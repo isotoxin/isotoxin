@@ -98,14 +98,14 @@ int proc_sign(const ts::wstrings_c & pars)
         return ts::fn_join(procpath, p);
     };
 
-    b.load_from_disk_file( pa(bp.getString(CONSTASTR("ver"))) );
+    b.load_from_disk_file( pa(bp.get_string(CONSTASTR("ver"))) );
     ts::str_c ver = b.cstr();
     ver.replace_all('/','.').trim();
 
     ts::str_c ss(CONSTASTR("ver="));
     ss.append( ver );
     ss.append(CONSTASTR("\r\nurl="));
-    ss.append(bp.getString(CONSTASTR("path")));
+    ss.append(bp.get_string(CONSTASTR("path")));
     ss.append( ts::fn_get_name_with_ext(arch) );
     ss.append(CONSTASTR("\r\nsize="));
     ss.append_as_uint(archlen);
@@ -115,13 +115,13 @@ int proc_sign(const ts::wstrings_c & pars)
     unsigned char pk[crypto_sign_PUBLICKEYBYTES];
     unsigned char sk[crypto_sign_SECRETKEYBYTES];
     b.clear();
-    b.load_from_disk_file( pa(bp.getString(CONSTASTR("sk"))) );
+    b.load_from_disk_file( pa(bp.get_string(CONSTASTR("sk"))) );
     if (b.size() != crypto_sign_SECRETKEYBYTES)
     {
         rebuild:
         crypto_sign_keypair(pk, sk);
 
-        FILE *f = fopen(pa(bp.getString(CONSTASTR("sk"))), "wb");
+        FILE *f = fopen(pa(bp.get_string(CONSTASTR("sk"))), "wb");
         fwrite(sk, 1, sizeof(sk), f);
         fclose(f);
 
@@ -130,7 +130,7 @@ int proc_sign(const ts::wstrings_c & pars)
             spk.append(CONSTASTR("0x")).append_as_hex(pk[i]).append(CONSTASTR(", "));
         spk.trunc_length(2);
 
-        f = fopen(pa(bp.getString(CONSTASTR("pk"))), "wb");
+        f = fopen(pa(bp.get_string(CONSTASTR("pk"))), "wb");
         fwrite(spk.cstr(), 1, spk.get_length(), f);
         fclose(f);
     } else
@@ -138,7 +138,7 @@ int proc_sign(const ts::wstrings_c & pars)
         memcpy(sk, b.data(), crypto_sign_SECRETKEYBYTES);
         crypto_sign_ed25519_sk_to_pk(pk, sk);
 
-        b.load_from_disk_file( pa(bp.getString(CONSTASTR("pk"))) );
+        b.load_from_disk_file( pa(bp.get_string(CONSTASTR("pk"))) );
         ts::token<char> t(b.cstr(), ',');
         int n = 0;
         for(;t; ++t, ++n)
@@ -160,7 +160,7 @@ int proc_sign(const ts::wstrings_c & pars)
     ss.append_as_hex(sig, (int)siglen);
 
 
-    FILE *f = fopen(pa(bp.getString(CONSTASTR("result"))), "wb");
+    FILE *f = fopen(pa(bp.get_string(CONSTASTR("result"))), "wb");
     fwrite(ss.cstr(), 1, ss.get_length(), f);
     fclose(f);
 

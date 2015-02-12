@@ -204,6 +204,8 @@
     <ClCompile Include="lib\content_encoding.c" />
     <ClCompile Include="lib\cookie.c" />
     <ClCompile Include="lib\curl_addrinfo.c" />
+    <ClCompile Include="lib\curl_des.c" />
+    <ClCompile Include="lib\curl_endian.c" />
     <ClCompile Include="lib\curl_fnmatch.c" />
     <ClCompile Include="lib\curl_gethostname.c" />
     <ClCompile Include="lib\curl_gssapi.c" />
@@ -274,6 +276,7 @@
     <ClCompile Include="lib\sendf.c" />
     <ClCompile Include="lib\share.c" />
     <ClCompile Include="lib\slist.c" />
+    <ClCompile Include="lib\smb.c" />
     <ClCompile Include="lib\smtp.c" />
     <ClCompile Include="lib\socks.c" />
     <ClCompile Include="lib\socks_gssapi.c" />
@@ -292,12 +295,12 @@
     <ClCompile Include="lib\transfer.c" />
     <ClCompile Include="lib\url.c" />
     <ClCompile Include="lib\version.c" />
+    <ClCompile Include="lib\vtls\schannel.c" />
     <ClCompile Include="lib\warnless.c" />
     <ClCompile Include="lib\wildcard.c" />
     <ClCompile Include="lib\x509asn1.c" />
     <ClCompile Include="lib\vtls\axtls.c" />
     <ClCompile Include="lib\vtls\curl_darwinssl.c" />
-    <ClCompile Include="lib\vtls\curl_schannel.c" />
     <ClCompile Include="lib\vtls\cyassl.c" />
     <ClCompile Include="lib\vtls\gskit.c" />
     <ClCompile Include="lib\vtls\gtls.c" />
@@ -319,6 +322,8 @@
     <ClInclude Include="lib\cookie.h" />
     <ClInclude Include="lib\curl_addrinfo.h" />
     <ClInclude Include="lib\curl_base64.h" />
+    <ClInclude Include="lib\curl_des.h" />
+    <ClInclude Include="lib\curl_endian.h" />
     <ClInclude Include="lib\curl_fnmatch.h" />
     <ClInclude Include="lib\curl_gethostname.h" />
     <ClInclude Include="lib\curl_gssapi.h" />
@@ -385,6 +390,7 @@
     <ClInclude Include="lib\share.h" />
     <ClInclude Include="lib\sigpipe.h" />
     <ClInclude Include="lib\slist.h" />
+    <ClInclude Include="lib\smb.h" />
     <ClInclude Include="lib\smtp.h" />
     <ClInclude Include="lib\sockaddr.h" />
     <ClInclude Include="lib\socks.h" />
@@ -402,12 +408,12 @@
     <ClInclude Include="lib\transfer.h" />
     <ClInclude Include="lib\urldata.h" />
     <ClInclude Include="lib\url.h" />
+    <ClInclude Include="lib\vtls\schannel.h" />
     <ClInclude Include="lib\warnless.h" />
     <ClInclude Include="lib\wildcard.h" />
     <ClInclude Include="lib\x509asn1.h" />
     <ClInclude Include="lib\vtls\axtls.h" />
     <ClInclude Include="lib\vtls\curl_darwinssl.h" />
-    <ClInclude Include="lib\vtls\curl_schannel.h" />
     <ClInclude Include="lib\vtls\cyassl.h" />
     <ClInclude Include="lib\vtls\gskit.h" />
     <ClInclude Include="lib\vtls\gtls.h" />

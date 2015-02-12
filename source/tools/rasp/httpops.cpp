@@ -30,7 +30,7 @@ struct context_s
             {
                 post.append(it.name());
                 post.append_char('\1');
-                post.append(it->asString());
+                post.append(it->as_string());
                 post.append_char('\2');
             }
             post.trunc_length();
@@ -51,7 +51,7 @@ struct context_s
 
         } else
         {
-            wstr_c pf = bp->getString(CONSTASTR("postfile"));
+            wstr_c pf = bp->get_string(CONSTASTR("postfile"));
             if (!pf.is_empty())
             {
                 if (!is_file_exists(pf.as_sptr()))
@@ -73,7 +73,7 @@ struct context_s
         
         }
 
-        str_c constr = bp->getString(CONSTASTR("constr"));
+        str_c constr = bp->get_string(CONSTASTR("constr"));
         if (constr.is_empty())
         {
             Print(FOREGROUND_RED, "empty constr");
@@ -85,14 +85,14 @@ struct context_s
         buf_c rslt;
         con.get(constr, rslt, post);
 
-        str_c fns = bp->getString(CONSTASTR("save"));
+        str_c fns = bp->get_string(CONSTASTR("save"));
         if (!fns.is_empty())
         {
             podstava(fns);
             rslt.save_to_file(fns);
         }
 
-        str_c stor = bp->getString(CONSTASTR("store"));
+        str_c stor = bp->get_string(CONSTASTR("store"));
         if (!stor.is_empty())
             vals[stor] = rslt.cstr();
     }
