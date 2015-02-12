@@ -1,0 +1,174 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="src">
+      <UniqueIdentifier>{0b5679aa-756c-43eb-8536-34423b95bc76}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="res">
+      <UniqueIdentifier>{f4548116-0483-48d0-adfc-7abf17664c40}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\tools">
+      <UniqueIdentifier>{95d53ad6-0bc8-42e5-9217-896bd22e2118}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\gui">
+      <UniqueIdentifier>{67a531d4-ed86-4277-8590-0af59927029b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\profile">
+      <UniqueIdentifier>{f1a55b17-4567-413d-b722-4a9145d4cc95}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="_dummy_files">
+      <UniqueIdentifier>{eecff022-83af-400d-b94c-12ca90de3430}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\contactlist.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\conversation.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\firstrun.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\mainrect.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\libs-external\dlmalloc\dlmalloc.c">
+      <Filter>src\tools</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\tests.cpp">
+      <Filter>src\tools</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\todo.cpp">
+      <Filter>src\tools</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\application.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\isotoxin.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\config.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\isodialog.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\profile.cpp">
+      <Filter>src\profile</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\settings.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\entertext.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\msgbox.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\tools.cpp">
+      <Filter>src\tools</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\activeprotocol.cpp">
+      <Filter>src\profile</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\addcontact.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\contacts.cpp">
+      <Filter>src\profile</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\mediasystem.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\metacontact.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\autoupdater.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\res\resource.h">
+      <Filter>res</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\contactlist.h">
+      <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\conversation.h">
+      <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\firstrun.h">
+      <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\mainrect.h">
+      <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\application.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\isotoxin.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\config.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\isodialog.h">
+      <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\profile.h">
+      <Filter>src\profile</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\settings.h">
+      <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\entertext.h">
+      <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\msgbox.h">
+      <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\tools.h">
+      <Filter>src\tools</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\activeprotocol.h">
+      <Filter>src\profile</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\addcontact.h">
+      <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\contacts.h">
+      <Filter>src\profile</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\mediasystem.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\version.inl">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\metacontact.h">
+      <Filter>src\gui</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\res\icon.ico">
+      <Filter>res</Filter>
+    </None>
+    <None Include="..\..\res\appver.inl">
+      <Filter>res</Filter>
+    </None>
+    <None Include="..\..\signpk.inl">
+      <Filter>src</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="..\..\res\isotoxin.rc">
+      <Filter>res</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="..\..\res\icon_normal.ico">
+      <Filter>res</Filter>
+    </Image>
+  </ItemGroup>
+</Project>
