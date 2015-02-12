@@ -28,7 +28,6 @@
   <ItemGroup>
     <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="strings.cpp" />
-    <ClCompile Include="..\..\libs-external\dlmalloc\dlmalloc.c" />
     <ClCompile Include="plgcommon.cpp" />
     <ClCompile Include="md5.cpp" />
     <ClCompile Include="excpn.cpp">

@@ -13,7 +13,6 @@
 
 #pragma comment(lib, "zlib.lib")
 #pragma comment(lib, "minizip.lib")
-#pragma comment(lib, "pnglib.lib")
 #pragma comment(lib, "freetype.lib")
 #pragma comment(lib, "sqlite3.lib")
 #pragma comment(lib, "libcurl.lib")
@@ -242,4 +241,28 @@ int proc_hgver(const wstrings_c & pars)
     }
 
     return 0;
+}
+
+
+// dlmalloc -----------------
+#define SLASSERT ASSERTO
+#define SLERROR ERROR
+#include "spinlock/spinlock.h"
+#pragma warning (disable:4559)
+#pragma warning (disable:4127)
+#pragma warning (disable:4057)
+#pragma warning (disable:4702)
+
+#define MALLOC_ALIGNMENT ((size_t)16U)
+#define USE_DL_PREFIX
+#define USE_LOCKS 0
+
+static long dlmalloc_spinlock = 0;
+
+#define PREACTION(M)  (spinlock::simple_lock(dlmalloc_spinlock), 0)
+#define POSTACTION(M) spinlock::simple_unlock(dlmalloc_spinlock)
+
+extern "C"
+{
+#include "dlmalloc/dlmalloc.c"
 }

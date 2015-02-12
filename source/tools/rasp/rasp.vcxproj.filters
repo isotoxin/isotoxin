@@ -27,9 +27,6 @@
     <ClCompile Include="loc.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\libs-external\dlmalloc\dlmalloc.c">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="anti_c99.cpp">
       <Filter>src</Filter>
     </ClCompile>

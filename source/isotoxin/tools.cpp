@@ -637,3 +637,25 @@ void sound_capture_handler_c::stop_capture()
 }
 
 
+
+
+// dlmalloc -----------------
+
+#pragma warning (disable:4559)
+#pragma warning (disable:4127)
+#pragma warning (disable:4057)
+#pragma warning (disable:4702)
+
+#define MALLOC_ALIGNMENT ((size_t)16U)
+#define USE_DL_PREFIX
+#define USE_LOCKS 0
+
+static long dlmalloc_spinlock = 0;
+
+#define PREACTION(M)  (spinlock::simple_lock(dlmalloc_spinlock), 0)
+#define POSTACTION(M) spinlock::simple_unlock(dlmalloc_spinlock)
+
+extern "C"
+{
+#include "dlmalloc/dlmalloc.c"
+}

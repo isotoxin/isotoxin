@@ -158,10 +158,6 @@
     <ClInclude Include="stdafx.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\libs-external\dlmalloc\dlmalloc.c">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">NotUsing</PrecompiledHeader>
-    </ClCompile>
     <ClCompile Include="anti_c99.cpp" />
     <ClCompile Include="client.cpp" />
     <ClCompile Include="grabnodes.cpp" />

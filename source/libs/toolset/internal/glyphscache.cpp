@@ -26,7 +26,7 @@ glyph_s &font_c::operator[](wchar_t c)
 	//some checks
 	ASSERT(b.num_grays == 256 && b.pixel_mode == FT_PIXEL_MODE_GRAY);
 	ASSERT(face->glyph->format == FT_GLYPH_FORMAT_BITMAP);
-	ASSERT(b.pitch == b.width);//?
+	ASSERT((unsigned)b.pitch == b.width);//?
 
 	glyphs[c] = (glyph_s*)MM_ALLOC(sizeof(glyph_s) + b.width*b.rows);
 
@@ -37,12 +37,12 @@ glyph_s &font_c::operator[](wchar_t c)
 	glyphs[c]->width   = b.width;
 	glyphs[c]->height  = b.rows;
 	glyphs[c]->char_index = FT_Get_Char_Index(face, c);
-	glyphs[c]->outlined = NULL;
+	glyphs[c]->outlined = nullptr;
 
 	//copy bitmap data
-	char *src = (char*)b.buffer;
+	const char *src = (const char*)b.buffer;
 	char *dst = (char*)(glyphs[c]+1);
-	for (int row=0; row<b.rows; row++, src+=b.pitch, dst+=b.width)//pitch may be negative, so memcpy can't be used here
+	for (int row=0; row<(int)b.rows; row++, src+=b.pitch, dst+=b.width)//pitch may be negative, so memcpy can't be used here
 		memcpy(dst, src, b.width);//but can be used to copy a while row
 
 	return *glyphs[c];

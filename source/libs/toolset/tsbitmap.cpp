@@ -1,20 +1,18 @@
 #include "toolset.h"
-#include "internal/FilePNG.h"
+#include "internal/pngreader.h"
 #include "internal/FileDDS.h"
-#include <malloc.h>
-#include <ddraw.h>
-#include <d3d9types.h>
-//#include "squish.h"
 
 #pragma pack (push)
 #pragma pack (16)
 extern "C" {
+#define XMD_H
+#undef FAR
 #include "jpeg\src\jpeglib.h"
 #include "jpeg\src\jerror.h"
+#undef XMD_H
 }
 #pragma pack (pop)
 
-#pragma message("Automatically linking with jpeg.lib")
 #pragma comment(lib, "jpeg.lib")
 
 namespace ts
@@ -2712,13 +2710,13 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_PNG(const void * buf, int
 
 	ivec2 sz;
     uint8 bitpp;
+    read_png_data_s data;
 
     __try
     {
-	    size_t id=FilePNG_ReadStart_Buf(buf,buflen,sz,bitpp);
 
-       
-        if(id==0) return false;
+        if(!png_decode_start(data, buf, buflen, sz, bitpp))
+            return false;
 
 	    if(bitpp==8) {
 		    create_grayscale(sz);
@@ -2729,7 +2727,7 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_PNG(const void * buf, int
 	    } else
             DEBUG_BREAK();; // unsupported
 
-        if(!FilePNG_Read(id,body(),info().pitch))
+        if(!png_decode(data,body(),info().pitch))
         {
             clear();
             return false;
@@ -2779,7 +2777,7 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_file(const wsptr &filenam
 template<typename CORE> size_t bitmap_t<CORE>::save_as_PNG(const void * body, void * buf, int buflen) const
 {
 	if(info().sz.x<=0 || info().sz.y<=0) return 0;
-	return FilePNG_Write(buf,buflen,body,info().pitch,info().sz,info().bytepp(),0);
+	return png_write(buf,buflen,body,info().pitch, info().sz, (uint8)info().bytepp(),0);
 }
 
 template<typename CORE> bool bitmap_t<CORE>::save_as_PNG(const wsptr &filename) const
@@ -2805,13 +2803,15 @@ template<typename CORE> bool bitmap_t<CORE>::save_as_PNG(buf_c & buf) const
     //    data = bod.data();
     //}
 
-    size_t len = info().pitch*info().sz.y+100;
+    aint len = info().pitch*info().sz.y+100;
 	buf.set_size(sz_cast<uint>(len), false);
 	len=save_as_PNG(data, buf.data(),buf.capacity());
-	if(len>buf.capacity()) {
+	if(len>buf.capacity()) 
+    {
 		buf.set_size(sz_cast<uint>(len), false);
 		len=save_as_PNG(data, buf.data(),sz_cast<uint>(len));
-    } else buf.set_size(sz_cast<uint>(len));
+    } else
+        buf.set_size(sz_cast<uint>(len));
 	return len>0;
 }
 
@@ -2855,7 +2855,7 @@ template<typename CORE> void bitmap_t<CORE>::load_from_HWND(HWND hwnd)
 
     if (info().sz != sz || info().bytepp() != 4) create_RGBA( sz );
 
-    img_helper_copy( body(), bits, info(), imgdesc_s( sz, 32, lPitch ) );
+    img_helper_copy( body(), bits, info(), imgdesc_s( sz, 32, (uint16)lPitch ) );
 
     SelectObject(memDC,tempBM);
     DeleteObject(memBM);
@@ -3242,7 +3242,7 @@ void drawable_bitmap_c::draw(HDC dc, aint xx, aint yy, int alpha) const
     if (GetDIBits(m_memDC, m_memBitmap, 0, 0, nullptr, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return;
     if (alpha > 0)
     {
-        BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, alpha, AC_SRC_ALPHA };
+        BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, (uint8)alpha, AC_SRC_ALPHA };
         AlphaBlend(dc, xx, yy, b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height, m_memDC, 0, 0, b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height, blendPixelFunction);
     } else if (alpha < 0)
     {
@@ -3254,7 +3254,7 @@ void drawable_bitmap_c::draw(HDC dc, int xx, int yy, const irect &r, int alpha) 
 {
     if (alpha > 0)
     {
-        BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, alpha, AC_SRC_ALPHA };
+        BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, (uint8)alpha, AC_SRC_ALPHA };
         AlphaBlend(dc, xx, yy, r.width(), r.height(), m_memDC, r.lt.x, r.lt.y, r.width(), r.height(), blendPixelFunction);
     } else if (alpha < 0)
     {

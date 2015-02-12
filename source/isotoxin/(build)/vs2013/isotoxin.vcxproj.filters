@@ -33,9 +33,6 @@
     <ClCompile Include="..\..\mainrect.cpp">
       <Filter>src\gui</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\libs-external\dlmalloc\dlmalloc.c">
-      <Filter>src\tools</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\tests.cpp">
       <Filter>src\tools</Filter>
     </ClCompile>

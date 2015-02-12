@@ -177,7 +177,7 @@
       </PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="internal\FileDDS.cpp" />
-    <ClCompile Include="internal\FilePNG.cpp" />
+    <ClCompile Include="internal\pngreader.cpp" />
     <ClCompile Include="internal\resample.cpp">
       <AssemblerOutput Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
       </AssemblerOutput>
@@ -215,7 +215,7 @@
     <ClInclude Include="toolset.h" />
     <ClInclude Include="internal\cpuaccel.h" />
     <ClInclude Include="internal\FileDDS.h" />
-    <ClInclude Include="internal\FilePNG.h" />
+    <ClInclude Include="internal\pngreader.h" />
     <ClInclude Include="internal\math.h" />
     <ClInclude Include="internal\pixmap.h" />
     <ClInclude Include="internal\resample.h" />

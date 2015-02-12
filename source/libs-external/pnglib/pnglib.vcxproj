@@ -55,7 +55,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(ProjectDir)..\ZLib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;_CRT_SECURE_NO_DEPRECATE;PNG_USER_CONFIG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;_CRT_SECURE_NO_DEPRECATE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <SmallerTypeCheck>true</SmallerTypeCheck>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -82,7 +82,7 @@
       <OmitFramePointers>true</OmitFramePointers>
       <WholeProgramOptimization>true</WholeProgramOptimization>
       <AdditionalIncludeDirectories>$(ProjectDir)..\zlib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;_FINAL;_CRT_SECURE_NO_DEPRECATE;PNG_USER_CONFIG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;_FINAL;_CRT_SECURE_NO_DEPRECATE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <ExceptionHandling>false</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -112,7 +112,6 @@
   <ItemGroup>
     <ClCompile Include="src\png.c" />
     <ClCompile Include="src\pngerror.c" />
-    <ClCompile Include="src\pnggccrd.c" />
     <ClCompile Include="src\pngget.c" />
     <ClCompile Include="src\pngmem.c" />
     <ClCompile Include="src\pngpread.c" />
@@ -122,7 +121,6 @@
     <ClCompile Include="src\pngrutil.c" />
     <ClCompile Include="src\pngset.c" />
     <ClCompile Include="src\pngtrans.c" />
-    <ClCompile Include="src\pngvcrd.c" />
     <ClCompile Include="src\pngwio.c" />
     <ClCompile Include="src\pngwrite.c" />
     <ClCompile Include="src\pngwtran.c" />

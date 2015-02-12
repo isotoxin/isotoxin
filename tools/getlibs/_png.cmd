@@ -13,5 +13,6 @@ rd %PNGDIR% /S /Q
 md %1\pnglib\src
 move %PNGDIR%\*.c %1\pnglib\src
 move %PNGDIR%\*.h %1\pnglib\src
+rem move %PNGDIR%\scripts\pnglibconf.h.prebuilt %1\pnglib\src\pnglibconf.h
 rd %PNGDIR% /S /Q
 del %PNGARCHIVE%
