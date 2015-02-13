@@ -1,7 +1,3 @@
-# Isotoxin
-Isotoxin source
-http://isotoxin.im
-
 # Build instruction
 - Threre are 4 external utils used: **git**, **7z**, **grep**, **wget**<br />
 You have to install command line **git**<br />
