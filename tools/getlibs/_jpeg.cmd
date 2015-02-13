@@ -12,6 +12,7 @@ cd %1\jpeg
 md src
 cd src
 %op%\..\7z e %op%\%JPGARCHIVE%
+ren jconfig.vc jconfig.h
 rd jpeg-6b
 del *.obj
 del *.jpg

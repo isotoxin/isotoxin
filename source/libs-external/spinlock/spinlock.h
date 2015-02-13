@@ -35,7 +35,7 @@ __pragma(message("SLERROR undefined"))
 
 namespace spinlock
 {
-#if defined _WINDOWS
+#if defined _WIN32
 typedef __int64 int64;
 #elif defined _LINUX
 typedef long long int64;
@@ -57,7 +57,7 @@ inline void _mm_pause() { usleep(0); }
 #endif
 
 
-#ifdef _WINDOWS
+#ifdef _WIN32
 #define pthread_self() GetCurrentThreadId()
 
 #pragma intrinsic (_InterlockedExchangeAdd)
