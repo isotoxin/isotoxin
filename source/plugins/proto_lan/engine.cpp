@@ -9,11 +9,6 @@
 #define TCP_PORT 0x7ee7
 #define TCP_RANGE 10
 
-__forceinline int time_ms()
-{
-    return (int)timeGetTime();
-}
-
 lan_engine::media_stuff_s::~media_stuff_s()
 {
     if (audio_encoder)
@@ -140,10 +135,18 @@ void log_auth_key( const char *what, const byte *key )
     str_c pass_part; pass_part.append_as_hex(key + SIZE_KEY_NONCE_PART, SIZE_KEY_PASS_PART);
     Log( "%s / %s - %s", nonce_part.cstr(), pass_part.cstr(), what );
 }
+
+void log_bytes( const char *what, const byte *b, int sz )
+{
+    str_c bs; bs.append_as_hex(b, sz);
+    Log("%s - %s", bs.cstr(), what);
+}
+
 #define logm Log
 #else
 #define log_auth_key(a,b)
-#define logm(a,b)
+#define log_bytes(a, b, c)
+#define logm(...)
 #endif
 
 void udp_sender::prepare()
@@ -662,16 +665,18 @@ void lan_engine::tick()
                     {
                         randombytes_buf(c->authorized_key, SIZE_KEY_NONCE_PART); // rebuild nonce
 
-                        log_auth_key( "before send nonce", c->authorized_key );
-
                         pg_nonce(c->public_key, c->authorized_key);
                         bool ok = c->pipe.send(packet_buf_encoded, packet_buf_encoded_len);
                         if (ok)
                         {
+                            logm("pg_nonce send ok");
+
                             c->key_sent = true;
                             c->nextactiontime = ct + 5000; // waiting PID_READY in 5 seconds, then disconnect
                         } else
                         {
+                            logm("pg_nonce send fail, close pipe");
+
                             c->pipe.close();
                             c->nextactiontime = ct;
                         }
@@ -691,6 +696,8 @@ void lan_engine::tick()
 
                     if (c->state != contact_s::OFFLINE)
                     {
+                        logm("pg_nonce connect");
+
                         // just connect
                         c->pipe.connect();
                         c->nextactiontime = ct + 2000;
@@ -861,24 +868,21 @@ void lan_engine::tick()
         switch (pipe->packet_id())
         {
         case PID_MEET:
-            if (pp_meet( pipe, stream_reader( pipe->rcvbuf, pipe->rcvbuf_sz ) ))
-                pipe = nullptr;
+            pipe = pp_meet(pipe, stream_reader(pipe->rcvbuf, pipe->rcvbuf_sz));
             break;
         case PID_NONCE:
-            if (pp_nonce(pipe, stream_reader(pipe->rcvbuf, pipe->rcvbuf_sz)))
-                pipe = nullptr;
+            pipe = pp_nonce(pipe, stream_reader(pipe->rcvbuf, pipe->rcvbuf_sz));
             break;
         case PID_NONE:
-            break;
-        case PID_DEAD:
-        default:
-            delete pipe;
+            // not yet received
+            if (pipe->timeout()) break;
+
+            tcp_in.accepted.push(pipe); // push to queue
             pipe = nullptr;
             break;
         }
 
-        if (pipe)
-            tcp_in.accepted.push(pipe);
+        if (pipe) delete pipe;
     }
 }
 
@@ -917,12 +921,20 @@ void lan_engine::pp_hallo( unsigned int IPv4, int back_port, const byte *hallo_c
     }
 }
 
-bool lan_engine::pp_meet( tcp_pipe * pipe, stream_reader &&r )
+tcp_pipe * lan_engine::pp_meet( tcp_pipe * pipe, stream_reader &&r )
 {
-    if (r.end()) return false;
+    if (r.end())
+    {
+        tcp_in.accepted.push(pipe);
+        return nullptr;
+    }
 
     const byte *meet_public_key = r.read(SIZE_PUBLIC_KEY);
-    if (!meet_public_key) return false;
+    if (!meet_public_key)
+    {
+        tcp_in.accepted.push(pipe);
+        return nullptr;
+    }
 
     byte pubid[SIZE_PUBID];
     make_raw_pub_id(pubid, meet_public_key);
@@ -932,27 +944,31 @@ bool lan_engine::pp_meet( tcp_pipe * pipe, stream_reader &&r )
     {
         // only way to handle this packet - send broadcast udp PID_SEARCH packet and get incoming tcp connection
         // so, no client, no PID_SEARCH
-        delete pipe;
-        return false;
+        return pipe;
     }
 
 
     const byte *nonce = r.read(crypto_box_NONCEBYTES);
-    if (!nonce) return false;
+    if (!nonce) 
+    {
+        tcp_in.accepted.push(pipe);
+        return nullptr;
+    }
 
     const int cipher_len = SIZE_KEY + crypto_box_MACBYTES;
 
     const byte *cipher = r.read(cipher_len);
-    if (!cipher) return false;
+    if (!cipher)
+    {
+        tcp_in.accepted.push(pipe);
+        return nullptr;
+    }
 
     const int decoded_size = cipher_len - crypto_box_MACBYTES;
     static_assert(decoded_size == SIZE_KEY, "check size");
 
     if (crypto_box_open_easy(c->temporary_key, cipher, cipher_len, nonce, meet_public_key, my_secret_key) != 0)
-    {
-        delete pipe;
-        return true;
-    }
+        return pipe;
 
     memcpy(c->public_key, meet_public_key, SIZE_PUBLIC_KEY);
     c->pipe = std::move( *pipe );
@@ -960,19 +976,33 @@ bool lan_engine::pp_meet( tcp_pipe * pipe, stream_reader &&r )
     c->nextactiontime = time_ms();
     c->pipe.cpdone();
 
-    delete pipe;
-    return true;
+    return pipe;
 }
 
-bool lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
+tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
 {
-    if (r.end()) return false;
+    logm("pp_nonce (rcvd) ==============================================================");
+    log_bytes("my_public_key", my_public_key, SIZE_PUBLIC_KEY);
 
-    const byte *meet_public_key = r.read(SIZE_PUBLIC_KEY);
-    if (!meet_public_key) return false;
+    if (r.end())
+    {
+        logm("pp_nonce no data");
+        tcp_in.accepted.push(pipe);
+        return nullptr;
+    }
+
+    const byte *peer_public_key = r.read(SIZE_PUBLIC_KEY);
+    if (!peer_public_key)
+    {
+        logm("pp_nonce no peer_public_key");
+        tcp_in.accepted.push(pipe);
+        return nullptr;
+    }
+   
+    log_bytes("peer_public_key (rcvd)", peer_public_key, SIZE_PUBLIC_KEY);
 
     byte pubid[SIZE_PUBID];
-    make_raw_pub_id(pubid, meet_public_key);
+    make_raw_pub_id(pubid, peer_public_key);
 
     contact_s *c = find_by_rpid(pubid);
     while (c == nullptr || (c->state != contact_s::OFFLINE))
@@ -981,43 +1011,75 @@ bool lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
         {
             // concurrent connection
             // one of contacts should ignore incoming connection, but other should continue
+            // compare public keys to decide who should drop incoming connection
             if (memcmp( my_public_key, c->public_key, SIZE_PUBLIC_KEY ) < 0)
                 break;
+
+            logm("concurrent fail");
+
+        } else
+        {
+            logm(c ? "found non-offline contact" : "no such key");
         }
 
         // only way to handle this packet - send broadcast udp PID_HALLO packet and get incoming tcp connection
         // so, no client, no PID_HALLO
-        delete pipe;
-        return false;
+        return pipe;
     }
 
+    logm("concurrent ok");
+    log_auth_key("c auth_key", c->authorized_key);
+    log_bytes("c public_key", c->public_key, SIZE_PUBLIC_KEY);
 
     const byte *nonce = r.read(crypto_box_NONCEBYTES);
-    if (!nonce) return false;
+    if (!nonce)
+    {
+        logm("no nonce yet");
+        tcp_in.accepted.push(pipe);
+        return nullptr;
+    }
+
+    log_bytes("nonce (rcvd)", nonce, crypto_box_NONCEBYTES);
 
     const int cipher_len = SIZE_KEY_NONCE_PART + crypto_box_MACBYTES;
 
     const byte *cipher = r.read(cipher_len);
-    if (!cipher) return false;
+    if (!cipher)
+    {
+        logm("no cipher yet");
+        tcp_in.accepted.push(pipe);
+        return nullptr;
+    }
 
     const int decoded_size = cipher_len - crypto_box_MACBYTES;
     static_assert(decoded_size == SIZE_KEY_NONCE_PART, "check size");
 
-    if (crypto_box_open_easy(c->authorized_key, cipher, cipher_len, nonce, meet_public_key, my_secret_key) != 0)
+    if (crypto_box_open_easy(c->authorized_key, cipher, cipher_len, nonce, peer_public_key, my_secret_key) != 0)
     {
-        delete pipe;
-        return true;
+        logm("cipher cannot be decrypted");
+        return pipe;
     }
 
-    log_auth_key( "pp_nonce", c->authorized_key );
+    log_auth_key( "authkey decrypted", c->authorized_key );
 
     const byte *rhash = r.read(crypto_generichash_BYTES);
+    if (!rhash)
+    {
+        logm("no hash yet");
+        tcp_in.accepted.push(pipe);
+        return nullptr;
+    }
+
+    log_bytes("hash (rcvd)", rhash, crypto_generichash_BYTES);
+
     byte hash[crypto_generichash_BYTES];
     crypto_generichash(hash, sizeof(hash), c->authorized_key, SIZE_KEY, nullptr, 0);
 
+    log_bytes("hash of authkey", hash, crypto_generichash_BYTES);
+
     if ( 0 == memcmp(hash, rhash, crypto_generichash_BYTES) )
     {
-        if (ASSERT(0 == memcmp(c->public_key, meet_public_key, SIZE_PUBLIC_KEY)))
+        if (ASSERT(0 == memcmp(c->public_key, peer_public_key, SIZE_PUBLIC_KEY)))
         {
             c->pipe = std::move(*pipe);
             c->state = contact_s::ONLINE;
@@ -1029,11 +1091,16 @@ bool lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
             pg_ready(c->raw_public_id, c->authorized_key);
             c->pipe.send(packet_buf_encoded, packet_buf_encoded_len);
         }
+    } else
+    {
+        // authorized_key is damaged
+        c->invitemessage = CONSTASTR("\1restorekey");
+        c->state = contact_s::SEARCH;
+        c->data_changed = true;
     }
 
 
-    delete pipe;
-    return true;
+    return pipe;
 }
 
 void lan_engine::goodbye()
@@ -1159,6 +1226,9 @@ void lan_engine::set_config(const void*data, int isz)
                         if (lc(chunk_contact_invitemsg))
                             c->invitemessage = lc.get_astr();
 
+                    //if (c->invitemessage.is_empty() && c->state == lan_engine::contact_s::SEARCH)
+                    //    c->invitemessage = CONSTASTR("\1restorekey");
+
                     if (c->state != lan_engine::contact_s::ONLINE && c->state != lan_engine::contact_s::OFFLINE)
                     {
                         if (int tksz = lc(chunk_contact_tmpkey))
@@ -1259,7 +1329,7 @@ void operator<<(chunk &chunkm, const lan_engine::contact_s &c)
         chunk(chunkm.b, chunk_contact_invitemsg) << c.invitemessage;
     }
 
-    if (c.state != lan_engine::contact_s::ONLINE && c.state != lan_engine::contact_s::OFFLINE)
+    if (c.state != lan_engine::contact_s::ONLINE && c.state != lan_engine::contact_s::OFFLINE && c.state != lan_engine::contact_s::BACKCONNECT)
     {
         chunk(chunkm.b, chunk_contact_tmpkey) << bytes(c.temporary_key, SIZE_KEY);
 

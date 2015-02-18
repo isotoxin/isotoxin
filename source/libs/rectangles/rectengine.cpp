@@ -11,28 +11,6 @@ INLINE bool insiderb(int v, int a, int asz)
     return v < a && v >= (a - asz);
 }
 
-text_draw_params_s::text_draw_params_s(guirect_c *rect)
-{
-    if (rect)
-    {
-        const theme_rect_s *thr = rect->themerect();
-        if (thr && !thr->deffont.is_empty()) font = thr->deffont;
-    }
-    if (font.is_empty()) font = gui->default_font();
-}
-
-text_draw_params_s::text_draw_params_s(const ts::str_c &font_, guirect_c *rect) :font(font_)
-{
-    if (rect && font.is_empty())
-    {
-        const theme_rect_s *thr = rect->themerect();
-        if (thr && !thr->deffont.is_empty()) font = thr->deffont;
-    }
-    if (font.is_empty()) font = gui->default_font();
-}
-
-
-
 namespace
 {
 struct border_window_data_s
@@ -149,7 +127,7 @@ struct border_window_data_s
         if (hwnd) return;
 
         rect = getrect();
-        if (rect.zero_square()) return;
+        if (rect.zero_area()) return;
 
         ts::uint32 af = WS_POPUP | WS_VISIBLE;
         ts::uint32 exf = WS_EX_LAYERED;
@@ -1232,7 +1210,7 @@ static void draw_image( HDC dc, const ts::drawable_bitmap_c &image, ts::aint x, 
     imgrectnew += ts::ivec2(x,y);
     imgrectnew.intersect(cliprect);
     
-    if (imgrectnew.zero_square()) return;
+    if (imgrectnew.zero_area()) return;
 
     imgrectnew -= ts::ivec2(x,y);
     x += imgrectnew.lt.x; y += imgrectnew.lt.y;
@@ -1453,7 +1431,7 @@ void border_window_data_s::draw()
         {
             ts::irect fillrect(dd.offset + thr.sis[SI_BASE].lt, rbpt - thr.sis[SI_BASE].rb);
             fillrect.intersect(dd.cliprect);
-            if (!fillrect.zero_square())
+            if (!fillrect.zero_area())
             {
                 if (use_alphablend && ts::ALPHA(thr.siso[SI_BASE].fillcolor) < 255)
                     backbuffer.overfill(fillrect.lt, fillrect.size(), ts::PREMULTIPLY( thr.siso[SI_BASE].fillcolor ) );
@@ -1525,7 +1503,7 @@ void border_window_data_s::draw()
             // do it before draw border due border can overdraw filled rect
             ts::irect fillrect( dd.offset + thr.sis[SI_CENTER].lt, rbpt - thr.sis[SI_CENTER].rb );
             fillrect.intersect(dd.cliprect);
-            if (!fillrect.zero_square())
+            if (!fillrect.zero_area())
             {
                 if (use_alphablend && ts::ALPHA(thr.siso[SI_CENTER].fillcolor) < 255)
                     backbuffer.overfill(fillrect.lt, fillrect.size(), ts::PREMULTIPLY(thr.siso[SI_CENTER].fillcolor));
@@ -1537,7 +1515,7 @@ void border_window_data_s::draw()
         if (options & DTHRO_BORDER)
         {
             // top
-            if (!t->zero_square())
+            if (!t->zero_area())
             {
                 rdraw.rbeg = lt; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_TOP);
                 rdraw.rrep = t; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_TOP);
@@ -1546,7 +1524,7 @@ void border_window_data_s::draw()
             }
 
             // bottom
-            if (!b->zero_square())
+            if (!b->zero_area())
             {
                 rdraw.rbeg = lb; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_BOTTOM);
                 rdraw.rrep = b; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_BOTTOM);
@@ -1555,7 +1533,7 @@ void border_window_data_s::draw()
             }
 
             // left
-            if (!l->zero_square())
+            if (!l->zero_area())
             {
                 rdraw.rbeg = nullptr;
                 rdraw.rrep = l; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_LEFT);
@@ -1564,7 +1542,7 @@ void border_window_data_s::draw()
             }
 
             // right
-            if (!r->zero_square())
+            if (!r->zero_area())
             {
                 rdraw.rbeg = nullptr;
                 rdraw.rrep = r; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_RIGHT);
@@ -1618,7 +1596,7 @@ void border_window_data_s::draw()
             fillrect.lt += thr.sis[SI_CENTER].lt;
             fillrect.rb -= thr.sis[SI_CENTER].rb;
             fillrect.intersect(dd.cliprect);
-            if (!fillrect.zero_square())
+            if (!fillrect.zero_area())
             {
                 if (use_alphablend && ts::ALPHA(thr.siso[SI_CENTER].fillcolor) < 255)
                     backbuffer.overfill(fillrect.lt, fillrect.size(), ts::PREMULTIPLY(thr.siso[SI_CENTER].fillcolor));
@@ -1685,7 +1663,7 @@ void border_window_data_s::draw()
             subimage_e si = SI_CENTER;
             rdraw.rbeg = nullptr;
             rdraw.rrep = thr.sis + si; rdraw.a_beg = use_alphablend && thr.is_alphablend(si);
-            if (rdraw.rrep->zero_square())
+            if (rdraw.rrep->zero_area())
             {
                 si = SI_BASE;
                 rdraw.rrep = thr.sis + si;
@@ -1707,9 +1685,11 @@ void border_window_data_s::draw()
             ts::wstr_c dn;
             if (dd.engine) dn = dd.engine->getrect().get_name();
 
-            text_draw_params_s tdp( thr.capfont );
-            tdp.forecolor = thr.deftextcolor;
-            tdp.textoptions.set(ts::TO_VCENTER);
+            text_draw_params_s tdp;
+            tdp.font = thr.capfont;
+            tdp.forecolor = &thr.deftextcolor;
+            ts::flags32_s f; f.set(ts::TO_VCENTER);
+            tdp.textoptions = &f;
 
             draw_data_s &ddd = begin_draw();
             ddd.offset = caprect.lt;
@@ -1732,12 +1712,12 @@ void border_window_data_s::draw()
     const draw_data_s &dd = drawdata.last();
     if (dd.size <= 0) return;
     ts::text_rect_c &tr = gui->tr();
-    tr.use_external_glyphs( tdp.glyphs );
+    //tr.use_external_glyphs( tdp.glyphs );
+    tr.set_text_only(text, true);
     tr.set_size( dd.size );
     tr.set_font( tdp.font );
-    tr.set_options(tdp.textoptions);
-    tr.set_def_color(tdp.forecolor);
-    tr.set_text_only(text);
+    tr.set_options(tdp.textoptions ? *tdp.textoptions : 0);
+    tr.set_def_color(tdp.forecolor ? *tdp.forecolor : ts::ARGB(0,0,0));
 
     if ( tdp.rectupdate )
     {
@@ -1749,11 +1729,11 @@ void border_window_data_s::draw()
     } else
         tr.parse_and_render_texture(nullptr);
 
-    draw_image( backbuffer.DC(), gui->tr().get_texture(), dd.offset.x, dd.offset.y, ts::irect( ts::ivec2(0), dd.size ), dd.cliprect, dd.alpha );
+    draw_image( backbuffer.DC(), tr.get_texture(), dd.offset.x, dd.offset.y, ts::irect( ts::ivec2(0), dd.size ), dd.cliprect, dd.alpha );
     if (tdp.sz)
         *tdp.sz = gui->tr().lastdrawsize;
-    if (tdp.glyphs)
-        tr.use_external_glyphs( nullptr );
+    //if (tdp.glyphs)
+        //tr.use_external_glyphs( nullptr );
 }
 
 /*virtual*/ void rectengine_root_c::draw( const ts::irect & rect, ts::TSCOLOR color, bool clip )
@@ -1763,7 +1743,7 @@ void border_window_data_s::draw()
     {
         ts::irect dr = rect + dd.offset;
         dr.intersect(dd.cliprect);
-        if (!dr.zero_square())
+        if (!dr.zero_area())
         {
             if (ts::ALPHA(color) < 255)
                 backbuffer.overfill(dr.lt, dr.size(), color);

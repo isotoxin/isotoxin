@@ -16,6 +16,7 @@ template<> struct gmsg<ISOGM_METACREATE> : public gmsgbase
         REMOVE,
         ADDED,
         MAKEFIRST,
+        CHECKINLIST,
 
     } state = ADD;
     gmsg(contact_key_s ck) :gmsgbase(ISOGM_METACREATE), ck(ck) {}
@@ -35,10 +36,13 @@ template<> struct MAKE_ROOT<dialog_metacontact_c> : public _PROOT(dialog_metacon
 class dialog_metacontact_c : public gui_isodialog_c
 {
     GM_RECEIVER( dialog_metacontact_c, ISOGM_METACREATE );
+    GM_RECEIVER( dialog_metacontact_c, GM_DRAGNDROP );
 
     ts::array_inplace_t<contact_key_s, 2> clist;
 
     ts::safe_ptr<gui_contactlist_c> cl;
+
+    //bool dndtgt = false;
 
 protected:
     /*virtual*/ int unique_tag() { return UD_METACONTACT; }
@@ -49,9 +53,6 @@ protected:
 
     bool makelist(RID, GUIPARAM);
 
-    //bool public_id_handler(const ts::wstr_c &);
-    //bool invite_message_handler(const ts::wstr_c &);
-    //void network_selected(const ts::str_c &);
 public:
     dialog_metacontact_c(MAKE_ROOT<dialog_metacontact_c> &data);
     ~dialog_metacontact_c();

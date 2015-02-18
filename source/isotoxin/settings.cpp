@@ -655,7 +655,7 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
     cfg().autoupdate_proxy(autoupdate_proxy);
     cfg().autoupdate_proxy_addr(autoupdate_proxy_addr);
     if (oautoupdate != autoupdate && autoupdate > 0)
-        cfg().autoupdate_next( now() + 10 );
+        g_app->autoupdate_next = now() + 10;
 
 
     cfg().collapse_beh(collapse_beh);

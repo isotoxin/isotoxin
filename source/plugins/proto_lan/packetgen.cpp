@@ -1,9 +1,13 @@
 #include "stdafx.h"
 
 #if LOGGING
+#define logm Log
 void log_auth_key( const char *what, const byte *key );
+void log_bytes( const char *what, const byte *b, int sz );
 #else
 #define log_auth_key(a,b)
+#define log_bytes(a, b, c)
+#define logm(...)
 #endif 
 
 packetgen::packetgen()
@@ -46,9 +50,8 @@ void packetgen::pg_meet(const byte *other_public_key, const byte *temporary_key)
 
     push(my_public_key, SIZE_PUBLIC_KEY);
 
-    byte nonce[crypto_box_NONCEBYTES];
-    randombytes_buf(nonce, sizeof (nonce));
-    push(nonce, crypto_box_NONCEBYTES);
+    byte *nonce = push(crypto_box_NONCEBYTES);
+    randombytes_buf(nonce, crypto_box_NONCEBYTES);
 
     int cipher_len = crypto_box_MACBYTES + SIZE_KEY;
     byte *cipher = push(cipher_len);
@@ -59,14 +62,20 @@ void packetgen::pg_meet(const byte *other_public_key, const byte *temporary_key)
 
 void packetgen::pg_nonce(const byte *other_public_key, const byte *auth_key /* nonce + contact key */)
 {
+    logm("pg_nonce =================================================================================");
+    log_bytes("other_public_key", other_public_key, SIZE_PUBLIC_KEY);
+    log_auth_key("auth_key", auth_key);
+
     push_pid(PID_NONCE);
 
     push(my_public_key, SIZE_PUBLIC_KEY);
+    log_bytes("my_public_key (send)", my_public_key, SIZE_PUBLIC_KEY);
 
     // nonce for decrypt nonce part of contact key
-    byte nonce[crypto_box_NONCEBYTES];
-    randombytes_buf(nonce, sizeof(nonce));
-    push(nonce, crypto_box_NONCEBYTES);
+    byte *nonce = push(crypto_box_NONCEBYTES);
+    randombytes_buf(nonce, crypto_box_NONCEBYTES);
+
+    log_bytes("nonce 4 nonce (send)", nonce, crypto_box_NONCEBYTES);
 
     // encrypt nonce part of contact key by public key
     int cipher_len = crypto_box_MACBYTES + SIZE_KEY_NONCE_PART;
@@ -74,11 +83,10 @@ void packetgen::pg_nonce(const byte *other_public_key, const byte *auth_key /* n
     crypto_box_easy(cipher, auth_key, SIZE_KEY_NONCE_PART, nonce, other_public_key, my_secret_key);
 
     // hash to verify we have same contact key
-    byte hash[crypto_generichash_BYTES];
-    crypto_generichash(hash, sizeof(hash), auth_key, SIZE_KEY, nullptr, 0 );
-    push(hash, crypto_generichash_BYTES);
+    byte *hash = push(crypto_generichash_BYTES);
+    crypto_generichash(hash, crypto_generichash_BYTES, auth_key, SIZE_KEY, nullptr, 0 );
 
-    log_auth_key("PID_NONCE key", auth_key);
+    log_bytes("hash of authkey", hash, crypto_generichash_BYTES);
 
     encopy();
 
@@ -158,9 +166,9 @@ void packetgen::pg_delivered(u64 dtag, const byte *crypt_packet_key)
 void packetgen::pg_time(bool resync, const byte *crypt_packet_key)
 {
     push_pid(PID_TIME);
-    u64 randombytes;
-    randombytes_buf(&randombytes, sizeof(randombytes));
-    push(&randombytes, sizeof(randombytes));
+    byte *randombytes = push(sizeof(u64));;
+    randombytes_buf(randombytes, sizeof(u64));
+    
     pushll( now() );
     pushb( resync ? 1 : 0 );
     encode(crypt_packet_key);

@@ -14,42 +14,54 @@ struct rectangle_update_s
     void *param;
 };
 
-class text_rect_c // формирователь текстуры с текстом
+class text_rect_c // texture with text
 {
-    TSCOLOR default_color;
+    TSCOLOR default_color = ARGB(0, 0, 0);
+    wstr_c text;
+    flags32_s flags;
+    int scroll_top = 0;
+    int margin_left = 0, margin_right = 0, margin_top = 0; // offset of text in texture
+    int text_height;
 public:
-	font_desc_c default_font;
-	wstr_c format_;//формат текста (просто строчка, которая добавляется в начало текста)
-	wstr_c text_;//текст
+	const font_desc_c *font;
     ivec2 size;
     ivec2 lastdrawsize;
-	drawable_bitmap_c texture;//текстура с текстом
-	GLYPHS  glyphs_internal;//массив с глифами
-    GLYPHS *glyphs_external = nullptr;
-	int scroll_top;
-	int text_height;
-	int margin_left, margin_right, margin_top;//смещение текста в текстуре (для bottom не указывается, т.к. нижняя граница всегда берется на окончании текста)
-	flags32_s flags;
+	drawable_bitmap_c texture;
+	GLYPHS  glyphs_internal;
+    //GLYPHS *glyphs_external = nullptr;
 
     static const flags32_s::BITS F_DIRTY            = TO_LAST_OPTION << 0;
+    static const flags32_s::BITS F_INVALID_SIZE     = TO_LAST_OPTION << 1;
+    static const flags32_s::BITS F_INVALID_TEXTURE  = TO_LAST_OPTION << 2;
+    static const flags32_s::BITS F_INVALID_GLYPHS   = TO_LAST_OPTION << 3;
 
-    GLYPHS & glyphs() { return glyphs_external ? (*glyphs_external) : glyphs_internal; }
+    //GLYPHS & glyphs() { return glyphs_external ? (*glyphs_external) : glyphs_internal; }
+    GLYPHS & glyphs() { return glyphs_internal; }
+    void update_rectangles( ts::ivec2 &offset, rectangle_update_s * updr ); // internal
 
 public:
 
-    text_rect_c() : margin_left(0), margin_right(0), margin_top(0), scroll_top(0), default_color(ARGB(0, 0, 0)), default_font(g_default_text_font), size(0), lastdrawsize(0) {}
+    text_rect_c() : font(&g_default_text_font), size(0), lastdrawsize(0) { flags.setup(F_INVALID_SIZE|F_INVALID_TEXTURE|F_INVALID_GLYPHS); }
 	~text_rect_c();
     
-    void use_external_glyphs( GLYPHS *eglyphs )
+    //void use_external_glyphs( GLYPHS *eglyphs )
+    //{
+    //    glyphs_external = eglyphs;
+    //}
+    bool is_dirty() const { return flags.is(F_DIRTY); }
+    bool is_dirty_size() const { return flags.is(F_INVALID_SIZE); }
+    
+    void set_margins(int mleft, int mtop, int mrite)
     {
-        glyphs_external = eglyphs;
+        if (mleft != margin_left) { flags.set(F_DIRTY|F_INVALID_TEXTURE|F_INVALID_GLYPHS); margin_left = mleft; }
+        if (mtop != margin_top) { flags.set(F_DIRTY|F_INVALID_TEXTURE|F_INVALID_GLYPHS); margin_top = mtop; }
+        if (mrite != margin_right) { flags.set(F_DIRTY|F_INVALID_TEXTURE|F_INVALID_GLYPHS); margin_right = mrite; }
     }
-
-    void set_def_color( TSCOLOR c ) { if (default_color != c) { flags.set(F_DIRTY); default_color = c; } }
-    void set_size(const ts::ivec2 &sz) { if (size != sz) { flags.set(F_DIRTY); size = sz; } }
-    void set_text_only(const wstr_c &text) { text_ = text; flags.set(F_DIRTY); }
+    void set_def_color( TSCOLOR c ) { if (default_color != c) { flags.set(F_DIRTY|F_INVALID_TEXTURE|F_INVALID_GLYPHS); default_color = c; } }
+    void set_size(const ts::ivec2 &sz) { flags.clear(F_INVALID_SIZE); if (size != sz) { flags.set(F_DIRTY|F_INVALID_TEXTURE|F_INVALID_GLYPHS); size = sz; } }
+    void set_text_only(const wstr_c &text_, bool forcedirty) { if (forcedirty || !text.equals(text_)) { flags.set(F_DIRTY|F_INVALID_SIZE|F_INVALID_TEXTURE|F_INVALID_GLYPHS); text = text_; } }
 	bool set_text(const wstr_c &text, bool do_parse_and_render_texture = true);
-	const wstr_c& get_text() const { return text_; }
+	const wstr_c& get_text() const { return text; }
     void set_options(ts::flags32_s nf)
     {
         if ((flags.__bits & (TO_LAST_OPTION - 1)) != (nf.__bits & (TO_LAST_OPTION - 1)))
@@ -59,38 +71,35 @@ public:
             flags.set(F_DIRTY);
         }
     }
-	void set_font(const asptr& font) 
+	bool set_font(const font_desc_c *fd) 
     {
-        if (default_font.assign(font, false))
+        if (fd == nullptr) fd = &g_default_text_font;
+        if (fd != font)
         {
-            default_font.update(flags.is(ts::TO_NOT_SCALE_FONT) ? 0 : 100);
-            flags.set(F_DIRTY);
+            font = fd;
+            flags.set(F_DIRTY|F_INVALID_TEXTURE|F_INVALID_GLYPHS);
+            return true;
         }
+        return false;
     }
 	void parse_and_render_texture( rectangle_update_s * updr, bool do_render = true );
     void render_texture( rectangle_update_s * updr, fastdelegate::FastDelegate< void (drawable_bitmap_c&) > clearp ); // custom clear
     void render_texture( rectangle_update_s * updr );
+    void update_rectangles( rectangle_update_s * updr );
 
-	int  scrollTop() const {return scroll_top;}
+    ivec2 calc_text_size(int maxwidth) const; // also it renders texture
+    ivec2 calc_text_size(const font_desc_c& font, const wstr_c&text, int maxwidth, uint flags) const;
+
+	int  get_scroll_top() const {return scroll_top;}
 	//void scrollTo(int y) {scrollTop_ = y; render_texture();}
-	void disableFontScaling(bool f = true) 
-    { 
-        if (flags.is(ts::TO_NOT_SCALE_FONT) != f)
-        {
-            flags.set(F_DIRTY);
-            flags.init(ts::TO_NOT_SCALE_FONT, f);
-            default_font.update(flags.is(ts::TO_NOT_SCALE_FONT) ? 0 : 100);
-        }
-    }
 
-    drawable_bitmap_c &get_texture() {return texture;};
+    drawable_bitmap_c &get_texture() { ASSERT(!flags.is(F_INVALID_TEXTURE|F_INVALID_GLYPHS)); return texture;};
 
 	//Рисует глифы в область памяти RGBA-изображения dst с полным блендингом.
 	//Параметр offset задает смещение, на которое сдвигается каждый глиф перед отрисовкой и может использоваться для скроллинга, а также для margin.
 	//pitch - смещение в байтах для перехода к следующей строке буфера изображения, обычно = width * 4.
 	static bool draw_glyphs(uint8 *dst, int width, int height, int pitch, const array_wrapper_c<const glyph_image_s> &glyphs, ivec2 offset = ivec2(0), bool prior_clear = true);
 
-    ivec2 calc_text_size( font_desc_c& font, const wstr_c&text, int maxwidth, uint flags ); // uses glyphs array! be careful
 };
 
 } // namespace ts

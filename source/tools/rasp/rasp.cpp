@@ -13,7 +13,6 @@
 
 #pragma comment(lib, "zlib.lib")
 #pragma comment(lib, "minizip.lib")
-#pragma comment(lib, "freetype.lib")
 #pragma comment(lib, "sqlite3.lib")
 #pragma comment(lib, "libcurl.lib")
 #pragma comment(lib, "toxcore.lib")

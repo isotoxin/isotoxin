@@ -4,7 +4,6 @@ gui_textedit_c::gui_textedit_c(initial_rect_data_s &data) : gui_control_c(data),
 {
     flags.set(F_CARET_SHOW);
 	lines.add(ts::ivec2(0,0));
-    font.assign( gui->default_font() );
 }
 
 gui_textedit_c::~gui_textedit_c()
@@ -71,7 +70,7 @@ gui_textedit_c::active_element_s *gui_textedit_c::create_active_element(const ts
 	el->color = color;
 	el->user_data_size = user_data_size;
 	if (user_data) memcpy(el + 1, user_data, user_data_size);
-	el->update_advance(font);
+	el->update_advance(*font);
 	return el;
 }
 
@@ -98,9 +97,9 @@ bool gui_textedit_c::text_replace(int pos, int num, const ts::wsptr &str, active
 
 		int w = editwidth-ts::ui_scale(margin_left)-ts::ui_scale(margin_right)-ts::ui_scale(is_vsb() ? sbhelper.sbrect.width() : 0);
 		if (!password_char)
-			for (ts::wchar c : ttext) w -= (*font)[c].advance;
+			for (ts::wchar c : ttext) w -= (*(*font))[c].advance;
 		else
-			w -= ttext.get_length() * (*font)[password_char].advance;
+			w -= ttext.get_length() * (*(*font))[password_char].advance;
 		if (w < 0) return false;//значит текст не умещается в строке - запрещаем
 	}
 	else
@@ -195,14 +194,14 @@ ts::ivec2 gui_textedit_c::get_caret_pos() const
 {
 	int i=0, x=0, s=lines.get(caret_line).r0;
 	for (;i<caret_offset;i++) x+=text_el_advance(s+i);
-	return ts::ivec2(x + ts::ui_scale(margin_left) - scroll_left, caret_line*font->height + ts::ui_scale(margin_top) - scroll_top());
+	return ts::ivec2(x + ts::ui_scale(margin_left) - scroll_left, caret_line * (*font)->height + ts::ui_scale(margin_top) - scroll_top());
 }
 
 void gui_textedit_c::scroll_to_caret()
 {
     ts::ivec2 sz = size();
     bool dirty_texture = false;
-	int newST = ts::tmax((caret_line+1)*font->height - sz.y + ts::ui_scale(margin_top) + ts::ui_scale(margin_bottom), ts::tmin(scroll_top(), caret_line*font->height));
+	int newST = ts::tmax((caret_line+1) * (*font)->height - sz.y + ts::ui_scale(margin_top) + ts::ui_scale(margin_bottom), ts::tmin(scroll_top(), caret_line * (*font)->height));
 	if (newST != scroll_top())
     {
         sbhelper.shift = -newST;
@@ -226,7 +225,7 @@ void gui_textedit_c::set_caret_pos(ts::ivec2 p)
 {
     if (!font) return;
 	p.x += scroll_left - ts::ui_scale(margin_left);
-	int line=ts::tmax(0,ts::tmin((p.y-ts::ui_scale(margin_top)+scroll_top())/font->height,lines.count()-1));
+	int line=ts::tmax(0,ts::tmin((p.y-ts::ui_scale(margin_top)+scroll_top())/(*font)->height,lines.count()-1));
 	int lineW=0;
 	int i=0;
 	for (;i<lines.get(line).delta();i++)
@@ -367,7 +366,7 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 				break;
 			case SSK_UP:
 			case SSK_DOWN:
-				set_caret_pos(get_caret_pos()+ts::ivec2(0,font->height*(scan==SSK_UP ? -1 : 1)));
+				set_caret_pos(get_caret_pos()+ts::ivec2(0,(*font)->height*(scan==SSK_UP ? -1 : 1)));
 				res = true;
 				break;
 			case SSK_HOME:
@@ -511,7 +510,7 @@ bool gui_textedit_c::prepare_lines(int startchar)
 	under_mouse_active_element = nullptr;//при изменении текста указатель может стать битым, поэтому просто необходимо обнулять его
     flags.clear(F_LINESDIRTY);
 
-    sbhelper.set_size( lines.count()*font->height+ ts::ui_scale(margin_top) + ts::ui_scale(margin_bottom), sz.y );
+    sbhelper.set_size( lines.count() * (*font)->height+ ts::ui_scale(margin_top) + ts::ui_scale(margin_bottom), sz.y );
 
     if (caret_line >= lines.count()) caret_line = lines.count() - 1;
 
@@ -645,7 +644,7 @@ void gui_textedit_c::prepare_texture()
         return;
 
     ts::tmp_tbuf_t<ts::glyph_image_s> glyphs, outlinedglyphs;
-	ts::ivec2 visLines = (ts::ivec2(0, asize.y) + (scroll_top() - ts::ui_scale(margin_top)))/font->height & ts::ivec2(0, lines.count()-1);//getVisibleLinesRange();
+	ts::ivec2 visLines = (ts::ivec2(0, asize.y) + (scroll_top() - ts::ui_scale(margin_top)))/(*font)->height & ts::ivec2(0, lines.count()-1);//getVisibleLinesRange();
 	int firstvischar = lines.get(visLines.r0).r0;
     int numcolors = lines.get(visLines.r1).r1 - firstvischar;
     ts::tmp_tbuf_t< ts::pair_s<ts::TSCOLOR, ts::TSCOLOR> > colors( numcolors );
@@ -696,7 +695,7 @@ void gui_textedit_c::prepare_texture()
 		for (int l = visLines.r0; l <= visLines.r1; l++)
 		{
 			if (l > 0 && text.get(lines.get(l).r0-1) == L'\n') currentColor = 0;//при переходе к новой строке, установленный цвет всегда сбрасывается
-			ts::ivec2 pen(ts::ui_scale(margin_left) - scroll_left, font->ascender + l*font->height + ts::ui_scale(margin_top) - scroll_top());
+			ts::ivec2 pen(ts::ui_scale(margin_left) - scroll_left, (*font)->ascender + l*(*font)->height + ts::ui_scale(margin_top) - scroll_top());
 
 			for (int i = lines.get(l).r0; i < lines.get(l).r1; i++)
 			{
@@ -725,7 +724,7 @@ void gui_textedit_c::prepare_texture()
 				do
 				{
 					ts::glyph_image_s &gi = glyphs.add();
-					ts::glyph_s &glyph = (*font)[*str];
+					ts::glyph_s &glyph = (*(*font))[*str];
 					gi.width  = (ts::uint16)glyph.width;
 					gi.height = (ts::uint16)glyph.height;
                     gi.pitch = (ts::uint16)glyph.width;
@@ -737,7 +736,7 @@ void gui_textedit_c::prepare_texture()
 					gi.thickness = 0;
 					advoffset += glyph.advance;
 					if (outline_color)
-						glyph.get_outlined_glyph(outlinedglyphs.add(), font, pos, outline_color);
+						glyph.get_outlined_glyph(outlinedglyphs.add(), (*font), pos, outline_color);
 				}
 				while (str++, --strLen);
 
@@ -747,8 +746,8 @@ void gui_textedit_c::prepare_texture()
 				{
                     ts::TSCOLOR *dst = (ts::TSCOLOR*)texture.body();
                     int pitch = texture.info().pitch / sizeof(ts::TSCOLOR);
-					int x = ts::tmax(0, pen.x), xx = ts::tmin(w, pen.x + advoffset), y = pen.y - font->ascender;
-					for (int ty = ts::tmax(0, y), yy = ts::tmin(asize.y, y + font->height); ty < yy; ty++)
+					int x = ts::tmax(0, pen.x), xx = ts::tmin(w, pen.x + advoffset), y = pen.y - (*font)->ascender;
+					for (int ty = ts::tmax(0, y), yy = ts::tmin(asize.y, y + (*font)->height); ty < yy; ty++)
 						for (int tx = x; tx < xx; tx++)
                             dst[ty * pitch + tx] = c;
 				}
@@ -786,13 +785,6 @@ void gui_textedit_c::prepare_texture()
 	scrollBar->show(scrollBarWidth > 0);
 #endif
 
-}
-
-void gui_textedit_c::set_font(const ts::asptr&fname)
-{
-    font.assign(fname, false);
-    bool scale_font = false;
-    font.update(scale_font ? 100 : 0);
 }
 
 void gui_textedit_c::selectword()
@@ -869,14 +861,7 @@ bool gui_textedit_c::summoncontextmenu()
 
 /*virtual*/ void gui_textedit_c::created()
 {
-    auto gf = [this]()-> const ts::str_c&
-    {
-        const theme_rect_s *thr = themerect();
-        if (thr && !thr->deffont.is_empty()) return thr->deffont;
-        return gui->default_font();
-    };
-    set_font( gf() );
-
+    set_font( nullptr );
     return __super::created();
 }
 
@@ -887,14 +872,14 @@ bool gui_textedit_c::summoncontextmenu()
     case SQ_MOUSE_WHEELUP:
         if (is_vsb())
         {
-            sbhelper.shift += font->height;
+            sbhelper.shift += (*font)->height;
             redraw();
         }
         break;
     case SQ_MOUSE_WHEELDOWN:
         if (is_vsb())
         {
-            sbhelper.shift -= font->height;
+            sbhelper.shift -= (*font)->height;
             redraw();
         }
         break;
@@ -978,7 +963,7 @@ bool gui_textedit_c::summoncontextmenu()
             ts::ivec2 p = to_local(data.mouse.screenpos) - get_client_area().lt;
 
             p.x += scroll_left - ts::ui_scale(margin_left);
-            ts::aint l = (p.y - ts::ui_scale(margin_top) + scroll_top()) / font->height;
+            ts::aint l = (p.y - ts::ui_scale(margin_top) + scroll_top()) / (*font)->height;
             if (unsigned(l) < (unsigned)lines.count())
             {
                 ts::ivec2 line = lines.get(l);
@@ -991,7 +976,7 @@ bool gui_textedit_c::summoncontextmenu()
                         if (!text[i].is_char())
                         {
                             under_mouse_active_element = text[i].p;
-                            under_mouse_active_element_pos = ts::ivec2(x + ts::ui_scale(margin_left), l * font->height + ts::ui_scale(margin_top));
+                            under_mouse_active_element_pos = ts::ivec2(x + ts::ui_scale(margin_left), l * (*font)->height + ts::ui_scale(margin_top));
                             flags.set(F_HANDCURSOR);
                         }
                         break;
@@ -1024,7 +1009,7 @@ bool gui_textedit_c::summoncontextmenu()
             ts::irect drawarea = get_client_area();
             if (is_vsb())
             {
-                sbhelper.set_size(lines.count()*font->height + ts::ui_scale(margin_top) + ts::ui_scale(margin_bottom), drawarea.height()); // clamp scrollTop() value
+                sbhelper.set_size(lines.count()*(*font)->height + ts::ui_scale(margin_top) + ts::ui_scale(margin_bottom), drawarea.height()); // clamp scrollTop() value
 
                 evt_data_s ds;
                 ds.draw_thr.sbrect() = drawarea;
@@ -1055,9 +1040,9 @@ bool gui_textedit_c::summoncontextmenu()
             {
                 ts::irect r;
                 r.lt = drawarea.lt + get_caret_pos();
-                r.rb = r.lt + ts::ivec2(ts::ui_scale(caret_width), font->height);
+                r.rb = r.lt + ts::ivec2(ts::ui_scale(caret_width), (*font)->height);
                 r.intersect(drawarea);
-                if (!r.zero_square())
+                if (!r.zero_area())
                 {
                     if(show_caret())
                         rh.engine().draw(r, caret_color);

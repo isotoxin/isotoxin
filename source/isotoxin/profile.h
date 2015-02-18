@@ -256,6 +256,7 @@ public:
     void load_history( const contact_key_s&historian, time_t time, int nload, ts::tmp_tbuf_t<int>& loaded_ids );
     void load_history( const contact_key_s&historian ); // load all history items to internal table
     void merge_history( const contact_key_s&base_historian, const contact_key_s&from_historian );
+    void detach_history( const contact_key_s&prev_historian, const contact_key_s&new_historian, const contact_key_s&sender );
     void change_history_item(const contact_key_s&historian, const post_s &post, ts::uint32 change_what);
     bool change_history_item(uint64 utag, contact_key_s & historian); // find item by tag and change type form MTA_UNDELIVERED_MESSAGE to MTA_MESSAGE, then return historian (if loaded)
 

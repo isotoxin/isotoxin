@@ -8,6 +8,7 @@ void dotests();
 
 application_c::application_c(const ts::wchar * cmdl)
 {
+    autoupdate_next = now() + 10;
 	g_app = this;
     cfg().load();
     if (cfg().is_loaded())
@@ -213,11 +214,11 @@ static DWORD WINAPI autoupdater(LPVOID)
 
     if ( cfg().autoupdate() > 0 )
     {
-        if (now() > cfg().autoupdate_next())
+        if (now() > g_app->autoupdate_next)
         {
-            cfg().autoupdate_next( cfg().autoupdate_next() + SEC_PER_DAY );
-            if (cfg().autoupdate_next() <= now() )
-                cfg().autoupdate_next( now() + SEC_PER_DAY );
+            g_app->autoupdate_next += SEC_PER_DAY;
+            if (g_app->autoupdate_next <= now() )
+                g_app->autoupdate_next = now() + SEC_PER_DAY;
 
             g_app->b_update_ver(RID(),(GUIPARAM)AUB_DEFAULT);
         }
@@ -483,16 +484,14 @@ bool application_c::b_update_ver(RID, GUIPARAM p)
         if (w().in_progress) return true;
         bool renotice = false;
         w().in_progress = true;
+        w().downloaded = false;
 
         autoupdate_beh_e req = (autoupdate_beh_e)(int)p;
+        if (req == AUB_DOWNLOAD)
+            renotice = true;
         if (req == AUB_DEFAULT)
             req = (autoupdate_beh_e)cfg().autoupdate();
 
-        if (req == AUB_DOWNLOAD)
-        {
-            w().downloaded = false;
-            renotice = true;
-        }
         w().ver.setcopy(application_c::appver());
         w().path.setcopy(ts::fn_join(ts::fn_get_path(cfg().get_path()),CONSTWSTR("update\\")));
         w().proxy_addr.setcopy(cfg().autoupdate_proxy_addr());
@@ -753,6 +752,10 @@ void application_c::load_theme( const ts::wsptr&thn )
 {
     m_gui.load_theme(thn);
     m_buttons.reload();
+
+    font_conv_name = &m_gui.get_font( CONSTASTR("conv_name") );
+    font_conv_text = &m_gui.get_font( CONSTASTR("conv_text") );
+
 }
 
 void preloaded_buttons_s::reload()

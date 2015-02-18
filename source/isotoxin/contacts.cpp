@@ -43,6 +43,23 @@ contact_c::~contact_c()
 {
     if (gui) gui->delete_event( DELEGATE(this,flashing_proc) );
 }
+
+void contact_c::reselect(bool scrollend)
+{
+    contact_c *h = get_historian();
+    if (scrollend)
+    {
+        DECLARE_DELAY_EVENT_BEGIN(0)
+            gmsg<ISOGM_SELECT_CONTACT>((contact_c *)param).send();
+        DECLARE_DELAY_EVENT_END(h)
+    } else
+    {
+        DECLARE_DELAY_EVENT_BEGIN(0)
+            gmsg<ISOGM_SELECT_CONTACT>((contact_c *)param, false).send();
+        DECLARE_DELAY_EVENT_END(h)
+    }
+}
+
 ts::wstr_c contact_c::compile_pubid() const
 {
     ASSERT(is_meta());
@@ -59,8 +76,8 @@ ts::wstr_c contact_c::compile_name() const
     ts::wstr_c x(defc->get_name(false));
     for(contact_c *c : subcontacts)
         if (x.find_pos(c->get_name(false)) < 0)
-            x.append(c->get_name(false)).append_char('~');
-    return x.trunc_char('~');
+            x.append_char('~').append(c->get_name(false));
+    return x;
 }
 
 ts::wstr_c contact_c::compile_statusmsg() const
@@ -71,8 +88,8 @@ ts::wstr_c contact_c::compile_statusmsg() const
     ts::wstr_c x(defc->get_statusmsg(false));
     for (contact_c *c : subcontacts)
         if (x.find_pos(c->get_statusmsg(false)) < 0)
-            x.append(c->get_statusmsg(false)).append_char('~');
-    return x.trunc_char('~');
+            x.append_char('~').append(c->get_statusmsg(false));
+    return x;
 }
 
 contact_state_e contact_c::get_meta_state() const
@@ -438,10 +455,7 @@ bool contact_c::b_accept(RID, GUIPARAM par)
         ap->accept(getkey().contactid);
 
     get_historian()->fix_history(MTA_FRIEND_REQUEST, MTA_OLD_REQUEST, getkey());
-
-    DECLARE_DELAY_EVENT_BEGIN(0)
-        gmsg<ISOGM_SELECT_CONTACT>((contact_c *)param, false).send();
-    DECLARE_DELAY_EVENT_END(get_historian())
+    get_historian()->reselect(false);
 
     prf().dirtycontact(getkey());
     return true;
@@ -456,9 +470,7 @@ bool contact_c::b_reject(RID, GUIPARAM par)
     if (CHECK(ap))
         ap->reject(getkey().contactid);
 
-    DECLARE_DELAY_EVENT_BEGIN(0)
-        gmsg<ISOGM_SELECT_CONTACT>((contact_c *)param, false).send();
-    DECLARE_DELAY_EVENT_END(get_historian())
+    get_historian()->reselect(false);
 
     prf().dirtycontact(getkey());
     return true;
@@ -480,9 +492,7 @@ bool contact_c::b_load(RID, GUIPARAM n)
 {
     int n_load = (int)n;
     get_historian()->load_history(n_load);
-    DECLARE_DELAY_EVENT_BEGIN(0)
-        gmsg<ISOGM_SELECT_CONTACT>((contact_c *)param, false).send();
-    DECLARE_DELAY_EVENT_END(get_historian())
+    get_historian()->reselect(false);
     return true;
 }
 
@@ -755,6 +765,18 @@ void contacts_c::kill(const contact_key_s &ck)
     del(cc->getkey());
 }
 
+contact_c *contacts_c::create_new_meta()
+{
+    contact_c *metac = TSNEW(contact_c, contact_key_s(find_free_meta_id()));
+
+    ts::aint index;
+    if (CHECK(!arr.find_sorted(index, metac->getkey())))
+        arr.insert(index, metac);
+    prf().dirtycontact(metac->getkey());
+
+    return metac;
+}
+
 ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
 {
     prf().dirty_sort();
@@ -779,15 +801,12 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
         ts::aint index;
         if (!arr.find_sorted(index, contact.key))
         {
-            contact_c *metac = TSNEW(contact_c, contact_key_s(find_free_meta_id()));
-            c = metac->subgetadd( contact.key );
+            c = create_new_meta()->subgetadd( contact.key );
+            
+            if (CHECK(!arr.find_sorted(index, c->getkey()))) // find index again due create_new_meta can make current index invalid
+                arr.insert(index, c);
 
-            arr.insert(index, c);
-            if (CHECK( !arr.find_sorted(index, metac->getkey()) ))
-                arr.insert(index, metac);
-        
             prf().purifycontact( c->getkey() );
-            prf().dirtycontact( metac->getkey() );
 
             // serious change - new contact added. proto data must be saved
             serious_change = c->getkey().protoid;

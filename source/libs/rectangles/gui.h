@@ -102,7 +102,6 @@ struct selectable_core_s
     GM_RECEIVER(selectable_core_s, GM_COPY_HOTKEY);
 
     ts::safe_ptr<gui_label_c> owner;
-    ts::GLYPHS glyphs;
     ts::ivec2 glyphs_pos;
     int glyph_under_cursor = -1;
     int glyph_start_sel = -1;
@@ -110,6 +109,7 @@ struct selectable_core_s
     int char_start_sel = -1;
     int char_end_sel = -1;
     int flashing = 0;
+    bool dirty = false;
 
     ts::wchar ggetchar( int glyphindex );
 
@@ -122,6 +122,7 @@ struct selectable_core_s
     }
     ~selectable_core_s();
 
+    bool is_dirty() { bool r = dirty; dirty = false; return r; }
 
     void begin( gui_label_c *label );
     bool try_begin( gui_label_c *label );
@@ -132,6 +133,40 @@ struct selectable_core_s
     void track();
     ts::uint32 detect_area(const ts::ivec2 &pos);
 
+};
+
+class dragndrop_processor_c : public ts::safe_object
+{
+    ts::ivec2 clickpos;
+    ts::ivec2 clickpos_rel;
+    ts::safe_ptr<guirect_c> dndrect;
+    ts::safe_ptr<guirect_c> dndobj;
+    bool dndobjdropable = false;
+public:
+    dragndrop_processor_c( guirect_c *dndrect );
+    virtual ~dragndrop_processor_c();
+    guirect_c *underproc() {return dndrect;}
+    ts::irect rect() const
+    {
+        return dndobj ? dndobj->getprops().screenrect() : ts::irect(0);
+    }
+
+    void mm(const ts::ivec2& cursorpos);
+    void update();
+    void droped();
+};
+
+enum dndaction_e
+{
+    DNDA_DRAG,
+    DNDA_DROP,
+    DNDA_CLEAN,
+};
+
+template<> struct gmsg<GM_DRAGNDROP> : public gmsgbase
+{
+    gmsg(dndaction_e a) :gmsgbase(GM_DRAGNDROP), a(a) {}
+    dndaction_e a;
 };
 
 class gui_c
@@ -152,7 +187,7 @@ class gui_c
 
     GM_RECEIVER( gui_c, GM_ROOT_FOCUS );
 
-    ts::str_c deffont;
+    ts::safe_ptr<dragndrop_processor_c> dndproc;
 
     class tempbuf_c : public ts::safe_object
     {
@@ -222,6 +257,9 @@ class gui_c
     ts::time_reducer_s<5000> m_5seconds;
     ts::struct_pool_t<sizeof(delay_event_c), 128> m_evpool;
 
+    ts::str_c m_deffont_name;
+    ts::hashmap_t<ts::str_c, ts::font_desc_c> m_fonts;
+
     struct slallocator
     {
         static void *ma(size_t sz) { return MM_ALLOC(sz); }
@@ -254,7 +292,16 @@ public:
 	~gui_c();
 
     void load_theme( const ts::wsptr&thn );
-    const ts::str_c & default_font() const {return deffont;}
+    
+    const ts::font_desc_c & get_font( const ts::asptr &fontname )
+    {
+        bool add = false;
+        auto &val = m_fonts.addAndReturnItem(fontname,add);
+        if (add) val.value.assign(fontname);
+        else val.value.update_font();
+        return val.value;
+    }
+    const ts::str_c &default_font_name() const { return m_deffont_name; }
 
     void resort_roots();
 
@@ -300,7 +347,7 @@ public:
     const ts::tbuf_t<RID>& roots() const {return m_roots;}
     void nomorerect(RID rootrid, bool isroot);
 
-    ts::ivec2 textsize( const ts::asptr& font, const ts::wstr_c& text, int width_limit = -1, int flags = 0 );
+    ts::ivec2 textsize( const ts::font_desc_c& font, const ts::wstr_c& text, int width_limit = -1, int flags = 0 );
 
     void make_app_buttons(RID rootappwindow, ts::uint32 allowed_buttons = 0xFFFFFFFF, GET_TOOLTIP closebhint = nullptr);
 
@@ -314,6 +361,11 @@ public:
     
     void exclusive_input(RID r, bool set = true);
     bool allow_input(RID r) const { return m_exclusive_input.count() == 0 || m_exclusive_input.last(RID()) == r || ( m_exclusive_input.last(RID()) >> r ); }
+
+    void dragndrop_lb( guirect_c *r );
+    void dragndrop_update( guirect_c *r );
+    ts::irect dragndrop_objrect();
+    guirect_c *dragndrop_underproc() { return dndproc.expired() ? nullptr : dndproc->underproc(); }
 
     ts::ivec2 get_cursor_pos() const;
 
@@ -372,15 +424,24 @@ INLINE ts::uint32 gui_control_c::get_state() const
     return st;
 }
 
-INLINE const ts::str_c &gui_label_c::get_font() const
+INLINE const ts::font_desc_c &gui_label_c::get_font() const
 {
-    if (font.is_empty())
+    if (!ASSERT(text.font))
     {
-        const theme_rect_s *thr = themerect();
-        if (thr && !thr->deffont.is_empty()) return thr->deffont;
-        return gui->default_font();
+        if (const theme_rect_s *thr = themerect()) return *thr->deffont;
+        return ts::g_default_text_font;
     }
-    return font;
+    return *text.font;
+}
+
+INLINE const ts::font_desc_c &gui_button_c::get_font() const
+{
+    if (!font)
+    {
+        if (const theme_rect_s *thr = themerect()) return *thr->deffont;
+        return ts::g_default_text_font;
+    }
+    return *font;
 }
 
 

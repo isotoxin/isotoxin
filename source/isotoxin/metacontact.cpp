@@ -45,19 +45,8 @@ void dialog_metacontact_c::getbutton(bcreate_s &bcr)
     descmaker dm(descs);
     dm << 1;
 
-    dm().page_header(TTT("Будет создан новый метаконтакт - объединение нескольких контактов с общей историей сообщений.[br][l]Добавляйте в этот список другие контакты из основного списока контактов ([nbr]правый клик -> Метаконтакт[/nbr])[/l]",147));
+    dm().page_header(TTT("Будет создан новый метаконтакт - объединение нескольких контактов с общей историей сообщений.[br][l]Добавляйте в этот список другие контакты из основного списока контактов путем перетаскивания.[/l]",147));
     dm().vspace(300, DELEGATE(this,makelist));
-
-    //dm().textfield(TTT("Публичный идентификатор", 67), ts::wstr_c(inparam.pubid), DELEGATE(this, public_id_handler))
-    //    .focus(!resend)
-    //    .readonly(resend);
-    //dm().vspace(5);
-    //dm().textfieldml(TTT("Сообщение", 72), TTT("$: Пожалуйста, добавьте меня в свой список контактов.", 73) / contacts().get_self().get_name(), DELEGATE(this, invite_message_handler))
-    //    .focus(resend);
-    //dm().vspace(5);
-    //dm().hiddenlabel(TTT("Неправильный публичный идентификатор!", 71), ts::ARGB(255, 0, 0)).setname(CONSTASTR("err") + ts::amake((int)CR_INVALID_PUB_ID));
-    //dm().hiddenlabel(TTT("Такой контакт уже есть!", 87), ts::ARGB(255, 0, 0)).setname(CONSTASTR("err") + ts::amake((int)CR_ALREADY_PRESENT));
-    //dm().hiddenlabel(TTT("Мало памяти!", 92), ts::ARGB(255, 0, 0)).setname(CONSTASTR("err") + ts::amake((int)CR_MEMORY_ERROR));
 
     return 0;
 }
@@ -69,6 +58,32 @@ bool dialog_metacontact_c::makelist(RID stub, GUIPARAM)
     cl_.leech( TSNEW(leech_fill_parent_s) );
     cl_.array_mode( clist );
     return true;
+}
+
+ts::uint32 dialog_metacontact_c::gm_handler(gmsg<GM_DRAGNDROP> & dnda)
+{
+    if (dnda.a == DNDA_CLEAN)
+    {
+        return 0;
+    }
+
+    gui_contact_item_c *ciproc = dynamic_cast<gui_contact_item_c *>(gui->dragndrop_underproc());
+    if (!ciproc) return 0;
+    if (dnda.a == DNDA_DROP)
+    {
+        if (clist.find(ciproc->getcontact().getkey()) < 0)
+            clist.add(ciproc->getcontact().getkey());
+        if (cl)
+            cl->refresh_array();
+
+        return 0;
+    }
+
+    ts::irect rect = gui->dragndrop_objrect();
+    int carea = getprops().screenrect().intersect_area( rect );
+    bool dndtgt = carea > rect.area()/2;
+
+    return dndtgt ? GMRBIT_ACCEPTED : 0;
 }
 
 ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
@@ -99,6 +114,10 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
             }
             break;
         }
+    case gmsg<ISOGM_METACREATE>::CHECKINLIST:
+        if (cl && clist.find(mca.ck) >= 0)
+            return GMRBIT_ACCEPTED | GMRBIT_ABORT;
+        return 0;
     }
 
     return 0;
@@ -163,6 +182,8 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
         }
     });
     prf().dirtycontact( basec->getkey() );
+    if (basec->gui_item) basec->gui_item->update_text();
+    basec->reselect(true);
     __super::on_confirm();
 }
 

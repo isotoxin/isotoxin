@@ -7,6 +7,10 @@ MAKE_CHILD<gui_contact_item_c>::~MAKE_CHILD()
     MODIFY(get()).visible(true);
 }
 
+gui_contact_item_c::gui_contact_item_c(MAKE_ROOT<gui_contact_item_c> &data) :gui_label_c(data), role(CIR_DNDOBJ), contact(data.contact)
+{
+}
+
 gui_contact_item_c::gui_contact_item_c(MAKE_CHILD<gui_contact_item_c> &data) :gui_label_c(data), role(data.role), contact(data.contact)
 {
     if (contact && (CIR_LISTITEM == role || CIR_ME == role))
@@ -24,7 +28,13 @@ gui_contact_item_c::~gui_contact_item_c()
 
 /*virtual*/ ts::ivec2 gui_contact_item_c::get_min_size() const
 {
-    return ts::ivec2(60);
+    ts::ivec2 subsize(0);
+    if (CIR_DNDOBJ == role)
+    {
+        if (const theme_rect_s *thr = themerect())
+            subsize = thr->maxcutborder.lt + thr->maxcutborder.rb;
+    }
+    return ts::ivec2(60) - subsize;
 }
 
 /*virtual*/ ts::ivec2 gui_contact_item_c::get_max_size() const
@@ -329,6 +339,12 @@ void gui_contact_item_c::created()
 {
     switch (role)
     {
+        case CIR_DNDOBJ:
+            set_theme_rect(CONSTASTR("contact.dnd"), false);
+            defaultthrdraw = DTHRO_BORDER | DTHRO_CENTER;
+            if (const gui_contact_item_c *r = dynamic_cast<const gui_contact_item_c *>(gui->dragndrop_underproc()))
+                if (r->is_protohit()) flags.set(F_PROTOHIT);
+            break;
         case CIR_METACREATE:
         case CIR_LISTITEM:
             set_theme_rect(CONSTASTR("contact"), false);
@@ -437,27 +453,36 @@ void gui_contact_item_c::setcontact(contact_c *c)
 
 void gui_contact_item_c::update_text()
 {
-    ts::wstr_c oldt = text;
+    ts::wstr_c newtext;
     if (contact)
     {
         if (contact->getkey().is_self())
         {
-
-            text = prf().username();
-            text_adapt_user_input(text);
+            newtext = prf().username();
+            text_adapt_user_input(newtext);
             ts::wstr_c t2(prf().userstatus());
             text_adapt_user_input(t2);
             if (CIR_CONVERSATION_HEAD == role)
             {
                 ts::ivec2 sz = g_app->buttons().editb->size;
-                text.append( CONSTWSTR(" <rect=0,") );
-                text.append_as_uint( sz.x ).append_char(',').append_as_uint( -sz.y ).append(CONSTWSTR(",2><br><l>"));
-                text.append(t2).append(CONSTWSTR(" <rect=1,"));
-                text.append_as_uint( sz.x ).append_char(',').append_as_uint( -sz.y ).append(CONSTWSTR(",2></l>"));
+                newtext.append( CONSTWSTR(" <rect=0,") );
+                newtext.append_as_uint( sz.x ).append_char(',').append_as_uint( -sz.y ).append(CONSTWSTR(",2><br><l>"));
+                newtext.append(t2).append(CONSTWSTR(" <rect=1,"));
+                newtext.append_as_uint( sz.x ).append_char(',').append_as_uint( -sz.y ).append(CONSTWSTR(",2></l>"));
             } else
             {
-                text.append(CONSTWSTR("<br><l>")).append(t2).append(CONSTWSTR("</l>"));
+                newtext.append(CONSTWSTR("<br><l>")).append(t2).append(CONSTWSTR("</l>"));
             }
+        } else if (CIR_METACREATE == role && contact->subcount() > 1)
+        {
+            contact->subiterate([&](contact_c *c) {
+                newtext.append(CONSTWSTR("<nl>"));
+                ts::wstr_c n = c->get_name(false);
+                text_adapt_user_input(n);
+                newtext.append( n );
+                active_protocol_c *ap = prf().ap( c->getkey().protoid );
+                if (CHECK(ap)) newtext.append(CONSTWSTR(" (")).append(ap->get_name()).append(CONSTWSTR(")"));
+            });
 
         } else if (contact->is_multicontact())
         {
@@ -476,54 +501,65 @@ void gui_contact_item_c::update_text()
                 if (c->get_state() == CS_WAIT) ++wait;
             } );
             if (live == 0 && count > 0)
-                text = colorize( TTT("Удален",77), get_default_text_color(0) );
+                newtext = colorize( TTT("Удален",77), get_default_text_color(0) );
             else if (count == 0)
-                text = colorize( TTT("Пустой",78), get_default_text_color(0) );
+                newtext = colorize( TTT("Пустой",78), get_default_text_color(0) );
             else if (rej > 0)
-                text = colorize( TTT("Отказано",79), get_default_text_color(0) );
+                newtext = colorize( TTT("Отказано",79), get_default_text_color(0) );
             else if (invsend > 0)
-                text = colorize( TTT("Запрос отправлен",88), get_default_text_color(0) );
+            {
+                newtext = contact->get_customname();
+                if (newtext.is_empty()) newtext = contact->get_name();
+                text_adapt_user_input(newtext);
+                if (!newtext.is_empty()) newtext.append(CONSTWSTR("<br>"));
+                newtext.append( colorize(TTT("Запрос отправлен", 88), get_default_text_color(0)) );
+            }
             else {
-                text = contact->get_customname();
-                if (text.is_empty()) text = contact->get_name();
-                text_adapt_user_input(text);
+                newtext = contact->get_customname();
+                if (newtext.is_empty()) newtext = contact->get_name();
+                text_adapt_user_input(newtext);
                 ts::wstr_c t2(contact->get_statusmsg());
                 text_adapt_user_input(t2);
 
                 if (CIR_CONVERSATION_HEAD == role)
                 {
                     ts::ivec2 sz = g_app->buttons().editb->size;
-                    text.append(CONSTWSTR(" <rect=0,"));
-                    text.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTWSTR(",2><br><l>"));
-                    //text.append(t1).append(CONSTWSTR("<br><l>"));
-                    text.append(t2).append(CONSTWSTR("</l>"));
+                    newtext.append(CONSTWSTR(" <rect=0,"));
+                    newtext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTWSTR(",2><br><l>"));
+                    //newtext.append(t1).append(CONSTWSTR("<br><l>"));
+                    newtext.append(t2).append(CONSTWSTR("</l>"));
 
                 } else
                 {
-                    if(!t2.is_empty()) text.append(CONSTWSTR("<br><l>")).append(t2).append(CONSTWSTR("</l>"));
                     if (invrcv)
                     {
-                        if (!text.is_empty()) text.append(CONSTWSTR("<br>"));
-                        text.append( colorize( TTT("Требуется подтверждение",153), get_default_text_color(0) ) );
+                        if (!newtext.is_empty()) newtext.append(CONSTWSTR("<br>"));
+                        newtext.append( colorize( TTT("Требуется подтверждение",153), get_default_text_color(0) ) );
+                        t2.clear();
                     }
+
                     if (wait)
                     {
-                        if (!text.is_empty()) text.append(CONSTWSTR("<br>"));
-                        text.append(colorize(TTT("Ожидание",154), get_default_text_color(0)));
+                        if (!newtext.is_empty()) newtext.append(CONSTWSTR("<br>"));
+                        newtext.append(colorize(TTT("Ожидание",154), get_default_text_color(0)));
+                        t2.clear();
                     }
+                    if (!t2.is_empty()) newtext.append(CONSTWSTR("<br><l>")).append(t2).append(CONSTWSTR("</l>"));
+
                 }
             }
 
         } else
-            set_text( L"<error>" );
+            newtext.set( CONSTWSTR("<error>") );
 
 
     } else
     {
-        set_text( ts::wstr_c() );
+        newtext.clear();
     }
+    text.set_text_only(newtext, false);
 
-    if (CIR_CONVERSATION_HEAD == role && oldt != text)
+    if (CIR_CONVERSATION_HEAD == role && text.is_dirty())
     {
         for (ebutton &b : hstuff().updr)
             b.updated = false;
@@ -557,215 +593,298 @@ void gui_contact_item_c::updrect(void *, int r, const ts::ivec2 &p)
     }
 }
 
+/*virtual*/ void gui_contact_item_c::update_dndobj(guirect_c *donor)
+{
+    update_text();
+    if (const gui_contact_item_c *r = dynamic_cast<const gui_contact_item_c *>(donor))
+        flags.init(F_PROTOHIT, r->is_protohit());
+}
+
+void gui_contact_item_c::target(bool tgt)
+{
+    if (tgt)
+        set_theme_rect(CONSTASTR("contact.dndtgt"), false);
+    else
+        set_theme_rect(CONSTASTR("contact"), false);
+}
+
+void gui_contact_item_c::on_drop(gui_contact_item_c *ondr)
+{
+    if (dialog_already_present(UD_METACONTACT)) return;
+
+    SUMMON_DIALOG<dialog_metacontact_c>(UD_METACONTACT, dialog_metacontact_params_s(contact->getkey()));
+
+    gmsg<ISOGM_METACREATE> mca(ondr->contact->getkey());
+    mca.state = gmsg<ISOGM_METACREATE>::ADD;
+    mca.send();
+
+    getengine().redraw();
+}
+
+
+/*virtual*/ guirect_c * gui_contact_item_c::summon_dndobj(const ts::ivec2 &deltapos)
+{
+    flags.set( F_DNDDRAW );
+    drawchecker dch;
+    gui_contact_item_c &dnd = MAKE_ROOT<gui_contact_item_c>(dch, contact);
+    ts::ivec2 subsize(0);
+    if (const theme_rect_s *thr = dnd.themerect())
+        subsize = thr->maxcutborder.lt + thr->maxcutborder.rb;
+    dnd.update_text();
+    MODIFY(dnd).pos( getprops().screenpos() + deltapos ).size( getprops().size() - subsize ).visible(true);
+    return &dnd;
+}
+
 /*virtual*/ bool gui_contact_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
     switch (qp)
     {
-        case SQ_DRAW:
-            gui_control_c::sq_evt(qp, rid, data);
-            if (m_engine)
+    case SQ_DRAW:
+        if (flags.is( F_DNDDRAW ))
+        {
+            if ( gui->dragndrop_underproc() == this )
+                return true;
+            flags.clear( F_DNDDRAW );
+        }
+        gui_control_c::sq_evt(qp, rid, data);
+        if (m_engine)
+        {
+            ts::irect ca = get_client_area();
+
+            contact_state_e st = CS_OFFLINE;
+            contact_online_state_e ost = COS_ONLINE;
+            if (contact)
             {
-                ts::irect ca = get_client_area();
-
-                contact_state_e st = CS_OFFLINE;
-                contact_online_state_e ost = COS_ONLINE;
-                if (contact)
-                {
-                    st = contact->get_meta_state();
-                    ost = contact->get_meta_ostate();
+                st = contact->get_meta_state();
+                ost = contact->get_meta_ostate();
+                if (role == CIR_CONVERSATION_HEAD)
+                    st = contact_state_check;
+            }
+            button_desc_s::states bst =  button_desc_s::DISABLED;
+            button_desc_s *bdesc = g_app->buttons().online;
+            bool force_state_icon = false;
+            switch (st)
+            {
+                case CS_INVITE_SEND:
+                    bdesc = g_app->buttons().invite;
+                    bst = button_desc_s::NORMAL;
+                    force_state_icon = true;
+                    break;
+                case CS_INVITE_RECEIVE:
+                    bdesc = g_app->buttons().invite;
+                    bst = button_desc_s::HOVER;
+                    force_state_icon = true;
+                    break;
+                case CS_REJECTED:
+                    bdesc = g_app->buttons().invite;
+                    bst = button_desc_s::DISABLED;
+                    force_state_icon = true;
+                    break;
+                case CS_ONLINE:
+                    if (ost == COS_ONLINE) bst = button_desc_s::NORMAL;
+                    else if (ost == COS_AWAY) bst = button_desc_s::HOVER;
+                    else if (ost == COS_DND) bst = button_desc_s::PRESS;
+                    break;
+                case CS_WAIT:
+                    bdesc = nullptr;
+                    break;
+                case contact_state_check: // some online, some offline
                     if (role == CIR_CONVERSATION_HEAD)
-                        st = contact_state_check;
-                }
-                button_desc_s::states bst =  button_desc_s::DISABLED;
-                button_desc_s *bdesc = g_app->buttons().online;
-                bool force_state_icon = false;
-                switch (st)
-                {
-                    case CS_INVITE_SEND:
-                        bdesc = g_app->buttons().invite;
-                        bst = button_desc_s::NORMAL;
-                        force_state_icon = true;
-                        break;
-                    case CS_INVITE_RECEIVE:
-                        bdesc = g_app->buttons().invite;
-                        bst = button_desc_s::HOVER;
-                        force_state_icon = true;
-                        break;
-                    case CS_REJECTED:
-                        bdesc = g_app->buttons().invite;
-                        bst = button_desc_s::DISABLED;
-                        force_state_icon = true;
-                        break;
-                    case CS_ONLINE:
-                        if (ost == COS_ONLINE) bst = button_desc_s::NORMAL;
-                        else if (ost == COS_AWAY) bst = button_desc_s::HOVER;
-                        else if (ost == COS_DND) bst = button_desc_s::PRESS;
-                        break;
-                    case CS_WAIT:
+                    {
                         bdesc = nullptr;
-                        break;
-                    case contact_state_check: // some online, some offline
-                        if (role == CIR_CONVERSATION_HEAD)
-                        {
-                            bdesc = nullptr;
-                        } else
-                        {
-                            bdesc = g_app->buttons().online2;
-                            bst = button_desc_s::NORMAL;
-                        }
-                        break;
-                }
-
-                if (( force_state_icon || CIR_METACREATE == role || (flags.is(F_PROTOHIT) && st != CS_ROTTEN)) && bdesc)
-                    bdesc->draw( m_engine.get(), bst, ca, button_desc_s::ARIGHT | button_desc_s::ABOTTOM );
-
-                if (contact)
-                {
-                    text_draw_params_s tdp( get_font(), this );
-                    button_desc_s *icon = g_app->buttons().icon[contact->get_meta_gender()];
-                    icon->draw( m_engine.get(), button_desc_s::NORMAL, ca, button_desc_s::ALEFT | button_desc_s::ATOP | button_desc_s::ABOTTOM );
-                    bool achtung = (CIR_CONVERSATION_HEAD == role) ? false : contact->achtung();
-                    if (n_unread > 0 || achtung)
+                    } else
                     {
-                        if (n_unread > 99) n_unread = 99;
-                        button_desc_s *unread = g_app->buttons().unread;
-
-                        ts::ivec2 pos = unread->draw( m_engine.get(), button_desc_s::NORMAL, ca, button_desc_s::ALEFT | button_desc_s::ABOTTOM );
-
-                        if (!contact->is_ringtone() || contact->is_ringtone_blink())
-                        {
-                            tdp.textoptions.setup(ts::TO_VCENTER | ts::TO_HCENTER);
-                            tdp.forecolor = unread->colors[button_desc_s::NORMAL];
-
-                            draw_data_s &dd = m_engine->begin_draw();
-                            dd.offset += pos;
-                            dd.size = unread->size;
-                            if ( contact->is_ringtone() )
-                                m_engine->draw(ts::wstr_c(CONSTWSTR("<img=call>")), tdp);
-                            else
-                            {
-                                if (st == CS_INVITE_RECEIVE || n_unread == 0)
-                                    m_engine->draw(CONSTWSTR("!"), tdp);
-                                else
-                                    m_engine->draw(ts::wstr_c().set_as_uint(n_unread), tdp);
-                            }
-                            m_engine->end_draw();
-                        }
-
+                        bdesc = g_app->buttons().online2;
+                        bst = button_desc_s::NORMAL;
                     }
+                    break;
+            }
 
-                    if (!flags.is(F_EDITNAME|F_EDITSTATUS))
+            if (( force_state_icon || CIR_METACREATE == role || (flags.is(F_PROTOHIT) && st != CS_ROTTEN)) && bdesc)
+                bdesc->draw( m_engine.get(), bst, ca, button_desc_s::ARIGHT | button_desc_s::ABOTTOM );
+
+            if (contact)
+            {
+                text_draw_params_s tdp;
+                button_desc_s *icon = g_app->buttons().icon[contact->get_meta_gender()];
+                icon->draw( m_engine.get(), button_desc_s::NORMAL, ca, button_desc_s::ALEFT | button_desc_s::ATOP | button_desc_s::ABOTTOM );
+                bool achtung = (CIR_CONVERSATION_HEAD == role) ? false : contact->achtung();
+                if (n_unread > 0 || achtung)
+                {
+                    if (n_unread > 99) n_unread = 99;
+                    button_desc_s *unread = g_app->buttons().unread;
+
+                    ts::ivec2 pos = unread->draw( m_engine.get(), button_desc_s::NORMAL, ca, button_desc_s::ALEFT | button_desc_s::ABOTTOM );
+
+                    if (!contact->is_ringtone() || contact->is_ringtone_blink())
                     {
-                        ca.lt += ts::ivec2(icon->size.x + 5, 2);
+                        ts::flags32_s f; f.setup(ts::TO_VCENTER | ts::TO_HCENTER);
+                        tdp.textoptions = &f;
+                        tdp.forecolor = unread->colors + button_desc_s::NORMAL;
+
                         draw_data_s &dd = m_engine->begin_draw();
-                        dd.size = ca.size();
-                        if (dd.size >> 0)
+                        dd.offset += pos;
+                        dd.size = unread->size;
+                        if ( contact->is_ringtone() )
+                            m_engine->draw(ts::wstr_c(CONSTWSTR("<img=call>")), tdp);
+                        else
                         {
-                            if (CIR_CONVERSATION_HEAD == role)
-                                hstuff().last_head_text_pos = ca.lt;
-                            dd.offset += ca.lt;
-                            tdp.textoptions.setup(ts::TO_VCENTER);
-                            tdp.forecolor = get_default_text_color();
-                            tdp.rectupdate = DELEGATE( this, updrect );
-                            m_engine->draw(text, tdp);
+                            if (st == CS_INVITE_RECEIVE || n_unread == 0)
+                                m_engine->draw(CONSTWSTR("!"), tdp);
+                            else
+                                m_engine->draw(ts::wstr_c().set_as_uint(n_unread), tdp);
                         }
                         m_engine->end_draw();
                     }
+
+                }
+
+                if (!flags.is(F_EDITNAME|F_EDITSTATUS))
+                {
+                    ca.lt += ts::ivec2(icon->size.x + 5, 2);
+                    draw_data_s &dd = m_engine->begin_draw();
+                    dd.size = ca.size();
+                    if (dd.size >> 0)
+                    {
+                        if (CIR_CONVERSATION_HEAD == role)
+                            hstuff().last_head_text_pos = ca.lt;
+                        dd.offset += ca.lt;
+                        ts::flags32_s f; f.setup(ts::TO_VCENTER);
+                        tdp.textoptions = &f;
+                        tdp.forecolor = nullptr;
+                        tdp.rectupdate = DELEGATE( this, updrect );
+                        draw(dd, tdp);
+                    }
+                    m_engine->end_draw();
                 }
             }
-            return true;
-        case SQ_MOUSE_OUT:
+        }
+        return true;
+    case SQ_MOUSE_OUT:
+        flags.clear(F_LBDN);
+        break;
+    case SQ_MOUSE_LDOWN:
+        flags.set(F_LBDN);
+        if ( CIR_LISTITEM == role ) 
+        {
+            gmsg<ISOGM_METACREATE> mca(contact->getkey());
+            mca.state = gmsg<ISOGM_METACREATE>::CHECKINLIST;
+            if (!mca.send().is(GMRBIT_ACCEPTED))
+                gui->dragndrop_lb( this );
+        }
+
+        return true;
+    case SQ_MOUSE_LUP:
+        if (flags.is(F_LBDN))
+        {
+            gmsg<ISOGM_SELECT_CONTACT>( contact ).send();
             flags.clear(F_LBDN);
-            break;
-        case SQ_MOUSE_LDOWN:
-            flags.set(F_LBDN);
-            return true;
-        case SQ_MOUSE_LUP:
-            if (flags.is(F_LBDN))
+        }
+        return false;
+    case SQ_MOUSE_RUP:
+        if (CIR_LISTITEM == role && !contact->getkey().is_self())
+        {
+            struct handlers
             {
-                gmsg<ISOGM_SELECT_CONTACT>( contact ).send();
-                flags.clear(F_LBDN);
-            }
-            return false;
-        case SQ_MOUSE_RUP:
-            if (CIR_LISTITEM == role && !contact->getkey().is_self())
-            {
-                struct handlers
+                static void m_delete_doit(const ts::str_c&cks)
                 {
-                    static void m_delete_doit(const ts::str_c&cks)
-                    {
-                        contact_key_s ck(cks);
-                        contacts().kill(ck);
-                    }
-                    static void m_delete(const ts::str_c&cks)
-                    {
-                        contact_key_s ck(cks);
-                        contact_c * c = contacts().find(ck);
-                        if (c)
-                        {
-                            SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                                gui_isodialog_c::title(DT_MSGBOX_WARNING),
-                                TTT("Будет полностью удален контакт:[br]$",84) / c->get_description()
-                                ).bcancel().on_ok(m_delete_doit, cks) );
-                        }
-                    }
-                    static void m_metacontact(const ts::str_c&cks)
-                    {
-                        contact_key_s ck(cks);
-                        contact_c * c = contacts().find(ck);
-                        if (c)
-                        {
-                            gmsg<ISOGM_METACREATE> mca(ck); mca.state = gmsg<ISOGM_METACREATE>::ADD; mca.send();
-                            if ( gmsg<ISOGM_METACREATE>::ADDED != mca.state )
-                                SUMMON_DIALOG<dialog_metacontact_c>(UD_METACONTACT, dialog_metacontact_params_s(ck));
-                        }
-                    }
-                };
-
-                menu_c m;
-                m.add(TTT("Метаконтакт",145),0,handlers::m_metacontact,contact->getkey().as_str());
-                m.add(TTT("Удалить",85),0,handlers::m_delete,contact->getkey().as_str());
-                gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(),0), m);
-
-            } else if (CIR_METACREATE == role)
-            {
-                struct handlers
+                    contact_key_s ck(cks);
+                    contacts().kill(ck);
+                }
+                static void m_delete(const ts::str_c&cks)
                 {
-                    static void m_remove(const ts::str_c&cks)
+                    contact_key_s ck(cks);
+                    contact_c * c = contacts().find(ck);
+                    if (c)
                     {
-                        contact_key_s ck(cks);
-                        contact_c * c = contacts().find(ck);
-                        if (c)
-                        {
-                            gmsg<ISOGM_METACREATE> mca(ck); mca.state = gmsg<ISOGM_METACREATE>::REMOVE; mca.send();
-                        }
+                        SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
+                            gui_isodialog_c::title(DT_MSGBOX_WARNING),
+                            TTT("Будет полностью удален контакт:[br]$",84) / c->get_description()
+                            ).bcancel().on_ok(m_delete_doit, cks) );
                     }
-                    static void m_mfirst(const ts::str_c&cks)
+                }
+                static void m_metacontact_detach(const ts::str_c&cks)
+                {
+                    contact_key_s ck(cks);
+                    ts::shared_ptr<contact_c> c = contacts().find(ck);
+                    if (c && c->getmeta())
                     {
-                        contact_key_s ck(cks);
-                        contact_c * c = contacts().find(ck);
-                        if (c)
-                        {
-                            gmsg<ISOGM_METACREATE> mca(ck); mca.state = gmsg<ISOGM_METACREATE>::MAKEFIRST; mca.send();
-                        }
+                        contact_c *historian = c->get_historian();
+                        prf().load_history(historian->getkey()); // load whole history into memory table
+                        historian->unload_history(); // clear history cache in contact
+                        contact_c *detached_meta = contacts().create_new_meta();
+                        historian->subdel(c);
+                        detached_meta->subadd(c);
+                        if (historian->gui_item) historian->gui_item->update_text();
+                        prf().dirtycontact( c->getkey() );
+                        prf().detach_history( historian->getkey(), detached_meta->getkey(), c->getkey() );
+                        gmsg<ISOGM_UPDATE_CONTACT_V>( c ).send();
+                        gmsg<ISOGM_UPDATE_CONTACT> upd;
+                        upd.key = c->getkey();
+                        upd.mask = CDM_STATE;
+                        upd.state = c->get_state();
+                        upd.send();
+                        historian->reselect(true);
                     }
-                };
+                }
+            };
 
-                rectengine_c &pareng = HOLD(getparent()).engine();
-                int nchild = pareng.children_count();
+            menu_c m;
+            if (contact->subcount() > 1) 
+            {
+                menu_c mc = m.add_sub(TTT("Метаконтакт", 145));
+                contact->subiterate([&](contact_c *c) {
 
+                    ts::wstr_c text(c->get_name(false));
+                    text_adapt_user_input(text);
+                    active_protocol_c *ap = prf().ap(c->getkey().protoid);
+                    if (CHECK(ap)) text.append(CONSTWSTR(" (")).append(ap->get_name()).append(CONSTWSTR(")"));
+                    mc.add( TTT("Отделить: $",197) / text, 0, handlers::m_metacontact_detach, c->getkey().as_str() );
+                });
 
-                menu_c m;
-                if (nchild > 1 && pareng.get_child(0) != &getengine())
-                    m.add(TTT("Сделать первым",151), 0, handlers::m_mfirst, contact->getkey().as_str());
-                m.add(TTT("Убрать",148), 0, handlers::m_remove, contact->getkey().as_str());
-                gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
             }
-            return false;
+            m.add(TTT("Удалить",85),0,handlers::m_delete,contact->getkey().as_str());
+            gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(),0), m);
+
+        } else if (CIR_METACREATE == role)
+        {
+            struct handlers
+            {
+                static void m_remove(const ts::str_c&cks)
+                {
+                    contact_key_s ck(cks);
+                    contact_c * c = contacts().find(ck);
+                    if (c)
+                    {
+                        gmsg<ISOGM_METACREATE> mca(ck); mca.state = gmsg<ISOGM_METACREATE>::REMOVE; mca.send();
+                    }
+                }
+                static void m_mfirst(const ts::str_c&cks)
+                {
+                    contact_key_s ck(cks);
+                    contact_c * c = contacts().find(ck);
+                    if (c)
+                    {
+                        gmsg<ISOGM_METACREATE> mca(ck); mca.state = gmsg<ISOGM_METACREATE>::MAKEFIRST; mca.send();
+                    }
+                }
+            };
+
+            rectengine_c &pareng = HOLD(getparent()).engine();
+            int nchild = pareng.children_count();
+
+
+            menu_c m;
+            if (nchild > 1 && pareng.get_child(0) != &getengine())
+                m.add(TTT("Сделать первым",151), 0, handlers::m_mfirst, contact->getkey().as_str());
+            m.add(TTT("Убрать",148), 0, handlers::m_remove, contact->getkey().as_str());
+            gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
+        }
+        return false;
 
     }
 
-    return gui_control_c::sq_evt(qp,rid,data);
+    return __super::sq_evt(qp,rid,data);
 }
 
 INLINE int statev(contact_state_e v)
@@ -933,6 +1052,59 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
 }
 
 
+ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_DRAGNDROP> &dnda)
+{
+    if (dnda.a == DNDA_CLEAN)
+    {
+        if (dndtarget) dndtarget->target(false);
+        dndtarget = nullptr;
+        return 0;
+    }
+    gui_contact_item_c *ciproc = dynamic_cast<gui_contact_item_c *>(gui->dragndrop_underproc());
+    if (!ciproc) return 0;
+    if (dnda.a == DNDA_DROP)
+    {
+        if (dndtarget) dndtarget->on_drop(ciproc);
+        dndtarget = nullptr;
+    }
+
+    ts::irect rect = gui->dragndrop_objrect();
+    int area = rect.area() / 3;
+    rectengine_c *yo = nullptr;
+    int count = getengine().children_count();
+    for (int i = skipctl; i < count; ++i)
+    {
+        rectengine_c *ch = getengine().get_child(i);
+        if (ch)
+        {
+            const guirect_c &cirect = ch->getrect();
+            if (&cirect == ciproc) continue;
+            int carea = cirect.getprops().screenrect().intersect_area( rect );
+            if (carea > area)
+            {
+                area = carea;
+                yo = ch;
+            }
+        }
+    }
+    if (yo)
+    {
+        gui_contact_item_c *ci = ts::ptr_cast<gui_contact_item_c *>(&yo->getrect());
+        if (dndtarget != ci)
+        {
+            if (dndtarget)
+                dndtarget->target(false);
+            ci->target(true);
+            dndtarget = ci;
+        }
+    } else if (dndtarget)
+    {
+        dndtarget->target(false);
+        dndtarget = nullptr;
+    }
+
+    return yo ? GMRBIT_ACCEPTED : 0;
+}
 
 ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT_V> & c )
 {
@@ -960,12 +1132,14 @@ ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT_V> & c )
             {
                 TSDEL(ch);
                 getengine().redraw();
+                gui->dragndrop_update(nullptr);
                 return 0;
             }
             if (same || ci->getcontact().subpresent( c.contact->getkey() ))
             {
                 ci->protohit();
                 ci->update_text();
+                gui->dragndrop_update(ci);
                 return 0;
             }
         }
@@ -979,7 +1153,7 @@ ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT_V> & c )
 
 ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
 {
-    if (prf().sort_tag() != sort_tag && role == CLR_MAIN_LIST)
+    if (prf().sort_tag() != sort_tag && role == CLR_MAIN_LIST && gui->dragndrop_underproc() == nullptr)
     {
         struct ss
         {

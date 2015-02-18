@@ -113,7 +113,6 @@ public:
     INTPAR(autoupdate, 0)
     INTPAR(autoupdate_proxy, 0)
     TEXTAPAR(autoupdate_proxy_addr, DEFAULT_PROXY)
-    INT64PAR(autoupdate_next, 0)
     TEXTAPAR(autoupdate_newver, "")
     
     TEXTAPAR(device_mic, "")

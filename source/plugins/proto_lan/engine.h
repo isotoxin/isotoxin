@@ -11,8 +11,13 @@
 #define AUDIO_BITS 16
 #define AUDIO_CHANNELS 1
 
-
+#define OPUS_EXPORT
 #include <opus.h>
+
+__forceinline int time_ms()
+{
+    return (int)timeGetTime();
+}
 
 struct socket_s
 {
@@ -60,12 +65,17 @@ struct udp_sender : public socket_s
 struct tcp_pipe : public socket_s
 {
     sockaddr_in addr;
-
+    int creationtime = 0;
     byte rcvbuf[65536];
     int rcvbuf_sz = 0;
 
-    tcp_pipe() {}
-    tcp_pipe( SOCKET s, const sockaddr_in& addr ):addr(addr) { _socket = s; }
+    tcp_pipe() { creationtime = time_ms(); }
+    tcp_pipe( SOCKET s, const sockaddr_in& addr ):addr(addr) { _socket = s; creationtime = time_ms(); }
+
+    bool timeout() const
+    {
+        return (time_ms() - creationtime) > 10000; // 10 sec
+    }
 
     void set_address(unsigned int IPv4, int port)
     {
@@ -322,7 +332,7 @@ public:
         int correct_create_time = 0;
         int next_sync = 0;
 
-        byte temporary_key[SIZE_KEY]; // crypto key for unautorized interactions (before accept invite)
+        byte temporary_key[SIZE_KEY]; // crypto key for unauthorized interactions (before accept invite)
         byte authorized_key[SIZE_KEY];
 
         byte public_key[SIZE_PUBLIC_KEY];
@@ -409,7 +419,7 @@ public:
 
         contact_s(int id):id(id)
         {
-            nextactiontime = timeGetTime() - 10000000;
+            nextactiontime = time_ms() - 10000000;
         }
         ~contact_s();
 
@@ -441,8 +451,8 @@ private:
     void pp_search( unsigned int IPv4, int back_port, const byte *trapped_contact_public_key, const byte *seeking_raw_public_id );
     void pp_hallo( unsigned int IPv4, int back_port, const byte *hallo_contact_public_key );
 
-    bool pp_meet( tcp_pipe * pipe, stream_reader &&r ); // returns true if ok, so pipe deleted or used
-    bool pp_nonce( tcp_pipe * pipe, stream_reader &&r ); // returns true if ok, so pipe deleted or used
+    tcp_pipe * pp_meet( tcp_pipe * pipe, stream_reader &&r );
+    tcp_pipe * pp_nonce( tcp_pipe * pipe, stream_reader &&r );
 
     lan_engine(host_functions_s *hf);
     ~lan_engine();

@@ -16,7 +16,6 @@
 
 #pragma comment(lib, "zlib.lib")
 #pragma comment(lib, "minizip.lib")
-#pragma comment(lib, "freetype.lib")
 #pragma comment(lib, "sqlite3.lib")
 #pragma comment(lib, "libcurl.lib")
 #pragma comment(lib, "libsodium.lib")
@@ -148,7 +147,7 @@ static bool check_instance()
     return true;
 }
 
-static bool parsecmdl(const wchar_t *cmdl)
+static bool parsecmdl(const wchar_t *cmdl, bool &checkinstance)
 {
     ts::wstr_c wd;
     ts::set_work_dir(wd);
@@ -166,6 +165,9 @@ static bool parsecmdl(const wchar_t *cmdl)
         }
         if (cmds->equals(CONSTWSTR("wait")))
             wait_cmd = true;
+
+        if (cmds->equals(CONSTWSTR("multi")))
+            checkinstance = false;
     }
 
     if (processwait)
@@ -191,14 +193,16 @@ bool _cdecl app_preinit( const wchar_t *cmdl )
 
     sodium_init();
 
-    if (!parsecmdl(cmdl))
+    bool checkinstance = true;
+    if (!parsecmdl(cmdl, checkinstance))
         return false;
 
     if (!check_autoupdate())
         return false;
 
 #ifdef _FINAL
-    if (!check_instance()) return false;
+    if (checkinstance)
+        if (!check_instance()) return false;
 #endif // _FINAL
 
     UNSTABLE_CODE_PROLOG

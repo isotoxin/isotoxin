@@ -336,7 +336,9 @@ struct text_parser_s
                 rite_rite = 0;
             }
 
-		}
+		} else
+            rite_rite = 0;
+
         if (acceptaddhnow)
         {
             int addH = 0;
@@ -443,7 +445,14 @@ struct text_parser_s
 			if (last_line.count() > 0) end_line();
 			else next_line(font.height);//если строка пуста€, то добавл€ем высоту строки дл€ текущего шрифта
 			pen.y += ui_scale(tagbody.as_int());
-		}
+		} else if (tag == CONSTWSTR("nl")) // next line, but only if not first tag
+        {
+            if (last_line.count() > 0)
+            {
+                end_line();
+                pen.y += ui_scale(tagbody.as_int());
+            }
+        }
         else if (tag == CONSTWSTR("char"))
         {
             addchar(font, (wchar)tagbody.as_uint('?'), chari);
@@ -551,21 +560,25 @@ struct text_parser_s
 		else if (tag == CONSTWSTR("b"))
 		{
             font_c &f = *fonts_stack.last();
-			fonts_stack.add(font_desc_c(f.makename_bold()));
+            font_desc_c ff; ff.assign(f.makename_bold());
+			fonts_stack.add(ff);
 		}
         else if (tag == CONSTWSTR("l"))
         {
             font_c &f = *fonts_stack.last();
-            fonts_stack.add(font_desc_c(f.makename_light()));
+            font_desc_c ff; ff.assign(f.makename_light());
+            fonts_stack.add(ff);
         }
         else if (tag == CONSTWSTR("i"))
         {
             font_c &f = *fonts_stack.last();
-            fonts_stack.add(font_desc_c(f.makename_italic()));
+            font_desc_c ff; ff.assign(f.makename_italic());
+            fonts_stack.add(ff);
         }
         else if (tag == CONSTWSTR("font"))
         {
-            fonts_stack.add(font_desc_c(tmp_str_c(tagbody)));
+            font_desc_c ff; ff.assign(tmp_str_c(tagbody));
+            fonts_stack.add(ff);
         }
 		else if (tag == CONSTWSTR("/font") || tag == CONSTWSTR("/b") || tag == CONSTWSTR("/l") || tag == CONSTWSTR("/i"))
 		{
@@ -738,7 +751,7 @@ struct text_parser_s
 			{
 				int j = last_line.count() - 1, lineSize;
 
-				if (flags & TO_MULTILINE || (flags & TO_END_ELLIPSIS && pen.y + fonts_stack.last()->height * 3 / 2 >= boundy))
+				if (FLAG(flags,TO_FORCE_SINGLELINE) || (FLAG(flags,TO_END_ELLIPSIS) && pen.y + fonts_stack.last()->height * 3 / 2 >= boundy))
 				{
 					glyph_s &dot_glyph = (*fonts_stack.last())[L'.'];
 					line_len += dot_glyph.advance * 3;//advance of ...
@@ -758,7 +771,7 @@ struct text_parser_s
 				}
 				else
 				{
-					if (flags & TO_WRAP_BREAK_WORD) goto inlineBreak;
+					if (FLAG(flags,TO_WRAP_BREAK_WORD)) goto inlineBreak;
 
 					//—разу формировать новую строку нельз€ - если окажетс€, что это единственное слово в строке, то его надо не переносить, а разбивать
 					//ѕоиск последнего разделител€ (только пробел)
@@ -924,7 +937,8 @@ end:;
                         rite_rite = 0;
                     }
 
-				}
+				} else
+                    rite_rite = 0;
 
 				// go next line
 				last_line.remove_slow(0, lineSize);

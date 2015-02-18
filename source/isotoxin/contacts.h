@@ -180,6 +180,8 @@ public:
         subdelall();
     }
 
+    void reselect(bool);
+
     bool achtung() const;
 
     bool is_meta() const { return key.is_meta() && getmeta() == nullptr; };
@@ -537,6 +539,8 @@ public:
 
     ts::str_c find_pubid(int protoid) const;
     contact_c *find_subself(int protoid) const;
+
+    contact_c *create_new_meta();
 
     bool present( const contact_key_s&k ) const
     {

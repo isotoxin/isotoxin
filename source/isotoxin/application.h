@@ -142,6 +142,12 @@ class application_c
 public:
     bool b_send_message(RID r, GUIPARAM param);
 public:
+
+    const ts::font_desc_c *font_conv_name = &ts::g_default_text_font;
+    const ts::font_desc_c *font_conv_text = &ts::g_default_text_font;
+
+    time_t autoupdate_next;
+
 	application_c( const ts::wchar * cmdl );
 	~application_c();
 

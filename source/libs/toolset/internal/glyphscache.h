@@ -86,10 +86,12 @@ class font_desc_c
 
 public:
 	font_desc_c() : font(nullptr) {}
-	font_desc_c(const asptr &params) : font(nullptr) { assign(params); }
-
+	//explicit font_desc_c(const asptr &params) : font(nullptr) { assign(params); }
+    const str_c &name() const {return fontname;}
+    void reasign( const asptr &p ) { params.clear(); assign(p); };
 	bool assign(const asptr &params, bool andUpdate = true);
 	void update(int scale = 100);
+    void update_font();
 
 	operator font_c * () const {return get_font();}
 	font_c *operator->() const {return get_font();}

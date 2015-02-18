@@ -13,11 +13,10 @@ namespace ts
 	{
 		TO_HCENTER          = SETBIT(NUMGEN_NEXT(dopb)),
 		TO_VCENTER          = SETBIT(NUMGEN_NEXT(dopb)),
-		TO_CLIP             = SETBIT(NUMGEN_NEXT(dopb)),
 		TO_MULTILINE        = SETBIT(NUMGEN_NEXT(dopb)),
-		TO_END_ELLIPSIS     = SETBIT(NUMGEN_NEXT(dopb)),//like SINGLELINE, but also works for multiline text
-		TO_WRAP_BREAK_WORD  = SETBIT(NUMGEN_NEXT(dopb)),//wrap line by any symbol, not just by space
-		TO_NOT_SCALE_FONT   = SETBIT(NUMGEN_NEXT(dopb)),
+        TO_FORCE_SINGLELINE = SETBIT(NUMGEN_NEXT(dopb)),
+		TO_END_ELLIPSIS     = SETBIT(NUMGEN_NEXT(dopb)),// like SINGLELINE, but also works for multiline text
+		TO_WRAP_BREAK_WORD  = SETBIT(NUMGEN_NEXT(dopb)),// wrap line by any symbol, not just by space
         TO_LASTLINEADDH     = SETBIT(NUMGEN_NEXT(dopb)),
 
         TO_LAST_OPTION      = SETBIT(NUMGEN_NEXT(dopb)),
@@ -31,9 +30,9 @@ struct glyph_image_s
 
     union
     {
-        struct // на самом деле не глиф, а служебная информация
+        struct // not a glyph, but service info
         {
-            void *zeroptr;
+            void *zeroptr; // nullptr
             int outline_index; // если -1, следующие 2 поля актуальныы, если 0, то этот глиф надо игнорировать, если >0, то сначала идет отрисовка глифов от этого индекса и до конца массива
             int next_dim_glyph;
             svec2 line_lt;
@@ -41,7 +40,7 @@ struct glyph_image_s
         };
         struct
         {
-            const uint8 *pixels;
+            const uint8 *pixels; // not nullptr
             int charindex;
             TSCOLOR color; //если не 0, то pixels указывает на alpha-изображение, которое нужно вывести с данным color (rgb берется напрямую из color, а альфа получается перемножением color.a и alpha пикселя)
                            //если = 0, то pixels указывает на rgba-premultiplied-изображение, которое выводится как есть

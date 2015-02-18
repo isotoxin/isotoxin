@@ -49,16 +49,13 @@ struct draw_data_s
 
 struct text_draw_params_s
 {
-    ts::str_c font;
-    ts::TSCOLOR forecolor = ts::ARGB(0, 0, 0, 255);
-    ts::TSCOLOR bkcolor = ts::ARGB(255, 255, 255, 255);
-    ts::flags32_s textoptions;
-    ts::ivec2 *sz = nullptr;
-    ts::GLYPHS *glyphs = nullptr;
+    const ts::font_desc_c *font = nullptr;
+    const ts::TSCOLOR *forecolor = nullptr;
+    //ts::TSCOLOR *bkcolor = nullptr;
+    const ts::flags32_s *textoptions = nullptr;
     ts::UPDATE_RECTANGLE rectupdate;
-
-    text_draw_params_s( guirect_c *rect = nullptr );
-    text_draw_params_s(const ts::str_c &font, guirect_c *rect = nullptr );
+    ts::ivec2 *sz = nullptr;
+    //ts::GLYPHS *glyphs = nullptr;
 };
 
 enum area_e

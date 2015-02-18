@@ -302,16 +302,16 @@ void summon_test_window()
 {
     //cfg().autoupdate_next( now() + 2 );
     //cfg().autoupdate_newver(CONSTASTR("0.0.0"));
-    zero_version = true;
+    //zero_version = true;
     //gmsg<ISOGM_NEWVERSION> *m = TSNEW(gmsg<ISOGM_NEWVERSION>, CONSTASTR("0.1.225"));
     //m->send_to_main_thread();
 
 
-    /*
+    
     drawchecker dch;
     RID r = MAKE_ROOT<test_window>(dch);
     MODIFY(r).allow_move_resize().size(502,447).setcenterpos().visible(true);
-    */
+    
 }
 
 

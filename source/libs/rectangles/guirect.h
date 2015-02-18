@@ -23,6 +23,7 @@ enum system_query_e
     SQ_PARENT_VISIBILITY_CHANGED,   // evt_data_s::changed .is_visible
 
     SQ_ZINDEX_CHANGED,              // evt_data_s::changed .zindex
+    SQ_THEMERECT_CHANGED,
 
     SQ_FOCUS_CHANGED,               // evt_data_s::changed .focus
 
@@ -510,6 +511,9 @@ public:
 	guirect_c(initial_rect_data_s &data);
 	virtual ~guirect_c();
 
+    virtual void update_dndobj(guirect_c *donor) {}
+    virtual guirect_c * summon_dndobj(const ts::ivec2 &deltapos) { return nullptr; };
+
     const ts::wstr_c tooltip() const {return m_tooltip ? m_tooltip() : ts::wstr_c();}
     void tooltip(GET_TOOLTIP gtt)  {m_tooltip = gtt;}
 
@@ -614,7 +618,7 @@ protected:
     cached_theme_rect_c thrcache;
     ts::uint32 get_state() const;
 
-    static const ts::flags32_s::BITS F_DISABLED = SETBIT(0);
+    static const ts::flags32_s::BITS F_DISABLED         = SETBIT(0);
     static const ts::flags32_s::BITS FLAGS_FREEBITSTART = SETBIT(1);
 
     ts::UPDATE_RECTANGLE updaterect;
@@ -623,6 +627,19 @@ protected:
     ts::uint32 defaultthrdraw = DTHRO_BORDER | DTHRO_CENTER;
     ts::flags32_s flags;
     gui_control_c() {}
+
+    const ts::font_desc_c & safe_font( const ts::font_desc_c *f )
+    {
+        if (f == nullptr)
+        {
+            if (const theme_rect_s *thr = themerect())
+                return *thr->deffont;
+            else
+                return ts::g_default_text_font;
+        }
+        return *f;
+    }
+
 public:
     gui_control_c(initial_rect_data_s &data):guirect_c(data) {}
     /*virtual*/ ~gui_control_c();
@@ -756,7 +773,7 @@ class gui_button_c : public gui_control_c
     typedef gm_redirect_s<GM_GROUP_SIGNAL> GROUPHANDLER;
     UNIQUE_PTR( GROUPHANDLER ) grouphandler;
     int grouptag = -1;
-    ts::str_c font;
+    const ts::font_desc_c *font = &ts::g_default_text_font;
     ts::wstr_c text;
     ts::shared_ptr<button_desc_s> desc;
     button_desc_s::states curstate = button_desc_s::NORMAL;
@@ -793,7 +810,7 @@ public:
         grouphandler.reset(TSNEW(GROUPHANDLER, h));
     }
 
-    
+    const ts::font_desc_c &get_font() const;
 
     //void set_font(const ts::asptr&text);
     void set_face( const ts::asptr&fancename );
@@ -822,40 +839,36 @@ class gui_label_c : public gui_control_c
 
     void draw();
 
-    ts::str_c font;
-
 protected:
 
     static const ts::flags32_s::BITS FLAGS_AUTO_HEIGHT          = FLAGS_FREEBITSTART << 0;
-    static const ts::flags32_s::BITS FLAGS_DEFCOLOR             = FLAGS_FREEBITSTART << 1;
+    static const ts::flags32_s::BITS FLAGS_SELECTION            = FLAGS_FREEBITSTART << 1;
     static const ts::flags32_s::BITS FLAGS_SELECTABLE           = FLAGS_FREEBITSTART << 2;
     static const ts::flags32_s::BITS FLAGS_FREEBITSTART_LABEL   = FLAGS_FREEBITSTART << 3;
 
-    ts::ivec2 marginlt = 0;
-    ts::TSCOLOR defcolor = 0;
-
-    ts::wstr_c text;
-    ts::ivec2 lastdrawtextsize = 0;
+    ts::text_rect_c text;
 
     void draw( draw_data_s &dd, const text_draw_params_s &tdp ); // use it if want selection
-
 
     gui_label_c() {} // издержки производства - нужен для потомка
 public:
     gui_label_c(initial_rect_data_s &data) :gui_control_c(data) {}
     /*virtual*/ ~gui_label_c() { }
 
-    const ts::str_c &get_font() const;
-    void set_text(const ts::wsptr&text);
-    void set_font(const ts::asptr&text);
+    const ts::font_desc_c &get_font() const;
+    void set_text(const ts::wstr_c&text);
+    void set_font(const ts::font_desc_c *font);
     void set_autoheight() { flags.set(FLAGS_AUTO_HEIGHT); }
-    void set_defcolor(ts::TSCOLOR col) { defcolor = col; flags.set(FLAGS_DEFCOLOR); }
+    void set_defcolor(ts::TSCOLOR col) { text.set_def_color(col); }
     void set_selectable( bool f = true );
 
+    ts::GLYPHS &get_glyphs() { return text.glyphs(); }
+
+    /*virtual*/ int       get_height_by_width(int width) const override;
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ ts::ivec2 get_max_size() const override;
 
-    const ts::wstr_c &get_text() const {return text;};
+    const ts::wstr_c &get_text() const {return text.get_text();};
 
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };

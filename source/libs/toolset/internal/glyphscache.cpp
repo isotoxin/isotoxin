@@ -359,6 +359,12 @@ void load_fonts( const abp_c &bp )
         add_font_internal(bpr.name(), bpr->as_string().as_sptr());
 }
 
+void font_desc_c::update_font()
+{
+    if (fontsig != idata().font_cache_sig)
+        update();
+}
+
 font_c *font_desc_c::get_font() const
 {
 	if (font && !CHECK(fontsig == idata().font_cache_sig))

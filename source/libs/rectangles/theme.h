@@ -71,8 +71,8 @@ struct theme_rect_s : ts::shared_object
     ts::ivec2 capbuttonsshift;
     ts::ivec2 capbuttonsshift_max;
 	ts::ivec2 minsize;
-    ts::str_c capfont;
-    ts::str_c deffont;
+    const ts::font_desc_c *capfont = &ts::g_default_text_font;
+    const ts::font_desc_c *deffont = &ts::g_default_text_font;
     ts::TSCOLOR deftextcolor;
     ts::tbuf0_t<ts::TSCOLOR> colors;
 	

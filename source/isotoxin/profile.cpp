@@ -761,6 +761,26 @@ void profile_c::load_history( const contact_key_s&historian )
     table_history.read( db, whr );
 }
 
+void profile_c::detach_history( const contact_key_s&prev_historian, const contact_key_s&new_historian, const contact_key_s&sender )
+{
+    // already loaded
+    // just detach
+    // don't care about time
+
+    bool changed = false;
+    for (auto &hi : table_history.rows)
+    {
+        if (hi.other.historian == prev_historian && hi.other.sender == sender)
+        {
+            hi.other.historian = new_historian;
+            hi.changed();
+            changed = true;
+        }
+    }
+    if (changed)
+        this->changed();
+}
+
 void profile_c::merge_history( const contact_key_s&base_historian, const contact_key_s&from_historian )
 {
     // just merge already loaded stuff

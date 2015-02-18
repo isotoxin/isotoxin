@@ -86,13 +86,14 @@ bool gui_c::b_normalize(RID r, GUIPARAM param)
 
 gui_c::gui_c()
 {
-    deffont = CONSTASTR("default");
+    m_deffont_name = CONSTASTR("default");
     gui = this;
     dirty_hover_data();
 }
 
 gui_c::~gui_c() 
 {
+    if (dndproc) TSDEL(dndproc);
     ASSERT(gui == this);
 
     for(int tag : m_usedtags4buf)
@@ -123,6 +124,11 @@ gui_c::~gui_c()
 void gui_c::load_theme( const ts::wsptr&thn )
 {
     m_theme.load(thn);
+    for(auto it = m_fonts.begin(); it; ++it)
+    {
+        ts::str_c name = it->name();
+        it->reasign( name );
+    }
 }
 
 int gui_c::get_temp_buf(double ttl, ts::aint sz)
@@ -335,6 +341,18 @@ DWORD gui_c::handler_SEV_WCHAR(const system_event_param_s & p)
 
 DWORD gui_c::handler_SEV_MOUSE(const system_event_param_s & p)
 {
+    ts::tmp_array_inplace_t<drawchecker, 4> dchs;
+    for (RID r : roots())
+        dchs.add() = HOLD(r).engine().getroot();
+
+    if (dndproc)
+    {
+        if (p.mouse.message == WM_MOUSEMOVE)
+            dndproc->mm( ts::ref_cast<ts::ivec2>( p.mouse.pos ) );
+        else if (p.mouse.message == WM_LBUTTONUP)
+            dndproc->droped();
+    }
+    
     if (p.mouse.message == WM_MOUSEWHEEL)
         if (RID f = gui->get_minside())
             if (allow_input(f))
@@ -415,11 +433,9 @@ ts::uint32 gui_c::gm_handler(gmsg<GM_ROOT_FOCUS>&p)
 }
 
 
-ts::ivec2 gui_c::textsize( const ts::asptr& font, const ts::wstr_c& text, int width_limit, int flags )
+ts::ivec2 gui_c::textsize( const ts::font_desc_c& font, const ts::wstr_c& text, int width_limit, int flags )
 {
-    ts::font_desc_c f;
-    f.assign(font);
-    return m_textrect.calc_text_size(f,text,width_limit < 0 ? 16384 : width_limit, flags);
+    return m_textrect.calc_text_size(font,text,width_limit < 0 ? 16384 : width_limit, flags);
 }
 
 RID gui_c::get_free_rid()
@@ -732,6 +748,92 @@ ts::ivec2 gui_c::get_cursor_pos() const
     return cp;
 }
 
+dragndrop_processor_c::dragndrop_processor_c(guirect_c *dndrect):dndrect(dndrect)
+{
+    clickpos = gui->get_cursor_pos();
+    clickpos_rel = dndrect->to_local(clickpos);
+}
+dragndrop_processor_c::~dragndrop_processor_c()
+{
+    if (dndobj)
+        TSDEL(dndobj.get());
+    if (dndrect)
+        dndrect->getengine().redraw();
+
+    gmsg<GM_DRAGNDROP>(DNDA_CLEAN).send();
+}
+
+void dragndrop_processor_c::update()
+{
+    if (!dndrect)
+    {
+        TSDEL(this);
+        return;
+    }
+    if (dndobj)
+        dndobj->update_dndobj(dndrect);
+}
+
+void dragndrop_processor_c::droped()
+{
+    if (dndobj)
+    {
+        gmsg<GM_DRAGNDROP>(DNDA_DROP).send();
+    }
+    TSDEL(this);
+}
+
+void dragndrop_processor_c::mm(const ts::ivec2& cursorpos)
+{
+    if (!dndrect)
+    {
+        TSDEL(this);
+        return;
+    }
+    if (dndobj == nullptr && (cursorpos-clickpos).sqlen() > 25.0f)
+    {
+        dndobj = dndrect->summon_dndobj(cursorpos - clickpos);
+        if (!dndobj)
+        {
+            TSDEL(this);
+            return;
+        }
+
+        clickpos = cursorpos;
+        clickpos_rel = dndobj->to_local(clickpos);
+    }
+    if (dndobj)
+    {
+        MODIFY(*dndobj).pos(cursorpos - clickpos_rel);
+        bool isdropable = gmsg<GM_DRAGNDROP>(DNDA_DRAG).send().is(GMRBIT_ACCEPTED);
+        if (dndobjdropable != isdropable)
+        {
+            dndobjdropable = isdropable;
+            MODIFY(*dndobj).highlight(dndobjdropable);
+            dndobj->getengine().redraw();
+        }
+    }
+}
+
+void gui_c::dragndrop_update( guirect_c *r )
+{
+    if (dndproc && (dndproc->underproc() == r || r == nullptr))
+        dndproc->update();
+}
+
+void gui_c::dragndrop_lb( guirect_c *r )
+{
+    if (dndproc) TSDEL(dndproc);
+    dndproc = TSNEW(dragndrop_processor_c, r);
+}
+
+ts::irect gui_c::dragndrop_objrect()
+{
+    if (dndproc) return dndproc->rect();
+    return ts::irect(0);
+}
+
+
 selectable_core_s::~selectable_core_s()
 {
     //gui->delete_event( DELEGATE(this,flash) );
@@ -741,6 +843,7 @@ bool selectable_core_s::flash(RID, GUIPARAM)
 {
     --flashing;
     if (flashing > 0) DELAY_CALL_R( 0.1, DELEGATE(this, flash), nullptr );
+    dirty = true;
     owner->getengine().redraw();
     return true;
 }
@@ -768,6 +871,7 @@ ts::uint32 selectable_core_s::gm_handler(gmsg<GM_COPY_HOTKEY> &s)
 
         flashing = 3;
         DELAY_CALL_R( 0.1, DELEGATE(this, flash), nullptr );
+        dirty = true;
         owner->getengine().redraw();
         return GMRBIT_ABORT|GMRBIT_ACCEPTED;
     }
@@ -776,6 +880,8 @@ ts::uint32 selectable_core_s::gm_handler(gmsg<GM_COPY_HOTKEY> &s)
 
 ts::wchar selectable_core_s::ggetchar( int glyphindex )
 {
+    ts::GLYPHS &glyphs = owner->get_glyphs();
+
     if (glyphindex >= 0 && glyphindex < glyphs.count())
         if (glyphs.get(glyphindex).pixels == nullptr || glyphs.get(glyphindex).charindex < 0) return 0; // word break
 
@@ -791,11 +897,13 @@ bool selectable_core_s::selectword(RID, GUIPARAM p)
     {
         // current glyph not yet known. waiting it
         if (!p && owner) owner->getengine().redraw();
+        dirty = true;
         DELAY_CALL_R( 0, DELEGATE(this, selectword), GUIPARAM(1) );
         return true;
     }
     if (owner)
     {
+        ts::GLYPHS &glyphs = owner->get_glyphs();
         int chari = ts::glyphs_get_charindex(glyphs,glyph_under_cursor);
         if (chari >= 0 && chari < owner->get_text().get_length())
         {
@@ -805,6 +913,7 @@ bool selectable_core_s::selectword(RID, GUIPARAM p)
 
             char_start_sel = ts::glyphs_get_charindex(glyphs, glyph_start_sel);
             char_end_sel = ts::glyphs_get_charindex(glyphs, glyph_end_sel);
+            dirty = true;
             owner->getengine().redraw();
 
         }
@@ -822,13 +931,13 @@ void selectable_core_s::begin( gui_label_c *label )
         if (owner && owner != label)
             clear_selection();
         owner = label;
-        glyphs.clear();
     }
     glyph_under_cursor = -1;
     glyph_start_sel = -1 /*glyph_under_cursor*/;
     glyph_end_sel = -1 /*glyph_under_cursor*/;
     char_start_sel = -1;
     char_end_sel = -1;
+    dirty = true;
     owner->getengine().redraw();
 }
 
@@ -845,6 +954,7 @@ bool selectable_core_s::sure_selected()
     if (glyph_start_sel >= 0 && glyph_end_sel >= 0 &&
         char_start_sel >= 0 && char_end_sel >= 0)
     {
+        ts::GLYPHS &glyphs = owner->get_glyphs();
         int new_char_start_sel = ts::glyphs_get_charindex(glyphs, glyph_start_sel);
         int new_char_end_sel = ts::glyphs_get_charindex(glyphs, glyph_end_sel);
         if (new_char_start_sel != char_start_sel || new_char_end_sel != char_end_sel)
@@ -876,6 +986,7 @@ void selectable_core_s::selection_stuff(ts::drawable_bitmap_c &texture)
     int isel0 = glyph_start_sel;
     int isel1 = glyph_end_sel;
     if (isel0 > isel1) SWAP(isel0, isel1);
+    ts::GLYPHS &glyphs = owner->get_glyphs();
     if (isel0 >= glyphs.count()) return;
 
     ts::TSCOLOR selectionColor = ts::ARGB(255, 255, 0);
@@ -934,6 +1045,7 @@ void selectable_core_s::clear_selection()
     glyph_end_sel = -1;
     char_start_sel = -1;
     char_end_sel = -1;
+    dirty = true;
     owner->getengine().redraw();
     gui->delete_event( DELEGATE(this, selectword) );
 }
@@ -941,6 +1053,7 @@ void selectable_core_s::clear_selection()
 ts::uint32 selectable_core_s::detect_area(const ts::ivec2 &pos)
 {
     glyph_under_cursor = -1;
+    ts::GLYPHS &glyphs = owner->get_glyphs();
     ts::irect gr = ts::glyphs_bound_rect(glyphs);
     gr += glyphs_pos;
     gr.lt.x -= 5; if (gr.lt.x < 0) gr.lt.x = 0;
@@ -970,8 +1083,10 @@ void selectable_core_s::track()
         if (glyph_under_cursor >= 0) glyph_end_sel = glyph_under_cursor;
         if (glyph_start_sel >= 0 && glyph_end_sel >= 0)
         {
+            ts::GLYPHS &glyphs = owner->get_glyphs();
             char_start_sel = ts::glyphs_get_charindex(glyphs, glyph_start_sel);
             char_end_sel = ts::glyphs_get_charindex(glyphs, glyph_end_sel);
+            dirty = true;
             owner->getengine().redraw();
         }
     }

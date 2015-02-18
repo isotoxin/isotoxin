@@ -137,11 +137,11 @@ class gui_message_item_c : public gui_label_c
     ts::array_inplace_t<record, 2> records;
     void rebuild_text()
     {
-        ts::wstr_c pret, postt;
+        ts::wstr_c pret, postt, newtext;
         prepare_str_prefix(pret, postt);
-        text.clear();
         for(record &r : records)
-            r.append(text,pret,postt);
+            r.append(newtext,pret,postt);
+        text.set_text_only(newtext, false);
     }
 
     ts::shared_ptr<contact_c> author;
@@ -172,7 +172,7 @@ class gui_message_item_c : public gui_label_c
         postt.set(CONSTWSTR("</color></r>"));
     }
 
-    void prepare_message_time(time_t posttime);
+    void prepare_message_time(ts::wstr_c &newtext, time_t posttime);
     ts::wstr_c prepare_button_rect(int r, const ts::ivec2 &sz);
     void kill_button( rectengine_c *beng, int r );
     void updrect(void *, int r, const ts::ivec2 &p);

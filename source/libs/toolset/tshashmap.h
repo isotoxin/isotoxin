@@ -94,7 +94,7 @@ template <class T> inline unsigned GetHash(const T &obj)//Внимание! во избежание
 
 struct Void {};
 
-template <class KEYTYPE, class VALTYPE = Void> class hashmap_t//HashMap<T> задает HashSet
+template <class KEYTYPE, class VALTYPE = Void> class hashmap_t
 {
 public:
 	struct litm_s;
@@ -205,7 +205,7 @@ public:
 		if (size > tableSize)
 		{
 			litm_s **newTable = (litm_s**)MM_ALLOC(sizeof(litm_s*)*size);
-			size = MM_SIZE(newTable)/sizeof(litm_s*);//корректировка size на реально выделенный размер блока
+			size = MM_SIZE(newTable)/sizeof(litm_s*);
 			memset(newTable, 0, sizeof(litm_s*)*size);
 
 			if (table) //переносим все данные из старой таблицы в новую

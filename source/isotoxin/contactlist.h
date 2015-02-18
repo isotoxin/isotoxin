@@ -6,6 +6,7 @@ enum contact_item_role_e
     CIR_ME,
     CIR_CONVERSATION_HEAD,
     CIR_METACREATE,
+    CIR_DNDOBJ,
 };
 
 class gui_contact_item_c;
@@ -17,6 +18,12 @@ template<> struct MAKE_CHILD<gui_contact_item_c> : public _PCHILD(gui_contact_it
     ~MAKE_CHILD();
     MAKE_CHILD &operator << (contact_item_role_e r) { role = r; return *this; }
 };
+template<> struct MAKE_ROOT<gui_contact_item_c> : public _PROOT(gui_contact_item_c)
+{
+    contact_c *contact;
+    MAKE_ROOT(drawchecker &dch, contact_c *c) : _PROOT(gui_contact_item_c)(dch), contact(c) { init(false); }
+    ~MAKE_ROOT() {}
+};
 
 class gui_contact_item_c : public gui_label_c
 {
@@ -26,12 +33,14 @@ class gui_contact_item_c : public gui_label_c
     GM_RECEIVER( gui_contact_item_c, ISOGM_SELECT_CONTACT );
     GM_RECEIVER( gui_contact_item_c, ISOGM_SOMEUNREAD );
     
+    
 
-    static const ts::flags32_s::BITS  F_PROTOHIT  = FLAGS_FREEBITSTART_LABEL << 0;
-    static const ts::flags32_s::BITS  F_EDITNAME  = FLAGS_FREEBITSTART_LABEL << 1;
+    static const ts::flags32_s::BITS  F_PROTOHIT    = FLAGS_FREEBITSTART_LABEL << 0;
+    static const ts::flags32_s::BITS  F_EDITNAME    = FLAGS_FREEBITSTART_LABEL << 1;
     static const ts::flags32_s::BITS  F_EDITSTATUS  = FLAGS_FREEBITSTART_LABEL << 2;
     static const ts::flags32_s::BITS  F_SKIPUPDATE  = FLAGS_FREEBITSTART_LABEL << 3;
-    static const ts::flags32_s::BITS  F_LBDN  = FLAGS_FREEBITSTART_LABEL << 4;
+    static const ts::flags32_s::BITS  F_LBDN        = FLAGS_FREEBITSTART_LABEL << 4;
+    static const ts::flags32_s::BITS  F_DNDDRAW     = FLAGS_FREEBITSTART_LABEL << 5;
 
     friend class contact_c;
     friend class contacts_c;
@@ -45,9 +54,17 @@ class gui_contact_item_c : public gui_label_c
     void updrect(void *, int r, const ts::ivec2 &);
 
 public:
+    gui_contact_item_c(MAKE_ROOT<gui_contact_item_c> &data);
     gui_contact_item_c(MAKE_CHILD<gui_contact_item_c> &data);
     /*virtual*/ ~gui_contact_item_c();
 
+    /*virtual*/ void update_dndobj(guirect_c *donor) override;
+    /*virtual*/ guirect_c * summon_dndobj(const ts::ivec2 &deltapos) override;
+
+    void target(bool tgt); // d'n'd target
+    void on_drop(gui_contact_item_c *ondr);
+
+    bool is_protohit() const {return flags.is(F_PROTOHIT);}
     void protohit() { flags.set(F_PROTOHIT); }
     bool update_buttons( RID r = RID(), GUIPARAM p = nullptr );
     bool cancel_edit( RID r = RID(), GUIPARAM p = nullptr);
@@ -95,6 +112,7 @@ class gui_contactlist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_contactlist_c, ISOGM_CHANGED_PROFILEPARAM);
     GM_RECEIVER(gui_contactlist_c, ISOGM_UPDATE_CONTACT_V);
     GM_RECEIVER(gui_contactlist_c, GM_HEARTBEAT);
+    GM_RECEIVER(gui_contactlist_c, GM_DRAGNDROP);
 
     uint64 sort_tag = 0;
     contact_list_role_e role = CLR_MAIN_LIST;
@@ -104,6 +122,7 @@ class gui_contactlist_c : public gui_vscrollgroup_c
     int skipctl = 0;
 
     ts::safe_ptr<gui_contact_item_c> self;
+    ts::safe_ptr<gui_contact_item_c> dndtarget;
 
     ts::array_inplace_t<contact_key_s, 2> * arr = nullptr;
 

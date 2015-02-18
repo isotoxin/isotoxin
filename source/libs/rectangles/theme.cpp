@@ -72,9 +72,8 @@ void theme_rect_s::load_params(const abp_c * block)
 	capheight = block->get_int(CONSTASTR("capheight"), 0);
     capheight_max = block->get_int(CONSTASTR("capheight_max"), 0);
 
-    ts::str_c d(gui->default_font());
-    capfont = block->get_string(CONSTASTR("capfont"), d);
-    deffont = block->get_string(CONSTASTR("deffont"), d);
+    capfont = &gui->get_font( block->get_string(CONSTASTR("capfont"), gui->default_font_name()) );
+    deffont = &gui->get_font( block->get_string(CONSTASTR("deffont"), gui->default_font_name()) );
 
     deftextcolor = parsecolor( block->get_string(CONSTASTR("deftextcolor")).as_sptr(), ARGB(0,0,0) );
     ts::token<char> cols( block->get_string(CONSTASTR("colors")), ',' );
@@ -271,6 +270,16 @@ bool theme_c::load( const ts::wsptr &name )
     }
 
 
+    if (const abp_c * fonts = bp.get("fonts"))
+    {
+        for (auto it = fonts->begin(); it; ++it)
+        {
+            add_font(it.name(), it->as_string());
+        }
+    }
+
+    ts::g_default_text_font = gui->get_font( gui->default_font_name() ); // not gui->default_font(), due m_deffont not yet initialized
+
 	if (const abp_c * rs = bp.get("rects"))
 	{
 		for (auto it = rs->begin(); it; ++it)
@@ -327,16 +336,6 @@ bool theme_c::load( const ts::wsptr &name )
             bd->load_params(this, it);
         }
     }
-
-    if (const abp_c * fonts = bp.get("fonts"))
-    {
-        for (auto it = fonts->begin(); it; ++it)
-        {
-            add_font(it.name(), it->as_string() );
-        }
-    }
-    
-    ts::g_default_text_font.assign(CONSTASTR("default"));
 
     if (const abp_c * corrs = bp.get("corrections"))
     {

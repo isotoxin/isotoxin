@@ -41,7 +41,7 @@ int ver_ok( ts::asptr verss )
 
 bool md5ok(ts::buf_c &b, const ts::abp_c &ver)
 {
-    ts::str_c md5s = ver.as_string(CONSTASTR("md5"));
+    ts::str_c md5s = ver.get_string(CONSTASTR("md5"));
     if (md5s.get_length() != 32) return false;
     if (ver.get_int(CONSTASTR("size")) != b.size()) return false;
     ts::md5_c md5;
@@ -72,10 +72,10 @@ ts::str_c get_downloaded_ver( ts::buf_c *pak = nullptr )
         int signi = ver_ok(pak->cstr());
         if (!signi) return ts::str_c();
         ts::abp_c ver; ver.load(ts::asptr(pak->cstr().s, signi));
-        ts::wstr_c wurl; wurl.set_as_utf8( ver.as_string(CONSTASTR("url")) );
+        ts::wstr_c wurl; wurl.set_as_utf8( ver.get_string(CONSTASTR("url")) );
         pak->load_from_disk_file(ts::fn_join<ts::wchar>(auparams().lock_read()().path, ts::fn_get_name_with_ext(wurl)));
         if (md5ok(*pak,ver))
-            return ver.as_string(CONSTASTR("ver"));
+            return ver.get_string(CONSTASTR("ver"));
     }
     return ts::str_c();
 }
@@ -145,7 +145,7 @@ void autoupdater()
     ts::abp_c ver; ver.load( ts::asptr(d.cstr().s, signi) );
 
     r = auparams().lock_read();
-    if (!new_version( r().ver, ver.as_string(CONSTASTR("ver")) ))
+    if (!new_version( r().ver, ver.get_string(CONSTASTR("ver")) ))
     {
         TSNEW(gmsg<ISOGM_NEWVERSION>, ts::str_c())->send_to_main_thread();
         return;
@@ -153,7 +153,7 @@ void autoupdater()
 
     bool downloaded = false;
     ts::str_c dver = get_downloaded_ver();
-    ts::str_c aver = ver.as_string(CONSTASTR("ver"));
+    ts::str_c aver = ver.get_string(CONSTASTR("ver"));
     if (dver == aver)
         downloaded = true;
 
@@ -172,7 +172,7 @@ void autoupdater()
     }
     r.unlock();
 
-    ts::wstr_c wurl; wurl.set_as_utf8( ver.as_string(CONSTASTR("url")) );
+    ts::wstr_c wurl; wurl.set_as_utf8( ver.get_string(CONSTASTR("url")) );
     ts::wstr_c pakname = ts::fn_get_name_with_ext(wurl);
     if (wurl.get_char(0) == '/')
     {

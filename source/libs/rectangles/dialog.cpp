@@ -14,8 +14,7 @@ gui_listitem_c::~gui_listitem_c()
 
 /*virtual*/ ts::ivec2 gui_listitem_c::get_min_size() const
 {
-    ts::font_desc_c f; f.assign( get_font() );
-    int h = f->height;
+    int h = get_font()->height;
     if (const theme_rect_s *thr = themerect()) h += thr->clientborder.lt.y + thr->clientborder.rb.y;
     return ts::ivec2(60, h + 4);
 }
@@ -118,8 +117,7 @@ gui_dialog_c::description_s&gui_dialog_c::description_s::subctl(int tag, ts::wst
     {
         ASSERT(height_ == 0);
 
-        ts::font_desc_c fd; fd.assign(gui->default_font());
-        height_ = fd->height;
+        height_ = ts::g_default_text_font->height;
 
         if (const theme_rect_s *thr = gui->theme().get_rect(CONSTASTR("textfield")))
             height_ += thr->clientborder.lt.y + thr->clientborder.rb.y;
@@ -168,8 +166,7 @@ gui_dialog_c::description_s& gui_dialog_c::description_s::textfieldml( const ts:
     desc = desc_;
     text = val;
     textchecker = checker;
-    ts::font_desc_c fd; fd.assign(gui->default_font());
-    height_ = lines * fd->height;
+    height_ = lines * ts::g_default_text_font->height;
     return *this;
 }
 
@@ -211,8 +208,7 @@ gui_dialog_c::description_s& gui_dialog_c::description_s::list( const ts::wsptr 
 {
     ctl = _LIST;
     desc = desc_;
-    ts::font_desc_c fd; fd.assign(gui->default_font());
-    height_ = lines * fd->height;
+    height_ = lines * ts::g_default_text_font->height;
     return *this;
 }
 
@@ -644,7 +640,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
         if (d.desc.is_empty() && lasthgroup)
         {
             parent = lasthgroup;
-        } else
+        } else if (!d.desc.is_empty())
         {
             label( CONSTWSTR("<l>") + d.desc + CONSTWSTR("</l>") );
         }

@@ -29,7 +29,7 @@ class gui_textedit_c : public gui_control_c
                 selection_color     = ts::ARGB(255,255,0),
                 selection_bg_color  = ts::ARGB(100,100,255),
                 outline_color       = 0; //ts::ARGB(0,0,0);
-	ts::font_desc_c font;
+	const ts::font_desc_c *font = &ts::g_default_text_font;
 	ts::wchar password_char = 0;
 	struct active_element_s
 	{
@@ -125,7 +125,7 @@ class gui_textedit_c : public gui_control_c
 
 	//void onChangeScrollPos(float f) {scrollTo((int)f);}
 
-	int text_el_advance(int index) const { if (index >= text.size()) return 0; return !password_char ? text[index].advance(font) : (*font)[password_char].advance;}
+	int text_el_advance(int index) const { if (index >= text.size()) return 0; return !password_char ? text[index].advance((*font)) : (*(*font))[password_char].advance;}
 	active_element_s *create_active_element(const ts::wstr_c &str, ts::TSCOLOR color, const void *user_data, int user_data_size);
 	bool text_replace(int pos, int num, const ts::wsptr &str, active_element_s **el, int len, bool updateCaretPos = true);
 	bool text_replace(int pos, int num, const ts::wsptr &str, bool updateCaretPos = true);
@@ -165,7 +165,10 @@ public:
 	gui_textedit_c(initial_rect_data_s &data);
 	~gui_textedit_c();
 
-    void set_font(const ts::asptr&text);
+    void set_font(const ts::font_desc_c *f)
+    {
+        font = &safe_font(f);
+    }
 
 	int meta_text_length_limit;
     typedef fastdelegate::FastDelegate<bool (const ts::wstr_c &)> TEXTCHECKFUNC;
@@ -251,8 +254,8 @@ public:
 	void insert_active_element(const ts::wstr_c &str, ts::TSCOLOR color, const void *user_data, int user_data_size, int cp);
 	void insert_active_element(const ts::wstr_c &str, ts::TSCOLOR color, const void *user_data, int user_data_size) {insert_active_element(str, color, user_data, user_data_size, get_caret_char_index());}
 
-	const ts::font_desc_c& default_font() const { return font; }
-
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+
+    const ts::font_desc_c &get_font() const { ASSERT(font); return *font; }
 };

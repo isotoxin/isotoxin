@@ -258,7 +258,8 @@ namespace ts
 
         ivec2 center() const { return ivec2((lt.x + rb.x) / 2, (lt.y + rb.y) / 2); }
 
-        bool zero_square() const {return lt.x >= rb.x || lt.y  >= rb.y; }
+        int area() const { return width() * height(); }
+        bool zero_area() const {return lt.x >= rb.x || lt.y  >= rb.y; }
 
 		bool inside(ivec2 p) const
 		{
@@ -274,6 +275,7 @@ namespace ts
             return *this;
 		}
 
+        int intersect_area(const irect &i);
 		irect & intersect(const irect &i);
 		irect & combine(const irect &i);
 
@@ -887,6 +889,15 @@ template <typename T, int N> INLINE const vec_t<T, N> tmax(const vec_t<T, N> &x,
     return r;
 }
 
+INLINE int irect::intersect_area(const irect &i)
+{
+    if (lt.x >= i.rb.x) return 0;
+    if (lt.y >= i.rb.y) return 0;
+    if (rb.x <= i.lt.x) return 0;
+    if (rb.y <= i.lt.y) return 0;
+
+    return irect( tmax(lt.x, i.lt.x), tmax(lt.y, i.lt.y), tmin(rb.x, i.rb.x), tmin(rb.y, i.rb.y) ).area();
+}
 
 INLINE irect & irect::intersect(const irect &i)
 {
