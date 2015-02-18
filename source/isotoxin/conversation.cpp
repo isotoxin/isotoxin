@@ -123,7 +123,7 @@ int gui_notice_c::get_height_by_width(int w) const
     {
         ts::ivec2 sz = thr->clientrect(ts::ivec2(w, height), false).size();
         int ww = sz.x;
-        sz = text.calc_text_size(ww);
+        sz = textrect.calc_text_size(ww);
         int h = thr->size_by_clientsize(ts::ivec2(ww, sz.y + addheight), false).y;
         height_cache[next_cache_write_index] = ts::ivec2(w, h);
         ++next_cache_write_index;
@@ -169,7 +169,7 @@ void gui_notice_c::setup(const ts::wstr_c &itext, const ts::str_c &pubid)
                 .append(TTT("Модуль", 105)).append(CONSTWSTR(": <l>")).append(plugdesc).append(CONSTWSTR("</l><br>"))
                 .append(TTT("ID", 103)).append(CONSTWSTR(": <l>")).append(pubid).append(CONSTWSTR("</l><br>"))
                 .append(TTT("Состояние", 104)).append(CONSTWSTR(": <l>")).append(sost); //.append(CONSTWSTR("<br><b>"));
-            text.set_text_only(newtext, true);
+            textrect.set_text_only(newtext, true);
 
             struct x
             {
@@ -243,7 +243,7 @@ void gui_notice_c::setup(const ts::wstr_c &itext)
 
                 addheight = 40;
             }
-            text.set_text_only(newtext, false);
+            textrect.set_text_only(newtext, false);
         }
         break;
     }
@@ -272,7 +272,7 @@ void gui_notice_c::setup(const ts::wstr_c &itext, contact_c *sender, uint64 utag
                 newtext.append(itext);
             }
 
-            text.set_text_only(newtext,false);
+            textrect.set_text_only(newtext,false);
 
             gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
             b_accept.set_text(TTT("Принять", 75));
@@ -297,7 +297,7 @@ void gui_notice_c::setup(const ts::wstr_c &itext, contact_c *sender, uint64 utag
             newtext.set(CONSTWSTR("<p=c>"));
             newtext.append(TTT("Вы согласны принять файл [b]$[/b]?",175) / itext);
             newtext.append(CONSTWSTR("<hr=7,2,1>"));
-            text.set_text_only(newtext,false);
+            textrect.set_text_only(newtext,false);
 
 
             int minw = 0;
@@ -461,7 +461,7 @@ void gui_notice_c::update_text(contact_c *sender)
     }
 
     if (hr) newtext.append(CONSTWSTR("<hr=7,2,1>"));
-    text.set_text_only(newtext,false);
+    textrect.set_text_only(newtext,false);
 }
 
 
@@ -796,17 +796,7 @@ static time_t readtime; // ugly static... but it is fastest
                         ts::TSCOLOR c = get_default_text_color( 0 );
                         tdp.forecolor = &c;
                         ts::ivec2 sz; tdp.sz = &sz;
-                        ts::wstr_c n(author->get_name());
-                        text_adapt_user_input(n);
-                        if ( prf().msgopts() & MSGOP_SHOW_PROTOCOL_NAME )
-                        {
-                            if (protodesc.is_empty() && author->getkey().protoid)
-                            {
-                                active_protocol_c *ap = prf().ap(author->getkey().protoid);
-                                if (CHECK(ap)) protodesc.set(CONSTWSTR(" (")).append(ap->get_name()).append_char(')');
-                            }
-                            n.append(protodesc);
-                        }
+                        ts::wstr_c n(hdr());
                         m_engine->draw(n, tdp);
 
                         sz.x = m_left;
@@ -920,7 +910,7 @@ void gui_message_item_c::init_date_separator( const tm &tmtm )
 
     ts::wstr_c newtext( CONSTWSTR("<p=c>") );
     newtext.append(tstr);
-    text.set_text_only(newtext, false);
+    textrect.set_text_only(newtext, false);
 }
 
 void gui_message_item_c::init_request( const ts::wstr_c &pre )
@@ -941,7 +931,7 @@ void gui_message_item_c::init_request( const ts::wstr_c &pre )
         t.append(message);
     }
 
-    text.set_text_only(t,false);
+    textrect.set_text_only(t,false);
 }
 
 void gui_message_item_c::init_load( int n_load )
@@ -1064,7 +1054,7 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
     if (MTA_UNDELIVERED_MESSAGE != post.mt())
         mt = post.mt();
 
-    text.set_options(ts::TO_LASTLINEADDH);
+    textrect.set_options(ts::TO_LASTLINEADDH);
 
     switch(mt)
     {
@@ -1083,7 +1073,9 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
                 newtext.append(TTT("Вы получили разрешение на добавление контакта [b]$[/b] в список контактов.", 91) / aname);
             if (MTA_ACCEPT_OK == mt)
                 newtext.append(TTT("Вы разрешили добавление контакта [b]$[/b] в список контактов.", 90) / aname);
-            text.set_text_only(newtext,false);
+            textrect.set_text_only(newtext,false);
+            author->reselect(true);
+
         }
         break;
     case MTA_INCOMING_CALL_REJECTED:
@@ -1108,7 +1100,7 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             else if (MTA_HANGUP == mt)
                 newtext.append(TTT("Закончен разговор с $",139)/aname);
 
-            text.set_text_only(newtext, false);
+            textrect.set_text_only(newtext, false);
 
         }
         break;
@@ -1134,7 +1126,7 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
     default:
         {
             subtype = ST_CONVERSATION;
-            text.set_font(g_app->font_conv_text);
+            textrect.set_font(g_app->font_conv_text);
 
             ts::wstr_c message = post.message;
             text_adapt_user_input(message);
@@ -1143,7 +1135,7 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             rec.text = message;
             rec.undelivered = post.type == MTA_UNDELIVERED_MESSAGE ? get_default_text_color(1) : 0;
 
-            ts::wstr_c pret, postt, newtext(text.get_text());
+            ts::wstr_c pret, postt, newtext(textrect.get_text());
             prepare_str_prefix(pret, postt);
             rec.append( newtext, pret, postt );
             bool rebuild = false;
@@ -1154,7 +1146,7 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
                     rebuild_text();
                 }
 
-            if(!rebuild) text.set_text_only(newtext, false);
+            if(!rebuild) textrect.set_text_only(newtext, false);
 
         }
         break;
@@ -1267,15 +1259,15 @@ void gui_message_item_c::kill_button( rectengine_c *beng, int r )
     }
 
     // hint! remove rect tag from text, to avoid button creation on next redraw
-    int ri = text.get_text().find_pos( ts::wstr_c(CONSTWSTR("<rect=")).append_as_uint(r).append_char(',') );
+    int ri = textrect.get_text().find_pos( ts::wstr_c(CONSTWSTR("<rect=")).append_as_uint(r).append_char(',') );
     if (ri >= 0)
     {
-        int ri2 = text.get_text().find_pos(ri,'>');
+        int ri2 = textrect.get_text().find_pos(ri,'>');
         if (ri2 > ri)
         {
-            ts::wstr_c cht( text.get_text() );
+            ts::wstr_c cht( textrect.get_text() );
             cht.cut(ri,ri2-ri+1);
-            text.set_text_only(cht, false);
+            textrect.set_text_only(cht, false);
         }
     }
 
@@ -1432,7 +1424,7 @@ void gui_message_item_c::update_text()
                         newtext.append(TTT("Файл: $",192) / fn);
                 }
             }
-            text.set_text_only(newtext,false);
+            textrect.set_text_only(newtext,false);
 
             for (int i = records.size()-1; i > 0; --i)
                 if (records.get(i).time)
@@ -1447,6 +1439,22 @@ void gui_message_item_c::update_text()
         }
         break;
     }
+}
+
+ts::wstr_c gui_message_item_c::hdr() const
+{
+    ts::wstr_c n(author->get_name());
+    text_adapt_user_input(n);
+    if (prf().msgopts() & MSGOP_SHOW_PROTOCOL_NAME)
+    {
+        if (protodesc.is_empty() && author->getkey().protoid)
+        {
+            active_protocol_c *ap = prf().ap(author->getkey().protoid);
+            if (CHECK(ap)) protodesc.set(CONSTWSTR(" (")).append(ap->get_name()).append_char(')');
+        }
+        n.append(protodesc);
+    }
+    return n;
 }
 
 int gui_message_item_c::get_height_by_width(int w) const
@@ -1486,9 +1494,9 @@ update_size_mode:
             {
                 ts::ivec2 sz = thr->clientrect(ts::ivec2(w, height), false).size();
                 int ww = sz.x;
-                sz = text.calc_text_size(ww);
+                sz = textrect.calc_text_size(ww);
                 if (update_size_mode)
-                    const_cast<ts::text_rect_c &>(text).set_size( ts::ivec2(ww, sz.y) );
+                    const_cast<ts::text_rect_c &>(textrect).set_size( ts::ivec2(ww, sz.y) );
                 int h = thr->size_by_clientsize(ts::ivec2(ww, sz.y + addheight), false).y;
                 height_cache[next_cache_write_index] = ts::ivec2(w, h);
                 ++next_cache_write_index;
@@ -1500,11 +1508,13 @@ update_size_mode:
             {
                 ts::ivec2 sz = thr->clientrect(ts::ivec2(w, height), false).size();
                 int ww = sz.x;
-                sz = gui->textsize(*g_app->font_conv_name, author->get_name(), ww);
+
+                ts::wstr_c n( hdr() );
+                sz = gui->textsize(*g_app->font_conv_name, n, ww);
                 int h = sz.y + m_top;
-                sz = text.calc_text_size(ww - m_left);
+                sz = textrect.calc_text_size(ww - m_left);
                 if (update_size_mode)
-                    const_cast<ts::text_rect_c &>(text).set_size(ts::ivec2(ww-m_left, sz.y));
+                    const_cast<ts::text_rect_c &>(textrect).set_size(ts::ivec2(ww-m_left, sz.y));
                 h = thr->size_by_clientsize(ts::ivec2(ww, sz.y + h + addheight), false).y;
                 height_cache[next_cache_write_index] = ts::ivec2(w, h);
                 ++next_cache_write_index;

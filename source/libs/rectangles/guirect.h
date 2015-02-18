@@ -846,7 +846,7 @@ protected:
     static const ts::flags32_s::BITS FLAGS_SELECTABLE           = FLAGS_FREEBITSTART << 2;
     static const ts::flags32_s::BITS FLAGS_FREEBITSTART_LABEL   = FLAGS_FREEBITSTART << 3;
 
-    ts::text_rect_c text;
+    ts::text_rect_c textrect;
 
     void draw( draw_data_s &dd, const text_draw_params_s &tdp ); // use it if want selection
 
@@ -859,16 +859,16 @@ public:
     void set_text(const ts::wstr_c&text);
     void set_font(const ts::font_desc_c *font);
     void set_autoheight() { flags.set(FLAGS_AUTO_HEIGHT); }
-    void set_defcolor(ts::TSCOLOR col) { text.set_def_color(col); }
+    void set_defcolor(ts::TSCOLOR col) { textrect.set_def_color(col); }
     void set_selectable( bool f = true );
 
-    ts::GLYPHS &get_glyphs() { return text.glyphs(); }
+    ts::GLYPHS &get_glyphs() { return textrect.glyphs(); }
 
     /*virtual*/ int       get_height_by_width(int width) const override;
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ ts::ivec2 get_max_size() const override;
 
-    const ts::wstr_c &get_text() const {return text.get_text();};
+    const ts::wstr_c &get_text() const {return textrect.get_text();};
 
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
@@ -1255,7 +1255,11 @@ class gui_vtabsel_c : public gui_vscrollgroup_c
 {
     DUMMY(gui_vtabsel_c);
 
+    GM_RECEIVER( gui_vtabsel_c, GM_HEARTBEAT );
+
     menu_c menu;
+    RID currentgroup;
+    RID activeitem;
 
 public:
     bool operator()(ts::pair_s<RID, int>&, const ts::wsptr& txt);

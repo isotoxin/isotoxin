@@ -224,9 +224,6 @@ bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
     talkdevice = cfg().device_talk();
     signaldevice = cfg().device_signal();
 
-
-    //active_prots = prf.get(CONSTASTR("active_protocols"));
-
     int textrectid = 0;
 
     menu_c m;

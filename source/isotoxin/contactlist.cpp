@@ -431,7 +431,7 @@ ts::uint32 gui_contact_item_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> & c )
 
 ts::uint32 gui_contact_item_c::gm_handler(gmsg<ISOGM_SOMEUNREAD> & c)
 {
-    if (n_unread > 0 || (CIR_CONVERSATION_HEAD == role && contact->achtung()))
+    if (n_unread > 0 || (CIR_CONVERSATION_HEAD == role && contact && contact->achtung()))
         return GMRBIT_ACCEPTED | GMRBIT_ABORT;
 
     return 0;
@@ -557,9 +557,9 @@ void gui_contact_item_c::update_text()
     {
         newtext.clear();
     }
-    text.set_text_only(newtext, false);
+    textrect.set_text_only(newtext, false);
 
-    if (CIR_CONVERSATION_HEAD == role && text.is_dirty())
+    if (CIR_CONVERSATION_HEAD == role && textrect.is_dirty())
     {
         for (ebutton &b : hstuff().updr)
             b.updated = false;
@@ -790,6 +790,7 @@ void gui_contact_item_c::on_drop(gui_contact_item_c *ondr)
                 {
                     contact_key_s ck(cks);
                     contacts().kill(ck);
+                    contacts().get_self().reselect(true);
                 }
                 static void m_delete(const ts::str_c&cks)
                 {

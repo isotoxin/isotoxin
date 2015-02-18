@@ -263,7 +263,7 @@ bool contact_c::ringtone(bool activate, bool play_stop_snd)
 
         flashing_proc(RID(), nullptr);
 
-    } else if (CHECK(getmeta()))
+    } else if (getmeta())
     {
         bool wasrt = opts.unmasked().is(F_RINGTONE);
         opts.unmasked().init(F_RINGTONE, activate);

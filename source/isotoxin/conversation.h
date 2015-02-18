@@ -141,11 +141,11 @@ class gui_message_item_c : public gui_label_c
         prepare_str_prefix(pret, postt);
         for(record &r : records)
             r.append(newtext,pret,postt);
-        text.set_text_only(newtext, false);
+        textrect.set_text_only(newtext, false);
     }
 
     ts::shared_ptr<contact_c> author;
-    ts::wstr_c protodesc;
+    mutable ts::wstr_c protodesc;
 
     static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE = FLAGS_FREEBITSTART_LABEL << 0;
 
@@ -202,6 +202,7 @@ public:
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
+    ts::wstr_c hdr() const;
     contact_c * get_author() const {return author;}
     message_type_app_e get_mt() const {return mt;}
 

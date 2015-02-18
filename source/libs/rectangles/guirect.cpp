@@ -798,7 +798,7 @@ void gui_label_c::set_selectable(bool f)
 
 void gui_label_c::draw()
 {
-    if (ASSERT(m_engine) && !text.get_text().is_empty())
+    if (ASSERT(m_engine) && !textrect.get_text().is_empty())
     {
         ts::irect ca = get_client_area();
         draw_data_s &dd = getengine().begin_draw();
@@ -825,20 +825,20 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
     } else
         return;
 
-    if (text.is_dirty_size()) text.set_size(dd.size);
-    if (tdp.font) text.set_font(tdp.font);
-    if (tdp.textoptions) text.set_options(*tdp.textoptions);
-    if (tdp.forecolor) text.set_def_color(*tdp.forecolor);
+    if (textrect.is_dirty_size()) textrect.set_size(dd.size);
+    if (tdp.font) textrect.set_font(tdp.font);
+    if (tdp.textoptions) textrect.set_options(*tdp.textoptions);
+    if (tdp.forecolor) textrect.set_def_color(*tdp.forecolor);
     bool updr = true;
     if (flags.is(FLAGS_SELECTABLE) && gui->selcore().owner == this)
     {
         flags.set(FLAGS_SELECTION);
         selectable_core_s &selcore = gui->selcore();
 
-        if (gui->selcore().is_dirty() || text.is_dirty())
+        if (gui->selcore().is_dirty() || textrect.is_dirty())
         {
             updr = false;
-            text.parse_and_render_texture(nullptr, false); // it changes glyphs array
+            textrect.parse_and_render_texture(nullptr, false); // it changes glyphs array
             bool still_selected = selcore.sure_selected();
 
             if (tdp.rectupdate)
@@ -848,24 +848,24 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
                 updr.offset = dd.offset;
                 updr.param = getrid().to_ptr();
                 if (still_selected)
-                    text.render_texture(&updr, DELEGATE(&selcore, selection_stuff));
+                    textrect.render_texture(&updr, DELEGATE(&selcore, selection_stuff));
                 else
-                    text.render_texture(&updr);
+                    textrect.render_texture(&updr);
             }
             else
             {
                 if (still_selected)
-                    text.render_texture(nullptr, DELEGATE(&selcore, selection_stuff));
+                    textrect.render_texture(nullptr, DELEGATE(&selcore, selection_stuff));
                 else
-                    text.render_texture(nullptr);
+                    textrect.render_texture(nullptr);
             }
         }
 
 
-    } else if (text.is_dirty() || flags.is(FLAGS_SELECTION))
+    } else if (textrect.is_dirty() || flags.is(FLAGS_SELECTION))
     {
         flags.clear(FLAGS_SELECTION);
-        text.parse_and_render_texture(nullptr, false); // it changes glyphs array
+        textrect.parse_and_render_texture(nullptr, false); // it changes glyphs array
         updr = false;
         if (tdp.rectupdate)
         {
@@ -873,50 +873,50 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
             updr.updrect = tdp.rectupdate;
             updr.offset = dd.offset;
             updr.param = getrid().to_ptr();
-            text.render_texture(&updr);
+            textrect.render_texture(&updr);
         } else
         {
-            text.render_texture(nullptr);
+            textrect.render_texture(nullptr);
         }
     }
 
-    m_engine->draw(ts::ivec2(0), text.get_texture(), ts::irect(ts::ivec2(0), tmin(dd.size, text.size)), true);
+    m_engine->draw(ts::ivec2(0), textrect.get_texture(), ts::irect(ts::ivec2(0), tmin(dd.size, textrect.size)), true);
     if (updr && tdp.rectupdate)
     {
         ts::rectangle_update_s updr;
         updr.updrect = tdp.rectupdate;
         updr.offset = dd.offset;
         updr.param = getrid().to_ptr();
-        text.update_rectangles(&updr);
+        textrect.update_rectangles(&updr);
     }
 }
 
 void gui_label_c::set_text(const ts::wstr_c&_text)
 {
-    if (text.set_text(_text,false))
+    if (textrect.set_text(_text,false))
         getengine().redraw();
 }
 
 void gui_label_c::set_font(const ts::font_desc_c *f)
 {
-    if (text.set_font(f))
+    if (textrect.set_font(f))
         getengine().redraw();
 }
 
 /*virtual*/ int gui_label_c::get_height_by_width(int width) const
 {
-    if (flags.is(FLAGS_AUTO_HEIGHT) && !text.get_text().is_empty())
-        return text.calc_text_size(width).y;
+    if (flags.is(FLAGS_AUTO_HEIGHT) && !textrect.get_text().is_empty())
+        return textrect.calc_text_size(width).y;
     return 0;
 }
 
 /*virtual*/ ts::ivec2 gui_label_c::get_min_size() const
 {
     ts::ivec2 sz = __super::get_min_size();
-    if (flags.is(FLAGS_AUTO_HEIGHT) && !text.get_text().is_empty())
+    if (flags.is(FLAGS_AUTO_HEIGHT) && !textrect.get_text().is_empty())
     {
         int w = getprops().size().x;
-        ts::ivec2 szt = text.calc_text_size( w ? w : -1 );
+        ts::ivec2 szt = textrect.calc_text_size( w ? w : -1 );
         sz.y = szt.y;
     }
     return sz;
@@ -925,10 +925,10 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
 /*virtual*/ ts::ivec2 gui_label_c::get_max_size() const
 {
     ts::ivec2 sz = __super::get_max_size();
-    if (flags.is(FLAGS_AUTO_HEIGHT) && !text.get_text().is_empty())
+    if (flags.is(FLAGS_AUTO_HEIGHT) && !textrect.get_text().is_empty())
     {
         int w = getprops().size().x;
-        ts::ivec2 szt = text.calc_text_size( w ? w : -1 );
+        ts::ivec2 szt = textrect.calc_text_size( w ? w : -1 );
         sz.y = szt.y;
     }
     return sz;
@@ -986,7 +986,7 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
         }
         return true;
     case SQ_RECT_CHANGED:
-        text.set_size( get_client_area().size() );
+        textrect.set_size( get_client_area().size() );
         return true;
     case SQ_THEMERECT_CHANGED:
 
@@ -1025,15 +1025,15 @@ bool gui_tooltip_c::check_text(RID r, GUIPARAM param)
         MODIFY( *this ).visible(false);
     } else
     {
-        text.set_text_only(tt, false);
-        if (text.is_dirty())
+        textrect.set_text_only(tt, false);
+        if (textrect.is_dirty())
             getengine().redraw();
         cp += 20;
-        ts::ivec2 sz = text.size;
-        if (text.is_dirty() || text.size == ts::ivec2(0))
+        ts::ivec2 sz = textrect.size;
+        if (textrect.is_dirty() || textrect.size == ts::ivec2(0))
         {
-            sz = text.calc_text_size(300);
-            text.set_size(sz);
+            sz = textrect.calc_text_size(300);
+            textrect.set_size(sz);
         }
         if (const theme_rect_s *thr = themerect())
             sz = thr->size_by_clientsize(sz + 5, false);
@@ -1061,7 +1061,7 @@ ts::ivec2 gui_tooltip_c::get_min_size() const
 {
     set_theme_rect(CONSTASTR("tooltip"), false);
     __super::created();
-    text.set_margins(5,5,0);
+    textrect.set_margins(5,5,0);
     DELAY_CALL_R( 0.1, DELEGATE(this, check_text), nullptr );
     HOLD(ownrect)().leech(this);
 
@@ -1105,7 +1105,7 @@ void gui_tooltip_c::create(RID owner)
 ts::uint32 gui_tooltip_c::gm_handler(gmsg<GM_TOOLTIP_PRESENT> & p)
 {
     if (p.rid == ownrect) return GMRBIT_ACCEPTED;
-    text.size = ts::ivec2(0);
+    textrect.size = ts::ivec2(0);
     if (ownrect && HOLD(ownrect)) HOLD(ownrect)().unleech( this );
     ownrect = p.rid;
     HOLD(ownrect)().leech( this );
@@ -2195,7 +2195,7 @@ gui_menu_item_c::~gui_menu_item_c()
             return ts::ivec2(thr->clientborder.lt.x + thr->clientborder.rb.x, 5);
         } else
         {
-            int tl = text.calc_text_size(-1).x;
+            int tl = textrect.calc_text_size(-1).x;
             if (submnu) tl += thr->sis[SI_RIGHT].width();
             return ts::ivec2(thr->clientborder.lt.x + tl + thr->clientborder.rb.x, thr->sis[SI_LEFT].height());
         }
@@ -2224,7 +2224,7 @@ gui_menu_item_c::~gui_menu_item_c()
             {
                 pm->set_close_handler(GUIPARAMHANDLER()); // disable close handler
                 if (RID host = pm->host()) // notify host
-                    host.call_item_activated(text.get_text(), param);
+                    host.call_item_activated(textrect.get_text(), param);
             }
             gmsg<GM_KILLPOPUPMENU_LEVEL>(0).send();
             return true;
@@ -2337,7 +2337,7 @@ gui_menu_item_c & gui_menu_item_c::separator(bool f)
 
 gui_menu_item_c & gui_menu_item_c::submenu(const menu_c &m)
 {
-    if (text.get_text().is_empty()) text.set_text_only( CONSTWSTR("???"), true );
+    if (textrect.get_text().is_empty()) textrect.set_text_only( CONSTWSTR("???"), true );
     flags.clear(F_SEPARATOR);
     submnu = m;
     MODIFY(getrid()).sizeh( get_min_size().y );
@@ -2491,6 +2491,34 @@ MAKE_CHILD<gui_vtabsel_c>::~MAKE_CHILD()
     children_repos();
     
 }
+
+ts::uint32 gui_vtabsel_c::gm_handler( gmsg<GM_HEARTBEAT> & )
+{
+    if (!currentgroup)
+    {
+        for (rectengine_c *c : getengine())
+            if (c)
+            {
+                getrid().call_open_group( c->getrid() );
+                break;
+            }
+        return 0;
+    }
+    if (!activeitem)
+    {
+        for (rectengine_c *c : getengine())
+        {
+            if (c && c->getrect().getprops().is_active())
+            {
+                activeitem = c->getrid();
+                return 0;
+            }
+        }
+        if (currentgroup) currentgroup.call_lbclick();
+    }
+    return 0;
+}
+
 /*virtual*/ bool gui_vtabsel_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
     if (rid != getrid() && ASSERT(getrid() >> rid)) // child?
@@ -2515,36 +2543,36 @@ MAKE_CHILD<gui_vtabsel_c>::~MAKE_CHILD()
     switch (qp)
     {
     case SQ_OPEN_GROUP:
-        {
-            AUTOCLEAR( flags, F_NO_REPOS );
+        //{
+        //    AUTOCLEAR( flags, F_NO_REPOS );
 
-            RID initiator = data.rect.id;
-            menu_c itmmenu = initiator.call_get_menu();
-            for(rectengine_c *c : getengine())
-                if (c && c->getrid().call_get_menu_level() >= itmmenu.lv()) TSDEL(c);
+        //    RID initiator = data.rect.id;
+        //    menu_c itmmenu = initiator.call_get_menu();
+        //    for(rectengine_c *c : getengine())
+        //        if (c && c->getrid().call_get_menu_level() >= itmmenu.lv()) TSDEL(c);
 
-            ts::pair_s<RID, int> cp( initiator, itmmenu.lv() );
-            itmmenu.iterate_items(*this, cp);
-        }
-        getengine().cleanup_children_now();
-        children_repos();
+        //    ts::pair_s<RID, int> cp( initiator, itmmenu.lv() );
+        //    itmmenu.iterate_items(*this, cp);
+        //}
+        //getengine().cleanup_children_now();
+        //children_repos();
 
         {
             // find 1st rect after initiator
-            RID initiator = data.rect.id;
+            currentgroup = data.rect.id;
             for (rectengine_c *c : getengine())
                 if (c)
                 {
-                    if (!initiator)
+                    if (!currentgroup)
                     {
-                        initiator = c->getrid();
+                        currentgroup = c->getrid();
                         break;
                     }
-                    if (c->getrid() == initiator) initiator = RID();
+                    if (c->getrid() == currentgroup) currentgroup = RID();
                 }
-            if (ASSERT(initiator != data.rect.id))
+            if (ASSERT(currentgroup != data.rect.id))
             {
-                initiator.call_lbclick();
+                currentgroup.call_lbclick();
             }
         }
 
@@ -2562,6 +2590,10 @@ bool gui_vtabsel_c::operator()(ts::pair_s<RID, int>& cp, const ts::wsptr& txt, c
     make << sm << cp.first;
     if (cp.first)
         cp.first = make;
+
+    ts::pair_s<RID, int> cpx(make, sm.lv());
+    sm.iterate_items(*this, cpx);
+
     return true;
 }
 bool gui_vtabsel_c::operator()(ts::pair_s<RID, int>& cp, const ts::wsptr& txt, ts::uint32 flags, MENUHANDLER handler, const ts::str_c& prm)
@@ -2585,7 +2617,7 @@ gui_vtabsel_item_c::~gui_vtabsel_item_c()
 {
     if (const theme_rect_s *thr = themerect())
     {
-        int tl = text.calc_text_size(-1).x;
+        int tl = textrect.calc_text_size(-1).x;
         if (submnu) tl += thr->sis[SI_RIGHT].width();
         return ts::ivec2(thr->clientborder.lt.x + tl + thr->clientborder.rb.x, thr->sis[SI_LEFT].height());
     }
@@ -2596,7 +2628,7 @@ gui_vtabsel_item_c::~gui_vtabsel_item_c()
 {
     if (const theme_rect_s *thr = themerect())
     {
-        int tl = text.calc_text_size(-1).x;
+        int tl = textrect.calc_text_size(-1).x;
         if (submnu) tl += thr->sis[SI_RIGHT].width();
         return ts::ivec2(thr->clientborder.lt.x + tl + thr->clientborder.rb.x, thr->sis[SI_LEFT].height());
     }

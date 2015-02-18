@@ -426,12 +426,12 @@ INLINE ts::uint32 gui_control_c::get_state() const
 
 INLINE const ts::font_desc_c &gui_label_c::get_font() const
 {
-    if (!ASSERT(text.font))
+    if (!ASSERT(textrect.font))
     {
         if (const theme_rect_s *thr = themerect()) return *thr->deffont;
         return ts::g_default_text_font;
     }
-    return *text.font;
+    return *textrect.font;
 }
 
 INLINE const ts::font_desc_c &gui_button_c::get_font() const

@@ -177,14 +177,6 @@ protected:
     bool path_explore(RID, GUIPARAM prm);
     bool combo_drop(RID, GUIPARAM prm);
 
-    //ts::hashmap_t<ts::pair_s<int,int>, guirect_c::sptr_t> ctls;
-    //template<typename R> R * getctl( int tag, int subtag = 0 )
-    //{
-    //    guirect_c::sptr_t * ptr = ctls.get( ts::pair_s<int, int>(tag,subtag) );
-    //    if (ptr && !ptr->expired()) return ts::ptr_cast<R *>(ptr->get());
-    //    return nullptr;
-    //}
-
     struct radio_item_s
     {
         ts::wstr_c text;
