@@ -1074,8 +1074,6 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             if (MTA_ACCEPT_OK == mt)
                 newtext.append(TTT("Вы разрешили добавление контакта [b]$[/b] в список контактов.", 90) / aname);
             textrect.set_text_only(newtext,false);
-            author->reselect(true);
-
         }
         break;
     case MTA_INCOMING_CALL_REJECTED:

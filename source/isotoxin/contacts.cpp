@@ -854,6 +854,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                 c->fix_history(MTA_FRIEND_REQUEST, MTA_OLD_REQUEST);
                 msg.send();
                 serious_change = c->getkey().protoid;
+                c->reselect(true);
 
             } else if (oldst == CS_INVITE_SEND)
             {
