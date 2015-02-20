@@ -4,7 +4,7 @@
 
 bool TSCALL dialog_already_present( int );
 
-typedef fastdelegate::FastDelegate< menu_c (const ts::str_c &) > GETMENU_FUNC;
+typedef fastdelegate::FastDelegate< menu_c (const ts::str_c &, bool) > GETMENU_FUNC;
 class gui_listitem_c;
 template<> struct MAKE_CHILD<gui_listitem_c> : public _PCHILD(gui_listitem_c)
 {

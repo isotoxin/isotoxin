@@ -38,7 +38,6 @@ dialog_settings_c::~dialog_settings_c()
     return TTT("[appname]: Настройки",31);
 }
 
-
 /*virtual*/ void dialog_settings_c::created()
 {
     set_theme_rect(CONSTASTR("main"), false);
@@ -205,14 +204,11 @@ bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
         table_active_protocol_underedit = *table_active_protocol;
 
         for (auto it = table_active_protocol_underedit.begin(), end = table_active_protocol_underedit.end(); it != end; ++it)
-        {
-            active_protocol_c *ap = prf().ap(it.id());
-            if (CHECK(ap))
+            if (active_protocol_c *ap = prf().ap(it.id()))
             {
                 it->proxy = ap->get_proxy_settings();
                 if (it->proxy.proxy_addr.is_empty()) it->proxy.proxy_addr = CONSTASTR(DEFAULT_PROXY);
             }
-        }
 
     }
     curlang = cfg().language();
@@ -348,12 +344,6 @@ bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
     tab.leech( TSNEW(leech_dock_left_s, 150) );
     border = ts::irect(155,0,0,0);
 
-    tab.getrid().call_lbclick( ts::ivec2(2) );
-    //tabsel( ts::amake((uint)MASK_PROFILE_COMMON) );
-
-    //DECLARE_DELAY_EVENT_BEGIN(0)
-    //    RID::from_ptr(param).call_lbclick();
-    //DECLARE_DELAY_EVENT_END(tabsel.getrid().to_ptr())
     return 1;
 }
 
@@ -368,6 +358,12 @@ ts::wstr_c dialog_settings_c::describe_network(const ts::wstr_c& name, const ts:
         return ts::wstr_c(name).append(CONSTWSTR(" (")).append(p->description).append_char(')');
 }
 
+void dialog_settings_c::add_suspended_proto( RID lst, int id, const active_protocol_data_s &apdata )
+{
+    ts::wstr_c desc(TTT("Отключено: $",200) / describe_network(apdata.name, apdata.tag));
+    MAKE_CHILD<gui_listitem_c>(lst, desc, ts::str_c(CONSTASTR("3/")).append(apdata.tag).append_char('/').append_as_int(id)) << DELEGATE(this, getcontextmenu);
+}
+
 /*virtual*/ void dialog_settings_c::tabselected(ts::uint32 mask)
 {
     network_props = -1;
@@ -380,14 +376,24 @@ ts::wstr_c dialog_settings_c::describe_network(const ts::wstr_c& name, const ts:
             {
                 MAKE_CHILD<gui_listitem_c>(lst, proto.description, ts::str_c(CONSTASTR("1/")).append(proto.tag)) << DELEGATE( this, getcontextmenu );
             }
+
+            for (auto it = table_active_protocol_underedit.begin(), end = table_active_protocol_underedit.end(); it != end; ++it)
+            {
+                if (0 == (it->options & active_protocol_data_s::O_SUSPENDED))
+                    continue;
+
+                add_suspended_proto( lst, it.id(), *it );
+            }
         }
 
         if (RID lst = find(CONSTASTR("protoactlist")))
         {
             for (auto it = table_active_protocol_underedit.begin(), end = table_active_protocol_underedit.end(); it != end; ++it)
             {
-                ts::wstr_c desc = describe_network(it->name, it->tag);
-                MAKE_CHILD<gui_listitem_c>(lst, desc, ts::str_c(CONSTASTR("2/")).append(it->tag).append_char('/').append_as_int(it.id())) << DELEGATE( this, getcontextmenu );
+                if (0 != (it->options & active_protocol_data_s::O_SUSPENDED))
+                    continue;
+
+                add_active_proto(lst, it.id(), *it);
             }
         }
 
@@ -486,13 +492,20 @@ bool dialog_settings_c::set_proxy_addr_handler(const ts::wstr_c & t)
 
 void dialog_settings_c::create_network_props_ctls( int id )
 {
+    getengine().trunc_children( num_ctls_in_network_tab );
+    if (id == 0)
+    {
+        network_props = 0;
+        return;
+    }
+    
+
     auto row = table_active_protocol_underedit.find(id);
     if (!row) return;
 
     //if (network_props != id)
-        network_props = id;
+    network_props = id;
 
-    getengine().trunc_children( num_ctls_in_network_tab );
 
     vspace(5);
     label( CONSTWSTR("<l>") + ts::wstr_c(TTT("Имя сети",70)) + CONSTWSTR("</l>") );
@@ -528,17 +541,20 @@ void dialog_settings_c::create_network_props_ctls( int id )
         }
 }
 
+void dialog_settings_c::add_active_proto( RID lst, int id, const active_protocol_data_s &apdata )
+{
+    ts::wstr_c desc = describe_network(apdata.name, apdata.tag);
+    ts::str_c par(CONSTASTR("2/")); par.append(apdata.tag).append_char('/').append_as_int(id);
+    MAKE_CHILD<gui_listitem_c>(lst, desc, par) << DELEGATE(this, getcontextmenu);
+}
+
 bool dialog_settings_c::activateprotocol( const ts::wstr_c& name, const ts::str_c& tag )
 {
     auto &r = table_active_protocol_underedit.getcreate(0);
     r.other.name = name;
     r.other.tag = tag;
     if (RID lst = find(CONSTASTR("protoactlist")))
-    {
-        ts::wstr_c desc = describe_network(name, tag);
-        ts::str_c par(CONSTASTR("2/")); par.append(tag).append_char('/').append_as_int(r.id);
-        MAKE_CHILD<gui_listitem_c>(lst, desc, par) << DELEGATE( this, getcontextmenu );
-    }
+        add_active_proto(lst, r.id, r.other);
     return true;
 }
 
@@ -557,12 +573,52 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
             DELEGATE(this, activateprotocol),
             check_always_ok));
 
+    } else if (*t == CONSTASTR("on"))
+    {
+        // activate suspended proto
+        ++t;
+        int id = t->as_int();
+        auto *row = table_active_protocol_underedit.find(id);
+        if (ASSERT(row))
+        {
+            RESETFLAG( row->other.options, active_protocol_data_s::O_SUSPENDED );
+            row->changed();
+
+            if (RID lst = find(CONSTASTR("protolist")))
+                lst.call_kill_child(ts::str_c(CONSTASTR("3/")).append(row->other.tag).append_char('/').append_as_int(id));
+
+            if (RID lst = find(CONSTASTR("protoactlist")))
+                add_active_proto(lst, row->id, row->other);
+        }
+        
+
     } else if (*t == CONSTASTR("del"))
     {
         ++t;
-        auto row = table_active_protocol_underedit.del( t->as_int() );
+        int id = t->as_int();
+        if (network_props == id) create_network_props_ctls(0);
+
+        ts::str_c tag;
+        if (contacts().present_protoid( id ))
+        {
+            auto *row = table_active_protocol_underedit.find( id );
+            if (ASSERT(row))
+            {
+                row->other.options |= active_protocol_data_s::O_SUSPENDED;
+                row->changed();
+                tag = row->other.tag;
+            }
+
+            if (RID lst = find(CONSTASTR("protolist")))
+                add_suspended_proto(lst, id, row->other);
+
+        } else
+        {
+            tag = table_active_protocol_underedit.del(id).other.tag;
+        }
+
         if (RID lst = find(CONSTASTR("protoactlist")))
-            lst.call_kill_child( row.other.tag.insert(0,CONSTASTR("2/")).append_char('/').append_as_int(row.id) );
+            lst.call_kill_child( tag.insert(0,CONSTASTR("2/")).append_char('/').append_as_int(id) );
 
     } else if (*t == CONSTASTR("props"))
     {
@@ -576,28 +632,39 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
     }
 }
 
-menu_c dialog_settings_c::getcontextmenu( const ts::str_c& param )
+menu_c dialog_settings_c::getcontextmenu( const ts::str_c& param, bool activation )
 {
     menu_c m;
     ts::token<char> t(param, '/');
     if (*t == CONSTASTR("1"))
     {
         ++t;
-        m.add(TTT("Добавить к списку активных",58),0,DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("add/")).append(*t) );
+        if (activation)
+            contextmenuhandler( ts::str_c(CONSTASTR("add/")).append(*t) );
+        else
+            m.add(TTT("Добавить к списку активных",58),0,DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("add/")).append(*t) );
+
     } else if (*t == CONSTASTR("2"))
     {
         ++t;
         ++t;
-        m.add(TTT("Деактивировать",59),0,DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("del/")).append(*t) );
-        m.add(TTT("Свойства",60),0,DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("props/")).append(*t) );
-    }
-#if 0
-    else if (*t == CONSTASTR("3"))
+        if (activation)
+            contextmenuhandler( ts::str_c(CONSTASTR("del/")).append(*t) );
+        else 
+        {
+            m.add(TTT("Деактивировать", 59), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("del/")).append(*t));
+            m.add(TTT("Свойства", 60), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("props/")).append(*t));
+        }
+
+    } else if (*t == CONSTASTR("3"))
     {
         ++t;
-        m.add(TTT("Копировать",69), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("copy/")).append(*t));
+        ++t;
+        if (activation)
+            contextmenuhandler(ts::str_c(CONSTASTR("on/")).append(*t) );
+        else
+            m.add(TTT("Активировать",201),0,DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("on/")).append(*t) );
     }
-#endif
 
     return m;
 }
@@ -643,6 +710,7 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
             gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_MSGOPTIONS).send();
 
         prf().download_folder(downloadfolder);
+
     }
 
     if (autoupdate_proxy > 0 && !check_netaddr(autoupdate_proxy_addr))

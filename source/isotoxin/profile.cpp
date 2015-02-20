@@ -996,6 +996,7 @@ ts::uint32 profile_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
         
         for( const auto& row : table_active_protocol.rows )
         {
+            if (0 != (row.other.options & active_protocol_data_s::O_SUSPENDED)) continue;
             if ( active_protocol_c *ap = this->ap(row.id) )
             {
                 ap->set_proxy_settings(row.other.proxy);

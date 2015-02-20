@@ -233,9 +233,9 @@ public:
     template<typename APR> void iterate_aps( APR apr )
     {
         for( const active_protocol_c *ap : protocols )
-            if (ap) apr(*ap);
+            if (ap && !ap->is_dip()) apr(*ap);
     }
-    active_protocol_c *ap(int id) { for( active_protocol_c *ap : protocols ) if (ap && ap->getid() == id) return ap; return nullptr; }
+    active_protocol_c *ap(int id) { for( active_protocol_c *ap : protocols ) if (ap && ap->getid() == id && !ap->is_dip()) return ap; return nullptr; }
 
     void load( const ts::wstr_c& pfn );
 

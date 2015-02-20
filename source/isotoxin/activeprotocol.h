@@ -39,7 +39,8 @@ struct active_protocol_data_s
 
     enum options_e
     {
-        O_AUTOCONNECT = SETBIT(0),
+        O_AUTOCONNECT   = SETBIT(0),
+        O_SUSPENDED     = SETBIT(1),
     };
 
 };

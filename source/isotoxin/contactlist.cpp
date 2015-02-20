@@ -82,7 +82,6 @@ bool head_stuff_s::_edt(const ts::wstr_c & e)
     return true;
 }
 
-
 struct leech_edit : public autoparam_i
 {
     int sx;
@@ -102,9 +101,10 @@ struct leech_edit : public autoparam_i
 
         if (qp == SQ_PARENT_RECT_CHANGING)
         {
-            int width = 100 + sx + g_app->buttons().callb->size.x;
-
             HOLD r(owner->getparent());
+
+            int width = 100 + sx + r.as<gui_contact_item_c>().contact_item_rite_margin();
+
             ts::ivec2 szmin = owner->get_min_size(); if (szmin.x < width) szmin.y = width;
             ts::ivec2 szmax = owner->get_max_size(); if (szmax.y < width) szmax.y = width;
             r().calc_min_max_by_client_area(szmin, szmax);
@@ -118,8 +118,8 @@ struct leech_edit : public autoparam_i
             HOLD r(owner->getparent());
             ts::irect cr = r().get_client_area();
 
-            int width = cr.width() - sx - g_app->buttons().callb->size.x - g_app->buttons().fileb->size.x - 
-                20 - g_app->buttons().confirmb->size.x - g_app->buttons().cancelb->size.x;
+            int width = cr.width() - sx - r.as<gui_contact_item_c>().contact_item_rite_margin() - 5 -
+                g_app->buttons().confirmb->size.x - g_app->buttons().cancelb->size.x;
             if (width < 100) width = 100;
             int height = szmin.y;
 
@@ -284,8 +284,7 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
         int features_online = 0;
         bool now_disabled = false;
         contact->subiterate([&](contact_c *c) {
-            active_protocol_c *ap = prf().ap(c->getkey().protoid);
-            if (CHECK(ap)) 
+            if (active_protocol_c *ap = prf().ap(c->getkey().protoid)) 
             {
                 int f = ap->get_features();
                 features |= f;
@@ -383,7 +382,7 @@ bool gui_contact_item_c::audio_call(RID btn, GUIPARAM)
 
         contact->subiterate([&](contact_c *c) {
             active_protocol_c *ap = prf().ap(c->getkey().protoid);
-            if (CHECK(ap) && 0 != (PF_AUDIO_CALLS & ap->get_features()))
+            if (ap && 0 != (PF_AUDIO_CALLS & ap->get_features()))
             {
                 if (c_call == nullptr || cdef == c)
                     c_call = cdef;
@@ -453,6 +452,7 @@ void gui_contact_item_c::setcontact(contact_c *c)
 
 void gui_contact_item_c::update_text()
 {
+    protocols.clear();
     ts::wstr_c newtext;
     if (contact)
     {
@@ -480,8 +480,8 @@ void gui_contact_item_c::update_text()
                 ts::wstr_c n = c->get_name(false);
                 text_adapt_user_input(n);
                 newtext.append( n );
-                active_protocol_c *ap = prf().ap( c->getkey().protoid );
-                if (CHECK(ap)) newtext.append(CONSTWSTR(" (")).append(ap->get_name()).append(CONSTWSTR(")"));
+                if (active_protocol_c *ap = prf().ap( c->getkey().protoid ))
+                    newtext.append(CONSTWSTR(" (")).append(ap->get_name()).append(CONSTWSTR(")"));
             });
 
         } else if (contact->is_multicontact())
@@ -492,6 +492,7 @@ void gui_contact_item_c::update_text()
             int invsend = 0;
             int invrcv = 0;
             int wait = 0;
+            int deactivated = 0;
             contact->subiterate( [&](contact_c *c) {
                 ++count;
                 if (c->get_state() != CS_ROTTEN) ++live;
@@ -499,6 +500,7 @@ void gui_contact_item_c::update_text()
                 if (c->get_state() == CS_INVITE_SEND) ++invsend;
                 if (c->get_state() == CS_INVITE_RECEIVE) ++invrcv;
                 if (c->get_state() == CS_WAIT) ++wait;
+                if (nullptr==prf().ap(c->getkey().protoid)) ++deactivated;
             } );
             if (live == 0 && count > 0)
                 newtext = colorize( TTT("Удален",77), get_default_text_color(0) );
@@ -526,7 +528,6 @@ void gui_contact_item_c::update_text()
                     ts::ivec2 sz = g_app->buttons().editb->size;
                     newtext.append(CONSTWSTR(" <rect=0,"));
                     newtext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTWSTR(",2><br><l>"));
-                    //newtext.append(t1).append(CONSTWSTR("<br><l>"));
                     newtext.append(t2).append(CONSTWSTR("</l>"));
 
                 } else
@@ -544,8 +545,12 @@ void gui_contact_item_c::update_text()
                         newtext.append(colorize(TTT("Ожидание",154), get_default_text_color(0)));
                         t2.clear();
                     }
+                    if (count == 1 && deactivated > 0)
+                    {
+                        //newtext.append(CONSTWSTR("<nl>")).append(colorize(TTT("протокол отключен"), get_default_text_color(1)));
+                        t2.clear();
+                    }
                     if (!t2.is_empty()) newtext.append(CONSTWSTR("<br><l>")).append(t2).append(CONSTWSTR("</l>"));
-
                 }
             }
 
@@ -633,6 +638,80 @@ void gui_contact_item_c::on_drop(gui_contact_item_c *ondr)
     dnd.update_text();
     MODIFY(dnd).pos( getprops().screenpos() + deltapos ).size( getprops().size() - subsize ).visible(true);
     return &dnd;
+}
+
+void gui_contact_item_c::protohit()
+{
+    ts::flags32_s::BITS old = flags.__bits & (F_PROTOHIT|F_NOPROTOHIT);
+    flags.clear(F_PROTOHIT|F_NOPROTOHIT);
+    if (contact)
+    {
+        contact->subiterate([this](contact_c *c) {
+            if (c->is_protohit(true))
+                flags.set(F_PROTOHIT);
+            else
+                flags.set(F_NOPROTOHIT);
+        });
+    }
+    if ( (flags.__bits & (F_PROTOHIT|F_NOPROTOHIT)) != old )
+        getengine().redraw();
+}
+
+void gui_contact_item_c::generate_protocols()
+{
+    protocols.clear();
+    if (!contact) return;
+
+    protocols.set(CONSTWSTR("<p=r>"));
+
+    const contact_c *def = CIR_CONVERSATION_HEAD == role && !contact->getkey().is_self() ? contact->subget_default() : nullptr;
+    contact->subiterate([&](contact_c *c) {
+
+        if (auto *row = prf().get_table_active_protocol().find(c->getkey().protoid))
+        {
+            if (0 == (row->other.options & active_protocol_data_s::O_SUSPENDED))
+            {
+                if (c->get_state() == CS_ONLINE)
+                {
+                    protocols.append(CONSTWSTR("<nl><shadow>")).append(maketag_color<ts::wchar>(get_default_text_color(2)));
+                    if (def == c) protocols.append(CONSTWSTR("+"));
+                    protocols.append(row->other.tag);
+                    protocols.append(CONSTWSTR("</color></shadow> "));
+                } else
+                {
+                    protocols.append(CONSTWSTR("<nl>")).append(maketag_color<ts::wchar>(get_default_text_color(3)));
+                    if (def == c) protocols.append(CONSTWSTR("+"));
+                    protocols.append(row->other.tag);
+                    protocols.append(CONSTWSTR("</color> "));
+                }
+            } else
+            {
+                protocols.append(CONSTWSTR("<nl><s> ")).append( maketag_color<ts::wchar>( get_default_text_color(4) ) );
+                protocols.append( row->other.tag );
+                protocols.append(CONSTWSTR("</color> </s>"));
+            }
+        }
+    });
+
+}
+
+void gui_contact_item_c::draw_online_state_text(draw_data_s &dd)
+{
+    text_draw_params_s tdp;
+
+    ts::flags32_s f; f.setup(ts::TO_VCENTER);
+    tdp.textoptions = &f;
+
+    if (protocols.is_empty())
+        generate_protocols();
+
+    getengine().draw(protocols, tdp);
+}
+
+int gui_contact_item_c::contact_item_rite_margin()
+{
+    if (contact && contact->getkey().is_self()) return 5;
+    return g_app->buttons().callb->size.x + g_app->buttons().fileb->size.x + 15;
 }
 
 /*virtual*/ bool gui_contact_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -749,11 +828,20 @@ void gui_contact_item_c::on_drop(gui_contact_item_c *ondr)
                         if (CIR_CONVERSATION_HEAD == role)
                             hstuff().last_head_text_pos = ca.lt;
                         dd.offset += ca.lt;
+                        int oldxo = dd.offset.x;
                         ts::flags32_s f; f.setup(ts::TO_VCENTER);
                         tdp.textoptions = &f;
                         tdp.forecolor = nullptr;
                         tdp.rectupdate = DELEGATE( this, updrect );
                         draw(dd, tdp);
+
+                        if (CIR_CONVERSATION_HEAD == role)
+                        {
+                            dd.offset.x = oldxo + dd.size.x - contact_item_rite_margin() - 100;
+                            dd.size.x = 100; // 100px should be enough
+                            draw_online_state_text(dd);
+
+                        }
                     }
                     m_engine->end_draw();
                 }
@@ -838,8 +926,8 @@ void gui_contact_item_c::on_drop(gui_contact_item_c *ondr)
 
                     ts::wstr_c text(c->get_name(false));
                     text_adapt_user_input(text);
-                    active_protocol_c *ap = prf().ap(c->getkey().protoid);
-                    if (CHECK(ap)) text.append(CONSTWSTR(" (")).append(ap->get_name()).append(CONSTWSTR(")"));
+                    if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
+                        text.append(CONSTWSTR(" (")).append(ap->get_name()).append(CONSTWSTR(")"));
                     mc.add( TTT("Отделить: $",197) / text, 0, handlers::m_metacontact_detach, c->getkey().as_str() );
                 });
 
@@ -911,10 +999,10 @@ INLINE int statev(contact_state_e v)
 
 bool gui_contact_item_c::is_after(gui_contact_item_c &ci)
 {
-    int mystate = statev(contact->get_meta_state());
-    int otherstate = statev(ci.contact->get_meta_state());
+    int mystate = statev(contact->get_meta_state()) + protohit_power();
+    int otherstate = statev(ci.contact->get_meta_state()) + ci.protohit_power();
     if (otherstate > mystate) return true;
-    
+
     return false;
 }
 
@@ -1113,10 +1201,7 @@ ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT_V> & c )
     {
         if (self && self->contacted())
             if (ASSERT(c.contact == &self->getcontact() || c.contact->getmeta() == &self->getcontact()))
-            {
-                self->protohit();
                 self->update_text();
-            }
     
         return 0;
     }
@@ -1138,7 +1223,6 @@ ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT_V> & c )
             }
             if (same || ci->getcontact().subpresent( c.contact->getkey() ))
             {
-                ci->protohit();
                 ci->update_text();
                 gui->dragndrop_update(ci);
                 return 0;

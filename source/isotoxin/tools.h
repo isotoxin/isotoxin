@@ -385,12 +385,21 @@ struct leech_at_left : public autoparam_i
 
 struct leech_save_proportions_s : public autoparam_i
 {
+    static const int divider = 10000;
     ts::str_c cfgname;
     ts::str_c defaultv;
-    leech_save_proportions_s(const ts::asptr& cfgp) :cfgname(cfgp)
+    leech_save_proportions_s(const ts::asptr& cfgname, const ts::asptr& defvals) :cfgname(cfgname), defaultv(defvals)
     {
-        int i = cfgname.find_pos(',');
-        if (i>=0) { defaultv = cfgname.substr(i+1); cfgname.set_length(i);}
+    }
+    virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+};
+
+struct leech_save_size_s : public autoparam_i
+{
+    ts::str_c cfgname;
+    ts::ivec2 defaultsz;
+    leech_save_size_s(const ts::asptr& cfgname, const ts::ivec2& defsz) :cfgname(cfgname), defaultsz(defsz)
+    {
     }
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };

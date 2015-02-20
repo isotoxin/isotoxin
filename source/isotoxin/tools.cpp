@@ -286,19 +286,26 @@ bool leech_at_left::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
         {
         case SQ_GROUP_PROPORTIONS_CAHNGED:
             {
+                ts::token<char> d( cfg().get(cfgname, defaultv.as_sptr()), ',' );
                 ts::str_c v;
                 for (float t : data.float_array())
                 {
-                    v.append_as_int(ts::lround(t * 10000)).append_char(',');
+                    int vn = ts::lround(t * divider);
+                    if (vn == 0)
+                        v.append(*d);
+                    else
+                        v.append_as_int(vn);
+                    ++d;
+                    v.append_char(',');
                 }
                 v.trunc_length();
                 cfg().param(cfgname, v);
             }
             break;
-        case SQ_GROUP_RESTORE_PROPORTIONS:
+        case SQ_RESTORE_SIGNAL:
             {
                 gui_hgroup_c *g = ts::ptr_cast<gui_hgroup_c *>(owner);
-                g->set_proportions( cfg().get(cfgname, defaultv.as_sptr()), 10000 );
+                g->set_proportions( cfg().get(cfgname, defaultv.as_sptr()), divider );
 
             }
             break;
@@ -309,6 +316,25 @@ bool leech_at_left::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
     return false;
 }
 
+
+/*virtual*/ bool leech_save_size_s::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    if (owner->getrid() == rid)
+    {
+        switch (qp)
+        {
+        case SQ_RECT_CHANGED:
+            cfg().param(cfgname, ts::amake<ts::ivec2>(owner->getprops().size()));
+            break;
+        case SQ_RESTORE_SIGNAL:
+            MODIFY(*owner).size( cfg().get<ts::ivec2>(cfgname, defaultsz) );
+            break;
+        }
+
+    }
+
+    return false;
+}
 
 
 

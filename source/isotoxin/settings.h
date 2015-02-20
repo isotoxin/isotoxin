@@ -52,6 +52,9 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     tableview_active_protocol_s * table_active_protocol = nullptr;
     tableview_active_protocol_s table_active_protocol_underedit;
 
+    void add_suspended_proto( RID lst, int id, const active_protocol_data_s &apdata );
+    void add_active_proto( RID lst, int id, const active_protocol_data_s &apdata );
+
     void set_proxy_type_handler(const ts::str_c&);
     bool set_proxy_addr_handler(const ts::wstr_c & t);
 
@@ -89,7 +92,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     bool ipchandler( ipcr );
     bool activateprotocol( const ts::wstr_c& name, const ts::str_c& param );
     void contextmenuhandler( const ts::str_c& prm );
-    menu_c getcontextmenu( const ts::str_c& param );
+    menu_c getcontextmenu( const ts::str_c& param, bool activation );
 
     void select_lang( const ts::str_c& prm );
 

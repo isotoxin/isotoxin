@@ -39,10 +39,13 @@ class gui_notice_c : public gui_label_c
     uint64 utag = 0;
     int height = 0;
     int addheight = 0;
+    int flashing = 0;
+    int networkid = 0; // only for NOTICE_NETWORK
 
     GM_RECEIVER(gui_notice_c, ISOGM_NOTICE);
     GM_RECEIVER(gui_notice_c, ISOGM_CALL_STOPED);
     GM_RECEIVER(gui_notice_c, ISOGM_FILE);
+    GM_RECEIVER(gui_notice_c, ISOGM_PROFILE_TABLE_SAVED);
 
     static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE = FLAGS_FREEBITSTART_LABEL << 0;
 
@@ -54,10 +57,14 @@ class gui_notice_c : public gui_label_c
 
     void setup_tail();
 
+    bool flash_pereflash(RID, GUIPARAM);
+
 public:
 
     gui_notice_c(MAKE_CHILD<gui_notice_c> &data);
     /*virtual*/ ~gui_notice_c();
+
+    void flash();
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ ts::ivec2 get_max_size() const override;
@@ -106,9 +113,10 @@ class gui_message_item_c;
 template<> struct MAKE_CHILD<gui_message_item_c> : public _PCHILD(gui_message_item_c)
 {
     contact_c *author;
+    contact_c *historian;
     ts::str_c skin;
     message_type_app_e mt;
-    MAKE_CHILD(RID parent_, contact_c *author, const ts::str_c &skin, message_type_app_e mt):author(author), skin(skin), mt(mt) { parent = parent_; }
+    MAKE_CHILD(RID parent_, contact_c *historian, contact_c *author, const ts::str_c &skin, message_type_app_e mt):historian(historian), author(author), skin(skin), mt(mt) { parent = parent_; }
     ~MAKE_CHILD();
 };
 
@@ -144,6 +152,7 @@ class gui_message_item_c : public gui_label_c
         textrect.set_text_only(newtext, false);
     }
 
+    ts::shared_ptr<contact_c> historian;
     ts::shared_ptr<contact_c> author;
     mutable ts::wstr_c protodesc;
 
@@ -193,7 +202,7 @@ public:
 
     void dirty_height_cache() { flags.set(F_DIRTY_HEIGHT_CACHE); }
 
-    gui_message_item_c(MAKE_CHILD<gui_message_item_c> &data) :gui_label_c(data), mt(data.mt), author(data.author) { set_theme_rect( CONSTASTR("message.") + data.skin, false );}
+    gui_message_item_c(MAKE_CHILD<gui_message_item_c> &data) :gui_label_c(data), mt(data.mt), author(data.author), historian(data.historian) { set_theme_rect( CONSTASTR("message.") + data.skin, false );}
     /*virtual*/ ~gui_message_item_c();
 
     /*virtual*/ int get_height_by_width(int width) const override;
@@ -308,6 +317,7 @@ class gui_conversation_c : public gui_vgroup_c, public sound_capture_handler_c
     GM_RECEIVER(gui_conversation_c, ISOGM_CHANGED_PROFILEPARAM);
     GM_RECEIVER(gui_conversation_c, ISOGM_AV);
     GM_RECEIVER(gui_conversation_c, ISOGM_CALL_STOPED);
+    GM_RECEIVER(gui_conversation_c, ISOGM_PROFILE_TABLE_SAVED);
     
     
     ts::tbuf_t<s3::Format> avformats;
@@ -315,11 +325,14 @@ class gui_conversation_c : public gui_vgroup_c, public sound_capture_handler_c
     ts::safe_ptr<gui_contact_item_c> caption;
     ts::safe_ptr<gui_messagelist_c> msglist;
     ts::safe_ptr<gui_noticelist_c> noticelist;
+    ts::safe_ptr<gui_message_area_c> messagearea;
 
     RID message_editor;
 
     /*virtual*/ void datahandler(const void *data, int size) override;
     /*virtual*/ s3::Format *formats(int &count) override;
+
+    bool hide_show_messageeditor(RID r = RID(), GUIPARAM p = nullptr);
 
 public:
     gui_conversation_c(initial_rect_data_s &data) :gui_vgroup_c(data) { /*defaultthrdraw = DTHRO_BASE;*/ }

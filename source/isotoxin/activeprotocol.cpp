@@ -268,10 +268,16 @@ ts::uint32 active_protocol_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
                 dematerialization = true;
         } else
         {
-            dematerialization = t.find(id) == nullptr;
+            auto *row = t.find(id);
+            dematerialization = row == nullptr || FLAG(row->other.options, active_protocol_data_s::O_SUSPENDED);
         }
         if (dematerialization)
+        {
+            int protoid = id;
             stop_and_die();
+            contacts().nomore_proto(protoid);
+            prf().dirty_sort();
+        }
     }
     return 0;
 }

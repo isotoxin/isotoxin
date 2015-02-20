@@ -44,6 +44,40 @@ contact_c::~contact_c()
     if (gui) gui->delete_event( DELEGATE(this,flashing_proc) );
 }
 
+bool contact_c::is_protohit( bool strong )
+{
+    ASSERT( !is_multicontact() );
+
+    if ( strong && opts.unmasked().is(F_PROTOHIT) )
+    {
+        if (nullptr == prf().ap(getkey().protoid))
+            opts.unmasked().clear(F_PROTOHIT);
+    }
+        
+    return opts.unmasked().is(F_PROTOHIT);
+}
+
+void contact_c::protohit( bool f )
+{
+    ASSERT( !is_multicontact() );
+
+    if (f && nullptr == prf().ap(getkey().protoid))
+        f = false;
+
+    if (f != opts.unmasked().is(F_PROTOHIT))
+    {
+        opts.unmasked().init(F_PROTOHIT, f);
+        
+        if (!f && get_state() == CS_ONLINE)
+            state = CS_OFFLINE;
+
+        if (contact_c *m = getmeta())
+            if (m->gui_item)
+                m->gui_item->protohit();
+    }
+
+}
+
 void contact_c::reselect(bool scrollend)
 {
     contact_c *h = get_historian();
@@ -65,8 +99,8 @@ ts::wstr_c contact_c::compile_pubid() const
     ASSERT(is_meta());
     ts::wstr_c x;
     for (contact_c *c : subcontacts)
-        x.append(c->get_pubid_desc()).append_char('~');
-    return x.trunc_length();
+        x.append('~', c->get_pubid_desc());
+    return x;
 }
 ts::wstr_c contact_c::compile_name() const
 {
@@ -133,6 +167,7 @@ contact_gender_e contact_c::get_meta_gender() const
 
 contact_c * contact_c::subget_for_send() const
 {
+    if (subcontacts.size() == 1) return subcontacts.get(0);
     contact_c *maxpriority = nullptr;
     int prior = 0;
     contact_state_e st = contact_state_check;
@@ -140,8 +175,7 @@ contact_c * contact_c::subget_for_send() const
     {
         if (c->options().is(contact_c::F_DEFALUT) && c->get_state() == CS_ONLINE) return c;
 
-        active_protocol_c *ap = prf().ap(c->getkey().protoid);
-        if (CHECK(ap))
+        if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
         {
             if (maxpriority == nullptr || (st != CS_ONLINE && c->get_state() == CS_ONLINE) || (st != CS_ONLINE && c->get_state() != CS_ONLINE && ap->get_priority() > prior))
             {
@@ -156,14 +190,14 @@ contact_c * contact_c::subget_for_send() const
 
 contact_c * contact_c::subget_default() const
 {
+    if (subcontacts.size() == 1) return subcontacts.get(0);
     contact_c *maxpriority = nullptr;
     int prior = 0;
     for (contact_c *c : subcontacts)
     {
         if (c->options().is(contact_c::F_DEFALUT)) return c;
 
-        active_protocol_c *ap = prf().ap( c->getkey().protoid );
-        if (CHECK(ap))
+        if (active_protocol_c *ap = prf().ap( c->getkey().protoid ))
         {
             if (maxpriority == nullptr || ap->get_priority() > prior)
             {
@@ -215,7 +249,7 @@ void contact_c::send_file(const ts::wstr_c &fn)
     contact_c *c_file_to = nullptr;
     historian->subiterate([&](contact_c *c) {
         active_protocol_c *ap = prf().ap(c->getkey().protoid);
-        if (CHECK(ap) && 0 != (PF_SEND_FILE & ap->get_features()))
+        if (ap && 0 != (PF_SEND_FILE & ap->get_features()))
         {
             if (c_file_to == nullptr || cdef == c)
                 c_file_to = cdef;
@@ -349,8 +383,7 @@ bool contact_c::b_accept_call(RID, GUIPARAM)
 {
     if (ringtone(false, false))
     {
-        active_protocol_c *ap = prf().ap(getkey().protoid);
-        if (CHECK(ap))
+        if (active_protocol_c *ap = prf().ap(getkey().protoid))
             ap->accept_call(getkey().contactid);
 
         if (CHECK(getmeta()))
@@ -372,8 +405,7 @@ bool contact_c::b_hangup(RID, GUIPARAM par)
     HOLD(ownitm->getparent())().getparent().call_children_repos();
     TSDEL(ownitm);
 
-    active_protocol_c *ap = prf().ap(getkey().protoid);
-    if (CHECK(ap))
+    if (active_protocol_c *ap = prf().ap(getkey().protoid))
         ap->stop_call(getkey().contactid, STOPCALL_HANGUP);
 
     if (CHECK(getmeta()))
@@ -388,8 +420,7 @@ bool contact_c::b_hangup(RID, GUIPARAM par)
 bool contact_c::b_call(RID, GUIPARAM)
 {
     if (!ASSERT(!is_av())) return true;
-    active_protocol_c *ap = prf().ap(getkey().protoid);
-    if (CHECK(ap))
+    if (active_protocol_c *ap = prf().ap(getkey().protoid))
         ap->call(getkey().contactid, 60);
 
     gmsg<ISOGM_NOTICE>( get_historian(), this, NOTICE_CALL ).send();
@@ -405,17 +436,8 @@ bool contact_c::b_cancel_call(RID, GUIPARAM par)
     TSDEL(ownitm);
 
     if (calltone(false))
-    {
-        active_protocol_c *ap = prf().ap(getkey().protoid);
-        if (CHECK(ap))
+        if (active_protocol_c *ap = prf().ap(getkey().protoid))
             ap->stop_call(getkey().contactid, STOPCALL_CANCEL);
-    }
-
-    //if (CHECK(getmeta()))
-    //{
-    //    const post_s *p = get_historian()->fix_history(MTA_INCOMING_CALL, MTA_INCOMING_CALL_REJECTED, getkey(), get_historian()->nowtime());
-    //    if (p) gmsg<ISOGM_SUMMON_POST>(*p, true).send();
-    //}
 
     return true;
 }
@@ -428,11 +450,8 @@ bool contact_c::b_reject_call(RID, GUIPARAM par)
     TSDEL(ownitm);
 
     if (ringtone(false))
-    {
-        active_protocol_c *ap = prf().ap(getkey().protoid);
-        if (CHECK(ap))
+        if (active_protocol_c *ap = prf().ap(getkey().protoid))
             ap->stop_call(getkey().contactid, STOPCALL_REJECT);
-    }
 
     if (CHECK(getmeta()))
     {
@@ -450,8 +469,7 @@ bool contact_c::b_accept(RID, GUIPARAM par)
     HOLD(ownitm->getparent())().getparent().call_children_repos();
     TSDEL(ownitm);
 
-    active_protocol_c *ap = prf().ap(getkey().protoid);
-    if (CHECK(ap))
+    if (active_protocol_c *ap = prf().ap(getkey().protoid))
         ap->accept(getkey().contactid);
 
     get_historian()->fix_history(MTA_FRIEND_REQUEST, MTA_OLD_REQUEST, getkey());
@@ -466,8 +484,7 @@ bool contact_c::b_reject(RID, GUIPARAM par)
     HOLD(ownitm->getparent())().getparent().call_children_repos();
     TSDEL(ownitm);
 
-    active_protocol_c *ap = prf().ap( getkey().protoid );
-    if (CHECK(ap))
+    if (active_protocol_c *ap = prf().ap( getkey().protoid ))
         ap->reject(getkey().contactid);
 
     get_historian()->reselect(false);
@@ -509,8 +526,7 @@ bool contact_c::b_receive_file(RID, GUIPARAM par)
         ts::make_path(downf);
         ft->prepare_fn(ts::fn_join(downf, ft->filename), false);
 
-        active_protocol_c *ap = prf().ap(ft->sender.protoid);
-        if (CHECK(ap))
+        if (active_protocol_c *ap = prf().ap(ft->sender.protoid))
             ap->file_control(utag, FIC_ACCEPT);
 
     }
@@ -538,8 +554,7 @@ bool contact_c::b_receive_file_as(RID, GUIPARAM par)
             TSDEL(ownitm);
 
             ft->prepare_fn(fn, true);
-            active_protocol_c *ap = prf().ap(ft->sender.protoid);
-            if (CHECK(ap))
+            if (active_protocol_c *ap = prf().ap(ft->sender.protoid))
                 ap->file_control(utag, FIC_ACCEPT);
         }
 
@@ -619,6 +634,21 @@ contact_c *contacts_c::find_subself(int protoid) const
     return self->subget( contact_key_s(0, protoid) );
 }
 
+void contacts_c::nomore_proto(int id)
+{
+    for (contact_c *c : arr)
+        if (!c->is_multicontact() && c->getkey().protoid == id)
+            c->protohit(false);
+}
+
+bool contacts_c::present_protoid(int id) const
+{
+    for(const contact_c *c : arr)
+        if (!c->is_multicontact() && c->getkey().protoid == id)
+            return true;
+    return false;
+}
+
 int contacts_c::find_free_meta_id() const
 {
     int id=1;
@@ -642,6 +672,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
 {
     if (msg.tabi == pt_contacts)
     {
+        time_t nowtime = now();
         // 1st pass - create meta
         ts::tmp_pointers_t<contacts_s, 32> notmeta;
         //ts::tmp_pointers_t<contact_c, 32> meta;
@@ -663,7 +694,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
                 metac->set_customname(row.customname);
                 metac->set_statusmsg( row.statusmsg );
                 metac->options().setup(row.options);
-                metac->set_readtime( row.readtime );
+                metac->set_readtime( ts::tmin(nowtime, row.readtime) );
                 //meta.add(metac);
             } else
                 notmeta.add(&row);
@@ -729,8 +760,8 @@ void contacts_c::kill(const contact_key_s &ck)
     if (cc->is_multicontact())
     {
         cc->subiterate([this](contact_c *c) {
-            active_protocol_c *ap = prf().ap(c->getkey().protoid);
-            if (ap) ap->del_contact(c->getkey().contactid);
+            if (active_protocol_c *ap = prf().ap(c->getkey().protoid)) 
+                ap->del_contact(c->getkey().contactid);
             prf().killcontact(c->getkey());
             del(c->getkey());
         });
@@ -757,8 +788,8 @@ void contacts_c::kill(const contact_key_s &ck)
             }
         }
 
-        active_protocol_c *ap = prf().ap(cc->getkey().protoid);
-        if (ap) ap->del_contact(cc->getkey().contactid);
+        if (active_protocol_c *ap = prf().ap(cc->getkey().protoid))
+            ap->del_contact(cc->getkey().contactid);
 
     }
     prf().killcontact(cc->getkey());
@@ -842,6 +873,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
 
     if (0 != (contact.mask & CDM_STATE))
     {
+        c->protohit(true);
         contact_state_e oldst = c->get_state();
         c->set_state( contact.state );
 
@@ -895,8 +927,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
     if (serious_change)
     {
         // serious change - new contact added. proto data must be saved
-        active_protocol_c *ap = prf().ap(serious_change);
-        if (ASSERT(ap))
+        if (active_protocol_c *ap = prf().ap(serious_change))
             ap->save_config(false);
     }
 
@@ -975,8 +1006,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
                 n.send();
             } else
             {
-                active_protocol_c *ap = prf().ap( ifl.sender.protoid );
-                if (CHECK(ap))
+                if (active_protocol_c *ap = prf().ap( ifl.sender.protoid ))
                     ap->file_control( ifl.utag, FIC_REJECT );
             }
             if (historian->gui_item)

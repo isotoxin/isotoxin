@@ -270,12 +270,7 @@ namespace ts
 		path.set_length(0);
 
 		for (const auto & s : sa)
-		{
-			path.append(s);
-			path.append_char('\\');
-		}
-
-		path.trunc_length();
+			path.append('\\', s);
 
 		return path;
 	}

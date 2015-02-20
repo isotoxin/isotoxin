@@ -50,7 +50,7 @@ enum system_query_e
     SQ_CUSTOM_INIT_DONE,    // optional event
 
     SQ_GROUP_PROPORTIONS_CAHNGED, // by xgroup to self - use subscribe
-    SQ_GROUP_RESTORE_PROPORTIONS, // by extern code
+    SQ_RESTORE_SIGNAL, // by extern code
 
     SQ_DETECT_AREA,
     SQ_GET_POPUP_MENU_POS,
@@ -965,6 +965,7 @@ protected:
             szmax = 0;
             sz = -1;
             szsplit = 0;
+            sizepolicy = SP_NORMAL;
         }
     };
 

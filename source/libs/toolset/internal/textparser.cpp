@@ -659,6 +659,10 @@ struct text_parser_s
             if (rite_rite == 0)
                 paragraphs_stack.last().rite = false;
         }
+        else if (tag == CONSTWSTR("null"))
+        {
+            // do nothing with null tag
+        } 
         else if (tag == CONSTWSTR("hyphenation"))
         {
             hyphenation_tag_nesting_level++;

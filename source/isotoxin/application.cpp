@@ -721,8 +721,7 @@ bool application_c::register_file_transfer( const contact_key_s &historian, cons
         }
         GetFileSizeEx(ftr.handle, &ts::ref_cast<LARGE_INTEGER>(ftr.filesize) );
 
-        active_protocol_c *ap = prf().ap(sender.protoid);
-        if (CHECK(ap))
+        if (active_protocol_c *ap = prf().ap(sender.protoid))
             ap->send_file(sender.contactid, utag, ts::fn_get_name_with_ext(ftr.filename), ftr.filesize);
 
         ftr.bytes_per_sec = -3; // wait 4 accept
@@ -824,7 +823,7 @@ void file_transfer_s::pause_by_remote( bool p )
 void file_transfer_s::pause_by_me(bool p)
 {
     active_protocol_c *ap = prf().ap(sender.protoid);
-    if (!CHECK(ap)) return;
+    if (!ap) return;
 
     if (p)
     {
@@ -844,8 +843,7 @@ void file_transfer_s::kill( file_control_e fctl )
 {
     if (fctl != FIC_NONE)
     {
-        active_protocol_c *ap = prf().ap(sender.protoid);
-        if (CHECK(ap))
+        if (active_protocol_c *ap = prf().ap(sender.protoid))
             ap->file_control(utag, fctl);
     }
 
@@ -901,8 +899,7 @@ void file_transfer_s::query( uint64 offset_, int sz )
             return;
         }
 
-        active_protocol_c *ap = prf().ap(sender.protoid);
-        if (CHECK(ap))
+        if (active_protocol_c *ap = prf().ap(sender.protoid))
             ap->file_portion(utag, offset_, b.data(), sz);
 
         if (sz)

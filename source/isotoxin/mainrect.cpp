@@ -34,14 +34,14 @@ ts::uint32 mainrect_c::gm_handler( gmsg<ISOGM_APPRISE> & )
         gui_hgroup_c &g = MAKE_VISIBLE_CHILD<gui_hgroup_c>(p);
         g.allow_move_splitter(true);
         g.leech(TSNEW(leech_fill_parent_s));
-        g.leech(TSNEW(leech_save_proportions_s, CONSTASTR("main_splitter,7060,12940")));
+        g.leech(TSNEW(leech_save_proportions_s, CONSTASTR("main_splitter"), CONSTASTR("7060,12940")));
         return g.getrid();
     };
 
     RID hg = uiroot(m_rid);
     RID cl = MAKE_CHILD<gui_contactlist_c>( hg );
     RID chat = MAKE_CHILD<gui_conversation_c>( hg );
-    hg.call_restore_proportions();
+    hg.call_restore_signal();
     
     gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self()).send(); // 1st selected item, yo
 

@@ -28,7 +28,46 @@ gui_notice_c::gui_notice_c(MAKE_CHILD<gui_notice_c> &data) :gui_label_c(data), n
 
 gui_notice_c::~gui_notice_c()
 {
+    if (gui) gui->delete_event( DELEGATE(this,flash_pereflash) );
 }
+
+void gui_notice_c::flash()
+{
+    flashing = 4;
+    flash_pereflash(RID(), nullptr);
+}
+
+bool gui_notice_c::flash_pereflash(RID, GUIPARAM)
+{
+    --flashing;
+    if (flashing > 0) DELAY_CALL_R(0.1, DELEGATE(this, flash_pereflash), nullptr);
+
+    ts::wstr_c text = textrect.get_text();
+
+    int i0 = text.find_pos(CONSTWSTR("<null=1>")) + 8;
+    int i1 = text.find_pos(CONSTWSTR("<null=2>"));
+    int i2 = text.find_pos(CONSTWSTR("<null=3>")) + 8;
+    int i3 = text.find_pos(CONSTWSTR("<null=4>"));
+
+    ASSERT(i1 >= i0 && i2 > i1 && i3 >= i2);
+
+    if (flashing & 1)
+    {
+        text.replace(i2, i3 - i2, CONSTWSTR("</color>"));
+        text.replace(i0, i1 - i0, maketag_color<ts::wchar>(get_default_text_color(2)));
+    }
+    else
+    {
+        // cut flash color
+        if (i3 > i2) text.cut(i2, i3 - i2);
+        if (i1 > i0) text.cut(i0, i1 - i0);
+    }
+    textrect.set_text_only(text, false);
+
+    getengine().redraw();
+    return true;
+}
+
 
 ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
 {
@@ -66,6 +105,18 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
 
     if (die) TSDEL(this);
     // no need to refresh here due ISOGM_NOTICE is notice-creation event and it initiates refresh
+    return 0;
+}
+
+ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&p)
+{
+    if (p.tabi == pt_active_protocol && p.pass == 0 && notice == NOTICE_NETWORK)
+    {
+        auto *row = prf().get_table_active_protocol().find(networkid);
+        if (row == nullptr || 0 != (row->other.options & active_protocol_data_s::O_SUSPENDED))
+            TSDEL( this );
+    }
+
     return 0;
 }
 
@@ -145,7 +196,6 @@ void gui_notice_c::setup(const ts::wstr_c &itext, const ts::str_c &pubid)
     {
     case NOTICE_NETWORK:
         {
-
             ts::wstr_c sost, plugdesc, newtext(1024,false);
 
             prf().iterate_aps([&](const active_protocol_c &ap) {
@@ -153,6 +203,7 @@ void gui_notice_c::setup(const ts::wstr_c &itext, const ts::str_c &pubid)
                 if (contact_c *c = contacts().find_subself(ap.getid()))
                     if (c->get_pubid() == pubid)
                     {
+                        networkid = ap.getid();
                         plugdesc = ap.get_desc();
 
                         if (c->get_state() == CS_ONLINE)
@@ -167,28 +218,32 @@ void gui_notice_c::setup(const ts::wstr_c &itext, const ts::str_c &pubid)
 
             newtext.set(TTT("Имя сети", 102)).append(CONSTWSTR(": <l>")).append(itext).append(CONSTWSTR("</l><br>"))
                 .append(TTT("Модуль", 105)).append(CONSTWSTR(": <l>")).append(plugdesc).append(CONSTWSTR("</l><br>"))
-                .append(TTT("ID", 103)).append(CONSTWSTR(": <l>")).append(pubid).append(CONSTWSTR("</l><br>"))
+                .append(TTT("ID", 103)).append(CONSTWSTR(": <l><null=1><null=2>")).append(pubid).append(CONSTWSTR("<null=3><null=4></l><br>"))
                 .append(TTT("Состояние", 104)).append(CONSTWSTR(": <l>")).append(sost); //.append(CONSTWSTR("<br><b>"));
             textrect.set_text_only(newtext, true);
 
-            struct x
+            struct copydata
             {
-                static bool copy_handler(RID b, GUIPARAM)
+                ts::wstr_c pubid;
+                ts::safe_ptr<gui_notice_c> notice;
+                bool copy_handler(RID b, GUIPARAM)
                 {
-                    gui_button_c &btn = HOLD(b).as<gui_button_c>();
-                    ts::wstr_c t = btn.get_data_obj<ts::wstr_c>();
-                    ts::set_clipboard_text(t);
+                    ts::set_clipboard_text(pubid);
+                    if (notice) notice->flash();
                     return true;
+                }
+                copydata(const ts::wstr_c &pubid, gui_notice_c *notice):pubid(pubid), notice(notice)
+                {
                 }
             };
 
             gui_button_c &b_copy = MAKE_CHILD<gui_button_c>(getrid());
-            b_copy.set_data_obj<ts::wstr_c>(pubid);
+            b_copy.set_data_obj<copydata>(pubid, this);
             b_copy.set_text(L"ID");
             b_copy.set_face(CONSTASTR("button"));
             b_copy.tooltip(TOOLTIP(TTT("Копировть ID в буфер обмена", 98)));
 
-            b_copy.set_handler(x::copy_handler, nullptr);
+            b_copy.set_handler(DELEGATE( &b_copy.get_data_obj<copydata>(), copy_handler), nullptr);
             //b_copy.leech(TSNEW(leech_dock_bottom_center_s, 100, 30, -5, 5, 0, 2));
             b_copy.leech(TSNEW(leech_dock_right_center_s, 40, 40, 5, -5, 0, 1));
             MODIFY(b_copy).visible(true);
@@ -660,6 +715,9 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
 
             for (auto it = prf().get_table_active_protocol().begin(), end = prf().get_table_active_protocol().end(); it != end; ++it)
             {
+                if (0 != (it->options & active_protocol_data_s::O_SUSPENDED))
+                    continue;
+
                 ts::str_c pubid = contacts().find_pubid(it.id());
                 if (!pubid.is_empty())
                 {
@@ -670,6 +728,14 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
             }
         } else
         {
+            owner->subiterate([this](contact_c *c) {
+                if (c->is_calltone())
+                {
+                    gui_notice_c &n = create_notice(NOTICE_CALL);
+                    n.setup(c);
+                }
+            });
+
             g_app->enum_file_transfers_by_historian(owner->getkey(), [this](file_transfer_s &ftr) {
                 if (ftr.send) return;
                 contact_c *sender = contacts().find(ftr.sender);
@@ -741,6 +807,7 @@ void gui_message_item_c::created()
 }
 
 static time_t readtime; // ugly static... but it is fastest
+static contact_c * readtime_historian = nullptr;
 
 /*virtual*/ bool gui_message_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
@@ -748,8 +815,9 @@ static time_t readtime; // ugly static... but it is fastest
     {
     case SQ_DRAW:
         {
-            for (const record &r : records)
-                if (r.time >= readtime) readtime = r.time+1; // обновим время итемов, которые видим
+            if (historian && readtime_historian == historian)
+                for (const record &r : records)
+                    if (r.time >= readtime) readtime = r.time+1; // refresh time of items we see
 
             switch (subtype)
             {
@@ -1447,8 +1515,11 @@ ts::wstr_c gui_message_item_c::hdr() const
     {
         if (protodesc.is_empty() && author->getkey().protoid)
         {
-            active_protocol_c *ap = prf().ap(author->getkey().protoid);
-            if (CHECK(ap)) protodesc.set(CONSTWSTR(" (")).append(ap->get_name()).append_char(')');
+            if (active_protocol_c *ap = prf().ap(author->getkey().protoid))
+                protodesc.set(CONSTWSTR(" (")).append(ap->get_name()).append_char(')');
+            else if (auto *row = prf().get_table_active_protocol().find(author->getkey().protoid))
+                if (ASSERT(row->other.options & active_protocol_data_s::O_SUSPENDED))
+                    protodesc.set(CONSTWSTR(" (")).append(row->other.name).append(CONSTWSTR(", ")).append(TTT("протокол деактивирован",69)).append_char(')');
         }
         n.append(protodesc);
     }
@@ -1556,6 +1627,7 @@ gui_messagelist_c::~gui_messagelist_c()
     {
         time_t rt = historian ? historian->get_readtime() : 0;
         readtime = rt;
+        readtime_historian = historian;
         bool r = __super::sq_evt(qp, rid, data);
         if (readtime > rt && historian)
         {
@@ -1563,6 +1635,7 @@ gui_messagelist_c::~gui_messagelist_c()
             prf().dirtycontact(historian->getkey());
             g_app->need_recalc_unread(historian->getkey());
         }
+        readtime_historian = nullptr;
 
         return r;
     }
@@ -1579,7 +1652,7 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
         _localtime64_s(&tmtm, &post_time);
         if (tmtm.tm_year != last_post_time.tm_year || tmtm.tm_mon != last_post_time.tm_mon || tmtm.tm_mday != last_post_time.tm_mday)
         {
-            gui_message_item_c &sep = MAKE_CHILD<gui_message_item_c>(getrid(), nullptr, ("date"), MTA_DATE_SEPARATOR);
+            gui_message_item_c &sep = MAKE_CHILD<gui_message_item_c>(getrid(), nullptr, nullptr, ("date"), MTA_DATE_SEPARATOR);
             sep.init_date_separator(tmtm);
         }
         last_post_time = tmtm;
@@ -1601,7 +1674,7 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
 
 
     if (is_special_mt(mt))
-        return MAKE_CHILD<gui_message_item_c>(getrid(), author, skin, mt);
+        return MAKE_CHILD<gui_message_item_c>(getrid(), historian, author, skin, mt);
 
 
     while (rectengine_c *e = getengine().get_last_child())
@@ -1614,7 +1687,7 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
         break;
     }
 
-    return MAKE_CHILD<gui_message_item_c>(getrid(), author, skin, mt);
+    return MAKE_CHILD<gui_message_item_c>(getrid(), historian, author, skin, mt);
 }
 
 
@@ -1931,6 +2004,8 @@ gui_message_area_c::~gui_message_area_c()
 
 /*virtual*/ void gui_message_area_c::created()
 {
+    leech(TSNEW( leech_save_size_s, CONSTASTR("msg_area_size"), ts::ivec2(0,60)) );
+
     message_editor = MAKE_VISIBLE_CHILD<gui_message_editor_c>( getrid() );
     send_button = MAKE_VISIBLE_CHILD<gui_button_c>( getrid() );
     send_button->set_face(CONSTASTR("send"));
@@ -1966,7 +2041,9 @@ MAKE_CHILD<gui_conversation_c>::~MAKE_CHILD()
 }
 
 gui_conversation_c::~gui_conversation_c()
-{}
+{
+    if (gui) gui->delete_event( DELEGATE( this, hide_show_messageeditor ) );
+}
 
 
 ts::ivec2 gui_conversation_c::get_min_size() const
@@ -1975,16 +2052,33 @@ ts::ivec2 gui_conversation_c::get_min_size() const
 }
 void gui_conversation_c::created()
 {
-    leech(TSNEW(leech_save_proportions_s, CONSTASTR("msg_splitter,4255,0,30709,5035")));
+    leech(TSNEW(leech_save_proportions_s, CONSTASTR("msg_splitter"), CONSTASTR("4255,0,30709,5035")));
 
     caption = MAKE_CHILD<gui_contact_item_c>(getrid(), &contacts().get_self()) << CIR_CONVERSATION_HEAD;
     noticelist = MAKE_CHILD<gui_noticelist_c>( getrid() );
     msglist = MAKE_VISIBLE_CHILD<gui_messagelist_c>( getrid() );
-    gui_message_area_c &ma = MAKE_VISIBLE_CHILD<gui_message_area_c>( getrid() );
-    message_editor = ma.message_editor->getrid();
-    getrid().call_restore_proportions();
+    messagearea = MAKE_CHILD<gui_message_area_c>( getrid() );
+    message_editor = messagearea->message_editor->getrid();
+    getrid().call_restore_signal();
+    messagearea->getrid().call_restore_signal();
     return __super::created();
 }
+
+bool gui_conversation_c::hide_show_messageeditor(RID, GUIPARAM)
+{
+    bool show = false;
+    if (caption->contacted() && !caption->getcontact().getkey().is_self())
+    {
+        caption->getcontact().subiterate([&](contact_c *c) {
+            if (show) return;
+            if (c->is_protohit(true))
+                show = true;
+        });
+    }
+    MODIFY(*messagearea).visible(show);
+    return false;
+}
+
 bool gui_conversation_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
     return __super::sq_evt(qp,rid,data);
@@ -2002,9 +2096,10 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_CONTACT_V> &c)
 
     ASSERT(caption->getcontact().is_multicontact());
     if (caption->getcontact().subpresent( c.contact->getkey() ))
-    {
         caption->update_text();
-    }
+
+    hide_show_messageeditor();
+
     return 0;
 }
 
@@ -2014,10 +2109,8 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_CONTACT_V> &c)
     {
         c->subiterate([&](contact_c *sc) {
             if (sc->is_av())
-            {
-                active_protocol_c *ap = prf().ap(sc->getkey().protoid);
-                if (CHECK(ap)) ap->send_audio(sc->getkey().contactid, capturefmt, data, size);
-            }
+                if (active_protocol_c *ap = prf().ap(sc->getkey().protoid))
+                    ap->send_audio(sc->getkey().contactid, capturefmt, data, size);
         });
     }
 
@@ -2029,10 +2122,7 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_CONTACT_V> &c)
     {
         c->subiterate( [this](contact_c *sc) {
             if (sc->is_av())
-            {
-                active_protocol_c *ap = prf().ap(sc->getkey().protoid);
-                if (CHECK(ap)) avformats.add(ap->defaudio());
-            }
+                if (active_protocol_c *ap = prf().ap(sc->getkey().protoid)) avformats.add(ap->defaudio());
         } );
 
         //avformats.get(0).sampleRate = 44100;
@@ -2077,6 +2167,8 @@ ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> &c )
     if (c.contact->is_av())
         start_capture();
 
+    hide_show_messageeditor();
+
     return 0;
 }
 
@@ -2097,4 +2189,14 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
     return 0;
 }
 
+ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&p)
+{
+    if (p.tabi == pt_active_protocol)
+    {
+        caption->update_text();
+        caption->update_buttons();
+        DELAY_CALL_R( 0.3, DELEGATE( this, hide_show_messageeditor ), nullptr );
+    }
 
+    return 0;
+}

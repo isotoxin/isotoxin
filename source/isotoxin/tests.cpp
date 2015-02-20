@@ -68,6 +68,20 @@ void crash()
 
 void dotests()
 {
+
+    ts::str_c aaa(CONSTASTR("a"));
+    aaa.append(',',CONSTASTR("b,"));
+    aaa.append(',',CONSTASTR(",c"));
+    aaa.append(',',CONSTASTR(",d"));
+    aaa.clear();
+    aaa.append(',', CONSTASTR("b,"));
+    aaa.append(',', CONSTASTR("c"));
+    aaa.append(',', CONSTASTR("d"));
+    aaa.clear();
+    aaa.append(',', CONSTASTR(",b,"));
+    aaa.append(',',CONSTASTR(",d"));
+
+
     //uint64 u1 = ts::uuid();
     //uint64 u2 = ts::uuid();
     //uint64 u3 = ts::uuid();
@@ -232,7 +246,7 @@ protected:
         c = TSNEW( contact_c );
         c->set_name(L"Bla");
 
-        gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(getrid(), c, CONSTASTR("mine"), MTA_MESSAGE);
+        gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(getrid(), nullptr, c, CONSTASTR("mine"), MTA_MESSAGE);
 
         post_s p;
         //p.time = now() - 1000;

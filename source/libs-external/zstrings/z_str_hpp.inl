@@ -1830,6 +1830,34 @@ public:
     str_t & append_as_int(int n) { return append_as_num<int>(n); }
     str_t & append_as_uint(unsigned int n) { return append_as_num<unsigned int>(n); }
 
+    str_t & append(TCHARACTER sep, sptr<TCHARACTER> s)
+    {
+        if (s.l == 0) return *this;
+        ZSTRINGS_SIGNED prevlen = get_length();
+        ZSTRINGS_SIGNED prevlen_x = prevlen;
+        ZSTRINGS_SIGNED newlen = prevlen + s.l;
+        if (prevlen)
+        {
+            if (get_last_char() != sep && s.s[0] != sep)
+            {
+                ++prevlen_x;
+                ++newlen;
+            } else if ( get_last_char() == sep && s.s[0] == sep )
+            {
+                --newlen;
+                s = s.skip(1);
+            }
+        } else if (s.s[0] == sep )
+        {
+            --newlen;
+            s = s.skip(1);
+        }
+        core.change(newlen, zstrings_internal::mod_preserve<TCHARACTER>(newlen));
+        blk_UNIT_copy_fwd<TCHARACTER>(core() + prevlen_x, s.s, s.l);
+        if (prevlen_x > prevlen) core()[prevlen] = sep;
+        return *this;
+    }
+
     str_t & append(const sptr<TCHARACTER> &s)
     {
         if (s.l == 0) return *this;
@@ -1839,7 +1867,9 @@ public:
         return *this;
     }
 
+    str_t & append(TCHARACTER sep, const str_t &s) {return this->append(sep, s.as_sptr());};
     str_t & append(const str_t &s) {return this->append(s.as_sptr());};
+
     template<class CORE2> str_t & append(const str_t<TCHARACTER, CORE2> &s) {return this->append(s.as_sptr());};
 	template<typename TCHARACTER2, class CORE2> str_t & append(const str_t<TCHARACTER2, CORE2> &s) { xappend(*this, s.as_sptr()); return *this; };
 	

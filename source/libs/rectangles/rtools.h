@@ -50,7 +50,7 @@ public:
     int         call_get_menu_level() const;
     menu_c      call_get_menu() const;
     bool        call_is_tooltip() const;
-    void        call_restore_proportions() const;
+    void        call_restore_signal() const;
     void        call_setup_button(bcreate_s &bcr) const;
     void        call_open_group(RID itm) const;
     void        call_lbclick(ts::ivec2 relpos = ts::ivec2(0)) const;

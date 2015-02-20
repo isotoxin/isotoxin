@@ -81,10 +81,10 @@ menu_c  RID::call_get_menu() const
     return d.getsome.handled ? *d.getsome.menu : menu_c();
 }
 
-void RID::call_restore_proportions() const
+void RID::call_restore_signal() const
 {
     HOLD ctl(*this);
-    ctl().sq_evt(SQ_GROUP_RESTORE_PROPORTIONS, *this, ts::make_dummy<evt_data_s>(true));
+    ctl().sq_evt(SQ_RESTORE_SIGNAL, *this, ts::make_dummy<evt_data_s>(true));
 }
 
 void RID::call_setup_button(bcreate_s &bcr) const
@@ -1253,6 +1253,7 @@ void gui_hgroup_c::children_repos()
     if (proposum == 0) proposum = 1.0;
 
     // get min max size
+    int szt = 0;
     for (ts::aint t = 0; t < info.count; ++t)
     {
         rsize &ww = rsizes.add();
@@ -1260,12 +1261,14 @@ void gui_hgroup_c::children_repos()
         if (e == nullptr)
         {
             ww.no();
+            proposum -= tpropo[t];
             continue;
         }
         const guirect_c &r = e->getrect();
         if (!r.getprops().is_visible())
         {
             ww.no();
+            proposum -= tpropo[t];
             continue;
         }
         szpol_override[t] = ww.sizepolicy = (ts::uint8)r.size_policy();
@@ -1273,7 +1276,19 @@ void gui_hgroup_c::children_repos()
         ww.szmax = (ts::int16)r.get_max_size()[vecindex];
         ww.szsplit = 0;
         ww.sz = (ts::int16)r.getprops().size()[vecindex];
+        szt += ww.sz;
     }
+
+    if (szt > 0)
+        for (ts::aint t = 0; t < info.count; ++t)
+        {
+            rsize &ww = rsizes.get(t);
+            if (ww.sz > 0 && tpropo[t] == 0)
+            {
+                tpropo[t] = float(ww.sz) / (float)szt;
+                proposum += tpropo[t];
+            }
+        }
 
     int splitters_sz = 0;
     if (int splitter_sz = __splitter_size())
@@ -1545,6 +1560,7 @@ void gui_hgroup_c::children_repos()
 void gui_hgroup_c::on_add_child(RID id)
 {
     if (proportions.count()) proportions.add(proportions.average()); else proportions.add(1.0f);
+    HOLD(id)().leech(this);
 }
 void gui_hgroup_c::on_die_child(int index)
 {
@@ -1574,6 +1590,17 @@ void gui_hgroup_c::set_proportions(const ts::str_c&values, int div)
 
 bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    if (rid != getrid() && ASSERT(getrid() >> rid)) // child?
+    {
+        switch (qp)
+        {
+            case SQ_VISIBILITY_CHANGED:
+                children_repos_delay();
+                return false;
+        }
+        return false;
+    }
+
     if (__super::sq_evt(qp, rid, data)) return true;
 
     switch (qp)

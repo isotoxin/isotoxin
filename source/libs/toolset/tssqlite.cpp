@@ -183,8 +183,7 @@ public:
             if (recreate)
             {
                 tmp_str_c sc;
-                for( const str_c &s : selcols ) sc.append(s).append_char(',');
-                sc.trunc_length();
+                for( const str_c &s : selcols ) sc.append(',',s);
 
                 execsql(CONSTASTR("BEGIN"));
                 str_c newtable(CONSTASTR("new__"), tablename);

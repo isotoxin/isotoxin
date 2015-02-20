@@ -45,10 +45,13 @@ void gui_listitem_c::created()
         case SQ_MOUSE_RUP:
             if (gm)
             {
-                menu_c m = gm(param);
+                menu_c m = gm(param, false);
                 popupmenu = &gui_popup_menu_c::show( ts::ivec3(gui->get_cursor_pos(),0), m );
                 MODIFY(rid).active(true);
             }
+            return false;
+        case SQ_MOUSE_L2CLICK:
+            gm(param, true);
             return false;
         case SQ_YOU_WANNA_DIE:
             return param.equals(data.strparam);

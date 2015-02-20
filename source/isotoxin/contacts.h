@@ -162,6 +162,7 @@ public:
     //static const ts::flags32_s::BITS F_ACCEPT = SETBIT(0);
     //static const ts::flags32_s::BITS F_REJECT = SETBIT(1);
 
+    static const ts::flags32_s::BITS F_PROTOHIT = SETBIT(27);
     static const ts::flags32_s::BITS F_CALLTONE = SETBIT(28);
     static const ts::flags32_s::BITS F_AV_INPROGRESS = SETBIT(29);
     static const ts::flags32_s::BITS F_RINGTONE = SETBIT(30);
@@ -181,6 +182,9 @@ public:
     }
 
     void reselect(bool);
+
+    bool is_protohit( bool strong );
+    void protohit(bool f);
 
     bool achtung() const;
 
@@ -541,6 +545,9 @@ public:
     contact_c *find_subself(int protoid) const;
 
     contact_c *create_new_meta();
+
+    void nomore_proto(int id);
+    bool present_protoid(int id) const;
 
     bool present( const contact_key_s&k ) const
     {

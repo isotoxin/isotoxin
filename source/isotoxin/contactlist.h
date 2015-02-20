@@ -33,14 +33,15 @@ class gui_contact_item_c : public gui_label_c
     GM_RECEIVER( gui_contact_item_c, ISOGM_SELECT_CONTACT );
     GM_RECEIVER( gui_contact_item_c, ISOGM_SOMEUNREAD );
     
-    
+    ts::wstr_c protocols;
 
     static const ts::flags32_s::BITS  F_PROTOHIT    = FLAGS_FREEBITSTART_LABEL << 0;
-    static const ts::flags32_s::BITS  F_EDITNAME    = FLAGS_FREEBITSTART_LABEL << 1;
-    static const ts::flags32_s::BITS  F_EDITSTATUS  = FLAGS_FREEBITSTART_LABEL << 2;
-    static const ts::flags32_s::BITS  F_SKIPUPDATE  = FLAGS_FREEBITSTART_LABEL << 3;
-    static const ts::flags32_s::BITS  F_LBDN        = FLAGS_FREEBITSTART_LABEL << 4;
-    static const ts::flags32_s::BITS  F_DNDDRAW     = FLAGS_FREEBITSTART_LABEL << 5;
+    static const ts::flags32_s::BITS  F_NOPROTOHIT  = FLAGS_FREEBITSTART_LABEL << 1;
+    static const ts::flags32_s::BITS  F_EDITNAME    = FLAGS_FREEBITSTART_LABEL << 2;
+    static const ts::flags32_s::BITS  F_EDITSTATUS  = FLAGS_FREEBITSTART_LABEL << 3;
+    static const ts::flags32_s::BITS  F_SKIPUPDATE  = FLAGS_FREEBITSTART_LABEL << 4;
+    static const ts::flags32_s::BITS  F_LBDN        = FLAGS_FREEBITSTART_LABEL << 5;
+    static const ts::flags32_s::BITS  F_DNDDRAW     = FLAGS_FREEBITSTART_LABEL << 6;
 
     friend class contact_c;
     friend class contacts_c;
@@ -53,10 +54,15 @@ class gui_contact_item_c : public gui_label_c
     bool edit1(RID, GUIPARAM);
     void updrect(void *, int r, const ts::ivec2 &);
 
+    void generate_protocols();
+    void draw_online_state_text(draw_data_s &dd);
+
 public:
     gui_contact_item_c(MAKE_ROOT<gui_contact_item_c> &data);
     gui_contact_item_c(MAKE_CHILD<gui_contact_item_c> &data);
     /*virtual*/ ~gui_contact_item_c();
+
+    int contact_item_rite_margin();
 
     /*virtual*/ void update_dndobj(guirect_c *donor) override;
     /*virtual*/ guirect_c * summon_dndobj(const ts::ivec2 &deltapos) override;
@@ -65,7 +71,14 @@ public:
     void on_drop(gui_contact_item_c *ondr);
 
     bool is_protohit() const {return flags.is(F_PROTOHIT);}
-    void protohit() { flags.set(F_PROTOHIT); }
+    bool is_noprotohit() const {return flags.is(F_NOPROTOHIT);}
+    int protohit_power() const
+    {
+        if (!is_protohit()) return -100;
+        if (is_noprotohit()) return 1;
+        return 2;
+    }
+    void protohit();
     bool update_buttons( RID r = RID(), GUIPARAM p = nullptr );
     bool cancel_edit( RID r = RID(), GUIPARAM p = nullptr);
     bool apply_edit( RID r = RID(), GUIPARAM p = nullptr);
@@ -131,7 +144,6 @@ class gui_contactlist_c : public gui_vscrollgroup_c
     //void die() { TSDEL(this); }
 
     /*virtual*/ void children_repos_info(cri_s &info) const override;
-
 public:
     gui_contactlist_c( MAKE_CHILD<gui_contactlist_c> &data) :gui_vscrollgroup_c(data) { defaultthrdraw = DTHRO_BASE; role = data.role; }
     /*virtual*/ ~gui_contactlist_c();
