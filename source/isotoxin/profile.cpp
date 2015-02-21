@@ -394,6 +394,7 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts:
 {
     ts::tmp_array_inplace_t<ts::data_pair_s, 0> vals( T::columns );
     bool one_done = false;
+    bool some_action = false;
     for(row_s &r: rows)
     {
         switch (r.st)
@@ -418,6 +419,7 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts:
                         ts::data_pair_s &dpair = vals.add();
                         r.other.get(i,dpair);
                     }
+                    some_action = true;
                     int newid = db->insert(T::get_table_name(), vals.array());
                     if (r.id < 0)
                         new2ins[r.id] = newid;
@@ -428,6 +430,7 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts:
                 continue;
             case row_s::s_delete:
                 if (one_done) return true;
+                some_action = true;
                 db->delrow(T::get_table_name(), r.id);
                 r.st = row_s::s_deleted;
                 one_done = !all;
@@ -436,7 +439,7 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts:
         }
     }
 
-    if (notify_saved) gmsg<ISOGM_PROFILE_TABLE_SAVED>( tabi ).send();
+    if (notify_saved && some_action) gmsg<ISOGM_PROFILE_TABLE_SAVED>( tabi ).send();
     return false;
 }
 
@@ -778,7 +781,10 @@ void profile_c::detach_history( const contact_key_s&prev_historian, const contac
         }
     }
     if (changed)
+    {
         this->changed();
+        table_history.flush(db, true); // very important to save now
+    }
 }
 
 void profile_c::merge_history( const contact_key_s&base_historian, const contact_key_s&from_historian )
@@ -817,6 +823,11 @@ void profile_c::merge_history( const contact_key_s&base_historian, const contact
     }
     if (changed)
         this->changed();
+}
+
+void profile_c::flush_history_now()
+{
+    table_history.flush(db, true);
 }
 
 int  profile_c::calc_history( const contact_key_s&historian, bool ignore_invites )
@@ -998,10 +1009,7 @@ ts::uint32 profile_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
         {
             if (0 != (row.other.options & active_protocol_data_s::O_SUSPENDED)) continue;
             if ( active_protocol_c *ap = this->ap(row.id) )
-            {
-                ap->set_proxy_settings(row.other.proxy);
                 continue;
-            }
             protocols.add( TSNEW(active_protocol_c, row.id, row.other) );
         }
     }

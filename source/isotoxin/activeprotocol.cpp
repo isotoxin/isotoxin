@@ -270,6 +270,11 @@ ts::uint32 active_protocol_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
         {
             auto *row = t.find(id);
             dematerialization = row == nullptr || FLAG(row->other.options, active_protocol_data_s::O_SUSPENDED);
+            if (!dematerialization)
+            {
+                syncdata.lock_write()().data.name = row->other.name;
+                set_proxy_settings(row->other.proxy);
+            }
         }
         if (dematerialization)
         {

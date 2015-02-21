@@ -2193,6 +2193,7 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&p)
 {
     if (p.tabi == pt_active_protocol)
     {
+        if (caption->contacted()) caption->getcontact().reselect(true);
         caption->update_text();
         caption->update_buttons();
         DELAY_CALL_R( 0.3, DELEGATE( this, hide_show_messageeditor ), nullptr );

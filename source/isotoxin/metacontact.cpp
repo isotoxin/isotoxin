@@ -173,6 +173,7 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
                 c->subclear();
                 contacts().kill(ck);
             }
+        prf().flush_history_now();
     }
     basec->subiterate([&](contact_c *cc) {
         if ( cc->get_options().is(contact_c::F_DEFALUT) )
@@ -182,7 +183,11 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
         }
     });
     prf().dirtycontact( basec->getkey() );
-    if (basec->gui_item) basec->gui_item->update_text();
+    if (basec->gui_item)
+    {
+        basec->gui_item->protohit();
+        basec->gui_item->update_text();
+    }
     basec->reselect(true);
     __super::on_confirm();
 }

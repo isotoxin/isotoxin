@@ -259,6 +259,7 @@ public:
     void detach_history( const contact_key_s&prev_historian, const contact_key_s&new_historian, const contact_key_s&sender );
     void change_history_item(const contact_key_s&historian, const post_s &post, ts::uint32 change_what);
     bool change_history_item(uint64 utag, contact_key_s & historian); // find item by tag and change type form MTA_UNDELIVERED_MESSAGE to MTA_MESSAGE, then return historian (if loaded)
+    void flush_history_now();
 
     uint64 sort_tag() const {return sorttag;}
     void dirty_sort() { sorttag = ts::uuid(); };

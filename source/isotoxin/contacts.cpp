@@ -71,10 +71,12 @@ void contact_c::protohit( bool f )
         if (!f && get_state() == CS_ONLINE)
             state = CS_OFFLINE;
 
-        if (contact_c *m = getmeta())
-            if (m->gui_item)
-                m->gui_item->protohit();
     }
+
+    // always update gui_item
+    if (contact_c *m = getmeta())
+        if (m->gui_item)
+            m->gui_item->protohit();
 
 }
 
