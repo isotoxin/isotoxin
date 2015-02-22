@@ -2107,7 +2107,8 @@ rectengine_root_c *rectengine_child_c::getroot()
 
 /*virtual*/ void rectengine_child_c::redraw()
 {
-    HOLD(getrect().getroot()).engine().redraw();
+    HOLD h(getrect().getroot());
+    if (h) h.engine().redraw();
 }
 
 /*virtual*/ void rectengine_child_c::draw( const theme_rect_s &thr, ts::uint32 options, evt_data_s *d )

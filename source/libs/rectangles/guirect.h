@@ -55,6 +55,7 @@ enum system_query_e
     SQ_DETECT_AREA,
     SQ_GET_POPUP_MENU_POS,
     SQ_GET_MENU_LEVEL,
+    SQ_POPUP_MENU_DIE,
     SQ_GET_MENU,
     SQ_IS_TOOLTIP,
     SQ_BUTTON_SETUP,

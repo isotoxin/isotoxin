@@ -484,6 +484,7 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::reader(int
     {
         if (read_ids) read_ids->add( (int)v.i );
         row_s &row = getcreate((int)v.i);
+        if (!CHECK(row.st == row_s::s_unchanged)) return true;
 
         for(int i=1;i<T::columns;++i)
         {

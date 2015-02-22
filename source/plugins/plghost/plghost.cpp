@@ -423,7 +423,9 @@ int CALLBACK WinMain(
     _In_  int
     )
 {
+#if defined _DEBUG || defined _CRASH_HANDLER
     exception_operator_c::set_unhandled_exception_filter();
+#endif
 
     UNSTABLE_CODE_PROLOG
         WinMainProtect(lpCmdLine);

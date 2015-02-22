@@ -1719,7 +1719,7 @@ void __stdcall set_config(const void*data, int isz)
                     loader lc(l.chunkdata(), message_data_size);
 
                     int fid = 0, mid = 0;
-                    message_type_e mt;
+                    message_type_e mt(MT_MESSAGE);
                     u64 utag = 0;
                     u64 create_time = _now;
                     if (lc(chunk_msg_sending_fid))

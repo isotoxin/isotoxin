@@ -286,14 +286,16 @@ guirect_c::guirect_c(initial_rect_data_s &data):m_rid(data.id), m_parent(data.pa
 
 guirect_c::~guirect_c() 
 {
+    make_all_ponters_expired();
+
     if (m_engine) m_engine->rect_ = nullptr;
 
-    if (m_parent)
+    if (m_parent) if (auto h = HOLD(m_parent))
     {
         evt_data_s d;
         d.rect.id = getrid();
         d.rect.index = -1;
-        HOLD(m_parent).engine().sq_evt(SQ_CHILD_DESTROYED, m_parent, d);
+        h.engine().sq_evt(SQ_CHILD_DESTROYED, m_parent, d);
     }
 
     if (g_app)
@@ -1064,7 +1066,6 @@ ts::ivec2 gui_tooltip_c::get_min_size() const
     textrect.set_margins(5,5,0);
     DELAY_CALL_R( 0.1, DELEGATE(this, check_text), nullptr );
     HOLD(ownrect)().leech(this);
-
 }
 /*virtual*/ bool gui_tooltip_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
@@ -1096,6 +1097,10 @@ ts::ivec2 gui_tooltip_c::get_min_size() const
 
 void gui_tooltip_c::create(RID owner)
 {
+#ifdef _DEBUG
+    if ((GetAsyncKeyState(VK_CONTROL)  & 0x8000)==0x8000)
+        return;
+#endif
     if (owner.call_is_tooltip()) return;
     if (gmsg<GM_TOOLTIP_PRESENT>(owner).send().is(GMRBIT_ACCEPTED)) return;
     drawchecker dch;
@@ -2084,12 +2089,12 @@ bool gui_popup_menu_c::check_focus(RID r, GUIPARAM p)
     {
         switch (qp)
         {
-        case SQ_MOUSE_IN:
-            MODIFY(rid).highlight(true);
-            return false;
-        case SQ_MOUSE_OUT:
-            MODIFY(rid).highlight(false);
-            return false;
+        //case SQ_MOUSE_IN:
+        //    MODIFY(rid).highlight(true);
+        //    return false;
+        //case SQ_MOUSE_OUT:
+        //    MODIFY(rid).highlight(false);
+        //    return false;
         case SQ_MOUSE_LDOWN:
         case SQ_MOUSE_LUP:
         case SQ_MOUSE_MOVE:
@@ -2187,6 +2192,7 @@ ts::uint32 gui_popup_menu_c::gm_handler( gmsg<GM_KILLPOPUPMENU_LEVEL> & p )
     if (p.level <= menu.lv())
     {
         if (closehandler) closehandler(getrid(), nullptr);
+        sq_evt(SQ_POPUP_MENU_DIE,getrid(), ts::make_dummy<evt_data_s>(true)); // send evt to self - leech will intercept it
         TSDEL(this);
     }
     return 0;
@@ -2234,7 +2240,11 @@ gui_menu_item_c::~gui_menu_item_c()
 {
     if (submnu_shown && submnu_shown->getrid() == rid)
     {
-        // ‚ÓÛ ‚ÓÛ
+        if (qp == SQ_POPUP_MENU_DIE)
+        {
+            submnu_shown = nullptr;
+            sq_evt(SQ_THEMERECT_CHANGED, getrid(), ts::make_dummy<evt_data_s>(true));
+        }
         return false;
     }
 
@@ -2262,9 +2272,11 @@ gui_menu_item_c::~gui_menu_item_c()
             DELAY_CALL_R(0.5,DELEGATE(this, open_submenu), nullptr);
         else
             gmsg<GM_KILLPOPUPMENU_LEVEL>( getparent().call_get_menu_level() + 1 ).send();
+        MODIFY(getrid()).highlight(true);
         break;
     case SQ_MOUSE_OUT:
         gui->delete_event(DELEGATE(this, open_submenu));
+        MODIFY(getrid()).highlight(false);
         break;
     case SQ_GET_POPUP_MENU_POS:
         {
