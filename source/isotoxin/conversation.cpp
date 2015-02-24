@@ -785,6 +785,8 @@ MAKE_CHILD<gui_message_item_c>::~MAKE_CHILD()
 
 gui_message_item_c::~gui_message_item_c()
 {
+    if (gui)
+        gui->delete_event( DELEGATE(this, try_select_link) );
 }
 
 /*virtual*/ ts::ivec2 gui_message_item_c::get_min_size() const
@@ -809,8 +811,57 @@ void gui_message_item_c::created()
 static time_t readtime; // ugly static... but it is fastest
 static contact_c * readtime_historian = nullptr;
 
+static int cleanup_link(ts::wstr_c &message, int chari);
+
+void gui_message_item_c::ctx_menu_golink(const ts::str_c & lnk)
+{
+    ShellExecuteA(NULL, "open", lnk, nullptr, nullptr, SW_SHOWNORMAL);
+    gui->selcore().flash_and_clear_selection();
+}
+void gui_message_item_c::ctx_menu_copylink(const ts::str_c & lnk)
+{
+    ts::set_clipboard_text(ts::to_wstr(lnk));
+    gui->selcore().flash_and_clear_selection();
+}
+
+bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
+{
+    ts::ivec2 *pt = (ts::ivec2 *)gui->lock_temp_buf((int)p);
+    if (flags.is(F_GLYPHS_INVALID))
+    {
+        if (pt)
+        {
+            DELAY_CALL_R( 0, DELEGATE(this, try_select_link), p );
+        }
+        return true;
+    }
+    if (pt)
+    {
+        ts::ivec2 pp = get_link_pos_under_cursor(*pt);
+        gui->selcore().select_by_charinds(this, pp.r0, pp.r1);
+    }
+
+    return true;
+}
+
 /*virtual*/ bool gui_message_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    if (rid != getrid())
+    {
+        // from submenu
+        if (popupmenu && popupmenu->getrid() == rid)
+        {
+            if (SQ_POPUP_MENU_DIE == qp)
+            {
+                // only link menu here
+                // clear selection
+                if (!gui->selcore().flashing)
+                    gui->selcore().clear_selection();
+            }
+        }
+        return false;
+    }
+
     switch (qp)
     {
     case SQ_DRAW:
@@ -879,7 +930,10 @@ static contact_c * readtime_historian = nullptr;
 
                         __super::draw( dd, tdp );
 
-                        if (gui->selcore().owner == this) gui->selcore().glyphs_pos = sz + ca.lt;
+                        flags.clear(F_GLYPHS_INVALID);
+
+                        glyphs_pos = sz + ca.lt;
+                        if (gui->selcore().owner == this) gui->selcore().glyphs_pos = glyphs_pos;
 
                         m_engine->end_draw();
                     }
@@ -900,7 +954,7 @@ static contact_c * readtime_historian = nullptr;
             }
             menu_c mnu;
 
-            bool some_selection = gui->selcore().owner == this && gui->selcore().some_selected();
+            bool some_selection = some_selected();
 
             mnu.add(gui->app_loclabel(LL_CTXMENU_COPY), (!some_selection) ? MIF_DISABLED : 0, DELEGATE(this, ctx_menu_copy));
             //mnu.add_separator();
@@ -910,7 +964,73 @@ static contact_c * readtime_historian = nullptr;
 
         }
         break;
-        
+    case SQ_MOUSE_LUP:
+        if (!some_selected() && check_overlink(to_local(data.mouse.screenpos)))
+        {
+            if (popupmenu)
+            {
+                TSDEL(popupmenu);
+                return true;
+            }
+            menu_c mnu;
+
+            ts::str_c lnk = get_link_under_cursor(to_local(data.mouse.screenpos));
+            mnu.add(TTT("Перейти по ссылке", 202), 0, DELEGATE(this, ctx_menu_golink), lnk);
+            mnu.add(TTT("Копировать ссылку", 203), 0, DELEGATE(this, ctx_menu_copylink), lnk);
+
+            popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), mnu);
+            popupmenu->leech(this);
+
+            flags.clear(F_OVERLINK);
+            ts::wstr_c hll = textrect.get_text();
+            cleanup_link(hll, 0);
+            textrect.set_text_only(hll, false);
+            if (textrect.is_dirty())
+            {
+                getengine().redraw();
+                flags.set(F_GLYPHS_INVALID);
+            }
+
+            int b = gui->get_temp_buf(1.0, sizeof(ts::ivec2));
+            *(ts::ivec2 *)gui->lock_temp_buf(b) = to_local(data.mouse.screenpos);
+            try_select_link(RID(), (GUIPARAM)b);
+
+            return true;
+        }
+        break;
+    case SQ_MOUSE_LDOWN:
+        if (!popupmenu && !some_selected() && check_overlink(to_local(data.mouse.screenpos)))
+            return true;
+        // no break here!
+    case SQ_MOUSE_OUT:
+        if (!popupmenu && textrect.get_text().find_pos(CONSTWSTR("<null=a0")) >= 0)
+        {
+            flags.clear(F_OVERLINK);
+            ts::wstr_c hll = textrect.get_text();
+            cleanup_link(hll, 0);
+            textrect.set_text_only(hll, false);
+            if (textrect.is_dirty())
+                getengine().redraw();
+        }
+        break;
+    case SQ_DETECT_AREA:
+        if (!popupmenu && textrect.get_text().find_pos(CONSTWSTR("<null=a0")) >= 0 && !getengine().mtrack(getrid(), MTT_TEXTSELECT) && !some_selected())
+        {
+            bool overlink = check_overlink(data.detectarea.pos);
+            if (!flags.init(F_OVERLINK, overlink))
+            {
+                ts::wstr_c hll = textrect.get_text();
+                cleanup_link(hll, 0);
+                textrect.set_text_only(hll, false);
+                if (textrect.is_dirty())
+                    getengine().redraw();
+            } else
+            {
+                data.detectarea.area = AREA_HAND;
+            }
+        }
+        break;
+
     //case SQ_RECT_CHANGING:
     //    {
     //        int h = get_height_by_width( data.rectchg.rect.get().width() );
@@ -1109,6 +1229,198 @@ static void parse_smiles( ts::wstr_c &message )
     //message.replace_all(CONSTWSTR("(colb)"), CONSTWSTR("<img=/smiles/colb32.png,-1>"));
 }
 
+static int cleanup_link(ts::wstr_c &message, int chari)
+{
+    int i = 0, prev = -1;
+    for(;;)
+    {
+        int a = message.find_pos(i, CONSTWSTR("<null="));
+        if (a < 0) break;
+        if (message.get_char(a + 6) != 'b' && message.get_char(a + 6) != 'd')
+        {
+            prev = message.find_pos(a, '>') + 1;
+            i = prev;
+            continue;
+        }
+        if (a != prev)
+        {
+            // cleanup
+            int l = a-prev;
+            message.cut(prev,l);
+            if (a < chari)
+            {
+                chari -= l;
+            } else
+            {
+                ASSERT(prev > chari);
+            }
+            i = a - l + 6;
+        } else
+            i = a + 6;
+    }
+
+    return chari;
+}
+
+static ts::ivec2 extract_link(const ts::wstr_c &message, int chari)
+{
+    int e = message.find_pos(chari, CONSTWSTR("<null=c"));
+    if (e > 0)
+    {
+        int s = message.substr(0, chari).find_last_pos(CONSTWSTR("<null=b"));
+        if (s >= 0)
+        {
+            int ne = message.as_num_part(-1, e + 7);
+            if (ne >= 0 && ne == message.as_num_part(-1, s + 7))
+            {
+                s = message.find_pos(s+7,'>') + 1;
+                return ts::ivec2( s, e );
+            }
+        }
+    }
+    return ts::ivec2(-1);
+}
+
+static ts::wstr_c highlite_link(const ts::wstr_c &message, int chari, ts::TSCOLOR col, bool &overlink)
+{
+    overlink = false;
+    ts::wstr_c m(message);
+    chari = cleanup_link(m, chari);
+
+    int e = m.find_pos(chari, CONSTWSTR("<null=c"));
+    if (e > 0)
+    {
+        int s = m.substr(0,chari).find_last_pos(CONSTWSTR("<null=b"));
+        if (s >= 0)
+        {
+            int ne = m.as_num_part(-1, e + 7);
+            if (ne >= 0 && ne == m.as_num_part(-1, s + 7))
+            {
+                overlink = true;
+                e = m.find_pos(e + 6, '>') + 1;
+                ASSERT(e > chari && m.get_char(e) == '<');
+                m.insert(e, CONSTWSTR("</u></color>"));
+                m.insert(s, maketag_color<ts::wchar>(col).append(CONSTWSTR("<u>")));
+            }
+        }
+    }
+
+    return m;
+}
+
+static int prepare_link(ts::wstr_c &message, int i, int n)
+{
+    int cnt = message.get_length();
+    int j=i;
+    for(;j<cnt;++j)
+    {
+        ts::wchar c = message.get_char(j);
+        if (ts::CHARz_find(L" \\<>", c)>=0) break;
+        if (c > 127) break;
+    }
+    ts::swstr_t<-128> inst(CONSTWSTR("<b><null=c"));
+    inst.append_as_uint(n).append(CONSTWSTR("><null=d"));
+    int i2 = inst.get_length()-1;
+    inst.append_as_uint(n).append(CONSTWSTR("></b>"));
+    message.insert(j,inst.as_sptr().skip(3));
+    inst.set_char(9,'a').set_char(i2,'b');
+    message.insert(i,inst.as_sptr().trim(4));
+    return j + inst.get_length() * 2 - 7;
+}
+
+static void parse_links(ts::wstr_c &message)
+{
+    int i = 0, n = 0;
+    for(;;)
+    {
+        int j = message.find_pos(i, CONSTWSTR("http://"));
+        if (j>=0)
+        {
+            i = prepare_link(message, j, n);
+            ++n;
+            continue;
+        }
+        j = message.find_pos(i, CONSTWSTR("https://"));
+        if (j >= 0)
+        {
+            i = prepare_link(message, j, n);
+            ++n;
+            continue;
+        }
+        j = message.find_pos(i, CONSTWSTR("ftp://"));
+        if (j >= 0)
+        {
+            i = prepare_link(message, j, n);
+            ++n;
+            continue;
+        }
+        j = message.find_pos(i, CONSTWSTR("www."));
+        if (j == 0 || (j > 0 && message.get_char(j-1) == ' '))
+        {
+            i = prepare_link(message, j, n);
+            ++n;
+            continue;
+        }
+        break;
+    }
+}
+
+ts::ivec2 gui_message_item_c::get_link_pos_under_cursor(const ts::ivec2 &localpos)
+{
+    ts::irect clar = get_client_area();
+    if (clar.inside(localpos))
+    {
+        ts::GLYPHS &glyphs = get_glyphs();
+        ts::irect gr = ts::glyphs_bound_rect(glyphs);
+        gr += glyphs_pos;
+        gr.lt.x -= 5; if (gr.lt.x < 0) gr.lt.x = 0;
+        if (gr.inside(localpos))
+        {
+            ts::ivec2 cp = localpos - glyphs_pos;
+            int glyph_under_cursor = ts::glyphs_nearest_glyph(glyphs, cp);
+            int char_index = ts::glyphs_get_charindex(glyphs, glyph_under_cursor);
+            if (char_index >= 0 && char_index < textrect.get_text().get_length())
+                return extract_link(textrect.get_text(), char_index);
+        }
+    }
+    return ts::ivec2(-1);
+}
+
+ts::str_c gui_message_item_c::get_link_under_cursor(const ts::ivec2 &localpos)
+{
+    ts::ivec2 p = get_link_pos_under_cursor(localpos);
+    if ( p.r0 >= 0 && p.r1 >= p.r0 ) return textrect.get_text().substr( p.r0, p.r1 );
+    return ts::str_c();
+}
+
+bool gui_message_item_c::check_overlink(const ts::ivec2 &pos)
+{
+    bool overlink = false;
+    ts::irect clar = get_client_area();
+    if (clar.inside(pos))
+    {
+        ts::GLYPHS &glyphs = get_glyphs();
+        ts::irect gr = ts::glyphs_bound_rect(glyphs);
+        gr += glyphs_pos;
+        gr.lt.x -= 5; if (gr.lt.x < 0) gr.lt.x = 0;
+        if (gr.inside(pos))
+        {
+            ts::ivec2 cp = pos - glyphs_pos;
+            int glyph_under_cursor = ts::glyphs_nearest_glyph(glyphs, cp);
+            int char_index = ts::glyphs_get_charindex(glyphs, glyph_under_cursor);
+            if (char_index >= 0 && char_index < textrect.get_text().get_length())
+            {
+                ts::wstr_c hll = highlite_link(textrect.get_text(), char_index, get_default_text_color(3), overlink);
+                textrect.set_text_only(hll, false);
+                if (textrect.is_dirty())
+                    getengine().redraw();
+            }
+        }
+    }
+    return overlink;
+}
+
+
 void gui_message_item_c::append_text( const post_s &post, bool resize_now )
 {
     bool use0rec = (records.size() && records.get(0).utag == post.utag);
@@ -1197,6 +1509,7 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             ts::wstr_c message = post.message;
             text_adapt_user_input(message);
             parse_smiles(message);
+            parse_links(message);
 
             rec.text = message;
             rec.undelivered = post.type == MTA_UNDELIVERED_MESSAGE ? get_default_text_color(1) : 0;

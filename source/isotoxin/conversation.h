@@ -123,6 +123,7 @@ template<> struct MAKE_CHILD<gui_message_item_c> : public _PCHILD(gui_message_it
 class gui_message_item_c : public gui_label_c
 {
     DUMMY(gui_message_item_c);
+    ts::ivec2 glyphs_pos = 0;
     message_type_app_e mt;
     int height = 0;
     int addheight = 0;
@@ -157,6 +158,10 @@ class gui_message_item_c : public gui_label_c
     mutable ts::wstr_c protodesc;
 
     static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE = FLAGS_FREEBITSTART_LABEL << 0;
+    static const ts::flags32_s::BITS F_OVERLINK = FLAGS_FREEBITSTART_LABEL << 1;
+    static const ts::flags32_s::BITS F_GLYPHS_INVALID = FLAGS_FREEBITSTART_LABEL << 2;
+
+    
 
     static const int m_left = 10;
     static const int m_top = 3;
@@ -168,6 +173,10 @@ class gui_message_item_c : public gui_label_c
     {
         gmsg<GM_COPY_HOTKEY>().send();
     }
+    void ctx_menu_golink(const ts::str_c &);
+    void ctx_menu_copylink(const ts::str_c &);
+
+    bool try_select_link(RID r = RID(), GUIPARAM p = nullptr);
 
     void prepare_str_prefix( ts::wstr_c &pret, ts::wstr_c &postt )
     {
@@ -189,6 +198,15 @@ class gui_message_item_c : public gui_label_c
     bool b_break(RID, GUIPARAM);
     bool b_pause(RID, GUIPARAM);
     bool b_unpause(RID, GUIPARAM);
+
+    bool some_selected() const
+    {
+        return gui->selcore().owner == (const gui_label_c *)this && gui->selcore().some_selected();
+    }
+
+    bool check_overlink(const ts::ivec2 &localpos);
+    ts::str_c get_link_under_cursor(const ts::ivec2 &localpos);
+    ts::ivec2 get_link_pos_under_cursor(const ts::ivec2 &localpos);
 
 public:
 

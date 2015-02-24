@@ -127,6 +127,21 @@ HICON application_c::iso_gui_c::app_icon(bool for_tray)
             text.cut(rr, rr2-rr+4);
     }
 
+    text.replace_all(CONSTWSTR("<b><null=a"), CONSTWSTR("<null=a")); // link bold remove
+    for(int i = 0;;)
+    {
+        int kk = text.find_pos(i, CONSTWSTR("<null=d"));
+        if (kk >= 0)
+        {
+            int kk2 = text.find_pos(kk+7, '>');
+            if (kk2 > kk && kk2 + 5 <= text.get_length() && text.substr(kk2 + 1, kk2+5).equals(CONSTWSTR("</b>")))
+                text.cut(kk, kk2-kk+5);
+            i = kk;
+            continue;
+        }
+        break;
+    }
+
     text.replace_all(CONSTWSTR("<char=60>"), CONSTWSTR("\2"));
     text.replace_all(CONSTWSTR("<char=62>"), CONSTWSTR("\3"));
     text.replace_all(CONSTWSTR("<br>"), CONSTWSTR("\n"));

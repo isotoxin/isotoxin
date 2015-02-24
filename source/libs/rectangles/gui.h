@@ -110,10 +110,12 @@ struct selectable_core_s
     int char_end_sel = -1;
     int flashing = 0;
     bool dirty = false;
+    bool clear_selection_after_flashing = false;
 
     ts::wchar ggetchar( int glyphindex );
 
-    bool flash(RID, GUIPARAM);
+    bool flash(RID r = RID(), GUIPARAM p = (GUIPARAM)4);
+    void flash_and_clear_selection() { flash(RID(), (GUIPARAM)100); }
     bool selectword(RID, GUIPARAM);
 
     selectable_core_s()
@@ -124,10 +126,11 @@ struct selectable_core_s
 
     bool is_dirty() { bool r = dirty; dirty = false; return r; }
 
+    void select_by_charinds(gui_label_c *label, int char_start_sel, int char_end_sel);
     void begin( gui_label_c *label );
     bool try_begin( gui_label_c *label );
     bool sure_selected();
-    bool some_selected() const { return owner && char_start_sel >= 0 && char_end_sel >= 0; }
+    bool some_selected() const { return owner && char_start_sel >= 0 && char_end_sel >= 0 && char_start_sel != char_end_sel; }
     void selection_stuff(ts::drawable_bitmap_c &bmp);
     void clear_selection();
     void track();

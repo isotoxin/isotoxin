@@ -839,12 +839,21 @@ selectable_core_s::~selectable_core_s()
     //gui->delete_event( DELEGATE(this,flash) );
 }
 
-bool selectable_core_s::flash(RID, GUIPARAM)
+bool selectable_core_s::flash(RID, GUIPARAM p)
 {
-    --flashing;
-    if (flashing > 0) DELAY_CALL_R( 0.1, DELEGATE(this, flash), nullptr );
-    dirty = true;
-    owner->getengine().redraw();
+    flashing = (int)p;
+    if (flashing >= 100)
+    {
+        clear_selection_after_flashing = true;
+        flashing = 4;
+    }
+    if (flashing > 0) DELAY_CALL_R( 0.1, DELEGATE(this, flash), (GUIPARAM)(flashing-1) );
+    if (clear_selection_after_flashing && flashing == 0)
+        clear_selection();
+    else {
+        dirty = true;
+        owner->getengine().redraw();
+    }
     return true;
 }
 
@@ -869,10 +878,7 @@ ts::uint32 selectable_core_s::gm_handler(gmsg<GM_COPY_HOTKEY> &s)
 
         ts::set_clipboard_text(text);
 
-        flashing = 3;
-        DELAY_CALL_R( 0.1, DELEGATE(this, flash), nullptr );
-        dirty = true;
-        owner->getengine().redraw();
+        flash();
         return GMRBIT_ABORT|GMRBIT_ACCEPTED;
     }
     return 0;
@@ -922,6 +928,43 @@ bool selectable_core_s::selectword(RID, GUIPARAM p)
     return true;
 }
 
+void selectable_core_s::select_by_charinds(gui_label_c *label, int char_start_sel_, int char_end_sel_)
+{
+    begin(label);
+    ts::GLYPHS &glyphs = owner->get_glyphs();
+    int cnt = glyphs.count();
+    bool almost = false;
+    for(int i=0;i<cnt;++i)
+    {
+        const ts::glyph_image_s &gi = glyphs.get(i);
+        if (gi.pixels >= (ts::uint8 *)(16))
+        {
+            if (gi.charindex == char_start_sel_)
+            {
+                char_start_sel = char_start_sel_;
+                glyph_start_sel = i;
+            }
+            if (gi.charindex == char_end_sel_ || (glyph_end_sel < 0 && gi.charindex > char_end_sel_))
+            {
+                char_end_sel = gi.charindex;
+                glyph_end_sel = i;
+            } else if (gi.charindex == char_end_sel_-1)
+                almost = true;
+            if (almost && gi.charindex < 0)
+            {
+                char_end_sel = char_end_sel_;
+                glyph_end_sel = i;
+            }
+        }
+        if (some_selected())
+        {
+            dirty = true;
+            owner->getengine().redraw();
+            break;
+        }
+    }
+}
+
 void selectable_core_s::begin( gui_label_c *label )
 {
     if (label == owner)
@@ -937,6 +980,7 @@ void selectable_core_s::begin( gui_label_c *label )
     glyph_end_sel = -1 /*glyph_under_cursor*/;
     char_start_sel = -1;
     char_end_sel = -1;
+    clear_selection_after_flashing = false;
     dirty = true;
     owner->getengine().redraw();
 }
@@ -964,6 +1008,7 @@ bool selectable_core_s::sure_selected()
             glyph_end_sel = -1;
             char_start_sel = -1;
             char_end_sel = -1;
+            clear_selection_after_flashing = false;
 
             if (owner->getengine().mtrack(owner->getrid(), MTT_TEXTSELECT))
                 owner->getengine().end_mousetrack(MTT_TEXTSELECT);
@@ -1045,6 +1090,7 @@ void selectable_core_s::clear_selection()
     glyph_end_sel = -1;
     char_start_sel = -1;
     char_end_sel = -1;
+    clear_selection_after_flashing = false;
     dirty = true;
     owner->getengine().redraw();
     gui->delete_event( DELEGATE(this, selectword) );

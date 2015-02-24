@@ -89,6 +89,7 @@ template<typename TCHARACTER> struct sptr
         return blk_cmp(s, ss.s, l * sizeof(TCHARACTER));
     }
     sptr skip(ZSTRINGS_SIGNED chars) const { ZSTRINGS_ASSERT(chars <= l); return sptr(s+chars,l-chars);}
+    sptr trim(ZSTRINGS_SIGNED chars) const { ZSTRINGS_ASSERT(chars <= l); return sptr(s,l-chars);}
     void operator++()
     {
         ZSTRINGS_ASSERT(l > 0);
@@ -1126,9 +1127,10 @@ public:
     ZSTRINGS_SIGNED     find_last_pos(const sptr<TCHARACTER> &s) const
     {
         ZSTRINGS_SIGNED idx = get_length() - s.l;
+        if (s.l == 0) return idx;
         for(;idx >= 0;)
         {
-            if (core()[idx] == *c)
+            if (core()[idx] == s.s[0])
             {
                 if (blk_cmp(core() + idx, s.s, s.l * sizeof(TCHARACTER))) return idx;
             }
@@ -1207,7 +1209,6 @@ public:
         }
         //return -1;
     };
-
 
     ZSTRINGS_SIGNED     find_pos(TCHARACTER c) const {return (core.len() == 0) ? -1 : CHARz_findn(core(),c, core.len());};
     ZSTRINGS_SIGNED     find_pos(ZSTRINGS_SIGNED idx, TCHARACTER c) const 
