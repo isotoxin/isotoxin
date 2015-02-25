@@ -934,6 +934,7 @@ void selectable_core_s::select_by_charinds(gui_label_c *label, int char_start_se
     ts::GLYPHS &glyphs = owner->get_glyphs();
     int cnt = glyphs.count();
     bool almost = false;
+    bool altend = false;
     for(int i=0;i<cnt;++i)
     {
         const ts::glyph_image_s &gi = glyphs.get(i);
@@ -944,24 +945,32 @@ void selectable_core_s::select_by_charinds(gui_label_c *label, int char_start_se
                 char_start_sel = char_start_sel_;
                 glyph_start_sel = i;
             }
-            if (gi.charindex == char_end_sel_ || (glyph_end_sel < 0 && gi.charindex > char_end_sel_))
+            if (gi.charindex == char_end_sel_ || ((glyph_end_sel < 0 || altend) && gi.charindex > char_end_sel_))
             {
                 char_end_sel = gi.charindex;
                 glyph_end_sel = i;
+                if (altend) break;
             } else if (gi.charindex == char_end_sel_-1)
                 almost = true;
             if (almost && gi.charindex < 0)
             {
+                almost = false;
                 char_end_sel = char_end_sel_;
                 glyph_end_sel = i;
+                altend = true;
             }
         }
-        if (some_selected())
+        if (!altend && some_selected())
         {
             dirty = true;
             owner->getengine().redraw();
-            break;
+            return;
         }
+    }
+    if (altend && some_selected())
+    {
+        dirty = true;
+        owner->getengine().redraw();
     }
 }
 

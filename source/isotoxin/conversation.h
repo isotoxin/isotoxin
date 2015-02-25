@@ -159,9 +159,6 @@ class gui_message_item_c : public gui_label_c
 
     static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE = FLAGS_FREEBITSTART_LABEL << 0;
     static const ts::flags32_s::BITS F_OVERLINK = FLAGS_FREEBITSTART_LABEL << 1;
-    static const ts::flags32_s::BITS F_GLYPHS_INVALID = FLAGS_FREEBITSTART_LABEL << 2;
-
-    
 
     static const int m_left = 10;
     static const int m_top = 3;

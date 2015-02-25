@@ -50,6 +50,7 @@ public:
     //}
     bool is_dirty() const { return flags.is(F_DIRTY); }
     bool is_dirty_size() const { return flags.is(F_INVALID_SIZE); }
+    bool is_dirty_glyphs() const { return flags.is(F_INVALID_GLYPHS); }
     
     void set_margins(int mleft, int mtop, int mrite)
     {

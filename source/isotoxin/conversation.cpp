@@ -827,7 +827,7 @@ void gui_message_item_c::ctx_menu_copylink(const ts::str_c & lnk)
 bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
 {
     ts::ivec2 *pt = (ts::ivec2 *)gui->lock_temp_buf((int)p);
-    if (flags.is(F_GLYPHS_INVALID))
+    if (textrect.is_dirty_glyphs())
     {
         if (pt)
         {
@@ -930,8 +930,6 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
 
                         __super::draw( dd, tdp );
 
-                        flags.clear(F_GLYPHS_INVALID);
-
                         glyphs_pos = sz + ca.lt;
                         if (gui->selcore().owner == this) gui->selcore().glyphs_pos = glyphs_pos;
 
@@ -944,7 +942,49 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
             
         }
         return true;
+    case SQ_MOUSE_LUP:
+        if (!some_selected() && check_overlink(to_local(data.mouse.screenpos)))
+        {
+            ts::str_c lnk = get_link_under_cursor(to_local(data.mouse.screenpos));
+            if (!lnk.is_empty()) ctx_menu_golink(lnk);
+        }
+        break;
     case SQ_MOUSE_RUP:
+        if (!some_selected() && check_overlink(to_local(data.mouse.screenpos)))
+        {
+            if (popupmenu)
+            {
+                TSDEL(popupmenu);
+                return true;
+            }
+            menu_c mnu;
+
+            ts::str_c lnk = get_link_under_cursor(to_local(data.mouse.screenpos));
+            if (!lnk.is_empty())
+            {
+                mnu.add(TTT("Перейти по ссылке", 202), 0, DELEGATE(this, ctx_menu_golink), lnk);
+                mnu.add(TTT("Копировать ссылку", 203), 0, DELEGATE(this, ctx_menu_copylink), lnk);
+
+                popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), mnu);
+                popupmenu->leech(this);
+            }
+
+            flags.clear(F_OVERLINK);
+            ts::wstr_c hll = textrect.get_text();
+            cleanup_link(hll, 0);
+            textrect.set_text_only(hll, false);
+            if (textrect.is_dirty())
+                getengine().redraw();
+
+            if (popupmenu)
+            {
+                int b = gui->get_temp_buf(1.0, sizeof(ts::ivec2));
+                *(ts::ivec2 *)gui->lock_temp_buf(b) = to_local(data.mouse.screenpos);
+                try_select_link(RID(), (GUIPARAM)b);
+            }
+
+            return true;
+        }
         if (!getengine().mtrack(getrid(), MTT_SBMOVE) && !getengine().mtrack(getrid(), MTT_TEXTSELECT))
         {
             if (popupmenu)
@@ -960,44 +1000,11 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
             //mnu.add_separator();
             //mnu.add(gui->app_loclabel(LL_CTXMENU_SELALL), (text.size() == 0) ? MIF_DISABLED : 0, DELEGATE(this, ctx_menu_selall));
 
-            popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(),0), mnu);
-
-        }
-        break;
-    case SQ_MOUSE_LUP:
-        if (!some_selected() && check_overlink(to_local(data.mouse.screenpos)))
-        {
-            if (popupmenu)
-            {
-                TSDEL(popupmenu);
-                return true;
-            }
-            menu_c mnu;
-
-            ts::str_c lnk = get_link_under_cursor(to_local(data.mouse.screenpos));
-            mnu.add(TTT("Перейти по ссылке", 202), 0, DELEGATE(this, ctx_menu_golink), lnk);
-            mnu.add(TTT("Копировать ссылку", 203), 0, DELEGATE(this, ctx_menu_copylink), lnk);
-
             popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), mnu);
-            popupmenu->leech(this);
 
-            flags.clear(F_OVERLINK);
-            ts::wstr_c hll = textrect.get_text();
-            cleanup_link(hll, 0);
-            textrect.set_text_only(hll, false);
-            if (textrect.is_dirty())
-            {
-                getengine().redraw();
-                flags.set(F_GLYPHS_INVALID);
-            }
-
-            int b = gui->get_temp_buf(1.0, sizeof(ts::ivec2));
-            *(ts::ivec2 *)gui->lock_temp_buf(b) = to_local(data.mouse.screenpos);
-            try_select_link(RID(), (GUIPARAM)b);
-
-            return true;
         }
         break;
+    case SQ_MOUSE_RDOWN:
     case SQ_MOUSE_LDOWN:
         if (!popupmenu && !some_selected() && check_overlink(to_local(data.mouse.screenpos)))
             return true;
@@ -1315,7 +1322,7 @@ static int prepare_link(ts::wstr_c &message, int i, int n)
     for(;j<cnt;++j)
     {
         ts::wchar c = message.get_char(j);
-        if (ts::CHARz_find(L" \\<>", c)>=0) break;
+        if (ts::CHARz_find(L" \\<>\r\n\t", c)>=0) break;
         if (c > 127) break;
     }
     ts::swstr_t<-128> inst(CONSTWSTR("<b><null=c"));
@@ -1367,6 +1374,7 @@ static void parse_links(ts::wstr_c &message)
 
 ts::ivec2 gui_message_item_c::get_link_pos_under_cursor(const ts::ivec2 &localpos)
 {
+    if (textrect.is_dirty_glyphs()) return ts::ivec2(-1);
     ts::irect clar = get_client_area();
     if (clar.inside(localpos))
     {
@@ -1395,6 +1403,7 @@ ts::str_c gui_message_item_c::get_link_under_cursor(const ts::ivec2 &localpos)
 
 bool gui_message_item_c::check_overlink(const ts::ivec2 &pos)
 {
+    if (textrect.is_dirty_glyphs()) return false;
     bool overlink = false;
     ts::irect clar = get_client_area();
     if (clar.inside(pos))
