@@ -39,6 +39,8 @@ enum cmd_result_e
     CR_ALREADY_PRESENT,
     CR_MULTIPLE_CALL,
     CR_MEMORY_ERROR,
+    CR_TIMEOUT,
+    CR_OPERATION_IN_PROGRESS,
 };
 
 enum stop_call_e

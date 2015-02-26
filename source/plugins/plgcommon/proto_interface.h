@@ -105,8 +105,14 @@ struct file_portion_s
     int size;
 };
 
+enum long_operation_e
+{
+    LOP_ADDCONTACT,
+};
+
 struct host_functions_s
 {
+    void(__stdcall *operation_result)(long_operation_e op, int rslt);
     void(__stdcall *update_contact)(const contact_data_s *);
     void(__stdcall *message)(message_type_e mt, int cid, u64 sendtime, const char *msgbody_utf8, int mlen);
     void(__stdcall *delivered)(u64 utag);

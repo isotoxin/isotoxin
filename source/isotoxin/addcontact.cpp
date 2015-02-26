@@ -73,7 +73,8 @@ void dialog_addcontact_c::network_selected( const ts::str_c &prm )
     dm().vspace(5);
     dm().hiddenlabel(TTT("Неправильный публичный идентификатор!",71), ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_INVALID_PUB_ID));
     dm().hiddenlabel(TTT("Такой контакт уже есть!",87), ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_ALREADY_PRESENT));
-    dm().hiddenlabel(TTT("Мало памяти!",92), ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_MEMORY_ERROR));
+    dm().hiddenlabel(L"memory error", ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_MEMORY_ERROR)); // no need to translate it due rare error
+    dm().hiddenlabel(L"timeout", ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_TIMEOUT)); // no need to translate it due rare error
 
     return 0;
 }
@@ -128,6 +129,7 @@ ts::uint32 dialog_addcontact_c::gm_handler( gmsg<ISOGM_CMD_RESULT>& r)
 {
     if (r.cmd == AQ_ADD_CONTACT)
     {
+        if (r.rslt == CR_OPERATION_IN_PROGRESS) return 0; // TODO : show progress animation
         if (r.rslt == CR_OK)
         {
             __super::on_confirm();

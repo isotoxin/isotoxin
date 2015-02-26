@@ -4,7 +4,9 @@
 
 #include <windows.h>
 #include <Mmsystem.h>
+#include <Windns.h>
 #include "../plgcommon/proto_interface.h"
 #include "../plgcommon/plgcommon.h"
 #include "toxcore/toxcore/tox.h"
 #include "toxcore/toxav/toxav.h"
+#include "toxcore/toxdns/toxdns.h"

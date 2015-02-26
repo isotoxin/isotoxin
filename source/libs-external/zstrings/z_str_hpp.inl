@@ -759,6 +759,14 @@ public:
         return blk_cmp(core(),s, get_length() * sizeof(TCHARACTER));
     }
 
+    bool contain_chars(const sptr<TCHARACTER> &s) const
+    {
+        for(TCHARACTER c : *this)
+            if (CHARz_findn(s.s,c,s.l) < 0)
+                return false;
+        return true;
+    }
+
     template<class CORE2> bool contain_token( str_t<TCHARACTER, CORE2> & s, TCHARACTER td )
     {
         ZSTRINGS_SIGNED seek = 0;

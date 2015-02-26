@@ -74,7 +74,16 @@ public:
     bool is_noprotohit() const {return flags.is(F_NOPROTOHIT);}
     int protohit_power() const
     {
-        if (!is_protohit()) return -100;
+        if (!is_protohit())
+        {
+            if (contact)
+            {
+                auto state = contact->get_state();
+                if (CS_INVITE_RECEIVE == state || CS_INVITE_SEND == state) return 2;
+            }
+
+            return -100;
+        }
         if (is_noprotohit()) return 1;
         return 2;
     }

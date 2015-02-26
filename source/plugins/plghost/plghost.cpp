@@ -15,6 +15,7 @@
 
 ipc::ipc_junction_s *ipcj = nullptr;
 
+static void __stdcall operation_result(long_operation_e op, int rslt);
 static void __stdcall update_contact(const contact_data_s *);
 static void __stdcall message(message_type_e mt, int cid, u64 create_time, const char *msgbody_utf8, int mlen);
 static void __stdcall delivered(u64 utag);
@@ -77,6 +78,7 @@ struct protolib_s
 } protolib = 
 {
     {
+        operation_result,
         update_contact,
         message,
         delivered,
@@ -759,6 +761,17 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
     d->die();
 
     return flags;
+}
+
+static void __stdcall operation_result(long_operation_e op, int rslt)
+{
+    switch (op)
+    {
+    case LOP_ADDCONTACT: {
+            IPCW(HA_CMD_STATUS) << (int)AQ_ADD_CONTACT << rslt;
+            break;
+        }
+    }
 }
 
 static void __stdcall update_contact(const contact_data_s *cd)

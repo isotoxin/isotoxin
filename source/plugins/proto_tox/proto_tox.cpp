@@ -12,6 +12,8 @@
 #pragma comment(lib, "toxcored.lib")
 #endif
 
+
+#pragma comment(lib, "Dnsapi.lib")
 #pragma comment(lib, "Winmm.lib")
 #pragma comment(lib, "Msacm32.lib")
 #pragma comment(lib, "Ws2_32.lib")
@@ -134,13 +136,168 @@ struct dht_node_s
     dht_node_s( const asptr& addr, int port, const asptr& pubid_ ):addr(addr), port(port)
     {
         for(int i=0;i<32;++i)
-        {
             pubid[i] = pstr_c(pubid_).as_byte_hex( i * 2 );
-        }
     }
 };
 
-std::vector<dht_node_s> nodes;
+static std::vector<dht_node_s> nodes;
+
+static str_c dnsquery( const str_c & query, const asptr& ver )
+{
+    bool ok_version = false;
+    DNS_RECORDW *record = nullptr;
+    DnsQuery_UTF8(query, DNS_TYPE_TEXT, 0, nullptr, &record, nullptr);
+    while (record)
+    {
+        DNS_TXT_DATA *txt = &record->Data.Txt;
+        if (record->wType == DNS_TYPE_TEXT && txt->dwStringCount)
+        {
+            if (txt->pStringArray[0])
+            {
+                str_c retid;
+
+                const char *r = (const char *)txt->pStringArray[0];
+                asptr rr(r);
+                if (ver.l == 0 && rr.l == 64)
+                    return str_c(rr);
+                token<char> t(rr, ';');
+                for (; t; ++t)
+                {
+                    token<char> tt(*t, '=');
+                    if (tt)
+                    {
+                        if (tt->equals(CONSTASTR("v")))
+                        {
+                            ++tt;
+                            if (!tt || !tt->equals(ver))
+                                return str_c();
+                            ok_version = true;
+                            continue;
+                        }
+                        if (tt->equals(CONSTASTR("id")))
+                        {
+                            ++tt;
+                            if (!tt)
+                                return str_c();
+
+                            retid = *tt;
+                            break;
+                        }
+                    }
+                }
+                if (ok_version && !retid.is_empty())
+                    return retid;
+            }
+        }
+
+        record = record->pNext;
+    }
+
+    return str_c();
+}
+
+struct tox3dns_s
+{
+    str_c addr;
+    byte key[32];
+    void *dns3 = nullptr;
+    bool key_ok = false;
+
+    void operator=(tox3dns_s && oth)
+    {
+        addr = oth.addr;
+        memcpy( key, oth.key, 32 );
+        key_ok = oth.key_ok;
+        std::swap(dns3, oth.dns3);
+    }
+    tox3dns_s(tox3dns_s && oth):addr(oth.addr)
+    {
+        if (oth.key_ok)
+        {
+            memcpy(key, oth.key, 32);
+            key_ok = true;
+        }
+        dns3 = oth.dns3;
+        oth.dns3 = nullptr;
+    }
+
+    void operator=(const tox3dns_s&) = delete;
+    tox3dns_s(const tox3dns_s&) = delete;
+
+    tox3dns_s( const asptr &sn, const asptr &k = asptr()):addr(sn)
+    {
+        if (k.l)
+        {
+            for (int i = 0; i < 32; ++i)
+                key[i] = pstr_c(k).as_byte_hex(i * 2);
+            key_ok = true;
+
+        } else
+        {
+            // we have to query
+            str_c key_string = dnsquery(CONSTASTR("_tox.") + addr, asptr());
+            if (!key_string.is_empty())
+            {
+                for (int i = 0; i < 32; ++i)
+                    key[i] = key_string.as_byte_hex(i * 2);
+                key_ok = true;
+            }
+        }
+    }
+
+    ~tox3dns_s()
+    {
+        if (dns3) tox_dns3_kill(dns3);
+    }
+
+    str_c query1( const str_c &pubid )
+    {
+        if (dns3)
+        {
+            tox_dns3_kill(dns3);
+            dns3 = nullptr;
+        }
+        str_c request(pubid);
+        request.replace_all( CONSTASTR("@"), CONSTASTR("._tox.") );
+        return dnsquery(request, CONSTASTR("tox1"));
+    }
+
+    str_c query3( const str_c &pubid )
+    {
+        if (!key_ok)
+            return query1(pubid);
+
+        if (dns3 == nullptr)
+            dns3 = tox_dns3_new(key);
+
+        uint32_t request_id;
+        sstr_t<128> dns_string;
+        int dns_string_len = tox_generate_dns3_string(dns3, (byte *)dns_string.str(), (uint16_t)dns_string.get_capacity(), &request_id, (uint8_t*)pubid.cstr(), (byte)pubid.find_pos('@'));
+
+        if (dns_string_len < 0)
+            return query1(pubid);
+
+        dns_string.set_length(dns_string_len);
+
+        str_c rec( 256, true );
+        rec.set_as_char('_').append(dns_string).append(CONSTASTR("._tox.")).append(addr);
+        rec = dnsquery(rec,CONSTASTR("tox3"));
+        if (!rec.is_empty())
+        {
+            uint8_t tox_id[TOX_FRIEND_ADDRESS_SIZE];
+            if (tox_decrypt_dns3_TXT(dns3, tox_id, (/*const*/ uint8_t *)rec.cstr(), rec.get_length(), request_id) < 0)
+                return query1(pubid);
+        
+            rec.clear();
+            rec.append_as_hex(tox_id, sizeof(tox_id));
+            return rec;
+        }
+
+        return query1(pubid);
+    }
+};
+
+static std::vector<tox3dns_s> pinnedservs;
 
 bool is_isotoxin(int fid);
 
@@ -228,10 +385,8 @@ struct message2send_s
         }
     }
 
-    static void tick()
+    static void tick(int ct)
     {
-        int time = time_ms();
-
         std::vector<int> disabled;
 
         for(message2send_s *x = first; x; x = x->next)
@@ -245,10 +400,10 @@ struct message2send_s
             if ( x->mid == 0 )
             {
                 if (isPresent(disabled, x->fid)) continue;
-                x->try_send(time);
+                x->try_send(ct);
                 if ( x->mid == 0 )
                     addIfNotPresent(disabled, x->fid); // to preserve delivery order
-            } else if ( (time - x->resend_time) > 0 )
+            } else if ( (ct - x->resend_time) > 0 )
             {
                 // seems message not delivered: no delivery notification received in 10 seconds
                 x->mid = 0;
@@ -325,13 +480,11 @@ struct message_part_s
         }
     }
 
-    static void tick()
+    static void tick(int ct)
     {
-        int time = time_ms();
-
         for (message_part_s *x = first; x; x = x->next)
         {
-            if ( (time - x->send2host_time) > 0 )
+            if ( (ct - x->send2host_time) > 0 )
             {
                 hf->message(x->mt, x->cid, x->create_time, x->msgb.cstr(), x->msgb.get_length());
                 delete x;
@@ -550,6 +703,134 @@ struct transmiting_file_s : public file_transfer_s
 
 transmiting_file_s *transmiting_file_s::first = nullptr;
 transmiting_file_s *transmiting_file_s::last = nullptr;
+
+static int send_request(const char*public_id, const char* invite_message_utf8, bool resend);
+
+struct discoverer_s
+{
+    static discoverer_s *first;
+    static discoverer_s *last;
+    discoverer_s *prev;
+    discoverer_s *next;
+    
+    int timeout_discover = 0;
+    str_c invmsg;
+
+    struct syncdata_s
+    {
+        str_c ids;
+        str_c pubid;
+
+        bool waiting_thread_start = true;
+        bool thread_in_progress = false;
+        bool shutdown_discover = false;
+    };
+
+    spinlock::syncvar< syncdata_s > sync;
+
+    discoverer_s(const asptr &ids, const asptr &invmsg) :invmsg(invmsg)
+    {
+        sync.lock_write()().ids = ids;
+        timeout_discover = time_ms() + 30000; // 30 seconds should be enough
+        LIST_ADD(this, first, last, prev, next);
+        CloseHandle(CreateThread(nullptr, 0, discover_thread, this, 0, nullptr));
+    }
+    ~discoverer_s()
+    {
+        sync.lock_write()().shutdown_discover = true;
+        while(sync.lock_read()().thread_in_progress) Sleep(1);
+
+        LIST_DEL(this, first, last, prev, next);
+    }
+
+    bool do_discover( int ct )
+    {
+        if ((ct - timeout_discover) > 0)
+            sync.lock_write()().shutdown_discover = true;
+
+        auto r = sync.lock_read();
+
+        if (r().shutdown_discover && !r().thread_in_progress)
+        {
+            hf->operation_result(LOP_ADDCONTACT, CR_TIMEOUT);
+            delete this;
+            return true;
+        }
+
+        if (r().thread_in_progress || r().waiting_thread_start)
+            return false;
+
+        if (r().pubid.is_empty())
+        {
+            hf->operation_result(LOP_ADDCONTACT, CR_INVALID_PUB_ID);
+        } else
+        {
+            int rslt = send_request(r().pubid,invmsg,false);
+            hf->operation_result(LOP_ADDCONTACT, rslt);
+        }
+        r.unlock(); // unlock now to avoid deadlock
+        delete this;
+        return true;
+    }
+
+    void discover_thread()
+    {
+        auto w = sync.lock_write();
+        if (w().shutdown_discover) return;
+        w().waiting_thread_start = false;
+        w().thread_in_progress = true;
+
+        str_c ids = w().ids;
+        w.unlock();
+
+        str_c servname = ids.substr(ids.find_pos('@') + 1);
+        
+        bool pinfound = false;
+        for (tox3dns_s& pin : pinnedservs)
+        {
+            if (sync.lock_read()().shutdown_discover)
+                break;
+
+            if (servname.equals(pin.addr))
+            {
+                str_c s = pin.query3(ids);
+                sync.lock_write()().pubid = s;
+                pinfound = true;
+                break;
+            }
+        }
+
+        if (!pinfound)
+        {
+            pinnedservs.emplace_back( servname );
+            str_c s = pinnedservs.back().query3(ids);
+            if ( !pinnedservs.back().key_ok )
+                pinnedservs.erase( --pinnedservs.end() ); // kick non tox3 servers from list
+            
+            sync.lock_write()().pubid = s;
+        }
+
+        sync.lock_write()().thread_in_progress = false;
+    }
+
+    static DWORD WINAPI discover_thread(LPVOID p)
+    {
+        UNSTABLE_CODE_PROLOG
+            ((discoverer_s *)p)->discover_thread();
+        UNSTABLE_CODE_EPILOG
+        return 0;
+    }
+
+    static void tick(int ct)
+    {
+        for(discoverer_s *d = first; d; d = d->next)
+            if (d->do_discover(ct))
+                break;
+    }
+};
+
+discoverer_s *discoverer_s::first = nullptr;
+discoverer_s *discoverer_s::last = nullptr;
 
 static void make_uniq_utag( u64 &utag )
 {
@@ -1489,9 +1770,10 @@ void __stdcall tick()
     time_t tryconnect = now() + 60;
     if (tox)
     {
-        message2send_s::tick();
-        message_part_s::tick();
+        message2send_s::tick(curt);
+        message_part_s::tick(curt);
         transmiting_file_s::tick();
+        discoverer_s::tick(curt);
 
         bool forceupdateself = false;
         if ((curt - nextt) > 0)
@@ -1565,6 +1847,9 @@ void __stdcall goodbye()
 
     while (transmiting_file_s::first)
         delete transmiting_file_s::first;
+
+    while (discoverer_s::first)
+        delete discoverer_s::first;
     
     if (tox)
     {
@@ -1938,9 +2223,19 @@ int __stdcall resend_request(int id, const char* invite_message_utf8)
 }
 
 
-int __stdcall add_contact(const char*public_id, const char* invite_message_utf8)
+int __stdcall add_contact(const char* public_id, const char* invite_message_utf8)
 {
-    return send_request(public_id, invite_message_utf8, false);
+    pstr_c s = asptr(public_id);
+    if (s.get_length() == (TOX_FRIEND_ADDRESS_SIZE * 2) && s.contain_chars(CONSTASTR("0123456789abcdefABCDEF")))
+        return send_request(public_id, invite_message_utf8, false);
+
+    if (s.find_pos('@') > 0)
+    {
+        new discoverer_s(s, asptr(invite_message_utf8));
+        return CR_OPERATION_IN_PROGRESS;
+    }
+
+    return CR_INVALID_PUB_ID;
 }
 
 void __stdcall del_contact(int id)
@@ -2230,13 +2525,15 @@ proto_functions_s* __stdcall handshake(host_functions_s *hf_)
     self_state = CS_OFFLINE;
 
     nodes.clear();
+    nodes.reserve(32);
 
-#if defined _DEBUG && !defined _DEBUG_OPTIMIZED
-    //nodes.emplace_back( CONSTASTR("192.168.17.199"), 33445, CONSTASTR("992DAF04003E22C4223C18581C443DF06A223F6ECE36E0E2DC47F13871C0B113") );
 #include "dht_nodes.inl"
-#else
-#include "dht_nodes.inl"
-#endif
+
+    pinnedservs.clear();
+    pinnedservs.reserve(4);
+#define PINSERV(a, b) pinnedservs.emplace_back( CONSTASTR(a), CONSTASTR(b) );
+    #include "pinned_srvs.inl"
+#undef PINSERV
 
     //prepare(); // do not prepare now, prepare after config received due proxy settings
 
