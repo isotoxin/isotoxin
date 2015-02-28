@@ -75,10 +75,11 @@ struct theme_rect_s : ts::shared_object
     const ts::font_desc_c *deffont = &ts::g_default_text_font;
     ts::TSCOLOR deftextcolor;
     ts::tbuf0_t<ts::TSCOLOR> colors;
+    ts::abp_c addition;
 	
     mutable ts::packed_buf_c< 2, SI_count > alphablend; // cache
 	
-	void load_params(const ts::bp_t<char> * block);
+	void load_params(ts::bp_t<char> * block);
 	static theme_rect_s * build( const ts::drawable_bitmap_c &dbmp, const theme_conf_s &thconf )
 	{
         // hack due TSNEW

@@ -158,7 +158,8 @@ class gui_message_item_c : public gui_label_c
     mutable ts::wstr_c protodesc;
 
     static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE = FLAGS_FREEBITSTART_LABEL << 0;
-    static const ts::flags32_s::BITS F_OVERLINK = FLAGS_FREEBITSTART_LABEL << 1;
+
+    int overlink = -1;
 
     static const int m_left = 10;
     static const int m_top = 3;
@@ -172,6 +173,8 @@ class gui_message_item_c : public gui_label_c
     }
     void ctx_menu_golink(const ts::str_c &);
     void ctx_menu_copylink(const ts::str_c &);
+    void ctx_menu_copymessage(const ts::str_c &);
+    
 
     bool try_select_link(RID r = RID(), GUIPARAM p = nullptr);
 
@@ -202,9 +205,12 @@ class gui_message_item_c : public gui_label_c
     }
 
     bool check_overlink(const ts::ivec2 &localpos);
-    ts::str_c get_link_under_cursor(const ts::ivec2 &localpos);
-    ts::ivec2 get_link_pos_under_cursor(const ts::ivec2 &localpos);
-
+    ts::str_c get_link_under_cursor(const ts::ivec2 &localpos) const;
+    ts::ivec2 get_link_pos_under_cursor(const ts::ivec2 &localpos) const;
+    ts::pwstr_c get_message_under_cursor(const ts::ivec2 &localpos) const;
+    ts::ivec2 get_message_pos_under_cursor(const ts::ivec2 &localpos) const;
+    /*virtual*/ bool custom_tag_parser(ts::wstr_c& r, const ts::wsptr &tv) const override;
+    ts::ivec2 extract_message(int chari) const;
 public:
 
     enum

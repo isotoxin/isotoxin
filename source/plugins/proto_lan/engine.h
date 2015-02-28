@@ -155,6 +155,7 @@ struct tcp_listner : public socket_s
     spinlock::syncvar<state_s> state;
     static DWORD WINAPI acceptor(LPVOID);
     int open();
+    void close();
     tcp_listner(int port) { state.lock_write()().port = port; }
     ~tcp_listner();
 };

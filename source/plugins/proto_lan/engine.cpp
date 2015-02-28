@@ -304,16 +304,25 @@ int tcp_listner::open()
     return port;
 }
 
-tcp_listner::~tcp_listner()
+void tcp_listner::close()
 {
     state.lock_write()().acceptor_should_stop = true;
-    close();
-    for(;state.lock_read()().wait_acceptor_stop(); Sleep(0)) ;
+    __super::close();
+    for (; state.lock_read()().wait_acceptor_stop(); Sleep(0));
 
     tcp_pipe *p;
-    for( ; accepted.try_pop(p) ; )
+    for (; accepted.try_pop(p);)
         delete p;
 
+    auto w = state.lock_write();
+    w().acceptor_should_stop = false;
+    w().acceptor_stoped = false;
+    w().acceptor_works = false;
+}
+
+tcp_listner::~tcp_listner()
+{
+    close();
 }
 
 bool tcp_pipe::connect()
@@ -528,6 +537,7 @@ void lan_engine::setup_communication_stuff()
 
 void lan_engine::shutdown_communication_stuff()
 {
+    listen_port = -1;
     tcp_in.close();
     broadcast_seek.close();
     broadcast_trap.close();
@@ -1409,6 +1419,10 @@ void lan_engine::online()
     {
         first->state = contact_s::ONLINE;
         first->data_changed = true;
+
+        contact_data_s cd;
+        first->fill_data(cd);
+        hf->update_contact(&cd);
     }
 }
 
@@ -1421,6 +1435,20 @@ void lan_engine::offline()
         contact_data_s cd;
         first->fill_data(cd);
         hf->update_contact(&cd);
+
+        for (contact_s *c = first->next; c; c = c->next)
+        {
+            if (c->pipe.connect())
+                c->pipe.flush_and_close();
+            if (c->state == contact_s::ONLINE || c->state == contact_s::BACKCONNECT)
+                c->state = contact_s::OFFLINE;
+            if (c->state == contact_s::INVITE_SEND || c->state == contact_s::MEET)
+                c->state = contact_s::SEARCH;
+            
+            contact_data_s cd;
+            c->fill_data(cd);
+            hf->update_contact(&cd);
+        }
 
         shutdown_communication_stuff();
     }

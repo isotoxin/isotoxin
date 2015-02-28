@@ -160,7 +160,8 @@ struct text_parser_s
 {
 	//void operator=(const text_parser_s &) UNUSED;
 
-	const wstr_c *text;
+    CUSTOM_TAG_PARSER ctp;
+	const wstr_c *textp;
 	GLYPHS *glyphs;
     GLYPHS outlined_glyphs;
     int max_line_length;
@@ -211,9 +212,10 @@ struct text_parser_s
 
     text_parser_s() {}
 
-	void setup(const wstr_c &text_, int max_line_length_, GLYPHS *glyphs_, TSCOLOR default_color_, font_c *default_font, uint32 flags_, int boundy_)
+	void setup(const wstr_c &text_, int max_line_length_, CUSTOM_TAG_PARSER ctp_, GLYPHS *glyphs_, TSCOLOR default_color_, font_c *default_font, uint32 flags_, int boundy_)
 	{
-        text = &text_;
+        ctp = ctp_;
+        textp = &text_;
         max_line_length = max_line_length_;
         glyphs = glyphs_;
         flags = flags_;
@@ -243,7 +245,7 @@ struct text_parser_s
 
 		if (glyphs)
         {
-            glyphs->reserve( text->get_length() );
+            glyphs->reserve( textp->get_length() );
             glyph_image_s &gi = glyphs->add();
             gi.pixels = nullptr;
             gi.outline_index = 0;
@@ -663,6 +665,15 @@ struct text_parser_s
         {
             // do nothing with null tag
         } 
+        else if (tag == CONSTWSTR("cstm"))
+        {
+            if (ctp)
+            {
+                wstr_c r;
+                if (ctp(r, tagbody_))
+                    parse(r, 0);
+            }
+        }
         else if (tag == CONSTWSTR("hyphenation"))
         {
             hyphenation_tag_nesting_level++;
@@ -716,38 +727,37 @@ struct text_parser_s
         }
     }
 
-	ivec2 parse(int curTextI = 0)
+	void parse(const ts::wsptr &text, int cur_text_index = 0)
 	{
-
-		for (; curTextI<text->get_length(); curTextI++)
+		for (; cur_text_index<text.l; ++cur_text_index)
 		{
 			font_c &font = *fonts_stack.last();
 			paragraph_s &paragraph = paragraphs_stack.last();
-			wchar ch = text->get_char(curTextI);
+			wchar ch = text.s[cur_text_index];
 
 			if (ch == L'\n')
 			{
 				if (last_line.count() > 0) end_line();
-				else next_line(font.height);//если строка пустая, то добавляем высоту строки для текущего шрифта
-			} else if (ch != L'<')//это простой символ
+				else next_line(font.height);// if empty line, just add height of current font
+			} else if (ch != L'<') // just simple symbol
 			{
             add_char:
-                addchar(font, ch, curTextI);
-			} else if (curTextI < text->get_length()-1 && text->get_char(curTextI+1) == '|')//это экранированный символ '<'
+                addchar(font, ch, cur_text_index);
+			} else if (cur_text_index < text.l-1 && text.s[cur_text_index+1] == '|') // escaped '<'
 			{
-				curTextI++;//skip |
+				cur_text_index++; //skip |
 				goto add_char;
-			} else//это тэг
+			} else // this is tag
 			{
-				int i = text->find_pos(curTextI + 1, L'>');
-				if (i == -1) {WARNING("Tag '%s' not closed", to_str(text->cstr()+curTextI).cstr()); break;}
+				int i = pwstr_c(text).find_pos(cur_text_index + 1, L'>');
+				if (i == -1) {WARNING("Tag '%s' not closed", to_str(text.skip(cur_text_index)).cstr()); break;}
 
-                token<wchar> t(text->substr(curTextI+1, i), L'=');
+                token<wchar> t(pwstr_c(text).substr(cur_text_index+1, i), L'=');
                 wsptr tag(*t);
                 ++t; wsptr tagbody; if (t) tagbody = *t;
-				if (!process_tag(tag, tagbody, curTextI))
-					goto add_char;//если не смогли раскрыть тег, оставляем его нераскрытым в тексте (чтобы хотя бы было видно баг)
-				curTextI = i;
+				if (!process_tag(tag, tagbody, cur_text_index))
+					goto add_char; // unknown tag - keep it as is
+				cur_text_index = i;
 			}
 
 			//Перенос слов
@@ -763,10 +773,9 @@ struct text_parser_s
 					for (; j > 0; j--) if ((line_len -= last_line.get(j).advance) <= cur_max_line_len) break;
 					last_line.set_count(j);
 
-					//Add ...
 					for (int i=0; i<3; i++)
 					{
-						meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::CHAR, curTextI);//добавляем метаглиф
+						meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::CHAR, cur_text_index);//добавляем метаглиф
 						mg.glyph = &dot_glyph;
 						mg.advance = mg.glyph->advance;
 					}
@@ -787,7 +796,7 @@ struct text_parser_s
 					if (hyphenation_tag_nesting_level && n < LENGTH(charclass)-3)//нужно смотреть на 3 буквы вперёд, чтобы работали правила gss-ssg и gs-ssg
 					{
 						//Перенос слов по слогам реализован на основе упрощённого алгоритма П.Христова http://sites.google.com/site/foliantapp/project-updates/hyphenation
-						int nn = tmin(n+3, text->get_length() - (curTextI-n+1)), i = 0;
+						int nn = tmin(n+3, text.l - (cur_text_index-n+1)), i = 0;
 
 						while (i<n && wcschr(L"(\"«", last_line.get(i+start).ch))//пропускаем допустимые символы перед началом слова
 							charclass[i++] = 0;
@@ -803,7 +812,7 @@ struct text_parser_s
 							}
 							else
 							{
-								ch = text->get_char(curTextI+i-n+1);
+								ch = text.s[cur_text_index+i-n+1];
 							}
 							if (wcschr(L"аеёиоуыэюяaeiouyАЕЁИОУЫЭЮЯAEIOUY", ch))
 								charclass[i] = 'g';
@@ -848,7 +857,7 @@ struct text_parser_s
 								if (last_line.get(i + start - 1).ch != '-')
 								{
 									lineSize++;
-									meta_glyph_s mg = add_meta_glyph(meta_glyph_s::CHAR, curTextI);//добавляем метаглиф
+									meta_glyph_s mg = add_meta_glyph(meta_glyph_s::CHAR, cur_text_index);//добавляем метаглиф
 									mg.glyph = &hyphenGlyph;
 									mg.advance = mg.glyph->advance;
 									last_line.pop();
@@ -950,6 +959,11 @@ end:;
 				for (j=0; j<last_line.count(); j++) line_len += last_line.get(j).advance;
 			}
 		}
+    }
+
+    ivec2 parse()
+    {
+        parse(textp->as_sptr(), 0);
 		end_line(true, 0 != (TO_LASTLINEADDH & flags)); // last line
 
 		if (/*glyphs && */outlined_glyphs.count() > 0)
@@ -967,11 +981,11 @@ end:;
 }
 
 
-ivec2 parse_text(const wstr_c &text, int max_line_length, GLYPHS *glyphs, TSCOLOR default_color, font_c *default_font, uint32 flags, int boundy)
+ivec2 parse_text(const wstr_c &text, int max_line_length, CUSTOM_TAG_PARSER ctp, GLYPHS *glyphs, TSCOLOR default_color, font_c *default_font, uint32 flags, int boundy)
 {
 	if (!ASSERT(default_font)) return ivec2(0);
 	static text_parser_s text_parser;
-    text_parser.setup(text, tabs(max_line_length), glyphs, default_color, default_font, flags, boundy);
+    text_parser.setup(text, tabs(max_line_length), ctp, glyphs, default_color, default_font, flags, boundy);
 	ivec2 r = text_parser.parse();
 	if (max_line_length < 0 && text_parser.was_inword_break) r.x = -r.x;
 	return r;

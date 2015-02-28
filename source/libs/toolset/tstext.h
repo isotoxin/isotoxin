@@ -37,6 +37,7 @@ public:
 
     //GLYPHS & glyphs() { return glyphs_external ? (*glyphs_external) : glyphs_internal; }
     GLYPHS & glyphs() { return glyphs_internal; }
+    const GLYPHS & glyphs() const { return glyphs_internal; }
     void update_rectangles( ts::ivec2 &offset, rectangle_update_s * updr ); // internal
 
 public:
@@ -44,10 +45,12 @@ public:
     text_rect_c() : font(&g_default_text_font), size(0), lastdrawsize(0) { flags.setup(F_INVALID_SIZE|F_INVALID_TEXTURE|F_INVALID_GLYPHS); }
 	~text_rect_c();
     
-    //void use_external_glyphs( GLYPHS *eglyphs )
-    //{
-    //    glyphs_external = eglyphs;
-    //}
+    void make_dirty( bool dirty_common = true, bool dirty_glyphs = true, bool dirty_size = false )
+    {
+        if (dirty_common) flags.set(F_DIRTY);
+        if (dirty_glyphs) flags.set(F_INVALID_GLYPHS);
+        if (dirty_size) flags.set(F_INVALID_SIZE);
+    }
     bool is_dirty() const { return flags.is(F_DIRTY); }
     bool is_dirty_size() const { return flags.is(F_INVALID_SIZE); }
     bool is_dirty_glyphs() const { return flags.is(F_INVALID_GLYPHS); }
@@ -61,7 +64,7 @@ public:
     void set_def_color( TSCOLOR c ) { if (default_color != c) { flags.set(F_DIRTY|F_INVALID_TEXTURE|F_INVALID_GLYPHS); default_color = c; } }
     void set_size(const ts::ivec2 &sz) { flags.clear(F_INVALID_SIZE); if (size != sz) { flags.set(F_DIRTY|F_INVALID_TEXTURE|F_INVALID_GLYPHS); size = sz; } }
     void set_text_only(const wstr_c &text_, bool forcedirty) { if (forcedirty || !text.equals(text_)) { flags.set(F_DIRTY|F_INVALID_SIZE|F_INVALID_TEXTURE|F_INVALID_GLYPHS); text = text_; } }
-	bool set_text(const wstr_c &text, bool do_parse_and_render_texture = true);
+	bool set_text(const wstr_c &text, CUSTOM_TAG_PARSER ctp, bool do_parse_and_render_texture);
 	const wstr_c& get_text() const { return text; }
     void set_options(ts::flags32_s nf)
     {
@@ -83,13 +86,13 @@ public:
         }
         return false;
     }
-	void parse_and_render_texture( rectangle_update_s * updr, bool do_render = true );
+	void parse_and_render_texture( rectangle_update_s * updr, CUSTOM_TAG_PARSER ctp, bool do_render = true );
     void render_texture( rectangle_update_s * updr, fastdelegate::FastDelegate< void (drawable_bitmap_c&) > clearp ); // custom clear
     void render_texture( rectangle_update_s * updr );
     void update_rectangles( rectangle_update_s * updr );
 
-    ivec2 calc_text_size(int maxwidth) const; // also it renders texture
-    ivec2 calc_text_size(const font_desc_c& font, const wstr_c&text, int maxwidth, uint flags) const;
+    ivec2 calc_text_size(int maxwidth, CUSTOM_TAG_PARSER ctp) const; // also it renders texture
+    ivec2 calc_text_size(const font_desc_c& font, const wstr_c&text, int maxwidth, uint flags, CUSTOM_TAG_PARSER ctp) const;
 
 	int  get_scroll_top() const {return scroll_top;}
 	//void scrollTo(int y) {scrollTop_ = y; render_texture();}

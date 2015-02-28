@@ -1725,9 +1725,9 @@ void border_window_data_s::draw()
         updr.updrect = tdp.rectupdate;
         updr.offset = dd.offset;
         updr.param = (dd.engine ? dd.engine->getrid() : getrid()).to_ptr();
-        tr.parse_and_render_texture(&updr);
+        tr.parse_and_render_texture(&updr, nullptr);
     } else
-        tr.parse_and_render_texture(nullptr);
+        tr.parse_and_render_texture(nullptr, nullptr);
 
     draw_image( backbuffer.DC(), tr.get_texture(), dd.offset.x, dd.offset.y, ts::irect( ts::ivec2(0), dd.size ), dd.cliprect, dd.alpha );
     if (tdp.sz)

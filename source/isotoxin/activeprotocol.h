@@ -79,6 +79,8 @@ class active_protocol_c : public ts::safe_object
     static const ts::flags32_s::BITS F_SAVE_REQUEST         = SETBIT(4);
     static const ts::flags32_s::BITS F_DIRTY_PROXY_SETTINGS = SETBIT(5);
     static const ts::flags32_s::BITS F_PROXY_SETTINGS_RCVD  = SETBIT(6);
+    static const ts::flags32_s::BITS F_ONLINE               = SETBIT(7);
+    static const ts::flags32_s::BITS F_SET_PROTO_OK         = SETBIT(8);
     
 
     bool cmdhandler(ipcr r);
@@ -110,6 +112,9 @@ public:
     int getid() const {return id;}
     bool is_new() const { return id < 0 && !is_dip(); }
     bool is_dip() const { return syncdata.lock_read()().flags.is(F_DIP); }
+
+    bool is_autoconnect() const { return 0 != (syncdata.lock_read()().data.options & active_protocol_data_s::O_AUTOCONNECT); }
+    void set_autoconnect( bool v );
 
     void resend_request( int cid, const ts::wstr_c &msg );
     void add_contact( const ts::str_c& pub_id, const ts::wstr_c &msg );

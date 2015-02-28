@@ -62,7 +62,9 @@ TS_STATIC_CHECK( sizeof(glyph_image_s) == 32, "oops" );
 
 typedef tbuf0_t<glyph_image_s> GLYPHS;
 
-ivec2 parse_text(const wstr_c &text, int max_line_length, GLYPHS *glyphs = nullptr, TSCOLOR default_color = ARGB(0,0,0), font_c *default_font = g_default_text_font, uint32 flags = 0, int boundy = 0);
+typedef fastdelegate::FastDelegate<bool (wstr_c &, const wsptr &)> CUSTOM_TAG_PARSER;
+
+ivec2 parse_text(const wstr_c &text, int max_line_length, CUSTOM_TAG_PARSER ctp, GLYPHS *glyphs = nullptr, TSCOLOR default_color = ARGB(0,0,0), font_c *default_font = g_default_text_font, uint32 flags = 0, int boundy = 0);
 
 //—читает пр€моугольник, ограничивающий все глифы из заданного массива
 irect glyphs_bound_rect(const GLYPHS &glyphs);

@@ -78,7 +78,7 @@ public:
         {
             if (contact)
             {
-                auto state = contact->get_state();
+                auto state = contact->get_meta_state();
                 if (CS_INVITE_RECEIVE == state || CS_INVITE_SEND == state) return 2;
             }
 

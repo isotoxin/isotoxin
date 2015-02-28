@@ -1061,11 +1061,17 @@ static void update_contact( const contact_descriptor_s *cdesc )
         int st = cdesc->get_fid() >= 0 ? tox_get_user_status(tox, cdesc->get_fid()) : TOX_USERSTATUS_INVALID;
 
         uint8_t id[TOX_CLIENT_ID_SIZE];
-        tox_get_client_id(tox, cdesc->get_fid(), id);
-        str_c pubid(TOX_CLIENT_ID_SIZE * 2, true);
-        pubid.append_as_hex(id,TOX_CLIENT_ID_SIZE);
+        sstr_t<TOX_CLIENT_ID_SIZE * 2 + 16> pubid;
+        if (cdesc->get_fid() >= 0)
+        {
+            tox_get_client_id(tox, cdesc->get_fid(), id);
+            pubid.append_as_hex(id, TOX_CLIENT_ID_SIZE);
+            ASSERT(pubid.beginof(cdesc->pubid));
+        } else
+        {
+            pubid.append( asptr( cdesc->pubid.cstr(), TOX_CLIENT_ID_SIZE * 2 ) );
+        }
 
-        ASSERT(pubid.beginof(cdesc->pubid));
         cd.public_id = pubid.cstr();
         cd.public_id_len = pubid.get_length();
 
@@ -2079,6 +2085,11 @@ void __stdcall init_done()
             if (tox_friend_exists(tox,i))
                 update_init_contact(i);
         }
+        for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
+        {
+            if (f->get_fid() < 0 && f->state == CS_INVITE_RECEIVE)
+                update_contact(f);
+        }
     }
 }
 
@@ -2145,6 +2156,20 @@ void __stdcall offline()
         tox_kill(tox);
         prepare();
         tox_load(tox,(const uint8_t *)buf.data(),sz);
+
+        contact_data_s self;
+        self.mask = CDM_STATE;
+        self.id = 0;
+        self.state = CS_OFFLINE;
+        hf->update_contact(&self);
+
+        for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
+        {
+            if (f->is_online)
+                f->is_online = false;
+            update_contact(f);
+        }
+
     }
 }
 

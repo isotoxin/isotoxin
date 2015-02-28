@@ -54,8 +54,13 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     ipcp->send(ipcw(AQ_SET_NAME) << (w().data.user_name.is_empty() ? prf().username() : w().data.user_name));
                     ipcp->send(ipcw(AQ_SET_STATUSMSG) << (w().data.user_statusmsg.is_empty() ? prf().userstatus() : w().data.user_statusmsg));
                     ipcp->send(ipcw(AQ_INIT_DONE));
-                    if (0 != (w().data.options & active_protocol_data_s::O_AUTOCONNECT)) ipcp->send(ipcw(AQ_ONLINE));
+                    if (0 != (w().data.options & active_protocol_data_s::O_AUTOCONNECT))
+                    {
+                        ipcp->send(ipcw(AQ_ONLINE));
+                        w().flags.set(F_ONLINE);
+                    }
 
+                    w().flags.set(F_SET_PROTO_OK);
                     w.unlock();
 
                     gmsg<ISOGM_PROTO_LOADED> *m = TSNEW( gmsg<ISOGM_PROTO_LOADED>, id );
@@ -294,6 +299,27 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
     if (syncdata.lock_write()().flags.clearr(F_SAVE_REQUEST))
         save_config(false);
 
+    auto r = syncdata.lock_read();
+    if (r().flags.is(F_SET_PROTO_OK))
+    {
+        bool is_ac = 0 != (r().data.options & active_protocol_data_s::O_AUTOCONNECT);
+        if (r().flags.is(F_ONLINE))
+        {
+            if (!is_ac)
+            {
+                r.unlock();
+                ipcp->send(ipcw(AQ_OFFLINE));
+                syncdata.lock_write()().flags.clear(F_ONLINE);
+            }
+        }
+        else if (is_ac)
+        {
+            r.unlock();
+            ipcp->send(ipcw(AQ_ONLINE));
+            syncdata.lock_write()().flags.set(F_ONLINE);
+        }
+
+    }
     return 0;
 }
 
@@ -410,6 +436,23 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CMD_RESULT>& r)
             syncdata.lock_write()().flags.set(F_CONFIG_FAIL);
     }
     return 0;
+}
+
+void active_protocol_c::set_autoconnect( bool v )
+{
+    auto w = syncdata.lock_write();
+    bool oldac = 0 != (w().data.options & active_protocol_data_s::O_AUTOCONNECT);
+    if (oldac != v)
+    {
+        INITFLAG( w().data.options, active_protocol_data_s::O_AUTOCONNECT, v );
+
+        auto row = prf().get_table_active_protocol().find(id);
+        if (CHECK(row))
+        {
+            INITFLAG(row->other.options, active_protocol_data_s::O_AUTOCONNECT, v);
+            row->changed();
+        }
+    }
 }
 
 void active_protocol_c::stop_and_die(bool wait_worker_end)

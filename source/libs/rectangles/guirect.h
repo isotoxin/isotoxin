@@ -851,6 +851,10 @@ protected:
 
     void draw( draw_data_s &dd, const text_draw_params_s &tdp ); // use it if want selection
 
+    virtual bool custom_tag_parser(ts::wstr_c& r, const ts::wsptr &tv) const { return false; }
+    bool _custom_tag_parser_delegate(ts::wstr_c& r, const ts::wsptr &tv) const { return custom_tag_parser(r,tv); }
+    ts::CUSTOM_TAG_PARSER custom_tag_parser_delegate() const { return DELEGATE(this, _custom_tag_parser_delegate); }
+
     gui_label_c() {} // издержки производства - нужен для потомка
 public:
     gui_label_c(initial_rect_data_s &data) :gui_control_c(data) {}
@@ -864,6 +868,7 @@ public:
     void set_selectable( bool f = true );
 
     ts::GLYPHS &get_glyphs() { return textrect.glyphs(); }
+    const ts::GLYPHS &get_glyphs() const { return textrect.glyphs(); }
 
     /*virtual*/ int       get_height_by_width(int width) const override;
     /*virtual*/ ts::ivec2 get_min_size() const override;

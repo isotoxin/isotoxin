@@ -47,7 +47,7 @@ void theme_rect_s::init_subimage(subimage_e si, const str_c &sidef)
     siso[si].loaded = !sidef.is_empty();
 }
 
-void theme_rect_s::load_params(const abp_c * block)
+void theme_rect_s::load_params(abp_c * block)
 {
     static const char *sins[SI_count] = { "lt", "rt", "lb", "rb", "l", "t", "r", "b", "c", "base",
         "capstart", "caprep", "capend",
@@ -80,6 +80,11 @@ void theme_rect_s::load_params(const abp_c * block)
     colors.clear();
     for(;cols;++cols)
         colors.add() = parsecolor<char>(*cols, deftextcolor);
+
+    if (abp_c *addi = block->get(CONSTASTR("addition")))
+    {
+        addition = std::move(*addi);
+    }
 
     if (byrect)
     {

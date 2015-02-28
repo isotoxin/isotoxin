@@ -840,7 +840,7 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
         if (gui->selcore().is_dirty() || textrect.is_dirty())
         {
             updr = false;
-            textrect.parse_and_render_texture(nullptr, false); // it changes glyphs array
+            textrect.parse_and_render_texture(nullptr, custom_tag_parser_delegate(), false); // it changes glyphs array
             bool still_selected = selcore.sure_selected();
 
             if (tdp.rectupdate)
@@ -867,7 +867,7 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
     } else if (textrect.is_dirty() || flags.is(FLAGS_SELECTION))
     {
         flags.clear(FLAGS_SELECTION);
-        textrect.parse_and_render_texture(nullptr, false); // it changes glyphs array
+        textrect.parse_and_render_texture(nullptr, custom_tag_parser_delegate(), false); // it changes glyphs array
         updr = false;
         if (tdp.rectupdate)
         {
@@ -895,7 +895,7 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
 
 void gui_label_c::set_text(const ts::wstr_c&_text)
 {
-    if (textrect.set_text(_text,false))
+    if (textrect.set_text(_text,custom_tag_parser_delegate(),false))
         getengine().redraw();
 }
 
@@ -908,7 +908,7 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
 /*virtual*/ int gui_label_c::get_height_by_width(int width) const
 {
     if (flags.is(FLAGS_AUTO_HEIGHT) && !textrect.get_text().is_empty())
-        return textrect.calc_text_size(width).y;
+        return textrect.calc_text_size(width, custom_tag_parser_delegate()).y;
     return 0;
 }
 
@@ -918,7 +918,7 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
     if (flags.is(FLAGS_AUTO_HEIGHT) && !textrect.get_text().is_empty())
     {
         int w = getprops().size().x;
-        ts::ivec2 szt = textrect.calc_text_size( w ? w : -1 );
+        ts::ivec2 szt = textrect.calc_text_size( w ? w : -1, custom_tag_parser_delegate() );
         sz.y = szt.y;
     }
     return sz;
@@ -930,7 +930,7 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
     if (flags.is(FLAGS_AUTO_HEIGHT) && !textrect.get_text().is_empty())
     {
         int w = getprops().size().x;
-        ts::ivec2 szt = textrect.calc_text_size( w ? w : -1 );
+        ts::ivec2 szt = textrect.calc_text_size( w ? w : -1, custom_tag_parser_delegate() );
         sz.y = szt.y;
     }
     return sz;
@@ -1034,7 +1034,7 @@ bool gui_tooltip_c::check_text(RID r, GUIPARAM param)
         ts::ivec2 sz = textrect.size;
         if (textrect.is_dirty() || textrect.size == ts::ivec2(0))
         {
-            sz = textrect.calc_text_size(300);
+            sz = textrect.calc_text_size(300, custom_tag_parser_delegate());
             textrect.set_size(sz);
         }
         if (const theme_rect_s *thr = themerect())
@@ -2228,7 +2228,7 @@ gui_menu_item_c::~gui_menu_item_c()
             return ts::ivec2(thr->clientborder.lt.x + thr->clientborder.rb.x, 5);
         } else
         {
-            int tl = textrect.calc_text_size(-1).x;
+            int tl = textrect.calc_text_size(-1, custom_tag_parser_delegate()).x;
             if (submnu) tl += thr->sis[SI_RIGHT].width();
             return ts::ivec2(thr->clientborder.lt.x + tl + thr->clientborder.rb.x, thr->sis[SI_LEFT].height());
         }
@@ -2656,7 +2656,7 @@ gui_vtabsel_item_c::~gui_vtabsel_item_c()
 {
     if (const theme_rect_s *thr = themerect())
     {
-        int tl = textrect.calc_text_size(-1).x;
+        int tl = textrect.calc_text_size(-1, custom_tag_parser_delegate()).x;
         if (submnu) tl += thr->sis[SI_RIGHT].width();
         return ts::ivec2(thr->clientborder.lt.x + tl + thr->clientborder.rb.x, thr->sis[SI_LEFT].height());
     }
@@ -2667,7 +2667,7 @@ gui_vtabsel_item_c::~gui_vtabsel_item_c()
 {
     if (const theme_rect_s *thr = themerect())
     {
-        int tl = textrect.calc_text_size(-1).x;
+        int tl = textrect.calc_text_size(-1, custom_tag_parser_delegate()).x;
         if (submnu) tl += thr->sis[SI_RIGHT].width();
         return ts::ivec2(thr->clientborder.lt.x + tl + thr->clientborder.rb.x, thr->sis[SI_LEFT].height());
     }

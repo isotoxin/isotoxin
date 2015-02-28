@@ -127,21 +127,6 @@ HICON application_c::iso_gui_c::app_icon(bool for_tray)
             text.cut(rr, rr2-rr+4);
     }
 
-    text.replace_all(CONSTWSTR("<b><null=a"), CONSTWSTR("<null=a")); // link bold remove
-    for(int i = 0;;)
-    {
-        int kk = text.find_pos(i, CONSTWSTR("<null=d"));
-        if (kk >= 0)
-        {
-            int kk2 = text.find_pos(kk+7, '>');
-            if (kk2 > kk && kk2 + 5 <= text.get_length() && text.substr(kk2 + 1, kk2+5).equals(CONSTWSTR("</b>")))
-                text.cut(kk, kk2-kk+5);
-            i = kk;
-            continue;
-        }
-        break;
-    }
-
     text.replace_all(CONSTWSTR("<char=60>"), CONSTWSTR("\2"));
     text.replace_all(CONSTWSTR("<char=62>"), CONSTWSTR("\3"));
     text.replace_all(CONSTWSTR("<br>"), CONSTWSTR("\n"));
@@ -160,23 +145,24 @@ HICON application_c::iso_gui_c::app_icon(bool for_tray)
         text.replace(i,j-i+1, ts::fn_get_name<ts::wchar>(text.substr(i + t.l, j)) );
     }
 
-
     text_remove_tags(text);
 
     text.replace_all('\2', '<');
     text.replace_all('\3', '>');
 
+    text.replace_all(CONSTWSTR("\r\n"), CONSTWSTR("\n"));
+    text.replace_all(CONSTWSTR("\n"), CONSTWSTR("\r\n"));
 }
 
 /*virtual*/ ts::wsptr application_c::iso_gui_c::app_loclabel(loc_label_e ll)
 {
     switch (ll)
     {
-        case LL_CTXMENU_COPY: return TTT("Копировать",93);
-        case LL_CTXMENU_CUT: return TTT("Вырезать",94);
-        case LL_CTXMENU_PASTE: return TTT("Вставить",95);
-        case LL_CTXMENU_DELETE: return TTT("Удалить",96);
-        case LL_CTXMENU_SELALL: return TTT("Выделить всё",97);
+        case LL_CTXMENU_COPY: return TTT("Копировать",92);
+        case LL_CTXMENU_CUT: return TTT("Вырезать",93);
+        case LL_CTXMENU_PASTE: return TTT("Вставить",94);
+        case LL_CTXMENU_DELETE: return TTT("Удалить",95);
+        case LL_CTXMENU_SELALL: return TTT("Выделить всё",96);
         case LL_ABTT_CLOSE:
             if (cfg().collapse_beh() == 2)
             {

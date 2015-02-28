@@ -228,7 +228,7 @@ void text_rect_c::render_texture( rectangle_update_s * updr, fastdelegate::FastD
         update_rectangles(toffset, updr);
 }
 
-bool text_rect_c::set_text(const wstr_c &text_, bool do_parse_and_render_texture)
+bool text_rect_c::set_text(const wstr_c &text_, CUSTOM_TAG_PARSER ctp, bool do_parse_and_render_texture)
 {
     bool dirty = texture.ajust(size,false) | flags.is(F_DIRTY);
 
@@ -237,38 +237,38 @@ bool text_rect_c::set_text(const wstr_c &text_, bool do_parse_and_render_texture
         flags.set(F_DIRTY|F_INVALID_TEXTURE);
 		text = text_;
 		if (do_parse_and_render_texture && (*font)) 
-            parse_and_render_texture(nullptr); 
+            parse_and_render_texture(nullptr, ctp); 
         return true;
 	}
     return false;
 }
 
-void text_rect_c::parse_and_render_texture(rectangle_update_s * updr, bool do_render)
+void text_rect_c::parse_and_render_texture(rectangle_update_s * updr, CUSTOM_TAG_PARSER ctp, bool do_render)
 {
 	glyphs().clear();
 	int f = flags & (TO_WRAP_BREAK_WORD | TO_HCENTER | TO_LASTLINEADDH | TO_FORCE_SINGLELINE | TO_END_ELLIPSIS);
     flags.clear(F_INVALID_GLYPHS);
-	lastdrawsize = parse_text(text, size.x-ui_scale(margin_left)-ui_scale(margin_right), &glyphs(), default_color, (*font), f, size.y - ui_scale(margin_top));
+	lastdrawsize = parse_text(text, size.x-ui_scale(margin_left)-ui_scale(margin_right), ctp, &glyphs(), default_color, (*font), f, size.y - ui_scale(margin_top));
 	text_height = lastdrawsize.y + ui_scale(margin_top);
 	lastdrawsize.x += ui_scale(margin_left) + ui_scale(margin_right);
     lastdrawsize.y = text_height;
 	if (do_render) render_texture(updr);
 }
 
-ivec2 text_rect_c::calc_text_size(int maxwidth) const
+ivec2 text_rect_c::calc_text_size(int maxwidth, CUSTOM_TAG_PARSER ctp) const
 {
     if (!is_dirty() && (size.x == maxwidth || maxwidth < 0)) return lastdrawsize;
 
     int w = maxwidth; if (w < 0) w = 16384;
     int f = flags & (TO_WRAP_BREAK_WORD | TO_HCENTER | TO_LASTLINEADDH | TO_FORCE_SINGLELINE | TO_END_ELLIPSIS);
-    ts::ivec2 sz = parse_text(text, w-ui_scale(margin_left)-ui_scale(margin_right), nullptr, default_color, (*font), f, 0);
+    ts::ivec2 sz = parse_text(text, w-ui_scale(margin_left)-ui_scale(margin_right), ctp, nullptr, default_color, (*font), f, 0);
 
     return sz + ts::ivec2(ui_scale(margin_left) + ui_scale(margin_right), margin_top);
 }
 
-ivec2 text_rect_c::calc_text_size( const font_desc_c& font, const wstr_c&text, int maxwidth, uint flags ) const
+ivec2 text_rect_c::calc_text_size( const font_desc_c& font, const wstr_c&text, int maxwidth, uint flags, CUSTOM_TAG_PARSER ctp ) const
 {
-    return parse_text(text, maxwidth, nullptr, ARGB(0,0,0), font, flags, 0);
+    return parse_text(text, maxwidth, ctp, nullptr, ARGB(0,0,0), font, flags, 0);
 }
 
 } // namespace ts

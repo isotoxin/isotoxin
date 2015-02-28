@@ -362,11 +362,11 @@ struct leech_at_right : public autoparam_i
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
-struct leech_at_left : public autoparam_i
+struct leech_at_left_s : public autoparam_i
 {
     int space;
     guirect_c::sptr_t of;
-    leech_at_left(guirect_c *of, int space) :of(of), space(space)
+    leech_at_left_s(guirect_c *of, int space) :of(of), space(space)
     {
         of->leech(this);
     }

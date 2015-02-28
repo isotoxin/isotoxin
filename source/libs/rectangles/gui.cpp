@@ -435,7 +435,7 @@ ts::uint32 gui_c::gm_handler(gmsg<GM_ROOT_FOCUS>&p)
 
 ts::ivec2 gui_c::textsize( const ts::font_desc_c& font, const ts::wstr_c& text, int width_limit, int flags )
 {
-    return m_textrect.calc_text_size(font,text,width_limit < 0 ? 16384 : width_limit, flags);
+    return m_textrect.calc_text_size(font,text,width_limit < 0 ? 16384 : width_limit, flags, nullptr);
 }
 
 RID gui_c::get_free_rid()

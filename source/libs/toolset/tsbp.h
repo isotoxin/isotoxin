@@ -43,6 +43,17 @@ public:
 		for (element_s *e=first_element, *next; e; e=next) {next = e->next; TSDEL(e);}
 	}
 
+    bp_t& operator=(bp_t &&oth)
+    {
+        preserve_comments = oth.preserve_comments;
+        value = oth.value;
+        SWAP(double_value_cache, oth.double_value_cache);
+        SWAP(first_element, oth.first_element);
+        SWAP(last_element, oth.last_element);
+        elements = std::move(oth.elements);
+        return *this;
+    }
+
     bool value_not_specified() const
     {
         return double_value_cache == DBL_MAX;

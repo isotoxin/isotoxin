@@ -245,6 +245,14 @@ public:
 
 		used = 0;
 	}
+    hashmap_t &operator=(hashmap_t &&hm)
+    {
+        SWAP(table, hm.table);
+        SWAP(tableSize, hm.tableSize);
+        SWAP(used, hm.used);
+
+        return *this;
+    }
 
 	hashmap_t &operator=(const hashmap_t &hm)
 	{

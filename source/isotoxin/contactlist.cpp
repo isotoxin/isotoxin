@@ -321,7 +321,7 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
 
         b_file.set_handler(DELEGATE(this, send_file), nullptr);
         minsz = b_file.get_min_size();
-        b_file.leech(TSNEW(leech_at_left, &b_call, 2));
+        b_file.leech(TSNEW(leech_at_left_s, &b_call, 2));
         MODIFY(b_file).visible(true);
         if (0 == (features & PF_SEND_FILE))
         {

@@ -4,8 +4,7 @@
 */
 #pragma once
 
-#pragma pack (push)
-#pragma pack (1)
+#pragma pack (push, 1)
 
 #pragma warning (disable:4100) //  unreferenced formal parameter
 //#pragma warning (disable:4668) // 'MACRONAME' is not defined as a preprocessor macro, replacing with '0' for '#if/#elif'

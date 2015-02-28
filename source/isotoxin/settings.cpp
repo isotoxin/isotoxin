@@ -514,7 +514,7 @@ void dialog_settings_c::create_network_props_ctls( int id )
 
     check_item_s chis[] = 
     {
-        check_item_s( TTT("Соединение с сетью при запуске",99), 1 )
+        check_item_s( TTT("Соединение с сетью при запуске",204), 1 )
     };
 
     check( ARRAY_WRAPPER(chis), DELEGATE(this, network_2), 0 != (row->other.options & active_protocol_data_s::O_AUTOCONNECT) ? 1 : 0 );

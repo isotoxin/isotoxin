@@ -257,7 +257,7 @@ bool leech_at_right::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
     return false;
 }
 
-bool leech_at_left::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+bool leech_at_left_s::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
     if (!ASSERT(owner)) return false;
     if (!of) return false;
