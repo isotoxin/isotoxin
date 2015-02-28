@@ -659,21 +659,6 @@ public:
     }
     //////////////////////////////////////////////////////////////////////////////////////////////
 
-
-
-
-
-    void save_to_file(const asptr &name, int disp = 0) const
-    {
-        HANDLE f = CreateFileA(tmp_str_c(name), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (f != INVALID_HANDLE_VALUE)
-        {
-            DWORD w;
-            WriteFile(f, core() + disp, core.size() - disp, &w, nullptr);
-            CloseHandle(f);
-        }
-    }
-
     void save_to_file(const wsptr &name, int disp = 0) const
     {
         HANDLE f = CreateFileW(tmp_wstr_c(name), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -690,29 +675,6 @@ public:
         set_size(0, false);
 
         HANDLE hand = CreateFileW(tmp_wstr_c(fn), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-        if (hand != INVALID_HANDLE_VALUE)
-        {
-            aint size = GetFileSize(hand, nullptr);
-            aint m_size = size; if (text) m_size += 2;
-            set_size(m_size, false);
-            DWORD r;
-            ReadFile(hand, core(), size, &r, nullptr);
-            CloseHandle(hand);
-            if (text && ASSERT(core.writable()))
-            {
-                core()[size] = 0;
-                core()[size + 1] = 0;
-            }
-            return ((aint)r == size);
-        }
-        return false;
-    }
-
-    bool    load_from_disk_file(const asptr &fn, bool text = false)
-    {
-        set_size(0, false);
-
-        HANDLE hand = CreateFileA(tmp_str_c(fn), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
         if (hand != INVALID_HANDLE_VALUE)
         {
             aint size = GetFileSize(hand, nullptr);
@@ -755,7 +717,7 @@ public:
         return load_from_file(0, fn, 0);
     }
 
-    bool    load_from_text_file(const asptr &fn)
+    bool    load_from_text_file(const wsptr &fn)
     {
         bool log = load_from_file(0, fn, 1);
         if (ASSERT(core.writable()))

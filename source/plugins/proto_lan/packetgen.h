@@ -13,6 +13,7 @@
 */
 
 #define LAN_PROTOCOL_VERSION 1 // only clients with same version can interact
+#define LAN_SAVE_VERSION 1
 
 #define SIZE_PACKET_HEADER 4
 #define SIZE_MAX_SEND 499

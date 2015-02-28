@@ -486,13 +486,7 @@ void gui_contact_item_c::update_text()
 
         } else if (contact->is_multicontact())
         {
-            int live = 0;
-            int count = 0;
-            int rej = 0;
-            int invsend = 0;
-            int invrcv = 0;
-            int wait = 0;
-            int deactivated = 0;
+            int live = 0, count = 0, rej = 0, invsend = 0, invrcv = 0, wait = 0, deactivated = 0;
             contact->subiterate( [&](contact_c *c) {
                 ++count;
                 if (c->get_state() != CS_ROTTEN) ++live;
@@ -675,19 +669,19 @@ void gui_contact_item_c::generate_protocols()
                 {
                     protocols.append(CONSTWSTR("<nl><shadow>")).append(maketag_color<ts::wchar>(get_default_text_color(2)));
                     if (def == c) protocols.append(CONSTWSTR("+"));
-                    protocols.append(row->other.tag);
+                    protocols.append(row->other.name);
                     protocols.append(CONSTWSTR("</color></shadow> "));
                 } else
                 {
                     protocols.append(CONSTWSTR("<nl>")).append(maketag_color<ts::wchar>(get_default_text_color(3)));
                     if (def == c) protocols.append(CONSTWSTR("+"));
-                    protocols.append(row->other.tag);
+                    protocols.append(row->other.name);
                     protocols.append(CONSTWSTR("</color> "));
                 }
             } else
             {
                 protocols.append(CONSTWSTR("<nl><s> ")).append( maketag_color<ts::wchar>( get_default_text_color(4) ) );
-                protocols.append( row->other.tag );
+                protocols.append( row->other.name );
                 protocols.append(CONSTWSTR("</color> </s>"));
             }
         }
@@ -699,7 +693,7 @@ void gui_contact_item_c::draw_online_state_text(draw_data_s &dd)
 {
     text_draw_params_s tdp;
 
-    ts::flags32_s f; f.setup(ts::TO_VCENTER);
+    ts::flags32_s f; f.setup(ts::TO_VCENTER|ts::TO_LINE_END_ELLIPSIS);
     tdp.textoptions = &f;
 
     if (protocols.is_empty())

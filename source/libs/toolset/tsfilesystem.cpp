@@ -6,15 +6,6 @@
 
 namespace ts
 {
-    static INLINE DWORD GetFileAttributes__(const asptr &f)
-    {
-        return GetFileAttributesA(str_c(f));
-    }
-
-    static INLINE DWORD GetFileAttributes__(const wsptr &f)
-    {
-        return GetFileAttributesW(wstr_c(f));
-    }
 	static INLINE DWORD GetCurrentDirectoryX( __in DWORD nBufferLength, LPWSTR lpBuffer )
 	{
 		return GetCurrentDirectoryW( nBufferLength, lpBuffer );
@@ -662,41 +653,37 @@ namespace ts
     template bool TSCALL fn_mask_match( const wsptr &, const wsptr & );
 
 
-    template<typename TCHARACTER> bool TSCALL is_file_exists(const sptr<TCHARACTER> &fname)
+    bool TSCALL is_file_exists(const wsptr &fname)
     {
-        return INVALID_FILE_ATTRIBUTES != GetFileAttributes__(fname);
+        return INVALID_FILE_ATTRIBUTES != GetFileAttributesW(tmp_wstr_c(fname));
     }
-    template bool TSCALL is_file_exists(const asptr &fname);
-    template bool TSCALL is_file_exists(const wsptr &fname);
 
-	template<typename TCHARACTER> bool    TSCALL is_file_exists(const sptr<TCHARACTER> &iroot, const sptr<TCHARACTER> &fname)
+	bool    TSCALL is_file_exists(const wsptr &iroot, const wsptr &fname)
 	{
-		str_t<TCHARACTER> path(iroot);
+		wstr_c path(iroot);
 		if (path.is_empty()) return false;
-		TCHARACTER lch = path.get_last_char();
+		wchar lch = path.get_last_char();
 		if (lch != '\\' && lch != '/') path.append_char('\\');
 
-		strings_t<TCHARACTER> sa;
+		wstrings_c sa;
 
-        str_t<TCHARACTER> new_path(path);
+        wstr_c new_path(path);
         aint lclip = new_path.get_length();
 
 		if (find_files(new_path.set_length(lclip).append(fname), sa, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY)) return true;
-		if (find_files(new_path.set_length(lclip).append(CONSTSTR(TCHARACTER, "*.*")), sa, FILE_ATTRIBUTE_DIRECTORY))
+		if (find_files(new_path.set_length(lclip).append(CONSTWSTR("*.*")), sa, FILE_ATTRIBUTE_DIRECTORY))
 		{
 			for (const auto & dir : sa)
 			{
-				if (dir == CONSTSTR(TCHARACTER, ".") || dir == CONSTSTR(TCHARACTER, "..")) continue;
+				if (dir == CONSTWSTR(".") || dir == CONSTWSTR("..")) continue;
 				new_path.set_length(lclip).append(dir);
-				if (is_file_exists<TCHARACTER>(new_path, fname)) return true;
+				if (is_file_exists(new_path, fname)) return true;
 			}
 		}
 		return false;
 	}
-    template bool    TSCALL is_file_exists(const asptr &iroot, const asptr &fname);
-    template bool    TSCALL is_file_exists(const wsptr &iroot, const wsptr &fname);
 
-	wstr_c  TSCALL get_exe_full_name(void)
+	wstr_c  TSCALL get_exe_full_name()
 	{
 		wstr_c wd;
 		wd.set_length(2048 - 8);
@@ -831,10 +818,8 @@ namespace ts
 		return buffer;
 	}
 
-#ifdef _ALLOW_SYSTEM_DIALOGS_
-	wstr_c   TSCALL get_load_filename_dialog(const wchar *iroot, const wchar *name, const wchar *filt, const wchar *defext, const wchar *title)
+	wstr_c   TSCALL get_load_filename_dialog(const wsptr &iroot, const wsptr &name, const wsptr &filt, const wchar *defext, const wchar *title)
 	{
-		++ts::m_nospy;
 		wchar cdp[ MAX_PATH ];
 		GetCurrentDirectoryW(MAX_PATH,cdp);
 
@@ -844,15 +829,15 @@ namespace ts
 		wstr_c root(get_full_path<wchar>(iroot));
 
 		o.lStructSize=sizeof(o);
-		o.hwndOwner=ts::m_main_window;
-		o.hInstance=ts::m_instance;
+        o.hwndOwner = g_main_window;
+        o.hInstance = GetModuleHandle(nullptr);
 
 		wstr_c filter(filt);
 		filter.replace_all('/',0);
 
 		wstr_c buffer;
 		buffer.set_length(2048);
-		buffer = name;
+		buffer.set(name);
 
 		o.lpstrTitle = title;
 		o.lpstrFile = buffer.str();
@@ -866,17 +851,14 @@ namespace ts
 		if(!GetOpenFileNameW(&o))
 		{
 			SetCurrentDirectoryW(cdp);
-			--ts::m_nospy;
 			return wstr_c();
 		}
 
 
 		SetCurrentDirectoryW(cdp);
-		buffer.set_length();
-		--ts::m_nospy;
+		buffer.set_length( CHARz_len(buffer.cstr()) );
 		return buffer;
 	}
-#endif
 
 
 	bool    TSCALL get_load_filename_dialog(wstrings_c &files, const wsptr &iroot, const wsptr& name, const wsptr &filt, const wchar *defext, const wchar *title)
@@ -978,44 +960,5 @@ namespace ts
 
 		return bResult;
 	};
-
-	bool    TSCALL find_files(const asptr &wildcard, astrings_c &files, const DWORD dwFileAttributes, const DWORD dwSkipAttributes)
-	{
-		WIN32_FIND_DATAA find_data;
-		HANDLE           fh = FindFirstFileA(tmp_str_c(wildcard), &find_data);
-		bool             bResult = false;
-
-		while (fh != INVALID_HANDLE_VALUE)
-		{
-			if ((find_data.dwFileAttributes & dwSkipAttributes) == 0)
-			{
-				if (find_data.dwFileAttributes & dwFileAttributes)
-				{
-					files.add(find_data.cFileName);
-					bResult = true;
-				}
-			}
-			if (!FindNextFileA(fh, &find_data)) break;;
-		}
-
-		if (fh != INVALID_HANDLE_VALUE) FindClose( fh );
-
-		return bResult;
-	};
-
-    /*
-	file_buffer_c::file_buffer_c(size_t sz, int align)
-	{
-		align--;
-		uintptr_t p = (uintptr_t)MM_ALLOC(align + sizeof(Core) + sz);
-		if (!p) ERROR("Not enough system memory!");
-		core = (Core*)((p + align + sizeof(Core)) & ~align) - 1;
-		core->refCount = 1;
-		core->size = sz;
-		core->mptr = (void*)p;
-		core->data = (char*)(core + 1);
-	}
-    */
-
 
 } //namespace ts

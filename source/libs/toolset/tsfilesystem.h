@@ -35,19 +35,15 @@ void    TSCALL copy_dir(const wstr_c &path_from, const wstr_c &path_clone);
 
 bool    TSCALL dir_present(const wstr_c &path, bool path_already_nice = false);
 
-template<typename TCHARACTER> bool TSCALL is_file_exists(const sptr<TCHARACTER> &fname);
-template<typename TCHARACTER> bool TSCALL is_file_exists(const sptr<TCHARACTER> &iroot, const sptr<TCHARACTER> &fname);
+bool TSCALL is_file_exists(const wsptr &fname);
+bool TSCALL is_file_exists(const wsptr &iroot, const wsptr &fname);
 
-#ifdef _ALLOW_SYSTEM_DIALOGS_
-wstr_c   TSCALL get_load_filename_dialog(const wchar *iroot, const wchar *name, const wchar *filt, const wchar *defext, const wchar *title);
-bool    TSCALL get_load_filename_dialog(strings_c<wchar> &files, const wchar *iroot, const wchar *name, const wchar *filt, const wchar *defext, const wchar *title);
-#endif
+wstr_c   TSCALL get_load_filename_dialog(const wsptr &iroot, const wsptr &name, const wsptr &filt, const wchar *defext, const wchar *title);
 bool    TSCALL get_load_filename_dialog(wstrings_c &files, const wsptr &iroot, const wsptr& name, const wsptr &filt, const wchar *defext, const wchar *title);
 wstr_c   TSCALL get_save_directory_dialog(const wsptr &root, const wsptr &title, const wsptr &selectpath = wsptr(), bool nonewfolder = false);
 wstr_c   TSCALL get_save_filename_dialog(const wsptr &iroot, const wsptr &name, const wsptr &filt, const wchar *defext, const wchar *title);
 
 bool    TSCALL find_files(const wsptr &wildcard, wstrings_c &files, const DWORD dwFileAttributes, const DWORD dwSkipAttributes = 0);
-bool    TSCALL find_files(const asptr &wildcard, astrings_c &files, const DWORD dwFileAttributes, const DWORD dwSkipAttributes = 0);
 
 template<typename TCHARACTER> void TSCALL parse_env(str_t<TCHARACTER> &envstring);
 

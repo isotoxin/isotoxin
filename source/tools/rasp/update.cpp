@@ -65,7 +65,7 @@ int proc_upd(const ts::wstrings_c & pars)
 
     if (curl) curl_easy_cleanup(curl);
 
-    d.save_to_file("updateresult.bin");
+    d.save_to_file(L"updateresult.bin");
 
     return 0;
 }
@@ -73,16 +73,16 @@ int proc_upd(const ts::wstrings_c & pars)
 int proc_sign(const ts::wstrings_c & pars)
 {
     if (pars.size() < 3) return 0;
-    ts::str_c arch = ts::simplify_path(ts::str_c(pars.get(1)));
-    ts::str_c proc = ts::simplify_path(ts::str_c(pars.get(2)));
+    ts::wstr_c arch = ts::simplify_path(pars.get(1));
+    ts::wstr_c proc = ts::simplify_path(pars.get(2));
 
     if (!is_file_exists(arch.as_sptr()))
     {
-        Print(FOREGROUND_RED, "arch file not found: %s\n", arch.cstr()); return 0;
+        Print(FOREGROUND_RED, "arch file not found: %s\n", to_str(arch).cstr()); return 0;
     }
     if (!is_file_exists(proc.as_sptr()))
     {
-        Print(FOREGROUND_RED, "proc file not found: %s\n", proc.cstr()); return 0;
+        Print(FOREGROUND_RED, "proc file not found: %s\n", to_str(proc).cstr()); return 0;
     }
     ts::buf_c b; b.load_from_disk_file(arch);
     int archlen = b.size();
@@ -98,7 +98,7 @@ int proc_sign(const ts::wstrings_c & pars)
         return ts::fn_join(procpath, p);
     };
 
-    b.load_from_disk_file( pa(bp.get_string(CONSTASTR("ver"))) );
+    b.load_from_disk_file( to_wstr(pa(bp.get_string(CONSTASTR("ver")))) );
     ts::str_c ver = b.cstr();
     ver.replace_all('/','.').trim();
 
@@ -115,7 +115,7 @@ int proc_sign(const ts::wstrings_c & pars)
     unsigned char pk[crypto_sign_PUBLICKEYBYTES];
     unsigned char sk[crypto_sign_SECRETKEYBYTES];
     b.clear();
-    b.load_from_disk_file( pa(bp.get_string(CONSTASTR("sk"))) );
+    b.load_from_disk_file( to_wstr(pa(bp.get_string(CONSTASTR("sk")))) );
     if (b.size() != crypto_sign_SECRETKEYBYTES)
     {
         rebuild:
@@ -138,7 +138,7 @@ int proc_sign(const ts::wstrings_c & pars)
         memcpy(sk, b.data(), crypto_sign_SECRETKEYBYTES);
         crypto_sign_ed25519_sk_to_pk(pk, sk);
 
-        b.load_from_disk_file( pa(bp.get_string(CONSTASTR("pk"))) );
+        b.load_from_disk_file( to_wstr(pa(bp.get_string(CONSTASTR("pk")))) );
         ts::token<char> t(b.cstr(), ',');
         int n = 0;
         for(;t; ++t, ++n)

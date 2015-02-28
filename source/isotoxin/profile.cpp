@@ -108,7 +108,7 @@ void default_rows<active_protocol_s>::setup_default(int index, active_protocol_s
     {
         case 0:
             d.tag = CONSTASTR("tox");
-            d.name = TTT("Сеть Tox",55);
+            d.name = CONSTWSTR("Tox");
             d.user_name.clear();
             d.user_statusmsg.clear();
             d.config.clear();
@@ -116,7 +116,7 @@ void default_rows<active_protocol_s>::setup_default(int index, active_protocol_s
             return;
         case 1:
             d.tag = CONSTASTR("lan");
-            d.name = TTT("Локальная сеть",56);
+            d.name = CONSTWSTR("Lan");
             d.user_name.clear();
             d.user_statusmsg.clear();
             d.config.clear();

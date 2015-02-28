@@ -194,7 +194,7 @@ struct text_parser_s
 	tbuf_t<TSCOLOR> outline_stack;
 	tbuf_t<int> underline_stack;
 	int hyphenation_tag_nesting_level;
-	int line_len, last_line_descender;
+	int line_width, last_line_descender;
 	ivec2 pen;
 	tbuf_t<meta_glyph_s> last_line; //метаглифы последней строки
 	int cur_max_line_len;
@@ -208,7 +208,7 @@ struct text_parser_s
     int rite_rite = 0; // индекс в массиве глифов для блока в <r></r> - выровнять этот кусок вправо
     int addhtags = 0; // количество тэгов, увеличивающих высоту строки
 
-    bool first_char_in_paragraph, was_inword_break;
+    bool first_char_in_paragraph, was_inword_break, waiting_for_linebreak;
 
     text_parser_s() {}
 
@@ -251,20 +251,20 @@ struct text_parser_s
             gi.outline_index = 0;
         }
 
-		line_len = 0;//текущая длина строки в пикселях (используется для переноса слов)
-		//int H = 0;//высота строки (инициализируется нулем, т.к. непонятно чем её инициализировать - в начале строки может идти тег изменения шрифта)
-		pen = ivec2(0,0);//положение "пера", реально оно выше на величину H, но H не известно пока не сформировалась строка целиком
+		line_width = 0; // current line width in pixels
+		pen = ivec2(0,0); // pen position (real pen position is higher with H pixels, but H is unknown before line completely constructed)
         prev_line_dim_glyph_index = -1;
 		cur_max_line_len = max_line_length;
 		first_char_in_paragraph = true;
 		was_inword_break = false;
+        waiting_for_linebreak = false;
 		last_line_descender = maxW = 0;
 
         rite_rite = 0;
         addhtags = 0;
 	}
 
-	void add_indent(int chari)//добавляет абзацный отступ
+	void add_indent(int chari)
 	{
 		paragraph_s &paragraph = paragraphs_stack.last();
 		if (paragraph.indention > 0)
@@ -273,7 +273,7 @@ struct text_parser_s
 			mg.underlined = 0;//это спец. признак indent-а, за счет которого под ним не будет рисоваться линия подчеркивания
 			mg.glyph = &(*fonts_stack.last())[L' '];
 			mg.advance = paragraph.indention;
-			line_len += mg.advance;
+			line_width += mg.advance;
 		}
 	}
 
@@ -283,12 +283,11 @@ struct text_parser_s
 		cur_max_line_len = max_line_length;
 		if (pen.y <  leftSL.bottom) cur_max_line_len -= (pen.x = leftSL.width); else pen.x = 0;
 		if (pen.y < rightSL.bottom) cur_max_line_len -= rightSL.width;
-		line_len = 0;
+		line_width = 0;
 	}
 
-	void end_line(bool nextLn = true, bool acceptaddhnow = false) //прерывает текущую строку
+	void end_line(bool nextLn = true, bool acceptaddhnow = false) // break current line
 	{
-		//Считаем высоту строки
 		int H, spaces, W, WR;
 		pen.y += calc_HSW(H, spaces, W, WR, last_line.count());
 
@@ -354,16 +353,16 @@ struct text_parser_s
 		first_char_in_paragraph = true;
 	}
 
-	int calc_HSW(int &H, int &spaces, int &W, int &WR, int lineSize)
+	int calc_HSW(int &H, int &spaces, int &W, int &WR, int line_size)
 	{
         ivec2 *curaddhs = addhtags ? (ivec2 *)_alloca(addhtags * sizeof(ivec2)) : nullptr;
         int curaddhs_n = 0;
 
 		H = 0; spaces = 0; W = 0; WR = 0;
-		if (lineSize == 0) return 0;//чтобы не портить значение last_line_descender из-за последней пустой строки (актуально для singleLine)
+		if (line_size == 0) return 0;//чтобы не портить значение last_line_descender из-за последней пустой строки (актуально для singleLine)
 		last_line_descender = 0;
         int addH = 0;
-		for (int j = 0; j < lineSize; j++)
+		for (int j = 0; j < line_size; j++)
 		{
 			meta_glyph_s &mg = last_line.get(j);
 			H = tmax(H, pen.y ? mg.font->height : mg.font->ascender);//1. считаем max, т.к. в строке может меняться шрифт; 2. берется не высота символа, а именно ascender, чтобы высота строки не могла быть меньше этого значения, иначе строка из прописных символов нарисуется выше чем надо
@@ -444,12 +443,23 @@ struct text_parser_s
 
 		if (tag == CONSTWSTR("br"))
 		{
-			if (last_line.count() > 0) end_line();
-			else next_line(font.height);//если строка пустая, то добавляем высоту строки для текущего шрифта
-			pen.y += ui_scale(tagbody.as_int());
+            if (waiting_for_linebreak)
+            {
+                waiting_for_linebreak = false;
+            } else
+            {
+                if (last_line.count() > 0) end_line();
+                else next_line(font.height); // if current line is empty, just add current font height
+                pen.y += ui_scale(tagbody.as_int());
+            }
+
 		} else if (tag == CONSTWSTR("nl")) // next line, but only if not first tag
         {
-            if (last_line.count() > 0)
+            if (waiting_for_linebreak)
+            {
+                waiting_for_linebreak = false;
+            }
+            else if (last_line.count() > 0)
             {
                 end_line();
                 pen.y += ui_scale(tagbody.as_int());
@@ -504,6 +514,8 @@ struct text_parser_s
 			if (last_line.count() > 0 && tag == CONSTWSTR("p")) end_line();
 			else ;//если строка пустая, то перо не смещаем вниз, в этом отличие тега <p> от <br>, ведь часто <p> стоит в начале строки и новая строка в этом случае не нужна
 
+            waiting_for_linebreak = false;
+
             ASSERT(rite_rite == 0);
 
             token<wchar> t( tagbody, L',' ); //align,indent,lineSpacing
@@ -529,6 +541,7 @@ struct text_parser_s
 		{
 			if (last_line.count() > 0) end_line(false);
 			else ;//если строка пустая, то перо не смещаем вниз, в этом отличие тега <p> от <br>, ведь часто <p> стоит в начале строки и новая строка в этом случае не нужна
+            waiting_for_linebreak = false;
 
             ASSERT(rite_rite == 0);
 
@@ -546,17 +559,17 @@ struct text_parser_s
 			meta_glyph_s &mg = add_meta_glyph(tag.get_char(0) == 's' ? meta_glyph_s::SPACE : meta_glyph_s::CHAR, chari); // метаглиф пробела
 			mg.glyph = &font[L' '];
 			mg.advance = tagbody.is_empty() ? mg.glyph->advance : (tagbody.get_last_char() == L'%' ? tagbody.as_int() * mg.glyph->advance / 100 : ui_scale(tagbody.as_int()));
-			line_len += mg.advance;
+			line_width += mg.advance;
 		}
 		else if (tag == CONSTWSTR("tab"))
 		{
 			int pos = ui_scale(tagbody.as_int());
-			if (pos > line_len)
+			if (pos > line_width)
 			{
 				meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::CHAR, chari);
 				mg.glyph = &font[L' '];
-				mg.advance = pos - line_len;
-				line_len += mg.advance;
+				mg.advance = pos - line_width;
+				line_width += mg.advance;
 			}
 		}
 		else if (tag == CONSTWSTR("b"))
@@ -589,6 +602,7 @@ struct text_parser_s
 		else if (tag == CONSTWSTR("hr"))
 		{
 			if (last_line.count() > 0) end_line();
+            waiting_for_linebreak = false;
 
             token<wchar> t( tagbody, L',' ); //vertindent[,sideindent,[thickness]]
 			
@@ -624,12 +638,13 @@ struct text_parser_s
                     ++addhtags;
             }
 			mg.advance = mg.image->width;
-			line_len += mg.advance;
+			line_width += mg.advance;
 		}
 		else if (tag == CONSTWSTR("imgl") || tag == CONSTWSTR("imgr"))
 		{
 			side_text_limit &sl = tag == CONSTWSTR("imgl") ? leftSL : rightSL;
 			if (last_line.count() > 0) end_line();//переход на новую строку, если нужно
+            waiting_for_linebreak = false;
 			if (pen.y < sl.bottom) pen.y = sl.bottom;//если сейчас текст уже обтекается картинкой, то перемещаем перо на конец картинки, т.к. область обтекания более чем из одной картинки с одной стороны не поддерживается
 			// Теперь добавляем картинку с нужной стороны
 			scaled_image_s *si = scaled_image_s::load(tagbody, ivec2(ui_scale(100)));
@@ -701,7 +716,7 @@ struct text_parser_s
             if (mg.image_offset_Y > 0)
                 ++addhtags;
             mg.image = nullptr;
-            line_len += mg.advance;
+            line_width += mg.advance;
         } else if (tag == CONSTWSTR("."))//это служебный тег разделитель для удобства локализации - скрываем его
 			;
 		else
@@ -712,10 +727,12 @@ struct text_parser_s
 
     void addchar(font_c &font, wchar ch, int chari)
     {
+        if (waiting_for_linebreak) return;
+
         meta_glyph_s &mg = add_meta_glyph(ch == L' ' ? meta_glyph_s::SPACE : meta_glyph_s::CHAR, chari);
         mg.glyph = &font[mg.ch = ch];
         mg.advance = mg.glyph->advance;
-        line_len += mg.advance;
+        line_width += mg.advance;
         //Kerning processing
         meta_glyph_s *prev;
         int cnt = last_line.count();
@@ -723,7 +740,7 @@ struct text_parser_s
         {
             int k = font.kerning_ci(prev->glyph->char_index, mg.glyph->char_index);
             prev->advance += k;//корректируем ширину пред. символа; по хорошему нужно сдвигать "перо", но так проще и не нужно вводить новые переменные
-            line_len += k;
+            line_width += k;
         }
     }
 
@@ -737,8 +754,12 @@ struct text_parser_s
 
 			if (ch == L'\n')
 			{
-				if (last_line.count() > 0) end_line();
-				else next_line(font.height);// if empty line, just add height of current font
+                if (waiting_for_linebreak)
+                    waiting_for_linebreak = false;
+                {
+                    if (last_line.count() > 0) end_line();
+                    else next_line(font.height);// if empty line, just add height of current font
+                }
 			} else if (ch != L'<') // just simple symbol
 			{
             add_char:
@@ -760,29 +781,45 @@ struct text_parser_s
 				cur_text_index = i;
 			}
 
-			//Перенос слов
-			if (line_len > cur_max_line_len && last_line.count() > 1)//обязательно проверяем - вдруг это первый символ строки, т.к. ситуация когда символ не помещается во всей строке не может быть корректно обработана
+			// wrap words
+			if (line_width > cur_max_line_len && last_line.count() > 1)//обязательно проверяем - вдруг это первый символ строки, т.к. ситуация когда символ не помещается во всей строке не может быть корректно обработана
 			{
-				int j = last_line.count() - 1, lineSize;
+				int j = last_line.count() - 1, line_size;
 
 				if (FLAG(flags,TO_FORCE_SINGLELINE) || (FLAG(flags,TO_END_ELLIPSIS) && pen.y + fonts_stack.last()->height * 3 / 2 >= boundy))
 				{
 					glyph_s &dot_glyph = (*fonts_stack.last())[L'.'];
-					line_len += dot_glyph.advance * 3;//advance of ...
+					line_width += dot_glyph.advance * 3; // advance of ...
 
-					for (; j > 0; j--) if ((line_len -= last_line.get(j).advance) <= cur_max_line_len) break;
+					for (; j > 0; j--) if ((line_width -= last_line.get(j).advance) <= cur_max_line_len) break;
 					last_line.set_count(j);
 
 					for (int i=0; i<3; i++)
 					{
-						meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::CHAR, cur_text_index);//добавляем метаглиф
+						meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::CHAR, cur_text_index); // append dot
 						mg.glyph = &dot_glyph;
 						mg.advance = mg.glyph->advance;
 					}
 
 					break;//early exit
-				}
-				else
+				} else if (FLAG(flags,TO_LINE_END_ELLIPSIS))
+                {
+                    glyph_s &dot_glyph = (*fonts_stack.last())[L'.'];
+                    line_width += dot_glyph.advance * 3; // advance of ...
+
+                    for (; j > 0; j--) if ((line_width -= last_line.get(j).advance) <= cur_max_line_len) break;
+                    last_line.set_count(j);
+
+                    for (int i = 0; i < 3; i++)
+                    {
+                        meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::CHAR, cur_text_index); // append dot
+                        mg.glyph = &dot_glyph;
+                        mg.advance = mg.glyph->advance;
+                    }
+                    line_size = last_line.count();
+                    waiting_for_linebreak = true;
+
+                } else
 				{
 					if (FLAG(flags,TO_WRAP_BREAK_WORD)) goto inlineBreak;
 
@@ -844,7 +881,7 @@ struct text_parser_s
 							 || (DWORD&)(charclass[i]) == MAKEFOURCC('s','g','g','g'))
 							 charclass[i+=1] = '-';
 
-						int newLineLen = line_len;
+						int newLineLen = line_width;
 						glyph_s &hyphenGlyph = (*fonts_stack.last())[L'-'];
 						newLineLen += hyphenGlyph.advance;
 
@@ -852,11 +889,11 @@ struct text_parser_s
 						for (int i=n-1; i>2; i--)//не разрешаем переносить менее 3-х букв с начала и конца слова
 							if ((newLineLen -= last_line.get(i+start).advance) <= cur_max_line_len && charclass[i-1] == '-' && i < nn-2)
 							{
-								lineSize = start + i;
-								line_len = newLineLen;
+								line_size = start + i;
+								line_width = newLineLen;
 								if (last_line.get(i + start - 1).ch != '-')
 								{
-									lineSize++;
+									line_size++;
 									meta_glyph_s mg = add_meta_glyph(meta_glyph_s::CHAR, cur_text_index);//добавляем метаглиф
 									mg.glyph = &hyphenGlyph;
 									mg.advance = mg.glyph->advance;
@@ -871,25 +908,23 @@ skipHyphenate:;
 					if (j >= rite_rite)//Пробел был найден - слово не единственное => формируем новую строку
 					{
 						last_line.remove_slow(j);//удаляем пробел (чтобы он не участвовал в подсчете пробелов ниже, а также чтобы не добавлялся соответствующий глиф - его может быть видно при подчеркивании)
-						lineSize = j;//строку прерываем на символе, идущем сразу после пробела
+						line_size = j;//строку прерываем на символе, идущем сразу после пробела
 					}
 					else//Также формируем новую строку, но уже не по последнему пробелу, а по части слова, вмещающегося в строку
 					{
 inlineBreak:
-						lineSize = last_line.count()-1;//длину строки ограничиваем до текущего символа (невключительно)
+						line_size = last_line.count()-1;//длину строки ограничиваем до текущего символа (невключительно)
 						was_inword_break = true;
 					}
 end:;
 				}
 
-				//Считаем высоту строки, а также кол-во пробелов
 				int H, spaces, W, WR;
-                pen.y += calc_HSW(H, spaces, W, WR, lineSize);
+                pen.y += calc_HSW(H, spaces, W, WR, line_size); // calculate line height and spaces count
 
-				//Добавляем символы в массив glyphs с учетом выравнивания
 				if (glyphs)
 				{
-					ivec2 offset(0, H);//смещение, добавляемое к каждому символу перед помещением в массив
+					ivec2 offset(0, H); // offset for every symbol before it put to glyphs array
 
                     int lineW = W;
 					if (paragraph.align == paragraph_s::ARIGHT) offset.x = cur_max_line_len - W - WR;
@@ -910,7 +945,7 @@ end:;
 
 					int spaceIndex = 0, offX = 0;//эти две переменные нужны только для AJUSTIFY
                     int oldpenx = pen.x;
-					for (j = rite_rite; j < lineSize; j++)
+					for (j = rite_rite; j < line_size; j++)
 					{
                         const meta_glyph_s &mg = last_line.get(j);
 						int add_underline_len = 0;
@@ -954,9 +989,9 @@ end:;
                     rite_rite = 0;
 
 				// go next line
-				last_line.remove_slow(0, lineSize);
+				last_line.remove_slow(0, line_size);
 				next_line(H);
-				for (j=0; j<last_line.count(); j++) line_len += last_line.get(j).advance;
+				for (j=0; j<last_line.count(); j++) line_width += last_line.get(j).advance;
 			}
 		}
     }

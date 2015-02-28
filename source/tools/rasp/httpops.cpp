@@ -89,7 +89,7 @@ struct context_s
         if (!fns.is_empty())
         {
             podstava(fns);
-            rslt.save_to_file(fns);
+            rslt.save_to_file(to_wstr(fns));
         }
 
         str_c stor = bp->get_string(CONSTASTR("store"));
@@ -101,10 +101,10 @@ struct context_s
 int proc_http(const wstrings_c & pars)
 {
     if (pars.size() < 2) return 0;
-    str_c nodesf = simplify_path(str_c(pars.get(1)));
+    wstr_c nodesf = simplify_path(pars.get(1));
     if (!is_file_exists(nodesf.as_sptr()))
     {
-        Print(FOREGROUND_RED, "command file not found: %s\n", nodesf.cstr()); return 0;
+        Print(FOREGROUND_RED, "command file not found: %s\n", to_str(nodesf).cstr()); return 0;
     }
     context_s ctx;
     buf_c rslt;

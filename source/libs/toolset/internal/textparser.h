@@ -11,13 +11,14 @@ namespace ts
 
 	enum text_options_e
 	{
-		TO_HCENTER          = SETBIT(NUMGEN_NEXT(dopb)),
-		TO_VCENTER          = SETBIT(NUMGEN_NEXT(dopb)),
-		TO_MULTILINE        = SETBIT(NUMGEN_NEXT(dopb)),
-        TO_FORCE_SINGLELINE = SETBIT(NUMGEN_NEXT(dopb)),
-		TO_END_ELLIPSIS     = SETBIT(NUMGEN_NEXT(dopb)),// like SINGLELINE, but also works for multiline text
-		TO_WRAP_BREAK_WORD  = SETBIT(NUMGEN_NEXT(dopb)),// wrap line by any symbol, not just by space
-        TO_LASTLINEADDH     = SETBIT(NUMGEN_NEXT(dopb)),
+		TO_HCENTER              = SETBIT(NUMGEN_NEXT(dopb)),
+		TO_VCENTER              = SETBIT(NUMGEN_NEXT(dopb)),
+		TO_MULTILINE            = SETBIT(NUMGEN_NEXT(dopb)),
+        TO_FORCE_SINGLELINE     = SETBIT(NUMGEN_NEXT(dopb)),
+		TO_END_ELLIPSIS         = SETBIT(NUMGEN_NEXT(dopb)), // like SINGLELINE, but also works for multiline text
+        TO_LINE_END_ELLIPSIS    = SETBIT(NUMGEN_NEXT(dopb)), // do not wrap words in multiline text
+		TO_WRAP_BREAK_WORD      = SETBIT(NUMGEN_NEXT(dopb)), // wrap line by any symbol, not just by space
+        TO_LASTLINEADDH         = SETBIT(NUMGEN_NEXT(dopb)),
 
         TO_LAST_OPTION      = SETBIT(NUMGEN_NEXT(dopb)),
 	};

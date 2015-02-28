@@ -1661,7 +1661,7 @@ bool gui_message_item_c::b_explore(RID, GUIPARAM)
 {
     ASSERT(records.size());
     record &rec = records.get(0);
-    if (ts::is_file_exists<ts::wchar>(rec.text))
+    if (ts::is_file_exists(rec.text))
     {
         ShellExecuteW(nullptr, L"open", L"explorer", CONSTWSTR("/select,") + ts::fn_get_short_name(rec.text), ts::fn_get_path(rec.text), SW_SHOWDEFAULT);
     }

@@ -1166,6 +1166,8 @@ enum chunks_e // HADR ORDER!!!!!!!!
     chunk_contact_sendmessage_utag,
     chunk_contact_sendmessage_createtime,
 
+    chunk_magic,
+
 };
 
 void lan_engine::set_config(const void*data, int isz)
@@ -1394,6 +1396,7 @@ void lan_engine::save_config(void *param)
     if (engine && set_cfg_called)
     {
         savebuffer b;
+        chunk(b, chunk_magic) << (uint64)(0x555BADF00D2C0FE6ull + LAN_SAVE_VERSION);
         chunk(b, chunk_secret_key) << bytes(my_secret_key, SIZE_SECRET_KEY);
         chunk(b, chunk_contacts) << serlist<contact_s>(first);
         hf->on_save(b.data(), b.size(), param);

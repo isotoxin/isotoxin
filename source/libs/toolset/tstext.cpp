@@ -246,7 +246,7 @@ bool text_rect_c::set_text(const wstr_c &text_, CUSTOM_TAG_PARSER ctp, bool do_p
 void text_rect_c::parse_and_render_texture(rectangle_update_s * updr, CUSTOM_TAG_PARSER ctp, bool do_render)
 {
 	glyphs().clear();
-	int f = flags & (TO_WRAP_BREAK_WORD | TO_HCENTER | TO_LASTLINEADDH | TO_FORCE_SINGLELINE | TO_END_ELLIPSIS);
+	int f = flags & (TO_WRAP_BREAK_WORD | TO_HCENTER | TO_LASTLINEADDH | TO_FORCE_SINGLELINE | TO_END_ELLIPSIS | TO_LINE_END_ELLIPSIS);
     flags.clear(F_INVALID_GLYPHS);
 	lastdrawsize = parse_text(text, size.x-ui_scale(margin_left)-ui_scale(margin_right), ctp, &glyphs(), default_color, (*font), f, size.y - ui_scale(margin_top));
 	text_height = lastdrawsize.y + ui_scale(margin_top);
@@ -260,7 +260,7 @@ ivec2 text_rect_c::calc_text_size(int maxwidth, CUSTOM_TAG_PARSER ctp) const
     if (!is_dirty() && (size.x == maxwidth || maxwidth < 0)) return lastdrawsize;
 
     int w = maxwidth; if (w < 0) w = 16384;
-    int f = flags & (TO_WRAP_BREAK_WORD | TO_HCENTER | TO_LASTLINEADDH | TO_FORCE_SINGLELINE | TO_END_ELLIPSIS);
+    int f = flags & (TO_WRAP_BREAK_WORD | TO_HCENTER | TO_LASTLINEADDH | TO_FORCE_SINGLELINE | TO_END_ELLIPSIS | TO_LINE_END_ELLIPSIS);
     ts::ivec2 sz = parse_text(text, w-ui_scale(margin_left)-ui_scale(margin_right), ctp, nullptr, default_color, (*font), f, 0);
 
     return sz + ts::ivec2(ui_scale(margin_left) + ui_scale(margin_right), margin_top);

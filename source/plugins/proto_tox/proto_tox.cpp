@@ -26,6 +26,7 @@
 #include "appver.inl"
 
 #define IDENTITY_PACKETID 173
+#define SAVE_VERSION 1
 
 #define MAX_CALLS 16
 
@@ -100,7 +101,7 @@ enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
     
     chunk_descriptor,
     chunk_descriptor_id,
-    __chunk_unused_00, // chunk_descriptor_fid,
+    chunk_magic,
     chunk_descriptor_pubid,
     chunk_descriptor_state,
 
@@ -1929,7 +1930,13 @@ void __stdcall set_gender(int /*gender*/)
 void __stdcall set_config(const void*data, int isz)
 {
     u64 _now = now();
-    if (isz)
+    if (isz>8 && (*(uint32_t *)data) == 0 && (*((uint32_t *)data+1)) == 0x15ed1b1f)
+    {
+        // raw tox_save
+        if (!tox) prepare();
+        tox_load(tox, (const uint8_t *)data, isz);
+
+    } else if (isz>4 && (*(uint32_t *)data) != 0)
     {
         loader ldr(data,isz);
 
@@ -2133,6 +2140,7 @@ void operator<<(chunk &chunkm, const message_part_s &m)
 
 static void save_current_stuff( savebuffer &b )
 {
+    chunk(b, chunk_magic) << (uint64)(0x111BADF00D2C0FE6ull + SAVE_VERSION);
     chunk(b, chunk_proxy_type) << tox_proxy_type;
     chunk(b, chunk_proxy_address) << tox_proxy_address;
 

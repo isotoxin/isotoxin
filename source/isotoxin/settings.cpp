@@ -553,6 +553,7 @@ bool dialog_settings_c::activateprotocol( const ts::wstr_c& name, const ts::str_
     auto &r = table_active_protocol_underedit.getcreate(0);
     r.other.name = name;
     r.other.tag = tag;
+    r.other.config = import;
     if (RID lst = find(CONSTASTR("protoactlist")))
         add_active_proto(lst, r.id, r.other);
     return true;
@@ -561,9 +562,34 @@ bool dialog_settings_c::activateprotocol( const ts::wstr_c& name, const ts::str_
 void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
 {
     ts::token<char> t(param, '/');
-    if (*t == CONSTASTR("add"))
+    if (*t == CONSTASTR("add") || *t == CONSTASTR("imp"))
     {
-        ++t;
+        import.clear();
+
+        if (*t == CONSTASTR("imp"))
+        {
+            ++t;
+            ts::wstr_c title = TTT("Импорт конфигурации для протокола $",55) / ts::wstr_c(*t);
+            ts::wstr_c iroot( CONSTWSTR("%APPDATA%") );
+            ts::parse_env(iroot);
+
+            if (dir_present( ts::fn_join(iroot, ts::wstr_c(*t)) ))
+            {
+                iroot = ts::fn_join(iroot, ts::wstr_c(*t));
+            }
+
+            ts::wstr_c fn = ts::get_load_filename_dialog(iroot, CONSTWSTR(""), CONSTWSTR(""), nullptr, title);
+
+            if (fn.is_empty())
+                return;
+
+            import.load_from_text_file(fn);
+
+        } else
+        {
+            ++t;
+        }
+
         SUMMON_DIALOG<dialog_entertext_c>(UD_NETWORKNAME, dialog_entertext_c::params(
             UD_NETWORKNAME,
             TTT("[appname]: имя сети",61),
@@ -638,11 +664,18 @@ menu_c dialog_settings_c::getcontextmenu( const ts::str_c& param, bool activatio
     ts::token<char> t(param, '/');
     if (*t == CONSTASTR("1"))
     {
+        if (gmsg<GM_DIALOG_PRESENT>( UD_NETWORKNAME ).send().is(GMRBIT_ACCEPTED))
+            return m;
+
         ++t;
         if (activation)
             contextmenuhandler( ts::str_c(CONSTASTR("add/")).append(*t) );
         else
-            m.add(TTT("Добавить к списку активных",58),0,DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("add/")).append(*t) );
+        {
+            m.add(TTT("Добавить к списку активных", 58), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("add/")).append(*t));
+            if (!t->equals(CONSTASTR("lan"))) // temporary disable lan import
+                m.add(TTT("Импортировать конфигурацию из файла",56), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("imp/")).append(*t));
+        }
 
     } else if (*t == CONSTASTR("2"))
     {

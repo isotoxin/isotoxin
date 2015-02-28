@@ -18,6 +18,8 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     fmt_converter_s cvter;
     /*virtual*/ s3::Format *formats(int &count) override;
 
+    ts::blob_c import;
+
     isotoxin_ipc_s ipcj;
 
     s3::DEVICE mic_device_stored;

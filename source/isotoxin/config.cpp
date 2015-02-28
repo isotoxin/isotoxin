@@ -85,11 +85,11 @@ void config_base_c::changed(bool save_all_now)
 bool find_config(ts::wstr_c &path)
 {
     path = ts::get_full_path<ts::wchar>(CONSTWSTR("config.db"));
-    bool found_cfg = ts::is_file_exists<ts::wchar>(path);
+    bool found_cfg = ts::is_file_exists(path);
     if (!found_cfg)
     {
         path = ts::get_full_path(ts::wstr_c(CONSTWSTR("%APPDATA%\\isotoxin\\config.db")), true, true);
-        found_cfg = ts::is_file_exists<ts::wchar>(path);
+        found_cfg = ts::is_file_exists(path);
     }
     return found_cfg;
 }

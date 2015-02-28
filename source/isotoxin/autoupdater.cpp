@@ -212,7 +212,7 @@ struct updater
         {
             moved.add(wfn);
         }
-        else if (ts::is_file_exists<ts::wchar>(wfn))
+        else if (ts::is_file_exists(wfn))
         {
             updfail = true;
             // oops

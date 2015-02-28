@@ -46,8 +46,11 @@ void gui_listitem_c::created()
             if (gm)
             {
                 menu_c m = gm(param, false);
-                popupmenu = &gui_popup_menu_c::show( ts::ivec3(gui->get_cursor_pos(),0), m );
-                MODIFY(rid).active(true);
+                if (!m.is_empty())
+                {
+                    popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
+                    MODIFY(rid).active(true);
+                }
             }
             return false;
         case SQ_MOUSE_L2CLICK:

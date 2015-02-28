@@ -313,7 +313,7 @@ bool application_c::iso_gui_c::b_customize(RID r, GUIPARAM param)
         {
             ts::wstr_c pn = prfn;
             profile_c::path_by_name(pn);
-            if (ts::is_file_exists<ts::wchar>(pn))
+            if (ts::is_file_exists(pn))
             {
                 SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
                     gui_isodialog_c::title(DT_MSGBOX_ERROR),
@@ -794,7 +794,7 @@ void file_transfer_s::prepare_fn( const ts::wstr_c &path_with_fn, bool overwrite
     {
         ts::wstr_c origname = ts::fn_get_name<ts::wchar>(filename);
         int n = 1;
-        while (ts::is_file_exists<ts::wchar>(filename))
+        while (ts::is_file_exists(filename))
             filename = ts::fn_change_name<ts::wchar>(filename, ts::wstr_c(origname).append_char('(').append_as_int(n++).append_char(')'));
     }
 
