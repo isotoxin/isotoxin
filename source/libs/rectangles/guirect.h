@@ -861,7 +861,7 @@ public:
     /*virtual*/ ~gui_label_c() { }
 
     const ts::font_desc_c &get_font() const;
-    void set_text(const ts::wstr_c&text);
+    virtual void set_text(const ts::wstr_c&text);
     void set_font(const ts::font_desc_c *font);
     void set_autoheight() { flags.set(FLAGS_AUTO_HEIGHT); }
     void set_defcolor(ts::TSCOLOR col) { textrect.set_def_color(col); }
@@ -876,6 +876,49 @@ public:
 
     const ts::wstr_c &get_text() const {return textrect.get_text();};
 
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+};
+
+class gui_label_ex_c : public gui_label_c
+{
+    DUMMY(gui_label_ex_c);
+
+protected:
+    gui_label_ex_c() {}
+    ts::ivec2 glyphs_pos = 0;
+    int overlink = -1;
+
+    bool check_overlink(const ts::ivec2 &localpos);
+    ts::str_c get_link_under_cursor(const ts::ivec2 &localpos) const;
+    ts::ivec2 get_link_pos_under_cursor(const ts::ivec2 &localpos) const;
+    /*virtual*/ bool custom_tag_parser(ts::wstr_c& r, const ts::wsptr &tv) const override;
+
+    virtual void get_link_prolog(ts::wstr_c & r, int linknum) const;
+    virtual void get_link_epilog(ts::wstr_c & r, int linknum) const;
+
+public:
+
+    gui_label_ex_c(initial_rect_data_s &data) :gui_label_c(data) {}
+    /*virtual*/ ~gui_label_ex_c() {}
+
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+};
+
+typedef fastdelegate::FastDelegate<void (const ts::wstr_c &)> CLICK_LINK;
+
+class gui_label_simplehtml_c : public gui_label_ex_c
+{
+    DUMMY(gui_label_simplehtml_c);
+    ts::wstrings_c links;
+    ts::wstr_c tt() const;
+public:
+    gui_label_simplehtml_c(initial_rect_data_s &data) :gui_label_ex_c(data) { m_tooltip = DELEGATE(this, tt); }
+    /*virtual*/ ~gui_label_simplehtml_c() {}
+
+    CLICK_LINK on_link_click;
+
+    /*virtual*/ void created() override;
+    /*virtual*/ void set_text(const ts::wstr_c&text) override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 

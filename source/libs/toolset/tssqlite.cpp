@@ -141,7 +141,7 @@ public:
             {
                 const char *datatype, *collseq;
                 int notnull,primarykey,autoinc, index;
-                sqlite3_table_column_metadata(db,nullptr,tbln,tmp_str_c(cd.name_),&datatype,&collseq,&notnull,&primarykey,&autoinc,&index);
+                recreate |= SQLITE_ERROR == sqlite3_table_column_metadata(db,nullptr,tbln,tmp_str_c(cd.name_),&datatype,&collseq,&notnull,&primarykey,&autoinc,&index);
 
                 if (datatype == nullptr)
                 {

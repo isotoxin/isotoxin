@@ -16,9 +16,6 @@
     <Filter Include="src\profile">
       <UniqueIdentifier>{f1a55b17-4567-413d-b722-4a9145d4cc95}</UniqueIdentifier>
     </Filter>
-    <Filter Include="_dummy_files">
-      <UniqueIdentifier>{eecff022-83af-400d-b94c-12ca90de3430}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\contactlist.cpp">
@@ -84,6 +81,9 @@
     <ClCompile Include="..\..\autoupdater.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\avaselector.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\res\resource.h">
@@ -144,6 +144,9 @@
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\..\metacontact.h">
+      <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\avaselector.h">
       <Filter>src\gui</Filter>
     </ClInclude>
   </ItemGroup>

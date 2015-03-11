@@ -68,3 +68,150 @@ void dialog_msgbox_c::getbutton(bcreate_s &bcr)
     if (m_params.on_cancel_h) m_params.on_cancel_h(m_params.on_cancel_par);
     __super::on_close();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+dialog_about_c::dialog_about_c(initial_rect_data_s &data):gui_isodialog_c(data)
+{
+}
+
+dialog_about_c::~dialog_about_c()
+{
+}
+
+/*virtual*/ void dialog_about_c::created()
+{
+    gui->exclusive_input(getrid());
+    set_theme_rect(CONSTASTR("about"), false);
+    __super::created();
+    tabsel(CONSTASTR("1"));
+}
+
+void dialog_about_c::getbutton(bcreate_s &bcr)
+{
+    if (bcr.tag == 0)
+    {
+        bcr.tag = 1;
+        __super::getbutton(bcr);
+    }
+}
+
+
+/*virtual*/ int dialog_about_c::additions(ts::irect & border)
+{
+
+    descmaker dm(descs);
+    dm << 1;
+
+    ts::wstr_c title(256,true);
+    title.set( CONSTWSTR("<p=c><b>") );
+    title.append( CONSTWSTR("<a href=\"http://isotoxin.im\">Isotoxin</a>") );
+    title.append( CONSTWSTR("</b> ") );
+    title.append( g_app->appver() );
+    title.append( CONSTWSTR("<br>Coding, design and sounds by <a href=\"https://github.com/Rotkaermota\">Rotkaermota</a>") );
+    title.append( CONSTWSTR("<br>Isotoxin is open-source freeware, licensed under <a href=\"https://github.com/Rotkaermota/Isotoxin/blob/master/LICENSE\">GPL3</a>") );
+
+    dm().label( title );
+
+    dm().vspace(5);
+    dm().hiddenlabel(ts::wstr_c(), 0).setname(CONSTASTR("upd"));
+    dm().vspace(5);
+    dm().button(ts::wstr_c(), TTT("Проверить наличие обновления",208), DELEGATE(this, check_update_now)).height(35).setname(CONSTASTR("checkupdb"));
+    dm().vspace(5);
+
+    title.set( CONSTWSTR("<p=c>Used libs<hr><l><a href=\"https://libtoxcore.so/\">Tox core</a>") );
+    title.append( CONSTWSTR(" <a href=\"https://www.opus-codec.org\">Opus audio codec</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://vorbis.com\">Ogg Vorbis audio codec</a>"));
+    title.append( CONSTWSTR(" <a href=\"https://xiph.org/flac/\">Flac audio codec</a>"));
+    title.append( CONSTWSTR(" <a href=\"http://www.mega-nerd.com/SRC\">Sample Rate Converter</a>"));
+    title.append( CONSTWSTR(" <a href=\"http://webmproject.org\">VP8 video codec</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://libsodium.org\">Sodium crypto library</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://freetype.org\">Free Type font render library</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://zlib.net\">zlib compression library</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://www.libpng.org/pub/png/libpng.html\">png image library</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://pngquant.org\">pngquant library</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://libjpeg.sourceforge.net\">jpg image library</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://g.oswego.edu/dl/html/malloc.html\">dlmalloc</a>") );
+    title.append( CONSTWSTR(" <a href=\"https://github.com/yxbh/FastDelegate\">C++11 fastdelegates</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://curl.haxx.se/libcurl\">Curl</a>") );
+    title.append( CONSTWSTR("</l><br><br>Adapded libs<hr><l><a href=\"https://code.google.com/p/s-3\">Simple Sound System</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://www.codeproject.com/Articles/11132/Walking-the-callstack\">Walking the callstack</a>") );
+    title.append( CONSTWSTR(" <a href=\"https://sqlite.org\">SQLite</a>") );
+    title.append( CONSTWSTR("</l><br><br>Other sources and assets used<hr><l><a href=\"http://virtualdub.sourceforge.net/\">VirtualDub</a>") );
+    title.append( CONSTWSTR(" <a href=\"https://code.google.com/p/libsquish\">squish</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://www.efgh.com/software/md5.htm\">md5</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://dejavu-fonts.org\">DejaVu fonts</a>") );
+
+    dm().label( title );
+
+    return 0;
+}
+
+bool dialog_about_c::check_update_now(RID, GUIPARAM)
+{
+    if (RID b = find(CONSTASTR("checkupdb")))
+        b.call_enable(false);
+
+    checking_new_version = true;
+    g_app->b_update_ver(RID(), (GUIPARAM)AUB_ONLY_CHECK);
+
+    return true;
+}
+
+ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
+{
+    if (RID b = find(CONSTASTR("checkupdb")))
+        b.call_enable(true);
+
+    if (!checking_new_version) return 0;
+    checking_new_version = false;
+
+    if (nv.ver.is_empty())
+    {
+        set_label_text( CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(0)) + TTT("Обновление не найдено", 207) );
+        if (RID no = find(CONSTASTR("upd")))
+        {
+            MODIFY(no).visible(true);
+        }
+        return 0;
+    }
+
+    set_label_text( CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(1)) + (TTT("Обнаружена новая версия: $",209) / ts::to_wstr(nv.ver.as_sptr())) );
+    if (RID yes = find(CONSTASTR("upd")))
+    {
+        MODIFY(yes).visible(true);
+    }
+
+    return 0;
+}
+
+
+/*virtual*/ ts::wstr_c dialog_about_c::get_name() const
+{
+    return ts::wstr_c( CONSTWSTR(APPNAME) );
+}
+/*virtual*/ ts::ivec2 dialog_about_c::get_min_size() const
+{
+    return ts::ivec2(450, 420);
+}
+
+/*virtual*/ bool dialog_about_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    if (__super::sq_evt(qp, rid, data)) return true;
+
+    return false;
+}
+
+
+

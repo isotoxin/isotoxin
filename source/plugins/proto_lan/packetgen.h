@@ -16,7 +16,8 @@
 #define LAN_SAVE_VERSION 1
 
 #define SIZE_PACKET_HEADER 4
-#define SIZE_MAX_SEND 499
+#define SIZE_MAX_SEND_NONAUTH 499
+#define SIZE_MAX_SEND_AUTH 65500
 #define SIZE_PUBID 20 // full pub id size
 #define SIZE_KEY (crypto_secretbox_NONCEBYTES + crypto_secretbox_KEYBYTES)
 #define SIZE_KEY_NONCE_PART (crypto_secretbox_NONCEBYTES)
@@ -171,7 +172,7 @@ public:
 
     void pg_nonce(const byte *other_public_key, const byte *auth_key /*nonce + contact key*/ );
 
-    void pg_message(msg_s *m, const byte *crypt_packet_key);
+    void pg_message(msg_s *m, const byte *crypt_packet_key, int maxsize);
     void pg_delivered(u64 dtag, const byte *crypt_packet_key);
     void pg_time(bool resync, const byte *crypt_packet_key);
 };

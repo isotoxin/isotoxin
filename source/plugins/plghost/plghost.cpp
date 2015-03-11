@@ -24,6 +24,7 @@ static void __stdcall on_save(const void *data, int dlen, void *param);
 static void __stdcall play_audio(int channel_id, const audio_format_s *audio_format, const void *frame, int framesize);
 static void __stdcall close_audio(int channel_id);
 static void __stdcall proxy_settings(int proxy_type, const char *proxy_address);
+static void __stdcall avatar_data(int cid, int tag, const void *avatar_body, int avatar_body_size);
 static void __stdcall incoming_file(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
 static void __stdcall file_portion(u64 utag, u64 offset, const void *portion, int portion_size);
 static void __stdcall file_control(u64 utag, file_control_e fctl);
@@ -87,6 +88,7 @@ struct protolib_s
         play_audio,
         close_audio,
         proxy_settings,
+        avatar_data,
         incoming_file,
         file_portion,
         file_control,
@@ -581,6 +583,15 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                 protolib.functions->set_config(d,sz);
         }
         break;
+    case AQ_SET_AVATAR:
+        if (LIBLOADED())
+        {
+            ipcr r(d->get_reader());
+            int sz;
+            if (const void *d = r.get_data(sz))
+                protolib.functions->set_avatar(d, sz);
+        }
+        break;
     case AQ_INIT_DONE:
         if (LIBLOADED())
         {
@@ -756,6 +767,14 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             protolib.functions->file_portion(utag, &fp);
         }
         break;
+    case AQ_GET_AVATAR_DATA:
+        if (LIBLOADED())
+        {
+            ipcr r(d->get_reader());
+            int id = r.get<int>();
+            protolib.functions->get_avatar(id);
+        }
+        break;
     }
 
     d->die();
@@ -781,6 +800,7 @@ static void __stdcall update_contact(const contact_data_s *cd)
       << ((0 != (cd->mask & CDM_PUBID)) ? asptr(cd->public_id, cd->public_id_len) : asptr("",0))
       << ((0 != (cd->mask & CDM_NAME)) ? asptr(cd->name, cd->name_len) : asptr("",0))
       << ((0 != (cd->mask & CDM_STATUSMSG)) ? asptr(cd->status_message, cd->status_message_len) : asptr("",0))
+      << cd->avatar_tag
       << (int)cd->state
       << (int)cd->ostate
       << (int)cd->gender;
@@ -836,6 +856,11 @@ static void __stdcall close_audio(int cid)
 static void __stdcall proxy_settings(int proxy_type, const char *proxy_address)
 {
     IPCW(HA_PROXY_SETTINGS) << proxy_type << asptr(proxy_address);
+}
+
+static void __stdcall avatar_data(int cid, int tag, const void *avatar_body, int avatar_body_size)
+{
+    IPCW(HQ_AVATAR_DATA) << cid << tag << data_block_s(avatar_body, avatar_body_size);
 }
 
 static void __stdcall incoming_file(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen)

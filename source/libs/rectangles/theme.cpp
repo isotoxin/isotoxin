@@ -267,11 +267,12 @@ bool theme_c::load( const ts::wsptr &name )
     buttons.clear();
 
     theme_conf_s thc;
-    if (const abp_c * conf = bp.get("conf"))
+    if (abp_c * conf = bp.get("conf"))
     {
         thc.fastborder = conf->get_int(CONSTASTR("fastborder"), 0) != 0;
         thc.rootalphablend = conf->get_int(CONSTASTR("rootalphablend"), 1) != 0;
         thc.specialborder = conf->get_int(CONSTASTR("specialborder"), 0) != 0;
+        m_conf = std::move(*conf);
     }
 
 
@@ -319,7 +320,10 @@ bool theme_c::load( const ts::wsptr &name )
                 const drawable_bitmap_c &dbmp = loadimage(path, to_wstr(t->as_sptr()));
                 ++t;
                 irect r = ts::parserect(t,irect(ivec2(0),dbmp.info().sz));
-                add_image(to_wstr(it.name()),dbmp.body(r.lt),imgdesc_s(r.size(),32,dbmp.info().pitch),false /* no need to copy */);
+                ts::image_extbody_c &img = images.add(it.name());
+                img = std::move(ts::image_extbody_c(dbmp.body(r.lt), imgdesc_s(r.size(),32,dbmp.info().pitch)));
+
+                add_image(to_wstr(it.name()),img.body(),img.info(),false /* no need to copy */);
             }
         }
     }

@@ -9,6 +9,8 @@ enum unique_dialog_e
     UD_SETTINGS,
     UD_PROFILENAME,
     UD_NETWORKNAME,
+    UD_ABOUT,
+    UD_AVASELECTOR,
 
 };
 

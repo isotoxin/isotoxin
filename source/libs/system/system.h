@@ -172,6 +172,7 @@ extern system_conf_s g_sysconf;
 bool _cdecl app_preinit(const wchar_t *cmdline);
 
 // lib
+void _cdecl sys_idle();
 void _cdecl sys_exit( int iErrCode );
 void _cdecl sys_restart( void );
 bool _cdecl sys_dispatch_input( const system_event_param_s & p );

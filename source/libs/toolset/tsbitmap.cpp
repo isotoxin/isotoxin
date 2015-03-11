@@ -1,6 +1,6 @@
 #include "toolset.h"
 #include "internal/pngreader.h"
-#include "internal/FileDDS.h"
+#include "internal/ddsreader.h"
 
 #pragma pack (push)
 #pragma pack (16)
@@ -66,7 +66,8 @@ void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_i
             {
                 *des1++ = *sou1++;
             }
-            if (alpha) *des1 = 0xFF;
+            if (des_info.bytepp() == 4 && c == 3)
+                *des1 = 0xFF;
         }
     }
 
@@ -273,32 +274,36 @@ void TSCALL img_helper_get_from_dxt(uint8 *des, const imgdesc_s &des_info, const
 #pragma warning (push)
 #pragma warning (disable : 4731)
 
-void img_helper_merge_with_alpha(uint8 *dst, const uint8 *src, const imgdesc_s &des_info, const imgdesc_s &sou_info, int oalphao)
+void img_helper_merge_with_alpha(uint8 *dst, const uint8 *basesrc, const uint8 *src, const imgdesc_s &des_info, const imgdesc_s &base_info, const imgdesc_s &sou_info, int oalphao)
 {
     ASSERT(sou_info.bytepp() == 4);
 
     if (des_info.bytepp() == 3)
     {
-
-        for (int y = 0; y < des_info.sz.y; y++, dst += des_info.pitch, src += sou_info.pitch)
+        for (int y = 0; y < des_info.sz.y; y++, dst += des_info.pitch, basesrc += base_info.pitch, src += sou_info.pitch)
         {
             uint8 *des = dst;
+            const uint8 *desbase = basesrc;
             const uint32 *sou = (uint32 *)src;
-            for (int x = 0; x < des_info.sz.x; x++, des += des_info.bytepp(), ++sou)
+            int bytepp = des_info.bytepp();
+            int byteppbase = base_info.bytepp();
+            for (int x = 0; x < des_info.sz.x; x++, des += bytepp, desbase += byteppbase, ++sou)
             {
                 uint32 color = *sou;
-                uint32 ocolor = uint32(*(uint16 *)des) | (uint32(*((uint8 *)des + 2)) << 16);
-
                 uint8 alpha = uint8(color >> 24);
-
-                if (alpha == 0) continue;
-
-                if (alpha == 255)
+                uint32 ocolor = 0;
+                if (alpha == 0)
+                {
+                    if (dst == basesrc)
+                        continue;
+                } else if (alpha == 255)
                 {
                     ocolor = color;
                 }
                 else
                 {
+                    ocolor = uint32(*(uint16 *)desbase) | (uint32(*((uint8 *)desbase + 2)) << 16);
+
                     uint8 R = as_byte(color >> 16);
                     uint8 G = as_byte(color >> 8);
                     uint8 B = as_byte(color);
@@ -328,28 +333,33 @@ void img_helper_merge_with_alpha(uint8 *dst, const uint8 *src, const imgdesc_s &
 
         if (oalphao < 0)
         {
-            for (int y = 0; y < des_info.sz.y; y++, dst += des_info.pitch, src += sou_info.pitch)
+            for (int y = 0; y < des_info.sz.y; y++, dst += des_info.pitch, basesrc += base_info.pitch, src += sou_info.pitch)
             {
                 uint8 *des = dst;
+                const uint8 *desbase = basesrc;
                 const uint32 *sou = (uint32 *)src;
-                for (int x = 0; x < des_info.sz.x; x++, des += des_info.bytepp(), ++sou)
+                int bytepp = des_info.bytepp();
+                int byteppbase = base_info.bytepp();
+                for (int x = 0; x < des_info.sz.x; x++, des += bytepp, desbase += byteppbase, ++sou)
                 {
-                    uint32 ocolor;
+                    uint32 ocolor = 0;
                     uint32 color = *sou;
                     uint8 alpha = uint8(color >> 24);
-                    if (alpha == 0) continue;
-                    if (alpha == 255)
+                    if (alpha == 0)
+                    {
+                        if (dst == basesrc)
+                            continue;
+                    } else if (alpha == 255)
                     {
                         ocolor = color;
-                    }
-                    else
+                    } else
                     {
 
                         uint8 R = as_byte(color >> 16);
                         uint8 G = as_byte(color >> 8);
                         uint8 B = as_byte(color);
 
-                        uint32 ocolor_cur = *(uint32 *)des;
+                        uint32 ocolor_cur = byteppbase == 4 ? *(uint32 *)desbase : (uint32(*(uint16 *)desbase) | (uint32(*(desbase + 2)) << 16) | 0xFF000000);
                         uint8 oalpha = as_byte(ocolor_cur >> 24);
                         uint8 oR = as_byte(ocolor_cur >> 16);
                         uint8 oG = as_byte(ocolor_cur >> 8);
@@ -371,33 +381,39 @@ void img_helper_merge_with_alpha(uint8 *dst, const uint8 *src, const imgdesc_s &
         }
         else
         {
-            for (int y = 0; y < des_info.sz.y; y++, dst += des_info.pitch, src += sou_info.pitch)
+            for (int y = 0; y < des_info.sz.y; y++, dst += des_info.pitch, basesrc += base_info.pitch, src += sou_info.pitch)
             {
                 uint8 *des = dst;
+                const uint8 *desbase = basesrc;
                 const uint32 *sou = (uint32 *)src;
-                for (int x = 0; x < des_info.sz.x; x++, des += des_info.bytepp(), ++sou)
+                int bytepp = des_info.bytepp();
+                int byteppbase = base_info.bytepp();
+                for (int x = 0; x < des_info.sz.x; x++, des += bytepp, desbase += byteppbase, ++sou)
                 {
-                    uint32 ocolor;
-                    uint32 color = *sou;
-                    uint8 alpha = uint8(color >> 24);
-                    if (alpha == 0) continue;
-                    if (alpha == 255)
+                    uint32 ocolor = 0;
+                    uint32 icolor = *sou;
+                    uint8 ialpha = uint8(icolor >> 24);
+                    if (ialpha == 0)
                     {
-                        ocolor = color;
+                        if (dst == basesrc)
+                            continue;
+                    } else if (ialpha == 255)
+                    {
+                        ocolor = icolor;
                     }
                     else
                     {
 
-                        uint8 R = as_byte(color >> 16);
-                        uint8 G = as_byte(color >> 8);
-                        uint8 B = as_byte(color);
+                        uint8 R = as_byte(icolor >> 16);
+                        uint8 G = as_byte(icolor >> 8);
+                        uint8 B = as_byte(icolor);
 
-                        uint32 ocolor_cur = *(uint32 *)des;
+                        uint32 ocolor_cur = byteppbase == 4 ? *(uint32 *)desbase : (uint32(*(uint16 *)desbase) | (uint32(*(desbase + 2)) << 16));
                         uint8 oR = as_byte(ocolor_cur >> 16);
                         uint8 oG = as_byte(ocolor_cur >> 8);
                         uint8 oB = as_byte(ocolor_cur);
 
-                        float A = float(alpha) / 255.0f;
+                        float A = float(ialpha) / 255.0f;
                         float nA = 1.0f - A;
 
 
@@ -435,7 +451,7 @@ void    bmpcore_normal_s::before_modify(bitmap_c *me)
     else if (b.info().bitpp == 24) me->create_RGB(b.info().sz);
     if (b.info().bitpp == 32) me->create_RGBA(b.info().sz);
 
-    me->copy(ivec2(0), b.info().sz, b, ivec2(0));
+    me->copy(ivec2(0), b.info().sz, b.extbody(), ivec2(0));
 }
 
 bool bmpcore_normal_s::operator==(const bmpcore_normal_s & bm) const
@@ -496,11 +512,10 @@ template <typename CORE> void bitmap_t<CORE>::convert_24to32(bitmap_c &imgout) c
 {
     if (info().bitpp != 24) return;
 
-	if (info().pitch * info().sz.y % 12 != 0)//дл€ маленьких изображений (напр. 1x1 или 2x3)
+	if (info().pitch * info().sz.y % 12 != 0) // for small images 1x1 or 2x2
 	{
 		imgout.create_RGBA(info().sz);
-		this->copy_components(imgout, 3, 0, 0);
-		imgout.fill_alpha(0xFF);
+		imgout.copy(ts::ivec2(0),info().sz,extbody(),ts::ivec2(0));
 		return;
 	}
 
@@ -846,7 +861,7 @@ template<typename CORE> uint32 bitmap_t<CORE>::get_area_type(const ivec2 & p,con
     return at;
 }
 
-template<typename CORE> void bitmap_t<CORE>::tile(const ivec2 & pdes,const ivec2 & desize, const bitmap_t<CORE> & bmsou,const ivec2 & spsou, const ivec2 & szsou)
+template<typename CORE> void bitmap_t<CORE>::tile(const ivec2 & pdes,const ivec2 & desize, const bmpcore_exbody_s & bmsou,const ivec2 & spsou, const ivec2 & szsou)
 {
     copy(pdes, szsou, bmsou, spsou);
 
@@ -856,7 +871,7 @@ template<typename CORE> void bitmap_t<CORE>::tile(const ivec2 & pdes,const ivec2
     while (cx < desize.x)
     {
         int w = tmin((desize.x-cx), cx);
-        copy( ivec2(pdes.x + cx, pdes.y), ivec2(w,szsou.y), *this, pdes);
+        copy( ivec2(pdes.x + cx, pdes.y), ivec2(w,szsou.y), extbody(), pdes);
         cx += w;
     }
 
@@ -866,7 +881,7 @@ template<typename CORE> void bitmap_t<CORE>::tile(const ivec2 & pdes,const ivec2
     while (cy < desize.y)
     {
         int h = tmin((desize.y-cy), cy);
-        copy( ivec2(pdes.x, pdes.y + cy), ivec2(desize.x,h), *this, pdes);
+        copy( ivec2(pdes.x, pdes.y + cy), ivec2(desize.x,h), extbody(), pdes);
         cy += h;
     }
 }
@@ -884,7 +899,7 @@ template<typename CORE> void bitmap_t<CORE>::copy_components(bitmap_c &imageout,
 	img_helper_copy_components(imageout.body() + dst_first_comp, body() + src_first_comp, imageout.info(), info(), num_comps);
 }
 
-template<typename CORE> void bitmap_t<CORE>::copy(const ivec2 &pdes, const ivec2 &size, const bitmap_t<CORE> &bmsou, const ivec2 &spsou)
+template<typename CORE> void bitmap_t<CORE>::copy(const ivec2 &pdes, const ivec2 &size, const bmpcore_exbody_s &bmsou, const ivec2 &spsou)
 {
 	if(spsou.x<0 || spsou.y<0) return;
 	if((spsou.x+size.x)>bmsou.info().sz.x || (spsou.y+size.y)>bmsou.info().sz.y) return;
@@ -895,7 +910,7 @@ template<typename CORE> void bitmap_t<CORE>::copy(const ivec2 &pdes, const ivec2
     before_modify();
 
 	uint8 * des=body()+info().bytepp()*pdes.x+info().pitch*pdes.y;
-	const uint8 * sou=bmsou.body()+bmsou.info().bytepp()*spsou.x+bmsou.info().pitch*spsou.y;
+	const uint8 * sou=bmsou()+bmsou.info().bytepp()*spsou.x+bmsou.info().pitch*spsou.y;
 
     if (bmsou.info().bytepp() == info().bytepp())
     {
@@ -937,9 +952,7 @@ template<typename CORE> void bitmap_t<CORE>::fill_alpha(uint8 a)
         uint8 * o = body() + 3;
         int cnt = info().sz.x * info().sz.y;
         for (; cnt > 0; --cnt, o += 4)
-        {
             *o = a;
-        }
     } else
         fill_alpha(ts::ivec2(0), info().sz, a);
 }
@@ -963,6 +976,38 @@ template<typename CORE> void bitmap_t<CORE>::fill_alpha(const ivec2 & pdes, cons
     }
 }
 
+template<typename CORE> bool bitmap_t<CORE>::has_alpha() const
+{
+    if (info().bytepp() != 4) return false;
+
+    if (info().pitch == 4 * info().sz.x)
+    {
+        const uint8 * o = body() + 3;
+        int cnt = info().sz.x * info().sz.y;
+        for (; cnt > 0; --cnt, o += 4)
+            if (*o < 255) return true;
+        return false;
+    }
+    return has_alpha(ts::ivec2(0), info().sz);
+
+}
+
+template<typename CORE> bool bitmap_t<CORE>::has_alpha(const ivec2 & pdes, const ivec2 & size) const
+{
+    if (info().bytepp() != 4) return false;
+    if (pdes.x < 0 || pdes.y < 0) return false;
+    if ((pdes.x + size.x) > info().sz.x || (pdes.y + size.y) > info().sz.y) return false;
+
+    const uint8 * des = body() + info().bytepp()*pdes.x + info().pitch*pdes.y + 3;
+    int desnl = info().pitch - size.x*info().bytepp();
+    int desnp = info().bytepp();
+
+    for (int y = 0; y < size.y; y++, des += desnl)
+        for (int x = 0; x < size.x; x++, des += desnp)
+            if (*des < 255) return true;
+
+    return false;
+}
 
 template<typename CORE> void bitmap_t<CORE>::detect_alpha_channel( const bitmap_t<CORE> & bmsou )
 {
@@ -1471,51 +1516,46 @@ template<typename CORE> void bitmap_t<CORE>::flip_y(const ivec2 & pdes,const ive
 
 }
 
-template<typename CORE> void bitmap_t<CORE>::merge_by_mask(const ivec2 & pdes,const ivec2 & size,
-							const bitmap_t<CORE> & bm1,const ivec2 & sp1,
-							const bitmap_t<CORE> & bm2,const ivec2 & sp2,
-							const bitmap_t<CORE> & mask,const ivec2 & spm)
+template<typename CORE> void bitmap_t<CORE>::alpha_blend( const ivec2 &p, const bmpcore_exbody_s & img, const bmpcore_exbody_s & base )
 {
-	if(sp1.x<0 || sp1.y<0) return;
-	if((sp1.x+size.x)>bm1.info().sz.x || (sp1.y+size.y)>bm1.info().sz.y) return;
+    ASSERT( img.info().bytepp() == 4 );
+    if (info().sz != base.info().sz)
+        create_RGBA( base.info().sz );
 
-	if(sp2.x<0 || sp2.y<0) return;
-	if((sp2.x+size.x)>bm2.info().sz.x || (sp2.y+size.y)>bm2.info().sz.y) return;
+    irect baserect( 0, base.info().sz - p );
+    baserect.intersect( irect( 0, img.info().sz ) );
 
-	if(pdes.x<0 || pdes.y<0) return;
-	if((pdes.x+size.x)>info().sz.x || (pdes.y+size.y)>info().sz.y) return;
+    ts::ivec2 imgwh( tmin(img.info().sz, info().sz - p) );
+    if (base() != body())
+    {
+        // we have to copy base part outside of img rectange
+        if (p.y > 0) // top
+            img_helper_copy( body(), base(), imgdesc_s(info()).set_height(p.y), imgdesc_s(base.info()).set_height(p.y) );
 
-	if(bm1.info().bitpp!=bm2.info().bitpp) return;
-	if(bm1.info().bitpp!=info().bitpp) return;
+        if (imgwh.y > 0)
+        {
 
-	if(mask.info().bitpp<8) return;
+            if (p.x > 0) // left
+                img_helper_copy(body() + p.y * info().pitch,
+                                base() + p.y * base.info().pitch,
+                                imgdesc_s(info()).set_width(p.x).set_height(imgwh.y),
+                                imgdesc_s(base.info()).set_width(p.x).set_height(imgwh.y));
 
-    before_modify();
+            int r_space = info().sz.x - p.x - img.info().sz.x;
+            if (r_space > 0) // rite
+                img_helper_copy(body() + p.y * info().pitch + (info().sz.x-r_space) * info().bytepp(),
+                                base() + p.y * base.info().pitch + (info().sz.x-r_space) * base.info().bytepp(),
+                                imgdesc_s(info()).set_width(r_space).set_height(imgwh.y),
+                                imgdesc_s(base.info()).set_width(r_space).set_height(imgwh.y));
+        }
+        int b_space = info().sz.y - p.y - img.info().sz.y;
+        if (b_space > 0) // bottom
+            img_helper_copy(body() + (info().sz.y - b_space) * info().pitch, base() + (info().sz.y - b_space) * base.info().pitch, imgdesc_s(info()).set_height(b_space), imgdesc_s(base.info()).set_height(b_space));
+    }
 
-	uint8 * des=body()+info().bytepp()*pdes.x+info().pitch*pdes.y;
-	int desnl=info().pitch-size.x*info().bytepp();
+    // alphablend itself
+    img_helper_merge_with_alpha(body(p), base() + p.x * base.info().bytepp() + p.y * base.info().pitch, img(), imgdesc_s(info()).set_size(imgwh), imgdesc_s(base.info()).set_size(imgwh), imgdesc_s(img.info()).set_size(imgwh));
 
-	const uint8 * sou1=bm1.body()+bm1.info().bytepp()*sp1.x+bm1.info().pitch*sp1.y;
-	int sou1nl=bm1.info().pitch-size.x*bm1.info().bytepp();
-
-	uint8 * sou2=bm2.body()+bm2.info().bytepp()*sp2.x+bm2.info().pitch*sp2.y;
-	int sou2nl=bm2.info().pitch-size.x*bm2.info().bytepp();
-
-	uint8 * m=mask.body()+mask.info().bytepp()*spm.x+mask.info().pitch*spm.y;
-	int mnl=mask.info().pitch-size.x*mask.info().bytepp();
-	int mnp=mask.info().bytepp();
-
-	for(int y=0;y<size.y;y++,des+=desnl,sou1+=sou1nl,sou2+=sou2nl,m+=mnl) {
-		for(int x=0;x<size.x;x++,m+=mnp) {
-			for(int i=0;i<bm1.info().bytepp();i++,des++,sou1++,sou2++) {
-				if(*m==0) *des=*sou2;
-				else if(*m==255) *des=*sou1;
-				else *des=   uint8((uint32(*sou1)*(uint32(*m)<<8))>>16)
-							+uint8((uint32(*sou2)*(uint32(255-*m)<<8))>>16); // не совсем точна€ формула =(
-
-			}
-		}
-	}
 }
 
 template<typename CORE> void bitmap_t<CORE>::swap_byte(const ivec2 & pos,const ivec2 & size,int n1,int n2)
@@ -2010,21 +2050,21 @@ namespace
         {
             buf.clear();
 
-            init_destination = sljpg_init_destination;
-            empty_output_buffer = sljpg_empty_output_buffer;
-            term_destination = sljpg_term_destination;
+            init_destination = tsjpg_init_destination;
+            empty_output_buffer = tsjpg_empty_output_buffer;
+            term_destination = tsjpg_term_destination;
 
         }
         jpgsavebuf &operator=(const jpgsavebuf &) UNUSED;
 
-        static void sljpg_init_destination(j_compress_ptr cinfo)
+        static void tsjpg_init_destination(j_compress_ptr cinfo)
         {
             jpgsavebuf *me = (jpgsavebuf *)cinfo->dest;
             me->next_output_byte = (JOCTET *)me->buf.expand(BLOCK_SIZE);
             me->free_in_buffer = BLOCK_SIZE;
         }
 
-        static boolean sljpg_empty_output_buffer(j_compress_ptr cinfo)
+        static boolean tsjpg_empty_output_buffer(j_compress_ptr cinfo)
         {
             jpgsavebuf *me = (jpgsavebuf *)cinfo->dest;
             me->next_output_byte = (JOCTET *)me->buf.expand(BLOCK_SIZE);
@@ -2032,7 +2072,7 @@ namespace
             return true;
         }
 
-        static void sljpg_term_destination(j_compress_ptr cinfo)
+        static void tsjpg_term_destination(j_compress_ptr cinfo)
         {
             jpgsavebuf *me = (jpgsavebuf *)cinfo->dest;
             me->buf.set_size(me->buf.size() - me->free_in_buffer);
@@ -2048,14 +2088,16 @@ namespace
         int buflen;
         uint curp;
         JOCTET fakeend[2];
+        bool fail;
         jpgreadbuf(const void * buf, int buflen):buf((const JOCTET *)buf), buflen(buflen)
         {
             curp = 0;
-            init_source = sljpg_init_source;
-            fill_input_buffer = sljpg_fill_input_buffer;
-            skip_input_data = sljpg_skip_input_data;
+            fail = false;
+            init_source = tsjpg_init_source;
+            fill_input_buffer = tsjpg_fill_input_buffer;
+            skip_input_data = tsjpg_skip_input_data;
             resync_to_restart = jpeg_resync_to_restart; /* use default method */
-            term_source = sljpg_term_source;
+            term_source = tsjpg_term_source;
             bytes_in_buffer = 0; /* forces fill_input_buffer on first read */
             next_input_byte = nullptr; /* until buffer loaded */
             fakeend[0] = (JOCTET) 0xFF;
@@ -2065,13 +2107,13 @@ namespace
         jpgreadbuf &operator=(const jpgreadbuf &) UNUSED;
 
 
-        static void sljpg_init_source(j_decompress_ptr cinfo)
+        static void tsjpg_init_source(j_decompress_ptr cinfo)
         {
             jpgreadbuf *me = (jpgreadbuf *)cinfo->src;
             me->curp = 0;
         }
 
-        static boolean sljpg_fill_input_buffer (j_decompress_ptr cinfo)
+        static boolean tsjpg_fill_input_buffer (j_decompress_ptr cinfo)
         {
             jpgreadbuf *src = (jpgreadbuf *)cinfo->src;
             
@@ -2090,11 +2132,19 @@ namespace
             //return TRUE;
         }
 
-        static void sljpg_skip_input_data (j_decompress_ptr cinfo, long num_bytes)
+        static void tsjpg_skip_input_data (j_decompress_ptr cinfo, long num_bytes)
         {
-            __debugbreak();
+            jpgreadbuf *src = (jpgreadbuf *)cinfo->src;
+            src->next_input_byte += num_bytes;
+            src->bytes_in_buffer -= num_bytes;
+            if (src->bytes_in_buffer <= 0)
+            {
+                src->next_input_byte = src->fakeend;
+                src->bytes_in_buffer = 2;
+            }
+            //__debugbreak();
         }
-        static void sljpg_term_source (j_decompress_ptr cinfo)
+        static void tsjpg_term_source (j_decompress_ptr cinfo)
         {
             /* no work necessary here */
         }
@@ -2103,7 +2153,8 @@ namespace
 
     static void __error_exit(j_common_ptr cinfo)
     {
-        __debugbreak();
+        jpgreadbuf *src = (jpgreadbuf *)cinfo->client_data;
+        src->fail = true;
     }
 }
 
@@ -2119,11 +2170,15 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_JPG(const void * buf, int
 
     jpgreadbuf tmp(buf, buflen);
     cinfo.src = &tmp;
+    cinfo.client_data = &tmp;
+
 
     cinfo.out_color_space = JCS_RGB;
 
     if (JPEG_SUSPENDED == jpeg_read_header(&cinfo,true)) return false;
+    if (tmp.fail) return false;
     jpeg_start_decompress(&cinfo);
+    if (tmp.fail) return false;
 
     int row_stride = cinfo.output_width * cinfo.output_components;
     create_RGBA(ref_cast<ivec2>(cinfo.output_width,cinfo.output_height));
@@ -2134,6 +2189,7 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_JPG(const void * buf, int
     for (int y = 0; y < info().sz.y; y++)
     {
         jpeg_read_scanlines(&cinfo, aTempBuffer, 1);
+        if (tmp.fail) break;
 
         uint8* src = aTempBuffer[0];
         uint8* dest = body() + info().pitch*y;
@@ -2150,7 +2206,7 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_JPG(const void * buf, int
     jpeg_finish_decompress(&cinfo);
     jpeg_destroy_decompress(&cinfo);
 
-    return true;
+    return !tmp.fail;
 
 }
 
@@ -2577,17 +2633,28 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_TGA(const void * buf, int
 {
 	clear();
 
-	// Ќеобходимые константы дл€ загрузки TGA
+	// TGA constants
 #define TARGA_TRUECOLOR_IMAGE		2
 #define TARGA_BW_IMAGE				3
 #define TARGA_TRUECOLOR_RLE_IMAGE	10
 #define TARGA_BW_RLE_IMAGE			11
 
+    if (buflen < sizeof(TGA_Header)) return false;
+
 	TGA_Header * header = (TGA_Header*)buf;
-	if ((size_t)buflen < sizeof(TGA_Header) || (header->ImageType != TARGA_TRUECOLOR_IMAGE && header->ImageType != TARGA_BW_IMAGE)) return false;
-	uint8 *pixels = (uint8*)(header + 1) + header->IDLength, *tdata;
+	if ((size_t)buflen < sizeof(TGA_Header) || (header->ImageType != TARGA_TRUECOLOR_IMAGE && header->ImageType != TARGA_BW_IMAGE && header->ImageType != TARGA_TRUECOLOR_RLE_IMAGE)) return false;
+	const uint8 *pixels = (uint8*)(header + 1) + header->IDLength;
+    uint8 *tdata;
 
 	ivec2 sz( header->Width, header->Height );
+
+    if (header->ImageType != TARGA_TRUECOLOR_RLE_IMAGE)
+    {
+        // addition size check
+        int64 datasize = (int64)header->Width * (int64)header->Height * (int64)header->Depth / 8;
+        if (datasize < 1 || datasize >(buflen - sizeof(TGA_Header)))
+            return false;
+    }
 
 	switch (header->Depth)
 	{
@@ -2597,6 +2664,7 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_TGA(const void * buf, int
 	default: return false;
 	}
 
+    int tgapitch = header->Depth / 8 * header->Width;
 	int inc;
 	if (header->ImageDescriptor & 0x20)//top-down orientation
 	{
@@ -2608,42 +2676,108 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_TGA(const void * buf, int
 		tdata = body()+(sz.y-1)*info().pitch;
 		inc = -(int)info().pitch;
 	}
+    if ( header->ImageType == TARGA_TRUECOLOR_RLE_IMAGE )
+    {
+        int data_length = buflen - sizeof(TGA_Header);
+        const uint8 *pixels_end = pixels + data_length;
+        int y = 0;
 
-	for (int y=sz.y; y>0; tdata+=inc, pixels+=info().pitch, y--)
-		memcpy(tdata, pixels, info().pitch);
+        TSCOLOR color = 0xFF000000;
+        uint8 depth_bytes = header->Depth / 8;
+        int bbx = 0;
+        int bbxlim = sz.x * depth_bytes;
+        while (pixels < pixels_end)
+        {
+            uint8 rle_var = *pixels++;
+            if (rle_var > 127)
+            {
+                int repeat_count = rle_var - 127;
+                memcpy(&color, pixels, depth_bytes);
+                pixels += depth_bytes;
+                ASSERT(pixels <= pixels_end);
 
-	//if (header->Depth > 8) bgr_to_rgb(lenx*leny, body(), info().bytepp());//RGB -> BGR
+                while (repeat_count--) 
+                {
+                    memcpy(tdata + bbx, &color, depth_bytes);
+                    bbx += depth_bytes;
+                }
+                ASSERT(bbx <= bbxlim);
+                if (bbx >= bbxlim)
+                {
+                    tdata += inc;
+                    bbx = 0;
+                    ++y;
+                    if (y == sz.y)
+                        break;
+                }
+            }
+            else {
+                int series_size = (rle_var + 1) * depth_bytes;
+                ASSERT(bbx + series_size <= bbxlim);
+                memcpy(tdata + bbx, pixels, series_size);
+                pixels += series_size; ASSERT(pixels <= pixels_end);
+                bbx += series_size;
+
+                if (bbx >= bbxlim)
+                {
+                    tdata += inc;
+                    bbx = 0;
+                    ++y;
+                    if (y == sz.y)
+                        break;
+                }
+            }
+        }
+    } else
+    {
+        if (tgapitch == info().pitch && inc > 0)
+        {
+            memcpy(tdata, pixels, tgapitch * sz.y);
+        } else
+        {
+            for (int y = sz.y; y > 0; tdata += inc, pixels += tgapitch, y--)
+                memcpy(tdata, pixels, info().pitch);
+        }
+    }
 
 	return true;
 }
 
 template<typename CORE> bool bitmap_t<CORE>::load_from_BMP(const void * buf, int buflen)
 {
-	clear();
+    clear();
+    struct Header
+    {
+        BITMAPFILEHEADER fH;
+        BITMAPINFOHEADER iH;
+    } *header = (Header*)buf;
+    if (header->fH.bfType != MAKEWORD('B', 'M')) return false;
+    if (header->iH.biCompression != 0) return false;
+    return load_from_BMPHEADER(&header->iH, buflen - sizeof(BITMAPFILEHEADER));
+}
 
-	struct Header
-	{
-		BITMAPFILEHEADER fH;
-		BITMAPINFOHEADER iH;
-	} *header = (Header*)buf;
+template<typename CORE> bool bitmap_t<CORE>::load_from_BMPHEADER(const BITMAPINFOHEADER * iH, int buflen)
+{
+    clear();
 
-	if (header->fH.bfType != MAKEWORD('B', 'M')) return false;
-	if (header->iH.biCompression != 0) return false;
+	ivec2 sz( iH->biWidth, iH->biHeight );
 
-	ivec2 sz( header->iH.biWidth, header->iH.biHeight );
-
-	switch (header->iH.biBitCount)
+	switch (iH->biBitCount)
 	{
 	case 24: create_RGB (sz); break;
 	case 32: create_RGBA(sz); break;
 	default: return false;
 	}
 
-	uint8 *pixels = (uint8*)buf + header->fH.bfOffBits, *tdata = body()+(sz.y-1)*info().pitch;
-	int bmpPitch = (info().pitch + 3) & ~3;
+	const uint8 *pixels = ((const uint8*)iH) + iH->biSize;
+    const uint8 *epixels = ((const uint8*)iH) + buflen;
+    uint8 *tdata = body()+(sz.y-1)*info().pitch;
 
-	for (int y=sz.y; y>0; tdata-=info().pitch, pixels+=bmpPitch, y--)
-		memcpy(tdata, pixels, info().pitch);
+	int bmppitch = (info().pitch + 3) & ~3;
+
+	for (int y=sz.y; y>0; tdata-=info().pitch, pixels+=bmppitch, y--)
+        if ( ASSERT((pixels + info().pitch) <= epixels) )
+		    memcpy(tdata, pixels, info().pitch);
 
 	return true;
 }
@@ -2653,13 +2787,13 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_DDS(void * buf_to, int bu
 	ivec2 sz;
     uint8 bitpp;
 
-	size_t id = FileDDS_ReadStart_Buf(buf,buflen,sz,bitpp);
-	if(id==0) return false;
+	void *decompressor = dds_start(buf,buflen,sz,bitpp);
+	if(!decompressor) return false;
 
     ASSERT( bitpp == 32 );
     ASSERT( buf_to_len >= int(sz.x * sz.y * 4) );
 
-    return FileDDS_Read(id,buf_to,sz.x*4) != 0;
+    return dds_read(decompressor,buf_to,sz.x*4);
 }
 
 
@@ -2670,8 +2804,8 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_DDS(const void * buf, int
 	ivec2 sz;
     uint8 bitpp;
 
-	size_t id = FileDDS_ReadStart_Buf(buf,buflen,sz,bitpp);
-	if(id==0) return false;
+	void *decompressor = dds_start(buf,buflen,sz,bitpp);
+	if(!decompressor) return false;
 
 	if(bitpp==8)
     {
@@ -2683,7 +2817,7 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_DDS(const void * buf, int
 	} else
         DEBUG_BREAK(); // unsupported
 
-    if(!FileDDS_Read(id,body(),info().pitch))
+    if(!dds_read(decompressor,body(),info().pitch))
     {
 		clear();
 		return false;
@@ -2759,8 +2893,22 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_PNG(const wsptr &filename
 
 template<typename CORE> bool bitmap_t<CORE>::load_from_file(const void * buf, int buflen)
 {
-	if (buflen == 0) return false;
-	return load_from_DDS(buf, buflen) || load_from_PNG(buf, buflen) || load_from_BMP(buf, buflen) || load_from_TGA(buf, buflen);
+	if (buflen < 4) return false;
+
+    uint32 tag = *(uint32 *)buf;
+    if (tag == 1196314761)
+        return load_from_PNG(buf, buflen);
+
+    if ((tag & 0xFFFFFF) == 16767231)
+        return load_from_JPG(buf, buflen);
+
+    if (tag == 542327876)
+        return load_from_DDS(buf, buflen);
+
+    if ((tag & 0xFFFF) == 19778)
+        return load_from_BMP(buf, buflen);
+
+	return load_from_TGA(buf, buflen);
 }
 template<typename CORE> bool bitmap_t<CORE>::load_from_file(const buf_c & buf)
 {
@@ -2777,7 +2925,7 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_file(const wsptr &filenam
 template<typename CORE> size_t bitmap_t<CORE>::save_as_PNG(const void * body, void * buf, int buflen) const
 {
 	if(info().sz.x<=0 || info().sz.y<=0) return 0;
-	return png_write(buf,buflen,body,info().pitch, info().sz, (uint8)info().bytepp(),0);
+	return png_write(buf,buflen,body,info().pitch, info().sz, (uint8)info().bytepp());
 }
 
 template<typename CORE> bool bitmap_t<CORE>::save_as_PNG(const wsptr &filename) const
@@ -3021,7 +3169,7 @@ bool drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, const ivec2 &p, 
     uint8 * bdes = core(); //+lls*uint32(sz.y-1);
     const uint8 * bsou = bmp.body() + p.x * bmp.info().bytepp() + bmp.info().pitch * p.y;
 
-    if (premultiply)
+    if (premultiply && bmp.info().bytepp() == 4)
     {
         for (int y = 0; y < sz.y; ++y)
         {
@@ -3065,7 +3213,7 @@ bool drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, const ivec2 &p, 
         }
 
     }
-    else if (detect_alpha_pixels)
+    else if (detect_alpha_pixels && bmp.info().bytepp() == 4)
     {
         for (int y = 0; y < sz.y; ++y)
         {
@@ -3110,12 +3258,7 @@ bool drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, const ivec2 &p, 
         }
         else
         {
-            for (int y = 0; y < sz.y; ++y)
-            {
-                memcpy(bdes, bsou, ll);
-                bsou = bsou + bmp.info().pitch;
-                bdes = bdes + info().pitch;
-            }
+            img_helper_copy(bdes, bsou, info(), bmp.info());
         }
     }
 

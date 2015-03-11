@@ -11,6 +11,7 @@ enum gmsg_e
     GM_CLOSE_DIALOG,
     GM_ROOT_FOCUS,
     GM_COPY_HOTKEY,
+    GM_PASTE_HOTKEY,
     GM_HEARTBEAT,
     GM_UI_EVENT,
     GM_DROPFILES,
@@ -86,7 +87,8 @@ template<> struct gmsg<GM_CLOSE_DIALOG> : public gmsgbase
 
 template<> struct gmsg<GM_DROPFILES> : public gmsgbase
 {
-    gmsg(const ts::wstr_c&fn, const ts::ivec2 &p) :gmsgbase(GM_DROPFILES), p(p), fn(fn) {}
+    gmsg(RID root, const ts::wstr_c&fn, const ts::ivec2 &p) :gmsgbase(GM_DROPFILES), root(root), p(p), fn(fn) {}
+    RID root;
     ts::ivec2 p;
     ts::wstr_c fn;
 };

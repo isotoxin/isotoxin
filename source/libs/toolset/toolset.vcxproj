@@ -176,7 +176,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">
       </PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="internal\FileDDS.cpp" />
+    <ClCompile Include="internal\ddsreader.cpp" />
     <ClCompile Include="internal\pngreader.cpp" />
     <ClCompile Include="internal\resample.cpp">
       <AssemblerOutput Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -214,7 +214,7 @@
     <ClInclude Include="tsbitmap.h" />
     <ClInclude Include="toolset.h" />
     <ClInclude Include="internal\cpuaccel.h" />
-    <ClInclude Include="internal\FileDDS.h" />
+    <ClInclude Include="internal\ddsreader.h" />
     <ClInclude Include="internal\pngreader.h" />
     <ClInclude Include="internal\math.h" />
     <ClInclude Include="internal\pixmap.h" />

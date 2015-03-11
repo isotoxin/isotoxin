@@ -10,6 +10,10 @@ enum mousetrack_type_e
     MTT_SBMOVE = SETBIT(2),
     MTT_TEXTSELECT = SETBIT(3),
     MTT_MOVESPLITTER = SETBIT(4),
+    MTT_MOVECONTENT = SETBIT(5),
+    MTT_SCALECONTENT = SETBIT(6),
+    MTT_APPDEFINED1 = SETBIT(7),
+    MTT_APPDEFINED2 = SETBIT(8),
 
 	MTT_ANY = 0xFFFF,
 };
@@ -68,6 +72,7 @@ enum area_e
     AREA_EDITTEXT = 32,
     AREA_HAND = 64,
 
+    AREA_NORESIZE = 65536,
 	AREA_RESIZE = AREA_LEFT|AREA_RITE|AREA_TOP|AREA_BOTTOM,
 	AREA_MOVE = AREA_CAPTION,
 };
@@ -120,7 +125,9 @@ public:
     void cleanup_children_now();
     void resort_children(); // resort children according to zindex
     bool children_sort( fastdelegate::FastDelegate< bool (rectengine_c *, rectengine_c *) > swap_them );
-    void child_move_top( rectengine_c *e );
+    void child_move_top( rectengine_c *e ) { child_move_to(0, e); }
+    void child_move_to( int index, rectengine_c *e );
+    
 
     const guirect_c &getrect() const { ASSERT(this); return SAFE_REF(rect_); }
     guirect_c &getrect() { ASSERT(this); return SAFE_REF(rect_); }
@@ -164,6 +171,7 @@ public:
     ts::aint children_count() const { return children.size();}
     rectengine_c *get_child(ts::aint index) {return children.get(index);};
     const rectengine_c *get_child(ts::aint index) const {return children.get(index);};
+    int get_child_index(const rectengine_c *e) const { return children.find(e); }
     rectengine_c *get_last_child();
 
     RID getrid() const { return rid_; }

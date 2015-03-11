@@ -23,6 +23,7 @@ void __stdcall get_info(proto_info_s *info)
 {
     if (info->protocol_name) strncpy_s( info->protocol_name, info->protocol_name_buflen, "lan", _TRUNCATE );
     if (info->description) strncpy_s( info->description, info->description_buflen, "Local Area Network protocol " SS(PLUGINVER), _TRUNCATE );
+    info->max_avatar_size = 0;
     info->priority = 1000;
     info->features = PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT | PF_AUDIO_CALLS;
     info->proxy_support = 0;

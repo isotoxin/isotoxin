@@ -58,6 +58,7 @@ INLINE ipcr & operator>>(ipcr &r, ts::astrings_c &s)
 #include "settings.h"
 #include "msgbox.h"
 #include "entertext.h"
+#include "avaselector.h"
 
 #include "res/resource.h"
 #include "application.h"

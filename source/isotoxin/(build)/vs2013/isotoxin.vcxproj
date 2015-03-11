@@ -178,6 +178,7 @@
     <ClCompile Include="..\..\addcontact.cpp" />
     <ClCompile Include="..\..\application.cpp" />
     <ClCompile Include="..\..\autoupdater.cpp" />
+    <ClCompile Include="..\..\avaselector.cpp" />
     <ClCompile Include="..\..\config.cpp" />
     <ClCompile Include="..\..\contactlist.cpp" />
     <ClCompile Include="..\..\conversation.cpp" />
@@ -204,6 +205,7 @@
     <ClInclude Include="..\..\activeprotocol.h" />
     <ClInclude Include="..\..\addcontact.h" />
     <ClInclude Include="..\..\application.h" />
+    <ClInclude Include="..\..\avaselector.h" />
     <ClInclude Include="..\..\config.h" />
     <ClInclude Include="..\..\contacts.h" />
     <ClInclude Include="..\..\contactlist.h" />

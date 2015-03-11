@@ -245,6 +245,7 @@ namespace ts
 		irect(const irect &ir):lt(ir.lt), rb(ir.rb) {}
 		template<typename T1, typename T2> irect(const vec_t<T1,2> &lt_, const vec_t<T2,2> &rb_):lt(lt_.x,lt_.y), rb(rb_.x, rb_.y) {}
 		irect(decltype(ivec2::x) x1, decltype(ivec2::y) y1, decltype(ivec2::x) x2, decltype(ivec2::y) y2) :lt(x1, y1), rb(x2, y2) {}
+        template<typename T> irect(decltype(ivec2::x) lt_, const vec_t<T,2> &rb_) :lt(lt_, lt_), rb(rb_) {}
 
 		auto width() const -> decltype(rb.x - lt.x) {return rb.x - lt.x;} 
 		auto height() const -> decltype(rb.y - lt.y) {return rb.y - lt.y;};

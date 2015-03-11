@@ -32,7 +32,7 @@ struct proto_info_s
 
     char *description = nullptr;
     int   description_buflen = 0;
-
+    int   max_avatar_size; // 0 - avatars not supported
     int   priority = 0; // bigger -> higher (automatic select default subcontact of metacontact)
     int   features = 0;
     int   proxy_support = 0;
@@ -51,6 +51,8 @@ struct contact_data_s
     int name_len;
     const char *status_message; // utf8
     int status_message_len;
+
+    int avatar_tag;
 
     unsigned state : contact_state_bits;
     unsigned ostate : contact_online_state_bits;
@@ -121,8 +123,9 @@ struct host_functions_s
     void(__stdcall *play_audio)(int cid, const audio_format_s *audio_format, const void *frame, int framesize); // plugin can request play any format
     void(__stdcall *close_audio)(int cid); // close audio player, allocated for client
     void(__stdcall *proxy_settings)(int proxy_type, const char *proxy_address);
+    void(__stdcall *avatar_data)(int cid, int tag, const void *avatar_body, int avatar_body_size);
     void(__stdcall *incoming_file)(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
-    
+
     /* 
         1. data received (all params are valid)
         2. data request (portion == nullptr && portion_size > 0)
@@ -137,6 +140,7 @@ struct host_functions_s
     FUNC1( void, set_name,       const char* ) \
     FUNC1( void, set_statusmsg,  const char* ) \
     FUNC2( void, set_config,     const void*, int ) \
+    FUNC2( void, set_avatar,     const void*, int ) \
     FUNC1( void, set_ostate,     int ) \
     FUNC1( void, set_gender,     int ) \
     FUNC0( void, init_done ) \
@@ -157,6 +161,7 @@ struct host_functions_s
     FUNC2( void, file_send,      int, const file_send_info_s *) \
     FUNC2( void, file_control,   u64, file_control_e) \
     FUNC2( void, file_portion,   u64, const file_portion_s *) \
+    FUNC1( void, get_avatar,     int ) \
     
 
 struct proto_functions_s

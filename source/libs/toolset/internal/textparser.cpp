@@ -105,8 +105,11 @@ namespace
 
 	    void add_glyph_image(GLYPHS &outlined_glyphs, GLYPHS *glyphs, const ivec2 &pos, int add_underline_len = 0) const
 	    {
-		    for (int i = 1, n = ui_scale(shadow); i <= n; i++)//можно было бы идти в обратную сторону (i--), но это не повлияет на результат, т.к. lerp(lerp(S, D, A1), D, A2) = lerp(lerp(S, D, A2), D, A1)
-			    export_to_glyph_image(glyphs, pos + ui_scale(ivec2(i)), add_underline_len, shadow_color);
+            if (type != meta_glyph_s::RECTANGLE)
+            {
+                for (int i = 1, n = ui_scale(shadow); i <= n; i++)//можно было бы идти в обратную сторону (i--), но это не повлияет на результат, т.к. lerp(lerp(S, D, A1), D, A2) = lerp(lerp(S, D, A2), D, A1)
+                    export_to_glyph_image(glyphs, pos + ui_scale(ivec2(i)), add_underline_len, shadow_color);
+            }
 
 		    export_to_glyph_image(glyphs, pos, add_underline_len, color);
 
@@ -1051,7 +1054,7 @@ irect glyphs_bound_rect(const GLYPHS &glyphs)
 	return res;
 }
 
-int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p)
+int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p, bool strong)
 {
     int cnt = glyphs.count();
     for (int i=0;i<cnt;)
@@ -1071,6 +1074,7 @@ int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p)
                 if (gi.next_dim_glyph > 0)
                     cnt = gi.next_dim_glyph;
 
+                int maxw = 0;
                 int mind = maximum<int>::value;
                 int index = -1;
 
@@ -1081,10 +1085,13 @@ int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p)
                     int d = tabs(gic.pos.x + gic.width / 2 - p.x);
                     if (d < mind)
                     {
-                        index = j;
                         mind = d;
+                        index = j;
                     }
+                    if (strong && gic.width > maxw)
+                        maxw = gic.width;
                 }
+                if (index >= 0 && strong && mind > maxw) return -1;
                 return index;
             }
 
@@ -1100,6 +1107,7 @@ int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p)
 
 int glyphs_get_charindex(const GLYPHS &glyphs, int glyphindex)
 {
+    if (glyphindex < 0) return -1;
     int glyphc = glyphs.count();
     if (glyphc && glyphs.get(0).pixels == nullptr && glyphs.get(0).outline_index > 0)
         glyphc =glyphs.get(0).outline_index;

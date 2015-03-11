@@ -6,7 +6,7 @@
 
 // typical scenario : AQ -> plghost, HA -> application
 
-#define PLGHOST_IPC_PROTOCOL_VERSION 3
+#define PLGHOST_IPC_PROTOCOL_VERSION 4
 
 enum commands_e
 {
@@ -59,6 +59,10 @@ enum commands_e
     HQ_FILE_PORTION,        // remote peer's file portion received
     HQ_QUERY_FILE_PORTION,
     AA_FILE_PORTION,        // application provides file portion
+
+    AQ_GET_AVATAR_DATA,
+    HQ_AVATAR_DATA,
+    AQ_SET_AVATAR, // set self avatar
 
     HA_CMD_STATUS,
 

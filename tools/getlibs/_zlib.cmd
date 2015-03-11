@@ -1,15 +1,26 @@
-echo zlib ....................................
+@echo off
+set getlib=zlib
+echo getting: %getlib%
+set libdir=%1
+if x%libdir%==x set libdir=..\..\source\libs-external
+if exist %libdir%\zlib\src\zlib.h goto alrd
 
-rd zlib /S /Q
+if exist zlib rd zlib /S /Q
 git clone https://github.com/madler/zlib
 
-md %1\zlib\src
-move zlib\*.c %1\zlib\src
-move zlib\*.h %1\zlib\src
+md %libdir%\zlib\src
+move zlib\*.c %libdir%\zlib\src >nul
+move zlib\*.h %libdir%\zlib\src >nul
 
-md %1\zlib\src\contrib
-move zlib\contrib\minizip %1\zlib\src\contrib
-move zlib\contrib\masmx64 %1\zlib\src\contrib
-move zlib\contrib\masmx86 %1\zlib\src\contrib
+md %libdir%\zlib\src\contrib
+move zlib\contrib\minizip %libdir%\zlib\src\contrib >nul
+move zlib\contrib\masmx64 %libdir%\zlib\src\contrib >nul
+move zlib\contrib\masmx86 %libdir%\zlib\src\contrib >nul
 
 rd zlib /S /Q
+
+echo ok: %getlib% obtained
+goto enda
+:alrd
+echo ok: %getlib% already here
+:enda

@@ -1,5 +1,78 @@
 #include "isotoxin.h"
 
+void avatar_s::load( const void *body, int size, int tag_ )
+{
+    alpha_pixels = false;
+    ts::bitmap_c bmp;
+    if (bmp.load_from_file(body, size))
+    {
+        if (tag_ == 0) ++tag; else tag = tag_;
+
+        if (bmp.info().bytepp() != 4)
+        {
+            ts::bitmap_c bmp4;
+            bmp.convert_24to32(bmp4);
+            bmp = bmp4;
+        }
+        ts::ivec2 asz = parsevec2( gui->theme().conf().get_string(CONSTASTR("avatarsize")), ts::ivec2(32));
+        if (bmp.info().sz != asz)
+        {
+            ts::bitmap_c bmprsz;
+
+            if (bmp.info().sz.x != info().sz.y)
+            {
+                bmprsz.create_RGBA(ts::ivec2(ts::tmax(bmp.info().sz.x,info().sz.y)));
+                bmprsz.fill(0);
+                bmprsz.copy( (bmprsz.info().sz - bmp.info().sz) / 2, bmp.info().sz, bmp.extbody(), ts::ivec2(0) );
+                bmp = bmprsz;
+            }
+
+            bmp.resize(bmprsz, asz, ts::FILTER_LANCZOS3);
+            bmp = bmprsz;
+        }
+
+        if (bmp.has_alpha())
+        {
+            alpha_pixels = true;
+        } else
+        {
+            // apply mask
+            if (const ts::image_extbody_c *mask = gui->theme().get_image(CONSTASTR("avamask")))
+            {
+                if (mask->info().sz >>= bmp.info().sz)
+                {
+                    if (mask->info().sz > bmp.info().sz)
+                    {
+                        ts::bitmap_c bmplarger;
+                        bmplarger.create_RGBA(ts::tmax( mask->info().sz, bmp.info().sz ));
+                        bmplarger.fill(0);
+                        bmplarger.copy( (bmplarger.info().sz - bmp.info().sz) / 2, bmp.info().sz, bmp.extbody(), ts::ivec2(0) );
+                        bmp = bmplarger;
+                    }
+                    bmp.before_modify();
+                    ts::ivec2 offs = (bmp.info().sz - mask->info().sz) / 2;
+                    ts::img_helper_copy_components(bmp.body() + 3 + offs.x * bmp.info().bytepp() + offs.y * bmp.info().pitch, mask->body() + 3, bmp.info(offs), mask->info(), 1);
+                }
+            }
+            if (const ts::image_extbody_c *avabase = gui->theme().get_image(CONSTASTR("avabase")))
+            {
+                if (avabase->info().sz >>= bmp.info().sz)
+                {
+                    ts::bitmap_c prepared;
+                    prepared.create_RGBA(avabase->info().sz);
+                    ts::ivec2 offs = (avabase->info().sz - bmp.info().sz) / 2;
+                    prepared.alpha_blend(offs, bmp.extbody(), avabase->extbody());
+                    bmp = prepared;
+                }
+            }
+        }
+    
+        bool a = create_from_bitmap(bmp, false, true, !alpha_pixels);
+        if (!alpha_pixels) alpha_pixels = a;
+    }
+
+}
+
 ts::static_setup<contacts_c> contacts;
 
 gmsg<ISOGM_MESSAGE>::gmsg(contact_c *sender, contact_c *receiver, message_type_app_e mt) :gmsgbase(ISOGM_MESSAGE), sender(sender), receiver(receiver)
@@ -41,7 +114,11 @@ contact_c::contact_c()
 }
 contact_c::~contact_c()
 {
-    if (gui) gui->delete_event( DELEGATE(this,flashing_proc) );
+    if (gui)
+    {
+        gui->delete_event( DELEGATE(this,flashing_proc) );
+        gui->delete_event( DELEGATE(this,check_invite) );
+    }
 }
 
 bool contact_c::is_protohit( bool strong )
@@ -212,10 +289,26 @@ contact_c * contact_c::subget_default() const
     return maxpriority;
 }
 
+const avatar_s *contact_c::get_avatar() const
+{
+    if (!is_multicontact())
+        return avatar.get();
+
+    const avatar_s * r = nullptr;
+    for (const contact_c *c : subcontacts)
+    {
+        if (c->get_options().is(contact_c::F_AVA_DEFAULT) && c->get_avatar())
+            return c->get_avatar();
+        if (c->get_avatar() && (c->get_options().is(contact_c::F_DEFALUT) || r == nullptr) )
+            r = c->get_avatar();
+    }
+    return r;
+}
+
 void contact_c::make_time_unique(time_t &t)
 {
     if (history.size() == 0 || t < history.get(0).time )
-        prf().load_history(getkey()); // load whole history to correct uniquesate t
+        prf().load_history(getkey()); // load whole history to correct uniquzate t
 
     for( const post_s &p : history )
         if (p.time == t)
@@ -242,6 +335,24 @@ void contact_c::load_history(int n_last_items)
             p = row->other;
         }
     }
+}
+
+bool contact_c::check_invite(RID r, GUIPARAM p)
+{
+    ASSERT( !is_multicontact() );
+    if (!opts.unmasked().is(F_SHOW_FRIEND_REQUEST))
+    {
+        if (p)
+        {
+            DELAY_CALL_R(1.0, DELEGATE(this, check_invite), (GUIPARAM)((int)p - 1));
+        } else
+        {
+            // no invite... looks like already confirmed, but not saved
+            // so, accept again
+            b_accept(RID(), nullptr);
+        }
+    }
+    return true;
 }
 
 void contact_c::send_file(const ts::wstr_c &fn)
@@ -467,9 +578,12 @@ bool contact_c::b_reject_call(RID, GUIPARAM par)
 
 bool contact_c::b_accept(RID, GUIPARAM par)
 {
-    gui_notice_c *ownitm = (gui_notice_c *)par;
-    HOLD(ownitm->getparent())().getparent().call_children_repos();
-    TSDEL(ownitm);
+    if (par)
+    {
+        gui_notice_c *ownitm = (gui_notice_c *)par;
+        HOLD(ownitm->getparent())().getparent().call_children_repos();
+        TSDEL(ownitm);
+    }
 
     if (active_protocol_c *ap = prf().ap(getkey().protoid))
         ap->accept(getkey().contactid);
@@ -714,6 +828,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
                 cc->set_customname(c->customname);
                 cc->set_statusmsg(c->statusmsg);
                 cc->options().setup(c->options);
+                cc->set_avatar(c->avatar.data(), c->avatar.size(), c->avatar_tag);
 
                 if (!arr.find_sorted(index, cc->getkey()))
                     arr.insert(index, cc);
@@ -810,6 +925,16 @@ contact_c *contacts_c::create_new_meta()
     return metac;
 }
 
+ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_AVATAR> &ava)
+{
+    if (contact_c *c = find(ava.contact))
+        c->set_avatar( ava.data.data(), ava.data.size(), ava.tag );
+
+    prf().set_avatar( ava.contact, ava.data, ava.tag );
+    
+    return 0;
+}
+
 ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
 {
     prf().dirty_sort();
@@ -827,6 +952,8 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
     if (contact.key.contactid == 0)
     {
         c = self->subgetadd(contact.key);
+        if (active_protocol_c *ap = prf().ap(contact.key.protoid))
+            ap->set_avatar(c);
         is_self = true;
         
     } else
@@ -899,16 +1026,20 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
         }
 
         if ( c->get_state() != oldst )
+        {
             if (c->get_historian()->gui_item)
             {
                 gui_contact_item_c *ci = c->get_historian()->gui_item;
                 if (ci->role == CIR_CONVERSATION_HEAD)
                 {
                     DECLARE_DELAY_EVENT_BEGIN(0)
-                        ((gui_contact_item_c *)param)->update_buttons();
-                    DECLARE_DELAY_EVENT_END( ci )
+                    ((gui_contact_item_c *)param)->update_buttons();
+                    DECLARE_DELAY_EVENT_END(ci)
                 }
             }
+            if (c->get_state() == CS_INVITE_RECEIVE)
+                c->check_invite();
+        }
 
         prf().dirty_sort();
     }
@@ -920,6 +1051,21 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
     {
         c->set_ostate(contact.ostate);
     }
+
+    if (0 != (contact.mask & CDM_AVATAR_TAG) && !is_self)
+    {
+        if (c->avatar_tag() != contact.avatar_tag)
+        {
+            if (contact.avatar_tag == 0)
+            {
+                c->set_avatar(nullptr,0);
+                prf().set_avatar(c->getkey(), ts::blob_c(), 0);
+            }
+            else if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
+                ap->avatar_data_request( contact.key.contactid );
+        }
+    }
+
 
     prf().dirtycontact(c->getkey());
 
@@ -1077,9 +1223,10 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
     bool up_unread = true;
     switch (imsg.mt)
     {
+    case MTA_FRIEND_REQUEST:
+        sender->friend_request();
     case MTA_MESSAGE:
     case MTA_ACTION:
-    case MTA_FRIEND_REQUEST:
         if (g_app->is_inactive(true) || !msg.current)
             play_sound( snd_incoming_message, false );
         break;

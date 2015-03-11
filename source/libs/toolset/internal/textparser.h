@@ -69,7 +69,7 @@ ivec2 parse_text(const wstr_c &text, int max_line_length, CUSTOM_TAG_PARSER ctp,
 
 //—читает пр€моугольник, ограничивающий все глифы из заданного массива
 irect glyphs_bound_rect(const GLYPHS &glyphs);
-int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p);
+int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p, bool strong = false);
 int glyphs_get_charindex(const GLYPHS &glyphs, int glyphindex);
 
 } // namespace ts

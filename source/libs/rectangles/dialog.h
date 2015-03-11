@@ -137,7 +137,7 @@ protected:
 
 
         void hgroup( const ts::wsptr& desc );
-        void label( const ts::wsptr& text );
+        description_s& label( const ts::wsptr& text );
         description_s& hiddenlabel( const ts::wsptr& text, ts::TSCOLOR col );
         void page_header( const ts::wsptr& text );
         description_s& vspace( int h = 5, GUIPARAMHANDLER oncreatehanler = nullptr );
@@ -155,6 +155,7 @@ protected:
 
     ts::hashmap_t<int, ts::safe_ptr<guirect_c>> subctls;
     void updrect(void *, int r, const ts::ivec2 &p);
+    void removerctl(int r);
 
     typedef ts::array_inplace_t<description_s, 0> descarray;
     descarray descs;
@@ -222,6 +223,9 @@ protected:
     void ctlenable( const ts::asptr&name, bool enblflg );
 
     void set_combik_menu( const ts::asptr& ctl_name, const menu_c& m );
+    void set_label_text( const ts::asptr& ctl_name, const ts::wstr_c& t );
+
+    ts::UPDATE_RECTANGLE getrectupdate() { return DELEGATE(this, updrect); }
 
 public:
     gui_dialog_c(initial_rect_data_s &data) :gui_vscrollgroup_c(data) {}

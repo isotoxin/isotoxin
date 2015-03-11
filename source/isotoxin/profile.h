@@ -26,7 +26,7 @@ struct active_protocol_s : public active_protocol_data_s
     void set(int column, ts::data_value_s& v);
     void get(int column, ts::data_pair_s& v);
 
-    static const int columns = 1 + 6; // tag, name, uname, ustatus, conf, options
+    static const int columns = 1 + 7; // tag, name, uname, ustatus, conf, options, avatar
     static ts::asptr get_table_name() {return CONSTASTR("protocols");}
     static void get_column_desc(int index, ts::column_desc_s&cd);
     static ts::data_type_e get_column_type(int index);
@@ -41,11 +41,13 @@ struct contacts_s
     ts::wstr_c statusmsg;
     ts::wstr_c customname;
     time_t readtime;
+    ts::blob_c avatar;
+    int avatar_tag;
 
     void set(int column, ts::data_value_s& v);
     void get(int column, ts::data_pair_s& v);
 
-    static const int columns = 1 + 8; // contact_id, proto_id, meta_id, options, name, statusmsg, readtime, customname
+    static const int columns = 1 + 10; // contact_id, proto_id, meta_id, options, name, statusmsg, readtime, customname, avatar, avatar_tag
     static ts::asptr get_table_name() { return CONSTASTR("contacts"); }
     static void get_column_desc(int index, ts::column_desc_s&cd);
     static ts::data_type_e get_column_type(int index);
@@ -238,6 +240,8 @@ public:
     active_protocol_c *ap(int id) { for( active_protocol_c *ap : protocols ) if (ap && ap->getid() == id && !ap->is_dip()) return ap; return nullptr; }
 
     void load( const ts::wstr_c& pfn );
+
+    void set_avatar( const contact_key_s&k, const ts::blob_c &avadata, int tag );
 
     void dirtycontact( const contact_key_s&k ) { dirtycontacts.get_index(k); changed(); }
     void killcontact( const contact_key_s&k );

@@ -1704,7 +1704,7 @@ Cleanup: /* CLEANUP */
 
         VDPixmapResampler resampler;
 
-        const BYTE* src;
+        const uint8* src;
         imgdesc_s srcinfo;
 
         bitmap_c& bdst;
@@ -1716,7 +1716,7 @@ Cleanup: /* CLEANUP */
         bool	fLetterbox;
         bool	fInterlaced;
 
-        VDResizeFilterData(const uint8 *sou, const imgdesc_s &souinfo, bitmap_c& dst) : src(src), srcinfo(souinfo), bdst(dst)
+        VDResizeFilterData(const uint8 *source, const imgdesc_s &souinfo, bitmap_c& dst) : src(source), srcinfo(souinfo), bdst(dst)
         {
         }
 

@@ -38,6 +38,7 @@ void __stdcall get_info( proto_info_s *info )
     if (info->protocol_name) strncpy_s(info->protocol_name, info->protocol_name_buflen, "tox", _TRUNCATE);
     if (info->description) strncpy_s(info->description, info->description_buflen, "Isotoxin tox wrapper " SS(PLUGINVER), _TRUNCATE);
     info->priority = 500;
+    info->max_avatar_size = TOX_AVATAR_MAX_DATA_LENGTH;
     info->features = PF_AUDIO_CALLS | PF_SEND_FILE; //PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT;
     info->proxy_support = PROXY_SUPPORT_HTTP | PROXY_SUPPORT_SOCKS5;
     info->max_friend_request_bytes = TOX_MAX_FRIENDREQUEST_LENGTH;
@@ -104,6 +105,8 @@ enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
     chunk_magic,
     chunk_descriptor_pubid,
     chunk_descriptor_state,
+    chunk_descriptor_avatartag,
+    chunk_descriptor_avatarhash,
 
     chunk_msgs_sending = 10,
     chunk_msg_sending,
@@ -862,6 +865,9 @@ private:
 public:
     int callindex = -1;
 
+    int avatar_tag = 0;
+    byte avatar_hash[TOX_HASH_LENGTH];
+
     contact_state_e state = CS_ROTTEN;
     str_c pubid;
 
@@ -970,6 +976,7 @@ void message2send_s::try_send(int time)
 
 contact_descriptor_s::contact_descriptor_s(bool init_new_id, int fid) :pubid(TOX_FRIEND_ADDRESS_SIZE * 2, true), fid(fid)
 {
+    memset(avatar_hash, 0, sizeof(avatar_hash));
     LIST_ADD(this, first_desc, last_desc, prev, next);
 
     if (init_new_id)
@@ -1046,6 +1053,7 @@ void update_self()
         self.status_message = statusmsg.cstr();
         self.status_message_len = statusmsg.get_length();
         self.state = self_state;
+        self.avatar_tag = 0;
         hf->update_contact(&self);
 
     }
@@ -1056,7 +1064,7 @@ static void update_contact( const contact_descriptor_s *cdesc )
     if (ASSERT(tox))
     {
         contact_data_s cd;
-        cd.mask = CDM_PUBID | CDM_STATE | CDM_ONLINE_STATE;
+        cd.mask = CDM_PUBID | CDM_STATE | CDM_ONLINE_STATE | CDM_AVATAR_TAG;
         cd.id = cdesc->get_id();
 
         int st = cdesc->get_fid() >= 0 ? tox_get_user_status(tox, cdesc->get_fid()) : TOX_USERSTATUS_INVALID;
@@ -1075,6 +1083,8 @@ static void update_contact( const contact_descriptor_s *cdesc )
 
         cd.public_id = pubid.cstr();
         cd.public_id_len = pubid.get_length();
+
+        cd.avatar_tag = cdesc->avatar_tag;
 
         str_c name, statusmsg;
 
@@ -1432,7 +1442,57 @@ static void cb_file_data(Tox *, int32_t fid, uint8_t filenumber, const uint8_t *
         }
 }
 
+static void cb_avatar_info(Tox*, int32_t fid, uint8_t format, uint8_t* hash, void* /*userdata*/)
+{
+    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+    {
+        if (format == TOX_AVATAR_FORMAT_NONE)
+        {
+            memset( desc->avatar_hash, 0, TOX_HASH_LENGTH );
+            if ( desc->avatar_tag == 0 ) return;
 
+            // avatar changed to none, so just send empty avatar to application (avatar tag == 0)
+
+            desc->avatar_tag = 0;
+            contact_data_s cd;
+            cd.id = desc->get_id();
+            cd.mask = CDM_AVATAR_TAG;
+            cd.avatar_tag = 0;
+            hf->update_contact(&cd);
+            hf->save();
+
+        } else
+        {
+            if (0 != memcmp(hash,desc->avatar_hash, TOX_HASH_LENGTH))
+            {
+                // avatar changed
+                memcpy( desc->avatar_hash, hash, TOX_HASH_LENGTH );
+                ++desc->avatar_tag; // new avatar version
+
+                contact_data_s cd;
+                cd.id = desc->get_id();
+                cd.mask = CDM_AVATAR_TAG;
+                cd.avatar_tag = desc->avatar_tag;
+                hf->update_contact(&cd);
+                hf->save();
+            }
+        }
+    }
+}
+
+static void cb_avatar_data(Tox*, int32_t fid, uint8_t, uint8_t *hash, uint8_t *data, uint32_t datalen, void * /*userdata*/)
+{
+    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+    {
+        if (0 != memcmp(hash, desc->avatar_hash, TOX_HASH_LENGTH))
+        {
+            memcpy(desc->avatar_hash, hash, TOX_HASH_LENGTH);
+            ++desc->avatar_tag; // new avatar version
+        }
+
+        hf->avatar_data(desc->get_id(), desc->avatar_tag, data, datalen);
+    }
+}
 
 
 static void cb_group_invite(Tox *, int /*fid*/, uint8_t /*type*/, const uint8_t * /*data*/, uint16_t /*length*/, void *)
@@ -1706,6 +1766,8 @@ static void prepare()
     tox_callback_file_control(tox, cb_file_control, nullptr);
     tox_callback_file_data(tox, cb_file_data, nullptr);
 
+    tox_callback_avatar_info(tox, cb_avatar_info, nullptr);
+    tox_callback_avatar_data(tox, cb_avatar_data, nullptr);
 
     toxav = toxav_new( tox, MAX_CALLS );
 
@@ -1926,6 +1988,44 @@ void __stdcall set_gender(int /*gender*/)
 {
 }
 
+void __stdcall get_avatar(int id)
+{
+    if (tox)
+    {
+        auto it = id2desc.find(id);
+        if (it == id2desc.end()) return;
+        contact_descriptor_s *cd = it->second;
+        if (cd->avatar_tag == 0)
+            tox_request_avatar_info(tox, cd->get_fid());
+        else
+            tox_request_avatar_data(tox, cd->get_fid());
+    }
+}
+
+void __stdcall set_avatar(const void*data, int isz)
+{
+    static byte avahash[ TOX_HASH_LENGTH ] = {0};
+    static int prevavalen = 0;
+
+    if (isz > TOX_AVATAR_MAX_DATA_LENGTH) isz = 0;
+
+    if (isz == 0 && prevavalen > 0)
+    {
+        prevavalen = 0;
+        memset(avahash,0,sizeof(avahash));
+        if (tox) tox_set_avatar(tox, TOX_AVATAR_FORMAT_NONE, nullptr, 0);
+    } else if (tox)
+    {
+        byte newavahash[ TOX_HASH_LENGTH ];
+        tox_hash(newavahash,(const byte *)data,isz);
+        if (0 != memcmp(newavahash,avahash,TOX_HASH_LENGTH))
+        {
+            memcmp(avahash, newavahash, TOX_HASH_LENGTH);
+            tox_set_avatar(tox, TOX_AVATAR_FORMAT_PNG, (const byte *)data, isz);
+        }
+        prevavalen = isz;
+    }
+}
 
 void __stdcall set_config(const void*data, int isz)
 {
@@ -1981,6 +2081,19 @@ void __stdcall set_config(const void*data, int isz)
                         cd->pubid = lc.get_astr();
                     if (lc(chunk_descriptor_state))
                         cd->state = (contact_state_e)lc.get_int();
+                    if (lc(chunk_descriptor_avatartag))
+                        cd->avatar_tag = lc.get_int();
+
+                    if (cd->avatar_tag != 0)
+                    {
+                        if (int bsz = lc(chunk_descriptor_avatarhash))
+                        {
+                            loader hbl(lc.chunkdata(), bsz);
+                            int dsz;
+                            if (const void *mb = hbl.get_data(dsz))
+                                memcpy(cd->avatar_hash, mb, min(dsz, TOX_HASH_LENGTH));
+                        }
+                    }
 
                     if (id == 0) continue;
 
@@ -2114,6 +2227,12 @@ void operator<<(chunk &chunkm, const contact_descriptor_s &desc)
     //chunk(chunkm.b, chunk_descriptor_fid) << desc.get_fid();
     chunk(chunkm.b, chunk_descriptor_pubid) << desc.pubid;
     chunk(chunkm.b, chunk_descriptor_state) << (int)desc.state;
+    chunk(chunkm.b, chunk_descriptor_avatartag) << desc.avatar_tag;
+    if (desc.avatar_tag != 0)
+    {
+        chunk(chunkm.b, chunk_descriptor_avatarhash) << bytes(desc.avatar_hash, TOX_HASH_LENGTH);
+    }
+    
 }
 
 void operator<<(chunk &chunkm, const message2send_s &m)

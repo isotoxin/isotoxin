@@ -375,6 +375,10 @@ bool application_c::iso_gui_c::b_customize(RID r, GUIPARAM param)
             prf().load(wpn);
 
         }
+        static void m_about(const ts::str_c&)
+        {
+            SUMMON_DIALOG<dialog_about_c>(UD_ABOUT);
+        }
     };
 
 #ifndef _FINAL
@@ -407,6 +411,8 @@ bool application_c::iso_gui_c::b_customize(RID r, GUIPARAM param)
 
 
     m.add( TTT("Настройки",42), 0, handlers::m_settings );
+    m.add_separator();
+    m.add( TTT("О программе",206), 0, handlers::m_about );
     gui_popup_menu_c::show(r.call_get_popup_menu_pos(), m);
 
     //SUMMON_DIALOG<dialog_settings_c>(L"dialog_settings");

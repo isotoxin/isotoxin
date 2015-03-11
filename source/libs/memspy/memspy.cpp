@@ -216,7 +216,7 @@ void block_header_s::mf(void *p)
     for (block_header_s *b = first_free; b; b = b->next)
     {
         if (b == me)
-            __debugbreak();
+            __debugbreak(); // delete again
     }
 
     LIST_DEL(me, first, last, prev, next);

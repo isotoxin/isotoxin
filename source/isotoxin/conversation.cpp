@@ -865,7 +865,7 @@ static contact_c * readtime_historian = nullptr;
 
 void gui_message_item_c::ctx_menu_golink(const ts::str_c & lnk)
 {
-    ShellExecuteA(NULL, "open", lnk, nullptr, nullptr, SW_SHOWNORMAL);
+    open_link(lnk);
     gui->selcore().flash_and_clear_selection();
 }
 void gui_message_item_c::ctx_menu_copylink(const ts::str_c & lnk)
@@ -1076,13 +1076,17 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                 textrect.make_dirty();
                 getengine().redraw();
             }
+            return gui_label_c::sq_evt(qp,rid,data);
         }
         break;
     case SQ_DETECT_AREA:
         if (!popupmenu && textrect.get_text().find_pos(CONSTWSTR("<cstm=a")) >= 0 && !getengine().mtrack(getrid(), MTT_TEXTSELECT) && !some_selected())
         {
             if (check_overlink(data.detectarea.pos))
+            {
                 data.detectarea.area = AREA_HAND;
+                return true;
+            }
         }
         break;
 
@@ -1284,44 +1288,6 @@ static void parse_smiles( ts::wstr_c &message )
     //message.replace_all(CONSTWSTR("(colb)"), CONSTWSTR("<img=/smiles/colb32.png,-1>"));
 }
 
-static ts::ivec2 extract_link(const ts::wstr_c &message, int chari)
-{
-    int e = message.find_pos(chari, CONSTWSTR("<cstm=b"));
-    if (e > 0)
-    {
-        int s = message.substr(0, chari).find_last_pos(CONSTWSTR("<cstm=a"));
-        if (s >= 0)
-        {
-            int ne = message.as_num_part(-1, e + 7);
-            if (ne >= 0 && ne == message.as_num_part(-1, s + 7))
-            {
-                s = message.find_pos(s+7,'>') + 1;
-                return ts::ivec2( s, e );
-            }
-        }
-    }
-    return ts::ivec2(-1);
-}
-
-static int detect_link(const ts::wstr_c &message, int chari)
-{
-    int overlink = -1;
-
-    int e = message.find_pos(chari, CONSTWSTR("<cstm=b"));
-    if (e > 0)
-    {
-        int s = message.substr(0,chari).find_last_pos(CONSTWSTR("<cstm=a"));
-        if (s >= 0)
-        {
-            int ne = message.as_num_part(-1, e + 7);
-            if (ne >= 0 && ne == message.as_num_part(-1, s + 7))
-                overlink = ne;
-        }
-    }
-
-    return overlink;
-}
-
 static int prepare_link(ts::wstr_c &message, int i, int n)
 {
     int cnt = message.get_length();
@@ -1417,95 +1383,27 @@ ts::ivec2 gui_message_item_c::extract_message(int chari) const
     return ts::ivec2(left, rite);
 }
 
-ts::ivec2 gui_message_item_c::get_link_pos_under_cursor(const ts::ivec2 &localpos) const
+/*virtual*/ void gui_message_item_c::get_link_prolog(ts::wstr_c & r, int linknum) const
 {
-    if (textrect.is_dirty_glyphs()) return ts::ivec2(-1);
-    ts::irect clar = get_client_area();
-    if (clar.inside(localpos))
+    r.set(CONSTWSTR("<b>"));
+    if (linknum == overlink)
     {
-        const ts::GLYPHS &glyphs = get_glyphs();
-        ts::irect gr = ts::glyphs_bound_rect(glyphs);
-        gr += glyphs_pos;
-        gr.lt.x -= 5; if (gr.lt.x < 0) gr.lt.x = 0;
-        if (gr.inside(localpos))
-        {
-            ts::ivec2 cp = localpos - glyphs_pos;
-            int glyph_under_cursor = ts::glyphs_nearest_glyph(glyphs, cp);
-            int char_index = ts::glyphs_get_charindex(glyphs, glyph_under_cursor);
-            if (char_index >= 0 && char_index < textrect.get_text().get_length())
-                return extract_link(textrect.get_text(), char_index);
-        }
+        ts::TSCOLOR c = get_default_text_color(3);
+        r.append(CONSTWSTR("<color=#")).append_as_hex(ts::RED(c))
+            .append_as_hex(ts::GREEN(c))
+            .append_as_hex(ts::BLUE(c))
+            .append_as_hex(ts::ALPHA(c))
+            .append(CONSTWSTR("><u>"));
     }
-    return ts::ivec2(-1);
-}
 
-ts::str_c gui_message_item_c::get_link_under_cursor(const ts::ivec2 &localpos) const
-{
-    ts::ivec2 p = get_link_pos_under_cursor(localpos);
-    if ( p.r0 >= 0 && p.r1 >= p.r0 ) return textrect.get_text().substr( p.r0, p.r1 );
-    return ts::str_c();
 }
-
-bool gui_message_item_c::check_overlink(const ts::ivec2 &pos)
+/*virtual*/ void gui_message_item_c::get_link_epilog(ts::wstr_c & r, int linknum) const
 {
-    if (textrect.is_dirty_glyphs()) return false;
-    ts::irect clar = get_client_area();
-    if (clar.inside(pos))
-    {
-        ts::GLYPHS &glyphs = get_glyphs();
-        ts::irect gr = ts::glyphs_bound_rect(glyphs);
-        gr += glyphs_pos;
-        gr.lt.x -= 5; if (gr.lt.x < 0) gr.lt.x = 0;
-        if (gr.inside(pos))
-        {
-            ts::ivec2 cp = pos - glyphs_pos;
-            int glyph_under_cursor = ts::glyphs_nearest_glyph(glyphs, cp);
-            int char_index = ts::glyphs_get_charindex(glyphs, glyph_under_cursor);
-            if (char_index >= 0 && char_index < textrect.get_text().get_length())
-            {
-                int boverlink = overlink;
-                overlink = detect_link(textrect.get_text(), char_index);
-                if (overlink != boverlink)
-                {
-                    textrect.make_dirty();
-                    getengine().redraw();
-                }
-            }
-        }
-    }
-    return overlink >= 0;
-}
+    if (linknum == overlink)
+        r.set(CONSTWSTR("</b></u></color>"));
+    else
+        r.set(CONSTWSTR("</b>"));
 
-/*virtual*/ bool gui_message_item_c::custom_tag_parser(ts::wstr_c& r, const ts::wsptr &tv) const
-{
-    if (tv.l)
-    {
-        if (tv.s[0] == 'a')
-        {
-            r.set(CONSTWSTR("<b>"));
-            if (ts::pwstr_c(tv).as_num_part(-2, 1) == overlink)
-            {
-                ts::TSCOLOR c = get_default_text_color(3);
-                r.append(CONSTWSTR("<color=#")).append_as_hex(ts::RED(c))
-                    .append_as_hex(ts::GREEN(c))
-                    .append_as_hex(ts::BLUE(c))
-                    .append_as_hex(ts::ALPHA(c))
-                    .append(CONSTWSTR("><u>"));
-            }
-            return true;
-        } else if (tv.s[0] == 'b')
-        {
-            if (ts::pwstr_c(tv).as_num_part(-2, 1) == overlink)
-            {
-                r.set(CONSTWSTR("</b></color></u>"));
-            } else
-            {
-                r.set(CONSTWSTR("</b>"));
-            }
-            return true;
-        }
-    }
-    return false;
 }
 
 void gui_message_item_c::append_text( const post_s &post, bool resize_now )
@@ -2160,7 +2058,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_UPDATE_CONTACT_V> & p)
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<GM_DROPFILES> & p)
 {
-    if (historian && !historian->getkey().is_self())
+    if (historian && !historian->getkey().is_self() && p.root == getroot())
     {
         historian->send_file(p.fn);
     }
@@ -2196,6 +2094,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> & p)
     {
         case MTA_FRIEND_REQUEST:
             gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_FRIEND_REQUEST_RECV, p.post.message).send();
+            sender->friend_request();
             break;
         case MTA_INCOMING_CALL:
             gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_INCOMING_CALL, p.post.message).send();
@@ -2584,8 +2483,13 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
                 break;
         }
     }
-    if (ch.pass == 0 && ch.pp == PP_MSGOPTIONS && caption->contacted())
-        caption->getcontact().reselect(true);
+    if (ch.pass == 0 && caption->contacted())
+    {
+        if (ch.pp == PP_MSGOPTIONS)
+            caption->getcontact().reselect(true);
+        else if (ch.pp == PP_AVATAR)
+            caption->getengine().redraw();
+    }
     return 0;
 }
 

@@ -230,6 +230,7 @@ void exception_operator_c::create_dump(EXCEPTION_POINTERS* pExp/*=NULL*/, bool n
     if (pDump)
     {
         static sstr_t<MAX_PATH+32> exename(MAX_PATH,false);
+        exename.set_length(MAX_PATH);
         GetModuleFileNameA(nullptr, exename.str(), MAX_PATH);
         exename.set_length();
         int namei = exename.find_last_pos_of("/\\");

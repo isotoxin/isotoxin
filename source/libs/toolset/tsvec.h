@@ -146,6 +146,9 @@ public:
     INLINE bool operator ==(const vec_t& v) const { for (int i = 0; i < N; i++) if ((&x)[i] != v[i]) return false; return true; }
     INLINE bool operator !=(const vec_t& v) const { for (int i = 0; i < N; i++) if ((&x)[i] != v[i]) return true; return false; }
 
+    INLINE bool operator >>=(const vec_t& v) const { for (int i = 0; i < N; i++) if ((&x)[i] < v[i]) return false; return true; } // if all
+
+
     INLINE bool operator >>(const vec_t& v) const { for (int i = 0; i < N; i++) if ((&x)[i] <= v[i]) return false; return true; } // if all
     INLINE bool operator <<(const vec_t& v) const { for (int i = 0; i < N; i++) if ((&x)[i] >= v[i]) return false; return true; } // if all
 

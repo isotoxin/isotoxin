@@ -691,6 +691,13 @@ void gui_button_c::set_face( const ts::asptr&fancename )
             if (flags.is(F_LIMIT_MAX_SIZE))
                 return get_min_size();
 
+            if (flags.is(F_CONSTANT_SIZE_Y))
+            {
+                ts::ivec2 sz = __super::get_max_size();
+                sz.y = get_min_size().y;
+                return sz;
+            }
+
             return __super::get_max_size();
         }
         return desc->rects[curstate].size();
@@ -747,7 +754,7 @@ void gui_button_c::set_face( const ts::asptr&fancename )
         }
         break;
     case SQ_MOUSE_LUP:
-        if (!flags.is(F_DISABLED))
+        if (!flags.is(F_DISABLED) && flags.is(F_PRESS))
         {
             if (getprops().screenrect().inside(data.mouse.screenpos))
             {
@@ -814,7 +821,7 @@ void gui_label_c::draw()
         dd.size = ca.size();
 
         text_draw_params_s tdp;
-
+        tdp.rectupdate = updaterect;
         draw(dd, tdp);
         getengine().end_draw();
     }
@@ -831,7 +838,7 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
     if (tdp.font) textrect.set_font(tdp.font);
     if (tdp.textoptions) textrect.set_options(*tdp.textoptions);
     if (tdp.forecolor) textrect.set_def_color(*tdp.forecolor);
-    bool updr = true;
+    bool do_updr = true;
     if (flags.is(FLAGS_SELECTABLE) && gui->selcore().owner == this)
     {
         flags.set(FLAGS_SELECTION);
@@ -839,7 +846,7 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
 
         if (gui->selcore().is_dirty() || textrect.is_dirty())
         {
-            updr = false;
+            do_updr = false;
             textrect.parse_and_render_texture(nullptr, custom_tag_parser_delegate(), false); // it changes glyphs array
             bool still_selected = selcore.sure_selected();
 
@@ -868,7 +875,7 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
     {
         flags.clear(FLAGS_SELECTION);
         textrect.parse_and_render_texture(nullptr, custom_tag_parser_delegate(), false); // it changes glyphs array
-        updr = false;
+        do_updr = false;
         if (tdp.rectupdate)
         {
             ts::rectangle_update_s updr;
@@ -883,7 +890,7 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
     }
 
     m_engine->draw(ts::ivec2(0), textrect.get_texture(), ts::irect(ts::ivec2(0), tmin(dd.size, textrect.size)), true);
-    if (updr && tdp.rectupdate)
+    if (do_updr && tdp.rectupdate)
     {
         ts::rectangle_update_s updr;
         updr.updrect = tdp.rectupdate;
@@ -972,7 +979,10 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
         break;
     case SQ_MOUSE_LUP:
         if (getengine().mtrack(getrid(), MTT_TEXTSELECT))
+        {
             getengine().end_mousetrack(MTT_TEXTSELECT);
+            gui->selcore().endtrack();
+        }
         break;
     case SQ_MOUSE_MOVE_OP:
         if (getengine().mtrack(getrid(), MTT_TEXTSELECT))
@@ -1001,6 +1011,230 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
         return true;
     }
     return false;
+}
+
+
+
+
+//________________________________________________________________________________________________________________________________ gui label ex
+
+static int detect_link(const ts::wstr_c &message, int chari)
+{
+    int overlink = -1;
+
+    int e = message.find_pos(chari, CONSTWSTR("<cstm=b"));
+    if (e > 0)
+    {
+        int s = message.substr(0, chari).find_last_pos(CONSTWSTR("<cstm=a"));
+        if (s >= 0)
+        {
+            int ne = message.as_num_part(-1, e + 7);
+            if (ne >= 0 && ne == message.as_num_part(-1, s + 7))
+                overlink = ne;
+        }
+    }
+
+    return overlink;
+}
+
+static ts::ivec2 extract_link(const ts::wstr_c &message, int chari)
+{
+    int e = message.find_pos(chari, CONSTWSTR("<cstm=b"));
+    if (e > 0)
+    {
+        int s = message.substr(0, chari).find_last_pos(CONSTWSTR("<cstm=a"));
+        if (s >= 0)
+        {
+            int ne = message.as_num_part(-1, e + 7);
+            if (ne >= 0 && ne == message.as_num_part(-1, s + 7))
+            {
+                s = message.find_pos(s + 7, '>') + 1;
+                return ts::ivec2(s, e);
+            }
+        }
+    }
+    return ts::ivec2(-1);
+}
+
+bool gui_label_ex_c::check_overlink(const ts::ivec2 &pos)
+{
+    if (textrect.is_dirty_glyphs()) return false;
+    ts::irect clar = get_client_area();
+    bool set = false;
+    if (clar.inside(pos))
+    {
+        ts::GLYPHS &glyphs = get_glyphs();
+        ts::irect gr = ts::glyphs_bound_rect(glyphs);
+        gr += glyphs_pos;
+        if (gr.inside(pos))
+        {
+            ts::ivec2 cp = pos - glyphs_pos;
+            int glyph_under_cursor = ts::glyphs_nearest_glyph(glyphs, cp, true);
+            int char_index = ts::glyphs_get_charindex(glyphs, glyph_under_cursor);
+            if (char_index >= 0 && char_index < textrect.get_text().get_length())
+            {
+                set = true;
+                int boverlink = overlink;
+                overlink = detect_link(textrect.get_text(), char_index);
+                if (overlink != boverlink)
+                {
+                    textrect.make_dirty();
+                    getengine().redraw();
+                }
+            }
+        }
+
+    }
+
+    if (!set && overlink >= 0)
+    {
+        overlink = -1;
+        textrect.make_dirty();
+        getengine().redraw();
+    }
+
+    return overlink >= 0;
+}
+
+ts::ivec2 gui_label_ex_c::get_link_pos_under_cursor(const ts::ivec2 &localpos) const
+{
+    if (textrect.is_dirty_glyphs()) return ts::ivec2(-1);
+    ts::irect clar = get_client_area();
+    if (clar.inside(localpos))
+    {
+        const ts::GLYPHS &glyphs = get_glyphs();
+        ts::irect gr = ts::glyphs_bound_rect(glyphs);
+        gr += glyphs_pos;
+        if (gr.inside(localpos))
+        {
+            ts::ivec2 cp = localpos - glyphs_pos;
+            int glyph_under_cursor = ts::glyphs_nearest_glyph(glyphs, cp, true);
+            int char_index = ts::glyphs_get_charindex(glyphs, glyph_under_cursor);
+            if (char_index >= 0 && char_index < textrect.get_text().get_length())
+                return extract_link(textrect.get_text(), char_index);
+        }
+    }
+    return ts::ivec2(-1);
+}
+
+ts::str_c gui_label_ex_c::get_link_under_cursor(const ts::ivec2 &localpos) const
+{
+    ts::ivec2 p = get_link_pos_under_cursor(localpos);
+    if (p.r0 >= 0 && p.r1 >= p.r0) return textrect.get_text().substr(p.r0, p.r1);
+    return ts::str_c();
+}
+
+
+/*virtual*/ bool gui_label_ex_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    switch (qp)
+    {
+        case SQ_MOUSE_OUT:
+            if (/*!popupmenu &&*/ textrect.get_text().find_pos(CONSTWSTR("<cstm=a")) >= 0)
+            {
+                if (overlink >= 0)
+                {
+                    overlink = -1;
+                    textrect.make_dirty();
+                    getengine().redraw();
+                }
+            }
+            break;
+        case SQ_DETECT_AREA:
+            if (/*!popupmenu &&*/ textrect.get_text().find_pos(CONSTWSTR("<cstm=a")) >= 0 && !getengine().mtrack(getrid(), MTT_TEXTSELECT))
+            {
+                if (check_overlink(data.detectarea.pos))
+                    data.detectarea.area = AREA_HAND;
+            }
+            break;
+    }
+    return __super::sq_evt(qp, rid, data);
+}
+
+void gui_label_ex_c::get_link_prolog(ts::wstr_c &r, int linknum) const
+{
+    r.set(CONSTWSTR("<u>"));
+    if (linknum == overlink)
+    {
+        ts::TSCOLOR c = get_default_text_color(0);
+        r.append(CONSTWSTR("<color=#")).append_as_hex(ts::RED(c))
+            .append_as_hex(ts::GREEN(c))
+            .append_as_hex(ts::BLUE(c))
+            .append_as_hex(ts::ALPHA(c))
+            .append_char('>');
+    }
+
+}
+void gui_label_ex_c::get_link_epilog(ts::wstr_c &r, int linknum) const
+{
+    if (linknum == overlink)
+        r.set(CONSTWSTR("</color></u>"));
+    else
+        r.set(CONSTWSTR("</u>"));
+}
+
+
+/*virtual*/ bool gui_label_ex_c::custom_tag_parser(ts::wstr_c& r, const ts::wsptr &tv) const
+{
+    if (tv.l)
+    {
+        if (tv.s[0] == 'a')
+        {
+            get_link_prolog(r,ts::pwstr_c(tv).as_num_part(-2, 1));
+            return true;
+        }
+        else if (tv.s[0] == 'b')
+        {
+            get_link_epilog(r,ts::pwstr_c(tv).as_num_part(-2, 1));
+            return true;
+        }
+    }
+    return false;
+}
+
+ts::wstr_c gui_label_simplehtml_c::tt() const
+{
+    if (overlink >= 0)
+        return links.get(overlink);
+    return ts::wstr_c();
+}
+
+void gui_label_simplehtml_c::created()
+{
+    set_theme_rect(CONSTASTR("html"), false);
+    __super::created();
+}
+
+/*virtual*/ void gui_label_simplehtml_c::set_text(const ts::wstr_c&text)
+{
+    ts::wstr_c t(text);
+    ts::swstr_t<32> ct( CONSTWSTR("<cstm=b") ); int ctl = ct.get_length();
+    int x = 0;
+    for(;(x = t.find_pos(x, CONSTWSTR("<a href=\""))) >= 0;)
+    {
+        int y = t.find_pos(x+9, '\"');
+        if (y < 0) break;
+        if (t.get_char(y+1) != '>') break;
+        int z = t.find_pos(y + 1, CONSTWSTR("</a>"));
+        if (z < 0) break;
+        ct.set_char(6,'b').set_length(ctl).append_as_uint(links.size()).append_char('>');
+        links.add( t.substr(x+9,y) );
+        t.replace(z,4, ct );
+        ct.set_char(6,'a');
+        t.replace(x,y+2-x,ct);
+    }
+    __super::set_text(t);
+}
+
+/*virtual*/ bool gui_label_simplehtml_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    if (SQ_MOUSE_LUP == qp)
+    {
+        if (overlink >= 0 && on_link_click)
+            on_link_click( links.get(overlink) );
+        return true;
+    }
+    return __super::sq_evt(qp,rid,data);
 }
 
 //________________________________________________________________________________________________________________________________ gui tooltip

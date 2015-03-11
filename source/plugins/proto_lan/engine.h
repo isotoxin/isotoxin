@@ -174,6 +174,7 @@ enum message_type_lan_e // hard order!!!
     MTL_MESSAGE = MT_MESSAGE,
     MTL_ACTION = MT_ACTION,
 
+    __mtl_service,
     __mtl_no_save_begin = 100,
     __mtl_no_need_ater_save_begin = __mtl_no_save_begin,
 
@@ -189,6 +190,9 @@ enum message_type_lan_e // hard order!!!
     MTL_CALL_CANCEL,
     MTL_CALL_ACCEPT,
     MTL_AUDIO_FRAME,
+    MTL_GETAVATAR,
+    MTL_AVATARHASH,
+    MTL_AVATARDATA,
 
     __mtl_no_save_end,
 
@@ -225,7 +229,8 @@ class lan_engine : public packetgen
     tcp_listner tcp_in;
     host_functions_s *hf;
 
-    //int last_message;
+    std::vector<byte> avatar;
+    bool avatar_set = false;
 
     int lasthallo;
     int listen_port = -1;
@@ -347,6 +352,8 @@ public:
         contact_gender_e gender = CSEX_UNKNOWN;
 
         int changed_self = 0;
+        int avatar_tag = 0;
+        byte avatar_hash[16];
 
         int reconnect = 0;
         bool key_sent = false;
@@ -364,9 +371,11 @@ public:
         void online_tick(int ct, int nexttime = 500); // not always online
         void start_media();
 
-        const byte *message_key() const
+        
+        const byte *message_key(bool *is_auth = nullptr) const
         {
-            if (state == ONLINE || state == OFFLINE || state == BACKCONNECT || state == ACCEPT) return authorized_key;
+            if (state == ONLINE || state == OFFLINE || state == BACKCONNECT || state == ACCEPT) { if (is_auth) *is_auth = true; return authorized_key; }
+            if (is_auth) *is_auth = false;
             return temporary_key;
         }
 
@@ -384,6 +393,7 @@ public:
             cd.name_len = name.get_length();
             cd.status_message = statusmsg.cstr();
             cd.status_message_len = statusmsg.get_length();
+            cd.avatar_tag = 0;
             switch (state)
             {
                 case lan_engine::contact_s::SEARCH:
@@ -416,11 +426,13 @@ public:
             }
             cd.ostate = ostate;
             cd.gender = gender;
+            cd.avatar_tag = avatar_tag;
         }
 
         contact_s(int id):id(id)
         {
             nextactiontime = time_ms() - 10000000;
+            memset(avatar_hash, 0, sizeof(avatar_hash));
         }
         ~contact_s();
 

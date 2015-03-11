@@ -23,6 +23,10 @@ void active_protocol_s::set(int column, ts::data_value_s &v)
             return;
         case 6:
             options = (int)v.i;
+            return;
+        case 7:
+            avatar = v.blob;
+            return;
     }
 }
 
@@ -52,6 +56,9 @@ void active_protocol_s::get(int column, ts::data_pair_s& v)
         case 6:
             v.i = options;
             return;
+        case 7:
+            v.blob = avatar;
+            return;
     }
 }
 
@@ -65,6 +72,7 @@ ts::data_type_e active_protocol_s::get_column_type(int index)
         case 4:
             return ts::data_type_e::t_str;
         case 5:
+        case 7:
             return ts::data_type_e::t_blob;
         case 6:
             return ts::data_type_e::t_int;
@@ -97,6 +105,9 @@ void active_protocol_s::get_column_desc(int index, ts::column_desc_s&cd)
             cd.name_ = CONSTASTR("options");
             cd.default_ = CONSTASTR("1"); // O_AUTOCONNECT
             break;
+        case 7:
+            cd.name_ = CONSTASTR("avatar");
+            break;
         default:
             FORBIDDEN();
     }
@@ -112,6 +123,7 @@ void default_rows<active_protocol_s>::setup_default(int index, active_protocol_s
             d.user_name.clear();
             d.user_statusmsg.clear();
             d.config.clear();
+            d.avatar.clear();
             d.options = active_protocol_data_s().options;
             return;
         case 1:
@@ -120,6 +132,7 @@ void default_rows<active_protocol_s>::setup_default(int index, active_protocol_s
             d.user_name.clear();
             d.user_statusmsg.clear();
             d.config.clear();
+            d.avatar.clear();
             d.options = active_protocol_data_s().options;
             return;
         default:
@@ -157,6 +170,12 @@ void contacts_s::set(int column, ts::data_value_s &v)
         case 8:
             customname.set_as_utf8(v.text);
             return;
+        case 9:
+            avatar = v.blob;
+            return;
+        case 10:
+            avatar_tag = (int)v.i;
+            return;
     }
 }
 
@@ -192,6 +211,12 @@ void contacts_s::get(int column, ts::data_pair_s& v)
         case 8:
             v.text = to_utf8(customname);
             return;
+        case 9:
+            v.blob = avatar;
+            return;
+        case 10:
+            v.i = avatar_tag;
+            return;
     }
 }
 
@@ -203,6 +228,7 @@ ts::data_type_e contacts_s::get_column_type(int index)
         case 2:
         case 3:
         case 4:
+        case 10:
             return ts::data_type_e::t_int;
         case 5:
         case 6:
@@ -210,6 +236,8 @@ ts::data_type_e contacts_s::get_column_type(int index)
             return ts::data_type_e::t_str;
         case 7:
             return ts::data_type_e::t_int64;
+        case 9:
+            return ts::data_type_e::t_blob;
     }
     FORBIDDEN();
     return ts::data_type_e::t_null;
@@ -243,6 +271,12 @@ void contacts_s::get_column_desc(int index, ts::column_desc_s&cd)
             break;
         case 8:
             cd.name_ = CONSTASTR("customname");
+            break;
+        case 9:
+            cd.name_ = CONSTASTR("avatar");
+            break;
+        case 10:
+            cd.name_ = CONSTASTR("avatar_tag");
             break;
         default:
             FORBIDDEN();
@@ -959,6 +993,28 @@ bool profile_c::isfreecontact( const contact_key_s&ck ) const
     return row == nullptr;
 }
 
+void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, int tag )
+{
+    auto *row = table_contacts.find([&](const contacts_s &k)->bool { return k.key == ck; });
+
+    if (!row)
+    {
+        row = &table_contacts.getcreate(0);
+        row->other.key = ck;
+    }
+    else
+    {
+        if (row->st == ts::clean_type<decltype(row)>::type::s_delete || row->st == ts::clean_type<decltype(row)>::type::s_deleted)
+            return;
+
+        row->changed();
+    }
+
+    row->other.avatar = avadata;
+    row->other.avatar_tag = tag;
+    dirtycontact(ck);
+}
+
 /*virtual*/ bool profile_c::save()
 {
     if (__super::save()) return true;
@@ -973,6 +1029,7 @@ bool profile_c::isfreecontact( const contact_key_s&ck ) const
             {
                 row = &table_contacts.getcreate(0);
                 row->other.key = ck;
+                row->other.avatar_tag = 0;
             } else
             {
                 if (row->st == ts::clean_type<decltype(row)>::type::s_delete || row->st == ts::clean_type<decltype(row)>::type::s_deleted)
@@ -987,6 +1044,7 @@ bool profile_c::isfreecontact( const contact_key_s&ck ) const
             row->other.customname = c->get_customname();
             row->other.statusmsg = c->get_statusmsg(false);
             row->other.readtime = c->get_readtime();
+            // avatar data copied not here, see set_avatar
         }
     }
     dirtycontacts.clear();

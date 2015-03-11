@@ -25,8 +25,10 @@ ivec2 TSCALL center_pos_by_window(HWND hwnd);
 wstr_c TSCALL get_clipboard_text(void);
 void TSCALL set_clipboard_text(const wsptr &text);
 
-bitmap_c TSCALL get_clipboard_bitmap(void);
+bitmap_c TSCALL get_clipboard_bitmap();
 void TSCALL set_clipboard_bitmap(const bitmap_c &bmp);
+
+void TSCALL open_link(const ts::wstr_c &lnk);
 
 bool start_app( const wsptr &cmdline, HANDLE *hProcess );
 

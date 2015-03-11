@@ -68,6 +68,14 @@ void crash()
 
 void dotests()
 {
+    /*
+    ts::bitmap_c basei; basei.load_from_file(L"1\\ava.png");
+    ts::bitmap_c img; img.load_from_file(L"1\\creambee-qrcode.png");
+    ts::bitmap_c b;
+    b.create_RGB(basei.info().sz);
+    b.alpha_blend(ts::ivec2(17,19), img.extbody(), basei.extbody());
+    b.save_as_PNG(L"1\\out.png");
+    */
 
     ts::str_c aaa(CONSTASTR("a"));
     aaa.append(',',CONSTASTR("b,"));
@@ -337,10 +345,13 @@ void summon_test_window()
     //m->send_to_main_thread();
 
 
-    
+    /*
     drawchecker dch;
     RID r = MAKE_ROOT<test_window>(dch);
     MODIFY(r).allow_move_resize().size(502,447).setcenterpos().visible(true);
+    */
+
+    SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR);
     
 }
 

@@ -53,6 +53,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     ipcp->send(ipcw(AQ_SET_CONFIG) << w().data.config);
                     ipcp->send(ipcw(AQ_SET_NAME) << (w().data.user_name.is_empty() ? prf().username() : w().data.user_name));
                     ipcp->send(ipcw(AQ_SET_STATUSMSG) << (w().data.user_statusmsg.is_empty() ? prf().userstatus() : w().data.user_statusmsg));
+                    ipcp->send(ipcw(AQ_SET_AVATAR) << w().data.avatar);
                     ipcp->send(ipcw(AQ_INIT_DONE));
                     if (0 != (w().data.options & active_protocol_data_s::O_AUTOCONNECT))
                     {
@@ -87,6 +88,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
             m->pubid = r.getastr();
             m->name = r.getastr();
             m->statusmsg = r.getastr();
+            m->avatar_tag = r.get<int>();
             m->state = (contact_state_e)r.get<int>();
             m->ostate = (contact_online_state_e)r.get<int>();
             m->gender = (contact_gender_e)r.get<int>();
@@ -209,6 +211,21 @@ bool active_protocol_c::cmdhandler(ipcr r)
             memcpy(m->data.data(), data, dsz);
 
             m->send_to_main_thread();
+        }
+        break;
+    case HQ_AVATAR_DATA:
+        {
+            gmsg<ISOGM_AVATAR> *m = TSNEW(gmsg<ISOGM_AVATAR>);
+            m->contact.protoid = id;
+            m->contact.contactid = r.get<int>();
+            m->tag = r.get<int>();
+            int dsz;
+            const void *data = r.get_data(dsz);
+            m->data.set_size(dsz);
+            memcpy(m->data.data(), data, dsz);
+
+            m->send_to_main_thread();
+
         }
         break;
     }
@@ -388,6 +405,34 @@ bool active_protocol_c::check_save(RID, GUIPARAM)
     return true;
 }
 
+void active_protocol_c::set_avatar(contact_c *c)
+{
+    auto r = syncdata.lock_read();
+    c->set_avatar(r().data.avatar.data(),r().data.avatar.size(),1);
+}
+
+void active_protocol_c::set_avatar( const ts::blob_c &ava )
+{
+    auto w = syncdata.lock_write();
+    w().data.avatar = ava;
+    w().data.avatar.set_size(ava.size()); // make copy due refcount not multithreaded
+    w.unlock();
+
+    tableview_active_protocol_s &t = prf().get_table_active_protocol();
+    if (auto *r = t.find(id))
+    {
+        r->other.avatar = ava;
+        r->changed();
+        prf().changed();
+    }
+
+    ipcp->send(ipcw(AQ_SET_AVATAR) << ava);
+
+    if (contact_c *c = contacts().find_subself(getid()))
+        c->set_avatar(ava.data(), ava.size(), 1);
+
+}
+
 void active_protocol_c::save_config(bool wait)
 {
     if (!ipcp) return;
@@ -414,6 +459,7 @@ try_again_save:
         while( !syncdata.lock_read()().flags.is(F_CONFIG_OK|F_CONFIG_FAIL) )
         {
             Sleep(100);
+            sys_idle();
             DWORD ct = timeGetTime(); 
             if (((int)ct - (int)ttt) > 1000)
             {
@@ -587,4 +633,9 @@ void active_protocol_c::send_file(int cid, uint64 utag, const ts::wstr_c &filena
 void active_protocol_c::file_portion(uint64 utag, uint64 offset, const void *data, int sz)
 {
     ipcp->send(ipcw(AA_FILE_PORTION) << utag << offset << data_block_s(data, sz));
+}
+
+void active_protocol_c::avatar_data_request(int cid)
+{
+    ipcp->send(ipcw(AQ_GET_AVATAR_DATA) << cid);
 }

@@ -28,6 +28,7 @@ enum cd_mask_e
     CDM_STATE           = 1 << 3,
     CDM_ONLINE_STATE    = 1 << 4,
     CDM_GENDER          = 1 << 5,
+    CDM_AVATAR_TAG      = 1 << 6,
 };
 
 enum cmd_result_e

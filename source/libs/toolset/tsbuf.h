@@ -158,9 +158,9 @@ template<aint GRANULA, typename ALLOCATOR> struct BUFFER_RESIZABLE : public ALLO
     }
     void operator=(const BUFFER_RESIZABLE & tb)
     {
-        WARNING("performance warning");
         fitcapacity(tb.size());
         memcpy(m_data, tb.m_data, tb.size());
+        m_size = tb.size();
     }
 
 
@@ -249,7 +249,16 @@ template<aint GRANULA, typename ALLOCATOR> struct BUFFER_RESIZABLE_COPY_ON_DEMAN
     void clear()
     {
         if (m_core)
-            m_core->m_size = 0; // nothing special
+        {
+            if (m_core->m_ref == 1)
+            {
+                m_core->m_size = 0; // nothing special
+            } else
+            {
+                --m_core->m_ref;
+                m_core = nullptr;
+            }
+        }
     }
 
     template<typename MODER> void change(aint newlen, const MODER &moder)

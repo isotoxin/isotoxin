@@ -1,19 +1,29 @@
 @echo off
-echo toxcore-vs ....................................
+set getlib=toxcore-vs
+echo getting: %getlib%
+set libdir=%1
+if x%libdir%==x set libdir=..\..\source\libs-external
+if exist %libdir%\toxcore\toxcore\tox.h goto alrd
 
-rd toxcore-vs /S /Q
+if exist toxcore-vs rd toxcore-vs /S /Q
 git clone https://github.com/Rotkaermota/toxcore-vs
 
-rd %1\opus /S /Q
-move /Y toxcore-vs\opus %1
+if exist %libdir%\opus rd %libdir%\opus /S /Q
+move /Y toxcore-vs\opus %libdir% >nul
 
-rd %1\libsodium /S /Q
-move /Y toxcore-vs\libsodium %1
+if exist %libdir%\libsodium rd %libdir%\libsodium /S /Q
+move /Y toxcore-vs\libsodium %libdir% >nul
 
-rd %1\libvpx /S /Q
-move /Y toxcore-vs\libvpx %1
+if exist %libdir%\libvpx rd %libdir%\libvpx /S /Q
+move /Y toxcore-vs\libvpx %libdir% >nul
 
-rd %1\toxcore /S /Q
-move /Y toxcore-vs\toxcore %1
+if exist %libdir%\toxcore rd %libdir%\toxcore /S /Q
+move /Y toxcore-vs\toxcore %libdir% >nul
 
 rd toxcore-vs /S /Q
+
+echo ok: %getlib% obtained
+goto enda
+:alrd
+echo ok: %getlib% already here
+:enda

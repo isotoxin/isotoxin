@@ -18,13 +18,12 @@ struct read_png_data_internal_s
 {
 	png_structp     png_ptr;
 	png_infop       info_ptr;
-	png_colorp      palette;
-	int             num_palette;
 
 	const void *    src;
     size_t          srcsize;
 	size_t          offset;
 	int             sizex,sizey;
+    int             bytepp;
 
     bool    error;
     bool    warning;
@@ -102,6 +101,8 @@ bool png_decode_start(read_png_data_s&idata, const void * soubuf,int soubuflen,i
     if (data.error) goto eggog;
 
     png_set_bgr( data.png_ptr );
+    png_set_scale_16(data.png_ptr);
+    png_set_palette_to_rgb(data.png_ptr);
 
 	if((data.info_ptr = png_create_info_struct(data.png_ptr)) == nullptr) goto eggog;
 
@@ -122,8 +123,10 @@ bool png_decode_start(read_png_data_s&idata, const void * soubuf,int soubuflen,i
             goto eggog;
     }
 
+
 	data.sizex=sz.x=data.info_ptr->width;
 	data.sizey=sz.y=data.info_ptr->height;
+    data.bytepp = bitpp / 8;
 
     return true;
 eggog:
@@ -131,18 +134,18 @@ eggog:
 	return false;
 }
 
-bool png_decode(read_png_data_s&idata, void * buf,aint lenline)
+bool png_decode(read_png_data_s&idata, void * buf, aint pitch)
 {
 	read_png_data_internal_s &data = ref_cast<read_png_data_internal_s>(idata);
 	png_bytep * row_pointers=nullptr;
-	uint8 * tbuf;
-	int i;
 
     aint rolinesize = png_get_rowbytes(data.png_ptr, data.info_ptr);
-    if (rolinesize > lenline) goto eggog;
+    if (rolinesize > pitch) goto eggog;
 
-	row_pointers=(png_bytep *)_alloca( (data.sizey)*sizeof(png_bytep) );
-	for(i=0,tbuf=(uint8 *)buf;i<data.sizey;i++,tbuf+=lenline) row_pointers[i]=tbuf;
+	row_pointers=(png_bytep *)_alloca( data.sizey*sizeof(png_bytep) );
+    uint8 * tbuf = (uint8 *)buf;
+	for(int i=0;i<data.sizey;++i,tbuf+=pitch)
+        row_pointers[i]=tbuf;
 
 	png_read_image(data.png_ptr, row_pointers);
 	png_read_end(data.png_ptr, data.info_ptr);
@@ -156,7 +159,7 @@ eggog:
 	return false;
 }
 
-size_t png_write(void * bufout,size_t bufoutlen,const void * buf,int ll,const ivec2 &sz,uint8 bytepp,int rgb_to_bgr)
+size_t png_write(void * bufout,size_t bufoutlen,const void * buf,int pitch, const ivec2 &sz,uint8 bytepp)
 {
 	png_structp png_ptr=nullptr;
 	png_infop info_ptr=nullptr;
@@ -201,10 +204,8 @@ size_t png_write(void * bufout,size_t bufoutlen,const void * buf,int ll,const iv
 
 	png_write_info(png_ptr, info_ptr);
 
-	if(rgb_to_bgr) png_set_bgr(png_ptr);
-
 	rows=(uint8 * *)MM_ALLOC(sz.y*sizeof(uint8 *));
-	for (i = 0; i < int(sz.y); i++) rows[i] = ((uint8 *)buf) + i*ll;
+	for (i = 0; i < int(sz.y); i++) rows[i] = ((uint8 *)buf) + i*pitch;
 
 	png_write_image(png_ptr, rows);
 

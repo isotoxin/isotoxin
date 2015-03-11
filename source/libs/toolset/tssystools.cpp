@@ -283,6 +283,7 @@ wstr_c TSCALL get_clipboard_text(void)
 
 void TSCALL set_clipboard_bitmap(const bitmap_c &bmp)
 {
+#if 0
     OpenClipboard(nullptr);
     EmptyClipboard();
 
@@ -296,91 +297,44 @@ void TSCALL set_clipboard_bitmap(const bitmap_c &bmp)
 
     SetClipboardData(CF_TIFF, text);
     CloseClipboard();
+#endif
 }
 
-bitmap_c TSCALL get_clipboard_bitmap(void)
+bitmap_c TSCALL get_clipboard_bitmap()
 {
     bitmap_c res;
 
     OpenClipboard(nullptr);
-    wstr_c fmtt;
-    wstrings_c sa;
-    UINT fmt = 0;
-    UINT adobe = 0;
 
-    for (; 0 != (fmt = EnumClipboardFormats(fmt));)
+    if (IsClipboardFormatAvailable(CF_DIBV5))
     {
-        fmtt.set_length(2048);
-        int l = GetClipboardFormatNameW(fmt, fmtt.str(), 2048);
-        fmtt.set_length(l);
-        if (l)
-        {
-            sa.add(fmtt);
-            if (fmtt.find_pos(L"Adobe") >= 0)
-            {
-                adobe = fmt;
-            }
-        }
-        else
-        {
-            switch (fmt)
-            {
-            case CF_BITMAP: sa.add(L"CF_BITMAP"); break;
-            case CF_DIB: sa.add(L"CF_DIB"); break;
-            case CF_DIBV5: sa.add(L"CF_DIBV5"); break;
-            case CF_DIF: sa.add(L"CF_DIF"); break;
-            case CF_DSPBITMAP: sa.add(L"CF_DSPBITMAP"); break;
-            case CF_DSPENHMETAFILE: sa.add(L"CF_DSPENHMETAFILE"); break;
-            case CF_DSPMETAFILEPICT: sa.add(L"CF_DSPMETAFILEPICT"); break;
-            case CF_DSPTEXT: sa.add(L"CF_DSPTEXT"); break;
-            case CF_ENHMETAFILE: sa.add(L"CF_ENHMETAFILE"); break;
-            case CF_HDROP: sa.add(L"CF_HDROP"); break;
-            case CF_LOCALE: sa.add(L"CF_LOCALE"); break;
-            case CF_METAFILEPICT: sa.add(L"CF_METAFILEPICT"); break;
-            case CF_OEMTEXT: sa.add(L"CF_OEMTEXT"); break;
-            case CF_OWNERDISPLAY: sa.add(L"CF_OWNERDISPLAY"); break;
-            case CF_PALETTE: sa.add(L"CF_PALETTE"); break;
-            case CF_PENDATA: sa.add(L"CF_PENDATA"); break;
-            case CF_RIFF: sa.add(L"CF_RIFF"); break;
-            case CF_SYLK: sa.add(L"CF_SYLK"); break;
-            case CF_TEXT: sa.add(L"CF_TEXT"); break;
-            case CF_WAVE: sa.add(L"CF_WAVE"); break;
-            case CF_TIFF: sa.add(L"CF_TIFF"); break;
-            case CF_UNICODETEXT: sa.add(L"CF_UNICODETEXT"); break;
-            default:
-                if (fmt >= CF_PRIVATEFIRST && fmt <= CF_PRIVATELAST)
-                {
-                    sa.add(wstr_c(L"CF_PRIVATEFIRST #").append_as_int(fmt - CF_PRIVATEFIRST));
-                }
-                else if (fmt >= CF_GDIOBJFIRST && fmt <= CF_GDIOBJLAST)
-                {
-                    sa.add(wstr_c(L"CF_GDIOBJFIRST #").append_as_int(fmt - CF_GDIOBJFIRST));
-                }
-            }
-        }
-    }
-
-    buf_c b;
-    BITMAPV5HEADER hdr;
-
-    if (IsClipboardFormatAvailable(adobe))
-    {
-        HGLOBAL hg = GetClipboardData(adobe);
-        if (hg)
+        if (HGLOBAL hg = GetClipboardData(CF_DIBV5))
         {
             uint sz = sz_cast<uint>(GlobalSize(hg));
-            byte *p = (byte*)GlobalLock(hg);
-            b.append_buf(p, sz);
-            memcpy(&hdr, p, sizeof(BITMAPV5HEADER));
-
+            const BITMAPV5HEADER *p = (const BITMAPV5HEADER*)GlobalLock(hg);
+            res.load_from_BMPHEADER((const BITMAPINFOHEADER *)p,sz);
+            GlobalUnlock(hg);
+        }
+    } else if (IsClipboardFormatAvailable(CF_DIB))
+    {
+        if (HGLOBAL hg = GetClipboardData(CF_DIB))
+        {
+            uint sz = sz_cast<uint>(GlobalSize(hg));
+            const BITMAPINFOHEADER *p = (const BITMAPINFOHEADER*)GlobalLock(hg);
+            res.load_from_BMPHEADER((const BITMAPINFOHEADER *)p, sz);
             GlobalUnlock(hg);
         }
     }
+
     CloseClipboard();
-    MessageBoxW(nullptr, sa.join(L"\r\n"), L"x", MB_OK);
+
     return res;
 }
 
+void TSCALL open_link(const ts::wstr_c &lnk)
+{
+    ShellExecuteW(nullptr, L"open", lnk, nullptr, nullptr, SW_SHOWNORMAL);
+}
 
 bool start_app( const wsptr &cmdline, HANDLE *hProcess)
 {

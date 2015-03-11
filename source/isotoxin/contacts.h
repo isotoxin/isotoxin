@@ -121,6 +121,15 @@ struct post_s
 
     message_type_app_e mt() const {return (message_type_app_e)type;}
 };
+
+struct avatar_s : public ts::drawable_bitmap_c
+{
+    int tag = 0;
+    bool alpha_pixels = false;
+    avatar_s( const void *body, int size, int tag ) { load(body, size, tag); }
+    void load( const void *body, int size, int tag );
+};
+
 class gui_contact_item_c;
 class contact_c : public ts::shared_object
 {
@@ -131,8 +140,8 @@ class contact_c : public ts::shared_object
     ts::wstr_c name;
     ts::wstr_c customname;
     ts::wstr_c statusmsg;
-    ts::drawable_bitmap_c avatar;
     time_t readtime = 0; // all messages after readtime considered unread
+    UNIQUE_PTR( avatar_s ) avatar;
 
     contact_state_e state = CS_OFFLINE;
     contact_online_state_e ostate = COS_ONLINE;
@@ -159,9 +168,9 @@ public:
     ts::safe_ptr<gui_contact_item_c> gui_item;
 
     static const ts::flags32_s::BITS F_DEFALUT = SETBIT(0);
-    //static const ts::flags32_s::BITS F_ACCEPT = SETBIT(0);
-    //static const ts::flags32_s::BITS F_REJECT = SETBIT(1);
+    static const ts::flags32_s::BITS F_AVA_DEFAULT = SETBIT(1);
 
+    static const ts::flags32_s::BITS F_SHOW_FRIEND_REQUEST = SETBIT(26);
     static const ts::flags32_s::BITS F_PROTOHIT = SETBIT(27);
     static const ts::flags32_s::BITS F_CALLTONE = SETBIT(28);
     static const ts::flags32_s::BITS F_AV_INPROGRESS = SETBIT(29);
@@ -182,6 +191,11 @@ public:
     }
 
     void reselect(bool);
+
+    void friend_request( bool f = true )
+    {
+        opts.unmasked().init(F_SHOW_FRIEND_REQUEST, f);
+    }
 
     bool is_protohit( bool strong );
     void protohit(bool f);
@@ -387,6 +401,8 @@ public:
 
     const post_s * fix_history( message_type_app_e oldt, message_type_app_e newt, const contact_key_s& sender = contact_key_s() /* self - empty - no matter */, time_t update_time = 0 /* 0 - no need update */ );
 
+    bool check_invite(RID r = RID(), GUIPARAM p = (GUIPARAM)3);
+
     bool b_accept(RID, GUIPARAM);
     bool b_reject(RID, GUIPARAM);
     bool b_resend(RID, GUIPARAM);
@@ -416,6 +432,22 @@ public:
 
     bool is_filein() const;
 
+    int avatar_tag() const {return avatar ? avatar->tag : 0; }
+    void set_avatar( const void *body, int size, int tag = 0 )
+    {
+        if (size == 0)
+        {
+            avatar.reset();
+            return;
+        }
+
+        if (avatar)
+            avatar->load( body, size, tag );
+        else
+            avatar.reset( TSNEW(avatar_s, body, size, tag) );
+    }
+    const avatar_s *get_avatar() const;
+
 };
 
 contact_c *get_historian(contact_c *sender, contact_c * receiver);
@@ -428,6 +460,7 @@ template<> struct gmsg<ISOGM_UPDATE_CONTACT> : public gmsgbase
     ts::str_c pubid;
     ts::str_c name;
     ts::str_c statusmsg;
+    int avatar_tag = 0;
     contact_state_e state = CS_INVITE_SEND;
     contact_online_state_e ostate = COS_ONLINE;
     contact_gender_e gender = CSEX_UNKNOWN;
@@ -459,6 +492,14 @@ template<> struct gmsg<ISOGM_FILE> : public gmsgbase
     ts::wstr_c filename;
     ts::buf0_c data;
     file_control_e fctl = FIC_NONE;
+};
+
+template<> struct gmsg<ISOGM_AVATAR> : public gmsgbase
+{
+    gmsg() :gmsgbase(ISOGM_AVATAR) {}
+    contact_key_s contact;
+    ts::blob_c data;
+    int tag = 0;
 };
 
 
@@ -518,6 +559,7 @@ class contacts_c
     GM_RECEIVER(contacts_c, ISOGM_CHANGED_PROFILEPARAM);
     GM_RECEIVER(contacts_c, ISOGM_DELIVERED);
     GM_RECEIVER(contacts_c, ISOGM_NEWVERSION);
+    GM_RECEIVER(contacts_c, ISOGM_AVATAR);
     
 
     ts::array_shared_t<contact_c, 8> arr;

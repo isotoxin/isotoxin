@@ -1168,7 +1168,41 @@ enum chunks_e // HADR ORDER!!!!!!!!
 
     chunk_magic,
 
+    chunk_contact_avatar_hash,
+    chunk_contact_avatar_tag,
+
 };
+
+void lan_engine::set_avatar(const void*data, int isz)
+{
+    md5_c md5;
+    bool avachange = ((int)avatar.size() != isz);
+    if (!avachange)
+    {
+        if (isz)
+        {
+            md5.update(data, isz);
+            md5.done();
+            if (0 != memcmp(first->avatar_hash, md5.result(), 16))
+                avachange = true;
+        }
+    } else if (isz)
+    {
+        md5.update(data, isz);
+        md5.done();
+    }
+    if (avachange)
+    {
+        if (isz)
+            memcpy(first->avatar_hash,md5.result(), 16);
+        else
+            memset(first->avatar_hash, 0, 16);
+        avatar.resize(isz);
+        memcpy(avatar.data(), data, isz);
+        changed_some |= CDM_AVATAR_TAG;
+        avatar_set = true;
+    }
+}
 
 void lan_engine::set_config(const void*data, int isz)
 {
@@ -1304,6 +1338,20 @@ void lan_engine::set_config(const void*data, int isz)
                     if (lc(chunk_contact_changedflags))
                         c->changed_self = lc.get_int();
 
+                    if (lc(chunk_contact_avatar_tag))
+                        c->avatar_tag = lc.get_int();
+
+                    if (c->avatar_tag != 0)
+                    {
+                        if (int bsz = lc(chunk_contact_avatar_hash))
+                        {
+                            loader hbl(lc.chunkdata(), bsz);
+                            int dsz;
+                            if (const void *mb = hbl.get_data(dsz))
+                                memcpy(c->avatar_hash, mb, min(dsz, 16));
+                        }
+                    }
+
                 }
             }
     }
@@ -1366,6 +1414,13 @@ void operator<<(chunk &chunkm, const lan_engine::contact_s &c)
             x->die();
         }
     }
+
+    chunk(chunkm.b, chunk_contact_avatar_tag) << c.avatar_tag;
+    if (c.avatar_tag != 0)
+    {
+        chunk(chunkm.b, chunk_contact_avatar_hash) << bytes(c.avatar_hash, 16);
+    }
+
 
 }
 void operator<<(chunk &chunkm, const msg_s &m)
@@ -1646,6 +1701,9 @@ void lan_engine::contact_s::online_tick(int ct, int nexttime)
             if (0 != (changed_self & CDM_GENDER))
                 add_message(MTL_GENDER, n, str_c().set_as_int(engine->first->gender), 0);
 
+            if (0 != (changed_self & CDM_AVATAR_TAG) && engine->avatar_set)
+                add_message(MTL_AVATARHASH, n, asptr((const char *)engine->first->avatar_hash, 16), 0);
+
             changed_self = 0;
         }
 
@@ -1666,11 +1724,13 @@ void lan_engine::contact_s::online_tick(int ct, int nexttime)
     while (m && m->sent >= m->len) m = m->next;
     if (m)
     {
-        engine->pg_message(m, message_key());
+        bool is_auth = false;
+        const byte *k = message_key(&is_auth);
+        engine->pg_message(m, k, is_auth ? SIZE_MAX_SEND_AUTH : SIZE_MAX_SEND_NONAUTH);
         pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
     }
 
-    bool asap = media != nullptr || m && m->next;
+    bool asap = media != nullptr || (m && m->next) || (m && m->sent < m->len);
 
     nextactiontime = ct;
     if (!asap) nextactiontime += nexttime;
@@ -1897,18 +1957,48 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                                     engine->hf->play_audio(id, &fmt, media->uncompressed.data(), sz);
                             }
                             break;
-                        default:
+                        case MTL_GETAVATAR:
+                            add_message(MTL_AVATARDATA, 0, asptr((const char *)engine->avatar.data(), engine->avatar.size()), 0);
+                            break;
+                        case MTL_AVATARHASH:
+                            if (rstr.as_sptr().l == 16 && 0!=memcmp(avatar_hash,rstr.as_sptr().s, 16))
                             {
-                                //int messagetime = time_ms();
-                                //if ((messagetime - engine->last_message) > 5000 || 0 != memcmp(engine->md5_of_last_message, md5.result(), 16))
+                                memcpy(avatar_hash,rstr.as_sptr().s, 16);
+                                if (0 == *(int *)avatar_hash && 0 == *(int *)(avatar_hash+4) && 0 == *(int *)(avatar_hash+8) && 0 == *(int *)(avatar_hash+12))
+                                    avatar_tag = 0;
+                                else
+                                    avatar_tag++;
+
+                                contact_data_s cd;
+                                cd.id = id;
+                                cd.mask = CDM_AVATAR_TAG;
+                                cd.avatar_tag = avatar_tag;
+                                engine->hf->update_contact(&cd);
+                                engine->hf->save();
+                            }
+                            break;
+                        case MTL_AVATARDATA:
+                            {
+                                md5_c md5;
+                                md5.update(rstr.as_sptr().s, rstr.get_length());
+                                md5.done();
+
+                                if (0 != memcmp(md5.result(), avatar_hash, 16))
                                 {
-                                    //engine->last_message = messagetime;
-                                    if (rstr.get_length() == 1 && rstr.get_char(0) == 0)
-                                        engine->hf->message((message_type_e)mt, id, dd.create_time, nullptr, 0);
-                                    else
-                                        engine->hf->message((message_type_e)mt, id, dd.create_time, rstr.as_sptr().s, rstr.get_length());
-                                    //memcpy(engine->md5_of_last_message, md5.result(), 16);
+                                    memcpy(avatar_hash, md5.result(), 16);
+                                    ++avatar_tag; // new avatar version
                                 }
+                                
+                                engine->hf->avatar_data(id, avatar_tag, rstr.as_sptr().s, rstr.get_length());
+                            }
+                            break;
+                        default:
+                            if (mt < __mtl_service)
+                            {
+                                if (rstr.get_length() == 1 && rstr.get_char(0) == 0)
+                                    engine->hf->message((message_type_e)mt, id, dd.create_time, nullptr, 0);
+                                else
+                                    engine->hf->message((message_type_e)mt, id, dd.create_time, rstr.as_sptr().s, rstr.get_length());
                             }
                             break;
                     }
@@ -1961,6 +2051,12 @@ void lan_engine::file_control(u64, file_control_e)
 void lan_engine::file_portion(u64, const file_portion_s *)
 {
 
+}
+
+void lan_engine::get_avatar(int id)
+{
+    if (contact_s *c = find(id))
+        c->add_message(MTL_GETAVATAR, 0, asptr(), 0);
 }
 
 

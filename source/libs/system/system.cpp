@@ -389,12 +389,6 @@ static void app_MainLoop( void )
                         DispatchMessageW(mMessagesArray + iCurrentArraySize);
                         continue;
                     }
-
-                    //if ( mMessagesArray[iCurrentArraySize].message == WM_MOUSEMOVE )
-                    //{
-                    //    g_AbsoluteMouseMoveCallbacker.Call();
-                    //}
-
                     TranslateMessage(mMessagesArray + iCurrentArraySize);
                     ++iCurrentArraySize;
                     if ( iCurrentArraySize >= iAllocatedArraySize )
@@ -881,6 +875,18 @@ kbddo:
 
     }
     return handled;
+}
+
+void _cdecl sys_idle()
+{
+    MSG m;
+    if (PeekMessageW(&m, NULL, 0U, 0U, PM_REMOVE))
+    {
+        TranslateMessage(&m);
+        DispatchMessageW(&m);
+    }
+
+    system_event_receiver_c::notify_system_receivers( SEV_IDLE, g_par_def );
 }
 
 void _cdecl sys_exit ( int )

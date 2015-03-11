@@ -134,6 +134,7 @@ struct selectable_core_s
     void selection_stuff(ts::drawable_bitmap_c &bmp);
     void clear_selection();
     void track();
+    void endtrack();
     ts::uint32 detect_area(const ts::ivec2 &pos);
 
 };

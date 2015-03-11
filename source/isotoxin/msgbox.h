@@ -63,3 +63,26 @@ public:
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
+
+class dialog_about_c : public gui_isodialog_c
+{
+    bool checking_new_version = false;
+    bool check_update_now(RID, GUIPARAM);
+    GM_RECEIVER(dialog_about_c, ISOGM_NEWVERSION);
+protected:
+    /*virtual*/ int unique_tag() { return UD_ABOUT; }
+    /*virtual*/ void created() override;
+    /*virtual*/ void getbutton(bcreate_s &bcr) override;
+    /*virtual*/ int additions(ts::irect & border) override;
+
+public:
+    dialog_about_c(initial_rect_data_s &data);
+    ~dialog_about_c();
+
+    /*virtual*/ ts::wstr_c get_name() const override;
+    /*virtual*/ ts::ivec2 get_min_size() const;
+
+    //sqhandler_i
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+};
+

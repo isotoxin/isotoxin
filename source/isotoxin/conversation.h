@@ -120,10 +120,9 @@ template<> struct MAKE_CHILD<gui_message_item_c> : public _PCHILD(gui_message_it
     ~MAKE_CHILD();
 };
 
-class gui_message_item_c : public gui_label_c
+class gui_message_item_c : public gui_label_ex_c
 {
     DUMMY(gui_message_item_c);
-    ts::ivec2 glyphs_pos = 0;
     message_type_app_e mt;
     int height = 0;
     int addheight = 0;
@@ -158,8 +157,6 @@ class gui_message_item_c : public gui_label_c
     mutable ts::wstr_c protodesc;
 
     static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE = FLAGS_FREEBITSTART_LABEL << 0;
-
-    int overlink = -1;
 
     static const int m_left = 10;
     static const int m_top = 3;
@@ -204,13 +201,13 @@ class gui_message_item_c : public gui_label_c
         return gui->selcore().owner == (const gui_label_c *)this && gui->selcore().some_selected();
     }
 
-    bool check_overlink(const ts::ivec2 &localpos);
-    ts::str_c get_link_under_cursor(const ts::ivec2 &localpos) const;
-    ts::ivec2 get_link_pos_under_cursor(const ts::ivec2 &localpos) const;
     ts::pwstr_c get_message_under_cursor(const ts::ivec2 &localpos) const;
     ts::ivec2 get_message_pos_under_cursor(const ts::ivec2 &localpos) const;
-    /*virtual*/ bool custom_tag_parser(ts::wstr_c& r, const ts::wsptr &tv) const override;
     ts::ivec2 extract_message(int chari) const;
+
+    virtual void get_link_prolog(ts::wstr_c & r, int linknum) const;
+    virtual void get_link_epilog(ts::wstr_c & r, int linknum) const;
+
 public:
 
     enum
@@ -223,7 +220,7 @@ public:
 
     void dirty_height_cache() { flags.set(F_DIRTY_HEIGHT_CACHE); }
 
-    gui_message_item_c(MAKE_CHILD<gui_message_item_c> &data) :gui_label_c(data), mt(data.mt), author(data.author), historian(data.historian) { set_theme_rect( CONSTASTR("message.") + data.skin, false );}
+    gui_message_item_c(MAKE_CHILD<gui_message_item_c> &data) :gui_label_ex_c(data), mt(data.mt), author(data.author), historian(data.historian) { set_theme_rect( CONSTASTR("message.") + data.skin, false );}
     /*virtual*/ ~gui_message_item_c();
 
     /*virtual*/ int get_height_by_width(int width) const override;

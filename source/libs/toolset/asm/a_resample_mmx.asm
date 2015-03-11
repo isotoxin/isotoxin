@@ -574,7 +574,7 @@ _vdasm_resize_table_row_MMX	proc	near
 pixelloop_even_pairs:
 	shr		esi,14
 	and		edx,0000ff00h
-	and		esi,0FFFFFFFCh ;byte -4
+	and		esi,-4
 
 	mov		ecx,[esp + 16 + 16]
 	shr		edx,5
@@ -653,7 +653,7 @@ coeffloop_unaligned_even_pairs:
 pixelloop_odd_pairs:
 	shr		esi,14
 	and		edx,0000ff00h
-	and		esi,0FFFFFFFCh ;byte -4
+	and		esi,-4
 
 	mov		ecx,[esp + 16 + 16]
 	shr		edx,5
@@ -768,7 +768,7 @@ coeffloop_unaligned_odd_pairs:
 @pixelloop_4coeff:
 	shr		esi,14
 	and		edx,0000ff00h
-	and		esi,0FFFFFFFCh ;byte -4
+	and		esi,-4
 
 	shr		edx,4
 	add		esi,ebx
@@ -847,7 +847,7 @@ coeffloop_unaligned_odd_pairs:
 @pixelloop_6coeff:
 	shr		esi,14
 	and		edx,0000ff00h
-	and		esi,0FFFFFFFCh ;byte -4
+	and		esi,-4
 
 	shr		edx,5
 	lea		edx,[edx+edx*2]
@@ -943,7 +943,7 @@ coeffloop_unaligned_odd_pairs:
 @pixelloop_8coeff:
 	shr		esi,14
 	and		edx,0000ff00h
-	and		esi,0FFFFFFFCh ;byte -4
+	and		esi,-4
 
 	shr		edx,3
 	add		esi,ebx

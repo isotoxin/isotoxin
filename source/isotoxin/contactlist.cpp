@@ -342,7 +342,10 @@ void gui_contact_item_c::created()
             set_theme_rect(CONSTASTR("contact.dnd"), false);
             defaultthrdraw = DTHRO_BORDER | DTHRO_CENTER;
             if (const gui_contact_item_c *r = dynamic_cast<const gui_contact_item_c *>(gui->dragndrop_underproc()))
+            {
                 if (r->is_protohit()) flags.set(F_PROTOHIT);
+                if (r->is_noprotohit()) flags.set(F_NOPROTOHIT);
+            }
             break;
         case CIR_METACREATE:
         case CIR_LISTITEM:
@@ -596,7 +599,10 @@ void gui_contact_item_c::updrect(void *, int r, const ts::ivec2 &p)
 {
     update_text();
     if (const gui_contact_item_c *r = dynamic_cast<const gui_contact_item_c *>(donor))
+    {
         flags.init(F_PROTOHIT, r->is_protohit());
+        flags.init(F_NOPROTOHIT, r->is_noprotohit());
+    }
 }
 
 void gui_contact_item_c::target(bool tgt)
@@ -648,7 +654,14 @@ void gui_contact_item_c::protohit()
         });
     }
     if ( (flags.__bits & (F_PROTOHIT|F_NOPROTOHIT)) != old )
+    {
         getengine().redraw();
+        //if (is_protohit())
+        //    DMSG("protohit" << contact->getkey() << true);
+        //else
+        //    DMSG("protohit" << contact->getkey() << false);
+    }
+
 }
 
 void gui_contact_item_c::generate_protocols()
@@ -667,20 +680,20 @@ void gui_contact_item_c::generate_protocols()
             {
                 if (c->get_state() == CS_ONLINE)
                 {
-                    protocols.append(CONSTWSTR("<nl><shadow>")).append(maketag_color<ts::wchar>(get_default_text_color(2)));
+                    protocols.append(CONSTWSTR("<nl><shadow>")).append(maketag_color<ts::wchar>(get_default_text_color(1)));
                     if (def == c) protocols.append(CONSTWSTR("+"));
                     protocols.append(row->other.name);
                     protocols.append(CONSTWSTR("</color></shadow> "));
                 } else
                 {
-                    protocols.append(CONSTWSTR("<nl>")).append(maketag_color<ts::wchar>(get_default_text_color(3)));
+                    protocols.append(CONSTWSTR("<nl>")).append(maketag_color<ts::wchar>(get_default_text_color(2)));
                     if (def == c) protocols.append(CONSTWSTR("+"));
                     protocols.append(row->other.name);
                     protocols.append(CONSTWSTR("</color> "));
                 }
             } else
             {
-                protocols.append(CONSTWSTR("<nl><s> ")).append( maketag_color<ts::wchar>( get_default_text_color(4) ) );
+                protocols.append(CONSTWSTR("<nl><s> ")).append( maketag_color<ts::wchar>( get_default_text_color(3) ) );
                 protocols.append( row->other.name );
                 protocols.append(CONSTWSTR("</color> </s>"));
             }
@@ -779,8 +792,25 @@ int gui_contact_item_c::contact_item_rite_margin()
             if (contact)
             {
                 text_draw_params_s tdp;
-                button_desc_s *icon = g_app->buttons().icon[contact->get_meta_gender()];
-                icon->draw( m_engine.get(), button_desc_s::NORMAL, ca, button_desc_s::ALEFT | button_desc_s::ATOP | button_desc_s::ABOTTOM );
+                
+                if (flags.is(F_OVERAVATAR))
+                {
+                    m_engine->draw( ts::irect(ca).setwidth(ca.height()), get_default_text_color(0) );
+                }
+
+                int x_offset = 0;
+                if (const avatar_s *ava = contact->get_avatar())
+                {
+                    int y = (ca.size().y - ava->info().sz.y) / 2;
+                    m_engine->draw(ca.lt + ts::ivec2(y), *ava, ts::irect( 0, ava->info().sz ), ava->alpha_pixels);
+                    x_offset = g_app->buttons().icon[CSEX_UNKNOWN]->size.x;
+                } else
+                {
+                    button_desc_s *icon = g_app->buttons().icon[contact->get_meta_gender()];
+                    icon->draw(m_engine.get(), button_desc_s::NORMAL, ca, button_desc_s::ALEFT | button_desc_s::ATOP | button_desc_s::ABOTTOM);
+                    x_offset = icon->size.x;
+                }
+
                 bool achtung = (CIR_CONVERSATION_HEAD == role) ? false : contact->achtung();
                 if (n_unread > 0 || achtung)
                 {
@@ -814,7 +844,7 @@ int gui_contact_item_c::contact_item_rite_margin()
 
                 if (!flags.is(F_EDITNAME|F_EDITSTATUS))
                 {
-                    ca.lt += ts::ivec2(icon->size.x + 5, 2);
+                    ca.lt += ts::ivec2(x_offset + 5, 2);
                     draw_data_s &dd = m_engine->begin_draw();
                     dd.size = ca.size();
                     if (dd.size >> 0)
@@ -842,8 +872,22 @@ int gui_contact_item_c::contact_item_rite_margin()
             }
         }
         return true;
+    case SQ_DETECT_AREA:
+        if ( CIR_CONVERSATION_HEAD == role && contact && contact->getkey().is_self() && popupmenu.expired())
+        {
+            ts::irect ca = get_client_area();
+            ca.setwidth( ca.height() );
+            bool prev = flags.is(F_OVERAVATAR);
+            if (prev != flags.init( F_OVERAVATAR, ca.inside(data.detectarea.pos) ))
+                getengine().redraw();
+        }
+        break;
     case SQ_MOUSE_OUT:
-        flags.clear(F_LBDN);
+        {
+            bool prev = flags.is(F_OVERAVATAR);
+            flags.clear(F_LBDN | F_OVERAVATAR);
+            if (prev) getengine().redraw();
+        }
         break;
     case SQ_MOUSE_LDOWN:
         flags.set(F_LBDN);
@@ -859,7 +903,42 @@ int gui_contact_item_c::contact_item_rite_margin()
     case SQ_MOUSE_LUP:
         if (flags.is(F_LBDN))
         {
-            gmsg<ISOGM_SELECT_CONTACT>( contact ).send();
+            if (flags.is(F_OVERAVATAR))
+            {
+                struct x
+                {
+                    static void set_self_avatar(const ts::str_c&)
+                    {
+                        SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR);
+                    }
+                    static void clear_self_avatar(const ts::str_c&)
+                    {
+                        prf().iterate_aps([](const active_protocol_c &cap) {
+                            if (active_protocol_c *ap = prf().ap(cap.getid())) // bad
+                                ap->set_avatar(ts::blob_c());
+                        });
+                        gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_AVATAR).send();
+                    }
+                };
+
+                if (contact->get_avatar())
+                {
+                    menu_c m;
+                    m.add(TTT("Изменить аватар",219), 0, x::set_self_avatar);
+                    m.add(TTT("Убрать аватар",220), 0, x::clear_self_avatar);
+                    popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
+                } else
+                {
+                    SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR);
+                }
+                flags.clear(F_OVERAVATAR);
+                getengine().redraw();
+
+            } else if (CIR_CONVERSATION_HEAD != role)
+            {
+                gmsg<ISOGM_SELECT_CONTACT>(contact).send();
+            }
+
             flags.clear(F_LBDN);
         }
         return false;
@@ -1105,7 +1184,7 @@ void gui_contactlist_c::refresh_array()
         //b_add.set_handler();
 
         gui_contact_item_c &selfci = MAKE_CHILD<gui_contact_item_c>(getrid(), &contacts().get_self()) << CIR_ME;
-        selfci.leech( TSNEW(leech_dock_top_s, 70 ) );
+        selfci.leech( TSNEW(leech_dock_top_s, gui->theme().conf().get_int(CONSTASTR("mecontactheight"), 60)) );
         self = &selfci;
 
         skipctl = 2;
@@ -1133,7 +1212,6 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
     }
     return 0;
 }
-
 
 ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_DRAGNDROP> &dnda)
 {

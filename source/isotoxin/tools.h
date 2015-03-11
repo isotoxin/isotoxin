@@ -150,6 +150,7 @@ enum isogmsg_e
     ISOGM_APPRISE,
     ISOGM_NEWVERSION,
     ISOGM_SOMEUNREAD,
+    ISOGM_AVATAR,
 
     ISOGM_COUNT,
 };

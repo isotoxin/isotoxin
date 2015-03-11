@@ -215,10 +215,13 @@ public:
 
 class theme_c
 {
+    
+    ts::hashmap_t<ts::str_c, ts::image_extbody_c> images;
 	ts::hashmap_t<ts::wstr_c, ts::drawable_bitmap_c> bitmaps;
 	ts::hashmap_t<ts::str_c, ts::shared_ptr<theme_rect_s> > rects;
     ts::hashmap_t<ts::str_c, ts::shared_ptr<button_desc_s> > buttons;
 	ts::wstr_c m_name;
+    ts::abp_c m_conf;
 
 	const ts::drawable_bitmap_c &loadimage( const ts::wsptr &path, const ts::wsptr &name );
 
@@ -237,6 +240,14 @@ public:
         const ts::shared_ptr<button_desc_s> *p = buttons.get(bname);
         return p ? (*p) : ts::shared_ptr<button_desc_s>();
     }
+
+    const ts::image_extbody_c * get_image(const ts::asptr &iname) const
+    {
+        return images.get(iname);
+    }
+
+    const ts::abp_c &conf() const {return m_conf;}
+
 };
 
 enum rect_state_e

@@ -239,13 +239,13 @@ bool rectengine_c::children_sort( fastdelegate::FastDelegate< bool (rectengine_c
     return false;
 }
 
-void rectengine_c::child_move_top( rectengine_c *e )
+void rectengine_c::child_move_to( int index, rectengine_c *e )
 {
     int i = children.find(e);
-    if (i > 0)
+    if (i != index)
     {
         children.set(i, nullptr);
-        children.insert(0, e);
+        children.insert(index, e);
         cleanup_children_now();
         gui->dirty_hover_data();
         redraw();
@@ -395,7 +395,7 @@ rectengine_c *rectengine_c::get_last_child()
 		{
             const hover_data_s &hd = gui->get_hoverdata(data.mouse.screenpos);
 			if (hd.rid == getrid() && !getrect().getprops().is_maximized())
-            {   if (0 != (hd.area & AREA_RESIZE))
+            {   if (0 != (hd.area & AREA_RESIZE) && 0 == (hd.area & AREA_NORESIZE))
 			    {
                     gui->set_focus(hd.rid);
 				    sq_evt(SQ_RESIZE_START, getrid(), ts::make_dummy<evt_data_s>(true));
@@ -730,7 +730,8 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
                         int l = DragQueryFileW(drp,i,f.str(), MAX_PATH);
                         if (l<=0) break;
                         f.set_length(l);
-                        gmsg<GM_DROPFILES>(f, ts::ref_cast<ts::ivec2>(p)).send();
+                        if (gmsg<GM_DROPFILES>(engine ? engine->getrid() : RID(), f, ts::ref_cast<ts::ivec2>(p)).send().is(GMRBIT_ABORT))
+                            break;
                     }
                 }
                 DragFinish(drp);
@@ -827,6 +828,17 @@ bool rectengine_root_c::refresh_frame(RID, GUIPARAM p)
 
 void rectengine_root_c::kill_window()
 {
+    if (borderdata)
+    {
+        border_window_data_s *d = (border_window_data_s *)borderdata;
+        borderdata = nullptr;
+        (d + 0)->~border_window_data_s();
+        (d + 1)->~border_window_data_s();
+        (d + 2)->~border_window_data_s();
+        (d + 3)->~border_window_data_s();
+        MM_FREE(d);
+    }
+
     if (HWND h = hwnd)
     {
         if (flags.is(F_NOTIFY_ICON))
@@ -838,17 +850,6 @@ void rectengine_root_c::kill_window()
             nd.uID = (int)hwnd;
             Shell_NotifyIconW(NIM_DELETE, &nd);
             flags.clear(F_NOTIFY_ICON);
-        }
-
-        if (borderdata)
-        {
-            border_window_data_s *d = (border_window_data_s *)borderdata;
-            borderdata = nullptr;
-            (d+0)->~border_window_data_s();
-            (d+1)->~border_window_data_s();
-            (d+2)->~border_window_data_s();
-            (d+3)->~border_window_data_s();
-            MM_FREE(d);
         }
 
         hwnd = nullptr;
@@ -865,10 +866,10 @@ void rectengine_root_c::kill_window()
 
 		// create visible window
 		ts::uint32 af = WS_POPUP|WS_VISIBLE|WS_SYSMENU|WS_MINIMIZEBOX|WS_MAXIMIZEBOX;
-		ts::uint32 exf = 0;
+		ts::uint32 exf = WS_EX_ACCEPTFILES;;
         
         if ( !g_sysconf.mainwindow )
-            exf |= WS_EX_APPWINDOW | WS_EX_ACCEPTFILES;
+            exf |= WS_EX_APPWINDOW;
 		
 		if (pss.is_alphablend())
 			exf |= WS_EX_LAYERED;
@@ -1892,8 +1893,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                         IDC_SIZENESW,
                         IDC_SIZENWSE,
                     };
-
-                    if (hd.area < LENGTH(cursors)) return cursors[hd.area];
+                    if ((hd.area & AREA_RESIZE) && (hd.area & AREA_RESIZE) < LENGTH(cursors)) return cursors[hd.area & AREA_RESIZE];
                     if (hd.area & AREA_CAPTION) return IDC_SIZEALL;
                     if (hd.area & AREA_EDITTEXT) return IDC_IBEAM;
                     if (hd.area & AREA_HAND) return IDC_HAND;

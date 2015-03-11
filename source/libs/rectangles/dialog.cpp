@@ -93,10 +93,11 @@ ts::uint32 gui_dialog_c::gm_handler(gmsg<GM_CLOSE_DIALOG> & p)
 }
 
 
-void gui_dialog_c::description_s::label( const ts::wsptr& text_ )
+gui_dialog_c::description_s&  gui_dialog_c::description_s::label( const ts::wsptr& text_ )
 {
     ctl = _STATIC;
     text.set(text_);
+    return *this;
 }
 
 gui_dialog_c::description_s& gui_dialog_c::description_s::hiddenlabel( const ts::wsptr& text_, ts::TSCOLOR col )
@@ -338,8 +339,7 @@ bool gui_dialog_c::combo_drop(RID rid, GUIPARAM param)
 
 void gui_dialog_c::set_combik_menu( const ts::asptr& ctl_name, const menu_c& m )
 {
-    RID crid = find(ctl_name);
-    if (crid)
+    if (RID crid = find(ctl_name))
     {
         gui_control_c &ctl = HOLD(crid).as<gui_control_c>();
         ctl.set_data_obj<menu_c>( m );
@@ -352,6 +352,15 @@ void gui_dialog_c::set_combik_menu( const ts::asptr& ctl_name, const menu_c& m )
                 break;
             }
         }
+    }
+}
+
+void gui_dialog_c::set_label_text( const ts::asptr& ctl_name, const ts::wstr_c& t )
+{
+    if (RID lrid = find(ctl_name))
+    {
+        gui_label_simplehtml_c &ctl = HOLD(lrid).as<gui_label_simplehtml_c>();
+        ctl.set_text(t);
     }
 }
 
@@ -557,9 +566,11 @@ RID gui_dialog_c::combik(const menu_c &m, RID parent)
 
 RID gui_dialog_c::label(const ts::wstr_c &text, ts::TSCOLOR col, bool visible)
 {
-    gui_label_c &l = MAKE_VISIBLE_CHILD<gui_label_c>(getrid(),visible);
+    gui_label_simplehtml_c &l = MAKE_VISIBLE_CHILD<gui_label_simplehtml_c>(getrid(),visible);
+    l.on_link_click = (CLICK_LINK)ts::open_link;
     l.set_autoheight();
     l.set_text(text);
+    l.set_updaterect( DELEGATE(this, updrect) );
     if (col) l.set_defcolor(col);
     return l.getrid();
 }
@@ -568,6 +579,17 @@ RID gui_dialog_c::vspace(int height)
 {
     RID stub = MAKE_CHILD<gui_stub_c>( getrid(), ts::ivec2(-1, height), ts::ivec2(-1, height) );
     return stub;
+}
+
+void gui_dialog_c::removerctl(int r)
+{
+    ts::safe_ptr<guirect_c> & ctl = subctls[r];
+    if (ctl)
+    {
+        int i = getengine().get_child_index(&ctl->getengine());
+        if (i >= 0 && i <= skipctls) --skipctls;
+        TSDEL( ctl.get() );
+    }
 }
 
 void gui_dialog_c::updrect(void *rr, int r, const ts::ivec2 &p)
@@ -583,12 +605,18 @@ void gui_dialog_c::updrect(void *rr, int r, const ts::ivec2 &p)
                 d.height_ = 0;
                 ctl = &HOLD( d.make_ctl(this, par) )();
                 MODIFY(*ctl).size( d.width_, h ).pos(HOLD(par)().to_local(to_screen(p)));
+                if (par == getrid())
+                {
+                    getengine().child_move_to(skipctls++, &ctl->getengine());
+                    ctl->getengine().__spec_set_outofbound(false);
+                }
                 d.height_ = h;
                 if (!d.name.is_empty()) setctlname(d.name, *ctl);
                 return;
             }
         return;
     }
+
     MODIFY(*ctl).pos(HOLD(par)().to_local(to_screen(p)));
 }
 
@@ -618,6 +646,7 @@ void gui_dialog_c::reset(bool keep_skip)
 
         ++skipctls;
         gui_button_c &b = MAKE_VISIBLE_CHILD<gui_button_c>(getrid());
+        ctl_by_name[ts::str_c(CONSTASTR("dialog_button_")).append_as_uint(tag)] = &b;
         b.set_face(bcr.face);
         b.tooltip(bcr.tooltip);
         if (bcr.btext.l) b.set_text(bcr.btext);
@@ -679,30 +708,6 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
                 rctl = combik( d.items, parent );
             }
             break;
-        case description_s::_BUTTON:
-            {
-                gui_button_c &b = MAKE_CHILD<gui_button_c>(parent);
-                if (d.text.begins(CONSTWSTR("face=")))
-                {
-                    b.set_face(ts::str_c(d.text.substr(5)));
-                } else
-                {
-                    b.set_text(d.text);
-                    b.set_face(CONSTASTR("button"));
-                }
-                b.set_handler(d.handler, this);
-                b.tooltip( d.gethintproc() );
-
-                if (d.width_)
-                    b.set_constant_width(d.width_);
-
-                if (d.height_)
-                    b.set_constant_height(d.height_);
-
-                MODIFY(b).visible(true);
-                rctl = b.getrid();
-            }
-            break;
         case description_s::_CHECKBUTTONS:
             if (!d.items.is_empty())
             {
@@ -749,6 +754,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             }
             break;
         case description_s::_TEXT:
+        case description_s::_BUTTON:
             rctl = d.make_ctl(this, parent);
             break;
         }
@@ -766,6 +772,32 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
     {
     case _TEXT:
         return dlg->textfield(text, MAX_PATH, readonly_ ? TFR_TEXT_FILED_RO : TFR_TEXT_FILED, DELEGATE(this, updvalue), nullptr, height_, parent);
+    case _BUTTON:
+        {
+            gui_button_c &b = MAKE_CHILD<gui_button_c>(parent);
+            if (text.begins(CONSTWSTR("face=")))
+            {
+                b.set_face(ts::str_c(text.substr(5)));
+            }
+            else
+            {
+                b.set_text(text);
+                b.set_face(CONSTASTR("button"));
+            }
+            b.set_handler(handler, this);
+            b.tooltip(gethintproc());
+
+            if (width_)
+                b.set_constant_width(width_);
+
+            if (height_)
+                b.set_constant_height(height_);
+
+            MODIFY(b).visible(true);
+            return b.getrid();
+        }
+        break;
+
     }
     FORBIDDEN();
     return RID();

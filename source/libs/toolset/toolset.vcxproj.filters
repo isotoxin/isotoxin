@@ -30,9 +30,6 @@
     <ClCompile Include="internal\cpuaccel.cpp">
       <Filter>src\internal\bitmaps</Filter>
     </ClCompile>
-    <ClCompile Include="internal\FileDDS.cpp">
-      <Filter>src\internal\bitmaps</Filter>
-    </ClCompile>
     <ClCompile Include="internal\resample.cpp">
       <Filter>src\internal\bitmaps</Filter>
     </ClCompile>
@@ -126,12 +123,12 @@
     <ClCompile Include="internal\pngreader.cpp">
       <Filter>src\internal\bitmaps</Filter>
     </ClCompile>
+    <ClCompile Include="internal\ddsreader.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="internal\cpuaccel.h">
-      <Filter>src\internal\bitmaps</Filter>
-    </ClInclude>
-    <ClInclude Include="internal\FileDDS.h">
       <Filter>src\internal\bitmaps</Filter>
     </ClInclude>
     <ClInclude Include="internal\math.h">
@@ -246,6 +243,9 @@
       <Filter>src\files\packages</Filter>
     </ClInclude>
     <ClInclude Include="internal\pngreader.h">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClInclude>
+    <ClInclude Include="internal\ddsreader.h">
       <Filter>src\internal\bitmaps</Filter>
     </ClInclude>
   </ItemGroup>

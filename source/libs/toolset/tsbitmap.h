@@ -238,13 +238,17 @@ struct imgdesc_s
     aint bytepp() const { return (bitpp + 1) >> 3; };
     bool operator==(const imgdesc_s&d) const { return sz == d.sz && /*pitch == d.pitch &&*/ bitpp == d.bitpp; }
     bool operator!=(const imgdesc_s&d) const { return sz != d.sz || /*pitch != d.pitch ||*/ bitpp != d.bitpp; }
+
+    imgdesc_s &set_width(int w) { sz.x = w; return *this; }
+    imgdesc_s &set_height(int h) { sz.y = h; return *this; }
+    imgdesc_s &set_size(const ivec2 &szz) { sz = szz; return *this; }
 };
 
 void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info);
 void TSCALL img_helper_make_2x_smaller(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info);
 void TSCALL img_helper_get_from_dxt(uint8 *des, const imgdesc_s &des_info, const ivec2 &from_p, const void *sou, int sou_pitch, int squish_fmt);
 void TSCALL img_helper_copy_components(uint8* des, const uint8* sou, const imgdesc_s &des_info, const imgdesc_s &sou_info, int num_comps );
-void TSCALL img_helper_merge_with_alpha(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info, int oalphao = -1);
+void TSCALL img_helper_merge_with_alpha(uint8 *des, const uint8 *basesrc, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &base_info, const imgdesc_s &sou_info, int oalphao = -1);
 
 
 struct bmpcore_normal_s;
@@ -311,6 +315,11 @@ struct bmpcore_normal_s
     } *m_core;
     TS_STATIC_CHECK(sizeof(core_s) == 16, "sizeof(core_s) must be 16");
 
+    bmpcore_normal_s( const bmpcore_normal_s&oth ):m_core(oth.m_core)
+    {
+        m_core->ref_inc();
+    }
+
     bmpcore_normal_s( aint sz )
     {
         m_core = core_s::build(sz);
@@ -347,15 +356,21 @@ struct bmpcore_normal_s
         }
         return *this;
     }
+    bmpcore_normal_s &operator=(bmpcore_normal_s &&ocore)
+    {
+        SWAP(m_core, ocore.m_core);
+        return *this;
+    }
 };
 
 
 struct bmpcore_exbody_s
 {
-    const void *m_body;
+    const uint8 *m_body;
     imgdesc_s m_info;
 
-    bmpcore_exbody_s(const void *body, const imgdesc_s &info):m_body(body), m_info(info)
+    bmpcore_exbody_s(const bmpcore_exbody_s & oth):m_body(oth.m_body), m_info(oth.m_info) {}
+    bmpcore_exbody_s(const uint8 *body, const imgdesc_s &info):m_body(body), m_info(info)
     {
     }
     bmpcore_exbody_s(aint) {}
@@ -371,10 +386,16 @@ struct bmpcore_exbody_s
     }
 
     const imgdesc_s &info() const { return m_info; }
-    uint8 *operator()() const { return (uint8 *)m_body; }
+    uint8 *operator()() const { return const_cast<uint8 *>(m_body); }
 
     bool operator==(const bmpcore_exbody_s &ocore) const;
     bmpcore_exbody_s &operator=(const bmpcore_exbody_s &ocore)
+    {
+        m_body = ocore.m_body;
+        m_info = ocore.m_info;
+        return *this;
+    }
+    bmpcore_exbody_s &operator=(bmpcore_exbody_s &&ocore)
     {
         m_body = ocore.m_body;
         m_info = ocore.m_info;
@@ -475,12 +496,26 @@ public:
 
 	void clear(void)                { core.clear(); }
     const imgdesc_s &info() const   { return core.info(); }
+    imgdesc_s info(const ts::ivec2 &offset) const 
+    {
+        if (offset == ts::ivec2(0))
+            return core.info();
+        imgdesc_s inf( core.info() );
+        inf.sz -= offset;
+        return inf;
+    }
     uint8* body() const             { return core(); }
     uint8* body(const ivec2& pos) const { return core() + pos.x * core.info().bytepp() + pos.y * core.info().pitch; }
+
+    bmpcore_exbody_s extbody() const { return bmpcore_exbody_s( body(), info() ); }
 
     void operator =(const bitmap_t &bmp)
     {
         core = bmp.core;
+    }
+    void operator =(bitmap_t &&bmp)
+    {
+        core = std::move( bmp.core );
     }
 
     bool equals(const bitmap_t & bm) const { return core == bm.core; }
@@ -502,12 +537,15 @@ public:
 
     void copy_components(bitmap_c &imageout, int num_comps, int dst_first_comp, int src_first_comp) const;//копирует только часть компонент (R|G|B|A) из bmsou
 
-	void copy(const ivec2 & pdes,const ivec2 & size, const bitmap_t & bmsou, const ivec2 & spsou);
-    void tile(const ivec2 & pdes,const ivec2 & desize, const bitmap_t & bmsou,const ivec2 & spsou, const ivec2 & szsou);
+	void copy(const ivec2 & pdes,const ivec2 & size, const bmpcore_exbody_s & bmsou, const ivec2 & spsou);
+    void tile(const ivec2 & pdes,const ivec2 & desize, const bmpcore_exbody_s & bmsou,const ivec2 & spsou, const ivec2 & szsou);
 	void fill(const ivec2 & pdes,const ivec2 & size, TSCOLOR color);
     void fill(TSCOLOR color);
     void fill_alpha(const ivec2 & pdes,const ivec2 & size, uint8 a);
     void fill_alpha(uint8 a);
+
+    bool has_alpha() const;
+    bool has_alpha(const ivec2 & pdes,const ivec2 & size) const;
 
     void overfill(const ivec2 & pdes,const ivec2 & size, TSCOLOR color); // draws rectangle with premultiplied color
 
@@ -629,10 +667,9 @@ public:
 	void flip_y(const ivec2 & pdes,const ivec2 & size);
     void flip_y(void);
 
-	void merge_by_mask(	const ivec2 & pdes,const ivec2 & size,
-						const bitmap_t & bm1,const ivec2 & sp1,
-						const bitmap_t & bm2,const ivec2 & sp2,
-						const bitmap_t & mask,const ivec2 & spm);
+    void alpha_blend( const ivec2 &p, const bmpcore_exbody_s & img ) { before_modify(); alpha_blend(p,img,extbody()); }
+    void alpha_blend( const ivec2 &p, const bmpcore_exbody_s & img, const bmpcore_exbody_s & base ); // this - target, result size - base size
+
 	void swap_byte(const ivec2 & pos,const ivec2 & size,int n1,int n2);
     void swap_byte(void *target) const;
 
@@ -743,6 +780,7 @@ public:
 
 	bool load_from_TGA(const void * buf, int buflen);
 	bool load_from_BMP(const void * buf, int buflen);
+    bool load_from_BMPHEADER(const BITMAPINFOHEADER * iH, int buflen);
 
 	bool load_from_PNG(const void * buf, int buflen);
     bool load_from_PNG(const buf_c & buf);
@@ -762,7 +800,7 @@ class image_extbody_c : public bitmap_t < bmpcore_exbody_s >
 {
 public:
     image_extbody_c(): bitmap_t(nullptr, imgdesc_s(ivec2(0), 0)) {}
-    image_extbody_c( const void *imgbody, const imgdesc_s &info ): bitmap_t(imgbody, info) {}
+    image_extbody_c( const uint8 *imgbody, const imgdesc_s &info ): bitmap_t(imgbody, info) {}
 };
 
 class drawable_bitmap_c : public image_extbody_c

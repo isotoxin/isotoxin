@@ -315,9 +315,20 @@ DWORD gui_c::handler_SEV_KEYBOARD(const system_event_param_s & p)
             case SSK_INSERT:
                 if (gmsg<GM_COPY_HOTKEY>().send().is(GMRBIT_ACCEPTED)) return 0;
                 break;
+            case SSK_V:
+                if (gmsg<GM_PASTE_HOTKEY>().send().is(GMRBIT_ACCEPTED)) return 0;
+                break;
         }
     }
-
+    if (p.kbd.down && GetKeyState(VK_SHIFT) < 0)
+    {
+        switch (p.kbd.scan)
+        {
+            case SSK_INSERT:
+                if (gmsg<GM_PASTE_HOTKEY>().send().is(GMRBIT_ACCEPTED)) return 0;
+                break;
+        }
+    }
     return 0;
 }
 
@@ -850,7 +861,7 @@ bool selectable_core_s::flash(RID, GUIPARAM p)
     if (flashing > 0) DELAY_CALL_R( 0.1, DELEGATE(this, flash), (GUIPARAM)(flashing-1) );
     if (clear_selection_after_flashing && flashing == 0)
         clear_selection();
-    else {
+    else if (owner) {
         dirty = true;
         owner->getengine().redraw();
     }
@@ -1030,6 +1041,15 @@ bool selectable_core_s::sure_selected()
         }
     }
     return false;
+}
+
+void selectable_core_s::endtrack()
+{
+    if (glyph_start_sel > glyph_end_sel)
+    {
+        SWAP(glyph_start_sel, glyph_end_sel);
+        SWAP(char_start_sel, char_end_sel);
+    }
 }
 
 void selectable_core_s::selection_stuff(ts::drawable_bitmap_c &texture)

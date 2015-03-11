@@ -34,6 +34,7 @@ struct active_protocol_data_s
     ts::wstr_c user_name;
     ts::wstr_c user_statusmsg;
     ts::blob_c config;
+    ts::blob_c avatar;
     int options = O_AUTOCONNECT;
     proxy_settings_s proxy;
 
@@ -107,6 +108,9 @@ public:
 
     const s3::Format& defaudio() const {return audio_fmt;}
 
+    void set_avatar(contact_c *); // self avatar to self contact
+    void set_avatar( const ts::blob_c &ava ); // avatar for this protocol
+
     void save_config(bool wait);
     void stop_and_die(bool wait_worker_end = false);
     int getid() const {return id;}
@@ -127,8 +131,9 @@ public:
     void call(int cid, int seconds);
     void stop_call(int cid, stop_call_e sc);
 
-
     void file_control(uint64 utag, file_control_e fctl);
     void send_file(int cid, uint64 utag, const ts::wstr_c &filename, uint64 filesize);
     void file_portion(uint64 utag, uint64 offset, const void *data, int sz);
+
+    void avatar_data_request(int cid);
 };

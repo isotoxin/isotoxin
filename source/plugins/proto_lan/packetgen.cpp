@@ -125,7 +125,7 @@ void packetgen::pg_reject()
     encopy();
 }
 
-void packetgen::pg_message(msg_s *m, const byte *crypt_packet_key)
+void packetgen::pg_message(msg_s *m, const byte *crypt_packet_key, int maxsize)
 {
     push_pid(PID_MESSAGE);
     pushi(randombytes_random()); // just random int
@@ -139,10 +139,10 @@ void packetgen::pg_message(msg_s *m, const byte *crypt_packet_key)
     pushi( m->len );
     if (flags & 1) pushll( m->create_time );
 
-    int sb = SIZE_MAX_SEND;
+    int sb = maxsize;
     if (m->left() < sb) sb = m->left();
 
-    static_assert( SIZE_MAX_SEND < 65536, "bad max send size" );
+    ASSERT( maxsize < 65536, "bad max send size" );
 
     pushus( (USHORT)sb );
 
@@ -172,6 +172,6 @@ void packetgen::pg_time(bool resync, const byte *crypt_packet_key)
     pushll( now() );
     pushb( resync ? 1 : 0 );
     encode(crypt_packet_key);
-    log_auth_key("PID_DELIVERED encoded", crypt_packet_key);
+    log_auth_key("PID_TIME encoded", crypt_packet_key);
 }
 
