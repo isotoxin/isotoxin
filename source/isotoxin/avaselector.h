@@ -39,6 +39,7 @@ class dialog_avaselector_c : public gui_isodialog_c
     bool dirty = true;
     bool disabled_ok = false;
 
+    void newimage();
     bool flashavarect(RID, GUIPARAM);
     void rebuild_bitmap();
     void prepare_stuff();

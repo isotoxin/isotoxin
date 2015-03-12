@@ -386,13 +386,7 @@ ts::uint32 dialog_avaselector_c::gm_handler(gmsg<GM_PASTE_HOTKEY> & p)
     if (bmp.info().sz >> 0)
     {
         bitmap = bmp;
-        user_offset = ts::ivec2(0);
-        resize_k = 1.0f;
-        dirty = true;
-        avarect = ts::irect(0, bitmap.info().sz);
-        rebuild_bitmap();
-        flashavarect(RID(), nullptr);
-        recompress();
+        newimage();
     }
 
     return 0;
@@ -445,9 +439,8 @@ bool dialog_avaselector_c::open_image(RID, GUIPARAM)
     return true;
 }
 
-void dialog_avaselector_c::load_image(const ts::wstr_c &fn)
+void dialog_avaselector_c::newimage()
 {
-    bitmap.load_from_file(fn);
     user_offset = ts::ivec2(0);
     resize_k = 1.0f;
     dirty = true;
@@ -455,6 +448,18 @@ void dialog_avaselector_c::load_image(const ts::wstr_c &fn)
     rebuild_bitmap();
     flashavarect(RID(), nullptr);
     recompress();
+
+    if (image.info().sz > viewrect.size())
+    {
+        statrt_scale();
+        do_scale(ts::tmin( (float)viewrect.width() / (float)image.info().sz.x, (float)viewrect.height() / (float)image.info().sz.y ));
+    }
+}
+
+void dialog_avaselector_c::load_image(const ts::wstr_c &fn)
+{
+    bitmap.load_from_file(fn);
+    newimage();
 }
 
 void dialog_avaselector_c::rebuild_bitmap()
@@ -576,6 +581,18 @@ static void draw_chessboard(rectengine_c &e, const ts::irect & r, ts::TSCOLOR c1
 
 void dialog_avaselector_c::recompress()
 {
+    if (getengine().mtrack(getrid(), MTT_APPDEFINED1) == nullptr)
+    {
+        if (avarect.width() < avarect.height())
+        {
+            avarect.setheight(avarect.width());
+        }
+        else if (avarect.width() > avarect.height())
+        {
+            avarect.setwidth(avarect.height());
+        }
+    }
+
     ts::bitmap_c b;
     b.create_RGBA( avarect.size() );
     b.copy(ts::ivec2(0), b.info().sz, image.extbody(), avarect.lt );

@@ -17,7 +17,7 @@
 
 #define SIZE_PACKET_HEADER 4
 #define SIZE_MAX_SEND_NONAUTH 499
-#define SIZE_MAX_SEND_AUTH 65500
+#define SIZE_MAX_SEND_AUTH 32000
 #define SIZE_PUBID 20 // full pub id size
 #define SIZE_KEY (crypto_secretbox_NONCEBYTES + crypto_secretbox_KEYBYTES)
 #define SIZE_KEY_NONCE_PART (crypto_secretbox_NONCEBYTES)

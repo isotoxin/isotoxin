@@ -21,12 +21,11 @@ void avatar_s::load( const void *body, int size, int tag_ )
 
             if (bmp.info().sz.x != info().sz.y)
             {
-                bmprsz.create_RGBA(ts::ivec2(ts::tmax(bmp.info().sz.x,info().sz.y)));
+                bmprsz.create_RGBA(ts::ivec2(ts::tmax(bmp.info().sz.x,bmp.info().sz.y)));
                 bmprsz.fill(0);
                 bmprsz.copy( (bmprsz.info().sz - bmp.info().sz) / 2, bmp.info().sz, bmp.extbody(), ts::ivec2(0) );
                 bmp = bmprsz;
             }
-
             bmp.resize(bmprsz, asz, ts::FILTER_LANCZOS3);
             bmp = bmprsz;
         }
