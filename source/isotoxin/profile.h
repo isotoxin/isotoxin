@@ -87,27 +87,43 @@ template<typename T, profile_table_e tabi> struct tableview_t
 
         bool present() const { return st == s_unchanged || st == s_changed || st == s_new; }
         void changed() { st = s_changed; };
-        bool deleted() { bool c = st != s_delete; st = s_delete; return c; };
+        bool deleted() { if (st == s_deleted) return false; if (st == s_new) { st = s_deleted; return false; }  bool c = st != s_delete; st = s_delete; return c; };
+        bool is_deleted() const {return st == s_delete || st == s_deleted;}
     };
     ts::tmp_tbuf_t<int> *read_ids = nullptr;
     ts::array_inplace_t<row_s, 0> rows;
     ts::hashmap_t<int, int> new2ins; // new id (negative) to inserted. valid after save
     int newidpool = -1;
+    bool cleanup_requred = false;
 
+    void cleanup()
+    {
+        // remove s_deleted
+        if (cleanup_requred)
+            for(int i=rows.size()-1; i>=0; --i)
+                if (rows.get(i).st == row_s::s_deleted)
+                    rows.remove_slow(i);
+        cleanup_requred = false;
+    }
 
     void operator=(const tableview_t& other)
     {
         rows = other.rows;
         newidpool = other.newidpool;
+        cleanup_requred = other.cleanup_requred;
+        cleanup();
     }
     void operator=(tableview_t&& other)
     {
-        rows = other.rows;
-        newidpool = other.newidpool;
+        rows = std::move(other.rows);
+        SWAP(newidpool, other.newidpool);
+        cleanup_requred = other.cleanup_requred;
+        cleanup();
     }
 
     row_s del(int id) // returns deleted row
     {
+        cleanup();
         int cnt = rows.size();
         for (int i = 0; i < cnt; ++i)
         {
@@ -117,6 +133,7 @@ template<typename T, profile_table_e tabi> struct tableview_t
         }
         return row_s();
     }
+    /*
     template<typename F> void finddel(F f)
     {
         int cnt = rows.size();
@@ -130,29 +147,37 @@ template<typename T, profile_table_e tabi> struct tableview_t
             }
         }
     }
-    template<typename F> void iterate(F f)
+    template<bool skip_deleted, typename F> void iterate(F f)
     {
         for (row_s &r : rows)
-            f(r.other);
+            if ((!skip_deleted || r.st != row_s::s_delete) && r.st != row_s::s_deleted)
+                f(r.other);
     }
+    */
 
-    template<typename F> row_s *find(F f)
+    template<bool skip_deleted, typename F> row_s *find(F f)
     {
+        cleanup();
         for (row_s &r : rows)
-            if (f(r.other)) return &r;
+            if (!skip_deleted || r.st != row_s::s_delete)
+                if (f(r.other)) return &r;
         return nullptr;
     }
-    template<typename F> const row_s *find(F f) const
+    template<bool skip_deleted, typename F> const row_s *find(F f) const
     {
+        ASSERT(!cleanup_requred);
         for (const row_s &r : rows)
-            if (f(r.other)) return &r;
+            if ((!skip_deleted || r.st != row_s::s_delete) && r.st != row_s::s_deleted)
+                if (f(r.other)) return &r;
         return nullptr;
     }
 
-    row_s *find(int id)
+    template<bool skip_deleted> row_s *find(int id)
     {
+        cleanup();
         for (row_s &r : rows)
-            if (r.id == id) return &r;
+            if (!skip_deleted || r.st != row_s::s_delete)
+                if (r.id == id) return &r;
         return nullptr;
     }
     row_s &getcreate(int id);
@@ -256,6 +281,7 @@ public:
     int  calc_history_after( const contact_key_s&historian, time_t time );
     int  calc_history_between( const contact_key_s&historian, time_t time1, time_t time2 );
     
+    void kill_history_item(uint64 utag);
     void kill_history(const contact_key_s&historian);
     void load_history( const contact_key_s&historian, time_t time, int nload, ts::tmp_tbuf_t<int>& loaded_ids );
     void load_history( const contact_key_s&historian ); // load all history items to internal table

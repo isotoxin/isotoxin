@@ -304,6 +304,21 @@ const avatar_s *contact_c::get_avatar() const
     return r;
 }
 
+void contact_c::del_history(uint64 utag)
+{
+    int cnt = history.size();
+    for (int i = 0; i < cnt; ++i)
+    {
+        if (history.get(i).utag == utag)
+        {
+            history.remove_slow(i);
+            break;
+        }
+    }
+    prf().kill_history_item(utag);
+}
+
+
 void contact_c::make_time_unique(time_t &t)
 {
     if (history.size() == 0 || t < history.get(0).time )
@@ -327,7 +342,7 @@ void contact_c::load_history(int n_last_items)
 
     for(int id : ids)
     {
-        auto * row = prf().get_table_history().find(id);
+        auto * row = prf().get_table_history().find<true>(id);
         if (ASSERT(row && row->other.historian == getkey()))
         {
             post_s & p = add_history( row->other.time );
@@ -773,11 +788,17 @@ int contacts_c::find_free_meta_id() const
 
 ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
 {
-    switch (ch.pp)
+    if (ch.pass == 0)
     {
+        switch (ch.pp)
+        {
         case PP_USERNAME:
-        case PP_USERSTATUSMSG:
+            get_self().set_name(ch.s);
             break;
+        case PP_USERSTATUSMSG:
+            get_self().set_statusmsg(ch.s);
+            break;
+        }
     }
 
     return 0;

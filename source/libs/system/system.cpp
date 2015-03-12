@@ -109,25 +109,31 @@ static LRESULT CALLBACK app_wndproc(HWND hWnd, UINT message, WPARAM wParam, LPAR
     {
         // if application is active
     case WM_ACTIVATEAPP:
-        {
-            bool bActivate = (wParam != 0);
-            if ( g_sysconf.is_active != bActivate )
-            {
-                g_sysconf.is_active = bActivate;
+        //{
+        //    bool bActivate = (wParam != 0);
+        //    if ( g_sysconf.is_active != bActivate )
+        //    {
+        //        g_sysconf.is_active = bActivate;
 
-                system_event_param_s p; p.active = bActivate;
-                system_event_receiver_c::notify_system_receivers( SEV_ACTIVE_STATE, p );
-            }
-        }
+        //        system_event_param_s p; p.active = bActivate;
+        //        system_event_receiver_c::notify_system_receivers( SEV_ACTIVE_STATE, p );
+        //    }
+        //}
         break;
-
-    case WM_ACTIVATE:
-        if ( LOWORD(wParam) != WA_INACTIVE && g_sysconf.is_active == false )
+    case WM_NCACTIVATE:
         {
-            g_sysconf.is_active = true;
-            system_event_param_s p; p.active = true;
-            system_event_receiver_c::notify_system_receivers( SEV_ACTIVE_STATE, p );
+            g_sysconf.is_active = wParam != 0;
+            system_event_param_s p; p.active = g_sysconf.is_active;
+            system_event_receiver_c::notify_system_receivers(SEV_ACTIVE_STATE, p);
         }
+        return TRUE;
+    case WM_ACTIVATE:
+        //if ( LOWORD(wParam) != WA_INACTIVE && g_sysconf.is_active == false )
+        //{
+        //    g_sysconf.is_active = true;
+        //    system_event_param_s p; p.active = true;
+        //    system_event_receiver_c::notify_system_receivers( SEV_ACTIVE_STATE, p );
+        //}
         break;
 
     //case WM_UNICHAR:

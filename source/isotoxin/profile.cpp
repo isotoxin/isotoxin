@@ -468,6 +468,7 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts:
                 db->delrow(T::get_table_name(), r.id);
                 r.st = row_s::s_deleted;
                 one_done = !all;
+                cleanup_requred = true;
                 continue;
 
         }
@@ -611,8 +612,29 @@ void profile_c::record_history( const contact_key_s&historian, const post_s &his
     changed();
 }
 
+
+void profile_c::kill_history_item(uint64 utag)
+{
+    if(auto *row = table_history.find<true>([&](history_s &h) ->bool { return h.utag == utag; }))
+        if (row->deleted())
+            changed();
+
+    ts::tmp_str_c whr(CONSTASTR("utag=")); whr.append_as_num<int64>(utag);
+    db->delrows(CONSTASTR("history"), whr);
+}
+
 void profile_c::kill_history(const contact_key_s&historian)
 {
+    bool bchanged = false;
+    for (auto &row : table_history.rows)
+    {
+        if (row.other.historian == historian)
+            bchanged |= row.deleted();
+    }
+    if (bchanged)
+        changed();
+
+    // apply modification to db now due not all history items loaded
     ts::tmp_str_c whr( CONSTASTR("historian=") ); whr.append_as_num<int64>( ts::ref_cast<int64>( historian ) );
     db->delrows( CONSTASTR("history"), whr );
 }
@@ -620,7 +642,8 @@ void profile_c::kill_history(const contact_key_s&historian)
 bool profile_c::change_history_item(uint64 utag, contact_key_s & historian)
 {
     bool ok = false;
-    table_history.find([&](history_s &h) ->bool
+    table_history.cleanup();
+    table_history.find<true>([&](history_s &h) ->bool
     {
         if (h.utag == utag && h.type == MTA_UNDELIVERED_MESSAGE)
         {
@@ -648,8 +671,8 @@ bool profile_c::change_history_item(uint64 utag, contact_key_s & historian)
 void profile_c::change_history_item(const contact_key_s&historian, const post_s &post, ts::uint32 change_what)
 {
     if (!change_what) return;
-
-    table_history.find([&](history_s &h) ->bool
+    table_history.cleanup();
+    table_history.find<true>([&](history_s &h) ->bool
     {
         if (h.historian == historian && h.utag == post.utag)
         {
@@ -693,6 +716,8 @@ void profile_c::change_history_item(const contact_key_s&historian, const post_s 
 
 void profile_c::load_history( const contact_key_s&historian, time_t time, int nload, ts::tmp_tbuf_t<int>& loaded_ids )
 {
+    table_history.cleanup();
+
     auto fix = []( post_s &p )->bool
     {
         auto olft = p.mt();
@@ -738,8 +763,9 @@ void profile_c::load_history( const contact_key_s&historian, time_t time, int nl
     typedef tableview_t<history_s, pt_history>::row_s hitm;
     ts::tmp_pointers_t< hitm, 16 > candidates;
     for (auto &hi : table_history.rows)
-        if (hi.other.historian == historian && hi.other.time < time)
-            candidates.add(&hi);
+        if (!hi.is_deleted())
+            if (hi.other.historian == historian && hi.other.time < time)
+                candidates.add(&hi);
     if (candidates.size() > nload)
     {
         candidates.sort([](hitm *p1, hitm *p2)->bool {
@@ -776,8 +802,8 @@ void profile_c::load_history( const contact_key_s&historian, time_t time, int nl
 
     for(int idl : loaded_ids)
     {
-        auto * row = table_history.find(idl);
-        if (fix( row->other ))
+        auto * row = table_history.find<true>(idl);
+        if (row && fix( row->other ))
         {
             whr.set(CONSTASTR("utag=")); whr.append_as_num<int64>(ts::ref_cast<int64>(row->other.utag));
 
@@ -824,6 +850,8 @@ void profile_c::detach_history( const contact_key_s&prev_historian, const contac
 
 void profile_c::merge_history( const contact_key_s&base_historian, const contact_key_s&from_historian )
 {
+    table_history.cleanup();
+
     // just merge already loaded stuff
 
     bool changed = false;
@@ -863,6 +891,7 @@ void profile_c::merge_history( const contact_key_s&base_historian, const contact
 void profile_c::flush_history_now()
 {
     table_history.flush(db, true);
+    table_history.cleanup();
 }
 
 int  profile_c::calc_history( const contact_key_s&historian, bool ignore_invites )
@@ -960,26 +989,15 @@ void profile_c::shutdown_aps()
 void profile_c::killcontact( const contact_key_s&ck )
 {
     dirtycontacts.find_remove_fast(ck);
-    auto *row = table_contacts.find([&](const contacts_s &k)->bool { return k.key == ck; });
-    if (row)
-    {
-        if (row->st == ts::clean_type<decltype(row)>::type::s_new)
-        {
-            //table_contacts.del(row->id);
-            row->st = ts::clean_type<decltype(row)>::type::s_deleted;
-        } else
-        {
-            if (row->deleted())
-                changed();
-        }
-    }
+    if (auto *row = table_contacts.find<false>([&](const contacts_s &k)->bool { return k.key == ck; }))
+        if (row->deleted())
+            changed();
 }
 
 void profile_c::purifycontact( const contact_key_s&ck )
 {
     dirtycontacts.find_remove_fast(ck);
-    auto *row = table_contacts.find([&](const contacts_s &k)->bool { return k.key == ck; });
-    if (row)
+    if (auto *row = table_contacts.find<true>([&](const contacts_s &k)->bool { return k.key == ck; }))
     {
         row->other.key = contact_key_s();
         if (row->deleted())
@@ -989,13 +1007,12 @@ void profile_c::purifycontact( const contact_key_s&ck )
 
 bool profile_c::isfreecontact( const contact_key_s&ck ) const
 {
-    auto *row = table_contacts.find([&](const contacts_s &k)->bool { return k.key == ck; });
-    return row == nullptr;
+    return nullptr == table_contacts.find<true>([&](const contacts_s &k)->bool { return k.key == ck; });
 }
 
 void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, int tag )
 {
-    auto *row = table_contacts.find([&](const contacts_s &k)->bool { return k.key == ck; });
+    auto *row = table_contacts.find<false>([&](const contacts_s &k)->bool { return k.key == ck; });
 
     if (!row)
     {
@@ -1004,7 +1021,7 @@ void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, i
     }
     else
     {
-        if (row->st == ts::clean_type<decltype(row)>::type::s_delete || row->st == ts::clean_type<decltype(row)>::type::s_deleted)
+        if (row->is_deleted())
             return;
 
         row->changed();
@@ -1024,7 +1041,7 @@ void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, i
         const contact_c * c = contacts().find(ck);
         if (c)
         {
-            auto *row = table_contacts.find( [&](const contacts_s &k)->bool { return k.key == ck; } );
+            auto *row = table_contacts.find<false>( [&](const contacts_s &k)->bool { return k.key == ck; } );
             if (!row)
             {
                 row = &table_contacts.getcreate(0);
@@ -1032,7 +1049,7 @@ void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, i
                 row->other.avatar_tag = 0;
             } else
             {
-                if (row->st == ts::clean_type<decltype(row)>::type::s_delete || row->st == ts::clean_type<decltype(row)>::type::s_deleted)
+                if (row->is_deleted())
                     continue;
 
                 row->changed();

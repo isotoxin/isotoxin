@@ -80,6 +80,33 @@ ts::str_c get_downloaded_ver( ts::buf_c *pak = nullptr )
     return ts::str_c();
 }
 
+namespace
+{
+    struct myprogress_s
+    {
+        double lastruntime = 0;
+        CURL *curl;
+        myprogress_s(CURL *c):curl(c) {}
+    };
+    static int xferinfo(void *p, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
+    {
+        myprogress_s *myp = (myprogress_s *)p;
+        CURL *curl = myp->curl;
+        double curtime = 0;
+ 
+        curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, &curtime);
+ 
+        if((curtime - myp->lastruntime) >= 1)
+        {
+            // every 1000 ms
+            myp->lastruntime = curtime;
+            TSNEW(gmsg<ISOGM_DOWNLOADPROGRESS>, (int)dlnow, (int)dltotal)->send_to_main_thread();
+        }
+
+        return 0;
+    }
+}
+
 void autoupdater()
 {
     ts::str_c address("http://95.215.46.114/latest.txt");
@@ -185,6 +212,11 @@ void autoupdater()
     ts::buf_c latest(d);
     d.clear();
     rslt = curl_easy_setopt(curl, CURLOPT_URL, address.cstr());
+    myprogress_s progress(curl);
+    rslt = curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, xferinfo);
+    rslt = curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &progress);
+    rslt = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
+    
     rslt = curl_easy_perform(curl);
     if (!md5ok(d, ver)) return;
 

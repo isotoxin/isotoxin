@@ -233,6 +233,8 @@
     <ResourceCompile Include="..\..\res\isotoxin.rc" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="..\..\res\hollow.ico" />
+    <Image Include="..\..\res\icon2.ico" />
     <Image Include="..\..\res\icon_normal.ico" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

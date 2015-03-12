@@ -170,5 +170,11 @@
     <Image Include="..\..\res\icon_normal.ico">
       <Filter>res</Filter>
     </Image>
+    <Image Include="..\..\res\hollow.ico">
+      <Filter>res</Filter>
+    </Image>
+    <Image Include="..\..\res\icon2.ico">
+      <Filter>res</Filter>
+    </Image>
   </ItemGroup>
 </Project>

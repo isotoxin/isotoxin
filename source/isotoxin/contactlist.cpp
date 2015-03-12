@@ -547,6 +547,7 @@ void gui_contact_item_c::update_text()
                         //newtext.append(CONSTWSTR("<nl>")).append(colorize(TTT("протокол отключен"), get_default_text_color(1)));
                         t2.clear();
                     }
+                    t2.trim();
                     if (!t2.is_empty()) newtext.append(CONSTWSTR("<br><l>")).append(t2).append(CONSTWSTR("</l>"));
                 }
             }
@@ -674,7 +675,7 @@ void gui_contact_item_c::generate_protocols()
     const contact_c *def = CIR_CONVERSATION_HEAD == role && !contact->getkey().is_self() ? contact->subget_default() : nullptr;
     contact->subiterate([&](contact_c *c) {
 
-        if (auto *row = prf().get_table_active_protocol().find(c->getkey().protoid))
+        if (auto *row = prf().get_table_active_protocol().find<true>(c->getkey().protoid))
         {
             if (0 == (row->other.options & active_protocol_data_s::O_SUSPENDED))
             {

@@ -91,6 +91,7 @@ END
 IDI_ICON                ICON                    "icon.ico"
 IDI_ICON2               ICON                    "icon2.ico"
 IDI_ICON_NORMAL         ICON                    "icon_normal.ico"
+IDI_ICON_HOLLOW         ICON                    "hollow.ico"
 
 /////////////////////////////////////////////////////////////////////////////
 //

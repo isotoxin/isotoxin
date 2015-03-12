@@ -112,7 +112,7 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&p)
 {
     if (p.tabi == pt_active_protocol && p.pass == 0 && notice == NOTICE_NETWORK)
     {
-        auto *row = prf().get_table_active_protocol().find(networkid);
+        auto *row = prf().get_table_active_protocol().find<true>(networkid);
         if (row == nullptr || 0 != (row->other.options & active_protocol_data_s::O_SUSPENDED))
             TSDEL( this );
     }
@@ -307,6 +307,40 @@ void gui_notice_c::setup(const ts::wstr_c &itext, const ts::str_c &pubid)
     setup_tail();
 }
 
+ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_DOWNLOADPROGRESS>&p)
+{
+    if (notice == NOTICE_NEWVERSION)
+    {
+        ts::wstr_c ot = textrect.get_text();
+        int pp = ot.find_pos(CONSTWSTR("<null=px>"));
+        if (pp >= 0)
+        {
+            ts::wstr_c n;
+            
+            n.set_as_uint(p.downloaded);
+            for (int ix = n.get_length() - 3; ix > 0; ix -= 3)
+                n.insert(ix, '`');
+
+            ot.set_length(pp+9).append( n );
+            if (p.total > 0)
+            {
+                n.set_as_uint(p.total);
+                for (int ix = n.get_length() - 3; ix > 0; ix -= 3)
+                    n.insert(ix, '`');
+
+                ot.append(CONSTWSTR(" / "))
+                    .append(n)
+                    .append(CONSTWSTR(" ("))
+                    .append(ts::roundstr<ts::wstr_c>(100.0*double(p.downloaded)/p.total,2))
+                    .append(CONSTWSTR("%)"));
+            }
+            textrect.set_text_only(ot, false);
+            getengine().redraw();
+        }
+    }
+
+    return 0;
+}
 
 void gui_notice_c::setup(const ts::wstr_c &itext)
 {
@@ -324,7 +358,7 @@ void gui_notice_c::setup(const ts::wstr_c &itext)
             {
                 newtext.append(CONSTWSTR("<br><b>"));
                 newtext.append(TTT("-загрузка-",166));
-                newtext.append(CONSTWSTR("<b>"));
+                newtext.append(CONSTWSTR("</b><br><null=px>0"));
             } else if (auparams().lock_read()().downloaded)
             {
                 newtext.append(CONSTWSTR("<br>"));
@@ -879,6 +913,23 @@ void gui_message_item_c::ctx_menu_copymessage(const ts::str_c &msg)
     ts::set_clipboard_text(ts::wstr_c().set_as_utf8(msg));
 }
 
+void gui_message_item_c::ctx_menu_delmessage(const ts::str_c &mutag)
+{
+    uint64 utag = 0;
+    for (int i = 0; i < sizeof(utag); ++i)
+        ((ts::uint8 *)&utag)[i] = mutag.as_byte_hex(i * 2);
+
+    historian->del_history(utag);
+
+    if (remove_utag(utag))
+    {
+        RID parent = getparent();
+        if (records.size() == 0)
+            TSDEL(this);
+        parent.call_children_repos();
+    }
+}
+
 bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
 {
     ts::ivec2 *pt = (ts::ivec2 *)gui->lock_temp_buf((int)p);
@@ -1052,11 +1103,12 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
             bool some_selection = some_selected();
 
             mnu.add(gui->app_loclabel(LL_CTXMENU_COPY), (!some_selection) ? MIF_DISABLED : 0, DELEGATE(this, ctx_menu_copy));
-            ts::wstr_c msg = get_message_under_cursor(to_local(data.mouse.screenpos));
+            uint64 mutag = 0;
+            ts::wstr_c msg = get_message_under_cursor(to_local(data.mouse.screenpos), mutag);
             gui->app_prepare_text_for_copy( msg );
             mnu.add(TTT("Копировать сообщение",205), 0, DELEGATE(this, ctx_menu_copymessage), ts::to_utf8(msg));
-            //mnu.add_separator();
-            //mnu.add(gui->app_loclabel(LL_CTXMENU_SELALL), (text.size() == 0) ? MIF_DISABLED : 0, DELEGATE(this, ctx_menu_selall));
+            mnu.add_separator();
+            mnu.add(TTT("Удалить сообщение",221), 0, DELEGATE(this, ctx_menu_delmessage), ts::str_c().append_as_hex(&mutag, sizeof(mutag)));
 
             popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), mnu);
 
@@ -1280,6 +1332,7 @@ void gui_message_item_c::record::append( ts::wstr_c &t, const ts::wsptr &pret, c
     else
         t.append(text);
 
+    t.append(CONSTWSTR("<null=t")).append_as_hex(&utag, sizeof(utag)).append_char('>');
 }
 
 static void parse_smiles( ts::wstr_c &message )
@@ -1345,41 +1398,44 @@ static void parse_links(ts::wstr_c &message, bool reset_n)
     }
 }
 
-ts::pwstr_c gui_message_item_c::get_message_under_cursor(const ts::ivec2 &localpos) const
+ts::pwstr_c gui_message_item_c::get_message_under_cursor(const ts::ivec2 &localpos, uint64 &mutag) const
 {
-    ts::ivec2 p = get_message_pos_under_cursor(localpos);
+    ts::ivec2 p = get_message_pos_under_cursor(localpos, mutag);
     if (p.r0 >= 0 && p.r1 >= p.r0) return textrect.get_text().substr(p.r0, p.r1);
     return ts::pwstr_c();
 }
 
 
-ts::ivec2 gui_message_item_c::get_message_pos_under_cursor(const ts::ivec2 &localpos) const
+ts::ivec2 gui_message_item_c::get_message_pos_under_cursor(const ts::ivec2 &localpos, uint64 &mutag) const
 {
     if (textrect.is_dirty_glyphs()) return ts::ivec2(-1);
     ts::irect clar = get_client_area();
     if (clar.inside(localpos))
     {
         const ts::GLYPHS &glyphs = get_glyphs();
-        ts::irect gr = ts::glyphs_bound_rect(glyphs);
-        gr += glyphs_pos;
-        gr.lt.x -= 5; if (gr.lt.x < 0) gr.lt.x = 0;
-        if (gr.inside(localpos))
-        {
-            ts::ivec2 cp = localpos - glyphs_pos;
-            int glyph_under_cursor = ts::glyphs_nearest_glyph(glyphs, cp);
-            int char_index = ts::glyphs_get_charindex(glyphs, glyph_under_cursor);
-            if (char_index >= 0 && char_index < textrect.get_text().get_length())
-                return extract_message(char_index);
-        }
+        ts::ivec2 cp = localpos - glyphs_pos;
+        int glyph_under_cursor = ts::glyphs_nearest_glyph(glyphs, cp);
+        int char_index = ts::glyphs_get_charindex(glyphs, glyph_under_cursor);
+        if (char_index >= 0 && char_index < textrect.get_text().get_length())
+            return extract_message(char_index, mutag);
     }
     return ts::ivec2(-1);
 }
 
-ts::ivec2 gui_message_item_c::extract_message(int chari) const
+ts::ivec2 gui_message_item_c::extract_message(int chari, uint64 &mutag) const
 {
     int rite = textrect.get_text().find_pos(chari, CONSTWSTR("<p><r>"));
     if (rite < 0) rite = textrect.get_text().get_length();
     int left = textrect.get_text().substr(0, chari).find_last_pos(CONSTWSTR("</r>")) + 4;
+
+    int r2 = rite - 8 - 16;
+    if (CHECK(textrect.get_text().substr(r2, r2+7).equals(CONSTWSTR("<null=t"))))
+    {
+        rite = r2;
+        ts::pwstr_c hex = textrect.get_text().substr(r2+7,r2+7+16);
+        for (int i = 0; i < sizeof(mutag); ++i)
+            ((ts::uint8 *)&mutag)[i] = hex.as_byte_hex(i * 2);
+    }
     return ts::ivec2(left, rite);
 }
 
@@ -1815,7 +1871,7 @@ ts::wstr_c gui_message_item_c::hdr() const
         {
             if (active_protocol_c *ap = prf().ap(author->getkey().protoid))
                 protodesc.set(CONSTWSTR(" (")).append(ap->get_name()).append_char(')');
-            else if (auto *row = prf().get_table_active_protocol().find(author->getkey().protoid))
+            else if (auto *row = prf().get_table_active_protocol().find<true>(author->getkey().protoid))
                 if (ASSERT(row->other.options & active_protocol_data_s::O_SUSPENDED))
                     protodesc.set(CONSTWSTR(" (")).append(row->other.name).append(CONSTWSTR(", ")).append(TTT("протокол деактивирован",69)).append_char(')');
         }
@@ -1929,9 +1985,12 @@ gui_messagelist_c::~gui_messagelist_c()
         bool r = __super::sq_evt(qp, rid, data);
         if (readtime > rt && historian)
         {
-            historian->set_readtime(readtime);
-            prf().dirtycontact(historian->getkey());
-            g_app->need_recalc_unread(historian->getkey());
+            if (!g_app->is_inactive(false) && historian->gui_item && historian->gui_item->getprops().is_active())
+            {
+                historian->set_readtime(readtime);
+                prf().dirtycontact(historian->getkey());
+                g_app->need_recalc_unread(historian->getkey());
+            }
         }
         readtime_historian = nullptr;
 
@@ -2015,6 +2074,13 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_MESSAGE> & p) // show messag
 void gui_messagelist_c::clear_list()
 {
     getengine().trunc_children(0);
+}
+
+DWORD gui_messagelist_c::handler_SEV_ACTIVE_STATE(const system_event_param_s & p)
+{
+    if (p.active)
+        getengine().redraw();
+    return 0;
 }
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_UPDATE_CONTACT_V> & p)

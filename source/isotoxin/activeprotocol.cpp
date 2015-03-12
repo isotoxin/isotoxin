@@ -290,7 +290,7 @@ ts::uint32 active_protocol_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
                 dematerialization = true;
         } else
         {
-            auto *row = t.find(id);
+            auto *row = t.find<true>(id);
             dematerialization = row == nullptr || FLAG(row->other.options, active_protocol_data_s::O_SUSPENDED);
             if (!dematerialization)
             {
@@ -393,7 +393,7 @@ bool active_protocol_c::check_save(RID, GUIPARAM)
     else
     {
         tableview_active_protocol_s &t = prf().get_table_active_protocol();
-        if (auto *r = t.find(id))
+        if (auto *r = t.find<true>(id))
         {
             r->other.config = ttt().data.config;
             r->other.config.set_size(ttt().data.config.size()); // copy content
@@ -419,7 +419,7 @@ void active_protocol_c::set_avatar( const ts::blob_c &ava )
     w.unlock();
 
     tableview_active_protocol_s &t = prf().get_table_active_protocol();
-    if (auto *r = t.find(id))
+    if (auto *r = t.find<true>(id))
     {
         r->other.avatar = ava;
         r->changed();
@@ -492,7 +492,7 @@ void active_protocol_c::set_autoconnect( bool v )
     {
         INITFLAG( w().data.options, active_protocol_data_s::O_AUTOCONNECT, v );
 
-        auto row = prf().get_table_active_protocol().find(id);
+        auto row = prf().get_table_active_protocol().find<true>(id);
         if (CHECK(row))
         {
             INITFLAG(row->other.options, active_protocol_data_s::O_AUTOCONNECT, v);

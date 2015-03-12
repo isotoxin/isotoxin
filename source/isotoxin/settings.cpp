@@ -422,7 +422,7 @@ void dialog_settings_c::add_suspended_proto( RID lst, int id, const active_proto
 
 bool dialog_settings_c::network_1( const ts::wstr_c & nnn )
 {
-    auto row = table_active_protocol_underedit.find(network_props);
+    auto row = table_active_protocol_underedit.find<false>(network_props);
     if (!row) return true;
 
     if (RID lst = find(CONSTASTR("protoactlist")))
@@ -453,7 +453,7 @@ bool dialog_settings_c::network_1( const ts::wstr_c & nnn )
 
 bool dialog_settings_c::network_2( RID, GUIPARAM p )
 {
-    auto row = table_active_protocol_underedit.find(network_props);
+    auto row = table_active_protocol_underedit.find<false>(network_props);
     if (!row) return true;
     row->changed();
     
@@ -465,7 +465,7 @@ bool dialog_settings_c::network_2( RID, GUIPARAM p )
 void dialog_settings_c::set_proxy_type_handler(const ts::str_c& p)
 {
     int psel = p.as_int();
-    auto row = table_active_protocol_underedit.find(network_props);
+    auto row = table_active_protocol_underedit.find<false>(network_props);
     if (!row) return;
     if (psel == 0) row->other.proxy.proxy_type = 0;
     else if (psel == 1) row->other.proxy.proxy_type = PROXY_SUPPORT_HTTP;
@@ -481,7 +481,7 @@ void dialog_settings_c::set_proxy_type_handler(const ts::str_c& p)
 
 bool dialog_settings_c::set_proxy_addr_handler(const ts::wstr_c & t)
 {
-    auto row = table_active_protocol_underedit.find(network_props);
+    auto row = table_active_protocol_underedit.find<false>(network_props);
     row->other.proxy.proxy_addr = t;
 
     if (RID r = find(CONSTASTR("protoproxyaddr")))
@@ -500,7 +500,7 @@ void dialog_settings_c::create_network_props_ctls( int id )
     }
     
 
-    auto row = table_active_protocol_underedit.find(id);
+    auto row = table_active_protocol_underedit.find<false>(id);
     if (!row) return;
 
     //if (network_props != id)
@@ -604,7 +604,7 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
         // activate suspended proto
         ++t;
         int id = t->as_int();
-        auto *row = table_active_protocol_underedit.find(id);
+        auto *row = table_active_protocol_underedit.find<false>(id);
         if (ASSERT(row))
         {
             RESETFLAG( row->other.options, active_protocol_data_s::O_SUSPENDED );
@@ -627,7 +627,7 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
         ts::str_c tag;
         if (contacts().present_protoid( id ))
         {
-            auto *row = table_active_protocol_underedit.find( id );
+            auto *row = table_active_protocol_underedit.find<false>( id );
             if (ASSERT(row))
             {
                 row->other.options |= active_protocol_data_s::O_SUSPENDED;

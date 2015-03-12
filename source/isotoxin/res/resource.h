@@ -5,6 +5,7 @@
 #define IDI_ICON                        103
 #define IDI_ICON2                       104
 #define IDI_ICON_NORMAL                 105
+#define IDI_ICON_HOLLOW                 106
 
 // Next default values for new objects
 //

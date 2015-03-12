@@ -116,6 +116,7 @@ class application_c
         /*virtual*/ void app_b_minimize(RID main) override;
         /*virtual*/ void app_b_close(RID main) override;
         /*virtual*/ void app_path_expand_env(ts::wstr_c &path);
+        /*virtual*/ void app_active_state(bool is_active);
 
     } m_gui;
 
@@ -138,10 +139,15 @@ class application_c
     unsigned F_INITIALIZATION : 1;
     unsigned F_NEWVERSION : 1;
     unsigned F_NONEWVERSION : 1;
+    unsigned F_UNREADICONFLASH : 1;
+    unsigned F_UNREADICON : 1;
 
 public:
     bool b_send_message(RID r, GUIPARAM param);
+    bool flash_notification_icon(RID r, GUIPARAM param);
 public:
+
+    HICON get_current_notification_icon();
 
     const ts::font_desc_c *font_conv_name = &ts::g_default_text_font;
     const ts::font_desc_c *font_conv_text = &ts::g_default_text_font;

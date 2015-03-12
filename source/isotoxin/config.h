@@ -110,7 +110,7 @@ public:
     TEXTAPAR(language, "ru")
     TEXTWPAR(theme, "def")
     INTPAR(collapse_beh, 2)
-    INTPAR(autoupdate, 0)
+    INTPAR(autoupdate, 1)
     INTPAR(autoupdate_proxy, 0)
     TEXTAPAR(autoupdate_proxy_addr, DEFAULT_PROXY)
     TEXTAPAR(autoupdate_newver, "")

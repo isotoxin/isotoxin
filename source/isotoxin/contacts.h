@@ -290,6 +290,8 @@ public:
     }
     void make_time_unique(time_t &t);
 
+    void del_history(uint64 utag);
+
     post_s& add_history()
     {
         post_s &p = history.add();

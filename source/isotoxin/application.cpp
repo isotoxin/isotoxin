@@ -8,6 +8,8 @@ void dotests();
 
 application_c::application_c(const ts::wchar * cmdl)
 {
+    F_UNREADICONFLASH = false;
+    F_UNREADICON = false;
     autoupdate_next = now() + 10;
 	g_app = this;
     cfg().load();
@@ -107,14 +109,37 @@ bool application_c::b_send_message(RID r, GUIPARAM param)
     return true;
 }
 
+bool application_c::flash_notification_icon(RID r, GUIPARAM param)
+{
+    F_UNREADICONFLASH = !F_UNREADICONFLASH;
+    DELAY_CALL_R(0.3, DELEGATE(this, flash_notification_icon), 0);
+    set_notification_icon();
+    return true;
+}
+
+HICON application_c::get_current_notification_icon()
+{
+    bool unread = gmsg<ISOGM_SOMEUNREAD>().send().is(GMRBIT_ACCEPTED);
+    if (unread && !F_UNREADICON)
+    {
+        F_UNREADICONFLASH = true;
+        DELAY_CALL_R(0.3, DELEGATE(this, flash_notification_icon), 0);
+    } else if (!unread && F_UNREADICON)
+        m_gui.delete_event(DELEGATE(this, flash_notification_icon));
+    F_UNREADICON = unread;
+
+    return LoadIcon(g_sysconf.instance, unread ? MAKEINTRESOURCE(F_UNREADICONFLASH ? IDI_ICON2 : IDI_ICON_HOLLOW) : MAKEINTRESOURCE(IDI_ICON));
+}
+
+
 // isogui
 
 HICON application_c::iso_gui_c::app_icon(bool for_tray)
 {
     if (!for_tray)
         return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(IDI_ICON)); 
-    bool unread = gmsg<ISOGM_SOMEUNREAD>().send().is(GMRBIT_ACCEPTED);
-    return LoadIcon(g_sysconf.instance, unread ? MAKEINTRESOURCE(IDI_ICON2) : MAKEINTRESOURCE(IDI_ICON)); 
+
+    return g_app->get_current_notification_icon();
 };
 
 /*virtual*/ void application_c::iso_gui_c::app_prepare_text_for_copy(ts::wstr_c &text)

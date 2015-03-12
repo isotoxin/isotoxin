@@ -149,6 +149,7 @@ enum isogmsg_e
     ISOGM_METACREATE,
     ISOGM_APPRISE,
     ISOGM_NEWVERSION,
+    ISOGM_DOWNLOADPROGRESS,
     ISOGM_SOMEUNREAD,
     ISOGM_AVATAR,
 
@@ -159,6 +160,13 @@ template<> struct gmsg<ISOGM_NEWVERSION> : public gmsgbase
 {
     gmsg(ts::asptr ver) :gmsgbase(ISOGM_NEWVERSION), ver(ver) {}
     ts::sstr_t<-16> ver;
+};
+
+template<> struct gmsg<ISOGM_DOWNLOADPROGRESS> : public gmsgbase
+{
+    gmsg(int d, int t) :gmsgbase(ISOGM_DOWNLOADPROGRESS), downloaded(d), total(t) {}
+    int downloaded;
+    int total;
 };
 
 enum profile_table_e;

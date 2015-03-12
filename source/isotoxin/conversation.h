@@ -46,6 +46,8 @@ class gui_notice_c : public gui_label_c
     GM_RECEIVER(gui_notice_c, ISOGM_CALL_STOPED);
     GM_RECEIVER(gui_notice_c, ISOGM_FILE);
     GM_RECEIVER(gui_notice_c, ISOGM_PROFILE_TABLE_SAVED);
+    GM_RECEIVER(gui_notice_c, ISOGM_DOWNLOADPROGRESS);
+    
 
     static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE = FLAGS_FREEBITSTART_LABEL << 0;
 
@@ -171,6 +173,8 @@ class gui_message_item_c : public gui_label_ex_c
     void ctx_menu_golink(const ts::str_c &);
     void ctx_menu_copylink(const ts::str_c &);
     void ctx_menu_copymessage(const ts::str_c &);
+    void ctx_menu_delmessage(const ts::str_c &);
+    
     
 
     bool try_select_link(RID r = RID(), GUIPARAM p = nullptr);
@@ -201,9 +205,9 @@ class gui_message_item_c : public gui_label_ex_c
         return gui->selcore().owner == (const gui_label_c *)this && gui->selcore().some_selected();
     }
 
-    ts::pwstr_c get_message_under_cursor(const ts::ivec2 &localpos) const;
-    ts::ivec2 get_message_pos_under_cursor(const ts::ivec2 &localpos) const;
-    ts::ivec2 extract_message(int chari) const;
+    ts::pwstr_c get_message_under_cursor(const ts::ivec2 &localpos, uint64 &mutag) const;
+    ts::ivec2 get_message_pos_under_cursor(const ts::ivec2 &localpos, uint64 &mutag) const;
+    ts::ivec2 extract_message(int chari, uint64 &mutag) const;
 
     virtual void get_link_prolog(ts::wstr_c & r, int linknum) const;
     virtual void get_link_epilog(ts::wstr_c & r, int linknum) const;
@@ -258,6 +262,9 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_messagelist_c, ISOGM_DELIVERED);
     GM_RECEIVER(gui_messagelist_c, GM_DROPFILES);
     
+    SIMPLE_SYSTEM_EVENT_RECEIVER(gui_messagelist_c, SEV_ACTIVE_STATE);
+
+
     tm last_post_time;
     ts::shared_ptr<contact_c> historian;
 
