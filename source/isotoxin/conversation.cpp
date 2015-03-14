@@ -2,6 +2,12 @@
 
 ////////////////////////// gui_notice_c
 
+void temporary()
+{
+
+    TTT("История сообщений не сохраняется!",231);
+}
+
 MAKE_CHILD<gui_notice_c>::~MAKE_CHILD()
 {
     MODIFY(get()).visible(true);
@@ -1056,6 +1062,7 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
         }
         break;
     case SQ_MOUSE_RUP:
+        if ((records.size() == 1 && records.get(0).text.is_empty()) || subtype != ST_CONVERSATION) break;
         if (!some_selected() && check_overlink(to_local(data.mouse.screenpos)))
         {
             if (popupmenu)
@@ -1312,7 +1319,7 @@ void gui_message_item_c::record::append( ts::wstr_c &t, const ts::wsptr &pret, c
     ts::swstr_t<-128> tstr;
     tm tt;
     _localtime64_s(&tt, &time);
-    if ( prf().msgopts() & MSGOP_SHOW_DATE )
+    if ( prf().get_msg_options().is(MSGOP_SHOW_DATE) )
     {
         set_date(tstr,prf().date_msg_template(),tt);
         tstr.append_char(' ');
@@ -1548,9 +1555,12 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             textrect.set_font(g_app->font_conv_text);
 
             ts::wstr_c message = post.message;
-            text_adapt_user_input(message);
-            parse_smiles(message);
-            parse_links(message, records.size() == 1);
+            if (message.is_empty()) message.set(CONSTWSTR("error"));
+            else {
+                text_adapt_user_input(message);
+                parse_smiles(message);
+                parse_links(message, records.size() == 1);
+            }
 
             rec.text = message;
             rec.undelivered = post.type == MTA_UNDELIVERED_MESSAGE ? get_default_text_color(1) : 0;
@@ -1594,7 +1604,7 @@ void gui_message_item_c::prepare_message_time(ts::wstr_c &newtext, time_t postti
 
     tm tt;
     _localtime64_s(&tt, &posttime);
-    if (prf().msgopts() & MSGOP_SHOW_DATE)
+    if (prf().get_msg_options().is(MSGOP_SHOW_DATE))
     {
         ts::swstr_t<-128> tstr;
         set_date(tstr, prf().date_msg_template(), tt);
@@ -1865,7 +1875,7 @@ ts::wstr_c gui_message_item_c::hdr() const
 {
     ts::wstr_c n(author->get_name());
     text_adapt_user_input(n);
-    if (prf().msgopts() & MSGOP_SHOW_PROTOCOL_NAME)
+    if (prf().get_msg_options().is(MSGOP_SHOW_PROTOCOL_NAME))
     {
         if (protodesc.is_empty() && author->getkey().protoid)
         {
@@ -2003,7 +2013,7 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
 {
     ASSERT(MTA_FRIEND_REQUEST != mt);
 
-    if ( 0 != (MSGOP_SHOW_DATE_SEPARATOR & prf().msgopts()) && post_time )
+    if ( prf().get_msg_options().is(MSGOP_SHOW_DATE_SEPARATOR) && post_time )
     {
         tm tmtm;
         _localtime64_s(&tmtm, &post_time);

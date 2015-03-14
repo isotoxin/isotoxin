@@ -375,6 +375,8 @@ template <typename VARTYPE> class syncvar
         read_c( const VARTYPE & _var, const syncvar *_host ): var(&_var), host(_host), locked(true)
         {
         }
+        read_c & operator = (const read_c &);
+        read_c(const read_c &);
     public:
         read_c( read_c &&r ): var(r.var), host(r.host), locked(r.locked)
         {
@@ -399,7 +401,7 @@ template <typename VARTYPE> class syncvar
             r.locked = false;
             return *this;
         }
-        void unlock(void)
+        void unlock()
         {
             SLASSERT ( locked );
             host->unlock_read();
@@ -422,6 +424,8 @@ template <typename VARTYPE> class syncvar
         write_c( VARTYPE * _var, const syncvar *_host ): var(_var), host(_host), locked(true)
         {
         }
+        write_c & operator = (const write_c &r);
+        write_c(const write_c &r);
     public:
         write_c(): var(nullptr), host(nullptr), locked(false) {}
         write_c( const write_c &&r ): var(r.var), host(r.host), locked(r.locked)

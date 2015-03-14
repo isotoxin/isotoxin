@@ -173,6 +173,8 @@ template<> struct gmsg<GM_DRAGNDROP> : public gmsgbase
     dndaction_e a;
 };
 
+extern int sysmodal;
+
 class gui_c
 {
 	friend class HOLD;
@@ -364,7 +366,7 @@ public:
     void mouse_outside( RID rid = RID() );
     
     void exclusive_input(RID r, bool set = true);
-    bool allow_input(RID r) const { return m_exclusive_input.count() == 0 || m_exclusive_input.last(RID()) == r || ( m_exclusive_input.last(RID()) >> r ); }
+    bool allow_input(RID r) const { return sysmodal == 0 && m_exclusive_input.count() == 0 || m_exclusive_input.last(RID()) == r || ( m_exclusive_input.last(RID()) >> r ); }
 
     void dragndrop_lb( guirect_c *r );
     void dragndrop_update( guirect_c *r );

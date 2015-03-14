@@ -2137,6 +2137,7 @@ public:
         }
     }
 
+    str_t & operator = (const str_t &s) { return set(s); }
     template<typename TCHARACTER2, class CORE2> str_t<TCHARACTER, CORE> & operator = (const str_t<TCHARACTER2, CORE2> &s) { return set(s); }
     str_t & operator = (const TCHARACTER * const s)   { *this = sptr<TCHARACTER>(s); return *this; } // copy always, fail on part strings
     str_t & operator = (const sptr<TCHARACTER> &s) { set(s.s, s.l); return *this; } // copy always, fail on part strings

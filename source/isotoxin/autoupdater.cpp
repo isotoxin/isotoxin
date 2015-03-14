@@ -218,6 +218,9 @@ void autoupdater()
     rslt = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
     
     rslt = curl_easy_perform(curl);
+
+    TSNEW(gmsg<ISOGM_DOWNLOADPROGRESS>, (int)d.size(), (int)d.size())->send_to_main_thread();
+
     if (!md5ok(d, ver)) return;
 
     ts::make_path( auparams().lock_read()().path );
@@ -225,6 +228,7 @@ void autoupdater()
     d.save_to_file( ts::fn_join( auparams().lock_read()().path, pakname ) );
 
     auparams().lock_write()().downloaded = true;
+    Sleep(1000);
     TSNEW(gmsg<ISOGM_NEWVERSION>, aver)->send_to_main_thread();
 }
 

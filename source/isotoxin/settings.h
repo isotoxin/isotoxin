@@ -63,7 +63,8 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     bool profile_selected = false;
     bool checking_new_version = false;
 
-    int msgopts = 0;
+    ts::flags32_s::BITS msgopts_current = 0;
+    ts::flags32_s::BITS msgopts_changed = 0;
     int ctl2send = 1;
     int collapse_beh = 2;
     int oautoupdate = 0;

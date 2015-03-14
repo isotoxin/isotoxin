@@ -1,5 +1,4 @@
 #include "toolset.h"
-#include "ddsreader.h"
 #include <ddraw.h>
 
 namespace ts
@@ -103,110 +102,88 @@ struct Color565
 struct dds_decompressor_s
 {
     const DDSHEAD * dds;
-
-    dds_decompressor_s() {};
-    virtual bool decompress( void * buf, uint32 pitch ) = 0;
-
 };
 
 struct dds_decompressor_uncompressed_32_s : public dds_decompressor_s
 {
     dds_decompressor_uncompressed_32_s():dds_decompressor_s() {}
-    virtual bool decompress( void * buf, uint32 pitch ) override;
+    static bool decompress( img_reader_s &r, void * buf, int pitch );
 };
 
 struct dds_decompressor_dxt1_s : public dds_decompressor_s
 {
     dds_decompressor_dxt1_s():dds_decompressor_s() {}
-    virtual bool decompress( void * buf, uint32 pitch ) override;
+    static bool decompress( img_reader_s &r, void * buf, int pitch );
 };
 
 struct dds_decompressor_dxt3_s : public dds_decompressor_s
 {
     dds_decompressor_dxt3_s() :dds_decompressor_s() {}
-    virtual bool decompress(void * buf, uint32 pitch) override;
+    static bool decompress( img_reader_s &r, void * buf, int pitch);
 };
 
 struct dds_decompressor_dxt5_s : public dds_decompressor_s
 {
     dds_decompressor_dxt5_s() :dds_decompressor_s() {}
-    virtual bool decompress(void * buf, uint32 pitch) override;
+    static bool decompress( img_reader_s &r, void * buf, int pitch);
 };
 
-void * dds_start(const void * soubuf, aint soubuflen,ivec2 &sz, uint8 &bitpp)
+image_read_func img_reader_s::detect_dds_format(const void *sourcebuf, int sourcebufsize)
 {
-    const DDSHEAD *dds = (const DDSHEAD *)soubuf;
-    if (dds->Signature != 0x20534444) return 0;
-
-    dds_decompressor_s *dec = nullptr;
+    const DDSHEAD *dds = (const DDSHEAD *)sourcebuf;
+    if (dds->Signature != 0x20534444) return nullptr;
 
     if (dds->Flags2 & DDS_FOURCC)
     {
-        //int BlockSize = ((dds->Width + 3)/4) * ((dds->Height + 3)/4) * ((dds->Depth + 3)/4);
         switch (dds->FourCC)
         {
             case IL_MAKEFOURCC('D','X','T','1'):
-                dec = TSNEW( dds_decompressor_dxt1_s);
+                ((dds_decompressor_dxt1_s *)&data)->dds = dds;
+                size.x = dds->Width;
+                size.y = dds->Height;
                 bitpp = 32;
-                break;
+                return dds_decompressor_dxt1_s::decompress;
 
-            case IL_MAKEFOURCC('D','X','T','2'):
-                //dec = TSNEW(dds_decompressor_dxt2_s);
-                bitpp = 32;
-                break;
+            //case IL_MAKEFOURCC('D','X','T','2'):
+            //    break;
 
             case IL_MAKEFOURCC('D','X','T','3'):
-                dec = TSNEW(dds_decompressor_dxt3_s);
+                ((dds_decompressor_dxt3_s *)&data)->dds = dds;
+                size.x = dds->Width;
+                size.y = dds->Height;
                 bitpp = 32;
-                break;
+                return dds_decompressor_dxt3_s::decompress;
 
-            case IL_MAKEFOURCC('D','X','T','4'):
-                //dec = TSNEW(dds_decompressor_dxt4_s);
-                bitpp = 32;
-                break;
+            //case IL_MAKEFOURCC('D','X','T','4'):
+            //    break;
 
             case IL_MAKEFOURCC('D','X','T','5'):
-                dec = TSNEW(dds_decompressor_dxt5_s);
+                ((dds_decompressor_dxt5_s *)&data)->dds = dds;
+                size.x = dds->Width;
+                size.y = dds->Height;
                 bitpp = 32;
-                break;
+                return dds_decompressor_dxt5_s::decompress;
 
             default:
                 return nullptr;
-                break;
         }
     } else
     {
-        //int BlockSize = (dds->Width * dds->Height * dds->Depth * (dds->RGBBitCount >> 3));
         if (dds->RGBBitCount == 32)
         {
-            dec = TSNEW( dds_decompressor_uncompressed_32_s );
+            ((dds_decompressor_uncompressed_32_s *)&data)->dds = dds;
+            size.x = dds->Width;
+            size.y = dds->Height;
             bitpp = 32;
+            return dds_decompressor_uncompressed_32_s::decompress;
         } else {
-            // dec = TSNEW( dds_decompressor_uncompressed_24_s, BlockSize );
-            //*format = bitmap_c::BMF_32;
         }
     }
 
-    if (!dec) return nullptr;
-    dec->dds = dds;
-
-    sz.x = dds->Width;
-    sz.y = dds->Height;
-
-    return dec;
+    return nullptr;
 
 
 }
-
-bool dds_read(void * decoder,void * buf,aint pitch)
-{
-    dds_decompressor_s *dec = (dds_decompressor_s *)decoder;
-    bool ret = dec->decompress( buf, pitch );
-    TSDEL(dec);
-    return ret;
-}
-
-
 
 static void GetBitsFromMask(uint Mask, uint *ShiftLeft, uint *ShiftRight)
 {
@@ -238,32 +215,34 @@ static void GetBitsFromMask(uint Mask, uint *ShiftLeft, uint *ShiftRight)
 
 
 
-bool dds_decompressor_uncompressed_32_s::decompress( void * buf, uint32 pitch )
+bool dds_decompressor_uncompressed_32_s::decompress( img_reader_s &r, void * buf, int pitch )
 {
+    dds_decompressor_uncompressed_32_s &me = ref_cast<dds_decompressor_uncompressed_32_s>(r.data);
+
     uint ReadI, RedL, RedR, GreenL, GreenR, BlueL, BlueR, AlphaL, AlphaR;
     const uint32 *Temp;
     uint32        *out = (uint32 *)buf;
 
-    GetBitsFromMask(dds->RBitMask, &RedL, &RedR);
-    GetBitsFromMask(dds->GBitMask, &GreenL, &GreenR);
-    GetBitsFromMask(dds->BBitMask, &BlueL, &BlueR);
-    GetBitsFromMask(dds->RGBAlphaBitMask, &AlphaL, &AlphaR);
-    Temp = (const uint32 *)(dds + 1);
+    GetBitsFromMask(me.dds->RBitMask, &RedL, &RedR);
+    GetBitsFromMask(me.dds->GBitMask, &GreenL, &GreenR);
+    GetBitsFromMask(me.dds->BBitMask, &BlueL, &BlueR);
+    GetBitsFromMask(me.dds->RGBAlphaBitMask, &AlphaL, &AlphaR);
+    Temp = (const uint32 *)(me.dds + 1);
 
     //int sz = dds->Width * dds->Height * 4;
 
     //int temp_w = dds->Width;
-    for (uint y = 0; y < dds->Height; ++y)
+    for (uint y = 0; y < me.dds->Height; ++y)
     {
         uint32 * next_out = (uint32 *)(((byte *)out) + pitch);
-        for (uint x = 0; x < dds->Width; ++x, ++out, ++Temp)
+        for (uint x = 0; x < me.dds->Width; ++x, ++out, ++Temp)
         {
             ReadI = *Temp;
 
-            uint32 r = ((ReadI & dds->RBitMask) >> RedR) << RedL;
-            uint32 g = ((ReadI & dds->GBitMask) >> GreenR) << GreenL;
-            uint32 b = ((ReadI & dds->BBitMask) >> BlueR) << BlueL;
-            uint32 a = ((ReadI & dds->RGBAlphaBitMask) >> AlphaR) << AlphaL;
+            uint32 r = ((ReadI & me.dds->RBitMask) >> RedR) << RedL;
+            uint32 g = ((ReadI & me.dds->GBitMask) >> GreenR) << GreenL;
+            uint32 b = ((ReadI & me.dds->BBitMask) >> BlueR) << BlueL;
+            uint32 a = ((ReadI & me.dds->RGBAlphaBitMask) >> AlphaR) << AlphaL;
 
             *out = (a << 24) | (r << 16) | (g << 8) | (b << 0);
         }
@@ -274,19 +253,21 @@ bool dds_decompressor_uncompressed_32_s::decompress( void * buf, uint32 pitch )
 
 }
 
-bool dds_decompressor_dxt1_s::decompress( void * buf, uint32 pitch )
+bool dds_decompressor_dxt1_s::decompress( img_reader_s&r, void * buf, int pitch )
 {
+    dds_decompressor_dxt1_s &me = ref_cast<dds_decompressor_dxt1_s>(r.data);
+
     int         Select;
     Color565    *color_0, *color_1;
     Color8888   colours[4], *col;
     uint        bitmask;
 
-    const byte     *Temp = (const byte *)(dds + 1);
+    const byte     *Temp = (const byte *)(me.dds + 1);
 
     //for (z = 0; z < Depth; z++) { // mip maps ?
     {
-        int w = (int)dds->Width;
-        int h = (int)dds->Height;
+        int w = (int)me.dds->Width;
+        int h = (int)me.dds->Height;
         for (int y = 0; y < h; y += 4) {
             for (int x = 0; x < w; x += 4) {
 
@@ -538,15 +519,17 @@ void DecompressAlphaDxt5(u8* rgba, void const* block)
         rgba[4 * i + 3] = codes[indices[i]];
 }
 
-bool dds_decompressor_dxt3_s::decompress(void * buf, uint32 pitch)
+bool dds_decompressor_dxt3_s::decompress(img_reader_s &r, void * buf, int pitch)
 {
-    const byte *blocks = (const byte *)(dds + 1);
+    dds_decompressor_dxt3_s &me = ref_cast<dds_decompressor_dxt3_s>(r.data);
+
+    const byte *blocks = (const byte *)(me.dds + 1);
     byte *rgba = (byte *)buf;
 
     u8 const* sourceBlock = reinterpret_cast<u8 const*>(blocks);
 
-    int w = (int)dds->Width;
-    int h = (int)dds->Height;
+    int w = (int)me.dds->Width;
+    int h = (int)me.dds->Height;
     for (int y = 0; y < h; y += 4) {
         for (int x = 0; x < w; x += 4) {
 
@@ -592,15 +575,17 @@ bool dds_decompressor_dxt3_s::decompress(void * buf, uint32 pitch)
 
 }
 
-bool dds_decompressor_dxt5_s::decompress(void * buf, uint32 pitch)
+bool dds_decompressor_dxt5_s::decompress(img_reader_s &r, void * buf, int pitch)
 {
-    const byte *blocks = (const byte *)(dds + 1);
+    dds_decompressor_dxt5_s &me = ref_cast<dds_decompressor_dxt5_s>(r.data);
+
+    const byte *blocks = (const byte *)(me.dds + 1);
     byte *rgba = (byte *)buf;
 
     u8 const* sourceBlock = reinterpret_cast<u8 const*>(blocks);
 
-    int w = (int)dds->Width;
-    int h = (int)dds->Height;
+    int w = (int)me.dds->Width;
+    int h = (int)me.dds->Height;
     for (int y = 0; y < h; y += 4) {
         for (int x = 0; x < w; x += 4) {
 
@@ -647,6 +632,124 @@ bool dds_decompressor_dxt5_s::decompress(void * buf, uint32 pitch)
     return true;
 }
 
+bool save_to_dds_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
+{
+    buf.clear();
+    return false;
+}
 
+/*
+
+void save_to_dds_format(buf_c & buf, int compression, int additional_squish_flags)
+{
+    if (info().bytepp() != 3 && info().bytepp() != 4)
+    {
+        DEBUG_BREAK(); //ERROR(L"Unsupported bitpp to convert");
+    }
+
+    int sz = info().sz.x * info().sz.y * info().bytepp();
+	int squishc = squish::kDxt5;
+	if (compression)
+	{
+		switch (compression)
+		{
+		default:
+			sux("wrong DDS compression bitpp, using DXT1");
+		case D3DFMT_DXT1:
+			squishc = squish::kDxt1;
+			break;
+		case D3DFMT_DXT3:
+			squishc = squish::kDxt3;
+			break;
+		case D3DFMT_DXT5:
+			squishc = squish::kDxt5;
+			break;
+		}
+		sz = squish::GetStorageRequirements(info().sz.x, info().sz.y, squishc);
+	}
+
+    buf.clear();
+    uint32 *dds = (uint32 *)buf.expand(sz + sizeof(DDSURFACEDESC2) + sizeof(uint32));
+
+    *dds = 0x20534444; // "DDS "
+
+    DDSURFACEDESC2 * ddsp = (DDSURFACEDESC2 *)(dds + 1);
+    memset(ddsp, 0, sizeof(DDSURFACEDESC2));
+    
+    ddsp->dwSize = sizeof(DDSURFACEDESC2);
+    ddsp->dwWidth = info().sz.x;
+    ddsp->dwHeight = info().sz.y;
+    ddsp->dwFlags = DDSD_PIXELFORMAT | DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS | DDSD_LINEARSIZE;
+
+    ddsp->dwLinearSize = sz;
+    ddsp->ddpfPixelFormat.dwSize = sizeof(DDPIXELFORMAT);
+	ddsp->ddpfPixelFormat.dwFlags = (compression == 0 ? DDPF_RGB : DDPF_FOURCC) | ((info().bytepp() == 4)?DDPF_ALPHAPIXELS:0);
+    ddsp->ddpfPixelFormat.dwRGBBitCount = info().bitpp;
+    ddsp->ddpfPixelFormat.dwRBitMask = 0x00FF0000;
+    ddsp->ddpfPixelFormat.dwGBitMask = 0x0000FF00;
+    ddsp->ddpfPixelFormat.dwBBitMask = 0x000000FF;
+    ddsp->ddpfPixelFormat.dwRGBAlphaBitMask = 0xFF000000;
+	ddsp->ddpfPixelFormat.dwFourCC = compression;
+
+    ddsp->ddsCaps.dwCaps = DDSCAPS_TEXTURE;
+
+    if (info().sz.x < 4)
+    {
+		sux("!-!");
+        int cnt = info().sz.x * info().sz.y;
+        BYTE *des = (BYTE *)(ddsp + 1);
+        const uint8 *sou = body();
+        if (info().bytepp() == 3)
+        {
+            while (cnt-- > 0)
+            {
+                //*des = *(sou + 2);
+                //*(des+1) = *(sou + 1);
+                //*(des+2) = *(sou + 0);
+                *des = *(sou + 0);
+                *(des+1) = *(sou + 1);
+                *(des+2) = *(sou + 2);
+                *(des+3) = 0xFF;
+
+                sou += 3;
+                des += 4;
+            }
+        } else
+        {
+            while (cnt-- > 0)
+            {
+                //*des = *(sou + 2);
+                //*(des+1) = *(sou + 1);
+                //*(des+2) = *(sou + 0);
+                //*(des+3) = *(sou + 3);
+                *des = *(sou + 0);
+                *(des+1) = *(sou + 1);
+                *(des+2) = *(sou + 2);
+                *(des+3) = *(sou + 3);
+
+                sou += 4;
+                des += 4;
+            }
+
+        }
+
+    } else
+    {
+		if (compression == 0)
+			memcpy( ddsp + 1, body(), info().sz.x * info().sz.y * info().bytepp() );
+		else
+		{
+			squish::u8 *buf = (squish::u8*)MM_ALLOC(slmemcat::squish_buff, info().sz.x * info().sz.y * info().bytepp());
+			swap_byte(buf);
+			squish::CompressImage(buf, info().sz.x, info().sz.y, ddsp + 1, squishc | additional_squish_flags);
+			MM_FREE(slmemcat::squish_buff, buf);
+		}
+        //swap_byte( ddsp + 1 );
+
+    }
+    //memcpy(des,sou,sz);
+}
+#pragma warning (pop)
+*/
 
 }

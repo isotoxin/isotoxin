@@ -1,6 +1,7 @@
 #include "rectangles.h"
 
 gui_c *gui = nullptr;
+int sysmodal = 0;
 
 gui_c::tempbuf_c::tempbuf_c( double ttl )
 {

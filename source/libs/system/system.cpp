@@ -824,9 +824,7 @@ do_key:
                     handled = true;
                 }
 
-            } else
-
-            if ( pp.msg.wp == VK_MENU )
+            } else if ( pp.msg.wp == VK_MENU )
             {
                 //g_bAltKnopa = downkey;
                 goto kbddo;

@@ -120,10 +120,19 @@
     <ClCompile Include="tspackfile.cpp">
       <Filter>src\files\packages</Filter>
     </ClCompile>
-    <ClCompile Include="internal\pngreader.cpp">
+    <ClCompile Include="internal\imageformat_png.cpp">
       <Filter>src\internal\bitmaps</Filter>
     </ClCompile>
-    <ClCompile Include="internal\ddsreader.cpp">
+    <ClCompile Include="internal\imageformat_dds.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\imageformat_bmp.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\imageformat_tga.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\imageformat_jpg.cpp">
       <Filter>src\internal\bitmaps</Filter>
     </ClCompile>
   </ItemGroup>
@@ -242,10 +251,7 @@
     <ClInclude Include="tspackfile.h">
       <Filter>src\files\packages</Filter>
     </ClInclude>
-    <ClInclude Include="internal\pngreader.h">
-      <Filter>src\internal\bitmaps</Filter>
-    </ClInclude>
-    <ClInclude Include="internal\ddsreader.h">
+    <ClInclude Include="internal\imageformat.h">
       <Filter>src\internal\bitmaps</Filter>
     </ClInclude>
   </ItemGroup>

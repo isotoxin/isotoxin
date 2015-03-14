@@ -16,7 +16,9 @@ bool RID::operator>(const RID&or) const
 bool RID::operator>>(const RID&or) const
 {
     if (!or) return false;
-    RID parent = HOLD(or)().getparent();
+    HOLD ror(or);
+    if (!ror) return false;
+    RID parent = ror().getparent();
     if (!parent) return false;
     if (parent == *this) return true;
     return *this >> parent;

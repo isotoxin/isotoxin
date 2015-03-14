@@ -1855,7 +1855,7 @@ void __stdcall tick()
 
             uint8_t id[TOX_FRIEND_ADDRESS_SIZE];
             tox_get_address(tox,id);
-            if (memcmp(id, lastmypubid, TOX_FRIEND_ADDRESS_SIZE))
+            if (0 != memcmp(id, lastmypubid, TOX_FRIEND_ADDRESS_SIZE))
                 forceupdateself = true;
         }
         contact_state_e nst = tox_isconnected(tox) ? CS_ONLINE : CS_OFFLINE;
@@ -2020,7 +2020,7 @@ void __stdcall set_avatar(const void*data, int isz)
         tox_hash(newavahash,(const byte *)data,isz);
         if (0 != memcmp(newavahash,avahash,TOX_HASH_LENGTH))
         {
-            memcmp(avahash, newavahash, TOX_HASH_LENGTH);
+            memcpy(avahash, newavahash, TOX_HASH_LENGTH);
             tox_set_avatar(tox, TOX_AVATAR_FORMAT_PNG, (const byte *)data, isz);
         }
         prevavalen = isz;

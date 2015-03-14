@@ -177,13 +177,15 @@ menu_c dialog_settings_c::list_proxy_types(int cur, MENUHANDLER mh, int av)
 
 bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
 {
-    msgopts = (int)p;
+    ts::flags32_s::BITS newo = (ts::flags32_s::BITS)p;
+    msgopts_changed |= newo ^ msgopts_current;
+    msgopts_current = newo;
 
     if (RID r = find(CONSTASTR("date_msg_tmpl")))
-        r.call_enable(0 != (msgopts & MSGOP_SHOW_DATE));
+        r.call_enable(0 != (msgopts_current & MSGOP_SHOW_DATE));
 
     if (RID r = find(CONSTASTR("date_sep_tmpl")))
-        r.call_enable(0 != (msgopts & MSGOP_SHOW_DATE_SEPARATOR));
+        r.call_enable(0 != (msgopts_current & MSGOP_SHOW_DATE_SEPARATOR));
 
     return true;
 }
@@ -195,7 +197,8 @@ bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
         username = prf().username(); text_prepare_for_edit(username);
         userstatusmsg = prf().userstatus(); text_prepare_for_edit(userstatusmsg);
         ctl2send = prf().ctl_to_send();
-        msgopts = prf().msgopts();
+        msgopts_current = prf().get_msg_options().__bits;
+        msgopts_changed = 0;
         date_msg_tmpl = prf().date_msg_template();
         date_sep_tmpl = prf().date_sep_template();
         downloadfolder = prf().download_folder();
@@ -318,10 +321,11 @@ bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
         ts::wstr_c t_showdatesep = TTT("Показывать разделитель $ между сообщениями с различной датой",172) / ctl;
         if (t_showdatesep.find_pos(ctl)<0) t_showdate.append_char(' ').append(ctl);
 
-        dm().checkb(TTT("Сообщения",170), DELEGATE(this, msgopts_handler), msgopts).setmenu(
+        dm().checkb(TTT("Сообщения",170), DELEGATE(this, msgopts_handler), msgopts_current).setmenu(
                     menu_c().add(t_showdate, 0, MENUHANDLER(), ts::amake<int>( MSGOP_SHOW_DATE ))
                             .add(t_showdatesep, 0, MENUHANDLER(), ts::amake<int>( MSGOP_SHOW_DATE_SEPARATOR ))
                             .add(TTT("Показывать название протокола",173), 0, MENUHANDLER(), ts::amake<int>( MSGOP_SHOW_PROTOCOL_NAME ))
+                            .add(TTT("Сохранять историю сообщений",222), 0, MENUHANDLER(), ts::amake<int>( MSGOP_KEEP_HISTORY ))
                     );
 
         dm << MASK_PROFILE_NETWORKS; //_________________________________________________________________________________________________//
@@ -403,7 +407,7 @@ void dialog_settings_c::add_suspended_proto( RID lst, int id, const active_proto
 
     if (mask & MASK_PROFILE_CHAT)
     {
-        DELAY_CALL_R(0, DELEGATE(this,msgopts_handler), (GUIPARAM)msgopts);
+        DELAY_CALL_R(0, DELEGATE(this,msgopts_handler), (GUIPARAM)msgopts_current);
     }
 
     if (mask & MASK_APPLICATION_COMMON)
@@ -578,7 +582,9 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
                 iroot = ts::fn_join(iroot, ts::wstr_c(*t));
             }
 
+            ++sysmodal;
             ts::wstr_c fn = ts::get_load_filename_dialog(iroot, CONSTWSTR(""), CONSTWSTR(""), nullptr, title);
+            --sysmodal;
 
             if (fn.is_empty())
                 return;
@@ -739,7 +745,7 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
         prf().ctl_to_send(ctl2send);
         ch1 = prf().date_msg_template(date_msg_tmpl);
         ch1 |= prf().date_sep_template(date_sep_tmpl);
-        if (prf().msgopts( msgopts ) || ch1)
+        if (prf().set_msg_options( msgopts_current, msgopts_changed ) || ch1)
             gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_MSGOPTIONS).send();
 
         prf().download_folder(downloadfolder);

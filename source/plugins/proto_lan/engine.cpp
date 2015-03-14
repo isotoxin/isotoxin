@@ -373,8 +373,9 @@ packet_id_e tcp_pipe::packet_id()
     rcv_all();
     if ( rcvbuf_sz >= SIZE_PACKET_HEADER )
     {
-        packet_id_e pid = (packet_id_e)ntohs(*(short *)rcvbuf);
-        return pid;
+        USHORT sz = ntohs(*(USHORT *)(rcvbuf+2));
+        if (rcvbuf_sz >= sz)
+            return (packet_id_e)ntohs(*(short *)rcvbuf);;
     }
     return connected() ? PID_NONE : PID_DEAD;
 }
@@ -1194,11 +1195,15 @@ void lan_engine::set_avatar(const void*data, int isz)
     if (avachange)
     {
         if (isz)
+        {
             memcpy(first->avatar_hash,md5.result(), 16);
-        else
+            avatar.resize(isz);
+            memcpy(avatar.data(), data, isz);
+        } else
+        {
             memset(first->avatar_hash, 0, 16);
-        avatar.resize(isz);
-        memcpy(avatar.data(), data, isz);
+            avatar.clear();
+        }
         changed_some |= CDM_AVATAR_TAG;
         avatar_set = true;
     }

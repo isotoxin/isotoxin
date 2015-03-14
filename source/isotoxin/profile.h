@@ -19,7 +19,10 @@ enum messages_options_e
     MSGOP_SHOW_DATE             = SETBIT(0),
     MSGOP_SHOW_DATE_SEPARATOR   = SETBIT(1),
     MSGOP_SHOW_PROTOCOL_NAME    = SETBIT(2),
+    MSGOP_KEEP_HISTORY          = SETBIT(3),
 };
+
+#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY)
 
 struct active_protocol_s : public active_protocol_data_s
 {
@@ -105,7 +108,9 @@ template<typename T, profile_table_e tabi> struct tableview_t
                     rows.remove_slow(i);
         cleanup_requred = false;
     }
-
+    tableview_t() {}
+    tableview_t(const tableview_t&) UNUSED;
+    tableview_t(tableview_t &&) UNUSED;
     void operator=(const tableview_t& other)
     {
         rows = other.rows;
@@ -250,7 +255,13 @@ class profile_c : public config_base_c
 
     uint64 sorttag;
 
-    INTPAR_CACHE(msgopts);
+    static const ts::flags32_s::BITS F_MSG_OPTIONS_VALID = SETBIT(0);
+
+    ts::flags32_s profile_options;
+    ts::flags32_s current_msg_options;
+
+    INTPAR(msgopts, 0)
+    INTPAR(msgopts_edited, 0)
 
 public:
     profile_c() { dirty_sort(); }
@@ -295,11 +306,33 @@ public:
     void dirty_sort() { sorttag = ts::uuid(); };
     uint64 uniq_history_item_tag();
 
+    ts::flags32_s get_msg_options()
+    {
+        if (!profile_options.is(F_MSG_OPTIONS_VALID))
+        {
+            ts::flags32_s::BITS opts = msgopts();
+            ts::flags32_s::BITS optse = msgopts_edited();
+            current_msg_options.setup( (opts & optse) | ( ~optse & DEFAULT_MSG_OPTIONS ) );
+            profile_options.set(F_MSG_OPTIONS_VALID);
+        }
+        return current_msg_options;
+    }
+    bool set_msg_options( ts::flags32_s::BITS mo, ts::flags32_s::BITS mask )
+    {
+        ts::flags32_s::BITS cur = get_msg_options().__bits;
+        ts::flags32_s::BITS curmod = cur & mask;
+        ts::flags32_s::BITS newbits = mo & mask;
+        ts::flags32_s::BITS edited = msgopts_edited();
+        edited |= (curmod ^ newbits);
+        msgopts_edited( (int)edited );
+        cur = (cur & ~mask) | newbits;
+        return msgopts( (int)cur );
+    }
+
     TEXTWPAR( username, "IsotoxinUser" )
     TEXTWPAR( userstatus, "" )
     INTPAR( min_history, 10 )
     INTPAR( ctl_to_send, 1 )
-    INTPARC( msgopts, (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME) )
     TEXTWPAR( date_msg_template, "d MMMM" )
     TEXTWPAR( date_sep_template, "dddd d MMMM yyyy" )
     TEXTWPAR( download_folder, "%CONFIG%\\download" )

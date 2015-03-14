@@ -424,7 +424,7 @@ rectengine_c *rectengine_c::get_last_child()
 			sq_evt(SQ_RESIZE_END, getrid(), ts::make_dummy<evt_data_s>(true));
             end_mousetrack(MTT_RESIZE);
 			return true;
-		} else if (const mousetrack_data_s *mtd = mtrack( MTT_MOVE ))
+		} else if (nullptr != (mtd = mtrack( MTT_MOVE )))
 		{
 			sq_evt(SQ_MOVE_END, getrid(), ts::make_dummy<evt_data_s>(true));
 			end_mousetrack(MTT_MOVE);
@@ -585,18 +585,18 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
 				PAINTSTRUCT ps;
 				engine->dc = BeginPaint(hwnd,&ps);
                 guirect_c &r = engine->getrect();
-				const rectprops_c &rps = r.getprops();
+				//const rectprops_c &rps = r.getprops();
                 evt_data_s d( evt_data_s::draw_s(engine->drawtag) );
-				if (!rps.is_alphablend())
-				{
-                    engine->sq_evt(SQ_DRAW, r.getrid(), d);
-					EndPaint(hwnd,&ps);
+				//if (!rps.is_alphablend())
+				//{
+    //                engine->sq_evt(SQ_DRAW, r.getrid(), d);
+				//	EndPaint(hwnd,&ps);
 
-				} else
-				{
+				//} else
+				//{
 					engine->sq_evt(SQ_DRAW, r.getrid(), d );
 					EndPaint(hwnd,&ps);
-				}
+				//}
                 engine->dc = nullptr;
 				return 0;
 			}

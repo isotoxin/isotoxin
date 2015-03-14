@@ -1,5 +1,7 @@
 #pragma once
 
+#include "internal/imageformat.h"
+
 namespace ts
 {
 
@@ -482,7 +484,6 @@ protected:
     template<typename T1, typename T2> bitmap_t(const T1&t1, const T2&t2):core(t1,t2) {}
 
 public:
-    size_t save_as_PNG(const void * body, void * buf, int buflen) const;
 
     void before_modify()
     {
@@ -760,40 +761,21 @@ public:
     }
 
     void load_from_HWND(HWND hwnd);
-
-	void save_as_BMP(buf_c & buf) const;
-	void save_as_BMP(const wsptr &filename) const;
-
-	bool save_as_JPG(const wsptr &filename, int quality = 80, bool colorspace_rgb = true) const;
-    bool save_as_JPG(buf_c &buf, int quality = 80, bool colorspace_rgb = true) const;
-
-	/*
-	// to save as DDS we need squish library
-	void save_as_DDS(buf_c & buf, int compression = 0, int additional_squish_flags = 0) const;
-	void save_as_DDS(const asptr &filename, int compression = 0, int additional_squish_flags = 0) const;
-	*/
-
-    static bool load_from_DDS(void * buf_to, int buf_to_len, const void * buf, int buflen);
-	bool load_from_DDS(const void * buf, int buflen);
-    bool load_from_DDS(const buf_c & buf);
-	bool load_from_DDS(const wsptr &filename);
-
-	bool load_from_TGA(const void * buf, int buflen);
-	bool load_from_BMP(const void * buf, int buflen);
     bool load_from_BMPHEADER(const BITMAPINFOHEADER * iH, int buflen);
-
-	bool load_from_PNG(const void * buf, int buflen);
-    bool load_from_PNG(const buf_c & buf);
-	bool load_from_PNG(const wsptr &filename);
-
-    bool load_from_JPG(const void * buf, int buflen);
 
 	bool load_from_file(const void * buf, int buflen);
 	bool load_from_file(const buf_c & buf);
 	bool load_from_file(const wsptr &filename);
 
-	bool save_as_PNG(buf_c & buf) const;
-	bool save_as_PNG(const wsptr &filename) const;
+#define FMT(fn) bool save_as_##fn(buf_c &buf, int options = DEFAULT_SAVE_OPT(fn)) { return save_to_##fn##_format(buf, extbody(), options); }
+    IMGFORMATS
+#undef FMT
+
+#define FMT(fn) bool save_as_##fn(const wsptr &filename, int options = DEFAULT_SAVE_OPT(fn)) { buf_c b; if (save_to_##fn##_format(b, extbody(), options)) { b.save_to_file(filename); return true;} return false; }
+    IMGFORMATS
+#undef FMT
+
+
 };
 
 class image_extbody_c : public bitmap_t < bmpcore_exbody_s >

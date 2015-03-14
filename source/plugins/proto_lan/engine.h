@@ -71,6 +71,8 @@ struct tcp_pipe : public socket_s
 
     tcp_pipe() { creationtime = time_ms(); }
     tcp_pipe( SOCKET s, const sockaddr_in& addr ):addr(addr) { _socket = s; creationtime = time_ms(); }
+    tcp_pipe(const tcp_pipe&) = delete;
+    tcp_pipe(tcp_pipe&&) = delete;
 
     bool timeout() const
     {
@@ -110,7 +112,7 @@ struct tcp_pipe : public socket_s
             USHORT sz = ntohs(*(USHORT *)(rcvbuf+2));
             if (rcvbuf_sz == sz)
                 rcvbuf_sz = 0;
-            else if (ASSERT(rcvbuf_sz > sz))
+            else if (CHECK(rcvbuf_sz > sz))
             {   
                 rcvbuf_sz -= sz;
                 memcpy(rcvbuf, rcvbuf + sz, rcvbuf_sz);

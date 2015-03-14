@@ -190,7 +190,7 @@ void WINAPI exception_operator_c::show_callstack(HANDLE hThread, const char* nam
 	self.output.clear();
 	self.OnOutput("\n=====================================================================\n");
 	sstr_t<256> stamp;
-	sprintf_s(stamp.str(), stamp.get_capacity(), "%s [%04X]\n", name, hThread);
+	sprintf_s(stamp.str(), stamp.get_capacity(), "%s [%04X]\n", name, ((unsigned int)hThread));
 	self.OnOutput(stamp.cstr());
 	self.ShowCallstack(hThread, NULL);
 	self.OnOutput("=====================================================================");

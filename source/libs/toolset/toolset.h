@@ -849,18 +849,18 @@ template<typename T> struct is_movable : public is_movable__<T, (std::is_pod<T>:
 
 template<typename Tout, typename Tin> Tout &ref_cast(Tin & t)
 {
-    TS_STATIC_CHECK(sizeof(Tout) == sizeof(Tin), "ref cast fail");
+    TS_STATIC_CHECK(sizeof(Tout) <= sizeof(Tin), "ref cast fail");
     return (Tout &)t;
 }
 template<typename Tout, typename Tin> const Tout &ref_cast(const Tin & t)
 {
-    TS_STATIC_CHECK(sizeof(Tout) == sizeof(Tin), "ref cast fail");
+    TS_STATIC_CHECK(sizeof(Tout) <= sizeof(Tin), "ref cast fail");
     return (const Tout &)t;
 }
 
 template<typename Tout, typename Tin> const Tout &ref_cast(const Tin & t1, const Tin & t2)
 {
-    TS_STATIC_CHECK(sizeof(Tout) == (sizeof(Tin)*2), "ref cast fail");
+    TS_STATIC_CHECK(sizeof(Tout) <= (sizeof(Tin)*2), "ref cast fail");
     ASSERT( ((uint8 *)&t1)+sizeof(Tin) == (uint8 *)&t2 );
     return *(const Tout *)&t1;
 }

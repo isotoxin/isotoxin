@@ -147,11 +147,14 @@ void ccollection_c::find_by_mask(wstrings_c & files, const ts::wsptr &fnmask)
     pwstr_c masks(fnmask);
     int lastd = masks.find_last_pos_of(CONSTWSTR("/\\"));
 
+#pragma warning (disable:4822) // 'ts::ccollection_c::find_by_mask::middle::operator =' : local class member function does not have a body
+
     struct middle
     {
         wstrings_c & files;
         pwstr_c m;
-        middle &operator=(const middle &) {}
+        middle &operator=(const middle &) UNUSED;
+        middle(const middle &) UNUSED;
         middle(wstrings_c & files, const pwstr_c &m):files(files), m(m) {}
         bool filer( const wsptr & path, const wsptr & fn, container_c * )
         {

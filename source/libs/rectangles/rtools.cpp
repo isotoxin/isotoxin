@@ -66,10 +66,9 @@ void calcsb( int &pos, int &size, int shift, int viewsize, int datasize )
     }
 
     float k = float(viewsize) / float(datasize);
-    float sbmove = (float)(viewsize - minsbsize);
     float datamove = float(datasize - viewsize);
     size = lround(ts::tmax<float>( k * viewsize, minsbsize ));
-    sbmove = float(viewsize - size);
+    float sbmove = float(viewsize - size);
 
 
     pos = lround(-float(shift) / datamove * sbmove);
@@ -82,10 +81,9 @@ int calcsbshift( int pos, int viewsize, int datasize )
         return 0;
 
     float k = float(viewsize) / float(datasize);
-    float sbmove = (float)(viewsize - minsbsize);
     float datamove = float(datasize - viewsize);
     int size = lround(ts::tmax<float>(k * viewsize, minsbsize));
-    sbmove = float(viewsize - size);
+    float sbmove = float(viewsize - size);
 
     ASSERT(sbmove > 0);
 

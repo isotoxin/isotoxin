@@ -402,6 +402,7 @@ template<typename R> struct MAKE_ROOT : public initial_rect_data_s
     operator RID() const { return id; }
     operator R&() { ASSERT(me); return *me; }
     void operator=(const MAKE_ROOT&) UNUSED;
+    MAKE_ROOT(const MAKE_ROOT&) UNUSED;
 };
 
 // template 2 // see description
@@ -415,6 +416,7 @@ template<typename R> struct MAKE_ROOT< newrectkitchen::rectwrapper<R> > : public
     operator ts::safe_ptr<R>() { ASSERT(me); return ts::safe_ptr<R>(me); }
     void init(bool sys);
     void operator=(const MAKE_ROOT&) UNUSED;
+    MAKE_ROOT(const MAKE_ROOT&) UNUSED;
 };
 
 // template 3 // see description

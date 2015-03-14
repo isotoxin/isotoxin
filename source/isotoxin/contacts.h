@@ -130,6 +130,14 @@ struct avatar_s : public ts::drawable_bitmap_c
     void load( const void *body, int size, int tag );
 };
 
+enum keep_contact_history_e
+{
+    KCH_DEFAULT,
+    KCH_ALWAYS_KEEP,
+    KCH_NEVER_KEEP,
+};
+
+struct contacts_s;
 class gui_contact_item_c;
 class contact_c : public ts::shared_object
 {
@@ -143,9 +151,11 @@ class contact_c : public ts::shared_object
     time_t readtime = 0; // all messages after readtime considered unread
     UNIQUE_PTR( avatar_s ) avatar;
 
+    // TODO: lower memory usage: use bits
     contact_state_e state = CS_OFFLINE;
     contact_online_state_e ostate = COS_ONLINE;
     contact_gender_e gender = CSEX_UNKNOWN;
+    keep_contact_history_e keeph = KCH_DEFAULT;
 
     typedef ts::flags_t<ts::uint32, 0xFFFF> Options;
     Options opts;
@@ -191,6 +201,9 @@ public:
     }
 
     void reselect(bool);
+
+    void setup( const contacts_s * c, time_t nowtime );
+    void save( contacts_s * c ) const;
 
     void friend_request( bool f = true )
     {
@@ -290,6 +303,8 @@ public:
     }
     void make_time_unique(time_t &t);
 
+    bool keep_history() const;
+    
     void del_history(uint64 utag);
 
     post_s& add_history()
@@ -380,6 +395,9 @@ public:
     void set_state( contact_state_e st ) { state = st; }
     void set_ostate( contact_online_state_e ost ) { ostate = ost; }
     void set_gender( contact_gender_e g ) { gender = g; }
+    
+    keep_contact_history_e get_keeph() const { return keeph; }
+    void set_keeph( keep_contact_history_e v ) { keeph = v; }
 
     const ts::str_c &get_pubid() const {return pubid;};
     

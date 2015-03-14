@@ -409,15 +409,18 @@ bool gui_contact_item_c::send_file(RID, GUIPARAM)
     if (fromdir.is_empty())
         fromdir = ts::fn_get_path(ts::get_exe_full_name());
     ts::wstr_c title(TTT("Отправить файлы", 180));
+    ++sysmodal;
     if (ts::get_load_filename_dialog(files, fromdir, CONSTWSTR(""), CONSTWSTR(""), nullptr, title))
     {
+        --sysmodal;
         if (files.size())
             prf().last_filedir(ts::fn_get_path(files.get(0)));
 
         if (contact_c *c = contact)
             for (const ts::wstr_c &fn : files)
                 c->send_file(fn);
-    }
+    } else
+        --sysmodal;
 
     return true;
 }
@@ -524,8 +527,9 @@ void gui_contact_item_c::update_text()
                 {
                     ts::ivec2 sz = g_app->buttons().editb->size;
                     newtext.append(CONSTWSTR(" <rect=0,"));
-                    newtext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTWSTR(",2><br><l>"));
-                    newtext.append(t2).append(CONSTWSTR("</l>"));
+                    newtext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTWSTR(",2>"));
+                    t2.trim();
+                    if (!t2.is_empty()) newtext.append(CONSTWSTR("<br><l>")).append(t2).append(CONSTWSTR("</l>"));
 
                 } else
                 {
@@ -990,24 +994,35 @@ int gui_contact_item_c::contact_item_rite_margin()
                         historian->reselect(true);
                     }
                 }
+
+                static void m_contact_props(const ts::str_c&cks)
+                {
+                    contact_key_s ck(cks);
+                    SUMMON_DIALOG<dialog_contact_props_c>(UD_CONTACTPROPS, dialog_contactprops_params_s(ck));
+                }
             };
 
-            menu_c m;
-            if (contact->subcount() > 1) 
+            if (!dialog_already_present(UD_CONTACTPROPS))
             {
-                menu_c mc = m.add_sub(TTT("Метаконтакт", 145));
-                contact->subiterate([&](contact_c *c) {
+                menu_c m;
+                if (contact->subcount() > 1) 
+                {
+                    menu_c mc = m.add_sub(TTT("Метаконтакт", 145));
+                    contact->subiterate([&](contact_c *c) {
 
-                    ts::wstr_c text(c->get_name(false));
-                    text_adapt_user_input(text);
-                    if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
-                        text.append(CONSTWSTR(" (")).append(ap->get_name()).append(CONSTWSTR(")"));
-                    mc.add( TTT("Отделить: $",197) / text, 0, handlers::m_metacontact_detach, c->getkey().as_str() );
-                });
+                        ts::wstr_c text(c->get_name(false));
+                        text_adapt_user_input(text);
+                        if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
+                            text.append(CONSTWSTR(" (")).append(ap->get_name()).append(CONSTWSTR(")"));
+                        mc.add( TTT("Отделить: $",197) / text, 0, handlers::m_metacontact_detach, c->getkey().as_str() );
+                    });
 
+                }
+
+                m.add(TTT("Удалить",85),0,handlers::m_delete,contact->getkey().as_str());
+                m.add(TTT("Настройки контакта",223),0,handlers::m_contact_props,contact->getkey().as_str());
+                gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(),0), m);
             }
-            m.add(TTT("Удалить",85),0,handlers::m_delete,contact->getkey().as_str());
-            gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(),0), m);
 
         } else if (CIR_METACREATE == role)
         {

@@ -10,13 +10,8 @@
 #define INTPAR( pn, defv ) int pn() { return get(CONSTASTR(#pn), (int)(defv)); } \
                             bool pn( int un ) { return param( CONSTASTR(#pn), ts::tmp_str_c().set_as_int(un) ); }
 
-#define INTPARC( pn, defv ) int pn() { if (!pn##_cache_initialized) {pn##_cache = get(CONSTASTR(#pn), (int)(defv)); pn##_cache_initialized = true;} return pn##_cache; } \
-                            bool pn( int un ) { pn##_cache_initialized = true; pn##_cache = un; return param( CONSTASTR(#pn), ts::tmp_str_c().set_as_int(un) ); }
-
 #define INT64PAR( pn, defv ) int64 pn() { return get(CONSTASTR(#pn), (int64)(defv)); } \
                             bool pn( int64 un ) { return param( CONSTASTR(#pn), ts::tmp_str_c().set_as_num<int64>(un) ); }
-
-#define INTPAR_CACHE(pn) int pn##_cache = 0; bool pn##_cache_initialized = false;
 
 #define DEFAULT_PROXY "localhost:9050"
 

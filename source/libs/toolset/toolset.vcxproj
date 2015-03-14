@@ -159,6 +159,9 @@
   <ItemGroup>
     <ClCompile Include="internal\excpn.cpp" />
     <ClCompile Include="internal\glyphscache.cpp" />
+    <ClCompile Include="internal\imageformat_bmp.cpp" />
+    <ClCompile Include="internal\imageformat_jpg.cpp" />
+    <ClCompile Include="internal\imageformat_tga.cpp" />
     <ClCompile Include="internal\stkwlk.cpp" />
     <ClCompile Include="internal\textparser.cpp" />
     <ClCompile Include="tsarray.cpp" />
@@ -176,8 +179,8 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">
       </PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="internal\ddsreader.cpp" />
-    <ClCompile Include="internal\pngreader.cpp" />
+    <ClCompile Include="internal\imageformat_dds.cpp" />
+    <ClCompile Include="internal\imageformat_png.cpp" />
     <ClCompile Include="internal\resample.cpp">
       <AssemblerOutput Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
       </AssemblerOutput>
@@ -208,14 +211,13 @@
   <ItemGroup>
     <ClInclude Include="internal\excpn.h" />
     <ClInclude Include="internal\glyphscache.h" />
+    <ClInclude Include="internal\imageformat.h" />
     <ClInclude Include="internal\stkwlk.h" />
     <ClInclude Include="internal\textparser.h" />
     <ClInclude Include="tsarray.h" />
     <ClInclude Include="tsbitmap.h" />
     <ClInclude Include="toolset.h" />
     <ClInclude Include="internal\cpuaccel.h" />
-    <ClInclude Include="internal\ddsreader.h" />
-    <ClInclude Include="internal\pngreader.h" />
     <ClInclude Include="internal\math.h" />
     <ClInclude Include="internal\pixmap.h" />
     <ClInclude Include="internal\resample.h" />

@@ -304,7 +304,9 @@ bool gui_dialog_c::path_selector(RID, GUIPARAM param)
         curp.set_length(cutit);
     }
 
+    ++sysmodal;
     ts::wstr_c path = ts::get_save_directory_dialog(CONSTWSTR("/"), label_path_selector_caption, curp);
+    --sysmodal;
     if (!path.is_empty())
     {
         tf.set_text(path);

@@ -84,6 +84,9 @@
     <ClCompile Include="..\..\avaselector.cpp">
       <Filter>src\gui</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\contactprops.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\res\resource.h">
@@ -147,6 +150,9 @@
       <Filter>src\gui</Filter>
     </ClInclude>
     <ClInclude Include="..\..\avaselector.h">
+      <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\contactprops.h">
       <Filter>src\gui</Filter>
     </ClInclude>
   </ItemGroup>

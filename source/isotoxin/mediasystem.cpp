@@ -328,7 +328,7 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize,
         const ts::int16 *ind = (const ts::int16 *)idata;
         for (int ch = 0; ch < ichnls; ++ch)
         {
-            float *out = ((float *)b[curtarget].data()) + (sizeof(float) * samples_per_chnl * ch);
+            float *out = ((float *)b[curtarget].data()) + (samples_per_chnl * ch);
             for (const ts::int16 *from = ind + ch, *end = ind + samples_per_chnl + ch; from < end; ++from, ++out)
                 if (ASSERT(b[curtarget].inside(out, 4)))
                     *out = (float)(*from) * (float)(1.0 / 32768.0);

@@ -293,7 +293,7 @@ scaled_image_s *scaled_image_s::load(const wsptr &filename_, const ivec2 &scale)
             else fn.set(idata().images_dir.as_sptr()).append(filename_);
             if (fn.find_pos('.') < 0) fn.append(CONSTWSTR(".png"));
             blob_c buf = g_fileop->load(fn);
-			if (buf && i.bitmap.load_from_PNG(buf.data(), buf.size()))
+			if (buf && i.bitmap.load_from_file(buf.data(), buf.size()))
             {
 				switch (i.bitmap.info().bitpp)
 				{

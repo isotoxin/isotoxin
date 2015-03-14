@@ -55,6 +55,7 @@ INLINE ipcr & operator>>(ipcr &r, ts::astrings_c &s)
 #include "firstrun.h"
 #include "addcontact.h"
 #include "metacontact.h"
+#include "contactprops.h"
 #include "settings.h"
 #include "msgbox.h"
 #include "entertext.h"

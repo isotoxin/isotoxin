@@ -304,6 +304,13 @@ const avatar_s *contact_c::get_avatar() const
     return r;
 }
 
+bool contact_c::keep_history() const
+{
+    if (KCH_ALWAYS_KEEP == keeph) return true;
+    if (KCH_NEVER_KEEP == keeph) return false;
+    return prf().get_msg_options().is(MSGOP_KEEP_HISTORY);
+}
+
 void contact_c::del_history(uint64 utag)
 {
     int cnt = history.size();
@@ -676,7 +683,9 @@ bool contact_c::b_receive_file_as(RID, GUIPARAM par)
         ts::make_path(downf);
                     
         ts::wstr_c title = TTT("Сохранение файла",179);
+        ++sysmodal;
         ts::wstr_c fn = ts::get_save_filename_dialog(downf, ft->filename, CONSTWSTR(""), nullptr, title);
+        --sysmodal;
 
         if (!fn.is_empty())
         {
@@ -804,6 +813,29 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
     return 0;
 }
 
+void contact_c::setup( const contacts_s * c, time_t nowtime )
+{
+    set_name(c->name);
+    set_customname(c->customname);
+    set_statusmsg(c->statusmsg);
+    set_avatar(c->avatar.data(), c->avatar.size(), c->avatar_tag);
+    set_readtime(ts::tmin(nowtime, c->readtime));
+
+    options().setup(c->options);
+    keeph = (keep_contact_history_e)((c->options >> 16) & 3);
+}
+
+void contact_c::save( contacts_s * c ) const
+{
+    c->metaid = getmeta() ? getmeta()->getkey().contactid : 0;
+    c->options = get_options() | (get_keeph() << 16);
+    c->name = get_name(false);
+    c->customname = get_customname();
+    c->statusmsg = get_statusmsg(false);
+    c->readtime = get_readtime();
+    // avatar data copied not here, see profile_c::set_avatar
+}
+
 ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
 {
     if (msg.tabi == pt_contacts)
@@ -826,12 +858,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
                     metac = TSNEW(contact_c, metakey);
                     arr.insert(index, metac);
                 }
-                metac->set_name( row.name );
-                metac->set_customname(row.customname);
-                metac->set_statusmsg( row.statusmsg );
-                metac->options().setup(row.options);
-                metac->set_readtime( ts::tmin(nowtime, row.readtime) );
-                //meta.add(metac);
+                metac->setup(&row, nowtime);
             } else
                 notmeta.add(&row);
         }
@@ -844,11 +871,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
             meta_restored:
                 metac = arr.get(index);
                 contact_c *cc = metac->subgetadd(c->key);
-                cc->set_name(c->name);
-                cc->set_customname(c->customname);
-                cc->set_statusmsg(c->statusmsg);
-                cc->options().setup(c->options);
-                cc->set_avatar(c->avatar.data(), c->avatar.size(), c->avatar_tag);
+                cc->setup(c, 0);
 
                 if (!arr.find_sorted(index, cc->getkey()))
                     arr.insert(index, cc);

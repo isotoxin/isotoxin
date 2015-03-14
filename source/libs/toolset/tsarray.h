@@ -900,6 +900,23 @@ public:
         return *this;
     }
 
+    array_c(const array_c&a)
+    {
+        m_count = 0;
+        m_capacity = a.size();
+        m_list = (T *)beh.ma(sizeof(T)*m_capacity);
+        *this = a;
+    }
+    array_c(array_c &&a)
+    {
+        m_count = a.m_count;
+        m_capacity = a.m_capacity;
+        m_list = a.m_list;
+        a.m_count = 0;
+        a.m_capacity = 0;
+        a.m_list = nullptr;
+    }
+
     array_c(std::initializer_list<T> list)
     {
         m_count = list.size();

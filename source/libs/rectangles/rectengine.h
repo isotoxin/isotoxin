@@ -294,7 +294,7 @@ class rectengine_root_c : public rectengine_c
     //sqhandler_i
 	/*virtual*/ bool sq_evt( system_query_e qp, RID rid, evt_data_s &data ) override;
 
-    rectengine_root_c *redraw_checker() { if (!this || flags.is(F_REDRAW_CHECKER)) return nullptr; flags.set(F_REDRAW_CHECKER); return this; }
+    static rectengine_root_c *redraw_checker(rectengine_root_c * root) { if (!root || root->flags.is(F_REDRAW_CHECKER)) return nullptr; root->flags.set(F_REDRAW_CHECKER); return root; }
     void redraw_now();
     bool redraw_required() const { return drawtag != drawntag; }
 
@@ -351,7 +351,7 @@ public:
 struct drawchecker
 {
     drawchecker() :engine(nullptr) {}
-    explicit drawchecker(rectengine_root_c *root) :engine(root->redraw_checker()) {}
+    explicit drawchecker(rectengine_root_c *root) :engine(rectengine_root_c::redraw_checker(root)) {}
     ~drawchecker()
     {
         if (engine)
@@ -365,7 +365,7 @@ struct drawchecker
     drawchecker &operator=(rectengine_root_c *root)
     {
         ASSERT(engine == nullptr);
-        engine = root->redraw_checker();
+        engine = rectengine_root_c::redraw_checker(root);
         return *this;
     }
     drawchecker &operator=(const drawchecker&) UNUSED;

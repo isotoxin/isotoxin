@@ -74,7 +74,7 @@ ZSTRINGS_FORCEINLINE ZSTRINGS_SIGNED wchar_as_hex(ZSTRINGS_WIDECHAR c)
     if (c>='0' && c<='9') return (c - '0');
     if (c>='A' && c<='F') return (c - 'A' + 10);
     if (c>='a' && c<='f') return (c - 'a' + 10);
-    return -1;
+    return 0;
 }
 
 

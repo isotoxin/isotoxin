@@ -579,7 +579,8 @@ ts::uint32 profile_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // record history
         post.utag = msg.post.utag;
         post.options = 0;
 
-        record_history(historian->getkey(), post);
+        if (historian->keep_history())
+            record_history(historian->getkey(), post);
     }
 
     return second_pass_requred ? GMRBIT_CALLAGAIN : 0;
@@ -1054,14 +1055,7 @@ void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, i
 
                 row->changed();
             }
-
-            row->other.metaid = c->getmeta() ? c->getmeta()->getkey().contactid : 0;
-            row->other.options = c->get_options();
-            row->other.name = c->get_name(false);
-            row->other.customname = c->get_customname();
-            row->other.statusmsg = c->get_statusmsg(false);
-            row->other.readtime = c->get_readtime();
-            // avatar data copied not here, see set_avatar
+            c->save( &row->other );
         }
     }
     dirtycontacts.clear();

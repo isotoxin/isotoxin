@@ -65,7 +65,8 @@ template <typename VARTYPE> class cs_lock_t
         read_c(const VARTYPE & _var, const cs_lock_t *_host) : var(_var), host(_host), locked(true)
         {
         }
-        read_c & operator = (const read_c &r);
+        read_c & operator = (const read_c &r) UNUSED;
+        read_c(const read_c &r) UNUSED;
     public:
         read_c(read_c &&r) : var(r.var), host(r.host), locked(r.locked)
         {
@@ -113,6 +114,8 @@ template <typename VARTYPE> class cs_lock_t
         write_c(VARTYPE * _var, const cs_lock_t *_host) : var(_var), host(_host), locked(true)
         {
         }
+        write_c & operator = (const write_c &r) UNUSED;
+        write_c(const write_c &r) UNUSED;
     public:
         write_c(): var(nullptr), host(nullptr), locked(false) {}
         write_c(const write_c &&r) : var(r.var), host(r.host), locked(r.locked)

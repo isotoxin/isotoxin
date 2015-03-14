@@ -63,7 +63,7 @@ class Source //базовый класс для источников звука (лучше использовать сразу MSou
 protected:
     Player *player;
 	const SoundGroup soundGroup;
-	int slotIndex;
+	volatile int slotIndex;
 
 public:
 	float pitch;//коэффициент частоты звука

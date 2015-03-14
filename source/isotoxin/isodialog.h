@@ -11,6 +11,7 @@ enum unique_dialog_e
     UD_NETWORKNAME,
     UD_ABOUT,
     UD_AVASELECTOR,
+    UD_CONTACTPROPS,
 
 };
 
