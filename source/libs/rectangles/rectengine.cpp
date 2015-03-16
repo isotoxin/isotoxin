@@ -1808,6 +1808,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
 	case SQ_MOUSE_MOVE:
 		if (!mtrack(MTT_ANY))
 		{
+            gui->check_hintzone(data.mouse.screenpos);
             data.mouse.allowchangecursor = true;
             HWND h = GetCapture();
             RID rid = getrid();

@@ -231,6 +231,8 @@ class gui_c
 
     ts::tbuf_t<RID> m_exclusive_input;
 
+    ts::safe_ptr<guirect_c> m_active_hint_zone;
+    ts::array_safe_t<guirect_c, 1> m_hint_zone;
 	ts::array_safe_t<guirect_c, 2> m_rects;
     ts::tbuf_t<RID> m_roots;
     typedef ts::pair_s<ts::Time,RID> free_rid;
@@ -365,6 +367,11 @@ public:
     void mouse_inside( RID rid );
     void mouse_outside( RID rid = RID() );
     
+    guirect_c *active_hintzone() {return m_active_hint_zone;};
+    void register_hintzone( guirect_c *r );
+    void unregister_hintzone( guirect_c *r );
+    void check_hintzone( const ts::ivec2 & screenmousepos );
+
     void exclusive_input(RID r, bool set = true);
     bool allow_input(RID r) const { return sysmodal == 0 && m_exclusive_input.count() == 0 || m_exclusive_input.last(RID()) == r || ( m_exclusive_input.last(RID()) >> r ); }
 

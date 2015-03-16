@@ -1252,10 +1252,13 @@ gui_tooltip_c::~gui_tooltip_c()
 bool gui_tooltip_c::check_text(RID r, GUIPARAM param)
 {
     ts::ivec2 cp = gui->get_cursor_pos();
-    if (gui->get_hoverdata(cp).rid != ownrect)
+    if (!gui->active_hintzone())
     {
-        TSDEL(this);
-        return true;
+        if (gui->get_hoverdata(cp).rid != ownrect)
+        {
+            TSDEL(this);
+            return true;
+        }
     }
     const ts::wstr_c &tt = HOLD(ownrect)().tooltip();
     if (tt.is_empty())
@@ -1310,6 +1313,7 @@ ts::ivec2 gui_tooltip_c::get_min_size() const
         switch (qp)
         {
         case SQ_MOUSE_MOVE:
+        case SQ_CHECK_HINTZONE:
             check_text(RID(),nullptr);
             return false;
         case SQ_MOUSE_OUT:

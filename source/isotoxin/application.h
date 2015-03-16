@@ -18,7 +18,7 @@ struct preloaded_buttons_s
     ts::shared_ptr<button_desc_s> unpauseb;
     ts::shared_ptr<button_desc_s> breakb;
     
-    
+    ts::shared_ptr<button_desc_s> nokeeph;
 
     void reload();
 };

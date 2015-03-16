@@ -736,7 +736,7 @@ void gui_c::mouse_inside(RID rid)
     DMSG( "in: "<< rid );
 
     r.engine().sq_evt(SQ_MOUSE_IN, rid, d);
-    gui_tooltip_c::create(rid);
+    if (m_active_hint_zone.expired()) gui_tooltip_c::create(rid);
 }
 
 void gui_c::mouse_outside(RID rid)
@@ -752,6 +752,74 @@ void gui_c::mouse_outside(RID rid)
     r.engine().sq_evt(SQ_MOUSE_OUT, r().getrid(), d);
 }
 
+void gui_c::register_hintzone(guirect_c *r)
+{
+    int cnt = m_hint_zone.size();
+    int ff = -1;
+    for (int i=0;i<cnt;++i)
+    {
+        if (m_hint_zone.get(i).expired() && ff < 0)
+            ff = i;
+        else if (m_hint_zone.get(i) == r)
+            return;
+    }
+    if (ff < 0)
+        m_hint_zone.add(r);
+    else
+        m_hint_zone.set(ff, r);
+
+    if (!m_active_hint_zone)
+        check_hintzone( get_cursor_pos() );
+}
+
+void gui_c::unregister_hintzone(guirect_c *r)
+{
+    int cnt = m_hint_zone.size();
+    for (int i = 0; i < cnt; ++i)
+    {
+        if (m_hint_zone.get(i) == r)
+        {
+            m_hint_zone.remove_fast(i);
+            break;
+        }
+    }
+    if (r == m_active_hint_zone)
+    {
+        m_active_hint_zone = nullptr;
+        check_hintzone( get_cursor_pos() );
+    }
+}
+
+void gui_c::check_hintzone( const ts::ivec2 & screenmousepos )
+{
+    evt_data_s d;
+    d.hintzone.accepted = false;
+    if (m_active_hint_zone)
+    {
+        d.hintzone.pos = m_active_hint_zone->to_local(screenmousepos);
+        m_active_hint_zone->sq_evt(SQ_CHECK_HINTZONE, m_active_hint_zone->getrid(), d);
+        if (d.hintzone.accepted) return;
+    }
+
+    for( guirect_c *r : m_hint_zone )
+    {
+        if (r)
+        {
+            d.hintzone.accepted = false;
+            d.hintzone.pos = r->to_local(screenmousepos);
+            r->sq_evt(SQ_CHECK_HINTZONE, r->getrid(), d);
+            if (d.hintzone.accepted)
+            {
+                m_active_hint_zone = r;
+                gui_tooltip_c::create(r->getrid());
+                r->sq_evt(SQ_CHECK_HINTZONE, r->getrid(), d); // touch hint now
+                return;
+            }
+        }
+    }
+    m_active_hint_zone = nullptr;
+    if (RID cr = get_hoverdata(screenmousepos).rid) gui_tooltip_c::create(cr);
+}
 
 ts::ivec2 gui_c::get_cursor_pos() const
 {

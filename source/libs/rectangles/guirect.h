@@ -51,6 +51,7 @@ enum system_query_e
 
     SQ_GROUP_PROPORTIONS_CAHNGED, // by xgroup to self - use subscribe
     SQ_RESTORE_SIGNAL, // by extern code
+    SQ_CHECK_HINTZONE,
 
     SQ_DETECT_AREA,
     SQ_GET_POPUP_MENU_POS,
@@ -193,6 +194,12 @@ struct evt_data_s
             ts::make_pod<ts::ivec2> pos;
             ts::uint32 area;
         } detectarea;
+
+        struct
+        {
+            ts::make_pod<ts::ivec2> pos;
+            bool accepted;
+        } hintzone;
 
         struct
         {
@@ -536,7 +543,6 @@ public:
     {
         return screenrect - getprops().screenpos();
     }
-
     virtual void created(); // fully created - notify parent
 
     void leech( sqhandler_i * h );
@@ -1103,6 +1109,7 @@ class gui_vscrollgroup_c : public gui_group_c // vertical group with vertical sc
 protected:
     static const ts::flags32_s::BITS F_NO_REPOS = FLAGS_FREEBITSTART << 1;
     static const ts::flags32_s::BITS F_LAST_REPOS_AT_END = FLAGS_FREEBITSTART << 2;
+    static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 3;
 
     /*virtual*/ void children_repos() override;
     /*virtual*/ void on_add_child(RID id) override;

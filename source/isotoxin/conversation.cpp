@@ -2,12 +2,6 @@
 
 ////////////////////////// gui_notice_c
 
-void temporary()
-{
-
-    TTT("История сообщений не сохраняется!",231);
-}
-
 MAKE_CHILD<gui_notice_c>::~MAKE_CHILD()
 {
     MODIFY(get()).visible(true);
@@ -2004,7 +1998,24 @@ gui_messagelist_c::~gui_messagelist_c()
         }
         readtime_historian = nullptr;
 
+        if (historian && !historian->keep_history())
+            g_app->buttons().nokeeph->draw( m_engine.get(), button_desc_s::NORMAL, ts::irect(10,10,100,100), button_desc_s::ALEFT | button_desc_s::ATOP );
+
         return r;
+    }
+    if (qp == SQ_CHECK_HINTZONE && rid == getrid())
+    {
+        data.hintzone.accepted = false;
+        m_tooltip = GET_TOOLTIP();
+        if (historian && !historian->keep_history())
+        {
+            if (ts::irect(10, g_app->buttons().nokeeph->size + 10).inside(data.hintzone.pos))
+            {
+                m_tooltip = TOOLTIP(TTT("История сообщений не сохраняется!", 231));
+                data.hintzone.accepted = true;
+            }
+        }
+        // dont return, parent should process message
     }
     return __super::sq_evt(qp, rid, data);
 }
@@ -2089,7 +2100,11 @@ void gui_messagelist_c::clear_list()
 DWORD gui_messagelist_c::handler_SEV_ACTIVE_STATE(const system_event_param_s & p)
 {
     if (p.active)
-        getengine().redraw();
+    {
+        DECLARE_DELAY_EVENT_BEGIN(0)
+            ((gui_messagelist_c*)param)->getengine().redraw();
+        DECLARE_DELAY_EVENT_END(this)
+    }
     return 0;
 }
 
@@ -2200,7 +2215,12 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> & p)
     clear_list();
 
     historian = p.contact;
-    
+
+    if (historian && !historian->keep_history())
+        gui->register_hintzone(this);
+    else
+        gui->unregister_hintzone(this);
+
     gmsg<ISOGM_NOTICE>( historian, nullptr, NOTICE_NETWORK, ts::wstr_c() ).send(); // init notice list
 
     time_t before = now();

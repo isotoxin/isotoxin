@@ -264,6 +264,7 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     
     SIMPLE_SYSTEM_EVENT_RECEIVER(gui_messagelist_c, SEV_ACTIVE_STATE);
 
+    //static const ts::flags32_s::BITS F_OVER_NOKEEPH = F_VSCROLLFREEBITSTART << 0;
 
     tm last_post_time;
     ts::shared_ptr<contact_c> historian;

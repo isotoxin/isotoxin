@@ -810,6 +810,8 @@ void preloaded_buttons_s::reload()
     pauseb = gui->theme().get_button(CONSTASTR("pause"));
     unpauseb = gui->theme().get_button(CONSTASTR("unpause"));
     exploreb = gui->theme().get_button(CONSTASTR("explore"));
+
+    nokeeph = gui->theme().get_button(CONSTASTR("nokeeph"));
 }
 
 file_transfer_s::~file_transfer_s()
