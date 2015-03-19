@@ -135,6 +135,9 @@
     <ClCompile Include="internal\imageformat_jpg.cpp">
       <Filter>src\internal\bitmaps</Filter>
     </ClCompile>
+    <ClCompile Include="internal\imageformat_gif.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="internal\cpuaccel.h">

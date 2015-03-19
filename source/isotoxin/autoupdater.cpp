@@ -109,20 +109,34 @@ namespace
 
 void autoupdater()
 {
+    if (auparams().lock_read()().in_updater)
+        return;
+
     ts::str_c address("http://95.215.46.114/latest.txt");
     //ts::str_c address("http://2ip.ru");
 
     struct curl_s
     {
         CURL *curl;
+        ts::str_c newver;
+        bool send_newver = false;
         curl_s()
         {
             curl = curl_easy_init();
+            auto w = auparams().lock_write();
+            w().in_progress = true;
+            w().in_updater = true;
         }
         ~curl_s()
         {
             if (curl) curl_easy_cleanup(curl);
-            auparams().lock_write()().in_progress = false;
+            auto w = auparams().lock_write();
+            w().in_progress = false;
+            w().in_updater = false;
+            w.unlock();
+
+            if (send_newver)
+                TSNEW(gmsg<ISOGM_NEWVERSION>, newver)->send_to_main_thread();
         }
         operator CURL *() {return curl;}
     } curl;
@@ -165,7 +179,8 @@ void autoupdater()
     int signi = ver_ok( d.cstr() );
     if (!signi) 
     {
-        TSNEW(gmsg<ISOGM_NEWVERSION>, ts::str_c())->send_to_main_thread();
+        curl.newver.clear();
+        curl.send_newver = true;
         return;
     }
 
@@ -174,7 +189,8 @@ void autoupdater()
     r = auparams().lock_read();
     if (!new_version( r().ver, ver.get_string(CONSTASTR("ver")) ))
     {
-        TSNEW(gmsg<ISOGM_NEWVERSION>, ts::str_c())->send_to_main_thread();
+        curl.newver.clear();
+        curl.send_newver = true;
         return;
     }
 
@@ -193,8 +209,8 @@ void autoupdater()
         }
 
         // just notify
-        gmsg<ISOGM_NEWVERSION> *m = TSNEW( gmsg<ISOGM_NEWVERSION>, aver );
-        m->send_to_main_thread();
+        curl.newver = aver;
+        curl.send_newver = true;
         return;
     }
     r.unlock();
@@ -221,15 +237,20 @@ void autoupdater()
 
     TSNEW(gmsg<ISOGM_DOWNLOADPROGRESS>, (int)d.size(), (int)d.size())->send_to_main_thread();
 
-    if (!md5ok(d, ver)) return;
+    if (!md5ok(d, ver))
+    {
+        curl.newver.clear();
+        curl.send_newver = true;
+        return;
+    }
 
     ts::make_path( auparams().lock_read()().path );
     latest.save_to_file( ts::fn_join( auparams().lock_read()().path, CONSTWSTR("latest.txt") ) );
     d.save_to_file( ts::fn_join( auparams().lock_read()().path, pakname ) );
 
     auparams().lock_write()().downloaded = true;
-    Sleep(1000);
-    TSNEW(gmsg<ISOGM_NEWVERSION>, aver)->send_to_main_thread();
+    curl.newver = aver;
+    curl.send_newver = true;
 }
 
 namespace {

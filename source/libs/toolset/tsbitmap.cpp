@@ -2124,36 +2124,37 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_BMPHEADER(const BITMAPINF
 	return true;
 }
 
-template<typename CORE> bool bitmap_t<CORE>::load_from_file(const void * buf, int buflen)
+template<typename CORE> img_format_e bitmap_t<CORE>::load_from_file(const void * buf, int buflen)
 {
-	if (buflen < 4) return false;
+	if (buflen < 4) return if_none;
 
     __try
     {
         img_reader_s reader;
-        if (image_read_func r = reader.detect(buf,buflen))
+        img_format_e fmt = if_none;
+        if (image_read_func r = reader.detect(buf,buflen,fmt))
         {
             switch (reader.bitpp)
             {
             case 8:
                 create_grayscale(reader.size);
-                if (r(reader,body(),info().pitch)) return true;
+                if (r(reader,body(),info().pitch)) return fmt;
                 break;
             case 15:
                 create_15(reader.size);
-                if (r(reader, body(), info().pitch)) return true;
+                if (r(reader, body(), info().pitch)) return fmt;
                 break;
             case 16:
                 create_16(reader.size);
-                if (r(reader, body(), info().pitch)) return true;
+                if (r(reader, body(), info().pitch)) return fmt;
                 break;
             case 24:
                 create_RGB(reader.size);
-                if (r(reader, body(), info().pitch)) return true;
+                if (r(reader, body(), info().pitch)) return fmt;
                 break;
             case 32:
                 create_RGBA(reader.size);
-                if (r(reader, body(), info().pitch)) return true;
+                if (r(reader, body(), info().pitch)) return fmt;
                 break;
             }
         }
@@ -2164,17 +2165,17 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_file(const void * buf, in
     }
 
     clear();
-    return false;
+    return if_none;
 }
-template<typename CORE> bool bitmap_t<CORE>::load_from_file(const buf_c & buf)
+template<typename CORE> img_format_e bitmap_t<CORE>::load_from_file(const buf_c & buf)
 {
 	return load_from_file( buf.data(), buf.size() );
 }
-template<typename CORE> bool bitmap_t<CORE>::load_from_file(const wsptr &filename)
+template<typename CORE> img_format_e bitmap_t<CORE>::load_from_file(const wsptr &filename)
 {
 	if (blob_c b = g_fileop->load(filename))
 		return load_from_file( b.data(), b.size() );
-	return false;
+	return if_none;
 }
 
 template<typename CORE> void bitmap_t<CORE>::load_from_HWND(HWND hwnd)

@@ -763,9 +763,9 @@ public:
     void load_from_HWND(HWND hwnd);
     bool load_from_BMPHEADER(const BITMAPINFOHEADER * iH, int buflen);
 
-	bool load_from_file(const void * buf, int buflen);
-	bool load_from_file(const buf_c & buf);
-	bool load_from_file(const wsptr &filename);
+	img_format_e load_from_file(const void * buf, int buflen);
+	img_format_e load_from_file(const buf_c & buf);
+	img_format_e load_from_file(const wsptr &filename);
 
 #define FMT(fn) bool save_as_##fn(buf_c &buf, int options = DEFAULT_SAVE_OPT(fn)) { return save_to_##fn##_format(buf, extbody(), options); }
     IMGFORMATS

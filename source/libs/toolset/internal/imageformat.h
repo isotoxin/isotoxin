@@ -6,6 +6,7 @@ namespace ts
 #define IMGFORMATS \
     FMT( png ) \
     FMT( jpg ) \
+    FMT( gif ) \
     FMT( dds ) \
     FMT( bmp ) \
     FMT( tga ) \
@@ -13,6 +14,7 @@ namespace ts
 
 enum img_format_e
 {
+    if_none,
 #define FMT(fn) if_##fn,
     IMGFORMATS
 #undef FMT
@@ -28,9 +30,9 @@ struct img_reader_s
     ivec2 size;
     uint8 bitpp;
 
-    image_read_func detect( const void *data, int datasize )
+    image_read_func detect( const void *data, int datasize, img_format_e &fmt )
     {
-#define FMT(fn) if (image_read_func f = detect_##fn##_format(data, datasize)) return f;
+#define FMT(fn) if (image_read_func f = detect_##fn##_format(data, datasize)) { fmt = if_##fn; return f; }
         IMGFORMATS
 #undef FMT
         return nullptr;
@@ -49,6 +51,8 @@ struct img_reader_s
 #define DEFAULT_SAVE_OPT_jpg (80 | SAVE_IMAGE_OPT_JPG_COLORSPACE_RGB)
 #define DEFAULT_SAVE_OPT_dds 0
 #define DEFAULT_SAVE_OPT_bmp 0
+#define DEFAULT_SAVE_OPT_tga 0
+#define DEFAULT_SAVE_OPT_gif 0
 
 #define DEFAULT_SAVE_OPT(fn) DEFAULT_SAVE_OPT_##fn
 
@@ -57,5 +61,27 @@ struct bmpcore_exbody_s;
 IMGFORMATS
 #undef FMT
 
+
+template <typename R> void enum_supported_formats(R r)
+{
+#define FMT(fn) r(#fn);
+    IMGFORMATS
+#undef FMT
+}
+
+struct bmpcore_normal_s;
+template<typename CORE> class bitmap_t;
+typedef bitmap_t<bmpcore_normal_s> bitmap_c;
+
+class animated_c // gif animated
+{
+    uint data[64];
+public:
+    animated_c();
+    ~animated_c();
+
+    bool load( const void *b, int bsize ); // returns true, if animated
+    int getframe( bitmap_c &bmp ); // returns ms time of frame. bmp should contain previous frame!
+};
 
 } // namespace ts

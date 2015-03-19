@@ -11,27 +11,23 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="lib\blur.c" />
-    <ClCompile Include="lib\libimagequant.c" />
-    <ClCompile Include="lib\mediancut.c" />
-    <ClCompile Include="lib\mempool.c" />
-    <ClCompile Include="lib\nearest.c" />
-    <ClCompile Include="lib\pam.c" />
-    <ClCompile Include="lib\viter.c" />
+    <ClCompile Include="lib\dgif_lib.c" />
+    <ClCompile Include="lib\egif_lib.c" />
+    <ClCompile Include="lib\gifalloc.c" />
+    <ClCompile Include="lib\gif_err.c" />
+    <ClCompile Include="lib\gif_font.c" />
+    <ClCompile Include="lib\gif_hash.c" />
+    <ClCompile Include="lib\quantize.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="lib\blur.h" />
-    <ClInclude Include="lib\libimagequant.h" />
-    <ClInclude Include="lib\mediancut.h" />
-    <ClInclude Include="lib\mempool.h" />
-    <ClInclude Include="lib\nearest.h" />
-    <ClInclude Include="lib\pam.h" />
-    <ClInclude Include="lib\viter.h" />
+    <ClInclude Include="lib\gif_hash.h" />
+    <ClInclude Include="lib\gif_lib.h" />
+    <ClInclude Include="lib\gif_lib_private.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{AC61809B-2682-4C87-B705-70D321EE4AB0}</ProjectGuid>
+    <ProjectGuid>{7655B3D2-136C-4910-9A57-4039A3A5655D}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>pngquant</RootNamespace>
+    <RootNamespace>giflib</RootNamespace>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -68,7 +64,6 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -83,7 +78,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>true</OmitFramePointers>
@@ -93,8 +88,7 @@
       <StructMemberAlignment>16Bytes</StructMemberAlignment>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions</EnableEnhancedInstructionSet>
-      <DebugInformationFormat>None</DebugInformationFormat>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\pnglib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

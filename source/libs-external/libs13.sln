@@ -35,6 +35,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "opus", "opus\opus.vcxproj",
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "pngquant", "pngquant\pngquant.vcxproj", "{AC61809B-2682-4C87-B705-70D321EE4AB0}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "giflib", "giflib\giflib.vcxproj", "{7655B3D2-136C-4910-9A57-4039A3A5655D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -148,6 +150,12 @@ Global
 		{AC61809B-2682-4C87-B705-70D321EE4AB0}.Release|Win32.ActiveCfg = Release|Win32
 		{AC61809B-2682-4C87-B705-70D321EE4AB0}.Release|Win32.Build.0 = Release|Win32
 		{AC61809B-2682-4C87-B705-70D321EE4AB0}.Release|x64.ActiveCfg = Release|Win32
+		{7655B3D2-136C-4910-9A57-4039A3A5655D}.Debug|Win32.ActiveCfg = Debug|Win32
+		{7655B3D2-136C-4910-9A57-4039A3A5655D}.Debug|Win32.Build.0 = Debug|Win32
+		{7655B3D2-136C-4910-9A57-4039A3A5655D}.Debug|x64.ActiveCfg = Debug|Win32
+		{7655B3D2-136C-4910-9A57-4039A3A5655D}.Release|Win32.ActiveCfg = Release|Win32
+		{7655B3D2-136C-4910-9A57-4039A3A5655D}.Release|Win32.Build.0 = Release|Win32
+		{7655B3D2-136C-4910-9A57-4039A3A5655D}.Release|x64.ActiveCfg = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

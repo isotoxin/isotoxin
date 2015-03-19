@@ -15,6 +15,7 @@ class dialog_avaselector_c : public gui_isodialog_c
     GM_RECEIVER(dialog_avaselector_c, GM_PASTE_HOTKEY);
     
     framedrawer_s fd;
+    ts::animated_c anm;
 
     ts::bitmap_c bitmap;
     ts::drawable_bitmap_c image;
@@ -38,6 +39,9 @@ class dialog_avaselector_c : public gui_isodialog_c
     bool alpha = false;
     bool dirty = true;
     bool disabled_ok = false;
+    bool animated = false;
+
+    void nextframe();
 
     void newimage();
     bool flashavarect(RID, GUIPARAM);
@@ -77,7 +81,7 @@ public:
 
     /*virtual*/ int additions(ts::irect & border) override;
     /*virtual*/ ts::wstr_c get_name() const override;
-    /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(570, 500); }
+    /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(570, 520); }
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
     /*virtual*/ void on_confirm() override;
 };

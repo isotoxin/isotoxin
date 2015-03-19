@@ -160,6 +160,7 @@
     <ClCompile Include="internal\excpn.cpp" />
     <ClCompile Include="internal\glyphscache.cpp" />
     <ClCompile Include="internal\imageformat_bmp.cpp" />
+    <ClCompile Include="internal\imageformat_gif.cpp" />
     <ClCompile Include="internal\imageformat_jpg.cpp" />
     <ClCompile Include="internal\imageformat_tga.cpp" />
     <ClCompile Include="internal\stkwlk.cpp" />

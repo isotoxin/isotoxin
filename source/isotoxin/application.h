@@ -39,6 +39,7 @@ struct autoupdate_params_s
     ts::str_c proxy_addr;
     int proxy_type = 0;
     autoupdate_beh_e autoupdate = AUB_NO;
+    bool in_updater = false;
     bool in_progress = false;
     bool downloaded = false;
 };

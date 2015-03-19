@@ -342,8 +342,14 @@ dialog_avaselector_c::~dialog_avaselector_c()
 
     ts::wstr_c openimgbuttonface( TTT("Открыть изображение",212) );
     ts::wstr_c l(CONSTWSTR("<p=l>"));
-    ts::wstr_c s(TTT("Поддерживаемые форматы: $", 216) / CONSTWSTR("png, jpg, bmp, tga, dds"));
-    s.insert(0,CONSTWSTR("<br>"));
+
+    ts::wstr_c sprtfmts;
+    ts::enum_supported_formats([&](const char *fmt) {sprtfmts.append(':',ts::to_wstr(fmt));});
+    sprtfmts.replace_all(CONSTWSTR(":"), CONSTWSTR(", "));
+
+    ts::wstr_c s(TTT("Поддерживаемые форматы: $", 216) / sprtfmts);
+    s.insert(0,CONSTWSTR("<p=c>"));
+    s.append(CONSTWSTR("<br><l>")).append(TTT("Для анимированных изображений используйте клавишу пробел для переключения кадров анимации",232)).append(CONSTWSTR("</l>"));
 
     ts::wstr_c ctl;
 
@@ -382,6 +388,7 @@ ts::uint32 dialog_avaselector_c::gm_handler(gmsg<GM_DROPFILES> & p)
 
 ts::uint32 dialog_avaselector_c::gm_handler(gmsg<GM_PASTE_HOTKEY> & p)
 {
+    animated = false;
     ts::bitmap_c bmp = ts::get_clipboard_bitmap();
     if (bmp.info().sz >> 0)
     {
@@ -427,7 +434,17 @@ bool dialog_avaselector_c::open_image(RID, GUIPARAM)
         fromdir = ts::fn_get_path(ts::get_exe_full_name());
 
     ts::wstr_c title( TTT("Изображение",213) );
-    ts::wstr_c filter( CONSTWSTR("<imgs> (png, jpeg, bmp, dds, tga)/*.png;*.jpg;*.jpeg;*.dds;*.bmp;*.tga/<all> (*.*)/*.*//") );
+
+    ts::wstr_c sprtfmts, sprtfmts2(CONSTWSTR("*."));
+    ts::enum_supported_formats([&](const char *fmt) {sprtfmts.append(':', ts::to_wstr(fmt)); });
+    sprtfmts2.append(sprtfmts);
+    sprtfmts.replace_all(CONSTWSTR(":"), CONSTWSTR(", "));
+    sprtfmts2.replace_all(CONSTWSTR(":"), CONSTWSTR(";*."));
+
+
+    ts::wstr_c filter( CONSTWSTR("<imgs> (<list1>)/<list2>/<all> (*.*)/*.*//") );
+    filter.replace_all(CONSTWSTR("<list1>"), sprtfmts);
+    filter.replace_all(CONSTWSTR("<list2>"), sprtfmts2);
     filter.replace_all(CONSTWSTR("<imgs>"), TTT("Изображения",214));
     filter.replace_all(CONSTWSTR("<all>"), TTT("Любые файлы",215));
 
@@ -442,6 +459,13 @@ bool dialog_avaselector_c::open_image(RID, GUIPARAM)
     }
 
     return true;
+}
+
+void dialog_avaselector_c::nextframe()
+{
+    anm.getframe(bitmap);
+    rebuild_bitmap();
+    recompress();
 }
 
 void dialog_avaselector_c::newimage()
@@ -463,8 +487,15 @@ void dialog_avaselector_c::newimage()
 
 void dialog_avaselector_c::load_image(const ts::wstr_c &fn)
 {
-    bitmap.load_from_file(fn);
-    newimage();
+    animated = false;
+    ts::buf_c b; b.load_from_file(fn);
+    if (b.size())
+    {
+        if (ts::if_gif == bitmap.load_from_file(b))
+            if (animated = anm.load(b.data(),b.size()))
+                anm.getframe(bitmap);
+        newimage();
+    }
 }
 
 void dialog_avaselector_c::rebuild_bitmap()
@@ -948,6 +979,10 @@ void dialog_avaselector_c::do_scale(float sf)
             break;
         case SQ_RECT_CHANGED:
             dirty = true;
+            break;
+        case SQ_KEYDOWN:
+            if (animated)
+                nextframe();
             break;
         }
 

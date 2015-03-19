@@ -111,24 +111,30 @@ bool application_c::b_send_message(RID r, GUIPARAM param)
 
 bool application_c::flash_notification_icon(RID r, GUIPARAM param)
 {
-    F_UNREADICONFLASH = !F_UNREADICONFLASH;
-    DELAY_CALL_R(0.3, DELEGATE(this, flash_notification_icon), 0);
+    F_UNREADICON = gmsg<ISOGM_SOMEUNREAD>().send().is(GMRBIT_ACCEPTED);;
+    if (F_UNREADICON)
+    {
+        F_UNREADICONFLASH = !F_UNREADICONFLASH;
+        DELAY_CALL_R(0.3, DELEGATE(this, flash_notification_icon), 0);
+    }
     set_notification_icon();
     return true;
 }
 
 HICON application_c::get_current_notification_icon()
 {
+    if (F_UNREADICON)
+        return LoadIcon(g_sysconf.instance, F_UNREADICONFLASH ? MAKEINTRESOURCE(IDI_ICON2) : MAKEINTRESOURCE(IDI_ICON_HOLLOW));
+
     bool unread = gmsg<ISOGM_SOMEUNREAD>().send().is(GMRBIT_ACCEPTED);
-    if (unread && !F_UNREADICON)
+    if (unread)
     {
         F_UNREADICONFLASH = true;
+        F_UNREADICON = true;
         DELAY_CALL_R(0.3, DELEGATE(this, flash_notification_icon), 0);
-    } else if (!unread && F_UNREADICON)
-        m_gui.delete_event(DELEGATE(this, flash_notification_icon));
-    F_UNREADICON = unread;
+    }
 
-    return LoadIcon(g_sysconf.instance, unread ? MAKEINTRESOURCE(F_UNREADICONFLASH ? IDI_ICON2 : IDI_ICON_HOLLOW) : MAKEINTRESOURCE(IDI_ICON));
+    return LoadIcon(g_sysconf.instance, unread ? MAKEINTRESOURCE(IDI_ICON2) : MAKEINTRESOURCE(IDI_ICON));
 }
 
 
@@ -236,7 +242,8 @@ static DWORD WINAPI autoupdater(LPVOID)
 
 /*virtual*/ void application_c::iso_gui_c::app_5second_event()
 {
-    g_app->set_notification_icon();
+    if (!g_app->F_UNREADICON)
+        g_app->set_notification_icon();
 
     if ( cfg().autoupdate() > 0 )
     {
