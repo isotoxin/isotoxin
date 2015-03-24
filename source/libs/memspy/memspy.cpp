@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <malloc.h>
+#include <intrin.h>
 
 // CONFIG!
 //if you get a memory problem, change values of config here and recompile - it is ok 

@@ -54,13 +54,10 @@ TODO("индексы добавть в таблицы (history на поле mtime и historian)");
 TODO("запоминать позицию скрола при смене контакта");
 TODO("подгрузка сообщений из истории по движению скролбара");
 TODO("автоскрол разговора при получении сообщения (опция)");
-TODO("gui_popup_menu_c::update_size - убрать лямбду");
-TODO("children_repos вынести в постоперации по типу redraw и тем самым избавится от флага F_NO_REPOS")
 TODO("themerect контрола брать из темы по типу контрола");
 TODO("App Icon in caption")
 TODO("Support for stretch theme rect (theme_rect_s::F_*_TILE)");
 TODO("dirty_hover_data should call mousemove event to refresh cursor");
-TODO("strings отнаследовать от массива");
 TODO("при сворачивании окна по максимуму освобождать память, где только можно");
 TODO("PF_UNAUTHORIZED_CHAT");
 TODO("dll-ки протоколов класть в пак и выгружать при запуске в темп");

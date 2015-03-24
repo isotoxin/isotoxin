@@ -481,7 +481,7 @@ template<typename R> struct MAKE_VISIBLE_CHILD : public initial_rect_data_s
 */
 
 typedef fastdelegate::FastDelegate<ts::wstr_c ()> GET_TOOLTIP;
-
+class rectengine_root_c;
 class guirect_c : public sqhandler_i
 {
     friend class MODIFY;
@@ -489,16 +489,16 @@ class guirect_c : public sqhandler_i
 	DUMMY( guirect_c );
 	rectprops_c m_props; // never! never change this struct directly! its private
 
-    RID __spec_find_root() const
+    rectengine_root_c *__spec_find_root() const
     {
-        if (m_parent == RID()) return m_rid;
+        if (m_parent == RID()) return ts::ptr_cast<rectengine_root_c *>(m_engine.get());
         return HOLD(m_parent)().__spec_find_root();
     }
     int m_inmod = 0;
     int __spec_inmod(int v) {m_inmod += v; return m_inmod;}
 
 
-#ifdef _DEBUG
+#ifndef _FINAL
     bool m_test_00 = false; // проверка на прохождение SQ_TEST_00 по базовым классам guirect_c
 public:
     bool m_test_01 = false; // проверка вызова created из потомков
@@ -510,7 +510,7 @@ protected:
     ts::array_safe_t<sqhandler_i,1> m_leeches;
     RID m_rid;
     RID m_parent;
-    RID m_root;
+    ts::safe_ptr<rectengine_root_c> m_root;
     GET_TOOLTIP m_tooltip;
     guirect_c() {}
 
@@ -543,6 +543,10 @@ public:
     {
         return screenrect - getprops().screenpos();
     }
+    ts::irect local_to_root(const ts::irect &localr) const;
+    ts::ivec2 local_to_root(const ts::ivec2 &localpt) const;
+    ts::ivec2 root_to_local(const ts::ivec2 &rootpt) const;
+
     virtual void created(); // fully created - notify parent
 
     void leech( sqhandler_i * h );
@@ -552,7 +556,8 @@ public:
 
     RID getparent() const {return m_parent;}
     RID getrid() const {return m_rid;}
-    RID getroot() const {return m_root;}
+    rectengine_root_c *getroot() const;
+    RID getrootrid() const;
     bool is_root() const {return m_parent == RID();}
 
     rectengine_c &getengine() {return SAFE_REF(m_engine);}

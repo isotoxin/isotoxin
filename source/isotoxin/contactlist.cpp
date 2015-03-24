@@ -594,7 +594,7 @@ void gui_contact_item_c::updrect(void *, int r, const ts::ivec2 &p)
 {
     if (ASSERT(r < EB_MAX) && prf().is_loaded())
     {
-        hstuff().updr[r].p = to_local(HOLD(getroot())().to_screen(p));
+        hstuff().updr[r].p = root_to_local(p);
         hstuff().updr[r].updated = true;
         DELAY_CALL_R( 0, DELEGATE(this, update_buttons), (void *)1 );
     }
@@ -819,32 +819,41 @@ int gui_contact_item_c::contact_item_rite_margin()
                 bool achtung = (CIR_CONVERSATION_HEAD == role) ? false : contact->achtung();
                 if (n_unread > 0 || achtung)
                 {
-                    if (n_unread > 99) n_unread = 99;
-                    button_desc_s *unread = g_app->buttons().unread;
-
-                    ts::ivec2 pos = unread->draw( m_engine.get(), button_desc_s::NORMAL, ca, button_desc_s::ALEFT | button_desc_s::ABOTTOM );
-
-                    if (!contact->is_ringtone() || contact->is_ringtone_blink())
+                    bool drawnotify = true;
+                    if (g_app->flashingicon())
                     {
-                        ts::flags32_s f; f.setup(ts::TO_VCENTER | ts::TO_HCENTER);
-                        tdp.textoptions = &f;
-                        tdp.forecolor = unread->colors + button_desc_s::NORMAL;
-
-                        draw_data_s &dd = m_engine->begin_draw();
-                        dd.offset += pos;
-                        dd.size = unread->size;
-                        if ( contact->is_ringtone() )
-                            m_engine->draw(ts::wstr_c(CONSTWSTR("<img=call>")), tdp);
-                        else
-                        {
-                            if (st == CS_INVITE_RECEIVE || n_unread == 0)
-                                m_engine->draw(CONSTWSTR("!"), tdp);
-                            else
-                                m_engine->draw(ts::wstr_c().set_as_uint(n_unread), tdp);
-                        }
-                        m_engine->end_draw();
+                        drawnotify = g_app->flashiconflag();
+                        g_app->flashredraw( getrid() );
                     }
 
+                    if (drawnotify)
+                    {
+                        if (n_unread > 99) n_unread = 99;
+                        button_desc_s *unread = g_app->buttons().unread;
+
+                        ts::ivec2 pos = unread->draw(m_engine.get(), button_desc_s::NORMAL, ca, button_desc_s::ALEFT | button_desc_s::ABOTTOM);
+
+                        if (!contact->is_ringtone() || contact->is_ringtone_blink())
+                        {
+                            ts::flags32_s f; f.setup(ts::TO_VCENTER | ts::TO_HCENTER);
+                            tdp.textoptions = &f;
+                            tdp.forecolor = unread->colors + button_desc_s::NORMAL;
+
+                            draw_data_s &dd = m_engine->begin_draw();
+                            dd.offset += pos;
+                            dd.size = unread->size;
+                            if (contact->is_ringtone())
+                                m_engine->draw(ts::wstr_c(CONSTWSTR("<img=call>")), tdp);
+                            else
+                            {
+                                if (st == CS_INVITE_RECEIVE || n_unread == 0)
+                                    m_engine->draw(CONSTWSTR("!"), tdp);
+                                else
+                                    m_engine->draw(ts::wstr_c().set_as_uint(n_unread), tdp);
+                            }
+                            m_engine->end_draw();
+                        }
+                    }
                 }
 
                 if (!flags.is(F_EDITNAME|F_EDITSTATUS))

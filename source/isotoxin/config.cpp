@@ -27,9 +27,7 @@ void config_base_c::prepare_conf_table( ts::sqlitedb_c *db )
         cfgcols[1].name_ = CONSTASTR("value");
         cfgcols[1].type_ = ts::data_type_e::t_str;
 
-        //db->create_table(CONSTASTR("conf"), ARRAY_WRAPPER(cfgcols), true);
         db->update_table_struct(CONSTASTR("conf"), ARRAY_WRAPPER(cfgcols), true);
-        
     }
 
 }
@@ -66,7 +64,7 @@ bool config_base_c::param( const ts::asptr& pn, const ts::asptr& vl )
 {
     if (closed) return false;
     bool added = false;
-    auto &v = values.addAndReturnItem(pn, added);
+    auto &v = values.add_get_item(pn, added);
     if (added || !v.value.equals(vl))
     {
         v.value = vl;
@@ -112,7 +110,7 @@ void config_c::load( bool config_must_be_present )
         // no config :(
         // aha! 1st run!
         // show dialog
-        gui->load_theme(CONSTWSTR("def"));
+        g_app->load_theme(CONSTWSTR("def"));
         SUMMON_DIALOG<dialog_firstrun_c>();
 
     } else

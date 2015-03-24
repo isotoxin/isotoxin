@@ -15,8 +15,7 @@
 #define SS_JOINMACRO1(x,y) SS_JOINMACRO2(x,y)
 #define SS_UNIQIDLINE(x) SS_JOINMACRO1(x,__LINE__)
 
-
-#define SIMPLE_SYSTEM_EVENT_RECEIVER( parent, ev ) struct SS_UNIQIDLINE( ev##clazz ) : public system_event_receiver_c \
+#define SIMPLE_SYSTEM_EVENT_RECEIVER( parent, ev ) __declspec(align(4)) struct SS_UNIQIDLINE( ev##clazz ) : public system_event_receiver_c \
 { \
     SS_UNIQIDLINE( ev##clazz )():system_event_receiver_c(ev) {} \
     ~ SS_UNIQIDLINE( ev##clazz )() { unsubscribe(ev);} \

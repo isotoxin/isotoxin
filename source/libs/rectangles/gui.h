@@ -191,7 +191,7 @@ class gui_c
     SIMPLE_SYSTEM_EVENT_RECEIVER( gui_c, SEV_WCHAR );
     SIMPLE_SYSTEM_EVENT_RECEIVER( gui_c, SEV_MOUSE );
 
-    GM_RECEIVER( gui_c, GM_ROOT_FOCUS );
+    GM_RECEIVER(gui_c, GM_ROOT_FOCUS);
 
     ts::safe_ptr<dragndrop_processor_c> dndproc;
 
@@ -301,14 +301,7 @@ public:
 
     void load_theme( const ts::wsptr&thn );
     
-    const ts::font_desc_c & get_font( const ts::asptr &fontname )
-    {
-        bool add = false;
-        auto &val = m_fonts.addAndReturnItem(fontname,add);
-        if (add) val.value.assign(fontname);
-        else val.value.update_font();
-        return val.value;
-    }
+    const ts::font_desc_c & get_font( const ts::asptr &fontname );
     const ts::str_c &default_font_name() const { return m_deffont_name; }
 
     void resort_roots();
@@ -352,6 +345,7 @@ public:
 
     ts::text_rect_c &tr() {return m_textrect;}
 	const theme_c &theme() const {return m_theme;}
+    DEBUGCODE( const theme_c &xtheme(); );
     const ts::tbuf_t<RID>& roots() const {return m_roots;}
     void nomorerect(RID rootrid, bool isroot);
 

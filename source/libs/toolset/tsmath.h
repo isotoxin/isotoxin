@@ -245,6 +245,7 @@ namespace ts
 		irect(const irect &ir):lt(ir.lt), rb(ir.rb) {}
 		template<typename T1, typename T2> irect(const vec_t<T1,2> &lt_, const vec_t<T2,2> &rb_):lt(lt_.x,lt_.y), rb(rb_.x, rb_.y) {}
 		irect(decltype(ivec2::x) x1, decltype(ivec2::y) y1, decltype(ivec2::x) x2, decltype(ivec2::y) y2) :lt(x1, y1), rb(x2, y2) {}
+        irect(decltype(ivec2::x) v1, decltype(ivec2::x) v2) :lt(v1), rb(v2) {}
         template<typename T> irect(decltype(ivec2::x) lt_, const vec_t<T,2> &rb_) :lt(lt_, lt_), rb(rb_) {}
 
 		auto width() const -> decltype(rb.x - lt.x) {return rb.x - lt.x;} 
@@ -260,7 +261,7 @@ namespace ts
         ivec2 center() const { return ivec2((lt.x + rb.x) / 2, (lt.y + rb.y) / 2); }
 
         int area() const { return width() * height(); }
-        bool zero_area() const {return lt.x >= rb.x || lt.y  >= rb.y; }
+        operator bool () const {return rb.x > lt.x && rb.y > lt.y; }
 
 		bool inside(ivec2 p) const
 		{
@@ -276,7 +277,9 @@ namespace ts
             return *this;
 		}
 
-        int intersect_area(const irect &i);
+        
+        bool intersected(const irect &i) const;
+        int intersect_area(const irect &i) const;
 		irect & intersect(const irect &i);
 		irect & combine(const irect &i);
 
@@ -890,7 +893,16 @@ template <typename T, int N> INLINE const vec_t<T, N> tmax(const vec_t<T, N> &x,
     return r;
 }
 
-INLINE int irect::intersect_area(const irect &i)
+INLINE bool irect::intersected(const irect &i) const
+{
+    if (lt.x >= i.rb.x) return false;
+    if (lt.y >= i.rb.y) return false;
+    if (rb.x <= i.lt.x) return false;
+    if (rb.y <= i.lt.y) return false;
+    return true;
+}
+
+INLINE int irect::intersect_area(const irect &i) const
 {
     if (lt.x >= i.rb.x) return 0;
     if (lt.y >= i.rb.y) return 0;

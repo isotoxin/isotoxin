@@ -3,20 +3,21 @@
 namespace ts
 {
 
-template <typename TCHARACTER, class S_CORE = str_core_copy_on_demand_c<TCHARACTER> > class strings_t
+template <typename TCHARACTER, class S_CORE = str_core_copy_on_demand_c<TCHARACTER> > class strings_t : public array_inplace_t<str_t<TCHARACTER, S_CORE>, 8>
 {
     typedef str_t<TCHARACTER, S_CORE> strtype;
     typedef strings_t<TCHARACTER, S_CORE> arrtype;
 
-    array_inplace_t<strtype, 8> m_vect;
-
 public:
 
     strings_t() {};
-    strings_t(const arrtype &othera):m_vect( othera.size() )
+    strings_t(const arrtype &othera):array_inplace_t( othera.size() )
     {
         for (const strtype&s :othera)
             add( s );
+    }
+    strings_t(arrtype &&othera) :array_inplace_t(std::move(othera))
+    {
     }
 
     strings_t(const void *buf, aint bufsize, bool allow_empty_lines)
@@ -51,7 +52,7 @@ public:
         }
     }
 
-    strings_t(const strtype &str, TCHARACTER separator = 32)
+    strings_t(const strtype &str, TCHARACTER separator)
     {
         if (str.get_length() == 0)  return;
         int i = 0;
@@ -357,26 +358,26 @@ public:
 
     template<typename TCHARACTER2, typename CORE2> int     add(const str_t<TCHARACTER2, CORE2> &s)
     {
-		int r = m_vect.size();
-		m_vect.add().set(s);
+		int r = size();
+		__super::add().set(s);
 		return r;
     };
     int     add(const sptr<TCHARACTER> &s, bool casedown = false)
     {
-		strtype &ss = m_vect.add();
+		strtype &ss = __super::add();
 		ss.set(s);
         if ( casedown )
             ss.case_down();
-        return m_vect.size() - 1;
+        return size() - 1;
     };
     template<typename TCHARACTER2, class CORE2> void    insert(uint i, const str_t<TCHARACTER2, CORE2> &s)
     {
-        m_vect.insert(i) = s;
+        __super::insert(i) = s;
     }
 
 	template<typename TCHARACTER2, class CORE2> void    set( int index, const str_t<TCHARACTER2, CORE2> &s )
 	{
-		m_vect.get(index) = s;
+		get(index) = s;
 	}
 
     bool operator==( const arrtype &a ) const
@@ -403,22 +404,22 @@ public:
     strtype & operator[] (uint index)
     {
         while (index >= size())
-			m_vect.add();
+			add();
 
-        return m_vect.get( index );
+        return get( index );
     }
 
     
     int     find_sorted_descending(const TCHARACTER *text) const
     {
         int index;
-        if (m_vect.find_sorted( index, text )) return index;
+        if (__super::find_sorted( index, text )) return index;
         return -1;
     }
     int     find_sorted_descending(const strtype &text) const
     {
         int index;
-        if (m_vect.find_sorted( index, text )) return index;
+        if (__super::find_sorted( index, text )) return index;
         return -1;
     }
 
@@ -458,10 +459,10 @@ public:
     void    copyin(aint i, const arrtype &a)
     {
         aint sz = a.size();
-        m_vect.expand(i,sz);
+        expand(i,sz);
         for (int k = 0; k<sz; ++k)
         {
-            m_vect.set(i+k, a.get(k));
+            set(i+k, a.get(k));
         }
     }
 
@@ -481,79 +482,57 @@ public:
     }
     
 
-    void    moveup(const uint i)    
+    void    moveup(int i)    
     { 
-        if ((i > 0) && (i < m_vect.size()))
+        if ((i > 0) && (i < size()))
         {
-            m_vect.move_up_unsafe(i);
+            move_up_unsafe(i);
         }
     }
-    void    movedown(const uint i)  
+    void    movedown(int i)  
     { 
-        if ((int)i < (int)m_vect.size()-1)
+        if (i < size()-1)
         {
-            m_vect.move_down_unsafe(i); 
+            move_down_unsafe(i); 
         }
     }
 
-    void    swap_unsafe(const uint i, const uint j)  
-    {
-        m_vect.swap_unsafe(i,j);
-    }
-
-    
     void    case_down(void)
     {
-        int sz = size();
-        for (int k = 0; k<sz; ++k)
-        {
-            m_vect.get(k)->case_down();
-        }
+        for(strtype &s : *this)
+            s.case_down();
     }
 
     void    case_up(void)
     {
-        int sz = size();
-        for (int k = 0; k<sz; ++k)
-        {
-            m_vect.get(k)->case_up();
-        }
+        for (strtype &s : *this)
+            s.case_up();
     }
 
-    void    trim(void)
+    void    trim()
     {
-        int sz = size();
-        for (int k = 0; k<sz; ++k)
-        {
-            m_vect.get(k).trim();
-        }
+        for (strtype &s : *this)
+            s.trim();
     }
     void    trim(char c)
     {
-        int sz = size();
-        for (int k = 0; k<sz; ++k)
-        {
-            m_vect.get(k)->trim(c);
-        }
+        for (strtype &s : *this)
+            s.trim(c);
     }
 
-    void    remove_slow(aint i)
-    {
-        m_vect.remove_slow(i);
-    }
-    void    remove_slow(aint i, aint count)
-    {
-        m_vect.remove_some(i, count);
-    }
     void    remove_slow(const sptr<TCHARACTER> &s)
     {
         int i = find( s );
-        if (i>=0) m_vect.delete_slow(i);
+        if (i>=0) delete_slow(i);
+    }
+    void    remove_slow(aint idx)
+    {
+        __super::remove_slow(idx);
     }
 
     void    remove_fast(aint i)
     {
-        m_vect.remove_fast(i);
+        __super::remove_fast(i);
     }
 
     bool remove_fast(const sptr<TCHARACTER> &s)
@@ -561,18 +540,11 @@ public:
         int i = find( s );
         if (i>=0)
         {
-            m_vect.remove_fast(i);
+            __super::remove_fast(i);
             return true;
         }
         return false;
     }
-
-    void truncate(aint i)
-    {
-        m_vect.truncate(i);
-    }
-
-    int    size(void) const {return m_vect.size();};
 
     template <int N> void geta(strtype ar[N], uint i) const
     {
@@ -588,31 +560,8 @@ public:
 #endif
         for (int k=0;k<N;++k)
         {
-            ar[k] = m_vect[i+k];
+            ar[k] = (*this)[i+k];
         }
-    }
-
-    const strtype & get(int i) const
-    {
-        if (ASSERT(i >= 0 && i < size(), "get: out of range of string array <" << join('|') << ">"))
-        {
-            return m_vect[i];
-        }
-        return make_dummy<strtype>();
-    }
-
-    strtype & get(int i)
-    {
-#ifndef _FINAL
-        if (i >= size())
-        {
-#pragma warning (push)
-#pragma warning (disable : 4127)
-            ERROR( tmp_str_c("get: out of range of string array <").append(join('|')).append(">").cstr() );
-#pragma warning (pop)
-        }
-#endif
-        return m_vect[i];
     }
 
     // pool funtions
@@ -645,11 +594,11 @@ public:
     void kill_empty_fast(void)
     {
         int i = 0;
-        for(;i<m_vect.size();)
+        for(;i<size();)
         {
-            if (m_vect.get(i).is_empty())
+            if (get(i).is_empty())
             {
-                m_vect.remove_fast(i);
+                remove_fast(i);
                 continue;
             }
             ++i;
@@ -659,37 +608,38 @@ public:
     void kill_empty_slow(int startindex = 0)
     {
         int i = startindex;
-        for(;i<m_vect.size();)
+        for(;i<size();)
         {
-            if (m_vect.get(i).is_empty())
+            if (get(i).is_empty())
             {
-                m_vect.remove_slow(i);
+                remove_slow(i);
                 continue;
             }
             ++i;
         }
     }
 
-    void clear(void)
+    void clear()
     {
-        m_vect.truncate(0);
+        __super::clear();
     }
+
     void clear(int index)
     {
-        m_vect.get(index)->clear();
+        __super::get(index).clear();
     }
 
     void sort( bool ascending )
     {
         if (ascending)
         {
-            m_vect.sort([](const strtype &u1, const strtype &u2)->bool
+            __super::sort([](const strtype &u1, const strtype &u2)->bool
             {
                 return 0 > strtype::compare(u1, u2);
             });
         } else
         {
-            m_vect.sort([](const strtype &u1, const strtype &u2)->bool
+            __super::sort([](const strtype &u1, const strtype &u2)->bool
             {
                 return 0 < strtype::compare(u1, u2);
             });
@@ -698,13 +648,8 @@ public:
 
 	template <typename T> void sort(T &sorter)
 	{
-		m_vect.sort(sorter);
+		__super::sort(sorter);
 	}
-
-    void absorb( arrtype &othera )
-    {
-        m_vect.absorb( othera.m_vect );
-    }
 
     int compare( const arrtype &othera ) const
     {
@@ -739,11 +684,11 @@ public:
         int cc = imin( (int)size(), (int)othera.size() );
         for (int i=0;i<cc;++i)
         {
-            m_vect.get(i)->set( othera.get(i) );
+            get(i).set( othera.get(i) );
         }
         if ( cc == (int)othera.size() )
         {
-            m_vect.truncate( cc );
+            truncate( cc );
         } else
         {
 
@@ -755,19 +700,6 @@ public:
         }
         return *this;
 	}
-
-    const strtype& last() const
-    {
-        return m_vect.last();
-    }
-
-    // begin() end() semantics
-
-    strtype * begin() { return m_vect.begin(); }
-    const strtype *begin() const { return m_vect.begin(); }
-
-    strtype *end() { return m_vect.end(); }
-    const strtype *end() const { return m_vect.end(); }
 
 };
 

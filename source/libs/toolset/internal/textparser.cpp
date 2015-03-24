@@ -97,7 +97,7 @@ namespace
 		    //underline
             gi.length = (uint16)(advance + add_underline_len);
             gi.start_pos = svec2(0, (int16)underline_offset) - gi.pos;
-            gi.thickness = font->ulineThickness * underlined;
+            gi.thickness = font->uline_thickness * underlined;
 
             gi.pos.x += (int16)pos.x;
             gi.pos.y += (int16)pos.y;
@@ -369,7 +369,7 @@ struct text_parser_s
 		{
 			meta_glyph_s &mg = last_line.get(j);
 			H = tmax(H, pen.y ? mg.font->height : mg.font->ascender);//1. считаем max, т.к. в строке может меняться шрифт; 2. берется не высота символа, а именно ascender, чтобы высота строки не могла быть меньше этого значения, иначе строка из прописных символов нарисуется выше чем надо
-			last_line_descender = tmin(last_line_descender, mg.calch(), mg.font->ulinePos-(int)lceil(mg.font->ulineThickness*.5f));
+			last_line_descender = tmin(last_line_descender, mg.calch(), mg.font->underline_add_y-(int)lceil(mg.font->uline_thickness*.5f));
 			if		(mg.type == meta_glyph_s::SPACE) spaces++;
             else if (mg.type == meta_glyph_s::IMAGE) // для картинок дополнительно выполняется проверка на высоту картинки, чтобы высокие картинки расширяли строку
             {
@@ -486,7 +486,7 @@ struct text_parser_s
 		}
 		else if (tag == CONSTWSTR("u"))
 		{
-			underline_stack.add(ui_scale(tagbody.as_int())-font.ulinePos);
+			underline_stack.add(ui_scale(tagbody.as_int())-font.underline_add_y);
 		}
 		else if (tag == CONSTWSTR("/u") || tag == CONSTWSTR("/s"))
 		{

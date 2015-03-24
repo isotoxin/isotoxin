@@ -1959,7 +1959,8 @@ public:
         clear();
         return append_as_double(n);
     }
-
+#pragma warning(push)
+#pragma warning(disable:4702) // unreachable code
     template<typename NUMTYPE> str_t & set_as_num(NUMTYPE n)
     {
         TCHARACTER buf[sizeof(NUMTYPE) * 3];
@@ -1978,6 +1979,7 @@ public:
         TCHARACTER *tcalced = CHARz_make_str_unsigned( buf, szbyte, n );
         return set(tcalced,szbyte/sizeof(TCHARACTER)-1);
     }
+#pragma warning(pop)
 	template<> str_t & set_as_num<float>(float n) { return set_as_float(n); }
 	template<> str_t & set_as_num<double>(double n) { return set_as_double(n); }
 

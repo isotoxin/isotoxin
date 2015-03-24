@@ -1717,7 +1717,9 @@ static DWORD WINAPI audio_sender(LPVOID)
 
 static void prepare()
 {
-    options.ipv6enabled = 1;
+    OSVERSIONINFO v = {sizeof(OSVERSIONINFO),0};
+    GetVersionExW(&v);
+    options.ipv6enabled = (v.dwMajorVersion >= 6) ? 1 : 0;
     options.proxy_address[0] = 0;
     options.proxy_port = 0;
     options.proxy_type = TOX_PROXY_NONE;
@@ -2170,7 +2172,7 @@ void __stdcall set_config(const void*data, int isz)
 
                     u64 create_time = _now;
                     int cid = 0;
-                    message_type_e mt;
+                    message_type_e mt(MT_MESSAGE);
                     if (lc(chunk_msg_receiving_cid))
                         cid = lc.get_int();
                     if (lc(chunk_msg_receiving_type))

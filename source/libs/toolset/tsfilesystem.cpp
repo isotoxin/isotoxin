@@ -230,7 +230,7 @@ namespace ts
 
 		strings_t<TCHARACTER> sa(path, '\\');
 
-		sa.kill_empty_slow(1); // двойный
+		sa.kill_empty_slow(1);
 
 		for (int i=0;i<sa.size();)
 		{

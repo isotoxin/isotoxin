@@ -14,7 +14,7 @@
 #pragma comment(lib, "zlib.lib")
 #pragma comment(lib, "minizip.lib")
 #pragma comment(lib, "sqlite3.lib")
-#pragma comment(lib, "libcurl.lib")
+#pragma comment(lib, "curl.lib")
 #pragma comment(lib, "toxcore.lib")
 #pragma comment(lib, "libsodium.lib")
 
@@ -24,6 +24,9 @@
 //#pragma comment(lib, "comctl32.lib")
 //#pragma comment(lib, "Wldap32.lib")
 
+#if defined _FINAL || defined _DEBUG_OPTIMIZED
+#include "crt_nomem/crtfunc.h"
+#endif
 
 using namespace ts;
 

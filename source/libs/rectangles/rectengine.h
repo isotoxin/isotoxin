@@ -120,8 +120,6 @@ public:
 	rectengine_c();
 	virtual ~rectengine_c();
 
-    virtual rectengine_root_c *getroot() { return nullptr; }
-
     void cleanup_children_now();
     void resort_children(); // resort children according to zindex
     bool children_sort( fastdelegate::FastDelegate< bool (rectengine_c *, rectengine_c *) > swap_them );
@@ -213,7 +211,7 @@ public:
         }
     }
 
-    virtual void redraw() {}
+    virtual void redraw(const ts::irect *invalidate_rect=nullptr) {}
 	virtual bool apply(rectprops_c &rpss, const rectprops_c &pss) { return rpss.change_to(pss, this); }
 
 	virtual draw_data_s & begin_draw() { return ts::make_dummy<draw_data_s>(); }
@@ -262,9 +260,12 @@ Only root engine knows system-specific gui machinery
 
 class rectengine_root_c : public rectengine_c
 {
+    DUMMY(rectengine_root_c);
+
     friend struct drawchecker;
 	HWND hwnd;
 	HDC dc;
+    ts::irect redraw_rect;
     void *borderdata = nullptr;
 	ts::drawable_bitmap_c backbuffer;
     ts::array_inplace_t<draw_data_s, 4> drawdata;
@@ -321,13 +322,11 @@ public:
 
     bool is_dip() const {return flags.is(F_DIP);}
 
-    /*virtual*/ rectengine_root_c *getroot() override { return this; }
-
     int current_drawtag() const {return drawtag;}
 
     /*virtual*/ bool detect_hover(const ts::ivec2 & screenmousepos) const override { return getrect().getprops().is_visible() && hwnd == WindowFromPoint((POINT &)screenmousepos); };
 
-    /*virtual*/ void redraw() override;
+    /*virtual*/ void redraw(const ts::irect *invalidate_rect = nullptr) override;
 	/*virtual*/ bool apply(rectprops_c &rpss, const rectprops_c &pss) override;
 	
 	/*virtual*/ draw_data_s & begin_draw() override;
@@ -348,10 +347,42 @@ public:
     }
 };
 
+INLINE rectengine_root_c *root_by_rid( RID r )
+{
+    if (r)
+    {
+        HOLD rr(r);
+        if (rr) return rr().getroot();
+    }
+    return nullptr;
+}
+
+INLINE rectengine_root_c *guirect_c::getroot() const { return m_root && !m_root->is_dip() ? m_root : nullptr; }
+
+INLINE RID guirect_c::getrootrid() const { return m_root ? m_root->getrid() : RID(); }
+
+INLINE ts::irect guirect_c::local_to_root(const ts::irect &localr) const
+{
+    if (is_root() || !m_root) return localr;
+    return m_root->getrect().to_local(to_screen(localr));
+}
+
+INLINE ts::ivec2 guirect_c::local_to_root(const ts::ivec2 &localpt) const
+{
+    if (is_root() || !m_root) return localpt;
+    return m_root->getrect().to_local(to_screen(localpt));
+}
+
+INLINE ts::ivec2 guirect_c::root_to_local(const ts::ivec2 &rootpt) const
+{
+    if (is_root() || !m_root) return rootpt;
+    return to_local(m_root->getrect().to_screen(rootpt));
+}
+
 struct drawchecker
 {
-    drawchecker() :engine(nullptr) {}
-    explicit drawchecker(rectengine_root_c *root) :engine(rectengine_root_c::redraw_checker(root)) {}
+    drawchecker() : engine(nullptr) {}
+    drawchecker(rectengine_root_c *root) :engine(rectengine_root_c::redraw_checker(root)) {}
     ~drawchecker()
     {
         if (engine)
@@ -385,12 +416,10 @@ public:
 	rectengine_child_c(guirect_c *parent, RID after);
 	~rectengine_child_c();
 
-    /*virtual*/ rectengine_root_c *getroot() override;
-
-    /*virtual*/ void redraw() override;
+    /*virtual*/ void redraw(const ts::irect *invalidate_rect = nullptr) override;
 
     /*virtual*/ draw_data_s & begin_draw() override;
-    /*virtual*/ void end_draw() override { HOLD(getrect().getroot()).engine().end_draw(); }
+    /*virtual*/ void end_draw() override { getrect().getroot()->end_draw(); }
 
 	/*virtual*/ void draw( const theme_rect_s &thr, ts::uint32 options, evt_data_s *d = nullptr ) override;
 	/*virtual*/ void draw(const ts::wstr_c & text, const text_draw_params_s & dp) override;

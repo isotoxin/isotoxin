@@ -65,6 +65,9 @@ enum commands_e
     AQ_SET_AVATAR, // set self avatar
 
     HA_CMD_STATUS,
+    
+    XX_PING,
+    XX_PONG,
 
     MAX_COMMANDS
 };

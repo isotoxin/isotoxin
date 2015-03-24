@@ -20,7 +20,7 @@ static bool bmpdatareader(img_reader_s &r, void * buf, int pitch)
     bmppitch = (bmppitch + 3) & ~3;
 
     for (int y = r.size.y; y > 0; tdata -= pitch, pixels += bmppitch, --y)
-        if (ASSERT((pixels + pitch) <= epixels))
+        if (CHECK((pixels + pitch) <= epixels))
             memcpy(tdata, pixels, pitch);
 
     return true;

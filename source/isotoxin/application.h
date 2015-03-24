@@ -75,53 +75,57 @@ struct file_transfer_s
     bool is_active() const { return bytes_per_sec == -3 || (ts::Time::current() - trtime) < 60000; /* last activity in 60 sec */ }
 };
 
-class application_c
+class application_c : public gui_c
 {
-	SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_EXIT);
+    bool b_customize(RID r, GUIPARAM param);
+public:
+    /*virtual*/ HICON app_icon(bool for_tray) override;
+    /*virtual*/ void app_setup_custom_button(bcreate_s & bcr) override
+    {
+        if (bcr.tag == ABT_APPCUSTOM)
+        {
+            bcr.face = CONSTASTR("customize");
+            bcr.handler = DELEGATE(this, b_customize);
+            bcr.tooltip = TOOLTIP(TTT("Настройки", 2));
+        }
+    }
+    /*virtual*/ bool app_custom_button_state(int tag, int &shiftleft) override
+    {
+        if (tag == ABT_APPCUSTOM)
+            shiftleft += 5;
+
+        return true;
+    }
+
+    /*virtual*/ void app_prepare_text_for_copy(ts::wstr_c &text) override;
+
+    /*virtual*/ ts::wsptr app_loclabel(loc_label_e ll);
+
+    /*virtual*/ void app_notification_icon_action(naction_e act, RID iconowner) override;
+    /*virtual*/ void app_fix_sleep_value(int &sleep_ms) override;
+    /*virtual*/ void app_5second_event() override;
+    /*virtual*/ void app_b_minimize(RID main) override;
+    /*virtual*/ void app_b_close(RID main) override;
+    /*virtual*/ void app_path_expand_env(ts::wstr_c &path);
+    /*virtual*/ void app_active_state(bool is_active);
+
+    ///////////// application_c itself
+
+    RID main;
+
+    unsigned F_INITIALIZATION : 1;
+    unsigned F_NEWVERSION : 1;
+    unsigned F_NONEWVERSION : 1;
+    unsigned F_UNREADICONFLASH : 1;
+    unsigned F_UNREADICON : 1;
+
+    SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_EXIT);
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_INIT);
 
     GM_RECEIVER( application_c, ISOGM_PROFILE_TABLE_SAVED );
 
     ts::pointers_t<contact_c,0> m_ringing;
     mediasystem_c m_mediasystem;
-
-    class iso_gui_c : public gui_c
-    {
-        bool b_customize(RID r, GUIPARAM param);
-    public:
-        /*virtual*/ HICON app_icon(bool for_tray) override;
-        /*virtual*/ void app_setup_custom_button(bcreate_s & bcr) override
-        {
-            if (bcr.tag == ABT_APPCUSTOM)
-            {
-                bcr.face = CONSTASTR("customize");
-                bcr.handler = DELEGATE(this, b_customize);
-                bcr.tooltip = TOOLTIP( TTT("Настройки",2) );
-            }
-        }
-        /*virtual*/ bool app_custom_button_state(int tag, int &shiftleft) override
-        {
-            if (tag == ABT_APPCUSTOM)
-                shiftleft += 5;
-
-            return true;
-        }
-
-        /*virtual*/ void app_prepare_text_for_copy( ts::wstr_c &text ) override;
-
-        /*virtual*/ ts::wsptr app_loclabel( loc_label_e ll );
-
-        /*virtual*/ void app_notification_icon_action(naction_e act, RID iconowner) override;
-        /*virtual*/ void app_fix_sleep_value(int &sleep_ms) override;
-        /*virtual*/ void app_5second_event() override;
-        /*virtual*/ void app_b_minimize(RID main) override;
-        /*virtual*/ void app_b_close(RID main) override;
-        /*virtual*/ void app_path_expand_env(ts::wstr_c &path);
-        /*virtual*/ void app_active_state(bool is_active);
-
-    } m_gui;
-
-    RID main;
 
     ts::hashmap_t<int, ts::wstr_c> m_locale;
     ts::hashmap_t<SLANGID, ts::wstr_c> m_locale_lng;
@@ -137,16 +141,16 @@ class application_c
     sound_capture_handler_c *m_currentsc = nullptr;
     ts::pointers_t<sound_capture_handler_c, 0> m_scaptures;
 
-    unsigned F_INITIALIZATION : 1;
-    unsigned F_NEWVERSION : 1;
-    unsigned F_NONEWVERSION : 1;
-    unsigned F_UNREADICONFLASH : 1;
-    unsigned F_UNREADICON : 1;
+    ts::tbuf_t<RID> m_flashredraw;
 
 public:
     bool b_send_message(RID r, GUIPARAM param);
     bool flash_notification_icon(RID r, GUIPARAM param);
+    bool flashiconflag() const {return F_UNREADICONFLASH;};
+    bool flashingicon() const {return F_UNREADICON;};
+    void flashredraw(RID r) { m_flashredraw.set(r); }
 public:
+
 
     HICON get_current_notification_icon();
 
@@ -184,8 +188,8 @@ public:
     void summon_main_rect();
     preloaded_buttons_s &buttons() {return m_buttons;}
 
-    void lock_recalc_unread( const contact_key_s &ck ) { m_locked_recalc_unread.get_index(ck); };
-    void need_recalc_unread( const contact_key_s &ck ) { m_need_recalc_unread.get_index(ck); };
+    void lock_recalc_unread( const contact_key_s &ck ) { m_locked_recalc_unread.set(ck); };
+    void need_recalc_unread( const contact_key_s &ck ) { m_need_recalc_unread.set(ck); };
 
     void handle_sound_capture( const void *data, int size );
     void register_capture_handler( sound_capture_handler_c *h );

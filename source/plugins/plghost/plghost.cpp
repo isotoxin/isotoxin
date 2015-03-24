@@ -775,6 +775,15 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             protolib.functions->get_avatar(id);
         }
         break;
+
+    case XX_PING:
+        {
+            ipcr r(d->get_reader());
+            int sz;
+            const void *data = r.get_data(sz);
+            IPCW(XX_PONG) << data_block_s(data, sz);
+        }
+        break;
     }
 
     d->die();

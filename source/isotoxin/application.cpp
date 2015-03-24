@@ -118,6 +118,12 @@ bool application_c::flash_notification_icon(RID r, GUIPARAM param)
         DELAY_CALL_R(0.3, DELEGATE(this, flash_notification_icon), 0);
     }
     set_notification_icon();
+    for(RID r : m_flashredraw)
+    {
+        HOLD rr(r);
+        if (rr) rr.engine().redraw();
+    }
+    m_flashredraw.clear();
     return true;
 }
 
@@ -137,18 +143,15 @@ HICON application_c::get_current_notification_icon()
     return LoadIcon(g_sysconf.instance, unread ? MAKEINTRESOURCE(IDI_ICON2) : MAKEINTRESOURCE(IDI_ICON));
 }
 
-
-// isogui
-
-HICON application_c::iso_gui_c::app_icon(bool for_tray)
+HICON application_c::app_icon(bool for_tray)
 {
     if (!for_tray)
         return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(IDI_ICON)); 
 
-    return g_app->get_current_notification_icon();
+    return get_current_notification_icon();
 };
 
-/*virtual*/ void application_c::iso_gui_c::app_prepare_text_for_copy(ts::wstr_c &text)
+/*virtual*/ void application_c::app_prepare_text_for_copy(ts::wstr_c &text)
 {
     int rr = text.find_pos(CONSTWSTR("<r>"));
     if (rr >= 0)
@@ -185,7 +188,7 @@ HICON application_c::iso_gui_c::app_icon(bool for_tray)
     text.replace_all(CONSTWSTR("\n"), CONSTWSTR("\r\n"));
 }
 
-/*virtual*/ ts::wsptr application_c::iso_gui_c::app_loclabel(loc_label_e ll)
+/*virtual*/ ts::wsptr application_c::app_loclabel(loc_label_e ll)
 {
     switch (ll)
     {
@@ -210,21 +213,21 @@ HICON application_c::iso_gui_c::app_icon(bool for_tray)
     return __super::app_loclabel(ll);
 }
 
-/*virtual*/ void application_c::iso_gui_c::app_b_minimize(RID main)
+/*virtual*/ void application_c::app_b_minimize(RID main)
 {
     if (cfg().collapse_beh() == 1)
         MODIFY(main).micromize(true);
     else
         __super::app_b_minimize(main);
 }
-/*virtual*/ void application_c::iso_gui_c::app_b_close(RID main)
+/*virtual*/ void application_c::app_b_close(RID main)
 {
     if (GetKeyState(VK_CONTROL) >= 0 && cfg().collapse_beh() == 2)
         MODIFY(main).micromize(true);
     else
         __super::app_b_close(main);
 }
-/*virtual*/ void application_c::iso_gui_c::app_path_expand_env(ts::wstr_c &path)
+/*virtual*/ void application_c::app_path_expand_env(ts::wstr_c &path)
 {
     path_expand_env(path);
 }
@@ -240,39 +243,39 @@ static DWORD WINAPI autoupdater(LPVOID)
     return 0;
 }
 
-/*virtual*/ void application_c::iso_gui_c::app_5second_event()
+/*virtual*/ void application_c::app_5second_event()
 {
-    if (!g_app->F_UNREADICON)
-        g_app->set_notification_icon();
+    if (!F_UNREADICON)
+        set_notification_icon();
 
     if ( cfg().autoupdate() > 0 )
     {
-        if (now() > g_app->autoupdate_next)
+        if (now() > autoupdate_next)
         {
-            g_app->autoupdate_next += SEC_PER_DAY;
-            if (g_app->autoupdate_next <= now() )
-                g_app->autoupdate_next = now() + SEC_PER_DAY;
+            autoupdate_next += SEC_PER_DAY;
+            if (autoupdate_next <= now() )
+                autoupdate_next = now() + SEC_PER_DAY;
 
-            g_app->b_update_ver(RID(),(GUIPARAM)AUB_DEFAULT);
+            b_update_ver(RID(),(GUIPARAM)AUB_DEFAULT);
         }
-        if (!g_app->nonewversion())
+        if (!nonewversion())
         {
-            if (!g_app->newversion() && new_version())
+            if (!newversion() && new_version())
                 gmsg<ISOGM_NEWVERSION>(cfg().autoupdate_newver()).send();
-            g_app->nonewversion(true);
+            nonewversion(true);
         }
     }
 
 }
 
-/*virtual*/ void application_c::iso_gui_c::app_fix_sleep_value(int &sleep_ms)
+/*virtual*/ void application_c::app_fix_sleep_value(int &sleep_ms)
 {
     UNSTABLE_CODE_PROLOG
 
-    ts::tbuf_t<contact_key_s> & unr = g_app->m_need_recalc_unread;
+    ts::tbuf_t<contact_key_s> & unr = m_need_recalc_unread;
     while (unr.count())
     {
-        ts::tbuf_t<contact_key_s> & unrl = g_app->m_locked_recalc_unread;
+        ts::tbuf_t<contact_key_s> & unrl = m_locked_recalc_unread;
 
         contact_key_s ck = unr.get(0);
         if (unrl.find_index(ck) >= 0)
@@ -306,7 +309,7 @@ static DWORD WINAPI autoupdater(LPVOID)
         
 }
 
-/*virtual*/ void application_c::iso_gui_c::app_notification_icon_action(naction_e act, RID iconowner)
+/*virtual*/ void application_c::app_notification_icon_action(naction_e act, RID iconowner)
 {
     HOLD m(iconowner);
 
@@ -333,7 +336,7 @@ static DWORD WINAPI autoupdater(LPVOID)
     }
 }
 
-bool application_c::iso_gui_c::b_customize(RID r, GUIPARAM param)
+bool application_c::b_customize(RID r, GUIPARAM param)
 {
     struct handlers
     {
@@ -497,8 +500,8 @@ void application_c::summon_main_rect()
 
 bool application_c::is_inactive(bool do_incoming_message_stuff)
 {
-    rectengine_root_c *root = HOLD(main).engine().getroot();
-    if (!ASSERT(root)) return false;
+    rectengine_root_c *root = HOLD(main)().getroot();
+    if (!CHECK(root)) return false;
     bool inactive = false;
     for(;;)
     {
@@ -585,8 +588,8 @@ void application_c::set_notification_icon()
 {
     if (main)
     {
-        rectengine_root_c *root = HOLD(main).engine().getroot();
-        if (ASSERT(root))
+        rectengine_root_c *root = HOLD(main)().getroot();
+        if (CHECK(root))
         {
             root->notification_icon(CONSTWSTR(APPNAME));
         }
@@ -788,37 +791,47 @@ void application_c::unregister_file_transfer(uint64 utag)
 
 void application_c::load_theme( const ts::wsptr&thn )
 {
-    m_gui.load_theme(thn);
+    __super::load_theme(thn);
     m_buttons.reload();
 
-    font_conv_name = &m_gui.get_font( CONSTASTR("conv_name") );
-    font_conv_text = &m_gui.get_font( CONSTASTR("conv_text") );
+    font_conv_name = &get_font( CONSTASTR("conv_name") );
+    font_conv_text = &get_font( CONSTASTR("conv_text") );
 
 }
 
 void preloaded_buttons_s::reload()
 {
-    icon[CSEX_UNKNOWN] = gui->theme().get_button(CONSTASTR("nosex"));
-    icon[CSEX_MALE] = gui->theme().get_button(CONSTASTR("male"));
-    icon[CSEX_FEMALE] = gui->theme().get_button(CONSTASTR("female"));
+    const theme_c &th = gui->theme();
+
+#ifndef _FINAL
+    const theme_c &th1 = gui->xtheme();
+    int a1 = (int)&th1;
+    int a2 = (int)&th;
+    if (a1 != a2)
+        __debugbreak();
+#endif
+
+    icon[CSEX_UNKNOWN] = th.get_button(CONSTASTR("nosex"));
+    icon[CSEX_MALE] = th.get_button(CONSTASTR("male"));
+    icon[CSEX_FEMALE] = th.get_button(CONSTASTR("female"));
             
-    online = gui->theme().get_button(CONSTASTR("online"));
-    online2 = gui->theme().get_button(CONSTASTR("online2"));
-    invite = gui->theme().get_button(CONSTASTR("invite"));
-    unread = gui->theme().get_button(CONSTASTR("unread"));
-    callb = gui->theme().get_button(CONSTASTR("call"));
-    fileb = gui->theme().get_button(CONSTASTR("file"));
+    online = th.get_button(CONSTASTR("online"));
+    online2 = th.get_button(CONSTASTR("online2"));
+    invite = th.get_button(CONSTASTR("invite"));
+    unread = th.get_button(CONSTASTR("unread"));
+    callb = th.get_button(CONSTASTR("call"));
+    fileb = th.get_button(CONSTASTR("file"));
 
-    editb = gui->theme().get_button(CONSTASTR("edit"));
-    confirmb = gui->theme().get_button(CONSTASTR("confirmb"));
-    cancelb = gui->theme().get_button(CONSTASTR("cancelb"));
+    editb = th.get_button(CONSTASTR("edit"));
+    confirmb = th.get_button(CONSTASTR("confirmb"));
+    cancelb = th.get_button(CONSTASTR("cancelb"));
 
-    breakb = gui->theme().get_button(CONSTASTR("break"));
-    pauseb = gui->theme().get_button(CONSTASTR("pause"));
-    unpauseb = gui->theme().get_button(CONSTASTR("unpause"));
-    exploreb = gui->theme().get_button(CONSTASTR("explore"));
+    breakb = th.get_button(CONSTASTR("break"));
+    pauseb = th.get_button(CONSTASTR("pause"));
+    unpauseb = th.get_button(CONSTASTR("unpause"));
+    exploreb = th.get_button(CONSTASTR("explore"));
 
-    nokeeph = gui->theme().get_button(CONSTASTR("nokeeph"));
+    nokeeph = th.get_button(CONSTASTR("nokeeph"));
 }
 
 file_transfer_s::~file_transfer_s()

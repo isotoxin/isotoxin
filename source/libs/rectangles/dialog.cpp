@@ -236,7 +236,7 @@ RID gui_dialog_c::find( const ts::asptr &name ) const
 void gui_dialog_c::setctlname( const ts::asptr &name, guirect_c &r )
 {
     bool added;
-    ctl_by_name.addAndReturnItem(name, added).value = &r;
+    ctl_by_name.add_get_item(name, added).value = &r;
 }
 
 namespace

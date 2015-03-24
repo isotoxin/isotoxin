@@ -82,9 +82,9 @@ struct contact_key_s
     }
 };
 
-INLINE unsigned GetHash(const contact_key_s &ck)
+INLINE unsigned calc_hash(const contact_key_s &ck)
 {
-    return ts::GetHash(ck.contactid) ^ ts::hash_func(ts::GetHash(ck.protoid));
+    return ts::calc_hash(ck.contactid) ^ ts::hash_func(ts::calc_hash(ck.protoid));
 }
 
 INLINE ts::asptr  calc_message_skin(message_type_app_e mt, contact_key_s sender)

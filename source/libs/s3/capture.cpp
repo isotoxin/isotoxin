@@ -3,6 +3,9 @@
 
 namespace s3
 {
+
+MY_GUID(MY_DSDEVID_DefaultVoiceCapture, 0xdef00003, 0x9c6d, 0x47ed, 0xaa, 0xf1, 0x4d, 0xda, 0x8f, 0x2b, 0x5c, 0x03);
+
 static LPDIRECTSOUNDCAPTURE8 pDSCapture = nullptr;
 static LPDIRECTSOUNDCAPTUREBUFFER pDSCaptureBuffer = nullptr;
 static DEVICE captureguid( DEFAULT_DEVICE );
@@ -108,7 +111,7 @@ bool start_capture(Format & cfmt, const Format * tryformats, int try_formats_cnt
 {
     stop_capture();
 
-    DEVICE device = (captureguid == DEFAULT_DEVICE) ? DSDEVID_DefaultVoiceCapture : captureguid;
+    DEVICE device = (captureguid == DEFAULT_DEVICE) ? MY_DSDEVID_DefaultVoiceCapture : captureguid;
 
     if (FAILED(DirectSoundCaptureCreate8(&device, &pDSCapture, nullptr)))
         return false;

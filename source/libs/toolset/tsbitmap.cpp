@@ -2118,7 +2118,7 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_BMPHEADER(const BITMAPINF
 	int bmppitch = (info().pitch + 3) & ~3;
 
 	for (int y=sz.y; y>0; tdata-=info().pitch, pixels+=bmppitch, y--)
-        if ( ASSERT((pixels + info().pitch) <= epixels) )
+        if ( CHECK((pixels + info().pitch) <= epixels) )
 		    memcpy(tdata, pixels, info().pitch);
 
 	return true;

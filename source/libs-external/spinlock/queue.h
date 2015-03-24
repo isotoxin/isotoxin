@@ -18,7 +18,7 @@ struct defallocator
 // T must be a pointer
 
 template< typename T, typename A = defallocator > class
-#ifdef _WINDOWS
+#ifdef _WIN32
 __declspec(align(16))
 #endif
 spinlock_queue_s

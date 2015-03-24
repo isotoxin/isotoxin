@@ -127,7 +127,7 @@ struct border_window_data_s
         if (hwnd) return;
 
         rect = getrect();
-        if (rect.zero_area()) return;
+        if (!rect) return;
 
         ts::uint32 af = WS_POPUP | WS_VISIBLE;
         ts::uint32 exf = WS_EX_LAYERED;
@@ -527,7 +527,7 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
 
     ts::tmp_array_inplace_t<drawchecker, 4> dchs;
     for (RID r : gui->roots())
-        dchs.add() = HOLD(r).engine().getroot();
+        dchs.add() = HOLD(r)().getroot();
 
 	switch(msg)
 	{
@@ -545,9 +545,7 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
             {
                 if (e->flags.is(F_NOTIFY_ICON))
                 {
-                    NOTIFYICONDATAW nd;
-                    memset(&nd, 0, sizeof(nd));
-                    nd.cbSize = sizeof(NOTIFYICONDATA);
+                    NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
                     nd.hWnd = hwnd;
                     nd.uID = (int)hwnd;
                     Shell_NotifyIconW(NIM_DELETE, &nd);
@@ -744,6 +742,7 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
 
 rectengine_root_c::rectengine_root_c(bool sys):hwnd(nullptr), dc(nullptr)/*, alphablendfor(nullptr)*/
 {
+    redraw_rect = ts::irect( maximum<int>::value, minimum<int>::value );
     flags.init( F_SYSTEM, sys );
     drawntag = drawtag - 1;
 	if (!regclassref)
@@ -772,6 +771,14 @@ rectengine_root_c::rectengine_root_c(bool sys):hwnd(nullptr), dc(nullptr)/*, alp
 
 rectengine_root_c::~rectengine_root_c() 
 {
+    if (flags.is(F_SYSTEM) && flags.is(F_NOTIFY_ICON))
+    {
+        NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
+        nd.hWnd = hwnd;
+        nd.uID = (int)hwnd;
+        Shell_NotifyIconW(NIM_SETFOCUS, &nd);
+    }
+
     flags.set(F_DIP);
     if (gui) gui->delete_event( DELEGATE(this, refresh_frame) );
     kill_window();
@@ -843,9 +850,7 @@ void rectengine_root_c::kill_window()
     {
         if (flags.is(F_NOTIFY_ICON))
         {
-            NOTIFYICONDATAW nd;
-            memset(&nd, 0, sizeof(nd));
-            nd.cbSize = sizeof(NOTIFYICONDATA);
+            NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
             nd.hWnd = hwnd;
             nd.uID = (int)hwnd;
             Shell_NotifyIconW(NIM_DELETE, &nd);
@@ -1130,12 +1135,13 @@ void rectengine_root_c::kill_window()
     return false;
 }
 
-/*virtual*/ void rectengine_root_c::redraw()
+/*virtual*/ void rectengine_root_c::redraw(const ts::irect *invalidate_rect)
 {
     if(!flags.is(F_REDRAW_CHECKER))
     {
         DMSG("oops F_REDRAW_CHECKER");
     }
+    redraw_rect.combine( invalidate_rect ? *invalidate_rect : getrect().getprops().currentszrect() );
     drawchecker dch( this );
     ++drawtag;
 
@@ -1155,11 +1161,12 @@ void rectengine_root_c::redraw_now()
 
     ASSERT(dd.offset == ts::ivec2(0));
     dd.size = getrect().getprops().currentsize();
-    ASSERT(dd.cliprect.size() >> dd.size);
-
+    dd.cliprect = redraw_rect;
+    redraw_rect = dd.cliprect.intersect( ts::irect(0, dd.size) );
     evt_data_s d = evt_data_s::draw_s(drawtag);
     sq_evt(SQ_DRAW, getrid(), d);
     end_draw();
+    redraw_rect = ts::irect( maximum<int>::value, minimum<int>::value );
 }
 
 /*virtual*/ draw_data_s & rectengine_root_c::begin_draw()
@@ -1195,11 +1202,16 @@ void rectengine_root_c::redraw_now()
 void rectengine_root_c::draw_back_buffer()
 {
     if (dc)
-        backbuffer.draw(dc, 0, 0, getrect().getprops().currentszrect());
+        backbuffer.draw(dc, 0, 0, getrect().getprops().currentszrect()); // WM_PAINT - draw whole backbuffer
     else
     {
+        if (!redraw_rect)
+            redraw_rect = ts::irect(0, getrect().getprops().currentszrect());
+
+        //DMSG( "bb:" << redraw_rect );
+
         HDC tdc = GetDC(hwnd);
-        backbuffer.draw(tdc, 0, 0, getrect().getprops().currentszrect());
+        backbuffer.draw(tdc, redraw_rect.lt.x, redraw_rect.lt.y, redraw_rect);
         ReleaseDC(hwnd, tdc);
     }
 }
@@ -1211,7 +1223,7 @@ static void draw_image( HDC dc, const ts::drawable_bitmap_c &image, ts::aint x, 
     imgrectnew += ts::ivec2(x,y);
     imgrectnew.intersect(cliprect);
     
-    if (imgrectnew.zero_area()) return;
+    if (!imgrectnew) return;
 
     imgrectnew -= ts::ivec2(x,y);
     x += imgrectnew.lt.x; y += imgrectnew.lt.y;
@@ -1431,8 +1443,7 @@ void border_window_data_s::draw()
         if (0 != ts::ALPHA(thr.siso[SI_BASE].fillcolor))
         {
             ts::irect fillrect(dd.offset + thr.sis[SI_BASE].lt, rbpt - thr.sis[SI_BASE].rb);
-            fillrect.intersect(dd.cliprect);
-            if (!fillrect.zero_area())
+            if (fillrect.intersect(dd.cliprect))
             {
                 if (use_alphablend && ts::ALPHA(thr.siso[SI_BASE].fillcolor) < 255)
                     backbuffer.overfill(fillrect.lt, fillrect.size(), ts::PREMULTIPLY( thr.siso[SI_BASE].fillcolor ) );
@@ -1503,8 +1514,7 @@ void border_window_data_s::draw()
             // center color fill
             // do it before draw border due border can overdraw filled rect
             ts::irect fillrect( dd.offset + thr.sis[SI_CENTER].lt, rbpt - thr.sis[SI_CENTER].rb );
-            fillrect.intersect(dd.cliprect);
-            if (!fillrect.zero_area())
+            if (fillrect.intersect(dd.cliprect))
             {
                 if (use_alphablend && ts::ALPHA(thr.siso[SI_CENTER].fillcolor) < 255)
                     backbuffer.overfill(fillrect.lt, fillrect.size(), ts::PREMULTIPLY(thr.siso[SI_CENTER].fillcolor));
@@ -1516,7 +1526,7 @@ void border_window_data_s::draw()
         if (options & DTHRO_BORDER)
         {
             // top
-            if (!t->zero_area())
+            if (*t)
             {
                 rdraw.rbeg = lt; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_TOP);
                 rdraw.rrep = t; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_TOP);
@@ -1525,7 +1535,7 @@ void border_window_data_s::draw()
             }
 
             // bottom
-            if (!b->zero_area())
+            if (*b)
             {
                 rdraw.rbeg = lb; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_BOTTOM);
                 rdraw.rrep = b; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_BOTTOM);
@@ -1534,7 +1544,7 @@ void border_window_data_s::draw()
             }
 
             // left
-            if (!l->zero_area())
+            if (*l)
             {
                 rdraw.rbeg = nullptr;
                 rdraw.rrep = l; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_LEFT);
@@ -1543,7 +1553,7 @@ void border_window_data_s::draw()
             }
 
             // right
-            if (!r->zero_area())
+            if (*r)
             {
                 rdraw.rbeg = nullptr;
                 rdraw.rrep = r; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_RIGHT);
@@ -1596,8 +1606,7 @@ void border_window_data_s::draw()
             ts::irect fillrect(dd.offset.x + thr.sis[SI_LEFT].width(), dd.offset.y, rbpt.x, rbpt.y);
             fillrect.lt += thr.sis[SI_CENTER].lt;
             fillrect.rb -= thr.sis[SI_CENTER].rb;
-            fillrect.intersect(dd.cliprect);
-            if (!fillrect.zero_area())
+            if (fillrect.intersect(dd.cliprect))
             {
                 if (use_alphablend && ts::ALPHA(thr.siso[SI_CENTER].fillcolor) < 255)
                     backbuffer.overfill(fillrect.lt, fillrect.size(), ts::PREMULTIPLY(thr.siso[SI_CENTER].fillcolor));
@@ -1664,7 +1673,7 @@ void border_window_data_s::draw()
             subimage_e si = SI_CENTER;
             rdraw.rbeg = nullptr;
             rdraw.rrep = thr.sis + si; rdraw.a_beg = use_alphablend && thr.is_alphablend(si);
-            if (rdraw.rrep->zero_area())
+            if (! *rdraw.rrep)
             {
                 si = SI_BASE;
                 rdraw.rrep = thr.sis + si;
@@ -1743,8 +1752,7 @@ void border_window_data_s::draw()
     if (clip)
     {
         ts::irect dr = rect + dd.offset;
-        dr.intersect(dd.cliprect);
-        if (!dr.zero_area())
+        if (dr.intersect(dd.cliprect))
         {
             if (ts::ALPHA(color) < 255)
                 backbuffer.overfill(dr.lt, dr.size(), color);
@@ -1815,9 +1823,11 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
 			const hover_data_s &hd = gui->get_hoverdata(data.mouse.screenpos);
             if (hd.rid && !h)
             {
-                rectengine_root_c *root = HOLD(hd.rid).engine().getroot();
-                h = root->hwnd;
-                SetCapture(h);
+                if (rectengine_root_c *root = HOLD(hd.rid)().getroot())
+                {
+                    h = root->hwnd;
+                    SetCapture(h);
+                }
                 //DMSG("capture" << h);
             }
             if (!hd.rid && h)
@@ -1827,9 +1837,9 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
             RID prevmouserid = hd.minside;
             if (hd.rid != prevmouserid)
             {
-                if (hd.rid && HOLD(hd.rid)().getroot() != rid)
+                rectengine_root_c *root = HOLD(hd.rid)().getroot();
+                if (CHECK( root != nullptr ) && hd.rid && root->getrid() != rid)
                 {
-                    rectengine_root_c *root = HOLD(hd.rid).engine().getroot();
                     h = root->hwnd;
                     SetCapture(h);
                     //DMSG("capture" << h);
@@ -1956,7 +1966,6 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
             draw_data_s  &dd = begin_draw();
             dd.offset = ts::ivec2(0);
             dd.size = r->getprops().currentsize();
-            ASSERT( dd.cliprect.size() >> dd.size );
             r->sq_evt(qp, r->getrid(), data);
 
             for( rectengine_c *c : children_sorted )
@@ -1991,9 +2000,7 @@ void rectengine_root_c::flash()
 
 void rectengine_root_c::notification_icon( const ts::wsptr& text )
 {
-    NOTIFYICONDATAW nd;
-    memset(&nd,0,sizeof(nd));
-    nd.cbSize = sizeof(NOTIFYICONDATA);
+    NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
     nd.hWnd = hwnd;
     nd.uID = (int)hwnd;
     nd.uFlags = NIF_ICON|NIF_MESSAGE|NIF_TIP;
@@ -2002,11 +2009,14 @@ void rectengine_root_c::notification_icon( const ts::wsptr& text )
     
     size_t copylen = ts::tmin( sizeof(nd.szTip) - sizeof(ts::wchar), text.l * sizeof(ts::wchar) );
     memcpy( nd.szTip, text.s, copylen );
+    nd.szTip[copylen/sizeof(ts::wchar)] = 0;
 
     if (flags.is(F_NOTIFY_ICON))
         Shell_NotifyIconW( NIM_MODIFY, &nd );
     else {
         Shell_NotifyIconW(NIM_ADD, &nd);
+        nd.uVersion = NOTIFYICON_VERSION;
+        Shell_NotifyIconW(NIM_SETVERSION, &nd);
     }
     flags.set(F_NOTIFY_ICON);
 
@@ -2017,7 +2027,7 @@ bool rectengine_root_c::update_foreground()
     HWND prev = nullptr;
     for( RID rr : gui->roots() )
     {
-        HWND cur = HOLD(rr).engine().getroot()->hwnd;
+        HWND cur = HOLD(rr)().getroot()->hwnd;
         SetWindowPos(cur, HWND_NOTOPMOST /*prev*/, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         if (prev)
         {
@@ -2037,7 +2047,7 @@ bool rectengine_root_c::update_foreground()
 rectengine_child_c::rectengine_child_c(guirect_c *parent, RID after):parent(parent)
 {
     parent->getengine().add_child(this, after);
-    drawntag = parent->getengine().getroot()->current_drawtag() - 1;
+    drawntag = parent->getroot()->current_drawtag() - 1;
 }
 rectengine_child_c::~rectengine_child_c() 
 {
@@ -2046,7 +2056,7 @@ rectengine_child_c::~rectengine_child_c()
 
 /*virtual*/ draw_data_s & rectengine_child_c::begin_draw() 
 {
-    draw_data_s &d = HOLD(getrect().getroot()).engine().begin_draw();
+    draw_data_s &d = getrect().getroot()->begin_draw();
     d.engine = this;
     return d;
 }
@@ -2066,12 +2076,16 @@ rectengine_child_c::~rectengine_child_c()
             if (!r->getprops().is_visible()) return true;
 
             draw_data_s  &dd = begin_draw();
-            dd.offset = HOLD(r->getroot())().to_local( r->to_screen(ts::ivec2(0)) );
+            dd.offset = r->local_to_root( ts::ivec2(0) );
             dd.size = r->getprops().size();
-            r->sq_evt(qp, r->getrid(), data);
+            
+            if (dd.cliprect.intersected(ts::irect(dd.offset,dd.offset+dd.size)))
+            {
+                r->sq_evt(qp, r->getrid(), data);
 
-            for (rectengine_c *c : children_sorted)
-                if (c) c->sq_evt(qp, c->getrid(), data);
+                for (rectengine_c *c : children_sorted)
+                    if (c) c->sq_evt(qp, c->getrid(), data);
+            }
 
             end_draw();
             return true;
@@ -2101,33 +2115,36 @@ rectengine_child_c::~rectengine_child_c()
     }
     return __super::sq_evt(qp, rid, data);
 }
-rectengine_root_c *rectengine_child_c::getroot()
-{
-    return ts::ptr_cast<rectengine_root_c *>( &HOLD(getrect().getroot()).engine() );
-}
 
-/*virtual*/ void rectengine_child_c::redraw()
+/*virtual*/ void rectengine_child_c::redraw(const ts::irect *invalidate_rect)
 {
-    HOLD h(getrect().getroot());
-    if (h) h.engine().redraw();
+    if (rectengine_root_c *root = getrect().getroot())
+    {
+        ts::irect r = getrect().local_to_root( invalidate_rect ? *invalidate_rect : getrect().getprops().currentszrect() );
+        root->redraw( &r );
+    }
 }
 
 /*virtual*/ void rectengine_child_c::draw( const theme_rect_s &thr, ts::uint32 options, evt_data_s *d )
 {
-	HOLD(getrect().getroot()).engine().draw(thr, options, d);
+    if (rectengine_root_c *root = getrect().getroot())
+        root->draw(thr, options, d);
 }
 
 /*virtual*/ void rectengine_child_c::draw(const ts::wstr_c & text, const text_draw_params_s &tdp)
 {
-	HOLD(getrect().getroot()).engine().draw(text, tdp);
+    if (rectengine_root_c *root = getrect().getroot())
+        root->draw(text, tdp);
 }
 
 /*virtual*/ void rectengine_child_c::draw( const ts::ivec2 & p, const ts::drawable_bitmap_c &bmp, const ts::irect& bmprect, bool alphablend)
 {
-    HOLD(getrect().getroot()).engine().draw(p,bmp,bmprect,alphablend);
+    if (rectengine_root_c *root = getrect().getroot())
+        root->draw(p, bmp, bmprect, alphablend);
 }
 
 /*virtual*/ void rectengine_child_c::draw( const ts::irect & rect, ts::TSCOLOR color, bool clip)
 {
-    HOLD(getrect().getroot()).engine().draw(rect, color, clip);
+    if (rectengine_root_c *root = getrect().getroot())
+        root->draw(rect, color, clip);
 }

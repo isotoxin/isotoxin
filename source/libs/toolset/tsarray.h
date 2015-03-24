@@ -763,12 +763,16 @@ public:
 
     const T &get(int idx) const
     {
-        ASSERT( idx < size(), "get: out of range of array" );
+        ASSERT( idx >= 0 && idx < size(), "get: out of range of array" );
         return m_list[idx];
     };
     T &get(int idx)
     {
-        ASSERT(idx < size(), "get: out of range of array");
+        //ASSERT(idx < size(), "get: out of range of array"); // compiler crashes
+#ifndef _FINAL
+        if (idx < 0 || idx >= size())
+            __debugbreak();
+#endif
         return m_list[idx];
     };
     const T &last(void) const { return (m_count == 0) ? make_dummy<T>() : m_list[m_count - 1]; };

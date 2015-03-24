@@ -14,11 +14,11 @@ font_c::~font_c()
 		}
 }
 
-glyph_s &font_c::operator[](wchar_t c)
+glyph_s &font_c::operator[](wchar c)
 {
 	if (glyphs[c]) return *glyphs[c];
 
-	FT_Set_Pixel_Sizes( face, font_params.size.x, font_params.size.y );//можно было б запоминать пред. установленный размер чтобы не каждый раз вызывать эту ф-ю, но это оч. быстрая операция (по сравнению с FT_Load_Char)
+	FT_Set_Pixel_Sizes( face, font_params.size.x, font_params.size.y );
 	CHECK(FT_Load_Char( face, c, font_params.flags | FT_LOAD_RENDER ) == 0);
 
 	FT_Bitmap &b = face->glyph->bitmap;
@@ -33,7 +33,7 @@ glyph_s &font_c::operator[](wchar_t c)
 	//fill glyph fields
 	glyphs[c]->left	   = face->glyph->bitmap_left;
 	glyphs[c]->top	   = face->glyph->bitmap_top;
-	glyphs[c]->advance = (face->glyph->advance.x + 32) >> 6; // +32 нужно для округления к целому числу пикселей, т.к. glyph->advance хранится в формате 26.6
+	glyphs[c]->advance = (face->glyph->advance.x + 32) >> 6; // +32 need to round integer number of pixels due glyph->advance is in fixed point 26.6
 	glyphs[c]->width   = b.width;
 	glyphs[c]->height  = b.rows;
 	glyphs[c]->char_index = FT_Get_Char_Index(face, c);
@@ -42,8 +42,8 @@ glyph_s &font_c::operator[](wchar_t c)
 	//copy bitmap data
 	const char *src = (const char*)b.buffer;
 	char *dst = (char*)(glyphs[c]+1);
-	for (int row=0; row<(int)b.rows; row++, src+=b.pitch, dst+=b.width)//pitch may be negative, so memcpy can't be used here
-		memcpy(dst, src, b.width);//but can be used to copy a while row
+	for (int row=0; row<(int)b.rows; row++, src+=b.pitch, dst+=b.width) // pitch may be negative, so memcpy can't be used here
+		memcpy(dst, src, b.width); // but can be used to copy a while row
 
 	return *glyphs[c];
 }
@@ -51,7 +51,7 @@ glyph_s &font_c::operator[](wchar_t c)
 
 static bool operator==(const font_params_s &f1,const font_params_s &f2)
 { return memcmp(&f1, &f2, sizeof(font_params_s)) == 0; }
-unsigned GetHash(const font_params_s &f) {return GetHash(&f, sizeof(f));}
+unsigned calc_hash(const font_params_s &f) {return calc_hash(&f, sizeof(f));}
 
 str_c font_c::makename_bold()
 {
@@ -102,11 +102,11 @@ str_c font_c::makename_italic()
 namespace
 {
 
-    struct font_face_s//базовый класс контейнер шрифта (в FreeType - это face)
+    struct font_face_s
     {
 	    FT_Face face;
-	    blob_c fontFileBuffer;//по требованию FreeType нельзя освобождать буфер с файлом шрифта до вызова FT_Done_Face, поэтому храним его здесь
-	    hashmap_t<font_params_s, font_c> fontsCache;
+	    blob_c font_file_buffer; // FreeType requirement: buffer of font must be valid until FT_Done_Face, so keep buffer here
+	    hashmap_t<font_params_s, font_c> fonts_cache;
 
 	    ~font_face_s()
 	    {
@@ -120,9 +120,9 @@ namespace
         ivec2 scale;
         bool operator==(const scaled_image_key_s &s) const { return name == s.name && scale == s.scale; }
     };
-    static unsigned GetHash(const scaled_image_key_s &i)
+    static unsigned calc_hash(const scaled_image_key_s &i)
     {
-        return GetHash(i.name) ^ GetHash(&i.scale, sizeof(i.scale));
+        return calc_hash(i.name) ^ calc_hash(&i.scale, sizeof(i.scale));
     }
     struct scaled_image_container_s : scaled_image_s
     {
@@ -160,7 +160,7 @@ void set_fonts_dir(const wsptr &dir)
 {
 	idata().fonts_dir = dir;
 }
-void set_images_dir(const wsptr &dir) // для парсера
+void set_images_dir(const wsptr &dir) // for parser
 {
 	idata().images_dir = dir;
     if (idata().images_dir.get_last_char() != '\\' && idata().images_dir.get_last_char() != '/')
@@ -212,11 +212,14 @@ font_c &font_c::buildfont(const wstr_c &filename, const str_c &fontname, ivec2 s
 	if (face.find_pos('.') < 0) face.append(CONSTWSTR(".otf"));
 	bool added;
 	font_face_s &ff = idta.font_faces_cache.add(face, added);
-	if (added)//если только что добавили, выполняем инициализацию
+	if (added) // if just added - do initialization
 	{
 		blob_c buf = g_fileop->load(fn_join(idta.fonts_dir, face));
-		while (!buf)//если не смогли загрузить, берем просто первый попавшийся шрифт
+		while (!buf)
 		{
+            // cant load font?
+            // try load it from system dir...
+
             swstr_t<MAX_PATH+32> sysdir(MAX_PATH,false);
             GetWindowsDirectoryW(sysdir.str(), MAX_PATH); sysdir.set_length();
             if (sysdir.get_last_char() != '\\') sysdir.append_char('\\');
@@ -227,37 +230,39 @@ font_c &font_c::buildfont(const wstr_c &filename, const str_c &fontname, ivec2 s
 
             ERROR("Font '%s' not found. Check path! Current path is: %s", face.cstr(), idta.fonts_dir.cstr());
 
+            // ... or load any other
+
 			auto it = idta.font_faces_cache.begin();
-			if (it.key() == face) it++;//на случай когда первым в списке идет только что добавленный незагруженный шрифт
-			buf = it->fontFileBuffer;
+			if (it.key() == face) it++;
+			buf = it->font_file_buffer;
             break;
 		}
 
 		CHECK(FT_New_Memory_Face( idta.ftlibrary, (FT_Byte*)buf.data(), buf.size(), 0, &ff.face ) == 0);
-		ff.fontFileBuffer = buf;//ref++ чтобы буфер с шрифтом не удалился
+		ff.font_file_buffer = buf;
 
 		//some checks
 		ASSERT(FT_IS_SCALABLE(ff.face));
 	}
 
 	font_params_s fp(size, hinting ? 0 : FT_LOAD_NO_HINTING, additional_line_spacing, outline_radius, outline_shift);
-	font_c &f = ff.fontsCache.add(fp, added);
-	if (added)//заполняем параметры шрифта
+	font_c &f = ff.fonts_cache.add(fp, added);
+	if (added)
 	{
         f.fontname = fontname;
 		f.face = ff.face;
 		f.font_params = fp;
 
-		//FT_Set_Pixel_Sizes( f.face, size.x, size.y );//устанавливаем размер, чтобы проинициализировались отмасштабированные значения метрик
+		//FT_Set_Pixel_Sizes( f.face, size.x, size.y );
 		//f.ascender  = (f.face->size->metrics.ascender  + 32) >> 6;
 		//f.descender = (f.face->size->metrics.descender + 32) >> 6;
 		//f.height    = (f.face->size->metrics.height    + 32) >> 6;
-		float design_to_device_K = (float)size.y/f.face->units_per_EM;//коэф-т перевода из системы измерения шрифта (именно в ней хранятся глобальные метрики) к пикселям
+		float design_to_device_K = (float)size.y/f.face->units_per_EM; // K from font to pixels
 		f.ascender  =  lceil(design_to_device_K * f.face->ascender);
 		f.descender = lround(design_to_device_K * f.face->descender);
 		f.height    = lround(design_to_device_K * f.face->height);
-		f.ulinePos  = lround(design_to_device_K * f.face->underline_position);
-		f.ulineThickness = float(design_to_device_K * f.face->underline_thickness);
+		f.underline_add_y  = lround(design_to_device_K * f.face->underline_position);
+		f.uline_thickness = float(design_to_device_K * f.face->underline_thickness);
 
 		memset(f.glyphs, 0, sizeof(f.glyphs));
 	}
@@ -270,7 +275,7 @@ int font_c::kerning_ci(int left, int right)
 	if (!FT_HAS_KERNING(face)) return 0;
 
 	FT_Vector delta;
-	/*//эта простейшая реализация была заменена оптимизированной версией ниже
+	/* // optimized version below
 	FT_Set_Pixel_Sizes( face, fontParams.size.x, fontParams.size.y );
 	FT_Get_Kerning( face, FT_Get_Char_Index(face, left), FT_Get_Char_Index(face, right), FT_KERNING_DEFAULT, &delta );
 	return delta.x >> 6;*/
@@ -285,7 +290,7 @@ scaled_image_s *scaled_image_s::load(const wsptr &filename_, const ivec2 &scale)
 	scaled_image_container_s &i = idata().scaled_images_cache.add(sik, added);
 	if (added)
 	{
-		i.width = i.height = i.pitch = 0; //инициализация на случай ошибки
+		i.width = i.height = i.pitch = 0;
 		do
 		{
             tmp_wstr_c fn;
@@ -304,7 +309,7 @@ scaled_image_s *scaled_image_s::load(const wsptr &filename_, const ivec2 &scale)
                         i.bitmap = tmp;
                     }
 				case 32:
-					i.width  = tmax(1, (i.bitmap.info().sz.x * scale.x + 50) / 100);//способ расчета должен быть такой же как в ui.scale
+					i.width  = tmax(1, (i.bitmap.info().sz.x * scale.x + 50) / 100);
 					i.height = tmax(1, (i.bitmap.info().sz.y * scale.y + 50) / 100);
 					if (i.width != i.bitmap.info().sz.x || i.height != i.bitmap.info().sz.y)
 					{
@@ -418,7 +423,7 @@ void font_desc_c::update(int scale)
 void clear_glyphs_cache()
 {
 	for (auto it = idata().font_faces_cache.begin(); it; ++it)
-		it->fontsCache.clear();
+		it->fonts_cache.clear();
 
 	idata().scaled_images_cache.clear(); // also clear images cache
 	idata().font_cache_sig++; // increment sig to invalidate all exist font_desc_c (avoid access to broken pointer to font)

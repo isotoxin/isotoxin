@@ -66,7 +66,7 @@ struct contact_data_s
     }
 };
 
-#if defined _WINDOWS
+#if defined _WIN32
 typedef unsigned __int64 u64;
 #elif defined _LINUX
 typedef unsigned long long u64;

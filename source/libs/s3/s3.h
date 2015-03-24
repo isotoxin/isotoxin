@@ -16,6 +16,10 @@
 	SG(SG_VOICE, 16, false)
 #endif
 
+#define MY_GUID(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) \
+        const GUID name \
+                = { l, w1, w2, { b1, b2,  b3,  b4,  b5,  b6,  b7,  b8 } }
+
 namespace s3
 {
 

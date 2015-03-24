@@ -275,7 +275,7 @@ class lan_engine : public packetgen
         {
             const u64 *v = (const u64 *)read(sizeof(u64));
             if (!v) return def;
-            return ntohll(*v);
+            return my_ntohll(*v);
         }
         const byte *read(int size)
         {

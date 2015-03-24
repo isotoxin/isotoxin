@@ -279,7 +279,7 @@ public:
 
     void set_avatar( const contact_key_s&k, const ts::blob_c &avadata, int tag );
 
-    void dirtycontact( const contact_key_s&k ) { dirtycontacts.get_index(k); changed(); }
+    void dirtycontact( const contact_key_s&k ) { dirtycontacts.set(k); changed(); }
     void killcontact( const contact_key_s&k );
     void purifycontact( const contact_key_s&k );
     bool isfreecontact( const contact_key_s&k ) const;

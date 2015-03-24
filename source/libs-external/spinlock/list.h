@@ -12,7 +12,7 @@
 namespace spinlock
 {
 template<typename T> class
-#ifdef _WINDOWS
+#ifdef _WIN32
 __declspec(align(16))
 #endif
 spinlock_list_s
@@ -55,7 +55,7 @@ spinlock_list_s
             }
         }
 
-#ifdef _WINDOWS
+#ifdef _WIN32
         __except (EXCEPTION_EXECUTE_HANDLER){
             SLERROR("spinlock list get crush");
         }

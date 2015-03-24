@@ -534,7 +534,7 @@ SLANGID detect_language()
 
 
     ts::wchar x[32];
-    GetLocaleInfoW( LOCALE_NAME_USER_DEFAULT, LOCALE_SNAME, x, 32 );
+    GetLocaleInfoW( NULL, LOCALE_SISO639LANGNAME, x, 32 );
 
     for (const ts::wstr_c &f : fns)
         if ( f.substr(0, 2).equals( ts::wsptr(x,2) ) ) return SLANGID( ts::to_str(ts::wsptr(x,2)) );

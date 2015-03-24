@@ -1,23 +1,20 @@
 #pragma once
 
-// eah, simple win32 threads, compartible with pthread lib
+// eah, simple win32 threads (just mutex), compatible with pthread lib
 
 #include <windows.h>
+#include <intrin.h>
 
 #define pthread_self GetCurrentThreadId
 
-#pragma intrinsic (_InterlockedCompareExchange64)
-typedef __int64 lock_t;
+#pragma intrinsic (_InterlockedCompareExchange)
+typedef long lock_t;
 
 typedef struct
 {
     lock_t lock;
 
 } pthread_mutex_t;
-
-#define pthread_w32_lock_write_mask  0x0000FF0000000000ll
-#define pthread_w32_lock_thread_mask 0x000000FFFFFFFFFFll
-#define pthread_w32_lock_write_val   0x0000010000000000ll
 
 typedef struct
 {
@@ -43,20 +40,20 @@ int _inline pthread_mutex_init(pthread_mutex_t * mutex, const pthread_mutexattr_
 int _inline pthread_mutex_lock (pthread_mutex_t * mutex)
 {
     volatile lock_t *l = &mutex->lock;
-    lock_t thread = GetCurrentThreadId();
+    lock_t thread = 0xFFFFFF & GetCurrentThreadId();
     lock_t val = *l;
-    if ((val & pthread_w32_lock_thread_mask) == thread)
+    if ((val & 0xFFFFFF) == thread)
     {
-        *l += pthread_w32_lock_write_val; // simple increment due mutex locked by current thread
+        *l += 0x1000000; // simple increment due mutex locked by current thread
         return 0;
     }
-    thread |= pthread_w32_lock_write_val;
+    thread |= 0x1000000;
 
     for (;;)
     {
         lock_t tmp = 0;
         val = thread;
-        val = _InterlockedCompareExchange64(l, val, tmp);
+        val = _InterlockedCompareExchange(l, val, tmp);
         if (val == tmp)
             break;
         _mm_pause();
@@ -70,10 +67,10 @@ int _inline pthread_mutex_unlock (pthread_mutex_t * mutex)
 {
     volatile lock_t *l = &mutex->lock;
     lock_t tmp = *l;
-    lock_t val = tmp - pthread_w32_lock_write_val;
-    if (!(val & pthread_w32_lock_write_mask))
+    lock_t val = tmp - 0x1000000;
+    if (!(val & 0xFF000000))
         val = 0;
-    _InterlockedCompareExchange64(l, val, tmp);
+    _InterlockedCompareExchange(l, val, tmp);
 
     return 0;
 }

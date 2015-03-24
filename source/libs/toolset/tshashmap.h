@@ -1,37 +1,23 @@
 /*
-    (C) 2010-2015 TAV
+    (C) 2010-2015 TAV, ROTKAERMOTA
 */
 #pragma once
 
 namespace ts
 {
 
-inline unsigned GetHash(const int i)
+inline unsigned calc_hash(const int i)
 {
 	return (unsigned)i;
 }
 
-inline unsigned GetHash(const unsigned i)
+inline unsigned calc_hash(const unsigned i)
 {
 	return i;
 }
 
-inline unsigned GetHash(const void *obj, unsigned len/*, unsigned int seed*/)
+inline unsigned calc_hash(const void *obj, unsigned len/*, unsigned int seed*/)
 {
-/*
-	unsigned hash = 0;
-	for (size_t i=0,l=size%sizeof(unsigned),e=size-l; i<l; i++)
-		hash |= unsigned(((unsigned char*)obj)[e+i]) << (i*8);
-
-	for (size_t i=0; i<size/sizeof(unsigned); i++)
-		hash ^= ((unsigned*)obj)[i];
-
-	return hash;
-*/
-/*	unsigned hash = 2166136261u;//FNV-1a
-	for (size_t i=0; i<size; i++)
-		hash = 16777619u * (hash ^ ((unsigned char*)obj)[i]);
-	return hash;*/
 	//MurmurHash2
 	const unsigned m = 0x5bd1e995;//'m' and 'r' are mixing constants generated offline.
 	const int r = 24;             //They're not really 'magic', they just happen to work well.
@@ -66,30 +52,30 @@ inline unsigned GetHash(const void *obj, unsigned len/*, unsigned int seed*/)
 	return h;
 }
 
-template<typename TCHARACTER> unsigned GetHash(const sptr<TCHARACTER> &s)
+template<typename TCHARACTER> unsigned calc_hash(const sptr<TCHARACTER> &s)
 {
-    return GetHash(s.s, s.l * sizeof(TCHARACTER));
+    return calc_hash(s.s, s.l * sizeof(TCHARACTER));
 }
 
-template<typename TCHARACTER, class CORE> unsigned GetHash(const str_t<TCHARACTER, CORE> &s)
+template<typename TCHARACTER, class CORE> unsigned calc_hash(const str_t<TCHARACTER, CORE> &s)
 {
-	return GetHash(s.as_sptr());
+	return calc_hash(s.as_sptr());
 }
 
-template<typename T1, typename T2> unsigned GetHash(const pair_s<T1, T2> &s)
+template<typename T1, typename T2> unsigned calc_hash(const pair_s<T1, T2> &s)
 {
-    return GetHash(s.first) ^ ts::hash_func( GetHash(s.second) );
+    return calc_hash(s.first) ^ ts::hash_func( calc_hash(s.second) );
 }
 
-//template <class T, int N> inline unsigned GetHash(const Tvec<T,N> &v)
+//template <class T, int N> inline unsigned calc_hash(const vec_t<T,N> &v)
 //{
-//	return GetHash(&v, sizeof(v));
+//	return calc_hash(&v, sizeof(v));
 //}
 
-template <class T> inline unsigned GetHash(const T &obj)//Внимание! во избежание глюков с "дырявыми" структурами {short;int;} рекомендуется выставлять memalign в 1b, всегда объявлять поля структур в порядке уменьшения их размера и/или переопределять эту функцию для таких структур
+template <class T> inline unsigned calc_hash(const T &obj) // bad for aligned structures. please write its own calc_hash
 {
-	DEBUGCODE(static const T t[1] = {1L};)//compile-time check to allow only POD and non-pointer types
-	return GetHash(&obj, sizeof(obj));
+	DEBUGCODE(static const T t[1] = {1L};) // compile-time check to allow only POD and non-pointer types
+	return calc_hash(&obj, sizeof(obj));
 }
 
 struct Void {};
@@ -99,17 +85,16 @@ template <class KEYTYPE, class VALTYPE = Void> class hashmap_t
 public:
 	struct litm_s;
 private:
-	litm_s **table;
-	int tableSize,used;
-
-	//friend class Iterator;
+	litm_s **table = nullptr;
+	int table_size = 0;
+    int used = 0;
 
 public:
 
 	struct litm_s
 	{
 		KEYTYPE key;
-		unsigned keyHash;
+		unsigned key_hash;
 		VALTYPE value;
 
 		litm_s *next;
@@ -117,12 +102,12 @@ public:
 
 	class iterator
 	{
-		const hashmap_t *hashMap;
-		int tableIndex;
-		litm_s *item;
+		const hashmap_t *hashmap;
+		int table_index;
+		litm_s *item = nullptr;
 
 	public:
-		iterator(const hashmap_t *hashMap, int startIndex = -1) : hashMap(hashMap), tableIndex(startIndex), item(nullptr) {}
+		iterator(const hashmap_t *hashmap, int start_index = -1) : hashmap(hashmap), table_index(start_index) {}
 
 		const KEYTYPE &key() const {ASSERT(operator bool()); return item->key;}
         VALTYPE &value(void) { return  item->value; }
@@ -130,16 +115,17 @@ public:
 		VALTYPE &operator* () { return  item->value; }
 		VALTYPE *operator->() { return &item->value; }
 
-		explicit operator bool() const {return tableIndex < hashMap->tableSize;}
+		explicit operator bool() const {return table_index < hashmap->table_size;}
 
 		iterator &operator++()
 		{
-			if (item) item = item->next;
+			if (item)
+                item = item->next;
 
-			while (item == nullptr)
+			while (nullptr == item)
 			{
-				if (++tableIndex < hashMap->tableSize)
-					item = hashMap->table[ tableIndex ];
+				if (++table_index < hashmap->table_size)
+					item = hashmap->table[ table_index ];
 				else
 				{
 					item = nullptr;
@@ -159,25 +145,25 @@ public:
 
 		bool operator==(const iterator &i) const
 		{
-			return hashMap == i.hashMap && tableIndex == i.tableIndex && item == i.item;
+			return hashmap == i.hashmap && table_index == i.table_index && item == i.item;
 		}
 
 		bool operator!=(const iterator &i) const { return !operator==(i); }
 
-		void remove()//удаляет элемент, на который указывает данный итератор, и переходит к следующему элементу
+		void remove() // remove current element and go to next element
 		{
 			if (!ASSERT(operator bool())) return;
 
-			litm_s *itemToRemove = item, **li = &hashMap->table[tableIndex];//сохраняем указатель на удаляемый элемент
-			operator++();//и переходим к следующему элементу
+			litm_s *item2remove = item, **li = &hashmap->table[table_index];
+			operator++();
 
 			for (; *li; li = &(*li)->next)
-				if (*li == itemToRemove)
+				if (*li == item2remove)
 				{
 					litm_s *el = *li;
 					*li = (*li)->next;
 					TSDEL(el);
-					const_cast<hashmap_t*>(hashMap)->used--;
+					const_cast<hashmap_t*>(hashmap)->used--;
 					return;
 				}
 
@@ -186,10 +172,10 @@ public:
 	};
 
 	iterator begin() const { return ++iterator(this); }
-	iterator   end() const { return   iterator(this, tableSize); }
+	iterator   end() const { return   iterator(this, table_size); }
 
-	hashmap_t():table(nullptr),tableSize(0),used(0) {}
-	hashmap_t(int size):table(nullptr),tableSize(0),used(0)
+	hashmap_t() {}
+	hashmap_t(int size)
 	{
 		reserve(size);
 	}
@@ -202,19 +188,19 @@ public:
 
 	void reserve(int size)
 	{
-		if (size > tableSize)
+		if (size > table_size)
 		{
-			litm_s **newTable = (litm_s**)MM_ALLOC(sizeof(litm_s*)*size);
-			size = MM_SIZE(newTable)/sizeof(litm_s*);
-			memset(newTable, 0, sizeof(litm_s*)*size);
+			litm_s **new_table = (litm_s**)MM_ALLOC(sizeof(litm_s*)*size);
+			size = MM_SIZE(new_table)/sizeof(litm_s*);
+			memset(new_table, 0, sizeof(litm_s*)*size);
 
-			if (table) //переносим все данные из старой таблицы в новую
+			if (table) // move data from old table to new one
 			{
-				for (int i=0; i<tableSize; i++)
+				for (int i=0; i<table_size; i++)
 					for (litm_s *sli = table[i], *next; sli; sli = next)
 					{
 						next = sli->next;
-						litm_s **li = newTable + sli->keyHash % unsigned(size);
+						litm_s **li = new_table + sli->key_hash % unsigned(size);
 						sli->next = *li;
 						*li = sli;
 					}
@@ -222,18 +208,17 @@ public:
 				MM_FREE(table);
 			}
 
-			table = newTable;
-			tableSize = size;
+			table = new_table;
+			table_size = size;
 		}
 	}
 
-	int   size() const { return used; }
-	int length() const { return used; }
-	bool empty() const { return used == 0; }
+	int  size() const { return used; }
+	bool is_empty() const { return used == 0; }
 
 	void clear()
 	{
-		for (int i=0; i<tableSize; i++)
+		for (int i=0; i<table_size; ++i)
 		{
 			for (litm_s *li = table[i], *next; li; li = next)
 			{
@@ -248,7 +233,7 @@ public:
     hashmap_t &operator=(hashmap_t &&hm)
     {
         SWAP(table, hm.table);
-        SWAP(tableSize, hm.tableSize);
+        SWAP(table_size, hm.table_size);
         SWAP(used, hm.used);
 
         return *this;
@@ -258,44 +243,44 @@ public:
 	{
 		if (&hm == this) return *this;
 
-		clear();
-		if (!hm.empty())
-		{
-			if (table) MM_FREE(table);
-			table = (litm_s**)MM_ALLOC(sizeof(litm_s*)*hm.tableSize);
-			tableSize = hm.tableSize;
-			used = hm.used;
+        clear();
+        if (!hm.empty())
+        {
+            if (table) MM_FREE(table);
+            table = (litm_s**)MM_ALLOC(sizeof(litm_s*)*hm.table_size);
+            table_size = hm.table_size;
+            used = hm.used;
 
-			for (int i=0; i<tableSize; i++)
-			{
-				litm_s **prevNext = &table[i];
-				for (litm_s *sli = hm.table[i]; sli; sli = sli->next)
-				{
-					litm_s *newLI = TSNEW(litm_s);
-					*prevNext = newLI;
-					newLI->key     = sli->key;
-					newLI->keyHash = sli->keyHash;
-					newLI->value   = sli->value;
-					prevNext = &newLI->next;
+            for (int i=0; i<table_size; i++)
+            {
+                litm_s **prev_next = &table[i];
+                for (litm_s *sli = hm.table[i]; sli; sli = sli->next)
+                {
+                    litm_s *new_li = TSNEW(litm_s);
+                    *prev_next = new_li;
+                    new_li->key = sli->key;
+                    new_li->key_hash = sli->key_hash;
+                    new_li->value = sli->value;
+                    prev_next = &new_li->next;
 				}
-				*prevNext = nullptr;
-			}
-		}
+				*prev_next = nullptr;
+            }
+        }
 
-		return *this;
-	}
+        return *this;
+    }
 
-	template<typename COMPARTIBLE_KEY> litm_s &addAndReturnItem(const COMPARTIBLE_KEY &key, bool &added)
+    template<typename COMPARTIBLE_KEY> litm_s &add_get_item(const COMPARTIBLE_KEY &key, bool &added)
 	{
-		unsigned hash = GetHash(key);
+		unsigned hash = calc_hash(key);
 		litm_s **li = nullptr;
 		if (table)
 		{
-			li = table + hash % unsigned(tableSize);
+			li = table + hash % unsigned(table_size);
 			DEBUGCODE(int collisions = 0;)
 			while (*li)
 			{
-				if ((*li)->keyHash == hash && (*li)->key == key) //такой элемент уже есть
+				if ((*li)->key_hash == hash && (*li)->key == key) // element already present
 				{
 					added = false;
 					return *(*li);
@@ -303,42 +288,42 @@ public:
 				li=&(*li)->next;
 				DEBUGCODE(collisions++;)
 			}
-			ASSERT(collisions < 7, "Too many hash collisions, please check hash function");//большое кол-во коллизий скорее всего обусловлено неправильной хэш функцией
+			ASSERT(collisions < 7, "Too many hash collisions, please check hash function"); // bad hash func :(
 		}
 
-		if (used >= tableSize/2) //занято уже 50% таблицы или более
+		if (used >= table_size/2) // 50% table fill
 		{
-			reserve( tmax(10, tableSize * 2) );
-			li = table + hash % unsigned(tableSize);//пересчитываем указатель, т.к. размер таблицы уже другой
+			reserve( tmax(10, table_size * 2) );
+			li = table + hash % unsigned(table_size); // recalc ptr due new table size
 		}
 
-		//Добавляем новый элемент
+		// add new element
 		added = true;
 		used++;
-		litm_s *newLI = TSNEW(litm_s);
-		newLI->key     = key;
-		newLI->keyHash = hash;
-		newLI->next = *li;
-		*li = newLI;
-		return *newLI;
+		litm_s *new_li = TSNEW(litm_s);
+		new_li->key = key;
+		new_li->key_hash = hash;
+		new_li->next = *li;
+		*li = new_li;
+		return *new_li;
 	}
 	template<typename COMPARTIBLE_KEY> VALTYPE &add(const COMPARTIBLE_KEY &key, bool &added)
 	{
-		return addAndReturnItem(key, added).value;
+		return add_get_item(key, added).value;
 	}
 	template<typename COMPARTIBLE_KEY> VALTYPE &add(const COMPARTIBLE_KEY &key)
 	{
 		bool added;
-		return addAndReturnItem(key, added).value;
+		return add_get_item(key, added).value;
 	}
 
 	template<typename COMPARTIBLE_KEY> bool remove(const COMPARTIBLE_KEY &key)
 	{
-		if (tableSize == 0) return false;
-		unsigned hash = GetHash(key);
+		if (table_size == 0) return false;
+		unsigned hash = calc_hash(key);
 
-		for (litm_s **li = &table[hash % unsigned(tableSize)]; *li; li = &(*li)->next)
-			if ((*li)->keyHash == hash && (*li)->key == key)
+		for (litm_s **li = &table[hash % unsigned(table_size)]; *li; li = &(*li)->next)
+			if ((*li)->key_hash == hash && (*li)->key == key)
 			{
 				litm_s *el = *li;
 				*li = (*li)->next;
@@ -352,11 +337,11 @@ public:
 
 	template<typename COMPARTIBLE_KEY> const litm_s *find(const COMPARTIBLE_KEY &key) const
 	{
-		if (tableSize == 0) return nullptr;
-		unsigned hash = GetHash(key);
+		if (table_size == 0) return nullptr;
+		unsigned hash = calc_hash(key);
 
-		for (const litm_s *li = table[hash % unsigned(tableSize)]; li; li = li->next)
-			if (li->keyHash == hash && li->key == key) return li;
+		for (const litm_s *li = table[hash % unsigned(table_size)]; li; li = li->next)
+			if (li->key_hash == hash && li->key == key) return li;
 
 		return nullptr;
 	}

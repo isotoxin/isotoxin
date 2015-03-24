@@ -1708,7 +1708,7 @@ void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
         if ( (rec.utag & 0xFFFFFFFF) == r )
         {
             RID rid(rec.utag >> 32); 
-            MODIFY(rid).pos(to_local(HOLD(getroot())().to_screen(p)));
+            MODIFY(rid).pos(root_to_local(p));
             return;
         }
     }
@@ -1721,7 +1721,7 @@ void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
             gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
             bc.set_face(g_app->buttons().exploreb);
             bc.set_handler(DELEGATE(this, b_explore), nullptr);
-            MODIFY(bc).setminsize(bc.getrid()).pos(to_local(HOLD(getroot())().to_screen(p))).visible(true);
+            MODIFY(bc).setminsize(bc.getrid()).pos(root_to_local(p)).visible(true);
             b = bc.getrid();
             break;
         }
@@ -1730,7 +1730,7 @@ void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
             gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
             bc.set_face(g_app->buttons().breakb);
             bc.set_handler(DELEGATE(this, b_break), nullptr);
-            MODIFY(bc).setminsize(bc.getrid()).pos(to_local(HOLD(getroot())().to_screen(p))).visible(true);
+            MODIFY(bc).setminsize(bc.getrid()).pos(root_to_local(p)).visible(true);
             b = bc.getrid();
             break;
         }
@@ -1739,7 +1739,7 @@ void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
             gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
             bc.set_face(g_app->buttons().pauseb);
             bc.set_handler(DELEGATE(this, b_pause), nullptr);
-            MODIFY(bc).setminsize(bc.getrid()).pos(to_local(HOLD(getroot())().to_screen(p))).visible(true);
+            MODIFY(bc).setminsize(bc.getrid()).pos(root_to_local(p)).visible(true);
             b = bc.getrid();
             break;
         }
@@ -1748,7 +1748,7 @@ void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
             gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
             bc.set_face(g_app->buttons().unpauseb);
             bc.set_handler(DELEGATE(this, b_unpause), nullptr);
-            MODIFY(bc).setminsize(bc.getrid()).pos(to_local(HOLD(getroot())().to_screen(p))).visible(true);
+            MODIFY(bc).setminsize(bc.getrid()).pos(root_to_local(p)).visible(true);
             b = bc.getrid();
             break;
         }
@@ -2149,7 +2149,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_UPDATE_CONTACT_V> & p)
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<GM_DROPFILES> & p)
 {
-    if (historian && !historian->getkey().is_self() && p.root == getroot())
+    if (historian && !historian->getkey().is_self() && p.root == getrootrid())
     {
         historian->send_file(p.fn);
     }
@@ -2345,7 +2345,7 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_MESSAGE> & msg) // clear 
 ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> & p)
 {
     bool added;
-    auto &x = messages.addAndReturnItem(historian ? historian->getkey() : contact_key_s(), added);
+    auto &x = messages.add_get_item(historian ? historian->getkey() : contact_key_s(), added);
     x.value.text = get_text();
     x.value.cp = get_caret_char_index();
     historian = p.contact;

@@ -378,7 +378,7 @@ bool dialog_avaselector_c::flashavarect(RID, GUIPARAM)
 
 ts::uint32 dialog_avaselector_c::gm_handler(gmsg<GM_DROPFILES> & p)
 {
-    if (p.root == getroot())
+    if (p.root == getrootrid())
     {
         load_image(p.fn);
         return GMRBIT_ABORT;
@@ -492,7 +492,7 @@ void dialog_avaselector_c::load_image(const ts::wstr_c &fn)
     if (b.size())
     {
         if (ts::if_gif == bitmap.load_from_file(b))
-            if (animated = anm.load(b.data(),b.size()))
+            if (false != (animated = anm.load(b.data(),b.size())))
                 anm.getframe(bitmap);
         newimage();
     }
@@ -609,7 +609,7 @@ static void draw_chessboard(rectengine_c &e, const ts::irect & r, ts::TSCOLOR c1
             rr.rb.x = ts::tmin(rr.lt.x + sz.x, r.rb.x);
             rr.rb.y = ts::tmin(rr.lt.y + sz.y, r.rb.y);
 
-            if (!rr.zero_area())
+            if (rr)
                 e.draw(rr,c[1 & (x ^ y)]);
         }
     }
@@ -649,7 +649,7 @@ void dialog_avaselector_c::recompress()
 void dialog_avaselector_c::clamp_user_offset()
 {
     if (getengine().mtrack(getrid(), MTT_MOVECONTENT)) return;
-    if (imgrect.zero_area())
+    if (!imgrect)
     {
         if (user_offset != ts::ivec2(0))
         {
@@ -754,7 +754,7 @@ void dialog_avaselector_c::do_scale(float sf)
                     info_c = tr->color(3);
                 }
 
-                if (!imgrect.zero_area())
+                if (imgrect)
                 {
                     draw_data_s &dd = getengine().begin_draw();
                     dd.cliprect = viewrect;

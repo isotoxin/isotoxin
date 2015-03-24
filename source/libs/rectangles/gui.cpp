@@ -132,6 +132,22 @@ void gui_c::load_theme( const ts::wsptr&thn )
     }
 }
 
+const ts::font_desc_c & gui_c::get_font(const ts::asptr &fontname)
+{
+    bool add = false;
+    auto &val = m_fonts.add_get_item(fontname, add);
+    if (add) val.value.assign(fontname);
+    else val.value.update_font();
+    return val.value;
+}
+
+#ifndef _FINAL
+const theme_c &gui_c::xtheme()
+{
+    return m_theme;
+}
+#endif
+
 int gui_c::get_temp_buf(double ttl, ts::aint sz)
 {
     int tag = get_free_tag();
@@ -183,7 +199,8 @@ void gui_c::heartbeat()
         ++m_checkindex;
     }
     if (nullptr == GetFocus())
-        HOLD( roots().last(RID()) ).engine().getroot()->set_system_focus();
+        if (rectengine_root_c *root = root_by_rid( roots().last(RID()) ))
+            root->set_system_focus();
 
     gmsg<GM_HEARTBEAT>().send();
 
@@ -295,7 +312,7 @@ DWORD gui_c::handler_SEV_KEYBOARD(const system_event_param_s & p)
 {
     ts::tmp_array_inplace_t<drawchecker, 4> dchs;
     for (RID r : roots())
-        dchs.add() = HOLD(r).engine().getroot();
+        dchs.add() = HOLD(r)().getroot();
 
     if (RID f = gui->get_active_focus())
         if (allow_input(f))
@@ -340,7 +357,7 @@ DWORD gui_c::handler_SEV_WCHAR(const system_event_param_s & p)
         {
             ts::tmp_array_inplace_t<drawchecker, 4> dchs;
             for (RID r : roots())
-                dchs.add() = HOLD(r).engine().getroot();
+                dchs.add() = HOLD(r)().getroot();
 
             evt_data_s d;
             d.kbd.scan = 0;
@@ -355,7 +372,7 @@ DWORD gui_c::handler_SEV_MOUSE(const system_event_param_s & p)
 {
     ts::tmp_array_inplace_t<drawchecker, 4> dchs;
     for (RID r : roots())
-        dchs.add() = HOLD(r).engine().getroot();
+        dchs.add() = HOLD(r)().getroot();
 
     if (dndproc)
     {
@@ -371,7 +388,7 @@ DWORD gui_c::handler_SEV_MOUSE(const system_event_param_s & p)
             {
                 ts::tmp_array_inplace_t<drawchecker, 4> dchs;
                 for (RID r : roots())
-                    dchs.add() = HOLD(r).engine().getroot();
+                    dchs.add() = HOLD(r)().getroot();
 
 
                 evt_data_s d;
@@ -400,7 +417,7 @@ DWORD gui_c::handler_SEV_LOOP( const system_event_param_s & p )
 {
     ts::tmp_array_inplace_t<drawchecker, 4> dchs;
     for (RID r : roots())
-        dchs.add() = HOLD(r).engine().getroot();
+        dchs.add() = HOLD(r)().getroot();
 
     int sleep = 1;
 
@@ -482,10 +499,10 @@ void gui_c::exclusive_input(RID r, bool set)
     } else
     {
         m_exclusive_input.find_remove_slow(r);
-        if (RID rooti = m_roots.last(RID()))
+        if (rectengine_root_c *root = root_by_rid(m_roots.last(RID())))
         {
-            ASSERT(allow_input(rooti));
-            HOLD(rooti).engine().getroot()->update_foreground();
+            ASSERT(allow_input(root->getrid()));
+            root->update_foreground();
         }
     }
 }
@@ -506,9 +523,11 @@ void gui_c::nomorerect(RID rid, bool isroot)
             if (RID rooti = m_roots.last(RID()))
             {
                 ASSERT(allow_input(rooti));
-                rectengine_root_c *root = HOLD(rooti).engine().getroot();
-                gui->set_focus( root->getrid() );
-                root->update_foreground();
+                if (rectengine_root_c *root = HOLD(rooti)().getroot())
+                {
+                    gui->set_focus(rooti);
+                    root->update_foreground();
+                }
             }
     }
 
@@ -546,9 +565,9 @@ public:
         if (!pc && !c) return false;
 
         ASSERT(owner);
-        HOLD root(owner->getroot());
+        guirect_c &root = SAFE_REF(owner->getroot()).getrect();
 
-        const theme_rect_s *themerect = root().themerect();
+        const theme_rect_s *themerect = root.themerect();
         if (themerect)
         {
             int shiftleft = owner->getprops().size().x;
@@ -558,7 +577,7 @@ public:
             case 0:
                 if (pc && owner->getrid() == rid) // query for owner
                 {
-                    const rectprops_c &rootprops = root().getprops();
+                    const rectprops_c &rootprops = root.getprops();
                     ts::irect ca = themerect->captionrect(rootprops.currentszrect(), rootprops.is_maximized());
                     ts::ivec2 capshift = (rootprops.is_maximized() || themerect->fastborder()) ? themerect->capbuttonsshift_max : themerect->capbuttonsshift;
                     MODIFY(*owner).pos(ca.rb.x - shiftleft + capshift.x, ca.lt.y + capshift.y);
@@ -574,13 +593,13 @@ public:
                     case ABT_CLOSE:
                         break;
                     case ABT_MAXIMIZE:
-                        _visible = !root().getprops().is_maximized();
+                        _visible = !root.getprops().is_maximized();
                         if (!_visible) shiftleft = 0;
                         break;
                     case ABT_MINIMIZE:
                         break;
                     case ABT_NORMALIZE:
-                        _visible = root().getprops().is_maximized();
+                        _visible = root.getprops().is_maximized();
                         if (!_visible) shiftleft = 0;
                         break;
                     default:
@@ -681,7 +700,7 @@ void gui_c::set_focus(RID rid, bool force_active_focus)
         if (force_active_focus) m_hoverdata.active_focus = rid;
         if (rid)
         {
-            rectengine_root_c * root = HOLD(rid).engine().getroot();
+            rectengine_root_c * root = HOLD(rid)().getroot();
             if (root) root->set_system_focus();
         }
         return;
@@ -706,7 +725,7 @@ void gui_c::set_focus(RID rid, bool force_active_focus)
 
     if (m_hoverdata.focus)
     {
-        rectengine_root_c * root = HOLD(m_hoverdata.focus).engine().getroot();
+        rectengine_root_c * root = HOLD(m_hoverdata.focus)().getroot();
         root->set_system_focus();
     }
 

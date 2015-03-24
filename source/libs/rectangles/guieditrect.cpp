@@ -18,7 +18,8 @@ bool gui_textedit_c::focus() const
 
 void gui_textedit_c::redraw(bool redraw_texture)
 {
-    if (redraw_texture) flags.set(F_TEXTUREDIRTY);
+    if (redraw_texture)
+        flags.set(F_TEXTUREDIRTY);
     getengine().redraw();
 }
 
@@ -26,7 +27,7 @@ bool gui_textedit_c::invert_caret(RID, GUIPARAM)
 {
     gui->delete_event(DELEGATE(this, invert_caret));
     flags.invert(F_CARET_SHOW);
-    redraw(false);
+    if (caretrect) getengine().redraw(&caretrect);
     flags.clear(F_HEARTBEAT);
     if (gui->get_focus() != getrid() && focus())
         gui->set_focus(getrid()); // get focus to papa
@@ -624,8 +625,6 @@ void gui_textedit_c::remove_lines(int r)
 			lines.remove_slow(0, i+1);
 			for (auto &l : lines) l -= m;
 
-			//scrollBar->setScrollRange(0, multiline() ? (float)lines.size()*font->height + ts::ui_scale(marginTop) + ts::ui_scale(marginBottom) : size.y);
-			//scrollBar->correctScrollPos();
 			caret_offset = caret_line = 0;
 			return;
 		}
@@ -649,15 +648,15 @@ void gui_textedit_c::prepare_texture()
     int numcolors = lines.get(visLines.r1).r1 - firstvischar;
     ts::tmp_tbuf_t< ts::pair_s<ts::TSCOLOR, ts::TSCOLOR> > colors( numcolors );
 
-	//Раскрашиваем буковки
+	// colorize
 	for (int i=0; i<numcolors; i++)
 	{
         auto &c = colors.add();
-		c.first=color;//сначала основной цвет текста
+		c.first=color; // base text color
 		c.second=0;
 	}
 
-	if (start_sel!=-1 && focus())//выделение всегда имеет цветовой приоритет, поэтому делаем это в конце
+	if (start_sel!=-1 && focus()) // selection has always highest color priority
 	{
 		int cp=get_caret_char_index();
 		ts::ivec2 selRange = (ts::ivec2(ts::tmin(start_sel,cp), ts::tmax(start_sel,cp)-1) - lines.get(visLines.r0).r0) & ts::ivec2(0, colors.count()-1);
@@ -676,25 +675,25 @@ void gui_textedit_c::prepare_texture()
 	{
         texture.fill(ts::ivec2(0), ts::ivec2(w, asize.y), 0);
 
-		ts::TSCOLOR currentColor = 0;
+		ts::TSCOLOR current_color = 0;
 		if (text.size())
-			for (int i=lines.get(visLines.r0).r0; i>=0; i--)//цвет может быть изменён в вышестоящей строке, которую сейчас не видно, поэтому ищем спец. элемент изменения тек. цвета или начало строки
+			for (int i=lines.get(visLines.r0).r0; i>=0; --i) // color can be defined at upper line that is currently invisible, so search special change color symbol or line start
 			{
 				text_element_c &el = text.get(i);
 				if (el == L'\n')
-					break;//переход к новой строке равнозначен сбросу цвета
+					break; // new line - reset current color
 				else
-					if (!el.is_char() && el.p->str.is_empty() && el.p->user_data_size == 0)//это спец. элемент изменения текущего цвета
+					if (!el.is_char() && el.p->str.is_empty() && el.p->user_data_size == 0) // special element to change current color
 					{
-						currentColor = el.p->color;
+						current_color = el.p->color;
 						break;
 					}
 			}
 
-		//Проставляем положение глифов и рисуем выделение
-		for (int l = visLines.r0; l <= visLines.r1; l++)
+		// glyphs and selection
+		for (int l = visLines.r0; l <= visLines.r1; ++l)
 		{
-			if (l > 0 && text.get(lines.get(l).r0-1) == L'\n') currentColor = 0;//при переходе к новой строке, установленный цвет всегда сбрасывается
+			if (l > 0 && text.get(lines.get(l).r0-1) == L'\n') current_color = 0; // new line always reset current color
 			ts::ivec2 pen(ts::ui_scale(margin_left) - scroll_left, (*font)->ascender + l*(*font)->height + ts::ui_scale(margin_top) - scroll_top());
 
 			for (int i = lines.get(l).r0; i < lines.get(l).r1; i++)
@@ -702,20 +701,20 @@ void gui_textedit_c::prepare_texture()
 				text_element_c &el = text.get(i);
 				const ts::wchar *str;
 				int strLen, advoffset = 0;
-				ts::TSCOLOR color = (currentColor == 0 ? colors.get(i-firstvischar).first : currentColor);
+				ts::TSCOLOR color = (current_color == 0 ? colors.get(i-firstvischar).first : current_color);
 				if (!password_char)
 					if (el.is_char())
 						str = (ts::wchar*)&el.p + 1, strLen = 1;
 					else
 					{
-						if (el.p->str.is_empty() && el.p->user_data_size == 0)//это спец. элемент изменения текущего цвета
+						if (el.p->str.is_empty() && el.p->user_data_size == 0) // special element to change current color
 						{
-							currentColor = el.p->color;
+							current_color = el.p->color;
 							continue;
 						}
 						str = el.p->str;
 						strLen = el.p->str.get_length();
-						if (el.p->color/*если = 0, то цвет ActiveElement'а не задан*/) color = el.p->color;
+						if (el.p->color/*if == 0, then color of ActiveElement not set*/) color = el.p->color;
 					}
 				else
 					str = (ts::wchar*)&password_char, strLen = 1;
@@ -756,35 +755,11 @@ void gui_textedit_c::prepare_texture()
 			}
 		}
 
-		//А теперь рисуем глифы в текстуру
+		// now render glyphs to texture
 		if (outlinedglyphs.count() != 0)
 			ts::text_rect_c::draw_glyphs(texture.body(), w, asize.y, texture.info().pitch, outlinedglyphs.array(), ts::ivec2(0), false);
 		ts::text_rect_c::draw_glyphs(texture.body(), w, asize.y, texture.info().pitch, glyphs.array(), ts::ivec2(0), false);
 	}
-
-#if 0
-
-	//Линия подчеркивания при наведении на элемент
-	if (ui.underMouseControl == this && underMouseActiveElement)
-	{
-		srect r;
-		r.min = pp + underMouseActiveElementPos + (svec2)ivec2(-scrollLeft_, /*font->ascender - font->ulinePos + ts::ui_scale(2)*/font->height - scrollTop_);
-		r.max = r.min + svec2((short)underMouseActiveElement->advance, (short)max(font->ulineThickness, 1.f));
-		r &= srect(p, p+size);
-		if (r != srect(0))
-		{
-			SetDefaultStates();
-			SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG2);
-			SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG2);
-			ApplyStates();
-			imode.color(underMouseActiveElement->color);
-			drawTexRect(r);
-		}
-	}
-
-	scrollBar->show(scrollBarWidth > 0);
-#endif
-
 }
 
 void gui_textedit_c::selectword()
@@ -1004,7 +979,7 @@ bool gui_textedit_c::summoncontextmenu()
     {
     case SQ_DRAW:
         {
-            HOLD rh(getroot());
+            rectengine_root_c &root = SAFE_REF( getroot() );
 
             ts::irect drawarea = get_client_area();
             if (is_vsb())
@@ -1015,7 +990,7 @@ bool gui_textedit_c::summoncontextmenu()
                 ds.draw_thr.sbrect() = drawarea;
                 const theme_rect_s *thr = themerect();
                 int osbw = sbhelper.sbrect.width();
-                if (thr) sbhelper.draw(thr, rh.engine(), ds);
+                if (thr) sbhelper.draw(thr, root, ds);
                 if (osbw != sbhelper.sbrect.width())
                     flags.set(F_LINESDIRTY);
                 drawarea.rb.x -= sbhelper.sbrect.width();
@@ -1027,25 +1002,23 @@ bool gui_textedit_c::summoncontextmenu()
             bool gray = (is_readonly() && !is_disabled_caret()) || is_disabled();
             if (gray)
             {
-                draw_data_s &dd = rh.engine().begin_draw();
+                draw_data_s &dd = root.begin_draw();
                 dd.alpha = 128;
             }
 
-            rh.engine().draw( drawarea.lt, texture, ts::irect( ts::ivec2(0), drawarea.size() - ts::ivec2(margin_right,0) ), true );
+            root.draw( drawarea.lt, texture, ts::irect( ts::ivec2(0), drawarea.size() - ts::ivec2(margin_right,0) ), true );
             
             if (gray)
-                rh.engine().end_draw();
+                root.end_draw();
 
             if (!flags.is(F_DISABLE_CARET))
             {
-                ts::irect r;
-                r.lt = drawarea.lt + get_caret_pos();
-                r.rb = r.lt + ts::ivec2(ts::ui_scale(caret_width), (*font)->height);
-                r.intersect(drawarea);
-                if (!r.zero_area())
+                caretrect.lt = drawarea.lt + get_caret_pos();
+                caretrect.rb = caretrect.lt + ts::ivec2(ts::ui_scale(caret_width), (*font)->height);
+                if (caretrect.intersect(drawarea))
                 {
                     if(show_caret())
-                        rh.engine().draw(r, caret_color);
+                        root.draw(caretrect, caret_color, true);
 
                     if (focus() && !flags.is(F_HEARTBEAT))
                         run_heartbeat();
@@ -1096,7 +1069,7 @@ bool gui_textedit_c::summoncontextmenu()
         }
         if (selection_disallowed())
             start_sel = -1;
-        redraw(true);
+        redraw();
         return true;
     }
 
@@ -1116,7 +1089,7 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_HEARTBEAT> &)
     if (selection_disallowed())
     {
         start_sel = -1;
-        redraw(true);
+        redraw();
     }
     return 0;
 }

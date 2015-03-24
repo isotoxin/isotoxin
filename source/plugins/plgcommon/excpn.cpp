@@ -211,7 +211,7 @@ void exception_operator_c::OnOutput(LPCSTR szText) const
 
 exception_operator_c::exception_operator_c()
 {
-    dump_type = (MINIDUMP_TYPE)(MiniDumpWithFullMemory | MiniDumpWithProcessThreadData | MiniDumpWithDataSegs | MiniDumpWithHandleData | MiniDumpWithFullMemoryInfo | MiniDumpWithThreadInfo);
+    dump_type = (MINIDUMP_TYPE)(MiniDumpWithFullMemory /*| MiniDumpWithProcessThreadData*/ | MiniDumpWithDataSegs | MiniDumpWithHandleData /*| MiniDumpWithFullMemoryInfo | MiniDumpWithThreadInfo*/ );
     LoadModules();
 }
 

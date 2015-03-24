@@ -186,7 +186,7 @@ int proc_loc(const wstrings_c & pars)
                     //Print( FOREGROUND_GREEN, "TTT(%i): %s\n", r.tag, tmp_str_c(r.txt).cstr());
                     if (r.tag >= 0)
                     {
-                        int i = used_tags.get_index(r.tag);
+                        int i = used_tags.set(r.tag);
                         if (i < (used_tags.count()-1))
                         {
                             for(const rpl_s &rr : need2rpl)

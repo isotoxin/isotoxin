@@ -805,25 +805,6 @@ public:
         return false;
     }
 
-    aint  get_index(const T &t)
-    {
-        for (const T&x : *this)
-            if (x == t) return &x - tbegin<T>();
-
-        tappend<T>(t, 1);
-        return tend<T>() - tbegin<T>() - 1;
-    }
-
-    aint  get_index_replace(const T &t, const T &f)
-    {
-        for (T&x : *this)
-            if (x == t) return &x - tbegin<T>();
-                else if (x == f) { x = f; return &x - tbegin<T>(); }
-
-        tappend<T>(t, 1);
-        return tend<T>() - tbegin<T>() - 1;
-    }
-
     aint  find_index(const T &t) const
     {
         for (const T&x : *this)
@@ -997,6 +978,26 @@ public:
         ASSERT(index >= 0 && index < count());
         tbegin<T>()[index] = t;
     }
+
+    aint  set(const T &t)
+    {
+        for (const T&x : *this)
+            if (x == t) return &x - tbegin<T>();
+
+        tappend<T>(t, 1);
+        return tend<T>() - tbegin<T>() - 1;
+    }
+
+    aint  set_replace(const T &t, const T &f)
+    {
+        for (T&x : *this)
+            if (x == t) return &x - tbegin<T>();
+            else if (x == f) { x = f; return &x - tbegin<T>(); }
+
+        tappend<T>(t, 1);
+        return tend<T>() - tbegin<T>() - 1;
+    }
+
     void add(const T &t)
     {
         tappend<T>(t, 1);

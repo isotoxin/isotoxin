@@ -66,8 +66,53 @@ void crash()
     //*((int *)1) = 1;
 }
 
+isotoxin_ipc_s *ipcx;
+int nnnn = 0;
+int npersec = 0;
+bool cmdhandlerx(ipcr r)
+{
+    switch (r.header().cmd)
+    {
+        case XX_PONG:
+        {
+            ++nnnn;
+            if (nnnn >= 5000) return false;
+
+            ts::uint8 data[16384];
+            memset(data, 1, sizeof(data));
+            ipcx->send(ipcw(XX_PING) << data_block_s(data,sizeof(data)));
+
+        }
+    }
+    return true;
+}
+
+bool tickx()
+{
+    return true;
+}
+
+void test_ipc()
+{
+    isotoxin_ipc_s ipcs(CONSTASTR("testtest"), cmdhandlerx);
+    if (ipcs.ipc_ok)
+    {
+        int stime = timeGetTime();
+        ts::uint8 data[16384];
+        memset(data,1,sizeof(data));
+        ipcx = &ipcs;
+        ipcs.send(ipcw(XX_PING) << data_block_s(data,sizeof(data)));
+        ipcs.wait_loop(tickx);
+
+        npersec = nnnn * 1000 / (timeGetTime() - stime);
+        __debugbreak();
+    }
+}
+
 void dotests()
 {
+    //test_ipc();
+
     /*
     ts::bitmap_c basei; basei.load_from_file(L"1\\ava.png");
     ts::bitmap_c img; img.load_from_file(L"1\\creambee-qrcode.png");

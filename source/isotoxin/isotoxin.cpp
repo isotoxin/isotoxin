@@ -17,7 +17,7 @@
 #pragma comment(lib, "zlib.lib")
 #pragma comment(lib, "minizip.lib")
 #pragma comment(lib, "sqlite3.lib")
-#pragma comment(lib, "libcurl.lib")
+#pragma comment(lib, "curl.lib")
 #pragma comment(lib, "libsodium.lib")
 
 #pragma comment(lib, "Winmm.lib")

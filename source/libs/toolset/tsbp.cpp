@@ -5,7 +5,7 @@ namespace ts {
 template <typename TCHARACTER> bp_t<TCHARACTER> &bp_t<TCHARACTER>::add_block(const string_type &name)
 {
 	bool added;
-	hashmap_t<string_type, bp_t<TCHARACTER>*>::litm_s &li = elements.addAndReturnItem(name, added);
+	hashmap_t<string_type, bp_t<TCHARACTER>*>::litm_s &li = elements.add_get_item(name, added);
 	element_s *e = TSNEW(element_s);
 	li.value = &e->bp;
 	e->name = &li.key;

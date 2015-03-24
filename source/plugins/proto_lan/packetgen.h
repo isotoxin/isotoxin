@@ -86,7 +86,7 @@ class packetgen
     }
     void pushll(u64 v, bool correct_size = true)
     {
-        u64 vv = htonll(v);
+        u64 vv = my_htonll(v);
         push(&vv, sizeof(vv), correct_size);
     }
 

@@ -101,6 +101,8 @@ class gui_textedit_c : public gui_control_c
 	float wheel_scroll_step_size = 50.0f;
 	int caret_width = 2, baseline_offset = 0, chars_limit = 0;
 	int margin_left = 0, margin_right = 0, margin_top = 0, margin_bottom = 0;
+    ts::irect caretrect = 0;
+
 
     bool focus() const;
     bool selection_disallowed() const;

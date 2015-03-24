@@ -25,10 +25,10 @@
  **********************************************************************/
 
 #include "toolset.h"
-#if defined _DEBUG || defined _CRASH_HANDLER
+#if !defined _FINAL || defined _CRASH_HANDLER
 #include "stkwlk.h"
 
-#ifdef _WINDOWS
+#ifdef _WIN32
 // TODO - move to /src/win
 
 #include <tchar.h>

@@ -124,7 +124,7 @@ template<typename T> struct TSNEWDEL
 
 #define NOWARNING(n,...) __pragma(warning(push)) __pragma(warning(disable:n)) __VA_ARGS__ __pragma(warning(pop))
 
-#ifdef _DEBUG
+#ifndef _FINAL
 #define DEBUGCODE(...) __VA_ARGS__
 #define FINALCODE(...) 
 #else

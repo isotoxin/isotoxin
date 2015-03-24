@@ -2,9 +2,11 @@
 #include "slot.h"
 
 
-#pragma comment(lib, "dxguid")
+//#pragma comment(lib, "dxguid")
 #pragma comment(lib, "dsound")
 #pragma comment(lib, "winmm")
+
+MY_GUID(MY_IID_IDirectSound3DListener, 0x279AFA84, 0x4981, 0x11CE, 0xA5, 0x21, 0x00, 0x20, 0xAF, 0x0B, 0xE5, 0x60);
 
 namespace s3
 {
@@ -12,9 +14,9 @@ namespace s3
 
 void DefaultErrorHandler(ErrorLevel el, const char *err)
 {
-	OutputDebugString(el == EL_ERROR ? "s3 ERROR: " : "s3 warning: ");
-	OutputDebugString(err);
-	OutputDebugString("\n");
+	OutputDebugStringA(el == EL_ERROR ? "s3 ERROR: " : "s3 warning: ");
+	OutputDebugStringA(err);
+	OutputDebugStringA("\n");
 }
 void (*ErrorHandler)(ErrorLevel, const char *) = &DefaultErrorHandler;
 
@@ -97,7 +99,7 @@ bool Player::Initialize(const SlotInitParams slotsIP[], const int sgCount_)
 	DSBUFFERDESC dsbd = {sizeof(DSBUFFERDESC), DSBCAPS_PRIMARYBUFFER|DSBCAPS_CTRL3D|DSBCAPS_CTRLVOLUME};
 	if (SUCCEEDED(pd.pDS->CreateSoundBuffer(&dsbd, &pd.dsPrimaryBuffer, nullptr)))
 	{
-		pd.dsPrimaryBuffer->QueryInterface(IID_IDirectSound3DListener8, (LPVOID*)&pd.dsListener);
+		pd.dsPrimaryBuffer->QueryInterface(MY_IID_IDirectSound3DListener, (LPVOID*)&pd.dsListener);
 
 		//Также устанавливаем формат primary buffer-а (почему-то по умолчанию там 8бит 22КГц)
 		WAVEFORMATEX wf = BuildWaveFormat(params.channels, params.sampleRate, params.bitsPerSample);

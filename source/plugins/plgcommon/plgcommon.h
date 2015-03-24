@@ -450,3 +450,26 @@ template< typename VEC, typename EL > bool removeIfPresentFast(VEC &vec, const E
     }
     return false;
 }
+
+#define _MY_WS2_32_WINSOCK_SWAP_LONGLONG(l)            \
+            ( ( ((l) >> 56) & 0x00000000000000FFLL ) |       \
+              ( ((l) >> 40) & 0x000000000000FF00LL ) |       \
+              ( ((l) >> 24) & 0x0000000000FF0000LL ) |       \
+              ( ((l) >>  8) & 0x00000000FF000000LL ) |       \
+              ( ((l) <<  8) & 0x000000FF00000000LL ) |       \
+              ( ((l) << 24) & 0x0000FF0000000000LL ) |       \
+              ( ((l) << 40) & 0x00FF000000000000LL ) |       \
+              ( ((l) << 56) & 0xFF00000000000000LL ) )
+
+
+__inline unsigned __int64 my_htonll(unsigned __int64 Value)
+{
+    const unsigned __int64 Retval = _MY_WS2_32_WINSOCK_SWAP_LONGLONG(Value);
+    return Retval;
+}
+
+__inline unsigned __int64 my_ntohll(unsigned __int64 Value)
+{
+    const unsigned __int64 Retval = _MY_WS2_32_WINSOCK_SWAP_LONGLONG(Value);
+    return Retval;
+}

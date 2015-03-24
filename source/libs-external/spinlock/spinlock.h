@@ -4,6 +4,7 @@
 
 */
 #pragma once
+#include <intrin.h>
 
 #ifndef JOINMACRO1
 #define JOINMACRO2(x,y) x##y
@@ -59,17 +60,13 @@ inline void _mm_pause() { usleep(0); }
 
 #ifdef _WIN32
 #define pthread_self() GetCurrentThreadId()
-
-#pragma intrinsic (_InterlockedExchangeAdd)
+#pragma intrinsic (_InterlockedExchangeAdd, _InterlockedCompareExchange64)
 #define InterlockedExchangeAdd _InterlockedExchangeAdd
-#pragma intrinsic (_InterlockedCompareExchange64)
 
 #ifdef _WIN64
-#	pragma intrinsic (_InterlockedExchangeAdd64)
+#	pragma intrinsic (_InterlockedExchangeAdd64, _InterlockedDecrement64, _InterlockedCompareExchange128)
 #	define InterlockedExchangeAdd64 _InterlockedExchangeAdd64
-#	pragma intrinsic (_InterlockedDecrement64)
 #	define InterlockedDecrement64 _InterlockedDecrement64
-#	pragma intrinsic (_InterlockedCompareExchange128)
 #endif
 
 #endif
@@ -179,7 +176,7 @@ inline int64 SLlInterlockedExchange64(volatile int64* lock, int64 newValue)
 
 #define DEADLOCK_COUNTER 3000000000LU // 30 seconds
 #define DEBUG_DEADLOCK
-#if defined(DEBUG_DEADLOCK) && defined(_WINDOWS)
+#if defined(DEBUG_DEADLOCK) && defined(_WIN32)
 #define DEADLOCKCHECK_INIT() spinlock::int64 deadlockcounter=0;
 #define DEADLOCKCHECK(counter) if (deadlockcounter++>DEADLOCK_COUNTER){ SLERROR("Deadlock: %llu", counter); }
 #else

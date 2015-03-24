@@ -182,11 +182,9 @@ namespace
             // Fill an IP address structure, to send an IP broadcast. The 
             // packet will be broadcasted to the specified port.
             saUdpServ.sin_family = AF_INET;
-            inet_pton(AF_INET, "127.0.0.1", &saUdpServ.sin_addr.s_addr);
+            //InetPton(AF_INET, "127.0.0.1", &saUdpServ.sin_addr.s_addr);
+            saUdpServ.sin_addr.s_addr = inet_addr("127.0.0.1");
             saUdpServ.sin_port = htons((word)debug_port);
-
-            //trace_array_size = 2048;
-            //trace_array = (debug_tracer_c **)HeapAlloc(GetProcessHeap(),0,trace_array_size * sizeof(debug_tracer_c *));
 
             InitializeCriticalSection(&csect);
         }

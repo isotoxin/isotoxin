@@ -13,7 +13,7 @@ ts::uint32 mainrect_c::gm_handler( gmsg<ISOGM_APPRISE> & )
 {
     if (getprops().is_collapsed())
         MODIFY(*this).decollapse();
-    getengine().getroot()->set_system_focus(true);
+    if (getroot()) getroot()->set_system_focus(true);
     return 0;
 }
 

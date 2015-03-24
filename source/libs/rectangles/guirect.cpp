@@ -301,7 +301,7 @@ guirect_c::~guirect_c()
     }
 
     if (g_app)
-        gui->nomorerect(getrid(), getroot() == getrid());
+        gui->nomorerect(getrid(), !m_parent);
 
     for (ts::safe_ptr<sqhandler_i> & sh : m_leeches)
         if (sqhandler_i *h = sh)
@@ -455,7 +455,7 @@ void gui_control_c::set_theme_rect( const ts::asptr &thrn, bool ajust_defdraw )
         if (ajust_defdraw)
         {
             const theme_rect_s *thrmine;
-            if (!is_root() && nullptr != (thrmine = themerect()) && !thrmine->sis[SI_BASE].zero_area() &&
+            if (!is_root() && nullptr != (thrmine = themerect()) && thrmine->sis[SI_BASE] &&
                 (
                 thrmine->is_alphablend(SI_LEFT) ||
                 thrmine->is_alphablend(SI_RIGHT) ||
@@ -1481,7 +1481,7 @@ void gui_hgroup_c::children_repos()
     };
 
     ts::irect clar = get_client_area();
-    if (clar.zero_area()) return;
+    if (!clar) return;
 
     int vecindex = __vec_index();
     double proposum = 0;
@@ -1926,7 +1926,6 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
         if (allow_move_splitter())
             if (const theme_rect_s *thr = themerect())
             {
-                HOLD rh(getroot());
                 evt_data_s d;
                 d.draw_thr.rect = get_client_area();
                 ts::aint chcnt = getengine().children_count();
@@ -1938,7 +1937,7 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
                     if (szsz.sz < 0) continue;
                     d.draw_thr.rect().lt[vecindex] += szsz.sz;
                     int next = d.draw_thr.rect().rb[vecindex] = d.draw_thr.rect().lt[vecindex] + szsz.szsplit;
-                    if (szsz.szsplit) rh.engine().draw(*thr, DTHRO_CENTER_ONLY, &d);
+                    if (szsz.szsplit && getroot()) getroot()->draw(*thr, DTHRO_CENTER_ONLY, &d);
                     d.draw_thr.rect().lt[vecindex] = next;
                 }
             }
@@ -2032,7 +2031,7 @@ void gui_vscrollgroup_c::children_repos()
     children_repos_info(info);
 
     if (info.count <= 0) return;
-    if (info.area.zero_area()) return;
+    if (!info.area) return;
 
     int height_need = info.area.height() / info.count;
 
@@ -2095,7 +2094,7 @@ void gui_vscrollgroup_c::children_repos()
 
         ts::irect crect( ts::ivec2(info.area.lt.x, info.area.lt.y + y), ts::ivec2(info.area.rb.x, info.area.lt.y + y + h) );
         crect.intersect(info.area);
-        if (crect.zero_area())
+        if (!crect)
         {
             if (y < 0)
             {
@@ -2153,14 +2152,14 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
     {
     case SQ_DRAW:
         {
-            HOLD rh(getroot());
+            rectengine_root_c &root = SAFE_REF(getroot());
 
             const theme_rect_s *thr = themerect();
 
             cri_s info;
             children_repos_info(info);
 
-            ts::irect clar = rh().to_local(to_screen( info.area ));
+            ts::irect clar = root.getrect().to_local(to_screen( info.area ));
             draw_data_s &dd = getengine().begin_draw();
             dd.cliprect.intersect(clar);
             for(int i=0;i<info.count;++i)
@@ -2177,7 +2176,7 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
             {
                 evt_data_s ds;
                 ds.draw_thr.sbrect = info.area;
-                sbhelper.draw(thr, rh.engine(), ds);
+                sbhelper.draw(thr, root, ds);
             }
         }
         break;
@@ -2248,30 +2247,20 @@ bool gui_popup_menu_c::update_size(RID, GUIPARAM)
     int *rheights = (int *)_alloca(asz);
     memset(rheights, -1, asz);
     ts::ivec2 csz(0);
-    auto rheight = [&](int i)->int {
-        int rh = rheights[i];
-        if (rh >= 0) return rh;
-        rectengine_c * e = getengine().get_child(i);
-        if (e == nullptr)
+
+    for (int t = 0; t < chcnt; ++t)
+    {
+        rectengine_c * e = getengine().get_child(t);
+        if (!e)
         {
-            rheights[i] = 0;
-            return 0;
+            rheights[t] = 0;
+            continue;
         }
         const guirect_c &r = e->getrect();
         ts::ivec2 sz = r.get_min_size();
         int h = r.getprops().is_visible() ? sz.y : 0;
-        rheights[i] = h;
+        rheights[t] = h;
         if (sz.x > csz.x) csz.x = sz.x;
-        return h;
-    };
-
-    for (ts::aint t = 0; t < chcnt; ++t)
-    {
-        int h = rheight(t);
-        if (h == 0)
-        {
-            continue;
-        }
         csz.y += h;
     }
 
@@ -2292,13 +2281,11 @@ bool gui_popup_menu_c::update_size(RID, GUIPARAM)
     ts::irect clar = get_client_area();
 
     int y = clar.lt.y;
-    for (ts::aint t = 0; t < chcnt; ++t)
+    for (int t = 0; t < chcnt; ++t)
     {
-        int h = rheight(t);
+        int h = rheights[t];
         if (h == 0)
-        {
             continue;
-        }
 
         MODIFY( getengine().get_child(t)->getrect() ).pos( clar.lt.x, y ).size( clar.width(), h );
 
@@ -2401,7 +2388,7 @@ MAKE_ROOT<gui_popup_menu_c>::~MAKE_ROOT()
 {
     MODIFY(*me).pos(screenpos.xy()).visible(true);
     gui->set_focus(id);
-    me->getengine().getroot()->set_system_focus(true);
+    me->getroot()->set_system_focus(true);
 }
 
 gui_popup_menu_c & gui_popup_menu_c::create(drawchecker &dch, const ts::ivec3& screenpos_, const menu_c &mnu, bool sys)
@@ -2808,12 +2795,6 @@ ts::uint32 gui_vtabsel_c::gm_handler( gmsg<GM_HEARTBEAT> & )
             for(rectengine_c *c : getengine())
                 if (c && c->getrid() != rid) MODIFY(c->getrid()).active(false);
             return false;
-        case SQ_MOUSE_IN:
-            MODIFY(rid).highlight(true);
-            return false;
-        case SQ_MOUSE_OUT:
-            MODIFY(rid).highlight(false);
-            return false;
         default:
             return false;
         }
@@ -2822,20 +2803,6 @@ ts::uint32 gui_vtabsel_c::gm_handler( gmsg<GM_HEARTBEAT> & )
     switch (qp)
     {
     case SQ_OPEN_GROUP:
-        //{
-        //    AUTOCLEAR( flags, F_NO_REPOS );
-
-        //    RID initiator = data.rect.id;
-        //    menu_c itmmenu = initiator.call_get_menu();
-        //    for(rectengine_c *c : getengine())
-        //        if (c && c->getrid().call_get_menu_level() >= itmmenu.lv()) TSDEL(c);
-
-        //    ts::pair_s<RID, int> cp( initiator, itmmenu.lv() );
-        //    itmmenu.iterate_items(*this, cp);
-        //}
-        //getengine().cleanup_children_now();
-        //children_repos();
-
         {
             // find 1st rect after initiator
             currentgroup = data.rect.id;
@@ -2938,12 +2905,11 @@ gui_vtabsel_item_c::~gui_vtabsel_item_c()
         }
         break;
     case SQ_MOUSE_IN:
-        //if (submnu)
-        //    DELAY_CALL_R(0.5, DELEGATE(this, open_submenu), nullptr);
-        break;
+        MODIFY(*this).highlight(true);
+        return false;
     case SQ_MOUSE_OUT:
-        //gui->delete_event(DELEGATE(this, open_submenu));
-        break;
+        MODIFY(*this).highlight(false);
+        return false;
     case SQ_DRAW:
 
         if (ASSERT(m_engine))

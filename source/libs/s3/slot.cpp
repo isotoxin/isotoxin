@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "slot.h"
 
+MY_GUID(MY_IID_IDirectSoundBuffer8, 0x6825a449, 0x7524, 0x4d82, 0x92, 0x0f, 0x50, 0xe3, 0x6a, 0xb3, 0xab, 0x1e);
+MY_GUID(MY_IID_IDirectSound3DBuffer, 0x279AFA86, 0x4981, 0x11CE, 0xA5, 0x21, 0x00, 0x20, 0xAF, 0x0B, 0xE5, 0x60);
 
 namespace s3
 {
@@ -33,8 +35,8 @@ bool Slot::createBuffer(Player *player, const Format &f, bool is3d)
 			return false;
 		}
 	}
-	buf->QueryInterface(IID_IDirectSoundBuffer8, (LPVOID*)&buffer);//на всякий случай получаем новый интерфейс буфера
-	if (is3d) buf->QueryInterface(IID_IDirectSound3DBuffer8, (LPVOID*)&buffer3D);
+	buf->QueryInterface(MY_IID_IDirectSoundBuffer8, (LPVOID*)&buffer);//на всякий случай получаем новый интерфейс буфера
+	if (is3d) buf->QueryInterface(MY_IID_IDirectSound3DBuffer, (LPVOID*)&buffer3D);
 	buf->Release();
 
 	format = f;

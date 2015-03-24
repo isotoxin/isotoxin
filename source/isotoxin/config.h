@@ -97,7 +97,7 @@ public:
         ASSERT(!onclose_handlers_dead, "onclose item was died before close event!");
     }
 
-    void onclosereg( ONCLOSE_FUNC f ) { onclose_handlers.get_index_replace(f,ONCLOSE_FUNC()); }
+    void onclosereg( ONCLOSE_FUNC f ) { onclose_handlers.set_replace(f,ONCLOSE_FUNC()); }
     void oncloseunreg( ONCLOSE_FUNC f ) { onclose_handlers.find_remove_fast(f); }
     void onclosedie( ONCLOSE_FUNC f ) { if (onclose_handlers.find_remove_fast(f)) onclose_handlers_dead = true; }
 
