@@ -35,19 +35,6 @@ enum naction_e
     NIA_RCLICK,
 };
 
-enum ui_event_e
-{
-    UE_MAXIMIZED,
-    UE_NORMALIZED,
-    UE_MINIMIZED,
-};
-
-template<> struct gmsg<GM_UI_EVENT> : public gmsgbase
-{
-    gmsg(ui_event_e evt) :gmsgbase(GM_UI_EVENT), evt(evt) {}
-    ui_event_e evt;
-};
-
 class delay_event_c : public ts::timer_subscriber_c
 {
 protected:
@@ -69,11 +56,11 @@ public:
     void set_handler(GUIPARAMHANDLER _handler, GUIPARAM _param) { handler = _handler; param = _param; }
 };
 
-#define DECLARE_DELAY_EVENT_BEGIN(t_sec) typedef struct UNIQIDLINE(dc) : public delay_event_c { static double gett() {return t_sec;} UNIQIDLINE(dc)(GUIPARAM param = nullptr):delay_event_c(param) {} virtual void  die() {gui->delete_event<UNIQIDLINE(dc)>(this);} virtual void doit(void) {
-#define DECLARE_DELAY_EVENT_END(param) } } UNIQIDLINE(dc); gui->add_event<UNIQIDLINE(dc)>(UNIQIDLINE(dc)::gett(), (GUIPARAM)(param));
+#define DEFERRED_EXECUTION_BLOCK_BEGIN(t_sec) typedef struct UNIQIDLINE(dc) : public delay_event_c { static double gett() {return t_sec;} UNIQIDLINE(dc)(GUIPARAM param = nullptr):delay_event_c(param) {} virtual void  die() {gui->delete_event<UNIQIDLINE(dc)>(this);} virtual void doit(void) {
+#define DEFERRED_EXECUTION_BLOCK_END(param) } } UNIQIDLINE(dc); gui->add_event<UNIQIDLINE(dc)>(UNIQIDLINE(dc)::gett(), (GUIPARAM)(param));
 
-#define DELAY_CALL( t_sec, h, p ) do { delay_event_c &dc = gui->add_event<delay_event_c>(t_sec); dc.set_handler( (h), (p) ); } while(false)
-#define DELAY_CALL_R( t_sec, h, p ) do { auto hh = (h); gui->delete_event(hh); delay_event_c &dc = gui->add_event<delay_event_c>(t_sec); dc.set_handler( hh, (p) ); } while (false)
+#define DEFERRED_CALL( t_sec, h, p ) do { delay_event_c &dc = gui->add_event<delay_event_c>(t_sec); dc.set_handler( (h), (p) ); } while(false)
+#define DEFERRED_UNIQUE_CALL( t_sec, h, p ) do { auto hh = (h); gui->delete_event(hh); delay_event_c &dc = gui->add_event<delay_event_c>(t_sec); dc.set_handler( hh, (p) ); } while (false)
 
 
 struct hover_data_s
@@ -90,7 +77,7 @@ struct hover_data_s
 
 struct bcreate_s
 {
-    ts::asptr face;
+    GET_BUTTON_FACE face;
     GUIPARAMHANDLER handler;
     int tag;
     GET_TOOLTIP tooltip;
@@ -192,6 +179,7 @@ class gui_c
     SIMPLE_SYSTEM_EVENT_RECEIVER( gui_c, SEV_MOUSE );
 
     GM_RECEIVER(gui_c, GM_ROOT_FOCUS);
+    GM_RECEIVER(gui_c, GM_UI_EVENT);
 
     ts::safe_ptr<dragndrop_processor_c> dndproc;
 
@@ -299,7 +287,7 @@ public:
     gui_c();
 	~gui_c();
 
-    void load_theme( const ts::wsptr&thn );
+    bool load_theme( const ts::wsptr&thn );
     
     const ts::font_desc_c & get_font( const ts::asptr &fontname );
     const ts::str_c &default_font_name() const { return m_deffont_name; }

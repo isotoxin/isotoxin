@@ -39,7 +39,7 @@ void gui_textedit_c::run_heartbeat()
 {
     if ( focus() && !flags.is(F_HEARTBEAT) )
     {
-        DELAY_CALL(0.3, DELEGATE(this, invert_caret), nullptr);
+        DEFERRED_UNIQUE_CALL(0.3, DELEGATE(this, invert_caret), nullptr);
         flags.set(F_HEARTBEAT);
     } else {
         flags.clear(F_HEARTBEAT);

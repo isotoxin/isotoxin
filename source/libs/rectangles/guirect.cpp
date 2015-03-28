@@ -124,7 +124,7 @@ void RID::call_lbclick(ts::ivec2 relpos) const
     cs->first = relpos;
     cs->second = *this;
 
-    DECLARE_DELAY_EVENT_BEGIN(0)
+    DEFERRED_EXECUTION_BLOCK_BEGIN(0)
 
         if (clickstruct *s = (clickstruct *)gui->lock_temp_buf((int)param))
         {
@@ -145,7 +145,7 @@ void RID::call_lbclick(ts::ivec2 relpos) const
             }
         }
 
-    DECLARE_DELAY_EVENT_END( (GUIPARAM)tag )
+    DEFERRED_EXECUTION_BLOCK_END( (GUIPARAM)tag )
 }
 
 void RID::call_kill_child( const ts::str_c&param )
@@ -167,13 +167,13 @@ void RID::call_item_activated( const ts::wstr_c&text, const ts::str_c&param )
 
 void RID::call_children_repos()
 {
-    DECLARE_DELAY_EVENT_BEGIN(0)
+    DEFERRED_EXECUTION_BLOCK_BEGIN(0)
         
         RID grid = RID::from_ptr(param);
         HOLD ctl(grid);
         ctl().sq_evt(SQ_CHILDREN_REPOS, grid, ts::make_dummy<evt_data_s>(true));
 
-    DECLARE_DELAY_EVENT_END( this->to_ptr() )
+    DEFERRED_EXECUTION_BLOCK_END( this->to_ptr() )
 }
 
 HOLD::HOLD(RID id)
@@ -603,6 +603,17 @@ int gui_button_c::get_ctl_width()
     return get_min_size().x;
 }
 
+ts::uint32 gui_button_c::gm_handler(gmsg<GM_UI_EVENT> & e)
+{
+    if (UE_THEMECHANGED == e.evt)
+    {
+        if (face_getter)
+            set_face(face_getter());
+    }
+
+    return 0;
+}
+
 void gui_button_c::set_face( button_desc_s *bdesc )
 {
     desc = bdesc;
@@ -610,11 +621,6 @@ void gui_button_c::set_face( button_desc_s *bdesc )
         set_text(desc->text);
 
     flags.init(F_DISABLED_USE_ALPHA, desc->rects[button_desc_s::NORMAL] == desc->rects[button_desc_s::DISABLED]);
-}
-
-void gui_button_c::set_face( const ts::asptr&fancename )
-{
-    set_face( gui->theme().get_button(fancename) );
 }
 
 /*virtual*/ ts::ivec2 gui_button_c::get_min_size() const
@@ -1288,7 +1294,7 @@ bool gui_tooltip_c::check_text(RID r, GUIPARAM param)
         MODIFY( *this ).pos(cp).size(sz).visible(true);
     }
 
-    DELAY_CALL_R( 0.1, DELEGATE(this, check_text), nullptr );
+    DEFERRED_UNIQUE_CALL( 0.1, DELEGATE(this, check_text), nullptr );
     return true;
 }
 
@@ -1303,7 +1309,7 @@ ts::ivec2 gui_tooltip_c::get_min_size() const
     set_theme_rect(CONSTASTR("tooltip"), false);
     __super::created();
     textrect.set_margins(5,5,0);
-    DELAY_CALL_R( 0.1, DELEGATE(this, check_text), nullptr );
+    DEFERRED_UNIQUE_CALL( 0.1, DELEGATE(this, check_text), nullptr );
     HOLD(ownrect)().leech(this);
 }
 /*virtual*/ bool gui_tooltip_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -1317,7 +1323,7 @@ ts::ivec2 gui_tooltip_c::get_min_size() const
             check_text(RID(),nullptr);
             return false;
         case SQ_MOUSE_OUT:
-            DELAY_CALL_R( 0.5, DELEGATE(this, check_text), nullptr );
+            DEFERRED_UNIQUE_CALL( 0.5, DELEGATE(this, check_text), nullptr );
             return false;
         }
 
@@ -1354,7 +1360,7 @@ ts::uint32 gui_tooltip_c::gm_handler(gmsg<GM_TOOLTIP_PRESENT> & p)
     if (ownrect && HOLD(ownrect)) HOLD(ownrect)().unleech( this );
     ownrect = p.rid;
     HOLD(ownrect)().leech( this );
-    DELAY_CALL_R( 0.5, DELEGATE(this, check_text), nullptr );
+    DEFERRED_UNIQUE_CALL( 0.5, DELEGATE(this, check_text), nullptr );
     return GMRBIT_ACCEPTED;
 }
 
@@ -1381,7 +1387,7 @@ bool gui_group_c::children_repos_delay_do(RID, GUIPARAM)
 
 void gui_group_c::children_repos_delay()
 {
-    DELAY_CALL_R(0, DELEGATE(this, children_repos_delay_do), nullptr);
+    DEFERRED_UNIQUE_CALL(0, DELEGATE(this, children_repos_delay_do), nullptr);
 }
 
 
@@ -2331,7 +2337,7 @@ bool gui_popup_menu_c::check_focus(RID r, GUIPARAM p)
             break;
         case SQ_RECT_CHANGED:
             if (data.changed.size_changed)
-                DELAY_CALL_R(0, DELEGATE(this, update_size), nullptr);
+                DEFERRED_UNIQUE_CALL(0, DELEGATE(this, update_size), nullptr);
             return false;
         default:
             return false;
@@ -2347,14 +2353,14 @@ bool gui_popup_menu_c::check_focus(RID r, GUIPARAM p)
     case SQ_RECT_CHANGED:
         return true;
     case SQ_FOCUS_CHANGED:
-        DELAY_CALL_R(0, DELEGATE(this, check_focus), nullptr);
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, check_focus), nullptr);
         if (data.changed.focus) data.changed.is_active_focus = true;
         return true;
     case SQ_CHILD_CREATED:
         HOLD(data.rect.id)().leech(this);
         // no break here
     case SQ_CHILD_DESTROYED:
-        DELAY_CALL_R(0, DELEGATE(this, update_size), nullptr);
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, update_size), nullptr);
         return true;
     case SQ_DRAW:
         return gui_control_c::sq_evt(qp,getrid(),data);
@@ -2479,7 +2485,7 @@ gui_menu_item_c::~gui_menu_item_c()
     {
     case SQ_MOUSE_LUP:
         if (submnu)
-            DELAY_CALL_R(0, DELEGATE(this, open_submenu), nullptr);
+            DEFERRED_UNIQUE_CALL(0, DELEGATE(this, open_submenu), nullptr);
         else if (!flags.is(F_DISABLED))
         {
             ts::safe_ptr<gui_popup_menu_c> pm = &HOLD(getparent()).as<gui_popup_menu_c>();
@@ -2496,7 +2502,7 @@ gui_menu_item_c::~gui_menu_item_c()
         break;
     case SQ_MOUSE_IN:
         if (submnu)
-            DELAY_CALL_R(0.5,DELEGATE(this, open_submenu), nullptr);
+            DEFERRED_UNIQUE_CALL(0.5,DELEGATE(this, open_submenu), nullptr);
         else
             gmsg<GM_KILLPOPUPMENU_LEVEL>( getparent().call_get_menu_level() + 1 ).send();
         MODIFY(getrid()).highlight(true);
@@ -2628,7 +2634,7 @@ MAKE_CHILD<gui_textfield_c>::~MAKE_CHILD()
     if (selector)
     {
         get().selector = &(gui_button_c &)MAKE_CHILD<gui_button_c>(get().getrid());
-        get().selector->set_face(selectorface.is_empty() ? CONSTASTR("selector") : selectorface.as_sptr());
+        get().selector->set_face_getter(selectorface ? selectorface : BUTTON_FACE(selector));
         get().selector->set_handler(handler, param);
         ts::ivec2 minsz = get().selector->get_min_size();
         get().set_margins(0, minsz.x);

@@ -35,7 +35,7 @@ bool config_base_c::save_dirty(RID, GUIPARAM save_all_now)
 {
     bool some_data_still_not_saved = save();
     for(;save_all_now && some_data_still_not_saved; some_data_still_not_saved = save()) ;
-    if (some_data_still_not_saved) DELAY_CALL_R( 1.0, DELEGATE(this, save_dirty), nullptr );
+    if (some_data_still_not_saved) DEFERRED_UNIQUE_CALL( 1.0, DELEGATE(this, save_dirty), nullptr );
     return true;
 }
 bool config_base_c::save()
@@ -77,7 +77,7 @@ bool config_base_c::param( const ts::asptr& pn, const ts::asptr& vl )
 
 void config_base_c::changed(bool save_all_now)
 {
-    DELAY_CALL_R(1.0, DELEGATE(this, save_dirty), save_all_now ? (GUIPARAM)1 : nullptr);
+    DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, save_dirty), save_all_now ? (GUIPARAM)1 : nullptr);
 }
 
 bool find_config(ts::wstr_c &path)

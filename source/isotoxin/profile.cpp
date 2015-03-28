@@ -1011,6 +1011,13 @@ bool profile_c::isfreecontact( const contact_key_s&ck ) const
     return nullptr == table_contacts.find<true>([&](const contacts_s &k)->bool { return k.key == ck; });
 }
 
+ts::blob_c profile_c::get_avatar( const contact_key_s&ck ) const
+{
+    auto *row = table_contacts.find<false>([&](const contacts_s &k)->bool { return k.key == ck; });
+    if (row) return row->other.avatar;
+    return ts::blob_c();
+}
+
 void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, int tag )
 {
     auto *row = table_contacts.find<false>([&](const contacts_s &k)->bool { return k.key == ck; });

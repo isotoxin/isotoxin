@@ -43,7 +43,7 @@ bool    TSCALL get_load_filename_dialog(wstrings_c &files, const wsptr &iroot, c
 wstr_c   TSCALL get_save_directory_dialog(const wsptr &root, const wsptr &title, const wsptr &selectpath = wsptr(), bool nonewfolder = false);
 wstr_c   TSCALL get_save_filename_dialog(const wsptr &iroot, const wsptr &name, const wsptr &filt, const wchar *defext, const wchar *title);
 
-bool    TSCALL find_files(const wsptr &wildcard, wstrings_c &files, const DWORD dwFileAttributes, const DWORD dwSkipAttributes = 0);
+bool    TSCALL find_files(const wsptr &wildcard, wstrings_c &files, const DWORD dwFileAttributes, const DWORD dwSkipAttributes = 0, bool full_names = false);
 
 template<typename TCHARACTER> void TSCALL parse_env(str_t<TCHARACTER> &envstring);
 

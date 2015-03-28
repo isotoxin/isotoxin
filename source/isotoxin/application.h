@@ -1,5 +1,7 @@
 #pragma once
 
+#define BUTTON_FACE_PRELOADED( face ) (GET_BUTTON_FACE) ([]()->button_desc_s * { return g_app->buttons().face; } )
+
 struct preloaded_buttons_s
 {
     ts::shared_ptr<button_desc_s> icon[ contact_gender_count ];
@@ -84,7 +86,7 @@ public:
     {
         if (bcr.tag == ABT_APPCUSTOM)
         {
-            bcr.face = CONSTASTR("customize");
+            bcr.face = BUTTON_FACE(customize);
             bcr.handler = DELEGATE(this, b_customize);
             bcr.tooltip = TOOLTIP(TTT("Настройки", 2));
         }
@@ -145,14 +147,12 @@ public:
 
 public:
     bool b_send_message(RID r, GUIPARAM param);
-    bool flash_notification_icon(RID r, GUIPARAM param);
+    bool flash_notification_icon(RID r = RID(), GUIPARAM param = nullptr);
     bool flashiconflag() const {return F_UNREADICONFLASH;};
     bool flashingicon() const {return F_UNREADICON;};
     void flashredraw(RID r) { m_flashredraw.set(r); }
 public:
 
-
-    HICON get_current_notification_icon();
 
     const ts::font_desc_c *font_conv_name = &ts::g_default_text_font;
     const ts::font_desc_c *font_conv_text = &ts::g_default_text_font;
@@ -174,7 +174,7 @@ public:
     void set_notification_icon();
     bool is_inactive(bool do_incoming_message_stuff);
 
-    void load_theme( const ts::wsptr&thn );
+    bool load_theme( const ts::wsptr&thn );
 
     const SLANGID &current_lang() const {return m_locale_tag;};
     void load_locale( const SLANGID& lng );

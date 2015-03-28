@@ -408,7 +408,7 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
         tf.set_readonly();
     } else if (role == TFR_COMBO)
     {
-        creator.selectorface = CONSTASTR("combo");
+        creator.selectorface = BUTTON_FACE(combo);
         tf.set_readonly();
         tf.disable_caret();
         tf.arrow_cursor();
@@ -499,7 +499,7 @@ int gui_dialog_c::radio( const ts::array_wrapper_c<const radio_item_s> & items, 
         gui_button_c &r = MAKE_VISIBLE_CHILD<gui_button_c>(getrid());
         r.set_radio(tag);
         r.set_handler(handler, ri.param);
-        r.set_face(CONSTASTR("radio"));
+        r.set_face_getter(BUTTON_FACE(radio));
         r.set_text(ri.text);
 
         if ( !ri.name.is_empty() )
@@ -520,7 +520,7 @@ int gui_dialog_c::check( const ts::array_wrapper_c<const check_item_s> & items, 
         gui_button_c &c = MAKE_VISIBLE_CHILD<gui_button_c>(getrid());
         c.set_check(tag);
         c.set_handler(handler, (GUIPARAM)ci.mask);
-        c.set_face(CONSTASTR("check"));
+        c.set_face_getter(BUTTON_FACE(check));
         c.set_text(ci.text);
         c.set_updaterect( DELEGATE(this, updrect) );
 
@@ -639,17 +639,17 @@ void gui_dialog_c::reset(bool keep_skip)
     for (int tag = 0;; ++tag)
     {
         bcreate_s bcr;
-        bcr.face.s = nullptr;
+        bcr.face = GET_BUTTON_FACE();
         bcr.handler = GUIPARAMHANDLER();
         bcr.tag = tag;
 
         getbutton(bcr);
-        if (bcr.face.s == nullptr) break;
+        if (!bcr.face) break;
 
         ++skipctls;
         gui_button_c &b = MAKE_VISIBLE_CHILD<gui_button_c>(getrid());
         ctl_by_name[ts::str_c(CONSTASTR("dialog_button_")).append_as_uint(tag)] = &b;
-        b.set_face(bcr.face);
+        b.set_face_getter(bcr.face);
         b.tooltip(bcr.tooltip);
         if (bcr.btext.l) b.set_text(bcr.btext);
         b.leech(TSNEW(buttons_pos, prevb, tag));
@@ -770,6 +770,8 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
 
 RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
 {
+    ASSERT(!initialization);
+
     switch (ctl)
     {
     case _TEXT:
@@ -779,12 +781,12 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
             gui_button_c &b = MAKE_CHILD<gui_button_c>(parent);
             if (text.begins(CONSTWSTR("face=")))
             {
-                b.set_face(ts::str_c(text.substr(5)));
+                b.set_face_getter( getgetface() );
             }
             else
             {
                 b.set_text(text);
-                b.set_face(CONSTASTR("button"));
+                b.set_face_getter(BUTTON_FACE(button));
             }
             b.set_handler(handler, this);
             b.tooltip(gethintproc());

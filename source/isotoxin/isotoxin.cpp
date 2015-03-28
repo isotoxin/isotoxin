@@ -93,24 +93,24 @@ namespace
             HANDLE h = popup_event; popup_event = nullptr;
             if (h) SetEvent(h);
 		}
-		/*virtual*/ bool read( const ts::wsptr &fn, ts::buf_wrapper_s &b )
+		/*virtual*/ bool read( const ts::wsptr &fn, ts::buf_wrapper_s &b ) override
 		{
 			if (deffop->read(fn,b))
                 return true;
 
 			return packs.read(fn,b);
 		}
-		/*virtual*/ bool size( const ts::wsptr &fn, size_t &sz )
+		/*virtual*/ bool size( const ts::wsptr &fn, size_t &sz ) override
 		{
             if (deffop->size(fn, sz))
                 return true;
             sz = packs.size(fn);
             return sz > 0;
 		}
-        /*virtual*/ void find(ts::wstrings_c & files, const ts::wsptr &fnmask)
+        /*virtual*/ void find(ts::wstrings_c & files, const ts::wsptr &fnmask, bool full_paths) override
         {
-            deffop->find(files, fnmask);
-            packs.find_by_mask( files, fnmask );
+            deffop->find(files, fnmask, full_paths);
+            packs.find_by_mask( files, fnmask, full_paths );
         }
 	};
 

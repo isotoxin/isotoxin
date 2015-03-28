@@ -77,6 +77,20 @@ enum system_query_e
 };
 
 
+enum ui_event_e
+{
+    UE_MAXIMIZED,
+    UE_NORMALIZED,
+    UE_MINIMIZED,
+    UE_THEMECHANGED,
+};
+
+template<> struct gmsg<GM_UI_EVENT> : public gmsgbase
+{
+    gmsg(ui_event_e evt) :gmsgbase(GM_UI_EVENT), evt(evt) {}
+    ui_event_e evt;
+};
+
 namespace ts {
 template<> INLINE RID &make_dummy<RID>(bool quiet) { static RID t; DUMMY_USED_WARNING(quiet); return t; }
 }
@@ -769,9 +783,14 @@ public:
     }
 };
 
+typedef fastdelegate::FastDelegate< button_desc_s *() > GET_BUTTON_FACE;
+#define BUTTON_FACE( face ) (GET_BUTTON_FACE) ([]()->button_desc_s * { return gui->theme().get_button(CONSTASTR(#face)); } )
+
 class gui_button_c : public gui_control_c
 {
     DUMMY(gui_button_c);
+
+    GM_RECEIVER(gui_button_c, GM_UI_EVENT);
 
     static const ts::flags32_s::BITS F_PRESS                = FLAGS_FREEBITSTART << 0;
     static const ts::flags32_s::BITS F_MARK                 = FLAGS_FREEBITSTART << 1;
@@ -796,11 +815,15 @@ class gui_button_c : public gui_control_c
     GUIPARAMHANDLER handler;
     GUIPARAM param = nullptr;
 
+    GET_BUTTON_FACE face_getter;
+
     bool group_handler(gmsg<GM_GROUP_SIGNAL> & signal);
     bool default_handler(RID r, GUIPARAM param);
     void draw();
     void update_textsize();
     int get_ctl_width();
+
+    void set_face(button_desc_s *bdesc);
 
 public:
     gui_button_c(initial_rect_data_s &data):gui_control_c(data) { handler = DELEGATE(this, default_handler); }
@@ -826,9 +849,8 @@ public:
 
     const ts::font_desc_c &get_font() const;
 
-    //void set_font(const ts::asptr&text);
-    void set_face( const ts::asptr&fancename );
-    void set_face( button_desc_s *bdesc );
+    void set_face_getter( GET_BUTTON_FACE _face_getter ) { face_getter = _face_getter; if (face_getter) set_face( face_getter() ); }; // be careful!!! face_getter will be called every time theme changed! make sure object life time is enough
+
     void set_handler( GUIPARAMHANDLER _handler, GUIPARAM _param ) { handler = _handler; param = _param; }
     void set_text( const ts::wsptr&t ) { text = t; flags.clear(F_TEXTSIZEACTUAL); }
     void set_text( const ts::wsptr&t, int &minw ) { text = t; flags.clear(F_TEXTSIZEACTUAL); minw = get_ctl_width(); }
@@ -1268,7 +1290,7 @@ template<> struct MAKE_CHILD<gui_textfield_c> : public _PCHILD(gui_textfield_c)
     GUIPARAM param;
     ts::wstr_c text;
     int chars_limit;
-    ts::str_c selectorface;
+    GET_BUTTON_FACE selectorface;
     int multiline;
     bool selector;
     MAKE_CHILD(RID parent_, const ts::wstr_c &text, int chars_limit = 0, int multiline = 0, bool selector = true) :text(text), chars_limit(chars_limit), multiline(multiline), selector(selector) { parent = parent_; }

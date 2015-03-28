@@ -382,7 +382,7 @@ INLINE ts::ivec2 guirect_c::root_to_local(const ts::ivec2 &rootpt) const
 struct drawchecker
 {
     drawchecker() : engine(nullptr) {}
-    drawchecker(rectengine_root_c *root) :engine(rectengine_root_c::redraw_checker(root)) {}
+    explicit drawchecker(rectengine_root_c *root) :engine(rectengine_root_c::redraw_checker(root)) {}
     ~drawchecker()
     {
         if (engine)

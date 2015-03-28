@@ -19,12 +19,12 @@ gui_isodialog_c::~gui_isodialog_c()
     switch (bcr.tag)
     {
     case 0: // close/cancel
-        bcr.face = CONSTASTR("button");
+        bcr.face = BUTTON_FACE(button);
         bcr.btext = TTT("Отмена",9);
         bcr.handler = DELEGATE(this, b_close);
         break;
     case 1: // close/cancel
-        bcr.face = CONSTASTR("button");
+        bcr.face = BUTTON_FACE(button);
         bcr.btext = TTT("Ok",10);
         bcr.handler = DELEGATE(this, b_confirm);
         break;

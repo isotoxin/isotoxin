@@ -140,7 +140,7 @@ ts::uint32 dialog_addcontact_c::gm_handler( gmsg<ISOGM_CMD_RESULT>& r)
             if (errr)
             {
                 MODIFY(errr).visible(true);
-                DELAY_CALL_R( 1.0, DELEGATE(this, hidectl), errr.to_ptr() );
+                DEFERRED_UNIQUE_CALL( 1.0, DELEGATE(this, hidectl), errr.to_ptr() );
             }
         }
     }

@@ -135,8 +135,8 @@ namespace
         hashmap_t<wstr_c, font_face_s> font_faces_cache;
 	    hashmap_t<scaled_image_key_s, scaled_image_container_s> scaled_images_cache;
 	    hashmap_t<str_c, font_alias_s> fonts;
-	    wstr_c fonts_dir;
-	    wstr_c images_dir;
+	    wstrings_c fonts_dirs;
+	    wstrings_c images_dirs;
 	    int font_cache_sig;
 	    internal_data_s() :font_cache_sig(0)
         {
@@ -156,16 +156,31 @@ namespace
 
 static_setup<internal_data_s> idata;
 
-void set_fonts_dir(const wsptr &dir)
+void set_fonts_dir(const wsptr &dir, bool add)
 {
-	idata().fonts_dir = dir;
+    if (!add)
+        idata().fonts_dirs.clear();
+    idata().fonts_dirs.add(dir);
+    wstr_c & l = idata().fonts_dirs.get( idata().fonts_dirs.size() - 1 );
+    if (l.get_last_char() != '\\' && l.get_last_char() != '/')
+        l.append_char('\\');
 }
-void set_images_dir(const wsptr &dir) // for parser
+void set_images_dir(const wsptr &dir, bool add) // for parser
 {
-	idata().images_dir = dir;
-    if (idata().images_dir.get_last_char() != '\\' && idata().images_dir.get_last_char() != '/')
-        idata().images_dir.append_char('\\');
+    if (!add)
+        idata().images_dirs.clear();
+	idata().images_dirs.add(dir);
+
+    wstr_c & l = idata().images_dirs.get(idata().images_dirs.size() - 1);
+    if (l.get_last_char() != '\\' && l.get_last_char() != '/')
+        l.append_char('\\');
 }
+
+blob_c load_image( const wsptr&fn )
+{
+    return g_fileop->load( idata().images_dirs, fn );
+}
+
 void add_image(const wsptr&name, const bitmap_c&bmp, const irect& rect)
 {
     bool added;
@@ -214,7 +229,7 @@ font_c &font_c::buildfont(const wstr_c &filename, const str_c &fontname, ivec2 s
 	font_face_s &ff = idta.font_faces_cache.add(face, added);
 	if (added) // if just added - do initialization
 	{
-		blob_c buf = g_fileop->load(fn_join(idta.fonts_dir, face));
+		blob_c buf = g_fileop->load(idta.fonts_dirs, face);
 		while (!buf)
 		{
             // cant load font?
@@ -228,7 +243,7 @@ font_c &font_c::buildfont(const wstr_c &filename, const str_c &fontname, ivec2 s
             buf = g_fileop->load(sysdir);
             if (buf) break;
 
-            ERROR("Font '%s' not found. Check path! Current path is: %s", face.cstr(), idta.fonts_dir.cstr());
+            ERROR("Font '%s' not found. Check path! Current path is: %s", str_c(face).cstr(), str_c(idta.fonts_dirs.join(CONSTWSTR("\r\n"))).cstr());
 
             // ... or load any other
 
@@ -293,11 +308,21 @@ scaled_image_s *scaled_image_s::load(const wsptr &filename_, const ivec2 &scale)
 		i.width = i.height = i.pitch = 0;
 		do
 		{
-            tmp_wstr_c fn;
-            if (filename_.s[0] == '/') fn.set(filename_.skip(1));
-            else fn.set(idata().images_dir.as_sptr()).append(filename_);
-            if (fn.find_pos('.') < 0) fn.append(CONSTWSTR(".png"));
-            blob_c buf = g_fileop->load(fn);
+            auto loadimage = [](const wsptr& filename_) -> blob_c
+            {
+                if (filename_.s[0] == '/')
+                {
+                    tmp_wstr_c fn;
+                    fn.set(filename_.skip(1));
+                    if (fn.find_pos('.') < 0) fn.append(CONSTWSTR(".png"));
+                    return g_fileop->load(fn);
+                }
+
+                tmp_wstr_c fn( filename_ );
+                if (fn.find_pos('.') < 0) fn.append(CONSTWSTR(".png"));
+                return g_fileop->load(idata().images_dirs, fn);
+            };
+            blob_c buf = loadimage(filename_);
 			if (buf && i.bitmap.load_from_file(buf.data(), buf.size()))
             {
 				switch (i.bitmap.info().bitpp)

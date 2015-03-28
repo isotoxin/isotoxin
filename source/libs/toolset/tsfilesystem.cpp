@@ -937,11 +937,23 @@ namespace ts
 
 	}
 
-	bool    TSCALL find_files(const wsptr &wildcard, wstrings_c &files, const DWORD dwFileAttributes, const DWORD dwSkipAttributes)
+	bool    TSCALL find_files(const wsptr &wildcard, wstrings_c &files, const DWORD dwFileAttributes, const DWORD dwSkipAttributes, bool full_names)
 	{
 		WIN32_FIND_DATAW find_data;
 		HANDLE           fh = FindFirstFileW(tmp_wstr_c(wildcard), &find_data);
 		bool             bResult = false;
+        swstr_t<MAX_PATH> path;
+        int pl = 0;
+        if (full_names)
+        {
+            int i = pwstr_c(wildcard).find_last_pos_of(CONSTWSTR("/\\"));
+            if (ASSERT(i > 0))
+            {
+                path.set(pwstr_c(wildcard).substr(0, i + 1));
+                pl = i+1;
+            }
+
+        }
 
 		while (fh != INVALID_HANDLE_VALUE)
 		{
@@ -949,7 +961,10 @@ namespace ts
 			{
 				if (find_data.dwFileAttributes & dwFileAttributes)
 				{
-					files.add(find_data.cFileName);
+                    if (full_names)
+                        files.add(path.set_length(pl).append(find_data.cFileName));
+                    else
+					    files.add(find_data.cFileName);
 					bResult = true;
 				}
 			}

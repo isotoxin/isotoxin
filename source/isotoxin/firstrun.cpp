@@ -97,7 +97,7 @@ bool dialog_firstrun_c::noob_or_father( RID, GUIPARAM par )
 {
     i_am_noob = par != nullptr;
     //update_buttons();
-    DELAY_CALL_R( 0, DELEGATE(this, refresh_current_page), nullptr );
+    DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, refresh_current_page), nullptr );
     return true;
 }
 
@@ -118,7 +118,7 @@ void dialog_firstrun_c::select_lang(const ts::str_c& prm)
     deflng = prm;
     g_app->load_locale(deflng);
     //set_combik_menu(CONSTASTR("langs"), list_langs(deflng, DELEGATE(this, select_lang)));
-    DELAY_CALL_R( 0, DELEGATE(this, refresh_current_page), nullptr );
+    DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, refresh_current_page), nullptr );
 }
 
 void dialog_firstrun_c::go2page(int page_)
@@ -281,7 +281,7 @@ void dialog_firstrun_c::getbutton(bcreate_s &bcr)
     {
         if (page > 0)
         {
-            bcr.face = CONSTASTR("button");
+            bcr.face = BUTTON_FACE(button);
             bcr.tooltip = TOOLTIP( TTT("Перейти к предыдущей странице",29) );
             bcr.btext = TTT("Назад",30);
             bcr.handler = DELEGATE(this, prev_page);

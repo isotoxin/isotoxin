@@ -53,6 +53,7 @@ namespace ts
             bool               file_exists(const wsptr &fnn);
             bool               iterate_files(const wsptr &path_orig, const wsptr &path0, ITERATE_FILES_CALLBACK ef, container_c *pf);
             bool               iterate_files(const wsptr &path_orig, ITERATE_FILES_CALLBACK ef, container_c *pf);
+            bool               iterate_folders(const wsptr &path_orig, const wsptr &path0, ITERATE_FILES_CALLBACK ef, container_c *pf);
 
         };
 
@@ -80,6 +81,7 @@ namespace ts
 
         /*virtual*/ bool    path_exists(const wsptr &path) override;
         /*virtual*/ bool    file_exists(const wsptr &path) override;
+        /*virtual*/ bool    iterate_folders(const wsptr &path, ITERATE_FILES_CALLBACK ef) override;
         /*virtual*/ bool    iterate_files(const wsptr &path, ITERATE_FILES_CALLBACK ef) override;
         /*virtual*/ bool    iterate_files(ITERATE_FILES_CALLBACK ef) override;
 

@@ -135,6 +135,13 @@ void  ccollection_c::iterate_files(const wsptr &path, ITERATE_FILES_CALLBACK ef)
 			break;
 }
 
+void ccollection_c::iterate_folders(const wsptr &path, ITERATE_FILES_CALLBACK ef)
+{
+    for (container_c *c : m_containers)
+        if (!c->iterate_folders(path, ef))
+            break;
+}
+
 void  ccollection_c::iterate_all_files(ITERATE_FILES_CALLBACK ef)
 {
     for(container_c *c : m_containers)
@@ -142,27 +149,58 @@ void  ccollection_c::iterate_all_files(ITERATE_FILES_CALLBACK ef)
 			break;
 }
 
-void ccollection_c::find_by_mask(wstrings_c & files, const ts::wsptr &fnmask)
+void ccollection_c::find_by_mask(wstrings_c & files, const ts::wsptr &fnmask, bool full_paths)
 {
-    pwstr_c masks(fnmask);
-    int lastd = masks.find_last_pos_of(CONSTWSTR("/\\"));
-
 #pragma warning (disable:4822) // 'ts::ccollection_c::find_by_mask::middle::operator =' : local class member function does not have a body
+
+    pwstr_c masks(fnmask);
+
+    int x = masks.find_pos(CONSTWSTR("/*/"));
+    if (x >= 0)
+    {
+        struct folders
+        {
+            wstrings_c m_folders;
+            folders &operator=(const folders &)UNUSED;
+            folders(const folders &) UNUSED;
+            folders() {}
+            bool filer(const wsptr & path, const wsptr & fn, container_c *)
+            {
+                m_folders.add(fn);
+                return true;
+            }
+        } f;
+
+        iterate_folders( pwstr_c(fnmask).substr(0, x), DELEGATE(&f, filer) );
+        for( const wstr_c &f : f.m_folders )
+        {
+            find_by_mask( files, ts::wstr_c(pwstr_c(fnmask).substr(0, x + 1)).append(f).append(pwstr_c(fnmask).substr(x+2)), full_paths);
+        }
+        return;
+    }
+
+    int lastd = masks.find_last_pos_of(CONSTWSTR("/\\"));
 
     struct middle
     {
         wstrings_c & files;
         pwstr_c m;
+        bool fullpaths;
         middle &operator=(const middle &) UNUSED;
         middle(const middle &) UNUSED;
-        middle(wstrings_c & files, const pwstr_c &m):files(files), m(m) {}
+        middle(wstrings_c & files, const pwstr_c &m, bool fp):files(files), m(m), fullpaths(fp) {}
         bool filer( const wsptr & path, const wsptr & fn, container_c * )
         {
             if (fn_mask_match<wchar>(fn, m))
-                files.add( fn );
+            {
+                if (fullpaths)
+                    files.add( fn_join(ts::tmp_wstr_c(path),fn) );
+                else
+                    files.add(fn);
+            }
             return true;
         }
-    } m(files, masks.substr(lastd+1));
+    } m(files, masks.substr(lastd+1), full_paths);
     if (lastd >= 0)
         iterate_files( masks.substr(0, lastd), DELEGATE(&m, filer) );
     else

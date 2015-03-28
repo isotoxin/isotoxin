@@ -51,8 +51,8 @@ void application_c::load_locale( const SLANGID& lng )
     ts::wstr_c path(CONSTWSTR("loc/"));
     int cl = path.get_length();
 
-    ts::g_fileop->find(fns, path.append(lng).append(CONSTWSTR(".*.lng")));
-
+    ts::g_fileop->find(fns, path.append(lng).append(CONSTWSTR(".*.lng")), false);
+    fns.kill_dups();
     fns.sort(true);
 
     ts::wstrings_c ps;
@@ -115,7 +115,7 @@ bool application_c::flash_notification_icon(RID r, GUIPARAM param)
     if (F_UNREADICON)
     {
         F_UNREADICONFLASH = !F_UNREADICONFLASH;
-        DELAY_CALL_R(0.3, DELEGATE(this, flash_notification_icon), 0);
+        DEFERRED_UNIQUE_CALL(0.3, DELEGATE(this, flash_notification_icon), 0);
     }
     set_notification_icon();
     for(RID r : m_flashredraw)
@@ -127,28 +127,15 @@ bool application_c::flash_notification_icon(RID r, GUIPARAM param)
     return true;
 }
 
-HICON application_c::get_current_notification_icon()
-{
-    if (F_UNREADICON)
-        return LoadIcon(g_sysconf.instance, F_UNREADICONFLASH ? MAKEINTRESOURCE(IDI_ICON2) : MAKEINTRESOURCE(IDI_ICON_HOLLOW));
-
-    bool unread = gmsg<ISOGM_SOMEUNREAD>().send().is(GMRBIT_ACCEPTED);
-    if (unread)
-    {
-        F_UNREADICONFLASH = true;
-        F_UNREADICON = true;
-        DELAY_CALL_R(0.3, DELEGATE(this, flash_notification_icon), 0);
-    }
-
-    return LoadIcon(g_sysconf.instance, unread ? MAKEINTRESOURCE(IDI_ICON2) : MAKEINTRESOURCE(IDI_ICON));
-}
-
 HICON application_c::app_icon(bool for_tray)
 {
     if (!for_tray)
         return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(IDI_ICON)); 
 
-    return get_current_notification_icon();
+    if (F_UNREADICON)
+        return LoadIcon(g_sysconf.instance, F_UNREADICONFLASH ? MAKEINTRESOURCE(IDI_ICON2) : MAKEINTRESOURCE(IDI_ICON_HOLLOW));
+
+    return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(IDI_ICON));
 };
 
 /*virtual*/ void application_c::app_prepare_text_for_copy(ts::wstr_c &text)
@@ -458,7 +445,12 @@ bool application_c::b_customize(RID r, GUIPARAM param)
 void application_c::summon_main_rect()
 {
     load_locale(cfg().language());
-    load_theme(cfg().theme());
+    if (!load_theme(cfg().theme()))
+    {
+        MessageBoxW(nullptr, ts::wstr_c(TTT("Не найдена тема интерфейса по умолчанию!",234)), L"error", MB_OK|MB_ICONERROR);
+        sys_exit(1);
+        return;
+    }
     mediasystem().init();
     ts::str_c mic = cfg().device_mic();
     s3::DEVICE device = s3::DEFAULT_DEVICE;
@@ -789,14 +781,22 @@ void application_c::unregister_file_transfer(uint64 utag)
 }
 
 
-void application_c::load_theme( const ts::wsptr&thn )
+bool application_c::load_theme( const ts::wsptr&thn )
 {
-    __super::load_theme(thn);
+    if (!__super::load_theme(thn))
+    {
+        if (!ts::pwstr_c(thn).equals(CONSTWSTR("def")))
+        {
+            cfg().theme( CONSTWSTR("def") );
+            return load_theme( CONSTWSTR("def") );
+        }
+        return false;
+    }
     m_buttons.reload();
 
     font_conv_name = &get_font( CONSTASTR("conv_name") );
     font_conv_text = &get_font( CONSTASTR("conv_text") );
-
+    return true;
 }
 
 void preloaded_buttons_s::reload()

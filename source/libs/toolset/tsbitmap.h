@@ -527,12 +527,12 @@ public:
     void convert_32to24(bitmap_c &imgout) const;
     */
 
-	void create(const ivec2 &sz, uint8 bitpp) { core.create(imgdesc_s(sz, bitpp)); }
-    void create_grayscale(const ivec2 &sz) { core.create(imgdesc_s(sz, 8)); }
-	void create_16(const ivec2 &sz) { core.create(imgdesc_s(sz, 16)); }
-	void create_15(const ivec2 &sz) { core.create(imgdesc_s(sz, 15)); }
-	void create_RGB(const ivec2 &sz)  { core.create(imgdesc_s(sz, 24)); }
-	void create_RGBA(const ivec2 &sz)  { core.create(imgdesc_s(sz, 32)); }
+	bitmap_t &create(const ivec2 &sz, uint8 bitpp) { core.create(imgdesc_s(sz, bitpp)); return *this; }
+    bitmap_t &create_grayscale(const ivec2 &sz) { core.create(imgdesc_s(sz, 8)); return *this; }
+	bitmap_t &create_16(const ivec2 &sz) { core.create(imgdesc_s(sz, 16)); return *this; }
+	bitmap_t &create_15(const ivec2 &sz) { core.create(imgdesc_s(sz, 15)); return *this; }
+	bitmap_t &create_RGB(const ivec2 &sz)  { core.create(imgdesc_s(sz, 24)); return *this; }
+	bitmap_t &create_RGBA(const ivec2 &sz)  { core.create(imgdesc_s(sz, 32)); return *this; }
 
     void get_from_dxt( const ivec2 &from_p, const void *src_bits, int src_pitch, int squish_fmt );
 

@@ -986,7 +986,7 @@ public:
     virtual bool read(const wsptr &fn, buf_wrapper_s &b) = 0;
     virtual bool size(const wsptr &fn, size_t &sz) = 0;
 
-    virtual void find(wstrings_c & files, const wsptr &fnmask) = 0;
+    virtual void find(wstrings_c & files, const wsptr &fnmask, bool full_paths) = 0;
 
     template<typename T> static void setup()
     {
@@ -995,6 +995,7 @@ public:
         g_fileop = nfop;
     }
 
+    blob_c load(const wstrings_c &paths, const wsptr &fn);
     blob_c load(const wsptr &fn);
     bool load(const wsptr &fn, buf_wrapper_s &b, size_t reservebefore = 0, size_t reserveafter = 0);
     bool load(const wsptr &fn, abp_c &bp);

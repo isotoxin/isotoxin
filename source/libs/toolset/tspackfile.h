@@ -36,6 +36,7 @@ public:
 
     virtual bool    path_exists(const wsptr &path) = 0;
     virtual bool    file_exists(const wsptr &path) = 0;
+    virtual bool    iterate_folders(const wsptr &path, ITERATE_FILES_CALLBACK ef) = 0;
     virtual bool    iterate_files(const wsptr &path, ITERATE_FILES_CALLBACK ef) = 0;
     virtual bool    iterate_files(ITERATE_FILES_CALLBACK ef) = 0;
 

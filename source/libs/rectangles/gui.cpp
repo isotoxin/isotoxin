@@ -6,7 +6,7 @@ int sysmodal = 0;
 gui_c::tempbuf_c::tempbuf_c( double ttl )
 {
     if ( ttl >= 0 )
-        DELAY_CALL( ttl, DELEGATE(this, selfdie), nullptr );
+        DEFERRED_CALL( ttl, DELEGATE(this, selfdie), nullptr );
 }
 
 delay_event_c::~delay_event_c()
@@ -122,14 +122,16 @@ gui_c::~gui_c()
     gui = nullptr;
 }
 
-void gui_c::load_theme( const ts::wsptr&thn )
+bool gui_c::load_theme( const ts::wsptr&thn )
 {
-    m_theme.load(thn);
+    if (!m_theme.load(thn)) return false;
+
     for(auto it = m_fonts.begin(); it; ++it)
     {
         ts::str_c name = it->name();
         it->reasign( name );
     }
+    return true;
 }
 
 const ts::font_desc_c & gui_c::get_font(const ts::asptr &fontname)
@@ -461,6 +463,15 @@ ts::uint32 gui_c::gm_handler(gmsg<GM_ROOT_FOCUS>&p)
     return 0;
 }
 
+ts::uint32 gui_c::gm_handler(gmsg<GM_UI_EVENT>&e)
+{
+    if (UE_THEMECHANGED == e.evt)
+    {
+        for (RID r : roots())
+            HOLD(r).engine().redraw();
+    }
+    return 0;
+}
 
 ts::ivec2 gui_c::textsize( const ts::font_desc_c& font, const ts::wstr_c& text, int width_limit, int flags )
 {
@@ -622,17 +633,17 @@ public:
 void gui_c::make_app_buttons(RID rootappwindow, ts::uint32 allowed_buttons, GET_TOOLTIP closebhint)
 {
     bcreate_s buttons[] = { 
-        {"close", DELEGATE( this, b_close ), ABT_CLOSE, DELEGATE( this, tt_close ) },
-        {"maximize", DELEGATE( this, b_maximize ), ABT_MAXIMIZE, DELEGATE( this, tt_maximize ) },
-        {"normalize", DELEGATE( this, b_normalize ), ABT_NORMALIZE, DELEGATE( this, tt_normalize ) },
-        {"minimize", DELEGATE( this, b_minimize ), ABT_MINIMIZE, DELEGATE( this, tt_minimize ) },
+        {BUTTON_FACE(close), DELEGATE( this, b_close ), ABT_CLOSE, DELEGATE( this, tt_close ) },
+        {BUTTON_FACE(maximize), DELEGATE( this, b_maximize ), ABT_MAXIMIZE, DELEGATE( this, tt_maximize ) },
+        {BUTTON_FACE(normalize), DELEGATE( this, b_normalize ), ABT_NORMALIZE, DELEGATE( this, tt_normalize ) },
+        {BUTTON_FACE(minimize), DELEGATE( this, b_minimize ), ABT_MINIMIZE, DELEGATE( this, tt_minimize ) },
     };
     if (closebhint) buttons[0].tooltip = closebhint;
     auto setupcustom = [this](bcreate_s &bcr, int tag) -> bcreate_s * {
 
         ASSERT(tag >= ABT_APPCUSTOM);
         bcr.tag = tag;
-        bcr.face.s = nullptr;
+        bcr.face = GET_BUTTON_FACE();
         bcr.handler = GUIPARAMHANDLER();
         bcr.tooltip = GET_TOOLTIP();
         app_setup_custom_button(bcr);
@@ -647,11 +658,11 @@ void gui_c::make_app_buttons(RID rootappwindow, ts::uint32 allowed_buttons, GET_
             if (0 == (allowed_buttons & SETBIT(i))) continue;
 
         bcreate_s *cbc = i < ARRAY_SIZE(buttons) ? buttons + i : setupcustom(custom, i);
-        if (cbc->face.s == nullptr) break;
+        if (!cbc->face) break;
 
         gui_button_c &b = MAKE_CHILD<gui_button_c>(rootappwindow);
         b.tooltip(cbc->tooltip);
-        b.set_face(cbc->face);
+        b.set_face_getter(cbc->face);
         b.set_handler(cbc->handler, rootappwindow.to_ptr());
         b.set_data( (GUIPARAM)cbc->tag );
         b.leech( TSNEW(auto_app_buttons, prev, i) );
@@ -946,7 +957,7 @@ bool selectable_core_s::flash(RID, GUIPARAM p)
         clear_selection_after_flashing = true;
         flashing = 4;
     }
-    if (flashing > 0) DELAY_CALL_R( 0.1, DELEGATE(this, flash), (GUIPARAM)(flashing-1) );
+    if (flashing > 0) DEFERRED_UNIQUE_CALL( 0.1, DELEGATE(this, flash), (GUIPARAM)(flashing-1) );
     if (clear_selection_after_flashing && flashing == 0)
         clear_selection();
     else if (owner) {
@@ -1003,7 +1014,7 @@ bool selectable_core_s::selectword(RID, GUIPARAM p)
         // current glyph not yet known. waiting it
         if (!p && owner) owner->getengine().redraw();
         dirty = true;
-        DELAY_CALL_R( 0, DELEGATE(this, selectword), GUIPARAM(1) );
+        DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, selectword), GUIPARAM(1) );
         return true;
     }
     if (owner)
@@ -1209,7 +1220,7 @@ void selectable_core_s::clear_selection()
     char_end_sel = -1;
     clear_selection_after_flashing = false;
     dirty = true;
-    owner->getengine().redraw();
+    if (owner) owner->getengine().redraw();
     gui->delete_event( DELEGATE(this, selectword) );
 }
 

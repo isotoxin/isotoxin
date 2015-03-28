@@ -161,14 +161,14 @@ void contact_c::reselect(bool scrollend)
     contact_c *h = get_historian();
     if (scrollend)
     {
-        DECLARE_DELAY_EVENT_BEGIN(0)
+        DEFERRED_EXECUTION_BLOCK_BEGIN(0)
             gmsg<ISOGM_SELECT_CONTACT>((contact_c *)param).send();
-        DECLARE_DELAY_EVENT_END(h)
+        DEFERRED_EXECUTION_BLOCK_END(h)
     } else
     {
-        DECLARE_DELAY_EVENT_BEGIN(0)
+        DEFERRED_EXECUTION_BLOCK_BEGIN(0)
             gmsg<ISOGM_SELECT_CONTACT>((contact_c *)param, false).send();
-        DECLARE_DELAY_EVENT_END(h)
+        DEFERRED_EXECUTION_BLOCK_END(h)
     }
 }
 
@@ -365,7 +365,7 @@ bool contact_c::check_invite(RID r, GUIPARAM p)
     {
         if (p)
         {
-            DELAY_CALL_R(1.0, DELEGATE(this, check_invite), (GUIPARAM)((int)p - 1));
+            DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, check_invite), (GUIPARAM)((int)p - 1));
         } else
         {
             // no invite... looks like already confirmed, but not saved
@@ -416,7 +416,7 @@ bool contact_c::flashing_proc(RID, GUIPARAM)
         if (opts.unmasked().is(F_RINGTONE))
         {
             opts.unmasked().invert(F_RINGTONE_BLINK);
-            DELAY_CALL_R(0.5f, DELEGATE(this, flashing_proc), nullptr);
+            DEFERRED_UNIQUE_CALL(0.5f, DELEGATE(this, flashing_proc), nullptr);
         }
         gui_item->getengine().redraw();
     }
@@ -968,6 +968,25 @@ contact_c *contacts_c::create_new_meta()
     return metac;
 }
 
+ts::uint32 contacts_c::gm_handler(gmsg<GM_UI_EVENT> &e)
+{
+    if (UE_THEMECHANGED == e.evt)
+    {
+        for(contact_c *c : arr)
+        {
+            if (c->getmeta() != nullptr && !c->getkey().is_self())
+            {
+                if (const avatar_s *a = c->get_avatar())
+                {
+                    ts::blob_c ava = prf().get_avatar(c->getkey());
+                    c->set_avatar(ava.data(), ava.size(), ava.size() ? a->tag : 0);
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_AVATAR> &ava)
 {
     if (contact_c *c = find(ava.contact))
@@ -1075,9 +1094,9 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                 gui_contact_item_c *ci = c->get_historian()->gui_item;
                 if (ci->role == CIR_CONVERSATION_HEAD)
                 {
-                    DECLARE_DELAY_EVENT_BEGIN(0)
-                    ((gui_contact_item_c *)param)->update_buttons();
-                    DECLARE_DELAY_EVENT_END(ci)
+                    DEFERRED_EXECUTION_BLOCK_BEGIN(0)
+                        ((gui_contact_item_c *)param)->update_buttons();
+                    DEFERRED_EXECUTION_BLOCK_END(ci)
                 }
             }
             if (c->get_state() == CS_INVITE_RECEIVE)
@@ -1292,7 +1311,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
             ++historian->gui_item->n_unread;
             historian->gui_item->getengine().redraw();
             g_app->need_recalc_unread(historian->getkey());
-            g_app->set_notification_icon();
+            g_app->flash_notification_icon();
         }
     }
 

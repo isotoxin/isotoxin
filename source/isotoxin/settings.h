@@ -99,6 +99,17 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
 
     void select_lang( const ts::str_c& prm );
 
+    struct theme_info_s
+    {
+        ts::wstr_c folder;
+        ts::wstr_c name;
+        bool current;
+    };
+
+    ts::array_inplace_t<theme_info_s, 0> m_themes;
+    void select_theme( const ts::str_c& prm );
+    menu_c list_themes();
+
     struct sound_device_s
     {
         s3::DEVICE deviceid;

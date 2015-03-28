@@ -41,9 +41,10 @@ public:
     bool        file_exists(const wsptr &name);
     bool        path_exists(const wsptr &path);
     void        iterate_files(const wsptr &path, ITERATE_FILES_CALLBACK ef);
+    void        iterate_folders(const wsptr &path, ITERATE_FILES_CALLBACK ef);
     void        iterate_all_files(ITERATE_FILES_CALLBACK ef);
 
-    void        find_by_mask(ts::wstrings_c & files, const ts::wsptr &fnmask);
+    void        find_by_mask(ts::wstrings_c & files, const ts::wsptr &fnmask, bool full_paths);
 
     bool        read(uint container_id, const wsptr &name, buf_wrapper_s &b);
     bool        read(const wsptr &name, buf_wrapper_s &b);

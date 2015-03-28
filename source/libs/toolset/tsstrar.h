@@ -336,7 +336,7 @@ public:
         return str;
     }
 
-    strtype    join( const TCHARACTER *joincharz ) const
+    strtype    join( const sptr<TCHARACTER> &joincharz ) const
     {
         strtype str;
         const int sz = size();
@@ -591,7 +591,18 @@ public:
 
     template<typename CORE2> int get_string_index(const str_t<TCHARACTER, CORE2> &of) {return get_string_index(of.as_spart());}
 
-    void kill_empty_fast(void)
+    void kill_dups()
+    {
+        for(int i = size() - 1; i > 0; --i)
+            for(int j = i - 1; j >= 0; --j)
+                if (get(j).equals(get(i)))
+                {
+                    remove_fast(i);
+                    break;
+                }
+    }
+
+    void kill_empty_fast()
     {
         int i = 0;
         for(;i<size();)

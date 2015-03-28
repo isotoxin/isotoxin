@@ -71,7 +71,6 @@ TODO("удаление контакта до загрузки контактов крашит lan");
 //+TODO("upsample input stream to 48ksps for opus encoder");
 //+TODO("доставка сообщений Tox для offline клиентов");
 //+TODO("сегментация сообщений Tox");
-//TODO("помигать строчкой пуб-ид при нажатии на кнопку копировать id");
 
 void todo()
 {

@@ -136,7 +136,11 @@ class gui_contactlist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_contactlist_c, ISOGM_UPDATE_CONTACT_V);
     GM_RECEIVER(gui_contactlist_c, GM_HEARTBEAT);
     GM_RECEIVER(gui_contactlist_c, GM_DRAGNDROP);
-    
+    GM_RECEIVER(gui_contactlist_c, GM_UI_EVENT)
+    {
+        if (UE_THEMECHANGED == p.evt) recreate_ctls();
+        return 0;
+    }
 
     uint64 sort_tag = 0;
     contact_list_role_e role = CLR_MAIN_LIST;
@@ -145,14 +149,13 @@ class gui_contactlist_c : public gui_vscrollgroup_c
     int skip_bottom_pixels = 70;
     int skipctl = 0;
 
+    ts::safe_ptr<gui_button_c> addcbtn;
     ts::safe_ptr<gui_contact_item_c> self;
     ts::safe_ptr<gui_contact_item_c> dndtarget;
 
     ts::array_inplace_t<contact_key_s, 2> * arr = nullptr;
 
-    //void check_focus(RID r, GUIPARAM p);
-    //void update_size(RID r, GUIPARAM p);
-    //void die() { TSDEL(this); }
+    void recreate_ctls();
 
     /*virtual*/ void children_repos_info(cri_s &info) const override;
 public:

@@ -335,6 +335,25 @@ public:
 		return false;
 	}
 
+    template<typename COMPARTIBLE_KEY, typename GETHANDLER> bool getremove(const COMPARTIBLE_KEY &key, GETHANDLER gh)
+    {
+        if (table_size == 0) return false;
+        unsigned hash = calc_hash(key);
+
+        for (litm_s **li = &table[hash % unsigned(table_size)]; *li; li = &(*li)->next)
+            if ((*li)->key_hash == hash && (*li)->key == key)
+            {
+                litm_s *el = *li;
+                gh( el->value );
+                *li = (*li)->next;
+                TSDEL(el);
+                used--;
+                return true;
+            }
+
+        return false;
+    }
+
 	template<typename COMPARTIBLE_KEY> const litm_s *find(const COMPARTIBLE_KEY &key) const
 	{
 		if (table_size == 0) return nullptr;

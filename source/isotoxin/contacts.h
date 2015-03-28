@@ -580,6 +580,7 @@ class contacts_c
     GM_RECEIVER(contacts_c, ISOGM_DELIVERED);
     GM_RECEIVER(contacts_c, ISOGM_NEWVERSION);
     GM_RECEIVER(contacts_c, ISOGM_AVATAR);
+    GM_RECEIVER(contacts_c, GM_UI_EVENT);
     
 
     ts::array_shared_t<contact_c, 8> arr;

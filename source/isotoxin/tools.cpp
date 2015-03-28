@@ -126,6 +126,14 @@ void path_expand_env(ts::wstr_c &path)
     return false;
 }
 
+void leech_dock_top_s::update_ctl_pos()
+{
+    HOLD r(owner->getparent());
+    ts::irect cr = r().get_client_area();
+    MODIFY(*owner).pos(cr.lt).size(cr.width(), height);
+}
+
+
 /*virtual*/ bool leech_dock_top_s::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
     if (!ASSERT(owner)) return false;
@@ -143,12 +151,30 @@ void path_expand_env(ts::wstr_c &path)
 
     if (qp == SQ_PARENT_RECT_CHANGED)
     {
-        HOLD r(owner->getparent());
-        ts::irect cr = r().get_client_area();
-        MODIFY(*owner).pos(cr.lt).size(cr.width(), height);
+        update_ctl_pos();
         return false;
     }
     return false;
+}
+
+void leech_dock_bottom_center_s::update_ctl_pos()
+{
+    HOLD r(owner->getparent());
+    ts::irect cr = r().get_client_area();
+    int xspace = x_space;
+    if (xspace < 0)
+    {
+        int rqw = (width * num) + (-xspace * (num + 1));
+        xspace = (cr.width() - rqw) / 2;
+    }
+    cr.lt.x += xspace;
+    cr.rb.x -= xspace;
+    cr.rb.y -= y_space;
+
+    float fx = (float)(cr.width() - (width * num)) / (float)(num + 1);
+    int x = xspace + lround(fx + (width + fx) * index);
+
+    MODIFY(*owner).pos(x, cr.rb.y - height).size(width, height);
 }
 
 /*virtual*/ bool leech_dock_bottom_center_s::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -168,26 +194,7 @@ void path_expand_env(ts::wstr_c &path)
 
     if (qp == SQ_PARENT_RECT_CHANGED)
     {
-        HOLD r(owner->getparent());
-        ts::irect cr = r().get_client_area();
-        int xspace = x_space;
-        if (xspace < 0)
-        {
-            int rqw = (width * num) + (-xspace * (num+1));
-            xspace = (cr.width() - rqw) / 2;
-        }
-        cr.lt.x += xspace;
-        cr.rb.x -= xspace;
-        cr.rb.y -= y_space;
-
-        //float w = (float)cr.width() / (float)num;
-        //int x = lround(w * index + (w-width)/2);
-
-        float fx = (float)(cr.width() - (width * num)) / (float)(num + 1);
-        int x = xspace + lround(fx + (width + fx) * index);
-
-
-        MODIFY(*owner).pos(x,cr.rb.y-height).size(width, height);
+        update_ctl_pos();
         return false;
     }
 
@@ -347,6 +354,7 @@ bool leech_at_left_s::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 
 isotoxin_ipc_s::isotoxin_ipc_s(const ts::str_c &tag, datahandler_func datahandler):tag(tag), datahandler(datahandler)
 {
+    if (!datahandler) return;
     int memba = junct.start(tag);
     if (memba != 0) 
     {
@@ -362,7 +370,8 @@ isotoxin_ipc_s::isotoxin_ipc_s(const ts::str_c &tag, datahandler_func datahandle
 }
 isotoxin_ipc_s::~isotoxin_ipc_s()
 {
-    junct.stop();
+    if (ipc_ok)
+        junct.stop();
 }
 
 ipc::ipc_result_e isotoxin_ipc_s::wait_func( void *par )
@@ -530,7 +539,7 @@ void text_prepare_for_edit(ts::wstr_c &text)
 SLANGID detect_language()
 {
     ts::wstrings_c fns;
-    ts::g_fileop->find(fns, CONSTWSTR("loc/*.lng*.lng"));
+    ts::g_fileop->find(fns, CONSTWSTR("loc/*.lng*.lng"), false);
 
 
     ts::wchar x[32];
@@ -550,7 +559,8 @@ menu_c list_langs( SLANGID curlang, MENUHANDLER h )
     ts::wstr_c path(CONSTWSTR("loc/"));
     int cl = path.get_length();
 
-    ts::g_fileop->find(fns, path.append(CONSTWSTR("*.lng*.lng")));
+    ts::g_fileop->find(fns, path.append(CONSTWSTR("*.lng*.lng")), false);
+    fns.kill_dups();
 
     struct lang_s
     {

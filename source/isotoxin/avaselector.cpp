@@ -370,7 +370,7 @@ dialog_avaselector_c::~dialog_avaselector_c()
 
 bool dialog_avaselector_c::flashavarect(RID, GUIPARAM)
 {
-    DELAY_CALL_R(0.13, DELEGATE(this,flashavarect), nullptr);
+    DEFERRED_UNIQUE_CALL(0.13, DELEGATE(this,flashavarect), nullptr);
     ++tickvalue;
     getengine().redraw();
     return true;

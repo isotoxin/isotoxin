@@ -218,7 +218,7 @@ void rectengine_c::resort_children()
     {
         gui->dirty_hover_data();
         redraw();
-        DELAY_CALL_R(0,DELEGATE(this,cleanup_children),nullptr);
+        DEFERRED_UNIQUE_CALL(0,DELEGATE(this,cleanup_children),nullptr);
     }
 }
 
@@ -233,7 +233,7 @@ bool rectengine_c::children_sort( fastdelegate::FastDelegate< bool (rectengine_c
     {
         gui->dirty_hover_data();
         redraw();
-        DELAY_CALL_R(0, DELEGATE(this, cleanup_children), nullptr);
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, cleanup_children), nullptr);
         return true;
     }
     return false;
@@ -245,7 +245,11 @@ void rectengine_c::child_move_to( int index, rectengine_c *e )
     if (i != index)
     {
         children.set(i, nullptr);
-        children.insert(index, e);
+        if (children.get(index))
+            children.insert(index, e);
+        else
+            children.set(index, e);
+
         cleanup_children_now();
         gui->dirty_hover_data();
         redraw();
@@ -443,7 +447,7 @@ rectengine_c *rectengine_c::get_last_child()
     case SQ_CHILD_DESTROYED:
         data.rect.index = child_index( data.rect.id );
         if (data.rect.index>=0) children.get(data.rect.index) = nullptr;
-        DELAY_CALL_R(0,DELEGATE(this,cleanup_children),nullptr);
+        DEFERRED_UNIQUE_CALL(0,DELEGATE(this,cleanup_children),nullptr);
         break;
 	}
 
@@ -561,7 +565,8 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
         case WM_USER + 7213:
             if (engine)
             {
-                switch (LOWORD(lparam)) {
+                switch (lparam) 
+                {
                     case WM_LBUTTONDBLCLK:
                         gui->app_notification_icon_action(NIA_L2CLICK, engine->getrid());
                         break;
@@ -828,7 +833,7 @@ bool rectengine_root_c::refresh_frame(RID, GUIPARAM p)
 
     } else
     {
-        DELAY_CALL_R( 1.0, DELEGATE(this, refresh_frame), (GUIPARAM)1 );
+        DEFERRED_UNIQUE_CALL( 1.0, DELEGATE(this, refresh_frame), (GUIPARAM)1 );
     }
     return true;
 }

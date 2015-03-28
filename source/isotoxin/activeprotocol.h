@@ -60,6 +60,7 @@ class active_protocol_c : public ts::safe_object
     GM_RECEIVER( active_protocol_c, ISOGM_CHANGED_PROFILEPARAM);
     GM_RECEIVER( active_protocol_c, GM_HEARTBEAT);
     GM_RECEIVER( active_protocol_c, ISOGM_CMD_RESULT);
+    GM_RECEIVER( active_protocol_c, GM_UI_EVENT);
     
     int id;
     int priority = 0;

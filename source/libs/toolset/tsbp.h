@@ -34,7 +34,7 @@ public:
 
     enum mergeoptions
     {
-        SKIP_EXIST = 1
+        SKIP_EXIST = 1,
     };
 
 	bp_t(bool presComments = false): preserve_comments(presComments) DEBUGCODE(,source_basis(nullptr)) {}
@@ -86,11 +86,15 @@ public:
 
     void merge( const bp_t &oth, uint32 options )
     {
-        if (options & SKIP_EXIST)
+        if (0 != (options & SKIP_EXIST))
         {
             for (auto it = oth.begin(); it; ++it)
             {
-                if (get(it.name())) continue;
+                if (auto *ibp = get(it.name()))
+                {
+                    ibp->merge( *it, options );
+                    continue;
+                }
                 set(it.name()).overwrite(*it);
             }
         } else 
@@ -101,6 +105,32 @@ public:
     {
         for (auto it = begin(); it; ++it)
             if (it == bp) return true;
+        return false;
+    }
+
+    bool get_remove(const sptr<TCHARACTER> &name, bp_t &bpout)
+    {
+        element_s *el = nullptr;
+        elements.getremove(name, [&](bp_t *bp) {
+
+            iterator it;
+            element_s *prev = nullptr;
+            for (it = begin(); it; prev = it.el, ++it)
+                if (it == bp) break;
+            if (!ASSERT(it)) return;
+
+            (prev ? prev->next : first_element) = it.el->next;
+            if (it.el->next == nullptr) last_element = prev;
+            it.el->next = nullptr;
+            el = it.el;
+
+        });
+        if (el)
+        {
+            bpout = std::move(el->bp);
+            TSDEL(el);
+            return true;
+        }
         return false;
     }
 
@@ -158,20 +188,17 @@ public:
 
 	void remove(const sptr<TCHARACTER> &name)
 	{
-		if (bp_t *bp = get(name))
-		{
-			elements.remove(name);
+        elements.getremove(name, [this](bp_t *bp){
+            iterator it;
+            element_s *prev = nullptr;
+            for (it = begin(); it; prev = it.el, ++it)
+                if (it == bp) break;
+            if (!ASSERT(it)) return;
 
-			iterator it;
-			element_s *prev = nullptr;
-			for (it = begin(); it; prev=it.el, ++it)
-				if (it == bp) break;
-			if (!ASSERT(it)) return;
-
-			(prev ? prev->next : first_element) = it.el->next;
-			if (it.el->next == nullptr) last_element = prev;
-			TSDEL(it.el);
-		}
+            (prev ? prev->next : first_element) = it.el->next;
+            if (it.el->next == nullptr) last_element = prev;
+            TSDEL(it.el);
+        });
 	}
 
 	void remove_at_path(const sptr<TCHARACTER> &path)

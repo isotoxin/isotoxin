@@ -72,6 +72,41 @@ namespace ts
 		return true;
     }
 
+    bool zip_container_c::zip_folder_entry_c::iterate_folders(const wsptr &path_orig, const wsptr &path, ITERATE_FILES_CALLBACK ef, container_c *pf)
+    {
+        tmp_wstr_c pa(path), cf;
+        if (pa.get_char(0) == '\\' || pa.get_char(0) == '/') pa.cut(0, 1);
+        int pad = pa.find_pos('\\');
+        if (pad < 0) pad = pa.find_pos('/');
+        if (pad >= 0)
+        {
+            cf = pa.substr(0, pad);
+            pa.cut(0, pad + 1);
+        }
+        else
+        {
+            cf = pa;
+            pa.clear();
+        }
+
+        if (!cf.is_empty())
+        {
+            // find folder
+            for (zip_folder_entry_c *fe : m_folders)
+                if (fe->name().equals(cf))
+                    if (!fe->iterate_folders(path_orig, pa, ef, pf))
+                        return false;
+        }
+        else
+        {
+            for (zip_folder_entry_c *f : m_folders)
+                if (!ef(path_orig, f->name(), pf))
+                    return false;
+
+        }
+
+        return true;
+    }
 
     zip_container_c::zip_folder_entry_c * zip_container_c::zip_folder_entry_c::add_folder( const wsptr &fnn )
     {
@@ -301,12 +336,16 @@ next:
 
     bool   zip_container_c::read(const wsptr &filename, buf_wrapper_s &b)
     {
-        if (m_find_cache_file_name.equals(filename))
+        ts::wstr_c fn(filename);
+        fn.case_down();
+        fn.replace_all('/', '\\');
+
+        if (m_find_cache_file_name.equals(fn))
         {
             return m_find_cache_file_entry->read( m_unz, b );
         } else
         {
-            if (file_exists( filename ))
+            if (file_exists( fn ))
             {
                 return m_find_cache_file_entry->read( m_unz, b );
             }
@@ -316,13 +355,17 @@ next:
 
     size_t    zip_container_c::size(const wsptr &filename)
     {
-        if (m_find_cache_file_name.equals(filename))
+        ts::wstr_c fn(filename);
+        fn.case_down();
+        fn.replace_all('/', '\\');
+
+        if (m_find_cache_file_name.equals(fn))
         {
             return m_find_cache_file_entry->size();
         }
         else
         {
-            if (file_exists(filename))
+            if (file_exists(fn))
             {
                 return m_find_cache_file_entry->size();
             }
@@ -339,6 +382,7 @@ next:
     {
         wstr_c path1( path0 );
         path1.case_down();
+        path1.replace_all('/', '\\');
         const wchar *path = path1.cstr();
 
         zip_folder_entry_c *cur = &m_root;
@@ -346,7 +390,6 @@ next:
         for (;;)
         {
             int ind = CHARz_find<wchar>( path, '\\' );
-            if (ind < 0) ind = CHARz_find<wchar>( path, '/' );
             if ( ind >= 0 )
             {
                 zip_folder_entry_c *f = cur->get_folder(wsptr(path, ind));
@@ -394,6 +437,19 @@ next:
         if ( c != '\\' && c != '/' ) pp.append_char('\\');
 
         return m_root.iterate_files(pp, path1,ef,this);
+    }
+
+    bool    zip_container_c::iterate_folders(const wsptr &path0, ITERATE_FILES_CALLBACK ef)
+    {
+        tmp_wstr_c path1(path0);
+        path1.case_down();
+
+        tmp_wstr_c pp(path0);
+        wchar c = 0;
+        if (pp.get_length() > 0) c = pp.get_char(pp.get_length() - 1);
+        if (c != '\\' && c != '/') pp.append_char('\\');
+
+        return m_root.iterate_folders(pp, path1, ef, this);
     }
 
     bool zip_container_c::Detect( HANDLE file, LPFILETIME pFileTime )

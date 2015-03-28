@@ -2,7 +2,7 @@
 
 #define HGROUP_MEMBER ts::wsptr()
 
-dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c(data), ipcj( (ts::streamstr<ts::str_c>() << "isotoxin_settings_" << GetCurrentThreadId()).buffer(), DELEGATE( this, ipchandler ) )
+dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c(data), ipcj( (ts::streamstr<ts::str_c>() << "isotoxin_settings_" << GetCurrentThreadId()).buffer(), prf().is_loaded() ? DELEGATE( this, ipchandler ) : nullptr )
 {
     s3::enum_sound_capture_devices(enum_capture_devices, this);
     s3::enum_sound_play_devices(enum_play_devices, this);
@@ -11,6 +11,37 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
     micdevice = string_from_device(mic_device_stored);
     start_capture();
     profile_selected = prf().is_loaded();
+
+    //ts::tbuf0_t<theme_info_s> m_themes;
+
+    ts::wstrings_c fns;
+    ts::g_fileop->find(fns, CONSTWSTR("themes/*/struct.decl"), true);
+
+    for( const ts::wstr_c &f : fns )
+    {
+        ts::wstr_c n = ts::fn_get_name_with_ext(ts::fn_get_path(f).trunc_length(1));
+        for( const theme_info_s &thi : m_themes )
+        {
+            if (thi.folder.equals(n))
+            {
+                n.clear();
+                break;
+            }
+        }
+        if (!n.is_empty())
+        {
+            ts::abp_c bp;
+            if (!ts::g_fileop->load(f, bp)) continue;
+            const ts::abp_c *conf = bp.get(CONSTASTR("conf"));
+
+            theme_info_s &thi = m_themes.add();
+            thi.folder = n;
+            thi.current = cfg().theme().equals(n);
+            thi.name.set_as_char('@').append(n);
+            if (conf)
+                thi.name = conf->get_string(CONSTASTR("name"), ts::to_str(thi.name));
+        }
+    }
 }
 
 dialog_settings_c::~dialog_settings_c()
@@ -190,6 +221,23 @@ bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
     return true;
 }
 
+void dialog_settings_c::select_theme(const ts::str_c& prm)
+{
+    ts::wstr_c selfo; selfo.set_as_utf8(prm);
+    for( theme_info_s &ti : m_themes )
+        ti.current = ti.folder.equals(selfo);
+    set_combik_menu(CONSTASTR("themes"), list_themes());
+}
+
+menu_c dialog_settings_c::list_themes()
+{
+    menu_c m;
+    for( const theme_info_s &ti : m_themes )
+        m.add( ti.name, ti.current ? MIF_MARKED : 0, DELEGATE(this, select_theme), to_utf8(ti.folder) );
+    return m;
+}
+
+
 /*virtual*/ int dialog_settings_c::additions( ts::irect & border )
 {
     if(profile_selected)
@@ -245,6 +293,8 @@ bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
     dm().page_header(TTT("Основные настройки приложения",108));
     dm().vspace(10);
     dm().combik(TTT("Язык",107)).setmenu( list_langs( curlang, DELEGATE(this, select_lang) ) ).setname( CONSTASTR("langs") );
+    dm().vspace(10);
+    dm().combik(TTT("Тема интерфейса",233)).setmenu(list_themes()).setname(CONSTASTR("themes"));
     dm().vspace();
     dm().radio(TTT("Обновления", 155), DELEGATE(this, autoupdate_handler), autoupdate).setmenu(
         menu_c()
@@ -407,7 +457,7 @@ void dialog_settings_c::add_suspended_proto( RID lst, int id, const active_proto
 
     if (mask & MASK_PROFILE_CHAT)
     {
-        DELAY_CALL_R(0, DELEGATE(this,msgopts_handler), (GUIPARAM)msgopts_current);
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this,msgopts_handler), (GUIPARAM)msgopts_current);
     }
 
     if (mask & MASK_APPLICATION_COMMON)
@@ -776,6 +826,19 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
         gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_MICDEVICE).send();
     }
 
+    for (const theme_info_s& thi : m_themes)
+    {
+        if (thi.current)
+        {
+            if (thi.folder != cfg().theme())
+            {
+                cfg().theme(thi.folder);
+                g_app->load_theme(thi.folder);
+            }
+            break;
+        }
+    }
+
     if (profile_selected)
     {
         prf().get_table_active_protocol() = std::move(table_active_protocol_underedit);
@@ -790,7 +853,7 @@ bool dialog_settings_c::ipchandler( ipcr r )
     if (r.d == nullptr)
     {
         // lost contact to plghost
-        DELAY_CALL_R( 0, get_close_button_handler(), nullptr );
+        DEFERRED_UNIQUE_CALL( 0, get_close_button_handler(), nullptr );
     } else
     {
         switch (r.header().cmd)

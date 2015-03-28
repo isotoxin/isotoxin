@@ -322,7 +322,9 @@ struct leech_dock_top_s : public autoparam_i
 {
     int height;
     leech_dock_top_s(int height) :height(height) {}
-    virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+    void update_ctl_pos();
+    /*virtual*/ void i_leeched(guirect_c &to) override { __super::i_leeched(to); update_ctl_pos(); };
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
 struct leech_dock_bottom_center_s : public autoparam_i
@@ -334,6 +336,8 @@ struct leech_dock_bottom_center_s : public autoparam_i
     int index;
     int num;
     leech_dock_bottom_center_s(int width, int height, int x_space = 0, int y_space = 0, int index = 0, int num = 1) :width(width), height(height), x_space(x_space), y_space(y_space), index(index), num(num){}
+    void update_ctl_pos();
+    /*virtual*/ void i_leeched( guirect_c &to ) override { __super::i_leeched(to); update_ctl_pos(); };
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 

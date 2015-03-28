@@ -222,12 +222,15 @@ class theme_c
     ts::hashmap_t<ts::str_c, ts::shared_ptr<button_desc_s> > buttons;
 	ts::wstr_c m_name;
     ts::abp_c m_conf;
+    int iver = -1;
 
-	const ts::drawable_bitmap_c &loadimage( const ts::wsptr &path, const ts::wsptr &name );
+	const ts::drawable_bitmap_c &loadimage( const ts::wsptr &name );
 
 public:
 	theme_c();
 	~theme_c();
+
+    int ver() const {return iver;}
 
 	bool load( const ts::wsptr &name );
 	ts::shared_ptr<theme_rect_s> get_rect(const ts::asptr &rname) const
@@ -262,17 +265,17 @@ enum rect_state_e
 class cached_theme_rect_c
 {
     ts::str_c themerect;
-	mutable const theme_c *theme;
 	mutable ts::shared_ptr<theme_rect_s> rects[RST_ALL_COMBINATIONS];
+    mutable int theme_ver = -1;
 
 public:
-	cached_theme_rect_c():theme(nullptr) {}
+	cached_theme_rect_c() {}
 
     bool set_themerect( const ts::asptr &name )
     {
         if (themerect == name) return false;
         themerect.set(name);
-        theme = nullptr;
+        theme_ver = -1;
         return true;
     }
     const ts::str_c & get_themerect() const {return themerect;}

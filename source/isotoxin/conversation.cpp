@@ -40,7 +40,7 @@ void gui_notice_c::flash()
 bool gui_notice_c::flash_pereflash(RID, GUIPARAM)
 {
     --flashing;
-    if (flashing > 0) DELAY_CALL_R(0.1, DELEGATE(this, flash_pereflash), nullptr);
+    if (flashing > 0) DEFERRED_UNIQUE_CALL(0.1, DELEGATE(this, flash_pereflash), nullptr);
 
     ts::wstr_c text = textrect.get_text();
 
@@ -272,13 +272,13 @@ void gui_notice_c::setup(const ts::wstr_c &itext, const ts::str_c &pubid)
                 {
                     if (current_is_autoconnect)
                     {
-                        b.set_face(CONSTASTR("to_offline"));
+                        b.set_face_getter(BUTTON_FACE(to_offline));
                         b.tooltip(TOOLTIP(TTT("Разъединить (включить режим оффлайн)",98)));
                         b.set_handler(make_offline, (GUIPARAM)networkid);
                     }
                     else
                     {
-                        b.set_face(CONSTASTR("to_online"));
+                        b.set_face_getter(BUTTON_FACE(to_online));
                         b.tooltip(TOOLTIP(TTT("Соединить (включить режим онлайн)",99)));
                         b.set_handler(make_online, (GUIPARAM)networkid);
                     }
@@ -293,7 +293,7 @@ void gui_notice_c::setup(const ts::wstr_c &itext, const ts::str_c &pubid)
             gui_button_c &b_copy = MAKE_CHILD<gui_button_c>(getrid());
             b_copy.set_constant_size(sz1);
             b_copy.set_data_obj<copydata>(pubid, this);
-            b_copy.set_face(CONSTASTR("copyid"));
+            b_copy.set_face_getter(BUTTON_FACE(copyid));
             b_copy.tooltip(TOOLTIP(TTT("Копировть ID в буфер обмена", 97)));
 
             b_copy.set_handler(DELEGATE(&b_copy.get_data_obj<copydata>(), copy_handler), nullptr);
@@ -366,7 +366,7 @@ void gui_notice_c::setup(const ts::wstr_c &itext)
 
                 gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
                 b_accept.set_text(TTT("Перезагрузка",168));
-                b_accept.set_face(CONSTASTR("button"));
+                b_accept.set_face_getter(BUTTON_FACE(button));
                 b_accept.set_handler(DELEGATE(g_app, b_restart), nullptr);
                 b_accept.leech(TSNEW(leech_dock_bottom_center_s, 150, 30, -5, 5, 0, 1));
                 MODIFY(b_accept).visible(true);
@@ -377,7 +377,7 @@ void gui_notice_c::setup(const ts::wstr_c &itext)
             {
                 gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
                 b_accept.set_text(TTT("Загрузить",165));
-                b_accept.set_face(CONSTASTR("button"));
+                b_accept.set_face_getter(BUTTON_FACE(button));
                 b_accept.set_handler(DELEGATE(g_app, b_update_ver), (GUIPARAM)AUB_DOWNLOAD);
                 b_accept.leech(TSNEW(leech_dock_bottom_center_s, 150, 30, -5, 5, 0, 1));
                 MODIFY(b_accept).visible(true);
@@ -417,14 +417,14 @@ void gui_notice_c::setup(const ts::wstr_c &itext, contact_c *sender, uint64 utag
 
             gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
             b_accept.set_text(TTT("Принять", 75));
-            b_accept.set_face(CONSTASTR("button"));
+            b_accept.set_face_getter(BUTTON_FACE(button));
             b_accept.set_handler(DELEGATE(sender, b_accept), this);
             b_accept.leech(TSNEW(leech_dock_bottom_center_s, 100, 30, -5, 5, 0, 2));
             MODIFY(b_accept).visible(true);
 
             gui_button_c &b_reject = MAKE_CHILD<gui_button_c>(getrid());
             b_reject.set_text(TTT("Отклонить", 76));
-            b_reject.set_face(CONSTASTR("button"));
+            b_reject.set_face_getter(BUTTON_FACE(button));
             b_reject.set_handler(DELEGATE(sender, b_reject), this);
             b_reject.leech(TSNEW(leech_dock_bottom_center_s, 100, 30, -5, 5, 1, 2));
             MODIFY(b_reject).visible(true);
@@ -443,21 +443,21 @@ void gui_notice_c::setup(const ts::wstr_c &itext, contact_c *sender, uint64 utag
 
             int minw = 0;
             gui_button_c &b_receiveas = MAKE_CHILD<gui_button_c>(getrid());
-            b_receiveas.set_face(CONSTASTR("button"));
+            b_receiveas.set_face_getter(BUTTON_FACE(button));
             b_receiveas.set_text(TTT("Сохранить как...", 177), minw); minw += 6; if (minw < 100) minw = 100;
             b_receiveas.set_handler(DELEGATE(sender, b_receive_file_as), this);
             b_receiveas.leech(TSNEW(leech_dock_bottom_center_s, minw, 30, -5, 5, 1, 3));
             MODIFY(b_receiveas).visible(true);
 
             gui_button_c &b_receive = MAKE_CHILD<gui_button_c>(getrid());
-            b_receive.set_face(CONSTASTR("button"));
+            b_receive.set_face_getter(BUTTON_FACE(button));
             b_receive.set_text(TTT("Сохранить",176) );
             b_receive.set_handler(DELEGATE(sender, b_receive_file), this);
             b_receive.leech(TSNEW(leech_dock_bottom_center_s, minw, 30, -5, 5, 0, 3));
             MODIFY(b_receive).visible(true);
 
             gui_button_c &b_refuse = MAKE_CHILD<gui_button_c>(getrid());
-            b_refuse.set_face(CONSTASTR("button"));
+            b_refuse.set_face_getter(BUTTON_FACE(button));
             b_refuse.set_text(TTT("Нет",178));
             b_refuse.set_handler(DELEGATE(sender, b_refuse_file), this);
             b_refuse.leech(TSNEW(leech_dock_bottom_center_s, minw, 30, -5, 5, 2, 3));
@@ -486,14 +486,14 @@ void gui_notice_c::setup(contact_c *sender)
 
             gui_button_c &b_resend = MAKE_CHILD<gui_button_c>(getrid());
             b_resend.set_text(TTT("Повторить", 81));
-            b_resend.set_face(CONSTASTR("button"));
+            b_resend.set_face_getter(BUTTON_FACE(button));
             b_resend.set_handler(DELEGATE(sender, b_resend), this);
             b_resend.leech(TSNEW(leech_dock_bottom_center_s, 100, 30, -5, 5, 0, 2));
             MODIFY(b_resend).visible(true);
 
             gui_button_c &b_kill = MAKE_CHILD<gui_button_c>(getrid());
             b_kill.set_text(TTT("Удалить", 82));
-            b_kill.set_face(CONSTASTR("button"));
+            b_kill.set_face_getter(BUTTON_FACE(button));
             b_kill.set_handler(DELEGATE(sender, b_kill), this);
             b_kill.leech(TSNEW(leech_dock_bottom_center_s, 100, 30, -5, 5, 1, 2));
             MODIFY(b_kill).visible(true);
@@ -507,14 +507,14 @@ void gui_notice_c::setup(contact_c *sender)
             update_text(sender);
 
             gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
-            b_accept.set_face(CONSTASTR("accept_call"));
+            b_accept.set_face_getter(BUTTON_FACE(accept_call));
             b_accept.set_handler(DELEGATE(sender, b_accept_call), this);
             ts::ivec2 minsz = b_accept.get_min_size();
             b_accept.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, -5, 5, 0, 2));
             MODIFY(b_accept).visible(true);
 
             gui_button_c &b_reject = MAKE_CHILD<gui_button_c>(getrid());
-            b_reject.set_face(CONSTASTR("reject_call"));
+            b_reject.set_face_getter(BUTTON_FACE(reject_call));
             b_reject.set_handler(DELEGATE(sender, b_reject_call), this);
             minsz = b_reject.get_min_size();
             b_reject.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, -5, 5, 1, 2));
@@ -528,7 +528,7 @@ void gui_notice_c::setup(contact_c *sender)
             update_text(sender);
 
             gui_button_c &b_reject = MAKE_CHILD<gui_button_c>(getrid());
-            b_reject.set_face(CONSTASTR("reject_call"));
+            b_reject.set_face_getter(BUTTON_FACE(reject_call));
             b_reject.set_handler(DELEGATE(sender, b_hangup), this);
             ts::ivec2 minsz = b_reject.get_min_size();
             b_reject.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, -5, 5, 0, 1));
@@ -542,7 +542,7 @@ void gui_notice_c::setup(contact_c *sender)
             update_text(sender);
 
             gui_button_c &b_cancel = MAKE_CHILD<gui_button_c>(getrid());
-            b_cancel.set_face(CONSTASTR("call_cancel"));
+            b_cancel.set_face_getter(BUTTON_FACE(call_cancel));
             b_cancel.set_handler(DELEGATE(sender, b_cancel_call), this);
             ts::ivec2 minsz = b_cancel.get_min_size();
             b_cancel.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, -5, 5, 0, 1));
@@ -674,10 +674,10 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED> &)
     if (owner && owner->getkey().is_self())
     {
         // just update self, if self-contactitem selected
-        DECLARE_DELAY_EVENT_BEGIN(0.4)
+        DEFERRED_EXECUTION_BLOCK_BEGIN(0.4)
             if (self_selected)
                 gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self()).send();
-        DECLARE_DELAY_EVENT_END(0)
+        DEFERRED_EXECUTION_BLOCK_END(0)
     }
     return 0;
 }
@@ -689,10 +689,10 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_UPDATE_CONTACT_V> & p)
     if (owner->getkey().is_self())
     {
         // just update self, if self-contactitem selected
-        DECLARE_DELAY_EVENT_BEGIN(0.4)
+        DEFERRED_EXECUTION_BLOCK_BEGIN(0.4)
             if (self_selected)
             gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self()).send();
-        DECLARE_DELAY_EVENT_END(0)
+        DEFERRED_EXECUTION_BLOCK_END(0)
     }
 
     contact_c *sender = nullptr;
@@ -774,10 +774,10 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<GM_UI_EVENT> & e)
 {
     if (e.evt == UE_MAXIMIZED || e.evt == UE_NORMALIZED)
     {
-        DECLARE_DELAY_EVENT_BEGIN(0)
+        DEFERRED_EXECUTION_BLOCK_BEGIN(0)
         if (self_selected)
             gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self()).send();
-        DECLARE_DELAY_EVENT_END(0)
+        DEFERRED_EXECUTION_BLOCK_END(0)
     }
     return 0;
 }
@@ -937,7 +937,7 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
     {
         if (pt)
         {
-            DELAY_CALL_R( 0, DELEGATE(this, try_select_link), p );
+            DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, try_select_link), p );
         }
         return true;
     }
@@ -1243,7 +1243,7 @@ void gui_message_item_c::init_load( int n_load )
 
     gui_button_c &b_load = MAKE_CHILD<gui_button_c>(getrid());
     b_load.set_text(TTT("Загрузить еще $ сообщений",124) / ts::wstr_c().set_as_int(n_load));
-    b_load.set_face(CONSTASTR("button"));
+    b_load.set_face_getter(BUTTON_FACE(button));
     b_load.set_handler(DELEGATE(author.get(), b_load), (GUIPARAM)n_load);
     b_load.leech(TSNEW(leech_dock_bottom_center_s, 300, 30, -5, 5, 0, 1));
     MODIFY(b_load).visible(true);
@@ -1719,7 +1719,7 @@ void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
         case 0: //explore
         {
             gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
-            bc.set_face(g_app->buttons().exploreb);
+            bc.set_face_getter(BUTTON_FACE_PRELOADED(exploreb));
             bc.set_handler(DELEGATE(this, b_explore), nullptr);
             MODIFY(bc).setminsize(bc.getrid()).pos(root_to_local(p)).visible(true);
             b = bc.getrid();
@@ -1728,7 +1728,7 @@ void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
         case 1: //break
         {
             gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
-            bc.set_face(g_app->buttons().breakb);
+            bc.set_face_getter(BUTTON_FACE_PRELOADED(breakb));
             bc.set_handler(DELEGATE(this, b_break), nullptr);
             MODIFY(bc).setminsize(bc.getrid()).pos(root_to_local(p)).visible(true);
             b = bc.getrid();
@@ -1737,7 +1737,7 @@ void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
         case 2: //pause
         {
             gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
-            bc.set_face(g_app->buttons().pauseb);
+            bc.set_face_getter(BUTTON_FACE_PRELOADED(pauseb));
             bc.set_handler(DELEGATE(this, b_pause), nullptr);
             MODIFY(bc).setminsize(bc.getrid()).pos(root_to_local(p)).visible(true);
             b = bc.getrid();
@@ -1746,7 +1746,7 @@ void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
         case 3: //unpause
         {
             gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
-            bc.set_face(g_app->buttons().unpauseb);
+            bc.set_face_getter(BUTTON_FACE_PRELOADED(unpauseb));
             bc.set_handler(DELEGATE(this, b_unpause), nullptr);
             MODIFY(bc).setminsize(bc.getrid()).pos(root_to_local(p)).visible(true);
             b = bc.getrid();
@@ -2101,9 +2101,9 @@ DWORD gui_messagelist_c::handler_SEV_ACTIVE_STATE(const system_event_param_s & p
 {
     if (p.active)
     {
-        DECLARE_DELAY_EVENT_BEGIN(0)
+        DEFERRED_EXECUTION_BLOCK_BEGIN(0)
             ((gui_messagelist_c*)param)->getengine().redraw();
-        DECLARE_DELAY_EVENT_END(this)
+        DEFERRED_EXECUTION_BLOCK_END(this)
     }
     return 0;
 }
@@ -2403,7 +2403,7 @@ gui_message_area_c::~gui_message_area_c()
 
     message_editor = MAKE_VISIBLE_CHILD<gui_message_editor_c>( getrid() );
     send_button = MAKE_VISIBLE_CHILD<gui_button_c>( getrid() );
-    send_button->set_face(CONSTASTR("send"));
+    send_button->set_face_getter(BUTTON_FACE(send));
     send_button->tooltip( TOOLTIP( TTT("Отправить",7) ) );
     send_button->set_handler( DELEGATE(g_app, b_send_message), nullptr );
     
@@ -2596,7 +2596,7 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&p)
         if (caption->contacted()) caption->getcontact().reselect(true);
         caption->update_text();
         caption->update_buttons();
-        DELAY_CALL_R( 0.3, DELEGATE( this, hide_show_messageeditor ), nullptr );
+        DEFERRED_UNIQUE_CALL( 0.3, DELEGATE( this, hide_show_messageeditor ), nullptr );
     }
 
     return 0;

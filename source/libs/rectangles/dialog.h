@@ -91,6 +91,7 @@ protected:
         int height_ = 0;
         bool focus_ = false;
         bool readonly_ = false;
+        DEBUGCODE(bool initialization = true;) // protection flag - [this] can be changed while [initialization] == true due resize of array realloc.
 
         bool updvalue( const ts::wstr_c &t )
         {
@@ -119,8 +120,20 @@ protected:
             return true;
         }
 
+        button_desc_s *getbface() const
+        {
+            ASSERT(text.begins(CONSTWSTR("face=")));
+            return gui->theme().get_button( ts::str_c(text.substr(5)) );
+        }
+        GET_BUTTON_FACE getgetface() const
+        {
+            ASSERT(!initialization);
+            return DELEGATE(this, getbface);
+        }
+
         GET_TOOLTIP gethintproc() const
         {
+            ASSERT(!initialization);
             return DELEGATE(this, gethint);
         }
         ts::wstr_c gethint() const {return hint;}
@@ -166,7 +179,14 @@ protected:
     {
         descarray& arr;
         ts::uint32 mask = 0;
-        descmaker(descarray& arr):arr(arr) {}
+        descmaker(descarray& arr):arr(arr) { ASSERT(arr.size() == 0); }
+        ~descmaker()
+        {
+#ifndef _FINAL
+            for(description_s &d : arr)
+                d.initialization = false;
+#endif
+        }
         description_s& operator()() { description_s& d = arr.add(); d.mask = mask; return d; }
         void operator << (ts::uint32 m) {mask = m;}
         void operator=(const descmaker&) UNUSED;

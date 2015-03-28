@@ -170,14 +170,14 @@ bool gui_contact_item_c::apply_edit( RID r, GUIPARAM p)
         }
 
     }
-    DELAY_CALL_R( 0, DELEGATE( this, update_buttons ), nullptr );
+    DEFERRED_UNIQUE_CALL( 0, DELEGATE( this, update_buttons ), nullptr );
     return true;
 }
 
 bool gui_contact_item_c::cancel_edit( RID, GUIPARAM)
 {
     flags.clear(F_EDITNAME|F_EDITSTATUS);
-    DELAY_CALL_R( 0, DELEGATE( this, update_buttons ), nullptr );
+    DEFERRED_UNIQUE_CALL( 0, DELEGATE( this, update_buttons ), nullptr );
     return true;
 }
 
@@ -211,7 +211,7 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
     if (!hstuff().updr[EB_NAME].brid)
     {
         gui_button_c &b = MAKE_CHILD<gui_button_c>(getrid());
-        b.set_face(g_app->buttons().editb);
+        b.set_face_getter(BUTTON_FACE_PRELOADED(editb));
         b.set_handler(DELEGATE(this, edit0), nullptr);
         hstuff().updr[EB_NAME].brid = b.getrid();
     }
@@ -219,7 +219,7 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
     if (!hstuff().updr[EB_STATUS].brid)
     {
         gui_button_c &b = MAKE_CHILD<gui_button_c>(getrid());
-        b.set_face(g_app->buttons().editb);
+        b.set_face_getter(BUTTON_FACE_PRELOADED(editb));
         b.set_handler(DELEGATE(this, edit1), nullptr);
         hstuff().updr[EB_STATUS].brid = b.getrid();
     }
@@ -255,13 +255,13 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
             tf.on_enter_press = DELEGATE( this, apply_edit );
 
             gui_button_c &bok = MAKE_CHILD<gui_button_c>(getrid());
-            bok.set_face(g_app->buttons().confirmb);
+            bok.set_face_getter(BUTTON_FACE_PRELOADED(confirmb));
             bok.set_handler(DELEGATE(this, apply_edit), nullptr);
             bok.leech(TSNEW(leech_at_right, &tf, 5));
             hstuff().bconfirm = bok.getrid();
 
             gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
-            bc.set_face(g_app->buttons().cancelb);
+            bc.set_face_getter(BUTTON_FACE_PRELOADED(cancelb));
             bc.set_handler(DELEGATE(this, cancel_edit), nullptr);
             bc.leech(TSNEW(leech_at_right, &bok, 5));
             hstuff().bcancel = bc.getrid();
@@ -294,7 +294,7 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
         });
 
         gui_button_c &b_call = MAKE_CHILD<gui_button_c>(getrid());
-        b_call.set_face(g_app->buttons().callb);
+        b_call.set_face_getter(BUTTON_FACE_PRELOADED(callb));
         b_call.tooltip(TOOLTIP(TTT("Звонок", 140)));
 
         b_call.set_handler(DELEGATE(this, audio_call), nullptr);
@@ -316,7 +316,7 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
         }
 
         gui_button_c &b_file = MAKE_CHILD<gui_button_c>(getrid());
-        b_file.set_face(g_app->buttons().fileb);
+        b_file.set_face_getter(BUTTON_FACE_PRELOADED(fileb));
         b_file.tooltip(TOOLTIP(TTT("Отправить файл",187)));
 
         b_file.set_handler(DELEGATE(this, send_file), nullptr);
@@ -596,7 +596,7 @@ void gui_contact_item_c::updrect(void *, int r, const ts::ivec2 &p)
     {
         hstuff().updr[r].p = root_to_local(p);
         hstuff().updr[r].updated = true;
-        DELAY_CALL_R( 0, DELEGATE(this, update_buttons), (void *)1 );
+        DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, update_buttons), (void *)1 );
     }
 }
 
@@ -1184,6 +1184,25 @@ void gui_contactlist_c::refresh_array()
 
     if (role == CLR_MAIN_LIST)
     {
+        recreate_ctls();
+        contacts().update_meta();
+    } else if (role == CLR_NEW_METACONTACT_LIST)
+    {
+        skip_top_pixels = 0;
+        skip_bottom_pixels = 0;
+        skipctl = 0;
+    }
+}
+
+void gui_contactlist_c::recreate_ctls()
+{
+    if (addcbtn) TSDEL(addcbtn);
+    if (self) TSDEL(self);
+
+    if (button_desc_s *baddc = gui->theme().get_button(CONSTASTR("addcontact")))
+    {
+        AUTOCLEAR(flags, F_NO_REPOS);
+
         struct handlers
         {
             static bool summon_addcontacts(RID, GUIPARAM)
@@ -1199,28 +1218,29 @@ void gui_contactlist_c::refresh_array()
             }
         };
 
-        gui_button_c &b_add = MAKE_CHILD<gui_button_c>( getrid() );
-        b_add.tooltip(TOOLTIP(TTT("Добавить контакт",64)));
-        b_add.set_face(CONSTASTR("addcontact"));
-        b_add.set_handler(handlers::summon_addcontacts,nullptr);
-        b_add.leech( TSNEW(leech_dock_bottom_center_s, 40, 40, 0, 10) );
-        MODIFY(b_add).zindex(1.0f).visible(true);
-    
-        //b_add.set_handler();
+        addcbtn = MAKE_CHILD<gui_button_c>(getrid());
+        addcbtn->tooltip(TOOLTIP(TTT("Добавить контакт", 64)));
+        addcbtn->set_face_getter(BUTTON_FACE(addcontact));
+        addcbtn->set_handler(handlers::summon_addcontacts, nullptr);
+        addcbtn->leech(TSNEW(leech_dock_bottom_center_s, baddc->size.x, baddc->size.y, 0, 10));
+        MODIFY(*addcbtn).zindex(1.0f).visible(true);
+        getengine().child_move_to(0, &addcbtn->getengine());
 
-        gui_contact_item_c &selfci = MAKE_CHILD<gui_contact_item_c>(getrid(), &contacts().get_self()) << CIR_ME;
-        selfci.leech( TSNEW(leech_dock_top_s, gui->theme().conf().get_int(CONSTASTR("mecontactheight"), 60)) );
-        self = &selfci;
+        self = MAKE_CHILD<gui_contact_item_c>(getrid(), &contacts().get_self()) << CIR_ME;
+        self->leech(TSNEW(leech_dock_top_s, gui->theme().conf().get_int(CONSTASTR("mecontactheight"), 60)));
+        getengine().child_move_to(1, &self->getengine());
+
+        getengine().resort_children();
 
         skipctl = 2;
+        skip_top_pixels = gui->theme().conf().get_int(CONSTASTR("cltop"), 70);
+        skip_bottom_pixels = gui->theme().conf().get_int(CONSTASTR("clbottom"), 70);
 
-        contacts().update_meta();
-    } else if (role == CLR_NEW_METACONTACT_LIST)
-    {
-        skip_top_pixels = 0;
-        skip_bottom_pixels = 0;
-        skipctl = 0;
+        return;
     }
+    skipctl = 0;
+    children_repos();
+
 }
 
 ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)

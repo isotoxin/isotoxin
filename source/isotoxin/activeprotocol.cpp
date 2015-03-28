@@ -309,6 +309,16 @@ ts::uint32 active_protocol_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
     return 0;
 }
 
+ts::uint32 active_protocol_c::gm_handler(gmsg<GM_UI_EVENT>&e)
+{
+    if (UE_THEMECHANGED == e.evt)
+    {
+        // self avatar must be recreated to fit new gui theme
+        set_avatar( contacts().get_self().subget(contact_key_s(0,id)) );
+    }
+    return 0;
+}
+
 ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
 {
     run();
@@ -374,7 +384,7 @@ bool active_protocol_c::check_die(RID, GUIPARAM)
         // worker still works. waiting again
         if (ipcp) ipcp->something_happens();
         r.unlock();
-        DELAY_CALL_R(0.01, DELEGATE(this, check_die), nullptr);
+        DEFERRED_UNIQUE_CALL(0.01, DELEGATE(this, check_die), nullptr);
     } else
     {
         r.unlock();
@@ -388,7 +398,7 @@ bool active_protocol_c::check_save(RID, GUIPARAM)
     if (!ttt().flags.is(F_CONFIG_OK))
     {
         // config still not received. waiting again
-        DELAY_CALL_R(0.01, DELEGATE(this, check_die), nullptr);
+        DEFERRED_UNIQUE_CALL(0.01, DELEGATE(this, check_die), nullptr);
     }
     else
     {
@@ -470,7 +480,7 @@ try_again_save:
         check_save(RID(),nullptr);
 
     } else
-        DELAY_CALL_R( 0, DELEGATE(this,check_save), nullptr );
+        DEFERRED_UNIQUE_CALL( 0, DELEGATE(this,check_save), nullptr );
 }
 
 ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CMD_RESULT>& r)
@@ -524,7 +534,7 @@ void active_protocol_c::stop_and_die(bool wait_worker_end)
             lr = syncdata.lock_read();
         }
     } else
-        DELAY_CALL_R( 0, DELEGATE(this,check_die), nullptr );
+        DEFERRED_UNIQUE_CALL( 0, DELEGATE(this,check_die), nullptr );
 }
 
 void active_protocol_c::del_contact(int cid)

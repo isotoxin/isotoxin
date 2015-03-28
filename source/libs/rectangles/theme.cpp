@@ -4,24 +4,30 @@ using namespace ts;
 
 const theme_rect_s *cached_theme_rect_c::operator()( ts::uint32 st ) const
 {
-	if (theme != &gui->theme())
+	if (theme_ver != gui->theme().ver())
 	{
-		theme = &gui->theme();
-		rects[0] = theme->get_rect(themerect);
-        rects[ RST_HIGHLIGHT ] = theme->get_rect(tmp_str_c(themerect).append(CONSTASTR(".h")));
-        rects[ RST_ACTIVE ] = theme->get_rect(tmp_str_c(themerect).append(CONSTASTR(".a")));
-        rects[ RST_FOCUS ] = theme->get_rect(tmp_str_c(themerect).append(CONSTASTR(".f")));
+        if (theme_ver>=0)
+        {
+            for (int i = 0; i < RST_ALL_COMBINATIONS; ++i)
+                rects[i] = nullptr;
+        }
+		theme_ver = gui->theme().ver();
 
-        rects[ RST_ACTIVE | RST_HIGHLIGHT ] = theme->get_rect(tmp_str_c(themerect).append(CONSTASTR(".ah")));
+		rects[0] = gui->theme().get_rect(themerect);
+        rects[ RST_HIGHLIGHT ] = gui->theme().get_rect(tmp_str_c(themerect).append(CONSTASTR(".h")));
+        rects[ RST_ACTIVE ] = gui->theme().get_rect(tmp_str_c(themerect).append(CONSTASTR(".a")));
+        rects[ RST_FOCUS ] = gui->theme().get_rect(tmp_str_c(themerect).append(CONSTASTR(".f")));
+
+        rects[ RST_ACTIVE | RST_HIGHLIGHT ] = gui->theme().get_rect(tmp_str_c(themerect).append(CONSTASTR(".ah")));
         if (!rects[ RST_ACTIVE | RST_HIGHLIGHT ]) rects[ RST_ACTIVE | RST_HIGHLIGHT ] = rects[ RST_HIGHLIGHT ];
 
-        rects[ RST_FOCUS | RST_HIGHLIGHT ] = theme->get_rect(tmp_str_c(themerect).append(CONSTASTR(".fh")));
+        rects[ RST_FOCUS | RST_HIGHLIGHT ] = gui->theme().get_rect(tmp_str_c(themerect).append(CONSTASTR(".fh")));
         if (!rects[ RST_FOCUS | RST_HIGHLIGHT ]) rects[ RST_FOCUS | RST_HIGHLIGHT ] = rects[ RST_HIGHLIGHT ];
 
-        rects[ RST_FOCUS | RST_ACTIVE ] = theme->get_rect(tmp_str_c(themerect).append(CONSTASTR(".af")));
+        rects[ RST_FOCUS | RST_ACTIVE ] = gui->theme().get_rect(tmp_str_c(themerect).append(CONSTASTR(".af")));
         if (!rects[ RST_FOCUS | RST_ACTIVE ]) rects[ RST_FOCUS | RST_ACTIVE ] = rects[ RST_ACTIVE ];
 
-        rects[ RST_FOCUS | RST_ACTIVE | RST_HIGHLIGHT ] = theme->get_rect(tmp_str_c(themerect).append(CONSTASTR(".afh")));
+        rects[ RST_FOCUS | RST_ACTIVE | RST_HIGHLIGHT ] = gui->theme().get_rect(tmp_str_c(themerect).append(CONSTASTR(".afh")));
         if (!rects[RST_FOCUS | RST_ACTIVE | RST_HIGHLIGHT]) rects[RST_FOCUS | RST_ACTIVE | RST_HIGHLIGHT] = rects[RST_ACTIVE | RST_HIGHLIGHT];
 
         for(int i=0;i<RST_ALL_COMBINATIONS;++i)
@@ -197,6 +203,8 @@ void button_desc_s::load_params(theme_c *th, const abp_c * block)
         if (rects[i].size().y > size.y)
             size.y = rects[i].size().y;
     }
+    if (const ts::abp_c *sz = block->get(CONSTASTR("size")))
+        size = parsevec2(sz->as_string(), size);
 }
 
 ts::ivec2 button_desc_s::draw( rectengine_c *engine, states st, const ts::irect& area, ts::uint32 defalign )
@@ -239,24 +247,33 @@ theme_c::~theme_c()
 
 }
 
-const drawable_bitmap_c &theme_c::loadimage( const wsptr &path, const wsptr &name )
+const drawable_bitmap_c &theme_c::loadimage( const wsptr &name )
 {
 	drawable_bitmap_c &dbmp = bitmaps[name];
     if (dbmp.info().pitch != 0)
         return dbmp;
-    bitmap_c bmp; bmp.load_from_file( fn_join(pwstr_c(path), name) );
+    bitmap_c bmp;
+    if (blob_c b = load_image(name))
+    {
+        if (!bmp.load_from_file(b.data(),b.size()))
+            bmp.create_RGBA(ts::ivec2(128,128)).fill(ARGB(255,0,255));
+    } else
+        bmp.create_RGBA(ts::ivec2(128,128)).fill(ARGB(255, 0, 255));
+
     dbmp.create_from_bitmap(bmp, false, true);
 	return dbmp;
 }
 
 bool theme_c::load( const ts::wsptr &name )
 {
-    clear_glyphs_cache();
-
-	wstr_c path(CONSTWSTR("themes/")); path.append(name).append_char('/');
+	wstr_c path(CONSTWSTR("themes/"));
+    path.append(name).append_char('/');
 	int pl = path.get_length();
 	abp_c bp;
 	if (!g_fileop->load(path.append(CONSTWSTR("struct.decl")), bp)) return false;
+
+    clear_glyphs_cache();
+    ++iver;
 	path.set_length(pl);
 
     set_fonts_dir(path);
@@ -265,6 +282,28 @@ bool theme_c::load( const ts::wsptr &name )
     bitmaps.clear();
     rects.clear();
     buttons.clear();
+
+    abp_c * parent = bp.get(CONSTASTR("parent"));
+    abp_c bp_temp;
+
+    while (parent)
+    {
+        ts::wstr_c pfolder = parent->as_string();
+        if (!pfolder.is_empty())
+        {
+            abp_c pbp;
+            wstr_c ppath(CONSTWSTR("themes/"));
+            ppath.append(pfolder).append_char('/');
+            set_fonts_dir(ppath, true);
+            set_images_dir(ppath, true);
+            if (!g_fileop->load(ppath.append(CONSTWSTR("struct.decl")), pbp)) return false;
+            bp.merge(pbp,abp_c::SKIP_EXIST);
+            if (pbp.get_remove(CONSTASTR("parent"), bp_temp))
+                parent = &bp_temp;
+            else 
+                parent = nullptr;
+        }
+    }
 
     theme_conf_s thc;
     if (abp_c * conf = bp.get("conf"))
@@ -302,7 +341,7 @@ bool theme_c::load( const ts::wsptr &name )
                     bn = parent->as_string();
                 }
             }
-            const drawable_bitmap_c &dbmp = loadimage(path,to_wstr(it->get_string("src")));
+            const drawable_bitmap_c &dbmp = loadimage(to_wstr(it->get_string("src")));
 			r = theme_rect_s::build( dbmp, thc );
 			
 			r->load_params(it);
@@ -317,7 +356,7 @@ bool theme_c::load( const ts::wsptr &name )
             if (ASSERT(!src.is_empty()))
             {
                 token<char> t(src.as_sptr());
-                const drawable_bitmap_c &dbmp = loadimage(path, to_wstr(t->as_sptr()));
+                const drawable_bitmap_c &dbmp = loadimage(to_wstr(t->as_sptr()));
                 ++t;
                 irect r = ts::parserect(t,irect(ivec2(0),dbmp.info().sz));
                 ts::image_extbody_c &img = images.add(it.name());
@@ -339,7 +378,7 @@ bool theme_c::load( const ts::wsptr &name )
                 bd = button_desc_s::build( make_dummy<drawable_bitmap_c>(true) );
             } else
             {
-                const drawable_bitmap_c &dbmp = loadimage(path, to_wstr(src));
+                const drawable_bitmap_c &dbmp = loadimage(to_wstr(src));
                 bd = button_desc_s::build(dbmp);
             }
             bd->load_params(this, it);
@@ -354,7 +393,7 @@ bool theme_c::load( const ts::wsptr &name )
             if (ASSERT(!src.is_empty()))
             {
                 token<char> t(src.as_sptr());
-                drawable_bitmap_c &dbmp = const_cast<drawable_bitmap_c &>(loadimage(path, to_wstr(t->as_sptr())));
+                drawable_bitmap_c &dbmp = const_cast<drawable_bitmap_c &>(loadimage(to_wstr(t->as_sptr())));
                 ++t;
                 irect r = ts::parserect(t, irect(ivec2(0), dbmp.info().sz));
                 if (it.name().equals( CONSTASTR("zeroalpha") ))
@@ -401,6 +440,8 @@ bool theme_c::load( const ts::wsptr &name )
 
 
 	m_name = name;
+    if (iver > 0) // 1st load (iver == 0) is not change
+        gmsg<GM_UI_EVENT>(UE_THEMECHANGED).send();
 	return true;
 }
 

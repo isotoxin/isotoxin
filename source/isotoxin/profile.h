@@ -277,6 +277,7 @@ public:
 
     void load( const ts::wstr_c& pfn );
 
+    ts::blob_c get_avatar( const contact_key_s&k ) const;
     void set_avatar( const contact_key_s&k, const ts::blob_c &avadata, int tag );
 
     void dirtycontact( const contact_key_s&k ) { dirtycontacts.set(k); changed(); }

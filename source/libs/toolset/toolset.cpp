@@ -21,6 +21,17 @@ __declspec(thread) tmpalloc_c *tmpalloc_c::core = nullptr;
 
 tmpalloc_c tmpb;
 
+    blob_c tsfileop_c::load(const wstrings_c &paths, const wsptr &fn)
+    {
+        blob_c b;
+        for ( const wstr_c &trypath : paths )
+        {
+            b = load( fn_join(trypath, fn) );
+            if (b) return b;
+        }
+        return b;
+    }
+
     blob_c tsfileop_c::load(const wsptr &fn)
     {
         struct bw : public buf_wrapper_s
@@ -83,7 +94,7 @@ tmpalloc_c tmpb;
 		}
 
 		virtual ~tsfileop_def_c() {}
-        /*virtual*/ bool read(const wsptr &fn, buf_wrapper_s &b)
+        /*virtual*/ bool read(const wsptr &fn, buf_wrapper_s &b) override
 		{
 			HANDLE f = CreateFileW( tmp_wstr_c(fn), GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr );
 			if (f == INVALID_HANDLE_VALUE)
@@ -95,7 +106,7 @@ tmpalloc_c tmpb;
             CloseHandle(f);
             return (aint)r == sz;
 		}
-		/*virtual*/ bool size(const wsptr &fn, size_t &sz)
+		/*virtual*/ bool size(const wsptr &fn, size_t &sz) override
 		{
             HANDLE f = CreateFileW(tmp_wstr_c(fn), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
             if (f == INVALID_HANDLE_VALUE)
@@ -105,9 +116,20 @@ tmpalloc_c tmpb;
 			return true;;
 		}
 
-        /*virtual*/ void find(wstrings_c & files, const wsptr &fnmask )
+        /*virtual*/ void find(wstrings_c & files, const wsptr &fnmask, bool full_paths ) override
         {
-            find_files(fnmask, files, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY);
+            int x = pwstr_c(fnmask).find_pos(CONSTWSTR("/*/"));
+            if (x >= 0)
+            {
+                wstrings_c folders;
+                find_files(pwstr_c(fnmask).substr(0, x + 2), folders, FILE_ATTRIBUTE_DIRECTORY);
+                for( const wstr_c &f : folders )
+                {
+                    if (f.equals(CONSTWSTR(".")) || f.equals(CONSTWSTR(".."))) continue;
+                    find( files, ts::wstr_c(pwstr_c(fnmask).substr(0, x + 1)).append(f).append(pwstr_c(fnmask).substr(x+2)), full_paths);
+                }
+            } else
+                find_files(fnmask, files, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, full_paths);
         }
 	};
 
