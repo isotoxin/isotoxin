@@ -151,6 +151,7 @@ struct host_functions_s
     FUNC2( int,  resend_request, int, const char* ) \
     FUNC1( void, del_contact,    int ) \
     FUNC2( void, send,           int, const message_s * ) \
+    FUNC1( void, del_message,    u64 ) \
     FUNC1( void, accept,         int ) \
     FUNC1( void, reject,         int ) \
     FUNC2( void, call,           int, const call_info_s * ) \
@@ -159,6 +160,7 @@ struct host_functions_s
     FUNC2( void, send_audio,     int, const call_info_s * ) \
     FUNC2( void, proxy_settings, int, const char *) \
     FUNC2( void, file_send,      int, const file_send_info_s *) \
+    FUNC2( void, file_resume,    u64, u64) \
     FUNC2( void, file_control,   u64, file_control_e) \
     FUNC2( void, file_portion,   u64, const file_portion_s *) \
     FUNC1( void, get_avatar,     int ) \

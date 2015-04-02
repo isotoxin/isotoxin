@@ -71,7 +71,7 @@ bool gui_notice_c::flash_pereflash(RID, GUIPARAM)
 
 ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
 {
-    if (notice == NOTICE_FILE && utag == ifl.utag && ifl.fctl == FIC_BREAK)
+    if (notice == NOTICE_FILE && utag == ifl.utag && (ifl.fctl == FIC_BREAK || ifl.fctl == FIC_DISCONNECT))
     {
         RID par = getparent();
         TSDEL(this);
@@ -218,7 +218,7 @@ void gui_notice_c::setup(const ts::wstr_c &itext, const ts::str_c &pubid)
 
 
             newtext.set(TTT("Имя сети", 102)).append(CONSTWSTR(": <l>")).append(itext).append(CONSTWSTR("</l><br>"))
-                .append(TTT("Модуль", 105)).append(CONSTWSTR(": <l>")).append(plugdesc).append(CONSTWSTR("</l><br>"))
+                .append(TTT("Модуль", 105)).append(CONSTWSTR(": <l>")).append(plugdesc).append(CONSTWSTR("</l><br><ee>"))
                 .append(TTT("ID", 103)).append(CONSTWSTR(": <l><null=1><null=2>")).append(pubid).append(CONSTWSTR("<null=3><null=4></l><br>"))
                 .append(TTT("Состояние", 104)).append(CONSTWSTR(": <l>")).append(sost); //.append(CONSTWSTR("<br><b>"));
             textrect.set_text_only(newtext, true);
@@ -799,17 +799,17 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
             
             }
 
-            for (auto it = prf().get_table_active_protocol().begin(), end = prf().get_table_active_protocol().end(); it != end; ++it)
+            for (auto &row : prf().get_table_active_protocol())
             {
-                if (0 != (it->options & active_protocol_data_s::O_SUSPENDED))
+                if (0 != (row.other.options & active_protocol_data_s::O_SUSPENDED))
                     continue;
 
-                ts::str_c pubid = contacts().find_pubid(it.id());
+                ts::str_c pubid = contacts().find_pubid(row.id);
                 if (!pubid.is_empty())
                 {
                     not_at_end();
                     gui_notice_c &n = create_notice(NOTICE_NETWORK);
-                    n.setup(it->name, pubid);
+                    n.setup(row.other.name, pubid);
                 }
             }
         } else
@@ -823,7 +823,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
             });
 
             g_app->enum_file_transfers_by_historian(owner->getkey(), [this](file_transfer_s &ftr) {
-                if (ftr.send) return;
+                if (ftr.upload) return;
                 contact_c *sender = contacts().find(ftr.sender);
                 if (sender)
                 {
@@ -916,15 +916,22 @@ void gui_message_item_c::ctx_menu_copymessage(const ts::str_c &msg)
 void gui_message_item_c::ctx_menu_delmessage(const ts::str_c &mutag)
 {
     uint64 utag = 0;
-    for (int i = 0; i < sizeof(utag); ++i)
-        ((ts::uint8 *)&utag)[i] = mutag.as_byte_hex(i * 2);
+    mutag.hex2buf<sizeof(uint64)>((ts::uint8 *)&utag);
 
     historian->del_history(utag);
+    historian->subiterate([&](contact_c *c){
+        if (active_protocol_c *ap = prf().ap(c->getkey().protoid)) // all protocols
+            ap->del_message(utag);
+    });
+
+    if (auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.msgitem_utag == utag; }))
+        if (row->deleted())
+            prf().changed();
 
     if (remove_utag(utag))
     {
         RID parent = getparent();
-        if (records.size() == 0)
+        if (records.size() == 0 || subtype == ST_RECV_FILE || subtype == ST_RECV_FILE)
             TSDEL(this);
         parent.call_children_repos();
     }
@@ -967,6 +974,8 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
         }
         return false;
     }
+
+    bool del_only = false;
 
     switch (qp)
     {
@@ -1056,8 +1065,14 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
         }
         break;
     case SQ_MOUSE_RUP:
-        if ((records.size() == 1 && records.get(0).text.is_empty()) || subtype != ST_CONVERSATION) break;
-        if (!some_selected() && check_overlink(to_local(data.mouse.screenpos)))
+        if ((records.size() == 1 && records.get(0).text.is_empty()) || subtype != ST_CONVERSATION)
+        {
+            if (records.size() == 0) break;
+            if (ST_SEND_FILE == subtype || ST_RECV_FILE == subtype)
+                if (g_app->find_file_transfer_by_msgutag(records.get(0).utag))
+                    break; // do not delete file transfer in progress
+            del_only = true;
+        } else if (!some_selected() && check_overlink(to_local(data.mouse.screenpos)))
         {
             if (popupmenu)
             {
@@ -1101,14 +1116,20 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
             }
             menu_c mnu;
 
-            bool some_selection = some_selected();
-
-            mnu.add(gui->app_loclabel(LL_CTXMENU_COPY), (!some_selection) ? MIF_DISABLED : 0, DELEGATE(this, ctx_menu_copy));
             uint64 mutag = 0;
-            ts::wstr_c msg = get_message_under_cursor(to_local(data.mouse.screenpos), mutag);
-            gui->app_prepare_text_for_copy( msg );
-            mnu.add(TTT("Копировать сообщение",205), 0, DELEGATE(this, ctx_menu_copymessage), ts::to_utf8(msg));
-            mnu.add_separator();
+            if (del_only)
+            {
+                mutag = records.get(0).utag;
+            } else
+            {
+                bool some_selection = some_selected();
+
+                mnu.add(gui->app_loclabel(LL_CTXMENU_COPY), (!some_selection) ? MIF_DISABLED : 0, DELEGATE(this, ctx_menu_copy));
+                ts::wstr_c msg = get_message_under_cursor(to_local(data.mouse.screenpos), mutag);
+                gui->app_prepare_text_for_copy(msg);
+                mnu.add(TTT("Копировать сообщение", 205), 0, DELEGATE(this, ctx_menu_copymessage), ts::to_utf8(msg));
+                mnu.add_separator();
+            }
             mnu.add(TTT("Удалить сообщение",221), 0, DELEGATE(this, ctx_menu_delmessage), ts::str_c().append_as_hex(&mutag, sizeof(mutag)));
 
             popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), mnu);
@@ -1434,8 +1455,7 @@ ts::ivec2 gui_message_item_c::extract_message(int chari, uint64 &mutag) const
     {
         rite = r2;
         ts::pwstr_c hex = textrect.get_text().substr(r2+7,r2+7+16);
-        for (int i = 0; i < sizeof(mutag); ++i)
-            ((ts::uint8 *)&mutag)[i] = hex.as_byte_hex(i * 2);
+        hex.hex2buf<sizeof(uint64)>((ts::uint8 *)&mutag);
     }
     return ts::ivec2(left, rite);
 }
@@ -1785,6 +1805,9 @@ void gui_message_item_c::update_text()
         is_send = true;
     case ST_RECV_FILE:
         {
+            int w = get_client_area().width();
+            int oldh = get_height_by_width(w);
+
             set_selectable(false);
             ASSERT(records.size());
             record &rec = records.get(0);
@@ -1796,15 +1819,20 @@ void gui_message_item_c::update_text()
             prepare_message_time(newtext, rec.time);
 
             ts::wstr_c fn = ts::fn_get_name_with_ext(rec.text);
-
-            if (rec.text.get_char(0) == '*')
+            ts::wchar fc = rec.text.get_char(0);
+            if (fc == '*')
             {
                 newtext.append(CONSTWSTR("<img=file,-1>"));
                 if (is_send)
-                    newtext.append(TTT("Передача прервана: $",181) / fn);
+                    newtext.append(TTT("Передача отменена: $",181) / fn);
                 else
-                    newtext.append(TTT("Прием прерван: $",182) / fn);
-            } else
+                    newtext.append(TTT("Прием отменен: $",182) / fn);
+            } else if (fc == '?')
+            {
+                newtext.append(CONSTWSTR("<img=file,-1>"));
+                newtext.append(TTT("Соединение отсутствует: $",235) / fn);
+            }
+            else
             {
                 if (!is_send)
                     newtext.insert(3, prepare_button_rect(0,g_app->buttons().exploreb->size)); // 3 - <r>
@@ -1859,7 +1887,13 @@ void gui_message_item_c::update_text()
 
 
             flags.set(F_DIRTY_HEIGHT_CACHE);
-            getengine().redraw();
+            int newh = get_height_by_width(w);
+            if (newh == oldh)
+                getengine().redraw();
+            else
+            {
+                getparent().call_children_repos();
+            }
         }
         break;
     }
@@ -2492,6 +2526,10 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_CONTACT_V> &c)
     ASSERT(caption->getcontact().is_multicontact());
     if (caption->getcontact().subpresent( c.contact->getkey() ))
         caption->update_text();
+
+    DEFERRED_EXECUTION_BLOCK_BEGIN(0)
+        ((gui_contact_item_c *)param)->update_buttons();
+    DEFERRED_EXECUTION_BLOCK_END(caption.get())
 
     hide_show_messageeditor();
 

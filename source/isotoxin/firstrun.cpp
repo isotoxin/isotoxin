@@ -309,11 +309,14 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     bool exit = false;
     ts::wstr_c curd = path_by_choice( PCH_HERE );
     copyto = path_by_choice( PCH_INSTALLPATH );
-    WINDOWS_ONLY curd.case_down().replace_all('/', '\\').trim_right('\\');
-    WINDOWS_ONLY copyto.case_down().replace_all('/', '\\').trim_right('\\');
+#ifdef _WIN32
+    curd.case_down();
+    copyto.case_down();
+#endif // _WIN32
+    curd.replace_all('/', '\\').trim_right('\\');
+    copyto.replace_all('/', '\\').trim_right('\\');
     if (curd != copyto)
     {
-
         // TODO : copy
     }
     ts::wstr_c config_fn = ts::fn_join(copyto, CONSTWSTR("config.db"));

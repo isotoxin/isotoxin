@@ -5,6 +5,7 @@
     TAB( active_protocol ) \
     TAB( contacts ) \
     TAB( history ) \
+    TAB( unfinished_file_transfer ) \
 
 
 enum profile_table_e {
@@ -68,6 +69,27 @@ struct history_s : public post_s
     static void get_column_desc(int index, ts::column_desc_s&cd);
     static ts::data_type_e get_column_type(int index);
 };
+
+struct unfinished_file_transfer_s
+{
+    contact_key_s historian;
+    contact_key_s sender;
+    uint64 utag = 0;
+    uint64 filesize = 0;
+    uint64 msgitem_utag = 0;
+    ts::wstr_c filename; // full filename (with path)
+    ts::wstr_c filename_on_disk;
+    bool upload = false; // true - upload, false - download
+
+    void set(int column, ts::data_value_s& v);
+    void get(int column, ts::data_pair_s& v);
+
+    static const int columns = 1 + 8; // historian, sender, filename, filename_on_disk, size, utag, gui_utag, upload
+    static ts::asptr get_table_name() { return CONSTASTR("transfer"); }
+    static void get_column_desc(int index, ts::column_desc_s&cd);
+    static ts::data_type_e get_column_type(int index);
+};
+
 
 template<typename T> struct load_on_start { static const bool value = true; };
 template<> struct load_on_start<history_s> { static const bool value = false; };
@@ -138,27 +160,6 @@ template<typename T, profile_table_e tabi> struct tableview_t
         }
         return row_s();
     }
-    /*
-    template<typename F> void finddel(F f)
-    {
-        int cnt = rows.size();
-        for (int i = 0; i < cnt; ++i)
-        {
-            row_s &r = rows.get(i);
-            if (f(r.other))
-            {
-                rows.get_remove_slow(i);
-                return;
-            }
-        }
-    }
-    template<bool skip_deleted, typename F> void iterate(F f)
-    {
-        for (row_s &r : rows)
-            if ((!skip_deleted || r.st != row_s::s_delete) && r.st != row_s::s_deleted)
-                f(r.other);
-    }
-    */
 
     template<bool skip_deleted, typename F> row_s *find(F f)
     {
@@ -210,8 +211,8 @@ template<typename T, profile_table_e tabi> struct tableview_t
         row_s *get() { return is_end() ? nullptr : (row_s *)&tab->rows.get(index); }
     public:
         int id() const { return is_end() ? 0 : tab->rows.get(index).id; }
-        operator typename TABTYPE::ROWTYPE*() { row_s *row = get(); return row ? &row->other : nullptr; }
-        typename TABTYPE::ROWTYPE *operator->() { row_s *row = get(); ASSERT(row); return &row->other; }
+        operator typename row_s*() { return get(); }
+        typename row_s *operator->() { return get(); }
         void operator++() { ++index; skipdel(); }
         bool operator!=(const iterator &it) const { return index != it.index || tab != it.tab; }
     };

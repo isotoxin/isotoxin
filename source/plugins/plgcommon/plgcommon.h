@@ -11,7 +11,7 @@
 #include <map>
 #include <unordered_map>
 
-typedef unsigned __int64 uint64;
+typedef unsigned long u32;
 typedef unsigned char byte;
 
 #define LIST_ADD(el,first,last,prev,next)       {if((last)!=nullptr) {(last)->next=el;} (el)->prev=(last); (el)->next=0;  last=(el); if(first==0) {first=(el);}}
@@ -337,7 +337,8 @@ public:
         memcpy(b.data() + offset, d, s);
 
     }
-    int read_data(byte *dest, int size);
+    void get_data(int offset, byte *dest, int size); // copy data and leave it in buffer
+    int read_data(byte *dest, int size); // dest can be null
     void clear()
     {
         buf[0].clear();

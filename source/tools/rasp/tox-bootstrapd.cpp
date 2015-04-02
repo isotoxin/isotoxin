@@ -321,10 +321,7 @@ int proc_toxrelay(const ts::wstrings_c & pars)
 
         dht_node_s(const ts::asptr& addr, int port, const ts::asptr& pubid_) :addr(addr), port(port)
         {
-            for (int i = 0; i < 32; ++i)
-            {
-                pubid[i] = ts::pstr_c(pubid_).as_byte_hex(i * 2);
-            }
+            ts::pstr_c(pubid_).hex2buf<32>(pubid);
         }
     };
 

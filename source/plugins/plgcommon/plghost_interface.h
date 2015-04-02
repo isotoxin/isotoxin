@@ -41,7 +41,7 @@ enum commands_e
     AQ_REJECT,
 
     AQ_MESSAGE,
-    AQ_ACTION_MESSAGE,
+    AQ_DEL_MESSAGE, // delete undelivered message
 
     HQ_MESSAGE,
     HA_DELIVERED,

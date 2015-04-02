@@ -46,28 +46,23 @@ struct autoupdate_params_s
     bool downloaded = false;
 };
 
-struct file_transfer_s
+struct file_transfer_s : public unfinished_file_transfer_s
 {
     MOVABLE(true);
 
-    contact_key_s historian;
-    contact_key_s sender;
-    uint64 utag = 0;
     uint64 offset = 0;
     uint64 progrez = 0;
-    uint64 filesize = 0;
-    uint64 msgitem_utag = 0;
     HANDLE handle = nullptr;
     ts::Time trtime = ts::Time::past();
     int bytes_per_sec = 0;
-    ts::wstr_c filename;
-    bool send = false;
+    bool accepted = false; // prepare_fn called - file receive accepted
 
     ~file_transfer_s();
 
     int progress(int &bytes_per_sec) const;
     void upd_message_item();
 
+    void resume();
     void prepare_fn( const ts::wstr_c &path_with_fn, bool overwrite );
     void kill( file_control_e fctl = FIC_BREAK );
     void save( uint64 offset, const ts::buf0_c&data );
@@ -106,6 +101,7 @@ public:
     /*virtual*/ void app_notification_icon_action(naction_e act, RID iconowner) override;
     /*virtual*/ void app_fix_sleep_value(int &sleep_ms) override;
     /*virtual*/ void app_5second_event() override;
+    /*virtual*/ void app_loop_event() override;
     /*virtual*/ void app_b_minimize(RID main) override;
     /*virtual*/ void app_b_close(RID main) override;
     /*virtual*/ void app_path_expand_env(ts::wstr_c &path);
@@ -120,6 +116,7 @@ public:
     unsigned F_NONEWVERSION : 1;
     unsigned F_UNREADICONFLASH : 1;
     unsigned F_UNREADICON : 1;
+    unsigned F_SETNOTIFYICON : 1; // once
 
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_EXIT);
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_INIT);
@@ -213,8 +210,8 @@ public:
     bool present_file_transfer_by_sender(const contact_key_s &sender, bool accept_only_rquest);
     file_transfer_s *find_file_transfer(uint64 utag);
     file_transfer_s *find_file_transfer_by_msgutag(uint64 utag);
-    bool register_file_transfer( const contact_key_s &historian, const contact_key_s &sender, uint64 utag, const ts::wstr_c &filename, uint64 filesize );
-    void unregister_file_transfer(uint64 utag);
+    file_transfer_s *register_file_transfer( const contact_key_s &historian, const contact_key_s &sender, uint64 utag, const ts::wstr_c &filename, uint64 filesize );
+    void unregister_file_transfer(uint64 utag,bool disconnected);
 };
 
 extern application_c *g_app;

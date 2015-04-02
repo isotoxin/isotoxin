@@ -400,7 +400,129 @@ void history_s::get_column_desc(int index, ts::column_desc_s&cd)
 }
 
 
-/////// history
+/////// transfer file
+
+void unfinished_file_transfer_s::set(int column, ts::data_value_s &v)
+{
+    switch (column)
+    {
+        case 1:
+            historian = ts::ref_cast<contact_key_s>(v.i);
+            return;
+        case 2:
+            sender = ts::ref_cast<contact_key_s>(v.i);
+            return;
+        case 3:
+            filename.set_as_utf8(v.text);
+            return;
+        case 4:
+            filename_on_disk.set_as_utf8(v.text);
+            return;
+        case 5:
+            filesize = v.i;
+            return;
+        case 6:
+            utag = v.i;
+            return;
+        case 7:
+            msgitem_utag = v.i;
+            return;
+        case 8:
+            upload = v.i != 0;
+            return;
+    }
+}
+
+void unfinished_file_transfer_s::get(int column, ts::data_pair_s& v)
+{
+    ts::column_desc_s ccd;
+    get_column_desc(column, ccd);
+    v.type_ = ccd.type_;
+    v.name = ccd.name_;
+    switch (column)
+    {
+        case 1:
+            v.i = ts::ref_cast<int64>(historian);
+            return;
+        case 2:
+            v.i = ts::ref_cast<int64>(sender);
+            return;
+        case 3:
+            v.text = to_utf8(filename);
+            return;
+        case 4:
+            v.text = to_utf8(filename_on_disk);
+            return;
+        case 5:
+            v.i = filesize;
+            return;
+        case 6:
+            v.i = utag;
+            return;
+        case 7:
+            v.i = msgitem_utag;
+            return;
+        case 8:
+            v.i = upload ? 1 : 0;
+            return;
+    }
+}
+
+ts::data_type_e unfinished_file_transfer_s::get_column_type(int index)
+{
+    switch (index)
+    {
+        case 1:
+        case 2:
+        case 5:
+        case 6:
+        case 7:
+            return ts::data_type_e::t_int64;
+        case 3:
+        case 4:
+            return ts::data_type_e::t_str;
+        case 8:
+            return ts::data_type_e::t_int;
+    }
+    FORBIDDEN();
+    return ts::data_type_e::t_null;
+}
+
+void unfinished_file_transfer_s::get_column_desc(int index, ts::column_desc_s&cd)
+{
+    cd.type_ = get_column_type(index);
+    switch (index)
+    {
+        case 1:
+            cd.name_ = CONSTASTR("historian");
+            break;
+        case 2:
+            cd.name_ = CONSTASTR("sender");
+            break;
+        case 3:
+            cd.name_ = CONSTASTR("fn");
+            break;
+        case 4:
+            cd.name_ = CONSTASTR("fnod");
+            break;
+        case 5:
+            cd.name_ = CONSTASTR("sz");
+            break;
+        case 6:
+            cd.name_ = CONSTASTR("utag");
+            break;
+        case 7:
+            cd.name_ = CONSTASTR("guiutag");
+            break;
+        case 8:
+            cd.name_ = CONSTASTR("upl");
+            break;
+        default:
+            FORBIDDEN();
+    }
+}
+
+// transfer file
 
 
 template<typename T, profile_table_e tabi> void tableview_t<T, tabi>::prepare( ts::sqlitedb_c *db )

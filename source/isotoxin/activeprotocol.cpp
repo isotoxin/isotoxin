@@ -630,9 +630,14 @@ void active_protocol_c::set_proxy_settings( const proxy_settings_s &ps )
 
 }
 
+void active_protocol_c::file_resume(uint64 utag, uint64 offset)
+{
+    ipcp->send(ipcw(AQ_CONTROL_FILE) << utag << ((int)FIC_ACCEPT) << offset);
+}
+
 void active_protocol_c::file_control(uint64 utag, file_control_e fctl)
 {
-    ipcp->send(ipcw(AQ_CONTROL_FILE) << utag << ((int)fctl));
+    ipcp->send(ipcw(AQ_CONTROL_FILE) << utag << ((int)fctl) << (uint64)0);
 }
 
 void active_protocol_c::send_file(int cid, uint64 utag, const ts::wstr_c &filename, uint64 filesize)
@@ -649,3 +654,9 @@ void active_protocol_c::avatar_data_request(int cid)
 {
     ipcp->send(ipcw(AQ_GET_AVATAR_DATA) << cid);
 }
+
+void active_protocol_c::del_message(uint64 utag)
+{
+    ipcp->send(ipcw(AQ_DEL_MESSAGE) << utag);
+}
+

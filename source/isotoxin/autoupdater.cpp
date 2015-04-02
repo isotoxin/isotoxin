@@ -30,8 +30,7 @@ int ver_ok( ts::asptr verss )
     byte pk[crypto_sign_PUBLICKEYBYTES] = {
 #include "signpk.inl"
     };
-    for (int i = 0; i < crypto_sign_BYTES; ++i)
-        sig[i] = ss.as_byte_hex(signi + 7 + i * 2);
+    ss.hex2buf<crypto_sign_BYTES>(sig, signi + 7);
 
     if  (0 == crypto_sign_verify_detached(sig, (const byte *)verss.s, signi, pk))
         return signi;

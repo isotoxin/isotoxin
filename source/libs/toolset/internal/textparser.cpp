@@ -211,7 +211,7 @@ struct text_parser_s
     int rite_rite = 0; // индекс в массиве глифов для блока в <r></r> - выровнять этот кусок вправо
     int addhtags = 0; // количество тэгов, увеличивающих высоту строки
 
-    bool first_char_in_paragraph, was_inword_break, waiting_for_linebreak;
+    bool first_char_in_paragraph, was_inword_break, waiting_for_linebreak, current_line_end_ellipsis;
 
     text_parser_s() {}
 
@@ -265,6 +265,7 @@ struct text_parser_s
 
         rite_rite = 0;
         addhtags = 0;
+        current_line_end_ellipsis = FLAG(flags,TO_LINE_END_ELLIPSIS);
 	}
 
 	void add_indent(int chari)
@@ -272,21 +273,22 @@ struct text_parser_s
 		paragraph_s &paragraph = paragraphs_stack.last();
 		if (paragraph.indention > 0)
 		{
-			meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::CHAR, chari);//тип именно CHAR, а не SPACE, т.к. иначе при выравнивании по шинине все SPACE-ы расширятся, включая и абзацный отступ
-			mg.underlined = 0;//это спец. признак indent-а, за счет которого под ним не будет рисоваться линия подчеркивания
+			meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::CHAR, chari); // CHAR, not SPACE!
+			mg.underlined = 0; // zero underline - special value to do not draw underline under ident
 			mg.glyph = &(*fonts_stack.last())[L' '];
 			mg.advance = paragraph.indention;
 			line_width += mg.advance;
 		}
 	}
 
-	void next_line(int H = INT_MAX) //перемещает "перо" на следующую строку с учетом обтекания текста
+	void next_line(int H = INT_MAX) // moves "pen" to next line
 	{
 		if (H != INT_MAX) pen.y += H + paragraphs_stack.last().line_spacing + fonts_stack.last()->font_params.additional_line_spacing;
 		cur_max_line_len = max_line_length;
 		if (pen.y <  leftSL.bottom) cur_max_line_len -= (pen.x = leftSL.width); else pen.x = 0;
 		if (pen.y < rightSL.bottom) cur_max_line_len -= rightSL.width;
 		line_width = 0;
+        current_line_end_ellipsis = FLAG(flags,TO_LINE_END_ELLIPSIS);
 	}
 
 	void end_line(bool nextLn = true, bool acceptaddhnow = false) // break current line
@@ -700,6 +702,10 @@ struct text_parser_s
         {
             if (CHECK(hyphenation_tag_nesting_level > 0)) hyphenation_tag_nesting_level--;
         }
+        else if (tag == CONSTWSTR("ee"))
+        {
+            current_line_end_ellipsis = true;
+        }
         else if (tag == CONSTWSTR("rect"))
         {
             meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::RECTANGLE, chari);
@@ -805,7 +811,7 @@ struct text_parser_s
 					}
 
 					break;//early exit
-				} else if (FLAG(flags,TO_LINE_END_ELLIPSIS))
+				} else if (current_line_end_ellipsis)
                 {
                     glyph_s &dot_glyph = (*fonts_stack.last())[L'.'];
                     line_width += dot_glyph.advance * 3; // advance of ...
@@ -931,12 +937,12 @@ end:;
 
                     int lineW = W;
 					if (paragraph.align == paragraph_s::ARIGHT) offset.x = cur_max_line_len - W - WR;
-                    else if (paragraph.align == paragraph_s::AJUSTIFY) { W = cur_max_line_len - W - WR; lineW = cur_max_line_len - WR; }//подгоняем символы (т.о. добавляться они будут уже в корректированном положении)
+                    else if (paragraph.align == paragraph_s::AJUSTIFY) { W = cur_max_line_len - W - WR; lineW = cur_max_line_len - WR; }
 					else if (paragraph.align == paragraph_s::ACENTER) offset.x = (cur_max_line_len - W - WR)/2;
 
                     if (prev_line_dim_glyph_index >= 0) glyphs->get(prev_line_dim_glyph_index).next_dim_glyph = glyphs->count();
                     prev_line_dim_glyph_index = glyphs->count();
-                    glyph_image_s &gi = glyphs->add(); // служебный глиф с размерами строки
+                    glyph_image_s &gi = glyphs->add(); // service glyph with line dimension
 
                     gi.pixels = nullptr;
                     gi.outline_index = -1;
@@ -946,7 +952,7 @@ end:;
                     gi.line_rb.x = (int16)(gi.line_lt.x + lineW);
                     gi.line_rb.y = (int16)(gi.line_lt.y + H);
 
-					int spaceIndex = 0, offX = 0;//эти две переменные нужны только для AJUSTIFY
+					int spaceIndex = 0, offX = 0; // AJUSTIFY
                     int oldpenx = pen.x;
 					for (j = rite_rite; j < line_size; j++)
 					{
@@ -957,12 +963,12 @@ end:;
 
 						if (paragraph.align == paragraph_s::AJUSTIFY)
 						{
-							pos.x += offX;//за счет смещения offX получается, что pen.x фактически не указывает на положение тек. символа, а отстает
+							pos.x += offX;
 							if (last_line.get(j).type == meta_glyph_s::SPACE)
 							{
 								spaceIndex++;
 								int prevOffX = offX;
-								offX = W * spaceIndex / spaces;//данная схема исключает накопляемую ошибку, а также усредняет промежутки между словами, т.е. будет не 2,2,3,3, а 2,3,2,3
+								offX = W * spaceIndex / spaces;
 								add_underline_len = offX - prevOffX;
 							}
 						}

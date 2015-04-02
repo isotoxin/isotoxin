@@ -899,6 +899,15 @@ public:
 	ZSTRINGS_VEC3(int) as_ivec3() const { return as_vec<int, 3>(); }
 #endif
 
+    template <ZSTRINGS_UNSIGNED N> void hex2buf( ZSTRINGS_BYTE *out, int index = 0 ) const
+    {
+        int n = (get_length() - index) / 2; 
+        if (n > N) n = N;
+        for (int i = 0; i < n; ++i)
+            out[i] = as_byte_hex(index + i * 2);
+        for (int i = N; i < n; ++i)
+            out[i] = 0;
+    }
 
     ZSTRINGS_BYTE as_byte_hex( ZSTRINGS_SIGNED char_index ) const
     {

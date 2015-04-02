@@ -322,7 +322,6 @@
     <ClCompile Include="src\base\ftsynth.c" />
     <ClCompile Include="src\base\fttype1.c" />
     <ClCompile Include="src\base\ftwinfnt.c" />
-    <ClCompile Include="src\base\ftxf86.c" />
     <ClCompile Include="src\base\ftlcdfil.c" />
     <ClCompile Include="src\base\ftgxval.c" />
     <ClCompile Include="src\base\ftotval.c" />

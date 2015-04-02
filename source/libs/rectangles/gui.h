@@ -278,6 +278,7 @@ public:
 
     virtual void app_fix_sleep_value(int &sleep_ms) {}
     virtual void app_5second_event() {}
+    virtual void app_loop_event() {}
 
     virtual void app_b_minimize(RID main);
     virtual void app_b_close(RID main);

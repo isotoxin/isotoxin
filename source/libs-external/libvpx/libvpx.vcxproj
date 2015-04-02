@@ -87,7 +87,6 @@
     <ClCompile Include="vp8\encoder\temporal_filter.c" />
     <ClCompile Include="vp8\encoder\tokenize.c" />
     <ClCompile Include="vp8\encoder\treewriter.c" />
-    <ClCompile Include="vp8\encoder\vp8_asm_enc_offsets.c" />
     <ClCompile Include="vp8\encoder\x86\denoising_sse2.c" />
     <ClCompile Include="vp8\encoder\x86\quantize_sse2.c" />
     <ClCompile Include="vp8\encoder\x86\quantize_sse4.c" />

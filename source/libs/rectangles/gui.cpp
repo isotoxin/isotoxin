@@ -179,7 +179,7 @@ void gui_c::kill_temp_buf(int tag)
 void gui_c::heartbeat()
 {
 #ifdef _DEBUG
-    // раз в секунду проверим кое что
+    // check something 1 per sec
     for (RID rid : roots())
     {
         HOLD r(rid);
@@ -431,6 +431,7 @@ DWORD gui_c::handler_SEV_LOOP( const system_event_param_s & p )
 
     m_5seconds.takt(m_frametime.frame_time());
     if (m_5seconds.it_is_time_ones()) app_5second_event();
+    app_loop_event();
 
     gmsgbase *m;
     while (m_msgs.try_pop(m))
@@ -439,10 +440,8 @@ DWORD gui_c::handler_SEV_LOOP( const system_event_param_s & p )
         TSDEL(m);
     }
 
-    dchs.clear();
-
     app_fix_sleep_value(sleep);
-
+    dchs.clear();
     if (sleep > 0) Sleep(sleep);
 	return 0;
 }

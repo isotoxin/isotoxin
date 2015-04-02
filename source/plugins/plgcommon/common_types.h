@@ -60,6 +60,7 @@ enum file_control_e
     FIC_DONE,
     FIC_PAUSE,
     FIC_UNPAUSE,
+    FIC_DISCONNECT, // file transfer broken due disconnect. It will be resumed asap
 };
 
 enum message_type_e : unsigned // hard order

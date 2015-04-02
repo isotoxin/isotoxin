@@ -156,7 +156,9 @@ namespace ts
     zip_container_c::zip_file_entry_c * zip_container_c::add_path( const wsptr &path0 )
     {
         wstr_c path1( path0 );
+#ifdef _WIN32
         path1.case_down();
+#endif
         const wchar *path = path1.cstr();
 
         zip_folder_entry_c *cur = &m_root;
@@ -337,7 +339,9 @@ next:
     bool   zip_container_c::read(const wsptr &filename, buf_wrapper_s &b)
     {
         ts::wstr_c fn(filename);
+#ifdef _WIN32
         fn.case_down();
+#endif // _WIN32
         fn.replace_all('/', '\\');
 
         if (m_find_cache_file_name.equals(fn))
@@ -356,7 +360,9 @@ next:
     size_t    zip_container_c::size(const wsptr &filename)
     {
         ts::wstr_c fn(filename);
+#ifdef _WIN32
         fn.case_down();
+#endif // _WIN32
         fn.replace_all('/', '\\');
 
         if (m_find_cache_file_name.equals(fn))
@@ -381,7 +387,9 @@ next:
     bool    zip_container_c::file_exists(const wsptr &path0)
     {
         wstr_c path1( path0 );
+#ifdef _WIN32
         path1.case_down();
+#endif // _WIN32
         path1.replace_all('/', '\\');
         const wchar *path = path1.cstr();
 

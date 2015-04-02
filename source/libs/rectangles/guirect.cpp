@@ -172,6 +172,7 @@ void RID::call_children_repos()
         RID grid = RID::from_ptr(param);
         HOLD ctl(grid);
         ctl().sq_evt(SQ_CHILDREN_REPOS, grid, ts::make_dummy<evt_data_s>(true));
+        ctl().getengine().redraw();
 
     DEFERRED_EXECUTION_BLOCK_END( this->to_ptr() )
 }
@@ -1665,8 +1666,8 @@ void gui_hgroup_c::children_repos()
                         }
                     }
                 }
-                ASSERT(maxszi >= 0 && frompol == szpol_override[maxszi]);
-                szpol_override[maxszi] = topol;
+                if (CHECK(maxszi >= 0 && frompol == szpol_override[maxszi]))
+                    szpol_override[maxszi] = topol;
 
                 proposum = 0;
                 for(int i=0;i<info.count;++i)

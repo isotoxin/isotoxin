@@ -820,7 +820,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                 if (n_unread > 0 || achtung)
                 {
                     bool drawnotify = true;
-                    if (g_app->flashingicon())
+                    if (CIR_LISTITEM == role && g_app->flashingicon())
                     {
                         drawnotify = g_app->flashiconflag();
                         g_app->flashredraw( getrid() );

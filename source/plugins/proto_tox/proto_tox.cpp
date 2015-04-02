@@ -1,4 +1,10 @@
 #include "stdafx.h"
+#pragma warning(push)
+#pragma warning(disable : 4324) // 'crypto_generichash_blake2b_state' : structure was padded due to __declspec(align())
+#include "sodium.h"
+#pragma warning(pop)
+
+#define CHECKIT() __pragma(message(__LOC__ "check it: " __FUNCTION__))
 
 #pragma USELIB("plgcommon")
 
@@ -32,16 +38,37 @@
 
 #define SS2(x) #x
 #define SS(x) SS2(x)
+#define ISFLAG(f,mask) (((f)&(mask))!=0)
+#define SETFLAG(f,mask) (f)|=(mask)
+#define UNSETFLAG(f,mask) (f)&=~(mask)
+#define SETUPFLAG(f,mask,val) if(val) {SETFLAG(f,mask);} else {UNSETFLAG(f,mask);}
+
+#define AVATAR_MAX_DATA_SIZE (1024 * 512) // 0.5 mb should be enough
 
 void __stdcall get_info( proto_info_s *info )
 {
     if (info->protocol_name) strncpy_s(info->protocol_name, info->protocol_name_buflen, "tox", _TRUNCATE);
-    if (info->description) strncpy_s(info->description, info->description_buflen, "Isotoxin tox wrapper " SS(PLUGINVER), _TRUNCATE);
+    if (info->description)
+    {
+        sstr_t<1024> desc( "Isotoxin tox wrapper " SS(PLUGINVER) ); 
+        desc.append(CONSTASTR(" (toxcore: "));
+        desc.append_as_uint(TOX_VERSION_MAJOR);
+        desc.append_char('.');
+        desc.append_as_uint(TOX_VERSION_MINOR);
+        desc.append_char('.');
+        desc.append_as_uint(TOX_VERSION_PATCH);
+        desc.append_char(')');
+
+        strncpy_s(info->description, info->description_buflen, desc, _TRUNCATE);
+    }
+
+
+
     info->priority = 500;
-    info->max_avatar_size = TOX_AVATAR_MAX_DATA_LENGTH;
+    info->max_avatar_size = AVATAR_MAX_DATA_SIZE;
     info->features = PF_AUDIO_CALLS | PF_SEND_FILE; //PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT;
     info->proxy_support = PROXY_SUPPORT_HTTP | PROXY_SUPPORT_SOCKS5;
-    info->max_friend_request_bytes = TOX_MAX_FRIENDREQUEST_LENGTH;
+    info->max_friend_request_bytes = TOX_MAX_FRIEND_REQUEST_LENGTH;
     info->audio_fmt.sample_rate = av_DefaultSettings.audio_sample_rate;
     info->audio_fmt.channels = (short)av_DefaultSettings.audio_channels;
     info->audio_fmt.bits = 16;
@@ -57,8 +84,21 @@ static host_functions_s *hf;
 static Tox *tox = nullptr;
 static ToxAv *toxav = nullptr;
 static Tox_Options options;
-static str_c tox_proxy_address;
+static sstr_t<256> tox_proxy_host;
+static uint16_t tox_proxy_port;
 static int tox_proxy_type = 0;
+static byte avahash[TOX_HASH_LENGTH] = { 0 };
+static std::vector<byte> gavatar;
+static int gavatag = 0;
+
+void set_proxy_addr(const asptr& addr)
+{
+    token<char> p(addr, ':');
+    tox_proxy_host.clear();
+    tox_proxy_port = 0;
+    if (p) tox_proxy_host = *p;
+    ++p; if (p) tox_proxy_port = (uint16_t)p->as_uint();
+}
 
 struct stream_settings_s : public ToxAvCSettings
 {
@@ -139,8 +179,7 @@ struct dht_node_s
 
     dht_node_s( const asptr& addr, int port, const asptr& pubid_ ):addr(addr), port(port)
     {
-        for(int i=0;i<32;++i)
-            pubid[i] = pstr_c(pubid_).as_byte_hex( i * 2 );
+        pstr_c(pubid_).hex2buf<32>(pubid);
     }
 };
 
@@ -232,8 +271,7 @@ struct tox3dns_s
     {
         if (k.l)
         {
-            for (int i = 0; i < 32; ++i)
-                key[i] = pstr_c(k).as_byte_hex(i * 2);
+            pstr_c(k).hex2buf<32>(key);
             key_ok = true;
 
         } else
@@ -242,8 +280,7 @@ struct tox3dns_s
             str_c key_string = dnsquery(CONSTASTR("_tox.") + addr, asptr());
             if (!key_string.is_empty())
             {
-                for (int i = 0; i < 32; ++i)
-                    key[i] = key_string.as_byte_hex(i * 2);
+                key_string.hex2buf<32>(key);
                 key_ok = true;
             }
         }
@@ -276,7 +313,7 @@ struct tox3dns_s
 
         uint32_t request_id;
         sstr_t<128> dns_string;
-        int dns_string_len = tox_generate_dns3_string(dns3, (byte *)dns_string.str(), (uint16_t)dns_string.get_capacity(), &request_id, (uint8_t*)pubid.cstr(), (byte)pubid.find_pos('@'));
+        int dns_string_len = tox_generate_dns3_string(dns3, (byte *)dns_string.str(), (uint16_t)dns_string.get_capacity(), &request_id, (byte*)pubid.cstr(), (byte)pubid.find_pos('@'));
 
         if (dns_string_len < 0)
             return query1(pubid);
@@ -288,8 +325,8 @@ struct tox3dns_s
         rec = dnsquery(rec,CONSTASTR("tox3"));
         if (!rec.is_empty())
         {
-            uint8_t tox_id[TOX_FRIEND_ADDRESS_SIZE];
-            if (tox_decrypt_dns3_TXT(dns3, tox_id, (/*const*/ uint8_t *)rec.cstr(), rec.get_length(), request_id) < 0)
+            byte tox_id[TOX_ADDRESS_SIZE];
+            if (tox_decrypt_dns3_TXT(dns3, tox_id, (/*const*/ byte *)rec.cstr(), rec.get_length(), request_id) < 0)
                 return query1(pubid);
         
             rec.clear();
@@ -302,8 +339,6 @@ struct tox3dns_s
 };
 
 static std::vector<tox3dns_s> pinnedservs;
-
-bool is_isotoxin(int fid);
 
 struct message2send_s
 {
@@ -512,8 +547,12 @@ struct file_transfer_s
     virtual void finished() {}
     virtual void resume() {}
 
+    u32 fid;
+    byte id[TOX_FILE_ID_LENGTH];
+
     u64 fsz;
-    u64 offset = 0;
+    u64 utag;
+    u32 fnn;
 
 };
 static void make_uniq_utag( u64 &utag );
@@ -524,26 +563,24 @@ struct incoming_file_s : public file_transfer_s
     incoming_file_s *prev;
     incoming_file_s *next;
     
-    union
-    {
-        u64 utag;
-        struct
-        {
-            uint32_t time;
-            uint32_t fidfn;
-        };
-    };
     str_c fn;
-    int fid;
-    byte fnn;
+    TOX_FILE_KIND kind;
 
-
-    incoming_file_s( int fid, byte fnn, u64 fsz_, const asptr &fn ):fn(fn), fid(fid), fnn(fnn)
+    incoming_file_s( u32 fid_, u32 fnn_, TOX_FILE_KIND kind, u64 fsz_, const asptr &fn ):fn(fn), kind(kind)
     {
         fsz = fsz_;
-        time = (uint32_t)now();
-        fidfn = fid | (((uint32_t)fnn) << 24);
+        fid = fid_;
+        fnn = fnn_;
 
+        if (TOX_FILE_KIND_AVATAR != kind && tox_file_get_file_id(tox,fid,fnn,id,nullptr))
+        {
+            if (0 == memcmp(id+8,"isotoxin",9))
+                utag = *(const u64 *)id;
+            else
+                randombytes_buf(&utag, sizeof(u64));
+        } else
+            randombytes_buf(&utag, sizeof(u64));
+        
         make_uniq_utag(utag);
 
         LIST_ADD(this, first, last, prev, next);
@@ -553,13 +590,21 @@ struct incoming_file_s : public file_transfer_s
     {
         LIST_DEL(this, first, last, prev, next);
     }
+
+    virtual void recv_data( u64 position, const byte *data, size_t datasz )
+    {
+        hf->file_portion(utag, position, data, datasz);
+    }
+
     /*virtual*/ void accepted() override
     {
-        hf->file_control(utag,FIC_UNPAUSE);
+        if (TOX_FILE_KIND_AVATAR != kind)
+            hf->file_control(utag,FIC_UNPAUSE);
     }
     /*virtual*/ void kill() override
     {
-        hf->file_control(utag,FIC_BREAK);
+        if (TOX_FILE_KIND_AVATAR != kind)
+            hf->file_control(utag,FIC_BREAK);
         delete this;
     }
     /*virtual*/ void finished() override
@@ -569,112 +614,114 @@ struct incoming_file_s : public file_transfer_s
     }
     /*virtual*/ void pause()
     {
-        hf->file_control(utag,FIC_PAUSE);
+        if (TOX_FILE_KIND_AVATAR != kind)
+            hf->file_control(utag,FIC_PAUSE);
     }
+
+    static void tick(int ct);
+
 };
+
+struct incoming_avatar_s : public incoming_file_s
+{
+    std::vector<byte> avatar;
+    int droptime;
+    incoming_avatar_s(u32 fid_, u32 fnn_, u64 fsz_, const asptr &fn) : incoming_file_s( fid_, fnn_, TOX_FILE_KIND_AVATAR, fsz_, fn )
+    {
+        droptime = time_ms() + 30000;
+        avatar.resize((size_t)fsz_);
+    }
+    
+    void check_avatar(int ct);
+
+    /*virtual*/ void recv_data(u64 position, const byte *data, size_t datasz) override
+    {
+        droptime = time_ms() + 30000;
+
+        u64 newsize = position + datasz;
+        if (newsize <= avatar.size())
+            memcpy(avatar.data() + position, data, datasz);
+    }
+    /*virtual*/ void finished() override;
+};
+
+void incoming_file_s::tick(int ct)
+{
+    byte id[TOX_FILE_ID_LENGTH];
+    for (incoming_file_s *f = incoming_file_s::first; f;)
+    {
+        incoming_file_s *ff = f->next;
+
+        if (!tox_file_get_file_id(tox, f->fid, f->fnn, id, nullptr))
+        {
+            // transfer broken
+            if (TOX_FILE_KIND_AVATAR != f->kind) hf->file_control(f->utag, FIC_DISCONNECT);
+            delete f;
+        } else if (TOX_FILE_KIND_AVATAR == f->kind)
+            ((incoming_avatar_s *)f)->check_avatar(ct);
+
+        f = ff;
+    }
+}
+
 
 incoming_file_s *incoming_file_s::first = nullptr;
 incoming_file_s *incoming_file_s::last = nullptr;
 
 
-struct transmiting_file_s : public file_transfer_s
+struct transmitting_data_s : public file_transfer_s
 {
-    static transmiting_file_s *first;
-    static transmiting_file_s *last;
-    transmiting_file_s *prev;
-    transmiting_file_s *next;
-    u64 utag;
+    static transmitting_data_s *first;
+    static transmitting_data_s *last;
+    transmitting_data_s *prev;
+    transmitting_data_s *next;
     str_c fn;
-    int fid;
-    int fnn;
-    int requested = 0;
 
-    fifo_stream_c buffer;
-    std::vector<byte> sip;
+    struct req
+    {
+        req() {};
+        req(u64 offset, u32 size):offset(offset), size(size) {}
+        u64 offset;
+        u32 size;
+    };
+
+    fifo_stream_c requests;
+
     bool is_accepted = false;
     bool is_paused = false;
     bool is_finished = false;
 
-    transmiting_file_s(int fid, int fnn, u64 utag, u64 fsz_, const asptr &fn) :fn(fn), fid(fid), fnn(fnn), utag(utag)
+    transmitting_data_s(u32 fid_, u32 fnn_, u64 utag_, const byte * id_, u64 fsz_, const asptr &fn) :fn(fn)
     {
         fsz = fsz_;
+        fid = fid_;
+        fnn = fnn_;
+        memcpy( id, id_, TOX_FILE_ID_LENGTH );
+        utag = utag_;
 
         LIST_ADD(this, first, last, prev, next);
     }
 
-    ~transmiting_file_s()
+    ~transmitting_data_s()
     {
         LIST_DEL(this, first, last, prev, next);
     }
 
-    u64 not_yet() const {return fsz - offset;};
-    void transmit()
+    virtual void ontick() = 0;
+    virtual void portion( u64 /*offset*/, const void * /*data*/, int /*size*/ ) {}
+    virtual void try_send_requested_chunk() = 0;
+
+    void transmit(const req &r)
     {
-        if (is_accepted && !is_paused && !is_finished)
+        if (r.size == 0)
         {
-            //Log("transmit requested: %i, ost: %i, av: %i", requested, (int)not_yet(), buffer.available());
-
-            if (buffer.available() < 65536 && requested == 0 && not_yet())
-            {
-                huston_we_have_a_trouble:
-                int request = 65536;
-                if (request > not_yet())
-                    request = (int)not_yet();
-
-                //Log("request: %llu, %u, av: %i", offset, request, buffer.available());
-
-                hf->file_portion(utag, offset, nullptr, request);
-                requested += request;
-                offset += request;
-            }
-
-            if (sip.size())
-            {
-                if (0 == tox_file_send_data(tox,fid,(byte)fnn,sip.data(),(uint16_t)sip.size()))
-                {
-                    //Log("buf sip send ok: %i, av: %i", sip.size(), buffer.available());
-                    sip.clear();
-                } else
-                {
-                    //Log( "buf sip send fail, av: %i", buffer.available() );
-                    return;
-                }
-            }
-
-            auto have_to_send = [this]()->int
-            {
-                if (not_yet() || requested) return tox_file_data_size(tox, fid);
-                return min(buffer.available(), tox_file_data_size(tox, fid));
-            };
-
-            int chunk_size = 0;
-            while (tox && buffer.available() >= (chunk_size = have_to_send()))
-            {
-                //Log("pre send fifo: %i, av: %i", chunk_size, buffer.available());
-
-                if (chunk_size == 0) break;
-                sip.resize( chunk_size );
-                buffer.read_data(sip.data(),chunk_size);
-                if (tox_file_send_data(tox,fid,(byte)fnn,sip.data(),(uint16_t)chunk_size) < 0)
-                {
-                    //Log( "buf fifo send fail, sip: %i, av: %i", sip.size(), buffer.available() );
-                    break;
-                }
-                //Log("buf fifo send ok, sz: %i, av: %i", chunk_size, buffer.available());
-                sip.clear();
-                if (buffer.available() < 65536 && requested == 0 && not_yet())
-                {
-                    //Log("huston_we_have_a_trouble");
-                    goto huston_we_have_a_trouble; // buffer about empty
-                }
-            }
-            if (buffer.available() == 0 && requested == 0 && offset == fsz && sip.size() == 0)
-            {
-                //Log("finish");
-                tox_file_send_control(tox, fid, 0, (uint8_t)fnn, TOX_FILECONTROL_FINISHED, nullptr, 0);
-                is_finished = true;
-            }
+            finished();
+            return;
         }
+
+        //Log("req chunk: %llu:%i", r.offset, r.size);
+        requests.add_data( &r, sizeof(req) );
+        try_send_requested_chunk();
     }
 
     /*virtual*/ void accepted() override
@@ -684,29 +731,230 @@ struct transmiting_file_s : public file_transfer_s
     }
     /*virtual*/ void kill() override
     {
-        hf->file_control(utag, FIC_BREAK);
         delete this;
     }
     /*virtual*/ void finished() override
     {
-        hf->file_control(utag, FIC_DONE);
         delete this;
     }
     /*virtual*/ void pause()
     {
         is_paused = true;
-        hf->file_control(utag, FIC_PAUSE);
     }
 
     static void tick()
     {
-        for (transmiting_file_s *f = transmiting_file_s::first; f; f = f->next)
-            f->transmit();
+        for (transmitting_data_s *f = transmitting_data_s::first; f;)
+        {
+            transmitting_data_s *ff = f->next;
+            f->ontick();
+            f = ff;
+        }
     }
 };
 
-transmiting_file_s *transmiting_file_s::first = nullptr;
-transmiting_file_s *transmiting_file_s::last = nullptr;
+struct transmitting_file_s : public transmitting_data_s
+{
+    fifo_stream_c fifo;
+    u64 fifooffset = 0;
+    bool is_requested_portion = false;
+
+    transmitting_file_s(u32 fid_, u32 fnn_, u64 utag_, const byte * id_, u64 fsz_, const asptr &fn) : transmitting_data_s(fid_, fnn_, utag_, id_, fsz_, fn)
+    {
+    }
+
+    /*virtual*/ void finished() override
+    {
+        hf->file_control(utag, FIC_DONE);
+        __super::finished();
+    }
+    /*virtual*/ void kill() override
+    {
+        hf->file_control(utag, FIC_BREAK);
+        __super::kill();
+    }
+
+    /*virtual*/ void pause() override
+    {
+        __super::pause();
+        hf->file_control(utag, FIC_PAUSE);
+    }
+
+    virtual void portion(u64 offset, const void *data, int size) override
+    {
+        ASSERT(is_requested_portion);
+        is_requested_portion = false;
+
+        if (offset == (fifooffset + fifo.available()))
+        {
+            fifo.add_data(data, size);
+        }
+        else
+        {
+            fifo.clear();
+            fifo.add_data(data, size);
+            fifooffset = offset;
+        }
+
+        //Log("portion: %llu:%i", offset, size);
+        //Log("fifo: %llu:%i", fifooffset, fifo.available());
+
+        try_send_requested_chunk();
+    }
+
+    void request_portion()
+    {
+        if (is_requested_portion) return;
+
+        req r;
+        bool oof = false;
+        if (requests.available())
+        {
+            requests.get_data(0, (byte *)&r, sizeof(req));
+
+            if (r.offset < fifooffset || (r.offset - fifooffset) > fifo.available())
+            {
+                oof = true; // out of available fifo data
+                fifo.clear();
+            }
+        }
+        else if (fifo.available() == 0)
+        {
+            return; // no requests, no fifo - do nothing (wait chunk request from tox core)
+        }
+
+        if (fifo.available() < 32768)
+        {
+            is_requested_portion = true;
+
+            if (oof || fifo.available() == 0)
+            {
+                int rqsz = (int)min(65536, fsz - r.offset);
+                if (rqsz) hf->file_portion(utag, r.offset, nullptr, rqsz);
+                //Log( "request from app 1: %llu:%i", r.offset, rqsz );
+            }
+            else
+            {
+                u64 roffs = fifooffset + fifo.available();
+                int rqsz = (int)min(65536, fsz - roffs);
+                hf->file_portion(utag, roffs, nullptr, rqsz);
+                //Log( "request from app 2: %llu:%i", roffs, rqsz );
+            }
+        }
+        //Log("fifo: %llu:%i", fifooffset, fifo.available());
+    }
+
+    void try_send_requested_chunk() override
+    {
+        u64 fifolast = fifooffset + fifo.available();
+
+        if (requests.available())
+        {
+            req r;
+            requests.get_data(0, (byte *)&r, sizeof(req));
+
+            if (r.offset >= fifooffset)
+            {
+                if ((r.offset + r.size) <= fifolast)
+                {
+                    // fifo has data
+                    // just send
+
+                    byte *d = (byte *)_alloca(r.size);
+                    fifo.get_data((int)(r.offset - fifooffset), d, r.size);
+
+                    TOX_ERR_FILE_SEND_CHUNK er;
+                    tox_file_send_chunk(tox, fid, fnn, r.offset, d, r.size, &er);
+                    if (TOX_ERR_FILE_SEND_CHUNK_OK == er)
+                    {
+                        if (r.offset == fifooffset)
+                        {
+                            fifo.read_data(nullptr, r.size);
+                            fifooffset += r.size;
+                        }
+                        requests.read_data(nullptr, sizeof(req));
+
+                        //Log("send ok: %llu:%i", r.offset, r.size);
+                        //Log("fifo: %llu:%i", fifooffset, fifo.available());
+                    }
+                }
+            }
+        }
+        request_portion();
+    }
+
+    virtual void ontick() override
+    {
+        byte id[TOX_FILE_ID_LENGTH];
+        if (!tox_file_get_file_id(tox, fid, fnn, id, nullptr))
+        {
+            // transfer broken
+            hf->file_control(utag, FIC_DISCONNECT);
+            delete this;
+            return;
+        }
+
+        if (requests.available())
+            try_send_requested_chunk();
+    }
+
+
+};
+
+struct transmitting_avatar_s : public transmitting_data_s
+{
+    int avatag = -1;
+
+    transmitting_avatar_s(u32 fid_, u32 fnn_, u64 utag_, const asptr &fn) : transmitting_data_s(fid_, fnn_, utag_, avahash, gavatar.size(), fn)
+    {
+        avatag = gavatag;
+    }
+    virtual void ontick() override
+    {
+        if (avatag != gavatag)
+        {
+            // avatar changed while it sending
+            tox_file_control(tox, fid, fnn, TOX_FILE_CONTROL_CANCEL, nullptr);
+            delete this;
+        } else
+        {
+            byte id[TOX_FILE_ID_LENGTH];
+            if (!tox_file_get_file_id(tox, fid, fnn, id, nullptr))
+            {
+                // transfer broken
+                delete this;
+                return;
+            }
+
+            if (requests.available())
+                try_send_requested_chunk();
+        }
+    }
+    /*virtual*/ void kill() override;
+    /*virtual*/ void finished() override;
+
+    /*virtual*/ void try_send_requested_chunk() override
+    {
+        if (avatag != gavatag) return;
+
+        if (requests.available())
+        {
+            req r;
+            requests.get_data(0, (byte *)&r, sizeof(req));
+
+            if (ASSERT((r.offset + r.size) <= gavatar.size()))
+            {
+                TOX_ERR_FILE_SEND_CHUNK er;
+                tox_file_send_chunk(tox, fid, fnn, r.offset, gavatar.data() + r.offset, r.size, &er);
+                if (TOX_ERR_FILE_SEND_CHUNK_OK == er)
+                    requests.read_data(nullptr, sizeof(req));
+            }
+        }
+    }
+};
+
+transmitting_data_s *transmitting_data_s::first = nullptr;
+transmitting_data_s *transmitting_data_s::last = nullptr;
 
 static int send_request(const char*public_id, const char* invite_message_utf8, bool resend);
 
@@ -817,7 +1065,7 @@ struct discoverer_s
         sync.lock_write()().thread_in_progress = false;
     }
 
-    static DWORD WINAPI discover_thread(LPVOID p)
+    static u32 WINAPI discover_thread(LPVOID p)
     {
         UNSTABLE_CODE_PROLOG
             ((discoverer_s *)p)->discover_thread();
@@ -839,7 +1087,7 @@ discoverer_s *discoverer_s::last = nullptr;
 static void make_uniq_utag( u64 &utag )
 {
     again_check:
-    for (transmiting_file_s *f = transmiting_file_s::first; f; f = f->next)
+    for (transmitting_data_s *f = transmitting_data_s::first; f; f = f->next)
         if (f->utag == utag)
         {
             // almost impossible
@@ -847,9 +1095,13 @@ static void make_uniq_utag( u64 &utag )
             ++utag;
             goto again_check;
         }
+    for (incoming_file_s *f = incoming_file_s::first; f; f = f->next)
+        if (f->utag == utag)
+        {
+            ++utag;
+            goto again_check;
+        }
 }
-
-static int cb_isotoxin(Tox *, int32_t fid, const uint8_t *data, uint32_t len, void * /*object*/);
 
 struct contact_descriptor_s
 {
@@ -865,7 +1117,10 @@ private:
 public:
     int callindex = -1;
 
-    int avatar_tag = 0;
+    int avatar_tag = 0; // tag of contact's avatar
+    int avatar_recv_fnn = -1; // receiving file number
+    int avatag_self = -1; // tag of self avatar, if not equal to gavatag, then should be transfered (gavatag increased every time self avatar changed)
+    std::vector<byte> avatar; // contact's avatar itself
     byte avatar_hash[TOX_HASH_LENGTH];
 
     contact_state_e state = CS_ROTTEN;
@@ -874,10 +1129,15 @@ public:
     int correct_create_time = 0; // delta
     int wait_client_id = 0;
     int next_sync = 0;
-    bool is_online = false;
-    bool notify_app_on_start = false;
-    bool isotoxin = false;
-    bool need_resync = false;
+
+    static const int F_IS_ONLINE = 1;
+    static const int F_NOTIFY_APP_ON_START = 2;
+    static const int F_ISOTOXIN = 4;
+    static const int F_NEED_RESYNC = 8;
+    static const int F_AVASEND = 16;
+    static const int F_AVARECIVED = 32;
+
+    int flags = 0;
 
     contact_descriptor_s(bool init_new_id, int fid);
     ~contact_descriptor_s()
@@ -888,10 +1148,10 @@ public:
     static contact_descriptor_s *find( const asptr &pubid )
     {
         asptr ff = pubid;
-        ff.l = TOX_CLIENT_ID_SIZE * 2;
+        ff.l = TOX_PUBLIC_KEY_SIZE * 2;
         pstr_c fff; fff.set(ff);
         for(contact_descriptor_s *f = first_desc; f; f = f->next)
-            if (f->pubid.substr(0, TOX_CLIENT_ID_SIZE * 2) == fff)
+            if (f->pubid.substr(0, TOX_PUBLIC_KEY_SIZE * 2) == fff)
                 return f;
 
         return nullptr;
@@ -906,11 +1166,45 @@ public:
 
     void send_identity(bool resync)
     {
-        tox_lossless_packet_registerhandler(tox, fid, IDENTITY_PACKETID, cb_isotoxin, nullptr);
         sstr_t<-128> isotoxin_id("-isotoxin/" SS(PLUGINVER) "/"); isotoxin_id.append_as_num<u64>(now());
         if (resync) isotoxin_id.append(CONSTASTR("/resync"));
-        *(uint8_t *)isotoxin_id.str() = IDENTITY_PACKETID;
-        tox_send_lossless_packet(tox, fid, (const uint8_t *)isotoxin_id.cstr(), isotoxin_id.get_length());
+        *(byte *)isotoxin_id.str() = IDENTITY_PACKETID;
+        TOX_ERR_FRIEND_CUSTOM_PACKET err = TOX_ERR_FRIEND_CUSTOM_PACKET_OK;
+        tox_friend_send_lossless_packet(tox, fid, (const byte *)isotoxin_id.cstr(), isotoxin_id.get_length(), &err);
+    }
+
+    void send_avatar()
+    {
+        if (!ISFLAG(flags, F_IS_ONLINE)) return;
+        if (ISFLAG(flags, F_AVASEND)) return;
+        if (avatag_self == gavatag) return;
+
+        str_c fnc; fnc.append_as_hex( avahash, TOX_HASH_LENGTH ).append(CONSTASTR(".png"));
+
+        u64 utag;
+        randombytes_buf(&utag, sizeof(u64));
+        make_uniq_utag( utag );
+
+        TOX_ERR_FILE_SEND er = TOX_ERR_FILE_SEND_NULL;
+        uint32_t tr = tox_file_send(tox, get_fid(), TOX_FILE_KIND_AVATAR, gavatar.size(), avahash, (const byte *)fnc.cstr(), (uint16_t)fnc.get_length(), &er);
+        if (er != TOX_ERR_FILE_SEND_OK)
+            return;
+
+        SETFLAG(flags, F_AVASEND);
+
+        new transmitting_avatar_s(get_fid(), tr, utag, fnc); // not memleak
+
+    }
+
+    void recv_avatar()
+    {
+        if (avatar_recv_fnn < 0)
+        {
+            if (ISFLAG(flags, F_AVARECIVED))
+                hf->avatar_data(get_id(),avatar_tag,avatar.data(),avatar.size());
+            return;
+        }
+        tox_file_control(tox,get_fid(),avatar_recv_fnn, TOX_FILE_CONTROL_RESUME, nullptr);
     }
 
 };
@@ -918,18 +1212,77 @@ public:
 contact_descriptor_s *contact_descriptor_s::first_desc = nullptr;
 contact_descriptor_s *contact_descriptor_s::last_desc = nullptr;
 
-std::unordered_map<int, contact_descriptor_s*> id2desc;
-std::unordered_map<int, contact_descriptor_s*> fid2desc;
+static std::unordered_map<int, contact_descriptor_s*> id2desc;
+static std::unordered_map<int, contact_descriptor_s*> fid2desc;
 
 static contact_descriptor_s * find_descriptor(int cid);
 static contact_descriptor_s * find_restore_descriptor(int fid);
 
-bool is_isotoxin(int fid)
+void incoming_avatar_s::check_avatar(int ct)
+{
+    bool die = true;
+    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+        die = desc->avatar_recv_fnn != (int)fnn;
+    if (!die && (ct - droptime) > 0) die = true;
+    if (die)
+    {
+        tox_file_control(tox,fid,fnn,TOX_FILE_CONTROL_CANCEL, nullptr);
+        delete this;
+    }
+}
+
+/*virtual*/ void incoming_avatar_s::finished()
 {
     if (contact_descriptor_s *desc = find_restore_descriptor(fid))
-        return desc->isotoxin;
+    {
+        byte hash[TOX_HASH_LENGTH];
+        tox_hash(hash,avatar.data(),avatar.size());
+
+        if (0 != memcmp(hash, desc->avatar_hash, TOX_HASH_LENGTH))
+        {
+            memcpy(desc->avatar_hash, hash, TOX_HASH_LENGTH);
+            ++desc->avatar_tag; // new avatar version
+        }
+
+        desc->avatar = std::move(avatar);
+        SETFLAG(desc->flags, contact_descriptor_s::F_AVARECIVED);
+
+        hf->avatar_data(desc->get_id(), desc->avatar_tag, desc->avatar.data(), desc->avatar.size());
+    }
+
+    delete this;
+}
+
+
+
+/*virtual*/ void transmitting_avatar_s::kill()
+{
+    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+    {
+        UNSETFLAG(desc->flags, contact_descriptor_s::F_AVASEND);
+    }
+    __super::kill();
+}
+
+/*virtual*/ void transmitting_avatar_s::finished()
+{
+    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+    {
+        UNSETFLAG(desc->flags, contact_descriptor_s::F_AVASEND);
+        desc->avatag_self = avatag;
+    }
+    __super::finished();
+}
+
+
+/*
+static bool is_isotoxin(int fid)
+{
+    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+        return ISFLAG(desc->flags, contact_descriptor_s::F_ISOTOXIN);
     return false;
 }
+*/
 
 void message2send_s::try_send(int time)
 {
@@ -938,7 +1291,7 @@ void message2send_s::try_send(int time)
         bool send_create_time = false;
         if (contact_descriptor_s *desc = find_restore_descriptor(fid))
         {
-            if (!desc->is_online)
+            if (!ISFLAG(desc->flags, contact_descriptor_s::F_IS_ONLINE))
             {
                 mid = 0;
                 return; // not yet
@@ -952,7 +1305,7 @@ void message2send_s::try_send(int time)
                 }
                 desc->wait_client_id = 0;
             }
-            send_create_time = desc->isotoxin;
+            send_create_time = ISFLAG(desc->flags, contact_descriptor_s::F_ISOTOXIN);
         }
 
         asptr m = msg.as_sptr();
@@ -963,18 +1316,20 @@ void message2send_s::try_send(int time)
                 m = m.skip(skipchars + 1);
         }
 
+        TOX_ERR_FRIEND_SEND_MESSAGE err;
+
         mid = 0;
         if (mt == MT_MESSAGE)
-            mid = tox_send_message(tox, fid, (const uint8_t *)m.s, m.l);
+            mid = tox_friend_send_message(tox,fid,TOX_MESSAGE_TYPE_NORMAL, (const byte *)m.s, m.l, &err);
         if (mt == MT_ACTION)
-            mid = tox_send_action(tox, fid, (const uint8_t *)m.s, m.l);
+            mid = tox_friend_send_message(tox,fid,TOX_MESSAGE_TYPE_ACTION, (const byte *)m.s, m.l, &err);
         if (mid) resend_time = time + 10000;
         next_try_time = time + 1000;
     }
 }
 
 
-contact_descriptor_s::contact_descriptor_s(bool init_new_id, int fid) :pubid(TOX_FRIEND_ADDRESS_SIZE * 2, true), fid(fid)
+contact_descriptor_s::contact_descriptor_s(bool init_new_id, int fid) :pubid(TOX_ADDRESS_SIZE * 2, true), fid(fid)
 {
     memset(avatar_hash, 0, sizeof(avatar_hash));
     LIST_ADD(this, first_desc, last_desc, prev, next);
@@ -1029,20 +1384,20 @@ void contact_descriptor_s::set_id(int id_)
 
 static bool online_flag = false;
 contact_state_e self_state;
-uint8_t lastmypubid[TOX_FRIEND_ADDRESS_SIZE];
+byte lastmypubid[TOX_ADDRESS_SIZE];
 
 void update_self()
 {
     if (tox)
     {
-        tox_get_address(tox,lastmypubid);
-        str_c pubid(TOX_FRIEND_ADDRESS_SIZE * 2, true); pubid.append_as_hex(lastmypubid,TOX_FRIEND_ADDRESS_SIZE);
+        tox_self_get_address(tox,lastmypubid);
+        str_c pubid(TOX_ADDRESS_SIZE * 2, true); pubid.append_as_hex(lastmypubid,TOX_ADDRESS_SIZE);
 
-        str_c name( tox_get_self_name_size(tox), false );
-        tox_get_self_name(tox,(uint8_t*)name.str());
+        str_c name( tox_self_get_name_size(tox), false );
+        tox_self_get_name(tox,(byte*)name.str());
 
-        str_c statusmsg(tox_get_self_status_message_size(tox), false);
-        tox_get_self_status_message(tox, (uint8_t*)statusmsg.str(),statusmsg.get_length());
+        str_c statusmsg(tox_self_get_status_message_size(tox), false);
+        tox_self_get_status_message(tox, (byte*)statusmsg.str());
 
         contact_data_s self;
         self.id = 0;
@@ -1067,18 +1422,22 @@ static void update_contact( const contact_descriptor_s *cdesc )
         cd.mask = CDM_PUBID | CDM_STATE | CDM_ONLINE_STATE | CDM_AVATAR_TAG;
         cd.id = cdesc->get_id();
 
-        int st = cdesc->get_fid() >= 0 ? tox_get_user_status(tox, cdesc->get_fid()) : TOX_USERSTATUS_INVALID;
+        TOX_ERR_FRIEND_QUERY err = TOX_ERR_FRIEND_QUERY_NULL;
+        TOX_USER_STATUS st = cdesc->get_fid() >= 0 ? tox_friend_get_status(tox, cdesc->get_fid(), &err) : (TOX_USER_STATUS)(-1);
+        if (err != TOX_ERR_FRIEND_QUERY_OK) st = (TOX_USER_STATUS)(-1);
 
-        uint8_t id[TOX_CLIENT_ID_SIZE];
-        sstr_t<TOX_CLIENT_ID_SIZE * 2 + 16> pubid;
+        sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
         if (cdesc->get_fid() >= 0)
         {
-            tox_get_client_id(tox, cdesc->get_fid(), id);
-            pubid.append_as_hex(id, TOX_CLIENT_ID_SIZE);
+            byte id[TOX_PUBLIC_KEY_SIZE];
+            TOX_ERR_FRIEND_GET_PUBLIC_KEY e;
+            tox_friend_get_public_key(tox, cdesc->get_fid(), id, &e);
+            if (TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK != e) memset(id,0,sizeof(id));
+            pubid.append_as_hex(id, TOX_PUBLIC_KEY_SIZE);
             ASSERT(pubid.beginof(cdesc->pubid));
         } else
         {
-            pubid.append( asptr( cdesc->pubid.cstr(), TOX_CLIENT_ID_SIZE * 2 ) );
+            pubid.append( asptr( cdesc->pubid.cstr(), TOX_PUBLIC_KEY_SIZE * 2 ) );
         }
 
         cd.public_id = pubid.cstr();
@@ -1088,22 +1447,23 @@ static void update_contact( const contact_descriptor_s *cdesc )
 
         str_c name, statusmsg;
 
-        if (st != TOX_USERSTATUS_INVALID)
+        if (st >= (TOX_USER_STATUS)0)
         {
-            name.set_length(tox_get_name_size(tox, cdesc->get_fid()));
-            tox_get_name(tox, cdesc->get_fid(), (uint8_t*)name.str());
+            TOX_ERR_FRIEND_QUERY er;
+            name.set_length(tox_friend_get_name_size(tox, cdesc->get_fid(), &er));
+            tox_friend_get_name(tox, cdesc->get_fid(), (byte*)name.str(), &er);
             cd.name = name.cstr();
             cd.name_len = name.get_length();
 
-            statusmsg.set_length(tox_get_status_message_size(tox, cdesc->get_fid()));
-            tox_get_status_message(tox, cdesc->get_fid(), (uint8_t*)statusmsg.str(), statusmsg.get_length());
+            statusmsg.set_length(tox_friend_get_status_message_size(tox, cdesc->get_fid(), &er));
+            tox_friend_get_status_message(tox, cdesc->get_fid(), (byte*)statusmsg.str(), &er);
             cd.status_message = statusmsg.cstr();
             cd.status_message_len = statusmsg.get_length();
 
             cd.mask |= CDM_NAME | CDM_STATUSMSG;
         }
 
-        if (st == TOX_USERSTATUS_INVALID || cdesc->state != CS_OFFLINE)
+        if (st < (TOX_USER_STATUS)0 || cdesc->state != CS_OFFLINE)
         {
             cd.state = cdesc->state;
             if ( cd.state == CS_INVITE_SEND )
@@ -1111,23 +1471,24 @@ static void update_contact( const contact_descriptor_s *cdesc )
                 cd.public_id = cdesc->pubid.cstr();
                 cd.public_id_len = cdesc->pubid.get_length();
             }
+            st = TOX_USER_STATUS_NONE;
 
         } else
         {
-            int cst = tox_get_friend_connection_status(tox, cdesc->get_fid());
+            TOX_ERR_FRIEND_QUERY er;
+            int cst = tox_friend_get_connection_status(tox, cdesc->get_fid(), &er);
             cd.state = cst ? CS_ONLINE : CS_OFFLINE;
         }
         
         switch (st)
         {
-            case TOX_USERSTATUS_NONE:
-            case TOX_USERSTATUS_INVALID:
+            case TOX_USER_STATUS_NONE:
                 cd.ostate = COS_ONLINE;
                 break;
-            case TOX_USERSTATUS_AWAY:
+            case TOX_USER_STATUS_AWAY:
                 cd.ostate = COS_AWAY;
                 break;
-            case TOX_USERSTATUS_BUSY:
+            case TOX_USER_STATUS_BUSY:
                 cd.ostate = COS_DND;
                 break;
         }
@@ -1177,10 +1538,11 @@ static contact_descriptor_s * find_restore_descriptor(int fid)
 
     contact_descriptor_s *desc = new contact_descriptor_s(true, fid);
 
-    uint8_t id[TOX_CLIENT_ID_SIZE];
-    tox_get_client_id(tox, fid, id);
+    byte id[TOX_PUBLIC_KEY_SIZE];
+    TOX_ERR_FRIEND_GET_PUBLIC_KEY er;
+    tox_friend_get_public_key(tox, fid, id, &er);
 
-    desc->pubid.append_as_hex(id, TOX_CLIENT_ID_SIZE);
+    desc->pubid.append_as_hex(id, TOX_PUBLIC_KEY_SIZE);
     desc->state = CS_OFFLINE;
 
     ASSERT( contact_descriptor_s::find(desc->pubid) == desc ); // check that such pubid is single
@@ -1206,22 +1568,40 @@ static void update_init_contact(int fid)
 ///// Tox callbacks /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static void cb_friend_request(Tox *, const uint8_t *id, const uint8_t *msg, uint16_t length, void *)
+static int find_tox_fid(const byte *id)
+{
+    byte pubkey[TOX_PUBLIC_KEY_SIZE];
+    TOX_ERR_FRIEND_GET_PUBLIC_KEY err;
+    if (!ASSERT(tox)) return -1;
+    int n = tox_self_get_friend_list_size(tox);
+    for(int i=0;i<n;++i)
+    {
+        if (tox_friend_exists(tox,i))
+        {
+            tox_friend_get_public_key(tox,i,pubkey,&err);
+            if (0 == memcmp(pubkey,id,TOX_PUBLIC_KEY_SIZE))
+                return i;
+        }
+    }
+    return -1;
+}
+
+static void cb_friend_request(Tox *, const byte *id, const byte *msg, size_t length, void *)
 {
     str_c pubid;
-    pubid.append_as_hex(id,TOX_FRIEND_ADDRESS_SIZE);
+    pubid.append_as_hex(id,TOX_PUBLIC_KEY_SIZE);
     contact_descriptor_s *desc = contact_descriptor_s::find(pubid);
     if (!desc) desc = new contact_descriptor_s( true, -1 );
     desc->pubid = pubid;
     desc->state = CS_INVITE_RECEIVE;
 
-    desc->set_fid( tox_get_friend_number(tox, id) );
+    desc->set_fid( find_tox_fid(id) );
 
     contact_data_s cd;
     cd.mask = CDM_PUBID | CDM_STATE;
     cd.id = desc->get_id();
     cd.public_id = desc->pubid.cstr();
-    cd.public_id_len = TOX_CLIENT_ID_SIZE * 2;
+    cd.public_id_len = TOX_PUBLIC_KEY_SIZE * 2;
     cd.state = desc->state;
     hf->update_contact(&cd);
 
@@ -1230,18 +1610,14 @@ static void cb_friend_request(Tox *, const uint8_t *id, const uint8_t *msg, uint
     hf->message(MT_FRIEND_REQUEST, desc->get_id(), create_time, (const char *)msg, length);
 }
 
-static void cb_friend_message(Tox *, int fid, const uint8_t *message, uint16_t length, void *)
+static void cb_friend_message(Tox *, uint32_t fid, TOX_MESSAGE_TYPE type, const byte *message, size_t length, void *)
 {
     if (contact_descriptor_s *desc = find_restore_descriptor(fid))
-        message_part_s::msg(MT_MESSAGE, desc->get_id(), 0, (const char *)message, length);
+        message_part_s::msg(TOX_MESSAGE_TYPE_NORMAL == type ? MT_MESSAGE : MT_ACTION, desc->get_id(), 0, (const char *)message, length);
 
 }
-static void cb_friend_action(Tox *, int fid, const uint8_t *action, uint16_t length, void *)
-{
-    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
-        message_part_s::msg(MT_ACTION, desc->get_id(), 0, (const char *)action, length);
-}
-static void cb_name_change(Tox *, int fid, const uint8_t * newname, uint16_t length, void *)
+
+static void cb_name_change(Tox *, uint32_t fid, const byte * newname, size_t length, void *)
 {
     if (contact_descriptor_s *desc = find_restore_descriptor(fid))
     {
@@ -1254,7 +1630,7 @@ static void cb_name_change(Tox *, int fid, const uint8_t * newname, uint16_t len
     }
 }
 
-static void cb_status_message(Tox *, int fid, const uint8_t * newstatus, uint16_t length, void *)
+static void cb_status_message(Tox *, uint32_t fid, const byte * newstatus, size_t length, void *)
 {
     if (contact_descriptor_s *desc = find_restore_descriptor(fid))
     {
@@ -1264,14 +1640,11 @@ static void cb_status_message(Tox *, int fid, const uint8_t * newstatus, uint16_
         cd.status_message = (const char *)newstatus;
         cd.status_message_len = length;
 
-        if (length == 1 && cd.status_message[0] == ' ') // WORKAROUND - Tox not allow send empty status message
-            cd.status_message_len = 0;
-
         hf->update_contact(&cd);
     }
 }
 
-static void cb_user_status(Tox *, int fid, uint8_t status, void *)
+static void cb_friend_status(Tox *, uint32_t fid, TOX_USER_STATUS status, void *)
 {
     if (contact_descriptor_s *desc = find_restore_descriptor(fid))
     {
@@ -1281,13 +1654,13 @@ static void cb_user_status(Tox *, int fid, uint8_t status, void *)
         cd.id = desc->get_id();
         switch (status)
         {
-            case TOX_USERSTATUS_NONE:
+            case TOX_USER_STATUS_NONE:
                 cd.ostate = COS_ONLINE;
                 break;
-            case TOX_USERSTATUS_AWAY:
+            case TOX_USER_STATUS_AWAY:
                 cd.ostate = COS_AWAY;
                 break;
-            case TOX_USERSTATUS_BUSY:
+            case TOX_USER_STATUS_BUSY:
                 cd.ostate = COS_DND;
                 break;
         }
@@ -1295,23 +1668,23 @@ static void cb_user_status(Tox *, int fid, uint8_t status, void *)
     }
 }
 
-static void cb_typing_change(Tox *, int /*fid*/, uint8_t /*is_typing*/, void *)
+static void cb_typing(Tox *, uint32_t /*friend_number*/, bool /*is_typing*/, void *)
 {
 }
 
-static void cb_read_receipt(Tox *, int fid, uint32_t receipt, void *)
+static void cb_read_receipt(Tox *, uint32_t fid, uint32_t message_id, void *)
 {
-    message2send_s::read(fid, receipt);
+    message2send_s::read(fid, message_id);
 }
 
-static int cb_isotoxin(Tox *, int32_t fid, const uint8_t *data, uint32_t len, void * /*object*/)
+static void cb_isotoxin(Tox *, uint32_t fid, const byte *data, size_t len, void * /*object*/)
 {
     if (contact_descriptor_s *desc = find_restore_descriptor(fid))
     {
         desc->wait_client_id = 0;
         token<char> t(asptr((const char *)data + 1, len - 1), '/');
-        desc->isotoxin = t && t->equals(CONSTASTR("isotoxin"));
-        if (desc->isotoxin)
+        SETUPFLAG(desc->flags, contact_descriptor_s::F_ISOTOXIN, t && t->equals(CONSTASTR("isotoxin")));
+        if (ISFLAG(desc->flags, contact_descriptor_s::F_ISOTOXIN))
         {
             ++t; // version
             ++t; // time of peer
@@ -1319,199 +1692,198 @@ static int cb_isotoxin(Tox *, int32_t fid, const uint8_t *data, uint32_t len, vo
             {
                 time_t remote_peer_time = t->as_num<u64>();
                 desc->correct_create_time = (int)((long long)now() - (long long)remote_peer_time);
-                desc->need_resync = abs( desc->correct_create_time ) > 10; // 10+ seconds time delta :( resync it every 2 min
-                if (desc->need_resync) desc->next_sync = time_ms() + 120000;
+                SETUPFLAG( desc->flags, contact_descriptor_s::F_NEED_RESYNC, abs( desc->correct_create_time ) > 10 ); // 10+ seconds time delta :( resync it every 2 min
+                if (ISFLAG( desc->flags, contact_descriptor_s::F_NEED_RESYNC)) desc->next_sync = time_ms() + 120000;
                 ++t;
                 if (t && t->equals(CONSTASTR("resync"))) desc->send_identity(false);
             }
         }
     }
-    return 1;
 }
 
-static void cb_connection_status(Tox *, int fid, uint8_t status, void *)
+static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_status, void *)
 {
     if (contact_descriptor_s *desc = find_restore_descriptor(fid))
     {
-        bool prev_online = desc->is_online;
+        bool prev_online = ISFLAG(desc->flags, contact_descriptor_s::F_IS_ONLINE);
         bool accepted = desc->state == CS_INVITE_SEND;
         desc->state = CS_OFFLINE;
         contact_data_s cd;
         cd.mask = CDM_STATE;
         cd.id = desc->get_id();
-        cd.state = status ? CS_ONLINE : CS_OFFLINE;
-        desc->is_online = CS_ONLINE == cd.state;
+        cd.state = (TOX_CONNECTION_NONE != connection_status) ? CS_ONLINE : CS_OFFLINE;
+        SETUPFLAG(desc->flags, contact_descriptor_s::F_IS_ONLINE, CS_ONLINE == cd.state );
 
         if (accepted)
         {
             cd.mask |= CDM_PUBID;
             cd.public_id = desc->pubid.cstr();
-            cd.public_id_len = TOX_CLIENT_ID_SIZE * 2;
+            cd.public_id_len = TOX_PUBLIC_KEY_SIZE * 2;
         }
 
         hf->update_contact(&cd);
 
-        if (!prev_online && desc->is_online)
+        if (!prev_online && ISFLAG(desc->flags, contact_descriptor_s::F_IS_ONLINE))
         {
             desc->wait_client_id = time_ms() + 2000; // wait 2 sec client name
             if (desc->wait_client_id == 0) desc->wait_client_id++;
             desc->send_identity(false);
-        } else if (!desc->is_online)
+            desc->send_avatar();
+
+        } else if (!ISFLAG(desc->flags, contact_descriptor_s::F_IS_ONLINE))
         {
-            desc->need_resync = false;
-            desc->isotoxin = false;
+            UNSETFLAG( desc->flags, contact_descriptor_s::F_NEED_RESYNC );
+            UNSETFLAG( desc->flags, contact_descriptor_s::F_ISOTOXIN );
+            UNSETFLAG( desc->flags, contact_descriptor_s::F_AVASEND );
+            desc->avatag_self = gavatag - 1;
             desc->correct_create_time = 0;
+            desc->avatar_recv_fnn = -1;
         }
     }
 }
 
+static void cb_file_chunk_request(Tox *, uint32_t fid, uint32_t file_number, u64 position, size_t length, void *)
+{
+    for (transmitting_data_s *f = transmitting_data_s::first; f; f = f->next)
+        if (f->fid == fid && f->fnn == file_number)
+        {
+            f->transmit(transmitting_data_s::req(position, length));
+            break;
+        }
+}
 
-static void cb_file_send_request(Tox *, int32_t fid, uint8_t filenumber, uint64_t filesize, const uint8_t *filename, uint16_t filename_length, void * /*userdata*/)
+static void cb_tox_file_recv(Tox *, uint32_t fid, uint32_t filenumber, uint32_t kind, u64 filesize, const byte *filename, size_t filename_length, void *)
 {
     if (contact_descriptor_s *desc = find_restore_descriptor(fid))
     {
-        incoming_file_s *f = new incoming_file_s(fid,filenumber,filesize,asptr((const char *)filename, filename_length)); // not memleak
+        if (TOX_FILE_KIND_AVATAR == kind)
+        {
+            if (desc->avatar_recv_fnn >= 0)
+                desc->avatar_recv_fnn = -1;
+
+            if (0 == filesize)
+            {
+                tox_file_control(tox, fid, filenumber, TOX_FILE_CONTROL_CANCEL, nullptr);
+
+                memset(desc->avatar_hash, 0, TOX_HASH_LENGTH);
+                if (desc->avatar_tag == 0) return;
+
+                // avatar changed to none, so just send empty avatar to application (avatar tag == 0)
+
+                desc->avatar_tag = 0;
+                contact_data_s cd;
+                cd.id = desc->get_id();
+                cd.mask = CDM_AVATAR_TAG;
+                cd.avatar_tag = 0;
+                hf->update_contact(&cd);
+                hf->save();
+
+            } else
+            {
+                byte hash[TOX_HASH_LENGTH] = {0};
+                if (!tox_file_get_file_id(tox,fid,filenumber,hash,nullptr) || 0 == memcmp(hash, desc->avatar_hash, TOX_HASH_LENGTH))
+                {
+                    // same avatar - cancel avatar transfer
+                    tox_file_control(tox, fid, filenumber, TOX_FILE_CONTROL_CANCEL, nullptr);
+
+                } else
+                {
+                    // avatar changed
+                    memcpy(desc->avatar_hash, hash, TOX_HASH_LENGTH);
+                    ++desc->avatar_tag; // new avatar version
+
+                    desc->avatar_recv_fnn = filenumber;
+                    new incoming_avatar_s(fid, filenumber, filesize, asptr((const char *)filename, filename_length)); // not memleak
+
+                    contact_data_s cd;
+                    cd.id = desc->get_id();
+                    cd.mask = CDM_AVATAR_TAG;
+                    cd.avatar_tag = desc->avatar_tag;
+                    hf->update_contact(&cd);
+                    hf->save();
+                }
+            }
+            return;
+        }
+
+
+        incoming_file_s *f = new incoming_file_s(fid, filenumber, (TOX_FILE_KIND)kind, filesize, asptr((const char *)filename, filename_length)); // not memleak
         hf->incoming_file(desc->get_id(), f->utag, filesize, (const char *)filename, filename_length);
     }
+
 }
 
-static void cb_file_control(Tox *, int32_t fid, uint8_t is_send, uint8_t filenumber, uint8_t control, const uint8_t * /*data*/, uint16_t /*length*/, void * /*userdata*/)
+static void cb_file_recv_control(Tox *, uint32_t fid, uint32_t filenumber, TOX_FILE_CONTROL control, void * /*userdata*/)
 {
     file_transfer_s *ft = nullptr;
-    if (is_send)
+    // outgoing
+    for (transmitting_data_s *f = transmitting_data_s::first; f; f = f->next)
+        if (f->fid == fid && f->fnn == filenumber)
+        {
+            ft = f;
+            break;
+        }
+
+    // incoming
+    if (nullptr == ft)
     {
-        // outgoing
-        for (transmiting_file_s *f = transmiting_file_s::first; f; f = f->next)
-            if (f->fid == fid && f->fnn == filenumber)
-            {
-                ft = f;
-                break;
-            }
-    } else
-    {
-        // incoming
         for(incoming_file_s *f = incoming_file_s::first;f;f=f->next)
             if (f->fid == fid && f->fnn == filenumber)
             {
                 ft = f;
                 break;
             }
-
     }
     
     if (!ft) return;
 
     switch (control)
     {
-    case TOX_FILECONTROL_ACCEPT:
+    case TOX_FILE_CONTROL_RESUME:
         ft->accepted();
         break;
 
-    case TOX_FILECONTROL_KILL:
+    case TOX_FILE_CONTROL_CANCEL:
         ft->kill();
         break;
 
-    case TOX_FILECONTROL_PAUSE:
+    case TOX_FILE_CONTROL_PAUSE:
         ft->pause();
-        break;
-
-    case TOX_FILECONTROL_FINISHED:
-        ft->finished();
-        break;
-    
-    case TOX_FILECONTROL_RESUME_BROKEN:
-        ft->resume();
         break;
 
     }
 }
 
-static void cb_file_data(Tox *, int32_t fid, uint8_t filenumber, const uint8_t *data, uint16_t length, void * /*userdata*/)
+static void cb_tox_file_recv_chunk(Tox *, uint32_t fid, uint32_t filenumber, u64 position, const byte *data, size_t length, void * /*userdata*/)
 {
     for (incoming_file_s *f = incoming_file_s::first; f; f = f->next)
         if (f->fid == fid && f->fnn == filenumber)
         {
-            hf->file_portion( f->utag, f->offset, data, length );
-            f->offset += length;
-            if (f->offset > f->fsz)
-            {
-                tox_file_send_control(tox, f->fid, 1, f->fnn, TOX_FILECONTROL_KILL, nullptr, 0);
-                f->kill();
-            }
+            if (length == 0)
+                f->finished();
+            else
+                f->recv_data( position, data, length );
             break;
         }
 }
 
-static void cb_avatar_info(Tox*, int32_t fid, uint8_t format, uint8_t* hash, void* /*userdata*/)
-{
-    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
-    {
-        if (format == TOX_AVATAR_FORMAT_NONE)
-        {
-            memset( desc->avatar_hash, 0, TOX_HASH_LENGTH );
-            if ( desc->avatar_tag == 0 ) return;
-
-            // avatar changed to none, so just send empty avatar to application (avatar tag == 0)
-
-            desc->avatar_tag = 0;
-            contact_data_s cd;
-            cd.id = desc->get_id();
-            cd.mask = CDM_AVATAR_TAG;
-            cd.avatar_tag = 0;
-            hf->update_contact(&cd);
-            hf->save();
-
-        } else
-        {
-            if (0 != memcmp(hash,desc->avatar_hash, TOX_HASH_LENGTH))
-            {
-                // avatar changed
-                memcpy( desc->avatar_hash, hash, TOX_HASH_LENGTH );
-                ++desc->avatar_tag; // new avatar version
-
-                contact_data_s cd;
-                cd.id = desc->get_id();
-                cd.mask = CDM_AVATAR_TAG;
-                cd.avatar_tag = desc->avatar_tag;
-                hf->update_contact(&cd);
-                hf->save();
-            }
-        }
-    }
-}
-
-static void cb_avatar_data(Tox*, int32_t fid, uint8_t, uint8_t *hash, uint8_t *data, uint32_t datalen, void * /*userdata*/)
-{
-    if (contact_descriptor_s *desc = find_restore_descriptor(fid))
-    {
-        if (0 != memcmp(hash, desc->avatar_hash, TOX_HASH_LENGTH))
-        {
-            memcpy(desc->avatar_hash, hash, TOX_HASH_LENGTH);
-            ++desc->avatar_tag; // new avatar version
-        }
-
-        hf->avatar_data(desc->get_id(), desc->avatar_tag, data, datalen);
-    }
-}
-
-
-static void cb_group_invite(Tox *, int /*fid*/, uint8_t /*type*/, const uint8_t * /*data*/, uint16_t /*length*/, void *)
+static void cb_group_invite(Tox *, int /*fid*/, byte /*type*/, const byte * /*data*/, uint16_t /*length*/, void *)
 {
 }
 
-static void cb_group_message(Tox *, int /*gid*/, int /*pid*/, const uint8_t * /*message*/, uint16_t /*length*/, void *)
+static void cb_group_message(Tox *, int /*gid*/, int /*pid*/, const byte * /*message*/, uint16_t /*length*/, void *)
 {
 }
 
-static void cb_group_action(Tox *, int /*gid*/, int /*pid*/, const uint8_t * /*action*/, uint16_t /*length*/, void *)
+static void cb_group_action(Tox *, int /*gid*/, int /*pid*/, const byte * /*action*/, uint16_t /*length*/, void *)
 {
 }
 
-static void cb_group_namelist_change(Tox *, int /*gid*/, int /*pid*/, uint8_t /*change*/, void *)
+static void cb_group_namelist_change(Tox *, int /*gid*/, int /*pid*/, byte /*change*/, void *)
 {
 }
 
-static void cb_group_title(Tox *, int /*gid*/, int /*pid*/, const uint8_t * /*title*/, uint8_t /*length*/, void *)
+static void cb_group_title(Tox *, int /*gid*/, int /*pid*/, const byte * /*title*/, byte /*length*/, void *)
 {
 }
 
@@ -1554,9 +1926,9 @@ static void cb_toxav_start(void *av, int32_t call_index, void * /*userdata*/)
         //bool video = (peer_settings.call_type == av_TypeVideo);
 
         toxav_prepare_transmission(toxav, call_index, 0 /*video = 1*/);
-        if (desc->notify_app_on_start)
+        if (ISFLAG(desc->flags, contact_descriptor_s::F_NOTIFY_APP_ON_START))
         {
-            desc->notify_app_on_start = false;
+            UNSETFLAG(desc->flags, contact_descriptor_s::F_NOTIFY_APP_ON_START);
             hf->message(MT_CALL_ACCEPTED, desc->get_id(), now(), nullptr, 0);
         }
     }
@@ -1571,7 +1943,7 @@ static void call_stop_int( int32_t call_index )
             ASSERT(desc->callindex == call_index);
             hf->message(MT_CALL_STOP, desc->get_id(), now(), nullptr, 0);
             desc->callindex = -1;
-            desc->notify_app_on_start = false;
+            UNSETFLAG(desc->flags, contact_descriptor_s::F_NOTIFY_APP_ON_START);
         }
         hf->close_audio(desc->get_id());
     }
@@ -1648,8 +2020,8 @@ static DWORD WINAPI audio_sender(LPVOID)
 {
     state.lock_write()().audio_sender = true;
 
-    std::vector<uint8_t> prebuffer; // just ones allocated buffer for raw audio
-    std::vector<uint8_t> compressed; // just ones allocated buffer for raw audio
+    std::vector<byte> prebuffer; // just ones allocated buffer for raw audio
+    std::vector<byte> compressed; // just ones allocated buffer for raw audio
 
     int sleepms = 100;
     for(;; Sleep(sleepms))
@@ -1690,7 +2062,7 @@ static DWORD WINAPI audio_sender(LPVOID)
                     int16_t * cvt = (int16_t *)compressed.data();
                     for(int i=0;i<req_frame_size;++i)
                     {
-                        uint8_t sample8 = (uint8_t)prebuffer.data()[i];
+                        byte sample8 = (byte)prebuffer.data()[i];
                         *cvt = ((int16_t)sample8-(int16_t)0x80) << 8;
                         ++cvt;
                     }
@@ -1715,48 +2087,46 @@ static DWORD WINAPI audio_sender(LPVOID)
 }
 
 
-static void prepare()
+static void prepare(const byte *data, size_t length)
 {
+    if (tox) tox_kill(tox);
+
     OSVERSIONINFO v = {sizeof(OSVERSIONINFO),0};
     GetVersionExW(&v);
-    options.ipv6enabled = (v.dwMajorVersion >= 6) ? 1 : 0;
-    options.proxy_address[0] = 0;
+    options.ipv6_enabled = (v.dwMajorVersion >= 6) ? 1 : 0;
+    options.proxy_host = tox_proxy_host.cstr();
     options.proxy_port = 0;
-    options.proxy_type = TOX_PROXY_NONE;
+    options.proxy_type = TOX_PROXY_TYPE_NONE;
     if (tox_proxy_type & PROXY_SUPPORT_HTTP)
-        options.proxy_type = TOX_PROXY_HTTP;
+        options.proxy_type = TOX_PROXY_TYPE_HTTP;
     if (tox_proxy_type & (PROXY_SUPPORT_SOCKS4|PROXY_SUPPORT_SOCKS5))
-        options.proxy_type = TOX_PROXY_SOCKS5;
-    if (TOX_PROXY_NONE != options.proxy_type)
+        options.proxy_type = TOX_PROXY_TYPE_SOCKS5;
+    if (TOX_PROXY_TYPE_NONE != options.proxy_type)
     {
-        token<char> p(tox_proxy_address, ':');
-        int pal = p->get_length(); if (pal > sizeof(options.proxy_address)-1) pal = sizeof(options.proxy_address)-1;
-        memcpy( options.proxy_address, p->as_sptr().s, pal );
-        options.proxy_address[pal] = 0;
-        ++p;
-        if (p) options.proxy_port = (uint16_t)p->as_int();
-        if (options.proxy_port == 0 && options.proxy_type == TOX_PROXY_HTTP) options.proxy_port = 3128;
-        if (options.proxy_port == 0 && options.proxy_type == TOX_PROXY_SOCKS5) options.proxy_port = 1080;
+        options.proxy_port = tox_proxy_port;
+        if (options.proxy_port == 0 && options.proxy_type == TOX_PROXY_TYPE_HTTP) options.proxy_port = 3128;
+        if (options.proxy_port == 0 && options.proxy_type == TOX_PROXY_TYPE_SOCKS5) options.proxy_port = 1080;
         if (options.proxy_port == 0)
         {
-            options.proxy_address[0] = 0;
-            options.proxy_type = TOX_PROXY_NONE;
+            options.proxy_host = nullptr;
+            options.proxy_type = TOX_PROXY_TYPE_NONE;
         }
-
     }
-    options.udp_disabled = 0;
+    options.udp_enabled = options.proxy_type == TOX_PROXY_TYPE_NONE;
 
-    tox = tox_new(&options);
+    TOX_ERR_NEW er;
+    tox = tox_new(&options, data, length, &er);
+
+    tox_callback_friend_lossless_packet(tox, cb_isotoxin, nullptr);
 
     tox_callback_friend_request(tox, cb_friend_request, nullptr);
     tox_callback_friend_message(tox, cb_friend_message, nullptr);
-    tox_callback_friend_action(tox, cb_friend_action, nullptr);
-    tox_callback_name_change(tox, cb_name_change, nullptr);
-    tox_callback_status_message(tox, cb_status_message, nullptr);
-    tox_callback_user_status(tox, cb_user_status, nullptr);
-    tox_callback_typing_change(tox, cb_typing_change, nullptr);
-    tox_callback_read_receipt(tox, cb_read_receipt, nullptr);
-    tox_callback_connection_status(tox, cb_connection_status, nullptr);
+    tox_callback_friend_name(tox, cb_name_change, nullptr);
+    tox_callback_friend_status_message(tox, cb_status_message, nullptr);
+    tox_callback_friend_status(tox, cb_friend_status, nullptr);
+    tox_callback_friend_typing(tox, cb_typing, nullptr);
+    tox_callback_friend_read_receipt(tox, cb_read_receipt, nullptr);
+    tox_callback_friend_connection_status(tox, cb_connection_status, nullptr);
 
     tox_callback_group_invite(tox, cb_group_invite, nullptr);
     tox_callback_group_message(tox, cb_group_message, nullptr);
@@ -1764,12 +2134,11 @@ static void prepare()
     tox_callback_group_namelist_change(tox, cb_group_namelist_change, nullptr);
     tox_callback_group_title(tox, cb_group_title, nullptr);
 
-    tox_callback_file_send_request(tox, cb_file_send_request, nullptr);
-    tox_callback_file_control(tox, cb_file_control, nullptr);
-    tox_callback_file_data(tox, cb_file_data, nullptr);
+    tox_callback_file_recv_control(tox, cb_file_recv_control, nullptr);
+    tox_callback_file_chunk_request(tox, cb_file_chunk_request, nullptr);
+    tox_callback_file_recv(tox, cb_tox_file_recv, nullptr);
+    tox_callback_file_recv_chunk(tox, cb_tox_file_recv_chunk, nullptr);
 
-    tox_callback_avatar_info(tox, cb_avatar_info, nullptr);
-    tox_callback_avatar_data(tox, cb_avatar_data, nullptr);
 
     toxav = toxav_new( tox, MAX_CALLS );
 
@@ -1825,7 +2194,15 @@ static void connect()
     for (int i = 0; i < n; ++i)
     {
         const dht_node_s &node = get_node();
-        tox_bootstrap_from_address(tox, node.addr.cstr(), (uint16_t)node.port, node.pubid);
+        TOX_ERR_BOOTSTRAP er;
+        tox_bootstrap(tox, node.addr.cstr(), (uint16_t)node.port, node.pubid, &er);
+        if (TOX_ERR_BOOTSTRAP_BAD_HOST == er)
+        {
+            ++n;
+            if (n > (int)nodes.size() && i >= (int)nodes.size()) break;
+            continue;
+        }
+        tox_add_tcp_relay(tox, node.addr.cstr(), (uint16_t)node.port, node.pubid, &er);
     }
 
     
@@ -1843,24 +2220,25 @@ void __stdcall tick()
     {
         message2send_s::tick(curt);
         message_part_s::tick(curt);
-        transmiting_file_s::tick();
+        incoming_file_s::tick(curt);
+        transmitting_data_s::tick();
         discoverer_s::tick(curt);
 
         bool forceupdateself = false;
         if ((curt - nextt) > 0)
         {
             //DWORD xxx = time_ms();
-            tox_do(tox);
+            tox_iterate(tox);
             //DWORD yyy = time_ms();
             //DWORD zzz = yyy - xxx;
-            nextt = curt + tox_do_interval(tox);
+            nextt = curt + tox_iteration_interval(tox);
 
-            uint8_t id[TOX_FRIEND_ADDRESS_SIZE];
-            tox_get_address(tox,id);
-            if (0 != memcmp(id, lastmypubid, TOX_FRIEND_ADDRESS_SIZE))
+            byte id[TOX_ADDRESS_SIZE];
+            tox_self_get_address(tox,id);
+            if (0 != memcmp(id, lastmypubid, TOX_ADDRESS_SIZE))
                 forceupdateself = true;
         }
-        contact_state_e nst = tox_isconnected(tox) ? CS_ONLINE : CS_OFFLINE;
+        contact_state_e nst = tox_self_get_connection_status(tox) != TOX_CONNECTION_NONE ? CS_ONLINE : CS_OFFLINE;
         if (forceupdateself || nst != self_state)
         {
             if (nst == CS_OFFLINE && self_state != CS_OFFLINE)
@@ -1889,7 +2267,7 @@ void __stdcall tick()
         if ((curt - nexttresync) > 0)
         {
             for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
-                if (f->need_resync && f->is_online && (curt - f->next_sync) > 0)
+                if (ISFLAG(f->flags, contact_descriptor_s::F_NEED_RESYNC) && ISFLAG(f->flags, contact_descriptor_s::F_IS_ONLINE) && (curt - f->next_sync) > 0)
                 {
                     f->next_sync = curt + 120000;
                     f->send_identity(true);
@@ -1916,8 +2294,8 @@ void __stdcall goodbye()
     while (incoming_file_s::first)
         delete incoming_file_s::first;
 
-    while (transmiting_file_s::first)
-        delete transmiting_file_s::first;
+    while (transmitting_data_s::first)
+        delete transmitting_data_s::first;
 
     while (discoverer_s::first)
         delete discoverer_s::first;
@@ -1940,31 +2318,27 @@ void __stdcall set_name(const char*utf8name)
 {
     if (tox)
     {
-        uint16_t len = (uint16_t)strlen(utf8name);
+        size_t len = strlen(utf8name);
         if (len == 0)
         {
             utf8name = "noname";
             len = 6;
         } else if (len > TOX_MAX_NAME_LENGTH)
             len = TOX_MAX_NAME_LENGTH;
-        tox_set_name(tox,(const uint8_t *)utf8name,len);
+        TOX_ERR_SET_INFO er;
+        tox_self_set_name(tox,(const byte *)utf8name,len,&er);
     }
 }
 void __stdcall set_statusmsg(const char*utf8status)
 {
     if (tox)
     {
-        uint16_t len = (uint16_t)strlen(utf8status);
-        if (len > TOX_MAX_STATUSMESSAGE_LENGTH)
-            len = TOX_MAX_STATUSMESSAGE_LENGTH;
+        size_t len = strlen(utf8status);
+        if (len > TOX_MAX_STATUS_MESSAGE_LENGTH)
+            len = TOX_MAX_STATUS_MESSAGE_LENGTH;
 
-        if (len == 0)
-        {
-            utf8status = " "; // WORKAROUND - Tox not allow send empty status message
-            len = 1;
-        }
-
-        tox_set_status_message(tox, (const uint8_t *)utf8status, len);
+        TOX_ERR_SET_INFO er;
+        tox_self_set_status_message(tox, (const byte *)utf8status, len, &er);
     }
 }
 
@@ -1975,13 +2349,13 @@ void __stdcall set_ostate(int ostate)
         switch (ostate)
         {
             case COS_ONLINE:
-                tox_set_user_status(tox, TOX_USERSTATUS_NONE);
+                tox_self_set_status(tox, TOX_USER_STATUS_NONE);
                 break;
             case COS_AWAY:
-                tox_set_user_status(tox, TOX_USERSTATUS_AWAY);
+                tox_self_set_status(tox, TOX_USER_STATUS_AWAY);
                 break;
             case COS_DND:
-                tox_set_user_status(tox, TOX_USERSTATUS_BUSY);
+                tox_self_set_status(tox, TOX_USER_STATUS_BUSY);
                 break;
         }
     }
@@ -1997,25 +2371,21 @@ void __stdcall get_avatar(int id)
         auto it = id2desc.find(id);
         if (it == id2desc.end()) return;
         contact_descriptor_s *cd = it->second;
-        if (cd->avatar_tag == 0)
-            tox_request_avatar_info(tox, cd->get_fid());
-        else
-            tox_request_avatar_data(tox, cd->get_fid());
+        cd->recv_avatar();
     }
 }
 
 void __stdcall set_avatar(const void*data, int isz)
 {
-    static byte avahash[ TOX_HASH_LENGTH ] = {0};
     static int prevavalen = 0;
 
-    if (isz > TOX_AVATAR_MAX_DATA_LENGTH) isz = 0;
-
+    if (isz > AVATAR_MAX_DATA_SIZE) isz = 0;
     if (isz == 0 && prevavalen > 0)
     {
         prevavalen = 0;
         memset(avahash,0,sizeof(avahash));
-        if (tox) tox_set_avatar(tox, TOX_AVATAR_FORMAT_NONE, nullptr, 0);
+        gavatar.clear();
+        ++gavatag;
     } else if (tox)
     {
         byte newavahash[ TOX_HASH_LENGTH ];
@@ -2023,10 +2393,16 @@ void __stdcall set_avatar(const void*data, int isz)
         if (0 != memcmp(newavahash,avahash,TOX_HASH_LENGTH))
         {
             memcpy(avahash, newavahash, TOX_HASH_LENGTH);
-            tox_set_avatar(tox, TOX_AVATAR_FORMAT_PNG, (const byte *)data, isz);
+            gavatar.resize(isz);
+            memcpy(gavatar.data(), data, isz);
+            ++gavatag;
         }
         prevavalen = isz;
     }
+    
+    for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
+        f->send_avatar();
+
 }
 
 void __stdcall set_config(const void*data, int isz)
@@ -2035,8 +2411,7 @@ void __stdcall set_config(const void*data, int isz)
     if (isz>8 && (*(uint32_t *)data) == 0 && (*((uint32_t *)data+1)) == 0x15ed1b1f)
     {
         // raw tox_save
-        if (!tox) prepare();
-        tox_load(tox, (const uint8_t *)data, isz);
+        prepare( (const byte *)data, isz );
 
     } else if (isz>4 && (*(uint32_t *)data) != 0)
     {
@@ -2045,18 +2420,16 @@ void __stdcall set_config(const void*data, int isz)
         if (ldr(chunk_proxy_type))
             tox_proxy_type = ldr.get_int();
         if (ldr(chunk_proxy_address))
-            tox_proxy_address = ldr.get_astr();
+            set_proxy_addr(ldr.get_astr());
 
         if (int sz = ldr(chunk_tox_data))
         {
-            if (!tox) prepare();
-
             loader l(ldr.chunkdata(), sz);
             int dsz;
             if (const void *toxdata = l.get_data(dsz))
-                tox_load(tox, (const uint8_t *)toxdata, dsz);
+                prepare((const byte *)toxdata, dsz);
         } else
-            if (!tox) prepare(); // prepare anyway
+            if (!tox) prepare(nullptr,0); // prepare anyway
 
         if (int sz = ldr(chunk_descriptors))
         {
@@ -2099,10 +2472,9 @@ void __stdcall set_config(const void*data, int isz)
 
                     if (id == 0) continue;
 
-                    byte buf[TOX_CLIENT_ID_SIZE];
-                    for (int i = 0; i < TOX_CLIENT_ID_SIZE; ++i)
-                        buf[i] = cd->pubid.as_byte_hex(i * 2);
-                    fid = tox_get_friend_number(tox, buf);
+                    byte buf[TOX_PUBLIC_KEY_SIZE];
+                    cd->pubid.hex2buf<TOX_PUBLIC_KEY_SIZE>(buf);
+                    fid = find_tox_fid(buf);
 
                     if (fid >= 0)
                     {
@@ -2191,9 +2563,9 @@ void __stdcall set_config(const void*data, int isz)
         }
 
     } else
-        if (!tox) prepare();
+        if (!tox) prepare(nullptr, 0);
 
-    hf->proxy_settings(tox_proxy_type, tox_proxy_address);
+    hf->proxy_settings(tox_proxy_type, str_c(tox_proxy_host).append_char(':').append_as_uint(tox_proxy_port));
 }
 void __stdcall init_done()
 {
@@ -2201,7 +2573,7 @@ void __stdcall init_done()
     {
         update_self();
 
-        int cnt = tox_count_friendlist(tox);
+        int cnt = tox_self_get_friend_list_size(tox);
         for(int i=0;i<cnt;++i)
         {
             if (tox_friend_exists(tox,i))
@@ -2261,13 +2633,13 @@ void operator<<(chunk &chunkm, const message_part_s &m)
 
 static void save_current_stuff( savebuffer &b )
 {
-    chunk(b, chunk_magic) << (uint64)(0x111BADF00D2C0FE6ull + SAVE_VERSION);
+    chunk(b, chunk_magic) << (u64)(0x111BADF00D2C0FE6ull + SAVE_VERSION);
     chunk(b, chunk_proxy_type) << tox_proxy_type;
-    chunk(b, chunk_proxy_address) << tox_proxy_address;
+    chunk(b, chunk_proxy_address) << ( str_c(tox_proxy_host).append_char(':').append_as_uint(tox_proxy_port) );
 
-    size_t sz = tox_size(tox);
+    size_t sz = tox_get_savedata_size(tox);
     void *data = chunk(b, chunk_tox_data).alloc(sz);
-    tox_save(tox, (uint8_t *)data);
+    tox_get_savedata(tox, (byte *)data);
 
     chunk(b, chunk_descriptors) << serlist<contact_descriptor_s>(contact_descriptor_s::first_desc);
     chunk(b, chunk_msgs_sending) << serlist<message2send_s>(message2send_s::first);
@@ -2279,12 +2651,10 @@ void __stdcall offline()
     online_flag = false;
     if (tox)
     {
-        size_t sz = tox_size(tox);
+        size_t sz = tox_get_savedata_size(tox);
         std::vector<byte> buf(sz);
-        tox_save(tox, buf.data());
-        tox_kill(tox);
-        prepare();
-        tox_load(tox,(const uint8_t *)buf.data(),sz);
+        tox_get_savedata(tox, buf.data());
+        prepare( (const byte *)buf.data(),sz );
 
         contact_data_s self;
         self.mask = CDM_STATE;
@@ -2294,11 +2664,9 @@ void __stdcall offline()
 
         for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
         {
-            if (f->is_online)
-                f->is_online = false;
+            UNSETFLAG(f->flags, contact_descriptor_s::F_IS_ONLINE);
             update_contact(f);
         }
-
     }
 }
 
@@ -2316,36 +2684,37 @@ static int send_request(const char*public_id, const char* invite_message_utf8, b
 {
     if (tox)
     {
-        uint8_t id[TOX_FRIEND_ADDRESS_SIZE];
+        byte toxaddr[TOX_ADDRESS_SIZE];
 
-        pstr_c s; s.set( asptr(public_id, TOX_FRIEND_ADDRESS_SIZE * 2) );
-        for(int i=0;i<TOX_FRIEND_ADDRESS_SIZE;++i)
-            id[i] = s.as_byte_hex(i * 2);
+        pstr_c s; s.set( asptr(public_id, TOX_ADDRESS_SIZE * 2) );
+        s.hex2buf<TOX_ADDRESS_SIZE>(toxaddr);
 
         if (resend) // before resend we have to delete contact in Tox system, otherwise we will get an error TOX_FAERR_ALREADYSENT
         {
-            contact_descriptor_s *cd = contact_descriptor_s::find(asptr(public_id, TOX_CLIENT_ID_SIZE));
-            if (cd) tox_del_friend(tox, cd->get_fid());
+            contact_descriptor_s *cd = contact_descriptor_s::find(asptr(public_id, TOX_PUBLIC_KEY_SIZE));
+            TOX_ERR_FRIEND_DELETE er;
+            if (cd) tox_friend_delete(tox, cd->get_fid(), &er);
         }
 
         asptr invmsg(invite_message_utf8);
-        if (invmsg.l > TOX_MAX_FRIENDREQUEST_LENGTH) invmsg.l = TOX_MAX_FRIENDREQUEST_LENGTH;
+        if (invmsg.l > TOX_MAX_FRIEND_REQUEST_LENGTH) invmsg.l = TOX_MAX_FRIEND_REQUEST_LENGTH;
         if (invmsg.l == 0) invmsg.s = "?";
 
-        int fid = tox_add_friend(tox,id,(const uint8_t *)invmsg.s,(uint16_t)invmsg.l);
-        switch (fid)
+        TOX_ERR_FRIEND_ADD er = TOX_ERR_FRIEND_ADD_NULL;
+        int fid = tox_friend_add(tox, toxaddr, (const byte *)invmsg.s,invmsg.l, &er);
+        switch (er)
         {
-            case TOX_FAERR_ALREADYSENT:
+            case TOX_ERR_FRIEND_ADD_ALREADY_SENT:
                 return CR_ALREADY_PRESENT;
-            case TOX_FAERR_OWNKEY:
-            case TOX_FAERR_BADCHECKSUM:
-            case TOX_FAERR_SETNEWNOSPAM:
+            case TOX_ERR_FRIEND_ADD_OWN_KEY:
+            case TOX_ERR_FRIEND_ADD_BAD_CHECKSUM:
+            case TOX_ERR_FRIEND_ADD_SET_NEW_NOSPAM:
                 return CR_INVALID_PUB_ID;
-            case TOX_FAERR_NOMEM:
+            case TOX_ERR_FRIEND_ADD_MALLOC:
                 return CR_MEMORY_ERROR;
         }
 
-        contact_descriptor_s *cd = contact_descriptor_s::find( asptr(public_id, TOX_CLIENT_ID_SIZE) );
+        contact_descriptor_s *cd = contact_descriptor_s::find( asptr(public_id, TOX_PUBLIC_KEY_SIZE) );
         if (cd) cd->set_fid(fid);
         else cd = new contact_descriptor_s( true, fid );
         cd->pubid = s;
@@ -2380,7 +2749,7 @@ int __stdcall resend_request(int id, const char* invite_message_utf8)
 int __stdcall add_contact(const char* public_id, const char* invite_message_utf8)
 {
     pstr_c s = asptr(public_id);
-    if (s.get_length() == (TOX_FRIEND_ADDRESS_SIZE * 2) && s.contain_chars(CONSTASTR("0123456789abcdefABCDEF")))
+    if (s.get_length() == (TOX_ADDRESS_SIZE * 2) && s.contain_chars(CONSTASTR("0123456789abcdefABCDEF")))
         return send_request(public_id, invite_message_utf8, false);
 
     if (s.find_pos('@') > 0)
@@ -2399,7 +2768,8 @@ void __stdcall del_contact(int id)
         auto it = id2desc.find(id);
         if (it == id2desc.end()) return;
         contact_descriptor_s *cd = it->second;
-        tox_del_friend(tox, cd->get_fid());
+        TOX_ERR_FRIEND_DELETE er;
+        tox_friend_delete(tox, cd->get_fid(), &er);
         cd->die();
     }
 }
@@ -2417,6 +2787,19 @@ void __stdcall send(int id, const message_s *msg)
     }
 }
 
+void __stdcall del_message( u64 utag )
+{
+    for (message2send_s *x = message2send_s::first; x; x = x->next)
+    {
+        if (x->utag == utag)
+        {
+            delete x;
+            hf->save();
+            break;
+        }
+    }
+}
+
 void __stdcall accept(int id)
 {
     if (tox)
@@ -2425,14 +2808,15 @@ void __stdcall accept(int id)
         if (it == id2desc.end()) return;
         contact_descriptor_s *cd = it->second;
         
-        byte buf[TOX_FRIEND_ADDRESS_SIZE];
-        if (cd->pubid.get_length() == TOX_FRIEND_ADDRESS_SIZE * 2 && cd->get_fid() < 0)
+        if (cd->pubid.get_length() >= TOX_PUBLIC_KEY_SIZE * 2 && cd->get_fid() < 0)
         {
-            for (int i = 0; i < TOX_FRIEND_ADDRESS_SIZE; ++i)
-                buf[i] = cd->pubid.as_byte_hex(i * 2);
+            byte buf[TOX_PUBLIC_KEY_SIZE];
+            cd->pubid.hex2buf<TOX_PUBLIC_KEY_SIZE>(buf);
 
-            int fid = tox_add_friend_norequest(tox, buf);
-            if (fid < 0) return;
+            TOX_ERR_FRIEND_ADD er;
+            int fid = tox_friend_add_norequest(tox, buf, &er);
+            if (TOX_ERR_FRIEND_ADD_OK != er)
+                return;
             cd->set_fid(fid);
             cd->state = CS_OFFLINE;
 
@@ -2460,7 +2844,8 @@ void __stdcall reject(int id)
         cdata.state = CS_ROTTEN;
         hf->update_contact(&cdata);
 
-        if (cd->get_fid() >= 0) tox_del_friend(tox,cd->get_fid());
+        TOX_ERR_FRIEND_DELETE er;
+        if (cd->get_fid() >= 0) tox_friend_delete(tox,cd->get_fid(), &er);
 
         cd->die();
     }
@@ -2478,7 +2863,7 @@ void __stdcall call(int id, const call_info_s *ci)
             stream_settings_s sets;
             if (0 == toxav_call(toxav, &cd->callindex, cd->get_fid(), &sets, ci->duration ))
             {
-                cd->notify_app_on_start = true;
+                SETFLAG(cd->flags, contact_descriptor_s::F_NOTIFY_APP_ON_START);
                 auto w = state.lock_write();
                 w().local_peer_settings[cd->callindex] = sets;
             }
@@ -2501,7 +2886,7 @@ void __stdcall stop_call(int id, stop_call_e sc)
             else if (sc == STOPCALL_CANCEL)
                 toxav_cancel(toxav, cd->callindex, cd->get_fid(), nullptr);
         cd->callindex = -1;
-        cd->notify_app_on_start = false;
+        UNSETFLAG(cd->flags, contact_descriptor_s::F_NOTIFY_APP_ON_START);
     }
 }
 
@@ -2544,10 +2929,11 @@ void __stdcall proxy_settings(int proxy_type, const char *proxy_address)
 {
     asptr pa(proxy_address);
     if (pa.l == 0) proxy_type = 0;
-    if (tox_proxy_type != proxy_type || !tox_proxy_address.equals(pa))
+    str_c paddr(tox_proxy_host); paddr.append_char(':').append_as_uint(tox_proxy_port);
+    if (tox_proxy_type != proxy_type || !paddr.equals(pa))
     {
         tox_proxy_type = proxy_type;
-        tox_proxy_address = pa;
+        set_proxy_addr(pa);
         offline();
         online();
         hf->save();
@@ -2571,41 +2957,59 @@ void __stdcall file_send(int cid, const file_send_info_s *finfo)
         {
             str_c fnc;
             asptr fn(finfo->filename, finfo->filename_len);
-            while(fn.l >= 255)
+            while(fn.l >= TOX_MAX_FILENAME_LENGTH)
             {
                 wstr_c w = to_wstr(fn);
                 fnc = to_str( w.as_sptr().skip(1) );
                 fn = fnc.as_sptr();
             }
 
-            int tr = tox_new_file_sender(tox, cd->get_fid(), finfo->filesize, (const uint8_t *)fn.s, (uint16_t)fn.l);
-            if (tr < 0)
+            byte id[TOX_FILE_ID_LENGTH] = {0,0,0,0,0,0,0,0,'i','s','o','t','o','x','i','n',0};
+            randombytes_buf(id + sizeof(u64) + 9, sizeof(id) - sizeof(u64) - 9);
+            *(u64 *)id = finfo->utag;
+
+            TOX_ERR_FILE_SEND er = TOX_ERR_FILE_SEND_NULL;
+            uint32_t tr = tox_file_send(tox, cd->get_fid(), TOX_FILE_KIND_DATA, finfo->filesize, id, (const byte *)fn.s, (uint16_t)fn.l, &er);
+            if (er != TOX_ERR_FILE_SEND_OK)
             {
-                hf->file_control( finfo->utag, FIC_REJECT );
+                hf->file_control( finfo->utag, FIC_DISCONNECT ); // put it to send queue: assume transfer broken
                 return;
             }
-            new transmiting_file_s(cd->get_fid(), tr, finfo->utag, finfo->filesize, fn); // not memleak
+            new transmitting_file_s(cd->get_fid(), tr, finfo->utag, id, finfo->filesize, fn); // not memleak
         }
     }
 
 }
+
+void __stdcall file_resume(u64 utag, u64 offset)
+{
+    for (incoming_file_s *f = incoming_file_s::first; f; f = f->next)
+        if (f->utag == utag)
+        {
+            if (offset)
+                tox_file_seek(tox, f->fid, f->fnn, offset, nullptr);
+            tox_file_control(tox, f->fid, f->fnn, TOX_FILE_CONTROL_RESUME, nullptr);
+            break;
+        }
+}
+
 void __stdcall file_control(u64 utag, file_control_e fctl)
 {
     if (tox)
     {
-        for (transmiting_file_s *f = transmiting_file_s::first; f; f = f->next)
+        for (transmitting_data_s *f = transmitting_data_s::first; f; f = f->next)
             if (f->utag == utag)
             {
                 switch (fctl)
                 {
                 case FIC_UNPAUSE:
-                    tox_file_send_control(tox, f->fid, 0, (uint8_t)f->fnn, TOX_FILECONTROL_ACCEPT, nullptr, 0);
+                    tox_file_control(tox, f->fid, f->fnn, TOX_FILE_CONTROL_RESUME, nullptr);
                     break;
                 case FIC_PAUSE:
-                    tox_file_send_control(tox, f->fid, 0, (uint8_t)f->fnn, TOX_FILECONTROL_PAUSE, nullptr, 0);
+                    tox_file_control(tox, f->fid, f->fnn, TOX_FILE_CONTROL_PAUSE, nullptr);
                     break;
                 case FIC_BREAK:
-                    tox_file_send_control(tox, f->fid, 0, (uint8_t)f->fnn, TOX_FILECONTROL_KILL, nullptr, 0);
+                    tox_file_control(tox, f->fid, f->fnn, TOX_FILE_CONTROL_CANCEL, nullptr);
                     delete f;
                     break;
                 }
@@ -2619,18 +3023,18 @@ void __stdcall file_control(u64 utag, file_control_e fctl)
                 {
                 case FIC_ACCEPT:
                 case FIC_UNPAUSE:
-                    tox_file_send_control(tox, f->fid, 1, f->fnn, TOX_FILECONTROL_ACCEPT, nullptr, 0);
+                    tox_file_control(tox, f->fid, f->fnn, TOX_FILE_CONTROL_RESUME, nullptr);
                     break;
                 case FIC_PAUSE:
-                    tox_file_send_control(tox, f->fid, 1, f->fnn, TOX_FILECONTROL_PAUSE, nullptr, 0);
+                    tox_file_control(tox, f->fid, f->fnn, TOX_FILE_CONTROL_PAUSE, nullptr);
                     break;
                 case FIC_REJECT:
                 case FIC_BREAK:
-                    tox_file_send_control(tox, f->fid, 1, f->fnn, TOX_FILECONTROL_KILL, nullptr, 0);
+                    tox_file_control(tox, f->fid, f->fnn, TOX_FILE_CONTROL_CANCEL, nullptr);
                     delete f;
                     break;
                 case FIC_DONE:
-                    tox_file_send_control(tox, f->fid, 1, f->fnn, TOX_FILECONTROL_FINISHED, nullptr, 0);
+                    tox_file_send_chunk(tox, f->fid, f->fnn, 0, nullptr, 0, nullptr);
                     delete f;
                     break;
                 }
@@ -2638,22 +3042,13 @@ void __stdcall file_control(u64 utag, file_control_e fctl)
             }
     }
 }
+
 void __stdcall file_portion(u64 utag, const file_portion_s *portion)
 {
-    for (transmiting_file_s *f = transmiting_file_s::first; f; f = f->next)
+    for (transmitting_data_s *f = transmitting_data_s::first; f; f = f->next)
         if (f->utag == utag)
         {
-            //Log("new portion: offs %llu, sz %u, available: %i", portion->offset, portion->size, f->buffer.available());
-            if ( portion->offset == (f->offset - portion->size) && portion->size == f->requested )
-            {
-                f->buffer.add_data(portion->data, portion->size);
-                f->requested = 0;
-                //Log("portion added: offs %llu, sz %u, available: %i", portion->offset, portion->size, f->buffer.available());
-            } else
-            {
-                if (tox) tox_file_send_control(tox, f->fid, 0, (uint8_t)f->fnn, TOX_FILECONTROL_KILL, nullptr, 0); // notify peer
-                f->kill(); // notify app, and delete
-            }
+            f->portion( portion->offset, portion->data, portion->size );
             return;
         }
 }

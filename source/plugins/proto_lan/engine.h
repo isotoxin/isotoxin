@@ -369,6 +369,7 @@ public:
         msg_s *sendmessage_l = nullptr;
 
         void add_message(message_type_lan_e mt, u64 put_time, asptr text, u64 utag);
+        bool del_message( u64 utag );
 
         void online_tick(int ct, int nexttime = 500); // not always online
         void start_media();

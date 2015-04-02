@@ -19,7 +19,7 @@ void avatar_s::load( const void *body, int size, int tag_ )
         {
             ts::bitmap_c bmprsz;
 
-            if (bmp.info().sz.x != info().sz.y)
+            if (bmp.info().sz.x != bmp.info().sz.y)
             {
                 bmprsz.create_RGBA(ts::ivec2(ts::tmax(bmp.info().sz.x,bmp.info().sz.y)));
                 bmprsz.fill(0);
@@ -352,8 +352,31 @@ void contact_c::load_history(int n_last_items)
         auto * row = prf().get_table_history().find<true>(id);
         if (ASSERT(row && row->other.historian == getkey()))
         {
-            post_s & p = add_history( row->other.time );
-            p = row->other;
+            if (MTA_RECV_FILE == row->other.mt() || MTA_SEND_FILE == row->other.mt())
+            {
+                if (nullptr == prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.msgitem_utag == row->other.utag; }))
+                {
+                    if (row->other.message.get_char(0) == '?')
+                    {
+                        row->other.message.set_char(0, '*');
+                        row->changed();
+                        prf().changed();
+                    }
+                } else
+                {
+                    if (row->other.message.get_char(0) != '?')
+                    {
+                        if (row->other.message.get_char(0) == '*')
+                            row->other.message.set_char(0, '?');
+                        else
+                            row->other.message.insert(0, '?');
+                        row->changed();
+                        prf().changed();
+                    }
+                }
+            }
+
+            add_history(row->other.time) = row->other;
         }
     }
 }
@@ -391,7 +414,13 @@ void contact_c::send_file(const ts::wstr_c &fn)
     });
 
     if (c_file_to)
-        g_app->register_file_transfer(historian->getkey(), c_file_to->getkey(), ts::uuid(), fn, 0 /* 0 means send */);
+    {
+        uint64 utag = ts::uuid();
+        while( nullptr != prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.utag == utag; })) 
+            ++utag;
+
+        g_app->register_file_transfer(historian->getkey(), c_file_to->getkey(), utag, fn, 0 /* 0 means send */);
+    }
 }
 
 void contact_c::recalc_unread()
@@ -404,7 +433,7 @@ void contact_c::recalc_unread()
         {
             gi->n_unread = unread;
             gi->getengine().redraw();
-            g_app->set_notification_icon();
+            g_app->F_SETNOTIFYICON = true;
         }
     }
 }
@@ -665,7 +694,6 @@ bool contact_c::b_receive_file(RID, GUIPARAM par)
 
         if (active_protocol_c *ap = prf().ap(ft->sender.protoid))
             ap->file_control(utag, FIC_ACCEPT);
-
     }
 
     return true;
@@ -846,9 +874,9 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
         //ts::tmp_pointers_t<contact_c, 32> meta;
         for( auto &row : prf().get_table_contacts() )
         {
-            if (row.metaid == 0)
+            if (row.other.metaid == 0)
             {
-                contact_key_s metakey(row.key.contactid);
+                contact_key_s metakey(row.other.key.contactid);
                 contact_c *metac = nullptr;
                 ts::aint index;
                 if (arr.find_sorted(index, metakey))
@@ -858,9 +886,9 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
                     metac = TSNEW(contact_c, metakey);
                     arr.insert(index, metac);
                 }
-                metac->setup(&row, nowtime);
+                metac->setup(&row.other, nowtime);
             } else
-                notmeta.add(&row);
+                notmeta.add(&row.other);
         }
         for(contacts_s *c : notmeta)
         {
@@ -1089,16 +1117,6 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
 
         if ( c->get_state() != oldst )
         {
-            if (c->get_historian()->gui_item)
-            {
-                gui_contact_item_c *ci = c->get_historian()->gui_item;
-                if (ci->role == CIR_CONVERSATION_HEAD)
-                {
-                    DEFERRED_EXECUTION_BLOCK_BEGIN(0)
-                        ((gui_contact_item_c *)param)->update_buttons();
-                    DEFERRED_EXECUTION_BLOCK_END(ci)
-                }
-            }
             if (c->get_state() == CS_INVITE_RECEIVE)
                 c->check_invite();
         }
@@ -1208,25 +1226,62 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
             if (sender == nullptr) return 0; // sender. no sender - no message
             contact_c *historian = get_historian(sender, &get_self());
 
-            if (g_app->register_file_transfer( historian->getkey(), ifl.sender, ifl.utag, ifl.filename, ifl.filesize ))
+            if (auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool 
+                {
+                    if (uftr.upload) return false;
+                    if (uftr.utag == ifl.utag) return true; // isotoxin provides same utag on target side
+                    return ifl.filename.equals( uftr.filename ) && ifl.filesize == uftr.filesize;
+                }))
             {
-                play_sound(snd_incoming_file, false);
-                gmsg<ISOGM_NOTICE> n(historian, sender, NOTICE_FILE, ifl.filename);
-                n.utag = ifl.utag;
-                n.send();
+                // resume
+                uint64 guiitm_utag = row->other.msgitem_utag;
+                ts::wstr_c fod = row->other.filename_on_disk;
+
+                row->deleted(); // this row not needed anymore
+                prf().changed();
+
+                if (guiitm_utag == 0 || !is_file_exists(fod) || nullptr != g_app->find_file_transfer(ifl.utag))
+                    goto not_resume;
+
+                auto &tft = prf().get_table_unfinished_file_transfer().getcreate(0);
+                tft.other.utag = ifl.utag;
+                tft.other.msgitem_utag = guiitm_utag;
+                tft.other.filesize = ifl.filesize;
+                tft.other.filename = ifl.filename;
+
+                if (file_transfer_s *ft = g_app->register_file_transfer(historian->getkey(), ifl.sender, ifl.utag, ifl.filename, ifl.filesize))
+                {
+                    ft->filename_on_disk = fod;
+                    tft.other.filename_on_disk = fod;
+                    ft->resume();
+
+                } else if (active_protocol_c *ap = prf().ap(ifl.sender.protoid))
+                    ap->file_control(ifl.utag, FIC_REJECT);
+
+
             } else
             {
-                if (active_protocol_c *ap = prf().ap( ifl.sender.protoid ))
-                    ap->file_control( ifl.utag, FIC_REJECT );
+                not_resume:
+                if (g_app->register_file_transfer(historian->getkey(), ifl.sender, ifl.utag, ifl.filename, ifl.filesize))
+                {
+                    play_sound(snd_incoming_file, false);
+                    gmsg<ISOGM_NOTICE> n(historian, sender, NOTICE_FILE, ifl.filename);
+                    n.utag = ifl.utag;
+                    n.send();
+                }
+                else if (active_protocol_c *ap = prf().ap(ifl.sender.protoid))
+                    ap->file_control(ifl.utag, FIC_REJECT);
             }
+
             if (historian->gui_item)
                 historian->gui_item->getengine().redraw();
 
         }
         break;
     case FIC_BREAK:
+    case FIC_REJECT:
         if (file_transfer_s *ft = g_app->find_file_transfer(ifl.utag))
-            ft->kill( FIC_NONE );
+            ft->kill(FIC_NONE);
         break;
     case FIC_DONE:
         if (file_transfer_s *ft = g_app->find_file_transfer(ifl.utag))
@@ -1237,6 +1292,9 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
         if (file_transfer_s *ft = g_app->find_file_transfer(ifl.utag))
             ft->pause_by_remote(FIC_PAUSE == ifl.fctl);
         break;
+    case FIC_DISCONNECT:
+        if (file_transfer_s *ft = g_app->find_file_transfer(ifl.utag))
+            ft->kill(FIC_DISCONNECT);
     }
 
     return 0;

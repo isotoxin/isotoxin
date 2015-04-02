@@ -121,6 +121,8 @@ public:
     bool is_autoconnect() const { return 0 != (syncdata.lock_read()().data.options & active_protocol_data_s::O_AUTOCONNECT); }
     void set_autoconnect( bool v );
 
+    void del_message( uint64 utag );
+
     void resend_request( int cid, const ts::wstr_c &msg );
     void add_contact( const ts::str_c& pub_id, const ts::wstr_c &msg );
     void del_contact(int cid);
@@ -132,6 +134,7 @@ public:
     void call(int cid, int seconds);
     void stop_call(int cid, stop_call_e sc);
 
+    void file_resume(uint64 utag, uint64 offset);
     void file_control(uint64 utag, file_control_e fctl);
     void send_file(int cid, uint64 utag, const ts::wstr_c &filename, uint64 filesize);
     void file_portion(uint64 utag, uint64 offset, const void *data, int sz);

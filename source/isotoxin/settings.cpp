@@ -254,11 +254,11 @@ menu_c dialog_settings_c::list_themes()
         table_active_protocol = &prf().get_table_active_protocol();
         table_active_protocol_underedit = *table_active_protocol;
 
-        for (auto it = table_active_protocol_underedit.begin(), end = table_active_protocol_underedit.end(); it != end; ++it)
-            if (active_protocol_c *ap = prf().ap(it.id()))
+        for (auto &row : table_active_protocol_underedit)
+            if (active_protocol_c *ap = prf().ap(row.id))
             {
-                it->proxy = ap->get_proxy_settings();
-                if (it->proxy.proxy_addr.is_empty()) it->proxy.proxy_addr = CONSTASTR(DEFAULT_PROXY);
+                row.other.proxy = ap->get_proxy_settings();
+                if (row.other.proxy.proxy_addr.is_empty()) row.other.proxy.proxy_addr = CONSTASTR(DEFAULT_PROXY);
             }
 
     }
@@ -431,23 +431,23 @@ void dialog_settings_c::add_suspended_proto( RID lst, int id, const active_proto
                 MAKE_CHILD<gui_listitem_c>(lst, proto.description, ts::str_c(CONSTASTR("1/")).append(proto.tag)) << DELEGATE( this, getcontextmenu );
             }
 
-            for (auto it = table_active_protocol_underedit.begin(), end = table_active_protocol_underedit.end(); it != end; ++it)
+            for (auto &row : table_active_protocol_underedit)
             {
-                if (0 == (it->options & active_protocol_data_s::O_SUSPENDED))
+                if (0 == (row.other.options & active_protocol_data_s::O_SUSPENDED))
                     continue;
 
-                add_suspended_proto( lst, it.id(), *it );
+                add_suspended_proto( lst, row.id, row.other );
             }
         }
 
         if (RID lst = find(CONSTASTR("protoactlist")))
         {
-            for (auto it = table_active_protocol_underedit.begin(), end = table_active_protocol_underedit.end(); it != end; ++it)
+            for (auto &row : table_active_protocol_underedit)
             {
-                if (0 != (it->options & active_protocol_data_s::O_SUSPENDED))
+                if (0 != (row.other.options & active_protocol_data_s::O_SUSPENDED))
                     continue;
 
-                add_active_proto(lst, it.id(), *it);
+                add_active_proto(lst, row.id, row.other);
             }
         }
 

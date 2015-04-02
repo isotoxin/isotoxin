@@ -135,7 +135,6 @@ class gui_message_item_c : public gui_label_ex_c
 
         uint64 utag;
         time_t time;
-        //int index = 0;
         ts::wstr_c text;
         ts::TSCOLOR undelivered = 0;
         void append( ts::wstr_c &t, const ts::wsptr &pret, const ts::wsptr &postt );

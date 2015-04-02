@@ -444,9 +444,7 @@ bool make_raw_pub_id( byte *raw_pub_id, const asptr &pub_id )
 {
     if (ASSERT(pub_id.l == SIZE_PUBID * 2))
     {
-        pstr_c p(pub_id);
-        for (int i = 0; i < SIZE_PUBID; ++i)
-            raw_pub_id[i] = p.as_byte_hex(i * 2);
+        pstr_c(pub_id).hex2buf<SIZE_PUBID>(raw_pub_id);
         return true;
     }
     return false;
@@ -518,6 +516,22 @@ void lan_engine::contact_s::add_message(message_type_lan_e mt, u64 create_time, 
         nextactiontime = time_ms();
 }
 
+bool lan_engine::contact_s::del_message( u64 utag )
+{
+    for (msg_s *m = sendmessage_f; m; m = m->next)
+    {
+        if (m->delivery_tag == utag)
+        {
+            if (m->sent == 0)
+            {
+                LIST_DEL(m, sendmessage_f, sendmessage_l, prev, next);
+                m->die();
+            }
+            return true;
+        }
+    }
+    return false;
+}
 
 void lan_engine::contact_s::calculate_pub_id( const byte *pk )
 {
@@ -1456,7 +1470,7 @@ void lan_engine::save_config(void *param)
     if (engine && set_cfg_called)
     {
         savebuffer b;
-        chunk(b, chunk_magic) << (uint64)(0x555BADF00D2C0FE6ull + LAN_SAVE_VERSION);
+        chunk(b, chunk_magic) << (u64)(0x555BADF00D2C0FE6ull + LAN_SAVE_VERSION);
         chunk(b, chunk_secret_key) << bytes(my_secret_key, SIZE_SECRET_KEY);
         chunk(b, chunk_contacts) << serlist<contact_s>(first);
         hf->on_save(b.data(), b.size(), param);
@@ -1604,6 +1618,16 @@ void lan_engine::send(int id, const message_s *msg)
 {
     if (contact_s *c = find(id))
         c->add_message((message_type_lan_e)msg->mt, now(), asptr(msg->message, msg->message_len), msg->utag);
+}
+
+void lan_engine::del_message( u64 utag )
+{
+    for (contact_s *i = first->next; i; i = i->next)
+        if (i->del_message(utag))
+        {
+            hf->save();
+            break;
+        }
 }
 
 void lan_engine::accept(int id)
@@ -2047,6 +2071,10 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
 }
 
 void lan_engine::file_send(int cid, const file_send_info_s *finfo)
+{
+}
+
+void lan_engine::file_resume(u64, u64)
 {
 }
 

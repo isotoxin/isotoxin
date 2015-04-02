@@ -101,13 +101,31 @@ bool AssertFailed(const char *file, int line, const char *s, ...)
     return Warning("Assert failed at %s (%i)\n%s", file, line, str);
 }
 
+void fifo_stream_c::get_data(int offset, byte *dest, int size)
+{
+    int ost1 = buf[readbuf].size() - readpos;
 
+    if (offset < ost1)
+    {
+        int have2copy = min(ost1 - offset, size);
+        memcpy(dest, buf[readbuf].data() + readpos + offset, have2copy);
+        size -= have2copy;
+        dest += have2copy;
+        offset += have2copy;
+    }
+    if (size)
+    {
+        int offs2 = offset - ost1;
+        if (newdata != readbuf && size <= (int)buf[newdata].size() - offs2)
+            memcpy(dest, buf[newdata].data() + offs2, size);
+    }
+}
 
 int fifo_stream_c::read_data(byte *dest, int size)
 {
     if (size < ((int)buf[readbuf].size() - readpos))
     {
-        memcpy(dest, buf[readbuf].data() + readpos, size);
+        if (dest) memcpy(dest, buf[readbuf].data() + readpos, size);
         readpos += size;
         if (newdata == readbuf) newdata ^= 1;
         return size;
@@ -115,7 +133,7 @@ int fifo_stream_c::read_data(byte *dest, int size)
     else
     {
         int szleft = buf[readbuf].size() - readpos;
-        memcpy(dest, buf[readbuf].data() + readpos, szleft);
+        if (dest) memcpy(dest, buf[readbuf].data() + readpos, szleft);
         size -= szleft;
         buf[readbuf].clear(); // this buf fully extracted
         newdata = readbuf; // now it is for new data
@@ -123,7 +141,7 @@ int fifo_stream_c::read_data(byte *dest, int size)
         if (size)
         {
             if (buf[readbuf].size()) // something in buf - extract it
-                return szleft + read_data(dest + szleft, size);
+                return szleft + read_data(dest ? (dest + szleft) : nullptr, size);
             newdata = readbuf = 0; // both bufs are empty, but data still required
         }
         return szleft;

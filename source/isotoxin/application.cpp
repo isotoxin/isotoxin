@@ -10,6 +10,7 @@ application_c::application_c(const ts::wchar * cmdl)
 {
     F_UNREADICONFLASH = false;
     F_UNREADICON = false;
+    F_SETNOTIFYICON = false;
     autoupdate_next = now() + 10;
 	g_app = this;
     cfg().load();
@@ -117,7 +118,7 @@ bool application_c::flash_notification_icon(RID r, GUIPARAM param)
         F_UNREADICONFLASH = !F_UNREADICONFLASH;
         DEFERRED_UNIQUE_CALL(0.3, DELEGATE(this, flash_notification_icon), 0);
     }
-    set_notification_icon();
+    F_SETNOTIFYICON = true;
     for(RID r : m_flashredraw)
     {
         HOLD rr(r);
@@ -232,8 +233,7 @@ static DWORD WINAPI autoupdater(LPVOID)
 
 /*virtual*/ void application_c::app_5second_event()
 {
-    if (!F_UNREADICON)
-        set_notification_icon();
+    F_SETNOTIFYICON = true; // once per 5 seconds do icon refresh
 
     if ( cfg().autoupdate() > 0 )
     {
@@ -253,30 +253,71 @@ static DWORD WINAPI autoupdater(LPVOID)
         }
     }
 
+    for( auto &row : prf().get_table_unfinished_file_transfer() )
+    {
+        if (row.other.upload)
+        {
+            if (find_file_transfer(row.other.utag)) break;
+
+            contact_c *sender = contacts().find( row.other.sender );
+            if (!sender)
+            {
+                row.deleted();
+                prf().changed();
+                break;
+            }
+            contact_c *historian = contacts().find( row.other.historian );
+            if (!historian)
+            {
+                row.deleted();
+                prf().changed();
+                break;
+            }
+            if (ts::is_file_exists(row.other.filename))
+            {
+                if (sender->get_state() != CS_ONLINE) break;
+                g_app->register_file_transfer(historian->getkey(), sender->getkey(), row.other.utag, row.other.filename, 0);
+
+            } else if (row.deleted())
+            {
+                prf().changed();
+                break;
+            }
+                
+        }
+    
+    }
+
+}
+
+/*virtual*/ void application_c::app_loop_event()
+{
+    while (m_need_recalc_unread.count())
+    {
+        contact_key_s ck = m_need_recalc_unread.get(0);
+        if (m_locked_recalc_unread.find_index(ck) >= 0)
+        {
+            // locked. postpone
+            m_need_recalc_unread.remove_slow(0);
+            m_need_recalc_unread.add(ck);
+            break;
+        }
+        contact_c *c = contacts().find(ck);
+        m_need_recalc_unread.remove_slow(0);
+        if (c) c->recalc_unread();
+        break;
+    }
+
+    if (F_SETNOTIFYICON)
+    {
+        set_notification_icon();
+        F_SETNOTIFYICON = false;
+    }
 }
 
 /*virtual*/ void application_c::app_fix_sleep_value(int &sleep_ms)
 {
     UNSTABLE_CODE_PROLOG
-
-    ts::tbuf_t<contact_key_s> & unr = m_need_recalc_unread;
-    while (unr.count())
-    {
-        ts::tbuf_t<contact_key_s> & unrl = m_locked_recalc_unread;
-
-        contact_key_s ck = unr.get(0);
-        if (unrl.find_index(ck) >= 0)
-        {
-            // locked. postpone
-            unr.remove_slow(0);
-            unr.add(ck);
-            break;
-        }
-        contact_c *c = contacts().find(ck);
-        unr.remove_slow(0);
-        if (c) c->recalc_unread();
-        break;
-    }
 
     if (s3::is_capturing())
     {
@@ -452,11 +493,8 @@ void application_c::summon_main_rect()
         return;
     }
     mediasystem().init();
-    ts::str_c mic = cfg().device_mic();
-    s3::DEVICE device = s3::DEFAULT_DEVICE;
-    if (mic.get_length() / 2 == sizeof(device))
-        for (int i = 0; i < sizeof(device); ++i)
-            ((ts::uint8 *)&device)[i] = mic.as_byte_hex(i * 2);
+
+    s3::DEVICE device = device_from_string( cfg().device_mic() );
     s3::set_capture_device( &device );
 
     ts::wstr_c profname = cfg().profile();
@@ -731,21 +769,25 @@ file_transfer_s *application_c::find_file_transfer(uint64 utag)
     return nullptr;
 }
 
-bool application_c::register_file_transfer( const contact_key_s &historian, const contact_key_s &sender, uint64 utag, const ts::wstr_c &filename, uint64 filesize )
+file_transfer_s * application_c::register_file_transfer( const contact_key_s &historian, const contact_key_s &sender, uint64 utag, const ts::wstr_c &filename, uint64 filesize )
 {
-    if (find_file_transfer(utag)) return false;
+    if (find_file_transfer(utag)) return nullptr;
 
     file_transfer_s &ftr = m_files.add();
     ftr.historian = historian;
     ftr.sender = sender;
     ftr.filename = filename;
+    ftr.filename_on_disk = filename;
     ftr.filesize = filesize;
     ftr.utag = utag;
+    ftr.filename.replace_all('\\','/');
+
+    auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.utag == utag; });
 
     if (filesize == 0)
     {
         // send
-        ftr.send = true;
+        ftr.upload = true;
         ftr.handle = CreateFileW(filename, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (ftr.handle == INVALID_HANDLE_VALUE)
         {
@@ -759,14 +801,33 @@ bool application_c::register_file_transfer( const contact_key_s &historian, cons
             ap->send_file(sender.contactid, utag, ts::fn_get_name_with_ext(ftr.filename), ftr.filesize);
 
         ftr.bytes_per_sec = -3; // wait 4 accept
-        ftr.upd_message_item();
+        if (row == nullptr) ftr.upd_message_item();
     }
 
-    return true;
+    if (row)
+    {
+        ASSERT( row->other.filesize == ftr.filesize && row->other.filename.equals(ftr.filename) );
+        ftr.msgitem_utag = row->other.msgitem_utag;
+        row->other = ftr;
+        ftr.upd_message_item();
+    } else
+    {
+        auto &tft = prf().get_table_unfinished_file_transfer().getcreate(0);
+        tft.other = ftr;
+    }
+
+    prf().changed();
+
+    return &ftr;
 }
 
-void application_c::unregister_file_transfer(uint64 utag)
+void application_c::unregister_file_transfer(uint64 utag, bool disconnected)
 {
+    if (!disconnected)
+        if (auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.utag == utag; }))
+            if (row->deleted())
+                prf().changed();
+
     int cnt = m_files.size();
     for (int i=0;i<cnt;++i)
     {
@@ -777,7 +838,6 @@ void application_c::unregister_file_transfer(uint64 utag)
             return;
         }
     }
-
 }
 
 
@@ -842,17 +902,26 @@ file_transfer_s::~file_transfer_s()
 
 void file_transfer_s::prepare_fn( const ts::wstr_c &path_with_fn, bool overwrite )
 {
-    filename = path_with_fn;
+    accepted = true;
+    filename_on_disk = path_with_fn;
     if (!overwrite)
     {
-        ts::wstr_c origname = ts::fn_get_name<ts::wchar>(filename);
+        ts::wstr_c origname = ts::fn_get_name<ts::wchar>(filename_on_disk);
         int n = 1;
-        while (ts::is_file_exists(filename))
-            filename = ts::fn_change_name<ts::wchar>(filename, ts::wstr_c(origname).append_char('(').append_as_int(n++).append_char(')'));
+        while (ts::is_file_exists(filename_on_disk) || ts::is_file_exists(filename_on_disk + CONSTWSTR(".!rcv")))
+            filename_on_disk = ts::fn_change_name<ts::wchar>(filename_on_disk, ts::wstr_c(origname).append_char('(').append_as_int(n++).append_char(')'));
     }
-
+    filename_on_disk.append(CONSTWSTR(".!rcv"));
     trtime = ts::Time::current();
     upd_message_item();
+
+    if (auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.utag == utag; }))
+    {
+        row->other.msgitem_utag = msgitem_utag;
+        row->other.filename_on_disk = filename_on_disk;
+        row->changed();
+        prf().changed();
+    }
 }
 
 int file_transfer_s::progress(int &bps) const
@@ -895,42 +964,73 @@ void file_transfer_s::pause_by_me(bool p)
 
 void file_transfer_s::kill( file_control_e fctl )
 {
+    if (contact_c *h = contacts().find(historian))
+        if (h->gui_item)
+            h->gui_item->getengine().redraw();
+
+    if (!upload && !accepted && (fctl == FIC_NONE || fctl == FIC_DISCONNECT))
+    {
+        // kill without accept - just do nothing
+        g_app->unregister_file_transfer(utag, false);
+        return;
+    }
+
     if (fctl != FIC_NONE)
     {
         if (active_protocol_c *ap = prf().ap(sender.protoid))
             ap->file_control(utag, fctl);
     }
 
-    if (handle && (!send || fctl != FIC_DONE)) // close before update message item
+    if (handle && (!upload || fctl != FIC_DONE)) // close before update message item
     {
         LARGE_INTEGER fsz = {0};
-        if (!send) GetFileSizeEx(handle,&fsz);
+        if (!upload) GetFileSizeEx(handle,&fsz);
         CloseHandle(handle);
         handle = nullptr;
-        if ( (uint64)fsz.QuadPart != filesize || send)
+        if (filename_on_disk.ends(CONSTWSTR(".!rcv")))
+            filename_on_disk.trunc_length(5);
+        if ( (uint64)fsz.QuadPart != filesize || upload)
         {
             post_s p;
             p.sender = sender;
-            filename.insert(0, '*');
-            p.message = filename;
+            filename_on_disk.insert(0, fctl != FIC_DISCONNECT ? '*' : '?');
+            p.message = filename_on_disk;
             p.utag = msgitem_utag;
             prf().change_history_item(historian, p, HITM_MESSAGE);
             if (contact_c * h = contacts().find(historian)) h->iterate_history([this](post_s &p)->bool {
                 if (p.utag == msgitem_utag)
                 {
-                    p.message = filename;
+                    p.message = filename_on_disk;
                     return true;
                 }
                 return false;
             });
         
-            if (!send) 
-                DeleteFileW(filename.cstr() + 1);
-        }
+            if (!upload && fctl != FIC_DISCONNECT) 
+                DeleteFileW(ts::wstr_c(filename_on_disk.as_sptr().skip(1)).append(CONSTWSTR(".!rcv")));
+        } else if (!upload && fctl == FIC_DONE)
+            MoveFileW(filename_on_disk + CONSTWSTR(".!rcv"), filename_on_disk);
     }
     trtime = ts::Time::past();
     if (fctl != FIC_REJECT) upd_message_item();
-    g_app->unregister_file_transfer(utag);
+    if (fctl == FIC_DONE)
+    {
+        post_s p;
+        p.sender = sender;
+        p.message = filename_on_disk;
+        p.utag = msgitem_utag;
+        prf().change_history_item(historian, p, HITM_MESSAGE);
+        if (contact_c * h = contacts().find(historian)) h->iterate_history([this](post_s &p)->bool {
+            if (p.utag == msgitem_utag)
+            {
+                p.message = filename_on_disk;
+                return true;
+            }
+            return false;
+        });
+
+    }
+    g_app->unregister_file_transfer(utag, fctl == FIC_DISCONNECT);
 }
 
 void file_transfer_s::query( uint64 offset_, int sz )
@@ -981,11 +1081,35 @@ void file_transfer_s::query( uint64 offset_, int sz )
     }
 }
 
+void file_transfer_s::resume()
+{
+    ASSERT(handle == nullptr);
+
+    handle = CreateFileW(filename_on_disk, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
+    {
+        handle = nullptr;
+        kill();
+        return;
+    }
+
+    LARGE_INTEGER fsz = { 0 };
+    GetFileSizeEx(handle, &fsz);
+    offset = fsz.QuadPart > 1024 ? fsz.QuadPart - 1024 : 0;
+    progrez = offset;
+    fsz.QuadPart = offset;
+    SetFilePointer(handle, fsz.LowPart, &fsz.HighPart, FILE_BEGIN);
+
+    if (active_protocol_c *ap = prf().ap(sender.protoid))
+        ap->file_resume( utag, offset );
+
+}
+
 void file_transfer_s::save(uint64 offset_, const ts::buf0_c&data)
 {
     if (handle == nullptr)
     {
-        handle = CreateFileW(filename, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+        handle = CreateFileW(filename_on_disk, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (handle == INVALID_HANDLE_VALUE)
         {
             handle = nullptr;
@@ -1042,17 +1166,22 @@ void file_transfer_s::upd_message_item()
     if (msgitem_utag)
     {
         post_s p;
-        p.type = send ? MTA_SEND_FILE : MTA_RECV_FILE;
-        p.message = filename;
+        p.type = upload ? MTA_SEND_FILE : MTA_RECV_FILE;
+        p.message = filename_on_disk;
+        if (p.message.ends(CONSTWSTR(".!rcv")))
+            p.message.trunc_length(5);
+
         p.utag = msgitem_utag;
         p.sender = sender;
         p.receiver = contacts().get_self().getkey();
         gmsg<ISOGM_SUMMON_POST>(p, true).send();
     } else if (contact_c *c = contacts().find(sender))
     {
-        gmsg<ISOGM_MESSAGE> msg(c, &contacts().get_self(), send ? MTA_SEND_FILE : MTA_RECV_FILE);
+        gmsg<ISOGM_MESSAGE> msg(c, &contacts().get_self(), upload ? MTA_SEND_FILE : MTA_RECV_FILE);
         msg.create_time = now();
-        msg.post.message = filename;
+        msg.post.message = filename_on_disk;
+        if (msg.post.message.ends(CONSTWSTR(".!rcv")))
+            msg.post.message.trunc_length(5);
         msg.post.utag = prf().uniq_history_item_tag();
         msgitem_utag = msg.post.utag;
         msg.send();

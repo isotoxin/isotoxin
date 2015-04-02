@@ -136,38 +136,6 @@ template<class TPred, class S_CORE> bool enum_files(const str_t<wchar, S_CORE> &
 	return true;
 }
 
-/*
-class file_buffer_c //файловый буфер со счетчиком ссылок
-{
-	struct Core//сделано по аналогии со String::Core
-	{
-		int refCount;
-		int size;
-		void *mptr;//указатель на начало аллоцированного блока памяти (нужен для корректного освобождения)
-		char *data;//указатель на данные буфера (обычно = core+1)
-	} *core;
-
-	void detachCore() { if (core) if (--core->refCount == 0) MM_FREE(core->mptr); }
-
-public:
-	file_buffer_c() : core(nullptr) {}
-	file_buffer_c(size_t sz, int align = 1);
-	file_buffer_c(const file_buffer_c &buf) : core(buf.core) { if (core) core->refCount++; }
-	file_buffer_c &operator=(const file_buffer_c &buf)
-	{
-		if (buf.core) buf.core->refCount++;//сначала поднимаем refCount, чтобы работало присваивание SharedFileBuffer'а самому себе
-		detachCore();
-		core = buf.core;
-		return *this;
-	}
-	~file_buffer_c() { detachCore(); }
-
-	explicit operator bool() const { return size() > 0; }
-
-	char *data() const { return core ? core->data : nullptr; }
-	int size() const { return core ? core->size : 0; }
-};
-*/
 
 } // namespace ts
 
