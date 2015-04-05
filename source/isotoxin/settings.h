@@ -9,6 +9,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     {
         MASK_PROFILE_COMMON         = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_CHAT           = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_PROFILE_FILES          = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_NETWORKS       = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_APPLICATION_SYSTEM     = SETBIT(NUMGEN_NEXT(ctlm)),
         MASK_APPLICATION_COMMON     = SETBIT(NUMGEN_NEXT(ctlm)),
@@ -29,7 +30,6 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     ts::wstr_c userstatusmsg;
     SLANGID curlang;
 
-    ts::wstr_c downloadfolder;
     ts::wstr_c date_msg_tmpl;
     ts::wstr_c date_sep_tmpl;
 
@@ -65,6 +65,12 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
 
     ts::flags32_s::BITS msgopts_current = 0;
     ts::flags32_s::BITS msgopts_changed = 0;
+
+    ts::wstr_c auto_download_masks;
+    ts::wstr_c manual_download_masks;
+    ts::wstr_c downloadfolder;
+    int fileconfirm = 0;
+
     int ctl2send = 1;
     int collapse_beh = 2;
     int oautoupdate = 0;
@@ -73,6 +79,10 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     int num_ctls_in_network_tab = 0;
     int network_props = 0;
     ts::str_c autoupdate_proxy_addr;
+
+    bool fileconfirm_handler(RID, GUIPARAM);
+    bool fileconfirm_auto_masks_handler(const ts::wstr_c &v);
+    bool fileconfirm_manual_masks_handler(const ts::wstr_c &v);
     bool downloadfolder_edit_handler(const ts::wstr_c &v);
     bool date_msg_tmpl_edit_handler(const ts::wstr_c &v);
     bool date_sep_tmpl_edit_handler(const ts::wstr_c &v);

@@ -686,15 +686,7 @@ bool contact_c::b_receive_file(RID, GUIPARAM par)
     HOLD(ownitm->getparent())().getparent().call_children_repos();
     TSDEL(ownitm);
     if (file_transfer_s *ft = g_app->find_file_transfer(utag))
-    {
-        ts::wstr_c downf = prf().download_folder();
-        path_expand_env(downf);
-        ts::make_path(downf);
-        ft->prepare_fn(ts::fn_join(downf, ft->filename), false);
-
-        if (active_protocol_c *ap = prf().ap(ft->sender.protoid))
-            ap->file_control(utag, FIC_ACCEPT);
-    }
+        ft->auto_confirm();
 
     return true;
 }
@@ -913,6 +905,27 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
         }
         //for (contact_c *c : meta)
         //    gmsg<ISOGM_UPDATE_CONTACT_V>(c).send();
+    }
+    if (msg.tabi == pt_unfinished_file_transfer)
+    {
+        // cleanup transfers
+        TS_STATIC_CHECK( pt_unfinished_file_transfer > pt_contacts, "unfinished transfer table must be loaded after contacts" );
+        while( auto *row =  prf().get_table_unfinished_file_transfer().find<true>([](unfinished_file_transfer_s &uft){
+        
+            if (0 == uft.msgitem_utag) return true;
+            contact_c *c = contacts().find( uft.historian );
+            if (c == nullptr) return true;
+            prf().load_history( c->getkey() );
+            if (nullptr == prf().get_table_history().find<true>([&](history_s &h){
+                if (h.historian != uft.historian) return false;
+                if (uft.msgitem_utag == h.utag) return true;
+                return false;
+            }))
+                return true;
+
+            return false;
+        })) { if (row->deleted()) prf().changed(); }
+
     }
     return 0;
 }
@@ -1229,7 +1242,6 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
             if (auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool 
                 {
                     if (uftr.upload) return false;
-                    if (uftr.utag == ifl.utag) return true; // isotoxin provides same utag on target side
                     return ifl.filename.equals( uftr.filename ) && ifl.filesize == uftr.filesize;
                 }))
             {
@@ -1262,12 +1274,16 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
             } else
             {
                 not_resume:
-                if (g_app->register_file_transfer(historian->getkey(), ifl.sender, ifl.utag, ifl.filename, ifl.filesize))
+                if (file_transfer_s *ft = g_app->register_file_transfer(historian->getkey(), ifl.sender, ifl.utag, ifl.filename, ifl.filesize))
                 {
-                    play_sound(snd_incoming_file, false);
-                    gmsg<ISOGM_NOTICE> n(historian, sender, NOTICE_FILE, ifl.filename);
-                    n.utag = ifl.utag;
-                    n.send();
+                    if (ft->confirm_required())
+                    {
+                        play_sound(snd_incoming_file, false);
+                        gmsg<ISOGM_NOTICE> n(historian, sender, NOTICE_FILE, ifl.filename);
+                        n.utag = ifl.utag;
+                        n.send();
+                    } else
+                        ft->auto_confirm();
                 }
                 else if (active_protocol_c *ap = prf().ap(ifl.sender.protoid))
                     ap->file_control(ifl.utag, FIC_REJECT);
@@ -1280,10 +1296,12 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
         break;
     case FIC_BREAK:
     case FIC_REJECT:
+        DMSG("ftbreak " << ifl.utag);
         if (file_transfer_s *ft = g_app->find_file_transfer(ifl.utag))
             ft->kill(FIC_NONE);
         break;
     case FIC_DONE:
+        DMSG("ftdone " << ifl.utag);
         if (file_transfer_s *ft = g_app->find_file_transfer(ifl.utag))
             ft->kill( FIC_DONE );
         break;
@@ -1293,6 +1311,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
             ft->pause_by_remote(FIC_PAUSE == ifl.fctl);
         break;
     case FIC_DISCONNECT:
+        DMSG("ftdisc " << ifl.utag);
         if (file_transfer_s *ft = g_app->find_file_transfer(ifl.utag))
             ft->kill(FIC_DISCONNECT);
     }

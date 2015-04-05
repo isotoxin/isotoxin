@@ -3,6 +3,8 @@
 #pragma warning(disable : 4324) // 'crypto_generichash_blake2b_state' : structure was padded due to __declspec(align())
 #include "sodium.h"
 #pragma warning(pop)
+//#include "toxcore/toxcore/tox_old.h"
+
 
 #define CHECKIT() __pragma(message(__LOC__ "check it: " __FUNCTION__))
 
@@ -541,6 +543,7 @@ message_part_s *message_part_s::last = nullptr;
 
 struct file_transfer_s
 {
+    virtual ~file_transfer_s() {}
     virtual void accepted() {}
     virtual void kill() {}
     virtual void pause() {}
@@ -548,13 +551,14 @@ struct file_transfer_s
     virtual void resume() {}
 
     u32 fid;
-    byte id[TOX_FILE_ID_LENGTH];
+    byte fileid[TOX_FILE_ID_LENGTH];
 
     u64 fsz;
     u64 utag;
     u32 fnn;
 
 };
+
 static void make_uniq_utag( u64 &utag );
 struct incoming_file_s : public file_transfer_s
 {
@@ -572,16 +576,13 @@ struct incoming_file_s : public file_transfer_s
         fid = fid_;
         fnn = fnn_;
 
-        if (TOX_FILE_KIND_AVATAR != kind && tox_file_get_file_id(tox,fid,fnn,id,nullptr))
+        if (TOX_FILE_KIND_AVATAR != kind && tox_file_get_file_id(tox,fid,fnn,fileid,nullptr))
         {
-            if (0 == memcmp(id+8,"isotoxin",9))
-                utag = *(const u64 *)id;
-            else
-                randombytes_buf(&utag, sizeof(u64));
+            utag = *(const u64 *)fileid; // only 8 bytes of fileid used. isotoxin plugins api requires only 8 bytes unique
         } else
             randombytes_buf(&utag, sizeof(u64));
         
-        make_uniq_utag(utag);
+        make_uniq_utag(utag); // requirement to unique is only utag unique across current file transfers
 
         LIST_ADD(this, first, last, prev, next);
     }
@@ -647,14 +648,13 @@ struct incoming_avatar_s : public incoming_file_s
 
 void incoming_file_s::tick(int ct)
 {
-    byte id[TOX_FILE_ID_LENGTH];
     for (incoming_file_s *f = incoming_file_s::first; f;)
     {
         incoming_file_s *ff = f->next;
 
-        if (!tox_file_get_file_id(tox, f->fid, f->fnn, id, nullptr))
+        if (TOX_CONNECTION_NONE == tox_friend_get_connection_status(tox,f->fid,nullptr))
         {
-            // transfer broken
+            // peer disconnected - transfer break
             if (TOX_FILE_KIND_AVATAR != f->kind) hf->file_control(f->utag, FIC_DISCONNECT);
             delete f;
         } else if (TOX_FILE_KIND_AVATAR == f->kind)
@@ -691,12 +691,12 @@ struct transmitting_data_s : public file_transfer_s
     bool is_paused = false;
     bool is_finished = false;
 
-    transmitting_data_s(u32 fid_, u32 fnn_, u64 utag_, const byte * id_, u64 fsz_, const asptr &fn) :fn(fn)
+    transmitting_data_s(u32 fid_, u32 fnn_, u64 utag_, const byte * fileid_, u64 fsz_, const asptr &fn) :fn(fn)
     {
         fsz = fsz_;
         fid = fid_;
         fnn = fnn_;
-        memcpy( id, id_, TOX_FILE_ID_LENGTH );
+        memcpy( fileid, fileid_, TOX_FILE_ID_LENGTH );
         utag = utag_;
 
         LIST_ADD(this, first, last, prev, next);
@@ -885,10 +885,9 @@ struct transmitting_file_s : public transmitting_data_s
 
     virtual void ontick() override
     {
-        byte id[TOX_FILE_ID_LENGTH];
-        if (!tox_file_get_file_id(tox, fid, fnn, id, nullptr))
+        if (tox_friend_get_connection_status(tox,fid,nullptr) == TOX_CONNECTION_NONE)
         {
-            // transfer broken
+            // peer disconnect - transfer broken
             hf->file_control(utag, FIC_DISCONNECT);
             delete this;
             return;
@@ -1158,6 +1157,17 @@ public:
     }
 
     void die();
+
+    void on_offline()
+    {
+        UNSETFLAG(flags, F_IS_ONLINE);
+        UNSETFLAG(flags, F_NEED_RESYNC);
+        UNSETFLAG(flags, F_ISOTOXIN);
+        UNSETFLAG(flags, F_AVASEND);
+        avatag_self = gavatag - 1;
+        correct_create_time = 0;
+        avatar_recv_fnn = -1;
+    }
 
     int get_fid() const {return fid;};
     int get_id() const {return id;};
@@ -1475,9 +1485,7 @@ static void update_contact( const contact_descriptor_s *cdesc )
 
         } else
         {
-            TOX_ERR_FRIEND_QUERY er;
-            int cst = tox_friend_get_connection_status(tox, cdesc->get_fid(), &er);
-            cd.state = cst ? CS_ONLINE : CS_OFFLINE;
+            cd.state = tox_friend_get_connection_status(tox, cdesc->get_fid(), nullptr) != TOX_CONNECTION_NONE ? CS_ONLINE : CS_OFFLINE;
         }
         
         switch (st)
@@ -1732,12 +1740,7 @@ static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_
 
         } else if (!ISFLAG(desc->flags, contact_descriptor_s::F_IS_ONLINE))
         {
-            UNSETFLAG( desc->flags, contact_descriptor_s::F_NEED_RESYNC );
-            UNSETFLAG( desc->flags, contact_descriptor_s::F_ISOTOXIN );
-            UNSETFLAG( desc->flags, contact_descriptor_s::F_AVASEND );
-            desc->avatag_self = gavatag - 1;
-            desc->correct_create_time = 0;
-            desc->avatar_recv_fnn = -1;
+            desc->on_offline();
         }
     }
 }
@@ -2651,6 +2654,19 @@ void __stdcall offline()
     online_flag = false;
     if (tox)
     {
+        for (; transmitting_data_s::first;)
+        {
+            transmitting_data_s *f = transmitting_data_s::first;
+            hf->file_control(f->utag, FIC_DISCONNECT);
+            delete f;
+        }
+        for (; incoming_file_s::first;)
+        {
+            incoming_file_s *f = incoming_file_s::first;
+            hf->file_control(f->utag, FIC_DISCONNECT);
+            delete f;
+        }
+
         size_t sz = tox_get_savedata_size(tox);
         std::vector<byte> buf(sz);
         tox_get_savedata(tox, buf.data());
@@ -2664,7 +2680,7 @@ void __stdcall offline()
 
         for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
         {
-            UNSETFLAG(f->flags, contact_descriptor_s::F_IS_ONLINE);
+            f->on_offline();
             update_contact(f);
         }
     }
@@ -2964,18 +2980,17 @@ void __stdcall file_send(int cid, const file_send_info_s *finfo)
                 fn = fnc.as_sptr();
             }
 
-            byte id[TOX_FILE_ID_LENGTH] = {0,0,0,0,0,0,0,0,'i','s','o','t','o','x','i','n',0};
-            randombytes_buf(id + sizeof(u64) + 9, sizeof(id) - sizeof(u64) - 9);
-            *(u64 *)id = finfo->utag;
+            byte fileid[TOX_FILE_ID_LENGTH] = {0,0,0,0,0,0,0,0,'i','s','o','t','o','x','i','n'}; // not so random, yeah. toxcore requirement to provide same file id across client restarts
+            *(u64 *)fileid = finfo->utag; // utag will be same every send
 
             TOX_ERR_FILE_SEND er = TOX_ERR_FILE_SEND_NULL;
-            uint32_t tr = tox_file_send(tox, cd->get_fid(), TOX_FILE_KIND_DATA, finfo->filesize, id, (const byte *)fn.s, (uint16_t)fn.l, &er);
+            uint32_t tr = tox_file_send(tox, cd->get_fid(), TOX_FILE_KIND_DATA, finfo->filesize, fileid, (const byte *)fn.s, (uint16_t)fn.l, &er);
             if (er != TOX_ERR_FILE_SEND_OK)
             {
                 hf->file_control( finfo->utag, FIC_DISCONNECT ); // put it to send queue: assume transfer broken
                 return;
             }
-            new transmitting_file_s(cd->get_fid(), tr, finfo->utag, id, finfo->filesize, fn); // not memleak
+            new transmitting_file_s(cd->get_fid(), tr, finfo->utag, fileid, finfo->filesize, fn); // not memleak
         }
     }
 

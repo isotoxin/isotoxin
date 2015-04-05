@@ -652,6 +652,33 @@ bool new_version()
 }
 
 
+bool file_mask_match( const ts::wsptr &filename, const ts::wsptr &masks )
+{
+    if (masks.l == 0) return false;
+    ts::wstr_c fn(filename);
+#ifdef _WIN32
+    fn.case_down();
+#endif
+    
+    for(ts::token<ts::wchar> t(masks, ';');t;++t)
+    {
+        ts::wstr_c fnmask( *t );
+#ifdef _WIN32
+        fnmask.case_down();
+#endif
+        fnmask.trim();
+        ts::wsptr fnm = fnmask.as_sptr();
+        if (fnmask.get_char(0) == '\"')
+        {
+            ++fnm;
+            --fnm.l;
+        }
+        if (ts::fn_mask_match<ts::wchar>(fn, fnm)) return true;
+    }
+
+    return false;
+}
+
 sound_capture_handler_c::sound_capture_handler_c()
 {
     g_app->register_capture_handler(this);

@@ -94,6 +94,29 @@ bool dialog_settings_c::statusmsg_edit_handler( const ts::wstr_c &v )
     return true;
 }
 
+bool dialog_settings_c::fileconfirm_handler(RID, GUIPARAM p)
+{
+    fileconfirm = (int)p;
+
+    if (RID r = find(CONSTASTR("confirmauto")))
+        r.call_enable( fileconfirm == 0 );
+
+    if (RID r = find(CONSTASTR("confirmmanual")))
+        r.call_enable(fileconfirm == 1);
+
+    return true;
+}
+bool dialog_settings_c::fileconfirm_auto_masks_handler(const ts::wstr_c &v)
+{
+    auto_download_masks = v;
+    return true;
+}
+bool dialog_settings_c::fileconfirm_manual_masks_handler(const ts::wstr_c &v)
+{
+    manual_download_masks = v;
+    return true;
+}
+
 bool dialog_settings_c::downloadfolder_edit_handler(const ts::wstr_c &v)
 {
     downloadfolder = v;
@@ -250,6 +273,9 @@ menu_c dialog_settings_c::list_themes()
         date_msg_tmpl = prf().date_msg_template();
         date_sep_tmpl = prf().date_sep_template();
         downloadfolder = prf().download_folder();
+        fileconfirm = prf().fileconfirm();
+        auto_download_masks = prf().auto_confirm_masks();
+        manual_download_masks = prf().manual_confirm_masks();
 
         table_active_protocol = &prf().get_table_active_protocol();
         table_active_protocol_underedit = *table_active_protocol;
@@ -279,6 +305,7 @@ menu_c dialog_settings_c::list_themes()
         m.add_sub( TTT("Профиль",1) )
             .add(TTT("Основные",32), 0, TABSELMI(MASK_PROFILE_COMMON) )
             .add(TTT("Чат",109), 0, TABSELMI(MASK_PROFILE_CHAT) )
+            .add(TTT("Прием файлов",236), 0, TABSELMI(MASK_PROFILE_FILES) )
             .add(TTT("Сети",33), 0, TABSELMI(MASK_PROFILE_NETWORKS) );
     }
 
@@ -348,8 +375,6 @@ menu_c dialog_settings_c::list_themes()
         dm().textfield( TTT("Имя",52), username, DELEGATE(this,username_edit_handler) ).setname(CONSTASTR("uname")).focus(true);
         dm().vspace();
         dm().textfield(TTT("Статус",68), userstatusmsg, DELEGATE(this, statusmsg_edit_handler)).setname(CONSTASTR("ustatus"));
-        dm().vspace();
-        dm().path(TTT("Папка для файлов",174), downloadfolder, DELEGATE(this, downloadfolder_edit_handler));
 
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
         dm().page_header(TTT("Настройки чата",110));
@@ -377,6 +402,23 @@ menu_c dialog_settings_c::list_themes()
                             .add(TTT("Показывать название протокола",173), 0, MENUHANDLER(), ts::amake<int>( MSGOP_SHOW_PROTOCOL_NAME ))
                             .add(TTT("Сохранять историю сообщений",222), 0, MENUHANDLER(), ts::amake<int>( MSGOP_KEEP_HISTORY ))
                     );
+
+        dm << MASK_PROFILE_FILES; //____________________________________________________________________________________________________//
+        dm().page_header(TTT("Настройки приема файлов",237));
+        dm().vspace(10);
+        dm().path(TTT("Папка для файлов по умолчанию", 174), downloadfolder, DELEGATE(this, downloadfolder_edit_handler));
+        dm().vspace();
+
+        dm().radio(TTT("Подтверждение",240), DELEGATE(this, fileconfirm_handler), fileconfirm).setmenu(
+            menu_c().add(TTT("Запрашивать подтверждение для всех файлов",238), 0, MENUHANDLER(), CONSTASTR("0"))
+                    .add(TTT("Начинать прием файлов без подтверждения",239), 0, MENUHANDLER(), CONSTASTR("1"))
+            );
+
+        dm().vspace();
+        dm().textfield(TTT("Эти файлы будут скачиваться без подтверждения",241), auto_download_masks, DELEGATE(this, fileconfirm_auto_masks_handler)).setname(CONSTASTR("confirmauto"));
+        dm().vspace();
+        dm().textfield(TTT("Для приема этих файлов небходимо будет подтверждение",242), manual_download_masks, DELEGATE(this, fileconfirm_manual_masks_handler)).setname(CONSTASTR("confirmmanual"));
+
 
         dm << MASK_PROFILE_NETWORKS; //_________________________________________________________________________________________________//
         dm().page_header(TTT("Настройки сетей",130));
@@ -457,7 +499,12 @@ void dialog_settings_c::add_suspended_proto( RID lst, int id, const active_proto
 
     if (mask & MASK_PROFILE_CHAT)
     {
-        DEFERRED_UNIQUE_CALL(0, DELEGATE(this,msgopts_handler), (GUIPARAM)msgopts_current);
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, msgopts_handler), (GUIPARAM)msgopts_current);
+    }
+
+    if (mask & MASK_PROFILE_FILES)
+    {
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, fileconfirm_handler), (GUIPARAM)fileconfirm);
     }
 
     if (mask & MASK_APPLICATION_COMMON)
@@ -799,7 +846,9 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
             gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_MSGOPTIONS).send();
 
         prf().download_folder(downloadfolder);
-
+        prf().auto_confirm_masks( auto_download_masks );
+        prf().manual_confirm_masks( manual_download_masks );
+        prf().fileconfirm( fileconfirm );
     }
 
     if (autoupdate_proxy > 0 && !check_netaddr(autoupdate_proxy_addr))

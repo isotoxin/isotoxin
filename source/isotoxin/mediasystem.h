@@ -5,6 +5,7 @@
 #define SOUNDS \
     SND( incoming_message ) \
     SND( incoming_file ) \
+    SND( start_recv_file ) \
     SND( ringtone ) \
     SND( call_cancel ) \
     SND( hangon ) \

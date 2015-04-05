@@ -35,7 +35,7 @@ extern "C"
 	size_t dlmalloc_usable_size(void*);
 };
 
-#ifdef _FINAL
+#if defined _FINAL || defined _DEBUG_OPTIMIZED
 #include "crt_nomem/crtfunc.h"
 #endif
 
@@ -189,7 +189,9 @@ extern "C" { void sodium_init(); }
 
 bool _cdecl app_preinit( const wchar_t *cmdl )
 {
+#if defined _DEBUG || defined _CRASH_HANDLER
     ts::exception_operator_c::set_unhandled_exception_filter();
+#endif
 
     sodium_init();
 

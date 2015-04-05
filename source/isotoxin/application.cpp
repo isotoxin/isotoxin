@@ -900,6 +900,32 @@ file_transfer_s::~file_transfer_s()
         CloseHandle(handle);
 }
 
+bool file_transfer_s::confirm_required() const
+{
+    if ( prf().fileconfirm() == 0 )
+    {
+        // required, except...
+        return !file_mask_match( filename, prf().auto_confirm_masks() );
+    } else if (prf().fileconfirm() == 1)
+    {
+        // not required, except...
+        return file_mask_match(filename, prf().manual_confirm_masks());
+    }
+    return true;
+}
+
+void file_transfer_s::auto_confirm()
+{
+    ts::wstr_c downf = prf().download_folder();
+    path_expand_env(downf);
+    ts::make_path(downf);
+    prepare_fn(ts::fn_join(downf, filename), false);
+
+    if (active_protocol_c *ap = prf().ap(sender.protoid))
+        ap->file_control(utag, FIC_ACCEPT);
+}
+
+
 void file_transfer_s::prepare_fn( const ts::wstr_c &path_with_fn, bool overwrite )
 {
     accepted = true;
@@ -964,6 +990,8 @@ void file_transfer_s::pause_by_me(bool p)
 
 void file_transfer_s::kill( file_control_e fctl )
 {
+    //DMSG("kill " << utag << fctl << filename_on_disk);
+
     if (contact_c *h = contacts().find(historian))
         if (h->gui_item)
             h->gui_item->getengine().redraw();
@@ -1076,7 +1104,7 @@ void file_transfer_s::query( uint64 offset_, int sz )
         }
 
         offset += sz;
-        progrez += sz;
+        progrez = offset + sz;
 
     }
 }
@@ -1100,6 +1128,8 @@ void file_transfer_s::resume()
     fsz.QuadPart = offset;
     SetFilePointer(handle, fsz.LowPart, &fsz.HighPart, FILE_BEGIN);
 
+    accepted = true;
+
     if (active_protocol_c *ap = prf().ap(sender.protoid))
         ap->file_resume( utag, offset );
 
@@ -1109,6 +1139,8 @@ void file_transfer_s::save(uint64 offset_, const ts::buf0_c&data)
 {
     if (handle == nullptr)
     {
+        play_sound( snd_start_recv_file, false );
+
         handle = CreateFileW(filename_on_disk, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (handle == INVALID_HANDLE_VALUE)
         {
@@ -1163,6 +1195,8 @@ void file_transfer_s::save(uint64 offset_, const ts::buf0_c&data)
 
 void file_transfer_s::upd_message_item()
 {
+    //DMSG("upditem " << utag << filename_on_disk);
+
     if (msgitem_utag)
     {
         post_s p;

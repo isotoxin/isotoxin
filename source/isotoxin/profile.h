@@ -340,6 +340,11 @@ public:
     TEXTWPAR( download_folder, "%CONFIG%\\download" )
     TEXTWPAR( last_filedir, "" )
 
+    TEXTWPAR(auto_confirm_masks, "*.png; *.jpg; *.gif; *.avi; *.mp4; *.mkv");
+    TEXTWPAR(manual_confirm_masks, "*.exe; *.com; *.bat; *.cmd; *.vbs");
+    INTPAR(fileconfirm, 0);
+
+
 #define SND(s) TEXTWPAR( snd_##s, "sounds/" #s ".ogg" )
     SOUNDS
 #undef SND

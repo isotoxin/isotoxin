@@ -24,27 +24,6 @@ bool RID::operator>>(const RID&or) const
     return *this >> parent;
 }
 
-template<typename STRTYPE> ts::streamstr<STRTYPE> & operator<<(ts::streamstr<STRTYPE> &dl, RID r)
-{
-    dl.begin();
-    if (r)
-    {
-        dl.raw_append("RID=[");
-        dl << ts::ref_cast<int>(r);
-        ts::wstr_c n = HOLD(r)().get_name();
-        if (!n.is_empty())
-        {
-            dl << ',';
-            dl << n;
-        }
-        dl << ']';
-    } else
-    {
-        dl.raw_append("RID=[]");
-    }
-    return dl;
-}
-
 ts::ivec3 RID::call_get_popup_menu_pos() const
 {
     evt_data_s d;
@@ -507,9 +486,12 @@ bool gui_button_c::group_handler(gmsg<GM_GROUP_SIGNAL> & signal)
 {
     if (signal.tag == grouptag)
     {
+        bool om = flags.is(F_MARK);
+
         if (flags.is(F_RADIOBUTTON))
         {
             flags.init(F_MARK, signal.sender == getrid());
+
         } else if (flags.is(F_CHECKBUTTON))
         {
             if (signal.sender == getrid())
@@ -517,6 +499,9 @@ bool gui_button_c::group_handler(gmsg<GM_GROUP_SIGNAL> & signal)
             if (flags.is(F_MARK))
                 signal.mask |= (ts::uint32)param;
         }
+
+        if (flags.is(F_MARK) != om)
+            getengine().redraw();
     }
     return true;
 }

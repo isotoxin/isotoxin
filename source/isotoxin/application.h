@@ -59,6 +59,8 @@ struct file_transfer_s : public unfinished_file_transfer_s
 
     ~file_transfer_s();
 
+    void auto_confirm();
+
     int progress(int &bytes_per_sec) const;
     void upd_message_item();
 
@@ -70,6 +72,7 @@ struct file_transfer_s : public unfinished_file_transfer_s
     void pause_by_remote( bool p );
     void pause_by_me( bool p );
     bool is_active() const { return bytes_per_sec == -3 || (ts::Time::current() - trtime) < 60000; /* last activity in 60 sec */ }
+    bool confirm_required() const;
 };
 
 class application_c : public gui_c

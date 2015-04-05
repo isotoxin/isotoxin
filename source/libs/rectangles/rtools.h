@@ -58,22 +58,32 @@ public:
     void        call_item_activated( const ts::wstr_c&text, const ts::str_c&param );
     void        call_children_repos();
     void        call_enable(bool enableflg) const;
-    
-
 };
+
+template<typename STRTYPE> INLINE ts::streamstr<STRTYPE> & operator<<(ts::streamstr<STRTYPE> &dl, RID r)
+{
+    dl.begin();
+    if (r)
+    {
+        dl.raw_append("RID=[");
+        dl << ts::ref_cast<int>(r);
+        ts::wstr_c n = HOLD(r)().get_name();
+        if (!n.is_empty())
+        {
+            dl << ',';
+            dl << n;
+        }
+        dl << ']';
+    }
+    else
+    {
+        dl.raw_append("RID=[]");
+    }
+    return dl;
+}
 
 typedef const void * GUIPARAM;
 typedef fastdelegate::FastDelegate<bool (RID, GUIPARAM)> GUIPARAMHANDLER;
-
-//extern "C"
-//{
-//	void* dlmalloc(size_t);
-//	void  dlfree(void*);
-//	void* dlrealloc(void*, size_t);
-//	void* dlcalloc(size_t, size_t);
-//	size_t dlmalloc_usable_size(void*);
-//};
-
 
 void fixrect(ts::irect &r, const ts::ivec2 &minsz, const ts::ivec2 &maxsz, ts::uint32 hitarea);
 

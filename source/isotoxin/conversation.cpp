@@ -1639,9 +1639,21 @@ bool gui_message_item_c::b_explore(RID, GUIPARAM)
 {
     ASSERT(records.size());
     record &rec = records.get(0);
+    if (rec.text.get_char(0) == '*' || rec.text.get_char(0) == '?') return true;
     if (ts::is_file_exists(rec.text))
     {
         ShellExecuteW(nullptr, L"open", L"explorer", CONSTWSTR("/select,") + ts::fn_get_short_name(rec.text), ts::fn_get_path(rec.text), SW_SHOWDEFAULT);
+    } else
+    {
+        ts::wstr_c path = fn_get_path(rec.text);
+        path.replace_all('/', '\\');
+        for(; !ts::dir_present(path);)
+        {
+            if (path.find_pos('\\') < 0) return true;
+            path.trunc_char('\\');
+            path = fn_get_path(path);
+        }
+        ShellExecuteW(nullptr, L"explore", path, nullptr, nullptr, SW_SHOWDEFAULT);
     }
 
     return true;

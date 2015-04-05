@@ -101,6 +101,8 @@ menu_c list_langs( SLANGID curlng, MENUHANDLER h );
 bool new_version();
 bool new_version( const ts::asptr &current, const ts::asptr &newver );
 
+bool file_mask_match( const ts::wsptr &filename, const ts::wsptr &masks );
+
 class sound_capture_handler_c
 {
 protected:

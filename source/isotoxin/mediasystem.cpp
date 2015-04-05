@@ -343,7 +343,7 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize,
         int outsamples_per_chnl = samples_per_chnl * ofmt.sampleRate / ifmt.sampleRate + 256;
         b[curtarget].set_size(outsamples_per_chnl * ichnls * sizeof(float));
 
-        SRC_DATA	src_data;
+        SRC_DATA	src_data = {0};
         src_data.end_of_input = 0;
         src_data.src_ratio = (double)ofmt.sampleRate / (double)ifmt.sampleRate;
 
