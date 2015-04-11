@@ -384,7 +384,7 @@ public:
         return r;
     }
 
-    void recalc_unread();
+    bool recalc_unread(); // returns true if unread
 
     void send_file(const ts::wstr_c &fn);
 

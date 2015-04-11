@@ -423,7 +423,7 @@ void contact_c::send_file(const ts::wstr_c &fn)
     }
 }
 
-void contact_c::recalc_unread()
+bool contact_c::recalc_unread()
 {
     if (gui_contact_item_c *gi = gui_item)
     {
@@ -434,8 +434,11 @@ void contact_c::recalc_unread()
             gi->n_unread = unread;
             gi->getengine().redraw();
             g_app->F_SETNOTIFYICON = true;
+            g_app->F_NEEDFLASH |= gi->n_unread > 0;
         }
+        return gi->n_unread > 0;
     }
+    return false;
 }
 
 bool contact_c::flashing_proc(RID, GUIPARAM)
@@ -1386,9 +1389,10 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
         if (ASSERT(historian) && historian->gui_item)
         {
             ++historian->gui_item->n_unread;
+            g_app->F_NEEDFLASH = true;
+            g_app->F_SETNOTIFYICON = true;
             historian->gui_item->getengine().redraw();
             g_app->need_recalc_unread(historian->getkey());
-            g_app->flash_notification_icon();
         }
     }
 

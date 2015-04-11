@@ -181,6 +181,22 @@ blob_c load_image( const wsptr&fn )
     return g_fileop->load( idata().images_dirs, fn );
 }
 
+bmpcore_exbody_s get_image(const wsptr&name)
+{
+    scaled_image_key_s sik = { name, ivec2(100) };
+    scaled_image_container_s *i = idata().scaled_images_cache.get(sik);
+    bmpcore_exbody_s eb;
+    if (i)
+    {
+        eb.m_body = i->pixels;
+        eb.m_info.sz.x = i->width;
+        eb.m_info.sz.y = i->height;
+        eb.m_info.pitch = (uint16)i->pitch;
+        eb.m_info.bitpp = 32;
+    }
+    return eb;
+}
+
 void add_image(const wsptr&name, const bitmap_c&bmp, const irect& rect)
 {
     bool added;

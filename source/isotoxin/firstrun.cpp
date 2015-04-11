@@ -330,7 +330,7 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     {
         ts::wstr_c n = profilename;
         cfg().profile(n);
-        ts::sqlitedb_c::connect(ts::fn_change_name_ext<ts::wchar>(config_fn, n.append(CONSTWSTR(".profile"))));
+        ts::sqlitedb_c::connect(ts::fn_change_name_ext(config_fn, n.append(CONSTWSTR(".profile"))));
     }
 
     cfg().language( deflng );

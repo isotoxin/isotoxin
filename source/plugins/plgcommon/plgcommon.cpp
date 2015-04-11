@@ -148,6 +148,26 @@ int fifo_stream_c::read_data(byte *dest, int size)
     }
 }
 
+wstr_c get_exe_full_name()
+{
+    wstr_c wd;
+    wd.set_length(2048 - 8);
+    int len = GetModuleFileNameW(nullptr, wd.str(), 2048 - 8);
+    wd.set_length(len);
+
+    if (wd.get_char(0) == '\"')
+    {
+        int s = wd.find_pos(1, '\"');
+        wd.set_length(s);
+    }
+
+    wd.trim_right();
+    wd.trim_right('\"');
+    wd.trim_left('\"');
+
+    return wd;
+}
+
 
 #pragma warning (disable:4559)
 #pragma warning (disable:4127)

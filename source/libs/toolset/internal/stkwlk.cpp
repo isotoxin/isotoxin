@@ -773,8 +773,8 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context)const
     TraceRegisters(hThread, &c);
   }else c = *context;
 
-  _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Call stack (%08p):\r\n", hThread);
-  OnOutput(outBuffer);
+  int len = _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Call stack (%08p):\r\n", hThread);
+  OnOutput(outBuffer, len);
 
   // init STACKFRAME for first call
   memset(&s, 0, sizeof(s));
@@ -973,31 +973,30 @@ void StackWalker::OnCallstackEntry(CallstackEntryType eType, CallstackEntry &ent
 {
 	if ( (eType != lastEntry) && (entry.offset != 0) )
 	{
-// 		stackInfo.AddrStack; //указатель стека на момент краха
-//		stackInfo.AddrFrame  //указатель на фрейм вызова функции (EBP, RETURN ADDR, PARAMS)
+        int len = 0;
 		if (/*entry.lineFileName!=nullptr && */entry.lineFileName[0] != 0)
 		{
 			if (entry.offsetFromLine!=0)
 			{
-				_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "%04X:%p (0x%p 0x%p 0x%p 0x%p) %s, %s()+%llu byte(s), %s, line %u+%u byte(s)\r\n", entry.segment, (LPVOID) entry.offset, (LPVOID) stackInfo.Params[0], (LPVOID) stackInfo.Params[1], (LPVOID) stackInfo.Params[2], (LPVOID) stackInfo.Params[3], entry.loadedImageNamep, entry.name, entry.offsetFromSmybol, entry.lineFileName, entry.lineNumber, entry.offsetFromLine);
+				len = _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "%04X:%p (0x%p 0x%p 0x%p 0x%p) %s, %s()+%llu byte(s), %s, line %u+%u byte(s)\r\n", entry.segment, (LPVOID) entry.offset, (LPVOID) stackInfo.Params[0], (LPVOID) stackInfo.Params[1], (LPVOID) stackInfo.Params[2], (LPVOID) stackInfo.Params[3], entry.loadedImageNamep, entry.name, entry.offsetFromSmybol, entry.lineFileName, entry.lineNumber, entry.offsetFromLine);
 			}
 			else
 			{
-				_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "%04X:%p (0x%p 0x%p 0x%p 0x%p) %s, %s()+%llu byte(s), %s, line %u\r\n", entry.segment, (LPVOID) entry.offset, (LPVOID) stackInfo.Params[0], (LPVOID) stackInfo.Params[1], (LPVOID) stackInfo.Params[2], (LPVOID) stackInfo.Params[3], entry.loadedImageNamep, entry.name, entry.offsetFromSmybol, entry.lineFileName, entry.lineNumber);
+				len = _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "%04X:%p (0x%p 0x%p 0x%p 0x%p) %s, %s()+%llu byte(s), %s, line %u\r\n", entry.segment, (LPVOID) entry.offset, (LPVOID) stackInfo.Params[0], (LPVOID) stackInfo.Params[1], (LPVOID) stackInfo.Params[2], (LPVOID) stackInfo.Params[3], entry.loadedImageNamep, entry.name, entry.offsetFromSmybol, entry.lineFileName, entry.lineNumber);
 			}
 		}
 		else
 		{
-			_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "%04X:%p (0x%p 0x%p 0x%p 0x%p) %s, %s()+%llu byte(s), %s\r\n", entry.segment, (LPVOID) entry.offset, (LPVOID) stackInfo.Params[0], (LPVOID) stackInfo.Params[1], (LPVOID) stackInfo.Params[2], (LPVOID) stackInfo.Params[3], entry.loadedImageNamep, entry.name, entry.offsetFromSmybol, entry.lineFileName);
+			len = _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "%04X:%p (0x%p 0x%p 0x%p 0x%p) %s, %s()+%llu byte(s), %s\r\n", entry.segment, (LPVOID) entry.offset, (LPVOID) stackInfo.Params[0], (LPVOID) stackInfo.Params[1], (LPVOID) stackInfo.Params[2], (LPVOID) stackInfo.Params[3], entry.loadedImageNamep, entry.name, entry.offsetFromSmybol, entry.lineFileName);
 		}
-		OnOutput(outBuffer);
+		OnOutput(outBuffer, len);
 	}
 }
 
 void StackWalker::OnDbgHelpErr(LPCSTR szFuncName, DWORD gle, DWORD64 addr)
 {
-	_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, " ERROR: %s, GetLastError: %lu (Address: %p)\r\n", szFuncName, gle, (LPVOID) addr);
-	OnOutput(outBuffer);
+	int len = _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, " ERROR: %s, GetLastError: %lu (Address: %p)\r\n", szFuncName, gle, (LPVOID) addr);
+	OnOutput(outBuffer, len);
 }
 
 void StackWalker::OnSymInit(LPCSTR, DWORD, LPCSTR)
@@ -1027,7 +1026,7 @@ void StackWalker::OnSymInit(LPCSTR, DWORD, LPCSTR)
 #endif
 }
 
-void StackWalker::OnOutput(LPCSTR szText)const
+void StackWalker::OnOutput(LPCSTR szText, int len)const
 {
 	printf("%08X %s", (unsigned int)GetCurrentThreadId(), szText);
 
@@ -1045,9 +1044,9 @@ void StackWalker::OnOSVersion(DWORD dwMajorVersion, DWORD dwMinorVersion, DWORD 
 
 void StackWalker::TraceRegisters( const HANDLE thread, const CONTEXT* pCxt )const
 {
-    //Вывод регистров
+    // registers
 #ifdef _M_IX86
-    _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Registers (%08p):\r\n\
+    int len = _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Registers (%08p):\r\n\
 EAX=%p  EBX=%p  ECX=%p  EDX=%p  ESI=%p\r\n\
 EDI=%p  EBP=%p  ESP=%p  EIP=%p  FLG=%p\r\n\
 CS=%04X   DS=%04X  SS=%04X  ES=%04X   FS=%04X  GS=%04X\r\n\r\n", thread,
@@ -1056,7 +1055,7 @@ CS=%04X   DS=%04X  SS=%04X  ES=%04X   FS=%04X  GS=%04X\r\n\r\n", thread,
         pCxt->SegCs,pCxt->SegDs,pCxt->SegSs,
         pCxt->SegEs,pCxt->SegFs,pCxt->SegGs);
 #elif _M_X64
-    _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Registers (%08p):\r\n\
+    int len = _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Registers (%08p):\r\n\
 RAX=%p  RBX=%p  RCX=%p  RDX=%p  RSI=%p\r\n\
 RDI=%p  R8 =%p  R9 =%p  R10=%p  R11=%p\r\n\
 R12=%p  R13=%p  R14=%p  R15=%p  RIP=%p\r\n\
@@ -1071,7 +1070,7 @@ CS=%04X  DS=%04X  SS=%04X  ES=%04X   FS=%04X  GS=%04X\r\n\r\n", thread,
 #else
 #error "Platform not supported!"
 #endif
-    OnOutput(outBuffer);
+    OnOutput(outBuffer, len);
 }
 
 HMODULE StackWalker::DBGDLL() const

@@ -302,6 +302,7 @@ public:
     gui_message_editor_c(initial_rect_data_s &data) :gui_textedit_c(data) {}
     /*virtual*/ ~gui_message_editor_c();
     /*virtual*/ void created() override;
+    contact_c *get_historian() { return historian; }
 };
 
 class gui_message_area_c : public gui_group_c
@@ -316,6 +317,7 @@ public:
 
     ts::safe_ptr<gui_message_editor_c> message_editor;
     ts::safe_ptr<gui_button_c> send_button;
+    ts::safe_ptr<gui_button_c> file_button;
 
     gui_message_area_c(initial_rect_data_s &data) :gui_group_c(data) {}
     /*virtual*/ ~gui_message_area_c();
@@ -323,6 +325,10 @@ public:
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ size_policy_e size_policy() const override {return SP_KEEP;}
     /*virtual*/ void created() override;
+
+    bool send_file(RID, GUIPARAM);
+
+    void update_buttons();
 };
 
 
@@ -343,7 +349,7 @@ class gui_conversation_c : public gui_vgroup_c, public sound_capture_handler_c
     GM_RECEIVER(gui_conversation_c, ISOGM_AV);
     GM_RECEIVER(gui_conversation_c, ISOGM_CALL_STOPED);
     GM_RECEIVER(gui_conversation_c, ISOGM_PROFILE_TABLE_SAVED);
-    
+    GM_RECEIVER(gui_conversation_c, ISOGM_UPDATE_BUTTONS);
     
     ts::tbuf_t<s3::Format> avformats;
 

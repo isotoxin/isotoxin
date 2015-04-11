@@ -49,7 +49,6 @@ class gui_contact_item_c : public gui_label_c
     int n_unread =0;
 
     bool audio_call(RID, GUIPARAM);
-    bool send_file(RID, GUIPARAM);
 
     bool edit0(RID, GUIPARAM);
     bool edit1(RID, GUIPARAM);
@@ -149,7 +148,8 @@ class gui_contactlist_c : public gui_vscrollgroup_c
     int skip_bottom_pixels = 70;
     int skipctl = 0;
 
-    ts::safe_ptr<gui_button_c> addcbtn;
+    ts::safe_ptr<gui_button_c> addcbtn; // add contact button
+    ts::safe_ptr<gui_button_c> addgbtn; // add group button
     ts::safe_ptr<gui_contact_item_c> self;
     ts::safe_ptr<gui_contact_item_c> dndtarget;
 

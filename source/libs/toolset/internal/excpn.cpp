@@ -9,6 +9,7 @@
 namespace ts
 {
 exception_operator_c exception_operator_c::self;
+swstr_t<MAX_PATH> exception_operator_c::dump_filename;
 
 char* strerror_r(int errnum, char *buf, size_t n)
 {
@@ -83,8 +84,8 @@ void exception_operator_c::trace_info(EXCEPTION_POINTERS* pExp)
 	if (name)
 	{
 		name++;
-		_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Exception info [%04X]:\r\n\r\n%s caused a %s at %04X:%p\r\n\r\n", (int)GetCurrentThreadId(), name, ExceptionCodeToStr(pExp->ExceptionRecord->ExceptionCode), pExp->ContextRecord->SegCs, (LPVOID)pExp->ExceptionRecord->ExceptionAddress);
-		OnOutput(outBuffer);
+		int len =_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Exception info [%04X]:\r\n\r\n%s caused a %s at %04X:%p\r\n\r\n", (int)GetCurrentThreadId(), name, ExceptionCodeToStr(pExp->ExceptionRecord->ExceptionCode), pExp->ContextRecord->SegCs, (LPVOID)pExp->ExceptionRecord->ExceptionAddress);
+		OnOutput(outBuffer, len);
 
 		unsigned char* code = NULL;
 
@@ -93,26 +94,26 @@ void exception_operator_c::trace_info(EXCEPTION_POINTERS* pExp)
 		if (pExp->ContextRecord-> Eip && !pExp->ExceptionRecord->ExceptionRecord)
 		{
 			code = (unsigned char*)(pExp->ContextRecord-> Eip);
-			_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Bytes at CS::EIP:\r\n%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X\r\n\r\n",
+			len =_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Bytes at CS::EIP:\r\n%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X\r\n\r\n",
 				code[0], code[1], code[2], code[3], code[4], code[5], code[6], code[7],
 				code[8], code[9], code[10], code[11], code[12], code[13], code[14], code[15]);
 		}
-		else _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Bytes at CS::EIP:\r\n<NULL>\r\n\r\n");
+		else len =_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Bytes at CS::EIP:\r\n<NULL>\r\n\r\n");
 #elif _M_X64
 		if (pExp->ContextRecord-> Rip && !pExp->ExceptionRecord->ExceptionRecord)
 		{
 			code = (unsigned char*)(pExp->ContextRecord-> Rip);
-			_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Bytes at CS::RIP:\r\n%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X\r\n",
+			len =_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Bytes at CS::RIP:\r\n%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X\r\n",
 				code[0], code[1], code[2], code[3], code[4], code[5], code[6], code[7],
 				code[8], code[9], code[10], code[11], code[12], code[13], code[14], code[15]);
 		}
-		else _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Bytes at CS::RIP:\r\n<NULL>\r\n\r\n");
+		else len =_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Bytes at CS::RIP:\r\n<NULL>\r\n\r\n");
 #endif
 		}__except(EXCEPTION_EXECUTE_HANDLER){
-			_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Bytes at CS::RIP(inavlid):\r\n %p\r\n\r\n", code);
+			len =_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Bytes at CS::RIP(inavlid):\r\n %p\r\n\r\n", code);
 		};
 
-		OnOutput(outBuffer);
+		OnOutput(outBuffer, len);
 
 		void** stack =NULL;
 
@@ -121,30 +122,30 @@ void exception_operator_c::trace_info(EXCEPTION_POINTERS* pExp)
 		if (pExp->ContextRecord -> Esp && !pExp->ExceptionRecord->ExceptionRecord)
 		{
 			stack = (void**)(pExp->ContextRecord -> Esp);
-			_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "nStack dump:\r\n%p %p %p %p %p %p %p %p\r\n%p %p %p %p %p %p %p %p\r\n%p %p %p %p %p %p %p %p\r\n%p %p %p %p %p %p %p %p\r\n\r\n",
+			len =_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "nStack dump:\r\n%p %p %p %p %p %p %p %p\r\n%p %p %p %p %p %p %p %p\r\n%p %p %p %p %p %p %p %p\r\n%p %p %p %p %p %p %p %p\r\n\r\n",
 				stack[0], stack[1], stack[2], stack[3], stack[4], stack[5], stack[6], stack[7],
 				stack[8], stack[9], stack[10], stack[11], stack[12], stack[13], stack[14], stack[15],
 				stack[16], stack[17], stack[18], stack[19], stack[20], stack[21], stack[22], stack[23],
 				stack[24], stack[25], stack[26], stack[27], stack[28], stack[29], stack[30], stack[31]);
 		}
-		else _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "nStack dump:\r\n<NULL>");
+		else len =_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "nStack dump:\r\n<NULL>");
 #elif _M_X64
 		if (pExp->ContextRecord -> Rsp && !pExp->ExceptionRecord->ExceptionRecord)
 		{
 			stack = (void**)(pExp->ContextRecord -> Rsp);
-			_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "nStack dump:\r\n%p %p %p %p %p %p %p %p\r\n%p %p %p %p %p %p %p %p\r\n%p %p %p %p %p %p %p %p\r\n%p %p %p %p %p %p %p %p\r\n\r\n",
+			len =_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "nStack dump:\r\n%p %p %p %p %p %p %p %p\r\n%p %p %p %p %p %p %p %p\r\n%p %p %p %p %p %p %p %p\r\n%p %p %p %p %p %p %p %p\r\n\r\n",
 				stack[0], stack[1], stack[2], stack[3], stack[4], stack[5], stack[6], stack[7],
 				stack[8], stack[9], stack[10], stack[11], stack[12], stack[13], stack[14], stack[15],
 				stack[16], stack[17], stack[18], stack[19], stack[20], stack[21], stack[22], stack[23],
 				stack[24], stack[25], stack[26], stack[27], stack[28], stack[29], stack[30], stack[31]);
 		}
-		else _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "nStack dump:\r\n<NULL>\r\n\r\n");
+		else len =_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "nStack dump:\r\n<NULL>\r\n\r\n");
 #endif
 		}__except(EXCEPTION_EXECUTE_HANDLER){
-			_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Stack dump:(inavlid):\r\n %p\r\n\r\n", stack);
+			len =_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Stack dump:(inavlid):\r\n %p\r\n\r\n", stack);
 		};
 
-		OnOutput(outBuffer);
+		OnOutput(outBuffer, len);
 	}
 }
 
@@ -169,11 +170,11 @@ LONG WINAPI exception_operator_c::exception_filter(EXCEPTION_POINTERS* pExp)
 
     SIMPLELOCK(self.lock);
 	self.output.clear();
-	self.OnOutput("\n=====================================================================\n");
+	self.OnOutput1("\n=====================================================================\n");
     self.trace_info(pExp);
     self.TraceRegisters(GetCurrentThread(), pExp->ContextRecord);
     self.ShowCallstack(GetCurrentThread(), pExp->ContextRecord);
-	self.OnOutput("=====================================================================\n");
+	self.OnOutput1("=====================================================================\n");
 
 	if (CheckMemCorrupt)
 		CheckMemCorrupt();
@@ -188,12 +189,12 @@ void WINAPI exception_operator_c::show_callstack(HANDLE hThread, const char* nam
 {
     SIMPLELOCK(self.lock);
 	self.output.clear();
-	self.OnOutput("\n=====================================================================\n");
+	self.OnOutput1("\n=====================================================================\n");
 	sstr_t<256> stamp;
-	sprintf_s(stamp.str(), stamp.get_capacity(), "%s [%04X]\n", name, ((unsigned int)hThread));
-	self.OnOutput(stamp.cstr());
+	int len = sprintf_s(stamp.str(), stamp.get_capacity(), "%s [%04X]\n", name, ((unsigned int)hThread));
+	self.OnOutput(stamp.cstr(), len);
 	self.ShowCallstack(hThread, NULL);
-	self.OnOutput("=====================================================================");
+	self.OnOutput1("=====================================================================");
 	Log(self.output.cstr());
 }
 
@@ -205,10 +206,11 @@ LONG exception_operator_c::TraceFinal(EXCEPTION_POINTERS* pExp)
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
-void exception_operator_c::OnOutput(LPCSTR szText) const
+void exception_operator_c::OnOutput(LPCSTR szText, int len) const
 {
-    __super::OnOutput(szText);
-	output.append(szText);
+    int maxlen = output.get_capacity() - output.get_length();
+    if (len > maxlen) len = maxlen;
+    output.append(asptr(szText, len));
 }
 
 exception_operator_c::exception_operator_c()
@@ -229,18 +231,22 @@ void exception_operator_c::create_dump(EXCEPTION_POINTERS* pExp/*=NULL*/, bool n
 
     if (pDump)
     {
-        static sstr_t<MAX_PATH+32> exename(MAX_PATH,false);
-        exename.set_length(MAX_PATH);
-        GetModuleFileNameA(nullptr, exename.str(), MAX_PATH);
-        exename.set_length();
-        int namei = exename.find_last_pos_of("/\\");
-        int doti = exename.find_last_pos('.');
-        if (doti > namei) exename.set_length(doti);
-        exename.set_length(namei);
-        static char dumpName[1024];
-        sprintf_s(dumpName, sizeof(dumpName), "%s\\%s.dmp", exename.cstr(), exename.cstr() + namei + 1);
+        if (dump_filename.is_empty())
+        {
+            swstr_t<MAX_PATH + 32> exename(MAX_PATH, false);
+            exename.set_length(MAX_PATH);
+            GetModuleFileNameW(nullptr, exename.str(), MAX_PATH);
+            exename.set_length();
+            int namei = exename.find_last_pos_of(CONSTWSTR("/\\"));
+            int doti = exename.find_last_pos('.');
+            if (doti > namei) exename.set_length(doti);
+            exename.set_length(namei);
+            dump_filename.append( wsptr(exename.cstr()) );
+            dump_filename.append_char('\\');
+            dump_filename.append( wsptr(exename.cstr() + namei + 1) );
+        }
 
-        HANDLE hFile = ::CreateFileA(dumpName, GENERIC_WRITE, FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        HANDLE hFile = ::CreateFileW(dump_filename, GENERIC_WRITE, FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
         if (hFile!=INVALID_HANDLE_VALUE)
         {

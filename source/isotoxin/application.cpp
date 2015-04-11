@@ -10,6 +10,8 @@ application_c::application_c(const ts::wchar * cmdl)
 {
     F_UNREADICONFLASH = false;
     F_UNREADICON = false;
+    F_NEEDFLASH = false;
+    F_FLASHIP = false;
     F_SETNOTIFYICON = false;
     autoupdate_next = now() + 10;
 	g_app = this;
@@ -112,9 +114,12 @@ bool application_c::b_send_message(RID r, GUIPARAM param)
 
 bool application_c::flash_notification_icon(RID r, GUIPARAM param)
 {
-    F_UNREADICON = gmsg<ISOGM_SOMEUNREAD>().send().is(GMRBIT_ACCEPTED);;
+    F_UNREADICON = F_NEEDFLASH ? true : gmsg<ISOGM_SOMEUNREAD>().send().is(GMRBIT_ACCEPTED);;
+    F_NEEDFLASH = false;
+    F_FLASHIP = false;
     if (F_UNREADICON)
     {
+        F_FLASHIP = true;
         F_UNREADICONFLASH = !F_UNREADICONFLASH;
         DEFERRED_UNIQUE_CALL(0.3, DELEGATE(this, flash_notification_icon), 0);
     }
@@ -304,9 +309,12 @@ static DWORD WINAPI autoupdater(LPVOID)
         }
         contact_c *c = contacts().find(ck);
         m_need_recalc_unread.remove_slow(0);
-        if (c) c->recalc_unread();
+        if (c) F_NEEDFLASH |= c->recalc_unread();
         break;
     }
+
+    if (F_NEEDFLASH && !F_FLASHIP)
+        flash_notification_icon();
 
     if (F_SETNOTIFYICON)
     {

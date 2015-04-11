@@ -4,12 +4,12 @@
 
 enum proto_features_e
 {
-    PF_INVITE_NAME          = (1 << 0),  // invite send name
-    PF_UNAUTHORIZED_CHAT    = (1 << 1),
-    PF_AUDIO_CALLS          = (1 << 2),
-    PF_VIDEO_CALLS          = (1 << 3),
-    PF_SEND_FILE            = (1 << 4),
-    PF_FILE_RESUME          = (1 << 5),
+    PF_INVITE_NAME          = (1 << 0),     // invite send name
+    PF_UNAUTHORIZED_CHAT    = (1 << 1),     // allow chat with non-friend
+    PF_AUDIO_CALLS          = (1 << 2),     // audio calls supported
+    PF_VIDEO_CALLS          = (1 << 3),     // video calls supported
+    PF_SEND_FILE            = (1 << 4),     // send (and recv, of course) files supported
+    PF_GROUP_CHAT           = (1 << 5),     // group chats supported
 };
 
 enum proxy_support_e

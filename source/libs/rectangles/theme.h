@@ -150,6 +150,18 @@ public:
 
 };
 class theme_c;
+struct button_desc_s;
+struct generated_button_data_s
+{
+    ts::drawable_bitmap_c src;
+    static generated_button_data_s *generate( const ts::abp_c *gen );
+    generated_button_data_s() {}
+    virtual ~generated_button_data_s() {}
+    virtual void setup(button_desc_s &desc);
+    
+    generated_button_data_s &operator=(const generated_button_data_s&) UNUSED;
+};
+
 struct button_desc_s : ts::shared_object
 {
     enum states
@@ -170,7 +182,7 @@ struct button_desc_s : ts::shared_object
         ARIGHT = SETBIT(2),
         ABOTTOM = SETBIT(3),
     };
-
+    UNIQUE_PTR( generated_button_data_s ) genb;
     ts::ivec2 size;
     const ts::drawable_bitmap_c &src;
     ts::wstr_c text;

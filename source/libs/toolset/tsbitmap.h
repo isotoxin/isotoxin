@@ -252,7 +252,6 @@ void TSCALL img_helper_get_from_dxt(uint8 *des, const imgdesc_s &des_info, const
 void TSCALL img_helper_copy_components(uint8* des, const uint8* sou, const imgdesc_s &des_info, const imgdesc_s &sou_info, int num_comps );
 void TSCALL img_helper_merge_with_alpha(uint8 *des, const uint8 *basesrc, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &base_info, const imgdesc_s &sou_info, int oalphao = -1);
 
-
 struct bmpcore_normal_s;
 template<typename CORE> class bitmap_t;
 typedef bitmap_t<bmpcore_normal_s> bitmap_c;
@@ -375,6 +374,7 @@ struct bmpcore_exbody_s
     bmpcore_exbody_s(const uint8 *body, const imgdesc_s &info):m_body(body), m_info(info)
     {
     }
+    bmpcore_exbody_s():m_body(nullptr) {}
     bmpcore_exbody_s(aint) {}
 
     void before_modify(bitmap_t<bmpcore_exbody_s> *me) {}
@@ -668,7 +668,7 @@ public:
 	void flip_y(const ivec2 & pdes,const ivec2 & size);
     void flip_y(void);
 
-    void alpha_blend( const ivec2 &p, const bmpcore_exbody_s & img ) { before_modify(); alpha_blend(p,img,extbody()); }
+    void alpha_blend( const ivec2 &p, const bmpcore_exbody_s & img );
     void alpha_blend( const ivec2 &p, const bmpcore_exbody_s & img, const bmpcore_exbody_s & base ); // this - target, result size - base size
 
 	void swap_byte(const ivec2 & pos,const ivec2 & size,int n1,int n2);
@@ -719,34 +719,11 @@ public:
         before_modify();
 		*(TSCOLOR *)(body() + (y * info().pitch + x * info().bytepp())) = color;
     }
-	void ARGBPixel(int x, int y, TSCOLOR color, int alpha) // set ARGB color of specified pixel
+	void ARGBPixel(int x, int y, TSCOLOR color, int alpha) // alpha blend ARGB color of specified pixel (like photoshop Normal mode)
     {
         before_modify();
 		TSCOLOR * c = (TSCOLOR *)(body() + (y * info().pitch + x * info().bytepp()));
-		TSCOLOR ocolor = *c;
-
-        uint8 R = as_byte( color >> 16 );
-        uint8 G = as_byte( color >> 8 );
-        uint8 B = as_byte( color );
-
-        uint8 oA = as_byte( ocolor >> 24 );
-        uint8 oR = as_byte( ocolor >> 16 );
-        uint8 oG = as_byte( ocolor >> 8 );
-        uint8 oB = as_byte( ocolor );
-
-
-        float A = float( double(alpha) * (1.0 / 255.0) );
-        float nA = 1.0f - A;
-
-
-        auint oiA = lround(float(alpha) * A + float(oA) * nA);
-        auint oiB = lround(float(B) * A + float(oB) * nA);
-        auint oiG = lround(float(G) * A + float(oG) * nA);
-        auint oiR = lround(float(R) * A + float(oR) * nA);
-
-		*c = CLAMP<uint8>(oiB) | (CLAMP<uint8>(oiG) << 8) | (CLAMP<uint8>(oiR) << 16) | (CLAMP<uint8>(oiA) << 24);
-
-
+        *c = ALPHABLEND( *c, color, alpha );
     }
 
     irect calc_visible_rect() const;

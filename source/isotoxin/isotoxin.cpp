@@ -207,6 +207,11 @@ bool _cdecl app_preinit( const wchar_t *cmdl )
         if (!check_instance()) return false;
 #endif // _FINAL
 
+
+#if defined _DEBUG || defined _CRASH_HANDLER
+    ts::exception_operator_c::dump_filename = ts::fn_change_name_ext(ts::get_exe_full_name(), ts::wstr_c(CONSTWSTR(APPNAME)).append_char('.').append(ts::to_wstr(application_c::appver())).as_sptr(), CONSTWSTR("dmp"));
+#endif
+
     UNSTABLE_CODE_PROLOG
 
 

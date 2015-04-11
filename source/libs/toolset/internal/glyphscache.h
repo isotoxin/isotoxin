@@ -99,6 +99,7 @@ void set_fonts_dir(const wsptr&dir, bool add = false);
 void set_images_dir(const wsptr&dir, bool add = false); // for parser
 void add_image(const wsptr&name, const bitmap_c&bmp, const irect& rect);
 void add_image(const wsptr&name, const uint8* data, const imgdesc_s &imgdesc, bool copyin = true); // set external bitmap data. it must be 4 byte-per-pixel RGBA
+bmpcore_exbody_s get_image(const wsptr&name);
 void clear_glyphs_cache();
 
 blob_c load_image( const wsptr&fn ); // try load image from one of image-paths

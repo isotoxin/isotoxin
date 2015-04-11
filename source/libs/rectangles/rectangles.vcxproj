@@ -89,6 +89,7 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="button_generator.cpp" />
     <ClCompile Include="dialog.cpp" />
     <ClCompile Include="gmesages.cpp" />
     <ClCompile Include="gui.cpp" />

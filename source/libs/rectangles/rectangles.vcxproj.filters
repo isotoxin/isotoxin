@@ -36,6 +36,9 @@
     <ClCompile Include="gmesages.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="button_generator.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="gui.h">

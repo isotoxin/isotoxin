@@ -752,64 +752,65 @@ char sym[sizeof(IMAGEHLP_SYMBOL64) + StackWalker::STACKWALK_MAX_NAMELEN];
 
 BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context)const
 {
-  pSym = nullptr;
+    pSym = nullptr;
 
-  if (this->m_sw->m_hDbhHelp == nullptr)
-  {
-    SetLastError(ERROR_DLL_INIT_FAILED);
-    return FALSE;
-  }
-
-  if (context == nullptr)
-  {
-    if (hThread!=GetCurrentThread()) SuspendThread(hThread);
-    memset(&c, 0, sizeof(CONTEXT));
-    c.ContextFlags = USED_CONTEXT_FLAGS;
-    if (GetThreadContext(hThread, &c) == FALSE)
+    if (this->m_sw->m_hDbhHelp == nullptr)
     {
-        ResumeThread(hThread);
+        SetLastError(ERROR_DLL_INIT_FAILED);
         return FALSE;
     }
-    TraceRegisters(hThread, &c);
-  }else c = *context;
 
-  _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Call stack (%08p):\r\n", hThread);
-  OnOutput(outBuffer);
+    if (context == nullptr)
+    {
+        if (hThread != GetCurrentThread()) SuspendThread(hThread);
+        memset(&c, 0, sizeof(CONTEXT));
+        c.ContextFlags = USED_CONTEXT_FLAGS;
+        if (GetThreadContext(hThread, &c) == FALSE)
+        {
+            ResumeThread(hThread);
+            return FALSE;
+        }
+        TraceRegisters(hThread, &c);
+    }
+    else c = *context;
 
-  // init STACKFRAME for first call
-  memset(&s, 0, sizeof(s));
-  DWORD imageType;
+    int len = _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Call stack (%08p):\r\n", hThread);
+    OnOutput(outBuffer, len);
+
+    // init STACKFRAME for first call
+    memset(&s, 0, sizeof(s));
+    DWORD imageType;
 #ifdef _M_IX86
-  // normally, call ImageNtHeader() and use machine info from PE header
-  imageType = IMAGE_FILE_MACHINE_I386;
-  s.AddrPC.Offset = c.Eip;
-  s.AddrPC.Mode = AddrModeFlat;
-  s.AddrFrame.Offset = c.Ebp;
-  s.AddrFrame.Mode = AddrModeFlat;
-  s.AddrStack.Offset = c.Esp;
-  s.AddrStack.Mode = AddrModeFlat;
+    // normally, call ImageNtHeader() and use machine info from PE header
+    imageType = IMAGE_FILE_MACHINE_I386;
+    s.AddrPC.Offset = c.Eip;
+    s.AddrPC.Mode = AddrModeFlat;
+    s.AddrFrame.Offset = c.Ebp;
+    s.AddrFrame.Mode = AddrModeFlat;
+    s.AddrStack.Offset = c.Esp;
+    s.AddrStack.Mode = AddrModeFlat;
 #elif _M_X64
-  imageType = IMAGE_FILE_MACHINE_AMD64;
-  s.AddrPC.Offset = c.Rip;
-  s.AddrPC.Mode = AddrModeFlat;
-  s.AddrFrame.Offset = c.Rsp;
-  s.AddrFrame.Mode = AddrModeFlat;
-  s.AddrStack.Offset = c.Rsp;
-  s.AddrStack.Mode = AddrModeFlat;
+    imageType = IMAGE_FILE_MACHINE_AMD64;
+    s.AddrPC.Offset = c.Rip;
+    s.AddrPC.Mode = AddrModeFlat;
+    s.AddrFrame.Offset = c.Rsp;
+    s.AddrFrame.Mode = AddrModeFlat;
+    s.AddrStack.Offset = c.Rsp;
+    s.AddrStack.Mode = AddrModeFlat;
 #else
 #error "Platform not supported!"
 #endif
 
-  pSym = (IMAGEHLP_SYMBOL64 *)sym;
-  memset(pSym, 0, sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
-  pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
-  pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
+    pSym = (IMAGEHLP_SYMBOL64 *)sym;
+    memset(pSym, 0, sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
+    pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
+    pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
 
-  memset(&Line, 0, sizeof(Line));
-  Line.SizeOfStruct = sizeof(Line);
+    memset(&Line, 0, sizeof(Line));
+    Line.SizeOfStruct = sizeof(Line);
 
-  memset(&Module, 0, sizeof(Module));
-  Module.SizeOfStruct = sizeof(Module);
+    memset(&Module, 0, sizeof(Module));
+    Module.SizeOfStruct = sizeof(Module);
 
   for (frameNum = 0; ; ++frameNum )
   {
@@ -973,31 +974,30 @@ void StackWalker::OnCallstackEntry(CallstackEntryType eType, CallstackEntry &ent
 {
 	if ( (eType != lastEntry) && (entry.offset != 0) )
 	{
-// 		stackInfo.AddrStack; //указатель стека на момент краха
-//		stackInfo.AddrFrame  //указатель на фрейм вызова функции (EBP, RETURN ADDR, PARAMS)
+        int len = 0;
 		if (/*entry.lineFileName!=nullptr && */entry.lineFileName[0] != 0)
 		{
 			if (entry.offsetFromLine!=0)
 			{
-				_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "%04X:%p (0x%p 0x%p 0x%p 0x%p) %s, %s()+%llu byte(s), %s, line %u+%u byte(s)\r\n", entry.segment, (LPVOID) entry.offset, (LPVOID) stackInfo.Params[0], (LPVOID) stackInfo.Params[1], (LPVOID) stackInfo.Params[2], (LPVOID) stackInfo.Params[3], entry.loadedImageNamep, entry.name, entry.offsetFromSmybol, entry.lineFileName, entry.lineNumber, entry.offsetFromLine);
+				len = _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "%04X:%p (0x%p 0x%p 0x%p 0x%p) %s, %s()+%llu byte(s), %s, line %u+%u byte(s)\r\n", entry.segment, (LPVOID) entry.offset, (LPVOID) stackInfo.Params[0], (LPVOID) stackInfo.Params[1], (LPVOID) stackInfo.Params[2], (LPVOID) stackInfo.Params[3], entry.loadedImageNamep, entry.name, entry.offsetFromSmybol, entry.lineFileName, entry.lineNumber, entry.offsetFromLine);
 			}
 			else
 			{
-				_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "%04X:%p (0x%p 0x%p 0x%p 0x%p) %s, %s()+%llu byte(s), %s, line %u\r\n", entry.segment, (LPVOID) entry.offset, (LPVOID) stackInfo.Params[0], (LPVOID) stackInfo.Params[1], (LPVOID) stackInfo.Params[2], (LPVOID) stackInfo.Params[3], entry.loadedImageNamep, entry.name, entry.offsetFromSmybol, entry.lineFileName, entry.lineNumber);
+				len = _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "%04X:%p (0x%p 0x%p 0x%p 0x%p) %s, %s()+%llu byte(s), %s, line %u\r\n", entry.segment, (LPVOID) entry.offset, (LPVOID) stackInfo.Params[0], (LPVOID) stackInfo.Params[1], (LPVOID) stackInfo.Params[2], (LPVOID) stackInfo.Params[3], entry.loadedImageNamep, entry.name, entry.offsetFromSmybol, entry.lineFileName, entry.lineNumber);
 			}
 		}
 		else
 		{
-			_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "%04X:%p (0x%p 0x%p 0x%p 0x%p) %s, %s()+%llu byte(s), %s\r\n", entry.segment, (LPVOID) entry.offset, (LPVOID) stackInfo.Params[0], (LPVOID) stackInfo.Params[1], (LPVOID) stackInfo.Params[2], (LPVOID) stackInfo.Params[3], entry.loadedImageNamep, entry.name, entry.offsetFromSmybol, entry.lineFileName);
+			len = _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "%04X:%p (0x%p 0x%p 0x%p 0x%p) %s, %s()+%llu byte(s), %s\r\n", entry.segment, (LPVOID) entry.offset, (LPVOID) stackInfo.Params[0], (LPVOID) stackInfo.Params[1], (LPVOID) stackInfo.Params[2], (LPVOID) stackInfo.Params[3], entry.loadedImageNamep, entry.name, entry.offsetFromSmybol, entry.lineFileName);
 		}
-		OnOutput(outBuffer);
+		OnOutput(outBuffer, len);
 	}
 }
 
 void StackWalker::OnDbgHelpErr(LPCSTR szFuncName, DWORD gle, DWORD64 addr)
 {
-	_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, " ERROR: %s, GetLastError: %lu (Address: %p)\r\n", szFuncName, gle, (LPVOID) addr);
-	OnOutput(outBuffer);
+	int len = _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, " ERROR: %s, GetLastError: %lu (Address: %p)\r\n", szFuncName, gle, (LPVOID) addr);
+	OnOutput(outBuffer, len);
 }
 
 void StackWalker::OnSymInit(LPCSTR, DWORD, LPCSTR)
@@ -1027,7 +1027,7 @@ void StackWalker::OnSymInit(LPCSTR, DWORD, LPCSTR)
 #endif
 }
 
-void StackWalker::OnOutput(LPCSTR szText)const
+void StackWalker::OnOutput(LPCSTR szText, int /*len*/)const
 {
 	printf("%08X %s", (unsigned int)GetCurrentThreadId(), szText);
 
@@ -1047,7 +1047,7 @@ void StackWalker::TraceRegisters( const HANDLE thread, const CONTEXT* pCxt )cons
 {
     //Вывод регистров
 #ifdef _M_IX86
-    _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Registers (%08p):\r\n\
+    int len = _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Registers (%08p):\r\n\
 EAX=%p  EBX=%p  ECX=%p  EDX=%p  ESI=%p\r\n\
 EDI=%p  EBP=%p  ESP=%p  EIP=%p  FLG=%p\r\n\
 CS=%04X   DS=%04X  SS=%04X  ES=%04X   FS=%04X  GS=%04X\r\n\r\n", thread,
@@ -1056,7 +1056,7 @@ CS=%04X   DS=%04X  SS=%04X  ES=%04X   FS=%04X  GS=%04X\r\n\r\n", thread,
         pCxt->SegCs,pCxt->SegDs,pCxt->SegSs,
         pCxt->SegEs,pCxt->SegFs,pCxt->SegGs);
 #elif _M_X64
-    _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Registers (%08p):\r\n\
+    int len = _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Registers (%08p):\r\n\
 RAX=%p  RBX=%p  RCX=%p  RDX=%p  RSI=%p\r\n\
 RDI=%p  R8 =%p  R9 =%p  R10=%p  R11=%p\r\n\
 R12=%p  R13=%p  R14=%p  R15=%p  RIP=%p\r\n\
@@ -1071,7 +1071,7 @@ CS=%04X  DS=%04X  SS=%04X  ES=%04X   FS=%04X  GS=%04X\r\n\r\n", thread,
 #else
 #error "Platform not supported!"
 #endif
-    OnOutput(outBuffer);
+    OnOutput(outBuffer, len);
 }
 
 HMODULE StackWalker::DBGDLL() const

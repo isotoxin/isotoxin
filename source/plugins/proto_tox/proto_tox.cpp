@@ -3,7 +3,17 @@
 #pragma warning(disable : 4324) // 'crypto_generichash_blake2b_state' : structure was padded due to __declspec(align())
 #include "sodium.h"
 #pragma warning(pop)
-//#include "toxcore/toxcore/tox_old.h"
+
+// strange compile bug workaround: error C2365: 'TOX_GROUPCHAT_TYPE_TEXT' : redefinition; previous definition was 'enumerator'
+
+#define TOX_GROUPCHAT_TYPE_TEXT ISOTOXIN_GROUPCHAT_TYPE_TEXT
+#define TOX_GROUPCHAT_TYPE_AV ISOTOXIN_GROUPCHAT_TYPE_AV
+#define TOX_CHAT_CHANGE_PEER_ADD ISOTOXIN_CHAT_CHANGE_PEER_ADD
+#define TOX_CHAT_CHANGE_PEER_DEL ISOTOXIN_CHAT_CHANGE_PEER_DEL
+#define TOX_CHAT_CHANGE_PEER_NAME ISOTOXIN_CHAT_CHANGE_PEER_NAME
+#define TOX_CHAT_CHANGE ISOTOXIN_CHAT_CHANGE
+
+#include "toxcore/toxcore/tox_old.h"
 
 
 #define CHECKIT() __pragma(message(__LOC__ "check it: " __FUNCTION__))
@@ -37,13 +47,6 @@
 #define SAVE_VERSION 1
 
 #define MAX_CALLS 16
-
-#define SS2(x) #x
-#define SS(x) SS2(x)
-#define ISFLAG(f,mask) (((f)&(mask))!=0)
-#define SETFLAG(f,mask) (f)|=(mask)
-#define UNSETFLAG(f,mask) (f)&=~(mask)
-#define SETUPFLAG(f,mask,val) if(val) {SETFLAG(f,mask);} else {UNSETFLAG(f,mask);}
 
 #define AVATAR_MAX_DATA_SIZE (1024 * 512) // 0.5 mb should be enough
 

@@ -315,19 +315,9 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
             b_call.tooltip(TOOLTIP(TTT("Абонент не в сети",143)));
         }
 
-        gui_button_c &b_file = MAKE_CHILD<gui_button_c>(getrid());
-        b_file.set_face_getter(BUTTON_FACE_PRELOADED(fileb));
-        b_file.tooltip(TOOLTIP(TTT("Отправить файл",187)));
-
-        b_file.set_handler(DELEGATE(this, send_file), nullptr);
-        minsz = b_file.get_min_size();
-        b_file.leech(TSNEW(leech_at_left_s, &b_call, 2));
-        MODIFY(b_file).visible(true);
-        if (0 == (features & PF_SEND_FILE))
-        {
-            b_file.disable();
-            b_file.tooltip(TOOLTIP(TTT("Передача файлов не поддерживается",188)));
-        }
+        DEFERRED_EXECUTION_BLOCK_BEGIN(0)
+            gmsg<ISOGM_UPDATE_BUTTONS>().send();
+        DEFERRED_EXECUTION_BLOCK_END(0)
 
     }
 
@@ -366,13 +356,6 @@ void gui_contact_item_c::created()
 
     if (CIR_CONVERSATION_HEAD == role)
     {
-        //gui_button_c &b_editname = MAKE_CHILD<gui_button_c>(getrid());
-        //b_editname.set_face(CONSTASTR("edit"));
-        //b_editname.tooltip(TOOLTIP(TTT("Копировть ID в буфер обмена")));
-
-        //b_editname.set_handler(x::copy_handler, nullptr);
-        //b_editname.leech(TSNEW(leech_dock_right_center_s, 40, 40, 5, -5, 0, 1));
-        //MODIFY(b_editname).visible(true);
     }
 }
 
@@ -399,29 +382,6 @@ bool gui_contact_item_c::audio_call(RID btn, GUIPARAM)
         }
 
     }
-    return true;
-}
-
-bool gui_contact_item_c::send_file(RID, GUIPARAM)
-{
-    ts::wstrings_c files;
-    ts::wstr_c fromdir = prf().last_filedir();
-    if (fromdir.is_empty())
-        fromdir = ts::fn_get_path(ts::get_exe_full_name());
-    ts::wstr_c title(TTT("Отправить файлы", 180));
-    ++sysmodal;
-    if (ts::get_load_filename_dialog(files, fromdir, CONSTWSTR(""), CONSTWSTR(""), nullptr, title))
-    {
-        --sysmodal;
-        if (files.size())
-            prf().last_filedir(ts::fn_get_path(files.get(0)));
-
-        if (contact_c *c = contact)
-            for (const ts::wstr_c &fn : files)
-                c->send_file(fn);
-    } else
-        --sysmodal;
-
     return true;
 }
 
@@ -723,7 +683,7 @@ void gui_contact_item_c::draw_online_state_text(draw_data_s &dd)
 int gui_contact_item_c::contact_item_rite_margin()
 {
     if (contact && contact->getkey().is_self()) return 5;
-    return g_app->buttons().callb->size.x + g_app->buttons().fileb->size.x + 15;
+    return g_app->buttons().callb->size.x + 15;
 }
 
 /*virtual*/ bool gui_contact_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -1216,23 +1176,43 @@ void gui_contactlist_c::recreate_ctls()
                     ));
                 return true;
             }
+            static bool summon_addgroup(RID, GUIPARAM)
+            {
+                return true;
+            }
         };
+
+        button_desc_s *baddg = gui->theme().get_button(CONSTASTR("addgroup"));
+        int nbuttons = baddg ? 2 : 1;
+
 
         addcbtn = MAKE_CHILD<gui_button_c>(getrid());
         addcbtn->tooltip(TOOLTIP(TTT("Добавить контакт", 64)));
         addcbtn->set_face_getter(BUTTON_FACE(addcontact));
         addcbtn->set_handler(handlers::summon_addcontacts, nullptr);
-        addcbtn->leech(TSNEW(leech_dock_bottom_center_s, baddc->size.x, baddc->size.y, 0, 10));
+        addcbtn->leech(TSNEW(leech_dock_bottom_center_s, baddc->size.x, baddc->size.y, -10, 10, 0, nbuttons));
         MODIFY(*addcbtn).zindex(1.0f).visible(true);
         getengine().child_move_to(0, &addcbtn->getengine());
 
+        if (baddg)
+        {
+            addgbtn = MAKE_CHILD<gui_button_c>(getrid());
+            addgbtn->tooltip(TOOLTIP(TTT("Добавить групповой чат (скоро)",243)));
+            addgbtn->set_face_getter(BUTTON_FACE(addgroup));
+            addgbtn->set_handler(handlers::summon_addgroup, nullptr);
+            addgbtn->leech(TSNEW(leech_dock_bottom_center_s, baddg->size.x, baddg->size.y, -10, 10, 1, 2));
+            MODIFY(*addgbtn).zindex(1.0f).visible(true);
+            getengine().child_move_to(1, &addgbtn->getengine());
+            addgbtn->disable();
+        }
+
         self = MAKE_CHILD<gui_contact_item_c>(getrid(), &contacts().get_self()) << CIR_ME;
         self->leech(TSNEW(leech_dock_top_s, gui->theme().conf().get_int(CONSTASTR("mecontactheight"), 60)));
-        getengine().child_move_to(1, &self->getengine());
+        getengine().child_move_to(2, &self->getengine());
 
         getengine().resort_children();
 
-        skipctl = 2;
+        skipctl = 1 + nbuttons;
         skip_top_pixels = gui->theme().conf().get_int(CONSTASTR("cltop"), 70);
         skip_bottom_pixels = gui->theme().conf().get_int(CONSTASTR("clbottom"), 70);
 

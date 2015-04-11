@@ -119,6 +119,8 @@ public:
     unsigned F_NONEWVERSION : 1;
     unsigned F_UNREADICONFLASH : 1;
     unsigned F_UNREADICON : 1;
+    unsigned F_NEEDFLASH : 1;
+    unsigned F_FLASHIP : 1;
     unsigned F_SETNOTIFYICON : 1; // once
 
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_EXIT);

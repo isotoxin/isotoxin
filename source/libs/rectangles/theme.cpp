@@ -372,16 +372,46 @@ bool theme_c::load( const ts::wsptr &name )
         for (auto it = btns->begin(); it; ++it)
         {
             shared_ptr<button_desc_s> &bd = buttons[it.name()];
+
+            str_c par= it->as_string();
+            while (!par.is_empty())
+            {
+                const abp_c *parent = btns->get(par);
+                par.clear();
+                if (parent)
+                {
+                    it->merge(*parent, abp_c::SKIP_EXIST);
+                    par = parent->as_string();
+                }
+            }
+
             ts::str_c src = it->get_string(CONSTASTR("src"));
             if (src.is_empty())
             {
-                bd = button_desc_s::build( make_dummy<drawable_bitmap_c>(true) );
+                ts::abp_c *gen = it->get(CONSTASTR("gen"));
+                if (gen)
+                {
+                    generated_button_data_s *bgenstuff = generated_button_data_s::generate(gen);
+                    if (bgenstuff)
+                    {
+                        bd = button_desc_s::build(bgenstuff->src);
+                        bgenstuff->setup(*bd);
+
+                    } else
+                        gen = nullptr;
+                }
+
+                if (!gen)
+                {
+                    bd = button_desc_s::build(make_dummy<drawable_bitmap_c>(true));
+                    bd->load_params(this, it);
+                }
             } else
             {
                 const drawable_bitmap_c &dbmp = loadimage(to_wstr(src));
                 bd = button_desc_s::build(dbmp);
+                bd->load_params(this, it);
             }
-            bd->load_params(this, it);
         }
     }
 

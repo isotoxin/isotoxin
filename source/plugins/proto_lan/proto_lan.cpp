@@ -16,9 +16,6 @@
 
 #include "appver.inl"
 
-#define SS2(x) #x
-#define SS(x) SS2(x)
-
 void __stdcall get_info(proto_info_s *info)
 {
     if (info->protocol_name) strncpy_s( info->protocol_name, info->protocol_name_buflen, "lan", _TRUNCATE );

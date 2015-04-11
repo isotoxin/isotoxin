@@ -1035,6 +1035,21 @@ public:
     INLINE uint8 BLUE(TSCOLOR c) { return as_byte(c); }
     INLINE uint8 ALPHA(TSCOLOR c) { return as_byte(c>>24); }
 
+    INLINE TSCOLOR GRAYSCALE(TSCOLOR c)
+    {
+        auint oi = lround(float(BLUE(c)) * 0.114f + float(GREEN(c)) * 0.587f + float(RED(c)) * 0.299);
+        return CLAMP<uint8>(oi) | (CLAMP<uint8>(oi) << 8) | (CLAMP<uint8>(oi) << 16) | (ALPHA(c) << 24);
+    }
+
+    INLINE TSCOLOR PREMULTIPLY(TSCOLOR c, float a)
+    {
+        auint oiB = lround(float(BLUE(c)) * a);
+        auint oiG = lround(float(GREEN(c)) * a);
+        auint oiR = lround(float(RED(c)) * a);
+
+        return CLAMP<uint8>(oiB) | (CLAMP<uint8>(oiG) << 8) | (CLAMP<uint8>(oiR) << 16) | (ALPHA(c) << 24);
+    }
+
     INLINE TSCOLOR PREMULTIPLY(TSCOLOR c)
     {
         double a = ((double)ALPHA(c) * (1.0 / 255.0));
@@ -1057,6 +1072,40 @@ public:
         auint oiA = lround(a * 255.0);
 
         return CLAMP<uint8>(oiB) | (CLAMP<uint8>(oiG) << 8) | (CLAMP<uint8>(oiR) << 16) | (oiA << 24);
+    }
+
+    INLINE TSCOLOR ALPHABLEND( TSCOLOR target, TSCOLOR source, int constant_alpha = 255 ) // photoshop normal color mixing
+    {
+        uint8 oA = ALPHA(target);
+
+        if (oA == 0)
+        {
+            auint a = lround(double(constant_alpha * ALPHA(source)) * (1.0 / 255.0));
+            return (0x00FFFFFF & source) | (CLAMP<uint8>(a) << 24);
+        }
+
+        uint8 oR = RED(target);
+        uint8 oG = GREEN(target);
+        uint8 oB = BLUE(target);
+
+        uint8 R = RED(source);
+        uint8 G = GREEN(source);
+        uint8 B = BLUE(source);
+
+
+        float A = float(double(constant_alpha * ALPHA(source)) * (1.0 / (255.0 * 255.0)));
+        float nA = 1.0f - A;
+
+        auint oiA = lround(255.0f * A + float(oA) * nA);
+
+        float k = 0;
+        if (oiA) k = 1.0f - (A * 255.0f / (float)oiA);
+
+        auint oiB = lround(float(B) * A + float(oB) * k);
+        auint oiG = lround(float(G) * A + float(oG) * k);
+        auint oiR = lround(float(R) * A + float(oR) * k);
+
+        return ts::ARGB(oiR, oiG, oiB, oiA);
     }
 
     template<typename T> const char *shorttypename();

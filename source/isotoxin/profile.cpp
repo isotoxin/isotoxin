@@ -670,7 +670,7 @@ template<typename T, profile_table_e tabi> void tableview_t<T, tabi>::read( ts::
 ts::wstr_c& profile_c::path_by_name(ts::wstr_c &profname)
 {
     profname.append(CONSTWSTR(".profile"));
-    profname = ts::fn_change_name_ext<ts::wchar>(cfg().get_path(), profname);
+    profname = ts::fn_change_name_ext(cfg().get_path(), profname);
     return profname;
 }
 

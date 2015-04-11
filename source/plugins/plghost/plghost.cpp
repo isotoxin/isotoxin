@@ -56,7 +56,7 @@ struct protolib_s
                 protolib = nullptr;
                 return CR_FUNCTION_NOT_FOUND;
             }
-        
+       
             return CR_OK;
         }
         return CR_MODULE_NOT_FOUND;
@@ -428,7 +428,9 @@ int CALLBACK WinMain(
     )
 {
 #if defined _DEBUG || defined _CRASH_HANDLER
+#include "appver.inl"
     exception_operator_c::set_unhandled_exception_filter();
+    exception_operator_c::dump_filename = fn_change_name_ext(get_exe_full_name(), wstr_c(CONSTWSTR("plghost")).append_char('.').append(SS(APPVERD)).as_sptr(), CONSTWSTR("dmp"));
 #endif
 
     UNSTABLE_CODE_PROLOG
@@ -543,6 +545,12 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                     pi.description_buflen = 1023;
 
                     rst = protolib.load(path, pi);
+#if defined _DEBUG || defined _CRASH_HANDLER
+                    if (CR_OK == rst)
+                    {
+                        exception_operator_c::dump_filename.replace_all(CONSTWSTR(".dmp"), wstr_c(CONSTWSTR(".")).append(proto).append(CONSTWSTR(".dmp")));
+                    }
+#endif
 
                     FindClose(fh);
                     desc.set_length();

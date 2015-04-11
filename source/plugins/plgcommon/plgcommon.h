@@ -110,7 +110,26 @@ template<> inline wsptr _to_char_or_not_to_char<wchar_t>(const char *, const wch
 #undef MAKESTRTYPE
 #undef STRTYPE
 
+#define SS2(x) #x
+#define SS(x) SS2(x)
+
+#define ISFLAG(f,mask) (((f)&(mask))!=0)
+#define SETFLAG(f,mask) (f)|=(mask)
+#define UNSETFLAG(f,mask) (f)&=~(mask)
+#define SETUPFLAG(f,mask,val) if(val) {SETFLAG(f,mask);} else {UNSETFLAG(f,mask);}
+
+
 #include "proto_interface.h"
+
+wstr_c get_exe_full_name();
+
+inline wstr_c fn_change_name_ext(const wstr_c &full, const wsptr &name, const wsptr &ext)
+{
+    int i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
+    return wstr_c(wsptr(full.cstr(), i)).append(name).append_char('.').append(ext);
+}
+
+
 
 
 template <class T> class shared_ptr

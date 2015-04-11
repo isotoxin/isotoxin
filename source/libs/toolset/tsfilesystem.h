@@ -109,8 +109,19 @@ template <class TCHARACTER> bool TSCALL parse_text_file(const wsptr &filename, s
 
 template<typename TCHARACTER> str_t<TCHARACTER>   TSCALL fn_change_name(const str_t<TCHARACTER> &full, const sptr<TCHARACTER> &name);
 template<typename TCHARACTER> str_t<TCHARACTER>   TSCALL fn_change_ext(const str_t<TCHARACTER> &full, const sptr<TCHARACTER> &ext);
-template<typename TCHARACTER> str_t<TCHARACTER>   TSCALL fn_change_name_ext(const str_t<TCHARACTER> &full, const sptr<TCHARACTER> &name, const sptr<TCHARACTER> &ext);
-template<typename TCHARACTER> str_t<TCHARACTER>   TSCALL fn_change_name_ext(const str_t<TCHARACTER> &full, const sptr<TCHARACTER> &nameext);
+
+inline wstr_c fn_change_name_ext(const wstr_c &full, const wsptr &name, const wsptr &ext)
+{
+    int i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
+    return wstr_c(wsptr(full.cstr(), i)).append(name).append_char('.').append(ext);
+}
+
+inline wstr_c fn_change_name_ext(const wstr_c &full, const wsptr &nameext)
+{
+    int i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
+    return wstr_c(wsptr(full.cstr(), i)).append(nameext);
+}
+
 
 template<class TPred, class S_CORE> bool enum_files(const str_t<wchar, S_CORE> &base, TPred &pred, const str_t<wchar, S_CORE> &path = str_t<wchar, S_CORE>(), const wchar * wildcard = L"*.*")
 {

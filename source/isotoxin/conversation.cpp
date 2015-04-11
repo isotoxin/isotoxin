@@ -241,11 +241,11 @@ void gui_notice_c::setup(const ts::wstr_c &itext, const ts::str_c &pubid)
             ts::ivec2 sz1(40), sz2(40);
             if (const theme_rect_s * thr = themerect())
             {
-                if (const ts::abp_c *sz = thr->addition.get(CONSTASTR("bcopy")))
-                    sz1 = parsevec2(sz->as_string(), sz1);
+                if (const button_desc_s *bd = gui->theme().get_button(CONSTASTR("copyid")))
+                    sz1 = bd->size;
 
-                if (const ts::abp_c *sz = thr->addition.get(CONSTASTR("bconnect")))
-                    sz2 = parsevec2(sz->as_string(), sz2);
+                if (const button_desc_s *bd = gui->theme().get_button(CONSTASTR("to_online")))
+                    sz2 = bd->size;
             }
 
             struct connect_handler
@@ -2433,6 +2433,12 @@ gui_message_area_c::~gui_message_area_c()
         sz.x += bsz.x;
         if (miny < bsz.y) miny = bsz.y;
     }
+    if (guirect_c * r = file_button)
+    {
+        ts::ivec2 bsz = r->get_min_size();
+        sz.x += bsz.x;
+        if (miny < bsz.y) miny = bsz.y;
+    }
     if ( guirect_c * r = message_editor )
     {
         ts::ivec2 mesz = r->get_min_size();
@@ -2455,6 +2461,7 @@ gui_message_area_c::~gui_message_area_c()
     
     MODIFY(*send_button).visible(true).size(send_button->get_min_size());
 
+    update_buttons();
 
     set_theme_rect(CONSTASTR("entertext"), false);
     defaultthrdraw = DTHRO_BASE;
@@ -2463,15 +2470,79 @@ gui_message_area_c::~gui_message_area_c()
     flags.set( F_INITIALIZED );
 }
 
+bool gui_message_area_c::send_file(RID, GUIPARAM)
+{
+    ts::wstrings_c files;
+    ts::wstr_c fromdir = prf().last_filedir();
+    if (fromdir.is_empty())
+        fromdir = ts::fn_get_path(ts::get_exe_full_name());
+    ts::wstr_c title(TTT("Отправить файлы", 180));
+    ++sysmodal;
+    if (ts::get_load_filename_dialog(files, fromdir, CONSTWSTR(""), CONSTWSTR(""), nullptr, title))
+    {
+        --sysmodal;
+        if (files.size())
+            prf().last_filedir(ts::fn_get_path(files.get(0)));
+
+        if (contact_c *c = message_editor->get_historian())
+            for (const ts::wstr_c &fn : files)
+                c->send_file(fn);
+    }
+    else
+        --sysmodal;
+
+    return true;
+}
+
+
+void gui_message_area_c::update_buttons()
+{
+    if (!file_button)
+    {
+        file_button = MAKE_CHILD<gui_button_c>(getrid());
+        file_button->set_face_getter(BUTTON_FACE_PRELOADED(fileb));
+        file_button->set_handler(DELEGATE(this, send_file), nullptr);
+    }
+
+    int features = 0;
+    int features_online = 0;
+    bool now_disabled = false;
+    if (contact_c * contact = message_editor->get_historian())
+        contact->subiterate([&](contact_c *c) {
+            if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
+            {
+                int f = ap->get_features();
+                features |= f;
+                if (c->get_state() == CS_ONLINE) features_online |= f;
+                if (c->is_av()) now_disabled = true;
+            }
+        });
+
+    MODIFY(*file_button).visible(true);
+    if (0 == (features & PF_SEND_FILE))
+    {
+        file_button->disable();
+        file_button->tooltip(TOOLTIP(TTT("Передача файлов не поддерживается", 188)));
+    } else
+    {
+        file_button->enable();
+        file_button->tooltip(TOOLTIP(TTT("Отправить файл", 187)));
+    }
+
+}
+
 void gui_message_area_c::children_repos()
 {
     if (!flags.is( F_INITIALIZED )) return;
     if (!send_button) return;
     if (!message_editor) return;
+    if (!send_button) return;
     ts::irect clar = get_client_area();
     ts::ivec2 bsz = send_button->getprops().size();
+    ts::ivec2 sfsz = file_button->get_min_size();
+    MODIFY(*file_button).pos( clar.lt.x, clar.lt.y + (clar.height()-sfsz.y)/2 ).size(sfsz);
     MODIFY(*send_button).pos( clar.rb.x - bsz.x, clar.lt.y );
-    MODIFY(*message_editor).pos(clar.lt).size( clar.width() - bsz.x, clar.height() );
+    MODIFY(*message_editor).pos(clar.lt.x + sfsz.x, clar.lt.y).size( clar.width() - bsz.x - sfsz.x, clar.height() );
 }
 
 
@@ -2547,6 +2618,13 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_CONTACT_V> &c)
 
     return 0;
 }
+
+ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_BUTTONS> &c)
+{
+    messagearea->update_buttons();
+    return 0;
+}
+
 
 /*virtual*/ void gui_conversation_c::datahandler(const void *data, int size)
 {

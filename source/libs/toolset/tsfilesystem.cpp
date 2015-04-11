@@ -617,22 +617,6 @@ namespace ts
 	template str_t<wchar>   TSCALL fn_change_ext<wchar>(const str_t<wchar> &full, const sptr<wchar> &ext);
 
 
-	template<typename TCHARACTER> str_t<TCHARACTER> TSCALL fn_change_name_ext(const str_t<TCHARACTER> &full, const sptr<TCHARACTER> &name, const sptr<TCHARACTER> &ext)
-	{
-		int i = full.find_last_pos_of(CONSTSTR(TCHARACTER, "/\\")) + 1;
-		return str_t<TCHARACTER>(sptr<TCHARACTER>(full.cstr(), i)).append(name).append_char('.').append(ext);
-	}
-	template str_t<char> TSCALL fn_change_name_ext(const str_t<char> &full, const sptr<char> &name, const sptr<char> &ext);
-	template str_t<wchar> TSCALL fn_change_name_ext(const str_t<wchar> &full, const sptr<wchar> &name, const sptr<wchar> &ext);
-
-	template<typename TCHARACTER> str_t<TCHARACTER> TSCALL fn_change_name_ext(const str_t<TCHARACTER> &full, const sptr<TCHARACTER> &nameext)
-	{
-		int i = full.find_last_pos_of(CONSTSTR(TCHARACTER, "/\\")) + 1;
-		return str_t<TCHARACTER>(sptr<TCHARACTER>(full.cstr(), i)).append(nameext);
-	}
-	template str_t<char> TSCALL fn_change_name_ext(const str_t<char> &full, const asptr &nameext);
-	template str_t<wchar> TSCALL fn_change_name_ext(const str_t<wchar> &full, const wsptr &nameext);
-
     template<typename TCHARACTER> bool TSCALL fn_mask_match( const sptr<TCHARACTER> &fn, const sptr<TCHARACTER> &mask )
     {
         int index = 0;

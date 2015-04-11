@@ -20,7 +20,7 @@ private:
 
 protected:
 	virtual LONG TraceFinal(EXCEPTION_POINTERS* pExp);
-	void OnOutput(LPCSTR szText)const;
+	void OnOutput(LPCSTR szText, int len)const;
 
 public:
 	static LONG WINAPI exception_filter(EXCEPTION_POINTERS* pExp);
@@ -36,6 +36,7 @@ public:
     {
         ::SetUnhandledExceptionFilter(&exception_filter);
     }
+    static swstr_t<MAX_PATH> dump_filename;
 };
 
 #define EXCEPTIONFILTER() exception_operator_c::exception_filter(GetExceptionInformation())

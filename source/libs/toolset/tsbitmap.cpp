@@ -1501,11 +1501,45 @@ template<typename CORE> void bitmap_t<CORE>::flip_y(const ivec2 & pdes,const ive
 
 }
 
+template<typename CORE> void bitmap_t<CORE>::alpha_blend( const ivec2 &p, const bmpcore_exbody_s & img )
+{
+    if ( info().bytepp() != 4 )
+        alpha_blend(p,img,extbody());
+    else
+    {
+        // do photoshop normal mode mixing
+        before_modify();
+
+        const uint8 * s = img();
+
+        ts::ivec2 px = p;
+        ts::ivec2 isz = img.info().sz;
+
+        if (px.x < 0) { s -= px.x * sizeof(TSCOLOR); isz.x += px.x; px.x = 0; };
+        if (px.y < 0) { s -= px.y * img.info().pitch; isz.y += px.y; px.y = 0; };
+
+        uint8 * t = body() + info().bytepp() * px.x + info().pitch * px.y;
+        int srcwidth = tmin( isz.x, info().sz.x - px.x );
+        int srcheight = tmin( isz.y, info().sz.y - px.y );
+
+        for( int y=0; y<srcheight; ++y, t += info().pitch, s += img.info().pitch )
+        {
+            TSCOLOR *tgt = (TSCOLOR *)t;
+            const TSCOLOR *src = (const TSCOLOR *)s;
+            for(int x = 0; x<srcwidth; ++x, ++tgt, ++src)
+                *tgt = ALPHABLEND( *tgt, *src );
+        }
+
+    }
+}
+
 template<typename CORE> void bitmap_t<CORE>::alpha_blend( const ivec2 &p, const bmpcore_exbody_s & img, const bmpcore_exbody_s & base )
 {
     ASSERT( img.info().bytepp() == 4 );
     if (info().sz != base.info().sz)
         create_RGBA( base.info().sz );
+    else
+        before_modify();
 
     irect baserect( 0, base.info().sz - p );
     baserect.intersect( irect( 0, img.info().sz ) );
