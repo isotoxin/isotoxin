@@ -107,7 +107,7 @@ public:
     timerprocessor_c() {}
     ~timerprocessor_c() {}
 
-    bool    takt(double dt); // return true if empty
+    float   takt(double dt); // return next time event
     void    add(timer_subscriber_c *t, double ttl, void * par, bool delete_same = true);
     void    del(timer_subscriber_c *t, void * par);
     void    del(timer_subscriber_c *t);

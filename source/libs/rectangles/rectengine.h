@@ -262,17 +262,18 @@ class rectengine_root_c : public rectengine_c
 {
     DUMMY(rectengine_root_c);
 
-    friend struct drawchecker;
+    friend struct drawcollector;
 	HWND hwnd;
 	HDC dc;
     ts::irect redraw_rect;
     void *borderdata = nullptr;
 	ts::drawable_bitmap_c backbuffer;
     ts::array_inplace_t<draw_data_s, 4> drawdata;
+
     int drawtag = 0;
     ts::flags32_s flags;
     static const ts::flags32_s::BITS F_DIP = SETBIT(0);
-    static const ts::flags32_s::BITS F_REDRAW_CHECKER = SETBIT(1);
+    static const ts::flags32_s::BITS F_REDRAW_COLLECTOR = SETBIT(1);
     static const ts::flags32_s::BITS F_NOTIFY_ICON = SETBIT(2);
     static const ts::flags32_s::BITS F_SYSTEM = SETBIT(3);
 
@@ -295,7 +296,7 @@ class rectengine_root_c : public rectengine_c
     //sqhandler_i
 	/*virtual*/ bool sq_evt( system_query_e qp, RID rid, evt_data_s &data ) override;
 
-    static rectengine_root_c *redraw_checker(rectengine_root_c * root) { if (!root || root->flags.is(F_REDRAW_CHECKER)) return nullptr; root->flags.set(F_REDRAW_CHECKER); return root; }
+    static rectengine_root_c *redraw_collector(rectengine_root_c * root) { if (!root || root->flags.is(F_REDRAW_COLLECTOR)) return nullptr; root->flags.set(F_REDRAW_COLLECTOR); return root; }
     void redraw_now();
     bool redraw_required() const { return drawtag != drawntag; }
 
@@ -379,28 +380,28 @@ INLINE ts::ivec2 guirect_c::root_to_local(const ts::ivec2 &rootpt) const
     return to_local(m_root->getrect().to_screen(rootpt));
 }
 
-struct drawchecker
+struct drawcollector
 {
-    drawchecker() : engine(nullptr) {}
-    explicit drawchecker(rectengine_root_c *root) :engine(rectengine_root_c::redraw_checker(root)) {}
-    ~drawchecker()
+    drawcollector() : engine(nullptr) {}
+    explicit drawcollector(rectengine_root_c *root) :engine(rectengine_root_c::redraw_collector(root)) {}
+    ~drawcollector()
     {
         if (engine)
         {
             if (engine->redraw_required())
                 engine->redraw_now();
-            engine->flags.clear(rectengine_root_c::F_REDRAW_CHECKER);
+            engine->flags.clear(rectengine_root_c::F_REDRAW_COLLECTOR);
         }
     }
-    drawchecker(drawchecker&&odch) :engine(odch.engine) { odch.engine = nullptr; }
-    drawchecker &operator=(rectengine_root_c *root)
+    drawcollector(drawcollector&&odch) :engine(odch.engine) { odch.engine = nullptr; }
+    drawcollector &operator=(rectengine_root_c *root)
     {
         ASSERT(engine == nullptr);
-        engine = rectengine_root_c::redraw_checker(root);
+        engine = rectengine_root_c::redraw_collector(root);
         return *this;
     }
-    drawchecker &operator=(const drawchecker&) UNUSED;
-    drawchecker(const drawchecker &) UNUSED;
+    drawcollector &operator=(const drawcollector&) UNUSED;
+    drawcollector(const drawcollector &) UNUSED;
 private:
     ts::safe_ptr<rectengine_root_c> engine;
 };

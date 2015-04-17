@@ -338,6 +338,15 @@ void contact_c::make_time_unique(time_t &t)
             break;
 }
 
+int contact_c::calc_history_after(time_t t)
+{
+    int cnt = 0;
+    for( const post_s &p : history )
+        if (p.time > t)
+            ++cnt;
+    return cnt;
+}
+
 void contact_c::load_history(int n_last_items)
 {
     ASSERT( get_historian() == this );
@@ -408,8 +417,10 @@ void contact_c::send_file(const ts::wstr_c &fn)
         active_protocol_c *ap = prf().ap(c->getkey().protoid);
         if (ap && 0 != (PF_SEND_FILE & ap->get_features()))
         {
-            if (c_file_to == nullptr || cdef == c)
-                c_file_to = cdef;
+            if (c_file_to == nullptr || (cdef == c && c_file_to->get_state() != CS_ONLINE))
+                c_file_to = c;
+            if (c->get_state() == CS_ONLINE && c_file_to != c && c_file_to->get_state() != CS_ONLINE)
+                c_file_to = c;
         }
     });
 
@@ -427,7 +438,7 @@ bool contact_c::recalc_unread()
 {
     if (gui_contact_item_c *gi = gui_item)
     {
-        int unread = prf().calc_history_after(getkey(), readtime);
+        int unread = keep_history() ? prf().calc_history_after(getkey(), readtime) : calc_history_after(readtime);
         if (unread > 99) unread = 99;
         if (unread != gi->n_unread)
         {
@@ -494,7 +505,7 @@ void contact_c::av( bool f )
             }
         }
         
-    } else if (CHECK(getmeta()))
+    } else if (getmeta())
     {
         bool wasav = opts.unmasked().is(F_AV_INPROGRESS);
         opts.unmasked().init(F_AV_INPROGRESS, f);
@@ -523,7 +534,7 @@ bool contact_c::calltone(bool f, bool call_accepted)
 
             return wasct && !f;
         }
-    } else if (CHECK(getmeta()))
+    } else if (getmeta())
     {
         opts.unmasked().init(F_CALLTONE, f);
         if ( getmeta()->calltone(f) )
@@ -813,6 +824,7 @@ bool contacts_c::present_protoid(int id) const
 
 int contacts_c::find_free_meta_id() const
 {
+    prf().get_table_contacts().cleanup();
     int id=1;
     for(; present( contact_key_s(id) ) || !prf().isfreecontact(contact_key_s(id))  ;++id) ;
     return id;

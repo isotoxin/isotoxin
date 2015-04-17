@@ -3,6 +3,7 @@
 #include <windowsx.h>
 #include "system.h"
 
+#define WM_LOOPER_TICK (65534)
 #define WM_RESTART (65535)
 
 //
@@ -79,7 +80,7 @@ DWORD system_event_receiver_c::notify_system_receivers( system_event_e ev, const
     return bits;
 }
 
-static HHOOK  g_hKeyboardHook = NULL;
+//static HHOOK  g_hKeyboardHook = nullptr;
 system_conf_s g_sysconf;
 
 static LRESULT CALLBACK app_wndproc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -301,12 +302,12 @@ LRESULT CALLBACK sys_def_main_window_proc(HWND hWnd, UINT message, WPARAM wParam
 }
 
 
-static ATOM app_MyRegisterClass()
+static ATOM register_window_class()
 {
     // only once per application
     static bool bRegistred = false;
     if ( bRegistred )
-        return NULL;
+        return 0;
     bRegistred = true;
 
     // register class
@@ -318,31 +319,24 @@ static ATOM app_MyRegisterClass()
     wcex.cbClsExtra		= 0;
     wcex.cbWndExtra		= 0;
     wcex.hInstance		= g_sysconf.instance;
-    wcex.hIcon			= LoadIcon(NULL, IDI_APPLICATION);
-    wcex.hCursor		= NULL;//LoadCursor(NULL, IDC_ARROW);
+    wcex.hIcon			= LoadIcon(nullptr, IDI_APPLICATION);
+    wcex.hCursor		= nullptr;//LoadCursor(nullptr, IDC_ARROW);
     wcex.hbrBackground	= (HBRUSH) GetStockObject(BLACK_BRUSH);
-    wcex.lpszMenuName	= NULL; 
+    wcex.lpszMenuName	= nullptr; 
     wcex.lpszClassName	= L"mainwindowclass";
-    wcex.hIconSm		= NULL;
+    wcex.hIconSm		= nullptr;
 
     return RegisterClassExW(&wcex);
 }
 
 
-static BOOL app_InitInstance(void)
+static BOOL system_init()
 {
     RECT rect;
     rect.left	= 0;
     rect.top	= 0;
     rect.right	= 640;
     rect.bottom	= 480;
-
-    //if ( g_hWndParent != NULL )
-    //{
-    //    dwExStyle = 0;
-    //    dwStyle = WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
-    //    ::GetClientRect( g_hWndParent, &rect );
-    //}
 
     // create window
     g_sysconf.mainwindow = CreateWindowExW( // unicode window
@@ -354,256 +348,183 @@ static BOOL app_InitInstance(void)
         0,
         rect.right - rect.left,
         rect.bottom - rect.top,
-        NULL, //g_hWndParent, 
-        NULL, 
+        nullptr, //g_hWndParent, 
+        nullptr, 
         g_sysconf.instance,	// hInstance
-        NULL);
+        nullptr);
 
-    return g_sysconf.mainwindow != NULL;
+    return g_sysconf.mainwindow != nullptr;
 }
 
-
-static void app_MainLoop( void )
+static DWORD WINAPI looper(void *)
 {
-    // this is the way to insure that main window will get something for it's idle.
-    // each 32 milliseconds, i.e. 30 fps :))
-    //const int TIMER = 1;
-    //const int DELAY_MS = 32;
-
-    //::SetTimer ( g_sysconf.mainwindow, TIMER, DELAY_MS, NULL );
-
-    int iCurrentArraySize = 0;
-    int iAllocatedArraySize = 128;
-    MSG * mMessagesArray = new MSG[128];
-
-    g_sysconf.is_app_running = true;
-    PeekMessageW(mMessagesArray, NULL, 0U, 0U, PM_NOREMOVE);
-    while (mMessagesArray->message != WM_QUIT && !g_sysconf.is_app_need_quit)
+    g_sysconf.looper = true;
+    while(g_sysconf.is_app_running && !g_sysconf.is_app_need_quit)
     {
-        // use PeekMessage() if the app is active, so we can use idle time to
-        // render the scene. 
         if ( g_sysconf.is_active || g_sysconf.is_loop_in_background )
+            PostThreadMessageW( g_sysconf.mainthread, WM_LOOPER_TICK, 0, 0 );
+        if (g_sysconf.sleep >= 0) Sleep(g_sysconf.sleep);
+    }
+    g_sysconf.looper = false;
+    return 0;
+}
+
+static void system_loop()
+{
+    g_sysconf.mainthread = GetCurrentThreadId();
+    g_sysconf.is_app_running = true;
+
+    if (!g_sysconf.looper)
+        CloseHandle(CreateThread(nullptr, 0, looper, nullptr, 0, nullptr));
+
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0U, 0U) && !g_sysconf.is_app_need_quit)
+    {
+        bool downkey = false;
+        bool dispatch = true;
+
+        int xmsg = msg.message;
+        switch( xmsg )
         {
-            iCurrentArraySize = 0;
+            case WM_LOOPER_TICK:
+                if (g_sysconf.mainwindow && !g_sysconf.is_in_render)
+                    system_event_receiver_c::notify_system_receivers(g_sysconf.is_active ? SEV_LOOP : SEV_IDLE, g_par_def);
+                dispatch = false;
+                break;
+            //case WM_NCMOUSEMOVE: xmsg = WM_MOUSEMOVE; goto do_key;
+            //case WM_NCLBUTTONDOWN: xmsg = WM_LBUTTONDOWN; goto do_key;
+            //case WM_NCLBUTTONUP: xmsg = WM_LBUTTONUP; goto do_key;
+            case WM_NCMBUTTONDOWN: xmsg = WM_MBUTTONDOWN; goto do_key;
+            case WM_NCMBUTTONUP: xmsg = WM_MBUTTONUP; goto do_key;
+            //case WM_NCRBUTTONDOWN: xmsg = WM_RBUTTONDOWN; goto do_key;
+            //case WM_NCRBUTTONUP: xmsg = WM_RBUTTONUP; goto do_key;
+            case WM_NCXBUTTONUP: xmsg = WM_XBUTTONUP; goto do_key;
+            case WM_NCXBUTTONDOWN: xmsg = WM_XBUTTONDOWN;
 
-            while ( PeekMessageW(mMessagesArray + iCurrentArraySize, NULL, 0U, 0U, PM_REMOVE) )
-            {
-                if ( NULL == g_sysconf.modalwindow || !IsDialogMessage ( g_sysconf.modalwindow, mMessagesArray + iCurrentArraySize ) )
+                // mouse callbacker implementation
+            case WM_MOUSEMOVE:
+            case WM_LBUTTONDOWN:
+            case WM_LBUTTONUP:
+            case WM_MBUTTONDOWN:
+            case WM_MBUTTONUP:
+            case WM_RBUTTONDOWN:
+            case WM_RBUTTONUP:
+            case WM_XBUTTONUP:
+            case WM_XBUTTONDOWN:
+            case WM_MOUSEWHEEL:
+            case WM_LBUTTONDBLCLK:
+
                 {
-                    if ( mMessagesArray[iCurrentArraySize].message == WM_PAINT )
-                    {
-                        DispatchMessageW(mMessagesArray + iCurrentArraySize);
-                        continue;
-                    }
-                    TranslateMessage(mMessagesArray + iCurrentArraySize);
-                    ++iCurrentArraySize;
-                    if ( iCurrentArraySize >= iAllocatedArraySize )
-                    {
-                        iAllocatedArraySize += 128;
-                        MSG * newMessagesArray = new MSG[iAllocatedArraySize];
-                        memcpy( newMessagesArray, mMessagesArray, sizeof(MSG) * iCurrentArraySize );
-                        delete [] mMessagesArray;
-                        mMessagesArray = newMessagesArray;
-                    }
-                }		
-            }
-
-            if (!g_sysconf.purge_messages)
-            {
-                for (int msg = 0; msg < iCurrentArraySize; ++msg)
-                {
-                    bool downkey = false;
-                    bool dispatch = true;
-
-                    int xmsg = (mMessagesArray + msg)->message;
-                    switch( xmsg )
-                    {
-                    //case WM_NCMOUSEMOVE: xmsg = WM_MOUSEMOVE; goto do_key;
-                    //case WM_NCLBUTTONDOWN: xmsg = WM_LBUTTONDOWN; goto do_key;
-                    //case WM_NCLBUTTONUP: xmsg = WM_LBUTTONUP; goto do_key;
-                    case WM_NCMBUTTONDOWN: xmsg = WM_MBUTTONDOWN; goto do_key;
-                    case WM_NCMBUTTONUP: xmsg = WM_MBUTTONUP; goto do_key;
-                    //case WM_NCRBUTTONDOWN: xmsg = WM_RBUTTONDOWN; goto do_key;
-                    //case WM_NCRBUTTONUP: xmsg = WM_RBUTTONUP; goto do_key;
-                    case WM_NCXBUTTONUP: xmsg = WM_XBUTTONUP; goto do_key;
-                    case WM_NCXBUTTONDOWN: xmsg = WM_XBUTTONDOWN;
-
-                        // mouse callbacker implementation
-                    case WM_MOUSEMOVE:
-                    case WM_LBUTTONDOWN:
-                    case WM_LBUTTONUP:
-                    case WM_MBUTTONDOWN:
-                    case WM_MBUTTONUP:
-                    case WM_RBUTTONDOWN:
-                    case WM_RBUTTONUP:
-                    case WM_XBUTTONUP:
-                    case WM_XBUTTONDOWN:
-                    case WM_MOUSEWHEEL:
-                    case WM_LBUTTONDBLCLK:
-
-                        {
 do_key:
-                            system_event_param_s p;
-                            p.mouse.message = xmsg;
-                            p.mouse.wp = (mMessagesArray + msg)->wParam;
-                            p.mouse.pos.x = GET_X_LPARAM( (mMessagesArray + msg)->lParam );
-                            p.mouse.pos.y = GET_Y_LPARAM( (mMessagesArray + msg)->lParam );
-                            if (xmsg != WM_MOUSEWHEEL) ClientToScreen((mMessagesArray + msg)->hwnd, &p.mouse.pos);
-                            system_event_receiver_c::notify_system_receivers( SEV_MOUSE, p );
-                            break;
+                    system_event_param_s p;
+                    p.mouse.message = xmsg;
+                    p.mouse.wp = msg.wParam;
+                    p.mouse.pos.x = GET_X_LPARAM( msg.lParam );
+                    p.mouse.pos.y = GET_Y_LPARAM( msg.lParam );
+                    if (xmsg != WM_MOUSEWHEEL) ClientToScreen(msg.hwnd, &p.mouse.pos);
+                    system_event_receiver_c::notify_system_receivers( SEV_MOUSE, p );
+                    break;
+                }
+
+            case WM_SYSCHAR:
+            case WM_CHAR:
+                if ((msg.lParam&(1 << 29)) == 0 && GetKeyState(VK_CONTROL) < 0); else
+                {
+                    // wow! unicode! ... hm... WM_WCHAR?
+                    system_event_param_s p; p.c = (wchar_t)msg.wParam;
+                    DWORD res = system_event_receiver_c::notify_system_receivers(SEV_WCHAR, p);
+                    if (0 != (res & SRBIT_ACCEPTED))
+                    {
+                        dispatch = false;
+                    }
+                }
+                break;
+
+            case WM_KEYDOWN:
+            case WM_SYSKEYDOWN:
+                downkey = true;
+            case WM_KEYUP:
+            case WM_SYSKEYUP:
+                TranslateMessage(&msg);
+                {
+                    if ( msg.wParam == VK_SNAPSHOT )
+                    {
+                        // very special button - only release event can be handled
+
+                        system_event_param_s p;
+                        p.kbd.hwnd = msg.hwnd;
+                        p.kbd.scan = lp2key(msg.lParam); // 183
+                        p.kbd.down = true;
+
+                        DWORD res = system_event_receiver_c::notify_system_receivers( SEV_KEYBOARD, p );
+                        if ( 0 != (res & SRBIT_ACCEPTED))
+                        {
+                            dispatch = false;
                         }
 
-                    case WM_SYSCHAR:
-                    case WM_CHAR:
-                        if (((mMessagesArray + msg)->lParam&(1 << 29)) == 0 && GetKeyState(VK_CONTROL) < 0); else
+                        p.kbd.down = false;
+                        res = system_event_receiver_c::notify_system_receivers( SEV_KEYBOARD, p );
+                        if ( 0 != (res & SRBIT_ACCEPTED))
                         {
-                            // внатуре юникодом летит. возможно только для юникодных окон
-                            system_event_param_s p; p.c = (wchar_t)(mMessagesArray + msg)->wParam;
-                            DWORD res = system_event_receiver_c::notify_system_receivers(SEV_WCHAR, p);
-                            if (0 != (res & SRBIT_ACCEPTED))
-                            {
-                                dispatch = false;
-                            }
+                            dispatch = false;
                         }
-                        //return DefWindowProc(hWnd, message, wParam, lParam);
-                        break;
 
-                    case WM_KEYDOWN:
-                    case WM_SYSKEYDOWN:
-                        downkey = true;
-                    case WM_KEYUP:
-                    case WM_SYSKEYUP:
+                    } else if ( msg.wParam == VK_MENU )
+                    {
+                        //dispatch = false;
+                        goto kbddo;
+                    } else if ( downkey && msg.wParam == VK_F4 && (GetAsyncKeyState(VK_MENU) & 0x8000)==0x8000 )
+                    {
+                        PostMessageW( g_sysconf.mainwindow, WM_CLOSE, 0, 0 );
+                        dispatch = false;
+
+#if 0
+                    } else if ((msg.wParam == 0x44 || msg.wParam == 0x4D) && ((GetAsyncKeyState(VK_LWIN) & 0x8000)==0x8000 || (GetAsyncKeyState(VK_RWIN) & 0x8000)==0x8000))
+                    {
+
+                        ShowWindow( g_sysconf.mainwindow, SW_MINIMIZE );
+
+                        IShellDispatch4 *pShell;
+
+                        HRESULT hr = CoCreateInstance(CLSID_Shell, nullptr, CLSCTX_INPROC_SERVER,
+                            IID_IShellDispatch, (void**)&pShell);
+
+                        if(SUCCEEDED(hr))
                         {
-                            //static bool g_bWindowskaKnopa = false;
+                            pShell->ToggleDesktop();
+                            pShell->Release();
+                        }
 
-                            if ( (mMessagesArray + msg)->wParam == VK_SNAPSHOT )
-                            {
-                                // особая кнопка. только отжатие приходит
+                        //CoUninitialize();
+                        dispatch = false;
+#endif
 
-                                system_event_param_s p;
-                                p.kbd.hwnd = (mMessagesArray + msg)->hwnd;
-                                p.kbd.scan = lp2key((mMessagesArray + msg)->lParam); // 183
-                                p.kbd.down = true;
-
-                                DWORD res = system_event_receiver_c::notify_system_receivers( SEV_KEYBOARD, p );
-                                if ( 0 != (res & SRBIT_ACCEPTED))
-                                {
-                                    dispatch = false;
-                                }
-
-                                p.kbd.down = false;
-                                res = system_event_receiver_c::notify_system_receivers( SEV_KEYBOARD, p );
-                                if ( 0 != (res & SRBIT_ACCEPTED))
-                                {
-                                    dispatch = false;
-                                }
-
-                            } else if ( (mMessagesArray + msg)->wParam == VK_MENU )
-                            {
-                                //dispatch = false;
-                                goto kbddo;
-                            } else if ( downkey && (mMessagesArray + msg)->wParam == VK_F4 && (GetAsyncKeyState(VK_MENU) & 0x8000)==0x8000 )
-                            {
-                                PostMessageW( g_sysconf.mainwindow, WM_CLOSE, 0, 0 );
-                                dispatch = false;
-
-                            //} else if ( (mMessagesArray + msg)->wParam == VK_LWIN || (mMessagesArray + msg)->wParam == VK_RWIN )
-                            //{
-                            //    g_bWindowskaKnopa = downkey;
-                            //    goto kbddo;
-                            } else if (((mMessagesArray + msg)->wParam == 0x44 || (mMessagesArray + msg)->wParam == 0x4D) && ((GetAsyncKeyState(VK_LWIN) & 0x8000)==0x8000 || (GetAsyncKeyState(VK_RWIN) & 0x8000)==0x8000))
-                            {
-                                //g_bWindowskaKnopa = false;
-
-                                ShowWindow( g_sysconf.mainwindow, SW_MINIMIZE );
-
-                                //Beep(1500,50);
-                                //Beep(3000,50);
-                                //Beep(4500,50);
-
-                                IShellDispatch4 *pShell;
-
-                                //CoInitialize(NULL);
-
-                                HRESULT hr = CoCreateInstance(CLSID_Shell, NULL, CLSCTX_INPROC_SERVER,
-                                    IID_IShellDispatch, (void**)&pShell);
-
-                                if(SUCCEEDED(hr))
-                                {
-                                    pShell->ToggleDesktop();
-                                    pShell->Release();
-                                }
-
-                                //CoUninitialize();
-                                dispatch = false;
-
-
-                            } else
-                            {
+                    } else
+                    {
 kbddo:
+                        system_event_param_s p;
+                        p.kbd.hwnd = msg.hwnd;
+                        p.kbd.scan = lp2key(msg.lParam);
+                        p.kbd.down = downkey;
 
-                                system_event_param_s p;
-                                p.kbd.hwnd = (mMessagesArray + msg)->hwnd;
-                                p.kbd.scan = lp2key((mMessagesArray + msg)->lParam);
-                                p.kbd.down = downkey;
-
-                                //if (/*!p.kbd.down &&*/ p.kbd.scan == SLK_LSHIFT )
-                                //{
-                                //    Beep(p.kbd.down ? 1000: 5000,50);
-                                //    //    BOK(VK_F9);
-                                //}
-
-                                if ( 0 != (system_event_receiver_c::notify_system_receivers( SEV_KEYBOARD, p ) & SRBIT_ACCEPTED))
-                                {
-                                    dispatch = false;
-                                }
-
-                            }
-                            break;
+                        if ( 0 != (system_event_receiver_c::notify_system_receivers( SEV_KEYBOARD, p ) & SRBIT_ACCEPTED))
+                        {
+                            dispatch = false;
                         }
 
                     }
+                    break;
+                }
 
-                    if (dispatch) DispatchMessageW(mMessagesArray + msg);
-                    if (g_sysconf.purge_messages) break;
-                }
-            }
-
-            if (g_sysconf.purge_messages)
-            {
-                MSG msg;
-                while (PeekMessageW(&msg, NULL, 0U, 0U, PM_REMOVE)) {}
-                iCurrentArraySize = 0;
-                g_sysconf.purge_messages = false;
-            }
-            
-            // g_bAppActive could be changed by loop above, need to test again
-            if ( g_sysconf.mainwindow )
-            {
-                if ( !g_sysconf.is_in_render )
-                {
-                    system_event_receiver_c::notify_system_receivers( g_sysconf.is_active ? SEV_LOOP : SEV_IDLE, g_par_def );
-                }
-            }
-        } else
-        {
-            {
-                if ( GetMessageW( mMessagesArray, NULL, 0U, 0U ) )
-                {
-                    TranslateMessage(mMessagesArray);
-                    DispatchMessageW(mMessagesArray);
-                }
-            }
         }
+
+        if (dispatch) DispatchMessageW(&msg);
     }
 
-    delete [] mMessagesArray;
-
-    //::KillTimer( g_sysconf.mainwindow, TIMER );
     g_sysconf.is_app_running = false;
 }
 
-
+/*
 LRESULT CALLBACK LowLevelKeyboardProc( int nCode, WPARAM wParam, LPARAM lParam )
 {
     if (nCode < 0 || nCode != HC_ACTION )  // do not process message
@@ -630,29 +551,7 @@ LRESULT CALLBACK LowLevelKeyboardProc( int nCode, WPARAM wParam, LPARAM lParam )
     else
         return CallNextHookEx( g_hKeyboardHook, nCode, wParam, lParam );
 }
-
-
-static bool ParseCommandLine( const wchar_t * lpCmdLine ) // true - exit
-{
-    //char const hwnd_key [] = "-hwnd=";
-    //char const media_key [] = "-media=";
-    wchar_t const ver_key [] = L"-ver";
-
-    int const cmd_len = wcslen ( lpCmdLine );
-    for ( int i = 0; i < cmd_len; ++i )
-    {
-        if ( _wcsnicmp ( ver_key, lpCmdLine + i, sizeof ( ver_key ) - 1 ) == 0 )
-        {
-            HANDLE out = GetStdHandle( STD_OUTPUT_HANDLE );
-            DWORD w;
-            if (out) WriteFile( out, g_sysconf.version, strlen(g_sysconf.version), &w, NULL );
-
-            return true;
-        }
-
-    }
-    return false;
-}
+*/
 
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 {
@@ -665,16 +564,10 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 
     // Initialization
 #ifdef _FINAL
-    //g_hKeyboardHook = SetWindowsHookEx( WH_KEYBOARD_LL,  LowLevelKeyboardProc, GetModuleHandle(NULL), 0 );
+    //g_hKeyboardHook = SetWindowsHookEx( WH_KEYBOARD_LL,  LowLevelKeyboardProc, GetModuleHandle(nullptr), 0 );
 #endif
 
     g_sysconf.instance = hInstance;
-
-    if ( ParseCommandLine ( cmdlb ) ) 
-    {
-        system_event_receiver_c::notify_system_receivers( SEV_EXIT, g_par_def );
-        return 0;
-    }
 
     DWORD beforeinit = system_event_receiver_c::notify_system_receivers(SEV_BEFORE_INIT, g_par_def);
     if (0 != (SRBIT_ABORT & beforeinit))
@@ -684,30 +577,21 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
     if (0 != (SRBIT_ACCEPTED & beforeinit))
     {
         // Windows startup
-        app_MyRegisterClass();
-        app_InitInstance();
+        register_window_class();
+        system_init();
 
         // Common controls.
         InitCommonControls();
 
         //HRESULT hr = S_OK;
         //hr = 
-        CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         //Assert (hr == S_OK);
     }
 
     while ( 0 == (SRBIT_ABORT & system_event_receiver_c::notify_system_receivers( SEV_INIT, g_par_def )) )
     {
-
-//#ifndef _FINAL
-//        // show and update ( device will became not reset )
-//        ShowWindow( g_pAppWindow, SW_HIDE ); // otherwise no icon appears
-//        ShowWindow( g_pAppWindow, SW_SHOW );
-//        SetFocus ( g_pAppWindow );
-//#endif
-
-        // UpdateWindow( g_pAppWindow ); <- we don't need it
-        app_MainLoop();
+        system_loop();
 
         if (g_sysconf.is_app_restart)
         {
@@ -727,164 +611,21 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 
     g_sysconf.is_active = false;
     g_sysconf.is_aborting = true;
-    g_sysconf.mainwindow = NULL;
+    g_sysconf.mainwindow = nullptr;
 
     // Cleanup before shutdown
-#ifdef BM_FINAL
-    UnhookWindowsHookEx( g_hKeyboardHook );
+#ifdef _FINAL
+    //UnhookWindowsHookEx( g_hKeyboardHook );
 #endif
 
     system_event_receiver_c::notify_system_receivers( SEV_EXIT, g_par_def );
     return 0;
 }
 
-bool _cdecl sys_dispatch_input( const system_event_param_s & pp )
-{
-    bool downkey = false;
-    bool handled = false;
-    int xmsg = pp.msg.msg;
-    switch( xmsg )
-    {
-    //case WM_NCMOUSEMOVE: xmsg = WM_MOUSEMOVE; goto do_key;
-    //case WM_NCLBUTTONDOWN: xmsg = WM_LBUTTONDOWN; goto do_key;
-    //case WM_NCLBUTTONUP: xmsg = WM_LBUTTONUP; goto do_key;
-    case WM_NCMBUTTONDOWN: xmsg = WM_MBUTTONDOWN; goto do_key;
-    case WM_NCMBUTTONUP: xmsg = WM_MBUTTONUP; goto do_key;
-    //case WM_NCRBUTTONDOWN: xmsg = WM_RBUTTONDOWN; goto do_key;
-    //case WM_NCRBUTTONUP: xmsg = WM_RBUTTONUP; goto do_key;
-    case WM_NCXBUTTONUP: xmsg = WM_XBUTTONUP; goto do_key;
-    case WM_NCXBUTTONDOWN: xmsg = WM_XBUTTONDOWN;
-        // mouse callbacker implementation
-    case WM_MOUSEMOVE:
-    case WM_LBUTTONDOWN:
-    case WM_LBUTTONUP:
-    case WM_MBUTTONDOWN:
-    case WM_MBUTTONUP:
-    case WM_RBUTTONDOWN:
-    case WM_RBUTTONUP:
-    case WM_XBUTTONUP:
-    case WM_XBUTTONDOWN:
-    case WM_MOUSEWHEEL:
-    case WM_LBUTTONDBLCLK:
-        {
-do_key:
-            system_event_param_s p;
-            p.mouse.message = xmsg;
-            p.mouse.wp = pp.msg.wp;
-            p.mouse.pos.x = GET_X_LPARAM( pp.msg.lp );
-            p.mouse.pos.y = GET_Y_LPARAM( pp.msg.lp );
-            if (xmsg != WM_MOUSEWHEEL) ClientToScreen(g_sysconf.mainwindow, &p.mouse.pos);
-            handled = SS_FLAG( system_event_receiver_c::notify_system_receivers( SEV_MOUSE2, p ), SRBIT_ACCEPTED );
-            break;
-        }
-
-    case WM_SYSCHAR:
-    case WM_CHAR:
-        if ((pp.msg.lp&(1 << 29)) == 0 && GetKeyState(VK_CONTROL) < 0); else
-        {
-            // внатуре юникодом летит. возможно только для юникодных окон
-            system_event_param_s p; p.c = (wchar_t)pp.msg.wp;
-            DWORD res = system_event_receiver_c::notify_system_receivers(SEV_WCHAR, p);
-            if (0 != (res & SRBIT_ACCEPTED))
-            {
-                handled = false;
-            }
-        }
-        //return DefWindowProc(hWnd, message, wParam, lParam);
-        break;
-
-    case WM_KEYDOWN:
-    case WM_SYSKEYDOWN:
-        downkey = true;
-    case WM_KEYUP:
-    case WM_SYSKEYUP:
-        {
-            //static bool g_bWindowskaKnopa = false;
-            //static bool g_bAltKnopa = false;
-
-            if ( pp.msg.wp == VK_SNAPSHOT )
-            {
-                // особая кнопка. только отжатие приходит
-
-                system_event_param_s p;
-                p.kbd.hwnd = g_sysconf.mainwindow;
-                p.kbd.scan = lp2key(pp.msg.lp); // 183
-                p.kbd.down = true;
-
-                DWORD res = system_event_receiver_c::notify_system_receivers( SEV_KEYBOARD2, p );
-                if ( 0 != (res & SRBIT_ACCEPTED))
-                {
-                    handled = true;
-                }
-
-                p.kbd.down = false;
-                res = system_event_receiver_c::notify_system_receivers( SEV_KEYBOARD2, p );
-                if ( 0 != (res & SRBIT_ACCEPTED))
-                {
-                    handled = true;
-                }
-
-            } else if ( pp.msg.wp == VK_MENU )
-            {
-                //g_bAltKnopa = downkey;
-                goto kbddo;
-            } else if ( downkey && pp.msg.wp == VK_F4 && (GetAsyncKeyState(VK_MENU) & 0x8000)==0x8000 )
-            {
-                PostMessageW( g_sysconf.mainwindow, WM_CLOSE, 0, 0 );
-                handled = true;
-
-            //} else if ( pp.msg.wp == VK_LWIN || pp.msg.wp == VK_RWIN )
-            //{
-            //    g_bWindowskaKnopa = downkey;
-            //    goto kbddo;
-            } else if ((pp.msg.wp == 0x44 || pp.msg.wp == 0x4D) && ((GetAsyncKeyState(VK_LWIN) & 0x8000)==0x8000 || (GetAsyncKeyState(VK_RWIN) & 0x8000)==0x8000))
-            {
-                //g_bWindowskaKnopa = false;
-
-                ShowWindow( g_sysconf.mainwindow, SW_MINIMIZE );
-
-                //Beep(1500,50);
-                //Beep(3000,50);
-                //Beep(4500,50);
-
-                IShellDispatch4 *pShell;
-
-                //CoInitialize(NULL);
-
-                HRESULT hr = CoCreateInstance(CLSID_Shell, NULL, CLSCTX_INPROC_SERVER,
-                    IID_IShellDispatch, (void**)&pShell);
-
-                if(SUCCEEDED(hr))
-                {
-                    pShell->ToggleDesktop();
-                    pShell->Release();
-                }
-
-                //CoUninitialize();
-                handled = true;
-
-
-            } else
-            {
-kbddo:
-                system_event_param_s p;
-                p.kbd.hwnd = g_sysconf.mainwindow;
-                p.kbd.scan = lp2key(pp.msg.lp);
-                p.kbd.down = downkey;
-                handled |= SS_FLAG( system_event_receiver_c::notify_system_receivers( SEV_KEYBOARD2, p ), SRBIT_ACCEPTED );
-
-            }
-            break;
-        }
-
-    }
-    return handled;
-}
-
 void _cdecl sys_idle()
 {
     MSG m;
-    if (PeekMessageW(&m, NULL, 0U, 0U, PM_REMOVE))
+    if (PeekMessageW(&m, nullptr, 0U, 0U, PM_REMOVE))
     {
         TranslateMessage(&m);
         DispatchMessageW(&m);

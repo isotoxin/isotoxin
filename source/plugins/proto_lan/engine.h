@@ -360,7 +360,6 @@ public:
         int reconnect = 0;
         bool key_sent = false;
         bool data_changed = false;
-        bool need_resync = false;
 
         enum { CALL_OFF, OUT_CALL, IN_CALL, IN_PROGRESS } call_status = CALL_OFF;
         enum { SEARCH, MEET, TRAPPED, INVITE_SEND, INVITE_RECV, REJECTED, ACCEPT, ACCEPT_RESTORE_CONNECT, REJECT, ONLINE, OFFLINE, BACKCONNECT, ROTTEN } state = SEARCH;

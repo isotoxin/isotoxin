@@ -8,6 +8,7 @@ void dotests();
 
 application_c::application_c(const ts::wchar * cmdl)
 {
+    F_NEWVERSION = false;
     F_UNREADICONFLASH = false;
     F_UNREADICON = false;
     F_NEEDFLASH = false;
@@ -365,10 +366,11 @@ static DWORD WINAPI autoupdater(LPVOID)
             }
         };
 
-        menu_c m;
-        m.add(TTT("Выход",117), 0, handlers::m_exit);
-        gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(),0), m, true);
-
+        DEFERRED_EXECUTION_BLOCK_BEGIN(0)
+            menu_c m;
+            m.add(TTT("Выход",117), 0, handlers::m_exit);
+            gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(),0), m, true);
+        DEFERRED_EXECUTION_BLOCK_END(0)
     }
 }
 
@@ -525,12 +527,17 @@ void application_c::summon_main_rect()
     if (!profname.is_empty())
         prf().load(profile_c::path_by_name(profname));
 
-    drawchecker dch;
-    main = MAKE_ROOT<mainrect_c>(dch);
+    drawcollector dcoll;
+    main = MAKE_ROOT<mainrect_c>(dcoll);
     ts::ivec2 sz = cfg().get<ts::ivec2>(CONSTASTR("main_rect_size"), ts::ivec2(800, 600));
+    ts::irect mr( cfg().get<ts::ivec2>(CONSTASTR("main_rect_pos"), ts::wnd_get_center_pos(sz)), sz );
+    mr.rb += mr.lt;
+
+    ts::wnd_fix_rect(mr, sz.x, sz.y);
+
     MODIFY(main)
-        .size(sz)
-        .pos(cfg().get<ts::ivec2>(CONSTASTR("main_rect_pos"), ts::wnd_get_center_pos(sz)))
+        .size(mr.size())
+        .pos(mr.lt)
         .allow_move_resize()
         .show();
 
@@ -864,6 +871,9 @@ bool application_c::load_theme( const ts::wsptr&thn )
 
     font_conv_name = &get_font( CONSTASTR("conv_name") );
     font_conv_text = &get_font( CONSTASTR("conv_text") );
+    contactheight= theme().conf().get_string(CONSTASTR("contactheight")).as_int(55);
+    mecontactheight = theme().conf().get_string(CONSTASTR("mecontactheight")).as_int(60);
+    protowidth = theme().conf().get_string(CONSTASTR("protowidth")).as_int(100);
     return true;
 }
 

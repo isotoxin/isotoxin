@@ -111,6 +111,7 @@ public:
 
     void set_avatar(contact_c *); // self avatar to self contact
     void set_avatar( const ts::blob_c &ava ); // avatar for this protocol
+    void set_ostate(contact_online_state_e _cos);
 
     void save_config(bool wait);
     void stop_and_die(bool wait_worker_end = false);
@@ -140,4 +141,5 @@ public:
     void file_portion(uint64 utag, uint64 offset, const void *data, int sz);
 
     void avatar_data_request(int cid);
+
 };

@@ -111,6 +111,7 @@ enum dthr_options_e
     DTHRO_CAPTION_TEXT  = SETBIT(NUMGEN_NEXT(dthr)),
     DTHRO_VSB           = SETBIT(NUMGEN_NEXT(dthr)),
     DTHRO_HSB           = SETBIT(NUMGEN_NEXT(dthr)),
+    DTHRO_SB_HL         = SETBIT(NUMGEN_NEXT(dthr)),
     DTHRO_LEFT_CENTER   = SETBIT(NUMGEN_NEXT(dthr)),
     DTHRO_BOTTOM        = SETBIT(NUMGEN_NEXT(dthr)),
     DTHRO_RIGHT         = SETBIT(NUMGEN_NEXT(dthr)),
@@ -413,13 +414,13 @@ struct initial_rect_data_s
     RID parent;
     RID after;
 };
-struct drawchecker;
+struct drawcollector;
 // template 1 // see description
 template<typename R> struct MAKE_ROOT : public initial_rect_data_s
 {
     R *me = nullptr;
-    drawchecker &dch;
-    MAKE_ROOT(drawchecker &dch);
+    drawcollector &dcoll;
+    MAKE_ROOT(drawcollector &dcoll);
     operator RID() const { return id; }
     operator R&() { ASSERT(me); return *me; }
     void operator=(const MAKE_ROOT&) UNUSED;
@@ -430,8 +431,8 @@ template<typename R> struct MAKE_ROOT : public initial_rect_data_s
 template<typename R> struct MAKE_ROOT< newrectkitchen::rectwrapper<R> > : public initial_rect_data_s
 {
     R *me = nullptr;
-    drawchecker &dch;
-    MAKE_ROOT(drawchecker &dch):dch(dch) {}
+    drawcollector &dcoll;
+    MAKE_ROOT(drawcollector &dcoll):dcoll(dcoll) {}
     operator RID() const { return id; }
     operator R&() { ASSERT(me); return *me; }
     operator ts::safe_ptr<R>() { ASSERT(me); return ts::safe_ptr<R>(me); }
@@ -961,7 +962,7 @@ class gui_tooltip_c;
 template<> struct MAKE_ROOT<gui_tooltip_c> : public _PROOT(gui_tooltip_c)
 {
     RID owner;
-    MAKE_ROOT(drawchecker &dch, RID owner):_PROOT(gui_tooltip_c)(dch), owner(owner) { init(false); }
+    MAKE_ROOT(drawcollector &dcoll, RID owner):_PROOT(gui_tooltip_c)(dcoll), owner(owner) { init(false); }
 };
 
 class gui_tooltip_c : public gui_label_c
@@ -1133,10 +1134,11 @@ class gui_vscrollgroup_c : public gui_group_c // vertical group with vertical sc
     rectengine_c *scroll_target = nullptr;
 
     static const ts::flags32_s::BITS F_SBVISIBLE = FLAGS_FREEBITSTART << 0;
+    static const ts::flags32_s::BITS F_SBHL = FLAGS_FREEBITSTART << 1;
 protected:
-    static const ts::flags32_s::BITS F_NO_REPOS = FLAGS_FREEBITSTART << 1;
-    static const ts::flags32_s::BITS F_LAST_REPOS_AT_END = FLAGS_FREEBITSTART << 2;
-    static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 3;
+    static const ts::flags32_s::BITS F_NO_REPOS = FLAGS_FREEBITSTART << 2;
+    static const ts::flags32_s::BITS F_LAST_REPOS_AT_END = FLAGS_FREEBITSTART << 3;
+    static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 4;
 
     /*virtual*/ void children_repos() override;
     /*virtual*/ void on_add_child(RID id) override;
@@ -1184,7 +1186,7 @@ template<> struct MAKE_ROOT<gui_popup_menu_c> : public _PROOT(gui_popup_menu_c)
 {
     ts::ivec3 screenpos;
     menu_c menu;
-    MAKE_ROOT(drawchecker &dch, const ts::ivec3& screenpos, const menu_c &menu, bool sys = false) : _PROOT(gui_popup_menu_c)(dch), screenpos(screenpos), menu(menu) { init(sys); }
+    MAKE_ROOT(drawcollector &dcoll, const ts::ivec3& screenpos, const menu_c &menu, bool sys = false) : _PROOT(gui_popup_menu_c)(dcoll), screenpos(screenpos), menu(menu) { init(sys); }
     ~MAKE_ROOT();
 };
 
@@ -1206,7 +1208,7 @@ class gui_popup_menu_c : public gui_vscrollgroup_c
 
     ts::ivec3 showpoint;
 
-    static gui_popup_menu_c & create(drawchecker &dch, const ts::ivec3& screenpos, const menu_c &mnu, bool sys);
+    static gui_popup_menu_c & create(drawcollector &dch, const ts::ivec3& screenpos, const menu_c &mnu, bool sys);
 
 public:
     bool operator()(int, const ts::wsptr& txt);

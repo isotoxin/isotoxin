@@ -178,7 +178,7 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
     basec->subiterate([&](contact_c *cc) {
         if ( cc->get_options().is(contact_c::F_DEFALUT) )
         {
-            cc->get_options().clear(contact_c::F_DEFALUT);
+            cc->options().clear(contact_c::F_DEFALUT);
             prf().dirtycontact(cc->getkey());
         }
     });

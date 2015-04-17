@@ -24,7 +24,8 @@ irect TSCALL parserect(token<char> & tokens, const irect &def, str_c *tail)
     irt * hackptr_end = hackptr + 4;
     for (; tokens && hackptr < hackptr_end; ++tokens, ++hackptr)
         *hackptr = tokens->as_num<irt>(0);
-    if (tokens && tail) *tail = *tokens;
+    if (tokens && tail) 
+        tail->set(*tokens).append(tokens.sep(),tokens.tail());
     return r;
 }
 

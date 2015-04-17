@@ -181,6 +181,11 @@ class gui_c
     GM_RECEIVER(gui_c, GM_ROOT_FOCUS);
     GM_RECEIVER(gui_c, GM_UI_EVENT);
 
+    ts::uint32 handle_char( ts::wchar c );
+    ts::uint32 keyboard(const system_event_param_s & p);
+    ts::uint32 mouse(const system_event_param_s & p);
+    void loop();
+
     ts::safe_ptr<dragndrop_processor_c> dndproc;
 
     class tempbuf_c : public ts::safe_object
@@ -225,6 +230,10 @@ class gui_c
     ts::tbuf_t<RID> m_roots;
     typedef ts::pair_s<ts::Time,RID> free_rid;
 	ts::tbuf_t< free_rid > m_emptyids;
+
+    ts::array_inplace_t<drawcollector, 4> m_dcolls;
+    int m_dcolls_ref = 0;
+
 
     RID get_free_rid();
 
@@ -294,6 +303,23 @@ public:
     const ts::str_c &default_font_name() const { return m_deffont_name; }
 
     void resort_roots();
+
+    void prepare_redraw_collector()
+    {
+        ++m_dcolls_ref;
+        if (m_dcolls_ref == 1)
+        {
+            for (RID r : m_roots)
+                m_dcolls.add() = HOLD(r)().getroot();
+        }
+    }
+    void flush_redraw_collector()
+    {
+        --m_dcolls_ref;
+        ASSERT(m_dcolls_ref >= 0);
+        if (m_dcolls_ref == 0)
+            m_dcolls.clear();
+    }
 
     int get_temp_buf(double ttl, ts::aint sz);
     void *lock_temp_buf(int tag);
@@ -411,6 +437,18 @@ public:
 
 extern gui_c *gui;
 
+struct redraw_collector_s
+{
+    redraw_collector_s()
+    {
+        gui->prepare_redraw_collector();
+    }
+    ~redraw_collector_s()
+    {
+        gui->flush_redraw_collector();
+    }
+};
+
 INLINE ts::uint32 gui_control_c::get_state() const
 {
     ts::uint32 st = 0;
@@ -441,17 +479,17 @@ INLINE const ts::font_desc_c &gui_button_c::get_font() const
 }
 
 
-template<typename R> MAKE_ROOT<R>::MAKE_ROOT(drawchecker &dch):dch(dch)
+template<typename R> MAKE_ROOT<R>::MAKE_ROOT(drawcollector &dcoll):dcoll(dcoll)
 {
     engine = TSNEW(rectengine_root_c, false);
-    dch = (rectengine_root_c *)engine;
+    dcoll = (rectengine_root_c *)engine;
     gui->newrect<newrectkitchen::rectwrapper<R>::type>( *this );
 }
 template<typename R> void MAKE_ROOT< newrectkitchen::rectwrapper<R> >::init( bool sys )
 {
     if (me) return;
     engine = TSNEW(rectengine_root_c, sys);
-    dch = (rectengine_root_c *)engine;
+    dcoll = (rectengine_root_c *)engine;
     gui->newrect<R, MAKE_ROOT<R> >( (MAKE_ROOT<R> &)(*this) );
 }
 

@@ -1335,7 +1335,7 @@ void gui_tooltip_c::create(RID owner)
 #endif
     if (owner.call_is_tooltip()) return;
     if (gmsg<GM_TOOLTIP_PRESENT>(owner).send().is(GMRBIT_ACCEPTED)) return;
-    drawchecker dch;
+    drawcollector dch;
     MAKE_ROOT<gui_tooltip_c> with_par (dch, owner);
 }
 
@@ -2168,7 +2168,7 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
             {
                 evt_data_s ds;
                 ds.draw_thr.sbrect = info.area;
-                sbhelper.draw(thr, root, ds);
+                sbhelper.draw(thr, root, ds, flags.is(F_SBHL));
             }
         }
         break;
@@ -2180,11 +2180,28 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
         children_repos();
         getengine().redraw();
         break;
+    case SQ_MOUSE_OUT:
+        if (flags.is(F_SBHL))
+        {
+            flags.clear(F_SBHL);
+            getengine().redraw();
+        }
+        break;
+    case SQ_MOUSE_MOVE:
+        if (flags.is(F_SBVISIBLE) && !getengine().mtrack(getrid(), MTT_SBMOVE))
+        {
+            bool of = flags.is(F_SBHL);
+            flags.init(F_SBHL, sbhelper.sbrect.inside(to_local(data.mouse.screenpos)));
+            if (flags.is(F_SBHL) != of)
+                getengine().redraw();
+        }
+        break;
     case SQ_MOUSE_LDOWN:
         {
             ts::ivec2 mplocal = to_local(data.mouse.screenpos);
             if (sbhelper.sbrect.inside(mplocal))
             {
+                flags.set(F_SBHL);
                 cri_s info;
                 children_repos_info(info);
                 mousetrack_data_s &opd = getengine().begin_mousetrack(getrid(), MTT_SBMOVE);
@@ -2196,7 +2213,7 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
         }
         break;
     case SQ_MOUSE_LUP:
-        if (getengine().mtrack(getrid(), MTT_SBMOVE)) 
+        if (getengine().mtrack(getrid(), MTT_SBMOVE))
             getengine().end_mousetrack(MTT_SBMOVE);
         break;
     case SQ_MOUSE_MOVE_OP:
@@ -2367,7 +2384,7 @@ bool gui_popup_menu_c::check_focus(RID r, GUIPARAM p)
 
 gui_popup_menu_c & gui_popup_menu_c::show( const ts::ivec3& screenpos, const menu_c &menu, bool sys )
 {
-    drawchecker dch;
+    drawcollector dch;
     gui_popup_menu_c &m = gui_popup_menu_c::create(dch, screenpos, menu, sys);
 
     int dummy = 0;
@@ -2383,7 +2400,7 @@ MAKE_ROOT<gui_popup_menu_c>::~MAKE_ROOT()
     me->getroot()->set_system_focus(true);
 }
 
-gui_popup_menu_c & gui_popup_menu_c::create(drawchecker &dch, const ts::ivec3& screenpos_, const menu_c &mnu, bool sys)
+gui_popup_menu_c & gui_popup_menu_c::create(drawcollector &dch, const ts::ivec3& screenpos_, const menu_c &mnu, bool sys)
 {
     gmsg<GM_KILLPOPUPMENU_LEVEL>( mnu.lv() ).send();
     gmsg<GM_KILL_TOOLTIPS>().send();

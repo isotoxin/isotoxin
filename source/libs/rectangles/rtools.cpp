@@ -90,10 +90,10 @@ int calcsbshift( int pos, int viewsize, int datasize )
     return lround(-float(pos) / sbmove * datamove);
 }
 
-void sbhelper_s::draw( const theme_rect_s *thr, rectengine_c &engine, evt_data_s &dd )
+void sbhelper_s::draw( const theme_rect_s *thr, rectengine_c &engine, evt_data_s &dd, bool hl )
 {
     calcsb(dd.draw_thr.sbpos, dd.draw_thr.sbsize, shift, dd.draw_thr.sbrect().height(), datasize);
-    engine.draw(*thr, DTHRO_VSB, &dd);
+    engine.draw(*thr, hl ? (DTHRO_VSB|DTHRO_SB_HL) : DTHRO_VSB, &dd);
     sbrect = dd.draw_thr.sbrect();
 }
 

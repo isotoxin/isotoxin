@@ -212,9 +212,6 @@ bool _cdecl app_preinit( const wchar_t *cmdl )
     ts::exception_operator_c::dump_filename = ts::fn_change_name_ext(ts::get_exe_full_name(), ts::wstr_c(CONSTWSTR(APPNAME)).append_char('.').append(ts::to_wstr(application_c::appver())).as_sptr(), CONSTWSTR("dmp"));
 #endif
 
-    UNSTABLE_CODE_PROLOG
-
-
 	ts::tsfileop_c::setup<fileop_c>();
 
 	ts::CHARz_copy( g_sysconf.name, CONSTWSTR(APPNAME) .s );
@@ -227,6 +224,5 @@ bool _cdecl app_preinit( const wchar_t *cmdl )
 
 	TSNEW(application_c, cmdl); // not a memory leak! see SEV_EXIT handler
 
-    UNSTABLE_CODE_EPILOG
 	return true;
 }

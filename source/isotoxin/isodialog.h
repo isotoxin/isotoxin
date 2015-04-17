@@ -46,8 +46,8 @@ public:
 template<typename DLGT, typename PRMS> void SUMMON_DIALOG(unique_dialog_e udtag, const PRMS &prms)
 {
     if (udtag && dialog_already_present(udtag)) return;
-    drawchecker dch;
-    RID r = MAKE_ROOT<DLGT>( dch, prms );
+    drawcollector dcoll;
+    RID r = MAKE_ROOT<DLGT>( dcoll, prms );
     MODIFY(r)
         .setminsize(r)
         .setcenterpos()
@@ -58,8 +58,8 @@ template<typename DLGT, typename PRMS> void SUMMON_DIALOG(unique_dialog_e udtag,
 template<typename DLGT> void SUMMON_DIALOG(unique_dialog_e udtag = UD_NOT_UNIQUE)
 {
     if (udtag && dialog_already_present(udtag)) return;
-    drawchecker dch;
-    RID r = MAKE_ROOT<DLGT>(dch);
+    drawcollector dcoll;
+    RID r = MAKE_ROOT<DLGT>(dcoll);
     MODIFY(r)
         .setminsize(r)
         .setcenterpos()

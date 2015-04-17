@@ -371,6 +371,9 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
             syncdata.lock_write()().data.user_statusmsg = ch.s;
             ipcp->send(ipcw(AQ_SET_STATUSMSG) << ch.s);
             return GMRBIT_CALLAGAIN;
+        case PP_ONLINESTATUS:
+            if (contact_c *c = contacts().get_self().subget( contact_key_s(0, id) ))
+                set_ostate(c->get_ostate());
         }
     }
     return 0;
@@ -441,6 +444,11 @@ void active_protocol_c::set_avatar( const ts::blob_c &ava )
     if (contact_c *c = contacts().find_subself(getid()))
         c->set_avatar(ava.data(), ava.size(), 1);
 
+}
+
+void active_protocol_c::set_ostate(contact_online_state_e _cos)
+{
+    ipcp->send( ipcw(AQ_OSTATE) << (int)_cos );
 }
 
 void active_protocol_c::save_config(bool wait)

@@ -22,11 +22,10 @@ void    timerprocessor_c::do_all(void)
 
 }
 
-bool    timerprocessor_c::takt(double dt)
+float    timerprocessor_c::takt(double dt)
 {
-
     ASSERT( m_items_process.size() == 0 );
-
+    float nexttime = -1;
     aint cnt = m_items.size();
     for (aint i = 0; i < cnt;)
     {
@@ -39,6 +38,10 @@ bool    timerprocessor_c::takt(double dt)
                 m_items_process.add(m_items.get_remove_fast(i));
                 --cnt;
                 continue;
+            } else
+            {
+                if (nexttime < 0 || e->ttl < nexttime)
+                    nexttime = (float)e->ttl;
             }
         }
         ++i;
@@ -64,7 +67,7 @@ bool    timerprocessor_c::takt(double dt)
     }
 
     while (m_items_process.size()) makefree(m_items_process.get_last_remove());
-    return m_items.size() == 0;
+    return nexttime;
 }
 
 void    timerprocessor_c::add(timer_subscriber_c *t, double ttl, void * par, bool delete_same)

@@ -928,8 +928,22 @@ bool gui_textedit_c::summoncontextmenu()
     case SQ_KEYUP:
     case SQ_CHAR:
         return kbd_processing_(qp, data.kbd.charcode, data.kbd.scan);
-        
+
+    case SQ_MOUSE_OUT:
+        if (flags.is(F_SBHL))
+        {
+            flags.clear(F_SBHL);
+            getengine().redraw();
+        }
+        break;
     case SQ_MOUSE_MOVE:
+        if (is_vsb() && !getengine().mtrack(getrid(), MTT_SBMOVE))
+        {
+            bool of = flags.is(F_SBHL);
+            flags.init(F_SBHL, sbhelper.sbrect.inside(to_local(data.mouse.screenpos)));
+            if (flags.is(F_SBHL) != of)
+                getengine().redraw();
+        }
         if (!getengine().mtrack(getrid(), MTT_ANY))
         {
             flags.clear(F_HANDCURSOR);
@@ -990,7 +1004,7 @@ bool gui_textedit_c::summoncontextmenu()
                 ds.draw_thr.sbrect() = drawarea;
                 const theme_rect_s *thr = themerect();
                 int osbw = sbhelper.sbrect.width();
-                if (thr) sbhelper.draw(thr, root, ds);
+                if (thr) sbhelper.draw(thr, root, ds, flags.is(F_SBHL));
                 if (osbw != sbhelper.sbrect.width())
                     flags.set(F_LINESDIRTY);
                 drawarea.rb.x -= sbhelper.sbrect.width();

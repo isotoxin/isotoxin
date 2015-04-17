@@ -43,10 +43,8 @@ enum system_event_e
     SEV_CLOSE_ABORTED,
     SEV_SIZE_CHANGED,
     SEV_POS_CHANGED,
-    SEV_MOUSE,          // самый низкий уровень - перехватить невозможно
-    SEV_KEYBOARD,       // самый низкий уровень - перехватить невозможно
-    SEV_MOUSE2,         // уровень приложения - вызывать самостоятельно из anymessage (sys_dispatch_input)
-    SEV_KEYBOARD2,      // уровень приложения - вызывать самостоятельно из anymessage (sys_dispatch_input)
+    SEV_MOUSE,
+    SEV_KEYBOARD,
     SEV_SETCURSOR,
     SEV_LOOP,           // active loop
     SEV_IDLE,           // inactive loop
@@ -135,14 +133,15 @@ struct system_conf_s
 {
     wchar_t name[ 256 ];
 
-    char    version[64];
-
     HINSTANCE instance;
     HWND    mainwindow;
     HWND    modalwindow;
 
     DWORD   dwStyle;
     DWORD   dwExStyle;
+
+    DWORD   mainthread;
+    int     sleep;
 
     bool    is_exit; // sys_exit
     bool    is_aborting;
@@ -153,15 +152,15 @@ struct system_conf_s
     bool    is_app_running;
     bool    is_in_render;
     bool    eat_win_keys;
-    bool    purge_messages;
-	bool	do_graphics;
+    bool    looper;
 
-    system_conf_s(void)
+    system_conf_s()
     {
         memset( this, 0, sizeof(system_conf_s) );
         dwStyle = WS_OVERLAPPEDWINDOW;
         dwExStyle = WS_EX_APPWINDOW;
         eat_win_keys = true;
+        sleep = 1;
     }
 };
 
@@ -174,7 +173,6 @@ bool _cdecl app_preinit(const wchar_t *cmdline);
 void _cdecl sys_idle();
 void _cdecl sys_exit( int iErrCode );
 void _cdecl sys_restart( void );
-bool _cdecl sys_dispatch_input( const system_event_param_s & p );
 LRESULT CALLBACK sys_def_main_window_proc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
 

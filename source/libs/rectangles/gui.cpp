@@ -310,11 +310,9 @@ DWORD gui_c::handler_SEV_BEFORE_INIT( const system_event_param_s & p )
 	return 0;
 }
 
-DWORD gui_c::handler_SEV_KEYBOARD(const system_event_param_s & p)
+ts::uint32 gui_c::keyboard(const system_event_param_s & p)
 {
-    ts::tmp_array_inplace_t<drawchecker, 4> dchs;
-    for (RID r : roots())
-        dchs.add() = HOLD(r)().getroot();
+    redraw_collector_s dch;
 
     if (RID f = gui->get_active_focus())
         if (allow_input(f))
@@ -352,29 +350,25 @@ DWORD gui_c::handler_SEV_KEYBOARD(const system_event_param_s & p)
     return 0;
 }
 
-DWORD gui_c::handler_SEV_WCHAR(const system_event_param_s & p)
+ts::uint32 gui_c::handle_char( ts::wchar c )
 {
     if (RID f = gui->get_active_focus())
         if (allow_input(f))
         {
-            ts::tmp_array_inplace_t<drawchecker, 4> dchs;
-            for (RID r : roots())
-                dchs.add() = HOLD(r)().getroot();
+            redraw_collector_s dch;
 
             evt_data_s d;
             d.kbd.scan = 0;
-            d.kbd.charcode = p.c;
+            d.kbd.charcode = c;
             HOLD(f).engine().sq_evt(SQ_CHAR, f, d);
             return SRBIT_ACCEPTED;
         }
     return 0;
 }
 
-DWORD gui_c::handler_SEV_MOUSE(const system_event_param_s & p)
+ts::uint32 gui_c::mouse(const system_event_param_s & p)
 {
-    ts::tmp_array_inplace_t<drawchecker, 4> dchs;
-    for (RID r : roots())
-        dchs.add() = HOLD(r)().getroot();
+    redraw_collector_s dch;
 
     if (dndproc)
     {
@@ -388,10 +382,7 @@ DWORD gui_c::handler_SEV_MOUSE(const system_event_param_s & p)
         if (RID f = gui->get_minside())
             if (allow_input(f))
             {
-                ts::tmp_array_inplace_t<drawchecker, 4> dchs;
-                for (RID r : roots())
-                    dchs.add() = HOLD(r)().getroot();
-
+                redraw_collector_s dch;
 
                 evt_data_s d;
                 d.mouse.screenpos = ts::ref_cast<ts::ivec2>( p.mouse.pos );
@@ -415,40 +406,71 @@ DWORD gui_c::handler_SEV_MOUSE(const system_event_param_s & p)
     return 0;
 }
 
-DWORD gui_c::handler_SEV_LOOP( const system_event_param_s & p )
+void gui_c::loop()
 {
-    ts::tmp_array_inplace_t<drawchecker, 4> dchs;
-    for (RID r : roots())
-        dchs.add() = HOLD(r)().getroot();
+    g_sysconf.sleep = 1;
 
-    int sleep = 1;
+    { // draw collector should be flushed before sleep
+        redraw_collector_s dch;
 
-    ts::Time::updateForThread();
-    m_frametime.takt();
-    m_1second.takt(m_frametime.frame_time());
-    if (m_1second.it_is_time_ones()) heartbeat();
-    if (m_timer_processor.takt(m_frametime.frame_time())) sleep = 10;
+        ts::Time::updateForThread();
+        m_frametime.takt();
+        m_1second.takt(m_frametime.frame_time());
+        if (m_1second.it_is_time_ones()) heartbeat();
+        g_sysconf.sleep = lround(500.0f * m_timer_processor.takt(m_frametime.frame_time())); // sleep time 0.5 of time to next event
+        if (g_sysconf.sleep < 0 || g_sysconf.sleep > 50) g_sysconf.sleep = 50;
 
-    m_5seconds.takt(m_frametime.frame_time());
-    if (m_5seconds.it_is_time_ones()) app_5second_event();
-    app_loop_event();
+        m_5seconds.takt(m_frametime.frame_time());
+        if (m_5seconds.it_is_time_ones()) app_5second_event();
+        app_loop_event();
 
-    gmsgbase *m;
-    while (m_msgs.try_pop(m))
-    {
-        m->send();
-        TSDEL(m);
+        gmsgbase *m;
+        while (m_msgs.try_pop(m))
+        {
+            m->send();
+            TSDEL(m);
+        }
+
+        app_fix_sleep_value(g_sysconf.sleep);
     }
-
-    app_fix_sleep_value(sleep);
-    dchs.clear();
-    if (sleep > 0) Sleep(sleep);
-	return 0;
 }
 
-DWORD gui_c::handler_SEV_IDLE( const system_event_param_s & p )
+DWORD gui_c::handler_SEV_WCHAR(const system_event_param_s & p)
 {
-    handler_SEV_LOOP(p);
+    UNSTABLE_CODE_PROLOG
+        return handle_char(p.c);
+    UNSTABLE_CODE_EPILOG
+    return 0;
+}
+
+DWORD gui_c::handler_SEV_KEYBOARD(const system_event_param_s & p)
+{
+    UNSTABLE_CODE_PROLOG
+        return keyboard(p);
+    UNSTABLE_CODE_EPILOG
+    return 0;
+}
+
+DWORD gui_c::handler_SEV_MOUSE(const system_event_param_s & p)
+{
+    UNSTABLE_CODE_PROLOG
+        return mouse(p);
+    UNSTABLE_CODE_EPILOG
+    return 0;
+}
+
+DWORD gui_c::handler_SEV_LOOP(const system_event_param_s &)
+{
+    UNSTABLE_CODE_PROLOG
+        loop();
+    UNSTABLE_CODE_EPILOG
+    return 0;
+}
+DWORD gui_c::handler_SEV_IDLE( const system_event_param_s &)
+{
+    UNSTABLE_CODE_PROLOG
+        loop();
+    UNSTABLE_CODE_EPILOG
 	return 0;
 }
 

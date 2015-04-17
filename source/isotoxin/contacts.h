@@ -336,6 +336,8 @@ public:
         history.clear();
     }
 
+    int calc_history_after(time_t t);
+
     const post_s *get_post_by_utag(uint64 utg) const
     {
         for( const post_s &p : history )

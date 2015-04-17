@@ -55,6 +55,7 @@ struct theme_rect_s : ts::shared_object
     struct  
     {
         ts::TSCOLOR fillcolor = 0; // if (ALPHA(fillcolor) != 0)
+        ts::TSCOLOR filloutcolor = 0;
         bool tile = true;
         bool loaded = false;
     } siso[SI_count];
@@ -68,6 +69,7 @@ struct theme_rect_s : ts::shared_object
     int captop_max;
 	int capheight; // logical height of caption
     int capheight_max; // logical height of caption in maximized rect
+    ts::ivec2 activesbshift;
     ts::ivec2 capbuttonsshift;
     ts::ivec2 capbuttonsshift_max;
 	ts::ivec2 minsize;

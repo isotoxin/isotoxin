@@ -21,7 +21,7 @@ template<> struct MAKE_CHILD<gui_contact_item_c> : public _PCHILD(gui_contact_it
 template<> struct MAKE_ROOT<gui_contact_item_c> : public _PROOT(gui_contact_item_c)
 {
     contact_c *contact;
-    MAKE_ROOT(drawchecker &dch, contact_c *c) : _PROOT(gui_contact_item_c)(dch), contact(c) { init(false); }
+    MAKE_ROOT(drawcollector &dch, contact_c *c) : _PROOT(gui_contact_item_c)(dch), contact(c) { init(false); }
     ~MAKE_ROOT() {}
 };
 
@@ -33,6 +33,8 @@ class gui_contact_item_c : public gui_label_c
     GM_RECEIVER( gui_contact_item_c, ISOGM_SELECT_CONTACT );
     GM_RECEIVER( gui_contact_item_c, ISOGM_SOMEUNREAD );
     
+    ts::svec2 shiftstateicon;
+
     ts::wstr_c protocols;
 
     static const ts::flags32_s::BITS  F_PROTOHIT    = FLAGS_FREEBITSTART_LABEL << 0;
@@ -47,6 +49,8 @@ class gui_contact_item_c : public gui_label_c
     friend class contact_c;
     friend class contacts_c;
     int n_unread =0;
+
+    void set_default_proto(const ts::str_c&ost);
 
     bool audio_call(RID, GUIPARAM);
 

@@ -484,6 +484,8 @@ void gui_notice_c::setup(contact_c *sender)
         {
             update_text(sender);
 
+            getengine().trunc_children(0);
+
             gui_button_c &b_resend = MAKE_CHILD<gui_button_c>(getrid());
             b_resend.set_text(TTT("Повторить", 81));
             b_resend.set_face_getter(BUTTON_FACE(button));
@@ -506,6 +508,8 @@ void gui_notice_c::setup(contact_c *sender)
         {
             update_text(sender);
 
+            getengine().trunc_children(0);
+
             gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
             b_accept.set_face_getter(BUTTON_FACE(accept_call));
             b_accept.set_handler(DELEGATE(sender, b_accept_call), this);
@@ -527,6 +531,8 @@ void gui_notice_c::setup(contact_c *sender)
         {
             update_text(sender);
 
+            getengine().trunc_children(0);
+
             gui_button_c &b_reject = MAKE_CHILD<gui_button_c>(getrid());
             b_reject.set_face_getter(BUTTON_FACE(reject_call));
             b_reject.set_handler(DELEGATE(sender, b_hangup), this);
@@ -540,6 +546,8 @@ void gui_notice_c::setup(contact_c *sender)
     case NOTICE_CALL:
         {
             update_text(sender);
+
+            getengine().trunc_children(0);
 
             gui_button_c &b_cancel = MAKE_CHILD<gui_button_c>(getrid());
             b_cancel.set_face_getter(BUTTON_FACE(call_cancel));
@@ -1371,7 +1379,6 @@ static int prepare_link(ts::wstr_c &message, int i, int n)
     {
         ts::wchar c = message.get_char(j);
         if (ts::CHARz_find(L" \\<>\r\n\t", c)>=0) break;
-        if (c > 127) break;
     }
     ts::swstr_t<-128> inst(CONSTWSTR("<cstm=b"));
     inst.append_as_uint(n).append(CONSTWSTR(">"));
@@ -2404,6 +2411,7 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> & p)
     }
     set_text(t);
     if (cp >= 0) set_caret_pos(cp);
+    if (check_text_func) check_text_func(t);
 
     return 0;
 }
@@ -2449,11 +2457,18 @@ gui_message_area_c::~gui_message_area_c()
     return sz;
 }
 
+bool gui_message_area_c::change_text_handler(const ts::wstr_c &t)
+{
+    send_button->disable( t.is_empty() );
+    return true;
+}
+
 /*virtual*/ void gui_message_area_c::created()
 {
     leech(TSNEW( leech_save_size_s, CONSTASTR("msg_area_size"), ts::ivec2(0,60)) );
 
     message_editor = MAKE_VISIBLE_CHILD<gui_message_editor_c>( getrid() );
+    message_editor->check_text_func = DELEGATE(this, change_text_handler);
     send_button = MAKE_VISIBLE_CHILD<gui_button_c>( getrid() );
     send_button->set_face_getter(BUTTON_FACE(send));
     send_button->tooltip( TOOLTIP( TTT("Отправить",7) ) );
@@ -2541,7 +2556,7 @@ void gui_message_area_c::children_repos()
     ts::ivec2 bsz = send_button->getprops().size();
     ts::ivec2 sfsz = file_button->get_min_size();
     MODIFY(*file_button).pos( clar.lt.x, clar.lt.y + (clar.height()-sfsz.y)/2 ).size(sfsz);
-    MODIFY(*send_button).pos( clar.rb.x - bsz.x, clar.lt.y );
+    MODIFY(*send_button).pos( clar.rb.x - bsz.x, clar.lt.y + (clar.height()-bsz.y)/2 );
     MODIFY(*message_editor).pos(clar.lt.x + sfsz.x, clar.lt.y).size( clar.width() - bsz.x - sfsz.x, clar.height() );
 }
 

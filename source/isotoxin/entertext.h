@@ -26,7 +26,7 @@ class dialog_entertext_c;
 template<> struct MAKE_ROOT<dialog_entertext_c> : public _PROOT(dialog_entertext_c)
 {
     dialog_entertext_params_s prms;
-    MAKE_ROOT(drawchecker &dch, const dialog_entertext_params_s &prms) :_PROOT(dialog_entertext_c)(dch), prms(prms) { init(false); }
+    MAKE_ROOT(drawcollector &dcoll, const dialog_entertext_params_s &prms) :_PROOT(dialog_entertext_c)(dcoll), prms(prms) { init(false); }
     ~MAKE_ROOT() {}
 };
 

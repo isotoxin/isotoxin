@@ -813,7 +813,6 @@ void lan_engine::tick()
                 c->state = contact_s::OFFLINE;
                 c->data_changed = true;
                 c->correct_create_time = 0;
-                c->need_resync = false;
             }
         }
         
@@ -1707,11 +1706,11 @@ void lan_engine::contact_s::online_tick(int ct, int nexttime)
 {
     if (state == ONLINE)
     {
-        if (need_resync && (ct-next_sync)>0)
+        if ((ct-next_sync)>0)
         {
             engine->pg_time(true, authorized_key);
             pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
-            next_sync = ct + 120000;
+            next_sync = ct + 50000;
         }
 
 
@@ -2056,8 +2055,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
             {
                 bool resync = r.readb() != 0;
                 correct_create_time = (int)((long long)now() - (long long)remote_peer_time);
-                need_resync = abs(correct_create_time) > 10; // 10+ seconds time delta :( resync it every 2 min
-                if (need_resync) next_sync = time_ms() + 120000;
+                next_sync = time_ms() + 50000;
                 if (resync)
                 {
                     engine->pg_time(false, authorized_key);

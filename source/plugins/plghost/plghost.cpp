@@ -618,6 +618,14 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             protolib.functions->offline();
         }
         break;
+    case AQ_OSTATE:
+        if (LIBLOADED())
+        {
+            ipcr r(d->get_reader());
+            int ost = r.get<int>();
+            protolib.functions->set_ostate(ost);
+        }
+        break;
     case AQ_ADD_CONTACT:
         if (LIBLOADED())
         {
@@ -840,7 +848,7 @@ static void __stdcall message(message_type_e mt, int cid, u64 create_time, const
 {
     static u64 last_createtime = 0;
     static byte lastmessage_md5[16] = { 0 };
-    if ((create_time - last_createtime) < 60)
+    if (mt == MT_MESSAGE && (create_time - last_createtime) < 60)
     {
         md5_c md5;
         md5.update(msgbody_utf8, mlen);

@@ -28,13 +28,18 @@ gui_contact_item_c::~gui_contact_item_c()
 
 /*virtual*/ ts::ivec2 gui_contact_item_c::get_min_size() const
 {
+    if (CIR_ME == role || CIR_CONVERSATION_HEAD == role)
+    {
+        return ts::ivec2( g_app->mecontactheight );
+    }
+
     ts::ivec2 subsize(0);
     if (CIR_DNDOBJ == role)
     {
         if (const theme_rect_s *thr = themerect())
             subsize = thr->maxcutborder.lt + thr->maxcutborder.rb;
     }
-    return ts::ivec2(60) - subsize;
+    return g_app->contactheight - subsize;
 }
 
 /*virtual*/ ts::ivec2 gui_contact_item_c::get_max_size() const
@@ -352,6 +357,13 @@ void gui_contact_item_c::created()
             break;
     }
 
+    if (const theme_rect_s * thr = themerect())
+    {
+        ts::ivec2 s = parsevec2(thr->addition.get_string(CONSTASTR("shiftstateicon")), ts::ivec2(0));
+        shiftstateicon.x = (ts::int16)s.x;
+        shiftstateicon.y = (ts::int16)s.y;
+    }
+
     gui_control_c::created();
 
     if (CIR_CONVERSATION_HEAD == role)
@@ -370,12 +382,14 @@ bool gui_contact_item_c::audio_call(RID btn, GUIPARAM)
             active_protocol_c *ap = prf().ap(c->getkey().protoid);
             if (ap && 0 != (PF_AUDIO_CALLS & ap->get_features()))
             {
-                if (c_call == nullptr || cdef == c)
-                    c_call = cdef;
+                if (c_call == nullptr || (cdef == c && c_call->get_state() != CS_ONLINE))
+                    c_call = c;
+                if (c->get_state() == CS_ONLINE && c_call != c && c_call->get_state() != CS_ONLINE)
+                    c_call = c;
             }
         });
 
-        if (CHECK(c_call))
+        if (c_call)
         {
             c_call->b_call(RID(), nullptr);
             btn.call_enable(false);
@@ -389,7 +403,13 @@ ts::uint32 gui_contact_item_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> & c )
 {
     if ( CIR_LISTITEM == role || CIR_ME == role || CIR_METACREATE == role )
     {
-        MODIFY(*this).active( contact == c.contact );
+        bool o = getprops().is_active();
+        bool n = contact == c.contact;
+        if (o != n)
+        {
+            MODIFY(*this).active(n);
+            update_text();
+        }
     }
     return 0;
 }
@@ -508,7 +528,6 @@ void gui_contact_item_c::update_text()
                     }
                     if (count == 1 && deactivated > 0)
                     {
-                        //newtext.append(CONSTWSTR("<nl>")).append(colorize(TTT("протокол отключен"), get_default_text_color(1)));
                         t2.clear();
                     }
                     t2.trim();
@@ -595,8 +614,8 @@ void gui_contact_item_c::on_drop(gui_contact_item_c *ondr)
 /*virtual*/ guirect_c * gui_contact_item_c::summon_dndobj(const ts::ivec2 &deltapos)
 {
     flags.set( F_DNDDRAW );
-    drawchecker dch;
-    gui_contact_item_c &dnd = MAKE_ROOT<gui_contact_item_c>(dch, contact);
+    drawcollector dcoll;
+    gui_contact_item_c &dnd = MAKE_ROOT<gui_contact_item_c>(dcoll, contact);
     ts::ivec2 subsize(0);
     if (const theme_rect_s *thr = dnd.themerect())
         subsize = thr->maxcutborder.lt + thr->maxcutborder.rb;
@@ -688,6 +707,27 @@ int gui_contact_item_c::contact_item_rite_margin()
 
 /*virtual*/ bool gui_contact_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    if (rid != getrid())
+    {
+        // from submenu
+        if (popupmenu && popupmenu->getrid() == rid)
+        {
+            if (SQ_POPUP_MENU_DIE == qp)
+            {
+                MODIFY(*this).highlight(false);
+                bool prev = flags.is(F_OVERAVATAR);
+                flags.clear(F_OVERAVATAR);
+                if (prev)
+                {
+                    update_text();
+                    getengine().redraw();
+                }
+            }
+        }
+        return false;
+    }
+
+
     switch (qp)
     {
     case SQ_DRAW:
@@ -752,7 +792,7 @@ int gui_contact_item_c::contact_item_rite_margin()
             }
 
             if (( force_state_icon || CIR_METACREATE == role || (flags.is(F_PROTOHIT) && st != CS_ROTTEN)) && bdesc)
-                bdesc->draw( m_engine.get(), bst, ca, button_desc_s::ARIGHT | button_desc_s::ABOTTOM );
+                bdesc->draw( m_engine.get(), bst, ca + ts::ivec2(shiftstateicon.x, shiftstateicon.y), button_desc_s::ARIGHT | button_desc_s::ABOTTOM );
 
             if (contact)
             {
@@ -835,10 +875,9 @@ int gui_contact_item_c::contact_item_rite_margin()
 
                         if (CIR_CONVERSATION_HEAD == role)
                         {
-                            dd.offset.x = oldxo + dd.size.x - contact_item_rite_margin() - 100;
-                            dd.size.x = 100; // 100px should be enough
+                            dd.offset.x = oldxo + dd.size.x - contact_item_rite_margin() - g_app->protowidth;
+                            dd.size.x = g_app->protowidth;
                             draw_online_state_text(dd);
-
                         }
                     }
                     m_engine->end_draw();
@@ -856,10 +895,30 @@ int gui_contact_item_c::contact_item_rite_margin()
                 getengine().redraw();
         }
         break;
+    case SQ_MOUSE_IN:
+        if ( CIR_LISTITEM == role || CIR_METACREATE == role )
+        {
+            if (!getprops().is_highlighted())
+            {
+                MODIFY(*this).highlight(true);
+                update_text();
+            }
+        }
+        break;
     case SQ_MOUSE_OUT:
         {
+            if (CIR_LISTITEM == role || CIR_METACREATE == role)
+            {
+                if (getprops().is_highlighted() && popupmenu == nullptr)
+                {
+                    MODIFY(*this).highlight(false);
+                    update_text();
+                }
+            }
+
             bool prev = flags.is(F_OVERAVATAR);
             flags.clear(F_LBDN | F_OVERAVATAR);
+            if (prev && popupmenu) flags.set(F_OVERAVATAR);
             if (prev) getengine().redraw();
         }
         break;
@@ -901,11 +960,12 @@ int gui_contact_item_c::contact_item_rite_margin()
                     m.add(TTT("Изменить аватар",219), 0, x::set_self_avatar);
                     m.add(TTT("Убрать аватар",220), 0, x::clear_self_avatar);
                     popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
+                    popupmenu->leech(this);
                 } else
                 {
                     SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR);
+                    flags.clear(F_OVERAVATAR);
                 }
-                flags.clear(F_OVERAVATAR);
                 getengine().redraw();
 
             } else if (CIR_CONVERSATION_HEAD != role)
@@ -990,7 +1050,8 @@ int gui_contact_item_c::contact_item_rite_margin()
 
                 m.add(TTT("Удалить",85),0,handlers::m_delete,contact->getkey().as_str());
                 m.add(TTT("Настройки контакта",223),0,handlers::m_contact_props,contact->getkey().as_str());
-                gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(),0), m);
+                popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(),0), m);
+                popupmenu->leech(this);
             }
 
         } else if (CIR_METACREATE == role)
@@ -1026,12 +1087,81 @@ int gui_contact_item_c::contact_item_rite_margin()
                 m.add(TTT("Сделать первым",151), 0, handlers::m_mfirst, contact->getkey().as_str());
             m.add(TTT("Убрать",148), 0, handlers::m_remove, contact->getkey().as_str());
             gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
+
+        } else if (CIR_ME == role)
+        {
+            struct handlers
+            {
+                static void m_ost(const ts::str_c&ost)
+                {
+                    contact_online_state_e cos_ = (contact_online_state_e)ost.as_uint();
+
+                    contacts().get_self().subiterate( [&](contact_c *c) {
+                        c->set_ostate(cos_);
+                    } );
+                    contacts().get_self().set_ostate(cos_);
+                    gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_ONLINESTATUS).send();
+                }
+            };
+
+            contact_online_state_e ost = contacts().get_self().get_ostate();
+
+            menu_c m;
+            m.add(TTT("Онлайн",244), COS_ONLINE == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_ONLINE));
+            m.add(TTT("Отошёл",245), COS_AWAY == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_AWAY));
+            m.add(TTT("Занят",246), COS_DND == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_DND));
+            gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
+        } else if (CIR_CONVERSATION_HEAD == role && !contact->getkey().is_self())
+        {
+            ts::irect ca = get_client_area();
+            ca.rb.x -= contact_item_rite_margin();
+            ca.lt.x = ca.rb.x - g_app->protowidth;
+            if (ca.inside(to_local(gui->get_cursor_pos())))
+            {
+                menu_c m;
+
+                const contact_c *def = contact->subget_default();
+                contact->subiterate([&](contact_c *c) {
+                    if (auto *row = prf().get_table_active_protocol().find<true>(c->getkey().protoid))
+                    {
+                        m.add(row->other.name, def == c ? MIF_MARKED : 0, DELEGATE(this,set_default_proto), ts::amake<uint>(c->getkey().protoid));
+                    }
+                });
+
+                gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
+            }
         }
         return false;
 
     }
 
     return __super::sq_evt(qp,rid,data);
+}
+
+void gui_contact_item_c::set_default_proto(const ts::str_c&ost)
+{
+    int id = ost.as_uint();
+    contact->subiterate([&](contact_c *c) {
+        if (id == c->getkey().protoid)
+        {
+            if ( !c->get_options().is(contact_c::F_DEFALUT) )
+            {
+                c->options().set(contact_c::F_DEFALUT);
+                prf().dirtycontact(c->getkey());
+                protocols.clear();
+                
+            }
+        } else
+        {
+            if (c->get_options().is(contact_c::F_DEFALUT))
+            {
+                c->options().clear(contact_c::F_DEFALUT);
+                prf().dirtycontact(c->getkey());
+                protocols.clear();
+            }
+        }
+    } );
+    getengine().redraw();
 }
 
 INLINE int statev(contact_state_e v)
@@ -1207,7 +1337,8 @@ void gui_contactlist_c::recreate_ctls()
         }
 
         self = MAKE_CHILD<gui_contact_item_c>(getrid(), &contacts().get_self()) << CIR_ME;
-        self->leech(TSNEW(leech_dock_top_s, gui->theme().conf().get_int(CONSTASTR("mecontactheight"), 60)));
+        self->leech(TSNEW(leech_dock_top_s, g_app->mecontactheight));
+        MODIFY(*self).zindex(1.0f).visible(true);
         getengine().child_move_to(2, &self->getengine());
 
         getengine().resort_children();
@@ -1235,6 +1366,8 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
                 break;
         }
     }
+    if (ch.pass == 0 && self && PP_ONLINESTATUS == ch.pp)
+        self->getengine().redraw();
     return 0;
 }
 
@@ -1375,17 +1508,7 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
 {
     if (rid != getrid() && ASSERT(getrid() >> rid)) // child?
     {
-        switch (qp)
-        {
-        case SQ_MOUSE_IN:
-            MODIFY(rid).highlight(true);
-            return false;
-        case SQ_MOUSE_OUT:
-            MODIFY(rid).highlight(false);
-            return false;
-        default:
-            return __super::sq_evt(qp,rid,data);
-        }
+        return __super::sq_evt(qp,rid,data);
     }
     return __super::sq_evt(qp, rid, data);
 }

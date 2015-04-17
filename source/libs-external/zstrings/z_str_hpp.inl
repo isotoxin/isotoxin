@@ -2545,6 +2545,8 @@ public:
 	template<typename CORE> token(const str_t<TCHARACTER,CORE> &str, TCHARACTER separator = TCHARACTER(',')) : str(str.as_sptr()), separator(separator), eos(false) {++(*this);}
     token(const sptr<TCHARACTER> &str, TCHARACTER separator = TCHARACTER(',')) : str(str), separator(separator), eos(false) {++(*this);}
 
+    TCHARACTER sep() const {return separator;}
+
 	operator bool() const {return !eos;}
 
     const sptr<TCHARACTER>& tail() const {return str;}

@@ -1111,6 +1111,7 @@ void profile_c::shutdown_aps()
 
 void profile_c::killcontact( const contact_key_s&ck )
 {
+    table_contacts.cleanup();
     dirtycontacts.find_remove_fast(ck);
     if (auto *row = table_contacts.find<false>([&](const contacts_s &k)->bool { return k.key == ck; }))
         if (row->deleted())
@@ -1119,6 +1120,7 @@ void profile_c::killcontact( const contact_key_s&ck )
 
 void profile_c::purifycontact( const contact_key_s&ck )
 {
+    table_contacts.cleanup();
     dirtycontacts.find_remove_fast(ck);
     if (auto *row = table_contacts.find<true>([&](const contacts_s &k)->bool { return k.key == ck; }))
     {

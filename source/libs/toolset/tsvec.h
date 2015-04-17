@@ -202,6 +202,12 @@ public:
 	{
         return dot(*this);
 	}
+    INLINE operator bool() const
+    {
+        for (int i = 0; i < N; i++)
+            if ((&x)[i]) return true;
+        return false;
+    }
 };
 
 template<class T> INLINE vec_t<T, 2>& vecbase_t<T, 2>::rotate(float fAngle)

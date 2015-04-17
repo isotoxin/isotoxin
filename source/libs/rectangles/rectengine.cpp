@@ -522,16 +522,14 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
     struct _redraw {
         rectengine_root_c *engine;
 
-        _redraw(rectengine_root_c *engine) :engine(engine) {}
+        _redraw(rectengine_root_c *engine_) :engine(engine_) {}
 
         explicit operator bool() {return engine != nullptr;};
         rectengine_root_c * operator ->() {return engine;};
 
     } engine(hwnd2engine(hwnd));
 
-    ts::tmp_array_inplace_t<drawchecker, 4> dchs;
-    for (RID r : gui->roots())
-        dchs.add() = HOLD(r)().getroot();
+    redraw_collector_s dch;
 
 	switch(msg)
 	{
@@ -551,7 +549,7 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
                 {
                     NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
                     nd.hWnd = hwnd;
-                    nd.uID = (int)hwnd;
+                    nd.uID = (int)e;
                     Shell_NotifyIconW(NIM_DELETE, &nd);
                     e->flags.clear(F_NOTIFY_ICON);
                 }
@@ -582,6 +580,26 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
                 }
             }
             return 0;
+        case WM_USER + 7214:
+            {
+                NOTIFYICONDATAW *nd = (NOTIFYICONDATAW *)lparam;
+                nd->uTimeout = 0;
+                nd->hIcon = gui->app_icon(true);
+
+                if (engine->flags.is(F_NOTIFY_ICON))
+                {
+                    nd->uFlags = NIF_ICON;
+                    Shell_NotifyIconW(NIM_MODIFY, nd);
+
+                } else {
+                    nd->uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+                    Shell_NotifyIconW(NIM_ADD, nd);
+                    nd->uVersion = NOTIFYICON_VERSION;
+                    Shell_NotifyIconW(NIM_SETVERSION, nd);
+                }
+                engine->flags.set(F_NOTIFY_ICON);
+            }
+            return 0;
 		case WM_PAINT:
 			if (engine && !engine->is_dip())
 			{
@@ -602,7 +620,12 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
 				//}
                 engine->dc = nullptr;
 				return 0;
-			}
+			} else
+            {
+                PAINTSTRUCT ps;
+                BeginPaint(hwnd,&ps);
+                EndPaint(hwnd,&ps);
+            }
 			break;
         case WM_CAPTURECHANGED:
             //DMSG("lost capture" << hwnd);
@@ -612,10 +635,17 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
             if (hwnd == GetCapture())
                 ReleaseCapture();
             return 0;
-        //case WM_SETTINGCHANGE:
-        //    if (engine)
-        //        engine->refresh_frame();
-        //    return 0;
+        case WM_SETTINGCHANGE:
+            if (engine)
+                if (guirect_c *r = engine->rect())
+                    if (r->getprops().is_maximized())
+                    {
+                        MODIFY(*r).maximize(false);
+                        DEFERRED_EXECUTION_BLOCK_BEGIN(0)
+                            MODIFY(RID::from_ptr(param)).maximize(true);
+                        DEFERRED_EXECUTION_BLOCK_END(r->getrid().to_ptr());
+                    }
+            return 0;
 
         case WM_SYSCOMMAND:
             switch (GET_SC_WPARAM(wparam))
@@ -629,18 +659,26 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
             }
             break;
         case WM_SIZE:
+            //DMSG("wmsize wparam: " << wparam);
             if (wparam == SIZE_MINIMIZED && engine)
             {
                 // minimization by system - setup inner flags to avoid restore of window by refresh_frame checker
                 if (guirect_c *r = engine->rect())
                     if (!r->inmod())
                         MODIFY(*r).minimize(true);
+            } else if (wparam == SIZE_RESTORED && engine)
+            {
+                // restore by system - setup inner flags to avoid restore of window by refresh_frame checker
+                if (guirect_c *r = engine->rect())
+                    if (!r->inmod())
+                        MODIFY(*r).decollapse();
             }
             break;
         case WM_WINDOWPOSCHANGED:
             if (engine && !engine->is_dip())
             {
                 WINDOWPOS *wp = (WINDOWPOS *)lparam;
+                DMSG("wpch flags: " << wp->flags);
                 const guirect_c &r = engine->getrect();
                 ts::ivec2 p = r.getprops().screenpos();
                 ts::ivec2 s = r.getprops().size();
@@ -694,27 +732,6 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
         case WM_LBUTTONDBLCLK: MOUSE_HANDLER(SQ_MOUSE_L2CLICK);
 
         case WM_MOUSEWHEEL:
-            /*
-            if (engine && gui->allow_input(engine->getrid()))
-            {
-                evt_data_s d;
-                d.mouse.screenpos = ts::ivec2(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
-
-                int rot = GET_WHEEL_DELTA_WPARAM(wparam);
-
-                int rot2 = lround((float)rot / (float)WHEEL_DELTA);
-                if (rot2 == 0) rot2 = ts::isign(rot);
-                if (rot2 > 10) rot2 = 10;
-                if (rot2 < -10) rot2 = -10;
-
-                for (;rot2 > 0; --rot2)
-                    engine->sq_evt( SQ_MOUSE_WHEELUP, engine->getrid(), d );
-
-                for (;rot2 < 0;++rot2)
-                    engine->sq_evt(SQ_MOUSE_WHEELDOWN, engine->getrid(), d);
-
-            }
-            */
             return 0;
         case WM_MOUSEACTIVATE:
             if (!gui->allow_input(engine->getrid()))
@@ -780,7 +797,7 @@ rectengine_root_c::~rectengine_root_c()
     {
         NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
         nd.hWnd = hwnd;
-        nd.uID = (int)hwnd;
+        nd.uID = (int)this;
         Shell_NotifyIconW(NIM_SETFOCUS, &nd);
     }
 
@@ -857,7 +874,7 @@ void rectengine_root_c::kill_window()
         {
             NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
             nd.hWnd = hwnd;
-            nd.uID = (int)hwnd;
+            nd.uID = (int)this;
             Shell_NotifyIconW(NIM_DELETE, &nd);
             flags.clear(F_NOTIFY_ICON);
         }
@@ -1126,13 +1143,16 @@ void rectengine_root_c::kill_window()
         case SW_MAXIMIZE:
             gmsg<GM_UI_EVENT>(UE_MAXIMIZED).send();
             refresh_frame();
+            DMSG("maximized");
             break;
         case SW_RESTORE:
             gmsg<GM_UI_EVENT>(UE_NORMALIZED).send();
             refresh_frame();
+            DMSG("restored");
             break;
         case SW_MINIMIZE:
             gmsg<GM_UI_EVENT>(UE_MINIMIZED).send();
+            DMSG("minimized");
             break;
         }
 
@@ -1142,12 +1162,12 @@ void rectengine_root_c::kill_window()
 
 /*virtual*/ void rectengine_root_c::redraw(const ts::irect *invalidate_rect)
 {
-    if(!flags.is(F_REDRAW_CHECKER))
+    if(!flags.is(F_REDRAW_COLLECTOR))
     {
         DMSG("oops F_REDRAW_CHECKER");
     }
     redraw_rect.combine( invalidate_rect ? *invalidate_rect : getrect().getprops().currentszrect() );
-    drawchecker dch( this );
+    drawcollector dch( this );
     ++drawtag;
 
     //if (hwnd && flags.is(F_SYSTEM))
@@ -1369,32 +1389,36 @@ void border_window_data_s::draw()
     switch (si)
     {
         case SI_LEFT:
+            if (thr->sis[SI_LEFT])
+            {
+                rep = thr->sis[SI_LEFT]; rep.rb.x = rep.lt.x + thr->maxcutborder.lt.x;
+                prev = thr->sis[SI_LEFT_TOP];
+                prev.rb.x = prev.lt.x + thr->maxcutborder.lt.x;
+                prev.lt.y += thr->maxcutborder.lt.y;
 
-            rep = thr->sis[SI_LEFT]; rep.rb.x = rep.lt.x + thr->maxcutborder.lt.x;
-            prev = thr->sis[SI_LEFT_TOP];
-            prev.rb.x = prev.lt.x + thr->maxcutborder.lt.x;
-            prev.lt.y += thr->maxcutborder.lt.y;
+                last = thr->sis[SI_LEFT_BOTTOM];
+                last.rb.x = last.lt.x + thr->maxcutborder.lt.x;
+                last.rb.y -= thr->maxcutborder.rb.y;
 
-            last = thr->sis[SI_LEFT_BOTTOM];
-            last.rb.x = last.lt.x + thr->maxcutborder.lt.x;
-            last.rb.y -= thr->maxcutborder.rb.y;
-
-            rdraw.rbeg = &prev; rdraw.a_beg = false;
-            rdraw.rrep = &rep; rdraw.a_rep = false;
-            rdraw.rend = &last; rdraw.a_end = false;
-            rdraw.draw_v(0, 0, rect.height(), thr->siso[SI_LEFT].tile);
+                rdraw.rbeg = &prev; rdraw.a_beg = false;
+                rdraw.rrep = &rep; rdraw.a_rep = false;
+                rdraw.rend = &last; rdraw.a_end = false;
+                rdraw.draw_v(0, 0, rect.height(), thr->siso[SI_LEFT].tile);
+            }
 
             break;
         case SI_TOP:
+            if (thr->sis[SI_TOP])
+            {
+                rep = thr->sis[SI_TOP];  rep.rb.y = rep.lt.y + thr->maxcutborder.lt.y;
+                prev = thr->sis[SI_LEFT_TOP]; prev.rb.y = prev.lt.y + thr->maxcutborder.lt.y;
+                last = thr->sis[SI_RIGHT_TOP]; last.rb.y = last.lt.y + thr->maxcutborder.lt.y;
 
-            rep = thr->sis[SI_TOP];  rep.rb.y = rep.lt.y + thr->maxcutborder.lt.y;
-            prev = thr->sis[SI_LEFT_TOP]; prev.rb.y = prev.lt.y + thr->maxcutborder.lt.y;
-            last = thr->sis[SI_RIGHT_TOP]; last.rb.y = last.lt.y + thr->maxcutborder.lt.y;
-
-            rdraw.rbeg = &prev; rdraw.a_beg = false;
-            rdraw.rrep = &rep; rdraw.a_rep = false;
-            rdraw.rend = &last; rdraw.a_end = false;
-            rdraw.draw_h(0, rect.width(), 0, thr->siso[SI_TOP].tile);
+                rdraw.rbeg = &prev; rdraw.a_beg = false;
+                rdraw.rrep = &rep; rdraw.a_rep = false;
+                rdraw.rend = &last; rdraw.a_end = false;
+                rdraw.draw_h(0, rect.width(), 0, thr->siso[SI_TOP].tile);
+            }
 
             break;
         case SI_RIGHT:
@@ -1443,18 +1467,26 @@ void border_window_data_s::draw()
     repdraw rdraw( backbuffer.DC(), thr.src, dd.cliprect, dd.alpha );
     ts::ivec2 rbpt = dd.offset + dd.size;
 
+    ts::irect fillrect;
+
+    auto filler = [&](ts::TSCOLOR c)
+    {
+        if (fillrect.intersect(dd.cliprect))
+        {
+            if (use_alphablend && ts::ALPHA(c) < 255)
+                backbuffer.overfill(fillrect.lt, fillrect.size(), ts::PREMULTIPLY(c));
+            else
+                backbuffer.fill(fillrect.lt, fillrect.size(), c);
+        }
+    };
+
     if (options & DTHRO_BASE)
     {
         if (0 != ts::ALPHA(thr.siso[SI_BASE].fillcolor))
         {
-            ts::irect fillrect(dd.offset + thr.sis[SI_BASE].lt, rbpt - thr.sis[SI_BASE].rb);
-            if (fillrect.intersect(dd.cliprect))
-            {
-                if (use_alphablend && ts::ALPHA(thr.siso[SI_BASE].fillcolor) < 255)
-                    backbuffer.overfill(fillrect.lt, fillrect.size(), ts::PREMULTIPLY( thr.siso[SI_BASE].fillcolor ) );
-                else
-                    backbuffer.fill(fillrect.lt, fillrect.size(), thr.siso[SI_BASE].fillcolor);
-            }
+            fillrect.lt = dd.offset + thr.sis[SI_BASE].lt;
+            fillrect.rb = rbpt - thr.sis[SI_BASE].rb;
+            filler(thr.siso[SI_BASE].fillcolor);
 
         } else
         {
@@ -1463,7 +1495,7 @@ void border_window_data_s::draw()
             rdraw.rend = nullptr;
             rdraw.draw_c(dd.offset.x, rbpt.x, dd.offset.y, rbpt.y, thr.siso[SI_BASE].tile);
         }
-    } else if (0 != (options & DTHRO_BASE_HOLE) && d)
+    } else if (0 != (options & DTHRO_BASE_HOLE) && d && ASSERT(thr.sis[SI_BASE]))
     {
         rdraw.rbeg = nullptr;
         rdraw.rrep = thr.sis + SI_BASE; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_BASE);
@@ -1518,20 +1550,53 @@ void border_window_data_s::draw()
         {
             // center color fill
             // do it before draw border due border can overdraw filled rect
-            ts::irect fillrect( dd.offset + thr.sis[SI_CENTER].lt, rbpt - thr.sis[SI_CENTER].rb );
-            if (fillrect.intersect(dd.cliprect))
+
+            fillrect.lt = dd.offset + thr.sis[SI_CENTER].lt;
+            fillrect.rb = rbpt - thr.sis[SI_CENTER].rb;
+            filler( thr.siso[SI_CENTER].fillcolor );
+
+            if (0 != ts::ALPHA(thr.siso[SI_CENTER].filloutcolor))
             {
-                if (use_alphablend && ts::ALPHA(thr.siso[SI_CENTER].fillcolor) < 255)
-                    backbuffer.overfill(fillrect.lt, fillrect.size(), ts::PREMULTIPLY(thr.siso[SI_CENTER].fillcolor));
-                else
-                    backbuffer.fill(fillrect.lt, fillrect.size(), thr.siso[SI_CENTER].fillcolor);
+                if ( thr.sis[SI_CENTER].lt.y > 0 )
+                {
+                    // top part
+                    fillrect.lt = dd.offset;
+                    fillrect.rb = rbpt + ts::ivec2(0, thr.sis[SI_CENTER].lt.y);
+                    filler(thr.siso[SI_CENTER].filloutcolor);
+                }
+                if (thr.sis[SI_CENTER].rb.y > 0)
+                {
+                    // bottom part
+                    fillrect.lt.x = dd.offset.x;
+                    fillrect.lt.y = rbpt.y - thr.sis[SI_CENTER].rb.y;
+                    fillrect.rb = rbpt;
+                    filler(thr.siso[SI_CENTER].filloutcolor);
+                }
+                if (thr.sis[SI_CENTER].lt.x > 0)
+                {
+                    // left part
+                    fillrect.lt = dd.offset + ts::ivec2(0, thr.sis[SI_CENTER].lt.y);
+                    fillrect.rb.x = dd.offset.x + thr.sis[SI_CENTER].lt.x;
+                    fillrect.rb.y = rbpt.y - thr.sis[SI_CENTER].lt.y;
+                    filler(thr.siso[SI_CENTER].filloutcolor);
+                }
+                if (thr.sis[SI_CENTER].rb.x > 0)
+                {
+                    // rite part
+                    fillrect.lt.x = rbpt.x - thr.sis[SI_CENTER].lt.x;
+                    fillrect.lt.y = dd.offset.y + thr.sis[SI_CENTER].lt.y;
+                    fillrect.rb.x = rbpt.x;
+                    fillrect.rb.y = rbpt.y - thr.sis[SI_CENTER].lt.y;
+                    filler(thr.siso[SI_CENTER].filloutcolor);
+                }
             }
         }
 
         if (options & DTHRO_BORDER)
         {
             // top
-            if (*t)
+            bool top_drawn;
+            if (false != (top_drawn = *t))
             {
                 rdraw.rbeg = lt; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_TOP);
                 rdraw.rrep = t; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_TOP);
@@ -1540,7 +1605,8 @@ void border_window_data_s::draw()
             }
 
             // bottom
-            if (*b)
+            bool bottom_drawn;
+            if (false != (bottom_drawn = *b))
             {
                 rdraw.rbeg = lb; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_BOTTOM);
                 rdraw.rrep = b; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_BOTTOM);
@@ -1551,19 +1617,25 @@ void border_window_data_s::draw()
             // left
             if (*l)
             {
-                rdraw.rbeg = nullptr;
+                int y0 = dd.offset.y;
+                int y1 = rbpt.y;
+
+                if (top_drawn) { rdraw.rbeg = nullptr; y0 += lt->height(); } else { rdraw.rbeg = lt; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_TOP); }
                 rdraw.rrep = l; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_LEFT);
-                rdraw.rend = nullptr;
-                rdraw.draw_v(dd.offset.x, dd.offset.y + lt->height(), rbpt.y - lb->height(), thr.siso[SI_LEFT].tile);
+                if (bottom_drawn) { rdraw.rend = nullptr;  y1 -= lb->height(); } else { rdraw.rend = lb; rdraw.a_end = use_alphablend && thr.is_alphablend(SI_LEFT_BOTTOM); }
+                rdraw.draw_v(dd.offset.x, y0, y1, thr.siso[SI_LEFT].tile);
             }
 
             // right
             if (*r)
             {
-                rdraw.rbeg = nullptr;
+                int y0 = dd.offset.y;
+                int y1 = rbpt.y;
+
+                if (top_drawn) { rdraw.rbeg = nullptr;  y0 += rt->height(); } else { rdraw.rbeg = rt; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_RIGHT_TOP); }
                 rdraw.rrep = r; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_RIGHT);
-                rdraw.rend = nullptr;
-                rdraw.draw_v(rbpt.x - r->width(), dd.offset.y + rt->height(), rbpt.y - rb->height(), thr.siso[SI_RIGHT].tile);
+                if (bottom_drawn) { rdraw.rend = nullptr; y1 -= rb->height(); } else { rdraw.rend = rb; rdraw.a_end = use_alphablend && thr.is_alphablend(SI_RIGHT_BOTTOM); }
+                rdraw.draw_v(rbpt.x - r->width(), y0, y1, thr.siso[SI_RIGHT].tile);
             }
 
         }
@@ -1608,16 +1680,11 @@ void border_window_data_s::draw()
 
         if (0 != ts::ALPHA(thr.siso[SI_CENTER].fillcolor))
         {
-            ts::irect fillrect(dd.offset.x + thr.sis[SI_LEFT].width(), dd.offset.y, rbpt.x, rbpt.y);
+            fillrect.lt.x = dd.offset.x + thr.sis[SI_LEFT].width();
+            fillrect.lt.y = dd.offset.y;
+            fillrect.rb = rbpt - thr.sis[SI_CENTER].rb;
             fillrect.lt += thr.sis[SI_CENTER].lt;
-            fillrect.rb -= thr.sis[SI_CENTER].rb;
-            if (fillrect.intersect(dd.cliprect))
-            {
-                if (use_alphablend && ts::ALPHA(thr.siso[SI_CENTER].fillcolor) < 255)
-                    backbuffer.overfill(fillrect.lt, fillrect.size(), ts::PREMULTIPLY(thr.siso[SI_CENTER].fillcolor));
-                else
-                    backbuffer.fill(fillrect.lt, fillrect.size(), thr.siso[SI_CENTER].fillcolor);
-            }
+            filler(thr.siso[SI_CENTER].fillcolor);
         } else
         {
             rdraw.rrep = thr.sis + SI_CENTER; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_CENTER);
@@ -1645,16 +1712,32 @@ void border_window_data_s::draw()
 
     if ((options & DTHRO_VSB) && d)
     {
-        rdraw.rbeg = thr.sis + SI_SBTOP; rdraw.a_beg = thr.is_alphablend(SI_SBTOP);
-        rdraw.rrep = thr.sis + SI_SBREP; rdraw.a_rep = thr.is_alphablend(SI_SBREP);
-        rdraw.rend = thr.sis + SI_SBBOT; rdraw.a_end = thr.is_alphablend(SI_SBBOT);
 
         ts::irect sbr = d->draw_thr.sbrect() + dd.offset;
-        rdraw.draw_v(sbr.rb.x - rdraw.rrep->width(), sbr.lt.y, sbr.rb.y, true);
+        rdraw.rrep = thr.sis + SI_SBREP;
+        if (*rdraw.rrep)
+        {
+            rdraw.rbeg = thr.sis + SI_SBTOP;
+            rdraw.rend = thr.sis + SI_SBBOT;
+
+            rdraw.a_beg = thr.is_alphablend(SI_SBTOP);
+            rdraw.a_rep = thr.is_alphablend(SI_SBREP);
+            rdraw.a_end = thr.is_alphablend(SI_SBBOT);
+
+            rdraw.draw_v(sbr.rb.x - rdraw.rrep->width(), sbr.lt.y, sbr.rb.y, true);
+        }
 
         rdraw.rbeg = thr.sis + SI_SMTOP; rdraw.a_beg = thr.is_alphablend(SI_SMTOP);
         rdraw.rrep = thr.sis + SI_SMREP; rdraw.a_rep = thr.is_alphablend(SI_SMREP);
         rdraw.rend = thr.sis + SI_SMBOT; rdraw.a_end = thr.is_alphablend(SI_SMBOT);
+
+        ts::irect sbhl[3];
+        if ((options & DTHRO_SB_HL) && thr.activesbshift)
+        {
+            sbhl[0] = *rdraw.rbeg + thr.activesbshift; rdraw.rbeg = sbhl + 0;
+            sbhl[1] = *rdraw.rrep + thr.activesbshift; rdraw.rrep = sbhl + 1;
+            sbhl[2] = *rdraw.rend + thr.activesbshift; rdraw.rend = sbhl + 2;
+        }
 
         d->draw_thr.sbrect().lt.x = sbr.rb.x - rdraw.rrep->width();
         d->draw_thr.sbrect().lt.y = sbr.lt.y + d->draw_thr.sbpos;
@@ -2005,26 +2088,17 @@ void rectengine_root_c::flash()
 
 void rectengine_root_c::notification_icon( const ts::wsptr& text )
 {
-    NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
+    static NOTIFYICONDATAW nd = { sizeof(NOTIFYICONDATAW), 0 };
     nd.hWnd = hwnd;
-    nd.uID = (int)hwnd;
-    nd.uFlags = NIF_ICON|NIF_MESSAGE|NIF_TIP;
+    nd.uID = (int)this;
     nd.uCallbackMessage = WM_USER + 7213;
-    nd.hIcon = gui->app_icon(true);
-    
-    size_t copylen = ts::tmin( sizeof(nd.szTip) - sizeof(ts::wchar), text.l * sizeof(ts::wchar) );
-    memcpy( nd.szTip, text.s, copylen );
-    nd.szTip[copylen/sizeof(ts::wchar)] = 0;
+    //nd.hIcon = gui->app_icon(true);
 
-    if (flags.is(F_NOTIFY_ICON))
-        Shell_NotifyIconW( NIM_MODIFY, &nd );
-    else {
-        Shell_NotifyIconW(NIM_ADD, &nd);
-        nd.uVersion = NOTIFYICON_VERSION;
-        Shell_NotifyIconW(NIM_SETVERSION, &nd);
-    }
-    flags.set(F_NOTIFY_ICON);
+    size_t copylen = ts::tmin(sizeof(nd.szTip) - sizeof(ts::wchar), text.l * sizeof(ts::wchar));
+    memcpy(nd.szTip, text.s, copylen);
+    nd.szTip[copylen / sizeof(ts::wchar)] = 0;
 
+    PostMessageW( hwnd, WM_USER + 7214, 0, (LPARAM)&nd );
 }
 
 bool rectengine_root_c::update_foreground()

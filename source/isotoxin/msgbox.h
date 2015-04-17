@@ -27,7 +27,7 @@ class dialog_msgbox_c;
 template<> struct MAKE_ROOT<dialog_msgbox_c> : public _PROOT(dialog_msgbox_c)
 {
     dialog_msgbox_params_s prms;
-    MAKE_ROOT(drawchecker &dch, const dialog_msgbox_params_s &prms) : _PROOT(dialog_msgbox_c)(dch), prms(prms) { init(false); }
+    MAKE_ROOT(drawcollector &dch, const dialog_msgbox_params_s &prms) : _PROOT(dialog_msgbox_c)(dch), prms(prms) { init(false); }
     ~MAKE_ROOT() {}
 };
 

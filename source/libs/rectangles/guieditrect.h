@@ -155,6 +155,7 @@ class gui_textedit_c : public gui_control_c
     DECLAREBIT( F_ARROW_CURSOR );
     DECLAREBIT( F_DISABLE_CARET ); // no caret - no selections
     DECLAREBIT( F_SBALWAYS );
+    DECLAREBIT( F_SBHL );
     DECLAREBIT( F_IGNOREFOCUSCHANGE );
 
 protected:

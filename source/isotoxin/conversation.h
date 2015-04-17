@@ -310,7 +310,8 @@ class gui_message_area_c : public gui_group_c
     DUMMY(gui_message_area_c);
 
     static const ts::flags32_s::BITS F_INITIALIZED = FLAGS_FREEBITSTART << 0;
-
+    
+    bool change_text_handler(const ts::wstr_c &);
 protected:
     /*virtual*/ void children_repos() override;
 public:

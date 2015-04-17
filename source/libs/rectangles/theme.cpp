@@ -44,12 +44,19 @@ theme_rect_s::~theme_rect_s()
 void theme_rect_s::init_subimage(subimage_e si, const str_c &sidef)
 {
 	siso[si].fillcolor = 0;
+    siso[si].filloutcolor = 0;
 
     str_c tail;
 	sis[si] = parserect(sidef, ts::irect(0), &tail);
     siso[si].tile = !tail.equals(CONSTASTR("stretch"));
     if (siso[si].tile && tail.begins(CONSTASTR("#")))
-        siso[si].fillcolor = ts::parsecolor<char>(tail, ARGB(0,0,0,255));
+    {
+        token<char> tt(tail,',');
+        siso[si].fillcolor = ts::parsecolor<char>(*tt, ARGB(0,0,0,255));
+        ++tt;
+        if (tt) 
+            siso[si].filloutcolor = ts::parsecolor<char>(*tt, ARGB(0,0,0,255));
+    }
     siso[si].loaded = !sidef.is_empty();
 }
 
@@ -71,6 +78,7 @@ void theme_rect_s::load_params(abp_c * block)
 	minsize = parsevec2( block->get_string(CONSTASTR("minsize")), ts::ivec2(0) );
     capbuttonsshift = parsevec2( block->get_string(CONSTASTR("bshift")), ts::ivec2(0) );
     capbuttonsshift_max = parsevec2( block->get_string(CONSTASTR("bshiftmax")), ts::ivec2(0) );
+    activesbshift = parsevec2( block->get_string(CONSTASTR("smh")), ts::ivec2(0) );
 
     captexttab = block->get_int(CONSTASTR("captexttab"), 5);
 	captop = block->get_int(CONSTASTR("captop"), 0);
@@ -391,8 +399,7 @@ bool theme_c::load( const ts::wsptr &name )
                 ts::abp_c *gen = it->get(CONSTASTR("gen"));
                 if (gen)
                 {
-                    generated_button_data_s *bgenstuff = generated_button_data_s::generate(gen);
-                    if (bgenstuff)
+                    if (generated_button_data_s *bgenstuff = generated_button_data_s::generate(gen))
                     {
                         bd = button_desc_s::build(bgenstuff->src);
                         bgenstuff->setup(*bd);

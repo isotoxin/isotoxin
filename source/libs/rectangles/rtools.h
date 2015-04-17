@@ -118,7 +118,7 @@ struct sbhelper_s
         return false;
     }
 
-    void draw( const theme_rect_s *thr, rectengine_c &engine, evt_data_s &dd );
+    void draw( const theme_rect_s *thr, rectengine_c &engine, evt_data_s &dd, bool hl );
 
     bool at_end( int viewsize ) const
     {

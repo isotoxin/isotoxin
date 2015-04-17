@@ -1025,20 +1025,20 @@ public:
 #define UNIQUE_PTR(ty) std::unique_ptr<ty, ts::ts_delete<ty> >
 
 
+    INLINE uint8 RED(TSCOLOR c) { return as_byte(c >> 16); }
+    INLINE uint8 GREEN(TSCOLOR c) { return as_byte(c >> 8); }
+    INLINE uint8 BLUE(TSCOLOR c) { return as_byte(c); }
+    INLINE uint8 ALPHA(TSCOLOR c) { return as_byte(c >> 24); }
 
 	INLINE TSCOLOR ARGB(auint r, auint g, auint b, auint a = 255)
 	{
 		return CLAMP<uint8>(b) | (CLAMP<uint8>(g) << 8) | (CLAMP<uint8>(r) << 16) | (CLAMP<uint8>(a) << 24);
 	}
-    INLINE uint8 RED(TSCOLOR c) { return as_byte(c>>16); }
-    INLINE uint8 GREEN(TSCOLOR c) { return as_byte(c>>8); }
-    INLINE uint8 BLUE(TSCOLOR c) { return as_byte(c); }
-    INLINE uint8 ALPHA(TSCOLOR c) { return as_byte(c>>24); }
 
     INLINE TSCOLOR GRAYSCALE(TSCOLOR c)
     {
         auint oi = lround(float(BLUE(c)) * 0.114f + float(GREEN(c)) * 0.587f + float(RED(c)) * 0.299);
-        return CLAMP<uint8>(oi) | (CLAMP<uint8>(oi) << 8) | (CLAMP<uint8>(oi) << 16) | (ALPHA(c) << 24);
+        return ARGB(oi, oi, oi, ALPHA(c));
     }
 
     INLINE TSCOLOR PREMULTIPLY(TSCOLOR c, float a)
@@ -1047,7 +1047,7 @@ public:
         auint oiG = lround(float(GREEN(c)) * a);
         auint oiR = lround(float(RED(c)) * a);
 
-        return CLAMP<uint8>(oiB) | (CLAMP<uint8>(oiG) << 8) | (CLAMP<uint8>(oiR) << 16) | (ALPHA(c) << 24);
+        return ARGB(oiR, oiG, oiB, ALPHA(c));
     }
 
     INLINE TSCOLOR PREMULTIPLY(TSCOLOR c)
@@ -1058,7 +1058,7 @@ public:
         auint oiG = lround(float(GREEN(c)) * a);
         auint oiR = lround(float(RED(c)) * a);
 
-        return CLAMP<uint8>(oiB) | (CLAMP<uint8>(oiG) << 8) | (CLAMP<uint8>(oiR) << 16) | (ALPHA(c) << 24);
+        return ARGB(oiR, oiG, oiB, ALPHA(c));
     }
 
     INLINE TSCOLOR PREMULTIPLY(TSCOLOR c, uint8 aa, double &not_a) // premultiply with addition alpha and return not-alpha
@@ -1071,10 +1071,10 @@ public:
         auint oiR = lround(float(RED(c)) * a);
         auint oiA = lround(a * 255.0);
 
-        return CLAMP<uint8>(oiB) | (CLAMP<uint8>(oiG) << 8) | (CLAMP<uint8>(oiR) << 16) | (oiA << 24);
+        return ARGB(oiR, oiG, oiB, oiA);
     }
 
-    INLINE TSCOLOR ALPHABLEND( TSCOLOR target, TSCOLOR source, int constant_alpha = 255 ) // photoshop normal color mixing
+    INLINE TSCOLOR ALPHABLEND( TSCOLOR target, TSCOLOR source, int constant_alpha = 255 ) // photoshop like Normal mode color blending
     {
         uint8 oA = ALPHA(target);
 
@@ -1105,7 +1105,7 @@ public:
         auint oiG = lround(float(G) * A + float(oG) * k);
         auint oiR = lround(float(R) * A + float(oR) * k);
 
-        return ts::ARGB(oiR, oiG, oiB, oiA);
+        return ARGB(oiR, oiG, oiB, oiA);
     }
 
     template<typename T> const char *shorttypename();

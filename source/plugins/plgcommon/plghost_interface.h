@@ -6,7 +6,7 @@
 
 // typical scenario : AQ -> plghost, HA -> application
 
-#define PLGHOST_IPC_PROTOCOL_VERSION 4
+#define PLGHOST_IPC_PROTOCOL_VERSION 5
 
 enum commands_e
 {
@@ -25,6 +25,7 @@ enum commands_e
     AQ_INIT_DONE,
     AQ_ONLINE,
     AQ_OFFLINE,
+    AQ_OSTATE,
 
     HA_PROXY_SETTINGS,
     AQ_PROXY_SETTINGS,
