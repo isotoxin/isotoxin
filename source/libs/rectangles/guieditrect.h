@@ -237,7 +237,7 @@ public:
         scroll_to_caret();
     }
 
-    void backspace() { text_erase(get_caret_char_index()-1, 1); }
+    void backspace() { if (text.size() == 0) return; text_erase(get_caret_char_index()-1, 1); }
     void del() {cut_(get_caret_char_index(),false);}
 	void cut() {cut_(get_caret_char_index());}
 	void copy() {copy_(get_caret_char_index());}

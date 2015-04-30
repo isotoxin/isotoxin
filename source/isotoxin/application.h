@@ -53,16 +53,49 @@ struct file_transfer_s : public unfinished_file_transfer_s
     uint64 offset = 0;
     uint64 progrez = 0;
     HANDLE handle = nullptr;
-    ts::Time trtime = ts::Time::past();
+    double notfreq = 1.0;
+    LARGE_INTEGER prevt;
     int bytes_per_sec = 0;
+
+    struct range_s
+    {
+        uint64 offset0;
+        uint64 offset1;
+    };
+    ts::tbuf0_t<range_s> transfered;
+    void tr( uint64 _offset0, uint64 _offset1 );
+    uint64 trsz() const
+    {
+        uint64 sz = 0;
+        for(const range_s &r : transfered)
+            sz += r.offset1 - r.offset0;
+        return sz;
+    }
+
+    float upduitime = 0;
     bool accepted = false; // prepare_fn called - file receive accepted
 
+    file_transfer_s();
     ~file_transfer_s();
 
     void auto_confirm();
 
     int progress(int &bytes_per_sec) const;
     void upd_message_item();
+
+    float deltatime(bool updateprevt, int addseconds = 0)
+    {
+        LARGE_INTEGER cur;
+        QueryPerformanceCounter(&cur);
+        float dt = (float)((double)(cur.QuadPart - prevt.QuadPart) * notfreq);
+        if (updateprevt)
+        {
+            prevt = cur;
+            if (addseconds)
+                prevt.QuadPart += (int64)((double)addseconds / notfreq);
+        }
+        return dt;
+    }
 
     void resume();
     void prepare_fn( const ts::wstr_c &path_with_fn, bool overwrite );
@@ -71,7 +104,7 @@ struct file_transfer_s : public unfinished_file_transfer_s
     void query( uint64 offset, int sz );
     void pause_by_remote( bool p );
     void pause_by_me( bool p );
-    bool is_active() const { return bytes_per_sec == -3 || (ts::Time::current() - trtime) < 60000; /* last activity in 60 sec */ }
+    bool is_active() const { return bytes_per_sec == -3 || (const_cast<file_transfer_s *>(this)->deltatime(false)) < 60; /* last activity in 60 sec */ }
     bool confirm_required() const;
 };
 
@@ -220,6 +253,7 @@ public:
     file_transfer_s *find_file_transfer_by_msgutag(uint64 utag);
     file_transfer_s *register_file_transfer( const contact_key_s &historian, const contact_key_s &sender, uint64 utag, const ts::wstr_c &filename, uint64 filesize );
     void unregister_file_transfer(uint64 utag,bool disconnected);
+    void cancel_file_transfers( const contact_key_s &historian ); // by historian
 };
 
 extern application_c *g_app;

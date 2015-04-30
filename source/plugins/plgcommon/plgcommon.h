@@ -118,6 +118,31 @@ template<> inline wsptr _to_char_or_not_to_char<wchar_t>(const char *, const wch
 #define UNSETFLAG(f,mask) (f)&=~(mask)
 #define SETUPFLAG(f,mask,val) if(val) {SETFLAG(f,mask);} else {UNSETFLAG(f,mask);}
 
+#ifdef _DEBUG
+
+struct delta_time_profiler_s
+{
+    double notfreq;
+    LARGE_INTEGER prev;
+    struct entry_s
+    {
+        int id;
+        float deltams;
+    };
+    entry_s *entries = nullptr;
+    int index = 0;
+    int n = 0;
+    delta_time_profiler_s(int n);
+    ~delta_time_profiler_s();
+    void operator()(int id);
+};
+
+#define DELTA_TIME_PROFILER(name, n) delta_time_profiler_s name(n)
+#define DELTA_TIME_CHECKPOINT(name) name(__LINE__)
+#else
+#define DELTA_TIME_PROFILER(n, nn) 
+#define DELTA_TIME_CHECKPOINT(n) 
+#endif
 
 #include "proto_interface.h"
 

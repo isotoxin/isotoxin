@@ -46,7 +46,7 @@ void path_expand_env(ts::wstr_c &path)
 {
     ts::parse_env(path);
     //ts::wstr_c cfgfolder = cfg().get_path();
-    path.replace_all(CONSTWSTR("%CONFIG%"), ts::fn_get_path(cfg().get_path()).trunc_char('\\'));
+    path.replace_all(CONSTWSTR("%CONFIG%"), ts::fn_get_path(cfg().get_path()).trunc_char(NATIVE_SLASH));
 
 }
 
@@ -357,14 +357,20 @@ isotoxin_ipc_s::isotoxin_ipc_s(const ts::str_c &tag, datahandler_func datahandle
     if (!datahandler) return;
     int memba = junct.start(tag);
     if (memba != 0) 
+        return;
+
+    if (!ts::start_app(CONSTWSTR("plghost ") + ts::tmp_wstr_c(tag), &plughost))
     {
+        junct.stop();
         return;
     }
-    if (!ts::start_app(CONSTWSTR("plghost ") + ts::tmp_wstr_c(tag), &plughost))
-        return;
+
     junct.set_data_callback(handshake_func, this);
     if (!junct.wait_partner(10000))
+    {
+        junct.stop();
         return;
+    }
     ipc_ok = true;
     send( ipcw(AQ_VERSION) );
 }
@@ -656,16 +662,12 @@ bool file_mask_match( const ts::wsptr &filename, const ts::wsptr &masks )
 {
     if (masks.l == 0) return false;
     ts::wstr_c fn(filename);
-#ifdef _WIN32
-    fn.case_down();
-#endif
+    ts::fix_path(fn, FNO_LOWERCASEAUTO|FNO_NORMALIZE);
     
     for(ts::token<ts::wchar> t(masks, ';');t;++t)
     {
         ts::wstr_c fnmask( *t );
-#ifdef _WIN32
-        fnmask.case_down();
-#endif
+        ts::fix_path(fnmask, FNO_LOWERCASEAUTO|FNO_NORMALIZE);
         fnmask.trim();
         ts::wsptr fnm = fnmask.as_sptr();
         if (fnmask.get_char(0) == '\"')
@@ -673,7 +675,7 @@ bool file_mask_match( const ts::wsptr &filename, const ts::wsptr &masks )
             ++fnm;
             --fnm.l;
         }
-        if (ts::fn_mask_match<ts::wchar>(fn, fnm)) return true;
+        if (ts::fn_mask_match(fn, fnm)) return true;
     }
 
     return false;

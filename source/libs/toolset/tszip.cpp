@@ -117,7 +117,7 @@ struct zlo : public zlib_filefunc_def,  public arc_file_s
                 return false;
             fn.l = file_info.size_filename;
             if (file_info.compression_method != 0 && file_info.compression_method != Z_DEFLATED) goto next;
-            if (file_info.size_filename == 0 || filename_inzip[fn.l - 1] == '/' || filename_inzip[fn.l - 1] == '\\') goto next;
+            if (file_info.size_filename == 0 || __is_slash(filename_inzip[fn.l - 1])) goto next;
             unzGetFilePos64(z, &ffs);
             if (!h(*this))
                 return true;

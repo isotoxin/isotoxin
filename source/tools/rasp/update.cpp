@@ -73,8 +73,9 @@ int proc_upd(const ts::wstrings_c & pars)
 int proc_sign(const ts::wstrings_c & pars)
 {
     if (pars.size() < 3) return 0;
-    ts::wstr_c arch = ts::simplify_path(pars.get(1));
-    ts::wstr_c proc = ts::simplify_path(pars.get(2));
+
+    ts::wstr_c arch = pars.get(1); ts::fix_path( arch, FNO_SIMPLIFY );
+    ts::wstr_c proc = pars.get(2); ts::fix_path( proc, FNO_SIMPLIFY );
 
     if (!is_file_exists(arch.as_sptr()))
     {
@@ -92,8 +93,8 @@ int proc_sign(const ts::wstrings_c & pars)
     b.load_from_disk_file(proc);
     bp.load(b.cstr());
 
-    ts::str_c procpath = ts::fn_get_path(proc);
-    auto pa = [&]( ts::str_c p ) ->ts::str_c
+    ts::wstr_c procpath = ts::fn_get_path(proc);
+    auto pa = [&]( ts::wstr_c p ) ->ts::wstr_c
     {
         return ts::fn_join(procpath, p);
     };
@@ -121,7 +122,7 @@ int proc_sign(const ts::wstrings_c & pars)
         rebuild:
         crypto_sign_keypair(pk, sk);
 
-        FILE *f = fopen(pa(bp.get_string(CONSTASTR("sk"))), "wb");
+        FILE *f = _wfopen(pa(bp.get_string(CONSTASTR("sk"))), L"wb");
         fwrite(sk, 1, sizeof(sk), f);
         fclose(f);
 
@@ -130,7 +131,7 @@ int proc_sign(const ts::wstrings_c & pars)
             spk.append(CONSTASTR("0x")).append_as_hex(pk[i]).append(CONSTASTR(", "));
         spk.trunc_length(2);
 
-        f = fopen(pa(bp.get_string(CONSTASTR("pk"))), "wb");
+        f = _wfopen(pa(bp.get_string(CONSTASTR("pk"))), L"wb");
         fwrite(spk.cstr(), 1, spk.get_length(), f);
         fclose(f);
     } else
@@ -160,7 +161,7 @@ int proc_sign(const ts::wstrings_c & pars)
     ss.append_as_hex(sig, (int)siglen);
 
 
-    FILE *f = fopen(pa(bp.get_string(CONSTASTR("result"))), "wb");
+    FILE *f = _wfopen(pa(bp.get_string(CONSTASTR("result"))), L"wb");
     fwrite(ss.cstr(), 1, ss.get_length(), f);
     fclose(f);
 

@@ -27,7 +27,7 @@ namespace ts
     bool    zip_container_c::zip_folder_entry_c::iterate_files(const wsptr &path_orig, ITERATE_FILES_CALLBACK ef, container_c *pf)
     {
         tmp_wstr_c path(path_orig);
-        if (!path.is_empty()) path.append(CONSTWSTR("\\"));
+        if (!path.is_empty() && !__is_slash(path.get_last_char())) path.append_char(NATIVE_SLASH);
 
         for (zip_file_entry_c *f : m_files)
             if (!ef(path, f->name(), pf)) return false;
@@ -41,9 +41,9 @@ namespace ts
     bool    zip_container_c::zip_folder_entry_c::iterate_files(const wsptr &path_orig, const wsptr &path, ITERATE_FILES_CALLBACK ef, container_c *pf)
     {
         tmp_wstr_c pa( path ), cf;
-        if ( pa.get_char(0) == '\\' || pa.get_char(0) == '/' ) pa.cut(0,1);
-        int pad = pa.find_pos('\\');
-        if (pad < 0) pad = pa.find_pos('/');
+        ASSERT(pa.find_pos(ENEMY_SLASH) < 0);
+        if (pa.get_char(0) == NATIVE_SLASH) pa.cut(0, 1);
+        int pad = pa.find_pos(NATIVE_SLASH);
         if ( pad >= 0 )
         {
             cf = pa.substr(0,pad);
@@ -75,9 +75,9 @@ namespace ts
     bool zip_container_c::zip_folder_entry_c::iterate_folders(const wsptr &path_orig, const wsptr &path, ITERATE_FILES_CALLBACK ef, container_c *pf)
     {
         tmp_wstr_c pa(path), cf;
-        if (pa.get_char(0) == '\\' || pa.get_char(0) == '/') pa.cut(0, 1);
-        int pad = pa.find_pos('\\');
-        if (pad < 0) pad = pa.find_pos('/');
+        ASSERT(pa.find_pos(ENEMY_SLASH) < 0);
+        if (pa.get_char(0) == NATIVE_SLASH) pa.cut(0, 1);
+        int pad = pa.find_pos(NATIVE_SLASH);
         if (pad >= 0)
         {
             cf = pa.substr(0, pad);
@@ -156,17 +156,14 @@ namespace ts
     zip_container_c::zip_file_entry_c * zip_container_c::add_path( const wsptr &path0 )
     {
         wstr_c path1( path0 );
-#ifdef _WIN32
-        path1.case_down();
-#endif
+        fix_path(path1, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
         const wchar *path = path1.cstr();
 
         zip_folder_entry_c *cur = &m_root;
 
         for (;;)
         {
-            int ind = CHARz_find<wchar>( path, '\\' );
-            if (ind < 0) ind = CHARz_find<wchar>( path, '/' );
+            int ind = CHARz_find<wchar>( path, NATIVE_SLASH );
             if ( ind >= 0 )
             {
                 zip_folder_entry_c *f = cur->get_folder(wsptr(path, ind));
@@ -307,7 +304,7 @@ namespace ts
             }
             filename_inzip.set_length();
             if (file_info.compression_method!=0 && file_info.compression_method!=Z_DEFLATED) goto next;
-            if (file_info.size_filename == 0 || filename_inzip.get_last_char() == '/' || filename_inzip.get_last_char() == '\\') goto next;
+            if (file_info.size_filename == 0 || __is_slash(filename_inzip.get_last_char())) goto next;
 
             {
                 zip_file_entry_c *fe = add_path( to_wstr(filename_inzip.as_sptr()) );
@@ -339,10 +336,7 @@ next:
     bool   zip_container_c::read(const wsptr &filename, buf_wrapper_s &b)
     {
         ts::wstr_c fn(filename);
-#ifdef _WIN32
-        fn.case_down();
-#endif // _WIN32
-        fn.replace_all('/', '\\');
+        fix_path(fn, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
 
         if (m_find_cache_file_name.equals(fn))
         {
@@ -360,10 +354,7 @@ next:
     size_t    zip_container_c::size(const wsptr &filename)
     {
         ts::wstr_c fn(filename);
-#ifdef _WIN32
-        fn.case_down();
-#endif // _WIN32
-        fn.replace_all('/', '\\');
+        fix_path(fn, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
 
         if (m_find_cache_file_name.equals(fn))
         {
@@ -387,17 +378,14 @@ next:
     bool    zip_container_c::file_exists(const wsptr &path0)
     {
         wstr_c path1( path0 );
-#ifdef _WIN32
-        path1.case_down();
-#endif // _WIN32
-        path1.replace_all('/', '\\');
+        fix_path(path1, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
         const wchar *path = path1.cstr();
 
         zip_folder_entry_c *cur = &m_root;
 
         for (;;)
         {
-            int ind = CHARz_find<wchar>( path, '\\' );
+            int ind = CHARz_find<wchar>( path, NATIVE_SLASH );
             if ( ind >= 0 )
             {
                 zip_folder_entry_c *f = cur->get_folder(wsptr(path, ind));
@@ -437,12 +425,10 @@ next:
     bool    zip_container_c::iterate_files(const wsptr &path0, ITERATE_FILES_CALLBACK ef)
     {
         tmp_wstr_c path1( path0 );
-        path1.case_down();
+        fix_path(path1, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
 
         tmp_wstr_c pp( path0 );
-        wchar c = 0;
-        if (pp.get_length() > 0) c = pp.get_char( pp.get_length() - 1 );
-        if ( c != '\\' && c != '/' ) pp.append_char('\\');
+        if ( !__is_slash(pp.get_last_char()) ) pp.append_char(NATIVE_SLASH);
 
         return m_root.iterate_files(pp, path1,ef,this);
     }
@@ -450,12 +436,10 @@ next:
     bool    zip_container_c::iterate_folders(const wsptr &path0, ITERATE_FILES_CALLBACK ef)
     {
         tmp_wstr_c path1(path0);
-        path1.case_down();
+        fix_path(path1, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
 
         tmp_wstr_c pp(path0);
-        wchar c = 0;
-        if (pp.get_length() > 0) c = pp.get_char(pp.get_length() - 1);
-        if (c != '\\' && c != '/') pp.append_char('\\');
+        if (!__is_slash(pp.get_last_char())) pp.append_char(NATIVE_SLASH);
 
         return m_root.iterate_folders(pp, path1, ef, this);
     }

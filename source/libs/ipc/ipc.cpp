@@ -269,7 +269,11 @@ int ipc_junction_s::start( const char *junction_name )
         }
     }
 
+    if (d.sync == nullptr)
+        __debugbreak();
+
     CloseHandle(CreateThread(nullptr, 0, watchdog, this, 0, nullptr));
+    stop_called = false;
     for( ; !d.watch_dog_works; ) Sleep(1);
     return d.member;
 }
@@ -277,7 +281,13 @@ int ipc_junction_s::start( const char *junction_name )
 void ipc_junction_s::stop()
 {
     ipc_data_s &d = (ipc_data_s &)(*this);
-    if (d.sync == nullptr) return; // already cleared
+    if (d.sync == nullptr)
+    {
+        if (!stop_called || d.watch_dog_works)
+            __debugbreak();
+
+        return; // already cleared
+    }
 
     SetEvent(d.watchdog[1]);
     CloseHandle(d.watchdog[1]);
@@ -299,6 +309,7 @@ void ipc_junction_s::stop()
     CloseHandle(d.mapfile);
 
     memset(this, 0, sizeof(ipc_junction_s));
+    stop_called = true;
 }
 
 void ipc_junction_s::idlejob()

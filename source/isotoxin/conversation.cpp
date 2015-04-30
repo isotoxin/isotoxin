@@ -831,7 +831,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
             });
 
             g_app->enum_file_transfers_by_historian(owner->getkey(), [this](file_transfer_s &ftr) {
-                if (ftr.upload) return;
+                if (ftr.upload || ftr.accepted) return;
                 contact_c *sender = contacts().find(ftr.sender);
                 if (sender)
                 {
@@ -1649,15 +1649,15 @@ bool gui_message_item_c::b_explore(RID, GUIPARAM)
     if (rec.text.get_char(0) == '*' || rec.text.get_char(0) == '?') return true;
     if (ts::is_file_exists(rec.text))
     {
-        ShellExecuteW(nullptr, L"open", L"explorer", CONSTWSTR("/select,") + ts::fn_get_short_name(rec.text), ts::fn_get_path(rec.text), SW_SHOWDEFAULT);
+        ShellExecuteW(nullptr, L"open", L"explorer", CONSTWSTR("/select,") + ts::fn_autoquote(ts::fn_get_name_with_ext(rec.text)), ts::fn_get_path(rec.text), SW_SHOWDEFAULT);
     } else
     {
         ts::wstr_c path = fn_get_path(rec.text);
-        path.replace_all('/', '\\');
+        ts::fix_path(path, FNO_NORMALIZE);
         for(; !ts::dir_present(path);)
         {
-            if (path.find_pos('\\') < 0) return true;
-            path.trunc_char('\\');
+            if (path.find_pos(NATIVE_SLASH) < 0) return true;
+            path.trunc_char(NATIVE_SLASH);
             path = fn_get_path(path);
         }
         ShellExecuteW(nullptr, L"explore", path, nullptr, nullptr, SW_SHOWDEFAULT);
@@ -1677,6 +1677,35 @@ bool gui_message_item_c::b_break(RID btn, GUIPARAM)
         ft->kill();
 
     if (e) kill_button(e, 1);
+
+    if (rec.text.get_char(0) == '?')
+    {
+        // unfinished
+        rec.text.set_char(0, '*');
+
+        if (auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.msgitem_utag == rec.utag; }))
+        {
+
+            post_s p;
+            p.sender = row->other.sender;
+            p.message = rec.text;
+            p.utag = rec.utag;
+            prf().change_history_item(row->other.historian, p, HITM_MESSAGE);
+            if (contact_c * h = contacts().find(row->other.historian)) h->iterate_history([&](post_s &p)->bool {
+                if (p.utag == rec.utag)
+                {
+                    p.message = rec.text;
+                    return true;
+                }
+                return false;
+            });
+
+            if (row->deleted())
+                prf().changed();
+        }
+
+        update_text();
+    }
 
     return true;
 }
@@ -1850,6 +1879,7 @@ void gui_message_item_c::update_text()
             {
                 newtext.append(CONSTWSTR("<img=file,-1>"));
                 newtext.append(TTT("Соединение отсутствует: $",235) / fn);
+                newtext.insert(3,prepare_button_rect(1,g_app->buttons().breakb->size));
             }
             else
             {
@@ -2575,7 +2605,7 @@ gui_conversation_c::~gui_conversation_c()
 
 ts::ivec2 gui_conversation_c::get_min_size() const
 {
-    return __super::get_min_size();
+    return ts::ivec2(300,200);
 }
 void gui_conversation_c::created()
 {
@@ -2660,7 +2690,7 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_BUTTONS> &c)
     {
         c->subiterate( [this](contact_c *sc) {
             if (sc->is_av())
-                if (active_protocol_c *ap = prf().ap(sc->getkey().protoid)) avformats.add(ap->defaudio());
+                if (active_protocol_c *ap = prf().ap(sc->getkey().protoid)) avformats.set(ap->defaudio());
         } );
 
         //avformats.get(0).sampleRate = 44100;

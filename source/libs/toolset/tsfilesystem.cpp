@@ -6,52 +6,17 @@
 
 namespace ts
 {
-	static INLINE DWORD GetCurrentDirectoryX( __in DWORD nBufferLength, LPWSTR lpBuffer )
-	{
-		return GetCurrentDirectoryW( nBufferLength, lpBuffer );
-	}
-	static INLINE DWORD GetCurrentDirectoryX( __in DWORD nBufferLength, LPSTR lpBuffer )
-	{
-		return GetCurrentDirectoryA( nBufferLength, lpBuffer );
-	}
-	static INLINE DWORD GetFullPathNameX( LPCWSTR lpFileName, DWORD nBufferLength, LPWSTR lpBuffer, LPWSTR *lpFilePart )
-	{
-		return GetFullPathNameW(lpFileName, nBufferLength, lpBuffer, lpFilePart);
-	}
-	static INLINE DWORD GetFullPathNameX( LPCSTR lpFileName, DWORD nBufferLength, LPSTR lpBuffer, LPSTR *lpFilePart )
-	{
-		return GetFullPathNameA(lpFileName, nBufferLength, lpBuffer, lpFilePart);
-	}
-
-	INLINE DWORD WINAPI GetEnvironmentVariable__( const char * lpName, char * lpBuffer, DWORD nSize )
-	{
-		return GetEnvironmentVariableA(lpName, lpBuffer, nSize);
-	}
-
-	INLINE DWORD WINAPI GetEnvironmentVariable__( const wchar * lpName, wchar * lpBuffer, DWORD nSize )
-	{
-		return GetEnvironmentVariableW(lpName, lpBuffer, nSize);
-	}
-
-    INLINE HRESULT SHGetFolderPath__(_Reserved_ HWND hwnd, _In_ int csidl, _In_opt_ HANDLE hToken, _In_ DWORD dwFlags, _Out_writes_(MAX_PATH) LPSTR pszPath)
+    INLINE bool __ending_slash(const wsptr &path)
     {
-        return SHGetFolderPathA(hwnd, csidl, hToken, dwFlags, pszPath);
+        return __is_slash(path.s[path.l-1]);
     }
-    INLINE HRESULT SHGetFolderPath__(_Reserved_ HWND hwnd, _In_ int csidl, _In_opt_ HANDLE hToken, _In_ DWORD dwFlags, _Out_writes_(MAX_PATH) LPWSTR pszPath)
+    template<typename CORE> void __append_slash_if_not(str_t<wchar, CORE> &path)
     {
-        return SHGetFolderPathW(hwnd, csidl, hToken, dwFlags, pszPath);
+        if (!__ending_slash(path.as_sptr()))
+            path.append_char(NATIVE_SLASH);
     }
 
-    INLINE BOOL GetUserName__(char *b, DWORD *bl)
-    {
-        return GetUserNameA(b, bl);
-    }
-    INLINE BOOL GetUserName__(wchar *b, DWORD *bl)
-    {
-        return GetUserNameW(b,bl);
-    }
-
-    template<typename TCHARACTER> void TSCALL parse_env(str_t<TCHARACTER> &envstr)
+    void TSCALL parse_env(wstr_c &envstr)
     {
         int dprc = 0;
         for (;;)
@@ -66,7 +31,7 @@ namespace ts
                 {
                     if ((iie - ii) > 1)
                     {
-                        sxstr_t<TCHARACTER, MAX_PATH + 1> b, name;
+                        swstr_t<MAX_PATH + 1> b, name;
                         int ll = iie - ii - 1;
                         if (ll >= MAX_PATH)
                         {
@@ -75,12 +40,12 @@ namespace ts
                         }
                         name.set(envstr.cstr() + ii + 1, ll);
 
-                        if (name == CONSTSTR(TCHARACTER, "PERSONAL"))
+                        if (name == CONSTWSTR("PERSONAL"))
                         {
-                            if (SUCCEEDED(SHGetFolderPath__(nullptr, CSIDL_PERSONAL | CSIDL_FLAG_CREATE, nullptr, 0, b.str())))
+                            if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PERSONAL | CSIDL_FLAG_CREATE, nullptr, 0, b.str())))
                             {
                                 int pl = CHARz_len(b.cstr());
-                                envstr.replace(ii, ll + 2, sptr<TCHARACTER>(b, pl));
+                                envstr.replace(ii, ll + 2, wsptr(b, pl));
                                 break;
                             }
                             else
@@ -90,12 +55,12 @@ namespace ts
                             }
 
                         }
-                        else if (name == CONSTSTR(TCHARACTER, "APPDATA"))
+                        else if (name == CONSTWSTR("APPDATA"))
                         {
-                            if (SUCCEEDED(SHGetFolderPath__(nullptr, CSIDL_APPDATA | CSIDL_FLAG_CREATE, nullptr, 0, b.str())))
+                            if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA | CSIDL_FLAG_CREATE, nullptr, 0, b.str())))
                             {
                                 int pl = CHARz_len(b.cstr());
-                                envstr.replace(ii, ll + 2, sptr<TCHARACTER>(b, pl));
+                                envstr.replace(ii, ll + 2, wsptr(b, pl));
                                 break;
                             }
                             else
@@ -104,12 +69,12 @@ namespace ts
                                 break;
                             }
                         }
-                        else if (name == CONSTSTR(TCHARACTER, "PROGRAMS"))
+                        else if (name == CONSTWSTR("PROGRAMS"))
                         {
-                            if (SUCCEEDED(SHGetFolderPath__(nullptr, CSIDL_PROGRAM_FILES | CSIDL_FLAG_CREATE, nullptr, 0, b.str())))
+                            if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PROGRAM_FILES | CSIDL_FLAG_CREATE, nullptr, 0, b.str())))
                             {
                                 int pl = CHARz_len(b.cstr());
-                                envstr.replace(ii, ll + 2, sptr<TCHARACTER>(b, pl));
+                                envstr.replace(ii, ll + 2, wsptr(b, pl));
                                 break;
                             }
                             else
@@ -118,13 +83,13 @@ namespace ts
                                 break;
                             }
                         }
-                        else if (name == CONSTSTR(TCHARACTER, "USER"))
+                        else if (name == CONSTWSTR("USER"))
                         {
                             DWORD blen = b.get_capacity();
-                            if (GetUserName__(b.str(), &blen))
+                            if (GetUserNameW(b.str(), &blen))
                             {
                                 int pl = CHARz_len(b.cstr());
-                                envstr.replace(ii, ll + 2, sptr<TCHARACTER>(b, pl));
+                                envstr.replace(ii, ll + 2, wsptr(b, pl));
                                 break;
                             }
                             else
@@ -137,10 +102,10 @@ namespace ts
                         else
                         {
 
-                            int pl = GetEnvironmentVariable__(name, b.str(), MAX_PATH);
+                            int pl = GetEnvironmentVariableW(name, b.str(), MAX_PATH);
                             if (pl && pl < MAX_PATH)
                             {
-                                envstr.replace(ii, ll + 2, sptr<TCHARACTER>(b, pl));
+                                envstr.replace(ii, ll + 2, wsptr(b, pl));
                                 break;
 
                             }
@@ -168,20 +133,10 @@ namespace ts
             }
         }
     }
-    template void  TSCALL parse_env(str_t<char> &strenv);
-    template void TSCALL parse_env(str_t<wchar> &strenv);
 
-	template<typename TCHARACTER> str_t<TCHARACTER>  TSCALL get_full_path(const str_t<TCHARACTER> &ipath, bool lower_case, bool bparse_env)
+	void  __build_full_path(wstr_c &path)
 	{
-		str_t<TCHARACTER> path(ipath);
-
-		if (bparse_env)
-            parse_env(path);
-
-
-		path.replace_all('/', '\\');
-
-        sxstr_t<TCHARACTER, 8> disk;
+        swstr_t<8> disk;
 
 		if (path.get_length() > 1 && (path.get_char(1) == ':'))
 		{
@@ -189,85 +144,125 @@ namespace ts
 			path.cut(0,2);
 		}
 
-		if (path.get_char(0) != '\\')
+		if (!__is_slash(path.get_char(0)))
 		{
-			sxstr_t<TCHARACTER, 2048> buf;
+			swstr_t<2048> buf;
 			if ( disk.is_empty() )
 			{
-				DWORD len = GetCurrentDirectoryX(2048-8, buf.str());
+				DWORD len = GetCurrentDirectoryW(2048-8, buf.str());
 				buf.set_length(len);
-				if (buf.get_last_char() != '\\') buf.append_char('\\');
+                __append_slash_if_not(buf);
 				path.insert(0,buf);
 			} else
 			{
-				DWORD len =GetFullPathNameX( disk, 2048-8, buf.str(), nullptr );
+				DWORD len =GetFullPathNameW( disk, 2048-8, buf.str(), nullptr );
 				buf.set_length(len);
-				if (buf.get_last_char() != '\\') buf.append_char('\\');
+                __append_slash_if_not(buf);
 				path.insert(0,buf);
 			}
 
 		} else
 			path.insert(0,disk);
-
-		return lower_case ? path.case_down() : path;
 	}
 
-	template str_t<char>  TSCALL get_full_path(const str_t<char> &path, bool lower_case, bool parse_env);
-	template str_t<wchar>  TSCALL get_full_path(const str_t<wchar> &path, bool lower_case, bool parse_env);
-
-
-	template<typename TCHARACTER> str_t<TCHARACTER>  TSCALL simplify_path(const str_t<TCHARACTER> &ipath, bool lower_case, bool parse_env)
-	{
-		bool slashing = false;
-
-		str_t<TCHARACTER> path(get_full_path<TCHARACTER>(ipath, lower_case, parse_env));
-
-		if(path.get_char(path.get_length()-1) == '\\')
+    void __remove_crap(wstr_c &path)
+    {
+        int prev_prev_slash = path.get_last_char() == '.' ? path.get_length() : -1;
+        int prev_slash = prev_prev_slash;
+        int cch = path.get_length() - 1;
+        int to = -1;
+        int doubledot = 0;
+        if ( path.begins(CONSTWSTR("\\\\")) ) to = path.find_pos_of(2, CONSTWSTR("/\\")); // UNC path
+        for(;cch >= to;--cch)
         {
-			path.cut(path.get_length()-1);
-			slashing = true;
-		}
+            wchar c = cch >= 0 ? path.get_char(cch) : NATIVE_SLASH;
+            if ( __is_slash(c) )
+            {
+                if (prev_slash - 1 == cch)
+                {
+                    if (cch < 0) break;
 
-		strings_t<TCHARACTER> sa(path, '\\');
+                    // remove double slash
+                    if (c != ENEMY_SLASH || path.get_char(prev_slash) == ENEMY_SLASH)
+                    {
+                        ASSERT(prev_slash < path.get_length());
+                        path.cut(prev_slash);
+                    } else
+                        path.cut(cch);
+                    --prev_prev_slash;
+                    prev_slash = cch;
+                    continue;
+                }
+                if (prev_slash - 2 == cch && path.get_char(cch + 1) == '.')
+                {
+                    // remove /./
 
-		sa.kill_empty_slow(1);
+                    if (prev_slash < path.get_length() && (c != ENEMY_SLASH || path.get_char(prev_slash) == ENEMY_SLASH))
+                        path.cut(prev_slash-1,2);
+                    else
+                        path.cut(cch,2);
+                    prev_prev_slash -= 2;
+                    prev_slash = cch;
+                    continue;
+                }
+                if (prev_prev_slash - 3 == prev_slash && prev_slash > cch && path.get_char(prev_prev_slash-1) == '.' && path.get_char(prev_prev_slash-2) == '.')
+                {
+                    // remove /subfolder/..
 
-		for (int i=0;i<sa.size();)
-		{
-			const str_t<TCHARACTER> &ss = sa.get(i);
+                    if (prev_slash - 3 == cch && path.get_char(prev_slash-1) == '.' && path.get_char(prev_slash-2) == '.')
+                    {
+                        ++doubledot;
+                        prev_prev_slash = prev_slash;
+                        prev_slash = cch;
+                        continue;
+                    }
 
-			if (ss.get_char(0) == '.')
-			{
-				if (ss.get_length() == 2 && ss.get_char(1) == '.')
-				{
-					sa.remove_slow(i);
-					if (i > 0)
-					{
-						--i;
-						sa.remove_slow(i);
-					}
-					continue;
-				}
-				if ( ss.get_length() == 1 )
-				{
-					sa.remove_slow(i);
-					continue;
-				}
+                    int n = prev_prev_slash - cch;
+                    if (prev_prev_slash < path.get_length() && (c != ENEMY_SLASH || path.get_char(prev_prev_slash) == ENEMY_SLASH))
+                        path.cut(cch + 1, n);
+                    else
+                        path.cut(cch, n);
+                    prev_prev_slash = cch;
+                    prev_slash = cch;
+                    if (doubledot)
+                    {
+                        --doubledot;
+                        prev_prev_slash += 3; // "/../"
+                        ASSERT(__is_slash(path.get_char(prev_prev_slash)) && path.get_char(prev_prev_slash-1) == '.' && path.get_char(prev_prev_slash-2) == '.');
+                    }
+                    continue;
+                }
 
-			}
-			++i;
-		}
+                prev_prev_slash = prev_slash;
+                prev_slash = cch;
+            }
 
-		path.set_length(0);
+        }
+    }
 
-		for (const auto & s : sa)
-			path.append('\\', s);
+	void  TSCALL fix_path(wstr_c &path, int fnoptions)
+	{
+        if ( 0 != (FNO_TRIMLASTSLASH & fnoptions) && __ending_slash(path) )
+            path.trunc_length(1);
 
-		return path;
+        if ( FNO_NORMALIZE & fnoptions )
+            path.replace_all(ENEMY_SLASH, NATIVE_SLASH);
+
+        if ( FNO_PARSENENV & fnoptions)
+            parse_env(path);
+
+        if ( FNO_FULLPATH & fnoptions )
+            __build_full_path( path );
+
+        if ( FNO_REMOVECRAP & fnoptions )
+            __remove_crap(path);
+
+#ifdef _WIN32
+        if (FNO_LOWERCASEAUTO & fnoptions)
+            path.case_down();
+#endif // _WIN32
+
 	}
-	template str_t<char>  TSCALL simplify_path(const str_t<char> &ipath, bool lower_case, bool parse_env);
-	template str_t<wchar>  TSCALL simplify_path(const str_t<wchar> &ipath, bool lower_case, bool parse_env);
-
 
 	void TSCALL fill_dirs_and_files( const wstr_c &path, wstrings_c &files, wstrings_c &dirs )
 	{
@@ -296,7 +291,7 @@ namespace ts
 		dirs.add( path );
 	}
 
-	void    TSCALL copy_dir(const wstr_c &path_from, const wstr_c &path_clone)
+	void    TSCALL copy_dir(const wstr_c &path_from, const wstr_c &path_clone, const wsptr& skip)
 	{
 		wstrings_c files;
 		wstrings_c dirs;
@@ -304,15 +299,28 @@ namespace ts
 		fill_dirs_and_files( path_from, files, dirs );
 
 		int pfl = path_from.get_length();
-		if (path_from.get_last_char() == '\\' || path_from.get_last_char() == '/') --pfl;
+		if (__ending_slash(path_from)) --pfl;
 
 		int pfc = path_clone.get_length();
-		if (path_clone.get_last_char() == '\\' || path_clone.get_last_char() == '/') --pfc;
+		if (__ending_slash(path_clone)) --pfc;
 
 		for (int i=dirs.size()-1;i>=0;--i)
 		{
-			int x = dirs.get(i).find_pos(L"\\.svn");
-			if (x >= 0 && (dirs.get(i).get_char(x+5) == 0 || dirs.get(i).get_char(x+5) == '\\'))
+            bool rm = false;
+            token<wchar> t(skip, ';');
+            for(;t;++t)
+            {
+                const wstr_c &d = dirs.get(i);
+                int x = d.find_pos( *t );
+                if (x >= 0 || __is_slash(d.get_char(x-1)))
+                    if (x + t->get_length() == d.get_length() || __is_slash(d.get_char(x + t->get_length())))
+                    {
+                        rm = true;
+                        break;
+                    }
+            }
+
+			if (rm)
 			{
 				dirs.remove_fast(i);
 				continue;
@@ -323,16 +331,25 @@ namespace ts
 		dirs.sort(true);
 		
         for (const auto & s : dirs)
-			make_path( s, false );
+			make_path( s, 0 );
 
 		wstr_c t,tt;
 		for (int i=files.size()-1;i>=0;--i)
 		{
-			int x = files.get(i).find_pos(L"\\.svn");
-			if (x >= 0 && (files.get(i).get_char(x+5) == 0 || files.get(i).get_char(x+5) == '\\'))
-			{
-				continue;
-			}
+            bool rm = false;
+            t = files.get(i);
+            token<wchar> tok(skip, ';');
+            for (; tok; ++tok)
+            {
+                int x = t.find_pos(*tok);
+                if (x >= 0 || __is_slash(t.get_char(x - 1)))
+                    if (x + tok->get_length() == t.get_length() || __is_slash(t.get_char(x + tok->get_length())))
+                    {
+                        rm = true;
+                        break;
+                    }
+            }
+            if (rm) continue;
 
 			t = files.get(i);
 			tt = t;
@@ -363,44 +380,21 @@ namespace ts
 		}
 	}
 
-	void    TSCALL make_path(const wstr_c &ipath, bool lower_case)
+	void    TSCALL make_path(const wstr_c &ipath, int fnoptions)
 	{
+		wstr_c path(ipath);
+        fix_path(path, fnoptions | FNO_NORMALIZE | FNO_REMOVECRAP | FNO_TRIMLASTSLASH);
 
-		wstr_c path(get_full_path(ipath, lower_case));
-
-		if ( path.get_last_char() == '\\' ) path.trunc_length();
-
-		wstrings_c sa(path, '\\');
-
-		for (int i=0;i<sa.size();)
-		{
-			if (sa.get(i) == CONSTWSTR("."))
-			{
-				sa.remove_slow(i);
-				continue;
-			}
-			if (sa.get(i) == CONSTWSTR(".."))
-			{
-				sa.remove_slow(i);
-				if (i > 0)
-				{
-					--i;
-					sa.remove_slow(i);
-				}
-				continue;
-			}
-			++i;
-		}
-
+		wstrings_c sa(path, NATIVE_SLASH);
 		path.set_length(0);
 
-		for (int i=ipath.begins(L"\\\\") ? (path.set(L"\\\\", 2).append(sa.get(2)).append_char('\\'), 3) : 0; i<sa.size(); ++i)
+		for (int i=ipath.begins(CONSTWSTR("\\\\")) ? (path.set(CONSTWSTR("\\\\")).append(sa.get(2)).append_char(NATIVE_SLASH), 3) : 0; i<sa.size(); ++i)
 		{
 			path.append(sa.get(i));
 			if (i == 0)
 			{
 				ASSERT( path.get_last_char() == ':' );
-				path.append_char('\\');
+				path.append_char(NATIVE_SLASH);
 				continue;
 			}
 
@@ -408,7 +402,7 @@ namespace ts
 			{
 				if (0 == CreateDirectoryW(path.cstr(), nullptr)) return;
 			}
-			path.append_char('\\');
+			path.append_char(NATIVE_SLASH);
 		}
 	}
 
@@ -451,30 +445,27 @@ namespace ts
     template bool TSCALL parse_text_file<char>(const wsptr &filename, strings_t<char>& text, bool);
     template bool TSCALL parse_text_file<wchar>(const wsptr &filename, strings_t<wchar>& text, bool);
 
-	template<typename TCHARACTER> void                     TSCALL fn_split( const str_t<TCHARACTER> &full_name, str_t<TCHARACTER> &name, str_t<TCHARACTER> &ext )
+	void TSCALL fn_split( const wsptr &full_name, wstr_c &name, wstr_c &ext )
 	{
-		int i = full_name.find_last_pos_of(CONSTSTR(TCHARACTER, "/\\"));
+		int i = pwstr_c(full_name).find_last_pos_of(CONSTWSTR("/\\"));
 		if (i < 0) i = 0; else ++i;
-		int j = full_name.find_last_pos('.');
+		int j = pwstr_c(full_name).find_last_pos('.');
 		if (j < i)
 		{
-			name.set(full_name.cstr() + i, full_name.get_length() - i);
+			name.set(full_name.skip(i));
 			ext.clear();
 		} else
 		{
-			name.set(full_name.cstr() + i, j - i);
-			ext.set(full_name.cstr() + j + 1, full_name.get_length() - j - 1);
+			name.set(wsptr(full_name.s + i, j - i));
+			ext.set(full_name.skip(j + 1));
 		}
 	}
 
-	template void TSCALL fn_split<wchar>( const str_t<wchar> &full_name, str_t<wchar> &name, str_t<wchar> &ext );
-	template void TSCALL fn_split<char>( const str_t<char> &full_name, str_t<char> &name, str_t<char> &ext );
-
-	template<typename TCHARACTER> str_t<TCHARACTER>  TSCALL fn_get_next_name(const str_t<TCHARACTER> &fullname, bool check)
+	wstr_c  TSCALL fn_get_next_name(const wsptr &fullname, bool check)
 	{
 		if (check)
 		{
-			str_t<TCHARACTER> n = fn_get_next_name(fullname,false);
+			wstr_c n = fn_get_next_name(fullname,false);
 
 			WIN32_FIND_DATAW fd;
 
@@ -487,18 +478,14 @@ namespace ts
 			}
 		}
 
-		str_t<TCHARACTER> name = fn_get_name(fullname.as_sptr());
+		wstr_c name = fn_get_name(fullname);
 		int index = name.get_length() - 1;
 		for (; index >= 0 && CHAR_is_digit(name.get_char(index)) ;--index);
 		uint nn = name.substr(++index).as_uint() + 1;
-		name.replace(index,name.get_length()-index, str_t<TCHARACTER>().set_as_uint(nn));
-		return fn_change_name<TCHARACTER>(fullname,name);
+		name.replace(index,name.get_length()-index, wstr_c().set_as_uint(nn));
+		return fn_change_name(fullname,name);
 
 	}
-
-	template str_c  TSCALL fn_get_next_name<char>(const str_c &fullname,bool check);
-	template wstr_c  TSCALL fn_get_next_name<wchar>(const wstr_c &fullname,bool check);
-
 
 	template<typename TCHARACTER> str_t<TCHARACTER>  TSCALL fn_autoquote(const str_t<TCHARACTER> &name)
 	{
@@ -510,39 +497,31 @@ namespace ts
 	template str_c  TSCALL fn_autoquote<char>(const str_c &name);
 	template wstr_c  TSCALL fn_autoquote<wchar>(const wstr_c &name);
 
-
-
-	template<typename TCHARACTER> str_t<TCHARACTER>  TSCALL fn_get_name(const sptr<TCHARACTER> &name_)
+	wstr_c  TSCALL fn_get_name(const wsptr &name_)
 	{
-        pstr_t<TCHARACTER> name(name_);
-		int i = name.find_last_pos_of(CONSTSTR(TCHARACTER, "/\\"));
+        pwstr_c name(name_);
+		int i = name.find_last_pos_of(CONSTWSTR("/\\"));
 		if (i < 0) i = 0; else ++i;
 		int j = name.find_last_pos('.');
 		if (j < i) j = name.get_length();
-		return str_t<TCHARACTER>(name_.s + i, j - i);
+		return wstr_c(name_.s + i, j - i);
 	}
 
-	template str_c  TSCALL fn_get_name<char>(const asptr &name);
-	template wstr_c  TSCALL fn_get_name<wchar>(const wsptr &name);
-
-	template<typename TCHARACTER> str_t<TCHARACTER>  TSCALL fn_get_ext(const str_t<TCHARACTER> &name)
+	wstr_c  TSCALL fn_get_ext(const wsptr &name_)
 	{
-		int i = name.find_last_pos_of(CONSTSTR(TCHARACTER, "/\\"));
+        pwstr_c name(name_);
+		int i = name.find_last_pos_of(CONSTWSTR("/\\"));
 		int j = name.find_last_pos('.');
 		if (j <= i) j = name.get_length(); else ++j;
-		return str_t<TCHARACTER>(name.cstr() + j);
+		return wstr_c(name_.skip(j));
 	}
-	template str_t<char>  TSCALL fn_get_ext(const str_t<char> &name);
-	template str_t<wchar>  TSCALL fn_get_ext(const str_t<wchar> &name);
 
-	template<typename TCHARACTER> str_t<TCHARACTER>  TSCALL fn_get_path(const str_t<TCHARACTER> &name) // with ending slash
+	wstr_c TSCALL fn_get_path(const wstr_c &name) // with ending slash
 	{
-		int i = name.find_last_pos_of(CONSTSTR(TCHARACTER, "/\\"));
+		int i = name.find_last_pos_of(CONSTWSTR("/\\"));
 		if (i<0) return name;
-		return str_t<TCHARACTER>(name.cstr(), i + 1);
+		return wstr_c(name.cstr(), i + 1);
 	}
-	template str_t<wchar>  TSCALL fn_get_path(const str_t<wchar> &name); // with ending slash
-	template str_t<char>  TSCALL fn_get_path(const str_t<char> &name); // with ending slash
 
 #define FROMCS "‡·‚„‰Â∏ÊÁËÈÍÎÏÌÓÔÒÚÛÙıˆ˜¯˘˙˚¸˝˛ˇ¿¡¬√ƒ≈®∆«»… ÀÃÕŒœ–—“”‘’÷◊ÿŸ⁄€‹›ﬁﬂ"; ///\\.,;!@#$%^&*()[]|`~{}-=<>\"\'"
 #define   TOCS "abvgdeezziyklmnoprstufhccssyyyeuaABVGDEEZZIYKLMNOPRSTUFHCCSSYYYEUA"; //_______________________________"
@@ -593,38 +572,33 @@ namespace ts
 	template void  TSCALL fn_validizate(str_t<wchar> &name, const wchar *ext); // with ending slash
 	template void  TSCALL fn_validizate(str_t<char> &name, const char *ext); // with ending slash
 
-	template<typename TCHARACTER> str_t<TCHARACTER>   TSCALL fn_change_name(const str_t<TCHARACTER> &full, const sptr<TCHARACTER> &name)
+	wstr_c TSCALL fn_change_name(const wsptr &full_, const wsptr &name)
 	{
-		int i = full.find_last_pos_of(CONSTSTR(TCHARACTER, "/\\"));
+        pwstr_c full(full_);
+		int i = full.find_last_pos_of(CONSTWSTR("/\\"));
 		if (i < 0) i = 0; else ++i;
 		int j = full.find_last_pos('.');
 		if (j < i) j = full.get_length();
-		return str_t<TCHARACTER>(sptr<TCHARACTER>(full.cstr(), i)).append(name).append(full.as_sptr().skip(j));
+		return wstr_c(full_.part(i)).append(name).append(full.as_sptr().skip(j));
 	}
 
-	template str_t<char>   TSCALL fn_change_name(const str_t<char> &full, const sptr<char> &name);
-	template str_t<wchar>   TSCALL fn_change_name(const str_t<wchar> &full, const sptr<wchar> &name);
-
-	template<typename TCHARACTER> str_t<TCHARACTER>   TSCALL fn_change_ext(const str_t<TCHARACTER> &full, const sptr<TCHARACTER> &ext)
+	wstr_c  TSCALL fn_change_ext(const wsptr &full_, const wsptr &ext)
 	{
-		int i = full.find_last_pos_of(CONSTSTR(TCHARACTER, "/\\"));
+        pwstr_c full(full_);
+		int i = full.find_last_pos_of(CONSTWSTR("/\\"));
 		int j = full.find_last_pos('.');
 		if (j <= i) j = full.get_length();
-		return str_t<TCHARACTER>(sptr<TCHARACTER>(full.cstr(), j)).append_char('.').append(ext);
+		return wstr_c(full_.part(j)).append_char('.').append(ext);
 	}
 
-	template str_t<char>   TSCALL fn_change_ext<char>(const str_t<char> &full, const sptr<char> &ext);
-	template str_t<wchar>   TSCALL fn_change_ext<wchar>(const str_t<wchar> &full, const sptr<wchar> &ext);
-
-
-    template<typename TCHARACTER> bool TSCALL fn_mask_match( const sptr<TCHARACTER> &fn, const sptr<TCHARACTER> &mask )
+    bool TSCALL fn_mask_match( const wsptr &fn, const wsptr &mask )
     {
         int index = 0;
-        token<TCHARACTER> mp(mask, '*');
+        token<wchar> mp(mask, '*');
         bool left = true;
         for(;mp;++mp)
         {
-            int i = mp->get_length() == 0 ? index : pstr_t<TCHARACTER>(fn).find_pos_t(index, *mp);
+            int i = mp->get_length() == 0 ? index : pwstr_c(fn).find_pos_t(index, *mp);
             if (i < 0) return false;
             if (left && i != 0) return false;
             left = false;
@@ -633,9 +607,6 @@ namespace ts
 
         return index == fn.l;
     }
-    template bool TSCALL fn_mask_match( const asptr &, const asptr & );
-    template bool TSCALL fn_mask_match( const wsptr &, const wsptr & );
-
 
     bool TSCALL is_file_exists(const wsptr &fname)
     {
@@ -647,7 +618,7 @@ namespace ts
 		wstr_c path(iroot);
 		if (path.is_empty()) return false;
 		wchar lch = path.get_last_char();
-		if (lch != '\\' && lch != '/') path.append_char('\\');
+		if (lch != NATIVE_SLASH && lch != ENEMY_SLASH) path.append_char(NATIVE_SLASH);
 
 		wstrings_c sa;
 
@@ -768,14 +739,15 @@ namespace ts
 		OPENFILENAMEW o;
 		memset(&o, 0, sizeof(OPENFILENAMEW));
 
-		wstr_c root(get_full_path<wchar>(iroot));
+		wstr_c root(iroot);
+        fix_path(root, FNO_FULLPATH);
 
 		o.lStructSize=sizeof(o);
 		o.hwndOwner=g_main_window;
 		o.hInstance=GetModuleHandle(nullptr);
 
 		wstr_c filter(filt);
-		filter.replace_all('/',0);
+		filter.replace_all(ENEMY_SLASH,0);
 
 		wstr_c buffer(MAX_PATH + 16,true);
         buffer.set(name);
@@ -810,14 +782,15 @@ namespace ts
 		OPENFILENAMEW o;
 		memset(&o, 0, sizeof(OPENFILENAMEW));
 
-		wstr_c root(get_full_path<wchar>(iroot));
+        wstr_c root(iroot);
+        fix_path(root, FNO_FULLPATH);
 
 		o.lStructSize=sizeof(o);
         o.hwndOwner = g_main_window;
         o.hInstance = GetModuleHandle(nullptr);
 
 		wstr_c filter(filt);
-		filter.replace_all('/',0);
+		filter.replace_all(ENEMY_SLASH,0);
 
 		wstr_c buffer;
 		buffer.set_length(2048);
@@ -853,14 +826,15 @@ namespace ts
 		OPENFILENAMEW o;
 		memset(&o, 0, sizeof(OPENFILENAMEW));
 
-		wstr_c root(get_full_path<wchar>(iroot));
+        wstr_c root(iroot);
+        fix_path(root, FNO_FULLPATH);
 
 		o.lStructSize=sizeof(o);
         o.hwndOwner = g_main_window;
         o.hInstance = GetModuleHandle(nullptr);
 
 		wstr_c filter(filt);
-		filter.replace_all('/',0);
+		filter.replace_all(ENEMY_SLASH,0);
 
 		wstr_c buffer(16384, true);
 		buffer.set(name);
@@ -894,26 +868,25 @@ namespace ts
 
 		for (; *zz ; zz += CHARz_len(zz) + 1 )
 		{
-			files.add( wstr_c(buffer.cstr()).append_char('\\').append(zz) );
+			files.add( wstr_c(buffer.cstr()).append_char(NATIVE_SLASH).append(zz) );
 		}
 
 		return true;
 	}
 
-	bool    TSCALL dir_present(const wstr_c &path, bool path_already_nice)
+	bool    TSCALL dir_present(const wstr_c &path)
 	{
 		WIN32_FIND_DATAW find_data;
 		wstr_c p(path);
-        if (!path_already_nice) p = simplify_path(path);
 
-		if (p.get_last_char() == '\\') p.trunc_length();
+		if (__ending_slash(p)) p.trunc_length();
 		if ( p.get_length() == 2 && p.get_last_char() == ':' )
 		{
-			UINT r = GetDriveTypeW( p.append_char('\\') );
+			UINT r = GetDriveTypeW( p.append_char(NATIVE_SLASH) );
 			return (r != DRIVE_NO_ROOT_DIR);
 		}
 
-		HANDLE           fh = FindFirstFileW(p, &find_data);
+		HANDLE fh = FindFirstFileW(p, &find_data);
 		if ( fh == INVALID_HANDLE_VALUE ) return false;
 		FindClose( fh );
 

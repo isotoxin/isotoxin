@@ -714,7 +714,7 @@ bool contact_c::b_receive_file_as(RID, GUIPARAM par)
     {
         ts::wstr_c downf = prf().download_folder();
         path_expand_env(downf);
-        ts::make_path(downf);
+        ts::make_path(downf, 0);
                     
         ts::wstr_c title = TTT("Ñîõğàíåíèå ôàéëà",179);
         ++sysmodal;
@@ -1000,6 +1000,7 @@ void contacts_c::kill(const contact_key_s &ck)
                     prf().killcontact(meta->getkey());
                     prf().kill_history(meta->getkey());
                     del(meta->getkey());
+                    g_app->cancel_file_transfers( meta->getkey() );
                 }
             }
         }

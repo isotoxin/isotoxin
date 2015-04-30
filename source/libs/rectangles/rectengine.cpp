@@ -308,8 +308,7 @@ void rectengine_c::mouse_unlock()
 
 void rectengine_c::trunc_children(int index)
 {
-    int cnt = children.size();
-    for (; index < cnt; ++index)
+    for (; index < children.size(); ++index)
     {
         rectengine_c *c = children.get(index);
         if (c) TSDEL(c);

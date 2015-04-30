@@ -31,13 +31,16 @@ void packetgen::pg_search( int back_tcp_port, const byte *seeking_contact_raw_pu
     encode();
 }
 
-void packetgen::pg_hallo( int back_tcp_port  )
+void packetgen::pg_hallo( int back_tcp_port )
 {
     packet_buf_len = 0;
 
     pushus(PID_HALLO, false);
     pushus(LAN_PROTOCOL_VERSION, false); // version
     pushus((USHORT)back_tcp_port, false);
+    if (my_mastertag == 0)
+        my_mastertag = randombytes_random();
+    pushi(my_mastertag, false);
 
     push(my_public_key, SIZE_PUBLIC_KEY, false);
 
@@ -125,19 +128,19 @@ void packetgen::pg_reject()
     encopy();
 }
 
-void packetgen::pg_message(msg_s *m, const byte *crypt_packet_key, int maxsize)
+void packetgen::pg_data(datablock_s *m, const byte *crypt_packet_key, int maxsize)
 {
-    push_pid(PID_MESSAGE);
+    push_pid(PID_DATA);
     pushi(randombytes_random()); // just random int
 
     USHORT flags = 0;
-    if ( m->sent == 0 ) flags |= 1; // put time
+    //if ( m->sent == 0 ) flags |= 1; // put time
     pushus( flags ); // 
     pushus( (USHORT)m->mt );
     pushll( m->delivery_tag );
     pushi( m->sent );
     pushi( m->len );
-    if (flags & 1) pushll( m->create_time );
+    //if (flags & 1) pushll( m->create_time );
 
     int sb = maxsize;
     if (m->left() < sb) sb = m->left();
@@ -146,13 +149,13 @@ void packetgen::pg_message(msg_s *m, const byte *crypt_packet_key, int maxsize)
 
     pushus( (USHORT)sb );
 
-    push( m->text().s + m->sent, sb );
+    push( m->data() + m->sent, sb );
 
     m->sent += sb;
 
     encode(crypt_packet_key);
 
-    log_auth_key("PID_MESSAGE encoded", crypt_packet_key);
+    log_auth_key("PID_DATA encoded", crypt_packet_key);
 }
 
 void packetgen::pg_delivered(u64 dtag, const byte *crypt_packet_key)
@@ -163,15 +166,15 @@ void packetgen::pg_delivered(u64 dtag, const byte *crypt_packet_key)
     log_auth_key("PID_DELIVERED encoded", crypt_packet_key);
 }
 
-void packetgen::pg_time(bool resync, const byte *crypt_packet_key)
+void packetgen::pg_sync(bool resync, const byte *crypt_packet_key)
 {
-    push_pid(PID_TIME);
+    push_pid(PID_SYNC);
     byte *randombytes = push(sizeof(u64));;
     randombytes_buf(randombytes, sizeof(u64));
     
     pushll( now() );
     pushb( resync ? 1 : 0 );
     encode(crypt_packet_key);
-    log_auth_key("PID_TIME encoded", crypt_packet_key);
+    log_auth_key("PID_SYNC encoded", crypt_packet_key);
 }
 

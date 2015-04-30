@@ -35,9 +35,9 @@ struct protolib_s
     HMODULE protolib;
     proto_functions_s *functions;
 
-    cmd_result_e load(const char *protolibname, proto_info_s& pi)
+    cmd_result_e load(const wchar_t *protolibname, proto_info_s& pi)
     {
-        protolib = LoadLibraryA(protolibname);
+        protolib = LoadLibraryW(protolibname);
         if (protolib)
         {
             get_info_pf gi = (get_info_pf)GetProcAddress(protolib,"get_info");
@@ -349,7 +349,9 @@ ipc::ipc_result_e event_processor( void *, void *data, int datasize )
 
 unsigned long exec_task( data_data_s *d, unsigned long flags );
 
-DWORD WINAPI worker(LPVOID)
+DELTA_TIME_PROFILER(x1, 1024);
+
+DWORD WINAPI worker(LPVOID nonzerothread)
 {
     UNSTABLE_CODE_PROLOG
 
@@ -358,13 +360,21 @@ DWORD WINAPI worker(LPVOID)
 
     ++state.lock_write()().working;
 
-    for(;!state.lock_read()().need_stop;Sleep(1))
+    int sleepvalue = nonzerothread ? 1 : 10;
+    for(;!state.lock_read()().need_stop; )
     {
-        if (protolib.loaded()) protolib.functions->tick();
+        DELTA_TIME_CHECKPOINT( x1 );
+
+        if (protolib.loaded() && !nonzerothread) // nonzerothread: tick is single-threaded, so i can be called only in one thread
+            protolib.functions->tick(&sleepvalue);
+
+        DELTA_TIME_CHECKPOINT( x1 );
 
         unsigned long flags = 0;
         while (tasks.try_pop(d))
             flags = exec_task(d, flags);
+
+        DELTA_TIME_CHECKPOINT( x1 );
 
         while (sendbufs.try_pop(w))
         {
@@ -372,6 +382,12 @@ DWORD WINAPI worker(LPVOID)
              ipcwbuf.lock_write()().kill(w);
         }
 
+        DELTA_TIME_CHECKPOINT( x1 );
+
+        if (sleepvalue >= 0)
+            Sleep(sleepvalue);
+
+        DELTA_TIME_CHECKPOINT( x1 );
     }
 
     --state.lock_write()().working;
@@ -389,7 +405,7 @@ int CALLBACK WinMainProtect(
 
     for(int i=0;i<num_workers;++i)
     {
-        CloseHandle(CreateThread(nullptr, 0, worker, nullptr, 0, nullptr));
+        CloseHandle(CreateThread(nullptr, 0, worker, (LPVOID)i, 0, nullptr));
     }
 
     ipc::ipc_junction_s ipcblob;
@@ -439,11 +455,11 @@ int CALLBACK WinMain(
         return 0;
 }
 
-str_c mypath()
+wstr_c mypath()
 {
-    str_c path;
+    wstr_c path;
     path.set_length(2048 - 8);
-    int len = GetModuleFileNameA(nullptr, path.str(), 2048 - 8);
+    int len = GetModuleFileNameW(nullptr, path.str(), 2048 - 8);
     path.set_length(len);
 
     if (path.get_char(0) == '\"')
@@ -483,21 +499,22 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             IPCW w(HA_PROTOCOLS_LIST);
             auto cnt = w.w->reserve<int>();
 
-            str_c path = mypath(), outstr;
+            wstr_c path = mypath();
+            str_c outstr;
             sstr_c proto_name, description;
-            int truncp = path.find_last_pos_of(CONSTASTR("/\\"));
+            int truncp = path.find_last_pos_of(CONSTWSTR("/\\"));
             if (truncp>0)
             {
-                path.set_length(truncp+1).append(CONSTASTR("proto.*.dll"));
+                path.set_length(truncp+1).append(CONSTWSTR("proto.*.dll"));
 
             
-                WIN32_FIND_DATAA find_data;
-                HANDLE           fh = FindFirstFileA(path, &find_data);
+                WIN32_FIND_DATAW find_data;
+                HANDLE           fh = FindFirstFileW(path, &find_data);
 
                 while (fh != INVALID_HANDLE_VALUE)
                 {
                     path.set_length(truncp+1).append( find_data.cFileName );
-                    HMODULE l = LoadLibraryA(path);
+                    HMODULE l = LoadLibraryW(path);
                     get_info_pf f = (get_info_pf)GetProcAddress(l,"get_info");
                     proto_info_s info;
                     info.protocol_name = proto_name.str();
@@ -514,7 +531,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
 
                     FreeLibrary(l);
 
-                    if (!FindNextFileA(fh, &find_data)) break;
+                    if (!FindNextFileW(fh, &find_data)) break;
                 }
 
                 if (fh != INVALID_HANDLE_VALUE) FindClose(fh);
@@ -525,18 +542,18 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         {
             ipcr r(d->get_reader());
             tmp_str_c proto = r.getastr();
-            tmp_str_c path = mypath();
+            tmp_wstr_c path = mypath();
             str_c desc(1024,true);
             proto_info_s pi;
 
-            int truncp = path.find_last_pos_of(CONSTASTR("/\\"));
+            int truncp = path.find_last_pos_of(CONSTWSTR("/\\"));
             cmd_result_e rst = CR_MODULE_NOT_FOUND;
             if (truncp > 0)
             {
-                path.set_length(truncp + 1).append(CONSTASTR("proto.")).append(proto).append(CONSTASTR(".dll"));
+                path.set_length(truncp + 1).append(CONSTWSTR("proto.")).append(proto).append(CONSTWSTR(".dll"));
 
-                WIN32_FIND_DATAA find_data;
-                HANDLE fh = FindFirstFileA(path, &find_data);
+                WIN32_FIND_DATAW find_data;
+                HANDLE fh = FindFirstFileW(path, &find_data);
 
                 if (fh != INVALID_HANDLE_VALUE)
                 {
@@ -957,6 +974,7 @@ static void __stdcall file_portion(u64 utag, u64 offset, const void *portion, in
     {
         IPCW(HQ_FILE_PORTION) << utag << u64(b->offset - b->b.size()) << data_block_s(b->b.data(), b->b.size());
         b->b.clear();
+        b->offset = 0xffffffffffffffffull;
         goto send_now;
     }
 
@@ -968,6 +986,7 @@ static void __stdcall file_portion(u64 utag, u64 offset, const void *portion, in
     {
         IPCW(HQ_FILE_PORTION) << utag << u64(b->offset - b->b.size()) << data_block_s(b->b.data(), b->b.size());
         b->b.clear();
+        b->offset = 0xffffffffffffffffull;
     }
     spinlock::simple_unlock(prebuf_s::prebuflock);
 }

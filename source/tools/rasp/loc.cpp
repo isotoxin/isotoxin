@@ -133,13 +133,13 @@ static void savelines(const wsptr&fn, const wstrings_c & lines)
 int proc_loc(const wstrings_c & pars)
 {
     if (pars.size() < 3) return 0;
-    wstr_c pts = simplify_path(pars.get(1));
+    wstr_c pts = pars.get(1); fix_path(pts, FNO_SIMPLIFY);
 
-    if (!dir_present(pts, true))
+    if (!dir_present(pts))
     { Print(FOREGROUND_RED, "path-to-source not found: %s", pts.cstr()); return 0; }
 
-    wstr_c ptl = simplify_path(pars.get(2));
-    if (!dir_present(ptl, true))
+    wstr_c ptl = pars.get(2); fix_path(ptl, FNO_SIMPLIFY);
+    if (!dir_present(ptl))
     { Print(FOREGROUND_RED, "path-to-loc not found: %s", ptl.cstr()); return 0; }
 
     wstrings_c lines;

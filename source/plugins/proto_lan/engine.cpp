@@ -78,6 +78,8 @@ int lan_engine::media_stuff_s::prepare_audio4send()
 
 int lan_engine::media_stuff_s::decode_audio( const void *data, int datasize )
 {
+    engine->media_data_transfer = true;
+
     int rc;
     if (audio_decoder == nullptr)
     {
@@ -100,11 +102,10 @@ int lan_engine::media_stuff_s::decode_audio( const void *data, int datasize )
 
 void lan_engine::media_stuff_s::tick(contact_s *c)
 {
+    engine->media_data_transfer = true;
     int sz = prepare_audio4send();
     if (sz > 0)
-    {
-        c->add_message(MTL_AUDIO_FRAME, now(), asptr((char *)compressed.data(), sz), 0);
-    }
+        c->send_block(BT_AUDIO_FRAME, 0, compressed.data(), sz);
 }
 
 
@@ -122,7 +123,7 @@ asptr pid_name(packet_id_e pid)
         DESC_PID( PID_INVITE );
         DESC_PID( PID_ACCEPT );
         DESC_PID( PID_READY );
-        DESC_PID( PID_MESSAGE );
+        DESC_PID( PID_DATA );
         DESC_PID( PID_DELIVERED );
         DESC_PID( PID_REJECT );
     }
@@ -148,6 +149,25 @@ void log_bytes( const char *what, const byte *b, int sz )
 #define log_bytes(a, b, c)
 #define logm(...)
 #endif
+
+void socket_s::close()
+{
+    if (_socket != INVALID_SOCKET)
+    {
+        closesocket(_socket);
+        _socket = INVALID_SOCKET;
+    }
+}
+void socket_s::flush_and_close()
+{
+    if (_socket != INVALID_SOCKET)
+    {
+        shutdown(_socket, SD_SEND);
+        closesocket(_socket);
+        _socket = INVALID_SOCKET;
+    }
+}
+
 
 void udp_sender::prepare()
 {
@@ -332,14 +352,18 @@ bool tcp_pipe::connect()
     if (INVALID_SOCKET == _socket)
         return false;
 
-#if 0
-    int val = 524288;
+    int val = 1024 * 128;
     if (SOCKET_ERROR == setsockopt(_socket, SOL_SOCKET, SO_RCVBUF, (char*)&val, sizeof(val)))
     {
         close();
         return false;
     }
-#endif
+    if (SOCKET_ERROR == setsockopt(_socket, SOL_SOCKET, SO_SNDBUF, (char*)&val, sizeof(val)))
+    {
+        close();
+        return false;
+    }
+
     if (SOCKET_ERROR == ::connect(_socket, (LPSOCKADDR)&addr, sizeof(addr)))
     {
         close();
@@ -362,6 +386,8 @@ bool tcp_pipe::send( const byte *data, int datasize )
         {
             return false;
         }
+        if (iRetVal == 0)
+            __debugbreak();
         sent += iRetVal;
     } while (sent < datasize);
 
@@ -399,17 +425,24 @@ void tcp_pipe::rcv_all()
         if (n == 1)
         {
             int buf_free_space = sizeof(rcvbuf) - rcvbuf_sz;
-            int reqread = 4096; if (buf_free_space < reqread) reqread = buf_free_space;
-            
-            int _bytes = ::recv(_socket, (char *)rcvbuf + rcvbuf_sz, reqread, 0);
-            if (_bytes == 0 || _bytes == SOCKET_ERROR)
+            if (buf_free_space > 1300)
             {
-                // connection closed
-                close();
-                return;
+                int reqread = SIZE_MAX_SEND_AUTH; 
+                if (buf_free_space < reqread)
+                    reqread = buf_free_space;
+
+                int _bytes = ::recv(_socket, (char *)rcvbuf + rcvbuf_sz, reqread, 0);
+                if (_bytes == 0 || _bytes == SOCKET_ERROR)
+                {
+                    // connection closed
+                    close();
+                    return;
+                }
+                rcvbuf_sz += _bytes;
+                if ((sizeof(rcvbuf) - rcvbuf_sz < 1300))
+                    break;
+                continue;
             }
-            rcvbuf_sz += _bytes;
-            continue;
         } else if(n == SOCKET_ERROR)
         {
             close();
@@ -466,20 +499,20 @@ void make_raw_pub_id( byte *raw_pub_id, const byte *pk )
     protect_raw_id(raw_pub_id);
 }
 
-msg_s *msg_s::build(message_type_lan_e mt, u64 create_time, const asptr&text, u64 utag)
+datablock_s *datablock_s::build(block_type_e mt, u64 delivery_tag_, const void *data, int datasize, const void *data1, int datasize1)
 {
-    msg_s * m = (msg_s *)dlmalloc( sizeof(msg_s) + text.l );
-    m->create_time = create_time;
-    m->delivery_tag = utag;
+    datablock_s * m = (datablock_s *)dlmalloc( sizeof(datablock_s) + datasize + datasize1 );
+    m->delivery_tag = delivery_tag_;
     m->next = nullptr;
     m->prev = nullptr;
     m->mt = mt;
     m->sent = 0;
-    m->len = text.l;
-    memcpy( m+1, text.s, text.l );
+    m->len = datasize + datasize1;
+    memcpy( m+1, data, datasize );
+    if (data1) memcpy( ((byte *)(m+1)) + datasize, data1, datasize1 );
     return m;
 }
-void msg_s::die()
+void datablock_s::die()
 {
     dlfree(this);
 }
@@ -488,43 +521,47 @@ lan_engine::contact_s::~contact_s()
 {
     if (media)
         delete media;
-    for(;sendmessage_f;)
+    for(;sendblock_f;)
     {
-        msg_s *m = sendmessage_f;
-        LIST_DEL(m,sendmessage_f,sendmessage_l,prev,next);
+        datablock_s *m = sendblock_f;
+        LIST_DEL(m,sendblock_f,sendblock_l,prev,next);
         m->die();
     }
 }
 
-void lan_engine::contact_s::add_message(message_type_lan_e mt, u64 create_time, asptr text, u64 utag)
+u64 lan_engine::contact_s::send_block(block_type_e mt, u64 delivery_tag, const void *data, int datasize, const void *data1, int datasize1)
 {
-    char zero = 0;
-    if (text.l == 0)
+    if (delivery_tag == 0) do {
+        randombytes_buf(&delivery_tag, sizeof(delivery_tag));
+    } while (delivery_tag == 0 || engine->delivery.find(delivery_tag) != engine->delivery.end());
+    engine->delivery[delivery_tag].reset();
+
+    u64 temp;
+    if (data == nullptr)
     {
-        text.s = &zero;
-        text.l = 1;
+        randombytes_buf(&temp, sizeof(temp));
+        data = &temp;
+        datasize = sizeof(temp);
     }
 
-    if (utag == 0) do {
-        randombytes_buf(&utag, sizeof(utag));
-    } while (delivery.find(utag) != delivery.end());
 
-
-    msg_s *m = msg_s::build(mt, create_time, text,utag);
-    LIST_ADD(m,sendmessage_f,sendmessage_l,prev,next);
+    datablock_s *m = datablock_s::build(mt, delivery_tag, data, datasize, data1, datasize1);
+    LIST_ADD(m,sendblock_f,sendblock_l,prev,next);
     if (state == ONLINE)
         nextactiontime = time_ms();
+
+    return delivery_tag;
 }
 
-bool lan_engine::contact_s::del_message( u64 utag )
+bool lan_engine::contact_s::del_block( u64 utag )
 {
-    for (msg_s *m = sendmessage_f; m; m = m->next)
+    for (datablock_s *m = sendblock_f; m; m = m->next)
     {
         if (m->delivery_tag == utag)
         {
             if (m->sent == 0)
             {
-                LIST_DEL(m, sendmessage_f, sendmessage_l, prev, next);
+                LIST_DEL(m, sendblock_f, sendblock_l, prev, next);
                 m->die();
             }
             return true;
@@ -572,7 +609,7 @@ bool set_cfg_called = false;
 lan_engine::lan_engine( host_functions_s *hf ):hf(hf),broadcast_trap(BROADCAST_PORT), broadcast_seek(BROADCAST_PORT), tcp_in(TCP_PORT)
 {
     set_cfg_called = false;
-    lasthallo = time_ms() - 20000;
+    nexthallo = time_ms();
     //last_message = lasthallo;
     addnew()->state = contact_s::OFFLINE; /* create me */ 
 };
@@ -586,13 +623,22 @@ lan_engine::~lan_engine()
 }
 
 
-void lan_engine::tick()
+void lan_engine::tick(int *sleep_time_ms)
 {
-    if (first->state != contact_s::ONLINE || listen_port < 0) return;
+    if (first->state != contact_s::ONLINE || listen_port < 0) 
+    {
+        *sleep_time_ms = 100;
+        return;
+    }
+    *sleep_time_ms = first_ftr ? 0 : (10);
+    media_data_transfer = false;
 
     contact_s *rotten = nullptr;
     bool need_some_hallo = false;
     int ct = time_ms();
+
+    tick_ftr(ct);
+
     for (contact_s *c = first->next; c; c=c->next)
     {
         if (rotten == nullptr && c->state == contact_s::ROTTEN)
@@ -706,6 +752,7 @@ void lan_engine::tick()
                             c->nextactiontime = ct;
                         }
                     }
+
                 } else
                 {
                     if (c->key_sent)
@@ -790,8 +837,7 @@ void lan_engine::tick()
 
                 } else if ( (ct - c->nextactiontime) > 10000 )
                 {
-                    c->state = contact_s::OFFLINE;
-                    c->data_changed = true;
+                    c->to_offline(ct);
                 }
                 break;
             }
@@ -809,19 +855,14 @@ void lan_engine::tick()
         if (!c->pipe.connected())
         {
             if (c->state == contact_s::ONLINE)
-            {
-                c->state = contact_s::OFFLINE;
-                c->data_changed = true;
-                c->correct_create_time = 0;
-            }
+                c->to_offline( ct );
         }
         
         if (need_some_hallo)
         {
-            int deltat = (int)(ct - lasthallo);
-            if (deltat > 10000)
+            if ((ct - nexthallo) > 0)
             {
-                lasthallo = ct;
+                nexthallo = ct + randombytes_uniform( 10000 ) + 5000;
                 // one hallo per 10 sec
 
                 pg_hallo(listen_port);
@@ -829,7 +870,8 @@ void lan_engine::tick()
                     broadcast_seek.send(packet_buf_encoded, packet_buf_encoded_len, i);
 
             }
-        }
+        } else
+            my_mastertag = 0;
     }
 
     changed_some = 0;
@@ -877,9 +919,10 @@ void lan_engine::tick()
                 if (version != LAN_PROTOCOL_VERSION)
                     break;
                 USHORT back_port = reader.readus(0);
+                int mastertag = reader.readi(0);
                 const byte *hallo_contact_public_key = reader.read(SIZE_PUBLIC_KEY);
                 if (ASSERT(hallo_contact_public_key && reader.last() == 0))
-                    pp_hallo(addr.sin_addr.S_un.S_addr, back_port, hallo_contact_public_key);
+                    pp_hallo(addr.sin_addr.S_un.S_addr, back_port, mastertag, hallo_contact_public_key);
                 break;
             }
         }
@@ -908,6 +951,9 @@ void lan_engine::tick()
 
         if (pipe) delete pipe;
     }
+
+    if (media_data_transfer)
+        *sleep_time_ms = 0;
 }
 
 void lan_engine::pp_search( unsigned int IPv4, int back_port, const byte *trapped_contact_public_key, const byte *seeking_raw_public_id )
@@ -927,8 +973,15 @@ void lan_engine::pp_search( unsigned int IPv4, int back_port, const byte *trappe
     randombytes_buf(c->temporary_key, SIZE_KEY);
 }
 
-void lan_engine::pp_hallo( unsigned int IPv4, int back_port, const byte *hallo_contact_public_key )
+/*
+    handle broadcast udp PID_HALLO packet
+    mastertag - mastertag of broadcaster
+*/
+void lan_engine::pp_hallo( unsigned int IPv4, int back_port, int mastertag, const byte *hallo_contact_public_key )
 {
+    if (my_mastertag == 0 || my_mastertag < mastertag)
+        return; // just ignore this packet: my_mastertag == 0 - means no offline contacts here - nothing to connect / my_mastertag < mastertag - means concurent connection fail (my broadcast PID_HALLO will be processed)
+
     if (contact_s *c = find_by_pk( hallo_contact_public_key ))
     {
         // yo! this guy is in my contact list!
@@ -1031,23 +1084,8 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
     contact_s *c = find_by_rpid(pubid);
     while (c == nullptr || (c->state != contact_s::OFFLINE))
     {
-        if (c && c->state == contact_s::BACKCONNECT)
-        {
-            // concurrent connection
-            // one of contacts should ignore incoming connection, but other should continue
-            // compare public keys to decide who should drop incoming connection
-            if (memcmp( my_public_key, c->public_key, SIZE_PUBLIC_KEY ) < 0)
-                break;
-
-            logm("concurrent fail");
-
-        } else
-        {
-            logm(c ? "found non-offline contact" : "no such key");
-        }
-
-        // only way to handle this packet - send broadcast udp PID_HALLO packet and get incoming tcp connection
-        // so, no client, no PID_HALLO
+        // contact is not offline or not found
+        // disconnect
         return pipe;
     }
 
@@ -1178,7 +1216,7 @@ enum chunks_e // HADR ORDER!!!!!!!!
     chunk_contact_sendmessage_type,
     chunk_contact_sendmessage_body,
     chunk_contact_sendmessage_utag,
-    chunk_contact_sendmessage_createtime,
+    __unused__chunk_contact_sendmessage_createtime,
 
     chunk_magic,
 
@@ -1322,9 +1360,9 @@ void lan_engine::set_config(const void*data, int isz)
 
                     if (int sz = lc(chunk_contact_sendmessages))
                     {
-                        while (msg_s *m = c->sendmessage_f)
+                        while (datablock_s *m = c->sendblock_f)
                         {
-                            LIST_DEL(m, c->sendmessage_f, c->sendmessage_l, prev, next);
+                            LIST_DEL(m, c->sendblock_f, c->sendblock_l, prev, next);
                             m->die();
                         }
 
@@ -1335,19 +1373,16 @@ void lan_engine::set_config(const void*data, int isz)
                                 loader lcm(l.chunkdata(), msgs_size);
                                 if ( lcm(chunk_contact_sendmessage_type) )
                                 {
-                                    message_type_lan_e mt = (message_type_lan_e)lcm.get_int();
-                                    u64 create_time = now();
+                                    block_type_e mt = (block_type_e)lcm.get_int();
                                     u64 utag = 0;
                                     if (lcm(chunk_contact_sendmessage_utag))
                                         utag = lcm.get_u64();
-                                    if (lcm(chunk_contact_sendmessage_createtime))
-                                        create_time = lcm.get_u64();
                                     if (int mbsz = lcm(chunk_contact_sendmessage_body))
                                     {
                                         loader mbl(lcm.chunkdata(), mbsz);
                                         int dsz;
                                         if (const void *mb = mbl.get_data(dsz))
-                                            c->add_message(mt, create_time, asptr((const char *)mb, dsz), utag);
+                                            c->send_block(mt, utag, mb, dsz);
                                     }
                                 }
                             }
@@ -1418,17 +1453,17 @@ void operator<<(chunk &chunkm, const lan_engine::contact_s &c)
         log_auth_key( "saved", c.authorized_key );
     }
 
-    if (c.sendmessage_f)
-        chunk(chunkm.b, chunk_contact_sendmessages) << serlist<msg_s>(c.sendmessage_f);
+    if (c.sendblock_f)
+        chunk(chunkm.b, chunk_contact_sendmessages) << serlist<datablock_s>(c.sendblock_f);
 
     chunk(chunkm.b, chunk_contact_changedflags) << (int)c.changed_self;
 
-    for (msg_s *m = c.sendmessage_f; m; )
+    for (datablock_s *m = c.sendblock_f; m; )
     {
-        msg_s *x = m; m = m->next;
-        if (x->mt > __mtl_no_need_ater_save_begin && x->mt < __mtl_no_need_ater_save_end)
+        datablock_s *x = m; m = m->next;
+        if (x->mt > __bt_no_need_ater_save_begin && x->mt < __bt_no_need_ater_save_end)
         {
-            LIST_DEL(x, contact->sendmessage_f, contact->sendmessage_l, prev, next);
+            LIST_DEL(x, contact->sendblock_f, contact->sendblock_l, prev, next);
             x->die();
         }
     }
@@ -1441,17 +1476,17 @@ void operator<<(chunk &chunkm, const lan_engine::contact_s &c)
 
 
 }
-void operator<<(chunk &chunkm, const msg_s &m)
+void operator<<(chunk &chunkm, const datablock_s &m)
 {
     // some messages here means not all changed values were delivered
-    if (m.mt > __mtl_no_save_begin && m.mt < __mtl_no_save_end)
+    if (m.mt > __bt_no_save_begin && m.mt < __bt_no_save_end)
     {
         switch (m.mt)
         {
-            case MTL_CHANGED_NAME: { contact->changed_self |= CDM_NAME; return; }
-            case MTL_CHANGED_STATUSMSG: { contact->changed_self |= CDM_STATUSMSG; return; }
-            case MTL_OSTATE: { contact->changed_self |= CDM_ONLINE_STATE; return; }
-            case MTL_GENDER: { contact->changed_self |= CDM_GENDER; return; }
+            case BT_CHANGED_NAME: { contact->changed_self |= CDM_NAME; return; }
+            case BT_CHANGED_STATUSMSG: { contact->changed_self |= CDM_STATUSMSG; return; }
+            case BT_OSTATE: { contact->changed_self |= CDM_ONLINE_STATE; return; }
+            case BT_GENDER: { contact->changed_self |= CDM_GENDER; return; }
         }
         return;
     }
@@ -1460,8 +1495,7 @@ void operator<<(chunk &chunkm, const msg_s &m)
 
     chunk(chunkm.b, chunk_contact_sendmessage_type) << (int)m.mt;
     chunk(chunkm.b, chunk_contact_sendmessage_utag) << m.delivery_tag;
-    chunk(chunkm.b, chunk_contact_sendmessage_createtime) << m.create_time;
-    chunk(chunkm.b, chunk_contact_sendmessage_body) << bytes(m.text().s, m.len);
+    chunk(chunkm.b, chunk_contact_sendmessage_body) << bytes(m.data(), m.len);
 }
 
 void lan_engine::save_config(void *param)
@@ -1615,14 +1649,17 @@ void lan_engine::del(contact_s *c)
 
 void lan_engine::send(int id, const message_s *msg)
 {
-    if (contact_s *c = find(id))
-        c->add_message((message_type_lan_e)msg->mt, now(), asptr(msg->message, msg->message_len), msg->utag);
+    if (MT_MESSAGE == msg->mt || MT_ACTION == msg->mt)
+    {
+        if (contact_s *c = find(id))
+            c->send_message((block_type_e)msg->mt, now(), asptr(msg->message, msg->message_len), msg->utag);
+    }
 }
 
 void lan_engine::del_message( u64 utag )
 {
     for (contact_s *i = first->next; i; i = i->next)
-        if (i->del_message(utag))
+        if (i->del_block(utag))
         {
             hf->save();
             break;
@@ -1652,7 +1689,7 @@ void lan_engine::call(int id, const call_info_s *callinf)
     if (contact_s *c = find(id))
         if (c->state == contact_s::ONLINE && c->call_status == contact_s::CALL_OFF)
         {
-            c->add_message(MTL_CALL, now(), asptr(), 0);
+            c->send_block(BT_CALL, 0);
             c->call_status = contact_s::OUT_CALL;
             c->call_stop_time = time_ms() + (callinf->duration * 1000);
         }
@@ -1663,7 +1700,7 @@ void lan_engine::stop_call(int id, stop_call_e /*scr*/)
     if (contact_s *c = find(id))
         if (c->state == contact_s::ONLINE && contact_s::CALL_OFF != c->call_status)
         {
-            c->add_message(MTL_CALL_CANCEL, now(), asptr(), 0);
+            c->send_block(BT_CALL_CANCEL, 0);
             c->stop_call_activity(false);
             
         }
@@ -1674,7 +1711,7 @@ void lan_engine::accept_call(int id)
     if (contact_s *c = find(id))
         if (c->state == contact_s::ONLINE && contact_s::IN_CALL == c->call_status)
         {
-            c->add_message(MTL_CALL_ACCEPT, now(), asptr(), 0);
+            c->send_block(BT_CALL_ACCEPT, 0);
             c->start_media();
         }
 }
@@ -1702,35 +1739,60 @@ bool decrypt( byte *outbuf, const byte* inbuf, int inbufsz, const byte *tmpkey )
     return true;
 }
 
+void lan_engine::contact_s::to_offline(int ct)
+{
+    state = contact_s::OFFLINE;
+    data_changed = true;
+    correct_create_time = 0;
+    waiting_sync_answer = false;
+    engine->nexthallo = ct + min(500, abs(engine->nexthallo - ct));
+}
+
+
 void lan_engine::contact_s::online_tick(int ct, int nexttime)
 {
     if (state == ONLINE)
     {
+        if (waiting_sync_answer && (ct-sync_answer_deadline)>0)
+        {
+            // oops
+            waiting_sync_answer = false;
+            pipe.close();
+            return;
+        }
+
         if ((ct-next_sync)>0)
         {
-            engine->pg_time(true, authorized_key);
+            engine->pg_sync(true, authorized_key);
             pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
             next_sync = ct + 50000;
+            sync_answer_deadline = ct + 10000;
+            waiting_sync_answer = true;
         }
 
 
         if (changed_self)
         {
-            time_t n = now();
             if (0 != (changed_self & CDM_NAME))
-                add_message(MTL_CHANGED_NAME, n, engine->first->name, 0);
+                send_block(BT_CHANGED_NAME, 0, engine->first->name.cstr(), engine->first->name.get_length());
 
             if (0 != (changed_self & CDM_STATUSMSG))
-                add_message(MTL_CHANGED_STATUSMSG, n, engine->first->statusmsg, 0);
+                send_block(BT_CHANGED_STATUSMSG, 0, engine->first->statusmsg.cstr(), engine->first->statusmsg.get_length());
 
             if (0 != (changed_self & CDM_ONLINE_STATE))
-                add_message(MTL_OSTATE, n, str_c().set_as_int(engine->first->ostate), 0);
+            {
+                int v = htonl(engine->first->ostate);
+                send_block(BT_OSTATE, 0, &v, sizeof(v));
+            }
 
             if (0 != (changed_self & CDM_GENDER))
-                add_message(MTL_GENDER, n, str_c().set_as_int(engine->first->gender), 0);
+            {
+                int v = htonl(engine->first->gender);
+                send_block(BT_GENDER, 0, &v, sizeof(v));
+            }
 
             if (0 != (changed_self & CDM_AVATAR_TAG) && engine->avatar_set)
-                add_message(MTL_AVATARHASH, n, asptr((const char *)engine->first->avatar_hash, 16), 0);
+                send_block(BT_AVATARHASH, 0, engine->first->avatar_hash, 16);
 
             changed_self = 0;
         }
@@ -1740,7 +1802,7 @@ void lan_engine::contact_s::online_tick(int ct, int nexttime)
             int deltat = (int)(ct - call_stop_time);
             if (deltat >= 0)
             {
-                add_message(MTL_CALL_CANCEL, now(), asptr(), 0);
+                send_block(BT_CALL_CANCEL, 0);
                 stop_call_activity(true);
             }
         }
@@ -1748,17 +1810,18 @@ void lan_engine::contact_s::online_tick(int ct, int nexttime)
 
     if (media) media->tick( this );
 
-    msg_s *m = sendmessage_f;
+    datablock_s *m = sendblock_f;
     while (m && m->sent >= m->len) m = m->next;
     if (m)
     {
         bool is_auth = false;
         const byte *k = message_key(&is_auth);
-        engine->pg_message(m, k, is_auth ? SIZE_MAX_SEND_AUTH : SIZE_MAX_SEND_NONAUTH);
+        engine->pg_data(m, k, is_auth ? SIZE_MAX_SEND_AUTH : SIZE_MAX_SEND_NONAUTH);
         pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
+
     }
 
-    bool asap = media != nullptr || (m && m->next) || (m && m->sent < m->len);
+    bool asap = media != nullptr || engine->first_ftr != nullptr || (m && m->next) || (m && m->sent < m->len);
 
     nextactiontime = ct;
     if (!asap) nextactiontime += nexttime;
@@ -1877,7 +1940,8 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
             state = ONLINE;
             data_changed = true;
 
-            engine->pg_time(false, authorized_key);
+            next_sync = nextactiontime + 5000;
+            engine->pg_sync(false, authorized_key);
             pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
 
         }
@@ -1898,36 +1962,37 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                 {
                     nextactiontime = time_ms();
                     changed_self = -1;
-
-                    engine->pg_time(false, authorized_key);
+                    next_sync = nextactiontime + 5000;
+                    engine->pg_sync(false, authorized_key);
                     pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
                 }
             }
         }
         break;
-    case PID_MESSAGE:
+    case PID_DATA:
         {
             r.readi(); // read random stub
-            USHORT flags = r.readus();
-            message_type_lan_e mt = (message_type_lan_e)r.readus();
+            /*USHORT flags =*/ r.readus();
+            block_type_e mt = (block_type_e)r.readus();
             u64 dtb = r.readll(0);
             int sent = r.readi(-1);
             int len = r.readi(-1);
-            time_t create_time = 0;
-            if (flags & 1)
-                create_time = r.readll(now()) + correct_create_time;
+            //time_t create_time = 0;
+            //if (flags & 1)
+            //    create_time = r.readll(now()) + correct_create_time;
 
             USHORT msgl = r.readus();
             const byte *msg = r.read(msgl);
 
             if (dtb && sent >= 0 && len >= 0 && (sent + msgl <= len) && msg)
             {
-                delivery_data_s & dd = delivery[ dtb ];
+                std::unique_ptr<delivery_data_s> & ddp = engine->delivery[ dtb ];
+                if (ddp.get() == nullptr) ddp.reset( new delivery_data_s );
+                delivery_data_s &dd = *ddp;
                 if ( dd.buf.size() == 0 || sent == 0 )
                 {
                     dd.buf.resize(len);
                     dd.rcv_size = 0;
-                    dd.create_time = create_time;
                 }
                 dd.rcv_size += msgl;
                 memcpy( dd.buf.data() + sent, msg, msgl );
@@ -1937,61 +2002,65 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                     // delivered full message
                     engine->pg_delivered( dtb, message_key() );
                     pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
-                    pstr_c rstr; rstr.set(asptr((const char *)dd.buf.data(), dd.buf.size()));
+                    //pstr_c rstr; rstr.set(asptr((const char *)dd.buf.data(), dd.buf.size()));
                     switch (mt)
                     {
-                        case MTL_CHANGED_NAME:
-                            name = rstr;
-                            if (name.get_length() == 1) name.set_length();
+                        case BT_CHANGED_NAME:
+                            name = asptr((const char *)dd.buf.data(), dd.buf.size());
                             data_changed = true;
                             break;
-                        case MTL_CHANGED_STATUSMSG:
-                            statusmsg = rstr;
-                            if (statusmsg.get_length() == 1) statusmsg.set_length();
+                        case BT_CHANGED_STATUSMSG:
+                            statusmsg = asptr((const char *)dd.buf.data(), dd.buf.size());
                             data_changed = true;
                             break;
-                        case MTL_OSTATE:
-                            ostate = (contact_online_state_e)rstr.as_int();
-                            data_changed = true;
+                        case BT_OSTATE:
+                            if (dd.buf.size() == sizeof(int))
+                            {
+                                ostate = (contact_online_state_e)ntohl(*(int *)dd.buf.data());
+                                data_changed = true;
+                            }
                             break;
-                        case MTL_GENDER:
-                            gender = (contact_gender_e)rstr.as_int();
-                            data_changed = true;
+                        case BT_GENDER:
+                            if (dd.buf.size() == sizeof(int))
+                            {
+                                gender = (contact_gender_e)ntohl(*(int *)dd.buf.data());
+                                data_changed = true;
+                            }
                             break;
-                        case MTL_CALL:
+                        case BT_CALL:
                             if (CALL_OFF == call_status)
                             {
-                                engine->hf->message(MT_INCOMING_CALL, id, dd.create_time, "audio", 5);
+                                engine->hf->message(MT_INCOMING_CALL, id, now(), "audio", 5);
                                 call_status = IN_CALL;
                             }
                             break;
-                        case MTL_CALL_CANCEL:
+                        case BT_CALL_CANCEL:
                             if (CALL_OFF != call_status)
                                 stop_call_activity();
                             break;
-                        case MTL_CALL_ACCEPT:
+                        case BT_CALL_ACCEPT:
                             if (OUT_CALL == call_status)
                             {
-                                engine->hf->message(MT_CALL_ACCEPTED, id, dd.create_time, nullptr, 0);
+                                engine->hf->message(MT_CALL_ACCEPTED, id, now(), nullptr, 0);
                                 start_media();
                             }
                             break;
-                        case MTL_AUDIO_FRAME:
+                        case BT_AUDIO_FRAME:
                             if (IN_PROGRESS == call_status && media)
                             {
                                 audio_format_s fmt(AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS);
-                                int sz = media->decode_audio( rstr.as_sptr().s, rstr.get_length() );
+                                int sz = media->decode_audio( dd.buf.data(), dd.buf.size() );
                                 if (sz > 0)
                                     engine->hf->play_audio(id, &fmt, media->uncompressed.data(), sz);
                             }
                             break;
-                        case MTL_GETAVATAR:
-                            add_message(MTL_AVATARDATA, 0, asptr((const char *)engine->avatar.data(), engine->avatar.size()), 0);
+                        case BT_GETAVATAR:
+                            send_block(BT_AVATARDATA, 0, engine->avatar.data(), engine->avatar.size());
                             break;
-                        case MTL_AVATARHASH:
-                            if (rstr.as_sptr().l == 16 && 0!=memcmp(avatar_hash,rstr.as_sptr().s, 16))
+                        case BT_AVATARHASH:
+                            if (dd.buf.size() == 16 && 0!=memcmp(avatar_hash,dd.buf.data(), 16))
                             {
-                                memcpy(avatar_hash,rstr.as_sptr().s, 16);
+                                memcpy(avatar_hash, dd.buf.data(), 16);
                                 if (0 == *(int *)avatar_hash && 0 == *(int *)(avatar_hash+4) && 0 == *(int *)(avatar_hash+8) && 0 == *(int *)(avatar_hash+12))
                                     avatar_tag = 0;
                                 else
@@ -2005,10 +2074,10 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                                 engine->hf->save();
                             }
                             break;
-                        case MTL_AVATARDATA:
+                        case BT_AVATARDATA:
                             {
                                 md5_c md5;
-                                md5.update(rstr.as_sptr().s, rstr.get_length());
+                                md5.update(dd.buf.data(), dd.buf.size());
                                 md5.done();
 
                                 if (0 != memcmp(md5.result(), avatar_hash, 16))
@@ -2017,20 +2086,79 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                                     ++avatar_tag; // new avatar version
                                 }
                                 
-                                engine->hf->avatar_data(id, avatar_tag, rstr.as_sptr().s, rstr.get_length());
+                                engine->hf->avatar_data(id, avatar_tag, dd.buf.data(), dd.buf.size());
+                            }
+                            break;
+                        case BT_SENDFILE:
+                            if (dd.buf.size() > 16)
+                            {
+                                const u64 *d = (u64 *)dd.buf.data();
+                                u64 utag = my_ntohll(d[0]);
+                                u64 fsz = my_ntohll(d[1]);
+                                new incoming_file_s(id, utag, fsz, asptr((const char *)dd.buf.data(), dd.buf.size()).skip(16));
+                            }
+                            break;
+                        case BT_FILE_BREAK:
+                            if (dd.buf.size() == sizeof(u64))
+                            {
+                                const u64 *d = (u64 *)dd.buf.data();
+                                u64 utag = my_ntohll(d[0]);
+                                if(file_transfer_s *f = engine->find_ftr(utag))
+                                    f->kill(false);
+                            }
+                            break;
+                        case BT_FILE_ACCEPT:
+                            if (dd.buf.size() == sizeof(u64) * 2)
+                            {
+                                const u64 *d = (u64 *)dd.buf.data();
+                                u64 utag = my_ntohll(d[0]);
+                                u64 offset = my_ntohll(d[1]);
+                                if (file_transfer_s *f = engine->find_ftr(utag))
+                                    f->accepted(offset);
+                            }
+                            break;
+                        case BT_FILE_DONE:
+                            if (dd.buf.size() == sizeof(u64))
+                            {
+                                u64 utag = my_ntohll(*(u64 *)dd.buf.data());
+                                if (file_transfer_s *f = engine->find_ftr(utag))
+                                    f->finished(false);
+                            }
+                            break;
+                        case BT_FILE_PAUSE:
+                            if (dd.buf.size() == sizeof(u64))
+                            {
+                                u64 utag = my_ntohll(*(u64 *)dd.buf.data());
+                                if (file_transfer_s *f = engine->find_ftr(utag))
+                                    f->pause(false);
+                            }
+                            break;
+                        case BT_FILE_UNPAUSE:
+                            if (dd.buf.size() == sizeof(u64))
+                            {
+                                u64 utag = my_ntohll(*(u64 *)dd.buf.data());
+                                if (file_transfer_s *f = engine->find_ftr(utag))
+                                    f->unpause(false);
+                            }
+                            break;
+                        case BT_FILE_CHUNK:
+                            {
+                                const u64 *d = (u64 *)dd.buf.data();
+                                u64 utag = my_ntohll(d[0]);
+                                u64 offset = my_ntohll(d[1]);
+                                if (file_transfer_s *f = engine->find_ftr(utag))
+                                    f->chunk_received(offset, d + 2, dd.buf.size() - sizeof(u64) * 2);
                             }
                             break;
                         default:
-                            if (mt < __mtl_service)
+                            if (mt < __bt_service)
                             {
-                                if (rstr.get_length() == 1 && rstr.get_char(0) == 0)
-                                    engine->hf->message((message_type_e)mt, id, dd.create_time, nullptr, 0);
-                                else
-                                    engine->hf->message((message_type_e)mt, id, dd.create_time, rstr.as_sptr().s, rstr.get_length());
+                                u64 crtime = my_ntohll(*(u64 *)dd.buf.data());
+                                engine->hf->message((message_type_e)mt, id, crtime, (const char *)dd.buf.data() + sizeof(u64), dd.buf.size() - sizeof(u64));
                             }
                             break;
                     }
-                    delivery.erase( dtb );
+                    engine->delivery.erase( dtb );
                 }
             }
 
@@ -2038,27 +2166,36 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
         break;
     case PID_DELIVERED:
         if (u64 dtb = r.readll(0))
-            for(msg_s *m = sendmessage_f; m; m=m->next)
+            for(datablock_s *m = sendblock_f; m; m=m->next)
                 if (m->delivery_tag == dtb)
                 {
-                    engine->hf->delivered(m->delivery_tag);
-                    LIST_DEL(m,sendmessage_f,sendmessage_l,prev,next);
+                    if (m->mt < __bt_service)
+                        engine->hf->delivered(m->delivery_tag);
+                
+
+                    if (m->mt == BT_FILE_CHUNK)
+                        for (file_transfer_s *f = engine->first_ftr; f; f = f->next)
+                            if (f->delivered(m->delivery_tag))
+                                break;
+
+                    engine->delivery.erase( dtb );
+                    LIST_DEL(m,sendblock_f,sendblock_l,prev,next);
                     m->die();
                     break;
                 }
         break;
-    case PID_TIME:
+    case PID_SYNC:
         {
+            waiting_sync_answer = false;
             r.read(sizeof(u64)); // skip random stuff
             time_t remote_peer_time = r.readll(0);
             if (remote_peer_time)
             {
                 bool resync = r.readb() != 0;
                 correct_create_time = (int)((long long)now() - (long long)remote_peer_time);
-                next_sync = time_ms() + 50000;
                 if (resync)
                 {
-                    engine->pg_time(false, authorized_key);
+                    engine->pg_sync(false, authorized_key);
                     pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
                 }
             }
@@ -2068,26 +2205,325 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
 
 }
 
-void lan_engine::file_send(int cid, const file_send_info_s *finfo)
+lan_engine::file_transfer_s::file_transfer_s(const asptr &fn):fn(fn)
 {
+    LIST_ADD(this, engine->first_ftr, engine->last_ftr, prev, next);
+}
+lan_engine::file_transfer_s::~file_transfer_s()
+{
+    LIST_DEL(this, engine->first_ftr, engine->last_ftr, prev, next);
 }
 
-void lan_engine::file_resume(u64, u64)
+void lan_engine::file_transfer_s::kill(bool from_self)
 {
+    if (from_self)
+    {
+        if (contact_s *c = engine->find(cid))
+        {
+            u64 utagnet = my_htonll(utag);
+            c->send_block(BT_FILE_BREAK, 0, &utagnet, sizeof(utagnet));
+        }
+    }
+    else
+        engine->hf->file_control(utag, FIC_BREAK);
+    delete this;
 }
 
-void lan_engine::file_control(u64, file_control_e)
+lan_engine::incoming_file_s::incoming_file_s(u32 cid_, u64 utag_, u64 fsz_, const asptr &fn) :file_transfer_s(fn)
 {
+    utag = utag_;
+    fsz = fsz_;
+    cid = cid_;
+
+    engine->hf->incoming_file(cid, utag, fsz, fn.s, fn.l);
+
 }
-void lan_engine::file_portion(u64, const file_portion_s *)
+
+/*virtual*/ void lan_engine::incoming_file_s::chunk_received( u64 offset, const void *d, int dsz )
 {
+    if (is_accepted)
+        engine->hf->file_portion( utag, offset, d, dsz );
+}
+
+/*virtual*/ void lan_engine::incoming_file_s::accepted(u64 offset)
+{
+    if (contact_s *c = engine->find(cid))
+    {
+        struct
+        {
+            u64 utagnet;
+            u64 offsetnet;
+        } d = { my_htonll(utag), my_htonll(offset) };
+        c->send_block(BT_FILE_ACCEPT, 0, &d, sizeof(d));
+        is_accepted = true;
+    }
+}
+
+/*virtual*/ void lan_engine::incoming_file_s::finished(bool from_self)
+{
+    if (from_self)
+        delete this;
+    else
+        engine->hf->file_control(utag, FIC_DONE);
+}
+/*virtual*/ void lan_engine::incoming_file_s::pause(bool from_self)
+{
+    if (from_self)
+    {
+        if (contact_s *c = engine->find(cid))
+        {
+            u64 utagnet = my_htonll(utag);
+            c->send_block(BT_FILE_PAUSE, 0, &utagnet, sizeof(utagnet));
+        }
+    }
+    else
+        engine->hf->file_control(utag, FIC_PAUSE);
+}
+
+/*virtual*/ void lan_engine::incoming_file_s::unpause(bool from_self)
+{
+    if (from_self)
+    {
+        if (contact_s *c = engine->find(cid))
+        {
+            u64 utagnet = my_htonll(utag);
+            c->send_block(BT_FILE_UNPAUSE, 0, &utagnet, sizeof(utagnet));
+        }
+    }
+    else
+        engine->hf->file_control(utag, FIC_UNPAUSE);
+}
+
+/*virtual*/ void lan_engine::incoming_file_s::tick(int /*ct*/)
+{
+    if (contact_s *c = engine->find(cid))
+    {
+        if (c->state == contact_s::ONLINE)
+            return;
+    }
+
+    engine->hf->file_control(utag, FIC_DISCONNECT);
+    delete this;
+}
+
+lan_engine::transmitting_file_s::transmitting_file_s(contact_s *to_contact, u64 utag_, u64 fsz_, const asptr &fn) :file_transfer_s(fn)
+{
+    memset(dtgs, 0, sizeof(dtgs));
+    fsz = fsz_;
+    cid = to_contact->id;
+    utag = utag_;
+
+    struct
+    {
+        u64 utag;
+        u64 fsz;
+    } d = { my_htonll(utag), my_htonll(fsz) };
+    to_contact->send_block(BT_SENDFILE, 0, &d, sizeof(d), fn.s, fn.l);
+}
+
+
+/*virtual*/ void lan_engine::transmitting_file_s::accepted(u64 offset_)
+{
+    offset = offset_;
+    is_accepted = true;
+    is_paused = false;
+}
+/*virtual*/ void lan_engine::transmitting_file_s::finished(bool from_self)
+{
+    ASSERT(from_self);
+
+    if (contact_s *c = engine->find(cid))
+    {
+        u64 utagnet = my_htonll(utag);
+        c->send_block(BT_FILE_DONE, 0, &utagnet, sizeof(utagnet));
+    }
+
+    engine->hf->file_control(utag, FIC_DONE);
+    delete this;
+}
+/*virtual*/ void lan_engine::transmitting_file_s::pause(bool from_self)
+{
+    is_paused = true;
+    if (from_self)
+    {
+        if (contact_s *c = engine->find(cid))
+        {
+            u64 utagnet = my_htonll(utag);
+            c->send_block(BT_FILE_PAUSE, 0, &utagnet, sizeof(utagnet));
+        }
+    } else
+        engine->hf->file_control(utag, FIC_PAUSE);
+}
+
+/*virtual*/ void lan_engine::transmitting_file_s::unpause(bool from_self)
+{
+    is_paused = false;
+    if (from_self)
+    {
+        if (contact_s *c = engine->find(cid))
+        {
+            u64 utagnet = my_htonll(utag);
+            c->send_block(BT_FILE_UNPAUSE, 0, &utagnet, sizeof(utagnet));
+        }
+    }
+    else
+        engine->hf->file_control(utag, FIC_UNPAUSE);
+}
+
+DELTA_TIME_PROFILER(xxx, 1024);
+
+void lan_engine::transmitting_file_s::fresh_file_portion(const file_portion_s *fp)
+{
+    logm("fresh fp %llu (%llu)", utag, fp->offset);
+
+    if (contact_s *c = engine->find(cid))
+    {
+        if (c->state == contact_s::ONLINE)
+        {
+            DELTA_TIME_CHECKPOINT(xxx);
+
+            struct  
+            {
+                u64 utag;
+                u64 offset_net;
+            } d = { my_htonll(utag), my_htonll(fp->offset) };
+
+            for(u64 &dtg : dtgs)
+                if (dtg == 0)
+                {
+                    dtg = c->send_block(BT_FILE_CHUNK, 0, &d, sizeof(d), fp->data, fp->size);;
+                    logm("fresh fp send %llu (%llu) %llu", utag, fp->offset, mdtags[i].dtg);
+                    return;
+                }
+
+            __debugbreak(); // bad
+
+        }
+    }
+}
+
+/*virtual*/ bool lan_engine::transmitting_file_s::delivered(u64 idtg)
+{
+    for(u64 &dtg : dtgs)
+        if (dtg == idtg)
+        {
+            --requested_chunks;
+            dtg = 0;
+            return true;
+        }
+    return false;
+}
+
+/*virtual*/ void lan_engine::transmitting_file_s::tick(int /*ct*/)
+{
+    if (contact_s *c = engine->find(cid))
+    {
+        if (c->state == contact_s::ONLINE)
+        {
+            if (requested_chunks < MAX_TRANSFERING_CHUNKS && is_accepted && !is_paused && !is_finished)
+            {
+                logm("portion request %llu (%llu) //%llu", utag, offset, mdtags[i].dtg);
+
+                int request_size = (offset + (unsigned)PORTION_SIZE < fsz) ? PORTION_SIZE : (int)(fsz - offset);
+                if (request_size)
+                {
+                    engine->hf->file_portion(utag, offset, nullptr, request_size);
+                    offset += request_size;
+                    ++requested_chunks;
+                } else if (requested_chunks == 0)
+                {
+                    for(u64 dtg : dtgs)
+                        if (dtg) return;
+                    // send done
+                    finished(true);
+                }
+            }
+
+            return;
+        }
+    }
+
+    engine->hf->file_control(utag, FIC_DISCONNECT);
+    delete this;
+
+}
+
+
+void lan_engine::tick_ftr(int ct)
+{
+    for (file_transfer_s *f = first_ftr; f;)
+    {
+        file_transfer_s *ff = f->next;
+        f->tick(ct);
+        f = ff;
+    }
+}
+
+
+void lan_engine::file_send(int id, const file_send_info_s *finfo)
+{
+    bool ok = false;
+    if (contact_s *c = find(id))
+    {
+        if (c->state == contact_s::ONLINE)
+        {
+            new transmitting_file_s(c, finfo->utag, finfo->filesize, asptr(finfo->filename, finfo->filename_len));
+            ok = true;
+        }
+    }
+    if (!ok)
+        hf->file_control(finfo->utag, FIC_DISCONNECT); // put it to send queue: assume transfer broken
+}
+
+void lan_engine::file_resume(u64 utag, u64 offset)
+{
+    if (file_transfer_s *ft = find_ftr(utag))
+        ft->accepted( offset );
+}
+
+lan_engine::file_transfer_s *lan_engine::find_ftr(u64 utag)
+{
+    for(file_transfer_s *f = first_ftr; f; f = f->next)
+        if (f->utag == utag)
+            return f;
+    return nullptr;
+}
+
+void lan_engine::file_control(u64 utag, file_control_e ctl)
+{
+    if(file_transfer_s *f = find_ftr(utag))
+        switch (ctl)
+        {
+            case FIC_ACCEPT:
+                f->accepted(0);
+                break;
+            case FIC_REJECT:
+            case FIC_BREAK:
+                f->kill(true);
+                break;
+            case FIC_DONE:
+                f->finished(true);
+                break;
+            case FIC_PAUSE:
+                f->pause(true);
+                break;
+            case FIC_UNPAUSE:
+                f->unpause(true);
+                break;
+        }
+}
+
+void lan_engine::file_portion(u64 utag, const file_portion_s *fp)
+{
+    if (file_transfer_s *f = find_ftr(utag))
+        f->fresh_file_portion(fp);
 
 }
 
 void lan_engine::get_avatar(int id)
 {
     if (contact_s *c = find(id))
-        c->add_message(MTL_GETAVATAR, 0, asptr(), 0);
+        c->send_block(BT_GETAVATAR, 0);
 }
 
 

@@ -170,7 +170,7 @@ HICON application_c::app_icon(bool for_tray)
     {
         int j = text.find_pos(i + t.l, '>');
         if (j < 0) break;
-        text.replace(i,j-i+1, ts::fn_get_name<ts::wchar>(text.substr(i + t.l, j)) );
+        text.replace(i,j-i+1, ts::fn_get_name(text.substr(i + t.l, j)) );
     }
 
     text_remove_tags(text);
@@ -795,7 +795,7 @@ file_transfer_s * application_c::register_file_transfer( const contact_key_s &hi
     ftr.filename_on_disk = filename;
     ftr.filesize = filesize;
     ftr.utag = utag;
-    ftr.filename.replace_all('\\','/');
+    ts::fix_path(ftr.filename, FNO_NORMALIZE);
 
     auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.utag == utag; });
 
@@ -834,6 +834,25 @@ file_transfer_s * application_c::register_file_transfer( const contact_key_s &hi
     prf().changed();
 
     return &ftr;
+}
+
+void application_c::cancel_file_transfers( const contact_key_s &historian )
+{
+    for (int i = m_files.size()-1; i >= 0; --i)
+    {
+        file_transfer_s &ftr = m_files.get(i);
+        if (ftr.historian == historian)
+            m_files.remove_fast(i);
+    }
+
+    bool ch = false;
+    for (auto &row : prf().get_table_unfinished_file_transfer())
+    {
+        if (row.other.historian == historian)
+            ch |= row.deleted();
+    }
+    if (ch) prf().changed();
+
 }
 
 void application_c::unregister_file_transfer(uint64 utag, bool disconnected)
@@ -912,6 +931,14 @@ void preloaded_buttons_s::reload()
     nokeeph = th.get_button(CONSTASTR("nokeeph"));
 }
 
+file_transfer_s::file_transfer_s()
+{
+    LARGE_INTEGER freq;
+    QueryPerformanceFrequency(&freq);
+    notfreq = 1.0 / (double)freq.QuadPart;
+    QueryPerformanceCounter(&prevt);
+}
+
 file_transfer_s::~file_transfer_s()
 {
     if (handle)
@@ -936,7 +963,7 @@ void file_transfer_s::auto_confirm()
 {
     ts::wstr_c downf = prf().download_folder();
     path_expand_env(downf);
-    ts::make_path(downf);
+    ts::make_path(downf, 0);
     prepare_fn(ts::fn_join(downf, filename), false);
 
     if (active_protocol_c *ap = prf().ap(sender.protoid))
@@ -950,13 +977,13 @@ void file_transfer_s::prepare_fn( const ts::wstr_c &path_with_fn, bool overwrite
     filename_on_disk = path_with_fn;
     if (!overwrite)
     {
-        ts::wstr_c origname = ts::fn_get_name<ts::wchar>(filename_on_disk);
+        ts::wstr_c origname = ts::fn_get_name(filename_on_disk);
         int n = 1;
         while (ts::is_file_exists(filename_on_disk) || ts::is_file_exists(filename_on_disk + CONSTWSTR(".!rcv")))
-            filename_on_disk = ts::fn_change_name<ts::wchar>(filename_on_disk, ts::wstr_c(origname).append_char('(').append_as_int(n++).append_char(')'));
+            filename_on_disk = ts::fn_change_name(filename_on_disk, ts::wstr_c(origname).append_char('(').append_as_int(n++).append_char(')'));
     }
     filename_on_disk.append(CONSTWSTR(".!rcv"));
-    trtime = ts::Time::current();
+    deltatime(true);
     upd_message_item();
 
     if (auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.utag == utag; }))
@@ -982,7 +1009,7 @@ void file_transfer_s::pause_by_remote( bool p )
         upd_message_item();
     } else
     {
-        trtime = ts::Time::current();
+        deltatime(true);
         bytes_per_sec = 0;
     }
 }
@@ -1001,7 +1028,7 @@ void file_transfer_s::pause_by_me(bool p)
     else
     {
         ap->file_control(utag, FIC_UNPAUSE);
-        trtime = ts::Time::current();
+        deltatime(true);
         bytes_per_sec = 0;
     }
 }
@@ -1030,7 +1057,12 @@ void file_transfer_s::kill( file_control_e fctl )
     if (handle && (!upload || fctl != FIC_DONE)) // close before update message item
     {
         LARGE_INTEGER fsz = {0};
-        if (!upload) GetFileSizeEx(handle,&fsz);
+        if (!upload)
+        {
+            GetFileSizeEx(handle,&fsz);
+            if (fctl == FIC_DONE && (uint64)fsz.QuadPart != filesize)
+                return;
+        }
         CloseHandle(handle);
         handle = nullptr;
         if (filename_on_disk.ends(CONSTWSTR(".!rcv")))
@@ -1057,7 +1089,7 @@ void file_transfer_s::kill( file_control_e fctl )
         } else if (!upload && fctl == FIC_DONE)
             MoveFileW(filename_on_disk + CONSTWSTR(".!rcv"), filename_on_disk);
     }
-    trtime = ts::Time::past();
+    deltatime(true, -60);
     if (fctl != FIC_REJECT) upd_message_item();
     if (fctl == FIC_DONE)
     {
@@ -1077,6 +1109,52 @@ void file_transfer_s::kill( file_control_e fctl )
 
     }
     g_app->unregister_file_transfer(utag, fctl == FIC_DISCONNECT);
+}
+
+void file_transfer_s::tr( uint64 _offset0, uint64 _offset1 )
+{
+    if ( transfered.count() == 0 )
+    {
+        range_s &r = transfered.add();
+        r.offset0 = _offset0;
+        r.offset1 = _offset1;
+        return;
+    }
+
+    int cnt = transfered.count();
+    for(int i=0; i<cnt; ++i)
+    {
+        range_s r = transfered.get(i);
+        
+        if (_offset0 > r.offset1)
+            continue;
+
+        if (_offset1 < r.offset0)
+        {
+            range_s &rr = transfered.insert(i);
+            rr.offset0 = _offset0;
+            rr.offset1 = _offset1;
+            return;
+        }
+        if (_offset1 == r.offset0)
+        {
+            r.offset0 = _offset0;
+            transfered.remove_slow(i);
+            return tr(r.offset0, r.offset1);
+        }
+        if (_offset0 == r.offset1)
+        {
+            r.offset1 = _offset1;
+            transfered.remove_slow(i);
+            return tr(r.offset0, r.offset1);
+        }
+
+        return;
+    }
+
+    range_s &rr = transfered.add();
+    rr.offset0 = _offset0;
+    rr.offset1 = _offset1;
 }
 
 void file_transfer_s::query( uint64 offset_, int sz )
@@ -1106,19 +1184,21 @@ void file_transfer_s::query( uint64 offset_, int sz )
         {
             if (bytes_per_sec < 0)
             {
-                trtime = ts::Time::current();
+                deltatime(true);
                 bytes_per_sec = 0;
             } else
             {
-                ts::Time t = ts::Time::current();
-                int mspersize = t - trtime;
-                trtime = t;
-                if (mspersize > 0)
-                {
-                    bytes_per_sec = sz * 1000 / mspersize;
-                }
+                tr( offset_, offset_ + sz );
+                upduitime += deltatime(true);
             }
-            upd_message_item();
+            if (upduitime > 0.3f)
+            {
+                upduitime -= 0.3f;
+                bytes_per_sec = lround((float)trsz() / 0.3f);
+                transfered.clear();
+                upd_message_item();
+            }
+
         }
 
         offset += sz;
@@ -1155,6 +1235,8 @@ void file_transfer_s::resume()
 
 void file_transfer_s::save(uint64 offset_, const ts::buf0_c&data)
 {
+    if (!accepted) return;
+
     if (handle == nullptr)
     {
         play_sound( snd_start_recv_file, false );
@@ -1198,15 +1280,16 @@ void file_transfer_s::save(uint64 offset_, const ts::buf0_c&data)
     {
         if (bytes_per_sec >= 0)
         {
-            ts::Time t = ts::Time::current();
-            int mspersize = t - trtime;
-            trtime = t;
-            if (mspersize > 0)
-            {
-                bytes_per_sec = data.size() * 1000 / mspersize;
-            }
+            tr( offset_, offset_+ data.size() );
+            upduitime += deltatime(true);
         }
-        upd_message_item();
+        if (upduitime > 0.3f)
+        {
+            upduitime -= 0.3f;
+            bytes_per_sec = lround((float)trsz() / 0.3f);
+            transfered.clear();
+            upd_message_item();
+        }
     }
 
 }

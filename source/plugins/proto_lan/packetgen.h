@@ -12,12 +12,12 @@
     if you know correct true PUBLIC ID of your friend, nobody can mimic your friend's contact
 */
 
-#define LAN_PROTOCOL_VERSION 1 // only clients with same version can interact
+#define LAN_PROTOCOL_VERSION 2 // only clients with same version can interact
 #define LAN_SAVE_VERSION 1
 
 #define SIZE_PACKET_HEADER 4
-#define SIZE_MAX_SEND_NONAUTH 499
-#define SIZE_MAX_SEND_AUTH 32000
+#define SIZE_MAX_SEND_NONAUTH (512 - SIZE_PACKET_HEADER - crypto_secretbox_MACBYTES)
+#define SIZE_MAX_SEND_AUTH (65000 - SIZE_PACKET_HEADER - crypto_secretbox_MACBYTES)
 #define SIZE_PUBID 20 // full pub id size
 #define SIZE_KEY (crypto_secretbox_NONCEBYTES + crypto_secretbox_KEYBYTES)
 #define SIZE_KEY_NONCE_PART (crypto_secretbox_NONCEBYTES)
@@ -36,8 +36,8 @@ enum packet_id_e
     PID_HALLO,
 
     // tcp
-    PID_MEET,   // tcp 1st packet if non authorized
-    PID_NONCE,  // tcp 1st packet if authorized
+    PID_MEET,       // tcp 1st packet if non authorized
+    PID_NONCE,      // tcp 1st packet if authorized
 
     _tcp_recv_begin_,
     _tcp_encrypted_begin_,
@@ -45,9 +45,9 @@ enum packet_id_e
     PID_INVITE,
     PID_ACCEPT,
     PID_READY,  // answer to accept
-    PID_MESSAGE,
+    PID_DATA,
     PID_DELIVERED,
-    PID_TIME, // sync time
+    PID_SYNC, // sync time
 
     _tcp_encrypted_end_,
 
@@ -58,7 +58,7 @@ enum packet_id_e
     PID_DEAD = 0xFFFF,
 };
 
-struct msg_s;
+struct datablock_s;
 
 class packetgen
 {
@@ -155,6 +155,8 @@ protected:
 
     byte my_public_key[SIZE_PUBLIC_KEY];
     byte my_secret_key[SIZE_SECRET_KEY];
+    
+    int my_mastertag = 0; // changes every hallo, 0 - means no offline contacts
 
 public:
     packetgen();
@@ -169,10 +171,10 @@ public:
     void pg_accept(const asptr&name, const byte *auth_key, const byte *crypt_packet_key);
     void pg_ready(const byte *raw_public_id, const byte *crypt_packet_key);
     void pg_reject(); // no crypt
-
+    
     void pg_nonce(const byte *other_public_key, const byte *auth_key /*nonce + contact key*/ );
 
-    void pg_message(msg_s *m, const byte *crypt_packet_key, int maxsize);
+    void pg_data(datablock_s *m, const byte *crypt_packet_key, int maxsize);
     void pg_delivered(u64 dtag, const byte *crypt_packet_key);
-    void pg_time(bool resync, const byte *crypt_packet_key);
+    void pg_sync(bool resync, const byte *crypt_packet_key);
 };

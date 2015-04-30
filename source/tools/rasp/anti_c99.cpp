@@ -11,10 +11,10 @@ bool find_c99( const astrings_c & lines, int &sl, int &el  )
         l.trim();
         if (l.ends("// C99"))
         {
-            if (l.begins("//")) continue;;
+            if (l.begins("//")) continue;
 
             int c1 = l.count_chars(']');
-            if (c1 == 0) continue;; // not dynamic array
+            if (c1 == 0) continue; // not dynamic array
 
             int c2 = l.count_chars('[');
             int ii = i;
@@ -148,6 +148,18 @@ bool fix_c99(astrings_c & lines, int sl, int el)
     for(int i=sl;i<=sll;++i)
         lines.get(i).insert(ins,"//");
     
+    if (type_of_elements.ends(CONSTASTR(",")))
+    {
+        // multiple vars in line
+        type_of_elements.trunc_length(1).append(CONSTASTR(";\r"));
+        lines.insert(sl, str_c( lines.get(sl).substr(0, ins) ).append(type_of_elements));
+        ++sl; ++sll;
+        astrings_c t( type_of_elements, ' ' );
+        int tr = 1;
+        if (t.get(0).equals(CONSTASTR("unsigned"))) ++tr;
+        t.truncate(tr);
+        type_of_elements = t.join(' ');
+    }
 
     str_c sizeofarr( CONSTASTR("sizeof_") ); sizeofarr.append(name_of_array);
     str_c s1; s1.fill(ins,' ').append( CONSTASTR("size_t ") ).append(sizeofarr).append( CONSTASTR(" = sizeof(") ).append(type_of_elements).append( CONSTASTR(") * (") ).append(num_of_elements).append(CONSTASTR("); // -C99\r"));
@@ -186,7 +198,7 @@ static void savelines(const asptr&fn, const astrings_c & lines)
 int proc_antic99(const wstrings_c & pars)
 {
     if (pars.size() < 2) return 0;
-    wstr_c c99 = simplify_path(pars.get(1));
+    wstr_c c99 = pars.get(1); fix_path( c99, FNO_SIMPLIFY );
 
     if (!is_file_exists(c99.as_sptr()))
     {
@@ -214,7 +226,7 @@ int proc_antic99(const wstrings_c & pars)
     //if (fixes) savelines( str_c(c99).append( asptr("99free.c") ), lines );
     if (fixes) savelines( str_c(c99), lines );
 
-    Print(FOREGROUND_GREEN, "done %s. fixes: %i\n", fn_get_name_with_ext(to_str(c99)).cstr(), fixes);
+    Print(FOREGROUND_GREEN, "done %s. fixes: %i\n", to_str(fn_get_name_with_ext(c99)).cstr(), fixes);
 
     return 0;
 }

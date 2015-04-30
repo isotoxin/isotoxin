@@ -191,7 +191,7 @@ void ccollection_c::find_by_mask(wstrings_c & files, const ts::wsptr &fnmask, bo
         middle(wstrings_c & files, const pwstr_c &m, bool fp):files(files), m(m), fullpaths(fp) {}
         bool filer( const wsptr & path, const wsptr & fn, container_c * )
         {
-            if (fn_mask_match<wchar>(fn, m))
+            if (fn_mask_match(fn, m))
             {
                 if (fullpaths)
                     files.add( fn_join(ts::tmp_wstr_c(path),fn) );

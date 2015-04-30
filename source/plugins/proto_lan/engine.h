@@ -14,6 +14,8 @@
 #define OPUS_EXPORT
 #include <opus.h>
 
+#include <memory>
+
 __forceinline int time_ms()
 {
     return (int)timeGetTime();
@@ -23,23 +25,8 @@ struct socket_s
 {
     SOCKET _socket = INVALID_SOCKET;
 
-    void close()
-    {
-        if (_socket != INVALID_SOCKET)
-        {
-            closesocket(_socket);
-            _socket = INVALID_SOCKET;
-        }
-    }
-    void flush_and_close()
-    {
-        if (_socket != INVALID_SOCKET)
-        {
-            shutdown(_socket, SD_SEND);
-            closesocket(_socket);
-            _socket = INVALID_SOCKET;
-        }
-    }
+    void close();
+    void flush_and_close();
     bool ready() const { return _socket != INVALID_SOCKET; }
     ~socket_s() {close();}
 };
@@ -66,13 +53,19 @@ struct tcp_pipe : public socket_s
 {
     sockaddr_in addr;
     int creationtime = 0;
-    byte rcvbuf[65536];
+    byte rcvbuf[65536 * 2];
     int rcvbuf_sz = 0;
 
     tcp_pipe() { creationtime = time_ms(); }
     tcp_pipe( SOCKET s, const sockaddr_in& addr ):addr(addr) { _socket = s; creationtime = time_ms(); }
     tcp_pipe(const tcp_pipe&) = delete;
     tcp_pipe(tcp_pipe&&) = delete;
+
+    void close()
+    {
+        rcvbuf_sz = 0;
+        __super::close();
+    }
 
     bool timeout() const
     {
@@ -171,50 +164,58 @@ bool check_pubid_valid( const asptr &pub_id );
 
 #pragma pack(push,1)
 
-enum message_type_lan_e // hard order!!!
+enum block_type_e // hard order!!!
 {
-    MTL_MESSAGE = MT_MESSAGE,
-    MTL_ACTION = MT_ACTION,
+    BT_MESSAGE = MT_MESSAGE,
+    BT_ACTION = MT_ACTION,
 
-    __mtl_service,
-    __mtl_no_save_begin = 100,
-    __mtl_no_need_ater_save_begin = __mtl_no_save_begin,
+    __bt_service,
+    __bt_no_save_begin = 100,
+    __bt_no_need_ater_save_begin = __bt_no_save_begin,
 
-    MTL_CHANGED_NAME,
-    MTL_CHANGED_STATUSMSG,
-    MTL_OSTATE,
-    MTL_GENDER,
+    BT_CHANGED_NAME,
+    BT_CHANGED_STATUSMSG,
+    BT_OSTATE,
+    BT_GENDER,
     
-    __mtl_no_need_ater_save_end,
-    __mtl_0 = 200,
+    __bt_no_need_ater_save_end,
+    __bt_0 = 200,
 
-    MTL_CALL,
-    MTL_CALL_CANCEL,
-    MTL_CALL_ACCEPT,
-    MTL_AUDIO_FRAME,
-    MTL_GETAVATAR,
-    MTL_AVATARHASH,
-    MTL_AVATARDATA,
+    BT_CALL,
+    BT_CALL_CANCEL,
+    BT_CALL_ACCEPT,
+    BT_AUDIO_FRAME,
+    BT_GETAVATAR,
+    BT_AVATARHASH,
+    BT_AVATARDATA,
+    BT_SENDFILE,
+    BT_FILE_ACCEPT,
+    BT_FILE_BREAK,
+    BT_FILE_PAUSE,
+    BT_FILE_UNPAUSE,
+    BT_FILE_DONE,
+    BT_FILE_CHUNK,
 
-    __mtl_no_save_end,
+    __bt_no_save_end,
 
 };
 
-static_assert(__mtl_no_need_ater_save_end < __mtl_0, "!");
+static_assert(__bt_no_need_ater_save_end < __bt_0, "!");
 
-struct msg_s
+struct datablock_s
 {
-    u64 create_time;
     u64 delivery_tag;
-    msg_s *next;
-    msg_s *prev;
-    message_type_lan_e mt;
+    datablock_s *next;
+    datablock_s *prev;
+    block_type_e mt;
     int len;
     int sent;
 
-    asptr text() const { return asptr((const char *)(this + 1), len); }
+    u64 create_time() const { ASSERT(BT_MESSAGE == mt || BT_ACTION == mt); return *(u64 *)(this + 1); }
+    asptr text() const { ASSERT(BT_MESSAGE == mt || BT_ACTION == mt); return asptr(((const char *)(this + 1)) + sizeof(u64), len - sizeof(u64)); }
+    const byte *data() const {return (const byte *)(this + 1);}
 
-    static msg_s *build(message_type_lan_e mt, u64 create_time, const asptr&text, u64 utag);
+    static datablock_s *build(block_type_e mt, u64 delivery_tag, const void *data, int datasize, const void *data1 = nullptr, int datasize1 = 0);
     void die();
 
     int left() const { return len - sent; }
@@ -233,8 +234,9 @@ class lan_engine : public packetgen
 
     std::vector<byte> avatar;
     bool avatar_set = false;
+    bool media_data_transfer = false;
 
-    int lasthallo;
+    int nexthallo = 0;
     int listen_port = -1;
 
     int changed_some = 0;
@@ -315,21 +317,20 @@ public:
         ~media_stuff_s();
     };
 
+    struct delivery_data_s
+    {
+        size_t rcv_size = 0;
+        std::vector<byte> buf;
+    };
+
+    std::unordered_map< u64, std::unique_ptr<delivery_data_s> > delivery;
+
     struct contact_s
     {
         contact_s *next = nullptr;
         contact_s *prev = nullptr;
 
         media_stuff_s *media = nullptr;
-
-        struct delivery_data_s
-        {
-            u64 create_time = 0;
-            size_t rcv_size = 0;
-            std::vector<byte> buf;
-        };
-
-        std::unordered_map< u64, delivery_data_s > delivery;
 
         tcp_pipe pipe;
 
@@ -339,6 +340,7 @@ public:
         int call_stop_time = 0;
         int correct_create_time = 0;
         int next_sync = 0;
+        int sync_answer_deadline = 0;
 
         byte temporary_key[SIZE_KEY]; // crypto key for unauthorized interactions (before accept invite)
         byte authorized_key[SIZE_KEY];
@@ -358,18 +360,26 @@ public:
         byte avatar_hash[16];
 
         int reconnect = 0;
+       
         bool key_sent = false;
         bool data_changed = false;
+        bool waiting_sync_answer = false;
 
         enum { CALL_OFF, OUT_CALL, IN_CALL, IN_PROGRESS } call_status = CALL_OFF;
         enum { SEARCH, MEET, TRAPPED, INVITE_SEND, INVITE_RECV, REJECTED, ACCEPT, ACCEPT_RESTORE_CONNECT, REJECT, ONLINE, OFFLINE, BACKCONNECT, ROTTEN } state = SEARCH;
 
-        msg_s *sendmessage_f = nullptr;
-        msg_s *sendmessage_l = nullptr;
+        datablock_s *sendblock_f = nullptr;
+        datablock_s *sendblock_l = nullptr;
 
-        void add_message(message_type_lan_e mt, u64 put_time, asptr text, u64 utag);
-        bool del_message( u64 utag );
+        void send_message( block_type_e mt, u64 create_time, const asptr &text, u64 dtag)
+        {
+            u64 create_time_net = my_htonll(create_time);
+            send_block(mt, dtag, &create_time_net, sizeof(u64), text.s, text.l);
+        }
+        u64 send_block(block_type_e mt, u64 delivery_tag, const void *data = nullptr, int datasize = 0, const void *data1 = nullptr, int datasize1 = 0);
+        bool del_block( u64 delivery_tag );
 
+        void to_offline(int ct);
         void online_tick(int ct, int nexttime = 500); // not always online
         void start_media();
 
@@ -444,6 +454,86 @@ public:
 
     };
 private:
+    
+    struct file_transfer_s
+    {
+        file_transfer_s *prev;
+        file_transfer_s *next;
+
+        file_transfer_s(const asptr &fn);
+        virtual ~file_transfer_s();
+        virtual void accepted(u64 /*offset*/) {}
+        virtual void kill(bool /*from_self*/);
+        virtual void pause(bool /*from_self*/) {}
+        virtual void unpause(bool /*from_self*/) {}
+        virtual void finished(bool /*from_self*/) {}
+        virtual void tick(int ct) = 0;
+
+        virtual void chunk_received( u64 /*offset*/, const void * /*d*/, int /*dsz*/ ) {}; // incoming
+        virtual void fresh_file_portion(const file_portion_s * /*fp*/) {} // transmitting
+        virtual bool delivered(u64 /*dtg*/) { return false; } // transmitting
+
+        u32 cid;    // client id
+        u64 fsz;    // filesize
+        u64 utag;   // unique tag
+        str_c fn;   // filename
+    };
+
+    file_transfer_s *first_ftr = nullptr;
+    file_transfer_s *last_ftr = nullptr;
+
+    void tick_ftr(int ct);
+    file_transfer_s *find_ftr(u64 utag);
+
+    struct incoming_file_s : public file_transfer_s
+    {
+        bool is_accepted = false;
+        incoming_file_s(u32 cid_, u64 utag_, u64 fsz_, const asptr &fn);
+        ~incoming_file_s() {}
+
+        //void recv_data(u64 position, const byte *data, size_t datasz)
+        //{
+        //    hf->file_portion(utag, position, data, datasz);
+        //}
+
+        /*virtual*/ void accepted(u64 offset) override;
+        /*virtual*/ void finished(bool from_self) override;
+        /*virtual*/ void pause(bool from_self) override;
+        /*virtual*/ void unpause(bool from_self) override;
+        /*virtual*/ void tick(int ct) override;
+
+        /*virtual*/ void chunk_received( u64 offset, const void *d, int dsz ) override;
+    };
+
+
+    struct transmitting_file_s : public file_transfer_s
+    {
+        static const int PORTION_SIZE = 65536;
+        static const int MAX_TRANSFERING_CHUNKS = 16;
+
+        u64 dtgs[ MAX_TRANSFERING_CHUNKS ];
+
+        u64 offset = 0;
+        int requested_chunks = 0;
+        bool is_accepted = false;
+        bool is_paused = false;
+        bool is_finished = false;
+
+        transmitting_file_s(contact_s *to_contact, u64 utag_, u64 fsz_, const asptr &fn);
+        ~transmitting_file_s() {}
+
+        /*virtual*/ void accepted(u64 offset) override;
+        /*virtual*/ void finished(bool from_self) override;
+        /*virtual*/ void pause(bool from_self) override;
+        /*virtual*/ void unpause(bool from_self) override;
+        /*virtual*/ void tick(int ct) override;
+
+        /*virtual*/ void fresh_file_portion(const file_portion_s *fp) override;
+        /*virtual*/ bool delivered(u64 dtg) override;
+    };
+
+
+private:
     contact_s *first = nullptr; // first points to zero contact - self
     contact_s *last = nullptr;
 
@@ -464,7 +554,7 @@ private:
 
 
     void pp_search( unsigned int IPv4, int back_port, const byte *trapped_contact_public_key, const byte *seeking_raw_public_id );
-    void pp_hallo( unsigned int IPv4, int back_port, const byte *hallo_contact_public_key );
+    void pp_hallo( unsigned int IPv4, int back_port, int mastertag, const byte *hallo_contact_public_key );
 
     tcp_pipe * pp_meet( tcp_pipe * pipe, stream_reader &&r );
     tcp_pipe * pp_nonce( tcp_pipe * pipe, stream_reader &&r );

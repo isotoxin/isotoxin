@@ -21,9 +21,9 @@ ts::wstr_c dialog_firstrun_c::path_by_choice(path_choice_e choice)
 {
     switch (choice)
     {
-    case PCH_PROGRAMFILES: return ts::get_full_path(ts::wstr_c(CONSTWSTR("%PROGRAMS%\\Isotoxin\\")), false, true);
-    case PCH_HERE: return ts::get_full_path(ts::wstr_c(CONSTWSTR("")));
-    case PCH_APPDATA: return ts::get_full_path(ts::wstr_c(CONSTWSTR("%APPDATA%\\isotoxin\\")), false, true);
+    case PCH_PROGRAMFILES: return ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%PROGRAMS%\\Isotoxin\\")), FNO_FULLPATH | FNO_PARSENENV);
+    case PCH_HERE: return ts::fn_fix_path(ts::wstr_c(CONSTWSTR("")), FNO_FULLPATH);
+    case PCH_APPDATA: return ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%APPDATA%\\isotoxin\\")), FNO_FULLPATH | FNO_PARSENENV);
     case PCH_CUSTOM:
         {
             if (ASSERT(selpath))
@@ -309,12 +309,9 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     bool exit = false;
     ts::wstr_c curd = path_by_choice( PCH_HERE );
     copyto = path_by_choice( PCH_INSTALLPATH );
-#ifdef _WIN32
-    curd.case_down();
-    copyto.case_down();
-#endif // _WIN32
-    curd.replace_all('/', '\\').trim_right('\\');
-    copyto.replace_all('/', '\\').trim_right('\\');
+    fix_path(curd, FNO_SIMPLIFY | FNO_TRIMLASTSLASH);
+    fix_path(copyto, FNO_SIMPLIFY | FNO_TRIMLASTSLASH);
+
     if (curd != copyto)
     {
         // TODO : copy

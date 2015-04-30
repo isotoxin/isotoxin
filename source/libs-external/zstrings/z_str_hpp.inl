@@ -90,6 +90,7 @@ template<typename TCHARACTER> struct sptr
     }
     sptr skip(ZSTRINGS_SIGNED chars) const { ZSTRINGS_ASSERT(chars <= l); return sptr(s+chars,l-chars);}
     sptr trim(ZSTRINGS_SIGNED chars) const { ZSTRINGS_ASSERT(chars <= l); return sptr(s,l-chars);}
+    sptr part(ZSTRINGS_SIGNED chars) const { ZSTRINGS_ASSERT(chars <= l); return sptr(s,chars);}
     void operator++()
     {
         ZSTRINGS_ASSERT(l > 0);
@@ -1288,7 +1289,7 @@ public:
     }
 
 
-    TCHARACTER   get_last_char(void) const
+    TCHARACTER   get_last_char() const
     {
         if (core.len() == 0) return 0;
         return core()[ get_length() - 1 ];

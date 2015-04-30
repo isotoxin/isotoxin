@@ -211,7 +211,8 @@ struct text_parser_s
     int rite_rite = 0; // индекс в массиве глифов для блока в <r></r> - выровнять этот кусок вправо
     int addhtags = 0; // количество тэгов, увеличивающих высоту строки
 
-    bool first_char_in_paragraph, was_inword_break, waiting_for_linebreak, current_line_end_ellipsis;
+    bool first_char_in_paragraph, was_inword_break, current_line_end_ellipsis, current_line_with_rects;
+    bool search_rects;
 
     text_parser_s() {}
 
@@ -260,12 +261,13 @@ struct text_parser_s
 		cur_max_line_len = max_line_length;
 		first_char_in_paragraph = true;
 		was_inword_break = false;
-        waiting_for_linebreak = false;
 		last_line_descender = maxW = 0;
 
         rite_rite = 0;
         addhtags = 0;
         current_line_end_ellipsis = FLAG(flags,TO_LINE_END_ELLIPSIS);
+        current_line_with_rects = false;
+        search_rects = false;
 	}
 
 	void add_indent(int chari)
@@ -417,8 +419,8 @@ struct text_parser_s
 
 	meta_glyph_s &add_meta_glyph(meta_glyph_s::mgtype_e type, int chari = -1)
 	{
-		if (first_char_in_paragraph) first_char_in_paragraph = false, add_indent(chari);//если это первый символ строки, добавляем отступ
-		meta_glyph_s &mg = last_line.add();//добавляем метаглиф
+		if (first_char_in_paragraph) first_char_in_paragraph = false, add_indent(chari); // if 1st symbol, add indent
+		meta_glyph_s &mg = last_line.add(); // add metaglyph
         mg.image_offset_Y = 0;
         mg.charindex = chari;
 		mg.type = type;
@@ -448,23 +450,19 @@ struct text_parser_s
 
 		if (tag == CONSTWSTR("br"))
 		{
-            if (waiting_for_linebreak)
-            {
-                waiting_for_linebreak = false;
-            } else
-            {
-                if (last_line.count() > 0) end_line();
-                else next_line(font.height); // if current line is empty, just add current font height
-                pen.y += ui_scale(tagbody.as_int());
-            }
+            if (search_rects)
+                line_ellipsis();
+
+            if (last_line.count() > 0) end_line();
+            else next_line(font.height); // if current line is empty, just add current font height
+            pen.y += ui_scale(tagbody.as_int());
 
 		} else if (tag == CONSTWSTR("nl")) // next line, but only if not first tag
         {
-            if (waiting_for_linebreak)
-            {
-                waiting_for_linebreak = false;
-            }
-            else if (last_line.count() > 0)
+            if (search_rects)
+                line_ellipsis();
+            
+            if (last_line.count() > 0)
             {
                 end_line();
                 pen.y += ui_scale(tagbody.as_int());
@@ -516,10 +514,11 @@ struct text_parser_s
 		}
 		else if (tag == CONSTWSTR("p") || tag == CONSTWSTR("pn"))
 		{
+            if (search_rects)
+                line_ellipsis();
+
 			if (last_line.count() > 0 && tag == CONSTWSTR("p")) end_line();
 			else ;//если строка пустая, то перо не смещаем вниз, в этом отличие тега <p> от <br>, ведь часто <p> стоит в начале строки и новая строка в этом случае не нужна
-
-            waiting_for_linebreak = false;
 
             ASSERT(rite_rite == 0);
 
@@ -544,9 +543,11 @@ struct text_parser_s
 		}
 		else if (tag == CONSTWSTR("pr"))
 		{
-			if (last_line.count() > 0) end_line(false);
-			else ;//если строка пустая, то перо не смещаем вниз, в этом отличие тега <p> от <br>, ведь часто <p> стоит в начале строки и новая строка в этом случае не нужна
-            waiting_for_linebreak = false;
+            if (search_rects)
+                line_ellipsis();
+
+            if (last_line.count() > 0) end_line(false);
+			else ; // do not move pen down if line empty
 
             ASSERT(rite_rite == 0);
 
@@ -606,8 +607,10 @@ struct text_parser_s
 		}
 		else if (tag == CONSTWSTR("hr"))
 		{
-			if (last_line.count() > 0) end_line();
-            waiting_for_linebreak = false;
+            if (search_rects)
+                line_ellipsis();
+
+            if (last_line.count() > 0) end_line();
 
             token<wchar> t( tagbody, L',' ); //vertindent[,sideindent,[thickness]]
 			
@@ -648,8 +651,11 @@ struct text_parser_s
 		else if (tag == CONSTWSTR("imgl") || tag == CONSTWSTR("imgr"))
 		{
 			side_text_limit &sl = tag == CONSTWSTR("imgl") ? leftSL : rightSL;
+
+            if (search_rects)
+                line_ellipsis();
+
 			if (last_line.count() > 0) end_line();//переход на новую строку, если нужно
-            waiting_for_linebreak = false;
 			if (pen.y < sl.bottom) pen.y = sl.bottom;//если сейчас текст уже обтекается картинкой, то перемещаем перо на конец картинки, т.к. область обтекания более чем из одной картинки с одной стороны не поддерживается
 			// Теперь добавляем картинку с нужной стороны
 			scaled_image_s *si = scaled_image_s::load(tagbody, ivec2(ui_scale(100)));
@@ -708,6 +714,7 @@ struct text_parser_s
         }
         else if (tag == CONSTWSTR("rect"))
         {
+            current_line_with_rects = true;
             meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::RECTANGLE, chari);
             token<wchar> t(tagbody, L',');
             mg.ch = (wchar)t->as_int();
@@ -736,8 +743,6 @@ struct text_parser_s
 
     void addchar(font_c &font, wchar ch, int chari)
     {
-        if (waiting_for_linebreak) return;
-
         meta_glyph_s &mg = add_meta_glyph(ch == L' ' ? meta_glyph_s::SPACE : meta_glyph_s::CHAR, chari);
         mg.glyph = &font[mg.ch = ch];
         mg.advance = mg.glyph->advance;
@@ -745,12 +750,76 @@ struct text_parser_s
         //Kerning processing
         meta_glyph_s *prev;
         int cnt = last_line.count();
-        if (cnt > 1 && (prev = &last_line.get(cnt - 2))->type == meta_glyph_s::CHAR && (cnt-1) != rite_rite) //если перед этим символом стоит другой символ
+        if (cnt > 1 && (prev = &last_line.get(cnt - 2))->type == meta_glyph_s::CHAR && (cnt-1) != rite_rite)
         {
             int k = font.kerning_ci(prev->glyph->char_index, mg.glyph->char_index);
-            prev->advance += k;//корректируем ширину пред. символа; по хорошему нужно сдвигать "перо", но так проще и не нужно вводить новые переменные
+            prev->advance += k; // fix prev symbol width instead of pen moving (lighter code)
             line_width += k;
         }
+    }
+
+    void line_ellipsis()
+    {
+        int j = last_line.count() - 1;
+
+        glyph_s &dot_glyph = (*fonts_stack.last())[L'.'];
+        line_width += dot_glyph.advance * 3; // advance of ...
+
+        auto setupglyphspecial = [this](meta_glyph_s &mg, int j)
+        {
+            for (int i = j; i >= 0; i--)
+                if (last_line.get(i).type == meta_glyph_s::CHAR)
+                {
+                    mg.font = last_line.get(i).font;
+                    mg.color = last_line.get(i).color;
+                    mg.shadow = last_line.get(i).shadow;
+                    mg.shadow_color = last_line.get(i).shadow_color;
+                    mg.outline_color = last_line.get(i).outline_color;
+                    mg.underlined = last_line.get(i).underlined;
+                    mg.underline_offset = last_line.get(i).underline_offset;
+                    break;
+                }
+        };
+
+        if (current_line_with_rects)
+        {
+            for (; j > 0; j--)
+            {
+                if (last_line.get(j).type == meta_glyph_s::RECTANGLE) continue;
+                if ((line_width -= last_line.get(j).advance) > cur_max_line_len)
+                    last_line.remove_slow(j);
+                else break;
+            }
+            meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::CHAR); // append dot
+            setupglyphspecial(mg,j);
+            ++j;
+
+            mg.glyph = &dot_glyph;
+            mg.advance = mg.glyph->advance;
+            meta_glyph_s mgt = mg;
+            last_line.set_count(last_line.count() - 1);
+
+            last_line.insert(j,mgt);
+            last_line.insert(j+1,mgt);
+            mgt.advance += 3; last_line.insert(j+2,mgt);
+
+
+        } else
+        {
+            for (; j > 0; j--) if ((line_width -= last_line.get(j).advance) <= cur_max_line_len) break;
+            last_line.set_count(j);
+
+            meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::CHAR); // append dot
+            setupglyphspecial(mg,last_line.count()-2);
+            mg.glyph = &dot_glyph;
+            mg.advance = mg.glyph->advance;
+            meta_glyph_s mgt = mg;
+            last_line.add(mgt);
+            mgt.advance += 3; last_line.add(mgt);
+        }
+
+        search_rects = false;
+        current_line_with_rects = false;
     }
 
 	void parse(const ts::wsptr &text, int cur_text_index = 0)
@@ -763,12 +832,12 @@ struct text_parser_s
 
 			if (ch == L'\n')
 			{
-                if (waiting_for_linebreak)
-                    waiting_for_linebreak = false;
-                {
-                    if (last_line.count() > 0) end_line();
-                    else next_line(font.height);// if empty line, just add height of current font
-                }
+                if (search_rects)
+                    line_ellipsis();
+
+                if (last_line.count() > 0) end_line();
+                else next_line(font.height);// if empty line, just add height of current font
+
 			} else if (ch != L'<') // just simple symbol
 			{
             add_char:
@@ -791,7 +860,7 @@ struct text_parser_s
 			}
 
 			// wrap words
-			if (line_width > cur_max_line_len && last_line.count() > 1)//обязательно проверяем - вдруг это первый символ строки, т.к. ситуация когда символ не помещается во всей строке не может быть корректно обработана
+			if (!search_rects && line_width > cur_max_line_len && last_line.count() > 1)//обязательно проверяем - вдруг это первый символ строки, т.к. ситуация когда символ не помещается во всей строке не может быть корректно обработана
 			{
 				int j = last_line.count() - 1, line_size;
 
@@ -813,20 +882,8 @@ struct text_parser_s
 					break;//early exit
 				} else if (current_line_end_ellipsis)
                 {
-                    glyph_s &dot_glyph = (*fonts_stack.last())[L'.'];
-                    line_width += dot_glyph.advance * 3; // advance of ...
-
-                    for (; j > 0; j--) if ((line_width -= last_line.get(j).advance) <= cur_max_line_len) break;
-                    last_line.set_count(j);
-
-                    for (int i = 0; i < 3; i++)
-                    {
-                        meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::CHAR, cur_text_index); // append dot
-                        mg.glyph = &dot_glyph;
-                        mg.advance = mg.glyph->advance;
-                    }
-                    line_size = last_line.count();
-                    waiting_for_linebreak = true;
+                    search_rects = true;
+                    continue;
 
                 } else
 				{
@@ -1008,6 +1065,8 @@ end:;
     ivec2 parse()
     {
         parse(textp->as_sptr(), 0);
+        if (search_rects)
+            line_ellipsis();
 		end_line(true, 0 != (TO_LASTLINEADDH & flags)); // last line
 
 		if (/*glyphs && */outlined_glyphs.count() > 0)

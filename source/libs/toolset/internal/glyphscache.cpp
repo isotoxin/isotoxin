@@ -162,8 +162,8 @@ void set_fonts_dir(const wsptr &dir, bool add)
         idata().fonts_dirs.clear();
     idata().fonts_dirs.add(dir);
     wstr_c & l = idata().fonts_dirs.get( idata().fonts_dirs.size() - 1 );
-    if (l.get_last_char() != '\\' && l.get_last_char() != '/')
-        l.append_char('\\');
+    if (!__is_slash(l.get_last_char()))
+        l.append_char(NATIVE_SLASH);
 }
 void set_images_dir(const wsptr &dir, bool add) // for parser
 {
@@ -172,8 +172,8 @@ void set_images_dir(const wsptr &dir, bool add) // for parser
 	idata().images_dirs.add(dir);
 
     wstr_c & l = idata().images_dirs.get(idata().images_dirs.size() - 1);
-    if (l.get_last_char() != '\\' && l.get_last_char() != '/')
-        l.append_char('\\');
+    if (!__is_slash(l.get_last_char()))
+        l.append_char(NATIVE_SLASH);
 }
 
 blob_c load_image( const wsptr&fn )

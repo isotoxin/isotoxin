@@ -22,7 +22,7 @@ void __stdcall get_info(proto_info_s *info)
     if (info->description) strncpy_s( info->description, info->description_buflen, "Local Area Network protocol " SS(PLUGINVER), _TRUNCATE );
     info->max_avatar_size = 0;
     info->priority = 1000;
-    info->features = PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT | PF_AUDIO_CALLS;
+    info->features = PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT | PF_AUDIO_CALLS | PF_SEND_FILE;
     info->proxy_support = 0;
     info->max_friend_request_bytes = SIZE_MAX_FRIEND_REQUEST_BYTES;
 

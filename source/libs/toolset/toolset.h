@@ -27,9 +27,6 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
-#ifndef _INCLUDE_TOOLSET
-#define _INCLUDE_TOOLSET
-
 #if defined _FINAL || defined _DEBUG_OPTIMIZED
 #ifndef DLMALLOC_USED
 #define DLMALLOC_USED 1
@@ -944,7 +941,6 @@ template <typename T> struct dummy
 
 } // namespace ts
 
-#endif
 
 #define FORWARD_DECLARE_STRING(c, s) template <typename TCHARACTER> class str_core_copy_on_demand_c; template <typename TCHARACTER, class CORE > class str_t; typedef str_t<c, str_core_copy_on_demand_c<c>> s;
 

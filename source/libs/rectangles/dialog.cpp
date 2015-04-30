@@ -320,7 +320,7 @@ bool gui_dialog_c::path_explore(RID rid, GUIPARAM param)
     gui_textfield_c &tf = HOLD(RID::from_ptr(param)).as<gui_textfield_c>();
     ts::wstr_c curp = tf.get_text();
 
-    ShellExecuteW( NULL, L"open", L"explorer", CONSTWSTR("/select,") + ts::fn_get_short_name(curp), ts::fn_get_path(curp), SW_SHOWDEFAULT );
+    ShellExecuteW( NULL, L"open", L"explorer", CONSTWSTR("/select,") + ts::fn_autoquote(ts::fn_get_name_with_ext(curp)), ts::fn_get_path(curp), SW_SHOWDEFAULT );
 
     return true;
 }

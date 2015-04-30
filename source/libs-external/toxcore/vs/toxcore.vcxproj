@@ -44,6 +44,7 @@
     <ClCompile Include="..\toxcore\ping.c" />
     <ClCompile Include="..\toxcore\ping_array.c" />
     <ClCompile Include="..\toxcore\TCP_client.c" />
+    <ClCompile Include="..\toxcore\TCP_connection.c" />
     <ClCompile Include="..\toxcore\TCP_server.c" />
     <ClCompile Include="..\toxcore\tox.c" />
     <ClCompile Include="..\toxcore\util.c" />
@@ -75,6 +76,7 @@
     <ClInclude Include="..\toxcore\ping.h" />
     <ClInclude Include="..\toxcore\ping_array.h" />
     <ClInclude Include="..\toxcore\TCP_client.h" />
+    <ClInclude Include="..\toxcore\TCP_connection.h" />
     <ClInclude Include="..\toxcore\TCP_server.h" />
     <ClInclude Include="..\toxcore\tox.h" />
     <ClInclude Include="..\toxcore\util.h" />

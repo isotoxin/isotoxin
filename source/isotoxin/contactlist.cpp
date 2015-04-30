@@ -75,6 +75,7 @@ struct head_stuff_s
     RID bconfirm;
     RID bcancel;
     ts::wstr_c curedit;
+    ts::safe_ptr<gui_button_c> call_button;
 
     static bool _edt(const ts::wstr_c & e);
 };
@@ -193,10 +194,19 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
     if (p)
     {
         // just update pos of edit buttons
+        bool redr = false;
         bool noedt = !flags.is(F_EDITNAME|F_EDITSTATUS);
         for (ebutton &b : hstuff().updr)
             if (b.updated)
-                MODIFY(b.brid).pos(b.p).setminsize(b.brid).visible(noedt);
+            {
+                MODIFY bbm(b.brid);
+                redr |= bbm.pos() != b.p;
+                bbm.pos(b.p).setminsize(b.brid).visible(noedt);
+            }
+
+        if (redr)
+            getengine().redraw();
+
         if (noedt && hstuff().editor)
         {
         } else
@@ -299,6 +309,7 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
         });
 
         gui_button_c &b_call = MAKE_CHILD<gui_button_c>(getrid());
+        hstuff().call_button = &b_call;
         b_call.set_face_getter(BUTTON_FACE_PRELOADED(callb));
         b_call.tooltip(TOOLTIP(TTT("Звонок", 140)));
 
@@ -799,31 +810,67 @@ int gui_contact_item_c::contact_item_rite_margin()
                 text_draw_params_s tdp;
                 
                 if (flags.is(F_OVERAVATAR))
-                {
                     m_engine->draw( ts::irect(ca).setwidth(ca.height()), get_default_text_color(0) );
-                }
-
-                int x_offset = 0;
-                if (const avatar_s *ava = contact->get_avatar())
-                {
-                    int y = (ca.size().y - ava->info().sz.y) / 2;
-                    m_engine->draw(ca.lt + ts::ivec2(y), *ava, ts::irect( 0, ava->info().sz ), ava->alpha_pixels);
-                    x_offset = g_app->buttons().icon[CSEX_UNKNOWN]->size.x;
-                } else
-                {
-                    button_desc_s *icon = g_app->buttons().icon[contact->get_meta_gender()];
-                    icon->draw(m_engine.get(), button_desc_s::NORMAL, ca, button_desc_s::ALEFT | button_desc_s::ATOP | button_desc_s::ABOTTOM);
-                    x_offset = icon->size.x;
-                }
 
                 bool achtung = (CIR_CONVERSATION_HEAD == role) ? false : contact->achtung();
+                bool drawnotify = false;
                 if (n_unread > 0 || achtung)
                 {
-                    bool drawnotify = true;
+                    drawnotify = true;
                     if (CIR_LISTITEM == role && g_app->flashingicon())
                     {
                         drawnotify = g_app->flashiconflag();
                         g_app->flashredraw( getrid() );
+                    }
+                }
+
+                int ritem = 0;
+                bool draw_ava = true;
+                bool draw_proto = true;
+                //bool draw_btn = true;
+                if (CIR_CONVERSATION_HEAD == role)
+                {
+                    ritem = contact_item_rite_margin() + g_app->protowidth;;
+                    ts::irect cac(ca);
+
+                    int x_offset = contact->get_avatar() ? g_app->buttons().icon[CSEX_UNKNOWN]->size.x : g_app->buttons().icon[contact->get_meta_gender()]->size.x;
+
+                    cac.lt.x += x_offset + 5;
+                    cac.rb.x -= 5;
+                    cac.rb.x -= ritem;
+                    int curw = cac.width();
+                    int w = gui->textsize( *textrect.font, textrect.get_text() ).x;
+                    if (w > curw && !contact->getkey().is_self() /* always show self avatar */)
+                    {
+                        curw += x_offset;
+                        draw_ava = false;
+                    }
+                    if (w > curw)
+                    {
+                        curw += g_app->protowidth;
+                        draw_proto = false;
+                    }
+                    // never hide call button
+                    //if (w > curw)
+                    //{
+                    //    draw_btn = false;
+                    //}
+                }
+                
+                int x_offset = 0;
+                if (draw_ava)
+                {
+                    if (const avatar_s *ava = contact->get_avatar())
+                    {
+                        int y = (ca.size().y - ava->info().sz.y) / 2;
+                        m_engine->draw(ca.lt + ts::ivec2(y), *ava, ts::irect(0, ava->info().sz), ava->alpha_pixels);
+                        x_offset = g_app->buttons().icon[CSEX_UNKNOWN]->size.x;
+                    }
+                    else
+                    {
+                        button_desc_s *icon = g_app->buttons().icon[contact->get_meta_gender()];
+                        icon->draw(m_engine.get(), button_desc_s::NORMAL, ca, button_desc_s::ALEFT | button_desc_s::ATOP | button_desc_s::ABOTTOM);
+                        x_offset = icon->size.x;
                     }
 
                     if (drawnotify)
@@ -854,11 +901,32 @@ int gui_contact_item_c::contact_item_rite_margin()
                             m_engine->end_draw();
                         }
                     }
+
                 }
 
                 if (!flags.is(F_EDITNAME|F_EDITSTATUS))
                 {
                     ca.lt += ts::ivec2(x_offset + 5, 2);
+                    ca.rb.x -= 5;
+                    if (CIR_CONVERSATION_HEAD == role)
+                    {
+                        ca.rb.x -= ritem;
+
+                        if (!draw_proto)
+                            ca.rb.x += g_app->protowidth;
+#if 0
+                        if (hstuff().call_button)
+                        {
+                            if (!draw_btn)
+                            {
+                                MODIFY(*hstuff().call_button).visible(false);
+                                ca.rb.x += g_app->buttons().callb->size.x;
+                            }
+                            else
+                                MODIFY(*hstuff().call_button).visible(true);
+                        }
+#endif
+                    }
                     draw_data_s &dd = m_engine->begin_draw();
                     dd.size = ca.size();
                     if (dd.size >> 0)
@@ -867,15 +935,15 @@ int gui_contact_item_c::contact_item_rite_margin()
                             hstuff().last_head_text_pos = ca.lt;
                         dd.offset += ca.lt;
                         int oldxo = dd.offset.x;
-                        ts::flags32_s f; f.setup(ts::TO_VCENTER);
+                        ts::flags32_s f; f.setup(ts::TO_VCENTER | ts::TO_LINE_END_ELLIPSIS);
                         tdp.textoptions = &f;
                         tdp.forecolor = nullptr;
                         tdp.rectupdate = DELEGATE( this, updrect );
                         draw(dd, tdp);
 
-                        if (CIR_CONVERSATION_HEAD == role)
+                        if (CIR_CONVERSATION_HEAD == role && draw_proto)
                         {
-                            dd.offset.x = oldxo + dd.size.x - contact_item_rite_margin() - g_app->protowidth;
+                            dd.offset.x = oldxo + dd.size.x + 5;
                             dd.size.x = g_app->protowidth;
                             draw_online_state_text(dd);
                         }
@@ -884,6 +952,9 @@ int gui_contact_item_c::contact_item_rite_margin()
                 }
             }
         }
+        return true;
+    case SQ_RECT_CHANGED:
+        textrect.make_dirty(false,false,true);
         return true;
     case SQ_DETECT_AREA:
         if ( CIR_CONVERSATION_HEAD == role && contact && contact->getkey().is_self() && popupmenu.expired())
@@ -1124,7 +1195,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                 contact->subiterate([&](contact_c *c) {
                     if (auto *row = prf().get_table_active_protocol().find<true>(c->getkey().protoid))
                     {
-                        m.add(row->other.name, def == c ? MIF_MARKED : 0, DELEGATE(this,set_default_proto), ts::amake<uint>(c->getkey().protoid));
+                        m.add(row->other.name, def == c ? MIF_MARKED : 0, DELEGATE(this,set_default_proto), c->getkey().as_str());
                     }
                 });
 
@@ -1138,11 +1209,12 @@ int gui_contact_item_c::contact_item_rite_margin()
     return __super::sq_evt(qp,rid,data);
 }
 
-void gui_contact_item_c::set_default_proto(const ts::str_c&ost)
+void gui_contact_item_c::set_default_proto(const ts::str_c&cks)
 {
-    int id = ost.as_uint();
+    contact_key_s ck(cks);
+
     contact->subiterate([&](contact_c *c) {
-        if (id == c->getkey().protoid)
+        if (ck == c->getkey())
         {
             if ( !c->get_options().is(contact_c::F_DEFALUT) )
             {
@@ -1262,7 +1334,7 @@ void gui_contactlist_c::refresh_array()
 
 /*virtual*/ ts::ivec2 gui_contactlist_c::get_min_size() const
 {
-    ts::ivec2 sz(100);
+    ts::ivec2 sz(200);
     sz.y += skip_top_pixels + skip_bottom_pixels;
     return sz;
 }

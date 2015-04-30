@@ -31,7 +31,7 @@ pstr_c get_tag_inner( int &offset, const asptr&buf, const asptr& tag )
 int proc_grabnodes(const wstrings_c & pars)
 {
     if (pars.size() < 2) return 0;
-    wstr_c nodesf = simplify_path(pars.get(1));
+    wstr_c nodesf = pars.get(1); fix_path(nodesf, FNO_SIMPLIFY);
 
     buf_c rslt;
 

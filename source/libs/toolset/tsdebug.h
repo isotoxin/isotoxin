@@ -101,6 +101,32 @@ void _cdecl dmsg(const char *str);
 INLINE void _cdecl dmsg(const char *str) {}
 #define DMSG(expr, ...) (1,true)
 #endif
+
+#ifdef _DEBUG
+struct delta_time_profiler_s
+{
+    double notfreq;
+    LARGE_INTEGER prev;
+    struct entry_s
+    {
+        int id;
+        float deltams;
+    };
+    entry_s *entries = nullptr;
+    int index = 0;
+    int n = 0;
+    delta_time_profiler_s(int n);
+    ~delta_time_profiler_s();
+    void operator()(int id);
+};
+
+#define DELTA_TIME_PROFILER(name, n) ts::delta_time_profiler_s name(n)
+#define DELTA_TIME_CHECKPOINT(name) name(__LINE__)
+#else
+#define DELTA_TIME_PROFILER(n, nn) 
+#define DELTA_TIME_CHECKPOINT(n) 
+#endif
+
 }
 
 #endif

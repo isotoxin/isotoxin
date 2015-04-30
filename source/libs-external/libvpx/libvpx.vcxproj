@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Label="Globals">
     <ProjectGuid>{55B5FF6E-A64F-4C96-A907-3D989A769D70}</ProjectGuid>
@@ -102,7 +102,6 @@
     <ClCompile Include="vpx\src\vpx_image.c" />
     <ClCompile Include="vpx\src\vpx_psnr.c" />
     <ClCompile Include="vpx_mem\vpx_mem.c" />
-    <ClCompile Include="vpx_mem\vpx_mem_tracker.c" />
     <ClCompile Include="vpx_scale\generic\gen_scalers.c" />
     <ClCompile Include="vpx_scale\generic\vpx_scale.c" />
     <ClCompile Include="vpx_scale\generic\yv12config.c" />

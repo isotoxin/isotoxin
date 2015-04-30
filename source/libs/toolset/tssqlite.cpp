@@ -443,7 +443,7 @@ public:
     sqlitedb_c *get( const wsptr &fn )
     {
         ts::wstr_c fnn(fn);
-        fnn.case_down().replace_all('/','\\'); //WINDOWS_ONLY
+        ts::fix_path(fnn, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
         UNIQUE_PTR(sqlite3_c) *recruit = nullptr;
         for (UNIQUE_PTR(sqlite3_c) &ptr : dbs)
         {

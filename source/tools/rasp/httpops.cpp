@@ -101,7 +101,7 @@ struct context_s
 int proc_http(const wstrings_c & pars)
 {
     if (pars.size() < 2) return 0;
-    wstr_c nodesf = simplify_path(pars.get(1));
+    wstr_c nodesf = pars.get(1); fix_path(nodesf, FNO_SIMPLIFY);
     if (!is_file_exists(nodesf.as_sptr()))
     {
         Print(FOREGROUND_RED, "command file not found: %s\n", to_str(nodesf).cstr()); return 0;

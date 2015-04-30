@@ -223,4 +223,32 @@ void _cdecl dmsg(const char *str)
 }
 #endif
 
+#ifdef _DEBUG
+delta_time_profiler_s::delta_time_profiler_s(int n) :n(n)
+{
+    entries = (entry_s *)MM_ALLOC( n*sizeof(entry_s) );
+    LARGE_INTEGER freq;
+    QueryPerformanceFrequency(&freq);
+    notfreq = 1000.0 / (double)freq.QuadPart;
+    QueryPerformanceCounter(&prev);
+}
+delta_time_profiler_s::~delta_time_profiler_s()
+{
+    MM_FREE(entries);
+}
+void delta_time_profiler_s::operator()(int id)
+{
+    entries[index].id = id;
+
+    LARGE_INTEGER cur;
+    QueryPerformanceCounter(&cur);
+    entries[index].deltams = (float)((double)(cur.QuadPart - prev.QuadPart) * notfreq);
+    prev = cur;
+    ++index;
+    if (index >= n)
+        index = 0;
+
+}
+#endif
+
 } // namespace ts

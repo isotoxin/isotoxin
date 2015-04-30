@@ -616,7 +616,7 @@ struct incoming_file_s : public file_transfer_s
         hf->file_control(utag,FIC_DONE);
         //delete this; do not delete now due FIC_DONE from app
     }
-    /*virtual*/ void pause()
+    /*virtual*/ void pause() override
     {
         if (TOX_FILE_KIND_AVATAR != kind)
             hf->file_control(utag,FIC_PAUSE);
@@ -740,7 +740,7 @@ struct transmitting_data_s : public file_transfer_s
     {
         delete this;
     }
-    /*virtual*/ void pause()
+    /*virtual*/ void pause() override
     {
         is_paused = true;
     }
@@ -758,9 +758,14 @@ struct transmitting_data_s : public file_transfer_s
 
 struct transmitting_file_s : public transmitting_data_s
 {
+    static const int MAX_CHUNKS_REQUESTED = 16;
+
     fifo_stream_c fifo;
     u64 fifooffset = 0;
-    bool is_requested_portion = false;
+    int requested_chunks = 0;
+
+    u64 roffset0 = 0;
+    u64 roffset1 = 0;
 
     transmitting_file_s(u32 fid_, u32 fnn_, u64 utag_, const byte * id_, u64 fsz_, const asptr &fn) : transmitting_data_s(fid_, fnn_, utag_, id_, fsz_, fn)
     {
@@ -783,10 +788,10 @@ struct transmitting_file_s : public transmitting_data_s
         hf->file_control(utag, FIC_PAUSE);
     }
 
-    virtual void portion(u64 offset, const void *data, int size) override
+    /*virtual*/ void portion(u64 offset, const void *data, int size) override
     {
-        ASSERT(is_requested_portion);
-        is_requested_portion = false;
+        ASSERT(requested_chunks > 0);
+        --requested_chunks;
 
         if (offset == (fifooffset + fifo.available()))
         {
@@ -805,9 +810,25 @@ struct transmitting_file_s : public transmitting_data_s
         try_send_requested_chunk();
     }
 
+    void nextoffset(u64 &fixoffset, int &fixsize)
+    {
+        if (fixoffset >= roffset0 && fixoffset < roffset1)
+        {
+            fixoffset = roffset1;
+            u64 ost = fsz - roffset1;
+            if ( ost < (u64)fixsize )
+                fixsize = (int)ost;
+            roffset1 += fixsize;
+        } else
+        {
+            roffset0 = fixoffset;
+            roffset1 = roffset0 + fixsize;
+        }
+    }
+
     void request_portion()
     {
-        if (is_requested_portion) return;
+        if (requested_chunks >= MAX_CHUNKS_REQUESTED) return;
 
         req r;
         bool oof = false;
@@ -819,6 +840,8 @@ struct transmitting_file_s : public transmitting_data_s
             {
                 oof = true; // out of available fifo data
                 fifo.clear();
+                roffset0 = r.offset;
+                roffset1 = r.offset;
             }
         }
         else if (fifo.available() == 0)
@@ -826,21 +849,27 @@ struct transmitting_file_s : public transmitting_data_s
             return; // no requests, no fifo - do nothing (wait chunk request from tox core)
         }
 
-        if (fifo.available() < 32768)
+        if (fifo.available() < (65536 * MAX_CHUNKS_REQUESTED) / 2)
         {
-            is_requested_portion = true;
-
             if (oof || fifo.available() == 0)
             {
                 int rqsz = (int)min(65536, fsz - r.offset);
-                if (rqsz) hf->file_portion(utag, r.offset, nullptr, rqsz);
+                if (rqsz)
+                {
+                    u64 roffs = r.offset;
+                    nextoffset(roffs, rqsz);
+                    hf->file_portion(utag, roffs, nullptr, rqsz);
+                    ++requested_chunks;
+                }
                 //Log( "request from app 1: %llu:%i", r.offset, rqsz );
             }
             else
             {
                 u64 roffs = fifooffset + fifo.available();
                 int rqsz = (int)min(65536, fsz - roffs);
+                nextoffset(roffs, rqsz);
                 hf->file_portion(utag, roffs, nullptr, rqsz);
+                ++requested_chunks;
                 //Log( "request from app 2: %llu:%i", roffs, rqsz );
             }
         }
@@ -886,7 +915,7 @@ struct transmitting_file_s : public transmitting_data_s
         request_portion();
     }
 
-    virtual void ontick() override
+    /*virtual*/ void ontick() override
     {
         if (tox_friend_get_connection_status(tox,fid,nullptr) == TOX_CONNECTION_NONE)
         {
@@ -1581,6 +1610,11 @@ static void update_init_contact(int fid)
 
 static int find_tox_fid(const byte *id)
 {
+    u32 r = tox_friend_by_public_key(tox, id, nullptr);
+    if (r == UINT32_MAX) return -1;
+    return r;
+
+    /*
     byte pubkey[TOX_PUBLIC_KEY_SIZE];
     TOX_ERR_FRIEND_GET_PUBLIC_KEY err;
     if (!ASSERT(tox)) return -1;
@@ -1595,6 +1629,7 @@ static int find_tox_fid(const byte *id)
         }
     }
     return -1;
+    */
 }
 
 static void cb_friend_request(Tox *, const byte *id, const byte *msg, size_t length, void *)
@@ -2214,9 +2249,14 @@ static void connect()
     
 }
 
-void __stdcall tick()
+void __stdcall tick(int *sleep_time_ms)
 {
-    if (!online_flag) return;
+    if (!online_flag)
+    {
+        *sleep_time_ms = 100;
+        return;
+    }
+    *sleep_time_ms = 1;
     int curt = time_ms();
     static int nextt = curt;
     static int nexttav = curt;
@@ -2281,6 +2321,10 @@ void __stdcall tick()
                 }
             nexttresync = curt + 3001;
         }
+
+        int nextticktime = min( min( nexttresync - curt, nexttav - curt ), nextt - curt );
+        if (nextticktime <= 0) nextticktime = 1;
+        *sleep_time_ms = nextticktime;
     }
 }
 

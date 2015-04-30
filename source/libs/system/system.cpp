@@ -301,6 +301,17 @@ LRESULT CALLBACK sys_def_main_window_proc(HWND hWnd, UINT message, WPARAM wParam
     return app_wndproc(hWnd, message, wParam, lParam);
 }
 
+static LRESULT CALLBACK looper_proc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    if (WM_LOOPER_TICK == message)
+    {
+        if (!g_sysconf.is_in_render)
+            system_event_receiver_c::notify_system_receivers(g_sysconf.is_active ? SEV_LOOP : SEV_IDLE, g_par_def);
+        return 0;
+    }
+
+    return DefWindowProcW(hWnd,message,wParam,lParam);
+}
 
 static ATOM register_window_class()
 {
@@ -310,10 +321,11 @@ static ATOM register_window_class()
         return 0;
     bRegistred = true;
 
-    // register class
     WNDCLASSEXW wcex;
 
-    wcex.cbSize 		= sizeof(WNDCLASSEX); 
+    // register class
+
+    wcex.cbSize 		= sizeof(wcex); 
     wcex.style			= CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
     wcex.lpfnWndProc	= (WNDPROC) app_wndproc;
     wcex.cbClsExtra		= 0;
@@ -356,13 +368,16 @@ static BOOL system_init()
     return g_sysconf.mainwindow != nullptr;
 }
 
+static HWND looper_hwnd = nullptr;
+
 static DWORD WINAPI looper(void *)
 {
     g_sysconf.looper = true;
     while(g_sysconf.is_app_running && !g_sysconf.is_app_need_quit)
     {
         if ( g_sysconf.is_active || g_sysconf.is_loop_in_background )
-            PostThreadMessageW( g_sysconf.mainthread, WM_LOOPER_TICK, 0, 0 );
+            if (looper_hwnd)
+                PostMessageW( looper_hwnd, WM_LOOPER_TICK, 0, 0 );
         if (g_sysconf.sleep >= 0) Sleep(g_sysconf.sleep);
     }
     g_sysconf.looper = false;
@@ -383,14 +398,31 @@ static void system_loop()
         bool downkey = false;
         bool dispatch = true;
 
+        if (looper_hwnd == nullptr)
+        {
+            WNDCLASSEXW wcex;
+
+            wcex.cbSize = sizeof(wcex);
+            wcex.style = 0;
+            wcex.lpfnWndProc = (WNDPROC)looper_proc;
+            wcex.cbClsExtra = 0;
+            wcex.cbWndExtra = 0;
+            wcex.hInstance = g_sysconf.instance;
+            wcex.hIcon = nullptr;
+            wcex.hCursor = nullptr;
+            wcex.hbrBackground = nullptr;
+            wcex.lpszMenuName = nullptr;
+            wcex.lpszClassName = L"aoi202309fasdo234";
+            wcex.hIconSm = nullptr;
+
+            RegisterClassExW(&wcex);
+
+            looper_hwnd = CreateWindowW(L"aoi202309fasdo234", nullptr, 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, g_sysconf.instance, nullptr);
+        }
+
         int xmsg = msg.message;
         switch( xmsg )
         {
-            case WM_LOOPER_TICK:
-                if (g_sysconf.mainwindow && !g_sysconf.is_in_render)
-                    system_event_receiver_c::notify_system_receivers(g_sysconf.is_active ? SEV_LOOP : SEV_IDLE, g_par_def);
-                dispatch = false;
-                break;
             //case WM_NCMOUSEMOVE: xmsg = WM_MOUSEMOVE; goto do_key;
             //case WM_NCLBUTTONDOWN: xmsg = WM_LBUTTONDOWN; goto do_key;
             //case WM_NCLBUTTONUP: xmsg = WM_LBUTTONUP; goto do_key;
@@ -520,6 +552,9 @@ kbddo:
 
         if (dispatch) DispatchMessageW(&msg);
     }
+
+    if (looper_hwnd)
+        DestroyWindow(looper_hwnd);
 
     g_sysconf.is_app_running = false;
 }

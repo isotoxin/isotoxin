@@ -32,11 +32,11 @@ struct proto_info_s
 
     char *description = nullptr;
     int   description_buflen = 0;
-    int   max_avatar_size; // 0 - avatars not supported
+    int   max_avatar_size = 0; // 0 - avatars not supported
     int   priority = 0; // bigger -> higher (automatic select default subcontact of metacontact)
     int   features = 0;
     int   proxy_support = 0;
-    int   max_friend_request_bytes;
+    int   max_friend_request_bytes = 0;
 
     audio_format_s audio_fmt; // required audio format for proto plugin (app will convert audio on-the-fly if hardware not support)
 };
@@ -135,7 +135,7 @@ struct host_functions_s
 };
 
 #define PROTO_FUNCTIONS \
-    FUNC0( void, tick ) \
+    FUNC1( void, tick,           int * ) \
     FUNC0( void, goodbye ) \
     FUNC1( void, set_name,       const char* ) \
     FUNC1( void, set_statusmsg,  const char* ) \

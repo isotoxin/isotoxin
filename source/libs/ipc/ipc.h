@@ -22,10 +22,11 @@ namespace ipc
 
     struct ipc_junction_s
     {
-        char buffer[64]; // internal data. ipc_junction_s must be allocated at your application. good news: no any new/malloc/delete/free memory routines called inside lib engine
+        char buffer[63]; // internal data. ipc_junction_s must be allocated at your application. good news: no any new/malloc/delete/free memory routines called inside lib engine
+        bool stop_called;
 
-        ipc_junction_s() {} // constructor do nothing: all initialization stuff in this->start
-        ~ipc_junction_s() {} // destructor do nothing: all finalization stuff in this->stop
+        ipc_junction_s():stop_called(true) {} // constructor do nothing: all initialization stuff in this->start
+        ~ipc_junction_s() { if (!stop_called) __debugbreak(); } // destructor do nothing: all finalization stuff in this->stop
 
         int start(const char *junction_name); // application should call this, to connect to ipc junction. junction_name is unique per system and only two apps (or one app twice) can use one junction_name
         void stop(); // don't forget to execute stop at end of all

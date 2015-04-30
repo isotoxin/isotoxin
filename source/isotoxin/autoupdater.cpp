@@ -72,7 +72,7 @@ ts::str_c get_downloaded_ver( ts::buf_c *pak = nullptr )
         if (!signi) return ts::str_c();
         ts::abp_c ver; ver.load(ts::asptr(pak->cstr().s, signi));
         ts::wstr_c wurl; wurl.set_as_utf8( ver.get_string(CONSTASTR("url")) );
-        pak->load_from_disk_file(ts::fn_join<ts::wchar>(auparams().lock_read()().path, ts::fn_get_name_with_ext(wurl)));
+        pak->load_from_disk_file(ts::fn_join(auparams().lock_read()().path, ts::fn_get_name_with_ext(wurl)));
         if (md5ok(*pak,ver))
             return ver.get_string(CONSTASTR("ver"));
     }
@@ -243,7 +243,7 @@ void autoupdater()
         return;
     }
 
-    ts::make_path( auparams().lock_read()().path );
+    ts::make_path( auparams().lock_read()().path, 0 );
     latest.save_to_file( ts::fn_join( auparams().lock_read()().path, CONSTWSTR("latest.txt") ) );
     d.save_to_file( ts::fn_join( auparams().lock_read()().path, pakname ) );
 
@@ -262,9 +262,9 @@ struct updater
     bool process_pak_file(const ts::arc_file_s &f)
     {
         ts::wstr_c wfn(ts::to_wstr(f.fn));
-        ts::wstr_c ff(auparams().lock_read()().path); ff.append_as_num<time_t>(amfn).append_char('\\');
-        ts::make_path(ff);
-        if (MoveFileW(wfn, ts::fn_join<ts::wchar>(ff, wfn)))
+        ts::wstr_c ff(auparams().lock_read()().path); ff.append_as_num<time_t>(amfn).append_char(NATIVE_SLASH);
+        ts::make_path(ff, 0);
+        if (MoveFileW(wfn, ts::fn_join(ff, wfn)))
         {
             moved.add(wfn);
         }
@@ -275,7 +275,7 @@ struct updater
             for (const ts::wstr_c &mf : moved)
             {
                 DeleteFileW(mf);
-                MoveFileW(ts::fn_join<ts::wchar>(ff, mf), mf);
+                MoveFileW(ts::fn_join(ff, mf), mf);
             }
         }
         f.get().save_to_file(wfn);

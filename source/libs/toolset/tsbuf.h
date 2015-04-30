@@ -798,6 +798,32 @@ public:
         memcpy(data(), t, sz);
     }
 
+    void set(aint index, const T &t)
+    {
+        ASSERT(is_writable()); // TODO: asserted here, use overwrite base method. oops. you have to write it too :)
+        ASSERT(index >= 0 && index < count());
+        tbegin<T>()[index] = t;
+    }
+
+    aint  set(const T &t)
+    {
+        for (const T&x : *this)
+            if (x == t) return &x - tbegin<T>();
+
+        tappend<T>(t, 1);
+        return tend<T>() - tbegin<T>() - 1;
+    }
+
+    aint  set_replace(const T &t, const T &f)
+    {
+        for (T&x : *this)
+            if (x == t) return &x - tbegin<T>();
+            else if (x == f) { x = f; return &x - tbegin<T>(); }
+
+            tappend<T>(t, 1);
+            return tend<T>() - tbegin<T>() - 1;
+    }
+
     bool present(const T &t) const
     {
         for( const T&x : *this )
@@ -821,10 +847,14 @@ public:
         return -1;
     }
 
-    void    insert(aint index, const T &t)
+    void insert(aint index, const T &t)
     {
         T * tt = (T*)expand(index * sizeof(T), sizeof(T));
         *tt = t;
+    }
+    T &insert(aint index)
+    {
+        return *(T*)expand(index * sizeof(T), sizeof(T));
     }
 
     template< typename CORE2 > void insert(aint index, const tbuf_t<T, CORE2> &t)
@@ -970,32 +1000,6 @@ public:
     const T * get() const
     {
         return tbegin<T>();
-    }
-
-    void set(aint index, const T &t)
-    {
-        ASSERT(is_writable()); // TODO: asserted here, use overwrite base method. oops. you have to write it too :)
-        ASSERT(index >= 0 && index < count());
-        tbegin<T>()[index] = t;
-    }
-
-    aint  set(const T &t)
-    {
-        for (const T&x : *this)
-            if (x == t) return &x - tbegin<T>();
-
-        tappend<T>(t, 1);
-        return tend<T>() - tbegin<T>() - 1;
-    }
-
-    aint  set_replace(const T &t, const T &f)
-    {
-        for (T&x : *this)
-            if (x == t) return &x - tbegin<T>();
-            else if (x == f) { x = f; return &x - tbegin<T>(); }
-
-        tappend<T>(t, 1);
-        return tend<T>() - tbegin<T>() - 1;
     }
 
     void add(const T &t)

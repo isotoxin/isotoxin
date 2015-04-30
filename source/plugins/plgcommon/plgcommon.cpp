@@ -168,6 +168,35 @@ wstr_c get_exe_full_name()
     return wd;
 }
 
+#ifdef _DEBUG
+delta_time_profiler_s::delta_time_profiler_s(int n):n(n)
+{
+    entries = new entry_s[ n ];
+    LARGE_INTEGER freq;
+    QueryPerformanceFrequency(&freq);
+    notfreq = 1000.0 / (double)freq.QuadPart;
+    QueryPerformanceCounter(&prev);
+}
+delta_time_profiler_s::~delta_time_profiler_s()
+{
+    delete[] entries;
+}
+void delta_time_profiler_s::operator()(int id)
+{
+    entries[index].id = id;
+
+    LARGE_INTEGER cur;
+    QueryPerformanceCounter(&cur);
+    entries[index].deltams = (float)((double)(cur.QuadPart - prev.QuadPart) * notfreq);
+    prev = cur;
+    ++index;
+    if (index >= n)
+        index = 0;
+
+}
+
+#endif
+
 
 #pragma warning (disable:4559)
 #pragma warning (disable:4127)
