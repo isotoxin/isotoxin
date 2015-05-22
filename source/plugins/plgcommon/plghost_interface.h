@@ -6,7 +6,7 @@
 
 // typical scenario : AQ -> plghost, HA -> application
 
-#define PLGHOST_IPC_PROTOCOL_VERSION 5
+#define PLGHOST_IPC_PROTOCOL_VERSION 6
 
 enum commands_e
 {
@@ -33,6 +33,10 @@ enum commands_e
     HQ_SAVE,
     AQ_SAVE_CONFIG,
     HA_CONFIG,
+
+    AQ_REN_GROUPCHAT,
+    AQ_ADD_GROUPCHAT,
+    AQ_JOIN_GROUPCHAT,
 
     AQ_ADD_CONTACT,
     AQ_DEL_CONTACT,

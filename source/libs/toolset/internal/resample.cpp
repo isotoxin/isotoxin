@@ -628,7 +628,7 @@ public:
 				b = ~b >> 31;
 
 			*dst++ = (r & 0xff0000) + (g & 0xff00) + (b & 0xff);
-		} while(--w);
+		} 
 	}
 
 protected:

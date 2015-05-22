@@ -106,11 +106,11 @@ public:
         for (int i = 0; i < N; i++) (&x)[i] = v[i];
     }
     //vec2
-    INLINE vec_t(const T x_, const T y_) { x = x_; y = y_; typedef char staticCheck[N == 2 ? 1 : 0]; }
+    INLINE vec_t(const T x_, const T y_) { x = x_; y = y_; TS_STATIC_CHECK(N == 2, "vec2 expected"); }
     //vec3
-    INLINE vec_t(const vec_t<T, 2> &xy, const T z_)   { x = xy.x; y = xy.y; z = z_;   typedef char staticCheck[N == 3 ? 1 : 0]; }
-    INLINE vec_t(const T x_, const vec_t<T, 2> &yz)   { x = x_;   y = yz.x; z = yz.y; typedef char staticCheck[N == 3 ? 1 : 0]; }
-    INLINE vec_t(const T x_, const T y_, const T z_) { x = x_;   y = y_;   z = z_;   typedef char staticCheck[N == 3 ? 1 : 0]; }
+    INLINE vec_t(const vec_t<T, 2> &xy, const T z_)   { x = xy.x; y = xy.y; z = z_;   TS_STATIC_CHECK(N == 3, "vec3 expected"); }
+    INLINE vec_t(const T x_, const vec_t<T, 2> &yz)   { x = x_;   y = yz.x; z = yz.y; TS_STATIC_CHECK(N == 3, "vec3 expected"); }
+    INLINE vec_t(const T x_, const T y_, const T z_) { x = x_;   y = y_;   z = z_;    TS_STATIC_CHECK(N == 3, "vec3 expected"); }
     //vec4
     //2 arg
     INLINE vec_t(const vec_t<T, 3> &xyz, const T w_)         { x = xyz.x; y = xyz.y; z = xyz.z; w = w_; }
@@ -213,9 +213,9 @@ public:
 template<class T> INLINE vec_t<T, 2>& vecbase_t<T, 2>::rotate(float fAngle)
 {
     double s, c;
-    sincos(fAngle, s, c)
+    sincos(fAngle, s, c);
 
-        float tx = x;
+    float tx = x;
     x = x * c - y * s;
     y = tx * s + y * c;
     return *this;

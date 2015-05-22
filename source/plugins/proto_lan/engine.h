@@ -398,7 +398,7 @@ public:
             data_changed = false;
 
             cd.id = id;
-            cd.mask = -1;
+            cd.mask = CDM_PUBID | CDM_NAME | CDM_STATUSMSG | CDM_STATE | CDM_ONLINE_STATE | CDM_GENDER | CDM_AVATAR_TAG;
             cd.public_id = public_id.cstr();
             cd.public_id_len = public_id.get_length();
             cd.name = name.cstr();

@@ -66,7 +66,6 @@ class active_protocol_c : public ts::safe_object
     int priority = 0;
     int features = 0;
     /*int proxy_support = 0;*/
-    int max_friend_request_bytes = 0;
     s3::Format audio_fmt;
     isotoxin_ipc_s *ipcp = nullptr;
     spinlock::syncvar< sync_data_s > syncdata;
@@ -124,6 +123,9 @@ public:
 
     void del_message( uint64 utag );
 
+    void join_group_chat(int gid, int cid);
+    void rename_group_chat(int gid, const ts::wstr_c &groupname);
+    void add_group_chat( const ts::wstr_c &groupname, bool permanent );
     void resend_request( int cid, const ts::wstr_c &msg );
     void add_contact( const ts::str_c& pub_id, const ts::wstr_c &msg );
     void del_contact(int cid);

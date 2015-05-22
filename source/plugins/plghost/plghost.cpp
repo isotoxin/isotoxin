@@ -17,7 +17,7 @@ ipc::ipc_junction_s *ipcj = nullptr;
 
 static void __stdcall operation_result(long_operation_e op, int rslt);
 static void __stdcall update_contact(const contact_data_s *);
-static void __stdcall message(message_type_e mt, int cid, u64 create_time, const char *msgbody_utf8, int mlen);
+static void __stdcall message(message_type_e mt, int gid, int cid, u64 create_time, const char *msgbody_utf8, int mlen);
 static void __stdcall delivered(u64 utag);
 static void __stdcall save();
 static void __stdcall on_save(const void *data, int dlen, void *param);
@@ -419,7 +419,7 @@ int CALLBACK WinMainProtect(
     state.lock_write()().need_stop = true;
     while (state.lock_read()().working) Sleep(0); // worker must die
 
-    ipcblob.stop();
+    if (member == 1) ipcblob.stop();
     ipcj = nullptr;
 
     data_data_s* d = nullptr;
@@ -578,7 +578,6 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                 << pi.audio_fmt.channels
                 << pi.audio_fmt.bits
                 << (unsigned short)pi.proxy_support
-                << (unsigned short)pi.max_friend_request_bytes
                 ;
 
         }
@@ -641,6 +640,33 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             ipcr r(d->get_reader());
             int ost = r.get<int>();
             protolib.functions->set_ostate(ost);
+        }
+        break;
+    case AQ_JOIN_GROUPCHAT:
+        if (LIBLOADED())
+        {
+            ipcr r(d->get_reader());
+            int gid = r.get<int>();
+            int cid = r.get<int>();
+            protolib.functions->join_groupchat(gid, cid);
+        }
+        break;
+    case AQ_REN_GROUPCHAT:
+        if (LIBLOADED())
+        {
+            ipcr r(d->get_reader());
+            int gid = r.get<int>();
+            tmp_wstr_c gchname = r.getwstr();
+            protolib.functions->ren_groupchat(gid, to_utf8(gchname));
+        }
+        break;
+    case AQ_ADD_GROUPCHAT:
+        if (LIBLOADED())
+        {
+            ipcr r(d->get_reader());
+            tmp_wstr_c gchname = r.getwstr();
+            bool permanent = r.get<int>() != 0;
+            protolib.functions->add_groupchat(to_utf8(gchname), permanent);
         }
         break;
     case AQ_ADD_CONTACT:
@@ -820,7 +846,6 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             protolib.functions->del_message(utag);
         }
         break;
-
     case XX_PING:
         {
             ipcr r(d->get_reader());
@@ -849,19 +874,22 @@ static void __stdcall operation_result(long_operation_e op, int rslt)
 
 static void __stdcall update_contact(const contact_data_s *cd)
 {
-    IPCW(HQ_UPDATE_CONTACT) << cd->id
-      << cd->mask
-      << ((0 != (cd->mask & CDM_PUBID)) ? asptr(cd->public_id, cd->public_id_len) : asptr("",0))
-      << ((0 != (cd->mask & CDM_NAME)) ? asptr(cd->name, cd->name_len) : asptr("",0))
-      << ((0 != (cd->mask & CDM_STATUSMSG)) ? asptr(cd->status_message, cd->status_message_len) : asptr("",0))
-      << cd->avatar_tag
-      << (int)cd->state
-      << (int)cd->ostate
-      << (int)cd->gender;
-        
+    IPCW ucs(HQ_UPDATE_CONTACT);
+    ucs << cd->id << cd->mask
+        << (cd->id >= 0 && (0 != (cd->mask & CDM_PUBID)) ? asptr(cd->public_id, cd->public_id_len) : asptr("",0))
+        << ((0 != (cd->mask & CDM_NAME)) ? asptr(cd->name, cd->name_len) : asptr("",0))
+        << ((0 != (cd->mask & CDM_STATUSMSG)) ? asptr(cd->status_message, cd->status_message_len) : asptr("",0))
+        << cd->avatar_tag << (int)cd->state << (int)cd->ostate << (int)cd->gender << cd->groupchat_permissions;
+    
+    if ( 0 != (cd->mask & CDM_MEMBERS) )
+    {
+        ucs << cd->members_count;
+        for(int i=0; i<cd->members_count; ++i)
+            ucs << cd->members[i];
+    }
 }
 
-static void __stdcall message(message_type_e mt, int cid, u64 create_time, const char *msgbody_utf8, int mlen)
+static void __stdcall message(message_type_e mt, int gid, int cid, u64 create_time, const char *msgbody_utf8, int mlen)
 {
     static u64 last_createtime = 0;
     static byte lastmessage_md5[16] = { 0 };
@@ -874,7 +902,7 @@ static void __stdcall message(message_type_e mt, int cid, u64 create_time, const
         memcpy(lastmessage_md5, md5.result(), 16);
     }
     last_createtime = create_time;
-    IPCW(HQ_MESSAGE) << cid << ((int)mt) << create_time << asptr(msgbody_utf8, mlen);
+    IPCW(HQ_MESSAGE) << gid << cid << ((int)mt) << create_time << asptr(msgbody_utf8, mlen);
 }
 
 static void __stdcall save()

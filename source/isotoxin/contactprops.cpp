@@ -85,9 +85,9 @@ menu_c dialog_contact_props_c::gethistorymenu()
     return 0;
 }
 
-/*virtual*/ bool dialog_contact_props_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+/*virtual*/ bool dialog_contact_props_c::sq_evt(system_query_e qp, RID rid, evt_data_s &d)
 {
-    if (__super::sq_evt(qp, rid, data)) return true;
+    if (__super::sq_evt(qp, rid, d)) return true;
 
     //switch (qp)
     //{

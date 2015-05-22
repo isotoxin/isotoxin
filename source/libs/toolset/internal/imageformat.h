@@ -30,9 +30,9 @@ struct img_reader_s
     ivec2 size;
     uint8 bitpp;
 
-    image_read_func detect( const void *data, int datasize, img_format_e &fmt )
+    image_read_func detect( const void *d, int datasize, img_format_e &fmt )
     {
-#define FMT(fn) if (image_read_func f = detect_##fn##_format(data, datasize)) { fmt = if_##fn; return f; }
+#define FMT(fn) if (image_read_func f = detect_##fn##_format(d, datasize)) { fmt = if_##fn; return f; }
         IMGFORMATS
 #undef FMT
         return nullptr;

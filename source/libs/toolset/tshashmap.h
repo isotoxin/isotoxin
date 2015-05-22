@@ -179,6 +179,14 @@ public:
 	{
 		reserve(size);
 	}
+    hashmap_t(const hashmap_t &hm)
+    {
+        *this = hm;
+    }
+    hashmap_t(hashmap_t &&hm)
+    {
+        *this = std::move(hm);
+    }
 
 	~hashmap_t()
 	{
@@ -230,6 +238,7 @@ public:
 
 		used = 0;
 	}
+
     hashmap_t &operator=(hashmap_t &&hm)
     {
         SWAP(table, hm.table);

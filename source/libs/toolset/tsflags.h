@@ -68,7 +68,8 @@ template<class FLAGS, decltype(FLAGS::BITS) v, bool v1, bool v2> struct auto_cha
     auto_change_flags(FLAGS &f):f(f) { f.init(v,v1); }
     ~auto_change_flags() { f.init(v,v2); }
 private:
-    auto_change_flags operator=(const auto_change_flags &);
+    auto_change_flags(const auto_change_flags&) UNUSED;
+    auto_change_flags operator=(const auto_change_flags &) UNUSED;
 };
 
 #define AUTOCLEAR(f,v) ts::auto_change_flags< decltype(f), v, true, false > __autoclear(f);

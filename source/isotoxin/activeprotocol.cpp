@@ -45,7 +45,6 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     audio_fmt.channels = r.get<short>();
                     audio_fmt.bitsPerSample = r.get<short>();
                     /*proxy_support =*/ r.get<ts::uint16>();
-                    max_friend_request_bytes = r.get<ts::uint16>();
 
                     auto w = syncdata.lock_write();
                     w().description.set_as_utf8(desc);
@@ -93,12 +92,26 @@ bool active_protocol_c::cmdhandler(ipcr r)
             m->ostate = (contact_online_state_e)r.get<int>();
             m->gender = (contact_gender_e)r.get<int>();
 
+            /*int grants =*/ r.get<int>();
+
+            if (0 != (m->mask & CDM_MEMBERS)) // groupchat members
+            {
+                ASSERT( m->key.is_group() );
+
+                int cnt = r.get<int>();
+                m->members.reserve(cnt);
+                for(int i=0;i<cnt;++i)
+                    m->members.add( r.get<int>() );
+            }
+
             m->send_to_main_thread();
         }
         break;
     case HQ_MESSAGE:
         {
             gmsg<ISOGM_INCOMING_MESSAGE> *m = TSNEW(gmsg<ISOGM_INCOMING_MESSAGE>);
+            m->groupchat.contactid = r.get<int>();
+            m->groupchat.protoid = m->groupchat.contactid ? id : 0;
             m->sender.protoid = id;
             m->sender.contactid = r.get<int>();
             m->mt = (message_type_app_e)r.get<int>();
@@ -557,17 +570,24 @@ void active_protocol_c::resend_request( int cid, const ts::wstr_c &msg )
 
 void active_protocol_c::add_contact( const ts::str_c& pub_id, const ts::wstr_c &msg )
 {
-    ts::wstr_c m(msg);
-    ts::str_c utf8;
-    for(;max_friend_request_bytes;)
-    {
-        utf8 = to_utf8(m);
-        if (utf8.get_length() < max_friend_request_bytes) break;
-        m.trunc_length();
-    }
-
-    ipcp->send( ipcw(AQ_ADD_CONTACT) << (char)0 << pub_id << m );
+    ipcp->send( ipcw(AQ_ADD_CONTACT) << (char)0 << pub_id << msg );
 }
+
+void active_protocol_c::add_group_chat( const ts::wstr_c &groupname, bool permanent )
+{
+    ipcp->send( ipcw(AQ_ADD_GROUPCHAT) << groupname << (permanent ? 1 : 0) );
+}
+
+void active_protocol_c::rename_group_chat(int gid, const ts::wstr_c &groupname)
+{
+    ipcp->send(ipcw(AQ_REN_GROUPCHAT) << gid << groupname);
+}
+
+void active_protocol_c::join_group_chat(int gid, int cid)
+{
+    ipcp->send(ipcw(AQ_JOIN_GROUPCHAT) << gid << cid);
+}
+
 
 void active_protocol_c::accept(int cid)
 {

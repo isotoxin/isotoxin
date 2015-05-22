@@ -161,6 +161,7 @@ struct generated_button_data_s
     virtual ~generated_button_data_s() {}
     virtual void setup(button_desc_s &desc);
     
+    generated_button_data_s(const generated_button_data_s&) UNUSED;
     generated_button_data_s &operator=(const generated_button_data_s&) UNUSED;
 };
 

@@ -107,6 +107,7 @@ protected:
         return -1;
     }
     guirect_c *rect() { return rect_; }
+    const guirect_c *rect() const { return rect_; }
 
 public:
     int operator()(const rectengine_c *r) const
@@ -321,7 +322,7 @@ public:
 	rectengine_root_c(bool sys);
 	~rectengine_root_c();
 
-    bool is_dip() const {return flags.is(F_DIP);}
+    bool is_dip() const {return flags.is(F_DIP) || nullptr == rect();}
 
     int current_drawtag() const {return drawtag;}
 
@@ -358,7 +359,7 @@ INLINE rectengine_root_c *root_by_rid( RID r )
     return nullptr;
 }
 
-INLINE rectengine_root_c *guirect_c::getroot() const { return m_root && !m_root->is_dip() ? m_root : nullptr; }
+INLINE rectengine_root_c *guirect_c::getroot() const { return (m_root && !m_root->is_dip()) ? m_root : nullptr; }
 
 INLINE RID guirect_c::getrootrid() const { return m_root ? m_root->getrid() : RID(); }
 

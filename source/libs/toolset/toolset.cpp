@@ -62,6 +62,7 @@ tmpalloc_c tmpb;
                 return a + reservebefore;
             }
             bw(buf_wrapper_s &b, size_t reservebefore, size_t reserveafter):b(b), reservebefore(reservebefore), reserveafter(reserveafter) {}
+        private:
             void operator=(const bw&) {};
         } me(b,reservebefore,reserveafter);
 

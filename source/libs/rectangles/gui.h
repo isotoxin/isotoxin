@@ -51,7 +51,7 @@ public:
     virtual void    doit() { handler(RID(), param); };
     virtual void    die();
 
-    bool operator==(GUIPARAMHANDLER &h) const { return h == handler; }
+    bool operator==(const GUIPARAMHANDLER &h) const { return h == handler; }
 
     void set_handler(GUIPARAMHANDLER _handler, GUIPARAM _param) { handler = _handler; param = _param; }
 };
@@ -400,6 +400,13 @@ public:
 
     virtual HICON app_icon(bool for_tray) = 0;   //HICON icon = LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(IDI_ICON));
 
+    template<typename R> R * find_rect( GUIPARAM ptr )
+    {
+        for( guirect_c * r : m_rects )
+            if (r == (guirect_c *)ptr)
+                return dynamic_cast<R *>(r);
+        return nullptr;
+    }
 
     template<typename R, typename PAR> void newrect( PAR &data )
     {

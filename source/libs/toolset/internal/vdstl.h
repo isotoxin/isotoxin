@@ -218,6 +218,7 @@ public:
 
 	const_iterator fast_find(T *p) const {
 		iterator it(p);
+        return it;
 	}
 
 	void clear() {

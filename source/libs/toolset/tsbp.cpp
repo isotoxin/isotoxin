@@ -120,7 +120,7 @@ template <typename TCHARACTER> bool bp_t<TCHARACTER>::read_bp(const TCHARACTER *
 
 		if (*s == TCHARACTER('`'))
 		{
-			string_type value;
+			string_type v;
 			start = ++s;
 			while (s<end)
 			{
@@ -128,19 +128,19 @@ template <typename TCHARACTER> bool bp_t<TCHARACTER>::read_bp(const TCHARACTER *
 				{
 					if (s<end-1 && *(s+1)==TCHARACTER('`')) // quoted '`'
 					{
-						value.append(sptr<TCHARACTER>(start, s+1-start));
+						v.append(sptr<TCHARACTER>(start, s+1-start));
 						start = s+=2;
 						continue;
 					}
 					else // line end
 					{
-						value.append(sptr<TCHARACTER>(start, s-start));
+						v.append(sptr<TCHARACTER>(start, s-start));
 						break;
 					}
 				}
 				s++;
 			}
-			bp.set_value(value);
+			bp.set_value(v);
 			END_CHECK("looking for '`'")
 			s++;
 			SKIP_SEPARATORS(true)

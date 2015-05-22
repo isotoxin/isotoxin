@@ -36,15 +36,25 @@ struct proto_info_s
     int   priority = 0; // bigger -> higher (automatic select default subcontact of metacontact)
     int   features = 0;
     int   proxy_support = 0;
-    int   max_friend_request_bytes = 0;
 
     audio_format_s audio_fmt; // required audio format for proto plugin (app will convert audio on-the-fly if hardware not support)
 };
 
 struct contact_data_s
 {
-    int mask = -1; // valid fields
-    int id; // MAIN RULE: id is not index! Delete contact must not shift values! AND!!! 0 (zero) value reserved for self!
+    /*
+        Base contact identifier.
+        MAIN RULE: id is not index! Delete contact must not shift values!
+        0 (zero) value reserved for self
+        Positive (>0) values - ids of contacts
+        Negative (<0) values - ids of group chats
+
+        id - stable identifier - must never be changed while contact lifetime
+        unused values (eg: deleted contacts or group chats) can be used with new ones
+    */
+    int id;
+
+    int mask; // valid fields
     const char *public_id;
     int public_id_len;
     const char *name; // utf8
@@ -54,16 +64,24 @@ struct contact_data_s
 
     int avatar_tag;
 
-    unsigned state : contact_state_bits;
-    unsigned ostate : contact_online_state_bits;
-    unsigned gender : contact_gender_bits;
+    int *members; // cid's
+    int members_count;
 
-    contact_data_s()
+    int groupchat_permissions;
+
+    contact_state_e state;
+    contact_online_state_e ostate;
+    contact_gender_e gender;
+
+#ifdef __cplusplus
+    contact_data_s(int id, int mask):id(id), mask(mask)
     {
         state = CS_ROTTEN;
         ostate = COS_ONLINE;
         gender = CSEX_UNKNOWN;
+        groupchat_permissions = 0;
     }
+#endif
 };
 
 #if defined _WIN32
@@ -116,9 +134,29 @@ struct host_functions_s
 {
     void(__stdcall *operation_result)(long_operation_e op, int rslt);
     void(__stdcall *update_contact)(const contact_data_s *);
-    void(__stdcall *message)(message_type_e mt, int cid, u64 sendtime, const char *msgbody_utf8, int mlen);
+
+    /*
+        mt  - see enum for possible values
+        gid - negative (groupchat id) when groupchat message received, 0 - normal message
+        cid - unique contact id (known and unknown contacts)
+        sendtime - message send time (sender should send it)
+        msgbody_utf8, mlen - message itself
+    */
+    void(__stdcall *message)(message_type_e mt, int gid, int cid, u64 sendtime, const char *msgbody_utf8, int mlen);
+
+    /*
+        plugin MUST call this function to notify Isotoxin that message was delivered to other peer
+    */
     void(__stdcall *delivered)(u64 utag);
+
+    /*
+        plugin should call this function, to force save
+    */
     void(__stdcall *save)(); // initiate save
+
+    /*
+        plugin should call this function only from call of save_config
+    */
     void(__stdcall *on_save)(const void *data, int dlen, void *param);
     void(__stdcall *play_audio)(int cid, const audio_format_s *audio_format, const void *frame, int framesize); // plugin can request play any format
     void(__stdcall *close_audio)(int cid); // close audio player, allocated for client
@@ -164,6 +202,9 @@ struct host_functions_s
     FUNC2( void, file_control,   u64, file_control_e) \
     FUNC2( void, file_portion,   u64, const file_portion_s *) \
     FUNC1( void, get_avatar,     int ) \
+    FUNC2( void, add_groupchat,  const char *, bool ) \
+    FUNC2( void, ren_groupchat,  int, const char * ) \
+    FUNC2( void, join_groupchat, int, int ) \
     
 
 struct proto_functions_s

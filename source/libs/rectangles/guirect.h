@@ -278,6 +278,7 @@ class rectprops_c // pod
 
 #undef DECLAREBIT
 
+    rectprops_c(const rectprops_c&) UNUSED;
     rectprops_c operator=(const rectprops_c &) UNUSED;
 
     void updatefs()
@@ -651,8 +652,8 @@ protected:
     static const ts::flags32_s::BITS FLAGS_FREEBITSTART = SETBIT(1);
 
     ts::UPDATE_RECTANGLE updaterect;
-    GUIPARAMHANDLER datakiller;
-    GUIPARAM data = nullptr;
+    GUIPARAMHANDLER customdatakiller;
+    GUIPARAM customdata = nullptr;
     ts::uint32 defaultthrdraw = DTHRO_BORDER | DTHRO_CENTER;
     ts::flags32_s flags;
     gui_control_c() {}
@@ -691,25 +692,25 @@ public:
     // custom data
     void set_data(GUIPARAM _data, GUIPARAMHANDLER _datakiller = GUIPARAMHANDLER()) 
     {
-        if (!datakiller.empty()) datakiller(getrid(), data);
-        data = _data; datakiller = _datakiller;
+        if (!customdatakiller.empty()) customdatakiller(getrid(), customdata);
+        customdata = _data; customdatakiller = _datakiller;
     }
-    GUIPARAM get_data() const {return data;}
-    GUIPARAMHANDLER get_data_killer() const {return datakiller;}
+    GUIPARAM get_customdata() const {return customdata;}
+    GUIPARAMHANDLER get_customdata_killer() const {return customdatakiller;}
 
-    template<typename T> T& get_data_obj()
+    template<typename T> T& get_customdata_obj()
     {
-        T * t = (T *)data;
+        T * t = (T *)customdata;
         return *t;
     }
-    template<typename T> const T& get_data_obj() const
+    template<typename T> const T& get_customdata_obj() const
     {
-        const T * t = (const T *)data;
+        const T * t = (const T *)customdata;
         return *t;
     }
-    template<typename T, class... _Valty> void set_data_obj(_Valty&&... _Val)
+    template<typename T, class... _Valty> void set_customdata_obj(_Valty&&... _Val)
     {
-        if (!datakiller.empty()) datakiller(getrid(), data);
+        if (!customdatakiller.empty()) customdatakiller(getrid(), customdata);
 
         struct x
         {
@@ -721,8 +722,8 @@ public:
             }
         };
 
-        data = TSNEW(T, std::forward<_Valty>(_Val)...);
-        datakiller = (GUIPARAMHANDLER)x::killa;
+        customdata = TSNEW(T, std::forward<_Valty>(_Val)...);
+        customdatakiller = (GUIPARAMHANDLER)x::killa;
     }
 
     /*virtual*/ void created() override;
@@ -777,10 +778,10 @@ public:
     }
 
 
-    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &d) override
     {
         if (qp == SQ_DRAW) return false; // stub control - nothing to draw
-        return __super::sq_evt(qp,rid,data);
+        return __super::sq_evt(qp,rid,d);
     }
 };
 

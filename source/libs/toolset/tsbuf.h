@@ -299,8 +299,8 @@ template<typename CORE> class buf_t
 public:
 
     explicit buf_t( aint prealloc_capacity = 0, bool setsize = false ):core( prealloc_capacity ) { if (setsize) set_size(prealloc_capacity, false); }
-    buf_t(const buf_t<CORE>&b) :core(b.core) {} // same core
-    buf_t(buf_t<CORE>&&b) :core(std::move(b.core)) {} // same core
+    buf_t(const buf_t&b) :core(b.core) {} // same core
+    buf_t(buf_t&&b) :core(std::move(b.core)) {} // same core
     template<typename CORE2> explicit buf_t( const buf_t<CORE2>&b ):core( b.size() ) // other core
     {
         TS_STATIC_CHECK( (!std::is_same<CORE, CORE2>::value), "CORE and CORE2 are same" );

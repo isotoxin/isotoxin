@@ -5,6 +5,7 @@ enum unique_dialog_e
     UD_NOT_UNIQUE, // reserve zero value
 
     UD_ADDCONTACT,
+    UD_ADDGROUP,
     UD_METACONTACT,
     UD_SETTINGS,
     UD_PROFILENAME,

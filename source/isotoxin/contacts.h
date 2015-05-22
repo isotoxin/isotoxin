@@ -52,7 +52,7 @@ struct contact_key_s
 {
     DUMMY(contact_key_s);
 
-    int contactid;  // protocol contact id. 0 - group if protoid < 0, self proto if protoid > 0
+    int contactid;  // protocol contact id. >0 - contact, <0 - group
     int protoid;    // 0 - metacontact. all visible contacts are metacontacts with history and conversation / >0 - protocol contact
 
     explicit contact_key_s( const ts::asptr&s )
@@ -62,8 +62,7 @@ struct contact_key_s
     explicit contact_key_s(int contactid = 0, int protoid = 0):contactid(contactid), protoid(protoid) {}
 
     bool is_meta() const {return protoid == 0 && contactid > 0;}
-    bool is_group() const {return contactid == 0 && protoid < 0;}
-    int get_group_id() const { return is_group() ? protoid : 0; }
+    bool is_group() const {return contactid < 0 && protoid > 0;}
     bool is_self() const {return ts::ref_cast<int64>(*this) == 0; }
     bool is_empty() const {return ts::ref_cast<int64>(*this) == 0; }
 
@@ -130,6 +129,22 @@ struct avatar_s : public ts::drawable_bitmap_c
     void load( const void *body, int size, int tag );
 };
 
+template<> struct gmsg<ISOGM_UPDATE_CONTACT> : public gmsgbase
+{
+    gmsg() :gmsgbase(ISOGM_UPDATE_CONTACT) {}
+    contact_key_s key;
+    int mask;
+    ts::str_c pubid;
+    ts::str_c name;
+    ts::str_c statusmsg;
+    int avatar_tag = 0;
+    contact_state_e state = CS_INVITE_SEND;
+    contact_online_state_e ostate = COS_ONLINE;
+    contact_gender_e gender = CSEX_UNKNOWN;
+
+    ts::tbuf_t<int> members;
+};
+
 enum keep_contact_history_e
 {
     KCH_DEFAULT,
@@ -170,6 +185,7 @@ class contact_c : public ts::shared_object
     void setmeta(contact_c *metac)
     {
         /*if (ASSERT((metac->key.is_self() && key.is_group()) || (!is_meta() && !key.is_self() && !key.is_group()))) */
+        ASSERT( metac->get_state() != CS_UNKNOWN );
         ASSERT(metac->subpresent(key));
         metacontact = metac;
     }
@@ -177,9 +193,13 @@ class contact_c : public ts::shared_object
 public:
     ts::safe_ptr<gui_contact_item_c> gui_item;
 
-    static const ts::flags32_s::BITS F_DEFALUT = SETBIT(0);
-    static const ts::flags32_s::BITS F_AVA_DEFAULT = SETBIT(1);
+    static const ts::flags32_s::BITS F_DEFALUT      = SETBIT(0);
+    static const ts::flags32_s::BITS F_AVA_DEFAULT  = SETBIT(1);
+    static const ts::flags32_s::BITS F_UNKNOWN      = SETBIT(2);
 
+
+    // not saved
+    static const ts::flags32_s::BITS F_PERMANENT_GCHAT = SETBIT(25);
     static const ts::flags32_s::BITS F_SHOW_FRIEND_REQUEST = SETBIT(26);
     static const ts::flags32_s::BITS F_PROTOHIT = SETBIT(27);
     static const ts::flags32_s::BITS F_CALLTONE = SETBIT(28);
@@ -203,7 +223,7 @@ public:
     void reselect(bool);
 
     void setup( const contacts_s * c, time_t nowtime );
-    void save( contacts_s * c ) const;
+    bool save( contacts_s * c ) const;
 
     void friend_request( bool f = true )
     {
@@ -216,31 +236,31 @@ public:
     bool achtung() const;
 
     bool is_meta() const { return key.is_meta() && getmeta() == nullptr; };
-    bool is_multicontact() const { return is_meta() || getkey().is_group() || getkey().is_self(); }
+    bool is_rootcontact() const { return !opts.is(F_UNKNOWN) && (is_meta() || getkey().is_group() || getkey().is_self()); } // root contact - in contact list
 
     Options get_options() const {return opts;}
     Options &options() {return opts;}
 
-    bool subpresent( const contact_key_s&key ) const
+    bool subpresent( const contact_key_s&k ) const
     {
         for( contact_c *c : subcontacts )
-            if (c->getkey() == key) return true;
+            if (c->getkey() == k) return true;
         return false;
     }
 
-    contact_c * subgetadd(const contact_key_s&key)
+    contact_c * subgetadd(const contact_key_s&k)
     {
         for (contact_c *c : subcontacts)
-            if (c->getkey() == key) return c;
-        contact_c *c = TSNEW( contact_c, key );
+            if (c->getkey() == k) return c;
+        contact_c *c = TSNEW( contact_c, k );
         subcontacts.add(c);
         c->setmeta( this );
         return c;
     }
-    contact_c * subget(const contact_key_s&key)
+    contact_c * subget(const contact_key_s&k)
     {
         for (contact_c *c : subcontacts)
-            if (c->getkey() == key) return c;
+            if (c->getkey() == k) return c;
         return nullptr;
     }
     int subcount() const {return subcontacts.size();}
@@ -260,6 +280,13 @@ public:
             c->setmeta( this );
         }
     }
+    void subaddgchat(contact_c *c)
+    {
+        if (ASSERT(key.is_group() && !subpresent(c->getkey()) && c->getkey().protoid == getkey().protoid))
+        {
+            subcontacts.add(c);
+        }
+    }
     bool subdel( contact_c *c )
     {
         if (ASSERT(is_meta() && subpresent(c->getkey())))
@@ -275,7 +302,7 @@ public:
             c->prepare4die();
         subcontacts.clear();
     }
-    void subclear() // do not use it!!! this function used only while metacontact creation
+    void subclear() // do not use it!!! this function used only while metacontact creation or cleanup group
     {
         subcontacts.clear();
     }
@@ -284,6 +311,15 @@ public:
     {
         for (contact_c *c : subcontacts)
             itr(c);
+    }
+
+    int subonlinecount() const
+    {
+        int online_count = 0;
+        for (contact_c *c : subcontacts)
+            if (c->get_state() == CS_ONLINE)
+                ++online_count;
+        return online_count;
     }
 
     contact_c *getmeta() {return metacontact;}
@@ -338,7 +374,7 @@ public:
 
     int calc_history_after(time_t t);
 
-    const post_s *get_post_by_utag(uint64 utg) const
+    const post_s *find_post_by_utag(uint64 utg) const
     {
         for( const post_s &p : history )
             if (p.utag == utg)
@@ -394,7 +430,7 @@ public:
     void set_name( const ts::wstr_c &name_ ) { name = name_; }
     void set_customname( const ts::wstr_c &name_ ) { customname = name_; }
     void set_statusmsg( const ts::wstr_c &statusmsg_ ) { statusmsg = statusmsg_; }
-    void set_state( contact_state_e st ) { state = st; }
+    void set_state( contact_state_e st ) { state = st; opts.init(F_UNKNOWN, st == CS_UNKNOWN); }
     void set_ostate( contact_online_state_e ost ) { ostate = ost; }
     void set_gender( contact_gender_e g ) { gender = g; }
     
@@ -418,7 +454,7 @@ public:
 
     bool authorized() const { return get_state() == CS_OFFLINE || get_state() == CS_ONLINE; }
 
-    time_t get_readtime() const { return is_multicontact() ? readtime : 0;}
+    time_t get_readtime() const { return is_rootcontact() ? readtime : 0;}
     void set_readtime(time_t t) { readtime = t; }
 
     const post_s * fix_history( message_type_app_e oldt, message_type_app_e newt, const contact_key_s& sender = contact_key_s() /* self - empty - no matter */, time_t update_time = 0 /* 0 - no need update */ );
@@ -474,23 +510,9 @@ public:
 
 contact_c *get_historian(contact_c *sender, contact_c * receiver);
 
-template<> struct gmsg<ISOGM_UPDATE_CONTACT> : public gmsgbase
+template<> struct gmsg<ISOGM_V_UPDATE_CONTACT> : public gmsgbase
 {
-    gmsg() :gmsgbase(ISOGM_UPDATE_CONTACT) {}
-    contact_key_s key;
-    int mask;
-    ts::str_c pubid;
-    ts::str_c name;
-    ts::str_c statusmsg;
-    int avatar_tag = 0;
-    contact_state_e state = CS_INVITE_SEND;
-    contact_online_state_e ostate = COS_ONLINE;
-    contact_gender_e gender = CSEX_UNKNOWN;
-};
-
-template<> struct gmsg<ISOGM_UPDATE_CONTACT_V> : public gmsgbase
-{
-    gmsg(contact_c *c) :gmsgbase(ISOGM_UPDATE_CONTACT_V),contact(c) {}
+    gmsg(contact_c *c) :gmsgbase(ISOGM_V_UPDATE_CONTACT),contact(c) { ASSERT(c->get_state() != CS_UNKNOWN); }
     ts::shared_ptr<contact_c> contact;
 };
 
@@ -498,6 +520,7 @@ template<> struct gmsg<ISOGM_UPDATE_CONTACT_V> : public gmsgbase
 template<> struct gmsg<ISOGM_INCOMING_MESSAGE> : public gmsgbase
 {
     gmsg() :gmsgbase(ISOGM_INCOMING_MESSAGE) {}
+    contact_key_s groupchat;
     contact_key_s sender;
     time_t create_time;
     message_type_app_e mt;
@@ -534,14 +557,14 @@ template<> struct gmsg<ISOGM_SELECT_CONTACT> : public gmsgbase
 
 template<> struct gmsg<ISOGM_AV> : public gmsgbase
 {
-    gmsg(contact_c *c, bool activated) :gmsgbase(ISOGM_AV), multicontact(c), activated(activated) { ASSERT(c->is_multicontact()); }
+    gmsg(contact_c *c, bool activated) :gmsgbase(ISOGM_AV), multicontact(c), activated(activated) { ASSERT(c->is_meta()); }
     ts::shared_ptr<contact_c> multicontact;
     bool activated;
 };
 
 template<> struct gmsg<ISOGM_CALL_STOPED> : public gmsgbase
 {
-    gmsg(contact_c *c, stop_call_e sc) :gmsgbase(ISOGM_CALL_STOPED), subcontact(c), sc(sc) { ASSERT(!c->is_multicontact()); }
+    gmsg(contact_c *c, stop_call_e sc) :gmsgbase(ISOGM_CALL_STOPED), subcontact(c), sc(sc) { ASSERT(!c->is_meta()); }
     ts::shared_ptr<contact_c> subcontact;
     stop_call_e sc;
 };
@@ -587,6 +610,8 @@ class contacts_c
 
     ts::array_shared_t<contact_c, 8> arr;
     ts::shared_ptr<contact_c> self;
+
+    bool is_groupchat_member( const contact_key_s &ck );
 
     int find_free_meta_id() const;
     void del( const contact_key_s&k )

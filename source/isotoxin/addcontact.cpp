@@ -40,6 +40,17 @@ void dialog_addcontact_c::getbutton(bcreate_s &bcr)
 void dialog_addcontact_c::network_selected( const ts::str_c &prm )
 {
     apid = prm.as_int();
+    set_combik_menu(CONSTASTR("networks"), networks());
+}
+
+menu_c dialog_addcontact_c::networks()
+{
+    menu_c nm;
+    prf().iterate_aps([&](const active_protocol_c &ap) {
+        if (apid == 0) apid = ap.getid();
+        nm.add(ap.get_name(), ap.getid() == apid ? MIF_MARKED : 0, DELEGATE(this, network_selected), ts::amake(ap.getid()));
+    });
+    return nm;
 }
 
 /*virtual*/ int dialog_addcontact_c::additions(ts::irect & border)
@@ -49,16 +60,9 @@ void dialog_addcontact_c::network_selected( const ts::str_c &prm )
     descmaker dm(descs);
     dm << 1;
 
-    menu_c networks;
-    prf().iterate_aps( [&]( const active_protocol_c &ap ) {
-        if (apid == 0) apid = ap.getid();
-        networks.add(ap.get_name(), 0, DELEGATE(this, network_selected), ts::amake(ap.getid()));
-    } );
-        
-
     if (inparam.key.protoid == 0)
     {
-        dm().combik(TTT("Сеть", 66)).setmenu(networks);
+        dm().combik(TTT("Сеть", 66)).setmenu(networks());
         dm().vspace(5);
     } else
     {
@@ -147,3 +151,163 @@ ts::uint32 dialog_addcontact_c::gm_handler( gmsg<ISOGM_CMD_RESULT>& r)
 
     return 0;
 }
+
+
+
+//_________________________________________________________________________________________________________________________________
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+dialog_addgroup_c::dialog_addgroup_c(initial_rect_data_s &data) :gui_isodialog_c(data)
+{
+}
+
+dialog_addgroup_c::~dialog_addgroup_c()
+{
+}
+
+/*virtual*/ ts::wstr_c dialog_addgroup_c::get_name() const
+{
+    return TTT("[appname]: Новый групповой чат",248);
+}
+
+
+/*virtual*/ void dialog_addgroup_c::created()
+{
+    set_theme_rect(CONSTASTR("main"), false);
+    __super::created();
+    tabsel(CONSTASTR("1"));
+    update_lifetime();
+}
+
+/*virtual*/ ts::ivec2 dialog_addgroup_c::get_min_size() const
+{
+    return ts::ivec2(510, 280);
+}
+
+void dialog_addgroup_c::getbutton(bcreate_s &bcr)
+{
+    __super::getbutton(bcr);
+}
+
+void dialog_addgroup_c::network_selected(const ts::str_c &prm)
+{
+    apid = prm.as_int();
+    set_combik_menu(CONSTASTR("networks"), networks() );
+    update_lifetime();
+}
+
+menu_c dialog_addgroup_c::networks()
+{
+    menu_c nm;
+    prf().iterate_aps([&](const active_protocol_c &ap) {
+        int f = ap.get_features();
+        if (f & PF_GROUP_CHAT)
+        {
+            if (apid == 0) apid = ap.getid();
+            nm.add(ap.get_name(), ap.getid() == apid ? MIF_MARKED : 0, DELEGATE(this, network_selected), ts::amake(ap.getid()));
+        }
+    });
+    return nm;
+}
+
+bool dialog_addgroup_c::chatlifetime(RID,GUIPARAM p)
+{
+    permanent = p == nullptr;
+    return true;
+}
+
+void dialog_addgroup_c::update_lifetime()
+{
+    if (active_protocol_c *ap = prf().ap(apid))
+    {
+        if ( 0 == (ap->get_features() & PF_GROUP_CHAT_PERMANENT) )
+        {
+            // permanent groupchats not supported
+            ctlenable(CONSTASTR("lifetime0"), false);
+            if (permanent)
+                if (RID p = find(CONSTASTR("lifetime1")))
+                    p.call_lbclick();
+        } else
+        {
+            ctlenable(CONSTASTR("lifetime0"), true);
+        }
+    }
+}
+
+/*virtual*/ int dialog_addgroup_c::additions(ts::irect & border)
+{
+    descmaker dm(descs);
+    dm << 1;
+
+    dm().combik(TTT("Сеть",249)).setmenu(networks()).setname(CONSTASTR("networks"));
+    dm().vspace(5);
+
+    dm().textfield(TTT("Имя чата", 250), CONSTWSTR(""), DELEGATE(this, groupname_handler)).focus(true);
+    dm().vspace(5);
+
+    int incht = 0;
+    dm().radio(TTT("Время жизни чата",252), DELEGATE(this, chatlifetime), incht).setmenu(
+        menu_c().add(TTT("Постоянный (сохраняется между перезагрузками клиента)",253), 0, MENUHANDLER(), CONSTASTR("0"))
+        .add(TTT("Временный (история сообщений не ведется; закрыв [appname], вы покинете чат)",254), 0, MENUHANDLER(), CONSTASTR("1"))
+       ).setname("lifetime");
+
+    dm().vspace(5);
+
+    dm().hiddenlabel(TTT("Имя чата не может быть пустым!",251), ts::ARGB(255, 0, 0)).setname(CONSTASTR("err1"));
+
+    return 0;
+}
+
+bool dialog_addgroup_c::groupname_handler(const ts::wstr_c &m)
+{
+    groupname = m;
+    return true;
+}
+
+/*virtual*/ bool dialog_addgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    if (__super::sq_evt(qp, rid, data)) return true;
+
+    //switch (qp)
+    //{
+    //case SQ_DRAW:
+    //    if (const theme_rect_s *tr = themerect())
+    //        draw(*tr);
+    //    break;
+    //}
+
+    return false;
+}
+
+bool dialog_addgroup_c::hidectl(RID, GUIPARAM p)
+{
+    MODIFY(RID::from_ptr(p)).visible(false);
+    return true;
+}
+
+
+void dialog_addgroup_c::showerror(int id)
+{
+    RID errr = find(CONSTASTR("err") + ts::amake(id));
+    if (errr)
+    {
+        MODIFY(errr).visible(true);
+        DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, hidectl), errr.to_ptr());
+    }
+
+}
+
+/*virtual*/ void dialog_addgroup_c::on_confirm()
+{
+    if (groupname.is_empty())
+    {
+        showerror(1);
+        return;
+    }
+
+    if (active_protocol_c *ap = prf().ap(apid))
+        ap->add_group_chat(groupname, permanent);
+    __super::on_confirm();
+}
+

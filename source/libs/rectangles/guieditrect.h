@@ -59,7 +59,7 @@ class gui_textedit_c : public gui_control_c
 
         void die()
         {
-            if (ASSERT(!is_char() && this))
+            if (ASSERT(!is_char() && 0 != (UINT_PTR)this))
             {
                 this->~active_element_s();
                 MM_FREE(this);
@@ -203,7 +203,7 @@ public:
 
 	void set_text(const ts::wstr_c &text, bool setCaretToEnd = false);
 	ts::wstr_c get_text() const {return text_substr(0, text.size());}
-	void insert_text(const ts::wstr_c &text) {text_replace(get_caret_char_index(), text);}//вставляет текст в текущей позиции курсора
+	void insert_text(const ts::wstr_c &t) {text_replace(get_caret_char_index(), t);} //insert text at current cursor pos
 	void set_color(ts::TSCOLOR c) { caret_color = color = c; redraw(); }
 	void set_password_char(ts::wchar pc) { password_char = pc; }
 
@@ -255,7 +255,7 @@ public:
 	active_element_s *under_mouse_active_element;
 	ts::ivec2 under_mouse_active_element_pos;
 	void insert_active_element(const ts::wstr_c &str, ts::TSCOLOR color, const void *user_data, int user_data_size, int cp);
-	void insert_active_element(const ts::wstr_c &str, ts::TSCOLOR color, const void *user_data, int user_data_size) {insert_active_element(str, color, user_data, user_data_size, get_caret_char_index());}
+	void insert_active_element(const ts::wstr_c &str, ts::TSCOLOR c, const void *user_data, int user_data_size) {insert_active_element(str, c, user_data, user_data_size, get_caret_char_index());}
 
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;

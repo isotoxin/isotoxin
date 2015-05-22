@@ -18,6 +18,7 @@ struct streamstr_time
     const time_t &t;
     streamstr_time( const time_t &t ):t(t) {}
 private:
+    streamstr_time(const streamstr_time&) UNUSED;
     streamstr_time& operator=(streamstr_time &) UNUSED;
 };
 
@@ -69,7 +70,7 @@ private:
         char_t *cur = boof_current(1);
         if (!cur) return nullptr;
         boof.require_capacity(boof.get_length() + chars);
-
+        return boof_current(chars);
     }
 
 public:

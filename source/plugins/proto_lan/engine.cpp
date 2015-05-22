@@ -439,7 +439,7 @@ void tcp_pipe::rcv_all()
                     return;
                 }
                 rcvbuf_sz += _bytes;
-                if ((sizeof(rcvbuf) - rcvbuf_sz < 1300))
+                if ((sizeof(rcvbuf) - rcvbuf_sz) < 1300)
                     break;
                 continue;
             }
@@ -884,7 +884,7 @@ void lan_engine::tick(int *sleep_time_ms)
 
     if (first->data_changed) // send self status
     {
-        contact_data_s cd;
+        contact_data_s cd(0, 0);
         first->fill_data(cd);
         hf->update_contact(&cd);
     }
@@ -1082,7 +1082,7 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
     make_raw_pub_id(pubid, peer_public_key);
 
     contact_s *c = find_by_rpid(pubid);
-    while (c == nullptr || (c->state != contact_s::OFFLINE))
+    if (c == nullptr || (c->state != contact_s::OFFLINE))
     {
         // contact is not offline or not found
         // disconnect
@@ -1513,7 +1513,7 @@ void lan_engine::save_config(void *param)
 void lan_engine::init_done()
 {
     // send contacts to host
-    contact_data_s cd;
+    contact_data_s cd(0, 0);
     for(contact_s *c = first; c; c=c->next)
     {
         c->fill_data(cd);
@@ -1530,7 +1530,7 @@ void lan_engine::online()
         first->state = contact_s::ONLINE;
         first->data_changed = true;
 
-        contact_data_s cd;
+        contact_data_s cd(0, 0);
         first->fill_data(cd);
         hf->update_contact(&cd);
     }
@@ -1542,7 +1542,7 @@ void lan_engine::offline()
     {
         first->state = contact_s::OFFLINE;
 
-        contact_data_s cd;
+        contact_data_s cd(0, 0);
         first->fill_data(cd);
         hf->update_contact(&cd);
 
@@ -1555,7 +1555,7 @@ void lan_engine::offline()
             if (c->state == contact_s::INVITE_SEND || c->state == contact_s::MEET)
                 c->state = contact_s::SEARCH;
             
-            contact_data_s cd;
+            contact_data_s cd(0, 0);
             c->fill_data(cd);
             hf->update_contact(&cd);
         }
@@ -1573,8 +1573,6 @@ int lan_engine::resend_request(int id, const char* invite_message_utf8)
 
 int lan_engine::add_contact(const char* public_id, const char* invite_message_utf8)
 {
-    contact_data_s cd;
-
     str_c pubid( public_id );
     byte raw_pub_id[SIZE_PUBID];
     make_raw_pub_id(raw_pub_id,pubid.as_sptr());
@@ -1592,10 +1590,11 @@ int lan_engine::add_contact(const char* public_id, const char* invite_message_ut
         c->public_id = pubid;
         make_raw_pub_id(c->raw_public_id, c->public_id);
     }
-    c->invitemessage = asptr(invite_message_utf8);
+    c->invitemessage = utf8clamp(invite_message_utf8, SIZE_MAX_FRIEND_REQUEST_BYTES);
     c->state = contact_s::SEARCH;
     if (c->pipe.connected()) c->pipe.close();
 
+    contact_data_s cd(0, 0);
     c->fill_data(cd);
     hf->update_contact(&cd);
     return CR_OK;
@@ -1879,7 +1878,7 @@ void lan_engine::contact_s::recv()
         if (state == OFFLINE && call_status != CALL_OFF)
             stop_call_activity();
 
-        contact_data_s cd;
+        contact_data_s cd(0, 0);
         fill_data(cd);
         engine->hf->update_contact(&cd);
     }
@@ -1888,7 +1887,7 @@ void lan_engine::contact_s::recv()
 
 void lan_engine::contact_s::stop_call_activity(bool notify_me)
 {
-    if (notify_me) engine->hf->message(MT_CALL_STOP, id, now(),  nullptr, 0);
+    if (notify_me) engine->hf->message(MT_CALL_STOP, 0, id, now(),  nullptr, 0);
     call_status = CALL_OFF;
     if (media)
     {
@@ -1918,11 +1917,11 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                 bool sendrq = invitemessage != oim;
                 state = contact_s::INVITE_RECV;
                 data_changed = true;
-                contact_data_s cd;
+                contact_data_s cd(0, 0);
                 fill_data(cd);
                 engine->hf->update_contact(&cd);
                 if (sendrq)
-                    engine->hf->message(MT_FRIEND_REQUEST, id, now(), invitemessage.cstr(), invitemessage.get_length());
+                    engine->hf->message(MT_FRIEND_REQUEST, 0, id, now(), invitemessage.cstr(), invitemessage.get_length());
             }
         }
         break;
@@ -2030,7 +2029,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                         case BT_CALL:
                             if (CALL_OFF == call_status)
                             {
-                                engine->hf->message(MT_INCOMING_CALL, id, now(), "audio", 5);
+                                engine->hf->message(MT_INCOMING_CALL, 0, id, now(), "audio", 5);
                                 call_status = IN_CALL;
                             }
                             break;
@@ -2041,7 +2040,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                         case BT_CALL_ACCEPT:
                             if (OUT_CALL == call_status)
                             {
-                                engine->hf->message(MT_CALL_ACCEPTED, id, now(), nullptr, 0);
+                                engine->hf->message(MT_CALL_ACCEPTED, 0, id, now(), nullptr, 0);
                                 start_media();
                             }
                             break;
@@ -2066,9 +2065,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                                 else
                                     avatar_tag++;
 
-                                contact_data_s cd;
-                                cd.id = id;
-                                cd.mask = CDM_AVATAR_TAG;
+                                contact_data_s cd(id, CDM_AVATAR_TAG);
                                 cd.avatar_tag = avatar_tag;
                                 engine->hf->update_contact(&cd);
                                 engine->hf->save();
@@ -2154,7 +2151,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                             if (mt < __bt_service)
                             {
                                 u64 crtime = my_ntohll(*(u64 *)dd.buf.data());
-                                engine->hf->message((message_type_e)mt, id, crtime, (const char *)dd.buf.data() + sizeof(u64), dd.buf.size() - sizeof(u64));
+                                engine->hf->message((message_type_e)mt, 0, id, crtime, (const char *)dd.buf.data() + sizeof(u64), dd.buf.size() - sizeof(u64));
                             }
                             break;
                     }
@@ -2526,6 +2523,17 @@ void lan_engine::get_avatar(int id)
         c->send_block(BT_GETAVATAR, 0);
 }
 
+void lan_engine::add_groupchat(const char *groupaname, bool permanent)
+{
+}
+
+void lan_engine::ren_groupchat(int gid, const char *groupaname)
+{
+}
+
+void lan_engine::join_groupchat( int gid, int cid )
+{
+}
 
 //unused
 void lan_engine::proxy_settings(int /*proxy_type*/, const char * /*proxy_address*/)

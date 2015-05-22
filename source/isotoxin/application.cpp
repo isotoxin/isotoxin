@@ -298,7 +298,7 @@ static DWORD WINAPI autoupdater(LPVOID)
 
 /*virtual*/ void application_c::app_loop_event()
 {
-    while (m_need_recalc_unread.count())
+    if (m_need_recalc_unread.count())
     {
         contact_key_s ck = m_need_recalc_unread.get(0);
         if (m_locked_recalc_unread.find_index(ck) >= 0)
@@ -306,12 +306,12 @@ static DWORD WINAPI autoupdater(LPVOID)
             // locked. postpone
             m_need_recalc_unread.remove_slow(0);
             m_need_recalc_unread.add(ck);
-            break;
+        } else
+        {
+            contact_c *c = contacts().find(ck);
+            m_need_recalc_unread.remove_slow(0);
+            if (c) F_NEEDFLASH |= c->recalc_unread();
         }
-        contact_c *c = contacts().find(ck);
-        m_need_recalc_unread.remove_slow(0);
-        if (c) F_NEEDFLASH |= c->recalc_unread();
-        break;
     }
 
     if (F_NEEDFLASH && !F_FLASHIP)
@@ -911,6 +911,7 @@ void preloaded_buttons_s::reload()
     icon[CSEX_UNKNOWN] = th.get_button(CONSTASTR("nosex"));
     icon[CSEX_MALE] = th.get_button(CONSTASTR("male"));
     icon[CSEX_FEMALE] = th.get_button(CONSTASTR("female"));
+    groupchat = th.get_button(CONSTASTR("groupchat"));
             
     online = th.get_button(CONSTASTR("online"));
     online2 = th.get_button(CONSTASTR("online2"));

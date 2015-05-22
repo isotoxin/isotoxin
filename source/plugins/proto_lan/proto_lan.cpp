@@ -24,7 +24,6 @@ void __stdcall get_info(proto_info_s *info)
     info->priority = 1000;
     info->features = PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT | PF_AUDIO_CALLS | PF_SEND_FILE;
     info->proxy_support = 0;
-    info->max_friend_request_bytes = SIZE_MAX_FRIEND_REQUEST_BYTES;
 
     info->audio_fmt.sample_rate = AUDIO_SAMPLERATE;
     info->audio_fmt.channels = AUDIO_CHANNELS;

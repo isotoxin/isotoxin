@@ -209,7 +209,8 @@ int ipc_junction_s::start( const char *junction_name )
         UnmapViewOfFile(d.sync);
         CloseHandle(d.mapfile);
         CloseHandle(d.watchdog[1]);
-        memset(this, 0, sizeof(ipc_junction_s));
+        memset(buffer, 0, sizeof(buffer));
+        stop_called = true;
         return -1;
     }
 
@@ -221,7 +222,8 @@ int ipc_junction_s::start( const char *junction_name )
         UnmapViewOfFile(d.sync);
         CloseHandle(d.mapfile);
         CloseHandle(d.watchdog[1]);
-        memset(this, 0, sizeof(ipc_junction_s));
+        memset(buffer, 0, sizeof(buffer));
+        stop_called = true;
         return -1;
     }
 
@@ -264,7 +266,8 @@ int ipc_junction_s::start( const char *junction_name )
             CloseHandle(d.mapfile);
             CloseHandle(d.watchdog[1]);
             DestroyWindow(handler);
-            memset(this, 0, sizeof(ipc_junction_s));
+            memset(buffer, 0, sizeof(buffer));
+            stop_called = true;
             return -1;
         }
     }
@@ -308,7 +311,7 @@ void ipc_junction_s::stop()
     UnmapViewOfFile(d.sync);
     CloseHandle(d.mapfile);
 
-    memset(this, 0, sizeof(ipc_junction_s));
+    memset(buffer, 0, sizeof(buffer));
     stop_called = true;
 }
 

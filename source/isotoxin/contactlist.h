@@ -52,6 +52,7 @@ class gui_contact_item_c : public gui_label_c
 
     void set_default_proto(const ts::str_c&ost);
 
+    bool redraw_now(RID, GUIPARAM);
     bool audio_call(RID, GUIPARAM);
 
     bool edit0(RID, GUIPARAM);
@@ -76,8 +77,11 @@ public:
 
     bool is_protohit() const {return flags.is(F_PROTOHIT);}
     bool is_noprotohit() const {return flags.is(F_NOPROTOHIT);}
-    int protohit_power() const
+    int sort_power() const
     {
+        if (contact && contact->getkey().is_group())
+            return contact->subonlinecount() + 2;
+
         if (!is_protohit())
         {
             if (contact)
@@ -115,6 +119,9 @@ public:
     void update_text();
 
     bool is_after(gui_contact_item_c &ci); // sort comparsion
+
+
+    void redraw(float delay);
 };
 
 enum contact_list_role_e
@@ -135,8 +142,10 @@ class gui_contactlist_c : public gui_vscrollgroup_c
 {
     DUMMY(gui_contactlist_c);
 
+    GM_RECEIVER(gui_contactlist_c, ISOGM_PROFILE_TABLE_SAVED);
+    GM_RECEIVER(gui_contactlist_c, ISOGM_PROTO_LOADED);
     GM_RECEIVER(gui_contactlist_c, ISOGM_CHANGED_PROFILEPARAM);
-    GM_RECEIVER(gui_contactlist_c, ISOGM_UPDATE_CONTACT_V);
+    GM_RECEIVER(gui_contactlist_c, ISOGM_V_UPDATE_CONTACT);
     GM_RECEIVER(gui_contactlist_c, GM_HEARTBEAT);
     GM_RECEIVER(gui_contactlist_c, GM_DRAGNDROP);
     GM_RECEIVER(gui_contactlist_c, GM_UI_EVENT)

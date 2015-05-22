@@ -45,6 +45,8 @@
 //#include "config.h"
 //#endif
 
+typedef bool _Bool;
+
 // toxcore
 extern "C"
 {

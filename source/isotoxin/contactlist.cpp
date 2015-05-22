@@ -14,7 +14,7 @@ gui_contact_item_c::gui_contact_item_c(MAKE_ROOT<gui_contact_item_c> &data) :gui
 gui_contact_item_c::gui_contact_item_c(MAKE_CHILD<gui_contact_item_c> &data) :gui_label_c(data), role(data.role), contact(data.contact)
 {
     if (contact && (CIR_LISTITEM == role || CIR_ME == role))
-        if (ASSERT(contact->is_multicontact()))
+        if (ASSERT(contact->is_rootcontact()))
         {
             contact->gui_item = this;
             g_app->need_recalc_unread( contact->getkey() );
@@ -23,7 +23,11 @@ gui_contact_item_c::gui_contact_item_c(MAKE_CHILD<gui_contact_item_c> &data) :gu
 
 gui_contact_item_c::~gui_contact_item_c()
 {
-    if (gui) gui->delete_event(DELEGATE(this, update_buttons));
+    if (gui)
+    {
+        gui->delete_event(DELEGATE(this, update_buttons));
+        gui->delete_event(DELEGATE(this, redraw_now));
+    }
 }
 
 /*virtual*/ ts::ivec2 gui_contact_item_c::get_min_size() const
@@ -152,17 +156,20 @@ bool gui_contact_item_c::apply_edit( RID r, GUIPARAM p)
                 if (prf().username(hstuff().curedit))
                     gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_USERNAME, hstuff().curedit).send();
             }
-        } else
+        } else if (contact->getkey().is_group())
         {
-            if (contact->get_customname() != hstuff().curedit)
-            {
-                contact->set_customname(hstuff().curedit);
-                prf().dirtycontact(contact->getkey());
-                flags.set(F_SKIPUPDATE);
-                gmsg<ISOGM_UPDATE_CONTACT_V>(contact).send();
-                flags.clear(F_SKIPUPDATE);
-                update_text();
-            }
+            if (active_protocol_c *ap = prf().ap(contact->getkey().protoid))
+                ap->rename_group_chat(contact->getkey().contactid, hstuff().curedit);
+
+        } else if (contact->get_customname() != hstuff().curedit)
+        {
+
+            contact->set_customname(hstuff().curedit);
+            prf().dirtycontact(contact->getkey());
+            flags.set(F_SKIPUPDATE);
+            gmsg<ISOGM_V_UPDATE_CONTACT>(contact).send();
+            flags.clear(F_SKIPUPDATE);
+            update_text();
         }
 
     }
@@ -435,7 +442,7 @@ ts::uint32 gui_contact_item_c::gm_handler(gmsg<ISOGM_SOMEUNREAD> & c)
 
 void gui_contact_item_c::setcontact(contact_c *c)
 {
-    ASSERT(c->is_multicontact());
+    ASSERT(c->is_rootcontact());
     bool changed = contact != c;
     contact = c;
     update_text(); 
@@ -481,7 +488,27 @@ void gui_contact_item_c::update_text()
                     newtext.append(CONSTWSTR(" (")).append(ap->get_name()).append(CONSTWSTR(")"));
             });
 
-        } else if (contact->is_multicontact())
+        } else if (contact->getkey().is_group())
+        {
+            newtext = contact->get_customname();
+            if (newtext.is_empty()) newtext = contact->get_name();
+            text_adapt_user_input(newtext);
+
+            if (CIR_CONVERSATION_HEAD == role)
+            {
+                ts::ivec2 sz = g_app->buttons().editb->size;
+                newtext.append(CONSTWSTR(" <rect=0,"));
+                newtext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTWSTR(",2>"));
+            } else
+            {
+                newtext.append(CONSTWSTR("<br>(")).append_as_int( contact->subonlinecount() ).append_char('/').append_as_int( contact->subcount() ).append_char(')');
+                if (active_protocol_c *ap = prf().ap( contact->getkey().protoid ))
+                    newtext.append(CONSTWSTR(" <l>")).append(ap->get_name()).append(CONSTWSTR("</l>"));
+            }
+            if (!contact->get_options().unmasked().is(contact_c::F_PERMANENT_GCHAT))
+                newtext.append(CONSTWSTR("<br>")).append(TTT("временный групповой чат",256));
+
+        } else if (contact->is_meta())
         {
             int live = 0, count = 0, rej = 0, invsend = 0, invrcv = 0, wait = 0, deactivated = 0;
             contact->subiterate( [&](contact_c *c) {
@@ -610,6 +637,30 @@ void gui_contact_item_c::target(bool tgt)
 
 void gui_contact_item_c::on_drop(gui_contact_item_c *ondr)
 {
+    if (contact->getkey().is_group())
+    {
+        ts::tmp_tbuf_t<int> c2a;
+
+        ondr->contact->subiterate([&](contact_c *c) {
+            if ( contact->getkey().protoid == c->getkey().protoid )
+                c2a.add( c->getkey().contactid );
+        });
+
+        if (c2a.count() == 0)
+        {
+            SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
+                gui_isodialog_c::title(DT_MSGBOX_WARNING),
+                TTT("В групповой чат можно добавлять только контакты из той же сети.",255)
+                ));
+        } else if (active_protocol_c *ap = prf().ap(contact->getkey().protoid))
+        {
+            for( int cid : c2a )
+                ap->join_group_chat( contact->getkey().contactid, cid );
+        }
+
+        return;
+    }
+
     if (dialog_already_present(UD_METACONTACT)) return;
 
     SUMMON_DIALOG<dialog_metacontact_c>(UD_METACONTACT, dialog_metacontact_params_s(contact->getkey()));
@@ -662,7 +713,7 @@ void gui_contact_item_c::protohit()
 void gui_contact_item_c::generate_protocols()
 {
     protocols.clear();
-    if (!contact) return;
+    if (!contact || contact->getkey().is_group()) return;
 
     protocols.set(CONSTWSTR("<p=r>"));
 
@@ -699,15 +750,19 @@ void gui_contact_item_c::generate_protocols()
 
 void gui_contact_item_c::draw_online_state_text(draw_data_s &dd)
 {
-    text_draw_params_s tdp;
-
-    ts::flags32_s f; f.setup(ts::TO_VCENTER|ts::TO_LINE_END_ELLIPSIS);
-    tdp.textoptions = &f;
-
     if (protocols.is_empty())
         generate_protocols();
 
-    getengine().draw(protocols, tdp);
+    if (!protocols.is_empty())
+    {
+
+        text_draw_params_s tdp;
+
+        ts::flags32_s f; f.setup(ts::TO_VCENTER|ts::TO_LINE_END_ELLIPSIS);
+        tdp.textoptions = &f;
+
+        getengine().draw(protocols, tdp);
+    }
 }
 
 int gui_contact_item_c::contact_item_rite_margin()
@@ -764,7 +819,7 @@ int gui_contact_item_c::contact_item_rite_margin()
             }
             button_desc_s::states bst =  button_desc_s::DISABLED;
             button_desc_s *bdesc = g_app->buttons().online;
-            bool force_state_icon = false;
+            bool force_state_icon = CIR_ME == role || CIR_METACREATE == role;
             switch (st)
             {
                 case CS_INVITE_SEND:
@@ -802,7 +857,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                     break;
             }
 
-            if (( force_state_icon || CIR_METACREATE == role || (flags.is(F_PROTOHIT) && st != CS_ROTTEN)) && bdesc)
+            if (( force_state_icon || (flags.is(F_PROTOHIT) && st != CS_ROTTEN)) && bdesc)
                 bdesc->draw( m_engine.get(), bst, ca + ts::ivec2(shiftstateicon.x, shiftstateicon.y), button_desc_s::ARIGHT | button_desc_s::ABOTTOM );
 
             if (contact)
@@ -826,11 +881,11 @@ int gui_contact_item_c::contact_item_rite_margin()
 
                 int ritem = 0;
                 bool draw_ava = true;
-                bool draw_proto = true;
+                bool draw_proto = !contact->getkey().is_group();
                 //bool draw_btn = true;
                 if (CIR_CONVERSATION_HEAD == role)
                 {
-                    ritem = contact_item_rite_margin() + g_app->protowidth;;
+                    ritem = contact_item_rite_margin() + (draw_proto ? g_app->protowidth : 0);
                     ts::irect cac(ca);
 
                     int x_offset = contact->get_avatar() ? g_app->buttons().icon[CSEX_UNKNOWN]->size.x : g_app->buttons().icon[contact->get_meta_gender()]->size.x;
@@ -845,7 +900,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                         curw += x_offset;
                         draw_ava = false;
                     }
-                    if (w > curw)
+                    if (draw_proto && w > curw)
                     {
                         curw += g_app->protowidth;
                         draw_proto = false;
@@ -868,7 +923,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                     }
                     else
                     {
-                        button_desc_s *icon = g_app->buttons().icon[contact->get_meta_gender()];
+                        button_desc_s *icon = contact->getkey().is_group() ? g_app->buttons().groupchat : g_app->buttons().icon[contact->get_meta_gender()];
                         icon->draw(m_engine.get(), button_desc_s::NORMAL, ca, button_desc_s::ALEFT | button_desc_s::ATOP | button_desc_s::ABOTTOM);
                         x_offset = icon->size.x;
                     }
@@ -995,7 +1050,7 @@ int gui_contact_item_c::contact_item_rite_margin()
         break;
     case SQ_MOUSE_LDOWN:
         flags.set(F_LBDN);
-        if ( CIR_LISTITEM == role ) 
+        if ( CIR_LISTITEM == role && !contact->getkey().is_group() ) 
         {
             gmsg<ISOGM_METACREATE> mca(contact->getkey());
             mca.state = gmsg<ISOGM_METACREATE>::CHECKINLIST;
@@ -1064,9 +1119,14 @@ int gui_contact_item_c::contact_item_rite_margin()
                     contact_c * c = contacts().find(ck);
                     if (c)
                     {
+                        ts::wstr_c txt;
+                        if ( c->getkey().is_group() )
+                            txt = TTT("Покинуть групповой чат?[br]$",258) / c->get_description();
+                        else
+                            txt = TTT("Будет полностью удален контакт:[br]$",84) / c->get_description();
                         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
                             gui_isodialog_c::title(DT_MSGBOX_WARNING),
-                            TTT("Будет полностью удален контакт:[br]$",84) / c->get_description()
+                            txt
                             ).bcancel().on_ok(m_delete_doit, cks) );
                     }
                 }
@@ -1085,7 +1145,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                         if (historian->gui_item) historian->gui_item->update_text();
                         prf().dirtycontact( c->getkey() );
                         prf().detach_history( historian->getkey(), detached_meta->getkey(), c->getkey() );
-                        gmsg<ISOGM_UPDATE_CONTACT_V>( c ).send();
+                        gmsg<ISOGM_V_UPDATE_CONTACT>( c ).send();
                         gmsg<ISOGM_UPDATE_CONTACT> upd;
                         upd.key = c->getkey();
                         upd.mask = CDM_STATE;
@@ -1105,7 +1165,7 @@ int gui_contact_item_c::contact_item_rite_margin()
             if (!dialog_already_present(UD_CONTACTPROPS))
             {
                 menu_c m;
-                if (contact->subcount() > 1) 
+                if (contact->is_meta() && contact->subcount() > 1) 
                 {
                     menu_c mc = m.add_sub(TTT("Метаконтакт", 145));
                     contact->subiterate([&](contact_c *c) {
@@ -1259,11 +1319,23 @@ INLINE int statev(contact_state_e v)
 
 bool gui_contact_item_c::is_after(gui_contact_item_c &ci)
 {
-    int mystate = statev(contact->get_meta_state()) + protohit_power();
-    int otherstate = statev(ci.contact->get_meta_state()) + ci.protohit_power();
+    int mystate = statev(contact->get_meta_state()) + sort_power();
+    int otherstate = statev(ci.contact->get_meta_state()) + ci.sort_power();
     if (otherstate > mystate) return true;
 
     return false;
+}
+
+bool gui_contact_item_c::redraw_now(RID, GUIPARAM)
+{
+    update_text();
+    getengine().redraw();
+    return true;
+}
+
+void gui_contact_item_c::redraw(float delay)
+{
+    DEFERRED_CALL( delay, DELEGATE(this, redraw_now), nullptr );
 }
 
 MAKE_CHILD<gui_contactlist_c>::~MAKE_CHILD()
@@ -1359,6 +1431,7 @@ void gui_contactlist_c::refresh_array()
 void gui_contactlist_c::recreate_ctls()
 {
     if (addcbtn) TSDEL(addcbtn);
+    if (addgbtn) TSDEL(addgbtn);
     if (self) TSDEL(self);
 
     if (button_desc_s *baddc = gui->theme().get_button(CONSTASTR("addcontact")))
@@ -1367,6 +1440,10 @@ void gui_contactlist_c::recreate_ctls()
 
         struct handlers
         {
+            static ts::wstr_c please_create_profile()
+            {
+                return TTT("Пожалуйста, создайте профиль", 144);
+            }
             static bool summon_addcontacts(RID, GUIPARAM)
             {
                 if (prf().is_loaded())
@@ -1374,12 +1451,19 @@ void gui_contactlist_c::recreate_ctls()
                 else
                     SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
                     gui_isodialog_c::title(DT_MSGBOX_ERROR),
-                    TTT("Пожалуйста, создайте профиль", 144)
+                    please_create_profile()
                     ));
                 return true;
             }
             static bool summon_addgroup(RID, GUIPARAM)
             {
+                if (prf().is_loaded())
+                    SUMMON_DIALOG<dialog_addgroup_c>(UD_ADDGROUP);
+                else
+                    SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
+                    gui_isodialog_c::title(DT_MSGBOX_ERROR),
+                    please_create_profile()
+                    ));
                 return true;
             }
         };
@@ -1399,17 +1483,29 @@ void gui_contactlist_c::recreate_ctls()
         if (baddg)
         {
             addgbtn = MAKE_CHILD<gui_button_c>(getrid());
-            addgbtn->tooltip(TOOLTIP(TTT("Добавить групповой чат (скоро)",243)));
+            addgbtn->tooltip(TOOLTIP(TTT("Добавить групповой чат",243)));
             addgbtn->set_face_getter(BUTTON_FACE(addgroup));
             addgbtn->set_handler(handlers::summon_addgroup, nullptr);
             addgbtn->leech(TSNEW(leech_dock_bottom_center_s, baddg->size.x, baddg->size.y, -10, 10, 1, 2));
             MODIFY(*addgbtn).zindex(1.0f).visible(true);
             getengine().child_move_to(1, &addgbtn->getengine());
-            addgbtn->disable();
+
+            bool support_groupchats = false;
+            prf().iterate_aps( [&](const active_protocol_c &ap) {
+                if (ap.get_features() & PF_GROUP_CHAT)
+                    support_groupchats = true;
+            } );
+
+            if (!support_groupchats)
+            {
+                addgbtn->tooltip(TOOLTIP(TTT("Ни одна из активных сетей не поддерживает групповые чаты",247)));
+                addgbtn->disable();
+            }
         }
 
         self = MAKE_CHILD<gui_contact_item_c>(getrid(), &contacts().get_self()) << CIR_ME;
         self->leech(TSNEW(leech_dock_top_s, g_app->mecontactheight));
+        self->protohit();
         MODIFY(*self).zindex(1.0f).visible(true);
         getengine().child_move_to(2, &self->getengine());
 
@@ -1424,6 +1520,20 @@ void gui_contactlist_c::recreate_ctls()
     skipctl = 0;
     children_repos();
 
+}
+
+ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&ch)
+{
+    if (ch.tabi == pt_active_protocol)
+        recreate_ctls();
+
+    return 0;
+}
+
+ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED>&ch)
+{
+    recreate_ctls();
+    return 0;
 }
 
 ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
@@ -1497,7 +1607,7 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_DRAGNDROP> &dnda)
     return yo ? GMRBIT_ACCEPTED : 0;
 }
 
-ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT_V> & c )
+ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_V_UPDATE_CONTACT> & c )
 {
     if (c.contact->get_historian()->getkey().is_self())
     {
@@ -1527,13 +1637,17 @@ ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT_V> & c )
             {
                 ci->update_text();
                 gui->dragndrop_update(ci);
-                return 0;
+                if (same || !ci->getcontact().getkey().is_group())
+                    return 0;
             }
         }
     }
 
-    if (role == CLR_MAIN_LIST)
+    if (role == CLR_MAIN_LIST && c.contact->get_state() != CS_UNKNOWN)
+    {
+        ASSERT( c.contact->get_historian()->get_state() != CS_UNKNOWN );
         MAKE_CHILD<gui_contact_item_c>(getrid(), c.contact->get_historian());
+    }
 
     return 0;
 }

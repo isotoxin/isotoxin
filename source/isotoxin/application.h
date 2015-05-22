@@ -5,6 +5,7 @@
 struct preloaded_buttons_s
 {
     ts::shared_ptr<button_desc_s> icon[ contact_gender_count ];
+    ts::shared_ptr<button_desc_s> groupchat;
     ts::shared_ptr<button_desc_s> online, online2;
     ts::shared_ptr<button_desc_s> invite;
     ts::shared_ptr<button_desc_s> unread;

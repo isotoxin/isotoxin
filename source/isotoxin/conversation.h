@@ -10,6 +10,7 @@ enum notice_e
     NOTICE_CALL_INPROGRESS,
     NOTICE_CALL,
     NOTICE_FILE,
+    NOTICE_GROUP_CHAT,
 };
 
 class gui_notice_c;
@@ -47,7 +48,7 @@ class gui_notice_c : public gui_label_c
     GM_RECEIVER(gui_notice_c, ISOGM_FILE);
     GM_RECEIVER(gui_notice_c, ISOGM_PROFILE_TABLE_SAVED);
     GM_RECEIVER(gui_notice_c, ISOGM_DOWNLOADPROGRESS);
-    
+    GM_RECEIVER(gui_notice_c, ISOGM_V_UPDATE_CONTACT);
 
     static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE = FLAGS_FREEBITSTART_LABEL << 0;
 
@@ -86,7 +87,7 @@ class gui_noticelist_c : public gui_vscrollgroup_c
 {
     DUMMY(gui_noticelist_c);
     GM_RECEIVER(gui_noticelist_c, ISOGM_PROTO_LOADED);
-    GM_RECEIVER(gui_noticelist_c, ISOGM_UPDATE_CONTACT_V);
+    GM_RECEIVER(gui_noticelist_c, ISOGM_V_UPDATE_CONTACT);
     GM_RECEIVER(gui_noticelist_c, ISOGM_NOTICE);
     GM_RECEIVER(gui_noticelist_c, GM_UI_EVENT);
 
@@ -256,7 +257,7 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     DUMMY(gui_messagelist_c);
     GM_RECEIVER(gui_messagelist_c, ISOGM_MESSAGE);
     GM_RECEIVER(gui_messagelist_c, ISOGM_SELECT_CONTACT);
-    GM_RECEIVER(gui_messagelist_c, ISOGM_UPDATE_CONTACT_V);
+    GM_RECEIVER(gui_messagelist_c, ISOGM_V_UPDATE_CONTACT);
     GM_RECEIVER(gui_messagelist_c, ISOGM_SUMMON_POST);
     GM_RECEIVER(gui_messagelist_c, ISOGM_DELIVERED);
     GM_RECEIVER(gui_messagelist_c, GM_DROPFILES);
@@ -344,7 +345,7 @@ class gui_conversation_c : public gui_vgroup_c, public sound_capture_handler_c
 {
     DUMMY(gui_conversation_c);
 
-    GM_RECEIVER(gui_conversation_c, ISOGM_UPDATE_CONTACT_V);
+    GM_RECEIVER(gui_conversation_c, ISOGM_V_UPDATE_CONTACT);
     GM_RECEIVER(gui_conversation_c, ISOGM_SELECT_CONTACT);
     GM_RECEIVER(gui_conversation_c, ISOGM_CHANGED_PROFILEPARAM);
     GM_RECEIVER(gui_conversation_c, ISOGM_AV);

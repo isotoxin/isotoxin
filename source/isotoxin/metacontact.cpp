@@ -160,7 +160,7 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
         for (const contact_key_s &ck : clist)
             if (contact_c * c = contacts().find(ck))
             {
-                ASSERT(c->is_multicontact());
+                ASSERT(c->is_meta());
                 c->unload_history();
                 prf().merge_history( basec->getkey(), ck );
                 c->subiterate([&](contact_c *cc) {

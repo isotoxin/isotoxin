@@ -136,7 +136,7 @@ enum isogmsg_e
     ISOGM_PROFILE_TABLE_LOADED,
     ISOGM_PROFILE_TABLE_SAVED,
     ISOGM_UPDATE_CONTACT,           // new or update contact - signal from protocol
-    ISOGM_UPDATE_CONTACT_V,         // visual update (add to list, or update caption)
+    ISOGM_V_UPDATE_CONTACT,         // visual update (add to list, or update caption)
     ISOGM_SELECT_CONTACT,
     ISOGM_CMD_RESULT,
     ISOGM_PROTO_LOADED,
@@ -207,14 +207,19 @@ template<> struct gmsg<ISOGM_PROTO_LOADED> : public gmsgbase
 };
 
 struct post_s;
+class contact_c;
 template<> struct gmsg<ISOGM_SUMMON_POST> : public gmsgbase
 {
+    gmsg(const post_s &post, contact_c *fake_sender) :gmsgbase(ISOGM_SUMMON_POST), post(post), unread(nullptr), fake_sender(fake_sender), replace_post(false)
+    {
+    }
     gmsg(const post_s &post, rectengine_c ** unread = nullptr) :gmsgbase(ISOGM_SUMMON_POST), post(post), unread(unread), replace_post(false)
     {
     }
     gmsg(const post_s &post, bool replace_post) :gmsgbase(ISOGM_SUMMON_POST), post(post), unread(nullptr), replace_post(replace_post)
     {
     }
+    contact_c *fake_sender = nullptr; // only used for messages from groupchat non-contactlist members
     rectengine_c **unread; // если время поста больше чем readtime текущего историка - сюда запишется новосозданный элемент интерфейса - на него отскролируемся
     const post_s &post;
     bool replace_post;

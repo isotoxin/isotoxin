@@ -17,6 +17,9 @@ gui_notice_c::gui_notice_c(MAKE_CHILD<gui_notice_c> &data) :gui_label_c(data), n
         case NOTICE_FRIEND_REQUEST_SEND_OR_REJECT:
             set_theme_rect(CONSTASTR("notice.reject"), false);
             break;
+        case NOTICE_GROUP_CHAT:
+            set_theme_rect(CONSTASTR("notice.gchat"), false);
+            break;
         //case NOTICE_FRIEND_REQUEST_RECV:
         //case NOTICE_INCOMING_CALL:
         //case NOTICE_CALL_INPROGRESS:
@@ -97,7 +100,7 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
     bool die = false;
     if (n.n == notice)
     {
-        if (NOTICE_FRIEND_REQUEST_RECV == notice || NOTICE_FRIEND_REQUEST_SEND_OR_REJECT == notice || NOTICE_INCOMING_CALL == notice || NOTICE_CALL_INPROGRESS == notice || NOTICE_NEWVERSION == notice)
+        if (NOTICE_FRIEND_REQUEST_RECV == notice || NOTICE_FRIEND_REQUEST_SEND_OR_REJECT == notice || NOTICE_INCOMING_CALL == notice || NOTICE_CALL_INPROGRESS == notice || NOTICE_NEWVERSION == notice || NOTICE_GROUP_CHAT == notice)
             die = true;
     }
     if (NOTICE_CALL_INPROGRESS == n.n && (NOTICE_INCOMING_CALL == notice || NOTICE_CALL == notice))
@@ -117,6 +120,15 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&p)
             TSDEL( this );
     }
 
+    return 0;
+}
+
+ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &c)
+{
+    if (NOTICE_GROUP_CHAT == notice && c.contact->getkey().is_group() && utag == ts::ref_cast<uint64>(c.contact->getkey()))
+    {
+        setup( c.contact );
+    }
     return 0;
 }
 
@@ -292,11 +304,11 @@ void gui_notice_c::setup(const ts::wstr_c &itext, const ts::str_c &pubid)
 
             gui_button_c &b_copy = MAKE_CHILD<gui_button_c>(getrid());
             b_copy.set_constant_size(sz1);
-            b_copy.set_data_obj<copydata>(pubid, this);
+            b_copy.set_customdata_obj<copydata>(pubid, this);
             b_copy.set_face_getter(BUTTON_FACE(copyid));
             b_copy.tooltip(TOOLTIP(TTT("Копировть ID в буфер обмена", 97)));
 
-            b_copy.set_handler(DELEGATE(&b_copy.get_data_obj<copydata>(), copy_handler), nullptr);
+            b_copy.set_handler(DELEGATE(&b_copy.get_customdata_obj<copydata>(), copy_handler), nullptr);
             b_copy.leech(TSNEW(leech_at_left_s, &b_connect, 5));
             MODIFY(b_copy).visible(true);
 
@@ -559,6 +571,35 @@ void gui_notice_c::setup(contact_c *sender)
             addheight = 50;
         }
         break;
+    case NOTICE_GROUP_CHAT:
+        {
+            utag = ts::ref_cast<uint64>(sender->getkey());
+            ts::wstr_c txt(CONSTWSTR("<p=c>"));
+            ASSERT( sender->getkey().is_group() );
+            sender->subiterate([&](contact_c *m) 
+            {
+                switch (m->get_state())
+                {
+                    case CS_OFFLINE:
+                        txt.append(CONSTWSTR("<img=gch_offline,-1>"));
+                        break;
+                    case CS_ONLINE:
+                        txt.append(CONSTWSTR("<img=gch_online,-1>"));
+                        break;
+                    default:
+                        txt.append( CONSTWSTR("<img=gch_unknown,-1>") );
+                    break;
+                }
+                txt.append( m->get_name() ).append(CONSTWSTR(", "));
+            } );
+
+            if (txt.ends( CONSTWSTR(", ") ))
+                txt.trunc_length(2);
+            else
+                txt.append( TTT("В этом групповом чате кроме вас никого нет",257) );
+            textrect.set_text_only(txt, false);
+        }
+        break;
     }
 
     setup_tail();
@@ -690,7 +731,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED> &)
     return 0;
 }
 
-ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_UPDATE_CONTACT_V> & p)
+ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> & p)
 {
     if (owner == nullptr) return 0;
 
@@ -704,7 +745,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_UPDATE_CONTACT_V> & p)
     }
 
     contact_c *sender = nullptr;
-    if (p.contact->is_multicontact())
+    if (p.contact->is_rootcontact())
     {
         if (owner != p.contact) return 0;
 
@@ -727,7 +768,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_UPDATE_CONTACT_V> & p)
         sender = p.contact;
     }
 
-    if (sender)
+    if (sender && !owner->getkey().is_group())
     {
         if (sender->get_state() == CS_ROTTEN)
         {
@@ -840,13 +881,14 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                 }
             });
 
-            owner->subiterate([this](contact_c *c) {
-                if (c->get_state() == CS_REJECTED || c->get_state() == CS_INVITE_SEND)
-                {
-                    gui_notice_c &n = create_notice(NOTICE_FRIEND_REQUEST_SEND_OR_REJECT);
-                    n.setup(c);
-                }
-            });
+            if (!owner->getkey().is_group())
+                owner->subiterate([this](contact_c *c) {
+                    if (c->get_state() == CS_REJECTED || c->get_state() == CS_INVITE_SEND)
+                    {
+                        gui_notice_c &n = create_notice(NOTICE_FRIEND_REQUEST_SEND_OR_REJECT);
+                        n.setup(c);
+                    }
+                });
         }
 
         refresh();
@@ -939,7 +981,7 @@ void gui_message_item_c::ctx_menu_delmessage(const ts::str_c &mutag)
     if (remove_utag(utag))
     {
         RID parent = getparent();
-        if (records.size() == 0 || subtype == ST_RECV_FILE || subtype == ST_RECV_FILE)
+        if (records.size() == 0 || subtype == ST_RECV_FILE || subtype == ST_SEND_FILE)
             TSDEL(this);
         parent.call_children_repos();
     }
@@ -1578,6 +1620,8 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             ts::wstr_c message = post.message;
             if (message.is_empty()) message.set(CONSTWSTR("error"));
             else {
+                //int x = message.find_pos('\1');
+                //if (x >= 0) message.cut(0, x + 1);
                 text_adapt_user_input(message);
                 parse_smiles(message);
                 parse_links(message, records.size() == 1);
@@ -1952,7 +1996,7 @@ ts::wstr_c gui_message_item_c::hdr() const
 {
     ts::wstr_c n(author->get_name());
     text_adapt_user_input(n);
-    if (prf().get_msg_options().is(MSGOP_SHOW_PROTOCOL_NAME))
+    if (prf().get_msg_options().is(MSGOP_SHOW_PROTOCOL_NAME) && !historian->getkey().is_group())
     {
         if (protodesc.is_empty() && author->getkey().protoid)
         {
@@ -2166,7 +2210,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_MESSAGE> & p) // show messag
     p.current = true;
     bool at_and = p.post.sender.is_self() || is_at_end();
 
-    gmsg<ISOGM_SUMMON_POST>( p.post ).send();
+    gmsg<ISOGM_SUMMON_POST>( p.post, p.sender ).send();
 
     if (at_and) scroll_to_end();
 
@@ -2185,18 +2229,19 @@ DWORD gui_messagelist_c::handler_SEV_ACTIVE_STATE(const system_event_param_s & p
     if (p.active)
     {
         DEFERRED_EXECUTION_BLOCK_BEGIN(0)
-            ((gui_messagelist_c*)param)->getengine().redraw();
+            if (gui_messagelist_c *ml = gui->find_rect<gui_messagelist_c>(param))
+                ml->getengine().redraw();
         DEFERRED_EXECUTION_BLOCK_END(this)
     }
     return 0;
 }
 
-ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_UPDATE_CONTACT_V> & p)
+ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> & p)
 {
     if (historian == nullptr) return 0;
 
     contact_c *sender = nullptr;
-    if (p.contact->is_multicontact())
+    if (p.contact->is_rootcontact())
     {
         if (historian != p.contact) return 0;
 
@@ -2626,11 +2671,14 @@ bool gui_conversation_c::hide_show_messageeditor(RID, GUIPARAM)
     bool show = false;
     if (caption->contacted() && !caption->getcontact().getkey().is_self())
     {
-        caption->getcontact().subiterate([&](contact_c *c) {
-            if (show) return;
-            if (c->is_protohit(true))
-                show = true;
-        });
+        if ( caption->getcontact().getkey().is_group() )
+            show = true;
+        else
+            caption->getcontact().subiterate([&](contact_c *c) {
+                if (show) return;
+                if (c->is_protohit(true))
+                    show = true;
+            });
     }
     MODIFY(*messagearea).visible(show);
     return false;
@@ -2641,22 +2689,30 @@ bool gui_conversation_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
     return __super::sq_evt(qp,rid,data);
 }
 
-ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_CONTACT_V> &c)
+ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &c)
 {
     if (!caption->contacted()) return 0;
 
-    if (c.contact->is_multicontact() && c.contact == &caption->getcontact())
+    if (c.contact->is_rootcontact() && c.contact == &caption->getcontact())
     {
-        caption->resetcontact();
+        if (c.contact->get_state() == CS_ROTTEN)
+            caption->resetcontact();
+
+        if (c.contact->getkey().is_group())
+        {
+            caption->update_text();
+            hide_show_messageeditor();
+        }
         return 0;
     }
 
-    ASSERT(caption->getcontact().is_multicontact());
+    ASSERT(caption->getcontact().is_rootcontact());
     if (caption->getcontact().subpresent( c.contact->getkey() ))
         caption->update_text();
 
     DEFERRED_EXECUTION_BLOCK_BEGIN(0)
-        ((gui_contact_item_c *)param)->update_buttons();
+        if (gui_contact_item_c *ci = gui->find_rect<gui_contact_item_c>(param))
+            ci->update_buttons();
     DEFERRED_EXECUTION_BLOCK_END(caption.get())
 
     hide_show_messageeditor();
@@ -2736,6 +2792,13 @@ ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> &c )
         start_capture();
 
     hide_show_messageeditor();
+
+    if (c.contact->getkey().is_group())
+    {
+        DEFERRED_EXECUTION_BLOCK_BEGIN(0)
+            gmsg<ISOGM_NOTICE>((contact_c *)param, (contact_c *)param, NOTICE_GROUP_CHAT).send();
+        DEFERRED_EXECUTION_BLOCK_END(c.contact.get());
+    }
 
     return 0;
 }

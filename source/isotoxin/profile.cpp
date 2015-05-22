@@ -1186,7 +1186,8 @@ void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, i
 
                 row->changed();
             }
-            c->save( &row->other );
+            if (!c->save( &row->other ))
+                row->deleted();
         }
     }
     dirtycontacts.clear();

@@ -36,6 +36,7 @@ protected:
     /*virtual*/ int additions(ts::irect & border) override;
     /*virtual*/ void on_confirm() override;
     
+    menu_c networks();
     bool hidectl(RID,GUIPARAM);
 
     bool public_id_handler( const ts::wstr_c & );
@@ -44,6 +45,39 @@ protected:
 public:
     dialog_addcontact_c(MAKE_ROOT<dialog_addcontact_c> &data);
     ~dialog_addcontact_c();
+
+    /*virtual*/ ts::wstr_c get_name() const override;
+    /*virtual*/ ts::ivec2 get_min_size() const override;
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+};
+
+
+
+class dialog_addgroup_c : public gui_isodialog_c
+{
+    int apid = 0;
+    ts::wstr_c groupname;
+    bool permanent = true;
+
+protected:
+    /*virtual*/ int unique_tag() { return UD_ADDCONTACT; }
+    /*virtual*/ void created() override;
+    /*virtual*/ void getbutton(bcreate_s &bcr) override;
+    /*virtual*/ int additions(ts::irect & border) override;
+    /*virtual*/ void on_confirm() override;
+    
+    bool chatlifetime(RID, GUIPARAM);
+    void update_lifetime();
+
+    menu_c networks();
+    bool hidectl(RID,GUIPARAM);
+    void showerror(int id);
+
+    bool groupname_handler(const ts::wstr_c &);
+    void network_selected(const ts::str_c &);
+public:
+    dialog_addgroup_c(initial_rect_data_s &data);
+    ~dialog_addgroup_c();
 
     /*virtual*/ ts::wstr_c get_name() const override;
     /*virtual*/ ts::ivec2 get_min_size() const override;

@@ -374,8 +374,8 @@ void guirect_c::apply(const rectprops_c &pss)
 
 /*virtual*/ gui_control_c::~gui_control_c()
 {
-    if (!datakiller.empty())
-        datakiller(getrid(), data);
+    if (!customdatakiller.empty())
+        customdatakiller(getrid(), customdata);
 
     if (popupmenu)
         TSDEL(popupmenu);
@@ -2428,7 +2428,7 @@ ts::uint32 gui_popup_menu_c::gm_handler( gmsg<GM_KILLPOPUPMENU_LEVEL> & p )
     if (p.level <= menu.lv())
     {
         if (closehandler) closehandler(getrid(), nullptr);
-        sq_evt(SQ_POPUP_MENU_DIE,getrid(), ts::make_dummy<evt_data_s>(true)); // send evt to self - leech will intercept it
+        sq_evt(SQ_POPUP_MENU_DIE, getrid(), ts::make_dummy<evt_data_s>(true)); // send evt to self - leech will intercept it
         TSDEL(this);
     }
     return 0;

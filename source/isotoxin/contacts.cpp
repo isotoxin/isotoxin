@@ -101,7 +101,7 @@ contact_c *get_historian(contact_c *sender, contact_c * receiver)
     {
         historian = sender;
     }
-    if (!historian->is_meta()) historian = historian->getmeta();
+    if (!historian->is_meta() && !historian->getkey().is_group()) historian = historian->getmeta();
     return historian;
 }
 
@@ -122,7 +122,7 @@ contact_c::~contact_c()
 
 bool contact_c::is_protohit( bool strong )
 {
-    ASSERT( !is_multicontact() );
+    ASSERT( !is_rootcontact() );
 
     if ( strong && opts.unmasked().is(F_PROTOHIT) )
     {
@@ -135,7 +135,7 @@ bool contact_c::is_protohit( bool strong )
 
 void contact_c::protohit( bool f )
 {
-    ASSERT( !is_multicontact() );
+    ASSERT( getkey().is_group() || !is_rootcontact() );
 
     if (f && nullptr == prf().ap(getkey().protoid))
         f = false;
@@ -206,6 +206,9 @@ ts::wstr_c contact_c::compile_statusmsg() const
 
 contact_state_e contact_c::get_meta_state() const
 {
+    if (key.is_group())
+        return subonlinecount() > 0 ? CS_ONLINE : CS_OFFLINE;
+
     if (subcontacts.size() == 0) return CS_ROTTEN;
     contact_state_e rst = contact_state_check;
     for (contact_c *c : subcontacts)
@@ -290,7 +293,7 @@ contact_c * contact_c::subget_default() const
 
 const avatar_s *contact_c::get_avatar() const
 {
-    if (!is_multicontact())
+    if (getkey().is_group() || !is_rootcontact())
         return avatar.get();
 
     const avatar_s * r = nullptr;
@@ -306,6 +309,8 @@ const avatar_s *contact_c::get_avatar() const
 
 bool contact_c::keep_history() const
 {
+    if (key.is_group() && !opts.unmasked().is(F_PERMANENT_GCHAT))
+        return false;
     if (KCH_ALWAYS_KEEP == keeph) return true;
     if (KCH_NEVER_KEEP == keeph) return false;
     return prf().get_msg_options().is(MSGOP_KEEP_HISTORY);
@@ -392,7 +397,7 @@ void contact_c::load_history(int n_last_items)
 
 bool contact_c::check_invite(RID r, GUIPARAM p)
 {
-    ASSERT( !is_multicontact() );
+    ASSERT( !is_rootcontact() );
     if (!opts.unmasked().is(F_SHOW_FRIEND_REQUEST))
     {
         if (p)
@@ -467,7 +472,7 @@ bool contact_c::flashing_proc(RID, GUIPARAM)
 }
 bool contact_c::ringtone(bool activate, bool play_stop_snd)
 {
-    if (is_multicontact())
+    if (is_meta())
     {
         opts.unmasked().init(F_RINGTONE, false);
         subiterate( [this](contact_c *c) { if (c->is_ringtone()) opts.unmasked().init(F_RINGTONE, true); } );
@@ -491,7 +496,7 @@ bool contact_c::ringtone(bool activate, bool play_stop_snd)
 
 void contact_c::av( bool f )
 {
-    if (is_multicontact())
+    if (is_meta())
     {
         bool wasav = opts.unmasked().is(F_AV_INPROGRESS);
         opts.unmasked().init(F_AV_INPROGRESS, false);
@@ -519,7 +524,7 @@ void contact_c::av( bool f )
 
 bool contact_c::calltone(bool f, bool call_accepted)
 {
-    if (is_multicontact())
+    if (is_meta())
     {
         bool wasct = opts.unmasked().is(F_CALLTONE);
         opts.unmasked().clear(F_CALLTONE);
@@ -549,7 +554,7 @@ bool contact_c::calltone(bool f, bool call_accepted)
 
 bool contact_c::is_filein() const
 {
-    if (is_multicontact())
+    if (is_meta())
         return g_app->present_file_transfer_by_historian( getkey(), true );
 
     return g_app->present_file_transfer_by_sender( getkey(), true );
@@ -757,7 +762,7 @@ bool contact_c::b_refuse_file(RID, GUIPARAM par)
 const post_s * contact_c::fix_history( message_type_app_e oldt, message_type_app_e newt, const contact_key_s& sender, time_t update_time )
 {
     contact_c *historian = this;
-    if (!historian->is_multicontact()) historian = historian->getmeta();
+    if (!historian->is_rootcontact()) historian = historian->getmeta();
     const post_s * r = nullptr;
     if (ASSERT(historian))
     {
@@ -776,7 +781,7 @@ const post_s * contact_c::fix_history( message_type_app_e oldt, message_type_app
         if (ri >= 0) r = &historian->history.get(ri);
         for( uint64 utag : updated )
         {
-            const post_s *p = historian->get_post_by_utag(utag);
+            const post_s *p = historian->find_post_by_utag(utag);
             if (ASSERT(p))
                 prf().change_history_item(historian->getkey(), *p, HITM_MT|HITM_TIME);
         }
@@ -810,14 +815,14 @@ contact_c *contacts_c::find_subself(int protoid) const
 void contacts_c::nomore_proto(int id)
 {
     for (contact_c *c : arr)
-        if (!c->is_multicontact() && c->getkey().protoid == id)
+        if (!c->is_meta() && c->getkey().protoid == id)
             c->protohit(false);
 }
 
 bool contacts_c::present_protoid(int id) const
 {
     for(const contact_c *c : arr)
-        if (!c->is_multicontact() && c->getkey().protoid == id)
+        if (!c->is_meta() && c->getkey().protoid == id)
             return true;
     return false;
 }
@@ -858,10 +863,19 @@ void contact_c::setup( const contacts_s * c, time_t nowtime )
 
     options().setup(c->options);
     keeph = (keep_contact_history_e)((c->options >> 16) & 3);
+
+    if (getkey().is_group())
+        opts.unmasked().set(F_PERMANENT_GCHAT); // if loaded - permanent (non permanent never saved)
+
+    if (opts.is(F_UNKNOWN))
+        set_state(CS_UNKNOWN);
 }
 
-void contact_c::save( contacts_s * c ) const
+bool contact_c::save( contacts_s * c ) const
 {
+    if (getkey().is_group())
+        if ( !opts.unmasked().is(F_PERMANENT_GCHAT) ) return false;
+
     c->metaid = getmeta() ? getmeta()->getkey().contactid : 0;
     c->options = get_options() | (get_keeph() << 16);
     c->name = get_name(false);
@@ -869,6 +883,8 @@ void contact_c::save( contacts_s * c ) const
     c->statusmsg = get_statusmsg(false);
     c->readtime = get_readtime();
     // avatar data copied not here, see profile_c::set_avatar
+
+    return true;
 }
 
 ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
@@ -883,7 +899,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
         {
             if (row.other.metaid == 0)
             {
-                contact_key_s metakey(row.other.key.contactid);
+                contact_key_s metakey(row.other.key.contactid, row.other.key.protoid); // row.other.key.protoid == 0 for meta and != 0 for unknown
                 contact_c *metac = nullptr;
                 ts::aint index;
                 if (arr.find_sorted(index, metakey))
@@ -894,6 +910,9 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
                     arr.insert(index, metac);
                 }
                 metac->setup(&row.other, nowtime);
+
+                ASSERT( metac->getkey().protoid == 0 || metac->get_state() == CS_UNKNOWN );
+
             } else
                 notmeta.add(&row.other);
         }
@@ -919,7 +938,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
             }
         }
         //for (contact_c *c : meta)
-        //    gmsg<ISOGM_UPDATE_CONTACT_V>(c).send();
+        //    gmsg<ISOGM_V_UPDATE_CONTACT>(c).send();
     }
     if (msg.tabi == pt_unfinished_file_transfer)
     {
@@ -948,16 +967,28 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
 void contacts_c::update_meta()
 {
     for (contact_c *c : arr)
-        if (c->is_meta() && !c->getkey().is_self())
-            gmsg<ISOGM_UPDATE_CONTACT_V>(c).send();
+        if (c->is_rootcontact() && !c->getkey().is_self())
+            gmsg<ISOGM_V_UPDATE_CONTACT>(c).send();
+}
+
+bool contacts_c::is_groupchat_member( const contact_key_s &ck )
+{
+    bool yep = false;
+    for (contact_c *c : arr)
+        if (c->getkey().is_group() && c->subpresent(ck))
+        {
+            if (c->gui_item)
+                c->gui_item->redraw(1.0f);
+            yep = true;
+        }
+    return yep;
 }
 
 void contacts_c::kill(const contact_key_s &ck)
 {
     contact_c * cc = find(ck);
-    ASSERT(!cc->getkey().is_group()); // TODO
 
-    if (cc->is_multicontact())
+    if (cc->is_meta())
     {
         cc->subiterate([this](contact_c *c) {
             c->ringtone(false);
@@ -971,21 +1002,34 @@ void contacts_c::kill(const contact_key_s &ck)
         cc->calltone(false);
     }
 
-    cc->set_state(CS_ROTTEN);
-    gmsg<ISOGM_UPDATE_CONTACT_V>(cc).send();
-    if (cc->is_multicontact())
+    if (cc->get_state() != CS_UNKNOWN)
+    {
+        cc->set_state(CS_ROTTEN);
+        gmsg<ISOGM_V_UPDATE_CONTACT>(cc).send(); // delete ui element
+    }
+    bool killcc = false;
+    if ( cc->is_meta() && !cc->getkey().is_group() )
     {
         cc->subiterate([this](contact_c *c) {
-            if (active_protocol_c *ap = prf().ap(c->getkey().protoid)) 
+
+            if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
                 ap->del_contact(c->getkey().contactid);
-            prf().killcontact(c->getkey());
-            del(c->getkey());
+
+            if (is_groupchat_member(c->getkey()))
+            {
+                c->set_state( CS_UNKNOWN );
+                prf().dirtycontact(c->getkey());
+            } else
+            {
+                prf().killcontact(c->getkey());
+                del(c->getkey());
+            }
         });
         prf().kill_history( cc->getkey() );
+        killcc = true;
     } else
     {
-        contact_c *meta = cc->getmeta();
-        if (ASSERT(meta))
+        if (contact_c *meta = cc->getmeta())
         {
             if (prf().calc_history(meta->getkey()) == 0)
             {
@@ -996,21 +1040,34 @@ void contacts_c::kill(const contact_key_s &ck)
                 if (live == 0)
                 {
                     meta->set_state(CS_ROTTEN);
-                    gmsg<ISOGM_UPDATE_CONTACT_V>(meta).send();
+                    gmsg<ISOGM_V_UPDATE_CONTACT>(meta).send();
                     prf().killcontact(meta->getkey());
                     prf().kill_history(meta->getkey());
                     del(meta->getkey());
                     g_app->cancel_file_transfers( meta->getkey() );
                 }
             }
+        } else
+        {
+            ASSERT(cc->getkey().is_group() || cc->get_state() == CS_UNKNOWN);
         }
 
         if (active_protocol_c *ap = prf().ap(cc->getkey().protoid))
             ap->del_contact(cc->getkey().contactid);
 
+        killcc = !is_groupchat_member(cc->getkey());
+        if (!killcc)
+        {
+            cc->set_state(CS_UNKNOWN);
+            prf().dirtycontact(cc->getkey());
+        }
     }
-    prf().killcontact(cc->getkey());
-    del(cc->getkey());
+
+    if (killcc)
+    {
+        prf().killcontact(cc->getkey());
+        del(cc->getkey());
+    }
 }
 
 contact_c *contacts_c::create_new_meta()
@@ -1080,24 +1137,49 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
         ts::aint index;
         if (!arr.find_sorted(index, contact.key))
         {
-            c = create_new_meta()->subgetadd( contact.key );
-            
-            if (CHECK(!arr.find_sorted(index, c->getkey()))) // find index again due create_new_meta can make current index invalid
+            if (contact.key.is_group())
+            {
+                c = TSNEW(contact_c, contact.key);
+                c->options().unmasked().init( contact_c::F_PERMANENT_GCHAT, 0 != (contact.mask & CDF_PERMANENT_GCHAT) );
                 arr.insert(index, c);
+                prf().purifycontact(c->getkey());
+                serious_change = contact.key.protoid;
 
-            prf().purifycontact( c->getkey() );
+            } else if (contact.state == CS_UNKNOWN)
+            {
+                c = TSNEW(contact_c, contact.key);
+                c->set_state( CS_UNKNOWN );
+                arr.insert(index, c);
+                prf().purifycontact(c->getkey());
+                serious_change = contact.key.protoid;
 
-            // serious change - new contact added. proto data must be saved
-            serious_change = c->getkey().protoid;
+            } else
+            {
+                c = create_new_meta()->subgetadd(contact.key);
+
+                if (CHECK(!arr.find_sorted(index, c->getkey()))) // find index again due create_new_meta can make current index invalid
+                    arr.insert(index, c);
+
+                prf().purifycontact(c->getkey());
+
+                // serious change - new contact added. proto data must be saved
+                serious_change = c->getkey().protoid;
+            }
+
 
         } else
         {
             c = arr.get(index);
-            ASSERT( c->getmeta() != nullptr ); // it must be part of metacontact
+            if (c->getkey().is_group() || c->get_options().is(contact_c::F_UNKNOWN))
+            {
+            } else
+            {
+                ASSERT(c->getmeta() != nullptr); // it must be part of metacontact
+            }
         }
     }
 
-    if (0 != (contact.mask & CDM_PUBID))
+    if (!contact.key.is_group() && 0 != (contact.mask & CDM_PUBID))
     {
         // allow change pubid if
         // - not yet set
@@ -1105,6 +1187,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
         // - just accepted contact (Tox: because send request pubid and accepted pubid are not same (see nospam tail) )
 
         bool accepted = c->get_state() == CS_INVITE_SEND && (0 != (contact.mask & CDM_STATE)) && ( contact.state == CS_ONLINE || contact.state == CS_OFFLINE );
+        if (!accepted) accepted = c->get_state() == CS_INVITE_RECEIVE && (0 != (contact.mask & CDM_STATE)) && ( contact.state == CS_INVITE_SEND || contact.state == CS_ONLINE || contact.state == CS_OFFLINE );
         if (c->get_pubid().is_empty() || is_self || accepted)
             c->set_pubid(contact.pubid);
         else
@@ -1125,29 +1208,43 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
         contact_state_e oldst = c->get_state();
         c->set_state( contact.state );
 
-        if ( contact.state == CS_ONLINE || contact.state == CS_OFFLINE )
-        {
-            if ( oldst == CS_INVITE_RECEIVE )
-            {
-                // accept ok
-                gmsg<ISOGM_MESSAGE> msg( c, &get_self(), MTA_ACCEPT_OK );
-                c->fix_history(MTA_FRIEND_REQUEST, MTA_OLD_REQUEST);
-                msg.send();
-                serious_change = c->getkey().protoid;
-                c->reselect(true);
-
-            } else if (oldst == CS_INVITE_SEND)
-            {
-                // accepted
-                gmsg<ISOGM_MESSAGE>( c, &get_self(), MTA_ACCEPTED ).send();
-                serious_change = c->getkey().protoid;
-            }
-        }
-
         if ( c->get_state() != oldst )
         {
+            if (contact.state == CS_ONLINE || contact.state == CS_OFFLINE)
+            {
+                if (oldst == CS_INVITE_RECEIVE)
+                {
+                    // accept ok
+                    gmsg<ISOGM_MESSAGE> msg(c, &get_self(), MTA_ACCEPT_OK);
+                    c->fix_history(MTA_FRIEND_REQUEST, MTA_OLD_REQUEST);
+                    msg.send();
+                    serious_change = c->getkey().protoid;
+                    c->reselect(true);
+
+
+                }
+                else if (oldst == CS_INVITE_SEND)
+                {
+                    // accepted
+                    // avoid friend request
+                    c->fix_history(MTA_FRIEND_REQUEST, MTA_OLD_REQUEST);
+                    gmsg<ISOGM_MESSAGE>(c, &get_self(), MTA_ACCEPTED).send();
+                    serious_change = c->getkey().protoid;
+                    c->reselect(true);
+                }
+            }
+
             if (c->get_state() == CS_INVITE_RECEIVE)
                 c->check_invite();
+
+            if ( CS_UNKNOWN == oldst )
+            {
+                contact_c *meta = create_new_meta();
+                meta->subadd(c);
+                serious_change = c->getkey().protoid;
+            }
+
+            is_groupchat_member( c->getkey() );
         }
 
         prf().dirty_sort();
@@ -1175,11 +1272,18 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
         }
     }
 
+    if (c->getkey().is_group() && 0 != (contact.mask & CDM_MEMBERS))
+    {
+        c->subclear();
+        for(int cid : contact.members)
+            if (contact_c *m = find( contact_key_s(cid, c->getkey().protoid) ))
+                c->subaddgchat(m);
+    }
 
     prf().dirtycontact(c->getkey());
 
-    gmsg<ISOGM_UPDATE_CONTACT_V>( c ).send();
-
+    if (c->get_state() != CS_UNKNOWN)
+        gmsg<ISOGM_V_UPDATE_CONTACT>( c ).send();
 
     if (serious_change)
     {
@@ -1211,6 +1315,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_DELIVERED>&d)
     contact_key_s historian;
     if (prf().change_history_item(d.utag, historian))
     {
+    do_deliver_stuff:
         contact_c *c = find(historian);
         if (CHECK(c))
         {
@@ -1224,6 +1329,16 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_DELIVERED>&d)
                 return false;
             });
         }
+    } else
+    {
+        // may be no history saved? try find historian
+        for(contact_c *c : arr)
+            if (c->is_rootcontact())
+                if (c->find_post_by_utag(d.utag))
+                {
+                    historian = c->getkey();
+                    goto do_deliver_stuff;
+                }
     }
 
     return 0;
@@ -1338,8 +1453,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
 ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
 {
     contact_c *sender = find( imsg.sender );
-    if (sender == nullptr) return 0; // sender. no sender - no message
-
+    if (!sender) return 0;
     contact_c *historian = get_historian( sender, &get_self() );
     prf().dirty_sort();
     switch (imsg.mt)
@@ -1369,7 +1483,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
     }
 
 
-    gmsg<ISOGM_MESSAGE> msg(sender, &get_self(), imsg.mt);
+    gmsg<ISOGM_MESSAGE> msg(sender, imsg.groupchat.is_empty() ? &get_self() : contacts().find(imsg.groupchat), imsg.mt);
     msg.create_time = imsg.create_time;
     msg.post.message.set_as_utf8( imsg.msgutf8 );
     msg.post.message.trim();

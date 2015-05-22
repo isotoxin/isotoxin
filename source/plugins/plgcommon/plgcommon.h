@@ -154,7 +154,7 @@ inline wstr_c fn_change_name_ext(const wstr_c &full, const wsptr &name, const ws
     return wstr_c(wsptr(full.cstr(), i)).append(name).append_char('.').append(ext);
 }
 
-
+str_c utf8clamp( const asptr &utf8, int maxbytesize );
 
 
 template <class T> class shared_ptr

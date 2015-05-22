@@ -101,6 +101,19 @@ bool AssertFailed(const char *file, int line, const char *s, ...)
     return Warning("Assert failed at %s (%i)\n%s", file, line, str);
 }
 
+str_c utf8clamp( const asptr &utf8, int maxbytesize )
+{
+    str_c a( utf8 );
+    wstr_c wide;
+    while( a.get_length() > maxbytesize )
+    {
+        if (wide.is_empty()) wide.set_as_utf8(a);
+        wide.trunc_length();
+        a = to_utf8(wide);
+    }
+    return a;
+}
+
 void fifo_stream_c::get_data(int offset, byte *dest, int size)
 {
     int ost1 = buf[readbuf].size() - readpos;

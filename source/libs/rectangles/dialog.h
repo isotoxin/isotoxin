@@ -235,7 +235,7 @@ protected:
 
     /*virtual*/ void children_repos_info(cri_s &info) const override;
     virtual void getbutton(bcreate_s &bcr) {};
-    virtual int additions( ts::irect & border ) { border = ts::irect(0); return 0; };
+    virtual int additions( ts::irect & b ) { b = ts::irect(0); return 0; };
     void reset(bool keep_skip = false); // kill all children and recreate default buttons (until keep_skip)
 
     virtual void tabselected(ts::uint32 mask) {}

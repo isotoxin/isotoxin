@@ -334,7 +334,7 @@ bool gui_dialog_c::combo_drop(RID rid, GUIPARAM param)
         return true;
     }
     if (tf.is_disabled()) return true;
-    const menu_c *mnu = (const menu_c *)tf.get_data();
+    const menu_c *mnu = (const menu_c *)tf.get_customdata();
     tf.popupmenu = &gui_popup_menu_c::show(ts::ivec3(tf.getprops().screenrect().lb(),0),*mnu).host(tf.getrid());
     return true;
 }
@@ -344,7 +344,7 @@ void gui_dialog_c::set_combik_menu( const ts::asptr& ctl_name, const menu_c& m )
     if (RID crid = find(ctl_name))
     {
         gui_control_c &ctl = HOLD(crid).as<gui_control_c>();
-        ctl.set_data_obj<menu_c>( m );
+        ctl.set_customdata_obj<menu_c>( m );
 
         for (description_s &d : descs)
         {
@@ -413,7 +413,7 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
         tf.disable_caret();
         tf.arrow_cursor();
         tf.on_lbclick = DELEGATE( &tf, push_selector );
-        tf.set_data_obj<menu_c>( *addition->menu );
+        tf.set_customdata_obj<menu_c>( *addition->menu );
     } else if (role == TFR_TEXT_FILED)
     {
         tf.selectall();
@@ -736,15 +736,17 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
                 struct getta
                 {
                     ts::tmp_array_inplace_t< radio_item_s, 4 > ris;
+                    ts::str_c radioname;
 
                     bool operator()(getta&, const ts::wsptr&) { return true; } // skip separator
                     bool operator()(getta&, const ts::wsptr&, const menu_c&) { return true; } // skip submenu
-                    bool operator()(getta&, const ts::wstr_c&txt, ts::uint32 flags, MENUHANDLER h, const ts::str_c&prm)
+                    bool operator()(getta&g, const ts::wstr_c&txt, ts::uint32 flags, MENUHANDLER h, const ts::str_c&prm)
                     {
-                        ris.addnew(txt, (GUIPARAM)prm.as_int());
+                        ris.addnew(txt, (GUIPARAM)prm.as_int(), g.radioname + prm);
                         return true;
                     }
                 } s;
+                s.radioname = d.name;
 
                 d.items.iterate_items(s, s);
                 radio(s.ris.array(), DELEGATE(&d, updvalue2), (GUIPARAM)d.text.as_int());

@@ -10,6 +10,7 @@ enum proto_features_e
     PF_VIDEO_CALLS          = (1 << 3),     // video calls supported
     PF_SEND_FILE            = (1 << 4),     // send (and recv, of course) files supported
     PF_GROUP_CHAT           = (1 << 5),     // group chats supported
+    PF_GROUP_CHAT_PERMANENT = (1 << 6),     // permanent group chats supported
 };
 
 enum proxy_support_e
@@ -29,6 +30,18 @@ enum cd_mask_e
     CDM_ONLINE_STATE    = 1 << 4,
     CDM_GENDER          = 1 << 5,
     CDM_AVATAR_TAG      = 1 << 6,
+    CDM_MEMBERS         = 1 << 7,
+    CDM_PERMISSIONS     = 1 << 8,
+
+    CDF_PERMANENT_GCHAT = CDM_PUBID,
+};
+
+enum groupchat_permission_e
+{
+    GCP_CHANGE_NAME     = 1 << 0,
+    GCP_DELETE_GCHAT    = 1 << 1,
+    GCP_ADD_CONTACT     = 1 << 2,
+    GCP_KICK_CONTACT    = 1 << 3,
 };
 
 enum cmd_result_e
@@ -86,6 +99,7 @@ enum contact_state_e : unsigned // hard order
     CS_OFFLINE,
     CS_ROTTEN,
     CS_WAIT,
+    CS_UNKNOWN,         // unknown groupchat member
 
     contact_state_check,
     contact_state_bits = 1 + (::boost::static_log2<(contact_state_check - 1)>::value)

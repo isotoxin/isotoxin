@@ -619,7 +619,7 @@ public:
                 if (c && owner->getrid() != rid) // query other
                 {
                     bool _visible = true;
-                    int tag = (int)ts::ptr_cast<gui_control_c *>(owner)->get_data();
+                    int tag = (int)ts::ptr_cast<gui_control_c *>(owner)->get_customdata();
                     switch (tag)
                     {
                     case ABT_CLOSE:

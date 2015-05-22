@@ -609,7 +609,7 @@ public:
     }
 
     const TCHARACTER * operator()() const { return buf.s; }
-    TCHARACTER * operator()() { ZSTRINGS_ASSERT(false, "str_core_part_c is read only"); return nullptr; }
+    TCHARACTER * operator()() { ZSTRINGS_ASSERT(false, "str_core_part_c is read only"); return nullptr; } //-V659
     ZSTRINGS_SIGNED len() const { return buf.l; }
     ZSTRINGS_SIGNED cap() const { return 0; }
 
