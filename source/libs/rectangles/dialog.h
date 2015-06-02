@@ -10,11 +10,13 @@ template<> struct MAKE_CHILD<gui_listitem_c> : public _PCHILD(gui_listitem_c)
 {
     ts::wstr_c text;
     ts::str_c  param;
+    ts::str_c  themerect;
     GETMENU_FUNC gm;
     MAKE_CHILD(RID parent_, const ts::wstr_c &text, const ts::str_c &param) :text(text), param(param) { parent = parent_; }
     ~MAKE_CHILD();
 
     MAKE_CHILD &operator<<( GETMENU_FUNC _gm ) { gm = _gm; return *this; }
+    MAKE_CHILD &threct( const ts::asptr&thr ) { themerect = thr; return *this; }
 };
 
 class gui_listitem_c : public gui_label_c
@@ -23,17 +25,21 @@ class gui_listitem_c : public gui_label_c
     DUMMY(gui_listitem_c);
     ts::str_c  param;
     GETMENU_FUNC gm; // get menu on rite click
+    int height = 0;
 
     GM_RECEIVER( gui_listitem_c, GM_POPUPMENU_DIED );
 public:
 
-    gui_listitem_c(MAKE_CHILD<gui_listitem_c> &data) :gui_label_c(data), param(data.param) { set_theme_rect(CONSTASTR("lstitem"), false); }
+    gui_listitem_c(MAKE_CHILD<gui_listitem_c> &data);
     /*virtual*/ ~gui_listitem_c();
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ ts::ivec2 get_max_size() const override;
     /*virtual*/ void created() override;
+    /*virtual*/ void set_text(const ts::wstr_c&text) override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+
+    /*virtual*/ int get_height_by_width(int width) const override;
 
     const ts::str_c  &getparam() const {return param;}
 };
@@ -79,6 +85,7 @@ protected:
             _STATIC,
             _STATIC_HIDDEN,
             _PATH,
+            _FILE,
             _TEXT,
             _COMBIK,
             _LIST,
@@ -95,7 +102,7 @@ protected:
 
         bool updvalue( const ts::wstr_c &t )
         {
-            ASSERT( _TEXT == ctl || _PATH == ctl );
+            ASSERT( _TEXT == ctl || _PATH == ctl || _FILE == ctl );
             if (textchecker && textchecker(t))
             {
                 text = t;
@@ -155,6 +162,7 @@ protected:
         void page_header( const ts::wsptr& text );
         description_s& vspace( int h = 5, GUIPARAMHANDLER oncreatehanler = nullptr );
         description_s& path( const ts::wsptr &desc, const ts::wsptr &path, gui_textedit_c::TEXTCHECKFUNC checker = gui_textedit_c::TEXTCHECKFUNC() );
+        description_s& file( const ts::wsptr &desc, const ts::wsptr &iroot, const ts::wsptr &fn, gui_textedit_c::TEXTCHECKFUNC checker = gui_textedit_c::TEXTCHECKFUNC() );
         description_s& textfield( const ts::wsptr &desc, const ts::wsptr &val, gui_textedit_c::TEXTCHECKFUNC checker);
         description_s& textfieldml( const ts::wsptr &desc, const ts::wsptr &val, gui_textedit_c::TEXTCHECKFUNC checker, int lines = 3); // multiline
         description_s& combik( const ts::wsptr &desc);
@@ -193,7 +201,9 @@ protected:
     };
 
     ts::wstr_c label_path_selector_caption;
+    ts::wstr_c label_file_selector_caption;
 
+    bool file_selector(RID, GUIPARAM prm);
     bool path_selector(RID, GUIPARAM prm);
     bool path_explore(RID, GUIPARAM prm);
     bool combo_drop(RID, GUIPARAM prm);
@@ -221,6 +231,7 @@ protected:
         TFR_TEXT_FILED_RO,
         TFR_PATH_SELECTOR,
         TFR_PATH_VIEWER,
+        TFR_FILE_SELECTOR,
         TFR_COMBO,
     };
 

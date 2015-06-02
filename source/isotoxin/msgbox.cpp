@@ -45,7 +45,7 @@ void dialog_msgbox_c::getbutton(bcreate_s &bcr)
     descmaker dm(descs);
     dm << 1;
 
-    dm().label(m_params.desc);
+    dm().label(CONSTWSTR("<p=c>") + m_params.desc);
 
     return 0;
 }

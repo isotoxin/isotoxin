@@ -44,7 +44,6 @@ class gui_contact_item_c : public gui_label_c
     static const ts::flags32_s::BITS  F_SKIPUPDATE  = FLAGS_FREEBITSTART_LABEL << 4;
     static const ts::flags32_s::BITS  F_LBDN        = FLAGS_FREEBITSTART_LABEL << 5;
     static const ts::flags32_s::BITS  F_DNDDRAW     = FLAGS_FREEBITSTART_LABEL << 6;
-    static const ts::flags32_s::BITS  F_OVERAVATAR  = FLAGS_FREEBITSTART_LABEL << 7; // mouse cursor above avatar
 
     friend class contact_c;
     friend class contacts_c;

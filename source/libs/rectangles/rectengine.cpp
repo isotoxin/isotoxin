@@ -2024,7 +2024,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
         {
             const hover_data_s &hd = gui->get_hoverdata(data.mouse.screenpos);
             ts::safe_ptr<rectengine_root_c> me(this);
-            if (!focuschanged) gui->set_focus(hd.rid);
+            if (!focuschanged && SQ_MOUSE_LUP != qp) gui->set_focus(hd.rid);
             if (!me) return false;
             if (hd.rid == getrid())
             {

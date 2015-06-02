@@ -27,8 +27,8 @@ enum commands_e
     AQ_OFFLINE,
     AQ_OSTATE,
 
-    HA_PROXY_SETTINGS,
-    AQ_PROXY_SETTINGS,
+    HA_CONFIGURABLE,    // some configurable parameters from plugin to application
+    AQ_CONFIGURABLE,
 
     HQ_SAVE,
     AQ_SAVE_CONFIG,

@@ -230,7 +230,7 @@ void text_rect_c::render_texture( rectangle_update_s * updr, fastdelegate::FastD
 
 bool text_rect_c::set_text(const wstr_c &text_, CUSTOM_TAG_PARSER ctp, bool do_parse_and_render_texture)
 {
-    bool dirty = texture.ajust(size,false) | flags.is(F_DIRTY);
+    bool dirty = flags.is(F_INVALID_SIZE) || texture.ajust(size,false) || flags.is(F_DIRTY);
 
 	if (dirty || !text.equals(text_))
 	{

@@ -110,9 +110,9 @@ template<typename T> struct TSNEWDEL
 #endif
 
 #define DEBUG_BREAK() __debugbreak()
-#define UNFINISHED(...) __pragma(message(__LOC__ "unfinished function: " __FUNCTION__ __VA_ARGS__))
-#define STUB(...) __pragma(message(__LOC__ "unfinished function: " __FUNCTION__ __VA_ARGS__)); WARNING( __LOC__ "unfinished function: " __FUNCTION__ __VA_ARGS__ )
-#define STOPSTUB(...) __pragma(message(__LOC__ "unfinished function: " __FUNCTION__ __VA_ARGS__)); ERROR( __LOC__ "unfinished function: " __FUNCTION__ __VA_ARGS__ )
+#define UNFINISHED(...) __pragma(message(__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__))
+#define STUB(...) __pragma(message(__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__)); WARNING( __LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__ )
+#define STOPSTUB(...) __pragma(message(__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__)); ERROR( __LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__ )
 #define NOP() ASSERT((1,true))
 
 #define ARRAY_SIZE( a ) ( sizeof(a)/sizeof(a[0]) )

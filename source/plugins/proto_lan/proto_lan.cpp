@@ -23,7 +23,7 @@ void __stdcall get_info(proto_info_s *info)
     info->max_avatar_size = 0;
     info->priority = 1000;
     info->features = PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT | PF_AUDIO_CALLS | PF_SEND_FILE;
-    info->proxy_support = 0;
+    info->connection_features = 0;
 
     info->audio_fmt.sample_rate = AUDIO_SAMPLERATE;
     info->audio_fmt.channels = AUDIO_CHANNELS;

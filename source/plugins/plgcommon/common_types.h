@@ -11,14 +11,20 @@ enum proto_features_e
     PF_SEND_FILE            = (1 << 4),     // send (and recv, of course) files supported
     PF_GROUP_CHAT           = (1 << 5),     // group chats supported
     PF_GROUP_CHAT_PERMANENT = (1 << 6),     // permanent group chats supported
+    PF_IMPORT               = (1 << 7),     // configuration import (set_config will receive imported file as is)
 };
 
-enum proxy_support_e
+enum connection_features_e
 {
-    PROXY_SUPPORT_HTTP = 1,
-    PROXY_SUPPORT_SOCKS4 = 2,
-    PROXY_SUPPORT_SOCKS5 = 4,
+    CF_PROXY_SUPPORT_HTTP   = 1,
+    CF_PROXY_SUPPORT_SOCKS4 = 2,
+    CF_PROXY_SUPPORT_SOCKS5 = 4,
+    CF_UDP_OPTION           = 8,
+    CF_SERVER_OPTION        = 16,
+
+    CF_PROXY_MASK = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_SOCKS4 | CF_PROXY_SUPPORT_SOCKS5,
 };
+
 
 enum cd_mask_e
 {
@@ -125,3 +131,8 @@ enum contact_gender_e : unsigned
     contact_gender_bits = 1 + (::boost::static_log2<(contact_gender_count - 1)>::value)
 };
 
+// known configurable fields
+#define CFGF_PROXY_TYPE     "proxy_type"
+#define CFGF_PROXY_ADDR     "proxy_addr"
+#define CFGF_UDP_ENABLE     "udp_enable"
+#define CFGF_SERVER_PORT    "server_port"

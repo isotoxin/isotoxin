@@ -3,6 +3,7 @@
 gui_isodialog_c::gui_isodialog_c(initial_rect_data_s &data) :gui_dialog_c(data)
 {
     label_path_selector_caption = TTT("Выбор папки", 21);
+    label_file_selector_caption = TTT("Выбор файла", 69);
 }
 
 gui_isodialog_c::~gui_isodialog_c()

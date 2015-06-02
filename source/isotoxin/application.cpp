@@ -263,7 +263,8 @@ static DWORD WINAPI autoupdater(LPVOID)
     {
         if (row.other.upload)
         {
-            if (find_file_transfer(row.other.utag)) break;
+            if (find_file_transfer(row.other.utag))
+                continue;
 
             contact_c *sender = contacts().find( row.other.sender );
             if (!sender)
@@ -283,6 +284,7 @@ static DWORD WINAPI autoupdater(LPVOID)
             {
                 if (sender->get_state() != CS_ONLINE) break;
                 g_app->register_file_transfer(historian->getkey(), sender->getkey(), row.other.utag, row.other.filename, 0);
+                break;
 
             } else if (row.deleted())
             {
@@ -808,7 +810,7 @@ file_transfer_s * application_c::register_file_transfer( const contact_key_s &hi
         {
             ftr.handle = nullptr;
             m_files.remove_fast(m_files.size()-1);
-            return false;
+            return nullptr;
         }
         GetFileSizeEx(ftr.handle, &ts::ref_cast<LARGE_INTEGER>(ftr.filesize) );
 

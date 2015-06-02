@@ -708,6 +708,31 @@ ts::uint32 profile_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // record history
     return second_pass_requred ? GMRBIT_CALLAGAIN : 0;
 }
 
+ts::uint32 profile_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
+{
+    bool changed = false;
+    if (ch.protoid)
+        switch (ch.pp)
+        {
+        case PP_NETWORKNAME:
+            if (auto *row = get_table_active_protocol().find<true>(ch.protoid))
+                row->other.name = ch.s, row->changed(), changed = true;
+            break;
+        case PP_USERNAME:
+            if (auto *row = get_table_active_protocol().find<true>(ch.protoid))
+                row->other.user_name = ch.s, row->changed(), changed = true;
+            break;
+        case PP_USERSTATUSMSG:
+            if (auto *row = get_table_active_protocol().find<true>(ch.protoid))
+                row->other.user_statusmsg = ch.s, row->changed(), changed = true;
+            break;
+        }
+
+    if (changed)
+        this->changed();
+
+    return 0;
+}
 
 uint64 profile_c::uniq_history_item_tag()
 {
@@ -1209,7 +1234,7 @@ ts::uint32 profile_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
         
         for( const auto& row : table_active_protocol.rows )
         {
-            if (0 != (row.other.options & active_protocol_data_s::O_SUSPENDED)) continue;
+            //if (0 != (row.other.options & active_protocol_data_s::O_SUSPENDED)) continue;
             if ( active_protocol_c *ap = this->ap(row.id) )
                 continue;
             protocols.add( TSNEW(active_protocol_c, row.id, row.other) );

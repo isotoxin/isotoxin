@@ -814,9 +814,15 @@ contact_c *contacts_c::find_subself(int protoid) const
 
 void contacts_c::nomore_proto(int id)
 {
-    for (contact_c *c : arr)
-        if (!c->is_meta() && c->getkey().protoid == id)
-            c->protohit(false);
+    ts::tmp_array_inplace_t<contact_key_s, 16> c2d;
+    for( int i = arr.size() - 1; i>=0 ;--i )
+    {
+        contact_c *c = arr.get(i);
+        if (c->getkey().protoid == id && ( c->getkey().is_group() || !c->is_meta()))
+            c2d.add(c->getkey());
+    }
+    for( const contact_key_s &ck : c2d )
+        kill(ck);
 }
 
 bool contacts_c::present_protoid(int id) const

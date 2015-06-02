@@ -4,8 +4,20 @@
 MAKE_CHILD<gui_listitem_c>::~MAKE_CHILD()
 {
     MODIFY(get()).visible(true);
+    //get().set_autoheight();
     get().set_text( text );
     get().gm = gm;
+}
+
+gui_listitem_c::gui_listitem_c(MAKE_CHILD<gui_listitem_c> &data) :gui_label_c(data), param(data.param)
+{
+    if (data.themerect.is_empty())
+        set_theme_rect(CONSTASTR("lstitem"), false);
+    else
+        set_theme_rect(data.themerect, false);
+
+    height = 1;
+    textrect.make_dirty(true, true, true);
 }
 
 gui_listitem_c::~gui_listitem_c()
@@ -14,9 +26,7 @@ gui_listitem_c::~gui_listitem_c()
 
 /*virtual*/ ts::ivec2 gui_listitem_c::get_min_size() const
 {
-    int h = get_font()->height;
-    if (const theme_rect_s *thr = themerect()) h += thr->clientborder.lt.y + thr->clientborder.rb.y;
-    return ts::ivec2(60, h + 4);
+    return ts::ivec2(60, height);
 }
 
 /*virtual*/ ts::ivec2 gui_listitem_c::get_max_size() const
@@ -30,6 +40,27 @@ void gui_listitem_c::created()
 {
     defaultthrdraw = DTHRO_BASE;
     __super::created();
+}
+
+/*virtual*/ int gui_listitem_c::get_height_by_width(int width) const
+{
+    int h = 0;
+    if (!textrect.get_text().is_empty())
+        h = textrect.calc_text_size(width, custom_tag_parser_delegate()).y + 4;
+    if (const theme_rect_s *thr = themerect()) h += thr->clientborder.lt.y + thr->clientborder.rb.y;
+    return h;
+}
+
+
+void gui_listitem_c::set_text(const ts::wstr_c&t)
+{
+    __super::set_text(t);
+    int h = get_height_by_width(-INT_MAX);
+    if (h != height)
+    {
+        height = h;
+        MODIFY(*this).sizeh(height);
+    }
 }
 
 /*virtual*/ bool gui_listitem_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -58,6 +89,9 @@ void gui_listitem_c::created()
             return false;
         case SQ_YOU_WANNA_DIE:
             return param.equals(data.strparam);
+        case SQ_RECT_CHANGED:
+            textrect.make_dirty(false, false, true);
+            break;
     }
     return __super::sq_evt(qp, rid, data);
 }
@@ -158,6 +192,16 @@ gui_dialog_c::description_s& gui_dialog_c::description_s::path( const ts::wsptr 
     return *this;
 }
 
+gui_dialog_c::description_s& gui_dialog_c::description_s::file(const ts::wsptr &desc_, const ts::wsptr &iroot, const ts::wsptr &fn, gui_textedit_c::TEXTCHECKFUNC checker)
+{
+    ctl = _FILE;
+    desc = desc_;
+    text = fn;
+    hint = iroot;
+    textchecker = checker;
+    return *this;
+}
+
 gui_dialog_c::description_s& gui_dialog_c::description_s::textfield( const ts::wsptr &desc_, const ts::wsptr &val, gui_textedit_c::TEXTCHECKFUNC checker )
 {
     ctl = _TEXT;
@@ -215,15 +259,12 @@ gui_dialog_c::description_s& gui_dialog_c::description_s::list( const ts::wsptr 
 {
     ctl = _LIST;
     desc = desc_;
-    height_ = lines * ts::g_default_text_font->height;
+    height_ = lines > 0 ? (lines * ts::g_default_text_font->height) : (-lines);
     return *this;
 }
 
 gui_dialog_c::~gui_dialog_c()
 {
-    if (is_root())
-    {
-    }
 }
 
 RID gui_dialog_c::find( const ts::asptr &name ) const
@@ -290,6 +331,45 @@ public:
 };
 
 }
+#ifdef _WIN32
+namespace ts {
+extern HWND g_main_window;
+};
+#endif
+
+bool gui_dialog_c::file_selector(RID, GUIPARAM param)
+{
+    if (is_disabled()) return true;
+    gui_textfield_c &tf = HOLD(RID::from_ptr(param)).as<gui_textfield_c>();
+    ts::wstr_c curp = tf.get_text();
+    if (curp.is_empty())
+        curp = tf.get_customdata_obj<ts::wstr_c>();
+    gui->app_path_expand_env(curp);
+
+
+    ++sysmodal;
+#ifdef _WIN32
+    /*
+        извините за этот небольшой win32 хак, но
+        если системному окну выбора папки не прописать в качестве владельца текущий диалог,
+        то системное окно начнет вести себя не вполне корректно
+    */
+    HWND ow = ts::g_main_window;
+    ts::g_main_window = getroot()->get_hwnd();
+#endif
+    ts::wstr_c fn = ts::get_load_filename_dialog(ts::fn_get_path(curp), CONSTWSTR(""), CONSTWSTR(""), nullptr, label_file_selector_caption);
+#ifdef _WIN32
+    ts::g_main_window = ow;
+#endif
+    --sysmodal;
+
+    if (!fn.is_empty())
+    {
+        tf.set_text(fn);
+    }
+
+    return true;
+}
 
 bool gui_dialog_c::path_selector(RID, GUIPARAM param)
 {
@@ -305,7 +385,19 @@ bool gui_dialog_c::path_selector(RID, GUIPARAM param)
     }
 
     ++sysmodal;
+#ifdef _WIN32
+    /*
+        извините за этот небольшой win32 хак, но
+        если системному окну выбора папки не прописать в качестве владельца текущий диалог,
+        то системное окно начнет вести себя не вполне корректно
+    */
+    HWND ow = ts::g_main_window;
+    ts::g_main_window = getroot()->get_hwnd();
+#endif
     ts::wstr_c path = ts::get_save_directory_dialog(CONSTWSTR("/"), label_path_selector_caption, curp);
+#ifdef _WIN32
+    ts::g_main_window = ow;
+#endif
     --sysmodal;
     if (!path.is_empty())
     {
@@ -345,14 +437,14 @@ void gui_dialog_c::set_combik_menu( const ts::asptr& ctl_name, const menu_c& m )
     {
         gui_control_c &ctl = HOLD(crid).as<gui_control_c>();
         ctl.set_customdata_obj<menu_c>( m );
+    }
 
-        for (description_s &d : descs)
+    for (description_s &d : descs)
+    {
+        if (d.ctl == description_s::_COMBIK && d.name == ctl_name)
         {
-            if (d.ctl == description_s::_COMBIK && d.name == ctl_name)
-            {
-                d.setmenu(m);
-                break;
-            }
+            d.setmenu(m);
+            break;
         }
     }
 }
@@ -385,6 +477,9 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
     case TFR_COMBO:
         selector = DELEGATE(this, combo_drop);
         break;
+    case TFR_FILE_SELECTOR:
+        selector = DELEGATE(this, file_selector);
+        break;
         
     }
     
@@ -406,6 +501,10 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
         if (const theme_rect_s *thr = tf.themerect()) c = thr->deftextcolor;
         tf.set_color( c );
         tf.set_readonly();
+    } else if (role == TFR_FILE_SELECTOR)
+    {
+        tf.set_customdata_obj<ts::wstr_c>( addition->wstrparam.get() );
+
     } else if (role == TFR_COMBO)
     {
         creator.selectorface = BUTTON_FACE(combo);
@@ -704,6 +803,11 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
         case description_s::_PATH:
             rctl = textfield(d.text,MAX_PATH, d.readonly_ ? TFR_PATH_VIEWER : TFR_PATH_SELECTOR, d.readonly_ ? nullptr : DELEGATE(&d, updvalue), nullptr, 0, parent);
             break;
+        case description_s::_FILE: {
+            evt_data_s dd;
+            dd.wstrparam = d.hint.as_sptr();
+            rctl = textfield(d.text, MAX_PATH, TFR_FILE_SELECTOR, d.readonly_ ? nullptr : DELEGATE(&d, updvalue), &dd, 0, parent);
+            break; }
         case description_s::_COMBIK:
             if (!d.items.is_empty())
             {

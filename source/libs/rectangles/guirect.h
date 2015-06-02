@@ -179,6 +179,7 @@ struct evt_data_s
         bcreate_s *btn;
         const menu_c *menu;
         ts::make_pod<ts::asptr> strparam;
+        ts::make_pod<ts::wsptr> wstrparam;
 
         struct
         {

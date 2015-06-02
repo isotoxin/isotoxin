@@ -46,6 +46,18 @@ INLINE time_t now()
     return t;
 }
 
+enum mpd_e
+{
+    MPD_UNAME = SETBIT(0),
+    MPD_USTATUS = SETBIT(1),
+    MPD_NAME = SETBIT(2),
+    MPD_MODULE = SETBIT(3),
+    MPD_ID = SETBIT(4),
+    MPD_STATE = SETBIT(5),
+};
+
+ts::wstr_c make_proto_desc(int mask);
+
 template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_color( ts::TSCOLOR c )
 {
     ts::str_t<TCHARACTER> s( CONSTSTR(TCHARACTER,"<color=#") );
@@ -235,13 +247,15 @@ enum profileparam_e
     PP_ONLINESTATUS,
     PP_AVATAR,
     PP_MSGOPTIONS,
+    PP_NETWORKNAME,
 
     PP_MICDEVICE,
 };
 template<> struct gmsg<ISOGM_CHANGED_PROFILEPARAM> : public gmsgbase
 {
-    gmsg(profileparam_e pp, const ts::wstr_c &s) :gmsgbase(ISOGM_CHANGED_PROFILEPARAM), pp(pp), s(s) {}
-    gmsg(profileparam_e pp) :gmsgbase(ISOGM_CHANGED_PROFILEPARAM), pp(pp) {}
+    gmsg(int protoid, profileparam_e pp, const ts::wstr_c &s) :gmsgbase(ISOGM_CHANGED_PROFILEPARAM), protoid(protoid), pp(pp), s(s) {}
+    gmsg(int protoid, profileparam_e pp) :gmsgbase(ISOGM_CHANGED_PROFILEPARAM), protoid(protoid), pp(pp) {}
+    int protoid;
     profileparam_e pp;
     ts::wstr_c s;
 };

@@ -147,12 +147,12 @@ void dialog_firstrun_c::go2page(int page_)
         {
             radio_item_s items[] =
             {
-                radio_item_s(TTT("Всё по умолчанию",25), (GUIPARAM)true, CONSTASTR("radio00")),
-                radio_item_s(TTT("Буду настраивать",26), (GUIPARAM)false)
+                radio_item_s(TTT("Всё по умолчанию",25), (GUIPARAM)1, CONSTASTR("radio00")),
+                radio_item_s(TTT("Буду настраивать",26), (GUIPARAM)0)
             };
 
             label( ts::wstr_c(CONSTWSTR("<l>")).append(TTT("Выбор",115)).append(CONSTWSTR("</l>")) );
-            radio(ARRAY_WRAPPER(items), DELEGATE(this, noob_or_father), (GUIPARAM)(i_am_noob && !developing));
+            radio(ARRAY_WRAPPER(items), DELEGATE(this, noob_or_father), (GUIPARAM)((i_am_noob && !developing) ? 1 : 0));
 
             if (developing) ctlenable( CONSTASTR("radio00"), false );
         }

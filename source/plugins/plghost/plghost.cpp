@@ -23,7 +23,7 @@ static void __stdcall save();
 static void __stdcall on_save(const void *data, int dlen, void *param);
 static void __stdcall play_audio(int channel_id, const audio_format_s *audio_format, const void *frame, int framesize);
 static void __stdcall close_audio(int channel_id);
-static void __stdcall proxy_settings(int proxy_type, const char *proxy_address);
+static void __stdcall configurable(int n, const char **fields, const char **values);
 static void __stdcall avatar_data(int cid, int tag, const void *avatar_body, int avatar_body_size);
 static void __stdcall incoming_file(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
 static void __stdcall file_portion(u64 utag, u64 offset, const void *portion, int portion_size);
@@ -87,7 +87,7 @@ struct protolib_s
         on_save,
         play_audio,
         close_audio,
-        proxy_settings,
+        configurable,
         avatar_data,
         incoming_file,
         file_portion,
@@ -526,7 +526,8 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                     outstr.set( asptr(info.protocol_name) ).append(CONSTASTR(": ")).append(asptr(info.description));
 
                     w << outstr.as_sptr();
-                    w << info.proxy_support;
+                    w << info.features;
+                    w << info.connection_features;
                     ++cnt;
 
                     FreeLibrary(l);
@@ -577,7 +578,6 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                 << pi.audio_fmt.sample_rate
                 << pi.audio_fmt.channels
                 << pi.audio_fmt.bits
-                << (unsigned short)pi.proxy_support
                 ;
 
         }
@@ -783,13 +783,17 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             protolib.functions->call(id, &cinf);
         }
         break;
-    case AQ_PROXY_SETTINGS:
+    case AQ_CONFIGURABLE:
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            int proxy_type = r.get<int>();
-            str_c proxy_addr = r.getastr();
-            protolib.functions->proxy_settings(proxy_type, proxy_addr.cstr());
+            int n = r.get<int>();
+            for(int i=0;i<n;++i)
+            {
+                str_c f = r.getastr();
+                str_c v = r.getastr();
+                protolib.functions->configurable(f, v);
+            }
         }
         break;
     case AQ_FILE_SEND:
@@ -935,9 +939,15 @@ static void __stdcall close_audio(int cid)
     IPCW(HQ_CLOSE_AUDIO) << cid;
 }
 
-static void __stdcall proxy_settings(int proxy_type, const char *proxy_address)
+static void __stdcall configurable(int n, const char **fields, const char **values)
 {
-    IPCW(HA_PROXY_SETTINGS) << proxy_type << asptr(proxy_address);
+    IPCW s(HA_CONFIGURABLE);
+    s << n;
+    for(int i=0;i<n;++i)
+    {
+        s << asptr(fields[i]);
+        s << asptr(values[i]);
+    }
 }
 
 static void __stdcall avatar_data(int cid, int tag, const void *avatar_body, int avatar_body_size)

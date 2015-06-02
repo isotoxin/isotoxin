@@ -35,7 +35,7 @@ struct proto_info_s
     int   max_avatar_size = 0; // 0 - avatars not supported
     int   priority = 0; // bigger -> higher (automatic select default subcontact of metacontact)
     int   features = 0;
-    int   proxy_support = 0;
+    int   connection_features = 0;
 
     audio_format_s audio_fmt; // required audio format for proto plugin (app will convert audio on-the-fly if hardware not support)
 };
@@ -160,7 +160,7 @@ struct host_functions_s
     void(__stdcall *on_save)(const void *data, int dlen, void *param);
     void(__stdcall *play_audio)(int cid, const audio_format_s *audio_format, const void *frame, int framesize); // plugin can request play any format
     void(__stdcall *close_audio)(int cid); // close audio player, allocated for client
-    void(__stdcall *proxy_settings)(int proxy_type, const char *proxy_address);
+    void(__stdcall *configurable)(int n, const char **fields, const char **values);
     void(__stdcall *avatar_data)(int cid, int tag, const void *avatar_body, int avatar_body_size);
     void(__stdcall *incoming_file)(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
 
@@ -196,7 +196,7 @@ struct host_functions_s
     FUNC2( void, stop_call,      int, stop_call_e ) \
     FUNC1( void, accept_call,    int ) \
     FUNC2( void, send_audio,     int, const call_info_s * ) \
-    FUNC2( void, proxy_settings, int, const char *) \
+    FUNC2( void, configurable,   const char *, const char *) \
     FUNC2( void, file_send,      int, const file_send_info_s *) \
     FUNC2( void, file_resume,    u64, u64) \
     FUNC2( void, file_control,   u64, file_control_e) \

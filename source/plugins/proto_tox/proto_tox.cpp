@@ -70,8 +70,8 @@ void __stdcall get_info( proto_info_s *info )
 
     info->priority = 500;
     info->max_avatar_size = AVATAR_MAX_DATA_SIZE;
-    info->features = PF_AUDIO_CALLS | PF_SEND_FILE | PF_GROUP_CHAT; //PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT;
-    info->proxy_support = PROXY_SUPPORT_HTTP | PROXY_SUPPORT_SOCKS5;
+    info->features = PF_IMPORT | PF_AUDIO_CALLS | PF_SEND_FILE | PF_GROUP_CHAT; //PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT;
+    info->connection_features = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_SOCKS5 | CF_UDP_OPTION | CF_SERVER_OPTION;
     info->audio_fmt.sample_rate = av_DefaultSettings.audio_sample_rate;
     info->audio_fmt.channels = (short)av_DefaultSettings.audio_channels;
     info->audio_fmt.bits = 16;
@@ -93,6 +93,7 @@ static int tox_proxy_type = 0;
 static byte avahash[TOX_HASH_LENGTH] = { 0 };
 static std::vector<byte> gavatar;
 static int gavatag = 0;
+static bool reconnect = false;
 
 void set_proxy_addr(const asptr& addr)
 {
@@ -132,6 +133,11 @@ struct state_s
     bool audio_sender_need_stop = false;
     stream_settings_s local_peer_settings[MAX_CALLS];
     static_assert(sizeof(unsigned long /*active_calls*/)*8 >= MAX_CALLS, "!");
+
+    bool allow_run_audio_sender() const
+    {
+        return !audio_sender && !audio_sender_need_stop;
+    }
 };
 
 static spinlock::syncvar<state_s> state;
@@ -170,6 +176,8 @@ enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
     chunk_other = 30,
     chunk_proxy_type,
     chunk_proxy_address,
+    chunk_server_port,
+    chunk_use_udp,
 };
 
 struct dht_node_s
@@ -2300,9 +2308,9 @@ static void prepare(const byte *data, size_t length)
     options.proxy_host = tox_proxy_host.cstr();
     options.proxy_port = 0;
     options.proxy_type = TOX_PROXY_TYPE_NONE;
-    if (tox_proxy_type & PROXY_SUPPORT_HTTP)
+    if (tox_proxy_type & CF_PROXY_SUPPORT_HTTP)
         options.proxy_type = TOX_PROXY_TYPE_HTTP;
-    if (tox_proxy_type & (PROXY_SUPPORT_SOCKS4|PROXY_SUPPORT_SOCKS5))
+    if (tox_proxy_type & (CF_PROXY_SUPPORT_SOCKS4|CF_PROXY_SUPPORT_SOCKS5))
         options.proxy_type = TOX_PROXY_TYPE_SOCKS5;
     if (TOX_PROXY_TYPE_NONE != options.proxy_type)
     {
@@ -2315,10 +2323,11 @@ static void prepare(const byte *data, size_t length)
             options.proxy_type = TOX_PROXY_TYPE_NONE;
         }
     }
-    options.udp_enabled = options.proxy_type == TOX_PROXY_TYPE_NONE;
     options.start_port = 0;
     options.end_port = 0;
-    options.tcp_port = 0; // TODO
+
+    //options.tcp_port = (uint16_t)server_port; // TODO
+    //options.udp_enabled = options.proxy_type == TOX_PROXY_TYPE_NONE;
 
     tox = tox_new(&options, data, length, nullptr);
 
@@ -2363,9 +2372,11 @@ static void prepare(const byte *data, size_t length)
     toxav_register_audio_callback(toxav, cb_toxav_audio, nullptr);
     //toxav_register_video_callback(toxav, cb_toxav_video, nullptr);
 
-
-    CloseHandle(CreateThread(nullptr, 0, audio_sender, nullptr, 0, nullptr));
-    for (; !state.lock_read()().audio_sender; Sleep(1)); // wait audio sender start
+    if (state.lock_read()().allow_run_audio_sender())
+    {
+        CloseHandle(CreateThread(nullptr, 0, audio_sender, nullptr, 0, nullptr));
+        for (; !state.lock_read()().audio_sender; Sleep(1)); // wait audio sender start
+    }
 }
 
 
@@ -2412,6 +2423,9 @@ static void connect()
 
     
 }
+
+void __stdcall offline();
+void __stdcall online();
 
 void __stdcall tick(int *sleep_time_ms)
 {
@@ -2490,6 +2504,14 @@ void __stdcall tick(int *sleep_time_ms)
         if (nextticktime <= 0) nextticktime = 1;
         *sleep_time_ms = nextticktime;
     }
+
+    if (reconnect)
+    {
+        offline();
+        online();
+        hf->save();
+        reconnect = false;
+    }
 }
 
 void __stdcall goodbye()
@@ -2513,14 +2535,17 @@ void __stdcall goodbye()
 
     while (discoverer_s::first)
         delete discoverer_s::first;
-    
+
+    while (state.lock_read()().audio_sender)
+    {
+        state.lock_write()().audio_sender_need_stop = true;
+        Sleep(1);
+    }
+
+    state.lock_write()().audio_sender_need_stop = false;
+
     if (tox)
     {
-
-        state.lock_write()().audio_sender_need_stop = true;
-        for (; state.lock_read()().audio_sender; Sleep(1)); // wait audio sender stop
-
-
         toxav_kill(toxav);
         toxav = nullptr;
 
@@ -2624,6 +2649,10 @@ void __stdcall set_config(const void*data, int isz)
     u64 _now = now();
     if (isz>8 && (*(uint32_t *)data) == 0 && (*((uint32_t *)data+1)) == 0x15ed1b1f)
     {
+        tox_proxy_type = 0;
+        memset( &options, 0, sizeof(options) );
+        options.udp_enabled = true;
+
         // raw tox_save
         prepare( (const byte *)data, isz );
 
@@ -2635,6 +2664,10 @@ void __stdcall set_config(const void*data, int isz)
             tox_proxy_type = ldr.get_int();
         if (ldr(chunk_proxy_address))
             set_proxy_addr(ldr.get_astr());
+        if (ldr(chunk_server_port))
+            options.tcp_port = (uint16_t)ldr.get_int();
+        if (ldr(chunk_use_udp))
+            options.udp_enabled = ldr.get_int() != 0;
 
         if (int sz = ldr(chunk_tox_data))
         {
@@ -2787,7 +2820,17 @@ void __stdcall set_config(const void*data, int isz)
     } else
         if (!tox) prepare(nullptr, 0);
 
-    hf->proxy_settings(tox_proxy_type, str_c(tox_proxy_host).append_char(':').append_as_uint(tox_proxy_port));
+    // now send configurable fields to application
+
+    const char * fields[] = { CFGF_PROXY_TYPE, CFGF_PROXY_ADDR, CFGF_UDP_ENABLE, CFGF_SERVER_PORT };
+    str_c svalues[ 4 ];
+    svalues[0].set_as_int( tox_proxy_type );
+    if (tox_proxy_type) svalues[1].set(tox_proxy_host).append_char(':').append_as_uint(tox_proxy_port);
+    svalues[2].set_as_int( options.udp_enabled ? 1 : 0 );
+    svalues[3].set_as_int( options.tcp_port );
+    const char * values[] = { svalues[0].cstr(), svalues[1].cstr(), svalues[2].cstr(), svalues[3].cstr() };
+
+    hf->configurable(4, fields, values);
 }
 void __stdcall init_done()
 {
@@ -2857,6 +2900,9 @@ static void save_current_stuff( savebuffer &b )
     chunk(b, chunk_magic) << (u64)(0x111BADF00D2C0FE6ull + SAVE_VERSION);
     chunk(b, chunk_proxy_type) << tox_proxy_type;
     chunk(b, chunk_proxy_address) << ( str_c(tox_proxy_host).append_char(':').append_as_uint(tox_proxy_port) );
+    chunk(b, chunk_server_port) << (int)options.tcp_port;
+    chunk(b, chunk_use_udp) << (int)(options.udp_enabled ? 1 : 0);
+    
 
     size_t sz = tox_get_savedata_size(tox);
     void *data = chunk(b, chunk_tox_data).alloc(sz);
@@ -2870,6 +2916,15 @@ static void save_current_stuff( savebuffer &b )
 void __stdcall offline()
 {
     online_flag = false;
+
+    while (state.lock_read()().audio_sender)
+    {
+        state.lock_write()().audio_sender_need_stop = true;
+        Sleep(1);
+    }
+
+    state.lock_write()().audio_sender_need_stop = false;
+
     if (tox)
     {
         for (; transmitting_data_s::first;)
@@ -3190,18 +3245,40 @@ void __stdcall send_audio(int id, const call_info_s * ci)
     }
 }
 
-void __stdcall proxy_settings(int proxy_type, const char *proxy_address)
+void __stdcall configurable(const char *field, const char *val)
 {
-    asptr pa(proxy_address);
-    if (pa.l == 0) proxy_type = 0;
-    str_c paddr(tox_proxy_host); paddr.append_char(':').append_as_uint(tox_proxy_port);
-    if (tox_proxy_type != proxy_type || !paddr.equals(pa))
+    if ( 0 == strcmp(CFGF_PROXY_TYPE, field) )
     {
-        tox_proxy_type = proxy_type;
-        set_proxy_addr(pa);
-        offline();
-        online();
-        hf->save();
+        int new_proxy_type = pstr_c( asptr(val) ).as_int();
+        if (new_proxy_type != tox_proxy_type)
+            tox_proxy_type = new_proxy_type, reconnect = true;
+        return;
+    }
+    if (0 == strcmp(CFGF_PROXY_ADDR, field))
+    {
+        asptr pa(val);
+        str_c paddr(tox_proxy_host); paddr.append_char(':').append_as_uint(tox_proxy_port);
+        if (!paddr.equals(pa))
+        {
+            set_proxy_addr(pa);
+            reconnect = true;
+        }
+        return;
+    }
+    if (0 == strcmp(CFGF_SERVER_PORT, field))
+    {
+        int new_server_port = pstr_c(asptr(val)).as_int();
+        if (new_server_port != options.tcp_port)
+            options.tcp_port = (uint16_t)new_server_port, reconnect = true;
+        return;
+    }
+
+    if (0 == strcmp(CFGF_UDP_ENABLE, field))
+    {
+        bool udp = pstr_c(asptr(val)).as_int() != 0;
+        if (udp != options.udp_enabled)
+            options.udp_enabled = udp, reconnect = true;
+        return;
     }
 }
 
@@ -3395,6 +3472,8 @@ proto_functions_s* __stdcall handshake(host_functions_s *hf_)
     hf = hf_;
 
     self_state = CS_OFFLINE;
+    memset( &options, 0, sizeof(options) );
+    options.udp_enabled = true;
 
     nodes.clear();
     nodes.reserve(32);

@@ -56,25 +56,10 @@ gui_contact_item_c::~gui_contact_item_c()
 namespace
 {
 
-enum
-{
-    EB_NAME,
-    EB_STATUS,
-
-    EB_MAX
-};
-
-struct ebutton
-{
-    RID brid;
-    ts::ivec2 p;
-    bool updated;
-};
-
 struct head_stuff_s
 {
     ts::ivec2 last_head_text_pos;
-    ebutton updr[EB_MAX];
+    rbtn::ebutton_s updr[rbtn::EB_MAX];
     RID editor;
     RID bconfirm;
     RID bcancel;
@@ -154,7 +139,7 @@ bool gui_contact_item_c::apply_edit( RID r, GUIPARAM p)
             if (!hstuff().curedit.is_empty())
             {
                 if (prf().username(hstuff().curedit))
-                    gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_USERNAME, hstuff().curedit).send();
+                    gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_USERNAME, hstuff().curedit).send();
             }
         } else if (contact->getkey().is_group())
         {
@@ -179,7 +164,7 @@ bool gui_contact_item_c::apply_edit( RID r, GUIPARAM p)
         if (contact->getkey().is_self())
         {
             if (prf().userstatus(hstuff().curedit))
-                gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_USERSTATUSMSG, hstuff().curedit).send();
+                gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_USERSTATUSMSG, hstuff().curedit).send();
         }
 
     }
@@ -203,7 +188,7 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
         // just update pos of edit buttons
         bool redr = false;
         bool noedt = !flags.is(F_EDITNAME|F_EDITSTATUS);
-        for (ebutton &b : hstuff().updr)
+        for (rbtn::ebutton_s &b : hstuff().updr)
             if (b.updated)
             {
                 MODIFY bbm(b.brid);
@@ -222,7 +207,7 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
 
     if ( getrid() == r )
     {
-        for(ebutton &b : hstuff().updr)
+        for(rbtn::ebutton_s &b : hstuff().updr)
             if (b.brid)
             {
                 b.updated = false;
@@ -230,20 +215,20 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
             }
     }
 
-    if (!hstuff().updr[EB_NAME].brid)
+    if (!hstuff().updr[rbtn::EB_NAME].brid)
     {
         gui_button_c &b = MAKE_CHILD<gui_button_c>(getrid());
         b.set_face_getter(BUTTON_FACE_PRELOADED(editb));
         b.set_handler(DELEGATE(this, edit0), nullptr);
-        hstuff().updr[EB_NAME].brid = b.getrid();
+        hstuff().updr[rbtn::EB_NAME].brid = b.getrid();
     }
 
-    if (!hstuff().updr[EB_STATUS].brid)
+    if (!hstuff().updr[rbtn::EB_STATUS].brid)
     {
         gui_button_c &b = MAKE_CHILD<gui_button_c>(getrid());
         b.set_face_getter(BUTTON_FACE_PRELOADED(editb));
         b.set_handler(DELEGATE(this, edit1), nullptr);
-        hstuff().updr[EB_STATUS].brid = b.getrid();
+        hstuff().updr[rbtn::EB_STATUS].brid = b.getrid();
     }
 
     if (flags.is(F_EDITNAME|F_EDITSTATUS))
@@ -585,7 +570,7 @@ void gui_contact_item_c::update_text()
 
     if (CIR_CONVERSATION_HEAD == role && textrect.is_dirty())
     {
-        for (ebutton &b : hstuff().updr)
+        for (rbtn::ebutton_s &b : hstuff().updr)
             b.updated = false;
         update_buttons(getrid());
     }
@@ -609,7 +594,7 @@ bool gui_contact_item_c::edit1(RID, GUIPARAM)
 
 void gui_contact_item_c::updrect(void *, int r, const ts::ivec2 &p)
 {
-    if (ASSERT(r < EB_MAX) && prf().is_loaded())
+    if (ASSERT(r < rbtn::EB_MAX) && prf().is_loaded())
     {
         hstuff().updr[r].p = root_to_local(p);
         hstuff().updr[r].updated = true;
@@ -722,7 +707,7 @@ void gui_contact_item_c::generate_protocols()
 
         if (auto *row = prf().get_table_active_protocol().find<true>(c->getkey().protoid))
         {
-            if (0 == (row->other.options & active_protocol_data_s::O_SUSPENDED))
+            //if (0 == (row->other.options & active_protocol_data_s::O_SUSPENDED))
             {
                 if (c->get_state() == CS_ONLINE)
                 {
@@ -737,11 +722,11 @@ void gui_contact_item_c::generate_protocols()
                     protocols.append(row->other.name);
                     protocols.append(CONSTWSTR("</color> "));
                 }
-            } else
-            {
-                protocols.append(CONSTWSTR("<nl><s> ")).append( maketag_color<ts::wchar>( get_default_text_color(3) ) );
-                protocols.append( row->other.name );
-                protocols.append(CONSTWSTR("</color> </s>"));
+            //} else
+            //{
+            //    protocols.append(CONSTWSTR("<nl><s> ")).append( maketag_color<ts::wchar>( get_default_text_color(3) ) );
+            //    protocols.append( row->other.name );
+            //    protocols.append(CONSTWSTR("</color> </s>"));
             }
         }
     });
@@ -773,27 +758,6 @@ int gui_contact_item_c::contact_item_rite_margin()
 
 /*virtual*/ bool gui_contact_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if (rid != getrid())
-    {
-        // from submenu
-        if (popupmenu && popupmenu->getrid() == rid)
-        {
-            if (SQ_POPUP_MENU_DIE == qp)
-            {
-                MODIFY(*this).highlight(false);
-                bool prev = flags.is(F_OVERAVATAR);
-                flags.clear(F_OVERAVATAR);
-                if (prev)
-                {
-                    update_text();
-                    getengine().redraw();
-                }
-            }
-        }
-        return false;
-    }
-
-
     switch (qp)
     {
     case SQ_DRAW:
@@ -864,9 +828,6 @@ int gui_contact_item_c::contact_item_rite_margin()
             {
                 text_draw_params_s tdp;
                 
-                if (flags.is(F_OVERAVATAR))
-                    m_engine->draw( ts::irect(ca).setwidth(ca.height()), get_default_text_color(0) );
-
                 bool achtung = (CIR_CONVERSATION_HEAD == role) ? false : contact->achtung();
                 bool drawnotify = false;
                 if (n_unread > 0 || achtung)
@@ -880,7 +841,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                 }
 
                 int ritem = 0;
-                bool draw_ava = true;
+                bool draw_ava = !contact->getkey().is_self();
                 bool draw_proto = !contact->getkey().is_group();
                 //bool draw_btn = true;
                 if (CIR_CONVERSATION_HEAD == role)
@@ -895,7 +856,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                     cac.rb.x -= ritem;
                     int curw = cac.width();
                     int w = gui->textsize( *textrect.font, textrect.get_text() ).x;
-                    if (w > curw && !contact->getkey().is_self() /* always show self avatar */)
+                    if (draw_ava && w > curw)
                     {
                         curw += x_offset;
                         draw_ava = false;
@@ -1011,16 +972,6 @@ int gui_contact_item_c::contact_item_rite_margin()
     case SQ_RECT_CHANGED:
         textrect.make_dirty(false,false,true);
         return true;
-    case SQ_DETECT_AREA:
-        if ( CIR_CONVERSATION_HEAD == role && contact && contact->getkey().is_self() && popupmenu.expired())
-        {
-            ts::irect ca = get_client_area();
-            ca.setwidth( ca.height() );
-            bool prev = flags.is(F_OVERAVATAR);
-            if (prev != flags.init( F_OVERAVATAR, ca.inside(data.detectarea.pos) ))
-                getengine().redraw();
-        }
-        break;
     case SQ_MOUSE_IN:
         if ( CIR_LISTITEM == role || CIR_METACREATE == role )
         {
@@ -1041,11 +992,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                     update_text();
                 }
             }
-
-            bool prev = flags.is(F_OVERAVATAR);
-            flags.clear(F_LBDN | F_OVERAVATAR);
-            if (prev && popupmenu) flags.set(F_OVERAVATAR);
-            if (prev) getengine().redraw();
+            flags.clear(F_LBDN);
         }
         break;
     case SQ_MOUSE_LDOWN:
@@ -1062,39 +1009,7 @@ int gui_contact_item_c::contact_item_rite_margin()
     case SQ_MOUSE_LUP:
         if (flags.is(F_LBDN))
         {
-            if (flags.is(F_OVERAVATAR))
-            {
-                struct x
-                {
-                    static void set_self_avatar(const ts::str_c&)
-                    {
-                        SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR);
-                    }
-                    static void clear_self_avatar(const ts::str_c&)
-                    {
-                        prf().iterate_aps([](const active_protocol_c &cap) {
-                            if (active_protocol_c *ap = prf().ap(cap.getid())) // bad
-                                ap->set_avatar(ts::blob_c());
-                        });
-                        gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_AVATAR).send();
-                    }
-                };
-
-                if (contact->get_avatar())
-                {
-                    menu_c m;
-                    m.add(TTT("Изменить аватар",219), 0, x::set_self_avatar);
-                    m.add(TTT("Убрать аватар",220), 0, x::clear_self_avatar);
-                    popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
-                    popupmenu->leech(this);
-                } else
-                {
-                    SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR);
-                    flags.clear(F_OVERAVATAR);
-                }
-                getengine().redraw();
-
-            } else if (CIR_CONVERSATION_HEAD != role)
+            if (CIR_CONVERSATION_HEAD != role)
             {
                 gmsg<ISOGM_SELECT_CONTACT>(contact).send();
             }
@@ -1231,7 +1146,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                         c->set_ostate(cos_);
                     } );
                     contacts().get_self().set_ostate(cos_);
-                    gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_ONLINESTATUS).send();
+                    gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_ONLINESTATUS).send();
                 }
             };
 
@@ -1544,11 +1459,15 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
         {
             case PP_USERNAME:
             case PP_USERSTATUSMSG:
+                if (0 != ch.protoid)
+                    break;
+            case PP_NETWORKNAME:
                 self->update_text();
                 break;
         }
     }
-    if (ch.pass == 0 && self && PP_ONLINESTATUS == ch.pp)
+    if (ch.pass == 0 && self)
+        if (PP_ONLINESTATUS == ch.pp)
         self->getengine().redraw();
     return 0;
 }

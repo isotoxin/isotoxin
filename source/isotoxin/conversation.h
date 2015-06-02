@@ -33,20 +33,26 @@ template<> struct MAKE_CHILD<gui_notice_c> : public _PCHILD(gui_notice_c)
     ~MAKE_CHILD();
 };
 
+class gui_notice_network_c;
+template<> struct MAKE_CHILD<gui_notice_network_c> : public _PCHILD(gui_notice_network_c)
+{
+    MAKE_CHILD(RID parent_) { parent = parent_; }
+    ~MAKE_CHILD();
+};
+
 class gui_notice_c : public gui_label_c
 {
     DUMMY(gui_notice_c);
+
+protected:
     notice_e notice;
     uint64 utag = 0;
     int height = 0;
     int addheight = 0;
-    int flashing = 0;
-    int networkid = 0; // only for NOTICE_NETWORK
 
     GM_RECEIVER(gui_notice_c, ISOGM_NOTICE);
     GM_RECEIVER(gui_notice_c, ISOGM_CALL_STOPED);
     GM_RECEIVER(gui_notice_c, ISOGM_FILE);
-    GM_RECEIVER(gui_notice_c, ISOGM_PROFILE_TABLE_SAVED);
     GM_RECEIVER(gui_notice_c, ISOGM_DOWNLOADPROGRESS);
     GM_RECEIVER(gui_notice_c, ISOGM_V_UPDATE_CONTACT);
 
@@ -58,16 +64,11 @@ class gui_notice_c : public gui_label_c
 
     void update_text(contact_c *sender);
 
-    void setup_tail();
-
-    bool flash_pereflash(RID, GUIPARAM);
-
 public:
-
+    gui_notice_c() {}
     gui_notice_c(MAKE_CHILD<gui_notice_c> &data);
+    gui_notice_c(MAKE_CHILD<gui_notice_network_c> &data);
     /*virtual*/ ~gui_notice_c();
-
-    void flash();
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ ts::ivec2 get_max_size() const override;
@@ -77,10 +78,60 @@ public:
     notice_e get_notice() const { return notice; }
     uint64 get_utag() const {return utag;}
 
-    void setup(const ts::wstr_c &name, const ts::str_c &pubid); // network
     void setup(const ts::wstr_c &itext, contact_c *sender, uint64 utag);
     void setup(const ts::wstr_c &itext);
     void setup(contact_c *sender);
+    bool setup_tail(RID r = RID(), GUIPARAM p = nullptr);
+
+};
+
+namespace rbtn
+{
+    enum
+    {
+        EB_NAME,
+        EB_STATUS,
+        EB_NNAME,
+
+        EB_MAX
+    };
+    struct ebutton_s
+    {
+        RID brid;
+        ts::ivec2 p;
+        bool updated = false;
+    };
+};
+
+
+class gui_notice_network_c : public gui_notice_c
+{
+    GM_RECEIVER(gui_notice_network_c, ISOGM_PROFILE_TABLE_SAVED);
+    GM_RECEIVER(gui_notice_network_c, ISOGM_CHANGED_PROFILEPARAM);
+    GM_RECEIVER(gui_notice_network_c, GM_HEARTBEAT);
+    
+    ts::str_c pubid;
+    int flashing = 0;
+    int networkid = 0;
+    int left_margin = 0;
+
+    bool resetup(RID, GUIPARAM);
+    bool flash_pereflash(RID, GUIPARAM);
+
+    static const ts::flags32_s::BITS  F_OVERAVATAR = FLAGS_FREEBITSTART_LABEL << 0; // mouse cursor above avatar
+
+public:
+    void flash();
+
+    gui_notice_network_c(MAKE_CHILD<gui_notice_network_c> &data):gui_notice_c(data) {}
+    /*virtual*/ ~gui_notice_network_c();
+
+    /*virtual*/ void created() override;
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+    /*virtual*/ int gui_notice_network_c::get_height_by_width(int width) const override;
+
+    void setup(const ts::str_c &pubid); // network
+
 };
 
 class gui_noticelist_c : public gui_vscrollgroup_c

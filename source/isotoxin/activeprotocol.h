@@ -27,6 +27,18 @@ struct proxy_settings_s
 
 };
 
+struct configurable_s
+{
+    proxy_settings_s proxy;
+    int server_port = 0;
+    bool udp_enable = true;
+
+    bool operator != (const configurable_s &o) const
+    {
+        return proxy != o.proxy || server_port != o.server_port || udp_enable != o.udp_enable;
+    }
+};
+
 struct active_protocol_data_s
 {
     ts::str_c tag;
@@ -36,12 +48,14 @@ struct active_protocol_data_s
     ts::blob_c config;
     ts::blob_c avatar;
     int options = O_AUTOCONNECT;
-    proxy_settings_s proxy;
+
+    configurable_s configurable;
+
 
     enum options_e
     {
         O_AUTOCONNECT   = SETBIT(0),
-        O_SUSPENDED     = SETBIT(1),
+        //O_SUSPENDED     = SETBIT(1),
     };
 
 };
@@ -65,7 +79,6 @@ class active_protocol_c : public ts::safe_object
     int id;
     int priority = 0;
     int features = 0;
-    /*int proxy_support = 0;*/
     s3::Format audio_fmt;
     isotoxin_ipc_s *ipcp = nullptr;
     spinlock::syncvar< sync_data_s > syncdata;
@@ -102,9 +115,12 @@ public:
     const ts::wstr_c &get_name() const {return syncdata.lock_read()().data.name;};
     int get_features() const {return features; }
     int get_priority() const {return priority; }
+
+    const ts::wstr_c &get_uname() const {return syncdata.lock_read()().data.user_name;};
+    const ts::wstr_c &get_ustatusmsg() const {return syncdata.lock_read()().data.user_statusmsg;};
     
-    proxy_settings_s get_proxy_settings() const { return syncdata.lock_read()().data.proxy; };
-    void set_proxy_settings( const proxy_settings_s &ps );
+    configurable_s get_configurable() const { return syncdata.lock_read()().data.configurable; };
+    void set_configurable( const configurable_s &c );
 
     const s3::Format& defaudio() const {return audio_fmt;}
 

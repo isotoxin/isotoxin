@@ -1,5 +1,22 @@
 #pragma once
 
+struct dialog_avasel_params_s
+{
+    int protoid = 0;
+
+    dialog_avasel_params_s() {}
+    dialog_avasel_params_s(int protoid) :protoid(protoid)  {}
+};
+
+class dialog_avaselector_c;
+template<> struct MAKE_ROOT<dialog_avaselector_c> : public _PROOT(dialog_avaselector_c)
+{
+    dialog_avasel_params_s prms;
+    MAKE_ROOT(drawcollector &dch, const dialog_avasel_params_s &prms) : _PROOT(dialog_avaselector_c)(dch), prms(prms) { init(false); }
+    ~MAKE_ROOT() {}
+};
+
+
 struct framedrawer_s
 {
     ts::drawable_bitmap_c h;
@@ -27,6 +44,8 @@ class dialog_avaselector_c : public gui_isodialog_c
     ts::irect inforect;
     ts::irect avarect;
     ts::irect storeavarect; // for scale
+
+    int protoid = 0;
 
     ts::ivec2 user_offset = 0;
     float resize_k = 1.0f;
@@ -76,7 +95,7 @@ protected:
     void load_image(const ts::wstr_c &fn);
 
 public:
-    dialog_avaselector_c(initial_rect_data_s &data);
+    dialog_avaselector_c(MAKE_ROOT<dialog_avaselector_c> &data);
     ~dialog_avaselector_c();
 
     /*virtual*/ int additions(ts::irect & border) override;

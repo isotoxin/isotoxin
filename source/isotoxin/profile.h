@@ -148,6 +148,7 @@ template<typename T, profile_table_e tabi> struct tableview_t
         cleanup();
     }
 
+    /*
     row_s del(int id) // returns deleted row
     {
         cleanup();
@@ -160,6 +161,7 @@ template<typename T, profile_table_e tabi> struct tableview_t
         }
         return row_s();
     }
+    */
 
     template<bool skip_deleted, typename F> row_s *find(F f)
     {
@@ -239,6 +241,7 @@ class profile_c : public config_base_c
 
     GM_RECEIVER( profile_c, ISOGM_PROFILE_TABLE_SAVED );
     GM_RECEIVER( profile_c, ISOGM_MESSAGE );
+    GM_RECEIVER( profile_c, ISOGM_CHANGED_PROFILEPARAM );
 
     ts::array_safe_t< active_protocol_c, 0 > protocols;
     ts::tbuf_t< contact_key_s > dirtycontacts;

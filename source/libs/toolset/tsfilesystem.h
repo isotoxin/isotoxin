@@ -8,6 +8,7 @@
 #define FNO_PARSENENV 8     // parse environment like %USER%, %APPDATA% and other %nnn%
 #define FNO_FULLPATH  16    // build full path according to current directory
 #define FNO_TRIMLASTSLASH 32
+#define FNO_APPENDSLASH 64
 #define FNO_SIMPLIFY (FNO_NORMALIZE|FNO_FULLPATH|FNO_LOWERCASEAUTO|FNO_REMOVECRAP)
 
 namespace ts

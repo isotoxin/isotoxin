@@ -2536,6 +2536,6 @@ void lan_engine::join_groupchat( int gid, int cid )
 }
 
 //unused
-void lan_engine::proxy_settings(int /*proxy_type*/, const char * /*proxy_address*/)
+void lan_engine::configurable(const char * /*field*/, const char * /*value*/)
 {
 }

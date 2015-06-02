@@ -309,7 +309,7 @@ void dialog_avaselector_c::compressor()
     sync.lock_write()().compressor_working = false;
 }
 
-dialog_avaselector_c::dialog_avaselector_c(initial_rect_data_s &data) :gui_isodialog_c(data), avarect(0) 
+dialog_avaselector_c::dialog_avaselector_c(MAKE_ROOT<dialog_avaselector_c> &data) :gui_isodialog_c(data), avarect(0), protoid(data.prms.protoid) 
 {
     CloseHandle(CreateThread(nullptr, 0, worker, this, 0, nullptr));
     while( !sync.lock_read()().compressor_working ) Sleep(1);
@@ -997,11 +997,17 @@ void dialog_avaselector_c::do_scale(float sf)
     ts::blob_c ava;
     ava.append_buf( sync.lock_read()().encoded_fit_16kb );
 
-    prf().iterate_aps([&](const active_protocol_c &cap) {
-        if (active_protocol_c *ap = prf().ap(cap.getid())) // bad
-            ap->set_avatar(ava);
-    });
-    gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_AVATAR).send();
+    if (0 == protoid)
+    {
+        prf().iterate_aps([&](const active_protocol_c &cap) {
+            if (active_protocol_c *ap = prf().ap(cap.getid())) // bad
+                ap->set_avatar(ava);
+        });
+
+    } else if (active_protocol_c *ap = prf().ap(protoid))
+        ap->set_avatar(ava);
+
+    gmsg<ISOGM_CHANGED_PROFILEPARAM>(protoid, PP_AVATAR).send();
     __super::on_confirm();
 }
 

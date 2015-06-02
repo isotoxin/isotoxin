@@ -245,6 +245,9 @@ namespace ts
         if ( 0 != (FNO_TRIMLASTSLASH & fnoptions) && __ending_slash(path) )
             path.trunc_length(1);
 
+        if (0 != (FNO_APPENDSLASH & fnoptions) && !__ending_slash(path))
+            path.append_char(NATIVE_SLASH);
+
         if ( FNO_NORMALIZE & fnoptions )
             path.replace_all(ENEMY_SLASH, NATIVE_SLASH);
 

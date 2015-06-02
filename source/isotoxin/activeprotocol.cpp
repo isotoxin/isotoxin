@@ -44,7 +44,6 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     audio_fmt.sampleRate = r.get<int>();
                     audio_fmt.channels = r.get<short>();
                     audio_fmt.bitsPerSample = r.get<short>();
-                    /*proxy_support =*/ r.get<ts::uint16>();
 
                     auto w = syncdata.lock_write();
                     w().description.set_as_utf8(desc);
@@ -152,11 +151,26 @@ bool active_protocol_c::cmdhandler(ipcr r)
             }
         }
         break;
-    case HA_PROXY_SETTINGS:
+    case HA_CONFIGURABLE:
         {
             auto w = syncdata.lock_write();
-            w().data.proxy.proxy_type = r.get<int>();
-            w().data.proxy.proxy_addr = r.getastr();
+
+            int n = r.get<int>();
+            for(int i = 0;i<n;++i)
+            {
+                ts::str_c f = r.getastr();
+                ts::str_c v = r.getastr();
+                if ( f.equals(CONSTASTR(CFGF_PROXY_TYPE)) )
+                    w().data.configurable.proxy.proxy_type = v.as_int();
+                else if ( f.equals(CONSTASTR(CFGF_PROXY_ADDR)) )
+                    w().data.configurable.proxy.proxy_addr = v;
+                else if (f.equals(CONSTASTR(CFGF_PROXY_ADDR)))
+                    w().data.configurable.proxy.proxy_addr = v;
+                else if (f.equals(CONSTASTR(CFGF_SERVER_PORT)))
+                    w().data.configurable.server_port = v.as_int();
+                else if (f.equals(CONSTASTR(CFGF_UDP_ENABLE)))
+                    w().data.configurable.server_port = v.as_int() != 0;
+            }
             w().flags.set(F_PROXY_SETTINGS_RCVD);
         }
         break;
@@ -304,11 +318,11 @@ ts::uint32 active_protocol_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
         } else
         {
             auto *row = t.find<true>(id);
-            dematerialization = row == nullptr || FLAG(row->other.options, active_protocol_data_s::O_SUSPENDED);
+            dematerialization = row == nullptr /*|| FLAG(row->other.options, active_protocol_data_s::O_SUSPENDED)*/;
             if (!dematerialization)
             {
                 syncdata.lock_write()().data.name = row->other.name;
-                set_proxy_settings(row->other.proxy);
+                set_configurable(row->other.configurable);
             }
         }
         if (dematerialization)
@@ -327,7 +341,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_UI_EVENT>&e)
     if (UE_THEMECHANGED == e.evt)
     {
         // self avatar must be recreated to fit new gui theme
-        set_avatar( contacts().get_self().subget(contact_key_s(0,id)) );
+        set_avatar( contacts().find_subself(id) );
     }
     return 0;
 }
@@ -372,21 +386,34 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
 
 ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
 {
-    if (ch.pass == 0 && ipcp)
+    if (ch.pass == 0 && ipcp && (ch.protoid == 0 || ch.protoid == id))
     {
         switch (ch.pp)
         {
         case PP_USERNAME:
-            syncdata.lock_write()().data.user_name = ch.s;
-            ipcp->send(ipcw(AQ_SET_NAME) << ch.s);
+            if (ch.protoid == id)
+            {
+                syncdata.lock_write()().data.user_name = ch.s;
+                ipcp->send(ipcw(AQ_SET_NAME) << ch.s);
+            } else if (syncdata.lock_read()().data.user_name.is_empty())
+                ipcp->send(ipcw(AQ_SET_NAME) << ch.s);
             return GMRBIT_CALLAGAIN;
         case PP_USERSTATUSMSG:
-            syncdata.lock_write()().data.user_statusmsg = ch.s;
-            ipcp->send(ipcw(AQ_SET_STATUSMSG) << ch.s);
+            if (ch.protoid == id)
+            {
+                syncdata.lock_write()().data.user_statusmsg = ch.s;
+                ipcp->send(ipcw(AQ_SET_STATUSMSG) << ch.s);
+            } else if (syncdata.lock_read()().data.user_statusmsg.is_empty())
+                ipcp->send(ipcw(AQ_SET_STATUSMSG) << ch.s);
+            return GMRBIT_CALLAGAIN;
+        case PP_NETWORKNAME:
+            if (ch.protoid == id)
+                syncdata.lock_write()().data.name = ch.s;
             return GMRBIT_CALLAGAIN;
         case PP_ONLINESTATUS:
             if (contact_c *c = contacts().get_self().subget( contact_key_s(0, id) ))
                 set_ostate(c->get_ostate());
+            break;
         }
     }
     return 0;
@@ -629,25 +656,32 @@ void active_protocol_c::stop_call(int cid, stop_call_e sc)
     ipcp->send(ipcw(AQ_STOP_CALL) << cid << ((char)sc));
 }
 
-void active_protocol_c::set_proxy_settings( const proxy_settings_s &ps )
+void active_protocol_c::set_configurable( const configurable_s &c )
 {
     auto w = syncdata.lock_write();
     if (!w().flags.is(F_PROXY_SETTINGS_RCVD)) return;
-    proxy_settings_s oldps = std::move(w().data.proxy);
-    w().data.proxy = ps;
 
-    if (!check_netaddr(w().data.proxy.proxy_addr))
-    {
-        w().data.proxy.proxy_addr = CONSTASTR(DEFAULT_PROXY);
-    }
+    configurable_s oldc = std::move(w().data.configurable);
+    w().data.configurable = c;
 
-    if (oldps != w().data.proxy)
+    if (!check_netaddr(w().data.configurable.proxy.proxy_addr))
+        w().data.configurable.proxy.proxy_addr = CONSTASTR(DEFAULT_PROXY);
+
+    if (oldc != w().data.configurable)
     {
         if (ipcp)
         {
-            proxy_settings_s oldps = w().data.proxy;
+            oldc = w().data.configurable;
             w.unlock();
-            ipcp->send(ipcw(AQ_PROXY_SETTINGS) << oldps.proxy_type << oldps.proxy_addr);
+
+            ipcw s(AQ_CONFIGURABLE);
+            s << (int)4;
+            s << CONSTASTR( CFGF_PROXY_TYPE ) << ts::amake<int>(oldc.proxy.proxy_type);
+            s << CONSTASTR( CFGF_PROXY_ADDR ) << oldc.proxy.proxy_addr;
+            s << CONSTASTR( CFGF_SERVER_PORT ) << ts::amake<int>(oldc.server_port);
+            s << CONSTASTR( CFGF_UDP_ENABLE ) << (oldc.udp_enable ? CONSTASTR("1") : CONSTASTR("0"));
+
+            ipcp->send(s);
             // do not save config now
             // protocol will initiate save procedure itself
         } else

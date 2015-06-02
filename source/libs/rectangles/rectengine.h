@@ -112,8 +112,9 @@ protected:
 public:
     int operator()(const rectengine_c *r) const
     {
+        const rectengine_c *me = this;
         if (r == nullptr) return 1;
-        if (this == nullptr) return -1;
+        if (me == nullptr) return -1;
         int x = ts::SIGN( getrect().getprops().zindex() - r->getrect().getprops().zindex() );
         return x == 0 ? ( ts::SIGN((ts::aint)this - (ts::aint)r) ) : x;
     }
@@ -347,6 +348,8 @@ public:
     {
         return GetForegroundWindow() == hwnd;
     }
+
+    HWND get_hwnd() {return hwnd;} // just WIN32
 };
 
 INLINE rectengine_root_c *root_by_rid( RID r )

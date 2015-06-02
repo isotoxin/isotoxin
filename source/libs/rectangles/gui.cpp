@@ -784,7 +784,7 @@ void gui_c::mouse_inside(RID rid)
 
     m_hoverdata.minside = rid;
 
-    DMSG( "in: "<< rid );
+    DMSG( "in: "<< rid << HOLD(rid).engine().getrect().getprops().rect() );
 
     r.engine().sq_evt(SQ_MOUSE_IN, rid, d);
     if (m_active_hint_zone.expired()) gui_tooltip_c::create(rid);

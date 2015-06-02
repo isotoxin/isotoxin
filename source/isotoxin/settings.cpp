@@ -2,6 +2,30 @@
 
 #define HGROUP_MEMBER ts::wsptr()
 
+
+static menu_c list_proxy_types(int cur, MENUHANDLER mh, int av = -1)
+{
+    menu_c m;
+    m.add(TTT("Прямое соединение", 159), cur == 0 ? MIF_MARKED : 0, mh, CONSTASTR("0"));
+
+    if (CF_PROXY_SUPPORT_HTTP & av)
+        m.add(TTT("HTTP прокси", 160), cur == 1 ? MIF_MARKED : 0, mh, CONSTASTR("1"));
+    if (CF_PROXY_SUPPORT_SOCKS4 & av)
+        m.add(TTT("Socks 4 прокси", 161), cur == 2 ? MIF_MARKED : 0, mh, CONSTASTR("2"));
+    if (CF_PROXY_SUPPORT_SOCKS5 & av)
+        m.add(TTT("Socks 5 прокси", 162), cur == 3 ? MIF_MARKED : 0, mh, CONSTASTR("3"));
+
+    return m;
+}
+
+static void check_proxy_addr(int connectiontype, RID editctl, ts::str_c &proxyaddr)
+{
+    gui_textfield_c &tf = HOLD(editctl).as<gui_textfield_c>();
+    //if (tf.is_disabled()) return;
+    tf.badvalue(connectiontype > 0 && !check_netaddr(proxyaddr));
+}
+
+
 dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c(data), ipcj( (ts::streamstr<ts::str_c>() << "isotoxin_settings_" << GetCurrentThreadId()).buffer(), prf().is_loaded() ? DELEGATE( this, ipchandler ) : nullptr )
 {
     s3::enum_sound_capture_devices(enum_capture_devices, this);
@@ -52,7 +76,14 @@ dialog_settings_c::~dialog_settings_c()
         g_app->capture_device_changed();
     }
 
-    gmsg<GM_CLOSE_DIALOG>( UD_NETWORKNAME ).send();
+    gmsg<GM_CLOSE_DIALOG>( UD_PROTOSETUPSETTINGS ).send();
+
+    if (gui)
+    {
+        gui->delete_event(DELEGATE(this, fileconfirm_handler));
+        gui->delete_event(DELEGATE(this, msgopts_handler));
+        gui->delete_event(DELEGATE(this, delete_used_network));
+    }
 }
 
 /*virtual*/ s3::Format *dialog_settings_c::formats(int &count)
@@ -161,22 +192,18 @@ void dialog_settings_c::autoupdate_proxy_handler(const ts::str_c& p)
     autoupdate_proxy = p.as_int();
     set_combik_menu(CONSTASTR("proxytype"), list_proxy_types(autoupdate_proxy, DELEGATE(this, autoupdate_proxy_handler)));
     if (RID r = find(CONSTASTR("proxyaddr")))
+    {
+        check_proxy_addr(autoupdate_proxy, r, autoupdate_proxy_addr);
         r.call_enable(autoupdate > 0 && autoupdate_proxy > 0);
+    }
 }
 
 bool dialog_settings_c::autoupdate_proxy_addr_handler( const ts::wstr_c & t )
 {
     autoupdate_proxy_addr = t;
     if (RID r = find(CONSTASTR("proxyaddr")))
-        check_proxy_addr(r, autoupdate_proxy_addr);
+        check_proxy_addr(autoupdate_proxy, r, autoupdate_proxy_addr);
     return true;
-}
-
-void dialog_settings_c::check_proxy_addr(RID editctl, ts::str_c &proxyaddr)
-{
-    gui_textfield_c &tf = HOLD(editctl).as<gui_textfield_c>();
-    if (tf.is_disabled()) return;
-    tf.badvalue(!check_netaddr(proxyaddr));
 }
 
 bool dialog_settings_c::check_update_now(RID, GUIPARAM)
@@ -212,21 +239,6 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
         ));
 
     return 0;
-}
-
-menu_c dialog_settings_c::list_proxy_types(int cur, MENUHANDLER mh, int av)
-{
-    menu_c m;
-    m.add(TTT("Прямое соединение", 159), cur == 0 ? MIF_MARKED : 0, mh, CONSTASTR("0"));
-
-    if (PROXY_SUPPORT_HTTP & av)
-        m.add(TTT("HTTP прокси", 160), cur == 1 ? MIF_MARKED : 0, mh, CONSTASTR("1"));
-    if (PROXY_SUPPORT_SOCKS4 & av)
-        m.add(TTT("Socks 4 прокси", 161), cur == 2 ? MIF_MARKED : 0, mh, CONSTASTR("2"));
-    if (PROXY_SUPPORT_SOCKS5 & av)
-        m.add(TTT("Socks 5 прокси", 162), cur == 3 ? MIF_MARKED : 0, mh, CONSTASTR("3"));
-
-    return m;
 }
 
 bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
@@ -283,8 +295,8 @@ menu_c dialog_settings_c::list_themes()
         for (auto &row : table_active_protocol_underedit)
             if (active_protocol_c *ap = prf().ap(row.id))
             {
-                row.other.proxy = ap->get_proxy_settings();
-                if (row.other.proxy.proxy_addr.is_empty()) row.other.proxy.proxy_addr = CONSTASTR(DEFAULT_PROXY);
+                row.other.configurable = ap->get_configurable();
+                if (row.other.configurable.proxy.proxy_addr.is_empty()) row.other.configurable.proxy.proxy_addr = CONSTASTR(DEFAULT_PROXY);
             }
 
     }
@@ -421,12 +433,15 @@ menu_c dialog_settings_c::list_themes()
 
 
         dm << MASK_PROFILE_NETWORKS; //_________________________________________________________________________________________________//
-        dm().page_header(TTT("Настройки сетей",130));
+        dm().page_header(TTT("[appname] поддерживает возможность одновременного соединения с несколькими сетями. Вы можете выбрать, с какими именно.",130));
         dm().vspace(10);
-        dm().list(TTT("Доступные сети (правый клик - опции)",53), 5).setname(CONSTASTR("protolist"));
+        dm().list(TTT("Активные соединения",54), -270).setname(CONSTASTR("protoactlist"));
         dm().vspace();
-        dm().list(TTT("Активные сети (правый клик - опции)",54), 5).setname(CONSTASTR("protoactlist"));
+        dm().hgroup(TTT("Доступные соединения",53));
+        dm().combik(HGROUP_MEMBER).setmenu(list_list_avaialble_networks()).setname(CONSTASTR("availablenets"));
+        dm().button(HGROUP_MEMBER, TTT("Добавить соединение",58), DELEGATE(this, addnetwork)).width(250).height(25).setname(CONSTASTR("addnet"));
         dm().vspace();
+
     /*
         dm().checkb(L"Тестовый чекбоксег", GUIPARAMHANDLER(), 3).setmenu(
               menu_c().add(L"Медвед",0,MENUHANDLER(), CONSTASTR("1"))
@@ -443,58 +458,35 @@ menu_c dialog_settings_c::list_themes()
     return 1;
 }
 
-ts::wstr_c dialog_settings_c::describe_network(const ts::wstr_c& name, const ts::str_c& tag) const
+void dialog_settings_c::describe_network(ts::wstr_c&desc, const ts::wstr_c& name, const ts::str_c& tag, int id) const
 {
     const protocols_s *p = find_protocol(tag);
     if (p == nullptr)
     {
-        return TTT("$ (Неизвестный протокол: $)", 57) / name / ts::to_wstr(tag);
-    }
-    else
-        return ts::wstr_c(name).append(CONSTWSTR(" (")).append(p->description).append_char(')');
-}
+        desc.replace_all(CONSTWSTR("{name}"), TTT("$ (Неизвестный протокол: $)",57) / name / ts::to_wstr(tag));
+        desc.replace_all(CONSTWSTR("{id}"), CONSTWSTR("?"));
+        desc.replace_all(CONSTWSTR("{module}"), CONSTWSTR("?"));
+    } else
+    {
+        ts::wstr_c pubid = contacts().find_pubid(id);
+        if (pubid.is_empty()) pubid = TTT("еще не создан или не загружен",200); else pubid.insert(0, CONSTWSTR("<ee>"));
 
-void dialog_settings_c::add_suspended_proto( RID lst, int id, const active_protocol_data_s &apdata )
-{
-    ts::wstr_c desc(TTT("Отключено: $",200) / describe_network(apdata.name, apdata.tag));
-    MAKE_CHILD<gui_listitem_c>(lst, desc, ts::str_c(CONSTASTR("3/")).append(apdata.tag).append_char('/').append_as_int(id)) << DELEGATE(this, getcontextmenu);
+        desc.replace_all(CONSTWSTR("{name}"), name);
+        desc.replace_all(CONSTWSTR("{id}"), pubid);
+        desc.replace_all(CONSTWSTR("{module}"), p->description);
+    }
 }
 
 /*virtual*/ void dialog_settings_c::tabselected(ts::uint32 mask)
 {
-    network_props = -1;
-
     if ( mask & MASK_PROFILE_NETWORKS )
     {
-        if (RID lst = find(CONSTASTR("protolist")))
-        {
-            for( const protocols_s&proto : available_prots )
-            {
-                MAKE_CHILD<gui_listitem_c>(lst, proto.description, ts::str_c(CONSTASTR("1/")).append(proto.tag)) << DELEGATE( this, getcontextmenu );
-            }
-
-            for (auto &row : table_active_protocol_underedit)
-            {
-                if (0 == (row.other.options & active_protocol_data_s::O_SUSPENDED))
-                    continue;
-
-                add_suspended_proto( lst, row.id, row.other );
-            }
-        }
-
         if (RID lst = find(CONSTASTR("protoactlist")))
         {
             for (auto &row : table_active_protocol_underedit)
-            {
-                if (0 != (row.other.options & active_protocol_data_s::O_SUSPENDED))
-                    continue;
-
                 add_active_proto(lst, row.id, row.other);
-            }
+            available_network_selected(selected_available_network);
         }
-
-        num_ctls_in_network_tab = getengine().children_count();
-
     }
 
     if (mask & MASK_PROFILE_CHAT)
@@ -516,243 +508,214 @@ void dialog_settings_c::add_suspended_proto( RID lst, int id, const active_proto
         {
             gui_textfield_c &tf = HOLD(r).as<gui_textfield_c>();
             tf.set_text( autoupdate_proxy_addr, true );
-            check_proxy_addr(r, autoupdate_proxy_addr);
+            check_proxy_addr(autoupdate_proxy, r, autoupdate_proxy_addr);
         }
     }
 }
 
-bool dialog_settings_c::network_1( const ts::wstr_c & nnn )
+void dialog_settings_c::on_delete_network_2(const ts::str_c&prm)
 {
-    auto row = table_active_protocol_underedit.find<false>(network_props);
-    if (!row) return true;
+    int id = prm.as_int();
+    auto *row = table_active_protocol_underedit.find<true>(id);
+    if (ASSERT(row))
+    {
+        ts::str_c tag(row->other.tag);
+        row->deleted();
+
+        if (RID lst = find(CONSTASTR("protoactlist")))
+            lst.call_kill_child(tag.insert(0, CONSTASTR("2/")).append_char('/').append_as_int(id));
+    }
+
+}
+
+bool dialog_settings_c::delete_used_network(RID, GUIPARAM param)
+{
+    auto *row = table_active_protocol_underedit.find<false>((int)param);
+    if (ASSERT(row))
+    {
+        SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
+            gui_isodialog_c::title(DT_MSGBOX_WARNING),
+            TTT("Соединение [$] используется! Будут удалены все контакты, использующие это соединение. Также будет удалена история сообщений этих контактов. Вы всё еще уверены?",267) / row->other.name
+            ).on_ok(DELEGATE(this, on_delete_network_2), ts::amake<int>((int)param)).bcancel());
+    }
+    return true;
+}
+
+void dialog_settings_c::on_delete_network(const ts::str_c& prm)
+{
+    int id = prm.as_int();
+    ts::str_c tag;
+    if (contacts().present_protoid( id ))
+    {
+        DEFERRED_UNIQUE_CALL(0.7, DELEGATE(this, delete_used_network), (GUIPARAM)id);
+
+    } else
+    {
+        auto *row = table_active_protocol_underedit.find<true>(id);
+        if (ASSERT(row))
+        {
+            tag = row->other.tag;
+            row->deleted();
+        }
+    }
+
+    if (RID lst = find(CONSTASTR("protoactlist")))
+        lst.call_kill_child( tag.insert(0,CONSTASTR("2/")).append_char('/').append_as_int(id) );
+
+}
+
+bool dialog_settings_c::addeditnethandler(dialog_protosetup_params_s &params)
+{
+    active_protocol_data_s *apd = nullptr;
+    int id = 0;
+    if ( params.protoid == 0 )
+    {
+        auto &r = table_active_protocol_underedit.getcreate(0);
+        id = r.id;
+        r.other.tag = params.networktag;
+        if (!params.importcfg.is_empty())
+            r.other.config.load_from_disk_file( params.importcfg );
+        apd = &r.other;
+    } else
+    {
+        apd = &table_active_protocol_underedit.find<true>( params.protoid )->other;
+        id = params.protoid;
+    }
+
+    apd->user_name = params.uname;
+    apd->user_statusmsg = params.ustatus;
+    apd->tag = params.networktag;
+    apd->name = params.networkname;
+    INITFLAG(apd->options, active_protocol_data_s::O_AUTOCONNECT, params.connect_at_startup);
+    apd->configurable = params.configurable;
 
     if (RID lst = find(CONSTASTR("protoactlist")))
     {
-        for( rectengine_c *itm : HOLD(lst).engine() )
+        if (params.protoid == 0)
         {
-            if (itm)
-            {
-                gui_listitem_c * li = ts::ptr_cast<gui_listitem_c *>( &itm->getrect() );
-                ts::token<char> t( li->getparam(), '/');
-                ++t;
-                ++t;
-                if (t->as_int() == network_props && ASSERT(li->get_text().begins(row->other.name)))
+            // new - create list item
+            add_active_proto(lst, id, *apd);
+        } else
+            // find list item and update
+            for( rectengine_c *itm : HOLD(lst).engine() )
+                if (itm)
                 {
-                    ts::wstr_c n = li->get_text();
-                    n.replace(0, row->other.name.get_length(), nnn);
-                    li->set_text(n);
+                    gui_listitem_c * li = ts::ptr_cast<gui_listitem_c *>(&itm->getrect());
+                    ts::token<char> t(li->getparam(), '/');
+                    ++t;
+                    ++t;
+                    if (t->as_int() == params.protoid)
+                    {
+                        ts::wstr_c desc = make_proto_desc(MPD_NAME | MPD_MODULE | MPD_ID);
+                        describe_network(desc, apd->name, apd->tag, params.protoid);
+                        li->set_text(desc);
+                        break;
+                    }
                 }
-            }
-        }
     }
 
-    row->other.name = nnn;
-    row->changed();
 
     return true;
 }
 
-bool dialog_settings_c::network_2( RID, GUIPARAM p )
+bool dialog_settings_c::addnetwork(RID, GUIPARAM)
 {
-    auto row = table_active_protocol_underedit.find<false>(network_props);
-    if (!row) return true;
-    row->changed();
-    
-    INITFLAG( row->other.options, active_protocol_data_s::O_AUTOCONNECT, p != nullptr );
-
-    return true;
-}
-
-void dialog_settings_c::set_proxy_type_handler(const ts::str_c& p)
-{
-    int psel = p.as_int();
-    auto row = table_active_protocol_underedit.find<false>(network_props);
-    if (!row) return;
-    if (psel == 0) row->other.proxy.proxy_type = 0;
-    else if (psel == 1) row->other.proxy.proxy_type = PROXY_SUPPORT_HTTP;
-    else if (psel == 2) row->other.proxy.proxy_type = PROXY_SUPPORT_SOCKS4;
-    else if (psel == 3) row->other.proxy.proxy_type = PROXY_SUPPORT_SOCKS5;
-
-    if (const protocols_s *pr = find_protocol(row->other.tag))
-        set_combik_menu(CONSTASTR("protoproxytype"),list_proxy_types(psel, DELEGATE(this, set_proxy_type_handler), pr->proxy_support));
-
-    if (RID r = find(CONSTASTR("protoproxyaddr")))
-        r.call_enable(psel > 0);
-}
-
-bool dialog_settings_c::set_proxy_addr_handler(const ts::wstr_c & t)
-{
-    auto row = table_active_protocol_underedit.find<false>(network_props);
-    row->other.proxy.proxy_addr = t;
-
-    if (RID r = find(CONSTASTR("protoproxyaddr")))
-        check_proxy_addr(r, row->other.proxy.proxy_addr);
-    return true;
-}
-
-
-void dialog_settings_c::create_network_props_ctls( int id )
-{
-    getengine().trunc_children( num_ctls_in_network_tab );
-    if (id == 0)
+    const protocols_s *p = find_protocol(selected_available_network);
+    if (!p) return true;
+    int n = table_active_protocol_underedit.rows.size() + 1;
+    again:
+    for (auto &row : table_active_protocol_underedit)
     {
-        network_props = 0;
-        return;
-    }
-    
-
-    auto row = table_active_protocol_underedit.find<false>(id);
-    if (!row) return;
-
-    //if (network_props != id)
-    network_props = id;
-
-
-    vspace(5);
-    label( CONSTWSTR("<l>") + ts::wstr_c(TTT("Имя сети",70)) + CONSTWSTR("</l>") );
-    textfield(row->other.name, MAX_PATH, TFR_TEXT_FILED, DELEGATE(this, network_1));
-    vspace(5);
-
-    check_item_s chis[] = 
-    {
-        check_item_s( TTT("Соединение с сетью при запуске",204), 1 )
-    };
-
-    check( ARRAY_WRAPPER(chis), DELEGATE(this, network_2), 0 != (row->other.options & active_protocol_data_s::O_AUTOCONNECT) ? 1 : 0 );
-
-    if (const protocols_s *p = find_protocol(row->other.tag))
-        if (p->proxy_support)
+        if (row.other.name.extract_numbers().as_int() == n)
         {
-            int pt = 0;
-            if (row->other.proxy.proxy_type & PROXY_SUPPORT_HTTP) pt = 1;
-            if (row->other.proxy.proxy_type & PROXY_SUPPORT_SOCKS4) pt = 2;
-            if (row->other.proxy.proxy_type & PROXY_SUPPORT_SOCKS5) pt = 3;
-            ts::wstr_c pa = row->other.proxy.proxy_addr;
-
-            vspace(5);
-            RID hg = hgroup(TTT("Настройки соединения",169));
-            RID ptcombik = combik( list_proxy_types(pt, DELEGATE(this, set_proxy_type_handler), p->proxy_support), hg );
-            RID paedit = textfield(pa, MAX_PATH, TFR_TEXT_FILED, DELEGATE(this, set_proxy_addr_handler), nullptr, 0, hg);
-            setctlname(CONSTASTR("protoproxytype"), HOLD(ptcombik)());
-            setctlname( CONSTASTR("protoproxyaddr"), HOLD(paedit)());
-
-            paedit.call_enable(pt != 0);
-
-            check_proxy_addr(paedit, row->other.proxy.proxy_addr);
+            ++n;
+            goto again;
         }
+    }
+    ts::wstr_c name = TTT("Соединение $", 63) / ts::to_wstr(selected_available_network).append_char(' ').append(ts::wmake(n));
+
+    dialog_protosetup_params_s prms(selected_available_network,name, p->features, p->connection_features, DELEGATE(this,addeditnethandler));
+    prms.configurable.udp_enable = true;
+    prms.configurable.server_port = 0;
+    prms.connect_at_startup = true;
+    SUMMON_DIALOG<dialog_setup_network_c>(UD_PROTOSETUPSETTINGS, prms);
+
+    return true;
 }
+
+void dialog_settings_c::available_network_selected(const ts::str_c& ntag)
+{
+    selected_available_network = ntag;
+    ctlenable(CONSTASTR("addnet"), !selected_available_network.is_empty());
+}
+
+menu_c dialog_settings_c::list_list_avaialble_networks()
+{
+    menu_c m;
+    m.add(TTT("Выберите сеть",201),0, DELEGATE( this,  available_network_selected ));
+    bool sep = false;
+    for (const protocols_s&proto : available_prots)
+    {
+        if (!sep) m.add_separator();
+        sep = true;
+        m.add( proto.description, 0, DELEGATE( this,  available_network_selected ), proto.tag);
+    }
+    return m;
+}
+
 
 void dialog_settings_c::add_active_proto( RID lst, int id, const active_protocol_data_s &apdata )
 {
-    ts::wstr_c desc = describe_network(apdata.name, apdata.tag);
+    ts::wstr_c desc = make_proto_desc( MPD_NAME | MPD_MODULE | MPD_ID );
+    describe_network(desc, apdata.name, apdata.tag, id);
+
     ts::str_c par(CONSTASTR("2/")); par.append(apdata.tag).append_char('/').append_as_int(id);
     MAKE_CHILD<gui_listitem_c>(lst, desc, par) << DELEGATE(this, getcontextmenu);
-}
-
-bool dialog_settings_c::activateprotocol( const ts::wstr_c& name, const ts::str_c& tag )
-{
-    auto &r = table_active_protocol_underedit.getcreate(0);
-    r.other.name = name;
-    r.other.tag = tag;
-    r.other.config = import;
-    if (RID lst = find(CONSTASTR("protoactlist")))
-        add_active_proto(lst, r.id, r.other);
-    return true;
 }
 
 void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
 {
     ts::token<char> t(param, '/');
-    if (*t == CONSTASTR("add") || *t == CONSTASTR("imp"))
+    if (*t == CONSTASTR("del"))
     {
-        import.clear();
+        ++t;
+        int id = t->as_int();
 
-        if (*t == CONSTASTR("imp"))
+        if (id < 0)
         {
-            ++t;
-            ts::wstr_c title = TTT("Импорт конфигурации для протокола $",55) / ts::wstr_c(*t);
-            ts::wstr_c iroot( CONSTWSTR("%APPDATA%") );
-            ts::parse_env(iroot);
-
-            if (dir_present( ts::fn_join(iroot, ts::wstr_c(*t)) ))
-            {
-                iroot = ts::fn_join(iroot, ts::wstr_c(*t));
-            }
-
-            ++sysmodal;
-            ts::wstr_c fn = ts::get_load_filename_dialog(iroot, CONSTWSTR(""), CONSTWSTR(""), nullptr, title);
-            --sysmodal;
-
-            if (fn.is_empty())
-                return;
-
-            import.load_from_text_file(fn);
-
+            on_delete_network( *t );
         } else
         {
-            ++t;
-        }
-
-        SUMMON_DIALOG<dialog_entertext_c>(UD_NETWORKNAME, dialog_entertext_c::params(
-            UD_NETWORKNAME,
-            TTT("[appname]: имя сети",61),
-            TTT("Введите имя сети. Поскольку возможно одновременное использование нескольких сетей одного типа, вам будет удобнее отличать эти сети друг от друга по именам, которые вы сами им дадите.",62),
-            TTT("Сеть $",63) / ts::wmake( table_active_protocol_underedit.rows.size() + 1 ),
-            *t,
-            DELEGATE(this, activateprotocol),
-            check_always_ok));
-
-    } else if (*t == CONSTASTR("on"))
-    {
-        // activate suspended proto
-        ++t;
-        int id = t->as_int();
-        auto *row = table_active_protocol_underedit.find<false>(id);
-        if (ASSERT(row))
-        {
-            RESETFLAG( row->other.options, active_protocol_data_s::O_SUSPENDED );
-            row->changed();
-
-            if (RID lst = find(CONSTASTR("protolist")))
-                lst.call_kill_child(ts::str_c(CONSTASTR("3/")).append(row->other.tag).append_char('/').append_as_int(id));
-
-            if (RID lst = find(CONSTASTR("protoactlist")))
-                add_active_proto(lst, row->id, row->other);
-        }
-        
-
-    } else if (*t == CONSTASTR("del"))
-    {
-        ++t;
-        int id = t->as_int();
-        if (network_props == id) create_network_props_ctls(0);
-
-        ts::str_c tag;
-        if (contacts().present_protoid( id ))
-        {
-            auto *row = table_active_protocol_underedit.find<false>( id );
+            auto *row = table_active_protocol_underedit.find<false>(id);
             if (ASSERT(row))
             {
-                row->other.options |= active_protocol_data_s::O_SUSPENDED;
-                row->changed();
-                tag = row->other.tag;
+                SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
+                    gui_isodialog_c::title(DT_MSGBOX_WARNING),
+                    TTT("Соединение [$] будет удалено![br]Вы уверены?", 266) / row->other.name
+                    ).on_ok(DELEGATE(this, on_delete_network), *t).bcancel());
             }
-
-            if (RID lst = find(CONSTASTR("protolist")))
-                add_suspended_proto(lst, id, row->other);
-
-        } else
-        {
-            tag = table_active_protocol_underedit.del(id).other.tag;
         }
-
-        if (RID lst = find(CONSTASTR("protoactlist")))
-            lst.call_kill_child( tag.insert(0,CONSTASTR("2/")).append_char('/').append_as_int(id) );
 
     } else if (*t == CONSTASTR("props"))
     {
         ++t;
-        create_network_props_ctls( t->as_int() );
+
+        auto *row = table_active_protocol_underedit.find<false>(t->as_int());
+        if (ASSERT(row))
+        {
+            const protocols_s *p = find_protocol(row->other.tag);
+            if (ASSERT(p))
+            {
+                dialog_protosetup_params_s prms(selected_available_network, row->other.name, p->features, p->connection_features, DELEGATE(this, addeditnethandler));
+                prms.uname = row->other.user_name;
+                prms.ustatus = row->other.user_statusmsg;
+                prms.protoid = row->id;
+                prms.configurable = row->other.configurable;
+                prms.connect_at_startup = 0 != (row->other.options & active_protocol_data_s::O_AUTOCONNECT);
+                SUMMON_DIALOG<dialog_setup_network_c>(UD_PROTOSETUPSETTINGS, prms);
+            }
+        }
+
     }
     else if (*t == CONSTASTR("copy"))
     {
@@ -765,41 +728,17 @@ menu_c dialog_settings_c::getcontextmenu( const ts::str_c& param, bool activatio
 {
     menu_c m;
     ts::token<char> t(param, '/');
-    if (*t == CONSTASTR("1"))
-    {
-        if (gmsg<GM_DIALOG_PRESENT>( UD_NETWORKNAME ).send().is(GMRBIT_ACCEPTED))
-            return m;
-
-        ++t;
-        if (activation)
-            contextmenuhandler( ts::str_c(CONSTASTR("add/")).append(*t) );
-        else
-        {
-            m.add(TTT("Добавить к списку активных", 58), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("add/")).append(*t));
-            if (!t->equals(CONSTASTR("lan"))) // temporary disable lan import
-                m.add(TTT("Импортировать конфигурацию из файла",56), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("imp/")).append(*t));
-        }
-
-    } else if (*t == CONSTASTR("2"))
+    if (*t == CONSTASTR("2"))
     {
         ++t;
         ++t;
         if (activation)
-            contextmenuhandler( ts::str_c(CONSTASTR("del/")).append(*t) );
+            contextmenuhandler( ts::str_c(CONSTASTR("props/")).append(*t) );
         else 
         {
-            m.add(TTT("Деактивировать", 59), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("del/")).append(*t));
-            m.add(TTT("Свойства", 60), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("props/")).append(*t));
+            m.add(ts::wstr_c(CONSTWSTR("<b>")).append(TTT("Настроить", 60)), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("props/")).append(*t));
+            m.add(TTT("Удалить", 59), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("del/")).append(*t));
         }
-
-    } else if (*t == CONSTASTR("3"))
-    {
-        ++t;
-        ++t;
-        if (activation)
-            contextmenuhandler(ts::str_c(CONSTASTR("on/")).append(*t) );
-        else
-            m.add(TTT("Активировать",201),0,DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("on/")).append(*t) );
     }
 
     return m;
@@ -837,13 +776,13 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
     {
         bool ch1 = prf().username(username);
         bool ch2 = prf().userstatus(userstatusmsg);
-        if (ch1) gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_USERNAME, username).send();
-        if (ch2) gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_USERSTATUSMSG, userstatusmsg).send();
+        if (ch1) gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_USERNAME, username).send();
+        if (ch2) gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_USERSTATUSMSG, userstatusmsg).send();
         prf().ctl_to_send(ctl2send);
         ch1 = prf().date_msg_template(date_msg_tmpl);
         ch1 |= prf().date_sep_template(date_sep_tmpl);
         if (prf().set_msg_options( msgopts_current, msgopts_changed ) || ch1)
-            gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_MSGOPTIONS).send();
+            gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_MSGOPTIONS).send();
 
         prf().download_folder(downloadfolder);
         prf().auto_confirm_masks( auto_download_masks );
@@ -872,7 +811,7 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
     if (cfg().device_mic(micdevice))
     {
         g_app->capture_device_changed();
-        gmsg<ISOGM_CHANGED_PROFILEPARAM>(PP_MICDEVICE).send();
+        gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_MICDEVICE).send();
     }
 
     for (const theme_info_s& thi : m_themes)
@@ -917,8 +856,11 @@ bool dialog_settings_c::ipchandler( ipcr r )
                     protocols_s &proto = available_prots.add();
                     proto.description = d.substr(p + 2);
                     proto.tag = d.substr(0, p);
-                    proto.proxy_support = r.get<int>();
+                    proto.features = r.get<int>();
+                    proto.connection_features = r.get<int>();
                 }
+
+                set_combik_menu(CONSTASTR("availablenets"), list_list_avaialble_networks());
             }
             break;
         }
@@ -1057,3 +999,265 @@ void dialog_settings_c::select_signal_device(const ts::str_c& prm)
     }
     */
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// proto setup
+
+dialog_setup_network_c::dialog_setup_network_c(MAKE_ROOT<dialog_setup_network_c> &data) :gui_isodialog_c(data), params(data.prms)
+{
+    if (params.protoid)
+        if (active_protocol_c *ap = prf().ap(params.protoid))
+        {
+            params.uname = ap->get_uname();
+            params.ustatus = ap->get_ustatusmsg();
+            params.networkname = ap->get_name();
+        }
+}
+
+dialog_setup_network_c::~dialog_setup_network_c()
+{
+    //gui->delete_event(DELEGATE(this, refresh_current_page));
+}
+
+
+/*virtual*/ void dialog_setup_network_c::created()
+{
+    set_theme_rect(CONSTASTR("main"), false);
+    __super::created();
+    tabsel(CONSTASTR("1"));
+}
+
+void dialog_setup_network_c::getbutton(bcreate_s &bcr)
+{
+    __super::getbutton(bcr);
+}
+
+/*virtual*/ int dialog_setup_network_c::additions(ts::irect & border)
+{
+
+    descmaker dm(descs);
+    dm << 1;
+
+    ts::wstr_c hdr(TTT("Настройка соединения",61));
+    hdr.append(CONSTWSTR("<br><l>"));
+
+    bool newnet = true;
+    if (params.protoid)
+        if (active_protocol_c *ap = prf().ap(params.protoid))
+            hdr.append(ap->get_desc()), newnet = false;
+    if (newnet)
+        hdr.append(TTT("будет создано новое соединение $",62) / ts::to_wstr(params.networktag));
+    hdr.append(CONSTWSTR("</l>"));
+
+    dm().page_header(hdr);
+
+
+    dm().vspace(15);
+    dm().textfield(TTT("Имя этого соединения",70), params.networkname, DELEGATE(this, netname_edit)).focus(true);
+    dm().vspace();
+    dm().textfield(TTT("Ваше имя в этой сети",261), params.uname, DELEGATE(this, uname_edit));
+    dm().vspace();
+    dm().textfield(TTT("Ваш статус в этой сети",262), params.ustatus, DELEGATE(this, ustatus_edit));
+
+    dm().vspace();
+
+    if ( params.confirm )
+    {
+        dm().checkb(ts::wstr_c(), DELEGATE(this, network_connect), params.connect_at_startup ? 1 : 0).setmenu(
+            menu_c().add(TTT("Соединение с сетью при запуске", 204), 0, MENUHANDLER(), CONSTASTR("1"))  );
+
+        addh += 22;
+
+        if (0 != (params.con_features & CF_UDP_OPTION))
+        {
+            addh += 22;
+            dm().checkb(ts::wstr_c(), DELEGATE(this, network_udp), params.configurable.udp_enable ? 1 : 0).setmenu(
+                menu_c().add(TTT("Разрешить использование UDP",264), 0, MENUHANDLER(), CONSTASTR("1")));
+        }
+
+        if (0 != (params.con_features & CF_SERVER_OPTION))
+        {
+            dm().vspace(5);
+            addh += 45;
+            dm().textfield(TTT("Порт сервера (0 - не запускать сервер)",265), ts::wmake<int>(params.configurable.server_port), DELEGATE(this, network_serverport));
+        }
+
+        if (0 != (params.con_features & CF_PROXY_MASK))
+        {
+            addh += 45;
+
+            int pt = 0;
+            if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_HTTP) pt = 1;
+            if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_SOCKS4) pt = 2;
+            if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_SOCKS5) pt = 3;
+            ts::wstr_c pa = params.configurable.proxy.proxy_addr;
+
+            dm().vspace(5);
+
+            dm().hgroup(TTT("Настройки соединения", 169));
+            dm().combik(HGROUP_MEMBER).setmenu(list_proxy_types(pt, DELEGATE(this, set_proxy_type_handler), params.con_features & CF_PROXY_MASK)).setname(CONSTASTR("protoproxytype"));
+            dm().textfield(HGROUP_MEMBER, ts::to_wstr(params.configurable.proxy.proxy_addr), DELEGATE(this, set_proxy_addr_handler)).setname(CONSTASTR("protoproxyaddr"));
+        }
+
+        if (params.protoid == 0 && 0 != (params.features & PF_IMPORT))
+        {
+            dm().vspace(5);
+            addh += 45;
+
+            ts::wstr_c iroot(CONSTWSTR("%APPDATA%"));
+            ts::parse_env(iroot);
+
+            if (dir_present(ts::fn_join(iroot, ts::wstr_c(params.networktag))))
+                iroot = ts::fn_join(iroot, ts::wstr_c(params.networktag));
+            ts::fix_path(iroot, FNO_APPENDSLASH);
+
+            dm().file(TTT("Импортировать конфигурацию из файла",56), iroot, ts::wstr_c(), DELEGATE(this, network_importfile));
+        }
+    }
+
+    return 0;
+}
+
+bool dialog_setup_network_c::uname_edit(const ts::wstr_c &t)
+{
+    params.uname = t;
+    return true;
+}
+
+bool dialog_setup_network_c::ustatus_edit(const ts::wstr_c &t)
+{
+    params.ustatus = t;
+    return true;
+}
+
+bool dialog_setup_network_c::netname_edit(const ts::wstr_c &t)
+{
+    params.networkname = t;
+    return true;
+}
+
+/*virtual*/ bool dialog_setup_network_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    if (__super::sq_evt(qp, rid, data)) return true;
+
+    //switch (qp)
+    //{
+    //case SQ_DRAW:
+    //    if (const theme_rect_s *tr = themerect())
+    //        draw(*tr);
+    //    break;
+    //}
+
+    return false;
+}
+
+/*virtual*/ void dialog_setup_network_c::on_confirm()
+{
+    if (params.confirm)
+    {
+        if (!params.confirm(params))
+            return;
+    } else if (params.protoid)
+    {
+        if (active_protocol_c *ap = prf().ap(params.protoid))
+        {
+            if (!params.uname.equals(ap->get_uname())) gmsg<ISOGM_CHANGED_PROFILEPARAM>(params.protoid, PP_USERNAME, params.uname).send();
+            if (!params.ustatus.equals(ap->get_ustatusmsg())) gmsg<ISOGM_CHANGED_PROFILEPARAM>(params.protoid, PP_USERSTATUSMSG, params.ustatus).send();
+            if (!params.networkname.equals(ap->get_name())) gmsg<ISOGM_CHANGED_PROFILEPARAM>(params.protoid, PP_NETWORKNAME, params.networkname).send();
+        }
+    } 
+
+    __super::on_confirm();
+}
+
+/*virtual*/ ts::wstr_c dialog_setup_network_c::get_name() const
+{
+    return TTT("[appname]: Настройка соединения",263);
+}
+/*virtual*/ ts::ivec2 dialog_setup_network_c::get_min_size() const
+{
+    return ts::ivec2(400, 300 + addh);
+}
+
+bool dialog_setup_network_c::network_importfile(const ts::wstr_c & t)
+{
+    params.importcfg = t;
+    return true;
+}
+
+bool dialog_setup_network_c::network_serverport(const ts::wstr_c & t)
+{
+    params.configurable.server_port = t.as_int();
+    if (params.configurable.server_port < 0 || params.configurable.server_port > 65535)
+        params.configurable.server_port = 0;
+    return true;
+}
+
+bool dialog_setup_network_c::network_udp(RID, GUIPARAM p)
+{
+    params.configurable.udp_enable = p != nullptr;
+    return true;
+}
+
+bool dialog_setup_network_c::network_connect(RID, GUIPARAM p)
+{
+    params.connect_at_startup = p != nullptr;
+    return true;
+}
+
+void dialog_setup_network_c::set_proxy_type_handler(const ts::str_c& p)
+{
+    int psel = p.as_int();
+    if (psel == 0) params.configurable.proxy.proxy_type = 0;
+    else if (psel == 1) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_HTTP;
+    else if (psel == 2) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_SOCKS4;
+    else if (psel == 3) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_SOCKS5;
+
+    set_combik_menu(CONSTASTR("protoproxytype"), list_proxy_types(psel, DELEGATE(this, set_proxy_type_handler), params.con_features & CF_PROXY_MASK));
+    if (RID r = find(CONSTASTR("protoproxyaddr")))
+    {
+        check_proxy_addr(params.configurable.proxy.proxy_type, r, params.configurable.proxy.proxy_addr);
+        r.call_enable(psel > 0);
+    }
+}
+
+bool dialog_setup_network_c::set_proxy_addr_handler(const ts::wstr_c & t)
+{
+    params.configurable.proxy.proxy_addr = t;
+
+    if (RID r = find(CONSTASTR("protoproxyaddr")))
+        check_proxy_addr(params.configurable.proxy.proxy_type, r, params.configurable.proxy.proxy_addr);
+    return true;
+}
+
+/*virtual*/ void dialog_setup_network_c::tabselected(ts::uint32 mask)
+{
+    if (RID r = find(CONSTASTR("protoproxyaddr")))
+    {
+        check_proxy_addr(params.configurable.proxy.proxy_type, r, params.configurable.proxy.proxy_addr);
+        r.call_enable(params.configurable.proxy.proxy_type != 0);
+    }
+}
+
+
+
+
+
+
+
+
+
+
