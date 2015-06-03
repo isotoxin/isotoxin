@@ -2120,6 +2120,70 @@ bool rectengine_root_c::update_foreground()
     gmsg<GM_ROOT_FOCUS>(getrid()).send();
     return oldfocus != gui->get_focus();
 }
+
+#ifdef _WIN32
+namespace ts {
+    extern HWND g_main_window;
+};
+#endif
+
+ts::wstr_c   rectengine_root_c::load_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, const ts::wsptr &filt, const ts::wchar *defext, const ts::wchar *title)
+{
+    /*
+        извините за этот небольшой win32 хак, но
+        если системному окну выбора папки не прописать в качестве владельца текущий диалог,
+        то системное окно начнет вести себя не вполне корректно
+    */
+    HWND ow = ts::g_main_window;
+    ts::g_main_window = hwnd;
+
+    ++sysmodal;
+    ts::wstr_c r = ts::get_load_filename_dialog(iroot, name, filt, defext, title);
+    --sysmodal;
+    ts::g_main_window = ow;
+
+    return r;
+}
+bool     rectengine_root_c::load_filename_dialog(ts::wstrings_c &files, const ts::wsptr &iroot, const ts::wsptr& name, const ts::wsptr &filt, const ts::wchar *defext, const ts::wchar *title)
+{
+    HWND ow = ts::g_main_window;
+    ts::g_main_window = hwnd;
+
+    ++sysmodal;
+    bool r = ts::get_load_filename_dialog(files, iroot, name, filt, defext, title);
+    --sysmodal;
+    ts::g_main_window = ow;
+
+    return r;
+}
+
+ts::wstr_c  rectengine_root_c::save_directory_dialog(const ts::wsptr &root, const ts::wsptr &title, const ts::wsptr &selectpath, bool nonewfolder)
+{
+    HWND ow = ts::g_main_window;
+    ts::g_main_window = hwnd;
+
+    ++sysmodal;
+    ts::wstr_c r = ts::get_save_directory_dialog(root, title, selectpath, nonewfolder);
+    --sysmodal;
+    ts::g_main_window = ow;
+
+    return r;
+}
+ts::wstr_c  rectengine_root_c::save_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, const ts::wsptr &filt, const ts::wchar *defext, const ts::wchar *title)
+{
+    HWND ow = ts::g_main_window;
+    ts::g_main_window = hwnd;
+
+    ++sysmodal;
+    ts::wstr_c r = ts::get_save_filename_dialog(iroot, name, filt, defext, title);
+    --sysmodal;
+    ts::g_main_window = ow;
+
+    return r;
+}
+
+
+
 // PARENT RECT ENGINE
 
 rectengine_child_c::rectengine_child_c(guirect_c *parent, RID after):parent(parent)

@@ -722,9 +722,7 @@ bool contact_c::b_receive_file_as(RID, GUIPARAM par)
         ts::make_path(downf, 0);
                     
         ts::wstr_c title = TTT("Сохранение файла",179);
-        ++sysmodal;
-        ts::wstr_c fn = ts::get_save_filename_dialog(downf, ft->filename, CONSTWSTR(""), nullptr, title);
-        --sysmodal;
+        ts::wstr_c fn = ownitm->getroot()->save_filename_dialog(downf, ft->filename, CONSTWSTR(""), nullptr, title);
 
         if (!fn.is_empty())
         {

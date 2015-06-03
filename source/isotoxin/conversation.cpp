@@ -2805,10 +2805,8 @@ bool gui_message_area_c::send_file(RID, GUIPARAM)
     if (fromdir.is_empty())
         fromdir = ts::fn_get_path(ts::get_exe_full_name());
     ts::wstr_c title(TTT("Отправить файлы", 180));
-    ++sysmodal;
-    if (ts::get_load_filename_dialog(files, fromdir, CONSTWSTR(""), CONSTWSTR(""), nullptr, title))
+    if (getroot()->load_filename_dialog(files, fromdir, CONSTWSTR(""), CONSTWSTR(""), nullptr, title))
     {
-        --sysmodal;
         if (files.size())
             prf().last_filedir(ts::fn_get_path(files.get(0)));
 
@@ -2816,8 +2814,6 @@ bool gui_message_area_c::send_file(RID, GUIPARAM)
             for (const ts::wstr_c &fn : files)
                 c->send_file(fn);
     }
-    else
-        --sysmodal;
 
     return true;
 }

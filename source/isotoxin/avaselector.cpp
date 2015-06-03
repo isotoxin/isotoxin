@@ -412,9 +412,7 @@ bool dialog_avaselector_c::save_image(RID, GUIPARAM)
 
     ts::wstr_c filter(CONSTWSTR("png/*.png/(*.*)/*.*//"));
 
-    ++sysmodal;
-    ts::wstr_c fn = ts::get_save_filename_dialog(fromdir, CONSTWSTR("avatar.png"), filter, L"png", title);
-    --sysmodal;
+    ts::wstr_c fn = getroot()->save_filename_dialog(fromdir, CONSTWSTR("avatar.png"), filter, L"png", title);
     if (!fn.is_empty())
     {
         if (savesmall)
@@ -448,9 +446,7 @@ bool dialog_avaselector_c::open_image(RID, GUIPARAM)
     filter.replace_all(CONSTWSTR("<imgs>"), TTT("Изображения",214));
     filter.replace_all(CONSTWSTR("<all>"), TTT("Любые файлы",215));
 
-    ++sysmodal;
-    ts::wstr_c fn = ts::get_load_filename_dialog(fromdir, CONSTWSTR(""), filter, L"png", title);
-    --sysmodal;
+    ts::wstr_c fn = getroot()->load_filename_dialog(fromdir, CONSTWSTR(""), filter, L"png", title);
 
     if (!fn.is_empty())
     {

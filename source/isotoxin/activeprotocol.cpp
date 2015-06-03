@@ -169,7 +169,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
                 else if (f.equals(CONSTASTR(CFGF_SERVER_PORT)))
                     w().data.configurable.server_port = v.as_int();
                 else if (f.equals(CONSTASTR(CFGF_UDP_ENABLE)))
-                    w().data.configurable.server_port = v.as_int() != 0;
+                    w().data.configurable.udp_enable = v.as_int() != 0;
             }
             w().flags.set(F_PROXY_SETTINGS_RCVD);
         }
@@ -321,7 +321,12 @@ ts::uint32 active_protocol_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
             dematerialization = row == nullptr /*|| FLAG(row->other.options, active_protocol_data_s::O_SUSPENDED)*/;
             if (!dematerialization)
             {
-                syncdata.lock_write()().data.name = row->other.name;
+                auto w = syncdata.lock_write();
+                w().data.name = row->other.name;
+                w().data.user_name = row->other.user_name;
+                w().data.user_statusmsg = row->other.user_statusmsg;
+                w().data.options = row->other.options;
+
                 set_configurable(row->other.configurable);
             }
         }

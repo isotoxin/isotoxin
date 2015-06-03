@@ -349,7 +349,12 @@ public:
         return GetForegroundWindow() == hwnd;
     }
 
-    HWND get_hwnd() {return hwnd;} // just WIN32
+
+    ts::wstr_c  load_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, const ts::wsptr &filt, const ts::wchar *defext, const ts::wchar *title);
+    bool        load_filename_dialog(ts::wstrings_c &files, const ts::wsptr &iroot, const ts::wsptr& name, const ts::wsptr &filt, const ts::wchar *defext, const ts::wchar *title);
+    ts::wstr_c  save_directory_dialog(const ts::wsptr &root, const ts::wsptr &title, const ts::wsptr &selectpath = ts::wsptr(), bool nonewfolder = false);
+    ts::wstr_c  save_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, const ts::wsptr &filt, const ts::wchar *defext, const ts::wchar *title);
+
 };
 
 INLINE rectengine_root_c *root_by_rid( RID r )

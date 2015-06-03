@@ -712,13 +712,13 @@ void gui_contact_item_c::generate_protocols()
                 if (c->get_state() == CS_ONLINE)
                 {
                     protocols.append(CONSTWSTR("<nl><shadow>")).append(maketag_color<ts::wchar>(get_default_text_color(1)));
-                    if (def == c) protocols.append(CONSTWSTR("+"));
+                    if (def == c) protocols.append(CONSTWSTR(" +")); else protocols.append_char(' ');
                     protocols.append(row->other.name);
                     protocols.append(CONSTWSTR("</color></shadow> "));
                 } else
                 {
                     protocols.append(CONSTWSTR("<nl>")).append(maketag_color<ts::wchar>(get_default_text_color(2)));
-                    if (def == c) protocols.append(CONSTWSTR("+"));
+                    if (def == c) protocols.append(CONSTWSTR(" +")); else protocols.append_char(' ');
                     protocols.append(row->other.name);
                     protocols.append(CONSTWSTR("</color> "));
                 }

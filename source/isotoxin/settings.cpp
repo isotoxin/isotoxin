@@ -578,8 +578,10 @@ bool dialog_settings_c::addeditnethandler(dialog_protosetup_params_s &params)
         apd = &r.other;
     } else
     {
-        apd = &table_active_protocol_underedit.find<true>( params.protoid )->other;
+        auto *row = table_active_protocol_underedit.find<true>( params.protoid );
+        apd = &row->other;
         id = params.protoid;
+        row->changed();
     }
 
     apd->user_name = params.uname;
@@ -700,13 +702,13 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
     {
         ++t;
 
-        auto *row = table_active_protocol_underedit.find<false>(t->as_int());
-        if (ASSERT(row))
+        auto *row = table_active_protocol_underedit.find<true>(t->as_int());
+        if (CHECK(row))
         {
             const protocols_s *p = find_protocol(row->other.tag);
-            if (ASSERT(p))
+            if (CHECK(p))
             {
-                dialog_protosetup_params_s prms(selected_available_network, row->other.name, p->features, p->connection_features, DELEGATE(this, addeditnethandler));
+                dialog_protosetup_params_s prms(row->other.tag, row->other.name, p->features, p->connection_features, DELEGATE(this, addeditnethandler));
                 prms.uname = row->other.user_name;
                 prms.ustatus = row->other.user_statusmsg;
                 prms.protoid = row->id;
@@ -1018,7 +1020,7 @@ void dialog_settings_c::select_signal_device(const ts::str_c& prm)
 
 dialog_setup_network_c::dialog_setup_network_c(MAKE_ROOT<dialog_setup_network_c> &data) :gui_isodialog_c(data), params(data.prms)
 {
-    if (params.protoid)
+    if (params.protoid && !params.confirm)
         if (active_protocol_c *ap = prf().ap(params.protoid))
         {
             params.uname = ap->get_uname();

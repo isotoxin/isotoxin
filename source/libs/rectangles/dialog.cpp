@@ -331,11 +331,6 @@ public:
 };
 
 }
-#ifdef _WIN32
-namespace ts {
-extern HWND g_main_window;
-};
-#endif
 
 bool gui_dialog_c::file_selector(RID, GUIPARAM param)
 {
@@ -347,21 +342,7 @@ bool gui_dialog_c::file_selector(RID, GUIPARAM param)
     gui->app_path_expand_env(curp);
 
 
-    ++sysmodal;
-#ifdef _WIN32
-    /*
-        извините за этот небольшой win32 хак, но
-        если системному окну выбора папки не прописать в качестве владельца текущий диалог,
-        то системное окно начнет вести себя не вполне корректно
-    */
-    HWND ow = ts::g_main_window;
-    ts::g_main_window = getroot()->get_hwnd();
-#endif
-    ts::wstr_c fn = ts::get_load_filename_dialog(ts::fn_get_path(curp), CONSTWSTR(""), CONSTWSTR(""), nullptr, label_file_selector_caption);
-#ifdef _WIN32
-    ts::g_main_window = ow;
-#endif
-    --sysmodal;
+    ts::wstr_c fn = getroot()->load_filename_dialog(ts::fn_get_path(curp), CONSTWSTR(""), CONSTWSTR(""), nullptr, label_file_selector_caption);
 
     if (!fn.is_empty())
     {
@@ -384,21 +365,7 @@ bool gui_dialog_c::path_selector(RID, GUIPARAM param)
         curp.set_length(cutit);
     }
 
-    ++sysmodal;
-#ifdef _WIN32
-    /*
-        извините за этот небольшой win32 хак, но
-        если системному окну выбора папки не прописать в качестве владельца текущий диалог,
-        то системное окно начнет вести себя не вполне корректно
-    */
-    HWND ow = ts::g_main_window;
-    ts::g_main_window = getroot()->get_hwnd();
-#endif
-    ts::wstr_c path = ts::get_save_directory_dialog(CONSTWSTR("/"), label_path_selector_caption, curp);
-#ifdef _WIN32
-    ts::g_main_window = ow;
-#endif
-    --sysmodal;
+    ts::wstr_c path = getroot()->save_directory_dialog(CONSTWSTR("/"), label_path_selector_caption, curp);
     if (!path.is_empty())
     {
         tf.set_text(path);
