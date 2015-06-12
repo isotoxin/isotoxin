@@ -3,17 +3,6 @@
 namespace ts
 {
 
-static FORCEINLINE int calc_mask_x(int m0, int m1)
-{
-    return (0xF << m0) & (0xF >> (4 - m1));
-}
-
-static FORCEINLINE int calc_mask_y(int m0, int m1)
-{
-    return (0xFFFF << m0 * 4) & (0xFFFF >> (4 - m1) * 4);
-}
-
-
 void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info)
 {
     ASSERT(sou_info.sz == des_info.sz);
@@ -215,46 +204,6 @@ void TSCALL img_helper_copy_components(uint8* des, const uint8* sou, const imgde
                 des[i] = sou[i];
 }
 
-
-//(uint8 *des, int des_info.pitch, const ivec2 &des_size, const ivec2 &from_p, const void *src_bits, int src_pitch, int squish_fmt)
-void TSCALL img_helper_get_from_dxt(uint8 *des, const imgdesc_s &des_info, const ivec2 &from_p, const void *sou, int sou_pitch, int squish_fmt)
-{
-
-    int src_byte_delta = squish_fmt == dxt::kDxt1 ? 8 : 16;
-
-    int blk_x = from_p.x >> 2;
-    int blk_y = from_p.y >> 2;
-    int bx = from_p.x - (blk_x << 2);
-    int by = from_p.y - (blk_y << 2);
-
-    int blk_cnt_x = ((from_p.x + des_info.sz.x - 1) >> 2) - blk_x + 1;
-    int blk_cnt_y = ((from_p.y + des_info.sz.y - 1) >> 2) - blk_y + 1;
-
-    // сколько пикселов справа и снизу нужно отхватить от последнего блока в строке/столбце
-    int rx = (from_p.x + des_info.sz.x) - (((from_p.x + des_info.sz.x) >> 2) << 2); if (rx == 0) rx = 4;
-    int ry = (from_p.y + des_info.sz.y) - (((from_p.y + des_info.sz.y) >> 2) << 2); if (ry == 0) ry = 4;
-
-    //uint8 *dst = body() - (by != 0 ? info().pitch * 4 : 0) - (bx != 0 ? 16 : 0);
-    uint8 *dst = des - by * des_info.pitch - bx * 4;
-
-    for (int y = 0; y < blk_cnt_y; ++y)
-    {
-        const uint8 *srcline = (const uint8 *)sou + sou_pitch * (y + blk_y);
-
-        int y_mask = calc_mask_y((y == 0) ? by : 0, (y < (blk_cnt_y - 1)) ? 4 : ry);
-
-        for (int x = 0; x < blk_cnt_x; ++x)
-        {
-            const uint8 *srcblock = srcline + (x + blk_x) * src_byte_delta;
-            uint8 *dstblock = dst + x * 4 * 4 + y * des_info.pitch * 4;
-
-            int x_mask = calc_mask_x((x == 0) ? bx : 0, (x < (blk_cnt_x - 1)) ? 4 : rx);
-            int the_mask = ((x_mask << 0) | (x_mask << 4) | (x_mask << 8) | (x_mask << 12)) & y_mask;
-
-            dxt::decompress(the_mask, dstblock, des_info.pitch, srcblock, squish_fmt);
-        }
-    }
-}
 
 #pragma warning (push)
 #pragma warning (disable : 4731)
@@ -871,12 +820,6 @@ template<typename CORE> void bitmap_t<CORE>::tile(const ivec2 & pdes,const ivec2
     }
 }
 
-template<typename CORE> void bitmap_t<CORE>::get_from_dxt( const ivec2 &from_p, const void *src_bits, int src_pitch, int squish_fmt )
-{
-    if (ASSERT( info().bytepp() == 4 ))
-        img_helper_get_from_dxt( body(), info(), from_p, src_bits, src_pitch, squish_fmt );
-}
-
 template<typename CORE> void bitmap_t<CORE>::copy_components(bitmap_c &imageout, int num_comps, int dst_first_comp, int src_first_comp) const
 {
 	ASSERT(imageout.info().sz == info().sz && dst_first_comp+num_comps <= imageout.info().bytepp() && src_first_comp+num_comps <= info().bytepp());
@@ -1089,7 +1032,7 @@ template<typename CORE> void bitmap_t<CORE>::fill(const ivec2 & pdes,const ivec2
         if (sz >> 0) fill(pos,sz,color);
         return;
     }
-    if (!ASSERT(size >> 0)) return;
+    if (!(size >> 0)) return;
 
     before_modify();
 
@@ -1964,6 +1907,8 @@ template<typename CORE> void bitmap_t<CORE>::make_grayscale(void)
 
 template<typename CORE> void bitmap_t<CORE>::swap_byte(void *target) const
 {
+    // TODO : move this stuff to asm file
+
     if (info().bytepp() != 3 && info().bytepp() != 4)
     {
         DEBUG_BREAK(); //ERROR_S(L"Unsupported bitpp to convert");

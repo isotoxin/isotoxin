@@ -21,6 +21,7 @@ enum messages_options_e
     MSGOP_SHOW_DATE_SEPARATOR   = SETBIT(1),
     MSGOP_SHOW_PROTOCOL_NAME    = SETBIT(2),
     MSGOP_KEEP_HISTORY          = SETBIT(3),
+    MSGOP_JOIN_MESSAGES         = SETBIT(4), // hidden option
 };
 
 #define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY)
@@ -268,6 +269,7 @@ class profile_c : public config_base_c
     INTPAR(msgopts_edited, 0)
 
 public:
+
     profile_c() { dirty_sort(); }
     ~profile_c();
 
@@ -331,6 +333,7 @@ public:
         edited |= (curmod ^ newbits);
         msgopts_edited( (int)edited );
         cur = (cur & ~mask) | newbits;
+        current_msg_options.setup(cur);
         return msgopts( (int)cur );
     }
 
@@ -347,11 +350,9 @@ public:
     TEXTWPAR(manual_confirm_masks, "*.exe; *.com; *.bat; *.cmd; *.vbs");
     INTPAR(fileconfirm, 0);
 
-
 #define SND(s) TEXTWPAR( snd_##s, "sounds/" #s ".ogg" )
     SOUNDS
 #undef SND
-
 
     #define TAB(tab) tableview_##tab##_s &get_table_##tab() { return table_##tab; };
     PROFILE_TABLES

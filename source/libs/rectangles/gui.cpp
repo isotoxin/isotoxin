@@ -685,7 +685,7 @@ void gui_c::make_app_buttons(RID rootappwindow, ts::uint32 allowed_buttons, GET_
         b.tooltip(cbc->tooltip);
         b.set_face_getter(cbc->face);
         b.set_handler(cbc->handler, rootappwindow.to_ptr());
-        b.set_data( (GUIPARAM)cbc->tag );
+        b.set_customdata( (GUIPARAM)cbc->tag );
         b.leech( TSNEW(auto_app_buttons, prev, i) );
         MODIFY(b).visible(true).size(b.get_min_size());
         prev = &b;

@@ -562,9 +562,9 @@ struct text_parser_s
 		}
 		else if (tag == CONSTWSTR("nbsp") || tag == CONSTWSTR("space"))
 		{
-			meta_glyph_s &mg = add_meta_glyph(tag.get_char(0) == 's' ? meta_glyph_s::SPACE : meta_glyph_s::CHAR, chari); // метаглиф пробела
+			meta_glyph_s &mg = add_meta_glyph(tag.get_char(0) == 's' ? meta_glyph_s::SPACE : meta_glyph_s::CHAR, chari);
 			mg.glyph = &font[L' '];
-			mg.advance = tagbody.is_empty() ? mg.glyph->advance : (tagbody.get_last_char() == L'%' ? tagbody.as_int() * mg.glyph->advance / 100 : ui_scale(tagbody.as_int()));
+			mg.advance = tagbody.is_empty() ? mg.glyph->advance : (tagbody.get_last_char() == L'%' ? tagbody.substr(0,tagbody.get_length()-1).as_int() * mg.glyph->advance / 100 : ui_scale(tagbody.as_int()));
 			line_width += mg.advance;
 		}
 		else if (tag == CONSTWSTR("tab"))

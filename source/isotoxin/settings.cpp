@@ -437,7 +437,7 @@ menu_c dialog_settings_c::list_themes()
         dm().vspace(10);
         dm().list(TTT("Активные соединения",54), -270).setname(CONSTASTR("protoactlist"));
         dm().vspace();
-        dm().hgroup(TTT("Доступные соединения",53));
+        dm().hgroup(TTT("Доступные сети",53));
         dm().combik(HGROUP_MEMBER).setmenu(list_list_avaialble_networks()).setname(CONSTASTR("availablenets"));
         dm().button(HGROUP_MEMBER, TTT("Добавить соединение",58), DELEGATE(this, addnetwork)).width(250).height(25).setname(CONSTASTR("addnet"));
         dm().vspace();

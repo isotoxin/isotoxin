@@ -89,6 +89,8 @@ public:
 	void update(int scale = 100);
     void update_font();
 
+    int height() const {return font ? font->height : 0;}
+
 	operator font_c * () const {return get_font();}
 	font_c *operator->() const {return get_font();}
 };

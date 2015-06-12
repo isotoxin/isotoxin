@@ -2329,7 +2329,11 @@ static void prepare(const byte *data, size_t length)
     //options.tcp_port = (uint16_t)server_port; // TODO
     //options.udp_enabled = options.proxy_type == TOX_PROXY_TYPE_NONE;
 
-    tox = tox_new(&options, data, length, nullptr);
+    options.savedata_type = TOX_SAVEDATA_TYPE_TOX_SAVE;
+    options.savedata_data = data;
+    options.savedata_length = length;
+
+    tox = tox_new(&options, nullptr);
 
     tox_callback_friend_lossless_packet(tox, cb_isotoxin, nullptr);
 

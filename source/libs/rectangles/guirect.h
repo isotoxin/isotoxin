@@ -691,7 +691,7 @@ public:
     void set_updaterect( ts::UPDATE_RECTANGLE h ) { updaterect = h; }
 
     // custom data
-    void set_data(GUIPARAM _data, GUIPARAMHANDLER _datakiller = GUIPARAMHANDLER()) 
+    void set_customdata(GUIPARAM _data, GUIPARAMHANDLER _datakiller = GUIPARAMHANDLER()) 
     {
         if (!customdatakiller.empty()) customdatakiller(getrid(), customdata);
         customdata = _data; customdatakiller = _datakiller;

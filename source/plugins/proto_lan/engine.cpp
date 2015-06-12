@@ -632,9 +632,9 @@ void lan_engine::tick(int *sleep_time_ms)
     }
     *sleep_time_ms = first_ftr ? 0 : (10);
     media_data_transfer = false;
+    bool reset_mastertag = true;
 
     contact_s *rotten = nullptr;
-    bool need_some_hallo = false;
     int ct = time_ms();
 
     tick_ftr(ct);
@@ -844,8 +844,10 @@ void lan_engine::tick(int *sleep_time_ms)
             
         }
 
+        bool need_some_hallo = false;
         if (c->state == contact_s::OFFLINE)
         {
+            reset_mastertag = false;
             if (!c->pipe.connected())
                 need_some_hallo = true;
         }
@@ -865,14 +867,19 @@ void lan_engine::tick(int *sleep_time_ms)
                 nexthallo = ct + randombytes_uniform( 10000 ) + 5000;
                 // one hallo per 10 sec
 
+                if ((ct - nextmastertaggeneration) > 0)
+                    my_mastertag = 0, nextmastertaggeneration = ct + randombytes_uniform( 10000 ) + 5000;
+
                 pg_hallo(listen_port);
                 for(int i=0;i<BROADCAST_RANGE;++i)
                     broadcast_seek.send(packet_buf_encoded, packet_buf_encoded_len, i);
 
             }
-        } else
-            my_mastertag = 0;
+        }
     }
+
+    if (reset_mastertag)
+        my_mastertag = 0;
 
     changed_some = 0;
 

@@ -892,9 +892,11 @@ bool application_c::load_theme( const ts::wsptr&thn )
 
     font_conv_name = &get_font( CONSTASTR("conv_name") );
     font_conv_text = &get_font( CONSTASTR("conv_text") );
+    font_conv_time = &get_font( CONSTASTR("conv_time") );
     contactheight= theme().conf().get_string(CONSTASTR("contactheight")).as_int(55);
     mecontactheight = theme().conf().get_string(CONSTASTR("mecontactheight")).as_int(60);
     protowidth = theme().conf().get_string(CONSTASTR("protowidth")).as_int(100);
+
     return true;
 }
 
@@ -1285,13 +1287,14 @@ void file_transfer_s::save(uint64 offset_, const ts::buf0_c&data)
         {
             tr( offset_, offset_+ data.size() );
             upduitime += deltatime(true);
-        }
-        if (upduitime > 0.3f)
-        {
-            upduitime -= 0.3f;
-            bytes_per_sec = lround((float)trsz() / 0.3f);
-            transfered.clear();
-            upd_message_item();
+
+            if (upduitime > 0.3f)
+            {
+                upduitime -= 0.3f;
+                bytes_per_sec = lround((float)trsz() / 0.3f);
+                transfered.clear();
+                upd_message_item();
+            }
         }
     }
 

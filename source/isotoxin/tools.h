@@ -225,12 +225,13 @@ template<> struct gmsg<ISOGM_SUMMON_POST> : public gmsgbase
     gmsg(const post_s &post, contact_c *fake_sender) :gmsgbase(ISOGM_SUMMON_POST), post(post), unread(nullptr), fake_sender(fake_sender), replace_post(false)
     {
     }
-    gmsg(const post_s &post, rectengine_c ** unread = nullptr) :gmsgbase(ISOGM_SUMMON_POST), post(post), unread(unread), replace_post(false)
+    gmsg(const post_s &post, rectengine_c ** unread = nullptr, contact_c *historian = nullptr) :gmsgbase(ISOGM_SUMMON_POST), post(post), unread(unread), historian(historian), replace_post(false)
     {
     }
     gmsg(const post_s &post, bool replace_post) :gmsgbase(ISOGM_SUMMON_POST), post(post), unread(nullptr), replace_post(replace_post)
     {
     }
+    contact_c *historian = nullptr;
     contact_c *fake_sender = nullptr; // only used for messages from groupchat non-contactlist members
     rectengine_c **unread; // если время поста больше чем readtime текущего историка - сюда запишется новосозданный элемент интерфейса - на него отскролируемся
     const post_s &post;

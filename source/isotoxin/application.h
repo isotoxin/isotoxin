@@ -192,6 +192,7 @@ public:
 
     const ts::font_desc_c *font_conv_name = &ts::g_default_text_font;
     const ts::font_desc_c *font_conv_text = &ts::g_default_text_font;
+    const ts::font_desc_c *font_conv_time = &ts::g_default_text_font;
     int contactheight = 55;
     int mecontactheight = 60;
     int protowidth = 100;

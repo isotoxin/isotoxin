@@ -1377,6 +1377,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
             if (auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool 
                 {
                     if (uftr.upload) return false;
+                    if (ifl.sender != sender->getkey()) return false;
                     return ifl.filename.equals( uftr.filename ) && ifl.filesize == uftr.filesize;
                 }))
             {

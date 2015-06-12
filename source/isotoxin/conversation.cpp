@@ -1,5 +1,7 @@
 #include "isotoxin.h"
 
+#define ADDTIMESPACE 5
+
 ////////////////////////// gui_notice_c
 
 MAKE_CHILD<gui_notice_c>::~MAKE_CHILD()
@@ -1160,7 +1162,10 @@ MAKE_CHILD<gui_message_item_c>::~MAKE_CHILD()
 gui_message_item_c::~gui_message_item_c()
 {
     if (gui)
-        gui->delete_event( DELEGATE(this, try_select_link) );
+    {
+        gui->delete_event(DELEGATE(this, b_pause_unpause));
+        gui->delete_event(DELEGATE(this, try_select_link));
+    }
 }
 
 /*virtual*/ ts::ivec2 gui_message_item_c::get_min_size() const
@@ -1181,6 +1186,28 @@ void gui_message_item_c::created()
     flags.set(F_DIRTY_HEIGHT_CACHE);
     __super::created();
 }
+
+void gui_message_item_c::rebuild_text()
+{
+    ts::wstr_c newtext;
+    if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+    {
+        ts::wstr_c pret, postt;
+        prepare_str_prefix(pret, postt);
+
+        for (record &r : records)
+            r.append(newtext, pret, postt);
+
+        timestr.clear();
+
+    } else if (records.size())
+    {
+         timestrwidth = records.get(0).append(newtext, timestr);
+    }
+
+    textrect.set_text_only(newtext, false);
+}
+
 
 static time_t readtime; // ugly static... but it is fastest
 static contact_c * readtime_historian = nullptr;
@@ -1220,7 +1247,15 @@ void gui_message_item_c::ctx_menu_delmessage(const ts::str_c &mutag)
     {
         RID parent = getparent();
         if (records.size() == 0 || subtype == ST_RECV_FILE || subtype == ST_SEND_FILE)
+        {
+            if (!flags.is(F_NO_AUTHOR))
+                if (rectengine_c *next = HOLD(parent).engine().get_next_child( &getengine() ))
+                    if (gui_message_item_c *nitm = ts::ptr_cast<gui_message_item_c *>( &next->getrect() ))
+                        if (nitm->get_author() == get_author())
+                            nitm->set_no_author(false), next->redraw();
+
             TSDEL(this);
+        }
         parent.call_children_repos();
     }
 }
@@ -1282,6 +1317,7 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                 {
                     ts::irect ca = get_client_area();
                     draw_data_s &dd = getengine().begin_draw();
+                    ts::ivec2 oo(dd.offset); 
 
                     dd.offset += ca.lt;
                     dd.size = ca.size();
@@ -1292,11 +1328,44 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                     tdp.forecolor = &c;
 
                     draw(dd, tdp);
+
+                    if (!prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+                    {
+                        dd.size.x = timestrwidth + 1;
+                        dd.size.y = g_app->font_conv_time->height();
+                        dd.offset = oo + ca.rb - dd.size;
+
+                        tdp.font = g_app->font_conv_time;
+                        ts::TSCOLOR c = get_default_text_color(2);
+                        tdp.forecolor = &c;
+                        m_engine->draw(timestr, tdp);
+                    }
+
+
                     getengine().end_draw();
                 }
                 break;
             case gui_message_item_c::ST_JUST_TEXT:
                 __super::sq_evt(qp, rid, data);
+
+                if (!prf().get_msg_options().is(MSGOP_JOIN_MESSAGES) && m_engine)
+                {
+                    ts::irect ca = get_client_area();
+                    draw_data_s &dd = getengine().begin_draw();
+
+                    dd.size.x = timestrwidth + 1;
+                    dd.size.y = g_app->font_conv_time->height();
+                    dd.offset += ca.rb - dd.size;
+
+                    text_draw_params_s tdp;
+                    tdp.font = g_app->font_conv_time;
+                    ts::TSCOLOR c = get_default_text_color(2);
+                    tdp.forecolor = &c;
+                    m_engine->draw(timestr, tdp);
+
+                    getengine().end_draw();
+                }
+
                 break;
             case gui_message_item_c::ST_CONVERSATION:
                 gui_control_c::sq_evt(qp, rid, data);
@@ -1312,14 +1381,19 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                         draw_data_s &dd = m_engine->begin_draw();
 
                         text_draw_params_s tdp;
-                        tdp.font = g_app->font_conv_name;
+                        ts::ivec2 sz(0), oo(dd.offset); 
+
                         dd.offset += ca.lt;
                         dd.size = ca.size();
-                        ts::TSCOLOR c = get_default_text_color( 0 );
-                        tdp.forecolor = &c;
-                        ts::ivec2 sz; tdp.sz = &sz;
-                        ts::wstr_c n(hdr());
-                        m_engine->draw(n, tdp);
+
+                        if (!flags.is(F_NO_AUTHOR))
+                        {
+                            tdp.font = g_app->font_conv_name;
+                            ts::TSCOLOR c = get_default_text_color( 0 );
+                            tdp.forecolor = &c;
+                            tdp.sz = &sz;
+                            m_engine->draw(hdr(), tdp);
+                        }
 
                         sz.x = m_left;
                         sz.y += m_top;
@@ -1335,6 +1409,19 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
 
                         glyphs_pos = sz + ca.lt;
                         if (gui->selcore().owner == this) gui->selcore().glyphs_pos = glyphs_pos;
+
+                        if (!prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+                        {
+                            dd.size.x = timestrwidth + 1;
+                            dd.size.y = g_app->font_conv_time->height();
+                            dd.offset = oo + ca.rb - dd.size;
+                                
+                            tdp.font = g_app->font_conv_time;
+                            ts::TSCOLOR c = get_default_text_color(2);
+                            tdp.forecolor = &c;
+                            tdp.sz = nullptr;
+                            m_engine->draw(timestr, tdp);
+                        }
 
                         m_engine->end_draw();
                     }
@@ -1485,25 +1572,12 @@ template<typename SCORE> void set_date(ts::str_t<ts::wchar, SCORE> & tstr, const
     st.wSecond = (ts::uint16)tt.tm_sec;
     st.wMilliseconds = 0;
 
-    tstr.set_length( tstr.get_capacity() - 1 );
+    if (tstr.get_capacity() > 32)
+        tstr.set_length( tstr.get_capacity() - 1 );
+    else
+        tstr.set_length( 64 );
     GetDateFormatW(LOCALE_USER_DEFAULT, 0, &st, fmt, tstr.str(), tstr.get_capacity() - 1);
     tstr.set_length();
-
-    /*
-    ts::wchar buf[32];
-    ts::aint szb;
-    ts::wchar *i = ts::CHARz_make_str_unsigned<ts::wchar>(buf, szb, tt.tm_mday);
-    tstr.replace_all(CONSTWSTR("DD"), ts::wsptr(i, szb / sizeof(ts::wchar) - 1));
-
-    i = ts::CHARz_make_str_unsigned<ts::wchar>(buf, szb, tt.tm_mon + 1);
-    ASSERT(i > buf);
-    if (tt.tm_mon < 9) *(--i) = '0';
-    tstr.replace_all(CONSTWSTR("MM"), ts::wsptr(i, 2));
-
-    i = ts::CHARz_make_str_unsigned<ts::wchar>(buf, szb, tt.tm_year + 1900);
-    tstr.replace_all(CONSTWSTR("YYYY"), ts::wsptr(i, 4));
-    tstr.replace_all(CONSTWSTR("YY"), ts::wsptr(i + 2, 2));
-    */
 }
 
 
@@ -1567,8 +1641,6 @@ bool gui_message_item_c::with_utag(uint64 utag) const
 
 bool gui_message_item_c::remove_utag(uint64 utag)
 {
-    ts::wstr_c pret, postt;
-    prepare_str_prefix(pret, postt);
     int cnt = records.size();
     for (int i=0;i<cnt;++i)
     {
@@ -1576,11 +1648,8 @@ bool gui_message_item_c::remove_utag(uint64 utag)
         if (rec.utag == utag)
         {
             records.remove_slow(i);
-            ts::wstr_c newtext;
-            for (record &r : records)
-                r.append(newtext,pret,postt);
             flags.set(F_DIRTY_HEIGHT_CACHE);
-            set_text(newtext);
+            rebuild_text();
             return true;
         }
     }
@@ -1595,11 +1664,8 @@ bool gui_message_item_c::delivered(uint64 utag)
         {
             if (rec.undelivered == 0) return false;
             rec.undelivered = 0;
-            ts::wstr_c pret, postt, newtext;
-            prepare_str_prefix(pret, postt);
-            for (record &r : records)
-                r.append(newtext, pret, postt);
-            set_text(newtext);
+
+            rebuild_text();
 
             flags.set(F_DIRTY_HEIGHT_CACHE);
 
@@ -1617,9 +1683,9 @@ bool gui_message_item_c::delivered(uint64 utag)
     return false;
 }
 
-void gui_message_item_c::record::append( ts::wstr_c &t, const ts::wsptr &pret, const ts::wsptr &postt )
+ts::uint16 gui_message_item_c::record::append( ts::wstr_c &t, ts::wstr_c &pret, const ts::wsptr &postt )
 {
-    ts::swstr_t<-128> tstr;
+    ts::wstr_c tstr;
     tm tt;
     _localtime64_s(&tt, &time);
     if ( prf().get_msg_options().is(MSGOP_SHOW_DATE) )
@@ -1634,7 +1700,16 @@ void gui_message_item_c::record::append( ts::wstr_c &t, const ts::wsptr &pret, c
         tstr.append_char(':');
     tstr.append_as_uint(tt.tm_min);
 
-    t.append(pret).append(tstr).append(postt);
+    ts::uint16 timestrwidth = 0;
+    if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+        t.append(pret).append(tstr).append(postt);
+    else
+    {
+        ts::ivec2 timeszie = g_app->tr().calc_text_size( *g_app->font_conv_time, tstr, 1024, 0, nullptr );
+        timestrwidth = (ts::uint16)timeszie.x;
+        pret = tstr;
+    }
+
     if (undelivered)
     {
         t.append(maketag_color<ts::wchar>(undelivered)).append(text).append(CONSTWSTR("</color>"));
@@ -1642,7 +1717,12 @@ void gui_message_item_c::record::append( ts::wstr_c &t, const ts::wsptr &pret, c
     else
         t.append(text);
 
+    if (timestrwidth)
+        t.append(CONSTWSTR("<nbsp=")).append_as_uint(timestrwidth + ADDTIMESPACE).append_char('>');
+
     t.append(CONSTWSTR("<null=t")).append_as_hex(&utag, sizeof(utag)).append_char('>');
+
+    return timestrwidth;
 }
 
 static void parse_smiles( ts::wstr_c &message )
@@ -1813,8 +1893,8 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             subtype = ST_JUST_TEXT;
 
             ts::wstr_c newtext(512, false);
-            prepare_message_time(newtext, post.time);
-            newtext.set(CONSTWSTR("<img=call,-1>"));
+            message_prefix(newtext, post.time);
+            newtext.append(CONSTWSTR("<img=call,-1>"));
             ts::wstr_c aname = author->get_name();
             text_adapt_user_input(aname);
 
@@ -1826,6 +1906,8 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
                 newtext.append(TTT("Начат разговор с $",138)/aname);
             else if (MTA_HANGUP == mt)
                 newtext.append(TTT("Закончен разговор с $",139)/aname);
+
+            message_postfix(newtext);
 
             textrect.set_text_only(newtext, false);
 
@@ -1868,18 +1950,28 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             rec.text = message;
             rec.undelivered = post.type == MTA_UNDELIVERED_MESSAGE ? get_default_text_color(1) : 0;
 
-            ts::wstr_c pret, postt, newtext(textrect.get_text());
-            prepare_str_prefix(pret, postt);
-            rec.append( newtext, pret, postt );
-            bool rebuild = false;
-            if (records.size() >= 2 && rec.time < records.get(records.size()-2).time)
-                if (records.sort())
-                { 
-                    rebuild = true;
-                    rebuild_text();
-                }
+            ts::wstr_c newtext(textrect.get_text());
+            if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+            {
+                ts::wstr_c pret, postt;
+                prepare_str_prefix(pret, postt);
+                rec.append(newtext, pret, postt);
+                bool rebuild = false;
+                if (records.size() >= 2 && rec.time < records.get(records.size() - 2).time)
+                    if (records.sort())
+                    {
+                        rebuild = true;
+                        rebuild_text();
+                    }
 
-            if(!rebuild) textrect.set_text_only(newtext, false);
+                if (!rebuild) textrect.set_text_only(newtext, false);
+                timestr.clear();
+
+            } else
+            {
+                timestrwidth = rec.append(newtext, timestr);
+                textrect.set_text_only(newtext, false);
+            }
 
         }
         break;
@@ -1899,11 +1991,15 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
     }
 }
 
-void gui_message_item_c::prepare_message_time(ts::wstr_c &newtext, time_t posttime)
+bool gui_message_item_c::message_prefix(ts::wstr_c &newtext, time_t posttime)
 {
-    newtext.set(CONSTWSTR("<r><font=conv_text><color=#"));
-    ts::TSCOLOR c = get_default_text_color(2);
-    newtext.append_as_hex(ts::RED(c)).append_as_hex(ts::GREEN(c)).append_as_hex(ts::BLUE(c)).append_as_hex(ts::ALPHA(c)).append(CONSTWSTR("> "));
+    if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+    {
+        newtext.set(CONSTWSTR("<r><font=conv_text><color=#"));
+        ts::TSCOLOR c = get_default_text_color(2);
+        newtext.append_as_hex(ts::RED(c)).append_as_hex(ts::GREEN(c)).append_as_hex(ts::BLUE(c)).append_as_hex(ts::ALPHA(c)).append(CONSTWSTR("> "));
+    } else
+        newtext.clear();
 
     tm tt;
     _localtime64_s(&tt, &posttime);
@@ -1921,7 +2017,27 @@ void gui_message_item_c::prepare_message_time(ts::wstr_c &newtext, time_t postti
         newtext.append_char(':');
     newtext.append_as_uint(tt.tm_min);
 
-    newtext.append(CONSTWSTR("</color></font></r>"));
+    if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+    {
+        newtext.append(CONSTWSTR("</color></font></r>"));
+        timestrwidth = 0;
+        timestr.clear();
+        return true;
+
+    } else
+    {
+        timestr = newtext;
+        newtext.clear();
+        ts::ivec2 timeszie = g_app->tr().calc_text_size(*g_app->font_conv_time, timestr, 1024, 0, nullptr);
+        timestrwidth = (ts::uint16)timeszie.x;
+        return false;
+    }
+}
+
+void gui_message_item_c::message_postfix(ts::wstr_c &newtext)
+{
+    if (timestrwidth)
+        newtext.append( CONSTWSTR("<nbsp=") ).append_as_uint(timestrwidth + ADDTIMESPACE).append_char('>');
 }
 
 bool gui_message_item_c::b_explore(RID, GUIPARAM)
@@ -1992,32 +2108,58 @@ bool gui_message_item_c::b_break(RID btn, GUIPARAM)
     return true;
 }
 
-bool gui_message_item_c::b_pause(RID btn, GUIPARAM)
+bool gui_message_item_c::b_pause_unpause(RID btn, GUIPARAM p)
 {
+    if (!p)
+    {
+        DEFERRED_UNIQUE_CALL( 0, DELEGATE(this,b_pause_unpause), btn.to_ptr() );
+        return true;
+    }
+
     ASSERT(records.size());
     record &rec = records.get(0);
-    ts::safe_ptr<rectengine_c> e = &HOLD(btn).engine();
+    gui_button_c &b = HOLD(RID::from_ptr(p)).as<gui_button_c>();
+    int r = (int)b.get_customdata();
+    int r_to = r ^ 1;
+    ASSERT(r == 2 || r == 3);
+
+    if (r == 2)
+        b.set_face_getter(BUTTON_FACE_PRELOADED(unpauseb));
+    else
+        b.set_face_getter(BUTTON_FACE_PRELOADED(pauseb));
+
+    b.set_customdata((GUIPARAM)r_to);
+    repl_button(r, r_to);
 
     file_transfer_s *ft = g_app->find_file_transfer_by_msgutag(rec.utag);
     if (ft && ft->is_active())
-        ft->pause_by_me(true);
+        ft->pause_by_me(r == 2);
 
-    if (e) kill_button(e, 2);
     return true;
 }
-bool gui_message_item_c::b_unpause(RID btn, GUIPARAM)
+
+void gui_message_item_c::repl_button( int r_from, int r_to )
 {
-    ASSERT(records.size());
-    record &rec = records.get(0);
-    ts::safe_ptr<rectengine_c> e = &HOLD(btn).engine();
-
-    file_transfer_s *ft = g_app->find_file_transfer_by_msgutag(rec.utag);
-    if (ft && ft->is_active())
-        ft->pause_by_me(false);
-
-    if (e) kill_button(e, 3);
-
-    return true;
+    ts::wstr_c f(CONSTWSTR("<rect=")); f.append_as_uint(r_from).append_char(',');
+    int ri = textrect.get_text().find_pos(f);
+    if (ri >= 0)
+    {
+        ts::wstr_c t; t.set_as_uint(r_to);
+        ts::wstr_c tt = textrect.get_text();
+        tt.replace(ri + 6, f.get_length() - 7, t);
+        textrect.set_text_only(tt, false);
+    }
+    
+    int cnt = records.size();
+    for (int i = 1; i < cnt; ++i)
+    {
+        record &rec = records.get(i);
+        if ((rec.utag & 0xFFFFFFFF) == r_from)
+        {
+            rec.utag = (rec.utag & 0xFFFFFFFF00000000ull) | r_to;
+            break;
+        }
+    }
 }
 
 void gui_message_item_c::kill_button( rectengine_c *beng, int r )
@@ -2027,6 +2169,7 @@ void gui_message_item_c::kill_button( rectengine_c *beng, int r )
         RID br = RID(records.get(i).utag >> 32);
         if (br == beng->getrid())
         {
+            ASSERT( (records.get(i).utag & 0xFFFFFFFF) == r );
             records.remove_fast(i);
             break;
         }
@@ -2087,8 +2230,9 @@ void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
         case 2: //pause
         {
             gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
+            bc.set_customdata((GUIPARAM)2);
             bc.set_face_getter(BUTTON_FACE_PRELOADED(pauseb));
-            bc.set_handler(DELEGATE(this, b_pause), nullptr);
+            bc.set_handler(DELEGATE(this, b_pause_unpause), nullptr);
             MODIFY(bc).setminsize(bc.getrid()).pos(root_to_local(p)).visible(true);
             b = bc.getrid();
             break;
@@ -2096,8 +2240,9 @@ void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
         case 3: //unpause
         {
             gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
+            bc.set_customdata((GUIPARAM)3);
             bc.set_face_getter(BUTTON_FACE_PRELOADED(unpauseb));
-            bc.set_handler(DELEGATE(this, b_unpause), nullptr);
+            bc.set_handler(DELEGATE(this, b_pause_unpause), nullptr);
             MODIFY(bc).setminsize(bc.getrid()).pos(root_to_local(p)).visible(true);
             b = bc.getrid();
             break;
@@ -2146,10 +2291,19 @@ void gui_message_item_c::update_text()
                 records.get(i).time = 1;
 
             ts::wstr_c newtext(256,false);
-            prepare_message_time(newtext, rec.time);
+            bool r_inserted = message_prefix(newtext, rec.time);
+            ts::wstr_c btns;
+            auto insert_button = [&]( int r, const ts::ivec2 &sz )
+            {
+                if (r_inserted)
+                    newtext.insert(3, prepare_button_rect(r, sz));
+                else
+                    btns.insert(0, prepare_button_rect(r, sz));
+            };
 
             ts::wstr_c fn = ts::fn_get_name_with_ext(rec.text);
             ts::wchar fc = rec.text.get_char(0);
+            file_transfer_s *ft = nullptr;
             if (fc == '*')
             {
                 newtext.append(CONSTWSTR("<img=file,-1>"));
@@ -2159,21 +2313,25 @@ void gui_message_item_c::update_text()
                     newtext.append(TTT("Прием отменен: $",182) / fn);
             } else if (fc == '?')
             {
+                ft = g_app->find_file_transfer_by_msgutag(rec.utag);
+                if (ft && ft->is_active()) goto transfer_alive;
+
+                insert_button( 1, g_app->buttons().breakb->size );
                 newtext.append(CONSTWSTR("<img=file,-1>"));
                 newtext.append(TTT("Соединение отсутствует: $",235) / fn);
-                newtext.insert(3,prepare_button_rect(1,g_app->buttons().breakb->size));
             }
             else
             {
+                transfer_alive:
                 if (!is_send)
-                    newtext.insert(3, prepare_button_rect(0,g_app->buttons().exploreb->size)); // 3 - <r>
+                    insert_button( 0, g_app->buttons().exploreb->size );
 
                 newtext.append(CONSTWSTR("<img=file,-1>"));
 
-                file_transfer_s *ft = g_app->find_file_transfer_by_msgutag(rec.utag);
+                if (nullptr == ft) ft = g_app->find_file_transfer_by_msgutag(rec.utag);
                 if (ft && ft->is_active())
                 {
-                    newtext.insert(3,prepare_button_rect(1,g_app->buttons().breakb->size));
+                    insert_button( 1, g_app->buttons().breakb->size );
 
                     if (is_send)
                         newtext.append(TTT("Передача файла: $",183) / fn);
@@ -2183,10 +2341,11 @@ void gui_message_item_c::update_text()
                     int bps;
                     newtext.append(CONSTWSTR(" (<b>")).append_as_uint( ft->progress(bps) ).append(CONSTWSTR("</b>%, "));
                     if (bps >= 0)
-                        newtext.insert(3, prepare_button_rect(2, g_app->buttons().pauseb->size));
+                        insert_button( 2, g_app->buttons().pauseb->size );
                     if (bps < 0)
                     {
-                        if (bps == -1) newtext.insert(3,prepare_button_rect(3,g_app->buttons().unpauseb->size));
+                        if (bps == -1)
+                            insert_button(3,g_app->buttons().unpauseb->size);
                         if (bps == -3)
                             newtext.append(TTT("ожидание",185));
                         else
@@ -2207,6 +2366,12 @@ void gui_message_item_c::update_text()
                         newtext.append(TTT("Файл: $",192) / fn);
                 }
             }
+
+            if (!btns.is_empty())
+                newtext.append(CONSTWSTR("<p=c>")).append(btns);
+            else
+                message_postfix(newtext);
+
             textrect.set_text_only(newtext,false);
 
             for (int i = records.size()-1; i > 0; --i)
@@ -2301,12 +2466,15 @@ update_size_mode:
                 ts::ivec2 sz = thr->clientrect(ts::ivec2(w, height), false).size();
                 int ww = sz.x;
 
-                ts::wstr_c n( hdr() );
-                sz = gui->textsize(*g_app->font_conv_name, n, ww);
-                int h = sz.y + m_top;
+                int h = m_top;
+                if ( !flags.is(F_NO_AUTHOR) )
+                {
+                    sz = gui->textsize(*g_app->font_conv_name, hdr(), ww);
+                    h += sz.y;
+                }
                 sz = textrect.calc_text_size(ww - m_left, custom_tag_parser_delegate());
                 if (update_size_mode)
-                    const_cast<ts::text_rect_c &>(textrect).set_size(ts::ivec2(ww-m_left, sz.y));
+                    const_cast<ts::text_rect_c &>(textrect).set_size(ts::ivec2(ww - m_left, sz.y));
                 h = thr->size_by_clientsize(ts::ivec2(ww, sz.y + h + addheight), false).y;
                 height_cache[next_cache_write_index] = ts::ivec2(w, h);
                 ++next_cache_write_index;
@@ -2419,18 +2587,25 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
     if (is_special_mt(mt))
         return MAKE_CHILD<gui_message_item_c>(getrid(), historian, author, skin, mt);
 
-
+    bool same_author = false;
     while (rectengine_c *e = getengine().get_last_child())
     {
         gui_message_item_c &mi = *ts::ptr_cast<gui_message_item_c *>( &e->getrect() );
         if (is_special_mt(mi.get_mt())) break;
-        if (mi.get_author() == author && mi.themename().equals(CONSTASTR("message."), skin)) return mi;
+        if (mi.get_author() == author && mi.themename().equals(CONSTASTR("message."), skin))
+        {
+            if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+                return mi;
+            same_author = true;
+        }
         if (post_time < mi.get_last_post_time())
             author->reselect(true);
         break;
     }
 
-    return MAKE_CHILD<gui_message_item_c>(getrid(), historian, author, skin, mt);
+    gui_message_item_c &r = MAKE_CHILD<gui_message_item_c>(getrid(), historian, author, skin, mt);
+    if (same_author) r.set_no_author();
+    return r;
 }
 
 
@@ -2544,7 +2719,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> & p)
     if (!sender) return 0;
     contact_c *receiver = contacts().find(p.post.receiver);
     if (!receiver) return 0;
-    contact_c * h = get_historian(sender, receiver);
+    contact_c * h = p.historian ? p.historian : get_historian(sender, receiver);
     if (h != historian) return 0;
 
     switch (p.post.mt())
@@ -2625,7 +2800,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> & p)
     rectengine_c *first_unread = nullptr;
     p.contact->iterate_history([&](const post_s &p)
     {
-        gmsg<ISOGM_SUMMON_POST>(p, &first_unread).send();
+        gmsg<ISOGM_SUMMON_POST>(p, &first_unread, historian).send();
         return false;
     });
 

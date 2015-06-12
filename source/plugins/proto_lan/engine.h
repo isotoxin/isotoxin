@@ -236,6 +236,7 @@ class lan_engine : public packetgen
     bool avatar_set = false;
     bool media_data_transfer = false;
 
+    int nextmastertaggeneration = 0;
     int nexthallo = 0;
     int listen_port = -1;
 

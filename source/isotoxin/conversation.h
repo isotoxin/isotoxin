@@ -179,7 +179,9 @@ class gui_message_item_c : public gui_label_ex_c
     DUMMY(gui_message_item_c);
     message_type_app_e mt;
     int height = 0;
-    int addheight = 0;
+    ts::uint16 addheight = 0;
+    ts::uint16 timestrwidth = 0;
+
     struct record
     {
         DUMMY(record);
@@ -189,27 +191,22 @@ class gui_message_item_c : public gui_label_ex_c
         time_t time;
         ts::wstr_c text;
         ts::TSCOLOR undelivered = 0;
-        void append( ts::wstr_c &t, const ts::wsptr &pret, const ts::wsptr &postt );
+        ts::uint16 append( ts::wstr_c &t, ts::wstr_c &pret, const ts::wsptr &postt = ts::wsptr() );
         bool operator()( const record&r ) const
         {
             return time < r.time;
         }
     };
     ts::array_inplace_t<record, 2> records;
-    void rebuild_text()
-    {
-        ts::wstr_c pret, postt, newtext;
-        prepare_str_prefix(pret, postt);
-        for(record &r : records)
-            r.append(newtext,pret,postt);
-        textrect.set_text_only(newtext, false);
-    }
+    void rebuild_text();
 
     ts::shared_ptr<contact_c> historian;
     ts::shared_ptr<contact_c> author;
     mutable ts::wstr_c protodesc;
+    ts::wstr_c timestr;
 
-    static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE = FLAGS_FREEBITSTART_LABEL << 0;
+    static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE   = FLAGS_FREEBITSTART_LABEL << 0;
+    static const ts::flags32_s::BITS F_NO_AUTHOR            = FLAGS_FREEBITSTART_LABEL << 1;
 
     static const int m_left = 10;
     static const int m_top = 3;
@@ -242,14 +239,16 @@ class gui_message_item_c : public gui_label_ex_c
         postt.set(CONSTWSTR("</color></r>"));
     }
 
-    void prepare_message_time(ts::wstr_c &newtext, time_t posttime);
+    bool message_prefix(ts::wstr_c &newtext, time_t posttime);
+    void message_postfix(ts::wstr_c &newtext);
+
     ts::wstr_c prepare_button_rect(int r, const ts::ivec2 &sz);
     void kill_button( rectengine_c *beng, int r );
+    void repl_button( int r_from, int r_to );
     void updrect(void *, int r, const ts::ivec2 &p);
     bool b_explore(RID, GUIPARAM);
     bool b_break(RID, GUIPARAM);
-    bool b_pause(RID, GUIPARAM);
-    bool b_unpause(RID, GUIPARAM);
+    bool b_pause_unpause(RID, GUIPARAM);
 
     bool some_selected() const
     {
@@ -292,6 +291,7 @@ public:
     time_t get_last_post_time() const {return records.size() ? records.last().time : 0;}
 
     void update_text();
+    void set_no_author( bool f = true ) { bool ona = flags.is(F_NO_AUTHOR); flags.init(F_NO_AUTHOR, f); if (ona != f) flags.set(F_DIRTY_HEIGHT_CACHE); }
 
     void append_text( const post_s &post, bool resize_now = true );
     bool delivered(uint64 utag);
