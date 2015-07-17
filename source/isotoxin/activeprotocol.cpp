@@ -385,7 +385,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
 ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send message to other peer
 {
     if (msg.pass == 0 && msg.post.sender.is_self() && msg.post.receiver.protoid == id) // handle only self-to-other messages
-        ipcp->send( ipcw(AQ_MESSAGE ) << msg.receiver->getkey().contactid << (int)MTA_MESSAGE << msg.post.utag << msg.post.message );
+        ipcp->send( ipcw(AQ_MESSAGE ) << msg.receiver->getkey().contactid << (int)MTA_MESSAGE << msg.post.utag << msg.post.message_utf8 );
     return 0;
 }
 
@@ -595,22 +595,22 @@ void active_protocol_c::del_contact(int cid)
     ipcp->send( ipcw(AQ_DEL_CONTACT) << cid );
 }
 
-void active_protocol_c::resend_request( int cid, const ts::wstr_c &msg )
+void active_protocol_c::resend_request( int cid, const ts::str_c &msg_utf8 )
 {
-    ipcp->send( ipcw(AQ_ADD_CONTACT) << (char)1 << cid << msg );
+    ipcp->send( ipcw(AQ_ADD_CONTACT) << (char)1 << cid << msg_utf8 );
 }
 
-void active_protocol_c::add_contact( const ts::str_c& pub_id, const ts::wstr_c &msg )
+void active_protocol_c::add_contact( const ts::str_c& pub_id, const ts::str_c &msg_utf8 )
 {
-    ipcp->send( ipcw(AQ_ADD_CONTACT) << (char)0 << pub_id << msg );
+    ipcp->send( ipcw(AQ_ADD_CONTACT) << (char)0 << pub_id << msg_utf8 );
 }
 
-void active_protocol_c::add_group_chat( const ts::wstr_c &groupname, bool permanent )
+void active_protocol_c::add_group_chat( const ts::str_c &groupname, bool persistent )
 {
-    ipcp->send( ipcw(AQ_ADD_GROUPCHAT) << groupname << (permanent ? 1 : 0) );
+    ipcp->send( ipcw(AQ_ADD_GROUPCHAT) << groupname << (persistent ? 1 : 0) );
 }
 
-void active_protocol_c::rename_group_chat(int gid, const ts::wstr_c &groupname)
+void active_protocol_c::rename_group_chat(int gid, const ts::str_c &groupname)
 {
     ipcp->send(ipcw(AQ_REN_GROUPCHAT) << gid << groupname);
 }

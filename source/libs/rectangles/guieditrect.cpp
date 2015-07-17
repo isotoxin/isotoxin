@@ -1,6 +1,6 @@
 #include "rectangles.h"
 
-gui_textedit_c::gui_textedit_c(initial_rect_data_s &data) : gui_control_c(data), start_sel(-1), caret_line(0), caret_offset(0), scroll_left(0), under_mouse_active_element(nullptr), meta_text_length_limit(0)
+gui_textedit_c::gui_textedit_c(initial_rect_data_s &data) : gui_control_c(data), start_sel(-1), caret_line(0), caret_offset(0), scroll_left(0), under_mouse_active_element(nullptr)
 {
     flags.set(F_CARET_SHOW);
 	lines.add(ts::ivec2(0,0));
@@ -46,53 +46,25 @@ void gui_textedit_c::run_heartbeat()
     }
 }
 
-#if 0
-void gui_textedit_c::changeUIScaleDefaultProcessing(int oldScale)
-{
-	Control::changeUIScaleDefaultProcessing(oldScale);
-	font.update();
-	for (int i=0; i<text.size(); i++) text[i].updateAdvance(font);
-	scrollBar->setStepSize(ts::ui_scale(stepSize));
-}
-
-#endif
-
-void gui_textedit_c::active_element_s::update_advance(ts::font_c *font)
-{
-	advance = 0;
-	for (const ts::wchar *s = str; *s; s++)
-		advance += (*font)[*s].advance;
-}
-
-gui_textedit_c::active_element_s *gui_textedit_c::create_active_element(const ts::wstr_c &str, ts::TSCOLOR color, const void *user_data, int user_data_size)
-{
-	active_element_s *el = active_element_s::create(user_data_size);
-	el->str = str;
-	el->color = color;
-	el->user_data_size = user_data_size;
-	if (user_data) memcpy(el + 1, user_data, user_data_size);
-	el->update_advance(*font);
-	return el;
-}
-
 bool gui_textedit_c::text_replace(int pos, int num, const ts::wsptr &str, active_element_s **el, int len, bool updateCaretPos)
 {
-	if (check_text_func && !check_text_func(get_text().replace(pos, num, str))) return false;
-	if (meta_text_length_limit)
-	{
-		int metaTextLength = 0;
-		for (int i=0; i<text.size(); i++)	metaTextLength += text[i].meta_text_size();
-		ASSERT(metaTextLength == get_meta_text().get_length());
-		for (int i=0; i<len; i++) metaTextLength += ((text_element_c&)el[i]).meta_text_size();
-		for (int i=0; i<num; i++) metaTextLength -= text[i+pos].meta_text_size();
-		if (metaTextLength > meta_text_length_limit) return false;
-	}
-	if (!is_multiline())//если editbox однострочный
+	if (check_text_func)
+    {
+        int pos0 = pos, pos1 = pos + num;
+        ts::wstr_c t = get_text_and_fix_pos(&pos0, &pos1);
+        t.replace(pos0, pos1 - pos0, str);
+        if (!check_text_func(t)) return false;
+    }
+	if (!is_multiline()) // singleline editbox
 	{
         int editwidth = size().x;
 
-		ts::wstr_c ttext = get_text().replace(pos, num, str);
-		if (ttext.find_pos(L'\n') != -1) return false;//переводы строк в однострочном тексте запрещены
+        int pos0 = pos, pos1 = pos + num;
+        ts::wstr_c ttext = get_text_and_fix_pos(&pos0, &pos1);
+        ttext.replace(pos0, pos1 - pos0, str);
+
+
+		if (ttext.find_pos(L'\n') != -1) return false; // no caret return allowed
 
 		if (chars_limit > 0) if (ttext.get_length() <= chars_limit) goto ok; else return false;
 
@@ -101,7 +73,7 @@ bool gui_textedit_c::text_replace(int pos, int num, const ts::wsptr &str, active
 			for (ts::wchar c : ttext) w -= (*(*font))[c].advance;
 		else
 			w -= ttext.get_length() * (*(*font))[password_char].advance;
-		if (w < 0) return false;//значит текст не умещается в строке - запрещаем
+		if (w < 0) return false; // text width too large
 	}
 	else
 		if (chars_limit > 0 && (text.size() - num + str.l) > chars_limit) return false;
@@ -144,13 +116,46 @@ bool gui_textedit_c::text_replace(int pos, int num, const ts::wsptr &str, bool u
     }
 }
 
+ts::wstr_c gui_textedit_c::get_text_and_fix_pos(int *pos0, int *pos1) const
+{
+    int count = text.size();
+    ts::wstr_c r(count, true);
+
+    bool pos0fixed = pos0 == nullptr;
+    bool pos1fixed = pos1 == nullptr;
+
+    for (int i = 0; i < count; ++i)
+    {
+        if (!pos0fixed && *pos0 == i)
+            *pos0 = r.get_length(), pos0fixed = true;
+
+        if (!pos1fixed && *pos1 == i)
+            *pos1 = r.get_length(), pos1fixed = true;
+
+        const text_element_c &te = text[i];
+        if (te.is_char()) r.append_char(te.get_char_fast()); else r.append(te.p->to_wstr());
+    }
+    return r;
+}
+
 ts::wstr_c gui_textedit_c::text_substr(int start, int count) const
 {
-	ts::wstr_c r(count, true);
-	for (int i=0; i<count; i++)
+    ts::wstr_c r(count, true);
+    for (int i = 0; i < count; ++i)
+    {
+        const text_element_c &te = text[start + i];
+        if (te.is_char()) r.append_char(te.get_char_fast()); else r.append(te.p->to_wstr());
+    }
+    return r;
+}
+
+ts::str_c gui_textedit_c::text_substr_utf8(int start, int count) const
+{
+	ts::str_c r(count, true);
+	for (int i=0; i<count; ++i)
 	{
 		const text_element_c &te = text[start+i];
-		if (te.is_char()) r.append_char( te.get_char_fast() ); else r.append(te.p->str);
+		if (te.is_char()) r.append_unicode_as_utf8( te.get_char_fast() ); else r.append(te.p->to_utf8());
 	}
 	return r;
 }
@@ -185,10 +190,9 @@ void gui_textedit_c::paste_(int cp)
 	text_replace(cp, ts::get_clipboard_text());
 }
 
-void gui_textedit_c::insert_active_element(const ts::wstr_c &str, ts::TSCOLOR color, const void *user_data, int user_data_size, int cp)
+void gui_textedit_c::insert_active_element(active_element_s *ae, int cp)
 {
-	active_element_s *el = create_active_element(str, color, user_data, user_data_size);
-	if (!text_replace(cp, 0, str, &el, 1)) el->die();
+	if (!text_replace(cp, 0, ae->to_wstr(), &ae, 1)) ae->release();
 }
 
 ts::ivec2 gui_textedit_c::get_caret_pos() const
@@ -270,13 +274,26 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 
 		if (!shiftPressed)
 		{
-			if (start_sel==cp) start_sel=-1;//нужно чтобы избежать ошибочной обработки нажатий влево/вправо при выделенном нулевом тексте
+			if (start_sel==cp) start_sel=-1; // if zero-len selection - avoid handle of left/rite key pressed
 		}
-		else if (start_sel==-1) start_sel=cp;//на всякий случай ставим выделение
+		else if (start_sel==-1) start_sel=cp;
 
 		if (GetKeyState(VK_CONTROL)<0)
 		{
-            if (flags.is(F_DISABLE_CARET)) return false;
+            bool do_default = true;
+            for (const kbd_press_callback_s &cb : kbdhandlers)
+            {
+                if (-cb.scancode == scan)
+                {
+                    if (cb.handler(getrid(), this))
+                        do_default = false;
+                    res = true;
+                    break;
+                }
+            }
+
+
+            if (!do_default || flags.is(F_DISABLE_CARET)) return false;
 			def=true;
 			switch (scan)
 			{
@@ -336,75 +353,86 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 		else
 		{
             if (flags.is(F_DISABLE_CARET)) return false;
-			if (!shiftPressed && start_sel!=-1 && (scan==SSK_LEFT || scan==SSK_RIGHT))//Обрабатываем спец. случай - когда Shift не нажата, а выделение есть, и нажата клавиша влево или вправо - нужно переместить курсор в начало или в конец выделения прежде чем сбрасывать его
+			if (!shiftPressed && start_sel!=-1 && (scan==SSK_LEFT || scan==SSK_RIGHT)) // special case: Shift not pressed but selection present and left or right key pressed - caret must be moved to start or end of selection before selection be reset
 			{
 				if (scan==SSK_LEFT) set_caret_pos(min(cp,start_sel));
-				else             set_caret_pos(max(cp,start_sel));
+				else set_caret_pos(max(cp,start_sel));
 				res = true;
 			}
 			else
-			switch (scan)
-			{
-			case SSK_ESC:
-				if (!(on_escape_press && on_escape_press(getrid(), this))) gui->set_focus(RID());
-				res = true;
-				break;
-			case SSK_SHIFT:
-				if (start_sel==-1) start_sel=cp;
-				res = true;
-				break;
-			case SSK_LEFT:
-				if (caret_offset>0) caret_offset--;
-				else if (caret_line>0) caret_offset=lines.get(--caret_line).delta();
-				scroll_to_caret();
-				res = true;
-				break;
-			case SSK_RIGHT:
-				if (caret_offset<lines.get(caret_line).delta()) caret_offset++;
-				else if (caret_line<lines.count()-1) caret_offset=0,caret_line++;
-				scroll_to_caret();
-				res = true;
-				break;
-			case SSK_UP:
-			case SSK_DOWN:
-				set_caret_pos(get_caret_pos()+ts::ivec2(0,(*font)->height*(scan==SSK_UP ? -1 : 1)));
-				res = true;
-				break;
-			case SSK_HOME:
-				caret_offset=0;
-				scroll_to_caret();
-				res = true;
-				break;
-			case SSK_END:
-				caret_offset=lines.get(caret_line).delta();
-				scroll_to_caret();
-				res = true;
-				break;
-			case SSK_INSERT:
-				if (is_readonly()) def=true; else
-				if (shiftPressed) paste_(cp); else def=true;
-				res = true;
-				break;
-			case SSK_DELETE:
-				if (is_readonly()) def=true; else
-				if (shiftPressed)
-				{
-					cut_(cp);
-				}
-				else
-				{
-					if (start_sel!=-1) text_erase(cp);
-					else if (text.size() > cp) text_erase(cp, 1);
-				}
-				res = true;
-				break;
-			default:
-				def=true;//означает что в данном обработчике нажатие клавиши не обрабатывается, а потому выделение сбрасывать не нужно (скорее всего нажатие такой клавиши обработается в onChar, где и будет сброшено выделение и произведены доп. действия)
-				break;
-			}
+            {
+                bool do_default = true;
+                for(const kbd_press_callback_s &cb : kbdhandlers)
+                {
+                    if (cb.scancode == scan)
+                    {
+                        if (cb.handler( getrid(), this ))
+                            do_default = false;
+                        res = true;
+                        break;
+                    }
+                }
+
+                if (do_default)
+			    switch (scan)
+			    {
+			    case SSK_SHIFT:
+				    if (start_sel==-1) start_sel=cp;
+				    res = true;
+				    break;
+			    case SSK_LEFT:
+				    if (caret_offset>0) caret_offset--;
+				    else if (caret_line>0) caret_offset=lines.get(--caret_line).delta();
+				    scroll_to_caret();
+				    res = true;
+				    break;
+			    case SSK_RIGHT:
+				    if (caret_offset<lines.get(caret_line).delta()) caret_offset++;
+				    else if (caret_line<lines.count()-1) caret_offset=0,caret_line++;
+				    scroll_to_caret();
+				    res = true;
+				    break;
+			    case SSK_UP:
+			    case SSK_DOWN:
+				    set_caret_pos(get_caret_pos()+ts::ivec2(0,(*font)->height*(scan==SSK_UP ? -1 : 1)));
+				    res = true;
+				    break;
+			    case SSK_HOME:
+				    caret_offset=0;
+				    scroll_to_caret();
+				    res = true;
+				    break;
+			    case SSK_END:
+				    caret_offset=lines.get(caret_line).delta();
+				    scroll_to_caret();
+				    res = true;
+				    break;
+			    case SSK_INSERT:
+				    if (is_readonly()) def=true; else
+				    if (shiftPressed) paste_(cp); else def=true;
+				    res = true;
+				    break;
+			    case SSK_DELETE:
+				    if (is_readonly()) def=true; else
+				    if (shiftPressed)
+				    {
+					    cut_(cp);
+				    }
+				    else
+				    {
+					    if (start_sel!=-1) text_erase(cp);
+					    else if (text.size() > cp) text_erase(cp, 1);
+				    }
+				    res = true;
+				    break;
+			    default:
+				    def=true; // do not clear selection
+				    break;
+			    }
+            }
 		}
 
-		if (!def && start_sel!=-1 && !shiftPressed) start_sel=-1;//Сбрасываем выделение
+		if (!def && start_sel!=-1 && !shiftPressed) start_sel=-1; // clear selection
 	}
 	else if (qp == SQ_CHAR)
 	{
@@ -442,11 +470,11 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 			break;
 		case VK_RETURN:
             do_enter_key:
-			if (on_enter_press && on_enter_press(getrid(), this))
-            {
-                gui->set_focus(RID());
-                return true;
-            }
+			//if (on_enter_press && on_enter_press(getrid(), this))
+   //         {
+   //             gui->set_focus(RID());
+   //             return true;
+   //         }
 			charcode='\n';
 		default:
             {
@@ -467,14 +495,14 @@ bool gui_textedit_c::prepare_lines(int startchar)
 {
     flags.set(F_LINESDIRTY|F_TEXTUREDIRTY);
     ts::ivec2 sz = size();
-    if (sz.x <= 0) return false; // возможно контрол еще не отресайзен
+    if (sz.x <= 0) return false; // not yet resized
 	int linew=0,linestart=startchar;
 	if (startchar == 0) lines.clear();
     int i=linestart;
 	if (!is_multiline()) i=text.size(); else
 	for (;i<text.size();i++)
 	{
-		if (text[i]==L'\n')//формируем новую строку
+		if (text[i]==L'\n') // build new line
 		{
 			lines.add(ts::ivec2(linestart,i));
 			linestart=i+1;
@@ -498,7 +526,7 @@ bool gui_textedit_c::prepare_lines(int startchar)
 				linew=0;
 				for (++j;j<=i;j++) linew+=text_el_advance(j);
 			}
-			else//Также формируем новую строку, но уже не по последнему пробелу, а по части слова, вмещающегося в строку
+			else //Также формируем новую строку, но уже не по последнему пробелу, а по части слова, вмещающегося в строку
 			{
 				lines.add(ts::ivec2(linestart,i));
 				linew=text_el_advance(i);
@@ -508,7 +536,7 @@ bool gui_textedit_c::prepare_lines(int startchar)
 	}
 	lines.add(ts::ivec2(linestart,i));
 
-	under_mouse_active_element = nullptr;//при изменении текста указатель может стать битым, поэтому просто необходимо обнулять его
+	under_mouse_active_element = nullptr;
     flags.clear(F_LINESDIRTY);
 
     sbhelper.set_size( lines.count() * (*font)->height+ ts::ui_scale(margin_top) + ts::ui_scale(margin_bottom), sz.y );
@@ -518,44 +546,10 @@ bool gui_textedit_c::prepare_lines(int startchar)
     return true;
 }
 
-void gui_textedit_c::append_meta_text(const ts::wstr_c &metatext)
-{
-	int startchar = text.size();
-	if (startchar)
-        text.addnew<ts::wchar>( L'\n' ), startchar++;
-
-	for (int i=0; i<metatext.get_length(); i++)
-	{
-		if (metatext[i] != L'\1')
-			text.addnew<ts::wchar>(metatext.get_char(i));
-		else
-		{
-			int s = i + 1;
-			i = metatext.find_pos(s, L'\1');
-			if (i == -1) break;
-			ts::wstr_c str(metatext.cstr() + s, i - s);
-			i = metatext.find_pos(s = i + 1, L'\1');
-			if (i == -1 || i - s < 8) break;
-			ts::TSCOLOR color;
-			ts::hex_to_data<ts::wchar>(&color, metatext.substr(s, s+8));
-			s += 8;
-			active_element_s *el = create_active_element(str, color, nullptr, (i - s)/2);
-			ts::hex_to_data(el + 1, ts::wsptr(metatext.cstr() + s, i - s));
-			text.addnew(el);
-		}
-	}
-
-	bool wasAtEnd = is_vsb() && sbhelper.at_end( size().y );
-	if (prepare_lines(startchar))
-    {
-	    redraw();
-	    if (wasAtEnd) set_caret_pos(text.size());
-    }
-	start_sel = -1;
-}
-
 void gui_textedit_c::set_text(const ts::wstr_c &text_, bool setCaretToEnd)
 {
+    flags.init(F_PREV_SB_VIS, is_vsb());
+
     if (text.size() == text_.get_length())
     {
         const ts::wchar *t = text_;
@@ -567,41 +561,6 @@ notEq:
 	ts::ivec2 prevCaretPos = get_caret_pos();
 	if (text_replace(0, text.size(), text_, false))
 		if (setCaretToEnd) set_caret_pos(text.size()); else set_caret_pos(prevCaretPos);
-}
-
-ts::wstr_c gui_textedit_c::get_meta_text() const
-{
-	ts::wstr_c mt(text.size(), true);
-	for (const text_element_c &te : text)
-	{
-		if (te.is_char())
-		{
-			ts::wchar ch = te.get_char_fast();
-			if (ch != L'\1') mt.append_char(ch);
-		}
-		else
-		{
-			mt.append_char(L'\1');
-			mt.append( te.p->str );
-			mt.append_char(L'\1');
-			mt.append_as_hex(&te.p->color, 4);
-			mt.append_as_hex(te.p + 1, te.p->user_data_size);
-			mt.append_char(L'\1');
-		}
-	}
-	return mt;
-}
-
-ts::wstr_c gui_textedit_c::make_meta_text_from_active_element(const ts::wstr_c &str, ts::TSCOLOR color, const void *user_data, int user_data_size)
-{
-	ts::wstr_c mt(3 + str.get_length() + (4 + user_data_size)*2, true);
-	mt.append_char(L'\1');
-	mt.append(str);
-	mt.append_char(L'\1');
-	mt.append_as_hex(&color, 4);
-	mt.append_as_hex(user_data, user_data_size);
-	mt.append_char(L'\1');
-	return mt;
 }
 
 int gui_textedit_c::lines_count() const
@@ -643,9 +602,9 @@ void gui_textedit_c::prepare_texture()
         return;
 
     ts::tmp_tbuf_t<ts::glyph_image_s> glyphs, outlinedglyphs;
-	ts::ivec2 visLines = (ts::ivec2(0, asize.y) + (scroll_top() - ts::ui_scale(margin_top)))/(*font)->height & ts::ivec2(0, lines.count()-1);//getVisibleLinesRange();
-	int firstvischar = lines.get(visLines.r0).r0;
-    int numcolors = lines.get(visLines.r1).r1 - firstvischar;
+	ts::ivec2 visible_lines = (ts::ivec2(0, asize.y) + (scroll_top() - ts::ui_scale(margin_top)))/(*font)->height & ts::ivec2(0, lines.count()-1);
+	int firstvischar = lines.get(visible_lines.r0).r0;
+    int numcolors = lines.get(visible_lines.r1).r1 - firstvischar;
     ts::tmp_tbuf_t< ts::pair_s<ts::TSCOLOR, ts::TSCOLOR> > colors( numcolors );
 
 	// colorize
@@ -659,7 +618,7 @@ void gui_textedit_c::prepare_texture()
 	if (start_sel!=-1 && focus()) // selection has always highest color priority
 	{
 		int cp=get_caret_char_index();
-		ts::ivec2 selRange = (ts::ivec2(ts::tmin(start_sel,cp), ts::tmax(start_sel,cp)-1) - lines.get(visLines.r0).r0) & ts::ivec2(0, colors.count()-1);
+		ts::ivec2 selRange = (ts::ivec2(ts::tmin(start_sel,cp), ts::tmax(start_sel,cp)-1) - lines.get(visible_lines.r0).r0) & ts::ivec2(0, colors.count()-1);
 		for (int i=selRange.r0; i<=selRange.r1; i++)
 		{
 			colors.get(i).first=selection_color;
@@ -672,94 +631,108 @@ void gui_textedit_c::prepare_texture()
     texture.ajust(ts::ivec2(w, asize.y), false);
 
 	
-	{
-        texture.fill(ts::ivec2(0), ts::ivec2(w, asize.y), 0);
+    texture.fill(ts::ivec2(0), ts::ivec2(w, asize.y), 0);
 
-		ts::TSCOLOR current_color = 0;
-		if (text.size())
-			for (int i=lines.get(visLines.r0).r0; i>=0; --i) // color can be defined at upper line that is currently invisible, so search special change color symbol or line start
-			{
-				text_element_c &el = text.get(i);
-				if (el == L'\n')
-					break; // new line - reset current color
+	ts::TSCOLOR current_color = 0;
+
+#if 0
+    // TODO : color of active element
+	if (text.size())
+		for (int i=lines.get(visible_lines.r0).r0; i>=0; --i) // color can be defined at upper line that is currently invisible, so search special change color symbol or line start
+		{
+			text_element_c &el = text.get(i);
+			if (el == L'\n')
+				break; // new line - reset current color
+			else
+				if (!el.is_char() && el.p->str.is_empty() && el.p->user_data_size == 0) // special element to change current color
+				{
+					current_color = el.p->color;
+					break;
+				}
+		}
+#endif
+
+	// glyphs and selection
+	for (int l = visible_lines.r0; l <= visible_lines.r1; ++l) // lines
+	{
+		if (l > 0 && text.get(lines.get(l).r0-1) == L'\n') current_color = 0; // new line always reset current color
+		ts::ivec2 pen(ts::ui_scale(margin_left) - scroll_left, (*font)->ascender + l*(*font)->height + ts::ui_scale(margin_top) - scroll_top());
+
+		for (int i = lines.get(l).r0; i < lines.get(l).r1; ++i) // chars at current line
+		{
+			text_element_c &el = text.get(i);
+			const ts::wchar *str = nullptr;
+            active_element_s *ae = nullptr;
+			int str_len = 0, advoffset = 0;
+			ts::TSCOLOR color = (current_color == 0 ? colors.get(i-firstvischar).first : current_color);
+			if (!password_char)
+				if (el.is_char())
+					str = (ts::wchar*)&el.p + 1, str_len = 1;
 				else
-					if (!el.is_char() && el.p->str.is_empty() && el.p->user_data_size == 0) // special element to change current color
+				{
+                    ae = el.p;
+#if 0
+                    // TODO : color of active element
+					if (el.p->str.is_empty() && el.p->user_data_size == 0) // special element to change current color
 					{
 						current_color = el.p->color;
-						break;
+						continue;
 					}
-			}
+					str = el.p->str;
+					str_len = el.p->str.get_length();
+					if (el.p->color/*if == 0, then color of text_element_c not set*/) color = el.p->color;
+#endif
+				}
+			else
+				str = (ts::wchar*)&password_char, str_len = 1;
 
-		// glyphs and selection
-		for (int l = visLines.r0; l <= visLines.r1; ++l)
-		{
-			if (l > 0 && text.get(lines.get(l).r0-1) == L'\n') current_color = 0; // new line always reset current color
-			ts::ivec2 pen(ts::ui_scale(margin_left) - scroll_left, (*font)->ascender + l*(*font)->height + ts::ui_scale(margin_top) - scroll_top());
-
-			for (int i = lines.get(l).r0; i < lines.get(l).r1; i++)
+            for(;str_len;--str_len,++str)
 			{
-				text_element_c &el = text.get(i);
-				const ts::wchar *str;
-				int strLen, advoffset = 0;
-				ts::TSCOLOR color = (current_color == 0 ? colors.get(i-firstvischar).first : current_color);
-				if (!password_char)
-					if (el.is_char())
-						str = (ts::wchar*)&el.p + 1, strLen = 1;
-					else
-					{
-						if (el.p->str.is_empty() && el.p->user_data_size == 0) // special element to change current color
-						{
-							current_color = el.p->color;
-							continue;
-						}
-						str = el.p->str;
-						strLen = el.p->str.get_length();
-						if (el.p->color/*if == 0, then color of ActiveElement not set*/) color = el.p->color;
-					}
-				else
-					str = (ts::wchar*)&password_char, strLen = 1;
+				ts::glyph_image_s &gi = glyphs.add();
+				ts::glyph_s &glyph = (*(*font))[*str];
+				gi.width  = (ts::uint16)glyph.width;
+				gi.height = (ts::uint16)glyph.height;
+                gi.pitch = (ts::uint16)glyph.width;
+				gi.pixels = (ts::uint8*)(&glyph+1);
+				ts::ivec2 pos = ts::ivec2(advoffset, ts::ui_scale(baseline_offset)) + pen;
+				gi.pos.x = (ts::int16)(glyph.left + pos.x);
+                gi.pos.y = (ts::int16)(-glyph.top + pos.y);
+				gi.color = color;
+				gi.thickness = 0;
+				advoffset += glyph.advance;
+				if (outline_color)
+					glyph.get_outlined_glyph(outlinedglyphs.add(), (*font), pos, outline_color);
+            }
 
-				ASSERT(strLen > 0);
-				do
-				{
-					ts::glyph_image_s &gi = glyphs.add();
-					ts::glyph_s &glyph = (*(*font))[*str];
-					gi.width  = (ts::uint16)glyph.width;
-					gi.height = (ts::uint16)glyph.height;
-                    gi.pitch = (ts::uint16)glyph.width;
-					gi.pixels = (ts::uint8*)(&glyph+1);
-					ts::ivec2 pos = ts::ivec2(advoffset, ts::ui_scale(baseline_offset)) + pen;
-					gi.pos.x = (ts::int16)(glyph.left + pos.x);
-                    gi.pos.y = (ts::int16)(-glyph.top + pos.y);
-					gi.color = color;
-					gi.thickness = 0;
-					advoffset += glyph.advance;
-					if (outline_color)
-						glyph.get_outlined_glyph(outlinedglyphs.add(), (*font), pos, outline_color);
-				}
-				while (str++, --strLen);
+            if (ae && ae->advance)
+            {
+                ts::ivec2 pos = ts::ivec2(advoffset, ts::ui_scale(baseline_offset)) + pen;
+                ts::glyph_image_s &gi = glyphs.add();
+                ae->setup( pos, gi );
+                advoffset += ae->advance;
+            }
 
-				ASSERT(advoffset == text_el_advance(i));
+            ASSERT(advoffset == text_el_advance(i));
 
-				if (ts::TSCOLOR c = colors.get(i-firstvischar).second)
-				{
-                    ts::TSCOLOR *dst = (ts::TSCOLOR*)texture.body();
-                    int pitch = texture.info().pitch / sizeof(ts::TSCOLOR);
-					int x = ts::tmax(0, pen.x), xx = ts::tmin(w, pen.x + advoffset), y = pen.y - (*font)->ascender;
-					for (int ty = ts::tmax(0, y), yy = ts::tmin(asize.y, y + (*font)->height); ty < yy; ty++)
-						for (int tx = x; tx < xx; tx++)
-                            dst[ty * pitch + tx] = c;
-				}
 
-				pen.x += advoffset;
+			if (ts::TSCOLOR c = colors.get(i-firstvischar).second)
+			{
+                ts::TSCOLOR *dst = (ts::TSCOLOR*)texture.body();
+                int pitch = texture.info().pitch / sizeof(ts::TSCOLOR);
+				int x = ts::tmax(0, pen.x), xx = ts::tmin(w, pen.x + advoffset), y = pen.y - (*font)->ascender;
+				for (int ty = ts::tmax(0, y), yy = ts::tmin(asize.y, y + (*font)->height); ty < yy; ty++)
+					for (int tx = x; tx < xx; tx++)
+                        dst[ty * pitch + tx] = c;
 			}
-		}
 
-		// now render glyphs to texture
-		if (outlinedglyphs.count() != 0)
-			ts::text_rect_c::draw_glyphs(texture.body(), w, asize.y, texture.info().pitch, outlinedglyphs.array(), ts::ivec2(0), false);
-		ts::text_rect_c::draw_glyphs(texture.body(), w, asize.y, texture.info().pitch, glyphs.array(), ts::ivec2(0), false);
+			pen.x += advoffset;
+		}
 	}
+
+	// now render glyphs to texture
+	if (outlinedglyphs.count() != 0)
+		ts::text_rect_c::draw_glyphs(texture.body(), w, asize.y, texture.info().pitch, outlinedglyphs.array(), ts::ivec2(0), false);
+	ts::text_rect_c::draw_glyphs(texture.body(), w, asize.y, texture.info().pitch, glyphs.array(), ts::ivec2(0), false);
 }
 
 void gui_textedit_c::selectword()
@@ -836,13 +809,15 @@ bool gui_textedit_c::summoncontextmenu()
 
 /*virtual*/ void gui_textedit_c::created()
 {
+    flags.init(F_PREV_SB_VIS, is_vsb());
+
     set_font( nullptr );
     return __super::created();
 }
 
 /*virtual*/ bool gui_textedit_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    switch (qp) // колесо необходимо перехватить до вызова родительского обработчика, т.к. оттуда о колесе узнает хозяин и до этого ректа колесо вообще не дойдет
+    switch (qp) // wheel must be handled here: default wheel processing will hide wheel event for this rectangle
     {
     case SQ_MOUSE_WHEELUP:
         if (is_vsb())
@@ -877,7 +852,7 @@ bool gui_textedit_c::summoncontextmenu()
                 int ocofs = caret_offset;
                 int ocl = caret_line;
                 set_caret_pos(mplocal - clar.lt);
-                if ((GetAsyncKeyState(VK_SHIFT)  & 0x8000)==0x8000) ; //если Shift нажат, то выделение не сбрасываем
+                if ((GetAsyncKeyState(VK_SHIFT)  & 0x8000)==0x8000) ; // if Shift pressed, do not reset selection
                     else start_sel = get_caret_char_index();
                 /*engine_operation_data_s &opd =*/ getengine().begin_mousetrack(getrid(), MTT_TEXTSELECT);
                 gui->set_focus(getrid());
@@ -892,11 +867,21 @@ bool gui_textedit_c::summoncontextmenu()
             getengine().end_mousetrack(MTT_SBMOVE);
         else if (getengine().mtrack(getrid(), MTT_TEXTSELECT))
             getengine().end_mousetrack(MTT_TEXTSELECT);
-        else if (on_lbclick) {
-            if (!on_lbclick(getrid(),this))
+        else 
+        {
+            bool d = true;
+            for (const kbd_press_callback_s &cb : kbdhandlers)
+            {
+                if (SSK_LB == cb.scancode)
+                {
+                    if (cb.handler(getrid(),this))
+                        d = false;
+                    break;
+                }
+            }
+            if (d)
                 goto default_stuff;
-        } else
-            goto default_stuff;
+        }
         break;
     case SQ_MOUSE_MOVE_OP:
         if (mousetrack_data_s *opd = getengine().mtrack(getrid(), MTT_SBMOVE))
@@ -966,7 +951,7 @@ bool gui_textedit_c::summoncontextmenu()
                         {
                             under_mouse_active_element = text[i].p;
                             under_mouse_active_element_pos = ts::ivec2(x + ts::ui_scale(margin_left), l * (*font)->height + ts::ui_scale(margin_top));
-                            flags.set(F_HANDCURSOR);
+                            if (under_mouse_active_element->hand_cursor()) flags.set(F_HANDCURSOR);
                         }
                         break;
                     }
@@ -977,9 +962,7 @@ bool gui_textedit_c::summoncontextmenu()
 
             if (under_mouse_active_element)
             {
-                if (active_element_mouse_event_func) 
-                    if (active_element_mouse_event_func(qp, under_mouse_active_element->str, under_mouse_active_element + 1, under_mouse_active_element->user_data_size))
-                        return true;
+                // TODO active element click
             }
         }
         // no break here! do default stuff
@@ -1008,7 +991,15 @@ bool gui_textedit_c::summoncontextmenu()
                 if (osbw != sbhelper.sbrect.width())
                     flags.set(F_LINESDIRTY);
                 drawarea.rb.x -= sbhelper.sbrect.width();
-            }
+
+
+                if (!flags.is(F_PREV_SB_VIS))
+                    cb_scrollbar_width(sbhelper.sbrect.width());
+                flags.set(F_PREV_SB_VIS);
+
+            } else if (flags.is(F_PREV_SB_VIS))
+                cb_scrollbar_width(0), flags.clear(F_PREV_SB_VIS);
+
 
             if (flags.is(F_TEXTUREDIRTY))
                 prepare_texture();

@@ -444,19 +444,9 @@ next:
         return m_root.iterate_folders(pp, path1, ef, this);
     }
 
-    bool zip_container_c::Detect( HANDLE file, LPFILETIME pFileTime )
+    bool zip_container_c::detect( blob_c &b )
     {
-        ASSERT(pFileTime != nullptr);
-        ::SetFilePointer( file, 0, nullptr, FILE_BEGIN );
-
-        DWORD temp = 0;
-        WORD id;
-        if (!::ReadFile(file,&id,2,&temp,nullptr))
-        {
-            return false;
-        }
-
-        return (id == 0x4B50) && (GetFileTime(file, nullptr, nullptr, pFileTime) != 0);
+        return *b.data16() == 0x4B50;
     }
 
 

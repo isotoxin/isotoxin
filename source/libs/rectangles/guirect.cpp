@@ -1114,7 +1114,7 @@ ts::ivec2 gui_label_ex_c::get_link_pos_under_cursor(const ts::ivec2 &localpos) c
 ts::str_c gui_label_ex_c::get_link_under_cursor(const ts::ivec2 &localpos) const
 {
     ts::ivec2 p = get_link_pos_under_cursor(localpos);
-    if (p.r0 >= 0 && p.r1 >= p.r0) return textrect.get_text().substr(p.r0, p.r1);
+    if (p.r0 >= 0 && p.r1 >= p.r0) return to_utf8(textrect.get_text().substr(p.r0, p.r1));
     return ts::str_c();
 }
 
@@ -2409,12 +2409,12 @@ gui_popup_menu_c & gui_popup_menu_c::create(drawcollector &dch, const ts::ivec3&
 
 bool gui_popup_menu_c::operator()(int, const ts::wsptr& txt)
 {
-    gui_menu_item_c::create(getrid(), txt, 0, MENUHANDLER(), ts::wstr_c()).separator(true);
+    gui_menu_item_c::create(getrid(), txt, 0, MENUHANDLER(), ts::str_c()).separator(true);
     return true;
 }
 bool gui_popup_menu_c::operator()(int, const ts::wsptr& txt, const menu_c &sm)
 {
-    gui_menu_item_c::create(getrid(), txt, 0, MENUHANDLER(), ts::wstr_c()).submenu( sm );
+    gui_menu_item_c::create(getrid(), txt, 0, MENUHANDLER(), ts::str_c()).submenu( sm );
     return true;
 }
 bool gui_popup_menu_c::operator()(int, const ts::wsptr& txt, ts::uint32 flags, MENUHANDLER handler, const ts::str_c& prm)

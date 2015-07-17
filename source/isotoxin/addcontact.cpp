@@ -48,7 +48,7 @@ menu_c dialog_addcontact_c::networks()
     menu_c nm;
     prf().iterate_aps([&](const active_protocol_c &ap) {
         if (apid == 0) apid = ap.getid();
-        nm.add(ap.get_name(), ap.getid() == apid ? MIF_MARKED : 0, DELEGATE(this, network_selected), ts::amake(ap.getid()));
+        nm.add(from_utf8(ap.get_name()), ap.getid() == apid ? MIF_MARKED : 0, DELEGATE(this, network_selected), ts::amake(ap.getid()));
     });
     return nm;
 }
@@ -68,11 +68,11 @@ menu_c dialog_addcontact_c::networks()
     {
         apid = inparam.key.protoid;
     }
-    dm().textfield(TTT("Публичный идентификатор",67), ts::wstr_c(inparam.pubid), DELEGATE(this, public_id_handler))
+    dm().textfield(TTT("Публичный идентификатор",67), ts::from_utf8(inparam.pubid), DELEGATE(this, public_id_handler))
         .focus(!resend)
         .readonly(resend);
     dm().vspace(5);
-    dm().textfieldml(TTT("Сообщение",72), TTT("$: Пожалуйста, добавьте меня в свой список контактов.",73) / contacts().get_self().get_name(), DELEGATE(this, invite_message_handler))
+    dm().textfieldml(TTT("Сообщение",72), TTT("$: Пожалуйста, добавьте меня в свой список контактов.",73) / from_utf8(contacts().get_self().get_name()), DELEGATE(this, invite_message_handler))
         .focus(resend);
     dm().vspace(5);
     dm().hiddenlabel(TTT("Неправильный публичный идентификатор!",71), ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_INVALID_PUB_ID));
@@ -85,13 +85,13 @@ menu_c dialog_addcontact_c::networks()
 
 bool dialog_addcontact_c::invite_message_handler(const ts::wstr_c &m)
 {
-    invitemessage = m;
+    invitemessage = to_utf8(m);
     return true;
 }
 
 bool dialog_addcontact_c::public_id_handler( const ts::wstr_c &pid )
 {
-    publicid = pid;
+    publicid = to_utf8(pid);
     return true;
 }
 
@@ -205,7 +205,7 @@ menu_c dialog_addgroup_c::networks()
         if (f & PF_GROUP_CHAT)
         {
             if (apid == 0) apid = ap.getid();
-            nm.add(ap.get_name(), ap.getid() == apid ? MIF_MARKED : 0, DELEGATE(this, network_selected), ts::amake(ap.getid()));
+            nm.add(from_utf8(ap.get_name()), ap.getid() == apid ? MIF_MARKED : 0, DELEGATE(this, network_selected), ts::amake(ap.getid()));
         }
     });
     return nm;
@@ -213,7 +213,7 @@ menu_c dialog_addgroup_c::networks()
 
 bool dialog_addgroup_c::chatlifetime(RID,GUIPARAM p)
 {
-    permanent = p == nullptr;
+    persistent = p == nullptr;
     return true;
 }
 
@@ -221,11 +221,11 @@ void dialog_addgroup_c::update_lifetime()
 {
     if (active_protocol_c *ap = prf().ap(apid))
     {
-        if ( 0 == (ap->get_features() & PF_GROUP_CHAT_PERMANENT) )
+        if ( 0 == (ap->get_features() & PF_GROUP_CHAT_PERSISTENT) )
         {
-            // permanent groupchats not supported
+            // persistent groupchats not supported
             ctlenable(CONSTASTR("lifetime0"), false);
-            if (permanent)
+            if (persistent)
                 if (RID p = find(CONSTASTR("lifetime1")))
                     p.call_lbclick();
         } else
@@ -261,7 +261,7 @@ void dialog_addgroup_c::update_lifetime()
 
 bool dialog_addgroup_c::groupname_handler(const ts::wstr_c &m)
 {
-    groupname = m;
+    groupname = to_utf8(m);
     return true;
 }
 
@@ -307,7 +307,7 @@ void dialog_addgroup_c::showerror(int id)
     }
 
     if (active_protocol_c *ap = prf().ap(apid))
-        ap->add_group_chat(groupname, permanent);
+        ap->add_group_chat(groupname, persistent);
     __super::on_confirm();
 }
 

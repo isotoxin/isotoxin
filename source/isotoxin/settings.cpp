@@ -63,7 +63,7 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
             thi.current = cfg().theme().equals(n);
             thi.name.set_as_char('@').append(n);
             if (conf)
-                thi.name = conf->get_string(CONSTASTR("name"), ts::to_str(thi.name));
+                thi.name = to_wstr(conf->get_string(CONSTASTR("name"), ts::to_str(thi.name)));
         }
     }
 }
@@ -115,13 +115,13 @@ void dialog_settings_c::getbutton(bcreate_s &bcr)
 
 bool dialog_settings_c::username_edit_handler( const ts::wstr_c &v )
 {
-    username = v;
+    username = to_utf8(v);
     return true;
 }
 
 bool dialog_settings_c::statusmsg_edit_handler( const ts::wstr_c &v )
 {
-    userstatusmsg = v;
+    userstatusmsg = to_utf8(v);
     return true;
 }
 
@@ -156,12 +156,12 @@ bool dialog_settings_c::downloadfolder_edit_handler(const ts::wstr_c &v)
 
 bool dialog_settings_c::date_msg_tmpl_edit_handler(const ts::wstr_c &v)
 {
-    date_msg_tmpl = v;
+    date_msg_tmpl = to_utf8(v);
     return true;
 }
 bool dialog_settings_c::date_sep_tmpl_edit_handler(const ts::wstr_c &v)
 {
-    date_sep_tmpl = v;
+    date_sep_tmpl = to_utf8(v);
     return true;
 }
 
@@ -200,7 +200,7 @@ void dialog_settings_c::autoupdate_proxy_handler(const ts::str_c& p)
 
 bool dialog_settings_c::autoupdate_proxy_addr_handler( const ts::wstr_c & t )
 {
-    autoupdate_proxy_addr = t;
+    autoupdate_proxy_addr = to_str(t);
     if (RID r = find(CONSTASTR("proxyaddr")))
         check_proxy_addr(autoupdate_proxy, r, autoupdate_proxy_addr);
     return true;
@@ -299,6 +299,7 @@ menu_c dialog_settings_c::list_themes()
                 if (row.other.configurable.proxy.proxy_addr.is_empty()) row.other.configurable.proxy.proxy_addr = CONSTASTR(DEFAULT_PROXY);
             }
 
+        smilepack = prf().emoticons_pack();
     }
     curlang = cfg().language();
     autoupdate = cfg().autoupdate();
@@ -384,9 +385,9 @@ menu_c dialog_settings_c::list_themes()
         dm << MASK_PROFILE_COMMON; //____________________________________________________________________________________________________//
         dm().page_header( TTT("Основные настройки профиля",38) );
         dm().vspace(10);
-        dm().textfield( TTT("Имя",52), username, DELEGATE(this,username_edit_handler) ).setname(CONSTASTR("uname")).focus(true);
+        dm().textfield( TTT("Имя",52), from_utf8(username), DELEGATE(this,username_edit_handler) ).setname(CONSTASTR("uname")).focus(true);
         dm().vspace();
-        dm().textfield(TTT("Статус",68), userstatusmsg, DELEGATE(this, statusmsg_edit_handler)).setname(CONSTASTR("ustatus"));
+        dm().textfield(TTT("Статус",68), from_utf8(userstatusmsg), DELEGATE(this, statusmsg_edit_handler)).setname(CONSTASTR("ustatus"));
 
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
         dm().page_header(TTT("Настройки чата",110));
@@ -397,14 +398,16 @@ menu_c dialog_settings_c::list_themes()
                     .add(TTT("Enter - перенос строки, двойной Enter - отправить сообщение",152), 0, MENUHANDLER(), CONSTASTR("2"))
             );
         dm().vspace();
+        dm().combik(TTT("Набор смайлов",269)).setmenu(emoti().get_list_smile_pack( smilepack, DELEGATE(this, smile_pack_selected) )).setname(CONSTASTR("avasmliepack"));
+        dm().vspace();
 
         ts::wstr_c ctl;
-        dm().textfield( ts::wstr_c(), date_msg_tmpl, DELEGATE(this,date_msg_tmpl_edit_handler) ).setname(CONSTASTR("date_msg_tmpl")).width(100).subctl(textrectid++, ctl);
+        dm().textfield( ts::wstr_c(), from_utf8(date_msg_tmpl), DELEGATE(this,date_msg_tmpl_edit_handler) ).setname(CONSTASTR("date_msg_tmpl")).width(100).subctl(textrectid++, ctl);
         ts::wstr_c t_showdate = TTT("Показывать дату (шаблон: $)",171) / ctl;
         if (t_showdate.find_pos(ctl)<0) t_showdate.append_char(' ').append(ctl);
 
         ctl.clear();
-        dm().textfield(ts::wstr_c(), date_sep_tmpl, DELEGATE(this, date_sep_tmpl_edit_handler)).setname(CONSTASTR("date_sep_tmpl")).width(140).subctl(textrectid++, ctl);
+        dm().textfield(ts::wstr_c(), from_utf8(date_sep_tmpl), DELEGATE(this, date_sep_tmpl_edit_handler)).setname(CONSTASTR("date_sep_tmpl")).width(140).subctl(textrectid++, ctl);
         ts::wstr_c t_showdatesep = TTT("Показывать разделитель $ между сообщениями с различной датой",172) / ctl;
         if (t_showdatesep.find_pos(ctl)<0) t_showdate.append_char(' ').append(ctl);
 
@@ -438,7 +441,7 @@ menu_c dialog_settings_c::list_themes()
         dm().list(TTT("Активные соединения",54), -270).setname(CONSTASTR("protoactlist"));
         dm().vspace();
         dm().hgroup(TTT("Доступные сети",53));
-        dm().combik(HGROUP_MEMBER).setmenu(list_list_avaialble_networks()).setname(CONSTASTR("availablenets"));
+        dm().combik(HGROUP_MEMBER).setmenu(get_list_avaialble_networks()).setname(CONSTASTR("availablenets"));
         dm().button(HGROUP_MEMBER, TTT("Добавить соединение",58), DELEGATE(this, addnetwork)).width(250).height(25).setname(CONSTASTR("addnet"));
         dm().vspace();
 
@@ -458,22 +461,22 @@ menu_c dialog_settings_c::list_themes()
     return 1;
 }
 
-void dialog_settings_c::describe_network(ts::wstr_c&desc, const ts::wstr_c& name, const ts::str_c& tag, int id) const
+void dialog_settings_c::describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const
 {
     const protocols_s *p = find_protocol(tag);
     if (p == nullptr)
     {
-        desc.replace_all(CONSTWSTR("{name}"), TTT("$ (Неизвестный протокол: $)",57) / name / ts::to_wstr(tag));
+        desc.replace_all(CONSTWSTR("{name}"), TTT("$ (Неизвестный протокол: $)",57) / from_utf8(name) / ts::to_wstr(tag));
         desc.replace_all(CONSTWSTR("{id}"), CONSTWSTR("?"));
         desc.replace_all(CONSTWSTR("{module}"), CONSTWSTR("?"));
     } else
     {
-        ts::wstr_c pubid = contacts().find_pubid(id);
+        ts::wstr_c pubid = to_wstr(contacts().find_pubid(id));
         if (pubid.is_empty()) pubid = TTT("еще не создан или не загружен",200); else pubid.insert(0, CONSTWSTR("<ee>"));
 
-        desc.replace_all(CONSTWSTR("{name}"), name);
+        desc.replace_all(CONSTWSTR("{name}"), from_utf8(name));
         desc.replace_all(CONSTWSTR("{id}"), pubid);
-        desc.replace_all(CONSTWSTR("{module}"), p->description);
+        desc.replace_all(CONSTWSTR("{module}"), from_utf8(p->description));
     }
 }
 
@@ -485,7 +488,7 @@ void dialog_settings_c::describe_network(ts::wstr_c&desc, const ts::wstr_c& name
         {
             for (auto &row : table_active_protocol_underedit)
                 add_active_proto(lst, row.id, row.other);
-            available_network_selected(selected_available_network);
+            available_network_selected(selected_available_network); 
         }
     }
 
@@ -507,7 +510,7 @@ void dialog_settings_c::describe_network(ts::wstr_c&desc, const ts::wstr_c& name
         if (RID r = find(CONSTASTR("proxyaddr")))
         {
             gui_textfield_c &tf = HOLD(r).as<gui_textfield_c>();
-            tf.set_text( autoupdate_proxy_addr, true );
+            tf.set_text( to_wstr(autoupdate_proxy_addr), true );
             check_proxy_addr(autoupdate_proxy, r, autoupdate_proxy_addr);
         }
     }
@@ -535,7 +538,7 @@ bool dialog_settings_c::delete_used_network(RID, GUIPARAM param)
     {
         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
             gui_isodialog_c::title(DT_MSGBOX_WARNING),
-            TTT("Соединение [$] используется! Будут удалены все контакты, использующие это соединение. Также будет удалена история сообщений этих контактов. Вы всё еще уверены?",267) / row->other.name
+            TTT("Соединение [$] используется! Будут удалены все контакты, использующие это соединение. Также будет удалена история сообщений этих контактов. Вы всё еще уверены?",267) / from_utf8(row->other.name)
             ).on_ok(DELEGATE(this, on_delete_network_2), ts::amake<int>((int)param)).bcancel());
     }
     return true;
@@ -636,7 +639,7 @@ bool dialog_settings_c::addnetwork(RID, GUIPARAM)
     }
     ts::wstr_c name = TTT("Соединение $", 63) / ts::to_wstr(selected_available_network).append_char(' ').append(ts::wmake(n));
 
-    dialog_protosetup_params_s prms(selected_available_network,name, p->features, p->connection_features, DELEGATE(this,addeditnethandler));
+    dialog_protosetup_params_s prms(selected_available_network, to_utf8(name), p->features, p->connection_features, DELEGATE(this,addeditnethandler));
     prms.configurable.udp_enable = true;
     prms.configurable.server_port = 0;
     prms.connect_at_startup = true;
@@ -649,18 +652,19 @@ void dialog_settings_c::available_network_selected(const ts::str_c& ntag)
 {
     selected_available_network = ntag;
     ctlenable(CONSTASTR("addnet"), !selected_available_network.is_empty());
+    set_combik_menu(CONSTASTR("availablenets"), get_list_avaialble_networks());
 }
 
-menu_c dialog_settings_c::list_list_avaialble_networks()
+menu_c dialog_settings_c::get_list_avaialble_networks()
 {
     menu_c m;
-    m.add(TTT("Выберите сеть",201),0, DELEGATE( this,  available_network_selected ));
+    m.add(TTT("Выберите сеть",201), selected_available_network.is_empty() ? MIF_MARKED : 0, DELEGATE( this,  available_network_selected ));
     bool sep = false;
     for (const protocols_s&proto : available_prots)
     {
         if (!sep) m.add_separator();
         sep = true;
-        m.add( proto.description, 0, DELEGATE( this,  available_network_selected ), proto.tag);
+        m.add( from_utf8(proto.description), selected_available_network.equals(proto.tag) ? MIF_MARKED : 0, DELEGATE( this,  available_network_selected ), proto.tag);
     }
     return m;
 }
@@ -693,7 +697,7 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
             {
                 SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
                     gui_isodialog_c::title(DT_MSGBOX_WARNING),
-                    TTT("Соединение [$] будет удалено![br]Вы уверены?", 266) / row->other.name
+                    TTT("Соединение [$] будет удалено![br]Вы уверены?", 266) / from_utf8(row->other.name)
                     ).on_ok(DELEGATE(this, on_delete_network), *t).bcancel());
             }
         }
@@ -722,7 +726,7 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
     else if (*t == CONSTASTR("copy"))
     {
         ++t;
-        ts::set_clipboard_text(ts::wstr_c(*t));
+        ts::set_clipboard_text(ts::to_wstr(*t));
     }
 }
 
@@ -744,6 +748,12 @@ menu_c dialog_settings_c::getcontextmenu( const ts::str_c& param, bool activatio
     }
 
     return m;
+}
+
+void dialog_settings_c::smile_pack_selected(const ts::str_c&smp)
+{
+    smilepack = from_utf8(smp);
+    set_combik_menu(CONSTASTR("avasmliepack"), emoti().get_list_smile_pack(smilepack,DELEGATE(this,smile_pack_selected)));
 }
 
 void dialog_settings_c::select_lang( const ts::str_c& prm )
@@ -790,6 +800,11 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
         prf().auto_confirm_masks( auto_download_masks );
         prf().manual_confirm_masks( manual_download_masks );
         prf().fileconfirm( fileconfirm );
+        if (prf().emoticons_pack(smilepack))
+        {
+            emoti().reload();
+            gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_EMOJISET).send();
+        }
     }
 
     if (autoupdate_proxy > 0 && !check_netaddr(autoupdate_proxy_addr))
@@ -862,7 +877,7 @@ bool dialog_settings_c::ipchandler( ipcr r )
                     proto.connection_features = r.get<int>();
                 }
 
-                set_combik_menu(CONSTASTR("availablenets"), list_list_avaialble_networks());
+                set_combik_menu(CONSTASTR("availablenets"), get_list_avaialble_networks());
             }
             break;
         }
@@ -1059,7 +1074,7 @@ void dialog_setup_network_c::getbutton(bcreate_s &bcr)
     bool newnet = true;
     if (params.protoid)
         if (active_protocol_c *ap = prf().ap(params.protoid))
-            hdr.append(ap->get_desc()), newnet = false;
+            hdr.append(from_utf8(ap->get_desc())), newnet = false;
     if (newnet)
         hdr.append(TTT("будет создано новое соединение $",62) / ts::to_wstr(params.networktag));
     hdr.append(CONSTWSTR("</l>"));
@@ -1068,11 +1083,11 @@ void dialog_setup_network_c::getbutton(bcreate_s &bcr)
 
 
     dm().vspace(15);
-    dm().textfield(TTT("Имя этого соединения",70), params.networkname, DELEGATE(this, netname_edit)).focus(true);
+    dm().textfield(TTT("Имя этого соединения",70), from_utf8(params.networkname), DELEGATE(this, netname_edit)).focus(true);
     dm().vspace();
-    dm().textfield(TTT("Ваше имя в этой сети",261), params.uname, DELEGATE(this, uname_edit));
+    dm().textfield(TTT("Ваше имя в этой сети",261), from_utf8(params.uname), DELEGATE(this, uname_edit));
     dm().vspace();
-    dm().textfield(TTT("Ваш статус в этой сети",262), params.ustatus, DELEGATE(this, ustatus_edit));
+    dm().textfield(TTT("Ваш статус в этой сети",262), from_utf8(params.ustatus), DELEGATE(this, ustatus_edit));
 
     dm().vspace();
 
@@ -1105,7 +1120,7 @@ void dialog_setup_network_c::getbutton(bcreate_s &bcr)
             if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_HTTP) pt = 1;
             if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_SOCKS4) pt = 2;
             if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_SOCKS5) pt = 3;
-            ts::wstr_c pa = params.configurable.proxy.proxy_addr;
+            ts::wstr_c pa = to_wstr(params.configurable.proxy.proxy_addr);
 
             dm().vspace(5);
 
@@ -1122,8 +1137,8 @@ void dialog_setup_network_c::getbutton(bcreate_s &bcr)
             ts::wstr_c iroot(CONSTWSTR("%APPDATA%"));
             ts::parse_env(iroot);
 
-            if (dir_present(ts::fn_join(iroot, ts::wstr_c(params.networktag))))
-                iroot = ts::fn_join(iroot, ts::wstr_c(params.networktag));
+            if (dir_present(ts::fn_join(iroot, ts::to_wstr(params.networktag))))
+                iroot = ts::fn_join(iroot, ts::to_wstr(params.networktag));
             ts::fix_path(iroot, FNO_APPENDSLASH);
 
             dm().file(TTT("Импортировать конфигурацию из файла",56), iroot, ts::wstr_c(), DELEGATE(this, network_importfile));
@@ -1135,19 +1150,19 @@ void dialog_setup_network_c::getbutton(bcreate_s &bcr)
 
 bool dialog_setup_network_c::uname_edit(const ts::wstr_c &t)
 {
-    params.uname = t;
+    params.uname = to_utf8(t);
     return true;
 }
 
 bool dialog_setup_network_c::ustatus_edit(const ts::wstr_c &t)
 {
-    params.ustatus = t;
+    params.ustatus = to_utf8(t);
     return true;
 }
 
 bool dialog_setup_network_c::netname_edit(const ts::wstr_c &t)
 {
-    params.networkname = t;
+    params.networkname = to_utf8(t);
     return true;
 }
 
@@ -1238,7 +1253,7 @@ void dialog_setup_network_c::set_proxy_type_handler(const ts::str_c& p)
 
 bool dialog_setup_network_c::set_proxy_addr_handler(const ts::wstr_c & t)
 {
-    params.configurable.proxy.proxy_addr = t;
+    params.configurable.proxy.proxy_addr = to_str(t);
 
     if (RID r = find(CONSTASTR("protoproxyaddr")))
         check_proxy_addr(params.configurable.proxy.proxy_type, r, params.configurable.proxy.proxy_addr);

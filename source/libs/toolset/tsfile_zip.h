@@ -85,7 +85,7 @@ namespace ts
         /*virtual*/ bool    iterate_files(const wsptr &path, ITERATE_FILES_CALLBACK ef) override;
         /*virtual*/ bool    iterate_files(ITERATE_FILES_CALLBACK ef) override;
 
-        static bool Detect( HANDLE file, LPFILETIME pFileTime ); 
+        static bool detect( blob_c & ); 
 
     };
 

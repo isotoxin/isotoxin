@@ -10,9 +10,11 @@ namespace ts
     {
         GifFileType *gif;
         const uint8 *sourcebuf;
+        const SavedImage *prevsi;
         int ibuflen;
         int offset;
         int frame;
+        int prevdisposal;
         TSCOLOR *colors; // only for animated_c
 
         static int InputFunc(GifFileType *gif, GifByteType *buf, int len)
@@ -137,6 +139,7 @@ namespace ts
         br.sourcebuf = (const uint8 *)b;
         br.ibuflen = bsize;
         br.offset = 0;
+        br.prevdisposal = DISPOSE_BACKGROUND;
         int err = 0;
         br.gif = DGifOpen(&br, gifread_s::InputFunc, &err);
         if (br.gif == nullptr) return false;
@@ -147,7 +150,12 @@ namespace ts
         }
         return br.gif->ImageCount > 1;
     }
-    int animated_c::getframe(bitmap_c &bmp)
+    int animated_c::numframes() const
+    {
+        const gifread_s & br = ref_cast<const gifread_s>(data);
+        return br.gif->ImageCount;
+    }
+    int animated_c::firstframe(bitmap_c &bmp)
     {
         gifread_s & br = ref_cast<gifread_s>(data);
 
@@ -170,19 +178,38 @@ namespace ts
             bmp.create_RGBA( ivec2(br.gif->SWidth, br.gif->SHeight) );
             bmp.fill( br.colors[br.gif->SBackGroundColor] );
         }
+        return nextframe( bmp.extbody() );
+    }
 
+    int animated_c::nextframe( const bmpcore_exbody_s &bmp )
+    {
+        gifread_s & br = ref_cast<gifread_s>(data);
         GraphicsControlBlock gcb;
         TSCOLOR colors[256];
         do 
         {
             DGifSavedExtensionToGCB(br.gif, br.frame, &gcb);
 
-            const SavedImage *si = br.gif->SavedImages + br.frame;
-            uint8 *pixels = bmp.body() + si->ImageDesc.Left * 4 + si->ImageDesc.Top * bmp.info().pitch;
+            if (DISPOSE_BACKGROUND == br.prevdisposal)
+            {
+                if (br.prevsi)
+                {
+                    uint8 *pixels = bmp() + br.prevsi->ImageDesc.Left * 4 + br.prevsi->ImageDesc.Top * bmp.info().pitch;
+                    img_helper_fill(pixels, imgdesc_s(bmp.info(), ts::ivec2(br.prevsi->ImageDesc.Width, br.prevsi->ImageDesc.Height)), 0);
+                } else
+                {
+                    img_helper_fill(bmp(), bmp.info(), 0);
+                }
+            }
+
+            br.prevdisposal = gcb.DisposalMode;
+            br.prevsi = br.gif->SavedImages + br.frame;
+
+            uint8 *pixels = bmp() + br.prevsi->ImageDesc.Left * 4 + br.prevsi->ImageDesc.Top * bmp.info().pitch;
 
             const TSCOLOR *ccolors = br.colors;
 
-            if (const ColorMapObject *cm = si->ImageDesc.ColorMap)
+            if (const ColorMapObject *cm = br.prevsi->ImageDesc.ColorMap)
             {
                 for (int i = 0; i < cm->ColorCount; ++i)
                 {
@@ -196,11 +223,11 @@ namespace ts
             }
 
 
-            const uint8 *spixels = (const uint8 *)si->RasterBits;
-            for (int y = 0; y < si->ImageDesc.Height; ++y, pixels += bmp.info().pitch)
+            const uint8 *spixels = (const uint8 *)br.prevsi->RasterBits;
+            for (int y = 0; y < br.prevsi->ImageDesc.Height; ++y, pixels += bmp.info().pitch)
             {
                 uint32 *opixels = (uint32 *)pixels;
-                for (int x = 0; x < si->ImageDesc.Width; ++x)
+                for (int x = 0; x < br.prevsi->ImageDesc.Width; ++x)
                 {
                     int index = *spixels;
                     if (index != gcb.TransparentColor)
@@ -216,11 +243,11 @@ namespace ts
 
             ++br.frame;
             if (br.frame >= br.gif->ImageCount)
-                br.frame = 0;
+                br.frame = 0, br.prevsi = nullptr, br.prevdisposal = 0;
 
         } while (br.frame > 0 && gcb.DelayTime == 0);
 
-        return gcb.DelayTime;
+        return gcb.DelayTime * 10;
     }
 
 

@@ -219,7 +219,7 @@ struct gb_circle_s : public generated_button_data_s
         ts::TSCOLOR shadow_col_in = shadow ? ts::parsecolor<char>(gen->get_string(CONSTASTR("shadow-color-in")), ts::ARGB(0, 0, 0)) : 0;
         ts::TSCOLOR shadow_col_out = shadow ? ts::parsecolor<char>(gen->get_string(CONSTASTR("shadow-color-out")), ts::ARGB(0, 0, 0, 0)) : 0;
 
-        ts::wstr_c imgname = gen->get_string(CONSTASTR("image"));
+        ts::wstr_c imgname = to_wstr(gen->get_string(CONSTASTR("image")));
         ts::bmpcore_exbody_s img; if (!imgname.is_empty()) img = get_image(imgname.as_sptr());
 
         for(int i=0;i<button_desc_s::numstates;++i)

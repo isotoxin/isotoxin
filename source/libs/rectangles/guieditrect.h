@@ -31,43 +31,44 @@ class gui_textedit_c : public gui_control_c
                 outline_color       = 0; //ts::ARGB(0,0,0);
 	const ts::font_desc_c *font = &ts::g_default_text_font;
 	ts::wchar password_char = 0;
+
+public:
 	struct active_element_s
 	{
-		int advance, user_data_size;
-		ts::wstr_c str;
-		ts::TSCOLOR color;
-		void update_advance(ts::font_c *font);
+		int advance = 0;
 
-        static active_element_s * fromchar( ts::wchar ch ) // хинт. создается указатель с установленным младшим битом. таких указателей не бывает (по крайней мере в винде), поэтому в старших битах сам символ
+        static active_element_s * fromchar( ts::wchar ch ) // hint! any valid pointers of normally allocated objects has always lower bit 0
         {
             return (active_element_s*)(((UINT_PTR)ch << 16)|1);
         }
-        static active_element_s * create( ts::aint addition_space )
-        {
-            active_element_s *el = (active_element_s*)MM_ALLOC(sizeof(active_element_s) + addition_space);
-            TSPLACENEW(el);
-            return el;
-        }
         bool is_char() const
         {
-            return ((UINT_PTR)this & 1); // хинт! младший бит валидного указателя всегда 0
+            return ((UINT_PTR)this & 1); // hint! lower bit of valid pointer is always 0
         }
         ts::wchar as_char() const
         {
             return ((UINT_PTR)this >> 16);
         }
 
-        void die()
+        virtual void release()
         {
             if (ASSERT(!is_char() && 0 != (UINT_PTR)this))
             {
-                this->~active_element_s();
-                MM_FREE(this);
+                TSDEL( this );
             }
         }
-    private:
-        ~active_element_s() {}
+
+        virtual bool hand_cursor() const {return false;}
+        virtual ts::wstr_c to_wstr() const = 0;
+        virtual ts::str_c to_utf8() const = 0;
+        virtual void update_advance(ts::font_c *font) {};
+        virtual void setup( const ts::ivec2 &pos, ts::glyph_image_s &gi ) = 0;
+
+        active_element_s() {}
+        virtual ~active_element_s() {}
 	};
+private:
+
 	class text_element_c
 	{
 		text_element_c(const text_element_c &) UNUSED;
@@ -78,11 +79,11 @@ class gui_textedit_c : public gui_control_c
 
 		text_element_c(active_element_s *p) : p(p) {}//absorb constructor
 		text_element_c(ts::wchar ch) {p = active_element_s::fromchar(ch);}
-		~text_element_c() {if (!p->is_char()) p->die();}
+		~text_element_c() {if (!p->is_char()) p->release();}
 
         void operator=(active_element_s *_p)
         {
-            if (!p->is_char()) p->die();
+            if (!p->is_char()) p->release();
             p = _p;
         }
 
@@ -93,7 +94,6 @@ class gui_textedit_c : public gui_control_c
 		ts::wchar get_char() const {return p->is_char() ? p->as_char() : 0;}
 		int advance(ts::font_c *font) const {return p->is_char() ? (*font)[p->as_char()].advance : p->advance;}
 		void update_advance(ts::font_c *font) {if (!p->is_char()) p->update_advance(font);}
-		int meta_text_size() const {return p->is_char() ? 1 : (3 + 8) + p->str.get_length() + p->user_data_size*2;}
 	};
 	ts::array_inplace_t<text_element_c,512> text; // text
 	ts::tbuf_t<ts::ivec2> lines; // lines of text
@@ -128,18 +128,25 @@ class gui_textedit_c : public gui_control_c
 	//void onChangeScrollPos(float f) {scrollTo((int)f);}
 
 	int text_el_advance(int index) const { if (index >= text.size()) return 0; return !password_char ? text[index].advance((*font)) : (*(*font))[password_char].advance;}
-	active_element_s *create_active_element(const ts::wstr_c &str, ts::TSCOLOR color, const void *user_data, int user_data_size);
 	bool text_replace(int pos, int num, const ts::wsptr &str, active_element_s **el, int len, bool updateCaretPos = true);
 	bool text_replace(int pos, int num, const ts::wsptr &str, bool updateCaretPos = true);
 	bool text_replace(int cp, const ts::wsptr &str) {return start_sel == -1 ? text_replace(cp, 0, str) : text_replace(ts::tmin(cp, start_sel), ts::tabs(start_sel-cp), str);}
 	bool text_erase(int pos, int num) {return text_replace(pos, num, ts::wstr_c(), nullptr, 0);}
 	bool text_erase(int cp) {return text_erase(ts::tmin(cp, start_sel), ts::tabs(start_sel-cp));}
 	ts::wstr_c text_substr(int start, int count) const;
+    ts::str_c text_substr_utf8(int start, int count) const;
 	void scroll_to_caret();
 	bool cut_(int cp, bool copy2clipboard = true);//used internally
 	bool copy_(int cp);//used internally
 	void paste_(int cp);//used internally
-	bool prepare_lines(int startChar = 0);//формирует из text набор строк в lines
+	bool prepare_lines(int startChar = 0); // split text to lines
+
+    struct kbd_press_callback_s
+    {
+        GUIPARAMHANDLER handler;
+        int scancode; // negative means ctrl+scancode
+    };
+    ts::array_inplace_t<kbd_press_callback_s, 1> kbdhandlers;
 
     NUMGEN_START(fff, 0);
 #define DECLAREBIT( fn ) static const ts::flags32_s::BITS fn = FLAGS_FREEBITSTART << NUMGEN_NEXT(fff)
@@ -147,7 +154,7 @@ class gui_textedit_c : public gui_control_c
     DECLAREBIT( F_TEXTUREDIRTY );
     DECLAREBIT( F_LINESDIRTY );
     DECLAREBIT( F_NOFOCUS );
-    DECLAREBIT( F_TRANSPARENT_ME ); // прозрачность для mouse events везде внутри окна, кроме active elements
+    DECLAREBIT( F_TRANSPARENT_ME ); // skip mouse clicks except active elements
     DECLAREBIT( F_MULTILINE );
     DECLAREBIT( F_HEARTBEAT );
     DECLAREBIT( F_CARET_SHOW ); // blinking flag
@@ -157,6 +164,7 @@ class gui_textedit_c : public gui_control_c
     DECLAREBIT( F_SBALWAYS );
     DECLAREBIT( F_SBHL );
     DECLAREBIT( F_IGNOREFOCUSCHANGE );
+    DECLAREBIT( F_PREV_SB_VIS );
 
 protected:
     DECLAREBIT( F_TEXTEDIT_FREBITSTART ); // free bit start for child
@@ -173,12 +181,17 @@ public:
         font = &safe_font(f);
     }
 
-	int meta_text_length_limit;
     typedef fastdelegate::FastDelegate<bool (const ts::wstr_c &)> TEXTCHECKFUNC;
-	TEXTCHECKFUNC check_text_func;//пользовательская функция проверка текста
-	GUIPARAMHANDLER on_enter_press; // пользовательский обработчик нажатия Enter
-	GUIPARAMHANDLER on_escape_press; // пользовательский обработчик нажатия Escape
-    GUIPARAMHANDLER on_lbclick; // only if F_DISABLE_CARET
+	TEXTCHECKFUNC check_text_func; // check/update text callback
+
+    void register_kbd_callback( GUIPARAMHANDLER handler, int scancode, bool ctrl )
+    {
+        kbd_press_callback_s &cb = kbdhandlers.add();
+        cb.handler = handler;
+        cb.scancode = ctrl ? -scancode : scancode;
+    }
+
+    virtual void cb_scrollbar_width(int w) {}
 
 	bool is_multiline() const {return flags.is(F_MULTILINE);}
     bool is_vsb() const
@@ -202,15 +215,12 @@ public:
     void set_margins( int left = 0, int rite = 0, int top = 0 ) { margin_left = left; margin_right = rite; margin_top = top; }
 
 	void set_text(const ts::wstr_c &text, bool setCaretToEnd = false);
+    ts::wstr_c get_text_and_fix_pos(int *pos0, int *pos1) const;
 	ts::wstr_c get_text() const {return text_substr(0, text.size());}
+    ts::str_c get_text_utf8() const {return text_substr_utf8(0, text.size());}
 	void insert_text(const ts::wstr_c &t) {text_replace(get_caret_char_index(), t);} //insert text at current cursor pos
 	void set_color(ts::TSCOLOR c) { caret_color = color = c; redraw(); }
 	void set_password_char(ts::wchar pc) { password_char = pc; }
-
-	void append_meta_text(const ts::wstr_c &meta_text);
-	ts::wstr_c get_meta_text() const;
-	static ts::wstr_c make_meta_text_from_active_element(const ts::wstr_c &str, ts::TSCOLOR color, const void *user_data = nullptr, int user_data_size = 0);
-	static ts::wstr_c make_meta_text_color_tag(ts::TSCOLOR color) {return make_meta_text_from_active_element(ts::wstr_c(), color);}
 
 	int lines_count() const;
 	void remove_lines(int n);
@@ -222,14 +232,14 @@ public:
 	int  scroll_top() const {return -sbhelper.shift;}
 	void scroll_to(int y) {sbhelper.shift = -y; redraw();}
 
-	//Функции работы с курсором
+	// caret
 	ts::ivec2 get_caret_pos() const;
-	void set_caret_pos(ts::ivec2 p);//задаёт положение курсора по координатам клика мыши
-	void set_caret_pos(int cp);//задаёт положение курсора по смещению символа в тексте
-	ts::ivec2 get_char_pos(int pos) const;//возвращает местонахождение (смещение и строку) символа
+	void set_caret_pos(ts::ivec2 p); // set caret pos by click pos
+	void set_caret_pos(int cp); // set caret pos by index of char of text
+	ts::ivec2 get_char_pos(int pos) const; // returns caret pos (offset and line) of char of text
 	int get_caret_char_index() const { return lines.get(caret_line).x+caret_offset; }
 
-	//Функции работы с буфером обмена
+	// clipboard
     void end()
     {
         caret_offset = lines.last().delta();
@@ -251,11 +261,10 @@ public:
         redraw();
     }
 
-	fastdelegate::FastDelegate<bool (system_query_e, const ts::wstr_c &, const void *, int)> active_element_mouse_event_func;
-	active_element_s *under_mouse_active_element;
+	active_element_s *under_mouse_active_element = nullptr;
 	ts::ivec2 under_mouse_active_element_pos;
-	void insert_active_element(const ts::wstr_c &str, ts::TSCOLOR color, const void *user_data, int user_data_size, int cp);
-	void insert_active_element(const ts::wstr_c &str, ts::TSCOLOR c, const void *user_data, int user_data_size) {insert_active_element(str, c, user_data, user_data_size, get_caret_char_index());}
+	void insert_active_element(active_element_s *ae, int cp);
+	void insert_active_element(active_element_s *ae) {insert_active_element(ae, get_caret_char_index());}
 
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;

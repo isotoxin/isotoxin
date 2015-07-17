@@ -924,11 +924,11 @@ void rectengine_root_c::kill_window()
         //}
         //if (prev) prnt = ts::ptr_cast<rectengine_root_c *>(&HOLD(prev).engine())->hwnd;
 
-        ts::wstr_c name( getrect().get_name() );
+        ts::str_c name( to_utf8(getrect().get_name()) );
         text_remove_tags(name);
 
         ts::irect sr = rpss.screenrect();
-		hwnd = CreateWindowExW(exf, classname(), name, af, sr.lt.x,sr.lt.y,sr.width(),sr.height(),prnt,0,g_sysconf.instance,this);
+		hwnd = CreateWindowExW(exf, classname(), from_utf8(name), af, sr.lt.x,sr.lt.y,sr.width(),sr.height(),prnt,0,g_sysconf.instance,this);
         if ( g_sysconf.mainwindow == nullptr )
         {
             g_sysconf.mainwindow = hwnd;

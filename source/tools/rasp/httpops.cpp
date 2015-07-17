@@ -51,7 +51,7 @@ struct context_s
 
         } else
         {
-            wstr_c pf = bp->get_string(CONSTASTR("postfile"));
+            wstr_c pf = to_wstr(bp->get_string(CONSTASTR("postfile")));
             if (!pf.is_empty())
             {
                 if (!is_file_exists(pf.as_sptr()))

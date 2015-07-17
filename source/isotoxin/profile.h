@@ -42,9 +42,9 @@ struct contacts_s
     contact_key_s key;
     int metaid;
     int options;
-    ts::wstr_c name;
-    ts::wstr_c statusmsg;
-    ts::wstr_c customname;
+    ts::str_c name;
+    ts::str_c statusmsg;
+    ts::str_c customname;
     time_t readtime;
     ts::blob_c avatar;
     int avatar_tag;
@@ -337,14 +337,17 @@ public:
         return msgopts( (int)cur );
     }
 
-    TEXTWPAR( username, "IsotoxinUser" )
-    TEXTWPAR( userstatus, "" )
+    TEXTAPAR( username, "IsotoxinUser" )
+    TEXTAPAR( userstatus, "" )
     INTPAR( min_history, 10 )
     INTPAR( ctl_to_send, 1 )
-    TEXTWPAR( date_msg_template, "d MMMM" )
-    TEXTWPAR( date_sep_template, "dddd d MMMM yyyy" )
+    TEXTAPAR( date_msg_template, "d MMMM" )
+    TEXTAPAR( date_sep_template, "dddd d MMMM yyyy" )
     TEXTWPAR( download_folder, "%CONFIG%\\download" )
     TEXTWPAR( last_filedir, "" )
+
+    TEXTWPAR( emoticons_pack, "" )
+    TEXTWPAR( emoticons_set, "" )
 
     TEXTWPAR(auto_confirm_masks, "*.png; *.jpg; *.gif; *.avi; *.mp4; *.mkv");
     TEXTWPAR(manual_confirm_masks, "*.exe; *.com; *.bat; *.cmd; *.vbs");

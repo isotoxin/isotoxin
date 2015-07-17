@@ -94,12 +94,12 @@ int proc_sign(const ts::wstrings_c & pars)
     bp.load(b.cstr());
 
     ts::wstr_c procpath = ts::fn_get_path(proc);
-    auto pa = [&]( ts::wstr_c p ) ->ts::wstr_c
+    auto pa = [&]( ts::asptr p ) ->ts::wstr_c
     {
-        return ts::fn_join(procpath, p);
+        return ts::fn_join(procpath, to_wstr(bp.get_string(p)));
     };
 
-    b.load_from_disk_file( to_wstr(pa(bp.get_string(CONSTASTR("ver")))) );
+    b.load_from_disk_file( pa(CONSTASTR("ver")) );
     ts::str_c ver = b.cstr();
     ver.replace_all('/','.').trim();
 
@@ -107,7 +107,7 @@ int proc_sign(const ts::wstrings_c & pars)
     ss.append( ver );
     ss.append(CONSTASTR("\r\nurl="));
     ss.append(bp.get_string(CONSTASTR("path")));
-    ss.append( ts::fn_get_name_with_ext(arch) );
+    ss.appendcvt( ts::fn_get_name_with_ext(arch) );
     ss.append(CONSTASTR("\r\nsize="));
     ss.append_as_uint(archlen);
     ss.append(CONSTASTR("\r\nmd5="));
@@ -116,13 +116,13 @@ int proc_sign(const ts::wstrings_c & pars)
     unsigned char pk[crypto_sign_PUBLICKEYBYTES];
     unsigned char sk[crypto_sign_SECRETKEYBYTES];
     b.clear();
-    b.load_from_disk_file( to_wstr(pa(bp.get_string(CONSTASTR("sk")))) );
+    b.load_from_disk_file( pa(CONSTASTR("sk")) );
     if (b.size() != crypto_sign_SECRETKEYBYTES)
     {
         rebuild:
         crypto_sign_keypair(pk, sk);
 
-        FILE *f = _wfopen(pa(bp.get_string(CONSTASTR("sk"))), L"wb");
+        FILE *f = _wfopen(pa(CONSTASTR("sk")), L"wb");
         fwrite(sk, 1, sizeof(sk), f);
         fclose(f);
 
@@ -131,7 +131,7 @@ int proc_sign(const ts::wstrings_c & pars)
             spk.append(CONSTASTR("0x")).append_as_hex(pk[i]).append(CONSTASTR(", "));
         spk.trunc_length(2);
 
-        f = _wfopen(pa(bp.get_string(CONSTASTR("pk"))), L"wb");
+        f = _wfopen(pa(CONSTASTR("pk")), L"wb");
         fwrite(spk.cstr(), 1, spk.get_length(), f);
         fclose(f);
     } else
@@ -139,7 +139,7 @@ int proc_sign(const ts::wstrings_c & pars)
         memcpy(sk, b.data(), crypto_sign_SECRETKEYBYTES);
         crypto_sign_ed25519_sk_to_pk(pk, sk);
 
-        b.load_from_disk_file( to_wstr(pa(bp.get_string(CONSTASTR("pk")))) );
+        b.load_from_disk_file( pa(CONSTASTR("pk")) );
         ts::token<char> t(b.cstr(), ',');
         int n = 0;
         for(;t; ++t, ++n)
@@ -161,7 +161,7 @@ int proc_sign(const ts::wstrings_c & pars)
     ss.append_as_hex(sig, (int)siglen);
 
 
-    FILE *f = _wfopen(pa(bp.get_string(CONSTASTR("result"))), L"wb");
+    FILE *f = _wfopen(pa(CONSTASTR("result")), L"wb");
     fwrite(ss.cstr(), 1, ss.get_length(), f);
     fclose(f);
 

@@ -386,7 +386,7 @@ namespace ts
 	void    TSCALL make_path(const wstr_c &ipath, int fnoptions)
 	{
 		wstr_c path(ipath);
-        fix_path(path, fnoptions | FNO_NORMALIZE | FNO_REMOVECRAP | FNO_TRIMLASTSLASH);
+        fix_path(path, fnoptions | FNO_NORMALIZE | FNO_REMOVECRAP | FNO_TRIMLASTSLASH | FNO_FULLPATH);
 
 		wstrings_c sa(path, NATIVE_SLASH);
 		path.set_length(0);

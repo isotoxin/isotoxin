@@ -1037,6 +1037,8 @@ class gui_hgroup_c : public gui_group_c // vertical or horizontal group
     void update_proportions();
 protected:
 
+    static const ts::flags32_s::BITS F_HGROUP_FREEBITSTART = FLAGS_FREEBITSTART << 1;
+
     struct rsize
     {
         ts::int16 szmin;

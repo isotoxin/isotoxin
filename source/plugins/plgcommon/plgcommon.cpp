@@ -101,17 +101,32 @@ bool AssertFailed(const char *file, int line, const char *s, ...)
     return Warning("Assert failed at %s (%i)\n%s", file, line, str);
 }
 
-str_c utf8clamp( const asptr &utf8, int maxbytesize )
+int skip_utf8_char( const asptr &utf8, int i )
 {
-    str_c a( utf8 );
-    wstr_c wide;
-    while( a.get_length() > maxbytesize )
+    byte x = (byte)utf8.s[i];
+    if (x == 0) return i;
+    if (x <= 0x7f) return i+1;
+    if ((x & (~0x1f)) == 0xc0) return i+2;
+    if ((x & (~0xf)) == 0xe0) return i+3;
+    if ((x & (~0x7)) == 0xf0) return i+4;
+    if ((x & (~0x3)) == 0xf8) return i+5;
+    return i+6;
+}
+
+asptr utf8clamp( const asptr &utf8, int maxbytesize )
+{
+    if( utf8.l > maxbytesize )
     {
-        if (wide.is_empty()) wide.set_as_utf8(a);
-        wide.trunc_length();
-        a = to_utf8(wide);
+        int i0 = 0;
+        int i1 = skip_utf8_char( utf8, i0 );
+        for(;i1 <= maxbytesize && i1 < utf8.l;)
+        {
+            i0 = i1;
+            i1 = skip_utf8_char( utf8, i0 );
+        }
+        return utf8.part(i0);
     }
-    return a;
+    return utf8;
 }
 
 void fifo_stream_c::get_data(int offset, byte *dest, int size)

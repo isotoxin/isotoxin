@@ -245,6 +245,38 @@ void leech_dock_right_center_s::update_ctl_pos()
     return false;
 }
 
+void leech_dock_bottom_right_s::update_ctl_pos()
+{
+    HOLD r(owner->getparent());
+    ts::irect cr = r().get_client_area();
+    MODIFY(*owner).pos(cr.rb - ts::ivec2(x_space + width, y_space + height)).size(width, height);
+}
+
+/*virtual*/ bool leech_dock_bottom_right_s::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    if (!ASSERT(owner)) return false;
+    if (owner->getrid() != rid) return false;
+
+    if (qp == SQ_PARENT_RECT_CHANGING)
+    {
+        HOLD r(owner->getparent());
+        ts::ivec2 szmin(width + x_space, height + y_space);
+        ts::ivec2 szmax = HOLD(owner->getparent())().get_max_size();
+        r().calc_min_max_by_client_area(szmin, szmax);
+        fixrect(data.rectchg.rect, szmin, szmax, data.rectchg.area);
+        return false;
+    }
+
+    if (qp == SQ_PARENT_RECT_CHANGED)
+    {
+        update_ctl_pos();
+        return false;
+    }
+
+    return false;
+}
+
+
 bool leech_at_right::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
     if (!ASSERT(owner)) return false;
@@ -359,7 +391,7 @@ isotoxin_ipc_s::isotoxin_ipc_s(const ts::str_c &tag, datahandler_func datahandle
     if (memba != 0) 
         return;
 
-    if (!ts::start_app(CONSTWSTR("plghost ") + ts::tmp_wstr_c(tag), &plughost))
+    if (!ts::start_app(CONSTWSTR("plghost ") + ts::to_wstr(tag), &plughost))
     {
         junct.stop();
         return;
@@ -422,13 +454,13 @@ ipc::ipc_result_e isotoxin_ipc_s::processor_func(void *par, void *data, int data
 }
 
 
-static ts::wsptr bb_tags[] = { CONSTWSTR("u"), CONSTWSTR("i"), CONSTWSTR("b"), CONSTWSTR("s") };
+static ts::asptr bb_tags[] = { CONSTASTR("u"), CONSTASTR("i"), CONSTASTR("b"), CONSTASTR("s") };
 
 
-void text_convert_to_bbcode(ts::wstr_c &text)
+void text_convert_to_bbcode(ts::str_c &text)
 {
-    ts::swstr_t<64> t1;
-    ts::swstr_t<64> t2;
+    ts::sstr_t<64> t1;
+    ts::sstr_t<64> t2;
     for (int k = 0; k < ARRAY_SIZE(bb_tags); ++k)
     {
         if (ASSERT((bb_tags[k].l+3) < t1.get_capacity()))
@@ -437,20 +469,21 @@ void text_convert_to_bbcode(ts::wstr_c &text)
             t2.clear().append_char('[').append(bb_tags[k]).append_char(']');
             text.replace_all(t1,t2);
 
-            t1.clear().append(CONSTWSTR("</")).append(bb_tags[k]).append_char('>');
-            t2.clear().append(CONSTWSTR("[/")).append(bb_tags[k]).append_char(']');
+            t1.clear().append(CONSTASTR("</")).append(bb_tags[k]).append_char('>');
+            t2.clear().append(CONSTASTR("[/")).append(bb_tags[k]).append_char(']');
             text.replace_all(t1,t2);
         }
     }
 }
-void text_close_bbcode(ts::wstr_c &text)
+
+void text_close_bbcode(ts::str_c &text_utf8)
 {
-    ts::wstrings_c opened;
-    for(int i=text.find_pos('['); i >= 0 ; i = text.find_pos(i+1,'[') )
+    ts::astrings_c opened;
+    for(int i=text_utf8.find_pos('['); i >= 0 ; i = text_utf8.find_pos(i+1,'[') )
     {
-        int j = text.find_pos(i+1,']');
+        int j = text_utf8.find_pos(i+1,']');
         if (j<0) break;
-        ts::pwstr_c tag = text.substr(i + 1, j);
+        ts::pstr_c tag = text_utf8.substr(i + 1, j);
         bool close = false;
         if (tag.get_char(0) == '/') { close = true; tag = tag.substr(1); }
         for(int k=0;k<ARRAY_SIZE(bb_tags);++k)
@@ -474,7 +507,7 @@ void text_close_bbcode(ts::wstr_c &text)
                     {
                         // лишний закрывающий тэг
                         //text.cut(i,j-i+1);
-                        text.insert(0,ts::wstr_c(CONSTWSTR("[")).append(tag).append_char(']'));
+                        text_utf8.insert(0,ts::str_c(CONSTASTR("[")).append(tag).append_char(']'));
                         i = j + tag.get_length() + 2;
                     }
 
@@ -487,31 +520,31 @@ void text_close_bbcode(ts::wstr_c &text)
             }
         }
     }
-    for( const ts::wstr_c& t : opened )
-        text.append( CONSTWSTR("[/") ).append(t).append_char(']');
+    for( const ts::str_c& t : opened )
+        text_utf8.append( CONSTASTR("[/") ).append(t).append_char(']');
 }
-void text_convert_char_tags(ts::wstr_c &text)
+void text_convert_char_tags(ts::str_c &text)
 {
-    auto t = CONSTWSTR("<char=");
+    auto t = CONSTASTR("<char=");
     for (int i = text.find_pos(t); i >= 0; i = text.find_pos(i + 1, t))
     {
         int j = text.find_pos(i+t.l,'>');
         if (j < 0) break;
-        ts::wchar charcode = (ts::wchar)text.substr(i+t.l, j).as_int();
-        text.replace(i,j-i+1,ts::wsptr(&charcode,1));
+        ts::sstr_t<16> utf8char; utf8char.append_unicode_as_utf8( text.substr(i+t.l, j).as_int() );
+        text.replace(i,j-i+1,utf8char.as_sptr());
     }
 }
-void text_adapt_user_input(ts::wstr_c &text)
+void text_adapt_user_input(ts::str_c &text)
 {
     text.replace_all('<', '\1');
     text.replace_all('>', '\2');
-    text.replace_all(CONSTWSTR("\1"), CONSTWSTR("<char=60>"));
-    text.replace_all(CONSTWSTR("\2"), CONSTWSTR("<char=62>"));
+    text.replace_all(CONSTASTR("\1"), CONSTASTR("<char=60>"));
+    text.replace_all(CONSTASTR("\2"), CONSTASTR("<char=62>"));
 
     text_close_bbcode(text);
 
-    ts::swstr_t<64> t1;
-    ts::swstr_t<64> t2;
+    ts::sstr_t<64> t1;
+    ts::sstr_t<64> t2;
     for (int k = 0; k < ARRAY_SIZE(bb_tags); ++k)
     {
         if (ASSERT((bb_tags[k].l + 3) < t1.get_capacity()))
@@ -520,18 +553,18 @@ void text_adapt_user_input(ts::wstr_c &text)
             t2.clear().append_char('<').append(bb_tags[k]).append_char('>');
             text.replace_all(t1, t2);
 
-            t1.clear().append(CONSTWSTR("[/")).append(bb_tags[k]).append_char(']');
-            t2.clear().append(CONSTWSTR("</")).append(bb_tags[k]).append_char('>');
+            t1.clear().append(CONSTASTR("[/")).append(bb_tags[k]).append_char(']');
+            t2.clear().append(CONSTASTR("</")).append(bb_tags[k]).append_char('>');
             text.replace_all(t1, t2);
         }
     }
 }
 
 
-void text_prepare_for_edit(ts::wstr_c &text)
+void text_prepare_for_edit(ts::str_c &text)
 {
-    text.replace_all(CONSTWSTR("<char=60>"), CONSTWSTR("\2"));
-    text.replace_all(CONSTWSTR("<char=62>"), CONSTWSTR("\3"));
+    text.replace_all(CONSTASTR("<char=60>"), CONSTASTR("\2"));
+    text.replace_all(CONSTASTR("<char=62>"), CONSTASTR("\3"));
 
     text_convert_to_bbcode(text);
     text_convert_char_tags(text);
@@ -581,16 +614,14 @@ menu_c list_langs( SLANGID curlang, MENUHANDLER h )
     ts::tmp_array_inplace_t<lang_s, 1> langs;
 
     ts::wstrings_c ps;
-    ts::str_c curdef;
-    for (const ts::str_c &f : fns)
+    ts::wstr_c curdef;
+    for (const ts::wstr_c &f : fns)
     {
         lang_s &lng = langs.add();
         ts::swstr_t<4> wlng = f.substr(0, 2);
-        lng.langtag = wlng;
+        lng.langtag = to_str(wlng);
         if (lng.langtag.equals(curlang))
-        {
             curdef = f;
-        }
 
         path.set_length(cl).append(f);
         ts::parse_text_file(path, ps);
@@ -615,12 +646,12 @@ menu_c list_langs( SLANGID curlang, MENUHANDLER h )
         ts::token<ts::wchar> t(ls, '=');
 
         for (lang_s &l : langs)
-            if (l.langtag.equals(*t))
+            if (l.langtag.equals(to_str(*t)))
             {
-            ++t;
-            ts::wstr_c ln(*t); ln.trim();
-            l.name = ln;
-            break;
+                ++t;
+                ts::wstr_c ln(*t); ln.trim();
+                l.name = ln;
+                break;
             }
     }
 

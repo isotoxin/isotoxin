@@ -10,13 +10,13 @@ void active_protocol_s::set(int column, ts::data_value_s &v)
             tag = v.text;
             return;
         case 2:
-            name.set_as_utf8(v.text);
+            name = v.text;
             return;
         case 3:
-            user_name.set_as_utf8(v.text);
+            user_name = v.text;
             return;
         case 4:
-            user_statusmsg.set_as_utf8(v.text);
+            user_statusmsg = v.text;
             return;
         case 5:
             config = v.blob;
@@ -42,13 +42,13 @@ void active_protocol_s::get(int column, ts::data_pair_s& v)
             v.text = tag;
             return;
         case 2:
-            v.text = to_utf8(name);
+            v.text = name;
             return;
         case 3:
-            v.text = to_utf8(user_name);
+            v.text = user_name;
             return;
         case 4:
-            v.text = to_utf8(user_statusmsg);
+            v.text = user_statusmsg;
             return;
         case 5:
             v.blob = config;
@@ -119,7 +119,7 @@ void default_rows<active_protocol_s>::setup_default(int index, active_protocol_s
     {
         case 0:
             d.tag = CONSTASTR("tox");
-            d.name = CONSTWSTR("Tox");
+            d.name = CONSTASTR("Tox");
             d.user_name.clear();
             d.user_statusmsg.clear();
             d.config.clear();
@@ -128,7 +128,7 @@ void default_rows<active_protocol_s>::setup_default(int index, active_protocol_s
             return;
         case 1:
             d.tag = CONSTASTR("lan");
-            d.name = CONSTWSTR("Lan");
+            d.name = CONSTASTR("Lan");
             d.user_name.clear();
             d.user_statusmsg.clear();
             d.config.clear();
@@ -159,16 +159,16 @@ void contacts_s::set(int column, ts::data_value_s &v)
             options = (int)v.i;
             return;
         case 5:
-            name.set_as_utf8(v.text);
+            name = v.text;
             return;
         case 6:
-            statusmsg.set_as_utf8(v.text);
+            statusmsg = v.text;
             return;
         case 7:
             readtime = v.i;
             return;
         case 8:
-            customname.set_as_utf8(v.text);
+            customname = v.text;
             return;
         case 9:
             avatar = v.blob;
@@ -200,16 +200,16 @@ void contacts_s::get(int column, ts::data_pair_s& v)
             v.i = options;
             return;
         case 5:
-            v.text = to_utf8(name);
+            v.text = name;
             return;
         case 6:
-            v.text = to_utf8(statusmsg);
+            v.text = statusmsg;
             return;
         case 7:
             v.i = readtime;
             return;
         case 8:
-            v.text = to_utf8(customname);
+            v.text = customname;
             return;
         case 9:
             v.blob = avatar;
@@ -307,7 +307,7 @@ void history_s::set(int column, ts::data_value_s &v)
             options = (v.i >> 16) & (SETBIT(options_size_bits)-1);
             return;
         case 6:
-            message.set_as_utf8(v.text);
+            message_utf8 = v.text;
             return;
         case 7:
             utag = v.i;
@@ -340,7 +340,7 @@ void history_s::get(int column, ts::data_pair_s& v)
             v.i |= ((int64)options) << 16;
             return;
         case 6:
-            v.text = to_utf8(message);
+            v.text = message_utf8;
             return;
         case 7:
             v.i = utag;
@@ -697,7 +697,7 @@ ts::uint32 profile_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // record history
         post.sender = msg.post.sender;
         post.receiver = msg.post.receiver;
         post.type = msg.post.type;
-        post.message = msg.post.message;
+        post.message_utf8 = msg.post.message_utf8;
         post.utag = msg.post.utag;
         post.options = 0;
 
@@ -826,7 +826,7 @@ void profile_c::change_history_item(const contact_key_s&historian, const post_s 
         {
             if (0 != (change_what & HITM_MT)) h.type = post.type;
             if (0 != (change_what & HITM_TIME)) h.time = post.time;
-            if (0 != (change_what & HITM_MESSAGE)) h.message = post.message;
+            if (0 != (change_what & HITM_MESSAGE)) h.message_utf8 = post.message_utf8;
             return true;
         }
         return false;
@@ -855,7 +855,7 @@ void profile_c::change_history_item(const contact_key_s&historian, const post_s 
     {
         dp[n].name = CONSTASTR("msg");
         dp[n].type_ = ts::data_type_e::t_str;
-        dp[n].text = to_utf8(post.message);
+        dp[n].text = post.message_utf8;
         ++n;
     }
     ASSERT(n<=ARRAY_SIZE(dp));
@@ -1114,6 +1114,7 @@ void profile_c::load(const ts::wstr_c& pfn)
 
     gmsg<ISOGM_PROFILE_TABLE_SAVED>( pt_active_protocol ).send(); // initiate active protocol reconfiguration/creation
 
+    emoti().reload();
 }
 
 

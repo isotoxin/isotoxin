@@ -194,7 +194,7 @@ void button_desc_s::load_params(theme_c *th, const abp_c * block)
         }
     }
 
-    text = block->get_string(CONSTASTR("text"));
+    text = to_wstr(block->get_string(CONSTASTR("text")));
 
     ts::token<char> salign( block->get_string(CONSTASTR("align")), ',' );
     for( ;salign; ++salign )
@@ -296,7 +296,7 @@ bool theme_c::load( const ts::wsptr &name )
 
     while (parent)
     {
-        ts::wstr_c pfolder = parent->as_string();
+        ts::wstr_c pfolder = to_wstr(parent->as_string());
         if (!pfolder.is_empty())
         {
             abp_c pbp;

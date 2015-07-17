@@ -10,10 +10,10 @@ struct dialog_protosetup_params_s
     int con_features = 0;
     ts::str_c networktag;
 
-    ts::wstr_c uname;
-    ts::wstr_c ustatus;
-    ts::wstr_c networkname;
-    ts::wstr_c importcfg;
+    ts::str_c uname; // utf8
+    ts::str_c ustatus; // utf8
+    ts::str_c networkname; // utf8
+    ts::wstr_c importcfg; // filename
     CONFIRM_PROTOSETUP confirm;
     configurable_s configurable;
     bool connect_at_startup = true;
@@ -23,13 +23,13 @@ struct dialog_protosetup_params_s
     dialog_protosetup_params_s() {}
     dialog_protosetup_params_s(int protoid) : protoid(protoid) {}
     dialog_protosetup_params_s(const ts::str_c &networktag,
-                               const ts::wstr_c &networkname,
+                               const ts::str_c &networkname,
                                int f, int cf,
                                CONFIRM_PROTOSETUP confirm
                                ) : networktag(networktag), networkname(networkname), confirm(confirm), features(f), con_features(cf) {}
-    dialog_protosetup_params_s(int protoid, const ts::wstr_c &uname,
-                               const ts::wstr_c &ustatus,
-                               const ts::wstr_c &networkname
+    dialog_protosetup_params_s(int protoid, const ts::str_c &uname,
+                               const ts::str_c &ustatus,
+                               const ts::str_c &networkname
                                ) : protoid(protoid), uname(uname), ustatus(ustatus), networkname(networkname) {}
 };
 
@@ -106,12 +106,12 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     s3::DEVICE mic_device_stored;
     bool mic_device_changed = false;
 
-    ts::wstr_c username;
-    ts::wstr_c userstatusmsg;
+    ts::str_c username;
+    ts::str_c userstatusmsg;
     SLANGID curlang;
 
-    ts::wstr_c date_msg_tmpl;
-    ts::wstr_c date_sep_tmpl;
+    ts::str_c date_msg_tmpl;
+    ts::str_c date_sep_tmpl;
 
     bool username_edit_handler( const ts::wstr_c & );
     bool statusmsg_edit_handler( const ts::wstr_c & );
@@ -119,7 +119,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     struct protocols_s
     {
         ts::str_c  tag; // lan, tox
-        ts::wstr_c description;
+        ts::str_c description; // utf8
         int connection_features;
         int features;
     };
@@ -161,7 +161,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     void on_delete_network_2(const ts::str_c&);
     bool addeditnethandler(dialog_protosetup_params_s &params);
     bool addnetwork(RID, GUIPARAM);
-    menu_c list_list_avaialble_networks();
+    menu_c get_list_avaialble_networks();
     void available_network_selected(const ts::str_c&);
 
     bool check_update_now(RID, GUIPARAM);
@@ -178,8 +178,8 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     bool autoupdate_handler( RID, GUIPARAM );
     void autoupdate_proxy_handler( const ts::str_c& );
     bool autoupdate_proxy_addr_handler( const ts::wstr_c & t );
-
-    void describe_network(ts::wstr_c&desc, const ts::wstr_c& name, const ts::str_c& tag, int id) const;
+    
+    void describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const;
 
     bool msgopts_handler( RID, GUIPARAM );
 
@@ -188,6 +188,9 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     menu_c getcontextmenu( const ts::str_c& param, bool activation );
 
     void select_lang( const ts::str_c& prm );
+
+    ts::wstr_c smilepack;
+    void smile_pack_selected(const ts::str_c&);
 
     struct theme_info_s
     {

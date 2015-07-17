@@ -48,6 +48,7 @@ INLINE ipcr & operator>>(ipcr &r, ts::astrings_c &s)
 #include "profile.h"
 
 // gui
+#include "emoticons.h"
 #include "contactlist.h"
 #include "conversation.h"
 #include "isodialog.h"
@@ -60,6 +61,7 @@ INLINE ipcr & operator>>(ipcr &r, ts::astrings_c &s)
 #include "msgbox.h"
 #include "entertext.h"
 #include "avaselector.h"
+#include "smileselector.h"
 
 #include "res/resource.h"
 #include "application.h"

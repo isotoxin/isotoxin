@@ -287,7 +287,7 @@ void dotests()
 
 class test_window : public gui_isodialog_c
 {
-    gui_message_item_c *ll;
+    //gui_message_item_c *ll;
     ts::shared_ptr<contact_c> c;
 protected:
     // /*virtual*/ int unique_tag() { return UD_NOT_UNIQUE; }
@@ -296,48 +296,64 @@ protected:
         set_theme_rect(CONSTASTR("main"), false);
         __super::created();
 
-        c = TSNEW( contact_c );
-        c->set_name(L"Bla");
+        gui_conversation_c &chat = MAKE_CHILD<gui_conversation_c>( getrid() );
+        chat.always_show_editor();
+        RID msglist = chat.get_msglist();
 
-        gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(getrid(), nullptr, c, CONSTASTR("mine"), MTA_MESSAGE);
+        c = TSNEW( contact_c );
+        c->set_name("Bla");
 
         post_s p;
-        //p.time = now() - 1000;
-        //p.message = L"А теперь представьте, что к вам домой приезжает специальный человек, забирает всеваше ненужное барахло и дает вам деньги. Вам не надо выставлять на продажу ваши вещи, вам не надо их фотографировать и встречаться с покупателями. За вас все сделают. Ненужные вещи есть у каждого человека";
-        ////p.message = L"унделиверед";
-        //l.append_text(p);
+        {
+            gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, nullptr, c, CONSTASTR("mine"), MTA_MESSAGE);
 
-        p.time = now() - 2500;
-        p.message = L"Преведмед ведычПрев едмедведыч(facepalm)Преведмедве http://2ip.ru дычПреведм едведычПреведмедве дычПрев https://wiki.tox.im/Special:RecentChanges едмедведыч";
-        p.utag = ts::uuid();
-        l.append_text(p);
+            //p.time = now() - 1000;
+            //p.message = L"А теперь представьте, что к вам домой приезжает специальный человек, забирает всеваше ненужное барахло и дает вам деньги. Вам не надо выставлять на продажу ваши вещи, вам не надо их фотографировать и встречаться с покупателями. За вас все сделают. Ненужные вещи есть у каждого человека";
+            ////p.message = L"унделиверед";
+            //l.append_text(p);
 
-        p.time = now() - 2100;
-        //p.type = MTA_UNDELIVERED_MESSAGE;
-        p.message = L"унделиверед www.microsoft.com\nsdfsdf";
-        //l.leech( TSNEW(leech_fill_parent_rect_s, ts::irect(0,0,0,40)) );
-        //l.set_text(L"А теперь представьте, что к вам домой приезжает <p><color=#FF0000>специальный человек, забирает все</color><p>ваше ненужное барахло и дает вам деньги. Вам не надо выставлять на продажу ваши вещи, вам не надо их фотографировать и встречаться с покупателями. За вас все сделают. Ненужные вещи есть у каждого человека. 
-        //p.message = L"Круг потенциальных клиентов огромен.Это каждый из вас.Уверен, что за 10 минут вы соберете целую коробку ненужного вам барахла : старая техника, сломанный телефон или телевизор, бабушкин шкаф, старая одежда и книги.Возможно кто - то подарил вам что - то ненужное и вы бы хотели получить за это деньги ? Кто - то переезжает и ему нужно куда - то деть старые вещи ? Вы закрываете офис и у вас остается куча техники и мебели ? Вот тут и нужен Макс.Он приедет и заберет все.Вы сразу получите деньги.";
-        //l.set_selectable();
-        p.utag = ts::uuid();
-        l.append_text(p);
+            p.time = now() - 2500;
+            p.message_utf8 = ts::to_utf8(L"Преведмед *BOY_GIRL_DRINK* ведычПрев едмедведыч :) Преведмедве http://2ip.ru дычПреведм едведычПре 0:-) ведмедве дычПрев https://wiki.tox.im/Special:RecentChanges едмедведыч");
+            p.utag = ts::uuid();
+            l.append_text(p);
+        }
 
-        p.time = now() - 4;
-        p.message = L"http://www.microsoft.com/sdfsdf";
-        p.utag = ts::uuid();
-        l.append_text(p);
+        {
+            gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, nullptr, c, CONSTASTR("mine"), MTA_MESSAGE);
+            p.time = now() - 2100;
+            //p.type = MTA_UNDELIVERED_MESSAGE;
+            p.message_utf8 = ts::to_utf8(L"унделиверед www.microsoft.com\nsdfsddddf *LOL*");
+            //l.leech( TSNEW(leech_fill_parent_rect_s, ts::irect(0,0,0,40)) );
+            //l.set_text(L"А теперь представьте, что к вам домой приезжает <p><color=#FF0000>специальный человек, забирает все</color><p>ваше ненужное барахло и дает вам деньги. Вам не надо выставлять на продажу ваши вещи, вам не надо их фотографировать и встречаться с покупателями. За вас все сделают. Ненужные вещи есть у каждого человека. 
+            //p.message = L"Круг потенциальных клиентов огромен.Это каждый из вас.Уверен, что за 10 минут вы соберете целую коробку ненужного вам барахла : старая техника, сломанный телефон или телевизор, бабушкин шкаф, старая одежда и книги.Возможно кто - то подарил вам что - то ненужное и вы бы хотели получить за это деньги ? Кто - то переезжает и ему нужно куда - то деть старые вещи ? Вы закрываете офис и у вас остается куча техники и мебели ? Вот тут и нужен Макс.Он приедет и заберет все.Вы сразу получите деньги.";
+            //l.set_selectable();
+            p.utag = ts::uuid();
+            l.append_text(p);
+        }
 
-        p.time = now() - 3;
-        p.message = L"ttp://www.microsoft.com/sdfsdf";
-        p.utag = ts::uuid();
-        l.append_text(p);
+        {
+            gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, nullptr, c, CONSTASTR("mine"), MTA_MESSAGE);
+            p.time = now() - 4;
+            p.message_utf8 = ts::to_utf8(L"http://www.microsoft.com/sdfsdf");
+            p.utag = ts::uuid();
+            l.append_text(p);
+        }
 
-        p.time = now() - 2;
-        p.message = L"http://www.microsoft.com/sdfsdf";
-        p.utag = ts::uuid();
-        l.append_text(p);
+        {
+            gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, nullptr, c, CONSTASTR("mine"), MTA_MESSAGE);
+            p.time = now() - 3;
+            p.message_utf8 = ts::to_utf8(L"ttp://www.microsoft.com/sdfsdf");
+            p.utag = ts::uuid();
+            l.append_text(p);
+        }
 
-        ll = &l;
+        {
+            gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, nullptr, c, CONSTASTR("mine"), MTA_MESSAGE);
+            p.time = now() - 2;
+            p.message_utf8 = ts::to_utf8(L"http://www.microsoft.com/sdfsdf");
+            p.utag = ts::uuid();
+            l.append_text(p);
+        }
     }
 
 public:
@@ -351,12 +367,12 @@ public:
     {
         if (qp == SQ_PARENT_RECT_CHANGED)
         {
-            ts::irect cr = get_client_area();
+            //ts::irect cr = get_client_area();
 
-            int h = ll->get_height_by_width(cr.width());
-            if (h > cr.height() - 40) h = cr.height() -40;
+            //int h = ll->get_height_by_width(cr.width());
+            //if (h > cr.height() - 40) h = cr.height() -40;
 
-            MODIFY(*ll).pos(cr.lt).size(cr.width(), h);
+            //MODIFY(*ll).pos(cr.lt).size(cr.width(), h);
             return false;
         }
     
@@ -365,12 +381,12 @@ public:
 
     /*virtual*/ void on_confirm() override
     {
-        ll->dirty_height_cache();
-        ts::irect cr = get_client_area();
-        int h = ll->get_height_by_width(cr.width());
-        DMSG("h:" << h << getprops().size());
+        //ll->dirty_height_cache();
+        //ts::irect cr = get_client_area();
+        //int h = ll->get_height_by_width(cr.width());
+        //DMSG("h:" << h << getprops().size());
 
-        ll->getengine().redraw();
+        //ll->getengine().redraw();
     }
 };
 
@@ -385,18 +401,16 @@ void summon_test_window()
 {
     //cfg().autoupdate_next( now() + 2 );
     //cfg().autoupdate_newver(CONSTASTR("0.0.0"));
-    zero_version = true;
+    //zero_version = true;
     //gmsg<ISOGM_NEWVERSION> *m = TSNEW(gmsg<ISOGM_NEWVERSION>, CONSTASTR("0.1.225"));
     //m->send_to_main_thread();
 
 
-    /*
-    drawchecker dch;
+    drawcollector dch;
     RID r = MAKE_ROOT<test_window>(dch);
     MODIFY(r).allow_move_resize().size(502,447).setcenterpos().visible(true);
-    */
 
-    //SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR);
+    //SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR, dialog_avasel_params_s(0));
     
 }
 

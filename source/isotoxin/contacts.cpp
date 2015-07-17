@@ -172,32 +172,32 @@ void contact_c::reselect(bool scrollend)
     }
 }
 
-ts::wstr_c contact_c::compile_pubid() const
+ts::str_c contact_c::compile_pubid() const
 {
     ASSERT(is_meta());
-    ts::wstr_c x;
+    ts::str_c x;
     for (contact_c *c : subcontacts)
         x.append('~', c->get_pubid_desc());
     return x;
 }
-ts::wstr_c contact_c::compile_name() const
+ts::str_c contact_c::compile_name() const
 {
     ASSERT(is_meta());
     contact_c *defc = subget_default();
-    if (defc == nullptr) return ts::wstr_c();
-    ts::wstr_c x(defc->get_name(false));
+    if (defc == nullptr) return ts::str_c();
+    ts::str_c x(defc->get_name(false));
     for(contact_c *c : subcontacts)
         if (x.find_pos(c->get_name(false)) < 0)
             x.append_char('~').append(c->get_name(false));
     return x;
 }
 
-ts::wstr_c contact_c::compile_statusmsg() const
+ts::str_c contact_c::compile_statusmsg() const
 {
     ASSERT(is_meta());
     contact_c *defc = subget_default();
-    if (defc == nullptr) return ts::wstr_c();
-    ts::wstr_c x(defc->get_statusmsg(false));
+    if (defc == nullptr) return ts::str_c();
+    ts::str_c x(defc->get_statusmsg(false));
     for (contact_c *c : subcontacts)
         if (x.find_pos(c->get_statusmsg(false)) < 0)
             x.append_char('~').append(c->get_statusmsg(false));
@@ -309,7 +309,7 @@ const avatar_s *contact_c::get_avatar() const
 
 bool contact_c::keep_history() const
 {
-    if (key.is_group() && !opts.unmasked().is(F_PERMANENT_GCHAT))
+    if (key.is_group() && !opts.unmasked().is(F_PERSISTENT_GCHAT))
         return false;
     if (KCH_ALWAYS_KEEP == keeph) return true;
     if (KCH_NEVER_KEEP == keeph) return false;
@@ -370,20 +370,20 @@ void contact_c::load_history(int n_last_items)
             {
                 if (nullptr == prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.msgitem_utag == row->other.utag; }))
                 {
-                    if (row->other.message.get_char(0) == '?')
+                    if (row->other.message_utf8.get_char(0) == '?')
                     {
-                        row->other.message.set_char(0, '*');
+                        row->other.message_utf8.set_char(0, '*');
                         row->changed();
                         prf().changed();
                     }
                 } else
                 {
-                    if (row->other.message.get_char(0) != '?')
+                    if (row->other.message_utf8.get_char(0) != '?')
                     {
-                        if (row->other.message.get_char(0) == '*')
-                            row->other.message.set_char(0, '?');
+                        if (row->other.message_utf8.get_char(0) == '*')
+                            row->other.message_utf8.set_char(0, '?');
                         else
-                            row->other.message.insert(0, '?');
+                            row->other.message_utf8.insert(0, '?');
                         row->changed();
                         prf().changed();
                     }
@@ -869,7 +869,7 @@ void contact_c::setup( const contacts_s * c, time_t nowtime )
     keeph = (keep_contact_history_e)((c->options >> 16) & 3);
 
     if (getkey().is_group())
-        opts.unmasked().set(F_PERMANENT_GCHAT); // if loaded - permanent (non permanent never saved)
+        opts.unmasked().set(F_PERSISTENT_GCHAT); // if loaded - persistent (non persistent never saved)
 
     if (opts.is(F_UNKNOWN))
         set_state(CS_UNKNOWN);
@@ -878,7 +878,7 @@ void contact_c::setup( const contacts_s * c, time_t nowtime )
 bool contact_c::save( contacts_s * c ) const
 {
     if (getkey().is_group())
-        if ( !opts.unmasked().is(F_PERMANENT_GCHAT) ) return false;
+        if ( !opts.unmasked().is(F_PERSISTENT_GCHAT) ) return false;
 
     c->metaid = getmeta() ? getmeta()->getkey().contactid : 0;
     c->options = get_options() | (get_keeph() << 16);
@@ -1144,7 +1144,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
             if (contact.key.is_group())
             {
                 c = TSNEW(contact_c, contact.key);
-                c->options().unmasked().init( contact_c::F_PERMANENT_GCHAT, 0 != (contact.mask & CDF_PERMANENT_GCHAT) );
+                c->options().unmasked().init( contact_c::F_PERSISTENT_GCHAT, 0 != (contact.mask & CDF_PERSISTENT_GCHAT) );
                 arr.insert(index, c);
                 prf().purifycontact(c->getkey());
                 serious_change = contact.key.protoid;
@@ -1201,10 +1201,10 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
     }
 
     if (0 != (contact.mask & CDM_NAME))
-        c->set_name( ts::wstr_c().set_as_utf8(contact.name) );
+        c->set_name( contact.name );
 
     if (0 != (contact.mask & CDM_STATUSMSG))
-        c->set_statusmsg( ts::wstr_c().set_as_utf8(contact.statusmsg) );
+        c->set_statusmsg( contact.statusmsg );
 
     if (0 != (contact.mask & CDM_STATE))
     {
@@ -1307,7 +1307,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
     g_app->newversion( new_version() );
     self->gui_item->getengine().redraw();
     if ( g_app->newversion() )
-        gmsg<ISOGM_NOTICE>( self, nullptr, NOTICE_NEWVERSION, ts::to_wstr(nv.ver.as_sptr())).send();
+        gmsg<ISOGM_NOTICE>( self, nullptr, NOTICE_NEWVERSION, nv.ver.as_sptr()).send();
 
     play_sound( snd_incoming_message, false );
 
@@ -1415,7 +1415,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
                     if (ft->confirm_required())
                     {
                         play_sound(snd_incoming_file, false);
-                        gmsg<ISOGM_NOTICE> n(historian, sender, NOTICE_FILE, ifl.filename);
+                        gmsg<ISOGM_NOTICE> n(historian, sender, NOTICE_FILE, to_utf8(ifl.filename));
                         n.utag = ifl.utag;
                         n.send();
                     } else
@@ -1490,8 +1490,8 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
 
     gmsg<ISOGM_MESSAGE> msg(sender, imsg.groupchat.is_empty() ? &get_self() : contacts().find(imsg.groupchat), imsg.mt);
     msg.create_time = imsg.create_time;
-    msg.post.message.set_as_utf8( imsg.msgutf8 );
-    msg.post.message.trim();
+    msg.post.message_utf8 = imsg.msgutf8;
+    msg.post.message_utf8.trim();
     msg.send();
 
     bool up_unread = true;

@@ -130,7 +130,7 @@ protected:
         button_desc_s *getbface() const
         {
             ASSERT(text.begins(CONSTWSTR("face=")));
-            return gui->theme().get_button( ts::str_c(text.substr(5)) );
+            return gui->theme().get_button( ts::to_str(text.substr(5)) );
         }
         GET_BUTTON_FACE getgetface() const
         {

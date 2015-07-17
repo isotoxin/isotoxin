@@ -43,6 +43,7 @@ int proc_http(const wstrings_c & pars);
 int proc_hgver(const wstrings_c & pars);
 int proc_upd(const wstrings_c & pars);
 int proc_sign(const wstrings_c & pars);
+int proc_emoji(const wstrings_c & pars);
 
 int proc_loc_(const wstrings_c & pars)
 {
@@ -73,6 +74,7 @@ struct command_s
     command_s(L"hgver", L"Prints current hg revision", proc_hgver),
     //command_s(L"upd", L"Load isotoxin update", proc_upd),
     command_s(L"sign", L"Sign archive", proc_sign),
+    command_s(L"emoji", L"Create emoji table", proc_emoji),
 };
 
 
@@ -188,11 +190,11 @@ int proc_trunc(const wstrings_c & pars)
 {
     if (pars.size() == 3)
     {
-        Print("Open: %s\n", str_c(pars.get(1)).cstr());
+        Print("Open: %s\n", to_str(pars.get(1)).cstr());
         HANDLE f = CreateFileW(pars.get(1), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (f != INVALID_HANDLE_VALUE)
         {
-            Print("Trunc at: %s\n", str_c(pars.get(2)).cstr());
+            Print("Trunc at: %s\n", to_str(pars.get(2)).cstr());
             uint64 offset = pars.get(2).as_num<uint64>();
             uint64 size;
             GetFileSizeEx(f,(LARGE_INTEGER *)&size);

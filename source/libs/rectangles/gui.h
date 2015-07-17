@@ -282,7 +282,7 @@ protected:
 public:
     virtual ts::wsptr app_loclabel(loc_label_e ll) { return CONSTWSTR("???"); }
     virtual bool app_custom_button_state(int tag, int &shiftleft) { return true; }
-    virtual void app_prepare_text_for_copy( ts::wstr_c &text ) {}
+    virtual void app_prepare_text_for_copy( ts::str_c &text_utf8 ) {}
     virtual void app_notification_icon_action(naction_e act, RID iconowner) {}
 
     virtual void app_fix_sleep_value(int &sleep_ms) {}

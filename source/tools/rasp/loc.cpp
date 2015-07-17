@@ -125,7 +125,7 @@ svovasearch:
 static void savelines(const wsptr&fn, const wstrings_c & lines)
 {
     FILE *f = fopen(to_str(fn), "wb");
-    str_c fbody = lines.join('\n');
+    str_c fbody = to_str(lines.join('\n'));
     fwrite(fbody.cstr(), 1, fbody.get_length(), f);
     fclose(f);
 }
@@ -193,11 +193,11 @@ int proc_loc(const wstrings_c & pars)
                             {
                                 if (rr.tag == r.tag)
                                 {
-                                    Print( FOREGROUND_RED, "%s(%i): Tag already used: TTT(%i): %s\n", tmp_str_c(rr.fn).cstr(), rr.ln, rr.tag, tmp_str_c(rr.txt).cstr());
+                                    Print( FOREGROUND_RED, "%s(%i): Tag already used: TTT(%i): %s\n", to_str(rr.fn).cstr(), rr.ln, rr.tag, to_str(rr.txt).cstr());
                                 }
                             }
 
-                            Print( FOREGROUND_RED, "%s(%i): Tag already used: TTT(%i): %s\n", tmp_str_c(f).cstr(), r.ln, r.tag, tmp_str_c(r.txt).cstr());
+                            Print( FOREGROUND_RED, "%s(%i): Tag already used: TTT(%i): %s\n", to_str(f).cstr(), r.ln, r.tag, to_str(r.txt).cstr());
                         }
                     }
                     need2rpl.add(r);
@@ -249,7 +249,7 @@ int proc_loc(const wstrings_c & pars)
 
     need2rpl.sort();
 
-    FILE *f = fopen(str_c(fn_join(ptl, CONSTWSTR("ru.labels.lng"))), "wb");
+    FILE *f = fopen(to_str(fn_join(ptl, CONSTWSTR("ru.labels.lng"))), "wb");
     swstr_c buf;
 
     //uint16 signa = 0xFEFF;

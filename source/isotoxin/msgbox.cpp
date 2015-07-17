@@ -118,7 +118,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.set( CONSTWSTR("<p=c><b>") );
     title.append( CONSTWSTR("<a href=\"http://isotoxin.im\">Isotoxin</a>") );
     title.append( CONSTWSTR("</b> ") );
-    title.append( g_app->appver() );
+    title.appendcvt( g_app->appver() );
     title.append( CONSTWSTR("<br>Coding, design and sounds by <a href=\"https://github.com/Rotkaermota\">Rotkaermota</a>") );
     title.append( CONSTWSTR("<br>Isotoxin is open-source freeware, licensed under <a href=\"https://github.com/Rotkaermota/Isotoxin/blob/master/LICENSE\">GPL3</a>") );
 
@@ -153,6 +153,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR(" <a href=\"https://github.com/sarbian/libsquish\">libsquish</a>") );
     title.append( CONSTWSTR(" <a href=\"http://www.efgh.com/software/md5.htm\">md5</a>") );
     title.append( CONSTWSTR(" <a href=\"http://dejavu-fonts.org\">DejaVu fonts</a>") );
+    title.append(CONSTWSTR(" <a href=\"http://www.kolobok.us\">Copyright<nbsp>©<nbsp>Aiwan.<nbsp>Kolobok<nbsp>Smiles</a>"));
 
     dm().label( title );
 
@@ -204,7 +205,7 @@ ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 }
 /*virtual*/ ts::ivec2 dialog_about_c::get_min_size() const
 {
-    return ts::ivec2(450, 420);
+    return ts::ivec2(450, 440);
 }
 
 /*virtual*/ bool dialog_about_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)

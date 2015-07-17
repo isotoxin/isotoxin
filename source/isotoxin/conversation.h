@@ -16,12 +16,12 @@ enum notice_e
 class gui_notice_c;
 template<> struct gmsg<ISOGM_NOTICE> : public gmsgbase
 {
-    gmsg(contact_c *owner, contact_c *sender, notice_e nid, const ts::wstr_c& text) :gmsgbase(ISOGM_NOTICE), owner(owner), sender(sender), n(nid), text(text) {}
+    gmsg(contact_c *owner, contact_c *sender, notice_e nid, const ts::str_c& text) :gmsgbase(ISOGM_NOTICE), owner(owner), sender(sender), n(nid), text(text) {}
     gmsg(contact_c *owner, contact_c *sender, notice_e nid) :gmsgbase(ISOGM_NOTICE), owner(owner), sender(sender), n(nid) {}
     contact_c *owner;
     contact_c *sender;
     notice_e n;
-    ts::wstr_c text;
+    ts::str_c text; // utf8
     uint64 utag = 0; // file utag
     gui_notice_c *just_created = nullptr;
 };
@@ -78,8 +78,8 @@ public:
     notice_e get_notice() const { return notice; }
     uint64 get_utag() const {return utag;}
 
-    void setup(const ts::wstr_c &itext, contact_c *sender, uint64 utag);
-    void setup(const ts::wstr_c &itext);
+    void setup(const ts::str_c &itext_utf8, contact_c *sender, uint64 utag);
+    void setup(const ts::str_c &itext_utf8);
     void setup(contact_c *sender);
     bool setup_tail(RID r = RID(), GUIPARAM p = nullptr);
 
@@ -189,7 +189,7 @@ class gui_message_item_c : public gui_label_ex_c
 
         uint64 utag;
         time_t time;
-        ts::wstr_c text;
+        ts::str_c text; // utf8
         ts::TSCOLOR undelivered = 0;
         ts::uint16 append( ts::wstr_c &t, ts::wstr_c &pret, const ts::wsptr &postt = ts::wsptr() );
         bool operator()( const record&r ) const
@@ -202,7 +202,7 @@ class gui_message_item_c : public gui_label_ex_c
 
     ts::shared_ptr<contact_c> historian;
     ts::shared_ptr<contact_c> author;
-    mutable ts::wstr_c protodesc;
+    mutable ts::str_c protodesc;
     ts::wstr_c timestr;
 
     static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE   = FLAGS_FREEBITSTART_LABEL << 0;
@@ -246,6 +246,8 @@ class gui_message_item_c : public gui_label_ex_c
     void kill_button( rectengine_c *beng, int r );
     void repl_button( int r_from, int r_to );
     void updrect(void *, int r, const ts::ivec2 &p);
+    void updrect_emoticons(void *, int r, const ts::ivec2 &p);
+    
     bool b_explore(RID, GUIPARAM);
     bool b_break(RID, GUIPARAM);
     bool b_pause_unpause(RID, GUIPARAM);
@@ -299,7 +301,7 @@ public:
     bool remove_utag(uint64 utag);
     
     void init_date_separator( const tm &tmtm );
-    void init_request( const ts::wstr_c &message );
+    void init_request( const ts::str_c &message_utf8 );
     void init_load( int n_load );
 };
 
@@ -349,7 +351,14 @@ class gui_message_editor_c : public gui_textedit_c
     };
     ts::hashmap_t<contact_key_s, editstate_s> messages;
 
+    ts::safe_ptr<leech_dock_bottom_right_s> smile_pos_corrector;
+    ts::ivec2 rb;
+
+    bool show_smile_selector(RID, GUIPARAM);
+    bool clear_text(RID, GUIPARAM);
     bool on_enter_press_func(RID, GUIPARAM);
+    /*virtual*/ void cb_scrollbar_width(int w) override;
+
 public:
     gui_message_editor_c(initial_rect_data_s &data) :gui_textedit_c(data) {}
     /*virtual*/ ~gui_message_editor_c();
@@ -411,6 +420,8 @@ class gui_conversation_c : public gui_vgroup_c, public sound_capture_handler_c
     ts::safe_ptr<gui_noticelist_c> noticelist;
     ts::safe_ptr<gui_message_area_c> messagearea;
 
+    static const ts::flags32_s::BITS F_ALWAYS_SHOW_EDITOR = F_HGROUP_FREEBITSTART << 0;
+
     RID message_editor;
 
     /*virtual*/ void datahandler(const void *data, int size) override;
@@ -421,6 +432,9 @@ class gui_conversation_c : public gui_vgroup_c, public sound_capture_handler_c
 public:
     gui_conversation_c(initial_rect_data_s &data) :gui_vgroup_c(data) { /*defaultthrdraw = DTHRO_BASE;*/ }
     /*virtual*/ ~gui_conversation_c();
+
+    RID get_msglist() const { return msglist->getrid(); }
+    void always_show_editor(bool f = true) { flags.init(F_ALWAYS_SHOW_EDITOR, f); hide_show_messageeditor(); }
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ void created() override;

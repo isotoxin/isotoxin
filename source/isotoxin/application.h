@@ -22,6 +22,8 @@ struct preloaded_buttons_s
     ts::shared_ptr<button_desc_s> breakb;
     
     ts::shared_ptr<button_desc_s> nokeeph;
+    
+    ts::shared_ptr<button_desc_s> smile;
 
     void reload();
 };
@@ -131,7 +133,7 @@ public:
         return true;
     }
 
-    /*virtual*/ void app_prepare_text_for_copy(ts::wstr_c &text) override;
+    /*virtual*/ void app_prepare_text_for_copy(ts::str_c &text_utf8) override;
 
     /*virtual*/ ts::wsptr app_loclabel(loc_label_e ll);
 

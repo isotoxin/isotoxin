@@ -87,6 +87,12 @@
     <ClCompile Include="..\..\contactprops.cpp">
       <Filter>src\gui</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\emoticons.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\smileselector.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\res\resource.h">
@@ -153,6 +159,12 @@
       <Filter>src\gui</Filter>
     </ClInclude>
     <ClInclude Include="..\..\contactprops.h">
+      <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\emoticons.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\smileselector.h">
       <Filter>src\gui</Filter>
     </ClInclude>
   </ItemGroup>

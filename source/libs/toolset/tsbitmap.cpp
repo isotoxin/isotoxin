@@ -3,6 +3,39 @@
 namespace ts
 {
 
+void TSCALL img_helper_fill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color)
+{
+    int desnl = des_info.pitch - des_info.sz.x*des_info.bytepp();
+    int desnp = des_info.bytepp();
+
+    switch (des_info.bytepp())
+    {
+        case 1:
+            for (int y = 0; y < des_info.sz.y; y++, des += desnl)
+                for (int x = 0; x < des_info.sz.x; x++, des += desnp)
+                    *(uint8 *)des = (uint8)color;
+            break;
+        case 2:
+            for (int y = 0; y < des_info.sz.y; y++, des += desnl)
+                for (int x = 0; x < des_info.sz.x; x++, des += desnp)
+                    *(uint16 *)des = (uint16)color;
+            break;
+        case 3:
+            for (int y = 0; y < des_info.sz.y; y++, des += desnl) {
+                for (int x = 0; x < des_info.sz.x; x++, des += desnp) {
+                    *(uint16 *)des = (uint16)color;
+                    *(uint8 *)(des + 2) = (uint8)(color >> 16);
+                }
+            }
+            break;
+        case 4:
+            for (int y = 0; y < des_info.sz.y; y++, des += desnl)
+                for (int x = 0; x < des_info.sz.x; x++, des += desnp)
+                    *(uint32 *)des = color;
+            break;
+    }
+}
+
 void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info)
 {
     ASSERT(sou_info.sz == des_info.sz);
@@ -987,36 +1020,7 @@ template<typename CORE> void bitmap_t<CORE>::detect_alpha_channel( const bitmap_
 template<typename CORE> void bitmap_t<CORE>::fill(TSCOLOR color)
 {
     before_modify();
-    uint8 * des=body();
-    int desnl=info().pitch-info().sz.x*info().bytepp();
-    int desnp=info().bytepp();
-
-    switch( info().bytepp() )
-    {
-    case 1:
-        for(int y=0;y<info().sz.y;y++,des+=desnl)
-            for(int x=0;x<info().sz.x;x++,des+=desnp)
-                *(uint8 *)des=(uint8)color;
-        break;
-    case 2:
-        for(int y=0;y<info().sz.y;y++,des+=desnl)
-            for(int x=0;x<info().sz.x;x++,des+=desnp)
-                *(uint16 *)des=(uint16)color;
-        break;
-    case 3:
-        for(int y=0;y<info().sz.y;y++,des+=desnl) {
-            for(int x=0;x<info().sz.x;x++,des+=desnp) {
-                *(uint16 *)des=(uint16)color;
-                *(uint8 *)(des+2)=(uint8)(color>>16);
-            }			
-        }
-        break;
-    case 4:
-        for(int y=0;y<info().sz.y;y++,des+=desnl)
-            for(int x=0;x<info().sz.x;x++,des+=desnp)
-                *(uint32 *)des=color;
-        break;
-    }
+    img_helper_fill( body(), info(), color );
 }
 
 template<typename CORE> void bitmap_t<CORE>::fill(const ivec2 & pdes,const ivec2 & size, TSCOLOR color)
@@ -1035,37 +1039,7 @@ template<typename CORE> void bitmap_t<CORE>::fill(const ivec2 & pdes,const ivec2
     if (!(size >> 0)) return;
 
     before_modify();
-
-	uint8 * des=body()+info().bytepp()*pdes.x+info().pitch*pdes.y;
-	int desnl=info().pitch-size.x*info().bytepp();
-	int desnp=info().bytepp();
-
-	if(info().bytepp()==1) {
-		for(int y=0;y<size.y;y++,des+=desnl) {
-			for(int x=0;x<size.x;x++,des+=desnp) {
-				*(uint8 *)des=(uint8)color;
-			}			
-		}
-	} else if(info().bytepp()==2) {
-		for(int y=0;y<size.y;y++,des+=desnl) {
-			for(int x=0;x<size.x;x++,des+=desnp) {
-				*(uint16 *)des=(uint16)color;
-			}			
-		}
-	} else if(info().bytepp()==3) {
-		for(int y=0;y<size.y;y++,des+=desnl) {
-			for(int x=0;x<size.x;x++,des+=desnp) {
-				*(uint16 *)des=(uint16)color;
-				*(uint8 *)(des+2)=(uint8)(color>>16);
-			}			
-		}
-	} else if(info().bytepp()==4) {
-		for(int y=0;y<size.y;y++,des+=desnl) {
-			for(int x=0;x<size.x;x++,des+=desnp) {
-				*(uint32 *)des=color;
-			}			
-		}
-	}
+    img_helper_fill( body()+info().bytepp()*pdes.x+info().pitch*pdes.y, imgdesc_s(info(), size), color );
 }
 
 template<typename CORE> void bitmap_t<CORE>::overfill(const ivec2 & pdes,const ivec2 & size, TSCOLOR color)
@@ -1826,29 +1800,16 @@ template<typename CORE> void bitmap_t<CORE>::sharpen(bitmap_c& outimage, int lv)
     sharpen_run(outimage, body(), info(), lv);
 }
 
-#if 0
-bool rotate2(bitmap_c &obm, bitmap_c &ibm, int angle, rot_filter_e filt_mode, bool expand_dst=true);
-
-// Angle in [-pi..pi]
-template<typename CORE> bool bitmap_t<CORE>::rotate(bitmap_c& obm, float angle_rad, rot_filter_e filt_mode, bool expand_dst)
-{
-	int ang = lround(angle_rad * 2147483648.0 / 3.14159265358979323846);
-	return rotate2(obm, *this, ang, filt_mode,expand_dst);
-}
-
-bool resize2(bitmap_c &obm, bitmap_c &ibm, float scale = 2.f, resize_filter_e filt_mode = FILTER_NONE);
-
-template<typename CORE> bool bitmap_t<CORE>::resize(bitmap_c& obm, float scale, resize_filter_e filt_mode)
-{
-	return resize2(obm, *this, scale, filt_mode);
-}
-
-#endif
-
-bool resize3(bitmap_c &obm, const uint8 *sou, const imgdesc_s &souinfo, const ivec2 &newsz, resize_filter_e filt_mode);
+bool resize3(const bmpcore_exbody_s &extbody, const uint8 *sou, const imgdesc_s &souinfo, resize_filter_e filt_mode);
 template<typename CORE> bool bitmap_t<CORE>::resize(bitmap_c& obm, const ivec2 & newsize, resize_filter_e filt_mode) const
 {
-    return resize3(obm, body(), info(), newsize, filt_mode);
+    obm.create_RGBA(newsize);
+    return resize3(obm.extbody(), body(), info(), filt_mode);
+}
+
+template<typename CORE> bool bitmap_t<CORE>::resize(const bmpcore_exbody_s &extbody_, resize_filter_e filt_mode) const
+{
+    return resize3(extbody_, body(), info(), filt_mode);
 }
 
 template<typename CORE> void bitmap_t<CORE>::make_grayscale(void)

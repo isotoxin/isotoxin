@@ -503,7 +503,7 @@ int proc_antic99(const wstrings_c & pars)
 
     //savelines( str_c(c99).append(asptr(".fixed")), lines );
     //if (fixes) savelines( str_c(c99).append( asptr("99free.c") ), lines );
-    if (fixes) savelines( str_c(c99), lines );
+    if (fixes) savelines( to_str(c99), lines );
 
     Print(FOREGROUND_GREEN, "done %s. fixes: %i\n", to_str(fn_get_name_with_ext(c99)).cstr(), fixes);
 

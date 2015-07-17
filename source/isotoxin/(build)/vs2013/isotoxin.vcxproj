@@ -123,6 +123,7 @@
     <ClCompile Include="..\..\contactlist.cpp" />
     <ClCompile Include="..\..\contactprops.cpp" />
     <ClCompile Include="..\..\conversation.cpp" />
+    <ClCompile Include="..\..\emoticons.cpp" />
     <ClCompile Include="..\..\entertext.cpp" />
     <ClCompile Include="..\..\firstrun.cpp" />
     <ClCompile Include="..\..\isodialog.cpp" />
@@ -138,6 +139,7 @@
     <ClCompile Include="..\..\mediasystem.cpp" />
     <ClCompile Include="..\..\contacts.cpp" />
     <ClCompile Include="..\..\settings.cpp" />
+    <ClCompile Include="..\..\smileselector.cpp" />
     <ClCompile Include="..\..\tests.cpp" />
     <ClCompile Include="..\..\todo.cpp" />
     <ClCompile Include="..\..\tools.cpp" />
@@ -152,6 +154,7 @@
     <ClInclude Include="..\..\contacts.h" />
     <ClInclude Include="..\..\contactlist.h" />
     <ClInclude Include="..\..\conversation.h" />
+    <ClInclude Include="..\..\emoticons.h" />
     <ClInclude Include="..\..\entertext.h" />
     <ClInclude Include="..\..\firstrun.h" />
     <ClInclude Include="..\..\isodialog.h" />
@@ -161,6 +164,7 @@
     <ClInclude Include="..\..\msgbox.h" />
     <ClInclude Include="..\..\profile.h" />
     <ClInclude Include="..\..\mediasystem.h" />
+    <ClInclude Include="..\..\smileselector.h" />
     <ClInclude Include="..\..\version.inl" />
     <ClInclude Include="..\..\res\resource.h" />
     <ClInclude Include="..\..\settings.h" />

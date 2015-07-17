@@ -81,7 +81,10 @@ public:
     ~animated_c();
 
     bool load( const void *b, int bsize ); // returns true, if animated
-    int getframe( bitmap_c &bmp ); // returns ms time of frame. bmp should contain previous frame!
+    int firstframe( bitmap_c &bmp ); // returns ms time of frame. bmp should contain previous frame!
+    int nextframe( const bmpcore_exbody_s &bmp );
+
+    int numframes() const;
 };
 
 } // namespace ts

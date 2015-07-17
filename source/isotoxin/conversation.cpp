@@ -195,7 +195,7 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_DOWNLOADPROGRESS>&p)
     return 0;
 }
 
-void gui_notice_c::setup(const ts::wstr_c &itext)
+void gui_notice_c::setup(const ts::str_c &itext_utf8)
 {
     switch (notice)
     {
@@ -203,7 +203,7 @@ void gui_notice_c::setup(const ts::wstr_c &itext)
         {
             ts::wstr_c newtext(1024,false);
             newtext.set(CONSTWSTR("<p=c>"));
-            newtext.append(TTT("Доступна новая версия: $",163) / itext);
+            newtext.append(TTT("Доступна новая версия: $",163) / from_utf8(itext_utf8));
             newtext.append(CONSTWSTR("<br>"));
             newtext.append(TTT("Текущая версия: $",164) / ts::to_wstr(application_c::appver()));
 
@@ -244,7 +244,7 @@ void gui_notice_c::setup(const ts::wstr_c &itext)
     setup_tail();
 }
 
-void gui_notice_c::setup(const ts::wstr_c &itext, contact_c *sender, uint64 utag_)
+void gui_notice_c::setup(const ts::str_c &itext_utf8, contact_c *sender, uint64 utag_)
 {
     utag = utag_;
     switch (notice)
@@ -253,17 +253,17 @@ void gui_notice_c::setup(const ts::wstr_c &itext, contact_c *sender, uint64 utag
         {
             ts::wstr_c newtext(1024,false);
             newtext.set(CONSTWSTR("<p=c><b>"));
-            newtext.append(sender->get_pubid_desc());
+            newtext.append(from_utf8(sender->get_pubid_desc()));
             newtext.append(CONSTWSTR("</b><br>"));
 
-            if (itext.equals(CONSTWSTR("\1restorekey")))
+            if (itext_utf8.equals(CONSTASTR("\1restorekey")))
             {
                 newtext.append(TTT("Требуется подтверждение восстановления ключа",198));
             } else
             {
                 newtext.append(TTT("Неизвестный контакт запрашивает разрешение на добавление вас в список контактов", 74));
                 newtext.append(CONSTWSTR("<hr=7,2,1>"));
-                newtext.append(itext);
+                newtext.append(from_utf8(itext_utf8));
             }
 
             textrect.set_text_only(newtext,false);
@@ -289,7 +289,7 @@ void gui_notice_c::setup(const ts::wstr_c &itext, contact_c *sender, uint64 utag
         {
             ts::wstr_c newtext(512,false);
             newtext.set(CONSTWSTR("<p=c>"));
-            newtext.append(TTT("Вы согласны принять файл [b]$[/b]?",175) / itext);
+            newtext.append(TTT("Вы согласны принять файл [b]$[/b]?",175) / from_utf8(itext_utf8));
             newtext.append(CONSTWSTR("<hr=7,2,1>"));
             textrect.set_text_only(newtext,false);
 
@@ -321,7 +321,7 @@ void gui_notice_c::setup(const ts::wstr_c &itext, contact_c *sender, uint64 utag
         break;
     default:
         if (sender == nullptr)
-            setup(itext);
+            setup(itext_utf8);
         else
             setup(sender);
         return;
@@ -431,7 +431,7 @@ void gui_notice_c::setup(contact_c *sender)
                         txt.append( CONSTWSTR("<img=gch_unknown,-1>") );
                     break;
                 }
-                txt.append( m->get_name() ).append(CONSTWSTR(", "));
+                txt.append( from_utf8(m->get_name()) ).append(CONSTWSTR(", "));
             } );
 
             if (txt.ends( CONSTWSTR(", ") ))
@@ -461,7 +461,7 @@ bool gui_notice_c::setup_tail(RID, GUIPARAM)
 
 void gui_notice_c::update_text(contact_c *sender)
 {
-    ts::wstr_c aname = sender->get_name();
+    ts::str_c aname = sender->get_name();
     text_adapt_user_input(aname);
 
     ts::wstr_c newtext(512,false);
@@ -472,7 +472,7 @@ void gui_notice_c::update_text(contact_c *sender)
         case NOTICE_FRIEND_REQUEST_SEND_OR_REJECT:
 
             newtext.append(CONSTWSTR("<b>"));
-            newtext.append(sender->get_pubid_desc());
+            newtext.append(from_utf8(sender->get_pubid_desc()));
             newtext.append(CONSTWSTR("</b><br>"));
             if (sender->get_state() == CS_REJECTED)
                 newtext.append(TTT("Запрос на добавление в список контактов был отклонен. Вы можете повторить запрос.", 80));
@@ -482,13 +482,13 @@ void gui_notice_c::update_text(contact_c *sender)
 
             break;
         case NOTICE_INCOMING_CALL:
-            newtext.append(TTT("Входящий звонок от $", 134) / aname);
+            newtext.append(TTT("Входящий звонок от $", 134) / from_utf8(aname));
             break;
         case NOTICE_CALL_INPROGRESS:
-            newtext.append(TTT("Разговор с $", 136) / aname);
+            newtext.append(TTT("Разговор с $", 136) / from_utf8(aname));
             break;
         case NOTICE_CALL:
-            newtext.append(TTT("Звонок $",142) / aname);
+            newtext.append(TTT("Звонок $",142) / from_utf8(aname));
             break;
     }
 
@@ -522,8 +522,8 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
             if (c->get_pubid() == pubid)
             {
                 networkid = ap.getid();
-                plugdesc = ap.get_desc();
-                netname = ap.get_name();
+                plugdesc = from_utf8(ap.get_desc());
+                netname = from_utf8(ap.get_name());
                 is_autoconnect = ap.is_autoconnect();
 
                 if (c->get_state() == CS_ONLINE)
@@ -533,17 +533,17 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
                 if (c->get_state() == CS_OFFLINE)
                     sost.set(maketag_color<ts::wchar>(get_default_text_color(1))).append(TTT("Офлайн", 101)).append(CONSTWSTR("</color>"));
 
-                uname = ap.get_uname();
-                ustatus = ap.get_ustatusmsg();
+                uname = from_utf8(ap.get_uname());
+                ustatus = from_utf8(ap.get_ustatusmsg());
             }
     });
 
     if (uname.is_empty())
-        uname.set(maketag_color<ts::wchar>(get_default_text_color(4))).append( prf().username() ).append(CONSTWSTR("</color>"));
+        uname.set(maketag_color<ts::wchar>(get_default_text_color(4))).append( from_utf8(prf().username()) ).append(CONSTWSTR("</color>"));
     else
         uname.insert(0,CONSTWSTR("</l><b>")).append(CONSTWSTR("</b><l>"));
     if (ustatus.is_empty())
-        ustatus.set(maketag_color<ts::wchar>(get_default_text_color(4))).append( prf().userstatus() ).append(CONSTWSTR("</color>"));
+        ustatus.set(maketag_color<ts::wchar>(get_default_text_color(4))).append( from_utf8(prf().userstatus()) ).append(CONSTWSTR("</color>"));
     else
         ustatus.insert(0, CONSTWSTR("</l><b>")).append(CONSTWSTR("</b><l>"));
 
@@ -553,22 +553,22 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
                             .replace_all(CONSTWSTR("{ustatus}"), ustatus)
                             .replace_all(CONSTWSTR("{name}"), netname)
                             .replace_all(CONSTWSTR("{module}"), plugdesc)
-                            .replace_all(CONSTWSTR("{id}"), ts::wstr_c(CONSTWSTR("<ee><null=1><null=2>")).append(pubid).append(CONSTWSTR("<null=3><null=4>")))
+                            .replace_all(CONSTWSTR("{id}"), ts::wstr_c(CONSTWSTR("<ee><null=1><null=2>")).append(from_utf8(pubid)).append(CONSTWSTR("<null=3><null=4>")))
                             .replace_all(CONSTWSTR("{state}"), sost),
 
                             true);
 
     struct copydata
     {
-        ts::wstr_c pubid;
+        ts::str_c pubid;
         ts::safe_ptr<gui_notice_network_c> notice;
         bool copy_handler(RID b, GUIPARAM)
         {
-            ts::set_clipboard_text(pubid);
+            ts::set_clipboard_text(from_utf8(pubid));
             if (notice) notice->flash();
             return true;
         }
-        copydata(const ts::wstr_c &pubid, gui_notice_network_c *notice) :pubid(pubid), notice(notice)
+        copydata(const ts::str_c &pubid, gui_notice_network_c *notice) :pubid(pubid), notice(notice)
         {
         }
     };
@@ -774,12 +774,6 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
 
                 text_draw_params_s tdp;
                 dd.offset += ca.lt;
-                //last_head_text_pos = ca.lt;
-                //int oldxo = dd.offset.x;
-                //ts::flags32_s f; f.setup(ts::TO_VCENTER | ts::TO_LINE_END_ELLIPSIS);
-                tdp.textoptions = nullptr; //&f;
-                tdp.forecolor = nullptr;
-                //tdp.rectupdate = DELEGATE(this, updrect);
                 draw(dd, tdp);
             }
             m_engine->end_draw();
@@ -1060,7 +1054,7 @@ void gui_noticelist_c::refresh()
 
 ts::uint32 gui_noticelist_c::gm_handler(gmsg<GM_UI_EVENT> & e)
 {
-    if (e.evt == UE_MAXIMIZED || e.evt == UE_NORMALIZED)
+    if (UE_MAXIMIZED == e.evt || UE_NORMALIZED == e.evt)
     {
         DEFERRED_EXECUTION_BLOCK_BEGIN(0)
         if (self_selected)
@@ -1117,7 +1111,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                 if (sender)
                 {
                     gui_notice_c &n = create_notice(NOTICE_FILE);
-                    n.setup(ftr.filename, sender, ftr.utag);
+                    n.setup(to_utf8(ftr.filename), sender, ftr.utag);
                 }
             });
 
@@ -1214,12 +1208,12 @@ static contact_c * readtime_historian = nullptr;
 
 void gui_message_item_c::ctx_menu_golink(const ts::str_c & lnk)
 {
-    open_link(lnk);
+    open_link(from_utf8(lnk));
     gui->selcore().flash_and_clear_selection();
 }
 void gui_message_item_c::ctx_menu_copylink(const ts::str_c & lnk)
 {
-    ts::set_clipboard_text(ts::to_wstr(lnk));
+    ts::set_clipboard_text(ts::from_utf8(lnk));
     gui->selcore().flash_and_clear_selection();
 }
 
@@ -1404,6 +1398,7 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                         tdp.sz = nullptr;
                         ts::flags32_s f; f.set(ts::TO_LASTLINEADDH);
                         tdp.textoptions = &f;
+                        tdp.rectupdate = DELEGATE(this, updrect_emoticons);
 
                         __super::draw( dd, tdp );
 
@@ -1420,6 +1415,7 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                             ts::TSCOLOR c = get_default_text_color(2);
                             tdp.forecolor = &c;
                             tdp.sz = nullptr;
+                            tdp.rectupdate = ts::UPDATE_RECTANGLE();
                             m_engine->draw(timestr, tdp);
                         }
 
@@ -1500,9 +1496,9 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                 bool some_selection = some_selected();
 
                 mnu.add(gui->app_loclabel(LL_CTXMENU_COPY), (!some_selection) ? MIF_DISABLED : 0, DELEGATE(this, ctx_menu_copy));
-                ts::wstr_c msg = get_message_under_cursor(to_local(data.mouse.screenpos), mutag);
+                ts::str_c msg = to_utf8(get_message_under_cursor(to_local(data.mouse.screenpos), mutag));
                 gui->app_prepare_text_for_copy(msg);
-                mnu.add(TTT("Копировать сообщение", 205), 0, DELEGATE(this, ctx_menu_copymessage), ts::to_utf8(msg));
+                mnu.add(TTT("Копировать сообщение", 205), 0, DELEGATE(this, ctx_menu_copymessage), msg);
                 mnu.add_separator();
             }
             mnu.add(TTT("Удалить сообщение",221), 0, DELEGATE(this, ctx_menu_delmessage), ts::str_c().append_as_hex(&mutag, sizeof(mutag)));
@@ -1589,14 +1585,14 @@ void gui_message_item_c::init_date_separator( const tm &tmtm )
     flags.set(F_DIRTY_HEIGHT_CACHE);
 
     ts::swstr_t<-128> tstr;
-    set_date(tstr, prf().date_sep_template(), tmtm);
+    set_date(tstr, from_utf8(prf().date_sep_template()), tmtm);
 
     ts::wstr_c newtext( CONSTWSTR("<p=c>") );
     newtext.append(tstr);
     textrect.set_text_only(newtext, false);
 }
 
-void gui_message_item_c::init_request( const ts::wstr_c &pre )
+void gui_message_item_c::init_request( const ts::str_c &pre_utf8 )
 {
     ASSERT(MTA_OLD_REQUEST == mt);
     ASSERT(MTA_OLD_REQUEST == mt || author->authorized());
@@ -1604,14 +1600,14 @@ void gui_message_item_c::init_request( const ts::wstr_c &pre )
     flags.set(F_DIRTY_HEIGHT_CACHE);
 
     ts::wstr_c t(CONSTWSTR("<p=c>"));
-    if (pre.equals(CONSTWSTR("\1restorekey")))
+    if (pre_utf8.equals(CONSTASTR("\1restorekey")))
     {
         t.append(TTT("Ключ восстановлен",199));
     } else
     {
-        ts::wstr_c message = pre;
+        ts::str_c message = pre_utf8;
         text_adapt_user_input(message);
-        t.append(message);
+        t.append(from_utf8(message));
     }
 
     textrect.set_text_only(t,false);
@@ -1690,7 +1686,7 @@ ts::uint16 gui_message_item_c::record::append( ts::wstr_c &t, ts::wstr_c &pret, 
     _localtime64_s(&tt, &time);
     if ( prf().get_msg_options().is(MSGOP_SHOW_DATE) )
     {
-        set_date(tstr,prf().date_msg_template(),tt);
+        set_date(tstr,from_utf8(prf().date_msg_template()),tt);
         tstr.append_char(' ');
     }
     tstr.append_as_uint(tt.tm_hour);
@@ -1712,10 +1708,10 @@ ts::uint16 gui_message_item_c::record::append( ts::wstr_c &t, ts::wstr_c &pret, 
 
     if (undelivered)
     {
-        t.append(maketag_color<ts::wchar>(undelivered)).append(text).append(CONSTWSTR("</color>"));
+        t.append(maketag_color<ts::wchar>(undelivered)).append(from_utf8(text)).append(CONSTWSTR("</color>"));
     }
     else
-        t.append(text);
+        t.append(from_utf8(text));
 
     if (timestrwidth)
         t.append(CONSTWSTR("<nbsp=")).append_as_uint(timestrwidth + ADDTIMESPACE).append_char('>');
@@ -1725,13 +1721,7 @@ ts::uint16 gui_message_item_c::record::append( ts::wstr_c &t, ts::wstr_c &pret, 
     return timestrwidth;
 }
 
-static void parse_smiles( ts::wstr_c &message )
-{
-    message.replace_all(CONSTWSTR("(facepalm)"), CONSTWSTR("<img=/smiles/(facepalm).png,-1>"));
-    //message.replace_all(CONSTWSTR("(colb)"), CONSTWSTR("<img=/smiles/colb32.png,-1>"));
-}
-
-static int prepare_link(ts::wstr_c &message, int i, int n)
+static int prepare_link(ts::str_c &message, int i, int n)
 {
     int cnt = message.get_length();
     int j=i;
@@ -1740,43 +1730,43 @@ static int prepare_link(ts::wstr_c &message, int i, int n)
         ts::wchar c = message.get_char(j);
         if (ts::CHARz_find(L" \\<>\r\n\t", c)>=0) break;
     }
-    ts::swstr_t<-128> inst(CONSTWSTR("<cstm=b"));
-    inst.append_as_uint(n).append(CONSTWSTR(">"));
+    ts::sstr_t<-128> inst(CONSTASTR("<cstm=b"));
+    inst.append_as_uint(n).append(CONSTASTR(">"));
     message.insert(j,inst);
     inst.set_char(6,'a');
     message.insert(i,inst);
     return j + inst.get_length() * 2;
 }
 
-static void parse_links(ts::wstr_c &message, bool reset_n)
+static void parse_links(ts::str_c &message, bool reset_n)
 {
     static int n = 0;
     if (reset_n) n = 0;
     int i = 0;
     for(;;)
     {
-        int j = message.find_pos(i, CONSTWSTR("http://"));
+        int j = message.find_pos(i, CONSTASTR("http://"));
         if (j>=0)
         {
             i = prepare_link(message, j, n);
             ++n;
             continue;
         }
-        j = message.find_pos(i, CONSTWSTR("https://"));
+        j = message.find_pos(i, CONSTASTR("https://"));
         if (j >= 0)
         {
             i = prepare_link(message, j, n);
             ++n;
             continue;
         }
-        j = message.find_pos(i, CONSTWSTR("ftp://"));
+        j = message.find_pos(i, CONSTASTR("ftp://"));
         if (j >= 0)
         {
             i = prepare_link(message, j, n);
             ++n;
             continue;
         }
-        j = message.find_pos(i, CONSTWSTR("www."));
+        j = message.find_pos(i, CONSTASTR("www."));
         if (j == 0 || (j > 0 && message.get_char(j-1) == ' '))
         {
             i = prepare_link(message, j, n);
@@ -1868,7 +1858,7 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
     switch(mt)
     {
     case MTA_OLD_REQUEST:
-        init_request(post.message);
+        init_request(post.message_utf8);
         break;
     case MTA_ACCEPT_OK:
     case MTA_ACCEPTED:
@@ -1876,12 +1866,12 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             subtype = ST_JUST_TEXT;
             ts::wstr_c newtext(512,false);
             newtext.set(CONSTWSTR("<p=c>"));
-            ts::wstr_c aname = author->get_name();
+            ts::str_c aname = author->get_name();
             text_adapt_user_input(aname);
             if (MTA_ACCEPTED == mt)
-                newtext.append(TTT("Вы получили разрешение на добавление контакта [b]$[/b] в список контактов.", 91) / aname);
+                newtext.append(TTT("Вы получили разрешение на добавление контакта [b]$[/b] в список контактов.", 91) / from_utf8(aname));
             if (MTA_ACCEPT_OK == mt)
-                newtext.append(TTT("Вы разрешили добавление контакта [b]$[/b] в список контактов.", 90) / aname);
+                newtext.append(TTT("Вы разрешили добавление контакта [b]$[/b] в список контактов.", 90) / from_utf8(aname));
             textrect.set_text_only(newtext,false);
         }
         break;
@@ -1895,7 +1885,7 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             ts::wstr_c newtext(512, false);
             message_prefix(newtext, post.time);
             newtext.append(CONSTWSTR("<img=call,-1>"));
-            ts::wstr_c aname = author->get_name();
+            ts::str_c aname = author->get_name();
             text_adapt_user_input(aname);
 
             if (MTA_INCOMING_CALL_CANCELED == mt)
@@ -1903,9 +1893,9 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             else if (MTA_INCOMING_CALL_REJECTED == mt)
                 newtext.append(TTT("Отказ от звонка",135));
             else if (MTA_CALL_ACCEPTED == mt)
-                newtext.append(TTT("Начат разговор с $",138)/aname);
+                newtext.append(TTT("Начат разговор с $",138)/from_utf8(aname));
             else if (MTA_HANGUP == mt)
-                newtext.append(TTT("Закончен разговор с $",139)/aname);
+                newtext.append(TTT("Закончен разговор с $",139)/from_utf8(aname));
 
             message_postfix(newtext);
 
@@ -1921,14 +1911,14 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
     case MTA_RECV_FILE:
         {
             subtype = ST_RECV_FILE;
-            rec.text = post.message;
+            rec.text = post.message_utf8;
             update_text();
         }
         break;
     case MTA_SEND_FILE:
         {
             subtype = ST_SEND_FILE;
-            rec.text = post.message;
+            rec.text = post.message_utf8;
             update_text();
         }
     break;
@@ -1937,13 +1927,11 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             subtype = ST_CONVERSATION;
             textrect.set_font(g_app->font_conv_text);
 
-            ts::wstr_c message = post.message;
-            if (message.is_empty()) message.set(CONSTWSTR("error"));
+            ts::str_c message = post.message_utf8;
+            if (message.is_empty()) message.set(CONSTASTR("error"));
             else {
-                //int x = message.find_pos('\1');
-                //if (x >= 0) message.cut(0, x + 1);
                 text_adapt_user_input(message);
-                parse_smiles(message);
+                emoti().parse(message);
                 parse_links(message, records.size() == 1);
             }
 
@@ -2006,7 +1994,7 @@ bool gui_message_item_c::message_prefix(ts::wstr_c &newtext, time_t posttime)
     if (prf().get_msg_options().is(MSGOP_SHOW_DATE))
     {
         ts::swstr_t<-128> tstr;
-        set_date(tstr, prf().date_msg_template(), tt);
+        set_date(tstr, from_utf8(prf().date_msg_template()), tt);
         newtext.append(tstr).append_char(' ');
     }
 
@@ -2045,12 +2033,13 @@ bool gui_message_item_c::b_explore(RID, GUIPARAM)
     ASSERT(records.size());
     record &rec = records.get(0);
     if (rec.text.get_char(0) == '*' || rec.text.get_char(0) == '?') return true;
-    if (ts::is_file_exists(rec.text))
+    ts::wstr_c fn = from_utf8(rec.text);
+    if (ts::is_file_exists(fn))
     {
-        ShellExecuteW(nullptr, L"open", L"explorer", CONSTWSTR("/select,") + ts::fn_autoquote(ts::fn_get_name_with_ext(rec.text)), ts::fn_get_path(rec.text), SW_SHOWDEFAULT);
+        ShellExecuteW(nullptr, L"open", L"explorer", CONSTWSTR("/select,") + ts::fn_autoquote(ts::fn_get_name_with_ext(fn)), ts::fn_get_path(fn), SW_SHOWDEFAULT);
     } else
     {
-        ts::wstr_c path = fn_get_path(rec.text);
+        ts::wstr_c path = fn_get_path(fn);
         ts::fix_path(path, FNO_NORMALIZE);
         for(; !ts::dir_present(path);)
         {
@@ -2086,13 +2075,13 @@ bool gui_message_item_c::b_break(RID btn, GUIPARAM)
 
             post_s p;
             p.sender = row->other.sender;
-            p.message = rec.text;
+            p.message_utf8 = rec.text;
             p.utag = rec.utag;
             prf().change_history_item(row->other.historian, p, HITM_MESSAGE);
             if (contact_c * h = contacts().find(row->other.historian)) h->iterate_history([&](post_s &p)->bool {
                 if (p.utag == rec.utag)
                 {
-                    p.message = rec.text;
+                    p.message_utf8 = rec.text;
                     return true;
                 }
                 return false;
@@ -2190,6 +2179,11 @@ void gui_message_item_c::kill_button( rectengine_c *beng, int r )
 
     TSDEL(beng);
     flags.set(F_DIRTY_HEIGHT_CACHE);
+}
+
+void gui_message_item_c::updrect_emoticons(void *, int r, const ts::ivec2 &p)
+{
+    emoti().draw( getroot(), p, r );
 }
 
 void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
@@ -2301,7 +2295,7 @@ void gui_message_item_c::update_text()
                     btns.insert(0, prepare_button_rect(r, sz));
             };
 
-            ts::wstr_c fn = ts::fn_get_name_with_ext(rec.text);
+            ts::wstr_c fn = ts::fn_get_name_with_ext(from_utf8(rec.text));
             ts::wchar fc = rec.text.get_char(0);
             file_transfer_s *ft = nullptr;
             if (fc == '*')
@@ -2397,21 +2391,18 @@ void gui_message_item_c::update_text()
 
 ts::wstr_c gui_message_item_c::hdr() const
 {
-    ts::wstr_c n(author->get_name());
+    ts::str_c n(author->get_name());
     text_adapt_user_input(n);
-    if (prf().get_msg_options().is(MSGOP_SHOW_PROTOCOL_NAME) && !historian->getkey().is_group())
+    if (prf().is_loaded() && prf().get_msg_options().is(MSGOP_SHOW_PROTOCOL_NAME) && !historian->getkey().is_group())
     {
         if (protodesc.is_empty() && author->getkey().protoid)
         {
             if (active_protocol_c *ap = prf().ap(author->getkey().protoid))
-                protodesc.set(CONSTWSTR(" (")).append(ap->get_name()).append_char(')');
-            //else if (auto *row = prf().get_table_active_protocol().find<true>(author->getkey().protoid))
-            //    if (ASSERT(row->other.options & active_protocol_data_s::O_SUSPENDED))
-            //        protodesc.set(CONSTWSTR(" (")).append(row->other.name).append(CONSTWSTR(", ")).append(TTT("протокол деактивирован",69)).append_char(')');
+                protodesc.set(CONSTASTR(" (")).append(ap->get_name()).append_char(')');
         }
         n.append(protodesc);
     }
-    return n;
+    return from_utf8(n);
 }
 
 int gui_message_item_c::get_height_by_width(int w) const
@@ -2548,7 +2539,7 @@ gui_messagelist_c::~gui_messagelist_c()
                 data.hintzone.accepted = true;
             }
         }
-        // dont return, parent should process message
+        // don't return, parent should process message
     }
     return __super::sq_evt(qp, rid, data);
 }
@@ -2588,19 +2579,20 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
         return MAKE_CHILD<gui_message_item_c>(getrid(), historian, author, skin, mt);
 
     bool same_author = false;
-    while (rectengine_c *e = getengine().get_last_child())
+    if (rectengine_c *e = getengine().get_last_child())
     {
         gui_message_item_c &mi = *ts::ptr_cast<gui_message_item_c *>( &e->getrect() );
-        if (is_special_mt(mi.get_mt())) break;
-        if (mi.get_author() == author && mi.themename().equals(CONSTASTR("message."), skin))
+        if (!is_special_mt(mi.get_mt()))
         {
-            if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
-                return mi;
-            same_author = true;
+            if (mi.get_author() == author && mi.themename().equals(CONSTASTR("message."), skin))
+            {
+                if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+                    return mi;
+                same_author = true;
+            }
+            if (post_time < mi.get_last_post_time())
+                author->reselect(true);
         }
-        if (post_time < mi.get_last_post_time())
-            author->reselect(true);
-        break;
     }
 
     gui_message_item_c &r = MAKE_CHILD<gui_message_item_c>(getrid(), historian, author, skin, mt);
@@ -2616,7 +2608,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_MESSAGE> & p) // show messag
     if (p.post.time == 0 && p.pass == 0)
     {
         // time will be initialized at 2nd pass
-        p.post.time = 1; // indicate 2nd pass requred
+        p.post.time = 1; // indicate 2nd pass required
         return 0;
     }
 
@@ -2677,14 +2669,6 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> & p)
         sender = p.contact;
     }
 
-    //if (sender->get_state() == CS_ROTTEN)
-    //{
-    //    clear_list();
-    //    historian = nullptr;
-    //    return 0;
-    //}
-
-
     return 0;
 }
 
@@ -2705,6 +2689,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_DELIVERED> & p)
             gui_message_item_c &mi = *ts::ptr_cast<gui_message_item_c *>( &e->getrect() );
             if ( mi.delivered(p.utag) )
             {
+                mi.getengine().redraw();
                 children_repos();
                 break;
             }
@@ -2725,11 +2710,11 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> & p)
     switch (p.post.mt())
     {
         case MTA_FRIEND_REQUEST:
-            gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_FRIEND_REQUEST_RECV, p.post.message).send();
+            gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_FRIEND_REQUEST_RECV, p.post.message_utf8).send();
             sender->friend_request();
             break;
         case MTA_INCOMING_CALL:
-            gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_INCOMING_CALL, p.post.message).send();
+            gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_INCOMING_CALL, p.post.message_utf8).send();
             break;
         case MTA_CALL_ACCEPTED:
             gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_CALL_INPROGRESS).send();
@@ -2762,7 +2747,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> & p)
     else
         gui->unregister_hintzone(this);
 
-    gmsg<ISOGM_NOTICE>( historian, nullptr, NOTICE_NETWORK, ts::wstr_c() ).send(); // init notice list
+    gmsg<ISOGM_NOTICE>( historian, nullptr, NOTICE_NETWORK, ts::str_c() ).send(); // init notice list
 
     time_t before = now();
     if (historian->history_size()) before = historian->get_history(0).time;
@@ -2819,6 +2804,8 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> & p)
 
 gui_message_editor_c::~gui_message_editor_c()
 {
+    if (gui)
+        gui->delete_event( DELEGATE(this,clear_text) );
 }
 
 bool gui_message_editor_c::on_enter_press_func(RID, GUIPARAM param)
@@ -2857,11 +2844,18 @@ bool gui_message_editor_c::on_enter_press_func(RID, GUIPARAM param)
     if (receiver == nullptr) return true;
     gmsg<ISOGM_MESSAGE> msg(&contacts().get_self(), receiver, MTA_UNDELIVERED_MESSAGE );
 
-    msg.post.message = get_text();
-    if (msg.post.message.is_empty()) return true;
+    msg.post.message_utf8 = get_text_utf8();
+    if (msg.post.message_utf8.is_empty()) return true;
+    emoti().parse( msg.post.message_utf8, true );
 
     msg.send();
 
+    return true;
+}
+
+bool gui_message_editor_c::clear_text(RID, GUIPARAM)
+{
+    set_text(ts::wstr_c());
     return true;
 }
 
@@ -2874,7 +2868,7 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_MESSAGE> & msg) // clear 
 {
     if ( msg.pass == 0 && msg.sender->getkey().is_self() )
     {
-        set_text(ts::wstr_c());
+        DEFERRED_CALL( 0, DELEGATE(this,clear_text), nullptr );
         messages.remove(historian->getkey());
         gui->set_focus(getrid());
         return GMRBIT_ACCEPTED;
@@ -2907,11 +2901,66 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> & p)
 
 /*virtual*/ void gui_message_editor_c::created()
 {
-    on_enter_press = DELEGATE( this, on_enter_press_func );
+    register_kbd_callback( DELEGATE( this, on_enter_press_func ), SSK_ENTER, false );
+    register_kbd_callback( DELEGATE( this, on_enter_press_func ), SSK_ENTER, true );
+    register_kbd_callback( DELEGATE( this, show_smile_selector ), SSK_S, true );
     set_multiline(true);
     set_theme_rect(CONSTASTR("entertext"), false);
     defaultthrdraw = DTHRO_BORDER;
+
+    gui_button_c &smiles = MAKE_CHILD<gui_button_c>(getrid());
+    smiles.set_face_getter(BUTTON_FACE_PRELOADED(smile));
+    smiles.tooltip(TOOLTIP(TTT("Вставить смайлик (Ctrl+S)",268)));
+    smiles.set_handler(DELEGATE(this, show_smile_selector), nullptr);
+    rb = smiles.get_min_size();
+    smile_pos_corrector = TSNEW(leech_dock_bottom_right_s, rb.x, rb.y, 2, 2);
+    smiles.leech(smile_pos_corrector);
+    MODIFY(smiles).visible(true);
+
     __super::created();
+}
+
+ts::ivec2 calc_smls_position(const ts::irect &buttonrect, const ts::ivec2 &menusize)
+{
+    ts::irect maxsize = ts::wnd_get_max_size(buttonrect);
+
+    int x = (buttonrect.rb.x + buttonrect.lt.x - menusize.x)/2;
+    
+    if (x + menusize.x > maxsize.rb.x)
+        x = maxsize.rb.x - menusize.x;
+
+    if (x < maxsize.lt.x)
+        x = maxsize.lt.x;
+
+    int y = buttonrect.lt.y - menusize.y;
+    if (y < maxsize.lt.y)
+        y = buttonrect.rb.y;
+
+    return ts::ivec2(x, y);
+}
+
+bool gui_message_editor_c::show_smile_selector(RID, GUIPARAM)
+{
+    ts::irect smilebuttonrect = getengine().get_child(0)->getrect().getprops().screenrect();
+
+    drawcollector dcoll;
+    RID r = MAKE_ROOT<dialog_smileselector_c>(dcoll, smilebuttonrect, getrid());
+    ts::ivec2 size = HOLD(r)().get_min_size();
+    ts::ivec2 pos = calc_smls_position( smilebuttonrect, size );
+
+    MODIFY(r)
+        .size(size)
+        .pos(pos)
+        .allow_move_resize(false, false)
+        .show();
+
+    return true;
+}
+
+/*virtual*/ void gui_message_editor_c::cb_scrollbar_width(int w)
+{
+    if ( smile_pos_corrector )
+        smile_pos_corrector->x_space = 2 + w, smile_pos_corrector->update_ctl_pos();
 }
 
 gui_message_area_c::~gui_message_area_c()
@@ -3077,7 +3126,7 @@ void gui_conversation_c::created()
 
 bool gui_conversation_c::hide_show_messageeditor(RID, GUIPARAM)
 {
-    bool show = false;
+    bool show = flags.is(F_ALWAYS_SHOW_EDITOR);
     if (caption->contacted() && !caption->getcontact().getkey().is_self())
     {
         if ( caption->getcontact().getkey().is_group() )
@@ -3231,9 +3280,10 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
     {
         if (ch.pp == PP_MSGOPTIONS)
             caption->getcontact().reselect(true);
-        //else if (ch.pp == PP_AVATAR)
-        //    caption->getengine().redraw();
     }
+    if (ch.pp == PP_EMOJISET && caption->contacted())
+        caption->getcontact().reselect(true);
+
     return 0;
 }
 

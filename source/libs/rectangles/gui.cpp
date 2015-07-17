@@ -1004,10 +1004,9 @@ ts::uint32 selectable_core_s::gm_handler(gmsg<GM_COPY_HOTKEY> &s)
             }
         }
 
-        ts::wstr_c text = owner->get_text().substr(char_start_sel, endi);
+        ts::str_c text = to_utf8(owner->get_text().substr(char_start_sel, endi));
         gui->app_prepare_text_for_copy( text );
-
-        ts::set_clipboard_text(text);
+        ts::set_clipboard_text(from_utf8(text));
 
         flash();
         return GMRBIT_ABORT|GMRBIT_ACCEPTED;

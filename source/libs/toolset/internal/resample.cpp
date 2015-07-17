@@ -1707,7 +1707,7 @@ Cleanup: /* CLEANUP */
         const uint8* src;
         imgdesc_s srcinfo;
 
-        bitmap_c& bdst;
+        const bmpcore_exbody_s& bdst;
         BYTE* dst;
         uint dst_h;
         uint dst_w;
@@ -1716,7 +1716,7 @@ Cleanup: /* CLEANUP */
         bool	fLetterbox;
         bool	fInterlaced;
 
-        VDResizeFilterData(const uint8 *source, const imgdesc_s &souinfo, bitmap_c& dst) : src(source), srcinfo(souinfo), bdst(dst)
+        VDResizeFilterData(const uint8 *source, const imgdesc_s &souinfo, const bmpcore_exbody_s& dst) : src(source), srcinfo(souinfo), bdst(dst)
         {
         }
 
@@ -1763,7 +1763,7 @@ Cleanup: /* CLEANUP */
 
     static int resize_run(VDResizeFilterData *mfd) 
     {
-        VDPixmap pxdst(VDAsPixmap(mfd->bdst.body(), mfd->bdst.info()));
+        VDPixmap pxdst(VDAsPixmap(mfd->bdst(), mfd->bdst.info()));
         VDPixmap pxsrc(VDAsPixmap(mfd->src, mfd->srcinfo));
 
         double dstw = mfd->new_x;
@@ -1834,23 +1834,21 @@ Cleanup: /* CLEANUP */
     }
 
 #include <xmmintrin.h>
-    bool resize3( bitmap_c &obm, const uint8 *sou, const imgdesc_s &souinfo, const ivec2 &newsz, resize_filter_e filt_mode=FILTER_NONE )
+    bool resize3( const bmpcore_exbody_s &extbody, const uint8 *sou, const imgdesc_s &souinfo, resize_filter_e filt_mode=FILTER_NONE )
     {
-        VDResizeFilterData mfd(sou, souinfo, obm);
+        VDResizeFilterData mfd(sou, souinfo, extbody);
 
-        mfd.new_x		=newsz.x;
-        mfd.new_y		=newsz.y;
+        mfd.new_x		=extbody.info().sz.x;
+        mfd.new_y		=extbody.info().sz.y;
 
-        obm.create_RGBA( newsz );
-
-        mfd.dst 	    =obm.body();
-        mfd.dst_h       =obm.info().sz.y;
-        mfd.dst_w	    =obm.info().sz.x;
-        mfd.dst_pitch   =obm.info().pitch;
+        mfd.dst 	    =extbody();
+        mfd.dst_h       =extbody.info().sz.y;
+        mfd.dst_w	    =extbody.info().sz.x;
+        mfd.dst_pitch   =extbody.info().pitch;
 
         mfd.filter_mode =filt_mode;
 
-		if (newsz.x < 16 || newsz.y < 16)
+		if (extbody.info().sz.x < 16 || extbody.info().sz.y < 16)
 		{
             int iw = souinfo.sz.x;
             int ih = souinfo.sz.y;
@@ -1862,14 +1860,21 @@ Cleanup: /* CLEANUP */
             if (xScale <= 1.0)
                 SCALED_RADIUS = dRadius / xScale;
             aint MAX_CONTRIBS = (int)(2 * SCALED_RADIUS + 1);
+            
+            double yScale = ((double)mfd.dst_h / ih);
+            double SCALED_RADIUSh = dRadius;
+            if (yScale < 1.0)
+                SCALED_RADIUSh = dRadius / yScale;
+
+            aint MAX_CONTRIBSh  = (int) (2 * SCALED_RADIUSh  + 1);
 
             aint sz = mfd.dst_w * ih * sizeof( DWORD ) + 
                 +(mfd.dst_w * MAX_CONTRIBS * sizeof(double))
                 +(mfd.dst_w * MAX_CONTRIBS * sizeof(int))
                 +(mfd.dst_w * sizeof(int))
                 +(mfd.dst_w * sizeof(double))
-                +(mfd.dst_h * MAX_CONTRIBS * sizeof(double))
-                +(mfd.dst_h * MAX_CONTRIBS * sizeof(int))
+                +(mfd.dst_h * MAX_CONTRIBSh * sizeof(double))
+                +(mfd.dst_h * MAX_CONTRIBSh * sizeof(int))
                 +(mfd.dst_h * sizeof(int))
                 +(mfd.dst_h * sizeof(double));
 
@@ -1889,10 +1894,5 @@ Cleanup: /* CLEANUP */
         //delete mfd;
         return r;
     }
-
-	bool resize2( bitmap_c &obm, const uint8 *sou, const imgdesc_s &souinfo, float scale=2.f, resize_filter_e filt_mode=FILTER_NONE )
-	{
-		return resize3(obm, sou, souinfo, ivec2(lround(souinfo.sz.x * scale), lround(souinfo.sz.y * scale)), filt_mode);
-	}
 
 } // namespace ts

@@ -63,7 +63,7 @@ struct head_stuff_s
     RID editor;
     RID bconfirm;
     RID bcancel;
-    ts::wstr_c curedit;
+    ts::str_c curedit; // utf8
     ts::safe_ptr<gui_button_c> call_button;
 
     static bool _edt(const ts::wstr_c & e);
@@ -73,7 +73,7 @@ ts::static_setup<head_stuff_s,1000> hstuff;
 
 bool head_stuff_s::_edt(const ts::wstr_c & e)
 {
-    hstuff().curedit = e;
+    hstuff().curedit = to_utf8(e);
     return true;
 }
 
@@ -233,7 +233,7 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
 
     if (flags.is(F_EDITNAME|F_EDITSTATUS))
     {
-        ts::wstr_c eval;
+        ts::str_c eval;
         if (contact->getkey().is_self())
         {
             if (flags.is(F_EDITNAME))
@@ -253,13 +253,13 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
 
             getengine().trunc_children(2);
 
-            gui_textfield_c &tf = (MAKE_CHILD<gui_textfield_c>(getrid(), eval, MAX_PATH, 0, false) << (gui_textedit_c::TEXTCHECKFUNC)head_stuff_s::_edt);
+            gui_textfield_c &tf = (MAKE_CHILD<gui_textfield_c>(getrid(), from_utf8(eval), MAX_PATH, 0, false) << (gui_textedit_c::TEXTCHECKFUNC)head_stuff_s::_edt);
             hstuff().editor = tf.getrid();
             tf.leech(TSNEW(leech_edit, hstuff().last_head_text_pos.x));
             gui->set_focus(hstuff().editor, true);
             tf.end();
-            tf.on_escape_press = DELEGATE( this, cancel_edit );
-            tf.on_enter_press = DELEGATE( this, apply_edit );
+            tf.register_kbd_callback(DELEGATE( this, cancel_edit ), SSK_ESC, false);
+            tf.register_kbd_callback(DELEGATE( this, apply_edit ), SSK_ENTER, false);
 
             gui_button_c &bok = MAKE_CHILD<gui_button_c>(getrid());
             bok.set_face_getter(BUTTON_FACE_PRELOADED(confirmb));
@@ -442,35 +442,35 @@ void gui_contact_item_c::setcontact(contact_c *c)
 void gui_contact_item_c::update_text()
 {
     protocols.clear();
-    ts::wstr_c newtext;
+    ts::str_c newtext;
     if (contact)
     {
         if (contact->getkey().is_self())
         {
             newtext = prf().username();
             text_adapt_user_input(newtext);
-            ts::wstr_c t2(prf().userstatus());
+            ts::str_c t2(prf().userstatus());
             text_adapt_user_input(t2);
             if (CIR_CONVERSATION_HEAD == role)
             {
                 ts::ivec2 sz = g_app->buttons().editb->size;
-                newtext.append( CONSTWSTR(" <rect=0,") );
-                newtext.append_as_uint( sz.x ).append_char(',').append_as_uint( -sz.y ).append(CONSTWSTR(",2><br><l>"));
-                newtext.append(t2).append(CONSTWSTR(" <rect=1,"));
-                newtext.append_as_uint( sz.x ).append_char(',').append_as_uint( -sz.y ).append(CONSTWSTR(",2></l>"));
+                newtext.append( CONSTASTR(" <rect=0,") );
+                newtext.append_as_uint( sz.x ).append_char(',').append_as_uint( -sz.y ).append(CONSTASTR(",2><br><l>"));
+                newtext.append(t2).append(CONSTASTR(" <rect=1,"));
+                newtext.append_as_uint( sz.x ).append_char(',').append_as_uint( -sz.y ).append(CONSTASTR(",2></l>"));
             } else
             {
-                newtext.append(CONSTWSTR("<br><l>")).append(t2).append(CONSTWSTR("</l>"));
+                newtext.append(CONSTASTR("<br><l>")).append(t2).append(CONSTASTR("</l>"));
             }
         } else if (CIR_METACREATE == role && contact->subcount() > 1)
         {
             contact->subiterate([&](contact_c *c) {
-                newtext.append(CONSTWSTR("<nl>"));
-                ts::wstr_c n = c->get_name(false);
+                newtext.append(CONSTASTR("<nl>"));
+                ts::str_c n = c->get_name(false);
                 text_adapt_user_input(n);
                 newtext.append( n );
                 if (active_protocol_c *ap = prf().ap( c->getkey().protoid ))
-                    newtext.append(CONSTWSTR(" (")).append(ap->get_name()).append(CONSTWSTR(")"));
+                    newtext.append(CONSTASTR(" (")).append(ap->get_name()).append(CONSTASTR(")"));
             });
 
         } else if (contact->getkey().is_group())
@@ -482,16 +482,16 @@ void gui_contact_item_c::update_text()
             if (CIR_CONVERSATION_HEAD == role)
             {
                 ts::ivec2 sz = g_app->buttons().editb->size;
-                newtext.append(CONSTWSTR(" <rect=0,"));
-                newtext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTWSTR(",2>"));
+                newtext.append(CONSTASTR(" <rect=0,"));
+                newtext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTASTR(",2>"));
             } else
             {
-                newtext.append(CONSTWSTR("<br>(")).append_as_int( contact->subonlinecount() ).append_char('/').append_as_int( contact->subcount() ).append_char(')');
+                newtext.append(CONSTASTR("<br>(")).append_as_int( contact->subonlinecount() ).append_char('/').append_as_int( contact->subcount() ).append_char(')');
                 if (active_protocol_c *ap = prf().ap( contact->getkey().protoid ))
-                    newtext.append(CONSTWSTR(" <l>")).append(ap->get_name()).append(CONSTWSTR("</l>"));
+                    newtext.append(CONSTASTR(" <l>")).append(ap->get_name()).append(CONSTASTR("</l>"));
             }
-            if (!contact->get_options().unmasked().is(contact_c::F_PERMANENT_GCHAT))
-                newtext.append(CONSTWSTR("<br>")).append(TTT("временный групповой чат",256));
+            if (!contact->get_options().unmasked().is(contact_c::F_PERSISTENT_GCHAT))
+                newtext.append(CONSTASTR("<br>")).append(to_utf8(TTT("временный групповой чат",256)));
 
         } else if (contact->is_meta())
         {
@@ -506,47 +506,47 @@ void gui_contact_item_c::update_text()
                 if (nullptr==prf().ap(c->getkey().protoid)) ++deactivated;
             } );
             if (live == 0 && count > 0)
-                newtext = colorize( TTT("Удален",77), get_default_text_color(0) );
+                newtext = colorize( to_utf8(TTT("Удален",77)).as_sptr(), get_default_text_color(0) );
             else if (count == 0)
-                newtext = colorize( TTT("Пустой",78), get_default_text_color(0) );
+                newtext = colorize( to_utf8(TTT("Пустой",78)).as_sptr(), get_default_text_color(0) );
             else if (rej > 0)
-                newtext = colorize( TTT("Отказано",79), get_default_text_color(0) );
+                newtext = colorize( to_utf8(TTT("Отказано",79)).as_sptr(), get_default_text_color(0) );
             else if (invsend > 0)
             {
                 newtext = contact->get_customname();
                 if (newtext.is_empty()) newtext = contact->get_name();
                 text_adapt_user_input(newtext);
-                if (!newtext.is_empty()) newtext.append(CONSTWSTR("<br>"));
-                newtext.append( colorize(TTT("Запрос отправлен", 88), get_default_text_color(0)) );
+                if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
+                newtext.append( colorize(to_utf8(TTT("Запрос отправлен", 88)).as_sptr(), get_default_text_color(0)) );
             }
             else {
                 newtext = contact->get_customname();
                 if (newtext.is_empty()) newtext = contact->get_name();
                 text_adapt_user_input(newtext);
-                ts::wstr_c t2(contact->get_statusmsg());
+                ts::str_c t2(contact->get_statusmsg());
                 text_adapt_user_input(t2);
 
                 if (CIR_CONVERSATION_HEAD == role)
                 {
                     ts::ivec2 sz = g_app->buttons().editb->size;
-                    newtext.append(CONSTWSTR(" <rect=0,"));
-                    newtext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTWSTR(",2>"));
+                    newtext.append(CONSTASTR(" <rect=0,"));
+                    newtext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTASTR(",2>"));
                     t2.trim();
-                    if (!t2.is_empty()) newtext.append(CONSTWSTR("<br><l>")).append(t2).append(CONSTWSTR("</l>"));
+                    if (!t2.is_empty()) newtext.append(CONSTASTR("<br><l>")).append(t2).append(CONSTASTR("</l>"));
 
                 } else
                 {
                     if (invrcv)
                     {
-                        if (!newtext.is_empty()) newtext.append(CONSTWSTR("<br>"));
-                        newtext.append( colorize( TTT("Требуется подтверждение",153), get_default_text_color(0) ) );
+                        if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
+                        newtext.append( colorize( to_utf8(TTT("Требуется подтверждение",153)).as_sptr(), get_default_text_color(0) ) );
                         t2.clear();
                     }
 
                     if (wait)
                     {
-                        if (!newtext.is_empty()) newtext.append(CONSTWSTR("<br>"));
-                        newtext.append(colorize(TTT("Ожидание",154), get_default_text_color(0)));
+                        if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
+                        newtext.append(colorize(to_utf8(TTT("Ожидание",154)).as_sptr(), get_default_text_color(0)));
                         t2.clear();
                     }
                     if (count == 1 && deactivated > 0)
@@ -554,19 +554,19 @@ void gui_contact_item_c::update_text()
                         t2.clear();
                     }
                     t2.trim();
-                    if (!t2.is_empty()) newtext.append(CONSTWSTR("<br><l>")).append(t2).append(CONSTWSTR("</l>"));
+                    if (!t2.is_empty()) newtext.append(CONSTASTR("<br><l>")).append(t2).append(CONSTASTR("</l>"));
                 }
             }
 
         } else
-            newtext.set( CONSTWSTR("<error>") );
+            newtext.set( CONSTASTR("<error>") );
 
 
     } else
     {
         newtext.clear();
     }
-    textrect.set_text_only(newtext, false);
+    textrect.set_text_only(from_utf8(newtext), false);
 
     if (CIR_CONVERSATION_HEAD == role && textrect.is_dirty())
     {
@@ -713,13 +713,13 @@ void gui_contact_item_c::generate_protocols()
                 {
                     protocols.append(CONSTWSTR("<nl><shadow>")).append(maketag_color<ts::wchar>(get_default_text_color(1)));
                     if (def == c) protocols.append(CONSTWSTR(" +")); else protocols.append_char(' ');
-                    protocols.append(row->other.name);
+                    protocols.append(from_utf8(row->other.name));
                     protocols.append(CONSTWSTR("</color></shadow> "));
                 } else
                 {
                     protocols.append(CONSTWSTR("<nl>")).append(maketag_color<ts::wchar>(get_default_text_color(2)));
                     if (def == c) protocols.append(CONSTWSTR(" +")); else protocols.append_char(' ');
-                    protocols.append(row->other.name);
+                    protocols.append(from_utf8(row->other.name));
                     protocols.append(CONSTWSTR("</color> "));
                 }
             //} else
@@ -1036,9 +1036,10 @@ int gui_contact_item_c::contact_item_rite_margin()
                     {
                         ts::wstr_c txt;
                         if ( c->getkey().is_group() )
-                            txt = TTT("Покинуть групповой чат?[br]$",258) / c->get_description();
+                            txt = TTT("Покинуть групповой чат?[br]$",258) / from_utf8(c->get_description());
                         else
-                            txt = TTT("Будет полностью удален контакт:[br]$",84) / c->get_description();
+                            txt = TTT("Будет полностью удален контакт:[br]$",84) / from_utf8(c->get_description());
+                        
                         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
                             gui_isodialog_c::title(DT_MSGBOX_WARNING),
                             txt
@@ -1085,11 +1086,11 @@ int gui_contact_item_c::contact_item_rite_margin()
                     menu_c mc = m.add_sub(TTT("Метаконтакт", 145));
                     contact->subiterate([&](contact_c *c) {
 
-                        ts::wstr_c text(c->get_name(false));
+                        ts::str_c text(c->get_name(false));
                         text_adapt_user_input(text);
                         if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
-                            text.append(CONSTWSTR(" (")).append(ap->get_name()).append(CONSTWSTR(")"));
-                        mc.add( TTT("Отделить: $",197) / text, 0, handlers::m_metacontact_detach, c->getkey().as_str() );
+                            text.append(CONSTASTR(" (")).append(ap->get_name()).append(CONSTASTR(")"));
+                        mc.add( TTT("Отделить: $",197) / from_utf8(text), 0, handlers::m_metacontact_detach, c->getkey().as_str() );
                     });
 
                 }
@@ -1170,7 +1171,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                 contact->subiterate([&](contact_c *c) {
                     if (auto *row = prf().get_table_active_protocol().find<true>(c->getkey().protoid))
                     {
-                        m.add(row->other.name, def == c ? MIF_MARKED : 0, DELEGATE(this,set_default_proto), c->getkey().as_str());
+                        m.add(from_utf8(row->other.name), def == c ? MIF_MARKED : 0, DELEGATE(this,set_default_proto), c->getkey().as_str());
                     }
                 });
 

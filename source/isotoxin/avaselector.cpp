@@ -459,7 +459,7 @@ bool dialog_avaselector_c::open_image(RID, GUIPARAM)
 
 void dialog_avaselector_c::nextframe()
 {
-    anm.getframe(bitmap);
+    anm.firstframe(bitmap);
     rebuild_bitmap();
     recompress();
 }
@@ -489,7 +489,7 @@ void dialog_avaselector_c::load_image(const ts::wstr_c &fn)
     {
         if (ts::if_gif == bitmap.load_from_file(b))
             if (false != (animated = anm.load(b.data(),b.size())))
-                anm.getframe(bitmap);
+                anm.firstframe(bitmap);
         newimage();
     }
 }

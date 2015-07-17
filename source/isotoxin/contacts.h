@@ -112,7 +112,7 @@ struct post_s
 
     uint64 utag;
     time_t time = 0;
-    ts::wstr_c message;
+    ts::str_c message_utf8;
     contact_key_s sender;
     contact_key_s receiver;
     unsigned type : type_size_bits;
@@ -160,9 +160,9 @@ class contact_c : public ts::shared_object
     contact_key_s key;
     ts::shared_ptr<contact_c> metacontact; // valid for non-meta contacts
     ts::str_c pubid;
-    ts::wstr_c name;
-    ts::wstr_c customname;
-    ts::wstr_c statusmsg;
+    ts::str_c name;
+    ts::str_c customname;
+    ts::str_c statusmsg;
     time_t readtime = 0; // all messages after readtime considered unread
     UNIQUE_PTR( avatar_s ) avatar;
 
@@ -178,9 +178,9 @@ class contact_c : public ts::shared_object
     ts::array_shared_t<contact_c, 0> subcontacts; // valid for meta contact
     ts::array_inplace_t<post_s, 128> history; // valid for meta contact
 
-    ts::wstr_c compile_pubid() const;
-    ts::wstr_c compile_name() const;
-    ts::wstr_c compile_statusmsg() const;
+    ts::str_c compile_pubid() const;
+    ts::str_c compile_name() const;
+    ts::str_c compile_statusmsg() const;
 
     void setmeta(contact_c *metac)
     {
@@ -199,7 +199,7 @@ public:
 
 
     // not saved
-    static const ts::flags32_s::BITS F_PERMANENT_GCHAT = SETBIT(25);
+    static const ts::flags32_s::BITS F_PERSISTENT_GCHAT = SETBIT(25);
     static const ts::flags32_s::BITS F_SHOW_FRIEND_REQUEST = SETBIT(26);
     static const ts::flags32_s::BITS F_PROTOHIT = SETBIT(27);
     static const ts::flags32_s::BITS F_CALLTONE = SETBIT(28);
@@ -427,9 +427,9 @@ public:
     void send_file(const ts::wstr_c &fn);
 
     void set_pubid( const ts::str_c &pubid_ ) { pubid = pubid_; }
-    void set_name( const ts::wstr_c &name_ ) { name = name_; }
-    void set_customname( const ts::wstr_c &name_ ) { customname = name_; }
-    void set_statusmsg( const ts::wstr_c &statusmsg_ ) { statusmsg = statusmsg_; }
+    void set_name( const ts::str_c &name_ ) { name = name_; }
+    void set_customname( const ts::str_c &name_ ) { customname = name_; }
+    void set_statusmsg( const ts::str_c &statusmsg_ ) { statusmsg = statusmsg_; }
     void set_state( contact_state_e st ) { state = st; opts.init(F_UNKNOWN, st == CS_UNKNOWN); }
     void set_ostate( contact_online_state_e ost ) { ostate = ost; }
     void set_gender( contact_gender_e g ) { gender = g; }
@@ -439,11 +439,11 @@ public:
 
     const ts::str_c &get_pubid() const {return pubid;};
     
-    const ts::str_c get_pubid_desc() const {return (pubid.is_empty() && is_meta()) ? compile_pubid() : ts::wstr_c(pubid);};
-    ts::wstr_c get_description() const { ts::wstr_c t = get_name(); if (t.is_empty()) t.set(get_pubid_desc()); return t; }
-    ts::wstr_c get_name(bool metacompile = true) const {return (name.is_empty() && is_meta() && metacompile) ? compile_name() : name;};
-    ts::wstr_c get_customname() const { return customname;}
-    ts::wstr_c get_statusmsg(bool metacompile = true) const {return (statusmsg.is_empty() && is_meta() && metacompile) ? compile_statusmsg() : statusmsg;};
+    const ts::str_c get_pubid_desc() const {return (pubid.is_empty() && is_meta()) ? compile_pubid() : pubid;};
+    ts::str_c get_description() const { ts::str_c t = get_name(); if (t.is_empty()) t.set(get_pubid_desc()); return t; }
+    ts::str_c get_name(bool metacompile = true) const {return (name.is_empty() && is_meta() && metacompile) ? compile_name() : name;};
+    ts::str_c get_customname() const { return customname;}
+    ts::str_c get_statusmsg(bool metacompile = true) const {return (statusmsg.is_empty() && is_meta() && metacompile) ? compile_statusmsg() : statusmsg;};
     contact_state_e get_state() const {return state;}
     contact_online_state_e get_ostate() const {return ostate;}
     contact_gender_e get_gender() const {return gender;}

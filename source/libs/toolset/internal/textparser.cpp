@@ -16,13 +16,13 @@ template<typename VECCTYPE, int VECLEN, typename TCHARACTER> vec_t<VECCTYPE, VEC
 
 namespace
 {
-    struct meta_glyph_s //структура, которая представляет глиф на стадии парсинга текста
+    struct meta_glyph_s // glyph at parsing step
     {
 	    TSCOLOR color;
 	    font_c *font;
-	    short underlined,//-1 - нет подчеркивания, 1 - есть, 0 - подчеркивание запрещено
+	    short underlined, // -1 - no underline, 1 - underline, 0 - underline disabled
 		      underline_offset;
-	    int advance;//горизонтальный размер метаглифа
+	    int advance; // horizontal metaglyph size
 	    short shadow;
 	    wchar_t ch;
         int charindex;
@@ -30,11 +30,10 @@ namespace
 	    int image_offset_Y;
 
 	    enum mgtype_e {
-		    //INDENT,//отступ в начале абзаца
-		    CHAR, // обычный символ
-		    SPACE, // пробел
-		    IMAGE, // картинка
-            RECTANGLE, // пустая прямоугольная область
+		    CHAR,       // normal symbol
+		    SPACE,      // space
+		    IMAGE,      // picture
+            RECTANGLE,  // empty rectangle area with callback (position of area)
 	    } type;
 
 	    union
@@ -67,17 +66,17 @@ namespace
 		    {
 		    case CHAR:
 		    case SPACE:
-			    if (color == 0)//в этом случае можно было бы вообще не добавлять символ для оптимизации, но цвет может потом меняться - blinking (актуально для span напр.)
-				     gi.color = ARGB(255,255,255,0);//т.к. 0 трактуется как RGBA изображение, а у нас ALPHA-глиф, надо подставить что-нить эквивалентное, но не = 0
+			    if (color == 0) // zero value is special
+				     gi.color = ARGB(255,255,255,0); // we should provide equivalent value, but not zero
 			    else gi.color = color;
 			    gi.width  = (uint16)glyph->width;
 			    gi.height = (uint16)glyph->height;
-                gi.pitch = (uint16)glyph->width; // для глифов 1 байт на пиксель
+                gi.pitch = (uint16)glyph->width; // 1 byte per pixel for glyphs
 			    gi.pixels = (uint8*)(glyph+1);
 			    gi.pos = svec2((int16)glyph->left, (int16)(-glyph->top));
 			    break;
 		    case IMAGE:
-			    gi.color = 0;//для картинок текущий цвет игнорируется
+			    gi.color = 0; // zero color for images - it will be ignored
 			    gi.width  = (uint16)image->width;
 			    gi.height = (uint16)image->height;
                 gi.pitch = (uint16)image->pitch;
@@ -85,7 +84,7 @@ namespace
 			    gi.pos = svec2(0, (int16)(-image->height+image_offset_Y));
 			    break;
             case RECTANGLE:
-                gi.pixels = (uint8 *)1; // хинтовый указатель - 1 - значит прямоугольник
+                gi.pixels = (uint8 *)1; // special pointer value - 1 - means rectangle
                 gi.width = (uint16)advance;
                 gi.height = shadow;
                 gi.pitch = ch;
@@ -107,21 +106,23 @@ namespace
 	    {
             if (type != meta_glyph_s::RECTANGLE)
             {
-                for (int i = 1, n = ui_scale(shadow); i <= n; i++)//можно было бы идти в обратную сторону (i--), но это не повлияет на результат, т.к. lerp(lerp(S, D, A1), D, A2) = lerp(lerp(S, D, A2), D, A1)
+                // generate shadow glyphs
+                for (int i = 1, n = ui_scale(shadow); i <= n; i++) // valid any direction due same result: lerp(lerp(S, D, A1), D, A2) == lerp(lerp(S, D, A2), D, A1)
                     export_to_glyph_image(glyphs, pos + ui_scale(ivec2(i)), add_underline_len, shadow_color);
             }
 
 		    export_to_glyph_image(glyphs, pos, add_underline_len, color);
 
-		    if (type == CHAR && outline_color) glyph->get_outlined_glyph(outlined_glyphs.add(), font, pos, outline_color);//обведенные символы добавляются в отдельный массив, т.к. обводка должна рисоваться раньше всех остальных символов, чтобы не затирать их
+		    if (type == CHAR && outline_color)
+                glyph->get_outlined_glyph(outlined_glyphs.add(), font, pos, outline_color); // separate glyph array for outline symbols - it will be rendered first
 	    }
     };
 }
 
 void glyph_s::get_outlined_glyph(glyph_image_s &gi, font_c *font, const ivec2 &pos, TSCOLOR outline_color)
 {
-	float invr = tmin(tmax(font->font_params.size)*font->font_params.outline_radius, 6.f);//ограничиваем размер обводки в 6 пикселей, т.к. иначе для больших букв проявляется круговая природа distance field
-	invr = tmax(invr, 1.1f);//радиус меньше пикселя не имеет смысла, к тому же единичный радиус приведет к делению на 0
+	float invr = tmin(tmax(font->font_params.size)*font->font_params.outline_radius, 6.f); // max outline size limited to 6 pixels to avoid distance field artefacts
+	invr = tmax(invr, 1.1f); // <= 1 size is not correct for outline generatation algorithm
 	int ir = (int)invr;
     gi.charindex = -1;
 	gi.color = outline_color;
@@ -131,7 +132,7 @@ void glyph_s::get_outlined_glyph(glyph_image_s &gi, font_c *font, const ivec2 &p
 	gi.pos = svec2((int16)left, (int16)-top);
     gi.pos.x += (int16)(pos.x - ir);
     gi.pos.y += (int16)(pos.y - ir);
-	gi.thickness = 0;//для линии подчеркивания обводки пока не будет
+	gi.thickness = 0; // do not generate outline for underline
 
 	if (outlined == nullptr)
 	{
@@ -139,10 +140,10 @@ void glyph_s::get_outlined_glyph(glyph_image_s &gi, font_c *font, const ivec2 &p
 		uint8 *pixels = (uint8*)(this+1);
 
 		float oshift = 1.f / (1.f - font->font_params.outline_shift);
-		invr = oshift/(invr-1);//уменьшаем радиус на 1 для того, чтобы обводка начиналась сразу на границе символа (особенно актуально при маленьких размерах шрифта)
+		invr = oshift/(invr-1); // decrease radius by 1 for better result (very actual for small font sizes)
 		irect imgRect(ivec2(0), ivec2(width, height)-1);
 		ivec2 p;
-		for (p.y=0; p.y<gi.height; p.y++)//формируем изображение обводки символа
+		for (p.y=0; p.y<gi.height; p.y++)
 		for (p.x=0; p.x<gi.width ; p.x++)
 		{
 			float nearest = 10000;
@@ -150,7 +151,7 @@ void glyph_s::get_outlined_glyph(glyph_image_s &gi, font_c *font, const ivec2 &p
 			vec2 c(p - ir);
 			for (int j=r.lt.y; j<=r.rb.y; j++)
 			for (int i=r.lt.x; i<=r.rb.x; i++)
-				if (pixels[i+width*j] > 0) nearest = tmin(nearest, (vec2((float)i, (float)j) - c).len() /* + 1.f*/ - pixels[i+width*j]/255.f);//если альфа > 0, значит на расстоянии не более чем в пиксель alpha = 255
+				if (pixels[i+width*j] > 0) nearest = tmin(nearest, (vec2((float)i, (float)j) - c).len() /* + 1.f*/ - pixels[i+width*j]/255.f); // if alpha > 0, it means at a distance of no more than one pixel, alpha = 255
 			outlined[p.x+gi.width*p.y] = (uint8)lround(CLAMP(oshift - (nearest/* - 1*/) * invr, 0.f, 1.f) * 0xff);
 		}
 	}
@@ -176,8 +177,8 @@ struct text_parser_s
 
 		DUMMY(paragraph_s);
 		paragraph_s():indention(0), line_spacing(0), align(ALEFT), rite(false) {}
-		signed indention : 16; //абзацный отступ
-		signed line_spacing : 16; //добавочный межстрочный интервал, в пикселях
+		signed indention : 16;
+		signed line_spacing : 16; // addition line distance in pixels
 		unsigned align : 8;
         unsigned rite : 1;
 	};
@@ -199,17 +200,17 @@ struct text_parser_s
 	int hyphenation_tag_nesting_level;
 	int line_width, last_line_descender;
 	ivec2 pen;
-	tbuf_t<meta_glyph_s> last_line; //метаглифы последней строки
+	tbuf_t<meta_glyph_s> last_line; // metaglyphs of last line
 	int cur_max_line_len;
     int prev_line_dim_glyph_index;
-	struct side_text_limit //обтекание, поддерживается только по одной картинке с каждой стороны
+	struct side_text_limit // wrapping text, only one image per side supported
 	{
 		int width, bottom;
-	} leftSL, rightSL; // границы для обтекания текста слева и справа (используется для imgl и imgr)
-	int maxW; // максимальная ширина строки (возвращаемое значение)
+	} leftSL, rightSL; // wrapping edges for left and right image (used for imgl and imgr)
+	int maxW; // max width of line (return value)
 
-    int rite_rite = 0; // индекс в массиве глифов для блока в <r></r> - выровнять этот кусок вправо
-    int addhtags = 0; // количество тэгов, увеличивающих высоту строки
+    int rite_rite = 0; // index in glyph array for block <r></r> - align to right
+    int addhtags = 0; // number of tags increasing height of line
 
     bool first_char_in_paragraph, was_inword_break, current_line_end_ellipsis, current_line_with_rects;
     bool search_rects;
@@ -298,10 +299,9 @@ struct text_parser_s
 		int H, spaces, W, WR;
 		pen.y += calc_HSW(H, spaces, W, WR, last_line.count());
 
-		//Добавляем символы в массив glyphs с учетом выравнивания (только по правому краю, выравнивание по ширине при переходе на новую строку игнорируется)
 		if (glyphs)
 		{
-			ivec2 offset(0, H);//смещение, добавляемое к каждому символу перед помещением в массив
+			ivec2 offset(0, H); // offset for every symbol before it will be put into array
 
 			if (paragraphs_stack.last().align == paragraph_s::ARIGHT) offset.x = cur_max_line_len - W - WR;
 			else if (paragraphs_stack.last().align == paragraph_s::ACENTER) offset.x = (cur_max_line_len - W - WR)/2;
@@ -398,7 +398,7 @@ struct text_parser_s
             if (j<rite_rite)
                 WR += mg.advance;
             else
-			    W += mg.advance; //длина строки (нужно для выравнивания)
+			    W += mg.advance; // line width (required for align)
 		}
 		if ((W+WR) > maxW) maxW = (W+WR);
 
@@ -518,7 +518,7 @@ struct text_parser_s
                 line_ellipsis();
 
 			if (last_line.count() > 0 && tag == CONSTWSTR("p")) end_line();
-			else ;//если строка пустая, то перо не смещаем вниз, в этом отличие тега <p> от <br>, ведь часто <p> стоит в начале строки и новая строка в этом случае не нужна
+			else ; // move pen down only for non-empty lines - this is difference between  <p> and <br>
 
             ASSERT(rite_rite == 0);
 
@@ -526,7 +526,7 @@ struct text_parser_s
 			paragraph_s pargph = paragraphs_stack.last(); pargph.rite = false;
 			if (!t->is_empty())
 			{
-				if (t->get_char(0) == L'l') pargph.align = paragraph_s::ALEFT;//проверяем только первый символ, чтоб можно было писать сокращенно
+				if (t->get_char(0) == L'l') pargph.align = paragraph_s::ALEFT;
 				else if (t->get_char(0) == L'r') pargph.align = paragraph_s::ARIGHT;
 				else if (t->get_char(0) == L'j') pargph.align = paragraph_s::AJUSTIFY;
 				else if (t->get_char(0) == L'c') pargph.align = paragraph_s::ACENTER;
@@ -598,7 +598,7 @@ struct text_parser_s
         }
         else if (tag == CONSTWSTR("font"))
         {
-            font_desc_c ff; ff.assign(tmp_str_c(tagbody));
+            font_desc_c ff; ff.assign(to_str(tagbody));
             fonts_stack.add(ff);
         }
 		else if (tag == CONSTWSTR("/font") || tag == CONSTWSTR("/b") || tag == CONSTWSTR("/l") || tag == CONSTWSTR("/i"))
@@ -655,9 +655,10 @@ struct text_parser_s
             if (search_rects)
                 line_ellipsis();
 
-			if (last_line.count() > 0) end_line();//переход на новую строку, если нужно
-			if (pen.y < sl.bottom) pen.y = sl.bottom;//если сейчас текст уже обтекается картинкой, то перемещаем перо на конец картинки, т.к. область обтекания более чем из одной картинки с одной стороны не поддерживается
-			// Теперь добавляем картинку с нужной стороны
+			if (last_line.count() > 0) end_line();
+			if (pen.y < sl.bottom) pen.y = sl.bottom;
+
+			// add wrapped image
 			scaled_image_s *si = scaled_image_s::load(tagbody, ivec2(ui_scale(100)));
 			if (glyphs)
 			{
@@ -733,7 +734,7 @@ struct text_parser_s
                 ++addhtags;
             mg.image = nullptr;
             line_width += mg.advance;
-        } else if (tag == CONSTWSTR("."))//это служебный тег разделитель для удобства локализации - скрываем его
+        } else if (tag == CONSTWSTR(".")) // <.> always ignored
 			;
 		else
 			return false;
@@ -860,7 +861,7 @@ struct text_parser_s
 			}
 
 			// wrap words
-			if (!search_rects && line_width > cur_max_line_len && last_line.count() > 1)//обязательно проверяем - вдруг это первый символ строки, т.к. ситуация когда символ не помещается во всей строке не может быть корректно обработана
+			if (!search_rects && line_width > cur_max_line_len && last_line.count() > 1) // check special case: 1 symbol cannot be inserted to line
 			{
 				int j = last_line.count() - 1, line_size;
 

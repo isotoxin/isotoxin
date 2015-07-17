@@ -259,7 +259,7 @@ font_c &font_c::buildfont(const wstr_c &filename, const str_c &fontname, ivec2 s
             buf = g_fileop->load(sysdir);
             if (buf) break;
 
-            ERROR("Font '%s' not found. Check path! Current path is: %s", str_c(face).cstr(), str_c(idta.fonts_dirs.join(CONSTWSTR("\r\n"))).cstr());
+            ERROR("Font '%s' not found. Check path! Current path is: %s", to_str(face).cstr(), to_str(idta.fonts_dirs.join(CONSTWSTR("\r\n"))).cstr());
 
             // ... or load any other
 
@@ -436,7 +436,7 @@ bool font_desc_c::assign(const asptr &iparams, bool andUpdate)
         fontname = CONSTASTR("default");
         fa = idata().fonts.get(fontname);
     }
-	filename = fa->file;
+	filename = to_wstr(fa->file);
 	fp = fa->fp;
     
     ++t;

@@ -348,6 +348,8 @@ public:
     /*virtual*/ void draw( const ts::ivec2 & p, const ts::drawable_bitmap_c &bmp, const ts::irect& bmprect, bool alphablend) override;
     /*virtual*/ void draw( const ts::irect & rect, ts::TSCOLOR color, bool clip ) override;
 
+    const ts::ivec2 &get_current_draw_offset() const { return drawdata.last().offset; }
+
     bool update_foreground();
     void set_system_focus(bool bring_to_front = false);
     void flash();

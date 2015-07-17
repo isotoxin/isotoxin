@@ -687,7 +687,8 @@ public:
     };
 
     str_t(const str_t &s):core(s.core) {}
-	template<typename TCHARACTER2, class CORE2> str_t(const str_t<TCHARACTER2, CORE2> &s):core( s.get_length() ) { xset<false>( *this, s ); }
+	//template<typename TCHARACTER2, class CORE2> str_t(const str_t<TCHARACTER2, CORE2> &s):core( s.get_length() ) { xset<false>( *this, s ); }
+    template<class CORE2> str_t(const str_t<TCHARACTER, CORE2> &s):core( s.get_length() ) { xset<false>( *this, s ); }
 
     ~str_t() {}
 
@@ -1029,22 +1030,22 @@ public:
     };
     operator const TCHARACTER *(void) const { return cstr();};
 
-    bool operator < (const str_t<TCHARACTER, CORE> &s) const
+    bool operator < (const sptr<TCHARACTER> &s) const
     {
-        return compare( *this, s ) < 0;
+        return compare( as_sptr(), s ) < 0;
     }
-    bool operator > (const str_t<TCHARACTER, CORE> &s) const
+    bool operator > (const sptr<TCHARACTER> &s) const
     {
-        return compare( *this, s ) > 0;
+        return compare( as_sptr(), s ) > 0;
     }
 
-    bool operator <= (const str_t<TCHARACTER, CORE> &s) const
+    bool operator <= (const sptr<TCHARACTER> &s) const
     {
-        return compare( *this, s ) <= 0;
+        return compare( as_sptr(), s ) <= 0;
     }
-    bool operator >= (const str_t<TCHARACTER, CORE> &s) const
+    bool operator >= (const sptr<TCHARACTER> &s) const
     {
-        return compare( *this, s ) >= 0;
+        return compare( as_sptr(), s ) >= 0;
     }
 
 
@@ -1091,6 +1092,24 @@ public:
         if (ZSTRINGS_ASSERT(newlen <= get_length()))
             set_length( newlen );
         return *this;
+    }
+
+    str_t &  append_unicode_as_utf8(long n) // encode utf8 form int32 code
+    {
+        static_assert( sizeof(TCHARACTER) == 1, "wide is bad" );
+
+        if (n <= 0x7f)
+            return append_char(n & 0x7f);
+        if (n <= 0x7FF)
+            return append_char(0xc0 | ((n >> 6) & 0x1f)).append_char(0x80 | (n & 0x3f));
+        if (n <= 0xFFFF)
+            return append_char(0xe0 | ((n >> 12) & 0xf)).append_char(0x80 | ((n >> 6) & 0x3f)).append_char(0x80 | (n & 0x3f));
+        if (n <= 0x1FFFFF)
+            return append_char(0xf0 | ((n >> 18) & 0x7)).append_char(0x80 | ((n >> 12) & 0x3f)).append_char(0x80 | ((n >> 6) & 0x3f)).append_char(0x80 | (n & 0x3f));
+        if (n <= 0x3FFFFFF)
+            return append_char(0xf8 | ((n >> 24) & 0x3)).append_char(0x80 | ((n >> 18) & 0x3f)).append_char(0x80 | ((n >> 12) & 0x3f)).append_char(0x80 | ((n >> 6) & 0x3f)).append_char(0x80 | (n & 0x3f));
+
+        return append_char(0xfc | ((n >> 30) & 0x1)).append_char(0x80 | ((n >> 24) & 0x3f)).append_char(0x80 | ((n >> 18) & 0x3f)).append_char(0x80 | ((n >> 12) & 0x3f)).append_char(0x80 | ((n >> 6) & 0x3f)).append_char(0x80 | (n & 0x3f));
     }
 
     str_t &  append_chars( ZSTRINGS_SIGNED n, TCHARACTER filler )
@@ -1333,7 +1352,16 @@ public:
 
 	}
 
-    str_t & trim(void)						// Удаляет в начале и в конце символы 0x20,0x9,0x0d,0x0a
+    strpart get_trimmed() const
+    {
+        ZSTRINGS_SIGNED tlen = get_length();
+        ZSTRINGS_SIGNED i0 = 0, i1 = tlen - 1;
+        for( ;i0 < tlen && CHAR_is_hollow( get_char(i0)); ++i0 );
+        for( ;i1 >=0 && CHAR_is_hollow( get_char(i1)); --i1 );
+        return substr(i0,i1+1);
+    }
+
+    str_t & trim()						// removes 0x20,0x9,0x0d,0x0a
     {
         ZSTRINGS_SIGNED tlen = get_length();
         const TCHARACTER * first = _cstr();
@@ -1890,10 +1918,10 @@ public:
     str_t & append(const str_t &s) {return this->append(s.as_sptr());};
 
     template<class CORE2> str_t & append(const str_t<TCHARACTER, CORE2> &s) {return this->append(s.as_sptr());};
-	template<typename TCHARACTER2, class CORE2> str_t & append(const str_t<TCHARACTER2, CORE2> &s) { xappend(*this, s.as_sptr()); return *this; };
+	template<typename TCHARACTER2, class CORE2> str_t & appendcvt(const str_t<TCHARACTER2, CORE2> &s) { xappend(*this, s.as_sptr()); return *this; };
 	
 	str_t & append(const TCHARACTER * const s) {return this->append(sptr<TCHARACTER>(s));};
-	template<typename TCHARACTER2> str_t & append(const TCHARACTER2 * const s) { xappend(*this, sptr<TCHARACTER2>(s)); return *this; };
+	template<typename TCHARACTER2> str_t & appendcvt(const TCHARACTER2 * const s) { xappend(*this, sptr<TCHARACTER2>(s)); return *this; };
 
     str_t & append_char(TCHARACTER c)
     {
@@ -1917,7 +1945,7 @@ public:
 
 
 
-	template<typename THCARACTER2, typename CORE2> str_t & operator += (const str_t<THCARACTER2, CORE2> &s) {return append<THCARACTER2, CORE2>(s);};
+	//template<typename THCARACTER2, typename CORE2> str_t & operator += (const str_t<THCARACTER2, CORE2> &s) {return append<THCARACTER2, CORE2>(s);};
     str_t & operator += (const TCHARACTER * const s) {return this->append(sptr<TCHARACTER>(s));};
     //str_template_c & operator += (const TCHARACTER c) {return this->append(c);};
 
@@ -2150,7 +2178,8 @@ public:
     }
 
     str_t & operator = (const str_t &s) { return set(s); }
-    template<typename TCHARACTER2, class CORE2> str_t<TCHARACTER, CORE> & operator = (const str_t<TCHARACTER2, CORE2> &s) { return set(s); }
+    //template<typename TCHARACTER2, class CORE2> str_t<TCHARACTER, CORE> & operator = (const str_t<TCHARACTER2, CORE2> &s) { return set(s); }
+    template<class CORE2> str_t<TCHARACTER, CORE> & operator = (const str_t<TCHARACTER, CORE2> &s) { return set(s); }
     str_t & operator = (const TCHARACTER * const s)   { *this = sptr<TCHARACTER>(s); return *this; } // copy always, fail on part strings
     str_t & operator = (const sptr<TCHARACTER> &s) { set(s.s, s.l); return *this; } // copy always, fail on part strings
 
@@ -2425,22 +2454,18 @@ inline str_c to_str(const wsptr &s)
     return sout;
 }
 
-
-inline str_c to_str(const wstr_c &s)
-{
-    return to_str( s.as_sptr() );
-}
-
-inline str_c to_str(const ZSTRINGS_WIDECHAR *s)
-{
-    return to_str(wsptr(s));
-}
-
 inline str_c to_utf8(const wsptr &s)
 {
     str_c   sout(s.l*4,false);
     ZSTRINGS_SIGNED nl = ZSTRINGS_SYSCALL(text_ucs2_to_utf8)(sout.str(), s.l*4+1, s);
     sout.set_length(nl);
+    return sout;
+}
+
+inline wstr_c from_utf8(const asptr &s)
+{
+    wstr_c   sout(s.l * 4, false);
+    sout.set_as_utf8(s);
     return sout;
 }
 
@@ -2466,17 +2491,6 @@ inline wstr_c to_wstr(const asptr &s)
     ZSTRINGS_SYSCALL(text_ansi_to_ucs2)(sout.str(), s.l+1, s);
     return sout;
 }
-
-inline wstr_c to_wstr(const ZSTRINGS_ANSICHAR *s)
-{
-    return to_wstr( asptr(s) );
-}
-
-inline wstr_c to_wstr(const str_c &s)
-{
-    return to_wstr( s.as_sptr() );
-}
-
 
 
 inline str_c str_convert(const wstr_c &s)
@@ -2545,6 +2559,7 @@ public:
 
 	template<typename CORE> token(const str_t<TCHARACTER,CORE> &str, TCHARACTER separator = TCHARACTER(',')) : str(str.as_sptr()), separator(separator), eos(false) {++(*this);}
     token(const sptr<TCHARACTER> &str, TCHARACTER separator = TCHARACTER(',')) : str(str), separator(separator), eos(false) {++(*this);}
+    token() : eos(true) {}
 
     TCHARACTER sep() const {return separator;}
 
@@ -2554,6 +2569,10 @@ public:
 
 	const str_t<TCHARACTER, str_core_part_c<TCHARACTER> > &operator* () const {return  tkn;}
 	const str_t<TCHARACTER, str_core_part_c<TCHARACTER> > *operator->() const {return &tkn;}
+
+    token & begin() {return *this;}
+    token end() {return token();}
+    bool operator!=(const token &t) { return eos != t.eos; }
 
 	void operator++()
 	{

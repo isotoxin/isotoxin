@@ -74,6 +74,18 @@ namespace
 
 			ts::enum_files( wd, *this, ts::wstr_c(), L"*.data" );
 			packs.open_containers();
+
+            /*
+            pack in pack not supported
+            ts::wstrings_c fns;
+            bool zips = false;
+            packs.find_by_mask( fns, CONSTWSTR("*.zip"), true );
+            for(const ts::wstr_c &fn : fns)
+                packs.add_container(fn, 1000), zips = true;
+
+            if (zips) packs.open_containers();
+            */
+
 		}
 
 		bool operator()( const ts::wstr_c& base, const ts::wstr_c& fn )

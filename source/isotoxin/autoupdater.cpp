@@ -214,14 +214,14 @@ void autoupdater()
     }
     r.unlock();
 
-    ts::wstr_c wurl; wurl.set_as_utf8( ver.get_string(CONSTASTR("url")) );
-    ts::wstr_c pakname = ts::fn_get_name_with_ext(wurl);
-    if (wurl.get_char(0) == '/')
+    ts::str_c aurl( ver.get_string(CONSTASTR("url")) );
+    ts::wstr_c pakname = ts::fn_get_name_with_ext(from_utf8(aurl));
+    if (aurl.get_char(0) == '/')
     {
-        address.set_length(address.find_pos(7, '/')).append(wurl).trim();
+        address.set_length(address.find_pos(7, '/')).append(aurl).trim();
     } else
     {
-        address = wurl;
+        address = aurl;
     }
 
     ts::buf_c latest(d);

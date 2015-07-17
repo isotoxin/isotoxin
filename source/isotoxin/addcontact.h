@@ -24,8 +24,8 @@ class dialog_addcontact_c : public gui_isodialog_c
     GM_RECEIVER(dialog_addcontact_c, ISOGM_CMD_RESULT);
 
     int apid = 0;
-    ts::wstr_c publicid;
-    ts::wstr_c invitemessage;
+    ts::str_c publicid; // utf8
+    ts::str_c invitemessage; // utf8
 
     dialog_addcontact_params_s inparam;
 
@@ -56,8 +56,8 @@ public:
 class dialog_addgroup_c : public gui_isodialog_c
 {
     int apid = 0;
-    ts::wstr_c groupname;
-    bool permanent = true;
+    ts::str_c groupname; // utf8
+    bool persistent = true;
 
 protected:
     /*virtual*/ int unique_tag() { return UD_ADDCONTACT; }

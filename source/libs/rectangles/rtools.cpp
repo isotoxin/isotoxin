@@ -97,7 +97,7 @@ void sbhelper_s::draw( const theme_rect_s *thr, rectengine_c &engine, evt_data_s
     sbrect = dd.draw_thr.sbrect();
 }
 
-void text_remove_tags(ts::wstr_c &text)
+void text_remove_tags(ts::str_c &text)
 {
     for (int i = text.find_pos('<'); i >= 0; i = text.find_pos(i, '<'))
     {

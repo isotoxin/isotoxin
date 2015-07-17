@@ -478,7 +478,7 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
         tf.set_readonly();
         tf.disable_caret();
         tf.arrow_cursor();
-        tf.on_lbclick = DELEGATE( &tf, push_selector );
+        tf.register_kbd_callback( DELEGATE( &tf, push_selector ), SSK_LB, false );
         tf.set_customdata_obj<menu_c>( *addition->menu );
     } else if (role == TFR_TEXT_FILED)
     {

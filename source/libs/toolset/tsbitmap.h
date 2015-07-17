@@ -40,6 +40,7 @@ struct imgdesc_s
     uint8 bitpp;
     uint8 _dummy;
     imgdesc_s() {}
+    imgdesc_s( const imgdesc_s &inf, const ivec2&sz ) :sz(sz), pitch(inf.pitch), bitpp(inf.bitpp) {}
     imgdesc_s( const ivec2&sz, uint8 bitpp):sz(sz), pitch(as_word(((bitpp + 1) >> 3) * sz.x)), bitpp(bitpp) {}
     imgdesc_s( const ivec2&sz, uint8 bitpp, uint16 pitch ):sz(sz), pitch(pitch), bitpp(bitpp) { ASSERT(pitch>=(sz.x*bytepp())); }
 
@@ -52,6 +53,7 @@ struct imgdesc_s
     imgdesc_s &set_size(const ivec2 &szz) { sz = szz; return *this; }
 };
 
+void TSCALL img_helper_fill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color);
 void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info);
 void TSCALL img_helper_make_2x_smaller(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info);
 void TSCALL img_helper_copy_components(uint8* des, const uint8* sou, const imgdesc_s &des_info, const imgdesc_s &sou_info, int num_comps );
@@ -315,6 +317,8 @@ public:
 
     bmpcore_exbody_s extbody() const { return bmpcore_exbody_s( body(), info() ); }
 
+    operator bool() const {return info().sz >> 0;}
+
     void operator =(const bitmap_t &bmp)
     {
         core = bmp.core;
@@ -449,6 +453,7 @@ public:
     void sharpen(bitmap_c &outimage, int lv) const; // lv [0..64]
 
     bool resize(bitmap_c& outimage, const ivec2 & newsize, resize_filter_e filt_mode = FILTER_NONE) const;
+    bool resize(const bmpcore_exbody_s &eb, resize_filter_e filt_mode = FILTER_NONE) const;
     /*
 	bool resize(bitmap_c& outimage, float scale=2.f, resize_filter_e filt_mode=FILTER_NONE) const;
 	bool rotate(bitmap_c& outimage, float angle_rad, rot_filter_e filt_mode=FILTMODE_POINT, bool expand_dst=true) const;

@@ -21,7 +21,7 @@ class dialog_contact_props_c : public gui_isodialog_c
 {
     ts::shared_ptr<contact_c> contactue;
 
-    ts::wstr_c customname;
+    ts::str_c customname; // utf8
     bool custom_name( const ts::wstr_c & );
 
     keep_contact_history_e keeph = KCH_DEFAULT;

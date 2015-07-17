@@ -55,7 +55,7 @@ void application_c::load_locale( const SLANGID& lng )
     ts::wstr_c path(CONSTWSTR("loc/"));
     int cl = path.get_length();
 
-    ts::g_fileop->find(fns, path.append(lng).append(CONSTWSTR(".*.lng")), false);
+    ts::g_fileop->find(fns, path.appendcvt(lng).append(CONSTWSTR(".*.lng")), false);
     fns.kill_dups();
     fns.sort(true);
 
@@ -101,7 +101,7 @@ void application_c::load_locale( const SLANGID& lng )
                 m_locale[tag] = l;
             } else if (stag.get_length() == 2 && !l.is_empty())
             {
-                m_locale_lng[SLANGID(stag)] = l;
+                m_locale_lng[SLANGID(to_str(stag))] = l;
             }
         }
     }
@@ -145,32 +145,39 @@ HICON application_c::app_icon(bool for_tray)
     return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(IDI_ICON));
 };
 
-/*virtual*/ void application_c::app_prepare_text_for_copy(ts::wstr_c &text)
+/*virtual*/ void application_c::app_prepare_text_for_copy(ts::str_c &text)
 {
-    int rr = text.find_pos(CONSTWSTR("<r>"));
+    int rr = text.find_pos(CONSTASTR("<r>"));
     if (rr >= 0)
     {
-        int rr2 = text.find_pos(rr+3, CONSTWSTR("</r>"));
+        int rr2 = text.find_pos(rr+3, CONSTASTR("</r>"));
         if (rr2 > rr)
             text.cut(rr, rr2-rr+4);
     }
 
-    text.replace_all(CONSTWSTR("<char=60>"), CONSTWSTR("\2"));
-    text.replace_all(CONSTWSTR("<char=62>"), CONSTWSTR("\3"));
-    text.replace_all(CONSTWSTR("<br>"), CONSTWSTR("\n"));
-    text.replace_all(CONSTWSTR("<p>"), CONSTWSTR("\n"));
+    text.replace_all(CONSTASTR("<char=60>"), CONSTASTR("\2"));
+    text.replace_all(CONSTASTR("<char=62>"), CONSTASTR("\3"));
+    text.replace_all(CONSTASTR("<br>"), CONSTASTR("\n"));
+    text.replace_all(CONSTASTR("<p>"), CONSTASTR("\n"));
 
     text_convert_to_bbcode(text);
     text_close_bbcode(text);
     text_convert_char_tags(text);
 
-    // unparse img - smiles
-    auto t = CONSTWSTR("<img=");
+    // unparse smiles
+    auto t = CONSTASTR("<rect=");
     for (int i = text.find_pos(t); i >= 0; i = text.find_pos(i + 1, t))
     {
         int j = text.find_pos(i + t.l, '>');
         if (j < 0) break;
-        text.replace(i,j-i+1, ts::fn_get_name(text.substr(i + t.l, j)) );
+        int k = text.substr(i + t.l, j).find_pos(0, ',');
+        if (k < 0) break;
+        int emoi = text.substr(i + t.l, i + t.l + k).as_int(-1);
+        if (const emoticon_s *e = emoti().get(emoi))
+        {
+            text.replace( i, j-i+1, e->def );
+        } else
+            break;
     }
 
     text_remove_tags(text);
@@ -178,8 +185,8 @@ HICON application_c::app_icon(bool for_tray)
     text.replace_all('\2', '<');
     text.replace_all('\3', '>');
 
-    text.replace_all(CONSTWSTR("\r\n"), CONSTWSTR("\n"));
-    text.replace_all(CONSTWSTR("\n"), CONSTWSTR("\r\n"));
+    text.replace_all(CONSTASTR("\r\n"), CONSTASTR("\n"));
+    text.replace_all(CONSTASTR("\n"), CONSTASTR("\r\n"));
 }
 
 /*virtual*/ ts::wsptr application_c::app_loclabel(loc_label_e ll)
@@ -324,6 +331,8 @@ static DWORD WINAPI autoupdater(LPVOID)
         set_notification_icon();
         F_SETNOTIFYICON = false;
     }
+
+    emoti().tick();
 }
 
 /*virtual*/ void application_c::app_fix_sleep_value(int &sleep_ms)
@@ -591,7 +600,7 @@ bool application_c::b_update_ver(RID, GUIPARAM p)
         CloseHandle(CreateThread(nullptr, 0, autoupdater, this, 0, nullptr));
 
         if (renotice)
-            gmsg<ISOGM_NOTICE>(&contacts().get_self(), nullptr, NOTICE_NEWVERSION, ts::to_wstr(cfg().autoupdate_newver().as_sptr())).send();
+            gmsg<ISOGM_NOTICE>(&contacts().get_self(), nullptr, NOTICE_NEWVERSION, cfg().autoupdate_newver().as_sptr()).send();
     }
     return true;
 }
@@ -897,6 +906,8 @@ bool application_c::load_theme( const ts::wsptr&thn )
     mecontactheight = theme().conf().get_string(CONSTASTR("mecontactheight")).as_int(60);
     protowidth = theme().conf().get_string(CONSTASTR("protowidth")).as_int(100);
 
+    emoti().reload();
+
     return true;
 }
 
@@ -934,6 +945,7 @@ void preloaded_buttons_s::reload()
     exploreb = th.get_button(CONSTASTR("explore"));
 
     nokeeph = th.get_button(CONSTASTR("nokeeph"));
+    smile = th.get_button(CONSTASTR("smile"));
 }
 
 file_transfer_s::file_transfer_s()
@@ -1077,13 +1089,13 @@ void file_transfer_s::kill( file_control_e fctl )
             post_s p;
             p.sender = sender;
             filename_on_disk.insert(0, fctl != FIC_DISCONNECT ? '*' : '?');
-            p.message = filename_on_disk;
+            p.message_utf8 = to_utf8(filename_on_disk);
             p.utag = msgitem_utag;
             prf().change_history_item(historian, p, HITM_MESSAGE);
             if (contact_c * h = contacts().find(historian)) h->iterate_history([this](post_s &p)->bool {
                 if (p.utag == msgitem_utag)
                 {
-                    p.message = filename_on_disk;
+                    p.message_utf8 = to_utf8(filename_on_disk);
                     return true;
                 }
                 return false;
@@ -1100,13 +1112,13 @@ void file_transfer_s::kill( file_control_e fctl )
     {
         post_s p;
         p.sender = sender;
-        p.message = filename_on_disk;
+        p.message_utf8 = to_utf8(filename_on_disk);
         p.utag = msgitem_utag;
         prf().change_history_item(historian, p, HITM_MESSAGE);
         if (contact_c * h = contacts().find(historian)) h->iterate_history([this](post_s &p)->bool {
             if (p.utag == msgitem_utag)
             {
-                p.message = filename_on_disk;
+                p.message_utf8 = to_utf8(filename_on_disk);
                 return true;
             }
             return false;
@@ -1308,9 +1320,9 @@ void file_transfer_s::upd_message_item()
     {
         post_s p;
         p.type = upload ? MTA_SEND_FILE : MTA_RECV_FILE;
-        p.message = filename_on_disk;
-        if (p.message.ends(CONSTWSTR(".!rcv")))
-            p.message.trunc_length(5);
+        p.message_utf8 = to_utf8(filename_on_disk);
+        if (p.message_utf8.ends(CONSTASTR(".!rcv")))
+            p.message_utf8.trunc_length(5);
 
         p.utag = msgitem_utag;
         p.sender = sender;
@@ -1320,9 +1332,9 @@ void file_transfer_s::upd_message_item()
     {
         gmsg<ISOGM_MESSAGE> msg(c, &contacts().get_self(), upload ? MTA_SEND_FILE : MTA_RECV_FILE);
         msg.create_time = now();
-        msg.post.message = filename_on_disk;
-        if (msg.post.message.ends(CONSTWSTR(".!rcv")))
-            msg.post.message.trunc_length(5);
+        msg.post.message_utf8 = to_utf8(filename_on_disk);
+        if (msg.post.message_utf8.ends(CONSTASTR(".!rcv")))
+            msg.post.message_utf8.trunc_length(5);
         msg.post.utag = prf().uniq_history_item_tag();
         msgitem_utag = msg.post.utag;
         msg.send();

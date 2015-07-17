@@ -36,22 +36,56 @@ uint  ccollection_c::add_container(const wsptr &name, int prior)
     for (container_c *pf : m_containers)
         if (pf->fn().equals(name)) return pf->get_id();
     
-    HANDLE h = CreateFileW(tmp_wstr_c(name), GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+    tmp_wstr_c n(name);
+    HANDLE h = CreateFileW(n, GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
     if (h == INVALID_HANDLE_VALUE)
-        return 0;
+    {
+        // pack in pack not supported, sorry
+        //if ( !file_exists(n) )
+            return 0;
+    }
 
     container_c *pf = nullptr;
+    FILETIME filetime = {0};
+    blob_c body;
 
-    FILETIME filetime;
+    if (h != INVALID_HANDLE_VALUE)
+    {
+        ::SetFilePointer(h, 0, nullptr, FILE_BEGIN);
+
+        body.set_size(64);
+        DWORD temp = 0;
+        if (!::ReadFile(h, body.data(), body.size(), &temp, nullptr))
+            return 0;
+
+        GetFileTime(h, nullptr, nullptr, &filetime);
+        CloseHandle(h);
+
+    } else
+    {
+        struct bw : public buf_wrapper_s
+        {
+            blob_c *b;
+            /*virtual*/ void * alloc(aint sz) override
+            {
+                b->set_size(sz, false);
+                return b->data();
+            }
+            
+            bw(blob_c *b):b(b) {}
+        } bbb(&body);
+
+        if (!read(n,bbb))
+            return false;
+    }
+
 
     for(;;)
     {
-        if ( zip_container_c::Detect(h, &filetime)) { pf = TSNEW(zip_container_c, name, prior, m_idpool); break; }
-        //if ( rar_file_c::Detect(h, &FileTime)) { pf = TSNEW(rar_file_c, name, prior); break; } // there are no rar file support, sorry
+        if ( zip_container_c::detect(body)) { pf = TSNEW(zip_container_c, name, prior, m_idpool); break; }
+        //if ( rar_file_c::detect(body)) { pf = TSNEW(rar_file_c, name, prior); break; } // there are no rar file support, sorry
         break;
     }
-
-    CloseHandle( h );
 
     if (pf) 
     {

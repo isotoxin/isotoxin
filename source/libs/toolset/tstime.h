@@ -33,6 +33,7 @@ public:
         return Time(threadCurrentTime);
     }
 
+    Time &operator+=(int delta) { value += delta; return *this; }
     Time operator+(int     delta) const { return Time(value + delta); }
     Time operator-(int     delta) const { return Time(value - delta); }
     int  operator-(const Time &t) const { return value - t.value; }

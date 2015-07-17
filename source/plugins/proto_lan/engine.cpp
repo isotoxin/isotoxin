@@ -2530,7 +2530,7 @@ void lan_engine::get_avatar(int id)
         c->send_block(BT_GETAVATAR, 0);
 }
 
-void lan_engine::add_groupchat(const char *groupaname, bool permanent)
+void lan_engine::add_groupchat(const char *groupaname, bool persistent)
 {
 }
 

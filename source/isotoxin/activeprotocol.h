@@ -42,9 +42,9 @@ struct configurable_s
 struct active_protocol_data_s
 {
     ts::str_c tag;
-    ts::wstr_c name;
-    ts::wstr_c user_name;
-    ts::wstr_c user_statusmsg;
+    ts::str_c name; // utf8
+    ts::str_c user_name; // utf8
+    ts::str_c user_statusmsg; // utf8
     ts::blob_c config;
     ts::blob_c avatar;
     int options = O_AUTOCONNECT;
@@ -63,7 +63,7 @@ struct active_protocol_data_s
 struct sync_data_s
 {
     active_protocol_data_s data;
-    ts::wstr_c description;
+    ts::str_c description; // utf8
     ts::flags32_s flags;
 };
 
@@ -111,13 +111,13 @@ public:
     active_protocol_c(int id, const active_protocol_data_s &pd);
     ~active_protocol_c();
 
-    const ts::wstr_c &get_desc() const {return syncdata.lock_read()().description;};
-    const ts::wstr_c &get_name() const {return syncdata.lock_read()().data.name;};
+    const ts::str_c &get_desc() const {return syncdata.lock_read()().description;};
+    const ts::str_c &get_name() const {return syncdata.lock_read()().data.name;};
     int get_features() const {return features; }
     int get_priority() const {return priority; }
 
-    const ts::wstr_c &get_uname() const {return syncdata.lock_read()().data.user_name;};
-    const ts::wstr_c &get_ustatusmsg() const {return syncdata.lock_read()().data.user_statusmsg;};
+    const ts::str_c &get_uname() const {return syncdata.lock_read()().data.user_name;};
+    const ts::str_c &get_ustatusmsg() const {return syncdata.lock_read()().data.user_statusmsg;};
     
     configurable_s get_configurable() const { return syncdata.lock_read()().data.configurable; };
     void set_configurable( const configurable_s &c );
@@ -140,10 +140,10 @@ public:
     void del_message( uint64 utag );
 
     void join_group_chat(int gid, int cid);
-    void rename_group_chat(int gid, const ts::wstr_c &groupname);
-    void add_group_chat( const ts::wstr_c &groupname, bool permanent );
-    void resend_request( int cid, const ts::wstr_c &msg );
-    void add_contact( const ts::str_c& pub_id, const ts::wstr_c &msg );
+    void rename_group_chat(int gid, const ts::str_c &groupname);
+    void add_group_chat( const ts::str_c &groupname, bool persistent );
+    void resend_request( int cid, const ts::str_c &msg_utf8 );
+    void add_contact( const ts::str_c& pub_id, const ts::str_c &msg_utf8 );
     void del_contact(int cid);
     void accept(int cid);
     void reject(int cid);

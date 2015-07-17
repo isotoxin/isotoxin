@@ -446,7 +446,7 @@ int CALLBACK WinMain(
 #if defined _DEBUG || defined _CRASH_HANDLER
 #include "appver.inl"
     exception_operator_c::set_unhandled_exception_filter();
-    exception_operator_c::dump_filename = fn_change_name_ext(get_exe_full_name(), wstr_c(CONSTWSTR("plghost")).append_char('.').append(SS(APPVERD)).as_sptr(), CONSTWSTR("dmp"));
+    exception_operator_c::dump_filename = fn_change_name_ext(get_exe_full_name(), wstr_c(CONSTWSTR("plghost")).append_char('.').appendcvt(SS(APPVERD)).as_sptr(), CONSTWSTR("dmp"));
 #endif
 
     UNSTABLE_CODE_PROLOG
@@ -551,7 +551,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             cmd_result_e rst = CR_MODULE_NOT_FOUND;
             if (truncp > 0)
             {
-                path.set_length(truncp + 1).append(CONSTWSTR("proto.")).append(proto).append(CONSTWSTR(".dll"));
+                path.set_length(truncp + 1).append(CONSTWSTR("proto.")).appendcvt(proto).append(CONSTWSTR(".dll"));
 
                 WIN32_FIND_DATAW find_data;
                 HANDLE fh = FindFirstFileW(path, &find_data);
@@ -566,7 +566,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
 #if defined _DEBUG || defined _CRASH_HANDLER
                     if (CR_OK == rst)
                     {
-                        exception_operator_c::dump_filename.replace_all(CONSTWSTR(".dmp"), wstr_c(CONSTWSTR(".")).append(proto).append(CONSTWSTR(".dmp")));
+                        exception_operator_c::dump_filename.replace_all(CONSTWSTR(".dmp"), wstr_c(CONSTWSTR(".")).appendcvt(proto).append(CONSTWSTR(".dmp")));
                     }
 #endif
 
@@ -586,16 +586,16 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            tmp_wstr_c name = r.getwstr();
-            protolib.functions->set_name(to_utf8(name));
+            tmp_str_c name = r.getastr();
+            protolib.functions->set_name(name);
         }
         break;
     case AQ_SET_STATUSMSG:
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            tmp_wstr_c status = r.getwstr();
-            protolib.functions->set_statusmsg(to_utf8(status));
+            tmp_str_c status = r.getastr();
+            protolib.functions->set_statusmsg(status);
         }
         break;
     case AQ_SET_CONFIG:
@@ -656,17 +656,17 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         {
             ipcr r(d->get_reader());
             int gid = r.get<int>();
-            tmp_wstr_c gchname = r.getwstr();
-            protolib.functions->ren_groupchat(gid, to_utf8(gchname));
+            tmp_str_c gchname = r.getastr();
+            protolib.functions->ren_groupchat(gid, gchname);
         }
         break;
     case AQ_ADD_GROUPCHAT:
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            tmp_wstr_c gchname = r.getwstr();
-            bool permanent = r.get<int>() != 0;
-            protolib.functions->add_groupchat(to_utf8(gchname), permanent);
+            tmp_str_c gchname = r.getastr();
+            bool persistent = r.get<int>() != 0;
+            protolib.functions->add_groupchat(gchname, persistent);
         }
         break;
     case AQ_ADD_CONTACT:
@@ -678,13 +678,13 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             {
                 // resend
                 int cid = r.get<int>();
-                tmp_wstr_c invitemsg = r.getwstr();
-                rslt = protolib.functions->resend_request(cid, to_utf8(invitemsg));
+                tmp_str_c invitemsg = r.getastr();
+                rslt = protolib.functions->resend_request(cid, invitemsg);
             } else
             {
                 tmp_str_c publicid = r.getastr();
-                tmp_wstr_c invitemsg = r.getwstr();
-                rslt = protolib.functions->add_contact(publicid, to_utf8(invitemsg));
+                tmp_str_c invitemsg = r.getastr();
+                rslt = protolib.functions->add_contact(publicid, invitemsg);
             }
             IPCW(HA_CMD_STATUS) << (int)AQ_ADD_CONTACT << rslt;
         }
@@ -704,7 +704,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             int id = r.get<int>();
             int mt = r.get<int>();
             u64 utag = r.get<u64>();
-            str_c message = to_utf8(r.getwstr());
+            str_c message = r.getastr();
             message_s m;
             m.mt = (message_type_e)mt;
             m.utag = utag;

@@ -98,11 +98,11 @@ template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_shadow(ts::TSCOLOR c
 }
 
 
-void text_convert_to_bbcode(ts::wstr_c &text);
-void text_close_bbcode(ts::wstr_c &text);
-void text_convert_char_tags(ts::wstr_c &text);
-void text_adapt_user_input(ts::wstr_c &text); // before print
-void text_prepare_for_edit(ts::wstr_c &text);
+void text_convert_to_bbcode(ts::str_c &text_utf8);
+void text_close_bbcode(ts::str_c &text_utf8);
+void text_convert_char_tags(ts::str_c &text_utf8);
+void text_adapt_user_input(ts::str_c &text_utf8); // before print
+void text_prepare_for_edit(ts::str_c &text_utf8);
 
 typedef ts::sstr_t<4> SLANGID;
 typedef ts::array_inplace_t<SLANGID, 0> SLANGIDS;
@@ -250,15 +250,16 @@ enum profileparam_e
     PP_MSGOPTIONS,
     PP_NETWORKNAME,
 
+    PP_EMOJISET,
     PP_MICDEVICE,
 };
 template<> struct gmsg<ISOGM_CHANGED_PROFILEPARAM> : public gmsgbase
 {
-    gmsg(int protoid, profileparam_e pp, const ts::wstr_c &s) :gmsgbase(ISOGM_CHANGED_PROFILEPARAM), protoid(protoid), pp(pp), s(s) {}
+    gmsg(int protoid, profileparam_e pp, const ts::str_c &s) :gmsgbase(ISOGM_CHANGED_PROFILEPARAM), protoid(protoid), pp(pp), s(s) {}
     gmsg(int protoid, profileparam_e pp) :gmsgbase(ISOGM_CHANGED_PROFILEPARAM), protoid(protoid), pp(pp) {}
     int protoid;
     profileparam_e pp;
-    ts::wstr_c s;
+    ts::str_c s;
 };
 //
 
@@ -376,6 +377,18 @@ struct leech_dock_right_center_s : public autoparam_i
     void update_ctl_pos();
     /*virtual*/ void i_leeched( guirect_c &to ) override { __super::i_leeched(to); update_ctl_pos(); };
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+};
+
+struct leech_dock_bottom_right_s : public autoparam_i
+{
+    int width;
+    int height;
+    int x_space;
+    int y_space;
+    leech_dock_bottom_right_s(int width, int height, int x_space = 0, int y_space = 0) :width(width), height(height), x_space(x_space), y_space(y_space) {}
+    void update_ctl_pos();
+    /*virtual*/ void i_leeched(guirect_c &to) override { __super::i_leeched(to); update_ctl_pos(); };
+    virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
 struct leech_at_right : public autoparam_i

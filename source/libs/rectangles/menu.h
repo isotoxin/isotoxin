@@ -159,7 +159,7 @@ public:
                 ts::uint32 flags = t->as_uint();
                 ++t; t->decode_base64(&h, sizeof(h));
                 ++t;
-                if (!f(par, it.name(), flags, h, ts::str_c(*t))) return; // text, handler, text param - menu item
+                if (!f(par, it.name(), flags, h, ts::to_str(*t))) return; // text, handler, text param - menu item
             }
         }
     }

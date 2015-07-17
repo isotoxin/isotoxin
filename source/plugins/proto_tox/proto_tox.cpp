@@ -2020,7 +2020,7 @@ static void setup_members_and_send(contact_data_s &cdata, int gnum) // cdata.mem
 
 static void cb_group_invite(Tox *, int fid, byte /*type*/, const byte * data, uint16_t length, void *)
 {
-    bool permanent = false;
+    bool persistent = false;
 
     int gnum = tox_join_groupchat(tox, fid, data, length);
     if (gnum >= 0)
@@ -2032,7 +2032,7 @@ static void cb_group_invite(Tox *, int fid, byte /*type*/, const byte * data, ui
         contact_descriptor_s *desc = new contact_descriptor_s(ID_GROUP, gnum + GROUP_ID_OFFSET);
         desc->state = CS_ONLINE; // groups always online
 
-        contact_data_s cdata(desc->get_id(), CDM_STATE | CDM_NAME | CDM_MEMBERS | CDM_PERMISSIONS | (permanent ? CDF_PERMANENT_GCHAT : 0));
+        contact_data_s cdata(desc->get_id(), CDM_STATE | CDM_NAME | CDM_MEMBERS | CDM_PERMISSIONS | (persistent ? CDF_PERSISTENT_GCHAT : 0));
         cdata.state = CS_ONLINE;
         cdata.name = gn.cstr();
         cdata.name_len = gn.get_length();
@@ -2329,7 +2329,7 @@ static void prepare(const byte *data, size_t length)
     //options.tcp_port = (uint16_t)server_port; // TODO
     //options.udp_enabled = options.proxy_type == TOX_PROXY_TYPE_NONE;
 
-    options.savedata_type = TOX_SAVEDATA_TYPE_TOX_SAVE;
+    options.savedata_type = data ? TOX_SAVEDATA_TYPE_TOX_SAVE : TOX_SAVEDATA_TYPE_NONE;
     options.savedata_data = data;
     options.savedata_length = length;
 
@@ -3398,25 +3398,25 @@ void __stdcall file_portion(u64 utag, const file_portion_s *portion)
         }
 }
 
-void __stdcall add_groupchat(const char *groupaname, bool permanent)
+void __stdcall add_groupchat(const char *groupaname, bool persistent)
 {
-    if (permanent) return; // tox not yet supported pemanent groups
+    if (persistent) return; // tox not yet supported persistent groups
 
     if (tox)
     {
         int gnum = tox_add_groupchat(tox);
         if (gnum >= 0)
         {
-            str_c gn = utf8clamp(groupaname, TOX_MAX_NAME_LENGTH);
-            tox_group_set_title(tox, gnum, (const uint8_t *)gn.cstr(), (uint8_t)gn.get_length());
+            asptr gn = utf8clamp(groupaname, TOX_MAX_NAME_LENGTH);
+            tox_group_set_title(tox, gnum, (const uint8_t *)gn.s, (uint8_t)gn.l);
 
             contact_descriptor_s *desc = new contact_descriptor_s(ID_GROUP, gnum + GROUP_ID_OFFSET);
             desc->state = CS_ONLINE; // groups always online
 
-            contact_data_s cdata( desc->get_id(), CDM_STATE | CDM_NAME | (permanent ? CDF_PERMANENT_GCHAT : 0) );
+            contact_data_s cdata( desc->get_id(), CDM_STATE | CDM_NAME | (persistent ? CDF_PERSISTENT_GCHAT : 0) );
             cdata.state = CS_ONLINE;
-            cdata.name = gn.cstr();
-            cdata.name_len = gn.get_length();
+            cdata.name = gn.s;
+            cdata.name_len = gn.l;
             hf->update_contact(&cdata);
 
         }
@@ -3430,12 +3430,12 @@ void __stdcall ren_groupchat(int gid, const char *groupaname)
         auto it = id2desc.find(gid);
         if (it == id2desc.end()) return;
         contact_descriptor_s *desc = it->second;
-        str_c gn = utf8clamp(groupaname, TOX_MAX_NAME_LENGTH);
-        tox_group_set_title(tox, desc->get_gnum(), (const uint8_t *)gn.cstr(), (uint8_t)gn.get_length());
+        asptr gn = utf8clamp(groupaname, TOX_MAX_NAME_LENGTH);
+        tox_group_set_title(tox, desc->get_gnum(), (const uint8_t *)gn.s, (uint8_t)gn.l);
 
         contact_data_s cdata(desc->get_id(), CDM_NAME);
-        cdata.name = gn.cstr();
-        cdata.name_len = gn.get_length();
+        cdata.name = gn.s;
+        cdata.name_len = gn.l;
         hf->update_contact(&cdata);
     }
 }

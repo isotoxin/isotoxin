@@ -36,7 +36,7 @@ void dialog_contact_props_c::getbutton(bcreate_s &bcr)
 
 bool dialog_contact_props_c::custom_name( const ts::wstr_c & cn )
 {
-    customname = cn;
+    customname = to_utf8(cn);
     return true;
 }
 
@@ -67,14 +67,14 @@ menu_c dialog_contact_props_c::gethistorymenu()
         customname = contactue->get_customname();
         keeph = contactue->get_keeph();
 
-        ts::wstr_c n = contactue->get_name();
+        ts::str_c n = contactue->get_name();
         text_adapt_user_input(n);
-        cname.append(CONSTWSTR("<br>")).append(n); 
+        cname.append(CONSTWSTR("<br>")).append(from_utf8(n)); 
 
         dm().page_header(cname);
         dm().vspace(10);
 
-        dm().textfield(TTT("Отображаемое имя",229), customname, DELEGATE(this, custom_name))
+        dm().textfield(TTT("Отображаемое имя",229), from_utf8(customname), DELEGATE(this, custom_name))
             .focus(true);
         dm().vspace();
 
