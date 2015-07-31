@@ -1147,7 +1147,7 @@ public:
         }
     }
 
-    void clear(void)
+    void clear()
     {
         block_s *z = m_first;
         for (;z;)

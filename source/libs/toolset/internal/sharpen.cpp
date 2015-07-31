@@ -147,7 +147,7 @@ enum MMXSTATE
 //#define _CPU_FEATURE_3DNOW 0x0008 
 
 
-bool IsCPUID(void) 
+bool IsCPUID() 
 { 
     __try
     { 

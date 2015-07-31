@@ -163,6 +163,7 @@ public:
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_INIT);
 
     GM_RECEIVER( application_c, ISOGM_PROFILE_TABLE_SAVED );
+    GM_RECEIVER( application_c, GM_UI_EVENT );
 
     ts::pointers_t<contact_c,0> m_ringing;
     mediasystem_c m_mediasystem;

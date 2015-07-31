@@ -28,15 +28,15 @@ class ccollection_c
 	}
 
 public:
-    ccollection_c(void):m_idpool(1) {}
+    ccollection_c():m_idpool(1) {}
     ~ccollection_c() { clear(); };
 
-    void			clear(void);
+    void			clear();
     uint			add_container(const wsptr &filename, int prior = 0); // only add, not open // returns container id or zero, if fail
     void			remove_container(uint container_id);
 
-    bool            open_containers(void);
-    bool			close_containers(void);
+    bool            open_containers();
+    bool			close_containers();
 
     bool        file_exists(const wsptr &name);
     bool        path_exists(const wsptr &path);

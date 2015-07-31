@@ -33,3 +33,4 @@ size_t mspy_size(void *p);
 
 
 bool mspy_getallocated_info( char *buf, int bufsz ); // call at end of app to get allocated memory info (leaks)
+void reset_allocnum();

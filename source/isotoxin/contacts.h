@@ -92,8 +92,10 @@ INLINE ts::asptr  calc_message_skin(message_type_app_e mt, contact_key_s sender)
         return CONSTASTR("invite");
     if (MTA_ACCEPTED == mt || MTA_ACCEPT_OK == mt)
         return CONSTASTR("invite");
-    if (MTA_RECV_FILE == mt || MTA_SEND_FILE == mt)
-        return CONSTASTR("file");
+    if (MTA_RECV_FILE == mt)
+        return CONSTASTR("filerecv");
+    if (MTA_SEND_FILE == mt)
+        return CONSTASTR("filesend");
     bool by_self = sender.is_self();
     return by_self ? CONSTASTR("mine") : CONSTASTR("other");
 }

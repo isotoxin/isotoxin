@@ -394,52 +394,6 @@ public:
     int available()  const { return buf[readbuf].size() - readpos + buf[readbuf ^ 1].size(); }
 };
 
-#if 0
-class critical_section_c
-{
-    CRITICAL_SECTION mutable    m_csect;
-public:
-    /**
-    * Constructor. Custom initialization for protected variable
-    */
-    critical_section_c(void)
-    {
-        InitializeCriticalSection( &m_csect );
-    }
-    /**
-    * Destructor
-    */
-    ~critical_section_c()
-    {
-        ASSERT( m_csect.LockCount == -1 && m_csect.RecursionCount == 0 );
-        DeleteCriticalSection( &m_csect );
-    }
-
-    void lock(void) const
-    {
-        EnterCriticalSection( &m_csect );
-    }
-
-    void unlock(void)
-    {
-        LeaveCriticalSection( &m_csect );
-    }
-};
-
-class cs_block_c
-{
-    critical_section_c *cs;
-public:
-    cs_block_c(critical_section_c *_cs) :cs(_cs) { cs->lock(); }
-    ~cs_block_c() { if (cs) cs->unlock(); }
-
-    void unlock(void)
-    {
-        if (cs) { cs->unlock(); cs = nullptr; }
-    }
-};
-#endif
-
 template< typename VEC, typename EL > int findIndex(const VEC &vec, const EL & el)
 {
     size_t cnt = vec.size();

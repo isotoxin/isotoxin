@@ -325,7 +325,7 @@ next:
         }
         return true;
     }
-    bool    zip_container_c::close(void)
+    bool    zip_container_c::close()
     {
         if (!m_unz) return false;
         unzClose(m_unz);

@@ -1290,7 +1290,7 @@ template<typename CORE> void bitmap_t<CORE>::flip_x(const ivec2 & pdes,const ive
 	}
 }
 
-template<typename CORE> void bitmap_t<CORE>::flip_y(void)
+template<typename CORE> void bitmap_t<CORE>::flip_y()
 {
     before_modify(); //TODO: multicore optimizations
 
@@ -1812,7 +1812,7 @@ template<typename CORE> bool bitmap_t<CORE>::resize(const bmpcore_exbody_s &extb
     return resize3(extbody_, body(), info(), filt_mode);
 }
 
-template<typename CORE> void bitmap_t<CORE>::make_grayscale(void)
+template<typename CORE> void bitmap_t<CORE>::make_grayscale()
 {
     if (info().bytepp() != 4 || info().bitpp != 32) return;
     before_modify();
@@ -2183,8 +2183,8 @@ void    drawable_bitmap_c::create(const ivec2 &sz)
 
     HDC tdc = CreateDCW(L"DISPLAY", nullptr, nullptr, &devmode);
 
-    m_memDC = CreateCompatibleDC(tdc);
-    if (m_memDC == 0)
+    m_mem_dc = CreateCompatibleDC(tdc);
+    if (m_mem_dc == 0)
         DEBUG_BREAK();;
 
     //m_memBitmap = CreateCompatibleBitmap(tdc, w, h);
@@ -2207,17 +2207,17 @@ void    drawable_bitmap_c::create(const ivec2 &sz)
 #ifndef _FINAL
         disable_fp_exceptions_c __x;
 #endif
-        m_memBitmap = CreateDIBSection(tdc, (BITMAPINFO *)&bmi, DIB_RGB_COLORS, (void **)&core.m_body, 0, 0);
+        m_mem_bitmap = CreateDIBSection(tdc, (BITMAPINFO *)&bmi, DIB_RGB_COLORS, (void **)&core.m_body, 0, 0);
 
     }
-    ASSERT(m_memBitmap);
-    CHECK(SelectObject(m_memDC, m_memBitmap));
+    ASSERT(m_mem_bitmap);
+    CHECK(SelectObject(m_mem_dc, m_mem_bitmap));
     DeleteDC(tdc);
 }
 
 bool    drawable_bitmap_c::is_alphablend(const irect &r) const
 {
-    if (!m_memDC || !m_memBitmap) return false;
+    if (!m_mem_dc || !m_mem_bitmap) return false;
 
     struct {
         struct {
@@ -2228,7 +2228,7 @@ bool    drawable_bitmap_c::is_alphablend(const irect &r) const
 
     memset(&b, 0, sizeof(BITMAPV4HEADER));
     b.bmi.bmiHeader.bV4Size = sizeof(BITMAPINFOHEADER);
-    if (GetDIBits(m_memDC, m_memBitmap, 0, 0, nullptr, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return false;
+    if (GetDIBits(m_mem_dc, m_mem_bitmap, 0, 0, nullptr, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return false;
 
     if (b.bmi.bmiHeader.bV4BitCount == 32 && core.m_body)
     {
@@ -2305,12 +2305,12 @@ bool drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, const ivec2 &p, 
         disable_fp_exceptions_c __x;
 #endif
 
-        m_memBitmap = CreateDIBSection(tdc, (BITMAPINFO *)&bmi, DIB_RGB_COLORS, (void **)&core.m_body, 0, 0);
+        m_mem_bitmap = CreateDIBSection(tdc, (BITMAPINFO *)&bmi, DIB_RGB_COLORS, (void **)&core.m_body, 0, 0);
     }
 
     bool alphablend = false;
 
-    if (m_memBitmap == nullptr) DEBUG_BREAK();;
+    if (m_mem_bitmap == nullptr) DEBUG_BREAK();;
 
     //if((bmp->info().bytepp()==3 || bmp->info().bytepp()==4)) bmp->swap_byte(ivec2(0,0),bmp->size(),0,2);
 
@@ -2417,9 +2417,9 @@ bool drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, const ivec2 &p, 
 
     //if((bmp->info().bytepp()==3 || bmp->info().bytepp()==4)) bmp->swap_byte(ivec2(0,0),bmp->size(),0,2);
 
-    m_memDC = CreateCompatibleDC(tdc);
-    if (m_memDC == nullptr) DEBUG_BREAK();;
-    if (SelectObject(m_memDC, m_memBitmap) == nullptr) DEBUG_BREAK();;
+    m_mem_dc = CreateCompatibleDC(tdc);
+    if (m_mem_dc == nullptr) DEBUG_BREAK();;
+    if (SelectObject(m_mem_dc, m_mem_bitmap) == nullptr) DEBUG_BREAK();;
 
     //ReleaseDC(0,tdc);
     DeleteDC(tdc);
@@ -2429,7 +2429,7 @@ bool drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, const ivec2 &p, 
 
 void    drawable_bitmap_c::save_to_bitmap(bitmap_c &bmp, const ivec2 & pos_from_dc)
 {
-    if (!m_memDC || !m_memBitmap) return;
+    if (!m_mem_dc || !m_mem_bitmap) return;
 
     struct {
         struct {
@@ -2440,7 +2440,7 @@ void    drawable_bitmap_c::save_to_bitmap(bitmap_c &bmp, const ivec2 & pos_from_
 
     memset(&b, 0, sizeof(BITMAPV4HEADER));
     b.bmi.bmiHeader.bV4Size = sizeof(BITMAPINFOHEADER);
-    if (GetDIBits(m_memDC, m_memBitmap, 0, 0, nullptr, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return;
+    if (GetDIBits(m_mem_dc, m_mem_bitmap, 0, 0, nullptr, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return;
 
     if (b.bmi.bmiHeader.bV4BitCount == 32 && core())
     {
@@ -2472,7 +2472,7 @@ void    drawable_bitmap_c::save_to_bitmap(bitmap_c &bmp, const ivec2 & pos_from_
 
 void drawable_bitmap_c::save_to_bitmap(bitmap_c &bmp, bool save16as32)
 {
-    if (!m_memDC || !m_memBitmap) return;
+    if (!m_mem_dc || !m_mem_bitmap) return;
 
 
     struct {
@@ -2484,7 +2484,7 @@ void drawable_bitmap_c::save_to_bitmap(bitmap_c &bmp, bool save16as32)
 
     memset(&b, 0, sizeof(BITMAPV4HEADER));
     b.bmi.bmiHeader.bV4Size = sizeof(BITMAPINFOHEADER);
-    if (GetDIBits(m_memDC, m_memBitmap, 0, 0, nullptr, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return;
+    if (GetDIBits(m_mem_dc, m_mem_bitmap, 0, 0, nullptr, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return;
 
     if (b.bmi.bmiHeader.bV4BitCount == 32 && core())
     {
@@ -2515,7 +2515,7 @@ void drawable_bitmap_c::save_to_bitmap(bitmap_c &bmp, bool save16as32)
     else if (b.bmi.bmiHeader.bV4BitCount == 32) bmp.create_RGBA(ref_cast<ivec2>(b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height));
     bmp.fill(0);
 
-    if (GetDIBits(m_memDC, m_memBitmap, 0, b.bmi.bmiHeader.bV4Height, bmp.body(), (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return;
+    if (GetDIBits(m_mem_dc, m_mem_bitmap, 0, b.bmi.bmiHeader.bV4Height, bmp.body(), (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return;
 
     bmp.fill_alpha(255);
 
@@ -2535,14 +2535,14 @@ void drawable_bitmap_c::draw(HDC dc, aint xx, aint yy, int alpha) const
 
     memset(&b, 0, sizeof(BITMAPV4HEADER));
     b.bmi.bmiHeader.bV4Size = sizeof(BITMAPINFOHEADER);
-    if (GetDIBits(m_memDC, m_memBitmap, 0, 0, nullptr, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return;
+    if (GetDIBits(m_mem_dc, m_mem_bitmap, 0, 0, nullptr, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return;
     if (alpha > 0)
     {
         BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, (uint8)alpha, AC_SRC_ALPHA };
-        AlphaBlend(dc, xx, yy, b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height, m_memDC, 0, 0, b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height, blendPixelFunction);
+        AlphaBlend(dc, xx, yy, b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height, m_mem_dc, 0, 0, b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height, blendPixelFunction);
     } else if (alpha < 0)
     {
-        BitBlt(dc, xx, yy, b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height, m_memDC, 0, 0, SRCCOPY);
+        BitBlt(dc, xx, yy, b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height, m_mem_dc, 0, 0, SRCCOPY);
     }
 }
 
@@ -2551,10 +2551,10 @@ void drawable_bitmap_c::draw(HDC dc, int xx, int yy, const irect &r, int alpha) 
     if (alpha > 0)
     {
         BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, (uint8)alpha, AC_SRC_ALPHA };
-        AlphaBlend(dc, xx, yy, r.width(), r.height(), m_memDC, r.lt.x, r.lt.y, r.width(), r.height(), blendPixelFunction);
+        AlphaBlend(dc, xx, yy, r.width(), r.height(), m_mem_dc, r.lt.x, r.lt.y, r.width(), r.height(), blendPixelFunction);
     } else if (alpha < 0)
     {
-        BitBlt(dc, xx, yy, r.width(), r.height(), m_memDC, r.lt.x, r.lt.y, SRCCOPY);
+        BitBlt(dc, xx, yy, r.width(), r.height(), m_mem_dc, r.lt.x, r.lt.y, SRCCOPY);
     }
 }
 

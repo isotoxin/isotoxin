@@ -236,8 +236,8 @@ template<class T> INLINE vec_t<T, 2>& vecbase_t<T, 2>::clamp(const vec_t<T, 2>& 
     return *this;
 }
 
-template<class T> INLINE vec_t<T, 2> vecbase_t<T, 2>::perpl(void) const   { return vec2(-y, x); }
-template<class T> INLINE vec_t<T, 2> vecbase_t<T, 2>::perpr(void) const   { return vec2(y, -x); }
+template<class T> INLINE vec_t<T, 2> vecbase_t<T, 2>::perpl() const   { return vec2(-y, x); }
+template<class T> INLINE vec_t<T, 2> vecbase_t<T, 2>::perpr() const   { return vec2(y, -x); }
 template<class T> INLINE vec_t<T, 2> vecbase_t<T, 2>::operator&(const vec_t<T, 2> &b) const
 {
    return vec_t<T, 2>( tmax(r0, b.r0), tmin(r1, b.r1) );

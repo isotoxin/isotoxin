@@ -456,6 +456,24 @@ ipc::ipc_result_e isotoxin_ipc_s::processor_func(void *par, void *data, int data
 
 static ts::asptr bb_tags[] = { CONSTASTR("u"), CONSTASTR("i"), CONSTASTR("b"), CONSTASTR("s") };
 
+void text_convert_from_bbcode(ts::str_c &text)
+{
+    ts::sstr_t<64> t1;
+    ts::sstr_t<64> t2;
+    for (int k = 0; k < ARRAY_SIZE(bb_tags); ++k)
+    {
+        if (ASSERT((bb_tags[k].l + 3) < t1.get_capacity()))
+        {
+            t1.clear().append_char('[').append(bb_tags[k]).append_char(']');
+            t2.clear().append_char('<').append(bb_tags[k]).append_char('>');
+            text.replace_all(t1, t2);
+
+            t1.clear().append(CONSTASTR("[/")).append(bb_tags[k]).append_char(']');
+            t2.clear().append(CONSTASTR("</")).append(bb_tags[k]).append_char('>');
+            text.replace_all(t1, t2);
+        }
+    }
+}
 
 void text_convert_to_bbcode(ts::str_c &text)
 {

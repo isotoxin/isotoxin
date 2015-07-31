@@ -20,6 +20,7 @@ void Log(const char *s, ...);
 #undef ERROR
 #define ERROR(...) do ; while ((1, false))
 #define DMSG(expr, ...) (1,true)
+#define RECURSIVE_ALERT()
 #else
 
 #ifdef _DEBUG_OPTIMIZED
@@ -91,6 +92,7 @@ namespace ts
 
 #define ASSERT(expr, ...) ASSERTO(expr, (ts::streamstr< ts::sstr_t<1024> >() << ""__VA_ARGS__).buffer().cstr())
 #define FORBIDDEN() ERROR("bad execution")
+#define RECURSIVE_ALERT() static int __r = 0; struct rcheck { int *r; rcheck(int *r):r(r) {++ (*r); ASSERT(*r == 1);} ~rcheck() {-- (*r);} } __rcheck(&__r)
 
 namespace ts
 {

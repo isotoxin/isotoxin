@@ -16,7 +16,7 @@ class safe_object
 		int ref;
         static pointer_container_s *create(safe_object *p);
         void die();
-	} *pc;
+	} *pc = nullptr;
 
 	safe_object(const safe_object &) UNUSED;
 	void operator=(const safe_object &) UNUSED;
@@ -25,7 +25,7 @@ public:
 
     static const aint POINTER_CONTAINER_SIZE = sizeof(pointer_container_s);
 
-	safe_object():pc(nullptr) {}
+	safe_object() {}
 
     void make_all_ponters_expired() // use carefully! you can get memory leak if there are no regular pointers to this object
     {
@@ -44,18 +44,18 @@ public:
 
 
 /*
-	ѕеремещаемый слабый указатель (weak pointer)
-	јвтоматически обнул€етс€ при уничтожении объекта, на который указывает.
+	movable intrusive weak pointer
 */
+
 template <typename T> class safe_ptr // T must be public child of safe_object
 {
     MOVABLE(true);
 	friend class safe_object;
 	template <class T> friend class safe_ptr;
 
-	safe_object::pointer_container_s *pc;
+	safe_object::pointer_container_s *pc = nullptr;
 
-	void unconnect()//for internal use only
+	void unconnect() //for internal use only
 	{
 		if (pc)
 		{
@@ -67,7 +67,7 @@ template <typename T> class safe_ptr // T must be public child of safe_object
 		}
 	}
 
-	void connect(T *p)//for internal use only
+	void connect(T *p) //for internal use only
 	{
 		if (p)
 		{
@@ -88,7 +88,7 @@ template <typename T> class safe_ptr // T must be public child of safe_object
 
 public:
 
-	safe_ptr():pc(nullptr) {}
+	safe_ptr() {}
 	safe_ptr(T *p) {connect(p);}
 	safe_ptr(const safe_ptr &p)
 	{
@@ -121,17 +121,15 @@ public:
 };
 
 /*
-	”казатель на раздел€емый объект (intrusive shared pointer)
-	√арантирует существование объекта пока существует хоть один раздел€емый указатель на него,
-	т.о. указатель не может быть nullptr.
-
-	ѕример использовани€:
-	shared_ptr<MyClass> p(new MyClass(...)), p2(p), p3=p;
+	intrusive shared pointer
+	
+    example:
+    shared_ptr<MyClass> p(new MyClass(...)), p2(p), p3=p;
 	. . .
 */
 template <class T> class shared_ptr // T must be public child of shared_object
 {
-	T *object;
+	T *object = nullptr;
 
 	void unconnect()
 	{
@@ -145,22 +143,24 @@ template <class T> class shared_ptr // T must be public child of shared_object
 	}
 
 public:
-	shared_ptr():object(nullptr) {}
-	//shared_ptr(const T &obj):object(new T (obj)) {object->refCount = 1;}
-	shared_ptr(T *p) {connect(p);}//это намного безопаснее чем refCount=0, т.к. ситуации shared_ptr p1(obj), p2(obj); работают корректно, более того это возможно только дл€ интрузивного shared_ptr
+	shared_ptr() {}
+	//shared_ptr(const T &obj):object(new T (obj)) {object->ref = 1;}
+	shared_ptr(T *p) {connect(p);} // now safe todo: shared_ptr p1(obj), p2(obj);
 	shared_ptr(const shared_ptr &p) {connect(p.object);}
 	shared_ptr(shared_ptr &&p):object(p.object) { p.object = nullptr; }
 	shared_ptr operator=(shared_ptr &&p) { SWAP(object,p.object); return *this; }
 
 	shared_ptr &operator=(T *p)
 	{
-		if (p) p->add_ref();//сначала поднимаем refCount, чтобы работало присваивание shared_ptr'а самому себе
+		if (p) p->add_ref(); // ref up - to correct self assign
 		unconnect();
 		object = p;
 		return *this;
 	}
-	shared_ptr &operator=(const shared_ptr &p)//нужно, т.к. иначе при использовании shared_ptr в других классах некорректно сгенерируетс€ дефолтный оператор присваивани€
-	{   return *this = p.object;   }
+	shared_ptr &operator=(const shared_ptr &p)
+	{
+        return *this = p.object;
+    }
 
 	~shared_ptr() {unconnect();}
 
@@ -171,19 +171,17 @@ public:
 
 	T *get() {return object;}
     const T *get() const {return object;}
-private:
-	//shared_ptr &operator=(T *p);//чтобы нельз€ было написать: MyClass *p=new MyClass; sp=p; sp2=p; (но делать так теперь уже в принципе можно)
 };
 
 class shared_object
 {
-	int ref;
+	int ref = 0;
 
-	shared_object(const shared_object &) UNUSED;//запрещаем копирование
-	void operator=(const shared_object &) UNUSED;//и присваивание
+	shared_object(const shared_object &) UNUSED;
+	void operator=(const shared_object &) UNUSED;
 
 public:
-	shared_object() : ref(0) {}
+	shared_object() {}
 
     bool is_multi_ref() const {return ref > 1;}
 	void add_ref() {ref++;}
@@ -196,16 +194,15 @@ public:
 
 
 /*
-	Ќе-самый-глупый-указатель (аналог std::auto_ptr)
-	—емантика разрушени€ при копировании. ƒопускает присваивание указателю, в отличие от auto_ptr, но его также нельз€ ложить в массив.
+	not most stupid pointer (аналог std::auto_ptr)
 */
 template <typename PTR> class auto_ptr
 {
-	PTR *pointer;
+	PTR *pointer = nullptr;
 
 public:
 
-	auto_ptr():pointer(nullptr) {}
+    auto_ptr() {}
 	explicit auto_ptr(PTR *p) {pointer = p;}
 	auto_ptr(auto_ptr &p) {pointer = p.pointer; p.pointer = nullptr;}
 	~auto_ptr() {TSDEL(pointer);}
@@ -215,7 +212,7 @@ public:
 
 	auto_ptr &operator=(PTR *p)
 	{
-		if (!ASSERT(pointer != p || !p)) return *this;//запрещаем присваивание самому себе
+		if (!ASSERT(pointer != p || !p)) return *this; // disable assign to self
 		TSDEL(pointer);
 		pointer = p;
 		return *this;
@@ -234,19 +231,19 @@ template<class OO, class OO1 = OO> struct iweak_ptr
 	friend struct eyelet_my;
 private:
     MOVABLE(false);
-	iweak_ptr *prev;
-	iweak_ptr *next;
-	OO *oobject;
+	iweak_ptr *prev = nullptr;
+	iweak_ptr *next = nullptr;
+	OO *oobject = nullptr;
 
 public:
 
-	iweak_ptr(void):oobject(nullptr),prev(nullptr),next(nullptr) {}
-	iweak_ptr(const iweak_ptr &hook):oobject(nullptr),prev(nullptr),next(nullptr)
+    iweak_ptr() {}
+	iweak_ptr(const iweak_ptr &hook)
 	{
 		if (hook.get()) const_cast<OO *>( hook.get() )->hook_connect( this );
 	}
 
-	iweak_ptr(OO1 *ob):oobject(nullptr),prev(nullptr),next(nullptr)
+	iweak_ptr(OO1 *ob)
 	{
 		if (ob) ((OO *)ob)->OO::hook_connect( this );
 	}
@@ -255,7 +252,7 @@ public:
 		unconnect();
 	}
 
-	void unconnect(void)
+	void unconnect()
 	{
 		if (oobject) oobject->hook_unconnect( this );
 	}
@@ -298,9 +295,9 @@ public:
 
 template<class OO> struct eyelet_s
 {
-	iweak_ptr<OO> *first;
+	iweak_ptr<OO> *first = nullptr;
 
-	eyelet_s(void) { first = nullptr; }
+	eyelet_s() {}
 	~eyelet_s()
 	{
 		iweak_ptr<OO> *f = first;

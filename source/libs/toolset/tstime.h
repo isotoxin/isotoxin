@@ -55,8 +55,8 @@ public:
 
     virtual ~timer_subscriber_c() {}
 
-    virtual  void   added(void) {}
-    virtual  void   unconnected(void) {}
+    virtual  void   added() {}
+    virtual  void   unconnected() {}
     virtual  void   timeup(void * par) = 0;
 
 
@@ -82,7 +82,6 @@ class timerprocessor_c
 {
 
     array_del_t<timer_subscriber_entry_s, 32> m_items;
-    array_del_t<timer_subscriber_entry_s, 32> m_items_process;
     array_del_t<timer_subscriber_entry_s, 32> m_items_free;
 
     timer_subscriber_entry_s *getfree( timer_subscriber_c *s, double _ttl, void *p )
@@ -116,8 +115,8 @@ public:
     bool    remain(timer_subscriber_c *t, void * par, double& ttl);
     bool    present(timer_subscriber_c *t) const;
     bool    present(timer_subscriber_c *t, void * par) const;
-    void    do_all(void);
-    void    clear(void);
+    void    do_all();
+    void    clear();
 
     template <typename RCV> void iterate(RCV &r)
     {
@@ -146,7 +145,7 @@ class message_poster_c
         bool stoping;
         bool pause;
 
-        data_s(void) :working(false), stoping(false), pause(false) {}
+        data_s() :working(false), stoping(false), pause(false) {}
     };
 
     cs_lock_t<data_s> m_data;
@@ -158,24 +157,24 @@ public:
     ~message_poster_c();
 
     void start(HWND w, int msg, WPARAM wp, LPARAM lp);
-    void stop(void);
+    void stop();
     void pause(bool p);
 };
 
 class frame_time_c
 {
-    float fixedFrameTime;
-    int currentFrame;//номер текущего кадра (увеличивается на каждый takt())
-    double frameTime_;
-    float  frameTimef_;
+    float m_fixed_frame_time;
+    int m_current_frame_num; // frame num (increased every takt())
+    double m_frametime_d;
+    float  m_frametime_f;
 
 public:
 
     frame_time_c();
 
     void takt();
-    void setFrameTime(float time) { frameTimef_ = time; }
-    float frame_time() const { return frameTimef_; }
+    void setFrameTime(float time) { m_frametime_f = time; }
+    float frame_time() const { return m_frametime_f; }
 
 };
 
@@ -185,9 +184,9 @@ template<int period_ms> struct time_reducer_s
 
     time_reducer_s(float initial_period = (double(period_ms)*(1.0 / 1000.0))) { m_current_period = initial_period; }
 
-    static int  get_period(void) { return period_ms; }
+    static int  get_period() { return period_ms; }
 
-    void reset(void)
+    void reset()
     {
         float initial_period = (float)(double(period_ms)*(1.0 / 1000.0));
         m_current_period = initial_period;
@@ -199,14 +198,14 @@ template<int period_ms> struct time_reducer_s
         return m_current_period < 0;
     }
 
-    bool it_is_time_looped(void)
+    bool it_is_time_looped()
     {
         bool r = m_current_period < 0;
         if (r) m_current_period += (double(period_ms)*(1.0 / 1000.0));
         return r;
     }
 
-    bool it_is_time_ones(void)
+    bool it_is_time_ones()
     {
         bool r = m_current_period < 0;
         if (r)

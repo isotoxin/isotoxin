@@ -662,34 +662,34 @@ public:
 
         if (size() == 0) return make_dummy<T>();
         
-        make_pod<T> r;
+        only_destructor<T> r;
         BEHAVIOUR::copy<T&, false,true>( r, m_list[idx] );
 
         _remove_slow(idx, 1);
-        return r;
+        return std::move(r.get());
     }
 
     T get_remove_fast(int idx = 0)
     {
         if (size() == 0) return make_dummy<T>();
 
-        make_pod<T> r;
+        only_destructor<T> r;
         BEHAVIOUR::copy<T&, false, true>(r, m_list[idx]);
         BEHAVIOUR::copy<T&, false, true>(m_list[idx], m_list[--m_count]);
         fill_dbg(m_count, 1);
-        return r;
+        return std::move(r.get());
     }
 
-    T get_last_remove(void)
+    T get_last_remove()
     {
         if (size() == 0) return make_dummy<T>();
 
-        make_pod<T> r;
+        only_destructor<T> r;
         BEHAVIOUR::copy<T&, false, true>(r, m_list[m_count-1]);
 
         --m_count;
         fill_dbg(m_count, 1);
-        return r;
+        return std::move(r.get());
     }
 
     void    remove_slow(aint idx)
@@ -755,7 +755,7 @@ public:
         m_count = 0;
     }
 
-    aint size(void) const {return m_count;};
+    aint size() const {return m_count;};
 
 	const T &operator[](int index) const { return get(index); }
 	T& operator[](int index) { return get(index); }
@@ -775,8 +775,8 @@ public:
 #endif
         return m_list[idx];
     };
-    const T &last(void) const { return (m_count == 0) ? make_dummy<T>() : m_list[m_count - 1]; };
-    T &last(void) {return (m_count==0)?make_dummy<T>():m_list[m_count-1];};
+    const T &last() const { return (m_count == 0) ? make_dummy<T>() : m_list[m_count - 1]; };
+    T &last() {return (m_count==0)?make_dummy<T>():m_list[m_count-1];};
 
     void    absorb_add( array_c &from )
     {
@@ -996,11 +996,11 @@ template <typename UNIT, int MAX_SIZE = 2048, typename BEHAVIOUR = DEFAULT_BEHAV
 
 public:
 
-    insert_sorter_c(void):m_left(MAX_SIZE >> 1), m_rite(MAX_SIZE >> 1)
+    insert_sorter_c():m_left(MAX_SIZE >> 1), m_rite(MAX_SIZE >> 1)
     {
     }
 
-    uint    size(void)
+    uint    size()
     {
         return m_rite - m_left;
     }
@@ -1010,7 +1010,7 @@ public:
         return m_array[m_left + index];
     }
 
-    void    clear(void)
+    void    clear()
     {
         for (;m_left < m_rite; ++m_left)
         {
@@ -1075,7 +1075,7 @@ public:
         return false;
     }
 
-    bool    is_valid(void)
+    bool    is_valid()
     {
         for (int i=m_left;i<m_rite-2;++i)
         {

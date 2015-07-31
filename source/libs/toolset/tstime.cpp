@@ -3,12 +3,12 @@
 namespace ts
 {
 
-void    timerprocessor_c::clear(void)
+void    timerprocessor_c::clear()
 {
     while(m_items.size()) makefree( m_items.get_last_remove() );
 }
 
-void    timerprocessor_c::do_all(void)
+void    timerprocessor_c::do_all()
 {
     for (timer_subscriber_entry_s *e : m_items)
         if (timer_subscriber_c *t = e->hook.get())
@@ -24,7 +24,10 @@ void    timerprocessor_c::do_all(void)
 
 float    timerprocessor_c::takt(double dt)
 {
-    ASSERT( m_items_process.size() == 0 );
+    RECURSIVE_ALERT();
+
+    tmp_array_del_t<timer_subscriber_entry_s, 32> m_items_process;
+
     float nexttime = -1;
     aint cnt = m_items.size();
     for (aint i = 0; i < cnt;)
@@ -227,7 +230,7 @@ void message_poster_c::start(HWND w, int msg, WPARAM wp, LPARAM lp)
     }
 
 }
-void message_poster_c::stop(void)
+void message_poster_c::stop()
 {
     if (!m_data.lock_read()().working) return;
 
@@ -250,14 +253,14 @@ namespace
 {
 template <class T> __forceinline const T sign(const T &x) { return x > 0 ? T(1) : (x < 0 ? T(-1) : 0); }
 
-template <int M> class DeltaTimeFilter
+template <int M> class valfilter
 {
-    double dt[M];//история - массив из M последних входных dt
+    double dt[M];
     int current;
-    double divergence;//накопленная разница между реально прошедшим временем и суммой возвращенных фильтрованных dt
+    double divergence;
 
 public:
-    DeltaTimeFilter() { memset(this, 0, sizeof(*this)); }
+    valfilter() { memset(this, 0, sizeof(*this)); }
 
     double operator()(double indt, double p = 0.1)//p - чем меньше, тем слабее скачки входного dt будут влиять на выходной, но тем больше времени будет погашаться расхождение, вызванное скачком
     {
@@ -308,30 +311,30 @@ inline T clamp(const T& x, const T1& xmin, const T2& xmax)
 
 frame_time_c::frame_time_c()
 {
-    fixedFrameTime = 0;
-    currentFrame = 0;
-    frameTime_ = 0;
-    frameTimef_ = 0;
+    m_fixed_frame_time = 0;
+    m_current_frame_num = 0;
+    m_frametime_d = 0;
+    m_frametime_f = 0;
     LARGE_INTEGER s;
-    QueryPerformanceFrequency(&s);//получаем частоту
-    invFreq = 1.0 / (double)s.QuadPart;//сохраняем её
+    QueryPerformanceFrequency(&s);
+    invFreq = 1.0 / (double)s.QuadPart;
 }
 
 void frame_time_c::takt()
 {
     static UINT64 prevTime = GetTime();
     UINT64 curTime = GetTime();
-    static DeltaTimeFilter<4> dtf;//12 выбрано как НОК 2,3 и 4 - провалы fps с такими периодами будут полностью погашены фильтром; также при p = 0.1, от любого скачка fps останется лишь 0.1/12*100%
+    static valfilter<4> dtf; // 12 выбрано как НОК 2,3 и 4 - провалы fps с такими периодами будут полностью погашены фильтром; также при p = 0.1, от любого скачка fps останется лишь 0.1/12*100%
     double ft = TimeDeltaToSec(curTime - prevTime);
-    if (fixedFrameTime == 0) frameTime_ = dtf(clamp(ft, 0.00000001, .25));
+    if (m_fixed_frame_time == 0) m_frametime_d = dtf(clamp(ft, 0.00000001, .25));
     else
     {
-        while (ft < fixedFrameTime) ft = TimeDeltaToSec((curTime = GetTime()) - prevTime);
-        frameTime_ = fixedFrameTime;
+        while (ft < m_fixed_frame_time) ft = TimeDeltaToSec((curTime = GetTime()) - prevTime);
+        m_frametime_d = m_fixed_frame_time;
     }
-    frameTimef_ = (float)frameTime_;
+    m_frametime_f = (float)m_frametime_d;
     prevTime = curTime;
-    currentFrame++;
+    m_current_frame_num++;
 }
 
 } // namespace ts

@@ -98,6 +98,7 @@ template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_shadow(ts::TSCOLOR c
 }
 
 
+void text_convert_from_bbcode(ts::str_c &text_utf8);
 void text_convert_to_bbcode(ts::str_c &text_utf8);
 void text_close_bbcode(ts::str_c &text_utf8);
 void text_convert_char_tags(ts::str_c &text_utf8);
@@ -167,6 +168,7 @@ enum isogmsg_e
     ISOGM_SOMEUNREAD,
     ISOGM_AVATAR,
     ISOGM_UPDATE_BUTTONS,
+    ISOGM_IMAGE_LOADED,
 
     ISOGM_COUNT,
 };

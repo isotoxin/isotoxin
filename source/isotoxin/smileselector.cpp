@@ -15,27 +15,27 @@ void dialog_smileselector_c::build_rects(rects_t&a)
     ts::ivec2 p(0);
     int maxh = 0;
     int i = 0;
-    emoti().iterate_current_pack([&](emoticon_s &ae) {
+    emoti().iterate_current_pack([&](emoticon_s &e) {
         
         if (p.x == 0)
         {
-            a.add(rectdef_s(p + ts::ivec2(OTS), &ae));
-            if (ae.framesize.y > maxh) maxh = ae.framesize.y;
+            a.add(rectdef_s(p + ts::ivec2(OTS), &e));
+            if (e.framesize().y > maxh) maxh = e.framesize().y;
 
-        } else if (p.x + ae.framesize.x > sz.x)
+        } else if (p.x + e.framesize().x > sz.x)
         {
             p.x = 0;
             p.y += maxh + ZAZ;
-            a.add( rectdef_s(p + ts::ivec2(OTS), &ae) );
-            maxh = ae.framesize.y;
+            a.add( rectdef_s(p + ts::ivec2(OTS), &e) );
+            maxh = e.framesize().y;
 
         } else
         {
-            a.add(rectdef_s(p + ts::ivec2(OTS), &ae));
-            if (ae.framesize.y > maxh) maxh = ae.framesize.y;
+            a.add(rectdef_s(p + ts::ivec2(OTS), &e));
+            if (e.framesize().y > maxh) maxh = e.framesize().y;
 
         }
-        p.x += ZAZ + ae.framesize.x;
+        p.x += ZAZ + e.framesize().x;
 
         ++i;
     });
@@ -89,7 +89,7 @@ bool dialog_smileselector_c::find_undermouse()
     mp.y -= sb.shift;
     for (rectdef_s &rd : rects)
     {
-        if (ts::irect(rd.p, rd.p + rd.e->framesize).inside(mp))
+        if (ts::irect(rd.p, rd.p + rd.e->framesize()).inside(mp))
         {
             undermouse = &rd;
             break;
@@ -122,7 +122,7 @@ bool dialog_smileselector_c::find_undermouse()
             {
                 if (undermouse == &rd)
                 {
-                    ts::irect sr(rd.p + d - ZAZ, rd.p + rd.e->framesize + d + ZAZ);
+                    ts::irect sr(rd.p + d - ZAZ, rd.p + rd.e->framesize() + d + ZAZ);
                     m_engine->draw(sr, get_default_text_color(0));
                     sr.lt += ZAZ;
                     sr.rb -= ZAZ;
@@ -150,7 +150,7 @@ bool dialog_smileselector_c::find_undermouse()
         }
         break;
     case SQ_MOUSE_MOVE:
-        if (!getengine().mtrack(getrid(), MTT_SBMOVE))
+        if (!gui->mtrack(getrid(), MTT_SBMOVE))
         {
             bool of = sbhl;
             sbhl = sb.sbrect.inside(to_local(data.mouse.screenpos));
@@ -164,7 +164,7 @@ bool dialog_smileselector_c::find_undermouse()
             if (sbv && sb.sbrect.inside(mplocal))
             {
                 sbhl = true;
-                mousetrack_data_s &opd = getengine().begin_mousetrack(getrid(), MTT_SBMOVE);
+                mousetrack_data_s &opd = gui->begin_mousetrack(getrid(), MTT_SBMOVE);
                 opd.mpos = data.mouse.screenpos;
                 opd.rect.lt.y = sb.sbrect.lt.y - OTS - get_client_area().lt.y;
             }
@@ -182,11 +182,10 @@ bool dialog_smileselector_c::find_undermouse()
         }
         break;
     case SQ_MOUSE_LUP:
-        if (getengine().mtrack(getrid(), MTT_SBMOVE))
-            getengine().end_mousetrack(MTT_SBMOVE);
+        gui->end_mousetrack(getrid(), MTT_SBMOVE);
         break;
     case SQ_MOUSE_MOVE_OP:
-        if (mousetrack_data_s *opd = getengine().mtrack(getrid(), MTT_SBMOVE))
+        if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_SBMOVE))
         {
             int dmouse = data.mouse.screenpos().y - opd->mpos.y;
             if (sb.scroll(opd->rect.lt.y + dmouse, sz.y))

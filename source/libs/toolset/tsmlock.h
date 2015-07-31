@@ -18,7 +18,7 @@ class interlocked_c
     static __forceinline int imin(int x, int y)   { return (x<y)?x:y; }
 
 public:
-    interlocked_c(void)
+    interlocked_c()
     {
         InterlockedExchange( &m_value, 0 );
     }
@@ -31,7 +31,7 @@ public:
     {
         return InterlockedExchangeAdd( &m_value, v );
     }
-    LONG get(void)
+    LONG get()
     {
         return InterlockedExchangeAdd( &m_value, 0 );
     }
@@ -90,7 +90,7 @@ template <typename VARTYPE> class cs_lock_t
             return *this;
         }
 
-        void unlock(void)
+        void unlock()
         {
             ASSERT( locked );
             host->unlock_read();
@@ -160,14 +160,14 @@ private:
     /**
     * Unlock variable (other threads can lock it)
     */
-    void unlock_write(void) const
+    void unlock_write() const
     {
         --m_onwrite;
         ASSERT( m_onwrite >= 0 );
         if ( m_onwrite == 0 && m_onread == 0 ) m_lockwthreadid = 0;
         LeaveCriticalSection( &m_csect );
     }
-    void unlock_read(void) const
+    void unlock_read() const
     {
         EnterCriticalSection( &m_csect );
         --m_onread;
@@ -220,7 +220,7 @@ public:
     }
 
 #ifndef _FINAL
-    const char *dbgtag(void) const {return m_debugtag;}
+    const char *dbgtag() const {return m_debugtag;}
 #endif
 
     /** 
@@ -228,7 +228,7 @@ public:
     * Current thread will wait for lock_read if there are some other thread waits for lock_write
     */
 
-    bool is_locked_write(void) const
+    bool is_locked_write() const
     {
         EnterCriticalSection( &m_csect );
         if ( m_onwrite > 0 || m_writer_waits )
@@ -252,7 +252,7 @@ public:
     * Current thread will wait for lock_read if there are some other thread waits for lock_write
     */
 
-    read_c lock_read(void) const
+    read_c lock_read() const
     {
         for (;;)
         {
@@ -358,7 +358,7 @@ public:
     /**
     * Constructor. Custom initialization for protected variable
     */
-    critical_section_c(void)
+    critical_section_c()
     {
         InitializeCriticalSection( &m_csect );
     }
@@ -371,12 +371,12 @@ public:
         DeleteCriticalSection( &m_csect );
     }
 
-    void lock(void) const
+    void lock() const
     {
         EnterCriticalSection( &m_csect );
     }
 
-    void unlock(void)
+    void unlock()
     {
         LeaveCriticalSection( &m_csect );
     }
@@ -389,7 +389,7 @@ public:
     cs_block_c( critical_section_c *_cs ):cs(_cs) { cs->lock(); }
     ~cs_block_c() {if (cs) cs->unlock();}
 
-    void unlock(void)
+    void unlock()
     {
         if (cs) {cs->unlock(); cs = nullptr;}
     }
@@ -403,7 +403,7 @@ public:
     cs_shell_c( void ) { _flag = false; InitializeCriticalSection(&_cs); }
     ~cs_shell_c() {DeleteCriticalSection(&_cs);}
 
-    bool flag(void)
+    bool flag()
     {
         lock();
         bool f = _flag;
@@ -411,7 +411,7 @@ public:
         return f;
     }
 
-    void lock(void) {EnterCriticalSection(&_cs);}
+    void lock() {EnterCriticalSection(&_cs);}
     void unlock(bool f) {_flag = f; LeaveCriticalSection(&_cs);}
     void unlock_or(bool f) {_flag |= f; LeaveCriticalSection(&_cs);}
 };

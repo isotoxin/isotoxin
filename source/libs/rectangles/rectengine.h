@@ -5,6 +5,7 @@
 
 enum mousetrack_type_e
 {
+    MTT_none, 
 	MTT_RESIZE = SETBIT(0),
 	MTT_MOVE = SETBIT(1),
     MTT_SBMOVE = SETBIT(2),
@@ -24,9 +25,7 @@ struct mousetrack_data_s
 	ts::uint32 area;
 	ts::ivec2 mpos;
     RID rid;
-	mousetrack_type_e mtt;
-
-	mousetrack_data_s(mousetrack_type_e mtt, RID rid):mtt(mtt), rid(rid) {}
+	mousetrack_type_e mtt = MTT_none;
 };
 
 struct draw_data_s
@@ -84,7 +83,6 @@ class rectengine_c : public sqhandler_i
 	friend class guirect_c;
 	guirect_c::sptr_t rect_;
     RID rid_;
-	UNIQUE_PTR(mousetrack_data_s) mtrack_;
 
 	void set_controlled_rect(guirect_c *r)
 	{
@@ -190,37 +188,6 @@ public:
 
     void mouse_lock();
     void mouse_unlock();
-
-    const mousetrack_data_s *mtrack(ts::uint32 o) const
-    {
-        if (const mousetrack_data_s *mt = &*mtrack_)
-            if ((mt->mtt & o) != 0)
-                return mt;
-        return nullptr;
-    };
-
-    mousetrack_data_s *mtrack(RID rid, ts::uint32 o)
-    {
-        if (mousetrack_data_s *mt = &*mtrack_)
-            if (mt->rid == rid && (mt->mtt & o) != 0)
-                return mt;
-        return nullptr;
-    };
-
-    mousetrack_data_s &begin_mousetrack(RID rid, mousetrack_type_e o)
-    {
-        mouse_lock();
-        mtrack_.reset(TSNEW(mousetrack_data_s, o, rid));
-        return *mtrack_;
-    }
-    void end_mousetrack(ts::uint32 o)
-    {
-        if (ASSERT(mtrack(o)))
-        {
-            mouse_unlock();
-            mtrack_.reset();
-        }
-    }
 
     virtual void redraw(const ts::irect *invalidate_rect=nullptr) {}
 	virtual bool apply(rectprops_c &rpss, const rectprops_c &pss) { return rpss.change_to(pss, this); }

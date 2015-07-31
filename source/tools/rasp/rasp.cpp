@@ -68,7 +68,7 @@ struct command_s
     command_s(L"loc", L"Generate Locale [path-to-source] [path-to-locale]", proc_loc_),
     command_s(L"trunc", L"Truncate [file] at [offset-from-begining]", proc_trunc),
     command_s(L"antic99", L"Remove C99 dependence [c-file]", proc_antic99),
-    command_s(L"nodes", L"Grab nodes list from wiki.tox.im/Nodes", proc_grabnodes),
+    command_s(L"nodes", L"Grab nodes list from https://wiki.tox.chat/users/nodes", proc_grabnodes),
     command_s(L"http", L"Do some http ops", proc_http),
     command_s(L"toxrelay", L"Just run TOX relay", proc_toxrelay),
     command_s(L"hgver", L"Prints current hg revision", proc_hgver),

@@ -39,6 +39,18 @@ ts::uint32 application_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&t )
     return 0;
 }
 
+ts::uint32 application_c::gm_handler(gmsg<GM_UI_EVENT> & e)
+{
+    if (UE_MAXIMIZED == e.evt || UE_NORMALIZED == e.evt)
+        picture_animated_c::allow_tick = true;
+    else if (UE_MINIMIZED == e.evt)
+        picture_animated_c::allow_tick = false;
+
+    return 0;
+}
+
+
+
 DWORD application_c::handler_SEV_EXIT( const system_event_param_s & p )
 {
     prf().shutdown_aps();
@@ -332,7 +344,7 @@ static DWORD WINAPI autoupdater(LPVOID)
         F_SETNOTIFYICON = false;
     }
 
-    emoti().tick();
+    picture_animated_c::tick();
 }
 
 /*virtual*/ void application_c::app_fix_sleep_value(int &sleep_ms)
@@ -1185,7 +1197,7 @@ void file_transfer_s::query( uint64 offset_, int sz )
             SetFilePointer(handle, li.LowPart, &li.HighPart, FILE_BEGIN);
             offset = offset_;
         }
-        sz = ts::tmin<int>(sz, (int)(filesize - offset));
+        sz = (int)ts::tmin<int64>(sz, (int64)(filesize - offset));
         ts::tmp_buf_c b(sz,true);
         DWORD r;
         if (!ReadFile(handle, b.data(), sz, &r, nullptr))

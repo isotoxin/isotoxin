@@ -18,7 +18,7 @@ namespace ts
             zip_entry_c( const wsptr &name ): m_name( name ) {}
             virtual ~zip_entry_c() {}
 
-            const wstr_c & name(void) const {return m_name;}
+            const wstr_c & name() const {return m_name;}
 
         };
 

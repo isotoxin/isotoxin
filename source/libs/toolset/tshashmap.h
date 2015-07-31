@@ -110,7 +110,7 @@ public:
 		iterator(const hashmap_t *hashmap, int start_index = -1) : hashmap(hashmap), table_index(start_index) {}
 
 		const KEYTYPE &key() const {ASSERT(operator bool()); return item->key;}
-        VALTYPE &value(void) { return  item->value; }
+        VALTYPE &value() { return  item->value; }
 
 		VALTYPE &operator* () { return  item->value; }
 		VALTYPE *operator->() { return &item->value; }

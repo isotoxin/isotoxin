@@ -15,6 +15,7 @@ static const char *contants[] = {
     "RETURN_2",
     "MAX_ONION_CLIENTS",
     "MAX_EVENTS",
+    "MAX_SAVED_DHT_NODES",
 };
 
 struct decomment

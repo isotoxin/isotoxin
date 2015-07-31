@@ -56,7 +56,7 @@ public:
     void set_handler(GUIPARAMHANDLER _handler, GUIPARAM _param) { handler = _handler; param = _param; }
 };
 
-#define DEFERRED_EXECUTION_BLOCK_BEGIN(t_sec) typedef struct UNIQIDLINE(dc) : public delay_event_c { static double gett() {return t_sec;} UNIQIDLINE(dc)(GUIPARAM param = nullptr):delay_event_c(param) {} virtual void  die() {gui->delete_event<UNIQIDLINE(dc)>(this);} virtual void doit(void) {
+#define DEFERRED_EXECUTION_BLOCK_BEGIN(t_sec) typedef struct UNIQIDLINE(dc) : public delay_event_c { static double gett() {return t_sec;} UNIQIDLINE(dc)(GUIPARAM param = nullptr):delay_event_c(param) {} virtual void  die() {gui->delete_event<UNIQIDLINE(dc)>(this);} virtual void doit() {
 #define DEFERRED_EXECUTION_BLOCK_END(param) } } UNIQIDLINE(dc); gui->add_event<UNIQIDLINE(dc)>(UNIQIDLINE(dc)::gett(), (GUIPARAM)(param));
 
 #define DEFERRED_CALL( t_sec, h, p ) do { delay_event_c &dc = gui->add_event<delay_event_c>(t_sec); dc.set_handler( (h), (p) ); } while(false)
@@ -187,6 +187,7 @@ class gui_c
     void loop();
 
     ts::safe_ptr<dragndrop_processor_c> dndproc;
+    mousetrack_data_s mtrack_;
 
     class tempbuf_c : public ts::safe_object
     {
@@ -376,6 +377,44 @@ public:
     void mouse_inside( RID rid );
     void mouse_outside( RID rid = RID() );
     
+    const mousetrack_data_s *mtrack(ts::uint32 o) const
+    {
+        if ((mtrack_.mtt & o) != 0)
+            return &mtrack_;
+        return nullptr;
+    };
+
+    mousetrack_data_s *mtrack(RID rid, ts::uint32 o)
+    {
+        if (mtrack_.rid == rid && (mtrack_.mtt & o) != 0)
+            return &mtrack_;
+        return nullptr;
+    };
+
+    mousetrack_data_s &begin_mousetrack(RID rid, mousetrack_type_e o)
+    {
+        mouse_lock( rid );
+        mtrack_.rid = rid;
+        mtrack_.mtt = o;
+        return mtrack_;
+    }
+    bool end_mousetrack(RID r, ts::uint32 o)
+    {
+        if (mtrack(r,o))
+        {
+            mouse_lock(RID());
+            mtrack_.mtt = MTT_none;
+            return true;
+        }
+        return false;
+    }
+    void end_mousetrack()
+    {
+        mouse_lock( RID() );
+        mtrack_.mtt = MTT_none;
+    }
+
+
     guirect_c *active_hintzone() {return m_active_hint_zone;};
     void register_hintzone( guirect_c *r );
     void unregister_hintzone( guirect_c *r );

@@ -13,12 +13,12 @@ namespace
 
         smile_element_s(const emoticon_s *e, int maxh):e(e)
         {
-            advance = e->framesize.x;
-            if (maxh && e->framesize.y > maxh)
+            advance = e->framesize().x;
+            if (maxh && e->framesize().y > maxh)
             {
-                float k = (float)maxh / (float)e->framesize.y;
-                advance = lround(k * e->framesize.x);
-                e->current_frame.resize(bmp, ts::ivec2(advance, maxh), ts::FILTER_LANCZOS3);
+                float k = (float)maxh / (float)e->framesize().y;
+                advance = lround(k * e->framesize().x);
+                e->curframe().resize(bmp, ts::ivec2(advance, maxh), ts::FILTER_LANCZOS3);
                 
             }
         }
@@ -53,47 +53,18 @@ namespace
                 gi.pos.y = (ts::int16)(pos.y - bmp.info().sz.y)+2;
             } else
             {
-                gi.width = (ts::uint16)e->framesize.x;
-                gi.height = (ts::uint16)e->framesize.y;
-                gi.pitch = e->current_frame.info().pitch;
-                gi.pixels = e->current_frame.body();
+                gi.width = (ts::uint16)e->framesize().x;
+                gi.height = (ts::uint16)e->framesize().y;
+                gi.pitch = e->curframe().info().pitch;
+                gi.pixels = e->curframe().body();
                 gi.pos.x = (ts::int16)pos.x;
-                gi.pos.y = (ts::int16)(pos.y - e->framesize.y);
+                gi.pos.y = (ts::int16)(pos.y - e->framesize().y);
             }
             gi.color = 0;
             gi.thickness = 0;
         }
     };
 }
-
-
-void emoticon_s::draw( rectengine_root_c *e, const ts::ivec2 &pos ) const
-{
-    e->draw(pos - e->get_current_draw_offset(), current_frame, framerect(), true);
-    
-    if (numframes > 1)
-    {
-        ts::irect cr(pos, pos + framesize);
-        for (redraw_request_s &r : rr)
-            if (r.engine.get() == e)
-            {
-                r.rr.combine( cr );
-                return;
-            }
-        redraw_request_s &r = rr.add();
-        r.engine = e;
-        r.rr = cr;
-    }
-}
-
-void emoticon_s::redraw()
-{
-    for (redraw_request_s &r : rr)
-        if (!r.engine.expired())
-            r.engine->redraw(&r.rr);
-    rr.clear();
-}
-
 
 bool emoticon_s::load( const ts::wsptr &fn )
 {
@@ -126,28 +97,6 @@ gui_textedit_c::active_element_s * emoticon_s::get_edit_element(int maxh)
     return se;
 }
 
-bool emoticons_c::emo_gif_s::load(const ts::blob_c &gifb)
-{
-    gif.load( gifb.data(), gifb.size() );
-    numframes = gif.numframes();
-    if (numframes == 0) return false;
-
-    ts::bitmap_c bmp;
-    delay = gif.firstframe(bmp);
-    framesize = bmp.info().sz;
-    current_frame.create_from_bitmap(bmp);
-
-    next_frame_tick = ts::Time::current() + delay;
-
-    return true;
-}
-
-int emoticons_c::emo_gif_s::nextframe()
-{
-    return gif.nextframe(current_frame.extbody());
-}
-
-
 bool emoticons_c::emo_static_image_s::load(const ts::blob_c &b)
 {
     ts::bitmap_c bmp;
@@ -158,12 +107,10 @@ bool emoticons_c::emo_static_image_s::load(const ts::blob_c &b)
     {
         float k = (float)emoti().maxheight / (float)bmp.info().sz.y;
         int neww = lround( k * bmp.info().sz.x );
-        framesize = ts::ivec2(neww, emoti().maxheight);
-        current_frame.create( framesize );
+        current_frame.create( ts::ivec2(neww, emoti().maxheight) );
         bmp.resize( current_frame.extbody(), ts::FILTER_LANCZOS3 );
     } else
     {
-        framesize = bmp.info().sz;
         current_frame.create( bmp.info().sz );
         current_frame.copy( ts::ivec2(0), bmp.info().sz, bmp.extbody(), ts::ivec2(0) );
     }
@@ -171,11 +118,6 @@ bool emoticons_c::emo_static_image_s::load(const ts::blob_c &b)
     current_frame.premultiply();
 
     return true;
-}
-
-int emoticons_c::emo_static_image_s::nextframe()
-{
-    return 0;
 }
 
 
@@ -364,7 +306,7 @@ void emoticons_c::reload()
                     {
                         ts::token<char> tkn(s.substr(eqi+1).get_trimmed().as_sptr(), ',');
                         e->def = *tkn;
-                        e->sort_dactor = index;
+                        e->sort_factor = index;
                         for (auto &ss : tkn)
                             insert_match_point(ss.as_sptr(), e);
                         if (e->unicode > 0)
@@ -378,7 +320,7 @@ void emoticons_c::reload()
         }
     }
 
-    arr.sort( []( const emoticon_s *e1, const emoticon_s *e2 )->bool { return e1->sort_dactor < e2->sort_dactor; } );
+    arr.sort( []( const emoticon_s *e1, const emoticon_s *e2 )->bool { return e1->sort_factor < e2->sort_factor; } );
 
     int cnt = arr.size();
     for (int i = 0; i < cnt; ++i)
@@ -388,9 +330,9 @@ void emoticons_c::reload()
         e->repl.set(CONSTASTR("<rect="));
         e->repl.append_as_int(i);
         e->repl.append_char(',');
-        e->repl.append_as_int(e->framesize.x);
+        e->repl.append_as_int(e->framesize().x);
         e->repl.append_char(',');
-        e->repl.append_as_int(-e->framesize.y);
+        e->repl.append_as_int(-e->framesize().y);
         e->repl.append_char('>');
 
     }
@@ -473,39 +415,6 @@ void emoticons_c::draw( rectengine_root_c *e, const ts::ivec2 &p, int smlnum )
 {
     arr.get(smlnum)->draw(e,p);
 }
-
-void emoticons_c::tick()
-{
-    if ( !allow_tick ) return; // don't animate inactive
-    ts::Time curt = ts::Time::current();
-    for( emoticon_s *e : arr )
-    {
-        if (e->numframes<=1 || e->rr.size() == 0)
-            continue;
-
-        bool redraw_it = false;
-        if ( curt >= e->next_frame_tick )
-        {
-            e->next_frame_tick += e->nextframe();
-            redraw_it = true;
-            if ( curt >= e->next_frame_tick )
-                e->next_frame_tick = curt;
-        }
-        if (redraw_it)
-            e->redraw();
-    }
-}
-
-ts::uint32 emoticons_c::gm_handler(gmsg<GM_UI_EVENT> & e)
-{
-    if (UE_MAXIMIZED == e.evt || UE_NORMALIZED == e.evt)
-        allow_tick = true;
-    else if ( UE_MINIMIZED == e.evt )
-        allow_tick = false;
-
-    return 0;
-}
-
 
 menu_c emoticons_c::get_list_smile_pack(const ts::wstr_c &curpack, MENUHANDLER mh)
 {

@@ -285,8 +285,10 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
             {
                 if (-cb.scancode == scan)
                 {
+                    ts::safe_ptr<rectengine_c> e(&getengine());
                     if (cb.handler(getrid(), this))
                         do_default = false;
+                    if (!e) return true;
                     res = true;
                     break;
                 }
@@ -366,8 +368,10 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
                 {
                     if (cb.scancode == scan)
                     {
+                        ts::safe_ptr<rectengine_c> e( &getengine() );
                         if (cb.handler( getrid(), this ))
                             do_default = false;
+                        if (!e) return true; // engine was killed by handler. just exit
                         res = true;
                         break;
                     }
@@ -842,7 +846,7 @@ bool gui_textedit_c::summoncontextmenu()
             ts::irect clar = get_client_area();
             if (sbhelper.sbrect.inside(mplocal))
             {
-                mousetrack_data_s &opd = getengine().begin_mousetrack(getrid(), MTT_SBMOVE);
+                mousetrack_data_s &opd = gui->begin_mousetrack(getrid(), MTT_SBMOVE);
                 opd.mpos = data.mouse.screenpos;
                 opd.rect.lt.y = sbhelper.sbrect.lt.y;
                 opd.rect.lt.y -= clar.lt.y;
@@ -854,7 +858,7 @@ bool gui_textedit_c::summoncontextmenu()
                 set_caret_pos(mplocal - clar.lt);
                 if ((GetAsyncKeyState(VK_SHIFT)  & 0x8000)==0x8000) ; // if Shift pressed, do not reset selection
                     else start_sel = get_caret_char_index();
-                /*engine_operation_data_s &opd =*/ getengine().begin_mousetrack(getrid(), MTT_TEXTSELECT);
+                /*engine_operation_data_s &opd =*/ gui->begin_mousetrack(getrid(), MTT_TEXTSELECT);
                 gui->set_focus(getrid());
                 if (osel != start_sel || ocofs != caret_offset || ocl != caret_line) redraw();
                 break;
@@ -863,19 +867,17 @@ bool gui_textedit_c::summoncontextmenu()
         }
         break;
     case SQ_MOUSE_LUP:
-        if (getengine().mtrack(getrid(), MTT_SBMOVE))
-            getengine().end_mousetrack(MTT_SBMOVE);
-        else if (getengine().mtrack(getrid(), MTT_TEXTSELECT))
-            getengine().end_mousetrack(MTT_TEXTSELECT);
-        else 
+        if (gui->end_mousetrack(getrid(), MTT_SBMOVE) || gui->end_mousetrack(getrid(), MTT_TEXTSELECT)) ; else 
         {
             bool d = true;
             for (const kbd_press_callback_s &cb : kbdhandlers)
             {
                 if (SSK_LB == cb.scancode)
                 {
+                    ts::safe_ptr<rectengine_c> e(&getengine());
                     if (cb.handler(getrid(),this))
                         d = false;
+                    if (!e) return true;
                     break;
                 }
             }
@@ -884,16 +886,16 @@ bool gui_textedit_c::summoncontextmenu()
         }
         break;
     case SQ_MOUSE_MOVE_OP:
-        if (mousetrack_data_s *opd = getengine().mtrack(getrid(), MTT_SBMOVE))
+        if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_SBMOVE))
         {
             int dmouse = data.mouse.screenpos().y - opd->mpos.y;
             if (sbhelper.scroll(opd->rect.lt.y + dmouse, get_client_area().height()))
                 redraw();
-        } else if (getengine().mtrack(getrid(), MTT_TEXTSELECT))
+        } else if (gui->mtrack(getrid(), MTT_TEXTSELECT))
         {
             if(start_sel == -1)
             {
-                getengine().end_mousetrack(MTT_TEXTSELECT);
+                gui->end_mousetrack();
             } else
             {
                 set_caret_pos(to_local(data.mouse.screenpos) - get_client_area().lt);
@@ -903,7 +905,7 @@ bool gui_textedit_c::summoncontextmenu()
         }
         break;
     case SQ_MOUSE_RUP:
-        if (!getengine().mtrack(getrid(), MTT_SBMOVE) && !getengine().mtrack(getrid(), MTT_TEXTSELECT))
+        if (!gui->mtrack(getrid(), MTT_SBMOVE) && !gui->mtrack(getrid(), MTT_TEXTSELECT))
         {
             if (summoncontextmenu())
                 goto default_stuff;
@@ -922,14 +924,14 @@ bool gui_textedit_c::summoncontextmenu()
         }
         break;
     case SQ_MOUSE_MOVE:
-        if (is_vsb() && !getengine().mtrack(getrid(), MTT_SBMOVE))
+        if (is_vsb() && !gui->mtrack(getrid(), MTT_SBMOVE))
         {
             bool of = flags.is(F_SBHL);
             flags.init(F_SBHL, sbhelper.sbrect.inside(to_local(data.mouse.screenpos)));
             if (flags.is(F_SBHL) != of)
                 getengine().redraw();
         }
-        if (!getengine().mtrack(getrid(), MTT_ANY))
+        if (!gui->mtrack(getrid(), MTT_ANY))
         {
             flags.clear(F_HANDCURSOR);
             under_mouse_active_element = nullptr;

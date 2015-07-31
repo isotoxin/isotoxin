@@ -207,6 +207,7 @@ class gui_message_item_c : public gui_label_ex_c
 
     static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE   = FLAGS_FREEBITSTART_LABEL << 0;
     static const ts::flags32_s::BITS F_NO_AUTHOR            = FLAGS_FREEBITSTART_LABEL << 1;
+    static const ts::flags32_s::BITS F_OVERIMAGE            = FLAGS_FREEBITSTART_LABEL << 2; // mouse cursor above image
 
     static const int m_left = 10;
     static const int m_top = 3;
@@ -279,7 +280,11 @@ public:
     gui_message_item_c(MAKE_CHILD<gui_message_item_c> &data) :gui_label_ex_c(data), mt(data.mt), author(data.author), historian(data.historian) { set_theme_rect( CONSTASTR("message.") + data.skin, false );}
     /*virtual*/ ~gui_message_item_c();
 
-    /*virtual*/ int get_height_by_width(int width) const override;
+    int calc_height_by_width(int width);
+    /*virtual*/ int get_height_by_width(int width) const override
+    {
+        return const_cast<gui_message_item_c *>(this)->calc_height_by_width(width);
+    }
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ ts::ivec2 get_max_size() const override;
     /*virtual*/ void created() override;
@@ -313,6 +318,7 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_messagelist_c, ISOGM_V_UPDATE_CONTACT);
     GM_RECEIVER(gui_messagelist_c, ISOGM_SUMMON_POST);
     GM_RECEIVER(gui_messagelist_c, ISOGM_DELIVERED);
+    GM_RECEIVER(gui_messagelist_c, ISOGM_PROTO_LOADED);
     GM_RECEIVER(gui_messagelist_c, GM_DROPFILES);
     
     SIMPLE_SYSTEM_EVENT_RECEIVER(gui_messagelist_c, SEV_ACTIVE_STATE);

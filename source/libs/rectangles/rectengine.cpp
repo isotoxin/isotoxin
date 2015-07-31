@@ -363,7 +363,7 @@ rectengine_c *rectengine_c::get_last_child()
 
         return true;
 	case SQ_MOUSE_MOVE:
-		if (const mousetrack_data_s *mtd = mtrack( MTT_RESIZE | MTT_MOVE ))
+		if (const mousetrack_data_s *mtd = gui->mtrack( getrid(), MTT_RESIZE | MTT_MOVE ))
 		{
 			evt_data_s d;
 			d.rectchg.rect = mtd->rect;
@@ -389,7 +389,7 @@ rectengine_c *rectengine_c::get_last_child()
 
 			sq_evt(SQ_RECT_CHANGING, getrid(), d);
 
-		} else if (mtrack(MTT_ANY))
+		} else if (gui->mtrack(getrid(), MTT_ANY))
             if (guirect_c *r = rect())
                 r->sq_evt(SQ_MOUSE_MOVE_OP, r->getrid(), data);
 		break;
@@ -402,7 +402,7 @@ rectengine_c *rectengine_c::get_last_child()
 			    {
                     gui->set_focus(hd.rid);
 				    sq_evt(SQ_RESIZE_START, getrid(), ts::make_dummy<evt_data_s>(true));
-                    mousetrack_data_s & oo = begin_mousetrack(rid, MTT_RESIZE);
+                    mousetrack_data_s & oo = gui->begin_mousetrack(rid, MTT_RESIZE);
 				    oo.area = hd.area;
 				    oo.rect = getrect().getprops().rect();
 				    oo.mpos = data.mouse.screenpos;
@@ -412,7 +412,7 @@ rectengine_c *rectengine_c::get_last_child()
 			    {
                     gui->set_focus(hd.rid);
 				    sq_evt(SQ_MOVE_START, getrid(), ts::make_dummy<evt_data_s>(true));
-                    mousetrack_data_s & oo = begin_mousetrack(rid, MTT_MOVE);
+                    mousetrack_data_s & oo = gui->begin_mousetrack(rid, MTT_MOVE);
 				    oo.area = hd.area;
 				    oo.rect = getrect().getprops().rect();
 				    oo.mpos = data.mouse.screenpos;
@@ -422,15 +422,13 @@ rectengine_c *rectengine_c::get_last_child()
 		}
 		return false;
 	case SQ_MOUSE_LUP:
-		if (const mousetrack_data_s *mtd = mtrack( MTT_RESIZE ))
+		if (gui->end_mousetrack( getrid(), MTT_RESIZE ))
 		{
 			sq_evt(SQ_RESIZE_END, getrid(), ts::make_dummy<evt_data_s>(true));
-            end_mousetrack(MTT_RESIZE);
 			return true;
-		} else if (nullptr != (mtd = mtrack( MTT_MOVE )))
+		} else if (gui->end_mousetrack( getrid(), MTT_MOVE ))
 		{
 			sq_evt(SQ_MOVE_END, getrid(), ts::make_dummy<evt_data_s>(true));
-			end_mousetrack(MTT_MOVE);
 			return true;
 		}
 		return false;
@@ -1901,7 +1899,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
 		}
 		break;
 	case SQ_MOUSE_MOVE:
-		if (!mtrack(MTT_ANY))
+		if (!gui->mtrack(getrid(), MTT_ANY))
 		{
             gui->check_hintzone(data.mouse.screenpos);
             data.mouse.allowchangecursor = true;
@@ -2234,7 +2232,7 @@ rectengine_child_c::~rectengine_child_c()
         }
         break;
     case SQ_MOUSE_MOVE:
-        if (mtrack(MTT_ANY)) break; // move op - do default action
+        if (gui->mtrack(getrid(), MTT_ANY)) break; // move op - do default action
     case SQ_MOUSE_IN:
     case SQ_MOUSE_OUT:
     case SQ_MOUSE_LDOWN:

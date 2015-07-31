@@ -469,44 +469,6 @@ INLINE int ilog2(float f)
     return (((*reinterpret_cast<int *>(&f)) >> IEEE_FLT_MANTISSA_BITS) & ((1 << IEEE_FLT_EXPONENT_BITS) - 1)) - IEEE_FLT_EXPONENT_BIAS;
 }
 
-template <uint v> struct __LOG2_template { static uint __log2(); };
-template <> struct __LOG2_template<SETBIT(0)> { static uint __log2() {return 0;}; };
-template <> struct __LOG2_template<SETBIT(1)> { static uint __log2() {return 1;}; };
-template <> struct __LOG2_template<SETBIT(2)> { static uint __log2() {return 2;}; };
-template <> struct __LOG2_template<SETBIT(3)> { static uint __log2() {return 3;}; };
-template <> struct __LOG2_template<SETBIT(4)> { static uint __log2() {return 4;}; };
-template <> struct __LOG2_template<SETBIT(5)> { static uint __log2() {return 5;}; };
-template <> struct __LOG2_template<SETBIT(6)> { static uint __log2() {return 6;}; };
-template <> struct __LOG2_template<SETBIT(7)> { static uint __log2() {return 7;}; };
-template <> struct __LOG2_template<SETBIT(8)> { static uint __log2() {return 8;}; };
-template <> struct __LOG2_template<SETBIT(9)> { static uint __log2() {return 9;}; };
-template <> struct __LOG2_template<SETBIT(10)> { static uint __log2() {return 10;}; };
-template <> struct __LOG2_template<SETBIT(11)> { static uint __log2() {return 11;}; };
-template <> struct __LOG2_template<SETBIT(12)> { static uint __log2() {return 12;}; };
-template <> struct __LOG2_template<SETBIT(13)> { static uint __log2() {return 13;}; };
-template <> struct __LOG2_template<SETBIT(14)> { static uint __log2() {return 14;}; };
-template <> struct __LOG2_template<SETBIT(15)> { static uint __log2() {return 15;}; };
-template <> struct __LOG2_template<SETBIT(16)> { static uint __log2() {return 16;}; };
-template <> struct __LOG2_template<SETBIT(17)> { static uint __log2() {return 17;}; };
-template <> struct __LOG2_template<SETBIT(18)> { static uint __log2() {return 18;}; };
-template <> struct __LOG2_template<SETBIT(19)> { static uint __log2() {return 19;}; };
-template <> struct __LOG2_template<SETBIT(20)> { static uint __log2() {return 20;}; };
-template <> struct __LOG2_template<SETBIT(21)> { static uint __log2() {return 21;}; };
-template <> struct __LOG2_template<SETBIT(22)> { static uint __log2() {return 22;}; };
-template <> struct __LOG2_template<SETBIT(23)> { static uint __log2() {return 23;}; };
-template <> struct __LOG2_template<SETBIT(24)> { static uint __log2() {return 24;}; };
-template <> struct __LOG2_template<SETBIT(25)> { static uint __log2() {return 25;}; };
-template <> struct __LOG2_template<SETBIT(26)> { static uint __log2() {return 26;}; };
-template <> struct __LOG2_template<SETBIT(27)> { static uint __log2() {return 27;}; };
-template <> struct __LOG2_template<SETBIT(28)> { static uint __log2() {return 28;}; };
-template <> struct __LOG2_template<SETBIT(29)> { static uint __log2() {return 29;}; };
-template <> struct __LOG2_template<SETBIT(30)> { static uint __log2() {return 30;}; };
-template <> struct __LOG2_template<SETBIT(31)> { static uint __log2() {return 31;}; };
-
-
-
-#define LOG2(x) __LOG2_template<x>::__log2()
-
 // NVidia stuff
 #define FP_ONE_BITS 0x3F800000
 // r = 1/p
@@ -715,7 +677,7 @@ INLINE float TableSin( float theta )
 }
 
 
-template <class NUM> INLINE NUM AngleNorm(NUM a) // Нормировать угол. Возращает от -pi до +pi
+template <class NUM> INLINE NUM angle_norm(NUM a) // normalize angle. returns -pi .. +pi
 {
     //return fmod(a, NUM(2.0*M_PI));
     while(a>M_PI) a -= NUM(2.0*M_PI);
@@ -723,7 +685,7 @@ template <class NUM> INLINE NUM AngleNorm(NUM a) // Нормировать угол. Возращает 
     return a;
 }
 
-template <class NUM> INLINE NUM AngleDist(NUM from,NUM to) // Дистанция между углами. Возращает от -pi до +pi
+template <class NUM> INLINE NUM angle_delta(NUM from, NUM to) // returns -pi .. +pi
 {
     while (from < 0.0) from += NUM(2.0*M_PI);
     while (to < 0.0) to += NUM(2.0*M_PI);
@@ -798,7 +760,7 @@ template < typename T1, typename T2 > INLINE T1 tmin ( const T1 & v1, const T2 &
     return ( v1 < v2 ) ? v1 : v2;
 }
 
-template <> INLINE float tmin<float, float>(const float &x, const float &y)//используется специализация шаблона, т.к. просто перегруженная функция с float выбирается там, где не надо, напр. для min(int, short)
+template <> INLINE float tmin<float, float>(const float &x, const float &y)
 {
     float r;
     _mm_store_ss(&r, _mm_min_ss(_mm_load_ss(&x), _mm_load_ss(&y)));
@@ -979,8 +941,8 @@ public:
     }
 
 
-    int get_keys_count(void) const {return m_keys_count;};
-    const key_s *get_keys(void) const {return m_keys;}
+    int get_keys_count() const {return m_keys_count;};
+    const key_s *get_keys() const {return m_keys;}
     key_s *get_keys( int count ) // discard all!!!
     {
         ASSERT( count >= 2 );
@@ -1015,7 +977,7 @@ public:
     
         return m_keys[m_keys_count-1].val;
     }
-    bool  is_empty(void) const {return m_keys_count == 0;}
+    bool  is_empty() const {return m_keys_count == 0;}
 
 };
 
@@ -1028,8 +990,8 @@ public:
     time_float_c():m_low(0), m_high(1) {}
     ~time_float_c() {};
 
-    float get_low(void) const {return m_low;}
-    float get_high(void) const {return m_high;}
+    float get_low() const {return m_low;}
+    float get_high() const {return m_high;}
     void set_low(float low, bool correct = false);
     void set_high(float hi, bool correct = false);
 
@@ -1037,13 +999,13 @@ public:
     {
         return time_value_c<float>::get_linear(t) * (m_high-m_low) + m_low;
     }
-    float get_linear( float t, float amp /* рукомендуемый диапазон [0..1] */ ) const
+    float get_linear( float t, float amp /* recommended range [0..1] */ ) const
     {
         return time_value_c<float>::get_linear(t) * amp * (m_high-m_low) + m_low;
     }
 
     void    init( const wsptr &val );
-    wstr_c  initstr(void) const;
+    wstr_c  initstr() const;
 
 };
 
@@ -1057,14 +1019,14 @@ public:
     {
         return time_value_c<float>::get_linear(t);
     }
-    float get_linear( float t, float amp /* рукомендуемый диапазон [0..1] */ ) const
+    float get_linear( float t, float amp /* recommended range [0..1] */ ) const
     {
         return time_value_c<float>::get_linear(t) * amp;
     }
 
     void    init();
     void    init( const wsptr &val );
-    wstr_c  initstr(void) const;
+    wstr_c  initstr() const;
 
 };
 
@@ -1076,7 +1038,7 @@ public:
     ~time_color_c() {};
 
     void    init( const wsptr &val );
-    wstr_c  initstr(void) const;
+    wstr_c  initstr() const;
 
 };
 

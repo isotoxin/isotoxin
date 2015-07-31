@@ -126,6 +126,7 @@
     <ClCompile Include="..\..\emoticons.cpp" />
     <ClCompile Include="..\..\entertext.cpp" />
     <ClCompile Include="..\..\firstrun.cpp" />
+    <ClCompile Include="..\..\images.cpp" />
     <ClCompile Include="..\..\isodialog.cpp" />
     <ClCompile Include="..\..\isotoxin.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
@@ -157,6 +158,7 @@
     <ClInclude Include="..\..\emoticons.h" />
     <ClInclude Include="..\..\entertext.h" />
     <ClInclude Include="..\..\firstrun.h" />
+    <ClInclude Include="..\..\images.h" />
     <ClInclude Include="..\..\isodialog.h" />
     <ClInclude Include="..\..\isotoxin.h" />
     <ClInclude Include="..\..\mainrect.h" />

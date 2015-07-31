@@ -82,11 +82,11 @@ struct bmpcore_normal_s
         }
 
 
-        void    ref_inc(void)
+        void    ref_inc()
         {
             ++m_ref;
         }
-        void    ref_dec(void)
+        void    ref_dec()
         {
             if (m_ref == 1)
             {
@@ -302,7 +302,7 @@ public:
     bitmap_t(const bitmap_t &bmp):core(bmp.core) {}
     ~bitmap_t() {}
 
-	void clear(void)                { core.clear(); }
+	void clear()                    { core.clear(); }
     const imgdesc_s &info() const   { return core.info(); }
     imgdesc_s info(const ts::ivec2 &offset) const 
     {
@@ -448,7 +448,7 @@ public:
 
     }
 
-    void make_grayscale(void);
+    void make_grayscale();
 
     void sharpen(bitmap_c &outimage, int lv) const; // lv [0..64]
 
@@ -466,7 +466,7 @@ public:
 
 
     void crop(const ivec2 & lt, const ivec2 &sz);
-    void crop_to_square(void);
+    void crop_to_square();
     */
 
     uint32 get_area_type(const ivec2 & p,const ivec2 & size) const;
@@ -474,7 +474,7 @@ public:
 	void flip_x(const ivec2 & pdes,const ivec2 & size, const bitmap_t & bmsou,const ivec2 & spsou);
 	void flip_y(const ivec2 & pdes,const ivec2 & size, const bitmap_t & bmsou,const ivec2 & spsou);
 	void flip_y(const ivec2 & pdes,const ivec2 & size);
-    void flip_y(void);
+    void flip_y();
 
     void alpha_blend( const ivec2 &p, const bmpcore_exbody_s & img );
     void alpha_blend( const ivec2 &p, const bmpcore_exbody_s & img, const bmpcore_exbody_s & base ); // this - target, result size - base size
@@ -536,7 +536,7 @@ public:
 
     irect calc_visible_rect() const;
 
-    uint32 hash(void) const
+    uint32 hash() const
     {
         uint32 crc = 0xFFFFFFFF;
         const uint8 *s = body();
@@ -574,15 +574,15 @@ class drawable_bitmap_c : public image_extbody_c
 {
     DUMMY(drawable_bitmap_c);
 
-    HBITMAP m_memBitmap;		// Windows-кий bitmap
-    HDC     m_memDC;		    // Context windows-кого bitmap-а
+    HBITMAP m_mem_bitmap = nullptr;
+    HDC     m_mem_dc = nullptr;
 
 public:
 
     void clear()
     {
-        if (m_memDC) { DeleteDC(m_memDC); m_memDC = nullptr; }
-        if (m_memBitmap) { DeleteObject(m_memBitmap); m_memBitmap = nullptr; }
+        if (m_mem_dc) { DeleteDC(m_mem_dc); m_mem_dc = nullptr; }
+        if (m_mem_bitmap) { DeleteObject(m_mem_bitmap); m_mem_bitmap = nullptr; }
         core.m_body = nullptr;
         memset( &core.m_info, 0, sizeof(imgdesc_s) );
 
@@ -608,19 +608,19 @@ public:
     void    save_to_bitmap(bitmap_c &bmp, const ivec2 & pos_from_dc);
     void    create(const ivec2 &sz);
 
-    HBITMAP bitmap(void)	const  { return m_memBitmap; }
-    HDC     DC(void)	const  { return m_memDC; }
+    HBITMAP bitmap()    const  { return m_mem_bitmap; }
+    HDC     DC()	    const  { return m_mem_dc; }
 
-    drawable_bitmap_c() :m_memBitmap(nullptr), m_memDC(nullptr), image_extbody_c(nullptr, imgdesc_s(ivec2(0), 0)) {}
-    explicit drawable_bitmap_c(const ivec2 &sz):m_memBitmap(nullptr), m_memDC(nullptr), image_extbody_c(nullptr, imgdesc_s(ivec2(0), 0)) { create(sz); }
+    drawable_bitmap_c() : image_extbody_c(nullptr, imgdesc_s(ivec2(0), 0)) {}
+    explicit drawable_bitmap_c(const ivec2 &sz) : image_extbody_c(nullptr, imgdesc_s(ivec2(0), 0)) { create(sz); }
 
-    ~drawable_bitmap_c(void) { clear(); }
+    ~drawable_bitmap_c() { clear(); }
 
     template <class W> void work(W & w)
     {
         if (body() == nullptr) return;
         BITMAP bmpInfo;
-        GetObject(m_memBitmap, sizeof(BITMAP), &bmpInfo);
+        GetObject(m_mem_bitmap, sizeof(BITMAP), &bmpInfo);
 
         for (int j = 0; j < bmpInfo.bmHeight; ++j)
         {

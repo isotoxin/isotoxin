@@ -299,8 +299,7 @@ int proc_toxrelay(const ts::wstrings_c & pars)
             return 1;
         }
 
-        tcp_server = new_TCP_server(enable_ipv6, tcp_relay_port_count, tcp_relay_ports, dht->self_public_key,
-                                    dht->self_secret_key, onion);
+        tcp_server = new_TCP_server(enable_ipv6, tcp_relay_port_count, tcp_relay_ports, dht->self_secret_key, onion);
 
         // tcp_relay_port_count != 0 at this point
         free(tcp_relay_ports);

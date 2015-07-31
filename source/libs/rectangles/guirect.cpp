@@ -196,7 +196,7 @@ bool rectprops_c::change_to(const rectprops_c &p, rectengine_c *engine)
     ts::ivec2 oldsize = currentsize();
     evt_data_s evtd;
 
-    // первым делом проклампим размер
+    // clamp size first
     evtd.rectchg.rect = p.rect();
     evtd.rectchg.area = 0;
     evtd.rectchg.apply = false;
@@ -208,11 +208,12 @@ bool rectprops_c::change_to(const rectprops_c &p, rectengine_c *engine)
     bool vis_changed = is_visible() != p.is_visible();
     ts::ivec2 posdelta = p.screenpos() - screenpos();
     
-    change_to(p); m_size = evtd.rectchg.rect.get().size(); // изменим текущий пропсет
+    change_to(p); m_size = evtd.rectchg.rect.get().size(); // change current property set
 
-    // ну а дальше набиваем данные для реквеста
+    // changed values for notifications
     evtd.changed.pos_changed = posdelta != ts::ivec2(0);
     evtd.changed.size_changed = currentsize() != oldsize;
+    evtd.changed.width_changed = currentsize().x != oldsize.x;
     evtd.changed.is_visible = is_visible();
     evtd.changed.zindex = zindex_changed;
     evtd.changed.rect = rect();
@@ -964,7 +965,7 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
             {
                 gui->selcore().begin( this );
 
-                getengine().begin_mousetrack(getrid(), MTT_TEXTSELECT);
+                gui->begin_mousetrack(getrid(), MTT_TEXTSELECT);
                 gui->set_focus(getrid());
                 getengine().redraw();
                 break;
@@ -972,14 +973,11 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
         }
         break;
     case SQ_MOUSE_LUP:
-        if (getengine().mtrack(getrid(), MTT_TEXTSELECT))
-        {
-            getengine().end_mousetrack(MTT_TEXTSELECT);
+        if (gui->end_mousetrack(getrid(), MTT_TEXTSELECT))
             gui->selcore().endtrack();
-        }
         break;
     case SQ_MOUSE_MOVE_OP:
-        if (getengine().mtrack(getrid(), MTT_TEXTSELECT))
+        if (gui->mtrack(getrid(), MTT_TEXTSELECT))
             if (flags.is(FLAGS_SELECTABLE) && gui->selcore().owner == this)
                 gui->selcore().track();
         break;
@@ -1135,7 +1133,7 @@ ts::str_c gui_label_ex_c::get_link_under_cursor(const ts::ivec2 &localpos) const
             }
             break;
         case SQ_DETECT_AREA:
-            if (/*!popupmenu &&*/ textrect.get_text().find_pos(CONSTWSTR("<cstm=a")) >= 0 && !getengine().mtrack(getrid(), MTT_TEXTSELECT))
+            if (/*!popupmenu &&*/ textrect.get_text().find_pos(CONSTWSTR("<cstm=a")) >= 0 && !gui->mtrack(getrid(), MTT_TEXTSELECT))
             {
                 if (check_overlink(data.detectarea.pos))
                     data.detectarea.area = AREA_HAND;
@@ -1532,7 +1530,7 @@ void gui_hgroup_c::children_repos()
         for (int i = 1; i < info.count; ++i)
             if (bool _ = movable_splitter(i)) { splitters_sz+=splitter_sz; rsizes.get(i-1).szsplit = (ts::uint8)splitter_sz; }
 
-    mousetrack_data_s *opd = getengine().mtrack(getrid(), MTT_MOVESPLITTER);
+    mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_MOVESPLITTER);
 
     double proposum_working = proposum;
     int current_size_goal = info.areasize-splitters_sz;
@@ -1856,7 +1854,7 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
                 clar.rb[vecindex] = clar.lt[vecindex] + szsz.szsplit;
                 if (szsz.szsplit && clar.inside(localmp))
                 {
-                    mousetrack_data_s &opd = getengine().begin_mousetrack(getrid(), MTT_MOVESPLITTER);
+                    mousetrack_data_s &opd = gui->begin_mousetrack(getrid(), MTT_MOVESPLITTER);
                     opd.mpos = data.mouse.screenpos;
                     opd.area = t;
                     opd.rect.lt.r0 = 0;
@@ -1867,15 +1865,12 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
         break;
     case SQ_MOUSE_LUP:
         if (allow_move_splitter())
-        if (mousetrack_data_s *opd = getengine().mtrack(getrid(), MTT_MOVESPLITTER))
-        {
+        if (gui->end_mousetrack(getrid(), MTT_MOVESPLITTER))
             update_proportions();
-            getengine().end_mousetrack(MTT_MOVESPLITTER);
-        }
         break;
     case SQ_MOUSE_MOVE_OP:
         if (allow_move_splitter())
-        if (mousetrack_data_s *opd = getengine().mtrack(getrid(), MTT_MOVESPLITTER))
+        if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_MOVESPLITTER))
         {
             int vecindex = __vec_index();
             int dmouse = data.mouse.screenpos()[vecindex] - opd->mpos[vecindex];
@@ -1886,7 +1881,7 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
     case SQ_DETECT_AREA:
         if (allow_move_splitter())
         {
-            if (getengine().mtrack(getrid(), MTT_MOVESPLITTER))
+            if (gui->mtrack(getrid(), MTT_MOVESPLITTER))
             {
                 data.detectarea.area = __splitcursor();
             } else if (data.detectarea.area == 0)
@@ -2051,6 +2046,7 @@ void gui_vscrollgroup_c::children_repos()
         if (h == 0)
             h = r.getprops().is_visible() ? ts::CLAMP(height_need, r.get_min_size().y, maxsz.y) : 0;
         e->__spec_set_outofbound(true);
+
         infs[i].h = h;
         infs[i].maxw = maxsz.x;
         if (e == scroll_target)
@@ -2188,7 +2184,7 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
         }
         break;
     case SQ_MOUSE_MOVE:
-        if (flags.is(F_SBVISIBLE) && !getengine().mtrack(getrid(), MTT_SBMOVE))
+        if (flags.is(F_SBVISIBLE) && !gui->mtrack(getrid(), MTT_SBMOVE))
         {
             bool of = flags.is(F_SBHL);
             flags.init(F_SBHL, sbhelper.sbrect.inside(to_local(data.mouse.screenpos)));
@@ -2204,7 +2200,7 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
                 flags.set(F_SBHL);
                 cri_s info;
                 children_repos_info(info);
-                mousetrack_data_s &opd = getengine().begin_mousetrack(getrid(), MTT_SBMOVE);
+                mousetrack_data_s &opd = gui->begin_mousetrack(getrid(), MTT_SBMOVE);
                 opd.mpos = data.mouse.screenpos;
                 opd.rect.lt.y = sbhelper.sbrect.lt.y;
                 opd.rect.lt.y -= info.area.lt.y;
@@ -2213,11 +2209,10 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
         }
         break;
     case SQ_MOUSE_LUP:
-        if (getengine().mtrack(getrid(), MTT_SBMOVE))
-            getengine().end_mousetrack(MTT_SBMOVE);
+        gui->end_mousetrack(getrid(), MTT_SBMOVE);
         break;
     case SQ_MOUSE_MOVE_OP:
-        if (mousetrack_data_s *opd = getengine().mtrack(getrid(), MTT_SBMOVE)) 
+        if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_SBMOVE)) 
         {
             flags.clear(F_LAST_REPOS_AT_END);
             int dmouse = data.mouse.screenpos().y - opd->mpos.y;

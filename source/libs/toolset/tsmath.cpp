@@ -110,7 +110,7 @@ double erf(double x)
 }
 
 
-wstr_c  time_float_c::initstr(void) const
+wstr_c  time_float_c::initstr() const
 {
     const key_s *keys = get_keys();
 
@@ -179,7 +179,7 @@ void time_float_c::set_high(float hi, bool correct)
 
 
 
-wstr_c  time_float_fixed_c::initstr(void) const
+wstr_c  time_float_fixed_c::initstr() const
 {
     const key_s *keys = get_keys();
 
@@ -208,7 +208,7 @@ void time_float_fixed_c::init( const wsptr &val )
 }
 
 
-void    time_float_fixed_c::init(void)
+void    time_float_fixed_c::init()
 {
     key_s *keys = get_keys( 2 );
     keys[0].time = 0;
@@ -218,7 +218,7 @@ void    time_float_fixed_c::init(void)
 }
 
 
-wstr_c  time_color_c::initstr(void) const
+wstr_c  time_color_c::initstr() const
 {
     const key_s *keys = get_keys();
 

@@ -10,7 +10,10 @@
 #define MEMSPY_DISABLE 0
 #define MEMSPY_CALL_STACK 0                 // store callstack for every allocation
 #define MEMSPY_CALL_STACK_DEEP 4            // bigger values - slower (captain obvious)
+#define MEMSPY_CALL_STACK_SKIP 3            // skip top of stack addresses
+#define MEMSPY_SPY_SHOWCONTENT 10           // report
 #define MEMSPY_SPY_SIZE 0                   // zero - spy every allocation, >0 - spy only allocations with given size
+#define MEMSPY_SPY_LINE 0                   // zero - spy every line, >0 - spy only allocations with given line
 #define MEMSPY_SPY_NUM 0
 #define MEMSPY_MAX_FREE_UNALLOCATED     (1024*1024)   // in bytes - how many bytes spy keep unfree (useful to detect twice free)
 #define MEMSPY_CORRUPT_CHECK_ZONE_BEGIN 0
@@ -19,9 +22,10 @@
 #define MEMSPY_MEMLEAK_DEBUGOUTPUT      1
 
 
-
-
-
+#if MEMSPY_CALL_STACK
+#pragma comment (lib, "dbghelp.lib")
+#include <DbgHelp.h>
+#endif
 
 #pragma warning(disable:4127)
 
@@ -49,9 +53,6 @@ int freesize = 0;
 
 void spylock()
 {
-    //if (numpool >= 4686)
-    //    __debugbreak();
-
     long myv = GetCurrentThreadId();
     if (memspylock == myv)
         __debugbreak();
@@ -87,12 +88,19 @@ struct block_header_s
     block_header_s *prev;
     block_header_s *next;
 #if MEMSPY_CALL_STACK
+    
+    static HANDLE process;
+
     DWORD callstack[MEMSPY_CALL_STACK_DEEP];
     void fill_callstack(DWORD *p)
     {
+        memset(callstack, 0, sizeof(callstack));
+
         __try {
-            //p = (DWORD*)p[0];//skip 1 callstack frame
-            for (int i = 0; i < LENGTH(callstack); i++, p = (DWORD*)p[0])
+            for (int i = 0; i<MEMSPY_CALL_STACK_SKIP; ++i)
+                p = (DWORD*)p[0];
+
+            for (int i = 0; i < sizeof(callstack)/sizeof(callstack[0]); i++, p = (DWORD*)p[0])
                 callstack[i] = p[1];
         }
         __except (EXCEPTION_EXECUTE_HANDLER) {}
@@ -122,14 +130,54 @@ struct block_header_s
     int getinfo( char *buf, int bufsz )
     {
         if (bufsz < 2) return -1;
-        char b[512];
-        int n = 1+sprintf_s(b,512,"%s(%i): leak size: %i, num: %i\r\n", fn, line, size, num);
+        char b[4096], content[512];
+        auto bufcontent = [&]( const void *buf, int bufsz )-> const char *
+        {
+
+            unsigned char *d = (unsigned char *)buf;
+            int show_bytes = bufsz; if (show_bytes > MEMSPY_SPY_SHOWCONTENT) show_bytes = MEMSPY_SPY_SHOWCONTENT;
+            int ii = 0;
+            for(;show_bytes > 0; --show_bytes)
+            {
+                ii += sprintf_s(content + ii, sizeof(content)-1 - ii, "%02x", (int)*d);
+                ++d;
+            }
+
+            return content;
+        };
+
+#if MEMSPY_CALL_STACK
+        char callstacks[2048]; callstacks[0] = 0;
+        int csi = 0;
+        for (int i = 0; i < sizeof(callstack) / sizeof(callstack[0]); i++)
+        {
+            // resolve file and line for given address
+
+            IMAGEHLP_LINE Line = { 0 };
+            Line.SizeOfStruct = sizeof(IMAGEHLP_LINE);
+
+            DWORD LineDisplacement = 0;
+            if (!SymGetLineFromAddr(process, callstack[i] - 1, &LineDisplacement, &Line)) break;
+            if (Line.FileName)
+            {
+                csi += sprintf_s(callstacks+csi, sizeof(callstacks)-csi-1, "%s(%i) : stack frame %i\r\n", Line.FileName, Line.LineNumber, i);
+            }
+        }
+        int n = 1+sprintf_s(b,sizeof(b),"%s(%i): leak size: %i, num: %i, content: %s\r\n%s", fn, line, size, num, bufcontent(usable_space(), size), callstacks);
+#else
+        int n = 1+sprintf_s(b,sizeof(b),"%s(%i): leak size: %i, num: %i, content: %s\r\n", fn, line, size, num, bufcontent(usable_space(), size));
+#endif
         if (n > bufsz) n = bufsz;
         b[n-1] = 0;
         memcpy(buf,b,n);
+
         return n;
     }
 };
+
+#if MEMSPY_CALL_STACK
+HANDLE block_header_s::process;
+#endif
 
 enum
 {
@@ -150,8 +198,14 @@ block_header_s *block_header_s::setup(const char *fn_, int line_, size_t sz)
     size = sz;
 
     spylock();
-#if MEMSPY_SPY_SIZE
+#if MEMSPY_SPY_SIZE && MEMSPY_SPY_LINE
+    if (MEMSPY_SPY_SIZE == sz && MEMSPY_SPY_LINE == line_) num = numpool++;
+    else num = -1;
+#elif MEMSPY_SPY_SIZE
     if (MEMSPY_SPY_SIZE == sz) num = numpool++;
+    else num = -1;
+#elif MEMSPY_SPY_LINE
+    if (MEMSPY_SPY_LINE == line_) num = numpool++;
     else num = -1;
 #else
     num = numpool++;
@@ -163,6 +217,14 @@ block_header_s *block_header_s::setup(const char *fn_, int line_, size_t sz)
     if (MEMSPY_SPY_NUM == num)
         __debugbreak();
 #endif
+
+#if MEMSPY_CALL_STACK
+    // fastest way to collect callstack addresses.
+    DWORD *p;
+    _asm mov[p], ebp
+    fill_callstack(p);
+#endif
+
 
     return this;
 }
@@ -254,12 +316,10 @@ void block_header_s::mf(void *p)
 
 }
 
-
-#if MEMSPY_CALL_STACK
-#pragma comment (lib, "dbghelp.lib")
-#include <DbgHelp.h>
-#endif
-
+void reset_allocnum()
+{
+    numpool = 0;
+}
 
 
 void *mspy_malloc(const char *fn, int line, size_t sz)
@@ -308,6 +368,22 @@ bool mspy_getallocated_info( char *buf, int bufsz )
         return false;
     }
 
+    const char *t = "   -================[MEMORY LEAKS]================-\r\n";
+    int tl = strlen(t);
+
+    if (tl < bufsz)
+    {
+        memcpy(buf, t, tl + 1);
+        buf += tl;
+        bufsz -= tl;
+    }
+
+#if MEMSPY_CALL_STACK
+    SymSetOptions(SymGetOptions() | SYMOPT_LOAD_LINES);
+    block_header_s::process = GetCurrentProcess();
+    SymInitialize(block_header_s::process, NULL, TRUE);
+#endif
+
     for( block_header_s *b = first; b; b=b->next )
     {
         int cs = b->getinfo(buf+curl,bufsz-curl);
@@ -339,6 +415,14 @@ struct memleak_fin_s
             spyunlock();
             return;
         }
+
+#if MEMSPY_CALL_STACK
+        SymSetOptions(SymGetOptions() | SYMOPT_LOAD_LINES);
+        block_header_s::process = GetCurrentProcess();
+        SymInitialize(block_header_s::process, NULL, TRUE);
+#endif
+        OutputDebugStringA("   -================[MEMORY LEAKS]================-\r\n");
+
         for (block_header_s *b = first; b; b = b->next)
         {
             if (b->getinfo(buf, 2048) < 0) break;

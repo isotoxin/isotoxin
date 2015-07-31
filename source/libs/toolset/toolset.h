@@ -396,7 +396,7 @@ class aligned
     char    store_[sizeof(T) + factor -1];
 
 public:
-    INLINE aligned(void) {
+    INLINE aligned() {
     }
 
     INLINE aligned(T src) {
@@ -521,6 +521,15 @@ public:
     const T& operator()() const { return *(T *)data; }
 
     T &operator=(const T&t) { get() = t; return get(); }
+};
+
+template<typename T> class only_destructor : public make_pod<T> // very special hack - object without calling constructor, but destructor.
+{
+public:
+    ~only_destructor()
+    {
+        get().~T();
+    }
 };
 
 
@@ -750,14 +759,14 @@ public:
 
     struct_pool_t() {}
 
-    void *    alloc(void)
+    void *    alloc()
     {
         void * ptr = try_alloc();
         if (ptr != nullptr) return ptr;
         return MM_ALLOC(bsize);
     }
 
-    void *    try_alloc(void)
+    void *    try_alloc()
     {
         if (m_free_count > 0)
         {

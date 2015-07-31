@@ -36,7 +36,7 @@ int proc_grabnodes(const wstrings_c & pars)
     buf_c rslt;
 
     https_c httpsclient;
-    httpsclient.get( "https://wiki.tox.im/Nodes", rslt );
+    httpsclient.get( "https://wiki.tox.chat/users/nodes", rslt );
     //rslt.load_from_disk_file(nodesf);
 
 
@@ -58,6 +58,10 @@ int proc_grabnodes(const wstrings_c & pars)
     
         int roffset = 0;
         pstr_c ipv4 = get_tag_inner( roffset, row, CONSTASTR("td") );
+
+        if (ipv4.is_empty())
+            break;
+
         pstr_c ipv6 = get_tag_inner( roffset, row, CONSTASTR("td") );
         pstr_c port = get_tag_inner( roffset, row, CONSTASTR("td") );
         pstr_c clid = get_tag_inner( roffset, row, CONSTASTR("td") );

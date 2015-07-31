@@ -21,13 +21,13 @@ public:
     {
         memset((void*)&m_timestamp, 0, sizeof(FILETIME));
     };
-    virtual ~container_c(void) {};
+    virtual ~container_c() {};
 
     void            SetTimeStamp(const FILETIME ft) { m_timestamp = ft;   }
-    const FILETIME &GetTimeStamp(void) const        { return m_timestamp; }
+    const FILETIME &GetTimeStamp() const        { return m_timestamp; }
 
-    int get_priority(void) const {return m_priority;}
-	uint get_id(void) const {return m_id;}
+    int get_priority() const {return m_priority;}
+	uint get_id() const {return m_id;}
 
     const wstr_c  &fn() const {return m_filename;}
 

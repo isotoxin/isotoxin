@@ -9,12 +9,6 @@
 #define FLAG(f,mask) (((f)&(mask))!=0)
 #define INITFLAG(f,mask,val) if(val) {SETFLAG(f,mask);} else {RESETFLAG(f,mask);}
 
-#define DECLARE_FLAG(flags_var, fn, fvalue) void set_##fn## (void)  { /* lint -e19 */ flags_var.set(fvalue); }; \
-    bool is_##fn## (void) const    { return flags_var.is(fvalue);    }; \
-    void clear_##fn## (void)       { flags_var.clear(fvalue);        }; \
-    void invert_##fn## (void)      { flags_var.invert(fvalue);       }; \
-    void init_##fn## (bool bValue) { flags_var.init(fvalue, bValue); /* lint -e19 */ }
-
 namespace ts
 {
 

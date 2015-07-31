@@ -172,6 +172,7 @@ struct evt_data_s
             bool pos_changed;
             bool size_changed;
             bool zindex;
+            bool width_changed;
         } changed;
 
         ts::make_pod<draw_s> draw;

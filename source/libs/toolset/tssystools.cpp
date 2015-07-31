@@ -4,14 +4,14 @@ namespace ts
 {
 __declspec(thread) DWORD Time::threadCurrentTime = 0;
 
-void	TSCALL hide_hardware_cursor(void)
+void	TSCALL hide_hardware_cursor()
 {
     while (ShowCursor(false) >= 0)
     {
     }
 }
 
-void	TSCALL show_hardware_cursor(void)
+void	TSCALL show_hardware_cursor()
 {
     while (ShowCursor(true) < 0)
     {
@@ -25,7 +25,7 @@ static BOOL CALLBACK calcmc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonito
     return TRUE;
 }
 
-int     TSCALL monitor_count(void)
+int     TSCALL monitor_count()
 {
     int cnt = 0;
     EnumDisplayMonitors(nullptr, nullptr, calcmc, (LPARAM)&cnt);
@@ -261,7 +261,7 @@ void TSCALL set_clipboard_text(const wsptr &t)
     CloseClipboard();
 }
 
-wstr_c TSCALL get_clipboard_text(void)
+wstr_c TSCALL get_clipboard_text()
 {
     wstr_c res;
 

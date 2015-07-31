@@ -424,12 +424,18 @@ void gui_c::loop()
         if (m_5seconds.it_is_time_ones()) app_5second_event();
         app_loop_event();
 
+        ts::tmp_pointers_t<gmsgbase,1> executing;
+
         gmsgbase *m;
-        while (m_msgs.try_pop(m))
+        while (m_msgs.try_pop(m) && executing.size() < 100 /* limit maximum to avoid interface freeze */ )
+            executing.add(m); // pop messages as fast as possible
+
+        for( gmsgbase * m : executing ) // now executing
         {
             m->send();
             TSDEL(m);
         }
+
 
         app_fix_sleep_value(g_sysconf.sleep);
     }
@@ -1149,9 +1155,7 @@ bool selectable_core_s::sure_selected()
             char_end_sel = -1;
             clear_selection_after_flashing = false;
 
-            if (owner->getengine().mtrack(owner->getrid(), MTT_TEXTSELECT))
-                owner->getengine().end_mousetrack(MTT_TEXTSELECT);
-
+            gui->end_mousetrack(owner->getrid(), MTT_TEXTSELECT);
         }
 
         if (char_start_sel >= 0 && char_end_sel >= 0)

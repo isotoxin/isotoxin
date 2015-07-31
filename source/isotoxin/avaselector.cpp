@@ -613,7 +613,7 @@ static void draw_chessboard(rectengine_c &e, const ts::irect & r, ts::TSCOLOR c1
 
 void dialog_avaselector_c::recompress()
 {
-    if (getengine().mtrack(getrid(), MTT_APPDEFINED1) == nullptr)
+    if (nullptr == gui->mtrack(getrid(), MTT_APPDEFINED1))
     {
         if (avarect.width() < avarect.height())
         {
@@ -644,7 +644,7 @@ void dialog_avaselector_c::recompress()
 
 void dialog_avaselector_c::clamp_user_offset()
 {
-    if (getengine().mtrack(getrid(), MTT_MOVECONTENT)) return;
+    if (gui->mtrack(getrid(), MTT_MOVECONTENT)) return;
     if (!imgrect)
     {
         if (user_offset != ts::ivec2(0))
@@ -813,7 +813,7 @@ void dialog_avaselector_c::do_scale(float sf)
             }
             return true;
         case SQ_DETECT_AREA:
-            if (nullptr == getengine().mtrack(getrid(), MTT_APPDEFINED1))
+            if (nullptr == gui->mtrack(getrid(), MTT_APPDEFINED1))
             {
                 area = 0;
                 if (data.detectarea.area == 0)
@@ -833,7 +833,7 @@ void dialog_avaselector_c::do_scale(float sf)
         case SQ_MOUSE_RDOWN:
             if (viewrect.inside(to_local(data.mouse.screenpos)) && (bitmap.info().sz >> 0))
             {
-                mousetrack_data_s &opd = getengine().begin_mousetrack(getrid(), MTT_MOVECONTENT);
+                mousetrack_data_s &opd = gui->begin_mousetrack(getrid(), MTT_MOVECONTENT);
                 opd.mpos = user_offset - data.mouse.screenpos();
                 return true;
             }
@@ -853,7 +853,7 @@ void dialog_avaselector_c::do_scale(float sf)
         case SQ_MOUSE_MDOWN:
             if (viewrect.inside(to_local(data.mouse.screenpos)) && (bitmap.info().sz >> 0))
             {
-                mousetrack_data_s &opd = getengine().begin_mousetrack(getrid(), MTT_SCALECONTENT);
+                mousetrack_data_s &opd = gui->begin_mousetrack(getrid(), MTT_SCALECONTENT);
                 opd.mpos.y = data.mouse.screenpos().y;
                 statrt_scale();
                 return true;
@@ -862,14 +862,14 @@ void dialog_avaselector_c::do_scale(float sf)
         case SQ_MOUSE_LDOWN:
             if (area)
             {
-                mousetrack_data_s &opd = getengine().begin_mousetrack(getrid(), MTT_APPDEFINED1);
+                mousetrack_data_s &opd = gui->begin_mousetrack(getrid(), MTT_APPDEFINED1);
                 opd.area = area;
                 opd.mpos = data.mouse.screenpos();
                 opd.rect = avarect;
                 return true;
             } else if ((avarect + offset - imgrect.lt).inside(to_local(data.mouse.screenpos)) && (bitmap.info().sz >> 0))
             {
-                mousetrack_data_s &opd = getengine().begin_mousetrack(getrid(), MTT_APPDEFINED2);
+                mousetrack_data_s &opd = gui->begin_mousetrack(getrid(), MTT_APPDEFINED2);
                 opd.mpos = data.mouse.screenpos();
                 storeavarect = avarect;
                 return true;
@@ -877,30 +877,18 @@ void dialog_avaselector_c::do_scale(float sf)
 
             break;
         case SQ_MOUSE_MUP:
-            if (mousetrack_data_s *opd = getengine().mtrack(getrid(), MTT_SCALECONTENT))
-                getengine().end_mousetrack(MTT_SCALECONTENT);
+            gui->end_mousetrack(getrid(), MTT_SCALECONTENT);
             break;
         case SQ_MOUSE_RUP:
-            if (mousetrack_data_s *opd = getengine().mtrack(getrid(), MTT_MOVECONTENT))
-            {
-                getengine().end_mousetrack(MTT_MOVECONTENT);
+            if (gui->end_mousetrack(getrid(), MTT_MOVECONTENT))
                 clamp_user_offset();
-            }
             break;
         case SQ_MOUSE_LUP:
-            if (mousetrack_data_s *opd = getengine().mtrack(getrid(), MTT_APPDEFINED1))
-            {
-                getengine().end_mousetrack(MTT_APPDEFINED1);
+            if (gui->end_mousetrack(getrid(), MTT_APPDEFINED1) || gui->end_mousetrack(getrid(), MTT_APPDEFINED2))
                 recompress();
-            }
-            if (mousetrack_data_s *opd = getengine().mtrack(getrid(), MTT_APPDEFINED2))
-            {
-                getengine().end_mousetrack(MTT_APPDEFINED2);
-                recompress();
-            }
             break;
         case SQ_MOUSE_MOVE_OP:
-            if (mousetrack_data_s *opd = getengine().mtrack(getrid(), MTT_MOVECONTENT))
+            if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_MOVECONTENT))
             {
                 ts::ivec2 o = user_offset;
                 user_offset = data.mouse.screenpos() + opd->mpos;
@@ -910,12 +898,12 @@ void dialog_avaselector_c::do_scale(float sf)
                     getengine().redraw();
                 }
             }
-            if (mousetrack_data_s *opd = getengine().mtrack(getrid(), MTT_SCALECONTENT))
+            if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_SCALECONTENT))
             {
                 double sf = pow(2.0, -(data.mouse.screenpos().y - opd->mpos.y) * 0.01);
                 do_scale((float)sf);
             }
-            if (mousetrack_data_s *opd = getengine().mtrack(getrid(), MTT_APPDEFINED1))
+            if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_APPDEFINED1))
             {
                 if ( 0 != (opd->area & AREA_LEFT) )
                 {
@@ -945,7 +933,7 @@ void dialog_avaselector_c::do_scale(float sf)
                 recompress();
                 getengine().redraw();
             }
-            if (mousetrack_data_s *opd = getengine().mtrack(getrid(), MTT_APPDEFINED2))
+            if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_APPDEFINED2))
             {
                 avarect = storeavarect + data.mouse.screenpos() - opd->mpos;
 

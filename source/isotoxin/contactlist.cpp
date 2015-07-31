@@ -888,37 +888,9 @@ int gui_contact_item_c::contact_item_rite_margin()
                         icon->draw(m_engine.get(), button_desc_s::NORMAL, ca, button_desc_s::ALEFT | button_desc_s::ATOP | button_desc_s::ABOTTOM);
                         x_offset = icon->size.x;
                     }
-
-                    if (drawnotify)
-                    {
-                        if (n_unread > 99) n_unread = 99;
-                        button_desc_s *unread = g_app->buttons().unread;
-
-                        ts::ivec2 pos = unread->draw(m_engine.get(), button_desc_s::NORMAL, ca, button_desc_s::ALEFT | button_desc_s::ABOTTOM);
-
-                        if (!contact->is_ringtone() || contact->is_ringtone_blink())
-                        {
-                            ts::flags32_s f; f.setup(ts::TO_VCENTER | ts::TO_HCENTER);
-                            tdp.textoptions = &f;
-                            tdp.forecolor = unread->colors + button_desc_s::NORMAL;
-
-                            draw_data_s &dd = m_engine->begin_draw();
-                            dd.offset += pos;
-                            dd.size = unread->size;
-                            if (contact->is_ringtone())
-                                m_engine->draw(ts::wstr_c(CONSTWSTR("<img=call>")), tdp);
-                            else
-                            {
-                                if (st == CS_INVITE_RECEIVE || n_unread == 0)
-                                    m_engine->draw(CONSTWSTR("!"), tdp);
-                                else
-                                    m_engine->draw(ts::wstr_c().set_as_uint(n_unread), tdp);
-                            }
-                            m_engine->end_draw();
-                        }
-                    }
-
                 }
+
+                ts::irect noti_draw_area = ca;
 
                 if (!flags.is(F_EDITNAME|F_EDITSTATUS))
                 {
@@ -965,6 +937,34 @@ int gui_contact_item_c::contact_item_rite_margin()
                         }
                     }
                     m_engine->end_draw();
+                }
+                if (drawnotify)
+                {
+                    if (n_unread > 99) n_unread = 99;
+                    button_desc_s *unread = g_app->buttons().unread;
+
+                    ts::ivec2 pos = unread->draw(m_engine.get(), button_desc_s::NORMAL, noti_draw_area, button_desc_s::ALEFT | button_desc_s::ABOTTOM);
+
+                    if (!contact->is_ringtone() || contact->is_ringtone_blink())
+                    {
+                        ts::flags32_s f; f.setup(ts::TO_VCENTER | ts::TO_HCENTER);
+                        tdp.textoptions = &f;
+                        tdp.forecolor = unread->colors + button_desc_s::NORMAL;
+
+                        draw_data_s &dd = m_engine->begin_draw();
+                        dd.offset += pos;
+                        dd.size = unread->size;
+                        if (contact->is_ringtone())
+                            m_engine->draw(ts::wstr_c(CONSTWSTR("<img=call>")), tdp);
+                        else
+                        {
+                            if (st == CS_INVITE_RECEIVE || n_unread == 0)
+                                m_engine->draw(CONSTWSTR("!"), tdp);
+                            else
+                                m_engine->draw(ts::wstr_c().set_as_uint(n_unread), tdp);
+                        }
+                        m_engine->end_draw();
+                    }
                 }
             }
         }
@@ -1449,6 +1449,7 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&ch)
 ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED>&ch)
 {
     recreate_ctls();
+
     return 0;
 }
 

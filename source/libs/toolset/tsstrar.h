@@ -497,13 +497,13 @@ public:
         }
     }
 
-    void    case_down(void)
+    void    case_down()
     {
         for(strtype &s : *this)
             s.case_down();
     }
 
-    void    case_up(void)
+    void    case_up()
     {
         for (strtype &s : *this)
             s.case_up();

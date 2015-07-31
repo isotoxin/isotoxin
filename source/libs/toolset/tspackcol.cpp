@@ -123,7 +123,7 @@ void    ccollection_c::remove_container(uint container_id)
 
 }
 
-bool ccollection_c::open_containers(void)
+bool ccollection_c::open_containers()
 {
     bool ok = false;
     int i=0;
@@ -140,7 +140,7 @@ bool ccollection_c::open_containers(void)
     return ok;
 }
 
-bool  ccollection_c::close_containers(void)
+bool  ccollection_c::close_containers()
 {
     for (container_c *c : m_containers)
         c->close();
