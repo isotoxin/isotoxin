@@ -750,6 +750,7 @@ struct transmitting_data_s : public file_transfer_s
     {
         is_accepted = true;
         is_paused = false;
+        hf->file_control(utag, FIC_ACCEPT);
     }
     /*virtual*/ void kill() override
     {

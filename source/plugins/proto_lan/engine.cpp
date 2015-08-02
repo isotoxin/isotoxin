@@ -2331,6 +2331,8 @@ lan_engine::transmitting_file_s::transmitting_file_s(contact_s *to_contact, u64 
     offset = offset_;
     is_accepted = true;
     is_paused = false;
+
+    engine->hf->file_control(utag, FIC_ACCEPT);
 }
 /*virtual*/ void lan_engine::transmitting_file_s::finished(bool from_self)
 {

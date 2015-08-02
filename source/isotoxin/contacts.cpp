@@ -1430,6 +1430,10 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
 
         }
         break;
+    case FIC_ACCEPT:
+        if (file_transfer_s *ft = g_app->find_file_transfer(ifl.utag))
+            ft->upload_accepted();
+        break;
     case FIC_BREAK:
     case FIC_REJECT:
         DMSG("ftbreak " << ifl.utag);
@@ -1450,6 +1454,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
         DMSG("ftdisc " << ifl.utag);
         if (file_transfer_s *ft = g_app->find_file_transfer(ifl.utag))
             ft->kill(FIC_DISCONNECT);
+        break;
     }
 
     return 0;

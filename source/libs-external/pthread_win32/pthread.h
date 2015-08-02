@@ -5,7 +5,9 @@
 #include <windows.h>
 #include <intrin.h>
 
+#ifndef pthread_self
 #define pthread_self GetCurrentThreadId
+#endif
 
 #pragma intrinsic (_InterlockedCompareExchange)
 typedef long lock_t;

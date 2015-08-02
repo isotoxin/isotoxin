@@ -129,6 +129,7 @@
     <ClCompile Include="tsbuf.cpp" />
     <ClCompile Include="tscrc.cpp" />
     <ClCompile Include="tsdebug.cpp" />
+    <ClCompile Include="tsexecutor.cpp" />
     <ClCompile Include="tsfilesystem.cpp" />
     <ClCompile Include="tsfile_zip.cpp" />
     <ClCompile Include="tshash_md5.cpp" />
@@ -147,6 +148,7 @@
     <ClCompile Include="tszip.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="tsexecutor.h" />
     <ClInclude Include="internal\excpn.h" />
     <ClInclude Include="internal\glyphscache.h" />
     <ClInclude Include="internal\imageformat.h" />

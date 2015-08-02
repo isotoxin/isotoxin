@@ -49,34 +49,102 @@ struct autoupdate_params_s
     bool downloaded = false;
 };
 
+struct file_transfer_s;
+struct query_task_s : public ts::task_c
+{
+    file_transfer_s *ftr;
+
+    struct job_s
+    {
+        DUMMY(job_s);
+        uint64 offset;
+        int sz;
+        job_s() {}
+    };
+
+    struct sync_s
+    {
+        job_s current_job;
+        ts::array_inplace_t<job_s, 1> jobarray;
+    };
+
+    spinlock::syncvar<sync_s> sync;
+
+    volatile enum 
+    {
+        rslt_inprogress,
+        rslt_kill,
+        rslt_ok,
+
+    } rslt = rslt_inprogress;
+
+    query_task_s(file_transfer_s *ftr):ftr(ftr) {}
+    ~query_task_s();
+    /*virtual*/ int iterate(int pass) override;
+    /*virtual*/ void done(bool canceled) override;
+    /*virtual*/ void result() override;
+};
+
 struct file_transfer_s : public unfinished_file_transfer_s
 {
     MOVABLE(true);
 
-    uint64 offset = 0;
-    uint64 progrez = 0;
-    HANDLE handle = nullptr;
-    double notfreq = 1.0;
-    LARGE_INTEGER prevt;
-    int bytes_per_sec = 0;
+    static const int BPSSV_WAIT_FOR_ACCEPT = -3;
+    static const int BPSSV_PAUSED_BY_REMOTE = -2;
+    static const int BPSSV_PAUSED_BY_ME = -1;
+    static const int BPSSV_ALLOW_CALC = 0;
 
-    struct range_s
+
+    query_task_s *query_task = nullptr;
+
+    struct data_s
     {
-        uint64 offset0;
-        uint64 offset1;
+        uint64 offset = 0;
+        uint64 progrez = 0;
+        HANDLE handle = nullptr;
+        double notfreq = 1.0;
+        LARGE_INTEGER prevt;
+        int bytes_per_sec = BPSSV_ALLOW_CALC;
+        float upduitime = 0;
+
+        struct range_s
+        {
+            uint64 offset0;
+            uint64 offset1;
+        };
+        ts::tbuf0_t<range_s> transfered;
+        void tr(uint64 _offset0, uint64 _offset1);
+        uint64 trsz() const
+        {
+            uint64 sz = 0;
+            for (const range_s &r : transfered)
+                sz += r.offset1 - r.offset0;
+            return sz;
+        }
+
+        float deltatime(bool updateprevt, int addseconds = 0)
+        {
+            LARGE_INTEGER cur;
+            QueryPerformanceCounter(&cur);
+            float dt = (float)((double)(cur.QuadPart - prevt.QuadPart) * notfreq);
+            if (updateprevt)
+            {
+                prevt = cur;
+                if (addseconds)
+                    prevt.QuadPart += (int64)((double)addseconds / notfreq);
+            }
+            return dt;
+        }
+
     };
-    ts::tbuf0_t<range_s> transfered;
-    void tr( uint64 _offset0, uint64 _offset1 );
-    uint64 trsz() const
-    {
-        uint64 sz = 0;
-        for(const range_s &r : transfered)
-            sz += r.offset1 - r.offset0;
-        return sz;
-    }
 
-    float upduitime = 0;
-    bool accepted = false; // prepare_fn called - file receive accepted
+    spinlock::syncvar<data_s> data;
+
+    HANDLE file_handle() const { return data.lock_read()().handle; }
+    uint64 get_offset() const { return data.lock_read()().offset; }
+
+    bool accepted = false; // prepare_fn called - file receive accepted // used only for receive
+    bool update_item = false;
 
     file_transfer_s();
     ~file_transfer_s();
@@ -84,22 +152,10 @@ struct file_transfer_s : public unfinished_file_transfer_s
     void auto_confirm();
 
     int progress(int &bytes_per_sec) const;
-    void upd_message_item();
+    void upd_message_item(bool force);
 
-    float deltatime(bool updateprevt, int addseconds = 0)
-    {
-        LARGE_INTEGER cur;
-        QueryPerformanceCounter(&cur);
-        float dt = (float)((double)(cur.QuadPart - prevt.QuadPart) * notfreq);
-        if (updateprevt)
-        {
-            prevt = cur;
-            if (addseconds)
-                prevt.QuadPart += (int64)((double)addseconds / notfreq);
-        }
-        return dt;
-    }
 
+    void upload_accepted();
     void resume();
     void prepare_fn( const ts::wstr_c &path_with_fn, bool overwrite );
     void kill( file_control_e fctl = FIC_BREAK );
@@ -107,7 +163,11 @@ struct file_transfer_s : public unfinished_file_transfer_s
     void query( uint64 offset, int sz );
     void pause_by_remote( bool p );
     void pause_by_me( bool p );
-    bool is_active() const { return bytes_per_sec == -3 || (const_cast<file_transfer_s *>(this)->deltatime(false)) < 60; /* last activity in 60 sec */ }
+    bool is_active() const 
+    {
+        auto rdata = data.lock_read();
+        return rdata().bytes_per_sec == BPSSV_WAIT_FOR_ACCEPT || (const_cast<data_s *>(&rdata())->deltatime(false)) < 60; /* last activity in 60 sec */
+    }
     bool confirm_required() const;
 };
 
@@ -167,6 +227,7 @@ public:
 
     ts::pointers_t<contact_c,0> m_ringing;
     mediasystem_c m_mediasystem;
+    ts::task_executor_c m_tasks_executor;
 
     ts::hashmap_t<int, ts::wstr_c> m_locale;
     ts::hashmap_t<SLANGID, ts::wstr_c> m_locale_lng;
@@ -174,7 +235,7 @@ public:
 
     preloaded_buttons_s m_buttons;
 
-    ts::array_inplace_t<file_transfer_s, 2> m_files;
+    ts::array_del_t<file_transfer_s, 2> m_files;
 
     ts::tbuf_t<contact_key_s> m_need_recalc_unread;
     ts::tbuf_t<contact_key_s> m_locked_recalc_unread;
@@ -243,14 +304,16 @@ public:
 
     mediasystem_c &mediasystem() {return m_mediasystem;};
 
+    void add_task( ts::task_c *t ) { m_tasks_executor.add(t); }
+
     void update_ringtone( contact_c *rt, bool play_stop_snd = true );
 
 
     template<typename R> void enum_file_transfers_by_historian( const contact_key_s &historian, R r )
     {
-        for (file_transfer_s &ftr : m_files)
-            if (ftr.historian == historian)
-                r(ftr);
+        for (file_transfer_s *ftr : m_files)
+            if (ftr->historian == historian)
+                r(*ftr);
     }
     bool present_file_transfer_by_historian(const contact_key_s &historian, bool accept_only_rquest);
     bool present_file_transfer_by_sender(const contact_key_s &sender, bool accept_only_rquest);

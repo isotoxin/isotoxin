@@ -138,6 +138,9 @@
     <ClCompile Include="internal\imageformat_gif.cpp">
       <Filter>src\internal\bitmaps</Filter>
     </ClCompile>
+    <ClCompile Include="tsexecutor.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="internal\cpuaccel.h">
@@ -256,6 +259,9 @@
     </ClInclude>
     <ClInclude Include="internal\imageformat.h">
       <Filter>src\internal\bitmaps</Filter>
+    </ClInclude>
+    <ClInclude Include="tsexecutor.h">
+      <Filter>src</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

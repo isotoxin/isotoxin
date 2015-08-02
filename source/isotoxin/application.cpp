@@ -345,6 +345,7 @@ static DWORD WINAPI autoupdater(LPVOID)
     }
 
     picture_animated_c::tick();
+    m_tasks_executor.tick();
 }
 
 /*virtual*/ void application_c::app_fix_sleep_value(int &sleep_ms)
@@ -775,35 +776,35 @@ void application_c::update_ringtone( contact_c *rt, bool play_stop_snd )
 
 bool application_c::present_file_transfer_by_historian(const contact_key_s &historian, bool accept_only_rquest)
 {
-    for (file_transfer_s &ftr : m_files)
-        if (ftr.historian == historian)
-            if (accept_only_rquest) { if (ftr.handle == nullptr) return true; }
+    for (const file_transfer_s *ftr : m_files)
+        if (ftr->historian == historian)
+            if (accept_only_rquest) { if (ftr->file_handle() == nullptr) return true; }
             else { return true; }
     return false;
 }
 
 bool application_c::present_file_transfer_by_sender(const contact_key_s &sender, bool accept_only_rquest)
 {
-    for (file_transfer_s &ftr : m_files)
-        if (ftr.sender == sender)
-            if (accept_only_rquest) { if (ftr.handle == nullptr) return true; }
+    for (const file_transfer_s *ftr : m_files)
+        if (ftr->sender == sender)
+            if (accept_only_rquest) { if (ftr->file_handle() == nullptr) return true; }
             else { return true; }
     return false;
 }
 
 file_transfer_s *application_c::find_file_transfer_by_msgutag(uint64 utag)
 {
-    for (file_transfer_s &ftr : m_files)
-        if (ftr.msgitem_utag == utag)
-            return &ftr;
+    for (file_transfer_s *ftr : m_files)
+        if (ftr->msgitem_utag == utag)
+            return ftr;
     return nullptr;
 }
 
 file_transfer_s *application_c::find_file_transfer(uint64 utag)
 {
-    for(file_transfer_s &ftr : m_files)
-        if (ftr.utag == utag)
-            return &ftr;
+    for(file_transfer_s *ftr : m_files)
+        if (ftr->utag == utag)
+            return ftr;
     return nullptr;
 }
 
@@ -811,60 +812,64 @@ file_transfer_s * application_c::register_file_transfer( const contact_key_s &hi
 {
     if (find_file_transfer(utag)) return nullptr;
 
-    file_transfer_s &ftr = m_files.add();
-    ftr.historian = historian;
-    ftr.sender = sender;
-    ftr.filename = filename;
-    ftr.filename_on_disk = filename;
-    ftr.filesize = filesize;
-    ftr.utag = utag;
-    ts::fix_path(ftr.filename, FNO_NORMALIZE);
+    file_transfer_s *ftr = TSNEW( file_transfer_s );
+    m_files.add( ftr );
+
+    auto d = ftr->data.lock_write();
+
+    ftr->historian = historian;
+    ftr->sender = sender;
+    ftr->filename = filename;
+    ftr->filename_on_disk = filename;
+    ftr->filesize = filesize;
+    ftr->utag = utag;
+    ts::fix_path(ftr->filename, FNO_NORMALIZE);
 
     auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.utag == utag; });
 
     if (filesize == 0)
     {
         // send
-        ftr.upload = true;
-        ftr.handle = CreateFileW(filename, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (ftr.handle == INVALID_HANDLE_VALUE)
+        ftr->upload = true;
+        d().handle = CreateFileW(filename, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (d().handle == INVALID_HANDLE_VALUE)
         {
-            ftr.handle = nullptr;
+            d().handle = nullptr;
             m_files.remove_fast(m_files.size()-1);
             return nullptr;
         }
-        GetFileSizeEx(ftr.handle, &ts::ref_cast<LARGE_INTEGER>(ftr.filesize) );
+        GetFileSizeEx(d().handle, &ts::ref_cast<LARGE_INTEGER>(ftr->filesize) );
 
         if (active_protocol_c *ap = prf().ap(sender.protoid))
-            ap->send_file(sender.contactid, utag, ts::fn_get_name_with_ext(ftr.filename), ftr.filesize);
+            ap->send_file(sender.contactid, utag, ts::fn_get_name_with_ext(ftr->filename), ftr->filesize);
 
-        ftr.bytes_per_sec = -3; // wait 4 accept
-        if (row == nullptr) ftr.upd_message_item();
+        d().bytes_per_sec = file_transfer_s::BPSSV_WAIT_FOR_ACCEPT;
+        if (row == nullptr) ftr->upd_message_item(true);
     }
 
     if (row)
     {
-        ASSERT( row->other.filesize == ftr.filesize && row->other.filename.equals(ftr.filename) );
-        ftr.msgitem_utag = row->other.msgitem_utag;
-        row->other = ftr;
-        ftr.upd_message_item();
+        ASSERT( row->other.filesize == ftr->filesize && row->other.filename.equals(ftr->filename) );
+        ftr->msgitem_utag = row->other.msgitem_utag;
+        row->other = *ftr;
+        ftr->upd_message_item(true);
     } else
     {
         auto &tft = prf().get_table_unfinished_file_transfer().getcreate(0);
-        tft.other = ftr;
+        tft.other = *ftr;
     }
 
     prf().changed();
 
-    return &ftr;
+    return ftr;
 }
 
 void application_c::cancel_file_transfers( const contact_key_s &historian )
 {
     for (int i = m_files.size()-1; i >= 0; --i)
     {
-        file_transfer_s &ftr = m_files.get(i);
-        if (ftr.historian == historian)
+        file_transfer_s *ftr = m_files.get(i);
+        if (ftr->historian == historian)
             m_files.remove_fast(i);
     }
 
@@ -888,8 +893,8 @@ void application_c::unregister_file_transfer(uint64 utag, bool disconnected)
     int cnt = m_files.size();
     for (int i=0;i<cnt;++i)
     {
-        file_transfer_s &ftr = m_files.get(i);
-        if (ftr.utag == utag)
+        file_transfer_s *ftr = m_files.get(i);
+        if (ftr->utag == utag)
         {
             m_files.remove_fast(i);
             return;
@@ -962,15 +967,25 @@ void preloaded_buttons_s::reload()
 
 file_transfer_s::file_transfer_s()
 {
+    auto d = data.lock_write();
+
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
-    notfreq = 1.0 / (double)freq.QuadPart;
-    QueryPerformanceCounter(&prevt);
+    d().notfreq = 1.0 / (double)freq.QuadPart;
+    QueryPerformanceCounter(&d().prevt);
 }
 
 file_transfer_s::~file_transfer_s()
 {
-    if (handle)
+    if (query_task)
+    {
+        while (query_task->rslt == query_task_s::rslt_inprogress) // oops. query task in progress (other thread job). wait...
+            Sleep(1);
+
+        query_task->ftr = nullptr;
+    }
+
+    if (HANDLE handle = file_handle())
         CloseHandle(handle);
 }
 
@@ -1012,8 +1027,8 @@ void file_transfer_s::prepare_fn( const ts::wstr_c &path_with_fn, bool overwrite
             filename_on_disk = ts::fn_change_name(filename_on_disk, ts::wstr_c(origname).append_char('(').append_as_int(n++).append_char(')'));
     }
     filename_on_disk.append(CONSTWSTR(".!rcv"));
-    deltatime(true);
-    upd_message_item();
+    data.lock_write()().deltatime(true);
+    upd_message_item(true);
 
     if (auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.utag == utag; }))
     {
@@ -1026,20 +1041,22 @@ void file_transfer_s::prepare_fn( const ts::wstr_c &path_with_fn, bool overwrite
 
 int file_transfer_s::progress(int &bps) const
 {
-    bps = bytes_per_sec;
-    return (int)(progrez * 100 / filesize);
+    auto rdata = data.lock_read();
+    bps = rdata().bytes_per_sec;
+    return (int)(rdata().progrez * 100 / filesize);
 }
 
 void file_transfer_s::pause_by_remote( bool p )
 {
     if (p)
     {
-        bytes_per_sec = -2;
-        upd_message_item();
+        data.lock_write()().bytes_per_sec = BPSSV_PAUSED_BY_REMOTE;
+        upd_message_item(true);
     } else
     {
-        deltatime(true);
-        bytes_per_sec = 0;
+        auto wdata = data.lock_write();
+        wdata().deltatime(true);
+        wdata().bytes_per_sec = BPSSV_ALLOW_CALC;
     }
 }
 
@@ -1051,14 +1068,15 @@ void file_transfer_s::pause_by_me(bool p)
     if (p)
     {
         ap->file_control(utag, FIC_PAUSE);
-        bytes_per_sec = -1;
-        upd_message_item();
+        data.lock_write()().bytes_per_sec = BPSSV_PAUSED_BY_ME;
+        upd_message_item(true);
     }
     else
     {
         ap->file_control(utag, FIC_UNPAUSE);
-        deltatime(true);
-        bytes_per_sec = 0;
+        auto wdata = data.lock_write();
+        wdata().deltatime(true);
+        wdata().bytes_per_sec = BPSSV_ALLOW_CALC;
     }
 }
 
@@ -1083,6 +1101,7 @@ void file_transfer_s::kill( file_control_e fctl )
             ap->file_control(utag, fctl);
     }
 
+    HANDLE handle = file_handle();
     if (handle && (!upload || fctl != FIC_DONE)) // close before update message item
     {
         LARGE_INTEGER fsz = {0};
@@ -1093,7 +1112,7 @@ void file_transfer_s::kill( file_control_e fctl )
                 return;
         }
         CloseHandle(handle);
-        handle = nullptr;
+        data.lock_write()().handle = nullptr;
         if (filename_on_disk.ends(CONSTWSTR(".!rcv")))
             filename_on_disk.trunc_length(5);
         if ( (uint64)fsz.QuadPart != filesize || upload)
@@ -1118,8 +1137,8 @@ void file_transfer_s::kill( file_control_e fctl )
         } else if (!upload && fctl == FIC_DONE)
             MoveFileW(filename_on_disk + CONSTWSTR(".!rcv"), filename_on_disk);
     }
-    deltatime(true, -60);
-    if (fctl != FIC_REJECT) upd_message_item();
+    data.lock_write()().deltatime(true, -60);
+    if (fctl != FIC_REJECT) upd_message_item(true);
     if (fctl == FIC_DONE)
     {
         post_s p;
@@ -1140,7 +1159,7 @@ void file_transfer_s::kill( file_control_e fctl )
     g_app->unregister_file_transfer(utag, fctl == FIC_DISCONNECT);
 }
 
-void file_transfer_s::tr( uint64 _offset0, uint64 _offset1 )
+void file_transfer_s::data_s::tr( uint64 _offset0, uint64 _offset1 )
 {
     if ( transfered.count() == 0 )
     {
@@ -1186,146 +1205,226 @@ void file_transfer_s::tr( uint64 _offset0, uint64 _offset1 )
     rr.offset1 = _offset1;
 }
 
+query_task_s::~query_task_s()
+{
+    if (ftr)
+        ftr->query_task = nullptr;
+}
+
+
+/*virtual*/ int query_task_s::iterate(int pass)
+{
+    job_s cj = sync.lock_read()().current_job;
+
+    if (ftr->get_offset() != cj.offset)
+    {
+        auto wdata = ftr->data.lock_write();
+        LARGE_INTEGER li;
+        li.QuadPart = cj.offset;
+        SetFilePointer(wdata().handle, li.LowPart, &li.HighPart, FILE_BEGIN);
+        wdata().offset = cj.offset;
+    }
+    int sz = (int)ts::tmin<int64>(cj.sz, (int64)(ftr->filesize - cj.offset));
+    ts::tmp_buf_c b(sz, true);
+    DWORD r;
+    if (!ReadFile(ftr->file_handle(), b.data(), sz, &r, nullptr))
+    {
+        rslt = rslt_kill;
+        return R_DONE;
+    }
+
+    if (active_protocol_c *ap = prf().ap(ftr->sender.protoid))
+        ap->file_portion(ftr->utag, cj.offset, b.data(), cj.sz);
+
+    if (cj.sz)
+    {
+        auto wdata = ftr->data.lock_write();
+
+        if (wdata().bytes_per_sec >= file_transfer_s::BPSSV_ALLOW_CALC)
+        {
+            wdata().tr(cj.offset, cj.offset + cj.sz);
+            wdata().upduitime += wdata().deltatime(true);
+
+            if (wdata().upduitime > 0.3f)
+            {
+                wdata().upduitime -= 0.3f;
+                wdata().bytes_per_sec = lround((float)wdata().trsz() / 0.3f);
+                wdata().transfered.clear();
+                ftr->update_item = true;
+            }
+        }
+
+        wdata().offset += cj.sz;
+        wdata().progrez = wdata().offset + cj.sz;
+    }
+
+
+    auto d = sync.lock_write();
+    if (d().jobarray.size())
+    {
+        d().current_job = d().jobarray.get_remove_slow();
+        rslt = rslt_inprogress;
+        return R_RESULT;
+    }
+
+    rslt = rslt_ok;
+    return R_DONE;
+}
+/*virtual*/ void query_task_s::done(bool canceled)
+{
+    if (canceled || ftr == nullptr)
+    {
+        __super::done(canceled);
+        return;
+    }
+
+    if (rslt == rslt_kill)
+    {
+        ftr->kill();
+        ASSERT(ftr == nullptr);
+        __super::done(canceled);
+        return;
+    }
+
+    ASSERT( rslt == rslt_ok );
+
+    ftr->upd_message_item(false);
+
+    __super::done(canceled);
+}
+
+/*virtual*/ void query_task_s::result()
+{
+    if (ftr) ftr->upd_message_item(false);
+}
+
 void file_transfer_s::query( uint64 offset_, int sz )
 {
-    if (handle)
+    if (query_task)
     {
-        if (offset != offset_)
-        {
-            LARGE_INTEGER li;
-            li.QuadPart = offset_;
-            SetFilePointer(handle, li.LowPart, &li.HighPart, FILE_BEGIN);
-            offset = offset_;
-        }
-        sz = (int)ts::tmin<int64>(sz, (int64)(filesize - offset));
-        ts::tmp_buf_c b(sz,true);
-        DWORD r;
-        if (!ReadFile(handle, b.data(), sz, &r, nullptr))
-        {
-            kill();
-            return;
-        }
-
-        if (active_protocol_c *ap = prf().ap(sender.protoid))
-            ap->file_portion(utag, offset_, b.data(), sz);
-
-        if (sz)
-        {
-            if (bytes_per_sec < 0)
-            {
-                deltatime(true);
-                bytes_per_sec = 0;
-            } else
-            {
-                tr( offset_, offset_ + sz );
-                upduitime += deltatime(true);
-            }
-            if (upduitime > 0.3f)
-            {
-                upduitime -= 0.3f;
-                bytes_per_sec = lround((float)trsz() / 0.3f);
-                transfered.clear();
-                upd_message_item();
-            }
-
-        }
-
-        offset += sz;
-        progrez = offset + sz;
-
+        auto d = query_task->sync.lock_write();
+        auto &job = d().jobarray.add();
+        job.offset = offset_;
+        job.sz = sz;
+        return;
     }
+        
+
+    if (file_handle())
+    {
+        query_task = TSNEW( query_task_s, this );
+        auto d = query_task->sync.lock_write();
+        d().current_job.offset = offset_;
+        d().current_job.sz = sz;
+        d.unlock();
+        g_app->add_task(query_task);
+    }
+}
+
+void file_transfer_s::upload_accepted()
+{
+    auto wdata = data.lock_write();
+    ASSERT( wdata().bytes_per_sec == BPSSV_WAIT_FOR_ACCEPT );
+        wdata().bytes_per_sec = BPSSV_ALLOW_CALC;
 }
 
 void file_transfer_s::resume()
 {
-    ASSERT(handle == nullptr);
+    ASSERT(file_handle() == nullptr);
 
-    handle = CreateFileW(filename_on_disk, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (handle == INVALID_HANDLE_VALUE)
+    HANDLE h = CreateFileW(filename_on_disk, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE)
     {
-        handle = nullptr;
         kill();
         return;
     }
+    auto wdata = data.lock_write();
+    wdata().handle = h;
 
     LARGE_INTEGER fsz = { 0 };
-    GetFileSizeEx(handle, &fsz);
-    offset = fsz.QuadPart > 1024 ? fsz.QuadPart - 1024 : 0;
-    progrez = offset;
-    fsz.QuadPart = offset;
-    SetFilePointer(handle, fsz.LowPart, &fsz.HighPart, FILE_BEGIN);
+    GetFileSizeEx(wdata().handle, &fsz);
+    wdata().offset = fsz.QuadPart > 1024 ? fsz.QuadPart - 1024 : 0;
+    wdata().progrez = wdata().offset;
+    fsz.QuadPart = wdata().offset;
+    SetFilePointer(wdata().handle, fsz.LowPart, &fsz.HighPart, FILE_BEGIN);
 
     accepted = true;
 
     if (active_protocol_c *ap = prf().ap(sender.protoid))
-        ap->file_resume( utag, offset );
+        ap->file_resume( utag, wdata().offset );
 
 }
 
-void file_transfer_s::save(uint64 offset_, const ts::buf0_c&data)
+void file_transfer_s::save(uint64 offset_, const ts::buf0_c&bdata)
 {
     if (!accepted) return;
 
-    if (handle == nullptr)
+    if (file_handle() == nullptr)
     {
         play_sound( snd_start_recv_file, false );
 
-        handle = CreateFileW(filename_on_disk, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (handle == INVALID_HANDLE_VALUE)
+        HANDLE h = CreateFileW(filename_on_disk, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h == INVALID_HANDLE_VALUE)
         {
-            handle = nullptr;
             kill();
             return;
         }
+        data.lock_write()().handle = h;
         if (contact_c *c = contacts().find(historian))
             if (c->gui_item)
                 c->gui_item->getengine().redraw();
     }
-    if (offset_ + data.size() > filesize)
+    if (offset_ + bdata.size() > filesize)
     {
         kill();
         return;
     }
-    if ( offset != offset_ )
+
+    auto wdata = data.lock_write();
+
+    if ( wdata().offset != offset_ )
     {
         LARGE_INTEGER li;
         li.QuadPart = offset_;
-        SetFilePointer(handle, li.LowPart, &li.HighPart, FILE_BEGIN);
-        offset = offset_;
+        SetFilePointer(wdata().handle, li.LowPart, &li.HighPart, FILE_BEGIN);
+        wdata().offset = offset_;
     }
 
     DWORD w;
-    WriteFile(handle, data.data(), data.size(), &w, nullptr);
-    if ((ts::aint)w != data.size())
+    WriteFile(wdata().handle, bdata.data(), bdata.size(), &w, nullptr);
+    if ((ts::aint)w != bdata.size())
     {
         kill();
         return;
     }
 
-    offset += data.size();
-    progrez += data.size();
+    wdata().offset += bdata.size();
+    wdata().progrez += bdata.size();
 
-    if (data.size())
+    if (bdata.size())
     {
-        if (bytes_per_sec >= 0)
+        if (wdata().bytes_per_sec >= BPSSV_ALLOW_CALC)
         {
-            tr( offset_, offset_+ data.size() );
-            upduitime += deltatime(true);
+            wdata().tr( offset_, offset_+ bdata.size() );
+            wdata().upduitime += wdata().deltatime(true);
 
-            if (upduitime > 0.3f)
+            if (wdata().upduitime > 0.3f)
             {
-                upduitime -= 0.3f;
-                bytes_per_sec = lround((float)trsz() / 0.3f);
-                transfered.clear();
-                upd_message_item();
+                wdata().upduitime -= 0.3f;
+                wdata().bytes_per_sec = lround((float)wdata().trsz() / 0.3f);
+                wdata().transfered.clear();
+                wdata.unlock();
+                upd_message_item(true);
             }
         }
     }
 
 }
 
-void file_transfer_s::upd_message_item()
+void file_transfer_s::upd_message_item(bool force)
 {
+    if (!force && !update_item) return;
+    update_item = false;
     //DMSG("upditem " << utag << filename_on_disk);
 
     if (msgitem_utag)

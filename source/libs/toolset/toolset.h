@@ -973,6 +973,7 @@ template <typename T> struct dummy
 #include "tsparse.h"
 #include "tssqlite.h"
 #include "tszip.h"
+#include "tsexecutor.h"
 
 
 #pragma pack (pop)

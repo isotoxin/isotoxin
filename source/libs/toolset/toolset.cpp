@@ -3,10 +3,6 @@
 #include <time.h>
 #include <Iphlpapi.h>
 
-#define SLASSERT ASSERTO
-#define SLERROR ERROR
-#include "spinlock/spinlock.h"
-
 #ifndef _FINAL
 #include <DbgHelp.h>
 #pragma comment(lib, "dbghelp.lib")

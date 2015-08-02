@@ -97,7 +97,7 @@ namespace
         bool rsz_required = false;
         bool frame_dirty = false;
 
-        virtual void fit_to_width(int w) override
+        /*virtual*/ void fit_to_width(int w) override
         {
             if (w >= origsz.x)
             {
@@ -179,7 +179,7 @@ namespace
     {
         ts::bitmap_c bmp;
 
-        virtual void fit_to_width(int w) override
+        /*virtual*/ void fit_to_width(int w) override
         {
             if ( w >= bmp.info().sz.x )
             {
@@ -198,7 +198,7 @@ namespace
             current_frame.premultiply();
         }
 
-        virtual bool load(const ts::blob_c &b) override
+        /*virtual*/ bool load(const ts::blob_c &b) override
         {
             if (!bmp.load_from_file(b.data(), b.size()))
                 return false;
@@ -217,19 +217,6 @@ namespace
 
     class pictures_cache_c
     {
-        GM_RECEIVER( pictures_cache_c, ISOGM_IMAGE_LOADED )
-        {
-            if (auto *x = stuff.find(p.fn))
-            {
-                pic_cached_s &pc = x->value;
-                pc.pic = std::move(p.pic);
-                for (image_loader_c *imgl = pc.first; imgl; imgl = imgl->next)
-                    imgl->signal_loaded(RID(), pc.pic.get());
-            }
-
-            return 0;
-        }
-
         struct pic_cached_s
         {
             UNIQUE_PTR( picture_c ) pic;
@@ -239,57 +226,52 @@ namespace
 
         ts::hashmap_t< ts::wstr_c, pic_cached_s > stuff;
 
-        struct loading_s
+        struct loading_s : public ts::task_c
         {
-            DUMMY(loading_s);
             loading_s() {}
             ts::wstr_c filename;
-            void load_and_notify()
-            {
-                picture_c *pic = nullptr;
+            UNIQUE_PTR(picture_c) pic;
+            pictures_cache_c *cache;
 
+            loading_s( const ts::wsptr &fn, pictures_cache_c *cache ):filename(fn), cache(cache) {}
+
+            /*virtual*/ int iterate(int pass) override
+            {
                 ts::blob_c b;
                 b.load_from_disk_file(filename);
                 if (b.size() > 8)
                 {
-                    ts::uint32 sign = htonl( *(ts::uint32 *)b.data() );
-                    if ( 1195984440 == sign )
-                        pic = TSNEW( gif_thumb_s );
+                    ts::uint32 sign = htonl(*(ts::uint32 *)b.data());
+                    if (1195984440 == sign)
+                        pic.reset( TSNEW(gif_thumb_s) );
                     else
-                        pic = TSNEW( static_thumb_s );
-                    
+                        pic.reset( TSNEW(static_thumb_s) );
+
                     pic->load(b);
                 }
 
-                gmsg<ISOGM_IMAGE_LOADED> *m = TSNEW( gmsg<ISOGM_IMAGE_LOADED>, filename, pic );
-                m->send_to_main_thread();
-            
+                return R_DONE;
+            }
+            /*virtual*/ void done(bool canceled) override
+            {
+                if (pic && !canceled)
+                {
+                    if (auto *x = cache->stuff.find(filename))
+                    {
+                        pic_cached_s &pc = x->value;
+                        pc.pic = std::move(pic);
+                        for (image_loader_c *imgl = pc.first; imgl; imgl = imgl->next)
+                            imgl->signal_loaded(RID(), pc.pic.get());
+                    }
+                }
+
+                __super::done(canceled);
             }
         };
-
-        struct sync_s
-        {
-            ts::array_inplace_t<loading_s, 1> loading;
-            bool loader_started = false;
-            bool loader_works = false;
-            bool loader_should_stop = false;
-        };
-
-        spinlock::syncvar< sync_s > sync;
 
     public:
         ~pictures_cache_c()
         {
-            for(;;)
-            {
-                auto w = sync.lock_write();
-                if (w().loader_works || w().loader_started)
-                {
-                    w().loader_should_stop = true;
-                    Sleep(1);
-                } else
-                    break;
-            }
         }
         picture_c *get(image_loader_c *by, const ts::wstr_c &filename)
         {
@@ -321,48 +303,10 @@ namespace
             }
         }
 
-        static DWORD WINAPI loader_proc(LPVOID ap)
-        {
-            ts::tmpalloc_c tmp;
-            ((pictures_cache_c *)ap)->loader();
-            return 0;
-        }
-
-        void loader()
-        {
-            auto w = sync.lock_write();
-            w().loader_started = false;
-            w().loader_works = true;
-            w.unlock();
-
-            for(;;)
-            {
-                auto w = sync.lock_write();
-                if (w().loading.size() == 0 || w().loader_should_stop)
-                {
-                    w().loader_works = false;
-                    return;
-                }
-
-                loading_s l = w().loading.get_remove_slow();
-                w.unlock();
-                l.load_and_notify();
-            }
-        }
-
         void load(const ts::wstr_c &filename)
         {
-            auto w = sync.lock_write();
-
-            loading_s &l = w().loading.add();
-            l.filename.setcopy(filename);
-
-
-            if (!w().loader_works && !w().loader_started)
-            {
-                w().loader_started = true;
-                CloseHandle(CreateThread(nullptr, 0, loader_proc, this, 0, nullptr));
-            }
+            loading_s *l = TSNEW( loading_s, filename.as_sptr(), this );
+            g_app->add_task(l);
         }
 
     };

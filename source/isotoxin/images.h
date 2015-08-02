@@ -102,9 +102,3 @@ public:
 
 };
 
-template<> struct gmsg<ISOGM_IMAGE_LOADED> : public gmsgbase
-{
-    UNIQUE_PTR( picture_c ) pic;
-    ts::wstr_c fn;
-    gmsg(ts::wsptr fn, picture_c *pic) :gmsgbase(ISOGM_IMAGE_LOADED), fn(fn), pic(pic) {}
-};
