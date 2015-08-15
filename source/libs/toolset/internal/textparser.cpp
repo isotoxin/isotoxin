@@ -1,6 +1,8 @@
 #include "toolset.h"
 #include "textparser.h"
 
+#pragma warning (disable:4456) // declaration of 'xxx' hides previous local declaration
+
 namespace ts
 {
 font_desc_c g_default_text_font;
@@ -59,16 +61,16 @@ namespace
             return 0;
         }
 
-	    void export_to_glyph_image(GLYPHS *glyphs, const ivec2 &pos, int add_underline_len, TSCOLOR color) const
+	    void export_to_glyph_image(GLYPHS *glyphs, const ivec2 &pos, int add_underline_len, TSCOLOR c) const
 	    {
 		    glyph_image_s &gi = glyphs->add();
 		    switch (type)
 		    {
 		    case CHAR:
 		    case SPACE:
-			    if (color == 0) // zero value is special
+			    if (c == 0) // zero value is special
 				     gi.color = ARGB(255,255,255,0); // we should provide equivalent value, but not zero
-			    else gi.color = color;
+			    else gi.color = c;
 			    gi.width  = (uint16)glyph->width;
 			    gi.height = (uint16)glyph->height;
                 gi.pitch = (uint16)glyph->width; // 1 byte per pixel for glyphs
@@ -362,20 +364,20 @@ struct text_parser_s
 
 	int calc_HSW(int &H, int &spaces, int &W, int &WR, int line_size)
 	{
-        ivec2 *curaddhs = addhtags ? (ivec2 *)_alloca(addhtags * sizeof(ivec2)) : nullptr;
+        ivec2 *curaddhs = addhtags ? (ivec2 *)_alloca(addhtags * sizeof(ivec2)) : nullptr; //-V630
         int curaddhs_n = 0;
 
 		H = 0; spaces = 0; W = 0; WR = 0;
-		if (line_size == 0) return 0;//чтобы не портить значение last_line_descender из-за последней пустой строки (актуально для singleLine)
+		if (line_size == 0) return 0; // to do not corrupt value of last_line_descender due last empty line (single line)
 		last_line_descender = 0;
         int addH = 0;
 		for (int j = 0; j < line_size; j++)
 		{
 			meta_glyph_s &mg = last_line.get(j);
-			H = tmax(H, pen.y ? mg.font->height : mg.font->ascender);//1. считаем max, т.к. в строке может меняться шрифт; 2. берется не высота символа, а именно ascender, чтобы высота строки не могла быть меньше этого значения, иначе строка из прописных символов нарисуется выше чем надо
+			H = tmax(H, pen.y ? mg.font->height : mg.font->ascender);
 			last_line_descender = tmin(last_line_descender, mg.calch(), mg.font->underline_add_y-(int)lceil(mg.font->uline_thickness*.5f));
 			if		(mg.type == meta_glyph_s::SPACE) spaces++;
-            else if (mg.type == meta_glyph_s::IMAGE) // для картинок дополнительно выполняется проверка на высоту картинки, чтобы высокие картинки расширяли строку
+            else if (mg.type == meta_glyph_s::IMAGE) // images can increase line height
             {
                 H = tmax(H, mg.image->height - mg.image_offset_Y);
                 if (mg.image_offset_Y > addH)
@@ -385,7 +387,7 @@ struct text_parser_s
                     curaddhs[curaddhs_n++] = ivec2(j,addH);
                 }
 
-            } else if (mg.type == meta_glyph_s::RECTANGLE) // для прямоугольников дополнительно выполняется проверка на высоту, чтобы высокие прямоугольники расширяли строку
+            } else if (mg.type == meta_glyph_s::RECTANGLE) // rectangles can increase line height
             {
                 H = tmax(H, mg.shadow - mg.image_offset_Y);
                 if (mg.image_offset_Y > addH)
@@ -614,8 +616,8 @@ struct text_parser_s
 
             token<wchar> t( tagbody, L',' ); //vertindent[,sideindent,[thickness]]
 			
-			int vertindent = ui_scale(t && !t->is_empty() ? t->as_int() : 7);
-            ++t; int sideindent = ui_scale(t && !t->is_empty() ? t->as_int() : 3);
+			int vertindent = ui_scale((t && !t->is_empty()) ? t->as_int() : 7);
+            ++t; int sideindent = ui_scale((t && !t->is_empty()) ? t->as_int() : 3);
 
 			if (glyphs)
 			{
@@ -907,7 +909,6 @@ struct text_parser_s
 
 						for (; i<nn; i++)
 						{
-							wchar_t ch;
 							if (i < n)
 							{
 								meta_glyph_s &mg = last_line.get(i+start);

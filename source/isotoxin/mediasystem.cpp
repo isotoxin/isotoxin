@@ -137,7 +137,7 @@ void mediasystem_c::voice_player::add_data(const void *d, int s)
     if (!isPlaying()) play();
 }
 
-int mediasystem_c::voice_player::protected_data_s::read_data(s3::Format fmt, char *dest, int size)
+int mediasystem_c::voice_player::protected_data_s::read_data(const s3::Format &fmt, char *dest, int size)
 {
     if (size < (buf[readbuf].size() - readpos))
     {
@@ -152,7 +152,7 @@ int mediasystem_c::voice_player::protected_data_s::read_data(s3::Format fmt, cha
         int exist_data_size = szleft + buf[readbuf ^ 1].size();
         if (exist_data_size < size && begining)
         {
-            // вначале тулим тишину, а потом данные, если есть
+            // silence first, then data, if exist
             int silence_size = size - exist_data_size;
             memset(dest, fmt.bitsPerSample == 8 ? 0x80 : 0, silence_size); // fill silence before data
             if (exist_data_size)
@@ -162,16 +162,16 @@ int mediasystem_c::voice_player::protected_data_s::read_data(s3::Format fmt, cha
         begining = false;
         memcpy(dest, buf[readbuf].data() + readpos, szleft);
         size -= szleft;
-        buf[readbuf].clear(); // этот буфер полностью выгребли
-        newdata = readbuf; // теперь в него буду поступать новые данные
-        readbuf ^= 1; readpos = 0; // а читать мы будем уже из другого буфера
+        buf[readbuf].clear(); // this buffer fully extracted
+        newdata = readbuf; // now it will be used for new data
+        readbuf ^= 1; readpos = 0; // and read-buffer is second one
         if (size)
         {
-            if (buf[readbuf].size()) // если в буфере что-то есть, то выгребаем
+            if (buf[readbuf].size()) // there are some data in buffer - get it
                 return szleft + read_data(fmt, dest + szleft, size);
-            newdata = readbuf = 0; // оба буфера пустые, но еще треба данные. работаем с нуля
-            memset(dest + szleft, fmt.bitsPerSample == 8 ? 0x80 : 0, size); // заполняем тишиной до конца запроса
-            begining = true; // как бы сначала - новые данные пойдут после тишины
+            newdata = readbuf = 0; // both buffers are empty - do job as from begining
+            memset(dest + szleft, fmt.bitsPerSample == 8 ? 0x80 : 0, size); // fill silence to end of request
+            begining = true; // as begining - new data after silence
         }
         return szleft + size;
     }

@@ -217,7 +217,7 @@ int proc_loc(const wstrings_c & pars)
     auto getfreetag = [&]()->int {
         static int lastchecktag = 0;
         tbuf_t<int>::default_comparator dc;
-        for(int tmp = 0;used_tags.find_index_sorted(tmp,++lastchecktag, dc););
+        for(aint tmp = 0;used_tags.find_index_sorted(tmp,++lastchecktag, dc););
         return lastchecktag;
     };
 

@@ -740,15 +740,15 @@ BOOL StackWalker::LoadModules()
   return bRet;
 }
 
-CONTEXT c;
-StackWalker::CallstackEntry csEntry;
-IMAGEHLP_SYMBOL64 *pSym;
-StackWalkerInternal::IMAGEHLP_MODULE64_V2 Module;
-IMAGEHLP_LINE64 Line;
-int frameNum;
-STACKFRAME64 s; // in/out stackframe
+static CONTEXT __c;
+static StackWalker::CallstackEntry csEntry;
+static IMAGEHLP_SYMBOL64 *pSym;
+static StackWalkerInternal::IMAGEHLP_MODULE64_V2 Module;
+static IMAGEHLP_LINE64 Line;
+static int frameNum;
+static STACKFRAME64 __s; // in/out stackframe
 
-char sym[sizeof(IMAGEHLP_SYMBOL64) + StackWalker::STACKWALK_MAX_NAMELEN];
+static char sym[sizeof(IMAGEHLP_SYMBOL64) + StackWalker::STACKWALK_MAX_NAMELEN];
 
 BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context)const
 {
@@ -763,39 +763,39 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context)const
   if (context == nullptr)
   {
     if (hThread!=GetCurrentThread()) SuspendThread(hThread);
-    memset(&c, 0, sizeof(CONTEXT));
-    c.ContextFlags = USED_CONTEXT_FLAGS;
-    if (GetThreadContext(hThread, &c) == FALSE)
+    memset(&__c, 0, sizeof(CONTEXT));
+    __c.ContextFlags = USED_CONTEXT_FLAGS;
+    if (GetThreadContext(hThread, &__c) == FALSE)
     {
         ResumeThread(hThread);
         return FALSE;
     }
-    TraceRegisters(hThread, &c);
-  }else c = *context;
+    TraceRegisters(hThread, &__c);
+  }else __c = *context;
 
   int len = _snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Call stack (%08p):\r\n", hThread);
   OnOutput(outBuffer, len);
 
   // init STACKFRAME for first call
-  memset(&s, 0, sizeof(s));
+  memset(&__s, 0, sizeof(__s));
   DWORD imageType;
 #ifdef _M_IX86
   // normally, call ImageNtHeader() and use machine info from PE header
   imageType = IMAGE_FILE_MACHINE_I386;
-  s.AddrPC.Offset = c.Eip;
-  s.AddrPC.Mode = AddrModeFlat;
-  s.AddrFrame.Offset = c.Ebp;
-  s.AddrFrame.Mode = AddrModeFlat;
-  s.AddrStack.Offset = c.Esp;
-  s.AddrStack.Mode = AddrModeFlat;
+  __s.AddrPC.Offset = __c.Eip;
+  __s.AddrPC.Mode = AddrModeFlat;
+  __s.AddrFrame.Offset = __c.Ebp;
+  __s.AddrFrame.Mode = AddrModeFlat;
+  __s.AddrStack.Offset = __c.Esp;
+  __s.AddrStack.Mode = AddrModeFlat;
 #elif _M_X64
   imageType = IMAGE_FILE_MACHINE_AMD64;
-  s.AddrPC.Offset = c.Rip;
-  s.AddrPC.Mode = AddrModeFlat;
-  s.AddrFrame.Offset = c.Rsp;
-  s.AddrFrame.Mode = AddrModeFlat;
-  s.AddrStack.Offset = c.Rsp;
-  s.AddrStack.Mode = AddrModeFlat;
+  __s.AddrPC.Offset = __c.Rip;
+  __s.AddrPC.Mode = AddrModeFlat;
+  __s.AddrFrame.Offset = __c.Rsp;
+  __s.AddrFrame.Mode = AddrModeFlat;
+  __s.AddrStack.Offset = __c.Rsp;
+  __s.AddrStack.Mode = AddrModeFlat;
 #else
 #error "Platform not supported!"
 #endif
@@ -818,14 +818,14 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context)const
     // assume that either you are done, or that the stack is so hosed that the next
     // deeper frame could not be found.
     // CONTEXT need not to be suplied if imageTyp is IMAGE_FILE_MACHINE_I386!
-    if ( ! this->m_sw->pSW(imageType, this->m_hProcess, hThread, &s, &c, myReadProcMem, this->m_sw->pSFTA, this->m_sw->pSGMB, nullptr) )
+    if ( ! this->m_sw->pSW(imageType, this->m_hProcess, hThread, &__s, &__c, myReadProcMem, this->m_sw->pSFTA, this->m_sw->pSGMB, nullptr) )
     {
       //this->OnDbgHelpErr("StackWalk64", GetLastError(), s.AddrPC.Offset);
       break;
     }
 
-    csEntry.offset = s.AddrPC.Offset;
-	csEntry.segment = (WORD)c.SegCs;
+    csEntry.offset = __s.AddrPC.Offset;
+	csEntry.segment = (WORD)__c.SegCs;
     csEntry.name[0] = 0;
     csEntry.undName[0] = 0;
     csEntry.undFullName[0] = 0;
@@ -835,16 +835,16 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context)const
     csEntry.lineNumber = 0;
     csEntry.loadedImageName[0] = 0;
     csEntry.moduleName[0] = 0;
-    if (s.AddrPC.Offset == s.AddrReturn.Offset)
+    if (__s.AddrPC.Offset == __s.AddrReturn.Offset)
     {
       //this->OnDbgHelpErr("StackWalk64-Endless-Callstack!", 0, s.AddrPC.Offset);
       break;
     }
-    if (s.AddrPC.Offset != 0)
+    if (__s.AddrPC.Offset != 0)
     {
       // we seem to have a valid PC
       // show procedure info (SymGetSymFromAddr64())
-      if (this->m_sw->pSGSFA(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromSmybol), pSym) != FALSE)
+      if (this->m_sw->pSGSFA(this->m_hProcess, __s.AddrPC.Offset, &(csEntry.offsetFromSmybol), pSym) != FALSE)
       {
         strncpy_s(csEntry.name, sizeof(csEntry.name), pSym->Name, sizeof(csEntry.name));
         // UnDecorateSymbolName()
@@ -859,7 +859,7 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context)const
       // show line number info, NT5.0-method (SymGetLineFromAddr64())
       if (this->m_sw->pSGLFA != nullptr )
       { // yes, we have SymGetLineFromAddr64()
-        if (this->m_sw->pSGLFA(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromLine), &Line) != FALSE)
+        if (this->m_sw->pSGLFA(this->m_hProcess, __s.AddrPC.Offset, &(csEntry.offsetFromLine), &Line) != FALSE)
         {
           csEntry.lineNumber = Line.LineNumber;
 
@@ -872,7 +872,7 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context)const
       } // yes, we have SymGetLineFromAddr64()
 
       // show module info (SymGetModuleInfo64())
-      if (this->m_sw->GetModuleInfo(this->m_hProcess, s.AddrPC.Offset, &Module ) != FALSE)
+      if (this->m_sw->GetModuleInfo(this->m_hProcess, __s.AddrPC.Offset, &Module ) != FALSE)
       { // got module info OK
         switch ( Module.SymType )
         {
@@ -926,11 +926,11 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context)const
     CallstackEntryType et = nextEntry;
     if (frameNum == 0)
       et = firstEntry;
-    this->OnCallstackEntry(et, csEntry, s);
+    this->OnCallstackEntry(et, csEntry, __s);
 
-    if (s.AddrReturn.Offset == 0)
+    if (__s.AddrReturn.Offset == 0)
     {
-      this->OnCallstackEntry(lastEntry, csEntry, s);
+      this->OnCallstackEntry(lastEntry, csEntry, __s);
       SetLastError(ERROR_SUCCESS);
       break;
     }

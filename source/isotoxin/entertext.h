@@ -17,7 +17,7 @@ gui_textfield_c::TEXTCHECKFUNC checker = check_always_ok;
      const ts::wstr_c &title,
      const ts::wstr_c &desc,
      const ts::wstr_c &val,
-     const ts::str_c  param,
+     const ts::str_c  &param,
      TEXTENTEROKFUNC okhandler,
      gui_textfield_c::TEXTCHECKFUNC checker ):utag(utag), title(title), desc(desc), val(val), param(param), okhandler(okhandler), checker(checker) {}
 };
@@ -51,7 +51,7 @@ public:
         const ts::wstr_c &title,
         const ts::wstr_c &desc,
         const ts::wstr_c &val,
-        const ts::str_c  param,
+        const ts::str_c  &param,
         TEXTENTEROKFUNC okhandler = TEXTENTEROKFUNC(),
         gui_textfield_c::TEXTCHECKFUNC checker = check_always_ok)  {  return dialog_entertext_params_s(utag,title,desc,val,param,okhandler,checker); }
 

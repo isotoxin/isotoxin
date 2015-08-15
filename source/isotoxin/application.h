@@ -218,12 +218,15 @@ public:
     unsigned F_NEEDFLASH : 1;
     unsigned F_FLASHIP : 1;
     unsigned F_SETNOTIFYICON : 1; // once
+    unsigned F_OFFLINE_ICON : 1;
+
 
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_EXIT);
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_INIT);
 
     GM_RECEIVER( application_c, ISOGM_PROFILE_TABLE_SAVED );
     GM_RECEIVER( application_c, GM_UI_EVENT );
+    GM_RECEIVER( application_c, ISOGM_DELIVERED );
 
     ts::pointers_t<contact_c,0> m_ringing;
     mediasystem_c m_mediasystem;
@@ -244,6 +247,15 @@ public:
     ts::pointers_t<sound_capture_handler_c, 0> m_scaptures;
 
     ts::tbuf_t<RID> m_flashredraw;
+
+    struct send_queue_s
+    {
+        ts::Time last_try_send_time = ts::Time::current();
+        contact_key_s receiver; // metacontact
+        ts::array_inplace_t<post_s, 1> queue; // sorted by time
+    };
+
+    ts::array_del_t<send_queue_s, 1> m_undelivered;
 
 public:
     bool b_send_message(RID r, GUIPARAM param);
@@ -322,6 +334,10 @@ public:
     file_transfer_s *register_file_transfer( const contact_key_s &historian, const contact_key_s &sender, uint64 utag, const ts::wstr_c &filename, uint64 filesize );
     void unregister_file_transfer(uint64 utag,bool disconnected);
     void cancel_file_transfers( const contact_key_s &historian ); // by historian
+
+
+    void resend_undelivered_messages( const contact_key_s& rcv = contact_key_s() );
+    void undelivered_message( const post_s &p );
 };
 
 extern application_c *g_app;

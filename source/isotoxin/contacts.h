@@ -73,20 +73,31 @@ struct contact_key_s
         return (int)ts::isign( ts::ref_cast<int64>(oc) - ts::ref_cast<int64>(*this) );
     }
 
-    ts::tmp_str_c as_str() const
+    ts::str_c as_str() const
     {
-        ts::tmp_str_c s;
+        ts::str_c s;
         s.set_as_num<int64>( ts::ref_cast<int64>(*this) );
         return s;
     }
 };
+
+template<typename STRTYPE> INLINE ts::streamstr<STRTYPE> & operator<<(ts::streamstr<STRTYPE> &dl, const contact_key_s &k)
+{
+    dl.begin();
+    dl.raw_append("CK=[cid:");
+    dl << k.contactid;
+    dl.raw_append(",pid:");
+    dl << k.protoid;
+    dl.raw_append("]");
+    return dl;
+}
 
 INLINE unsigned calc_hash(const contact_key_s &ck)
 {
     return ts::calc_hash(ck.contactid) ^ ts::hash_func(ts::calc_hash(ck.protoid));
 }
 
-INLINE ts::asptr  calc_message_skin(message_type_app_e mt, contact_key_s sender)
+INLINE ts::asptr  calc_message_skin(message_type_app_e mt, const contact_key_s &sender)
 {
     if (MTA_OLD_REQUEST == mt)
         return CONSTASTR("invite");
@@ -201,6 +212,7 @@ public:
 
 
     // not saved
+    static const ts::flags32_s::BITS F_DIP = SETBIT(24);
     static const ts::flags32_s::BITS F_PERSISTENT_GCHAT = SETBIT(25);
     static const ts::flags32_s::BITS F_SHOW_FRIEND_REQUEST = SETBIT(26);
     static const ts::flags32_s::BITS F_PROTOHIT = SETBIT(27);
@@ -218,6 +230,7 @@ public:
     ~contact_c();
     void prepare4die()
     {
+        opts.unmasked().set(F_DIP);
         metacontact = nullptr; // dec ref count
         subdelall();
     }
@@ -258,6 +271,12 @@ public:
         subcontacts.add(c);
         c->setmeta( this );
         return c;
+    }
+    contact_c * subget_proto(int protoid)
+    {
+        for (contact_c *c : subcontacts)
+            if (c->getkey().protoid == protoid) return c;
+        return nullptr;
     }
     contact_c * subget(const contact_key_s&k)
     {
@@ -588,6 +607,7 @@ template<> struct gmsg<ISOGM_MESSAGE> : public gmsgbase
     contact_c *sender = nullptr;
     contact_c *receiver = nullptr;
     bool current = false;
+    bool resend = false;
 
     contact_c *get_historian()
     {
@@ -666,6 +686,21 @@ public:
     void kill(const contact_key_s &ck);
 
     void update_meta();
+
+
+    template <typename R> void iterate_proto_contacts( R r )
+    {
+        for( contact_c *c : arr )
+            if (!c->is_meta())
+                if (!r(c)) break;
+    }
+    template <typename R> void iterate_meta_contacts(R r)
+    {
+        for (contact_c *c : arr)
+            if (c->is_meta())
+                if (!r(c)) break;
+    }
+
 };
 
 extern ts::static_setup<contacts_c> contacts;

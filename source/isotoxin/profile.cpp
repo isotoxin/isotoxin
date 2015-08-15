@@ -676,6 +676,7 @@ ts::wstr_c& profile_c::path_by_name(ts::wstr_c &profname)
 
 ts::uint32 profile_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // record history
 {
+    if (msg.resend) return 0;
     if (msg.pass != 0) return 0;
     bool second_pass_requred = msg.post.time == 1;
     contact_c *historian = msg.get_historian();
@@ -703,6 +704,9 @@ ts::uint32 profile_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // record history
 
         if (historian->keep_history())
             record_history(historian->getkey(), post);
+
+        if (post.mt() == MTA_UNDELIVERED_MESSAGE)
+            g_app->undelivered_message(post);
     }
 
     return second_pass_requred ? GMRBIT_CALLAGAIN : 0;
@@ -1074,11 +1078,14 @@ int  profile_c::calc_history_between( const contact_key_s&historian, time_t time
 }
 
 
-void profile_c::load(const ts::wstr_c& pfn)
+bool profile_c::load(const ts::wstr_c& pfn)
 {
+    if (mutex)
+        CloseHandle(mutex);
+
     if (db)
     {
-        save_dirty(RID(), (GUIPARAM)1);
+        save_dirty(RID(), (GUIPARAM)1); //-V566
         db->close();
     }
     closed = false;
@@ -1103,10 +1110,28 @@ void profile_c::load(const ts::wstr_c& pfn)
     }
 
     db->read_table( CONSTASTR("conf"), get_cfg_reader() );
+
+    ts::str_c utag = unique_profile_tag();
+    bool generated = false;
+    if (utag.is_empty())
+        utag.set_as_num<uint64>(ts::uuid()), generated = true;
+
+    mutex = CreateMutexW(nullptr, FALSE, CONSTWSTR("isotoxin_db_") + ts::to_wstr(utag));
+    if (!mutex) return false;
+    if (ERROR_ALREADY_EXISTS == GetLastError())
+    {
+        CloseHandle(mutex);
+        mutex = nullptr;
+        return false;
+    }
+    if (generated)
+        unique_profile_tag( utag );
     
     #define TAB(tab) if (load_on_start<tab##_s>::value) table_##tab.read( db );
     PROFILE_TABLES
     #undef TAB
+
+    load_undelivered();
 
     contact_c &self = contacts().get_self();
     self.set_name(username());
@@ -1115,12 +1140,60 @@ void profile_c::load(const ts::wstr_c& pfn)
     gmsg<ISOGM_PROFILE_TABLE_SAVED>( pt_active_protocol ).send(); // initiate active protocol reconfiguration/creation
 
     emoti().reload();
+
+    return true;
 }
 
+void profile_c::load_undelivered()
+{
+    ts::tmp_str_c whr(CONSTASTR("mtype=")); whr.append_as_int(MTA_UNDELIVERED_MESSAGE);
+
+    tableview_history_s table;
+    table.read(db, whr);
+
+    for (const auto &row : table.rows)
+        g_app->undelivered_message(row.other);
+
+}
+
+contact_c *profile_c::find_corresponding_historian(const contact_key_s &subcontact, ts::array_wrapper_c<contact_c * const> possible_historians) //-V813
+{
+    ts::tmp_str_c whr(CONSTASTR("sender=")); whr.append_as_num<int64>(ts::ref_cast<int64>(subcontact));
+    whr.append(CONSTASTR(" or receiver=")).append_as_num<int64>(ts::ref_cast<int64>(subcontact));
+
+    tableview_history_s table;
+    table.read(db, whr);
+
+    for (const auto &row : table.rows)
+        for( contact_c * const c : possible_historians )
+            if (c->getkey() == row.other.historian)
+                return c;
+
+    return nullptr;
+}
 
 profile_c::~profile_c()
 {
     shutdown_aps();
+
+    if (mutex)
+        CloseHandle(mutex);
+}
+
+void profile_c::error_unique_profile( const ts::wsptr & prfn, bool modal )
+{
+    ts::wstr_c text = TTT("Профиль [$] используется!",270) / prfn;
+    if (modal)
+    {
+        MessageBoxW(nullptr, text, L"error", MB_OK|MB_ICONERROR);
+
+    } else
+    {
+        SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
+            gui_isodialog_c::title(DT_MSGBOX_ERROR),
+            text
+            ));
+    }
 }
 
 void profile_c::shutdown_aps()
@@ -1197,7 +1270,7 @@ void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, i
     for(const contact_key_s &ck : dirtycontacts)
     {
         const contact_c * c = contacts().find(ck);
-        if (c)
+        if (c && !c->get_options().unmasked().is(contact_c::F_DIP))
         {
             auto *row = table_contacts.find<false>( [&](const contacts_s &k)->bool { return k.key == ck; } );
             if (!row)

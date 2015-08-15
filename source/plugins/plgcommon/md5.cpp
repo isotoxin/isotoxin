@@ -1,7 +1,7 @@
 #include "stdafx.h"
 
 void md5_init (md5_ctx *);
-void md5_update (md5_ctx *, const unsigned char *, unsigned int);
+void md5_update (md5_ctx *, const unsigned char *, size_t);
 void md5_final (md5_ctx *, unsigned char [16]);
 void md5_final (md5_ctx *);
 
@@ -10,7 +10,7 @@ void md5_c::reset()
     md5_init(&m_context);
 }
 
-void md5_c::update(const void* pach_source, unsigned long len)
+void md5_c::update(const void* pach_source, size_t len)
 {
     md5_update(&m_context, (const unsigned char*)pach_source, len);
 }
@@ -153,7 +153,7 @@ static void md5_process_message_block(unsigned long state[4], unsigned* x) {
 }
 
 //void md5_update (md5_ctx *context, const unsigned char *input, unsigned int inputLen)
-void md5_update(md5_ctx *ctx, const unsigned char* msg, unsigned size) {
+void md5_update(md5_ctx *ctx, const unsigned char* msg, size_t size) {
     
     unsigned index = (unsigned)ctx->length & 63;
     unsigned left;

@@ -94,7 +94,7 @@ void RID::call_enable(bool enableflg) const
 
 typedef ts::pair_s<ts::ivec2, RID> clickstruct;
 
-void RID::call_lbclick(ts::ivec2 relpos) const
+void RID::call_lbclick(const ts::ivec2 &relpos) const
 {
 
     int tag = gui->get_temp_buf(1.0, sizeof(clickstruct));
@@ -202,7 +202,7 @@ bool rectprops_c::change_to(const rectprops_c &p, rectengine_c *engine)
     evtd.rectchg.apply = false;
     engine->sq_evt(SQ_RECT_CHANGING, engine->getrid(), evtd);
 
-    bool zindex_changed = zindex() != p.zindex();
+    bool zindex_changed = zindex() != p.zindex(); //-V550
     bool hl_changed = is_highlighted() != p.is_highlighted();
     bool ac_changed = is_active() != p.is_active();
     bool vis_changed = is_visible() != p.is_visible();
@@ -1485,7 +1485,7 @@ void gui_hgroup_c::children_repos()
         *tpropo_++ = vv;
         proposum += vv;
     }
-    if (proposum == 0) proposum = 1.0;
+    if (proposum == 0) proposum = 1.0; //-V550
 
     // get min max size
     int szt = 0;
@@ -1518,7 +1518,7 @@ void gui_hgroup_c::children_repos()
         for (ts::aint t = 0; t < info.count; ++t)
         {
             rsize &ww = rsizes.get(t);
-            if (ww.sz > 0 && tpropo[t] == 0)
+            if (ww.sz > 0 && tpropo[t] == 0) //-V550
             {
                 tpropo[t] = float(ww.sz) / (float)szt;
                 proposum += tpropo[t];
@@ -1641,11 +1641,11 @@ void gui_hgroup_c::children_repos()
                 {
                     if (szpol_override[i] == frompol)
                     {
-                        rsize &ww = rsizes.get(i);
-                        if (ww.sz > maxsz)
+                        rsize &www = rsizes.get(i);
+                        if (www.sz > maxsz)
                         {
                             maxszi = i;
-                            maxsz = ww.sz;
+                            maxsz = www.sz;
                         }
                     }
                 }
@@ -1922,7 +1922,7 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
                 {
                     rsize &szsz = rsizes.get(t - 1);
                     if (szsz.sz < 0) continue;
-                    d.draw_thr.rect().lt[vecindex] += szsz.sz;
+                    d.draw_thr.rect().lt[vecindex] += szsz.sz; //-V807
                     int next = d.draw_thr.rect().rb[vecindex] = d.draw_thr.rect().lt[vecindex] + szsz.szsplit;
                     if (szsz.szsplit && getroot()) getroot()->draw(*thr, DTHRO_CENTER_ONLY, &d);
                     d.draw_thr.rect().lt[vecindex] = next;
@@ -2102,7 +2102,7 @@ void gui_vscrollgroup_c::children_repos()
 
     scroll_target = nullptr;
 
-    flags.init( F_LAST_REPOS_AT_END, flags.is(F_SBVISIBLE) && sbhelper.at_end(info.area.height()) );
+    flags.init( F_LAST_REPOS_AT_END, !flags.is(F_SBVISIBLE) || sbhelper.at_end(info.area.height()) );
 
 }
 
@@ -2113,7 +2113,7 @@ void gui_vscrollgroup_c::on_add_child(RID id)
 
 bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if (rid != getrid() && ASSERT( getrid() >> rid )) // child?
+    if (rid != getrid() && ASSERT( (getrid() >> rid) || HOLD(rid)().is_root() )) // child?
     {
         switch (qp)
         {
@@ -2412,9 +2412,9 @@ bool gui_popup_menu_c::operator()(int, const ts::wsptr& txt, const menu_c &sm)
     gui_menu_item_c::create(getrid(), txt, 0, MENUHANDLER(), ts::str_c()).submenu( sm );
     return true;
 }
-bool gui_popup_menu_c::operator()(int, const ts::wsptr& txt, ts::uint32 flags, MENUHANDLER handler, const ts::str_c& prm)
+bool gui_popup_menu_c::operator()(int, const ts::wsptr& txt, ts::uint32 f, MENUHANDLER handler, const ts::str_c& prm)
 {
-    gui_menu_item_c::create(getrid(), txt, flags, handler, prm);
+    gui_menu_item_c::create(getrid(), txt, f, handler, prm);
     return true;
 }
 
@@ -2632,7 +2632,7 @@ MAKE_CHILD<gui_textfield_c>::~MAKE_CHILD()
     if (selector)
     {
         get().selector = &(gui_button_c &)MAKE_CHILD<gui_button_c>(get().getrid());
-        get().selector->set_face_getter(selectorface ? selectorface : BUTTON_FACE(selector));
+        get().selector->set_face_getter(selectorface ? selectorface : BUTTON_FACE(selector)); //-V807
         get().selector->set_handler(handler, param);
         ts::ivec2 minsz = get().selector->get_min_size();
         get().set_margins(0, minsz.x);
@@ -2846,7 +2846,7 @@ bool gui_vtabsel_c::operator()(ts::pair_s<RID, int>& cp, const ts::wsptr& txt, c
 
     return true;
 }
-bool gui_vtabsel_c::operator()(ts::pair_s<RID, int>& cp, const ts::wsptr& txt, ts::uint32 flags, MENUHANDLER handler, const ts::str_c& prm)
+bool gui_vtabsel_c::operator()(ts::pair_s<RID, int>& cp, const ts::wsptr& txt, ts::uint32 /*flags*/, MENUHANDLER handler, const ts::str_c& prm)
 {
     MAKE_CHILD<gui_vtabsel_item_c> make(getrid(), txt, cp.second);
     make << handler << prm << cp.first;

@@ -263,8 +263,9 @@ vec3 TSCALL RGB_to_HSL(const vec3& rgb)
 
     float L = (var_Max + var_Min) / 2.0f;
 
-    if (del_Max == 0.0f)                        // This is a gray, no chroma...
+    if (del_Max == 0.0f) //-V550
     {
+        // This is a gray, no chroma...
         return vec3(0.0f, 0.0f, L); // HSL results = 0 ? 1
     } else {                                    // Chromatic data...
         float S = 0.0f;
@@ -304,7 +305,8 @@ vec3 TSCALL HSL_to_RGB(const vec3& c)
     float S = c.g;
     float L = c.b;
 
-    if (S == 0)                         // HSL values = 0 ? 1
+    
+    if (S == 0) //-V550 // HSL values = 0 ? 1
     {
         return vec3(L, L, L); // RGB results = 0 ? 255
     } else { 
@@ -370,23 +372,23 @@ vec3 TSCALL RGB_to_HSV(const vec3& rgb)
 
     del = dmax - dmin;
     v = dmax;
-    if (dmax != 0.0)
+    if (dmax != 0.0) //-V550
         s = del / dmax;
     else
         s = 0.0;
 
     h = 0;
-    if (s != 0.0)
+    if (s != 0.0) //-V550
     {
         rc = (dmax - rd) / del;
         gc = (dmax - gd) / del;
         bc = (dmax - bd) / del;
 
-        if (rd == dmax)
+        if (rd == dmax) //-V550
             h = bc - gc;
-        else if (gd == dmax)
+        else if (gd == dmax) //-V550
             h = 2 + rc - bc;
-        else if (bd == dmax)
+        else if (bd == dmax) //-V550
             h = 4 + gc - rc;
         if (h < 0)
             h += 6;

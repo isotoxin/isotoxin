@@ -163,7 +163,7 @@ public:
 	bp_t *get_at_path(const sptr<TCHARACTER> &path)
 	{
 		bp_t *bp = this;
-		for (token<TCHARACTER> t(path, TCHARACTER('/')); t; t++)
+		for (token<TCHARACTER> t(path, TCHARACTER('/')); t; ++t)
 			if ((bp = bp->get(*t)) == nullptr) break;
 		return bp;
 	}
@@ -178,7 +178,7 @@ public:
 	bp_t &set_at_path(const sptr<TCHARACTER> &path)
 	{
 		bp_t *bp = this, *nbp;
-		for (token<TCHARACTER> t(path, TCHARACTER('/')); t; t++)
+		for (token<TCHARACTER> t(path, TCHARACTER('/')); t; ++t)
 		{
 			if ((nbp = bp->get(*t)) == nullptr) nbp = &bp->add_block(*t);
 			bp = nbp;
@@ -208,7 +208,7 @@ public:
 		for (token<TCHARACTER> t(path, TCHARACTER('/')); ; bp = nbp)
 		{
 			if ((nbp = bp->get(name = *t)) == nullptr) break;
-			t++;
+			++t;
 			if (!t) {bp->remove(name); break;}
 		}
 	}

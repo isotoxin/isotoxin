@@ -81,8 +81,9 @@ template <class T> struct vecbase_t<T, 4> : vecbase_t < T, 3 >
 
 // vecs
 
+#define EACH_COMPONENT(i) for (aint i = 0; i < N; ++i)
 
-template <typename T, int N> struct vec_t : public vecbase_t<T,N>
+template <typename T, aint N> struct vec_t : public vecbase_t<T,N>
 {
 private:
 	static int __sqrt(int n) { return lround(fastsqrt((float)n)); }
@@ -95,101 +96,101 @@ private:
 public:
 
     INLINE vec_t() {};
-    template <class TT> INLINE explicit vec_t(const vec_t<TT, N> &v) { for (int i = 0; i < N; i++) (&x)[i] = (T)v[i]; }
+    template <class TT> INLINE explicit vec_t(const vec_t<TT, N> &v) { EACH_COMPONENT(i) (&x)[i] = (T)v[i]; }
     //copy constructor
-    INLINE vec_t(const vec_t &v) { for (int i = 0; i < N; i++) (&x)[i] = v[i]; }
+    INLINE vec_t(const vec_t &v) { EACH_COMPONENT(i) (&x)[i] = v[i]; }
     //1 arg
-    INLINE explicit vec_t(const T a) { for (int i = 0; i < N; i++) (&x)[i] = a; }
+    INLINE explicit vec_t(const T a) { EACH_COMPONENT(i) (&x)[i] = a; }
     template <int n> INLINE explicit vec_t(const vec_t<T, n> &v)
     {
         typedef char staticCheck[n - N];
-        for (int i = 0; i < N; i++) (&x)[i] = v[i];
+        EACH_COMPONENT(i) (&x)[i] = v[i];
     }
     //vec2
     INLINE vec_t(const T x_, const T y_) { x = x_; y = y_; TS_STATIC_CHECK(N == 2, "vec2 expected"); }
     //vec3
     INLINE vec_t(const vec_t<T, 2> &xy, const T z_)   { x = xy.x; y = xy.y; z = z_;   TS_STATIC_CHECK(N == 3, "vec3 expected"); }
-    INLINE vec_t(const T x_, const vec_t<T, 2> &yz)   { x = x_;   y = yz.x; z = yz.y; TS_STATIC_CHECK(N == 3, "vec3 expected"); }
+    INLINE vec_t(const T x_, const vec_t<T, 2> &yz)   { x = x_;   y = yz.x; z = yz.y; TS_STATIC_CHECK(N == 3, "vec3 expected"); } //-V537
     INLINE vec_t(const T x_, const T y_, const T z_) { x = x_;   y = y_;   z = z_;    TS_STATIC_CHECK(N == 3, "vec3 expected"); }
     //vec4
     //2 arg
     INLINE vec_t(const vec_t<T, 3> &xyz, const T w_)         { x = xyz.x; y = xyz.y; z = xyz.z; w = w_; }
-    INLINE vec_t(const T x_, const vec_t<T, 3> &yzw)         { x = x_;    y = yzw.x; z = yzw.y; w = yzw.z; }
+    INLINE vec_t(const T x_, const vec_t<T, 3> &yzw)         { x = x_;    y = yzw.x; z = yzw.y; w = yzw.z; } //-V537
     INLINE vec_t(const vec_t<T, 2> &xy, const vec_t<T, 2> &zw) { x = xy.x;  y = xy.y;  z = zw.x;  w = zw.y; }
     //3 arg
     INLINE vec_t(const vec_t<T, 2> &xy, const T z_, const T w_) { x = xy.x; y = xy.y; z = z_;   w = w_; }
-    INLINE vec_t(const T x_, const vec_t<T, 2> &yz, const T w_) { x = x_;   y = yz.x; z = yz.y; w = w_; }
+    INLINE vec_t(const T x_, const vec_t<T, 2> &yz, const T w_) { x = x_;   y = yz.x; z = yz.y; w = w_; } //-V537
     INLINE vec_t(const T x_, const T y_, const vec_t<T, 2> &zw) { x = x_;   y = y_;   z = zw.x; w = zw.y; }
     //4 arg
     INLINE vec_t(const T x_, const T y_, const T z_, const T w_) { x = x_; y = y_; z = z_; w = w_; }
 
 
     //operators
-    INLINE T &operator [] (const int i) { return (&x)[i]; }
-    INLINE const T &operator [] (const int i) const { return (&x)[i]; }
+    INLINE T &operator [] (aint i) { return (&x)[i]; }
+    INLINE const T &operator [] (aint i) const { return (&x)[i]; }
 
     //vector ~ a
-    INLINE const vec_t operator+(const T a) const { vec_t r; for (int i = 0; i < N; i++) r[i] = (&x)[i] + a; return r; }
-    INLINE const vec_t operator-(const T a) const { vec_t r; for (int i = 0; i < N; i++) r[i] = (&x)[i] - a; return r; }
-    INLINE const vec_t operator*(const T a) const { vec_t r; for (int i = 0; i < N; i++) r[i] = (&x)[i] * a; return r; }
-    INLINE const vec_t operator/(const T a) const { vec_t r; for (int i = 0; i < N; i++) r[i] = (&x)[i] / a; return r; }
+    INLINE const vec_t operator+(const T a) const { vec_t __r; EACH_COMPONENT(i) __r[i] = (&x)[i] + a; return __r; }
+    INLINE const vec_t operator-(const T a) const { vec_t __r; EACH_COMPONENT(i) __r[i] = (&x)[i] - a; return __r; }
+    INLINE const vec_t operator*(const T a) const { vec_t __r; EACH_COMPONENT(i) __r[i] = (&x)[i] * a; return __r; }
+    INLINE const vec_t operator/(const T a) const { vec_t __r; EACH_COMPONENT(i) __r[i] = (&x)[i] / a; return __r; }
 
     //a ~ vector
-    INLINE friend const vec_t operator+(const T a, const vec_t &v) { vec_t r; for (int i = 0; i < N; i++) r[i] = a + v[i]; return r; }
-    INLINE friend const vec_t operator-(const T a, const vec_t &v) { vec_t r; for (int i = 0; i < N; i++) r[i] = a - v[i]; return r; }
-    INLINE friend const vec_t operator*(const T a, const vec_t &v) { vec_t r; for (int i = 0; i < N; i++) r[i] = a * v[i]; return r; }
-    INLINE friend const vec_t operator/(const T a, const vec_t &v) { vec_t r; for (int i = 0; i < N; i++) r[i] = a / v[i]; return r; }
+    INLINE friend const vec_t operator+(const T a, const vec_t &v) { vec_t __r; EACH_COMPONENT(i) __r[i] = a + v[i]; return __r; }
+    INLINE friend const vec_t operator-(const T a, const vec_t &v) { vec_t __r; EACH_COMPONENT(i) __r[i] = a - v[i]; return __r; }
+    INLINE friend const vec_t operator*(const T a, const vec_t &v) { vec_t __r; EACH_COMPONENT(i) __r[i] = a * v[i]; return __r; }
+    INLINE friend const vec_t operator/(const T a, const vec_t &v) { vec_t __r; EACH_COMPONENT(i) __r[i] = a / v[i]; return __r; }
 
     //bools
-    INLINE bool operator >(const vec_t& v) const { for (int i = 0; i < N; i++) if ((&x)[i] > v[i]) return true; return false; } // if any
-    INLINE bool operator <(const vec_t& v) const { for (int i = 0; i < N; i++) if ((&x)[i] < v[i]) return true; return false; } // if any
-    INLINE bool operator ==(const vec_t& v) const { for (int i = 0; i < N; i++) if ((&x)[i] != v[i]) return false; return true; }
-    INLINE bool operator !=(const vec_t& v) const { for (int i = 0; i < N; i++) if ((&x)[i] != v[i]) return true; return false; }
+    INLINE bool operator >(const vec_t& v) const { EACH_COMPONENT(i) if ((&x)[i] > v[i]) return true; return false; } // if any
+    INLINE bool operator <(const vec_t& v) const { EACH_COMPONENT(i) if ((&x)[i] < v[i]) return true; return false; } // if any
+    INLINE bool operator ==(const vec_t& v) const { EACH_COMPONENT(i) if ((&x)[i] != v[i]) return false; return true; }
+    INLINE bool operator !=(const vec_t& v) const { EACH_COMPONENT(i) if ((&x)[i] != v[i]) return true; return false; }
 
-    INLINE bool operator >>=(const vec_t& v) const { for (int i = 0; i < N; i++) if ((&x)[i] < v[i]) return false; return true; } // if all
+    INLINE bool operator >>=(const vec_t& v) const { EACH_COMPONENT(i) if ((&x)[i] < v[i]) return false; return true; } // if all
 
 
-    INLINE bool operator >>(const vec_t& v) const { for (int i = 0; i < N; i++) if ((&x)[i] <= v[i]) return false; return true; } // if all
-    INLINE bool operator <<(const vec_t& v) const { for (int i = 0; i < N; i++) if ((&x)[i] >= v[i]) return false; return true; } // if all
+    INLINE bool operator >>(const vec_t& v) const { EACH_COMPONENT(i) if ((&x)[i] <= v[i]) return false; return true; } // if all
+    INLINE bool operator <<(const vec_t& v) const { EACH_COMPONENT(i) if ((&x)[i] >= v[i]) return false; return true; } // if all
 
-    INLINE bool operator >(const T a) const { for (int i = 0; i < N; i++) if ((&x)[i] > a) return true; return false; } // if any
-    INLINE bool operator >=(const T a) const { for (int i = 0; i < N; i++) if ((&x)[i] >= a) return true; return false; } // if any
-    INLINE bool operator <(const T a) const { for (int i = 0; i < N; i++) if ((&x)[i] < a) return true; return false; } // if any
-    INLINE bool operator <=(const T a) const { for (int i = 0; i < N; i++) if ((&x)[i] <= a) return true; return false; } // if any
+    INLINE bool operator >(const T a) const { EACH_COMPONENT(i) if ((&x)[i] > a) return true; return false; } // if any
+    INLINE bool operator >=(const T a) const { EACH_COMPONENT(i) if ((&x)[i] >= a) return true; return false; } // if any
+    INLINE bool operator <(const T a) const { EACH_COMPONENT(i) if ((&x)[i] < a) return true; return false; } // if any
+    INLINE bool operator <=(const T a) const { EACH_COMPONENT(i) if ((&x)[i] <= a) return true; return false; } // if any
 
-    INLINE bool operator >>(const T a) const { for (int i = 0; i < N; i++) if ((&x)[i] <= a) return false; return true; } // if all
-    INLINE bool operator <<(const T a) const { for (int i = 0; i < N; i++) if ((&x)[i] >= a) return false; return true; } // if all
+    INLINE bool operator >>(const T a) const { EACH_COMPONENT(i) if ((&x)[i] <= a) return false; return true; } // if all
+    INLINE bool operator <<(const T a) const { EACH_COMPONENT(i) if ((&x)[i] >= a) return false; return true; } // if all
 
 
     //vector ~ vector
-    INLINE const vec_t operator+(const vec_t &v) const { vec_t r; for (int i = 0; i < N; i++) r[i] = (&x)[i] + v[i]; return r; }
-    INLINE const vec_t operator-(const vec_t &v) const { vec_t r; for (int i = 0; i < N; i++) r[i] = (&x)[i] - v[i]; return r; }
-    INLINE const vec_t operator*(const vec_t &v) const { vec_t r; for (int i = 0; i < N; i++) r[i] = (&x)[i] * v[i]; return r; }
-    INLINE const vec_t operator/(const vec_t &v) const { vec_t r; for (int i = 0; i < N; i++) r[i] = (&x)[i] / v[i]; return r; }
+    INLINE const vec_t operator+(const vec_t &v) const { vec_t __r; EACH_COMPONENT(i) __r[i] = (&x)[i] + v[i]; return __r; }
+    INLINE const vec_t operator-(const vec_t &v) const { vec_t __r; EACH_COMPONENT(i) __r[i] = (&x)[i] - v[i]; return __r; }
+    INLINE const vec_t operator*(const vec_t &v) const { vec_t __r; EACH_COMPONENT(i) __r[i] = (&x)[i] * v[i]; return __r; }
+    INLINE const vec_t operator/(const vec_t &v) const { vec_t __r; EACH_COMPONENT(i) __r[i] = (&x)[i] / v[i]; return __r; }
 
     //vector ~= a
-    INLINE const vec_t &operator+=(const T a) { for (int i = 0; i < N; i++) (&x)[i] += a; return *this; }
-    INLINE const vec_t &operator-=(const T a) { for (int i = 0; i < N; i++) (&x)[i] -= a; return *this; }
-    INLINE const vec_t &operator*=(const T a) { for (int i = 0; i < N; i++) (&x)[i] *= a; return *this; }
-    INLINE const vec_t &operator/=(const T a) { for (int i = 0; i < N; i++) (&x)[i] /= a; return *this; }
+    INLINE const vec_t &operator+=(const T a) { EACH_COMPONENT(i) (&x)[i] += a; return *this; }
+    INLINE const vec_t &operator-=(const T a) { EACH_COMPONENT(i) (&x)[i] -= a; return *this; }
+    INLINE const vec_t &operator*=(const T a) { EACH_COMPONENT(i) (&x)[i] *= a; return *this; }
+    INLINE const vec_t &operator/=(const T a) { EACH_COMPONENT(i) (&x)[i] /= a; return *this; }
 
     //vector ~= vector
-    INLINE const vec_t &operator+=(const vec_t &v) { for (int i = 0; i < N; i++) (&x)[i] += v[i]; return *this; }
-    INLINE const vec_t &operator-=(const vec_t &v) { for (int i = 0; i < N; i++) (&x)[i] -= v[i]; return *this; }
-    INLINE const vec_t &operator*=(const vec_t &v) { for (int i = 0; i < N; i++) (&x)[i] *= v[i]; return *this; }
-    INLINE const vec_t &operator/=(const vec_t &v) { for (int i = 0; i < N; i++) (&x)[i] /= v[i]; return *this; }
-    INLINE const vec_t &operator =(const vec_t &v) { for (int i = 0; i < N; i++) (&x)[i] = v[i]; return *this; }
+    INLINE const vec_t &operator+=(const vec_t &v) { EACH_COMPONENT(i) (&x)[i] += v[i]; return *this; }
+    INLINE const vec_t &operator-=(const vec_t &v) { EACH_COMPONENT(i) (&x)[i] -= v[i]; return *this; }
+    INLINE const vec_t &operator*=(const vec_t &v) { EACH_COMPONENT(i) (&x)[i] *= v[i]; return *this; }
+    INLINE const vec_t &operator/=(const vec_t &v) { EACH_COMPONENT(i) (&x)[i] /= v[i]; return *this; }
+    INLINE const vec_t &operator =(const vec_t &v) { EACH_COMPONENT(i) (&x)[i] = v[i]; return *this; }
 
     //-vector
-    INLINE const vec_t operator-() const { vec_t r; for (int i = 0; i < N; i++) r[i] = -(&x)[i]; return r; }
+    INLINE const vec_t operator-() const { vec_t r; EACH_COMPONENT(i) r[i] = -(&x)[i]; return r; }
 
     //++vector and --vector
-    INLINE const vec_t operator++() { for (int i = 0; i < N; i++) ++(&x)[i]; return *this; }
-    INLINE const vec_t operator--() { for (int i = 0; i < N; i++) --(&x)[i]; return *this; }
+    INLINE const vec_t operator++() { EACH_COMPONENT(i) ++(&x)[i]; return *this; }
+    INLINE const vec_t operator--() { EACH_COMPONENT(i) --(&x)[i]; return *this; }
 
     //vector++ and vector--
-    INLINE const vec_t operator++(int notused) { vec_t t(*this); for (int i = 0; i < N; i++) ++(&x)[i]; return t; }
-    INLINE const vec_t operator--(int notused) { vec_t t(*this); for (int i = 0; i < N; i++) --(&x)[i]; return t; }
+    INLINE const vec_t operator++(int notused) { vec_t t(*this); EACH_COMPONENT(i) ++(&x)[i]; return t; }
+    INLINE const vec_t operator--(int notused) { vec_t t(*this); EACH_COMPONENT(i) --(&x)[i]; return t; }
 
 	/// dot product
     INLINE T	dot(const vec_t & v) const { return __dot(*this, v); }
@@ -204,7 +205,7 @@ public:
 	}
     INLINE operator bool() const
     {
-        for (int i = 0; i < N; i++)
+        EACH_COMPONENT(i)
             if ((&x)[i]) return true;
         return false;
     }
@@ -216,7 +217,7 @@ template<class T> INLINE vec_t<T, 2>& vecbase_t<T, 2>::rotate(float fAngle)
     sincos(fAngle, s, c);
 
     float tx = x;
-    x = x * c - y * s;
+    x = x * c - y * s; //-V537
     y = tx * s + y * c;
     return *this;
 }

@@ -9,6 +9,8 @@ struct evt_data_s;
 struct theme_rect_s;
 struct bcreate_s;
 
+//-V:RID:813
+
 class RID
 {
     enum rid_e
@@ -37,12 +39,12 @@ public:
     static RID from_ptr(const void *ptr)
     {
         RID r;
-        r.id = (int)ptr;
+        r.id = (int)ptr; //-V205
         return r;
     }
     void* to_ptr() const
     {
-        return (void *)id;
+        return (void *)id; //-V204
     }
 
     // calls
@@ -53,7 +55,7 @@ public:
     void        call_restore_signal() const;
     void        call_setup_button(bcreate_s &bcr) const;
     void        call_open_group(RID itm) const;
-    void        call_lbclick(ts::ivec2 relpos = ts::ivec2(0)) const;
+    void        call_lbclick(const ts::ivec2 &relpos = ts::ivec2(0)) const;
     void        call_kill_child( const ts::str_c&param );
     void        call_item_activated( const ts::wstr_c&text, const ts::str_c&param );
     void        call_children_repos();
@@ -92,7 +94,7 @@ int calcsbshift( int pos, int viewsize, int datasize );
 
 struct sbhelper_s
 {
-    ts::irect sbrect = 0;
+    ts::irect sbrect = ts::irect(0);
     int datasize = 0;
     int shift = 0; // zero or negative
 

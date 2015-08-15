@@ -1,5 +1,7 @@
 #include "isotoxin.h"
 
+//-V:w:807
+
 active_protocol_c::active_protocol_c(int id, const active_protocol_data_s &pd):id(id), lastconfig(ts::Time::past())
 {
     auto w = syncdata.lock_write();
@@ -56,7 +58,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     if (0 != (w().data.options & active_protocol_data_s::O_AUTOCONNECT))
                     {
                         ipcp->send(ipcw(AQ_ONLINE));
-                        w().flags.set(F_ONLINE);
+                        w().flags.set(F_ONLINE_SWITCH);
                     }
 
                     w().flags.set(F_SET_PROTO_OK);
@@ -362,20 +364,20 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
     if (r().flags.is(F_SET_PROTO_OK))
     {
         bool is_ac = 0 != (r().data.options & active_protocol_data_s::O_AUTOCONNECT);
-        if (r().flags.is(F_ONLINE))
+        if (r().flags.is(F_ONLINE_SWITCH))
         {
             if (!is_ac)
             {
                 r.unlock();
                 ipcp->send(ipcw(AQ_OFFLINE));
-                syncdata.lock_write()().flags.clear(F_ONLINE);
+                syncdata.lock_write()().flags.clear(F_ONLINE_SWITCH);
             }
         }
         else if (is_ac)
         {
             r.unlock();
             ipcp->send(ipcw(AQ_ONLINE));
-            syncdata.lock_write()().flags.set(F_ONLINE);
+            syncdata.lock_write()().flags.set(F_ONLINE_SWITCH);
         }
 
     }
@@ -384,8 +386,20 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
 
 ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send message to other peer
 {
-    if (msg.pass == 0 && msg.post.sender.is_self() && msg.post.receiver.protoid == id) // handle only self-to-other messages
-        ipcp->send( ipcw(AQ_MESSAGE ) << msg.receiver->getkey().contactid << (int)MTA_MESSAGE << msg.post.utag << msg.post.message_utf8 );
+    if (msg.pass == 0 && msg.post.sender.is_self()) // handle only self-to-other messages
+    {
+        if (msg.post.receiver.protoid != id)
+            return 0;
+
+        contact_c *target = contacts().find( msg.post.receiver );
+        if (!target) return 0;
+
+        if ( 0 == (get_features() & PF_OFFLINE_MESSAGING) )
+            if (target->get_state() != CS_ONLINE)
+                return 0;
+
+        ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().contactid << (int)MTA_MESSAGE << msg.post.utag << msg.post.message_utf8 );
+    }
     return 0;
 }
 

@@ -16,7 +16,7 @@ class safe_object
 		int ref;
         static pointer_container_s *create(safe_object *p);
         void die();
-	} *pc = nullptr;
+	} *__pc = nullptr;
 
 	safe_object(const safe_object &) UNUSED;
 	void operator=(const safe_object &) UNUSED;
@@ -29,16 +29,16 @@ public:
 
     void make_all_ponters_expired() // use carefully! you can get memory leak if there are no regular pointers to this object
     {
-        if (pc)
+        if (__pc)
         {
-            pc->pointer = nullptr;
-            pc = nullptr;
+            __pc->pointer = nullptr;
+            __pc = nullptr;
         }
     }
 
 	~safe_object()
 	{
-		if (pc) pc->pointer = nullptr;
+		if (__pc) __pc->pointer = nullptr;
 	}
 };
 
@@ -61,7 +61,7 @@ template <typename T> class safe_ptr // T must be public child of safe_object
 		{
 			if (--pc->ref == 0)
 			{
-				if (pc->pointer) pc->pointer->pc = nullptr;
+				if (pc->pointer) pc->pointer->__pc = nullptr;
 				pc->die();
 			}
 		}
@@ -71,14 +71,14 @@ template <typename T> class safe_ptr // T must be public child of safe_object
 	{
 		if (p)
 		{
-			if (p->pc)
+			if (p->__pc)
 			{
-				pc = p->pc;
+				pc = p->__pc;
 				pc->ref++;
 			}
 			else
 			{
-				pc = p->pc = safe_object::pointer_container_s::create(p);
+				pc = p->__pc = safe_object::pointer_container_s::create(p);
 			}
 		}
 		else pc = nullptr;

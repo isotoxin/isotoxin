@@ -618,9 +618,9 @@ RID gui_dialog_c::combik(const menu_c &m, RID parent)
 
         bool operator()(findamarked&, const ts::wsptr&) { return true; } // skip separator
         bool operator()(findamarked&, const ts::wsptr&, const menu_c&) { return true; } // skip submenu
-        bool operator()(findamarked&, const ts::wstr_c&txt, ts::uint32 flags, MENUHANDLER h, const ts::str_c&prm)
+        bool operator()(findamarked&, const ts::wstr_c&txt, ts::uint32 f, MENUHANDLER h, const ts::str_c&prm)
         {
-            if (flags & MIF_MARKED) name = txt;
+            if (f & MIF_MARKED) name = txt;
             return true;
         }
     } s;
@@ -790,7 +790,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
 
                     bool operator()(getta&, const ts::wsptr&) { return true; } // skip separator
                     bool operator()(getta&, const ts::wsptr&, const menu_c&) { return true; } // skip submenu
-                    bool operator()(getta&, const ts::wstr_c&txt, ts::uint32 flags, MENUHANDLER h, const ts::str_c&prm)
+                    bool operator()(getta&, const ts::wstr_c&txt, ts::uint32 /*flags*/, MENUHANDLER h, const ts::str_c&prm)
                     {
                         cis.addnew( txt, prm.as_uint() );
                         return true;
@@ -811,7 +811,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
 
                     bool operator()(getta&, const ts::wsptr&) { return true; } // skip separator
                     bool operator()(getta&, const ts::wsptr&, const menu_c&) { return true; } // skip submenu
-                    bool operator()(getta&g, const ts::wstr_c&txt, ts::uint32 flags, MENUHANDLER h, const ts::str_c&prm)
+                    bool operator()(getta&g, const ts::wstr_c&txt, ts::uint32 /*flags*/, MENUHANDLER h, const ts::str_c&prm)
                     {
                         ris.addnew(txt, (GUIPARAM)prm.as_int(), g.radioname + prm);
                         return true;

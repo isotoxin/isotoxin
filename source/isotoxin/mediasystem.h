@@ -51,7 +51,7 @@ class mediasystem_c
             {
                 buf[newdata].append_buf(d, s);
             }
-            int read_data(s3::Format fmt, char *dest, int size);
+            int read_data(const s3::Format &fmt, char *dest, int size);
         };
         spinlock::syncvar<protected_data_s> data;
 

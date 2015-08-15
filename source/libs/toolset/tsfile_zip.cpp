@@ -203,7 +203,7 @@ namespace ts
 
             static voidpf ZCALLBACK fopen_file_func(voidpf opaque, const char * filename, int mode)
             {
-                HANDLE file = nullptr, h;
+                HANDLE file, h;
                 DWORD desiredacces = GENERIC_READ;
                 DWORD createdispos = OPEN_EXISTING;
 
@@ -224,7 +224,7 @@ namespace ts
                 }
 
                 h = CreateFileW(((zippp *)opaque)->name, desiredacces, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, createdispos, FILE_ATTRIBUTE_NORMAL, nullptr);
-                file = (HANDLE)((DWORD)h + 1);
+                file = (HANDLE)((size_t)h + 1);
                 return file;
 
             }
@@ -424,7 +424,7 @@ next:
 
     bool    zip_container_c::iterate_files(const wsptr &path0, ITERATE_FILES_CALLBACK ef)
     {
-        tmp_wstr_c path1( path0 );
+        wstr_c path1( path0 );
         fix_path(path1, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
 
         tmp_wstr_c pp( path0 );
@@ -435,7 +435,7 @@ next:
 
     bool    zip_container_c::iterate_folders(const wsptr &path0, ITERATE_FILES_CALLBACK ef)
     {
-        tmp_wstr_c path1(path0);
+        wstr_c path1(path0);
         fix_path(path1, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
 
         tmp_wstr_c pp(path0);

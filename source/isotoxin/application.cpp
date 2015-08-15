@@ -1,5 +1,7 @@
 #include "isotoxin.h"
 
+//-V:theme:807
+
 application_c *g_app = nullptr;
 
 #ifndef _FINAL
@@ -14,6 +16,8 @@ application_c::application_c(const ts::wchar * cmdl)
     F_NEEDFLASH = false;
     F_FLASHIP = false;
     F_SETNOTIFYICON = false;
+    F_OFFLINE_ICON = true;
+
     autoupdate_next = now() + 10;
 	g_app = this;
     cfg().load();
@@ -152,9 +156,9 @@ HICON application_c::app_icon(bool for_tray)
         return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(IDI_ICON)); 
 
     if (F_UNREADICON)
-        return LoadIcon(g_sysconf.instance, F_UNREADICONFLASH ? MAKEINTRESOURCE(IDI_ICON2) : MAKEINTRESOURCE(IDI_ICON_HOLLOW));
+        return LoadIcon(g_sysconf.instance, F_UNREADICONFLASH ? MAKEINTRESOURCE(F_OFFLINE_ICON ? IDI_ICON_OFFLINE : IDI_ICON2) : MAKEINTRESOURCE(IDI_ICON_HOLLOW));
 
-    return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(IDI_ICON));
+    return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(F_OFFLINE_ICON ? IDI_ICON_OFFLINE : IDI_ICON));
 };
 
 /*virtual*/ void application_c::app_prepare_text_for_copy(ts::str_c &text)
@@ -258,6 +262,27 @@ static DWORD WINAPI autoupdater(LPVOID)
 
 /*virtual*/ void application_c::app_5second_event()
 {
+    enum
+    {
+        OST_UNKNOWN,
+        OST_OFFLINE,
+        OST_ONLINE,
+    } st = OST_UNKNOWN;
+    
+    prf().iterate_aps([&](const active_protocol_c &ap) {
+        
+        if ( 0 != (ap.get_features() & PF_OFFLINE_INDICATOR) )
+        {
+            bool onlflg = ap.is_current_online();
+            st = onlflg ? OST_ONLINE : OST_OFFLINE;
+        } else if (st == OST_UNKNOWN)
+        {
+            bool onlflg = ap.is_current_online();
+            st = onlflg ? OST_ONLINE : OST_OFFLINE;
+        }
+    });
+
+    F_OFFLINE_ICON = OST_ONLINE != st;
     F_SETNOTIFYICON = true; // once per 5 seconds do icon refresh
 
     if ( cfg().autoupdate() > 0 )
@@ -321,14 +346,20 @@ static DWORD WINAPI autoupdater(LPVOID)
 {
     if (m_need_recalc_unread.count())
     {
+        LOG( "m_need_recalc_unread" << m_need_recalc_unread.count() );
+
         contact_key_s ck = m_need_recalc_unread.get(0);
         if (m_locked_recalc_unread.find_index(ck) >= 0)
         {
+            LOG("locked:" << ck);
+
             // locked. postpone
             m_need_recalc_unread.remove_slow(0);
             m_need_recalc_unread.add(ck);
         } else
         {
+            LOG("recalc:" << ck);
+
             contact_c *c = contacts().find(ck);
             m_need_recalc_unread.remove_slow(0);
             if (c) F_NEEDFLASH |= c->recalc_unread();
@@ -346,6 +377,7 @@ static DWORD WINAPI autoupdater(LPVOID)
 
     picture_animated_c::tick();
     m_tasks_executor.tick();
+    resend_undelivered_messages();
 }
 
 /*virtual*/ void application_c::app_fix_sleep_value(int &sleep_ms)
@@ -434,12 +466,15 @@ bool application_c::b_customize(RID r, GUIPARAM param)
             ts::wstr_c profname = cfg().profile();
             if (profname.is_empty())
             {
-                SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                    gui_isodialog_c::title(DT_MSGBOX_INFO),
-                    TTT("Профиль с именем [b]$[/b] создан и установлен в качестве профиля по умолчанию.",48) / prfn
-                    ));
-                cfg().profile(pn);
-                prf().load(pn);
+                if (prf().load(pn))
+                {
+                    SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
+                        gui_isodialog_c::title(DT_MSGBOX_INFO),
+                        TTT("Профиль с именем [b]$[/b] создан и установлен в качестве профиля по умолчанию.", 48) / prfn
+                        ));
+                    cfg().profile(pn);
+                } else
+                    profile_c::error_unique_profile(pn);
             } else
             {
                 SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
@@ -466,10 +501,18 @@ bool application_c::b_customize(RID r, GUIPARAM param)
         }
         static void m_switchto(const ts::str_c& prfn)
         {
-            ts::wstr_c wpn; wpn.set_as_utf8(prfn);
+            ts::wstr_c oldprfn = cfg().profile();
+
+            ts::wstr_c wpn(from_utf8(prfn));
             profile_c::path_by_name(wpn);
-            cfg().profile(wpn);
-            prf().load(wpn);
+
+            if (prf().load(wpn))
+                cfg().profile(wpn);
+            else
+            {
+                prf().load( oldprfn );
+                profile_c::error_unique_profile( wpn );
+            }
 
         }
         static void m_about(const ts::str_c&)
@@ -549,7 +592,12 @@ void application_c::summon_main_rect()
         cfg().profile(profname);
     }
     if (!profname.is_empty())
-        prf().load(profile_c::path_by_name(profname));
+        if (!prf().load(profile_c::path_by_name(profname)))
+        {
+            profile_c::error_unique_profile(profname, true);
+            sys_exit(10);
+            return;
+        }
 
     drawcollector dcoll;
     main = MAKE_ROOT<mainrect_c>(dcoll);
@@ -902,6 +950,130 @@ void application_c::unregister_file_transfer(uint64 utag, bool disconnected)
     }
 }
 
+ts::uint32 application_c::gm_handler(gmsg<ISOGM_DELIVERED>&d)
+{
+    int cntx = m_undelivered.size();
+    for (int j = 0; j < cntx; ++j)
+    {
+        send_queue_s *q = m_undelivered.get(j);
+        
+        int cnt = q->queue.size();
+        for (int i = 0; i < cnt; ++i)
+        {
+            if (q->queue.get(i).utag == d.utag)
+            {
+                q->queue.remove_slow(i);
+
+                if (q->queue.size() == 0)
+                    m_undelivered.remove_fast(j);
+                else
+                    resend_undelivered_messages(q->receiver); // now send other undelivered messages
+
+                return 0;
+            }
+        }
+    }
+
+    WARNING("m_undelivered fail");
+    return 0;
+}
+
+void application_c::resend_undelivered_messages( const contact_key_s& rcv )
+{
+    for (send_queue_s *q : m_undelivered)
+    {
+        if (q->receiver == rcv || rcv.is_empty())
+        {
+            while ( !rcv.is_empty() || (ts::Time::current() - q->last_try_send_time) > 5000 /* try 2 resend every 5 seconds */ )
+            {
+                q->last_try_send_time = ts::Time::current();
+                contact_c *receiver = contacts().find( q->receiver );
+
+                if (receiver == nullptr)
+                {
+                    q->queue.clear();
+                    break;
+                }
+
+                if (receiver->is_meta())
+                    receiver = receiver->subget_for_send(); // get default subcontact for message target
+
+                if (receiver == nullptr)
+                {
+                    q->queue.clear();
+                    break;
+                }
+
+                gmsg<ISOGM_MESSAGE> msg(&contacts().get_self(), receiver, MTA_UNDELIVERED_MESSAGE);
+
+                const post_s& post = q->queue.get(0);
+                msg.post.time = post.time;
+                msg.post.utag = post.utag;
+                msg.post.message_utf8 = post.message_utf8;
+                msg.resend = true;
+                msg.send();
+
+                break; //-V612 // yeah. unconditional break
+            }
+
+            if (!rcv.is_empty())
+                break;
+        }
+    }
+}
+
+void application_c::undelivered_message( const post_s &p )
+{
+    contact_c *c = contacts().find(p.receiver);
+    if (!c) return;
+
+    for( const send_queue_s *q : m_undelivered )
+        for( const post_s &pp : q->queue )
+            if (pp.utag == p.utag)
+                return;
+
+    contact_key_s rcv = p.receiver;
+
+    if (!c->is_meta())
+    {
+        c = c->getmeta();
+        if (c)
+            rcv = c->getkey();
+    }
+
+    for( send_queue_s *q : m_undelivered )
+        if (q->receiver == rcv)
+        {
+            int cnt = q->queue.size();
+            for(int i=0;i<cnt;++i)
+            {
+                const post_s &qp = q->queue.get(i);
+                if (qp.time > p.time)
+                {
+                    post_s &insp = q->queue.insert(i);
+                    insp = p;
+                    insp.receiver = rcv;
+                    rcv = contact_key_s();
+                    break;
+                }
+            }
+            if (!rcv.is_empty())
+            {
+                post_s &insp = q->queue.add();
+                insp = p;
+                insp.receiver = rcv;
+            }
+            return;
+        }
+
+    send_queue_s *q = TSNEW( send_queue_s );
+    m_undelivered.add( q );
+    q->receiver = rcv;
+    post_s &insp = q->queue.add();
+    insp = p;
+    insp.receiver = rcv;
+
+}
 
 bool application_c::load_theme( const ts::wsptr&thn )
 {
@@ -1280,7 +1452,7 @@ query_task_s::~query_task_s()
 
     if (rslt == rslt_kill)
     {
-        ftr->kill();
+        ftr->kill(); //-V595
         ASSERT(ftr == nullptr);
         __super::done(canceled);
         return;

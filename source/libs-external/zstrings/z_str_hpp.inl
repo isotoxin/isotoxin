@@ -1,64 +1,29 @@
+#pragma once
+
 /*
     (C) 2010-2015 ROTKAERMOTA
 */
-#pragma once
+
 #include "z_str_funcs.h"
+
+static_assert( sizeof(ZSTRINGS_ANSICHAR) == 1, "bad size of ZSTRINGS_ANSICHAR" );
+static_assert( sizeof(ZSTRINGS_WIDECHAR) == 2, "bad size of ZSTRINGS_WIDECHAR" );
 
 ZSTRINGS_SIGNED  text_utf8_to_ansi(ZSTRINGS_ANSICHAR *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_ANSICHAR> &from);
 
-#define STR_GRANULA 32
-#define STRAR_GRANULA 32
-
-#ifndef ZSTRINGS_MIN
-#define ZSTRINGS_MIN(a,b) ( ( (a) <= (b) ) ? (a) : (b) )
-#endif
-
-#ifndef ZSTRINGS_MAX
-#define ZSTRINGS_MAX(a,b) ( ( (a) >= (b) ) ? (a) : (b) )
-#endif
-
-ZSTRINGS_FORCEINLINE ZSTRINGS_SIGNED CeilPowerOfTwo(ZSTRINGS_SIGNED x) 
-{
-    --x;
-    x |= x >> 1;
-    x |= x >> 2;
-    x |= x >> 4;
-    x |= x >> 8;
-    x |= x >> 16;
-    ++x;
-    return x;
-}
-
-class STRALLOCATOR
+#ifndef ZSTRINGS_ALLOCATOR
+#pragma message ("malloc/free allocator used for strings")
+class DEFAULT_STRALLOCATOR
 {
 
 public:
-
-    STRALLOCATOR( const ZSTRINGS_ANSICHAR * /*file*/, ZSTRINGS_SIGNED /*line*/, bool /*allocating*/ )
-    {
-        //alloc_tracker_c at( file, line, -1, allocating );
-    }
-
-
-    void _free(void *ptr) { ZSTRINGS_SYSCALL(mf)( ptr ); }
-    void *_alloc(ZSTRINGS_UNSIGNED sz) { return ZSTRINGS_SYSCALL(ma)(sz); }
-    void *_resize(void *ptr, ZSTRINGS_UNSIGNED sz) { return ZSTRINGS_SYSCALL(mra)( ptr, sz); }
-
-    template <typename TCHARACTER> static ZSTRINGS_FORCEINLINE ZSTRINGS_UNSIGNED _calc_alloc_size(ZSTRINGS_UNSIGNED L)
-    {
-        const ZSTRINGS_SIGNED C = sizeof(TCHARACTER);
-        ZSTRINGS_SIGNED N = (CeilPowerOfTwo( L*C + sizeof(void *) ) + 15) & (~15);
-        return N / C;
-    }
-
-
+    void mf(void *ptr) { free( ptr ); }
+    void *ma(ZSTRINGS_UNSIGNED sz) { return malloc(sz); }
+    void *mra(void *ptr, ZSTRINGS_UNSIGNED sz) { return realloc( ptr, sz); }
 };
 
-#define ZSTRINGS_CORE_ALLOC(sz) (str_core_s *)ZSTRINGS_SYSCALL(ma)( sizeof(str_core_s) + sz )
-
-#define ZSTRINGS_ALLOCATOR_ALLOC         STRALLOCATOR(__FILE__, __LINE__, true)._alloc
-#define ZSTRINGS_ALLOCATOR_RESIZE        STRALLOCATOR(__FILE__, __LINE__, true)._resize
-#define ZSTRINGS_ALLOCATOR_FREE          STRALLOCATOR(__FILE__, __LINE__, false)._free
+#define ZSTRINGS_ALLOCATOR DEFAULT_STRALLOCATOR
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -216,7 +181,7 @@ template<typename TCHARACTER> struct mod_fill
             blk_UNIT_copy_fwd<TCHARACTER>(news, olds, idx);
             blk_UNIT_copy_fwd<TCHARACTER>(news+idx+sz, olds+idx+sz, oldl-idx-sz);
         }
-        for(int i=idx;i<(idx+sz);++i)
+        for(ZSTRINGS_SIGNED i=idx;i<(idx+sz);++i)
             news[i] = c;
         return newl;
     }
@@ -368,35 +333,35 @@ template<typename TCHARACTER> struct mod_reverse
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // copy-on-demand string core
 
-template <typename TCHARACTER> class str_core_copy_on_demand_c
+template <typename TCHARACTER, typename ALLOCATOR = ZSTRINGS_ALLOCATOR> class str_core_copy_on_demand_c : public ALLOCATOR
 {
 	struct str_core_s
 	{
-		void    ref_inc(void) {m_ref++;};
-		void    ref_dec(void)
+		void    ref_inc() {m_ref++;};
+		void    ref_dec(ALLOCATOR *a)
 		{
 			ZSTRINGS_SIGNED nrf = m_ref-1;
 			if (nrf==0)
 			{
-				ZSTRINGS_ALLOCATOR_FREE( this );
+				a->mf( this );
 			} else
 				m_ref = nrf;
 		}
-		void        ref_dec_only(void)
+		void        ref_dec_only()
 		{
 			m_ref--;
 		};
-		bool  is_multi_ref(void) const {return (m_ref>1);}
+		bool  is_multi_ref() const {return (m_ref>1);}
 
-		TCHARACTER *str(void) {return (TCHARACTER *)(this + 1);}
-		const TCHARACTER *str(void) const {return (TCHARACTER *)(this + 1);}
+		TCHARACTER *str() {return (TCHARACTER *)(this + 1);}
+		const TCHARACTER *str() const {return (TCHARACTER *)(this + 1);}
 
-		static str_core_s  *build(ZSTRINGS_SIGNED size)
+		static str_core_s  *build(ALLOCATOR *a, ZSTRINGS_SIGNED size)
 		{
-			ZSTRINGS_SIGNED a_size = STRALLOCATOR::_calc_alloc_size<TCHARACTER>( size + 1 );
+			ZSTRINGS_SIGNED a_size = zstrings_internal::_calc_alloc_size<TCHARACTER>( size + 1 );
 			ZSTRINGS_SIGNED mem_size = a_size*sizeof(TCHARACTER);
 
-			str_core_s *core = ZSTRINGS_CORE_ALLOC( mem_size );
+			str_core_s *core = (str_core_s *)a->ma( sizeof(str_core_s) + mem_size );
 
 			core->m_n_size=size;
 			core->m_a_size=a_size;
@@ -405,13 +370,13 @@ template <typename TCHARACTER> class str_core_copy_on_demand_c
 			core->str()[size] = 0;
 			return core;
 		};
-		str_core_s *  newsize(ZSTRINGS_SIGNED size)
+		str_core_s *  newsize(ALLOCATOR *a, ZSTRINGS_SIGNED size)
 		{
 			if (size>=m_a_size)
 			{
-				ZSTRINGS_SIGNED a_size = STRALLOCATOR::_calc_alloc_size<TCHARACTER>( size+ 1 );
+				ZSTRINGS_SIGNED a_size = zstrings_internal::_calc_alloc_size<TCHARACTER>( size+ 1 );
 				ZSTRINGS_SIGNED mem_size = a_size*sizeof(TCHARACTER);
-				str_core_s *nd = (str_core_s *)ZSTRINGS_ALLOCATOR_RESIZE(this,mem_size + sizeof(str_core_s));
+				str_core_s *nd = (str_core_s *)a->mra(this,mem_size + sizeof(str_core_s));
 				nd->m_a_size = a_size;
 				return nd;
 
@@ -422,8 +387,8 @@ template <typename TCHARACTER> class str_core_copy_on_demand_c
 		}
 
 
-		ZSTRINGS_SIGNED    m_n_size;
-		ZSTRINGS_SIGNED    m_a_size;
+		ZSTRINGS_SIGNED     m_n_size;
+		ZSTRINGS_SIGNED     m_a_size;
 	private:
 		ZSTRINGS_SIGNED     m_ref;
 
@@ -437,13 +402,13 @@ public:
 
 
 	str_core_copy_on_demand_c():core(ZSTRINGS_NULL) {}
-	str_core_copy_on_demand_c(ZSTRINGS_SIGNED size):core( str_core_s::build(size) ) {}
+	str_core_copy_on_demand_c(ZSTRINGS_SIGNED size) { core = str_core_s::build(this, size); }
 	str_core_copy_on_demand_c(const str_core_copy_on_demand_c &ocore):core( ocore.core ) { if (core) core->ref_inc(); }
-    str_core_copy_on_demand_c(const sptr<TCHARACTER> &sp):core( str_core_s::build(sp.l) ) {blk_UNIT_copy_fwd<TCHARACTER>((*this)(),sp.s,sp.l);}
+    str_core_copy_on_demand_c(const sptr<TCHARACTER> &sp) { core = str_core_s::build(this, sp.l); blk_UNIT_copy_fwd<TCHARACTER>((*this)(),sp.s,sp.l);}
 
     ~str_core_copy_on_demand_c()
     {
-        if (core) core->ref_dec();
+        if (core) core->ref_dec( this );
     }
 
     void operator=(const sptr<TCHARACTER> &sp)
@@ -456,12 +421,41 @@ public:
 
 		change(sp.l, zstrings_internal::mod_copy<TCHARACTER>(sp.s,sp.l));
     }
+
+    template<bool> void set(const str_core_copy_on_demand_c &ocore);
+    template<> void set<false>(const str_core_copy_on_demand_c &ocore)
+    {
+        ZSTRINGS_SIGNED l = ocore.len();
+        if (l == 0)
+        {
+            if (core) 
+            {
+                core->ref_dec(this);
+                core = ZSTRINGS_NULL;
+            }
+            return;
+        }
+        if (!core)
+            core = str_core_s::build(this, l);
+        else
+        {
+            core = core->newsize(this, l);
+            core->m_n_size = l;
+            core->str()[l] = 0;
+        }
+        blk_UNIT_copy_fwd<TCHARACTER>(core->str(), ocore(), l);
+    }
+    template<> void set<true>(const str_core_copy_on_demand_c &ocore)
+    {
+        if (core == ocore.core) return;
+        if (core) core->ref_dec(this);
+        core = ocore.core;
+        if (core) core->ref_inc();
+    }
+
 	void operator=(const str_core_copy_on_demand_c &ocore)
 	{
-		if (core == ocore.core) return;
-		if (core) core->ref_dec();
-		core = ocore.core;
-		if (core) core->ref_inc();
+        set< zstrings_internal::is_struct_empty<ALLOCATOR>::value >( ocore );
 	}
 	bool operator==(const str_core_copy_on_demand_c &ocore) const
 	{
@@ -473,7 +467,7 @@ public:
 	ZSTRINGS_SIGNED len() const {return core?core->m_n_size:0;}
 	ZSTRINGS_SIGNED cap() const {return core?core->m_a_size:0;}
 
-	void clear(void) // set zero len
+	void clear() // set zero len
 	{
 		if (core == ZSTRINGS_NULL) return;
 		if (core->is_multi_ref())
@@ -491,7 +485,7 @@ public:
 	{
 		if (core == ZSTRINGS_NULL)
 		{
-			core = str_core_s::build(newlen);
+			core = str_core_s::build(this, newlen);
 			ZSTRINGS_SIGNED fixlen = moder(core->str(), newlen, ZSTRINGS_NULL, 0);
 			if (fixlen < newlen)
 			{
@@ -503,7 +497,7 @@ public:
 		if (core->is_multi_ref())
 		{
 			str_core_s *oldcore = core;
-			core = str_core_s::build(newlen);
+			core = str_core_s::build(this, newlen);
 			ZSTRINGS_SIGNED fixlen = moder(core->str(), newlen, oldcore->str(), oldcore->m_n_size);
 			oldcore->ref_dec_only();
 			if (fixlen < newlen)
@@ -514,7 +508,7 @@ public:
 			return;
 
 		}
-		core = core->newsize( newlen );
+		core = core->newsize( this, newlen );
 		ZSTRINGS_SIGNED fixlen = moder( core->str(), newlen, core->str(), core->m_n_size );
 		core->m_n_size = fixlen;
 		core->str()[fixlen] = 0;
@@ -566,7 +560,7 @@ public:
 	ZSTRINGS_SIGNED len() const {return _len;}
 	ZSTRINGS_SIGNED cap() const {return _cap;}
 
-	void clear(void) // set zero len
+	void clear() // set zero len
 	{
 		_len = 0;
 		_str[0] = 0;
@@ -609,11 +603,11 @@ public:
     }
 
     const TCHARACTER * operator()() const { return buf.s; }
-    TCHARACTER * operator()() { ZSTRINGS_ASSERT(false, "str_core_part_c is read only"); return nullptr; } //-V659
+    TCHARACTER * operator()() { ZSTRINGS_ASSERT(false, "str_core_part_c is read only"); return ZSTRINGS_NULL; } //-V659
     ZSTRINGS_SIGNED len() const { return buf.l; }
     ZSTRINGS_SIGNED cap() const { return 0; }
 
-    void clear(void) // set zero len
+    void clear() // set zero len
     {
         ZSTRINGS_ASSERT(false, "str_core_part_c is read only");
     }
@@ -635,7 +629,7 @@ template <typename TCHARACTER, class CORE = str_core_copy_on_demand_c<TCHARACTER
 
     typedef str_t<TCHARACTER, str_core_part_c<TCHARACTER> > strpart;
 
-    const TCHARACTER *_cstr(void) const
+    const TCHARACTER *_cstr() const
     {
         static const ZSTRINGS_WIDECHAR dummy = 0;
         const TCHARACTER * r = core();
@@ -669,14 +663,6 @@ public:
         blk_UNIT_copy_fwd<TCHARACTER>(core() + s1.l, s2.s, s2.l);
     };
 
-/*
-    str_t(const TCHARACTER * const s1, const ZSTRINGS_SIGNED l1, const TCHARACTER * const s2, const ZSTRINGS_SIGNED l2):core( l1+l2 )
-    {
-        blk_UNIT_copy_fwd<TCHARACTER>(core(),s1,l1);
-        blk_UNIT_copy_fwd<TCHARACTER>(core()+l1,s2,l2);
-    };
-*/
-
     str_t(const TCHARACTER * const s, const ZSTRINGS_SIGNED l):core( l )
     {
         blk_UNIT_copy_fwd<TCHARACTER>(core(),s,l);
@@ -687,7 +673,12 @@ public:
     };
 
     str_t(const str_t &s):core(s.core) {}
-	//template<typename TCHARACTER2, class CORE2> str_t(const str_t<TCHARACTER2, CORE2> &s):core( s.get_length() ) { xset<false>( *this, s ); }
+
+    /*
+        convert on create is evil: it can lead to invisible conversion
+	    template<typename TCHARACTER2, class CORE2> str_t(const str_t<TCHARACTER2, CORE2> &s):core( s.get_length() ) { xset<false>( *this, s ); }
+    */
+
     template<class CORE2> str_t(const str_t<TCHARACTER, CORE2> &s):core( s.get_length() ) { xset<false>( *this, s ); }
 
     ~str_t() {}
@@ -806,7 +797,7 @@ public:
         return *this;
     }
 
-    str_t<TCHARACTER, CORE> & reverse(void)
+    str_t<TCHARACTER, CORE> & reverse()
     {
         ZSTRINGS_SIGNED cnt = get_length();
         if (cnt <= 1) return *this;
@@ -889,10 +880,10 @@ public:
     }
 
 #ifdef ZSTRINGS_VEC3
-	template<typename VECCTYPE, int VECLEN> ZSTRINGS_VEC3(VECCTYPE) as_vec() const
+	template<typename VECCTYPE, ZSTRINGS_SIGNED VECLEN> ZSTRINGS_VEC3(VECCTYPE) as_vec() const
 	{
 		ZSTRINGS_VEC3(VECCTYPE) r(0);
-		int index = 0;
+		ZSTRINGS_SIGNED index = 0;
 		for (token t(*this, TCHARACTER(',')); t && index < VECLEN; ++t, ++index)
 			r[index] = t->as_num<VECCTYPE>();
 		return r;
@@ -901,13 +892,13 @@ public:
 	ZSTRINGS_VEC3(int) as_ivec3() const { return as_vec<int, 3>(); }
 #endif
 
-    template <ZSTRINGS_UNSIGNED N> void hex2buf( ZSTRINGS_BYTE *out, int index = 0 ) const
+    template <ZSTRINGS_UNSIGNED N> void hex2buf( ZSTRINGS_BYTE *out, ZSTRINGS_SIGNED index = 0 ) const
     {
-        int n = (get_length() - index) / 2; 
+        ZSTRINGS_SIGNED n = (get_length() - index) / 2; 
         if (n > N) n = N;
-        for (int i = 0; i < n; ++i)
+        for (ZSTRINGS_SIGNED i = 0; i < n; ++i)
             out[i] = as_byte_hex(index + i * 2);
-        for (int i = N; i < n; ++i)
+        for (ZSTRINGS_SIGNED i = N; i < n; ++i)
             out[i] = 0;
     }
 
@@ -921,7 +912,7 @@ public:
 	{
 		if (core.len() == 0) return def;
 		NUMTYPE r = 0;
-		if ( !CHARz_to_int<TCHARACTER>(r, core() + skip_chars, core.len() - skip_chars) )
+		if ( !CHARz_to_int<TCHARACTER, NUMTYPE>(r, core() + skip_chars, core.len() - skip_chars) )
 		{
 			ZSTRINGS_NUMCONVERSION_ERROR(def);
 			return def;
@@ -941,7 +932,7 @@ public:
         return CHARz_to_int_10<TCHARACTER, NUMTYPE>( core() + skip_chars, def, core.len() - skip_chars );
     }
 
-    bool is_float(void) const
+    bool is_float() const
     {
         if ( get_char(0) != '-' && get_char(0) != '.' && !CHAR_is_digit( get_char(0) ) ) return false;
         bool dot_yes = false;
@@ -965,7 +956,7 @@ public:
         return true;
     }
 
-    float as_float(void) const
+    float as_float() const
     {
         if (core.len() == 0) return 0.0f;
         double out = 0;
@@ -987,7 +978,7 @@ public:
         return (float)out;
     }
 
-    double as_double(void) const
+    double as_double() const
     {
 		if (core.len() == 0) return 0.0;
 		double out = 0;
@@ -1018,17 +1009,17 @@ public:
         return sptr<TCHARACTER>(_cstr(), othlen);
     }
 
-    TCHARACTER *str(void) const
+    TCHARACTER *str() const
     {
         ZSTRINGS_ASSERT( CORE::cstr_allow, "pointer to string not allowed" );
         return const_cast<TCHARACTER *>( core() );
     };
-	const TCHARACTER *cstr(void) const
+	const TCHARACTER *cstr() const
     {
         ZSTRINGS_ASSERT( CORE::cstr_allow, "const pointer to string not allowed" );
         return _cstr();
     };
-    operator const TCHARACTER *(void) const { return cstr();};
+    operator const TCHARACTER *() const { return cstr();};
 
     bool operator < (const sptr<TCHARACTER> &s) const
     {
@@ -1049,15 +1040,15 @@ public:
     }
 
 
-    str_t & clear(void) // set zero len
+    str_t & clear() // set zero len
     {
 		core.clear();
         return *this;
     }
 
-    bool  is_empty(void) const { return (get_length() == 0); }
-    ZSTRINGS_SIGNED    get_length(void) const {return core.len();};
-    ZSTRINGS_SIGNED    get_capacity(void) const {return core.cap();};
+    bool  is_empty() const { return (get_length() == 0); }
+    ZSTRINGS_SIGNED get_length() const {return core.len();};
+    ZSTRINGS_SIGNED get_capacity() const {return core.cap();};
     void require_capacity(ZSTRINGS_SIGNED capacity)
     {
         if (core.cap() < capacity)
@@ -1068,7 +1059,7 @@ public:
 
     str_t &  trunc_length(const ZSTRINGS_SIGNED chars = 1)
     {
-        return set_length( get_length() - ZSTRINGS_MIN(chars, get_length()) );
+        return set_length( get_length() - zstrings_internal::zmin(chars, get_length()) );
     }
     str_t &  trunc_char(const TCHARACTER c)
     {
@@ -1077,7 +1068,7 @@ public:
         return *this;
     }
 
-    str_t &  set_length(ZSTRINGS_SIGNED len, bool preserve_content = true) // udefined content for increasing buffer
+    str_t &  set_length(ZSTRINGS_SIGNED len, bool preserve_content = true) // undefined content for increasing buffer
     {
 		if (preserve_content)
 			core.change(len, zstrings_internal::mod_preserve<TCHARACTER>(len));
@@ -1235,7 +1226,7 @@ public:
             if ((idx + s.l) > get_length()) return -1;
 
             bool gotcha = true;
-            for(int i=0;i<s.l;++i)
+            for(ZSTRINGS_SIGNED i=0;i<s.l;++i)
             {
                 if (s.s[i] == c) continue;
                 if (*(core() + idx + i) != s.s[i]) { gotcha = false; break; }
@@ -1329,6 +1320,10 @@ public:
     {
         return str()[idx];
     }
+    TCHARACTER operator[](ZSTRINGS_SIGNED idx) const //-V659
+    {
+        return get_char(idx);
+    }
 
     ZSTRINGS_SIGNED count_chars( TCHARACTER c ) const
     {
@@ -1397,7 +1392,18 @@ public:
 		return *this;
     }
 
-    str_t &    expand_escapes(void)
+    str_t &  trim_right(const sptr<TCHARACTER> &c)
+    {
+        ZSTRINGS_SIGNED tlen = get_length();
+        if (tlen == 0) return *this;
+        TCHARACTER *s = core() + tlen - 1;
+        while (s >= core()) { if (CHARz_findn(c.s, *s, c.l) < 0) break; else s--; }
+        ZSTRINGS_SIGNED cutchars = ZSTRINGS_SIGNED((core() + tlen - 1) - s);
+        if (cutchars > 0) core.change(tlen - cutchars, zstrings_internal::mod_crop<TCHARACTER>(0, tlen - cutchars));
+        return *this;
+    }
+
+    str_t &    expand_escapes()
     {
         if (core.len() == 0) return *this;
 		core.change( core.len(), zstrings_internal::mod_expand_escape_codes<TCHARACTER>() );
@@ -1820,7 +1826,7 @@ public:
         str_t<ZSTRINGS_ANSICHAR, str_core_static_c<ZSTRINGS_ANSICHAR, 64> > tstr(63,false);
         ZSTRINGS_SIGNED dec,sign;
         ZSTRINGS_SIGNED count=0;
-        _fcvt_s(tstr.str(), 63, n,zpz,&dec,&sign);
+        _fcvt_s(tstr.str(), 63, n, (int)zpz, &dec,&sign);
         if (sign) append_char(TCHARACTER('-'));
         tstr.set_length();
 
@@ -1943,11 +1949,12 @@ public:
 		return *this;
     }
 
+    /*
+        convert on append is evil: it can lead to invisible conversion
+	    template<typename THCARACTER2, typename CORE2> str_t & operator += (const str_t<THCARACTER2, CORE2> &s) {return append<THCARACTER2, CORE2>(s);};
+    */
 
-
-	//template<typename THCARACTER2, typename CORE2> str_t & operator += (const str_t<THCARACTER2, CORE2> &s) {return append<THCARACTER2, CORE2>(s);};
     str_t & operator += (const TCHARACTER * const s) {return this->append(sptr<TCHARACTER>(s));};
-    //str_template_c & operator += (const TCHARACTER c) {return this->append(c);};
 
     str_t & append_as_hex(ZSTRINGS_UNSIGNED b)
     {
@@ -2072,15 +2079,18 @@ public:
 		core = s.core;
         return *this;
     }
-	template<typename TCHARACTER2, class CORE2> str_t & set(const str_t<TCHARACTER2, CORE2> &s)
+
+    template<class CORE2> str_t & set(const str_t<TCHARACTER, CORE2> &s)
+    {
+        xset<true>(*this, s);
+        return *this;
+    }
+
+	template<typename TCHARACTER2, class CORE2> str_t & setcvt(const str_t<TCHARACTER2, CORE2> &s)
 	{
 		xset<true>( *this, s );
 		return *this;
 	}
-    //str_t & set(const TCHARACTER * const s)
-    //{
-    //    return set(s, CHARz_len(s));
-    //}
 
     str_t & encode_base64( const void * data, ZSTRINGS_UNSIGNED size )
     {
@@ -2140,11 +2150,11 @@ public:
         s.s = core() + from;
         s.l = ilen < 0 ? (get_length() - from) : ilen;
         static const ZSTRINGS_ANSICHAR cd64[] = "|$$$}rstuvwxyz{$$$$$$$>?@ABCDEFGHIJKLMNOPQRSTUVW$$$$$$XYZ[\\]^_`abcdefghijklmnopq";
-        ZSTRINGS_BYTE inb[4];
+        ZSTRINGS_BYTE inb[4]; //-V112
         for (;s && datasize;)
         {
             ZSTRINGS_SIGNED len, i;
-            for (len = 0, i = 0; i < 4 && (s); ++i)
+            for (len = 0, i = 0; i < sizeof(inb)/sizeof(ZSTRINGS_BYTE) && (s); ++i) 
             {
                 ZSTRINGS_BYTE v = 0;
                 while ((s) && v == 0)
@@ -2178,7 +2188,12 @@ public:
     }
 
     str_t & operator = (const str_t &s) { return set(s); }
-    //template<typename TCHARACTER2, class CORE2> str_t<TCHARACTER, CORE> & operator = (const str_t<TCHARACTER2, CORE2> &s) { return set(s); }
+    
+    /* 
+        convert on assign is evil: it can lead to invisible conversion
+        template<typename TCHARACTER2, class CORE2> str_t<TCHARACTER, CORE> & operator = (const str_t<TCHARACTER2, CORE2> &s) { return set(s); }
+    */
+
     template<class CORE2> str_t<TCHARACTER, CORE> & operator = (const str_t<TCHARACTER, CORE2> &s) { return set(s); }
     str_t & operator = (const TCHARACTER * const s)   { *this = sptr<TCHARACTER>(s); return *this; } // copy always, fail on part strings
     str_t & operator = (const sptr<TCHARACTER> &s) { set(s.s, s.l); return *this; } // copy always, fail on part strings
@@ -2186,49 +2201,49 @@ public:
     template<class CORE2> ZSTRINGS_SIGNED   operator()( const str_t<TCHARACTER,CORE2> & n ) const { return compare(*this,n); }
     ZSTRINGS_SIGNED							operator()( const TCHARACTER * n ) const { return compare(n, CHARz_len(n), _cstr(), get_length()); }
 
-    static ZSTRINGS_SIGNED compare(const sptr<TCHARACTER> &zn1, const sptr<TCHARACTER> &zn2)
+    static signed char compare(const sptr<TCHARACTER> &s1, const sptr<TCHARACTER> &s2)
     {
-        return compare(zn1.s,zn1.l,zn2.s,zn1.l);
+        return compare(s1.s,s1.l,s2.s,s2.l);
     }
-    static ZSTRINGS_SIGNED compare(const TCHARACTER * zn1,ZSTRINGS_SIGNED zn1len,const TCHARACTER * zn2,ZSTRINGS_SIGNED zn2len) // "A","B"=-1  "A","A"=0  "B","A"=1
+    static signed char compare(const TCHARACTER * s1, ZSTRINGS_SIGNED s1len, const TCHARACTER * s2, ZSTRINGS_SIGNED s2len) // "A","B"=-1  "A","A"=0  "B","A"=1
     {
-        if(zn1len==0 && zn2len==0) return 0;
-        else if(zn1len==0) return -1;
-        else if(zn2len==0) return 1;
-        if (zn1 == zn2 && zn1len == zn2len) return 0;
+        if(!s1len && !s2len) return 0;
+        if(!s1len) return -1;
+        if(!s2len) return 1;
+        if (s1 == s2 && s1len == s2len) return 0;
 
-        ZSTRINGS_SIGNED len=zn1len;
-        if(len>zn2len) len=zn2len;
+        ZSTRINGS_SIGNED len=s1len;
+        if(len>s2len) len=s2len;
 
-        for(ZSTRINGS_SIGNED i=0;i<len;i++)
+        for(ZSTRINGS_SIGNED i=0;i<len;++i)
         {
-            if(zn1[i]<zn2[i]) return -1;
-            else if(zn1[i]>zn2[i]) return 1;
+            if(s1[i]<s2[i]) return -1;
+            if(s1[i]>s2[i]) return 1;
         }
-        if(zn1len<zn2len) return -1;
-        else if(zn1len>zn2len) return 1;
+        if (s1len < s2len) return -1;
+        if (s1len > s2len) return 1;
         return 0;
     }
 
-    static ZSTRINGS_SIGNED icompare(const sptr<TCHARACTER> &zn1, const sptr<TCHARACTER> &zn2)
+    static signed char icompare(const sptr<TCHARACTER> &s1, const sptr<TCHARACTER> &s2)
     {
-        return icompare(zn1.s,zn1.l,zn2.s,zn1.l);
+        return icompare(s1.s,s1.l,s1.s,s1.l);
     }
-    static ZSTRINGS_SIGNED icompare(const TCHARACTER * zn1,ZSTRINGS_SIGNED zn1len,const TCHARACTER * zn2,ZSTRINGS_SIGNED zn2len) // "A","B"=-1  "A","A"=0  "B","A"=1
+    static signed char icompare(const TCHARACTER * s1,ZSTRINGS_SIGNED s1len,const TCHARACTER * s2,ZSTRINGS_SIGNED s2len) // "A","B"=-1  "A","A"=0  "B","A"=1
     {
-        if(zn1len==0 && zn2len==0) return 0;
-        else if(zn1len==0) return -1;
-        else if(zn2len==0) return 1;
+        if(!s1len && !s2len) return 0;
+        if(!s1len) return -1;
+        if(!s2len) return 1;
 
-        ZSTRINGS_SIGNED len=zn1len;
-        if(len>zn2len) len=zn2len;
+        ZSTRINGS_SIGNED len=s1len;
+        if(len>s2len) len=s2len;
 
         TCHARACTER cc[2];
 
         for(ZSTRINGS_SIGNED i=0;i<len;i++)
         {
-            cc[0] = zn1[i];
-            cc[1] = zn2[i];
+            cc[0] = s1[i];
+            cc[1] = s2[i];
 
             ZSTRINGS_SYSCALL(text_lowercase)(cc,2);
 
@@ -2236,13 +2251,13 @@ public:
 
             return (cc[0]<cc[1]) ? -1 : 1;
         }
-        if(zn1len<zn2len) return -1;
-        else if(zn1len>zn2len) return 1;
+        if(s1len<s2len) return -1;
+        if(s1len>s2len) return 1;
         return 0;
     }
 
-    template<class CORE1, class CORE2> static ZSTRINGS_SIGNED compare(const str_t<TCHARACTER, CORE1>& zn1, const str_t<TCHARACTER, CORE2>& zn2) { return compare(zn1.as_sptr(), zn2.as_sptr());}
-    template<class CORE1, class CORE2> static ZSTRINGS_SIGNED icompare(const str_t<TCHARACTER, CORE1>& zn1,const str_t<TCHARACTER, CORE2>& zn2) { return icompare(zn1.as_sptr(), zn2.as_sptr());}
+    template<class CORE1, class CORE2> static signed char compare(const str_t<TCHARACTER, CORE1>& s1, const str_t<TCHARACTER, CORE2>& s2) { return compare(s1.as_sptr(), s2.as_sptr());}
+    template<class CORE1, class CORE2> static signed char icompare(const str_t<TCHARACTER, CORE1>& s1,const str_t<TCHARACTER, CORE2>& s2) { return icompare(s1.as_sptr(), s2.as_sptr());}
 
     ZSTRINGS_SIGNED token_count(const TCHARACTER * separators_chars) const
     {
@@ -2298,7 +2313,7 @@ public:
         return i-tokenoffset;
     }
 
-    ZSTRINGS_UNSIGNED crc(void) const { return get_length() ? ZSTRINGS_CRC32(core(), get_length() * sizeof(TCHARACTER)) : 0;}
+    ZSTRINGS_UNSIGNED crc() const { return get_length() ? ZSTRINGS_CRC32(core(), get_length() * sizeof(TCHARACTER)) : 0;}
 
     TCHARACTER * begin() { return core(); }
     const TCHARACTER *begin() const { return core(); }
@@ -2456,15 +2471,15 @@ inline str_c to_str(const wsptr &s)
 
 inline str_c to_utf8(const wsptr &s)
 {
-    str_c   sout(s.l*4,false);
-    ZSTRINGS_SIGNED nl = ZSTRINGS_SYSCALL(text_ucs2_to_utf8)(sout.str(), s.l*4+1, s);
+    str_c   sout(s.l*3,false); // hint: char at utf8 can be 6 bytes length, but ucs2 maximum code is 0xffff encoding to utf8 has 3 bytes len
+    ZSTRINGS_SIGNED nl = ZSTRINGS_SYSCALL(text_ucs2_to_utf8)(sout.str(), s.l*3+1, s);
     sout.set_length(nl);
     return sout;
 }
 
 inline wstr_c from_utf8(const asptr &s)
 {
-    wstr_c   sout(s.l * 4, false);
+    wstr_c   sout(s.l, false);
     sout.set_as_utf8(s);
     return sout;
 }
@@ -2492,21 +2507,6 @@ inline wstr_c to_wstr(const asptr &s)
     return sout;
 }
 
-
-inline str_c str_convert(const wstr_c &s)
-{
-    str_c   sout(s.get_length(),true);
-    ZSTRINGS_SYSCALL(text_ucs2_to_ansi)(sout.str(), s.get_length(), s.as_sptr());
-    return sout;
-}
-
-inline wstr_c str_convert(const str_c &s)
-{
-    wstr_c   sout(s.get_length(),true);
-    ZSTRINGS_SYSCALL(text_ansi_to_ucs2)(sout.str(), s.get_length(), s.as_sptr());
-    return sout;
-}
-
 inline bool CHARz_equal_ignore_case(const ZSTRINGS_WIDECHAR *src1, const ZSTRINGS_WIDECHAR *src2, ZSTRINGS_SIGNED len)
 {
     return ZSTRINGS_SYSCALL(text_iequalsw)(src1,src2,len);
@@ -2524,7 +2524,7 @@ template<typename STRT, typename NUMT> STRT roundstr( NUMT x, ZSTRINGS_SIGNED zp
 {
 	STRT t;
 	t.set_as_num<NUMT>(x);
-	int index = t.find_pos('.');
+	ZSTRINGS_SIGNED index = t.find_pos('.');
 	if (index < 0)
 	{
 		if (format)
@@ -2534,7 +2534,7 @@ template<typename STRT, typename NUMT> STRT roundstr( NUMT x, ZSTRINGS_SIGNED zp
 		}
 	} else
 	{
-		int ost = t.get_length() - index - 1;
+		ZSTRINGS_SIGNED ost = t.get_length() - index - 1;
 		if (ost > zp) t.set_length( index + zp + 1 );
 		if (zp == 0)
 		{
@@ -2546,7 +2546,7 @@ template<typename STRT, typename NUMT> STRT roundstr( NUMT x, ZSTRINGS_SIGNED zp
 
 }
 
-template<typename TCHARACTER> class token//токенизатор, используется для быстрого обхода по словам, разделенным одним символом: for (token t(str); t; t++) if (*t=="...") ...
+template<typename TCHARACTER> class token // tokenizer, for (token t(str); t; t++) if (*t=="...") ...
 {
 	sptr<TCHARACTER> str;
 	str_t<TCHARACTER, str_core_part_c<TCHARACTER> > tkn;
@@ -2594,3 +2594,20 @@ public:
 	}
 	void operator++(int) {++(*this);}
 };
+
+#ifndef Z_STR_JOINMACRO1
+#define Z_STR_JOINMACRO2(x,y) x##y
+#define Z_STR_JOINMACRO1(x,y) JOINMACRO2(x,y)
+#endif
+
+template<typename T> ZSTRINGS_FORCEINLINE sptr<T> _to_char_or_not_to_char(const ZSTRINGS_ANSICHAR * sa, const ZSTRINGS_WIDECHAR * sw, int len);
+template<> ZSTRINGS_FORCEINLINE asptr _to_char_or_not_to_char<char>(const ZSTRINGS_ANSICHAR * sa, const ZSTRINGS_WIDECHAR *, ZSTRINGS_SIGNED len) { return asptr(sa, len); }
+template<> ZSTRINGS_FORCEINLINE wsptr _to_char_or_not_to_char<wchar_t>(const ZSTRINGS_ANSICHAR *, const ZSTRINGS_WIDECHAR * sw, ZSTRINGS_SIGNED len) { return wsptr(sw, len); }
+#define CONSTSTR( tc, s ) AUTOSPTR_MACRO<tc>( s, Z_STR_JOINMACRO1(L,s), sizeof(s)-1 )
+#define CONSTASTR( s ) ASPTR_MACRO( s, sizeof(s)-1 )
+#define CONSTWSTR( s ) WSPTR_MACRO( Z_STR_JOINMACRO1(L,s), sizeof(s)-1 )
+
+#define NAMESPACE_MACRO( a, b, c ) a##b##c
+#define ASPTR_MACRO NAMESPACE_MACRO(ZSTRINGS_NAMESPACE,::,asptr)
+#define WSPTR_MACRO NAMESPACE_MACRO(ZSTRINGS_NAMESPACE,::,wsptr)
+#define AUTOSPTR_MACRO NAMESPACE_MACRO(ZSTRINGS_NAMESPACE,::,_to_char_or_not_to_char)

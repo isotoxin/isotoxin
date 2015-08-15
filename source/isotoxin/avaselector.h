@@ -47,7 +47,7 @@ class dialog_avaselector_c : public gui_isodialog_c
 
     int protoid = 0;
 
-    ts::ivec2 user_offset = 0;
+    ts::ivec2 user_offset = ts::ivec2(0);
     float resize_k = 1.0f;
     float click_resize_k;
     ts::uint32 area = 0;

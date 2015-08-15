@@ -12,6 +12,7 @@
 #pragma warning (disable:4062) // enumerator 'xxx' in switch of enum 'yyy' is not handled
 #pragma warning (disable:4127) // condition expression is constant
 #pragma warning (disable:4201) // nameless struct/union
+#pragma warning (disable:4091) // 'typedef ' : ignored on left of '' when no variable is declared
 
 #pragma warning (push)
 #pragma warning (disable:4820)
@@ -294,34 +295,43 @@ typedef signed long long	int64;
 typedef unsigned long long	uint64;
 #endif
 
-#include "tsstrs.h" // "strings lib" is most independent
-
-namespace ts
+namespace ts // some ts types
 {
-typedef wchar_t wchar;
-typedef unsigned long dword;
-typedef unsigned long uint32;
-typedef unsigned char uint8;
-typedef unsigned short uint16;
-typedef unsigned short word;
+    typedef wchar_t wchar;
+    typedef unsigned long dword;
+    typedef unsigned long uint32;
+    typedef unsigned char uint8;
+    typedef unsigned short uint16;
+    typedef unsigned short word;
 
-typedef signed char int8;
-typedef signed short int16;
-typedef signed long int32;
+    typedef signed char int8;
+    typedef signed short int16;
+    typedef signed long int32;
 
-typedef uint32 TSCOLOR;
+    typedef uint32 TSCOLOR;
 
-typedef size_t auint; // auto uint (32/64 bit)
-typedef ptrdiff_t aint; // auto int (32/64 bit)
+    typedef size_t auint; // auto uint (32/64 bit)
+    typedef ptrdiff_t aint; // auto int (32/64 bit)
 
-template<typename T> INLINE sptr<T> _to_char_or_not_to_char(const char * sa, const wchar * sw, int len);
-template<> INLINE asptr _to_char_or_not_to_char<char>(const char * sa, const wchar * sw, int len) { return asptr(sa, len); }
-template<> INLINE wsptr _to_char_or_not_to_char<wchar>(const char * sa, const wchar * sw, int len) { return wsptr(sw, len); }
-#define CONSTSTR( tc, s ) ts::_to_char_or_not_to_char<tc>( s, JOINMACRO1(L,s), sizeof(s)-1 )
-#define CONSTASTR( s ) ts::asptr( s, sizeof(s)-1 )
-#define CONSTWSTR( s ) ts::wsptr( JOINMACRO1(L,s), sizeof(s)-1 )
+    struct TS_DEFAULT_ALLOCATOR
+    {
+        INLINE void * TSCALL  ma(auint sz)
+        {
+            return MM_ALLOC(sz);
+        }
+        INLINE void   TSCALL  mf(void *ptr)
+        {
+            MM_FREE(ptr);
+        }
+        INLINE void * TSCALL  mra(void *ptr, auint sz)
+        {
+            return MM_RESIZE(ptr, sz);
+        }
+    };
+
 } // namespace ts
 
+#include "tsstrs.h" // "strings lib" is most independent
 #include "tsdebug.h"
 
 namespace ts
@@ -387,7 +397,7 @@ INLINE word as_word(uint32 aa) {return word(aa & 0xFFFF);}
 INLINE word as_word(uint64 aa) {return word(aa & 0xFFFF);}
 //INLINE word as_word(dword aa) {return word(aa & 0xFFFF);}
 
-INLINE dword as_dword(uint64 aa) {return dword(aa & 0xFFFFFFFF);}
+INLINE dword as_dword(uint64 aa) {return dword(aa & 0xFFFFFFFF);} //-V112
 
 
 template <typename T, int factor = sizeof(T)>
@@ -622,32 +632,16 @@ template <class CC> INLINE   void _ts_construct(CC *_Ptr, const CC &_Val)
 	TSPLACENEW(_Ptr, _Val );
 }
 
-struct TS_DEFAULT_ALLOCATOR
-{
-
-    INLINE void * TSCALL  ma(uint sz)
-    {
-        return MM_ALLOC(sz);
-    }
-    INLINE void   TSCALL  mf(void *ptr)
-    {
-        MM_FREE(ptr);
-    }
-    INLINE void * TSCALL  mra(void *ptr, uint sz)
-    {
-        return MM_RESIZE(ptr, sz);
-    }
-};
-
 #define MAX_TEMP_ARRAYS 4
 
 struct tmpbuf_s
 {
-    void *data; uint size;
+    void *data; auint size;
     bool used = false;
-    tmpbuf_s() : data(nullptr), size(0) {}
+    bool extra = false;
+    tmpbuf_s( bool extra = false ) : data(nullptr), size(0), extra(extra) {}
     ~tmpbuf_s() { if (data) MM_FREE(data); }
-    void *resize(uint sz)
+    void *resize(auint sz)
     {
         if (sz > size)
         {
@@ -689,14 +683,18 @@ public:
                 return &b;
             }
         }
-        ERROR("no more tmp bufs");
-        return nullptr;
+        return TSNEW( tmpbuf_s, true );
     }
     static void unget( tmpbuf_s * b )
     {
         ASSERT(GetCurrentThreadId() == core->threadid);
-        ASSERT(b->used);
-        b->used = false;
+        if (b->extra)
+            TSDEL(b);
+        else
+        {
+            ASSERT(b->used);
+            b->used = false;
+        }
     }
 };
 
@@ -712,18 +710,21 @@ struct TMP_ALLOCATOR
         tmpalloc_c::unget( curbuf );
     }
 
-    INLINE void * TSCALL  ma(uint sz)
+    INLINE void * TSCALL  ma(auint sz)
     {
         return curbuf->resize(sz);
     }
     INLINE void   TSCALL  mf(void *ptr)
     {
     }
-    INLINE void * TSCALL  mra(void *, uint sz)
+    INLINE void * TSCALL  mra(void *, auint sz)
     {
         return curbuf->resize(sz);
     }
 };
+
+typedef str_t<ZSTRINGS_ANSICHAR, str_core_copy_on_demand_c<ZSTRINGS_ANSICHAR, TMP_ALLOCATOR> > tmp_str_c;
+typedef str_t<ZSTRINGS_WIDECHAR, str_core_copy_on_demand_c<ZSTRINGS_WIDECHAR, TMP_ALLOCATOR> > tmp_wstr_c;
 
 
 template<size_t sz> struct sztype;
@@ -910,13 +911,13 @@ public:
 
 	bool empty() const { return length_ == 0; }
 
-	const T &operator[](int i) const
+	const T &operator[](aint i) const
 	{
 		if (ASSERT(unsigned(i) < unsigned(length_))) return data_[i];
 		return make_dummy<T>();
 	}
 
-	T &operator[](int i)
+	T &operator[](aint i)
 	{
 		if (ASSERT(unsigned(i) < unsigned(length_))) return data_[i];
 		return make_dummy<T>();
@@ -951,7 +952,7 @@ template <typename T> struct dummy
 } // namespace ts
 
 
-#define FORWARD_DECLARE_STRING(c, s) template <typename TCHARACTER> class str_core_copy_on_demand_c; template <typename TCHARACTER, class CORE > class str_t; typedef str_t<c, str_core_copy_on_demand_c<c>> s;
+#define FORWARD_DECLARE_STRING(c, s) template <typename TCHARACTER, typename ALC> class str_core_copy_on_demand_c; template <typename TCHARACTER, class CORE > class str_t; typedef str_t<c, str_core_copy_on_demand_c<c, ZSTRINGS_ALLOCATOR>> s;
 
 #include "tsflags.h"
 #include "tscrc.h"

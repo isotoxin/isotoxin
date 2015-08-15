@@ -198,7 +198,7 @@ tmpalloc_c tmpb;
 
             tmp_tbuf_t<IP_ADAPTER_INFO> adapters;
             adapters.set_size(sizeof(IP_ADAPTER_INFO) + 64);
-            adapters.tbegin<IP_ADAPTER_INFO>()->Next = nullptr;
+            adapters.tbegin<IP_ADAPTER_INFO>()->Next = nullptr; //-V807
             memcpy(adapters.tbegin<IP_ADAPTER_INFO>()->Address, cn, 6);//-V512 - mac address length is actually 6 bytes
 
 

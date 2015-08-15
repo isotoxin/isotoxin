@@ -28,7 +28,7 @@ inline wraptranslate<ts::wstr_c> wraptranslate<ts::wsptr>::operator / (const ts:
 #ifndef _FINAL
 INLINE const wraptranslate<ts::wsptr> __translation(const ts::wsptr &txt)
 {
-    WARNING("Translation not found! Use rasp loc. (%s)", ts::str_c(txt).cstr());
+    WARNING("Translation not found! Use rasp loc. (%s)", ts::to_str(txt).cstr());
     return wraptranslate<ts::wsptr>(txt);
 }
 #endif

@@ -1,6 +1,8 @@
 #include "toolset.h"
 #include "glyphscache.h"
 
+//-V:idata:807
+
 namespace ts
 {
 
@@ -19,7 +21,7 @@ glyph_s &font_c::operator[](wchar c)
 	if (glyphs[c]) return *glyphs[c];
 
 	FT_Set_Pixel_Sizes( face, font_params.size.x, font_params.size.y );
-	CHECK(FT_Load_Char( face, c, font_params.flags | FT_LOAD_RENDER ) == 0);
+	CHECK(FT_Load_Char( face, c, font_params.flags | FT_LOAD_RENDER ) == 0); //-V807
 
 	FT_Bitmap &b = face->glyph->bitmap;
 
@@ -235,7 +237,7 @@ void add_image(const wsptr&name, const uint8* data, const imgdesc_s &imgdesc, bo
     i.height = imgdesc.sz.y;
 }
 
-font_c &font_c::buildfont(const wstr_c &filename, const str_c &fontname, ivec2 size, bool hinting, int additional_line_spacing, float outline_radius, float outline_shift)
+font_c &font_c::buildfont(const wstr_c &filename, const str_c &fontname, const ivec2 &size, bool hinting, int additional_line_spacing, float outline_radius, float outline_shift)
 {
     internal_data_s &idta = idata();
     wstr_c face(filename);
@@ -264,9 +266,9 @@ font_c &font_c::buildfont(const wstr_c &filename, const str_c &fontname, ivec2 s
             // ... or load any other
 
 			auto it = idta.font_faces_cache.begin();
-			if (it.key() == face) it++;
+			if (it.key() == face) ++it;
 			buf = it->font_file_buffer;
-            break;
+            break; //-V612
 		}
 
 		CHECK(FT_New_Memory_Face( idta.ftlibrary, (FT_Byte*)buf.data(), buf.size(), 0, &ff.face ) == 0);

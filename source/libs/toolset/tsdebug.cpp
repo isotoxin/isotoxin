@@ -12,7 +12,7 @@ HWND g_main_window = nullptr;
 
 void LogMessage(const char *caption, const char *msg)
 {
-#if defined _DEBUG || defined _CRASH_HANDLER
+#if defined _DEBUG || defined _DEBUG_OPTIMIZED || defined _CRASH_HANDLER
 	FILE *f = nullptr;
 	fopen_s(&f, "messages.log", "ab");
 	if (f)

@@ -13,5 +13,5 @@ public:
 
 
     bool get(const char* address, ts::buf_c& resultad, const ts::buf_c* post = nullptr); // binary data
-    bool get(const char* address, ts::buf_c& resultad, const ts::asptr post); // key=value&key2=value2 
+    bool get(const char* address, ts::buf_c& resultad, const ts::asptr &post); // key=value&key2=value2 
 };

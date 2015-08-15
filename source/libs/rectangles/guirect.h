@@ -634,7 +634,7 @@ public:
         return (m_parent == RID()) ? r : HOLD(m_parent)().__spec_to_screen_calc(r);
     }
     void __spec_apply_screen_pos_delta(const ts::ivec2 &delta) { m_props.__spec_movescreenpos(delta); }
-    void __spec_remove_engine() { UNIQUE_PTR(rectengine_c) t; memcpy(&m_engine, &t, sizeof(m_engine)); make_all_ponters_expired(); } // hack! don't use
+    void __spec_remove_engine() { UNIQUE_PTR(rectengine_c) t; memcpy(&m_engine, &t, sizeof(m_engine)); make_all_ponters_expired(); } //-V614 // hack! hack! hack!
     void __spec_set_zindex(float zindex) {m_props.__spec_set_zindex(zindex);}
     void __spec_set_outofbound(bool f) { m_props.__spec_set_outofbound(f); }
 };
@@ -814,7 +814,7 @@ class gui_button_c : public gui_control_c
     ts::wstr_c text;
     ts::shared_ptr<button_desc_s> desc;
     button_desc_s::states curstate = button_desc_s::NORMAL;
-    ts::ivec2 textsize = 0;
+    ts::ivec2 textsize = ts::ivec2(0);
 
     GUIPARAMHANDLER handler;
     GUIPARAM param = nullptr;
@@ -924,7 +924,7 @@ class gui_label_ex_c : public gui_label_c
 
 protected:
     gui_label_ex_c() {}
-    ts::ivec2 glyphs_pos = 0;
+    ts::ivec2 glyphs_pos = ts::ivec2(0);
     int overlink = -1;
 
     bool check_overlink(const ts::ivec2 &localpos);

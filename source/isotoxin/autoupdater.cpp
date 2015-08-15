@@ -71,7 +71,7 @@ ts::str_c get_downloaded_ver( ts::buf_c *pak = nullptr )
         int signi = ver_ok(pak->cstr());
         if (!signi) return ts::str_c();
         ts::abp_c ver; ver.load(ts::asptr(pak->cstr().s, signi));
-        ts::wstr_c wurl; wurl.set_as_utf8( ver.get_string(CONSTASTR("url")) );
+        ts::wstr_c wurl(from_utf8( ver.get_string(CONSTASTR("url")) ));
         pak->load_from_disk_file(ts::fn_join(auparams().lock_read()().path, ts::fn_get_name_with_ext(wurl)));
         if (md5ok(*pak,ver))
             return ver.get_string(CONSTASTR("ver"));

@@ -77,7 +77,7 @@ bool config_base_c::param( const ts::asptr& pn, const ts::asptr& vl )
 
 void config_base_c::changed(bool save_all_now)
 {
-    DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, save_dirty), save_all_now ? (GUIPARAM)1 : nullptr);
+    DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, save_dirty), save_all_now ? (GUIPARAM)1 : nullptr); //-V566
 }
 
 bool find_config(ts::wstr_c &path)

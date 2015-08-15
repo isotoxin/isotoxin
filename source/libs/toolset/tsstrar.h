@@ -23,8 +23,8 @@ public:
     strings_t(const void *buf, aint bufsize, bool allow_empty_lines)
     {
         const TCHARACTER * s = (TCHARACTER *)buf;
-        int i0 = 0;
-        int i1 = 0;
+        aint i0 = 0;
+        aint i1 = 0;
         for(;;)
         {
             if (s[i1] == 13 || s[i1] == 10)
@@ -55,10 +55,10 @@ public:
     strings_t(const strtype &str, TCHARACTER separator)
     {
         if (str.get_length() == 0)  return;
-        int i = 0;
+        aint i = 0;
         for(;;)
         {
-            int k = str.find_pos(i,separator);
+            aint k = str.find_pos(i,separator);
             if (k < 0)
             {
                 
@@ -73,10 +73,10 @@ public:
     strings_t(const sptr<TCHARACTER> &str, TCHARACTER separator)
     {
         if (str.l == 0)  return;
-        int i = 0;
+        aint i = 0;
         for(;;)
         {
-            int k = CHARz_findn(str.s+i,separator,str.l);
+            aint k = CHARz_findn(str.s+i,separator,str.l);
             if (k < 0)
             {
                 add( str.skip(i) );
@@ -91,12 +91,12 @@ public:
     {
         if (str.get_length() == 0)  return;
 
-        int spll = CHARz_len(separator);
+        aint spll = CHARz_len(separator);
 
-        int i = 0;
+        aint i = 0;
         for(;;)
         {
-            int k = str.get_index(i,separator, spll);
+            aint k = str.get_index(i,separator, spll);
             if (k < 0)
             {
 
@@ -112,10 +112,10 @@ public:
     {
         if (str.get_length() == 0)  return;
 
-        int i = 0;
+        aint i = 0;
         for(;;)
         {
-            int k = str.get_index(i,separator);
+            aint k = str.get_index(i,separator);
             if (k < 0)
             {
 
@@ -134,10 +134,10 @@ public:
         strtype spls;
         clear();
         if (str.get_length() == 0)  return spls;
-        int i = 0;
+        aint i = 0;
         for(;;)
         {
-            int k = str.get_index_multi(i,separator);
+            aint k = str.get_index_multi(i,separator);
             if (k < 0)
             {
                 add(str.substr(i));
@@ -157,10 +157,10 @@ public:
     {
         clear();
         if (str.l == 0)  return;
-        int i = 0;
-        int bg = -1;
+        aint i = 0;
+        aint bg = -1;
         bool quote = false;
-        for(int l = str.l;l>0;++i,--l)
+        for(aint l = str.l;l>0;++i,--l)
         {
             TCHARACTER ch = str.s[i];
             if (bg < 0)
@@ -205,9 +205,9 @@ public:
     {
         clear();
         if (str.get_length() == 0)  return;
-        int i = 0;
-        int bg = -1;
-        int bra = 0;
+        aint i = 0;
+        aint bg = -1;
+        aint bra = 0;
         for(;;++i)
         {
             TCHARACTER ch = str.get_char(i);
@@ -268,10 +268,10 @@ public:
         clear();
         pstr_t<TCHARACTER2> str( _str );
         if (str.get_length() == 0)  return;
-        int i = 0;
+        aint i = 0;
         for(;;)
         {
-            int k = str.find_pos(i,separator);
+            aint k = str.find_pos(i,separator);
             ASSERT(k < str.get_length());
             if (k < 0)
             {
@@ -291,10 +291,10 @@ public:
         pstr_t<TCHARACTER2> str( _str );
 
         if (str.get_length() == 0)  return;
-        int i = 0;
+        aint i = 0;
         for(;;)
         {
-            int k = str.get_index(i,separator);
+            aint k = str.get_index(i,separator);
             if (k < 0)
             {
                 add(str.substr(i));
@@ -306,11 +306,11 @@ public:
         }
     }
 
-    strtype    join_multi( const TCHARACTER *multi, int begin = 0, int end = -1 ) const
+    strtype    join_multi( const TCHARACTER *multi, aint begin = 0, aint end = -1 ) const
     {
         strtype str;
-        const int sz = (end < 0) ? size() : end;
-        for (int k = begin; k<sz; ++k)
+        const aint sz = (end < 0) ? size() : end;
+        for (aint k = begin; k<sz; ++k)
         {
             str.append( get(k) );
             if (k < (sz-1))
@@ -324,11 +324,11 @@ public:
     }
 
 
-    strtype    join( TCHARACTER separator, int begin = 0, int end = -1 ) const
+    strtype    join( TCHARACTER separator, aint begin = 0, aint end = -1 ) const
     {
         strtype str;
-        const int sz = (end < 0) ? size() : end;
-        for (int k = begin; k<sz; ++k)
+        const aint sz = (end < 0) ? size() : end;
+        for (aint k = begin; k<sz; ++k)
         {
             str.append( get(k) );
             if (k < (sz-1)) str.append_char( separator );
@@ -339,8 +339,8 @@ public:
     strtype    join( const sptr<TCHARACTER> &joincharz ) const
     {
         strtype str;
-        const int sz = size();
-        for (int k = 0; k<sz; ++k)
+        aint sz = size();
+        for (aint k = 0; k<sz; ++k)
         {
             str.append( get(k) );
             if (k < (sz-1)) str.append( joincharz );
@@ -350,19 +350,26 @@ public:
 
     template <int N> void adda( const strtype s[N] )
     {
-        for (int i=0;i<N;++i)
+        for (aint i=0;i<N;++i)
         {
             add( s[i] );
         }
     }
 
-    template<typename TCHARACTER2, typename CORE2> int     add(const str_t<TCHARACTER2, CORE2> &s)
+    template<typename CORE2> aint add(const str_t<TCHARACTER, CORE2> &s)
     {
-		int r = size();
-		__super::add().set(s);
+        aint r = size();
+        __super::add().set(s);
+        return r;
+    };
+
+    template<typename TCHARACTER2, typename CORE2> aint add(const str_t<TCHARACTER2, CORE2> &s)
+    {
+		aint r = size();
+		__super::add().setcvt(s);
 		return r;
     };
-    int     add(const sptr<TCHARACTER> &s, bool casedown = false)
+    aint add(const sptr<TCHARACTER> &s, bool casedown = false)
     {
 		strtype &ss = __super::add();
 		ss.set(s);
@@ -370,21 +377,31 @@ public:
             ss.case_down();
         return size() - 1;
     };
-    template<typename TCHARACTER2, class CORE2> void    insert(uint i, const str_t<TCHARACTER2, CORE2> &s)
+
+    template<class CORE2> void    insert(aint i, const str_t<CORE2> &s)
     {
-        __super::insert(i) = s;
+        __super::insert(i).set(s);
     }
 
-	template<typename TCHARACTER2, class CORE2> void    set( int index, const str_t<TCHARACTER2, CORE2> &s )
+    template<typename TCHARACTER2, class CORE2> void    insert( aint i, const str_t<TCHARACTER2, CORE2> &s)
+    {
+        __super::insert(i).setcvt(s);
+    }
+    template<class CORE2> void    set(aint index, const str_t<CORE2> &s)
+    {
+        get(index).set(s);
+    }
+
+	template<typename TCHARACTER2, class CORE2> void    set( aint index, const str_t<TCHARACTER2, CORE2> &s )
 	{
-		get(index) = s;
+		get(index).setcvt(s);
 	}
 
     bool operator==( const arrtype &a ) const
     {
-        int cnt = size();
+        aint cnt = size();
         if (a.size() != size()) return false;
-        for (int i=0;i<cnt;++i)
+        for (aint i=0;i<cnt;++i)
         {
             if (!a.get(i).equals(get(i))) return false;
         }
@@ -392,16 +409,16 @@ public:
     }
     bool operator!=( const arrtype &a ) const
     {
-        int cnt = size();
+        aint cnt = size();
         if (a.size() != size()) return true;
-        for (int i=0;i<cnt;++i)
+        for (aint i=0;i<cnt;++i)
         {
             if (!a.get(i).equals(get(i))) return true;
         }
         return false;
     }
 
-    strtype & operator[] (uint index)
+    strtype & operator[] (aint index)
     {
         while (index >= size())
 			add();
@@ -410,37 +427,35 @@ public:
     }
 
     
-    int     find_sorted_descending(const TCHARACTER *text) const
+    aint find_sorted_descending(const TCHARACTER *text) const
     {
-        int index;
+        aint index;
         if (__super::find_sorted( index, text )) return index;
         return -1;
     }
-    int     find_sorted_descending(const strtype &text) const
+    aint find_sorted_descending(const strtype &text) const
     {
-        int index;
+        aint index;
         if (__super::find_sorted( index, text )) return index;
         return -1;
     }
 
-    int     find(const sptr<TCHARACTER> &text) const
+    aint find(const sptr<TCHARACTER> &text) const
     {
-        int sz = size();
-        for (int k = 0; k<sz; ++k)
-        {
-            if (get(k).equals(text)) return k;
-        }
+        aint sz = size();
+        for (aint k = 0; k<sz; ++k)
+            if (get(k).equals(text))
+                return k;
         return -1;
     }
-    template<typename CORE2> int     find(const str_t<TCHARACTER, CORE2> &text) const { return find(text.as_spart()); }
+    template<typename CORE2> aint find(const str_t<TCHARACTER, CORE2> &text) const { return find(text.as_spart()); }
 
-    int     find_ignore_case(const sptr<TCHARACTER> &text) const
+    aint find_ignore_case(const sptr<TCHARACTER> &text) const
     {
-        int sz = size();
-        for (int k = 0; k < sz; ++k)
-        {
-            if (get(k).equals_ignore_case(text)) return k;
-        }
+        aint sz = size();
+        for (aint k = 0; k < sz; ++k)
+            if (get(k).equals_ignore_case(text))
+                return k;
         return -1;
     }
 
@@ -448,8 +463,8 @@ public:
 
     bool    present_any_of(const arrtype &a) const
     {
-        int cnt = a.size();
-        for (int i=0;i<cnt;++i)
+        aint cnt = a.size();
+        for (aint i=0;i<cnt;++i)
         {
             if (find(a.get(i)) >= 0) return true;
         }
@@ -460,7 +475,7 @@ public:
     {
         aint sz = a.size();
         expand(i,sz);
-        for (int k = 0; k<sz; ++k)
+        for (aint k = 0; k<sz; ++k)
         {
             set(i+k, a.get(k));
         }
@@ -468,8 +483,8 @@ public:
 
     void    remove_fast_by(const arrtype &a)
     {
-        int cnt = size();
-        for (int i=0;i<cnt;)
+        aint cnt = size();
+        for (aint i=0;i<cnt;)
         {
             if (a.find(get(i)) >= 0)
             {
@@ -482,14 +497,14 @@ public:
     }
     
 
-    void    moveup(int i)    
+    void    moveup(aint i)    
     { 
         if ((i > 0) && (i < size()))
         {
             move_up_unsafe(i);
         }
     }
-    void    movedown(int i)  
+    void    movedown(aint i)  
     { 
         if (i < size()-1)
         {
@@ -522,7 +537,7 @@ public:
 
     void    remove_slow(const sptr<TCHARACTER> &s)
     {
-        int i = find( s );
+        aint i = find( s );
         if (i>=0) delete_slow(i);
     }
     void    remove_slow(aint idx)
@@ -537,7 +552,7 @@ public:
 
     bool remove_fast(const sptr<TCHARACTER> &s)
     {
-        int i = find( s );
+        aint i = find( s );
         if (i>=0)
         {
             __super::remove_fast(i);
@@ -546,7 +561,7 @@ public:
         return false;
     }
 
-    template <int N> void geta(strtype ar[N], uint i) const
+    template <aint N> void geta(strtype ar[N], aint i) const
     {
 #ifndef _FINAL
         if (i > (size()-N))
@@ -558,7 +573,7 @@ public:
 
         }
 #endif
-        for (int k=0;k<N;++k)
+        for (aint k=0;k<N;++k)
         {
             ar[k] = (*this)[i+k];
         }
@@ -568,7 +583,7 @@ public:
 
     const TCHARACTER *get_string_pointer(const sptr<TCHARACTER> &of) // dangerous! do not store pointer
     {
-        int index = find(of);
+        aint index = find(of);
         if (index < 0)
         {
             add(of);
@@ -578,9 +593,9 @@ public:
     }
     template<typename CORE2> const TCHARACTER *get_string_pointer(const str_t<TCHARACTER, CORE2> &of) {return get_string_pointer(of.as_spart());}
 
-    int get_string_index(const sptr<TCHARACTER> &of)
+    aint get_string_index(const sptr<TCHARACTER> &of)
     {
-        int index = find(of);
+        aint index = find(of);
         if (index < 0)
         {
             add(of);
@@ -593,8 +608,8 @@ public:
 
     void kill_dups()
     {
-        for(int i = size() - 1; i > 0; --i)
-            for(int j = i - 1; j >= 0; --j)
+        for(aint i = size() - 1; i > 0; --i)
+            for(aint j = i - 1; j >= 0; --j)
                 if (get(j).equals(get(i)))
                 {
                     remove_fast(i);
@@ -604,7 +619,7 @@ public:
 
     void kill_empty_fast()
     {
-        int i = 0;
+        aint i = 0;
         for(;i<size();)
         {
             if (get(i).is_empty())
@@ -616,9 +631,9 @@ public:
         }
     }
 
-    void kill_empty_slow(int startindex = 0)
+    void kill_empty_slow(aint startindex = 0)
     {
-        int i = startindex;
+        aint i = startindex;
         for(;i<size();)
         {
             if (get(i).is_empty())
@@ -662,49 +677,47 @@ public:
 		__super::sort(sorter);
 	}
 
-    int compare( const arrtype &othera ) const
+    signed char compare( const arrtype &othera ) const
     {
-        int cnt = imin( size(), othera.size() );
-        for (int i=0;i<cnt;++i)
+        aint cnt = tmin( size(), othera.size() );
+        for (aint i=0;i<cnt;++i)
         {
-            int c = strtype::compare( get(i), othera.get(i) );
+            signed char c = strtype::compare( get(i), othera.get(i) );
             if (c != 0) return c;
         }
-        return isign( (int)size() - (int)othera.size() );
+        aint c =( size() - othera.size() );
+        if (c < 0) return -1;
+        if (c > 0) return 1;
+        return 0;
     }
 
     void merge_and_sort( const arrtype &othera )
     {
-        int cnt = (int)othera.size();
-        for (int i = 0; i < cnt; ++i)
-        {
+        aint cnt = othera.size();
+        for (aint i = 0; i < cnt; ++i)
             add( othera.get(i) );
-        }
+
         sort(true);
-        for (int i=size()-2;i>=0;--i)
-        {
+
+        for (aint i=size()-2;i>=0;--i)
             if ( get(i).equals(get(i+1)) )
-            {
                 remove_slow(i);
-            }
-        }
     }
 
 	arrtype & operator = ( const arrtype &othera )
 	{
-        int cc = imin( (int)size(), (int)othera.size() );
-        for (int i=0;i<cc;++i)
-        {
+        aint cc = tmin( size(), othera.size() );
+        for (aint i=0;i<cc;++i)
             get(i).set( othera.get(i) );
-        }
-        if ( cc == (int)othera.size() )
+
+        if ( cc == othera.size() )
         {
             truncate( cc );
         } else
         {
 
-            int cnt = (int)othera.size();
-            for (int i = cc; i < cnt; ++i)
+            aint cnt = othera.size();
+            for (aint i = cc; i < cnt; ++i)
             {
                 add( othera.get(i) );
             }

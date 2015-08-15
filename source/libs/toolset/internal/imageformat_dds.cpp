@@ -215,9 +215,9 @@ static void GetBitsFromMask(uint Mask, uint *ShiftLeft, uint *ShiftRight)
 
 
 
-bool dds_decompressor_uncompressed_32_s::decompress( img_reader_s &r, void * buf, int pitch )
+bool dds_decompressor_uncompressed_32_s::decompress( img_reader_s &reader, void * buf, int pitch )
 {
-    dds_decompressor_uncompressed_32_s &me = ref_cast<dds_decompressor_uncompressed_32_s>(r.data);
+    dds_decompressor_uncompressed_32_s &me = ref_cast<dds_decompressor_uncompressed_32_s>(reader.data);
 
     uint ReadI, RedL, RedR, GreenL, GreenR, BlueL, BlueR, AlphaL, AlphaR;
     const uint32 *Temp;
@@ -502,14 +502,14 @@ void DecompressAlphaDxt5(u8* rgba, void const* block)
         int value = 0;
         for (int j = 0; j < 3; ++j)
         {
-            int byte = *src++;
-            value |= (byte << 8 * j);
+            int b = *src++;
+            value |= (b << (8 * j));
         }
 
         // unpack 8 3-bit values from it
         for (int j = 0; j < 8; ++j)
         {
-            int index = (value >> 3 * j) & 0x7;
+            int index = (value >> (3 * j)) & 0x7;
             *dest++ = (u8)index;
         }
     }

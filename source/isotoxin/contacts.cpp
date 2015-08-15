@@ -1,5 +1,7 @@
 #include "isotoxin.h"
 
+//-V:opts:807
+
 void avatar_s::load( const void *body, int size, int tag_ )
 {
     alpha_pixels = false;
@@ -14,7 +16,7 @@ void avatar_s::load( const void *body, int size, int tag_ )
             bmp.convert_24to32(bmp4);
             bmp = bmp4;
         }
-        ts::ivec2 asz = parsevec2( gui->theme().conf().get_string(CONSTASTR("avatarsize")), ts::ivec2(32));
+        ts::ivec2 asz = parsevec2( gui->theme().conf().get_string(CONSTASTR("avatarsize")), ts::ivec2(32)); //-V807
         if (bmp.info().sz != asz)
         {
             ts::bitmap_c bmprsz;
@@ -249,24 +251,64 @@ contact_gender_e contact_c::get_meta_gender() const
 contact_c * contact_c::subget_for_send() const
 {
     if (subcontacts.size() == 1) return subcontacts.get(0);
-    contact_c *maxpriority = nullptr;
+    contact_c *target_contact = nullptr;
     int prior = 0;
     contact_state_e st = contact_state_check;
+    bool real_offline_messaging = false;
+    bool is_default = false;
     for (contact_c *c : subcontacts)
     {
         if (c->options().is(contact_c::F_DEFALUT) && c->get_state() == CS_ONLINE) return c;
 
         if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
         {
-            if (maxpriority == nullptr || (st != CS_ONLINE && c->get_state() == CS_ONLINE) || (st != CS_ONLINE && c->get_state() != CS_ONLINE && ap->get_priority() > prior))
+            auto is_better = [&]()->bool {
+                
+                if (nullptr == target_contact)
+                    return true;
+
+                if ( CS_ONLINE != st && CS_ONLINE == c->get_state() )
+                    return true;
+
+                if ( CS_ONLINE != st && CS_ONLINE != c->get_state() )
+                {
+                    bool rom = 0 != (ap->get_features() & PF_OFFLINE_MESSAGING);
+
+                    if (rom && !real_offline_messaging)
+                        return true;
+
+                    if (c->options().is(contact_c::F_DEFALUT) && !is_default)
+                        return true;
+
+                    if (ap->get_priority() > prior)
+                        return true;
+                }
+
+                if ( CS_ONLINE == st && CS_ONLINE == c->get_state() )
+                {
+                    ASSERT(!c->options().is(contact_c::F_DEFALUT)); // because default + online the best choice
+
+                    if (ap->get_priority() > prior)
+                        return true;
+                }
+
+                return false;
+            };
+
+            if (is_better())
             {
-                maxpriority = c;
+                target_contact = c;
                 prior = ap->get_priority();
                 st = c->get_state();
+                real_offline_messaging = 0 != (ap->get_features() & PF_OFFLINE_MESSAGING);
+                is_default = c->options().is(contact_c::F_DEFALUT);
             }
         }
     }
-    return maxpriority;
+    
+    ASSERT(target_contact);
+
+    return target_contact;
 }
 
 contact_c * contact_c::subget_default() const
@@ -444,6 +486,9 @@ bool contact_c::recalc_unread()
     if (gui_contact_item_c *gi = gui_item)
     {
         int unread = keep_history() ? prf().calc_history_after(getkey(), readtime) : calc_history_after(readtime);
+
+        LOG("unread:" << getkey() << unread << ASTIME(readtime) );
+
         if (unread > 99) unread = 99;
         if (unread != gi->n_unread)
         {
@@ -898,7 +943,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
         time_t nowtime = now();
         // 1st pass - create meta
         ts::tmp_pointers_t<contacts_s, 32> notmeta;
-        //ts::tmp_pointers_t<contact_c, 32> meta;
+        ts::tmp_pointers_t<contact_c, 1> corrupt;
         for( auto &row : prf().get_table_contacts() )
         {
             if (row.other.metaid == 0)
@@ -915,7 +960,15 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
                 }
                 metac->setup(&row.other, nowtime);
 
-                ASSERT( metac->getkey().protoid == 0 || metac->get_state() == CS_UNKNOWN );
+                if( metac->getkey().protoid == 0 || metac->get_state() == CS_UNKNOWN )
+                {
+                    // ok
+                } else
+                {
+                    // corrupt?
+                    // contact lost its historian meta
+                    corrupt.add( metac );
+                }
 
             } else
                 notmeta.add(&row.other);
@@ -941,9 +994,41 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
                 goto meta_restored;
             }
         }
-        //for (contact_c *c : meta)
-        //    gmsg<ISOGM_V_UPDATE_CONTACT>(c).send();
+        if (ts::aint sz = corrupt.size())
+        {
+            // try to fix corruption
+            for(contact_c *c : arr)
+                if (c->is_meta() && c->subcount() == 0)
+                    corrupt.add(c); // empty meta? may be it is lost historian?
+
+            while( corrupt.size() )
+            {
+                contact_c *c = corrupt.get(0);
+
+                if (corrupt.size() == sz)
+                {
+                    // no empty historians
+                    contact_c *meta = create_new_meta();
+                    meta->subadd(c);
+                    prf().dirtycontact(c->getkey());
+                }
+                else
+                {
+                    contact_c *historian = prf().find_corresponding_historian( c->getkey(), corrupt.array().subarray(sz) );
+                    if (historian)
+                    {
+                        corrupt.find_remove_fast( historian );
+                        historian->subadd(c);
+                        prf().dirtycontact(c->getkey());
+                    }
+                }
+
+                corrupt.remove_slow(0);
+                --sz;
+            }
+        }
     }
+
     if (msg.tabi == pt_unfinished_file_transfer)
     {
         // cleanup transfers
@@ -1133,7 +1218,20 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
     {
         c = self->subgetadd(contact.key);
         if (active_protocol_c *ap = prf().ap(contact.key.protoid))
+        {
+            bool oflg = contact.state != CS_ONLINE;
+            ap->set_current_online( !oflg );
             ap->set_avatar(c);
+            if ( 0 != (ap->get_features() & PF_OFFLINE_INDICATOR) )
+            {
+                bool oldoflg = g_app->F_OFFLINE_ICON;
+                if (oldoflg != oflg)
+                {
+                    g_app->F_OFFLINE_ICON = oflg;
+                    g_app->set_notification_icon();
+                }
+            }
+        }
         is_self = true;
         
     } else
@@ -1523,8 +1621,10 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
     if (up_unread)
     {
         contact_c *historian = msg.get_historian();
-        if (ASSERT(historian) && historian->gui_item)
+        if (CHECK(historian) && historian->gui_item)
         {
+            LOG("unread up" << historian->getkey());
+
             ++historian->gui_item->n_unread;
             g_app->F_NEEDFLASH = true;
             g_app->F_SETNOTIFYICON = true;

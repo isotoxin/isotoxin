@@ -1,5 +1,7 @@
 #pragma once
 
+//-V:info:807 
+
 #include "internal/imageformat.h"
 
 namespace ts
@@ -371,7 +373,8 @@ public:
 
         FMATRIX mat;
 
-        for(int y=0;y<info().sz.y;y++,des+=outimage.info().pitch,sou+=info().pitch)
+        int szy = info().sz.y;
+        for(int y=0;y<szy;y++,des+=outimage.info().pitch,sou+=info().pitch)
         {
             bool up = y == 0;
             bool down = y == info().sz.y - 1;
@@ -409,8 +412,8 @@ public:
         before_modify();
 
         uint8 * bu = body() + info().bytepp()*pdes.x + info().pitch*pdes.y;
-        int desnl = info().pitch - size.x*info().bytepp();
-        int desnp = info().bytepp();
+        aint desnl = info().pitch - size.x*info().bytepp();
+        aint desnp = info().bytepp();
 
         FMATRIX mat;
 
@@ -420,7 +423,7 @@ public:
         bool brit = info().sz.x == (size.x + pdes.x);
         bool bbot = info().sz.y == (size.y + pdes.y);
 
-		for(int y=0;y<size.y;y++,bu+=desnl)
+		for(aint y=0;y<size.y;y++,bu+=desnl)
         {
             bool up = btop && y == 0;
             bool down = bbot && y == info().sz.y - 1;
@@ -497,18 +500,18 @@ public:
                                     // 1.0,1.0 - center of right-bottom pixel
     {
         float xf = x * (info().sz.x - 1) + 0.5f;
-        int x0 = TruncFloat(xf);
-        int x1 = x0 + 1;
+        aint x0 = TruncFloat(xf);
+        aint x1 = x0 + 1;
         float yf = y * (info().sz.y - 1) + 0.5f;
-        int y0 = TruncFloat(yf);
-        int y1 = y0 + 1;
+        aint y0 = TruncFloat(yf);
+        aint y1 = y0 + 1;
 
         TSCOLOR cl = LERPCOLOR(ARGBPixel(x0, y0), ARGBPixel(x0, y1), yf - y0);
         TSCOLOR cr = LERPCOLOR(ARGBPixel(x1, y0), ARGBPixel(x1, y1), yf - y0);
         return LERPCOLOR(cl, cr, xf - x0);
     }
 
-    uint32 ARGBPixel(int x, int y) const // get ARGB color of specified pixel
+    uint32 ARGBPixel(aint x, aint y) const // get ARGB color of specified pixel
     {
 
         uint32 c;
@@ -522,12 +525,12 @@ public:
         return c & mask;
     }
 
-	void ARGBPixel(int x, int y, TSCOLOR color) // set ARGB color of specified pixel
+	void ARGBPixel(aint x, aint y, TSCOLOR color) // set ARGB color of specified pixel
     {
         before_modify();
 		*(TSCOLOR *)(body() + (y * info().pitch + x * info().bytepp())) = color;
     }
-	void ARGBPixel(int x, int y, TSCOLOR color, int alpha) // alpha blend ARGB color of specified pixel (like photoshop Normal mode)
+	void ARGBPixel(aint x, aint y, TSCOLOR color, int alpha) // alpha blend ARGB color of specified pixel (like photoshop Normal mode)
     {
         before_modify();
 		TSCOLOR * c = (TSCOLOR *)(body() + (y * info().pitch + x * info().bytepp()));
@@ -632,8 +635,8 @@ public:
         }
     }
 
-    void draw(HDC dc, int xx, int yy, int alpha = -1 /* -1 means no alphablend used */) const;
-    void draw(HDC dc, int xx, int yy, const irect &r, int alpha = -1 /* -1 means no alphablend used */ ) const;
+    void draw(HDC dc, aint xx, aint yy, int alpha = -1 /* -1 means no alphablend used */) const;
+    void draw(HDC dc, aint xx, aint yy, const irect &r, int alpha = -1 /* -1 means no alphablend used */ ) const;
 };
 
 

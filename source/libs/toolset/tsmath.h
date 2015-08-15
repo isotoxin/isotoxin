@@ -133,16 +133,16 @@ namespace ts
 			e21 =-s; e22 = c;
 		}
 
-		float  operator()(int i, int j) const { return e[i][j]; }
-		float& operator()(int i, int j)       { return e[i][j]; }
+		float  operator()(aint i, aint j) const { return e[i][j]; }
+		float& operator()(aint i, aint j)       { return e[i][j]; }
 
 
-		const vec2& operator[](int i) const
+		const vec2& operator[](aint i) const
 		{
 			return reinterpret_cast<const vec2&>(e[i][0]);
 		}
 
-		vec2& operator[](int i)
+		vec2& operator[](aint i)
 		{
 			return reinterpret_cast<vec2&>(e[i][0]);
 		}		
@@ -263,7 +263,7 @@ namespace ts
         int area() const { return width() * height(); }
         operator bool () const {return rb.x > lt.x && rb.y > lt.y; }
 
-		bool inside(ivec2 p) const
+		bool inside(const ivec2 &p) const
 		{
 			return p.x >= lt.x && p.x < rb.x && p.y >= lt.y && p.y < rb.y;
 		}
@@ -493,11 +493,9 @@ INLINE unsigned char FP_NORM_TO_BYTE3(float p)
 
 INLINE auint DetermineGreaterPowerOfTwo( auint val )
 {
-    uint num = 1;
+    auint num = 1;
     while (val > num)
-    {
         num <<= 1;
-    }
 
     return num;
 }
@@ -659,7 +657,7 @@ INLINE float TableCos( float theta )
     } ftmp;
 
     // ideally, the following should compile down to: theta * constant + constant, changing any of these constants from defines sometimes fubars this.
-    ftmp.f = theta * ( float )( SIN_TABLE_SIZE / ( 2.0f * M_PI ) ) + ( FTOIBIAS + ( SIN_TABLE_SIZE / 4 ) );
+    ftmp.f = theta * ( float )( SIN_TABLE_SIZE / ( 2.0f * M_PI ) ) + ( FTOIBIAS + ( SIN_TABLE_SIZE / 4 ) ); //-V112
     return ts_math::sincostable::table[ ftmp.i & ( SIN_TABLE_SIZE - 1 ) ];
 }
 
@@ -718,7 +716,7 @@ INLINE auint isqr(aint x)
 template<typename T> INLINE T isign(T x)
 {
     typedef sztype<sizeof(T)>::type unsignedT;
-	const unsigned bshift = (sizeof(T) * 8 - 1);
+	const unsigned bshift = (sizeof(T) * 8 - 1); //-V103
 	return (T)((x >> bshift) | (unsignedT(-x) >> bshift));
 }
  
@@ -794,13 +792,13 @@ template < typename T1, typename T2, typename T3, typename T4, typename T5, type
 template <typename T, int N> INLINE T tmin(const vec_t<T, N> &v)
 {
     T r = v[0];
-    for (int i = 1; i < N; i++) r = tmin(r, v[i]);
+    for (aint i = 1; i < N; ++i) r = tmin(r, v[i]);
     return r;
 }
 template <typename T, int N> INLINE vec_t<T, N> tmin(const vec_t<T, N> &x, const vec_t<T, N> &y)
 {
     vec_t<T, N> r;
-    for (int i = 0; i < N; i++) r[i] = tmin(x[i], y[i]);
+    EACH_COMPONENT(i) r[i] = tmin(x[i], y[i]);
     return r;
 }
 
@@ -844,14 +842,14 @@ template < typename T1, typename T2, typename T3, typename T4, typename T5, type
 template <typename T, int N> INLINE T tmax(const vec_t<T, N> &v)
 {
     T r = v[0];
-    for (int i = 1; i < N; i++) r = tmax(r, v[i]);
+    for (aint i = 1; i < N; ++i) r = tmax(r, v[i]);
     return r;
 }
 
 template <typename T, int N> INLINE const vec_t<T, N> tmax(const vec_t<T, N> &x, const vec_t<T, N> &y)
 {
     vec_t<T, N> r;
-    for (int i = 0; i < N; i++) r[i] = tmax(x[i], y[i]);
+    EACH_COMPONENT(i) r[i] = tmax(x[i], y[i]);
     return r;
 }
 
@@ -912,11 +910,11 @@ public:
     };
 private:
     key_s *m_keys;
-    int    m_keys_count;
+    aint m_keys_count;
 
     void destroy()
     {
-        for (int i=0;i<m_keys_count;++i)
+        for (aint i=0;i<m_keys_count;++i)
         {
             m_keys[i].~key_s();
         }
@@ -941,9 +939,9 @@ public:
     }
 
 
-    int get_keys_count() const {return m_keys_count;};
+    aint get_keys_count() const {return m_keys_count;};
     const key_s *get_keys() const {return m_keys;}
-    key_s *get_keys( int count ) // discard all!!!
+    key_s *get_keys( aint count ) // discard all!!!
     {
         ASSERT( count >= 2 );
         destroy();
@@ -961,7 +959,7 @@ public:
         const key_s *s = m_keys + 1;
         const key_s *e = m_keys + m_keys_count;
     
-        if (t < m_keys->time) return m_keys->val;
+        if (t < m_keys[0].time) return m_keys[0].val;
     
         for (;s < e;)
         {

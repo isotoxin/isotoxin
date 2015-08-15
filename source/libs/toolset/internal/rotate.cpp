@@ -17,6 +17,8 @@
 
 #include "toolset.h"
 
+#pragma warning (disable:4456) // declaration of 'xxx' hides previous local declaration
+
 /////////////////////////////////////////////////////////////////////
 namespace ts
 {

@@ -427,8 +427,8 @@ bool fix_c99(astrings_c & lines, int sl, int el)
         t.truncate(tr);
         type_of_elements = t.join(' ');
     }
-    str_c s1; s1.fill(ins, ' ').append(CONSTASTR("DYNAMIC( ")).append(type_of_elements).append(CONSTASTR(", ")).append(name_of_array).append(CONSTASTR(", ")).append(num_of_elements).append(CONSTASTR(" ); // -C99\r"));
-    lines.set(sl, s1);
+    str_c ss1; ss1.fill(ins, ' ').append(CONSTASTR("DYNAMIC( ")).append(type_of_elements).append(CONSTASTR(", ")).append(name_of_array).append(CONSTASTR(", ")).append(num_of_elements).append(CONSTASTR(" ); // -C99\r"));
+    lines.set(sl, ss1);
     while(sll > sl)
         lines.remove_slow(sll--), --el;
 

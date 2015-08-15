@@ -18,6 +18,16 @@ template <typename T, T FMASK = (T)(-1)> struct flags_t
     typedef flags_t<T, (T)(-1)> UNMASKED;
     T   __bits;
 
+    flags_t(const flags_t &of)
+    {
+        __bits = (__bits & ~FMASK) | (of.__bits & FMASK);
+    }
+
+    template<T M> flags_t( const flags_t<T, M>&of )
+    {
+        __bits = (__bits & ~FMASK) | (of.__bits & FMASK & M);
+    }
+
     flags_t()
     {
         __bits = 0;

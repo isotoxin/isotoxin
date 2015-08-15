@@ -97,13 +97,6 @@ void Log(const char *s, ...);
 #define UNSTABLE_CODE_EPILOG ;
 #endif
 
-template<typename T> inline sptr<T> _to_char_or_not_to_char(const char * sa, const wchar_t * sw, int len);
-template<> inline asptr _to_char_or_not_to_char<char>(const char * sa, const wchar_t *, int len) { return asptr(sa, len); }
-template<> inline wsptr _to_char_or_not_to_char<wchar_t>(const char *, const wchar_t * sw, int len) { return wsptr(sw, len); }
-#define CONSTSTR( tc, s ) _to_char_or_not_to_char<tc>( s, JOINMACRO1(L,s), sizeof(s)-1 )
-#define CONSTASTR( s ) asptr( s, sizeof(s)-1 )
-#define CONSTWSTR( s ) wsptr( JOINMACRO1(L,s), sizeof(s)-1 )
-
 #define STRTYPE(TCHARACTER) pstr_t<TCHARACTER>
 #define MAKESTRTYPE(TCHARACTER, s, l) STRTYPE(TCHARACTER)( sptr<TCHARACTER>((s),(l)) )
 #include "plghost_interface.h"

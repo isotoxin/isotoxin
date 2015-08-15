@@ -4,7 +4,7 @@ namespace ts
 {
 
 void md5_init (md5_ctx *);
-void md5_update (md5_ctx *, const uint8 *, uint);
+void md5_update (md5_ctx *, const uint8 *, auint);
 void md5_final (md5_ctx *, uint8 [16]);
 void md5_final (md5_ctx *);
 
@@ -13,7 +13,7 @@ void md5_c::reset()
     md5_init(&m_context);
 }
 
-void md5_c::update(const void* pach_source, uint ulen)
+void md5_c::update(const void* pach_source, auint ulen)
 {
     md5_update(&m_context, (const uint8*)pach_source, ulen);
 }
@@ -156,7 +156,7 @@ static void md5_process_message_block(uint32 state[4], unsigned* x) {
     state[3] += d;
 }
 
-void md5_update(md5_ctx *ctx, const uint8* msg, uint size)
+void md5_update(md5_ctx *ctx, const uint8* msg, auint size)
 {
     
     unsigned index = (unsigned)ctx->length & 63;

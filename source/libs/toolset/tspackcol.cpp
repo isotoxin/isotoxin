@@ -76,7 +76,7 @@ uint  ccollection_c::add_container(const wsptr &name, int prior)
         } bbb(&body);
 
         if (!read(n,bbb))
-            return false;
+            return 0;
     }
 
 
@@ -203,10 +203,10 @@ void ccollection_c::find_by_mask(wstrings_c & files, const ts::wsptr &fnmask, bo
                 m_folders.add(fn);
                 return true;
             }
-        } f;
+        } fld;
 
-        iterate_folders( pwstr_c(fnmask).substr(0, x), DELEGATE(&f, filer) );
-        for( const wstr_c &f : f.m_folders )
+        iterate_folders( pwstr_c(fnmask).substr(0, x), DELEGATE(&fld, filer) );
+        for( const wstr_c &f : fld.m_folders )
         {
             find_by_mask( files, ts::wstr_c(pwstr_c(fnmask).substr(0, x + 1)).append(f).append(pwstr_c(fnmask).substr(x+2)), full_paths);
         }

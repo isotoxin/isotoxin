@@ -1,5 +1,8 @@
 #include "toolset.h"
 
+//-V:bytepp:112
+//-V:bitpp:112
+
 namespace ts
 {
 
@@ -97,7 +100,7 @@ void TSCALL img_helper_make_2x_smaller(uint8 *des, const uint8 *sou, const imgde
         {
             for (int x = 0; x < sou_info.sz.x; x += 2, ++des)
             {
-                int b0 = *(sou + x + 0);
+                aint b0 = *(sou + x + 0);
 
                 b0 += *(sou + x + 1);
 
@@ -113,14 +116,14 @@ void TSCALL img_helper_make_2x_smaller(uint8 *des, const uint8 *sou, const imgde
     }
     else if (sou_info.bytepp() == 2)
     {
-        for (int y = 0; y < newsz.y; y++, sou += sou_info.pitch + sounl, des += desnl)
+        for (aint y = 0; y < newsz.y; y++, sou += sou_info.pitch + sounl, des += desnl)
         {
-            for (int x = 0; x < newsz.x; x++, des += 3, sou += 3 + 3)
+            for (aint x = 0; x < newsz.x; x++, des += 3, sou += 3 + 3)
             {
 
-                int b0 = *(sou + 0);
-                int b1 = *(sou + 1);
-                int b2 = *(sou + 2);
+                aint b0 = *(sou + 0);
+                aint b1 = *(sou + 1);
+                aint b2 = *(sou + 2);
 
                 b0 += *(sou + 3);
                 b1 += *(sou + 4);
@@ -145,6 +148,9 @@ void TSCALL img_helper_make_2x_smaller(uint8 *des, const uint8 *sou, const imgde
         const int xxx = offsetof(imgdesc_s, sz) + offsetof(ivec2, x);
         const int yyy = offsetof(imgdesc_s, sz) + offsetof(ivec2, y);
         const int zzz = offsetof(imgdesc_s, pitch);
+
+        // TODO : rewrite with C++ for 64 bit
+
         _asm
         {
 
@@ -2389,7 +2395,7 @@ bool drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, const ivec2 &p, 
                 break;
             }
 
-            for (int i = 0; i < ll; i += 4)
+            for (aint i = 0; i < ll; i += 4)
             {
                 uint32 color = *(uint32 *)(bsou + i);
                 *(uint32 *)(bdes + i) = color;
@@ -2444,13 +2450,12 @@ void    drawable_bitmap_c::save_to_bitmap(bitmap_c &bmp, const ivec2 & pos_from_
 
     if (b.bmi.bmiHeader.bV4BitCount == 32 && core())
     {
-        uint32 ll = uint32(b.bmi.bmiHeader.bV4Width * 4);
-        const uint8 * src = core()+info().pitch*uint32(b.bmi.bmiHeader.bV4Height - 1 - pos_from_dc.y);
+        const uint8 * src = core()+info().pitch* (b.bmi.bmiHeader.bV4Height - 1 - pos_from_dc.y);
         src += pos_from_dc.x * 4;
         //bmp->create_RGBA(b.bmi.bmiHeader.bV4Width,b.bmi.bmiHeader.bV4Height);
         uint8 * dst = bmp.body();
         int hh = tmin(bmp.info().sz.y, b.bmi.bmiHeader.bV4Height - pos_from_dc.y);
-        ll = 4 * tmin(bmp.info().sz.x, b.bmi.bmiHeader.bV4Width - pos_from_dc.x);
+        auint ll = sizeof(uint32) * tmin(bmp.info().sz.x, b.bmi.bmiHeader.bV4Width - pos_from_dc.x);
         for (int y = 0; y < hh; y++)
         {
             //memcpy(dst,src,ll);
@@ -2546,7 +2551,7 @@ void drawable_bitmap_c::draw(HDC dc, aint xx, aint yy, int alpha) const
     }
 }
 
-void drawable_bitmap_c::draw(HDC dc, int xx, int yy, const irect &r, int alpha) const
+void drawable_bitmap_c::draw(HDC dc, aint xx, aint yy, const irect &r, int alpha) const
 {
     if (alpha > 0)
     {

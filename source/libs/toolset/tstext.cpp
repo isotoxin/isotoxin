@@ -13,7 +13,7 @@ namespace ts
 
 inline void writePixelBlended(TSCOLOR &dst, const ivec4 &srcColor)
 {
-	ivec4 dstColor(TSCOLORtoVec4(dst));//цвет пикселя в буфере назначения
+	ivec4 dstColor(TSCOLORtoVec4(dst));
 	dstColor.rgb() = srcColor.rgb()*srcColor.a + dstColor.rgb()*(255-srcColor.a);
 	dstColor.a = 255*256 - (255-dstColor.a)*(255-srcColor.a);
 	dst = ((dstColor.r & 0xFF00) << 8) | (dstColor.g & 0xFF00) | (dstColor.b >> 8) | ((dstColor.a & 0xFF00) << 16);
@@ -51,9 +51,13 @@ __forceinline void write_pixel(TSCOLOR &dst, TSCOLOR src, uint8 aa)
     dst = oiB | (oiG << 8) | (oiR << 16) | (oiA << 24);
 }
 
-bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, const array_wrapper_c<const glyph_image_s> &glyphs, ivec2 offset, bool prior_clear)
+bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, const array_wrapper_c<const glyph_image_s> &glyphs, const ivec2 &offset, bool prior_clear)
 {
-	/*Для рисования глифов в текстуру используется специальный алгоритм блендинга. Т.к. глифы могут рисоваться поверх друг друга,
+    // sorry guys, russian description of algorithm
+
+	/*
+      TAV:
+      Для рисования глифов в текстуру используется специальный алгоритм блендинга. Т.к. глифы могут рисоваться поверх друг друга,
 	  в частности при использовании специальных тегов или интегрированной в текстуру картинки с фоном, то просто рисовать глифы
 	  поверх друг друга или использовать простые техники (напр. рисовать цвет, если альфа > 0, и брать максимальную альфу) нельзя.
 	  Необходимо, чтобы полученный результат был эквивалентен независимому отображению всех заданных глифов, по очереди, со
@@ -78,6 +82,7 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
 	Чтобы корректно вывести полученный буфер на GPU, нужно включить бленд (ONE, ALPHA).*/
 
 	//Сначала подготавливаем буфер назначения, т.е. заполняем его нулями (не (0,0,0,255), т.к. альфу нужно получить в итоге инвертированную).
+
 	uint8 *dst = dst_;
 	if (prior_clear)
 		for (int h=height; h; h--, dst+=pitch)
@@ -86,7 +91,7 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
     int g = 0;
     if (glyphs.size() && glyphs[0].pixels == nullptr)
     {
-        // это спецглиф, меняющий порядок отрисовки глифов массива
+        // special glyph changing rendering order
         if ( glyphs[0].outline_index > 0 )
         {
             draw_glyphs(dst_, width, height, pitch, glyphs.subarray(glyphs[0].outline_index), offset, false);
@@ -95,7 +100,7 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
         g = 1;
     }
 
-	//А теперь рисуем все глифы, отсекая их областью буфера назначения.
+	// now render glyphs, clipping them by buffer area
     bool rectangles = false;
 	for (; g<glyphs.size(); g++)
 	{
@@ -103,16 +108,16 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
         if (glyph.pixels < (uint8 *)16)
         {
             rectangles |= (glyph.pixels == (uint8 *)1);
-            continue; // значение указателья <16 означает служебный глиф, который надо пропустить
+            continue; // pointer value < 16 means special glyph. Special glyph should be skipped while rendering
         }
 
-		int bpp = glyph.color ? 1 : 4;//кол-во байт на пиксель
+		int bpp = glyph.color ? 1 : 4; // bytes per pixel
 		int glyphPitch = glyph.pitch;
 		ivec4 glyphColor = TSCOLORtoVec4(glyph.color);
-		ivec2 pos(glyph.pos);  pos += offset;//положение для отрисовки глифа
+		ivec2 pos(glyph.pos);  pos += offset; // glyph rendering position
         ts::TSCOLOR gcol = glyph.color;
 
-		//Draw underline
+		// draw underline
 		if (glyph.thickness > 0)
 		{
 			ivec2 start = pos + ivec2(glyph.start_pos);
@@ -121,62 +126,47 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
 			start.y -= d;
 			ivec2 end = tmin(ivec2(width, height), start + ivec2(glyph.length, d*2 + 1));
 			start = tmax(ivec2(0,0), start);
-			if (end.x > start.x && end.y > start.y)//может показаться странным, но этих двух проверок полностью достаточно
+			if (end.x > start.x && end.y > start.y)
 			{
 				dst = dst_ + start.y * pitch;
 				ivec4 c = bpp == 1 ? glyphColor : ivec4(255);
 				ivec4 ca(c.rgb(), lround(c.a*(1 + thick - d)));
-				//Начало
+				// begin
 				for (int i=start.x; i<end.x; i++) writePixelBlended(((TSCOLOR*)dst)[i], ca);
 				start.y++, dst += pitch;
-				//Середина
+				// middle
 				for (; start.y<end.y-1; start.y++, dst += pitch)
 					for (int i=start.x; i<end.x; i++) writePixelBlended(((TSCOLOR*)dst)[i], c);
-				//Конец
+				// tail
 				if (start.y<end.y)
 					for (int i=start.x; i<end.x; i++) writePixelBlended(((TSCOLOR*)dst)[i], ca);
 			}
 		}
 
-		//Draw glyph
-		int clippedWidth  = glyph.width;//ширина "видимой" области глифа, т.е. с учетом отсечения на размеры буфера назначения
+		// draw glyph
+		int clippedWidth  = glyph.width;
 		int clippedHeight = glyph.height;
 		const uint8 *src = glyph.pixels;
-		//Clipping
+		// clipping
 		if (pos.x < 0) src -= pos.x*bpp       , clippedWidth  += pos.x, pos.x = 0;
 		if (pos.y < 0) src -= pos.y*glyphPitch, clippedHeight += pos.y, pos.y = 0;
 		if (pos.x + clippedWidth  > width ) clippedWidth  = width  - pos.x;
 		if (pos.y + clippedHeight > height) clippedHeight = height - pos.y;
 
-		if (clippedWidth <= 0 || clippedHeight <= 0) continue;//этот глиф вообще не попадает в область буфера назначения - пропускаем его
+		if (clippedWidth <= 0 || clippedHeight <= 0) continue; // fully clipped - skip
 
 		dst = dst_ + pos.x * sizeof(TSCOLOR) + pos.y * pitch;
 
         if (bpp == 1)
         {
             for (; clippedHeight; clippedHeight--, src += glyphPitch, dst += pitch)
-                for (int i = 0; i < clippedWidth; i++)//здесь нельзя использовать src и делать src++, т.к. glyphPitch может не совпадать с clippedWidth
-                {
-                    /*
-                    ivec4 srcColor;
-                    srcColor.rgb() = glyphColor.rgb();
-                    srcColor.a = (glyphColor.a*src[i]) >> 8; // not very accurate: >>8 equivalent to /65536, but correct divide is /65025
-                    writePixelBlended(((TSCOLOR*)dst)[i], srcColor);
-                    */
+                for (int i = 0; i < clippedWidth; i++)
                     write_pixel( ((TSCOLOR*)dst)[i], gcol, src[i] );
-                }
         } else
         {
             for (; clippedHeight; clippedHeight--, src += glyphPitch, dst += pitch)
-                for (int i = 0; i < clippedWidth; i++)//здесь нельзя использовать src и делать src++, т.к. glyphPitch может не совпадать с clippedWidth
-                {
-                    /*
-                    ivec4 srcColor;
-                    srcColor = TSCOLORtoVec4(((TSCOLOR*)src)[i]);
-                    writePixelBlended(((TSCOLOR*)dst)[i], srcColor);
-                    */
+                for (int i = 0; i < clippedWidth; i++)
                     write_pixel_pm( ((TSCOLOR*)dst)[i], ((TSCOLOR*)src)[i] );
-                }
         }
 
 	}
@@ -266,9 +256,9 @@ ivec2 text_rect_c::calc_text_size(int maxwidth, CUSTOM_TAG_PARSER ctp) const
     return sz + ts::ivec2(ui_scale(margin_left) + ui_scale(margin_right), margin_top);
 }
 
-ivec2 text_rect_c::calc_text_size( const font_desc_c& font, const wstr_c&text, int maxwidth, uint flags, CUSTOM_TAG_PARSER ctp ) const
+ivec2 text_rect_c::calc_text_size( const font_desc_c& f, const wstr_c& t, int maxwidth, uint flgs, CUSTOM_TAG_PARSER ctp ) const
 {
-    return parse_text(text, maxwidth, ctp, nullptr, ARGB(0,0,0), font, flags, 0);
+    return parse_text(t, maxwidth, ctp, nullptr, ARGB(0,0,0), f, flgs, 0);
 }
 
 } // namespace ts

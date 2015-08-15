@@ -70,7 +70,7 @@ void __stdcall get_info( proto_info_s *info )
 
     info->priority = 500;
     info->max_avatar_size = AVATAR_MAX_DATA_SIZE;
-    info->features = PF_IMPORT | PF_AUDIO_CALLS | PF_SEND_FILE | PF_GROUP_CHAT; //PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT;
+    info->features = PF_OFFLINE_INDICATOR | PF_IMPORT | PF_AUDIO_CALLS | PF_SEND_FILE | PF_GROUP_CHAT; //PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT;
     info->connection_features = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_SOCKS5 | CF_UDP_OPTION | CF_SERVER_OPTION;
     info->audio_fmt.sample_rate = av_DefaultSettings.audio_sample_rate;
     info->audio_fmt.channels = (short)av_DefaultSettings.audio_channels;
@@ -157,6 +157,11 @@ enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
     chunk_descriptor_avatartag,
     chunk_descriptor_avatarhash,
 
+    /*
+
+        no more need to save undelivered messages by protocol, due gui saves them itself
+
+
     chunk_msgs_sending = 10,
     chunk_msg_sending,
     chunk_msg_sending_fid,
@@ -165,6 +170,7 @@ enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
     chunk_msg_sending_body,
     chunk_msg_sending_mid,
     chunk_msg_sending_createtime,
+    */
 
     chunk_msgs_receiving = 20,
     chunk_msg_receiving,
@@ -1078,12 +1084,13 @@ struct discoverer_s
 
     void discover_thread()
     {
+        str_c ids;
         auto w = sync.lock_write();
         if (w().shutdown_discover) return;
         w().waiting_thread_start = false;
         w().thread_in_progress = true;
 
-        str_c ids = w().ids;
+        ids.setcopy( w().ids );
         w.unlock();
 
         str_c servname = ids.substr(ids.find_pos('@') + 1);
@@ -1097,7 +1104,7 @@ struct discoverer_s
             if (servname.equals(pin.addr))
             {
                 str_c s = pin.query3(ids);
-                sync.lock_write()().pubid = s;
+                sync.lock_write()().pubid.setcopy(s);
                 pinfound = true;
                 break;
             }
@@ -1110,7 +1117,7 @@ struct discoverer_s
             if ( !pinnedservs.back().key_ok )
                 pinnedservs.erase( --pinnedservs.end() ); // kick non tox3 servers from list
             
-            sync.lock_write()().pubid = s;
+            sync.lock_write()().pubid.setcopy(s);
         }
 
         sync.lock_write()().thread_in_progress = false;
@@ -1217,6 +1224,7 @@ public:
 
     void die();
 
+    bool is_online() const { return ISFLAG(flags, contact_descriptor_s::F_IS_ONLINE); }
     void on_offline()
     {
         UNSETFLAG(flags, F_IS_ONLINE);
@@ -1246,7 +1254,7 @@ public:
 
     void send_avatar()
     {
-        if (!ISFLAG(flags, F_IS_ONLINE)) return;
+        if (!is_online()) return;
         if (ISFLAG(flags, F_AVASEND)) return;
         if (avatag_self == gavatag) return;
 
@@ -1363,7 +1371,7 @@ void message2send_s::try_send(int time)
         if (fid < GROUP_ID_OFFSET)
             if (contact_descriptor_s *desc = find_restore_descriptor(fid))
             {
-                if (!ISFLAG(desc->flags, contact_descriptor_s::F_IS_ONLINE))
+                if (!desc->is_online())
                 {
                     mid = 0;
                     return; // not yet
@@ -1821,7 +1829,7 @@ static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_
 {
     if (contact_descriptor_s *desc = find_restore_descriptor(fid))
     {
-        bool prev_online = ISFLAG(desc->flags, contact_descriptor_s::F_IS_ONLINE);
+        bool prev_online = desc->is_online();
         bool accepted = desc->state == CS_INVITE_SEND;
         desc->state = CS_OFFLINE;
         contact_data_s cd(desc->get_id(), CDM_STATE);
@@ -1837,14 +1845,14 @@ static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_
 
         hf->update_contact(&cd);
 
-        if (!prev_online && ISFLAG(desc->flags, contact_descriptor_s::F_IS_ONLINE))
+        if (!prev_online && desc->is_online())
         {
             desc->wait_client_id = time_ms() + 2000; // wait 2 sec client name
             if (desc->wait_client_id == 0) desc->wait_client_id++;
             desc->send_identity(false);
             desc->send_avatar();
 
-        } else if (!ISFLAG(desc->flags, contact_descriptor_s::F_IS_ONLINE))
+        } else if (!desc->is_online())
         {
             desc->on_offline();
         }
@@ -2019,11 +2027,16 @@ static void setup_members_and_send(contact_data_s &cdata, int gnum) // cdata.mem
 
 }
 
-static void cb_group_invite(Tox *, int fid, byte /*type*/, const byte * data, uint16_t length, void *)
+static void callback_av_group_audio(Tox *, int /*groupnumber*/, int /*peernumber*/, const int16_t * /*pcm*/, unsigned int /*samples*/, uint8_t /*channels*/, unsigned int /*sample_rate*/, void * /*userdata*/)
+{
+    // TODO: av groupchat
+}
+
+static void cb_group_invite(Tox *, int fid, byte t, const byte * data, uint16_t length, void *)
 {
     bool persistent = false;
 
-    int gnum = tox_join_groupchat(tox, fid, data, length);
+    int gnum = t == TOX_GROUPCHAT_TYPE_TEXT ? tox_join_groupchat(tox, fid, data, length) : toxav_join_av_groupchat(tox, fid, data, length, callback_av_group_audio, nullptr);
     if (gnum >= 0)
     {
         sstr_t<TOX_MAX_NAME_LENGTH + 16> gn;
@@ -2496,7 +2509,7 @@ void __stdcall tick(int *sleep_time_ms)
         if ((curt - nexttresync) > 0)
         {
             for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
-                if (ISFLAG(f->flags, contact_descriptor_s::F_NEED_RESYNC) && ISFLAG(f->flags, contact_descriptor_s::F_IS_ONLINE) && (curt - f->next_sync) > 0)
+                if (ISFLAG(f->flags, contact_descriptor_s::F_NEED_RESYNC) && f->is_online() && (curt - f->next_sync) > 0)
                 {
                     f->next_sync = curt + 120000;
                     f->send_identity(true);
@@ -2752,6 +2765,8 @@ void __stdcall set_config(const void*data, int isz)
                     desc->set_fid(fid, fid_ok);
                 }
         }
+
+        /*
         if (int sz = ldr(chunk_msgs_sending))
         {
             for (; message2send_s::first;)
@@ -2791,6 +2806,8 @@ void __stdcall set_config(const void*data, int isz)
                         
                 }
         }
+        */
+
         if (int sz = ldr(chunk_msgs_receiving))
         {
             for (; message_part_s::first;)
@@ -2878,6 +2895,7 @@ void operator<<(chunk &chunkm, const contact_descriptor_s &desc)
     
 }
 
+/*
 void operator<<(chunk &chunkm, const message2send_s &m)
 {
     chunk mm(chunkm.b, chunk_msg_sending);
@@ -2889,6 +2907,7 @@ void operator<<(chunk &chunkm, const message2send_s &m)
     chunk(chunkm.b, chunk_msg_sending_createtime) << (u64)m.create_time;
     chunk(chunkm.b, chunk_msg_sending_body) << bytes(m.msg.cstr(), m.msg.get_length());
 }
+*/
 
 void operator<<(chunk &chunkm, const message_part_s &m)
 {
@@ -2914,7 +2933,7 @@ static void save_current_stuff( savebuffer &b )
     tox_get_savedata(tox, (byte *)data);
 
     chunk(b, chunk_descriptors) << serlist<contact_descriptor_s>(contact_descriptor_s::first_desc);
-    chunk(b, chunk_msgs_sending) << serlist<message2send_s>(message2send_s::first);
+    //chunk(b, chunk_msgs_sending) << serlist<message2send_s>(message2send_s::first);
     chunk(b, chunk_msgs_receiving) << serlist<message_part_s>(message_part_s::first);
 }
 
@@ -3453,6 +3472,8 @@ void __stdcall join_groupchat(int gid, int cid)
 
         contact_descriptor_s *gcd = git->second;
         contact_descriptor_s *ccd = cit->second;
+
+        if (!ccd->is_online()) return; // persistent groups not yet supported
 
         tox_invite_friend(tox, ccd->get_fid(), gcd->get_gnum());
     }

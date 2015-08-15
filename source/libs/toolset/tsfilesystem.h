@@ -94,7 +94,7 @@ template<class CORE> wstr_c TSCALL fn_join(const str_t<wchar, CORE> &path, const
 }
 INLINE wstr_c TSCALL fn_get_name_with_ext(const wsptr &name)
 {
-    int i = pwstr_c(name).find_last_pos_of(CONSTWSTR("/\\"));
+    aint i = pwstr_c(name).find_last_pos_of(CONSTWSTR("/\\"));
 	if (i < 0) i = 0; else ++i;
 	return wstr_c(name.skip(i));
 }
@@ -120,13 +120,13 @@ wstr_c TSCALL fn_change_ext(const wsptr &full, const wsptr &ext);
 
 inline wstr_c fn_change_name_ext(const wstr_c &full, const wsptr &name, const wsptr &ext)
 {
-    int i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
+    aint i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
     return wstr_c(wsptr(full.cstr(), i)).append(name).append_char('.').append(ext);
 }
 
 inline wstr_c fn_change_name_ext(const wstr_c &full, const wsptr &nameext)
 {
-    int i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
+    aint i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
     return wstr_c(wsptr(full.cstr(), i)).append(nameext);
 }
 

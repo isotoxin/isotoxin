@@ -669,14 +669,17 @@ void _cdecl sys_idle()
     system_event_receiver_c::notify_system_receivers( SEV_IDLE, g_par_def );
 }
 
-void _cdecl sys_exit ( int )
+void _cdecl sys_exit ( int code )
 {
     g_sysconf.is_exit = true;
-    ::PostMessage ( g_sysconf.mainwindow, WM_CLOSE, 0, 0 );
+    if (g_sysconf.mainwindow)
+        ::PostMessage ( g_sysconf.mainwindow, WM_CLOSE, 0, 0 );
+    else
+        PostQuitMessage( code );
 }
 
 
-void _cdecl sys_restart( void )
+void _cdecl sys_restart()
 {
     PostMessageW( g_sysconf.mainwindow, WM_RESTART, 0, 0 );
 }

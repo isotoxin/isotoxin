@@ -109,11 +109,13 @@ class gui_notice_network_c : public gui_notice_c
     GM_RECEIVER(gui_notice_network_c, ISOGM_PROFILE_TABLE_SAVED);
     GM_RECEIVER(gui_notice_network_c, ISOGM_CHANGED_PROFILEPARAM);
     GM_RECEIVER(gui_notice_network_c, GM_HEARTBEAT);
+    GM_RECEIVER(gui_notice_network_c, ISOGM_V_UPDATE_CONTACT);
     
     ts::str_c pubid;
     int flashing = 0;
     int networkid = 0;
     int left_margin = 0;
+    bool refresh = false;
 
     bool resetup(RID, GUIPARAM);
     bool flash_pereflash(RID, GUIPARAM);
@@ -181,6 +183,13 @@ class gui_message_item_c : public gui_label_ex_c
     int height = 0;
     ts::uint16 addheight = 0;
     ts::uint16 timestrwidth = 0;
+
+    static const int BTN_EXPLORE = 0;
+    static const int BTN_BREAK = 1;
+    static const int BTN_PAUSE = 2;
+    static const int BTN_UNPAUSE = 3;
+    static const int RECT_IMAGE = 1000;
+    
 
     struct record
     {

@@ -5,6 +5,7 @@
 #define ZSTRINGS_NULL nullptr
 #define ZSTRINGS_CRC32(p,s) 0
 #define ZSTRINGS_FORCEINLINE __forceinline
+#define ZSTRINGS_NAMESPACE ts
 #ifndef _FINAL
 #define ZSTRINGS_DEBUG 1
 #define ZSTRINGS_ASSERT(expr, ...) NOWARNING(4800, ((expr) || (ts::AssertFailed(__FILE__, __LINE__, __VA_ARGS__) ? __debugbreak(), false : false)))
@@ -15,6 +16,8 @@
 #define ZSTRINGS_NUMCONVERSION_ERROR(def) if (!def) ZSTRINGS_ASSERT(false, "num conversion error")
 #define ZSTRINGS_DEFAULT_STATIC_SIZE 1024 // 1024 bytes - default static string in-memory size
 //#define ZSTRINGS_VEC3(t) vec_t<t,3>
+
+#define ZSTRINGS_ALLOCATOR TS_DEFAULT_ALLOCATOR
 
 namespace ts
 {
@@ -31,9 +34,6 @@ typedef ptrdiff_t ZSTRINGS_SIGNED;
 
 template<typename TCHARACTER> struct sptr;
 
-void *	str_wrap_ma(ZSTRINGS_UNSIGNED sz); // mem alloc
-void *	str_wrap_mra(void *oldp, size_t sz); // mem realloc
-void	str_wrap_mf(void * p); // mem free
 int     str_wrap_text_ucs2_to_ansi(char *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_WIDECHAR> &from);
 void    str_wrap_text_ansi_to_ucs2(wchar_t *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_ANSICHAR> &from);
 ZSTRINGS_SIGNED str_wrap_text_utf8_to_ucs2(wchar_t *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_ANSICHAR> &from);
@@ -47,8 +47,8 @@ void    str_wrap_text_uppercase(char *out, ZSTRINGS_SIGNED maxlen);
 
 #include "zstrings/z_str_hpp.inl"
 
-typedef str_c tmp_str_c;
-typedef wstr_c tmp_wstr_c;
+//typedef str_c tmp_str_c;
+//typedef wstr_c tmp_wstr_c;
 
 }
 

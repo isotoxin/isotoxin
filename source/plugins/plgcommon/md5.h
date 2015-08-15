@@ -43,7 +43,7 @@ public:
     md5_c() {reset();}
     ~md5_c() {};
 
-    void update(const void* pach_source, unsigned long nLen);
+    void update(const void* pach_source, size_t nLen);
     void done(unsigned char rslt[16]);
     void done();
     const unsigned char *result() const; // make sure done called

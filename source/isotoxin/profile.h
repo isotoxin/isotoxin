@@ -192,7 +192,7 @@ template<typename T, profile_table_e tabi> struct tableview_t
     row_s &getcreate(int id);
     bool reader(int row, ts::SQLITE_DATAGETTER);
 
-    void clear() { rows.clear(); }
+    void clear() { newidpool = -1; rows.clear(); new2ins.clear(); }
     void prepare( ts::sqlitedb_c *db );
     void read( ts::sqlitedb_c *db );
     void read( ts::sqlitedb_c *db, const ts::asptr &where_items );
@@ -273,6 +273,8 @@ public:
     profile_c() { dirty_sort(); }
     ~profile_c();
 
+    static void error_unique_profile(const ts::wsptr & prfn, bool modal = false);
+
     void shutdown_aps();
     template<typename APR> void iterate_aps( APR apr )
     {
@@ -281,7 +283,7 @@ public:
     }
     active_protocol_c *ap(int id) { for( active_protocol_c *ap : protocols ) if (ap && ap->getid() == id && !ap->is_dip()) return ap; return nullptr; }
 
-    void load( const ts::wstr_c& pfn );
+    bool load( const ts::wstr_c& pfn );
 
     ts::blob_c get_avatar( const contact_key_s&k ) const;
     void set_avatar( const contact_key_s&k, const ts::blob_c &avadata, int tag );
@@ -308,6 +310,8 @@ public:
     void change_history_item(const contact_key_s&historian, const post_s &post, ts::uint32 change_what);
     bool change_history_item(uint64 utag, contact_key_s & historian); // find item by tag and change type form MTA_UNDELIVERED_MESSAGE to MTA_MESSAGE, then return historian (if loaded)
     void flush_history_now();
+    void load_undelivered();
+    contact_c *find_corresponding_historian(const contact_key_s &subcontact, ts::array_wrapper_c<contact_c * const> possible_historians);
 
     uint64 sort_tag() const {return sorttag;}
     void dirty_sort() { sorttag = ts::uuid(); };
@@ -353,6 +357,8 @@ public:
     TEXTWPAR(manual_confirm_masks, "*.exe; *.com; *.bat; *.cmd; *.vbs");
     INTPAR(fileconfirm, 0);
 
+    TEXTAPAR( unique_profile_tag, "" )
+
 #define SND(s) TEXTWPAR( snd_##s, "sounds/" #s ".ogg" )
     SOUNDS
 #undef SND
@@ -361,6 +367,7 @@ public:
     PROFILE_TABLES
     #undef TAB
 
+    HANDLE mutex = nullptr;
 };
 
 #undef TEXTPAR

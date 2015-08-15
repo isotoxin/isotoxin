@@ -33,6 +33,15 @@ namespace zstrings_internal
 		static const NUM value = is_signed<NUM>::value ? makemaxint<NUM, sizeof(NUM) - 1>::value : (NUM)(-1);
 	};
 
+    template<typename STRUCT> struct is_struct_empty
+    {
+        struct test : public STRUCT
+        {
+            int __dummy;
+        };
+        static const bool value = sizeof(test) == sizeof(int);
+    };
+
 	template<typename CHARTYPETO, typename CHARTYPEFROM> CHARTYPETO cvtchar( CHARTYPEFROM c )
 	{
 		return (CHARTYPETO)c;
@@ -53,6 +62,36 @@ namespace zstrings_internal
 	{
 		return CHARz_to_double( out, s, slen );
 	}
+
+    ZSTRINGS_FORCEINLINE ZSTRINGS_SIGNED zmin( ZSTRINGS_SIGNED a, ZSTRINGS_SIGNED b )
+    {
+        return (a <= b) ? a : b;
+    }
+
+    ZSTRINGS_FORCEINLINE ZSTRINGS_SIGNED zmax(ZSTRINGS_SIGNED a, ZSTRINGS_SIGNED b)
+    {
+        return (a >= b) ? a : b;
+    }
+
+    ZSTRINGS_FORCEINLINE ZSTRINGS_SIGNED CeilPowerOfTwo(ZSTRINGS_SIGNED x)
+    {
+        --x;
+        x |= x >> 1;
+        x |= x >> 2;
+        x |= x >> 4;
+        x |= x >> 8;
+        x |= x >> 16;
+        ++x;
+        return x;
+    }
+
+    template <typename TCHARACTER> static ZSTRINGS_FORCEINLINE ZSTRINGS_UNSIGNED _calc_alloc_size(ZSTRINGS_UNSIGNED L)
+    {
+        const ZSTRINGS_SIGNED C = sizeof(TCHARACTER);
+        ZSTRINGS_SIGNED N = (zstrings_internal::CeilPowerOfTwo(L*C + sizeof(void *)) + 15) & (~15);
+        return N / C;
+    }
+
 }
 
 ZSTRINGS_FORCEINLINE ZSTRINGS_ANSICHAR base64(ZSTRINGS_SIGNED index)
@@ -106,17 +145,17 @@ __inline bool    blk_cmp(const void *d1, const void *d2, ZSTRINGS_UNSIGNED size)
 {
     union
     {
-        ZSTRINGS_UNSIGNED *db1;
-        ZSTRINGS_BYTE *ds1;
+        const ZSTRINGS_UNSIGNED *db1;
+        const ZSTRINGS_BYTE *ds1;
     };
     union
     {
-        ZSTRINGS_UNSIGNED *db2;
-        ZSTRINGS_BYTE *ds2;
+        const ZSTRINGS_UNSIGNED *db2;
+        const ZSTRINGS_BYTE *ds2;
     };
 
-    db1 = (ZSTRINGS_UNSIGNED *)d1;
-    db2 = (ZSTRINGS_UNSIGNED *)d2;
+    db1 = (const ZSTRINGS_UNSIGNED *)d1; //-V206
+    db2 = (const ZSTRINGS_UNSIGNED *)d2; //-V206
 
     while (size >= sizeof(ZSTRINGS_UNSIGNED))
     {
@@ -183,8 +222,8 @@ template <class UNIT>  ZSTRINGS_FORCEINLINE void    blk_UNIT_copy_back(UNIT *tgt
 
 ZSTRINGS_FORCEINLINE void    blk_sizet_copy(void *tgt, const void *src, ZSTRINGS_UNSIGNED size) //same as blk_copy, but copying by sizeof(uint) ZSTRINGS_BYTEs
 {
-    ZSTRINGS_UNSIGNED    *uitgt = (ZSTRINGS_UNSIGNED *)tgt;
-    const ZSTRINGS_UNSIGNED    *uisrc = (const ZSTRINGS_UNSIGNED *)src;
+    ZSTRINGS_UNSIGNED    *uitgt = (ZSTRINGS_UNSIGNED *)tgt; //-V206
+    const ZSTRINGS_UNSIGNED    *uisrc = (const ZSTRINGS_UNSIGNED *)src; //-V206
 
     if ((uisrc + size) <= uitgt) blk_UNIT_copy_fwd<ZSTRINGS_UNSIGNED>(uitgt,uisrc,size);
     else blk_UNIT_copy_back<ZSTRINGS_UNSIGNED>(uitgt,uisrc,size);
@@ -456,8 +495,8 @@ parse_hex:
 
     do
     {
-        unsigned m = c - 48;
-        if (m>1)
+        unsigned m2 = c - 48;
+        if (m2>1)
         {
             //non radix 2 loop
 
@@ -482,8 +521,8 @@ parse_hex:
             }
             do
             {
-                unsigned m = c - 48;
-                if (m>7)
+                unsigned m8 = c - 48;
+                if (m8>7)
                 {
                     // non radix 8 loop
                     if (slen == i || *(s + i) == 0)
@@ -502,8 +541,8 @@ parse_hex:
                     }
                     do
                     {
-                        unsigned m = c - 48;
-                        if (m>10)
+                        unsigned m10 = c - 48;
+                        if (m10>10)
                         {
                             // non radix 10 loop
                             if (slen == i || *(s + i) == 0)
@@ -517,9 +556,9 @@ parse_hex:
                             }
                             do
                             {
-                                unsigned m = c - 48;
-                                if (m>10) m = (c | 32) - 87;
-                                if (m>16)
+                                unsigned m16 = c - 48;
+                                if (m16>10) m16 = (c | 32) - 87;
+                                if (m16>16)
                                 {
                                     if (slen == i || *(s + i) == 0)
                                     {
@@ -532,28 +571,28 @@ parse_hex:
                                     }
                                     return false;
                                 }
-                                n16 = (n16 << 4) + m;
+                                n16 = (n16 << 4) + m16;
                             } while(slen != i && (c = *(s + i++))!=0);
                             return false;
                         }
-                        n10 = (n10<<3) + (n10<<1) + m;
-                        n16 = (n16 << 4) + m;
+                        n10 = (n10<<3) + (n10<<1) + m10;
+                        n16 = (n16 << 4) + m10;
 
                     } while(slen != i && (c = *(s + i++))!=0);
                     out = (negative&&(zstrings_internal::is_signed<NUMTYPE>::value))?-n10:n10;
                     return true;
                 }
-                n8 = (n8 << 3) + m;
-                n10 = (n10<<3) + (n10<<1) + m;
-                n16 = (n16 << 4) + m;
+                n8 = (n8 << 3) + m8;
+                n10 = (n10<<3) + (n10<<1) + m8;
+                n16 = (n16 << 4) + m8;
             } while(slen != i && (c = *(s + i++))!=0);
             out = (negative&&(zstrings_internal::is_signed<NUMTYPE>::value))?-n10:n10;
             return true;
         }
-        n2 = (n2 << 1) + m;
-        n8 = (n8 << 3) + m;
-        n10 = (n10<<3) + (n10<<1) + m;
-        n16 = (n16 << 4) + m;
+        n2 = (n2 << 1) + m2;
+        n8 = (n8 << 3) + m2;
+        n10 = (n10<<3) + (n10<<1) + m2;
+        n16 = (n16 << 4) + m2;
     } while(slen != i && (c = *(s + i++))!=0);
 
     out = (negative&&(zstrings_internal::is_signed<NUMTYPE>::value))?-n10:n10;
@@ -595,9 +634,9 @@ template <typename TCHARACTER, typename NUMTYPE> inline NUMTYPE CHARz_to_int_10(
 
 inline unsigned char_as_hex(ZSTRINGS_SIGNED c)
 {
-	if (unsigned(c - '0') <= 9) return c - '0';
-	if (unsigned(c - 'A') < 6) return c + (10 - 'A');
-	if (ZSTRINGS_ASSERT(unsigned(c - 'a') < 6)) return c + (10 - 'a');
+	if (unsigned(c - '0') <= 9) return c - '0'; //-V110
+	if (unsigned(c - 'A') < 6) return c + (10 - 'A'); //-V104 //-V110
+	if (ZSTRINGS_ASSERT(unsigned(c - 'a') < 6)) return c + (10 - 'a'); //-V104 //-V110
 	return 0;
 }
 template <typename TCHARACTER> inline void hex_to_data(void *idata, const sptr<TCHARACTER> &hex)

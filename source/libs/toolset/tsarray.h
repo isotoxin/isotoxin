@@ -8,7 +8,7 @@ namespace ts
 
 template <typename UNIT_PTR, typename ALLOCATOR> class DEFAULT_BEHAVIOUR : public ALLOCATOR
 {
-public:
+protected:
     typedef typename clean_type<UNIT_PTR>::type CLEAN_OBJTYPE;
 
     static void destructor(UNIT_PTR) {}
@@ -21,7 +21,7 @@ public:
 
 template <typename T, typename ALLOCATOR> class DEFAULT_BEHAVIOUR_CLEAR_ONLY : public ALLOCATOR
 {
-public:
+protected:
 
     typedef decltype(clean_type<UNIT_PTR>::type) CLEAN_OBJTYPE;
 
@@ -34,13 +34,13 @@ public:
 
 template <typename UNIT_PTR, typename ALLOCATOR> class DEFAULT_BEHAVIOUR_DEL : public DEFAULT_BEHAVIOUR<UNIT_PTR, ALLOCATOR>
 {
-public:
+protected:
 
     typedef typename clean_type<UNIT_PTR>::type CLEAN_OBJTYPE;
 
     TS_STATIC_CHECK( std::is_pointer<UNIT_PTR>::value, "UNIT_PTR must be pointer" );
     static void destructor(UNIT_PTR u) { if (u) TSDEL(u); }
-    static void init(UNIT_PTR *u, uint count) { blk_fill<UNIT_PTR>(u, count); }
+    static void init(UNIT_PTR *u, auint count) { blk_fill<UNIT_PTR>(u, count); }
     template<typename TFROM, bool target_initialized, bool moveit> struct copy { copy(UNIT_PTR &to, TFROM from) { to = from; } };
     /*
     template<typename TFROM> struct copy<TFROM, false, false>
@@ -72,12 +72,12 @@ public:
 
 template <typename UNIT_PTR, typename ALLOCATOR> class DEFAULT_BEHAVIOUR_REL : public DEFAULT_BEHAVIOUR<UNIT_PTR, ALLOCATOR>
 {
-public:
+protected:
     typedef decltype(clean_type<UNIT_PTR>::type) CLEAN_OBJTYPE;
 
     TS_STATIC_CHECK( std::is_pointer<UNIT_PTR>::value, "UNIT_PTR must be pointer" );
     static void destructor(UNIT_PTR u) { if (u) u->release(); }
-    static void init(UNIT_PTR *u, uint count) { blk_fill<UNIT_PTR>(u, count); }
+    static void init(UNIT_PTR *u, auint count) { blk_fill<UNIT_PTR>(u, count); }
 
     template<typename TFROM, bool target_initialized, bool moveit> struct copy { copy(UNIT_PTR &to, TFROM from) { to = from; } };
 
@@ -111,13 +111,13 @@ public:
 
 template <typename inarraytype, typename OBJ, typename ALLOCATOR> class DEFAULT_BEHAVIOUR_SMARTPTR : public ALLOCATOR
 {
-public:
+protected:
     typedef typename clean_type<OBJ>::type CLEAN_OBJTYPE;
 
 	static void destructor(inarraytype &s) {s.~inarraytype();}
-	static void init(inarraytype * p, uint n)
+	static void init(inarraytype * p, auint n)
 	{
-		for(uint i=0;i<n;++i)
+		for(auint i=0;i<n;++i)
 			TSPLACENEW(p+i);
 	}
 	template<typename KEY> static int  compare( const inarraytype &u1, const KEY &key ) { return (*u1.get())(key); }
@@ -160,13 +160,13 @@ public:
 
 template<typename T, typename ALLOCATOR> class DEFAULT_BEHAVIOUR_INPLACE : public ALLOCATOR
 {
-public:
+protected:
     typedef typename clean_type<T>::type CLEAN_OBJTYPE;
 
     static void destructor(T &s) { s.~T(); }
-    static void init(T * p, uint n)
+    static void init(T * p, auint n)
     {
-        for (uint i = 0; i < n; ++i)
+        for (auint i = 0; i < n; ++i)
             TSPLACENEW(p + i);
     }
     template<typename KEY> static int  compare(const T &u1, const KEY &key) { return u1(key); }
@@ -233,7 +233,7 @@ public:
 /**
 *  universal array
 */
-template <typename T, int SMALLGRANULA = 0, typename BEHAVIOUR = DEFAULT_BEHAVIOUR<T, TS_DEFAULT_ALLOCATOR> > class array_c 
+template <typename T, int SMALLGRANULA = 0, typename BEHAVIOUR = DEFAULT_BEHAVIOUR<T, TS_DEFAULT_ALLOCATOR> > class array_c : public BEHAVIOUR
 {
 #ifdef _FINAL
     void fill_dbg(auint, auint) {}
@@ -241,7 +241,6 @@ template <typename T, int SMALLGRANULA = 0, typename BEHAVIOUR = DEFAULT_BEHAVIO
     void fill_dbg(auint i, auint n) { blk_fill<uint8>(m_list + i, n * sizeof(T), 0xcd); }
 #endif
 
-    BEHAVIOUR beh;
 public:
     typedef typename BEHAVIOUR::CLEAN_OBJTYPE CLEAN_OBJTYPE;
     typedef T OBJTYPE;
@@ -249,8 +248,8 @@ public:
 private:
 
     T *m_list;
-    int m_count;     //items in list
-    int m_capacity;     //allocated memory in list
+    aint m_count;       // items in list
+    aint m_capacity;    // allocated memory in list
 
     void    _destroy(aint idx)
     {
@@ -274,24 +273,24 @@ private:
 
             if (is_movable<T>::value)
             {
-                m_list = (T *)beh.mra(m_list, sizeof(T)*(m_capacity));
+                m_list = (T *)mra(m_list, sizeof(T)*(m_capacity));
                 if (index < m_count)
                     blk_copy_back( m_list + index + count, m_list + index, (m_count-index) * sizeof(T) );
 
             } else {
-                T *new_list = (T *)beh.ma(sizeof(T)*(m_capacity));
-                for (int i = 0; i < index; ++i)
+                T *new_list = (T *)ma(sizeof(T)*(m_capacity));
+                for (aint i = 0; i < index; ++i)
                     BEHAVIOUR::copy<T&, false, true>( new_list[i], m_list[i] );
 
-                for (int i = index; i < m_count; ++i)
+                for (aint i = index; i < m_count; ++i)
                     BEHAVIOUR::copy<T&, false, true>(new_list[i+count], m_list[i]);
 
-                beh.mf(m_list);
+                mf(m_list);
                 m_list = new_list;
                 oalocated = m_count;
             }
 
-            // все равно дыра в массиве будет заполнена. незачем ее заполнять дебаговыми цифирками
+            // hole in array will be filled anyway -> no need to fill it with debug values
             //if (index < m_count)
             //    fill_dbg(index, count);
 
@@ -310,11 +309,11 @@ private:
                     blk_copy_back(m_list + index + count, m_list + index, cntmove * sizeof(T));
             } else
             {
-                for (int i = m_count-1; i >= index; --i)
+                for (aint i = m_count-1; i >= index; --i)
                     BEHAVIOUR::copy<T&, false, true>(m_list[i + count], m_list[i]);
             }
             
-            // все равно дыра в массиве будет заполнена. незачем ее заполнять дебаговыми цифирками
+            // hole in array will be filled anyway -> no need to fill it with debug values
             //fill_dbg(index, count);
             m_count += count;
         }
@@ -328,7 +327,7 @@ private:
         }
         else
         {
-            for (int i = index + count; i < m_count; ++i)
+            for (aint i = index + count; i < m_count; ++i)
                 BEHAVIOUR::copy<T&, false, true>(m_list[i - count], m_list[i]);
         }
         fill_dbg( m_count - count, count );
@@ -354,7 +353,7 @@ public:
 
 	T &add()
 	{
-		int newcount = m_count+1;
+		aint newcount = m_count+1;
 		_upsize(newcount, m_count, 0);
 		BEHAVIOUR::init(m_list + m_count, 1);
 		m_count = newcount;
@@ -363,7 +362,7 @@ public:
 
     template<typename TT> aint add(const TT &d)
     {
-        int ret = size();
+        aint ret = size();
         set(ret,d);
         return ret;
     }
@@ -371,7 +370,7 @@ public:
     T& duplast() // if array is empty, default item will be created
     {
         if (size() == 0) return add();
-        int newcount = size() + 1;
+        aint newcount = size() + 1;
         _upsize(newcount, m_count, 0);
         BEHAVIOUR::copy<const T&, false,false>( m_list[newcount - 1], m_list[newcount - 2] );
         m_count = newcount;
@@ -392,7 +391,7 @@ public:
     }
     template<typename TT> void    move_up(const TT &p)
     {
-        int idx = find(p);
+        aint idx = find(p);
         if (idx > 0)
             move_up_unsafe(idx);
     }
@@ -405,8 +404,8 @@ public:
     {
         if (m_count > 1)
         {
-            int idx = find(p);
-            if ((idx >= 0) && (idx < int(m_count - 1)))
+            aint idx = find(p);
+            if ((idx >= 0) && (idx < (m_count - 1)))
             {
                 move_down_unsafe( idx );
             }
@@ -426,13 +425,13 @@ public:
 
         ASSERT( !is_movable<T>::value || &d < m_list || &d > (m_list + m_capacity), "Can't set object from this array due buffer resize" );
 
-        int newcount = idx+1;
+        aint newcount = idx+1;
         _upsize(idx+1, m_count, 0);
 
         ASSERT(newcount > m_count);
         
         BEHAVIOUR::copy<const T&, false,false>( m_list[idx], const_cast<T &>(d) );
-        BEHAVIOUR::init(m_list + m_count, idx-m_count); // инициализация элементов между вставляемым и последним концом массива, если вставляемы оказался далеко от конца
+        BEHAVIOUR::init(m_list + m_count, idx-m_count); // init items between inserted and previous end of array
 
         m_count = newcount;
     }
@@ -445,7 +444,7 @@ public:
 
     bool    set(const T & d)
     {
-        int idx = find(d);
+        aint idx = find(d);
         if (idx >=0)
         {
             return false;
@@ -540,9 +539,9 @@ public:
         return index;
     }
 
-    template <typename KEY, typename INHERITOR> int  insert_sorted_inherit_old( INHERITOR &inh, const T & d, const KEY &key )
+    template <typename KEY, typename INHERITOR> aint  insert_sorted_inherit_old( INHERITOR &inh, const T & d, const KEY &key )
     {
-        int index;
+        aint index;
         if ( find_sorted( index, key ) )
         {
             inh( d, get(index) );
@@ -563,7 +562,7 @@ public:
     {
         if (idx >= m_count)
         {
-            int new_count = idx + count;
+            aint new_count = idx + count;
 
             _upsize(new_count, m_count, 0); // т.к. idx за пределами массива, то никакие переносы внутри _upsize не требуются
 
@@ -584,7 +583,7 @@ public:
         return -1;
     }
 
-    template<typename KEY> bool find_sorted(aint &index, const KEY &key, int maxcount = -1) const
+    template<typename KEY> bool find_sorted(aint &index, const KEY &key, aint maxcount = -1) const
     {
         if (maxcount < 0) maxcount = m_count;
 
@@ -601,10 +600,10 @@ public:
         }
 
 
-        int left = 0;
-        int rite = maxcount;
+        aint left = 0;
+        aint rite = maxcount;
 
-        int test;
+        aint test;
         do
         {
             test = (rite + left) >> 1;
@@ -637,7 +636,7 @@ public:
         return cmp == 0;
     }
 
-    void    reinit(int idx)
+    void    reinit(aint idx)
     {
         BEHAVIOUR::destructor(m_list[idx]);
         BEHAVIOUR::init(m_list + idx, 1);
@@ -656,7 +655,7 @@ public:
             remove_fast(idx);
     }
 
-    T get_remove_slow(int idx = 0)
+    T get_remove_slow(aint idx = 0)
     {
         ASSERT( idx < size(), "get_remove_slow: out of range of array" );
 
@@ -669,7 +668,7 @@ public:
         return std::move(r.get());
     }
 
-    T get_remove_fast(int idx = 0)
+    T get_remove_fast(aint idx = 0)
     {
         if (size() == 0) return make_dummy<T>();
 
@@ -710,7 +709,7 @@ public:
     {
         if (count < 0) count = m_count - start;
         ASSERT( (start+count) <= size() && start >= 0 && count >= 0, "remove_slow: out of range of array" );
-        for (int i=0;i<count;++i)
+        for (aint i=0;i<count;++i)
             _destroy(i + start);
         _remove_slow(start,count);
     }
@@ -718,7 +717,7 @@ public:
     void    truncate( aint idx )
     {
         if (m_count <= idx) return;
-        for (int i = idx;i < m_count;++i)
+        for (aint i = idx;i < m_count;++i)
             _destroy(i);
         fill_dbg(idx, m_count - idx);
         m_count = idx;
@@ -734,8 +733,8 @@ public:
             {
                 if ( m_capacity != SMALLGRANULA )
                 {
-                    beh.mf(m_list);
-                    m_list = (T *)beh.ma(sizeof(T)*SMALLGRANULA);
+                    mf(m_list);
+                    m_list = (T *)ma(sizeof(T)*SMALLGRANULA);
                     m_capacity = SMALLGRANULA;
                     fillcount = m_capacity;
                 }
@@ -743,8 +742,8 @@ public:
             {
                 if ( m_capacity != 2 )
                 {
-                    beh.mf(m_list);
-                    m_list = (T *)beh.ma(sizeof(T)*2);
+                    mf(m_list);
+                    m_list = (T *)ma(sizeof(T)*2);
                     m_capacity = 2;
                     fillcount = m_capacity;
                 }
@@ -757,16 +756,16 @@ public:
 
     aint size() const {return m_count;};
 
-	const T &operator[](int index) const { return get(index); }
-	T& operator[](int index) { return get(index); }
+	const T &operator[](aint index) const { return get(index); }
+	T& operator[](aint index) { return get(index); }
 
 
-    const T &get(int idx) const
+    const T &get(aint idx) const
     {
         ASSERT( idx >= 0 && idx < size(), "get: out of range of array" );
         return m_list[idx];
     };
-    T &get(int idx)
+    T &get(aint idx)
     {
         //ASSERT(idx < size(), "get: out of range of array"); // compiler crashes
 #ifndef _FINAL
@@ -780,7 +779,7 @@ public:
 
     void    absorb_add( array_c &from )
     {
-        uint ns = m_count + from.m_count;
+        aint ns = m_count + from.m_count;
 
         _upsize(ns, m_count, 0);
 
@@ -790,7 +789,7 @@ public:
         }
         else
         {
-            for (int i = 0; i < from.m_count; ++i)
+            for (aint i = 0; i < from.m_count; ++i)
                 BEHAVIOUR::copy<T&, false, true>(m_list[i + m_count], from.m_list[i]);
         }
 
@@ -838,7 +837,7 @@ public:
             k--;
             i = a = st0[k];
             j = b = st1[k];
-            int centeri = ((a + b) / 2);
+            aint centeri = ((a + b) / 2);
             T *x = m_list + centeri;
             while (a < b)
             {
@@ -908,7 +907,7 @@ public:
     {
         m_count = 0;
         m_capacity = a.size();
-        m_list = (T *)beh.ma(sizeof(T)*m_capacity);
+        m_list = (T *)ma(sizeof(T)*m_capacity);
         *this = a;
     }
     array_c(array_c &&a)
@@ -925,7 +924,7 @@ public:
     {
         m_count = list.size();
         m_capacity = m_count;
-        m_list = (T *)beh.ma(sizeof(T)*m_capacity);
+        m_list = (T *)ma(sizeof(T)*m_capacity);
 
         aint i = 0;
         for(const T &el : list) BEHAVIOUR::copy<const T&, false,false>( m_list[i++], const_cast<T &>(el) );
@@ -938,17 +937,17 @@ public:
         {
             if (SMALLGRANULA > 0)
             {
-                m_list = (T *)beh.ma(sizeof(T)*SMALLGRANULA);
+                m_list = (T *)ma(sizeof(T)*SMALLGRANULA);
                 m_capacity = SMALLGRANULA;
             }
             else
             {
-                m_list = (T *)beh.ma(sizeof(T) * 2);
+                m_list = (T *)ma(sizeof(T) * 2);
                 m_capacity = 2;
             }
         } else
         {
-            m_list = (T *)beh.ma(sizeof(T) * capacity);
+            m_list = (T *)ma(sizeof(T) * capacity);
             m_capacity = capacity;
         }
         m_count = 0;
@@ -957,8 +956,8 @@ public:
     ~array_c()
     {
         T *ptr = m_list + m_count - 1;
-        while (ptr>=m_list) { beh.destructor( *ptr ); ptr--; }
-        beh.mf(m_list);
+        while (ptr>=m_list) { destructor( *ptr ); ptr--; }
+        mf(m_list);
     }
 
     array_wrapper_c<const T> array() const { return array_wrapper_c<const T>( m_list, m_count ); }
@@ -986,182 +985,6 @@ template<typename obj, int granula> using tmp_array_release_t = array_c < obj *,
 template<typename obj, int granula> using tmp_array_safe_t = array_c < safe_ptr<obj>, granula, DEFAULT_BEHAVIOUR_SMARTPTR<safe_ptr<obj>, obj, TMP_ALLOCATOR> > ;
 template<typename obj, int granula> using tmp_array_shared_t = array_c < shared_ptr<obj>, granula, DEFAULT_BEHAVIOUR_SMARTPTR<shared_ptr<obj>, obj, TMP_ALLOCATOR> > ;
 template<typename obj, int granula> using tmp_array_inplace_t = array_c < obj, granula, DEFAULT_BEHAVIOUR_INPLACE<obj, TMP_ALLOCATOR> > ;
-
-
-template <typename UNIT, int MAX_SIZE = 2048, typename BEHAVIOUR = DEFAULT_BEHAVIOUR<UNIT> > class insert_sorter_c
-{
-    UNIT    m_array[MAX_SIZE];
-    int     m_left;
-    int     m_rite;
-
-public:
-
-    insert_sorter_c():m_left(MAX_SIZE >> 1), m_rite(MAX_SIZE >> 1)
-    {
-    }
-
-    uint    size()
-    {
-        return m_rite - m_left;
-    }
-
-    UNIT    get(int index)
-    {
-        return m_array[m_left + index];
-    }
-
-    void    clear()
-    {
-        for (;m_left < m_rite; ++m_left)
-        {
-            BEHAVIOUR::destructor( m_array[m_left] );
-        }
-
-        m_left = MAX_SIZE >> 1;
-        m_rite = MAX_SIZE >> 1;
-    }
-
-    void destroy( UNIT u )
-    {
-        int index = get_index_by<UNIT>( u );
-        if (index >= 0)
-        {
-            int idx = m_left + index;
-            BEHAVIOUR::destructor( m_array[idx] );
-            blk_UNIT_copy_fwd( m_array + idx, m_array + idx + 1, m_rite-idx-1 );
-            --m_rite;
-        }
-    }
-
-    template <typename ZZZ> int get_index_by( ZZZ zzz )
-    {
-        int idx;
-        int idx0 = m_left;
-        int idx1 = m_rite;
-        if (m_left == m_rite) return -1;
-        for(;;)
-        {
-            idx = ((idx1-idx0) >> 1) + idx0;
-
-            int cmpr = BEHAVIOUR()(m_array[idx], zzz);
-            if (cmpr == 0)
-            {
-                return idx - m_left;
-            }
-            if (cmpr > 0)
-            {
-                //left
-                if (idx == idx0) break;
-                idx1 = idx;
-            } else
-            {
-                //rite
-                ++idx;
-                if (idx == idx1) break;
-                idx0 = idx;
-            }
-        }
-        return -1;
-    }
-
-    template <typename ZZZ> bool find_by( UNIT & out, ZZZ zzz )
-    {
-        int index = get_index_by<ZZZ>( zzz );
-        if (index >= 0)
-        {
-            out = m_array[index + m_left];
-            return true;
-        }
-        return false;
-    }
-
-    bool    is_valid()
-    {
-        for (int i=m_left;i<m_rite-2;++i)
-        {
-            if (BEHAVIOUR()(m_array[i], m_array[i+1]) > 0) return false;
-        }
-        return true;
-    }
-
-    bool    add(UNIT u)
-    {
-        bool noleft = (m_left <= 0);
-        bool norite = (m_rite >= MAX_SIZE);
-        if (noleft && norite) return false;
-
-        if (m_left == m_rite)
-        {
-            m_array[m_left] = u;
-            ++m_rite;
-            return true;
-        }
-        //seek index
-        int idx;
-        int idx0 = m_left;
-        int idx1 = m_rite;
-        for(;;)
-        {
-            idx = ((idx1-idx0) >> 1) + idx0;
-
-            if (BEHAVIOUR()(m_array[idx], u) > 0)
-            {
-                //left
-                if (idx == idx0) break;
-                idx1 = idx;
-            } else
-            {
-                //rite
-                ++idx;
-                if (idx == idx1) break;
-                idx0 = idx;
-            }
-        }
-        if (!norite && (idx == m_rite))
-        {
-            ++m_rite;
-            m_array[idx] = u;
-        } else  if (!noleft && (idx == m_left))
-        {
-            --m_left;
-            m_array[idx-1] = u;
-        } else
-        {
-            int lc = (idx-m_left);
-            int rc = (m_rite-idx);
-            bool expand_left = norite || ((lc <= rc) && !noleft);
-
-            if (expand_left)
-            {
-                memcpy(&m_array[m_left-1], &m_array[m_left], sizeof(UNIT) * lc);
-                --m_left;
-                m_array[idx-1] = u;
-            } else
-            {
-                blk_UNIT_copy_back(&m_array[idx+1], &m_array[idx], rc);
-                ++m_rite;
-                m_array[idx] = u;
-            }
-        }
-
-        return true;
-
-    }
-
-    template <typename INITER> void allocate_and_init(int count, INITER &initer)
-    {
-        ASSERT( count <= MAX_SIZE );
-
-        clear();
-        m_left = ( MAX_SIZE >> 1 ) - ( count >> 1 );
-        m_rite = m_left + count;
-        for (int i=0;i<count;++i)
-        {
-            m_array[i + m_left] = initer( i );
-        }
-    }
-
-};
 
 } // namespace ts
 

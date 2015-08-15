@@ -61,7 +61,7 @@ public:
         virtual bool hand_cursor() const {return false;}
         virtual ts::wstr_c to_wstr() const = 0;
         virtual ts::str_c to_utf8() const = 0;
-        virtual void update_advance(ts::font_c *font) {};
+        virtual void update_advance(ts::font_c *f) {};
         virtual void setup( const ts::ivec2 &pos, ts::glyph_image_s &gi ) = 0;
 
         active_element_s() {}
@@ -92,8 +92,8 @@ private:
 		ts::wchar get_char_fast() const {return p->as_char();}
 		bool     is_char() const {return p->is_char();}
 		ts::wchar get_char() const {return p->is_char() ? p->as_char() : 0;}
-		int advance(ts::font_c *font) const {return p->is_char() ? (*font)[p->as_char()].advance : p->advance;}
-		void update_advance(ts::font_c *font) {if (!p->is_char()) p->update_advance(font);}
+		int advance(ts::font_c *f) const {return p->is_char() ? (*f)[p->as_char()].advance : p->advance;}
+		void update_advance(ts::font_c *f) {if (!p->is_char()) p->update_advance(f);}
 	};
 	ts::array_inplace_t<text_element_c,512> text; // text
 	ts::tbuf_t<ts::ivec2> lines; // lines of text
@@ -101,7 +101,7 @@ private:
 	float wheel_scroll_step_size = 50.0f;
 	int caret_width = 2, baseline_offset = 0, chars_limit = 0;
 	int margin_left = 0, margin_right = 0, margin_top = 0, margin_bottom = 0;
-    ts::irect caretrect = 0;
+    ts::irect caretrect = ts::irect(0);
 
 
     bool focus() const;

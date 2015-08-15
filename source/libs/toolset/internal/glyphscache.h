@@ -60,7 +60,7 @@ public:
 
 	~font_c();
 	glyph_s &operator[](wchar c);
-	static font_c &buildfont(const wstr_c &filename, const str_c &fontname, ivec2 size, bool hinting = true, int additional_line_spacing = 0, float outline_radius = .2f, float outline_shift = 0);
+	static font_c &buildfont(const wstr_c &filename, const str_c &fontname, const ivec2 & size, bool hinting = true, int additional_line_spacing = 0, float outline_radius = .2f, float outline_shift = 0);
 	int kerning_ci(int left, int right);
 	int kerning(wchar_t left, wchar_t right) { return kerning_ci(operator[](left).char_index, operator[](right).char_index); }
 

@@ -46,7 +46,7 @@ namespace ts
         md5_c() {reset();}
         ~md5_c() {};
 
-        void update(const void* pach_source, uint len);
+        void update(const void* pach_source, auint len);
         void done(uint8 rslt[16]);
         void done();
         const unsigned char *result() const; // make sure done called

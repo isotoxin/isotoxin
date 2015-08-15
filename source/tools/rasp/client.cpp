@@ -52,7 +52,7 @@ bool https_c::get(const char* address, ts::buf_c& resultad, const ts::buf_c* pos
     return rslt == CURLE_OK;
 }
 
-bool https_c::get(const char* address, ts::buf_c& resultad, const ts::asptr post)
+bool https_c::get(const char* address, ts::buf_c& resultad, const ts::asptr &post)
 {
     if (!curl) return false;
 

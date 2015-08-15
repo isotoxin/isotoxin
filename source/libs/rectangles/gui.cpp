@@ -382,8 +382,6 @@ ts::uint32 gui_c::mouse(const system_event_param_s & p)
         if (RID f = gui->get_minside())
             if (allow_input(f))
             {
-                redraw_collector_s dch;
-
                 evt_data_s d;
                 d.mouse.screenpos = ts::ref_cast<ts::ivec2>( p.mouse.pos );
 
@@ -430,10 +428,10 @@ void gui_c::loop()
         while (m_msgs.try_pop(m) && executing.size() < 100 /* limit maximum to avoid interface freeze */ )
             executing.add(m); // pop messages as fast as possible
 
-        for( gmsgbase * m : executing ) // now executing
+        for( gmsgbase * me : executing ) // now executing
         {
-            m->send();
-            TSDEL(m);
+            me->send();
+            TSDEL(me);
         }
 
 

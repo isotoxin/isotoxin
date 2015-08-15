@@ -1,5 +1,7 @@
 #include "isotoxin.h"
 
+//-V:getkey:807
+
 MAKE_CHILD<gui_contact_item_c>::~MAKE_CHILD()
 {
     ASSERT(parent);
@@ -822,7 +824,11 @@ int gui_contact_item_c::contact_item_rite_margin()
             }
 
             if (( force_state_icon || (flags.is(F_PROTOHIT) && st != CS_ROTTEN)) && bdesc)
+            {
+                m_engine->begin_draw();
                 bdesc->draw( m_engine.get(), bst, ca + ts::ivec2(shiftstateicon.x, shiftstateicon.y), button_desc_s::ARIGHT | button_desc_s::ABOTTOM );
+                m_engine->end_draw();
+            }
 
             if (contact)
             {
@@ -876,6 +882,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                 int x_offset = 0;
                 if (draw_ava)
                 {
+                    m_engine->begin_draw();
                     if (const avatar_s *ava = contact->get_avatar())
                     {
                         int y = (ca.size().y - ava->info().sz.y) / 2;
@@ -888,6 +895,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                         icon->draw(m_engine.get(), button_desc_s::NORMAL, ca, button_desc_s::ALEFT | button_desc_s::ATOP | button_desc_s::ABOTTOM);
                         x_offset = icon->size.x;
                     }
+                    m_engine->end_draw();
                 }
 
                 ts::irect noti_draw_area = ca;
@@ -943,6 +951,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                     if (n_unread > 99) n_unread = 99;
                     button_desc_s *unread = g_app->buttons().unread;
 
+                    draw_data_s &dd = m_engine->begin_draw();
                     ts::ivec2 pos = unread->draw(m_engine.get(), button_desc_s::NORMAL, noti_draw_area, button_desc_s::ALEFT | button_desc_s::ABOTTOM);
 
                     if (!contact->is_ringtone() || contact->is_ringtone_blink())
@@ -951,7 +960,6 @@ int gui_contact_item_c::contact_item_rite_margin()
                         tdp.textoptions = &f;
                         tdp.forecolor = unread->colors + button_desc_s::NORMAL;
 
-                        draw_data_s &dd = m_engine->begin_draw();
                         dd.offset += pos;
                         dd.size = unread->size;
                         if (contact->is_ringtone())
@@ -963,8 +971,8 @@ int gui_contact_item_c::contact_item_rite_margin()
                             else
                                 m_engine->draw(ts::wstr_c().set_as_uint(n_unread), tdp);
                         }
-                        m_engine->end_draw();
                     }
+                    m_engine->end_draw();
                 }
             }
         }
@@ -1143,7 +1151,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                 {
                     contact_online_state_e cos_ = (contact_online_state_e)ost.as_uint();
 
-                    contacts().get_self().subiterate( [&](contact_c *c) {
+                    contacts().get_self().subiterate( [&](contact_c *c) { //-V807
                         c->set_ostate(cos_);
                     } );
                     contacts().get_self().set_ostate(cos_);
@@ -1350,7 +1358,7 @@ void gui_contactlist_c::recreate_ctls()
     if (addgbtn) TSDEL(addgbtn);
     if (self) TSDEL(self);
 
-    if (button_desc_s *baddc = gui->theme().get_button(CONSTASTR("addcontact")))
+    if (button_desc_s *baddc = gui->theme().get_button(CONSTASTR("addcontact"))) //-V807
     {
         AUTOCLEAR(flags, F_NO_REPOS);
 
@@ -1613,7 +1621,7 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
 
 /*virtual*/ bool gui_contactlist_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if (rid != getrid() && ASSERT(getrid() >> rid)) // child?
+    if (rid != getrid() && ASSERT((getrid() >> rid) || HOLD(rid)().is_root())) // child?
     {
         return __super::sq_evt(qp,rid,data);
     }

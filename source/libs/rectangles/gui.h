@@ -59,8 +59,8 @@ public:
 #define DEFERRED_EXECUTION_BLOCK_BEGIN(t_sec) typedef struct UNIQIDLINE(dc) : public delay_event_c { static double gett() {return t_sec;} UNIQIDLINE(dc)(GUIPARAM param = nullptr):delay_event_c(param) {} virtual void  die() {gui->delete_event<UNIQIDLINE(dc)>(this);} virtual void doit() {
 #define DEFERRED_EXECUTION_BLOCK_END(param) } } UNIQIDLINE(dc); gui->add_event<UNIQIDLINE(dc)>(UNIQIDLINE(dc)::gett(), (GUIPARAM)(param));
 
-#define DEFERRED_CALL( t_sec, h, p ) do { delay_event_c &dc = gui->add_event<delay_event_c>(t_sec); dc.set_handler( (h), (p) ); } while(false)
-#define DEFERRED_UNIQUE_CALL( t_sec, h, p ) do { auto hh = (h); gui->delete_event(hh); delay_event_c &dc = gui->add_event<delay_event_c>(t_sec); dc.set_handler( hh, (p) ); } while (false)
+#define DEFERRED_CALL( t_sec, h, p ) do { delay_event_c &__dc = gui->add_event<delay_event_c>(t_sec); __dc.set_handler( (h), (p) ); } while(false)
+#define DEFERRED_UNIQUE_CALL( t_sec, h, p ) do { auto hh = (h); gui->delete_event(hh); delay_event_c &__dc = gui->add_event<delay_event_c>(t_sec); __dc.set_handler( hh, (p) ); } while (false)
 
 
 struct hover_data_s

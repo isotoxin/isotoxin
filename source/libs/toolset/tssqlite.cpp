@@ -46,7 +46,8 @@ public:
     {
         if (ASSERT(db))
         {
-            streamstr<tmp_str_c> sql;
+            tmp_str_c tstr;
+            streamstr<tmp_str_c> sql(tstr);
             //sql << CONSTASTR("SELECT name FROM sqlite_master WHERE type=\'table\' AND name=\'") << tablename << "\'";
             sql << "PRAGMA table_info(" << tablename << ")";
             
@@ -65,7 +66,8 @@ public:
         {
             execsql( tmp_str_c(CONSTASTR("drop table if exists "), tablename) );
 
-            streamstr<tmp_str_c> sql;
+            tmp_str_c tstr;
+            streamstr<tmp_str_c> sql(tstr);
             sql << CONSTASTR("CREATE TABLE `") << tablename << CONSTASTR("` (");
             for (const column_desc_s& c : columns)
             {
@@ -103,7 +105,7 @@ public:
         }
     }
 
-    void create_index( const asptr& tablename, array_wrapper_c<const column_desc_s> columns )
+    void create_index( const asptr& tablename, array_wrapper_c<const column_desc_s> columns ) //-V813
     {
         tmp_str_c sql;
         for(const column_desc_s &cd : columns)
@@ -134,9 +136,9 @@ public:
         if (ASSERT(db))
         {
             bool recreate = false;
-            tmp_str_c tbln(tablename);
+            sstr_c tbln(tablename); // asptr -> zero-end-string
             int cid = 0;
-            tmp_array_inplace_t<str_c, 16> selcols;
+            tmp_str_c sc;
             for(const column_desc_s&cd : columns)
             {
                 const char *datatype, *collseq;
@@ -145,15 +147,14 @@ public:
 
                 if (datatype == nullptr)
                 {
-                    str_c &sc = selcols.add();
                     if (cd.nullable || cd.type_ == data_type_e::t_blob)
-                        sc = CONSTASTR("NULL");
+                        sc.append(',', CONSTASTR("NULL") );
                     else
-                        sc = cd.get_default();
+                        sc.append(',', cd.get_default().as_sptr() );
                     sc.append(CONSTASTR(" as ")).append(cd.name_);
                 } else
                 {
-                    selcols.add() = cd.name_;
+                    sc.append(',', cd.name_);
                 }
 
                 if (recreate) continue;
@@ -182,21 +183,19 @@ public:
             
             if (recreate)
             {
-                tmp_str_c sc;
-                for( const str_c &s : selcols ) sc.append(',',s);
-
                 execsql(CONSTASTR("BEGIN"));
-                str_c newtable(CONSTASTR("new__"), tablename);
-                create_table(newtable,columns,norowid);
+                tbln.insert(0,CONSTASTR("new__"));
+                create_table(tbln,columns,norowid);
             
-                streamstr<tmp_str_c> sql;
-                sql << CONSTASTR("INSERT INTO `") << newtable << CONSTASTR("` SELECT ") << sc << CONSTASTR(" FROM `") << tablename << "`";
+                tmp_str_c tstr;
+                streamstr<tmp_str_c> sql(tstr);
+                sql << CONSTASTR("INSERT INTO `") << tbln << CONSTASTR("` SELECT ") << sc << CONSTASTR(" FROM `") << tablename << "`";
                 
                 execsql(sql.buffer());
                 execsql( tmp_str_c(CONSTASTR("drop table "), tablename) );
 
                 sql.buffer().clear();
-                sql << CONSTASTR("ALTER TABLE `") << newtable << CONSTASTR("` RENAME TO `") << tablename << "`";
+                sql << CONSTASTR("ALTER TABLE `") << tbln << CONSTASTR("` RENAME TO `") << tablename << "`";
                 execsql(sql.buffer());
                 create_index(tablename, columns);
                 execsql(CONSTASTR("COMMIT"));
@@ -217,7 +216,8 @@ public:
         int cnt = 0;
         if (ASSERT(db))
         {
-            streamstr<tmp_str_c> sql;
+            tmp_str_c tstr;
+            streamstr<tmp_str_c> sql(tstr);
             sql << CONSTASTR("select count(rowid) from \'") << tablename << CONSTASTR("\' where ") << where_items;
 
             sqlite3_stmt *stmt;
@@ -235,7 +235,8 @@ public:
     {
         if (ASSERT(db))
         {
-            streamstr<tmp_str_c> sql;
+            tmp_str_c tstr;
+            streamstr<tmp_str_c> sql(tstr);
             sql << CONSTASTR("insert or replace into \'") << tablename << CONSTASTR("\' (");
             for( const data_pair_s &d : fields )
                 sql << d.name << CONSTASTR(",");
@@ -290,7 +291,8 @@ public:
     {
         if (ASSERT(db))
         {
-            streamstr<tmp_str_c> sql;
+            tmp_str_c tstr;
+            streamstr<tmp_str_c> sql(tstr);
             sql << CONSTASTR("update \'") << tablename << CONSTASTR("\' set ");
             for (const data_pair_s &d : fields)
                 sql << d.name << CONSTASTR("=?,");
@@ -336,7 +338,8 @@ public:
     {
         if (ASSERT(db))
         {
-            streamstr<tmp_str_c> sql;
+            tmp_str_c tstr;
+            streamstr<tmp_str_c> sql(tstr);
             sql << CONSTASTR("delete from \'") << tablename << CONSTASTR("\' where id=") << id;
 
             execsql( sql.buffer() );
@@ -347,7 +350,8 @@ public:
     {
         if (ASSERT(db))
         {
-            streamstr<tmp_str_c> sql;
+            tmp_str_c tstr;
+            streamstr<tmp_str_c> sql(tstr);
             sql << CONSTASTR("delete from \'") << tablename << CONSTASTR("\' where ") << where_items;
             execsql(sql.buffer());
         }
@@ -358,7 +362,8 @@ public:
     {
         if (ASSERT(db))
         {
-            streamstr<tmp_str_c> sql;
+            tmp_str_c tstr;
+            streamstr<tmp_str_c> sql(tstr);
             sql << CONSTASTR("SELECT * FROM \'") << tablename << "\'";
             if (where_items.l)
                 sql << CONSTASTR(" where ") << where_items;

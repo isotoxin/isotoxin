@@ -93,8 +93,9 @@ class active_protocol_c : public ts::safe_object
     static const ts::flags32_s::BITS F_SAVE_REQUEST         = SETBIT(4);
     static const ts::flags32_s::BITS F_DIRTY_PROXY_SETTINGS = SETBIT(5);
     static const ts::flags32_s::BITS F_PROXY_SETTINGS_RCVD  = SETBIT(6);
-    static const ts::flags32_s::BITS F_ONLINE               = SETBIT(7);
+    static const ts::flags32_s::BITS F_ONLINE_SWITCH        = SETBIT(7);
     static const ts::flags32_s::BITS F_SET_PROTO_OK         = SETBIT(8);
+    static const ts::flags32_s::BITS F_CURRENT_ONLINE       = SETBIT(9);
     
 
     bool cmdhandler(ipcr r);
@@ -123,6 +124,9 @@ public:
     void set_configurable( const configurable_s &c );
 
     const s3::Format& defaudio() const {return audio_fmt;}
+
+    void set_current_online(bool oflg) { syncdata.lock_write()().flags.init(F_CURRENT_ONLINE, oflg); }
+    bool is_current_online() const { return syncdata.lock_read()().flags.is(F_CURRENT_ONLINE); }
 
     void set_avatar(contact_c *); // self avatar to self contact
     void set_avatar( const ts::blob_c &ava ); // avatar for this protocol

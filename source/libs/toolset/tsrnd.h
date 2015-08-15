@@ -1,5 +1,8 @@
 #pragma once
 
+//-V:da_seed:112
+//-V:seed:112
+
 #include <Mmsystem.h>
 
 namespace ts
@@ -373,7 +376,7 @@ class random_vp_c
 public:
     random_vp_c( uint seed = timeGetTime() ):m_seed(seed) {}
 
-    static const uint MAXRND = 0xFFFFFFFF;
+    static const uint MAXRND = 0xFFFFFFFF; //-V112
 
     void mutate_seed( uint in_seed )
     {
@@ -405,47 +408,47 @@ public:
 
 class random_modnar_c
 {
-	uint m_seed;
+	uint32 m_seed;
 public:
-	random_modnar_c( uint seed = timeGetTime() ):m_seed(seed) {}
+	random_modnar_c( uint32 seed = timeGetTime() ):m_seed(seed) {}
 
-	static const uint MAXRND = 0xFFFFFFFF;
+	static const uint32 MAXRND = 0xFFFFFFFF; //-V112
 
-    void init( uint seed )
+    void init( uint32 seed )
     {
         m_seed = seed;
     }
 
-    void mutate_seed( uint in_seed )
+    void mutate_seed( uint32 in_seed )
     {
         mutate( false, get_current() + hash_func( in_seed ) );
     }
 
-	void mutate( bool use_timer = true, uint in_seed = 0 )
+	void mutate( bool use_timer = true, uint32 in_seed = 0 )
 	{
-		uint x = (use_timer ? timeGetTime() : 0) + in_seed;
-		const uint y = 3363093571U;
+		uint32 x = (use_timer ? timeGetTime() : 0) + in_seed;
+		const uint32 y = 3363093571U;
 		m_seed = x*y
 			+(x>>16)*(y>>16)
 			+(((x>>(16+1))*((y&0xFFFF)>>1))>>(16-2))
 			+((((x&0xFFFF)>>1)*(y>>(16+1)))>>(16-2)) + 1013904223L;
 	}
 
-	uint get_current() const
+	uint32 get_current() const
 	{
 		return hash_func(m_seed);
 	}
-	uint get_current(unsigned long long n) const
+	uint32 get_current(uint64 n) const
 	{
-		return uint(((unsigned long long)get_current() * n) >> 32u);
+		return uint32(((uint64)get_current() * n) >> 32u); //-V112
 	}
-	uint get_next(unsigned long long n = MAXRND+1ull)
+	uint32 get_next(uint64 n = MAXRND+1ull)
 	{
 		m_seed = 1664525L * m_seed + 1013904223L;
 		return get_current(n);
 	}
 
-    uint operator()( unsigned long long n = MAXRND+1ull ) {return get_next(n);}
+    uint32 operator()( uint64 n = MAXRND+1ull ) {return get_next(n);}
 
 
 };

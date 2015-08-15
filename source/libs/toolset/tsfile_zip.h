@@ -1,5 +1,4 @@
-#ifndef _INCLUDE_TSFILE_ZIP
-#define _INCLUDE_TSFILE_ZIP
+#pragma once
 
 #include "zlib/src/contrib/minizip/unzip.h"
 
@@ -107,4 +106,3 @@ namespace ts
 
 } // namespace ts
 
-#endif

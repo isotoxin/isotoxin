@@ -25,10 +25,10 @@ enum gmsg_e
 { \
     UNIQIDLINE( ev##clazz )():gm_receiver_c(ev) {} \
     ~ UNIQIDLINE( ev##clazz )() { unsubscribe(ev); } \
-    virtual ts::uint32 event_happens( gmsgbase & param ) override \
+    virtual ts::uint32 event_happens( gmsgbase & __param ) override \
     { \
         parent *p = (parent *)( ((::byte *)this) - offsetof( parent, UNIQIDLINE( m_##ev ) ) ); \
-        return p->gm_handler( (gmsg<ev> &)param ); \
+        return p->gm_handler( (gmsg<ev> &)__param ); \
     } \
 } UNIQIDLINE( m_##ev ); \
 	ts::uint32 gm_handler( gmsg<ev> & p )

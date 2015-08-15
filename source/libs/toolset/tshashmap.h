@@ -74,7 +74,7 @@ template<typename T1, typename T2> unsigned calc_hash(const pair_s<T1, T2> &s)
 
 template <class T> inline unsigned calc_hash(const T &obj) // bad for aligned structures. please write its own calc_hash
 {
-	DEBUGCODE(static const T t[1] = {1L};) // compile-time check to allow only POD and non-pointer types
+	DEBUGCODE(static const T t[1] = {1L};) //-V808 // compile-time check to allow only POD and non-pointer types
 	return calc_hash(&obj, sizeof(obj));
 }
 

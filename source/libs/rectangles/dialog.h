@@ -116,11 +116,11 @@ protected:
             {
             case gui_dialog_c::description_s::_RADIO:
                 if (handler) handler(r, p);
-                text.set_as_int((int)p);
+                text.set_as_int((int)p); //-V205
                 break;
             case gui_dialog_c::description_s::_CHECKBUTTONS:
                 if (handler) handler(r, p);
-                text.set_as_uint((ts::uint32)p);
+                text.set_as_uint((ts::uint32)p); //-V205
                 break;
             }
 
@@ -198,6 +198,7 @@ protected:
         description_s& operator()() { description_s& d = arr.add(); d.mask = mask; return d; }
         void operator << (ts::uint32 m) {mask = m;}
         void operator=(const descmaker&) UNUSED;
+        descmaker(const descmaker&) UNUSED;
     };
 
     ts::wstr_c label_path_selector_caption;

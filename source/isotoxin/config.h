@@ -1,6 +1,6 @@
 #pragma once
 
-#define TEXTWPAR( pn, defv ) ts::wstr_c pn() { if (!is_loaded()) return ts::wstr_c(CONSTWSTR("")); return ts::wstr_c().set_as_utf8( get(CONSTASTR(#pn), CONSTASTR(defv)) ); } \
+#define TEXTWPAR( pn, defv ) ts::wstr_c pn() { if (!is_loaded()) return ts::wstr_c(CONSTWSTR("")); return from_utf8( get(CONSTASTR(#pn), CONSTASTR(defv)) ); } \
                             bool pn( const ts::wstr_c&un ) { return param( CONSTASTR(#pn), to_utf8(un) ); }
 
 #define TEXTAPAR( pn, defv ) const ts::str_c &pn() { return get(CONSTASTR(#pn), CONSTASTR(defv)); } \

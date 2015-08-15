@@ -79,7 +79,7 @@ class image_loader_c : public autoparam_i
 
 public:
     ts::safe_ptr<gui_button_c> explorebtn;
-    ts::ivec2 local_p = 0;
+    ts::ivec2 local_p = ts::ivec2(0);
 
     image_loader_c *prev = nullptr;
     image_loader_c *next = nullptr;

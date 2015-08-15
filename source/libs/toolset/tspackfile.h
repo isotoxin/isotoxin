@@ -1,5 +1,4 @@
-#ifndef _INCLUDE_SERVPACKFILE
-#define _INCLUDE_SERVPACKFILE
+#pragma once
 
 namespace ts
 {
@@ -23,7 +22,7 @@ public:
     };
     virtual ~container_c() {};
 
-    void            SetTimeStamp(const FILETIME ft) { m_timestamp = ft;   }
+    void            SetTimeStamp(const FILETIME ft) { m_timestamp = ft; } //-V801
     const FILETIME &GetTimeStamp() const        { return m_timestamp; }
 
     int get_priority() const {return m_priority;}
@@ -31,8 +30,8 @@ public:
 
     const wstr_c  &fn() const {return m_filename;}
 
-    virtual bool    open() = 0;               // Открывает пакетный файл и считывает данные чтение
-    virtual bool    close() = 0;              // Закрывает пакетный файл и уничтожает посторонние объекты чтение
+    virtual bool    open() = 0;
+    virtual bool    close() = 0;
 
     virtual bool    path_exists(const wsptr &path) = 0;
     virtual bool    file_exists(const wsptr &path) = 0;
@@ -49,7 +48,4 @@ public:
 
 } // namespace ts
 
-#endif
-
-//#include "tsfile_rar.h"
 #include "tsfile_zip.h"

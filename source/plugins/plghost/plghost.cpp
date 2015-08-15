@@ -208,7 +208,7 @@ struct ipcwbuf_s
     ipcwbuf_s()
     {
         for(int i=0;i<preallocated_bitems;++i)
-            LIST_ADD( (data+i), first, last, prev, next );
+            LIST_ADD( (data+i), first, last, prev, next ); //-V619 // Wat? PVS-Studio too paranoiac?
     }
     ~ipcwbuf_s()
     {

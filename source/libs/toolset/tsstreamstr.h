@@ -40,6 +40,7 @@ public:
     typedef STRTYPE buftype_t;
     typedef typename STRTYPE::TCHAR char_t;
 private:
+    streamstr(const streamstr &) UNUSED;
     streamstr& operator=(streamstr &) UNUSED;
     buftype_t &boof;
 
@@ -113,10 +114,10 @@ public:
     {
         boof.append_as_num<NUM>(n);
     }
-    template<int SIZE> void append_num_hex( uint64 n )
+    template<aint SIZE> void append_num_hex( uint64 n )
     {
         char *cur = boof_current( SIZE * 2 ); if (!cur) return;
-        for (int i=0;i<SIZE;++i)
+        for (aint i=0;i<SIZE;++i)
         {
             set_hex( cur + (SIZE-i-1)*2, (n >> (i*8)) & 0xFF );
         }
@@ -169,7 +170,7 @@ private:
     }
 public:
     explicit streamstr(buftype_t& buf):boof(buf) {}
-    explicit streamstr(const char *func = nullptr):boof(get_static_buffer()) { if (func) boof.append(func); }
+    explicit streamstr(bool _YES_I_WANT_TO_USE_STATIC_BUFFER_):boof(get_static_buffer()) { ZSTRINGS_ASSERT(_YES_I_WANT_TO_USE_STATIC_BUFFER_); }
     ~streamstr() { }
 
     streamstr& operator<<(bool n) { begin(); boof.append(n ? CONSTASTR("TRUE") : CONSTASTR("FALSE")); return *this; }
@@ -207,8 +208,8 @@ public:
         begin();
         tm today;
         _localtime64_s(&today, &tim.t);
-        char *cur = boof.current(10); if (!cur) return *this;
-        strftime(cur, boof_current_size(), "[%Y-%m-%d %H:%M:%S]", &today); boof.update_len(cur);
+        char_t *cur = prepare_fill(16); if (!cur) return *this;
+        strftime(cur, boof_current_size(), "[%Y-%m-%d %H:%M:%S]", &today); boof_update_len(cur);
         return *this;
     }
 

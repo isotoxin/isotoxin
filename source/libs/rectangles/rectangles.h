@@ -14,11 +14,6 @@
 #include "toolset/toolset.h"
 #include "system/system.h"
 
-#define SLASSERT ASSERTO
-#define SLERROR ERROR
-#include "spinlock/spinlock.h"
-#include "spinlock/queue.h"
-
 #define MWHEELPIXELS 20
 
 #include "menu.h"

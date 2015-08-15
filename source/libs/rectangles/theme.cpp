@@ -4,14 +4,14 @@ using namespace ts;
 
 const theme_rect_s *cached_theme_rect_c::operator()( ts::uint32 st ) const
 {
-	if (theme_ver != gui->theme().ver())
+	if (theme_ver != gui->theme().ver()) //-V807
 	{
         if (theme_ver>=0)
         {
             for (int i = 0; i < RST_ALL_COMBINATIONS; ++i)
                 rects[i] = nullptr;
         }
-		theme_ver = gui->theme().ver();
+		theme_ver = gui->theme().ver(); //-V807
 
 		rects[0] = gui->theme().get_rect(themerect);
         rects[ RST_HIGHLIGHT ] = gui->theme().get_rect(tmp_str_c(themerect).append(CONSTASTR(".h")));
@@ -206,7 +206,7 @@ void button_desc_s::load_params(theme_c *th, const abp_c * block)
     size = ts::ivec2(10);
     for (int i = 0; i < numstates; ++i)
     {
-        if (rects[i].size().x > size.x)
+        if (rects[i].size().x > size.x) //-V807
             size.x = rects[i].size().x;
         if (rects[i].size().y > size.y)
             size.y = rects[i].size().y;
@@ -341,12 +341,12 @@ bool theme_c::load( const ts::wsptr &name )
             str_c bn = it->as_string();
             while (!bn.is_empty())
             {
-                const abp_c *parent = rs->get(bn);
+                const abp_c *parnt = rs->get(bn);
                 bn.clear();
-                if (parent)
+                if (parnt)
                 {
-                    it->merge(*parent, abp_c::SKIP_EXIST);
-                    bn = parent->as_string();
+                    it->merge(*parnt, abp_c::SKIP_EXIST);
+                    bn = parnt->as_string();
                 }
             }
             const drawable_bitmap_c &dbmp = loadimage(to_wstr(it->get_string("src")));
@@ -381,15 +381,15 @@ bool theme_c::load( const ts::wsptr &name )
         {
             shared_ptr<button_desc_s> &bd = buttons[it.name()];
 
-            str_c par= it->as_string();
+            str_c par = it->as_string();
             while (!par.is_empty())
             {
-                const abp_c *parent = btns->get(par);
+                const abp_c *parnt = btns->get(par);
                 par.clear();
-                if (parent)
+                if (parnt)
                 {
-                    it->merge(*parent, abp_c::SKIP_EXIST);
-                    par = parent->as_string();
+                    it->merge(*parnt, abp_c::SKIP_EXIST);
+                    par = parnt->as_string();
                 }
             }
 

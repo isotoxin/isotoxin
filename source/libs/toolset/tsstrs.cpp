@@ -13,19 +13,6 @@ namespace ts
 //	return vinfo.dwMajorVersion >= 5;
 //}
 
-void *str_wrap_ma(size_t sz)
-{
-	return MM_ALLOC(sz);
-}
-void *str_wrap_mra(void *oldp, size_t sz)
-{
-	return MM_RESIZE(oldp, sz);
-}
-void str_wrap_mf(void * p)
-{
-	MM_FREE(p);
-}
-
 int    str_wrap_text_ucs2_to_ansi(char *out, aint maxlen, const wsptr &from)
 {
 	if ( (maxlen==0) || (from.l== 0) ) return 0;

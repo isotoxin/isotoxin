@@ -28,14 +28,12 @@ public:
     ivec2 lastdrawsize;
 	drawable_bitmap_c texture;
 	GLYPHS  glyphs_internal;
-    //GLYPHS *glyphs_external = nullptr;
 
     static const flags32_s::BITS F_DIRTY            = TO_LAST_OPTION << 0;
     static const flags32_s::BITS F_INVALID_SIZE     = TO_LAST_OPTION << 1;
     static const flags32_s::BITS F_INVALID_TEXTURE  = TO_LAST_OPTION << 2;
     static const flags32_s::BITS F_INVALID_GLYPHS   = TO_LAST_OPTION << 3;
 
-    //GLYPHS & glyphs() { return glyphs_external ? (*glyphs_external) : glyphs_internal; }
     GLYPHS & glyphs() { return glyphs_internal; }
     const GLYPHS & glyphs() const { return glyphs_internal; }
     void update_rectangles( ts::ivec2 &offset, rectangle_update_s * updr ); // internal
@@ -66,7 +64,7 @@ public:
     void set_text_only(const wstr_c &text_, bool forcedirty) { if (forcedirty || !text.equals(text_)) { flags.set(F_DIRTY|F_INVALID_SIZE|F_INVALID_TEXTURE|F_INVALID_GLYPHS); text = text_; } }
 	bool set_text(const wstr_c &text, CUSTOM_TAG_PARSER ctp, bool do_parse_and_render_texture);
 	const wstr_c& get_text() const { return text; }
-    void set_options(ts::flags32_s nf)
+    void set_options(ts::flags32_s nf) //-V813
     {
         if ((flags.__bits & (TO_LAST_OPTION - 1)) != (nf.__bits & (TO_LAST_OPTION - 1)))
         {
@@ -95,14 +93,12 @@ public:
     ivec2 calc_text_size(const font_desc_c& font, const wstr_c&text, int maxwidth, uint flags, CUSTOM_TAG_PARSER ctp) const;
 
 	int  get_scroll_top() const {return scroll_top;}
-	//void scrollTo(int y) {scrollTop_ = y; render_texture();}
 
     drawable_bitmap_c &get_texture() { ASSERT(!flags.is(F_INVALID_TEXTURE|F_INVALID_GLYPHS)); return texture;};
 
-	//Рисует глифы в область памяти RGBA-изображения dst с полным блендингом.
-	//Параметр offset задает смещение, на которое сдвигается каждый глиф перед отрисовкой и может использоваться для скроллинга, а также для margin.
-	//pitch - смещение в байтах для перехода к следующей строке буфера изображения, обычно = width * 4.
-	static bool draw_glyphs(uint8 *dst, int width, int height, int pitch, const array_wrapper_c<const glyph_image_s> &glyphs, ivec2 offset = ivec2(0), bool prior_clear = true);
+	//render glyphs to RGBA buffer with full alpha-blending
+	//offset can be used for scrolling or margins
+	static bool draw_glyphs(uint8 *dst, int width, int height, int pitch, const array_wrapper_c<const glyph_image_s> &glyphs, const ivec2 & offset = ivec2(0), bool prior_clear = true);
 
 };
 

@@ -12,21 +12,22 @@ void Log(const char *s, ...);
 
 #ifdef _FINAL
 #define WARNING(...) do ; while ((1, false))
-#define ASSERT(...) (1, true)//чтобы не было предупреждения C4127
-#define ASSERTO(...) (1, true)//чтобы не было предупреждения C4127
-#define CHECK(expr,...) (expr)//в релизе проверка тоже должна отработать
+#define ASSERT(...) (1, true)
+#define ASSERTO(...) (1, true)
+#define CHECK(expr,...) (expr)
 #define TOOOFTEN(ms) (1, false)
 #define FORBIDDEN() do ; while ((1, false))
 #undef ERROR
 #define ERROR(...) do ; while ((1, false))
 #define DMSG(expr, ...) (1,true)
 #define RECURSIVE_ALERT()
+#define LOG(...) (1, false)
 #else
 
 #ifdef _DEBUG_OPTIMIZED
-#define SMART_DEBUG_BREAK (IsDebuggerPresent() ? __debugbreak(), false : false) //чтобы в _DEBUG_OPTIMIZED версии брейк был только из под отладчика
+#define SMART_DEBUG_BREAK (IsDebuggerPresent() ? __debugbreak(), false : false)
 #else
-#define SMART_DEBUG_BREAK __debugbreak() //в этом случае брейк срабатывает всегда, т.к. простой дебаг используют только программисты
+#define SMART_DEBUG_BREAK __debugbreak() // always break in debug
 #endif
 
 namespace ts 
@@ -81,24 +82,29 @@ namespace ts
 
 }
 
+//-V:ASSERT:807
+//-V:CHECK:807
+//-V:LOG:807
+
 #define TOOOFTEN(ms) ts::__tmbreak<__COUNTER__>(ms)
 
-#define ASSERTO(expr,...) NOWARNING(4800, ((expr) || (ts::AssertFailed(__FILE__, __LINE__, __VA_ARGS__) ? SMART_DEBUG_BREAK, false : false))) // (...) нужно чтобы можно было писать ASSERT(expr, "Message")
-#define CHECK ASSERT//в дебаг-версии CHECK работает также как и ASSERT
+#define ASSERTO(expr,...) NOWARNING(4800, ((expr) || (ts::AssertFailed(__FILE__, __LINE__, __VA_ARGS__) ? SMART_DEBUG_BREAK, false : false))) // (...) need to make possible syntax: ASSERT(expr, "Message")
+#define CHECK ASSERT // in debug CHECK same as ASSERT
 #define WARNING(...) (ts::Warning(__VA_ARGS__) ? SMART_DEBUG_BREAK, false : false)
 
 #undef ERROR
 #define ERROR(...) ts::Error(__VA_ARGS__)
 
-#define ASSERT(expr, ...) ASSERTO(expr, (ts::streamstr< ts::sstr_t<1024> >() << ""__VA_ARGS__).buffer().cstr())
+#define ASSERT(expr, ...) ASSERTO(expr, (ts::streamstr< ts::sstr_t<1024> >(true) << ""__VA_ARGS__).buffer().cstr())
 #define FORBIDDEN() ERROR("bad execution")
 #define RECURSIVE_ALERT() static int __r = 0; struct rcheck { int *r; rcheck(int *r):r(r) {++ (*r); ASSERT(*r == 1);} ~rcheck() {-- (*r);} } __rcheck(&__r)
+#define LOG(...) ts::LogMessage(nullptr, (ts::streamstr< ts::sstr_t<1024> >(true) << ""__VA_ARGS__).buffer().cstr())
 
 namespace ts
 {
 #ifdef __DMSG__
 void _cdecl dmsg(const char *str);
-#define DMSG(...) ts::dmsg( (ts::streamstr< ts::sstr_t<1024> >() << ""__VA_ARGS__).buffer().cstr() )
+#define DMSG(...) ts::dmsg( (ts::streamstr< ts::sstr_t<1024> >(true) << ""__VA_ARGS__).buffer().cstr() )
 #else
 INLINE void _cdecl dmsg(const char *str) {}
 #define DMSG(expr, ...) (1,true)

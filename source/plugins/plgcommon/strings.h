@@ -5,6 +5,7 @@
 #define ZSTRINGS_NULL nullptr
 #define ZSTRINGS_CRC32(p,s) 0
 #define ZSTRINGS_FORCEINLINE __forceinline
+#define ZSTRINGS_NAMESPACE
 #ifndef _FINAL
 #define ZSTRINGS_DEBUG 1
 #define ZSTRINGS_ASSERT ASSERT
@@ -16,6 +17,7 @@
 #define ZSTRINGS_DEFAULT_STATIC_SIZE 1024 // 1024 bytes - default static string in-memory size
 //#define ZSTRINGS_VEC3(t) vec_t<t,3>
 
+#define ZSTRINGS_ALLOCATOR STR_ALLOCATOR
 
 typedef char ZSTRINGS_ANSICHAR;
 typedef wchar_t ZSTRINGS_WIDECHAR;
@@ -26,18 +28,12 @@ typedef ptrdiff_t ZSTRINGS_SIGNED;
 
 template<typename TCHARACTER> struct sptr;
 
-inline void *	str_wrap_ma(ZSTRINGS_UNSIGNED sz) // mem alloc
+struct STR_ALLOCATOR
 {
-    return dlmalloc(sz);
-}
-inline void *	str_wrap_mra(void *oldp, size_t sz) // mem realloc
-{
-    return dlrealloc(oldp, sz);
-}
-inline void	str_wrap_mf(void * p) // mem free
-{
-    dlfree(p);
-}
+    void mf(void *ptr) { dlfree(ptr); }
+    void *ma(ZSTRINGS_UNSIGNED sz) { return dlmalloc(sz); }
+    void *mra(void *ptr, ZSTRINGS_UNSIGNED sz) { return dlrealloc(ptr, sz); }
+};
 
 int     str_wrap_text_ucs2_to_ansi(char *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_WIDECHAR> &from);
 void    str_wrap_text_ansi_to_ucs2(wchar_t *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_ANSICHAR> &from);

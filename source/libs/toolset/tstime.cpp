@@ -151,7 +151,7 @@ void    timerprocessor_c::its_time(timer_subscriber_c *t, void * par)
     }
 }
 
-message_poster_c::message_poster_c(int pausems) :MVINIT(m_data), m_pausems(pausems)
+message_poster_c::message_poster_c(int pausems): m_pausems(pausems)
 {
 
 }
@@ -203,7 +203,7 @@ void message_poster_c::start(HWND w, int msg, WPARAM wp, LPARAM lp)
 {
     stop();
 
-    cs_lock_t<data_s>::WRITER wr = m_data.lock_write();
+    auto wr = m_data.lock_write();
     wr().w = w;
     wr().msg = msg;
     wr().wp = wp;
@@ -213,12 +213,7 @@ void message_poster_c::start(HWND w, int msg, WPARAM wp, LPARAM lp)
     wr().pause = false;
     wr.unlock();
 
-    DWORD tid;
-    HANDLE t = CreateThread(nullptr, 0, worker, this, 0, &tid);
-    if (t == nullptr)
-    {
-    }
-    else
+    if (HANDLE t = CreateThread(nullptr, 0, worker, this, 0, nullptr))
     {
         CloseHandle(t);
         for (;;)

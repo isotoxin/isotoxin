@@ -130,7 +130,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     dm().button(ts::wstr_c(), TTT("Проверить наличие обновления",208), DELEGATE(this, check_update_now)).height(35).setname(CONSTASTR("checkupdb"));
     dm().vspace(5);
 
-    title.set( CONSTWSTR("<p=c>Used libs<hr><l><a href=\"https://libtoxcore.so/\">Tox core</a>") );
+    title.set( CONSTWSTR("<p=c>Used libs<hr><l><a href=\"https://github.com/irungentoo/toxcore/\">Tox core</a>") );
     title.append( CONSTWSTR(" <a href=\"https://www.opus-codec.org\">Opus audio codec</a>") );
     title.append( CONSTWSTR(" <a href=\"http://vorbis.com\">Ogg Vorbis audio codec</a>"));
     title.append( CONSTWSTR(" <a href=\"https://xiph.org/flac/\">Flac audio codec</a>"));

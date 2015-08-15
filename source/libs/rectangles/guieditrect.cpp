@@ -659,7 +659,7 @@ void gui_textedit_c::prepare_texture()
 	// glyphs and selection
 	for (int l = visible_lines.r0; l <= visible_lines.r1; ++l) // lines
 	{
-		if (l > 0 && text.get(lines.get(l).r0-1) == L'\n') current_color = 0; // new line always reset current color
+		if (l > 0 && text.get(lines.get(l).r0-1) == L'\n') current_color = 0; //-V807 // new line always reset current color
 		ts::ivec2 pen(ts::ui_scale(margin_left) - scroll_left, (*font)->ascender + l*(*font)->height + ts::ui_scale(margin_top) - scroll_top());
 
 		for (int i = lines.get(l).r0; i < lines.get(l).r1; ++i) // chars at current line
@@ -668,7 +668,7 @@ void gui_textedit_c::prepare_texture()
 			const ts::wchar *str = nullptr;
             active_element_s *ae = nullptr;
 			int str_len = 0, advoffset = 0;
-			ts::TSCOLOR color = (current_color == 0 ? colors.get(i-firstvischar).first : current_color);
+			ts::TSCOLOR cc = (current_color == 0 ? colors.get(i-firstvischar).first : current_color);
 			if (!password_char)
 				if (el.is_char())
 					str = (ts::wchar*)&el.p + 1, str_len = 1;
@@ -684,7 +684,7 @@ void gui_textedit_c::prepare_texture()
 					}
 					str = el.p->str;
 					str_len = el.p->str.get_length();
-					if (el.p->color/*if == 0, then color of text_element_c not set*/) color = el.p->color;
+					if (el.p->color/*if == 0, then color of text_element_c not set*/) cc = el.p->color;
 #endif
 				}
 			else
@@ -701,7 +701,7 @@ void gui_textedit_c::prepare_texture()
 				ts::ivec2 pos = ts::ivec2(advoffset, ts::ui_scale(baseline_offset)) + pen;
 				gi.pos.x = (ts::int16)(glyph.left + pos.x);
                 gi.pos.y = (ts::int16)(-glyph.top + pos.y);
-				gi.color = color;
+				gi.color = cc;
 				gi.thickness = 0;
 				advoffset += glyph.advance;
 				if (outline_color)

@@ -355,7 +355,7 @@ bool image_loader_c::upd_btnpos(RID r, GUIPARAM p)
         update_ctl_pos();
     else
         if ( local_p + ts::ivec2(4) != owner->getprops().pos() )
-            DEFERRED_UNIQUE_CALL(0, DELEGATE(this, upd_btnpos), (GUIPARAM)1);
+            DEFERRED_UNIQUE_CALL(0, DELEGATE(this, upd_btnpos), (GUIPARAM)1); //-V566
     return true;
 }
 
@@ -365,11 +365,8 @@ void image_loader_c::update_ctl_pos()
 
     if (item)
     {
-        if (item)
-        {
-            ts::irect rr( owner->getprops().pos(), owner->getprops().pos() + explorebdsc->size );
-            item->getengine().redraw( &rr ); // redraw old position of button
-        }
+        ts::irect rr( owner->getprops().pos(), owner->getprops().pos() + explorebdsc->size );
+        item->getengine().redraw( &rr ); // redraw old position of button
 
         MODIFY(*owner).pos(local_p + ts::ivec2(4)).size(explorebdsc->size).visible(true);
         //MODIFY(*owner).pos(5, 5).size(explorebdsc->size);

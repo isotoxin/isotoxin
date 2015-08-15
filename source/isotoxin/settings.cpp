@@ -1,5 +1,7 @@
 #include "isotoxin.h"
 
+//-V:dm:807
+
 #define HGROUP_MEMBER ts::wsptr()
 
 
@@ -26,7 +28,7 @@ static void check_proxy_addr(int connectiontype, RID editctl, ts::str_c &proxyad
 }
 
 
-dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c(data), ipcj( (ts::streamstr<ts::str_c>() << "isotoxin_settings_" << GetCurrentThreadId()).buffer(), prf().is_loaded() ? DELEGATE( this, ipchandler ) : nullptr )
+dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c(data), ipcj( ts::str_c(CONSTASTR("isotoxin_settings_")).append_as_uint(GetCurrentThreadId()), prf().is_loaded() ? DELEGATE( this, ipchandler ) : nullptr )
 {
     s3::enum_sound_capture_devices(enum_capture_devices, this);
     s3::enum_sound_play_devices(enum_play_devices, this);
@@ -127,7 +129,7 @@ bool dialog_settings_c::statusmsg_edit_handler( const ts::wstr_c &v )
 
 bool dialog_settings_c::fileconfirm_handler(RID, GUIPARAM p)
 {
-    fileconfirm = (int)p;
+    fileconfirm = (int)p; //-V205
 
     if (RID r = find(CONSTASTR("confirmauto")))
         r.call_enable( fileconfirm == 0 );
@@ -168,19 +170,19 @@ bool dialog_settings_c::date_sep_tmpl_edit_handler(const ts::wstr_c &v)
 
 bool dialog_settings_c::ctl2send_handler( RID, GUIPARAM p )
 {
-    ctl2send = (int)p;
+    ctl2send = (int)p; //-V205
     return true;
 }
 
 bool dialog_settings_c::collapse_beh_handler(RID, GUIPARAM p)
 {
-    collapse_beh = (int)p;
+    collapse_beh = (int)p; //-V205
     return true;
 }
 
 bool dialog_settings_c::autoupdate_handler( RID, GUIPARAM p)
 {
-    autoupdate = (int)p;
+    autoupdate = (int)p; //-V205
     if (RID r = find(CONSTASTR("proxytype")))
         r.call_enable(autoupdate > 0);
     if (RID r = find(CONSTASTR("proxyaddr")))
@@ -258,7 +260,7 @@ bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
 
 void dialog_settings_c::select_theme(const ts::str_c& prm)
 {
-    ts::wstr_c selfo; selfo.set_as_utf8(prm);
+    ts::wstr_c selfo( from_utf8(prm) );
     for( theme_info_s &ti : m_themes )
         ti.current = ti.folder.equals(selfo);
     set_combik_menu(CONSTASTR("themes"), list_themes());
@@ -499,13 +501,13 @@ void dialog_settings_c::describe_network(ts::wstr_c&desc, const ts::str_c& name,
 
     if (mask & MASK_PROFILE_FILES)
     {
-        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, fileconfirm_handler), (GUIPARAM)fileconfirm);
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, fileconfirm_handler), (GUIPARAM)fileconfirm); //-V204
     }
 
     if (mask & MASK_APPLICATION_COMMON)
     {
         select_lang(curlang);
-        autoupdate_handler(RID(),(GUIPARAM)autoupdate);
+        autoupdate_handler(RID(),(GUIPARAM)autoupdate); //-V204
         autoupdate_proxy_handler(ts::amake(autoupdate_proxy));
         if (RID r = find(CONSTASTR("proxyaddr")))
         {
@@ -533,13 +535,13 @@ void dialog_settings_c::on_delete_network_2(const ts::str_c&prm)
 
 bool dialog_settings_c::delete_used_network(RID, GUIPARAM param)
 {
-    auto *row = table_active_protocol_underedit.find<false>((int)param);
+    auto *row = table_active_protocol_underedit.find<false>((int)param); //-V205
     if (ASSERT(row))
     {
         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
             gui_isodialog_c::title(DT_MSGBOX_WARNING),
             TTT("Соединение [$] используется! Будут удалены все контакты, использующие это соединение. Также будет удалена история сообщений этих контактов. Вы всё еще уверены?",267) / from_utf8(row->other.name)
-            ).on_ok(DELEGATE(this, on_delete_network_2), ts::amake<int>((int)param)).bcancel());
+            ).on_ok(DELEGATE(this, on_delete_network_2), ts::amake<int>((int)param)).bcancel()); //-V205
     }
     return true;
 }
@@ -868,7 +870,7 @@ bool dialog_settings_c::ipchandler( ipcr r )
                 int n = r.get<int>();
                 while(--n >= 0)
                 {
-                    ts::tmp_str_c d = r.getastr();
+                    ts::pstr_c d = r.getastr();
                     int p = d.find_pos(':');
                     protocols_s &proto = available_prots.add();
                     proto.description = d.substr(p + 2);

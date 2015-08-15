@@ -1,5 +1,4 @@
-#ifndef _INCLUDE_TSPACKCOL
-#define _INCLUDE_TSPACKCOL
+#pragma once
 
 #include "tspackfile.h"
 
@@ -57,4 +56,3 @@ public:
 
 } // namespace ts
 
-#endif

@@ -148,7 +148,7 @@ class message_poster_c
         data_s() :working(false), stoping(false), pause(false) {}
     };
 
-    cs_lock_t<data_s> m_data;
+    spinlock::syncvar<data_s> m_data;
     int m_pausems;
 
     static DWORD WINAPI worker(LPVOID lpParameter);

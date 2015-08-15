@@ -174,16 +174,24 @@ rectengine_c::~rectengine_c()
             TSDEL(e);
     }
 
-    if (gui) gui->delete_event(DELEGATE(this, cleanup_children)); // удалять этот эвент надо после работы предыдущего цикла, т.к. он инициирует этот эвент
+    if (gui) gui->delete_event(DELEGATE(this, cleanup_children)); // previous clear-loop can produce this event, so it should be deleted now
 
     if (guirect_c *r = rect_)
     {
-        // если мы тут, то удаляется rectengine первым, что весьма черезжопно
+        /* it's very very tricky
+           do not repeat it at home
+
+            rectengine should be deleted before guirect
+            but
+            guirect is owner of rectengine
+            how it can be done?
+        */
+
         if (&r->getengine() == this)
         {
-            // поскольку guirect владелец rectengine'а (unique_ptr), то по хорошему нельзя удалять rectengine
-            // но мы все равно позволяем это делать
-            // хотя и приходится немного поприседать
+            /*
+                unique ptr to this rectengine must be cleared without call desctructor!
+            */
             r->__spec_remove_engine();
         }
         TSDEL(r);
@@ -794,7 +802,7 @@ rectengine_root_c::~rectengine_root_c()
     {
         NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
         nd.hWnd = hwnd;
-        nd.uID = (int)this;
+        nd.uID = (int)this; //V-205
         Shell_NotifyIconW(NIM_SETFOCUS, &nd);
     }
 
@@ -871,7 +879,7 @@ void rectengine_root_c::kill_window()
         {
             NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
             nd.hWnd = hwnd;
-            nd.uID = (int)this;
+            nd.uID = (int)this; //V-205
             Shell_NotifyIconW(NIM_DELETE, &nd);
             flags.clear(F_NOTIFY_ICON);
         }
@@ -1254,7 +1262,7 @@ static void draw_image( HDC dc, const ts::drawable_bitmap_c &image, ts::aint x, 
     image.draw(dc, x, y, imgrectnew, alpha);
 }
 
-struct repdraw
+struct repdraw //-V690
 {
     HDC dc;
     const ts::drawable_bitmap_c &image;
@@ -1499,7 +1507,7 @@ void border_window_data_s::draw()
         rdraw.rend = nullptr;
 
         int y = dd.offset.y;
-        for (int ylmt = d->draw_thr.rect().lt.y + dd.offset.y; y < ylmt; y += rdraw.rrep->height())
+        for (int ylmt = d->draw_thr.rect().lt.y + dd.offset.y; y < ylmt; y += rdraw.rrep->height()) //-V807
             rdraw.draw_h(dd.offset.x, rbpt.x, y, thr.siso[SI_BASE].tile);
 
         int y2 = rbpt.y;
@@ -1904,7 +1912,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
             gui->check_hintzone(data.mouse.screenpos);
             data.mouse.allowchangecursor = true;
             HWND h = GetCapture();
-            RID rid = getrid();
+            rid = getrid();
 			const hover_data_s &hd = gui->get_hoverdata(data.mouse.screenpos);
             if (hd.rid && !h)
             {
@@ -2087,7 +2095,7 @@ void rectengine_root_c::notification_icon( const ts::wsptr& text )
 {
     static NOTIFYICONDATAW nd = { sizeof(NOTIFYICONDATAW), 0 };
     nd.hWnd = hwnd;
-    nd.uID = (int)this;
+    nd.uID = (int)this; //V-205
     nd.uCallbackMessage = WM_USER + 7213;
     //nd.hIcon = gui->app_icon(true);
 

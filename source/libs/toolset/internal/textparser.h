@@ -33,8 +33,8 @@ struct glyph_image_s
     {
         struct // not a glyph, but service info
         {
-            void *zeroptr; // nullptr
-            int outline_index; // если -1, следующие 2 пол€ актуальныы, если 0, то этот глиф надо игнорировать, если >0, то сначала идет отрисовка глифов от этого индекса и до конца массива
+            void *zeroptr; // nullptr // same as pixels
+            int outline_index; // if -1, then next 3 fields are actual, if 0, this glyph should be skipped, if >0, then rendering order should be changed according value
             int next_dim_glyph;
             svec2 line_lt;
             svec2 line_rb;
@@ -43,13 +43,13 @@ struct glyph_image_s
         {
             const uint8 *pixels; // not nullptr
             int charindex;
-            TSCOLOR color; //если не 0, то pixels указывает на alpha-изображение, которое нужно вывести с данным color (rgb беретс€ напр€мую из color, а альфа получаетс€ перемножением color.a и alpha пиксел€)
-                           //если = 0, то pixels указывает на rgba-premultiplied-изображение, которое выводитс€ как есть
+            TSCOLOR color; //if !0, then pixels points to alpha-image (8 bit per pixel); image should be rendered with color
+                           //if ==0, то pixels points to rgba-premultiplied-image; image should be rendered as is
 
-            /*underline*/ float thickness;//толщина линии (если < 0, то линию рисовать не нужно - это дл€ вс€ких span-ов, чтоб можно было динамически и независимо включать подчеркивание текста в них)
+            /*underline*/ float thickness; // if < 0, then underline shouldn't be drawn
 
 	        svec2 pos;
-            /*underline*/ svec2 start_pos;//начало линии относительно левого верхнего угла изображени€
+            /*underline*/ svec2 start_pos; // underline start position
 	        uint16 width, height, pitch, /*underline*/ length;
         };
         struct
@@ -67,7 +67,6 @@ typedef fastdelegate::FastDelegate<bool (wstr_c &, const wsptr &)> CUSTOM_TAG_PA
 
 ivec2 parse_text(const wstr_c &text, int max_line_length, CUSTOM_TAG_PARSER ctp, GLYPHS *glyphs = nullptr, TSCOLOR default_color = ARGB(0,0,0), font_c *default_font = g_default_text_font, uint32 flags = 0, int boundy = 0);
 
-//—читает пр€моугольник, ограничивающий все глифы из заданного массива
 irect glyphs_bound_rect(const GLYPHS &glyphs);
 int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p, bool strong = false);
 int glyphs_get_charindex(const GLYPHS &glyphs, int glyphindex);

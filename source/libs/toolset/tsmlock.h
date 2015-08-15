@@ -1,7 +1,15 @@
 #pragma once
 
+#define SLASSERT ASSERTO
+#define SLERROR ERROR
+#include "spinlock/spinlock.h"
+#include "spinlock/queue.h"
+
 namespace ts
 {
+
+#if 0
+
 #ifndef _FINAL
 #define MVINIT( n ) n( #n )
 #else
@@ -415,6 +423,8 @@ public:
     void unlock(bool f) {_flag = f; LeaveCriticalSection(&_cs);}
     void unlock_or(bool f) {_flag |= f; LeaveCriticalSection(&_cs);}
 };
+
+#endif
 
 #pragma intrinsic (_InterlockedCompareExchange)
 

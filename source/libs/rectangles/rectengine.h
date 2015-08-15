@@ -127,8 +127,8 @@ public:
     void child_move_to( int index, rectengine_c *e );
     
 
-    const guirect_c &getrect() const { ASSERT(this); return SAFE_REF(rect_); }
-    guirect_c &getrect() { ASSERT(this); return SAFE_REF(rect_); }
+    const guirect_c &getrect() const { ASSERT(this); return SAFE_REF(rect_); } //-V704
+    guirect_c &getrect() { ASSERT(this); return SAFE_REF(rect_); } //-V704
 
     virtual ts::uint32 detect_area(const ts::ivec2 &localpt);
     virtual bool detect_hover(const ts::ivec2 & screenpos) const { return false; };

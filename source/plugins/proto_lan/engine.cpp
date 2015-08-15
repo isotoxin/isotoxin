@@ -519,8 +519,7 @@ void datablock_s::die()
 
 lan_engine::contact_s::~contact_s()
 {
-    if (media)
-        delete media;
+    delete media;
     for(;sendblock_f;)
     {
         datablock_s *m = sendblock_f;
@@ -956,7 +955,7 @@ void lan_engine::tick(int *sleep_time_ms)
             break;
         }
 
-        if (pipe) delete pipe;
+        delete pipe;
     }
 
     if (media_data_transfer)
@@ -1217,12 +1216,12 @@ enum chunks_e // HADR ORDER!!!!!!!!
     chunk_contact_invitemsg,
     chunk_contact_tmpkey,
     chunk_contact_authkey,
-    chunk_contact_sendmessages,
+    __unused__chunk_contact_sendmessages,
 
-    chunk_contact_sendmessage,
-    chunk_contact_sendmessage_type,
-    chunk_contact_sendmessage_body,
-    chunk_contact_sendmessage_utag,
+    __unused__chunk_contact_sendmessage,
+    __unused__chunk_contact_sendmessage_type,
+    __unused__chunk_contact_sendmessage_body,
+    __unused__chunk_contact_sendmessage_utag,
     __unused__chunk_contact_sendmessage_createtime,
 
     chunk_magic,
@@ -1365,6 +1364,7 @@ void lan_engine::set_config(const void*data, int isz)
                         log_auth_key( "loaded", c->authorized_key );
                     }
 
+                    /*
                     if (int sz = lc(chunk_contact_sendmessages))
                     {
                         while (datablock_s *m = c->sendblock_f)
@@ -1394,6 +1394,7 @@ void lan_engine::set_config(const void*data, int isz)
                                 }
                             }
                     }
+                    */
 
                     if (lc(chunk_contact_changedflags))
                         c->changed_self = lc.get_int();
@@ -1460,8 +1461,10 @@ void operator<<(chunk &chunkm, const lan_engine::contact_s &c)
         log_auth_key( "saved", c.authorized_key );
     }
 
+    /*
     if (c.sendblock_f)
         chunk(chunkm.b, chunk_contact_sendmessages) << serlist<datablock_s>(c.sendblock_f);
+        */
 
     chunk(chunkm.b, chunk_contact_changedflags) << (int)c.changed_self;
 
@@ -1483,6 +1486,8 @@ void operator<<(chunk &chunkm, const lan_engine::contact_s &c)
 
 
 }
+
+/*
 void operator<<(chunk &chunkm, const datablock_s &m)
 {
     // some messages here means not all changed values were delivered
@@ -1504,6 +1509,7 @@ void operator<<(chunk &chunkm, const datablock_s &m)
     chunk(chunkm.b, chunk_contact_sendmessage_utag) << m.delivery_tag;
     chunk(chunkm.b, chunk_contact_sendmessage_body) << bytes(m.data(), m.len);
 }
+*/
 
 void lan_engine::save_config(void *param)
 {

@@ -42,7 +42,7 @@ struct bufmod_fill
             memcpy(newb, oldb, offset);
             memcpy(newb + offset + sz, oldb + offset + sz, oldl - offset - sz);
         }
-        for (int i = offset; i < (offset + sz); ++i)
+        for (aint i = offset; i < (offset + sz); ++i)
             newb[i] = c;
         return newl;
     }
@@ -141,8 +141,8 @@ template<aint GRANULA, typename ALLOCATOR> struct BUFFER_RESIZABLE : public ALLO
     }
 
     uint8   *m_data;
-    int     m_size;        //bytes
-    int     m_capacity;    //allocated memory
+    aint     m_size;        //bytes
+    aint     m_capacity;    //allocated memory
 
     uint8  *operator()() { return m_data; }
     const uint8  *operator()() const { return m_data; }
@@ -190,9 +190,9 @@ template<aint GRANULA, typename ALLOCATOR> struct BUFFER_RESIZABLE_COPY_ON_DEMAN
 {
     struct core_s
     {
-        int     m_size;        //bytes
-        int     m_capacity;    //allocated memory
-        int     m_ref;
+        aint     m_size;        //bytes
+        aint     m_capacity;    //allocated memory
+        aint     m_ref;
         bool release()
         {
             --m_ref;
@@ -283,7 +283,7 @@ template<aint GRANULA, typename ALLOCATOR> struct BUFFER_RESIZABLE_COPY_ON_DEMAN
         if (newlen > m_core->m_capacity)
         {
             m_core->m_capacity = newlen + GRANULA;
-            m_core = (core_s *)mra(m_core, sizeof(uint8)*m_core->m_capacity + sizeof(core_s));
+            m_core = (core_s *)mra(m_core, m_core->m_capacity + sizeof(core_s));
         }
 
         aint fixlen = moder((uint8 *)(m_core + 1), newlen, (uint8 *)(m_core + 1), m_core->m_size);
@@ -329,7 +329,7 @@ public:
 
     const asptr cstr() const { return asptr((const char*)core(), core.size()); }
 
-    bool inside(const void *ptr, int sz) const
+    bool inside(const void *ptr, aint sz) const
     {
         return ptr >= data() && (((uint8 *)ptr)-data()+sz) <= size();
     }
@@ -474,7 +474,7 @@ public:
     /// Quick-sort the array.
     /// Parameter is functional object
     /// Spizheno u skyfallen
-    template < typename T, typename F > bool tsort(F &comp, int ileft = 0, int irite = -1)
+    template < typename T, typename F > bool tsort(F &comp, aint ileft = 0, aint irite = -1)
     {
         TS_STATIC_CHECK(is_movable<T>::value, "movable type expected!");
         
@@ -502,7 +502,7 @@ public:
             k--;
             i = a = st0[k];
             j = b = st1[k];
-            int center = (a + b) / 2;
+            aint center = (a + b) / 2;
             T *x = tget<T>(center);
             while (a < b)
             {
@@ -558,7 +558,7 @@ public:
         return sorted;
     }
 
-    template<typename T> bool tsort(int ileft = 0, int irite = -1)
+    template<typename T> bool tsort(aint ileft = 0, aint irite = -1)
     {
         struct
         {
@@ -597,13 +597,13 @@ public:
     }
     bool is_any_bit() const
     {
-        int cnt = core.size() / sizeof(auint);
-        for (int i = 0; i < cnt; ++i)
+        aint cnt = core.size() / sizeof(auint);
+        for (aint i = 0; i < cnt; ++i)
         {
             if (((auint *)core())[i] != 0) return true;
         }
         cnt = core.size() & (sizeof(auint) - 1);
-        for (int i = 0; i<cnt; ++i)
+        for (aint i = 0; i<cnt; ++i)
         {
             if (core()[core.size() - cnt + i]) return true;
         }
@@ -626,7 +626,7 @@ public:
         if (ASSERT(core.writable()))
         {
             aint cnt = tmin(core.size(), bset.size()) / sizeof(auint);
-            for (int i = 0; i < cnt; ++i)
+            for (aint i = 0; i < cnt; ++i)
             {
                 auint old = tbegin<auint>()[i];
                 auint n = old | bset.tbegin<auint>()[i];
@@ -636,9 +636,9 @@ public:
                     tbegin<auint>()[i] = n;
                 }
             }
-            int index = cnt*sizeof(auint);
+            aint index = cnt*sizeof(auint);
             cnt = tmin(core.size() - index, bset.size() - index);
-            for (int i = 0; i < cnt; ++i)
+            for (aint i = 0; i < cnt; ++i)
             {
                 uint8 old = core()[index + i];
                 uint8 n = old | bset.data()[index + i];
@@ -653,14 +653,14 @@ public:
     }
     template<typename CORE2> bool is_any_common_bit(const buf_t<CORE2> &bset) const
     {
-        int cnt = tmin(core.size(), bset.size()) / sizeof(auint);
-        for (int i = 0; i < cnt; ++i)
+        aint cnt = tmin(core.size(), bset.size()) / sizeof(auint);
+        for (aint i = 0; i < cnt; ++i)
         {
             if (0 != (((auint *)core())[i] & bset.tbegin<auint>()[i])) return true;
         }
-        int index = cnt*sizeof(auint);
+        aint index = cnt*sizeof(auint);
         cnt = tmin(m_size - index, bset.size() - index);
-        for (int i = 0; i < cnt; ++i)
+        for (aint i = 0; i < cnt; ++i)
         {
             if (0 != (core()[index + i] & bset.data()[index + i])) return true;
         }
@@ -754,7 +754,7 @@ public:
         ASSERT( (buf.size() & sizeof(T)) == 0 );
     }
 
-    aint    byte_size() const { return __super::size(); };
+    aint    byte_size() const { return __super::size(); }; //-V524
 
     /*
     tbuf_t(type_buf_c && tb)
@@ -875,7 +875,7 @@ public:
 
     template <typename F> bool  insert_sorted_uniq(const T &t, F &comp)
     {
-        int index;
+        aint index;
         if (find_index_sorted(index, t, comp))
         {
             return false;
@@ -887,9 +887,9 @@ public:
         return true;
     }
 
-    template <typename F> int  set_sorted_uniq(const T &t, F &comp)
+    template <typename F> aint  set_sorted_uniq(const T &t, F &comp)
     {
-        int index;
+        aint index;
         if (find_index_sorted(index, t, comp))
         {
         }
@@ -901,7 +901,7 @@ public:
     }
 
 
-    template<typename F> bool find_index_sorted(int &index, const T &t, F &comp) const
+    template<typename F> bool find_index_sorted(aint &index, const T &t, F &comp) const
     {
         if (count() == 0)
         {
@@ -916,10 +916,10 @@ public:
         }
 
 
-        int left = 0;
-        int rite = count();
+        aint left = 0;
+        aint rite = count();
 
-        int test;
+        aint test;
         do
         {
             test = (rite + left) >> 1;
@@ -942,7 +942,7 @@ public:
             }
         } while (left < (rite - 1));
 
-        if (left >= (int)count())
+        if (left >= count())
         {
             index = left;
             return false;
@@ -990,7 +990,7 @@ public:
         ASSERT(index >= 0 && index < count());
         return tbegin<T>()[index];
     }
-    T & get(aint index)
+    T & get(aint index) //-V659
     {
         ASSERT(is_writable());
         ASSERT(index >= 0 && index < count());
@@ -1033,7 +1033,7 @@ public:
     T pop() { return tpop<T>(); }
     void  push(const T &d) {tpush<T>(d);}
 
-    bool sort(int ileft = 0, int irite = -1) { return tsort<T>(ileft, irite); }
+    bool sort(aint ileft = 0, aint irite = -1) { return tsort<T>(ileft, irite); }
 
     void remove_slow(aint index, aint co = 1)
     {
@@ -1065,11 +1065,11 @@ public:
         return i;
     }
 
-    void move_up_unsafe(int index)
+    void move_up_unsafe(aint index)
     {
         swap_unsafe(index, index - 1);
     }
-    void move_down_unsafe(int index)
+    void move_down_unsafe(aint index)
     {
         swap_unsafe(index, index + 1);
     }
@@ -1079,7 +1079,7 @@ public:
     // begin() end() semantics
 
     T * begin() { ASSERT(is_writable()); return tbegin<T>(); }
-    const T *begin() const { return tbegin<T>(); }
+    const T *begin() const { return tbegin<T>(); } //-V659 //-V524
 
     T *end() { return const_cast<T *>(tend<T>()); }
     const T *end() const { return tend<T>(); }
@@ -1200,7 +1200,7 @@ namespace internal
             ELBYTES = ((BITS_PER_ELEMENT + 7) & (~7)) / 8,
         };
         static const bool MULTIBYTE = (BITS_PER_ELEMENT == 3 || (BITS_PER_ELEMENT >= 5 && BITS_PER_ELEMENT < 8) || BITS_PER_ELEMENT > 8);
-        static const size_t MINIMUMRVSIZE = MULTIBYTE ? (BITS_PER_ELEMENT - 8 * size_t(BITS_PER_ELEMENT / 8) == 1 ? ELBYTES : (ELBYTES + 1)) : 1;
+        static const size_t MINIMUMRVSIZE = MULTIBYTE ? (BITS_PER_ELEMENT - 8 * size_t(BITS_PER_ELEMENT / 8) == 1 ? ELBYTES : (ELBYTES + 1)) : 1; //-V101
     };
 };
 
@@ -1294,7 +1294,7 @@ public:
         newdata = 0;
         readpos = 0;
     }
-    int available()  const { return buf[readbuf].size() - readpos + buf[readbuf ^ 1].size(); }
+    aint available()  const { return buf[readbuf].size() - readpos + buf[readbuf ^ 1].size(); }
 };
 
 

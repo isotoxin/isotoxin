@@ -13,7 +13,7 @@ namespace
 
         smile_element_s(const emoticon_s *e, int maxh):e(e)
         {
-            advance = e->framesize().x;
+            advance = e->framesize().x; //-V807
             if (maxh && e->framesize().y > maxh)
             {
                 float k = (float)maxh / (float)e->framesize().y;
@@ -53,7 +53,7 @@ namespace
                 gi.pos.y = (ts::int16)(pos.y - bmp.info().sz.y)+2;
             } else
             {
-                gi.width = (ts::uint16)e->framesize().x;
+                gi.width = (ts::uint16)e->framesize().x; //-V807
                 gi.height = (ts::uint16)e->framesize().y;
                 gi.pitch = e->curframe().info().pitch;
                 gi.pixels = e->curframe().body();
@@ -338,6 +338,8 @@ void emoticons_c::reload()
     }
 }
 
+bool find_link( ts::str_c &message, int from, ts::ivec2 & rslt );
+
 void emoticons_c::parse( ts::str_c &t, bool to_unicode )
 {
     struct rpl_s
@@ -347,6 +349,56 @@ void emoticons_c::parse( ts::str_c &t, bool to_unicode )
         const emoticon_s *e;
     };
     ts::tmp_tbuf_t<rpl_s> rpl;
+
+    // detect forbidden areas (do not parse emoticons inside these areas)
+
+    if (to_unicode)
+    {
+        // raw text
+        // forbidden areas == links
+
+        ts::ivec2 linkinds;
+        for (int i = 0; find_link(t, i, linkinds);)
+        {
+            rpl_s &r = rpl.add();
+            r.index = linkinds.r0;
+            r.sz = linkinds.r1 - linkinds.r0;
+            r.e = nullptr;
+
+            i = linkinds.r1;
+        }
+
+    } else
+    {
+        // parsed text
+        // forbidden areas == parsed links
+
+        for (int sfi = 0;;)
+        {
+            int i = t.find_pos(sfi, CONSTASTR("<cstm=a"));
+            if (i >= 0)
+            {
+                sfi = i + 7;
+                int j = t.find_pos(sfi, CONSTASTR("<cstm=b"));
+                if (j > i)
+                {
+                    int k = t.find_pos(j, '>');
+                    if (k > j)
+                    {
+                        sfi = k + 1;
+                        rpl_s &r = rpl.add();
+                        r.index = i;
+                        r.sz = sfi - i;
+                        r.e = nullptr;
+                        continue;
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+
     for( const match_point_s&mp : matchs )
     {
         int sf = 0;
@@ -393,6 +445,9 @@ void emoticons_c::parse( ts::str_c &t, bool to_unicode )
     ts::sstr_t<-16> unicodes; 
     for( const rpl_s & r : rpl )
     {
+        if (!r.e)
+            continue; // just forbidden area
+
         if (to_unicode)
         {
             if (r.e->unicode)

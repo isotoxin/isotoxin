@@ -409,7 +409,7 @@ namespace ts
 		}
 	}
 
-    template <class TCHARACTER> bool TSCALL parse_text_file(const wsptr &filename, strings_t<TCHARACTER>& text, bool from_utf8)
+    template <class TCHARACTER> bool TSCALL parse_text_file(const wsptr &filename, strings_t<TCHARACTER>& text, bool b_from_utf8)
     {
         buf_c buffer;
         text.clear();
@@ -419,6 +419,8 @@ namespace ts
             {
                 if (buffer.size() >= 2)
                 {
+                    // TODO : is this stuff correct for big-endian architecture?
+
                     if (*buffer.data16() == 0xFEFF)
                     {
                         // native ucs16, no need swap bytes
@@ -436,10 +438,10 @@ namespace ts
                     }
                 }
 
-                if (from_utf8)
-                    text.split<wchar>(wstr_c().set_as_utf8(asptr((const char*)buffer.data(), buffer.size())), '\n');
+                if (b_from_utf8)
+                    text.split<wchar>( from_utf8(buffer.cstr()), '\n' );
                 else
-                    text.split<char>(asptr((const char*)buffer.data(), buffer.size()), '\n');
+                    text.split<char>(buffer.cstr(), '\n');
                 return true;
             }
         }
@@ -628,7 +630,7 @@ namespace ts
         wstr_c new_path(path);
         aint lclip = new_path.get_length();
 
-		if (find_files(new_path.set_length(lclip).append(fname), sa, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY)) return true;
+		if (find_files(new_path.set_length(lclip).append(fname), sa, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY)) return true; //-V807
 		if (find_files(new_path.set_length(lclip).append(CONSTWSTR("*.*")), sa, FILE_ATTRIBUTE_DIRECTORY))
 		{
 			for (const auto & dir : sa)

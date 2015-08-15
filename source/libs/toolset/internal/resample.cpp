@@ -23,6 +23,9 @@
 
 #include <xmmintrin.h>
 
+#pragma warning (disable:4456) // declaration of 'xxx' hides previous local declaration
+#pragma warning (disable:4458) // declaration of 'xxx' hides class member
+
 ///////////////////////////////////////////////////////////////////////////
 //
 // utility functions
@@ -637,6 +640,7 @@ protected:
 
 class VDResamplerSeparableStage : public IVDResamplerStage
 {
+    VDResamplerSeparableStage(const VDResamplerSeparableStage&) UNUSED;
     VDResamplerSeparableStage & operator=(const VDResamplerSeparableStage &) UNUSED;
 public:
 	VDResamplerSeparableStage(IVDResamplerSeparableRowStage *pRow, IVDResamplerSeparableColStage *pCol);
@@ -1721,15 +1725,9 @@ Cleanup: /* CLEANUP */
         }
 
     private:
+        VDResizeFilterData(const VDResizeFilterData &) UNUSED;
         VDResizeFilterData & operator=(const VDResizeFilterData &) UNUSED;
     };
-
-    ////////////////////
-
-
-    int revcolor(int c) {
-        return ((c>>16)&0xff) | (c&0xff00) | ((c&0xff)<<16);
-    }
 
     ////////////////////
 
