@@ -85,7 +85,7 @@ public:
         return false;
     }
 	void parse_and_render_texture( rectangle_update_s * updr, CUSTOM_TAG_PARSER ctp, bool do_render = true );
-    void render_texture( rectangle_update_s * updr, fastdelegate::FastDelegate< void (drawable_bitmap_c&) > clearp ); // custom clear
+    void render_texture( rectangle_update_s * updr, fastdelegate::FastDelegate< void (drawable_bitmap_c&, const ivec2 &size) > clearp ); // custom clear
     void render_texture( rectangle_update_s * updr );
     void update_rectangles( rectangle_update_s * updr );
 

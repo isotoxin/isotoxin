@@ -1165,6 +1165,12 @@ public:
         flags.clear(F_LAST_REPOS_AT_END);
     }
 
+    void scroll_to_begin(bool repos = false)
+    {
+        sbhelper.shift = 0;
+        if (repos) children_repos();
+    }
+
     void scroll_to_end( bool repos = false )
     {
         sbhelper.shift = minimum<int>::value;

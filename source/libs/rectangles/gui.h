@@ -54,6 +54,7 @@ public:
     bool operator==(const GUIPARAMHANDLER &h) const { return h == handler; }
 
     void set_handler(GUIPARAMHANDLER _handler, GUIPARAM _param) { handler = _handler; param = _param; }
+    GUIPARAM par() { return param; }
 };
 
 #define DEFERRED_EXECUTION_BLOCK_BEGIN(t_sec) typedef struct UNIQIDLINE(dc) : public delay_event_c { static double gett() {return t_sec;} UNIQIDLINE(dc)(GUIPARAM param = nullptr):delay_event_c(param) {} virtual void  die() {gui->delete_event<UNIQIDLINE(dc)>(this);} virtual void doit() {
@@ -61,6 +62,7 @@ public:
 
 #define DEFERRED_CALL( t_sec, h, p ) do { delay_event_c &__dc = gui->add_event<delay_event_c>(t_sec); __dc.set_handler( (h), (p) ); } while(false)
 #define DEFERRED_UNIQUE_CALL( t_sec, h, p ) do { auto hh = (h); gui->delete_event(hh); delay_event_c &__dc = gui->add_event<delay_event_c>(t_sec); __dc.set_handler( hh, (p) ); } while (false)
+#define DEFERRED_UNIQUE_PAR_CALL( t_sec, h, p ) do { auto hh = (h); gui->delete_event(hh, p); delay_event_c &__dc = gui->add_event<delay_event_c>(t_sec); __dc.set_handler( hh, (p) ); } while (false)
 
 
 struct hover_data_s
@@ -118,7 +120,7 @@ struct selectable_core_s
     bool try_begin( gui_label_c *label );
     bool sure_selected();
     bool some_selected() const { return owner && char_start_sel >= 0 && char_end_sel >= 0 && char_start_sel != char_end_sel; }
-    void selection_stuff(ts::drawable_bitmap_c &bmp);
+    void selection_stuff(ts::drawable_bitmap_c &bmp, const ts::ivec2 &size);
     void clear_selection();
     void track();
     void endtrack();
@@ -357,6 +359,7 @@ public:
             TSDEL(e);
     }
     void delete_event(GUIPARAMHANDLER h);
+    void delete_event(GUIPARAMHANDLER h, GUIPARAM prm);
 
 
     ts::text_rect_c &tr() {return m_textrect;}

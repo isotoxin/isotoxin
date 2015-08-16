@@ -1521,9 +1521,12 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
             flags.clear(F_OVERIMAGE);
             getengine().redraw();
 
-            image_loader_c &ldr = get_customdata_obj<image_loader_c>();
-            if (ldr.get_picture())
-                ts::open_link( ldr.get_fn() );
+            if (g_app->allow_image_click())
+            {
+                image_loader_c &ldr = get_customdata_obj<image_loader_c>();
+                if (ldr.get_picture())
+                    ts::open_link(ldr.get_fn());
+            }
         }
         break;
     case SQ_MOUSE_RUP:
@@ -3008,7 +3011,9 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> & p)
             scroll_to(first_unread);
         else
             scroll_to_end();
-    }
+    } else
+        scroll_to_begin();
+        
     children_repos();
 
     return 0;
@@ -3246,6 +3251,8 @@ bool gui_message_area_c::send_file(RID, GUIPARAM)
     ts::wstr_c title(TTT("Отправить файлы", 180));
     if (getroot()->load_filename_dialog(files, fromdir, CONSTWSTR(""), CONSTWSTR(""), nullptr, title))
     {
+        g_app->disallow_image_click(1000); // avoid false click to image (if double click in system dialog)
+
         if (files.size())
             prf().last_filedir(ts::fn_get_path(files.get(0)));
 

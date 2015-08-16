@@ -23,13 +23,17 @@ namespace
         const int TOTAL_CRT_LOCKS = 36; // for VS 2013 total number of crt locks is 36
         typedef __int64 lock_t;
 
+        /*
         enum : lock_t
         {
             lock_write_mask  = 0x0000FF0000000000ull,
             lock_thread_mask = 0x000000FFFFFFFFFFull,
             lock_write_val   = 0x0000010000000000ull,
         };
-
+        */
+        static const lock_t lock_write_mask  = 0x0000FF0000000000ull;
+        static const lock_t lock_thread_mask = 0x000000FFFFFFFFFFull;
+        static const lock_t lock_write_val   = 0x0000010000000000ull;
 
         static lock_t crt_locks[ TOTAL_CRT_LOCKS ];
 
@@ -181,7 +185,7 @@ void * __cdecl realloc(void *p, size_t nSize)
 }
 
 #undef _realloc_crt
-void * __cdecl _realloc_crt(void *p, size_t nSize)
+void * __cdecl _realloc_crt(void *p, size_t nSize) //-V524
 {
     return dlrealloc(p, nSize);
 }
@@ -189,13 +193,12 @@ void * __cdecl _realloc_crt(void *p, size_t nSize)
 #undef _recalloc_crt
 void * __cdecl _recalloc_crt(void * memblock, size_t count, size_t size)
 {
-    void * retp = nullptr;
     size_t  size_orig = 0, old_size = 0;
 
     size_orig = size * count;
     if (memblock != nullptr)
         old_size = dlmalloc_usable_size(memblock);
-    retp = dlrealloc(memblock, size_orig);
+    void * retp = dlrealloc(memblock, size_orig);
     if (retp != nullptr && old_size < size_orig)
     {
         memset((char*)retp + old_size, 0, size_orig - old_size);

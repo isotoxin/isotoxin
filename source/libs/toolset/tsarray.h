@@ -765,7 +765,7 @@ public:
         ASSERT( idx >= 0 && idx < size(), "get: out of range of array" );
         return m_list[idx];
     };
-    T &get(aint idx)
+    T &get(aint idx) //-V659
     {
         //ASSERT(idx < size(), "get: out of range of array"); // compiler crashes
 #ifndef _FINAL

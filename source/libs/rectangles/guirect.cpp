@@ -146,14 +146,18 @@ void RID::call_item_activated( const ts::wstr_c&text, const ts::str_c&param )
 
 void RID::call_children_repos()
 {
-    DEFERRED_EXECUTION_BLOCK_BEGIN(0)
-        
-        RID grid = RID::from_ptr(param);
-        HOLD ctl(grid);
-        ctl().sq_evt(SQ_CHILDREN_REPOS, grid, ts::make_dummy<evt_data_s>(true));
+    auto repos_deffered_proc = [](RID, GUIPARAM param)->bool
+    {
+        RID rid = RID::from_ptr(param);
+        HOLD ctl(rid);
+        ctl().sq_evt(SQ_CHILDREN_REPOS, rid, ts::make_dummy<evt_data_s>(true));
         ctl().getengine().redraw();
+        return true;
+    };
 
-    DEFERRED_EXECUTION_BLOCK_END( this->to_ptr() )
+    GUIPARAMHANDLER h = repos_deffered_proc;
+
+    DEFERRED_UNIQUE_PAR_CALL( 0, h, this->to_ptr() );
 }
 
 HOLD::HOLD(RID id)

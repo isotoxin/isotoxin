@@ -208,6 +208,8 @@ public:
 
     ///////////// application_c itself
 
+    ts::Time allow_click_time;
+
     RID main;
 
     unsigned F_INITIALIZATION : 1;
@@ -219,6 +221,7 @@ public:
     unsigned F_FLASHIP : 1;
     unsigned F_SETNOTIFYICON : 1; // once
     unsigned F_OFFLINE_ICON : 1;
+    unsigned F_ALLOW_IMAGE_CLICK : 1;
 
 
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_EXIT);
@@ -335,6 +338,8 @@ public:
     void unregister_file_transfer(uint64 utag,bool disconnected);
     void cancel_file_transfers( const contact_key_s &historian ); // by historian
 
+    bool allow_image_click();
+    void disallow_image_click(int timeout);
 
     void resend_undelivered_messages( const contact_key_s& rcv = contact_key_s() );
     void undelivered_message( const post_s &p );

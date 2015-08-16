@@ -76,7 +76,8 @@ const char* ExceptionCodeToStr(DWORD exceptioncode)
 
 void exception_operator_c::trace_info(EXCEPTION_POINTERS* pExp)
 {
-	//Вывод информации об исключении
+	// generate exception text and out
+
 	char modulename[256];
 	GetModuleFileNameA(NULL, modulename, 256);
 

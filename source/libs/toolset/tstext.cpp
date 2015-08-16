@@ -205,14 +205,14 @@ void text_rect_c::render_texture(rectangle_update_s * updr)
         update_rectangles(toffset, updr);
 }
 
-void text_rect_c::render_texture( rectangle_update_s * updr, fastdelegate::FastDelegate< void (drawable_bitmap_c&) > clearp )
+void text_rect_c::render_texture( rectangle_update_s * updr, fastdelegate::FastDelegate< void (drawable_bitmap_c&, const ivec2 &size) > clearp )
 {
     if (glyphs().count() == 0) return safe_destruct(texture);
     CHECK(!flags.is(F_INVALID_SIZE|F_INVALID_GLYPHS));
     if (!CHECK(size.x > 0 && size.y > 0)) return;
     texture.ajust(size, false);
     flags.clear(F_DIRTY|F_INVALID_TEXTURE);
-    clearp(texture);
+    clearp(texture, size);
     ivec2 toffset(ui_scale(margin_left), ui_scale(margin_top) - scroll_top + (flags.is(TO_VCENTER) ? (size.y - text_height) / 2 : 0));
     if (draw_glyphs((uint8*)texture.body(), size.x, size.y, texture.info().pitch, glyphs().array(), toffset, false) && updr)
         update_rectangles(toffset, updr);

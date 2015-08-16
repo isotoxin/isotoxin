@@ -3,6 +3,10 @@
 namespace ts
 {
 
+    static const int f_executing = 1;
+    static const int f_finished = 2;
+    static const int f_canceled = 4;
+    static const int f_result = 8;
 
 task_executor_c::task_executor_c()
 {
@@ -16,7 +20,10 @@ task_executor_c::~task_executor_c()
 
     // now cancel all tasks
     while (executing.try_pop(t))
+    {
+        t->resetflag( f_executing );
         t->done(true);
+    }
 
     for (;;)
     {
@@ -33,16 +40,28 @@ task_executor_c::~task_executor_c()
 
     // cancel all tasks again
     while (executing.try_pop(t))
-        t->done( true );
+    {
+        t->resetflag(f_executing);
+        t->done(true);
+    }
 
     while (results.try_pop(t))
+    {
+        t->resetflag(f_result);
         t->result();
+    }
 
     while (finished.try_pop(t))
+    {
+        t->resetflag(f_finished);
         t->done(false);
+    }
 
     while (canceled.try_pop(t))
+    {
+        t->resetflag(f_canceled);
         t->done(true);
+    }
 
     CloseHandle(evt);
 }
@@ -68,18 +87,33 @@ void task_executor_c::work()
         task_c *t;
         while (executing.try_pop(t))
         {
+            t->resetflag( f_executing );
+
             timeout = false;
             for(int r = 0;r >= 0;)
             {
                 r = t->iterate( r );
 
                 if (r == task_c::R_DONE)
-                    finished.push(t);
-                else if (r == task_c::R_CANCEL)
-                    canceled.push(t);
-                else if (r == task_c::R_RESULT)
                 {
-                    results.push(t);
+                    t->setflag( f_finished );
+                    finished.push(t);
+
+                } else if (r == task_c::R_CANCEL)
+                {
+                    t->setflag( f_canceled );
+                    canceled.push(t);
+
+                } else if (r == task_c::R_RESULT)
+                {
+                    t->setflag( f_executing );
+
+                    if (0 == (t->queueflags & f_result))
+                    {
+                        t->setflag(f_result);
+                        results.push(t); // only one result
+                    }
+
                     executing.push(t);
                 }
             }
@@ -117,6 +151,7 @@ void task_executor_c::add(task_c *task)
     w().worker_must = true;
     w.unlock();
 
+    task->setflag(f_executing);
     executing.push(task);
     SetEvent(evt);
 
@@ -130,14 +165,23 @@ void task_executor_c::tick()
 
     if ( GetCurrentThreadId() == base_thread_id )
     {
+        while (results.try_pop(t))
+        {
+            t->resetflag(f_result);
+            t->result();
+        }
+
         while (finished.try_pop(t))
+        {
+            t->resetflag(f_finished);
             t->done(false);
+        }
 
         while (canceled.try_pop(t))
+        {
+            t->resetflag(f_canceled);
             t->done(true);
-
-        while (results.try_pop(t))
-            t->result();
+        }
     }
 }
 

@@ -8,7 +8,7 @@ application_c *g_app = nullptr;
 void dotests();
 #endif
 
-application_c::application_c(const ts::wchar * cmdl)
+application_c::application_c(const ts::wchar * cmdl):allow_click_time(ts::Time::undefined())
 {
     F_NEWVERSION = false;
     F_UNREADICONFLASH = false;
@@ -17,6 +17,7 @@ application_c::application_c(const ts::wchar * cmdl)
     F_FLASHIP = false;
     F_SETNOTIFYICON = false;
     F_OFFLINE_ICON = true;
+    F_ALLOW_IMAGE_CLICK = true;
 
     autoupdate_next = now() + 10;
 	g_app = this;
@@ -1075,6 +1076,20 @@ void application_c::undelivered_message( const post_s &p )
 
 }
 
+bool application_c::allow_image_click()
+{
+    if (F_ALLOW_IMAGE_CLICK) return true;
+    if ( (ts::Time::current() - allow_click_time) > 0 )
+        F_ALLOW_IMAGE_CLICK = true;
+    return F_ALLOW_IMAGE_CLICK;
+}
+
+void application_c::disallow_image_click(int timeout)
+{
+    F_ALLOW_IMAGE_CLICK = false;
+    allow_click_time = ts::Time::current() + timeout;
+}
+
 bool application_c::load_theme( const ts::wsptr&thn )
 {
     if (!__super::load_theme(thn))
@@ -1623,3 +1638,4 @@ void file_transfer_s::upd_message_item(bool force)
         msg.send();
     }
 }
+

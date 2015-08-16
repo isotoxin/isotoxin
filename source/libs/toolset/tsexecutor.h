@@ -5,6 +5,20 @@ namespace ts
 
 class task_c
 {
+    friend class task_executor_c;
+    int queueflags = 0;
+    void setflag( int flagmask )
+    {
+        if ( 0 != (queueflags & flagmask) )
+            __debugbreak();
+        queueflags |= flagmask;
+    }
+    void resetflag(int flagmask)
+    {
+        if (0 == (queueflags & flagmask))
+            __debugbreak();
+        RESETFLAG( queueflags, flagmask );
+    }
 public:
     virtual ~task_c() {}
 

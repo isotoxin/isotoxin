@@ -42,7 +42,7 @@
 
 CHAR outBuffer[StackWalker::STACKWALK_MAX_NAMELEN];
 
-CHAR tmpData[4096];
+static CHAR tmpData[4096];
 
 class StackWalkerInternal
 {
@@ -680,7 +680,7 @@ BOOL StackWalker::LoadModules()
           break;
         }
       }  // for (search for path separator...)
-      if (strlen(szTemp) > 0)
+      if (szTemp[0])
       {
         strncat_s(szSymPath, nSymPathLen, szTemp, nSymPathLen);
         strncat_s(szSymPath, nSymPathLen, ";", nSymPathLen);
@@ -762,7 +762,7 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context)const
 
   if (context == nullptr)
   {
-    if (hThread!=GetCurrentThread()) SuspendThread(hThread);
+    if (hThread!=GetCurrentThread()) SuspendThread(hThread); //-V720
     memset(&__c, 0, sizeof(CONTEXT));
     __c.ContextFlags = USED_CONTEXT_FLAGS;
     if (GetThreadContext(hThread, &__c) == FALSE)
@@ -1026,7 +1026,7 @@ void StackWalker::OnSymInit(LPCSTR, DWORD, LPCSTR)
 #endif
 }
 
-void StackWalker::OnOutput(LPCSTR szText, int len)const
+void StackWalker::OnOutput(LPCSTR szText, int /*len*/)const
 {
 	printf("%08X %s", (unsigned int)GetCurrentThreadId(), szText);
 

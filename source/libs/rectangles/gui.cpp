@@ -1,5 +1,7 @@
 #include "rectangles.h"
 
+//-V:glyphs:807
+
 gui_c *gui = nullptr;
 int sysmodal = 0;
 
@@ -51,7 +53,21 @@ void gui_c::delete_event(GUIPARAMHANDLER h)
             de->die(); // and now we kill delay_event itself
         }
     }
+}
 
+void gui_c::delete_event(GUIPARAMHANDLER h, GUIPARAM prm)
+{
+    auto w = m_events.lock_write();
+
+    for (int index = w().size() - 1; index >= 0; --index)
+    {
+        delay_event_c *de = ts::ptr_cast<delay_event_c *>(w().get(index).get());
+        if ((*de) == h && de->par() == prm)
+        {
+            w().remove_fast(index); //<< this will kill hook
+            de->die(); // and now we kill delay_event itself
+        }
+    }
 }
 
 bool gui_c::b_close(RID r, GUIPARAM param)
@@ -999,7 +1015,7 @@ ts::uint32 selectable_core_s::gm_handler(gmsg<GM_COPY_HOTKEY> &s)
         if (char_start_sel > char_end_sel) SWAP(char_start_sel, char_end_sel);
         int endi = char_end_sel;
 
-        if ( owner->get_text().get_char(endi-1) == '<' )
+        if ( owner->get_text().get_char(endi-1) == '<' ) //-V807
         {
             int closebr = owner->get_text().find_pos(endi, '>');
             if (closebr > endi && owner->get_text().substr(endi,closebr).begins(CONSTWSTR("char=")))
@@ -1173,10 +1189,9 @@ void selectable_core_s::endtrack()
     }
 }
 
-void selectable_core_s::selection_stuff(ts::drawable_bitmap_c &texture)
+void selectable_core_s::selection_stuff(ts::drawable_bitmap_c &texture, const ts::ivec2 &size)
 {
-    ts::text_rect_c &tr = gui->tr();
-    texture.fill(ts::ivec2(0), tr.size, 0);
+    texture.fill(ts::ivec2(0), size, 0);
 
     int isel0 = glyph_start_sel;
     int isel1 = glyph_end_sel;
