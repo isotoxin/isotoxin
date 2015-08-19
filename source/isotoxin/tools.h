@@ -168,6 +168,7 @@ enum isogmsg_e
     ISOGM_SOMEUNREAD,
     ISOGM_AVATAR,
     ISOGM_UPDATE_BUTTONS,
+    ISOGM_TYPING,
 
     ISOGM_COUNT,
 };

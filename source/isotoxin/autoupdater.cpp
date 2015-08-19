@@ -108,6 +108,8 @@ namespace
 
 void autoupdater()
 {
+    ts::tmpalloc_c tmpalloc;
+
     if (auparams().lock_read()().in_updater)
         return;
 

@@ -34,8 +34,6 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
     s3::enum_sound_play_devices(enum_play_devices, this);
     media.init();
     s3::get_capture_device(&mic_device_stored);
-    micdevice = string_from_device(mic_device_stored);
-    start_capture();
     profile_selected = prf().is_loaded();
 
     //ts::tbuf0_t<theme_info_s> m_themes;
@@ -113,17 +111,24 @@ dialog_settings_c::~dialog_settings_c()
 void dialog_settings_c::getbutton(bcreate_s &bcr)
 {
     __super::getbutton(bcr);
+    if (bcr.tag == 1)
+    {
+        bcr.btext = TTT("Сохранить",61);
+    }
+
 }
 
 bool dialog_settings_c::username_edit_handler( const ts::wstr_c &v )
 {
     username = to_utf8(v);
+    mod();
     return true;
 }
 
 bool dialog_settings_c::statusmsg_edit_handler( const ts::wstr_c &v )
 {
     userstatusmsg = to_utf8(v);
+    mod();
     return true;
 }
 
@@ -137,33 +142,39 @@ bool dialog_settings_c::fileconfirm_handler(RID, GUIPARAM p)
     if (RID r = find(CONSTASTR("confirmmanual")))
         r.call_enable(fileconfirm == 1);
 
+    mod();
     return true;
 }
 bool dialog_settings_c::fileconfirm_auto_masks_handler(const ts::wstr_c &v)
 {
     auto_download_masks = v;
+    mod();
     return true;
 }
 bool dialog_settings_c::fileconfirm_manual_masks_handler(const ts::wstr_c &v)
 {
     manual_download_masks = v;
+    mod();
     return true;
 }
 
 bool dialog_settings_c::downloadfolder_edit_handler(const ts::wstr_c &v)
 {
     downloadfolder = v;
+    mod();
     return true;
 }
 
 bool dialog_settings_c::date_msg_tmpl_edit_handler(const ts::wstr_c &v)
 {
     date_msg_tmpl = to_utf8(v);
+    mod();
     return true;
 }
 bool dialog_settings_c::date_sep_tmpl_edit_handler(const ts::wstr_c &v)
 {
     date_sep_tmpl = to_utf8(v);
+    mod();
     return true;
 }
 
@@ -171,12 +182,14 @@ bool dialog_settings_c::date_sep_tmpl_edit_handler(const ts::wstr_c &v)
 bool dialog_settings_c::ctl2send_handler( RID, GUIPARAM p )
 {
     ctl2send = (int)p; //-V205
+    mod();
     return true;
 }
 
 bool dialog_settings_c::collapse_beh_handler(RID, GUIPARAM p)
 {
     collapse_beh = (int)p; //-V205
+    mod();
     return true;
 }
 
@@ -187,6 +200,7 @@ bool dialog_settings_c::autoupdate_handler( RID, GUIPARAM p)
         r.call_enable(autoupdate > 0);
     if (RID r = find(CONSTASTR("proxyaddr")))
         r.call_enable(autoupdate > 0 && autoupdate_proxy > 0);
+    mod();
     return true;
 }
 void dialog_settings_c::autoupdate_proxy_handler(const ts::str_c& p)
@@ -198,6 +212,7 @@ void dialog_settings_c::autoupdate_proxy_handler(const ts::str_c& p)
         check_proxy_addr(autoupdate_proxy, r, autoupdate_proxy_addr);
         r.call_enable(autoupdate > 0 && autoupdate_proxy > 0);
     }
+    mod();
 }
 
 bool dialog_settings_c::autoupdate_proxy_addr_handler( const ts::wstr_c & t )
@@ -205,6 +220,7 @@ bool dialog_settings_c::autoupdate_proxy_addr_handler( const ts::wstr_c & t )
     autoupdate_proxy_addr = to_str(t);
     if (RID r = find(CONSTASTR("proxyaddr")))
         check_proxy_addr(autoupdate_proxy, r, autoupdate_proxy_addr);
+    mod();
     return true;
 }
 
@@ -255,6 +271,7 @@ bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
     if (RID r = find(CONSTASTR("date_sep_tmpl")))
         r.call_enable(0 != (msgopts_current & MSGOP_SHOW_DATE_SEPARATOR));
 
+    mod();
     return true;
 }
 
@@ -264,6 +281,8 @@ void dialog_settings_c::select_theme(const ts::str_c& prm)
     for( theme_info_s &ti : m_themes )
         ti.current = ti.folder.equals(selfo);
     set_combik_menu(CONSTASTR("themes"), list_themes());
+    
+    ++force_change; mod();
 }
 
 menu_c dialog_settings_c::list_themes()
@@ -274,22 +293,42 @@ menu_c dialog_settings_c::list_themes()
     return m;
 }
 
+void dialog_settings_c::mod()
+{
+    bool ch = false;
+    for (value_watch_s *vw : watch_array)
+        if (vw->changed())
+        {
+            ch = true;
+            break;
+        }
+
+    if (RID b = find(CONSTASTR("dialog_button_1")))
+        b.call_enable(ch);
+}
+
+#define PREPARE(var, inits) var = inits; watch(var)
 
 /*virtual*/ int dialog_settings_c::additions( ts::irect & border )
 {
+    PREPARE( force_change, 0 );
+
     if(profile_selected)
     {
-        username = prf().username(); text_prepare_for_edit(username);
-        userstatusmsg = prf().userstatus(); text_prepare_for_edit(userstatusmsg);
-        ctl2send = prf().ctl_to_send();
-        msgopts_current = prf().get_msg_options().__bits;
+        PREPARE( username, prf().username(); text_prepare_for_edit(username) );
+        PREPARE( userstatusmsg, prf().userstatus(); text_prepare_for_edit(userstatusmsg) );
+
+        PREPARE( ctl2send, prf().ctl_to_send() );
+
+        PREPARE( msgopts_current, prf().get_msg_options().__bits );
         msgopts_changed = 0;
-        date_msg_tmpl = prf().date_msg_template();
-        date_sep_tmpl = prf().date_sep_template();
-        downloadfolder = prf().download_folder();
-        fileconfirm = prf().fileconfirm();
-        auto_download_masks = prf().auto_confirm_masks();
-        manual_download_masks = prf().manual_confirm_masks();
+
+        PREPARE( date_msg_tmpl, prf().date_msg_template() );
+        PREPARE( date_sep_tmpl, prf().date_sep_template() );
+        PREPARE( downloadfolder, prf().download_folder() );
+        PREPARE( fileconfirm, prf().fileconfirm() );
+        PREPARE( auto_download_masks, prf().auto_confirm_masks() );
+        PREPARE( manual_download_masks, prf().manual_confirm_masks() );
 
         table_active_protocol = &prf().get_table_active_protocol();
         table_active_protocol_underedit = *table_active_protocol;
@@ -301,16 +340,18 @@ menu_c dialog_settings_c::list_themes()
                 if (row.other.configurable.proxy.proxy_addr.is_empty()) row.other.configurable.proxy.proxy_addr = CONSTASTR(DEFAULT_PROXY);
             }
 
-        smilepack = prf().emoticons_pack();
+        PREPARE( smilepack,  prf().emoticons_pack() );
     }
-    curlang = cfg().language();
-    autoupdate = cfg().autoupdate();
+    PREPARE( curlang, cfg().language() );
+    PREPARE( autoupdate, cfg().autoupdate() );
     oautoupdate = autoupdate;
-    autoupdate_proxy = cfg().autoupdate_proxy();
-    autoupdate_proxy_addr = cfg().autoupdate_proxy_addr();
-    collapse_beh = cfg().collapse_beh();
-    talkdevice = cfg().device_talk();
-    signaldevice = cfg().device_signal();
+    PREPARE( autoupdate_proxy, cfg().autoupdate_proxy() );
+    PREPARE( autoupdate_proxy_addr, cfg().autoupdate_proxy_addr() );
+    PREPARE( collapse_beh, cfg().collapse_beh() );
+    PREPARE( talkdevice, cfg().device_talk() );
+    PREPARE( signaldevice, cfg().device_signal() );
+    PREPARE( micdevice, string_from_device(mic_device_stored) );
+    //start_capture();
 
     int textrectid = 0;
 
@@ -420,6 +461,12 @@ menu_c dialog_settings_c::list_themes()
                             .add(TTT("Сохранять историю сообщений",222), 0, MENUHANDLER(), ts::amake<int>( MSGOP_KEEP_HISTORY ))
                     );
 
+        dm().vspace();
+        dm().checkb(TTT("Уведомление о печати",272), DELEGATE(this, msgopts_handler), msgopts_current).setmenu(
+            menu_c().add(TTT("Слать сигнал [quote]я печатаю[quote]",273), 0, MENUHANDLER(), ts::amake<int>(MSGOP_SEND_TYPING))
+                    .add(TTT("Игнорировать уведомления о печати",274), 0, MENUHANDLER(), ts::amake<int>(MSGOP_IGNORE_OTHER_TYPING))
+            );
+
         dm << MASK_PROFILE_FILES; //____________________________________________________________________________________________________//
         dm().page_header(TTT("Настройки приема файлов",237));
         dm().vspace(10);
@@ -459,6 +506,8 @@ menu_c dialog_settings_c::list_themes()
     gui_vtabsel_c &tab = MAKE_CHILD<gui_vtabsel_c>( getrid(), m );
     tab.leech( TSNEW(leech_dock_left_s, 150) );
     border = ts::irect(155,0,0,0);
+
+    mod();
 
     return 1;
 }
@@ -529,8 +578,9 @@ void dialog_settings_c::on_delete_network_2(const ts::str_c&prm)
 
         if (RID lst = find(CONSTASTR("protoactlist")))
             lst.call_kill_child(tag.insert(0, CONSTASTR("2/")).append_char('/').append_as_int(id));
-    }
 
+        ++force_change; mod();
+    }
 }
 
 bool dialog_settings_c::delete_used_network(RID, GUIPARAM param)
@@ -561,11 +611,13 @@ void dialog_settings_c::on_delete_network(const ts::str_c& prm)
         {
             tag = row->other.tag;
             row->deleted();
+
+            if (RID lst = find(CONSTASTR("protoactlist")))
+                lst.call_kill_child(tag.insert(0, CONSTASTR("2/")).append_char('/').append_as_int(id));
+
+            ++force_change; mod();
         }
     }
-
-    if (RID lst = find(CONSTASTR("protoactlist")))
-        lst.call_kill_child( tag.insert(0,CONSTASTR("2/")).append_char('/').append_as_int(id) );
 
 }
 
@@ -621,6 +673,7 @@ bool dialog_settings_c::addeditnethandler(dialog_protosetup_params_s &params)
                 }
     }
 
+    ++force_change; mod();
 
     return true;
 }
@@ -644,6 +697,7 @@ bool dialog_settings_c::addnetwork(RID, GUIPARAM)
     dialog_protosetup_params_s prms(selected_available_network, to_utf8(name), p->features, p->connection_features, DELEGATE(this,addeditnethandler));
     prms.configurable.udp_enable = true;
     prms.configurable.server_port = 0;
+    prms.configurable.initialized = true;
     prms.connect_at_startup = true;
     SUMMON_DIALOG<dialog_setup_network_c>(UD_PROTOSETUPSETTINGS, prms);
 
@@ -756,12 +810,14 @@ void dialog_settings_c::smile_pack_selected(const ts::str_c&smp)
 {
     smilepack = from_utf8(smp);
     set_combik_menu(CONSTASTR("avasmliepack"), emoti().get_list_smile_pack(smilepack,DELEGATE(this,smile_pack_selected)));
+    mod();
 }
 
 void dialog_settings_c::select_lang( const ts::str_c& prm )
 {
     curlang = prm;
     set_combik_menu(CONSTASTR("langs"), list_langs(curlang,DELEGATE(this,select_lang)));
+    mod();
 }
 
 /*virtual*/ bool dialog_settings_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -909,6 +965,7 @@ void dialog_settings_c::select_capture_device(const ts::str_c& prm)
     set_combik_menu(CONSTASTR("mic"), list_capture_devices());
     s3::start_capture( capturefmt );
     mic_device_changed = true;
+    mod();
 }
 menu_c dialog_settings_c::list_capture_devices()
 {
@@ -991,6 +1048,7 @@ void dialog_settings_c::select_talk_device(const ts::str_c& prm)
     media.init( talkdevice, signaldevice );
 
     set_combik_menu(CONSTASTR("talk"), list_talk_devices());
+    mod();
 }
 void dialog_settings_c::select_signal_device(const ts::str_c& prm)
 {
@@ -998,6 +1056,7 @@ void dialog_settings_c::select_signal_device(const ts::str_c& prm)
     media.init(talkdevice, signaldevice);
 
     set_combik_menu(CONSTASTR("signal"), list_signal_devices());
+    mod();
 }
 
 /*virtual*/ void dialog_settings_c::datahandler( const void *data, int size )
@@ -1070,8 +1129,7 @@ void dialog_setup_network_c::getbutton(bcreate_s &bcr)
     descmaker dm(descs);
     dm << 1;
 
-    ts::wstr_c hdr(TTT("Настройка соединения",61));
-    hdr.append(CONSTWSTR("<br><l>"));
+    ts::wstr_c hdr(CONSTWSTR("<l>"));
 
     bool newnet = true;
     if (params.protoid)
@@ -1099,52 +1157,55 @@ void dialog_setup_network_c::getbutton(bcreate_s &bcr)
             menu_c().add(TTT("Соединение с сетью при запуске", 204), 0, MENUHANDLER(), CONSTASTR("1"))  );
 
         addh += 22;
+    }
 
-        if (0 != (params.con_features & CF_UDP_OPTION))
-        {
-            addh += 22;
-            dm().checkb(ts::wstr_c(), DELEGATE(this, network_udp), params.configurable.udp_enable ? 1 : 0).setmenu(
-                menu_c().add(TTT("Разрешить использование UDP",264), 0, MENUHANDLER(), CONSTASTR("1")));
-        }
+    if (0 != (params.conn_features & CF_UDP_OPTION))
+    {
+        ASSERT(params.configurable.initialized);
+        addh += 22;
+        dm().checkb(ts::wstr_c(), DELEGATE(this, network_udp), params.configurable.udp_enable ? 1 : 0).setmenu(
+            menu_c().add(TTT("Разрешить использование UDP",264), 0, MENUHANDLER(), CONSTASTR("1")));
+    }
 
-        if (0 != (params.con_features & CF_SERVER_OPTION))
-        {
-            dm().vspace(5);
-            addh += 45;
-            dm().textfield(TTT("Порт сервера (0 - не запускать сервер)",265), ts::wmake<int>(params.configurable.server_port), DELEGATE(this, network_serverport));
-        }
+    if (0 != (params.conn_features & CF_SERVER_OPTION))
+    {
+        ASSERT(params.configurable.initialized);
+        dm().vspace(5);
+        addh += 45;
+        dm().textfield(TTT("Порт сервера (0 - не запускать сервер)",265), ts::wmake<int>(params.configurable.server_port), DELEGATE(this, network_serverport));
+    }
 
-        if (0 != (params.con_features & CF_PROXY_MASK))
-        {
-            addh += 45;
+    if (0 != (params.conn_features & CF_PROXY_MASK))
+    {
+        ASSERT(params.configurable.initialized);
+        addh += 45;
 
-            int pt = 0;
-            if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_HTTP) pt = 1;
-            if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_SOCKS4) pt = 2;
-            if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_SOCKS5) pt = 3;
-            ts::wstr_c pa = to_wstr(params.configurable.proxy.proxy_addr);
+        int pt = 0;
+        if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_HTTP) pt = 1;
+        if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_SOCKS4) pt = 2;
+        if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_SOCKS5) pt = 3;
+        ts::wstr_c pa = to_wstr(params.configurable.proxy.proxy_addr);
 
-            dm().vspace(5);
+        dm().vspace(5);
 
-            dm().hgroup(TTT("Настройки соединения", 169));
-            dm().combik(HGROUP_MEMBER).setmenu(list_proxy_types(pt, DELEGATE(this, set_proxy_type_handler), params.con_features & CF_PROXY_MASK)).setname(CONSTASTR("protoproxytype"));
-            dm().textfield(HGROUP_MEMBER, ts::to_wstr(params.configurable.proxy.proxy_addr), DELEGATE(this, set_proxy_addr_handler)).setname(CONSTASTR("protoproxyaddr"));
-        }
+        dm().hgroup(TTT("Настройки соединения", 169));
+        dm().combik(HGROUP_MEMBER).setmenu(list_proxy_types(pt, DELEGATE(this, set_proxy_type_handler), params.conn_features & CF_PROXY_MASK)).setname(CONSTASTR("protoproxytype"));
+        dm().textfield(HGROUP_MEMBER, ts::to_wstr(params.configurable.proxy.proxy_addr), DELEGATE(this, set_proxy_addr_handler)).setname(CONSTASTR("protoproxyaddr"));
+    }
 
-        if (params.protoid == 0 && 0 != (params.features & PF_IMPORT))
-        {
-            dm().vspace(5);
-            addh += 45;
+    if (params.protoid == 0 && 0 != (params.features & PF_IMPORT))
+    {
+        dm().vspace(5);
+        addh += 45;
 
-            ts::wstr_c iroot(CONSTWSTR("%APPDATA%"));
-            ts::parse_env(iroot);
+        ts::wstr_c iroot(CONSTWSTR("%APPDATA%"));
+        ts::parse_env(iroot);
 
-            if (dir_present(ts::fn_join(iroot, ts::to_wstr(params.networktag))))
-                iroot = ts::fn_join(iroot, ts::to_wstr(params.networktag));
-            ts::fix_path(iroot, FNO_APPENDSLASH);
+        if (dir_present(ts::fn_join(iroot, ts::to_wstr(params.networktag))))
+            iroot = ts::fn_join(iroot, ts::to_wstr(params.networktag));
+        ts::fix_path(iroot, FNO_APPENDSLASH);
 
-            dm().file(TTT("Импортировать конфигурацию из файла",56), iroot, ts::wstr_c(), DELEGATE(this, network_importfile));
-        }
+        dm().file(TTT("Импортировать конфигурацию из файла",56), iroot, ts::wstr_c(), DELEGATE(this, network_importfile));
     }
 
     return 0;
@@ -1196,6 +1257,8 @@ bool dialog_setup_network_c::netname_edit(const ts::wstr_c &t)
             if (!params.uname.equals(ap->get_uname())) gmsg<ISOGM_CHANGED_PROFILEPARAM>(params.protoid, PP_USERNAME, params.uname).send();
             if (!params.ustatus.equals(ap->get_ustatusmsg())) gmsg<ISOGM_CHANGED_PROFILEPARAM>(params.protoid, PP_USERSTATUSMSG, params.ustatus).send();
             if (!params.networkname.equals(ap->get_name())) gmsg<ISOGM_CHANGED_PROFILEPARAM>(params.protoid, PP_NETWORKNAME, params.networkname).send();
+            if (params.configurable.initialized)
+                ap->set_configurable(params.configurable);
         }
     } 
 
@@ -1219,6 +1282,7 @@ bool dialog_setup_network_c::network_importfile(const ts::wstr_c & t)
 
 bool dialog_setup_network_c::network_serverport(const ts::wstr_c & t)
 {
+    params.configurable.initialized = true;
     params.configurable.server_port = t.as_int();
     if (params.configurable.server_port < 0 || params.configurable.server_port > 65535)
         params.configurable.server_port = 0;
@@ -1227,6 +1291,7 @@ bool dialog_setup_network_c::network_serverport(const ts::wstr_c & t)
 
 bool dialog_setup_network_c::network_udp(RID, GUIPARAM p)
 {
+    params.configurable.initialized = true;
     params.configurable.udp_enable = p != nullptr;
     return true;
 }
@@ -1239,13 +1304,15 @@ bool dialog_setup_network_c::network_connect(RID, GUIPARAM p)
 
 void dialog_setup_network_c::set_proxy_type_handler(const ts::str_c& p)
 {
+    params.configurable.initialized = true;
+
     int psel = p.as_int();
     if (psel == 0) params.configurable.proxy.proxy_type = 0;
     else if (psel == 1) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_HTTP;
     else if (psel == 2) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_SOCKS4;
     else if (psel == 3) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_SOCKS5;
 
-    set_combik_menu(CONSTASTR("protoproxytype"), list_proxy_types(psel, DELEGATE(this, set_proxy_type_handler), params.con_features & CF_PROXY_MASK));
+    set_combik_menu(CONSTASTR("protoproxytype"), list_proxy_types(psel, DELEGATE(this, set_proxy_type_handler), params.conn_features & CF_PROXY_MASK));
     if (RID r = find(CONSTASTR("protoproxyaddr")))
     {
         check_proxy_addr(params.configurable.proxy.proxy_type, r, params.configurable.proxy.proxy_addr);
@@ -1255,6 +1322,7 @@ void dialog_setup_network_c::set_proxy_type_handler(const ts::str_c& p)
 
 bool dialog_setup_network_c::set_proxy_addr_handler(const ts::wstr_c & t)
 {
+    params.configurable.initialized = true;
     params.configurable.proxy.proxy_addr = to_str(t);
 
     if (RID r = find(CONSTASTR("protoproxyaddr")))
@@ -1276,7 +1344,17 @@ bool dialog_setup_network_c::set_proxy_addr_handler(const ts::wstr_c & t)
 
 
 
-
+dialog_protosetup_params_s::dialog_protosetup_params_s(int protoid) : protoid(protoid)
+{
+    if (active_protocol_c *ap = prf().ap(protoid))
+    {
+        features = ap->get_features();
+        conn_features = ap->get_conn_features();
+        configurable = ap->get_configurable();
+        if (configurable.proxy.proxy_addr.is_empty())
+            configurable.proxy.proxy_addr = CONSTASTR(DEFAULT_PROXY);
+    }
+}
 
 
 

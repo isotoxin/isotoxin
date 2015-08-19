@@ -1,6 +1,7 @@
 #include "isotoxin.h"
 
 //-V:w:807
+//-V:flags:807
 
 active_protocol_c::active_protocol_c(int id, const active_protocol_data_s &pd):id(id), lastconfig(ts::Time::past())
 {
@@ -42,6 +43,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
                 {
                     priority = r.get<int>();
                     features = r.get<int>();
+                    conn_features = r.get<int>();
                     auto desc = r.getastr();
                     audio_fmt.sampleRate = r.get<int>();
                     audio_fmt.channels = r.get<short>();
@@ -172,8 +174,10 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     w().data.configurable.server_port = v.as_int();
                 else if (f.equals(CONSTASTR(CFGF_UDP_ENABLE)))
                     w().data.configurable.udp_enable = v.as_int() != 0;
+                
+                w().data.configurable.initialized = true;
             }
-            w().flags.set(F_PROXY_SETTINGS_RCVD);
+            w().flags.set(F_CONFIGURABLE_RCVD);
         }
         break;
     case HQ_PLAY_AUDIO:
@@ -257,6 +261,14 @@ bool active_protocol_c::cmdhandler(ipcr r)
 
         }
         break;
+    case HQ_TYPING:
+        {
+            gmsg<ISOGM_TYPING> *m = TSNEW(gmsg<ISOGM_TYPING>);
+            m->contact.protoid = id;
+            m->contact.contactid = r.get<int>();
+            m->send_to_main_thread();
+        }
+        break;
     }
 
     return true;
@@ -329,7 +341,8 @@ ts::uint32 active_protocol_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
                 w().data.user_statusmsg = row->other.user_statusmsg;
                 w().data.options = row->other.options;
 
-                set_configurable(row->other.configurable);
+                if (row->other.configurable.initialized)
+                    set_configurable(row->other.configurable);
             }
         }
         if (dematerialization)
@@ -360,27 +373,49 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
     if (syncdata.lock_write()().flags.clearr(F_SAVE_REQUEST))
         save_config(false);
 
-    auto r = syncdata.lock_read();
-    if (r().flags.is(F_SET_PROTO_OK))
+    bool is_online = false;
+
+    // brackets to destruct r
     {
-        bool is_ac = 0 != (r().data.options & active_protocol_data_s::O_AUTOCONNECT);
-        if (r().flags.is(F_ONLINE_SWITCH))
+        auto r = syncdata.lock_read();
+        is_online = r().flags.is(F_CURRENT_ONLINE);
+        if (r().flags.is(F_SET_PROTO_OK))
         {
-            if (!is_ac)
+            bool is_ac = 0 != (r().data.options & active_protocol_data_s::O_AUTOCONNECT);
+            if (r().flags.is(F_ONLINE_SWITCH))
+            {
+                if (!is_ac)
+                {
+                    r.unlock();
+                    ipcp->send(ipcw(AQ_OFFLINE));
+                    syncdata.lock_write()().flags.clear(F_ONLINE_SWITCH);
+                }
+            }
+            else if (is_ac)
             {
                 r.unlock();
-                ipcp->send(ipcw(AQ_OFFLINE));
-                syncdata.lock_write()().flags.clear(F_ONLINE_SWITCH);
+                ipcp->send(ipcw(AQ_ONLINE));
+                syncdata.lock_write()().flags.set(F_ONLINE_SWITCH);
             }
         }
-        else if (is_ac)
+    }
+
+    if (is_online)
+    {
+        if (typingsendcontact && (typingtime - ts::Time::current()) > 0)
         {
-            r.unlock();
-            ipcp->send(ipcw(AQ_ONLINE));
-            syncdata.lock_write()().flags.set(F_ONLINE_SWITCH);
+            // still typing
+            ipcp->send(ipcw(AQ_TYPING) << typingsendcontact);
+        } else
+        {
+            typingsendcontact = 0;
         }
 
+    } else
+    {
+        typingsendcontact = 0;
     }
+
     return 0;
 }
 
@@ -397,6 +432,9 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
         if ( 0 == (get_features() & PF_OFFLINE_MESSAGING) )
             if (target->get_state() != CS_ONLINE)
                 return 0;
+
+        if (typingsendcontact == target->getkey().contactid)
+            typingsendcontact = 0;
 
         ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().contactid << (int)MTA_MESSAGE << msg.post.utag << msg.post.message_utf8 );
     }
@@ -677,8 +715,10 @@ void active_protocol_c::stop_call(int cid, stop_call_e sc)
 
 void active_protocol_c::set_configurable( const configurable_s &c )
 {
+    ASSERT(c.initialized);
+
     auto w = syncdata.lock_write();
-    if (!w().flags.is(F_PROXY_SETTINGS_RCVD)) return;
+    if (!w().flags.is(F_CONFIGURABLE_RCVD)) return;
 
     configurable_s oldc = std::move(w().data.configurable);
     w().data.configurable = c;
@@ -703,9 +743,6 @@ void active_protocol_c::set_configurable( const configurable_s &c )
             ipcp->send(s);
             // do not save config now
             // protocol will initiate save procedure itself
-        } else
-        {
-            w().flags.set(F_DIRTY_PROXY_SETTINGS);
         }
     }
 
@@ -741,3 +778,17 @@ void active_protocol_c::del_message(uint64 utag)
     ipcp->send(ipcw(AQ_DEL_MESSAGE) << utag);
 }
 
+void active_protocol_c::typing(int cid)
+{
+    if ( !prf().get_msg_options().is(MSGOP_SEND_TYPING) )
+        return;
+
+    if (cid)
+    {
+        if (!typingsendcontact)
+            ipcp->send(ipcw(AQ_TYPING) << cid);
+        typingsendcontact = cid;
+        typingtime = ts::Time::current() + 5000;
+    } else
+        typingsendcontact = 0;
+}

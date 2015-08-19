@@ -7,7 +7,7 @@ struct dialog_protosetup_params_s
 {
     int protoid = 0;
     int features = 0;
-    int con_features = 0;
+    int conn_features = 0;
     ts::str_c networktag;
 
     ts::str_c uname; // utf8
@@ -21,12 +21,12 @@ struct dialog_protosetup_params_s
 
 
     dialog_protosetup_params_s() {}
-    dialog_protosetup_params_s(int protoid) : protoid(protoid) {}
+    dialog_protosetup_params_s(int protoid);
     dialog_protosetup_params_s(const ts::str_c &networktag,
                                const ts::str_c &networkname,
                                int f, int cf,
                                CONFIRM_PROTOSETUP confirm
-                               ) : networktag(networktag), networkname(networkname), confirm(confirm), features(f), con_features(cf) {}
+                               ) : networktag(networktag), networkname(networkname), confirm(confirm), features(f), conn_features(cf) {}
     dialog_protosetup_params_s(int protoid, const ts::str_c &uname,
                                const ts::str_c &ustatus,
                                const ts::str_c &networkname
@@ -97,6 +97,28 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
         MASK_APPLICATION_COMMON     = SETBIT(NUMGEN_NEXT(ctlm)),
         MASK_APPLICATION_SETSOUND   = SETBIT(NUMGEN_NEXT(ctlm)),
     };
+
+    struct value_watch_s
+    {
+        virtual ~value_watch_s() {}
+        virtual bool changed() const { return true; }
+    };
+
+    template<typename T> struct value_watch_t : public value_watch_s
+    {
+        T original;
+        const T *underedit;
+        value_watch_t(const T&t):original(t), underedit(&t) {}
+        virtual bool changed() const { return original != (*underedit); }
+    };
+
+    int force_change = 0;
+    ts::array_del_t<value_watch_s, 32> watch_array;
+
+    template <typename T> void watch(const T&t)
+    {
+        watch_array.add( TSNEW( value_watch_t<T>, t ) );
+    }
 
     fmt_converter_s cvter;
     /*virtual*/ s3::Format *formats(int &count) override;
@@ -233,6 +255,8 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
 
     void select_talk_device(const ts::str_c& prm);
     void select_signal_device(const ts::str_c& prm);
+
+    void mod();
 
 protected:
     /*virtual*/ int unique_tag() { return UD_SETTINGS; }

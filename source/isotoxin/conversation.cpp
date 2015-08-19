@@ -1196,6 +1196,12 @@ gui_message_item_c::~gui_message_item_c()
     {
         gui->delete_event(DELEGATE(this, b_pause_unpause));
         gui->delete_event(DELEGATE(this, try_select_link));
+
+        if (get_mt() == MTA_TYPING) // just optimization
+        {
+            gui->delete_event(DELEGATE(this, kill_self));
+            gui->delete_event(DELEGATE(this, animate_typing));
+        }
     }
 }
 
@@ -1347,6 +1353,7 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
             {
             case gui_message_item_c::ST_RECV_FILE:
             case gui_message_item_c::ST_SEND_FILE:
+            case gui_message_item_c::ST_TYPING:
                 gui_control_c::sq_evt(qp, rid, data);
                 if (m_engine)
                 {
@@ -1406,7 +1413,7 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                     draw(dd, tdp);
                     */
 
-                    if (!prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+                    if (!prf().get_msg_options().is(MSGOP_JOIN_MESSAGES) && gui_message_item_c::ST_TYPING != subtype)
                     {
                         dd.size.x = timestrwidth + 1;
                         dd.size.y = g_app->font_conv_time->height();
@@ -1516,17 +1523,14 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
         {
             ts::str_c lnk = get_link_under_cursor(to_local(data.mouse.screenpos));
             if (!lnk.is_empty()) ctx_menu_golink(lnk);
-        } else if (flags.is(F_OVERIMAGE) && get_customdata())
+        } else if (flags.is(F_OVERIMAGE_LBDN) && get_customdata())
         {
-            flags.clear(F_OVERIMAGE);
+            flags.clear(F_OVERIMAGE|F_OVERIMAGE_LBDN);
             getengine().redraw();
 
-            if (g_app->allow_image_click())
-            {
-                image_loader_c &ldr = get_customdata_obj<image_loader_c>();
-                if (ldr.get_picture())
-                    ts::open_link(ldr.get_fn());
-            }
+            image_loader_c &ldr = get_customdata_obj<image_loader_c>();
+            if (ldr.get_picture())
+                ts::open_link(ldr.get_fn());
         }
         break;
     case SQ_MOUSE_RUP:
@@ -1605,12 +1609,19 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
     case SQ_MOUSE_LDOWN:
         if (!popupmenu && !some_selected() && check_overlink(to_local(data.mouse.screenpos)))
             return true;
+
+        if (SQ_MOUSE_LDOWN == qp)
+        {
+            if (flags.is(F_OVERIMAGE) && get_customdata())
+                flags.set(F_OVERIMAGE_LBDN);
+        }
+
         // no break here!
     case SQ_MOUSE_OUT:
         if (SQ_MOUSE_LDOWN != qp)
         {
             bool prev = flags.is(F_OVERIMAGE);
-            flags.clear(F_OVERIMAGE);
+            flags.clear(F_OVERIMAGE|F_OVERIMAGE_LBDN);
             if (prev) getengine().redraw();
         }
         if (!popupmenu && textrect.get_text().find_pos(CONSTWSTR("<cstm=a")) >= 0)
@@ -1649,7 +1660,8 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                     {
                         data.detectarea.area = AREA_HAND;
                         return true;
-                    }
+                    } else
+                        flags.clear(F_OVERIMAGE_LBDN);
                 }
             }
         }
@@ -1799,6 +1811,30 @@ bool gui_message_item_c::delivered(uint64 utag)
 
     return false;
 }
+
+bool gui_message_item_c::kill_self(RID, GUIPARAM)
+{
+    RID par = getparent();
+    ASSERT( get_mt() == MTA_TYPING );
+    TSDEL(this);
+    par.call_children_repos();
+    return true;
+}
+bool gui_message_item_c::animate_typing(RID, GUIPARAM)
+{
+    update_text();
+    DEFERRED_UNIQUE_CALL( 1.0/15.0, DELEGATE(this, animate_typing), nullptr );
+    return true;
+}
+
+void gui_message_item_c::refresh_typing()
+{
+    ASSERT( get_mt() == MTA_TYPING );
+    subtype = ST_TYPING;
+    DEFERRED_UNIQUE_CALL( 1.5, DELEGATE(this, kill_self), nullptr );
+    animate_typing(RID(),nullptr);
+}
+
 
 ts::uint16 gui_message_item_c::record::append( ts::wstr_c &t, ts::wstr_c &pret, const ts::wsptr &postt )
 {
@@ -2316,7 +2352,8 @@ void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
                 pic->draw(getroot(), p + ts::ivec2(0, 4));
         }
         return;
-    }
+    } else if (TYPING_SPACERECT == r)
+        return;
 
     int cnt = records.size();
     for(int i=1; i<cnt; ++i)
@@ -2562,8 +2599,52 @@ void gui_message_item_c::update_text()
             }
         }
         break;
+    case ST_TYPING:
+        {
+            int w = get_client_area().width();
+            int oldh = get_height_by_width(w);
+
+            ts::wstr_c tt(TTT("Печатает",271));
+            ts::wstr_c ttc = textrect.get_text();
+
+            ts::wsptr recta = CONSTWSTR("<rect=1001,10,10>"); // width must be equal to m_left
+            //                                 TYPING_SPACERECT
+            ts::wsptr rectb = CONSTWSTR("_");
+
+            if (timestr.is_empty())
+            {
+                ttc.clear();
+                timestr.set(CONSTWSTR("__  __  __  __"));
+            }
+
+
+            if (ttc.is_empty()) ttc.set(recta).append(rectb);
+            else
+            {
+                if (ttc.get_length() - recta.l - rectb.l < tt.get_length())
+                {
+                    ttc.set(recta).append(tt.substr(0, ttc.get_length()-recta.l-rectb.l+1)).append(rectb);
+                }
+                else
+                {
+                    ttc.trunc_length(rectb.l).append_char(timestr.get_last_char()).append( rectb.skip(1) );
+                    timestr.trunc_length();
+                }
+            }
+
+            textrect.set_text_only(ttc, false);
+            flags.set(F_DIRTY_HEIGHT_CACHE);
+            int newh = get_height_by_width(w);
+            if (newh == oldh)
+                getengine().redraw();
+            else
+            {
+                getparent().call_children_repos();
+            }
+        }
+        break;
         default:
-        break; // other values: do nothing
+        break;
     }
 }
 
@@ -2621,6 +2702,7 @@ update_size_mode:
             // no break here
         case gui_message_item_c::ST_RECV_FILE:
         case gui_message_item_c::ST_SEND_FILE:
+        case gui_message_item_c::ST_TYPING:
             {
                 ts::ivec2 sz = thr->clientrect(ts::ivec2(w, height), false).size();
                 if (sz.x < 0) sz.x = 0;
@@ -2633,6 +2715,7 @@ update_size_mode:
                     h += sz.y;
                 }
                 sz = textrect.calc_text_size(ww, custom_tag_parser_delegate());
+                if (gui_message_item_c::ST_TYPING == subtype) sz.y = textrect.font->height() + 2;
                 if (update_size_mode)
                     textrect.set_size( ts::ivec2(ww, sz.y) );
                 h = thr->size_by_clientsize(ts::ivec2(ww, sz.y + h + addheight), false).y;
@@ -2743,9 +2826,59 @@ gui_messagelist_c::~gui_messagelist_c()
     return __super::sq_evt(qp, rid, data);
 }
 
+static bool same_author( rectengine_c *prev, contact_c *author, const ts::str_c &skin )
+{
+    if (prev)
+    {
+        gui_message_item_c &pmi = *ts::ptr_cast<gui_message_item_c *>(&prev->getrect());
+        if (!is_special_mt(pmi.get_mt()))
+        {
+            if (pmi.get_author() == author && pmi.themename().equals(CONSTASTR("message."), skin))
+                return true;
+        }
+    }
+    return false;
+}
+
 gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, contact_c *author, const ts::str_c &skin, time_t post_time, uint64 replace_post)
 {
     ASSERT(MTA_FRIEND_REQUEST != mt);
+
+    if (MTA_TYPING == mt)
+    {
+        bool free_index = false;
+        for(gui_message_item_c *mi : typing)
+        {
+            if (mi == nullptr)
+            {
+                free_index = true;
+                continue;
+            }
+            if (mi->get_author() == author)
+            {
+                if ( same_author (getengine().get_prev_child(&mi->getengine()), author, skin ))
+                    mi->set_no_author();
+                mi->refresh_typing();
+                return *mi;
+            }
+        }
+
+        rectengine_c *prev = getengine().get_last_child();
+        gui_message_item_c &mi = MAKE_CHILD<gui_message_item_c>(getrid(), historian, author, skin, MTA_TYPING);
+        mi.refresh_typing();
+        if ( same_author (prev, author, skin ))
+            mi.set_no_author();
+
+        ts::safe_ptr<gui_message_item_c> smi( &mi );
+        if (free_index)
+        {
+            int i = typing.find( nullptr );
+            typing.set(i, smi);
+        } else
+            typing.add(smi);
+
+        return mi;
+    }
 
     if ( prf().get_msg_options().is(MSGOP_SHOW_DATE_SEPARATOR) && post_time )
     {
@@ -2764,6 +2897,9 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
             if (e)
             {
                 gui_message_item_c &mi = *ts::ptr_cast<gui_message_item_c *>(&e->getrect());
+                if (mi.get_mt() == MTA_TYPING)
+                    continue;
+
                 if (MTA_RECV_FILE == mt || MTA_SEND_FILE == mt )
                 {
                     if (mi.with_utag(replace_post))
@@ -2777,17 +2913,27 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
     if (is_special_mt(mt))
         return MAKE_CHILD<gui_message_item_c>(getrid(), historian, author, skin, mt);
 
-    bool same_author = false;
+    if (MTA_MESSAGE == mt || MTA_UNDELIVERED_MESSAGE == mt)
+    {
+        for (gui_message_item_c *mi : typing)
+        {
+            TSDEL( mi );
+        }
+        typing.clear();
+    }
+
+    bool is_same_author = false;
     if (rectengine_c *e = getengine().get_last_child())
     {
         gui_message_item_c &mi = *ts::ptr_cast<gui_message_item_c *>( &e->getrect() );
+
         if (!is_special_mt(mi.get_mt()))
         {
             if (mi.get_author() == author && mi.themename().equals(CONSTASTR("message."), skin))
             {
                 if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
                     return mi;
-                same_author = true;
+                is_same_author = true;
             }
             if (post_time < mi.get_last_post_time())
                 author->reselect(true);
@@ -2795,7 +2941,7 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
     }
 
     gui_message_item_c &r = MAKE_CHILD<gui_message_item_c>(getrid(), historian, author, skin, mt);
-    if (same_author) r.set_no_author();
+    if (is_same_author) r.set_no_author();
     return r;
 }
 
@@ -2902,6 +3048,18 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED> & p)
 {
     if (historian)
         historian->reselect(false);
+    return 0;
+}
+
+ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_TYPING> & p)
+{
+    if (prf().get_msg_options().is(MSGOP_IGNORE_OTHER_TYPING))
+        return 0;
+
+    if (historian)
+        if (contact_c *tc = historian->subget(p.contact))
+            get_message_item(MTA_TYPING, tc, CONSTASTR("other"));
+
     return 0;
 }
 
@@ -3217,6 +3375,16 @@ gui_message_area_c::~gui_message_area_c()
 bool gui_message_area_c::change_text_handler(const ts::wstr_c &t)
 {
     send_button->disable( t.is_empty() );
+
+    if (contact_c * contact = message_editor->get_historian())
+        if (!contact->getkey().is_self())
+        {
+            contact_c *tgt = contact->getkey().is_group() ? contact : contact->subget_for_send();
+            if (tgt->get_state() == CS_ONLINE)
+                if (active_protocol_c *ap = prf().ap(tgt->getkey().protoid))
+                    ap->typing( t.is_empty() ? 0 : tgt->getkey().contactid );
+        }
+
     return true;
 }
 
@@ -3251,8 +3419,6 @@ bool gui_message_area_c::send_file(RID, GUIPARAM)
     ts::wstr_c title(TTT("Отправить файлы", 180));
     if (getroot()->load_filename_dialog(files, fromdir, CONSTWSTR(""), CONSTWSTR(""), nullptr, title))
     {
-        g_app->disallow_image_click(1000); // avoid false click to image (if double click in system dialog)
-
         if (files.size())
             prf().last_filedir(ts::fn_get_path(files.get(0)));
 

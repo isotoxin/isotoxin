@@ -195,6 +195,7 @@ enum block_type_e // hard order!!!
     BT_FILE_UNPAUSE,
     BT_FILE_DONE,
     BT_FILE_CHUNK,
+    BT_TYPING,
 
     __bt_no_save_end,
 

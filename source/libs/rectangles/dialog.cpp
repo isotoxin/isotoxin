@@ -577,9 +577,9 @@ int gui_dialog_c::radio( const ts::array_wrapper_c<const radio_item_s> & items, 
     return tag;
 }
 
-int gui_dialog_c::check( const ts::array_wrapper_c<const check_item_s> & items, GUIPARAMHANDLER handler, ts::uint32 initial )
+int gui_dialog_c::check( const ts::array_wrapper_c<const check_item_s> & items, GUIPARAMHANDLER handler, ts::uint32 initial, int tag )
 {
-    int tag = gui->get_free_tag();
+    if (!tag) tag = gui->get_free_tag();
     //int index = 0;
     for (const check_item_s &ci : items)
     {
@@ -733,6 +733,14 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
 {
     reset(true);
 
+    struct checkset
+    {
+        GUIPARAMHANDLER handler;
+        int tag;
+    };
+
+    ts::tmp_array_inplace_t<checkset,2> chset;
+
     ts::uint32 mask = par.as_uint();
     RID lasthgroup;
     for(description_s &d : descs)
@@ -784,6 +792,20 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
         case description_s::_CHECKBUTTONS:
             if (!d.items.is_empty())
             {
+                int tag = 0;
+                for(checkset &ch : chset)
+                    if (ch.handler == d.handler)
+                    {
+                        tag = ch.tag;
+                    }
+                if (tag == 0)
+                {
+                    checkset &ch = chset.add();
+                    ch.handler = d.handler;
+                    ch.tag = gui->get_free_tag();
+                    tag = ch.tag;
+                }
+
                 struct getta
                 {
                     ts::tmp_array_inplace_t< check_item_s, 4 > cis;
@@ -798,7 +820,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
                 } s;
 
                 d.items.iterate_items(s,s);
-                check( s.cis.array(), DELEGATE(&d, updvalue2), d.text.as_uint() );
+                check( s.cis.array(), DELEGATE(&d, updvalue2), d.text.as_uint(), tag );
             }
             break;
         case description_s::_RADIO:

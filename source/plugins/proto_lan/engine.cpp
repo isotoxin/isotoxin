@@ -2160,6 +2160,9 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                                     f->chunk_received(offset, d + 2, dd.buf.size() - sizeof(u64) * 2);
                             }
                             break;
+                        case BT_TYPING:
+                            engine->hf->typing( id );
+                            break;
                         default:
                             if (mt < __bt_service)
                             {
@@ -2548,6 +2551,12 @@ void lan_engine::ren_groupchat(int gid, const char *groupaname)
 
 void lan_engine::join_groupchat( int gid, int cid )
 {
+}
+
+void lan_engine::typing(int id)
+{
+    if (contact_s *c = find(id))
+        c->send_block(BT_TYPING, 0);
 }
 
 //unused

@@ -576,10 +576,16 @@ public:
         BEHAVIOUR::init(m_list + idx, count);
     }
 
-    template<typename TT> aint     find(const TT & p) const
+    template<typename TT> aint find(const TT & p) const
     {
         for (const T& t : *this)
             if (t == p) return &t - m_list;
+        return -1;
+    }
+    template<typename TT> aint find_rev(const TT & p) const
+    {
+        for (aint i = size() - 1; i >= 0; --i)
+            if (get(i) == p) return i;
         return -1;
     }
 

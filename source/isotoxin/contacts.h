@@ -12,6 +12,7 @@ enum message_type_app_e : unsigned
     // not saved to db
     MTA_SPECIAL,
     MTA_DATE_SEPARATOR,
+    MTA_TYPING,
 
     message_type_app_values = 99,
     // saved to db
@@ -568,6 +569,11 @@ template<> struct gmsg<ISOGM_AVATAR> : public gmsgbase
     int tag = 0;
 };
 
+template<> struct gmsg<ISOGM_TYPING> : public gmsgbase
+{
+    gmsg() :gmsgbase(ISOGM_TYPING) {}
+    contact_key_s contact;
+};
 
 template<> struct gmsg<ISOGM_SELECT_CONTACT> : public gmsgbase
 {

@@ -170,6 +170,8 @@ struct host_functions_s
     */
     void(__stdcall *file_portion)(u64 utag, u64 offset, const void *portion, int portion_size);
     void(__stdcall *file_control)(u64 utag, file_control_e fctl);
+
+    void(__stdcall *typing)(int cid);
 };
 
 #define PROTO_FUNCTIONS \
@@ -205,6 +207,7 @@ struct host_functions_s
     FUNC2( void, add_groupchat,  const char *, bool ) \
     FUNC2( void, ren_groupchat,  int, const char * ) \
     FUNC2( void, join_groupchat, int, int ) \
+    FUNC1( void, typing,         int ) \
     
 
 struct proto_functions_s

@@ -6,7 +6,7 @@
 
 // typical scenario : AQ -> plghost, HA -> application
 
-#define PLGHOST_IPC_PROTOCOL_VERSION 6
+#define PLGHOST_IPC_PROTOCOL_VERSION 7
 
 enum commands_e
 {
@@ -68,6 +68,10 @@ enum commands_e
     AQ_GET_AVATAR_DATA,
     HQ_AVATAR_DATA,
     AQ_SET_AVATAR, // set self avatar
+
+    // typing event sent every 1 second. receiver should show typing notification 1.5 (0.5 time overlap to avoid flickering) second after last event received
+    AQ_TYPING, // me typing
+    HQ_TYPING, // other typing
 
     HA_CMD_STATUS,
     

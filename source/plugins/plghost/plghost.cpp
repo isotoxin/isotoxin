@@ -28,6 +28,7 @@ static void __stdcall avatar_data(int cid, int tag, const void *avatar_body, int
 static void __stdcall incoming_file(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
 static void __stdcall file_portion(u64 utag, u64 offset, const void *portion, int portion_size);
 static void __stdcall file_control(u64 utag, file_control_e fctl);
+static void __stdcall typing(int cid);
 
 struct protolib_s
 {
@@ -92,6 +93,7 @@ struct protolib_s
         incoming_file,
         file_portion,
         file_control,
+        typing,
     },
     nullptr, // protolib
     nullptr, // functions
@@ -574,7 +576,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                     desc.set_length();
                 }
             }
-            IPCW(HA_CMD_STATUS) << (int)AQ_SET_PROTO << (int)rst << pi.priority << pi.features << desc.as_sptr()
+            IPCW(HA_CMD_STATUS) << (int)AQ_SET_PROTO << (int)rst << pi.priority << pi.features << pi.connection_features << desc.as_sptr()
                 << pi.audio_fmt.sample_rate
                 << pi.audio_fmt.channels
                 << pi.audio_fmt.bits
@@ -850,6 +852,14 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             protolib.functions->del_message(utag);
         }
         break;
+    case AQ_TYPING:
+        if (LIBLOADED())
+        {
+            ipcr r(d->get_reader());
+            int id = r.get<int>();
+            protolib.functions->typing(id);
+        }
+        break;
     case XX_PING:
         {
             ipcr r(d->get_reader());
@@ -1029,3 +1039,7 @@ static void __stdcall file_portion(u64 utag, u64 offset, const void *portion, in
     spinlock::simple_unlock(prebuf_s::prebuflock);
 }
 
+static void __stdcall typing(int cid)
+{
+    IPCW(HQ_TYPING) << cid;
+}

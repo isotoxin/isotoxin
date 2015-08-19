@@ -32,10 +32,20 @@ struct configurable_s
     proxy_settings_s proxy;
     int server_port = 0;
     bool udp_enable = true;
+    bool initialized = false;
 
     bool operator != (const configurable_s &o) const
     {
-        return proxy != o.proxy || server_port != o.server_port || udp_enable != o.udp_enable;
+        return initialized != o.initialized || proxy != o.proxy || server_port != o.server_port || udp_enable != o.udp_enable;
+    }
+    configurable_s operator=(const configurable_s &c)
+    {
+        if (!c.initialized) return *this;
+        proxy = c.proxy;
+        server_port = c.server_port;
+        udp_enable = c.udp_enable;
+        initialized = true;
+        return *this;
     }
 };
 
@@ -79,10 +89,13 @@ class active_protocol_c : public ts::safe_object
     int id;
     int priority = 0;
     int features = 0;
+    int conn_features = 0;
     s3::Format audio_fmt;
     isotoxin_ipc_s *ipcp = nullptr;
     spinlock::syncvar< sync_data_s > syncdata;
     ts::Time lastconfig;
+    ts::Time typingtime = ts::Time::past();
+    int typingsendcontact = 0;
 
     fmt_converter_s cvt;
 
@@ -91,11 +104,10 @@ class active_protocol_c : public ts::safe_object
     static const ts::flags32_s::BITS F_CONFIG_OK            = SETBIT(2);
     static const ts::flags32_s::BITS F_CONFIG_FAIL          = SETBIT(3);
     static const ts::flags32_s::BITS F_SAVE_REQUEST         = SETBIT(4);
-    static const ts::flags32_s::BITS F_DIRTY_PROXY_SETTINGS = SETBIT(5);
-    static const ts::flags32_s::BITS F_PROXY_SETTINGS_RCVD  = SETBIT(6);
-    static const ts::flags32_s::BITS F_ONLINE_SWITCH        = SETBIT(7);
-    static const ts::flags32_s::BITS F_SET_PROTO_OK         = SETBIT(8);
-    static const ts::flags32_s::BITS F_CURRENT_ONLINE       = SETBIT(9);
+    static const ts::flags32_s::BITS F_CONFIGURABLE_RCVD    = SETBIT(5);
+    static const ts::flags32_s::BITS F_ONLINE_SWITCH        = SETBIT(6);
+    static const ts::flags32_s::BITS F_SET_PROTO_OK         = SETBIT(7);
+    static const ts::flags32_s::BITS F_CURRENT_ONLINE       = SETBIT(8);
     
 
     bool cmdhandler(ipcr r);
@@ -115,6 +127,7 @@ public:
     const ts::str_c &get_desc() const {return syncdata.lock_read()().description;};
     const ts::str_c &get_name() const {return syncdata.lock_read()().data.name;};
     int get_features() const {return features; }
+    int get_conn_features() const { return conn_features; }
     int get_priority() const {return priority; }
 
     const ts::str_c &get_uname() const {return syncdata.lock_read()().data.user_name;};
@@ -163,5 +176,7 @@ public:
     void file_portion(uint64 utag, uint64 offset, const void *data, int sz);
 
     void avatar_data_request(int cid);
+
+    void typing(int cid);
 
 };

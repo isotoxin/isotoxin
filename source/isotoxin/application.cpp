@@ -8,7 +8,7 @@ application_c *g_app = nullptr;
 void dotests();
 #endif
 
-application_c::application_c(const ts::wchar * cmdl):allow_click_time(ts::Time::undefined())
+application_c::application_c(const ts::wchar * cmdl)
 {
     F_NEWVERSION = false;
     F_UNREADICONFLASH = false;
@@ -17,7 +17,6 @@ application_c::application_c(const ts::wchar * cmdl):allow_click_time(ts::Time::
     F_FLASHIP = false;
     F_SETNOTIFYICON = false;
     F_OFFLINE_ICON = true;
-    F_ALLOW_IMAGE_CLICK = true;
 
     autoupdate_next = now() + 10;
 	g_app = this;
@@ -290,9 +289,11 @@ static DWORD WINAPI autoupdater(LPVOID)
     {
         if (now() > autoupdate_next)
         {
-            autoupdate_next += SEC_PER_DAY;
+            time_t nextupdate = F_OFFLINE_ICON ? SEC_PER_HOUR : SEC_PER_DAY; // do every-hour check, if offline (it seems no internet connection)
+
+            autoupdate_next += nextupdate;
             if (autoupdate_next <= now() )
-                autoupdate_next = now() + SEC_PER_DAY;
+                autoupdate_next = now() + nextupdate;
 
             b_update_ver(RID(),(GUIPARAM)AUB_DEFAULT);
         }
@@ -1074,20 +1075,6 @@ void application_c::undelivered_message( const post_s &p )
     insp = p;
     insp.receiver = rcv;
 
-}
-
-bool application_c::allow_image_click()
-{
-    if (F_ALLOW_IMAGE_CLICK) return true;
-    if ( (ts::Time::current() - allow_click_time) > 0 )
-        F_ALLOW_IMAGE_CLICK = true;
-    return F_ALLOW_IMAGE_CLICK;
-}
-
-void application_c::disallow_image_click(int timeout)
-{
-    F_ALLOW_IMAGE_CLICK = false;
-    allow_click_time = ts::Time::current() + timeout;
 }
 
 bool application_c::load_theme( const ts::wsptr&thn )

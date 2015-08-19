@@ -189,6 +189,7 @@ class gui_message_item_c : public gui_label_ex_c
     static const int BTN_PAUSE = 2;
     static const int BTN_UNPAUSE = 3;
     static const int RECT_IMAGE = 1000;
+    static const int TYPING_SPACERECT = 1001;
     
 
     struct record
@@ -217,8 +218,9 @@ class gui_message_item_c : public gui_label_ex_c
     static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE   = FLAGS_FREEBITSTART_LABEL << 0;
     static const ts::flags32_s::BITS F_NO_AUTHOR            = FLAGS_FREEBITSTART_LABEL << 1;
     static const ts::flags32_s::BITS F_OVERIMAGE            = FLAGS_FREEBITSTART_LABEL << 2; // mouse cursor above image
+    static const ts::flags32_s::BITS F_OVERIMAGE_LBDN       = FLAGS_FREEBITSTART_LABEL << 3;
 
-    static const int m_left = 10;
+    static const int m_left = 10; // recta width and this value should be same
     static const int m_top = 3;
     
     mutable ts::ivec2 height_cache[2]; // size of array -> num of cached widths
@@ -274,6 +276,10 @@ class gui_message_item_c : public gui_label_ex_c
     virtual void get_link_prolog(ts::wstr_c & r, int linknum) const;
     virtual void get_link_epilog(ts::wstr_c & r, int linknum) const;
 
+    bool kill_self(RID, GUIPARAM);
+    bool animate_typing(RID, GUIPARAM);
+
+
 public:
 
     enum
@@ -281,6 +287,7 @@ public:
         ST_JUST_TEXT,
         ST_RECV_FILE,
         ST_SEND_FILE,
+        ST_TYPING,
         ST_CONVERSATION,
     } subtype = ST_JUST_TEXT;
 
@@ -317,6 +324,8 @@ public:
     void init_date_separator( const tm &tmtm );
     void init_request( const ts::str_c &message_utf8 );
     void init_load( int n_load );
+
+    void refresh_typing();
 };
 
 class gui_messagelist_c : public gui_vscrollgroup_c
@@ -328,6 +337,7 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_messagelist_c, ISOGM_SUMMON_POST);
     GM_RECEIVER(gui_messagelist_c, ISOGM_DELIVERED);
     GM_RECEIVER(gui_messagelist_c, ISOGM_PROTO_LOADED);
+    GM_RECEIVER(gui_messagelist_c, ISOGM_TYPING);
     GM_RECEIVER(gui_messagelist_c, GM_DROPFILES);
     
     SIMPLE_SYSTEM_EVENT_RECEIVER(gui_messagelist_c, SEV_ACTIVE_STATE);
@@ -336,6 +346,7 @@ class gui_messagelist_c : public gui_vscrollgroup_c
 
     tm last_post_time;
     ts::shared_ptr<contact_c> historian;
+    ts::array_safe_t< gui_message_item_c, 1 > typing;
 
     void clear_list();
     gui_message_item_c &get_message_item(message_type_app_e mt, contact_c *author, const ts::str_c &skin, time_t post_time = 0, uint64 replace_post = 0);

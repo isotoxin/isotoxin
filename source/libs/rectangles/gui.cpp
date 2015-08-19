@@ -196,11 +196,17 @@ void gui_c::heartbeat()
 {
 #ifdef _DEBUG
     // check something 1 per sec
-    for (RID rid : roots())
     {
-        HOLD r(rid);
-        r().prepare_test_00();
-        r.engine().sq_evt(SQ_TEST_00, rid, ts::make_dummy<evt_data_s>(true));
+        ts::tmp_array_inplace_t<RID, 1> rootstemp;
+        for (RID rid : roots())
+            rootstemp.add(rid);
+
+        for (RID rid : rootstemp)
+        {
+            HOLD r(rid);
+            r().prepare_test_00();
+            r.engine().sq_evt(SQ_TEST_00, rid, ts::make_dummy<evt_data_s>(true));
+        }
     }
 
 #endif

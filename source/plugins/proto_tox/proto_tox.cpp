@@ -95,6 +95,17 @@ static std::vector<byte> gavatar;
 static int gavatag = 0;
 static bool reconnect = false;
 
+int self_typing_contact = 0;
+int self_typing_time = 0;
+
+struct other_typing_s
+{
+    int fid = 0;
+    int time = 0;
+    other_typing_s(int fid, int time):fid(fid), time(time) {}
+};
+static std::vector<other_typing_s> other_typing;
+
 void set_proxy_addr(const asptr& addr)
 {
     token<char> p(addr, ':');
@@ -1234,6 +1245,18 @@ public:
         avatag_self = gavatag - 1;
         correct_create_time = 0;
         avatar_recv_fnn = -1;
+
+        if (self_typing_contact && self_typing_contact == get_id())
+            self_typing_contact = 0;
+
+        for (auto it = other_typing.begin(); it != other_typing.end(); ++it)
+        {
+            if (it->fid == get_fid())
+            {
+                other_typing.erase(it);
+                break;
+            }
+        }
     }
 
     int get_fidgnum() const {return fid;}
@@ -1743,8 +1766,18 @@ static void cb_friend_request(Tox *, const byte *id, const byte *msg, size_t len
 static void cb_friend_message(Tox *, uint32_t fid, TOX_MESSAGE_TYPE type, const byte *message, size_t length, void *)
 {
     if (contact_descriptor_s *desc = find_restore_descriptor(fid))
-        message_part_s::msg(TOX_MESSAGE_TYPE_NORMAL == type ? MT_MESSAGE : MT_ACTION, desc->get_id(), 0, (const char *)message, length);
+    {
+        for (auto it = other_typing.begin(); it != other_typing.end(); ++it)
+        {
+            if (it->fid == (int)fid)
+            {
+                other_typing.erase(it);
+                break;
+            }
+        }
 
+        message_part_s::msg(TOX_MESSAGE_TYPE_NORMAL == type ? MT_MESSAGE : MT_ACTION, desc->get_id(), 0, (const char *)message, length);
+    }
 }
 
 static void cb_name_change(Tox *, uint32_t fid, const byte * newname, size_t length, void *)
@@ -1790,10 +1823,6 @@ static void cb_friend_status(Tox *, uint32_t fid, TOX_USER_STATUS status, void *
         }
         hf->update_contact(&cd);
     }
-}
-
-static void cb_typing(Tox *, uint32_t /*friend_number*/, bool /*is_typing*/, void *)
-{
 }
 
 static void cb_read_receipt(Tox *, uint32_t fid, uint32_t message_id, void *)
@@ -1978,6 +2007,22 @@ static void cb_tox_file_recv_chunk(Tox *, uint32_t fid, uint32_t filenumber, u64
                 f->recv_data( position, data, length );
             break;
         }
+}
+
+static void cb_friend_typing(Tox *, uint32_t fid, bool is_typing, void * /*userdata*/)
+{
+    for( auto it = other_typing.begin(); it != other_typing.end(); ++it )
+    {
+        if (it->fid == (int)fid)
+        {
+            if (!is_typing)
+                other_typing.erase(it);
+            return;
+        }
+    }
+
+    if (is_typing)
+        other_typing.emplace_back( fid, time_ms() );
 }
 
 static void setup_members_and_send(contact_data_s &cdata, int gnum) // cdata.members is undefined after call this function
@@ -2356,7 +2401,7 @@ static void prepare(const byte *data, size_t length)
     tox_callback_friend_name(tox, cb_name_change, nullptr);
     tox_callback_friend_status_message(tox, cb_status_message, nullptr);
     tox_callback_friend_status(tox, cb_friend_status, nullptr);
-    tox_callback_friend_typing(tox, cb_typing, nullptr);
+    tox_callback_friend_typing(tox, cb_friend_typing, nullptr);
     tox_callback_friend_read_receipt(tox, cb_read_receipt, nullptr);
     tox_callback_friend_connection_status(tox, cb_connection_status, nullptr);
 
@@ -2450,6 +2495,7 @@ void __stdcall tick(int *sleep_time_ms)
     if (!online_flag)
     {
         *sleep_time_ms = 100;
+        self_typing_contact = 0;
         return;
     }
     *sleep_time_ms = 1;
@@ -2460,6 +2506,27 @@ void __stdcall tick(int *sleep_time_ms)
     time_t tryconnect = now() + 60;
     if (tox)
     {
+        // self typing
+        // may be time to stop typing?
+        if (self_typing_contact && (curt-self_typing_time) > 0)
+        {
+            if (contact_descriptor_s *cd = find_descriptor(self_typing_contact))
+                tox_self_set_typing(tox, cd->get_fid(), false, nullptr);
+            self_typing_contact = 0;
+        }
+
+        // other peers typing
+        // notify host
+        for(other_typing_s &ot : other_typing)
+        {
+            if ( (curt-ot.time) > 0 )
+            {
+                if (contact_descriptor_s *desc = find_restore_descriptor(ot.fid))
+                    hf->typing(desc->get_id());
+                ot.time += 1000;
+            }
+        }
+
         message2send_s::tick(curt);
         message_part_s::tick(curt);
         incoming_file_s::tick(curt);
@@ -3128,7 +3195,15 @@ void __stdcall send(int id, const message_s *msg)
     {
         auto it = id2desc.find(id);
         if (it == id2desc.end()) return;
+
         contact_descriptor_s *desc = it->second;
+
+        if (id == self_typing_contact)
+        {
+            tox_self_set_typing(tox, desc->get_fid(), false, nullptr);
+            self_typing_contact = 0;
+        }
+
 
         new message2send_s( msg->utag, msg->mt, desc->get_fidgnum(), asptr(msg->message, msg->message_len) ); // not memleak!
         hf->save();
@@ -3479,6 +3554,25 @@ void __stdcall join_groupchat(int gid, int cid)
     }
 }
 
+void __stdcall typing(int cid)
+{
+    if (cid < 0)
+    {
+        // oops. toxcore does not support group typing notification... :(
+        return;
+    }
+
+    if (contact_descriptor_s *cd = find_descriptor(cid))
+        if (cd->is_online())
+        {
+            if (!self_typing_contact)
+            {
+                self_typing_contact = cid;
+                if (tox) tox_self_set_typing(tox, cd->get_fid(), true, nullptr);
+            }
+            self_typing_time = time_ms() + 1500;
+        }
+}
 
 proto_functions_s funcs =
 {

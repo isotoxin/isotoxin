@@ -171,6 +171,15 @@ public:
     const rectengine_c *get_child(ts::aint index) const {return children.get(index);};
     int get_child_index(const rectengine_c *e) const { return children.find(e); }
     rectengine_c *get_last_child();
+    rectengine_c *get_prev_child(const rectengine_c *e)
+    {
+        int i = children.find_rev(e);
+        if (i >= 0)
+            while (--i >= 0)
+                if (rectengine_c * re = children.get(i))
+                    return re;
+        return nullptr;
+    }
     rectengine_c *get_next_child( const rectengine_c *e )
     {
         int i = children.find(e);
