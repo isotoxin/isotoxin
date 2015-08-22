@@ -14,7 +14,7 @@ dialog_addcontact_c::~dialog_addcontact_c()
 /*virtual*/ ts::wstr_c dialog_addcontact_c::get_name() const
 {
     if (!inparam.title.is_empty()) return inparam.title;
-    return TTT("[appname]: Новый контакт",65);
+    return TTT("[appname]: New contact",65);
 }
 
 
@@ -62,21 +62,21 @@ menu_c dialog_addcontact_c::networks()
 
     if (inparam.key.protoid == 0)
     {
-        dm().combik(TTT("Сеть", 66)).setmenu(networks());
+        dm().combik(TTT("Network",66)).setmenu(networks());
         dm().vspace(5);
     } else
     {
         apid = inparam.key.protoid;
     }
-    dm().textfield(TTT("Публичный идентификатор",67), ts::from_utf8(inparam.pubid), DELEGATE(this, public_id_handler))
+    dm().textfield(TTT("Public ID",67), ts::from_utf8(inparam.pubid), DELEGATE(this, public_id_handler))
         .focus(!resend)
         .readonly(resend);
     dm().vspace(5);
-    dm().textfieldml(TTT("Сообщение",72), TTT("$: Пожалуйста, добавьте меня в свой список контактов.",73) / from_utf8(contacts().get_self().get_name()), DELEGATE(this, invite_message_handler))
+    dm().textfieldml(TTT("Message",72), TTT("$: Please, add me to your contact list",73) / from_utf8(contacts().get_self().get_name()), DELEGATE(this, invite_message_handler))
         .focus(resend);
     dm().vspace(5);
-    dm().hiddenlabel(TTT("Неправильный публичный идентификатор!",71), ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_INVALID_PUB_ID));
-    dm().hiddenlabel(TTT("Такой контакт уже есть!",87), ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_ALREADY_PRESENT));
+    dm().hiddenlabel(TTT("Invalid Public ID!",71), ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_INVALID_PUB_ID));
+    dm().hiddenlabel(TTT("Such contact already present!",87), ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_ALREADY_PRESENT));
     dm().hiddenlabel(L"memory error", ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_MEMORY_ERROR)); // no need to translate it due rare error
     dm().hiddenlabel(L"timeout", ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_TIMEOUT)); // no need to translate it due rare error
 
@@ -168,7 +168,7 @@ dialog_addgroup_c::~dialog_addgroup_c()
 
 /*virtual*/ ts::wstr_c dialog_addgroup_c::get_name() const
 {
-    return TTT("[appname]: Новый групповой чат",248);
+    return TTT("[appname]: New group chat",248);
 }
 
 
@@ -240,21 +240,21 @@ void dialog_addgroup_c::update_lifetime()
     descmaker dm(descs);
     dm << 1;
 
-    dm().combik(TTT("Сеть",249)).setmenu(networks()).setname(CONSTASTR("networks"));
+    dm().combik(TTT("Network",249)).setmenu(networks()).setname(CONSTASTR("networks"));
     dm().vspace(5);
 
-    dm().textfield(TTT("Имя чата", 250), CONSTWSTR(""), DELEGATE(this, groupname_handler)).focus(true);
+    dm().textfield(TTT("Group chat name",250), CONSTWSTR(""), DELEGATE(this, groupname_handler)).focus(true);
     dm().vspace(5);
 
     int incht = 0;
-    dm().radio(TTT("Время жизни чата",252), DELEGATE(this, chatlifetime), incht).setmenu(
-        menu_c().add(TTT("Постоянный (сохраняется между перезагрузками клиента)",253), 0, MENUHANDLER(), CONSTASTR("0"))
-        .add(TTT("Временный (история сообщений не ведется; закрыв [appname], вы покинете чат)",254), 0, MENUHANDLER(), CONSTASTR("1"))
+    dm().radio(TTT("Group chat lifetime",252), DELEGATE(this, chatlifetime), incht).setmenu(
+        menu_c().add(TTT("Persistent (saved across client restarts)",253), 0, MENUHANDLER(), CONSTASTR("0"))
+        .add(TTT("Temporary (history log not saved; offline - leave group chat)",254), 0, MENUHANDLER(), CONSTASTR("1"))
        ).setname("lifetime");
 
     dm().vspace(5);
 
-    dm().hiddenlabel(TTT("Имя чата не может быть пустым!",251), ts::ARGB(255, 0, 0)).setname(CONSTASTR("err1"));
+    dm().hiddenlabel(TTT("Group chat name cannot be empty",251), ts::ARGB(255, 0, 0)).setname(CONSTASTR("err1"));
 
     return 0;
 }

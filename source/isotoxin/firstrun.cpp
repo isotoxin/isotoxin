@@ -14,7 +14,7 @@ dialog_firstrun_c::~dialog_firstrun_c()
 
 /*virtual*/ ts::wstr_c dialog_firstrun_c::get_name() const
 {
-    return TTT("[appname]: Первый запуск",8);
+    return TTT("[appname]: First run",8);
 }
 
 ts::wstr_c dialog_firstrun_c::path_by_choice(path_choice_e choice)
@@ -135,23 +135,23 @@ void dialog_firstrun_c::go2page(int page_)
         // CHOOSE YOUR STYLE
 
         label(ts::wstr_c(L"<p=c>")
-            .append(TTT("[appname] впервые запущен на этом компьютере. При первом запуске необходимо выбрать язык. Также можно настроить некоторые параметры или оставить всё по умолчанию. Что вы выберете?",24))
+            .append(TTT("This is first run of [appname]. You have to select language. Also You can choose default initialization or you can manually set up some settings. Please select.",24))
             .append(L"<color=#808080><hr=5,1,1>"));
 
         vspace(25);
 
-        label( ts::wstr_c(CONSTWSTR("<l>")).append(TTT("Язык",114)).append(CONSTWSTR("</l>")) );
+        label( ts::wstr_c(CONSTWSTR("<l>")).append(TTT("Language",114)).append(CONSTWSTR("</l>")) );
         combik( list_langs(deflng, DELEGATE(this, select_lang)) );
 
         vspace(5);
         {
             radio_item_s items[] =
             {
-                radio_item_s(TTT("Всё по умолчанию",25), (GUIPARAM)1, CONSTASTR("radio00")),
-                radio_item_s(TTT("Буду настраивать",26), (GUIPARAM)0)
+                radio_item_s(TTT("Default initialization",25), (GUIPARAM)1, CONSTASTR("radio00")),
+                radio_item_s(TTT("Manual setup",26), (GUIPARAM)0)
             };
 
-            label( ts::wstr_c(CONSTWSTR("<l>")).append(TTT("Выбор",115)).append(CONSTWSTR("</l>")) );
+            label( ts::wstr_c(CONSTWSTR("<l>")).append(TTT("Choice",115)).append(CONSTWSTR("</l>")) );
             radio(ARRAY_WRAPPER(items), DELEGATE(this, noob_or_father), (GUIPARAM)((i_am_noob && !developing) ? 1 : 0));
 
             if (developing) ctlenable( CONSTASTR("radio00"), false );
@@ -163,7 +163,7 @@ void dialog_firstrun_c::go2page(int page_)
         // SELECT INSTALL PATH
 
         label(ts::wstr_c(L"<p=c>")
-            .append(TTT("[appname] может скопировать себя в рабочую папку или продолжить работу в текущей папке", 11))
+            .append(TTT("[appname] can copy self to work folder or can continue work in current folder",11))
             .append(L"<color=#808080><hr=5,1,1>"));
 
         vspace(25);
@@ -171,9 +171,9 @@ void dialog_firstrun_c::go2page(int page_)
         {
             radio_item_s items[] =
             {
-                radio_item_s(TTT("Скопировать в[br][l][quote]$[quote][/l]", 16) / path_by_choice(PCH_PROGRAMFILES), (GUIPARAM)(int)PCH_PROGRAMFILES, CONSTASTR("radio01")),
-                radio_item_s(TTT("[appname] уже там где нужно[br]([l]оставить тут: [quote]$[quote][/l])", 15) / path_by_choice(PCH_HERE), (GUIPARAM)(int)PCH_HERE),
-                radio_item_s(TTT("Выбрать другую папку...", 17), (GUIPARAM)(int)PCH_CUSTOM, CONSTASTR("radio02"))
+                radio_item_s(TTT("Copy to[br][l][quote]$[quote][/l]",16) / path_by_choice(PCH_PROGRAMFILES), (GUIPARAM)(int)PCH_PROGRAMFILES, CONSTASTR("radio01")),
+                radio_item_s(TTT("[appname] already in right place[br]([l]leave it here: [quote]$[quote][/l])",15) / path_by_choice(PCH_HERE), (GUIPARAM)(int)PCH_HERE),
+                radio_item_s(TTT("Select another folder...",17), (GUIPARAM)(int)PCH_CUSTOM, CONSTASTR("radio02"))
             };
 
             if (developing)
@@ -196,14 +196,14 @@ void dialog_firstrun_c::go2page(int page_)
         // SELECT SETTINGS PATH
 
         label(ts::wstr_c(L"<p=c>")
-            .append(TTT("Вы можете выбрать место хранения настроек и профилей. Обычно выбор по умолчанию является оптимальным.", 14))
+            .append(TTT("You can select place for settings and profiles. Default choice recommended.",14))
             .append(L"<color=#808080><hr=5,1,1>"));
         vspace(25);
         {
             radio_item_s items[] =
             {
-                radio_item_s(TTT("По умолчанию[br][l][quote]$[quote][/l]", 20) / path_by_choice(PCH_APPDATA), (GUIPARAM)(int)PCH_APPDATA, CONSTASTR("radio03")),
-                radio_item_s(TTT("Там же где [appname][br][l][quote]$[quote][/l]", 19) / path_by_choice(PCH_INSTALLPATH), (GUIPARAM)(int)PCH_INSTALLPATH),
+                radio_item_s(TTT("By default[br][l][quote]$[quote][/l]",20) / path_by_choice(PCH_APPDATA), (GUIPARAM)(int)PCH_APPDATA, CONSTASTR("radio03")),
+                radio_item_s(TTT("Same folder of [appname][br][l][quote]$[quote][/l]",19) / path_by_choice(PCH_INSTALLPATH), (GUIPARAM)(int)PCH_INSTALLPATH),
             };
 
             if (developing)
@@ -219,7 +219,7 @@ void dialog_firstrun_c::go2page(int page_)
 
         // SELECT PROFILE NAME
         label(ts::wstr_c(L"<p=c>")
-            .append(TTT("Последний шаг - выбор имени файла профиля. Вы можете оставить это поле пустым и создать профиль позднее", 18))
+            .append(TTT("Last step - define profile name. You can leave this field empty and create profile later",18))
             .append(L"<color=#808080><hr=5,1,1>"));
         vspace(25);
 
@@ -247,8 +247,8 @@ void dialog_firstrun_c::getbutton(bcreate_s &bcr)
     __super::getbutton(bcr);
     if (bcr.tag == 0)
     {
-        bcr.tooltip = TOOLTIP( TTT("Ничего не делать. Выйти.",12) );
-        bcr.btext = TTT("Выход",22);
+        bcr.tooltip = TOOLTIP( TTT("Do nothing. Exit.",12) );
+        bcr.btext = TTT("Quit",22);
     }
     if (bcr.tag == 1)
     {
@@ -256,22 +256,22 @@ void dialog_firstrun_c::getbutton(bcreate_s &bcr)
         {
             if (i_am_noob && !developing)
             {
-                bcr.tooltip = TOOLTIP( TTT("Настроить всё по умолчанию и продолжить работу",28) );
+                bcr.tooltip = TOOLTIP( TTT("Initialize by default and run application",28) );
             make_pusk:
-                bcr.btext = TTT("Пуск",27);
+                bcr.btext = TTT("Start",27);
                 bcr.handler = DELEGATE(this, start);
             } else
             {
                 make_dalee:
-                bcr.tooltip = TOOLTIP( TTT("Перейти к следующей странице",13) );
-                bcr.btext = TTT("Далее", 23);
+                bcr.tooltip = TOOLTIP( TTT("Next page",13) );
+                bcr.btext = TTT("Next",23);
                 bcr.handler = DELEGATE(this, next_page);
             }
         } else
         {
             if ( page == 3 )
             {
-                bcr.tooltip = TOOLTIP( TTT("Начать работу",116) );
+                bcr.tooltip = TOOLTIP( TTT("Run!",116) );
                 goto make_pusk;
             }
             goto make_dalee;
@@ -282,8 +282,8 @@ void dialog_firstrun_c::getbutton(bcreate_s &bcr)
         if (page > 0)
         {
             bcr.face = BUTTON_FACE(button);
-            bcr.tooltip = TOOLTIP( TTT("Перейти к предыдущей странице",29) );
-            bcr.btext = TTT("Назад",30);
+            bcr.tooltip = TOOLTIP( TTT("Previous page",29) );
+            bcr.btext = TTT("Back",30);
             bcr.handler = DELEGATE(this, prev_page);
         }
     }

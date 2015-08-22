@@ -208,22 +208,22 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8)
         {
             ts::wstr_c newtext(1024,false);
             newtext.set(CONSTWSTR("<p=c>"));
-            newtext.append(TTT("Доступна новая версия: $",163) / from_utf8(itext_utf8));
+            newtext.append(TTT("New version available: $",163) / from_utf8(itext_utf8));
             newtext.append(CONSTWSTR("<br>"));
-            newtext.append(TTT("Текущая версия: $",164) / ts::to_wstr(application_c::appver()));
+            newtext.append(TTT("Current version: $",164) / ts::to_wstr(application_c::appver()));
 
             if ( auparams().lock_read()().in_progress )
             {
                 newtext.append(CONSTWSTR("<br><b>"));
-                newtext.append(TTT("-загрузка-",166));
+                newtext.append(TTT("-loading-",166));
                 newtext.append(CONSTWSTR("</b><br><null=px>0"));
             } else if (auparams().lock_read()().downloaded)
             {
                 newtext.append(CONSTWSTR("<br>"));
-                newtext.append(TTT("Новая версия загружена. Требуется перезагрузка приложения.",167));
+                newtext.append(TTT("New version downloaded. App restart required.",167));
 
                 gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
-                b_accept.set_text(TTT("Перезагрузка",168));
+                b_accept.set_text(TTT("Restart",168));
                 b_accept.set_face_getter(BUTTON_FACE(button));
                 b_accept.set_handler(DELEGATE(g_app, b_restart), nullptr);
                 b_accept.leech(TSNEW(leech_dock_bottom_center_s, 150, 30, -5, 5, 0, 1));
@@ -234,7 +234,7 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8)
             } else
             {
                 gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
-                b_accept.set_text(TTT("Загрузить",165));
+                b_accept.set_text(TTT("Load",165));
                 b_accept.set_face_getter(BUTTON_FACE(button));
                 b_accept.set_handler(DELEGATE(g_app, b_update_ver), (GUIPARAM)AUB_DOWNLOAD);
                 b_accept.leech(TSNEW(leech_dock_bottom_center_s, 150, 30, -5, 5, 0, 1));
@@ -263,10 +263,10 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8, contact_c *sender, uint64 
 
             if (itext_utf8.equals(CONSTASTR("\1restorekey")))
             {
-                newtext.append(TTT("Требуется подтверждение восстановления ключа",198));
+                newtext.append(TTT("Restore key confirm",198));
             } else
             {
-                newtext.append(TTT("Неизвестный контакт запрашивает разрешение на добавление вас в список контактов", 74));
+                newtext.append(TTT("Unknown contact request",74));
                 newtext.append(CONSTWSTR("<hr=7,2,1>"));
                 newtext.append(from_utf8(itext_utf8));
             }
@@ -274,14 +274,14 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8, contact_c *sender, uint64 
             textrect.set_text_only(newtext,false);
 
             gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
-            b_accept.set_text(TTT("Принять", 75));
+            b_accept.set_text(TTT("Accept",75));
             b_accept.set_face_getter(BUTTON_FACE(button));
             b_accept.set_handler(DELEGATE(sender, b_accept), this);
             b_accept.leech(TSNEW(leech_dock_bottom_center_s, 100, 30, -5, 5, 0, 2));
             MODIFY(b_accept).visible(true);
 
             gui_button_c &b_reject = MAKE_CHILD<gui_button_c>(getrid());
-            b_reject.set_text(TTT("Отклонить", 76));
+            b_reject.set_text(TTT("Reject",76));
             b_reject.set_face_getter(BUTTON_FACE(button));
             b_reject.set_handler(DELEGATE(sender, b_reject), this);
             b_reject.leech(TSNEW(leech_dock_bottom_center_s, 100, 30, -5, 5, 1, 2));
@@ -294,7 +294,7 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8, contact_c *sender, uint64 
         {
             ts::wstr_c newtext(512,false);
             newtext.set(CONSTWSTR("<p=c>"));
-            newtext.append(TTT("Вы согласны принять файл [b]$[/b]?",175) / from_utf8(itext_utf8));
+            newtext.append(TTT("Download file [b]$[/b]?",175) / from_utf8(itext_utf8));
             newtext.append(CONSTWSTR("<hr=7,2,1>"));
             textrect.set_text_only(newtext,false);
 
@@ -302,21 +302,21 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8, contact_c *sender, uint64 
             int minw = 0;
             gui_button_c &b_receiveas = MAKE_CHILD<gui_button_c>(getrid());
             b_receiveas.set_face_getter(BUTTON_FACE(button));
-            b_receiveas.set_text(TTT("Сохранить как...", 177), minw); minw += 6; if (minw < 100) minw = 100;
+            b_receiveas.set_text(TTT("Save as...",177), minw); minw += 6; if (minw < 100) minw = 100;
             b_receiveas.set_handler(DELEGATE(sender, b_receive_file_as), this);
             b_receiveas.leech(TSNEW(leech_dock_bottom_center_s, minw, 30, -5, 5, 1, 3));
             MODIFY(b_receiveas).visible(true);
 
             gui_button_c &b_receive = MAKE_CHILD<gui_button_c>(getrid());
             b_receive.set_face_getter(BUTTON_FACE(button));
-            b_receive.set_text(TTT("Сохранить",176) );
+            b_receive.set_text(TTT("Save",176) );
             b_receive.set_handler(DELEGATE(sender, b_receive_file), this);
             b_receive.leech(TSNEW(leech_dock_bottom_center_s, minw, 30, -5, 5, 0, 3));
             MODIFY(b_receive).visible(true);
 
             gui_button_c &b_refuse = MAKE_CHILD<gui_button_c>(getrid());
             b_refuse.set_face_getter(BUTTON_FACE(button));
-            b_refuse.set_text(TTT("Нет",178));
+            b_refuse.set_text(TTT("No",178));
             b_refuse.set_handler(DELEGATE(sender, b_refuse_file), this);
             b_refuse.leech(TSNEW(leech_dock_bottom_center_s, minw, 30, -5, 5, 2, 3));
             MODIFY(b_refuse).visible(true);
@@ -345,14 +345,14 @@ void gui_notice_c::setup(contact_c *sender)
             getengine().trunc_children(0);
 
             gui_button_c &b_resend = MAKE_CHILD<gui_button_c>(getrid());
-            b_resend.set_text(TTT("Повторить", 81));
+            b_resend.set_text(TTT("Again",81));
             b_resend.set_face_getter(BUTTON_FACE(button));
             b_resend.set_handler(DELEGATE(sender, b_resend), this);
             b_resend.leech(TSNEW(leech_dock_bottom_center_s, 100, 30, -5, 5, 0, 2));
             MODIFY(b_resend).visible(true);
 
             gui_button_c &b_kill = MAKE_CHILD<gui_button_c>(getrid());
-            b_kill.set_text(TTT("Удалить", 82));
+            b_kill.set_text(TTT("Delete",82));
             b_kill.set_face_getter(BUTTON_FACE(button));
             b_kill.set_handler(DELEGATE(sender, b_kill), this);
             b_kill.leech(TSNEW(leech_dock_bottom_center_s, 100, 30, -5, 5, 1, 2));
@@ -445,7 +445,7 @@ void gui_notice_c::setup(contact_c *sender)
             if (txt.ends( CONSTWSTR(", ") ))
                 txt.trunc_length(2);
             else
-                txt.append( TTT("В этом групповом чате кроме вас никого нет",257) );
+                txt.append( TTT("Nobody in group chat (except you)",257) );
             textrect.set_text_only(txt, false);
         }
         break;
@@ -483,20 +483,20 @@ void gui_notice_c::update_text(contact_c *sender)
             newtext.append(from_utf8(sender->get_pubid_desc()));
             newtext.append(CONSTWSTR("</b><br>"));
             if (sender->get_state() == CS_REJECTED)
-                newtext.append(TTT("Запрос на добавление в список контактов был отклонен. Вы можете повторить запрос.", 80));
+                newtext.append(TTT("Your request was rejected. You can send request again.",80));
             else if (sender->get_state() == CS_INVITE_SEND)
-                newtext.append(TTT("Запрос на добавление в список контактов был отправлен. Вы можете повторить запрос.", 89));
+                newtext.append(TTT("Request sent. You can repeat request.",89));
             hr = false;
 
             break;
         case NOTICE_INCOMING_CALL:
-            newtext.append(TTT("Входящий звонок от $", 134) / from_utf8(aname));
+            newtext.append(TTT("Incoming call from $",134) / from_utf8(aname));
             break;
         case NOTICE_CALL_INPROGRESS:
-            newtext.append(TTT("Разговор с $", 136) / from_utf8(aname));
+            newtext.append(TTT("Call with $",136) / from_utf8(aname));
             break;
         case NOTICE_CALL:
-            newtext.append(TTT("Звонок $",142) / from_utf8(aname));
+            newtext.append(TTT("Call to $",142) / from_utf8(aname));
             break;
     }
 
@@ -536,10 +536,10 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
 
                 if (c->get_state() == CS_ONLINE)
                     sost.set(CONSTWSTR("</l><b>"))
-                    .append(maketag_color<ts::wchar>(get_default_text_color(0))).append(TTT("Онлайн", 100)).append(CONSTWSTR("</color></b><l>"));
+                    .append(maketag_color<ts::wchar>(get_default_text_color(0))).append(TTT("Online",100)).append(CONSTWSTR("</color></b><l>"));
 
                 if (c->get_state() == CS_OFFLINE)
-                    sost.set(maketag_color<ts::wchar>(get_default_text_color(1))).append(TTT("Офлайн", 101)).append(CONSTWSTR("</color>"));
+                    sost.set(maketag_color<ts::wchar>(get_default_text_color(1))).append(TTT("Offline",101)).append(CONSTWSTR("</color>"));
 
                 int online = 0, all = 0;
                 contacts().iterate_proto_contacts( [&]( contact_c *c ) {
@@ -639,13 +639,13 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
             if (current_is_autoconnect)
             {
                 b.set_face_getter(BUTTON_FACE(to_offline));
-                b.tooltip(TOOLTIP(TTT("Разъединить (включить режим оффлайн)", 98)));
+                b.tooltip(TOOLTIP(TTT("Disconnect",98)));
                 b.set_handler(make_offline, (GUIPARAM)networkid);
             }
             else
             {
                 b.set_face_getter(BUTTON_FACE(to_online));
-                b.tooltip(TOOLTIP(TTT("Соединить (включить режим онлайн)", 99)));
+                b.tooltip(TOOLTIP(TTT("Connect",99)));
                 b.set_handler(make_online, (GUIPARAM)networkid);
             }
         }
@@ -665,7 +665,7 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
     gui_button_c &b_setup = MAKE_CHILD<gui_button_c>(getrid());
     b_setup.set_constant_size(sz1);
     b_setup.set_face_getter(BUTTON_FACE(netsetup));
-    b_setup.tooltip(TOOLTIP(TTT("Настроить сеть",55)));
+    b_setup.tooltip(TOOLTIP(TTT("Setup network connection",55)));
     b_setup.leech(TSNEW(leech_at_left_s, &b_connect, 5));
     b_setup.set_handler(connect_handler::netsetup, (GUIPARAM)networkid);
     MODIFY(b_setup).visible(true);
@@ -674,7 +674,7 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
     b_copy.set_constant_size(sz0);
     b_copy.set_customdata_obj<copydata>(pubid, this);
     b_copy.set_face_getter(BUTTON_FACE(copyid));
-    b_copy.tooltip(TOOLTIP(TTT("Копировть ID в буфер обмена", 97)));
+    b_copy.tooltip(TOOLTIP(TTT("Copy ID to clipboard",97)));
 
     b_copy.set_handler(DELEGATE(&b_copy.get_customdata_obj<copydata>(), copy_handler), nullptr);
     b_copy.leech(TSNEW(leech_at_left_s, &b_setup, 5));
@@ -863,8 +863,8 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
                 if (contact->get_avatar())
                 {
                     menu_c m;
-                    m.add(TTT("Изменить аватар", 219), 0, x::set_self_avatar, ts::amake<int>(networkid));
-                    m.add(TTT("Убрать аватар", 220), 0, x::clear_self_avatar, ts::amake<int>(networkid));
+                    m.add(TTT("Change avatar",219), 0, x::set_self_avatar, ts::amake<int>(networkid));
+                    m.add(TTT("Remove avatar",220), 0, x::clear_self_avatar, ts::amake<int>(networkid));
                     popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
                     popupmenu->leech(this);
                 }
@@ -1553,8 +1553,8 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
             ts::str_c lnk = get_link_under_cursor(to_local(data.mouse.screenpos));
             if (!lnk.is_empty())
             {
-                mnu.add(TTT("Перейти по ссылке", 202), 0, DELEGATE(this, ctx_menu_golink), lnk);
-                mnu.add(TTT("Копировать ссылку", 203), 0, DELEGATE(this, ctx_menu_copylink), lnk);
+                mnu.add(TTT("Open link",202), 0, DELEGATE(this, ctx_menu_golink), lnk);
+                mnu.add(TTT("Copy link",203), 0, DELEGATE(this, ctx_menu_copylink), lnk);
 
                 popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), mnu);
                 popupmenu->leech(this);
@@ -1596,10 +1596,10 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                 mnu.add(gui->app_loclabel(LL_CTXMENU_COPY), (!some_selection) ? MIF_DISABLED : 0, DELEGATE(this, ctx_menu_copy));
                 ts::str_c msg = to_utf8(get_message_under_cursor(to_local(data.mouse.screenpos), mutag));
                 gui->app_prepare_text_for_copy(msg);
-                mnu.add(TTT("Копировать сообщение", 205), 0, DELEGATE(this, ctx_menu_copymessage), msg);
+                mnu.add(TTT("Copy message",205), 0, DELEGATE(this, ctx_menu_copymessage), msg);
                 mnu.add_separator();
             }
-            mnu.add(TTT("Удалить сообщение",221), 0, DELEGATE(this, ctx_menu_delmessage), ts::str_c().append_as_hex(&mutag, sizeof(mutag)));
+            mnu.add(TTT("Delete message",221), 0, DELEGATE(this, ctx_menu_delmessage), ts::str_c().append_as_hex(&mutag, sizeof(mutag)));
 
             popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), mnu);
 
@@ -1735,7 +1735,7 @@ void gui_message_item_c::init_request( const ts::str_c &pre_utf8 )
     ts::wstr_c t(CONSTWSTR("<p=c>"));
     if (pre_utf8.equals(CONSTASTR("\1restorekey")))
     {
-        t.append(TTT("Ключ восстановлен",199));
+        t.append(TTT("Key restored",199));
     } else
     {
         ts::str_c message = pre_utf8;
@@ -1754,7 +1754,7 @@ void gui_message_item_c::init_load( int n_load )
     addheight = 40;
 
     gui_button_c &b_load = MAKE_CHILD<gui_button_c>(getrid());
-    b_load.set_text(TTT("Загрузить еще $ сообщений",124) / ts::wstr_c().set_as_int(n_load));
+    b_load.set_text(TTT("Load $ message(s)",124) / ts::wstr_c().set_as_int(n_load));
     b_load.set_face_getter(BUTTON_FACE(button));
     b_load.set_handler(DELEGATE(author.get(), b_load), (GUIPARAM)n_load);
     b_load.leech(TSNEW(leech_dock_bottom_center_s, 300, 30, -5, 5, 0, 1));
@@ -2021,9 +2021,9 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             ts::str_c aname = author->get_name();
             text_adapt_user_input(aname);
             if (MTA_ACCEPTED == mt)
-                newtext.append(TTT("Вы получили разрешение на добавление контакта [b]$[/b] в список контактов.", 91) / from_utf8(aname));
+                newtext.append(TTT("Your request was accepted by [b]$[/b]",91) / from_utf8(aname));
             if (MTA_ACCEPT_OK == mt)
-                newtext.append(TTT("Вы разрешили добавление контакта [b]$[/b] в список контактов.", 90) / from_utf8(aname));
+                newtext.append(TTT("You accepted contact [b]$[/b].",90) / from_utf8(aname));
             textrect.set_text_only(newtext,false);
         }
         break;
@@ -2041,13 +2041,13 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             text_adapt_user_input(aname);
 
             if (MTA_INCOMING_CALL_CANCELED == mt)
-                newtext.append(TTT("Звонок не удался",137));
+                newtext.append(TTT("Call failed",137));
             else if (MTA_INCOMING_CALL_REJECTED == mt)
-                newtext.append(TTT("Отказ от звонка",135));
+                newtext.append(TTT("Call rejected",135));
             else if (MTA_CALL_ACCEPTED == mt)
-                newtext.append(TTT("Начат разговор с $",138)/from_utf8(aname));
+                newtext.append(TTT("Call started with $",138)/from_utf8(aname));
             else if (MTA_HANGUP == mt)
-                newtext.append(TTT("Закончен разговор с $",139)/from_utf8(aname));
+                newtext.append(TTT("Call with $ finished",139)/from_utf8(aname));
 
             message_postfix(newtext);
 
@@ -2476,9 +2476,9 @@ void gui_message_item_c::update_text()
             {
                 newtext.append(CONSTWSTR("<img=file,-1>"));
                 if (is_send)
-                    newtext.append(TTT("Передача отменена: $",181) / fn);
+                    newtext.append(TTT("Upload canceled: $",181) / fn);
                 else
-                    newtext.append(TTT("Прием отменен: $",182) / fn);
+                    newtext.append(TTT("Download canceled: $",182) / fn);
             } else if (fc == '?')
             {
                 ft = g_app->find_file_transfer_by_msgutag(rec.utag);
@@ -2486,7 +2486,7 @@ void gui_message_item_c::update_text()
 
                 insert_button( BTN_BREAK, g_app->buttons().breakb->size );
                 newtext.append(CONSTWSTR("<img=file,-1>"));
-                newtext.append(TTT("Соединение отсутствует: $",235) / fn);
+                newtext.append(TTT("Disconnected: $",235) / fn);
             }
             else
             {
@@ -2502,9 +2502,9 @@ void gui_message_item_c::update_text()
                     insert_button( BTN_BREAK, g_app->buttons().breakb->size );
 
                     if (is_send)
-                        newtext.append(TTT("Передача файла: $",183) / fn);
+                        newtext.append(TTT("Upload: $",183) / fn);
                     else
-                        newtext.append(TTT("Прием файла: $",184) / fn);
+                        newtext.append(TTT("Download: $",184) / fn);
 
                     int bps;
                     newtext.append(CONSTWSTR(" (<b>")).append_as_uint( ft->progress(bps) ).append(CONSTWSTR("</b>%, "));
@@ -2517,23 +2517,23 @@ void gui_message_item_c::update_text()
                         if (bps == file_transfer_s::BPSSV_PAUSED_BY_ME)
                             insert_button( BTN_UNPAUSE, g_app->buttons().unpauseb->size );
                         if (bps == file_transfer_s::BPSSV_WAIT_FOR_ACCEPT) 
-                            newtext.append(TTT("ожидание",185));
+                            newtext.append(TTT("waiting",185));
                         else
-                            newtext.append(TTT("пауза",186));
+                            newtext.append(TTT("pause",186));
                     } else if (bps < 1024)
-                        newtext.append(TTT("$ байт в секунду",189) / ts::wmake(bps));
+                        newtext.append(TTT("$ bytes per second",189) / ts::wmake(bps));
                     else if (bps < 1024 * 1024)
-                        newtext.append(TTT("$ кб в секунду",190) / ts::wmake(bps/1024));
+                        newtext.append(TTT("$ kbytes per second",190) / ts::wmake(bps/1024));
                     else
-                        newtext.append(TTT("$ Мб в секунду",191) / ts::wmake(bps/(1024*1024)));
+                        newtext.append(TTT("$ Mb per second",191) / ts::wmake(bps/(1024*1024)));
 
                     newtext.append_char(')');
                 } else
                 {
                     if (is_send)
-                        newtext.append(TTT("Файл отправлен: $",193) / fn);
+                        newtext.append(TTT("File uploaded: $",193) / fn);
                     else
-                        newtext.append(TTT("Файл: $",192) / fn);
+                        newtext.append(TTT("File: $",192) / fn);
 
                     if (nullptr == get_customdata() && image_loader_c::is_image_fn(rec.text))
                         set_customdata_obj<image_loader_c>( this, from_utf8(rec.text) );
@@ -2604,7 +2604,7 @@ void gui_message_item_c::update_text()
             int w = get_client_area().width();
             int oldh = get_height_by_width(w);
 
-            ts::wstr_c tt(TTT("Печатает",271));
+            ts::wstr_c tt(TTT("Typing",271));
             ts::wstr_c ttc = textrect.get_text();
 
             ts::wsptr recta = CONSTWSTR("<rect=1001,10,10>"); // width must be equal to m_left
@@ -2817,7 +2817,7 @@ gui_messagelist_c::~gui_messagelist_c()
         {
             if (ts::irect(10, g_app->buttons().nokeeph->size + 10).inside(data.hintzone.pos))
             {
-                m_tooltip = TOOLTIP(TTT("История сообщений не сохраняется!", 231));
+                m_tooltip = TOOLTIP(TTT("Message history is not saved!",231));
                 data.hintzone.accepted = true;
             }
         }
@@ -3288,7 +3288,7 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> & p)
 
     gui_button_c &smiles = MAKE_CHILD<gui_button_c>(getrid());
     smiles.set_face_getter(BUTTON_FACE_PRELOADED(smile));
-    smiles.tooltip(TOOLTIP(TTT("Вставить смайлик (Ctrl+S)",268)));
+    smiles.tooltip(TOOLTIP(TTT("Insert emoticon (Ctrl+S)",268)));
     smiles.set_handler(DELEGATE(this, show_smile_selector), nullptr);
     rb = smiles.get_min_size();
     smile_pos_corrector = TSNEW(leech_dock_bottom_right_s, rb.x, rb.y, 2, 2);
@@ -3396,7 +3396,7 @@ bool gui_message_area_c::change_text_handler(const ts::wstr_c &t)
     message_editor->check_text_func = DELEGATE(this, change_text_handler);
     send_button = MAKE_VISIBLE_CHILD<gui_button_c>( getrid() );
     send_button->set_face_getter(BUTTON_FACE(send));
-    send_button->tooltip( TOOLTIP( TTT("Отправить",7) ) );
+    send_button->tooltip( TOOLTIP( TTT("Send",7) ) );
     send_button->set_handler( DELEGATE(g_app, b_send_message), nullptr );
     
     MODIFY(*send_button).visible(true).size(send_button->get_min_size());
@@ -3416,7 +3416,7 @@ bool gui_message_area_c::send_file(RID, GUIPARAM)
     ts::wstr_c fromdir = prf().last_filedir();
     if (fromdir.is_empty())
         fromdir = ts::fn_get_path(ts::get_exe_full_name());
-    ts::wstr_c title(TTT("Отправить файлы", 180));
+    ts::wstr_c title(TTT("Send files",180));
     if (getroot()->load_filename_dialog(files, fromdir, CONSTWSTR(""), CONSTWSTR(""), nullptr, title))
     {
         if (files.size())
@@ -3458,11 +3458,11 @@ void gui_message_area_c::update_buttons()
     if (0 == (features & PF_SEND_FILE))
     {
         file_button->disable();
-        file_button->tooltip(TOOLTIP(TTT("Передача файлов не поддерживается", 188)));
+        file_button->tooltip(TOOLTIP(TTT("File transmition not supported",188)));
     } else
     {
         file_button->enable();
-        file_button->tooltip(TOOLTIP(TTT("Отправить файл", 187)));
+        file_button->tooltip(TOOLTIP(TTT("Send file",187)));
     }
 
 }

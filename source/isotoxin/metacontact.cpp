@@ -14,7 +14,7 @@ dialog_metacontact_c::~dialog_metacontact_c()
 
 /*virtual*/ ts::wstr_c dialog_metacontact_c::get_name() const
 {
-    return TTT("[appname]: Ќовый метаконтакт",146);
+    return TTT("[appname]: New metacontact",146);
 }
 
 
@@ -36,7 +36,7 @@ void dialog_metacontact_c::getbutton(bcreate_s &bcr)
     __super::getbutton(bcr);
     if (bcr.tag == 1)
     {
-        bcr.btext = TTT("—оздать метаконтакт",149);
+        bcr.btext = TTT("Create metacontact",149);
     }
 }
 
@@ -45,7 +45,7 @@ void dialog_metacontact_c::getbutton(bcreate_s &bcr)
     descmaker dm(descs);
     dm << 1;
 
-    dm().page_header(TTT("Ѕудет создан новый метаконтакт - объединение нескольких контактов с общей историей сообщений.[br][l]ƒобавл€йте в этот список другие контакты из основного списока контактов путем перетаскивани€.[/l]",147));
+    dm().page_header(TTT("Metacontact - union of some contacts with common message history.[br][l]Drag and drop addition contacts to this list.[/l]",147));
     dm().vspace(300, DELEGATE(this,makelist));
 
     return 0;
@@ -144,7 +144,7 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
     {
         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
             gui_isodialog_c::title(DT_MSGBOX_ERROR),
-            TTT("ћетаконтакт - это объединение двух и более контактов. —ейчас список насчитывает менее двух контактов и дл€ создани€ метаконтакта этого количества недостаточно.",150)
+            TTT("Metacontact - union of two or more contacts. The current list contains less then two contacts and to create metacontact this amount is not enough.",150)
             ));
         return;
     }

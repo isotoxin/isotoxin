@@ -725,7 +725,7 @@ bool contact_c::b_reject(RID, GUIPARAM par)
 
 bool contact_c::b_resend(RID, GUIPARAM)
 {
-    SUMMON_DIALOG<dialog_addcontact_c>(UD_ADDCONTACT, dialog_addcontact_params_s( TTT("[appname]: Повторный запрос",83), get_pubid(), getkey() ));
+    SUMMON_DIALOG<dialog_addcontact_c>(UD_ADDCONTACT, dialog_addcontact_params_s( TTT("[appname]: Repeat request",83), get_pubid(), getkey() ));
     return true;
 }
 
@@ -766,7 +766,7 @@ bool contact_c::b_receive_file_as(RID, GUIPARAM par)
         path_expand_env(downf);
         ts::make_path(downf, 0);
                     
-        ts::wstr_c title = TTT("Сохранение файла",179);
+        ts::wstr_c title = TTT("Save file",179);
         ts::wstr_c fn = ownitm->getroot()->save_filename_dialog(downf, ft->filename, CONSTWSTR(""), nullptr, title);
 
         if (!fn.is_empty())

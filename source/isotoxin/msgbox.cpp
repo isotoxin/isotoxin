@@ -127,7 +127,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     dm().vspace(5);
     dm().hiddenlabel(ts::wstr_c(), 0).setname(CONSTASTR("upd"));
     dm().vspace(5);
-    dm().button(ts::wstr_c(), TTT("Проверить наличие обновления",208), DELEGATE(this, check_update_now)).height(35).setname(CONSTASTR("checkupdb"));
+    dm().button(ts::wstr_c(), TTT("Check for update",208), DELEGATE(this, check_update_now)).height(35).setname(CONSTASTR("checkupdb"));
     dm().vspace(5);
 
     title.set( CONSTWSTR("<p=c>Used libs<hr><l><a href=\"https://github.com/irungentoo/toxcore/\">Tox core</a>") );
@@ -181,7 +181,7 @@ ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 
     if (nv.ver.is_empty())
     {
-        set_label_text( CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(0)) + TTT("Обновление не найдено", 207) );
+        set_label_text( CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(0)) + TTT("Update not found",207) );
         if (RID no = find(CONSTASTR("upd")))
         {
             MODIFY(no).visible(true);
@@ -189,7 +189,7 @@ ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
         return 0;
     }
 
-    set_label_text( CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(1)) + (TTT("Обнаружена новая версия: $",209) / ts::to_wstr(nv.ver.as_sptr())) );
+    set_label_text( CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(1)) + (TTT("New version detected: $",209) / ts::to_wstr(nv.ver.as_sptr())) );
     if (RID yes = find(CONSTASTR("upd")))
     {
         MODIFY(yes).visible(true);

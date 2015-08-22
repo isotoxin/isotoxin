@@ -12,7 +12,7 @@ dialog_contact_props_c::~dialog_contact_props_c()
 
 /*virtual*/ ts::wstr_c dialog_contact_props_c::get_name() const
 {
-    return TTT("[appname]: Свойства контакта",224);
+    return TTT("[appname]: Contact settings",224);
 }
 
 
@@ -49,9 +49,9 @@ void dialog_contact_props_c::history_settings( const ts::str_c& v )
 menu_c dialog_contact_props_c::gethistorymenu()
 {
     menu_c m;
-    m.add( TTT("По умолчанию",226), (keeph == KCH_DEFAULT) ? MIF_MARKED : 0, DELEGATE(this, history_settings), ts::amake<char>(KCH_DEFAULT) );
-    m.add( TTT("Всегда сохранять",227), (keeph == KCH_ALWAYS_KEEP) ? MIF_MARKED : 0, DELEGATE(this, history_settings), ts::amake<char>(KCH_ALWAYS_KEEP) );
-    m.add( TTT("Не сохранять",228), (keeph == KCH_NEVER_KEEP) ? MIF_MARKED : 0, DELEGATE(this, history_settings), ts::amake<char>(KCH_NEVER_KEEP) );
+    m.add( TTT("Default",226), (keeph == KCH_DEFAULT) ? MIF_MARKED : 0, DELEGATE(this, history_settings), ts::amake<char>(KCH_DEFAULT) );
+    m.add( TTT("Always save",227), (keeph == KCH_ALWAYS_KEEP) ? MIF_MARKED : 0, DELEGATE(this, history_settings), ts::amake<char>(KCH_ALWAYS_KEEP) );
+    m.add( TTT("Never save",228), (keeph == KCH_NEVER_KEEP) ? MIF_MARKED : 0, DELEGATE(this, history_settings), ts::amake<char>(KCH_NEVER_KEEP) );
 
     return m;
 }
@@ -61,7 +61,7 @@ menu_c dialog_contact_props_c::gethistorymenu()
     descmaker dm(descs);
     dm << 1;
 
-    ts::wstr_c cname(TTT("Свойства контакта",225));
+    ts::wstr_c cname(TTT("Contact settings",225));
     if (contactue)
     {
         customname = contactue->get_customname();
@@ -74,11 +74,11 @@ menu_c dialog_contact_props_c::gethistorymenu()
         dm().page_header(cname);
         dm().vspace(10);
 
-        dm().textfield(TTT("Отображаемое имя",229), from_utf8(customname), DELEGATE(this, custom_name))
+        dm().textfield(TTT("Custom name",229), from_utf8(customname), DELEGATE(this, custom_name))
             .focus(true);
         dm().vspace();
 
-        dm().combik(TTT("История сообщений",230)).setmenu(gethistorymenu()).setname(CONSTASTR("history"));
+        dm().combik(TTT("Message history",230)).setmenu(gethistorymenu()).setname(CONSTASTR("history"));
 
     }
 

@@ -209,23 +209,23 @@ HICON application_c::app_icon(bool for_tray)
 {
     switch (ll)
     {
-        case LL_CTXMENU_COPY: return TTT("Копировать",92);
-        case LL_CTXMENU_CUT: return TTT("Вырезать",93);
-        case LL_CTXMENU_PASTE: return TTT("Вставить",94);
-        case LL_CTXMENU_DELETE: return TTT("Удалить",95);
-        case LL_CTXMENU_SELALL: return TTT("Выделить всё",96);
+        case LL_CTXMENU_COPY: return TTT("Copy",92);
+        case LL_CTXMENU_CUT: return TTT("Cut",93);
+        case LL_CTXMENU_PASTE: return TTT("Paste",94);
+        case LL_CTXMENU_DELETE: return TTT("Delete",95);
+        case LL_CTXMENU_SELALL: return TTT("Select all",96);
         case LL_ABTT_CLOSE:
             if (cfg().collapse_beh() == 2)
             {
-                return TTT("Свернуть в область уведомлений[br](Чтобы закрыть, удерживайте Ctrl)",122);
+                return TTT("Minimize to notification area[br](Hold Ctrl key to close)",122);
             }
-            return TTT("Закрыть", 3);
-        case LL_ABTT_MAXIMIZE: return TTT("Во весь экран", 4);
-        case LL_ABTT_NORMALIZE: return TTT("Нормальный размер", 5);
+            return TTT("Close",3);
+        case LL_ABTT_MAXIMIZE: return TTT("Expand",4);
+        case LL_ABTT_NORMALIZE: return TTT("Normal size",5);
         case LL_ABTT_MINIMIZE:
             if (cfg().collapse_beh() == 1)
-                return TTT("Свернуть в область уведомлений",123);
-            return TTT("Свернуть", 6);
+                return TTT("Minimize to notification area",123);
+            return TTT("Minimize",6);
     }
     return __super::app_loclabel(ll);
 }
@@ -426,7 +426,7 @@ static DWORD WINAPI autoupdater(LPVOID)
 
         DEFERRED_EXECUTION_BLOCK_BEGIN(0)
             menu_c m;
-            m.add(TTT("Выход",117), 0, handlers::m_exit);
+            m.add(TTT("Exit",117), 0, handlers::m_exit);
             gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(),0), m, true);
         DEFERRED_EXECUTION_BLOCK_END(0)
     }
@@ -448,7 +448,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
             {
                 SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
                     gui_isodialog_c::title(DT_MSGBOX_ERROR),
-                    TTT("Профиль с таким именем уже существует",49)
+                    TTT("Such profile already exists",49)
                     ));
                 return false;
             }
@@ -458,7 +458,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
             {
                 SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
                     gui_isodialog_c::title(DT_MSGBOX_ERROR),
-                    TTT("Не удалось создать профиль ($)",50) / lasterror()
+                    TTT("Can't create profile ($)",50) / lasterror()
                     ));
                 return true;
             }
@@ -472,7 +472,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
                 {
                     SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
                         gui_isodialog_c::title(DT_MSGBOX_INFO),
-                        TTT("Профиль с именем [b]$[/b] создан и установлен в качестве профиля по умолчанию.", 48) / prfn
+                        TTT("Profile [b]$[/b] has created and set as default.",48) / prfn
                         ));
                     cfg().profile(pn);
                 } else
@@ -481,7 +481,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
             {
                 SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
                     gui_isodialog_c::title(DT_MSGBOX_INFO),
-                    TTT("Профиль с именем [b]$[/b] создан. Вы можете переключиться на него, используя меню настроек.",51) / prfn
+                    TTT("Profile with name [b]$[/b] has created. You can switch to it using settings menu.",51) / prfn
                     ));
             }
             
@@ -494,8 +494,8 @@ bool application_c::b_customize(RID r, GUIPARAM param)
             ts::parse_env(defprofilename);
             SUMMON_DIALOG<dialog_entertext_c>(UD_PROFILENAME, dialog_entertext_c::params(
                                                 UD_PROFILENAME,
-                                                TTT("[appname]: имя профиля",44),
-                                                TTT("Введите имя профия. Будет создан файл с таким именем. Вы можете создавать любое количество профилей и переключаться между ними в любой момент. Детальная настройка текущего профиля доступна в окне настроек.",43),
+                                                TTT("[appname]: profile name",44),
+                                                TTT("Enter profile name. It is profile file name. You can create any number of profiles and switch them any time. Detailed settings of current profile are available in settings dialog.",43),
                                                 defprofilename,
                                                 ts::str_c(),
                                                 m_newprofile_ok,
@@ -534,8 +534,8 @@ bool application_c::b_customize(RID r, GUIPARAM param)
 
 
     menu_c m;
-    menu_c &pm = m.add_sub( TTT("Профиль",39) )
-        .add( TTT("Создать новый",40), 0, handlers::m_newprofile )
+    menu_c &pm = m.add_sub( TTT("Profile",39) )
+        .add( TTT("Create new",40), 0, handlers::m_newprofile )
         .add_separator();
 
     ts::wstr_c profname = cfg().profile();
@@ -548,13 +548,13 @@ bool application_c::b_customize(RID r, GUIPARAM param)
         if (ASSERT(wfn.ends(ext))) wfn.trunc_length( ext.l );
         ts::uint32 mif = 0;
         if (wfn == profname) mif = MIF_MARKED|MIF_DISABLED;
-        pm.add(TTT("Переключиться на [b]$[/b]",41) / wfn, mif, handlers::m_switchto, ts::to_utf8(wfn));
+        pm.add(TTT("Switch to [b]$[/b]",41) / wfn, mif, handlers::m_switchto, ts::to_utf8(wfn));
     }
 
 
-    m.add( TTT("Настройки",42), 0, handlers::m_settings );
+    m.add( TTT("Settings",42), 0, handlers::m_settings );
     m.add_separator();
-    m.add( TTT("О программе",206), 0, handlers::m_about );
+    m.add( TTT("About",206), 0, handlers::m_about );
     gui_popup_menu_c::show(r.call_get_popup_menu_pos(), m);
 
     //SUMMON_DIALOG<dialog_settings_c>(L"dialog_settings");
@@ -567,7 +567,7 @@ void application_c::summon_main_rect()
     load_locale(cfg().language());
     if (!load_theme(cfg().theme()))
     {
-        MessageBoxW(nullptr, ts::wstr_c(TTT("Не найдена тема интерфейса по умолчанию!",234)), L"error", MB_OK|MB_ICONERROR);
+        MessageBoxW(nullptr, ts::wstr_c(TTT("Default GUI theme not found!",234)), L"error", MB_OK|MB_ICONERROR);
         sys_exit(1);
         return;
     }

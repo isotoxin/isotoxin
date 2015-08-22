@@ -2,8 +2,8 @@
 
 gui_isodialog_c::gui_isodialog_c(initial_rect_data_s &data) :gui_dialog_c(data)
 {
-    label_path_selector_caption = TTT("Выбор папки", 21);
-    label_file_selector_caption = TTT("Выбор файла", 69);
+    label_path_selector_caption = TTT("Select folder",21);
+    label_file_selector_caption = TTT("File selector",69);
 }
 
 gui_isodialog_c::~gui_isodialog_c()
@@ -21,7 +21,7 @@ gui_isodialog_c::~gui_isodialog_c()
     {
     case 0: // close/cancel
         bcr.face = BUTTON_FACE(button);
-        bcr.btext = TTT("Отмена",9);
+        bcr.btext = TTT("Cancel",9);
         bcr.handler = DELEGATE(this, b_close);
         break;
     case 1: // close/cancel
@@ -45,11 +45,11 @@ ts::wstr_c gui_isodialog_c::title( dlg_title_e d )
     switch (d)
     {
     case DT_MSGBOX_ERROR:
-        return TTT("[appname]: ошибка",45);
+        return TTT("[appname]: error",45);
     case DT_MSGBOX_INFO:
-        return TTT("[appname]: информация",46);
+        return TTT("[appname]: information",46);
     case DT_MSGBOX_WARNING:
-        return TTT("[appname]: предупреждение",86);
+        return TTT("[appname]: warning",86);
     }
     return TTT("[appname]",47);
 }

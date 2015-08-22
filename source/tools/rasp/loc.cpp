@@ -208,7 +208,7 @@ int proc_loc(const wstrings_c & pars)
     }
 
 
-    //b.load_from_disk_file(str_c(fn_join(ptl, CONSTWSTR("ru.labels.lng"))).as_sptr());
+    //b.load_from_disk_file(str_c(fn_join(ptl, CONSTWSTR("en.labels.lng"))).as_sptr());
     //b.detect();
     //lngbp.load(b.as_str<wchar>());
 
@@ -249,7 +249,7 @@ int proc_loc(const wstrings_c & pars)
 
     need2rpl.sort();
 
-    FILE *f = fopen(to_str(fn_join(ptl, CONSTWSTR("ru.labels.lng"))), "wb");
+    FILE *f = fopen(to_str(fn_join(ptl, CONSTWSTR("en.labels.lng"))), "wb");
     swstr_c buf;
 
     //uint16 signa = 0xFEFF;
@@ -264,5 +264,81 @@ int proc_loc(const wstrings_c & pars)
     fclose(f);
 
     //getch();
+    return 0;
+}
+
+
+int proc_lochange(const wstrings_c & pars)
+{
+    if (pars.size() < 3) return 0;
+    wstr_c pts = pars.get(1); fix_path(pts, FNO_SIMPLIFY);
+
+    if (!dir_present(pts))
+    {
+        Print(FOREGROUND_RED, "path-to-source not found: %s", pts.cstr()); return 0;
+    }
+
+    wstr_c ptl = pars.get(2); fix_path(ptl, FNO_SIMPLIFY);
+    if (!dir_present(ptl))
+    {
+        Print(FOREGROUND_RED, "path-to-loc not found: %s", ptl.cstr()); return 0;
+    }
+
+    wstr_c tolocale = CONSTWSTR("en");
+    if (pars.size() >= 4)
+        tolocale = pars.get(3);
+
+    wstrings_c lines;
+    wstrings_c sfiles;
+    fill_dirs_and_files(pts, sfiles, lines);
+
+
+    hashmap_t<int, wstr_c> localehash;
+    wstrings_c localelines;
+    parse_text_file(fn_join(ptl, tolocale) + CONSTWSTR(".labels.lng"), localelines, true);
+    for (const wstr_c &ls : localelines)
+    {
+        token<wchar> t(ls, '=');
+        pwstr_c stag = *t;
+        int tag = t->as_int(-1);
+        ++t;
+        wstr_c l(*t); l.trim();
+
+        if (tag > 0)
+            localehash[tag] = l;
+    }
+
+
+    for (const wstr_c & f : sfiles)
+    {
+        if (f.ends(CONSTWSTR(".h")) || f.ends(CONSTWSTR(".cpp")))
+        {
+            parse_text_file(f, lines);
+            bool cmnt = false;
+            bool changed = false;
+            int cnt = lines.size();
+            for (int ln = 0; ln < cnt; ++ln)
+            {
+                wstr_c & l = lines.get(ln);
+                int workindex = 0;
+                wstr_c txt;
+                int tag, left, rite;
+
+                while (findTTT(l, txt, tag, cmnt, left, rite, workindex))
+                {
+                    if (tag >= 0)
+                    {
+                        wstr_c txtto = localehash[tag];
+                        l.replace( left, rite-left, CONSTWSTR("TTT(\"") + txtto + CONSTWSTR("\",") + wmake(tag) + CONSTWSTR(")") );
+                        changed = true;
+                    }
+                }
+
+            }
+            if (changed)
+                savelines(f, lines);
+
+        }
+    }
     return 0;
 }

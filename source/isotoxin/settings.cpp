@@ -8,14 +8,14 @@
 static menu_c list_proxy_types(int cur, MENUHANDLER mh, int av = -1)
 {
     menu_c m;
-    m.add(TTT("Прямое соединение", 159), cur == 0 ? MIF_MARKED : 0, mh, CONSTASTR("0"));
+    m.add(TTT("Direct connection",159), cur == 0 ? MIF_MARKED : 0, mh, CONSTASTR("0"));
 
     if (CF_PROXY_SUPPORT_HTTP & av)
-        m.add(TTT("HTTP прокси", 160), cur == 1 ? MIF_MARKED : 0, mh, CONSTASTR("1"));
+        m.add(TTT("HTTP proxy",160), cur == 1 ? MIF_MARKED : 0, mh, CONSTASTR("1"));
     if (CF_PROXY_SUPPORT_SOCKS4 & av)
-        m.add(TTT("Socks 4 прокси", 161), cur == 2 ? MIF_MARKED : 0, mh, CONSTASTR("2"));
+        m.add(TTT("Socks 4 proxy",161), cur == 2 ? MIF_MARKED : 0, mh, CONSTASTR("2"));
     if (CF_PROXY_SUPPORT_SOCKS5 & av)
-        m.add(TTT("Socks 5 прокси", 162), cur == 3 ? MIF_MARKED : 0, mh, CONSTASTR("3"));
+        m.add(TTT("Socks 5 proxy",162), cur == 3 ? MIF_MARKED : 0, mh, CONSTASTR("3"));
 
     return m;
 }
@@ -97,7 +97,7 @@ dialog_settings_c::~dialog_settings_c()
 
 /*virtual*/ ts::wstr_c dialog_settings_c::get_name() const
 {
-    return TTT("[appname]: Настройки",31);
+    return TTT("[appname]: Settings",31);
 }
 
 /*virtual*/ void dialog_settings_c::created()
@@ -113,7 +113,7 @@ void dialog_settings_c::getbutton(bcreate_s &bcr)
     __super::getbutton(bcr);
     if (bcr.tag == 1)
     {
-        bcr.btext = TTT("Сохранить",61);
+        bcr.btext = TTT("Save",61);
     }
 
 }
@@ -245,7 +245,7 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
     {
         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
             gui_isodialog_c::title(DT_MSGBOX_INFO),
-            TTT("Новых версий не обнаружено.",194)
+            TTT("No new versions detected.",194)
             ));
     
         return 0;
@@ -253,7 +253,7 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 
     SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
         gui_isodialog_c::title(DT_MSGBOX_INFO),
-        TTT("Обнаружена новая версия: $",196) / ts::to_wstr(nv.ver.as_sptr())
+        TTT("New version detected: $",196) / ts::to_wstr(nv.ver.as_sptr())
         ));
 
     return 0;
@@ -358,140 +358,140 @@ void dialog_settings_c::mod()
     menu_c m;
     if (profile_selected)
     {
-        m.add_sub( TTT("Профиль",1) )
-            .add(TTT("Основные",32), 0, TABSELMI(MASK_PROFILE_COMMON) )
-            .add(TTT("Чат",109), 0, TABSELMI(MASK_PROFILE_CHAT) )
-            .add(TTT("Прием файлов",236), 0, TABSELMI(MASK_PROFILE_FILES) )
-            .add(TTT("Сети",33), 0, TABSELMI(MASK_PROFILE_NETWORKS) );
+        m.add_sub( TTT("Profile",1) )
+            .add(TTT("General",32), 0, TABSELMI(MASK_PROFILE_COMMON) )
+            .add(TTT("Chat",109), 0, TABSELMI(MASK_PROFILE_CHAT) )
+            .add(TTT("File receive",236), 0, TABSELMI(MASK_PROFILE_FILES) )
+            .add(TTT("Networks",33), 0, TABSELMI(MASK_PROFILE_NETWORKS) );
     }
 
-    m.add_sub(TTT("Приложение", 34))
-        .add(TTT("Основные",106), 0, TABSELMI(MASK_APPLICATION_COMMON))
-        .add(TTT("Система", 35), 0, TABSELMI(MASK_APPLICATION_SYSTEM))
-        .add(TTT("Звук",125), 0, TABSELMI(MASK_APPLICATION_SETSOUND));
+    m.add_sub(TTT("Application",34))
+        .add(TTT("General",106), 0, TABSELMI(MASK_APPLICATION_COMMON))
+        .add(TTT("System",35), 0, TABSELMI(MASK_APPLICATION_SYSTEM))
+        .add(TTT("Audio",125), 0, TABSELMI(MASK_APPLICATION_SETSOUND));
 
     descmaker dm( descs );
     dm << MASK_APPLICATION_COMMON; //_________________________________________________________________________________________________//
 
-    dm().page_header(TTT("Основные настройки приложения",108));
+    dm().page_header(TTT("General application settings",108));
     dm().vspace(10);
-    dm().combik(TTT("Язык",107)).setmenu( list_langs( curlang, DELEGATE(this, select_lang) ) ).setname( CONSTASTR("langs") );
+    dm().combik(TTT("Language",107)).setmenu( list_langs( curlang, DELEGATE(this, select_lang) ) ).setname( CONSTASTR("langs") );
     dm().vspace(10);
-    dm().combik(TTT("Тема интерфейса",233)).setmenu(list_themes()).setname(CONSTASTR("themes"));
+    dm().combik(TTT("GUI theme",233)).setmenu(list_themes()).setname(CONSTASTR("themes"));
     dm().vspace();
-    dm().radio(TTT("Обновления", 155), DELEGATE(this, autoupdate_handler), autoupdate).setmenu(
+    dm().radio(TTT("Updates",155), DELEGATE(this, autoupdate_handler), autoupdate).setmenu(
         menu_c()
-        .add(TTT("Не проверять", 156), 0, MENUHANDLER(), CONSTASTR("0"))
-        .add(TTT("Только уведомлять", 157), 0, MENUHANDLER(), CONSTASTR("1"))
-        .add(TTT("Скачивать и обновлять", 158), 0, MENUHANDLER(), CONSTASTR("2"))
+        .add(TTT("Do not check",156), 0, MENUHANDLER(), CONSTASTR("0"))
+        .add(TTT("Check and notify",157), 0, MENUHANDLER(), CONSTASTR("1"))
+        .add(TTT("Check, download and update",158), 0, MENUHANDLER(), CONSTASTR("2"))
         );
     dm().hgroup(ts::wsptr());
     dm().combik(HGROUP_MEMBER).setmenu( list_proxy_types(autoupdate_proxy, DELEGATE(this, autoupdate_proxy_handler)) ).setname(CONSTASTR("proxytype"));
     dm().textfield(HGROUP_MEMBER, ts::to_wstr(autoupdate_proxy_addr), DELEGATE(this, autoupdate_proxy_addr_handler)).setname(CONSTASTR("proxyaddr"));
     dm().vspace();
-    dm().button(HGROUP_MEMBER, TTT("Проверить наличие обновления",195), DELEGATE(this, check_update_now) ).height(35).setname(CONSTASTR("checkupdb"));
+    dm().button(HGROUP_MEMBER, TTT("Check for update",195), DELEGATE(this, check_update_now) ).height(35).setname(CONSTASTR("checkupdb"));
 
     dm << MASK_APPLICATION_SYSTEM; //_________________________________________________________________________________________________//
 
-    dm().page_header( TTT("Некоторые системные настройки приложения",36) );
+    dm().page_header( TTT("Some system settings of application",36) );
     dm().vspace(10);
     //dm().combik(TTT("Текущий профиль")).setmenu( list_profiles() );
     
     ts::wstr_c profname = cfg().profile();
     if (!profname.is_empty()) profile_c::path_by_name(profname);
 
-    dm().path( TTT("Путь к текущему профилю",37), ts::to_wstr(profname) ).readonly(true);
+    dm().path( TTT("Current profile path",37), ts::to_wstr(profname) ).readonly(true);
     dm().vspace();
-    dm().radio(TTT("Сворачивание в область уведомлений",118), DELEGATE(this, collapse_beh_handler), collapse_beh).setmenu(
+    dm().radio(TTT("Minimize to notification area",118), DELEGATE(this, collapse_beh_handler), collapse_beh).setmenu(
         menu_c()
-        .add(TTT("Не сворачивать в область уведомлений",119), 0, MENUHANDLER(), CONSTASTR("0"))
-        .add(TTT("Кнопка минимизации $ сворачивает в область уведомлений",120) / CONSTWSTR("<img=bmin,-1>"), 0, MENUHANDLER(), CONSTASTR("1"))
-        .add(TTT("Кнопка закрытия $ сворачивает в область уведомлений",121) / CONSTWSTR("<img=bclose,-1>"), 0, MENUHANDLER(), CONSTASTR("2"))
+        .add(TTT("Don't minimize to notification area",119), 0, MENUHANDLER(), CONSTASTR("0"))
+        .add(TTT("[quote]Minimize[quote] button $ minimizes to notification area",120) / CONSTWSTR("<img=bmin,-1>"), 0, MENUHANDLER(), CONSTASTR("1"))
+        .add(TTT("[quote]Close[quote] button $ minimizes to notification area",121) / CONSTWSTR("<img=bclose,-1>"), 0, MENUHANDLER(), CONSTASTR("2"))
         );
 
     dm << MASK_APPLICATION_SETSOUND; //______________________________________________________________________________________________//
-    dm().page_header(TTT("Настройка звука",127));
+    dm().page_header(TTT("Audio settings",127));
     dm().vspace(10);
-    dm().combik(TTT("Микрофон",126)).setmenu( list_capture_devices() ).setname( CONSTASTR("mic") );
+    dm().combik(TTT("Microphone",126)).setmenu( list_capture_devices() ).setname( CONSTASTR("mic") );
     dm().vspace();
-    dm().hgroup(TTT("Динамики",128));
+    dm().hgroup(TTT("Speakers",128));
     dm().combik(HGROUP_MEMBER).setmenu( list_talk_devices() ).setname( CONSTASTR("talk") );
-    dm().button(HGROUP_MEMBER, CONSTWSTR("face=play"), DELEGATE(this, test_talk_device) ).sethint(TTT("Проверка динамиков",131));
+    dm().button(HGROUP_MEMBER, CONSTWSTR("face=play"), DELEGATE(this, test_talk_device) ).sethint(TTT("Check speakers",131));
     dm().vspace();
-    dm().hgroup(TTT("Звонок",129));
+    dm().hgroup(TTT("Ringtone",129));
     dm().combik(HGROUP_MEMBER).setmenu( list_signal_devices() ).setname( CONSTASTR("signal") );
-    dm().button(HGROUP_MEMBER, CONSTWSTR("face=play"), DELEGATE(this, test_signal_device) ).sethint(TTT("Проверка сигнала",132));
+    dm().button(HGROUP_MEMBER, CONSTWSTR("face=play"), DELEGATE(this, test_signal_device) ).sethint(TTT("Check ringtone",132));
     dm().vspace();
 
     if (profile_selected)
     {
         dm << MASK_PROFILE_COMMON; //____________________________________________________________________________________________________//
-        dm().page_header( TTT("Основные настройки профиля",38) );
+        dm().page_header( TTT("General profile settings",38) );
         dm().vspace(10);
-        dm().textfield( TTT("Имя",52), from_utf8(username), DELEGATE(this,username_edit_handler) ).setname(CONSTASTR("uname")).focus(true);
+        dm().textfield( TTT("Name",52), from_utf8(username), DELEGATE(this,username_edit_handler) ).setname(CONSTASTR("uname")).focus(true);
         dm().vspace();
-        dm().textfield(TTT("Статус",68), from_utf8(userstatusmsg), DELEGATE(this, statusmsg_edit_handler)).setname(CONSTASTR("ustatus"));
+        dm().textfield(TTT("Status",68), from_utf8(userstatusmsg), DELEGATE(this, statusmsg_edit_handler)).setname(CONSTASTR("ustatus"));
 
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
-        dm().page_header(TTT("Настройки чата",110));
+        dm().page_header(TTT("Chat settings",110));
         dm().vspace(10);
-        dm().radio(TTT("Enter и Ctrl+Enter",111), DELEGATE(this, ctl2send_handler), ctl2send).setmenu(
-            menu_c().add(TTT("Enter - отправить сообщение, Ctrl+Enter - перенос строки",112), 0, MENUHANDLER(), CONSTASTR("0"))
-                    .add(TTT("Enter - перенос строки, Ctrl+Enter - отправить сообщение",113), 0, MENUHANDLER(), CONSTASTR("1"))
-                    .add(TTT("Enter - перенос строки, двойной Enter - отправить сообщение",152), 0, MENUHANDLER(), CONSTASTR("2"))
+        dm().radio(TTT("Enter and Ctrl+Enter",111), DELEGATE(this, ctl2send_handler), ctl2send).setmenu(
+            menu_c().add(TTT("Enter - send message, Ctrl+Enter - new line",112), 0, MENUHANDLER(), CONSTASTR("0"))
+                    .add(TTT("Enter - new line, Ctrl+Enter - send message",113), 0, MENUHANDLER(), CONSTASTR("1"))
+                    .add(TTT("Enter - new line, double Enter - send message",152), 0, MENUHANDLER(), CONSTASTR("2"))
             );
         dm().vspace();
-        dm().combik(TTT("Набор смайлов",269)).setmenu(emoti().get_list_smile_pack( smilepack, DELEGATE(this, smile_pack_selected) )).setname(CONSTASTR("avasmliepack"));
+        dm().combik(TTT("Emoticon set",269)).setmenu(emoti().get_list_smile_pack( smilepack, DELEGATE(this, smile_pack_selected) )).setname(CONSTASTR("avasmliepack"));
         dm().vspace();
 
         ts::wstr_c ctl;
         dm().textfield( ts::wstr_c(), from_utf8(date_msg_tmpl), DELEGATE(this,date_msg_tmpl_edit_handler) ).setname(CONSTASTR("date_msg_tmpl")).width(100).subctl(textrectid++, ctl);
-        ts::wstr_c t_showdate = TTT("Показывать дату (шаблон: $)",171) / ctl;
+        ts::wstr_c t_showdate = TTT("Show message date (template: $)",171) / ctl;
         if (t_showdate.find_pos(ctl)<0) t_showdate.append_char(' ').append(ctl);
 
         ctl.clear();
         dm().textfield(ts::wstr_c(), from_utf8(date_sep_tmpl), DELEGATE(this, date_sep_tmpl_edit_handler)).setname(CONSTASTR("date_sep_tmpl")).width(140).subctl(textrectid++, ctl);
-        ts::wstr_c t_showdatesep = TTT("Показывать разделитель $ между сообщениями с различной датой",172) / ctl;
+        ts::wstr_c t_showdatesep = TTT("Show separator $ between messages with different date",172) / ctl;
         if (t_showdatesep.find_pos(ctl)<0) t_showdate.append_char(' ').append(ctl);
 
-        dm().checkb(TTT("Сообщения",170), DELEGATE(this, msgopts_handler), msgopts_current).setmenu(
+        dm().checkb(TTT("Messages",170), DELEGATE(this, msgopts_handler), msgopts_current).setmenu(
                     menu_c().add(t_showdate, 0, MENUHANDLER(), ts::amake<int>( MSGOP_SHOW_DATE ))
                             .add(t_showdatesep, 0, MENUHANDLER(), ts::amake<int>( MSGOP_SHOW_DATE_SEPARATOR ))
-                            .add(TTT("Показывать название протокола",173), 0, MENUHANDLER(), ts::amake<int>( MSGOP_SHOW_PROTOCOL_NAME ))
-                            .add(TTT("Сохранять историю сообщений",222), 0, MENUHANDLER(), ts::amake<int>( MSGOP_KEEP_HISTORY ))
+                            .add(TTT("Show protocol name",173), 0, MENUHANDLER(), ts::amake<int>( MSGOP_SHOW_PROTOCOL_NAME ))
+                            .add(TTT("Keep message history",222), 0, MENUHANDLER(), ts::amake<int>( MSGOP_KEEP_HISTORY ))
                     );
 
         dm().vspace();
-        dm().checkb(TTT("Уведомление о печати",272), DELEGATE(this, msgopts_handler), msgopts_current).setmenu(
-            menu_c().add(TTT("Слать сигнал [quote]я печатаю[quote]",273), 0, MENUHANDLER(), ts::amake<int>(MSGOP_SEND_TYPING))
-                    .add(TTT("Игнорировать уведомления о печати",274), 0, MENUHANDLER(), ts::amake<int>(MSGOP_IGNORE_OTHER_TYPING))
+        dm().checkb(TTT("Typing notification",272), DELEGATE(this, msgopts_handler), msgopts_current).setmenu(
+            menu_c().add(TTT("Send typing notification",273), 0, MENUHANDLER(), ts::amake<int>(MSGOP_SEND_TYPING))
+                    .add(TTT("Ignore typing notifications",274), 0, MENUHANDLER(), ts::amake<int>(MSGOP_IGNORE_OTHER_TYPING))
             );
 
         dm << MASK_PROFILE_FILES; //____________________________________________________________________________________________________//
-        dm().page_header(TTT("Настройки приема файлов",237));
+        dm().page_header(TTT("File receive settings",237));
         dm().vspace(10);
-        dm().path(TTT("Папка для файлов по умолчанию", 174), downloadfolder, DELEGATE(this, downloadfolder_edit_handler));
+        dm().path(TTT("Default download folder",174), downloadfolder, DELEGATE(this, downloadfolder_edit_handler));
         dm().vspace();
 
-        dm().radio(TTT("Подтверждение",240), DELEGATE(this, fileconfirm_handler), fileconfirm).setmenu(
-            menu_c().add(TTT("Запрашивать подтверждение для всех файлов",238), 0, MENUHANDLER(), CONSTASTR("0"))
-                    .add(TTT("Начинать прием файлов без подтверждения",239), 0, MENUHANDLER(), CONSTASTR("1"))
+        dm().radio(TTT("Confirmation",240), DELEGATE(this, fileconfirm_handler), fileconfirm).setmenu(
+            menu_c().add(TTT("Confirmation required for any files",238), 0, MENUHANDLER(), CONSTASTR("0"))
+                    .add(TTT("Files start downloading without confirmation",239), 0, MENUHANDLER(), CONSTASTR("1"))
             );
 
         dm().vspace();
-        dm().textfield(TTT("Эти файлы будут скачиваться без подтверждения",241), auto_download_masks, DELEGATE(this, fileconfirm_auto_masks_handler)).setname(CONSTASTR("confirmauto"));
+        dm().textfield(TTT("These files start downloading without confirmation",241), auto_download_masks, DELEGATE(this, fileconfirm_auto_masks_handler)).setname(CONSTASTR("confirmauto"));
         dm().vspace();
-        dm().textfield(TTT("Для приема этих файлов небходимо будет подтверждение",242), manual_download_masks, DELEGATE(this, fileconfirm_manual_masks_handler)).setname(CONSTASTR("confirmmanual"));
+        dm().textfield(TTT("These files require confirmation to start downloading",242), manual_download_masks, DELEGATE(this, fileconfirm_manual_masks_handler)).setname(CONSTASTR("confirmmanual"));
 
 
         dm << MASK_PROFILE_NETWORKS; //_________________________________________________________________________________________________//
-        dm().page_header(TTT("[appname] поддерживает возможность одновременного соединения с несколькими сетями. Вы можете выбрать, с какими именно.",130));
+        dm().page_header(TTT("[appname] supports simultaneous connections to multiple networks.",130));
         dm().vspace(10);
-        dm().list(TTT("Активные соединения",54), -270).setname(CONSTASTR("protoactlist"));
+        dm().list(TTT("Active network connections",54), -270).setname(CONSTASTR("protoactlist"));
         dm().vspace();
-        dm().hgroup(TTT("Доступные сети",53));
+        dm().hgroup(TTT("Available networks",53));
         dm().combik(HGROUP_MEMBER).setmenu(get_list_avaialble_networks()).setname(CONSTASTR("availablenets"));
-        dm().button(HGROUP_MEMBER, TTT("Добавить соединение",58), DELEGATE(this, addnetwork)).width(250).height(25).setname(CONSTASTR("addnet"));
+        dm().button(HGROUP_MEMBER, TTT("Add network connection",58), DELEGATE(this, addnetwork)).width(250).height(25).setname(CONSTASTR("addnet"));
         dm().vspace();
 
     /*
@@ -517,13 +517,13 @@ void dialog_settings_c::describe_network(ts::wstr_c&desc, const ts::str_c& name,
     const protocols_s *p = find_protocol(tag);
     if (p == nullptr)
     {
-        desc.replace_all(CONSTWSTR("{name}"), TTT("$ (Неизвестный протокол: $)",57) / from_utf8(name) / ts::to_wstr(tag));
+        desc.replace_all(CONSTWSTR("{name}"), TTT("$ (Unknown protocol: $)",57) / from_utf8(name) / ts::to_wstr(tag));
         desc.replace_all(CONSTWSTR("{id}"), CONSTWSTR("?"));
         desc.replace_all(CONSTWSTR("{module}"), CONSTWSTR("?"));
     } else
     {
         ts::wstr_c pubid = to_wstr(contacts().find_pubid(id));
-        if (pubid.is_empty()) pubid = TTT("еще не создан или не загружен",200); else pubid.insert(0, CONSTWSTR("<ee>"));
+        if (pubid.is_empty()) pubid = TTT("not yet created or loaded",200); else pubid.insert(0, CONSTWSTR("<ee>"));
 
         desc.replace_all(CONSTWSTR("{name}"), from_utf8(name));
         desc.replace_all(CONSTWSTR("{id}"), pubid);
@@ -590,7 +590,7 @@ bool dialog_settings_c::delete_used_network(RID, GUIPARAM param)
     {
         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
             gui_isodialog_c::title(DT_MSGBOX_WARNING),
-            TTT("Соединение [$] используется! Будут удалены все контакты, использующие это соединение. Также будет удалена история сообщений этих контактов. Вы всё еще уверены?",267) / from_utf8(row->other.name)
+            TTT("Connection [$] in use! All contacts of this connection will be deleted. History of these contacts will be deleted too. Are you still sure?",267) / from_utf8(row->other.name)
             ).on_ok(DELEGATE(this, on_delete_network_2), ts::amake<int>((int)param)).bcancel()); //-V205
     }
     return true;
@@ -692,7 +692,7 @@ bool dialog_settings_c::addnetwork(RID, GUIPARAM)
             goto again;
         }
     }
-    ts::wstr_c name = TTT("Соединение $", 63) / ts::to_wstr(selected_available_network).append_char(' ').append(ts::wmake(n));
+    ts::wstr_c name = TTT("Connection $",63) / ts::to_wstr(selected_available_network).append_char(' ').append(ts::wmake(n));
 
     dialog_protosetup_params_s prms(selected_available_network, to_utf8(name), p->features, p->connection_features, DELEGATE(this,addeditnethandler));
     prms.configurable.udp_enable = true;
@@ -714,7 +714,7 @@ void dialog_settings_c::available_network_selected(const ts::str_c& ntag)
 menu_c dialog_settings_c::get_list_avaialble_networks()
 {
     menu_c m;
-    m.add(TTT("Выберите сеть",201), selected_available_network.is_empty() ? MIF_MARKED : 0, DELEGATE( this,  available_network_selected ));
+    m.add(TTT("Choose network",201), selected_available_network.is_empty() ? MIF_MARKED : 0, DELEGATE( this,  available_network_selected ));
     bool sep = false;
     for (const protocols_s&proto : available_prots)
     {
@@ -753,7 +753,7 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
             {
                 SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
                     gui_isodialog_c::title(DT_MSGBOX_WARNING),
-                    TTT("Соединение [$] будет удалено![br]Вы уверены?", 266) / from_utf8(row->other.name)
+                    TTT("Connection [$] will be deleted![br]Are you sure?",266) / from_utf8(row->other.name)
                     ).on_ok(DELEGATE(this, on_delete_network), *t).bcancel());
             }
         }
@@ -798,8 +798,8 @@ menu_c dialog_settings_c::getcontextmenu( const ts::str_c& param, bool activatio
             contextmenuhandler( ts::str_c(CONSTASTR("props/")).append(*t) );
         else 
         {
-            m.add(ts::wstr_c(CONSTWSTR("<b>")).append(TTT("Настроить", 60)), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("props/")).append(*t));
-            m.add(TTT("Удалить", 59), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("del/")).append(*t));
+            m.add(ts::wstr_c(CONSTWSTR("<b>")).append(TTT("Properties",60)), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("props/")).append(*t));
+            m.add(TTT("Delete",59), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("del/")).append(*t));
         }
     }
 
@@ -1021,7 +1021,7 @@ menu_c dialog_settings_c::list_signal_devices()
         ts::str_c par;
         if (sd.deviceid == s3::DEFAULT_DEVICE)
         {
-            desc = TTT("Использовать динамики", 133);
+            desc = TTT("Use speakers",133);
         } else
         {
             par = string_from_device(sd.deviceid);
@@ -1136,25 +1136,25 @@ void dialog_setup_network_c::getbutton(bcreate_s &bcr)
         if (active_protocol_c *ap = prf().ap(params.protoid))
             hdr.append(from_utf8(ap->get_desc())), newnet = false;
     if (newnet)
-        hdr.append(TTT("будет создано новое соединение $",62) / ts::to_wstr(params.networktag));
+        hdr.append(TTT("new network connection will be created: $",62) / ts::to_wstr(params.networktag));
     hdr.append(CONSTWSTR("</l>"));
 
     dm().page_header(hdr);
 
 
     dm().vspace(15);
-    dm().textfield(TTT("Имя этого соединения",70), from_utf8(params.networkname), DELEGATE(this, netname_edit)).focus(true);
+    dm().textfield(TTT("Network connection name",70), from_utf8(params.networkname), DELEGATE(this, netname_edit)).focus(true);
     dm().vspace();
-    dm().textfield(TTT("Ваше имя в этой сети",261), from_utf8(params.uname), DELEGATE(this, uname_edit));
+    dm().textfield(TTT("Your name on this network",261), from_utf8(params.uname), DELEGATE(this, uname_edit));
     dm().vspace();
-    dm().textfield(TTT("Ваш статус в этой сети",262), from_utf8(params.ustatus), DELEGATE(this, ustatus_edit));
+    dm().textfield(TTT("Your status on this network",262), from_utf8(params.ustatus), DELEGATE(this, ustatus_edit));
 
     dm().vspace();
 
     if ( params.confirm )
     {
         dm().checkb(ts::wstr_c(), DELEGATE(this, network_connect), params.connect_at_startup ? 1 : 0).setmenu(
-            menu_c().add(TTT("Соединение с сетью при запуске", 204), 0, MENUHANDLER(), CONSTASTR("1"))  );
+            menu_c().add(TTT("Connect at startup",204), 0, MENUHANDLER(), CONSTASTR("1"))  );
 
         addh += 22;
     }
@@ -1164,7 +1164,7 @@ void dialog_setup_network_c::getbutton(bcreate_s &bcr)
         ASSERT(params.configurable.initialized);
         addh += 22;
         dm().checkb(ts::wstr_c(), DELEGATE(this, network_udp), params.configurable.udp_enable ? 1 : 0).setmenu(
-            menu_c().add(TTT("Разрешить использование UDP",264), 0, MENUHANDLER(), CONSTASTR("1")));
+            menu_c().add(TTT("Allow UDP",264), 0, MENUHANDLER(), CONSTASTR("1")));
     }
 
     if (0 != (params.conn_features & CF_SERVER_OPTION))
@@ -1172,7 +1172,7 @@ void dialog_setup_network_c::getbutton(bcreate_s &bcr)
         ASSERT(params.configurable.initialized);
         dm().vspace(5);
         addh += 45;
-        dm().textfield(TTT("Порт сервера (0 - не запускать сервер)",265), ts::wmake<int>(params.configurable.server_port), DELEGATE(this, network_serverport));
+        dm().textfield(TTT("Server port. If 0, the server is disabled.",265), ts::wmake<int>(params.configurable.server_port), DELEGATE(this, network_serverport));
     }
 
     if (0 != (params.conn_features & CF_PROXY_MASK))
@@ -1188,7 +1188,7 @@ void dialog_setup_network_c::getbutton(bcreate_s &bcr)
 
         dm().vspace(5);
 
-        dm().hgroup(TTT("Настройки соединения", 169));
+        dm().hgroup(TTT("Connection settings",169));
         dm().combik(HGROUP_MEMBER).setmenu(list_proxy_types(pt, DELEGATE(this, set_proxy_type_handler), params.conn_features & CF_PROXY_MASK)).setname(CONSTASTR("protoproxytype"));
         dm().textfield(HGROUP_MEMBER, ts::to_wstr(params.configurable.proxy.proxy_addr), DELEGATE(this, set_proxy_addr_handler)).setname(CONSTASTR("protoproxyaddr"));
     }
@@ -1205,7 +1205,7 @@ void dialog_setup_network_c::getbutton(bcreate_s &bcr)
             iroot = ts::fn_join(iroot, ts::to_wstr(params.networktag));
         ts::fix_path(iroot, FNO_APPENDSLASH);
 
-        dm().file(TTT("Импортировать конфигурацию из файла",56), iroot, ts::wstr_c(), DELEGATE(this, network_importfile));
+        dm().file(TTT("Import configuration from file",56), iroot, ts::wstr_c(), DELEGATE(this, network_importfile));
     }
 
     return 0;
@@ -1267,7 +1267,7 @@ bool dialog_setup_network_c::netname_edit(const ts::wstr_c &t)
 
 /*virtual*/ ts::wstr_c dialog_setup_network_c::get_name() const
 {
-    return TTT("[appname]: Настройка соединения",263);
+    return TTT("[appname]: Connection properties",263);
 }
 /*virtual*/ ts::ivec2 dialog_setup_network_c::get_min_size() const
 {

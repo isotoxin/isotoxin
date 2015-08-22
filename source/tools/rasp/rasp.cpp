@@ -35,6 +35,7 @@ typedef int(*cmdproc)(const wstrings_c & pars);
 int proc_help(const wstrings_c & pars);
 int proc_show(const wstrings_c & pars);
 int proc_loc(const wstrings_c & pars);
+int proc_lochange(const wstrings_c & pars);
 int proc_trunc(const wstrings_c & pars);
 int proc_antic99(const wstrings_c & pars);
 int proc_grabnodes(const wstrings_c & pars);
@@ -54,6 +55,15 @@ int proc_loc_(const wstrings_c & pars)
     return r;
 }
 
+int proc_lochange_(const wstrings_c & pars)
+{
+    int r = 0;
+    UNSTABLE_CODE_PROLOG
+        r = proc_lochange(pars);
+    UNSTABLE_CODE_EPILOG
+    return r;
+}
+
 struct command_s
 {
     const wchar *cmd;
@@ -66,6 +76,7 @@ struct command_s
     command_s(L"help", L"Show this help", proc_help),
     command_s(L"show", L"Show params for debug purpose", proc_show),
     command_s(L"loc", L"Generate Locale [path-to-source] [path-to-locale]", proc_loc_),
+    command_s(L"changeloc", L"Change Locale [path-to-source] [path-to-locale] [locale default en]", proc_lochange_),
     command_s(L"trunc", L"Truncate [file] at [offset-from-begining]", proc_trunc),
     command_s(L"antic99", L"Remove C99 dependence [c-file]", proc_antic99),
     command_s(L"nodes", L"Grab nodes list from https://wiki.tox.chat/users/nodes", proc_grabnodes),

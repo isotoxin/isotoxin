@@ -1182,7 +1182,7 @@ profile_c::~profile_c()
 
 void profile_c::error_unique_profile( const ts::wsptr & prfn, bool modal )
 {
-    ts::wstr_c text = TTT("Профиль [$] используется!",270) / prfn;
+    ts::wstr_c text = TTT("Profile [$] is busy!",270) / prfn;
     if (modal)
     {
         MessageBoxW(nullptr, text, L"error", MB_OK|MB_ICONERROR);

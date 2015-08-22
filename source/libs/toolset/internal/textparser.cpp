@@ -1,6 +1,8 @@
 #include "toolset.h"
 #include "textparser.h"
 
+//-V:glyphs:807
+
 #pragma warning (disable:4456) // declaration of 'xxx' hides previous local declaration
 
 namespace ts
@@ -279,7 +281,7 @@ struct text_parser_s
 		if (paragraph.indention > 0)
 		{
 			meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::CHAR, chari); // CHAR, not SPACE!
-			mg.underlined = 0; // zero underline - special value to do not draw underline under ident
+			mg.underlined = 0; // zero underline - special value to do not draw underline under indent
 			mg.glyph = &(*fonts_stack.last())[L' '];
 			mg.advance = paragraph.indention;
 			line_width += mg.advance;
@@ -771,17 +773,20 @@ struct text_parser_s
         auto setupglyphspecial = [this](meta_glyph_s &mg, int j)
         {
             for (int i = j; i >= 0; i--)
-                if (last_line.get(i).type == meta_glyph_s::CHAR)
+            {
+                const meta_glyph_s& mgf = last_line.get(i);
+                if (mgf.type == meta_glyph_s::CHAR)
                 {
-                    mg.font = last_line.get(i).font;
-                    mg.color = last_line.get(i).color;
-                    mg.shadow = last_line.get(i).shadow;
-                    mg.shadow_color = last_line.get(i).shadow_color;
-                    mg.outline_color = last_line.get(i).outline_color;
-                    mg.underlined = last_line.get(i).underlined;
-                    mg.underline_offset = last_line.get(i).underline_offset;
+                    mg.font = mgf.font;
+                    mg.color = mgf.color;
+                    mg.shadow = mgf.shadow;
+                    mg.shadow_color = mgf.shadow_color;
+                    mg.outline_color = mgf.outline_color;
+                    mg.underlined = mgf.underlined;
+                    mg.underline_offset = mgf.underline_offset;
                     break;
                 }
+            }
         };
 
         if (current_line_with_rects)

@@ -305,7 +305,7 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
         gui_button_c &b_call = MAKE_CHILD<gui_button_c>(getrid());
         hstuff().call_button = &b_call;
         b_call.set_face_getter(BUTTON_FACE_PRELOADED(callb));
-        b_call.tooltip(TOOLTIP(TTT("Звонок", 140)));
+        b_call.tooltip(TOOLTIP(TTT("Call",140)));
 
         b_call.set_handler(DELEGATE(this, audio_call), nullptr);
         ts::ivec2 minsz = b_call.get_min_size();
@@ -318,11 +318,11 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
         } else if (0 == (features & PF_AUDIO_CALLS))
         {
             b_call.disable();
-            b_call.tooltip(TOOLTIP(TTT("Звонок не поддерживается",141)));
+            b_call.tooltip(TOOLTIP(TTT("Call not supported",141)));
         } else if (0 == (features_online & PF_AUDIO_CALLS))
         {
             b_call.disable();
-            b_call.tooltip(TOOLTIP(TTT("Абонент не в сети",143)));
+            b_call.tooltip(TOOLTIP(TTT("Contact offline",143)));
         }
 
         DEFERRED_EXECUTION_BLOCK_BEGIN(0)
@@ -493,7 +493,7 @@ void gui_contact_item_c::update_text()
                     newtext.append(CONSTASTR(" <l>")).append(ap->get_name()).append(CONSTASTR("</l>"));
             }
             if (!contact->get_options().unmasked().is(contact_c::F_PERSISTENT_GCHAT))
-                newtext.append(CONSTASTR("<br>")).append(to_utf8(TTT("временный групповой чат",256)));
+                newtext.append(CONSTASTR("<br>")).append(to_utf8(TTT("temporary group chat",256)));
 
         } else if (contact->is_meta())
         {
@@ -508,18 +508,18 @@ void gui_contact_item_c::update_text()
                 if (nullptr==prf().ap(c->getkey().protoid)) ++deactivated;
             } );
             if (live == 0 && count > 0)
-                newtext = colorize( to_utf8(TTT("Удален",77)).as_sptr(), get_default_text_color(0) );
+                newtext = colorize( to_utf8(TTT("Deleted",77)).as_sptr(), get_default_text_color(0) );
             else if (count == 0)
-                newtext = colorize( to_utf8(TTT("Пустой",78)).as_sptr(), get_default_text_color(0) );
+                newtext = colorize( to_utf8(TTT("Empty",78)).as_sptr(), get_default_text_color(0) );
             else if (rej > 0)
-                newtext = colorize( to_utf8(TTT("Отказано",79)).as_sptr(), get_default_text_color(0) );
+                newtext = colorize( to_utf8(TTT("Rejected",79)).as_sptr(), get_default_text_color(0) );
             else if (invsend > 0)
             {
                 newtext = contact->get_customname();
                 if (newtext.is_empty()) newtext = contact->get_name();
                 text_adapt_user_input(newtext);
                 if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
-                newtext.append( colorize(to_utf8(TTT("Запрос отправлен", 88)).as_sptr(), get_default_text_color(0)) );
+                newtext.append( colorize(to_utf8(TTT("Request sent",88)).as_sptr(), get_default_text_color(0)) );
             }
             else {
                 newtext = contact->get_customname();
@@ -541,14 +541,14 @@ void gui_contact_item_c::update_text()
                     if (invrcv)
                     {
                         if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
-                        newtext.append( colorize( to_utf8(TTT("Требуется подтверждение",153)).as_sptr(), get_default_text_color(0) ) );
+                        newtext.append( colorize( to_utf8(TTT("Please, accept or reject",153)).as_sptr(), get_default_text_color(0) ) );
                         t2.clear();
                     }
 
                     if (wait)
                     {
                         if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
-                        newtext.append(colorize(to_utf8(TTT("Ожидание",154)).as_sptr(), get_default_text_color(0)));
+                        newtext.append(colorize(to_utf8(TTT("Waiting...",154)).as_sptr(), get_default_text_color(0)));
                         t2.clear();
                     }
                     if (count == 1 && deactivated > 0)
@@ -637,7 +637,7 @@ void gui_contact_item_c::on_drop(gui_contact_item_c *ondr)
         {
             SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
                 gui_isodialog_c::title(DT_MSGBOX_WARNING),
-                TTT("В групповой чат можно добавлять только контакты из той же сети.",255)
+                TTT("Group chat contacts must be from same network",255)
                 ));
         } else if (active_protocol_c *ap = prf().ap(contact->getkey().protoid))
         {
@@ -1044,9 +1044,9 @@ int gui_contact_item_c::contact_item_rite_margin()
                     {
                         ts::wstr_c txt;
                         if ( c->getkey().is_group() )
-                            txt = TTT("Покинуть групповой чат?[br]$",258) / from_utf8(c->get_description());
+                            txt = TTT("Leave group chat?[br]$",258) / from_utf8(c->get_description());
                         else
-                            txt = TTT("Будет полностью удален контакт:[br]$",84) / from_utf8(c->get_description());
+                            txt = TTT("Contact will be deleted:[br]$",84) / from_utf8(c->get_description());
                         
                         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
                             gui_isodialog_c::title(DT_MSGBOX_WARNING),
@@ -1091,20 +1091,20 @@ int gui_contact_item_c::contact_item_rite_margin()
                 menu_c m;
                 if (contact->is_meta() && contact->subcount() > 1) 
                 {
-                    menu_c mc = m.add_sub(TTT("Метаконтакт", 145));
+                    menu_c mc = m.add_sub(TTT("Metacontact",145));
                     contact->subiterate([&](contact_c *c) {
 
                         ts::str_c text(c->get_name(false));
                         text_adapt_user_input(text);
                         if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
                             text.append(CONSTASTR(" (")).append(ap->get_name()).append(CONSTASTR(")"));
-                        mc.add( TTT("Отделить: $",197) / from_utf8(text), 0, handlers::m_metacontact_detach, c->getkey().as_str() );
+                        mc.add( TTT("Detach: $",197) / from_utf8(text), 0, handlers::m_metacontact_detach, c->getkey().as_str() );
                     });
 
                 }
 
-                m.add(TTT("Удалить",85),0,handlers::m_delete,contact->getkey().as_str());
-                m.add(TTT("Настройки контакта",223),0,handlers::m_contact_props,contact->getkey().as_str());
+                m.add(TTT("Delete",85),0,handlers::m_delete,contact->getkey().as_str());
+                m.add(TTT("Contact settings",223),0,handlers::m_contact_props,contact->getkey().as_str());
                 popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(),0), m);
                 popupmenu->leech(this);
             }
@@ -1139,8 +1139,8 @@ int gui_contact_item_c::contact_item_rite_margin()
 
             menu_c m;
             if (nchild > 1 && pareng.get_child(0) != &getengine())
-                m.add(TTT("Сделать первым",151), 0, handlers::m_mfirst, contact->getkey().as_str());
-            m.add(TTT("Убрать",148), 0, handlers::m_remove, contact->getkey().as_str());
+                m.add(TTT("Move to top",151), 0, handlers::m_mfirst, contact->getkey().as_str());
+            m.add(TTT("Remove",148), 0, handlers::m_remove, contact->getkey().as_str());
             gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
 
         } else if (CIR_ME == role)
@@ -1162,9 +1162,9 @@ int gui_contact_item_c::contact_item_rite_margin()
             contact_online_state_e ost = contacts().get_self().get_ostate();
 
             menu_c m;
-            m.add(TTT("Онлайн",244), COS_ONLINE == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_ONLINE));
-            m.add(TTT("Отошёл",245), COS_AWAY == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_AWAY));
-            m.add(TTT("Занят",246), COS_DND == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_DND));
+            m.add(TTT("Online",244), COS_ONLINE == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_ONLINE));
+            m.add(TTT("Away",245), COS_AWAY == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_AWAY));
+            m.add(TTT("Busy",246), COS_DND == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_DND));
             gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
         } else if (CIR_CONVERSATION_HEAD == role && !contact->getkey().is_self())
         {
@@ -1366,7 +1366,7 @@ void gui_contactlist_c::recreate_ctls()
         {
             static ts::wstr_c please_create_profile()
             {
-                return TTT("Пожалуйста, создайте профиль", 144);
+                return TTT("Please, create profile first",144);
             }
             static bool summon_addcontacts(RID, GUIPARAM)
             {
@@ -1397,7 +1397,7 @@ void gui_contactlist_c::recreate_ctls()
 
 
         addcbtn = MAKE_CHILD<gui_button_c>(getrid());
-        addcbtn->tooltip(TOOLTIP(TTT("Добавить контакт", 64)));
+        addcbtn->tooltip(TOOLTIP(TTT("Add contact",64)));
         addcbtn->set_face_getter(BUTTON_FACE(addcontact));
         addcbtn->set_handler(handlers::summon_addcontacts, nullptr);
         addcbtn->leech(TSNEW(leech_dock_bottom_center_s, baddc->size.x, baddc->size.y, -10, 10, 0, nbuttons));
@@ -1407,7 +1407,7 @@ void gui_contactlist_c::recreate_ctls()
         if (baddg)
         {
             addgbtn = MAKE_CHILD<gui_button_c>(getrid());
-            addgbtn->tooltip(TOOLTIP(TTT("Добавить групповой чат",243)));
+            addgbtn->tooltip(TOOLTIP(TTT("Add group chat",243)));
             addgbtn->set_face_getter(BUTTON_FACE(addgroup));
             addgbtn->set_handler(handlers::summon_addgroup, nullptr);
             addgbtn->leech(TSNEW(leech_dock_bottom_center_s, baddg->size.x, baddg->size.y, -10, 10, 1, 2));
@@ -1422,7 +1422,7 @@ void gui_contactlist_c::recreate_ctls()
 
             if (!support_groupchats)
             {
-                addgbtn->tooltip(TOOLTIP(TTT("Ни одна из активных сетей не поддерживает групповые чаты",247)));
+                addgbtn->tooltip(TOOLTIP(TTT("No any active network with group chat support",247)));
                 addgbtn->disable();
             }
         }

@@ -687,12 +687,12 @@ menu_c list_langs( SLANGID curlang, MENUHANDLER h )
 ts::wstr_c make_proto_desc( int mask )
 {
     ts::wstr_c r(1024,true);
-    if (0 != (mask & MPD_UNAME))    r.append(TTT("Ваше имя",259)).append(CONSTWSTR(": <l>{uname}</l><br>"));
-    if (0 != (mask & MPD_USTATUS))  r.append(TTT("Ваш статус",260)).append(CONSTWSTR(": <l>{ustatus}</l><br>"));
-    if (0 != (mask & MPD_NAME))     r.append(TTT("Имя соединения", 102)).append(CONSTWSTR(": <l>{name}</l><br>"));
-    if (0 != (mask & MPD_MODULE))   r.append(TTT("Модуль", 105)).append(CONSTWSTR(": <l>{module}</l><br>"));
-    if (0 != (mask & MPD_ID))       r.append(TTT("ID", 103)).append(CONSTWSTR(": <l>{id}</l><br>"));
-    if (0 != (mask & MPD_STATE))    r.append(TTT("Состояние", 104)).append(CONSTWSTR(": <l>{state}</l><br>"));
+    if (0 != (mask & MPD_UNAME))    r.append(TTT("Your name",259)).append(CONSTWSTR(": <l>{uname}</l><br>"));
+    if (0 != (mask & MPD_USTATUS))  r.append(TTT("Your status",260)).append(CONSTWSTR(": <l>{ustatus}</l><br>"));
+    if (0 != (mask & MPD_NAME))     r.append(TTT("Connection name",102)).append(CONSTWSTR(": <l>{name}</l><br>"));
+    if (0 != (mask & MPD_MODULE))   r.append(TTT("Module",105)).append(CONSTWSTR(": <l>{module}</l><br>"));
+    if (0 != (mask & MPD_ID))       r.append(TTT("ID",103)).append(CONSTWSTR(": <l>{id}</l><br>"));
+    if (0 != (mask & MPD_STATE))    r.append(TTT("State",104)).append(CONSTWSTR(": <l>{state}</l><br>"));
 
     if (r.ends(CONSTWSTR("<br>"))) r.trunc_length(4);
     return r;

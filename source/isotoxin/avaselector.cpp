@@ -340,16 +340,16 @@ dialog_avaselector_c::~dialog_avaselector_c()
     descmaker dm(descs);
     dm << 1;
 
-    ts::wstr_c openimgbuttonface( TTT("Открыть изображение",212) );
+    ts::wstr_c openimgbuttonface( TTT("Open image",212) );
     ts::wstr_c l(CONSTWSTR("<p=l>"));
 
     ts::wstr_c sprtfmts;
     ts::enum_supported_formats([&](const char *fmt) {sprtfmts.append(':',ts::to_wstr(fmt));});
     sprtfmts.replace_all(CONSTWSTR(":"), CONSTWSTR(", "));
 
-    ts::wstr_c s(TTT("Поддерживаемые форматы: $", 216) / sprtfmts);
+    ts::wstr_c s(TTT("Supported formats: $",216) / sprtfmts);
     s.insert(0,CONSTWSTR("<p=c>"));
-    s.append(CONSTWSTR("<br><l>")).append(TTT("Для анимированных изображений используйте клавишу пробел для переключения кадров анимации",232)).append(CONSTWSTR("</l>"));
+    s.append(CONSTWSTR("<br><l>")).append(TTT("To switch frame of animated image use space key",232)).append(CONSTWSTR("</l>"));
 
     ts::wstr_c ctl;
 
@@ -361,7 +361,7 @@ dialog_avaselector_c::~dialog_avaselector_c()
     dm().button(ts::wstr_c(), openimgbuttonface, DELEGATE(this, open_image)).width(200).height(25).subctl(0,ctl);
     dm().button(ts::wstr_c(), b ? L"face=save" : L"save", DELEGATE(this, save_image)).width(bsz.x).height(bsz.y).subctl(1,savebtn);
 
-    dm().page_header(l+(TTT("Откройте изображение одним из способов:[br] 1. Перетащите сюда изображение в поддерживаемом формате[br] 2. Вставьте из буфера обмена (Ctrl+V)[br] 3. Воспользуйтесь кнопкой $",211) / ctl)+s);
+    dm().page_header(l+(TTT("Open image:[br] 1. Drag and drop image of one of supported formats[br] 2. Paste image from clipboard (Ctrl+V)[br] 3. Push $",211) / ctl)+s);
     
     
     dm().vspace(1).setname(CONSTASTR("last"));
@@ -408,7 +408,7 @@ bool dialog_avaselector_c::save_image(RID, GUIPARAM)
     if (fromdir.is_empty())
         fromdir = ts::fn_get_path(ts::get_exe_full_name());
 
-    ts::wstr_c title(TTT("Сохранить аватар в png-файл",217));
+    ts::wstr_c title(TTT("Save avatar to png-file",217));
 
     ts::wstr_c filter(CONSTWSTR("png/*.png/(*.*)/*.*//"));
 
@@ -431,7 +431,7 @@ bool dialog_avaselector_c::open_image(RID, GUIPARAM)
     if (fromdir.is_empty())
         fromdir = ts::fn_get_path(ts::get_exe_full_name());
 
-    ts::wstr_c title( TTT("Изображение",213) );
+    ts::wstr_c title( TTT("Image",213) );
 
     ts::wstr_c sprtfmts, sprtfmts2(CONSTWSTR("*."));
     ts::enum_supported_formats([&](const char *fmt) {sprtfmts.append(':', ts::to_wstr(fmt)); });
@@ -443,8 +443,8 @@ bool dialog_avaselector_c::open_image(RID, GUIPARAM)
     ts::wstr_c filter( CONSTWSTR("<imgs> (<list1>)/<list2>/<all> (*.*)/*.*//") );
     filter.replace_all(CONSTWSTR("<list1>"), sprtfmts);
     filter.replace_all(CONSTWSTR("<list2>"), sprtfmts2);
-    filter.replace_all(CONSTWSTR("<imgs>"), TTT("Изображения",214));
-    filter.replace_all(CONSTWSTR("<all>"), TTT("Любые файлы",215));
+    filter.replace_all(CONSTWSTR("<imgs>"), TTT("Images",214));
+    filter.replace_all(CONSTWSTR("<all>"), TTT("Any files",215));
 
     ts::wstr_c fn = getroot()->load_filename_dialog(fromdir, CONSTWSTR(""), filter, L"png", title);
 
@@ -520,7 +520,7 @@ void dialog_avaselector_c::rebuild_bitmap()
 
 /*virtual*/ ts::wstr_c dialog_avaselector_c::get_name() const
 {
-    return TTT("[appname]: Выбор изображения аватара",210);
+    return TTT("[appname]: avatar image",210);
 }
 
 void dialog_avaselector_c::prepare_stuff()
@@ -784,7 +784,7 @@ void dialog_avaselector_c::do_scale(float sf)
                         n.insert(ix, '`');
                     if (sz == 0) n.insert(0, CONSTWSTR("<s>")).append(CONSTWSTR("</s>"));
                     infostr.append(CONSTWSTR(" ("));
-                    infostr.append( TTT("объем: $ байт",218) / n );
+                    infostr.append( TTT("size: $ bytes",218) / n );
                     infostr.append(CONSTWSTR(") "));
                     if (sz == 0) { infostr.append(working[tickvalue & 3]); removerctl(1); }
                     else if (sync.lock_read()().encoded_fit_16kb.size())

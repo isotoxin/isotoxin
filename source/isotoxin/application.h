@@ -182,7 +182,7 @@ public:
         {
             bcr.face = BUTTON_FACE(customize);
             bcr.handler = DELEGATE(this, b_customize);
-            bcr.tooltip = TOOLTIP(TTT("Настройки", 2));
+            bcr.tooltip = TOOLTIP(TTT("Settings",2));
         }
     }
     /*virtual*/ bool app_custom_button_state(int tag, int &shiftleft) override
