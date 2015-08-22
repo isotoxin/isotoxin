@@ -605,8 +605,8 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         {
             ipcr r(d->get_reader());
             int sz;
-            if (const void *d = r.get_data(sz))
-                protolib.functions->set_config(d,sz);
+            if (const void *data = r.get_data(sz))
+                protolib.functions->set_config(data,sz);
         }
         break;
     case AQ_SET_AVATAR:
@@ -614,8 +614,8 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         {
             ipcr r(d->get_reader());
             int sz;
-            if (const void *d = r.get_data(sz))
-                protolib.functions->set_avatar(d, sz);
+            if (const void *data = r.get_data(sz))
+                protolib.functions->set_avatar(data, sz);
         }
         break;
     case AQ_INIT_DONE:

@@ -365,7 +365,7 @@ scaled_image_s *scaled_image_s::load(const wsptr &filename_, const ivec2 &scale)
 					i.pixels = i.bitmap.body();
 					break;
 				default:
-					WARNING("Unsupported format for scaled image '%s' : %i bpp", tmp_str_c(filename_).cstr(), i.bitmap.info().bitpp);
+					WARNING("Unsupported format for scaled image '%s' : %i bpp", to_str(filename_).cstr(), i.bitmap.info().bitpp);
 					break;
 				}
 				break;//ok

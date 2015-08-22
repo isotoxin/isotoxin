@@ -3,39 +3,39 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
 VisualStudioVersion = 12.0.31101.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sqlite3", "sqlite3\sqlite3.vcxproj", "{0F29ED1A-51C5-4172-B3E4-E907330B73D0}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sqlite3", "sqlite3\sqlite3_13.vcxproj", "{0F29ED1A-51C5-4172-B3E4-E907330B73D0}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libsodium", "libsodium\libsodium.vcxproj", "{A185B162-6CB6-4502-B03F-B56F7699A8D9}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libsodium", "libsodium\libsodium_13.vcxproj", "{A185B162-6CB6-4502-B03F-B56F7699A8D9}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "toxcore", "toxcore\vs\toxcore.vcxproj", "{002F36E6-8B6E-4AFF-87A0-E19514E1F07A}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "toxcore", "toxcore\vs\toxcore_13.vcxproj", "{002F36E6-8B6E-4AFF-87A0-E19514E1F07A}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libcurl", "curl\libcurl.vcxproj", "{DA6F56B4-06A4-441D-AD70-AC5A7D51FADB}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libcurl", "curl\libcurl_13.vcxproj", "{DA6F56B4-06A4-441D-AD70-AC5A7D51FADB}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libvpx", "libvpx\libvpx.vcxproj", "{55B5FF6E-A64F-4C96-A907-3D989A769D70}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libvpx", "libvpx\libvpx_13.vcxproj", "{55B5FF6E-A64F-4C96-A907-3D989A769D70}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libresample", "libresample\libresample.vcxproj", "{CFF98237-367B-4D89-A120-06B352F44EA4}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libresample", "libresample\libresample_13.vcxproj", "{CFF98237-367B-4D89-A120-06B352F44EA4}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libflac", "flac\libflac.vcxproj", "{4CEFBC84-C215-11DB-8314-0800200C9A66}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libflac", "flac\libflac_13.vcxproj", "{4CEFBC84-C215-11DB-8314-0800200C9A66}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "freetype", "freetype\freetype.vcxproj", "{78B079BD-9FC7-4B9E-B4A6-96DA0F00248B}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "freetype", "freetype\freetype_13.vcxproj", "{78B079BD-9FC7-4B9E-B4A6-96DA0F00248B}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "jpeg", "jpeg\jpeg.vcxproj", "{BC8BFFB8-7E39-411A-B856-A75B1DF2D2F6}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "jpeg", "jpeg\jpeg_13.vcxproj", "{BC8BFFB8-7E39-411A-B856-A75B1DF2D2F6}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libogg", "libogg\libogg.vcxproj", "{15CBFEFF-7965-41F5-B4E2-21E8795C9159}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libogg", "libogg\libogg_13.vcxproj", "{15CBFEFF-7965-41F5-B4E2-21E8795C9159}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libvorbis", "libvorbis\libvorbis.vcxproj", "{3A214E06-B95E-4D61-A291-1F8DF2EC10FD}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libvorbis", "libvorbis\libvorbis_13.vcxproj", "{3A214E06-B95E-4D61-A291-1F8DF2EC10FD}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "zlib", "zlib\zlib.vcxproj", "{745DEC58-EBB3-47A9-A9B8-4C6627C01BF8}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "zlib", "zlib\zlib_13.vcxproj", "{745DEC58-EBB3-47A9-A9B8-4C6627C01BF8}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "pnglib", "pnglib\pnglib.vcxproj", "{73466D36-65CC-4082-8B18-E3E9F0606110}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "pnglib", "pnglib\pnglib_13.vcxproj", "{73466D36-65CC-4082-8B18-E3E9F0606110}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "minizip", "zlib\minizip.vcxproj", "{F5735896-6117-4C16-8576-444FFDE25D1D}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "minizip", "zlib\minizip_13.vcxproj", "{F5735896-6117-4C16-8576-444FFDE25D1D}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "opus", "opus\opus.vcxproj", "{219EC965-228A-1824-174D-96449D05F88A}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "opus", "opus\opus_13.vcxproj", "{219EC965-228A-1824-174D-96449D05F88A}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "pngquant", "pngquant\pngquant.vcxproj", "{AC61809B-2682-4C87-B705-70D321EE4AB0}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "pngquant", "pngquant\pngquant_13.vcxproj", "{AC61809B-2682-4C87-B705-70D321EE4AB0}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "giflib", "giflib\giflib.vcxproj", "{7655B3D2-136C-4910-9A57-4039A3A5655D}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "giflib", "giflib\giflib_13.vcxproj", "{7655B3D2-136C-4910-9A57-4039A3A5655D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

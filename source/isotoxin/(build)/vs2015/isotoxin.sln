@@ -1,11 +1,12 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2013
-VisualStudioVersion = 12.0.30723.0
+# Visual Studio 14
+VisualStudioVersion = 14.0.23107.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "isotoxin", "isotoxin.vcxproj", "{DC148EB8-AEA2-4CA3-892D-D0ACB439642E}"
 	ProjectSection(ProjectDependencies) = postProject
 		{954B6F05-1838-48C5-B63C-27F10AE0A1F9} = {954B6F05-1838-48C5-B63C-27F10AE0A1F9}
+		{505BA313-4DD9-40C5-8794-2F3B9603CD0A} = {505BA313-4DD9-40C5-8794-2F3B9603CD0A}
 		{2BAA1615-3438-44E1-A780-5E060FC317B6} = {2BAA1615-3438-44E1-A780-5E060FC317B6}
 		{31805D3B-0783-48E8-99FA-04F8B3C65CE3} = {31805D3B-0783-48E8-99FA-04F8B3C65CE3}
 		{E0D65A4B-C904-4FB2-A177-483B257C9F2C} = {E0D65A4B-C904-4FB2-A177-483B257C9F2C}
@@ -16,13 +17,13 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "isotoxin", "isotoxin.vcxpro
 		{4C8589AD-973D-4331-8433-BBE50534B282} = {4C8589AD-973D-4331-8433-BBE50534B282}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "system", "..\..\..\libs\system\system.vcxproj", "{83B15650-FC4B-4AAE-8D95-AD890E1B001D}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "system", "..\..\..\libs\system\system_15.vcxproj", "{83B15650-FC4B-4AAE-8D95-AD890E1B001D}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "toolset", "..\..\..\libs\toolset\toolset.vcxproj", "{9209A27B-E512-4197-BD76-B6451C3726B2}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "toolset", "..\..\..\libs\toolset\toolset_15.vcxproj", "{9209A27B-E512-4197-BD76-B6451C3726B2}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rectangles", "..\..\..\libs\rectangles\rectangles.vcxproj", "{DC8F7A65-4E44-4773-A79C-9577EB420918}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rectangles", "..\..\..\libs\rectangles\rectangles_15.vcxproj", "{DC8F7A65-4E44-4773-A79C-9577EB420918}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rasp", "..\..\..\tools\rasp\rasp.vcxproj", "{505BA313-4DD9-40C5-8794-2F3B9603CD0A}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rasp", "..\..\..\tools\rasp\rasp_15.vcxproj", "{505BA313-4DD9-40C5-8794-2F3B9603CD0A}"
 	ProjectSection(ProjectDependencies) = postProject
 		{9209A27B-E512-4197-BD76-B6451C3726B2} = {9209A27B-E512-4197-BD76-B6451C3726B2}
 		{4C8589AD-973D-4331-8433-BBE50534B282} = {4C8589AD-973D-4331-8433-BBE50534B282}
@@ -30,7 +31,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rasp", "..\..\..\tools\rasp
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "plugins", "plugins", "{82937923-9940-4302-A205-03B689C894B9}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "plghost", "..\..\..\plugins\plghost\plghost.vcxproj", "{E0D65A4B-C904-4FB2-A177-483B257C9F2C}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "plghost", "..\..\..\plugins\plghost\plghost_15.vcxproj", "{E0D65A4B-C904-4FB2-A177-483B257C9F2C}"
 	ProjectSection(ProjectDependencies) = postProject
 		{954B6F05-1838-48C5-B63C-27F10AE0A1F9} = {954B6F05-1838-48C5-B63C-27F10AE0A1F9}
 		{31805D3B-0783-48E8-99FA-04F8B3C65CE3} = {31805D3B-0783-48E8-99FA-04F8B3C65CE3}
@@ -40,23 +41,23 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "plghost", "..\..\..\plugins
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "libs", "libs", "{57E327E9-45BC-46B9-A79F-0C16560B765F}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ipc", "..\..\..\libs\ipc\ipc.vcxproj", "{86C11A7D-171E-4C85-8A7E-00522AC778AB}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ipc", "..\..\..\libs\ipc\ipc_15.vcxproj", "{86C11A7D-171E-4C85-8A7E-00522AC778AB}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "proto_lan", "..\..\..\plugins\proto_lan\proto_lan.vcxproj", "{31805D3B-0783-48E8-99FA-04F8B3C65CE3}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "proto_lan", "..\..\..\plugins\proto_lan\proto_lan_15.vcxproj", "{31805D3B-0783-48E8-99FA-04F8B3C65CE3}"
 	ProjectSection(ProjectDependencies) = postProject
 		{412A8E3C-78F5-4FF1-9CA7-A19605BC3FF6} = {412A8E3C-78F5-4FF1-9CA7-A19605BC3FF6}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "proto_tox", "..\..\..\plugins\proto_tox\proto_tox.vcxproj", "{954B6F05-1838-48C5-B63C-27F10AE0A1F9}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "proto_tox", "..\..\..\plugins\proto_tox\proto_tox_15.vcxproj", "{954B6F05-1838-48C5-B63C-27F10AE0A1F9}"
 	ProjectSection(ProjectDependencies) = postProject
 		{412A8E3C-78F5-4FF1-9CA7-A19605BC3FF6} = {412A8E3C-78F5-4FF1-9CA7-A19605BC3FF6}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "plgcommon", "..\..\..\plugins\plgcommon\plgcommon.vcxproj", "{412A8E3C-78F5-4FF1-9CA7-A19605BC3FF6}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "plgcommon", "..\..\..\plugins\plgcommon\plgcommon_15.vcxproj", "{412A8E3C-78F5-4FF1-9CA7-A19605BC3FF6}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "s3", "..\..\..\libs\s3\s3.vcxproj", "{2BAA1615-3438-44E1-A780-5E060FC317B6}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "s3", "..\..\..\libs\s3\s3_15.vcxproj", "{2BAA1615-3438-44E1-A780-5E060FC317B6}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "memspy", "..\..\..\libs\memspy\memspy.vcxproj", "{4C8589AD-973D-4331-8433-BBE50534B282}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "memspy", "..\..\..\libs\memspy\memspy_15.vcxproj", "{4C8589AD-973D-4331-8433-BBE50534B282}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

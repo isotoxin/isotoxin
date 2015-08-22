@@ -1,5 +1,7 @@
 #pragma once
 
+#pragma warning (disable:4091) // 'typedef ' : ignored on left of '' when no variable is declared
+
 #define APPNAME "Isotoxin"
 
 #define WINDOWS_ONLY // #error

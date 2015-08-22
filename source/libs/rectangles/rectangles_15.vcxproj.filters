@@ -1,0 +1,78 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="src">
+      <UniqueIdentifier>{37637853-b908-4a7b-b3de-0d64250449ab}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="gui.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="guieditrect.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="guirect.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="menu.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="rectengine.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="theme.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="rectangles.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="rtools.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="dialog.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="gmesages.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="button_generator.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="gui.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="guieditrect.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="guirect.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="menu.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="rectengine.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="theme.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="rectangles.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="rtools.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="dialog.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="gmesages.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\memspy\memspy.h">
+      <Filter>src</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

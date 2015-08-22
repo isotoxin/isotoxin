@@ -9,6 +9,8 @@
   only point-to-point connection supported
 */
 
+#pragma warning (disable:4091) // 'typedef ' : ignored on left of '' when no variable is declared
+
 namespace ipc
 {
     enum ipc_result_e

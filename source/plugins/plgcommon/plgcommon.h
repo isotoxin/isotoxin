@@ -1,5 +1,7 @@
 #pragma once
 
+#pragma warning (disable:4091) // 'typedef ' : ignored on left of '' when no variable is declared
+
 #include <windows.h>
 #include <malloc.h>
 #include <locale.h>

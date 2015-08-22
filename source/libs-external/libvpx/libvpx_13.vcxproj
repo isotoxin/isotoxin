@@ -1,0 +1,747 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{55B5FF6E-A64F-4C96-A907-3D989A769D70}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>libvpx</RootNamespace>
+    <ProjectName>libvpx</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(SolutionDir)\libs.common.13.props" />
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="vp8\common\alloccommon.c" />
+    <ClCompile Include="vp8\common\blockd.c" />
+    <ClCompile Include="vp8\common\context.c" />
+    <ClCompile Include="vp8\common\debugmodes.c" />
+    <ClCompile Include="vp8\common\dequantize.c" />
+    <ClCompile Include="vp8\common\entropy.c" />
+    <ClCompile Include="vp8\common\entropymode.c" />
+    <ClCompile Include="vp8\common\entropymv.c" />
+    <ClCompile Include="vp8\common\extend.c" />
+    <ClCompile Include="vp8\common\filter.c" />
+    <ClCompile Include="vp8\common\findnearmv.c" />
+    <ClCompile Include="vp8\common\generic\systemdependent.c" />
+    <ClCompile Include="vp8\common\idctllm.c" />
+    <ClCompile Include="vp8\common\idct_blk.c" />
+    <ClCompile Include="vp8\common\loopfilter.c" />
+    <ClCompile Include="vp8\common\loopfilter_filters.c" />
+    <ClCompile Include="vp8\common\mbpitch.c" />
+    <ClCompile Include="vp8\common\mfqe.c" />
+    <ClCompile Include="vp8\common\modecont.c" />
+    <ClCompile Include="vp8\common\postproc.c" />
+    <ClCompile Include="vp8\common\quant_common.c" />
+    <ClCompile Include="vp8\common\reconinter.c" />
+    <ClCompile Include="vp8\common\reconintra.c" />
+    <ClCompile Include="vp8\common\reconintra4x4.c" />
+    <ClCompile Include="vp8\common\rtcd.c" />
+    <ClCompile Include="vp8\common\sad_c.c" />
+    <ClCompile Include="vp8\common\setupintrarecon.c" />
+    <ClCompile Include="vp8\common\swapyv12buffer.c" />
+    <ClCompile Include="vp8\common\textblit.c" />
+    <ClCompile Include="vp8\common\treecoder.c" />
+    <ClCompile Include="vp8\common\variance_c.c" />
+    <ClCompile Include="vp8\common\x86\filter_x86.c" />
+    <ClCompile Include="vp8\common\x86\idct_blk_mmx.c" />
+    <ClCompile Include="vp8\common\x86\idct_blk_sse2.c" />
+    <ClCompile Include="vp8\common\x86\loopfilter_x86.c" />
+    <ClCompile Include="vp8\common\x86\recon_wrapper_sse2.c" />
+    <ClCompile Include="vp8\common\x86\variance_mmx.c" />
+    <ClCompile Include="vp8\common\x86\variance_sse2.c" />
+    <ClCompile Include="vp8\common\x86\variance_ssse3.c" />
+    <ClCompile Include="vp8\common\x86\vp8_asm_stubs.c" />
+    <ClCompile Include="vp8\decoder\dboolhuff.c" />
+    <ClCompile Include="vp8\decoder\decodeframe.c" />
+    <ClCompile Include="vp8\decoder\decodemv.c" />
+    <ClCompile Include="vp8\decoder\detokenize.c" />
+    <ClCompile Include="vp8\decoder\onyxd_if.c" />
+    <ClCompile Include="vp8\decoder\threading.c" />
+    <ClCompile Include="vp8\encoder\bitstream.c" />
+    <ClCompile Include="vp8\encoder\boolhuff.c" />
+    <ClCompile Include="vp8\encoder\dct.c" />
+    <ClCompile Include="vp8\encoder\denoising.c" />
+    <ClCompile Include="vp8\encoder\encodeframe.c" />
+    <ClCompile Include="vp8\encoder\encodeintra.c" />
+    <ClCompile Include="vp8\encoder\encodemb.c" />
+    <ClCompile Include="vp8\encoder\encodemv.c" />
+    <ClCompile Include="vp8\encoder\ethreading.c" />
+    <ClCompile Include="vp8\encoder\firstpass.c" />
+    <ClCompile Include="vp8\encoder\lookahead.c" />
+    <ClCompile Include="vp8\encoder\mcomp.c" />
+    <ClCompile Include="vp8\encoder\modecosts.c" />
+    <ClCompile Include="vp8\encoder\onyx_if.c" />
+    <ClCompile Include="vp8\encoder\pickinter.c" />
+    <ClCompile Include="vp8\encoder\picklpf.c" />
+    <ClCompile Include="vp8\encoder\quantize.c" />
+    <ClCompile Include="vp8\encoder\ratectrl.c" />
+    <ClCompile Include="vp8\encoder\rdopt.c" />
+    <ClCompile Include="vp8\encoder\segmentation.c" />
+    <ClCompile Include="vp8\encoder\temporal_filter.c" />
+    <ClCompile Include="vp8\encoder\tokenize.c" />
+    <ClCompile Include="vp8\encoder\treewriter.c" />
+    <ClCompile Include="vp8\encoder\x86\denoising_sse2.c" />
+    <ClCompile Include="vp8\encoder\x86\quantize_sse2.c" />
+    <ClCompile Include="vp8\encoder\x86\quantize_sse4.c" />
+    <ClCompile Include="vp8\encoder\x86\quantize_ssse3.c" />
+    <ClCompile Include="vp8\encoder\x86\vp8_enc_stubs_mmx.c" />
+    <ClCompile Include="vp8\encoder\x86\vp8_enc_stubs_sse2.c" />
+    <ClCompile Include="vp8\vp8_cx_iface.c" />
+    <ClCompile Include="vp8\vp8_dx_iface.c" />
+    <ClCompile Include="vpx\src\svc_encodeframe.c" />
+    <ClCompile Include="vpx\src\vpx_codec.c" />
+    <ClCompile Include="vpx\src\vpx_decoder.c" />
+    <ClCompile Include="vpx\src\vpx_encoder.c" />
+    <ClCompile Include="vpx\src\vpx_image.c" />
+    <ClCompile Include="vpx\src\vpx_psnr.c" />
+    <ClCompile Include="vpx_mem\vpx_mem.c" />
+    <ClCompile Include="vpx_scale\generic\gen_scalers.c" />
+    <ClCompile Include="vpx_scale\generic\vpx_scale.c" />
+    <ClCompile Include="vpx_scale\generic\yv12config.c" />
+    <ClCompile Include="vpx_scale\generic\yv12extend.c" />
+    <ClCompile Include="vpx_scale\vpx_scale_rtcd.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="vp8\common\alloccommon.h" />
+    <ClInclude Include="vp8\common\blockd.h" />
+    <ClInclude Include="vp8\common\coefupdateprobs.h" />
+    <ClInclude Include="vp8\common\common.h" />
+    <ClInclude Include="vp8\common\default_coef_probs.h" />
+    <ClInclude Include="vp8\common\entropy.h" />
+    <ClInclude Include="vp8\common\entropymode.h" />
+    <ClInclude Include="vp8\common\entropymv.h" />
+    <ClInclude Include="vp8\common\extend.h" />
+    <ClInclude Include="vp8\common\filter.h" />
+    <ClInclude Include="vp8\common\findnearmv.h" />
+    <ClInclude Include="vp8\common\header.h" />
+    <ClInclude Include="vp8\common\invtrans.h" />
+    <ClInclude Include="vp8\common\loopfilter.h" />
+    <ClInclude Include="vp8\common\modecont.h" />
+    <ClInclude Include="vp8\common\mv.h" />
+    <ClInclude Include="vp8\common\onyx.h" />
+    <ClInclude Include="vp8\common\onyxc_int.h" />
+    <ClInclude Include="vp8\common\onyxd.h" />
+    <ClInclude Include="vp8\common\postproc.h" />
+    <ClInclude Include="vp8\common\ppflags.h" />
+    <ClInclude Include="vp8\common\quant_common.h" />
+    <ClInclude Include="vp8\common\reconinter.h" />
+    <ClInclude Include="vp8\common\reconintra4x4.h" />
+    <ClInclude Include="vp8\common\setupintrarecon.h" />
+    <ClInclude Include="vp8\common\swapyv12buffer.h" />
+    <ClInclude Include="vp8\common\systemdependent.h" />
+    <ClInclude Include="vp8\common\threading.h" />
+    <ClInclude Include="vp8\common\treecoder.h" />
+    <ClInclude Include="vp8\common\variance.h" />
+    <ClInclude Include="vp8\common\vp8_entropymodedata.h" />
+    <ClInclude Include="vp8\common\x86\filter_x86.h" />
+    <ClInclude Include="vp8\decoder\dboolhuff.h" />
+    <ClInclude Include="vp8\decoder\decodemv.h" />
+    <ClInclude Include="vp8\decoder\decoderthreading.h" />
+    <ClInclude Include="vp8\decoder\detokenize.h" />
+    <ClInclude Include="vp8\decoder\ec_types.h" />
+    <ClInclude Include="vp8\decoder\onyxd_int.h" />
+    <ClInclude Include="vp8\decoder\treereader.h" />
+    <ClInclude Include="vp8\encoder\bitstream.h" />
+    <ClInclude Include="vp8\encoder\block.h" />
+    <ClInclude Include="vp8\encoder\boolhuff.h" />
+    <ClInclude Include="vp8\encoder\dct_value_cost.h" />
+    <ClInclude Include="vp8\encoder\dct_value_tokens.h" />
+    <ClInclude Include="vp8\encoder\defaultcoefcounts.h" />
+    <ClInclude Include="vp8\encoder\denoising.h" />
+    <ClInclude Include="vp8\encoder\encodeframe.h" />
+    <ClInclude Include="vp8\encoder\encodeintra.h" />
+    <ClInclude Include="vp8\encoder\encodemb.h" />
+    <ClInclude Include="vp8\encoder\encodemv.h" />
+    <ClInclude Include="vp8\encoder\firstpass.h" />
+    <ClInclude Include="vp8\encoder\lookahead.h" />
+    <ClInclude Include="vp8\encoder\mcomp.h" />
+    <ClInclude Include="vp8\encoder\modecosts.h" />
+    <ClInclude Include="vp8\encoder\onyx_int.h" />
+    <ClInclude Include="vp8\encoder\pickinter.h" />
+    <ClInclude Include="vp8\encoder\quantize.h" />
+    <ClInclude Include="vp8\encoder\ratectrl.h" />
+    <ClInclude Include="vp8\encoder\rdopt.h" />
+    <ClInclude Include="vp8\encoder\segmentation.h" />
+    <ClInclude Include="vp8\encoder\tokenize.h" />
+    <ClInclude Include="vp8\encoder\treewriter.h" />
+    <ClInclude Include="vp8_rtcd.h" />
+    <ClInclude Include="vpx_config.h" />
+    <ClInclude Include="vpx_mem\vpx_mem.h" />
+    <ClInclude Include="vpx_version.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="vp8\common\x86\loopfilter_sse2.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\dequantize_mmx.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\idctllm_mmx.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\idctllm_sse2.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\iwalsh_mmx.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\iwalsh_sse2.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\loopfilter_block_sse2_x86_64.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\loopfilter_mmx.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\mfqe_sse2.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\postproc_mmx.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\postproc_sse2.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\recon_mmx.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\recon_sse2.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\sad_mmx.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\sad_sse2.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\sad_sse3.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\sad_sse4.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\sad_ssse3.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\subpixel_mmx.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\subpixel_sse2.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\subpixel_ssse3.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\variance_impl_mmx.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\variance_impl_sse2.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\common\x86\variance_impl_ssse3.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="vp8\encoder\x86\dct_mmx.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\encoder\x86\dct_sse2.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\encoder\x86\encodeopt.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\encoder\x86\fwalsh_sse2.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\encoder\x86\quantize_mmx.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\encoder\x86\ssim_opt_x86_64.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\encoder\x86\subtract_mmx.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\encoder\x86\subtract_sse2.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+    <CustomBuild Include="vp8\encoder\x86\temporal_filter_apply_sse2.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="vpx_ports\emms.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(ProjectDir)yasm.exe" -f win32 -m x86 -I "$(ProjectDir)." -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Assembling %(Filename).asm</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Assembling %(Filename).asm</Message>
+    </CustomBuild>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>$(GARBAGE)\#libs\vc13\$(Configuration)\</OutDir>
+    <IntDir>$(GARBAGE)\#garbage\vc13\$(ProjectName)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

@@ -1568,7 +1568,6 @@ void lan_engine::offline()
             if (c->state == contact_s::INVITE_SEND || c->state == contact_s::MEET)
                 c->state = contact_s::SEARCH;
             
-            contact_data_s cd(0, 0);
             c->fill_data(cd);
             hf->update_contact(&cd);
         }

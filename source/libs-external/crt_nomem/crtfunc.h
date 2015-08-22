@@ -12,7 +12,11 @@ example (in any cpp file of your project):
 #endif
 
 */
+
+#if _MSC_VER <= 1800
 #pragma comment(lib, "libcmt_nomem.lib")
+#endif
+
 #pragma warning (push)
 #pragma warning (disable:4565) //redefinition; the symbol was previously declared with __declspec(restrict)
 

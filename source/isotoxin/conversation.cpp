@@ -1113,8 +1113,8 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
             if (g_app->newversion())
             {
                 not_at_end();
-                gui_notice_c &n = create_notice(NOTICE_NEWVERSION);
-                n.setup( cfg().autoupdate_newver() );
+                gui_notice_c &nn = create_notice(NOTICE_NEWVERSION);
+                nn.setup( cfg().autoupdate_newver() );
             
             }
 
@@ -1128,8 +1128,8 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                 {
                     not_at_end();
                     MODIFY(*this).visible(true);
-                    gui_notice_network_c &n = MAKE_CHILD<gui_notice_network_c>(getrid());
-                    n.setup(pubid);
+                    gui_notice_network_c &nn = MAKE_CHILD<gui_notice_network_c>(getrid());
+                    nn.setup(pubid);
                 }
             }
         } else
@@ -1420,8 +1420,8 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                         dd.offset = oo + ca.rb - dd.size;
 
                         tdp.font = g_app->font_conv_time;
-                        ts::TSCOLOR c = get_default_text_color(2);
-                        tdp.forecolor = &c; //-V506
+                        ts::TSCOLOR cc = get_default_text_color(2);
+                        tdp.forecolor = &cc; //-V506
                         m_engine->draw(timestr, tdp);
                     }
 
@@ -1853,13 +1853,13 @@ ts::uint16 gui_message_item_c::record::append( ts::wstr_c &t, ts::wstr_c &pret, 
         tstr.append_char(':');
     tstr.append_as_uint(tt.tm_min);
 
-    ts::uint16 timestrwidth = 0;
+    ts::uint16 time_str_width = 0;
     if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
         t.append(pret).append(tstr).append(postt);
     else
     {
         ts::ivec2 timeszie = g_app->tr().calc_text_size( *g_app->font_conv_time, tstr, 1024, 0, nullptr );
-        timestrwidth = (ts::uint16)timeszie.x;
+        time_str_width = (ts::uint16)timeszie.x;
         pret = tstr;
     }
 
@@ -1870,12 +1870,12 @@ ts::uint16 gui_message_item_c::record::append( ts::wstr_c &t, ts::wstr_c &pret, 
     else
         t.append(from_utf8(text));
 
-    if (timestrwidth)
-        t.append(CONSTWSTR("<nbsp=")).append_as_uint(timestrwidth + ADDTIMESPACE).append_char('>');
+    if (time_str_width)
+        t.append(CONSTWSTR("<nbsp=")).append_as_uint(time_str_width + ADDTIMESPACE).append_char('>');
 
     t.append(CONSTWSTR("<null=t")).append_as_hex(&utag, sizeof(utag)).append_char('>');
 
-    return timestrwidth;
+    return time_str_width;
 }
 
 static int prepare_link(ts::str_c &message, const ts::ivec2 &lrange, int n)
@@ -2580,10 +2580,10 @@ void gui_message_item_c::update_text()
 
             for (int i = records.size() - 1; i > 0; --i)
             {
-                record &rec = records.get(i);
+                record &r = records.get(i);
                 if (rec.time)
                 {
-                    TSDEL(&HOLD(RID(rec.utag >> 32)).engine());
+                    TSDEL(&HOLD(RID(r.utag >> 32)).engine());
                     records.remove_fast(i);
                 }
             }
@@ -3146,7 +3146,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> & p)
     if (!historian->getkey().is_self())
     {
         int not_yet_loaded = prf().calc_history_before(historian->getkey(), before);
-        int needload = ts::tmax(10, prf().min_history());
+        needload = ts::tmax(10, prf().min_history());
         if ( not_yet_loaded )
         {
             if ((not_yet_loaded - needload) < 10) needload = not_yet_loaded;

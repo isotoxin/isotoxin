@@ -3,7 +3,7 @@
 
   <PropertyGroup>
     <IntDir>$(GARBAGE)\#garbage\vc13\$(ProjectName)\$(Configuration)\</IntDir>
-    <PlatformToolset>v120_xp</PlatformToolset>
+    <PlatformToolset>v140_xp</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
 
@@ -105,7 +105,6 @@
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
       <GenerateMapFile>true</GenerateMapFile>
       <MapFileName>$(IntDir)$(TargetName).map</MapFileName>
-      <IgnoreSpecificDefaultLibraries>libcmt</IgnoreSpecificDefaultLibraries>
       <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
     </Link>
   </ItemDefinitionGroup>

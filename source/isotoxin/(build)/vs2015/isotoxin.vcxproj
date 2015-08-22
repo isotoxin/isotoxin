@@ -53,6 +53,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <OutDir>$(ProjectDir)../../../../bin/</OutDir>
     <TargetName>dbg_isotoxin</TargetName>
+    <CodeAnalysisRuleSet>NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">
     <OutDir>$(ProjectDir)../../../../bin/</OutDir>
@@ -71,7 +72,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(ProjectDir)../../../libs;$(GARBAGE)\#libs\vc13\Release;$(GARBAGE)\#libs\vc13\Debug</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(ProjectDir)../../../libs;$(GARBAGE)\#libs\vc15\Release;$(GARBAGE)\#libs\vc15\Debug</AdditionalLibraryDirectories>
       <IgnoreSpecificDefaultLibraries>libcmt</IgnoreSpecificDefaultLibraries>
     </Link>
     <PreBuildEvent>
@@ -90,10 +91,9 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(ProjectDir)../../../libs;$(GARBAGE)\#libs\vc13\Release</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(ProjectDir)../../../libs;$(GARBAGE)\#libs\vc15\Release</AdditionalLibraryDirectories>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <FixedBaseAddress>true</FixedBaseAddress>
-      <IgnoreSpecificDefaultLibraries>libcmt</IgnoreSpecificDefaultLibraries>
     </Link>
     <PreBuildEvent>
       <Command>"$(ProjectDir)..\..\..\..\tools\prebuild.cmd"</Command>
@@ -108,8 +108,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(ProjectDir)../../../libs;$(GARBAGE)\#libs\vc13\Release;$(GARBAGE)\#libs\vc13\Debug</AdditionalLibraryDirectories>
-      <IgnoreSpecificDefaultLibraries>libcmt.lib</IgnoreSpecificDefaultLibraries>
+      <AdditionalLibraryDirectories>$(ProjectDir)../../../libs;$(GARBAGE)\#libs\vc15\Release;$(GARBAGE)\#libs\vc15\Debug</AdditionalLibraryDirectories>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
     </Link>
     <PreBuildEvent>

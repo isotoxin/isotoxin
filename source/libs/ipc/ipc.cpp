@@ -150,10 +150,10 @@ DWORD WINAPI watchdog(LPVOID p)
                 break;
             }
             HANDLE processhandler = d.watchdog[0];
-            DWORD r = WaitForMultipleObjects(2, d.watchdog, FALSE, INFINITE);
+            DWORD rtn = WaitForMultipleObjects(2, d.watchdog, FALSE, INFINITE);
             CloseHandle(processhandler);
 
-            if (r - WAIT_OBJECT_0 == 0)
+            if (rtn - WAIT_OBJECT_0 == 0)
             {
                 d.emergency_state = true; // terminate partner process - is always emergency_state
                 PostMessageA(handler, WM_USER + 7532, 0, 0);
@@ -257,10 +257,10 @@ int ipc_junction_s::start( const char *junction_name )
         }
         if (wait_0_member)
         {
-            auto w = d.sync->lock_write();
-            w().members[d.member].handler = nullptr;
-            w().members[d.member].pid = 0;
-            w.unlock();
+            auto ww = d.sync->lock_write();
+            ww().members[d.member].handler = nullptr;
+            ww().members[d.member].pid = 0;
+            ww.unlock();
 
             UnmapViewOfFile(d.sync);
             CloseHandle(d.mapfile);

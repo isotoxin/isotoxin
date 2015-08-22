@@ -55,27 +55,27 @@ void Slot::startPlay(Player *player, float time)
 	buffer->Play(0, 0, DSBPLAY_LOOPING);
 }
 
-void Slot::read(void *buffer, int size, bool afterRewind)
+void Slot::read(void *b, int size, bool afterRewind)
 {
 	if (silenceSize == -1)
 	{
-		int r = std::max(decoder->read(buffer, size), 0);
+		int r = std::max(decoder->read(b, size), 0);
 		if (r != size)
 		{
-			if (looping && !(afterRewind && r == 0))//втора€ проверка - на случай, когда сразу после rewind вызов read вернул 0 (если файл пустой напр.) - если это не обработать, может получитьс€ бесконечный цикл
+			if (looping && !(afterRewind && r == 0)) // втора€ проверка - на случай, когда сразу после rewind вызов read вернул 0 (если файл пустой напр.) - если это не обработать, может получитьс€ бесконечный цикл
 			{
 				source->rewind(false);
 				if (decoder->init(Source::readFunc, source))
-					return read((char*)buffer + r, size - r, true);
+					return read((char*)b + r, size - r, true);
 			}
 
 			silenceSize = 0;
-			read((char*)buffer + r, size - r);
+			read((char*)b + r, size - r);
 		}
 	}
 	else
 	{
-		memset(buffer, format.bitsPerSample == 8 ? 0x80 : 0, size);//заполн€ем тишиной
+		memset(b, format.bitsPerSample == 8 ? 0x80 : 0, size); // fill with silence
 		silenceSize += size;
 	}
 }
@@ -95,13 +95,13 @@ void Slot::update(Player *player, float dt, bool full)
 	if (source == nullptr) return;
     player_data_s &pd = *(player_data_s *)&player->data;
 
-	//ќбновл€ем громкость
+	// refresh volume
 	fade += fadeSpeed * dt;
 	if (fade < 0) {stop(); return;}//если сделать проверку на <= 0, то play() с time > 0 работать не будет :), см. if (time) fade = 0, ...
 	if (fade > 1) fade = 1, fadeSpeed = 0;
 	buffer->SetVolume(LinearToDirectSoundVolume(fade * source->volume * pd.soundGroups[source->soundGroup].volume));
 
-	//«аполн€ем звуковой буфер
+	// fill sound buffer
 	DWORD playPos;
 	if (SUCCEEDED(buffer->GetCurrentPosition(&playPos, nullptr)))
 	{

@@ -1,0 +1,284 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="src">
+      <UniqueIdentifier>{35005b07-a2fb-4cc8-a3bf-d4e38569b73b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\internal">
+      <UniqueIdentifier>{e8f0f899-dc84-4d05-88bd-1bdc6d5a397a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\internal\asm">
+      <UniqueIdentifier>{52955fa2-4225-4b8e-88f1-a664d54148c4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\internal\bitmaps">
+      <UniqueIdentifier>{7f25f807-9fc8-44d7-acd2-594d4e6ebc8c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\files">
+      <UniqueIdentifier>{dfe2d597-baeb-44d5-bb3a-b3df82849cd6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\files\packages">
+      <UniqueIdentifier>{29f3b431-1ba3-409a-b3de-a9e80a429925}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\math">
+      <UniqueIdentifier>{6dd785c4-14a1-4192-8215-4dc7b60921b3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\arc">
+      <UniqueIdentifier>{8b416ec1-858c-4f0d-be8e-2b4f8e0e9cb9}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="internal\cpuaccel.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\resample.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\rotate.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\sharpen.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
+    <ClCompile Include="tsmath.cpp">
+      <Filter>src\math</Filter>
+    </ClCompile>
+    <ClCompile Include="toolset.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tsarray.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tsbitmap.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tsbuf.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tsdebug.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tsrnd.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tsstrs.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tsstrar.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tscrc.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tsfilesystem.cpp">
+      <Filter>src\files</Filter>
+    </ClCompile>
+    <ClCompile Include="tsbp.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\glyphscache.cpp">
+      <Filter>src\internal</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\textparser.cpp">
+      <Filter>src\internal</Filter>
+    </ClCompile>
+    <ClCompile Include="tstext.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tssystools.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tstime.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tsparse.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tspointers.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tssqlite.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tshash_md5.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\excpn.cpp">
+      <Filter>src\internal</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\stkwlk.cpp">
+      <Filter>src\internal</Filter>
+    </ClCompile>
+    <ClCompile Include="tszip.cpp">
+      <Filter>src\arc</Filter>
+    </ClCompile>
+    <ClCompile Include="tsfile_zip.cpp">
+      <Filter>src\files\packages</Filter>
+    </ClCompile>
+    <ClCompile Include="tspackcol.cpp">
+      <Filter>src\files\packages</Filter>
+    </ClCompile>
+    <ClCompile Include="tspackfile.cpp">
+      <Filter>src\files\packages</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\imageformat_png.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\imageformat_dds.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\imageformat_bmp.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\imageformat_tga.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\imageformat_jpg.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\imageformat_gif.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
+    <ClCompile Include="tsexecutor.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="internal\cpuaccel.h">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClInclude>
+    <ClInclude Include="internal\math.h">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClInclude>
+    <ClInclude Include="internal\pixmap.h">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClInclude>
+    <ClInclude Include="internal\resample.h">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClInclude>
+    <ClInclude Include="internal\vdstl.h">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClInclude>
+    <ClInclude Include="internal\vdtypes.h">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClInclude>
+    <ClInclude Include="tsmath.h">
+      <Filter>src\math</Filter>
+    </ClInclude>
+    <ClInclude Include="tsstrs.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="toolset.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tsarray.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tsbitmap.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tsbuf.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tsdebug.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tsflags.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tshashmap.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tsrnd.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tsstrar.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tscrc.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tsfilesystem.h">
+      <Filter>src\files</Filter>
+    </ClInclude>
+    <ClInclude Include="tsbp.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tspointers.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="internal\glyphscache.h">
+      <Filter>src\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="internal\textparser.h">
+      <Filter>src\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="tsvec.h">
+      <Filter>src\math</Filter>
+    </ClInclude>
+    <ClInclude Include="tstext.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tssystools.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tstime.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tsmlock.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tsparse.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tssqlite.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tsstreamstr.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tshash_md5.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="internal\excpn.h">
+      <Filter>src\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="internal\stkwlk.h">
+      <Filter>src\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="tszip.h">
+      <Filter>src\arc</Filter>
+    </ClInclude>
+    <ClInclude Include="tsfile_zip.h">
+      <Filter>src\files\packages</Filter>
+    </ClInclude>
+    <ClInclude Include="tspackcol.h">
+      <Filter>src\files\packages</Filter>
+    </ClInclude>
+    <ClInclude Include="tspackfile.h">
+      <Filter>src\files\packages</Filter>
+    </ClInclude>
+    <ClInclude Include="internal\imageformat.h">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClInclude>
+    <ClInclude Include="tsexecutor.h">
+      <Filter>src</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="asm\a_resample_mmx.asm">
+      <Filter>src\internal\asm</Filter>
+    </CustomBuild>
+    <CustomBuild Include="asm\a_resize.asm">
+      <Filter>src\internal\asm</Filter>
+    </CustomBuild>
+    <CustomBuild Include="asm\a_rotate.asm">
+      <Filter>src\internal\asm</Filter>
+    </CustomBuild>
+    <CustomBuild Include="asm\a_stretchrgb_point.asm">
+      <Filter>src\internal\asm</Filter>
+    </CustomBuild>
+    <CustomBuild Include="asm\asharpen.asm">
+      <Filter>src\internal\asm</Filter>
+    </CustomBuild>
+  </ItemGroup>
+</Project>

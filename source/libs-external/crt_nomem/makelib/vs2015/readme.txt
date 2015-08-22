@@ -1,0 +1,1 @@
+Visual C 2015 no need to create no-mem crt lib
