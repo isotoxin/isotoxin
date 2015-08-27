@@ -1227,7 +1227,7 @@ void gui_message_item_c::created()
 void gui_message_item_c::rebuild_text()
 {
     ts::wstr_c newtext;
-    if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+    if (prf().get_options().is(MSGOP_JOIN_MESSAGES))
     {
         ts::wstr_c pret, postt;
         prepare_str_prefix(pret, postt);
@@ -1413,7 +1413,7 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                     draw(dd, tdp);
                     */
 
-                    if (!prf().get_msg_options().is(MSGOP_JOIN_MESSAGES) && gui_message_item_c::ST_TYPING != subtype)
+                    if (!prf().get_options().is(MSGOP_JOIN_MESSAGES) && gui_message_item_c::ST_TYPING != subtype)
                     {
                         dd.size.x = timestrwidth + 1;
                         dd.size.y = g_app->font_conv_time->height();
@@ -1432,7 +1432,7 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
             case gui_message_item_c::ST_JUST_TEXT:
                 __super::sq_evt(qp, rid, data);
 
-                if (!prf().get_msg_options().is(MSGOP_JOIN_MESSAGES) && m_engine)
+                if (!prf().get_options().is(MSGOP_JOIN_MESSAGES) && m_engine)
                 {
                     ts::irect ca = get_client_area();
                     draw_data_s &dd = getengine().begin_draw();
@@ -1495,7 +1495,7 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                         glyphs_pos = sz + ca.lt;
                         if (gui->selcore().owner == this) gui->selcore().glyphs_pos = glyphs_pos;
 
-                        if (!prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+                        if (!prf().get_options().is(MSGOP_JOIN_MESSAGES))
                         {
                             dd.size.x = timestrwidth + 1;
                             dd.size.y = g_app->font_conv_time->height();
@@ -1841,7 +1841,7 @@ ts::uint16 gui_message_item_c::record::append( ts::wstr_c &t, ts::wstr_c &pret, 
     ts::wstr_c tstr;
     tm tt;
     _localtime64_s(&tt, &time);
-    if ( prf().get_msg_options().is(MSGOP_SHOW_DATE) )
+    if ( prf().get_options().is(MSGOP_SHOW_DATE) )
     {
         set_date(tstr,from_utf8(prf().date_msg_template()),tt);
         tstr.append_char(' ');
@@ -1854,7 +1854,7 @@ ts::uint16 gui_message_item_c::record::append( ts::wstr_c &t, ts::wstr_c &pret, 
     tstr.append_as_uint(tt.tm_min);
 
     ts::uint16 time_str_width = 0;
-    if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+    if (prf().get_options().is(MSGOP_JOIN_MESSAGES))
         t.append(pret).append(tstr).append(postt);
     else
     {
@@ -2091,7 +2091,7 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             rec.undelivered = post.type == MTA_UNDELIVERED_MESSAGE ? get_default_text_color(1) : 0;
 
             ts::wstr_c newtext(textrect.get_text());
-            if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+            if (prf().get_options().is(MSGOP_JOIN_MESSAGES))
             {
                 ts::wstr_c pret, postt;
                 prepare_str_prefix(pret, postt);
@@ -2133,7 +2133,7 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
 
 bool gui_message_item_c::message_prefix(ts::wstr_c &newtext, time_t posttime)
 {
-    if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+    if (prf().get_options().is(MSGOP_JOIN_MESSAGES))
     {
         newtext.set(CONSTWSTR("<r><font=conv_text><color=#"));
         ts::TSCOLOR c = get_default_text_color(2);
@@ -2143,7 +2143,7 @@ bool gui_message_item_c::message_prefix(ts::wstr_c &newtext, time_t posttime)
 
     tm tt;
     _localtime64_s(&tt, &posttime);
-    if (prf().get_msg_options().is(MSGOP_SHOW_DATE))
+    if (prf().get_options().is(MSGOP_SHOW_DATE))
     {
         ts::swstr_t<-128> tstr;
         set_date(tstr, from_utf8(prf().date_msg_template()), tt);
@@ -2157,7 +2157,7 @@ bool gui_message_item_c::message_prefix(ts::wstr_c &newtext, time_t posttime)
         newtext.append_char(':');
     newtext.append_as_uint(tt.tm_min);
 
-    if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+    if (prf().get_options().is(MSGOP_JOIN_MESSAGES))
     {
         newtext.append(CONSTWSTR("</color></font></r>"));
         timestrwidth = 0;
@@ -2653,7 +2653,7 @@ ts::wstr_c gui_message_item_c::hdr() const
     if (!author) return ts::wstr_c();
     ts::str_c n(author->get_name());
     text_adapt_user_input(n);
-    if (prf().is_loaded() && prf().get_msg_options().is(MSGOP_SHOW_PROTOCOL_NAME) && !historian->getkey().is_group())
+    if (prf().is_loaded() && prf().get_options().is(MSGOP_SHOW_PROTOCOL_NAME) && !historian->getkey().is_group())
     {
         if (protodesc.is_empty() && author->getkey().protoid)
         {
@@ -2880,7 +2880,7 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
         return mi;
     }
 
-    if ( prf().get_msg_options().is(MSGOP_SHOW_DATE_SEPARATOR) && post_time )
+    if ( prf().get_options().is(MSGOP_SHOW_DATE_SEPARATOR) && post_time )
     {
         tm tmtm;
         _localtime64_s(&tmtm, &post_time);
@@ -2931,7 +2931,7 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
         {
             if (mi.get_author() == author && mi.themename().equals(CONSTASTR("message."), skin))
             {
-                if (prf().get_msg_options().is(MSGOP_JOIN_MESSAGES))
+                if (prf().get_options().is(MSGOP_JOIN_MESSAGES))
                     return mi;
                 is_same_author = true;
             }
@@ -3053,7 +3053,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED> & p)
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_TYPING> & p)
 {
-    if (prf().get_msg_options().is(MSGOP_IGNORE_OTHER_TYPING))
+    if (prf().get_options().is(MSGOP_IGNORE_OTHER_TYPING))
         return 0;
 
     if (historian)
@@ -3166,7 +3166,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> & p)
     if (p.scrollend)
     {
         if (first_unread)
-            scroll_to(first_unread);
+            scroll_to(first_unread, true, false);
         else
             scroll_to_end();
     } else
@@ -3288,7 +3288,8 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> & p)
 
     gui_button_c &smiles = MAKE_CHILD<gui_button_c>(getrid());
     smiles.set_face_getter(BUTTON_FACE_PRELOADED(smile));
-    smiles.tooltip(TOOLTIP(TTT("Insert emoticon (Ctrl+S)",268)));
+
+    smiles.tooltip((GET_TOOLTIP)[]()->ts::wstr_c { return TTT("Insert emoticon ($)",268) / CONSTWSTR("Ctrl+S"); });
     smiles.set_handler(DELEGATE(this, show_smile_selector), nullptr);
     rb = smiles.get_min_size();
     smile_pos_corrector = TSNEW(leech_dock_bottom_right_s, rb.x, rb.y, 2, 2);
@@ -3666,7 +3667,7 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
     }
     if (ch.pass == 0 && caption->contacted())
     {
-        if (ch.pp == PP_MSGOPTIONS)
+        if (ch.pp == PP_PROFILEOPTIONS)
             caption->getcontact().reselect(true);
     }
     if (ch.pp == PP_EMOJISET && caption->contacted())

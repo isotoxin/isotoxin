@@ -24,9 +24,10 @@ enum messages_options_e
     MSGOP_JOIN_MESSAGES         = SETBIT(4), // hidden option
     MSGOP_SEND_TYPING           = SETBIT(5),
     MSGOP_IGNORE_OTHER_TYPING   = SETBIT(6),
+    UIOPT_SHOW_SEARCH_BAR       = SETBIT(16),
 };
 
-#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING)
+#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|UIOPT_SHOW_SEARCH_BAR)
 
 struct active_protocol_s : public active_protocol_data_s
 {
@@ -262,10 +263,10 @@ class profile_c : public config_base_c
 
     uint64 sorttag;
 
-    static const ts::flags32_s::BITS F_MSG_OPTIONS_VALID = SETBIT(0);
+    static const ts::flags32_s::BITS F_OPTIONS_VALID = SETBIT(0);
 
     ts::flags32_s profile_options;
-    ts::flags32_s current_msg_options;
+    ts::flags32_s current_options;
 
     INTPAR(msgopts, 0)
     INTPAR(msgopts_edited, 0)
@@ -319,27 +320,27 @@ public:
     void dirty_sort() { sorttag = ts::uuid(); };
     uint64 uniq_history_item_tag();
 
-    ts::flags32_s get_msg_options()
+    ts::flags32_s get_options()
     {
-        if (!profile_options.is(F_MSG_OPTIONS_VALID))
+        if (!profile_options.is(F_OPTIONS_VALID))
         {
             ts::flags32_s::BITS opts = msgopts();
             ts::flags32_s::BITS optse = msgopts_edited();
-            current_msg_options.setup( (opts & optse) | ( ~optse & DEFAULT_MSG_OPTIONS ) );
-            profile_options.set(F_MSG_OPTIONS_VALID);
+            current_options.setup( (opts & optse) | ( ~optse & DEFAULT_MSG_OPTIONS ) );
+            profile_options.set(F_OPTIONS_VALID);
         }
-        return current_msg_options;
+        return current_options;
     }
-    bool set_msg_options( ts::flags32_s::BITS mo, ts::flags32_s::BITS mask )
+    bool set_options( ts::flags32_s::BITS mo, ts::flags32_s::BITS mask )
     {
-        ts::flags32_s::BITS cur = get_msg_options().__bits;
+        ts::flags32_s::BITS cur = get_options().__bits;
         ts::flags32_s::BITS curmod = cur & mask;
         ts::flags32_s::BITS newbits = mo & mask;
         ts::flags32_s::BITS edited = msgopts_edited();
         edited |= (curmod ^ newbits);
         msgopts_edited( (int)edited );
         cur = (cur & ~mask) | newbits;
-        current_msg_options.setup(cur);
+        current_options.setup(cur);
         return msgopts( (int)cur );
     }
 

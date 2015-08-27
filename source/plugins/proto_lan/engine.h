@@ -1,7 +1,7 @@
 #pragma once
 
-#define LOGGING 0
-#if defined _DEBUG_OPTIMIZED || defined _FINAL
+#define LOGGING 1
+#if defined _FINAL
 #undef LOGGING
 #define LOGGING 0
 #endif

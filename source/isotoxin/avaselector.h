@@ -29,7 +29,6 @@ struct framedrawer_s
 class dialog_avaselector_c : public gui_isodialog_c
 {
     GM_RECEIVER(dialog_avaselector_c, GM_DROPFILES);
-    GM_RECEIVER(dialog_avaselector_c, GM_PASTE_HOTKEY);
     
     framedrawer_s fd;
     ts::animated_c anm;
@@ -85,6 +84,8 @@ class dialog_avaselector_c : public gui_isodialog_c
     spinlock::syncvar<syncstruct_s> sync;
     static DWORD WINAPI dialog_avaselector_c::worker(LPVOID ap);
     void compressor();
+
+    bool paste_hotkey_handler(RID, GUIPARAM);
 
 protected:
     /*virtual*/ int unique_tag() { return UD_AVASELECTOR; }

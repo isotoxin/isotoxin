@@ -125,6 +125,7 @@
     <ClCompile Include="..\..\conversation.cpp" />
     <ClCompile Include="..\..\emoticons.cpp" />
     <ClCompile Include="..\..\entertext.cpp" />
+    <ClCompile Include="..\..\filterbar.cpp" />
     <ClCompile Include="..\..\firstrun.cpp" />
     <ClCompile Include="..\..\images.cpp" />
     <ClCompile Include="..\..\isodialog.cpp" />
@@ -157,6 +158,7 @@
     <ClInclude Include="..\..\conversation.h" />
     <ClInclude Include="..\..\emoticons.h" />
     <ClInclude Include="..\..\entertext.h" />
+    <ClInclude Include="..\..\filterbar.h" />
     <ClInclude Include="..\..\firstrun.h" />
     <ClInclude Include="..\..\images.h" />
     <ClInclude Include="..\..\isodialog.h" />

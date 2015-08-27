@@ -2,6 +2,8 @@
 
 #define BUTTON_FACE_PRELOADED( face ) (GET_BUTTON_FACE) ([]()->button_desc_s * { return g_app->buttons().face; } )
 
+#define HOTKEY_TOGGLE_SEARCH_BAR SSK_F, gui_c::casw_ctrl
+
 struct preloaded_buttons_s
 {
     ts::shared_ptr<button_desc_s> icon[ contact_gender_count ];
@@ -265,6 +267,7 @@ public:
     void flashredraw(RID r) { m_flashredraw.set(r); }
 public:
 
+    ts::safe_ptr<gui_contact_item_c> active_contact_item;
 
     const ts::font_desc_c *font_conv_name = &ts::g_default_text_font;
     const ts::font_desc_c *font_conv_text = &ts::g_default_text_font;

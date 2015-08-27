@@ -27,9 +27,15 @@ static void check_proxy_addr(int connectiontype, RID editctl, ts::str_c &proxyad
     tf.badvalue(connectiontype > 0 && !check_netaddr(proxyaddr));
 }
 
+static bool __kbd_chop(RID, GUIPARAM)
+{
+    return true;
+}
 
 dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c(data), ipcj( ts::str_c(CONSTASTR("isotoxin_settings_")).append_as_uint(GetCurrentThreadId()), prf().is_loaded() ? DELEGATE( this, ipchandler ) : nullptr )
 {
+    gui->register_kbd_callback( __kbd_chop, HOTKEY_TOGGLE_SEARCH_BAR );
+
     s3::enum_sound_capture_devices(enum_capture_devices, this);
     s3::enum_sound_play_devices(enum_play_devices, this);
     media.init();
@@ -83,6 +89,8 @@ dialog_settings_c::~dialog_settings_c()
         gui->delete_event(DELEGATE(this, fileconfirm_handler));
         gui->delete_event(DELEGATE(this, msgopts_handler));
         gui->delete_event(DELEGATE(this, delete_used_network));
+
+        gui->unregister_kbd_callback( __kbd_chop );
     }
 }
 
@@ -259,6 +267,15 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
     return 0;
 }
 
+bool dialog_settings_c::commonopts_handler( RID, GUIPARAM p )
+{
+    int newo = (int)p;
+    show_search_bar = newo & 1;
+
+    mod();
+    return true;
+}
+
 bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
 {
     ts::flags32_s::BITS newo = (ts::flags32_s::BITS)p;
@@ -320,8 +337,10 @@ void dialog_settings_c::mod()
 
         PREPARE( ctl2send, prf().ctl_to_send() );
 
-        PREPARE( msgopts_current, prf().get_msg_options().__bits );
+        PREPARE( msgopts_current, prf().get_options().__bits );
         msgopts_changed = 0;
+
+        PREPARE( show_search_bar, 0 != (msgopts_current & UIOPT_SHOW_SEARCH_BAR) );
 
         PREPARE( date_msg_tmpl, prf().date_msg_template() );
         PREPARE( date_sep_tmpl, prf().date_sep_template() );
@@ -431,6 +450,12 @@ void dialog_settings_c::mod()
         dm().textfield( TTT("Name",52), from_utf8(username), DELEGATE(this,username_edit_handler) ).setname(CONSTASTR("uname")).focus(true);
         dm().vspace();
         dm().textfield(TTT("Status",68), from_utf8(userstatusmsg), DELEGATE(this, statusmsg_edit_handler)).setname(CONSTASTR("ustatus"));
+        dm().vspace();
+        int copts = 0;
+        if (show_search_bar) copts |= 1;
+        dm().checkb(ts::wstr_c(), DELEGATE(this, commonopts_handler), copts).setmenu(
+                menu_c().add(TTT("Show search bar ($)",276) / CONSTWSTR("Ctrl+F"), 0, MENUHANDLER(), CONSTASTR("1"))
+            );
 
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
         dm().page_header(TTT("Chat settings",110));
@@ -851,8 +876,13 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
         prf().ctl_to_send(ctl2send);
         ch1 = prf().date_msg_template(date_msg_tmpl);
         ch1 |= prf().date_sep_template(date_sep_tmpl);
-        if (prf().set_msg_options( msgopts_current, msgopts_changed ) || ch1)
-            gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_MSGOPTIONS).send();
+        if (is_changed(show_search_bar))
+        {
+            msgopts_changed |= UIOPT_SHOW_SEARCH_BAR;
+            INITFLAG( msgopts_current, UIOPT_SHOW_SEARCH_BAR, show_search_bar );
+        }
+        if (prf().set_options( msgopts_current, msgopts_changed ) || ch1)
+            gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_PROFILEOPTIONS).send();
 
         prf().download_folder(downloadfolder);
         prf().auto_confirm_masks( auto_download_masks );

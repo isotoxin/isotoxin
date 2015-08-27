@@ -355,7 +355,7 @@ bool contact_c::keep_history() const
         return false;
     if (KCH_ALWAYS_KEEP == keeph) return true;
     if (KCH_NEVER_KEEP == keeph) return false;
-    return prf().get_msg_options().is(MSGOP_KEEP_HISTORY);
+    return prf().get_options().is(MSGOP_KEEP_HISTORY);
 }
 
 void contact_c::del_history(uint64 utag)

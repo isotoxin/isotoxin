@@ -228,7 +228,7 @@ class gui_message_item_c : public gui_label_ex_c
     
     void ctx_menu_copy(const ts::str_c &)
     {
-        gmsg<GM_COPY_HOTKEY>().send();
+        gui->simulate_kbd(SSK_C, gui_c::casw_ctrl);
     }
     void ctx_menu_golink(const ts::str_c &);
     void ctx_menu_copylink(const ts::str_c &);

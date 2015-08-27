@@ -780,7 +780,7 @@ void active_protocol_c::del_message(uint64 utag)
 
 void active_protocol_c::typing(int cid)
 {
-    if ( !prf().get_msg_options().is(MSGOP_SEND_TYPING) )
+    if ( !prf().get_options().is(MSGOP_SEND_TYPING) )
         return;
 
     if (cid)

@@ -464,7 +464,7 @@ public:
     const ts::str_c get_pubid_desc() const {return (pubid.is_empty() && is_meta()) ? compile_pubid() : pubid;};
     ts::str_c get_description() const { ts::str_c t = get_name(); if (t.is_empty()) t.set(get_pubid_desc()); return t; }
     ts::str_c get_name(bool metacompile = true) const {return (name.is_empty() && is_meta() && metacompile) ? compile_name() : name;};
-    ts::str_c get_customname() const { return customname;}
+    const ts::str_c &get_customname() const { return customname;}
     ts::str_c get_statusmsg(bool metacompile = true) const {return (statusmsg.is_empty() && is_meta() && metacompile) ? compile_statusmsg() : statusmsg;};
     contact_state_e get_state() const {return state;}
     contact_online_state_e get_ostate() const {return ostate;}
@@ -693,6 +693,8 @@ public:
 
     void update_meta();
 
+    int count() const {return arr.size();}
+    contact_c & get(int index) {return *arr.get(index);};
 
     template <typename R> void iterate_proto_contacts( R r )
     {

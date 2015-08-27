@@ -100,6 +100,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
 
     struct value_watch_s
     {
+        const void *underedit;
         virtual ~value_watch_s() {}
         virtual bool changed() const { return true; }
     };
@@ -107,9 +108,8 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     template<typename T> struct value_watch_t : public value_watch_s
     {
         T original;
-        const T *underedit;
-        value_watch_t(const T&t):original(t), underedit(&t) {}
-        virtual bool changed() const { return original != (*underedit); }
+        value_watch_t(const T&t):original(t) { underedit = &t; }
+        virtual bool changed() const { return original != (*(const T *)underedit); }
     };
 
     int force_change = 0;
@@ -118,6 +118,14 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     template <typename T> void watch(const T&t)
     {
         watch_array.add( TSNEW( value_watch_t<T>, t ) );
+    }
+
+    template <typename T> bool is_changed(const T&t) const
+    {
+        for( const value_watch_s *w : watch_array )
+            if (w->underedit == &t)
+                return w->changed();
+        return false;
     }
 
     fmt_converter_s cvter;
@@ -162,6 +170,8 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     bool profile_selected = false;
     bool checking_new_version = false;
 
+    bool show_search_bar = false;
+
     ts::flags32_s::BITS msgopts_current = 0;
     ts::flags32_s::BITS msgopts_changed = 0;
 
@@ -204,6 +214,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     void describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const;
 
     bool msgopts_handler( RID, GUIPARAM );
+    bool commonopts_handler( RID, GUIPARAM );
 
     bool ipchandler( ipcr );
     void contextmenuhandler( const ts::str_c& prm );

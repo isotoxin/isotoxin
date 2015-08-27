@@ -106,6 +106,10 @@ gui_c::gui_c()
     m_deffont_name = CONSTASTR("default");
     gui = this;
     dirty_hover_data();
+
+    register_kbd_callback(DELEGATE(&m_selcore, copy_hotkey_handler), SSK_C, casw_ctrl);
+    register_kbd_callback(DELEGATE(&m_selcore, copy_hotkey_handler), SSK_INSERT, casw_ctrl);
+
 }
 
 gui_c::~gui_c() 
@@ -332,6 +336,31 @@ DWORD gui_c::handler_SEV_BEFORE_INIT( const system_event_param_s & p )
 	return 0;
 }
 
+void gui_c::simulate_kbd(int scancode, ts::uint32 casw)
+{
+    ts::uint32 signalkbd = scancode | casw;
+    for (int i = m_kbdhandlers.size() - 1; i >= 0; --i) // back order! latest handler handle key first
+    {
+        const kbd_press_callback_s &cb = m_kbdhandlers.get(i);
+        if (cb.scancode == signalkbd)
+        {
+            if (cb.handler(RID(), nullptr))
+                break;
+        }
+    }
+}
+
+void gui_c::unregister_kbd_callback(GUIPARAMHANDLER handler)
+{
+    for (int i = m_kbdhandlers.size() - 1; i >= 0; --i)
+    {
+        kbd_press_callback_s &cb = m_kbdhandlers.get(i);
+        if (cb.handler == handler)
+            m_kbdhandlers.get_remove_slow(i);
+    }
+}
+
+
 ts::uint32 gui_c::keyboard(const system_event_param_s & p)
 {
     redraw_collector_s dch;
@@ -347,28 +376,17 @@ ts::uint32 gui_c::keyboard(const system_event_param_s & p)
                 return SRBIT_ACCEPTED;
         }
 
-    if (p.kbd.down && GetKeyState(VK_CONTROL) < 0)
+    if (p.kbd.down)
     {
-        switch (p.kbd.scan)
-        {
-            case SSK_C:
-            case SSK_INSERT:
-                if (gmsg<GM_COPY_HOTKEY>().send().is(GMRBIT_ACCEPTED)) return 0;
-                break;
-            case SSK_V:
-                if (gmsg<GM_PASTE_HOTKEY>().send().is(GMRBIT_ACCEPTED)) return 0;
-                break;
-        }
+        ts::uint32 casw = 0;
+        if ( GetKeyState(VK_CONTROL) < 0 ) casw |= casw_ctrl;
+        if ( GetKeyState(VK_MENU) < 0 ) casw |= casw_alt;
+        if ( GetKeyState(VK_SHIFT) < 0 ) casw |= casw_shift;
+        if ( GetKeyState(VK_LWIN) < 0 || GetKeyState(VK_RWIN) < 0 ) casw |= casw_win;
+
+        simulate_kbd( p.kbd.scan, casw );
     }
-    if (p.kbd.down && GetKeyState(VK_SHIFT) < 0)
-    {
-        switch (p.kbd.scan)
-        {
-            case SSK_INSERT:
-                if (gmsg<GM_PASTE_HOTKEY>().send().is(GMRBIT_ACCEPTED)) return 0;
-                break;
-        }
-    }
+
     return 0;
 }
 
@@ -991,9 +1009,16 @@ ts::irect gui_c::dragndrop_objrect()
 }
 
 
+selectable_core_s::selectable_core_s()
+{
+}
+
 selectable_core_s::~selectable_core_s()
 {
+    // no need unregister handlers due selectable_core_s is part of gui_c
+
     //gui->delete_event( DELEGATE(this,flash) );
+    //gui->unregister_kbd_callback( DELEGATE(this, copy_hotkey_handler) );
 }
 
 bool selectable_core_s::flash(RID, GUIPARAM p)
@@ -1014,7 +1039,7 @@ bool selectable_core_s::flash(RID, GUIPARAM p)
     return true;
 }
 
-ts::uint32 selectable_core_s::gm_handler(gmsg<GM_COPY_HOTKEY> &s)
+bool selectable_core_s::copy_hotkey_handler(RID, GUIPARAM)
 {
     if (some_selected())
     {
@@ -1035,9 +1060,9 @@ ts::uint32 selectable_core_s::gm_handler(gmsg<GM_COPY_HOTKEY> &s)
         ts::set_clipboard_text(from_utf8(text));
 
         flash();
-        return GMRBIT_ABORT|GMRBIT_ACCEPTED;
+        return true;
     }
-    return 0;
+    return false;
 }
 
 ts::wchar selectable_core_s::ggetchar( int glyphindex )

@@ -120,9 +120,11 @@ public:
 	rectengine_c();
 	virtual ~rectengine_c();
 
+    typedef fastdelegate::FastDelegate< bool (rectengine_c *, rectengine_c *) > SWAP_TESTER;
+
     void cleanup_children_now();
     void resort_children(); // resort children according to zindex
-    bool children_sort( fastdelegate::FastDelegate< bool (rectengine_c *, rectengine_c *) > swap_them );
+    bool children_sort( SWAP_TESTER swap_them );
     void child_move_top( rectengine_c *e ) { child_move_to(0, e); }
     void child_move_to( int index, rectengine_c *e );
     

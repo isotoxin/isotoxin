@@ -96,7 +96,7 @@ public:
 
     bool upd_btnpos(RID r = RID(), GUIPARAM p = nullptr);
     void update_ctl_pos();
-    /*virtual*/ void i_leeched(guirect_c &to) override { __super::i_leeched(to); update_ctl_pos(); };
+    /*virtual*/ bool i_leeched(guirect_c &to) override { if (!__super::i_leeched(to)) return false; update_ctl_pos(); return true; };
     /*virtual*/ void i_unleeched() override { /* do nothing */ };
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 

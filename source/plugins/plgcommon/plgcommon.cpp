@@ -4,7 +4,7 @@
 
 void LogMessage(const char *caption, const char *msg)
 {
-#ifdef _DEBUG
+#if defined _DEBUG || defined _DEBUG_OPTIMIZED
     FILE *f = nullptr;
     fopen_s(&f, "plghost.log", "ab");
     if (f)

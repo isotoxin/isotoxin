@@ -126,6 +126,7 @@ asptr pid_name(packet_id_e pid)
         DESC_PID( PID_DATA );
         DESC_PID( PID_DELIVERED );
         DESC_PID( PID_REJECT );
+        DESC_PID( PID_SYNC );
     }
     return CONSTASTR("pid unknown");
 }
@@ -730,7 +731,8 @@ void lan_engine::tick(int *sleep_time_ms)
                 {
                     if (c->key_sent)
                     {
-                        c->pipe.close(); 
+                        logm("pg_nonce close, next action time: %i", c->nextactiontime);
+                        c->pipe.close();
                     } else
                     {
                         randombytes_buf(c->authorized_key, SIZE_KEY_NONCE_PART); // rebuild nonce
@@ -739,10 +741,11 @@ void lan_engine::tick(int *sleep_time_ms)
                         bool ok = c->pipe.send(packet_buf_encoded, packet_buf_encoded_len);
                         if (ok)
                         {
-                            logm("pg_nonce send ok");
-
                             c->key_sent = true;
                             c->nextactiontime = ct + 5000; // waiting PID_READY in 5 seconds, then disconnect
+
+                            logm("pg_nonce send ok, next action time: %i", c->nextactiontime);
+
                         } else
                         {
                             logm("pg_nonce send fail, close pipe");
@@ -754,24 +757,29 @@ void lan_engine::tick(int *sleep_time_ms)
 
                 } else
                 {
+                    logm("pg_nonce not connected");
+
                     if (c->key_sent)
                     {
+                        logm("pg_nonce ++reconnect");
+
                         ++c->reconnect;
                         c->key_sent = false;
 
                         if (c->reconnect > 10)
                         {
+                            logm("pg_nonce max reconnect");
                             c->state = contact_s::OFFLINE;
                         }
                     }
 
                     if (c->state != contact_s::OFFLINE)
                     {
-                        logm("pg_nonce connect");
-
                         // just connect
                         c->pipe.connect();
                         c->nextactiontime = ct + 2000;
+
+                        logm("pg_nonce connect, next action time: %i", c->nextactiontime);
                     }
                 }
                 break;
@@ -1090,9 +1098,26 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
     contact_s *c = find_by_rpid(pubid);
     if (c == nullptr || (c->state != contact_s::OFFLINE))
     {
-        // contact is not offline or not found
-        // disconnect
-        return pipe;
+        if (c && c->state == contact_s::BACKCONNECT && 0 > memcmp(c->public_key, my_public_key, SIZE_PUBLIC_KEY))
+        {
+            // race condition :(
+            // create new pipe instead of backconnect one
+            c->pipe.close();
+            c->state = contact_s::OFFLINE;
+            c->key_sent = false;
+
+            logm("race condition win");
+
+        } else
+        {
+            // contact is not offline or not found
+            // or race condition loose
+            // disconnect
+
+            logm("race condition loose");
+
+            return pipe;
+        }
     }
 
     logm("concurrent ok");
@@ -2406,7 +2431,7 @@ void lan_engine::transmitting_file_s::fresh_file_portion(const file_portion_s *f
                 if (dtg == 0)
                 {
                     dtg = c->send_block(BT_FILE_CHUNK, 0, &d, sizeof(d), fp->data, fp->size);;
-                    logm("fresh fp send %llu (%llu) %llu", utag, fp->offset, mdtags[i].dtg);
+                    logm("fresh fp send %llu (%llu) %llu", utag, fp->offset, dtg);
                     return;
                 }
 
@@ -2436,7 +2461,7 @@ void lan_engine::transmitting_file_s::fresh_file_portion(const file_portion_s *f
         {
             if (requested_chunks < MAX_TRANSFERING_CHUNKS && is_accepted && !is_paused && !is_finished)
             {
-                logm("portion request %llu (%llu) //%llu", utag, offset, mdtags[i].dtg);
+                logm("portion request %llu (%llu)", utag, offset);
 
                 int request_size = (offset + (unsigned)PORTION_SIZE < fsz) ? PORTION_SIZE : (int)(fsz - offset);
                 if (request_size)

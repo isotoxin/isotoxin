@@ -85,11 +85,15 @@ struct leech_edit : public autoparam_i
     leech_edit(int sx) :sx(sx)
     {
     }
-    /*virtual*/ void i_leeched( guirect_c &to ) override 
+    /*virtual*/ bool i_leeched( guirect_c &to ) override 
     {
-        __super::i_leeched(to);
-        evt_data_s d;
-        sq_evt(SQ_PARENT_RECT_CHANGED, owner->getrid(), d);
+        if (__super::i_leeched(to))
+        {
+            evt_data_s d;
+            sq_evt(SQ_PARENT_RECT_CHANGED, owner->getrid(), d);
+            return true;
+        }
+        return false;
     };
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override
     {
@@ -414,6 +418,9 @@ ts::uint32 gui_contact_item_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> & c )
         {
             MODIFY(*this).active(n);
             update_text();
+
+            if (n)
+                g_app->active_contact_item = CIR_ME == role ? nullptr : contact->gui_item;
         }
     }
     return 0;
@@ -1270,6 +1277,8 @@ MAKE_CHILD<gui_contactlist_c>::~MAKE_CHILD()
 
 gui_contactlist_c::~gui_contactlist_c()
 {
+    if (gui)
+        gui->delete_event( DELEGATE(this, on_filter_deactivate) );
 }
 
 void gui_contactlist_c::array_mode( ts::array_inplace_t<contact_key_s, 2> & arr_ )
@@ -1352,8 +1361,13 @@ void gui_contactlist_c::refresh_array()
     }
 }
 
-void gui_contactlist_c::recreate_ctls()
+void gui_contactlist_c::recreate_ctls(bool focus_filter)
 {
+    if (filter)
+    {
+        TSDEL(filter);
+        DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, on_filter_deactivate), nullptr );
+    }
     if (addcbtn) TSDEL(addcbtn);
     if (addgbtn) TSDEL(addgbtn);
     if (self) TSDEL(self);
@@ -1395,6 +1409,7 @@ void gui_contactlist_c::recreate_ctls()
         button_desc_s *baddg = gui->theme().get_button(CONSTASTR("addgroup"));
         int nbuttons = baddg ? 2 : 1;
 
+        flags.set(F_NO_LEECH_CHILDREN);
 
         addcbtn = MAKE_CHILD<gui_button_c>(getrid());
         addcbtn->tooltip(TOOLTIP(TTT("Add contact",64)));
@@ -1431,19 +1446,93 @@ void gui_contactlist_c::recreate_ctls()
         self->leech(TSNEW(leech_dock_top_s, g_app->mecontactheight));
         self->protohit();
         MODIFY(*self).zindex(1.0f).visible(true);
-        getengine().child_move_to(2, &self->getengine());
+        getengine().child_move_to(nbuttons, &self->getengine());
 
+        flags.clear(F_NO_LEECH_CHILDREN);
+
+        int other_ctls = 1;
+        if (prf().get_options().is(UIOPT_SHOW_SEARCH_BAR))
+        {
+            other_ctls = 2;
+            filter = MAKE_CHILD<gui_filterbar_c>(getrid());
+            getengine().child_move_to(nbuttons + 1, &filter->getengine());
+            DEBUGCODE(skip_top_pixels = 0);
+            update_filter_pos();
+            MODIFY(*filter).zindex(1.0f).visible(true);
+
+            ASSERT(skip_top_pixels > 0); // it will be calculated via update_filter_pos
+
+            if (focus_filter)
+                filter->focus_edit();
+        } else
+        {
+            skip_top_pixels = gui->theme().conf().get_int(CONSTASTR("cltop"), 70);
+        }
+       
         getengine().resort_children();
 
-        skipctl = 1 + nbuttons;
-        skip_top_pixels = gui->theme().conf().get_int(CONSTASTR("cltop"), 70);
+        skipctl = other_ctls + nbuttons;
+        //skip_top_pixels = gui->theme().conf().get_int(CONSTASTR("cltop"), 70) + filter->get_height_by_width( get_client_area().width() );
         skip_bottom_pixels = gui->theme().conf().get_int(CONSTASTR("clbottom"), 70);
-
         return;
     }
     skipctl = 0;
     children_repos();
+}
 
+bool gui_contactlist_c::i_leeched( guirect_c &to )
+{
+    if (flags.is(F_NO_LEECH_CHILDREN))
+        return false;
+
+    return true;
+}
+
+bool gui_contactlist_c::on_filter_deactivate(RID, GUIPARAM)
+{
+    ts::safe_ptr<rectengine_c> active = g_app->active_contact_item ? &g_app->active_contact_item->getengine() : nullptr;
+
+    if (!active)
+        active = get_first_contact_item();
+
+
+    contacts().iterate_meta_contacts([](contact_c *c)->bool{
+    
+        if (c->gui_item)
+            MODIFY(*c->gui_item).visible(true);
+        return true;
+    });
+
+    if (active)
+        scroll_to(active, false, true);
+
+    return true;
+}
+
+void gui_contactlist_c::update_filter_pos()
+{
+    ASSERT(!filter.expired() && !self.expired());
+    ts::irect cla = get_client_area();
+    int claw = cla.width();
+    int fh = claw ? filter->get_height_by_width( claw ) : 20;
+    int selfh = gui->theme().conf().get_int(CONSTASTR("cltop"), 70);
+    MODIFY(*filter.get()).pos( cla.lt.x, cla.lt.y + selfh ).size( claw, fh );
+
+    int otp = skip_top_pixels;
+    skip_top_pixels = selfh + fh;
+    if (skip_top_pixels != otp)
+        getrid().call_children_repos();
+}
+
+bool gui_contactlist_c::filter_proc(system_query_e qp, evt_data_s &data)
+{
+    if (qp == SQ_PARENT_RECT_CHANGED)
+    {
+        update_filter_pos();
+        return false;
+    }
+
+    return false;
 }
 
 ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&ch)
@@ -1479,6 +1568,15 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
     if (ch.pass == 0 && self)
         if (PP_ONLINESTATUS == ch.pp)
         self->getengine().redraw();
+
+    if (ch.pass == 0)
+        if (PP_PROFILEOPTIONS == ch.pp)
+        {
+            bool show_filter = prf().get_options().is(UIOPT_SHOW_SEARCH_BAR);
+            if ((filter && !show_filter) || (!filter && show_filter))
+                recreate_ctls(true);
+        }
+
     return 0;
 }
 
@@ -1585,22 +1683,22 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
 {
     if (prf().sort_tag() != sort_tag && role == CLR_MAIN_LIST && gui->dragndrop_underproc() == nullptr)
     {
-        struct ss
+        auto swap_them = []( rectengine_c *e1, rectengine_c *e2 )->bool
         {
-            static bool swap_them( rectengine_c *e1, rectengine_c *e2 )
-            {
-                if (e1 == nullptr) return false;
-                gui_contact_item_c * ci1 = dynamic_cast<gui_contact_item_c *>( &e1->getrect() );
-                if (ci1 == nullptr || ci1->getrole() != CIR_LISTITEM) return false;
-                if (e2 == nullptr) return false;
-                gui_contact_item_c * ci2 = dynamic_cast<gui_contact_item_c *>(&e2->getrect());
-                if (ci2 == nullptr || ci2->getrole() != CIR_LISTITEM) return false;
-                return ci1->is_after(*ci2);
-            }
+            if (e1 == nullptr) return false;
+            gui_contact_item_c * ci1 = dynamic_cast<gui_contact_item_c *>( &e1->getrect() );
+            if (ci1 == nullptr || ci1->getrole() != CIR_LISTITEM) return false;
+            if (e2 == nullptr) return false;
+            gui_contact_item_c * ci2 = dynamic_cast<gui_contact_item_c *>(&e2->getrect());
+            if (ci2 == nullptr || ci2->getrole() != CIR_LISTITEM) return false;
+            return ci1->is_after(*ci2);
         };
 
-        if (getengine().children_sort( ss::swap_them ))
+        if (getengine().children_sort( (rectengine_c::SWAP_TESTER)swap_them ))
         {
+            if (g_app->active_contact_item)
+                scroll_to(&g_app->active_contact_item->getengine(), false, false);
+
             children_repos();
         }
         sort_tag = prf().sort_tag();
@@ -1611,8 +1709,8 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
 /*virtual*/ void gui_contactlist_c::children_repos_info(cri_s &info) const
 {
     info.area = get_client_area();
-    info.area.lt.y += skip_top_pixels; // TODO : top controls
-    info.area.rb.y -= skip_bottom_pixels; // TODO : bottom controls
+    info.area.lt.y += skip_top_pixels;
+    info.area.rb.y -= skip_bottom_pixels;
 
     info.from = skipctl;
     info.count = getengine().children_count() - skipctl;
@@ -1623,6 +1721,9 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
 {
     if (rid != getrid() && ASSERT((getrid() >> rid) || HOLD(rid)().is_root())) // child?
     {
+        if (filter && rid == filter->getrid())
+            return filter_proc(qp, data);
+
         return __super::sq_evt(qp,rid,data);
     }
     return __super::sq_evt(qp, rid, data);

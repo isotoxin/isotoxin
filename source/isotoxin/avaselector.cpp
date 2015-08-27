@@ -313,6 +313,9 @@ dialog_avaselector_c::dialog_avaselector_c(MAKE_ROOT<dialog_avaselector_c> &data
 {
     CloseHandle(CreateThread(nullptr, 0, worker, this, 0, nullptr));
     while( !sync.lock_read()().compressor_working ) Sleep(1);
+
+    gui->register_kbd_callback( DELEGATE( this, paste_hotkey_handler ), SSK_V, gui_c::casw_ctrl);
+    gui->register_kbd_callback( DELEGATE( this, paste_hotkey_handler ), SSK_INSERT, gui_c::casw_shift);
 }
 
 dialog_avaselector_c::~dialog_avaselector_c()
@@ -321,7 +324,11 @@ dialog_avaselector_c::~dialog_avaselector_c()
     w().compressor_should_stop = true;
     w().source_tag += 1;
     w.unlock();
-    if (gui) gui->delete_event(DELEGATE(this,flashavarect));
+    if (gui)
+    {
+        gui->delete_event(DELEGATE(this,flashavarect));
+        gui->unregister_kbd_callback(DELEGATE(this, paste_hotkey_handler));
+    }
     while( sync.lock_read()().compressor_working ) Sleep(1);
 }
 
@@ -386,7 +393,7 @@ ts::uint32 dialog_avaselector_c::gm_handler(gmsg<GM_DROPFILES> & p)
     return 0;
 }
 
-ts::uint32 dialog_avaselector_c::gm_handler(gmsg<GM_PASTE_HOTKEY> & p)
+bool dialog_avaselector_c::paste_hotkey_handler(RID, GUIPARAM)
 {
     animated = false;
     ts::bitmap_c bmp = ts::get_clipboard_bitmap();

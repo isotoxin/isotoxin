@@ -550,6 +550,16 @@ bool gui_textedit_c::prepare_lines(int startchar)
     return true;
 }
 
+void gui_textedit_c::set_placeholder(const ts::wstr_c &text)
+{
+    if (text != placeholder)
+    {
+        flags.set(F_TEXTUREDIRTY);
+        placeholder = text;
+        redraw();
+    }
+}
+
 void gui_textedit_c::set_text(const ts::wstr_c &text_, bool setCaretToEnd)
 {
     flags.init(F_PREV_SB_VIS, is_vsb());
@@ -606,6 +616,38 @@ void gui_textedit_c::prepare_texture()
         return;
 
     ts::tmp_tbuf_t<ts::glyph_image_s> glyphs, outlinedglyphs;
+
+    if (!placeholder.is_empty() && text.size() == 0)
+    {
+        // placeholder only
+
+        int w = asize.x;
+        texture.ajust(ts::ivec2(w, asize.y), false);
+        ts::ivec2 pen(ts::ui_scale(margin_left) + 4, (*font)->ascender + ts::ui_scale(margin_top));
+
+        int advoffset = 0;
+        int cnt = placeholder.get_length();
+        for(int i=0;i<cnt;++i)
+        {
+            ts::wchar phc = placeholder.get_char(i);
+            ts::glyph_image_s &gi = glyphs.add();
+            ts::glyph_s &glyph = (*(*font))[phc];
+            gi.width = (ts::uint16)glyph.width;
+            gi.height = (ts::uint16)glyph.height;
+            gi.pitch = (ts::uint16)glyph.width;
+            gi.pixels = (ts::uint8*)(&glyph + 1);
+            ts::ivec2 pos = ts::ivec2(advoffset, ts::ui_scale(baseline_offset)) + pen;
+            gi.pos.x = (ts::int16)(glyph.left + pos.x);
+            gi.pos.y = (ts::int16)(-glyph.top + pos.y);
+            gi.color = placeholder_color;
+            gi.thickness = 0;
+            advoffset += glyph.advance;
+        }
+
+        ts::text_rect_c::draw_glyphs(texture.body(), w, asize.y, texture.info().pitch, glyphs.array(), ts::ivec2(0), true);
+        return;
+    }
+
 	ts::ivec2 visible_lines = (ts::ivec2(0, asize.y) + (scroll_top() - ts::ui_scale(margin_top)))/(*font)->height & ts::ivec2(0, lines.count()-1);
 	int firstvischar = lines.get(visible_lines.r0).r0;
     int numcolors = lines.get(visible_lines.r1).r1 - firstvischar;

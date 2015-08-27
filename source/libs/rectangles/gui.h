@@ -88,10 +88,8 @@ struct bcreate_s
 
 struct selectable_core_s
 {
-    GM_RECEIVER(selectable_core_s, GM_COPY_HOTKEY);
-
     ts::safe_ptr<gui_label_c> owner;
-    ts::ivec2 glyphs_pos;
+    ts::ivec2 glyphs_pos = ts::ivec2(0);
     int glyph_under_cursor = -1;
     int glyph_start_sel = -1;
     int glyph_end_sel = -1;
@@ -101,16 +99,15 @@ struct selectable_core_s
     bool dirty = false;
     bool clear_selection_after_flashing = false;
 
+    bool copy_hotkey_handler(RID, GUIPARAM);
+
     ts::wchar ggetchar( int glyphindex );
 
     bool flash(RID r = RID(), GUIPARAM p = (GUIPARAM)4);
     void flash_and_clear_selection() { flash(RID(), (GUIPARAM)100); }
     bool selectword(RID, GUIPARAM);
 
-    selectable_core_s()
-    {
-        glyphs_pos = ts::ivec2(0);
-    }
+    selectable_core_s();
     ~selectable_core_s();
 
     bool is_dirty() { bool r = dirty; dirty = false; return r; }
@@ -237,6 +234,15 @@ class gui_c
     ts::array_inplace_t<drawcollector, 4> m_dcolls;
     int m_dcolls_ref = 0;
 
+    struct kbd_press_callback_s
+    {
+        DUMMY(kbd_press_callback_s);
+        kbd_press_callback_s() {}
+        GUIPARAMHANDLER handler;
+
+        ts::uint32 scancode;
+    };
+    ts::array_inplace_t<kbd_press_callback_s, 1> m_kbdhandlers;
 
     RID get_free_rid();
 
@@ -283,6 +289,12 @@ class gui_c
 protected:
     virtual void app_setup_custom_button(bcreate_s &) {};
 public:
+
+    static const ts::uint32 casw_ctrl = 1U << 31;
+    static const ts::uint32 casw_alt = 1U << 30;
+    static const ts::uint32 casw_shift = 1U << 29;
+    static const ts::uint32 casw_win = 1U << 28;
+
     virtual ts::wsptr app_loclabel(loc_label_e ll) { return CONSTWSTR("???"); }
     virtual bool app_custom_button_state(int tag, int &shiftleft) { return true; }
     virtual void app_prepare_text_for_copy( ts::str_c &text_utf8 ) {}
@@ -361,6 +373,15 @@ public:
     void delete_event(GUIPARAMHANDLER h);
     void delete_event(GUIPARAMHANDLER h, GUIPARAM prm);
 
+    void simulate_kbd( int scancode, ts::uint32 casw );
+    void register_kbd_callback(GUIPARAMHANDLER handler, int scancode, ts::uint32 casw)
+    {
+        kbd_press_callback_s &cb = m_kbdhandlers.add();
+        cb.handler = handler;
+        cb.scancode = casw | scancode;
+    }
+
+    void unregister_kbd_callback(GUIPARAMHANDLER handler);
 
     ts::text_rect_c &tr() {return m_textrect;}
 	const theme_c &theme() const {return m_theme;}

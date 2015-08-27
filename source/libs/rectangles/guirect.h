@@ -246,7 +246,7 @@ struct draw_data_s;
 struct sqhandler_i : public ts::safe_object
 {
     virtual bool sq_evt( system_query_e qp, RID rid, evt_data_s &data ) = 0;
-    virtual void i_leeched( guirect_c &to ) {};
+    virtual bool i_leeched( guirect_c &to ) { return true; };
     virtual void i_unleeched() {};
     virtual ~sqhandler_i() {}
 };
@@ -391,7 +391,7 @@ class autoparam_i : public sqhandler_i
 protected:
     guirect_c *owner = nullptr;
     autoparam_i() {}
-    /*virtual*/ void i_leeched( guirect_c &to ) override { owner = &to; };
+    /*virtual*/ bool i_leeched( guirect_c &to ) override { owner = &to; return true; };
     /*virtual*/ void i_unleeched() override { TSDEL(this); };
 public:
     virtual ~autoparam_i();
@@ -1143,11 +1143,12 @@ class gui_vscrollgroup_c : public gui_group_c // vertical group with vertical sc
 protected:
     static const ts::flags32_s::BITS F_NO_REPOS = FLAGS_FREEBITSTART << 2;
     static const ts::flags32_s::BITS F_LAST_REPOS_AT_END = FLAGS_FREEBITSTART << 3;
-    static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 4;
+    static const ts::flags32_s::BITS F_SCROLL_TO_MAX_TOP = FLAGS_FREEBITSTART << 4;
+    static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 5;
 
     /*virtual*/ void children_repos() override;
     /*virtual*/ void on_add_child(RID id) override;
-    gui_vscrollgroup_c() {} // издержки производства - нужен для потомка
+    gui_vscrollgroup_c() {}
 public:
     gui_vscrollgroup_c(initial_rect_data_s &data) :gui_group_c(data) {}
     /*virtual*/ ~gui_vscrollgroup_c() {}
@@ -1177,10 +1178,11 @@ public:
         if (repos) children_repos();
     }
 
-    void scroll_to( rectengine_c *reng, bool repos = false )
+    void scroll_to( rectengine_c *reng, bool maxtop, bool repos_now )
     {
+        flags.init( F_SCROLL_TO_MAX_TOP, maxtop );
         scroll_target = reng;
-        if (repos) children_repos();
+        if (repos_now) children_repos();
     }
 
     int width_for_children() const

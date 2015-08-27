@@ -319,8 +319,10 @@ void guirect_c::leech(sqhandler_i * h)
             continue;
         }
     }
-    m_leeches.add() = h;
-    h->i_leeched(*this);
+    if (h->i_leeched(*this))
+        m_leeches.add() = h;
+    else
+        h->i_unleeched();
 }
 void guirect_c::unleech(sqhandler_i * h)
 {
@@ -2039,6 +2041,7 @@ void gui_vscrollgroup_c::children_repos()
 
     repeat_calc_h:
     int scroll_target_y = -1;
+    int scroll_target_h = 1;
     int vheight = 0;
     for(int i=0;i<info.count;++i)
     {
@@ -2054,7 +2057,10 @@ void gui_vscrollgroup_c::children_repos()
         infs[i].h = h;
         infs[i].maxw = maxsz.x;
         if (e == scroll_target)
+        {
             scroll_target_y = vheight;
+            scroll_target_h = h;
+        }
         vheight += h;
     }
 
@@ -2074,8 +2080,20 @@ void gui_vscrollgroup_c::children_repos()
     }
     sbhelper.set_size(vheight, info.area.height());
     if (scroll_target_y >= 0)
-        sbhelper.shift = -scroll_target_y;
-    else if (flags.is(F_LAST_REPOS_AT_END) && flags.is(F_SBVISIBLE))
+    {
+        if (flags.is(F_SCROLL_TO_MAX_TOP))
+            sbhelper.shift = ts::tmax( -scroll_target_y, ts::tmin(0, info.area.height() - vheight) );
+        else
+        {
+            if (sbhelper.shift < -scroll_target_y)
+                sbhelper.shift = -scroll_target_y;
+
+            int botscrollshift = info.area.height() - sbhelper.shift;
+            if ((scroll_target_y + scroll_target_h) > botscrollshift)
+                sbhelper.shift = info.area.height() - scroll_target_y - scroll_target_h;
+        }
+
+    } else if (flags.is(F_LAST_REPOS_AT_END) && flags.is(F_SBVISIBLE))
         sbhelper.shift = info.area.height() - vheight;
 
     for( ts::aint i = 0, y = sbhelper.shift; i < info.count; ++i )

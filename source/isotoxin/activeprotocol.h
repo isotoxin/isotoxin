@@ -38,7 +38,12 @@ struct configurable_s
     {
         return initialized != o.initialized || proxy != o.proxy || server_port != o.server_port || udp_enable != o.udp_enable;
     }
-    configurable_s operator=(const configurable_s &c)
+    configurable_s() {}
+    configurable_s(const configurable_s &c)
+    {
+        *this = c;
+    }
+    configurable_s &operator=(const configurable_s &c)
     {
         if (!c.initialized) return *this;
         proxy = c.proxy;

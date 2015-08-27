@@ -22,13 +22,15 @@ class gui_textedit_c : public gui_control_c
     void ctx_menu_selall(const ts::str_c &);
     bool ctxclosehandler(RID, GUIPARAM);
 
+    ts::wstr_c placeholder;
 	ts::drawable_bitmap_c texture;
     sbhelper_s sbhelper;
 	ts::TSCOLOR caret_color         = ts::ARGB(0,0,0),
                 color               = ts::ARGB(0,0,0),
                 selection_color     = ts::ARGB(255,255,0),
                 selection_bg_color  = ts::ARGB(100,100,255),
-                outline_color       = 0; //ts::ARGB(0,0,0);
+                outline_color       = 0, //ts::ARGB(0,0,0),
+                placeholder_color   = ts::ARGB(0xa0,0xa0,0xa0);
 	const ts::font_desc_c *font = &ts::g_default_text_font;
 	ts::wchar password_char = 0;
 
@@ -213,6 +215,9 @@ public:
 	bool is_empty() const {return text.size() == 0;}
     void set_chars_limit( int cl ) { chars_limit = cl; }
     void set_margins( int left = 0, int rite = 0, int top = 0 ) { margin_left = left; margin_right = rite; margin_top = top; }
+
+    void set_placeholder(const ts::wstr_c &t);
+    void set_placeholder(const ts::wstr_c &t, ts::TSCOLOR phcolor) { placeholder_color = phcolor; set_placeholder(t); }
 
 	void set_text(const ts::wstr_c &text, bool setCaretToEnd = false);
     ts::wstr_c get_text_and_fix_pos(int *pos0, int *pos1) const;

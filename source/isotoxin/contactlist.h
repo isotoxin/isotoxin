@@ -153,6 +153,9 @@ class gui_contactlist_c : public gui_vscrollgroup_c
         return 0;
     }
 
+
+    static const ts::flags32_s::BITS F_NO_LEECH_CHILDREN = F_VSCROLLFREEBITSTART << 0;
+
     uint64 sort_tag = 0;
     contact_list_role_e role = CLR_MAIN_LIST;
 
@@ -160,6 +163,7 @@ class gui_contactlist_c : public gui_vscrollgroup_c
     int skip_bottom_pixels = 70;
     int skipctl = 0;
 
+    ts::safe_ptr<gui_filterbar_c> filter;
     ts::safe_ptr<gui_button_c> addcbtn; // add contact button
     ts::safe_ptr<gui_button_c> addgbtn; // add group button
     ts::safe_ptr<gui_contact_item_c> self;
@@ -167,7 +171,10 @@ class gui_contactlist_c : public gui_vscrollgroup_c
 
     ts::array_inplace_t<contact_key_s, 2> * arr = nullptr;
 
-    void recreate_ctls();
+    void recreate_ctls(bool focus_filter = false);
+    /*virtual*/ bool i_leeched( guirect_c &to ) override;
+    bool filter_proc(system_query_e qp, evt_data_s &data);
+    void update_filter_pos();
 
     /*virtual*/ void children_repos_info(cri_s &info) const override;
 public:
@@ -181,5 +188,8 @@ public:
     /*virtual*/ size_policy_e size_policy() const override {return SP_KEEP;}
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+
+    rectengine_c *get_first_contact_item() {return getengine().children_count() > skipctl ? getengine().get_child(skipctl) : nullptr; }
+    bool on_filter_deactivate(RID, GUIPARAM);
 
 };

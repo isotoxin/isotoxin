@@ -249,7 +249,7 @@ enum profileparam_e
     PP_GENDER,
     PP_ONLINESTATUS,
     PP_AVATAR,
-    PP_MSGOPTIONS,
+    PP_PROFILEOPTIONS,
     PP_NETWORKNAME,
 
     PP_EMOJISET,
@@ -349,7 +349,7 @@ struct leech_dock_top_s : public autoparam_i
     int height;
     leech_dock_top_s(int height) :height(height) {}
     void update_ctl_pos();
-    /*virtual*/ void i_leeched(guirect_c &to) override { __super::i_leeched(to); update_ctl_pos(); };
+    /*virtual*/ bool i_leeched(guirect_c &to) override { if (__super::i_leeched(to)) { update_ctl_pos(); return true;} return false; };
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
@@ -363,7 +363,7 @@ struct leech_dock_bottom_center_s : public autoparam_i
     int num;
     leech_dock_bottom_center_s(int width, int height, int x_space = 0, int y_space = 0, int index = 0, int num = 1) :width(width), height(height), x_space(x_space), y_space(y_space), index(index), num(num){}
     void update_ctl_pos();
-    /*virtual*/ void i_leeched( guirect_c &to ) override { __super::i_leeched(to); update_ctl_pos(); };
+    /*virtual*/ bool i_leeched( guirect_c &to ) override { if (__super::i_leeched(to)) { update_ctl_pos(); return true;} return false; };
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
@@ -377,7 +377,7 @@ struct leech_dock_right_center_s : public autoparam_i
     int num;
     leech_dock_right_center_s(int width, int height, int x_space = 0, int y_space = 0, int index = 0, int num = 1) :width(width), height(height), x_space(x_space), y_space(y_space), index(index), num(num) {}
     void update_ctl_pos();
-    /*virtual*/ void i_leeched( guirect_c &to ) override { __super::i_leeched(to); update_ctl_pos(); };
+    /*virtual*/ bool i_leeched( guirect_c &to ) override { if (__super::i_leeched(to)) { update_ctl_pos(); return true;} return false; };
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
@@ -389,7 +389,7 @@ struct leech_dock_bottom_right_s : public autoparam_i
     int y_space;
     leech_dock_bottom_right_s(int width, int height, int x_space = 0, int y_space = 0) :width(width), height(height), x_space(x_space), y_space(y_space) {}
     void update_ctl_pos();
-    /*virtual*/ void i_leeched(guirect_c &to) override { __super::i_leeched(to); update_ctl_pos(); };
+    /*virtual*/ bool i_leeched(guirect_c &to) override { if (__super::i_leeched(to)) { update_ctl_pos(); return true;} return false; };
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
@@ -401,14 +401,17 @@ struct leech_at_right : public autoparam_i
     {
         of->leech(this);
     }
-    /*virtual*/ void i_leeched(guirect_c &to) override
+    /*virtual*/ bool i_leeched(guirect_c &to) override
     {
-        if (&to != of) __super::i_leeched(to);
+        if (&to != of) 
+            if (!__super::i_leeched(to)) return false;
+
         if (&to == owner)
         {
             evt_data_s d;
             sq_evt(SQ_RECT_CHANGED, of->getrid(), d);
         }
+        return true;
     };
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
@@ -421,14 +424,17 @@ struct leech_at_left_s : public autoparam_i
     {
         of->leech(this);
     }
-    /*virtual*/ void i_leeched(guirect_c &to) override
+    /*virtual*/ bool i_leeched(guirect_c &to) override
     {
-        if (&to != of) __super::i_leeched(to);
+        if (&to != of) 
+            if (!__super::i_leeched(to))
+                return false;
         if (&to == owner)
         {
             evt_data_s d;
             sq_evt(SQ_RECT_CHANGED, of->getrid(), d);
         }
+        return true;
     };
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };

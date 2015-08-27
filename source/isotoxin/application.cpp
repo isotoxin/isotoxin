@@ -8,6 +8,14 @@ application_c *g_app = nullptr;
 void dotests();
 #endif
 
+static bool __toggle_search_bar(RID, GUIPARAM)
+{
+    bool sbshow = prf().get_options().is(UIOPT_SHOW_SEARCH_BAR);
+    prf().set_options( sbshow ? 0 : UIOPT_SHOW_SEARCH_BAR, UIOPT_SHOW_SEARCH_BAR );
+    gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_PROFILEOPTIONS).send();
+    return true;
+}
+
 application_c::application_c(const ts::wchar * cmdl)
 {
     F_NEWVERSION = false;
@@ -28,6 +36,7 @@ application_c::application_c(const ts::wchar * cmdl)
     dotests();
 #endif
 
+    register_kbd_callback( __toggle_search_bar, HOTKEY_TOGGLE_SEARCH_BAR );
 }
 
 
