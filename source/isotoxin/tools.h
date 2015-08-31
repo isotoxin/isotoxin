@@ -13,8 +13,8 @@ template<> struct wraptranslate<ts::wstr_c> : public ts::wstr_c
     wraptranslate( const ts::wstr_c & t ):ts::wstr_c(t) {}
     wraptranslate &operator / (const ts::wsptr&r)
     {
-        int ins = this->find_pos('$');
-        if (ASSERT(ins >=0))
+        ts::aint ins = this->find_pos('$');
+        if (CHECK(ins >=0))
             this->replace(ins,1, r);
         return *this;
     }
@@ -270,6 +270,17 @@ bool check_profile_name(const ts::wstr_c &);
 bool check_netaddr( const ts::asptr & );
 
 void path_expand_env(ts::wstr_c &path);
+
+enum icon_type_e
+{
+    IT_NORMAL,
+    IT_ONLINE,
+    IT_OFFLINE,
+    IT_AWAY,
+    IT_DND,
+};
+
+ts::drawable_bitmap_c * prepare_proto_icon( const ts::asptr &prototag, const void *icodata, int icodatasz, int imgsize, icon_type_e icot );
 
 struct data_block_s
 {

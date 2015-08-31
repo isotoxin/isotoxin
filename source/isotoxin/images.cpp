@@ -113,7 +113,7 @@ namespace
                     if (bmp.info().sz != origsz)
                     {
                         bmp.create_RGBA(origsz);
-                        current_frame.resize(bmp.extbody(), ts::FILTER_LANCZOS3);
+                        current_frame.resize_to(bmp.extbody(), ts::FILTER_LANCZOS3);
                     }
                     current_frame.create_from_bitmap(bmp);
                     bmp.clear();
@@ -127,7 +127,7 @@ namespace
                 if (bmp.info().sz != origsz)
                 {
                     bmp.create_RGBA(origsz);
-                    current_frame.resize(bmp.extbody(), ts::FILTER_LANCZOS3);
+                    current_frame.resize_to(bmp.extbody(), ts::FILTER_LANCZOS3);
                     frame_dirty = true;
                 }
                 if (current_frame.info().sz != ts::ivec2(w, newh))
@@ -136,7 +136,7 @@ namespace
                     frame_dirty = true;
                 }
                 if (frame_dirty)
-                    bmp.resize(current_frame.extbody(), ts::FILTER_LANCZOS3);
+                    bmp.resize_to(current_frame.extbody(), ts::FILTER_LANCZOS3);
 
                 rsz_required = true;
             }
@@ -168,7 +168,7 @@ namespace
             {
                 frame_dirty = true;
                 int r = gif.nextframe(bmp.extbody());
-                bmp.resize(current_frame.extbody(), ts::FILTER_LANCZOS3);
+                bmp.resize_to(current_frame.extbody(), ts::FILTER_LANCZOS3);
                 return r;
             } 
             return gif.nextframe(current_frame.extbody());
@@ -193,7 +193,7 @@ namespace
                 int newh = lround(k * bmp.info().sz.y);
                 if (current_frame.info().sz != ts::ivec2(w, newh))
                     current_frame.create(ts::ivec2(w, newh));
-                bmp.resize(current_frame.extbody(), ts::FILTER_LANCZOS3);
+                bmp.resize_to(current_frame.extbody(), ts::FILTER_LANCZOS3);
             }
             current_frame.premultiply();
         }

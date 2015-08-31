@@ -9,7 +9,7 @@ MAKE_CHILD<gui_listitem_c>::~MAKE_CHILD()
     get().gm = gm;
 }
 
-gui_listitem_c::gui_listitem_c(MAKE_CHILD<gui_listitem_c> &data) :gui_label_c(data), param(data.param)
+gui_listitem_c::gui_listitem_c(MAKE_CHILD<gui_listitem_c> &data) :gui_label_c(data), param(data.param), icon(data.icon)
 {
     if (data.themerect.is_empty())
         set_theme_rect(CONSTASTR("lstitem"), false);
@@ -18,6 +18,12 @@ gui_listitem_c::gui_listitem_c(MAKE_CHILD<gui_listitem_c> &data) :gui_label_c(da
 
     height = 1;
     textrect.make_dirty(true, true, true);
+    if (icon)
+    {
+        textrect.set_margins( icon->info().sz.x + 3, 0, 0 );
+        if ( icon->info().sz.y > height )
+            height = icon->info().sz.y;
+    }
 }
 
 gui_listitem_c::~gui_listitem_c()
@@ -56,6 +62,10 @@ void gui_listitem_c::set_text(const ts::wstr_c&t)
 {
     __super::set_text(t);
     int h = get_height_by_width(-INT_MAX);
+
+    if (icon && icon->info().sz.y > h)
+        h = icon->info().sz.y;
+
     if (h != height)
     {
         height = h;
@@ -67,31 +77,42 @@ void gui_listitem_c::set_text(const ts::wstr_c&t)
 {
     switch (qp)
     {
-        case SQ_MOUSE_IN:
-            MODIFY(getrid()).highlight(true);
-            return false;
-        case SQ_MOUSE_OUT:
-            MODIFY(getrid()).highlight(false);
-            return false;
-        case SQ_MOUSE_RUP:
-            if (gm)
+    case SQ_MOUSE_IN:
+        MODIFY(getrid()).highlight(true);
+        return false;
+    case SQ_MOUSE_OUT:
+        MODIFY(getrid()).highlight(false);
+        return false;
+    case SQ_MOUSE_RUP:
+        if (gm)
+        {
+            menu_c m = gm(param, false);
+            if (!m.is_empty())
             {
-                menu_c m = gm(param, false);
-                if (!m.is_empty())
-                {
-                    popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
-                    MODIFY(rid).active(true);
-                }
+                popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
+                MODIFY(rid).active(true);
             }
-            return false;
-        case SQ_MOUSE_L2CLICK:
-            gm(param, true);
-            return false;
-        case SQ_YOU_WANNA_DIE:
-            return param.equals(data.strparam);
-        case SQ_RECT_CHANGED:
-            textrect.make_dirty(false, false, true);
-            break;
+        }
+        return false;
+    case SQ_MOUSE_L2CLICK:
+        gm(param, true);
+        return false;
+    case SQ_YOU_WANNA_DIE:
+        return param.equals(data.strparam);
+    case SQ_RECT_CHANGED:
+        textrect.make_dirty(false, false, true);
+        break;
+    case SQ_DRAW:
+        if (icon)
+        {
+            ts::irect cla = get_client_area();
+            __super::sq_evt(qp, rid, data);
+            getengine().begin_draw();
+            getengine().draw( ts::ivec2(cla.lt.x, (cla.height()-icon->info().sz.y)/2+cla.lt.y), *icon, ts::irect(0, icon->info().sz), true );
+            getengine().end_draw();
+
+        }
+        return true;
     }
     return __super::sq_evt(qp, rid, data);
 }
@@ -255,10 +276,11 @@ gui_dialog_c::description_s& gui_dialog_c::description_s::button(const ts::wsptr
     return *this;
 }
 
-gui_dialog_c::description_s& gui_dialog_c::description_s::list( const ts::wsptr &desc_, int lines )
+gui_dialog_c::description_s& gui_dialog_c::description_s::list( const ts::wsptr &desc_, const ts::wsptr &emptytext_, int lines )
 {
     ctl = _LIST;
     desc = desc_;
+    text = emptytext_;
     height_ = lines > 0 ? (lines * ts::g_default_text_font->height) : (-lines);
     return *this;
 }
@@ -493,7 +515,8 @@ class gui_simple_dialog_list_c;
 template<> struct MAKE_CHILD<gui_simple_dialog_list_c> : public _PCHILD(gui_simple_dialog_list_c)
 {
     int height;
-    MAKE_CHILD(RID parent_, int height):height(height) { parent = parent_; }
+    ts::wstr_c emptymessage;
+    MAKE_CHILD(RID parent_, int height, const ts::wstr_c &emptymessage):height(height) { parent = parent_; }
     ~MAKE_CHILD();
 };
 
@@ -501,10 +524,21 @@ class gui_simple_dialog_list_c : public gui_vscrollgroup_c
 {
     DUMMY(gui_simple_dialog_list_c);
     int height;
+    ts::wstr_c emptymessage;
 public:
-    gui_simple_dialog_list_c(MAKE_CHILD<gui_simple_dialog_list_c> &data) :gui_vscrollgroup_c(data), height(data.height) {}
+    gui_simple_dialog_list_c(MAKE_CHILD<gui_simple_dialog_list_c> &data) :gui_vscrollgroup_c(data), height(data.height), emptymessage(data.emptymessage) {}
     /*virtual*/ ~gui_simple_dialog_list_c()
     {
+    }
+
+    void set_emptymessage( const ts::wstr_c &emt )
+    {
+        if (emptymessage != emt)
+        {
+            emptymessage = emt;
+            if (getengine().children_count() == 0)
+                getengine().redraw();
+        }
     }
 
     /*virtual*/ ts::ivec2 get_min_size() const override
@@ -524,17 +558,40 @@ public:
     }
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override
     {
-        if (SQ_KILL_CHILD == qp)
+        switch (qp)
         {
-            ts::tmp_tbuf_t<RID> sentenced_to_death;
-            for(rectengine_c *e : getengine())
-                if (e && e->getrect().sq_evt(SQ_YOU_WANNA_DIE, e->getrid(), data))
-                    sentenced_to_death.add() = e->getrid();
-            for (RID r : sentenced_to_death)
-                TSDEL( &HOLD(r)() );
-            if (sentenced_to_death.count()) getengine().redraw();
-            
+        case SQ_KILL_CHILD:
+            {
+                ts::tmp_tbuf_t<RID> sentenced_to_death;
+                for (rectengine_c *e : getengine())
+                    if (e && e->getrect().sq_evt(SQ_YOU_WANNA_DIE, e->getrid(), data))
+                        sentenced_to_death.add() = e->getrid();
+                for (RID r : sentenced_to_death)
+                    TSDEL(&HOLD(r)());
+                if (sentenced_to_death.count()) getengine().redraw();
+            }
+            break;
+        case SQ_DRAW:
+            if ( getengine().children_count() == 0 && !emptymessage.is_empty() )
+            {
+                __super::sq_evt(qp, rid, data);
+
+                draw_data_s &dd = getengine().begin_draw();
+                ts::irect cla = get_client_area();
+                dd.offset += cla.lt;
+                dd.size = cla.size();
+                text_draw_params_s tdp;
+                ts::TSCOLOR c = get_default_text_color();
+                tdp.forecolor = &c;
+                ts::flags32_s f; f.setup(ts::TO_VCENTER | ts::TO_HCENTER);
+                tdp.textoptions = &f;
+                getengine().draw( emptymessage, tdp );
+                getengine().end_draw();
+                return true;
+            }
+            break;
         }
+
         return __super::sq_evt(qp, rid, data);
     }
 };
@@ -543,16 +600,24 @@ MAKE_CHILD<gui_simple_dialog_list_c>::~MAKE_CHILD()
     MODIFY(get()).visible(true);
 }
 
+void gui_dialog_c::set_list_emptymessage(const ts::asptr& ctl_name, const ts::wstr_c& t)
+{
+    if (RID lrid = find(ctl_name))
+    {
+        gui_simple_dialog_list_c &ctl = HOLD(lrid).as<gui_simple_dialog_list_c>();
+        ctl.set_emptymessage(t);
+    }
+}
+
 void gui_dialog_c::ctlenable( const ts::asptr&name, bool enblflg )
 {
     if (RID ctl = find(name))
         ctl.call_enable(enblflg);
 }
 
-RID gui_dialog_c::list(int height)
+RID gui_dialog_c::list(int height, const ts::wstr_c & emptymessage)
 {
-    gui_simple_dialog_list_c &lst = MAKE_CHILD<gui_simple_dialog_list_c>(getrid(), height);
-
+    gui_simple_dialog_list_c &lst = MAKE_CHILD<gui_simple_dialog_list_c>(getrid(), height, emptymessage);
     return lst.getrid();
 }
 
@@ -847,7 +912,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             break;
         case description_s::_LIST:
             {
-                rctl = list(d.height_);
+                rctl = list(d.height_, d.text);
             }
             break;
         case description_s::_TEXT:

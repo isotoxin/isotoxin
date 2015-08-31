@@ -414,15 +414,18 @@ isotoxin_ipc_s::~isotoxin_ipc_s()
 
 ipc::ipc_result_e isotoxin_ipc_s::wait_func( void *par )
 {
-    idlejob_func f = *(idlejob_func *)par;
-    if (!f()) return ipc::IPCR_BREAK;
+    if (par)
+    {
+        idlejob_func f = *(idlejob_func *)par;
+        if (!f()) return ipc::IPCR_BREAK;
+    }
     return ipc::IPCR_OK;
 }
 
 void isotoxin_ipc_s::wait_loop( idlejob_func tickfunc )
 {
     idlejob_func localtickfunc = tickfunc;
-    junct.wait( processor_func, this, wait_func, &tickfunc );
+    junct.wait( processor_func, this, wait_func, tickfunc ? &tickfunc : nullptr );
 }
 
 ipc::ipc_result_e isotoxin_ipc_s::handshake_func(void *par, void *data, int datasize)
@@ -721,6 +724,153 @@ bool new_version()
     return new_version( application_c::appver(), cfg().autoupdate_newver() );
 }
 
+ts::drawable_bitmap_c * prepare_proto_icon( const ts::asptr &prototag, const void *icodata, int icodatasz, int imgsize, icon_type_e icot )
+{
+    ts::drawable_bitmap_c * ricon = nullptr;
+    if (icodatasz)
+    {
+        ts::bitmap_c bmp;
+        if (bmp.load_from_file(icodata, icodatasz))
+        {
+            int input_images_size = bmp.info().sz.x;
+            bool do_online_offline_effects = false;
+            ts::bmpcore_exbody_s srcb = bmp.extbody();
+
+            int numimages = bmp.info().sz.y / input_images_size; // vertical tiles
+            if (numimages > 1)
+            {
+                if (icot < numimages)
+                    srcb.m_body = srcb.m_body + srcb.info().pitch * (input_images_size * icot);
+                else
+                    do_online_offline_effects = true;
+                srcb.m_info.sz.y = input_images_size;
+
+            } else
+                do_online_offline_effects = true;
+            if (srcb.m_info.sz.y > input_images_size)
+                srcb.m_info.sz.y = input_images_size;
+
+
+            if (input_images_size != imgsize || numimages == 0)
+            {
+                ts::bitmap_c bmpsz;
+                bmpsz.create_RGBA( ts::ivec2(imgsize) );
+                bmpsz.resize_from(srcb, ts::FILTER_LANCZOS3);
+                bmp = bmpsz;
+            } else if (input_images_size != bmp.info().sz.y)
+            {
+                ASSERT( srcb.info().sz == ts::ivec2(imgsize) );
+                ts::bitmap_c bmpx;
+                bmpx.create_RGBA( ts::ivec2(imgsize) );
+                bmpx.copy(ts::ivec2(0), bmpx.info().sz, srcb, ts::ivec2(0));
+                bmp = bmpx;
+            }
+
+            if ( do_online_offline_effects )
+            {
+                switch (icot) //-V719
+                {
+                case IT_ONLINE:
+                    {
+                        auto make_online = [](ts::uint8 * me, const ts::image_extbody_c::FMATRIX &m)
+                        {
+                            // make it green
+                            if (me[3] == 255)
+                                *(ts::TSCOLOR *)me = ts::ARGB(112,255,80);
+                        };
+
+                        bmp.apply_filter(ts::ivec2(0), bmp.info().sz, make_online);
+                    }
+                    break;
+                case IT_OFFLINE:
+                    {
+                        auto make_offline = [](ts::uint8 * me, const ts::image_extbody_c::FMATRIX &m)
+                        {
+                            // make it gray and semitransparent
+                            *(ts::TSCOLOR *)me = ts::MULTIPLY( ts::GRAYSCALE( *(ts::TSCOLOR *)me ), ts::ARGB(255,255,255,128) );
+                        };
+
+                        bmp.apply_filter(ts::ivec2(0), bmp.info().sz, make_offline);
+                    }
+                    break;
+                case IT_AWAY:
+                    {
+                        auto make_online = [](ts::uint8 * me, const ts::image_extbody_c::FMATRIX &m)
+                        {
+                            // make it yellow
+                            if (me[3] == 255)
+                                *(ts::TSCOLOR *)me = ts::ARGB(207, 205, 0);
+                        };
+
+                        bmp.apply_filter(ts::ivec2(0), bmp.info().sz, make_online);
+                    }
+                    break;
+                case IT_DND:
+                    {
+                        auto make_online = [](ts::uint8 * me, const ts::image_extbody_c::FMATRIX &m)
+                        {
+                            // make it dark red
+                            if (me[3] == 255)
+                                *(ts::TSCOLOR *)me = ts::ARGB(141, 36, 0);
+                        };
+
+                        bmp.apply_filter(ts::ivec2(0), bmp.info().sz, make_online);
+                    }
+                    break;
+                }
+            }
+
+            ricon = TSNEW(ts::drawable_bitmap_c, bmp, false, true);
+        }
+    }
+    if (!ricon)
+    {
+        ts::text_rect_c tr;
+        tr.set_size(ts::ivec2(64,32));
+
+        ts::wstr_c t = ts::to_wstr(prototag);
+        t.case_up();
+        switch (icot)
+        {
+        case IT_NORMAL:
+            t.insert(0, CONSTWSTR("<l><outline=#000088>"));
+            break;
+        case IT_ONLINE:
+            t.insert(0, CONSTWSTR("<l><outline=#70ff50>"));
+            break;
+        case IT_OFFLINE:
+            t.insert(0, CONSTWSTR("<l><outline=#000000>"));
+            break;
+        case IT_AWAY:
+            t.insert(0, CONSTWSTR("<l><outline=#cfcd00>"));
+            break;
+        case IT_DND:
+            t.insert(0, CONSTWSTR("<l><outline=#8d2400>"));
+            break;
+        }
+
+        tr.set_text(t, nullptr, false);
+        tr.set_def_color(ts::ARGB(255, 255, 255));
+        tr.set_font(&ts::g_default_text_font);
+        tr.parse_and_render_texture(nullptr, nullptr, false);
+        tr.set_size(tr.lastdrawsize);
+        tr.parse_and_render_texture(nullptr, nullptr, true);
+
+        ts::bitmap_c bmp;
+        bmp.create_RGBA(tr.size);
+        bmp.copy(ts::ivec2(0), tr.size, tr.get_texture().extbody(), ts::ivec2(0));
+
+        if (bmp.info().sz != ts::ivec2(imgsize))
+        {
+            ts::bitmap_c bmpsz;
+            bmp.resize_to(bmpsz, ts::ivec2(imgsize), ts::FILTER_LANCZOS3);
+            bmp = bmpsz;
+        }
+
+        ricon = TSNEW(ts::drawable_bitmap_c, bmp, false, true);
+    }
+    return ricon;
+}
 
 bool file_mask_match( const ts::wsptr &filename, const ts::wsptr &masks )
 {

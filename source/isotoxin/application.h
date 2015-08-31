@@ -275,6 +275,7 @@ public:
     int contactheight = 55;
     int mecontactheight = 60;
     int protowidth = 100;
+    int protoiconsize = 10;
 
     time_t autoupdate_next;
 

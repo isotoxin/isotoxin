@@ -52,6 +52,14 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     auto w = syncdata.lock_write();
                     w().description.set_as_utf8(desc);
 
+                    int icondatasize;
+                    const void *icondata = r.get_data(icondatasize);
+                    if (icondatasize)
+                    {
+                        w().icon.set_size(icondatasize);
+                        memcpy( w().icon.data(), icondata, icondatasize );
+                    }
+
                     ipcp->send(ipcw(AQ_SET_CONFIG) << w().data.config);
                     ipcp->send(ipcw(AQ_SET_NAME) << (w().data.user_name.is_empty() ? prf().username() : w().data.user_name));
                     ipcp->send(ipcw(AQ_SET_STATUSMSG) << (w().data.user_statusmsg.is_empty() ? prf().userstatus() : w().data.user_statusmsg));
@@ -471,9 +479,28 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
             if (contact_c *c = contacts().get_self().subget( contact_key_s(0, id) ))
                 set_ostate(c->get_ostate());
             break;
+        case PP_PROFILEOPTIONS:
+            if (!prf().get_options().is(UIOPT_PROTOICONS))
+                icons_cache.clear();
+            break;
         }
     }
     return 0;
+}
+
+const ts::drawable_bitmap_c &active_protocol_c::get_icon(int sz, icon_type_e icot)
+{
+    for(const icon_s &icon : icons_cache)
+        if (icon.icot == icot && icon.bmp->info().sz.x == sz)
+            return *icon.bmp;
+
+    auto r = syncdata.lock_read();
+
+    ts::drawable_bitmap_c *icon = prepare_proto_icon( r().data.tag, r().icon.data(), r().icon.size(), sz, icot );
+    icon_s &ic = icons_cache.add();
+    ic.bmp.reset(icon);
+    ic.icot = icot;
+    return *icon;
 }
 
 bool active_protocol_c::check_die(RID, GUIPARAM)

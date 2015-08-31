@@ -28,7 +28,7 @@ void avatar_s::load( const void *body, int size, int tag_ )
                 bmprsz.copy( (bmprsz.info().sz - bmp.info().sz) / 2, bmp.info().sz, bmp.extbody(), ts::ivec2(0) );
                 bmp = bmprsz;
             }
-            bmp.resize(bmprsz, asz, ts::FILTER_LANCZOS3);
+            bmp.resize_to(bmprsz, asz, ts::FILTER_LANCZOS3);
             bmp = bmprsz;
         }
 

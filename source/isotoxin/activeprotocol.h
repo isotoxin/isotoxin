@@ -77,6 +77,7 @@ struct active_protocol_data_s
 
 struct sync_data_s
 {
+    ts::buf0_c icon;
     active_protocol_data_s data;
     ts::str_c description; // utf8
     ts::flags32_s flags;
@@ -113,7 +114,14 @@ class active_protocol_c : public ts::safe_object
     static const ts::flags32_s::BITS F_ONLINE_SWITCH        = SETBIT(6);
     static const ts::flags32_s::BITS F_SET_PROTO_OK         = SETBIT(7);
     static const ts::flags32_s::BITS F_CURRENT_ONLINE       = SETBIT(8);
-    
+
+    struct icon_s
+    {
+        UNIQUE_PTR(ts::drawable_bitmap_c) bmp;
+        icon_type_e icot;
+    };
+
+    ts::array_inplace_t<icon_s, 1> icons_cache;
 
     bool cmdhandler(ipcr r);
     bool tick();
@@ -142,6 +150,8 @@ public:
     void set_configurable( const configurable_s &c );
 
     const s3::Format& defaudio() const {return audio_fmt;}
+
+    const ts::drawable_bitmap_c &get_icon(int sz, icon_type_e icot);
 
     void set_current_online(bool oflg) { syncdata.lock_write()().flags.init(F_CURRENT_ONLINE, oflg); }
     bool is_current_online() const { return syncdata.lock_read()().flags.is(F_CURRENT_ONLINE); }

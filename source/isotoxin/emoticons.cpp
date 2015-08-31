@@ -18,7 +18,7 @@ namespace
             {
                 float k = (float)maxh / (float)e->framesize().y;
                 advance = lround(k * e->framesize().x);
-                e->curframe().resize(bmp, ts::ivec2(advance, maxh), ts::FILTER_LANCZOS3);
+                e->curframe().resize_to(bmp, ts::ivec2(advance, maxh), ts::FILTER_LANCZOS3);
                 
             }
         }
@@ -108,7 +108,7 @@ bool emoticons_c::emo_static_image_s::load(const ts::blob_c &b)
         float k = (float)emoti().maxheight / (float)bmp.info().sz.y;
         int neww = lround( k * bmp.info().sz.x );
         current_frame.create( ts::ivec2(neww, emoti().maxheight) );
-        bmp.resize( current_frame.extbody(), ts::FILTER_LANCZOS3 );
+        bmp.resize_to( current_frame.extbody(), ts::FILTER_LANCZOS3 );
     } else
     {
         current_frame.create( bmp.info().sz );

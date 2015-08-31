@@ -131,8 +131,6 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     fmt_converter_s cvter;
     /*virtual*/ s3::Format *formats(int &count) override;
 
-    isotoxin_ipc_s ipcj;
-
     s3::DEVICE mic_device_stored;
     bool mic_device_changed = false;
 
@@ -146,13 +144,16 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     bool username_edit_handler( const ts::wstr_c & );
     bool statusmsg_edit_handler( const ts::wstr_c & );
 
+public:
     struct protocols_s
     {
+        UNIQUE_PTR( ts::drawable_bitmap_c ) icon;
         ts::str_c  tag; // lan, tox
         ts::str_c description; // utf8
         int connection_features;
         int features;
     };
+private:
 
     ts::array_inplace_t<protocols_s,0> available_prots;
     const protocols_s *find_protocol(const ts::str_c& tag) const
@@ -167,10 +168,14 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
 
     void add_active_proto( RID lst, int id, const active_protocol_data_s &apdata );
 
+    bool is_networks_tab_selected = false;
+    bool proto_list_loaded = false;
+
     bool profile_selected = false;
     bool checking_new_version = false;
 
     bool show_search_bar = false;
+    bool proto_icons_indicator = false;
 
     ts::flags32_s::BITS msgopts_current = 0;
     ts::flags32_s::BITS msgopts_changed = 0;
@@ -211,7 +216,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     void autoupdate_proxy_handler( const ts::str_c& );
     bool autoupdate_proxy_addr_handler( const ts::wstr_c & t );
     
-    void describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const;
+    const protocols_s * describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const;
 
     bool msgopts_handler( RID, GUIPARAM );
     bool commonopts_handler( RID, GUIPARAM );
@@ -268,6 +273,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     void select_signal_device(const ts::str_c& prm);
 
     void mod();
+    void networks_tab_selected();
 
 protected:
     /*virtual*/ int unique_tag() { return UD_SETTINGS; }
@@ -283,5 +289,7 @@ public:
     /*virtual*/ ts::wstr_c get_name() const override;
     /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(810, 500); }
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+
+    void protocols_loaded(ts::array_inplace_t<protocols_s, 0> &prots);
 };
 

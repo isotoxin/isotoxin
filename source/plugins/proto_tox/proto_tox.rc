@@ -43,7 +43,7 @@ BEGIN
             VALUE "FileDescription", "Isotoxin Tox protocol"
             VALUE "FileVersion", SS(PLUGINVER)
             VALUE "InternalName", "proto_tox.dll"
-            VALUE "LegalCopyright", "Copyright (C) 2015 Rotkaermota, Tox Team (tox.im)"
+            VALUE "LegalCopyright", "Copyright (C) 2015 Rotkaermota, Tox Team (tox.chat)"
             VALUE "OriginalFilename", "proto_tox.dll"
             VALUE "ProductName", "Isotoxin"
             VALUE "ProductVersion", SS(PLUGINVER)
@@ -83,7 +83,7 @@ END
 #endif    // Russian (Russia) resources
 /////////////////////////////////////////////////////////////////////////////
 
-
+777 RCDATA toxlogo.png
 
 #ifndef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////

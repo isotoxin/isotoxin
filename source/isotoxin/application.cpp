@@ -1105,6 +1105,7 @@ bool application_c::load_theme( const ts::wsptr&thn )
     contactheight= theme().conf().get_string(CONSTASTR("contactheight")).as_int(55);
     mecontactheight = theme().conf().get_string(CONSTASTR("mecontactheight")).as_int(60);
     protowidth = theme().conf().get_string(CONSTASTR("protowidth")).as_int(100);
+    protoiconsize = theme().conf().get_string(CONSTASTR("protoiconsize")).as_int(10);
 
     emoti().reload();
 

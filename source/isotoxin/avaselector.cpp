@@ -268,7 +268,7 @@ void dialog_avaselector_c::compressor()
             }
             ts::bitmap_c b;
             e2.clear();
-            b2e.resize(b, newsz, ts::FILTER_LANCZOS3);
+            b2e.resize_to(b, newsz, ts::FILTER_LANCZOS3);
             encode_lossy_png(e2, b);
             sz = e2.size();
 
@@ -293,7 +293,7 @@ void dialog_avaselector_c::compressor()
                 {
                     usebestrslt:
                     e2.clear();
-                    b2e.resize(b, bestsz, ts::FILTER_LANCZOS3);
+                    b2e.resize_to(b, bestsz, ts::FILTER_LANCZOS3);
                     encode_lossy_png(e2, b);
                     sz = e2.size();
 
@@ -403,7 +403,7 @@ bool dialog_avaselector_c::paste_hotkey_handler(RID, GUIPARAM)
         newimage();
     }
 
-    return 0;
+    return true;
 }
 
 bool dialog_avaselector_c::save_image(RID, GUIPARAM)
@@ -515,7 +515,7 @@ void dialog_avaselector_c::rebuild_bitmap()
 
         if (resize_k < 1.0f)
         {
-            bitmap.resize(b, ts::ivec2( ts::lround(resize_k * bitmap.info().sz.x), ts::lround(resize_k * bitmap.info().sz.y)), ts::FILTER_LANCZOS3 );
+            bitmap.resize_to(b, ts::ivec2( ts::lround(resize_k * bitmap.info().sz.x), ts::lround(resize_k * bitmap.info().sz.y)), ts::FILTER_LANCZOS3 );
         } else
             b = bitmap;
 

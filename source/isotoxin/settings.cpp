@@ -4,6 +4,7 @@
 
 #define HGROUP_MEMBER ts::wsptr()
 
+#define PROTO_ICON_SIZE 32
 
 static menu_c list_proxy_types(int cur, MENUHANDLER mh, int av = -1)
 {
@@ -32,7 +33,7 @@ static bool __kbd_chop(RID, GUIPARAM)
     return true;
 }
 
-dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c(data), ipcj( ts::str_c(CONSTASTR("isotoxin_settings_")).append_as_uint(GetCurrentThreadId()), prf().is_loaded() ? DELEGATE( this, ipchandler ) : nullptr )
+dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c(data)
 {
     gui->register_kbd_callback( __kbd_chop, HOTKEY_TOGGLE_SEARCH_BAR );
 
@@ -112,8 +113,6 @@ dialog_settings_c::~dialog_settings_c()
 {
     set_theme_rect(CONSTASTR("main"), false);
     __super::created();
-
-    ipcj.send( ipcw ( AQ_GET_PROTOCOLS_LIST ) );
 }
 
 void dialog_settings_c::getbutton(bcreate_s &bcr)
@@ -270,7 +269,8 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 bool dialog_settings_c::commonopts_handler( RID, GUIPARAM p )
 {
     int newo = (int)p;
-    show_search_bar = newo & 1;
+    show_search_bar = 0 != (newo & 1);
+    proto_icons_indicator = 0 != (newo & 2);
 
     mod();
     return true;
@@ -341,6 +341,7 @@ void dialog_settings_c::mod()
         msgopts_changed = 0;
 
         PREPARE( show_search_bar, 0 != (msgopts_current & UIOPT_SHOW_SEARCH_BAR) );
+        PREPARE( proto_icons_indicator, 0 != (msgopts_current & UIOPT_PROTOICONS) );
 
         PREPARE( date_msg_tmpl, prf().date_msg_template() );
         PREPARE( date_sep_tmpl, prf().date_sep_template() );
@@ -453,8 +454,10 @@ void dialog_settings_c::mod()
         dm().vspace();
         int copts = 0;
         if (show_search_bar) copts |= 1;
+        if (proto_icons_indicator) copts |= 2;
         dm().checkb(ts::wstr_c(), DELEGATE(this, commonopts_handler), copts).setmenu(
                 menu_c().add(TTT("Show search bar ($)",276) / CONSTWSTR("Ctrl+F"), 0, MENUHANDLER(), CONSTASTR("1"))
+                        .add(TTT("Protocol icons as contact state indicator",278), 0, MENUHANDLER(), CONSTASTR("2"))
             );
 
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
@@ -512,7 +515,7 @@ void dialog_settings_c::mod()
         dm << MASK_PROFILE_NETWORKS; //_________________________________________________________________________________________________//
         dm().page_header(TTT("[appname] supports simultaneous connections to multiple networks.",130));
         dm().vspace(10);
-        dm().list(TTT("Active network connections",54), -270).setname(CONSTASTR("protoactlist"));
+        dm().list(TTT("Active network connections",54), L"", -270).setname(CONSTASTR("protoactlist"));
         dm().vspace();
         dm().hgroup(TTT("Available networks",53));
         dm().combik(HGROUP_MEMBER).setmenu(get_list_avaialble_networks()).setname(CONSTASTR("availablenets"));
@@ -537,7 +540,7 @@ void dialog_settings_c::mod()
     return 1;
 }
 
-void dialog_settings_c::describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const
+const dialog_settings_c::protocols_s * dialog_settings_c::describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const
 {
     const protocols_s *p = find_protocol(tag);
     if (p == nullptr)
@@ -554,17 +557,120 @@ void dialog_settings_c::describe_network(ts::wstr_c&desc, const ts::str_c& name,
         desc.replace_all(CONSTWSTR("{id}"), pubid);
         desc.replace_all(CONSTWSTR("{module}"), from_utf8(p->description));
     }
+    return p;
 }
+
+void dialog_settings_c::networks_tab_selected()
+{
+    if (RID lst = find(CONSTASTR("protoactlist")))
+    {
+        for (auto &row : table_active_protocol_underedit)
+            add_active_proto(lst, row.id, row.other);
+        available_network_selected(selected_available_network);
+    }
+}
+
+namespace
+{
+    struct load_proto_list_s : public ts::task_c
+    {
+        ts::safe_ptr<dialog_settings_c> dlg;
+        load_proto_list_s(dialog_settings_c *dlg) :dlg(dlg) {}
+        ~load_proto_list_s() {}
+
+        int result_x = 1;
+        ts::array_inplace_t<dialog_settings_c::protocols_s, 0> available_prots;
+
+        UNIQUE_PTR( isotoxin_ipc_s ) ipcj;
+
+        bool ipchandler(ipcr r)
+        {
+            if (r.d == nullptr)
+            {
+                // lost contact to plghost
+                // just close settings
+                if (dlg)
+                    DEFERRED_UNIQUE_CALL(0, dlg->get_close_button_handler(), nullptr);
+
+                result_x = R_CANCEL;
+                return false;
+            }
+            else
+            {
+                switch (r.header().cmd)
+                {
+                    case HA_PROTOCOLS_LIST:
+                    {
+                        int n = r.get<int>();
+                        while (--n >= 0)
+                        {
+                            ts::pstr_c d = r.getastr();
+                            int p = d.find_pos(':');
+                            dialog_settings_c::protocols_s &proto = available_prots.add();
+                            proto.description = d.substr(p + 2);
+                            proto.tag = d.substr(0, p);
+                            proto.features = r.get<int>();
+                            proto.connection_features = r.get<int>();
+
+                            int icosz;
+                            const void *icodata = r.get_data(icosz);
+                            proto.icon.reset( prepare_proto_icon( proto.tag, icodata, icosz, PROTO_ICON_SIZE, IT_NORMAL ) );
+                        }
+
+                        result_x = R_DONE;
+                    }
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+
+        /*virtual*/ int iterate(int pass) override
+        {
+            isotoxin_ipc_s ipcj(ts::str_c(CONSTASTR("isotoxin_settings_")).append_as_uint(GetCurrentThreadId()), DELEGATE(this, ipchandler) );
+            ipcj.send(ipcw(AQ_GET_PROTOCOLS_LIST));
+            ipcj.wait_loop(nullptr);
+            ASSERT(result_x != 1);
+            return result_x;
+        }
+        /*virtual*/ void done(bool canceled) override
+        {
+            if (!canceled && dlg)
+                dlg->protocols_loaded(available_prots);
+
+            __super::done(canceled);
+        }
+    };
+}
+
+void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &prots)
+{
+    available_prots = std::move(prots);
+    set_combik_menu(CONSTASTR("availablenets"), get_list_avaialble_networks());
+    if (is_networks_tab_selected) networks_tab_selected();
+    proto_list_loaded = true;
+}
+
 
 /*virtual*/ void dialog_settings_c::tabselected(ts::uint32 mask)
 {
+    is_networks_tab_selected = false;
     if ( mask & MASK_PROFILE_NETWORKS )
     {
-        if (RID lst = find(CONSTASTR("protoactlist")))
+        is_networks_tab_selected = true;
+        if (proto_list_loaded)
         {
-            for (auto &row : table_active_protocol_underedit)
-                add_active_proto(lst, row.id, row.other);
-            available_network_selected(selected_available_network); 
+            set_list_emptymessage(CONSTASTR("protoactlist"), L"");
+            networks_tab_selected();
+        } else
+        {
+            ctlenable(CONSTASTR("addnet"), false);
+            set_list_emptymessage(CONSTASTR("protoactlist"), TTT("Loading",277));
+            ASSERT( prf().is_loaded() );
+            g_app->add_task(TSNEW(load_proto_list_s, this));
+            return;
         }
     }
 
@@ -754,10 +860,10 @@ menu_c dialog_settings_c::get_list_avaialble_networks()
 void dialog_settings_c::add_active_proto( RID lst, int id, const active_protocol_data_s &apdata )
 {
     ts::wstr_c desc = make_proto_desc( MPD_NAME | MPD_MODULE | MPD_ID );
-    describe_network(desc, apdata.name, apdata.tag, id);
+    const protocols_s *p = describe_network(desc, apdata.name, apdata.tag, id);
 
     ts::str_c par(CONSTASTR("2/")); par.append(apdata.tag).append_char('/').append_as_int(id);
-    MAKE_CHILD<gui_listitem_c>(lst, desc, par) << DELEGATE(this, getcontextmenu);
+    MAKE_CHILD<gui_listitem_c>(lst, desc, par) << DELEGATE(this, getcontextmenu) << (const ts::drawable_bitmap_c *)(p ? p->icon.get() : nullptr);
 }
 
 void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
@@ -881,6 +987,11 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
             msgopts_changed |= UIOPT_SHOW_SEARCH_BAR;
             INITFLAG( msgopts_current, UIOPT_SHOW_SEARCH_BAR, show_search_bar );
         }
+        if (is_changed(proto_icons_indicator))
+        {
+            msgopts_changed |= UIOPT_PROTOICONS;
+            INITFLAG(msgopts_current, UIOPT_PROTOICONS, proto_icons_indicator);
+        }
         if (prf().set_options( msgopts_current, msgopts_changed ) || ch1)
             gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_PROFILEOPTIONS).send();
 
@@ -939,39 +1050,6 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
     }
 
     __super::on_confirm();
-}
-
-bool dialog_settings_c::ipchandler( ipcr r )
-{
-    if (r.d == nullptr)
-    {
-        // lost contact to plghost
-        DEFERRED_UNIQUE_CALL( 0, get_close_button_handler(), nullptr );
-    } else
-    {
-        switch (r.header().cmd)
-        {
-        case HA_PROTOCOLS_LIST:
-            {
-                int n = r.get<int>();
-                while(--n >= 0)
-                {
-                    ts::pstr_c d = r.getastr();
-                    int p = d.find_pos(':');
-                    protocols_s &proto = available_prots.add();
-                    proto.description = d.substr(p + 2);
-                    proto.tag = d.substr(0, p);
-                    proto.features = r.get<int>();
-                    proto.connection_features = r.get<int>();
-                }
-
-                set_combik_menu(CONSTASTR("availablenets"), get_list_avaialble_networks());
-            }
-            break;
-        }
-    }
-
-    return true;
 }
 
 

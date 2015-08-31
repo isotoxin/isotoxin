@@ -442,7 +442,7 @@ bool theme_c::load( const ts::wsptr &name )
                     {
                         ts::TSCOLOR c;
 
-                        void point(uint8 * me, const image_extbody_c::FMATRIX &m)
+                        void operator()(uint8 * me, const image_extbody_c::FMATRIX &m)
                         {
                             // dst = src + (1 - src.a) * dst;
                             // need minimal src_a 

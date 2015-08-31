@@ -32,13 +32,12 @@ protected:
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
     /*virtual*/ ts::irect get_client_area() const override;
 
-    GUIPARAMHANDLER get_close_button_handler() { return DELEGATE(this, b_close); }
-    GUIPARAMHANDLER get_confirm_button_handler() { return DELEGATE(this, b_confirm); }
-
-
 public:
     gui_isodialog_c(initial_rect_data_s &data);
     ~gui_isodialog_c();
+
+    GUIPARAMHANDLER get_close_button_handler() { return DELEGATE(this, b_close); }
+    GUIPARAMHANDLER get_confirm_button_handler() { return DELEGATE(this, b_confirm); }
 
     static ts::wstr_c title( dlg_title_e d );
 

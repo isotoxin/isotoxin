@@ -1807,15 +1807,20 @@ template<typename CORE> void bitmap_t<CORE>::sharpen(bitmap_c& outimage, int lv)
 }
 
 bool resize3(const bmpcore_exbody_s &extbody, const uint8 *sou, const imgdesc_s &souinfo, resize_filter_e filt_mode);
-template<typename CORE> bool bitmap_t<CORE>::resize(bitmap_c& obm, const ivec2 & newsize, resize_filter_e filt_mode) const
+template<typename CORE> bool bitmap_t<CORE>::resize_to(bitmap_c& obm, const ivec2 & newsize, resize_filter_e filt_mode) const
 {
     obm.create_RGBA(newsize);
     return resize3(obm.extbody(), body(), info(), filt_mode);
 }
 
-template<typename CORE> bool bitmap_t<CORE>::resize(const bmpcore_exbody_s &extbody_, resize_filter_e filt_mode) const
+template<typename CORE> bool bitmap_t<CORE>::resize_to(const bmpcore_exbody_s &extbody_, resize_filter_e filt_mode) const
 {
     return resize3(extbody_, body(), info(), filt_mode);
+}
+
+template<typename CORE> bool bitmap_t<CORE>::resize_from(const bmpcore_exbody_s &extbody_, resize_filter_e filt_mode) const
+{
+    return resize3(extbody(), extbody_(), extbody_.info(), filt_mode);
 }
 
 template<typename CORE> void bitmap_t<CORE>::make_grayscale()

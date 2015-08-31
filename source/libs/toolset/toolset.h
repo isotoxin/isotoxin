@@ -1081,6 +1081,17 @@ public:
         return ARGB(oiR, oiG, oiB, oiA);
     }
 
+    INLINE TSCOLOR MULTIPLY(TSCOLOR c1, TSCOLOR c2)
+    {
+        const float antidiv = (1.0f/255.0f);
+        auint oiB = lround(float(BLUE(c1)) * float(BLUE(c2)) * antidiv);
+        auint oiG = lround(float(GREEN(c1)) * float(GREEN(c2)) * antidiv);
+        auint oiR = lround(float(RED(c1)) * float(RED(c2)) * antidiv);
+        auint oiA = lround(float(ALPHA(c1)) * float(ALPHA(c2)) * antidiv);
+
+        return ARGB(oiR, oiG, oiB, oiA);
+    }
+
     INLINE TSCOLOR ALPHABLEND( TSCOLOR target, TSCOLOR source, int constant_alpha = 255 ) // photoshop like Normal mode color blending
     {
         uint8 oA = ALPHA(target);

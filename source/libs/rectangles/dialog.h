@@ -12,9 +12,11 @@ template<> struct MAKE_CHILD<gui_listitem_c> : public _PCHILD(gui_listitem_c)
     ts::str_c  param;
     ts::str_c  themerect;
     GETMENU_FUNC gm;
+    const ts::drawable_bitmap_c *icon;
     MAKE_CHILD(RID parent_, const ts::wstr_c &text, const ts::str_c &param) :text(text), param(param) { parent = parent_; }
     ~MAKE_CHILD();
 
+    MAKE_CHILD &operator<<( const ts::drawable_bitmap_c *_icon ) { icon = _icon; return *this; }
     MAKE_CHILD &operator<<( GETMENU_FUNC _gm ) { gm = _gm; return *this; }
     MAKE_CHILD &threct( const ts::asptr&thr ) { themerect = thr; return *this; }
 };
@@ -25,6 +27,7 @@ class gui_listitem_c : public gui_label_c
     DUMMY(gui_listitem_c);
     ts::str_c  param;
     GETMENU_FUNC gm; // get menu on rite click
+    const ts::drawable_bitmap_c *icon = nullptr;
     int height = 0;
 
     GM_RECEIVER( gui_listitem_c, GM_POPUPMENU_DIED );
@@ -166,7 +169,7 @@ protected:
         description_s& textfield( const ts::wsptr &desc, const ts::wsptr &val, gui_textedit_c::TEXTCHECKFUNC checker);
         description_s& textfieldml( const ts::wsptr &desc, const ts::wsptr &val, gui_textedit_c::TEXTCHECKFUNC checker, int lines = 3); // multiline
         description_s& combik( const ts::wsptr &desc);
-        description_s& list( const ts::wsptr &desc, int lines );
+        description_s& list( const ts::wsptr &desc, const ts::wsptr &emptytext, int lines );
         description_s& checkb( const ts::wsptr &desc, GUIPARAMHANDLER handler, ts::uint32 initial );
         description_s& radio( const ts::wsptr &desc, GUIPARAMHANDLER handler, int initial );
         description_s& button(const ts::wsptr &desc, const ts::wsptr &text, GUIPARAMHANDLER handler);
@@ -242,7 +245,7 @@ protected:
     RID label(const ts::wstr_c &text, ts::TSCOLOR col = 0, bool visible = true);
     RID vspace(int height);
     RID textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e role, gui_textedit_c::TEXTCHECKFUNC checker = gui_textedit_c::TEXTCHECKFUNC(), const evt_data_s *addition = nullptr, int multiline = 0, RID parent = RID() );
-    RID list(int height);
+    RID list(int height, const ts::wstr_c & emptymessage);
     RID combik( const menu_c &m, RID parent = RID() );
 
     /*virtual*/ void children_repos_info(cri_s &info) const override;
@@ -256,6 +259,7 @@ protected:
 
     void set_combik_menu( const ts::asptr& ctl_name, const menu_c& m );
     void set_label_text( const ts::asptr& ctl_name, const ts::wstr_c& t );
+    void set_list_emptymessage( const ts::asptr& ctl_name, const ts::wstr_c& t );
 
     ts::UPDATE_RECTANGLE getrectupdate() { return DELEGATE(this, updrect); }
 

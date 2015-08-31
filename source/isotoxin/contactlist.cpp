@@ -830,12 +830,58 @@ int gui_contact_item_c::contact_item_rite_margin()
                     break;
             }
 
+            m_engine->begin_draw();
+            
+            if (!force_state_icon && prf().get_options().is(UIOPT_PROTOICONS))
+                bdesc = nullptr;
+
+            // draw state
             if (( force_state_icon || (flags.is(F_PROTOHIT) && st != CS_ROTTEN)) && bdesc)
             {
-                m_engine->begin_draw();
                 bdesc->draw( m_engine.get(), bst, ca + ts::ivec2(shiftstateicon.x, shiftstateicon.y), button_desc_s::ARIGHT | button_desc_s::ABOTTOM );
-                m_engine->end_draw();
+
+            } else if (contact->is_meta() && flags.is(F_PROTOHIT)) // not group
+            {
+                // draw proto icons
+                int isz = g_app->protoiconsize;
+                ts::ivec2 p(ca.rb.x,ca.rb.y-isz);
+                contact->subiterate([&](contact_c *c) {
+                    if (c->is_protohit(false))
+                        if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
+                        {
+                            p.x -= isz;
+
+                            icon_type_e icot = IT_OFFLINE;
+                            if (c->get_state() == CS_ONLINE)
+                            {
+                                if (COS_AWAY == ost) icot = IT_AWAY;
+                                else if (COS_DND == ost) icot = IT_DND;
+                                else icot = IT_ONLINE;
+                            }
+
+                            m_engine->draw(p, ap->get_icon(isz, icot), ts::irect(0, 0, isz, isz), true);
+                        }
+                });
             }
+
+            /*
+            if (contact->is_meta() && flags.is(F_PROTOHIT)) // not group
+            {
+                int isz = g_app->protoiconsize;
+                statedd.alpha = 128;
+                ts::ivec2 p(ca.rt());
+                contact->subiterate([&](contact_c *c) {
+                    if (c->is_protohit(false))
+                        if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
+                        {
+                            p.x -= isz;
+                            m_engine->draw( p, ap->get_icon(isz), ts::irect(0,0, isz, isz), true );
+                        }
+                } );
+            }
+            */
+
+            m_engine->end_draw();
 
             if (contact)
             {

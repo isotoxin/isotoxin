@@ -47,9 +47,11 @@
 
 #define MAX_CALLS 16
 
-#define AVATAR_MAX_DATA_SIZE (1024 * 512) // 0.5 mb should be enough
-
 #define GROUP_ID_OFFSET 10000000 // 10M contacts should be enough for everything
+
+static void* iconptr = nullptr;
+static int iconsize = 0;
+extern HMODULE dll_module;
 
 void __stdcall get_info( proto_info_s *info )
 {
@@ -69,12 +71,21 @@ void __stdcall get_info( proto_info_s *info )
     }
 
     info->priority = 500;
-    info->max_avatar_size = AVATAR_MAX_DATA_SIZE;
-    info->features = PF_OFFLINE_INDICATOR | PF_IMPORT | PF_AUDIO_CALLS | PF_SEND_FILE | PF_GROUP_CHAT; //PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT;
+    info->features = PF_AVATARS | PF_OFFLINE_INDICATOR | PF_IMPORT | PF_AUDIO_CALLS | PF_SEND_FILE | PF_GROUP_CHAT; //PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT;
     info->connection_features = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_SOCKS5 | CF_UDP_OPTION | CF_SERVER_OPTION;
     info->audio_fmt.sample_rate = av_DefaultSettings.audio_sample_rate;
     info->audio_fmt.channels = (short)av_DefaultSettings.audio_channels;
     info->audio_fmt.bits = 16;
+
+    if (!iconptr)
+    {
+        HRSRC icon = FindResource(dll_module, MAKEINTRESOURCE(777), RT_RCDATA);
+        iconsize = SizeofResource(dll_module, icon);
+        HGLOBAL icondata = LoadResource(dll_module, icon);
+        iconptr = LockResource(icondata);
+    }
+    info->icon = iconptr;
+    info->icon_buflen = iconsize;
 }
 
 __forceinline int time_ms()
@@ -2703,7 +2714,6 @@ void __stdcall set_avatar(const void*data, int isz)
 {
     static int prevavalen = 0;
 
-    if (isz > AVATAR_MAX_DATA_SIZE) isz = 0;
     if (isz == 0 && prevavalen > 0)
     {
         prevavalen = 0;

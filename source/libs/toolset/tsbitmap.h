@@ -445,7 +445,7 @@ public:
                 mat[1][2] = (down) ? nullptr : (bu + info().pitch);
                 mat[2][2] = (rite || down) ? nullptr : (bu + info().pitch + info().bytepp());
 
-                f.point(bu, mat);
+                f(bu, mat);
             }
         }
 
@@ -455,8 +455,9 @@ public:
 
     void sharpen(bitmap_c &outimage, int lv) const; // lv [0..64]
 
-    bool resize(bitmap_c& outimage, const ivec2 & newsize, resize_filter_e filt_mode = FILTER_NONE) const;
-    bool resize(const bmpcore_exbody_s &eb, resize_filter_e filt_mode = FILTER_NONE) const;
+    bool resize_to(bitmap_c& outimage, const ivec2 & newsize, resize_filter_e filt_mode = FILTER_NONE) const;
+    bool resize_to(const bmpcore_exbody_s &eb, resize_filter_e filt_mode = FILTER_NONE) const;
+    bool resize_from(const bmpcore_exbody_s &eb, resize_filter_e filt_mode = FILTER_NONE) const;
     /*
 	bool resize(bitmap_c& outimage, float scale=2.f, resize_filter_e filt_mode=FILTER_NONE) const;
 	bool rotate(bitmap_c& outimage, float angle_rad, rot_filter_e filt_mode=FILTMODE_POINT, bool expand_dst=true) const;
@@ -616,6 +617,7 @@ public:
 
     drawable_bitmap_c() : image_extbody_c(nullptr, imgdesc_s(ivec2(0), 0)) {}
     explicit drawable_bitmap_c(const ivec2 &sz) : image_extbody_c(nullptr, imgdesc_s(ivec2(0), 0)) { create(sz); }
+    explicit drawable_bitmap_c(const bitmap_c &bmp, bool flipy = false, bool premultiply = false) { create_from_bitmap(bmp, flipy, premultiply, false); }
 
     ~drawable_bitmap_c() { clear(); }
 

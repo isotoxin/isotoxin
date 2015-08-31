@@ -16,18 +16,31 @@
 
 #include "appver.inl"
 
+static void* iconptr = nullptr;
+static int iconsize = 0;
+extern HMODULE dll_module;
+
 void __stdcall get_info(proto_info_s *info)
 {
     if (info->protocol_name) strncpy_s( info->protocol_name, info->protocol_name_buflen, "lan", _TRUNCATE );
     if (info->description) strncpy_s( info->description, info->description_buflen, "Local Area Network protocol " SS(PLUGINVER), _TRUNCATE );
-    info->max_avatar_size = 0;
     info->priority = 1000;
-    info->features = PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT | PF_AUDIO_CALLS | PF_SEND_FILE;
+    info->features = PF_AVATARS | PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT | PF_AUDIO_CALLS | PF_SEND_FILE;
     info->connection_features = 0;
 
     info->audio_fmt.sample_rate = AUDIO_SAMPLERATE;
     info->audio_fmt.channels = AUDIO_CHANNELS;
     info->audio_fmt.bits = AUDIO_BITS;
+
+    if (!iconptr)
+    {
+        HRSRC icon = FindResource(dll_module, MAKEINTRESOURCE(777), RT_RCDATA);
+        iconsize = SizeofResource(dll_module, icon);
+        HGLOBAL icondata = LoadResource(dll_module, icon);
+        iconptr = LockResource(icondata);
+    }
+    info->icon = iconptr;
+    info->icon_buflen = iconsize;
 
 }
 

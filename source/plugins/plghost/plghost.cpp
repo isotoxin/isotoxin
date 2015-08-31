@@ -306,7 +306,7 @@ struct IPCW
         if (w)
         {
             w->add<int>() = v.size();
-            w->add(v.data(), v.size());
+            if (v.size()) w->add(v.data(), v.size());
         }
         return *this;
     }
@@ -315,7 +315,7 @@ struct IPCW
         if (w)
         {
             w->add<int>() = d.datasize;
-            w->add(d.data, d.datasize);
+            if (d.datasize) w->add(d.data, d.datasize);
         }
         return *this;
     }
@@ -530,6 +530,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                     w << outstr.as_sptr();
                     w << info.features;
                     w << info.connection_features;
+                    w << data_block_s( info.icon, info.icon_buflen );
                     ++cnt;
 
                     FreeLibrary(l);
@@ -580,6 +581,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                 << pi.audio_fmt.sample_rate
                 << pi.audio_fmt.channels
                 << pi.audio_fmt.bits
+                << data_block_s(pi.icon, pi.icon_buflen)
                 ;
 
         }

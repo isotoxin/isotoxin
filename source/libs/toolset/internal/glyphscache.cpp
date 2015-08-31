@@ -357,7 +357,7 @@ scaled_image_s *scaled_image_s::load(const wsptr &filename_, const ivec2 &scale)
 					if (i.width != i.bitmap.info().sz.x || i.height != i.bitmap.info().sz.y)
 					{
 						bitmap_c temp;
-						i.bitmap.resize(temp, ref_cast<ivec2>(i.width, i.height), FILTER_LANCZOS3);
+						i.bitmap.resize_to(temp, ref_cast<ivec2>(i.width, i.height), FILTER_LANCZOS3);
 						i.bitmap = temp;
 					}
                     i.bitmap.premultiply();

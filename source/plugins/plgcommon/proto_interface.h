@@ -32,12 +32,14 @@ struct proto_info_s
 
     char *description = nullptr;
     int   description_buflen = 0;
-    int   max_avatar_size = 0; // 0 - avatars not supported
     int   priority = 0; // bigger -> higher (automatic select default subcontact of metacontact)
     int   features = 0;
     int   connection_features = 0;
 
     audio_format_s audio_fmt; // required audio format for proto plugin (app will convert audio on-the-fly if hardware not support)
+
+    void *icon = nullptr;
+    int   icon_buflen = 0;
 };
 
 struct contact_data_s
@@ -130,15 +132,23 @@ enum long_operation_e
     LOP_ADDCONTACT,
 };
 
-struct host_functions_s
+struct host_functions_s // plugin can (or must) call these functions to do its job
 {
+    /*
+        async answer
+    */
     void(__stdcall *operation_result)(long_operation_e op, int rslt);
+    
+    /*
+        main create/update contact function
+    */
     void(__stdcall *update_contact)(const contact_data_s *);
 
     /*
+        Incoming message!
         mt  - see enum for possible values
         gid - negative (groupchat id) when groupchat message received, 0 - normal message
-        cid - unique contact id (known and unknown contacts)
+        cid - unique contact id (known and unknown contacts), see contact_data_s::id
         sendtime - message send time (sender should send it)
         msgbody_utf8, mlen - message itself
     */
@@ -158,21 +168,60 @@ struct host_functions_s
         plugin should call this function only from call of save_config
     */
     void(__stdcall *on_save)(const void *data, int dlen, void *param);
-    void(__stdcall *play_audio)(int cid, const audio_format_s *audio_format, const void *frame, int framesize); // plugin can request play any format
-    void(__stdcall *close_audio)(int cid); // close audio player, allocated for client
+
+    /*
+        plugin can request play any audio_format
+        audio player will be automatically allocated for cid client
+    */
+    void(__stdcall *play_audio)(int cid, const audio_format_s *audio_format, const void *frame, int framesize);
+
+    /*
+        close audio player, allocated for client
+    */
+    void(__stdcall *close_audio)(int cid);
+
+    /*
+        plugin tells to Isotoxin its current values
+        see known configurable fields (eg CFGF_PROXY_TYPE)
+    */
     void(__stdcall *configurable)(int n, const char **fields, const char **values);
+
+    /*
+        plugin sends avatar data on request avatar (get_avatar)
+        tag - avatar version. every client have its own avatar tag
+        plugin should increment tag value every time avatar changed
+        plugin should store avatar tag into save
+    */
     void(__stdcall *avatar_data)(int cid, int tag, const void *avatar_body, int avatar_body_size);
+
+    /*
+        plugin notifies Isotoxin about incoming file
+        cid - contact_data_s::id - unique client id
+        utag - unique 64-bit file transfer identifier. Plugin can simply generate 64-bit random value
+    */
     void(__stdcall *incoming_file)(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
 
     /* 
-        1. data received (all params are valid)
-        2. data request (portion == nullptr && portion_size > 0)
+        there are two cases:
+        1. plugin has received file portion and now forward it to Isotoxin: all params are valid
+        2. plugin requests next file portion while it send file: portion == nullptr && portion_size > 0
     */
     void(__stdcall *file_portion)(u64 utag, u64 offset, const void *portion, int portion_size);
+    
+    /*
+        control file transfer
+    */
     void(__stdcall *file_control)(u64 utag, file_control_e fctl);
 
+    /*
+        plugin should call this function 1 per second for every typing client
+    */
     void(__stdcall *typing)(int cid);
 };
+
+/*
+    from-isotoxin/host-calls
+*/
 
 #define PROTO_FUNCTIONS \
     FUNC1( void, tick,           int * ) \
