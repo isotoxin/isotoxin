@@ -3199,7 +3199,7 @@ void __stdcall del_contact(int id)
     }
 }
 
-void __stdcall send(int id, const message_s *msg)
+void __stdcall send_message(int id, const message_s *msg)
 {
     if (tox)
     {

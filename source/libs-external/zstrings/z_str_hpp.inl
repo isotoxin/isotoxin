@@ -2400,7 +2400,7 @@ template<class CORE> void xappend( str_t<ZSTRINGS_ANSICHAR,CORE>&sto,  const spt
     ZSTRINGS_SIGNED len = sfrom.l;
     if (len == 0) return;
 	ZSTRINGS_SIGNED tlen = sto.get_length();
-	sto.set_length( tlen + len, false );
+	sto.set_length( tlen + len, true );
 	if (sto.get_capacity() <= (tlen + len)) len = sto.get_capacity() - 1 - tlen;
 	if (len > 0) ZSTRINGS_SYSCALL(text_ucs2_to_ansi)(sto.str() + tlen, len+1, wsptr(sfrom.s, len));
 
@@ -2410,7 +2410,7 @@ template<class CORE> void xappend( str_t<ZSTRINGS_WIDECHAR,CORE>&sto,  const spt
     ZSTRINGS_SIGNED len = sfrom.l;
     if (len == 0) return;
 	ZSTRINGS_SIGNED tlen = sto.get_length();
-	sto.set_length( tlen + len, false );
+	sto.set_length( tlen + len, true );
 	if (sto.get_capacity() <= (tlen + len)) len = sto.get_capacity() - 1 - tlen;
 	if (len > 0) ZSTRINGS_SYSCALL(text_ansi_to_ucs2)(sto.str() + tlen, len+1, sptr<ZSTRINGS_ANSICHAR>(sfrom.s, len));
 }

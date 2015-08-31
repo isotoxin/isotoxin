@@ -22,7 +22,16 @@ int ver_ok( ts::asptr verss )
     ts::pstr_c ss(verss);
     int signi = ss.find_pos(CONSTASTR("\r\nsign="));
     if (signi < 0)
-        return 0;
+    {
+        // \r\n not found... may be file was converted to \n format?
+        // so
+        ts::token<char> vv(verss, '\n');
+        ts::str_c winverss;
+        for(;vv;++vv)
+            winverss.append( vv->get_trimmed() ).append(CONSTASTR("\r\n"));
+        winverss.trunc_length(2); // remove last \r\n
+        return winverss.get_length() == verss.l ? 0 : ver_ok(winverss.as_sptr());
+    }
     if ((ss.get_length() - signi - 7) != crypto_sign_BYTES * 2)
         return 0;
 
@@ -38,11 +47,25 @@ int ver_ok( ts::asptr verss )
     return 0;
 }
 
-bool md5ok(ts::buf_c &b, const ts::abp_c &ver)
+auto getss = [&](const ts::asptr &latest, const ts::asptr&t) ->ts::asptr
 {
-    ts::str_c md5s = ver.get_string(CONSTASTR("md5"));
+    ts::token<char> ver( latest, '\n' );
+    for (;ver; ++ver)
+    {
+        auto s = ver->get_trimmed();
+        if (s.begins(t) && s.get_char(t.l) == '=')
+        {
+            return s.substr(t.l + 1).get_trimmed().as_sptr();
+        }
+    }
+    return ts::asptr();
+};
+
+bool md5ok(ts::buf_c &b, const ts::asptr &latest)
+{
+    ts::str_c md5s = getss(latest, CONSTASTR("md5"));
     if (md5s.get_length() != 32) return false;
-    if (ver.get_int(CONSTASTR("size")) != b.size()) return false;
+    if (ts::pstr_c(getss(latest, CONSTASTR("size"))).as_int() != b.size()) return false;
     ts::md5_c md5;
     md5.update(b.data(), b.size()); md5.done();
     for (int i = 0; i < 16; ++i)
@@ -70,11 +93,11 @@ ts::str_c get_downloaded_ver( ts::buf_c *pak = nullptr )
     {
         int signi = ver_ok(pak->cstr());
         if (!signi) return ts::str_c();
-        ts::abp_c ver; ver.load(ts::asptr(pak->cstr().s, signi));
-        ts::wstr_c wurl(from_utf8( ver.get_string(CONSTASTR("url")) ));
+        ts::asptr latest(pak->cstr().s, signi);
+        ts::wstr_c wurl(from_utf8( getss(latest,CONSTASTR("url")) ));
         pak->load_from_disk_file(ts::fn_join(auparams().lock_read()().path, ts::fn_get_name_with_ext(wurl)));
-        if (md5ok(*pak,ver))
-            return ver.get_string(CONSTASTR("ver"));
+        if (md5ok(*pak,latest))
+            return getss(latest,CONSTASTR("ver"));
     }
     return ts::str_c();
 }
@@ -113,8 +136,7 @@ void autoupdater()
     if (auparams().lock_read()().in_updater)
         return;
 
-    ts::str_c address("http://95.215.46.114/latest.txt");
-    //ts::str_c address("http://2ip.ru");
+    ts::str_c address("https://github.com/Rotkaermota/Isotoxin/wiki/latest");
 
     struct curl_s
     {
@@ -177,6 +199,30 @@ void autoupdater()
     rslt = curl_easy_setopt(curl, CURLOPT_URL, address.cstr());
     rslt = curl_easy_perform(curl);
 
+    // extract info from github wiki
+    int begin_wiki = ts::pstr_c(d.cstr()).find_pos(CONSTASTR("[begin]"));
+    if ( begin_wiki > 0 )
+    {
+        int end_wiki = ts::pstr_c(d.cstr()).find_pos(begin_wiki + 7,CONSTASTR("[end]"));
+        if (end_wiki > 0)
+        {
+            ts::str_c preop( ts::pstr_c(d.cstr()).substr(begin_wiki + 7, end_wiki) );
+            preop.replace_all(CONSTASTR("\r"), CONSTASTR(""));
+            preop.replace_all(CONSTASTR("\n"), CONSTASTR(""));
+            preop.replace_all(CONSTASTR("<br><code>"), CONSTASTR(""));
+            preop.replace_all(CONSTASTR("</code><br>"), CONSTASTR("\n"));
+            preop.replace_all(CONSTASTR("</code>"), CONSTASTR("\n"));
+            ts::str_c newver;
+            for(ts::token<char> t(preop, '\n');t;++t)
+                newver.append(*t).append(CONSTASTR("\r\n"));
+            if (newver.get_length())
+            {
+                d.set_size(newver.get_length() - 2); // -2 - do not copy last \r\n
+                memcpy(d.data(), newver.cstr(), newver.get_length() - 2);
+            }
+        }
+    }
+
     int signi = ver_ok( d.cstr() );
     if (!signi) 
     {
@@ -185,10 +231,10 @@ void autoupdater()
         return;
     }
 
-    ts::abp_c ver; ver.load( ts::asptr(d.cstr().s, signi) );
+    ts::str_c latests( d.cstr().s, signi );
 
     r = auparams().lock_read();
-    if (!new_version( r().ver, ver.get_string(CONSTASTR("ver")) ))
+    if (!new_version( r().ver, getss(latests, CONSTASTR("ver")) ))
     {
         curl.newver.clear();
         curl.send_newver = true;
@@ -197,7 +243,7 @@ void autoupdater()
 
     bool downloaded = false;
     ts::str_c dver = get_downloaded_ver();
-    ts::str_c aver = ver.get_string(CONSTASTR("ver"));
+    ts::str_c aver = getss(latests, CONSTASTR("ver"));
     if (dver == aver)
         downloaded = true;
 
@@ -216,7 +262,7 @@ void autoupdater()
     }
     r.unlock();
 
-    ts::str_c aurl( ver.get_string(CONSTASTR("url")) );
+    ts::str_c aurl( getss(latests, CONSTASTR("url")) );
     ts::wstr_c pakname = ts::fn_get_name_with_ext(from_utf8(aurl));
     if (aurl.get_char(0) == '/')
     {
@@ -238,7 +284,7 @@ void autoupdater()
 
     TSNEW(gmsg<ISOGM_DOWNLOADPROGRESS>, (int)d.size(), (int)d.size())->send_to_main_thread();
 
-    if (!md5ok(d, ver))
+    if (!md5ok(d, latests))
     {
         curl.newver.clear();
         curl.send_newver = true;

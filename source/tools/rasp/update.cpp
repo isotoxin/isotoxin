@@ -106,8 +106,16 @@ int proc_sign(const ts::wstrings_c & pars)
     ts::str_c ss(CONSTASTR("ver="));
     ss.append( ver );
     ss.append(CONSTASTR("\r\nurl="));
-    ss.append(bp.get_string(CONSTASTR("path")));
-    ss.appendcvt( ts::fn_get_name_with_ext(arch) );
+
+    ts::str_c path = bp.get_string(CONSTASTR("path"));
+    path.replace_all(CONSTASTR("%ver%"), ver);
+    path.replace_all(CONSTASTR("%https%"), CONSTASTR("https://"));
+    path.replace_all(CONSTASTR("%http%"), CONSTASTR("http://"));
+    path.appendcvt(ts::fn_get_name_with_ext(arch));
+
+
+    ss.append(path);
+
     ss.append(CONSTASTR("\r\nsize="));
     ss.append_as_uint(archlen);
     ss.append(CONSTASTR("\r\nmd5="));
@@ -160,6 +168,13 @@ int proc_sign(const ts::wstrings_c & pars)
     ss.append(CONSTASTR("\r\nsign="));
     ss.append_as_hex(sig, (int)siglen);
 
+    if (CONSTASTR("github") == bp.get_string(CONSTASTR("wiki")))
+    {
+        ss.insert(0,CONSTASTR("[begin]\r\n"));
+        ss.replace_all(CONSTASTR("\r\n"), CONSTASTR("`<br>\r\n`"));
+        ss.replace_all(CONSTASTR("[begin]`"), CONSTASTR("[begin]"));
+        ss.append(CONSTASTR("`<br>\r\n[end]<br>\r\n"));
+    }
 
     FILE *f = _wfopen(pa(CONSTASTR("result")), L"wb");
     fwrite(ss.cstr(), 1, ss.get_length(), f);

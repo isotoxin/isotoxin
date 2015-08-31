@@ -1683,7 +1683,7 @@ void lan_engine::del(contact_s *c)
     delete c;
 }
 
-void lan_engine::send(int id, const message_s *msg)
+void lan_engine::send_message(int id, const message_s *msg)
 {
     if (MT_MESSAGE == msg->mt || MT_ACTION == msg->mt)
     {

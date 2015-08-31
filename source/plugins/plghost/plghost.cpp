@@ -714,7 +714,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             m.utag = utag;
             m.message = message.cstr();
             m.message_len = message.get_length();
-            protolib.functions->send(id, &m);
+            protolib.functions->send_message(id, &m);
         }
         break;
     case AQ_SAVE_CONFIG:

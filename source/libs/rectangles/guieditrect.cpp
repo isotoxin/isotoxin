@@ -135,6 +135,13 @@ ts::wstr_c gui_textedit_c::get_text_and_fix_pos(int *pos0, int *pos1) const
         const text_element_c &te = text[i];
         if (te.is_char()) r.append_char(te.get_char_fast()); else r.append(te.p->to_wstr());
     }
+
+    if (!pos0fixed && *pos0 == count)
+        *pos0 = r.get_length();
+
+    if (!pos1fixed && *pos1 == count)
+        *pos1 = r.get_length();
+
     return r;
 }
 
