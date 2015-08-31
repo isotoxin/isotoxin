@@ -7,6 +7,6 @@ Also, Visual Studio 2013 must be installed.<br>
 - run **2_build_libs.cmd** - it builds downloaded external libs<br>
 - run **3_make_libcmt_nomem.cmd** - it creates libcmt_nomem.lib - croped version of standard libcmt.lib without any memory-related functions. We want to use dlmalloc everywhere :) **grep** utility used at this step<br>
 - run **4_build_isotoxin.cmd** - final build of isotoxin.exe, plghost.exe and proto.dll's<br>
-- to run isotoxin, you need isotoxin.data - zip archive of isotoxin assets. You can take it from http://isotoxin.im/files from latest version archive.<br>
+- to run isotoxin, you need isotoxin.data - zip archive of isotoxin assets. You can take it from https://github.com/Rotkaermota/Isotoxin/releases or http://isotoxin.im/files from latest version archive.<br>
 <br>
 - sometimes you have to run **5_update_libs.cmd** to update toxcore or/and download new external libs. Don't forget to run **2_build_libs.cmd** again.<br>
