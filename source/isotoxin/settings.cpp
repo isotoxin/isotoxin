@@ -6,6 +6,8 @@
 
 #define PROTO_ICON_SIZE 32
 
+#define TEST_RECORD_LEN 5000
+
 static menu_c list_proxy_types(int cur, MENUHANDLER mh, int av = -1)
 {
     menu_c m;
@@ -33,7 +35,7 @@ static bool __kbd_chop(RID, GUIPARAM)
     return true;
 }
 
-dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c(data)
+dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c(data), mic_test_rec_stop(ts::Time::undefined()), mic_level_refresh(ts::Time::past())
 {
     gui->register_kbd_callback( __kbd_chop, HOTKEY_TOGGLE_SEARCH_BAR );
 
@@ -143,11 +145,8 @@ bool dialog_settings_c::fileconfirm_handler(RID, GUIPARAM p)
 {
     fileconfirm = (int)p; //-V205
 
-    if (RID r = find(CONSTASTR("confirmauto")))
-        r.call_enable( fileconfirm == 0 );
-
-    if (RID r = find(CONSTASTR("confirmmanual")))
-        r.call_enable(fileconfirm == 1);
+    ctlenable(CONSTASTR("confirmauto"), fileconfirm == 0);
+    ctlenable(CONSTASTR("confirmmanual"), fileconfirm == 1);
 
     mod();
     return true;
@@ -203,10 +202,10 @@ bool dialog_settings_c::collapse_beh_handler(RID, GUIPARAM p)
 bool dialog_settings_c::autoupdate_handler( RID, GUIPARAM p)
 {
     autoupdate = (int)p; //-V205
-    if (RID r = find(CONSTASTR("proxytype")))
-        r.call_enable(autoupdate > 0);
-    if (RID r = find(CONSTASTR("proxyaddr")))
-        r.call_enable(autoupdate > 0 && autoupdate_proxy > 0);
+
+    ctlenable(CONSTASTR("proxytype"), autoupdate > 0);
+    ctlenable(CONSTASTR("proxyaddr"), autoupdate > 0 && autoupdate_proxy > 0);
+
     mod();
     return true;
 }
@@ -233,8 +232,7 @@ bool dialog_settings_c::autoupdate_proxy_addr_handler( const ts::wstr_c & t )
 
 bool dialog_settings_c::check_update_now(RID, GUIPARAM)
 {
-    if (RID b = find(CONSTASTR("checkupdb")))
-        b.call_enable(false);
+    ctlenable(CONSTASTR("checkupdb"), false);
 
     checking_new_version = true;
     g_app->b_update_ver(RID(), (GUIPARAM)AUB_ONLY_CHECK);
@@ -243,8 +241,7 @@ bool dialog_settings_c::check_update_now(RID, GUIPARAM)
 
 ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 {
-    if (RID b = find(CONSTASTR("checkupdb")))
-        b.call_enable(true);
+    ctlenable(CONSTASTR("checkupdb"), true);
 
     if (!checking_new_version) return 0;
     checking_new_version = false;
@@ -282,11 +279,8 @@ bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
     msgopts_changed |= newo ^ msgopts_current;
     msgopts_current = newo;
 
-    if (RID r = find(CONSTASTR("date_msg_tmpl")))
-        r.call_enable(0 != (msgopts_current & MSGOP_SHOW_DATE));
-
-    if (RID r = find(CONSTASTR("date_sep_tmpl")))
-        r.call_enable(0 != (msgopts_current & MSGOP_SHOW_DATE_SEPARATOR));
+    ctlenable(CONSTASTR("date_msg_tmpl"), 0 != (msgopts_current & MSGOP_SHOW_DATE));
+    ctlenable(CONSTASTR("date_sep_tmpl"), 0 != (msgopts_current & MSGOP_SHOW_DATE_SEPARATOR));
 
     mod();
     return true;
@@ -320,8 +314,7 @@ void dialog_settings_c::mod()
             break;
         }
 
-    if (RID b = find(CONSTASTR("dialog_button_1")))
-        b.call_enable(ch);
+    ctlenable(CONSTASTR("dialog_button_1"), ch);
 }
 
 #define PREPARE(var, inits) var = inits; watch(var)
@@ -371,7 +364,10 @@ void dialog_settings_c::mod()
     PREPARE( talkdevice, cfg().device_talk() );
     PREPARE( signaldevice, cfg().device_signal() );
     PREPARE( micdevice, string_from_device(mic_device_stored) );
-    //start_capture();
+
+    PREPARE( cvtmic.volume, cfg().vol_mic() );
+    PREPARE( talk_vol, cfg().vol_talk() );
+    PREPARE( signal_vol, cfg().vol_signal() );
 
     int textrectid = 0;
 
@@ -432,16 +428,28 @@ void dialog_settings_c::mod()
     dm << MASK_APPLICATION_SETSOUND; //______________________________________________________________________________________________//
     dm().page_header(TTT("Audio settings",127));
     dm().vspace(10);
-    dm().combik(TTT("Microphone",126)).setmenu( list_capture_devices() ).setname( CONSTASTR("mic") );
+    dm().hgroup(TTT("Microphone",126));
+    dm().combik(HGROUP_MEMBER).setmenu( list_capture_devices() ).setname( CONSTASTR("mic") );
+    dm().button(HGROUP_MEMBER, CONSTWSTR("face=rec"), DELEGATE(this, test_mic) ).sethint(TTT("Record test 5 seconds",280)).setname( CONSTASTR("micrecb") );
+    dm().vspace();
+    dm().hslider(L"", cvtmic.volume, CONSTWSTR("0/0/0.5/1/1/10"), DELEGATE(this, micvolset)).setname(CONSTASTR("micvol"));
+
     dm().vspace();
     dm().hgroup(TTT("Speakers",128));
     dm().combik(HGROUP_MEMBER).setmenu( list_talk_devices() ).setname( CONSTASTR("talk") );
-    dm().button(HGROUP_MEMBER, CONSTWSTR("face=play"), DELEGATE(this, test_talk_device) ).sethint(TTT("Check speakers",131));
+    dm().button(HGROUP_MEMBER, CONSTWSTR("face=play"), DELEGATE(this, test_talk_device) ).sethint(TTT("Test speakers",131));
     dm().vspace();
-    dm().hgroup(TTT("Ringtone",129));
+    dm().hslider(L"", talk_vol, CONSTWSTR("0/0/1/1"), DELEGATE(this, talkvolset));
+    dm().vspace();
+
+    dm().hgroup(TTT("Ringtone and other signals",129));
     dm().combik(HGROUP_MEMBER).setmenu( list_signal_devices() ).setname( CONSTASTR("signal") );
-    dm().button(HGROUP_MEMBER, CONSTWSTR("face=play"), DELEGATE(this, test_signal_device) ).sethint(TTT("Check ringtone",132));
+    dm().button(HGROUP_MEMBER, CONSTWSTR("face=play"), DELEGATE(this, test_signal_device) ).sethint(TTT("Test ringtone",132));
     dm().vspace();
+    dm().hslider(L"", signal_vol, CONSTWSTR("0/0/1/1"), DELEGATE(this, signalvolset));
+    dm().vspace(10);
+    dm().label(L"").setname("soundhint");
+
 
     if (profile_selected)
     {
@@ -581,8 +589,6 @@ namespace
         int result_x = 1;
         ts::array_inplace_t<dialog_settings_c::protocols_s, 0> available_prots;
 
-        UNIQUE_PTR( isotoxin_ipc_s ) ipcj;
-
         bool ipchandler(ipcr r)
         {
             if (r.d == nullptr)
@@ -656,6 +662,9 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
 
 /*virtual*/ void dialog_settings_c::tabselected(ts::uint32 mask)
 {
+    if (0 == (mask & MASK_APPLICATION_SETSOUND))
+        stop_capture();
+
     is_networks_tab_selected = false;
     if ( mask & MASK_PROFILE_NETWORKS )
     {
@@ -695,6 +704,13 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
             tf.set_text( to_wstr(autoupdate_proxy_addr), true );
             check_proxy_addr(autoupdate_proxy, r, autoupdate_proxy_addr);
         }
+    }
+
+    if (mask & MASK_APPLICATION_SETSOUND)
+    {
+        testrec.clear();
+        set_slider_value( CONSTASTR("micvol"), cvtmic.volume );
+        start_capture();
     }
 }
 
@@ -1030,6 +1046,18 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
         gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_MICDEVICE).send();
     }
 
+    if (is_changed(cvtmic.volume))
+        cfg().vol_mic(cvtmic.volume);
+
+    if (is_changed(talk_vol))
+    {
+        cfg().vol_talk(talk_vol);
+        gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_TALKVOLUME).send();
+    }
+
+    if (is_changed(signal_vol))
+        cfg().vol_signal(signal_vol);
+
     for (const theme_info_s& thi : m_themes)
     {
         if (thi.current)
@@ -1141,12 +1169,16 @@ menu_c dialog_settings_c::list_signal_devices()
 
 bool dialog_settings_c::test_talk_device(RID, GUIPARAM)
 {
-    media.test_talk();
+    if (testrec.size())
+    {
+        media.play_voice((uint64)-1,recfmt,testrec.data(),testrec.size(), talk_vol);
+    } else
+        media.test_talk( talk_vol );
     return true;
 }
 bool dialog_settings_c::test_signal_device(RID, GUIPARAM)
 {
-    media.test_signal();
+    media.test_signal( signal_vol );
     return true;
 }
 
@@ -1167,8 +1199,93 @@ void dialog_settings_c::select_signal_device(const ts::str_c& prm)
     mod();
 }
 
+static float find_max(const s3::Format&fmt, const void *idata, int isize)
+{
+    if (fmt.bitsPerSample == 8)
+    {
+        int m = 0;
+        for (int i = 0; i < isize; ++i)
+        {
+            ts::uint8 sample8 = ((ts::uint8 *)idata)[i];
+            int t = ts::tabs((int)sample8 - 128);
+            if (t > m) m = t;
+        }
+        return (float)m * (float)(1.0/128.0);
+    }
+    ASSERT(fmt.bitsPerSample == 16);
+    int samples = isize / 2;
+
+    int m = 0;
+    for (int i = 0; i < samples; ++i)
+    {
+        int samplex = ((ts::int16 *)idata)[i];
+        int t = ts::tabs(samplex);
+        if (t > m) m = t;
+    }
+
+    return (float)m * (float)(1.0/32767.0);
+}
+
 /*virtual*/ void dialog_settings_c::datahandler( const void *data, int size )
 {
+    bool mic_level_detected = false;
+    if (mic_test_rec)
+    {
+        struct ss_s
+        {
+            ts::buf_c *buf;
+            float current_level;
+            void addb(const s3::Format&f, const void *data, int size)
+            {
+                float m = find_max(f, data, size);
+                if (m > current_level) current_level = m;
+                buf->append_buf(data, size);
+            }
+        } ss { &testrec, current_mic_level };
+        
+        cvtmic.ofmt = recfmt;
+        cvtmic.acceptor = DELEGATE(&ss, addb);
+        cvtmic.cvt( capturefmt, data, size );
+
+        if (ss.current_level > current_mic_level)
+            current_mic_level = ss.current_level;
+
+        mic_level_detected = true;
+
+        if ((ts::Time::current() - mic_test_rec_stop) > 0)
+        {
+            mic_test_rec = false;
+            ctlenable(CONSTASTR("mic"), true);
+            ctlenable(CONSTASTR("micrecb"), true);
+
+            ts::wstr_c t(CONSTWSTR("<p=c><b>"));
+            t.append( TTT("Test record now available via test speakers button",281) );
+            set_label_text(CONSTASTR("soundhint"), t);
+
+        } else
+        {
+            int iprc = ts::lround((float)(mic_test_rec_stop - ts::Time::current()) * (100.0f / (float)TEST_RECORD_LEN));
+            if (iprc < 0) iprc = 0;
+            if (iprc > 100) iprc = 100;
+            ts::wstr_c prc; prc.set_as_int(100-iprc).append_char('%');
+            ts::wstr_c t(CONSTWSTR("<p=c><b>"));
+            t.append( maketag_color<ts::wchar>( ts::ARGB(155,0,0) ) );
+            t.append( TTT("Recording test sound...$",282) / prc );
+
+            set_label_text(CONSTASTR("soundhint"), t);
+        }
+    }
+
+    if (!mic_level_detected)
+        current_mic_level = ts::tmax( current_mic_level, ts::CLAMP( find_max(capturefmt, data, size) * cvtmic.volume, 0, 1 ) );
+
+    if ((ts::Time::current() - mic_level_refresh) > 0)
+    {
+        set_pb_pos(CONSTASTR("micvol"), current_mic_level);
+        mic_level_refresh = ts::Time::current() + 100; // 10 fps ought to be enough for anybody
+    } else
+        current_mic_level *= 0.8; // fade out
+
     /*
 
     static bool x = false;
@@ -1186,8 +1303,49 @@ void dialog_settings_c::select_signal_device(const ts::str_c& prm)
     */
 }
 
+bool dialog_settings_c::micvolset(RID, GUIPARAM p)
+{
+    gui_hslider_c::param_s *pp = (gui_hslider_c::param_s *)p;
+    cvtmic.volume = pp->value;
+
+    pp->custom_value_text.set(CONSTWSTR("<l>")).append( TTT("Microphone volume: $",279) / ts::roundstr<ts::wstr_c, float>(pp->value * 100.0f, 1).append_char('%') ).append(CONSTWSTR("</l>"));
+
+    mod();
+    return true;
+}
+
+bool dialog_settings_c::signalvolset(RID, GUIPARAM p)
+{
+    gui_hslider_c::param_s *pp = (gui_hslider_c::param_s *)p;
+    signal_vol = pp->value;
+    pp->custom_value_text.set(CONSTWSTR("<l>")).append( TTT("Signal volume: $",283) / ts::roundstr<ts::wstr_c, float>(pp->value * 100.0f, 1).append_char('%') ).append(CONSTWSTR("</l>"));
+    mod();
+    return true;
+}
+
+bool dialog_settings_c::talkvolset(RID, GUIPARAM p)
+{
+    gui_hslider_c::param_s *pp = (gui_hslider_c::param_s *)p;
+    talk_vol = pp->value;
+    pp->custom_value_text.set(CONSTWSTR("<l>")).append(TTT("Speakers volume: $",284) / ts::roundstr<ts::wstr_c, float>(pp->value * 100.0f, 1).append_char('%')).append(CONSTWSTR("</l>"));
+    media.voice_volume((uint64)-1,talk_vol);
+    mod();
+    return true;
+}
 
 
+bool dialog_settings_c::test_mic(RID, GUIPARAM)
+{
+    testrec.clear();
+    mic_test_rec = true;
+    mic_test_rec_stop = ts::Time::current() + TEST_RECORD_LEN;
+    recfmt = capturefmt;
+
+    ctlenable(CONSTASTR("mic"), false);
+    ctlenable(CONSTASTR("micrecb"), false);
+
+    return true;
+}
 
 
 

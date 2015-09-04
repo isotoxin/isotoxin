@@ -13,6 +13,9 @@
 #define INT64PAR( pn, defv ) int64 pn() { return get(CONSTASTR(#pn), (int64)(defv)); } \
                             bool pn( int64 un ) { return param( CONSTASTR(#pn), ts::tmp_str_c().set_as_num<int64>(un) ); }
 
+#define FLOATPAR( pn, defv ) float pn() { return get(CONSTASTR(#pn), (float)(defv)); } \
+                            bool pn( float un ) { return param( CONSTASTR(#pn), ts::tmp_str_c().set_as_float(un) ); }
+
 #define DEFAULT_PROXY "localhost:9050"
 
 class config_base_c
@@ -54,6 +57,13 @@ public:
         return v;
     }
     template<typename T> T get(const ts::asptr& pn, const T&def);
+    template<> float get(const ts::asptr& pn, const float&def)
+    {
+        bool added = false;
+        ts::str_c &v = values.add(pn, added);
+        if (added) { v.set_as_float(def); return def; }
+        return v.as_float(def);
+    }
     template<> int get(const ts::asptr& pn, const int&def)
     {
         bool added = false;
@@ -114,6 +124,9 @@ public:
     TEXTAPAR(device_talk, "")
     TEXTAPAR(device_signal, "")
 
+    FLOATPAR( vol_mic, 1.0f )
+    FLOATPAR( vol_talk, 1.0f )
+    FLOATPAR( vol_signal, 1.0f )
 };
 
 extern ts::static_setup<config_c,1000> cfg;

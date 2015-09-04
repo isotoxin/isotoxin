@@ -12,9 +12,10 @@ enum mousetrack_type_e
     MTT_TEXTSELECT = SETBIT(3),
     MTT_MOVESPLITTER = SETBIT(4),
     MTT_MOVECONTENT = SETBIT(5),
-    MTT_SCALECONTENT = SETBIT(6),
-    MTT_APPDEFINED1 = SETBIT(7),
-    MTT_APPDEFINED2 = SETBIT(8),
+    MTT_MOVESLIDER = SETBIT(6),
+    MTT_SCALECONTENT = SETBIT(7),
+    MTT_APPDEFINED1 = SETBIT(8),
+    MTT_APPDEFINED2 = SETBIT(9),
 
 	MTT_ANY = 0xFFFF,
 };
@@ -345,6 +346,12 @@ public:
     ts::wstr_c  save_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, const ts::wsptr &filt, const ts::wchar *defext, const ts::wchar *title);
 
 };
+
+INLINE void theme_image_s::draw(rectengine_c &eng, const ts::ivec2 &p) const
+{
+    eng.draw(p, *dbmp, rect, true);
+}
+
 
 INLINE rectengine_root_c *root_by_rid( RID r )
 {

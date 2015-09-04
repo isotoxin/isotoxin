@@ -110,22 +110,24 @@ double erf(double x)
 }
 
 
-wstr_c  time_float_c::initstr() const
+template<typename TCHARACTER>  str_t<TCHARACTER>  time_float_c::initstr() const
 {
     const key_s *keys = get_keys();
 
-    wstr_c r;
-    for (int i=0;i<get_keys_count();++i)
-    {
+    str_t<TCHARACTER> r;
+    int cnt = get_keys_count();
+    for (int i=0;i<cnt;++i)
         r.append_as_float(keys[i].time).append_char('/').append_as_float(keys[i].val).append_char('/');
-    }
     r.trunc_length();
     return r;
 }
 
-void time_float_c::init( const wsptr &val )
+template str_c  time_float_c::initstr() const;
+template wstr_c  time_float_c::initstr() const;
+
+template<typename TCHARACTER>  void time_float_c::init( const sptr<TCHARACTER> &val )
 {
-    wstrings_c sa(val, '/');
+    strings_t<TCHARACTER> sa(val, '/');
     ASSERT( (sa.size() & 1) == 0 && sa.size() >= 4 );
 
     key_s *keys = get_keys( sa.size() / 2 );
@@ -136,6 +138,29 @@ void time_float_c::init( const wsptr &val )
         keys->time = sa.get(i).as_float();
         keys->val = sa.get(i+1).as_float();
     }
+}
+
+template  void time_float_c::init( const asptr &val );
+template  void time_float_c::init( const wsptr &val );
+
+float time_float_c::find_t(float v) const
+{
+    const key_s *keys = get_keys();
+    int cnt = get_keys_count() - 1;
+    for(int i=0;i<cnt;++i)
+    {
+        const key_s &k0 = *(keys + i);
+        const key_s &k1 = *(keys + i + 1);
+
+        if ( (v >= k0.val && v <= k1.val) || (v <= k0.val && v >= k1.val) )
+        {
+            float dval = k1.val - k0.val;
+            if (dval == 0) return k0.time;
+            return (v - k0.val) * (k1.time - k0.time) / dval + k0.time;
+        }
+        
+    }
+    return keys->time;
 }
 
 void time_float_c::set_low(float low, bool correct)

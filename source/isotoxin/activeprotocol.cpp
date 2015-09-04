@@ -199,7 +199,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
             fmt.bitsPerSample = r.get<short>();
             int dsz;
             const void *data = r.get_data(dsz);
-            g_app->mediasystem().play_voice(ts::ref_cast<uint64>(ck), fmt, data, dsz);
+            g_app->mediasystem().play_voice(ts::ref_cast<uint64>(ck), fmt, data, dsz, syncdata.lock_read()().volume);
         }
         break;
     case HQ_CLOSE_AUDIO:
@@ -483,6 +483,8 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
             if (!prf().get_options().is(UIOPT_PROTOICONS))
                 icons_cache.clear();
             break;
+        case PP_TALKVOLUME:
+            syncdata.lock_write()().volume = cfg().vol_talk();
         }
     }
     return 0;
@@ -715,19 +717,22 @@ void active_protocol_c::accept_call(int cid)
     ipcp->send(ipcw(AQ_ACCEPT_CALL) << cid);
 }
 
-void active_protocol_c::send_audio(int cid, const s3::Format &ifmt, const void *data, int size)
+void active_protocol_c::send_audio(int cid, float vol, const s3::Format &ifmt, const void *data, int size)
 {
     struct s
     {
         int cid;
         isotoxin_ipc_s *ipcp;
-        void send_audio(const void *data, int size)
+        void send_audio(const s3::Format&, const void *data, int size)
         {
             ipcp->send(ipcw(AQ_SEND_AUDIO) << cid << data_block_s(data, size));
         }
     } ss = { cid, ipcp };
     
-    cvt.cvt(ifmt, data, size, audio_fmt, DELEGATE( &ss, send_audio ) );
+    cvt.volume = vol;
+    cvt.ofmt = audio_fmt;
+    cvt.acceptor = DELEGATE( &ss, send_audio );
+    cvt.cvt(ifmt, data, size );
 }
 
 void active_protocol_c::call(int cid, int seconds)

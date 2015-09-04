@@ -20,12 +20,12 @@ template <typename T, T FMASK = (T)(-1)> struct flags_t
 
     flags_t(const flags_t &of)
     {
-        __bits = (__bits & ~FMASK) | (of.__bits & FMASK);
+        __bits = of.__bits & FMASK;
     }
 
     template<T M> flags_t( const flags_t<T, M>&of )
     {
-        __bits = (__bits & ~FMASK) | (of.__bits & FMASK & M);
+        __bits = of.__bits & FMASK & M;
     }
 
     flags_t()

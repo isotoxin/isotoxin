@@ -25,8 +25,13 @@ class dialog_contact_props_c : public gui_isodialog_c
     bool custom_name( const ts::wstr_c & );
 
     keep_contact_history_e keeph = KCH_DEFAULT;
+    auto_accept_audio_call_e aaac = AAAC_NOT;
+    
     void history_settings( const ts::str_c& );
+    void aaac_settings( const ts::str_c& );
+
     menu_c gethistorymenu();
+    menu_c getaacmenu();
 
 protected:
     /*virtual*/ int unique_tag() { return UD_CONTACTPROPS; }

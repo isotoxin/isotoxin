@@ -95,6 +95,7 @@ protected:
             _CHECKBUTTONS,
             _RADIO,
             _BUTTON,
+            _HSLIDER,
         };
         ctl_e ctl;
         int width_ = 0;
@@ -113,22 +114,7 @@ protected:
             }
             return false;
         }
-        bool updvalue2( RID r, GUIPARAM p )
-        {
-            switch (ctl)
-            {
-            case gui_dialog_c::description_s::_RADIO:
-                if (handler) handler(r, p);
-                text.set_as_int((int)p); //-V205
-                break;
-            case gui_dialog_c::description_s::_CHECKBUTTONS:
-                if (handler) handler(r, p);
-                text.set_as_uint((ts::uint32)p); //-V205
-                break;
-            }
-
-            return true;
-        }
+        bool updvalue2( RID r, GUIPARAM p );
 
         button_desc_s *getbface() const
         {
@@ -173,6 +159,8 @@ protected:
         description_s& checkb( const ts::wsptr &desc, GUIPARAMHANDLER handler, ts::uint32 initial );
         description_s& radio( const ts::wsptr &desc, GUIPARAMHANDLER handler, int initial );
         description_s& button(const ts::wsptr &desc, const ts::wsptr &text, GUIPARAMHANDLER handler);
+        description_s& hslider(const ts::wsptr &desc, float val, const ts::wsptr &initstr, GUIPARAMHANDLER handler);
+        
 
         RID make_ctl(gui_dialog_c *dlg, RID parent);
     };
@@ -260,6 +248,8 @@ protected:
     void set_combik_menu( const ts::asptr& ctl_name, const menu_c& m );
     void set_label_text( const ts::asptr& ctl_name, const ts::wstr_c& t );
     void set_list_emptymessage( const ts::asptr& ctl_name, const ts::wstr_c& t );
+    void set_slider_value( const ts::asptr& ctl_name, float val );
+    void set_pb_pos( const ts::asptr& ctl_name, float val );
 
     ts::UPDATE_RECTANGLE getrectupdate() { return DELEGATE(this, updrect); }
 

@@ -115,6 +115,8 @@ enum dthr_options_e
     DTHRO_LEFT_CENTER   = SETBIT(NUMGEN_NEXT(dthr)),
     DTHRO_BOTTOM        = SETBIT(NUMGEN_NEXT(dthr)),
     DTHRO_RIGHT         = SETBIT(NUMGEN_NEXT(dthr)),
+    DTHRO_LT_T_RT       = SETBIT(NUMGEN_NEXT(dthr)),    // draw only left-top, top, rite-top rects
+    DTHRO_LB_B_RB       = SETBIT(NUMGEN_NEXT(dthr)),    // draw only left-bottom, bottom, rite-bottom rects
 };
 
 enum size_policy_e
@@ -587,7 +589,7 @@ public:
     virtual const theme_rect_s *themerect() const { return nullptr; };
     virtual ts::ivec2 get_min_size() const;
     virtual ts::ivec2 get_max_size() const;
-    virtual int       get_height_by_width(int width) const { return 0; /* 0 means not calculated */ }
+    virtual int       get_height_by_width(int width) const { return 0; /* 0 means not calculated */ } // calculate rect height by given rect width
     virtual size_policy_e size_policy() const {return SP_NORMAL;}
     virtual bool steal_active_focus_if_root() const {return true;} // default. tooltip should not steal
 
@@ -894,7 +896,7 @@ protected:
     bool _custom_tag_parser_delegate(ts::wstr_c& r, const ts::wsptr &tv) const { return custom_tag_parser(r,tv); }
     ts::CUSTOM_TAG_PARSER custom_tag_parser_delegate() const { return DELEGATE(this, _custom_tag_parser_delegate); }
 
-    gui_label_c() {} // издержки производства - нужен для потомка
+    gui_label_c() {}
 public:
     gui_label_c(initial_rect_data_s &data) :gui_control_c(data) {}
     /*virtual*/ ~gui_label_c() { }
@@ -1423,5 +1425,62 @@ public:
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
+//////////////
+
+class gui_hslider_c;
+template<> struct MAKE_CHILD<gui_hslider_c> : public _PCHILD(gui_hslider_c)
+{
+    MAKE_CHILD(RID parent_) { parent = parent_; }
+    ~MAKE_CHILD();
+
+    float val = 0;
+    ts::wstr_c initstr;
+    GUIPARAMHANDLER handler;
+
+    MAKE_CHILD &operator << (float val_) { val = val_; return *this; }
+    MAKE_CHILD &operator << (const ts::wsptr &inits) { initstr = inits; return *this; }
+    MAKE_CHILD &operator << (GUIPARAMHANDLER h) { handler = h; return *this; }
+};
+
+
+class gui_hslider_c : public gui_control_c
+{
+    DUMMY(gui_hslider_c);
+
+    float level = -1.0f;
+    float pos = 0;
+    ts::wstr_c current_value_text;
+    ts::time_float_c values;
+
+    static const ts::flags32_s::BITS F_LBDOWN = FLAGS_FREEBITSTART << 0;
+
+    GUIPARAMHANDLER handler;
+
+    void update_text_value();
+
+    ts::svec2 levelshift = ts::svec2(0);
+
+public:
+
+    struct param_s
+    {
+        float pos;
+        float value;
+
+        ts::wstr_c custom_value_text;
+    };
+
+    gui_hslider_c(MAKE_CHILD<gui_hslider_c> &data);
+    /*virtual*/ ~gui_hslider_c();
+
+    /*virtual*/ ts::ivec2 get_min_size() const override;
+    /*virtual*/ ts::ivec2 get_max_size() const override;
+
+    /*virtual*/ void created() override;
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+
+    void set_value(float value);
+    void set_level(float level);
+};
 
 #endif

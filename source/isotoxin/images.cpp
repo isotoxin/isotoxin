@@ -97,6 +97,16 @@ namespace
         bool rsz_required = false;
         bool frame_dirty = false;
 
+        /*virtual*/ ts::ivec2 framesize_by_width(int w) override
+        {
+            if (w >= origsz.x)
+                return origsz;
+
+            float k = (float)w / (float)origsz.x;
+            int newh = lround(k * origsz.y);
+            return ts::ivec2(w, newh);
+        }
+
         /*virtual*/ void fit_to_width(int w) override
         {
             if (w >= origsz.x)
@@ -178,6 +188,17 @@ namespace
     struct static_thumb_s : public picture_c
     {
         ts::bitmap_c bmp;
+
+        /*virtual*/ ts::ivec2 framesize_by_width(int w) override
+        {
+            if (w >= bmp.info().sz.x)
+                return bmp.info().sz;
+
+            float k = (float)w / (float)bmp.info().sz.x;
+            int newh = lround(k * bmp.info().sz.y);
+            return ts::ivec2(w, newh);
+        }
+
 
         /*virtual*/ void fit_to_width(int w) override
         {

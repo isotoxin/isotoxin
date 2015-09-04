@@ -112,6 +112,13 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
         virtual bool changed() const { return original != (*(const T *)underedit); }
     };
 
+    template<> struct value_watch_t<float> : value_watch_s
+    {
+        float original;
+        value_watch_t(const float&t) :original(t) { underedit = &t; }
+        virtual bool changed() const { return ts::tabs( original - (*(const float *)underedit) ) > 0.0001f; }
+    };
+
     int force_change = 0;
     ts::array_del_t<value_watch_s, 32> watch_array;
 
@@ -128,11 +135,25 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
         return false;
     }
 
-    fmt_converter_s cvter;
+    fmt_converter_s cvtmic;
     /*virtual*/ s3::Format *formats(int &count) override;
+
+    bool signalvolset(RID, GUIPARAM);
+    bool talkvolset(RID, GUIPARAM);
+    bool micvolset(RID, GUIPARAM);
+    bool test_mic(RID, GUIPARAM);
+
+    ts::buf_c testrec;
+    s3::Format recfmt;
+    float current_mic_level = -1;
+    float talk_vol = 1.0f;
+    float signal_vol = 1.0f;
 
     s3::DEVICE mic_device_stored;
     bool mic_device_changed = false;
+    bool mic_test_rec = false;
+
+    ts::Time mic_test_rec_stop, mic_level_refresh;
 
     ts::str_c username;
     ts::str_c userstatusmsg;

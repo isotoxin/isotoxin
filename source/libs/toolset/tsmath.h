@@ -975,6 +975,7 @@ public:
     
         return m_keys[m_keys_count-1].val;
     }
+
     bool  is_empty() const {return m_keys_count == 0;}
 
 };
@@ -1002,8 +1003,10 @@ public:
         return time_value_c<float>::get_linear(t) * amp * (m_high-m_low) + m_low;
     }
 
-    void    init( const wsptr &val );
-    wstr_c  initstr() const;
+    float find_t(float v) const; // find across raw values (ignore m_low and m_high)
+
+    template<typename TCHARACTER> void    init( const sptr<TCHARACTER> &val ); // example (x/y pairs): 0/0/0.7/1/1/10
+    template<typename TCHARACTER> str_t<TCHARACTER>  initstr() const;
 
 };
 

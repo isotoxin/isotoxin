@@ -557,12 +557,12 @@ bool gui_textedit_c::prepare_lines(int startchar)
     return true;
 }
 
-void gui_textedit_c::set_placeholder(const ts::wstr_c &text)
+void gui_textedit_c::set_placeholder(const ts::wstr_c &t)
 {
-    if (text != placeholder)
+    if (t != placeholder)
     {
         flags.set(F_TEXTUREDIRTY);
-        placeholder = text;
+        placeholder = t;
         redraw();
     }
 }

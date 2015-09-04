@@ -10,6 +10,7 @@ public:
     virtual ~picture_c() {}
 
     virtual bool load(const ts::blob_c &body) = 0;
+    virtual ts::ivec2 framesize_by_width(int w) { return ts::ivec2(0); };
     virtual void fit_to_width(int w) {}
     const ts::drawable_bitmap_c &curframe() const {return current_frame;};
     const ts::ivec2 &framesize() const { return current_frame.info().sz; };

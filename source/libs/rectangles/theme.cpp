@@ -367,8 +367,10 @@ bool theme_c::load( const ts::wsptr &name )
                 const drawable_bitmap_c &dbmp = loadimage(to_wstr(t->as_sptr()));
                 ++t;
                 irect r = ts::parserect(t,irect(ivec2(0),dbmp.info().sz));
-                ts::image_extbody_c &img = images.add(it.name());
-                img = std::move(ts::image_extbody_c(dbmp.body(r.lt), imgdesc_s(r.size(),32,dbmp.info().pitch)));
+                theme_image_s &img = images.add(it.name());
+                img.dbmp = &dbmp;
+                img.rect = r;
+                (ts::image_extbody_c &)img = std::move(ts::image_extbody_c(dbmp.body(r.lt), imgdesc_s(r.size(),32,dbmp.info().pitch)));
 
                 add_image(to_wstr(it.name()),img.body(),img.info(),false /* no need to copy */);
             }

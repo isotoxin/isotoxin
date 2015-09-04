@@ -81,6 +81,7 @@ struct sync_data_s
     active_protocol_data_s data;
     ts::str_c description; // utf8
     ts::flags32_s flags;
+    float volume = 1.0f;
 };
 
 class active_protocol_c : public ts::safe_object
@@ -181,7 +182,7 @@ public:
     void reject(int cid);
 
     void accept_call(int cid);
-    void send_audio(int cid, const s3::Format &fmt, const void *data, int size);
+    void send_audio(int cid, float vol, const s3::Format &fmt, const void *data, int size);
     void call(int cid, int seconds);
     void stop_call(int cid, stop_call_e sc);
 

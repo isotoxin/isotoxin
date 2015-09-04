@@ -1,6 +1,8 @@
 #include "isotoxin.h"
 
 //-V:getkey:807
+//-V:theme:807
+
 
 MAKE_CHILD<gui_contact_item_c>::~MAKE_CHILD()
 {
@@ -862,6 +864,42 @@ int gui_contact_item_c::contact_item_rite_margin()
                             m_engine->draw(p, ap->get_icon(isz, icot), ts::irect(0, 0, isz, isz), true);
                         }
                 });
+            }
+
+            if (contact->is_av() && CIR_CONVERSATION_HEAD != role)
+            {
+                if (const theme_image_s *img_voicecall = gui->theme().get_image(CONSTASTR("voicecall")))
+                {
+                    const theme_image_s *img_micoff = gui->theme().get_image(CONSTASTR("micoff"));
+                    const theme_image_s *img_speakeroff = gui->theme().get_image(CONSTASTR("speakeroff"));
+                    const theme_image_s * drawarr[3];
+                    drawarr[0] = img_voicecall;
+                    int drawarr_cnt = 1;
+                    if (contact->is_mic_off() && img_micoff)
+                        drawarr[drawarr_cnt++] = img_micoff;
+                    if (contact->is_speaker_off() && img_speakeroff)
+                        drawarr[drawarr_cnt++] = img_speakeroff;
+
+                    int h = 0;
+                    for (int i = 0; i < drawarr_cnt; ++i)
+                    {
+                        int hh = drawarr[i]->info().sz.y;
+                        if (hh > h) h = hh;
+                    }
+                    int addh[3];
+                    for (int i = 0; i < drawarr_cnt; ++i)
+                    {
+                        int hh = drawarr[i]->info().sz.y;
+                        addh[i] = (h - hh)/2;
+                    }
+
+                    ts::ivec2 p(ca.rt());
+                    for(int i=0;i<drawarr_cnt;++i)
+                    {
+                        p.x -= drawarr[i]->info().sz.x;
+                        drawarr[i]->draw(*m_engine, ts::ivec2(p.x, p.y + addh[i]));
+                    }
+                }
             }
 
             /*

@@ -166,6 +166,13 @@ enum keep_contact_history_e
     KCH_NEVER_KEEP,
 };
 
+enum auto_accept_audio_call_e
+{
+    AAAC_NOT,
+    AAAC_ACCEPT_MUTE_MIC,
+    AAAC_ACCEPT,
+};
+
 struct contacts_s;
 class gui_contact_item_c;
 class contact_c : public ts::shared_object
@@ -185,6 +192,7 @@ class contact_c : public ts::shared_object
     contact_online_state_e ostate = COS_ONLINE;
     contact_gender_e gender = CSEX_UNKNOWN;
     keep_contact_history_e keeph = KCH_DEFAULT;
+    auto_accept_audio_call_e aaac = AAAC_NOT;
 
     typedef ts::flags_t<ts::uint32, 0xFFFF> Options;
     Options opts;
@@ -213,6 +221,9 @@ public:
 
 
     // not saved
+    static const ts::flags32_s::BITS F_SPEAKER_OFF = SETBIT(21);
+    static const ts::flags32_s::BITS F_MIC_OFF = SETBIT(22);
+    static const ts::flags32_s::BITS F_CALL_INACTIVE = SETBIT(23);
     static const ts::flags32_s::BITS F_DIP = SETBIT(24);
     static const ts::flags32_s::BITS F_PERSISTENT_GCHAT = SETBIT(25);
     static const ts::flags32_s::BITS F_SHOW_FRIEND_REQUEST = SETBIT(26);
@@ -254,7 +265,7 @@ public:
     bool is_meta() const { return key.is_meta() && getmeta() == nullptr; };
     bool is_rootcontact() const { return !opts.is(F_UNKNOWN) && (is_meta() || getkey().is_group() || getkey().is_self()); } // root contact - in contact list
 
-    Options get_options() const {return opts;}
+    const Options &get_options() const {return opts;}
     Options &options() {return opts;}
 
     bool subpresent( const contact_key_s&k ) const
@@ -459,6 +470,9 @@ public:
     keep_contact_history_e get_keeph() const { return keeph; }
     void set_keeph( keep_contact_history_e v ) { keeph = v; }
 
+    auto_accept_audio_call_e get_aaac() const { return aaac; }
+    void set_aaac(auto_accept_audio_call_e v) { aaac = v; }
+
     const ts::str_c &get_pubid() const {return pubid;};
     
     const ts::str_c get_pubid_desc() const {return (pubid.is_empty() && is_meta()) ? compile_pubid() : pubid;};
@@ -493,6 +507,8 @@ public:
     bool b_hangup(RID, GUIPARAM);
     bool b_call(RID, GUIPARAM);
     bool b_cancel_call(RID, GUIPARAM);
+    bool b_mute_mic(RID, GUIPARAM);
+    bool b_mute_speaker(RID, GUIPARAM);
 
     bool b_receive_file(RID, GUIPARAM);
     bool b_receive_file_as(RID, GUIPARAM);
@@ -506,6 +522,10 @@ public:
     bool is_ringtone_blink() const { return opts.unmasked().is(F_RINGTONE_BLINK); }
     bool is_av() const { return opts.unmasked().is(F_AV_INPROGRESS); }
     void av( bool f = true );
+
+    bool is_mic_off() const { return opts.unmasked().is(F_MIC_OFF|F_CALL_INACTIVE); }
+    bool is_speaker_off() const { return opts.unmasked().is(F_SPEAKER_OFF|F_CALL_INACTIVE); }
+    void call_inactive(bool ci);
 
     bool is_calltone() const { return opts.unmasked().is(F_CALLTONE); }
     bool calltone( bool f = true, bool call_accepted = false );

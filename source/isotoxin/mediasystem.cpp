@@ -53,16 +53,15 @@ void mediasystem_c::init(const ts::str_c &talkdevice, const ts::str_c &signaldev
 
 }
 
-void mediasystem_c::test_talk()
+void mediasystem_c::test_talk(float vol)
 {
-    ts::blob_c buf = ts::g_fileop->load(CONSTWSTR("sounds/voicetest.ogg"));
-    if (buf.size()) play(buf, 1.0, false);
+    if (ts::blob_c buf = ts::g_fileop->load(CONSTWSTR("sounds/voicetest.ogg")))
+        play(buf, vol, false);
 }
-void mediasystem_c::test_signal()
+void mediasystem_c::test_signal(float vol)
 {
-    //play_looped(snd_ringtone);
-    ts::blob_c buf = ts::g_fileop->load(CONSTWSTR("sounds/ringtone.ogg"));
-    if (buf.size()) play(buf);
+    if (ts::blob_c buf = ts::g_fileop->load(CONSTWSTR("sounds/ringtone.ogg")))
+        play(buf, vol);
 }
 
 void mediasystem_c::play(const ts::blob_c &buf, float volume, bool signal_device)
@@ -182,7 +181,30 @@ int mediasystem_c::voice_player::protected_data_s::read_data(const s3::Format &f
     return data.lock_write()().read_data(format, dest, size);
 }
 
-bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const void *data, int size )
+void mediasystem_c::voice_mute(const uint64 &key, bool mute)
+{
+    SIMPLELOCK(rawplock);
+    for (int i = 0; i < MAX_RAW_PLAYERS; ++i)
+        if (vp(i).current == key)
+        {
+            vp(i).mute = mute;
+            return;
+        }
+}
+
+void mediasystem_c::voice_volume( const uint64 &key, float vol )
+{
+    SIMPLELOCK( rawplock );
+    for (int i = 0; i < MAX_RAW_PLAYERS; ++i)
+        if (vp(i).current == key)
+        {
+            vp(i).volume = vol;
+            return;
+        }
+}
+
+
+bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const void *data, int size, float vol )
 {
     SIMPLELOCK( rawplock );
 
@@ -191,8 +213,10 @@ bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const 
     for (; i < MAX_RAW_PLAYERS; ++i)
         if (vp(i).current == key)
         {
+            if (vp(i).mute)
+                return true;
         namana:
-            vp(i).set_fmt(fmt);
+            vp(i).set_fmt(fmt, vol);
             vp(i).add_data(data, size);
             return true;
         } else if ( j < 0 && vp(i).current == 0 )
@@ -201,6 +225,7 @@ bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const 
     {
         i = j;
         vp(j).current = key;
+        vp(j).mute = false;
         goto namana;
     }
     return false;
@@ -214,6 +239,7 @@ void mediasystem_c::free_voice_channel( const uint64 &key )
         {
             vp(i).stop();
             vp(i).current = 0;
+            vp(i).mute = false;
             break;
         }
 }
@@ -261,16 +287,21 @@ fmt_converter_s::~fmt_converter_s()
         if (s) src_delete(s);
 }
 
-void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize, const s3::Format &ofmt, accept_sound_func acceptor )
+void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize )
 {
-    if (ifmt == ofmt)
+    if (!ASSERT(acceptor)) return;
+
+    bool volume_changed = volume == 1.0f; // -V550
+
+    if (ifmt == ofmt && volume_changed)
     {
-        acceptor( idata, isize );
+        acceptor( ofmt, idata, isize );
         return;
     }
 
     ts::tmp_buf_c b[2];
     int curtarget = 0;
+    const void *idata_orig = idata;
 
     if (ifmt.bitsPerSample == 8)
     {
@@ -329,9 +360,24 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize,
         for (int ch = 0; ch < ichnls; ++ch)
         {
             float *out = ((float *)b[curtarget].data()) + (samples_per_chnl * ch);
-            for (const ts::int16 *from = ind + ch, *end = ind + samples_per_chnl + ch; from < end; ++from, ++out)
-                if (ASSERT(b[curtarget].inside(out, 4)))
-                    *out = (float)(*from) * (float)(1.0 / 32768.0);
+
+            if (volume_changed)
+            {
+                for (const ts::int16 *from = ind + ch, *end = ind + samples_per_chnl + ch; from < end; ++from, ++out)
+                    if (ASSERT(b[curtarget].inside(out, 4)))
+                        *out = (float)(*from) * (float)(1.0 / 32767.0);
+            } else
+            {
+                for (const ts::int16 *from = ind + ch, *end = ind + samples_per_chnl + ch; from < end; ++from, ++out)
+                    if (ASSERT(b[curtarget].inside(out, 4)))
+                    {
+                        float rslt = (float)(*from) * (float)(volume / 32767.0);
+                        if (rslt > 1.0f)
+                            rslt = 1.0f;
+                        *out = rslt;
+                    }
+                volume_changed = true;
+            }
         }
 
         // so float stuff ready
@@ -377,7 +423,7 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize,
             ts::int16 *odata = ((ts::int16 *)b[curtarget].data()) + ch;
             for (const float *indata_e = indata + src_data.output_frames_gen; indata < indata_e; ++indata, odata += ichnls)
                 if (ASSERT(b[curtarget].inside(odata, 2)))
-                    *odata = (ts::int16) ((*indata) * 32768.0f);
+                    *odata = (ts::int16) ((*indata) * 32767.0f);
         }
 
         idata = b[curtarget].data();
@@ -385,6 +431,37 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize,
         curtarget ^= 1;
     }
 
+    if (!volume_changed)
+    {
+        int samples = isize / 2;
+        ts::int16 *odata = (ts::int16 *)idata;
+        
+        if (idata_orig == idata)
+        {
+            // idata is const, we cannot modify data
+
+            b[curtarget].set_size(isize, false);
+            odata = (ts::int16 *)b[curtarget].data();
+        }
+
+        for (int i = 0; i < samples; ++i, ++odata)
+        {
+            ts::int16 sample16 = ((ts::int16 *)idata)[i];
+
+            float rslt = (float)(sample16) * (float)(volume / 32767.0);
+            if (rslt > 1.0f)
+                rslt = 1.0f;
+
+            *odata = (ts::int16) (rslt * 32767.0f);
+        }
+        volume_changed = true;
+
+        if (idata_orig == idata)
+        {
+            idata = b[curtarget].data();
+            curtarget ^= 1;
+        }
+    }
 
     if (ichnls != ofmt.channels && ASSERT(ichnls == 1))
     {
@@ -420,7 +497,7 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize,
         isize = b[curtarget].size();
     }
 
-    acceptor( idata, isize );
+    acceptor( ofmt, idata, isize );
 
 }
 

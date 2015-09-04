@@ -824,10 +824,13 @@ void application_c::update_ringtone( contact_c *rt, bool play_stop_snd )
 
     if (m_ringing.size())
     {
-        play_sound(snd_ringtone, true);
-    }
-    else
+        gmsg<ISOGM_AV_COUNT> avc; avc.send();
+        (avc.count == 0) ? 
+            play_sound(snd_ringtone, true) :
+            play_sound(snd_ringtone2, true);
+    } else
     {
+        stop_sound(snd_ringtone2);
         if (stop_sound(snd_ringtone) && play_stop_snd)
             play_sound(snd_call_cancel, false);
     }

@@ -50,11 +50,17 @@ void gui_listitem_c::created()
 
 /*virtual*/ int gui_listitem_c::get_height_by_width(int width) const
 {
-    int h = 0;
     if (!textrect.get_text().is_empty())
-        h = textrect.calc_text_size(width, custom_tag_parser_delegate()).y + 4;
-    if (const theme_rect_s *thr = themerect()) h += thr->clientborder.lt.y + thr->clientborder.rb.y;
-    return h;
+    {
+        if (const theme_rect_s *thr = themerect())
+        {
+            return textrect.calc_text_size(width - thr->clborder_x(), custom_tag_parser_delegate()).y + 4 + thr->clborder_y();
+        } else
+        {
+            return textrect.calc_text_size(width, custom_tag_parser_delegate()).y + 4;
+        }
+    }
+    return 0;
 }
 
 
@@ -145,6 +151,31 @@ ts::uint32 gui_dialog_c::gm_handler(gmsg<GM_CLOSE_DIALOG> & p)
     if (p.unique_tag == udt)
         on_close();
     return 0;
+}
+
+bool gui_dialog_c::description_s::updvalue2(RID r, GUIPARAM p)
+{
+    switch (ctl)
+    {
+        case gui_dialog_c::description_s::_RADIO:
+            if (handler) handler(r, p);
+            text.set_as_int((int)p); //-V205
+            break;
+        case gui_dialog_c::description_s::_CHECKBUTTONS:
+            if (handler) handler(r, p);
+            text.set_as_uint((ts::uint32)p); //-V205
+            break;
+        case gui_dialog_c::description_s::_HSLIDER:
+            {
+                if (handler) handler(r, p);
+                gui_hslider_c::param_s *pp = (gui_hslider_c::param_s *)p;
+                ts::wstr_c k(text);
+                text.set_as_float(pp->value).append_char('/').append(k.substr(k.find_pos('/') + 1));
+            }
+            break;
+    }
+
+    return true;
 }
 
 
@@ -272,6 +303,15 @@ gui_dialog_c::description_s& gui_dialog_c::description_s::button(const ts::wsptr
     ctl = _BUTTON;
     desc = desc_;
     text = text_;
+    handler = handler_;
+    return *this;
+}
+
+gui_dialog_c::description_s& gui_dialog_c::description_s::hslider(const ts::wsptr &desc_, float val, const ts::wsptr &initstr, GUIPARAMHANDLER handler_)
+{
+    ctl = _HSLIDER;
+    desc = desc_;
+    text.set_as_float(val).append_char('/').append(initstr);
     handler = handler_;
     return *this;
 }
@@ -445,6 +485,34 @@ void gui_dialog_c::set_label_text( const ts::asptr& ctl_name, const ts::wstr_c& 
         gui_label_simplehtml_c &ctl = HOLD(lrid).as<gui_label_simplehtml_c>();
         ctl.set_text(t);
     }
+}
+
+void gui_dialog_c::set_slider_value( const ts::asptr& ctl_name, float val )
+{
+    if (RID rid = find(ctl_name))
+    {
+        gui_hslider_c &ctl = HOLD(rid).as<gui_hslider_c>();
+        ctl.set_value(val);
+    }
+    for (description_s &d : descs)
+    {
+        if (d.ctl == description_s::_HSLIDER && d.name == ctl_name)
+        {
+            ts::wstr_c k(d.text);
+            d.text.set_as_float(val).append_char('/').append(k.substr(k.find_pos('/')+1));
+            break;
+        }
+    }
+}
+
+void gui_dialog_c::set_pb_pos( const ts::asptr& ctl_name, float val )
+{
+    if (RID rid = find(ctl_name))
+    {
+        gui_hslider_c &ctl = HOLD(rid).as<gui_hslider_c>();
+        ctl.set_level(val);
+    }
+
 }
 
 RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e role, gui_textedit_c::TEXTCHECKFUNC checker, const evt_data_s *addition, int multiline, RID parent )
@@ -917,6 +985,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             break;
         case description_s::_TEXT:
         case description_s::_BUTTON:
+        case description_s::_HSLIDER:
             rctl = d.make_ctl(this, parent);
             break;
         }
@@ -961,7 +1030,14 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
             return b.getrid();
         }
         break;
+    case _HSLIDER:
+        {
+            int x = text.find_pos('/');
 
+            gui_hslider_c &sldr = ( MAKE_CHILD<gui_hslider_c>(parent) << text.substr(0, x).as_float() << text.substr(x+1).as_sptr() << DELEGATE(this, updvalue2) );
+            return sldr.getrid();
+        }
+        break;
     }
     FORBIDDEN();
     return RID();

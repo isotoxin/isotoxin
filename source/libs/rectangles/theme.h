@@ -105,6 +105,9 @@ struct theme_rect_s : ts::shared_object
         return ts::ivec2(sz.x + clientborder.lt.x + clientborder.rb.x, sz.y + clientborder.lt.y + clientborder.rb.y + capheight);
     }
 
+    int clborder_x() const { if (fastborder()) return clientborder.lt.x + clientborder.rb.x - maxcutborder.lt.x - maxcutborder.rb.x; else return clientborder.lt.x + clientborder.rb.x; }
+    int clborder_y() const { if (fastborder()) return clientborder.lt.y + clientborder.rb.y + capheight_max - maxcutborder.lt.y - maxcutborder.rb.y; else return clientborder.lt.y + clientborder.rb.y + capheight; }
+
     ts::irect captionrect( const ts::irect &rr, bool maximized ) const;	// calc caption rect
 	ts::irect clientrect( const ts::ivec2 &sz, bool maximized ) const;	// calc raw client area
 	ts::irect hollowrect( const rectprops_c &rps ) const;	// calc client area and resize area
@@ -230,10 +233,17 @@ public:
     ~button_desc_s();
 };
 
+struct theme_image_s : ts::image_extbody_c
+{
+    const ts::drawable_bitmap_c *dbmp = nullptr;
+    ts::irect rect;
+    void draw( rectengine_c &eng, const ts::ivec2 &p ) const;
+};
+
 class theme_c
 {
     
-    ts::hashmap_t<ts::str_c, ts::image_extbody_c> images;
+    ts::hashmap_t<ts::str_c, theme_image_s> images;
 	ts::hashmap_t<ts::wstr_c, ts::drawable_bitmap_c> bitmaps;
 	ts::hashmap_t<ts::str_c, ts::shared_ptr<theme_rect_s> > rects;
     ts::hashmap_t<ts::str_c, ts::shared_ptr<button_desc_s> > buttons;
@@ -257,11 +267,13 @@ public:
 	}
     ts::shared_ptr<button_desc_s> get_button(const ts::asptr &bname) const
     {
+        if (bname.l == 0)
+            return buttons.begin().value();
         const ts::shared_ptr<button_desc_s> *p = buttons.get(bname);
         return p ? (*p) : ts::shared_ptr<button_desc_s>();
     }
 
-    const ts::image_extbody_c * get_image(const ts::asptr &iname) const
+    const theme_image_s * get_image(const ts::asptr &iname) const
     {
         return images.get(iname);
     }

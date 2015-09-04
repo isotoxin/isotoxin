@@ -7,6 +7,8 @@
     SND( incoming_file ) \
     SND( start_recv_file ) \
     SND( ringtone ) \
+    SND( ringtone2 ) \
+    SND( call_accept ) \
     SND( call_cancel ) \
     SND( hangon ) \
     SND( calltone ) \
@@ -62,19 +64,21 @@ class mediasystem_c
             format.bitsPerSample = 16;
         }
 
-        void set_fmt( const s3::Format &fmt )
+        void set_fmt( const s3::Format &fmt, float vol )
         {
             if (fmt != format)
             {
                 if (isPlaying()) stop();
                 format = fmt;
             }
+            volume = vol;
         }
 
         void add_data(const void *dest, int size);
         /*virtual*/ int rawRead(char *dest, int size) override;
 
         uint64 current = 0;
+        bool mute = false;
     };
 
     long rawplock = 0;
@@ -105,14 +109,16 @@ public:
         }
     }
 
-    void test_talk();
-    void test_signal();
+    void test_talk(float vol);
+    void test_signal(float vol);
 
     void play(const ts::blob_c &buf, float volume = 1.0f, bool signal_device = true);
     void play_looped(sound_e snd, float volume = 1.0f, bool signal_device = true);
     bool stop_looped(sound_e snd);
 
-    bool play_voice( const uint64 &key, const s3::Format &fmt, const void *data, int size ); 
+    void voice_mute(const uint64 &key, bool mute);
+    void voice_volume( const uint64 &key, float vol ); 
+    bool play_voice( const uint64 &key, const s3::Format &fmt, const void *data, int size, float vol ); 
     void free_voice_channel( const uint64 &key ); 
 };
 
@@ -140,7 +146,7 @@ INLINE s3::DEVICE device_from_string( const ts::asptr& s )
 
 ts::str_c string_from_device(const s3::DEVICE& device);
 
-typedef fastdelegate::FastDelegate<void (const void *, int)> accept_sound_func;
+typedef fastdelegate::FastDelegate<void (const s3::Format &fmt, const void *, int)> accept_sound_func;
 
 struct fmt_converter_s
 {
@@ -148,5 +154,11 @@ struct fmt_converter_s
     fmt_converter_s();
     ~fmt_converter_s();
 
-    void cvt( const s3::Format &ifmt, const void *idata, int isize, const s3::Format &ofmt, accept_sound_func acceptor );
+    s3::Format ofmt;
+    accept_sound_func acceptor;
+    
+    float volume = 1.0;
+
+    void cvt( const s3::Format &ifmt, const void *idata, int isize );
 };
+

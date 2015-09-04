@@ -158,8 +158,9 @@ enum isogmsg_e
     ISOGM_FILE,
     ISOGM_CHANGED_PROFILEPARAM,
     ISOGM_NOTICE,
-    ISOGM_SUMMON_POST,              // выдать в conversation post_s с учетом его типа
+    ISOGM_SUMMON_POST,              // summon post_s into conversation
     ISOGM_AV,
+    ISOGM_AV_COUNT,
     ISOGM_CALL_STOPED,
     ISOGM_METACREATE,
     ISOGM_APPRISE,
@@ -171,6 +172,12 @@ enum isogmsg_e
     ISOGM_TYPING,
 
     ISOGM_COUNT,
+};
+
+template<> struct gmsg<ISOGM_AV_COUNT> : public gmsgbase
+{
+    gmsg() :gmsgbase(ISOGM_AV_COUNT) {}
+    int count = 0;
 };
 
 template<> struct gmsg<ISOGM_NEWVERSION> : public gmsgbase
@@ -251,6 +258,7 @@ enum profileparam_e
     PP_AVATAR,
     PP_PROFILEOPTIONS,
     PP_NETWORKNAME,
+    PP_TALKVOLUME,
 
     PP_EMOJISET,
     PP_MICDEVICE,

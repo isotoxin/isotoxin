@@ -46,12 +46,28 @@ void dialog_contact_props_c::history_settings( const ts::str_c& v )
     set_combik_menu(CONSTASTR("history"), gethistorymenu());
 }
 
+void dialog_contact_props_c::aaac_settings( const ts::str_c& v )
+{
+    aaac = (auto_accept_audio_call_e)v.as_uint();
+    set_combik_menu(CONSTASTR("aaac"), getaacmenu());
+}
+
 menu_c dialog_contact_props_c::gethistorymenu()
 {
     menu_c m;
     m.add( TTT("Default",226), (keeph == KCH_DEFAULT) ? MIF_MARKED : 0, DELEGATE(this, history_settings), ts::amake<char>(KCH_DEFAULT) );
     m.add( TTT("Always save",227), (keeph == KCH_ALWAYS_KEEP) ? MIF_MARKED : 0, DELEGATE(this, history_settings), ts::amake<char>(KCH_ALWAYS_KEEP) );
     m.add( TTT("Never save",228), (keeph == KCH_NEVER_KEEP) ? MIF_MARKED : 0, DELEGATE(this, history_settings), ts::amake<char>(KCH_NEVER_KEEP) );
+
+    return m;
+}
+
+menu_c dialog_contact_props_c::getaacmenu()
+{
+    menu_c m;
+    m.add(TTT("Don't accept",285), (aaac == AAAC_NOT) ? MIF_MARKED : 0, DELEGATE(this, aaac_settings), ts::amake<char>(AAAC_NOT));
+    m.add(TTT("Accept and mute microphone",286), (aaac == AAAC_ACCEPT_MUTE_MIC) ? MIF_MARKED : 0, DELEGATE(this, aaac_settings), ts::amake<char>(AAAC_ACCEPT_MUTE_MIC));
+    m.add(TTT("Accept and don't mute microphone",287), (aaac == AAAC_ACCEPT) ? MIF_MARKED : 0, DELEGATE(this, aaac_settings), ts::amake<char>(AAAC_ACCEPT));
 
     return m;
 }
@@ -66,6 +82,7 @@ menu_c dialog_contact_props_c::gethistorymenu()
     {
         customname = contactue->get_customname();
         keeph = contactue->get_keeph();
+        aaac = contactue->get_aaac();
 
         ts::str_c n = contactue->get_name();
         text_adapt_user_input(n);
@@ -79,7 +96,10 @@ menu_c dialog_contact_props_c::gethistorymenu()
         dm().vspace();
 
         dm().combik(TTT("Message history",230)).setmenu(gethistorymenu()).setname(CONSTASTR("history"));
+        dm().vspace();
 
+        dm().combik(TTT("Auto accept audio calls",288)).setmenu(getaacmenu()).setname(CONSTASTR("aaac"));
+        dm().vspace();
     }
 
     return 0;
@@ -114,6 +134,11 @@ menu_c dialog_contact_props_c::gethistorymenu()
         {
             changed = true;
             contactue->set_keeph(keeph);
+        }
+        if (contactue->get_aaac() != aaac)
+        {
+            changed = true;
+            contactue->set_aaac(aaac);
         }
 
         if (changed)

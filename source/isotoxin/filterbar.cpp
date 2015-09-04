@@ -95,11 +95,11 @@ bool gui_filterbar_c::update_filter(const ts::wstr_c & e)
 /*virtual*/ int gui_filterbar_c::get_height_by_width(int width) const
 {
     ts::ivec2 sz(3);
+    const theme_rect_s *thr = themerect();
     if (!textrect.get_text().is_empty())
-        sz = textrect.calc_text_size(width, custom_tag_parser_delegate());
+        sz = textrect.calc_text_size(width - (thr ? thr->clborder_x() : 0), custom_tag_parser_delegate());
     sz.y += edit->getprops().size().y;
-    if (const theme_rect_s *thr = themerect())
-        return thr->size_by_clientsize(sz, false).y;
+    if (thr) sz.y += thr->clborder_y();
 
     return sz.y;
 }

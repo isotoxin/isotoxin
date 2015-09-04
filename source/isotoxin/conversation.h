@@ -313,7 +313,7 @@ public:
     time_t get_first_post_time() const {return records.size() ? records.get(0).time : 0;}
     time_t get_last_post_time() const {return records.size() ? records.last().time : 0;}
 
-    void update_text();
+    void update_text(int for_width = 0);
     void set_no_author( bool f = true ) { bool ona = flags.is(F_NO_AUTHOR); flags.init(F_NO_AUTHOR, f); if (ona != f) flags.set(F_DIRTY_HEIGHT_CACHE); }
 
     void append_text( const post_s &post, bool resize_now = true );
@@ -435,11 +435,14 @@ class gui_conversation_c : public gui_vgroup_c, public sound_capture_handler_c
     GM_RECEIVER(gui_conversation_c, ISOGM_SELECT_CONTACT);
     GM_RECEIVER(gui_conversation_c, ISOGM_CHANGED_PROFILEPARAM);
     GM_RECEIVER(gui_conversation_c, ISOGM_AV);
+    GM_RECEIVER(gui_conversation_c, ISOGM_AV_COUNT);
     GM_RECEIVER(gui_conversation_c, ISOGM_CALL_STOPED);
     GM_RECEIVER(gui_conversation_c, ISOGM_PROFILE_TABLE_SAVED);
     GM_RECEIVER(gui_conversation_c, ISOGM_UPDATE_BUTTONS);
     
     ts::tbuf_t<s3::Format> avformats;
+
+    ts::array_shared_t<contact_c,1> avs;
 
     ts::safe_ptr<gui_contact_item_c> caption;
     ts::safe_ptr<gui_messagelist_c> msglist;
@@ -466,5 +469,5 @@ public:
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
-    contact_c *get_other() { ASSERT(!caption.expired()); return caption->contacted() ? &caption->getcontact() : nullptr; }
+    contact_c *get_selected_contact() { ASSERT(!caption.expired()); return caption->contacted() ? &caption->getcontact() : nullptr; }
 };

@@ -610,6 +610,7 @@ ts::uint32 gui_button_c::gm_handler(gmsg<GM_UI_EVENT> & e)
 void gui_button_c::set_face( button_desc_s *bdesc )
 {
     desc = bdesc;
+    if (!desc) desc = gui->theme().get_button(ts::asptr());
     if (!desc->text.is_empty())
         set_text(desc->text);
 
@@ -709,6 +710,13 @@ void gui_button_c::set_face( button_desc_s *bdesc )
 
 /*virtual*/ bool gui_button_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
 {
+    if (SQ_CTL_ENABLE == qp && !data.flags.enableflag)
+    {
+        flags.clear(F_PRESS);
+        curstate = button_desc_s::NORMAL;
+        getengine().redraw();
+    }
+
     if (__super::sq_evt(qp,rid,data)) return true;
 
     bool action = false;
@@ -916,7 +924,10 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
 /*virtual*/ int gui_label_c::get_height_by_width(int width) const
 {
     if (flags.is(FLAGS_AUTO_HEIGHT) && !textrect.get_text().is_empty())
-        return textrect.calc_text_size(width, custom_tag_parser_delegate()).y;
+    {
+        const theme_rect_s *thr = themerect();
+        return textrect.calc_text_size(width - (thr ? thr->clborder_x() : 0), custom_tag_parser_delegate()).y + (thr ? thr->clborder_y() : 0);
+    }
     return 0;
 }
 
@@ -2971,3 +2982,213 @@ gui_vtabsel_item_c::~gui_vtabsel_item_c()
     __super::created();
 }
 
+
+//////////////
+
+MAKE_CHILD<gui_hslider_c>::~MAKE_CHILD()
+{
+    MODIFY(get()).visible(true);
+}
+
+gui_hslider_c::gui_hslider_c(MAKE_CHILD<gui_hslider_c> &data) :gui_control_c(data)
+{
+    handler = data.handler;
+    if (!data.initstr.is_empty())
+        values.init<ts::wchar>(data.initstr);
+    else
+        values.init(CONSTWSTR("0/0/1/1"));
+
+    set_value(data.val);
+}
+
+
+/*virtual*/ gui_hslider_c::~gui_hslider_c()
+{
+}
+
+void gui_hslider_c::set_value(float val)
+{
+    pos = values.find_t(val);
+    update_text_value();
+    getengine().redraw();
+}
+
+void gui_hslider_c::set_level(float level_)
+{
+    if (level_ != level)
+    {
+        level = level_;
+        getengine().redraw();
+    }
+}
+
+/*virtual*/ ts::ivec2 gui_hslider_c::get_min_size() const
+{
+    ts::ivec2 sz = __super::get_min_size();
+    if (const theme_rect_s *th = themerect())
+        sz.y = th->sis[SI_TOP].height();
+
+    return sz;
+}
+/*virtual*/ ts::ivec2 gui_hslider_c::get_max_size() const
+{
+    ts::ivec2 sz = __super::get_max_size();
+    if (const theme_rect_s *th = themerect())
+        sz.y = th->sis[SI_TOP].height();
+
+    return sz;
+}
+
+/*virtual*/ void gui_hslider_c::created()
+{
+    set_theme_rect(CONSTASTR("hslider"), false);
+    if (const theme_rect_s *th = themerect())
+    {
+        ts::ivec2 s = parsevec2(th->addition.get_string(CONSTASTR("levelshift")), ts::ivec2(0));
+        levelshift.x = (ts::int16)s.x;
+        levelshift.y = (ts::int16)s.y;
+    }
+
+    __super::created();
+}
+/*virtual*/ bool gui_hslider_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    switch (qp)
+    {
+    case SQ_DRAW:
+        if (ASSERT(m_engine))
+        {
+            if (const theme_rect_s *th = themerect())
+            {
+                m_engine->draw(*th, DTHRO_LT_T_RT);
+
+                ts::irect cla = get_client_area();
+                draw_data_s &dd = m_engine->begin_draw();
+
+                if (level >= 0)
+                {
+                    int sidew = th->sis[SI_LEFT_BOTTOM].width() + th->sis[SI_RIGHT_BOTTOM].width();
+                    int ww = ts::lround( ts::CLAMP( level, 0, 1 ) * (float)(dd.size.x - levelshift.x - levelshift.x - sidew) ) + sidew;
+
+                    evt_data_s d;
+                    d.draw_thr.rect().lt.x = dd.offset.x + levelshift.x;
+                    d.draw_thr.rect().lt.y = dd.offset.y + levelshift.y;
+                    d.draw_thr.rect().rb.x = d.draw_thr.rect().lt.x + ww;
+                    m_engine->draw(*th, DTHRO_LB_B_RB, &d);
+                }
+
+
+                int caret_width = th->sis[SI_CENTER].width();
+                int x = lround( (float)(cla.width() - caret_width) * pos ) + cla.lt.x;
+                m_engine->draw(ts::ivec2(x, cla.lt.y), th->src, th->sis[SI_CENTER], th->is_alphablend(SI_CENTER));
+
+                ts::ivec2 tsz = gui->tr().calc_text_size(ts::g_default_text_font, current_value_text, (cla.width()-caret_width)/2, 0, nullptr);
+
+                text_draw_params_s tdp;
+                ts::TSCOLOR c = get_default_text_color();
+                tdp.forecolor = &c;
+                ts::flags32_s f; f.setup( ts::TO_VCENTER );
+                tdp.textoptions = &f;
+
+                dd.offset.y += cla.lt.y;
+                dd.size.y = cla.height();
+                dd.size.x = (cla.width()-caret_width)/2;
+                //dd.offset.y += (dd.size.y - tsz.y)/2;
+
+                int center_x = cla.lt.x + (cla.width()-tsz.x) / 2;
+
+                if (pos <= 0.5f)
+                {
+                    int xx = x + caret_width + 2;
+                    dd.offset.x += ts::tmax(xx, center_x);
+                } else
+                {
+                    int xx = x - 2 - tsz.x;
+                    dd.offset.x += ts::tmin(xx, center_x);
+                }
+                m_engine->draw(current_value_text, tdp);
+
+
+                m_engine->end_draw();
+            }
+        }
+        return true;
+    case SQ_MOUSE_LDOWN:
+        if (const theme_rect_s *th = themerect())
+        {
+            ts::ivec2 mplocal = to_local(data.mouse.screenpos);
+            ts::ivec2 caret_size = th->sis[SI_CENTER].size();
+            ts::irect cla = get_client_area();
+            ts::ivec2 caret_pos( lround((float)(cla.width() - caret_size.x) * pos) + cla.lt.x, cla.lt.y );
+            ts::irect caret( caret_pos, caret_pos + caret_size );
+
+            if (caret.inside(mplocal))
+            {
+                mousetrack_data_s &mtd = gui->begin_mousetrack( getrid(), MTT_MOVESLIDER );
+                mtd.mpos = data.mouse.screenpos;
+                mtd.rect.lt.x = caret_pos.x;
+                mtd.rect.lt.x -= cla.lt.x;
+                mtd.rect.lt.y = cla.width() - caret_size.x; // just cached value
+            } else if (cla.inside(mplocal))
+            {
+                pos = (float)(mplocal.x - (cla.lt.x + caret_size.x/2)) / (float)(cla.width() - caret_size.x);
+                update_text_value();
+                if (pos < 0) pos = 0;
+                if (pos > 1) pos = 1;
+                mousetrack_data_s &mtd = gui->begin_mousetrack( getrid(), MTT_MOVESLIDER );
+                mtd.mpos = data.mouse.screenpos;
+                mtd.rect.lt.x = mplocal.x - cla.lt.x - caret_size.x/2;
+                mtd.rect.lt.y = cla.width() - caret_size.x; // just cached value
+                m_engine->redraw();
+            }
+        }
+        return true;
+    case SQ_MOUSE_LUP:
+        if (gui->end_mousetrack(getrid(), MTT_MOVESLIDER))
+        {
+            flags.clear(F_LBDOWN);
+        }
+        return true;
+    case SQ_MOUSE_MOVE:
+        
+        if (const theme_rect_s *th = themerect())
+        if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_MOVESLIDER))
+        {
+            ts::irect cla = get_client_area();
+            int dmouse = data.mouse.screenpos().x - opd->mpos.x;
+            if (dmouse != 0)
+            {
+                int x = opd->rect.lt.x + dmouse;
+                float newpos = (float)x / (float)opd->rect.lt.y;
+                if (newpos < 0) newpos = 0;
+                if (newpos > 1) newpos = 1;
+                if (newpos != pos)
+                {
+                    m_engine->redraw();
+                    pos = newpos;
+                    update_text_value();
+                }
+            }
+        }
+        return true;
+    }
+    return __super::sq_evt(qp, rid, data);
+}
+
+void gui_hslider_c::update_text_value()
+{
+    if (handler)
+    {
+        param_s p;
+        p.pos = pos;
+        p.value = values.get_linear(pos);
+        handler(getrid(), &p);
+        if (p.custom_value_text.is_empty())
+            current_value_text = ts::roundstr<ts::wstr_c, float>(values.get_linear(pos), 3);
+        else
+            current_value_text = p.custom_value_text;
+    } else
+    {
+        current_value_text = ts::roundstr<ts::wstr_c, float>(values.get_linear(pos), 3);
+    }
+}

@@ -141,15 +141,14 @@ int gui_notice_c::get_height_by_width(int w) const
             if (height_cache[i].x == w) return height_cache[i].y;
     }
 
-    const theme_rect_s *thr = themerect();
-    if (ASSERT(thr))
+    if (const theme_rect_s *thr = themerect())
     {
         ts::ivec2 sz = thr->clientrect(ts::ivec2(w, height), false).size();
         if (sz.x < 0) sz.x = 0;
         if (sz.y < 0) sz.y = 0;
         int ww = sz.x;
         sz = textrect.calc_text_size(ww, custom_tag_parser_delegate());
-        int h = thr->size_by_clientsize(ts::ivec2(ww, sz.y + addheight), false).y;
+        int h = sz.y + addheight + thr->clborder_y();
         height_cache[next_cache_write_index] = ts::ivec2(w, h);
         ++next_cache_write_index;
         if (next_cache_write_index >= ARRAY_SIZE(height_cache)) next_cache_write_index = 0;
@@ -370,7 +369,7 @@ void gui_notice_c::setup(contact_c *sender)
 
             gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
             b_accept.set_face_getter(BUTTON_FACE(accept_call));
-            b_accept.set_handler(DELEGATE(sender, b_accept_call), this);
+            b_accept.set_handler(DELEGATE(sender, b_accept_call), nullptr);
             ts::ivec2 minsz = b_accept.get_min_size();
             b_accept.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, -5, 5, 0, 2));
             MODIFY(b_accept).visible(true);
@@ -397,6 +396,32 @@ void gui_notice_c::setup(contact_c *sender)
             ts::ivec2 minsz = b_reject.get_min_size();
             b_reject.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, -5, 5, 0, 1));
             MODIFY(b_reject).visible(true);
+
+            int wwx = -minsz.x - 5;
+
+            gui_button_c &b_mute_mic = MAKE_CHILD<gui_button_c>(getrid());
+
+            (sender->getmeta() && sender->getmeta()->get_options().unmasked().is(contact_c::F_MIC_OFF)) ?
+                b_mute_mic.set_face_getter(BUTTON_FACE(unmute_mic)) :
+                b_mute_mic.set_face_getter(BUTTON_FACE(mute_mic));
+
+            b_mute_mic.set_handler(DELEGATE(sender, b_mute_mic), &b_mute_mic);
+            int rxx = minsz.y;
+            minsz = b_mute_mic.get_min_size();
+            rxx = (rxx - minsz.y)/2 + 5;
+            b_mute_mic.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, wwx, rxx, 0, 2));
+            MODIFY(b_mute_mic).visible(true);
+
+            gui_button_c &b_mute_speaker = MAKE_CHILD<gui_button_c>(getrid());
+
+            (sender->getmeta() && sender->getmeta()->get_options().unmasked().is(contact_c::F_SPEAKER_OFF)) ?
+                b_mute_speaker.set_face_getter(BUTTON_FACE(unmute_speaker)) :
+                b_mute_speaker.set_face_getter(BUTTON_FACE(mute_speaker));
+
+            b_mute_speaker.set_handler(DELEGATE(sender, b_mute_speaker), &b_mute_speaker);
+            minsz = b_mute_speaker.get_min_size();
+            b_mute_speaker.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, wwx, rxx, 1, 2));
+            MODIFY(b_mute_speaker).visible(true);
 
             addheight = 50;
         }
@@ -458,7 +483,7 @@ bool gui_notice_c::setup_tail(RID, GUIPARAM)
 {
     flags.set(F_DIRTY_HEIGHT_CACHE);
 
-    int h = get_height_by_width(get_client_area().width());
+    int h = get_height_by_width(getprops().size().x);
     if (h != height)
     {
         height = h;
@@ -1798,7 +1823,7 @@ bool gui_message_item_c::delivered(uint64 utag)
 
             flags.set(F_DIRTY_HEIGHT_CACHE);
 
-            int h = get_height_by_width(get_client_area().width());
+            int h = get_height_by_width(getprops().size().x);
             if (h != height)
             {
                 height = h;
@@ -2122,7 +2147,7 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
 
     if (resize_now)
     {
-        int h = get_height_by_width(get_client_area().width());
+        int h = get_height_by_width(getprops().size().x);
         if (h != height)
         {
             height = h;
@@ -2432,7 +2457,7 @@ ts::wstr_c gui_message_item_c::prepare_button_rect(int r, const ts::ivec2 &sz)
     return button;
 }
 
-void gui_message_item_c::update_text()
+void gui_message_item_c::update_text(int for_width)
 {
     bool is_send = false;
     switch (subtype)
@@ -2441,8 +2466,12 @@ void gui_message_item_c::update_text()
         is_send = true;
     case ST_RECV_FILE:
         {
-            int w = get_client_area().width();
-            int oldh = get_height_by_width(w);
+            // for_width != 0 means fake update, just for correct height calculation
+
+            ASSERT(for_width == 0 || get_customdata());
+
+            int rectw = for_width ? for_width : getprops().size().x;
+            int oldh = for_width ? 0 : get_height_by_width(rectw);
 
             set_selectable(false);
             ASSERT(records.size());
@@ -2540,13 +2569,23 @@ void gui_message_item_c::update_text()
                 }
             }
 
-            if (get_customdata() && w > 0)
+            if (get_customdata() && rectw > 0)
             {
                 image_loader_c &imgldr = get_customdata_obj<image_loader_c>();
                 if (picture_c *pic = imgldr.get_picture())
                 {
-                    pic->fit_to_width( w );
-                    ts::ivec2 picsz = pic->framesize();
+                    const theme_rect_s *thr = themerect();
+                    ts::ivec2 picsz;
+                    if (for_width == 0)
+                    {
+                        // normal picture size ajust
+                        pic->fit_to_width(rectw - (thr ? thr->clborder_x() : 0));
+                        picsz = pic->framesize();
+                    } else
+                    {
+                        picsz = pic->framesize_by_width(rectw - (thr ? thr->clborder_x() : 0));
+                        // no need to real picture size ajust (it is slow op), but just calculate height of picture by width
+                    }
 
                     newtext.clear().append(CONSTWSTR("<p=c><rect=1000,")).append_as_uint(picsz.x).append_char(',').append_as_int(picsz.y + 8).append(CONSTWSTR("><br></p>"));
                     //                                           RECT_IMAGE
@@ -2588,21 +2627,21 @@ void gui_message_item_c::update_text()
                 }
             }
 
-
-            flags.set(F_DIRTY_HEIGHT_CACHE);
-            int newh = get_height_by_width(w);
-            if (newh == oldh)
-                getengine().redraw();
-            else
+            if (!for_width)
             {
-                getparent().call_children_repos();
+                flags.set(F_DIRTY_HEIGHT_CACHE);
+                int newh = get_height_by_width(rectw);
+                if (newh == oldh)
+                    getengine().redraw();
+                else
+                    getparent().call_children_repos();
             }
         }
         break;
     case ST_TYPING:
         {
-            int w = get_client_area().width();
-            int oldh = get_height_by_width(w);
+            int rectw = getprops().size().x;
+            int oldh = get_height_by_width(rectw);
 
             ts::wstr_c tt(TTT("Typing",271));
             ts::wstr_c ttc = textrect.get_text();
@@ -2634,13 +2673,11 @@ void gui_message_item_c::update_text()
 
             textrect.set_text_only(ttc, false);
             flags.set(F_DIRTY_HEIGHT_CACHE);
-            int newh = get_height_by_width(w);
+            int newh = get_height_by_width(rectw);
             if (newh == oldh)
                 getengine().redraw();
             else
-            {
                 getparent().call_children_repos();
-            }
         }
         break;
         default:
@@ -2714,7 +2751,18 @@ update_size_mode:
                     sz = gui->textsize(*g_app->font_conv_name, hdr(), ww);
                     h += sz.y;
                 }
-                sz = textrect.calc_text_size(ww, custom_tag_parser_delegate());
+
+                if (get_customdata())
+                {
+                    ts::wstr_c storetext = textrect.get_text();
+                    update_text(ww); // do not resize picture now, just generate text with correct-sized image
+                    sz = textrect.calc_text_size(ww, custom_tag_parser_delegate());
+                    textrect.set_text_only(storetext, false);
+                } else
+                {
+                    sz = textrect.calc_text_size(ww, custom_tag_parser_delegate());
+                }
+
                 if (gui_message_item_c::ST_TYPING == subtype) sz.y = textrect.font->height() + 2;
                 if (update_size_mode)
                     textrect.set_size( ts::ivec2(ww, sz.y) );
@@ -3083,7 +3131,8 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> & p)
             sender->friend_request();
             break;
         case MTA_INCOMING_CALL:
-            gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_INCOMING_CALL, p.post.message_utf8).send();
+            if (!historian->get_aaac())
+                gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_INCOMING_CALL, p.post.message_utf8).send();
             break;
         case MTA_CALL_ACCEPTED:
             gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_CALL_INPROGRESS).send();
@@ -3576,49 +3625,68 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_BUTTONS> &c)
 
 /*virtual*/ void gui_conversation_c::datahandler(const void *data, int size)
 {
-    if (contact_c *c = get_other())
+    float micvol = cfg().vol_mic();
+
+    for (contact_c *c : avs) // transfer audio to all av contacts
     {
+        if (c->is_mic_off())
+            continue;
+
         c->subiterate([&](contact_c *sc) {
             if (sc->is_av())
                 if (active_protocol_c *ap = prf().ap(sc->getkey().protoid))
-                    ap->send_audio(sc->getkey().contactid, capturefmt, data, size);
+                    ap->send_audio(sc->getkey().contactid, micvol, capturefmt, data, size);
         });
     }
-
 }
+
 /*virtual*/ s3::Format *gui_conversation_c::formats(int &count)
 {
     avformats.clear();
-    if (contact_c *c = get_other())
+    for (contact_c *c : avs)
     {
         c->subiterate( [this](contact_c *sc) {
             if (sc->is_av())
-                if (active_protocol_c *ap = prf().ap(sc->getkey().protoid)) avformats.set(ap->defaudio());
+                if (active_protocol_c *ap = prf().ap(sc->getkey().protoid))
+                    avformats.set(ap->defaudio());
         } );
-
-        //avformats.get(0).sampleRate = 44100;
-        count = avformats.count();
-        return avformats.begin();
     }
     
-
-    count = 0;
-    return nullptr;
+    count = avformats.count();
+    return count ? avformats.begin() : nullptr;
 }
 
+ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_AV_COUNT> &avc)
+{
+    avc.count = avs.size();
+    return GMRBIT_ABORT;
+}
 
 ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_AV> &av)
 {
-    if (av.multicontact == get_other())
+    bool add = false;
+    if (av.activated)
     {
-        if (av.activated)
-        {
-            start_capture();
-            caption->update_buttons(); // it updates some stuff
-        }
-        else
-            stop_capture();
+        add = avs.set( av.multicontact );
+    } else
+    {
+        avs.find_remove_fast( av.multicontact );
     }
+
+    if ( avs.size() == 1 )
+        start_capture();
+    else if (avs.size() == 0)
+        stop_capture();
+
+    if (add)
+        for (contact_c *cc : avs)
+            cc->call_inactive(cc != av.multicontact);
+
+
+    if (av.multicontact == get_selected_contact())
+        if (av.activated)
+            caption->update_buttons(); // it updates some stuff
+
     return 0;
 }
 
@@ -3626,7 +3694,7 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_AV> &av)
 ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CALL_STOPED> &c)
 {
     contact_c *owner = c.subcontact->getmeta();
-    if (owner == &caption->getcontact())
+    if (owner == get_selected_contact())
         caption->update_buttons();
     return 0;
 }
@@ -3636,7 +3704,11 @@ ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> &c )
     caption->setcontact( c.contact );
 
     if (c.contact->is_av())
+    {
         start_capture();
+        for (contact_c *cc : avs)
+            cc->call_inactive( cc != c.contact );
+    }
 
     hide_show_messageeditor();
 

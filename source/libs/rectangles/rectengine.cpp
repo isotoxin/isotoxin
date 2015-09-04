@@ -1523,7 +1523,7 @@ void border_window_data_s::draw()
 
     if (options & (DTHRO_BORDER|DTHRO_CENTER|DTHRO_CENTER_HOLE))
     {
-        ASSERT( 0 == (options & (DTHRO_LEFT_CENTER)) );
+        ASSERT( 0 == (options & (DTHRO_LEFT_CENTER|DTHRO_LT_T_RT|DTHRO_LB_B_RB)) );
 
         ts::irect trects[SI_count];
         const ts::irect *lt = thr.sis + SI_LEFT_TOP;
@@ -1676,7 +1676,7 @@ void border_window_data_s::draw()
         }
     } else if (options & DTHRO_LEFT_CENTER)
     {
-        ASSERT( 0 == (options & (DTHRO_BORDER|DTHRO_CENTER|DTHRO_CENTER_HOLE)) );
+        ASSERT( 0 == (options & (DTHRO_BORDER|DTHRO_CENTER|DTHRO_CENTER_HOLE|DTHRO_LT_T_RT|DTHRO_LB_B_RB)) );
 
         rdraw.rbeg = nullptr;
         rdraw.rrep = thr.sis + SI_LEFT; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_LEFT);
@@ -1707,6 +1707,30 @@ void border_window_data_s::draw()
         {
             draw_image( backbuffer.DC(), thr.src, rbpt.x - thr.sis[SI_RIGHT].width(), (dd.offset.y + rbpt.y - thr.sis[SI_RIGHT].height())/2, thr.sis[SI_RIGHT], dd.cliprect, use_alphablend && thr.is_alphablend(SI_RIGHT) ? dd.alpha : -1 );
         }
+    } else if (options & DTHRO_LT_T_RT)
+    {
+        ASSERT(0 == (options & (DTHRO_BORDER | DTHRO_CENTER | DTHRO_CENTER_HOLE | DTHRO_LEFT_CENTER)));
+
+        rdraw.rbeg = thr.sis + SI_LEFT_TOP; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_TOP);
+        rdraw.rrep = thr.sis + SI_TOP; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_TOP);
+        rdraw.rend = thr.sis + SI_RIGHT_TOP; rdraw.a_end = use_alphablend && thr.is_alphablend(SI_RIGHT_TOP);
+        rdraw.draw_h(dd.offset.x, rbpt.x, dd.offset.y, thr.siso[SI_TOP].tile);
+    } else if (options & DTHRO_LB_B_RB)
+    {
+        ASSERT(0 == (options & (DTHRO_BORDER | DTHRO_CENTER | DTHRO_CENTER_HOLE | DTHRO_LEFT_CENTER)));
+
+        rdraw.rbeg = thr.sis + SI_LEFT_BOTTOM; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_BOTTOM);
+        rdraw.rrep = thr.sis + SI_BOTTOM; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_BOTTOM);
+        rdraw.rend = thr.sis + SI_RIGHT_BOTTOM; rdraw.a_end = use_alphablend && thr.is_alphablend(SI_RIGHT_BOTTOM);
+
+        if (d)
+        {
+            rdraw.draw_h(d->draw_thr.rect().lt.x, d->draw_thr.rect().rb.x, d->draw_thr.rect().lt.y, thr.siso[SI_BOTTOM].tile);
+        } else
+        {
+            rdraw.draw_h(dd.offset.x, rbpt.x, dd.offset.y, thr.siso[SI_TOP].tile);
+        }
+
     } else if (0 != (options & DTHRO_CENTER_ONLY) && d)
     {
         rdraw.rrep = thr.sis + SI_CENTER; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_CENTER);
@@ -1717,7 +1741,6 @@ void border_window_data_s::draw()
 
     if ((options & DTHRO_VSB) && d)
     {
-
         ts::irect sbr = d->draw_thr.sbrect() + dd.offset;
         rdraw.rrep = thr.sis + SI_SBREP;
         if (*rdraw.rrep)
