@@ -30,6 +30,15 @@ enum messages_options_e
 
 #define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|UIOPT_SHOW_SEARCH_BAR)
 
+
+enum dsp_flags_e
+{
+    DSP_MIC_NOISE       = SETBIT(0),
+    DSP_MIC_AGC         = SETBIT(1),
+    DSP_SPEAKERS_NOISE  = SETBIT(2),
+    DSP_SPEAKERS_AGC    = SETBIT(3),
+};
+
 struct active_protocol_s : public active_protocol_data_s
 {
     void set(int column, ts::data_value_s& v);

@@ -5,9 +5,19 @@
 
 active_protocol_c::active_protocol_c(int id, const active_protocol_data_s &pd):id(id), lastconfig(ts::Time::past())
 {
+    int dspflags = cfg().dsp_flags();
+
     auto w = syncdata.lock_write();
     w().data = pd;
     w().data.config.set_size(pd.config.size()); // copy content due race condition
+
+    w().volume = cfg().vol_talk();
+    w().dsp_flags = dspflags;
+
+    cvt.volume = cfg().vol_mic();
+    cvt.filter_options.init(fmt_converter_s::FO_NOISE_REDUCTION, FLAG(dspflags, DSP_MIC_NOISE));
+    cvt.filter_options.init(fmt_converter_s::FO_GAINER, FLAG(dspflags, DSP_MIC_AGC));
+
 }
 
 active_protocol_c::~active_protocol_c()
@@ -199,7 +209,17 @@ bool active_protocol_c::cmdhandler(ipcr r)
             fmt.bitsPerSample = r.get<short>();
             int dsz;
             const void *data = r.get_data(dsz);
-            g_app->mediasystem().play_voice(ts::ref_cast<uint64>(ck), fmt, data, dsz, syncdata.lock_read()().volume);
+
+            auto r = syncdata.lock_read();
+            float vol = r().volume;
+            int dsp_flags = r().dsp_flags;
+            r.unlock();
+
+            int dspf = 0;
+            if (0 != (dsp_flags & DSP_SPEAKERS_NOISE)) dspf |= fmt_converter_s::FO_NOISE_REDUCTION;
+            if (0 != (dsp_flags & DSP_SPEAKERS_AGC)) dspf |= fmt_converter_s::FO_GAINER;
+
+            g_app->mediasystem().play_voice(ts::ref_cast<uint64>(ck), fmt, data, dsz, vol, dspf);
         }
         break;
     case HQ_CLOSE_AUDIO:
@@ -485,6 +505,18 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
             break;
         case PP_TALKVOLUME:
             syncdata.lock_write()().volume = cfg().vol_talk();
+            break;
+        case PP_MICVOLUME:
+            cvt.volume = cfg().vol_mic();
+            break;
+        case PP_DSPFLAGS:
+            {
+                int flags = cfg().dsp_flags();
+                cvt.filter_options.init( fmt_converter_s::FO_NOISE_REDUCTION, FLAG(flags, DSP_MIC_NOISE) );
+                cvt.filter_options.init( fmt_converter_s::FO_GAINER, FLAG(flags, DSP_MIC_AGC) );
+                syncdata.lock_write()().dsp_flags = flags;
+            }
+            break;
         }
     }
     return 0;
@@ -717,7 +749,7 @@ void active_protocol_c::accept_call(int cid)
     ipcp->send(ipcw(AQ_ACCEPT_CALL) << cid);
 }
 
-void active_protocol_c::send_audio(int cid, float vol, const s3::Format &ifmt, const void *data, int size)
+void active_protocol_c::send_audio(int cid, const s3::Format &ifmt, const void *data, int size)
 {
     struct s
     {
@@ -729,7 +761,6 @@ void active_protocol_c::send_audio(int cid, float vol, const s3::Format &ifmt, c
         }
     } ss = { cid, ipcp };
     
-    cvt.volume = vol;
     cvt.ofmt = audio_fmt;
     cvt.acceptor = DELEGATE( &ss, send_audio );
     cvt.cvt(ifmt, data, size );

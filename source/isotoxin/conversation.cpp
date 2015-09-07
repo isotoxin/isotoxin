@@ -3625,7 +3625,7 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_BUTTONS> &c)
 
 /*virtual*/ void gui_conversation_c::datahandler(const void *data, int size)
 {
-    float micvol = cfg().vol_mic();
+    contact_key_s current_receiver;
 
     for (contact_c *c : avs) // transfer audio to all av contacts
     {
@@ -3634,10 +3634,17 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_BUTTONS> &c)
 
         c->subiterate([&](contact_c *sc) {
             if (sc->is_av())
-                if (active_protocol_c *ap = prf().ap(sc->getkey().protoid))
-                    ap->send_audio(sc->getkey().contactid, micvol, capturefmt, data, size);
+                current_receiver = sc->getkey();
         });
+
+        if (!current_receiver.is_empty())
+            break;
     }
+
+    if (!current_receiver.is_empty()) // only one contact receives sound at one time
+        if (active_protocol_c *ap = prf().ap(current_receiver.protoid))
+            ap->send_audio(current_receiver.contactid, capturefmt, data, size);
+
 }
 
 /*virtual*/ s3::Format *gui_conversation_c::formats(int &count)

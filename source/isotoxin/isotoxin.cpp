@@ -12,7 +12,11 @@
 #pragma comment(lib, "libflac.lib")
 #pragma comment(lib, "libvorbis.lib")
 #pragma comment(lib, "libogg.lib")
+
+#pragma comment(lib, "filter_audio.lib")
+#if _RESAMPLER == RESAMPLER_SRC
 #pragma comment(lib, "libresample.lib")
+#endif
 
 #pragma comment(lib, "zlib.lib")
 #pragma comment(lib, "minizip.lib")

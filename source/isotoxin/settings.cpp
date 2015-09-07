@@ -369,6 +369,8 @@ void dialog_settings_c::mod()
     PREPARE( talk_vol, cfg().vol_talk() );
     PREPARE( signal_vol, cfg().vol_signal() );
 
+    PREPARE( dsp_flags, cfg().dsp_flags() );
+
     int textrectid = 0;
 
     menu_c m;
@@ -432,7 +434,11 @@ void dialog_settings_c::mod()
     dm().combik(HGROUP_MEMBER).setmenu( list_capture_devices() ).setname( CONSTASTR("mic") );
     dm().button(HGROUP_MEMBER, CONSTWSTR("face=rec"), DELEGATE(this, test_mic) ).sethint(TTT("Record test 5 seconds",280)).setname( CONSTASTR("micrecb") );
     dm().vspace();
-    dm().hslider(L"", cvtmic.volume, CONSTWSTR("0/0/0.5/1/1/10"), DELEGATE(this, micvolset)).setname(CONSTASTR("micvol"));
+    dm().hslider(ts::wsptr(), cvtmic.volume, CONSTWSTR("0/0/0.5/1/1/10"), DELEGATE(this, micvolset)).setname(CONSTASTR("micvol"));
+    dm().vspace(3);
+    dm().checkb(ts::wsptr(), DELEGATE(this, dspf_handler), dsp_flags).setmenu(
+            menu_c().add(TTT("Noise filter of microphone",289), 0, MENUHANDLER(), ts::amake<int>( DSP_MIC_NOISE ))
+                    .add(TTT("Automatic gain of microphone",290), 0, MENUHANDLER(), ts::amake<int>( DSP_MIC_AGC ))   );
 
     dm().vspace();
     dm().hgroup(TTT("Speakers",128));
@@ -440,6 +446,10 @@ void dialog_settings_c::mod()
     dm().button(HGROUP_MEMBER, CONSTWSTR("face=play"), DELEGATE(this, test_talk_device) ).sethint(TTT("Test speakers",131));
     dm().vspace();
     dm().hslider(L"", talk_vol, CONSTWSTR("0/0/1/1"), DELEGATE(this, talkvolset));
+    dm().vspace(3);
+    dm().checkb(ts::wsptr(), DELEGATE(this, dspf_handler), dsp_flags).setmenu(
+        menu_c().add(TTT("Noise filter of incoming peer voice",291), 0, MENUHANDLER(), ts::amake<int>(DSP_SPEAKERS_NOISE))
+                .add(TTT("Automatic gain of incoming peer voice",292), 0, MENUHANDLER(), ts::amake<int>(DSP_SPEAKERS_AGC)) );
     dm().vspace();
 
     dm().hgroup(TTT("Ringtone and other signals",129));
@@ -1047,7 +1057,10 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
     }
 
     if (is_changed(cvtmic.volume))
+    {
         cfg().vol_mic(cvtmic.volume);
+        gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_MICVOLUME).send();
+    }
 
     if (is_changed(talk_vol))
     {
@@ -1057,6 +1070,9 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
 
     if (is_changed(signal_vol))
         cfg().vol_signal(signal_vol);
+
+    if (cfg().dsp_flags(dsp_flags))
+        gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_DSPFLAGS).send();
 
     for (const theme_info_s& thi : m_themes)
     {
@@ -1171,7 +1187,12 @@ bool dialog_settings_c::test_talk_device(RID, GUIPARAM)
 {
     if (testrec.size())
     {
-        media.play_voice((uint64)-1,recfmt,testrec.data(),testrec.size(), talk_vol);
+        int dspf = 0;
+        if (0 != (dsp_flags & DSP_SPEAKERS_NOISE)) dspf |= fmt_converter_s::FO_NOISE_REDUCTION;
+        if (0 != (dsp_flags & DSP_SPEAKERS_AGC)) dspf |= fmt_converter_s::FO_GAINER;
+
+        media.play_voice((uint64)-1,recfmt,testrec.data(),testrec.size(), talk_vol, dspf);
+        media.voice_autostop((uint64)-1,true);
     } else
         media.test_talk( talk_vol );
     return true;
@@ -1348,7 +1369,21 @@ bool dialog_settings_c::test_mic(RID, GUIPARAM)
 }
 
 
+bool dialog_settings_c::dspf_handler( RID, GUIPARAM p )
+{
+    int old_voice_dsp = dsp_flags & (DSP_SPEAKERS_NOISE | DSP_SPEAKERS_AGC);
+    dsp_flags = (int)p;
 
+    cvtmic.filter_options.init(fmt_converter_s::FO_NOISE_REDUCTION, FLAG(dsp_flags, DSP_MIC_NOISE));
+    cvtmic.filter_options.init(fmt_converter_s::FO_GAINER, FLAG(dsp_flags, DSP_MIC_AGC));
+
+    int dspf = dsp_flags & (DSP_SPEAKERS_NOISE | DSP_SPEAKERS_AGC);;
+    if (dspf != old_voice_dsp)
+        media.free_voice_channel((uint64)-1);
+
+    mod();
+    return true;
+}
 
 
 

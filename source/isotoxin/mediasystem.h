@@ -22,6 +22,8 @@ enum sound_e
     snd_count
 };
 
+struct fmt_converter_s;
+
 class mediasystem_c
 {
     s3::Player talks;
@@ -44,16 +46,27 @@ class mediasystem_c
     {
         struct protected_data_s
         {
+            UNIQUE_PTR(fmt_converter_s) cvt;
             ts::buf_c buf[2];
             int readbuf = 0;
             int newdata = 0;
             int readpos = 0;
             bool begining = true;
+            void clear()
+            {
+                buf[0].clear();
+                buf[1].clear();
+                readbuf = 0;
+                newdata = 0;
+                readpos = 0;
+                begining = true;
+            }
             void add_data(const void *d, int s)
             {
                 buf[newdata].append_buf(d, s);
             }
             int read_data(const s3::Format &fmt, char *dest, int size);
+            int available() const { return buf[readbuf].size() - readpos + buf[readbuf ^ 1].size(); }
         };
         spinlock::syncvar<protected_data_s> data;
 
@@ -64,21 +77,14 @@ class mediasystem_c
             format.bitsPerSample = 16;
         }
 
-        void set_fmt( const s3::Format &fmt, float vol )
-        {
-            if (fmt != format)
-            {
-                if (isPlaying()) stop();
-                format = fmt;
-            }
-            volume = vol;
-        }
-
-        void add_data(const void *dest, int size);
+        void add_data(const s3::Format &fmt, float vol, int dsp /* see fmt_converter_s::FO_* bits */, const void *dest, int size);
         /*virtual*/ int rawRead(char *dest, int size) override;
+
+        void shutdown();
 
         uint64 current = 0;
         bool mute = false;
+        bool autostop = false;
     };
 
     long rawplock = 0;
@@ -116,9 +122,10 @@ public:
     void play_looped(sound_e snd, float volume = 1.0f, bool signal_device = true);
     bool stop_looped(sound_e snd);
 
+    void voice_autostop(const uint64 &key, bool autostop);
     void voice_mute(const uint64 &key, bool mute);
     void voice_volume( const uint64 &key, float vol ); 
-    bool play_voice( const uint64 &key, const s3::Format &fmt, const void *data, int size, float vol ); 
+    bool play_voice( const uint64 &key, const s3::Format &fmt, const void *data, int size, float vol, int dsp ); 
     void free_voice_channel( const uint64 &key ); 
 };
 
@@ -150,7 +157,18 @@ typedef fastdelegate::FastDelegate<void (const s3::Format &fmt, const void *, in
 
 struct fmt_converter_s
 {
-    SRC_STATE *resampler[2]; // stereo?
+#if _RESAMPLER == RESAMPLER_SPEEXFA
+    SpeexResamplerState *resampler[2];
+#elif _RESAMPLER == RESAMPLER_SRC
+    SRC_STATE *resampler[2];
+#endif
+
+    Filter_Audio *filter[2];
+    ts::buf_c tail; // used for filter ( it handles only (SampleRate/100)*n samples at once )
+
+    static const ts::flags32_s::BITS FO_NOISE_REDUCTION = 1;
+    static const ts::flags32_s::BITS FO_GAINER = 2;
+
     fmt_converter_s();
     ~fmt_converter_s();
 
@@ -158,6 +176,12 @@ struct fmt_converter_s
     accept_sound_func acceptor;
     
     float volume = 1.0;
+    
+private:
+    void cvt_portion( const s3::Format &ifmt, const void *idata, int isize );
+    ts::flags32_s::BITS active_filter_options = 0;
+public:
+    ts::flags32_s filter_options;
 
     void cvt( const s3::Format &ifmt, const void *idata, int isize );
 };

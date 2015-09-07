@@ -276,9 +276,11 @@ void autoupdater()
     d.clear();
     rslt = curl_easy_setopt(curl, CURLOPT_URL, address.cstr());
     myprogress_s progress(curl);
+    rslt = curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:40.0) Gecko/20100101 Firefox/40.0");
     rslt = curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, xferinfo);
     rslt = curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &progress);
     rslt = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
     
     rslt = curl_easy_perform(curl);
 

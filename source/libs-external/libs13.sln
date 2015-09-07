@@ -9,7 +9,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libsodium", "libsodium\libs
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "toxcore", "toxcore\vs\toxcore_13.vcxproj", "{002F36E6-8B6E-4AFF-87A0-E19514E1F07A}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libcurl", "curl\libcurl_13.vcxproj", "{DA6F56B4-06A4-441D-AD70-AC5A7D51FADB}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "curl", "curl\libcurl_13.vcxproj", "{DA6F56B4-06A4-441D-AD70-AC5A7D51FADB}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libvpx", "libvpx\libvpx_13.vcxproj", "{55B5FF6E-A64F-4C96-A907-3D989A769D70}"
 EndProject
@@ -36,6 +36,8 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "pngquant", "pngquant\pngquant_13.vcxproj", "{AC61809B-2682-4C87-B705-70D321EE4AB0}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "giflib", "giflib\giflib_13.vcxproj", "{7655B3D2-136C-4910-9A57-4039A3A5655D}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "filter_audio", "filter_audio\filter_audio_13.vcxproj", "{E01905DE-B27B-4DA5-831C-5F27344898BC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -156,6 +158,12 @@ Global
 		{7655B3D2-136C-4910-9A57-4039A3A5655D}.Release|Win32.ActiveCfg = Release|Win32
 		{7655B3D2-136C-4910-9A57-4039A3A5655D}.Release|Win32.Build.0 = Release|Win32
 		{7655B3D2-136C-4910-9A57-4039A3A5655D}.Release|x64.ActiveCfg = Release|Win32
+		{E01905DE-B27B-4DA5-831C-5F27344898BC}.Debug|Win32.ActiveCfg = Debug|Win32
+		{E01905DE-B27B-4DA5-831C-5F27344898BC}.Debug|Win32.Build.0 = Debug|Win32
+		{E01905DE-B27B-4DA5-831C-5F27344898BC}.Debug|x64.ActiveCfg = Debug|Win32
+		{E01905DE-B27B-4DA5-831C-5F27344898BC}.Release|Win32.ActiveCfg = Release|Win32
+		{E01905DE-B27B-4DA5-831C-5F27344898BC}.Release|Win32.Build.0 = Release|Win32
+		{E01905DE-B27B-4DA5-831C-5F27344898BC}.Release|x64.ActiveCfg = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

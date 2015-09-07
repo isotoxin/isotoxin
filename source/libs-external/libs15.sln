@@ -37,6 +37,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "pngquant", "pngquant\pngqua
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "giflib", "giflib\giflib_15.vcxproj", "{7655B3D2-136C-4910-9A57-4039A3A5655D}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "filter_audio", "filter_audio\filter_audio_15.vcxproj", "{E01905DE-B27B-4DA5-831C-5F27344898BC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -140,6 +142,12 @@ Global
 		{7655B3D2-136C-4910-9A57-4039A3A5655D}.Release|Win32.ActiveCfg = Release|Win32
 		{7655B3D2-136C-4910-9A57-4039A3A5655D}.Release|Win32.Build.0 = Release|Win32
 		{7655B3D2-136C-4910-9A57-4039A3A5655D}.Release|x64.ActiveCfg = Release|Win32
+		{E01905DE-B27B-4DA5-831C-5F27344898BC}.Debug|Win32.ActiveCfg = Debug|Win32
+		{E01905DE-B27B-4DA5-831C-5F27344898BC}.Debug|Win32.Build.0 = Debug|Win32
+		{E01905DE-B27B-4DA5-831C-5F27344898BC}.Debug|x64.ActiveCfg = Debug|Win32
+		{E01905DE-B27B-4DA5-831C-5F27344898BC}.Release|Win32.ActiveCfg = Release|Win32
+		{E01905DE-B27B-4DA5-831C-5F27344898BC}.Release|Win32.Build.0 = Release|Win32
+		{E01905DE-B27B-4DA5-831C-5F27344898BC}.Release|x64.ActiveCfg = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

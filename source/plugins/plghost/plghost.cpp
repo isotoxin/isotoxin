@@ -105,7 +105,8 @@ struct prebuf_s
     u64 utag;
     u64 offset;
     std::vector<byte, ph_allocator> b;
-    prebuf_s(u64 utag):utag(utag), offset(0xffffffffffffffffull)
+    bool audio;
+    prebuf_s(u64 utag, bool audio):utag(utag), offset(0xffffffffffffffffull), audio(audio)
     {
         b.reserve(65536 + 4096);
         LIST_ADD(this, first, last, prev, next);
@@ -121,23 +122,23 @@ struct prebuf_s
     prebuf_s *next;
     prebuf_s *prev;
 
-    static prebuf_s * getbuf( u64 utag, bool create )
+    static prebuf_s * getbuf( u64 utag, bool create, bool audio = false )
     {
         for (prebuf_s *f = first; f; f = f->next)
         {
-            if (f->utag == utag)
+            if (f->utag == utag && audio == f->audio)
                 return f;
         }
         if (!create) return nullptr;
-        prebuf_s *bb = new prebuf_s(utag);
+        prebuf_s *bb = new prebuf_s(utag, audio);
         return bb;
     }
-    static void kill(u64 utag)
+    static void kill(u64 utag, bool audio = false)
     {
         spinlock::simple_lock(prebuflock);
         for (prebuf_s *f = first; f; f = f->next)
         {
-            if (f->utag == utag)
+            if (f->utag == utag && f->audio == audio)
             {
                 delete f;
                 break;
@@ -941,13 +942,54 @@ static void __stdcall on_save(const void *data, int dlen, void *param)
 
 static void __stdcall play_audio(int cid, const audio_format_s *audio_format, const void *frame, int framesize)
 {
-    IPCW(HQ_PLAY_AUDIO) << cid
-        << audio_format->sample_rate << audio_format->channels << audio_format->bits
-        << data_block_s(frame, framesize);
+    spinlock::simple_lock(prebuf_s::prebuflock);
+    prebuf_s *b = prebuf_s::getbuf(cid, true, true);
+
+    int bsz = audio_format->avgBytesPerMSecs(100);
+
+    auto flush_current = [](prebuf_s *b)
+    {
+        int sendsize = b->b.size() - sizeof(audio_format_s);
+        if (sendsize > 0)
+        {
+            audio_format_s *fmt = (audio_format_s *)b->b.data();
+
+            IPCW(HQ_PLAY_AUDIO) << (int)(b->utag & 0xFFFFFFFF)
+                << fmt->sample_rate << fmt->channels << fmt->bits
+                << data_block_s(b->b.data() + sizeof(audio_format_s), sendsize);
+
+        }
+        b->b.clear();
+    };
+
+    if (b->offset == 0xffffffffffffffffull || b->b.size() == 0)
+    {
+        b->offset = 0;
+    set_it_up:
+        b->b.resize(framesize + sizeof(audio_format_s));
+        memcpy(b->b.data(), audio_format, sizeof(audio_format_s));
+        memcpy(b->b.data() + sizeof(audio_format_s), frame, framesize);
+    } else if (ASSERT(b->b.size() >= sizeof(audio_format_s)) && 0 == memcmp(b->b.data(), audio_format, sizeof(audio_format_s)))
+    {
+        auto offs = b->b.size();
+        b->b.resize(offs + framesize);
+        memcpy(b->b.data() + offs, frame, framesize);
+    } else
+    {
+        // format changed?
+        flush_current(b);
+        goto set_it_up;
+    }
+
+    if (b->b.size() >= (bsz + sizeof(audio_format_s)))
+        flush_current(b);
+
+    spinlock::simple_unlock(prebuf_s::prebuflock);
 }
 
 static void __stdcall close_audio(int cid)
 {
+    prebuf_s::kill(cid, true);
     IPCW(HQ_CLOSE_AUDIO) << cid;
 }
 

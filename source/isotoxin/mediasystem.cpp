@@ -1,5 +1,7 @@
 #include "isotoxin.h"
 
+//-V:cvt:807
+
 void mediasystem_c::init()
 {
     init( cfg().device_talk(), cfg().device_signal() );
@@ -130,10 +132,68 @@ void mediasystem_c::play_looped(sound_e snd, float volume, bool signal_device)
         loops[snd].reset( TSNEW( loop_play, player, buf, volume ) );
 }
 
-void mediasystem_c::voice_player::add_data(const void *d, int s)
+void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int dsp /* see fmt_converter_s::FO_* bits */, const void *d, int dsz)
 {
-    data.lock_write()().add_data(d,s);
-    if (!isPlaying()) play();
+    auto w = data.lock_write();
+
+    if (fmt != format)
+    {
+        if (isPlaying()) stop();
+        format = fmt;
+    }
+
+    bool filter = false;
+    if (vol > 1.0f || dsp)
+    {
+        // activate cvt
+        if (!w().cvt)
+            w().cvt.reset(TSNEW(fmt_converter_s));
+        w().cvt->filter_options.setup(dsp);
+
+        if (vol > 1.0f) // gain volume will be processed by converter
+        {
+            volume = 1.0f;
+            w().cvt->volume = vol;
+        } else
+        {
+            volume = vol;
+            w().cvt->volume = 1.0f;
+        }
+        filter = true;
+
+#pragma warning(push)
+#pragma warning(disable:4822) 
+        struct s
+        {
+            protected_data_s &pd;
+            s(protected_data_s &pd):pd(pd) {}
+            void operator=(const s&) UNUSED;
+            void adddata(const s3::Format& fmt, const void *data, int size)
+            {
+                if (size) pd.add_data(data, size);
+            }
+
+        } ss(w());
+#pragma warning(pop)
+
+        w().cvt->ofmt = fmt;
+        w().cvt->acceptor = DELEGATE(&ss, adddata);
+        w().cvt->cvt(fmt, d, dsz);
+
+
+    } else 
+    {
+        volume = vol;
+        w().cvt.reset();
+        w().add_data(d, dsz);
+
+    }
+    w.unlock();
+
+
+
+    if (!isPlaying())
+        play();
 }
 
 int mediasystem_c::voice_player::protected_data_s::read_data(const s3::Format &fmt, char *dest, int size)
@@ -178,7 +238,36 @@ int mediasystem_c::voice_player::protected_data_s::read_data(const s3::Format &f
 
 /*virtual*/ int mediasystem_c::voice_player::rawRead(char *dest, int size)
 {
-    return data.lock_write()().read_data(format, dest, size);
+    auto w = data.lock_write();
+
+    if (autostop && w().available() == 0)
+    {
+        stop();
+        return 0;
+    }
+
+    return w().read_data(format, dest, size);
+}
+
+void mediasystem_c::voice_player::shutdown()
+{
+    stop();
+    current = 0;
+    mute = false;
+    autostop = false;
+    data.lock_write()().clear();
+}
+
+
+void mediasystem_c::voice_autostop(const uint64 &key, bool autostop)
+{
+    SIMPLELOCK(rawplock);
+    for (int i = 0; i < MAX_RAW_PLAYERS; ++i)
+        if (vp(i).current == key)
+        {
+            vp(i).autostop = autostop;
+            return;
+        }
 }
 
 void mediasystem_c::voice_mute(const uint64 &key, bool mute)
@@ -204,7 +293,7 @@ void mediasystem_c::voice_volume( const uint64 &key, float vol )
 }
 
 
-bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const void *data, int size, float vol )
+bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const void *data, int size, float vol, int dsp )
 {
     SIMPLELOCK( rawplock );
 
@@ -216,8 +305,7 @@ bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const 
             if (vp(i).mute)
                 return true;
         namana:
-            vp(i).set_fmt(fmt, vol);
-            vp(i).add_data(data, size);
+            vp(i).add_data(fmt, vol, dsp, data, size);
             return true;
         } else if ( j < 0 && vp(i).current == 0 )
             j = i;
@@ -237,9 +325,7 @@ void mediasystem_c::free_voice_channel( const uint64 &key )
     for (int i = 0; i < MAX_RAW_PLAYERS; ++i)
         if (vp(i).current == key)
         {
-            vp(i).stop();
-            vp(i).current = 0;
-            vp(i).mute = false;
+            vp(i).shutdown();
             break;
         }
 }
@@ -279,12 +365,19 @@ ts::str_c string_from_device(const s3::DEVICE& device)
 
 fmt_converter_s::fmt_converter_s()
 {
+    memset(filter, 0, sizeof(filter));
     memset(resampler, 0, sizeof(resampler));
 }
 fmt_converter_s::~fmt_converter_s()
 {
+#if _RESAMPLER == RESAMPLER_SPEEXFA
+    for (SpeexResamplerState *s : resampler)
+        if (s) speex_resampler_destroy(s);
+#elif _RESAMPLER == RESAMPLER_SRC
     for (SRC_STATE *s : resampler)
         if (s) src_delete(s);
+#endif
+
 }
 
 void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize )
@@ -293,29 +386,57 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize 
 
     bool volume_changed = volume == 1.0f; // -V550
 
-    if (ifmt == ofmt && volume_changed)
+    if (ifmt == ofmt && volume_changed && !filter_options.__bits && !active_filter_options && tail.size() == 0)
     {
         acceptor( ofmt, idata, isize );
         return;
     }
 
-    ts::tmp_buf_c b[2];
+    int maxssz = ifmt.avgBytesPerMSecs(100);
+    while (isize > maxssz)
+    {
+        cvt_portion(ifmt, idata, maxssz);
+        idata = ((char *)idata) + maxssz;
+        isize -= maxssz;
+    }
+
+    if (isize)
+        cvt_portion(ifmt, idata, isize);
+
+}
+
+void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int isize)
+{
+    bool volume_changed = volume == 1.0f; // -V550
+
+    int bszmax = 65536;
+    ts::uint8 b_temp[65536*2];
+    ts::uint8 *b[2];
+    b[0] = b_temp;
+    b[1] = b_temp + bszmax;
+    int bsz[2] = { 0, 0 };
     int curtarget = 0;
     const void *idata_orig = idata;
+
+#define CHECK_INSIDE(p, sz) ASSERT( (ts::uint8 *)(p) >= b[curtarget] && ((ts::uint8 *)(p) + sz) <= b[curtarget] + bszmax )
+#define SETSZ(sz) bsz[curtarget] = sz; if (!CHECK( int(sz) <= bszmax )) return;
+#define GETB() b[curtarget]
+#define GETSZ() bsz[curtarget]
 
     if (ifmt.bitsPerSample == 8)
     {
         // 8 -> 16
-        b[curtarget].set_size(isize * 2, false);
-        ts::int16 *cvt = (ts::int16 *)b[curtarget].data16();
+        SETSZ(isize * 2);
+
+        ts::int16 *cvt = (ts::int16 *)GETB();
         for (int i = 0; i < isize; ++i, ++cvt)
         {
             ts::uint8 sample8 = ((ts::uint8 *)idata)[i];
-            if (ASSERT(b[curtarget].inside(cvt, 1)))
+            if (CHECK_INSIDE(cvt, 1))
                 *cvt = ((ts::int16)sample8 - (ts::int16)0x80) << 8;
         }
-        idata = b[curtarget].data();
-        isize = b[curtarget].size();
+        idata = GETB();
+        isize = GETSZ();
         curtarget ^= 1;
     }
 
@@ -323,8 +444,9 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize 
     if (ifmt.channels != ofmt.channels && ichnls > 1) // convert to 1 channel before resample (in case input chnls and output chnls are not same)
     {
         int blocks = isize / (ichnls * 2);
-        b[curtarget].set_size(blocks * 2, false);
-        ts::int16 *cvt = (ts::int16 *)b[curtarget].data16();
+        SETSZ(blocks * 2);
+
+        ts::int16 *cvt = (ts::int16 *)GETB();
         for (int i = 0; i < blocks; ++i)
         {
             ts::int16 *sample16 = ((ts::int16 *)idata) + (i * ichnls);
@@ -333,12 +455,12 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize 
                 sum += *sample16;
             sum /= ichnls;
 
-            if (ASSERT(b[curtarget].inside(cvt, 2)))
+            if (CHECK_INSIDE(cvt, 2))
                 *cvt = (ts::int16)sum;
             ++cvt;
         }
-        idata = b[curtarget].data();
-        isize = b[curtarget].size();
+        idata = GETB();
+        isize = GETSZ();
         curtarget ^= 1;
 
         ichnls = 1;
@@ -349,32 +471,53 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize 
         if (resampler[0] == nullptr)
         {
             int error;
+
+#if _RESAMPLER == RESAMPLER_SPEEXFA
+            resampler[0] = speex_resampler_init(1, ifmt.sampleRate, ofmt.sampleRate, 10, &error);
+            if (ichnls > 1) resampler[1] = speex_resampler_init(1, ifmt.sampleRate, ofmt.sampleRate, 10, &error);
+
+#elif _RESAMPLER == RESAMPLER_SRC
             resampler[0] = src_new(SRC_SINC_BEST_QUALITY, 1, &error);
             if (ichnls > 1) resampler[1] = src_new(SRC_SINC_BEST_QUALITY, 1, &error);
+#endif
             if (ichnls > 2) ichnls = 2; // moar zen 2!!! it is impossibru!!!
+        } else
+        {
+            if (ichnls > 1 && !resampler[1])
+            {
+                // number of input channels increased! Create 2nd resampler
+                int error;
+
+#if _RESAMPLER == RESAMPLER_SPEEXFA
+                resampler[1] = speex_resampler_init(1, ifmt.sampleRate, ofmt.sampleRate, 10, &error);
+            }
+
+            speex_resampler_set_rate(resampler[0], ifmt.sampleRate, ofmt.sampleRate);
+            if (resampler[1]) speex_resampler_set_rate(resampler[1], ifmt.sampleRate, ofmt.sampleRate);
+#elif _RESAMPLER == RESAMPLER_SRC
+                resampler[1] = src_new(SRC_SINC_BEST_QUALITY, 1, &error);
+            }
+#endif
         }
 
         int samples_per_chnl = isize / (ichnls * 2);
-        b[curtarget].set_size(samples_per_chnl * sizeof(float) * ichnls);
-        const ts::int16 *ind = (const ts::int16 *)idata;
+        SETSZ(samples_per_chnl * sizeof(float) * ichnls);
+        const ts::int16 *source = (const ts::int16 *)idata;
         for (int ch = 0; ch < ichnls; ++ch)
         {
-            float *out = ((float *)b[curtarget].data()) + (samples_per_chnl * ch);
+            float *out = ((float *)GETB()) + (samples_per_chnl * ch);
 
             if (volume_changed)
             {
-                for (const ts::int16 *from = ind + ch, *end = ind + samples_per_chnl + ch; from < end; ++from, ++out)
-                    if (ASSERT(b[curtarget].inside(out, 4)))
+                for (const ts::int16 *from = source + ch, *end = source + (isize/2); from < end; from += ichnls, ++out)
+                    if (CHECK_INSIDE(out, 4))
                         *out = (float)(*from) * (float)(1.0 / 32767.0);
             } else
             {
-                for (const ts::int16 *from = ind + ch, *end = ind + samples_per_chnl + ch; from < end; ++from, ++out)
-                    if (ASSERT(b[curtarget].inside(out, 4)))
+                for (const ts::int16 *from = source + ch, *end = source + (isize/2); from < end; from += ichnls, ++out)
+                    if (CHECK_INSIDE(out, 4))
                     {
-                        float rslt = (float)(*from) * (float)(volume / 32767.0);
-                        if (rslt > 1.0f)
-                            rslt = 1.0f;
-                        *out = rslt;
+                        *out = ts::CLAMP( (float)(*from) * (float)(volume / 32767.0), -1.0f, 1.0f);
                     }
                 volume_changed = true;
             }
@@ -382,21 +525,38 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize 
 
         // so float stuff ready
 
-        idata = b[curtarget].data();
-        isize = b[curtarget].size();
+        idata = GETB();
+        isize = GETSZ();
         curtarget ^= 1;
 
         int outsamples_per_chnl = samples_per_chnl * ofmt.sampleRate / ifmt.sampleRate + 256;
-        b[curtarget].set_size(outsamples_per_chnl * ichnls * sizeof(float));
+        SETSZ(outsamples_per_chnl * ichnls * sizeof(float));
 
-        SRC_DATA	src_data = {0};
-        src_data.end_of_input = 0;
-        src_data.src_ratio = (double)ofmt.sampleRate / (double)ifmt.sampleRate;
+        uint osamples = 0;
+
+#if _RESAMPLER == RESAMPLER_SPEEXFA
 
         for (int ch = 0; ch < ichnls; ++ch)
         {
+            osamples = outsamples_per_chnl;
+
             float *indata = (float *)idata + (samples_per_chnl * ch);
-            float *odata = ((float *)b[curtarget].data()) + outsamples_per_chnl * ch;
+            float *odata = ((float *)GETB()) + outsamples_per_chnl * ch;
+            
+            unsigned int isamples = samples_per_chnl;
+            speex_resampler_process_float(resampler[ch], 0, indata, &isamples, odata, &osamples);
+
+            ASSERT(isamples == (uint)samples_per_chnl);
+        }
+
+#elif _RESAMPLER == RESAMPLER_SRC
+        SRC_DATA	src_data = { 0 };
+        src_data.end_of_input = 0;
+        src_data.src_ratio = (double)ofmt.sampleRate / (double)ifmt.sampleRate;
+        for (int ch = 0; ch < ichnls; ++ch)
+        {
+            float *indata = (float *)idata + (samples_per_chnl * ch);
+            float *odata = ((float *)GETB()) + outsamples_per_chnl * ch;
 
             src_data.input_frames = samples_per_chnl;
             src_data.data_in = indata;
@@ -407,27 +567,30 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize 
             src_process(resampler[ch], &src_data);
 
             ASSERT(src_data.input_frames_used == samples_per_chnl);
-            ASSERT(b[curtarget].inside(odata, src_data.output_frames_gen * sizeof(float)));
+            CHECK_INSIDE(odata, src_data.output_frames_gen * sizeof(float));
         }
+        osamples = src_data.output_frames_gen;
+#endif
 
-        idata = b[curtarget].data();
-        isize = b[curtarget].size();
+
+        idata = GETB();
+        isize = GETSZ();
         curtarget ^= 1;
 
-        b[curtarget].set_size(src_data.output_frames_gen * 2 * ichnls);
+        SETSZ(osamples * 2 * ichnls);
 
         // back to int16
         for (int ch = 0; ch < ichnls; ++ch)
         {
             const float *indata = (const float *)idata + (outsamples_per_chnl * ch); // outsamples_per_chnl used here - its right
-            ts::int16 *odata = ((ts::int16 *)b[curtarget].data()) + ch;
-            for (const float *indata_e = indata + src_data.output_frames_gen; indata < indata_e; ++indata, odata += ichnls)
-                if (ASSERT(b[curtarget].inside(odata, 2)))
+            ts::int16 *odata = ((ts::int16 *)GETB()) + ch;
+            for (const float *indata_e = indata + osamples; indata < indata_e; ++indata, odata += ichnls)
+                if (CHECK_INSIDE(odata, 2))
                     *odata = (ts::int16) ((*indata) * 32767.0f);
         }
 
-        idata = b[curtarget].data();
-        isize = b[curtarget].size();
+        idata = GETB();
+        isize = GETSZ();
         curtarget ^= 1;
     }
 
@@ -440,43 +603,174 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize 
         {
             // idata is const, we cannot modify data
 
-            b[curtarget].set_size(isize, false);
-            odata = (ts::int16 *)b[curtarget].data();
+            SETSZ(isize);
+            odata = (ts::int16 *)GETB();
         }
 
         for (int i = 0; i < samples; ++i, ++odata)
         {
             ts::int16 sample16 = ((ts::int16 *)idata)[i];
-
-            float rslt = (float)(sample16) * (float)(volume / 32767.0);
-            if (rslt > 1.0f)
-                rslt = 1.0f;
-
+            float rslt = ts::CLAMP( (float)(sample16) * (float)(volume / 32767.0), -1.0f, 1.0f );
             *odata = (ts::int16) (rslt * 32767.0f);
         }
         volume_changed = true;
 
         if (idata_orig == idata)
         {
-            idata = b[curtarget].data();
+            idata = GETB();
             curtarget ^= 1;
         }
+    }
+
+    if (active_filter_options != filter_options.__bits)
+    {
+        if (filter[0] && !filter_options.__bits)
+        {
+            kill_filter_audio(filter[0]);
+            filter[0] = nullptr;
+            if (filter[1]) { kill_filter_audio(filter[1]); filter[1] = nullptr; }
+
+        } else
+        {
+            if (!filter[0] && filter_options.__bits)
+            {
+                filter[0] = new_filter_audio(ofmt.sampleRate /* sample rate already converted */);
+                if (ichnls > 1 && !filter[1]) filter[1] = new_filter_audio(ofmt.sampleRate /* sample rate already converted */);
+            }
+
+            for(Filter_Audio *f : filter)
+                if (f) enable_disable_filters(f, 0, filter_options.is(FO_NOISE_REDUCTION) ? 1 : 0, filter_options.is(FO_GAINER) ? 1 : 0, 0);
+        }
+
+        active_filter_options = filter_options.__bits;
+    }
+
+    if (filter[0])
+    {
+        int samples_per_chnl;
+        if (tail.size())
+        {
+            int oldisize = isize;
+            int full_isize = isize + tail.size();
+            samples_per_chnl = full_isize / (ichnls * 2);
+
+            int filter_quant = ofmt.sampleRate / 100;
+            int samples_per_chnl_1 = (samples_per_chnl / filter_quant) * filter_quant;
+            if (samples_per_chnl_1 < samples_per_chnl)
+            {
+                isize = samples_per_chnl_1 * (ichnls * 2);
+                ASSERT(isize < full_isize);
+            } else
+            {
+                isize = full_isize;
+            }
+            samples_per_chnl = samples_per_chnl_1;
+
+            SETSZ(isize);
+
+            memcpy( GETB(), tail.data(), tail.size() );
+            memcpy( GETB() + tail.size(), idata, isize - tail.size() );
+
+            tail.clear();
+            if (int tail_size = full_isize - isize)
+                tail.append_buf( (const char *)idata+(oldisize-tail_size), tail_size );
+
+            idata = GETB();
+            curtarget ^= 1;
+
+        } else
+        {
+            samples_per_chnl = isize / (ichnls * 2);
+            int filter_quant = ofmt.sampleRate / 100;
+            int samples_per_chnl_1 = (samples_per_chnl / filter_quant) * filter_quant;
+            if (samples_per_chnl_1 < samples_per_chnl)
+            {
+                int oldisize = isize;
+                isize = samples_per_chnl_1 * (ichnls * 2);
+                tail.append_buf( (char *)idata + isize, oldisize - isize ); // store tail for next iteration
+                samples_per_chnl = samples_per_chnl_1;
+                if (samples_per_chnl == 0)
+                {
+                    acceptor( ofmt, nullptr, 0 );
+                    return;
+                }
+            }
+        }
+
+
+        if (idata_orig == idata || ichnls > 1)
+        {
+            // idata is const, we cannot modify data
+            // or we should split interleaved stereo stream to separate streams
+
+            SETSZ(isize);
+            
+            const ts::int16 *source = (const ts::int16 *)idata;
+            for (int ch = 0; ch < ichnls; ++ch)
+            {
+                ts::int16 *target = ((ts::int16 *)GETB()) + (samples_per_chnl * ch);
+                for (const ts::int16 *from = source + ch, *end = source + (isize/2); from < end; from += ichnls, ++target)
+                    if (CHECK_INSIDE(target, 2))
+                        *target = *from;
+            }
+
+            idata = GETB();
+            curtarget ^= 1;
+        }
+
+        for (int ch = 0; ch < ichnls; ++ch)
+        {
+            ts::int16 *indata = (ts::int16 *)idata + (samples_per_chnl * ch);
+            filter_audio(filter[ch], indata, samples_per_chnl);
+        }
+        
+        if (ichnls > 1)
+        {
+            // mix two streams into one stereo stream
+
+            SETSZ(isize);
+
+            for (int ch = 0; ch < ichnls; ++ch)
+            {
+                ts::int16 *indata = (ts::int16 *)idata + (samples_per_chnl * ch);
+                ts::int16 *odata = ((ts::int16 *)GETB()) + ch;
+
+                for (const ts::int16 *indata_e = indata + samples_per_chnl; indata < indata_e; ++indata, odata += ichnls)
+                    if (CHECK_INSIDE(odata, 2))
+                        *odata = *indata;
+            }
+
+            idata = GETB();
+            isize = GETSZ();
+            curtarget ^= 1;
+        }
+    } else if (tail.size())
+    {
+        isize += tail.size();
+        SETSZ(isize);
+
+        memcpy(GETB(), tail.data(), tail.size());
+        memcpy(GETB() + tail.size(), idata, isize - tail.size());
+        tail.clear();
+
+        idata = GETB();
+        curtarget ^= 1;
     }
 
     if (ichnls != ofmt.channels && ASSERT(ichnls == 1))
     {
         int samples = isize / 2;
-        b[curtarget].set_size(samples * 2 * ofmt.channels, false);
-        ts::int16 *cvt = (ts::int16 *)b[curtarget].data16();
+        SETSZ(samples * 2 * ofmt.channels);
+        ts::int16 *cvt = (ts::int16 *)GETB();
         for (int i = 0; i < samples; ++i)
         {
             ts::int16 sample16 = ((ts::int16 *)idata)[i];
             for (int i = 0; i < ofmt.channels; ++i, ++cvt)
-                if (ASSERT(b[curtarget].inside(cvt, 2)))
+                if (CHECK_INSIDE(cvt, 2))
                     *cvt = sample16;
         }
-        idata = b[curtarget].data();
-        isize = b[curtarget].size();
+        idata = GETB();
+        isize = GETSZ();
         curtarget ^= 1;
     }
 
@@ -485,19 +779,23 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize 
         // o_O plugin requirement. So strange plugin :)
         // 16 -> 8
         int samples = isize / 2;
-        b[curtarget].set_size(samples, false);
-        ts::uint8 *cvt = b[curtarget].data();
+        SETSZ(samples);
+        ts::uint8 *cvt = GETB();
         for (int i = 0; i < samples; ++i, ++cvt)
         {
             ts::int16 sample16 = ((ts::int16 *)idata)[i];
-            if (ASSERT(b[curtarget].inside(cvt, 1)))
+            if (CHECK_INSIDE(cvt, 1))
                 *cvt = (ts::uint8) ((sample16 >> 8) + (ts::int16)0x80);
         }
-        idata = b[curtarget].data();
-        isize = b[curtarget].size();
+        idata = GETB();
+        isize = GETSZ();
     }
 
     acceptor( ofmt, idata, isize );
 
 }
 
+
+#if _RESAMPLER == RESAMPLER_SILK
+#elif _RESAMPLER == RESAMPLER_SRC
+#endif

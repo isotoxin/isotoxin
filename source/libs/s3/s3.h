@@ -40,6 +40,7 @@ struct Format
 
     int blockAlign() const { return channels * (bitsPerSample / 8); }
     int avgBytesPerSec() const { return blockAlign() * sampleRate; }
+    int avgBytesPerMSecs(int ms) const { return blockAlign() * sampleRate * ms / 1000; }
 
 };
 

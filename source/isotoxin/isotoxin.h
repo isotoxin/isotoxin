@@ -6,7 +6,19 @@
 
 #define WINDOWS_ONLY // #error
 
+#define RESAMPLER_SPEEXFA 1
+#define RESAMPLER_SRC 2
+
+#define _RESAMPLER RESAMPLER_SPEEXFA
+
+#if _RESAMPLER == RESAMPLER_SPEEXFA
+#include "filter_audio/other/speex_resampler.h"
+#elif _RESAMPLER == RESAMPLER_SRC
 #include "libresample/src/samplerate.h"
+#endif
+#include "filter_audio/filter_audio.h"
+
+
 #include "ipc/ipc.h"
 #include "rectangles/rectangles.h"
 

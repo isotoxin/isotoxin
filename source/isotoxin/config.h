@@ -127,6 +127,8 @@ public:
     FLOATPAR( vol_mic, 1.0f )
     FLOATPAR( vol_talk, 1.0f )
     FLOATPAR( vol_signal, 1.0f )
+
+    INTPAR(dsp_flags, 0)
 };
 
 extern ts::static_setup<config_c,1000> cfg;
