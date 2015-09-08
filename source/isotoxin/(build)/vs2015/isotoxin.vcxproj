@@ -25,17 +25,14 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140_xp</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Final|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v140_xp</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v140_xp</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -127,6 +124,7 @@
     <ClCompile Include="..\..\conversation.cpp" />
     <ClCompile Include="..\..\emoticons.cpp" />
     <ClCompile Include="..\..\entertext.cpp" />
+    <ClCompile Include="..\..\filterbar.cpp" />
     <ClCompile Include="..\..\firstrun.cpp" />
     <ClCompile Include="..\..\images.cpp" />
     <ClCompile Include="..\..\isodialog.cpp" />
@@ -159,6 +157,7 @@
     <ClInclude Include="..\..\conversation.h" />
     <ClInclude Include="..\..\emoticons.h" />
     <ClInclude Include="..\..\entertext.h" />
+    <ClInclude Include="..\..\filterbar.h" />
     <ClInclude Include="..\..\firstrun.h" />
     <ClInclude Include="..\..\images.h" />
     <ClInclude Include="..\..\isodialog.h" />

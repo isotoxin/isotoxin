@@ -13,8 +13,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "curl", "curl\libcurl_15.vcx
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libvpx", "libvpx\libvpx_15.vcxproj", "{55B5FF6E-A64F-4C96-A907-3D989A769D70}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libresample", "libresample\libresample_15.vcxproj", "{CFF98237-367B-4D89-A120-06B352F44EA4}"
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libflac", "flac\libflac_15.vcxproj", "{4CEFBC84-C215-11DB-8314-0800200C9A66}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "freetype", "freetype\freetype_15.vcxproj", "{78B079BD-9FC7-4B9E-B4A6-96DA0F00248B}"
@@ -74,11 +72,6 @@ Global
 		{55B5FF6E-A64F-4C96-A907-3D989A769D70}.Release|Win32.ActiveCfg = Release|Win32
 		{55B5FF6E-A64F-4C96-A907-3D989A769D70}.Release|Win32.Build.0 = Release|Win32
 		{55B5FF6E-A64F-4C96-A907-3D989A769D70}.Release|x64.ActiveCfg = Release|Win32
-		{CFF98237-367B-4D89-A120-06B352F44EA4}.Debug|Win32.ActiveCfg = Debug|Win32
-		{CFF98237-367B-4D89-A120-06B352F44EA4}.Debug|x64.ActiveCfg = Debug|Win32
-		{CFF98237-367B-4D89-A120-06B352F44EA4}.Release|Win32.ActiveCfg = Release|Win32
-		{CFF98237-367B-4D89-A120-06B352F44EA4}.Release|Win32.Build.0 = Release|Win32
-		{CFF98237-367B-4D89-A120-06B352F44EA4}.Release|x64.ActiveCfg = Release|Win32
 		{4CEFBC84-C215-11DB-8314-0800200C9A66}.Debug|Win32.ActiveCfg = Debug|Win32
 		{4CEFBC84-C215-11DB-8314-0800200C9A66}.Debug|x64.ActiveCfg = Debug|x64
 		{4CEFBC84-C215-11DB-8314-0800200C9A66}.Debug|x64.Build.0 = Debug|x64

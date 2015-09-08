@@ -96,6 +96,9 @@
     <ClCompile Include="..\..\images.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\filterbar.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\res\resource.h">
@@ -172,6 +175,9 @@
     </ClInclude>
     <ClInclude Include="..\..\images.h">
       <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\filterbar.h">
+      <Filter>src\gui</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
