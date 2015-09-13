@@ -87,18 +87,18 @@ void mediasystem_c::play(const ts::blob_c &buf, float volume, bool signal_device
 
 }
 
-static ts::blob_c load_snd( sound_e snd )
+static ts::blob_c load_snd( sound_e snd, float &vol )
 {
     ts::wstr_c fn;
     switch (snd)
     {
-#define SND(s) case snd_##s: fn = prf().snd_##s(); break;
+#define SND(s) case snd_##s: fn = cfg().snd_##s(); vol = cfg().snd_vol_##s(); break;
         SOUNDS
 #undef SND
     }
 
     if (!fn.is_empty())
-        return ts::g_fileop->load(fn);
+        return ts::g_fileop->load(ts::fn_join(ts::pwstr_c(CONSTWSTR("sounds")),fn));
 
     return ts::blob_c();
 }
@@ -128,8 +128,9 @@ void mediasystem_c::play_looped(sound_e snd, float volume, bool signal_device)
         return;
     }
 
-    if (ts::blob_c buf = load_snd(snd))
-        loops[snd].reset( TSNEW( loop_play, player, buf, volume ) );
+    float vol;
+    if (ts::blob_c buf = load_snd(snd, vol))
+        loops[snd].reset( TSNEW( loop_play, player, buf, volume * vol ) );
 }
 
 void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int dsp /* see fmt_converter_s::FO_* bits */, const void *d, int dsz)
@@ -340,8 +341,9 @@ void play_sound( sound_e sss, bool looped )
         return;
     }
 
-    if (ts::blob_c buf = load_snd(sss)) 
-        g_app->mediasystem().play(buf, 1.0);
+    float vol;
+    if (ts::blob_c buf = load_snd(sss, vol)) 
+        g_app->mediasystem().play(buf, vol);
 }
 
 

@@ -372,10 +372,6 @@ public:
 
     TEXTAPAR( unique_profile_tag, "" )
 
-#define SND(s) TEXTWPAR( snd_##s, "sounds/" #s ".ogg" )
-    SOUNDS
-#undef SND
-
     #define TAB(tab) tableview_##tab##_s &get_table_##tab() { return table_##tab; };
     PROFILE_TABLES
     #undef TAB

@@ -376,7 +376,7 @@ bool image_loader_c::upd_btnpos(RID r, GUIPARAM p)
         update_ctl_pos();
     else
         if ( local_p + ts::ivec2(4) != owner->getprops().pos() )
-            DEFERRED_UNIQUE_CALL(0, DELEGATE(this, upd_btnpos), (GUIPARAM)1); //-V566
+            DEFERRED_UNIQUE_CALL(0, DELEGATE(this, upd_btnpos), 1);
     return true;
 }
 

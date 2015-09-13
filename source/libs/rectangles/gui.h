@@ -58,11 +58,11 @@ public:
 };
 
 #define DEFERRED_EXECUTION_BLOCK_BEGIN(t_sec) typedef struct UNIQIDLINE(dc) : public delay_event_c { static double gett() {return t_sec;} UNIQIDLINE(dc)(GUIPARAM param = nullptr):delay_event_c(param) {} virtual void  die() {gui->delete_event<UNIQIDLINE(dc)>(this);} virtual void doit() {
-#define DEFERRED_EXECUTION_BLOCK_END(param) } } UNIQIDLINE(dc); gui->add_event<UNIQIDLINE(dc)>(UNIQIDLINE(dc)::gett(), (GUIPARAM)(param));
+#define DEFERRED_EXECUTION_BLOCK_END(param) } } UNIQIDLINE(dc); gui->add_event<UNIQIDLINE(dc)>(UNIQIDLINE(dc)::gett(), as_param(param));
 
-#define DEFERRED_CALL( t_sec, h, p ) do { delay_event_c &__dc = gui->add_event<delay_event_c>(t_sec); __dc.set_handler( (h), (p) ); } while(false)
-#define DEFERRED_UNIQUE_CALL( t_sec, h, p ) do { auto hh = (h); gui->delete_event(hh); delay_event_c &__dc = gui->add_event<delay_event_c>(t_sec); __dc.set_handler( hh, (p) ); } while (false)
-#define DEFERRED_UNIQUE_PAR_CALL( t_sec, h, p ) do { auto hh = (h); gui->delete_event(hh, p); delay_event_c &__dc = gui->add_event<delay_event_c>(t_sec); __dc.set_handler( hh, (p) ); } while (false)
+#define DEFERRED_CALL( t_sec, h, p ) do { delay_event_c &__dc = gui->add_event<delay_event_c>(t_sec); __dc.set_handler( (h), as_param(p) ); } while(false)
+#define DEFERRED_UNIQUE_CALL( t_sec, h, p ) do { auto hh = (h); gui->delete_event(hh); delay_event_c &__dc = gui->add_event<delay_event_c>(t_sec); __dc.set_handler( hh, as_param(p) ); } while (false)
+#define DEFERRED_UNIQUE_PAR_CALL( t_sec, h, p ) do { auto hh = (h); gui->delete_event(hh, as_param(p)); delay_event_c &__dc = gui->add_event<delay_event_c>(t_sec); __dc.set_handler( hh, as_param(p) ); } while (false)
 
 
 struct hover_data_s
@@ -103,8 +103,8 @@ struct selectable_core_s
 
     ts::wchar ggetchar( int glyphindex );
 
-    bool flash(RID r = RID(), GUIPARAM p = (GUIPARAM)4);
-    void flash_and_clear_selection() { flash(RID(), (GUIPARAM)100); }
+    bool flash(RID r = RID(), GUIPARAM p = as_param(4));
+    void flash_and_clear_selection() { flash(RID(), as_param(100)); }
     bool selectword(RID, GUIPARAM);
 
     selectable_core_s();
@@ -214,6 +214,7 @@ class gui_c
 
 	static const ts::flags32_s::BITS F_INITIALIZATION   = SETBIT(0);
     static const ts::flags32_s::BITS F_DIRTY_HOVER_DATA = SETBIT(1);
+    static const ts::flags32_s::BITS F_DO_MOUSEMOUVE = SETBIT(2);
 
     int m_tagpool = 1;
     ts::text_rect_c m_textrect; // temp usage
@@ -395,7 +396,7 @@ public:
 
     int get_free_tag() {return m_tagpool++;}
 
-    void dirty_hover_data() {m_flags.set(F_DIRTY_HOVER_DATA);};
+    void dirty_hover_data() {m_flags.set(F_DIRTY_HOVER_DATA|F_DO_MOUSEMOUVE);};
     const hover_data_s &get_hoverdata( const ts::ivec2 & screenmousepos );
     void mouse_lock( RID rid );
     void mouse_inside( RID rid );

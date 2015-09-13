@@ -24,15 +24,15 @@ bool RID::operator>>(const RID&or) const
     return *this >> parent;
 }
 
-ts::ivec3 RID::call_get_popup_menu_pos() const
+menu_anchor_s RID::call_get_popup_menu_pos(menu_anchor_s::relpos_e rp) const
 {
     evt_data_s d;
     d.getsome.handled = false;
     HOLD ctl(*this);
     ctl().sq_evt( SQ_GET_POPUP_MENU_POS, *this, d );
-    if (d.getsome.handled) return d.getsome.pos;
+    if (d.getsome.handled) return d.getsome.menupos;
 
-    return ts::ivec3( ctl().to_screen(ctl().getprops().szrect().rt()), ctl().getprops().size().x );
+    return menu_anchor_s( ctl().to_screen(ctl().getprops().szrect()), rp );
 }
 
 bool RID::call_is_tooltip() const
@@ -105,7 +105,7 @@ void RID::call_lbclick(const ts::ivec2 &relpos) const
 
     DEFERRED_EXECUTION_BLOCK_BEGIN(0)
 
-        if (clickstruct *s = (clickstruct *)gui->lock_temp_buf((int)param))
+        if (clickstruct *s = (clickstruct *)gui->lock_temp_buf(as_int(param)))
         {
             RID r = s->second;
             HOLD ctl(r);
@@ -124,7 +124,7 @@ void RID::call_lbclick(const ts::ivec2 &relpos) const
             }
         }
 
-    DEFERRED_EXECUTION_BLOCK_END( (GUIPARAM)tag )
+    DEFERRED_EXECUTION_BLOCK_END( tag )
 }
 
 void RID::call_kill_child( const ts::str_c&param )
@@ -135,20 +135,11 @@ void RID::call_kill_child( const ts::str_c&param )
     ctl().sq_evt(SQ_KILL_CHILD, *this, d);
 }
 
-void RID::call_item_activated( const ts::wstr_c&text, const ts::str_c&param )
-{
-    HOLD ctl(*this);
-    evt_data_s d;
-    d.item.text = text.as_sptr();
-    d.item.param = param.as_sptr();
-    ctl().sq_evt(SQ_ITEM_ACTIVATED, *this, d);
-}
-
 void RID::call_children_repos()
 {
     auto repos_deffered_proc = [](RID, GUIPARAM param)->bool
     {
-        RID rid = RID::from_ptr(param);
+        RID rid = RID::from_param(param);
         HOLD ctl(rid);
         ctl().sq_evt(SQ_CHILDREN_REPOS, rid, ts::make_dummy<evt_data_s>(true));
         ctl().getengine().redraw();
@@ -157,7 +148,7 @@ void RID::call_children_repos()
 
     GUIPARAMHANDLER h = repos_deffered_proc;
 
-    DEFERRED_UNIQUE_PAR_CALL( 0, h, this->to_ptr() );
+    DEFERRED_UNIQUE_PAR_CALL( 0, h, *this );
 }
 
 HOLD::HOLD(RID id)
@@ -504,7 +495,7 @@ bool gui_button_c::group_handler(gmsg<GM_GROUP_SIGNAL> & signal)
             if (signal.sender == getrid())
                 flags.invert(F_MARK);
             if (flags.is(F_MARK))
-                signal.mask |= (ts::uint32)param;
+                signal.mask |= (ts::uint32)param; //-V205
         }
 
         if (flags.is(F_MARK) != om)
@@ -795,7 +786,7 @@ void gui_button_c::push()
     {
         gmsg<GM_GROUP_SIGNAL> s(getrid(), grouptag);
         s.send();
-        CHECK(handler && handler(getrid(), (GUIPARAM)s.mask));
+        CHECK(handler && handler(getrid(), as_param(s.mask)));
         return;
     }
 
@@ -864,7 +855,7 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
                 ts::rectangle_update_s updr;
                 updr.updrect = tdp.rectupdate;
                 updr.offset = dd.offset;
-                updr.param = getrid().to_ptr();
+                updr.param = getrid().to_param();
                 if (still_selected)
                     textrect.render_texture(&updr, DELEGATE(&selcore, selection_stuff));
                 else
@@ -890,7 +881,7 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
             ts::rectangle_update_s updr;
             updr.updrect = tdp.rectupdate;
             updr.offset = dd.offset;
-            updr.param = getrid().to_ptr();
+            updr.param = getrid().to_param();
             textrect.render_texture(&updr);
         } else
         {
@@ -904,7 +895,7 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
         ts::rectangle_update_s updr;
         updr.updrect = tdp.rectupdate;
         updr.offset = dd.offset;
-        updr.param = getrid().to_ptr();
+        updr.param = getrid().to_param();
         textrect.update_rectangles(&updr);
     }
 }
@@ -1354,7 +1345,7 @@ void gui_tooltip_c::create(RID owner)
     MAKE_ROOT<gui_tooltip_c> with_par (dch, owner);
 }
 
-ts::uint32 gui_tooltip_c::gm_handler(gmsg<GM_TOOLTIP_PRESENT> & p)
+ts::uint32 gui_tooltip_c::gm_handler(gmsg<GM_TOOLTIP_PRESENT> &p)
 {
     if (p.rid == ownrect) return GMRBIT_ACCEPTED;
     textrect.size = ts::ivec2(0);
@@ -1365,7 +1356,7 @@ ts::uint32 gui_tooltip_c::gm_handler(gmsg<GM_TOOLTIP_PRESENT> & p)
     return GMRBIT_ACCEPTED;
 }
 
-ts::uint32 gui_tooltip_c::gm_handler(gmsg<GM_KILL_TOOLTIPS> & p)
+ts::uint32 gui_tooltip_c::gm_handler(gmsg<GM_KILL_TOOLTIPS> &p)
 {
     TSDEL(this);
     return 0;
@@ -2080,12 +2071,12 @@ void gui_vscrollgroup_c::children_repos()
 
     flags.init( F_SBVISIBLE, vheight > info.area.height() );
 
-    if (flags.is(F_SBVISIBLE) && sbwidth == 0)
+    if (flags.is(F_SBVISIBLE) && sbwidth == 0 && !flags.is(F_SB_OVER_ITEMS))
     {
         sbwidth = sbhelper.sbrect.width();
         if (!sbwidth)
             if (const theme_rect_s *thr = themerect())
-                sbwidth = thr->sis[SI_SBREP].width();
+                sbwidth = thr->sbwidth();
 
         if (sbwidth) goto repeat_calc_h;
     }
@@ -2157,6 +2148,7 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
             return false;
         case SQ_MOUSE_WHEELUP:
         case SQ_MOUSE_WHEELDOWN:
+            gui->dirty_hover_data();
         case SQ_MOUSE_LDOWN:
         case SQ_MOUSE_LUP:
         case SQ_MOUSE_MOVE:
@@ -2305,29 +2297,61 @@ bool gui_popup_menu_c::update_size(RID, GUIPARAM)
     ts::ivec2 sz = thr ? thr->size_by_clientsize(csz, false) : csz;
     ts::ivec2 cp = getprops().screenpos();
 
-    ts::irect maxsz = ts::wnd_get_max_size_fs(ts::irect(cp, cp + sz));
+    ts::irect maxsz = ts::wnd_get_max_size(ts::irect(cp, cp + sz));
+
+    bool height_decreased = false;
+    if (sz.y > (maxsz.height() - 50))
+    {
+        sz.y = (maxsz.height() - 50);
+        height_decreased = true;
+
+        if (const theme_rect_s *thr = themerect())
+            sz.x += thr->sbwidth();
+    }
+
     if (cp.x + sz.x >= maxsz.rb.x) cp.x = maxsz.rb.x - sz.x;
     if (cp.y + sz.y >= maxsz.rb.y) cp.y = maxsz.rb.y - sz.y;
     if (cp.x < maxsz.lt.x) cp.x = maxsz.lt.x;
     if (cp.y < maxsz.lt.y) cp.y = maxsz.lt.y;
-    if (cp.y < showpoint.y) cp.y = showpoint.y - sz.y;
-    if (cp.x < showpoint.x) cp.x = showpoint.x - sz.x - showpoint.z;
+    switch (showpoint.relpos)
+    {
+    case menu_anchor_s::RELPOS_TYPE_1:
+        if (cp.y < showpoint.rect.lt.y) cp.y = maxsz.rb.y - sz.y;
+        if (cp.x < showpoint.rect.rb.x) cp.x = showpoint.rect.lt.x - sz.x;
+        break;
+    case menu_anchor_s::RELPOS_TYPE_2:
+        if (cp.y < showpoint.rect.rb.y) cp.y = showpoint.rect.lt.y - sz.y;
+        if (cp.x < showpoint.rect.lt.x) cp.x = showpoint.rect.rb.x - sz.x;
+        break;
+    default:
+        __debugbreak();
+    }
 
+    TS_STATIC_CHECK( menu_anchor_s::relpos_check == 2, "woopz" );
 
     MODIFY(*this).pos(cp).size(sz);
-    ts::irect clar = get_client_area();
 
-    int y = clar.lt.y;
-    for (int t = 0; t < chcnt; ++t)
+    if (height_decreased)
     {
-        int h = rheights[t];
-        if (h == 0)
-            continue;
+        children_repos();
+        
+    } else
+    {
+        ts::irect clar = get_client_area();
 
-        MODIFY( getengine().get_child(t)->getrect() ).pos( clar.lt.x, y ).size( clar.width(), h );
+        int recty = clar.lt.y;
+        for (int t = 0; t < chcnt; ++t)
+        {
+            int h = rheights[t];
+            if (h == 0)
+                continue;
 
-        y += h;
+            MODIFY(getengine().get_child(t)->getrect()).pos(clar.lt.x, recty).size(clar.width(), h);
+
+            recty += h;
+        }
     }
+
     return true;
 }
 
@@ -2353,12 +2377,9 @@ bool gui_popup_menu_c::check_focus(RID r, GUIPARAM p)
     {
         switch (qp)
         {
-        //case SQ_MOUSE_IN:
-        //    MODIFY(rid).highlight(true);
-        //    return false;
-        //case SQ_MOUSE_OUT:
-        //    MODIFY(rid).highlight(false);
-        //    return false;
+        case SQ_MOUSE_WHEELUP:
+        case SQ_MOUSE_WHEELDOWN:
+            gui->dirty_hover_data();
         case SQ_MOUSE_LDOWN:
         case SQ_MOUSE_LUP:
         case SQ_MOUSE_MOVE:
@@ -2394,7 +2415,7 @@ bool gui_popup_menu_c::check_focus(RID r, GUIPARAM p)
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, update_size), nullptr);
         return true;
     case SQ_DRAW:
-        return gui_control_c::sq_evt(qp,getrid(),data);
+        return is_sb_visible() ? __super::sq_evt(qp,getrid(),data) : gui_control_c::sq_evt(qp,getrid(),data);
     case SQ_KEYDOWN:
         if (data.kbd.scan == SSK_ESC)
             gmsg<GM_KILLPOPUPMENU_LEVEL>(menu.lv()).send();
@@ -2407,10 +2428,16 @@ bool gui_popup_menu_c::check_focus(RID r, GUIPARAM p)
 /*virtual*/ void gui_popup_menu_c::created()
 {
     set_theme_rect(CONSTASTR("menu"), false);
+    flags.set(F_SB_OVER_ITEMS);
     __super::created();
 }
 
-gui_popup_menu_c & gui_popup_menu_c::show( const ts::ivec3& screenpos, const menu_c &menu, bool sys )
+void gui_popup_menu_c::menu_item_click( const click_data_s &prm )
+{
+    if (clickhandler) clickhandler( getrid(), &prm );
+}
+
+gui_popup_menu_c & gui_popup_menu_c::show( const menu_anchor_s& screenpos, const menu_c &menu, bool sys )
 {
     drawcollector dch;
     gui_popup_menu_c &m = gui_popup_menu_c::create(dch, screenpos, menu, sys);
@@ -2423,12 +2450,12 @@ gui_popup_menu_c & gui_popup_menu_c::show( const ts::ivec3& screenpos, const men
 
 MAKE_ROOT<gui_popup_menu_c>::~MAKE_ROOT()
 {
-    MODIFY(*me).pos(screenpos.xy()).visible(true);
+    MODIFY(*me).pos(screenpos.pos()).visible(true);
     gui->set_focus(id);
     me->getroot()->set_system_focus(true);
 }
 
-gui_popup_menu_c & gui_popup_menu_c::create(drawcollector &dch, const ts::ivec3& screenpos_, const menu_c &mnu, bool sys)
+gui_popup_menu_c & gui_popup_menu_c::create(drawcollector &dch, const menu_anchor_s& screenpos_, const menu_c &mnu, bool sys)
 {
     gmsg<GM_KILLPOPUPMENU_LEVEL>( mnu.lv() ).send();
     gmsg<GM_KILL_TOOLTIPS>().send();
@@ -2451,7 +2478,7 @@ bool gui_popup_menu_c::operator()(int, const ts::wsptr& txt, ts::uint32 f, MENUH
     return true;
 }
 
-ts::uint32 gui_popup_menu_c::gm_handler( gmsg<GM_KILLPOPUPMENU_LEVEL> & p )
+ts::uint32 gui_popup_menu_c::gm_handler( gmsg<GM_KILLPOPUPMENU_LEVEL> &p )
 {
     if (p.level <= menu.lv())
     {
@@ -2462,7 +2489,7 @@ ts::uint32 gui_popup_menu_c::gm_handler( gmsg<GM_KILLPOPUPMENU_LEVEL> & p )
     return 0;
 }
     
-ts::uint32 gui_popup_menu_c::gm_handler(gmsg<GM_POPUPMENU_DIED> & p)
+ts::uint32 gui_popup_menu_c::gm_handler(gmsg<GM_POPUPMENU_DIED> &p)
 {
     if (p.level == menu.lv() + 1)
         gui->set_focus( getrid() );
@@ -2470,7 +2497,7 @@ ts::uint32 gui_popup_menu_c::gm_handler(gmsg<GM_POPUPMENU_DIED> & p)
 }
 
 
-ts::uint32 gui_popup_menu_c::gm_handler(gmsg<GM_TOOLTIP_PRESENT> & p)
+ts::uint32 gui_popup_menu_c::gm_handler(gmsg<GM_TOOLTIP_PRESENT> &p)
 {
     return GMRBIT_ACCEPTED;
 }
@@ -2520,13 +2547,12 @@ gui_menu_item_c::~gui_menu_item_c()
         else if (!flags.is(F_DISABLED))
         {
             ts::safe_ptr<gui_popup_menu_c> pm = &HOLD(getparent()).as<gui_popup_menu_c>();
+            gui_popup_menu_c::click_data_s cdata;
+            cdata.itemtext = get_text();
+            cdata.itemparam = param;
+            if (pm) pm->menu_item_click( cdata );
             if (handler) handler(param);
-            if (pm)
-            {
-                pm->set_close_handler(GUIPARAMHANDLER()); // disable close handler
-                if (RID host = pm->host()) // notify host
-                    host.call_item_activated(textrect.get_text(), param);
-            }
+            if (pm) pm->set_close_handler(GUIPARAMHANDLER()); // disable close handler
             gmsg<GM_KILLPOPUPMENU_LEVEL>(0).send();
             return true;
         }
@@ -2548,7 +2574,11 @@ gui_menu_item_c::~gui_menu_item_c()
             if (const theme_rect_s *thr = themerect())
                 dback = thr->sis[SI_RIGHT].width() / 2;
 
-            data.getsome.pos = ts::ivec3( to_screen(getprops().szrect().rt() - ts::ivec2(dback, -3)), getprops().size().x - dback * 2 );
+            ts::irect r( to_screen(getprops().szrect()) );
+            r.lt.y += 3;
+            r.rb.x -= dback;
+            r.lt.x = r.rb.x - (getprops().size().x - dback * 2);
+            data.getsome.menupos = menu_anchor_s( r );
             data.getsome.handled = true;
         }
         return true;
@@ -2654,6 +2684,14 @@ bool gui_menu_item_c::open_submenu(RID r, GUIPARAM p)
     if (submnu_shown) return false;
     submnu_shown = &gui_popup_menu_c::show( getrid().call_get_popup_menu_pos(), submnu );
     submnu_shown->leech(this);
+
+    gui_popup_menu_c* pm = &HOLD(getparent()).as<gui_popup_menu_c>();
+    if (pm)
+    {
+        submnu_shown->set_close_handler(pm->get_close_handler());
+        submnu_shown->set_click_handler(pm->get_click_handler());
+    }
+
     return true;
 }
 
@@ -2676,6 +2714,28 @@ MAKE_CHILD<gui_textfield_c>::~MAKE_CHILD()
     }
     if (multiline) get().height = multiline;
     MODIFY(get()).setminsize(get().getrid()).visible(true);
+}
+
+bool gui_textfield_c::behav_s::onclick(RID, GUIPARAM mpar)
+{
+    gui_popup_menu_c::click_data_s *cd = (gui_popup_menu_c::click_data_s *)mpar;
+
+    if (handler)
+    {
+        gui_dialog_c::behav_s b;
+        b.e = gui_dialog_c::behav_s::EVT_ON_CLICK;
+        b.menu = &menu;
+        b.param = cd->itemparam;
+        handler(tfrid, &b);
+    }
+
+    gui_textfield_c &tf = HOLD(tfrid).as<gui_textfield_c>();
+    if (set_value)
+        tf.set_text( ts::from_utf8(cd->itemparam) );
+    else
+        tf.set_text( cd->itemtext );
+
+    return true;
 }
 
 gui_textfield_c::gui_textfield_c(MAKE_CHILD<gui_textfield_c> &data) :gui_textedit_c(data)
@@ -2755,10 +2815,6 @@ void gui_textfield_c::badvalue( bool b )
         ts::irect clar = get_client_area();
         ts::ivec2 ssz = selector->get_min_size();
         MODIFY(*selector).pos( clar.rb.x - ssz.x, clar.lt.y + (clar.height()-ssz.y)/2 ).size(ssz).visible(true);
-    }
-    if (qp == SQ_ITEM_ACTIVATED)
-    {
-        set_text( data.item.text() );
     }
     if (qp == SQ_CTL_ENABLE)
     {
@@ -2993,17 +3049,33 @@ MAKE_CHILD<gui_hslider_c>::~MAKE_CHILD()
 gui_hslider_c::gui_hslider_c(MAKE_CHILD<gui_hslider_c> &data) :gui_control_c(data)
 {
     handler = data.handler;
+    gm = data.gm;
     if (!data.initstr.is_empty())
         values.init<ts::wchar>(data.initstr);
     else
         values.init(CONSTWSTR("0/0/1/1"));
 
-    set_value(data.val);
+    int bid = gui->get_temp_buf(1.0, sizeof(float));
+    void *voldata = gui->lock_temp_buf(bid);
+    memcpy(voldata, &data.val, sizeof(float));
+    DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, setval), as_param(bid) );
 }
 
 
 /*virtual*/ gui_hslider_c::~gui_hslider_c()
 {
+    if (gui)
+        gui->delete_event( DELEGATE(this, setval) );
+}
+
+bool gui_hslider_c::setval(RID, GUIPARAM p)
+{
+    if (void *voldata = gui->lock_temp_buf(as_int(p)))
+    {
+        set_value( *(float *)voldata );
+        gui->kill_temp_buf(as_int(p));
+    }
+    return true;
 }
 
 void gui_hslider_c::set_value(float val)
@@ -3015,7 +3087,7 @@ void gui_hslider_c::set_value(float val)
 
 void gui_hslider_c::set_level(float level_)
 {
-    if (level_ != level)
+    if (level_ != level) //-V550
     {
         level = level_;
         getengine().redraw();
@@ -3071,7 +3143,7 @@ void gui_hslider_c::set_level(float level_)
                     int ww = ts::lround( ts::CLAMP( level, 0, 1 ) * (float)(dd.size.x - levelshift.x - levelshift.x - sidew) ) + sidew;
 
                     evt_data_s d;
-                    d.draw_thr.rect().lt.x = dd.offset.x + levelshift.x;
+                    d.draw_thr.rect().lt.x = dd.offset.x + levelshift.x; //-V807
                     d.draw_thr.rect().lt.y = dd.offset.y + levelshift.y;
                     d.draw_thr.rect().rb.x = d.draw_thr.rect().lt.x + ww;
                     m_engine->draw(*th, DTHRO_LB_B_RB, &d);
@@ -3128,7 +3200,7 @@ void gui_hslider_c::set_level(float level_)
                 mtd.mpos = data.mouse.screenpos;
                 mtd.rect.lt.x = caret_pos.x;
                 mtd.rect.lt.x -= cla.lt.x;
-                mtd.rect.lt.y = cla.width() - caret_size.x; // just cached value
+                mtd.rect.lt.y = cla.width() - caret_size.x; //-V537 just cached value
             } else if (cla.inside(mplocal))
             {
                 pos = (float)(mplocal.x - (cla.lt.x + caret_size.x/2)) / (float)(cla.width() - caret_size.x);
@@ -3138,7 +3210,7 @@ void gui_hslider_c::set_level(float level_)
                 mousetrack_data_s &mtd = gui->begin_mousetrack( getrid(), MTT_MOVESLIDER );
                 mtd.mpos = data.mouse.screenpos;
                 mtd.rect.lt.x = mplocal.x - cla.lt.x - caret_size.x/2;
-                mtd.rect.lt.y = cla.width() - caret_size.x; // just cached value
+                mtd.rect.lt.y = cla.width() - caret_size.x; //-V537 just cached value
                 m_engine->redraw();
             }
         }
@@ -3149,6 +3221,18 @@ void gui_hslider_c::set_level(float level_)
             flags.clear(F_LBDOWN);
         }
         return true;
+    case SQ_MOUSE_RUP:
+        if (gm)
+        {
+            menu_c m = gm( ts::str_c().set_as_float(values.get_linear(pos)), false);
+            if (!m.is_empty())
+            {
+                popupmenu = &gui_popup_menu_c::show(menu_anchor_s(true), m);
+                popupmenu->set_click_handler( DELEGATE(this, onclick) );
+                MODIFY(rid).active(true);
+            }
+        }
+        return false;
     case SQ_MOUSE_MOVE:
         
         if (const theme_rect_s *th = themerect())
@@ -3162,7 +3246,7 @@ void gui_hslider_c::set_level(float level_)
                 float newpos = (float)x / (float)opd->rect.lt.y;
                 if (newpos < 0) newpos = 0;
                 if (newpos > 1) newpos = 1;
-                if (newpos != pos)
+                if (newpos != pos) //-V550
                 {
                     m_engine->redraw();
                     pos = newpos;
@@ -3173,6 +3257,13 @@ void gui_hslider_c::set_level(float level_)
         return true;
     }
     return __super::sq_evt(qp, rid, data);
+}
+
+bool gui_hslider_c::onclick(RID, GUIPARAM p)
+{
+    gui_popup_menu_c::click_data_s *cd = (gui_popup_menu_c::click_data_s *)p;
+    set_value( cd->itemparam.as_float() );
+    return true;
 }
 
 void gui_hslider_c::update_text_value()

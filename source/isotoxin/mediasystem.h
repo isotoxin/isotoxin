@@ -10,7 +10,7 @@
     SND( ringtone2 ) \
     SND( call_accept ) \
     SND( call_cancel ) \
-    SND( hangon ) \
+    SND( hangup ) \
     SND( calltone ) \
 
 

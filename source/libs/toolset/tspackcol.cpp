@@ -189,21 +189,24 @@ void ccollection_c::find_by_mask(wstrings_c & files, const ts::wsptr &fnmask, bo
 
     pwstr_c masks(fnmask);
 
-    int x = masks.find_pos(CONSTWSTR("/*/"));
-    if (x >= 0)
+    struct folders
     {
-        struct folders
+        wstrings_c m_folders;
+        folders &operator=(const folders &)UNUSED;
+        folders(const folders &) UNUSED;
+        folders() {}
+        bool filer(const wsptr & path, const wsptr & fn, container_c *)
         {
-            wstrings_c m_folders;
-            folders &operator=(const folders &)UNUSED;
-            folders(const folders &) UNUSED;
-            folders() {}
-            bool filer(const wsptr & path, const wsptr & fn, container_c *)
-            {
-                m_folders.add(fn);
-                return true;
-            }
-        } fld;
+            m_folders.add(fn);
+            return true;
+        }
+    };
+
+    int x = masks.find_pos(CONSTWSTR("/*"));
+    bool hm = x >= 0 && x+2 < fnmask.l;
+    if (hm && fnmask.s[x+2] == '/')
+    {
+        folders fld;
 
         iterate_folders( pwstr_c(fnmask).substr(0, x), DELEGATE(&fld, filer) );
         for( const wstr_c &f : fld.m_folders )
@@ -213,6 +216,22 @@ void ccollection_c::find_by_mask(wstrings_c & files, const ts::wsptr &fnmask, bo
         return;
     }
 
+    wstr_c curf;
+
+    if (hm && fnmask.s[x + 2] == '*' && x + 3 < fnmask.l && fnmask.s[x + 3] == '/')
+    {
+        folders fld;
+
+        iterate_folders(pwstr_c(fnmask).substr(0, x), DELEGATE(&fld, filer));
+        for (const wstr_c &f : fld.m_folders)
+        {
+            wstr_c curf(fnmask); curf.insert(x,CONSTWSTR("/") + f);
+            find_by_mask(files, curf, full_paths);
+        }
+        curf.set(masks.substr(0,x)).append(masks.substr(x+3));
+        masks.set( curf.as_sptr() );
+    }
+
     int lastd = masks.find_last_pos_of(CONSTWSTR("/\\"));
 
     struct middle
@@ -220,12 +239,16 @@ void ccollection_c::find_by_mask(wstrings_c & files, const ts::wsptr &fnmask, bo
         wstrings_c & files;
         pwstr_c m;
         bool fullpaths;
+        bool allfiles;
         middle &operator=(const middle &) UNUSED;
         middle(const middle &) UNUSED;
-        middle(wstrings_c & files, const pwstr_c &m, bool fp):files(files), m(m), fullpaths(fp) {}
+        middle(wstrings_c & files, const pwstr_c &m, bool fp):files(files), m(m), fullpaths(fp)
+        {
+            allfiles = m.equals(CONSTWSTR("*.*")) || m.equals(CONSTWSTR("*"));
+        }
         bool filer( const wsptr & path, const wsptr & fn, container_c * )
         {
-            if (fn_mask_match(fn, m))
+            if (allfiles || fn_mask_match(fn, m))
             {
                 if (fullpaths)
                     files.add( fn_join(ts::tmp_wstr_c(path),fn) );

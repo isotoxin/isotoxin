@@ -129,6 +129,14 @@ public:
     FLOATPAR( vol_signal, 1.0f )
 
     INTPAR(dsp_flags, 0)
+
+#define SND(s) TEXTWPAR( snd_##s, #s ".ogg" )
+    SOUNDS
+#undef SND
+#define SND(s) FLOATPAR( snd_vol_##s, 1.0f )
+    SOUNDS
+#undef SND
+
 };
 
 extern ts::static_setup<config_c,1000> cfg;

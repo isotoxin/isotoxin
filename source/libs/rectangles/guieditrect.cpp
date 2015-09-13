@@ -46,7 +46,7 @@ void gui_textedit_c::run_heartbeat()
     }
 }
 
-bool gui_textedit_c::text_replace(int pos, int num, const ts::wsptr &str, active_element_s **el, int len, bool updateCaretPos)
+bool gui_textedit_c::text_replace(int pos, int num, const ts::wsptr &str, active_element_s **el, int len, bool update_caret_pos)
 {
 	if (check_text_func)
     {
@@ -55,6 +55,14 @@ bool gui_textedit_c::text_replace(int pos, int num, const ts::wsptr &str, active
         t.replace(pos0, pos1 - pos0, str);
         if (!check_text_func(t)) return false;
     }
+
+    if (num > 0 || len > 0)
+    {
+        bool someselected = start_sel != -1;
+        _undo.push( text.array(), get_caret_char_index(), start_sel, num > 1 || someselected ? CH_REPLACE : (len == 0 ? CH_DELCHAR : CH_ADDCHAR) );
+        _redo.clear();
+    }
+
 	if (!is_multiline()) // singleline editbox
 	{
         int editwidth = size().x;
@@ -84,7 +92,7 @@ ok:
 	if (prepare_lines())
     {
 	    redraw();
-	    if (updateCaretPos) set_caret_pos(pos + len);
+	    if (update_caret_pos) set_caret_pos(pos + len);
     }
 	start_sel = -1;
 	return true;
@@ -133,7 +141,7 @@ ts::wstr_c gui_textedit_c::get_text_and_fix_pos(int *pos0, int *pos1) const
             *pos1 = r.get_length(), pos1fixed = true;
 
         const text_element_c &te = text[i];
-        if (te.is_char()) r.append_char(te.get_char_fast()); else r.append(te.p->to_wstr());
+        if (te.is_char()) r.append_char(te.get_char_unsafe()); else r.append(te.p->to_wstr());
     }
 
     if (!pos0fixed && *pos0 == count)
@@ -151,7 +159,7 @@ ts::wstr_c gui_textedit_c::text_substr(int start, int count) const
     for (int i = 0; i < count; ++i)
     {
         const text_element_c &te = text[start + i];
-        if (te.is_char()) r.append_char(te.get_char_fast()); else r.append(te.p->to_wstr());
+        if (te.is_char()) r.append_char(te.get_char_unsafe()); else r.append(te.p->to_wstr());
     }
     return r;
 }
@@ -162,7 +170,7 @@ ts::str_c gui_textedit_c::text_substr_utf8(int start, int count) const
 	for (int i=0; i<count; ++i)
 	{
 		const text_element_c &te = text[start+i];
-		if (te.is_char()) r.append_unicode_as_utf8( te.get_char_fast() ); else r.append(te.p->to_utf8());
+		if (te.is_char()) r.append_unicode_as_utf8( te.get_char_unsafe() ); else r.append(te.p->to_utf8());
 	}
 	return r;
 }
@@ -255,6 +263,9 @@ void gui_textedit_c::set_caret_pos(ts::ivec2 p)
 
 ts::ivec2 gui_textedit_c::get_char_pos(int pos) const
 {
+    if (flags.is(F_LINESDIRTY))
+        const_cast<gui_textedit_c *>(this)->prepare_lines();
+
 	int i;
 	for (i=0;i<lines.count()-1;i++)
 		if (pos<=lines.get(i).r1) break;
@@ -277,9 +288,9 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 	if (qp == SQ_KEYDOWN)
 	{
 		cp=get_caret_char_index();
-		bool def=false,shiftPressed=GetKeyState(VK_SHIFT)<0;
+		bool def=false,key_shift=GetKeyState(VK_SHIFT)<0;
 
-		if (!shiftPressed)
+		if (!key_shift)
 		{
 			if (start_sel==cp) start_sel=-1; // if zero-len selection - avoid handle of left/rite key pressed
 		}
@@ -317,6 +328,14 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 				break;
             case SSK_W:
                 selectword();
+                res = true;
+                break;
+            case SSK_Z:
+                undo();
+                res = true;
+                break;
+            case SSK_Y:
+                redo();
                 res = true;
                 break;
 			case SSK_HOME:
@@ -362,7 +381,7 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 		else
 		{
             if (flags.is(F_DISABLE_CARET)) return false;
-			if (!shiftPressed && start_sel!=-1 && (scan==SSK_LEFT || scan==SSK_RIGHT)) // special case: Shift not pressed but selection present and left or right key pressed - caret must be moved to start or end of selection before selection be reset
+			if (!key_shift && start_sel!=-1 && (scan==SSK_LEFT || scan==SSK_RIGHT)) // special case: Shift not pressed but selection present and left or right key pressed - caret must be moved to start or end of selection before selection be reset
 			{
 				if (scan==SSK_LEFT) set_caret_pos(min(cp,start_sel));
 				else set_caret_pos(max(cp,start_sel));
@@ -420,12 +439,12 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 				    break;
 			    case SSK_INSERT:
 				    if (is_readonly()) def=true; else
-				    if (shiftPressed) paste_(cp); else def=true;
+				    if (key_shift) paste_(cp); else def=true;
 				    res = true;
 				    break;
 			    case SSK_DELETE:
 				    if (is_readonly()) def=true; else
-				    if (shiftPressed)
+				    if (key_shift)
 				    {
 					    cut_(cp);
 				    }
@@ -443,7 +462,7 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
             }
 		}
 
-		if (!def && start_sel!=-1 && !shiftPressed) start_sel=-1; // clear selection
+		if (!def && start_sel!=-1 && !key_shift) start_sel=-1; // clear selection
 	}
 	else if (qp == SQ_CHAR)
 	{
@@ -466,6 +485,11 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 			res = true;
 			break;
 		case VK_BACK:
+            if (GetKeyState(VK_MENU) < 0)
+            {
+                undo();
+                return false;
+            }
 			if (GetKeyState(VK_SHIFT)>=0)
 			{
 				if (start_sel!=-1)
@@ -487,6 +511,8 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
    //             return true;
    //         }
 			charcode='\n';
+            _undo.push(text.array(), get_caret_char_index(), start_sel, CH_ADDSPECIAL );
+
 		default:
             {
                 ts::wchar c = charcode;
@@ -567,21 +593,28 @@ void gui_textedit_c::set_placeholder(const ts::wstr_c &t)
     }
 }
 
-void gui_textedit_c::set_text(const ts::wstr_c &text_, bool setCaretToEnd)
+void gui_textedit_c::set_text(const ts::wstr_c &text_, bool move_caret2end, bool setup_undo)
 {
     flags.init(F_PREV_SB_VIS, is_vsb());
 
     if (text.size() == text_.get_length())
     {
-        const ts::wchar *t = text_;
-        for (int i = 0, n = text.size(); i < n; i++)
+        const ts::wchar *t = text_.cstr();
+        for (int i = 0, n = text.size(); i < n; ++i)
             if (!(text[i] == t[i])) goto notEq;
         return;
     }
 notEq:
 	ts::ivec2 prevCaretPos = get_caret_pos();
 	if (text_replace(0, text.size(), text_, false))
-		if (setCaretToEnd) set_caret_pos(text.size()); else set_caret_pos(prevCaretPos);
+		if (move_caret2end) set_caret_pos(text.size()); else set_caret_pos(prevCaretPos);
+
+    if (setup_undo)
+    {
+        _redo.clear();
+        _undo.clear();
+        _undo.push( text.array(), get_caret_char_index(), start_sel, CH_REPLACE );
+    }
 }
 
 int gui_textedit_c::lines_count() const
@@ -799,6 +832,31 @@ void gui_textedit_c::selectword()
     redraw();
 }
 
+void gui_textedit_c::undo()
+{
+    if (_undo.size() == 0) return;
+    _redo.push(text.array(), get_caret_char_index(), start_sel, CH_REPLACE);
+    snapshot_s &ls = _undo.last();
+    text.replace(0, text.size(), ls.text.begin(), ls.text.size() );
+    start_sel = ls.selindex;
+    flags.set(F_LINESDIRTY | F_TEXTUREDIRTY);
+    set_caret_pos(ls.caret_index);
+    _undo.truncate(_undo.size() - 1);
+    redraw();
+}
+void gui_textedit_c::redo()
+{
+    if (_redo.size() == 0) return;
+    _undo.push(text.array(), get_caret_char_index(), start_sel, CH_REPLACE);
+    snapshot_s &ls = _redo.last();
+    text.replace(0, text.size(), ls.text.begin(), ls.text.size());
+    start_sel = ls.selindex;
+    flags.set(F_LINESDIRTY | F_TEXTUREDIRTY);
+    set_caret_pos(ls.caret_index);
+    _redo.truncate(_redo.size() - 1);
+    redraw();
+}
+
 void gui_textedit_c::ctx_menu_cut(const ts::str_c &)
 {
     cut();
@@ -853,7 +911,7 @@ bool gui_textedit_c::summoncontextmenu()
     mnu.add_separator();
     mnu.add(gui->app_loclabel(LL_CTXMENU_SELALL), (text.size() == 0) ? MIF_DISABLED : 0, DELEGATE(this,ctx_menu_selall) );
 
-    gui_popup_menu_c &pm = gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(),0), mnu);
+    gui_popup_menu_c &pm = gui_popup_menu_c::show(menu_anchor_s(true), mnu);
     pm.set_close_handler( DELEGATE(this, ctxclosehandler) );
     popupmenu = &pm;
     return true;
@@ -877,15 +935,17 @@ bool gui_textedit_c::summoncontextmenu()
         {
             sbhelper.shift += (*font)->height;
             redraw();
+            break;
         }
-        break;
+        goto default_stuff;
     case SQ_MOUSE_WHEELDOWN:
         if (is_vsb())
         {
             sbhelper.shift -= (*font)->height;
             redraw();
+            break;
         }
-        break;
+        goto default_stuff;
     case SQ_MOUSE_L2CLICK:
         selectword();
         break;
@@ -1149,3 +1209,26 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_HEARTBEAT> &)
     }
     return 0;
 }
+
+void gui_textedit_c::snapshots_s::push(const ts::array_wrapper_c<const text_element_c> &text, int caret, int start_sel, change_e ch)
+{
+    if (0 == size() || CH_REPLACE == ch || CH_ADDSPECIAL == ch)
+    {
+        addnew(text, caret, start_sel, CH_ADDSPECIAL == ch ? CH_ADDCHAR : ch);
+        return;
+    }
+
+    snapshot_s &ls = last();
+    if (ls.ch == ch)
+    {
+        if (CH_ADDCHAR == ch && caret == ls.last_caret + 1) { ls.last_caret = caret; return; }
+        else if (CH_DELCHAR == ch && (caret == ls.last_caret || caret == ls.last_caret - 1)) { ls.last_caret = caret; return; }
+    }
+    if (ls.text == text) return;
+
+    addnew(text, caret, start_sel, ch);
+
+    if (size() > 100) // limit with 100 undo items
+        remove_slow(0);
+}
+

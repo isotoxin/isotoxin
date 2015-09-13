@@ -479,10 +479,10 @@ public:
         }
     }
 
-    void replace(aint pos, aint num, const array_c &a) { replace(pos, num, &a.get(0), a.size()); }
+    void replace(aint pos, aint num, const array_c &a) { replace(pos, num, a.begin(), a.size()); }
 
     void insert(aint pos, const T *arr, aint len) { replace(pos, 0, arr, len); }
-    void insert(aint pos, const array_c &a) { replace(pos, 0, &a.get(0), a.size()); }
+    void insert(aint pos, const array_c &a) { replace(pos, 0, a.begin(), a.size()); }
 
     aint    insert(aint idx, const T & d)
     {
@@ -895,6 +895,27 @@ public:
         });
     }
 
+    bool operator==(const array_wrapper_c<const T>&wrp) const
+    {
+        if (size() != wrp.size()) return false;
+        const T *a1 = begin();
+        const T *a2 = wrp.begin();
+        for (const T *e = end(); a1 < e; ++a1, ++a2)
+            if (!(*a1 == *a2))
+                return false;
+        return true;
+    }
+    bool operator==(const array_c &o) const
+    {
+        if (size() != o.size()) return false;
+        const T *a1 = begin();
+        const T *a2 = o.begin();
+        for (const T *e = end(); a1 < e; ++a1, ++a2)
+            if (!(*a1 == *a2))
+                return false;
+        return true;
+    }
+
     array_c& operator=(const array_c&op)
     {
         replace( 0, size(), op );
@@ -906,6 +927,12 @@ public:
         SWAP(m_count, op.m_count);
         SWAP(m_capacity, op.m_capacity);
         SWAP(m_list, op.m_list);
+        return *this;
+    }
+
+    array_c& operator=(const array_wrapper_c<const T>&wrp)
+    {
+        replace( 0, size(), wrp.begin(), wrp.size() );
         return *this;
     }
 
@@ -936,6 +963,15 @@ public:
         for(const T &el : list) BEHAVIOUR::copy<const T&, false,false>( m_list[i++], const_cast<T &>(el) );
     }
 
+    array_c( const array_wrapper_c<const T>&wrp )
+    {
+        m_count = wrp.size();
+        m_capacity = m_count;
+        m_list = (T *)ma(sizeof(T)*m_capacity);
+
+        aint i = 0;
+        for (const T &el : wrp) BEHAVIOUR::copy<const T&, false, false>(m_list[i++], const_cast<T &>(el));
+    }
 
     array_c( aint capacity = 0 )
     {
@@ -967,6 +1003,30 @@ public:
     }
 
     array_wrapper_c<const T> array() const { return array_wrapper_c<const T>( m_list, m_count ); }
+
+    array_wrapper_c<const T> subarray(aint index) const
+    {
+        ASSERT(index >= 0 && m_count >= index); return array_wrapper_c<const T>( m_list + index, m_count - index );
+    }
+    array_wrapper_c<const T> subarray(aint index0, aint index1) const
+    {
+        ASSERT(index0 >= 0 && m_count >= index0 && m_count >= index1 && index0 <= index1); return array_wrapper_c<const T>( m_list + index0, index1 - index0 );
+    }
+
+    array_wrapper_c<const T> subarray_safe(aint index) const
+    {
+        if (index < 0) index = 0;
+        if (index > m_count) return array_wrapper_c<const T>(m_list + m_count, 0);
+        return array_wrapper_c<const T>(m_list + index, m_count - index);
+    }
+    array_wrapper_c<const T> subarray_safe(aint index0, aint index1) const
+    {
+        if (index0 < 0) index0 = 0;
+        if (index0 > m_count || index0 > index1) return array_wrapper_c<const T>(m_list + m_count, 0);
+        if (index1 > m_count) index1 = m_count;
+        return array_wrapper_c<const T>(m_list + index0, index1 - index0);
+    }
+
 
     // begin() end() semantics
 

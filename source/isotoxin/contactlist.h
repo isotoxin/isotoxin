@@ -56,7 +56,7 @@ class gui_contact_item_c : public gui_label_c
 
     bool edit0(RID, GUIPARAM);
     bool edit1(RID, GUIPARAM);
-    void updrect(void *, int r, const ts::ivec2 &);
+    void updrect(const void *, int r, const ts::ivec2 &);
 
     void generate_protocols();
     void draw_online_state_text(draw_data_s &dd);

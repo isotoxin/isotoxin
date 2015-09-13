@@ -304,7 +304,7 @@ static DWORD WINAPI autoupdater(LPVOID)
             if (autoupdate_next <= now() )
                 autoupdate_next = now() + nextupdate;
 
-            b_update_ver(RID(),(GUIPARAM)AUB_DEFAULT);
+            b_update_ver(RID(),as_param(AUB_DEFAULT));
         }
         if (!nonewversion())
         {
@@ -346,11 +346,8 @@ static DWORD WINAPI autoupdater(LPVOID)
                 prf().changed();
                 break;
             }
-                
         }
-    
     }
-
 }
 
 /*virtual*/ void application_c::app_loop_event()
@@ -436,7 +433,7 @@ static DWORD WINAPI autoupdater(LPVOID)
         DEFERRED_EXECUTION_BLOCK_BEGIN(0)
             menu_c m;
             m.add(TTT("Exit",117), 0, handlers::m_exit);
-            gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(),0), m, true);
+            gui_popup_menu_c::show(menu_anchor_s(true), m, true);
         DEFERRED_EXECUTION_BLOCK_END(0)
     }
 }
@@ -452,6 +449,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
         static bool m_newprofile_ok(const ts::wstr_c&prfn, const ts::str_c&)
         {
             ts::wstr_c pn = prfn;
+            ts::wstr_c storpn(pn);
             profile_c::path_by_name(pn);
             if (ts::is_file_exists(pn))
             {
@@ -483,7 +481,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
                         gui_isodialog_c::title(DT_MSGBOX_INFO),
                         TTT("Profile [b]$[/b] has created and set as default.",48) / prfn
                         ));
-                    cfg().profile(pn);
+                    cfg().profile(storpn);
                 } else
                     profile_c::error_unique_profile(pn);
             } else
@@ -515,10 +513,13 @@ bool application_c::b_customize(RID r, GUIPARAM param)
             ts::wstr_c oldprfn = cfg().profile();
 
             ts::wstr_c wpn(from_utf8(prfn));
+            ts::wstr_c storwpn(wpn);
             profile_c::path_by_name(wpn);
 
+            contacts().unload();
+
             if (prf().load(wpn))
-                cfg().profile(wpn);
+                cfg().profile(storwpn);
             else
             {
                 prf().load( oldprfn );
@@ -586,7 +587,15 @@ void application_c::summon_main_rect()
     s3::set_capture_device( &device );
 
     ts::wstr_c profname = cfg().profile();
-    if (profname.is_empty())
+    auto checkprofilenotexist = [&]()->bool
+    {
+        if (profname.is_empty()) return true;
+        ts::wstr_c pfn(profname);
+        bool not_exist = !ts::is_file_exists(profile_c::path_by_name(pfn));
+        if (not_exist) cfg().profile(CONSTWSTR("")), profname.clear();
+        return not_exist;
+    };
+    if (checkprofilenotexist())
     {
         ts::wstr_c prfsearch(CONSTWSTR("*"));
         profile_c::path_by_name(prfsearch);
@@ -656,7 +665,7 @@ bool application_c::b_update_ver(RID, GUIPARAM p)
         w().in_progress = true;
         w().downloaded = false;
 
-        autoupdate_beh_e req = (autoupdate_beh_e)(int)p;
+        autoupdate_beh_e req = (autoupdate_beh_e)as_int(p);
         if (req == AUB_DOWNLOAD)
             renotice = true;
         if (req == AUB_DEFAULT)
@@ -1118,14 +1127,6 @@ bool application_c::load_theme( const ts::wsptr&thn )
 void preloaded_buttons_s::reload()
 {
     const theme_c &th = gui->theme();
-
-#ifndef _FINAL
-    const theme_c &th1 = gui->xtheme();
-    int a1 = (int)&th1;
-    int a2 = (int)&th;
-    if (a1 != a2)
-        __debugbreak();
-#endif
 
     icon[CSEX_UNKNOWN] = th.get_button(CONSTASTR("nosex"));
     icon[CSEX_MALE] = th.get_button(CONSTASTR("male"));

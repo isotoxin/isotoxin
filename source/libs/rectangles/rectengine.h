@@ -339,6 +339,7 @@ public:
         return GetForegroundWindow() == hwnd;
     }
 
+    void simulate_mousemove(); // just send SQ_MOUSE_MOVE without actual mouse moving
 
     ts::wstr_c  load_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, const ts::wsptr &filt, const ts::wchar *defext, const ts::wchar *title);
     bool        load_filename_dialog(ts::wstrings_c &files, const ts::wsptr &iroot, const ts::wsptr& name, const ts::wsptr &filt, const ts::wchar *defext, const ts::wchar *title);

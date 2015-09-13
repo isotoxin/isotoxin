@@ -445,7 +445,7 @@ bool contact_c::check_invite(RID r, GUIPARAM p)
     {
         if (p)
         {
-            DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, check_invite), (GUIPARAM)((int)p - 1));
+            DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, check_invite), as_int(p) - 1);
         } else
         {
             // no invite... looks like already confirmed, but not saved
@@ -575,7 +575,7 @@ void contact_c::av( bool f )
             gmsg<ISOGM_AV>(this, !wasav).send();
             if (wasav)
             {
-                play_sound(snd_hangon, false);
+                play_sound(snd_hangup, false);
             }
         }
         
@@ -827,7 +827,7 @@ bool contact_c::b_kill(RID, GUIPARAM)
 
 bool contact_c::b_load(RID, GUIPARAM n)
 {
-    int n_load = (int)n;
+    int n_load = as_int(n);
     get_historian()->load_history(n_load);
     get_historian()->reselect(false);
     return true;
@@ -1702,7 +1702,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
     case MTA_INCOMING_CALL:
         up_unread = false;
         if (historian->get_aaac())
-            DEFERRED_UNIQUE_CALL(0, DELEGATE(sender, b_accept_call), (GUIPARAM)(historian->get_aaac()));
+            DEFERRED_UNIQUE_CALL(0, DELEGATE(sender, b_accept_call), historian->get_aaac());
         else
             msg.sender->ringtone();
         break;
@@ -1731,3 +1731,21 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
     return 0;
 }
 
+void contacts_c::unload()
+{
+    for (contact_c *c : arr)
+    {
+        if (c->gui_item)
+            TSDEL(c->gui_item);
+
+        c->prepare4die();
+    }
+
+    if (self)
+        self = nullptr;
+
+    arr.clear();
+
+    self = TSNEW(contact_c);
+    arr.add(self);
+}

@@ -598,6 +598,9 @@ namespace ts
 
     bool TSCALL fn_mask_match( const wsptr &fn, const wsptr &mask )
     {
+        if (pwstr_c(mask).equals(CONSTWSTR("*.*")) || pwstr_c(mask).equals(CONSTWSTR("*")))
+            return true;
+
         int index = 0;
         token<wchar> mp(mask, '*');
         bool left = true;

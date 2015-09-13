@@ -75,10 +75,10 @@ menu_c dialog_addcontact_c::networks()
     dm().textfieldml(TTT("Message",72), TTT("$: Please, add me to your contact list",73) / from_utf8(contacts().get_self().get_name()), DELEGATE(this, invite_message_handler))
         .focus(resend);
     dm().vspace(5);
-    dm().hiddenlabel(TTT("Invalid Public ID!",71), ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_INVALID_PUB_ID));
-    dm().hiddenlabel(TTT("Such contact already present!",87), ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_ALREADY_PRESENT));
-    dm().hiddenlabel(L"memory error", ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_MEMORY_ERROR)); // no need to translate it due rare error
-    dm().hiddenlabel(L"timeout", ts::ARGB(255,0,0)).setname(CONSTASTR("err") + ts::amake((int)CR_TIMEOUT)); // no need to translate it due rare error
+    dm().hiddenlabel(TTT("Invalid Public ID!",71), ts::ARGB(255,0,0)).setname(ts::amake<uint>(CONSTASTR("err"), CR_INVALID_PUB_ID));
+    dm().hiddenlabel(TTT("Such contact already present!",87), ts::ARGB(255,0,0)).setname(ts::amake<uint>(CONSTASTR("err"), CR_ALREADY_PRESENT));
+    dm().hiddenlabel(L"memory error", ts::ARGB(255,0,0)).setname(ts::amake<uint>(CONSTASTR("err"), CR_MEMORY_ERROR)); // no need to translate it due rare error
+    dm().hiddenlabel(L"timeout", ts::ARGB(255,0,0)).setname(ts::amake<uint>(CONSTASTR("err"), CR_TIMEOUT)); // no need to translate it due rare error
 
     return 0;
 }
@@ -125,7 +125,7 @@ bool dialog_addcontact_c::public_id_handler( const ts::wstr_c &pid )
 
 bool dialog_addcontact_c::hidectl(RID,GUIPARAM p)
 {
-    MODIFY(RID::from_ptr(p)).visible(false);
+    MODIFY(RID::from_param(p)).visible(false);
     return true;
 }
 
@@ -140,11 +140,11 @@ ts::uint32 dialog_addcontact_c::gm_handler( gmsg<ISOGM_CMD_RESULT>& r)
 
         } else
         {
-            RID errr = find( CONSTASTR("err") + ts::amake((int)r.rslt) );
+            RID errr = find( ts::amake<uint>( CONSTASTR("err"), r.rslt ) );
             if (errr)
             {
                 MODIFY(errr).visible(true);
-                DEFERRED_UNIQUE_CALL( 1.0, DELEGATE(this, hidectl), errr.to_ptr() );
+                DEFERRED_UNIQUE_CALL( 1.0, DELEGATE(this, hidectl), errr );
             }
         }
     }
@@ -164,6 +164,8 @@ dialog_addgroup_c::dialog_addgroup_c(initial_rect_data_s &data) :gui_isodialog_c
 
 dialog_addgroup_c::~dialog_addgroup_c()
 {
+    if (gui)
+        gui->delete_event(DELEGATE(this, hidectl));
 }
 
 /*virtual*/ ts::wstr_c dialog_addgroup_c::get_name() const
@@ -282,7 +284,7 @@ bool dialog_addgroup_c::groupname_handler(const ts::wstr_c &m)
 
 bool dialog_addgroup_c::hidectl(RID, GUIPARAM p)
 {
-    MODIFY(RID::from_ptr(p)).visible(false);
+    MODIFY(RID::from_param(p)).visible(false);
     return true;
 }
 
@@ -293,7 +295,7 @@ void dialog_addgroup_c::showerror(int id)
     if (errr)
     {
         MODIFY(errr).visible(true);
-        DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, hidectl), errr.to_ptr());
+        DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, hidectl), errr);
     }
 
 }

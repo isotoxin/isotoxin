@@ -23,6 +23,21 @@ menu_c& menu_c::add_separator()
     return *this;
 }
 
+menu_c menu_c::add_path( const ts::wstr_c & path )
+{
+    if (curbp == nullptr) prepare();
+    menu_c m = *this;
+    for( ts::token<ts::wchar> t( path, '/' ); t; ++t )
+    {
+        if (m.curbp == nullptr) m.prepare();
+        ts::wbp_c *item = m.curbp->get(*t);
+        if (!item) item = &m.curbp->add_block(*t);
+        item->set_value(CONSTWSTR("\1t"));
+        m = menu_c(m, item);
+    }
+    return m;
+}
+
 menu_c menu_c::add_sub( const ts::wstr_c & text )
 {
     if (curbp == nullptr) prepare();
@@ -33,7 +48,7 @@ menu_c menu_c::add_sub( const ts::wstr_c & text )
 
 menu_c menu_c::get_sub( const ts::wbp_c &bp ) const
 {
-    if (ASSERT(core && core->bp.present(&bp)))
+    if (ASSERT(core && core->bp.present_r(&bp)))
     {
         return menu_c( *this, const_cast<ts::wbp_c *>(&bp) );
     }

@@ -4,7 +4,6 @@
 
 bool TSCALL dialog_already_present( int );
 
-typedef fastdelegate::FastDelegate< menu_c (const ts::str_c &, bool) > GETMENU_FUNC;
 class gui_listitem_c;
 template<> struct MAKE_CHILD<gui_listitem_c> : public _PCHILD(gui_listitem_c)
 {
@@ -12,7 +11,7 @@ template<> struct MAKE_CHILD<gui_listitem_c> : public _PCHILD(gui_listitem_c)
     ts::str_c  param;
     ts::str_c  themerect;
     GETMENU_FUNC gm;
-    const ts::drawable_bitmap_c *icon;
+    const ts::drawable_bitmap_c *icon = nullptr;
     MAKE_CHILD(RID parent_, const ts::wstr_c &text, const ts::str_c &param) :text(text), param(param) { parent = parent_; }
     ~MAKE_CHILD();
 
@@ -60,17 +59,34 @@ class gui_dialog_c : public gui_vscrollgroup_c
     ts::irect border = ts::irect(0);
     ts::hashmap_t<ts::str_c, guirect_c::sptr_t> ctl_by_name;
 
+    friend class gui_textfield_c;
+
 protected:
 
     virtual int unique_tag() { return 0; }
     virtual void on_close() { TSDEL(this); }
     virtual void on_confirm() { TSDEL(this); }
 
+    ts::str_c find( RID crid ) const;
     RID find( const ts::asptr &name ) const;
     void setctlname( const ts::asptr &name, guirect_c &r );
 
+    struct behav_s
+    {
+        enum evt_e
+        {
+            EVT_ON_CREATE,
+            EVT_ON_OPEN_MENU,
+            EVT_ON_CLICK,
+        } e;
+        ts::str_c param;
+        menu_c *menu;
+    };
+
     struct description_s
     {
+        guirect_c::sptr_t ctlptr; // can be nullptr (if other tab selected, or parent control not yet created)
+
         int subctltag = -1;
         ts::str_c name;
         ts::uint32 mask = 0;
@@ -90,6 +106,7 @@ protected:
             _PATH,
             _FILE,
             _TEXT,
+            _SELECTOR,
             _COMBIK,
             _LIST,
             _CHECKBUTTONS,
@@ -115,6 +132,8 @@ protected:
             return false;
         }
         bool updvalue2( RID r, GUIPARAM p );
+
+        menu_c getcontextmenu( const ts::str_c& param, bool activation ) { return items; }
 
         button_desc_s *getbface() const
         {
@@ -150,6 +169,7 @@ protected:
         description_s& hiddenlabel( const ts::wsptr& text, ts::TSCOLOR col );
         void page_header( const ts::wsptr& text );
         description_s& vspace( int h = 5, GUIPARAMHANDLER oncreatehanler = nullptr );
+        description_s& selector( const ts::wsptr &desc, const ts::wsptr &t, GUIPARAMHANDLER behaviourhandler = nullptr );
         description_s& path( const ts::wsptr &desc, const ts::wsptr &path, gui_textedit_c::TEXTCHECKFUNC checker = gui_textedit_c::TEXTCHECKFUNC() );
         description_s& file( const ts::wsptr &desc, const ts::wsptr &iroot, const ts::wsptr &fn, gui_textedit_c::TEXTCHECKFUNC checker = gui_textedit_c::TEXTCHECKFUNC() );
         description_s& textfield( const ts::wsptr &desc, const ts::wsptr &val, gui_textedit_c::TEXTCHECKFUNC checker);
@@ -166,7 +186,7 @@ protected:
     };
 
     ts::hashmap_t<int, ts::safe_ptr<guirect_c>> subctls;
-    void updrect(void *, int r, const ts::ivec2 &p);
+    void updrect(const void *, int r, const ts::ivec2 &p);
     void removerctl(int r);
 
     typedef ts::array_inplace_t<description_s, 0> descarray;
@@ -199,6 +219,7 @@ protected:
     bool path_selector(RID, GUIPARAM prm);
     bool path_explore(RID, GUIPARAM prm);
     bool combo_drop(RID, GUIPARAM prm);
+    bool custom_menu(RID, GUIPARAM prm);
 
     struct radio_item_s
     {
@@ -224,6 +245,7 @@ protected:
         TFR_PATH_SELECTOR,
         TFR_PATH_VIEWER,
         TFR_FILE_SELECTOR,
+        TFR_CUSTOM_SELECTOR,
         TFR_COMBO,
     };
 
@@ -245,6 +267,7 @@ protected:
 
     void ctlenable( const ts::asptr&name, bool enblflg );
 
+    void set_selector_menu( const ts::asptr& ctl_name, const menu_c& m );
     void set_combik_menu( const ts::asptr& ctl_name, const menu_c& m );
     void set_label_text( const ts::asptr& ctl_name, const ts::wstr_c& t );
     void set_list_emptymessage( const ts::asptr& ctl_name, const ts::wstr_c& t );

@@ -38,14 +38,14 @@ ts::wstr_c dialog_firstrun_c::path_by_choice(path_choice_e choice)
 
 bool dialog_firstrun_c::handler_1( RID, GUIPARAM p )
 {
-    choice1 = (path_choice_e)(int)p;
+    choice1 = (path_choice_e)as_int(p);
     return true;
 }
 
 bool dialog_firstrun_c::handler_0( RID, GUIPARAM p )
 {
     path_choice_e prevchoice = choice0;
-    choice0 = (path_choice_e)(int)p;
+    choice0 = (path_choice_e)as_int(p);
 
     if (ASSERT(selpath))
     {
@@ -147,12 +147,12 @@ void dialog_firstrun_c::go2page(int page_)
         {
             radio_item_s items[] =
             {
-                radio_item_s(TTT("Default initialization",25), (GUIPARAM)1, CONSTASTR("radio00")),
-                radio_item_s(TTT("Manual setup",26), (GUIPARAM)0)
+                radio_item_s(TTT("Default initialization",25), as_param(1), CONSTASTR("radio00")),
+                radio_item_s(TTT("Manual setup",26), as_param(0))
             };
 
             label( ts::wstr_c(CONSTWSTR("<l>")).append(TTT("Choice",115)).append(CONSTWSTR("</l>")) );
-            radio(ARRAY_WRAPPER(items), DELEGATE(this, noob_or_father), (GUIPARAM)((i_am_noob && !developing) ? 1 : 0));
+            radio(ARRAY_WRAPPER(items), DELEGATE(this, noob_or_father), as_param((i_am_noob && !developing) ? 1 : 0));
 
             if (developing) ctlenable( CONSTASTR("radio00"), false );
         }
@@ -171,15 +171,15 @@ void dialog_firstrun_c::go2page(int page_)
         {
             radio_item_s items[] =
             {
-                radio_item_s(TTT("Copy to[br][l][quote]$[quote][/l]",16) / path_by_choice(PCH_PROGRAMFILES), (GUIPARAM)(int)PCH_PROGRAMFILES, CONSTASTR("radio01")),
-                radio_item_s(TTT("[appname] already in right place[br]([l]leave it here: [quote]$[quote][/l])",15) / path_by_choice(PCH_HERE), (GUIPARAM)(int)PCH_HERE),
-                radio_item_s(TTT("Select another folder...",17), (GUIPARAM)(int)PCH_CUSTOM, CONSTASTR("radio02"))
+                radio_item_s(TTT("Copy to[br][l][quote]$[quote][/l]",16) / path_by_choice(PCH_PROGRAMFILES), as_param(PCH_PROGRAMFILES), CONSTASTR("radio01")),
+                radio_item_s(TTT("[appname] already in right place[br]([l]leave it here: [quote]$[quote][/l])",15) / path_by_choice(PCH_HERE), as_param(PCH_HERE)),
+                radio_item_s(TTT("Select another folder...",17), as_param(PCH_CUSTOM), CONSTASTR("radio02"))
             };
 
             if (developing)
                 choice0 = PCH_HERE;
 
-            radio(ARRAY_WRAPPER(items), DELEGATE(this, handler_0), (GUIPARAM)(int)choice0);
+            radio(ARRAY_WRAPPER(items), DELEGATE(this, handler_0), as_param(choice0));
 
             if (developing)
             {
@@ -188,7 +188,7 @@ void dialog_firstrun_c::go2page(int page_)
             }
 
             selpath = textfield(CONSTWSTR(""), MAX_PATH, TFR_PATH_SELECTOR, DELEGATE(this, path_check_0));
-            handler_0(RID(), (GUIPARAM)(int)choice0);
+            handler_0(RID(), as_param(choice0));
         }
         break;
     case 2:
@@ -202,14 +202,14 @@ void dialog_firstrun_c::go2page(int page_)
         {
             radio_item_s items[] =
             {
-                radio_item_s(TTT("By default[br][l][quote]$[quote][/l]",20) / path_by_choice(PCH_APPDATA), (GUIPARAM)(int)PCH_APPDATA, CONSTASTR("radio03")),
-                radio_item_s(TTT("Same folder of [appname][br][l][quote]$[quote][/l]",19) / path_by_choice(PCH_INSTALLPATH), (GUIPARAM)(int)PCH_INSTALLPATH),
+                radio_item_s(TTT("By default[br][l][quote]$[quote][/l]",20) / path_by_choice(PCH_APPDATA), as_param(PCH_APPDATA), CONSTASTR("radio03")),
+                radio_item_s(TTT("Same folder of [appname][br][l][quote]$[quote][/l]",19) / path_by_choice(PCH_INSTALLPATH), as_param(PCH_INSTALLPATH)),
             };
 
             if (developing)
                 choice1 = PCH_INSTALLPATH;
 
-            radio(ARRAY_WRAPPER(items), DELEGATE(this, handler_1), (GUIPARAM)(int)choice1);
+            radio(ARRAY_WRAPPER(items), DELEGATE(this, handler_1), as_param(choice1));
 
             if (developing)
                 ctlenable( CONSTASTR("radio03"), false );

@@ -10,7 +10,7 @@ DWORD config_base_c::handler_SEV_CLOSE(const system_event_param_s & p)
 {
     onclose();
     gui->delete_event(DELEGATE(this, save_dirty));
-    save_dirty(RID(), GUIPARAM(1));
+    save_dirty(RID(), as_param(1));
     closed = true;
     return 0;
 }
@@ -77,7 +77,7 @@ bool config_base_c::param( const ts::asptr& pn, const ts::asptr& vl )
 
 void config_base_c::changed(bool save_all_now)
 {
-    DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, save_dirty), save_all_now ? (GUIPARAM)1 : nullptr); //-V566
+    DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, save_dirty), save_all_now ? 1 : 0);
 }
 
 bool find_config(ts::wstr_c &path)

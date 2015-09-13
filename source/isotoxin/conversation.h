@@ -257,8 +257,8 @@ class gui_message_item_c : public gui_label_ex_c
     ts::wstr_c prepare_button_rect(int r, const ts::ivec2 &sz);
     void kill_button( rectengine_c *beng, int r );
     void repl_button( int r_from, int r_to );
-    void updrect(void *, int r, const ts::ivec2 &p);
-    void updrect_emoticons(void *, int r, const ts::ivec2 &p);
+    void updrect(const void *, int r, const ts::ivec2 &p);
+    void updrect_emoticons(const void *, int r, const ts::ivec2 &p);
     
     bool b_explore(RID, GUIPARAM);
     bool b_break(RID, GUIPARAM);

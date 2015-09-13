@@ -495,7 +495,7 @@ public:
 
     const post_s * fix_history( message_type_app_e oldt, message_type_app_e newt, const contact_key_s& sender = contact_key_s() /* self - empty - no matter */, time_t update_time = 0 /* 0 - no need update */ );
 
-    bool check_invite(RID r = RID(), GUIPARAM p = (GUIPARAM)3);
+    bool check_invite(RID r = RID(), GUIPARAM p = as_param(3));
 
     bool b_accept(RID, GUIPARAM);
     bool b_reject(RID, GUIPARAM);
@@ -729,6 +729,7 @@ public:
                 if (!r(c)) break;
     }
 
+    void unload(); // called before profile switch
 };
 
 extern ts::static_setup<contacts_c> contacts;

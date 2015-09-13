@@ -12,7 +12,7 @@
   - Аудио фильтры
   - Одновременный звонок на метаконтакт с нескольких субконтактов - корректное отображение и прерывание
 
-- выбор звуковых файлов
++ выбор звуковых файлов
 
 + передача файлов
   + передача по lan протоколу
@@ -52,13 +52,15 @@
 
 */
 
+TODO("menu click - foreground");
+TODO("children repos optimizations");
+
 TODO("индексы добавть в таблицы (history на поле mtime и historian)");
 TODO("запоминать позицию скрола при смене контакта");
 TODO("подгрузка сообщений из истории по движению скролбара");
 TODO("автоскрол разговора при получении сообщения (опция)");
 TODO("App Icon in caption")
 TODO("Support for stretch theme rect (theme_rect_s::F_*_TILE)");
-TODO("dirty_hover_data should call mousemove event to refresh cursor");
 TODO("при сворачивании окна по максимуму освобождать память, где только можно");
 TODO("PF_UNAUTHORIZED_CHAT");
 TODO("dll-ки протоколов класть в пак и выгружать при запуске в темп");

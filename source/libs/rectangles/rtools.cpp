@@ -1,5 +1,15 @@
 #include "rectangles.h"
 
+menu_anchor_s::menu_anchor_s(bool setup_by_mousepos):rect(0)
+{
+    if (setup_by_mousepos && gui)
+    {
+        rect.lt = gui->get_cursor_pos();
+        rect.rb = rect.lt;
+    }
+}
+
+
 void fixrect(ts::irect &r, const ts::ivec2 &minsz, const ts::ivec2 &maxsz, ts::uint32 hitarea)
 {
     if (r.width() < minsz.x)

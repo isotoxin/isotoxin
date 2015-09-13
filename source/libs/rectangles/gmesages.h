@@ -29,7 +29,7 @@ enum gmsg_e
         return p->gm_handler( (gmsg<ev> &)__param ); \
     } \
 } UNIQIDLINE( m_##ev ); \
-	ts::uint32 gm_handler( gmsg<ev> & p )
+	ts::uint32 gm_handler( gmsg<ev> &p )
 
 
 #define GMRBIT_ABORT     (1<<0)

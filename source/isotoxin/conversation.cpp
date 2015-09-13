@@ -235,7 +235,7 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8)
                 gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
                 b_accept.set_text(TTT("Load",165));
                 b_accept.set_face_getter(BUTTON_FACE(button));
-                b_accept.set_handler(DELEGATE(g_app, b_update_ver), (GUIPARAM)AUB_DOWNLOAD);
+                b_accept.set_handler(DELEGATE(g_app, b_update_ver), as_param(AUB_DOWNLOAD));
                 b_accept.leech(TSNEW(leech_dock_bottom_center_s, 150, 30, -5, 5, 0, 1));
                 MODIFY(b_accept).visible(true);
 
@@ -643,7 +643,7 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
     {
         static bool make_offline(RID b, GUIPARAM p)
         {
-            int networkid = (int)p;
+            int networkid = as_int(p);
             if (active_protocol_c *ap = prf().ap(networkid))
                 ap->set_autoconnect(false);
             offline_online(HOLD(b).as<gui_button_c>(), networkid, false);
@@ -652,7 +652,7 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
         }
         static bool make_online(RID b, GUIPARAM p)
         {
-            int networkid = (int)p;
+            int networkid = as_int(p);
             if (active_protocol_c *ap = prf().ap(networkid))
                 ap->set_autoconnect(true);
             offline_online(HOLD(b).as<gui_button_c>(), networkid, true);
@@ -665,18 +665,18 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
             {
                 b.set_face_getter(BUTTON_FACE(to_offline));
                 b.tooltip(TOOLTIP(TTT("Disconnect",98)));
-                b.set_handler(make_offline, (GUIPARAM)networkid);
+                b.set_handler(make_offline, as_param(networkid));
             }
             else
             {
                 b.set_face_getter(BUTTON_FACE(to_online));
                 b.tooltip(TOOLTIP(TTT("Connect",99)));
-                b.set_handler(make_online, (GUIPARAM)networkid);
+                b.set_handler(make_online, as_param(networkid));
             }
         }
         static bool netsetup(RID b, GUIPARAM p)
         {
-            int networkid = (int)p;
+            int networkid = as_int(p);
             SUMMON_DIALOG<dialog_setup_network_c>( UD_PROTOSETUP, dialog_protosetup_params_s(networkid) );
             return true;
         }
@@ -692,7 +692,7 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
     b_setup.set_face_getter(BUTTON_FACE(netsetup));
     b_setup.tooltip(TOOLTIP(TTT("Setup network connection",55)));
     b_setup.leech(TSNEW(leech_at_left_s, &b_connect, 5));
-    b_setup.set_handler(connect_handler::netsetup, (GUIPARAM)networkid);
+    b_setup.set_handler(connect_handler::netsetup, as_param(networkid));
     MODIFY(b_setup).visible(true);
 
     gui_button_c &b_copy = MAKE_CHILD<gui_button_c>(getrid());
@@ -890,7 +890,7 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
                     menu_c m;
                     m.add(TTT("Change avatar",219), 0, x::set_self_avatar, ts::amake<int>(networkid));
                     m.add(TTT("Remove avatar",220), 0, x::clear_self_avatar, ts::amake<int>(networkid));
-                    popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
+                    popupmenu = &gui_popup_menu_c::show(menu_anchor_s(true), m);
                     popupmenu->leech(this);
                 }
                 else
@@ -1026,7 +1026,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED> &)
     return 0;
 }
 
-ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> & p)
+ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &p)
 {
     if (owner == nullptr) return 0;
 
@@ -1324,7 +1324,7 @@ void gui_message_item_c::ctx_menu_delmessage(const ts::str_c &mutag)
 
 bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
 {
-    ts::ivec2 *pt = (ts::ivec2 *)gui->lock_temp_buf((int)p);
+    ts::ivec2 *pt = (ts::ivec2 *)gui->lock_temp_buf(as_int(p));
     if (textrect.is_dirty_glyphs())
     {
         if (pt)
@@ -1581,7 +1581,7 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                 mnu.add(TTT("Open link",202), 0, DELEGATE(this, ctx_menu_golink), lnk);
                 mnu.add(TTT("Copy link",203), 0, DELEGATE(this, ctx_menu_copylink), lnk);
 
-                popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), mnu);
+                popupmenu = &gui_popup_menu_c::show(menu_anchor_s(true), mnu);
                 popupmenu->leech(this);
             }
 
@@ -1596,7 +1596,7 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
             {
                 int b = gui->get_temp_buf(1.0, sizeof(ts::ivec2));
                 *(ts::ivec2 *)gui->lock_temp_buf(b) = to_local(data.mouse.screenpos);
-                try_select_link(RID(), (GUIPARAM)b);
+                try_select_link(RID(), as_param(b));
             }
 
             return true;
@@ -1626,7 +1626,7 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
             }
             mnu.add(TTT("Delete message",221), 0, DELEGATE(this, ctx_menu_delmessage), ts::str_c().append_as_hex(&mutag, sizeof(mutag)));
 
-            popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), mnu);
+            popupmenu = &gui_popup_menu_c::show(menu_anchor_s(true), mnu);
 
         }
         break;
@@ -1781,7 +1781,7 @@ void gui_message_item_c::init_load( int n_load )
     gui_button_c &b_load = MAKE_CHILD<gui_button_c>(getrid());
     b_load.set_text(TTT("Load $ message(s)",124) / ts::wstr_c().set_as_int(n_load));
     b_load.set_face_getter(BUTTON_FACE(button));
-    b_load.set_handler(DELEGATE(author.get(), b_load), (GUIPARAM)n_load);
+    b_load.set_handler(DELEGATE(author.get(), b_load), as_param(n_load));
     b_load.leech(TSNEW(leech_dock_bottom_center_s, 300, 30, -5, 5, 0, 1));
     MODIFY(b_load).visible(true);
 }
@@ -2278,14 +2278,14 @@ bool gui_message_item_c::b_pause_unpause(RID btn, GUIPARAM p)
 {
     if (!p)
     {
-        DEFERRED_UNIQUE_CALL( 0, DELEGATE(this,b_pause_unpause), btn.to_ptr() );
+        DEFERRED_UNIQUE_CALL( 0, DELEGATE(this,b_pause_unpause), btn );
         return true;
     }
 
     ASSERT(records.size());
     record &rec = records.get(0);
-    gui_button_c &b = HOLD(RID::from_ptr(p)).as<gui_button_c>();
-    int r = (int)b.get_customdata();
+    gui_button_c &b = HOLD(RID::from_param(p)).as<gui_button_c>();
+    int r = as_int(b.get_customdata());
     int r_to = r ^ 1;
     ASSERT(r == BTN_PAUSE || r == BTN_UNPAUSE);
 
@@ -2294,7 +2294,7 @@ bool gui_message_item_c::b_pause_unpause(RID btn, GUIPARAM p)
     else
         b.set_face_getter(BUTTON_FACE_PRELOADED(pauseb));
 
-    b.set_customdata((GUIPARAM)r_to);
+    b.set_customdata(as_param(r_to));
     repl_button(r, r_to);
 
     file_transfer_s *ft = g_app->find_file_transfer_by_msgutag(rec.utag);
@@ -2358,12 +2358,12 @@ void gui_message_item_c::kill_button( rectengine_c *beng, int r )
     flags.set(F_DIRTY_HEIGHT_CACHE);
 }
 
-void gui_message_item_c::updrect_emoticons(void *, int r, const ts::ivec2 &p)
+void gui_message_item_c::updrect_emoticons(const void *, int r, const ts::ivec2 &p)
 {
     emoti().draw( getroot(), p, r );
 }
 
-void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
+void gui_message_item_c::updrect(const void *, int r, const ts::ivec2 &p)
 {
     if (RECT_IMAGE == r)
     {
@@ -2416,7 +2416,7 @@ void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
         case BTN_PAUSE:
         {
             gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
-            bc.set_customdata((GUIPARAM)BTN_PAUSE); //-V566
+            bc.set_customdata(as_param(BTN_PAUSE));
             bc.set_face_getter(BUTTON_FACE_PRELOADED(pauseb));
             bc.set_handler(DELEGATE(this, b_pause_unpause), nullptr);
             MODIFY(bc).setminsize(bc.getrid()).pos(root_to_local(p)).visible(true);
@@ -2426,7 +2426,7 @@ void gui_message_item_c::updrect(void *, int r, const ts::ivec2 &p)
         case BTN_UNPAUSE:
         {
             gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
-            bc.set_customdata((GUIPARAM)BTN_UNPAUSE); //-V566
+            bc.set_customdata(as_param(BTN_UNPAUSE));
             bc.set_face_getter(BUTTON_FACE_PRELOADED(unpauseb));
             bc.set_handler(DELEGATE(this, b_pause_unpause), nullptr);
             MODIFY(bc).setminsize(bc.getrid()).pos(root_to_local(p)).visible(true);
@@ -2994,7 +2994,7 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
 }
 
 
-ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_MESSAGE> & p) // show message in message list
+ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_MESSAGE> &p) // show message in message list
 {
     if (p.resend) return 0;
     if (historian != p.get_historian()) return 0;
@@ -3035,7 +3035,7 @@ DWORD gui_messagelist_c::handler_SEV_ACTIVE_STATE(const system_event_param_s & p
     return 0;
 }
 
-ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> & p)
+ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &p)
 {
     if (historian == nullptr) return 0;
 
@@ -3066,7 +3066,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> & p)
     return 0;
 }
 
-ts::uint32 gui_messagelist_c::gm_handler(gmsg<GM_DROPFILES> & p)
+ts::uint32 gui_messagelist_c::gm_handler(gmsg<GM_DROPFILES> &p)
 {
     if (historian && !historian->getkey().is_self() && p.root == getrootrid())
     {
@@ -3075,7 +3075,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<GM_DROPFILES> & p)
     return 0;
 }
 
-ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_DELIVERED> & p)
+ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_DELIVERED> &p)
 {
     for(rectengine_c *e : getengine())
         if (e)
@@ -3092,14 +3092,14 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_DELIVERED> & p)
     return 0;
 }
 
-ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED> & p)
+ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED> &p)
 {
     if (historian)
         historian->reselect(false);
     return 0;
 }
 
-ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_TYPING> & p)
+ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_TYPING> &p)
 {
     if (prf().get_options().is(MSGOP_IGNORE_OTHER_TYPING))
         return 0;
@@ -3111,7 +3111,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_TYPING> & p)
     return 0;
 }
 
-ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> & p)
+ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
 {
     contact_c *sender = contacts().find(p.post.sender);
     if (!sender) return 0;
@@ -3155,7 +3155,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> & p)
     return 0;
 }
 
-ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> & p)
+ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
 {
     self_selected = p.contact->getkey().is_self();
     memset( &last_post_time, 0, sizeof(last_post_time) );
@@ -3285,7 +3285,7 @@ bool gui_message_editor_c::clear_text(RID, GUIPARAM)
     return true;
 }
 
-ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SEND_MESSAGE> & p)
+ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SEND_MESSAGE> &p)
 {
     return on_enter_press_func(RID(), nullptr) ? GMRBIT_ACCEPTED : 0;
 }
@@ -3304,7 +3304,7 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_MESSAGE> & msg) // clear 
     return 0;
 }
 
-ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> & p)
+ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
 {
     bool added;
     auto &x = messages.add_get_item(historian ? historian->getkey() : contact_key_s(), added);

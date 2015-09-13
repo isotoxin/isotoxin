@@ -925,11 +925,37 @@ public:
 
     array_wrapper_c subarray(aint index) const
     {
+        ASSERT( index >= 0 && index <= length_ );
         return array_wrapper_c( data_ + index, length_ - index );
     }
     array_wrapper_c subarray(aint index0, aint index1) const
     {
+        ASSERT( index0 <= length_ && index1 <= length_ && index0 < index1 );
         return array_wrapper_c(data_ + index0, index1 - index0);
+    }
+    array_wrapper_c subarray_safe(aint index) const
+    {
+        if (index < 0) index = 0;
+        if (index > length_) return array_wrapper_c(data_ + length_, 0);
+        return array_wrapper_c(data_ + index, length_ - index);
+    }
+    array_wrapper_c subarray_safe(aint index0, aint index1) const
+    {
+        if (index0 < 0) index0 = 0;
+        if (index0 > length_ || index0 > index1) return array_wrapper_c(data_ + length_, 0);
+        if (index1 > length_) index1 = length_;
+        return array_wrapper_c(data_ + index0, index1 - index0);
+    }
+
+    bool operator==(const array_wrapper_c &o)
+    {
+        if (length_ != o.length_) return false;
+        const T *a1 = begin();
+        const T *a2 = o.begin();
+        for(const T *e = end(); a1 < e; ++a1, ++a2)
+            if (!(*a1 == *a2))
+                return false;
+        return true;
     }
 
     T * begin() { return data_ + 0; }

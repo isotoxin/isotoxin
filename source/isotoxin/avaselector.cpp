@@ -383,7 +383,7 @@ bool dialog_avaselector_c::flashavarect(RID, GUIPARAM)
     return true;
 }
 
-ts::uint32 dialog_avaselector_c::gm_handler(gmsg<GM_DROPFILES> & p)
+ts::uint32 dialog_avaselector_c::gm_handler(gmsg<GM_DROPFILES> &p)
 {
     if (p.root == getrootrid())
     {

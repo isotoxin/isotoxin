@@ -603,13 +603,13 @@ bool gui_contact_item_c::edit1(RID, GUIPARAM)
 }
 
 
-void gui_contact_item_c::updrect(void *, int r, const ts::ivec2 &p)
+void gui_contact_item_c::updrect(const void *, int r, const ts::ivec2 &p)
 {
     if (ASSERT(r < rbtn::EB_MAX) && prf().is_loaded())
     {
         hstuff().updr[r].p = root_to_local(p);
         hstuff().updr[r].updated = true;
-        DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, update_buttons), (void *)1 );
+        DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, update_buttons), 1 );
     }
 }
 
@@ -819,6 +819,12 @@ int gui_contact_item_c::contact_item_rite_margin()
                     break;
                 case CS_WAIT:
                     bdesc = nullptr;
+                    break;
+                case CS_ROTTEN:
+                case CS_OFFLINE:
+                    if (CIR_ME == role)
+                        if ( contact->subcount() == 0 )
+                            bdesc = nullptr;
                     break;
                 case contact_state_check: // some online, some offline
                     if (role == CIR_CONVERSATION_HEAD)
@@ -1196,7 +1202,7 @@ int gui_contact_item_c::contact_item_rite_margin()
 
                 m.add(TTT("Delete",85),0,handlers::m_delete,contact->getkey().as_str());
                 m.add(TTT("Contact settings",223),0,handlers::m_contact_props,contact->getkey().as_str());
-                popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(),0), m);
+                popupmenu = &gui_popup_menu_c::show(menu_anchor_s(true), m);
                 popupmenu->leech(this);
             }
 
@@ -1232,7 +1238,7 @@ int gui_contact_item_c::contact_item_rite_margin()
             if (nchild > 1 && pareng.get_child(0) != &getengine())
                 m.add(TTT("Move to top",151), 0, handlers::m_mfirst, contact->getkey().as_str());
             m.add(TTT("Remove",148), 0, handlers::m_remove, contact->getkey().as_str());
-            gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
+            gui_popup_menu_c::show(menu_anchor_s(true), m);
 
         } else if (CIR_ME == role)
         {
@@ -1256,7 +1262,7 @@ int gui_contact_item_c::contact_item_rite_margin()
             m.add(TTT("Online",244), COS_ONLINE == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_ONLINE));
             m.add(TTT("Away",245), COS_AWAY == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_AWAY));
             m.add(TTT("Busy",246), COS_DND == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_DND));
-            gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
+            gui_popup_menu_c::show(menu_anchor_s(true), m);
         } else if (CIR_CONVERSATION_HEAD == role && !contact->getkey().is_self())
         {
             ts::irect ca = get_client_area();
@@ -1274,7 +1280,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                     }
                 });
 
-                gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
+                gui_popup_menu_c::show(menu_anchor_s(true), m);
             }
         }
         return false;
@@ -1456,7 +1462,7 @@ void gui_contactlist_c::recreate_ctls(bool focus_filter)
     if (addgbtn) TSDEL(addgbtn);
     if (self) TSDEL(self);
 
-    if (button_desc_s *baddc = gui->theme().get_button(CONSTASTR("addcontact"))) //-V807
+    if (button_desc_s *baddc = gui->theme().get_button(CONSTASTR("addcontact")))
     {
         AUTOCLEAR(flags, F_NO_REPOS);
 

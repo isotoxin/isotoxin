@@ -72,22 +72,22 @@ void gui_c::delete_event(GUIPARAMHANDLER h, GUIPARAM prm)
 
 bool gui_c::b_close(RID r, GUIPARAM param)
 {
-    app_b_close(RID::from_ptr(param));
+    app_b_close(RID::from_param(param));
     return true;
 }
 bool gui_c::b_maximize(RID r, GUIPARAM param)
 {
-    MODIFY(RID::from_ptr(param)).maximize(true);
+    MODIFY(RID::from_param(param)).maximize(true);
     return true;
 }
 bool gui_c::b_minimize(RID r, GUIPARAM param)
 {
-    app_b_minimize(RID::from_ptr(param));
+    app_b_minimize(RID::from_param(param));
     return true;
 }
 bool gui_c::b_normalize(RID r, GUIPARAM param)
 {
-    MODIFY(RID::from_ptr(param)).decollapse().maximize(false);
+    MODIFY(RID::from_param(param)).decollapse().maximize(false);
     return true;
 }
 
@@ -162,13 +162,6 @@ const ts::font_desc_c & gui_c::get_font(const ts::asptr &fontname)
     else val.value.update_font();
     return val.value;
 }
-
-#ifndef _FINAL
-const theme_c &gui_c::xtheme()
-{
-    return m_theme;
-}
-#endif
 
 int gui_c::get_temp_buf(double ttl, ts::aint sz)
 {
@@ -474,6 +467,16 @@ void gui_c::loop()
             TSDEL(me);
         }
 
+        if (m_flags.is(F_DO_MOUSEMOUVE))
+        {
+            const hover_data_s &d = get_hoverdata(get_cursor_pos());
+            if (d.rid)
+            {
+                rectengine_root_c *rr = HOLD(d.rid)().getroot();
+                if (rr) rr->simulate_mousemove();
+            }
+            m_flags.clear(F_DO_MOUSEMOUVE);
+        }
 
         app_fix_sleep_value(g_sysconf.sleep);
     }
@@ -663,7 +666,7 @@ public:
                 if (c && owner->getrid() != rid) // query other
                 {
                     bool _visible = true;
-                    int tag = (int)ts::ptr_cast<gui_control_c *>(owner)->get_customdata();
+                    int tag = as_int(ts::ptr_cast<gui_control_c *>(owner)->get_customdata());
                     switch (tag)
                     {
                     case ABT_CLOSE:
@@ -728,8 +731,8 @@ void gui_c::make_app_buttons(RID rootappwindow, ts::uint32 allowed_buttons, GET_
         gui_button_c &b = MAKE_CHILD<gui_button_c>(rootappwindow);
         b.tooltip(cbc->tooltip);
         b.set_face_getter(cbc->face);
-        b.set_handler(cbc->handler, rootappwindow.to_ptr());
-        b.set_customdata( (GUIPARAM)cbc->tag );
+        b.set_handler(cbc->handler, rootappwindow.to_param());
+        b.set_customdata( as_param(cbc->tag) );
         b.leech( TSNEW(auto_app_buttons, prev, i) );
         MODIFY(b).visible(true).size(b.get_min_size());
         prev = &b;
@@ -1023,13 +1026,13 @@ selectable_core_s::~selectable_core_s()
 
 bool selectable_core_s::flash(RID, GUIPARAM p)
 {
-    flashing = (int)p;
+    flashing = as_int(p);
     if (flashing >= 100)
     {
         clear_selection_after_flashing = true;
         flashing = 4;
     }
-    if (flashing > 0) DEFERRED_UNIQUE_CALL( 0.1, DELEGATE(this, flash), (GUIPARAM)(flashing-1) );
+    if (flashing > 0) DEFERRED_UNIQUE_CALL( 0.1, DELEGATE(this, flash), flashing-1 );
     if (clear_selection_after_flashing && flashing == 0)
         clear_selection();
     else if (owner) {
@@ -1085,7 +1088,7 @@ bool selectable_core_s::selectword(RID, GUIPARAM p)
         // current glyph not yet known. waiting it
         if (!p && owner) owner->getengine().redraw();
         dirty = true;
-        DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, selectword), GUIPARAM(1) );
+        DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, selectword), 1 );
         return true;
     }
     if (owner)

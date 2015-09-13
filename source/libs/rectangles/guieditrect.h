@@ -45,7 +45,7 @@ public:
         }
         bool is_char() const
         {
-            return ((UINT_PTR)this & 1); // hint! lower bit of valid pointer is always 0
+            return 0 != ((UINT_PTR)this & 1); // hint! lower bit of valid pointer is always 0
         }
         ts::wchar as_char() const
         {
@@ -65,6 +65,8 @@ public:
         virtual ts::str_c to_utf8() const = 0;
         virtual void update_advance(ts::font_c *f) {};
         virtual void setup( const ts::ivec2 &pos, ts::glyph_image_s &gi ) = 0;
+        virtual active_element_s * clone() const = 0;
+        virtual bool equals(active_element_s *) const = 0;
 
         active_element_s() {}
         virtual ~active_element_s() {}
@@ -73,14 +75,22 @@ private:
 
 	class text_element_c
 	{
-		text_element_c(const text_element_c &) UNUSED;
-		void operator=(const text_element_c &) UNUSED;
 
 	public:
 		active_element_s *p;
 
+        text_element_c(const text_element_c &o)
+        {
+            p = o.p->is_char() ? o.p : o.p->clone();
+        }
+        void operator=(const text_element_c &o)
+        {
+            if (!p->is_char()) p->release();
+            p = o.p->is_char() ? o.p : o.p->clone();
+        }
+
 		text_element_c(active_element_s *p) : p(p) {}//absorb constructor
-		text_element_c(ts::wchar ch) {p = active_element_s::fromchar(ch);}
+		explicit text_element_c(ts::wchar ch) {p = active_element_s::fromchar(ch);}
 		~text_element_c() {if (!p->is_char()) p->release();}
 
         void operator=(active_element_s *_p)
@@ -89,9 +99,15 @@ private:
             p = _p;
         }
 
+        bool operator==(const text_element_c&o) const
+        {
+            if (p->is_char() && o.p->is_char()) return p->as_char() == o.p->as_char();
+            if (!p->is_char() && !o.p->is_char()) return p->equals(o.p);
+            return false;
+        }
 		bool operator==(ts::wchar ch) const {return p->is_char() && p->as_char() == ch;}
 
-		ts::wchar get_char_fast() const {return p->as_char();}
+		ts::wchar get_char_unsafe() const {return p->as_char();}
 		bool     is_char() const {return p->is_char();}
 		ts::wchar get_char() const {return p->is_char() ? p->as_char() : 0;}
 		int advance(ts::font_c *f) const {return p->is_char() ? (*f)[p->as_char()].advance : p->advance;}
@@ -105,6 +121,33 @@ private:
 	int margin_left = 0, margin_right = 0, margin_top = 0, margin_bottom = 0;
     ts::irect caretrect = ts::irect(0);
 
+    enum change_e
+    {
+        CH_ADDCHAR,
+        CH_DELCHAR,
+        CH_REPLACE,
+        CH_ADDSPECIAL,
+    };
+
+
+    struct snapshot_s
+    {
+        DUMMY(snapshot_s);
+        snapshot_s() {}
+        ts::array_inplace_t<text_element_c,1> text;
+        int caret_index = -1;
+        int selindex = -1;
+        int last_caret = -1;
+        change_e ch;
+        snapshot_s(const ts::array_wrapper_c<const text_element_c> &text, int caret, int selindex, change_e ch) :text(text), caret_index(caret), selindex(selindex), last_caret(caret), ch(ch) {}
+    };
+
+    struct snapshots_s : public ts::array_inplace_t < snapshot_s, 1 >
+    {
+        void push(const ts::array_wrapper_c<const text_element_c> &text, int caret, int selindex, change_e ch);
+    };
+    snapshots_s _undo;
+    snapshots_s _redo;
 
     bool focus() const;
     bool selection_disallowed() const;
@@ -219,7 +262,7 @@ public:
     void set_placeholder(const ts::wstr_c &t);
     void set_placeholder(const ts::wstr_c &t, ts::TSCOLOR phcolor) { placeholder_color = phcolor; set_placeholder(t); }
 
-	void set_text(const ts::wstr_c &text, bool setCaretToEnd = false);
+	void set_text(const ts::wstr_c &text, bool move_caret2end = false, bool setup_undo = true);
     ts::wstr_c get_text_and_fix_pos(int *pos0, int *pos1) const;
 	ts::wstr_c get_text() const {return text_substr(0, text.size());}
     ts::str_c get_text_utf8() const {return text_substr_utf8(0, text.size());}
@@ -257,6 +300,8 @@ public:
 	void cut() {cut_(get_caret_char_index());}
 	void copy() {copy_(get_caret_char_index());}
 	void paste() {paste_(get_caret_char_index());}
+    void undo();
+    void redo();
     void selectword();
     void selectall()
     {

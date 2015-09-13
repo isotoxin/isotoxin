@@ -134,7 +134,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR(" <a href=\"https://www.opus-codec.org\">Opus audio codec</a>") );
     title.append( CONSTWSTR(" <a href=\"http://vorbis.com\">Ogg Vorbis audio codec</a>"));
     title.append( CONSTWSTR(" <a href=\"https://xiph.org/flac/\">Flac audio codec</a>"));
-    title.append( CONSTWSTR(" <a href=\"http://www.mega-nerd.com/SRC\">Sample Rate Converter</a>"));
+    title.append( CONSTWSTR(" <a href=\"https://github.com/Rotkaermota/filter_audio\">Irungentoo's filter_audio fork</a>"));
     title.append( CONSTWSTR(" <a href=\"http://webmproject.org\">VP8 video codec</a>") );
     title.append( CONSTWSTR(" <a href=\"http://libsodium.org\">Sodium crypto library</a>") );
     title.append( CONSTWSTR(" <a href=\"http://freetype.org\">Free Type font render library</a>") );
@@ -166,7 +166,7 @@ bool dialog_about_c::check_update_now(RID, GUIPARAM)
         b.call_enable(false);
 
     checking_new_version = true;
-    g_app->b_update_ver(RID(), (GUIPARAM)AUB_ONLY_CHECK);
+    g_app->b_update_ver(RID(), as_param(AUB_ONLY_CHECK));
 
     return true;
 }

@@ -8,8 +8,11 @@ namespace
     struct smile_element_s : gui_textedit_c::active_element_s
     {
         const emoticon_s *e;
-        int ref = 1;
         ts::bitmap_c bmp;
+        mutable int ref = 1;
+
+        smile_element_s &operator=(const smile_element_s &se) UNUSED;
+        smile_element_s(const smile_element_s &se) UNUSED;
 
         smile_element_s(const emoticon_s *e, int maxh):e(e)
         {
@@ -62,6 +65,18 @@ namespace
             }
             gi.color = 0;
             gi.thickness = 0;
+        }
+        /*virtual*/ active_element_s * clone() const override
+        {
+            ++ref;
+            return const_cast<smile_element_s *>(this);
+        }
+        /*virtual*/ bool equals(active_element_s *se) const override
+        {
+            if (se == this)
+                return true;
+            smile_element_s *ses = dynamic_cast<smile_element_s *>(se);
+            return ses && ses->e == e;
         }
     };
 }

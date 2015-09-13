@@ -44,6 +44,9 @@ gui_listitem_c::~gui_listitem_c()
 
 void gui_listitem_c::created()
 {
+    gui_control_c &lst = HOLD(getparent()).as<gui_control_c>();
+    set_updaterect( lst.get_updaterect() );
+
     defaultthrdraw = DTHRO_BASE;
     __super::created();
 }
@@ -81,8 +84,30 @@ void gui_listitem_c::set_text(const ts::wstr_c&t)
 
 /*virtual*/ bool gui_listitem_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    if ( rid != getrid() && (getrid() >> rid) )
+    {
+        switch (qp)
+        {
+        case SQ_MOUSE_WHEELUP:
+        case SQ_MOUSE_WHEELDOWN:
+            return __super::sq_evt(qp, rid, data);;
+        case SQ_MOUSE_IN:
+            MODIFY(getrid()).highlight(true);
+            break;
+        case SQ_MOUSE_OUT:
+            MODIFY(getrid()).highlight(false);
+            break;
+        }
+        return false;
+    }
+
     switch (qp)
     {
+    case SQ_CHILD_CREATED:
+        {
+            HOLD(data.rect.id)().leech(this);
+        }
+        break;
     case SQ_MOUSE_IN:
         MODIFY(getrid()).highlight(true);
         return false;
@@ -95,7 +120,7 @@ void gui_listitem_c::set_text(const ts::wstr_c&t)
             menu_c m = gm(param, false);
             if (!m.is_empty())
             {
-                popupmenu = &gui_popup_menu_c::show(ts::ivec3(gui->get_cursor_pos(), 0), m);
+                popupmenu = &gui_popup_menu_c::show(menu_anchor_s(true), m);
                 MODIFY(rid).active(true);
             }
         }
@@ -109,21 +134,20 @@ void gui_listitem_c::set_text(const ts::wstr_c&t)
         textrect.make_dirty(false, false, true);
         break;
     case SQ_DRAW:
+        __super::sq_evt(qp, rid, data);
         if (icon)
         {
             ts::irect cla = get_client_area();
-            __super::sq_evt(qp, rid, data);
             getengine().begin_draw();
             getengine().draw( ts::ivec2(cla.lt.x, (cla.height()-icon->info().sz.y)/2+cla.lt.y), *icon, ts::irect(0, icon->info().sz), true );
             getengine().end_draw();
-
         }
         return true;
     }
     return __super::sq_evt(qp, rid, data);
 }
 
-ts::uint32 gui_listitem_c::gm_handler(gmsg<GM_POPUPMENU_DIED> & p)
+ts::uint32 gui_listitem_c::gm_handler(gmsg<GM_POPUPMENU_DIED> &p)
 {
     if (p.level == 0 && getprops().is_active())
         MODIFY(getrid()).active(false);
@@ -136,7 +160,7 @@ bool TSCALL dialog_already_present( int udtag )
     return gmsg<GM_DIALOG_PRESENT>( udtag ).send().is(GMRBIT_ACCEPTED);
 }
 
-ts::uint32 gui_dialog_c::gm_handler(gmsg<GM_DIALOG_PRESENT> & p)
+ts::uint32 gui_dialog_c::gm_handler(gmsg<GM_DIALOG_PRESENT> &p)
 {
     int udt = unique_tag();
     if (udt == 0) return 0;
@@ -144,13 +168,40 @@ ts::uint32 gui_dialog_c::gm_handler(gmsg<GM_DIALOG_PRESENT> & p)
     return 0;
 }
 
-ts::uint32 gui_dialog_c::gm_handler(gmsg<GM_CLOSE_DIALOG> & p)
+ts::uint32 gui_dialog_c::gm_handler(gmsg<GM_CLOSE_DIALOG> &p)
 {
     int udt = unique_tag();
     if (udt == 0) return 0;
     if (p.unique_tag == udt)
         on_close();
     return 0;
+}
+
+namespace
+{
+    struct finda
+    {
+        bool found = false;
+        bool operator()(ts::str_c&, const ts::wsptr&) { return true; } // skip separator
+        bool operator()(ts::str_c& fn, const ts::wsptr&, menu_c&m)
+        {
+            m.iterate_items(*this, fn);
+            return true;
+        }
+        bool operator()(ts::str_c& fn, const ts::wstr_c&txt, ts::uint32 &flags, MENUHANDLER h, const ts::str_c&prm)
+        {
+            if (found)
+            {
+                RESETFLAG(flags, MIF_MARKED);
+            }
+            else
+            {
+                found = prm.equals(fn);
+                INITFLAG(flags, MIF_MARKED, found);
+            }
+            return true;
+        }
+    };
 }
 
 bool gui_dialog_c::description_s::updvalue2(RID r, GUIPARAM p)
@@ -171,6 +222,18 @@ bool gui_dialog_c::description_s::updvalue2(RID r, GUIPARAM p)
                 gui_hslider_c::param_s *pp = (gui_hslider_c::param_s *)p;
                 ts::wstr_c k(text);
                 text.set_as_float(pp->value).append_char('/').append(k.substr(k.find_pos('/') + 1));
+            }
+            break;
+        case gui_dialog_c::description_s::_SELECTOR:
+            {
+                if (handler) handler(r, p);
+                if (behav_s::EVT_ON_OPEN_MENU == ((behav_s *)p)->e)
+                {
+                    finda ssss;
+                    ((behav_s *)p)->menu->iterate_items(ssss, ((behav_s *)p)->param);
+
+                } else if (behav_s::EVT_ON_CLICK == ((behav_s *)p)->e)
+                    text = ts::from_utf8( ((behav_s *)p)->param );
             }
             break;
     }
@@ -209,11 +272,18 @@ gui_dialog_c::description_s&gui_dialog_c::description_s::subctl(int tag, ts::wst
     if (ctl == _TEXT)
     {
         ASSERT(height_ == 0);
-
         height_ = ts::g_default_text_font->height;
 
         if (const theme_rect_s *thr = gui->theme().get_rect(CONSTASTR("textfield")))
-            height_ += thr->clientborder.lt.y + thr->clientborder.rb.y;
+            height_ += thr->clborder_y();
+    } else if (ctl == _SELECTOR)
+    {
+        const button_desc_s *selb = gui->theme().get_button(CONSTASTR("selector"));
+        ASSERT(height_ == 0);
+        height_ = ts::tmax( ts::g_default_text_font->height, selb ? selb->size.y : 0 );
+        if (const theme_rect_s *thr = gui->theme().get_rect(CONSTASTR("textfield")))
+            height_ += thr->clborder_y();
+
     }
     ctldesc.append(CONSTWSTR("<rect=")).append_as_int(tag).append_char(',');
     ctldesc.append_as_uint(width_).append_char(',').append_as_uint(-height_).append(CONSTWSTR(",3>"));
@@ -241,6 +311,15 @@ gui_dialog_c::description_s& gui_dialog_c::description_s::path( const ts::wsptr 
     desc = desc_;
     text = path;
     textchecker = checker;
+    return *this;
+}
+
+gui_dialog_c::description_s& gui_dialog_c::description_s::selector( const ts::wsptr &desc_, const ts::wsptr &t_, GUIPARAMHANDLER behaviourhandler )
+{
+    ctl = _SELECTOR;
+    desc = desc_;
+    text = t_;
+    handler = behaviourhandler;
     return *this;
 }
 
@@ -329,6 +408,15 @@ gui_dialog_c::~gui_dialog_c()
 {
 }
 
+ts::str_c gui_dialog_c::find( RID crid ) const
+{
+    const guirect_c *r = &HOLD(crid)();
+    for (const description_s &d : descs)
+        if (d.ctlptr == r)
+            return d.name;
+    return ts::str_c();
+}
+
 RID gui_dialog_c::find( const ts::asptr &name ) const
 {
     auto *v = ctl_by_name.find(name);
@@ -397,7 +485,7 @@ public:
 bool gui_dialog_c::file_selector(RID, GUIPARAM param)
 {
     if (is_disabled()) return true;
-    gui_textfield_c &tf = HOLD(RID::from_ptr(param)).as<gui_textfield_c>();
+    gui_textfield_c &tf = HOLD(RID::from_param(param)).as<gui_textfield_c>();
     ts::wstr_c curp = tf.get_text();
     if (curp.is_empty())
         curp = tf.get_customdata_obj<ts::wstr_c>();
@@ -417,7 +505,7 @@ bool gui_dialog_c::file_selector(RID, GUIPARAM param)
 bool gui_dialog_c::path_selector(RID, GUIPARAM param)
 {
     if (is_disabled()) return true;
-    gui_textfield_c &tf = HOLD(RID::from_ptr(param)).as<gui_textfield_c>();
+    gui_textfield_c &tf = HOLD(RID::from_param(param)).as<gui_textfield_c>();
     ts::wstr_c curp = tf.get_text();
     gui->app_path_expand_env(curp);
     while (!curp.is_empty() && !ts::dir_present(curp))
@@ -438,7 +526,7 @@ bool gui_dialog_c::path_selector(RID, GUIPARAM param)
 
 bool gui_dialog_c::path_explore(RID rid, GUIPARAM param)
 {
-    gui_textfield_c &tf = HOLD(RID::from_ptr(param)).as<gui_textfield_c>();
+    gui_textfield_c &tf = HOLD(RID::from_param(param)).as<gui_textfield_c>();
     ts::wstr_c curp = tf.get_text();
 
     ShellExecuteW( NULL, L"open", L"explorer", CONSTWSTR("/select,") + ts::fn_autoquote(ts::fn_get_name_with_ext(curp)), ts::fn_get_path(curp), SW_SHOWDEFAULT );
@@ -448,16 +536,66 @@ bool gui_dialog_c::path_explore(RID rid, GUIPARAM param)
 
 bool gui_dialog_c::combo_drop(RID rid, GUIPARAM param)
 {
-    gui_textfield_c &tf = HOLD(RID::from_ptr(param)).as<gui_textfield_c>();
+    gui_textfield_c &tf = HOLD(RID::from_param(param)).as<gui_textfield_c>();
     if (tf.popupmenu)
     {
         TSDEL(tf.popupmenu);
         return true;
     }
     if (tf.is_disabled()) return true;
-    const menu_c *mnu = (const menu_c *)tf.get_customdata();
-    tf.popupmenu = &gui_popup_menu_c::show(ts::ivec3(tf.getprops().screenrect().lb(),0),*mnu).host(tf.getrid());
+    gui_textfield_c::behav_s &beh = tf.get_customdata_obj<gui_textfield_c::behav_s>();
+    tf.popupmenu = &gui_popup_menu_c::show(menu_anchor_s(tf.getprops().screenrect(), menu_anchor_s::RELPOS_TYPE_2), beh.menu).host(tf.getrid());
+    tf.popupmenu->set_click_handler( DELEGATE(&beh, onclick) );
     return true;
+}
+
+bool gui_dialog_c::custom_menu(RID rid, GUIPARAM param)
+{
+    gui_textfield_c &tf = HOLD(RID::from_param(param)).as<gui_textfield_c>();
+    if (tf.popupmenu)
+    {
+        TSDEL(tf.popupmenu);
+        return true;
+    }
+    if (tf.is_disabled()) return true;
+    gui_textfield_c::behav_s &beh = tf.get_customdata_obj<gui_textfield_c::behav_s>();
+
+    ASSERT( beh.tfrid == tf.getrid() );
+
+    if (beh.handler)
+    {
+        behav_s b;
+        b.e = behav_s::EVT_ON_OPEN_MENU;
+        b.param = ts::to_utf8(tf.get_text());
+        b.menu = &beh.menu;
+        beh.handler( tf.getrid(), &b );
+    }
+
+    ts::irect r = tf.getprops().screenrect();
+    r.lt.x = r.rb.x - r.height();
+    tf.popupmenu = &gui_popup_menu_c::show(menu_anchor_s(r, menu_anchor_s::RELPOS_TYPE_2), beh.menu).host(tf.getrid());
+    tf.popupmenu->set_click_handler( DELEGATE(&beh, onclick) );
+
+    return true;
+}
+
+void gui_dialog_c::set_selector_menu(const ts::asptr& ctl_name, const menu_c& m)
+{
+    if (RID crid = find(ctl_name))
+    {
+        gui_control_c &ctl = HOLD(crid).as<gui_control_c>();
+        gui_textfield_c::behav_s &beh = ctl.get_customdata_obj<gui_textfield_c::behav_s>();
+        beh.menu = m;
+    }
+
+    for (description_s &d : descs)
+    {
+        if (d.ctl == description_s::_SELECTOR && d.name == ctl_name)
+        {
+            d.setmenu(m);
+            break;
+        }
+    }
 }
 
 void gui_dialog_c::set_combik_menu( const ts::asptr& ctl_name, const menu_c& m )
@@ -465,7 +603,8 @@ void gui_dialog_c::set_combik_menu( const ts::asptr& ctl_name, const menu_c& m )
     if (RID crid = find(ctl_name))
     {
         gui_control_c &ctl = HOLD(crid).as<gui_control_c>();
-        ctl.set_customdata_obj<menu_c>( m );
+        gui_textfield_c::behav_s &beh = ctl.get_customdata_obj<gui_textfield_c::behav_s>();
+        beh.menu = m;
     }
 
     for (description_s &d : descs)
@@ -531,6 +670,9 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
     case TFR_PATH_VIEWER:
         selector = DELEGATE( this, path_explore );
         break;
+    case TFR_CUSTOM_SELECTOR:
+        selector = DELEGATE(this, custom_menu);
+        break;
     case TFR_COMBO:
         selector = DELEGATE(this, combo_drop);
         break;
@@ -543,7 +685,7 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
     MAKE_CHILD<gui_textfield_c> creator(parent ? parent : getrid(),deftext, chars_limit, multiline, selector != GUIPARAMHANDLER());
     creator << selector << checker;
     gui_textfield_c &tf = creator;
-    creator << (GUIPARAM)((RID)creator).to_ptr();
+    creator << ((RID)creator).to_param();
 
     if (role == TFR_TEXT_FILED_RO)
     {
@@ -569,7 +711,13 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
         tf.disable_caret();
         tf.arrow_cursor();
         tf.register_kbd_callback( DELEGATE( &tf, push_selector ), SSK_LB, false );
-        tf.set_customdata_obj<menu_c>( *addition->menu );
+        tf.set_customdata_obj<gui_textfield_c::behav_s>(tf.getrid(), *addition->textfield.menu, addition->textfield.behav_handler.get(), false);
+    } else if (role == TFR_CUSTOM_SELECTOR)
+    {
+        tf.set_readonly();
+        tf.disable_caret();
+        tf.set_customdata_obj<gui_textfield_c::behav_s>(tf.getrid(), *addition->textfield.menu, addition->textfield.behav_handler.get());
+
     } else if (role == TFR_TEXT_FILED)
     {
         tf.selectall();
@@ -686,6 +834,7 @@ void gui_dialog_c::ctlenable( const ts::asptr&name, bool enblflg )
 RID gui_dialog_c::list(int height, const ts::wstr_c & emptymessage)
 {
     gui_simple_dialog_list_c &lst = MAKE_CHILD<gui_simple_dialog_list_c>(getrid(), height, emptymessage);
+    lst.set_updaterect( DELEGATE(this, updrect) );
     return lst.getrid();
 }
 
@@ -718,7 +867,7 @@ int gui_dialog_c::check( const ts::array_wrapper_c<const check_item_s> & items, 
     {
         gui_button_c &c = MAKE_VISIBLE_CHILD<gui_button_c>(getrid());
         c.set_check(tag);
-        c.set_handler(handler, (GUIPARAM)ci.mask);
+        c.set_handler(handler, as_param(ci.mask));
         c.set_face_getter(BUTTON_FACE(check));
         c.set_text(ci.text);
         c.set_updaterect( DELEGATE(this, updrect) );
@@ -743,7 +892,8 @@ RID gui_dialog_c::hgroup( const ts::wsptr& desc )
 RID gui_dialog_c::combik(const menu_c &m, RID parent)
 {
     evt_data_s dd;
-    dd.menu = &m;
+    dd.textfield.menu = &m;
+    dd.textfield.behav_handler = nullptr;
 
     struct findamarked
     {
@@ -793,10 +943,10 @@ void gui_dialog_c::removerctl(int r)
     }
 }
 
-void gui_dialog_c::updrect(void *rr, int r, const ts::ivec2 &p)
+void gui_dialog_c::updrect(const void *rr, int r, const ts::ivec2 &p)
 {
     ts::safe_ptr<guirect_c> & ctl = subctls[r];
-    RID par = RID::from_ptr(rr);
+    RID par = RID::from_param(rr);
     if (!ctl)
     {
         for (description_s &d : descs)
@@ -812,6 +962,7 @@ void gui_dialog_c::updrect(void *rr, int r, const ts::ivec2 &p)
                     ctl->getengine().__spec_set_outofbound(false);
                 }
                 d.height_ = h;
+                d.ctlptr = ctl;
                 if (!d.name.is_empty()) setctlname(d.name, *ctl);
                 return;
             }
@@ -852,7 +1003,7 @@ void gui_dialog_c::reset(bool keep_skip)
         b.tooltip(bcr.tooltip);
         if (bcr.btext.l) b.set_text(bcr.btext);
         b.leech(TSNEW(buttons_pos, prevb, tag));
-        b.set_handler(bcr.handler, getrid().to_ptr());
+        b.set_handler(bcr.handler, getrid().to_param());
         b.sq_evt(SQ_CUSTOM_INIT_DONE, b.getrid(), ts::make_dummy<evt_data_s>(true));
         prevb = &b;
         if (bottom_area_height == 0) bottom_area_height = b.get_min_size().y + 10;
@@ -968,14 +1119,14 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
                     bool operator()(getta&, const ts::wsptr&, const menu_c&) { return true; } // skip submenu
                     bool operator()(getta&g, const ts::wstr_c&txt, ts::uint32 /*flags*/, MENUHANDLER h, const ts::str_c&prm)
                     {
-                        ris.addnew(txt, (GUIPARAM)prm.as_int(), g.radioname + prm);
+                        ris.addnew(txt, as_param(prm.as_int()), g.radioname + prm);
                         return true;
                     }
                 } s;
                 s.radioname = d.name;
 
                 d.items.iterate_items(s, s);
-                radio(s.ris.array(), DELEGATE(&d, updvalue2), (GUIPARAM)d.text.as_int());
+                radio(s.ris.array(), DELEGATE(&d, updvalue2), as_param(d.text.as_int()));
             }
             break;
         case description_s::_LIST:
@@ -986,13 +1137,19 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
         case description_s::_TEXT:
         case description_s::_BUTTON:
         case description_s::_HSLIDER:
+        case description_s::_SELECTOR:
             rctl = d.make_ctl(this, parent);
             break;
         }
         if (rctl && d.focus_)
             gui->set_focus(rctl);
-        if (rctl && !d.name.is_empty())
-            ctl_by_name[d.name] = &HOLD(rctl)();
+
+        if (rctl)
+        {
+            d.ctlptr = &HOLD(rctl)();
+            if (!d.name.is_empty())
+                ctl_by_name[d.name] = d.ctlptr;
+        }
     }
     tabselected(mask);
 }
@@ -1005,6 +1162,24 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
     {
     case _TEXT:
         return dlg->textfield(text, MAX_PATH, readonly_ ? TFR_TEXT_FILED_RO : TFR_TEXT_FILED, DELEGATE(this, updvalue), nullptr, height_, parent);
+    case description_s::_SELECTOR:
+        {
+            evt_data_s dd;
+            dd.textfield.menu = &items;
+            dd.textfield.behav_handler() = DELEGATE( this, updvalue2 );
+
+            RID rr = dlg->textfield(text, MAX_PATH, TFR_CUSTOM_SELECTOR, nullptr, &dd, 0, parent);
+
+            if (handler)
+            {
+                gui_dialog_c::behav_s b;
+                b.e = gui_dialog_c::behav_s::EVT_ON_CREATE;
+                b.menu = &items;
+                handler(rr, &b);
+            }
+            return rr;
+        }
+        break;
     case _BUTTON:
         {
             gui_button_c &b = MAKE_CHILD<gui_button_c>(parent);
@@ -1034,7 +1209,7 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
         {
             int x = text.find_pos('/');
 
-            gui_hslider_c &sldr = ( MAKE_CHILD<gui_hslider_c>(parent) << text.substr(0, x).as_float() << text.substr(x+1).as_sptr() << DELEGATE(this, updvalue2) );
+            gui_hslider_c &sldr = ( MAKE_CHILD<gui_hslider_c>(parent) << text.substr(0, x).as_float() << text.substr(x+1).as_sptr() << DELEGATE(this, updvalue2) << DELEGATE(this, getcontextmenu) );
             return sldr.getrid();
         }
         break;

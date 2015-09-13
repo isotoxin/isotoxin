@@ -248,8 +248,9 @@ public:
             sql << CONSTASTR(")");
 
             int lastid = 0;
-            sqlite3_stmt *insstmt = nullptr; 
-            if (!CHECK( SQLITE_OK == sqlite3_prepare_v2(db, sql.buffer(), -1, &insstmt, nullptr) )) return 0;
+            sqlite3_stmt *insstmt = nullptr;
+            int prepr = sqlite3_prepare_v2(db, sql.buffer(), -1, &insstmt, nullptr);
+            if (!CHECK( SQLITE_OK == prepr, "" << sqlite3_extended_errcode(db) )) return 0;
             int cnt = fields.size();
             ASSERT(cnt == sqlite3_bind_parameter_count(insstmt));
             for(int i=1;i<=cnt;++i)

@@ -96,6 +96,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
         MASK_APPLICATION_SYSTEM     = SETBIT(NUMGEN_NEXT(ctlm)),
         MASK_APPLICATION_COMMON     = SETBIT(NUMGEN_NEXT(ctlm)),
         MASK_APPLICATION_SETSOUND   = SETBIT(NUMGEN_NEXT(ctlm)),
+        MASK_APPLICATION_SOUNDS     = SETBIT(NUMGEN_NEXT(ctlm)),
     };
 
     struct value_watch_s
@@ -167,6 +168,32 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
 
     bool username_edit_handler( const ts::wstr_c & );
     bool statusmsg_edit_handler( const ts::wstr_c & );
+
+    struct sound_preset_s
+    {
+        ts::wstr_c path;
+        ts::wstr_c name;
+        ts::abp_c preset;
+    };
+    ts::array_inplace_t<sound_preset_s, 1> presets;
+    int selected_preset = -1;
+
+    menu_c sounds_menu;
+    menu_c get_sounds_menu();
+    bool sndselhandler( RID, GUIPARAM );
+    bool sndplayhandler( RID, GUIPARAM );
+    bool sndvolhandler( RID, GUIPARAM );
+    
+    menu_c get_list_avaialble_sound_presets();
+    bool applysoundpreset( RID, GUIPARAM );
+    void soundpresetselected(const ts::str_c&);
+    
+    
+    ts::wstr_c sndfn[snd_count];
+    float sndvol[snd_count];
+    ts::wstr_c sndselctl[snd_count];
+    ts::wstr_c sndvolctl[snd_count];
+    ts::wstr_c sndplayctl[snd_count];
 
 public:
     struct protocols_s

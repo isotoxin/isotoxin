@@ -1085,7 +1085,7 @@ bool profile_c::load(const ts::wstr_c& pfn)
 
     if (db)
     {
-        save_dirty(RID(), (GUIPARAM)1); //-V566
+        save_dirty(RID(), as_param(1));
         db->close();
     }
     closed = false;

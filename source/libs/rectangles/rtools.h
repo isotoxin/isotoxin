@@ -11,6 +11,45 @@ struct bcreate_s;
 
 //-V:RID:813
 
+typedef const void * GUIPARAM;
+
+//-V:as_int:205
+INLINE int as_int(GUIPARAM p)
+{
+    return (int)p;
+}
+//-V:as_param:204
+INLINE GUIPARAM as_param(int v)
+{
+    return (GUIPARAM)v;
+}
+
+
+struct menu_anchor_s
+{
+    ts::irect rect;
+
+    enum relpos_e
+    {
+        RELPOS_TYPE_1, // at rite of rect, menu down
+        RELPOS_TYPE_2, // at bottom of rect, menu down
+
+        relpos_check,
+    } relpos = RELPOS_TYPE_1;
+
+    explicit menu_anchor_s(bool setup_by_mousepos = false);
+    menu_anchor_s(const ts::irect &r, relpos_e rp = RELPOS_TYPE_1) : rect(r), relpos(rp) {}
+    ts::ivec2 pos() const
+    {
+        switch (relpos) //-V719
+        {
+        case menu_anchor_s::RELPOS_TYPE_1: return rect.rt();
+        case menu_anchor_s::RELPOS_TYPE_2: return rect.lb();
+        }
+        return rect.center();
+    }
+};
+
 class RID
 {
     enum rid_e
@@ -36,19 +75,19 @@ public:
     // compare for sort
     bool operator<(const RID&or) const;
 
-    static RID from_ptr(const void *ptr)
+    static RID from_param(GUIPARAM p)
     {
         RID r;
-        r.id = (int)ptr; //-V205
+        r.id = as_int(p);
         return r;
     }
-    void* to_ptr() const
+    GUIPARAM to_param() const
     {
-        return (void *)id; //-V204
+        return as_param(id);
     }
 
     // calls
-    ts::ivec3   call_get_popup_menu_pos() const;
+    menu_anchor_s  call_get_popup_menu_pos( menu_anchor_s::relpos_e rp = menu_anchor_s::RELPOS_TYPE_1 ) const;
     int         call_get_menu_level() const;
     menu_c      call_get_menu() const;
     bool        call_is_tooltip() const;
@@ -57,10 +96,20 @@ public:
     void        call_open_group(RID itm) const;
     void        call_lbclick(const ts::ivec2 &relpos = ts::ivec2(0)) const;
     void        call_kill_child( const ts::str_c&param );
-    void        call_item_activated( const ts::wstr_c&text, const ts::str_c&param );
     void        call_children_repos();
     void        call_enable(bool enableflg) const;
 };
+
+typedef fastdelegate::FastDelegate<bool(RID, GUIPARAM)> GUIPARAMHANDLER;
+
+INLINE GUIPARAM as_param(GUIPARAM v)
+{
+    return v;
+}
+INLINE GUIPARAM as_param(RID r)
+{
+    return r.to_param();
+}
 
 template<typename STRTYPE> INLINE ts::streamstr<STRTYPE> & operator<<(ts::streamstr<STRTYPE> &dl, RID r)
 {
@@ -83,9 +132,6 @@ template<typename STRTYPE> INLINE ts::streamstr<STRTYPE> & operator<<(ts::stream
     }
     return dl;
 }
-
-typedef const void * GUIPARAM;
-typedef fastdelegate::FastDelegate<bool (RID, GUIPARAM)> GUIPARAMHANDLER;
 
 void fixrect(ts::irect &r, const ts::ivec2 &minsz, const ts::ivec2 &maxsz, ts::uint32 hitarea);
 

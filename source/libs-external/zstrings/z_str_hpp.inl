@@ -2518,7 +2518,9 @@ inline bool CHARz_equal_ignore_case(const ZSTRINGS_ANSICHAR *src1, const ZSTRING
 
 
 template<typename NUMTYPE> wstr_c wmake( NUMTYPE u ) {return wstr_c().set_as_num<NUMTYPE>(u);}
+template<typename NUMTYPE> wstr_c wmake(const wsptr&prevt, NUMTYPE u) { return wstr_c(prevt).append_as_num<NUMTYPE>(u); }
 template<typename NUMTYPE> str_c amake( NUMTYPE u ) {return str_c().set_as_num<NUMTYPE>(u);}
+template<typename NUMTYPE> str_c amake( const asptr&prevt, NUMTYPE u ) {return str_c(prevt).append_as_num<NUMTYPE>(u);}
 
 template<typename STRT, typename NUMT> STRT roundstr( NUMT x, ZSTRINGS_SIGNED zp, bool format = true )
 {

@@ -63,7 +63,6 @@ enum system_query_e
     SQ_OPEN_GROUP,
     SQ_KILL_CHILD,          // parent decides what the child must die in accordance with strparam
     SQ_YOU_WANNA_DIE,       // message to child in while processing SQ_KILL_CHILD
-    SQ_ITEM_ACTIVATED,
     SQ_CHILDREN_REPOS,
     SQ_CTL_ENABLE,
 
@@ -180,9 +179,14 @@ struct evt_data_s
         ts::make_pod<draw_s> draw;
         ts::make_pod< ts::array_wrapper_c<const float> > float_array;
         bcreate_s *btn;
-        const menu_c *menu;
         ts::make_pod<ts::asptr> strparam;
         ts::make_pod<ts::wsptr> wstrparam;
+
+        struct
+        {
+            const menu_c *menu;
+            ts::make_pod<GUIPARAMHANDLER> behav_handler;
+        } textfield;
 
         struct
         {
@@ -223,7 +227,8 @@ struct evt_data_s
         struct
         {
             menu_c *menu;
-            ts::make_pod<ts::ivec3> pos;
+            //ts::make_pod<ts::ivec3> pos;
+            ts::make_pod<menu_anchor_s> menupos;
             int level;
             bool handled;
         } getsome;
@@ -644,6 +649,7 @@ public:
 INLINE rectengine_c &HOLD::engine() {return SAFE_REF(client).getengine(); }
 
 // gui controls
+class gui_popup_menu_c;
 
 class gui_control_c : public guirect_c
 {
@@ -678,7 +684,7 @@ public:
     gui_control_c(initial_rect_data_s &data):guirect_c(data) {}
     /*virtual*/ ~gui_control_c();
 
-    guirect_c::sptr_t popupmenu;
+    ts::safe_ptr<gui_popup_menu_c> popupmenu;
 
     /*virtual*/ const theme_rect_s *themerect() const
     {
@@ -692,6 +698,7 @@ public:
     }
 
     void set_updaterect( ts::UPDATE_RECTANGLE h ) { updaterect = h; }
+    ts::UPDATE_RECTANGLE get_updaterect() { return updaterect; }
 
     // custom data
     void set_customdata(GUIPARAM _data, GUIPARAMHANDLER _datakiller = GUIPARAMHANDLER()) 
@@ -1146,7 +1153,8 @@ protected:
     static const ts::flags32_s::BITS F_NO_REPOS = FLAGS_FREEBITSTART << 2;
     static const ts::flags32_s::BITS F_LAST_REPOS_AT_END = FLAGS_FREEBITSTART << 3;
     static const ts::flags32_s::BITS F_SCROLL_TO_MAX_TOP = FLAGS_FREEBITSTART << 4;
-    static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 5;
+    static const ts::flags32_s::BITS F_SB_OVER_ITEMS = FLAGS_FREEBITSTART << 5;
+    static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 6;
 
     /*virtual*/ void children_repos() override;
     /*virtual*/ void on_add_child(RID id) override;
@@ -1156,6 +1164,14 @@ public:
     /*virtual*/ ~gui_vscrollgroup_c() {}
 
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+
+    void no_repos(bool b = true)
+    {
+        flags.init(F_NO_REPOS, b);
+    }
+
+
+    bool is_sb_visible() const { return flags.is(F_SBVISIBLE); };
 
     bool is_at_end() const
     {
@@ -1199,9 +1215,9 @@ public:
 class gui_popup_menu_c;
 template<> struct MAKE_ROOT<gui_popup_menu_c> : public _PROOT(gui_popup_menu_c)
 {
-    ts::ivec3 screenpos;
+    menu_anchor_s screenpos;
     menu_c menu;
-    MAKE_ROOT(drawcollector &dcoll, const ts::ivec3& screenpos, const menu_c &menu, bool sys = false) : _PROOT(gui_popup_menu_c)(dcoll), screenpos(screenpos), menu(menu) { init(sys); }
+    MAKE_ROOT(drawcollector &dcoll, const menu_anchor_s& screenpos, const menu_c &menu, bool sys = false) : _PROOT(gui_popup_menu_c)(dcoll), screenpos(screenpos), menu(menu) { init(sys); }
     ~MAKE_ROOT();
 };
 
@@ -1216,16 +1232,24 @@ class gui_popup_menu_c : public gui_vscrollgroup_c
     bool check_focus(RID r, GUIPARAM p);
     bool update_size(RID r, GUIPARAM p);
 
-    GUIPARAMHANDLER closehandler; // only of no any action was
+    GUIPARAMHANDLER closehandler; // only if no any action
+    GUIPARAMHANDLER clickhandler;
 
     RID hostrid;
     menu_c menu;
 
-    ts::ivec3 showpoint;
+    menu_anchor_s showpoint;
 
-    static gui_popup_menu_c & create(drawcollector &dch, const ts::ivec3& screenpos, const menu_c &mnu, bool sys);
+    static gui_popup_menu_c & create(drawcollector &dch, const menu_anchor_s& screenpos, const menu_c &mnu, bool sys);
 
 public:
+
+    struct click_data_s
+    {
+        ts::wstr_c itemtext;
+        ts::str_c itemparam;
+    };
+
     bool operator()(int, const ts::wsptr& txt);
     bool operator()(int, const ts::wsptr& txt, const menu_c &sm);
     bool operator()(int, const ts::wsptr& txt, ts::uint32 flags, MENUHANDLER handler, const ts::str_c& prm);
@@ -1239,9 +1263,14 @@ public:
     RID host() const {return hostrid;}
     gui_popup_menu_c &host(RID hostrid_) { hostrid = hostrid_; return *this; } // host can obtain focus without popmenu destruction
 
+    GUIPARAMHANDLER get_close_handler() { return closehandler; }
+    GUIPARAMHANDLER get_click_handler() { return clickhandler; }
     void set_close_handler( GUIPARAMHANDLER ch ) { closehandler = ch; }
+    void set_click_handler( GUIPARAMHANDLER ch ) { clickhandler = ch; }
 
-    static gui_popup_menu_c & show( const ts::ivec3& screenpos, const menu_c &menu, bool sys = false );
+    void menu_item_click( const click_data_s &prm );
+
+    static gui_popup_menu_c & show( const menu_anchor_s& screenpos, const menu_c &menu, bool sys = false );
 };
 
 class gui_menu_item_c;
@@ -1329,6 +1358,18 @@ class gui_textfield_c : public gui_textedit_c
 
 protected:
 public:
+
+    struct behav_s
+    {
+        RID tfrid;
+        menu_c menu;
+        GUIPARAMHANDLER handler;
+        bool set_value = true;
+
+        behav_s(RID tfrid, menu_c menu, GUIPARAMHANDLER handler, bool set_value = true):tfrid(tfrid), menu(menu), handler(handler), set_value(set_value) {}
+        bool onclick(RID, GUIPARAM);
+    };
+
     gui_textfield_c(MAKE_CHILD<gui_textfield_c> &data);
     /*virtual*/ ~gui_textfield_c();
 
@@ -1427,6 +1468,8 @@ public:
 
 //////////////
 
+typedef fastdelegate::FastDelegate< menu_c(const ts::str_c &, bool) > GETMENU_FUNC;
+
 class gui_hslider_c;
 template<> struct MAKE_CHILD<gui_hslider_c> : public _PCHILD(gui_hslider_c)
 {
@@ -1436,10 +1479,12 @@ template<> struct MAKE_CHILD<gui_hslider_c> : public _PCHILD(gui_hslider_c)
     float val = 0;
     ts::wstr_c initstr;
     GUIPARAMHANDLER handler;
+    GETMENU_FUNC gm;
 
     MAKE_CHILD &operator << (float val_) { val = val_; return *this; }
     MAKE_CHILD &operator << (const ts::wsptr &inits) { initstr = inits; return *this; }
     MAKE_CHILD &operator << (GUIPARAMHANDLER h) { handler = h; return *this; }
+    MAKE_CHILD &operator << (GETMENU_FUNC _gm) { gm = _gm; return *this; }
 };
 
 
@@ -1455,7 +1500,10 @@ class gui_hslider_c : public gui_control_c
     static const ts::flags32_s::BITS F_LBDOWN = FLAGS_FREEBITSTART << 0;
 
     GUIPARAMHANDLER handler;
+    GETMENU_FUNC gm;
 
+    bool setval(RID, GUIPARAM);
+    bool onclick(RID, GUIPARAM);
     void update_text_value();
 
     ts::svec2 levelshift = ts::svec2(0);

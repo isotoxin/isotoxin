@@ -647,8 +647,8 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
                     {
                         MODIFY(*r).maximize(false);
                         DEFERRED_EXECUTION_BLOCK_BEGIN(0)
-                            MODIFY(RID::from_ptr(param)).maximize(true);
-                        DEFERRED_EXECUTION_BLOCK_END(r->getrid().to_ptr());
+                            MODIFY(RID::from_param(param)).maximize(true);
+                        DEFERRED_EXECUTION_BLOCK_END(r->getrid());
                     }
             return 0;
 
@@ -802,7 +802,7 @@ rectengine_root_c::~rectengine_root_c()
     {
         NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
         nd.hWnd = hwnd;
-        nd.uID = (int)this; //V-205
+        nd.uID = (int)this; //-V205
         Shell_NotifyIconW(NIM_SETFOCUS, &nd);
     }
 
@@ -855,7 +855,7 @@ bool rectengine_root_c::refresh_frame(RID, GUIPARAM p)
 
     } else
     {
-        DEFERRED_UNIQUE_CALL( 1.0, DELEGATE(this, refresh_frame), (GUIPARAM)1 );
+        DEFERRED_UNIQUE_CALL( 1.0, DELEGATE(this, refresh_frame), 1 );
     }
     return true;
 }
@@ -879,7 +879,7 @@ void rectengine_root_c::kill_window()
         {
             NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
             nd.hWnd = hwnd;
-            nd.uID = (int)this; //V-205
+            nd.uID = (int)this; //-V205
             Shell_NotifyIconW(NIM_DELETE, &nd);
             flags.clear(F_NOTIFY_ICON);
         }
@@ -1850,7 +1850,7 @@ void border_window_data_s::draw()
         ts::rectangle_update_s updr;
         updr.updrect = tdp.rectupdate;
         updr.offset = dd.offset;
-        updr.param = (dd.engine ? dd.engine->getrid() : getrid()).to_ptr();
+        updr.param = (dd.engine ? dd.engine->getrid() : getrid()).to_param();
         tr.parse_and_render_texture(&updr, nullptr);
     } else
         tr.parse_and_render_texture(nullptr, nullptr);
@@ -1890,6 +1890,15 @@ void border_window_data_s::draw()
     draw_image( backbuffer.DC(), bmp, dd.offset.x + p.x, dd.offset.y + p.y, bmprect, dd.cliprect, alphablend ? dd.alpha : -1 );
 }
 
+void rectengine_root_c::simulate_mousemove()
+{
+    if (gui->allow_input(getrid()))
+    {
+        evt_data_s d;
+		d.mouse.screenpos = gui->get_cursor_pos();
+		sq_evt( SQ_MOUSE_MOVE, getrid(), d );
+    }
+}
 
 bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
 {
@@ -2118,7 +2127,7 @@ void rectengine_root_c::notification_icon( const ts::wsptr& text )
 {
     static NOTIFYICONDATAW nd = { sizeof(NOTIFYICONDATAW), 0 };
     nd.hWnd = hwnd;
-    nd.uID = (int)this; //V-205
+    nd.uID = (int)this; //-V205
     nd.uCallbackMessage = WM_USER + 7213;
     //nd.hIcon = gui->app_icon(true);
 

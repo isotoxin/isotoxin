@@ -5,13 +5,13 @@
 namespace ts
 {
 
-typedef fastdelegate::FastDelegate< void (void *, int, const ivec2 &) > UPDATE_RECTANGLE;
+typedef fastdelegate::FastDelegate< void (const void *, int, const ivec2 &) > UPDATE_RECTANGLE;
 
 struct rectangle_update_s
 {
     UPDATE_RECTANGLE updrect;
     ts::ivec2 offset;
-    void *param;
+    const void *param;
 };
 
 class text_rect_c // texture with text

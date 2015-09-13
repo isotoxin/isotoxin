@@ -75,6 +75,45 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
                 thi.name = to_wstr(conf->get_string(CONSTASTR("name"), ts::to_str(thi.name)));
         }
     }
+
+    fns.clear();
+    ts::g_fileop->find(fns, CONSTWSTR("sounds/**/*.*"), true);
+    fns.sort(true);
+
+    sounds_menu.add(TTT("no sound",301));
+    sounds_menu.add_separator();
+
+    for (const ts::wstr_c &f : fns)
+    {
+        menu_c m;
+        ts::wstr_c fn, path;
+        int fni = f.find_last_pos_of(CONSTWSTR("/\\"));
+        ASSERT(fni >= 6);
+        if (fni > 7)
+        {
+            path.set(f.substr(7, fni));
+            path.replace_all('\\', '/');
+            fn = f.substr(fni + 1);
+            m = sounds_menu.add_path(path);
+        } else
+            m = sounds_menu, fn.set(f.substr(fni+1));
+        if (fni == 0) fn.cut(0, 1);
+
+        ts::wstr_c ffn(ts::fn_join(path,fn)); ffn.replace_all('\\', '/');
+        if (ffn.ends_ignore_case(CONSTWSTR(".ogg")) || ffn.ends_ignore_case(CONSTWSTR(".wav")) || ffn.ends_ignore_case(CONSTWSTR(".flac")))
+            m.add(fn,0,nullptr /* no handler provided here - used onclick selector handler */, ts::to_utf8( ffn ));
+        else if (ffn.ends_ignore_case(CONSTWSTR(".decl")))
+        {
+            ts::wstr_c path = ts::fn_get_path(CONSTWSTR("/")+ffn); path.trim_left('/');
+            ffn = ts::fn_join(ts::pwstr_c(CONSTWSTR("sounds")), ffn);
+            sound_preset_s &spr = presets.add();
+            spr.path = path;
+            ts::g_fileop->load(ffn, spr.preset);
+            spr.name = ts::from_utf8(spr.preset.get_string(CONSTASTR("presetname")));
+            if (spr.name.is_empty()) spr.name = ffn;
+        }
+    }
+
 }
 
 dialog_settings_c::~dialog_settings_c()
@@ -143,7 +182,7 @@ bool dialog_settings_c::statusmsg_edit_handler( const ts::wstr_c &v )
 
 bool dialog_settings_c::fileconfirm_handler(RID, GUIPARAM p)
 {
-    fileconfirm = (int)p; //-V205
+    fileconfirm = as_int(p);
 
     ctlenable(CONSTASTR("confirmauto"), fileconfirm == 0);
     ctlenable(CONSTASTR("confirmmanual"), fileconfirm == 1);
@@ -187,21 +226,21 @@ bool dialog_settings_c::date_sep_tmpl_edit_handler(const ts::wstr_c &v)
 
 bool dialog_settings_c::ctl2send_handler( RID, GUIPARAM p )
 {
-    ctl2send = (int)p; //-V205
+    ctl2send = as_int(p);
     mod();
     return true;
 }
 
 bool dialog_settings_c::collapse_beh_handler(RID, GUIPARAM p)
 {
-    collapse_beh = (int)p; //-V205
+    collapse_beh = as_int(p);
     mod();
     return true;
 }
 
 bool dialog_settings_c::autoupdate_handler( RID, GUIPARAM p)
 {
-    autoupdate = (int)p; //-V205
+    autoupdate = as_int(p);
 
     ctlenable(CONSTASTR("proxytype"), autoupdate > 0);
     ctlenable(CONSTASTR("proxyaddr"), autoupdate > 0 && autoupdate_proxy > 0);
@@ -235,7 +274,7 @@ bool dialog_settings_c::check_update_now(RID, GUIPARAM)
     ctlenable(CONSTASTR("checkupdb"), false);
 
     checking_new_version = true;
-    g_app->b_update_ver(RID(), (GUIPARAM)AUB_ONLY_CHECK);
+    g_app->b_update_ver(RID(), as_param(AUB_ONLY_CHECK));
     return true;
 }
 
@@ -265,7 +304,7 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 
 bool dialog_settings_c::commonopts_handler( RID, GUIPARAM p )
 {
-    int newo = (int)p;
+    int newo = as_int(p);
     show_search_bar = 0 != (newo & 1);
     proto_icons_indicator = 0 != (newo & 2);
 
@@ -371,6 +410,11 @@ void dialog_settings_c::mod()
 
     PREPARE( dsp_flags, cfg().dsp_flags() );
 
+#define SND(s) PREPARE( sndfn[snd_##s], cfg().snd_##s() ); PREPARE( sndvol[snd_##s], cfg().snd_vol_##s() );
+    SOUNDS
+#undef SND
+
+
     int textrectid = 0;
 
     menu_c m;
@@ -386,7 +430,8 @@ void dialog_settings_c::mod()
     m.add_sub(TTT("Application",34))
         .add(TTT("General",106), 0, TABSELMI(MASK_APPLICATION_COMMON))
         .add(TTT("System",35), 0, TABSELMI(MASK_APPLICATION_SYSTEM))
-        .add(TTT("Audio",125), 0, TABSELMI(MASK_APPLICATION_SETSOUND));
+        .add(TTT("Audio",125), 0, TABSELMI(MASK_APPLICATION_SETSOUND))
+        .add(TTT("Sounds",293), 0, TABSELMI(MASK_APPLICATION_SOUNDS));
 
     descmaker dm( descs );
     dm << MASK_APPLICATION_COMMON; //_________________________________________________________________________________________________//
@@ -434,7 +479,12 @@ void dialog_settings_c::mod()
     dm().combik(HGROUP_MEMBER).setmenu( list_capture_devices() ).setname( CONSTASTR("mic") );
     dm().button(HGROUP_MEMBER, CONSTWSTR("face=rec"), DELEGATE(this, test_mic) ).sethint(TTT("Record test 5 seconds",280)).setname( CONSTASTR("micrecb") );
     dm().vspace();
-    dm().hslider(ts::wsptr(), cvtmic.volume, CONSTWSTR("0/0/0.5/1/1/10"), DELEGATE(this, micvolset)).setname(CONSTASTR("micvol"));
+    dm().hslider(ts::wsptr(), cvtmic.volume, CONSTWSTR("0/0/0.5/1/1/5"), DELEGATE(this, micvolset)).setname(CONSTASTR("micvol")).setmenu(
+            menu_c().add(CONSTWSTR("= 50%"), 0, nullptr, CONSTASTR("0.5"))
+                    .add(CONSTWSTR("= 100%"), 0, nullptr, CONSTASTR("1"))
+                    .add(CONSTWSTR("= 200%"), 0, nullptr, CONSTASTR("2"))
+                    .add(CONSTWSTR("= 300%"), 0, nullptr, CONSTASTR("3"))
+        );
     dm().vspace(3);
     dm().checkb(ts::wsptr(), DELEGATE(this, dspf_handler), dsp_flags).setmenu(
             menu_c().add(TTT("Noise filter of microphone",289), 0, MENUHANDLER(), ts::amake<int>( DSP_MIC_NOISE ))
@@ -460,6 +510,33 @@ void dialog_settings_c::mod()
     dm().vspace(10);
     dm().label(L"").setname("soundhint");
 
+    dm << MASK_APPLICATION_SOUNDS; //______________________________________________________________________________________________//
+    dm().page_header(TTT("Sounds",294));
+    dm().vspace(10);
+    dm().list(TTT("Sounds list",295), L"", -270).setname(CONSTASTR("soundslist"));
+    dm().vspace();
+    dm().hgroup(TTT("Presets",298));
+    dm().combik(HGROUP_MEMBER).setmenu(get_list_avaialble_sound_presets()).setname(CONSTASTR("availablepresets"));
+    dm().button(HGROUP_MEMBER, TTT("Apply preset",299), DELEGATE(this, applysoundpreset)).width(250).height(25).setname(CONSTASTR("applypreset"));
+    dm().vspace();
+
+    ts::ivec2 bsz(20);
+    if (const button_desc_s *bdesc = gui->theme().get_button(CONSTASTR("play")))
+        bsz = bdesc->size;
+
+    int slh = bsz.y;
+    if (const theme_rect_s *th = gui->theme().get_rect(CONSTASTR("hslider")))
+        slh = th->sis[SI_TOP].height();
+
+    ts::sstr_t<-32> isnd;
+    int www = 295;
+    for(int sndi = 0; sndi < snd_count; ++sndi)
+    {
+        isnd.set_as_int(sndi);
+        dm().selector(ts::wstr_c(), sndfn[sndi], DELEGATE(this, sndselhandler)).setmenu(get_sounds_menu()).setname(CONSTASTR("sndfn") + isnd).width(www).subctl(textrectid++, sndselctl[sndi]);
+        dm().button(ts::wstr_c(), CONSTWSTR("face=play"), DELEGATE(this, sndplayhandler)).setname(CONSTASTR("sndpl") + isnd).width(bsz.x).height(bsz.y).subctl(textrectid++, sndplayctl[sndi]);
+        dm().hslider(ts::wstr_c(), sndvol[sndi], CONSTWSTR("0/0/1/1"), DELEGATE(this, sndvolhandler)).setname(CONSTASTR("sndvl") + isnd).width(www).height(slh).subctl(textrectid++, sndvolctl[sndi]);
+    }
 
     if (profile_selected)
     {
@@ -475,7 +552,7 @@ void dialog_settings_c::mod()
         if (proto_icons_indicator) copts |= 2;
         dm().checkb(ts::wstr_c(), DELEGATE(this, commonopts_handler), copts).setmenu(
                 menu_c().add(TTT("Show search bar ($)",276) / CONSTWSTR("Ctrl+F"), 0, MENUHANDLER(), CONSTASTR("1"))
-                        .add(TTT("Protocol icons as contact state indicator",278), 0, MENUHANDLER(), CONSTASTR("2"))
+                        .add(TTT("Protocol icons as contact state indicator",296), 0, MENUHANDLER(), CONSTASTR("2"))
             );
 
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
@@ -539,14 +616,6 @@ void dialog_settings_c::mod()
         dm().combik(HGROUP_MEMBER).setmenu(get_list_avaialble_networks()).setname(CONSTASTR("availablenets"));
         dm().button(HGROUP_MEMBER, TTT("Add network connection",58), DELEGATE(this, addnetwork)).width(250).height(25).setname(CONSTASTR("addnet"));
         dm().vspace();
-
-    /*
-        dm().checkb(L"Тестовый чекбоксег", GUIPARAMHANDLER(), 3).setmenu(
-              menu_c().add(L"Медвед",0,MENUHANDLER(), CONSTASTR("1"))
-                      .add(L"Превед",0,MENUHANDLER(), CONSTASTR("2"))
-                      .add(L"Велосипед",0,MENUHANDLER(), CONSTASTR("4"))
-            );
-            */
     }
 
     gui_vtabsel_c &tab = MAKE_CHILD<gui_vtabsel_c>( getrid(), m );
@@ -557,6 +626,112 @@ void dialog_settings_c::mod()
 
     return 1;
 }
+
+bool dialog_settings_c::sndvolhandler( RID srid, GUIPARAM p )
+{
+    ts::str_c sname = find(srid);
+    if (sname.get_length() > 5)
+    {
+        sound_e snd = (sound_e)sname.substr(5).as_int();
+        gui_hslider_c::param_s *pp = (gui_hslider_c::param_s *)p;
+        sndvol[snd] = pp->value;
+        pp->custom_value_text.set(CONSTWSTR("<l>")).append(TTT("Volume: $",297) / ts::roundstr<ts::wstr_c, float>(pp->value * 100.0f, 1).append_char('%')).append(CONSTWSTR("</l>"));
+
+        mod();
+    }
+
+    return true;
+}
+
+bool dialog_settings_c::sndplayhandler(RID brid, GUIPARAM p)
+{
+    ts::str_c bname = find(brid);
+    if (bname.get_length() > 5)
+    {
+        sound_e snd = (sound_e)bname.substr(5).as_int();
+        if (ASSERT(snd >= 0 && snd < snd_count))
+            if (ts::blob_c buf = ts::g_fileop->load(ts::fn_join(ts::pwstr_c(CONSTWSTR("sounds")),sndfn[snd])))
+                media.play(buf, sndvol[snd]);
+    }
+
+    return true;
+}
+
+bool dialog_settings_c::sndselhandler( RID srid, GUIPARAM p )
+{
+    behav_s *b = (behav_s *)p;
+    if (behav_s::EVT_ON_CLICK == b->e)
+    {
+        ts::str_c fnctl = find( srid );
+        ASSERT(!fnctl.is_empty());
+        sound_e snd = (sound_e)fnctl.substr(5).as_int();
+        if (ASSERT(snd >= 0 && snd < snd_count))
+        {
+            sndfn[snd] = ts::from_utf8(b->param);
+            mod();
+        }
+    }
+
+
+    return true;
+}
+
+menu_c dialog_settings_c::get_list_avaialble_sound_presets()
+{
+    menu_c m;
+    m.add(TTT("Choose preset",300), selected_preset < 0 ? MIF_MARKED : 0, DELEGATE(this, soundpresetselected), CONSTASTR("-1"));
+    bool sep = false;
+    int cnt = presets.size();
+    for(int i=0;i<cnt;++i)
+    {
+        const sound_preset_s &preset = presets.get(i);
+        
+        if (!sep) m.add_separator();
+        sep = true;
+        m.add(preset.name, i == selected_preset ? MIF_MARKED : 0, DELEGATE(this, soundpresetselected), ts::amake(i) );
+    }
+    return m;
+}
+
+void dialog_settings_c::soundpresetselected(const ts::str_c &p)
+{
+    selected_preset = p.as_int();
+    ctlenable(CONSTASTR("applypreset"), selected_preset >= 0);
+    set_combik_menu(CONSTASTR("availablepresets"), get_list_avaialble_sound_presets());
+
+}
+
+bool dialog_settings_c::applysoundpreset(RID, GUIPARAM)
+{
+    if (selected_preset >= 0 && selected_preset < presets.size())
+    {
+        ts::asptr names[snd_count] = {
+#define SND(s) CONSTASTR(#s),
+            SOUNDS
+#undef SND
+        };
+
+        sound_preset_s &prst = presets.get(selected_preset);
+        for(int i=0;i<snd_count;++i)
+            if (const ts::abp_c *rec = prst.preset.get(names[i]))
+            {
+                sndfn[i] = ts::fn_join( prst.path, ts::from_utf8(rec->as_string()) );
+                if (RID ectl = find( ts::amake(CONSTASTR("sndfn"), i) ))
+                    HOLD(ectl).as<gui_textedit_c>().set_text(sndfn[i]);
+            }
+
+        mod();
+
+    }
+    return true;
+}
+
+
+menu_c dialog_settings_c::get_sounds_menu()
+{
+    return sounds_menu;
+}
+
 
 const dialog_settings_c::protocols_s * dialog_settings_c::describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const
 {
@@ -580,6 +755,7 @@ const dialog_settings_c::protocols_s * dialog_settings_c::describe_network(ts::w
 
 void dialog_settings_c::networks_tab_selected()
 {
+    set_list_emptymessage(CONSTASTR("protoactlist"), TTT("Empty list. Please add networks",278));
     if (RID lst = find(CONSTASTR("protoactlist")))
     {
         for (auto &row : table_active_protocol_underedit)
@@ -681,7 +857,6 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
         is_networks_tab_selected = true;
         if (proto_list_loaded)
         {
-            set_list_emptymessage(CONSTASTR("protoactlist"), L"");
             networks_tab_selected();
         } else
         {
@@ -695,18 +870,18 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
 
     if (mask & MASK_PROFILE_CHAT)
     {
-        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, msgopts_handler), (GUIPARAM)msgopts_current);
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, msgopts_handler), msgopts_current);
     }
 
     if (mask & MASK_PROFILE_FILES)
     {
-        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, fileconfirm_handler), (GUIPARAM)fileconfirm); //-V204
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, fileconfirm_handler), fileconfirm);
     }
 
     if (mask & MASK_APPLICATION_COMMON)
     {
         select_lang(curlang);
-        autoupdate_handler(RID(),(GUIPARAM)autoupdate); //-V204
+        autoupdate_handler(RID(),as_param(autoupdate));
         autoupdate_proxy_handler(ts::amake(autoupdate_proxy));
         if (RID r = find(CONSTASTR("proxyaddr")))
         {
@@ -721,6 +896,63 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
         testrec.clear();
         set_slider_value( CONSTASTR("micvol"), cvtmic.volume );
         start_capture();
+    }
+
+    if (mask & MASK_APPLICATION_SOUNDS)
+    {
+        ts::wsptr sdescs[snd_count] = {
+            TTT("Incoming message",1000),
+            TTT("Incoming file",1001),
+            TTT("File receiving started",1002),
+            TTT("Ringtone",1003),
+            TTT("Ringtone during call",1004),
+            TTT("Call accept",1005),
+            TTT("Call cancel",1006),
+            TTT("Hang up",1007),
+            TTT("Dialing",1008),
+        };
+
+        int sorted[snd_count] = {
+            snd_incoming_message,
+            snd_incoming_file,
+            snd_start_recv_file,
+            snd_ringtone,
+            snd_ringtone2,
+            snd_calltone,
+            snd_call_accept,
+            snd_call_cancel,
+            snd_hangup,
+        };
+
+        TS_STATIC_CHECK( ARRAY_SIZE(sdescs) == snd_count, "sz" );
+        TS_STATIC_CHECK( ARRAY_SIZE(sorted) == snd_count, "sz" );
+
+        ctlenable(CONSTASTR("applypreset"), selected_preset >= 0);
+
+        if (RID lst = find(CONSTASTR("soundslist")))
+        {
+            gui_vscrollgroup_c &l = HOLD(lst).as<gui_vscrollgroup_c>();
+            l.no_repos();
+
+            for(int sndi = 0; sndi < snd_count; ++sndi)
+            {
+                int ssndi = sorted[sndi];
+
+                ts::wstr_c lit( CONSTWSTR("<b>") );
+                lit.append(sdescs[ssndi]);
+                lit.append(CONSTWSTR("</b><br=5><p=c>"));
+                lit.append(sndselctl[ssndi]).append_char(' ');
+                lit.append(sndvolctl[ssndi]);
+                lit.append(sndplayctl[ssndi]);
+                lit.append(CONSTWSTR("<br=-15> "));
+
+                MAKE_CHILD<gui_listitem_c>(lst, lit, ts::amake(ssndi));
+            }
+
+            l.no_repos(false);
+            l.scroll_to_begin(true);
+        }
+
     }
 }
 
@@ -742,13 +974,13 @@ void dialog_settings_c::on_delete_network_2(const ts::str_c&prm)
 
 bool dialog_settings_c::delete_used_network(RID, GUIPARAM param)
 {
-    auto *row = table_active_protocol_underedit.find<false>((int)param); //-V205
+    auto *row = table_active_protocol_underedit.find<false>(as_int(param));
     if (ASSERT(row))
     {
         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
             gui_isodialog_c::title(DT_MSGBOX_WARNING),
             TTT("Connection [$] in use! All contacts of this connection will be deleted. History of these contacts will be deleted too. Are you still sure?",267) / from_utf8(row->other.name)
-            ).on_ok(DELEGATE(this, on_delete_network_2), ts::amake<int>((int)param)).bcancel()); //-V205
+            ).on_ok(DELEGATE(this, on_delete_network_2), ts::amake<int>(as_int(param))).bcancel());
     }
     return true;
 }
@@ -759,7 +991,7 @@ void dialog_settings_c::on_delete_network(const ts::str_c& prm)
     ts::str_c tag;
     if (contacts().present_protoid( id ))
     {
-        DEFERRED_UNIQUE_CALL(0.7, DELEGATE(this, delete_used_network), (GUIPARAM)id);
+        DEFERRED_UNIQUE_CALL(0.7, DELEGATE(this, delete_used_network), id);
 
     } else
     {
@@ -1074,6 +1306,11 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
     if (cfg().dsp_flags(dsp_flags))
         gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_DSPFLAGS).send();
 
+#define SND(s) cfg().snd_##s(sndfn[snd_##s]); cfg().snd_vol_##s(sndvol[snd_##s]);
+    SOUNDS
+#undef SND
+
+
     for (const theme_info_s& thi : m_themes)
     {
         if (thi.current)
@@ -1372,7 +1609,7 @@ bool dialog_settings_c::test_mic(RID, GUIPARAM)
 bool dialog_settings_c::dspf_handler( RID, GUIPARAM p )
 {
     int old_voice_dsp = dsp_flags & (DSP_SPEAKERS_NOISE | DSP_SPEAKERS_AGC);
-    dsp_flags = (int)p;
+    dsp_flags = as_int(p);
 
     cvtmic.filter_options.init(fmt_converter_s::FO_NOISE_REDUCTION, FLAG(dsp_flags, DSP_MIC_NOISE));
     cvtmic.filter_options.init(fmt_converter_s::FO_GAINER, FLAG(dsp_flags, DSP_MIC_AGC));

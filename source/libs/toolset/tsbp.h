@@ -108,6 +108,17 @@ public:
         return false;
     }
 
+    bool present_r(const bp_t * bp) const
+    {
+        for (auto it = begin(); it; ++it)
+            if (it == bp)
+                return true;
+            else
+                if (it->present_r(bp))
+                    return true;
+        return false;
+    }
+
     bool get_remove(const sptr<TCHARACTER> &name, bp_t &bpout)
     {
         element_s *el = nullptr;
