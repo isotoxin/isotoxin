@@ -278,6 +278,7 @@ public:
     int protoiconsize = 10;
 
     time_t autoupdate_next;
+    ts::ivec2 download_progress = ts::ivec2(0);
 
 	application_c( const ts::wchar * cmdl );
 	~application_c();

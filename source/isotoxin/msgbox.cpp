@@ -179,21 +179,25 @@ ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
     if (!checking_new_version) return 0;
     checking_new_version = false;
 
+    if (nv.is_error())
+    {
+        set_label_text(CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(0)) + connection_failed_text());
+        if (RID no = find(CONSTASTR("upd")))
+            MODIFY(no).visible(true);
+        return 0;
+    }
+
     if (nv.ver.is_empty())
     {
         set_label_text( CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(0)) + TTT("Update not found",207) );
         if (RID no = find(CONSTASTR("upd")))
-        {
             MODIFY(no).visible(true);
-        }
         return 0;
     }
 
     set_label_text( CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(1)) + (TTT("New version detected: $",209) / ts::to_wstr(nv.ver.as_sptr())) );
     if (RID yes = find(CONSTASTR("upd")))
-    {
         MODIFY(yes).visible(true);
-    }
 
     return 0;
 }

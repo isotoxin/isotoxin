@@ -284,6 +284,17 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 
     if (!checking_new_version) return 0;
     checking_new_version = false;
+
+    if (nv.is_error())
+    {
+        SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
+            gui_isodialog_c::title(DT_MSGBOX_ERROR),
+            TTT("No new versions detected. Connection failed.",303)
+            ));
+
+        return 0;
+    }
+
     if (nv.ver.is_empty())
     {
         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(

@@ -54,6 +54,7 @@ protected:
     GM_RECEIVER(gui_notice_c, ISOGM_CALL_STOPED);
     GM_RECEIVER(gui_notice_c, ISOGM_FILE);
     GM_RECEIVER(gui_notice_c, ISOGM_DOWNLOADPROGRESS);
+    GM_RECEIVER(gui_notice_c, ISOGM_NEWVERSION);
     GM_RECEIVER(gui_notice_c, ISOGM_V_UPDATE_CONTACT);
 
     static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE = FLAGS_FREEBITSTART_LABEL << 0;

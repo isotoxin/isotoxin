@@ -164,33 +164,59 @@ int gui_notice_c::get_height_by_width(int w) const
 
 extern ts::static_setup<spinlock::syncvar<autoupdate_params_s>,1000> auparams;
 
-ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_DOWNLOADPROGRESS>&p)
+ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 {
-    if (notice == NOTICE_NEWVERSION)
+    if (notice == NOTICE_NEWVERSION && nv.is_error())
     {
+        g_app->download_progress = ts::ivec2(0);
         ts::wstr_c ot = textrect.get_text();
         int pp = ot.find_pos(CONSTWSTR("<null=px>"));
         if (pp >= 0)
         {
-            ts::wstr_c n;
-            
-            n.set_as_uint(p.downloaded);
-            for (int ix = n.get_length() - 3; ix > 0; ix -= 3)
-                n.insert(ix, '`');
+            ot.set_length(pp).append(connection_failed_text());
+            textrect.set_text_only(ot, false);
+            getengine().redraw();
+        }
+    }
+    return 0;
+}
 
-            ot.set_length(pp+9).append( n );
-            if (p.total > 0)
-            {
-                n.set_as_uint(p.total);
-                for (int ix = n.get_length() - 3; ix > 0; ix -= 3)
-                    n.insert(ix, '`');
+static ts::wstr_c downloaded_info()
+{
+    ts::wstr_c info(CONSTWSTR("0"));
 
-                ot.append(CONSTWSTR(" / "))
-                    .append(n)
-                    .append(CONSTWSTR(" ("))
-                    .append(ts::roundstr<ts::wstr_c>(100.0*double(p.downloaded)/p.total,2))
-                    .append(CONSTWSTR("%)"));
-            }
+    if (g_app->download_progress.y > 0)
+    {
+        ts::wstr_c n;
+        n.set_as_uint(g_app->download_progress.x);
+        for (int ix = n.get_length() - 3; ix > 0; ix -= 3)
+            n.insert(ix, '`');
+        info = n;
+
+        n.set_as_uint(g_app->download_progress.y);
+        for (int ix = n.get_length() - 3; ix > 0; ix -= 3)
+            n.insert(ix, '`');
+
+        info.append(CONSTWSTR(" / "))
+            .append(n)
+            .append(CONSTWSTR(" ("))
+            .append(ts::roundstr<ts::wstr_c>(100.0*double(g_app->download_progress.x) / g_app->download_progress.y, 2))
+            .append(CONSTWSTR("%)"));
+    }
+    return info;
+}
+
+ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_DOWNLOADPROGRESS>&p)
+{
+    if (notice == NOTICE_NEWVERSION)
+    {
+        g_app->download_progress = ts::ivec2(p.downloaded, p.total);
+
+        ts::wstr_c ot = textrect.get_text();
+        int pp = ot.find_pos(CONSTWSTR("<null=px>"));
+        if (pp >= 0)
+        {
+            ot.set_length(pp + 9).append(downloaded_info());
             textrect.set_text_only(ot, false);
             getengine().redraw();
         }
@@ -215,9 +241,12 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8)
             {
                 newtext.append(CONSTWSTR("<br><b>"));
                 newtext.append(TTT("-loading-",166));
-                newtext.append(CONSTWSTR("</b><br><null=px>0"));
+                newtext.append(CONSTWSTR("</b><br><null=px>"));
+                newtext.append(downloaded_info());
+
             } else if (auparams().lock_read()().downloaded)
             {
+                g_app->download_progress = ts::ivec2(0);
                 newtext.append(CONSTWSTR("<br>"));
                 newtext.append(TTT("New version downloaded. App restart required.",167));
 

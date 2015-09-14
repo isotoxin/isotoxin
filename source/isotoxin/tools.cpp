@@ -595,6 +595,10 @@ void text_prepare_for_edit(ts::str_c &text)
 
 }
 
+ts::wstr_c connection_failed_text()
+{
+    return TTT("Connection failed",302);
+}
 
 SLANGID detect_language()
 {

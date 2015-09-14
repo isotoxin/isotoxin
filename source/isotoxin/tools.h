@@ -184,6 +184,7 @@ template<> struct gmsg<ISOGM_NEWVERSION> : public gmsgbase
 {
     gmsg(ts::asptr ver) :gmsgbase(ISOGM_NEWVERSION), ver(ver) {}
     ts::sstr_t<-16> ver;
+    bool is_error() const { return ver.equals(CONSTASTR("error")); }
 };
 
 template<> struct gmsg<ISOGM_DOWNLOADPROGRESS> : public gmsgbase
@@ -280,6 +281,8 @@ bool check_profile_name(const ts::wstr_c &);
 bool check_netaddr( const ts::asptr & );
 
 void path_expand_env(ts::wstr_c &path);
+
+ts::wstr_c connection_failed_text();
 
 enum icon_type_e
 {

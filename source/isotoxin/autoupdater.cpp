@@ -3,6 +3,8 @@
 #pragma warning (disable:4324)
 #include "libsodium/src/libsodium/include/sodium.h"
 
+#define USERAGENT "curl"
+
 extern ts::static_setup<spinlock::syncvar<autoupdate_params_s>,1000> auparams;
 
 static size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata)
@@ -93,7 +95,7 @@ ts::str_c get_downloaded_ver( ts::buf_c *pak = nullptr )
     {
         int signi = ver_ok(pak->cstr());
         if (!signi) return ts::str_c();
-        ts::asptr latest(pak->cstr().s, signi);
+        ts::str_c latest(pak->cstr().part(signi));
         ts::wstr_c wurl(from_utf8( getss(latest,CONSTASTR("url")) ));
         pak->load_from_disk_file(ts::fn_join(auparams().lock_read()().path, ts::fn_get_name_with_ext(wurl)));
         if (md5ok(*pak,latest))
@@ -136,7 +138,11 @@ void autoupdater()
     if (auparams().lock_read()().in_updater)
         return;
 
-    ts::str_c address("https://github.com/Rotkaermota/Isotoxin/wiki/latest");
+    ts::astrings_c addresses;
+
+    addresses.add("https://github.com/Rotkaermota/Isotoxin/wiki/latest");
+    addresses.add("http://isotoxin.im/latest.txt");
+    int addri = 0;
 
     struct curl_s
     {
@@ -164,8 +170,24 @@ void autoupdater()
         operator CURL *() {return curl;}
     } curl;
 
+    bool ok_sign = false;
+
     if (!curl) return;
     ts::buf_c d;
+
+next_address:
+    if (addri >= addresses.size())
+    {
+        curl.send_newver = true;
+        if (ok_sign)
+            curl.newver.clear();
+        else
+            curl.newver = CONSTASTR("error");
+        return;
+    }
+    
+    d.clear();
+
     int rslt = 0;
     rslt = curl_easy_setopt(curl, CURLOPT_WRITEDATA, &d);
     rslt = curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
@@ -196,7 +218,9 @@ void autoupdater()
     }
     r.unlock();
 
-    rslt = curl_easy_setopt(curl, CURLOPT_URL, address.cstr());
+    rslt = curl_easy_setopt(curl, CURLOPT_URL, addresses.get(addri).cstr());
+    rslt = curl_easy_setopt(curl, CURLOPT_USERAGENT, USERAGENT);
+    rslt = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
     rslt = curl_easy_perform(curl);
 
     // extract info from github wiki
@@ -226,19 +250,26 @@ void autoupdater()
     int signi = ver_ok( d.cstr() );
     if (!signi) 
     {
-        curl.newver.clear();
-        curl.send_newver = true;
-        return;
+        ++addri;
+        goto next_address;
     }
 
+    ok_sign = true;
+
     ts::str_c latests( d.cstr().s, signi );
+
+    ts::str_c alt = getss(latests, CONSTASTR("alt"));
+    if (!alt.is_empty())
+    {
+        for( ts::token<char> t(alt.as_sptr(),'@'); t; ++t )
+            addresses.get_string_index(t->as_sptr());
+    }
 
     r = auparams().lock_read();
     if (!new_version( r().ver, getss(latests, CONSTASTR("ver")) ))
     {
-        curl.newver.clear();
-        curl.send_newver = true;
-        return;
+        ++addri;
+        goto next_address;
     }
 
     bool downloaded = false;
@@ -251,9 +282,7 @@ void autoupdater()
     {
         r.unlock();
         if (downloaded)
-        {
             auparams().lock_write()().downloaded = true;
-        }
 
         // just notify
         curl.newver = aver;
@@ -264,6 +293,7 @@ void autoupdater()
 
     ts::str_c aurl( getss(latests, CONSTASTR("url")) );
     ts::wstr_c pakname = ts::fn_get_name_with_ext(from_utf8(aurl));
+    ts::str_c address = addresses.get(addri);
     if (aurl.get_char(0) == '/')
     {
         address.set_length(address.find_pos(7, '/')).append(aurl).trim();
@@ -276,21 +306,22 @@ void autoupdater()
     d.clear();
     rslt = curl_easy_setopt(curl, CURLOPT_URL, address.cstr());
     myprogress_s progress(curl);
-    rslt = curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:40.0) Gecko/20100101 Firefox/40.0");
+    rslt = curl_easy_setopt(curl, CURLOPT_USERAGENT, USERAGENT);
     rslt = curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, xferinfo);
     rslt = curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &progress);
     rslt = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
     rslt = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-    
     rslt = curl_easy_perform(curl);
 
-    TSNEW(gmsg<ISOGM_DOWNLOADPROGRESS>, (int)d.size(), (int)d.size())->send_to_main_thread();
+    if (d.size() > 1000000) // downloaded size mus be greater than 1m bytes
+    {
+        TSNEW(gmsg<ISOGM_DOWNLOADPROGRESS>, (int)d.size(), (int)d.size())->send_to_main_thread();
+    }
 
     if (!md5ok(d, latests))
     {
-        curl.newver.clear();
-        curl.send_newver = true;
-        return;
+        ++addri;
+        goto next_address;
     }
 
     ts::make_path( auparams().lock_read()().path, 0 );

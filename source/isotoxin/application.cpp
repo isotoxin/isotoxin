@@ -681,7 +681,10 @@ bool application_c::b_update_ver(RID, GUIPARAM p)
         CloseHandle(CreateThread(nullptr, 0, autoupdater, this, 0, nullptr));
 
         if (renotice)
+        {
+            download_progress = ts::ivec2(0);
             gmsg<ISOGM_NOTICE>(&contacts().get_self(), nullptr, NOTICE_NEWVERSION, cfg().autoupdate_newver().as_sptr()).send();
+        }
     }
     return true;
 }
