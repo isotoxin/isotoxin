@@ -323,6 +323,16 @@ bool dialog_settings_c::commonopts_handler( RID, GUIPARAM p )
     return true;
 }
 
+bool dialog_settings_c::gchatopts_handler(RID, GUIPARAM p)
+{
+    int newo = as_int(p);
+    mute_mic_on_gchat_invite = 0 != (newo & 1);
+    mute_speaker_on_gchat_invite = 0 != (newo & 2);
+
+    mod();
+    return true;
+}
+
 bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
 {
     ts::flags32_s::BITS newo = (ts::flags32_s::BITS)p;
@@ -386,6 +396,9 @@ void dialog_settings_c::mod()
         PREPARE( show_search_bar, 0 != (msgopts_current & UIOPT_SHOW_SEARCH_BAR) );
         PREPARE( proto_icons_indicator, 0 != (msgopts_current & UIOPT_PROTOICONS) );
 
+        PREPARE( mute_mic_on_gchat_invite, 0 != (msgopts_current & GCHOPT_MUTE_MIC_ON_INVITE) );
+        PREPARE( mute_speaker_on_gchat_invite, 0 != (msgopts_current & GCHOPT_MUTE_SPEAKER_ON_INVITE) );
+
         PREPARE( date_msg_tmpl, prf().date_msg_template() );
         PREPARE( date_sep_tmpl, prf().date_sep_template() );
         PREPARE( downloadfolder, prf().download_folder() );
@@ -434,6 +447,7 @@ void dialog_settings_c::mod()
         m.add_sub( TTT("Profile",1) )
             .add(TTT("General",32), 0, TABSELMI(MASK_PROFILE_COMMON) )
             .add(TTT("Chat",109), 0, TABSELMI(MASK_PROFILE_CHAT) )
+            .add(TTT("Group chat",305), 0, TABSELMI(MASK_PROFILE_GCHAT) )
             .add(TTT("File receive",236), 0, TABSELMI(MASK_PROFILE_FILES) )
             .add(TTT("Networks",33), 0, TABSELMI(MASK_PROFILE_NETWORKS) );
     }
@@ -601,6 +615,19 @@ void dialog_settings_c::mod()
                     .add(TTT("Ignore typing notifications",274), 0, MENUHANDLER(), ts::amake<int>(MSGOP_IGNORE_OTHER_TYPING))
             );
 
+        dm << MASK_PROFILE_GCHAT; //____________________________________________________________________________________________________//
+        dm().page_header(TTT("Group chat settings",306));
+        dm().vspace(10);
+
+        int gchpts = 0;
+        if (mute_mic_on_gchat_invite) gchpts |= 1;
+        if (mute_speaker_on_gchat_invite) gchpts |= 2;
+        dm().checkb(ts::wstr_c(), DELEGATE(this, gchatopts_handler), gchpts).setmenu(
+            menu_c().add(TTT("Mute microphone on audio group chat invite",307), 0, MENUHANDLER(), CONSTASTR("1"))
+                    .add(TTT("Mute speakers on audio group chat invite",308), 0, MENUHANDLER(), CONSTASTR("2"))
+            );
+
+
         dm << MASK_PROFILE_FILES; //____________________________________________________________________________________________________//
         dm().page_header(TTT("File receive settings",237));
         dm().vspace(10);
@@ -630,8 +657,8 @@ void dialog_settings_c::mod()
     }
 
     gui_vtabsel_c &tab = MAKE_CHILD<gui_vtabsel_c>( getrid(), m );
-    tab.leech( TSNEW(leech_dock_left_s, 150) );
-    border = ts::irect(155,0,0,0);
+    tab.leech( TSNEW(leech_dock_left_s, 170) );
+    border = ts::irect(175,0,0,0);
 
     mod();
 
@@ -911,6 +938,8 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
 
     if (mask & MASK_APPLICATION_SOUNDS)
     {
+        // #snd
+
         ts::wsptr sdescs[snd_count] = {
             TTT("Incoming message",1000),
             TTT("Incoming file",1001),
@@ -921,6 +950,7 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
             TTT("Call cancel",1006),
             TTT("Hang up",1007),
             TTT("Dialing",1008),
+            TTT("New version",1009),
         };
 
         int sorted[snd_count] = {
@@ -933,6 +963,7 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
             snd_call_accept,
             snd_call_cancel,
             snd_hangup,
+            snd_new_version,
         };
 
         TS_STATIC_CHECK( ARRAY_SIZE(sdescs) == snd_count, "sz" );
@@ -1240,29 +1271,32 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
     mic_device_changed = false; // to avoid restore in destructor
 
     if (cfg().language(curlang))
+    {
         g_app->load_locale(curlang);
+        gmsg<ISOGM_CHANGED_SETTINGS>(0, CFG_LANGUAGE, curlang).send();
+    }
 
     if (profile_selected)
     {
         bool ch1 = prf().username(username);
         bool ch2 = prf().userstatus(userstatusmsg);
-        if (ch1) gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_USERNAME, username).send();
-        if (ch2) gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_USERSTATUSMSG, userstatusmsg).send();
+        if (ch1) gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_USERNAME, username).send();
+        if (ch2) gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_USERSTATUSMSG, userstatusmsg).send();
         prf().ctl_to_send(ctl2send);
         ch1 = prf().date_msg_template(date_msg_tmpl);
         ch1 |= prf().date_sep_template(date_sep_tmpl);
-        if (is_changed(show_search_bar))
-        {
-            msgopts_changed |= UIOPT_SHOW_SEARCH_BAR;
-            INITFLAG( msgopts_current, UIOPT_SHOW_SEARCH_BAR, show_search_bar );
-        }
-        if (is_changed(proto_icons_indicator))
-        {
-            msgopts_changed |= UIOPT_PROTOICONS;
-            INITFLAG(msgopts_current, UIOPT_PROTOICONS, proto_icons_indicator);
-        }
+
+#define UPSETOPT(b,m) if (is_changed(b)) { msgopts_changed |= m; INITFLAG(msgopts_current, m, b); }
+
+        UPSETOPT(show_search_bar, UIOPT_SHOW_SEARCH_BAR);
+        UPSETOPT(proto_icons_indicator, UIOPT_PROTOICONS);
+        UPSETOPT(mute_mic_on_gchat_invite, GCHOPT_MUTE_MIC_ON_INVITE);
+        UPSETOPT(mute_speaker_on_gchat_invite, GCHOPT_MUTE_SPEAKER_ON_INVITE);
+
+#undef UPSETOPT
+
         if (prf().set_options( msgopts_current, msgopts_changed ) || ch1)
-            gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_PROFILEOPTIONS).send();
+            gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS).send();
 
         prf().download_folder(downloadfolder);
         prf().auto_confirm_masks( auto_download_masks );
@@ -1271,7 +1305,7 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
         if (prf().emoticons_pack(smilepack))
         {
             emoti().reload();
-            gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_EMOJISET).send();
+            gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_EMOJISET).send();
         }
     }
 
@@ -1294,28 +1328,25 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
     s3::set_capture_device(&micd);
     stop_capture();
     if (cfg().device_mic(micdevice))
-    {
         g_app->capture_device_changed();
-        gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_MICDEVICE).send();
-    }
 
     if (is_changed(cvtmic.volume))
     {
         cfg().vol_mic(cvtmic.volume);
-        gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_MICVOLUME).send();
+        gmsg<ISOGM_CHANGED_SETTINGS>(0, CFG_MICVOLUME).send();
     }
 
     if (is_changed(talk_vol))
     {
         cfg().vol_talk(talk_vol);
-        gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_TALKVOLUME).send();
+        gmsg<ISOGM_CHANGED_SETTINGS>(0, CFG_TALKVOLUME).send();
     }
 
     if (is_changed(signal_vol))
         cfg().vol_signal(signal_vol);
 
     if (cfg().dsp_flags(dsp_flags))
-        gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_DSPFLAGS).send();
+        gmsg<ISOGM_CHANGED_SETTINGS>(0, CFG_DSPFLAGS).send();
 
 #define SND(s) cfg().snd_##s(sndfn[snd_##s]); cfg().snd_vol_##s(sndvol[snd_##s]);
     SOUNDS
@@ -1440,7 +1471,6 @@ bool dialog_settings_c::test_talk_device(RID, GUIPARAM)
         if (0 != (dsp_flags & DSP_SPEAKERS_AGC)) dspf |= fmt_converter_s::FO_GAINER;
 
         media.play_voice((uint64)-1,recfmt,testrec.data(),testrec.size(), talk_vol, dspf);
-        media.voice_autostop((uint64)-1,true);
     } else
         media.test_talk( talk_vol );
     return true;
@@ -1803,9 +1833,9 @@ bool dialog_setup_network_c::netname_edit(const ts::wstr_c &t)
     {
         if (active_protocol_c *ap = prf().ap(params.protoid))
         {
-            if (!params.uname.equals(ap->get_uname())) gmsg<ISOGM_CHANGED_PROFILEPARAM>(params.protoid, PP_USERNAME, params.uname).send();
-            if (!params.ustatus.equals(ap->get_ustatusmsg())) gmsg<ISOGM_CHANGED_PROFILEPARAM>(params.protoid, PP_USERSTATUSMSG, params.ustatus).send();
-            if (!params.networkname.equals(ap->get_name())) gmsg<ISOGM_CHANGED_PROFILEPARAM>(params.protoid, PP_NETWORKNAME, params.networkname).send();
+            if (!params.uname.equals(ap->get_uname())) gmsg<ISOGM_CHANGED_SETTINGS>(params.protoid, PP_USERNAME, params.uname).send();
+            if (!params.ustatus.equals(ap->get_ustatusmsg())) gmsg<ISOGM_CHANGED_SETTINGS>(params.protoid, PP_USERSTATUSMSG, params.ustatus).send();
+            if (!params.networkname.equals(ap->get_name())) gmsg<ISOGM_CHANGED_SETTINGS>(params.protoid, PP_NETWORKNAME, params.networkname).send();
             if (params.configurable.initialized)
                 ap->set_configurable(params.configurable);
         }

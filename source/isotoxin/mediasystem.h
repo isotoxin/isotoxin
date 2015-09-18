@@ -1,6 +1,6 @@
 #pragma once
 
-#define MAX_RAW_PLAYERS 16
+#define MAX_RAW_PLAYERS 32
 
 #define SOUNDS \
     SND( incoming_message ) \
@@ -12,6 +12,7 @@
     SND( call_cancel ) \
     SND( hangup ) \
     SND( calltone ) \
+    SND( new_version ) \
 
 
 enum sound_e
@@ -51,6 +52,7 @@ class mediasystem_c
             int readbuf = 0;
             int newdata = 0;
             int readpos = 0;
+            int nodata = 0;
             bool begining = true;
             void clear()
             {
@@ -84,7 +86,6 @@ class mediasystem_c
 
         uint64 current = 0;
         bool mute = false;
-        bool autostop = false;
     };
 
     long rawplock = 0;
@@ -122,7 +123,16 @@ public:
     void play_looped(sound_e snd, float volume = 1.0f, bool signal_device = true);
     bool stop_looped(sound_e snd);
 
-    void voice_autostop(const uint64 &key, bool autostop);
+    template <typename CHK> void voice_mute(CHK chk, bool mute)
+    {
+        SIMPLELOCK(rawplock);
+        for (int i = 0; i < MAX_RAW_PLAYERS; ++i)
+            if (vp(i).current && chk(vp(i).current))
+            {
+                vp(i).mute = mute;
+                return;
+            }
+    }
     void voice_mute(const uint64 &key, bool mute);
     void voice_volume( const uint64 &key, float vol ); 
     bool play_voice( const uint64 &key, const s3::Format &fmt, const void *data, int size, float vol, int dsp ); 

@@ -200,8 +200,9 @@ bool active_protocol_c::cmdhandler(ipcr r)
         break;
     case HQ_PLAY_AUDIO:
         {
+            int gid = r.get<int>();
             contact_key_s ck;
-            ck.protoid = id;
+            ck.protoid = id | (gid << 16); // assume 65536 unique groups max
             ck.contactid = r.get<int>();
             s3::Format fmt;
             fmt.sampleRate = r.get<int>();
@@ -220,14 +221,20 @@ bool active_protocol_c::cmdhandler(ipcr r)
             if (0 != (dsp_flags & DSP_SPEAKERS_AGC)) dspf |= fmt_converter_s::FO_GAINER;
 
             g_app->mediasystem().play_voice(ts::ref_cast<uint64>(ck), fmt, data, dsz, vol, dspf);
+
+            /*
+            ts::Time t = ts::Time::current();
+            static int cntc = 0;
+            static ts::Time prevt = t;
+            if ((t-prevt) >= 0)
+            {
+                prevt += 1000;
+                DMSG("ccnt: " << cntc);
+                cntc = 0;
         }
-        break;
-    case HQ_CLOSE_AUDIO:
-        {
-            contact_key_s ck;
-            ck.protoid = id;
-            ck.contactid = r.get<int>();
-            g_app->mediasystem().free_voice_channel(ts::ref_cast<uint64>(ck));
+            ++cntc;
+            */
+
         }
         break;
     case AQ_CONTROL_FILE:
@@ -469,11 +476,11 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
     return 0;
 }
 
-ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
+ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 {
     if (ch.pass == 0 && ipcp && (ch.protoid == 0 || ch.protoid == id))
     {
-        switch (ch.pp)
+        switch (ch.sp)
         {
         case PP_USERNAME:
             if (ch.protoid == id)
@@ -503,13 +510,13 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
             if (!prf().get_options().is(UIOPT_PROTOICONS))
                 icons_cache.clear();
             break;
-        case PP_TALKVOLUME:
+        case CFG_TALKVOLUME:
             syncdata.lock_write()().volume = cfg().vol_talk();
             break;
-        case PP_MICVOLUME:
+        case CFG_MICVOLUME:
             cvt.volume = cfg().vol_mic();
             break;
-        case PP_DSPFLAGS:
+        case CFG_DSPFLAGS:
             {
                 int flags = cfg().dsp_flags();
                 cvt.filter_options.init( fmt_converter_s::FO_NOISE_REDUCTION, FLAG(flags, DSP_MIC_NOISE) );
@@ -754,16 +761,18 @@ void active_protocol_c::send_audio(int cid, const s3::Format &ifmt, const void *
     struct s
     {
         int cid;
-        isotoxin_ipc_s *ipcp;
-        void send_audio(const s3::Format&, const void *data, int size)
+        active_protocol_c *ap;
+        ts::Time ct;
+        void send_audio(const s3::Format& ofmt, const void *data, int size)
         {
-            ipcp->send(ipcw(AQ_SEND_AUDIO) << cid << data_block_s(data, size));
+            ap->ipcp->send(ipcw(AQ_SEND_AUDIO) << cid << data_block_s(data,size));
         }
-    } ss = { cid, ipcp };
+    } ss = { cid, this, ts::Time::current() };
     
     cvt.ofmt = audio_fmt;
     cvt.acceptor = DELEGATE( &ss, send_audio );
     cvt.cvt(ifmt, data, size );
+
 }
 
 void active_protocol_c::call(int cid, int seconds)
@@ -773,6 +782,11 @@ void active_protocol_c::call(int cid, int seconds)
 
 void active_protocol_c::stop_call(int cid, stop_call_e sc)
 {
+    contact_key_s ck;
+    ck.protoid = id;
+    ck.contactid = cid;
+    g_app->mediasystem().free_voice_channel(ts::ref_cast<uint64>(ck));
+
     ipcp->send(ipcw(AQ_STOP_CALL) << cid << ((char)sc));
 }
 

@@ -544,7 +544,7 @@ bool contact_c::ringtone(bool activate, bool play_stop_snd)
 
 void contact_c::call_inactive(bool ci)
 {
-    ASSERT(is_meta());
+    ASSERT(is_meta() || getkey().is_group());
 
     bool osoff = is_speaker_off();
 
@@ -564,14 +564,27 @@ void contact_c::call_inactive(bool ci)
 
 void contact_c::av( bool f )
 {
+    if (getkey().is_group())
+    {
+        opts.unmasked().clear(F_CALL_INACTIVE | F_MIC_OFF | F_SPEAKER_OFF);
+        if ( prf().get_options().is(GCHOPT_MUTE_MIC_ON_INVITE) )
+            opts.unmasked().set(F_MIC_OFF);
+        if (prf().get_options().is(GCHOPT_MUTE_SPEAKER_ON_INVITE))
+            opts.unmasked().set(F_SPEAKER_OFF);
+
+        if (opts.unmasked().is(F_AUDIO_GCHAT))
+            gmsg<ISOGM_AV>(this, f).send();
+        return;
+    }
+
     if (is_meta())
     {
-        opts.unmasked().clear(F_CALL_INACTIVE|F_MIC_OFF|F_SPEAKER_OFF);
         bool wasav = opts.unmasked().is(F_AV_INPROGRESS);
         opts.unmasked().init(F_AV_INPROGRESS, false);
         subiterate([this](contact_c *c) { if (c->is_av()) opts.unmasked().init(F_AV_INPROGRESS, true); });
         if ( opts.unmasked().is(F_AV_INPROGRESS) != wasav )
         {
+            opts.unmasked().clear(F_CALL_INACTIVE | F_MIC_OFF | F_SPEAKER_OFF);
             gmsg<ISOGM_AV>(this, !wasav).send();
             if (wasav)
             {
@@ -604,7 +617,6 @@ bool contact_c::calltone(bool f, bool call_accepted)
             {
                 stop_sound(snd_calltone);
             } else play_sound(snd_calltone, true);
-            //gmsg<ISOGM_AV>(this, !wasav).send();
 
             return wasct && !f;
         }
@@ -705,7 +717,7 @@ bool contact_c::b_cancel_call(RID, GUIPARAM par)
 
 bool contact_c::b_mute_mic(RID, GUIPARAM p)
 {
-    contact_c *meta = is_meta() ? this : getmeta();
+    contact_c *meta = (is_meta() || getkey().is_group()) ? this : getmeta();
     if (meta && meta->is_av())
     {
         meta->opts.unmasked().invert(F_MIC_OFF);
@@ -726,14 +738,14 @@ bool contact_c::b_mute_mic(RID, GUIPARAM p)
 
 bool contact_c::b_mute_speaker(RID, GUIPARAM p)
 {
-    if (!is_meta())
+    if (!is_meta() && !getkey().is_group())
     {
         if (getmeta())
             getmeta()->b_mute_speaker(RID(), p);
         return true;
     }
 
-    if (is_av())
+    if (is_av() && ASSERT(p))
     {
         bool osoff = is_speaker_off();
 
@@ -749,10 +761,20 @@ bool contact_c::b_mute_speaker(RID, GUIPARAM p)
             if (gui_item)
                 gui_item->getengine().redraw();
 
-            subiterate([this](contact_c *c) {
-                if (c->is_av())
-                    g_app->mediasystem().voice_mute(ts::ref_cast<uint64>(c->getkey()), is_speaker_off());
-            });
+            if (getkey().is_group())
+            {
+                g_app->mediasystem().voice_mute([this](uint64 id)->bool {
+                
+                    contact_key_s &ck = ts::ref_cast<contact_key_s>(id);
+                    return ( getkey().protoid | (getkey().contactid << 16)) == ck.protoid;
+
+                }, is_speaker_off());
+
+            } else
+                subiterate([this](contact_c *c) {
+                    if (c->is_av())
+                        g_app->mediasystem().voice_mute(ts::ref_cast<uint64>(c->getkey()), is_speaker_off());
+                });
         }
 
     }
@@ -930,7 +952,7 @@ contacts_c::contacts_c()
 contacts_c::~contacts_c()
 {
     for(contact_c *c : arr)
-        c->prepare4die();
+        c->prepare4die(nullptr);
 }
 
 ts::str_c contacts_c::find_pubid(int protoid) const
@@ -974,11 +996,11 @@ int contacts_c::find_free_meta_id() const
     return id;
 }
 
-ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
+ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 {
     if (ch.pass == 0)
     {
-        switch (ch.pp)
+        switch (ch.sp)
         {
         case PP_USERNAME:
             get_self().set_name(ch.s);
@@ -1025,6 +1047,32 @@ bool contact_c::save( contacts_s * c ) const
     // avatar data copied not here, see profile_c::set_avatar
 
     return true;
+}
+
+void contact_c::join_groupchat(contact_c *c)
+{
+    if (ASSERT(getkey().is_group()))
+    {
+        ts::tmp_tbuf_t<int> c2a;
+
+        c->subiterate([&](contact_c *c) {
+            if (getkey().protoid == c->getkey().protoid)
+                c2a.add(c->getkey().contactid);
+        });
+
+        if (c2a.count() == 0)
+        {
+            SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
+                gui_isodialog_c::title(DT_MSGBOX_WARNING),
+                TTT("Group chat contacts must be from same network", 255)
+                ));
+
+        } else if (active_protocol_c *ap = prf().ap(getkey().protoid))
+        {
+            for (int cid : c2a)
+                ap->join_group_chat(getkey().contactid, cid);
+        }
+    }
 }
 
 ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
@@ -1332,11 +1380,16 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
         {
             if (contact.key.is_group())
             {
+                bool audio = 0 != (contact.mask & CDF_AUDIO_GCHAT);
                 c = TSNEW(contact_c, contact.key);
                 c->options().unmasked().init( contact_c::F_PERSISTENT_GCHAT, 0 != (contact.mask & CDF_PERSISTENT_GCHAT) );
+                c->options().unmasked().init( contact_c::F_AUDIO_GCHAT, 0 != (contact.mask & CDF_AUDIO_GCHAT) );
                 arr.insert(index, c);
                 prf().purifycontact(c->getkey());
                 serious_change = contact.key.protoid;
+
+                if (audio)
+                    c->av(true);
 
             } else if (contact.state == CS_UNKNOWN)
             {
@@ -1372,7 +1425,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
         }
     }
 
-    if (!contact.key.is_group() && 0 != (contact.mask & CDM_PUBID))
+    if (0 != (contact.mask & CDM_PUBID))
     {
         // allow change pubid if
         // - not yet set
@@ -1467,10 +1520,16 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
 
     if (c->getkey().is_group() && 0 != (contact.mask & CDM_MEMBERS))
     {
+        int wasmembers = c->subcount();
         c->subclear();
         for(int cid : contact.members)
             if (contact_c *m = find( contact_key_s(cid, c->getkey().protoid) ))
                 c->subaddgchat(m);
+
+        if (wasmembers == 0 && c->subcount())
+            play_sound(snd_call_accept, false);
+        if (wasmembers > 0 && !c->subcount())
+            play_sound(snd_hangup, false);
     }
 
     prf().dirtycontact(c->getkey());
@@ -1498,7 +1557,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
     if ( g_app->newversion() )
         gmsg<ISOGM_NOTICE>( self, nullptr, NOTICE_NEWVERSION, nv.ver.as_sptr()).send();
 
-    play_sound( snd_incoming_message, false );
+    play_sound( snd_new_version, false );
 
     return 0;
 }
@@ -1738,7 +1797,7 @@ void contacts_c::unload()
         if (c->gui_item)
             TSDEL(c->gui_item);
 
-        c->prepare4die();
+        c->prepare4die(nullptr);
     }
 
     if (self)

@@ -44,6 +44,7 @@ class gui_contact_item_c : public gui_label_c
     static const ts::flags32_s::BITS  F_SKIPUPDATE  = FLAGS_FREEBITSTART_LABEL << 4;
     static const ts::flags32_s::BITS  F_LBDN        = FLAGS_FREEBITSTART_LABEL << 5;
     static const ts::flags32_s::BITS  F_DNDDRAW     = FLAGS_FREEBITSTART_LABEL << 6;
+    static const ts::flags32_s::BITS  F_CALLBUTTON  = FLAGS_FREEBITSTART_LABEL << 7;
 
     friend class contact_c;
     friend class contacts_c;
@@ -143,7 +144,7 @@ class gui_contactlist_c : public gui_vscrollgroup_c
 
     GM_RECEIVER(gui_contactlist_c, ISOGM_PROFILE_TABLE_SAVED);
     GM_RECEIVER(gui_contactlist_c, ISOGM_PROTO_LOADED);
-    GM_RECEIVER(gui_contactlist_c, ISOGM_CHANGED_PROFILEPARAM);
+    GM_RECEIVER(gui_contactlist_c, ISOGM_CHANGED_SETTINGS);
     GM_RECEIVER(gui_contactlist_c, ISOGM_V_UPDATE_CONTACT);
     GM_RECEIVER(gui_contactlist_c, GM_HEARTBEAT);
     GM_RECEIVER(gui_contactlist_c, GM_DRAGNDROP);

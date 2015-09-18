@@ -76,7 +76,7 @@ public:
         aint i = 0;
         for(;;)
         {
-            aint k = CHARz_findn(str.s+i,separator,str.l);
+            aint k = CHARz_findn(str.s+i,separator,str.l-i);
             if (k < 0)
             {
                 add( str.skip(i) );
@@ -87,16 +87,14 @@ public:
             i += k + 1;
         }
     }
-    strings_t(const strtype &str, const TCHARACTER *separator)
+    strings_t(const strtype &str, const sptr<TCHARACTER> &separator)
     {
         if (str.get_length() == 0)  return;
-
-        aint spll = CHARz_len(separator);
 
         aint i = 0;
         for(;;)
         {
-            aint k = str.get_index(i,separator, spll);
+            aint k = str.find_pos(i, separator);
             if (k < 0)
             {
 
@@ -105,7 +103,7 @@ public:
             }
             else
                 add(str.substr(i,k));
-            i = k + spll;
+            i = k + separator.l;
         }
     }
     strings_t(const strtype &str, const strtype &separator)
@@ -129,7 +127,7 @@ public:
     }
     ~strings_t() {}
 
-    strtype  split_by_multichar(const strtype &str, const TCHARACTER *separator)
+    strtype  split_by_multichar(const strtype &str, const sptr<TCHARACTER> &separator)
     {
         strtype spls;
         clear();
@@ -137,7 +135,7 @@ public:
         aint i = 0;
         for(;;)
         {
-            aint k = str.get_index_multi(i,separator);
+            aint k = str.find_pos_of(i,separator);
             if (k < 0)
             {
                 add(str.substr(i));

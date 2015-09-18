@@ -6,7 +6,7 @@
 
 // typical scenario : AQ -> plghost, HA -> application
 
-#define PLGHOST_IPC_PROTOCOL_VERSION 7
+#define PLGHOST_IPC_PROTOCOL_VERSION 8
 
 enum commands_e
 {
@@ -56,7 +56,6 @@ enum commands_e
     AQ_CALL,
     AQ_SEND_AUDIO,
     HQ_PLAY_AUDIO,
-    HQ_CLOSE_AUDIO,
 
     AQ_FILE_SEND,           // application initiate file send
     HQ_INCOMING_FILE,       // remote peer initiate send file

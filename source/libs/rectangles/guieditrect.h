@@ -22,7 +22,8 @@ class gui_textedit_c : public gui_control_c
     void ctx_menu_selall(const ts::str_c &);
     bool ctxclosehandler(RID, GUIPARAM);
 
-    ts::wstr_c placeholder;
+    ts::wstr_c placeholder_text; // prev value
+    GET_TOOLTIP placeholder;
 	ts::drawable_bitmap_c texture;
     sbhelper_s sbhelper;
 	ts::TSCOLOR caret_color         = ts::ARGB(0,0,0),
@@ -259,8 +260,8 @@ public:
     void set_chars_limit( int cl ) { chars_limit = cl; }
     void set_margins( int left = 0, int rite = 0, int top = 0 ) { margin_left = left; margin_right = rite; margin_top = top; }
 
-    void set_placeholder(const ts::wstr_c &t);
-    void set_placeholder(const ts::wstr_c &t, ts::TSCOLOR phcolor) { placeholder_color = phcolor; set_placeholder(t); }
+    void set_placeholder(GET_TOOLTIP plht);
+    void set_placeholder(GET_TOOLTIP plht, ts::TSCOLOR phcolor) { placeholder_color = phcolor; set_placeholder(plht); }
 
 	void set_text(const ts::wstr_c &text, bool move_caret2end = false, bool setup_undo = true);
     ts::wstr_c get_text_and_fix_pos(int *pos0, int *pos1) const;

@@ -11,6 +11,8 @@ class gui_filterbar_c : public gui_label_ex_c
 {
     DUMMY(gui_filterbar_c);
 
+    GM_RECEIVER(gui_filterbar_c, ISOGM_CHANGED_SETTINGS);
+
     ts::safe_ptr<rectengine_c> active;
     ts::safe_ptr<gui_textedit_c> edit;
     ts::wstrings_c fsplit;

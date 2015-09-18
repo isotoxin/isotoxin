@@ -1,7 +1,8 @@
 #include "stdafx.h"
 
 #define AUDIO_BITRATE 32000
-#define AUDIO_SAMPLEDURATION 20
+#define AUDIO_SAMPLEDURATION_MAX 60
+#define AUDIO_SAMPLEDURATION_MIN 20
 
 #define BROADCAST_PORT 0x8ee8
 #define BROADCAST_RANGE 10
@@ -20,6 +21,8 @@ lan_engine::media_stuff_s::~media_stuff_s()
 
 void lan_engine::media_stuff_s::init_audio_encoder()
 {
+    processing = false;
+
     if (audio_encoder)
         opus_encoder_destroy(audio_encoder);
 
@@ -48,7 +51,11 @@ void lan_engine::media_stuff_s::add_audio( const void *data, int datasize )
         enc_fifo.clear();
         init_audio_encoder();
     }
+
     enc_fifo.add_data(data, datasize);
+
+    if (enc_fifo.available() > audio_format_s(AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS).avgBytesPerSec())
+        enc_fifo.read_data(nullptr, datasize);
 }
 
 int lan_engine::media_stuff_s::encode_audio(byte *dest, int dest_max, const void *uncompressed_frame, int frame_size)
@@ -59,15 +66,37 @@ int lan_engine::media_stuff_s::encode_audio(byte *dest, int dest_max, const void
     return 0;
 }
 
-int lan_engine::media_stuff_s::prepare_audio4send()
+int lan_engine::media_stuff_s::prepare_audio4send(int ct)
 {
     int avsize = enc_fifo.available();
     if (avsize == 0)
+    {
+        processing = false;
+        return 0;
+    }
+
+    if ((next_time_send - ct) > 10)
         return 0;
 
-    int req_frame_size = audio_format_s(AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS).avgBytesPerMSecs(AUDIO_SAMPLEDURATION);
+    int sd = AUDIO_SAMPLEDURATION_MAX;
+    int req_frame_size = audio_format_s(AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS).avgBytesPerMSecs(AUDIO_SAMPLEDURATION_MAX);
     if (req_frame_size > avsize)
+    {
+        req_frame_size = audio_format_s(AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS).avgBytesPerMSecs(AUDIO_SAMPLEDURATION_MIN);
+        if (req_frame_size > avsize)
+        {
+            next_time_send = ct;
+            return 0;
+        }
+        sd = AUDIO_SAMPLEDURATION_MIN;
+    }
+
+    if (!processing && (req_frame_size*2) > avsize)
         return 0;
+
+    processing = true;
+    next_time_send += sd;
+    if ((next_time_send - ct) < 0) next_time_send = ct+sd/2;
 
     if (req_frame_size > (int)uncompressed.size()) uncompressed.resize(req_frame_size);
     int samples = enc_fifo.read_data(uncompressed.data(), req_frame_size) / audio_format_s(AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS).blockAlign();
@@ -87,23 +116,22 @@ int lan_engine::media_stuff_s::decode_audio( const void *data, int datasize )
         if (rc != OPUS_OK) return 0;
     }
 
-    int frames = AUDIO_SAMPLERATE * AUDIO_SAMPLEDURATION / 1000;
+    int frames = AUDIO_SAMPLERATE /** AUDIO_SAMPLEDURATION / 1000*/;
     int dec_size = frames * AUDIO_CHANNELS * AUDIO_BITS / 8;
     if ((int)uncompressed.size() < dec_size) uncompressed.resize(dec_size);
 
     rc = opus_decode(audio_decoder, (const byte *)data, datasize, (opus_int16 *)uncompressed.data(), frames, 0);
     if (rc > 0)
     {
-        ASSERT( rc * AUDIO_CHANNELS * AUDIO_BITS / 8 == dec_size );
-        return dec_size;
+        return rc * AUDIO_CHANNELS * AUDIO_BITS / 8;
     }
     return 0;
 }
 
-void lan_engine::media_stuff_s::tick(contact_s *c)
+void lan_engine::media_stuff_s::tick(contact_s *c, int ct)
 {
     engine->media_data_transfer = true;
-    int sz = prepare_audio4send();
+    int sz = prepare_audio4send(ct);
     if (sz > 0)
         c->send_block(BT_AUDIO_FRAME, 0, compressed.data(), sz);
 }
@@ -506,7 +534,7 @@ datablock_s *datablock_s::build(block_type_e mt, u64 delivery_tag_, const void *
     m->delivery_tag = delivery_tag_;
     m->next = nullptr;
     m->prev = nullptr;
-    m->mt = mt;
+    m->bt = mt;
     m->sent = 0;
     m->len = datasize + datasize1;
     memcpy( m+1, data, datasize );
@@ -529,8 +557,20 @@ lan_engine::contact_s::~contact_s()
     }
 }
 
-u64 lan_engine::contact_s::send_block(block_type_e mt, u64 delivery_tag, const void *data, int datasize, const void *data1, int datasize1)
+u64 lan_engine::contact_s::send_block(block_type_e bt, u64 delivery_tag, const void *data, int datasize, const void *data1, int datasize1)
 {
+    if (BT_AUDIO_FRAME == bt)
+    {
+        // special block
+
+        bool is_auth = false;
+        const byte *k = message_key(&is_auth);
+
+        engine->pg_raw_data(k, bt, (const byte *)data, datasize);
+        pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
+        return 0;
+    }
+
     if (delivery_tag == 0) do {
         randombytes_buf(&delivery_tag, sizeof(delivery_tag));
     } while (delivery_tag == 0 || engine->delivery.find(delivery_tag) != engine->delivery.end());
@@ -545,7 +585,7 @@ u64 lan_engine::contact_s::send_block(block_type_e mt, u64 delivery_tag, const v
     }
 
 
-    datablock_s *m = datablock_s::build(mt, delivery_tag, data, datasize, data1, datasize1);
+    datablock_s *m = datablock_s::build(bt, delivery_tag, data, datasize, data1, datasize1);
     LIST_ADD(m,sendblock_f,sendblock_l,prev,next);
     if (state == ONLINE)
         nextactiontime = time_ms();
@@ -1496,7 +1536,7 @@ void operator<<(chunk &chunkm, const lan_engine::contact_s &c)
     for (datablock_s *m = c.sendblock_f; m; )
     {
         datablock_s *x = m; m = m->next;
-        if (x->mt > __bt_no_need_ater_save_begin && x->mt < __bt_no_need_ater_save_end)
+        if (x->bt > __bt_no_need_ater_save_begin && x->bt < __bt_no_need_ater_save_end)
         {
             LIST_DEL(x, contact->sendblock_f, contact->sendblock_l, prev, next);
             x->die();
@@ -1844,7 +1884,7 @@ void lan_engine::contact_s::online_tick(int ct, int nexttime)
         }
     }
 
-    if (media) media->tick( this );
+    if (media) media->tick( this, ct );
 
     datablock_s *m = sendblock_f;
     while (m && m->sent >= m->len) m = m->next;
@@ -2009,7 +2049,25 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
         {
             r.readi(); // read random stub
             /*USHORT flags =*/ r.readus();
-            block_type_e mt = (block_type_e)r.readus();
+            block_type_e bt = (block_type_e)r.readus();
+
+            if (BT_AUDIO_FRAME == bt)
+            {
+                USHORT flen = r.readus();
+                const byte *frame = r.read(flen);
+
+                if (IN_PROGRESS == call_status && media)
+                {
+                    audio_format_s fmt(AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS);
+                    int sz = media->decode_audio(frame, flen);
+                    if (sz > 0)
+                        engine->hf->play_audio(0, id, &fmt, media->uncompressed.data(), sz);
+                }
+
+                break;
+            }
+
+
             u64 dtb = r.readll(0);
             int sent = r.readi(-1);
             int len = r.readi(-1);
@@ -2039,7 +2097,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                     engine->pg_delivered( dtb, message_key() );
                     pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
                     //pstr_c rstr; rstr.set(asptr((const char *)dd.buf.data(), dd.buf.size()));
-                    switch (mt)
+                    switch (bt)
                     {
                         case BT_CHANGED_NAME:
                             name = asptr((const char *)dd.buf.data(), dd.buf.size());
@@ -2082,13 +2140,6 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                             }
                             break;
                         case BT_AUDIO_FRAME:
-                            if (IN_PROGRESS == call_status && media)
-                            {
-                                audio_format_s fmt(AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS);
-                                int sz = media->decode_audio( dd.buf.data(), dd.buf.size() );
-                                if (sz > 0)
-                                    engine->hf->play_audio(id, &fmt, media->uncompressed.data(), sz);
-                            }
                             break;
                         case BT_GETAVATAR:
                             send_block(BT_AVATARDATA, 0, engine->avatar.data(), engine->avatar.size());
@@ -2188,10 +2239,10 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                             engine->hf->typing( id );
                             break;
                         default:
-                            if (mt < __bt_service)
+                            if (bt < __bt_service)
                             {
                                 u64 crtime = my_ntohll(*(u64 *)dd.buf.data());
-                                engine->hf->message((message_type_e)mt, 0, id, crtime, (const char *)dd.buf.data() + sizeof(u64), dd.buf.size() - sizeof(u64));
+                                engine->hf->message((message_type_e)bt, 0, id, crtime, (const char *)dd.buf.data() + sizeof(u64), dd.buf.size() - sizeof(u64));
                             }
                             break;
                     }
@@ -2206,11 +2257,11 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
             for(datablock_s *m = sendblock_f; m; m=m->next)
                 if (m->delivery_tag == dtb)
                 {
-                    if (m->mt < __bt_service)
+                    if (m->bt < __bt_service)
                         engine->hf->delivered(m->delivery_tag);
                 
 
-                    if (m->mt == BT_FILE_CHUNK)
+                    if (m->bt == BT_FILE_CHUNK)
                         for (file_transfer_s *f = engine->first_ftr; f; f = f->next)
                             if (f->delivered(m->delivery_tag))
                                 break;

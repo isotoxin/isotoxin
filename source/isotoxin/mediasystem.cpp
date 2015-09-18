@@ -241,11 +241,13 @@ int mediasystem_c::voice_player::protected_data_s::read_data(const s3::Format &f
 {
     auto w = data.lock_write();
 
-    if (autostop && w().available() == 0)
+    if (!mute && w().available() == 0)
     {
-        stop();
-        return 0;
-    }
+        w().nodata += size;
+        if (w().nodata > format.avgBytesPerSec())
+            return -1;
+    } else
+        w().nodata = 0;
 
     return w().read_data(format, dest, size);
 }
@@ -255,20 +257,7 @@ void mediasystem_c::voice_player::shutdown()
     stop();
     current = 0;
     mute = false;
-    autostop = false;
     data.lock_write()().clear();
-}
-
-
-void mediasystem_c::voice_autostop(const uint64 &key, bool autostop)
-{
-    SIMPLELOCK(rawplock);
-    for (int i = 0; i < MAX_RAW_PLAYERS; ++i)
-        if (vp(i).current == key)
-        {
-            vp(i).autostop = autostop;
-            return;
-        }
 }
 
 void mediasystem_c::voice_mute(const uint64 &key, bool mute)
@@ -298,7 +287,7 @@ bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const 
 {
     SIMPLELOCK( rawplock );
 
-    int j = -1;
+    int j = -1, k = -1;
     int i = 0;
     for (; i < MAX_RAW_PLAYERS; ++i)
         if (vp(i).current == key)
@@ -308,13 +297,26 @@ bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const 
         namana:
             vp(i).add_data(fmt, vol, dsp, data, size);
             return true;
-        } else if ( j < 0 && vp(i).current == 0 )
+        } else 
+        {
+            if ( j < 0 && vp(i).current == 0 )
             j = i;
+            if (k < 0 && j < 0 && !vp(i).isPlaying())
+                k = i;
+        }
+
     if (j>=0)
     {
         i = j;
         vp(j).current = key;
         vp(j).mute = false;
+        goto namana;
+    }
+    if (k >= 0)
+    {
+        i = k;
+        vp(k).current = key;
+        vp(k).mute = false;
         goto namana;
     }
     return false;
@@ -394,13 +396,15 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize 
         return;
     }
 
-    int maxssz = ifmt.avgBytesPerMSecs(100);
-    while (isize > maxssz)
-    {
-        cvt_portion(ifmt, idata, maxssz);
-        idata = ((char *)idata) + maxssz;
-        isize -= maxssz;
-    }
+    //int maxssz = ifmt.avgBytesPerMSecs(100);
+    //while (isize > maxssz)
+    //{
+    //    cvt_portion(ifmt, idata, maxssz);
+    //    idata = ((char *)idata) + maxssz;
+    //    isize -= maxssz;
+    //}
+
+    ASSERT( isize >= 0 );
 
     if (isize)
         cvt_portion(ifmt, idata, isize);
@@ -411,19 +415,27 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
 {
     bool volume_changed = volume == 1.0f; // -V550
 
-    int bszmax = 65536;
-    ts::uint8 b_temp[65536*2];
-    ts::uint8 *b[2];
-    b[0] = b_temp;
-    b[1] = b_temp + bszmax;
-    int bsz[2] = { 0, 0 };
+    //int bszmax = 65536;
+    //ts::uint8 b_temp[65536*2];
+    //ts::uint8 *b[2];
+    //b[0] = b_temp;
+    //b[1] = b_temp + bszmax;
+    //int bsz[2] = { 0, 0 };
+
+    ts::tmp_buf_c b[2];
+
     int curtarget = 0;
     const void *idata_orig = idata;
 
-#define CHECK_INSIDE(p, sz) ASSERT( (ts::uint8 *)(p) >= b[curtarget] && ((ts::uint8 *)(p) + sz) <= b[curtarget] + bszmax )
-#define SETSZ(sz) bsz[curtarget] = sz; if (!CHECK( int(sz) <= bszmax )) return;
-#define GETB() b[curtarget]
-#define GETSZ() bsz[curtarget]
+//#define CHECK_INSIDE(p, sz) ASSERT( (ts::uint8 *)(p) >= b[curtarget] && ((ts::uint8 *)(p) + sz) <= b[curtarget] + bszmax )
+//#define SETSZ(sz) bsz[curtarget] = sz; if (!CHECK( int(sz) <= bszmax )) return;
+//#define GETB() b[curtarget]
+//#define GETSZ() bsz[curtarget]
+
+#define CHECK_INSIDE(p, sz) ASSERT( b[curtarget].inside(p,sz) )
+#define SETSZ(sz) b[curtarget].set_size(sz,false)
+#define GETB() b[curtarget].data()
+#define GETSZ() b[curtarget].size()
 
     if (ifmt.bitsPerSample == 8)
     {
@@ -528,7 +540,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
         // so float stuff ready
 
         idata = GETB();
-        isize = GETSZ();
+        //isize = GETSZ();
         curtarget ^= 1;
 
         int outsamples_per_chnl = samples_per_chnl * ofmt.sampleRate / ifmt.sampleRate + 256;
@@ -574,9 +586,8 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
         osamples = src_data.output_frames_gen;
 #endif
 
-
         idata = GETB();
-        isize = GETSZ();
+        //isize = GETSZ();
         curtarget ^= 1;
 
         SETSZ(osamples * 2 * ichnls);
@@ -660,6 +671,13 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
             int samples_per_chnl_1 = (samples_per_chnl / filter_quant) * filter_quant;
             if (samples_per_chnl_1 < samples_per_chnl)
             {
+                if (samples_per_chnl_1 == 0)
+                {
+                    tail.append_buf(idata, isize);
+                    acceptor(ofmt, nullptr, 0);
+                    return;
+                }
+
                 isize = samples_per_chnl_1 * (ichnls * 2);
                 ASSERT(isize < full_isize);
             } else
@@ -669,6 +687,10 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
             samples_per_chnl = samples_per_chnl_1;
 
             SETSZ(isize);
+
+            ASSERT(isize >= tail.size());
+            CHECK_INSIDE(GETB(), tail.size());
+            CHECK_INSIDE(GETB() + tail.size(), isize - tail.size() );
 
             memcpy( GETB(), tail.data(), tail.size() );
             memcpy( GETB() + tail.size(), idata, isize - tail.size() );
@@ -699,7 +721,6 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
             }
         }
 
-
         if (idata_orig == idata || ichnls > 1)
         {
             // idata is const, we cannot modify data
@@ -725,7 +746,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
             ts::int16 *indata = (ts::int16 *)idata + (samples_per_chnl * ch);
             filter_audio(filter[ch], indata, samples_per_chnl);
         }
-        
+
         if (ichnls > 1)
         {
             // mix two streams into one stereo stream

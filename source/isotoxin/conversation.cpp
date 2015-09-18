@@ -496,11 +496,41 @@ void gui_notice_c::setup(contact_c *sender)
                 txt.append( from_utf8(n) ).append(CONSTWSTR(", "));
             } );
 
+            getengine().trunc_children(0);
+
             if (txt.ends( CONSTWSTR(", ") ))
                 txt.trunc_length(2);
             else
-                txt.append( TTT("Nobody in group chat (except you)",257) );
+                txt.append(TTT("Nobody in group chat (except you)", 257));
             textrect.set_text_only(txt, false);
+
+            if (sender->get_options().unmasked().is(contact_c::F_AUDIO_GCHAT))
+            {
+                gui_button_c &b_mute_mic = MAKE_CHILD<gui_button_c>(getrid());
+
+                (sender->get_options().unmasked().is(contact_c::F_MIC_OFF)) ?
+                    b_mute_mic.set_face_getter(BUTTON_FACE(unmute_mic)) :
+                    b_mute_mic.set_face_getter(BUTTON_FACE(mute_mic));
+
+                b_mute_mic.set_handler(DELEGATE(sender, b_mute_mic), &b_mute_mic);
+                ts::ivec2 minsz = b_mute_mic.get_min_size();
+                b_mute_mic.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, -5, 5, 0, 2));
+                MODIFY(b_mute_mic).visible(true);
+
+                gui_button_c &b_mute_speaker = MAKE_CHILD<gui_button_c>(getrid());
+
+                (sender->get_options().unmasked().is(contact_c::F_SPEAKER_OFF)) ?
+                    b_mute_speaker.set_face_getter(BUTTON_FACE(unmute_speaker)) :
+                    b_mute_speaker.set_face_getter(BUTTON_FACE(mute_speaker));
+
+                b_mute_speaker.set_handler(DELEGATE(sender, b_mute_speaker), &b_mute_speaker);
+                minsz = b_mute_speaker.get_min_size();
+                b_mute_speaker.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, -5, 5, 1, 2));
+                MODIFY(b_mute_speaker).visible(true);
+
+                addheight = 50;
+            }
+
         }
         break;
     }
@@ -575,6 +605,8 @@ gui_notice_network_c::~gui_notice_network_c()
 
 void gui_notice_network_c::setup(const ts::str_c &pubid_)
 {
+    getengine().trunc_children(0); // just kill all buttons
+
     pubid = pubid_;
     ts::wstr_c sost, plugdesc, uname, ustatus, netname;
     bool is_autoconnect = false;
@@ -774,16 +806,18 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<GM_HEARTBEAT>&)
     return 0;
 }
 
-ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
+ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 {
     if (ch.pass == 0)
     {
-        if (ch.pp == PP_AVATAR)
+        if (PP_AVATAR == ch.sp)
             getengine().redraw();
+        else if (CFG_LANGUAGE == ch.sp)
+            refresh = true;
     }
     if (ch.protoid == networkid && ch.pass > 0)
     {
-        if (ch.pp == PP_NETWORKNAME || ch.pp == PP_USERNAME || ch.pp == PP_USERSTATUSMSG)
+        if (ch.sp == PP_NETWORKNAME || ch.sp == PP_USERNAME || ch.sp == PP_USERSTATUSMSG)
             refresh = true;
     }
     return 0;
@@ -907,7 +941,7 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
                             if (active_protocol_c *ap = prf().ap(cap.getid())) // bad
                                 ap->set_avatar(ts::blob_c());
                     });
-                    gmsg<ISOGM_CHANGED_PROFILEPARAM>(protoid, PP_AVATAR).send();
+                    gmsg<ISOGM_CHANGED_SETTINGS>(protoid, PP_AVATAR).send();
                 }
             };
 
@@ -3651,7 +3685,6 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_BUTTONS> &c)
     return 0;
 }
 
-
 /*virtual*/ void gui_conversation_c::datahandler(const void *data, int size)
 {
     contact_key_s current_receiver;
@@ -3660,6 +3693,12 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_BUTTONS> &c)
     {
         if (c->is_mic_off())
             continue;
+
+        if (c->getkey().is_group())
+        {
+            current_receiver = c->getkey();
+            break;
+        }
 
         c->subiterate([&](contact_c *sc) {
             if (sc->is_av())
@@ -3673,7 +3712,6 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_BUTTONS> &c)
     if (!current_receiver.is_empty()) // only one contact receives sound at one time
         if (active_protocol_c *ap = prf().ap(current_receiver.protoid))
             ap->send_audio(current_receiver.contactid, capturefmt, data, size);
-
 }
 
 /*virtual*/ s3::Format *gui_conversation_c::formats(int &count)
@@ -3681,7 +3719,12 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_BUTTONS> &c)
     avformats.clear();
     for (contact_c *c : avs)
     {
-        c->subiterate( [this](contact_c *sc) {
+        if (c->getkey().is_group())
+        {
+            if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
+                avformats.set(ap->defaudio());
+        } else c->subiterate( [this](contact_c *sc)
+        {
             if (sc->is_av())
                 if (active_protocol_c *ap = prf().ap(sc->getkey().protoid))
                     avformats.set(ap->defaudio());
@@ -3726,6 +3769,33 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_AV> &av)
     return 0;
 }
 
+ts::uint32 gui_conversation_c::gm_handler(gmsg<GM_DRAGNDROP> &dnda)
+{
+    if (dnda.a == DNDA_CLEAN)
+    {
+        flags.clear(F_DNDTARGET);
+        return 0;
+    }
+    gui_contact_item_c *ciproc = dynamic_cast<gui_contact_item_c *>(gui->dragndrop_underproc());
+    if (!ciproc) return 0;
+    if (dnda.a == DNDA_DROP)
+    {
+        if (flags.is(F_DNDTARGET))
+        {
+            contact_c *c = get_selected_contact();
+            if (c->getkey().is_group())
+                c->join_groupchat(&ciproc->getcontact());
+        }
+        return 0;
+    }
+
+    ts::irect rect = gui->dragndrop_objrect();
+    int area = rect.area() / 3;
+    int carea = getprops().screenrect().intersect_area(rect);
+    flags.init(F_DNDTARGET, carea > area);
+    return flags.is(F_DNDTARGET) ? GMRBIT_ACCEPTED : 0;
+}
+
 
 ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CALL_STOPED> &c)
 {
@@ -3758,11 +3828,11 @@ ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> &c )
     return 0;
 }
 
-ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
+ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 {
     if (ch.pass > 0 && caption->contacted() && caption->getcontact().getkey().is_self())
     {
-        switch (ch.pp)
+        switch (ch.sp)
         {
             case PP_USERNAME:
             case PP_USERSTATUSMSG:
@@ -3775,10 +3845,10 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
     }
     if (ch.pass == 0 && caption->contacted())
     {
-        if (ch.pp == PP_PROFILEOPTIONS)
+        if (ch.sp == PP_PROFILEOPTIONS)
             caption->getcontact().reselect(true);
     }
-    if (ch.pp == PP_EMOJISET && caption->contacted())
+    if (ch.sp == PP_EMOJISET && caption->contacted())
         caption->getcontact().reselect(true);
 
     return 0;

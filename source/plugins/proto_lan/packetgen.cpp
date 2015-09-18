@@ -128,6 +128,22 @@ void packetgen::pg_reject()
     encopy();
 }
 
+void packetgen::pg_raw_data(const byte *crypt_packet_key, int bt, const byte *data, int size)
+{
+    push_pid(PID_DATA);
+    pushi(randombytes_random()); // just random int
+
+    ASSERT( bt == BT_AUDIO_FRAME && size < 64000 );
+
+    pushus(0); // 
+    pushus((USHORT)bt);
+    pushus((USHORT)size);
+    push(data, size);
+    encode(crypt_packet_key);
+
+    log_auth_key("PID_DATA (raw) encoded", crypt_packet_key);
+}
+
 void packetgen::pg_data(datablock_s *m, const byte *crypt_packet_key, int maxsize)
 {
     push_pid(PID_DATA);
@@ -136,7 +152,7 @@ void packetgen::pg_data(datablock_s *m, const byte *crypt_packet_key, int maxsiz
     USHORT flags = 0;
     //if ( m->sent == 0 ) flags |= 1; // put time
     pushus( flags ); // 
-    pushus( (USHORT)m->mt );
+    pushus( (USHORT)m->bt );
     pushll( m->delivery_tag );
     pushi( m->sent );
     pushi( m->len );

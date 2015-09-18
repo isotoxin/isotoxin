@@ -583,12 +583,18 @@ bool gui_textedit_c::prepare_lines(int startchar)
     return true;
 }
 
-void gui_textedit_c::set_placeholder(const ts::wstr_c &t)
+void gui_textedit_c::set_placeholder(GET_TOOLTIP plht)
 {
-    if (t != placeholder)
+    bool need_redraw = false;
+    if (plht != placeholder)
+        placeholder = plht, need_redraw = text.size() == 0;
+
+    if (!need_redraw && placeholder && placeholder() != placeholder_text)
+        need_redraw = true;
+
+    if (need_redraw)
     {
         flags.set(F_TEXTUREDIRTY);
-        placeholder = t;
         redraw();
     }
 }
@@ -657,7 +663,7 @@ void gui_textedit_c::prepare_texture()
 
     ts::tmp_tbuf_t<ts::glyph_image_s> glyphs, outlinedglyphs;
 
-    if (!placeholder.is_empty() && text.size() == 0)
+    if (!placeholder_text.is_empty() && text.size() == 0)
     {
         // placeholder only
 
@@ -666,10 +672,10 @@ void gui_textedit_c::prepare_texture()
         ts::ivec2 pen(ts::ui_scale(margin_left) + 4, (*font)->ascender + ts::ui_scale(margin_top));
 
         int advoffset = 0;
-        int cnt = placeholder.get_length();
+        int cnt = placeholder_text.get_length();
         for(int i=0;i<cnt;++i)
         {
-            ts::wchar phc = placeholder.get_char(i);
+            ts::wchar phc = placeholder_text.get_char(i);
             ts::glyph_image_s &gi = glyphs.add();
             ts::glyph_s &glyph = (*(*font))[phc];
             gi.width = (ts::uint16)glyph.width;
@@ -1087,6 +1093,17 @@ bool gui_textedit_c::summoncontextmenu()
     {
     case SQ_DRAW:
         {
+            if (text.size() == 0 && placeholder)
+            {
+                ts::wstr_c plht = placeholder();
+                if (placeholder_text != plht)
+                {
+                    placeholder_text = plht;
+                    flags.set(F_TEXTUREDIRTY);
+                }
+            }
+
+
             rectengine_root_c &root = SAFE_REF( getroot() );
 
             ts::irect drawarea = get_client_area();

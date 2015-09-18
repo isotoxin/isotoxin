@@ -91,6 +91,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     {
         MASK_PROFILE_COMMON         = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_CHAT           = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_PROFILE_GCHAT          = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_FILES          = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_NETWORKS       = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_APPLICATION_SYSTEM     = SETBIT(NUMGEN_NEXT(ctlm)),
@@ -228,6 +229,9 @@ private:
     bool show_search_bar = false;
     bool proto_icons_indicator = false;
 
+    bool mute_mic_on_gchat_invite = false;
+    bool mute_speaker_on_gchat_invite = false;
+
     ts::flags32_s::BITS msgopts_current = 0;
     ts::flags32_s::BITS msgopts_changed = 0;
 
@@ -271,6 +275,7 @@ private:
 
     bool msgopts_handler( RID, GUIPARAM );
     bool commonopts_handler( RID, GUIPARAM );
+    bool gchatopts_handler( RID, GUIPARAM );
 
     bool ipchandler( ipcr );
     void contextmenuhandler( const ts::str_c& prm );
@@ -338,7 +343,7 @@ public:
     ~dialog_settings_c();
 
     /*virtual*/ ts::wstr_c get_name() const override;
-    /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(810, 500); }
+    /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(830, 500); }
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
     void protocols_loaded(ts::array_inplace_t<protocols_s, 0> &prots);

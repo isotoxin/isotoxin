@@ -108,7 +108,7 @@ namespace rbtn
 class gui_notice_network_c : public gui_notice_c
 {
     GM_RECEIVER(gui_notice_network_c, ISOGM_PROFILE_TABLE_SAVED);
-    GM_RECEIVER(gui_notice_network_c, ISOGM_CHANGED_PROFILEPARAM);
+    GM_RECEIVER(gui_notice_network_c, ISOGM_CHANGED_SETTINGS);
     GM_RECEIVER(gui_notice_network_c, GM_HEARTBEAT);
     GM_RECEIVER(gui_notice_network_c, ISOGM_V_UPDATE_CONTACT);
     
@@ -434,13 +434,14 @@ class gui_conversation_c : public gui_vgroup_c, public sound_capture_handler_c
 
     GM_RECEIVER(gui_conversation_c, ISOGM_V_UPDATE_CONTACT);
     GM_RECEIVER(gui_conversation_c, ISOGM_SELECT_CONTACT);
-    GM_RECEIVER(gui_conversation_c, ISOGM_CHANGED_PROFILEPARAM);
+    GM_RECEIVER(gui_conversation_c, ISOGM_CHANGED_SETTINGS);
     GM_RECEIVER(gui_conversation_c, ISOGM_AV);
     GM_RECEIVER(gui_conversation_c, ISOGM_AV_COUNT);
     GM_RECEIVER(gui_conversation_c, ISOGM_CALL_STOPED);
     GM_RECEIVER(gui_conversation_c, ISOGM_PROFILE_TABLE_SAVED);
     GM_RECEIVER(gui_conversation_c, ISOGM_UPDATE_BUTTONS);
-    
+    GM_RECEIVER(gui_conversation_c, GM_DRAGNDROP );
+
     ts::tbuf_t<s3::Format> avformats;
 
     ts::array_shared_t<contact_c,1> avs;
@@ -450,7 +451,8 @@ class gui_conversation_c : public gui_vgroup_c, public sound_capture_handler_c
     ts::safe_ptr<gui_noticelist_c> noticelist;
     ts::safe_ptr<gui_message_area_c> messagearea;
 
-    static const ts::flags32_s::BITS F_ALWAYS_SHOW_EDITOR = F_HGROUP_FREEBITSTART << 0;
+    static const ts::flags32_s::BITS F_ALWAYS_SHOW_EDITOR   = F_HGROUP_FREEBITSTART << 0;
+    static const ts::flags32_s::BITS F_DNDTARGET            = F_HGROUP_FREEBITSTART << 1;
 
     RID message_editor;
 

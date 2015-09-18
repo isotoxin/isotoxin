@@ -171,14 +171,15 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
 
     /*
         plugin can request play any audio_format
-        audio player will be automatically allocated for cid client
-    */
-    void(__stdcall *play_audio)(int cid, const audio_format_s *audio_format, const void *frame, int framesize);
+        audio player will be automatically allocated for gid/cid client
 
-    /*
-        close audio player, allocated for client
+        gid - negative (groupchat id) when groupchat message received, 0 - normal message
+        cid - unique contact id (known and unknown contacts), see contact_data_s::id
+
+        audio system automatically allocates unique audio channel for gid-cid pair
+        and releases it when the audio buffer empties
     */
-    void(__stdcall *close_audio)(int cid);
+    void(__stdcall *play_audio)(int gid, int cid, const audio_format_s *audio_format, const void *frame, int framesize);
 
     /*
         plugin tells to Isotoxin its current values

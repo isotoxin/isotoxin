@@ -59,7 +59,13 @@ void Slot::read(void *b, int size, bool afterRewind)
 {
 	if (silenceSize == -1)
 	{
-		int r = std::max(decoder->read(b, size), 0);
+		int r = decoder->read(b, size);
+        if (r < 0)
+        {
+            // stop request
+            stop();
+            return;
+        }
 		if (r != size)
 		{
 			if (looping && !(afterRewind && r == 0)) // вторая проверка - на случай, когда сразу после rewind вызов read вернул 0 (если файл пустой напр.) - если это не обработать, может получиться бесконечный цикл

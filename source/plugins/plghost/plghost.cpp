@@ -21,8 +21,7 @@ static void __stdcall message(message_type_e mt, int gid, int cid, u64 create_ti
 static void __stdcall delivered(u64 utag);
 static void __stdcall save();
 static void __stdcall on_save(const void *data, int dlen, void *param);
-static void __stdcall play_audio(int channel_id, const audio_format_s *audio_format, const void *frame, int framesize);
-static void __stdcall close_audio(int channel_id);
+static void __stdcall play_audio(int gid, int cid, const audio_format_s *audio_format, const void *frame, int framesize);
 static void __stdcall configurable(int n, const char **fields, const char **values);
 static void __stdcall avatar_data(int cid, int tag, const void *avatar_body, int avatar_body_size);
 static void __stdcall incoming_file(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
@@ -87,7 +86,6 @@ struct protolib_s
         save,
         on_save,
         play_audio,
-        close_audio,
         configurable,
         avatar_data,
         incoming_file,
@@ -105,8 +103,7 @@ struct prebuf_s
     u64 utag;
     u64 offset;
     std::vector<byte, ph_allocator> b;
-    bool audio;
-    prebuf_s(u64 utag, bool audio):utag(utag), offset(0xffffffffffffffffull), audio(audio)
+    prebuf_s(u64 utag):utag(utag), offset(0xffffffffffffffffull)
     {
         b.reserve(65536 + 4096);
         LIST_ADD(this, first, last, prev, next);
@@ -122,23 +119,23 @@ struct prebuf_s
     prebuf_s *next;
     prebuf_s *prev;
 
-    static prebuf_s * getbuf( u64 utag, bool create, bool audio = false )
+    static prebuf_s * getbuf( u64 utag, bool create )
     {
         for (prebuf_s *f = first; f; f = f->next)
         {
-            if (f->utag == utag && audio == f->audio)
+            if (f->utag == utag)
                 return f;
         }
         if (!create) return nullptr;
-        prebuf_s *bb = new prebuf_s(utag, audio);
+        prebuf_s *bb = new prebuf_s(utag);
         return bb;
     }
-    static void kill(u64 utag, bool audio = false)
+    static void kill(u64 utag)
     {
         spinlock::simple_lock(prebuflock);
         for (prebuf_s *f = first; f; f = f->next)
         {
-            if (f->utag == utag && f->audio == audio)
+            if (f->utag == utag)
             {
                 delete f;
                 break;
@@ -391,6 +388,7 @@ DWORD WINAPI worker(LPVOID nonzerothread)
             Sleep(sleepvalue);
 
         DELTA_TIME_CHECKPOINT( x1 );
+
     }
 
     --state.lock_write()().working;
@@ -940,57 +938,11 @@ static void __stdcall on_save(const void *data, int dlen, void *param)
     memcpy( buffer->data() + offset, data, dlen );
 }
 
-static void __stdcall play_audio(int cid, const audio_format_s *audio_format, const void *frame, int framesize)
+static void __stdcall play_audio(int gid, int cid, const audio_format_s *audio_format, const void *frame, int framesize)
 {
-    spinlock::simple_lock(prebuf_s::prebuflock);
-    prebuf_s *b = prebuf_s::getbuf(cid, true, true);
-
-    int bsz = audio_format->avgBytesPerMSecs(100);
-
-    auto flush_current = [](prebuf_s *b)
-    {
-        int sendsize = b->b.size() - sizeof(audio_format_s);
-        if (sendsize > 0)
-        {
-            audio_format_s *fmt = (audio_format_s *)b->b.data();
-
-            IPCW(HQ_PLAY_AUDIO) << (int)(b->utag & 0xFFFFFFFF)
-                << fmt->sample_rate << fmt->channels << fmt->bits
-                << data_block_s(b->b.data() + sizeof(audio_format_s), sendsize);
-
-        }
-        b->b.clear();
-    };
-
-    if (b->offset == 0xffffffffffffffffull || b->b.size() == 0)
-    {
-        b->offset = 0;
-    set_it_up:
-        b->b.resize(framesize + sizeof(audio_format_s));
-        memcpy(b->b.data(), audio_format, sizeof(audio_format_s));
-        memcpy(b->b.data() + sizeof(audio_format_s), frame, framesize);
-    } else if (ASSERT(b->b.size() >= sizeof(audio_format_s)) && 0 == memcmp(b->b.data(), audio_format, sizeof(audio_format_s)))
-    {
-        auto offs = b->b.size();
-        b->b.resize(offs + framesize);
-        memcpy(b->b.data() + offs, frame, framesize);
-    } else
-    {
-        // format changed?
-        flush_current(b);
-        goto set_it_up;
-    }
-
-    if (b->b.size() >= (bsz + sizeof(audio_format_s)))
-        flush_current(b);
-
-    spinlock::simple_unlock(prebuf_s::prebuflock);
-}
-
-static void __stdcall close_audio(int cid)
-{
-    prebuf_s::kill(cid, true);
-    IPCW(HQ_CLOSE_AUDIO) << cid;
+    IPCW(HQ_PLAY_AUDIO) << gid << cid
+        << audio_format->sample_rate << audio_format->channels << audio_format->bits
+        << data_block_s(frame, framesize);
 }
 
 static void __stdcall configurable(int n, const char **fields, const char **values)

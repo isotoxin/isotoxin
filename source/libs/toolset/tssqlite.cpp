@@ -231,6 +231,28 @@ public:
         return cnt;
     }
 
+    /*virtual*/ int find_free( const asptr& tablename, const asptr& id ) override
+    {
+        tmp_str_c tstr;
+        streamstr<tmp_str_c> sql(tstr);
+        sql << CONSTASTR("select `") << id << CONSTASTR("` from \'") << tablename << CONSTASTR("\' order by `") << id << CONSTASTR("`");
+
+        sqlite3_stmt *stmt;
+        sqlite3_prepare_v2(db, sql.buffer(), sql.buffer().get_length(), &stmt, nullptr);
+
+        int idcheck = 1;
+
+        for (;SQLITE_ROW == sqlite3_step(stmt);)
+        {
+            int getid = sqlite3_column_int(stmt, 0);
+            if (getid > idcheck)
+                break;
+            ++idcheck;
+        }
+        sqlite3_finalize(stmt);
+        return idcheck;
+    }
+
     /*virtual*/ int insert( const asptr& tablename, array_wrapper_c<const data_pair_s> fields ) override
     {
         if (ASSERT(db))

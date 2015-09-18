@@ -12,7 +12,7 @@ static bool __toggle_search_bar(RID, GUIPARAM)
 {
     bool sbshow = prf().get_options().is(UIOPT_SHOW_SEARCH_BAR);
     prf().set_options( sbshow ? 0 : UIOPT_SHOW_SEARCH_BAR, UIOPT_SHOW_SEARCH_BAR );
-    gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_PROFILEOPTIONS).send();
+    gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS).send();
     return true;
 }
 
@@ -822,7 +822,11 @@ void application_c::stop_capture(sound_capture_handler_c *h)
 void application_c::capture_device_changed()
 {
     if (s3::is_capturing() && m_currentsc)
-        s3::start_capture( m_currentsc->getfmt() );
+    {
+        sound_capture_handler_c *h = m_currentsc;
+        stop_capture(h);
+        start_capture(h);
+    }        
 }
 
 

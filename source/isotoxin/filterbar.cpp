@@ -23,7 +23,7 @@ gui_filterbar_c::~gui_filterbar_c()
 
     gui_textfield_c &e = (MAKE_CHILD<gui_textfield_c>(getrid(), L"", MAX_PATH, 0, false) << (gui_textedit_c::TEXTCHECKFUNC)DELEGATE(this,update_filter));
     edit = &e;
-    e.set_placeholder( TTT("Search",275), get_default_text_color(0) );
+    e.set_placeholder( TOOLTIP(TTT("Search",275)), get_default_text_color(0) );
 
     __super::created();
 }
@@ -144,4 +144,12 @@ void gui_filterbar_c::focus_edit()
 {
     if (edit)
         gui->set_focus( edit->getrid() );
+}
+
+ts::uint32 gui_filterbar_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
+{
+    if (ch.pass == 0 && CFG_LANGUAGE == ch.sp)
+        getengine().redraw();
+
+    return 0;
 }

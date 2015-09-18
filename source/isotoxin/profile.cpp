@@ -578,7 +578,23 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts:
                     some_action = true;
                     int newid = db->insert(T::get_table_name(), vals.array());
                     if (r.id < 0)
+                    {
+                        __if_exists(T::maxid)
+                        {
+                            if (T::maxid > 0 && newid > T::maxid)
+                            {
+                                int other_newid = db->find_free(T::get_table_name(), CONSTASTR("id"));
+                                ts::data_pair_s idp;
+                                idp.name = CONSTASTR("id");
+                                idp.type_ = ts::data_type_e::t_int;
+                                idp.i = other_newid;
+                                db->update(T::get_table_name(), ts::array_wrapper_c<const ts::data_pair_s>(&idp, 1), ts::amake<uint>(CONSTASTR("id="), newid));
+                                newid = other_newid;
+                            }
+                        }
+
                         new2ins[r.id] = newid;
+                    }
                     r.id = newid;
                     r.st = row_s::s_unchanged;
                     one_done = !all;
@@ -712,11 +728,11 @@ ts::uint32 profile_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // record history
     return second_pass_requred ? GMRBIT_CALLAGAIN : 0;
 }
 
-ts::uint32 profile_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
+ts::uint32 profile_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 {
     bool changed = false;
     if (ch.protoid)
-        switch (ch.pp)
+        switch (ch.sp)
         {
         case PP_NETWORKNAME:
             if (auto *row = get_table_active_protocol().find<true>(ch.protoid))

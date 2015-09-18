@@ -147,7 +147,7 @@ bool gui_contact_item_c::apply_edit( RID r, GUIPARAM p)
             if (!hstuff().curedit.is_empty())
             {
                 if (prf().username(hstuff().curedit))
-                    gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_USERNAME, hstuff().curedit).send();
+                    gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_USERNAME, hstuff().curedit).send();
             }
         } else if (contact->getkey().is_group())
         {
@@ -172,7 +172,7 @@ bool gui_contact_item_c::apply_edit( RID r, GUIPARAM p)
         if (contact->getkey().is_self())
         {
             if (prf().userstatus(hstuff().curedit))
-                gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_USERSTATUSMSG, hstuff().curedit).send();
+                gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_USERSTATUSMSG, hstuff().curedit).send();
         }
 
     }
@@ -292,8 +292,9 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
 
     }
 
+    flags.clear(F_CALLBUTTON);
 
-    if (contact && !contact->getkey().is_self())
+    if (contact && !contact->getkey().is_self() && !contact->getkey().is_group())
     {
         int features = 0;
         int features_online = 0;
@@ -330,6 +331,8 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
             b_call.disable();
             b_call.tooltip(TOOLTIP(TTT("Contact offline",143)));
         }
+
+        flags.set(F_CALLBUTTON);
 
         DEFERRED_EXECUTION_BLOCK_BEGIN(0)
             gmsg<ISOGM_UPDATE_BUTTONS>().send();
@@ -635,25 +638,7 @@ void gui_contact_item_c::on_drop(gui_contact_item_c *ondr)
 {
     if (contact->getkey().is_group())
     {
-        ts::tmp_tbuf_t<int> c2a;
-
-        ondr->contact->subiterate([&](contact_c *c) {
-            if ( contact->getkey().protoid == c->getkey().protoid )
-                c2a.add( c->getkey().contactid );
-        });
-
-        if (c2a.count() == 0)
-        {
-            SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                gui_isodialog_c::title(DT_MSGBOX_WARNING),
-                TTT("Group chat contacts must be from same network",255)
-                ));
-        } else if (active_protocol_c *ap = prf().ap(contact->getkey().protoid))
-        {
-            for( int cid : c2a )
-                ap->join_group_chat( contact->getkey().contactid, cid );
-        }
-
+        contact->join_groupchat( ondr->contact );
         return;
     }
 
@@ -763,7 +748,7 @@ void gui_contact_item_c::draw_online_state_text(draw_data_s &dd)
 
 int gui_contact_item_c::contact_item_rite_margin()
 {
-    if (contact && contact->getkey().is_self()) return 5;
+    if (!flags.is(F_CALLBUTTON)) return 5;
     return g_app->buttons().callb->size.x + 15;
 }
 
@@ -779,7 +764,7 @@ int gui_contact_item_c::contact_item_rite_margin()
             flags.clear( F_DNDDRAW );
         }
         gui_control_c::sq_evt(qp, rid, data);
-        if (m_engine)
+        if (m_engine && contact)
         {
             ts::irect ca = get_client_area();
 
@@ -874,37 +859,39 @@ int gui_contact_item_c::contact_item_rite_margin()
 
             if (contact->is_av() && CIR_CONVERSATION_HEAD != role)
             {
-                if (const theme_image_s *img_voicecall = gui->theme().get_image(CONSTASTR("voicecall")))
+                const theme_image_s *img_voicecall = contact->getkey().is_group() ? nullptr : gui->theme().get_image(CONSTASTR("voicecall"));
+                const theme_image_s *img_micoff = gui->theme().get_image(CONSTASTR("micoff"));
+                const theme_image_s *img_speakeroff = gui->theme().get_image(CONSTASTR("speakeroff"));
+                const theme_image_s *img_speakeron = contact->getkey().is_group() ? gui->theme().get_image(CONSTASTR("speakeron")) : nullptr;
+                const theme_image_s * drawarr[3];
+                int drawarr_cnt = 0;
+                if (img_voicecall)
+                    drawarr[drawarr_cnt++] = img_voicecall;
+                if (contact->is_mic_off() && img_micoff)
+                    drawarr[drawarr_cnt++] = img_micoff;
+                if (contact->is_speaker_off() && img_speakeroff)
+                    drawarr[drawarr_cnt++] = img_speakeroff;
+                if (!contact->is_speaker_off() && img_speakeron)
+                    drawarr[drawarr_cnt++] = img_speakeron;
+
+                int h = 0;
+                for (int i = 0; i < drawarr_cnt; ++i)
                 {
-                    const theme_image_s *img_micoff = gui->theme().get_image(CONSTASTR("micoff"));
-                    const theme_image_s *img_speakeroff = gui->theme().get_image(CONSTASTR("speakeroff"));
-                    const theme_image_s * drawarr[3];
-                    drawarr[0] = img_voicecall;
-                    int drawarr_cnt = 1;
-                    if (contact->is_mic_off() && img_micoff)
-                        drawarr[drawarr_cnt++] = img_micoff;
-                    if (contact->is_speaker_off() && img_speakeroff)
-                        drawarr[drawarr_cnt++] = img_speakeroff;
+                    int hh = drawarr[i]->info().sz.y;
+                    if (hh > h) h = hh;
+                }
+                int addh[3];
+                for (int i = 0; i < drawarr_cnt; ++i)
+                {
+                    int hh = drawarr[i]->info().sz.y;
+                    addh[i] = (h - hh)/2;
+                }
 
-                    int h = 0;
-                    for (int i = 0; i < drawarr_cnt; ++i)
-                    {
-                        int hh = drawarr[i]->info().sz.y;
-                        if (hh > h) h = hh;
-                    }
-                    int addh[3];
-                    for (int i = 0; i < drawarr_cnt; ++i)
-                    {
-                        int hh = drawarr[i]->info().sz.y;
-                        addh[i] = (h - hh)/2;
-                    }
-
-                    ts::ivec2 p(ca.rt());
-                    for(int i=0;i<drawarr_cnt;++i)
-                    {
-                        p.x -= drawarr[i]->info().sz.x;
-                        drawarr[i]->draw(*m_engine, ts::ivec2(p.x, p.y + addh[i]));
-                    }
+                ts::ivec2 p(ca.rt());
+                for(int i=0;i<drawarr_cnt;++i)
+                {
+                    p.x -= drawarr[i]->info().sz.x;
+                    drawarr[i]->draw(*m_engine, ts::ivec2(p.x, p.y + addh[i]));
                 }
             }
 
@@ -1130,6 +1117,11 @@ int gui_contact_item_c::contact_item_rite_margin()
                 static void m_delete_doit(const ts::str_c&cks)
                 {
                     contact_key_s ck(cks);
+
+                    contact_c * c = contacts().find(ck);
+                    if (c && c->getkey().is_group() && c->get_options().unmasked().is(contact_c::F_AUDIO_GCHAT))
+                        c->av(false);
+
                     contacts().kill(ck);
                     contacts().get_self().reselect(true);
                 }
@@ -1200,7 +1192,10 @@ int gui_contact_item_c::contact_item_rite_margin()
 
                 }
 
-                m.add(TTT("Delete",85),0,handlers::m_delete,contact->getkey().as_str());
+                if (contact->getkey().is_group())
+                    m.add(TTT("Leave group chat",304),0,handlers::m_delete,contact->getkey().as_str());
+                else
+                    m.add(TTT("Delete",85),0,handlers::m_delete,contact->getkey().as_str());
                 m.add(TTT("Contact settings",223),0,handlers::m_contact_props,contact->getkey().as_str());
                 popupmenu = &gui_popup_menu_c::show(menu_anchor_s(true), m);
                 popupmenu->leech(this);
@@ -1252,7 +1247,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                         c->set_ostate(cos_);
                     } );
                     contacts().get_self().set_ostate(cos_);
-                    gmsg<ISOGM_CHANGED_PROFILEPARAM>(0, PP_ONLINESTATUS).send();
+                    gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_ONLINESTATUS).send();
                 }
             };
 
@@ -1640,11 +1635,11 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED>&ch)
     return 0;
 }
 
-ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
+ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 {
     if (ch.pass > 0 && self)
     {
-        switch (ch.pp)
+        switch (ch.sp)
         {
             case PP_USERNAME:
             case PP_USERSTATUSMSG:
@@ -1656,11 +1651,11 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_PROFILEPARAM>&ch)
         }
     }
     if (ch.pass == 0 && self)
-        if (PP_ONLINESTATUS == ch.pp)
+        if (PP_ONLINESTATUS == ch.sp)
         self->getengine().redraw();
 
     if (ch.pass == 0)
-        if (PP_PROFILEOPTIONS == ch.pp)
+        if (PP_PROFILEOPTIONS == ch.sp)
         {
             bool show_filter = prf().get_options().is(UIOPT_SHOW_SEARCH_BAR);
             if ((filter && !show_filter) || (!filter && show_filter))
@@ -1696,6 +1691,7 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_DRAGNDROP> &dnda)
         if (ch)
         {
             const guirect_c &cirect = ch->getrect();
+            if (!cirect.getprops().is_visible()) continue;
             if (&cirect == ciproc) continue;
             int carea = cirect.getprops().screenrect().intersect_area( rect );
             if (carea > area)

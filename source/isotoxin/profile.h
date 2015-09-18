@@ -26,9 +26,12 @@ enum messages_options_e
     MSGOP_IGNORE_OTHER_TYPING   = SETBIT(6),
     UIOPT_SHOW_SEARCH_BAR       = SETBIT(16),
     UIOPT_PROTOICONS            = SETBIT(17),
+
+    GCHOPT_MUTE_MIC_ON_INVITE   = SETBIT(24),
+    GCHOPT_MUTE_SPEAKER_ON_INVITE = SETBIT(25),
 };
 
-#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|UIOPT_SHOW_SEARCH_BAR)
+#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|UIOPT_SHOW_SEARCH_BAR | GCHOPT_MUTE_MIC_ON_INVITE)
 
 
 enum dsp_flags_e
@@ -44,6 +47,7 @@ struct active_protocol_s : public active_protocol_data_s
     void set(int column, ts::data_value_s& v);
     void get(int column, ts::data_pair_s& v);
 
+    static const int maxid = 65000;
     static const int columns = 1 + 7; // tag, name, uname, ustatus, conf, options, avatar
     static ts::asptr get_table_name() {return CONSTASTR("protocols");}
     static void get_column_desc(int index, ts::column_desc_s&cd);
@@ -255,7 +259,7 @@ class profile_c : public config_base_c
 
     GM_RECEIVER( profile_c, ISOGM_PROFILE_TABLE_SAVED );
     GM_RECEIVER( profile_c, ISOGM_MESSAGE );
-    GM_RECEIVER( profile_c, ISOGM_CHANGED_PROFILEPARAM );
+    GM_RECEIVER( profile_c, ISOGM_CHANGED_SETTINGS );
 
     ts::array_safe_t< active_protocol_c, 0 > protocols;
     ts::tbuf_t< contact_key_s > dirtycontacts;

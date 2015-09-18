@@ -42,7 +42,8 @@ enum cd_mask_e
     CDM_MEMBERS         = 1 << 7,
     CDM_PERMISSIONS     = 1 << 8,
 
-    CDF_PERSISTENT_GCHAT = CDM_PUBID,
+    CDF_PERSISTENT_GCHAT = 1 << 30,
+    CDF_AUDIO_GCHAT      = 1 << 29,
 };
 
 enum groupchat_permission_e

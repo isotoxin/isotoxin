@@ -998,7 +998,7 @@ void dialog_avaselector_c::do_scale(float sf)
     } else if (active_protocol_c *ap = prf().ap(protoid))
         ap->set_avatar(ava);
 
-    gmsg<ISOGM_CHANGED_PROFILEPARAM>(protoid, PP_AVATAR).send();
+    gmsg<ISOGM_CHANGED_SETTINGS>(protoid, PP_AVATAR).send();
     __super::on_confirm();
 }
 

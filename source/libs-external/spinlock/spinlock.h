@@ -251,9 +251,7 @@ __forceinline bool try_lock_write(RWLOCK &lock)
 	}
 	thread |= LOCK_WRITE_VAL;
 	val = SLxInterlockedCompareExchange64(&lock, thread, 0);
-	if (!val)
-		return true;
-	return false;
+	return !val;
 }
 
 __forceinline void unlock_write(RWLOCK &lock)
@@ -328,6 +326,19 @@ inline void simple_lock(volatile long &lock)
     if (lock != myv)
         __debugbreak();
 }
+
+inline bool try_simple_lock(volatile long &lock)
+{
+    long myv = GetCurrentThreadId();
+    if (lock == myv)
+        __debugbreak();
+    long val = _InterlockedCompareExchange(&lock, myv, 0);
+    if (val) return false;
+    if (lock != myv)
+        __debugbreak();
+    return true;
+}
+
 
 inline void simple_unlock(volatile long &lock)
 {

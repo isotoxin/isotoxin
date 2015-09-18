@@ -82,6 +82,7 @@ public:
     virtual void delrows(const asptr& tablename, const asptr& where_items) = 0;
     virtual int  count( const asptr& tablename, const asptr& where_items ) = 0;
     virtual void update( const asptr& tablename, array_wrapper_c<const data_pair_s> fields, const asptr& where_items ) = 0;
+    virtual int  find_free( const asptr& tablename, const asptr& id ) = 0;
     
 
     static sqlitedb_c *sqlitedb_c::connect( const wsptr &fn ); // will create file if not exist / returns already connected db

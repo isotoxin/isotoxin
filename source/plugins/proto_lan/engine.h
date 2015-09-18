@@ -208,12 +208,12 @@ struct datablock_s
     u64 delivery_tag;
     datablock_s *next;
     datablock_s *prev;
-    block_type_e mt;
+    block_type_e bt;
     int len;
     int sent;
 
-    u64 create_time() const { ASSERT(BT_MESSAGE == mt || BT_ACTION == mt); return *(u64 *)(this + 1); }
-    asptr text() const { ASSERT(BT_MESSAGE == mt || BT_ACTION == mt); return asptr(((const char *)(this + 1)) + sizeof(u64), len - sizeof(u64)); }
+    u64 create_time() const { ASSERT(BT_MESSAGE == bt || BT_ACTION == bt); return *(u64 *)(this + 1); }
+    asptr text() const { ASSERT(BT_MESSAGE == bt || BT_ACTION == bt); return asptr(((const char *)(this + 1)) + sizeof(u64), len - sizeof(u64)); }
     const byte *data() const {return (const byte *)(this + 1);}
 
     static datablock_s *build(block_type_e mt, u64 delivery_tag, const void *data, int datasize, const void *data1 = nullptr, int datasize1 = 0);
@@ -308,12 +308,14 @@ public:
         fifo_stream_c enc_fifo;
         std::vector<byte> uncompressed;
         std::vector<byte> compressed;
+        int next_time_send = 0;
+        bool processing = false;
 
         void init_audio_encoder();
-        void tick(contact_s *);
+        void tick(contact_s *, int ct);
         void add_audio( const void *data, int datasize );
         int encode_audio(byte *dest, int dest_max, const void *uncompressed_frame, int frame_size);
-        int prepare_audio4send(); // grabs enc_fifo buffer and put compressed frame to this->compressed buffer
+        int prepare_audio4send(int ct); // grabs enc_fifo buffer and put compressed frame to this->compressed buffer
         int decode_audio( const void *data, int datasize ); // pcm decoded audio stored to this->uncompressed
 
         ~media_stuff_s();

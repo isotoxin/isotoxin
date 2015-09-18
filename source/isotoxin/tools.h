@@ -156,7 +156,7 @@ enum isogmsg_e
     ISOGM_INCOMING_MESSAGE,
     ISOGM_DELIVERED,
     ISOGM_FILE,
-    ISOGM_CHANGED_PROFILEPARAM,
+    ISOGM_CHANGED_SETTINGS,
     ISOGM_NOTICE,
     ISOGM_SUMMON_POST,              // summon post_s into conversation
     ISOGM_AV,
@@ -250,8 +250,9 @@ template<> struct gmsg<ISOGM_SUMMON_POST> : public gmsgbase
 };
 
 
-enum profileparam_e
+enum settingsparam_e
 {
+    // profile
     PP_USERNAME,
     PP_USERSTATUSMSG,
     PP_GENDER,
@@ -259,19 +260,20 @@ enum profileparam_e
     PP_AVATAR,
     PP_PROFILEOPTIONS,
     PP_NETWORKNAME,
-    PP_MICVOLUME,
-    PP_TALKVOLUME,
-    PP_DSPFLAGS,
-
     PP_EMOJISET,
-    PP_MICDEVICE,
+
+    // config
+    CFG_MICVOLUME,
+    CFG_TALKVOLUME,
+    CFG_DSPFLAGS,
+    CFG_LANGUAGE,
 };
-template<> struct gmsg<ISOGM_CHANGED_PROFILEPARAM> : public gmsgbase
+template<> struct gmsg<ISOGM_CHANGED_SETTINGS> : public gmsgbase
 {
-    gmsg(int protoid, profileparam_e pp, const ts::str_c &s) :gmsgbase(ISOGM_CHANGED_PROFILEPARAM), protoid(protoid), pp(pp), s(s) {}
-    gmsg(int protoid, profileparam_e pp) :gmsgbase(ISOGM_CHANGED_PROFILEPARAM), protoid(protoid), pp(pp) {}
+    gmsg(int protoid, settingsparam_e sp, const ts::str_c &s) :gmsgbase(ISOGM_CHANGED_SETTINGS), protoid(protoid), sp(sp), s(s) {}
+    gmsg(int protoid, settingsparam_e sp) :gmsgbase(ISOGM_CHANGED_SETTINGS), protoid(protoid), sp(sp) {}
     int protoid;
-    profileparam_e pp;
+    settingsparam_e sp;
     ts::str_c s;
 };
 //

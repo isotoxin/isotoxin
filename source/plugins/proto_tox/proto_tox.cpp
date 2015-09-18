@@ -117,7 +117,7 @@ struct other_typing_s
 };
 static std::vector<other_typing_s> other_typing;
 
-void set_proxy_addr(const asptr& addr)
+static void set_proxy_addr(const asptr& addr)
 {
     token<char> p(addr, ':');
     tox_proxy_host.clear();
@@ -137,6 +137,11 @@ struct stream_settings_s : public ToxAvCSettings
         return r;
     }
     fifo_stream_c fifo;
+    int owner_cid = 0;
+    int next_time_send = 0;
+    int groupnum = -1;
+    bool processing = false;
+
     stream_settings_s()
     {
         *(ToxAvCSettings *)this = av_DefaultSettings;
@@ -148,12 +153,12 @@ struct stream_settings_s : public ToxAvCSettings
     }
 };
 
-struct state_s
+struct audio_sender_state_s
 {
     unsigned long active_calls = 0;
     bool audio_sender = false;
     bool audio_sender_need_stop = false;
-    stream_settings_s local_peer_settings[MAX_CALLS];
+    stream_settings_s local_peer_settings[MAX_CALLS * 2]; // MAX_CALLS for audio calls, another MAX_CALLS for groups
     static_assert(sizeof(unsigned long /*active_calls*/)*8 >= MAX_CALLS, "!");
 
     bool allow_run_audio_sender() const
@@ -162,8 +167,8 @@ struct state_s
     }
 };
 
-static spinlock::syncvar<state_s> state;
-stream_settings_s remote_audio_fmt[MAX_CALLS];
+static spinlock::syncvar<audio_sender_state_s> state;
+static stream_settings_s remote_audio_fmt[MAX_CALLS * 2];
 
 
 enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
@@ -1203,7 +1208,7 @@ private:
     int id = 0;
     int fid; 
 public:
-    int callindex = -1;
+    int audiostream = -1;
 
     int avatar_tag = 0; // tag of contact's avatar
     int avatar_recv_fnn = -1; // receiving file number
@@ -2083,9 +2088,30 @@ static void setup_members_and_send(contact_data_s &cdata, int gnum) // cdata.mem
 
 }
 
-static void callback_av_group_audio(Tox *, int /*groupnumber*/, int /*peernumber*/, const int16_t * /*pcm*/, unsigned int /*samples*/, uint8_t /*channels*/, unsigned int /*sample_rate*/, void * /*userdata*/)
+static void callback_av_group_audio(Tox *, int gnum, int peernum, const int16_t *pcm, unsigned int samples, uint8_t channels, unsigned int sample_rate, void * /*userdata*/)
 {
-    // TODO: av groupchat
+    uint8_t pubkey[TOX_PUBLIC_KEY_SIZE];
+    tox_group_peer_pubkey(tox, gnum, peernum, pubkey);
+    if (0 == memcmp(lastmypubid, pubkey, TOX_PUBLIC_KEY_SIZE))
+        return; // ignore self message
+
+    if (contact_descriptor_s *gdesc = find_restore_descriptor(gnum + GROUP_ID_OFFSET))
+    {
+        int cid = 0;
+        int fid = find_tox_fid(pubkey);
+        if (fid < 0)
+            fid = find_tox_unknown_contact(pubkey, asptr());
+
+        if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+            cid = desc->get_id();
+
+        audio_format_s fmt;
+        fmt.sample_rate = sample_rate;
+        fmt.bits = 16;
+        fmt.channels = channels;
+
+        hf->play_audio(gdesc->get_id(), cid, &fmt, pcm, (int)samples * fmt.channels * fmt.bits / 8);
+    }
 }
 
 static void cb_group_invite(Tox *, int fid, byte t, const byte * data, uint16_t length, void *)
@@ -2102,7 +2128,25 @@ static void cb_group_invite(Tox *, int fid, byte t, const byte * data, uint16_t 
         contact_descriptor_s *desc = new contact_descriptor_s(ID_GROUP, gnum + GROUP_ID_OFFSET);
         desc->state = CS_ONLINE; // groups always online
 
-        contact_data_s cdata(desc->get_id(), CDM_STATE | CDM_NAME | CDM_MEMBERS | CDM_PERMISSIONS | (persistent ? CDF_PERSISTENT_GCHAT : 0));
+        unsigned int am = 0;
+        if (t != TOX_GROUPCHAT_TYPE_TEXT)
+        {
+            am = CDF_AUDIO_GCHAT;
+            auto w = state.lock_write();
+            for (int i = MAX_CALLS; i < MAX_CALLS * 2; ++i)
+            {
+                stream_settings_s &ss = w().local_peer_settings[i];
+                if (ss.owner_cid == 0)
+                {
+                    ss.owner_cid = desc->get_id();
+                    ss.groupnum = gnum;
+                    desc->audiostream = i;
+                    break;
+                }
+            }
+        }
+
+        contact_data_s cdata(desc->get_id(), CDM_STATE | CDM_NAME | CDM_MEMBERS | CDM_PERMISSIONS | am | (persistent ? CDF_PERSISTENT_GCHAT : 0));
         cdata.state = CS_ONLINE;
         cdata.name = gn.cstr();
         cdata.name_len = gn.get_length();
@@ -2177,11 +2221,11 @@ static void cb_toxav_invite(void *av, int32_t call_index, void * /*userdata*/)
     if (av != toxav) return;
     if (contact_descriptor_s *desc = find_restore_descriptor(toxav_get_peer_id(toxav, call_index, 0)))
     {
-        ASSERT(desc->callindex < 0);
-        if (desc->callindex >= 0 && desc->callindex != call_index)
-            toxav_stop_call(toxav,desc->callindex);
+        ASSERT(desc->audiostream < 0);
+        if (desc->audiostream >= 0 && desc->audiostream != call_index)
+            toxav_stop_call(toxav,desc->audiostream);
 
-        desc->callindex = call_index;
+        desc->audiostream = call_index;
         ToxAvCSettings peer_settings;
         toxav_get_peer_csettings(toxav, call_index, 0, &peer_settings);
         bool video = (peer_settings.call_type == av_TypeVideo);
@@ -2201,7 +2245,7 @@ static void cb_toxav_start(void *av, int32_t call_index, void * /*userdata*/)
 
     if (contact_descriptor_s *desc = find_restore_descriptor(toxav_get_peer_id(toxav, call_index, 0)))
     {
-        ASSERT( call_index == desc->callindex );
+        ASSERT( call_index == desc->audiostream );
         toxav_get_peer_csettings(toxav, call_index, 0, &remote_settings);
 
         //bool video = (peer_settings.call_type == av_TypeVideo);
@@ -2219,14 +2263,13 @@ static void call_stop_int( int32_t call_index )
 {
     if (contact_descriptor_s *desc = find_restore_descriptor(toxav_get_peer_id(toxav, call_index, 0)))
     {
-        if (desc->callindex >= 0)
+        if (desc->audiostream >= 0)
         {
-            ASSERT(desc->callindex == call_index);
+            ASSERT(desc->audiostream == call_index);
             hf->message(MT_CALL_STOP, 0, desc->get_id(), now(), nullptr, 0);
-            desc->callindex = -1;
+            desc->audiostream = -1;
             UNSETFLAG(desc->flags, contact_descriptor_s::F_NOTIFY_APP_ON_START);
         }
-        hf->close_audio(desc->get_id());
     }
 }
 
@@ -2292,18 +2335,18 @@ static void cb_toxav_audio(void *av, int32_t call_index, const int16_t *data, ui
             if (remote_audio_fmt[call_index].audio_channels == 1 || remote_audio_fmt[call_index].audio_channels == 2)
             {
                 audio_format_s fmt = remote_audio_fmt[call_index];
-                hf->play_audio(desc->get_id(), &fmt, data, (int)samples * fmt.channels * fmt.bits / 8);
+                hf->play_audio(0, desc->get_id(), &fmt, data, (int)samples * fmt.channels * fmt.bits / 8);
             }
         }
 }
 
-static DWORD WINAPI audio_sender(LPVOID)
+static void audio_sender()
 {
     state.lock_write()().audio_sender = true;
 
     std::vector<byte> prebuffer; // just ones allocated buffer for raw audio
     std::vector<byte> compressed; // just ones allocated buffer for raw audio
-
+    
     int sleepms = 100;
     for(;; Sleep(sleepms))
     {
@@ -2311,62 +2354,79 @@ static DWORD WINAPI audio_sender(LPVOID)
         if (w().audio_sender_need_stop) break;
         if (w().active_calls == 0) { sleepms = 100; continue; }
         sleepms = 1;
-        for(int i=0;i<MAX_CALLS;++i)
+        int ct = time_ms();
+        for(int i=0;i<(MAX_CALLS*2);++i)
         {
             if (!w.is_locked()) w = state.lock_write();
 
             unsigned long mask = (1<<i);
+            if (w().active_calls < mask) break;
+
             if ( 0 != ( mask & w().active_calls) )
             {
                 stream_settings_s &ss = w().local_peer_settings[i];
                 int avsize = ss.fifo.available();
                 if (avsize == 0)
                 {
+                    ss.owner_cid = 0;
+                    ss.processing = false;
+                    ss.groupnum = -1;
                     w().active_calls &= ~mask;
                     continue;
                 }
+
+                if ((ss.next_time_send - ct) > 0 && (ss.next_time_send - ct) <= ss.audio_frame_duration)
+                    continue;
+
                 audio_format_s fmt = ss;
                 int req_frame_size = fmt.avgBytesPerMSecs(ss.audio_frame_duration);
                 if (req_frame_size > avsize) 
                     continue; // not yet
+
+                if (!ss.processing && (req_frame_size * 3) > avsize)
+                    continue;
+
+                ss.processing = true;
+                ss.next_time_send += ss.audio_frame_duration;
+                if ((ss.next_time_send - ct) < 0) ss.next_time_send = ct + ss.audio_frame_duration/2;
+
                 if (req_frame_size >(int)prebuffer.size()) prebuffer.resize(req_frame_size);
                 int samples = ss.fifo.read_data(prebuffer.data(), req_frame_size) / fmt.blockAlign();
                 w.unlock(); // no need lock anymore
 
-                if ( fmt.bits == 8 )
-                {
-                    // oops. Tox works only with 16 bits
-                    // converting to 16 bit...
-                    int cvt_size = fmt.blockAlign() * 2 * samples;
-                    compressed.clear();
-                    if (cvt_size >(int)compressed.size()) compressed.resize(cvt_size); // just use compressed buffer for convertion
-                    int16_t * cvt = (int16_t *)compressed.data();
-                    for(int i=0;i<req_frame_size;++i)
-                    {
-                        byte sample8 = (byte)prebuffer.data()[i];
-                        *cvt = ((int16_t)sample8-(int16_t)0x80) << 8;
-                        ++cvt;
-                    }
-                    std::swap(compressed, prebuffer);
-                    req_frame_size = cvt_size;
-                }
+                ASSERT( fmt.bits == 16 );
 
                 if (req_frame_size >(int)compressed.size()) compressed.resize(req_frame_size);
 
-                int r = 0;
-                if ((r = toxav_prepare_audio_frame(toxav, i, compressed.data(), req_frame_size, (int16_t *)prebuffer.data(), samples)) > 0)
+                if (ss.groupnum >= 0)
                 {
-                    toxav_send_audio(toxav, i, compressed.data(), r);
+                    toxav_group_send_audio(tox, ss.groupnum, (int16_t *)prebuffer.data(), samples, (byte)fmt.channels, fmt.sample_rate );
+
+                } else
+                {
+                    int r = 0;
+                    if ((r = toxav_prepare_audio_frame(toxav, i, compressed.data(), req_frame_size, (int16_t *)prebuffer.data(), samples)) > 0)
+                    {
+                        toxav_send_audio(toxav, i, compressed.data(), r);
+                    }
                 }
+
             }
         }
+        if (w.is_locked()) w.unlock();
 
     }
 
     state.lock_write()().audio_sender = false;
-    return 0;
 }
 
+static DWORD WINAPI audio_sender(LPVOID)
+{
+    UNSTABLE_CODE_PROLOG
+    audio_sender();
+    UNSTABLE_CODE_EPILOG
+    return 0;
+}
 
 static void prepare(const byte *data, size_t length)
 {
@@ -3287,14 +3347,14 @@ void __stdcall call(int id, const call_info_s *ci)
         auto it = id2desc.find(id);
         if (it == id2desc.end()) return;
         contact_descriptor_s *cd = it->second;
-        if (cd->callindex < 0)
+        if (cd->audiostream < 0)
         {
             stream_settings_s sets;
-            if (0 == toxav_call(toxav, &cd->callindex, cd->get_fid(), &sets, ci->duration ))
+            if (0 == toxav_call(toxav, &cd->audiostream, cd->get_fid(), &sets, ci->duration ))
             {
                 SETFLAG(cd->flags, contact_descriptor_s::F_NOTIFY_APP_ON_START);
                 auto w = state.lock_write();
-                w().local_peer_settings[cd->callindex] = sets;
+                w().local_peer_settings[cd->audiostream] = sets;
             }
         }
     }
@@ -3307,14 +3367,14 @@ void __stdcall stop_call(int id, stop_call_e sc)
         auto it = id2desc.find(id);
         if (it == id2desc.end()) return;
         contact_descriptor_s *cd = it->second;
-        if (cd->callindex >= 0)
+        if (cd->audiostream >= 0)
             if (sc == STOPCALL_HANGUP)
-                toxav_hangup(toxav, cd->callindex);
+                toxav_hangup(toxav, cd->audiostream);
             else if (sc == STOPCALL_REJECT)
-                toxav_reject(toxav, cd->callindex, nullptr);
+                toxav_reject(toxav, cd->audiostream, nullptr);
             else if (sc == STOPCALL_CANCEL)
-                toxav_cancel(toxav, cd->callindex, cd->get_fid(), nullptr);
-        cd->callindex = -1;
+                toxav_cancel(toxav, cd->audiostream, cd->get_fid(), nullptr);
+        cd->audiostream = -1;
         UNSETFLAG(cd->flags, contact_descriptor_s::F_NOTIFY_APP_ON_START);
     }
 }
@@ -3326,11 +3386,11 @@ void __stdcall accept_call(int id)
         auto it = id2desc.find(id);
         if (it == id2desc.end()) return;
         contact_descriptor_s *cd = it->second;
-        if (cd->callindex >= 0)
+        if (cd->audiostream >= 0)
         {
             auto w = state.lock_write();
-            w().local_peer_settings[cd->callindex].setup();
-            toxav_answer(toxav, cd->callindex, w().local_peer_settings + cd->callindex);
+            w().local_peer_settings[cd->audiostream].setup();
+            toxav_answer(toxav, cd->audiostream, w().local_peer_settings + cd->audiostream);
         }
     }
 }
@@ -3342,14 +3402,42 @@ void __stdcall send_audio(int id, const call_info_s * ci)
         auto it = id2desc.find(id);
         if (it == id2desc.end()) return;
         contact_descriptor_s *cd = it->second;
-        if (cd->callindex >= 0)
+
+        if (id < 0 && cd->audiostream < 0)
+        {
+            // group id
+            auto w = state.lock_write();
+            for(int i=MAX_CALLS; i<MAX_CALLS*2; ++i)
+            {
+                stream_settings_s &ss = w().local_peer_settings[i];
+                if (ss.owner_cid == 0)
+                {
+                    ss.owner_cid = id;
+                    ss.groupnum = cd->get_gnum();
+                    cd->audiostream = i;
+                    break;
+                }
+            }
+        }
+
+        if (cd->audiostream >= 0)
         {
             auto w = state.lock_write();
-            stream_settings_s &ss = w().local_peer_settings[cd->callindex];
-            //toxav_change_settings(toxav, cd->callindex, &ss);
+            stream_settings_s &ss = w().local_peer_settings[cd->audiostream];
+            
+            ASSERT(ss.owner_cid == 0 || ss.owner_cid == id);
+            ss.owner_cid = id;
+            if (cd->audiostream >= MAX_CALLS) 
+            {
+                ASSERT(id < 0);
+                ss.groupnum = cd->get_gnum();
+            }
             
             ss.fifo.add_data( ci->audio_data, ci->audio_data_size );
-            w().active_calls |= (1 << cd->callindex);
+            w().active_calls |= (1 << cd->audiostream);
+
+            if (ss.fifo.available() > ((audio_format_s)ss).avgBytesPerSec())
+                ss.fifo.read_data(nullptr, ci->audio_data_size);
         }
     }
 }
@@ -3509,7 +3597,7 @@ void __stdcall add_groupchat(const char *groupaname, bool persistent)
 
     if (tox)
     {
-        int gnum = tox_add_groupchat(tox);
+        int gnum = toxav_add_av_groupchat(tox, callback_av_group_audio, nullptr);
         if (gnum >= 0)
         {
             asptr gn = utf8clamp(groupaname, TOX_MAX_NAME_LENGTH);
@@ -3518,11 +3606,24 @@ void __stdcall add_groupchat(const char *groupaname, bool persistent)
             contact_descriptor_s *desc = new contact_descriptor_s(ID_GROUP, gnum + GROUP_ID_OFFSET);
             desc->state = CS_ONLINE; // groups always online
 
-            contact_data_s cdata( desc->get_id(), CDM_STATE | CDM_NAME | (persistent ? CDF_PERSISTENT_GCHAT : 0) );
+            contact_data_s cdata( desc->get_id(), CDM_STATE | CDM_NAME | CDF_AUDIO_GCHAT | (persistent ? CDF_PERSISTENT_GCHAT : 0) );
             cdata.state = CS_ONLINE;
             cdata.name = gn.s;
             cdata.name_len = gn.l;
             hf->update_contact(&cdata);
+
+            auto w = state.lock_write();
+            for (int i = MAX_CALLS; i < MAX_CALLS * 2; ++i)
+            {
+                stream_settings_s &ss = w().local_peer_settings[i];
+                if (ss.owner_cid == 0)
+                {
+                    ss.owner_cid = desc->get_id();
+                    ss.groupnum = gnum;
+                    desc->audiostream = i;
+                    break;
+                }
+            }
 
         }
     }

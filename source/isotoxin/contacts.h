@@ -206,9 +206,7 @@ class contact_c : public ts::shared_object
 
     void setmeta(contact_c *metac)
     {
-        /*if (ASSERT((metac->key.is_self() && key.is_group()) || (!is_meta() && !key.is_self() && !key.is_group()))) */
-        ASSERT( metac->get_state() != CS_UNKNOWN );
-        ASSERT(metac->subpresent(key));
+        ASSERT( metac && metac->get_state() != CS_UNKNOWN && metac->subpresent(key) );
         metacontact = metac;
     }
 
@@ -221,17 +219,18 @@ public:
 
 
     // not saved
-    static const ts::flags32_s::BITS F_SPEAKER_OFF = SETBIT(21);
-    static const ts::flags32_s::BITS F_MIC_OFF = SETBIT(22);
-    static const ts::flags32_s::BITS F_CALL_INACTIVE = SETBIT(23);
-    static const ts::flags32_s::BITS F_DIP = SETBIT(24);
-    static const ts::flags32_s::BITS F_PERSISTENT_GCHAT = SETBIT(25);
-    static const ts::flags32_s::BITS F_SHOW_FRIEND_REQUEST = SETBIT(26);
-    static const ts::flags32_s::BITS F_PROTOHIT = SETBIT(27);
-    static const ts::flags32_s::BITS F_CALLTONE = SETBIT(28);
-    static const ts::flags32_s::BITS F_AV_INPROGRESS = SETBIT(29);
-    static const ts::flags32_s::BITS F_RINGTONE = SETBIT(30);
-    static const ts::flags32_s::BITS F_RINGTONE_BLINK = SETBIT(31);
+    static const ts::flags32_s::BITS F_SPEAKER_OFF = SETBIT(20);
+    static const ts::flags32_s::BITS F_MIC_OFF = SETBIT(21);
+    static const ts::flags32_s::BITS F_CALL_INACTIVE = SETBIT(22);
+    static const ts::flags32_s::BITS F_AUDIO_GCHAT = SETBIT(23);
+    static const ts::flags32_s::BITS F_PERSISTENT_GCHAT = SETBIT(24);
+    static const ts::flags32_s::BITS F_SHOW_FRIEND_REQUEST = SETBIT(25);
+    static const ts::flags32_s::BITS F_PROTOHIT = SETBIT(26);
+    static const ts::flags32_s::BITS F_CALLTONE = SETBIT(27);
+    static const ts::flags32_s::BITS F_AV_INPROGRESS = SETBIT(28);
+    static const ts::flags32_s::BITS F_RINGTONE = SETBIT(29);
+    static const ts::flags32_s::BITS F_RINGTONE_BLINK = SETBIT(30);
+    static const ts::flags32_s::BITS F_DIP = SETBIT(31);
 
     int operator()(const contact_c&oc) const { return key(oc.key); }
 
@@ -240,11 +239,14 @@ public:
     contact_c( const contact_key_s &key );
     contact_c();
     ~contact_c();
-    void prepare4die()
+    void prepare4die(contact_c *owner)
     {
-        opts.unmasked().set(F_DIP);
-        metacontact = nullptr; // dec ref count
-        subdelall();
+        if (nullptr == owner || owner == metacontact)
+        {
+            opts.unmasked().set(F_DIP);
+            metacontact = nullptr; // dec ref count
+            subdelall();
+        }
     }
 
     void reselect(bool);
@@ -324,7 +326,7 @@ public:
     {
         if (ASSERT(is_meta() && subpresent(c->getkey())))
         {
-            c->prepare4die();
+            c->prepare4die(this);
             subcontacts.find_remove_slow(c);
         }
         return subcontacts.size() == 0;
@@ -332,7 +334,7 @@ public:
     void subdelall()
     {
         for (contact_c *c : subcontacts)
-            c->prepare4die();
+            c->prepare4die(this);
         subcontacts.clear();
     }
     void subclear() // do not use it!!! this function used only while metacontact creation or cleanup group
@@ -354,6 +356,8 @@ public:
                 ++online_count;
         return online_count;
     }
+
+    void join_groupchat(contact_c *c);
 
     contact_c *getmeta() {return metacontact;}
     const contact_c *getmeta() const {return metacontact;}
@@ -520,7 +524,7 @@ public:
     bool ringtone(bool activate = true, bool play_stop_snd = true);
     bool is_ringtone() const { return opts.unmasked().is(F_RINGTONE); }
     bool is_ringtone_blink() const { return opts.unmasked().is(F_RINGTONE_BLINK); }
-    bool is_av() const { return opts.unmasked().is(F_AV_INPROGRESS); }
+    bool is_av() const { return opts.unmasked().is(F_AV_INPROGRESS) || (getkey().is_group() && opts.unmasked().is(F_AUDIO_GCHAT)); }
     void av( bool f = true );
 
     bool is_mic_off() const { return opts.unmasked().is(F_MIC_OFF|F_CALL_INACTIVE); }
@@ -604,7 +608,7 @@ template<> struct gmsg<ISOGM_SELECT_CONTACT> : public gmsgbase
 
 template<> struct gmsg<ISOGM_AV> : public gmsgbase
 {
-    gmsg(contact_c *c, bool activated) :gmsgbase(ISOGM_AV), multicontact(c), activated(activated) { ASSERT(c->is_meta()); }
+    gmsg(contact_c *c, bool activated) :gmsgbase(ISOGM_AV), multicontact(c), activated(activated) { ASSERT(c->is_meta() || c->getkey().is_group()); }
     ts::shared_ptr<contact_c> multicontact;
     bool activated;
 };
@@ -649,7 +653,7 @@ class contacts_c
     GM_RECEIVER(contacts_c, ISOGM_UPDATE_CONTACT);
     GM_RECEIVER(contacts_c, ISOGM_INCOMING_MESSAGE);
     GM_RECEIVER(contacts_c, ISOGM_FILE);
-    GM_RECEIVER(contacts_c, ISOGM_CHANGED_PROFILEPARAM);
+    GM_RECEIVER(contacts_c, ISOGM_CHANGED_SETTINGS);
     GM_RECEIVER(contacts_c, ISOGM_DELIVERED);
     GM_RECEIVER(contacts_c, ISOGM_NEWVERSION);
     GM_RECEIVER(contacts_c, ISOGM_AVATAR);
@@ -668,7 +672,7 @@ class contacts_c
         if (arr.find_sorted(index, k))
         {
             contact_c *c = arr.get(index);
-            c->prepare4die();
+            c->prepare4die(nullptr);
             arr.remove_slow(index);
         }
 
