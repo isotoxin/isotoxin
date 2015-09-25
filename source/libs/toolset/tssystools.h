@@ -30,6 +30,7 @@ void TSCALL set_clipboard_bitmap(const bitmap_c &bmp);
 
 void TSCALL open_link(const ts::wstr_c &lnk);
 
-bool start_app( const wsptr &cmdline, HANDLE *hProcess );
+bool TSCALL start_app( const wsptr &cmdline, HANDLE *hProcess );
 
+bool TSCALL is_admin_mode();
 }

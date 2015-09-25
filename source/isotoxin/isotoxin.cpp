@@ -163,13 +163,14 @@ static bool check_instance()
     return true;
 }
 
-static bool parsecmdl(const wchar_t *cmdl, bool &checkinstance)
+static bool parsecmdl(const wchar_t *cmdl, bool &checkinstance, bool &minimize)
 {
     ts::wstr_c wd;
     ts::set_work_dir(wd);
 
     ts::token<wchar_t> cmds(cmdl, ' ');
     bool wait_cmd = false;
+    bool installto = false;
     uint processwait = 0;
     for (; cmds; ++cmds)
     {
@@ -179,11 +180,29 @@ static bool parsecmdl(const wchar_t *cmdl, bool &checkinstance)
             wait_cmd = false;
             continue;
         }
+
+        if (installto)
+        {
+            if (ts::is_admin_mode())
+            {
+                ts::wstr_c installto_path(*cmds);
+                installto_path.replace_all('*', ' ');
+                install_to(installto_path, false);
+            }
+            return false;
+        }
+
         if (cmds->equals(CONSTWSTR("wait")))
             wait_cmd = true;
 
         if (cmds->equals(CONSTWSTR("multi")))
             checkinstance = false;
+
+        if (cmds->equals(CONSTWSTR("minimize")))
+            minimize = true;
+
+        if (cmds->equals(CONSTWSTR("installto")))
+            installto = true;
     }
 
     if (processwait)
@@ -212,7 +231,8 @@ bool _cdecl app_preinit( const wchar_t *cmdl )
     sodium_init();
 
     bool checkinstance = true;
-    if (!parsecmdl(cmdl, checkinstance))
+    bool minimize = false;
+    if (!parsecmdl(cmdl, checkinstance, minimize))
         return false;
 
     if (!check_autoupdate())
@@ -238,7 +258,7 @@ bool _cdecl app_preinit( const wchar_t *cmdl )
     debug_name();
 #endif
 
-	TSNEW(application_c, cmdl); // not a memory leak! see SEV_EXIT handler
+	TSNEW(application_c, cmdl, minimize); // not a memory leak! see SEV_EXIT handler
 
 	return true;
 }

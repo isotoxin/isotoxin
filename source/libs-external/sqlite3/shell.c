@@ -4794,7 +4794,7 @@ int SQLITE_CDECL main(int argc, char **argv){
           sqlite3_snprintf(nHistory, zHistory,"%s/.sqlite_history", zHome);
         }
       }
-      if( zHistory ) shell_read_history(zHistory);
+      if( zHistory ){ shell_read_history(zHistory); }
       rc = process_input(&data, 0);
       if( zHistory ){
         shell_stifle_history(100);

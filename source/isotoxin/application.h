@@ -221,6 +221,7 @@ public:
     unsigned F_FLASHIP : 1;
     unsigned F_SETNOTIFYICON : 1; // once
     unsigned F_OFFLINE_ICON : 1;
+    unsigned F_ALLOW_AUTOUPDATE : 1;
 
 
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_EXIT);
@@ -259,6 +260,8 @@ public:
 
     ts::array_del_t<send_queue_s, 1> m_undelivered;
 
+    contact_online_state_e manual_cos = COS_ONLINE;
+
 public:
     bool b_send_message(RID r, GUIPARAM param);
     bool flash_notification_icon(RID r = RID(), GUIPARAM param = nullptr);
@@ -280,12 +283,14 @@ public:
     time_t autoupdate_next;
     ts::ivec2 download_progress = ts::ivec2(0);
 
-	application_c( const ts::wchar * cmdl );
+	application_c( const ts::wchar * cmdl, bool minimize );
 	~application_c();
 
     static ts::str_c get_downloaded_ver();
     bool b_update_ver(RID, GUIPARAM);
     bool b_restart(RID, GUIPARAM);
+    bool b_install(RID, GUIPARAM);
+    
     void newversion(bool nv) { F_NEWVERSION = nv; };
     void nonewversion(bool nv) { F_NONEWVERSION = nv; };
     bool newversion() const {return F_NEWVERSION;}
@@ -306,7 +311,7 @@ public:
         return ts::make_dummy<ts::wstr_c>(true);
     }
 
-    void summon_main_rect();
+    void summon_main_rect(bool minimize);
     preloaded_buttons_s &buttons() {return m_buttons;}
 
     void lock_recalc_unread( const contact_key_s &ck ) { m_locked_recalc_unread.set(ck); };
@@ -342,6 +347,8 @@ public:
 
     void resend_undelivered_messages( const contact_key_s& rcv = contact_key_s() );
     void undelivered_message( const post_s &p );
+
+    void set_status(contact_online_state_e cos_, bool manual);
 };
 
 extern application_c *g_app;

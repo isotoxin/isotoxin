@@ -171,8 +171,6 @@ private:
 
     bool kbd_processing_(system_query_e qp, ts::wchar charcode, int scan);
 
-	//void onChangeScrollPos(float f) {scrollTo((int)f);}
-
 	int text_el_advance(int index) const { if (index >= text.size()) return 0; return !password_char ? text[index].advance((*font)) : (*(*font))[password_char].advance;}
 	bool text_replace(int pos, int num, const ts::wsptr &str, active_element_s **el, int len, bool updateCaretPos = true);
 	bool text_replace(int pos, int num, const ts::wsptr &str, bool updateCaretPos = true);
@@ -211,6 +209,8 @@ private:
     DECLAREBIT( F_SBHL );
     DECLAREBIT( F_IGNOREFOCUSCHANGE );
     DECLAREBIT( F_PREV_SB_VIS );
+    DECLAREBIT( F_CHANGE_HANDLER );
+    DECLAREBIT( F_CHANGED_DURING_CHANGE_HANDLER );
 
 protected:
     DECLAREBIT( F_TEXTEDIT_FREBITSTART ); // free bit start for child

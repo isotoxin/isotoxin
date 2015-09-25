@@ -48,12 +48,27 @@ void gui_textedit_c::run_heartbeat()
 
 bool gui_textedit_c::text_replace(int pos, int num, const ts::wsptr &str, active_element_s **el, int len, bool update_caret_pos)
 {
-	if (check_text_func)
+    if (check_text_func && !flags.is(F_CHANGE_HANDLER))
     {
+        ts::wstr_c placeholder_text_backup = placeholder_text; // hack to use less memory for text edit control
+
         int pos0 = pos, pos1 = pos + num;
-        ts::wstr_c t = get_text_and_fix_pos(&pos0, &pos1);
-        t.replace(pos0, pos1 - pos0, str);
-        if (!check_text_func(t)) return false;
+        placeholder_text = get_text_and_fix_pos(&pos0, &pos1);
+        placeholder_text.replace(pos0, pos1 - pos0, str);
+
+        flags.clear(F_CHANGED_DURING_CHANGE_HANDLER);
+        AUTOCLEAR(flags, F_CHANGE_HANDLER);
+        if (!check_text_func(placeholder_text))
+        {
+            placeholder_text = placeholder_text_backup;
+            return false;
+        }
+        placeholder_text = placeholder_text_backup;
+        if (flags.is(F_CHANGED_DURING_CHANGE_HANDLER))
+        {
+            flags.clear(F_CHANGED_DURING_CHANGE_HANDLER);
+            return true;
+        }
     }
 
     if (num > 0 || len > 0)
@@ -601,21 +616,31 @@ void gui_textedit_c::set_placeholder(GET_TOOLTIP plht)
 
 void gui_textedit_c::set_text(const ts::wstr_c &text_, bool move_caret2end, bool setup_undo)
 {
-    flags.init(F_PREV_SB_VIS, is_vsb());
-
-    if (text.size() == text_.get_length())
+    if (flags.is(F_CHANGE_HANDLER))
     {
-        const ts::wchar *t = text_.cstr();
-        for (int i = 0, n = text.size(); i < n; ++i)
-            if (!(text[i] == t[i])) goto notEq;
-        return;
+        if (placeholder_text.equals(text_)) return; // why placeholder_text? it's a hack! see text_replace
+        flags.set(F_CHANGED_DURING_CHANGE_HANDLER);
+
+    } else
+    {
+        flags.init(F_PREV_SB_VIS, is_vsb());
+
+        if (text.size() == text_.get_length())
+        {
+            const ts::wchar *t = text_.cstr();
+            for (int i = 0, n = text.size(); i < n; ++i)
+                if (!(text[i] == t[i])) goto notEq;
+            return;
+        }
+    notEq: ;
     }
-notEq:
+
+
 	ts::ivec2 prevCaretPos = get_caret_pos();
 	if (text_replace(0, text.size(), text_, false))
 		if (move_caret2end) set_caret_pos(text.size()); else set_caret_pos(prevCaretPos);
 
-    if (setup_undo)
+    if (setup_undo && !flags.is(F_CHANGE_HANDLER))
     {
         _redo.clear();
         _undo.clear();
@@ -844,6 +869,7 @@ void gui_textedit_c::undo()
     _redo.push(text.array(), get_caret_char_index(), start_sel, CH_REPLACE);
     snapshot_s &ls = _undo.last();
     text.replace(0, text.size(), ls.text.begin(), ls.text.size() );
+    if (check_text_func) check_text_func(get_text());
     start_sel = ls.selindex;
     flags.set(F_LINESDIRTY | F_TEXTUREDIRTY);
     set_caret_pos(ls.caret_index);
@@ -856,6 +882,7 @@ void gui_textedit_c::redo()
     _undo.push(text.array(), get_caret_char_index(), start_sel, CH_REPLACE);
     snapshot_s &ls = _redo.last();
     text.replace(0, text.size(), ls.text.begin(), ls.text.size());
+    if (check_text_func) check_text_func(get_text());
     start_sel = ls.selindex;
     flags.set(F_LINESDIRTY | F_TEXTUREDIRTY);
     set_caret_pos(ls.caret_index);

@@ -336,7 +336,7 @@ void TSCALL open_link(const ts::wstr_c &lnk)
     ShellExecuteW(nullptr, L"open", lnk, nullptr, nullptr, SW_SHOWNORMAL);
 }
 
-bool start_app( const wsptr &cmdline, HANDLE *hProcess)
+bool TSCALL start_app( const wsptr &cmdline, HANDLE *hProcess)
 {
     STARTUPINFOW si = { sizeof(si) };
     PROCESS_INFORMATION pi = { 0 };
@@ -355,6 +355,51 @@ bool start_app( const wsptr &cmdline, HANDLE *hProcess)
     }
 }
 
+bool TSCALL is_admin_mode()
+{
+    // http://www.codeproject.com/Articles/320748/Haephrati-Elevating-during-runtime
 
+    BOOL fIsRunAsAdmin = FALSE;
+    DWORD dwError = ERROR_SUCCESS;
+    PSID pAdministratorsGroup = NULL;
+
+    // Allocate and initialize a SID of the administrators group.
+    SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
+    if (!AllocateAndInitializeSid(
+        &NtAuthority,
+        2,
+        SECURITY_BUILTIN_DOMAIN_RID,
+        DOMAIN_ALIAS_RID_ADMINS,
+        0, 0, 0, 0, 0, 0,
+        &pAdministratorsGroup))
+    {
+        dwError = GetLastError();
+        goto Cleanup;
+    }
+
+    // Determine whether the SID of administrators group is enabled in 
+    // the primary access token of the process.
+    if (!CheckTokenMembership(NULL, pAdministratorsGroup, &fIsRunAsAdmin))
+    {
+        dwError = GetLastError();
+        goto Cleanup;
+    }
+
+Cleanup:
+    // Centralized cleanup for all allocated resources.
+    if (pAdministratorsGroup)
+    {
+        FreeSid(pAdministratorsGroup);
+        pAdministratorsGroup = NULL;
+    }
+
+    // Throw the error if something failed in the function.
+    if (ERROR_SUCCESS != dwError)
+    {
+        return false;
+    }
+
+    return fIsRunAsAdmin == TRUE;
+}
 
 }

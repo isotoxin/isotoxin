@@ -1063,7 +1063,7 @@ void contact_c::join_groupchat(contact_c *c)
         if (c2a.count() == 0)
         {
             SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                gui_isodialog_c::title(DT_MSGBOX_WARNING),
+                DT_MSGBOX_WARNING,
                 TTT("Group chat contacts must be from same network", 255)
                 ));
 
@@ -1792,6 +1792,10 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
 
 void contacts_c::unload()
 {
+    prf().shutdown_aps();
+
+    gmsg<ISOGM_SELECT_CONTACT>( nullptr ).send();
+
     for (contact_c *c : arr)
     {
         if (c->gui_item)

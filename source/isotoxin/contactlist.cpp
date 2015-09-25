@@ -149,6 +149,8 @@ bool gui_contact_item_c::apply_edit( RID r, GUIPARAM p)
                 if (prf().username(hstuff().curedit))
                     gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_USERNAME, hstuff().curedit).send();
             }
+            update_text();
+
         } else if (contact->getkey().is_group())
         {
             if (active_protocol_c *ap = prf().ap(contact->getkey().protoid))
@@ -156,7 +158,6 @@ bool gui_contact_item_c::apply_edit( RID r, GUIPARAM p)
 
         } else if (contact->get_customname() != hstuff().curedit)
         {
-
             contact->set_customname(hstuff().curedit);
             prf().dirtycontact(contact->getkey());
             flags.set(F_SKIPUPDATE);
@@ -174,7 +175,7 @@ bool gui_contact_item_c::apply_edit( RID r, GUIPARAM p)
             if (prf().userstatus(hstuff().curedit))
                 gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_USERSTATUSMSG, hstuff().curedit).send();
         }
-
+        update_text();
     }
     DEFERRED_UNIQUE_CALL( 0, DELEGATE( this, update_buttons ), nullptr );
     return true;
@@ -415,19 +416,34 @@ bool gui_contact_item_c::audio_call(RID btn, GUIPARAM)
 
 ts::uint32 gui_contact_item_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> & c )
 {
-    if ( CIR_LISTITEM == role || CIR_ME == role || CIR_METACREATE == role )
+    switch (role)
     {
-        bool o = getprops().is_active();
-        bool n = contact == c.contact;
-        if (o != n)
+    case CIR_LISTITEM:
+    case CIR_METACREATE:
+        if (!c.contact)
         {
-            MODIFY(*this).active(n);
-            update_text();
-
-            if (n)
-                g_app->active_contact_item = CIR_ME == role ? nullptr : contact->gui_item;
+            TSDEL( this );
+            return 0;
         }
+    case CIR_ME:
+        {
+            bool o = getprops().is_active();
+            bool n = contact == c.contact;
+            if (o != n)
+            {
+                MODIFY(*this).active(n);
+                update_text();
+
+                if (n)
+                    g_app->active_contact_item = CIR_ME == role ? nullptr : contact->gui_item;
+            }
+        }
+        break;
+    case CIR_CONVERSATION_HEAD:
+        if (!c.contact) contact = nullptr;
+        break;
     }
+
     return 0;
 }
 
@@ -1138,7 +1154,7 @@ int gui_contact_item_c::contact_item_rite_margin()
                             txt = TTT("Contact will be deleted:[br]$",84) / from_utf8(c->get_description());
                         
                         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                            gui_isodialog_c::title(DT_MSGBOX_WARNING),
+                            DT_MSGBOX_WARNING,
                             txt
                             ).bcancel().on_ok(m_delete_doit, cks) );
                     }
@@ -1237,26 +1253,8 @@ int gui_contact_item_c::contact_item_rite_margin()
 
         } else if (CIR_ME == role)
         {
-            struct handlers
-            {
-                static void m_ost(const ts::str_c&ost)
-                {
-                    contact_online_state_e cos_ = (contact_online_state_e)ost.as_uint();
-
-                    contacts().get_self().subiterate( [&](contact_c *c) { //-V807
-                        c->set_ostate(cos_);
-                    } );
-                    contacts().get_self().set_ostate(cos_);
-                    gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_ONLINESTATUS).send();
-                }
-            };
-
-            contact_online_state_e ost = contacts().get_self().get_ostate();
-
             menu_c m;
-            m.add(TTT("Online",244), COS_ONLINE == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_ONLINE));
-            m.add(TTT("Away",245), COS_AWAY == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_AWAY));
-            m.add(TTT("Busy",246), COS_DND == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_DND));
+            add_status_items( m );
             gui_popup_menu_c::show(menu_anchor_s(true), m);
         } else if (CIR_CONVERSATION_HEAD == role && !contact->getkey().is_self())
         {
@@ -1463,18 +1461,14 @@ void gui_contactlist_c::recreate_ctls(bool focus_filter)
 
         struct handlers
         {
-            static ts::wstr_c please_create_profile()
-            {
-                return TTT("Please, create profile first",144);
-            }
             static bool summon_addcontacts(RID, GUIPARAM)
             {
                 if (prf().is_loaded())
                     SUMMON_DIALOG<dialog_addcontact_c>(UD_ADDCONTACT);
                 else
                     SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                    gui_isodialog_c::title(DT_MSGBOX_ERROR),
-                    please_create_profile()
+                    DT_MSGBOX_ERROR,
+                    loc_text(loc_please_create_profile)
                     ));
                 return true;
             }
@@ -1484,8 +1478,8 @@ void gui_contactlist_c::recreate_ctls(bool focus_filter)
                     SUMMON_DIALOG<dialog_addgroup_c>(UD_ADDGROUP);
                 else
                     SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                    gui_isodialog_c::title(DT_MSGBOX_ERROR),
-                    please_create_profile()
+                    DT_MSGBOX_ERROR,
+                    loc_text(loc_please_create_profile)
                     ));
                 return true;
             }
@@ -1650,9 +1644,10 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
                 break;
         }
     }
+
     if (ch.pass == 0 && self)
         if (PP_ONLINESTATUS == ch.sp)
-        self->getengine().redraw();
+            self->getengine().redraw();
 
     if (ch.pass == 0)
         if (PP_PROFILEOPTIONS == ch.sp)

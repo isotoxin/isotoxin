@@ -9,6 +9,7 @@ class dialog_firstrun_c : public gui_isodialog_c
     bool noob_or_father( RID, GUIPARAM );
     bool handler_0( RID, GUIPARAM );
     bool handler_1( RID, GUIPARAM );
+    bool handler_2( RID, GUIPARAM );
     bool path_check_0( const ts::wstr_c & t );
     bool path_check_1( const ts::wstr_c & t );
     void select_lang( const ts::str_c& prm );
@@ -25,22 +26,26 @@ class dialog_firstrun_c : public gui_isodialog_c
         PCH_INSTALLPATH,
     };
     SLANGID deflng;
-    ts::wstr_c copyto, profilename;
-    bool developing = true;
+    ts::wstr_c copyto, profilename, pathselected;
+    bool developing = false;
     bool i_am_noob = true;
-#ifdef _DEBUG
-    path_choice_e choice0 = PCH_HERE;
-#else
+    bool is_autostart = true;
     path_choice_e choice0 = PCH_PROGRAMFILES;
-#endif
     path_choice_e choice1 = PCH_APPDATA;
 
     void go2page(int page);
-    ts::wstr_c path_by_choice(path_choice_e choice);
+    ts::wstr_c path_by_choice(path_choice_e choice) const;
 
+    RID infolabel;
+    ts::wstr_c start_button_text;
+
+    ts::wstr_c gen_info() const;
+    void updinfo();
+
+    void set_defaults();
 protected:
     /*virtual*/ void created() override;
-    /*virtual*/ void on_close() override { sys_exit(0); }
+    /*virtual*/ void on_close() override;
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
 public:
     dialog_firstrun_c(initial_rect_data_s &data);

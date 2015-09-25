@@ -595,10 +595,43 @@ void text_prepare_for_edit(ts::str_c &text)
 
 }
 
-ts::wstr_c connection_failed_text()
+ts::wstr_c loc_text(loctext_e lt)
 {
-    return TTT("Connection failed",302);
+    switch (lt)
+    {
+        case loc_connection_failed:
+            return TTT("Connection failed", 302);
+        case loc_autostart:
+            return TTT("Start [appname] with system", 310);
+        case loc_please_create_profile:
+            return TTT("Please, create profile first", 144);
+        case loc_yes:
+            return TTT("yes",315);
+        case loc_no:
+            return TTT("no",316);
+    }
+    return ts::wstr_c();
 }
+
+void add_status_items(menu_c &m)
+{
+    struct handlers
+    {
+        static void m_ost(const ts::str_c&ost)
+        {
+            g_app->set_status( (contact_online_state_e)ost.as_uint(), true );
+        }
+    };
+
+    contact_online_state_e ost = contacts().get_self().get_ostate();
+
+    m.add(TTT("Online", 244), COS_ONLINE == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_ONLINE));
+    m.add(TTT("Away", 245), COS_AWAY == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_AWAY));
+    m.add(TTT("Busy", 246), COS_DND == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_DND));
+
+}
+
+
 
 SLANGID detect_language()
 {
@@ -920,7 +953,275 @@ void sound_capture_handler_c::stop_capture()
     g_app->stop_capture(this);
 }
 
+namespace
+{
+    enum enm_reg_e
+    {
+        ER_CONTINUE = 0,
+        ER_BREAK = 1,
+        ER_DELETE_AND_CONTINUE = 2,
+    };
+}
 
+template< typename ENM > void enum_reg( const ts::wsptr &regpath_, ENM e )
+{
+    HKEY okey = HKEY_CURRENT_USER;
+
+    ts::wsptr regpath = regpath_;
+
+    if (regpath.l > 5)
+    {
+        if (ts::pwstr_c(regpath).begins(CONSTWSTR("HKCR\\"))) { okey = HKEY_CLASSES_ROOT; regpath = regpath_.skip(5); }
+        else if (ts::pwstr_c(regpath).begins(CONSTWSTR("HKCU\\"))) { okey = HKEY_CURRENT_USER; regpath = regpath_.skip(5); }
+        else if (ts::pwstr_c(regpath).begins(CONSTWSTR("HKLM\\"))) { okey = HKEY_LOCAL_MACHINE; regpath = regpath_.skip(5); }
+    }
+
+    HKEY k;
+    if (RegOpenKeyExW(okey, ts::tmp_wstr_c(regpath), 0, KEY_READ, &k) != ERROR_SUCCESS) return;
+
+    ts::wstrings_c to_delete;
+
+    DWORD t, len = 1024;
+    ts::wchar buf[1024];
+    for (int index = 0; ERROR_SUCCESS == RegEnumValueW(k, index, buf, &len, nullptr, &t, nullptr, nullptr); ++index, len = 1024)
+        if (REG_SZ == t)
+        {
+            ts::tmp_wstr_c kn(ts::wsptr(buf, len));
+            DWORD lt = REG_BINARY;
+            DWORD sz = 1024;
+            int rz = RegQueryValueExW(k, kn, 0, &lt, (LPBYTE)buf, &sz);
+            if (rz != ERROR_SUCCESS) continue;
+
+            ts::wsptr b(buf, sz/sizeof(ts::wchar)-1);
+
+            enm_reg_e r = e(b);
+            if (r == ER_DELETE_AND_CONTINUE)
+            {
+                to_delete.add(kn);
+                continue;
+            }
+            if (r == ER_CONTINUE) continue;
+
+            break;
+        }
+
+
+    RegCloseKey(k);
+
+    if (to_delete.size())
+    {
+        if (RegOpenKeyExW(okey, ts::tmp_wstr_c(regpath), 0, KEY_READ|KEY_WRITE, &k) != ERROR_SUCCESS) return;
+
+        for (const ts::wstr_c &kns : to_delete)
+            RegDeleteValueW(k, kns);
+
+        RegCloseKey(k);
+    }
+
+}
+
+bool check_reg_writte_access(const ts::wsptr &regpath_)
+{
+    HKEY okey = HKEY_CURRENT_USER;
+
+    ts::wsptr regpath = regpath_;
+
+    if (regpath.l > 5)
+    {
+        if (ts::pwstr_c(regpath).begins(CONSTWSTR("HKCR\\"))) { okey = HKEY_CLASSES_ROOT; regpath = regpath_.skip(5); }
+        else if (ts::pwstr_c(regpath).begins(CONSTWSTR("HKCU\\"))) { okey = HKEY_CURRENT_USER; regpath = regpath_.skip(5); }
+        else if (ts::pwstr_c(regpath).begins(CONSTWSTR("HKLM\\"))) { okey = HKEY_LOCAL_MACHINE; regpath = regpath_.skip(5); }
+    }
+
+    //RegGetKeySecurity() - too complex to use; also it requres Advapi32.lib
+    //now way! just try open key for write
+
+    HKEY k;
+    if (RegOpenKeyExW(okey, ts::tmp_wstr_c(regpath), 0, KEY_WRITE, &k) != ERROR_SUCCESS) return false;
+    RegCloseKey(k);
+    return true;
+
+}
+
+int detect_autostart(ts::str_c &cmdpar)
+{
+    ts::wstrings_c lks;
+    ts::find_files(ts::fn_join(ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%STARTUP%")), FNO_FULLPATH | FNO_PARSENENV), CONSTWSTR("*.lnk")), lks, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, true);
+    ts::find_files(ts::fn_join(ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%COMMONSTARTUP%")), FNO_FULLPATH | FNO_PARSENENV), CONSTWSTR("*.lnk")), lks, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, true);
+
+    ts::wstr_c exepath = ts::get_exe_full_name();
+    ts::fix_path(exepath, FNO_NORMALIZE);
+
+    ts::tmp_buf_c lnk;
+    for(const ts::wstr_c &lnkf : lks)
+    {
+        lnk.load_from_disk_file(lnkf);
+        ts::lnk_s lnkreader( lnk.data(), lnk.size() );
+        if (lnkreader.read())
+        {
+            ts::fix_path(lnkreader.local_path, FNO_NORMALIZE);
+            if (exepath.equals_ignore_case(lnkreader.local_path))
+            {
+                cmdpar = ts::to_str(lnkreader.command_line_arguments);
+
+                if (ts::check_write_access( ts::fn_get_path(lnkf) ))
+                    return DETECT_AUSTOSTART;
+
+                return DETECT_AUSTOSTART | DETECT_READONLY;
+            }
+        }
+    }
+
+    ts::wsptr regpaths2check[] = 
+    {
+        CONSTWSTR("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
+        CONSTWSTR("HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"),
+        CONSTWSTR("HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run"),
+    };
+
+    ts::wstrings_c cmd;
+    for (const ts::wsptr & path : regpaths2check)
+    {
+        int detect_stuff = 0;
+
+        enum_reg(path, [&](const ts::wsptr& regvalue)->enm_reg_e
+        {
+            cmd.qsplit( regvalue );
+            
+            if (cmd.size())
+                ts::fix_path(cmd.get(0), FNO_NORMALIZE);
+
+            if (cmd.size() && exepath.equals_ignore_case(cmd.get(0)))
+            {
+                detect_stuff = DETECT_AUSTOSTART;
+                if (!check_reg_writte_access(path))
+                    detect_stuff |= DETECT_READONLY;
+
+                if (cmd.size() == 2)
+                    cmdpar = ts::to_str(cmd.get(1));
+
+                return ER_BREAK;
+            }
+
+            return ER_CONTINUE;
+        });
+
+        if (detect_stuff) return detect_stuff;
+    }
+
+    return 0;
+}
+void autostart(const ts::wstr_c &exepath, const ts::wsptr &cmdpar)
+{
+    ts::wstr_c my_exe = exepath;
+    if (my_exe.is_empty())
+        my_exe = ts::get_exe_full_name();
+    ts::fix_path(my_exe, FNO_NORMALIZE);
+
+    // 1st of all - delete lnk file
+
+    ts::wstrings_c lks;
+    ts::find_files(ts::fn_join(ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%STARTUP%")), FNO_FULLPATH | FNO_PARSENENV), CONSTWSTR("*.lnk")), lks, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, true);
+    ts::find_files(ts::fn_join(ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%COMMONSTARTUP%")), FNO_FULLPATH | FNO_PARSENENV), CONSTWSTR("*.lnk")), lks, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, true);
+
+    ts::tmp_buf_c lnk;
+    for (const ts::wstr_c &lnkf : lks)
+    {
+        lnk.load_from_disk_file(lnkf);
+        ts::lnk_s lnkreader(lnk.data(), lnk.size());
+        if (lnkreader.read())
+            if (my_exe.equals_ignore_case(lnkreader.local_path))
+                DeleteFileW(lnkf);
+    }
+
+    ts::wsptr regpaths2check[] =
+    {
+        CONSTWSTR("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
+        CONSTWSTR("HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"),
+        CONSTWSTR("HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run"),
+    };
+
+    // delete all reg records
+
+    ts::wstrings_c cmd;
+    for (const ts::wsptr & path : regpaths2check)
+    {
+        enum_reg(path, [&](const ts::wsptr& regvalue)->enm_reg_e
+        {
+            cmd.qsplit(regvalue);
+            if (cmd.size())
+                ts::fix_path(cmd.get(0), FNO_NORMALIZE);
+
+            if (cmd.size() && my_exe.equals_ignore_case(cmd.get(0)))
+                return ER_DELETE_AND_CONTINUE;
+
+            return ER_CONTINUE;
+        });
+    }
+
+    if (!exepath.is_empty())
+    {
+        HKEY k;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, ts::tmp_wstr_c(regpaths2check[0].skip(5)), 0, KEY_WRITE, &k) != ERROR_SUCCESS) return;
+
+        ts::wstr_c path(CONSTWSTR("\"")); path.append(exepath);
+        if (cmdpar.l) path.append(CONSTWSTR("\" ")).append(to_wstr(cmdpar));
+        else path.append_char('\"');
+
+        RegSetValueEx(k, L"Isotoxin", 0, REG_SZ, (const BYTE *)path.cstr(), (path.get_length() + 1) * sizeof(ts::wchar));
+        RegCloseKey(k);
+    }
+
+}
+
+static void ChuckNorrisCopy(const ts::wstr_c &copyto)
+{
+    ts::wstr_c prm(CONSTWSTR("installto ")); prm.append(copyto).replace_all(10, ' ', '*');
+
+    SHELLEXECUTEINFOW shExInfo = { 0 };
+    shExInfo.cbSize = sizeof(shExInfo);
+    shExInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
+    shExInfo.hwnd = 0;
+    shExInfo.lpVerb = L"runas";
+    shExInfo.lpFile = ts::get_exe_full_name();
+    shExInfo.lpParameters = prm;
+    shExInfo.lpDirectory = 0;
+    shExInfo.nShow = SW_NORMAL;
+    shExInfo.hInstApp = 0;
+
+    if (ShellExecuteExW(&shExInfo))
+    {
+        WaitForSingleObject(shExInfo.hProcess, INFINITE);
+        CloseHandle(shExInfo.hProcess);
+    }
+}
+
+void install_to(const ts::wstr_c &path, bool acquire_admin_if_need)
+{
+    if (!ts::dir_present(path))
+        if (!make_path(path, 0))
+        {
+            if (acquire_admin_if_need)
+                ChuckNorrisCopy(path);
+            return;
+        }
+
+    ts::wstr_c path_from = ts::fn_get_path( ts::get_exe_full_name() );
+
+    ts::wstrings_c files;
+    ts::find_files( ts::fn_join(path_from, CONSTWSTR("*.*")), files, 0xFFFFFFFF, true);
+
+    for(const ts::wstr_c &fn2c : files)
+    {
+        if (fn2c.ends_ignore_case(CONSTWSTR(".exe")) || fn2c.ends_ignore_case(CONSTWSTR(".dll")) || fn2c.ends_ignore_case(CONSTWSTR(".data")))
+            if (0 == CopyFileW(fn2c, ts::fn_join(path, ts::fn_get_name_with_ext(fn2c)), false))
+            {
+                if (acquire_admin_if_need && ERROR_ACCESS_DENIED == GetLastError())
+                    ChuckNorrisCopy(path);
+                return;
+            }
+    }
+}
 
 
 // dlmalloc -----------------

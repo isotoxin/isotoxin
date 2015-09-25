@@ -162,7 +162,6 @@ static LRESULT CALLBACK app_wndproc(HWND hWnd, UINT message, WPARAM wParam, LPAR
             return 0;
         }
     case WM_CLOSE:
-
         {
             DWORD b = system_event_receiver_c::notify_system_receivers( SEV_CLOSE, g_par_def );
             if (0 != (b & SRBIT_ABORT))
@@ -393,7 +392,7 @@ static void system_loop()
         CloseHandle(CreateThread(nullptr, 0, looper, nullptr, 0, nullptr));
 
     MSG msg;
-    while (GetMessageW(&msg, nullptr, 0U, 0U) && !g_sysconf.is_app_need_quit)
+    while (!g_sysconf.is_app_need_quit && GetMessageW(&msg, nullptr, 0U, 0U))
     {
         bool downkey = false;
         bool dispatch = true;

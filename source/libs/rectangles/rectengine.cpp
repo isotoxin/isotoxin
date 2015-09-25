@@ -593,7 +593,7 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
 
                 if (engine->flags.is(F_NOTIFY_ICON))
                 {
-                    nd->uFlags = NIF_ICON;
+                    nd->uFlags = NIF_ICON | NIF_TIP;
                     Shell_NotifyIconW(NIM_MODIFY, nd);
 
                 } else {
@@ -892,12 +892,12 @@ void rectengine_root_c::kill_window()
 
 /*virtual*/ bool rectengine_root_c::apply(rectprops_c &rpss, const rectprops_c &pss)
 {
-	if (!hwnd && pss.is_visible())
+	if (!hwnd && (pss.is_visible() || pss.is_micromized()))
 	{
         rpss.change_to(pss, this);
 
 		// create visible window
-		ts::uint32 af = WS_POPUP|WS_VISIBLE|WS_SYSMENU|WS_MINIMIZEBOX|WS_MAXIMIZEBOX;
+		ts::uint32 af = WS_POPUP| /*WS_VISIBLE|*/ WS_SYSMENU|WS_MINIMIZEBOX|WS_MAXIMIZEBOX; if (!pss.is_micromized()) af |= WS_VISIBLE;
 		ts::uint32 exf = WS_EX_ACCEPTFILES;;
         
         if ( !g_sysconf.mainwindow )
@@ -909,17 +909,26 @@ void rectengine_root_c::kill_window()
         //if (pss.is_maximized())
         //    af |= WS_MAXIMIZE;
 
-        if (pss.is_minimized())
+        if (pss.is_minimized() || pss.is_micromized())
             af |= WS_MINIMIZE;
 
         HWND prnt = g_sysconf.mainwindow;
         if (flags.is(F_SYSTEM))
         {
+            ASSERT( !pss.is_micromized() );
             af = WS_POPUP | WS_VISIBLE;
             exf = WS_EX_TOPMOST|WS_EX_TOOLWINDOW;
             //prnt = WindowFromPoint(ts::ref_cast<POINT>(gui->get_cursor_pos()));
             //prnt = FindWindowW(L"Shell_TrayWnd", NULL);
             prnt = nullptr;
+        }
+
+        {
+            evt_data_s d;
+            if (getrect().sq_evt(SQ_GET_ROOT_PARENT, getrid(), d))
+            {
+                prnt = ts::ptr_cast<rectengine_root_c *>(&HOLD(d.rect.id).engine())->hwnd;
+            }
         }
 
         //RID prev;
@@ -935,6 +944,9 @@ void rectengine_root_c::kill_window()
 
         ts::irect sr = rpss.screenrect();
 		hwnd = CreateWindowExW(exf, classname(), from_utf8(name), af, sr.lt.x,sr.lt.y,sr.width(),sr.height(),prnt,0,g_sysconf.instance,this);
+
+        DMSG("create hwnd: " << hwnd);
+
         if ( g_sysconf.mainwindow == nullptr )
         {
             g_sysconf.mainwindow = hwnd;
@@ -959,11 +971,14 @@ void rectengine_root_c::kill_window()
             end_draw();
         }
 
-        if ( getrid() >> gui->get_focus() ) ; else
-            gui->set_focus(getrid(), getrect().steal_active_focus_if_root()); // root rect stole focus
+        if (!pss.is_micromized())
+        {
+            if (getrid() >> gui->get_focus()); else
+                gui->set_focus(getrid(), getrect().steal_active_focus_if_root()); // root rect stole focus
 
-        if ( gui->get_active_focus() == getrid() )
-            SetFocus(hwnd);
+            if (gui->get_active_focus() == getrid())
+                SetFocus(hwnd);
+        }
 
 	} else if (!pss.is_visible())
 	{
@@ -2111,6 +2126,7 @@ void rectengine_root_c::set_system_focus(bool bring_to_front)
 {
     if (hwnd && hwnd != GetFocus())
     {
+        DMSG("focus: "<< hwnd);
         SetFocus(hwnd);
     }
     if (bring_to_front)
@@ -2125,6 +2141,8 @@ void rectengine_root_c::flash()
 
 void rectengine_root_c::notification_icon( const ts::wsptr& text )
 {
+    if (!hwnd) return;
+
     static NOTIFYICONDATAW nd = { sizeof(NOTIFYICONDATAW), 0 };
     nd.hWnd = hwnd;
     nd.uID = (int)this; //-V205
@@ -2135,6 +2153,8 @@ void rectengine_root_c::notification_icon( const ts::wsptr& text )
     memcpy(nd.szTip, text.s, copylen);
     nd.szTip[copylen / sizeof(ts::wchar)] = 0;
 
+    DMSG( "hhh" << ts::to_str(nd.szTip) );
+
     PostMessageW( hwnd, WM_USER + 7214, 0, (LPARAM)&nd );
 }
 
@@ -2144,11 +2164,12 @@ bool rectengine_root_c::update_foreground()
     for( RID rr : gui->roots() )
     {
         HWND cur = HOLD(rr)().getroot()->hwnd;
-        SetWindowPos(cur, HWND_NOTOPMOST /*prev*/, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         if (prev)
         {
+            SetWindowPos(cur, prev, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         } else
         {
+            SetWindowPos(cur, HWND_NOTOPMOST /*prev*/, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             SetForegroundWindow(cur);
         }
         prev = cur;

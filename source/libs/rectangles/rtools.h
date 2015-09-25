@@ -33,17 +33,20 @@ struct menu_anchor_s
     {
         RELPOS_TYPE_1, // at rite of rect, menu down
         RELPOS_TYPE_2, // at bottom of rect, menu down
+        RELPOS_TYPE_3, // same as 1, useful for sysmenu
 
         relpos_check,
     } relpos = RELPOS_TYPE_1;
 
-    explicit menu_anchor_s(bool setup_by_mousepos = false);
+    explicit menu_anchor_s(bool setup_by_mousepos = false, relpos_e rp = RELPOS_TYPE_1);
     menu_anchor_s(const ts::irect &r, relpos_e rp = RELPOS_TYPE_1) : rect(r), relpos(rp) {}
     ts::ivec2 pos() const
     {
         switch (relpos) //-V719
         {
-        case menu_anchor_s::RELPOS_TYPE_1: return rect.rt();
+        case menu_anchor_s::RELPOS_TYPE_1:
+        case menu_anchor_s::RELPOS_TYPE_3:
+            return rect.rt();
         case menu_anchor_s::RELPOS_TYPE_2: return rect.lb();
         }
         return rect.center();

@@ -489,7 +489,6 @@ public:
         recruit->get()->open(fnn);
         if (!recruit->get()->inactive()) return recruit->get();
         return nullptr;
-
     }
 };
 

@@ -22,6 +22,8 @@ enum dlg_title_e
     DT_MSGBOX_ERROR,
     DT_MSGBOX_INFO,
     DT_MSGBOX_WARNING,
+
+    DT_CUSTOM,
 };
 
 class gui_isodialog_c : public gui_dialog_c

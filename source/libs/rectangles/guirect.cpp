@@ -549,6 +549,7 @@ void gui_button_c::draw()
         } else if (!text.is_empty())
         {
             draw_data_s &dd = m_engine->begin_draw();
+
             if (flags.is(F_DISABLED_USE_ALPHA) && flags.is(F_DISABLED)) dd.alpha = 128;
             if (desc->rectsf[drawstate])
             {
@@ -559,10 +560,25 @@ void gui_button_c::draw()
             {
                 dd.size = sz;
             }
+
+            if (!flags.is(F_TEXTSIZEACTUAL))
+                update_textsize();
+
+            if (!flags.is(F_CONSTANT_SIZE_X))
+            {
+                dd.offset.x += (dd.size.x - textsize.x) / 2;
+
+                if (!image.is_empty())
+                    if (const theme_image_s *thi = gui->theme().get_image(image))
+                    {
+                        thi->draw(*m_engine, ts::ivec2(0, (dd.size.y - thi->info().sz.y) / 2));
+                        dd.offset.x += thi->info().sz.x + 3;
+                    }
+            }
             
             text_draw_params_s tdp;
             tdp.forecolor = desc->colors + drawstate;
-            ts::flags32_s f; f.set(ts::TO_VCENTER | ts::TO_HCENTER);
+            ts::flags32_s f; f.set(ts::TO_VCENTER); if (flags.is(F_CONSTANT_SIZE_X)) f.set(ts::TO_HCENTER);
             tdp.textoptions = &f;
             tdp.rectupdate = updaterect;
             if (dd.size >> 0) m_engine->draw(text, tdp);
@@ -576,8 +592,14 @@ void gui_button_c::update_textsize()
     if (!flags.is(F_TEXTSIZEACTUAL) && !text.is_empty() && ASSERT(font))
     {
         int w = getprops().size().x;
-        textsize = gui->textsize(get_font(), text, w ? w : -1);
+        ts::ivec2 tsz = gui->textsize(get_font(), text, w ? w : -1);
+        if (!flags.is(F_CONSTANT_SIZE_X)) textsize.x = tsz.x;
+        if (!flags.is(F_CONSTANT_SIZE_Y)) textsize.y = tsz.y;
         flags.set(F_TEXTSIZEACTUAL);
+
+        if (!flags.is(F_CONSTANT_SIZE_X) && !image.is_empty())
+            if (const theme_image_s *thi = gui->theme().get_image(image))
+                textsize.x += thi->info().sz.x + 3;
     }
 }
 
@@ -625,7 +647,6 @@ void gui_button_c::set_face( button_desc_s *bdesc )
     {
         if (desc->rectsf[curstate])
         {
-
             if (flags.is(F_CONSTANT_SIZE_X) || flags.is(F_CONSTANT_SIZE_Y))
             {
                 ts::ivec2 storesz = textsize;
@@ -633,15 +654,16 @@ void gui_button_c::set_face( button_desc_s *bdesc )
                 me->update_textsize();
                 if (flags.is(F_CONSTANT_SIZE_X)) me->textsize.x = storesz.x;
                 if (flags.is(F_CONSTANT_SIZE_Y)) me->textsize.y = storesz.y;
-                storesz = desc->rectsf[curstate]->size_by_clientsize( ts::ivec2(textsize), false );
+                storesz = desc->rectsf[curstate]->size_by_clientsize( textsize, false );
                 if (flags.is(F_CONSTANT_SIZE_X)) storesz.x = textsize.x;
                 if (flags.is(F_CONSTANT_SIZE_Y)) storesz.y = textsize.y;
                 return storesz;
             }
 
             const_cast<gui_button_c *>(this)->update_textsize();
-            return desc->rectsf[curstate]->size_by_clientsize( ts::ivec2(textsize), false );
+            return desc->rectsf[curstate]->size_by_clientsize( textsize, false );
         }
+
         ts::ivec2 rtnr = desc->rects[curstate].size();
         if (flags.is(F_CONSTANT_SIZE_X)) rtnr.x = textsize.x;
         if (flags.is(F_CONSTANT_SIZE_Y)) rtnr.y = textsize.y;
@@ -693,6 +715,7 @@ void gui_button_c::set_face( button_desc_s *bdesc )
 
             return __super::get_max_size();
         }
+
         return desc->rects[curstate].size();
     }
 
@@ -822,6 +845,14 @@ void gui_label_c::draw()
 
         text_draw_params_s tdp;
         tdp.rectupdate = updaterect;
+
+        ts::flags32_s f;
+        if (flags.is(FLAGS_VCENTER))
+        {
+            f.setup(ts::TO_VCENTER);
+            tdp.textoptions = &f;
+        }
+
         draw(dd, tdp);
         getengine().end_draw();
     }
@@ -1336,8 +1367,13 @@ ts::ivec2 gui_tooltip_c::get_min_size() const
 void gui_tooltip_c::create(RID owner)
 {
 #ifdef _DEBUG
+    static bool disable_tt = false;
+    if (disable_tt) return;
     if ((GetAsyncKeyState(VK_CONTROL)  & 0x8000)==0x8000)
+    {
+        disable_tt = true;
         return;
+    }
 #endif
     if (owner.call_is_tooltip()) return;
     if (gmsg<GM_TOOLTIP_PRESENT>(owner).send().is(GMRBIT_ACCEPTED)) return;
@@ -2297,7 +2333,7 @@ bool gui_popup_menu_c::update_size(RID, GUIPARAM)
     ts::ivec2 sz = thr ? thr->size_by_clientsize(csz, false) : csz;
     ts::ivec2 cp = getprops().screenpos();
 
-    ts::irect maxsz = ts::wnd_get_max_size(ts::irect(cp, cp + sz));
+    ts::irect maxsz = flags.is(F_SYSMENU) ? ts::wnd_get_max_size_fs(ts::irect(cp, cp + sz)) : ts::wnd_get_max_size(ts::irect(cp, cp + sz));
 
     bool height_decreased = false;
     if (sz.y > (maxsz.height() - 50))
@@ -2323,11 +2359,15 @@ bool gui_popup_menu_c::update_size(RID, GUIPARAM)
         if (cp.y < showpoint.rect.rb.y) cp.y = showpoint.rect.lt.y - sz.y;
         if (cp.x < showpoint.rect.lt.x) cp.x = showpoint.rect.rb.x - sz.x;
         break;
+    case menu_anchor_s::RELPOS_TYPE_3:
+        if (cp.y < showpoint.rect.lt.y) cp.y = showpoint.rect.lt.y - sz.y;
+        if (cp.x < showpoint.rect.rb.x) cp.x = showpoint.rect.lt.x - sz.x;
+        break;
     default:
         __debugbreak();
     }
 
-    TS_STATIC_CHECK( menu_anchor_s::relpos_check == 2, "woopz" );
+    TS_STATIC_CHECK( menu_anchor_s::relpos_check == 3, "woopz" );
 
     MODIFY(*this).pos(cp).size(sz);
 
@@ -2420,6 +2460,13 @@ bool gui_popup_menu_c::check_focus(RID r, GUIPARAM p)
         if (data.kbd.scan == SSK_ESC)
             gmsg<GM_KILLPOPUPMENU_LEVEL>(menu.lv()).send();
         return true;
+    case SQ_GET_ROOT_PARENT:
+        if (parent_menu)
+        {
+            data.rect.id = HOLD(parent_menu)().getrootrid();
+            return true;
+        }
+        return false;
     }
 
     return __super::sq_evt(qp,rid,data);
@@ -2437,10 +2484,10 @@ void gui_popup_menu_c::menu_item_click( const click_data_s &prm )
     if (clickhandler) clickhandler( getrid(), &prm );
 }
 
-gui_popup_menu_c & gui_popup_menu_c::show( const menu_anchor_s& screenpos, const menu_c &menu, bool sys )
+gui_popup_menu_c & gui_popup_menu_c::show( const menu_anchor_s& screenpos, const menu_c &menu, bool sys, RID parentmenu )
 {
     drawcollector dch;
-    gui_popup_menu_c &m = gui_popup_menu_c::create(dch, screenpos, menu, sys);
+    gui_popup_menu_c &m = gui_popup_menu_c::create(dch, screenpos, menu, sys, parentmenu);
 
     int dummy = 0;
     menu.iterate_items(m, dummy);
@@ -2455,11 +2502,11 @@ MAKE_ROOT<gui_popup_menu_c>::~MAKE_ROOT()
     me->getroot()->set_system_focus(true);
 }
 
-gui_popup_menu_c & gui_popup_menu_c::create(drawcollector &dch, const menu_anchor_s& screenpos_, const menu_c &mnu, bool sys)
+gui_popup_menu_c & gui_popup_menu_c::create(drawcollector &dch, const menu_anchor_s& screenpos_, const menu_c &mnu, bool sys, RID parentmenu)
 {
     gmsg<GM_KILLPOPUPMENU_LEVEL>( mnu.lv() ).send();
     gmsg<GM_KILL_TOOLTIPS>().send();
-    return MAKE_ROOT<gui_popup_menu_c>( dch, screenpos_, mnu, sys );
+    return MAKE_ROOT<gui_popup_menu_c>( dch, screenpos_, mnu, sys, parentmenu );
 }
 
 bool gui_popup_menu_c::operator()(int, const ts::wsptr& txt)
@@ -2501,6 +2548,12 @@ ts::uint32 gui_popup_menu_c::gm_handler(gmsg<GM_TOOLTIP_PRESENT> &p)
 {
     return GMRBIT_ACCEPTED;
 }
+
+ts::uint32 gui_popup_menu_c::gm_handler(gmsg<GM_SYSMENU_PRESENT> &p)
+{
+    return flags.is(F_SYSMENU) ? GMRBIT_ACCEPTED : 0;
+}
+
 
 gui_menu_item_c::~gui_menu_item_c()
 {
@@ -2682,7 +2735,7 @@ gui_menu_item_c & gui_menu_item_c::submenu(const menu_c &m)
 bool gui_menu_item_c::open_submenu(RID r, GUIPARAM p)
 {
     if (submnu_shown) return false;
-    submnu_shown = &gui_popup_menu_c::show( getrid().call_get_popup_menu_pos(), submnu );
+    submnu_shown = &gui_popup_menu_c::show( getrid().call_get_popup_menu_pos(), submnu, false, getrid() );
     submnu_shown->leech(this);
 
     gui_popup_menu_c* pm = &HOLD(getparent()).as<gui_popup_menu_c>();

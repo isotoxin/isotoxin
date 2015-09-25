@@ -761,13 +761,12 @@ void active_protocol_c::send_audio(int cid, const s3::Format &ifmt, const void *
     struct s
     {
         int cid;
-        active_protocol_c *ap;
-        ts::Time ct;
+        isotoxin_ipc_s *ipcp;
         void send_audio(const s3::Format& ofmt, const void *data, int size)
         {
-            ap->ipcp->send(ipcw(AQ_SEND_AUDIO) << cid << data_block_s(data,size));
+            ipcp->send(ipcw(AQ_SEND_AUDIO) << cid << data_block_s(data,size));
         }
-    } ss = { cid, this, ts::Time::current() };
+    } ss = { cid, ipcp };
     
     cvt.ofmt = audio_fmt;
     cvt.acceptor = DELEGATE( &ss, send_audio );

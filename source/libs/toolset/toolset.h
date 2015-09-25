@@ -1034,6 +1034,30 @@ public:
     bool load(const wsptr &fn, abp_c &bp);
 };
 
+/*
+    windows lnk file reader
+*/
+struct lnk_s
+{
+    lnk_s() {}
+    lnk_s(const uint8 *data, aint datasize):data(data), datasize(datasize) {}
+
+    // setup
+    const uint8 *data = nullptr;
+    aint datasize = 0;
+
+    // call read
+    bool read();
+
+    // now, you can read values
+    wstr_c local_path;
+    wstr_c relative_path;
+    wstr_c working_directory;
+    wstr_c command_line_arguments;
+};
+
+
+
     uint64 uuid(); // uniq 64-bit generator
 
 

@@ -3,6 +3,11 @@
 
 dialog_msgbox_c::dialog_msgbox_c(MAKE_ROOT<dialog_msgbox_c> &data) :gui_isodialog_c(data), m_params(data.prms)
 {
+    gui->register_kbd_callback( DELEGATE( this, copy_text ), SSK_C, gui_c::casw_ctrl);
+
+    if (m_params.title.is_empty())
+        m_params.title = gui_isodialog_c::title(m_params.etitle);
+
     if ( m_params.bcancel_ )
     {
         bcreate_s &bcr = m_buttons.add();
@@ -21,8 +26,20 @@ dialog_msgbox_c::dialog_msgbox_c(MAKE_ROOT<dialog_msgbox_c> &data) :gui_isodialo
 
 dialog_msgbox_c::~dialog_msgbox_c()
 {
+    if (gui)
+    {
+        gui->unregister_kbd_callback(DELEGATE(this, copy_text));
+    }
+
 }
 
+bool dialog_msgbox_c::copy_text(RID, GUIPARAM)
+{
+    ts::str_c utf8 = ts::to_utf8(m_params.desc);
+    text_remove_tags(utf8);
+    ts::set_clipboard_text(ts::from_utf8(utf8));
+    return true;
+}
 
 /*virtual*/ void dialog_msgbox_c::created()
 {
@@ -30,6 +47,20 @@ dialog_msgbox_c::~dialog_msgbox_c()
     set_theme_rect(CONSTASTR("main"), false);
     __super::created();
     tabsel(CONSTASTR("1"));
+
+    WINDOWS_ONLY
+    switch (m_params.etitle) //-V719
+    {
+        case DT_MSGBOX_ERROR:
+            MessageBeep(MB_ICONERROR);
+            break;
+        case DT_MSGBOX_INFO:
+            MessageBeep(MB_ICONINFORMATION);
+            break;
+        case DT_MSGBOX_WARNING:
+            MessageBeep(MB_ICONWARNING);
+            break;
+    }
 }
 
 void dialog_msgbox_c::getbutton(bcreate_s &bcr)
@@ -45,13 +76,34 @@ void dialog_msgbox_c::getbutton(bcreate_s &bcr)
     descmaker dm(descs);
     dm << 1;
 
-    dm().label(CONSTWSTR("<p=c>") + m_params.desc);
+    dm().label(CONSTWSTR("<p=c>") + m_params.desc).setname(CONSTASTR("label"));
 
     return 0;
 }
 
 /*virtual*/ bool dialog_msgbox_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    if (SQ_DRAW == qp && rid == getrid())
+    {
+        if (RID lbl = find(CONSTASTR("label")))
+        {
+            ts::ivec2 sz1( getprops().size() - ts::ivec2(30) );
+            if (RID b = find(CONSTASTR("dialog_button_0")))
+                sz1 = HOLD(b)().getprops().pos();
+
+            ts::irect ca = get_client_area();
+            int y0 = ca.lt.y;
+            ts::irect viewrect = ts::irect( ca.lt.x + 10, y0 + 2, ca.rb.x - 10, sz1.y - 2 );
+            HOLD rlbl(lbl);
+
+            gui_label_c &l = rlbl.as<gui_label_c>();
+            l.set_autoheight(false);
+            l.set_vcenter();
+
+            MODIFY(lbl).pos( viewrect.lt ).size(viewrect.size());
+        }
+    }
+
     if (__super::sq_evt(qp, rid, data)) return true;
 
     return false;
@@ -181,7 +233,7 @@ ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 
     if (nv.is_error())
     {
-        set_label_text(CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(0)) + connection_failed_text());
+        set_label_text(CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(0)) + loc_text(loc_connection_failed));
         if (RID no = find(CONSTASTR("upd")))
             MODIFY(no).visible(true);
         return 0;

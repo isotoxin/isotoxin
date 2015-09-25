@@ -99,6 +99,36 @@ namespace ts
                             }
 
                         }
+                        else if (name == CONSTWSTR("STARTUP"))
+                        {
+
+                            if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_STARTUP | CSIDL_FLAG_CREATE, nullptr, 0, b.str())))
+                            {
+                                int pl = CHARz_len(b.cstr());
+                                envstr.replace(ii, ll + 2, wsptr(b, pl));
+                                break;
+                            }
+                            else
+                            {
+                                dprc = iie + 1;
+                                break;
+                            }
+                        }
+                        else if (name == CONSTWSTR("COMMONSTARTUP"))
+                        {
+
+                            if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_COMMON_STARTUP | CSIDL_FLAG_CREATE, nullptr, 0, b.str())))
+                            {
+                                int pl = CHARz_len(b.cstr());
+                                envstr.replace(ii, ll + 2, wsptr(b, pl));
+                                break;
+                            }
+                            else
+                            {
+                                dprc = iie + 1;
+                                break;
+                            }
+                        }
                         else
                         {
 
@@ -383,7 +413,7 @@ namespace ts
 		}
 	}
 
-	void    TSCALL make_path(const wstr_c &ipath, int fnoptions)
+	bool    TSCALL make_path(const wstr_c &ipath, int fnoptions)
 	{
 		wstr_c path(ipath);
         fix_path(path, fnoptions | FNO_NORMALIZE | FNO_REMOVECRAP | FNO_TRIMLASTSLASH | FNO_FULLPATH);
@@ -402,11 +432,12 @@ namespace ts
 			}
 
 			if (!PathFileExistsW(path.cstr()))
-			{
-				if (0 == CreateDirectoryW(path.cstr(), nullptr)) return;
-			}
-			path.append_char(NATIVE_SLASH);
+				if (0 == CreateDirectoryW(path.cstr(), nullptr)) 
+                    return false;
+
+            path.append_char(NATIVE_SLASH);
 		}
+        return true;
 	}
 
     template <class TCHARACTER> bool TSCALL parse_text_file(const wsptr &filename, strings_t<TCHARACTER>& text, bool b_from_utf8)
@@ -941,4 +972,40 @@ namespace ts
 		return bResult;
 	};
 
+    bool TSCALL check_write_access(const wsptr &ipath)
+    {
+        wstr_c path(ipath);
+        fix_path(path, FNO_NORMALIZE | FNO_REMOVECRAP | FNO_TRIMLASTSLASH | FNO_FULLPATH);
+
+        wstrings_c sa(path, NATIVE_SLASH);
+        path.set_length(0);
+
+        
+        for (int i = pwstr_c(ipath).begins(CONSTWSTR("\\\\")) ? (path.set(CONSTWSTR("\\\\")).append(sa.get(2)).append_char(NATIVE_SLASH), 3) : 0; i < sa.size(); ++i)
+        {
+            ts::wstr_c prevpath = path;
+            path.append(sa.get(i));
+            if (i == 0)
+            {
+                ASSERT(path.get_last_char() == ':');
+                path.append_char(NATIVE_SLASH);
+                continue;
+            }
+
+            if (!PathFileExistsW(path))
+            {
+                path = prevpath;
+                break;
+            }
+
+            path.append_char(NATIVE_SLASH);
+        }
+
+        HANDLE h = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        if (INVALID_HANDLE_VALUE == h)
+            return false;
+        CloseHandle(h);
+        return true;
+
+    }
 } //namespace ts

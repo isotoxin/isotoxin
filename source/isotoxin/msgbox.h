@@ -1,9 +1,8 @@
 #pragma once
 
-
-
 struct dialog_msgbox_params_s
 {
+    dlg_title_e etitle = DT_CUSTOM;
     ts::wstr_c title;
     ts::wstr_c desc;
     MENUHANDLER on_ok_h;
@@ -17,6 +16,10 @@ struct dialog_msgbox_params_s
     dialog_msgbox_params_s(   const ts::wstr_c &title,
                               const ts::wstr_c &desc
                             ) :title(title), desc(desc)  {}
+    
+    dialog_msgbox_params_s(dlg_title_e tt,
+                           const ts::wstr_c &desc
+                           ) :etitle(tt), desc(desc)  {}
 
     dialog_msgbox_params_s& bcancel(bool f=true) {bcancel_ = f; return *this;}
     dialog_msgbox_params_s& on_ok(MENUHANDLER mh, const ts::str_c &par) {on_ok_h = mh; on_ok_par = par; return *this;}
@@ -37,6 +40,8 @@ class dialog_msgbox_c : public gui_isodialog_c
     dialog_msgbox_params_s m_params;
     ts::array_inplace_t<bcreate_s, 0> m_buttons;
 
+    bool copy_text(RID, GUIPARAM);
+
 protected:
     // /*virtual*/ int unique_tag() { return UD_NOT_UNIQUE; }
     /*virtual*/ void created() override;
@@ -51,6 +56,11 @@ public:
     ~dialog_msgbox_c();
     static dialog_msgbox_params_s params(
         const ts::wstr_c &title,
+        const ts::wstr_c &desc)  {
+        return dialog_msgbox_params_s(title, desc);
+    }
+    static dialog_msgbox_params_s params(
+        dlg_title_e title,
         const ts::wstr_c &desc)  {
         return dialog_msgbox_params_s(title, desc);
     }

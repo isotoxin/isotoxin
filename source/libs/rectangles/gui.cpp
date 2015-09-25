@@ -221,7 +221,8 @@ void gui_c::heartbeat()
     }
     if (nullptr == GetFocus())
         if (rectengine_root_c *root = root_by_rid( roots().last(RID()) ))
-            root->set_system_focus();
+            if (!root->getrect().getprops().is_collapsed())
+                root->set_system_focus();
 
     gmsg<GM_HEARTBEAT>().send();
 

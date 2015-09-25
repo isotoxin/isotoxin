@@ -14,7 +14,7 @@ enum gmsg_e
     GM_UI_EVENT,
     GM_DROPFILES,
     GM_DRAGNDROP, // drag'n'drop object drag or drop
-
+    GM_SYSMENU_PRESENT,
 
     GM_COUNT
 };

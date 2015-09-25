@@ -6,12 +6,22 @@ config_base_c::~config_base_c()
 {
 }
 
-DWORD config_base_c::handler_SEV_CLOSE(const system_event_param_s & p)
+void config_base_c::close()
 {
     onclose();
     gui->delete_event(DELEGATE(this, save_dirty));
     save_dirty(RID(), as_param(1));
     closed = true;
+    if (db)
+    {
+        db->close();
+        db = nullptr;
+    }
+}
+
+DWORD config_base_c::handler_SEV_CLOSE(const system_event_param_s & p)
+{
+    close();
     return 0;
 }
 
@@ -82,28 +92,40 @@ void config_base_c::changed(bool save_all_now)
 
 bool find_config(ts::wstr_c &path)
 {
-    path = ts::fn_fix_path(CONSTWSTR("config.db"), FNO_FULLPATH);
-    bool found_cfg = ts::is_file_exists(path);
-    if (!found_cfg)
+    ts::wstr_c exepath = ts::get_exe_full_name();
+    if (ts::check_write_access( ts::fn_get_path(exepath) ))
     {
-        path = ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%APPDATA%\\isotoxin\\config.db")), FNO_FULLPATH | FNO_PARSENENV);
-        found_cfg = ts::is_file_exists(path);
+        // ignore write protected path
+        // never never never store config in program files
+        path = ts::fn_change_name_ext(exepath, CONSTWSTR("config.db"));
+        if (ts::is_file_exists(path)) return true;
+
+#ifdef _DEBUG
+        if ( exepath.find_pos(CONSTWSTR("Program Files")) < 0 )
+            return false;
+#endif
     }
-    return found_cfg;
+
+    path = ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%APPDATA%\\Isotoxin\\config.db")), FNO_FULLPATH | FNO_PARSENENV);
+    bool prsnt = ts::is_file_exists(path);
+    if (!prsnt) path.clear();
+    return prsnt;
 }
 
 
-void config_c::load( bool config_must_be_present )
+void config_c::load( const ts::wstr_c &path_override )
 {
     ASSERT(g_app);
 
-    bool found_cfg = find_config(path);
+    bool found_cfg = path_override.is_empty() ? find_config(path) : ts::is_file_exists(path_override);
+    if (!path_override.is_empty())
+        path = path_override;
 
     if (!found_cfg) 
     {
-        if (config_must_be_present)
+        if (!path_override.is_empty())
         {
-            ERROR("Config MUST BE PRESENT");
+            ERROR("Config MUST PRESENT");
             sys_exit(0);
             return;
         }

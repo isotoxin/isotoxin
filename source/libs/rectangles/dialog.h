@@ -119,14 +119,18 @@ protected:
         int height_ = 0;
         bool focus_ = false;
         bool readonly_ = false;
+        bool changed = false;
         DEBUGCODE(bool initialization = true;) // protection flag - [this] can be changed while [initialization] == true due resize of array realloc.
 
         bool updvalue( const ts::wstr_c &t )
         {
             ASSERT( _TEXT == ctl || _PATH == ctl || _FILE == ctl );
+            changed = false;
             if (textchecker && textchecker(t))
             {
-                text = t;
+                if (!changed)
+                    text = t;
+                changed = false;
                 return true;
             }
             return false;
@@ -273,6 +277,7 @@ protected:
     void set_list_emptymessage( const ts::asptr& ctl_name, const ts::wstr_c& t );
     void set_slider_value( const ts::asptr& ctl_name, float val );
     void set_pb_pos( const ts::asptr& ctl_name, float val );
+    void set_edit_value( const ts::asptr& ctl_name, const ts::wstr_c& t );
 
     ts::UPDATE_RECTANGLE getrectupdate() { return DELEGATE(this, updrect); }
 

@@ -10,6 +10,7 @@
 #define FNO_TRIMLASTSLASH 32
 #define FNO_APPENDSLASH 64
 #define FNO_SIMPLIFY (FNO_NORMALIZE|FNO_FULLPATH|FNO_LOWERCASEAUTO|FNO_REMOVECRAP)
+#define FNO_SIMPLIFY_NOLOWERCASE (FNO_NORMALIZE|FNO_FULLPATH|FNO_REMOVECRAP)
 
 namespace ts
 {
@@ -39,7 +40,7 @@ inline wstr_c  TSCALL fn_fix_path(const wsptr &ipath, int fnoptions)
     return p;
 }
 
-void    TSCALL make_path(const wstr_c &path, int fnoptions);
+bool    TSCALL make_path(const wstr_c &path, int fnoptions);
 
 void    TSCALL fill_dirs_and_files( const wstr_c &path, wstrings_c &files, wstrings_c &dirs );
 void    TSCALL del_dir(const wstr_c &path);
@@ -155,6 +156,7 @@ template<class RCV, class STRCORE> bool enum_files(const str_t<wchar, STRCORE> &
 	return true;
 }
 
+bool TSCALL check_write_access(const wsptr &path);
 
 } // namespace ts
 

@@ -143,7 +143,7 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
     if (clist.size() < 2)
     {
         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-            gui_isodialog_c::title(DT_MSGBOX_ERROR),
+            DT_MSGBOX_ERROR,
             TTT("Metacontact - union of two or more contacts. The current list contains less then two contacts and to create metacontact this amount is not enough.",150)
             ));
         return;

@@ -41,6 +41,8 @@ public:
     config_base_c() {}
     ~config_base_c();
 
+    void close();
+
     void changed(bool save_all_now = false /* if true, save job will take lot of seconds (and will work in background) */); // initiate save procedure
 
     static void prepare_conf_table( ts::sqlitedb_c *db );
@@ -98,7 +100,7 @@ class config_c : public config_base_c
     ts::tbuf_t<ONCLOSE_FUNC> onclose_handlers;
     bool onclose_handlers_dead = false;
 public:
-    void load(bool config_must_be_present = false);
+    void load( const ts::wstr_c &path_override = ts::wstr_c() );
     /*virtual*/ void onclose() override
     {
         for(ONCLOSE_FUNC f : onclose_handlers)

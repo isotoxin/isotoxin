@@ -164,7 +164,7 @@ void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int
 
 #pragma warning(push)
 #pragma warning(disable:4822) 
-        struct s
+        struct s //-V690
         {
             protected_data_s &pd;
             s(protected_data_s &pd):pd(pd) {}

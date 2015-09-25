@@ -16,7 +16,7 @@ static bool __toggle_search_bar(RID, GUIPARAM)
     return true;
 }
 
-application_c::application_c(const ts::wchar * cmdl)
+application_c::application_c(const ts::wchar * cmdl, bool minimize)
 {
     F_NEWVERSION = false;
     F_UNREADICONFLASH = false;
@@ -25,12 +25,13 @@ application_c::application_c(const ts::wchar * cmdl)
     F_FLASHIP = false;
     F_SETNOTIFYICON = false;
     F_OFFLINE_ICON = true;
+    F_ALLOW_AUTOUPDATE = false;
 
     autoupdate_next = now() + 10;
 	g_app = this;
     cfg().load();
     if (cfg().is_loaded())
-        summon_main_rect();
+        summon_main_rect(minimize);
 
 #ifndef _FINAL
     dotests();
@@ -294,7 +295,7 @@ static DWORD WINAPI autoupdater(LPVOID)
     F_OFFLINE_ICON = OST_ONLINE != st;
     F_SETNOTIFYICON = true; // once per 5 seconds do icon refresh
 
-    if ( cfg().autoupdate() > 0 )
+    if ( F_ALLOW_AUTOUPDATE && cfg().autoupdate() > 0 )
     {
         if (now() > autoupdate_next)
         {
@@ -348,6 +349,45 @@ static DWORD WINAPI autoupdater(LPVOID)
             }
         }
     }
+
+    if (manual_cos == COS_ONLINE)
+    {
+        contact_online_state_e c = contacts().get_self().get_ostate();
+        contact_online_state_e cnew = COS_ONLINE;
+
+        if (prf().get_options().is(UIOPT_AWAYONSCRSAVER))
+        {
+            BOOL scrsvrun = FALSE;
+            SystemParametersInfoW(SPI_GETSCREENSAVERRUNNING, 0, &scrsvrun, 0);
+            if (scrsvrun) cnew = COS_AWAY;
+        }
+
+        int imins = prf().inactive_time();
+        if (imins > 0)
+        {
+            LASTINPUTINFO lii = { (UINT)sizeof(LASTINPUTINFO) };
+            GetLastInputInfo(&lii);
+            int cimins = (GetTickCount() - lii.dwTime) / 60000;
+            if (cimins >= imins)
+                cnew = COS_AWAY;
+        }
+
+        if (c != cnew)
+            set_status(cnew, false);
+    }
+}
+
+void application_c::set_status(contact_online_state_e cos_, bool manual)
+{
+    if (manual)
+        manual_cos = cos_;
+
+    contacts().get_self().subiterate([&](contact_c *c) { //-V807
+        c->set_ostate(cos_);
+    });
+    contacts().get_self().set_ostate(cos_);
+    gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_ONLINESTATUS).send();
+
 }
 
 /*virtual*/ void application_c::app_loop_event()
@@ -431,9 +471,16 @@ static DWORD WINAPI autoupdater(LPVOID)
         };
 
         DEFERRED_EXECUTION_BLOCK_BEGIN(0)
+            
             menu_c m;
+
+            add_status_items(m);
+
+            m.add_separator();
             m.add(TTT("Exit",117), 0, handlers::m_exit);
-            gui_popup_menu_c::show(menu_anchor_s(true), m, true);
+            gui_popup_menu_c::show(menu_anchor_s(true, menu_anchor_s::RELPOS_TYPE_3), m, true);
+            g_app->set_notification_icon(); // just remove hint
+
         DEFERRED_EXECUTION_BLOCK_END(0)
     }
 }
@@ -454,7 +501,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
             if (ts::is_file_exists(pn))
             {
                 SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                    gui_isodialog_c::title(DT_MSGBOX_ERROR),
+                    DT_MSGBOX_ERROR,
                     TTT("Such profile already exists",49)
                     ));
                 return false;
@@ -464,7 +511,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
             if (f == INVALID_HANDLE_VALUE)
             {
                 SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                    gui_isodialog_c::title(DT_MSGBOX_ERROR),
+                    DT_MSGBOX_ERROR,
                     TTT("Can't create profile ($)",50) / lasterror()
                     ));
                 return true;
@@ -478,7 +525,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
                 if (prf().load(pn))
                 {
                     SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                        gui_isodialog_c::title(DT_MSGBOX_INFO),
+                        DT_MSGBOX_INFO,
                         TTT("Profile [b]$[/b] has created and set as default.",48) / prfn
                         ));
                     cfg().profile(storpn);
@@ -487,7 +534,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
             } else
             {
                 SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                    gui_isodialog_c::title(DT_MSGBOX_INFO),
+                    DT_MSGBOX_INFO,
                     TTT("Profile with name [b]$[/b] has created. You can switch to it using settings menu.",51) / prfn
                     ));
             }
@@ -525,6 +572,9 @@ bool application_c::b_customize(RID r, GUIPARAM param)
                 prf().load( oldprfn );
                 profile_c::error_unique_profile( wpn );
             }
+
+            contacts().update_meta();
+            contacts().get_self().reselect(false);
 
         }
         static void m_about(const ts::str_c&)
@@ -572,7 +622,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
     return true;
 }
 
-void application_c::summon_main_rect()
+void application_c::summon_main_rect(bool minimize)
 {
     load_locale(cfg().language());
     if (!load_theme(cfg().theme()))
@@ -627,11 +677,23 @@ void application_c::summon_main_rect()
 
     ts::wnd_fix_rect(mr, sz.x, sz.y);
 
-    MODIFY(main)
-        .size(mr.size())
-        .pos(mr.lt)
-        .allow_move_resize()
-        .show();
+    if (minimize)
+    {
+        MODIFY(main)
+            .size(mr.size())
+            .pos(mr.lt)
+            .allow_move_resize()
+            .show()
+            .micromize(true);
+    } else
+    {
+        MODIFY(main)
+            .size(mr.size())
+            .pos(mr.lt)
+            .allow_move_resize()
+            .show();
+    }
+
 
 }
 
@@ -694,13 +756,39 @@ bool application_c::b_restart(RID, GUIPARAM)
     ts::wstr_c n = ts::get_exe_full_name();
     n.append(CONSTWSTR(" wait ")).append_as_uint( GetCurrentProcessId() );
 
-    prf().shutdown_aps();
-
     if (ts::start_app(n, nullptr))
+    {
+        prf().shutdown_aps();
         sys_exit(0);
+    }
     
     return true;
 }
+
+bool application_c::b_install(RID, GUIPARAM)
+{
+    ts::wstr_c prm(CONSTWSTR("wait ")); prm.append_as_uint( GetCurrentProcessId() );
+
+    SHELLEXECUTEINFOW shExInfo = { 0 };
+    shExInfo.cbSize = sizeof(shExInfo);
+    shExInfo.fMask = 0;
+    shExInfo.hwnd = 0;
+    shExInfo.lpVerb = L"runas";
+    shExInfo.lpFile = ts::get_exe_full_name();
+    shExInfo.lpParameters = prm;
+    shExInfo.lpDirectory = 0;
+    shExInfo.nShow = SW_NORMAL;
+    shExInfo.hInstApp = 0;
+
+    if (ShellExecuteExW(&shExInfo))
+    {
+        prf().shutdown_aps();
+        sys_exit(0);
+    }
+
+    return true;
+}
+
 
 #ifdef _DEBUG
 extern bool zero_version;
@@ -711,6 +799,19 @@ ts::str_c application_c::appver()
 #ifdef _DEBUG
     if (zero_version) return ts::str_c(CONSTASTR("0.0.0"));
 #endif // _DEBUG
+
+    static ts::sstr_t<-32> fake_version;
+    if (fake_version.is_empty())
+    {
+        ts::tmp_buf_c b;
+        b.load_from_disk_file( ts::fn_change_name_ext(ts::get_exe_full_name(), CONSTWSTR("fake_version.txt")) );
+        if (b.size())
+            fake_version = b.cstr();
+        else
+            fake_version.set(CONSTASTR("-"));
+    }
+    if (fake_version.get_length() >= 5)
+        return fake_version;
 
     struct verb
     {
@@ -731,7 +832,8 @@ void application_c::set_notification_icon()
         rectengine_root_c *root = HOLD(main)().getroot();
         if (CHECK(root))
         {
-            root->notification_icon(CONSTWSTR(APPNAME));
+            bool sysmenu = gmsg<GM_SYSMENU_PRESENT>().send().is(GMRBIT_ACCEPTED);
+            root->notification_icon(sysmenu ? ts::wsptr() : CONSTWSTR(APPNAME));
         }
     }
 }

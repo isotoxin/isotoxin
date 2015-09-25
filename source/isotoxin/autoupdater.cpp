@@ -140,6 +140,9 @@ void autoupdater()
 
     ts::astrings_c addresses;
 
+#ifdef _DEBUG
+    addresses.add("http://dev/latest.txt");
+#endif // _DEBUG
     addresses.add("https://github.com/Rotkaermota/Isotoxin/wiki/latest");
     addresses.add("http://isotoxin.im/latest.txt");
     int addri = 0;
@@ -194,8 +197,14 @@ next_address:
     rslt = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
 
 #ifdef _DEBUG
-    auparams().lock_write()().proxy_addr = CONSTASTR("srv:9050");
-    auparams().lock_write()().proxy_type = 3;
+    if (addri == 0)
+    {
+        auparams().lock_write()().proxy_type = 0;
+    } else
+    {
+        auparams().lock_write()().proxy_addr = CONSTASTR("srv:9050");
+        auparams().lock_write()().proxy_type = 3;
+    }
 #endif
 
     auto r = auparams().lock_read();
@@ -336,29 +345,38 @@ next_address:
 namespace {
 struct updater
 {
-    bool updfail = false;
+    updater(const ts::wstr_c &exe_path):exe_path(exe_path) {}
+    ts::wstr_c exe_path;
     time_t amfn = now();
+    bool updfail = false;
     ts::wstrings_c moved;
 
     bool process_pak_file(const ts::arc_file_s &f)
     {
-        ts::wstr_c wfn(ts::to_wstr(f.fn));
-        ts::wstr_c ff(auparams().lock_read()().path); ff.append_as_num<time_t>(amfn).append_char(NATIVE_SLASH);
+        ts::wstr_c wfn(ts::fn_join(exe_path,ts::to_wstr(f.fn)));
+        ts::wstr_c ff(ts::fn_join(exe_path, CONSTWSTR("old")));
+        ff.append_char(NATIVE_SLASH).append_as_num<time_t>(amfn).append_char(NATIVE_SLASH);
         ts::make_path(ff, 0);
-        if (MoveFileW(wfn, ts::fn_join(ff, wfn)))
+
+        if (MoveFileW(wfn, ts::fn_join(ff, ts::fn_get_name_with_ext(wfn))))
         {
             moved.add(wfn);
-        }
-        else if (ts::is_file_exists(wfn))
+
+        } else if (ts::is_file_exists(wfn))
         {
+            // update failed
+            // rollback
+
             updfail = true;
             // oops
             for (const ts::wstr_c &mf : moved)
             {
-                DeleteFileW(mf);
-                MoveFileW(ts::fn_join(ff, mf), mf);
+                DeleteFileW(mf); // delete new file
+                MoveFileW(ts::fn_join(ff, mf), mf); // return moved one
             }
+            return false;
         }
+
         f.get().save_to_file(wfn);
         return true;
     }
@@ -370,22 +388,31 @@ bool check_autoupdate()
     ts::buf_c pak;
     ts::str_c dver = get_downloaded_ver(&pak);
     if (dver.is_empty()) return true;
+
+    ts::wstr_c path_exe(ts::fn_get_path(ts::get_exe_full_name()));
+
     if (application_c::appver() == dver)
     {
         ts::wstr_c ff(auparams().lock_read()().path);
         if (dir_present(ff))
             del_dir(ff);
 
+        ff = ts::fn_join(path_exe, CONSTWSTR("old"));
+        if (dir_present(ff) && check_write_access(ff))
+            del_dir(ff);
+
     } else if (new_version(application_c::appver(), dver))
     {
-        updater u;
+        if (!check_write_access(path_exe))
+            return true; // can't write to exe folder - do nothing
 
+        del_dir(ts::fn_join(path_exe, CONSTWSTR("old")));
+
+        updater u(path_exe);
         ts::zip_open(pak.data(), pak.size(), DELEGATE(&u,process_pak_file));
 
         if (u.updfail)
-        {
             return true; // continue run
-        }
     
         ts::start_app(CONSTWSTR("isotoxin.exe"), nullptr);
 

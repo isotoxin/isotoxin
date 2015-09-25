@@ -1096,20 +1096,24 @@ int  profile_c::calc_history_between( const contact_key_s&historian, time_t time
 
 bool profile_c::load(const ts::wstr_c& pfn)
 {
-    if (mutex)
-        CloseHandle(mutex);
+    AUTOCLEAR( profile_options, F_LOADING );
 
     if (db)
     {
         save_dirty(RID(), as_param(1));
         db->close();
     }
+
+    if (mutex)
+        CloseHandle(mutex);
+
     closed = false;
 
 #define TAB(tab) table_##tab.clear();
     PROFILE_TABLES
 #undef TAB
 
+    profile_options.clear();
     values.clear();
     dirty.clear();
     path = pfn;
@@ -1206,7 +1210,7 @@ void profile_c::error_unique_profile( const ts::wsptr & prfn, bool modal )
     } else
     {
         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-            gui_isodialog_c::title(DT_MSGBOX_ERROR),
+            DT_MSGBOX_ERROR,
             text
             ));
     }
@@ -1214,6 +1218,7 @@ void profile_c::error_unique_profile( const ts::wsptr & prfn, bool modal )
 
 void profile_c::shutdown_aps()
 {
+    save_dirty(RID(), as_param(1));
     for (active_protocol_c *ap : protocols)
         if (ap) TSDEL(ap);
 }
@@ -1316,7 +1321,7 @@ void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, i
 
 ts::uint32 profile_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
 {
-    if (p.tabi == pt_active_protocol)
+    if (p.tabi == pt_active_protocol && !profile_options.is(F_LOADING))
     {
         if (p.pass == 0)
             for(active_protocol_c *ap : protocols)

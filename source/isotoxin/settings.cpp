@@ -113,7 +113,6 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
             if (spr.name.is_empty()) spr.name = ffn;
         }
     }
-
 }
 
 dialog_settings_c::~dialog_settings_c()
@@ -134,6 +133,24 @@ dialog_settings_c::~dialog_settings_c()
 
         gui->unregister_kbd_callback( __kbd_chop );
     }
+}
+
+int dialog_settings_c::detect_startopts()
+{
+    ts::str_c cmdline;
+    int is_autostart = detect_autostart(cmdline);
+    int asopts = 0;
+    if (is_autostart & DETECT_AUSTOSTART) asopts |= 1;
+    if (is_autostart & DETECT_READONLY) asopts |= 4;
+    if (cmdline.equals(CONSTASTR("minimize"))) asopts |= 2;
+    if (0 == (is_autostart & DETECT_AUSTOSTART))
+        asopts |= 2; // by default enable minimize
+    return asopts;
+}
+
+void dialog_settings_c::set_startopts()
+{
+    autostart( 0 != (1 & startopt) ? ts::get_exe_full_name() : ts::wstr_c(), 0 != (2 & startopt) ? CONSTWSTR("minimize") : ts::wsptr() );
 }
 
 /*virtual*/ s3::Format *dialog_settings_c::formats(int &count)
@@ -288,7 +305,7 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
     if (nv.is_error())
     {
         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-            gui_isodialog_c::title(DT_MSGBOX_ERROR),
+            DT_MSGBOX_ERROR,
             TTT("No new versions detected. Connection failed.",303)
             ));
 
@@ -298,7 +315,7 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
     if (nv.ver.is_empty())
     {
         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-            gui_isodialog_c::title(DT_MSGBOX_INFO),
+            DT_MSGBOX_INFO,
             TTT("No new versions detected.",194)
             ));
     
@@ -306,7 +323,7 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
     }
 
     SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-        gui_isodialog_c::title(DT_MSGBOX_INFO),
+        DT_MSGBOX_INFO,
         TTT("New version detected: $",196) / ts::to_wstr(nv.ver.as_sptr())
         ));
 
@@ -315,9 +332,19 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 
 bool dialog_settings_c::commonopts_handler( RID, GUIPARAM p )
 {
-    int newo = as_int(p);
-    show_search_bar = 0 != (newo & 1);
-    proto_icons_indicator = 0 != (newo & 2);
+    common_opts = as_int(p);
+    ctlenable(CONSTASTR("away_min"), 0 != (common_opts & 8));
+    mod();
+    return true;
+}
+
+bool dialog_settings_c::away_minutes_handler(const ts::wstr_c &v)
+{
+    set_away_on_timer_minutes_value = v.as_int();
+    int o = set_away_on_timer_minutes_value;
+    set_away_on_timer_minutes_value = ts::CLAMP(o, 1, 180);
+    if (o != set_away_on_timer_minutes_value)
+        set_edit_value(CONSTASTR("away_min"), ts::wmake(set_away_on_timer_minutes_value));
 
     mod();
     return true;
@@ -393,8 +420,16 @@ void dialog_settings_c::mod()
         PREPARE( msgopts_current, prf().get_options().__bits );
         msgopts_changed = 0;
 
-        PREPARE( show_search_bar, 0 != (msgopts_current & UIOPT_SHOW_SEARCH_BAR) );
-        PREPARE( proto_icons_indicator, 0 != (msgopts_current & UIOPT_PROTOICONS) );
+        PREPARE(set_away_on_timer_minutes_value, prf().inactive_time());
+
+        common_opts_orig = 0;
+        if (0 != (msgopts_current & UIOPT_SHOW_SEARCH_BAR)) common_opts_orig |= 1;
+        if (0 != (msgopts_current & UIOPT_PROTOICONS)) common_opts_orig |= 2;
+        if (0 != (msgopts_current & UIOPT_AWAYONSCRSAVER)) common_opts_orig |= 4;
+        if (set_away_on_timer_minutes_value > 0) common_opts_orig |= 8;
+
+        PREPARE( common_opts, common_opts_orig );
+
 
         PREPARE( mute_mic_on_gchat_invite, 0 != (msgopts_current & GCHOPT_MUTE_MIC_ON_INVITE) );
         PREPARE( mute_speaker_on_gchat_invite, 0 != (msgopts_current & GCHOPT_MUTE_SPEAKER_ON_INVITE) );
@@ -418,6 +453,9 @@ void dialog_settings_c::mod()
 
         PREPARE( smilepack,  prf().emoticons_pack() );
     }
+
+    PREPARE( startopt, detect_startopts() );
+
     PREPARE( curlang, cfg().language() );
     PREPARE( autoupdate, cfg().autoupdate() );
     oautoupdate = autoupdate;
@@ -483,8 +521,13 @@ void dialog_settings_c::mod()
 
     dm().page_header( TTT("Some system settings of application",36) );
     dm().vspace(10);
-    //dm().combik(TTT("Текущий профиль")).setmenu( list_profiles() );
-    
+
+    dm().checkb(TTT("Autostart", 309), DELEGATE(this, startopt_handler), startopt).setname(CONSTASTR("start")).setmenu(
+        menu_c().add(loc_text(loc_autostart), 0, MENUHANDLER(), CONSTASTR("1"))
+        .add(TTT("Minimize on start with system", 311), 0, MENUHANDLER(), CONSTASTR("2"))
+        );
+    dm().vspace();
+
     ts::wstr_c profname = cfg().profile();
     if (!profname.is_empty()) profile_c::path_by_name(profname);
 
@@ -496,6 +539,7 @@ void dialog_settings_c::mod()
         .add(TTT("[quote]Minimize[quote] button $ minimizes to notification area",120) / CONSTWSTR("<img=bmin,-1>"), 0, MENUHANDLER(), CONSTASTR("1"))
         .add(TTT("[quote]Close[quote] button $ minimizes to notification area",121) / CONSTWSTR("<img=bclose,-1>"), 0, MENUHANDLER(), CONSTASTR("2"))
         );
+
 
     dm << MASK_APPLICATION_SETSOUND; //______________________________________________________________________________________________//
     dm().page_header(TTT("Audio settings",127));
@@ -572,12 +616,22 @@ void dialog_settings_c::mod()
         dm().vspace();
         dm().textfield(TTT("Status",68), from_utf8(userstatusmsg), DELEGATE(this, statusmsg_edit_handler)).setname(CONSTASTR("ustatus"));
         dm().vspace();
-        int copts = 0;
-        if (show_search_bar) copts |= 1;
-        if (proto_icons_indicator) copts |= 2;
-        dm().checkb(ts::wstr_c(), DELEGATE(this, commonopts_handler), copts).setmenu(
+        dm().checkb(ts::wstr_c(), DELEGATE(this, commonopts_handler), common_opts).setmenu(
                 menu_c().add(TTT("Show search bar ($)",276) / CONSTWSTR("Ctrl+F"), 0, MENUHANDLER(), CONSTASTR("1"))
                         .add(TTT("Protocol icons as contact state indicator",296), 0, MENUHANDLER(), CONSTASTR("2"))
+            );
+
+        dm().vspace();
+
+        ts::wstr_c ctl;
+        dm().textfield(ts::wstr_c(), ts::wmake(set_away_on_timer_minutes_value), DELEGATE(this, away_minutes_handler)).setname(CONSTASTR("away_min")).width(50).subctl(textrectid++, ctl);
+        ts::wstr_c t_awaymin = TTT("Set [b]Away[/b] status when user has been inactive for $ minutes",322) / ctl;
+        if (t_awaymin.find_pos(ctl) < 0) t_awaymin.append_char(' ').append(ctl);
+
+
+        dm().checkb(ts::wstr_c(), DELEGATE(this, commonopts_handler), common_opts).setmenu(
+            menu_c().add(TTT("Set [b]Away[/b] status on screen saver activation",323), 0, MENUHANDLER(), CONSTASTR("4"))
+                    .add(t_awaymin, 0, MENUHANDLER(), CONSTASTR("8"))
             );
 
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
@@ -592,7 +646,7 @@ void dialog_settings_c::mod()
         dm().combik(TTT("Emoticon set",269)).setmenu(emoti().get_list_smile_pack( smilepack, DELEGATE(this, smile_pack_selected) )).setname(CONSTASTR("avasmliepack"));
         dm().vspace();
 
-        ts::wstr_c ctl;
+        ctl.clear();
         dm().textfield( ts::wstr_c(), from_utf8(date_msg_tmpl), DELEGATE(this,date_msg_tmpl_edit_handler) ).setname(CONSTASTR("date_msg_tmpl")).width(100).subctl(textrectid++, ctl);
         ts::wstr_c t_showdate = TTT("Show message date (template: $)",171) / ctl;
         if (t_showdate.find_pos(ctl)<0) t_showdate.append_char(' ').append(ctl);
@@ -664,6 +718,17 @@ void dialog_settings_c::mod()
 
     return 1;
 }
+
+bool dialog_settings_c::startopt_handler( RID, GUIPARAM p )
+{
+    startopt = as_int(p);
+   
+    ctlenable( CONSTASTR("start2"), 0 != (startopt & 1) );
+
+    mod();
+    return true;
+}
+
 
 bool dialog_settings_c::sndvolhandler( RID srid, GUIPARAM p )
 {
@@ -916,6 +981,11 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, fileconfirm_handler), fileconfirm);
     }
 
+    if (mask & MASK_PROFILE_COMMON)
+    {
+        DEFERRED_UNIQUE_CALL(0.1, DELEGATE(this, commonopts_handler), common_opts);
+    }
+
     if (mask & MASK_APPLICATION_COMMON)
     {
         select_lang(curlang);
@@ -927,6 +997,13 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
             tf.set_text( to_wstr(autoupdate_proxy_addr), true );
             check_proxy_addr(autoupdate_proxy, r, autoupdate_proxy_addr);
         }
+    }
+
+    if (mask & MASK_APPLICATION_SYSTEM)
+    {
+        bool allow_edit_autostart = 0 == (startopt & 4);
+        ctlenable( CONSTASTR("start1"), allow_edit_autostart );
+        ctlenable( CONSTASTR("start2"), allow_edit_autostart && 0 != (startopt & 1) );
     }
 
     if (mask & MASK_APPLICATION_SETSOUND)
@@ -1020,7 +1097,7 @@ bool dialog_settings_c::delete_used_network(RID, GUIPARAM param)
     if (ASSERT(row))
     {
         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-            gui_isodialog_c::title(DT_MSGBOX_WARNING),
+            DT_MSGBOX_WARNING,
             TTT("Connection [$] in use! All contacts of this connection will be deleted. History of these contacts will be deleted too. Are you still sure?",267) / from_utf8(row->other.name)
             ).on_ok(DELEGATE(this, on_delete_network_2), ts::amake<int>(as_int(param))).bcancel());
     }
@@ -1183,7 +1260,7 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
             if (ASSERT(row))
             {
                 SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                    gui_isodialog_c::title(DT_MSGBOX_WARNING),
+                    DT_MSGBOX_WARNING,
                     TTT("Connection [$] will be deleted![br]Are you sure?",266) / from_utf8(row->other.name)
                     ).on_ok(DELEGATE(this, on_delete_network), *t).bcancel());
             }
@@ -1287,13 +1364,17 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
         ch1 |= prf().date_sep_template(date_sep_tmpl);
 
 #define UPSETOPT(b,m) if (is_changed(b)) { msgopts_changed |= m; INITFLAG(msgopts_current, m, b); }
-
-        UPSETOPT(show_search_bar, UIOPT_SHOW_SEARCH_BAR);
-        UPSETOPT(proto_icons_indicator, UIOPT_PROTOICONS);
         UPSETOPT(mute_mic_on_gchat_invite, GCHOPT_MUTE_MIC_ON_INVITE);
         UPSETOPT(mute_speaker_on_gchat_invite, GCHOPT_MUTE_SPEAKER_ON_INVITE);
-
 #undef UPSETOPT
+
+#define UPSETOPT(bm,m) if ((common_opts_orig ^ common_opts) & bm) { msgopts_changed |= m; INITFLAG(msgopts_current, m, 0 != (common_opts & bm)); }
+        UPSETOPT(1, UIOPT_SHOW_SEARCH_BAR);
+        UPSETOPT(2, UIOPT_PROTOICONS);
+        UPSETOPT(4, UIOPT_AWAYONSCRSAVER);
+#undef UPSETOPT
+
+        prf().inactive_time( (common_opts & 8) ? set_away_on_timer_minutes_value : 0 );
 
         if (prf().set_options( msgopts_current, msgopts_changed ) || ch1)
             gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS).send();
@@ -1308,6 +1389,9 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
             gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_EMOJISET).send();
         }
     }
+
+    if (is_changed(startopt))
+        set_startopts();
 
     if (autoupdate_proxy > 0 && !check_netaddr(autoupdate_proxy_addr))
         autoupdate_proxy_addr = CONSTASTR(DEFAULT_PROXY);

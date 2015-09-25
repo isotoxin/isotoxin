@@ -38,6 +38,13 @@ const wraptranslate<ts::wsptr> __translation(const ts::wsptr &txt, int tag);
 
 ts::wstr_c lasterror();
 
+enum detect_e
+{
+    DETECT_AUSTOSTART = 1,
+    DETECT_READONLY = 2,
+};
+int detect_autostart(ts::str_c &cmdpar);
+void autostart(const ts::wstr_c &exepath, const ts::wsptr &cmdpar);
 
 INLINE time_t now()
 {
@@ -150,7 +157,7 @@ enum isogmsg_e
     ISOGM_PROFILE_TABLE_SAVED,
     ISOGM_UPDATE_CONTACT,           // new or update contact - signal from protocol
     ISOGM_V_UPDATE_CONTACT,         // visual update (add to list, or update caption)
-    ISOGM_SELECT_CONTACT,
+    ISOGM_SELECT_CONTACT,           // nullptr means total contacts unload
     ISOGM_CMD_RESULT,
     ISOGM_PROTO_LOADED,
     ISOGM_INCOMING_MESSAGE,
@@ -284,7 +291,20 @@ bool check_netaddr( const ts::asptr & );
 
 void path_expand_env(ts::wstr_c &path);
 
-ts::wstr_c connection_failed_text();
+void install_to(const ts::wstr_c &path, bool acquire_admin_if_need);
+
+enum loctext_e
+{
+    loc_connection_failed,
+    loc_autostart,
+    loc_please_create_profile,
+    loc_yes,
+    loc_no,
+};
+
+ts::wstr_c loc_text(loctext_e);
+
+void add_status_items(menu_c &m);
 
 enum icon_type_e
 {

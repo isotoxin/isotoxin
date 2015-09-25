@@ -1,5 +1,9 @@
 #include "isotoxin.h"
 
+static ts::wstr_c enquote( const ts::wstr_c &x )
+{
+    return ts::wstr_c(CONSTWSTR("\""),x).append(CONSTWSTR("\""));
+}
 
 dialog_firstrun_c::dialog_firstrun_c(initial_rect_data_s &data) :gui_isodialog_c(data)
 {
@@ -17,13 +21,81 @@ dialog_firstrun_c::~dialog_firstrun_c()
     return TTT("[appname]: First run",8);
 }
 
-ts::wstr_c dialog_firstrun_c::path_by_choice(path_choice_e choice)
+void dialog_firstrun_c::set_defaults()
+{
+    copyto = path_by_choice(PCH_PROGRAMFILES);
+    profilename = CONSTWSTR("%USER%");
+    parse_env(profilename);
+    if (profilename.find_pos('%') >= 0) profilename = CONSTWSTR("profile");
+    choice0 = PCH_PROGRAMFILES;
+    choice1 = PCH_APPDATA;
+    is_autostart = true;
+}
+
+
+ts::wstr_c dialog_firstrun_c::gen_info() const
+{
+    auto summary = [this]()->ts::wstr_c
+    {
+        ts::TSCOLOR pathcolor = ts::ARGB(0,0,100);
+
+        ts::wstr_c profnameinfo;;
+        if (!profilename.is_empty())
+            profnameinfo = enquote(colorize<ts::wchar>(profilename, pathcolor));
+        else
+            profnameinfo = TTT("do not create now",320);
+
+        ts::wstr_c t(CONSTWSTR("<l>"));
+        t.append( TTT("Install to: $",313) / enquote(colorize<ts::wchar>(path_by_choice(PCH_INSTALLPATH), pathcolor)) ).append(CONSTWSTR("<br>"));
+        t.append(TTT("Autostart: $", 314) / (colorize<ts::wchar>(loc_text(is_autostart ? loc_yes : loc_no), pathcolor))).append(CONSTWSTR("<br>"));
+        t.append( TTT("Config path: $",317) / enquote(colorize<ts::wchar>(path_by_choice(choice1), pathcolor)) ).append(CONSTWSTR("<br>"));
+        t.append( TTT("Profile name: $",318) / profnameinfo ).append(CONSTWSTR("<br>"));
+
+        return t;
+    };
+
+    auto oops = [this](const ts::wstr_c &ot)->ts::wstr_c
+    {
+        if (ts::check_write_access(path_by_choice(PCH_INSTALLPATH))) return ot;
+        ts::wstr_c t;
+        if (!ot.is_empty()) t.append(ot).append(CONSTWSTR("<br>"));
+        t.append(CONSTWSTR("<b><p=c>"));
+        t.append(maketag_color<ts::wchar>(ts::ARGB(10,10,0)));
+        t.append( TTT("Install path protected; permissions elevation will be performed",319) );
+
+        return t;
+    };
+
+    switch (page)
+    {
+    case 0:
+        if (!i_am_noob)
+            break;
+        // no break here
+    case 3:
+        return oops( summary() );
+    }
+
+    return ts::wstr_c();
+}
+
+void dialog_firstrun_c::updinfo()
+{
+    if (infolabel)
+    {
+        gui_label_c &ctl = HOLD(infolabel).as<gui_label_c>();
+        ctl.set_text(gen_info());
+    }
+
+}
+
+ts::wstr_c dialog_firstrun_c::path_by_choice(path_choice_e choice) const
 {
     switch (choice)
     {
     case PCH_PROGRAMFILES: return ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%PROGRAMS%\\Isotoxin\\")), FNO_FULLPATH | FNO_PARSENENV);
     case PCH_HERE: return ts::fn_fix_path(ts::wstr_c(CONSTWSTR("")), FNO_FULLPATH);
-    case PCH_APPDATA: return ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%APPDATA%\\isotoxin\\")), FNO_FULLPATH | FNO_PARSENENV);
+    case PCH_APPDATA: return ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%APPDATA%\\Isotoxin\\")), FNO_FULLPATH | FNO_PARSENENV);
     case PCH_CUSTOM:
         {
             if (ASSERT(selpath))
@@ -36,9 +108,17 @@ ts::wstr_c dialog_firstrun_c::path_by_choice(path_choice_e choice)
     return ts::wstr_c();
 }
 
+bool dialog_firstrun_c::handler_2( RID, GUIPARAM p)
+{
+    is_autostart = p != nullptr;
+    updinfo();
+    return true;
+}
+
 bool dialog_firstrun_c::handler_1( RID, GUIPARAM p )
 {
     choice1 = (path_choice_e)as_int(p);
+    updinfo();
     return true;
 }
 
@@ -53,10 +133,13 @@ bool dialog_firstrun_c::handler_0( RID, GUIPARAM p )
 
         if (choice0 == 2)
         {
+            copyto = pathselected;
             if (copyto.is_empty())
             {
                 if (tf.get_text().is_empty())
+                {
                     tf.set_text(path_by_choice(prevchoice));
+                }
             } else
             {
                 tf.set_text(copyto);
@@ -69,19 +152,22 @@ bool dialog_firstrun_c::handler_0( RID, GUIPARAM p )
     }
 
     copyto = path_by_choice(choice0);
-
+    updinfo();
     return true;
 }
 
 bool dialog_firstrun_c::path_check_0( const ts::wstr_c & t )
 {
     copyto = t;
+    pathselected = t;
+    updinfo();
     return true;
 }
 bool dialog_firstrun_c::path_check_1( const ts::wstr_c & t )
 {
     if (!check_profile_name(t)) return false;
     profilename = t;
+    updinfo();
     return true;
 }
 
@@ -98,6 +184,10 @@ bool dialog_firstrun_c::noob_or_father( RID, GUIPARAM par )
     i_am_noob = par != nullptr;
     //update_buttons();
     DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, refresh_current_page), nullptr );
+
+    if (i_am_noob)
+        set_defaults();
+
     return true;
 }
 
@@ -123,6 +213,8 @@ void dialog_firstrun_c::select_lang(const ts::str_c& prm)
 
 void dialog_firstrun_c::go2page(int page_)
 {
+    infolabel = RID();
+
     if (page != page_)
     {
         page = page_;
@@ -157,6 +249,9 @@ void dialog_firstrun_c::go2page(int page_)
             if (developing) ctlenable( CONSTASTR("radio00"), false );
         }
 
+        vspace(20);
+        infolabel = label( gen_info() );
+
         break;
     case 1:
 
@@ -171,8 +266,8 @@ void dialog_firstrun_c::go2page(int page_)
         {
             radio_item_s items[] =
             {
-                radio_item_s(TTT("Copy to[br][l][quote]$[quote][/l]",16) / path_by_choice(PCH_PROGRAMFILES), as_param(PCH_PROGRAMFILES), CONSTASTR("radio01")),
-                radio_item_s(TTT("[appname] already in right place[br]([l]leave it here: [quote]$[quote][/l])",15) / path_by_choice(PCH_HERE), as_param(PCH_HERE)),
+                radio_item_s(TTT("Copy to[br][l]$[/l]",16) / enquote(path_by_choice(PCH_PROGRAMFILES)), as_param(PCH_PROGRAMFILES), CONSTASTR("radio01")),
+                radio_item_s(TTT("[appname] already in right place[br]([l]leave it here: $[/l])",15) / enquote(path_by_choice(PCH_HERE)), as_param(PCH_HERE)),
                 radio_item_s(TTT("Select another folder...",17), as_param(PCH_CUSTOM), CONSTASTR("radio02"))
             };
 
@@ -190,6 +285,19 @@ void dialog_firstrun_c::go2page(int page_)
             selpath = textfield(CONSTWSTR(""), MAX_PATH, TFR_PATH_SELECTOR, DELEGATE(this, path_check_0));
             handler_0(RID(), as_param(choice0));
         }
+
+        vspace(10);
+        {
+            check_item_s items[] =
+            {
+                check_item_s(loc_text(loc_autostart), 1),
+            };
+            check(ARRAY_WRAPPER(items), DELEGATE(this, handler_2), is_autostart ? 1 : 0);
+        }
+
+        vspace(20);
+        infolabel = label( gen_info() );
+
         break;
     case 2:
 
@@ -200,20 +308,31 @@ void dialog_firstrun_c::go2page(int page_)
             .append(L"<color=#808080><hr=5,1,1>"));
         vspace(25);
         {
+            ts::wstr_c samepath = path_by_choice(PCH_INSTALLPATH);
             radio_item_s items[] =
             {
-                radio_item_s(TTT("By default[br][l][quote]$[quote][/l]",20) / path_by_choice(PCH_APPDATA), as_param(PCH_APPDATA), CONSTASTR("radio03")),
-                radio_item_s(TTT("Same folder of [appname][br][l][quote]$[quote][/l]",19) / path_by_choice(PCH_INSTALLPATH), as_param(PCH_INSTALLPATH)),
+                radio_item_s(TTT("By default[br][l]$[/l]",20) / enquote(path_by_choice(PCH_APPDATA)), as_param(PCH_APPDATA), CONSTASTR("radio03")),
+                radio_item_s(TTT("Same folder of [appname][br][l]$[/l]",19) / enquote(samepath), as_param(PCH_INSTALLPATH), CONSTASTR("radio04")),
             };
+
+            bool oops = !ts::check_write_access(samepath);
 
             if (developing)
                 choice1 = PCH_INSTALLPATH;
+            else if (oops)
+                choice1 = PCH_APPDATA;
 
             radio(ARRAY_WRAPPER(items), DELEGATE(this, handler_1), as_param(choice1));
 
             if (developing)
                 ctlenable( CONSTASTR("radio03"), false );
+            else if (oops)
+                ctlenable( CONSTASTR("radio04"), false );
         }
+
+        vspace(20);
+        infolabel = label(gen_info());
+
         break;
     case 3:
 
@@ -224,6 +343,10 @@ void dialog_firstrun_c::go2page(int page_)
         vspace(25);
 
         profile = textfield(profilename, ts::tmax(0, MAX_PATH - copyto.get_length() - 1), TFR_TEXT_FILED, DELEGATE(this, path_check_1));
+
+        vspace(20);
+        infolabel = label(gen_info());
+
     }
 
     children_repos();
@@ -234,12 +357,15 @@ void dialog_firstrun_c::go2page(int page_)
 {
     set_theme_rect(CONSTASTR("main"), false);
     __super::created();
-    
-    profilename = CONSTWSTR("%USER%");
-    parse_env(profilename);
-    if (profilename.find_pos('%') >= 0) profilename = CONSTWSTR("profile");
+
+    set_defaults();
 
     go2page(0);
+}
+
+/*virtual*/ void dialog_firstrun_c::on_close()
+{
+    sys_exit(0);
 }
 
 void dialog_firstrun_c::getbutton(bcreate_s &bcr)
@@ -258,7 +384,12 @@ void dialog_firstrun_c::getbutton(bcreate_s &bcr)
             {
                 bcr.tooltip = TOOLTIP( TTT("Initialize by default and run application",28) );
             make_pusk:
-                bcr.btext = TTT("Start",27);
+
+                start_button_text = TTT("Start",27);
+                if (!ts::check_write_access(path_by_choice( PCH_INSTALLPATH )))
+                    start_button_text.insert( 0, CONSTWSTR("<img=uac>") );
+
+                bcr.btext = start_button_text;
                 bcr.handler = DELEGATE(this, start);
             } else
             {
@@ -310,18 +441,36 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     ts::wstr_c curd = path_by_choice( PCH_HERE );
     copyto = path_by_choice( PCH_INSTALLPATH );
     fix_path(curd, FNO_SIMPLIFY | FNO_TRIMLASTSLASH);
-    fix_path(copyto, FNO_SIMPLIFY | FNO_TRIMLASTSLASH);
+    fix_path(copyto, FNO_SIMPLIFY_NOLOWERCASE | FNO_TRIMLASTSLASH);
 
-    if (curd != copyto)
+    bool run_another_place = false;
+    ts::wstr_c exepath = ts::get_exe_full_name();
+    if (curd != fn_fix_path(copyto, FNO_SIMPLIFY | FNO_TRIMLASTSLASH))
     {
-        // TODO : copy
+        install_to( copyto, true );
+        exepath = ts::fn_join(copyto, ts::fn_get_name_with_ext(ts::get_exe_full_name()));
+        if ( !ts::is_file_exists(exepath) )
+        {
+            SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
+                DT_MSGBOX_ERROR,
+                TTT("Sorry, copy to $ failed.",312) / enquote(copyto)
+                ));
+            return true;
+        }
+        exit = true;
+        run_another_place = true;
     }
-    ts::wstr_c config_fn = ts::fn_join(copyto, CONSTWSTR("config.db"));
 
-    ts::sqlitedb_c * db = ts::sqlitedb_c::connect( config_fn );
-    if (ASSERT(db))
+    make_path( path_by_choice(choice1), 0 );
+    ts::wstr_c config_fn = ts::fn_join(path_by_choice(choice1), CONSTWSTR("config.db"));
+
+    if (ts::sqlitedb_c * db = ts::sqlitedb_c::connect( config_fn ))
+    {
         config_c::prepare_conf_table(db);
-    cfg().load( true );
+        db->close();
+    }
+
+    cfg().load( config_fn );
 
     if (!profilename.is_empty())
     {
@@ -331,14 +480,25 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     }
 
     cfg().language( deflng );
+    if (is_autostart)
+        autostart(exepath, CONSTWSTR("minimize"));
 
     if (exit) 
     {
+        cfg().close();
+
+        if (run_another_place)
+        {
+            ts::wstr_c another_exe = ts::fn_join(copyto, ts::fn_get_name_with_ext(ts::get_exe_full_name()));
+            another_exe.append(CONSTWSTR(" wait ")).append_as_uint(GetCurrentProcessId());
+            ts::start_app(another_exe, nullptr);
+        }
+
         on_close();
     } else 
     {
         on_confirm();
-        g_app->summon_main_rect();
+        g_app->summon_main_rect(false);
         g_app->set_notification_icon();
     }
 

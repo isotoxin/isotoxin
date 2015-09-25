@@ -141,6 +141,9 @@
     <ClCompile Include="tsexecutor.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="internal\lnkreader.cpp">
+      <Filter>src\internal</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="internal\cpuaccel.h">

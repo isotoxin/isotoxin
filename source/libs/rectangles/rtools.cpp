@@ -1,6 +1,6 @@
 #include "rectangles.h"
 
-menu_anchor_s::menu_anchor_s(bool setup_by_mousepos):rect(0)
+menu_anchor_s::menu_anchor_s(bool setup_by_mousepos, relpos_e rp):rect(0), relpos(rp)
 {
     if (setup_by_mousepos && gui)
     {

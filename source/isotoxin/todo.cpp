@@ -52,7 +52,6 @@
 
 */
 
-TODO("menu click - foreground");
 TODO("children repos optimizations");
 
 TODO("индексы добавть в таблицы (history на поле mtime и historian)");

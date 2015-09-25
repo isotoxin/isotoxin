@@ -196,6 +196,13 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     ts::wstr_c sndvolctl[snd_count];
     ts::wstr_c sndplayctl[snd_count];
 
+
+    int startopt = 0;
+    bool startopt_handler( RID, GUIPARAM );
+    int detect_startopts();
+    void set_startopts();
+    
+
 public:
     struct protocols_s
     {
@@ -226,11 +233,12 @@ private:
     bool profile_selected = false;
     bool checking_new_version = false;
 
-    bool show_search_bar = false;
-    bool proto_icons_indicator = false;
-
     bool mute_mic_on_gchat_invite = false;
     bool mute_speaker_on_gchat_invite = false;
+
+    int common_opts_orig = 0;
+    int common_opts = 0;
+    int set_away_on_timer_minutes_value = 0;
 
     ts::flags32_s::BITS msgopts_current = 0;
     ts::flags32_s::BITS msgopts_changed = 0;
@@ -276,6 +284,7 @@ private:
     bool msgopts_handler( RID, GUIPARAM );
     bool commonopts_handler( RID, GUIPARAM );
     bool gchatopts_handler( RID, GUIPARAM );
+    bool away_minutes_handler(const ts::wstr_c &v);
 
     bool ipchandler( ipcr );
     void contextmenuhandler( const ts::str_c& prm );

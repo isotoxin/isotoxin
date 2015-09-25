@@ -42,7 +42,7 @@ gui_isodialog_c::~gui_isodialog_c()
 
 ts::wstr_c gui_isodialog_c::title( dlg_title_e d )
 {
-    switch (d)
+    switch (d) //-V719
     {
     case DT_MSGBOX_ERROR:
         return TTT("[appname]: error",45);

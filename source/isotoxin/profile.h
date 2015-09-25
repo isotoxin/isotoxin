@@ -26,12 +26,13 @@ enum messages_options_e
     MSGOP_IGNORE_OTHER_TYPING   = SETBIT(6),
     UIOPT_SHOW_SEARCH_BAR       = SETBIT(16),
     UIOPT_PROTOICONS            = SETBIT(17),
+    UIOPT_AWAYONSCRSAVER        = SETBIT(18),
 
     GCHOPT_MUTE_MIC_ON_INVITE   = SETBIT(24),
     GCHOPT_MUTE_SPEAKER_ON_INVITE = SETBIT(25),
 };
 
-#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|UIOPT_SHOW_SEARCH_BAR | GCHOPT_MUTE_MIC_ON_INVITE)
+#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|UIOPT_SHOW_SEARCH_BAR|UIOPT_AWAYONSCRSAVER | GCHOPT_MUTE_MIC_ON_INVITE)
 
 
 enum dsp_flags_e
@@ -278,6 +279,7 @@ class profile_c : public config_base_c
     uint64 sorttag;
 
     static const ts::flags32_s::BITS F_OPTIONS_VALID = SETBIT(0);
+    static const ts::flags32_s::BITS F_LOADING = SETBIT(1);
 
     ts::flags32_s profile_options;
     ts::flags32_s current_options;
@@ -362,6 +364,8 @@ public:
     TEXTAPAR( userstatus, "" )
     INTPAR( min_history, 10 )
     INTPAR( ctl_to_send, 1 )
+    INTPAR( inactive_time, 5 )
+    
     TEXTAPAR( date_msg_template, "d MMMM" )
     TEXTAPAR( date_sep_template, "dddd d MMMM yyyy" )
     TEXTWPAR( download_folder, "%CONFIG%\\download" )

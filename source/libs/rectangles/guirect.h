@@ -65,6 +65,7 @@ enum system_query_e
     SQ_YOU_WANNA_DIE,       // message to child in while processing SQ_KILL_CHILD
     SQ_CHILDREN_REPOS,
     SQ_CTL_ENABLE,
+    SQ_GET_ROOT_PARENT,
 
     SQ_CHILD_CREATED,
     SQ_CHILD_DESTROYED,     // child array item now nullptr, but size not yet changed
@@ -227,7 +228,6 @@ struct evt_data_s
         struct
         {
             menu_c *menu;
-            //ts::make_pod<ts::ivec3> pos;
             ts::make_pod<menu_anchor_s> menupos;
             int level;
             bool handled;
@@ -351,7 +351,7 @@ public:
         return *this;
     }
     
-    rectprops_c &decollapse() { m_flags.clear(F_MINIMIZED|F_MICROMIZED); return *this; }
+    rectprops_c &decollapse() { m_flags.clear(F_MINIMIZED|F_MICROMIZED); m_flags.set(F_VISIBLE); return *this; }
     rectprops_c &minimize(bool m) { m_flags.init(F_MINIMIZED, m); return *this; }
     rectprops_c &micromize(bool m) { m_flags.init(F_MICROMIZED, m); return *this; }
 	
@@ -814,12 +814,12 @@ class gui_button_c : public gui_control_c
     static const ts::flags32_s::BITS F_CONSTANT_SIZE_X      = FLAGS_FREEBITSTART << 6;
     static const ts::flags32_s::BITS F_CONSTANT_SIZE_Y      = FLAGS_FREEBITSTART << 7;
     static const ts::flags32_s::BITS F_DISABLED_USE_ALPHA   = FLAGS_FREEBITSTART << 8;
-    
 
     typedef gm_redirect_s<GM_GROUP_SIGNAL> GROUPHANDLER;
     UNIQUE_PTR( GROUPHANDLER ) grouphandler;
     int grouptag = -1;
     const ts::font_desc_c *font = &ts::g_default_text_font;
+    ts::str_c image;
     ts::wstr_c text;
     ts::shared_ptr<button_desc_s> desc;
     button_desc_s::states curstate = button_desc_s::NORMAL;
@@ -837,6 +837,25 @@ class gui_button_c : public gui_control_c
     int get_ctl_width();
 
     void set_face(button_desc_s *bdesc);
+
+    void set_text_internal(const ts::wsptr&t)
+    {
+        text.clear();
+        image.clear();
+
+        if (ts::pwstr_c(t).begins(CONSTWSTR("<img=")))
+        {
+            int x = ts::pwstr_c(t).find_pos(5,'>');
+            if (ASSERT(x>5))
+            {
+                text.set( t.skip(x+1) );
+                image = ts::to_str( ts::pwstr_c(t).substr(5,x) );
+            }
+        } else
+            text.set(t);
+
+        flags.clear(F_TEXTSIZEACTUAL);
+    }
 
 public:
     gui_button_c(initial_rect_data_s &data):gui_control_c(data) { handler = DELEGATE(this, default_handler); }
@@ -865,8 +884,8 @@ public:
     void set_face_getter( GET_BUTTON_FACE _face_getter ) { face_getter = _face_getter; if (face_getter) set_face( face_getter() ); }; // be careful!!! face_getter will be called every time theme changed! make sure object life time is enough
 
     void set_handler( GUIPARAMHANDLER _handler, GUIPARAM _param ) { handler = _handler; param = _param; }
-    void set_text( const ts::wsptr&t ) { text = t; flags.clear(F_TEXTSIZEACTUAL); }
-    void set_text( const ts::wsptr&t, int &minw ) { text = t; flags.clear(F_TEXTSIZEACTUAL); minw = get_ctl_width(); }
+    void set_text( const ts::wsptr&t ) { set_text_internal(t); }
+    void set_text( const ts::wsptr&t, int &minw ) { set_text_internal(t); minw = get_ctl_width(); }
 
     void set_limit_max_size( bool f = true ) { flags.init(F_LIMIT_MAX_SIZE,f); }
     void set_constant_size( const ts::ivec2 &sz ) { ASSERT(!flags.is(F_CHECKBUTTON|F_RADIOBUTTON)); flags.set(F_CONSTANT_SIZE_X|F_CONSTANT_SIZE_Y); textsize = sz; }
@@ -893,7 +912,8 @@ protected:
     static const ts::flags32_s::BITS FLAGS_AUTO_HEIGHT          = FLAGS_FREEBITSTART << 0;
     static const ts::flags32_s::BITS FLAGS_SELECTION            = FLAGS_FREEBITSTART << 1;
     static const ts::flags32_s::BITS FLAGS_SELECTABLE           = FLAGS_FREEBITSTART << 2;
-    static const ts::flags32_s::BITS FLAGS_FREEBITSTART_LABEL   = FLAGS_FREEBITSTART << 3;
+    static const ts::flags32_s::BITS FLAGS_VCENTER              = FLAGS_FREEBITSTART << 3;
+    static const ts::flags32_s::BITS FLAGS_FREEBITSTART_LABEL   = FLAGS_FREEBITSTART << 4;
 
     ts::text_rect_c textrect;
 
@@ -911,7 +931,8 @@ public:
     const ts::font_desc_c &get_font() const;
     virtual void set_text(const ts::wstr_c&text);
     void set_font(const ts::font_desc_c *font);
-    void set_autoheight() { flags.set(FLAGS_AUTO_HEIGHT); }
+    void set_vcenter(bool f = true) { flags.init(FLAGS_VCENTER, f); }
+    void set_autoheight(bool f = true) { flags.init(FLAGS_AUTO_HEIGHT, f); }
     void set_defcolor(ts::TSCOLOR col) { textrect.set_def_color(col); }
     void set_selectable( bool f = true );
 
@@ -1217,7 +1238,9 @@ template<> struct MAKE_ROOT<gui_popup_menu_c> : public _PROOT(gui_popup_menu_c)
 {
     menu_anchor_s screenpos;
     menu_c menu;
-    MAKE_ROOT(drawcollector &dcoll, const menu_anchor_s& screenpos, const menu_c &menu, bool sys = false) : _PROOT(gui_popup_menu_c)(dcoll), screenpos(screenpos), menu(menu) { init(sys); }
+    RID parentmenu;
+    bool sys;
+    MAKE_ROOT(drawcollector &dcoll, const menu_anchor_s& screenpos, const menu_c &menu, bool sys, RID parentmenu) : _PROOT(gui_popup_menu_c)(dcoll), screenpos(screenpos), menu(menu), parentmenu(parentmenu), sys(sys) { init(sys); }
     ~MAKE_ROOT();
 };
 
@@ -1228,6 +1251,8 @@ class gui_popup_menu_c : public gui_vscrollgroup_c
     GM_RECEIVER( gui_popup_menu_c, GM_KILLPOPUPMENU_LEVEL );
     GM_RECEIVER( gui_popup_menu_c, GM_POPUPMENU_DIED );
     GM_RECEIVER( gui_popup_menu_c, GM_TOOLTIP_PRESENT );
+    GM_RECEIVER( gui_popup_menu_c, GM_SYSMENU_PRESENT );
+    
 
     bool check_focus(RID r, GUIPARAM p);
     bool update_size(RID r, GUIPARAM p);
@@ -1235,12 +1260,17 @@ class gui_popup_menu_c : public gui_vscrollgroup_c
     GUIPARAMHANDLER closehandler; // only if no any action
     GUIPARAMHANDLER clickhandler;
 
+    RID parent_menu;
+
     RID hostrid;
     menu_c menu;
 
     menu_anchor_s showpoint;
 
-    static gui_popup_menu_c & create(drawcollector &dch, const menu_anchor_s& screenpos, const menu_c &mnu, bool sys);
+    static gui_popup_menu_c & create(drawcollector &dch, const menu_anchor_s& screenpos, const menu_c &mnu, bool sys, RID parentmenu);
+
+    static const ts::flags32_s::BITS F_SYSMENU = F_VSCROLLFREEBITSTART << 0;
+    
 
 public:
 
@@ -1254,7 +1284,7 @@ public:
     bool operator()(int, const ts::wsptr& txt, const menu_c &sm);
     bool operator()(int, const ts::wsptr& txt, ts::uint32 flags, MENUHANDLER handler, const ts::str_c& prm);
 
-    gui_popup_menu_c(MAKE_ROOT<gui_popup_menu_c> &data) :gui_vscrollgroup_c(data), menu(data.menu), showpoint(data.screenpos) { defaultthrdraw = DTHRO_BORDER; }
+    gui_popup_menu_c(MAKE_ROOT<gui_popup_menu_c> &data) :gui_vscrollgroup_c(data), menu(data.menu), showpoint(data.screenpos), parent_menu(data.parentmenu) { defaultthrdraw = DTHRO_BORDER; flags.init(F_SYSMENU, data.sys); }
     /*virtual*/ ~gui_popup_menu_c();
 
     /*virtual*/ void created() override;
@@ -1270,7 +1300,7 @@ public:
 
     void menu_item_click( const click_data_s &prm );
 
-    static gui_popup_menu_c & show( const menu_anchor_s& screenpos, const menu_c &menu, bool sys = false );
+    static gui_popup_menu_c & show( const menu_anchor_s& screenpos, const menu_c &menu, bool sys = false, RID parentmenu = RID() );
 };
 
 class gui_menu_item_c;

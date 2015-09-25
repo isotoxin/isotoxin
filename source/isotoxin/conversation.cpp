@@ -2,6 +2,8 @@
 
 //-V:theme:807
 //-V:prf:807
+//-V:unmasked:807
+
 
 #define ADDTIMESPACE 5
 
@@ -173,7 +175,7 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
         int pp = ot.find_pos(CONSTWSTR("<null=px>"));
         if (pp >= 0)
         {
-            ot.set_length(pp).append(connection_failed_text());
+            ot.set_length(pp).append(loc_text(loc_connection_failed));
             textrect.set_text_only(ot, false);
             getengine().redraw();
         }
@@ -248,12 +250,23 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8)
             {
                 g_app->download_progress = ts::ivec2(0);
                 newtext.append(CONSTWSTR("<br>"));
-                newtext.append(TTT("New version downloaded. App restart required.",167));
+                newtext.append(TTT("New version has been downloaded. Restart required.",167));
 
                 gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
-                b_accept.set_text(TTT("Restart",168));
+
+                bool normal_update = ts::check_write_access(ts::fn_get_path(ts::get_exe_full_name()));
+
+                if (normal_update)
+                {
+                    b_accept.set_text(TTT("Restart",168));
+                    b_accept.set_handler(DELEGATE(g_app, b_restart), nullptr);
+                } else
+                {
+                    b_accept.set_text( ts::wstr_c(CONSTWSTR("<img=uac>")).append( TTT("Install update",321) ));
+                    b_accept.set_handler(DELEGATE(g_app, b_install), nullptr);
+                }
+
                 b_accept.set_face_getter(BUTTON_FACE(button));
-                b_accept.set_handler(DELEGATE(g_app, b_restart), nullptr);
                 b_accept.leech(TSNEW(leech_dock_bottom_center_s, 150, 30, -5, 5, 0, 1));
                 MODIFY(b_accept).visible(true);
 
@@ -3220,7 +3233,8 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
 {
-    self_selected = p.contact->getkey().is_self();
+    self_selected = p.contact && p.contact->getkey().is_self();
+
     memset( &last_post_time, 0, sizeof(last_post_time) );
 
     clear_list();
@@ -3231,6 +3245,12 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
         gui->register_hintzone(this);
     else
         gui->unregister_hintzone(this);
+
+    if (!historian)
+    {
+        gmsg<ISOGM_NOTICE>( &contacts().get_self(), nullptr, NOTICE_NETWORK, ts::str_c() ).send(); // init notice list
+        return 0;
+    }
 
     gmsg<ISOGM_NOTICE>( historian, nullptr, NOTICE_NETWORK, ts::str_c() ).send(); // init notice list
 
@@ -3369,6 +3389,14 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_MESSAGE> & msg) // clear 
 
 ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
 {
+    if ( !p.contact )
+    {
+        historian = nullptr;
+        messages.clear();
+        set_text(ts::wstr_c());
+        return 0;
+    }
+
     bool added;
     auto &x = messages.add_get_item(historian ? historian->getkey() : contact_key_s(), added);
     x.value.text = get_text();
@@ -3493,7 +3521,7 @@ bool gui_message_area_c::change_text_handler(const ts::wstr_c &t)
         if (!contact->getkey().is_self())
         {
             contact_c *tgt = contact->getkey().is_group() ? contact : contact->subget_for_send();
-            if (tgt->get_state() == CS_ONLINE)
+            if (tgt && tgt->get_state() == CS_ONLINE)
                 if (active_protocol_c *ap = prf().ap(tgt->getkey().protoid))
                     ap->typing( t.is_empty() ? 0 : tgt->getkey().contactid );
         }
@@ -3807,6 +3835,13 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CALL_STOPED> &c)
 
 ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> &c )
 {
+    if (!c.contact)
+    {
+        caption->resetcontact();
+        hide_show_messageeditor();
+        return 0;
+    }
+
     caption->setcontact( c.contact );
 
     if (c.contact->is_av())

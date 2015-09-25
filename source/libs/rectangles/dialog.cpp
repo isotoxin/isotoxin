@@ -617,6 +617,25 @@ void gui_dialog_c::set_combik_menu( const ts::asptr& ctl_name, const menu_c& m )
     }
 }
 
+void gui_dialog_c::set_edit_value( const ts::asptr& ctl_name, const ts::wstr_c& t )
+{
+    if (RID lrid = find(ctl_name))
+    {
+        gui_textfield_c &ctl = HOLD(lrid).as<gui_textfield_c>();
+        ctl.set_text(t,true);
+        ctl.selectall();
+    }
+    for (description_s &d : descs)
+    {
+        if (d.ctl == description_s::_TEXT && d.name == ctl_name)
+        {
+            d.text = t;
+            d.changed = true;
+            break;
+        }
+    }
+}
+
 void gui_dialog_c::set_label_text( const ts::asptr& ctl_name, const ts::wstr_c& t )
 {
     if (RID lrid = find(ctl_name))
@@ -1093,15 +1112,17 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
                 struct getta
                 {
                     ts::tmp_array_inplace_t< check_item_s, 4 > cis;
+                    ts::str_c checkname;
 
                     bool operator()(getta&, const ts::wsptr&) { return true; } // skip separator
                     bool operator()(getta&, const ts::wsptr&, const menu_c&) { return true; } // skip submenu
-                    bool operator()(getta&, const ts::wstr_c&txt, ts::uint32 /*flags*/, MENUHANDLER h, const ts::str_c&prm)
+                    bool operator()(getta&g, const ts::wstr_c&txt, ts::uint32 /*flags*/, MENUHANDLER h, const ts::str_c&prm)
                     {
-                        cis.addnew( txt, prm.as_uint() );
+                        cis.addnew( txt, prm.as_uint(), g.checkname + prm );
                         return true;
                     }
                 } s;
+                s.checkname = d.name;
 
                 d.items.iterate_items(s,s);
                 check( s.cis.array(), DELEGATE(&d, updvalue2), d.text.as_uint(), tag );
