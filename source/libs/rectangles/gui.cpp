@@ -163,6 +163,33 @@ const ts::font_desc_c & gui_c::get_font(const ts::asptr &fontname)
     return val.value;
 }
 
+void gui_c::process_children_repos()
+{
+    ts::tmp_pointers_t<gui_group_c, 8> g2p;
+
+    for (gui_group_c *gg : m_children_repos)
+        if (gg) g2p.add(gg);
+    m_children_repos.clear();
+
+    AUTOCLEAR( m_flags, F_PROCESSING_REPOS );
+
+    for (gui_group_c *gg : g2p)
+    {
+        gg->children_repos();
+        gg->getengine().redraw();
+    }
+
+    ASSERT( m_children_repos.size() == 0 );
+}
+
+/*virtual*/ void gui_c::do_post_effect()
+{
+    if ( m_post_effect.is(PEF_CHILDREN_REPOS) )
+        process_children_repos();
+
+    m_post_effect.clear();
+}
+
 int gui_c::get_temp_buf(double ttl, ts::aint sz)
 {
     int tag = get_free_tag();
@@ -445,7 +472,7 @@ void gui_c::loop()
     { // draw collector should be flushed before sleep
         redraw_collector_s dch;
 
-        ts::Time::updateForThread();
+        ts::Time::update_thread_time();
         m_frametime.takt();
         m_1second.takt(m_frametime.frame_time());
         if (m_1second.it_is_time_ones()) heartbeat();
@@ -627,6 +654,23 @@ void gui_c::resort_roots()
         STOPSTUB();
     }
 }
+
+void gui_c::repos_children(gui_group_c *g)
+{
+    if (m_flags.is(F_PROCESSING_REPOS))
+    {
+        g->children_repos();
+        return;
+    }
+
+    m_post_effect.set(PEF_CHILDREN_REPOS);
+    for (gui_group_c *gg : m_children_repos)
+        if (gg == g)
+            return;
+
+    m_children_repos.add(g);
+}
+
 
 namespace
 {
@@ -1161,22 +1205,8 @@ void selectable_core_s::select_by_charinds(gui_label_c *label, int char_start_se
 
 void selectable_core_s::begin( gui_label_c *label )
 {
-    if (label == owner)
-    {
-    } else
-    {
-        if (owner && owner != label)
-            clear_selection();
-        owner = label;
-    }
-    glyph_under_cursor = -1;
-    glyph_start_sel = -1 /*glyph_under_cursor*/;
-    glyph_end_sel = -1 /*glyph_under_cursor*/;
-    char_start_sel = -1;
-    char_end_sel = -1;
-    clear_selection_after_flashing = false;
-    dirty = true;
-    owner->getengine().redraw();
+    clear_selection();
+    owner = label;
 }
 
 bool selectable_core_s::try_begin( gui_label_c *label )
@@ -1286,14 +1316,18 @@ void selectable_core_s::selection_stuff(ts::drawable_bitmap_c &texture, const ts
 
 void selectable_core_s::clear_selection()
 {
-    glyph_start_sel = -1;
-    glyph_end_sel = -1;
-    char_start_sel = -1;
-    char_end_sel = -1;
-    clear_selection_after_flashing = false;
-    dirty = true;
-    if (owner) owner->getengine().redraw();
-    gui->delete_event( DELEGATE(this, selectword) );
+    if (glyph_start_sel >= 0 && glyph_end_sel >= 0 &&
+        char_start_sel >= 0 && char_end_sel >= 0)
+    {
+        glyph_start_sel = -1;
+        glyph_end_sel = -1;
+        char_start_sel = -1;
+        char_end_sel = -1;
+        clear_selection_after_flashing = false;
+        dirty = true;
+        if (owner) owner->getengine().redraw();
+        gui->delete_event(DELEGATE(this, selectword));
+    }
 }
 
 ts::uint32 selectable_core_s::detect_area(const ts::ivec2 &pos)
@@ -1338,4 +1372,150 @@ void selectable_core_s::track()
     }
 
     //DMSG("h" << glyph_under_cursor <<glyph_start_sel << glyph_end_sel << char_start_sel << char_end_sel );
+}
+
+static bool is_better_size( const ts::ivec2 &need_size, const ts::ivec2 &current_size, const ts::ivec2 &new_size )
+{
+    if (need_size == new_size)
+        return need_size != current_size;
+
+    if ((need_size > current_size) && (new_size >>= need_size))
+        return true;
+
+    int current_area = current_size.x * current_size.y;
+    int new_area = new_size.x * new_size.y;
+
+    if ((need_size >>= current_size) && (need_size >>= new_size) && new_area < current_area)
+        return true;
+
+    return false;
+}
+
+ts::drawable_bitmap_c * gui_c::acquire_texture(text_rect_dynamic_c *requester, const ts::ivec2 &size)
+{
+    texture_s *candidate = nullptr;
+
+    static const int max_pool_size = 50;
+
+    if (m_textures.size() < max_pool_size)
+    {
+        for (texture_s *tt : m_textures)
+        {
+            if (tt->owner.expired())
+            {
+                if ( candidate == nullptr || is_better_size( size, candidate->texture.info().sz, tt->texture.info().sz ) )
+                    candidate = tt;
+            }
+        }
+    } else
+    {
+        ts::Time curt = ts::Time::current();
+        int max_use_delta = -INT_MAX;
+
+        auto better_time = [&](texture_s *newtt) ->bool
+        {
+            int d = ( curt - newtt->owner->last_use_time );
+            return (d - max_use_delta) > 5000; // assume better time is > 5 seconds
+        };
+
+        ts::tmp_pointers_t<texture_s, max_pool_size> postponed;
+
+        for (texture_s *tt : m_textures)
+        {
+            if (tt->owner.expired())
+            {
+                if (candidate == nullptr ||
+                    !candidate->owner.expired() ||
+                    is_better_size(size, candidate->texture.info().sz, tt->texture.info().sz) )
+                {
+                    candidate = tt;
+                    max_use_delta = -INT_MAX;
+                }
+            } else
+            {
+                if ( (curt - tt->owner->last_use_time) < 5000 )
+                {
+                    postponed.add(tt); // last use was early 5 sec ago
+                    continue; // skip it for now
+                }
+
+                if (candidate && candidate->owner.expired())
+                    continue;
+
+                if (candidate == nullptr || is_better_size(size, candidate->texture.info().sz, tt->texture.info().sz) || better_time(tt))
+                {
+                    candidate = tt;
+                    max_use_delta = curt - tt->owner->last_use_time;
+                }
+            }
+        }
+        if (!candidate)
+        {
+            for (texture_s *tt : postponed)
+            {
+                ASSERT(!tt->owner.expired());
+
+                if (candidate == nullptr || is_better_size(size, candidate->texture.info().sz, tt->texture.info().sz) || better_time(tt))
+                {
+                    candidate = tt;
+                    max_use_delta = curt - tt->owner->last_use_time;
+                }
+            }
+        }
+    }
+
+    if (!candidate)
+    { 
+        ASSERT(m_textures.size() < max_pool_size);
+        candidate = TSNEW(texture_s);
+        m_textures.add(candidate);
+
+    } else if (!candidate->owner.expired())
+    {
+        candidate->owner->curtexture = nullptr;
+        candidate->owner.unconnect();
+    }
+
+    candidate->owner = requester;
+
+    return &candidate->texture;
+}
+
+void gui_c::release_texture(ts::drawable_bitmap_c * t)
+{
+    for(texture_s *tt :m_textures)
+    {
+        if (&tt->texture == t)
+        {
+            if (tt->owner)
+            {
+                tt->owner->curtexture = nullptr;
+                tt->owner.unconnect();
+                tt->texture.clear();
+            }
+            break;
+        }
+    }
+}
+
+text_rect_dynamic_c::~text_rect_dynamic_c()
+{
+    if (curtexture && gui)
+        gui->release_texture(curtexture);
+}
+
+/*virtual*/ ts::drawable_bitmap_c &text_rect_dynamic_c::texture()
+{
+    last_use_time = ts::Time::current();
+    if ( curtexture ) return *curtexture;
+    flags.set(F_INVALID_TEXTURE);
+    curtexture = gui->acquire_texture( this, lastdrawsize );
+    return *curtexture;
+}
+/*virtual*/ void text_rect_dynamic_c::texture_no_need()
+{
+    last_use_time = ts::Time::past();
+    if (curtexture)
+        gui->release_texture( curtexture );
+    ASSERT(curtexture == nullptr);
 }

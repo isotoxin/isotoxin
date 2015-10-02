@@ -1,0 +1,46 @@
+====header
+<html>
+ <head>
+  <title>{NAME}</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <style>
+	.datesep {background-color:#cccccf; text-align: center ; margin-top: 2px;}
+	.me  {background-color:#e5fadd; color:#0b2f12; margin-top: 4px;}
+	.other  {background-color:#f5eef9; color:#8f5b35; margin-top: 4px;}
+	.outer {width:100%}
+    .inner {  width: 600px;  margin: 0 auto; }
+    .title { background-color:#3096a3; width:100%; text-align: center; }
+    .name { font-family:arial; margin-left:2px; }
+    .text { color:#000000; margin-left:10px; font-family:arial; font-size:90% }
+    .tm { font-size:70%; color:#709def; float:right; padding-top:5px; }
+  </style>
+ </head>
+ <body>
+<div class="outer">  
+  <div class="inner">
+   <div class="title">{NAME}</div>
+====footer
+  </div></div>
+ </body>
+<html>
+====mine
+<div class="me"><div class="text">{TEXT}<span class="tm">{TIME}</span></div></div>
+====namedmine
+<div class="me"><div class="name">{NAME}</div><div class="text">{TEXT}<span class="tm">{TIME}</span></div></div>
+====other
+<div class="other"><div class="text">{TEXT}<span class="tm">{TIME}</span></div></div>
+====namedother
+<div class="other"><div class="name">{NAME}</div><div class="text">{TEXT}<span class="tm">{TIME}</span></div></div>
+====dateseparator
+<div class="datesep">{TIME}</div>
+====replace
+linebreak=<br>
+link=`<a href="{LINK}">{LINK}</a>`
+bb-b=<b>
+be-b=</b>
+bb-i=<i>
+be-i=</i>
+bb-s=<strike>
+be-s=</strike>
+bb-u=<u>
+be-u=</u>

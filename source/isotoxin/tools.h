@@ -104,6 +104,27 @@ template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_shadow(ts::TSCOLOR c
     return s;
 }
 
+template<typename SCORE> void text_set_date(ts::str_t<ts::wchar, SCORE> & tstr, const ts::wstr_c &fmt, const tm &tt)
+{
+    SYSTEMTIME st;
+    st.wYear = (ts::uint16)(tt.tm_year + 1900);
+    st.wMonth = (ts::uint16)(tt.tm_mon + 1);
+    st.wDayOfWeek = (ts::uint16)tt.tm_wday;
+    st.wDay = (ts::uint16)tt.tm_mday;
+    st.wHour = (ts::uint16)tt.tm_hour;
+    st.wMinute = (ts::uint16)tt.tm_min;
+    st.wSecond = (ts::uint16)tt.tm_sec;
+    st.wMilliseconds = 0;
+
+    if (tstr.get_capacity() > 32)
+        tstr.set_length(tstr.get_capacity() - 1);
+    else
+        tstr.set_length(64);
+    GetDateFormatW(LOCALE_USER_DEFAULT, 0, &st, fmt, tstr.str(), tstr.get_capacity() - 1);
+    tstr.set_length();
+}
+
+bool text_find_link(ts::str_c &message, int from, ts::ivec2 & rslt);
 
 void text_convert_from_bbcode(ts::str_c &text_utf8);
 void text_convert_to_bbcode(ts::str_c &text_utf8);
@@ -173,9 +194,8 @@ enum isogmsg_e
     ISOGM_APPRISE,
     ISOGM_NEWVERSION,
     ISOGM_DOWNLOADPROGRESS,
-    ISOGM_SOMEUNREAD,
     ISOGM_AVATAR,
-    ISOGM_UPDATE_BUTTONS,
+    ISOGM_DO_POSTEFFECT,
     ISOGM_TYPING,
 
     ISOGM_COUNT,
@@ -256,6 +276,13 @@ template<> struct gmsg<ISOGM_SUMMON_POST> : public gmsgbase
     void operator =(gmsg &) UNUSED;
 };
 
+template<> struct gmsg<ISOGM_DO_POSTEFFECT> : public gmsgbase
+{
+    gmsg(ts::uint32 bits) :gmsgbase(ISOGM_DO_POSTEFFECT), bits(bits) {}
+    ts::uint32 bits;
+
+};
+
 
 enum settingsparam_e
 {
@@ -268,6 +295,7 @@ enum settingsparam_e
     PP_PROFILEOPTIONS,
     PP_NETWORKNAME,
     PP_EMOJISET,
+    PP_ACTIVEPROTO_SORT,
 
     // config
     CFG_MICVOLUME,
@@ -292,6 +320,7 @@ bool check_netaddr( const ts::asptr & );
 void path_expand_env(ts::wstr_c &path);
 
 void install_to(const ts::wstr_c &path, bool acquire_admin_if_need);
+bool elevate();
 
 enum loctext_e
 {
@@ -300,6 +329,7 @@ enum loctext_e
     loc_please_create_profile,
     loc_yes,
     loc_no,
+    loc_exit,
 };
 
 ts::wstr_c loc_text(loctext_e);

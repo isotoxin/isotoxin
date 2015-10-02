@@ -115,7 +115,7 @@ tmpalloc_c tmpb;
 
         /*virtual*/ void find(wstrings_c & files, const wsptr &fnmask, bool full_paths ) override
         {
-            int x = pwstr_c(fnmask).find_pos(CONSTWSTR("/*"));
+            aint x = pwstr_c(fnmask).find_pos(CONSTWSTR("/*"));
             bool hm = x >= 0 && x+2 < fnmask.l;
             if (hm && fnmask.s[x+2] == '/')
             {
@@ -138,10 +138,10 @@ tmpalloc_c tmpb;
                 }
 
                 wstr_c curf(fnmask); curf.cut(x, 3);
-                find_files(curf, files, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, full_paths);
+                find_files(curf, files, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, full_paths); //-V112
 
             } else
-                find_files(fnmask, files, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, full_paths);
+                find_files(fnmask, files, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, full_paths); //-V112
         }
 	};
 

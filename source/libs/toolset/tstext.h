@@ -16,17 +16,21 @@ struct rectangle_update_s
 
 class text_rect_c // texture with text
 {
+protected:
     TSCOLOR default_color = ARGB(0, 0, 0);
     wstr_c text;
     flags32_s flags;
     int scroll_top = 0;
     int margin_left = 0, margin_right = 0, margin_top = 0; // offset of text in texture
     int text_height;
+
+    virtual drawable_bitmap_c &texture() = 0;
+    virtual void texture_no_need() = 0;
+
 public:
 	const font_desc_c *font;
     ivec2 size;
-    ivec2 lastdrawsize;
-	drawable_bitmap_c texture;
+    ivec2 lastdrawsize = ivec2(0);
 	GLYPHS  glyphs_internal;
 
     static const flags32_s::BITS F_DIRTY            = TO_LAST_OPTION << 0;
@@ -41,7 +45,7 @@ public:
 public:
 
     text_rect_c() : font(&g_default_text_font), size(0), lastdrawsize(0) { flags.setup(F_INVALID_SIZE|F_INVALID_TEXTURE|F_INVALID_GLYPHS); }
-	~text_rect_c();
+	virtual ~text_rect_c();
     
     void make_dirty( bool dirty_common = true, bool dirty_glyphs = true, bool dirty_size = false )
     {
@@ -50,8 +54,9 @@ public:
         if (dirty_size) flags.set(F_INVALID_SIZE);
     }
     bool is_dirty() const { return flags.is(F_DIRTY); }
-    bool is_dirty_size() const { return flags.is(F_INVALID_SIZE); }
-    bool is_dirty_glyphs() const { return flags.is(F_INVALID_GLYPHS); }
+    bool is_invalid_size() const { return flags.is(F_INVALID_SIZE); }
+    bool is_invalid_glyphs() const { return flags.is(F_INVALID_GLYPHS); }
+    bool is_invalid_texture() const { return flags.is(F_INVALID_TEXTURE); }
     
     void set_margins(int mleft, int mtop, int mrite)
     {
@@ -94,12 +99,25 @@ public:
 
 	int  get_scroll_top() const {return scroll_top;}
 
-    drawable_bitmap_c &get_texture() { ASSERT(!flags.is(F_INVALID_TEXTURE|F_INVALID_GLYPHS)); return texture;};
+    drawable_bitmap_c &get_texture() { ASSERT(!flags.is(F_INVALID_TEXTURE|F_INVALID_GLYPHS)); return texture();};
 
 	//render glyphs to RGBA buffer with full alpha-blending
 	//offset can be used for scrolling or margins
 	static bool draw_glyphs(uint8 *dst, int width, int height, int pitch, const array_wrapper_c<const glyph_image_s> &glyphs, const ivec2 & offset = ivec2(0), bool prior_clear = true);
+};
 
+class text_rect_static_c : public text_rect_c
+{
+    drawable_bitmap_c t;
+    /*virtual*/ drawable_bitmap_c &texture() override
+    {
+        return t;
+    }
+    /*virtual*/ void texture_no_need() override
+    {
+        safe_destruct(t);
+    }
+public:
 };
 
 } // namespace ts

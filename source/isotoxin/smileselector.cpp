@@ -19,25 +19,26 @@ void dialog_smileselector_c::build_rects(rects_t&a)
     int i = 0;
     emoti().iterate_current_pack([&](emoticon_s &e) {
         
+        ts::irect fr = e.framerect();
         if (p.x == 0)
         {
             a.add(rectdef_s(p + ts::ivec2(OTS), &e));
-            if (e.framesize().y > maxh) maxh = e.framesize().y;
+            if (fr.height() > maxh) maxh = fr.height();
 
-        } else if (p.x + e.framesize().x > sz.x)
+        } else if (p.x + fr.width() > sz.x)
         {
             p.x = 0;
             p.y += maxh + ZAZ;
             a.add( rectdef_s(p + ts::ivec2(OTS), &e) );
-            maxh = e.framesize().y;
+            maxh = fr.height();
 
         } else
         {
             a.add(rectdef_s(p + ts::ivec2(OTS), &e));
-            if (e.framesize().y > maxh) maxh = e.framesize().y;
+            if (fr.height() > maxh) maxh = fr.height();
 
         }
-        p.x += ZAZ + e.framesize().x;
+        p.x += ZAZ + fr.width();
 
         ++i;
     });
@@ -91,7 +92,7 @@ bool dialog_smileselector_c::find_undermouse()
     mp.y -= sb.shift;
     for (rectdef_s &rd : rects)
     {
-        if (ts::irect(rd.p, rd.p + rd.e->framesize()).inside(mp))
+        if (ts::irect(rd.p, rd.p + rd.e->framerect().size()).inside(mp))
         {
             undermouse = &rd;
             break;
@@ -124,7 +125,7 @@ bool dialog_smileselector_c::find_undermouse()
             {
                 if (undermouse == &rd)
                 {
-                    ts::irect sr(rd.p + d - ZAZ, rd.p + rd.e->framesize() + d + ZAZ);
+                    ts::irect sr(rd.p + d - ZAZ, rd.p + rd.e->framerect().size() + d + ZAZ);
                     m_engine->draw(sr, get_default_text_color(0));
                     sr.lt += ZAZ;
                     sr.rb -= ZAZ;

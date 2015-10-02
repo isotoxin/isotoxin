@@ -219,24 +219,23 @@ public:
 
 
     // not saved
-    static const ts::flags32_s::BITS F_SPEAKER_OFF = SETBIT(20);
-    static const ts::flags32_s::BITS F_MIC_OFF = SETBIT(21);
-    static const ts::flags32_s::BITS F_CALL_INACTIVE = SETBIT(22);
-    static const ts::flags32_s::BITS F_AUDIO_GCHAT = SETBIT(23);
-    static const ts::flags32_s::BITS F_PERSISTENT_GCHAT = SETBIT(24);
-    static const ts::flags32_s::BITS F_SHOW_FRIEND_REQUEST = SETBIT(25);
-    static const ts::flags32_s::BITS F_PROTOHIT = SETBIT(26);
-    static const ts::flags32_s::BITS F_CALLTONE = SETBIT(27);
-    static const ts::flags32_s::BITS F_AV_INPROGRESS = SETBIT(28);
-    static const ts::flags32_s::BITS F_RINGTONE = SETBIT(29);
-    static const ts::flags32_s::BITS F_RINGTONE_BLINK = SETBIT(30);
+    static const ts::flags32_s::BITS F_SPEAKER_OFF = SETBIT(22);
+    static const ts::flags32_s::BITS F_MIC_OFF = SETBIT(23);
+    static const ts::flags32_s::BITS F_CALL_INACTIVE = SETBIT(24);
+    static const ts::flags32_s::BITS F_AUDIO_GCHAT = SETBIT(25);
+    static const ts::flags32_s::BITS F_PERSISTENT_GCHAT = SETBIT(26);
+    static const ts::flags32_s::BITS F_PROTOHIT = SETBIT(27);
+    static const ts::flags32_s::BITS F_CALLTONE = SETBIT(28);
+    static const ts::flags32_s::BITS F_AV_INPROGRESS = SETBIT(29);
+    static const ts::flags32_s::BITS F_RINGTONE = SETBIT(30);
     static const ts::flags32_s::BITS F_DIP = SETBIT(31);
 
     int operator()(const contact_c&oc) const { return key(oc.key); }
+    int operator()(const contact_key_s&k) const { return key(k); }
 
     const contact_key_s& getkey() const {return key;}
 
-    contact_c( const contact_key_s &key );
+    explicit contact_c( const contact_key_s &key );
     contact_c();
     ~contact_c();
     void prepare4die(contact_c *owner)
@@ -254,15 +253,8 @@ public:
     void setup( const contacts_s * c, time_t nowtime );
     bool save( contacts_s * c ) const;
 
-    void friend_request( bool f = true )
-    {
-        opts.unmasked().init(F_SHOW_FRIEND_REQUEST, f);
-    }
-
     bool is_protohit( bool strong );
     void protohit(bool f);
-
-    bool achtung() const;
 
     bool is_meta() const { return key.is_meta() && getmeta() == nullptr; };
     bool is_rootcontact() const { return !opts.is(F_UNKNOWN) && (is_meta() || getkey().is_group() || getkey().is_self()); } // root contact - in contact list
@@ -403,13 +395,16 @@ public:
         return p;
     }
 
+    //void load_history(); // whole
     void load_history(int n_last_items);
     void unload_history()
     {
         history.clear();
     }
 
-    int calc_history_after(time_t t);
+    int calc_unread();
+
+    void export_history( const ts::wsptr &templatename, const ts::wsptr &fname );
 
     const post_s *find_post_by_utag(uint64 utg) const
     {
@@ -459,8 +454,6 @@ public:
         return r;
     }
 
-    bool recalc_unread(); // returns true if unread
-
     void send_file(const ts::wstr_c &fn);
 
     void set_pubid( const ts::str_c &pubid_ ) { pubid = pubid_; }
@@ -480,7 +473,15 @@ public:
     const ts::str_c &get_pubid() const {return pubid;};
     
     const ts::str_c get_pubid_desc() const {return (pubid.is_empty() && is_meta()) ? compile_pubid() : pubid;};
-    ts::str_c get_description() const { ts::str_c t = get_name(); if (t.is_empty()) t.set(get_pubid_desc()); return t; }
+    ts::str_c get_description() const
+    {
+        ts::str_c t = get_name();
+        if (t.is_empty())
+            t.set(get_pubid_desc());
+        else
+            text_adapt_user_input(t);
+        return t;
+    }
     ts::str_c get_name(bool metacompile = true) const {return (name.is_empty() && is_meta() && metacompile) ? compile_name() : name;};
     const ts::str_c &get_customname() const { return customname;}
     ts::str_c get_statusmsg(bool metacompile = true) const {return (statusmsg.is_empty() && is_meta() && metacompile) ? compile_statusmsg() : statusmsg;};
@@ -499,8 +500,6 @@ public:
 
     const post_s * fix_history( message_type_app_e oldt, message_type_app_e newt, const contact_key_s& sender = contact_key_s() /* self - empty - no matter */, time_t update_time = 0 /* 0 - no need update */ );
 
-    bool check_invite(RID r = RID(), GUIPARAM p = as_param(3));
-
     bool b_accept(RID, GUIPARAM);
     bool b_reject(RID, GUIPARAM);
     bool b_resend(RID, GUIPARAM);
@@ -518,12 +517,8 @@ public:
     bool b_receive_file_as(RID, GUIPARAM);
     bool b_refuse_file(RID, GUIPARAM);
     
-    
-
-    bool flashing_proc(RID, GUIPARAM);
     bool ringtone(bool activate = true, bool play_stop_snd = true);
     bool is_ringtone() const { return opts.unmasked().is(F_RINGTONE); }
-    bool is_ringtone_blink() const { return opts.unmasked().is(F_RINGTONE_BLINK); }
     bool is_av() const { return opts.unmasked().is(F_AV_INPROGRESS) || (getkey().is_group() && opts.unmasked().is(F_AUDIO_GCHAT)); }
     void av( bool f = true );
 
@@ -533,8 +528,6 @@ public:
 
     bool is_calltone() const { return opts.unmasked().is(F_CALLTONE); }
     bool calltone( bool f = true, bool call_accepted = false );
-
-    bool is_filein() const;
 
     int avatar_tag() const {return avatar ? avatar->tag : 0; }
     void set_avatar( const void *body, int size, int tag = 0 )

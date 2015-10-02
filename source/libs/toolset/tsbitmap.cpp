@@ -6,6 +6,36 @@
 namespace ts
 {
 
+void TSCALL img_helper_premultiply(uint8 *des, const imgdesc_s &des_info)
+{
+    int desnl = des_info.pitch - des_info.sz.x * 4;
+
+    for (int y = 0; y < des_info.sz.y; ++y, des += desnl)
+    {
+        for (int x = 0; x < des_info.sz.x; ++x, des += 4)
+        {
+            TSCOLOR ocolor;
+            TSCOLOR color = *(TSCOLOR *)des;
+            uint8 alpha = ALPHA(color);
+            if (alpha == 255)
+            {
+                continue;
+            }
+            else if (alpha == 0)
+            {
+                ocolor = 0;
+            }
+            else
+            {
+                ocolor = PREMULTIPLY(color);
+            }
+
+            *(TSCOLOR *)des = ocolor;
+        }
+    }
+
+}
+
 void TSCALL img_helper_fill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color)
 {
     int desnl = des_info.pitch - des_info.sz.x*des_info.bytepp();
@@ -1120,32 +1150,14 @@ template<typename CORE> void bitmap_t<CORE>::premultiply()
 {
     if(info().bytepp()!=4) return;
     before_modify();
+    img_helper_premultiply( body(), info() );
+}
 
-    uint8 * des=body();
-    int desnl=info().pitch-info().sz.x*4;
-
-    for(int y=0;y<info().sz.y;++y,des+=desnl)
-    {
-        for(int x=0;x<info().sz.x;++x,des+=4)
-        {
-            TSCOLOR ocolor;
-            TSCOLOR color = *(TSCOLOR *)des;
-            uint8 alpha = ALPHA(color);
-            if(alpha==255)
-            {
-                continue;
-            } else if (alpha==0)
-            {
-                ocolor = 0;
-            } else
-            {
-                ocolor = PREMULTIPLY( color );
-            }
-
-            *(TSCOLOR *)des = ocolor;
-        }			
-    }
-
+template<typename CORE> void bitmap_t<CORE>::premultiply( const irect &rect )
+{
+    if (info().bytepp() != 4) return;
+    before_modify();
+    img_helper_premultiply( body(rect.lt), info(rect) );
 }
 
 
@@ -2175,9 +2187,37 @@ template<typename CORE> void bitmap_t<CORE>::load_from_HWND(HWND hwnd)
     DeleteDC(memDC);
 }
 
+#ifdef _DEBUG
+int dbmpcnt = 0;
+#endif // _DEBUG
+
+void drawable_bitmap_c::clear()
+{
+    if (m_mem_dc)
+    {
+#ifdef _DEBUG
+        --dbmpcnt;
+        DMSG("dbmp " << dbmpcnt);
+#endif // _DEBUG
+        DeleteDC(m_mem_dc); m_mem_dc = nullptr;
+    }
+    if (m_mem_bitmap) { DeleteObject(m_mem_bitmap); m_mem_bitmap = nullptr; }
+    core.m_body = nullptr;
+    memset(&core.m_info, 0, sizeof(imgdesc_s));
+}
+
+
 void    drawable_bitmap_c::create(const ivec2 &sz)
 {
     clear();
+
+#ifdef _DEBUG
+    ++dbmpcnt;
+    DMSG("dbmp " << dbmpcnt);
+    //if (dbmpcnt > 300)
+    //    __debugbreak();
+#endif // _DEBUG
+
 
     core.m_info.sz = sz;
     core.m_info.bitpp = 32;
@@ -2270,6 +2310,12 @@ bool    drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, bool flipy, b
 bool drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, const ivec2 &p, const ivec2 &sz, bool flipy, bool premultiply, bool detect_alpha_pixels)
 {
     clear();
+
+#ifdef _DEBUG
+    ++dbmpcnt;
+    DMSG("dbmp " << dbmpcnt);
+#endif // _DEBUG
+
 
     BITMAPV4HEADER bmi;
 

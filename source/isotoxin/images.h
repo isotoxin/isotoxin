@@ -2,9 +2,6 @@
 
 class picture_c
 {
-protected:
-    ts::drawable_bitmap_c current_frame;
-
 public:
     picture_c() {}
     virtual ~picture_c() {}
@@ -12,9 +9,9 @@ public:
     virtual bool load(const ts::blob_c &body) = 0;
     virtual ts::ivec2 framesize_by_width(int w) { return ts::ivec2(0); };
     virtual void fit_to_width(int w) {}
-    const ts::drawable_bitmap_c &curframe() const {return current_frame;};
-    const ts::ivec2 &framesize() const { return current_frame.info().sz; };
-    ts::irect framerect() const { return ts::irect(0, framesize()); }
+    virtual const ts::drawable_bitmap_c &curframe(ts::irect &frect) const  = 0;
+    virtual ts::irect framerect() const = 0;
+    virtual ts::drawable_bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &frect)  = 0;
 
     virtual void draw(rectengine_root_c *e, const ts::ivec2 &pos) const;
 };
@@ -68,6 +65,7 @@ protected:
     int delay = 1;
 
 public:
+    bool load_only_gif( ts::bitmap_c &first_frame, const ts::blob_c &body );
     /*virtual*/ bool load(const ts::blob_c &body) override;
     /*virtual*/ int nextframe() override;
 };

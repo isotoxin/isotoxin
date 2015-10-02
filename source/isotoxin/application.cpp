@@ -16,22 +16,24 @@ static bool __toggle_search_bar(RID, GUIPARAM)
     return true;
 }
 
-application_c::application_c(const ts::wchar * cmdl, bool minimize)
+application_c::application_c(const ts::wchar * cmdl, bool minimize, bool readonly)
 {
     F_NEWVERSION = false;
-    F_UNREADICONFLASH = false;
+    F_BLINKING_FLAG = false;
     F_UNREADICON = false;
-    F_NEEDFLASH = false;
-    F_FLASHIP = false;
+    F_NEED_BLINK_ICON = false;
+    F_BLINKING_ICON = false;
     F_SETNOTIFYICON = false;
     F_OFFLINE_ICON = true;
     F_ALLOW_AUTOUPDATE = false;
+    F_READONLY_MODE = readonly;
+    F_READONLY_MODE_WARN = readonly; // suppress warn
 
     autoupdate_next = now() + 10;
 	g_app = this;
     cfg().load();
     if (cfg().is_loaded())
-        summon_main_rect(minimize);
+        load_profile_and_summon_main_rect(minimize);
 
 #ifndef _FINAL
     dotests();
@@ -141,34 +143,43 @@ bool application_c::b_send_message(RID r, GUIPARAM param)
 
 bool application_c::flash_notification_icon(RID r, GUIPARAM param)
 {
-    F_UNREADICON = F_NEEDFLASH ? true : gmsg<ISOGM_SOMEUNREAD>().send().is(GMRBIT_ACCEPTED);;
-    F_NEEDFLASH = false;
-    F_FLASHIP = false;
-    if (F_UNREADICON)
+    F_BLINKING_ICON = F_NEED_BLINK_ICON;
+    F_UNREADICON = false;
+    if (F_BLINKING_ICON)
     {
-        F_FLASHIP = true;
-        F_UNREADICONFLASH = !F_UNREADICONFLASH;
+        F_UNREADICON = present_unread_blink_reason();
+        F_BLINKING_FLAG = !F_BLINKING_FLAG;
         DEFERRED_UNIQUE_CALL(0.3, DELEGATE(this, flash_notification_icon), 0);
     }
     F_SETNOTIFYICON = true;
-    for(RID r : m_flashredraw)
-    {
-        HOLD rr(r);
-        if (rr) rr.engine().redraw();
-    }
-    m_flashredraw.clear();
     return true;
 }
 
 HICON application_c::app_icon(bool for_tray)
 {
     if (!for_tray)
-        return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(IDI_ICON)); 
+        return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(IDI_ICON_APP)); 
+
+    auto actual_icon_idi = [this]( bool with_message )->int
+    {
+        if (F_OFFLINE_ICON) return with_message ? IDI_ICON_OFFLINE_MSG : IDI_ICON_OFFLINE;
+        switch (contacts().get_self().get_ostate())
+        {
+        case COS_AWAY:
+            return with_message ? IDI_ICON_AWAY_MSG : IDI_ICON_AWAY;
+        case COS_DND:
+            return with_message ? IDI_ICON_DND_MSG : IDI_ICON_DND;
+        }
+        return with_message ? IDI_ICON_ONLINE_MSG : IDI_ICON_ONLINE;
+    };
 
     if (F_UNREADICON)
-        return LoadIcon(g_sysconf.instance, F_UNREADICONFLASH ? MAKEINTRESOURCE(F_OFFLINE_ICON ? IDI_ICON_OFFLINE : IDI_ICON2) : MAKEINTRESOURCE(IDI_ICON_HOLLOW));
+        return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE( actual_icon_idi( F_BLINKING_FLAG ) ));
 
-    return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(F_OFFLINE_ICON ? IDI_ICON_OFFLINE : IDI_ICON));
+    if (F_BLINKING_ICON)
+        return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE( F_BLINKING_FLAG ? actual_icon_idi( false ) : IDI_ICON_HOLLOW  ));
+
+    return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(actual_icon_idi(false)));
 };
 
 /*virtual*/ void application_c::app_prepare_text_for_copy(ts::str_c &text)
@@ -258,6 +269,20 @@ HICON application_c::app_icon(bool for_tray)
 {
     path_expand_env(path);
 }
+
+
+/*virtual*/ void application_c::do_post_effect()
+{
+    while( m_post_effect.is(PEF_APP) )
+    {
+        gmsg<ISOGM_DO_POSTEFFECT> x( m_post_effect.__bits );
+        m_post_effect.clear(PEF_APP);
+        x.send();
+    }
+    __super::do_post_effect();
+}
+
+
 
 ts::static_setup<spinlock::syncvar<autoupdate_params_s>,1000> auparams;
 
@@ -350,7 +375,7 @@ static DWORD WINAPI autoupdater(LPVOID)
         }
     }
 
-    if (manual_cos == COS_ONLINE)
+    if (prf().manual_cos() == COS_ONLINE)
     {
         contact_online_state_e c = contacts().get_self().get_ostate();
         contact_online_state_e cnew = COS_ONLINE;
@@ -375,12 +400,13 @@ static DWORD WINAPI autoupdater(LPVOID)
         if (c != cnew)
             set_status(cnew, false);
     }
+
 }
 
 void application_c::set_status(contact_online_state_e cos_, bool manual)
 {
     if (manual)
-        manual_cos = cos_;
+        prf().manual_cos(cos_);
 
     contacts().get_self().subiterate([&](contact_c *c) { //-V807
         c->set_ostate(cos_);
@@ -390,31 +416,105 @@ void application_c::set_status(contact_online_state_e cos_, bool manual)
 
 }
 
-/*virtual*/ void application_c::app_loop_event()
+application_c::blinking_reason_s &application_c::new_blink_reason(const contact_key_s &historian)
 {
-    if (m_need_recalc_unread.count())
+    for (blinking_reason_s &fr:m_blink_reasons)
     {
-        LOG( "m_need_recalc_unread" << m_need_recalc_unread.count() );
+        if (fr.historian == historian)
+            return fr;
+    }
+    blinking_reason_s &fr = m_blink_reasons.add();
+    fr.historian = historian;
+    return fr;
+}
 
-        contact_key_s ck = m_need_recalc_unread.get(0);
-        if (m_locked_recalc_unread.find_index(ck) >= 0)
+
+void application_c::update_blink_reason(const contact_key_s &historian_key)
+{
+    if (g_app->is_inactive(false))
+        return;
+
+    if (blinking_reason_s *flr = g_app->find_blink_reason(historian_key, true))
+        flr->do_recalc_unread_now();
+}
+
+void application_c::blinking_reason_s::do_recalc_unread_now()
+{
+    if (contact_c *hi = contacts().find(historian))
+    {
+        if (flags.is(F_INVITE_FRIEND))
         {
-            LOG("locked:" << ck);
+            bool invite = false;
+            hi->subiterate([&](contact_c *c) { if (c->get_state() == CS_INVITE_RECEIVE) invite = true; });
+            if (!invite) friend_invite(false);
+        }
 
-            // locked. postpone
-            m_need_recalc_unread.remove_slow(0);
-            m_need_recalc_unread.add(ck);
-        } else
+        if (flags.is(F_RECALC_UNREAD) || hi->gui_item->getprops().is_active())
         {
-            LOG("recalc:" << ck);
+            if (is_file_download_process() || is_file_download_request())
+            {
+                if (!g_app->present_file_transfer_by_historian(historian))
+                    file_download_remove(0);
+            }
 
-            contact_c *c = contacts().find(ck);
-            m_need_recalc_unread.remove_slow(0);
-            if (c) F_NEEDFLASH |= c->recalc_unread();
+            set_unread(hi->calc_unread());
+            flags.clear(F_RECALC_UNREAD);
         }
     }
+}
 
-    if (F_NEEDFLASH && !F_FLASHIP)
+bool application_c::blinking_reason_s::tick()
+{
+    if (flags.is(F_RECALC_UNREAD))
+        do_recalc_unread_now();
+
+    if (!flags.is(F_CONTACT_BLINKING))
+    {
+        if (contact_need_blink())
+        {
+            flags.set(F_CONTACT_BLINKING);
+            nextblink = ts::Time::current() + 300;
+        } else
+            flags.set(F_BLINKING_FLAG); // set it
+    }
+
+    if (flags.is(F_CONTACT_BLINKING))
+    {
+        if ((ts::Time::current() - nextblink) > 0)
+        {
+            nextblink = ts::Time::current() + 300;
+            flags.invert(F_BLINKING_FLAG);
+            flags.set(F_REDRAW);
+        }
+        if (!contact_need_blink())
+            flags.clear(F_CONTACT_BLINKING);
+    }
+
+    if (flags.is(F_REDRAW))
+    {
+        if (contact_c *h = contacts().find(historian))
+            if (h->gui_item)
+                h->gui_item->getengine().redraw();
+        flags.clear(F_REDRAW);
+    }
+    return is_blank();
+}
+
+/*virtual*/ void application_c::app_loop_event()
+{
+    F_NEED_BLINK_ICON = false;
+    for(int i=m_blink_reasons.size()-1;i>=0;--i)
+    {
+        blinking_reason_s &br = m_blink_reasons.get(i);
+        if (br.tick())
+        {
+            m_blink_reasons.remove_fast(i);
+            continue;
+        }
+        F_NEED_BLINK_ICON |= br.notification_icon_need_blink();
+    }
+
+    if (F_NEED_BLINK_ICON && !F_BLINKING_ICON)
         flash_notification_icon();
 
     if (F_SETNOTIFYICON)
@@ -426,6 +526,13 @@ void application_c::set_status(contact_online_state_e cos_, bool manual)
     picture_animated_c::tick();
     m_tasks_executor.tick();
     resend_undelivered_messages();
+
+    if (F_PROTOSORTCHANGED)
+    {
+        F_PROTOSORTCHANGED = false;
+        gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_ACTIVEPROTO_SORT).send();
+    }
+
 }
 
 /*virtual*/ void application_c::app_fix_sleep_value(int &sleep_ms)
@@ -477,7 +584,7 @@ void application_c::set_status(contact_online_state_e cos_, bool manual)
             add_status_items(m);
 
             m.add_separator();
-            m.add(TTT("Exit",117), 0, handlers::m_exit);
+            m.add(loc_text(loc_exit), 0, handlers::m_exit);
             gui_popup_menu_c::show(menu_anchor_s(true, menu_anchor_s::RELPOS_TYPE_3), m, true);
             g_app->set_notification_icon(); // just remove hint
 
@@ -530,7 +637,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
                         ));
                     cfg().profile(storpn);
                 } else
-                    profile_c::error_unique_profile(pn);
+                    profile_c::mb_error_unique_profile(pn);
             } else
             {
                 SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
@@ -570,11 +677,12 @@ bool application_c::b_customize(RID r, GUIPARAM param)
             else
             {
                 prf().load( oldprfn );
-                profile_c::error_unique_profile( wpn );
+                profile_c::mb_error_unique_profile( wpn );
             }
 
             contacts().update_meta();
-            contacts().get_self().reselect(false);
+            contacts().get_self().reselect(true);
+            g_app->recreate_ctls();
 
         }
         static void m_about(const ts::str_c&)
@@ -622,7 +730,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
     return true;
 }
 
-void application_c::summon_main_rect(bool minimize)
+void application_c::load_profile_and_summon_main_rect(bool minimize)
 {
     load_locale(cfg().language());
     if (!load_theme(cfg().theme()))
@@ -653,24 +761,29 @@ void application_c::summon_main_rect(bool minimize)
         ts::find_files(prfsearch, ss, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY);
         if (ss.size())
             profname = ts::fn_get_name(ss.get(0).as_sptr());
-        else
-        {
-            //profname = CONSTASTR("%USER%");
-            //ts::parse_env(profname);
-            //if (profname.find_pos('%') >= 0) profname = CONSTASTR("profile");
-        }
         cfg().profile(profname);
     }
     if (!profname.is_empty())
         if (!prf().load(profile_c::path_by_name(profname)))
         {
-            profile_c::error_unique_profile(profname, true);
-            sys_exit(10);
+            profile_c::mb_error_unique_profile(profname, true);
             return;
         }
 
-    drawcollector dcoll;
-    main = MAKE_ROOT<mainrect_c>(dcoll);
+    if (F_READONLY_MODE)
+    {
+        profile_c::mb_warning_readonly( minimize );
+    } else
+    {
+        summon_main_rect(minimize);
+    }
+
+}
+
+void application_c::summon_main_rect(bool minimize)
+{
+    redraw_collector_s dch;
+    main = MAKE_ROOT<mainrect_c>();
     ts::ivec2 sz = cfg().get<ts::ivec2>(CONSTASTR("main_rect_size"), ts::ivec2(800, 600));
     ts::irect mr( cfg().get<ts::ivec2>(CONSTASTR("main_rect_pos"), ts::wnd_get_center_pos(sz)), sz );
     mr.rb += mr.lt;
@@ -693,8 +806,6 @@ void application_c::summon_main_rect(bool minimize)
             .allow_move_resize()
             .show();
     }
-
-
 }
 
 bool application_c::is_inactive(bool do_incoming_message_stuff)
@@ -767,20 +878,7 @@ bool application_c::b_restart(RID, GUIPARAM)
 
 bool application_c::b_install(RID, GUIPARAM)
 {
-    ts::wstr_c prm(CONSTWSTR("wait ")); prm.append_as_uint( GetCurrentProcessId() );
-
-    SHELLEXECUTEINFOW shExInfo = { 0 };
-    shExInfo.cbSize = sizeof(shExInfo);
-    shExInfo.fMask = 0;
-    shExInfo.hwnd = 0;
-    shExInfo.lpVerb = L"runas";
-    shExInfo.lpFile = ts::get_exe_full_name();
-    shExInfo.lpParameters = prm;
-    shExInfo.lpDirectory = 0;
-    shExInfo.nShow = SW_NORMAL;
-    shExInfo.hInstApp = 0;
-
-    if (ShellExecuteExW(&shExInfo))
+    if (elevate())
     {
         prf().shutdown_aps();
         sys_exit(0);
@@ -798,7 +896,6 @@ ts::str_c application_c::appver()
 {
 #ifdef _DEBUG
     if (zero_version) return ts::str_c(CONSTASTR("0.0.0"));
-#endif // _DEBUG
 
     static ts::sstr_t<-32> fake_version;
     if (fake_version.is_empty())
@@ -812,6 +909,7 @@ ts::str_c application_c::appver()
     }
     if (fake_version.get_length() >= 5)
         return fake_version;
+#endif // _DEBUG
 
     struct verb
     {
@@ -954,12 +1052,11 @@ void application_c::update_ringtone( contact_c *rt, bool play_stop_snd )
     }
 }
 
-bool application_c::present_file_transfer_by_historian(const contact_key_s &historian, bool accept_only_rquest)
+bool application_c::present_file_transfer_by_historian(const contact_key_s &historian)
 {
     for (const file_transfer_s *ftr : m_files)
         if (ftr->historian == historian)
-            if (accept_only_rquest) { if (ftr->file_handle() == nullptr) return true; }
-            else { return true; }
+            return true;
     return false;
 }
 
@@ -1112,9 +1209,17 @@ ts::uint32 application_c::gm_handler(gmsg<ISOGM_DELIVERED>&d)
 
 void application_c::resend_undelivered_messages( const contact_key_s& rcv )
 {
-    for (send_queue_s *q : m_undelivered)
+    for (int qi=0;qi<m_undelivered.size();)
     {
-        if (q->receiver == rcv || rcv.is_empty())
+        send_queue_s *q = m_undelivered.get(qi);
+
+        if (0 == q->queue.size())
+        {
+            m_undelivered.remove_fast(qi);
+            continue;
+        }
+
+        if ((q->receiver == rcv || rcv.is_empty()))
         {
             while ( !rcv.is_empty() || (ts::Time::current() - q->last_try_send_time) > 5000 /* try 2 resend every 5 seconds */ )
             {
@@ -1151,6 +1256,7 @@ void application_c::resend_undelivered_messages( const contact_key_s& rcv )
             if (!rcv.is_empty())
                 break;
         }
+        ++qi;
     }
 }
 
@@ -1225,7 +1331,7 @@ bool application_c::load_theme( const ts::wsptr&thn )
     font_conv_time = &get_font( CONSTASTR("conv_time") );
     contactheight= theme().conf().get_string(CONSTASTR("contactheight")).as_int(55);
     mecontactheight = theme().conf().get_string(CONSTASTR("mecontactheight")).as_int(60);
-    protowidth = theme().conf().get_string(CONSTASTR("protowidth")).as_int(100);
+    minprotowidth = theme().conf().get_string(CONSTASTR("minprotowidth")).as_int(100);
     protoiconsize = theme().conf().get_string(CONSTASTR("protoiconsize")).as_int(10);
 
     emoti().reload();
@@ -1245,7 +1351,7 @@ void preloaded_buttons_s::reload()
     online = th.get_button(CONSTASTR("online"));
     online2 = th.get_button(CONSTASTR("online2"));
     invite = th.get_button(CONSTASTR("invite"));
-    unread = th.get_button(CONSTASTR("unread"));
+    achtung = th.get_button(CONSTASTR("achtung"));
     callb = th.get_button(CONSTASTR("call"));
     fileb = th.get_button(CONSTASTR("file"));
 
@@ -1381,13 +1487,10 @@ void file_transfer_s::kill( file_control_e fctl )
 {
     //DMSG("kill " << utag << fctl << filename_on_disk);
 
-    if (contact_c *h = contacts().find(historian))
-        if (h->gui_item)
-            h->gui_item->getengine().redraw();
-
     if (!upload && !accepted && (fctl == FIC_NONE || fctl == FIC_DISCONNECT))
     {
         // kill without accept - just do nothing
+        g_app->new_blink_reason(historian).file_download_remove(utag);
         g_app->unregister_file_transfer(utag, false);
         return;
     }
@@ -1722,7 +1825,6 @@ void file_transfer_s::upd_message_item(bool force)
 {
     if (!force && !update_item) return;
     update_item = false;
-    //DMSG("upditem " << utag << filename_on_disk);
 
     if (msgitem_utag)
     {
@@ -1736,6 +1838,10 @@ void file_transfer_s::upd_message_item(bool force)
         p.sender = sender;
         p.receiver = contacts().get_self().getkey();
         gmsg<ISOGM_SUMMON_POST>(p, true).send();
+
+        if (!upload)
+            g_app->new_blink_reason(historian).file_download_progress_add(utag);
+
     } else if (contact_c *c = contacts().find(sender))
     {
         gmsg<ISOGM_MESSAGE> msg(c, &contacts().get_self(), upload ? MTA_SEND_FILE : MTA_RECV_FILE);

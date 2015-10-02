@@ -37,7 +37,7 @@ class dialog_setup_network_c;
 template<> struct MAKE_ROOT<dialog_setup_network_c> : public _PROOT(dialog_setup_network_c)
 {
     dialog_protosetup_params_s prms;
-    MAKE_ROOT(drawcollector &dcoll, const dialog_protosetup_params_s &prms) :_PROOT(dialog_setup_network_c)(dcoll), prms(prms) { init(false); }
+    MAKE_ROOT(const dialog_protosetup_params_s &prms) :_PROOT(dialog_setup_network_c)(), prms(prms) { init(false); }
     ~MAKE_ROOT() {}
 };
 
@@ -92,12 +92,13 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
         MASK_PROFILE_COMMON         = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_CHAT           = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_GCHAT          = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_PROFILE_HISTORY        = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_FILES          = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_NETWORKS       = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_APPLICATION_SYSTEM     = SETBIT(NUMGEN_NEXT(ctlm)),
-        MASK_APPLICATION_COMMON     = SETBIT(NUMGEN_NEXT(ctlm)),
-        MASK_APPLICATION_SETSOUND   = SETBIT(NUMGEN_NEXT(ctlm)),
-        MASK_APPLICATION_SOUNDS     = SETBIT(NUMGEN_NEXT(ctlm)),
+        MASK_APPLICATION_SYSTEM     = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_APPLICATION_COMMON     = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_APPLICATION_SETSOUND   = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_APPLICATION_SOUNDS     = SETBIT( NUMGEN_NEXT(ctlm) ),
     };
 
     struct value_watch_s
@@ -238,6 +239,11 @@ private:
 
     int common_opts_orig = 0;
     int common_opts = 0;
+
+    int hist_opts_orig = 0;
+    int hist_opts = 0;
+    
+    int load_history_count = 0;
     int set_away_on_timer_minutes_value = 0;
 
     ts::flags32_s::BITS msgopts_current = 0;
@@ -283,8 +289,10 @@ private:
 
     bool msgopts_handler( RID, GUIPARAM );
     bool commonopts_handler( RID, GUIPARAM );
+    bool histopts_handler( RID, GUIPARAM );
     bool gchatopts_handler( RID, GUIPARAM );
     bool away_minutes_handler(const ts::wstr_c &v);
+    bool load_history_count_handler(const ts::wstr_c &v);
 
     bool ipchandler( ipcr );
     void contextmenuhandler( const ts::str_c& prm );

@@ -453,13 +453,6 @@ template<class T> T SQUARE(const T& value) { return value * value; }
 
 double erf(double x);
 
-INLINE uint32 GetThumbSize(const uint32 maxtexw, const uint32 maxw, const uint32 count)
-{
-    uint32 rez = maxtexw;
-    while(rez * count > maxw) rez >>= 1;
-    return rez;    
-}
-
 #define IEEE_FLT_MANTISSA_BITS	23
 #define IEEE_FLT_EXPONENT_BITS	8
 #define IEEE_FLT_EXPONENT_BIAS	127

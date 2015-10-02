@@ -309,7 +309,10 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8, contact_c *sender, uint64 
             {
                 newtext.append(TTT("Unknown contact request",74));
                 newtext.append(CONSTWSTR("<hr=7,2,1>"));
-                newtext.append(from_utf8(itext_utf8));
+
+                ts::str_c n = itext_utf8;
+                text_adapt_user_input(n);
+                newtext.append(from_utf8(n));
             }
 
             textrect.set_text_only(newtext,false);
@@ -839,6 +842,7 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 
 /*virtual*/ void gui_notice_network_c::created()
 {
+    DMSG( "gui_notice_network_c: " << getrid() );
     __super::created();
 }
 
@@ -848,6 +852,66 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
     return __super::get_height_by_width( width - left_margin );
 }
 
+void gui_notice_network_c::moveup(const ts::str_c&)
+{
+    if (active_protocol_c *me = prf().ap(networkid))
+    {
+        active_protocol_c *other = nullptr;
+        int my_sf = me->sort_factor();
+        int other_sf = 0;
+        prf().iterate_aps( [&](active_protocol_c &ap) {
+            
+            int sf = ap.sort_factor();
+            if (sf < my_sf)
+            {
+                if (other_sf < sf)
+                {
+                    other_sf = sf;
+                    other = &ap;
+                }
+            }
+        } );
+        if (other)
+        {
+            other->set_sortfactor( my_sf );
+            me->set_sortfactor( other_sf );
+        }
+    }
+}
+
+void gui_notice_network_c::movedn(const ts::str_c&)
+{
+    if (active_protocol_c *me = prf().ap(networkid))
+    {
+        active_protocol_c *other = nullptr;
+        int my_sf = me->sort_factor();
+        int other_sf = 0;
+        prf().iterate_aps([&](active_protocol_c &ap) {
+
+            int sf = ap.sort_factor();
+            if (sf > my_sf)
+            {
+                if (other_sf == 0 || other_sf > sf)
+                {
+                    other_sf = sf;
+                    other = &ap;
+                }
+            }
+        });
+        if (other)
+        {
+            other->set_sortfactor(my_sf);
+            me->set_sortfactor(other_sf);
+        }
+    }
+}
+
+int gui_notice_network_c::sortfactor() const
+{
+    if (active_protocol_c *me = prf().ap(networkid))
+        return me->sort_factor();
+    return 0;
+}
 
 /*virtual*/ bool gui_notice_network_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
@@ -931,6 +995,7 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
         break;
     case SQ_MOUSE_OUT:
         {
+            flags.clear(F_RBDN);
             bool prev = flags.is(F_OVERAVATAR);
             flags.clear(F_OVERAVATAR);
             if (prev && popupmenu) flags.set(F_OVERAVATAR);
@@ -977,6 +1042,39 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
             }
             getengine().redraw();
 
+        }
+        break;
+    case SQ_MOUSE_RDOWN:
+        flags.set(F_RBDN);
+        break;
+    case SQ_MOUSE_RUP:
+        if (flags.is(F_RBDN))
+        {
+            int sortfactor = 0, minsortfactor = 0, maxsortfactor = 0;
+            prf().iterate_aps([&](const active_protocol_c &ap) {
+                
+                int sf = ap.sort_factor();
+                if (ap.getid() == networkid)
+                    sortfactor = sf;
+                else if (minsortfactor == 0 || minsortfactor > sf)
+                    minsortfactor = sf;
+                else if (maxsortfactor == 0 || maxsortfactor < sf)
+                    maxsortfactor = sf;
+            
+            });
+
+            bool allow_move_up = minsortfactor < sortfactor;
+            bool allow_move_down = maxsortfactor > sortfactor;
+
+            if (allow_move_up || allow_move_down)
+            {
+                menu_c m;
+                if (allow_move_up) m.add(TTT("Move up",77), 0, DELEGATE(this, moveup));
+                if (allow_move_down) m.add(TTT("Move down",78), 0, DELEGATE(this, movedn));
+                gui_popup_menu_c::show(menu_anchor_s(true), m);
+            }
+
+            flags.clear(F_RBDN);
         }
         break;
     case SQ_RECT_CHANGED:
@@ -1028,6 +1126,8 @@ bool gui_notice_network_c::flash_pereflash(RID, GUIPARAM)
 
 gui_noticelist_c::~gui_noticelist_c()
 {
+    if (gui)
+        gui->delete_event( DELEGATE(this, resort_children) );
 }
 
 /*virtual*/ ts::ivec2 gui_noticelist_c::get_min_size() const
@@ -1048,6 +1148,12 @@ gui_noticelist_c::~gui_noticelist_c()
         int w = width_for_children();
         for (rectengine_c *e : getengine())
             if (e) { sz.y += e->getrect().get_height_by_width(w); }
+
+        int parh = HOLD(getparent())().getprops().size().y / 2;
+        if (parh != 0)
+            if (sz.y > parh)
+                sz.y = parh;
+
     } else
         sz.y = get_min_size().y;
     return sz;
@@ -1060,13 +1166,41 @@ gui_noticelist_c::~gui_noticelist_c()
     __super::created();
 }
 
+/*virtual*/ void gui_noticelist_c::children_repos()
+{
+    bool sb = is_sb_visible();
+    __super::children_repos();
+    if (!sb && is_sb_visible())
+        scroll_to_begin();
+}
+
+bool gui_noticelist_c::resort_children(RID, GUIPARAM)
+{
+    auto swap_them = [](rectengine_c *e1, rectengine_c *e2)->bool
+    {
+        if (e1 == nullptr || e2 == nullptr) return false;
+        gui_notice_network_c * n1 = dynamic_cast<gui_notice_network_c *>(&e1->getrect());
+        if (n1 == nullptr) return false;
+        gui_notice_network_c * n2 = dynamic_cast<gui_notice_network_c *>(&e2->getrect());
+        if (n2 == nullptr) return false;
+
+        int sf1 = n1->sortfactor();
+        int sf2 = n2->sortfactor();
+
+        return sf1 > sf2;
+    };
+
+    if (getengine().children_sort((rectengine_c::SWAP_TESTER)swap_them))
+        gui->repos_children(this);
+    return true;
+}
+
 /*virtual*/ bool gui_noticelist_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    switch (qp)
+    if (SQ_CHILD_CREATED == qp && rid == getrid())
     {
-    case SQ_VISIBILITY_CHANGED:
-        getparent().call_children_repos();
-        break;
+        if (gui_notice_network_c *nn = dynamic_cast<gui_notice_network_c *>(&HOLD(data.rect.id)()))
+            DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, resort_children), 0 );
     }
 
     return __super::sq_evt(qp,rid,data);
@@ -1086,6 +1220,13 @@ void gui_noticelist_c::clear_list(bool hide)
     for (rectengine_c *e : getengine())
         if (e) TSDEL(e);
     getengine().redraw();
+}
+
+ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
+{
+    if (ch.pass == 0 && ch.sp == PP_ACTIVEPROTO_SORT)
+        resort_children(RID(),nullptr);
+    return 0;
 }
 
 static bool self_selected = false;
@@ -1172,7 +1313,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &p)
                 nrej = &create_notice(NOTICE_FRIEND_REQUEST_SEND_OR_REJECT);
 
             nrej->setup(sender);
-            children_repos();
+            gui->repos_children(this);
         }
 
     }
@@ -1182,12 +1323,17 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &p)
 
 void gui_noticelist_c::refresh()
 {
-    children_repos();
-
+    gui->repos_children(this);
+    bool vis = false;
     for (rectengine_c *e : getengine())
-        if (e) return;
+        if (e) 
+        {
+            vis = true;
+            break;
+        }
 
-    MODIFY(*this).visible(false);
+    MODIFY(*this).visible(vis);
+    gui->repos_children(&HOLD(getparent()).as<gui_group_c>());
 }
 
 ts::uint32 gui_noticelist_c::gm_handler(gmsg<GM_UI_EVENT> & e)
@@ -1216,15 +1362,30 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                 not_at_end();
                 gui_notice_c &nn = create_notice(NOTICE_NEWVERSION);
                 nn.setup( cfg().autoupdate_newver() );
-            
             }
 
+            ts::tmp_tbuf_t<ts::ivec2> splist;
+
             for (auto &row : prf().get_table_active_protocol())
+            {
+                ts::ivec2 &ap = splist.add();
+                ap.x = row.id;
+                ap.y = row.other.sort_factor;
+            }
+
+            auto srt = []( ts::ivec2 *s1, ts::ivec2 *s2 )
+            {
+                return s1->y < s2->y;
+            };
+
+            splist.tsort<ts::ivec2>( srt );
+
+            for(const ts::ivec2 &s : splist)
             {
                 //if (0 != (row.other.options & active_protocol_data_s::O_SUSPENDED))
                 //    continue;
 
-                ts::str_c pubid = contacts().find_pubid(row.id);
+                ts::str_c pubid = contacts().find_pubid(s.x);
                 if (!pubid.is_empty())
                 {
                     not_at_end();
@@ -1346,10 +1507,6 @@ void gui_message_item_c::rebuild_text()
     textrect.set_text_only(newtext, false);
 }
 
-
-static time_t readtime; // ugly static... but it is fastest
-static contact_c * readtime_historian = nullptr;
-
 void gui_message_item_c::ctx_menu_golink(const ts::str_c & lnk)
 {
     open_link(from_utf8(lnk));
@@ -1394,14 +1551,14 @@ void gui_message_item_c::ctx_menu_delmessage(const ts::str_c &mutag)
 
             TSDEL(this);
         }
-        parent.call_children_repos();
+        gui->repos_children(&HOLD(parent).as<gui_group_c>());
     }
 }
 
 bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
 {
-    ts::ivec2 *pt = (ts::ivec2 *)gui->lock_temp_buf(as_int(p));
-    if (textrect.is_dirty_glyphs())
+    ts::ivec2 *pt = gui->temp_restore<ts::ivec2>(as_int(p));
+    if (textrect.is_invalid_glyphs())
     {
         if (pt)
         {
@@ -1417,6 +1574,8 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
 
     return true;
 }
+
+static gui_messagelist_c *current_draw_list = nullptr;
 
 /*virtual*/ bool gui_message_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
@@ -1442,14 +1601,6 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
     {
     case SQ_DRAW:
         {
-            if (historian && readtime_historian == historian)
-                for (const record &r : records)
-                    if (r.time >= readtime)
-                    {
-                        LOG( "update readtime" << historian->getkey() << ASTIME(readtime) << ASTIME(r.time) );
-                        readtime = r.time+1; // refresh time of items we see
-                    }
-
             switch (subtype)
             {
             case gui_message_item_c::ST_RECV_FILE:
@@ -1556,9 +1707,9 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                 gui_control_c::sq_evt(qp, rid, data);
                 if (m_engine)
                 {
-                    //button_desc_s::states onlinestate = ((int)this & 16) ? button_desc_s::NORMAL : button_desc_s::DISABLED;
-                    //m_engine->draw(ca.rb - online->rects[onlinestate].size(), online->src, online->rects[onlinestate], online->is_alphablend(onlinestate));
-                    //m_engine->draw(ts::ivec2(ca.lt.x, ca.rb.y - icon->size.y), icon->src, icon->size, icon->is_alphablend(button_desc_s::NORMAL));
+                    if (historian && current_draw_list)
+                        for (const record &r : records)
+                            current_draw_list->update_last_seen_message_time(r.time);
 
                     ts::irect ca = get_client_area();
                     if (ca.size() >> 0)
@@ -1670,9 +1821,7 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
 
             if (popupmenu)
             {
-                int b = gui->get_temp_buf(1.0, sizeof(ts::ivec2));
-                *(ts::ivec2 *)gui->lock_temp_buf(b) = to_local(data.mouse.screenpos);
-                try_select_link(RID(), as_param(b));
+                try_select_link(RID(), as_param(gui->temp_store<ts::ivec2>( to_local(data.mouse.screenpos) )));
             }
 
             return true;
@@ -1752,7 +1901,7 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
                 image_loader_c &ldr = get_customdata_obj<image_loader_c>();
                 if (const picture_c *p = ldr.get_picture())
                 {
-                    ts::irect r( ldr.local_p, ldr.local_p + p->framesize() + ts::ivec2(8) );
+                    ts::irect r( ldr.local_p, ldr.local_p + p->framerect().size() + ts::ivec2(8) );
                     bool prev = flags.is(F_OVERIMAGE);
                     if (prev != flags.init(F_OVERIMAGE, r.inside(data.detectarea.pos)))
                         getengine().redraw();
@@ -1790,27 +1939,6 @@ bool gui_message_item_c::try_select_link(RID, GUIPARAM p)
     return __super::sq_evt(qp, rid, data);
 }
 
-template<typename SCORE> void set_date(ts::str_t<ts::wchar, SCORE> & tstr, const ts::wstr_c &fmt, const tm &tt)
-{
-    SYSTEMTIME st;
-    st.wYear = (ts::uint16)(tt.tm_year + 1900);
-    st.wMonth = (ts::uint16)(tt.tm_mon + 1);
-    st.wDayOfWeek = (ts::uint16)tt.tm_wday;
-    st.wDay = (ts::uint16)tt.tm_mday;
-    st.wHour = (ts::uint16)tt.tm_hour;
-    st.wMinute = (ts::uint16)tt.tm_min;
-    st.wSecond = (ts::uint16)tt.tm_sec;
-    st.wMilliseconds = 0;
-
-    if (tstr.get_capacity() > 32)
-        tstr.set_length( tstr.get_capacity() - 1 );
-    else
-        tstr.set_length( 64 );
-    GetDateFormatW(LOCALE_USER_DEFAULT, 0, &st, fmt, tstr.str(), tstr.get_capacity() - 1);
-    tstr.set_length();
-}
-
-
 void gui_message_item_c::init_date_separator( const tm &tmtm )
 {
     ASSERT(MTA_DATE_SEPARATOR == mt);
@@ -1819,7 +1947,7 @@ void gui_message_item_c::init_date_separator( const tm &tmtm )
     flags.set(F_DIRTY_HEIGHT_CACHE);
 
     ts::swstr_t<-128> tstr;
-    set_date(tstr, from_utf8(prf().date_sep_template()), tmtm);
+    text_set_date(tstr, from_utf8(prf().date_sep_template()), tmtm);
 
     ts::wstr_c newtext( CONSTWSTR("<p=c>") );
     newtext.append(tstr);
@@ -1918,7 +2046,7 @@ bool gui_message_item_c::kill_self(RID, GUIPARAM)
     RID par = getparent();
     ASSERT( get_mt() == MTA_TYPING );
     TSDEL(this);
-    par.call_children_repos();
+    gui->repos_children(&HOLD(par).as<gui_group_c>());
     return true;
 }
 bool gui_message_item_c::animate_typing(RID, GUIPARAM)
@@ -1944,7 +2072,7 @@ ts::uint16 gui_message_item_c::record::append( ts::wstr_c &t, ts::wstr_c &pret, 
     _localtime64_s(&tt, &time);
     if ( prf().get_options().is(MSGOP_SHOW_DATE) )
     {
-        set_date(tstr,from_utf8(prf().date_msg_template()),tt);
+        text_set_date(tstr,from_utf8(prf().date_msg_template()),tt);
         tstr.append_char(' ');
     }
     tstr.append_as_uint(tt.tm_hour);
@@ -1989,45 +2117,13 @@ static int prepare_link(ts::str_c &message, const ts::ivec2 &lrange, int n)
     return lrange.r1 + inst.get_length() * 2;
 }
 
-
-bool find_link( ts::str_c &message, int from, ts::ivec2 & rslt )
-{
-    int i = message.find_pos(from, CONSTASTR("http://"));
-    if (i < 0) i = message.find_pos(from, CONSTASTR("https://"));
-    if (i < 0) i = message.find_pos(from, CONSTASTR("ftp://"));
-    if (i < 0)
-    {
-        int j = message.find_pos(from, CONSTASTR("www."));
-        if (j == 0 || (j > 0 && message.get_char(j-1) == ' '))
-            i = j;
-    }
-
-    if (i >= 0)
-    {
-        int cnt = message.get_length();
-        int j = i;
-        for (; j < cnt; ++j)
-        {
-            ts::wchar c = message.get_char(j);
-            if (ts::CHARz_find(L" \\<>\r\n\t", c) >= 0) break;
-        }
-
-        rslt.r0 = i;
-        rslt.r1 = j;
-        return true;
-    }
-
-    return false;
-}
-
-
 static void parse_links(ts::str_c &message, bool reset_n)
 {
     static int n = 0;
     if (reset_n) n = 0;
 
     ts::ivec2 linkinds;
-    for(int i = 0; find_link(message, i, linkinds) ;)
+    for(int i = 0; text_find_link(message, i, linkinds) ;)
         i = prepare_link(message, linkinds, n++);
 }
 
@@ -2041,7 +2137,7 @@ ts::pwstr_c gui_message_item_c::get_message_under_cursor(const ts::ivec2 &localp
 
 ts::ivec2 gui_message_item_c::get_message_pos_under_cursor(const ts::ivec2 &localpos, uint64 &mutag) const
 {
-    if (textrect.is_dirty_glyphs()) return ts::ivec2(-1);
+    if (textrect.is_invalid_glyphs()) return ts::ivec2(-1);
     ts::irect clar = get_client_area();
     if (clar.inside(localpos))
     {
@@ -2247,7 +2343,7 @@ bool gui_message_item_c::message_prefix(ts::wstr_c &newtext, time_t posttime)
     if (prf().get_options().is(MSGOP_SHOW_DATE))
     {
         ts::swstr_t<-128> tstr;
-        set_date(tstr, from_utf8(prf().date_msg_template()), tt);
+        text_set_date(tstr, from_utf8(prf().date_msg_template()), tt);
         newtext.append(tstr).append_char(' ');
     }
 
@@ -2656,7 +2752,7 @@ void gui_message_item_c::update_text(int for_width)
                     {
                         // normal picture size ajust
                         pic->fit_to_width(rectw - (thr ? thr->clborder_x() : 0));
-                        picsz = pic->framesize();
+                        picsz = pic->framerect().size();
                     } else
                     {
                         picsz = pic->framesize_by_width(rectw - (thr ? thr->clborder_x() : 0));
@@ -2710,7 +2806,7 @@ void gui_message_item_c::update_text(int for_width)
                 if (newh == oldh)
                     getengine().redraw();
                 else
-                    getparent().call_children_repos();
+                    gui->repos_children(&HOLD(getparent()).as<gui_group_c>());
             }
         }
         break;
@@ -2753,7 +2849,7 @@ void gui_message_item_c::update_text(int for_width)
             if (newh == oldh)
                 getengine().redraw();
             else
-                getparent().call_children_repos();
+                gui->repos_children(&HOLD(getparent()).as<gui_group_c>());
         }
         break;
         default:
@@ -2828,7 +2924,7 @@ update_size_mode:
                     h += sz.y;
                 }
 
-                if (get_customdata())
+                if (get_customdata() && ww)
                 {
                     ts::wstr_c storetext = textrect.get_text();
                     update_text(ww); // do not resize picture now, just generate text with correct-sized image
@@ -2907,26 +3003,13 @@ gui_messagelist_c::~gui_messagelist_c()
 {
     if (qp == SQ_DRAW && rid == getrid())
     {
-        time_t rt = historian ? historian->get_readtime() : 0;
-        readtime = rt;
-        readtime_historian = historian;
-        LOG("prepare readtime" << (readtime_historian ? readtime_historian->getkey() : contact_key_s()) << ASTIME(readtime));
+        struct indraw
+        {
+            indraw(gui_messagelist_c *ml) { ASSERT(current_draw_list == nullptr); current_draw_list = ml; }
+            ~indraw() { ASSERT(current_draw_list); current_draw_list = nullptr; }
+        } indraw_(this);
 
         bool r = __super::sq_evt(qp, rid, data);
-        if (readtime > rt && historian)
-        {
-            LOG("updated" << ASTIME(readtime) << ASTIME(rt));
-
-            if (!g_app->is_inactive(false) && historian->gui_item && historian->gui_item->getprops().is_active())
-            {
-                LOG("set readtime" << historian->getkey() << ASTIME(readtime));
-
-                historian->set_readtime(readtime);
-                prf().dirtycontact(historian->getkey());
-                g_app->need_recalc_unread(historian->getkey());
-            }
-        }
-        readtime_historian = nullptr;
 
         if (historian && !historian->keep_history())
             g_app->buttons().nokeeph->draw( m_engine.get(), button_desc_s::NORMAL, ts::irect(10,10,100,100), button_desc_s::ALEFT | button_desc_s::ATOP );
@@ -3089,13 +3172,14 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_MESSAGE> &p) // show message
 
     if (at_and) scroll_to_end();
 
-    children_repos();
+    gui->repos_children(this);
 
     return 0;
 }
 
 void gui_messagelist_c::clear_list()
 {
+    last_seen_post_time = 0;
     getengine().trunc_children(0);
 }
 
@@ -3142,6 +3226,21 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &p)
     return 0;
 }
 
+ts::uint32 gui_messagelist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
+{
+    if (historian)
+    {
+        if (last_seen_post_time > historian->get_readtime())
+        {
+            historian->set_readtime(last_seen_post_time);
+            prf().dirtycontact(historian->getkey());
+        }
+
+        g_app->update_blink_reason(historian->getkey());
+    }
+    return 0;
+}
+
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<GM_DROPFILES> &p)
 {
     if (historian && !historian->getkey().is_self() && p.root == getrootrid())
@@ -3160,7 +3259,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_DELIVERED> &p)
             if ( mi.delivered(p.utag) )
             {
                 mi.getengine().redraw();
-                children_repos();
+                gui->repos_children(this);
                 break;
             }
         }
@@ -3204,7 +3303,6 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
     {
         case MTA_FRIEND_REQUEST:
             gmsg<ISOGM_NOTICE>(historian, sender, NOTICE_FRIEND_REQUEST_RECV, p.post.message_utf8).send();
-            sender->friend_request();
             break;
         case MTA_INCOMING_CALL:
             if (!historian->get_aaac())
@@ -3240,6 +3338,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     clear_list();
 
     historian = p.contact;
+    last_seen_post_time = historian ? historian->get_readtime() : 0;
 
     if (historian && !historian->keep_history())
         gui->register_hintzone(this);
@@ -3257,7 +3356,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     time_t before = now();
     if (historian->history_size()) before = historian->get_history(0).time;
 
-    int min_hist_size = prf().min_history();
+    int min_hist_size = prf().min_history_load();
     int cur_hist_size = p.contact->history_size();
 
     int needload = min_hist_size - cur_hist_size;
@@ -3278,7 +3377,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     if (!historian->getkey().is_self())
     {
         int not_yet_loaded = prf().calc_history_before(historian->getkey(), before);
-        needload = ts::tmax(10, prf().min_history());
+        needload = ts::tmax(10, prf().min_history_load());
         if ( not_yet_loaded )
         {
             if ((not_yet_loaded - needload) < 10) needload = not_yet_loaded;
@@ -3298,13 +3397,13 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     if (p.scrollend)
     {
         if (first_unread)
-            scroll_to(first_unread, true, false);
+            scroll_to(first_unread, true);
         else
             scroll_to_end();
     } else
         scroll_to_begin();
         
-    children_repos();
+    gui->repos_children(this);
 
     return 0;
 }
@@ -3462,8 +3561,7 @@ bool gui_message_editor_c::show_smile_selector(RID, GUIPARAM)
 {
     ts::irect smilebuttonrect = getengine().get_child(0)->getrect().getprops().screenrect();
 
-    drawcollector dcoll;
-    RID r = MAKE_ROOT<dialog_smileselector_c>(dcoll, smilebuttonrect, getrid());
+    RID r = MAKE_ROOT<dialog_smileselector_c>(smilebuttonrect, getrid());
     ts::ivec2 size = HOLD(r)().get_min_size();
     ts::ivec2 pos = calc_smls_position( smilebuttonrect, size );
 
@@ -3650,6 +3748,12 @@ void gui_conversation_c::created()
     message_editor = messagearea->message_editor->getrid();
     getrid().call_restore_signal();
     messagearea->getrid().call_restore_signal();
+
+    DMSG("CONVERSATION RID: " << getrid());
+    DMSG("MSGLIST RID: " << msglist->getrid());
+    DMSG("MESSAGEAREA RID: " << messagearea->getrid());
+    DMSG("NOTICELIST RID: " << noticelist->getrid());
+
     return __super::created();
 }
 
@@ -3688,7 +3792,7 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &c)
         if (c.contact->getkey().is_group())
         {
             caption->update_text();
-            hide_show_messageeditor();
+            g_app->hide_show_messageeditor();
         }
         return 0;
     }
@@ -3697,19 +3801,23 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &c)
     if (caption->getcontact().subpresent( c.contact->getkey() ))
         caption->update_text();
 
-    DEFERRED_EXECUTION_BLOCK_BEGIN(0)
-        if (gui_contact_item_c *ci = gui->find_rect<gui_contact_item_c>(param))
-            ci->update_buttons();
-    DEFERRED_EXECUTION_BLOCK_END(caption.get())
-
-    hide_show_messageeditor();
+    g_app->update_buttons_head();
+    g_app->hide_show_messageeditor();
 
     return 0;
 }
 
-ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_UPDATE_BUTTONS> &c)
+ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_DO_POSTEFFECT> &f)
 {
-    messagearea->update_buttons();
+    if (f.bits & application_c::PEF_UPDATE_BUTTONS_MSG)
+        messagearea->update_buttons();
+
+    if (f.bits & application_c::PEF_UPDATE_BUTTONS_HEAD)
+        caption->update_buttons();
+
+    if (f.bits & application_c::PEF_SHOW_HIDE_EDITOR)
+        hide_show_messageeditor();
+
     return 0;
 }
 
@@ -3838,7 +3946,7 @@ ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> &c )
     if (!c.contact)
     {
         caption->resetcontact();
-        hide_show_messageeditor();
+        g_app->hide_show_messageeditor();
         return 0;
     }
 
@@ -3851,7 +3959,7 @@ ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> &c )
             cc->call_inactive( cc != c.contact );
     }
 
-    hide_show_messageeditor();
+    g_app->hide_show_messageeditor();
 
     if (c.contact->getkey().is_group())
     {
@@ -3886,6 +3994,10 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
     if (ch.sp == PP_EMOJISET && caption->contacted())
         caption->getcontact().reselect(true);
 
+    if (ch.pass == 0 && ch.sp == PP_ACTIVEPROTO_SORT)
+        caption->clearprotocols();
+
+
     return 0;
 }
 
@@ -3895,8 +4007,8 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&p)
     {
         if (caption->contacted()) caption->getcontact().reselect(true);
         caption->update_text();
-        caption->update_buttons();
-        DEFERRED_UNIQUE_CALL( 0.3, DELEGATE( this, hide_show_messageeditor ), nullptr );
+        g_app->update_buttons_head();
+        g_app->hide_show_messageeditor();
     }
 
     return 0;

@@ -58,6 +58,7 @@ protected:
     GM_RECEIVER(gui_notice_c, ISOGM_V_UPDATE_CONTACT);
 
     static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE = FLAGS_FREEBITSTART_LABEL << 0;
+    static const ts::flags32_s::BITS F_FREEBITSTART_NOTICE = FLAGS_FREEBITSTART_LABEL << 1;
 
     mutable ts::ivec2 height_cache[2]; // size of array -> num of cached widths
     mutable int next_cache_write_index = 0;
@@ -121,10 +122,18 @@ class gui_notice_network_c : public gui_notice_c
     bool resetup(RID, GUIPARAM);
     bool flash_pereflash(RID, GUIPARAM);
 
-    static const ts::flags32_s::BITS  F_OVERAVATAR = FLAGS_FREEBITSTART_LABEL << 0; // mouse cursor above avatar
+    static const ts::flags32_s::BITS  F_OVERAVATAR  = F_FREEBITSTART_NOTICE << 0; // mouse cursor above avatar
+    static const ts::flags32_s::BITS  F_RBDN        = F_FREEBITSTART_NOTICE << 1;
+
+    FREE_BIT_START_CHECK( F_FREEBITSTART_NOTICE, 1 );
+
+    void moveup(const ts::str_c&);
+    void movedn(const ts::str_c&);
 
 public:
     void flash();
+
+    int sortfactor() const;
 
     gui_notice_network_c(MAKE_CHILD<gui_notice_network_c> &data):gui_notice_c(data) {}
     /*virtual*/ ~gui_notice_network_c();
@@ -144,11 +153,13 @@ class gui_noticelist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_noticelist_c, ISOGM_V_UPDATE_CONTACT);
     GM_RECEIVER(gui_noticelist_c, ISOGM_NOTICE);
     GM_RECEIVER(gui_noticelist_c, GM_UI_EVENT);
+    GM_RECEIVER(gui_noticelist_c, ISOGM_CHANGED_SETTINGS);
 
     ts::shared_ptr<contact_c> owner;
 
     void clear_list(bool hide = true);
     gui_notice_c &create_notice(notice_e n);
+    bool resort_children(RID, GUIPARAM);
 
 public:
     gui_noticelist_c(initial_rect_data_s &data) :gui_vscrollgroup_c(data) {}
@@ -159,6 +170,7 @@ public:
     /*virtual*/ size_policy_e size_policy() const override {return SP_NORMAL_MAX;}
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+    /*virtual*/ void children_repos() override;
 
     contact_c *get_owner() {return owner;}
 
@@ -340,11 +352,13 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_messagelist_c, ISOGM_PROTO_LOADED);
     GM_RECEIVER(gui_messagelist_c, ISOGM_TYPING);
     GM_RECEIVER(gui_messagelist_c, GM_DROPFILES);
+    GM_RECEIVER(gui_messagelist_c, GM_HEARTBEAT);
     
     SIMPLE_SYSTEM_EVENT_RECEIVER(gui_messagelist_c, SEV_ACTIVE_STATE);
 
     //static const ts::flags32_s::BITS F_OVER_NOKEEPH = F_VSCROLLFREEBITSTART << 0;
 
+    time_t last_seen_post_time = 0;
     tm last_post_time;
     ts::shared_ptr<contact_c> historian;
     ts::array_safe_t< gui_message_item_c, 1 > typing;
@@ -360,6 +374,11 @@ public:
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
+    void update_last_seen_message_time(time_t t)
+    {
+        if (t >= last_seen_post_time)
+            last_seen_post_time = t + 1; // refresh time of items we see
+    }
 };
 
 class gui_message_editor_c : public gui_textedit_c
@@ -439,7 +458,7 @@ class gui_conversation_c : public gui_vgroup_c, public sound_capture_handler_c
     GM_RECEIVER(gui_conversation_c, ISOGM_AV_COUNT);
     GM_RECEIVER(gui_conversation_c, ISOGM_CALL_STOPED);
     GM_RECEIVER(gui_conversation_c, ISOGM_PROFILE_TABLE_SAVED);
-    GM_RECEIVER(gui_conversation_c, ISOGM_UPDATE_BUTTONS);
+    GM_RECEIVER(gui_conversation_c, ISOGM_DO_POSTEFFECT);
     GM_RECEIVER(gui_conversation_c, GM_DRAGNDROP );
 
     ts::tbuf_t<s3::Format> avformats;

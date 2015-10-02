@@ -9,6 +9,7 @@
 #define FNO_FULLPATH  16    // build full path according to current directory
 #define FNO_TRIMLASTSLASH 32
 #define FNO_APPENDSLASH 64
+#define FNO_MAKECORRECTNAME 128 // process only name - replace all incorrect filename symbols to _ (underscore)
 #define FNO_SIMPLIFY (FNO_NORMALIZE|FNO_FULLPATH|FNO_LOWERCASEAUTO|FNO_REMOVECRAP)
 #define FNO_SIMPLIFY_NOLOWERCASE (FNO_NORMALIZE|FNO_FULLPATH|FNO_REMOVECRAP)
 
@@ -51,10 +52,28 @@ bool    TSCALL dir_present(const wstr_c &path);
 bool TSCALL is_file_exists(const wsptr &fname);
 bool TSCALL is_file_exists(const wsptr &iroot, const wsptr &fname);
 
+struct extension_s
+{
+    ts::wstr_c ext;
+    ts::wstr_c desc;
+};
+struct extensions_s
+{
+    extensions_s():exts(nullptr, 0) {}
+    extensions_s(const extension_s *e, int cnt):exts(e,cnt) {}
+    array_wrapper_c<const extension_s> exts;
+    aint index = -1;
+    const wchar *defext() const
+    {
+        if (index < 0 || index >= exts.size()) return nullptr;
+        return (exts.begin() + index)->ext.cstr();
+    }
+};
+
 wstr_c   TSCALL get_load_filename_dialog(const wsptr &iroot, const wsptr &name, const wsptr &filt, const wchar *defext, const wchar *title);
 bool    TSCALL get_load_filename_dialog(wstrings_c &files, const wsptr &iroot, const wsptr& name, const wsptr &filt, const wchar *defext, const wchar *title);
 wstr_c   TSCALL get_save_directory_dialog(const wsptr &root, const wsptr &title, const wsptr &selectpath = wsptr(), bool nonewfolder = false);
-wstr_c   TSCALL get_save_filename_dialog(const wsptr &iroot, const wsptr &name, const wsptr &filt, const wchar *defext, const wchar *title);
+wstr_c   TSCALL get_save_filename_dialog(const wsptr &iroot, const wsptr &name, extensions_s &exts, const wchar *title);
 
 bool    TSCALL find_files(const wsptr &wildcard, wstrings_c &files, const DWORD dwFileAttributes, const DWORD dwSkipAttributes = 0, bool full_names = false);
 

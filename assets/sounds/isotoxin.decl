@@ -1,0 +1,15 @@
+// sound_tag=filename (path relative to this decl file)
+// sound system supports wav, ogg, flac
+
+presetname=Isotoxin
+
+call_accept=call_accept.ogg
+call_cancel=call_cancel.ogg
+calltone=calltone.ogg
+hangup=hangup.ogg
+incoming_file=incoming_file.ogg
+incoming_message=incoming_message.ogg
+ringtone=ringtone.ogg
+ringtone2=ringtone2.ogg
+start_recv_file=start_recv_file.ogg
+new_version=new_version.ogg

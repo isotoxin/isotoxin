@@ -330,6 +330,34 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
     return 0;
 }
 
+bool dialog_settings_c::histopts_handler(RID, GUIPARAM p)
+{
+    int ip = as_int(p);
+    if (ip < 0)
+    {
+        INITFLAG(hist_opts, 2, ip == -1);
+        ctlenable(CONSTASTR("loadcount"), ip == -2);
+    } else
+        hist_opts = (ip & ~2) | (hist_opts & 2);
+
+    mod();
+    return true;
+}
+
+
+bool dialog_settings_c::load_history_count_handler(const ts::wstr_c &v)
+{
+    load_history_count = v.as_int();
+    if (load_history_count < 10)
+    {
+        load_history_count = 10;
+        set_edit_value(CONSTASTR("loadcount"), CONSTWSTR("10"));
+    }
+    mod();
+    return true;
+}
+
+
 bool dialog_settings_c::commonopts_handler( RID, GUIPARAM p )
 {
     common_opts = as_int(p);
@@ -427,9 +455,14 @@ void dialog_settings_c::mod()
         if (0 != (msgopts_current & UIOPT_PROTOICONS)) common_opts_orig |= 2;
         if (0 != (msgopts_current & UIOPT_AWAYONSCRSAVER)) common_opts_orig |= 4;
         if (set_away_on_timer_minutes_value > 0) common_opts_orig |= 8;
-
         PREPARE( common_opts, common_opts_orig );
 
+        hist_opts_orig = 0;
+        if (0 != (msgopts_current & MSGOP_KEEP_HISTORY)) hist_opts_orig |= 1;
+        if (0 != (msgopts_current & MSGOP_LOAD_WHOLE_HISTORY)) hist_opts_orig |= 2;
+        PREPARE(hist_opts, hist_opts_orig);
+
+        PREPARE(load_history_count, prf().min_history());
 
         PREPARE( mute_mic_on_gchat_invite, 0 != (msgopts_current & GCHOPT_MUTE_MIC_ON_INVITE) );
         PREPARE( mute_speaker_on_gchat_invite, 0 != (msgopts_current & GCHOPT_MUTE_SPEAKER_ON_INVITE) );
@@ -486,6 +519,7 @@ void dialog_settings_c::mod()
             .add(TTT("General",32), 0, TABSELMI(MASK_PROFILE_COMMON) )
             .add(TTT("Chat",109), 0, TABSELMI(MASK_PROFILE_CHAT) )
             .add(TTT("Group chat",305), 0, TABSELMI(MASK_PROFILE_GCHAT) )
+            .add(TTT("History",327), 0, TABSELMI(MASK_PROFILE_HISTORY) )
             .add(TTT("File receive",236), 0, TABSELMI(MASK_PROFILE_FILES) )
             .add(TTT("Networks",33), 0, TABSELMI(MASK_PROFILE_NETWORKS) );
     }
@@ -587,7 +621,6 @@ void dialog_settings_c::mod()
     dm().hgroup(TTT("Presets",298));
     dm().combik(HGROUP_MEMBER).setmenu(get_list_avaialble_sound_presets()).setname(CONSTASTR("availablepresets"));
     dm().button(HGROUP_MEMBER, TTT("Apply preset",299), DELEGATE(this, applysoundpreset)).width(250).height(25).setname(CONSTASTR("applypreset"));
-    dm().vspace();
 
     ts::ivec2 bsz(20);
     if (const button_desc_s *bdesc = gui->theme().get_button(CONSTASTR("play")))
@@ -660,7 +693,6 @@ void dialog_settings_c::mod()
                     menu_c().add(t_showdate, 0, MENUHANDLER(), ts::amake<int>( MSGOP_SHOW_DATE ))
                             .add(t_showdatesep, 0, MENUHANDLER(), ts::amake<int>( MSGOP_SHOW_DATE_SEPARATOR ))
                             .add(TTT("Show protocol name",173), 0, MENUHANDLER(), ts::amake<int>( MSGOP_SHOW_PROTOCOL_NAME ))
-                            .add(TTT("Keep message history",222), 0, MENUHANDLER(), ts::amake<int>( MSGOP_KEEP_HISTORY ))
                     );
 
         dm().vspace();
@@ -680,6 +712,26 @@ void dialog_settings_c::mod()
             menu_c().add(TTT("Mute microphone on audio group chat invite",307), 0, MENUHANDLER(), CONSTASTR("1"))
                     .add(TTT("Mute speakers on audio group chat invite",308), 0, MENUHANDLER(), CONSTASTR("2"))
             );
+
+        dm << MASK_PROFILE_HISTORY; //____________________________________________________________________________________________________//
+
+        dm().page_header(TTT("Message log settings",328));
+        dm().vspace(10);
+
+        dm().checkb(ts::wstr_c(), DELEGATE(this, histopts_handler), hist_opts).setmenu(
+            menu_c().add(TTT("Keep message history", 222), 0, MENUHANDLER(), CONSTASTR("1"))
+            );
+
+        ctl.clear();
+        dm().textfield(ts::wstr_c(), ts::wmake(load_history_count), DELEGATE(this, load_history_count_handler)).setname(CONSTASTR("loadcount")).width(50).subctl(textrectid++, ctl);
+        ts::wstr_c t_loadcount = TTT("...load $ messages",330) / ctl;
+        if (t_loadcount.find_pos(ctl) < 0) t_loadcount.append_char(' ').append(ctl);
+
+        dm().vspace();
+        dm().radio(TTT("On select contact...",331), DELEGATE(this, histopts_handler), (hist_opts & 2) ? -1 : -2).setmenu(
+            menu_c()
+            .add(TTT("...load whole history", 329), 0, MENUHANDLER(), CONSTASTR("-1"))
+            .add(t_loadcount, 0, MENUHANDLER(), CONSTASTR("-2")) );
 
 
         dm << MASK_PROFILE_FILES; //____________________________________________________________________________________________________//
@@ -707,7 +759,6 @@ void dialog_settings_c::mod()
         dm().hgroup(TTT("Available networks",53));
         dm().combik(HGROUP_MEMBER).setmenu(get_list_avaialble_networks()).setname(CONSTASTR("availablenets"));
         dm().button(HGROUP_MEMBER, TTT("Add network connection",58), DELEGATE(this, addnetwork)).width(250).height(25).setname(CONSTASTR("addnet"));
-        dm().vspace();
     }
 
     gui_vtabsel_c &tab = MAKE_CHILD<gui_vtabsel_c>( getrid(), m );
@@ -975,6 +1026,10 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
     {
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, msgopts_handler), msgopts_current);
     }
+    if (mask & MASK_PROFILE_HISTORY)
+    {
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, histopts_handler), hist_opts);
+    }
 
     if (mask & MASK_PROFILE_FILES)
     {
@@ -1051,7 +1106,6 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
         if (RID lst = find(CONSTASTR("soundslist")))
         {
             gui_vscrollgroup_c &l = HOLD(lst).as<gui_vscrollgroup_c>();
-            l.no_repos();
 
             for(int sndi = 0; sndi < snd_count; ++sndi)
             {
@@ -1068,8 +1122,7 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
                 MAKE_CHILD<gui_listitem_c>(lst, lit, ts::amake(ssndi));
             }
 
-            l.no_repos(false);
-            l.scroll_to_begin(true);
+            l.scroll_to_begin();
         }
 
     }
@@ -1098,7 +1151,7 @@ bool dialog_settings_c::delete_used_network(RID, GUIPARAM param)
     {
         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
             DT_MSGBOX_WARNING,
-            TTT("Connection [$] in use! All contacts of this connection will be deleted. History of these contacts will be deleted too. Are you still sure?",267) / from_utf8(row->other.name)
+            TTT("Connection [b]$[/b] in use! All contacts of this connection will be deleted. History of these contacts will be deleted too. Are you still sure?",267) / from_utf8(row->other.name)
             ).on_ok(DELEGATE(this, on_delete_network_2), ts::amake<int>(as_int(param))).bcancel());
     }
     return true;
@@ -1261,7 +1314,7 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
             {
                 SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
                     DT_MSGBOX_WARNING,
-                    TTT("Connection [$] will be deleted![br]Are you sure?",266) / from_utf8(row->other.name)
+                    TTT("Connection [b]$[/b] will be deleted![br]Are you sure?",266) / from_utf8(row->other.name)
                     ).on_ok(DELEGATE(this, on_delete_network), *t).bcancel());
             }
         }
@@ -1374,6 +1427,12 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
         UPSETOPT(4, UIOPT_AWAYONSCRSAVER);
 #undef UPSETOPT
 
+#define UPSETOPT(bm,m) if ((hist_opts_orig ^ hist_opts) & bm) { msgopts_changed |= m; INITFLAG(msgopts_current, m, 0 != (hist_opts & bm)); }
+        UPSETOPT(1, MSGOP_KEEP_HISTORY);
+        UPSETOPT(2, MSGOP_LOAD_WHOLE_HISTORY);
+#undef UPSETOPT
+
+        prf().min_history(load_history_count);
         prf().inactive_time( (common_opts & 8) ? set_away_on_timer_minutes_value : 0 );
 
         if (prf().set_options( msgopts_current, msgopts_changed ) || ch1)

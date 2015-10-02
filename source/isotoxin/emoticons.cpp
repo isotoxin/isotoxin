@@ -16,13 +16,19 @@ namespace
 
         smile_element_s(const emoticon_s *e, int maxh):e(e)
         {
-            advance = e->framesize().x; //-V807
-            if (maxh && e->framesize().y > maxh)
+            ts::irect frect = e->framerect();
+
+            advance = frect.width(); //-V807
+            if (maxh && frect.height() > maxh)
             {
-                float k = (float)maxh / (float)e->framesize().y;
-                advance = lround(k * e->framesize().x);
-                e->curframe().resize_to(bmp, ts::ivec2(advance, maxh), ts::FILTER_LANCZOS3);
-                
+                float k = (float)maxh / (float)frect.height();
+                advance = lround(k * advance);
+
+                ts::irect frrect; 
+                const ts::drawable_bitmap_c&frame =  e->curframe(frrect);
+
+                bmp.create_RGBA(ts::ivec2(advance, maxh));
+                bmp.resize_from(frame.extbody(frrect), ts::FILTER_LANCZOS3);
             }
         }
         /*virtual*/ void release() override
@@ -56,12 +62,15 @@ namespace
                 gi.pos.y = (ts::int16)(pos.y - bmp.info().sz.y)+2;
             } else
             {
-                gi.width = (ts::uint16)e->framesize().x; //-V807
-                gi.height = (ts::uint16)e->framesize().y;
-                gi.pitch = e->curframe().info().pitch;
-                gi.pixels = e->curframe().body();
+                ts::irect frrect;
+                const ts::drawable_bitmap_c&frame = e->curframe(frrect);
+
+                gi.width = (ts::uint16)frrect.width();
+                gi.height = (ts::uint16)frrect.height();
+                gi.pitch = frame.info().pitch;
+                gi.pixels = frame.body( frrect.lt );
                 gi.pos.x = (ts::int16)pos.x;
-                gi.pos.y = (ts::int16)(pos.y - e->framesize().y);
+                gi.pos.y = (ts::int16)(pos.y - frrect.height());
             }
             gi.color = 0;
             gi.thickness = 0;
@@ -96,6 +105,8 @@ bool emoticon_s::load( const ts::wsptr &fn )
         se->advance = 0;
         ee->release();
     }
+    if (ispreframe)
+        TSDEL(preframe);
 }
 
 gui_textedit_c::active_element_s * emoticon_s::get_edit_element(int maxh)
@@ -112,7 +123,14 @@ gui_textedit_c::active_element_s * emoticon_s::get_edit_element(int maxh)
     return se;
 }
 
-bool emoticons_c::emo_static_image_s::load(const ts::blob_c &b)
+/*virtual*/ bool emoticons_c::emo_gif_s::load(const ts::blob_c &body)
+{
+    ispreframe = true;
+    preframe = TSNEW( ts::bitmap_c );
+    return load_only_gif(*preframe, body);
+}
+
+/*virtual*/ bool emoticons_c::emo_static_image_s::load(const ts::blob_c &b)
 {
     ts::bitmap_c bmp;
     if (!bmp.load_from_file(b.data(), b.size()))
@@ -122,15 +140,22 @@ bool emoticons_c::emo_static_image_s::load(const ts::blob_c &b)
     {
         float k = (float)emoti().maxheight / (float)bmp.info().sz.y;
         int neww = lround( k * bmp.info().sz.x );
-        current_frame.create( ts::ivec2(neww, emoti().maxheight) );
-        bmp.resize_to( current_frame.extbody(), ts::FILTER_LANCZOS3 );
+
+        ispreframe = true;
+        preframe = TSNEW(ts::bitmap_c);
+        preframe->create_RGBA( ts::ivec2(neww, emoti().maxheight) );
+
+        bmp.resize_to( preframe->extbody(), ts::FILTER_LANCZOS3 );
+        preframe->premultiply();
+
     } else
     {
-        current_frame.create( bmp.info().sz );
-        current_frame.copy( ts::ivec2(0), bmp.info().sz, bmp.extbody(), ts::ivec2(0) );
+        bmp.premultiply();
+        ispreframe = true;
+        preframe = TSNEW(ts::bitmap_c);
+        *preframe = bmp;
     }
 
-    current_frame.premultiply();
 
     return true;
 }
@@ -186,8 +211,14 @@ static int getunicode( const ts::str_c&fn )
 ts::str_c emoticons_c::load_gif_smile( const ts::wstr_c& fn, const ts::blob_c &body, bool current_pack )
 {
     ts::str_c n = to_utf8(ts::fn_get_name(fn));
+    int code = getunicode(n);
+    for (const emoticon_s *e : arr)
+    {
+        if (e->unicode == code)
+            return n;
+    }
 
-    emo_gif_s *gif = TSNEW(emo_gif_s, getunicode(n));
+    emo_gif_s *gif = TSNEW(emo_gif_s, code);
     gif->current_pack = current_pack;
     gif->load(body);
     gif->def = n;
@@ -198,8 +229,14 @@ ts::str_c emoticons_c::load_gif_smile( const ts::wstr_c& fn, const ts::blob_c &b
 ts::str_c emoticons_c::load_png_smile(const ts::wstr_c& fn, const ts::blob_c &body, bool current_pack)
 {
     ts::str_c n = to_utf8(ts::fn_get_name(fn));
+    int code = getunicode(n);
+    for( const emoticon_s *e : arr )
+    {
+        if (e->unicode == code)
+            return n;
+    }
 
-    emo_static_image_s *img = TSNEW(emo_static_image_s, getunicode(n));
+    emo_static_image_s *img = TSNEW(emo_static_image_s, code);
     img->current_pack = current_pack;
     img->load(body);
     img->def = n;
@@ -341,19 +378,20 @@ void emoticons_c::reload()
     for (int i = 0; i < cnt; ++i)
     {
         emoticon_s *e = arr.get(i);
+        ASSERT(e->ispreframe);
+        ts::ivec2 csz = e->preframe->info().sz;
 
         e->repl.set(CONSTASTR("<rect="));
         e->repl.append_as_int(i);
         e->repl.append_char(',');
-        e->repl.append_as_int(e->framesize().x);
+        e->repl.append_as_int(csz.x);
         e->repl.append_char(',');
-        e->repl.append_as_int(-e->framesize().y);
+        e->repl.append_as_int(-csz.y);
         e->repl.append_char('>');
-
     }
-}
 
-bool find_link( ts::str_c &message, int from, ts::ivec2 & rslt );
+    generate_full_frame();
+}
 
 void emoticons_c::parse( ts::str_c &t, bool to_unicode )
 {
@@ -373,7 +411,7 @@ void emoticons_c::parse( ts::str_c &t, bool to_unicode )
         // forbidden areas == links
 
         ts::ivec2 linkinds;
-        for (int i = 0; find_link(t, i, linkinds);)
+        for (int i = 0; text_find_link(t, i, linkinds);)
         {
             rpl_s &r = rpl.add();
             r.index = linkinds.r0;
@@ -499,3 +537,114 @@ menu_c emoticons_c::get_list_smile_pack(const ts::wstr_c &curpack, MENUHANDLER m
 
     return m;
 }
+
+void emoticons_c::generate_full_frame()
+{
+    ts::tmp_tbuf_t<ts::ivec3> sizes;
+
+    for (emoticon_s *e : arr)
+    {
+        ASSERT(e->ispreframe);
+        ts::ivec2 csz = e->preframe->info().sz;
+
+        bool present = false;
+        for( ts::ivec3 &s : sizes )
+            if (s.xy() == csz)
+            {
+                ++s.z;
+                present = true;
+            }
+        if (!present)
+            sizes.add() = ts::ivec3( csz, 1 );
+    }
+
+    sizes.tsort<ts::ivec3>( []( const ts::ivec3 *s1, const ts::ivec3 *s2 ) { return s1->z == s2->z ? (s1->y > s2->y) : (s1->z > s2->z); } );
+    
+    ts::tmp_tbuf_t<ts::irect> rects;
+
+    auto find_rect = [&]( const ts::ivec2 &sz )->ts::irect
+    {
+        int cnt = rects.count();
+        for(int i=0;i<cnt;++i)
+        {
+            ts::irect rc = rects.get(i);
+            if (rc.size() == sz)
+            {
+                rects.remove_fast(i);
+                return rc;
+            }
+        }
+        FORBIDDEN();
+        __assume(0);
+    };
+
+    static const int max_width = 1024;
+    ts::ivec2 pos(0);
+    int lineheight = 0; int maxw = 0;
+
+    if (sizes.count() == 1)
+    {
+        ts::ivec3 sz = sizes.get(0);
+        int n_per_line = max_width/sz.x;
+        int n_lines = (sz.z+n_per_line-1) / n_per_line;
+        int crap = (n_per_line * n_lines)-sz.z;
+        ASSERT(crap >= 0);
+        ts::ivec2 gridsize(n_per_line, n_lines);
+        if (sz.z > n_per_line)
+        {
+            --n_per_line;
+            for (; crap != 0 && n_per_line > 2; --n_per_line)
+            {
+                n_lines = (sz.z + n_per_line - 1) / n_per_line;
+                int newcrap = (n_per_line * n_lines) - sz.z;
+                if (newcrap < crap)
+                {
+                    crap = newcrap;
+                    gridsize.x = n_per_line;
+                    gridsize.y = n_lines;
+                }
+            }
+        }
+        maxw = sz.x * gridsize.x;
+        lineheight = sz.y * gridsize.y;
+
+        for( int i=0;i<sz.z;++i )
+        {
+            int iy = i / gridsize.x;
+            int ix = i - iy * gridsize.x;
+            ts::ivec2 p(ix * sz.x, iy * sz.y);
+            rects.add(ts::irect(p, p + sz.xy()));
+        }
+
+    } else
+    {
+        for (ts::ivec3 &s : sizes)
+        {
+            for (int i = 0; i<s.z; ++i)
+            {
+                if ((pos.x + s.x) > max_width)
+                    pos.x = 0, pos.y += lineheight, lineheight = 0;
+
+                rects.add(ts::irect(pos, pos + s.xy()));
+                pos.x += s.x;
+                if (s.y > lineheight) lineheight = s.y;
+                if (pos.x > maxw) maxw = pos.x;
+            }
+        }
+    }
+
+    ts::ivec2 fullframesize( maxw, pos.y + lineheight );
+    if ( fullframe.info().sz != fullframesize )
+        fullframe.create( fullframesize );
+
+    for (emoticon_s *e : arr)
+    {
+        ts::bitmap_c *bmp = e->preframe;
+        e->ispreframe = false;
+        e->frame = &fullframe;
+        e->frect = find_rect(bmp->info().sz);
+        e->frame->copy(e->frect.lt, bmp->info().sz, bmp->extbody(), ts::ivec2(0));
+        TSDEL(bmp);
+    }
+}
+

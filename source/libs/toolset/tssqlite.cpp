@@ -9,7 +9,9 @@ namespace
 class sqlite3_c : public sqlitedb_c
 {
     sqlite3 *db = nullptr;
+    bool readonly = false;
 public:
+    sqlite3_c( bool readonly ):readonly(readonly) {}
     ts::wstr_c fn;
 
     /*virtual*/ void close() override
@@ -62,6 +64,7 @@ public:
 
     /*virtual*/ void create_table( const asptr& tablename, array_wrapper_c<const column_desc_s> columns, bool norowid ) override
     {
+        if (readonly) return;
         if (ASSERT(db))
         {
             execsql( tmp_str_c(CONSTASTR("drop table if exists "), tablename) );
@@ -107,6 +110,7 @@ public:
 
     void create_index( const asptr& tablename, array_wrapper_c<const column_desc_s> columns ) //-V813
     {
+        if (readonly) return;
         tmp_str_c sql;
         for(const column_desc_s &cd : columns)
         {
@@ -122,15 +126,16 @@ public:
     }
 
 
-    /*virtual*/ bool update_table_struct(const asptr& tablename, array_wrapper_c<const column_desc_s> columns, bool norowid) override
+    /*virtual*/ int update_table_struct(const asptr& tablename, array_wrapper_c<const column_desc_s> columns, bool norowid) override
     {
         if (!is_table_exist(tablename))
         {
+            if (readonly) return -1;
             execsql(CONSTASTR("BEGIN"));
             create_table(tablename,columns,norowid);
             create_index(tablename,columns);
             execsql(CONSTASTR("COMMIT"));
-            return true;
+            return 1;
         }
 
         if (ASSERT(db))
@@ -183,6 +188,7 @@ public:
             
             if (recreate)
             {
+                if (readonly) return -1;
                 execsql(CONSTASTR("BEGIN"));
                 tbln.insert(0,CONSTASTR("new__"));
                 create_table(tbln,columns,norowid);
@@ -201,14 +207,13 @@ public:
                 execsql(CONSTASTR("COMMIT"));
             } else
             {
+                if (readonly) return 0;
                 execsql(CONSTASTR("BEGIN"));
                 create_index(tablename, columns);
                 execsql(CONSTASTR("COMMIT"));
             }
-
-            
         }
-        return false;
+        return 0;
     }
 
     /*virtual*/ int  count( const asptr& tablename, const asptr& where_items ) override
@@ -255,6 +260,8 @@ public:
 
     /*virtual*/ int insert( const asptr& tablename, array_wrapper_c<const data_pair_s> fields ) override
     {
+        if (readonly) return -1;
+
         if (ASSERT(db))
         {
             tmp_str_c tstr;
@@ -312,6 +319,8 @@ public:
 
     /*virtual*/ void update(const asptr& tablename, array_wrapper_c<const data_pair_s> fields, const asptr& where_items) override
     {
+        if (readonly) return;
+
         if (ASSERT(db))
         {
             tmp_str_c tstr;
@@ -359,6 +368,8 @@ public:
 
     /*virtual*/ void delrow( const asptr& tablename, int id ) override
     {
+        if (readonly) return;
+
         if (ASSERT(db))
         {
             tmp_str_c tstr;
@@ -371,6 +382,7 @@ public:
 
     /*virtual*/ void  delrows(const asptr& tablename, const asptr& where_items) override
     {
+        if (readonly) return;
         if (ASSERT(db))
         {
             tmp_str_c tstr;
@@ -446,11 +458,11 @@ public:
 
 
     bool inactive() const {return db == nullptr;}
-    void open(const wsptr &fn_)
+    void open(const wsptr &fn_, bool readonly)
     {
         fn = fn_;
         ts::str_c utf8name = to_utf8( fn );
-        sqlite3_open_v2(utf8name, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr);
+        sqlite3_open_v2(utf8name, &db, readonly ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE), nullptr);
     }
 };
 
@@ -468,7 +480,7 @@ public:
         sqlite3_shutdown();
     }
 
-    sqlitedb_c *get( const wsptr &fn )
+    sqlitedb_c *get( const wsptr &fn, bool readonly )
     {
         ts::wstr_c fnn(fn);
         ts::fix_path(fnn, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
@@ -485,8 +497,8 @@ public:
         }
         
         if (recruit == nullptr) recruit = &dbs.add();
-        if (recruit->get() == nullptr) recruit->reset( TSNEW(sqlite3_c) );
-        recruit->get()->open(fnn);
+        if (recruit->get() == nullptr) recruit->reset( TSNEW(sqlite3_c, readonly) );
+        recruit->get()->open(fnn, readonly);
         if (!recruit->get()->inactive()) return recruit->get();
         return nullptr;
     }
@@ -497,9 +509,9 @@ static_setup<sqlite_init> sqliteinit;
 }
 
 
-sqlitedb_c *sqlitedb_c::connect(const wsptr &fn)
+sqlitedb_c *sqlitedb_c::connect(const wsptr &fn, bool readonly)
 {
-    return sqliteinit().get(fn);
+    return sqliteinit().get(fn, readonly);
 }
 
 }

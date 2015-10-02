@@ -417,9 +417,14 @@ bool dialog_avaselector_c::save_image(RID, GUIPARAM)
 
     ts::wstr_c title(TTT("Save avatar to png-file",217));
 
-    ts::wstr_c filter(CONSTWSTR("png/*.png/(*.*)/*.*//"));
+    ts::extension_s e[2];
+    e[0].desc = CONSTWSTR("png");
+    e[0].ext = e[0].desc;
+    e[1].desc = CONSTWSTR("(*.*)");
+    e[1].ext = CONSTWSTR("*.*");
+    ts::extensions_s exts(e,2);
 
-    ts::wstr_c fn = getroot()->save_filename_dialog(fromdir, CONSTWSTR("avatar.png"), filter, L"png", title);
+    ts::wstr_c fn = getroot()->save_filename_dialog(fromdir, CONSTWSTR("avatar.png"), exts, title);
     if (!fn.is_empty())
     {
         if (savesmall)

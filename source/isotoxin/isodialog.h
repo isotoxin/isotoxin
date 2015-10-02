@@ -49,25 +49,32 @@ public:
 template<typename DLGT, typename PRMS> void SUMMON_DIALOG(unique_dialog_e udtag, const PRMS &prms)
 {
     if (udtag && dialog_already_present(udtag)) return;
-    drawcollector dcoll;
-    RID r = MAKE_ROOT<DLGT>( dcoll, prms );
-    MODIFY(r)
-        .setminsize(r)
-        .setcenterpos()
-        .allow_move_resize(true, true)
-        .show();
+
+    RID r = MAKE_ROOT<DLGT>(prms);
+    {
+        MODIFY(r)
+            .setminsize(r)
+            .setcenterpos()
+            .allow_move_resize(true, true)
+            .show();
+    }
+
+    HOLD(r)().getroot()->set_system_focus(true);
 }
 
 template<typename DLGT> void SUMMON_DIALOG(unique_dialog_e udtag = UD_NOT_UNIQUE)
 {
     if (udtag && dialog_already_present(udtag)) return;
-    drawcollector dcoll;
-    RID r = MAKE_ROOT<DLGT>(dcoll);
-    MODIFY(r)
-        .setminsize(r)
-        .setcenterpos()
-        .allow_move_resize(true, true)
-        .show();
+    RID r = MAKE_ROOT<DLGT>();
+    
+    {
+        MODIFY(r)
+            .setminsize(r)
+            .setcenterpos()
+            .allow_move_resize(true, true)
+            .show();
+    }
+    HOLD(r)().getroot()->set_system_focus(true);
 }
 
 

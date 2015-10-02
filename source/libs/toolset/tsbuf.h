@@ -471,10 +471,8 @@ public:
     //////////////////////////////////////////////////////////////////////////////////////////////
     // sort
 
-    /// Quick-sort the array.
-    /// Parameter is functional object
-    /// Spizheno u skyfallen
-    template < typename T, typename F > bool tsort(F &comp, aint ileft = 0, aint irite = -1)
+    /// quick-sort the array.
+    template < typename T, typename F > bool tsort(const F &comp, aint ileft = 0, aint irite = -1)
     {
         TS_STATIC_CHECK(is_movable<T>::value, "movable type expected!");
         
@@ -486,7 +484,7 @@ public:
 
         if (ileft < 0) ileft = icnt + ileft;
         if (irite < 0) irite = icnt + irite;
-        ASSERT(ileft <= irite, "incorrect range for buf_granula_depricated::sort");
+        ASSERT(ileft <= irite, "incorrect range");
 
         aint st0[32], st1[32];
         aint a, b, k, i, j;
@@ -512,11 +510,14 @@ public:
                     while (comp(x, tget<T>(j))) j--;
                     if (i <= j)
                     {
-                        memcpy(&temp.get(), tget<T>(i), sizeof(T));
-                        memcpy(tget<T>(i), tget<T>(j), sizeof(T));
-                        memcpy(tget<T>(j), &temp.get(), sizeof(T));
+                        if (i!=j)
+                        {
+                            memcpy(&temp.get(), tget<T>(i), sizeof(T));
+                            memcpy(tget<T>(i), tget<T>(j), sizeof(T));
+                            memcpy(tget<T>(j), &temp.get(), sizeof(T));
 
-                        sorted = true;
+                            sorted = true;
+                        }
 
                         if (i == center)
                         {
@@ -560,11 +561,7 @@ public:
 
     template<typename T> bool tsort(aint ileft = 0, aint irite = -1)
     {
-        struct
-        {
-            bool operator() (const T * x1, const T * x2) { return (*x1) < (*x2); }
-        } comparator;
-        return tsort<T>(comparator, ileft, irite);
+        return tsort<T>([](const T * x1, const T * x2)->bool { return (*x1) < (*x2); }, ileft, irite);
     }
 
 

@@ -13,15 +13,14 @@ struct bcreate_s;
 
 typedef const void * GUIPARAM;
 
-//-V:as_int:205
 INLINE int as_int(GUIPARAM p)
 {
-    return (int)p;
+    return (int)p; //-V205
 }
-//-V:as_param:204
+
 INLINE GUIPARAM as_param(int v)
 {
-    return (GUIPARAM)v;
+    return (GUIPARAM)v; //-V204
 }
 
 
@@ -99,7 +98,6 @@ public:
     void        call_open_group(RID itm) const;
     void        call_lbclick(const ts::ivec2 &relpos = ts::ivec2(0)) const;
     void        call_kill_child( const ts::str_c&param );
-    void        call_children_repos();
     void        call_enable(bool enableflg) const;
 };
 

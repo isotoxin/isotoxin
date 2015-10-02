@@ -9,14 +9,24 @@ struct emoticon_s
     ts::str_c repl; // utf8
     int unicode = 0;
     int sort_factor = 100000;
+
+    ts::irect frect = ts::irect(0);
+
     bool current_pack = false;
+    bool ispreframe = false;
+
+    union 
+    {
+        ts::drawable_bitmap_c *frame;
+        ts::bitmap_c *preframe;
+    };
 
     bool load(const ts::wsptr &fn);
     virtual bool load(const ts::blob_c &body) = 0;
 
     virtual void draw(rectengine_root_c *e, const ts::ivec2 &pos) const = 0;
-    virtual const ts::drawable_bitmap_c &curframe() const = 0;
-    virtual ts::ivec2 framesize() const = 0;
+    virtual const ts::drawable_bitmap_c &curframe(ts::irect &frect) const = 0;
+    virtual ts::irect framerect() const = 0;
 
     gui_textedit_c::active_element_s * ee = nullptr;
     gui_textedit_c::active_element_s * get_edit_element(int maxh);
@@ -30,18 +40,29 @@ class emoticons_c
         ts::str_c s;
     };
 
+    ts::drawable_bitmap_c fullframe;
     ts::array_inplace_t< match_point_s, 128 > matchs;
 
     struct emo_gif_s : public emoticon_s, public picture_gif_c
     {
         emo_gif_s(int unicode):emoticon_s(unicode) {}
-        /*virtual*/ bool load(const ts::blob_c &body) override { return picture_gif_c::load(body); }
+        /*virtual*/ bool load(const ts::blob_c &body) override;
         
         /*virtual*/ void draw(rectengine_root_c *e, const ts::ivec2 &pos) const { picture_gif_c::draw(e,pos); }
 
-        /*virtual*/ const ts::drawable_bitmap_c &curframe() const { return picture_gif_c::curframe(); };
+        /*virtual*/ const ts::drawable_bitmap_c &curframe(ts::irect &fr) const override
+        {
+            ASSERT(!ispreframe);
+            fr = frect;
+            return *frame;
+        }
+        /*virtual*/ ts::irect framerect() const override { return frect; }
+        /*virtual*/ ts::drawable_bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &fr) override
+        {
+            FORBIDDEN();
+            __assume(0);
+        }
         /*virtual*/ int nextframe() override { return picture_gif_c::nextframe(); }
-        /*virtual*/ ts::ivec2 framesize() const { return picture_gif_c::framesize(); };
     };
 
     struct emo_static_image_s : public emoticon_s, public picture_c
@@ -51,8 +72,18 @@ class emoticons_c
 
         /*virtual*/ void draw(rectengine_root_c *e, const ts::ivec2 &pos) const { picture_c::draw(e,pos); }
 
-        /*virtual*/ const ts::drawable_bitmap_c &curframe() const { return picture_c::curframe(); };
-        /*virtual*/ ts::ivec2 framesize() const { return picture_c::framesize(); };
+        /*virtual*/ const ts::drawable_bitmap_c &curframe(ts::irect &fr) const override
+        {
+            ASSERT(!ispreframe);
+            fr = frect;
+            return *frame;
+        }
+        /*virtual*/ ts::irect framerect() const override { return frect; }
+        /*virtual*/ ts::drawable_bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &fr) override
+        {
+            FORBIDDEN();
+            __assume(0);
+        }
     };
 
     ts::array_del_t<emoticon_s, 8> arr;
@@ -60,6 +91,8 @@ class emoticons_c
     bool process_pak_file(const ts::arc_file_s &f);
 
     ts::wstrings_c packs;
+
+    void generate_full_frame();
 
 public:
 

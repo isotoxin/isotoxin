@@ -61,12 +61,12 @@ bool gui_filterbar_c::do_contact_check(RID, GUIPARAM p)
     if (contact_index < contacts().count())
     {
         if (active)
-            cl.scroll_to(active, false, true);
+            cl.scroll_to(active, false);
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, do_contact_check), 0);
     }
     else if (active)
     {
-        cl.scroll_to(active, false, true);
+        cl.scroll_to(active, false);
     }
 
     return true;

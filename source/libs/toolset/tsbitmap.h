@@ -55,6 +55,7 @@ struct imgdesc_s
     imgdesc_s &set_size(const ivec2 &szz) { sz = szz; return *this; }
 };
 
+void TSCALL img_helper_premultiply(uint8 *des, const imgdesc_s &des_info);
 void TSCALL img_helper_fill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color);
 void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info);
 void TSCALL img_helper_make_2x_smaller(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info);
@@ -224,7 +225,7 @@ public:
     public:
         bool begin( const bitmap_t & tgt, const bitmap_t & src )
         {
-            return src.info().bitpp == 32 && tgt.info().bitpp == 32;
+            return src.info().bitpp == 32 && tgt.info().bitpp == 32; //-V112
         }
 
         void point( ts::uint8 * me, const FMATRIX &m )
@@ -314,10 +315,20 @@ public:
         inf.sz -= offset;
         return inf;
     }
+    imgdesc_s info(const ts::irect &r) const
+    {
+        imgdesc_s inf(core.info());
+        inf.sz = r.size();
+        return inf;
+    }
     uint8* body() const             { return core(); }
     uint8* body(const ivec2& pos) const { return core() + pos.x * core.info().bytepp() + pos.y * core.info().pitch; }
 
     bmpcore_exbody_s extbody() const { return bmpcore_exbody_s( body(), info() ); }
+    bmpcore_exbody_s extbody( const ts::irect &r ) const
+    {
+        return bmpcore_exbody_s( body() + r.lt.x * info().bytepp() + r.lt.y * info().pitch, info(r) );
+    }
 
     operator bool() const {return info().sz >> 0;}
 
@@ -343,7 +354,7 @@ public:
 	bitmap_t &create_16(const ivec2 &sz) { core.create(imgdesc_s(sz, 16)); return *this; }
 	bitmap_t &create_15(const ivec2 &sz) { core.create(imgdesc_s(sz, 15)); return *this; }
 	bitmap_t &create_RGB(const ivec2 &sz)  { core.create(imgdesc_s(sz, 24)); return *this; }
-	bitmap_t &create_RGBA(const ivec2 &sz)  { core.create(imgdesc_s(sz, 32)); return *this; }
+	bitmap_t &create_RGBA(const ivec2 &sz)  { core.create(imgdesc_s(sz, 32)); return *this; } //-V112
 
     void copy_components(bitmap_c &imageout, int num_comps, int dst_first_comp, int src_first_comp) const;//копирует только часть компонент (R|G|B|A) из bmsou
 
@@ -360,6 +371,8 @@ public:
     void overfill(const ivec2 & pdes,const ivec2 & size, TSCOLOR color); // draws rectangle with premultiplied color
 
     void premultiply();
+    void premultiply( const irect &rect );
+
     void detect_alpha_channel( const bitmap_t & bmsou ); // me - black background, bmsou - white background
 
     template <typename FILTER, typename CORE2> void copy_with_filter(bitmap_t<CORE2>& outimage, FILTER &f) const
@@ -522,7 +535,7 @@ public:
         else
         if (info().bytepp() == 3) mask = 0x00FFFFFF;
         else
-        if (info().bytepp() == 4) mask = 0xFFFFFFFF;
+        if (info().bytepp() == 4) mask = 0xFFFFFFFF; //-V112
         return c & mask;
     }
 
@@ -542,7 +555,7 @@ public:
 
     uint32 hash() const
     {
-        uint32 crc = 0xFFFFFFFF;
+        uint32 crc = 0xFFFFFFFF; //-V112
         const uint8 *s = body();
         for(int y=0;y<info().sz.y;++y, s+=info().pitch)
             crc = CRC32_Buf(s, info().pitch, crc);
@@ -583,14 +596,7 @@ class drawable_bitmap_c : public image_extbody_c
 
 public:
 
-    void clear()
-    {
-        if (m_mem_dc) { DeleteDC(m_mem_dc); m_mem_dc = nullptr; }
-        if (m_mem_bitmap) { DeleteObject(m_mem_bitmap); m_mem_bitmap = nullptr; }
-        core.m_body = nullptr;
-        memset( &core.m_info, 0, sizeof(imgdesc_s) );
-
-    }
+    void clear();
 
     bool	ajust(const ivec2 &sz, bool exact_size)
     {
@@ -599,6 +605,8 @@ public:
 
         if ((exact_size && newbbsz != bbsz) || sz > bbsz)
         {
+            if(newbbsz.x < bbsz.x) newbbsz.x = bbsz.x;
+            if(newbbsz.y < bbsz.y) newbbsz.y = bbsz.y;
             create(newbbsz);
             return true;
         }
@@ -627,10 +635,10 @@ public:
         BITMAP bmpInfo;
         GetObject(m_mem_bitmap, sizeof(BITMAP), &bmpInfo);
 
-        for (int j = 0; j < bmpInfo.bmHeight; ++j)
+        for (aint j = 0; j < aint(bmpInfo.bmHeight); ++j)
         {
-            uint32 *x = (uint32 *)((BYTE *)body() + j * bmpInfo.bmWidthBytes);
-            for (int i = 0; i < bmpInfo.bmWidth; ++i)
+            uint32 *x = (uint32 *)((BYTE *)body() + j * aint(bmpInfo.bmWidthBytes));
+            for (aint i = 0; i < bmpInfo.bmWidth; ++i)
             {
                 x[i] = w(i, j, x[i]);
             }

@@ -349,7 +349,7 @@ void dialog_firstrun_c::go2page(int page_)
 
     }
 
-    children_repos();
+    gui->repos_children(this);
 
 }
 
@@ -464,7 +464,7 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     make_path( path_by_choice(choice1), 0 );
     ts::wstr_c config_fn = ts::fn_join(path_by_choice(choice1), CONSTWSTR("config.db"));
 
-    if (ts::sqlitedb_c * db = ts::sqlitedb_c::connect( config_fn ))
+    if (ts::sqlitedb_c * db = ts::sqlitedb_c::connect( config_fn, g_app->F_READONLY_MODE ))
     {
         config_c::prepare_conf_table(db);
         db->close();
@@ -476,7 +476,7 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     {
         ts::wstr_c n = profilename;
         cfg().profile(n);
-        ts::sqlitedb_c::connect(ts::fn_change_name_ext(config_fn, n.append(CONSTWSTR(".profile"))));
+        ts::sqlitedb_c::connect(ts::fn_change_name_ext(config_fn, n.append(CONSTWSTR(".profile"))), g_app->F_READONLY_MODE);
     }
 
     cfg().language( deflng );
@@ -498,7 +498,7 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     } else 
     {
         on_confirm();
-        g_app->summon_main_rect(false);
+        g_app->load_profile_and_summon_main_rect(false);
         g_app->set_notification_icon();
     }
 

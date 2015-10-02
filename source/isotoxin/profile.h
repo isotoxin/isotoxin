@@ -24,6 +24,7 @@ enum messages_options_e
     MSGOP_JOIN_MESSAGES         = SETBIT(4), // hidden option
     MSGOP_SEND_TYPING           = SETBIT(5),
     MSGOP_IGNORE_OTHER_TYPING   = SETBIT(6),
+    MSGOP_LOAD_WHOLE_HISTORY    = SETBIT(7),
     UIOPT_SHOW_SEARCH_BAR       = SETBIT(16),
     UIOPT_PROTOICONS            = SETBIT(17),
     UIOPT_AWAYONSCRSAVER        = SETBIT(18),
@@ -49,7 +50,7 @@ struct active_protocol_s : public active_protocol_data_s
     void get(int column, ts::data_pair_s& v);
 
     static const int maxid = 65000;
-    static const int columns = 1 + 7; // tag, name, uname, ustatus, conf, options, avatar
+    static const int columns = 1 + 8; // tag, name, uname, ustatus, conf, options, avatar, sortfactor
     static ts::asptr get_table_name() {return CONSTASTR("protocols");}
     static void get_column_desc(int index, ts::column_desc_s&cd);
     static ts::data_type_e get_column_type(int index);
@@ -63,7 +64,7 @@ struct contacts_s
     ts::str_c name;
     ts::str_c statusmsg;
     ts::str_c customname;
-    time_t readtime;
+    time_t readtime; // time of last seen message
     ts::blob_c avatar;
     int avatar_tag;
 
@@ -211,7 +212,7 @@ template<typename T, profile_table_e tabi> struct tableview_t
     bool reader(int row, ts::SQLITE_DATAGETTER);
 
     void clear() { newidpool = -1; rows.clear(); new2ins.clear(); }
-    void prepare( ts::sqlitedb_c *db );
+    bool prepare( ts::sqlitedb_c *db );
     void read( ts::sqlitedb_c *db );
     void read( ts::sqlitedb_c *db, const ts::asptr &where_items );
     bool flush( ts::sqlitedb_c *db, bool all, bool notify_saved = true );
@@ -292,15 +293,44 @@ public:
     profile_c() { dirty_sort(); }
     ~profile_c();
 
-    static void error_unique_profile(const ts::wsptr & prfn, bool modal = false);
+    static void mb_warning_readonly(bool minimize);
+    static void mb_error_unique_profile(const ts::wsptr & prfn, bool modal = false);
 
     void shutdown_aps();
-    template<typename APR> void iterate_aps( APR apr )
+    template<typename APR> void iterate_aps( APR apr ) const
     {
         for( const active_protocol_c *ap : protocols )
             if (ap && !ap->is_dip()) apr(*ap);
     }
+    template<typename APR> void iterate_aps(APR apr)
+    {
+        for (active_protocol_c *ap : protocols)
+            if (ap && !ap->is_dip()) apr(*ap);
+    }
+    template<typename APR> const active_protocol_c * find_ap(APR apr) const
+    {
+        for (const active_protocol_c *ap : protocols)
+            if (ap && !ap->is_dip())
+                if (apr(*ap))
+                    return ap;
+        return nullptr;
+    }
+    template<typename APR> active_protocol_c * find_ap(APR apr)
+    {
+        for (active_protocol_c *ap : protocols)
+            if (ap && !ap->is_dip())
+                if (apr(*ap))
+                    return ap;
+        return nullptr;
+    }
     active_protocol_c *ap(int id) { for( active_protocol_c *ap : protocols ) if (ap && ap->getid() == id && !ap->is_dip()) return ap; return nullptr; }
+    bool is_any_active_ap() const
+    {
+        for (const active_protocol_c *ap : protocols)
+            if (ap && !ap->is_dip())
+                return true;
+        return false;
+    }
 
     bool load( const ts::wstr_c& pfn );
 
@@ -317,7 +347,7 @@ public:
     void record_history( const contact_key_s&historian, const post_s &history_item );
     int  calc_history( const contact_key_s&historian, bool ignore_invites = true );
     int  calc_history_before( const contact_key_s&historian, time_t time );
-    int  calc_history_after( const contact_key_s&historian, time_t time );
+    int  calc_history_after( const contact_key_s&historian, time_t time, bool only_messages );
     int  calc_history_between( const contact_key_s&historian, time_t time1, time_t time2 );
     
     void kill_history_item(uint64 utag);
@@ -360,11 +390,14 @@ public:
         return msgopts( (int)cur );
     }
 
+    int min_history_load() { return get_options().is(MSGOP_LOAD_WHOLE_HISTORY) ? INT_MAX : min_history(); }
+
     TEXTAPAR( username, "IsotoxinUser" )
     TEXTAPAR( userstatus, "" )
     INTPAR( min_history, 10 )
     INTPAR( ctl_to_send, 1 )
     INTPAR( inactive_time, 5 )
+    INTPAR( manual_cos, COS_ONLINE )
     
     TEXTAPAR( date_msg_template, "d MMMM" )
     TEXTAPAR( date_sep_template, "dddd d MMMM yyyy" )

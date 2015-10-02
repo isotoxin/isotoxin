@@ -2,7 +2,9 @@
 
 void picture_c::draw(rectengine_root_c *e, const ts::ivec2 &pos) const
 {
-    e->draw(pos - e->get_current_draw_offset(), current_frame, framerect(), true);
+    ts::irect r;
+    const ts::drawable_bitmap_c &dbmp = curframe(r);
+    e->draw(pos - e->get_current_draw_offset(), dbmp, r, true);
 }
 
 picture_animated_c *picture_animated_c::first = nullptr;
@@ -21,7 +23,7 @@ void picture_animated_c::draw(rectengine_root_c *e, const ts::ivec2 &pos) const
 
     if (numframes > 1)
     {
-        ts::irect cr(pos, pos + framesize());
+        ts::irect cr(pos, pos + framerect().size());
         for (redraw_request_s &r : rr)
             if (r.engine.get() == e)
             {
@@ -66,36 +68,63 @@ void picture_animated_c::tick()
 
 }
 
-/*virtual*/ bool picture_gif_c::load(const ts::blob_c &body)
+bool picture_gif_c::load_only_gif( ts::bitmap_c &first_frame, const ts::blob_c &body )
 {
     gif.load(body.data(), body.size());
     numframes = gif.numframes();
     if (numframes == 0) return false;
 
-    ts::bitmap_c bmp;
-    delay = gif.firstframe(bmp);
-    current_frame.create_from_bitmap(bmp);
+    delay = gif.firstframe(first_frame);
 
     next_frame_tick = ts::Time::current() + delay;
-
     tick_it();
+    return true;
+}
+
+/*virtual*/ bool picture_gif_c::load(const ts::blob_c &body)
+{
+    ts::bitmap_c bmp;
+    if (!load_only_gif(bmp, body)) return false;
+   
+    ts::irect frect;
+    ts::drawable_bitmap_c &frame = prepare_frame( bmp.info().sz, frect );
+    frame.copy( frect.lt, bmp.info().sz, bmp.extbody(), ts::ivec2(0) );
 
     return true;
 }
 
 int picture_gif_c::nextframe()
 {
-    return gif.nextframe(current_frame.extbody());
+    ts::irect frect;
+    const ts::drawable_bitmap_c &frame = curframe(frect);
+
+    return gif.nextframe(frame.extbody(frect));
 }
 
 namespace
 {
     struct gif_thumb_s : public picture_gif_c
     {
+        ts::drawable_bitmap_c frame;
         ts::bitmap_c bmp;
         ts::ivec2 origsz;
         bool rsz_required = false;
         bool frame_dirty = false;
+
+        /*virtual*/ const ts::drawable_bitmap_c &curframe(ts::irect &frect) const override
+        {
+            frect = ts::irect(0, frame.info().sz);
+            return frame;
+        }
+        /*virtual*/ ts::irect framerect() const override
+        {
+            return ts::irect(0,frame.info().sz);
+        }
+        /*virtual*/ ts::drawable_bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &frect) override
+        {
+            FORBIDDEN();
+            __assume(0);
+        }
 
         /*virtual*/ ts::ivec2 framesize_by_width(int w) override
         {
@@ -116,16 +145,16 @@ namespace
                 // current_frame has original size and previous frame
                 // new frame rendered into current_frame directly
 
-                if (current_frame.info().sz != origsz)
+                if (frame.info().sz != origsz)
                 {
                     // previous mode is resize mode
 
                     if (bmp.info().sz != origsz)
                     {
                         bmp.create_RGBA(origsz);
-                        current_frame.resize_to(bmp.extbody(), ts::FILTER_LANCZOS3);
+                        frame.resize_to(bmp.extbody(), ts::FILTER_LANCZOS3);
                     }
-                    current_frame.create_from_bitmap(bmp);
+                    frame.create_from_bitmap(bmp);
                     bmp.clear();
                 }
                 rsz_required = false;
@@ -137,16 +166,16 @@ namespace
                 if (bmp.info().sz != origsz)
                 {
                     bmp.create_RGBA(origsz);
-                    current_frame.resize_to(bmp.extbody(), ts::FILTER_LANCZOS3);
+                    frame.resize_to(bmp.extbody(), ts::FILTER_LANCZOS3);
                     frame_dirty = true;
                 }
-                if (current_frame.info().sz != ts::ivec2(w, newh))
+                if (frame.info().sz != ts::ivec2(w, newh))
                 {
-                    current_frame.create(ts::ivec2(w, newh));
+                    frame.create(ts::ivec2(w, newh));
                     frame_dirty = true;
                 }
                 if (frame_dirty)
-                    bmp.resize_to(current_frame.extbody(), ts::FILTER_LANCZOS3);
+                    bmp.resize_to(frame.extbody(), ts::FILTER_LANCZOS3);
 
                 rsz_required = true;
             }
@@ -162,7 +191,7 @@ namespace
             delay = gif.firstframe(bmp);
             origsz = bmp.info().sz;
 
-            current_frame.create_from_bitmap(bmp);
+            frame.create_from_bitmap(bmp);
             bmp.clear();
             rsz_required = false;
 
@@ -178,16 +207,32 @@ namespace
             {
                 frame_dirty = true;
                 int r = gif.nextframe(bmp.extbody());
-                bmp.resize_to(current_frame.extbody(), ts::FILTER_LANCZOS3);
+                bmp.resize_to(frame.extbody(), ts::FILTER_LANCZOS3);
                 return r;
             } 
-            return gif.nextframe(current_frame.extbody());
+            return gif.nextframe(frame.extbody());
         }
 
     };
     struct static_thumb_s : public picture_c
     {
+        ts::drawable_bitmap_c frame;
         ts::bitmap_c bmp;
+
+        /*virtual*/ const ts::drawable_bitmap_c &curframe(ts::irect &frect) const override
+        {
+            frect = ts::irect(0, frame.info().sz);
+            return frame;
+        }
+        /*virtual*/ ts::irect framerect() const override
+        {
+            return ts::irect(0, frame.info().sz);
+        }
+        /*virtual*/ ts::drawable_bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &frect) override
+        {
+            FORBIDDEN();
+            __assume(0);
+        }
 
         /*virtual*/ ts::ivec2 framesize_by_width(int w) override
         {
@@ -204,19 +249,19 @@ namespace
         {
             if ( w >= bmp.info().sz.x )
             {
-                if (current_frame.info().sz != bmp.info().sz)
-                    current_frame.create(bmp.info().sz);
+                if (frame.info().sz != bmp.info().sz)
+                    frame.create(bmp.info().sz);
 
-                current_frame.copy(ts::ivec2(0), bmp.info().sz, bmp.extbody(), ts::ivec2(0));
+                frame.copy(ts::ivec2(0), bmp.info().sz, bmp.extbody(), ts::ivec2(0));
             } else
             {
                 float k = (float)w / (float)bmp.info().sz.x;
                 int newh = lround(k * bmp.info().sz.y);
-                if (current_frame.info().sz != ts::ivec2(w, newh))
-                    current_frame.create(ts::ivec2(w, newh));
-                bmp.resize_to(current_frame.extbody(), ts::FILTER_LANCZOS3);
+                if (frame.info().sz != ts::ivec2(w, newh))
+                    frame.create(ts::ivec2(w, newh));
+                bmp.resize_to(frame.extbody(), ts::FILTER_LANCZOS3);
             }
-            current_frame.premultiply();
+            frame.premultiply();
         }
 
         /*virtual*/ bool load(const ts::blob_c &b) override
@@ -231,7 +276,7 @@ namespace
                 bmp = b4;
             }
 
-            current_frame.create_from_bitmap(bmp, false, true);
+            frame.create_from_bitmap(bmp, false, true);
             return true;
         }
     };

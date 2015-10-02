@@ -43,7 +43,7 @@ namespace ts
         tmp_wstr_c pa( path ), cf;
         ASSERT(pa.find_pos(ENEMY_SLASH) < 0);
         if (pa.get_char(0) == NATIVE_SLASH) pa.cut(0, 1);
-        int pad = pa.find_pos(NATIVE_SLASH);
+        aint pad = pa.find_pos(NATIVE_SLASH);
         if ( pad >= 0 )
         {
             cf = pa.substr(0,pad);
@@ -77,7 +77,7 @@ namespace ts
         tmp_wstr_c pa(path), cf;
         ASSERT(pa.find_pos(ENEMY_SLASH) < 0);
         if (pa.get_char(0) == NATIVE_SLASH) pa.cut(0, 1);
-        int pad = pa.find_pos(NATIVE_SLASH);
+        aint pad = pa.find_pos(NATIVE_SLASH);
         if (pad >= 0)
         {
             cf = pa.substr(0, pad);
@@ -163,7 +163,7 @@ namespace ts
 
         for (;;)
         {
-            int ind = CHARz_find<wchar>( path, NATIVE_SLASH );
+            aint ind = CHARz_find<wchar>( path, NATIVE_SLASH );
             if ( ind >= 0 )
             {
                 zip_folder_entry_c *f = cur->get_folder(wsptr(path, ind));
@@ -224,7 +224,7 @@ namespace ts
                 }
 
                 h = CreateFileW(((zippp *)opaque)->name, desiredacces, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, createdispos, FILE_ATTRIBUTE_NORMAL, nullptr);
-                file = (HANDLE)((size_t)h + 1);
+                file = (HANDLE)((aint)h + 1);
                 return file;
 
             }
@@ -232,12 +232,12 @@ namespace ts
             static uLong ZCALLBACK fread_file_func(voidpf opaque, voidpf stream, void* buf, uLong size)
             {
                 DWORD r;
-                ReadFile((HANDLE)((DWORD)stream - 1), buf, (size_t)size, &r, nullptr);
+                ReadFile((HANDLE)((aint)stream - 1), buf, (size_t)size, &r, nullptr);
                 return r;
             }
             static long ZCALLBACK ftell_file_func(voidpf opaque, voidpf stream)
             {
-                return SetFilePointer((HANDLE)((DWORD)stream - 1), 0, nullptr, FILE_CURRENT);
+                return SetFilePointer((HANDLE)((aint)stream - 1), 0, nullptr, FILE_CURRENT);
             }
             static long ZCALLBACK fseek_file_func(voidpf opaque, voidpf stream, uLong offset, int origin)
             {
@@ -252,11 +252,11 @@ namespace ts
                         break;
                 }
 
-                return INVALID_SET_FILE_POINTER == SetFilePointer((HANDLE)((DWORD)stream - 1), offset, nullptr, or) ? 1 : 0;
+                return INVALID_SET_FILE_POINTER == SetFilePointer((HANDLE)((aint)stream - 1), offset, nullptr, or) ? 1 : 0;
             }
             static int ZCALLBACK fclose_file_func(voidpf opaque, voidpf stream)
             {
-                if (CloseHandle((HANDLE)((DWORD)stream - 1))) return 0;
+                if (CloseHandle((HANDLE)((aint)stream - 1))) return 0;
                 return EOF;
             }
             static int ZCALLBACK ferror_file_func(voidpf opaque, voidpf stream)
@@ -385,7 +385,7 @@ next:
 
         for (;;)
         {
-            int ind = CHARz_find<wchar>( path, NATIVE_SLASH );
+            aint ind = CHARz_find<wchar>( path, NATIVE_SLASH );
             if ( ind >= 0 )
             {
                 zip_folder_entry_c *f = cur->get_folder(wsptr(path, ind));

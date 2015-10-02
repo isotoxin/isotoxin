@@ -370,7 +370,7 @@ public:
         bool waiting_sync_answer = false;
 
         enum { CALL_OFF, OUT_CALL, IN_CALL, IN_PROGRESS } call_status = CALL_OFF;
-        enum { SEARCH, MEET, TRAPPED, INVITE_SEND, INVITE_RECV, REJECTED, ACCEPT, ACCEPT_RESTORE_CONNECT, REJECT, ONLINE, OFFLINE, BACKCONNECT, ROTTEN } state = SEARCH;
+        enum { SEARCH, MEET, TRAPPED, INVITE_SEND, INVITE_RECV, REJECTED, ACCEPT, ACCEPT_RESTORE_CONNECT, REJECT, ONLINE, OFFLINE, BACKCONNECT, ROTTEN, ALMOST_ROTTEN } state = SEARCH;
 
         datablock_s *sendblock_f = nullptr;
         datablock_s *sendblock_l = nullptr;
@@ -437,6 +437,7 @@ public:
                     cd.state = CS_OFFLINE;
                     break;
                 case lan_engine::contact_s::ROTTEN:
+                case lan_engine::contact_s::ALMOST_ROTTEN:
                     cd.state = CS_ROTTEN;
                     break;
             }

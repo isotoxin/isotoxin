@@ -92,6 +92,7 @@ void config_base_c::changed(bool save_all_now)
 
 bool find_config(ts::wstr_c &path)
 {
+    bool local_write_protected = false;
     ts::wstr_c exepath = ts::get_exe_full_name();
     if (ts::check_write_access( ts::fn_get_path(exepath) ))
     {
@@ -104,11 +105,41 @@ bool find_config(ts::wstr_c &path)
         if ( exepath.find_pos(CONSTWSTR("Program Files")) < 0 )
             return false;
 #endif
-    }
+    } else
+        local_write_protected = g_app != nullptr;
 
     path = ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%APPDATA%\\Isotoxin\\config.db")), FNO_FULLPATH | FNO_PARSENENV);
     bool prsnt = ts::is_file_exists(path);
-    if (!prsnt) path.clear();
+    if (!prsnt)
+    {
+        if (local_write_protected)
+        {
+            path = ts::fn_change_name_ext(exepath, CONSTWSTR("config.db"));
+            if (ts::is_file_exists(path))
+            {
+                g_app->F_READONLY_MODE = true;
+                if (ts::is_admin_mode())
+                {
+                    // super oops!
+                    // write protected folder under elevated rights?
+                    // readonly mode
+                } else if (elevate())
+                {
+                    path.clear();
+                    sys_exit(0);
+                    return false;
+                } else
+                {
+                    Sleep(500);
+                }
+
+                return true;
+            }
+        } 
+
+        path.clear();
+    }
+
     return prsnt;
 }
 
@@ -133,11 +164,13 @@ void config_c::load( const ts::wstr_c &path_override )
         // aha! 1st run!
         // show dialog
         g_app->load_theme(CONSTWSTR("def"));
+
+        redraw_collector_s dch;
         SUMMON_DIALOG<dialog_firstrun_c>();
 
     } else
     {
-        db = ts::sqlitedb_c::connect(path);
+        db = ts::sqlitedb_c::connect(path, g_app->F_READONLY_MODE);
     }
 
     if (db)

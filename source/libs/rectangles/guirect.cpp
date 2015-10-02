@@ -96,16 +96,9 @@ typedef ts::pair_s<ts::ivec2, RID> clickstruct;
 
 void RID::call_lbclick(const ts::ivec2 &relpos) const
 {
-
-    int tag = gui->get_temp_buf(1.0, sizeof(clickstruct));
-    clickstruct *cs = (clickstruct *)gui->lock_temp_buf(tag);
-    if (!ASSERT(cs)) return;
-    cs->first = relpos;
-    cs->second = *this;
-
     DEFERRED_EXECUTION_BLOCK_BEGIN(0)
 
-        if (clickstruct *s = (clickstruct *)gui->lock_temp_buf(as_int(param)))
+        if (clickstruct *s = gui->temp_restore<clickstruct>(as_int(param)))
         {
             RID r = s->second;
             HOLD ctl(r);
@@ -124,7 +117,7 @@ void RID::call_lbclick(const ts::ivec2 &relpos) const
             }
         }
 
-    DEFERRED_EXECUTION_BLOCK_END( tag )
+    DEFERRED_EXECUTION_BLOCK_END( gui->temp_store(clickstruct(relpos,*this)) )
 }
 
 void RID::call_kill_child( const ts::str_c&param )
@@ -133,22 +126,6 @@ void RID::call_kill_child( const ts::str_c&param )
     evt_data_s d;
     d.strparam = param.as_sptr();
     ctl().sq_evt(SQ_KILL_CHILD, *this, d);
-}
-
-void RID::call_children_repos()
-{
-    auto repos_deffered_proc = [](RID, GUIPARAM param)->bool
-    {
-        RID rid = RID::from_param(param);
-        HOLD ctl(rid);
-        ctl().sq_evt(SQ_CHILDREN_REPOS, rid, ts::make_dummy<evt_data_s>(true));
-        ctl().getengine().redraw();
-        return true;
-    };
-
-    GUIPARAMHANDLER h = repos_deffered_proc;
-
-    DEFERRED_UNIQUE_PAR_CALL( 0, h, *this );
 }
 
 HOLD::HOLD(RID id)
@@ -209,7 +186,7 @@ bool rectprops_c::change_to(const rectprops_c &p, rectengine_c *engine)
     evtd.changed.pos_changed = posdelta != ts::ivec2(0);
     evtd.changed.size_changed = currentsize() != oldsize;
     evtd.changed.width_changed = currentsize().x != oldsize.x;
-    evtd.changed.is_visible = is_visible();
+    bool vis = is_visible();
     evtd.changed.zindex = zindex_changed;
     evtd.changed.rect = rect();
     if (evtd.changed.pos_changed)
@@ -220,7 +197,17 @@ bool rectprops_c::change_to(const rectprops_c &p, rectengine_c *engine)
         engine->sq_evt(SQ_RECT_CHANGED, engine->getrid(), evtd);
     }
     if (vis_changed)
-        engine->sq_evt(SQ_VISIBILITY_CHANGED, engine->getrid(), evtd);
+    {
+        RID parr = engine->getrect().getparent();
+        if (parr)
+        {
+            HOLD p(parr);
+            evt_data_s d;
+            d.rect.id = engine->getrid();
+            d.rect.is_visible = vis;
+            p.engine().sq_evt(SQ_CHILD_VISIBILITY_CHANGED, p().getrid(), d);
+        }
+    }
     if (zindex_changed)
         engine->sq_evt(SQ_ZINDEX_CHANGED, engine->getrid(), evtd);
     if (hl_changed || ac_changed)
@@ -865,17 +852,21 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
     } else
         return;
 
-    if (textrect.is_dirty_size()) textrect.set_size(dd.size);
+    textrect.texture();
+
+    if (textrect.is_invalid_size()) textrect.set_size(dd.size);
     if (tdp.font) textrect.set_font(tdp.font);
     if (tdp.textoptions) textrect.set_options(*tdp.textoptions);
     if (tdp.forecolor) textrect.set_def_color(*tdp.forecolor);
     bool do_updr = true;
-    if (flags.is(FLAGS_SELECTABLE) && gui->selcore().owner == this)
-    {
-        flags.set(FLAGS_SELECTION);
-        selectable_core_s &selcore = gui->selcore();
 
-        if (gui->selcore().is_dirty() || textrect.is_dirty())
+    selectable_core_s &selcore = gui->selcore();
+    if (flags.is(FLAGS_SELECTABLE) && selcore.owner == this)
+    {
+        if (selcore.some_selected())
+            flags.set(FLAGS_SELECTION);
+
+        if (gui->selcore().is_dirty() || textrect.is_dirty() || textrect.is_invalid_texture())
         {
             do_updr = false;
             textrect.parse_and_render_texture(nullptr, custom_tag_parser_delegate(), false); // it changes glyphs array
@@ -902,8 +893,9 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
         }
 
 
-    } else if (textrect.is_dirty() || flags.is(FLAGS_SELECTION))
+    } else if (textrect.is_dirty() || textrect.is_invalid_texture() || flags.is(FLAGS_SELECTION))
     {
+        DMSG("render" << textrect.is_dirty() << textrect.is_invalid_texture() << flags.is(FLAGS_SELECTION));
         flags.clear(FLAGS_SELECTION);
         textrect.parse_and_render_texture(nullptr, custom_tag_parser_delegate(), false); // it changes glyphs array
         do_updr = false;
@@ -1089,7 +1081,7 @@ static ts::ivec2 extract_link(const ts::wstr_c &message, int chari)
 
 bool gui_label_ex_c::check_overlink(const ts::ivec2 &pos)
 {
-    if (textrect.is_dirty_glyphs()) return false;
+    if (textrect.is_invalid_glyphs()) return false;
     ts::irect clar = get_client_area();
     bool set = false;
     if (clar.inside(pos))
@@ -1129,7 +1121,7 @@ bool gui_label_ex_c::check_overlink(const ts::ivec2 &pos)
 
 ts::ivec2 gui_label_ex_c::get_link_pos_under_cursor(const ts::ivec2 &localpos) const
 {
-    if (textrect.is_dirty_glyphs()) return ts::ivec2(-1);
+    if (textrect.is_invalid_glyphs()) return ts::ivec2(-1);
     ts::irect clar = get_client_area();
     if (clar.inside(localpos))
     {
@@ -1378,7 +1370,7 @@ void gui_tooltip_c::create(RID owner)
     if (owner.call_is_tooltip()) return;
     if (gmsg<GM_TOOLTIP_PRESENT>(owner).send().is(GMRBIT_ACCEPTED)) return;
     drawcollector dch;
-    MAKE_ROOT<gui_tooltip_c> with_par (dch, owner);
+    MAKE_ROOT<gui_tooltip_c> with_par (owner);
 }
 
 ts::uint32 gui_tooltip_c::gm_handler(gmsg<GM_TOOLTIP_PRESENT> &p)
@@ -1402,22 +1394,7 @@ ts::uint32 gui_tooltip_c::gm_handler(gmsg<GM_KILL_TOOLTIPS> &p)
 
 gui_group_c::~gui_group_c()
 {
-    gui->delete_event( DELEGATE(this, children_repos_delay_do) );
 }
-
-bool gui_group_c::children_repos_delay_do(RID, GUIPARAM)
-{
-    children_repos();
-    getengine().redraw();
-    return true;
-}
-
-
-void gui_group_c::children_repos_delay()
-{
-    DEFERRED_UNIQUE_CALL(0, DELEGATE(this, children_repos_delay_do), nullptr);
-}
-
 
 void gui_group_c::children_repos()
 {
@@ -1437,23 +1414,22 @@ bool gui_group_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 
     switch (qp)
     {
+    case SQ_CHILD_VISIBILITY_CHANGED:
+        gui->repos_children(this);
+        break;
     case SQ_CHILD_CREATED:
         on_add_child(data.rect.id);
         // no break here
     case SQ_RECT_CHANGED:
-        //if (data.changed.size_changed)
-            children_repos();
+        gui->repos_children(this);
         return true;
     case SQ_CHILD_DESTROYED:
         on_die_child(data.rect.index);
-        children_repos();
+        gui->repos_children(this);
         return true;
     case SQ_CHILD_ARRAY_COUNT:
         on_change_children(data.values.count);
-        children_repos();
-        return true;
-    case SQ_CHILDREN_REPOS:
-        children_repos();
+        gui->repos_children(this);
         return true;
     }
     return false;
@@ -1541,6 +1517,7 @@ void gui_hgroup_c::children_repos()
         {
             ww.no();
             proposum -= tpropo[t];
+            tpropo[t] = 0;
             continue;
         }
         const guirect_c &r = e->getrect();
@@ -1548,6 +1525,7 @@ void gui_hgroup_c::children_repos()
         {
             ww.no();
             proposum -= tpropo[t];
+            tpropo[t] = 0;
             continue;
         }
         szpol_override[t] = ww.sizepolicy = (ts::uint8)r.size_policy();
@@ -1769,6 +1747,7 @@ void gui_hgroup_c::children_repos()
         sz[vecindex] = ww.sz;
         MODIFY(e->getrect()).pos(xy + clar.lt).size(sz);
         xy[vecindex] += ww.sz + ww.szsplit;
+        e->redraw();
     }
 }
 
@@ -1780,10 +1759,10 @@ void gui_hgroup_c::children_repos()
 /*virtual*/ ts::ivec2 gui_hgroup_c::get_min_size() const
 {
     ts::ivec2 sz = __super::get_min_size();
+    int cminy = 0;
     if (rsizes.count() == getengine().children_count() && ASSERT(0 == __vec_index()))
     {
         int chcnt = rsizes.count();
-        int cminy = 0;
         for(int i=0;i<chcnt;++i)
         {
             const rsize &szsz = rsizes.get(i);
@@ -1799,8 +1778,19 @@ void gui_hgroup_c::children_repos()
                 }
             }
         }
-        sz.y += cminy;
+    } else
+    {
+        int cnt = getengine().children_count();
+        for (int i = 0; i < cnt; ++i)
+        {
+            if (const rectengine_c *e = getengine().get_child(i))
+            {
+                int miny = e->getrect().get_min_size().y;
+                if (cminy < miny) cminy = miny;
+            }
+        }
     }
+    sz.y += cminy;
     return sz;
 }
 
@@ -1809,8 +1799,7 @@ void gui_hgroup_c::children_repos()
     ts::ivec2 sz = __super::get_max_size();
     if (rsizes.count() == getengine().children_count() && ASSERT(0 == __vec_index()))
     {
-        ts::ivec2 minsz = get_min_size();
-        sz.y = minsz.y;
+        sz.y = get_min_size().y;
         int chcnt = rsizes.count();
         int maxx = 0;
         for (int i = 0; i < chcnt; ++i)
@@ -1831,6 +1820,18 @@ void gui_hgroup_c::children_repos()
         }
         sz.x = maxx;
         sz += gui_control_c::get_min_size();
+    } else
+    {
+        sz.y = get_min_size().y;
+        int cnt = getengine().children_count();
+        for(int i=0;i<cnt;++i)
+        {
+            if (const rectengine_c *e = getengine().get_child(i))
+            {
+                int maxy = e->getrect().get_max_size().y;
+                if (sz.y < maxy) sz.y = maxy; // take maximum
+            }
+        }
     }
     return sz;
 }
@@ -1864,19 +1865,22 @@ void gui_hgroup_c::set_proportions(const ts::str_c&values, int div)
         }
         ++t;
     }
-    children_repos();
+    gui->repos_children(this);
+}
+
+void gui_hgroup_c::allow_move_splitter(bool b)
+{
+    bool changed = flags.is(F_ALLOW_MOVE_SPLITTER) != b;
+    flags.init(F_ALLOW_MOVE_SPLITTER, b);
+    if (changed)
+        gui->repos_children(this);
 }
 
 bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if (rid != getrid() && ASSERT(getrid() >> rid)) // child?
+    if (rid != getrid())
     {
-        switch (qp)
-        {
-            case SQ_VISIBILITY_CHANGED:
-                children_repos_delay();
-                return false;
-        }
+        ASSERT(getrid() >> rid); // child?
         return false;
     }
 
@@ -1919,7 +1923,7 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
             int vecindex = __vec_index();
             int dmouse = data.mouse.screenpos()[vecindex] - opd->mpos[vecindex];
             opd->rect.lt.r0 = dmouse;
-            children_repos();
+            gui->repos_children(this);
         }
         break;
     case SQ_DETECT_AREA:
@@ -2057,7 +2061,6 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 
 void gui_vscrollgroup_c::children_repos()
 {
-    if (flags.is(F_NO_REPOS)) return;
     cri_s info;
     children_repos_info(info);
 
@@ -2171,16 +2174,35 @@ void gui_vscrollgroup_c::on_add_child(RID id)
     HOLD(id)().leech(this); // no we'll got all queries of child! MU HA HA HA
 }
 
+void gui_vscrollgroup_c::scroll_to_begin()
+{
+    sbhelper.shift = 0;
+    gui->repos_children(this);
+}
+
+void gui_vscrollgroup_c::scroll_to_end()
+{
+    sbhelper.shift = minimum<int>::value;
+    gui->repos_children(this);
+}
+
+void gui_vscrollgroup_c::scroll_to(rectengine_c *reng, bool maxtop)
+{
+    flags.init(F_SCROLL_TO_MAX_TOP, maxtop);
+    scroll_target = reng;
+    gui->repos_children(this);
+}
+
+
 bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if (rid != getrid() && ASSERT( (getrid() >> rid) || HOLD(rid)().is_root() )) // child?
+    if (rid != getrid()) // child?
     {
+        ASSERT( (getrid() >> rid) || HOLD(rid)().is_root() );
+
         switch (qp)
         {
         case SQ_CHILD_CREATED:
-            return false;
-        case SQ_VISIBILITY_CHANGED:
-                children_repos_delay();
             return false;
         case SQ_MOUSE_WHEELUP:
         case SQ_MOUSE_WHEELDOWN:
@@ -2234,8 +2256,7 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
     case SQ_MOUSE_WHEELDOWN:
         sbhelper.shift -= MWHEELPIXELS;
         flags.clear(F_LAST_REPOS_AT_END);
-        children_repos();
-        getengine().redraw();
+        gui->repos_children(this);
         break;
     case SQ_MOUSE_OUT:
         if (flags.is(F_SBHL))
@@ -2283,8 +2304,7 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 
             if (sbhelper.scroll(opd->rect.lt.y + dmouse, info.area.height()))
             {
-                children_repos();
-                getengine().redraw();
+                gui->repos_children(this);
             }
         }
         break;
@@ -2373,7 +2393,7 @@ bool gui_popup_menu_c::update_size(RID, GUIPARAM)
 
     if (height_decreased)
     {
-        children_repos();
+        gui->repos_children(this);
         
     } else
     {
@@ -2486,8 +2506,7 @@ void gui_popup_menu_c::menu_item_click( const click_data_s &prm )
 
 gui_popup_menu_c & gui_popup_menu_c::show( const menu_anchor_s& screenpos, const menu_c &menu, bool sys, RID parentmenu )
 {
-    drawcollector dch;
-    gui_popup_menu_c &m = gui_popup_menu_c::create(dch, screenpos, menu, sys, parentmenu);
+    gui_popup_menu_c &m = gui_popup_menu_c::create(screenpos, menu, sys, parentmenu);
 
     int dummy = 0;
     menu.iterate_items(m, dummy);
@@ -2502,11 +2521,11 @@ MAKE_ROOT<gui_popup_menu_c>::~MAKE_ROOT()
     me->getroot()->set_system_focus(true);
 }
 
-gui_popup_menu_c & gui_popup_menu_c::create(drawcollector &dch, const menu_anchor_s& screenpos_, const menu_c &mnu, bool sys, RID parentmenu)
+gui_popup_menu_c & gui_popup_menu_c::create(const menu_anchor_s& screenpos_, const menu_c &mnu, bool sys, RID parentmenu)
 {
     gmsg<GM_KILLPOPUPMENU_LEVEL>( mnu.lv() ).send();
     gmsg<GM_KILL_TOOLTIPS>().send();
-    return MAKE_ROOT<gui_popup_menu_c>( dch, screenpos_, mnu, sys, parentmenu );
+    return MAKE_ROOT<gui_popup_menu_c>( screenpos_, mnu, sys, parentmenu );
 }
 
 bool gui_popup_menu_c::operator()(int, const ts::wsptr& txt)
@@ -2896,11 +2915,10 @@ MAKE_CHILD<gui_vtabsel_c>::~MAKE_CHILD()
     set_theme_rect(CONSTASTR("vtab"), false);
     __super::created();
     {
-        AUTOCLEAR(flags, F_NO_REPOS);
         ts::pair_s<RID, int> cp(RID(), 0);
         menu.iterate_items(*this, cp);
     }
-    children_repos();
+    gui->repos_children(this);
     
 }
 
@@ -3108,10 +3126,7 @@ gui_hslider_c::gui_hslider_c(MAKE_CHILD<gui_hslider_c> &data) :gui_control_c(dat
     else
         values.init(CONSTWSTR("0/0/1/1"));
 
-    int bid = gui->get_temp_buf(1.0, sizeof(float));
-    void *voldata = gui->lock_temp_buf(bid);
-    memcpy(voldata, &data.val, sizeof(float));
-    DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, setval), as_param(bid) );
+    DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, setval), as_param(gui->temp_store(data.val)) );
 }
 
 
@@ -3123,10 +3138,9 @@ gui_hslider_c::gui_hslider_c(MAKE_CHILD<gui_hslider_c> &data) :gui_control_c(dat
 
 bool gui_hslider_c::setval(RID, GUIPARAM p)
 {
-    if (void *voldata = gui->lock_temp_buf(as_int(p)))
+    if (float *voldata = gui->temp_restore<float>(as_int(p)))
     {
-        set_value( *(float *)voldata );
-        gui->kill_temp_buf(as_int(p));
+        set_value( *voldata );
     }
     return true;
 }

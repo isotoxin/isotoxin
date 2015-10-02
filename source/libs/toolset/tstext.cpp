@@ -195,32 +195,32 @@ void text_rect_c::update_rectangles( rectangle_update_s * updr )
 
 void text_rect_c::render_texture(rectangle_update_s * updr)
 {
-    if (glyphs().count() == 0) { safe_destruct(texture); return; }
+    if (glyphs().count() == 0) { texture_no_need(); return; }
     CHECK(!flags.is(F_INVALID_SIZE|F_INVALID_GLYPHS));
 	if (!CHECK(size.x > 0 && size.y > 0)) return;
-    texture.ajust(size,false);
+    texture().ajust(size,false);
     flags.clear(F_DIRTY|F_INVALID_TEXTURE);
     ivec2 toffset(ui_scale(margin_left), ui_scale(margin_top) - scroll_top + (flags.is(TO_VCENTER) ? (size.y-text_height)/2 : 0));
-	if (draw_glyphs((uint8*)texture.body(), size.x, size.y, texture.info().pitch, glyphs().array(), toffset) && updr)
+	if (draw_glyphs((uint8*)texture().body(), size.x, size.y, texture().info().pitch, glyphs().array(), toffset) && updr)
         update_rectangles(toffset, updr);
 }
 
 void text_rect_c::render_texture( rectangle_update_s * updr, fastdelegate::FastDelegate< void (drawable_bitmap_c&, const ivec2 &size) > clearp )
 {
-    if (glyphs().count() == 0) return safe_destruct(texture);
+    if (glyphs().count() == 0) return texture_no_need();
     CHECK(!flags.is(F_INVALID_SIZE|F_INVALID_GLYPHS));
     if (!CHECK(size.x > 0 && size.y > 0)) return;
-    texture.ajust(size, false);
+    texture().ajust(size, false);
     flags.clear(F_DIRTY|F_INVALID_TEXTURE);
-    clearp(texture, size);
+    clearp(texture(), size);
     ivec2 toffset(ui_scale(margin_left), ui_scale(margin_top) - scroll_top + (flags.is(TO_VCENTER) ? (size.y - text_height) / 2 : 0));
-    if (draw_glyphs((uint8*)texture.body(), size.x, size.y, texture.info().pitch, glyphs().array(), toffset, false) && updr)
+    if (draw_glyphs((uint8*)texture().body(), size.x, size.y, texture().info().pitch, glyphs().array(), toffset, false) && updr)
         update_rectangles(toffset, updr);
 }
 
 bool text_rect_c::set_text(const wstr_c &text_, CUSTOM_TAG_PARSER ctp, bool do_parse_and_render_texture)
 {
-    bool dirty = flags.is(F_INVALID_SIZE) || texture.ajust(size,false) || flags.is(F_DIRTY);
+    bool dirty = flags.is(F_INVALID_SIZE) || texture().ajust(size,false) || flags.is(F_DIRTY);
 
 	if (dirty || !text.equals(text_))
 	{

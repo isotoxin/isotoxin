@@ -219,7 +219,7 @@ bool rectengine_c::cleanup_children(RID,GUIPARAM)
     return true;
 }
 
-void rectengine_c::resort_children()
+void rectengine_c::z_resort_children()
 {
     children_sorted.clear();
     if (children.sortcopy( children_sorted ))
@@ -232,12 +232,11 @@ void rectengine_c::resort_children()
 
 bool rectengine_c::children_sort( fastdelegate::FastDelegate< bool (rectengine_c *, rectengine_c *) > swap_them )
 {
-    auto srt = [&](rectengine_c *e1, rectengine_c *e2)->bool
+    if (children.sort([&](rectengine_c *e1, rectengine_c *e2)->bool
     {
         if (e1 == e2) return false; // qsort requirement
-        return !swap_them(e1,e2);
-    };
-    if (children.sort(srt))
+        return !swap_them(e1, e2);
+    }))
     {
         gui->dirty_hover_data();
         redraw();
@@ -447,7 +446,7 @@ rectengine_c *rectengine_c::get_last_child()
     case SQ_MOUSE_L2CLICK:
         return false;
     case SQ_CHILD_CREATED:
-        resort_children();
+        z_resort_children();
         break;
     case SQ_CHILD_DESTROYED:
         data.rect.index = child_index( data.rect.id );
@@ -485,7 +484,7 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_border_dojob(HWND hwnd, UINT msg,
         case WM_CREATE:
             {
                 CREATESTRUCT *cs = (CREATESTRUCT *)lparam;
-                SetWindowLongPtrW(hwnd, GWLP_USERDATA, PTR_TO_UNSIGNED(cs->lpCreateParams));
+                SetWindowLongPtrW(hwnd, GWLP_USERDATA, PTR_TO_UNSIGNED(cs->lpCreateParams)); //-V221
                 border_window_data_s *d = (border_window_data_s *)cs->lpCreateParams;
                 d->recreate_back_buffer();
             }
@@ -541,7 +540,7 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
 		case WM_CREATE:
 			{
 				CREATESTRUCT *cs = (CREATESTRUCT *)lparam;
-				SetWindowLongPtrW(hwnd, GWLP_USERDATA, PTR_TO_UNSIGNED(cs->lpCreateParams) );
+				SetWindowLongPtrW(hwnd, GWLP_USERDATA, PTR_TO_UNSIGNED(cs->lpCreateParams) ); //-V221
 				rectengine_root_c *e = (rectengine_root_c *)cs->lpCreateParams;
                 e->hwnd = hwnd;
 				e->recreate_back_buffer( e->getrect().getprops().currentsize() );
@@ -554,7 +553,7 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
                 {
                     NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
                     nd.hWnd = hwnd;
-                    nd.uID = (int)e;
+                    nd.uID = (int)e; //-V205
                     Shell_NotifyIconW(NIM_DELETE, &nd);
                     e->flags.clear(F_NOTIFY_ICON);
                 }
@@ -683,7 +682,7 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
             if (engine && !engine->is_dip())
             {
                 WINDOWPOS *wp = (WINDOWPOS *)lparam;
-                DMSG("wpch flags: " << wp->flags);
+                //DMSG("wpch flags: " << wp->flags);
                 const guirect_c &r = engine->getrect();
                 ts::ivec2 p = r.getprops().screenpos();
                 ts::ivec2 s = r.getprops().size();
@@ -2130,7 +2129,9 @@ void rectengine_root_c::set_system_focus(bool bring_to_front)
         SetFocus(hwnd);
     }
     if (bring_to_front)
+    {
         SetForegroundWindow(hwnd);
+    }
 }
 
 void rectengine_root_c::flash()
@@ -2153,8 +2154,6 @@ void rectengine_root_c::notification_icon( const ts::wsptr& text )
     memcpy(nd.szTip, text.s, copylen);
     nd.szTip[copylen / sizeof(ts::wchar)] = 0;
 
-    DMSG( "hhh" << ts::to_str(nd.szTip) );
-
     PostMessageW( hwnd, WM_USER + 7214, 0, (LPARAM)&nd );
 }
 
@@ -2166,11 +2165,11 @@ bool rectengine_root_c::update_foreground()
         HWND cur = HOLD(rr)().getroot()->hwnd;
         if (prev)
         {
-            SetWindowPos(cur, prev, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            //SetWindowPos(cur, prev, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         } else
         {
-            SetWindowPos(cur, HWND_NOTOPMOST /*prev*/, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            SetForegroundWindow(cur);
+            //SetWindowPos(cur, HWND_NOTOPMOST /*prev*/, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            //SetForegroundWindow(cur);
         }
         prev = cur;
     }
@@ -2228,13 +2227,13 @@ ts::wstr_c  rectengine_root_c::save_directory_dialog(const ts::wsptr &root, cons
 
     return r;
 }
-ts::wstr_c  rectengine_root_c::save_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, const ts::wsptr &filt, const ts::wchar *defext, const ts::wchar *title)
+ts::wstr_c  rectengine_root_c::save_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, ts::extensions_s & exts, const ts::wchar *title)
 {
     HWND ow = ts::g_main_window;
     ts::g_main_window = hwnd;
 
     ++sysmodal;
-    ts::wstr_c r = ts::get_save_filename_dialog(iroot, name, filt, defext, title);
+    ts::wstr_c r = ts::get_save_filename_dialog(iroot, name, exts, title);
     --sysmodal;
     ts::g_main_window = ow;
 
@@ -2309,7 +2308,7 @@ rectengine_child_c::~rectengine_child_c()
         return false;
         break;
     case SQ_ZINDEX_CHANGED:
-        HOLD(getrect().getparent()).engine().resort_children();
+        HOLD(getrect().getparent()).engine().z_resort_children();
         break;
     default:
         break;

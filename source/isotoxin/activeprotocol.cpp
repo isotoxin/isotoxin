@@ -11,8 +11,19 @@ active_protocol_c::active_protocol_c(int id, const active_protocol_data_s &pd):i
     w().data = pd;
     w().data.config.set_size(pd.config.size()); // copy content due race condition
 
+    if (w().data.sort_factor == 0)
+    {
+        w().data.sort_factor = id;
+        for(; nullptr != prf().find_ap([&]( const active_protocol_c &oap )->bool {
+            if (&oap == this) return false;
+            return oap.sort_factor() == w().data.sort_factor;
+        }) ; ++w().data.sort_factor );
+    }
+    g_app->F_PROTOSORTCHANGED = true;
+
     w().volume = cfg().vol_talk();
     w().dsp_flags = dspflags;
+    w().manual_cos = (contact_online_state_e)prf().manual_cos();
 
     cvt.volume = cfg().vol_mic();
     cvt.filter_options.init(fmt_converter_s::FO_NOISE_REDUCTION, FLAG(dspflags, DSP_MIC_NOISE));
@@ -33,6 +44,9 @@ active_protocol_c::~active_protocol_c()
 
 void active_protocol_c::run()
 {
+    if (g_app->F_READONLY_MODE && !g_app->F_READONLY_MODE_WARN)
+        return; // no warn - no job
+
     if (syncdata.lock_read()().flags.is(F_WORKER)) return;
 
     CloseHandle(CreateThread(nullptr, 0, worker, this, 0, nullptr));
@@ -74,6 +88,9 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     ipcp->send(ipcw(AQ_SET_NAME) << (w().data.user_name.is_empty() ? prf().username() : w().data.user_name));
                     ipcp->send(ipcw(AQ_SET_STATUSMSG) << (w().data.user_statusmsg.is_empty() ? prf().userstatus() : w().data.user_statusmsg));
                     ipcp->send(ipcw(AQ_SET_AVATAR) << w().data.avatar);
+                    if (w().manual_cos != COS_ONLINE)
+                        set_ostate( w().manual_cos );
+
                     ipcp->send(ipcw(AQ_INIT_DONE));
                     if (0 != (w().data.options & active_protocol_data_s::O_AUTOCONNECT))
                     {
@@ -386,6 +403,7 @@ ts::uint32 active_protocol_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
             stop_and_die();
             contacts().nomore_proto(protoid);
             prf().dirty_sort();
+            g_app->recreate_ctls();
         }
     }
     return 0;
@@ -464,9 +482,19 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
         contact_c *target = contacts().find( msg.post.receiver );
         if (!target) return 0;
 
-        if ( 0 == (get_features() & PF_OFFLINE_MESSAGING) )
-            if (target->get_state() != CS_ONLINE)
-                return 0;
+
+        for(;;)
+        {
+            if (CS_INVITE_RECEIVE == target->get_state() || CS_INVITE_SEND == target->get_state())
+                if (0 != (get_features() & PF_UNAUTHORIZED_CHAT))
+                    break;
+
+            if (0 == (get_features() & PF_OFFLINE_MESSAGING))
+                if (target->get_state() != CS_ONLINE)
+                    return 0;
+
+            break;
+        }
 
         if (typingsendcontact == target->getkey().contactid)
             typingsendcontact = 0;
@@ -582,6 +610,13 @@ bool active_protocol_c::check_save(RID, GUIPARAM)
     }
     return true;
 }
+
+void active_protocol_c::set_sortfactor(int sf)
+{
+    syncdata.lock_write()().data.sort_factor = sf;
+    g_app->F_PROTOSORTCHANGED = true;
+}
+
 
 void active_protocol_c::set_avatar(contact_c *c)
 {

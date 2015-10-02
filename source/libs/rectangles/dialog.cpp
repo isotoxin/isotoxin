@@ -104,9 +104,7 @@ void gui_listitem_c::set_text(const ts::wstr_c&t)
     switch (qp)
     {
     case SQ_CHILD_CREATED:
-        {
-            HOLD(data.rect.id)().leech(this);
-        }
+        HOLD(data.rect.id)().leech(this);
         break;
     case SQ_MOUSE_IN:
         MODIFY(getrid()).highlight(true);
@@ -868,6 +866,7 @@ int gui_dialog_c::radio( const ts::array_wrapper_c<const radio_item_s> & items, 
         r.set_handler(handler, ri.param);
         r.set_face_getter(BUTTON_FACE(radio));
         r.set_text(ri.text);
+        r.set_updaterect( DELEGATE(this, updrect) );
 
         if ( !ri.name.is_empty() )
             ctl_by_name[ ri.name ] = &r;

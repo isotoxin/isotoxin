@@ -2574,7 +2574,7 @@ void __stdcall tick(int *sleep_time_ms)
     static int nextt = curt;
     static int nexttav = curt;
     static int nexttresync = curt;
-    time_t tryconnect = now() + 60;
+    static time_t tryconnect = now() + 60;
     if (tox)
     {
         // self typing
@@ -2622,7 +2622,7 @@ void __stdcall tick(int *sleep_time_ms)
         if (forceupdateself || nst != self_state)
         {
             if (nst == CS_OFFLINE && self_state != CS_OFFLINE)
-                tryconnect = now() + 60;
+                tryconnect = now() + 10;
 
             self_state = nst;
             update_self();
@@ -2634,7 +2634,7 @@ void __stdcall tick(int *sleep_time_ms)
             if (ctime > tryconnect)
             {
                 connect();
-                tryconnect = ctime + 60;
+                tryconnect = ctime + 10;
             }
         }
 

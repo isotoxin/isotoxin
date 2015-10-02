@@ -217,7 +217,9 @@ void gui_textedit_c::paste_(int cp)
 {
 	if (is_readonly()) return;
 
-	text_replace(cp, ts::get_clipboard_text());
+    ts::wstr_c t(ts::get_clipboard_text());
+    t.replace_all(CONSTWSTR("\r\n"), CONSTWSTR("\n"));
+	text_replace(cp, t);
 }
 
 void gui_textedit_c::insert_active_element(active_element_s *ae, int cp)

@@ -5,11 +5,11 @@ namespace ts
 class Time
 {
     DWORD value;
-    static __declspec(thread) DWORD threadCurrentTime;
+    static __declspec(thread) DWORD thread_current_time;
 
     Time();
     explicit Time(DWORD value) : value(value) {}
-    void operator-(DWORD) const;//чтобы отловить все места с "t - timeGetTime()"
+    void operator-(DWORD) const; // avoid "t - timeGetTime()"
 
 public:
 
@@ -17,20 +17,20 @@ public:
 
     static Time current()
     {
-        return Time(threadCurrentTime ? threadCurrentTime : timeGetTime());
+        return Time(thread_current_time ? thread_current_time : timeGetTime());
     }
     static Time undefined()
     {
         return Time(0);
     }
-    static Time past()//время, которое гарантированно в прошлом
+    static Time past() // time that is guaranteed is in past
     {
         return current() - 500000000;
     }
-    static Time updateForThread()//обновляет время для текущего потока и возвращает текущее время
+    static Time update_thread_time() // update current thread time and return current time value
     {
-        if ((threadCurrentTime = timeGetTime()) == 0) threadCurrentTime = 1;//0 используется как спец. признак того, что для данного потока время не обновляется и нужно всегда использовать timeGetTime()
-        return Time(threadCurrentTime);
+        if ((thread_current_time = timeGetTime()) == 0) thread_current_time = 1; // 0 means direct call to timeGetTime(), so set 1
+        return Time(thread_current_time);
     }
 
     Time &operator+=(int delta) { value += delta; return *this; }

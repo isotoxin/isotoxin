@@ -295,6 +295,15 @@ namespace ts
             path.case_down();
 #endif // _WIN32
 
+        if ( FNO_MAKECORRECTNAME & fnoptions )
+        {
+            wsptr badchars = CONSTWSTR("\\/?*|<>:");
+            int cnt = path.get_length();
+            for(int i=0;i<cnt;++i)
+                if ( pwstr_c(badchars).find_pos( path.get_char(i) ) >= 0 )
+                    path.set_char(i,'_');
+        }
+
 	}
 
 	void TSCALL fill_dirs_and_files( const wstr_c &path, wstrings_c &files, wstrings_c &dirs )
@@ -770,8 +779,17 @@ namespace ts
 		return buffer;
 	}
 
-	wstr_c   TSCALL get_save_filename_dialog(const wsptr &iroot, const wsptr &name, const wsptr &filt, const wchar *defext, const wchar *title)
+	wstr_c   TSCALL get_save_filename_dialog(const wsptr &iroot, const wsptr &name, extensions_s &exts, const wchar *title)
 	{
+        ts::wstr_c filter;
+        if (exts.exts.size())
+        {
+            for( const extension_s &e : exts.exts )
+                filter.append( e.desc ).append(CONSTWSTR("/*.")).append( e.ext ).append_char('/');
+            filter.append_char('/');
+            filter.replace_all('/', 0);
+        }
+
 		wchar cdp[ MAX_PATH + 16 ];
 		GetCurrentDirectoryW(MAX_PATH + 15,cdp);
 
@@ -785,8 +803,6 @@ namespace ts
 		o.hwndOwner=g_main_window;
 		o.hInstance=GetModuleHandle(nullptr);
 
-		wstr_c filter(filt);
-		filter.replace_all(ENEMY_SLASH,0);
 
 		wstr_c buffer(MAX_PATH + 16,true);
         buffer.set(name);
@@ -794,7 +810,7 @@ namespace ts
 		o.lpstrTitle = title;
 		o.lpstrFile = buffer.str();
 		o.nMaxFile=MAX_PATH;
-		o.lpstrDefExt = defext;
+		o.lpstrDefExt = exts.defext();
 
 		o.lpstrFilter = filter.is_empty() ? nullptr : filter.cstr();
 		o.lpstrInitialDir = root;
@@ -806,7 +822,7 @@ namespace ts
 			return wstr_c();
 		}
 
-
+        exts.index = o.nFilterIndex - 1;
 		SetCurrentDirectoryW(cdp);
 		buffer.set_length( CHARz_len(buffer.cstr()) );
 
@@ -943,7 +959,7 @@ namespace ts
         if (full_names)
         {
             int i = pwstr_c(wildcard).find_last_pos_of(CONSTWSTR("/\\"));
-            if (ASSERT(i > 0))
+            if (ASSERT(i >= 0))
             {
                 path.set(pwstr_c(wildcard).substr(0, i + 1));
                 pl = i+1;

@@ -62,6 +62,7 @@ struct active_protocol_data_s
     ts::str_c user_statusmsg; // utf8
     ts::blob_c config;
     ts::blob_c avatar;
+    int sort_factor = 0;
     int options = O_AUTOCONNECT;
 
     configurable_s configurable;
@@ -83,6 +84,7 @@ struct sync_data_s
     ts::flags32_s flags;
     float volume = 1.0f;
     int dsp_flags = 0;
+    contact_online_state_e manual_cos = COS_ONLINE;
 };
 
 class active_protocol_c : public ts::safe_object
@@ -157,6 +159,9 @@ public:
 
     void set_current_online(bool oflg) { syncdata.lock_write()().flags.init(F_CURRENT_ONLINE, oflg); }
     bool is_current_online() const { return syncdata.lock_read()().flags.is(F_CURRENT_ONLINE); }
+
+    int sort_factor() const { return syncdata.lock_read()().data.sort_factor; }
+    void set_sortfactor(int sf);
 
     void set_avatar(contact_c *); // self avatar to self contact
     void set_avatar( const ts::blob_c &ava ); // avatar for this protocol

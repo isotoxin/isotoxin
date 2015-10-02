@@ -117,8 +117,6 @@ contact_c::~contact_c()
 {
     if (gui)
     {
-        gui->delete_event( DELEGATE(this,flashing_proc) );
-        gui->delete_event( DELEGATE(this,check_invite) );
         gui->delete_event( DELEGATE(this,b_accept_call) );
     }
 }
@@ -352,6 +350,7 @@ const avatar_s *contact_c::get_avatar() const
 
 bool contact_c::keep_history() const
 {
+    if (g_app->F_READONLY_MODE && !getkey().is_self()) return false;
     if (key.is_group() && !opts.unmasked().is(F_PERSISTENT_GCHAT))
         return false;
     if (KCH_ALWAYS_KEEP == keeph) return true;
@@ -386,14 +385,233 @@ void contact_c::make_time_unique(time_t &t)
             break;
 }
 
-int contact_c::calc_history_after(time_t t)
+int contact_c::calc_unread()
 {
+    if (keep_history())
+        return prf().calc_history_after(getkey(), get_readtime(), true);
+
+    time_t rt = get_readtime();
     int cnt = 0;
-    for( const post_s &p : history )
-        if (p.time > t)
+    for(int i=history.size()-1;i>=0;--i)
+    {
+        const post_s &p = history.get(i);
+        if (p.time <= rt) break;
+        if (p.mt() == MTA_MESSAGE)
             ++cnt;
+    }
     return cnt;
 }
+
+void contact_c::export_history( const ts::wsptr &templatename, const ts::wsptr &fname )
+{
+    if (is_meta() || getkey().is_group())
+    {
+        prf().load_history( getkey() ); // load whole history for this contact
+        ts::tmp_pointers_t<post_s, 128> hist;
+        for( auto &row : prf().get_table_history() )
+            if (row.other.mt() == MTA_MESSAGE && row.other.historian == getkey())
+                hist.add( &row.other );
+
+        auto sorthist = []( const post_s *p1, const post_s *p2 ) -> bool
+        {
+            return p1->time < p2->time;
+        };
+
+        hist.sort(sorthist);
+
+        ts::tmp_buf_c buf; buf.load_from_file(templatename);
+        ts::pstr_c tmpls( buf.cstr() ); 
+
+        ts::str_c time, tname, text, linebreak(CONSTASTR("\r\n")), link;
+
+        static ts::asptr bb_tags[] = { CONSTASTR("u"), CONSTASTR("i"), CONSTASTR("b"), CONSTASTR("s") };
+        struct bbcode_s
+        {
+            ts::str_c bb0;
+            ts::str_c be0;
+
+            ts::str_c bb;
+            ts::str_c be;
+        } bbr[ARRAY_SIZE(bb_tags)];
+        
+        int bi = 0;
+        for(ts::asptr &b : bb_tags)
+        {
+            bbr[bi].bb0.set(CONSTASTR("[")).append(b).append(CONSTASTR("]"));
+            bbr[bi].bb = bbr[bi].bb0;
+            bbr[bi].be0.set(CONSTASTR("[/")).append(b).append(CONSTASTR("]"));
+            bbr[bi].be = bbr[bi].be0;
+            ++bi;
+        }
+
+        auto bbrepls = [&](ts::str_c &s)
+        {
+            for (bbcode_s &b : bbr)
+            {
+                s.replace_all(b.bb0, b.bb);
+                s.replace_all(b.be0, b.be);
+            }
+        };
+
+        auto do_repls = [&](ts::str_c &s)
+        {
+            s.replace_all(CONSTASTR("{TIME}"), time);
+            s.replace_all(CONSTASTR("{NAME}"), tname);
+            s.replace_all(CONSTASTR("{TEXT}"), text);
+        };
+
+        auto store = [&](const ts::str_c &s)
+        {
+            ts::str_c ss(s);
+            do_repls(ss);
+            buf.append_buf(ss.cstr(), ss.get_length());
+        };
+
+        auto find_indx = [&]( const ts::asptr &section, bool repls )->ts::str_c
+        {
+            int index = tmpls.find_pos(section);
+            if (index >= 0)
+            {
+                index += section.l;
+                int index_end = tmpls.find_pos(index, CONSTASTR("===="));
+                if (index_end < 0) index_end = tmpls.get_length();
+
+                ts::str_c s( tmpls.substr(index, index_end) );
+                if (repls) do_repls(s);
+                return s;
+            }
+            return ts::str_c();
+        };
+
+        tname = get_name();
+
+        tm tt;
+        time_t nowtime = now();
+        _localtime64_s(&tt, &nowtime);
+        ts::swstr_t<-128> tstr;
+        tstr.append_as_uint(tt.tm_hour);
+        if (tt.tm_min < 10)
+            tstr.append(CONSTWSTR(":0"));
+        else
+            tstr.append_char(':');
+        tstr.append_as_uint(tt.tm_min);
+        time = ts::to_utf8(tstr);
+
+        ts::str_c hdr = find_indx(CONSTASTR("====header"), true);
+        ts::str_c footer = find_indx(CONSTASTR("====footer"), true);
+        ts::str_c mine = find_indx(CONSTASTR("====mine"), false);
+        ts::str_c namedmine = find_indx(CONSTASTR("====namedmine"), false);
+        ts::str_c other = find_indx(CONSTASTR("====other"), false);
+        ts::str_c namedother = find_indx(CONSTASTR("====namedother"), false);
+        ts::str_c datesep = find_indx(CONSTASTR("====dateseparator"), false);
+        ts::abp_c sets; sets.load( find_indx(CONSTASTR("====replace"), false) );
+        if ( ts::abp_c * lbr = sets.get(CONSTASTR("linebreak")) )
+            linebreak = lbr->as_string();
+        if (ts::abp_c * lbr = sets.get(CONSTASTR("link")))
+            link = lbr->as_string();
+
+        bi = 0;
+        for (ts::asptr &b : bb_tags)
+        {
+            if (ts::abp_c * bb = sets.get(ts::str_c(CONSTASTR("bb-")).append(b)))
+                bbr[bi].bb = bb->as_string();
+            if (ts::abp_c * bb = sets.get(ts::str_c(CONSTASTR("be-")).append(b)))
+                bbr[bi].be = bb->as_string();
+            ++bi;
+        }
+
+        buf.clear();
+
+        if (!hdr.is_empty())
+            buf.append_buf(hdr.cstr(), hdr.get_length());
+
+
+        tm last_post_time = {0};
+        contact_c *prev_sender = nullptr;
+        int cnt = hist.size();
+        for(int i=0;i<cnt;++i)
+        {
+            const post_s *post = hist.get(i);
+
+            tm tmtm;
+            _localtime64_s(&tmtm, &post->time);
+
+            if (!datesep.is_empty())
+            {
+                if (tmtm.tm_year != last_post_time.tm_year || tmtm.tm_mon != last_post_time.tm_mon || tmtm.tm_mday != last_post_time.tm_mday)
+                {
+                    text_set_date(tstr, from_utf8(prf().date_sep_template()), tmtm);
+                    time = ts::to_utf8(tstr);
+                    store(datesep);
+                    prev_sender = nullptr;
+                }
+            }
+            last_post_time = tmtm;
+
+            tstr.clear();
+            tstr.append_as_uint(last_post_time.tm_hour);
+            if (last_post_time.tm_min < 10)
+                tstr.append(CONSTWSTR(":0"));
+            else
+                tstr.append_char(':');
+            tstr.append_as_uint(last_post_time.tm_min);
+
+            //text_set_date(tstr, from_utf8(prf().date_msg_template()), last_post_time);
+            time = ts::to_utf8(tstr);
+            bool is_mine = post->sender.is_self();
+            contact_c *sender = contacts().find( post->sender );
+            if (prev_sender != sender)
+            {
+                if (sender)
+                {
+                    contact_c *cs = sender;
+                    if (cs->getkey().is_self() && post->receiver.protoid)
+                        cs = contacts().find_subself(post->receiver.protoid);
+
+                    tname = cs->get_name();
+                    bbrepls(tname);
+                    
+                }
+                else
+                    tname = CONSTASTR("?");
+            }
+
+            text = post->message_utf8;
+            text.replace_all(CONSTASTR("\n"), linebreak);
+            if (!link.is_empty())
+            {
+                ts::ivec2 linkinds;
+                for (int i = 0; text_find_link(text, i, linkinds);)
+                {
+                    ts::str_c lnk = link;
+                    lnk.replace_all(CONSTASTR("{LINK}"), text.substr(linkinds.r0, linkinds.r1));
+                    text.replace(linkinds.r0, linkinds.r1 - linkinds.r0, lnk);
+                    i = linkinds.r0 + lnk.get_length();
+                }
+            }
+            bbrepls(text);
+
+            if (prev_sender != sender)
+                store( is_mine ? namedmine : namedother );
+            else
+                store( is_mine ? mine : other );
+            prev_sender = sender;
+        }
+
+
+        if (!footer.is_empty())
+            buf.append_buf(footer.cstr(), footer.get_length());
+        buf.save_to_file(fname);
+    }
+}
+
+//void contact_c::load_history()
+//{
+//    time_t before = now();
+//    if (history.size()) before = history.get(0).time;
+//    int not_yet_loaded = prf().calc_history_before(getkey(), before);
+//    load_history(not_yet_loaded);
+//}
 
 void contact_c::load_history(int n_last_items)
 {
@@ -438,24 +656,6 @@ void contact_c::load_history(int n_last_items)
     }
 }
 
-bool contact_c::check_invite(RID r, GUIPARAM p)
-{
-    ASSERT( !is_rootcontact() );
-    if (!opts.unmasked().is(F_SHOW_FRIEND_REQUEST))
-    {
-        if (p)
-        {
-            DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, check_invite), as_int(p) - 1);
-        } else
-        {
-            // no invite... looks like already confirmed, but not saved
-            // so, accept again
-            b_accept(RID(), nullptr);
-        }
-    }
-    return true;
-}
-
 void contact_c::send_file(const ts::wstr_c &fn)
 {
     contact_c *historian = get_historian();
@@ -482,40 +682,6 @@ void contact_c::send_file(const ts::wstr_c &fn)
     }
 }
 
-bool contact_c::recalc_unread()
-{
-    if (gui_contact_item_c *gi = gui_item)
-    {
-        int unread = keep_history() ? prf().calc_history_after(getkey(), readtime) : calc_history_after(readtime);
-
-        LOG("unread:" << getkey() << unread << ASTIME(readtime) );
-
-        if (unread > 99) unread = 99;
-        if (unread != gi->n_unread)
-        {
-            gi->n_unread = unread;
-            gi->getengine().redraw();
-            g_app->F_SETNOTIFYICON = true;
-            g_app->F_NEEDFLASH |= gi->n_unread > 0;
-        }
-        return gi->n_unread > 0;
-    }
-    return false;
-}
-
-bool contact_c::flashing_proc(RID, GUIPARAM)
-{
-    if (gui_item)
-    {
-        if (opts.unmasked().is(F_RINGTONE))
-        {
-            opts.unmasked().invert(F_RINGTONE_BLINK);
-            DEFERRED_UNIQUE_CALL(0.5f, DELEGATE(this, flashing_proc), nullptr);
-        }
-        gui_item->getengine().redraw();
-    }
-    return true;
-}
 bool contact_c::ringtone(bool activate, bool play_stop_snd)
 {
     ASSERT( activate || !get_aaac() );
@@ -525,7 +691,7 @@ bool contact_c::ringtone(bool activate, bool play_stop_snd)
         opts.unmasked().init(F_RINGTONE, false);
         subiterate( [this](contact_c *c) { if (c->is_ringtone()) opts.unmasked().init(F_RINGTONE, true); } );
 
-        flashing_proc(RID(), nullptr);
+        g_app->new_blink_reason( getkey() ).ringtone(activate);
 
     } else if (getmeta())
     {
@@ -633,15 +799,6 @@ bool contact_c::calltone(bool f, bool call_accepted)
     return false;
 }
 
-bool contact_c::is_filein() const
-{
-    if (is_meta())
-        return g_app->present_file_transfer_by_historian( getkey(), true );
-
-    return g_app->present_file_transfer_by_sender( getkey(), true );
-}
-
-
 bool contact_c::b_accept_call(RID, GUIPARAM prm)
 {
 
@@ -666,7 +823,7 @@ bool contact_c::b_accept_call(RID, GUIPARAM prm)
         av( true );
     }
 
-    if ( AAAC_ACCEPT_MUTE_MIC == (auto_accept_audio_call_e)(int)prm )
+    if ( AAAC_ACCEPT_MUTE_MIC == as_int(prm) )
         b_mute_mic(RID(),nullptr);
 
     return true;
@@ -675,7 +832,8 @@ bool contact_c::b_accept_call(RID, GUIPARAM prm)
 bool contact_c::b_hangup(RID, GUIPARAM par)
 {
     gui_notice_c *ownitm = (gui_notice_c *)par;
-    HOLD(ownitm->getparent())().getparent().call_children_repos();
+    RID parent = HOLD(ownitm->getparent())().getparent();
+    gui->repos_children(&HOLD(parent).as<gui_group_c>());
     TSDEL(ownitm);
 
     if (active_protocol_c *ap = prf().ap(getkey().protoid))
@@ -705,7 +863,8 @@ bool contact_c::b_call(RID, GUIPARAM)
 bool contact_c::b_cancel_call(RID, GUIPARAM par)
 {
     gui_notice_c *ownitm = (gui_notice_c *)par;
-    HOLD(ownitm->getparent())().getparent().call_children_repos();
+    RID parent = HOLD(ownitm->getparent())().getparent();
+    gui->repos_children(&HOLD(parent).as<gui_group_c>());
     TSDEL(ownitm);
 
     if (calltone(false))
@@ -785,7 +944,8 @@ bool contact_c::b_mute_speaker(RID, GUIPARAM p)
 bool contact_c::b_reject_call(RID, GUIPARAM par)
 {
     gui_notice_c *ownitm = (gui_notice_c *)par;
-    HOLD(ownitm->getparent())().getparent().call_children_repos();
+    RID parent = HOLD(ownitm->getparent())().getparent();
+    gui->repos_children(&HOLD(parent).as<gui_group_c>());
     TSDEL(ownitm);
 
     if (ringtone(false))
@@ -807,7 +967,8 @@ bool contact_c::b_accept(RID, GUIPARAM par)
     if (par)
     {
         gui_notice_c *ownitm = (gui_notice_c *)par;
-        HOLD(ownitm->getparent())().getparent().call_children_repos();
+        RID parent = HOLD(ownitm->getparent())().getparent();
+        gui->repos_children(&HOLD(parent).as<gui_group_c>());
         TSDEL(ownitm);
     }
 
@@ -822,16 +983,16 @@ bool contact_c::b_accept(RID, GUIPARAM par)
 }
 bool contact_c::b_reject(RID, GUIPARAM par)
 {
-    gui_notice_c *ownitm = (gui_notice_c *)par;
-    HOLD(ownitm->getparent())().getparent().call_children_repos();
-    TSDEL(ownitm);
+    //gui_notice_c *ownitm = (gui_notice_c *)par;
+    //RID parent = HOLD(ownitm->getparent())().getparent();
+    //gui->repos_children(&HOLD(parent).as<gui_group_c>());
+    //TSDEL(ownitm);
 
     if (active_protocol_c *ap = prf().ap( getkey().protoid ))
         ap->reject(getkey().contactid);
 
-    get_historian()->reselect(false);
+    contacts().kill( get_historian()->getkey() );
 
-    prf().dirtycontact(getkey());
     return true;
 }
 
@@ -859,7 +1020,8 @@ bool contact_c::b_receive_file(RID, GUIPARAM par)
 {
     gui_notice_c *ownitm = (gui_notice_c *)par;
     uint64 utag = ownitm->get_utag();
-    HOLD(ownitm->getparent())().getparent().call_children_repos();
+    RID parent = HOLD(ownitm->getparent())().getparent();
+    gui->repos_children(&HOLD(parent).as<gui_group_c>());
     TSDEL(ownitm);
     if (file_transfer_s *ft = g_app->find_file_transfer(utag))
         ft->auto_confirm();
@@ -879,11 +1041,13 @@ bool contact_c::b_receive_file_as(RID, GUIPARAM par)
         ts::make_path(downf, 0);
                     
         ts::wstr_c title = TTT("Save file",179);
-        ts::wstr_c fn = ownitm->getroot()->save_filename_dialog(downf, ft->filename, CONSTWSTR(""), nullptr, title);
+        ts::extensions_s exts;
+        ts::wstr_c fn = ownitm->getroot()->save_filename_dialog(downf, ft->filename, exts, title);
 
         if (!fn.is_empty())
         {
-            HOLD(ownitm->getparent())().getparent().call_children_repos();
+            RID parent = HOLD(ownitm->getparent())().getparent();
+            gui->repos_children(&HOLD(parent).as<gui_group_c>());
             TSDEL(ownitm);
 
             ft->prepare_fn(fn, true);
@@ -901,7 +1065,8 @@ bool contact_c::b_refuse_file(RID, GUIPARAM par)
 {
     gui_notice_c *ownitm = (gui_notice_c *)par;
     uint64 utag = ownitm->get_utag();
-    HOLD(ownitm->getparent())().getparent().call_children_repos();
+    RID parent = HOLD(ownitm->getparent())().getparent();
+    gui->repos_children(&HOLD(parent).as<gui_group_c>());
     TSDEL(ownitm);
 
     if (file_transfer_s *ft = g_app->find_file_transfer(utag))
@@ -975,6 +1140,15 @@ void contacts_c::nomore_proto(int id)
         contact_c *c = arr.get(i);
         if (c->getkey().protoid == id && ( c->getkey().is_group() || !c->is_meta()))
             c2d.add(c->getkey());
+    }
+    for (const contact_key_s &ck : c2d)
+    {
+        if (contact_c *c = find(ck))
+            if (c->get_historian()->gui_item == g_app->active_contact_item)
+            {
+                contacts().get_self().reselect(true);
+                break;
+            }
     }
     for( const contact_key_s &ck : c2d )
         kill(ck);
@@ -1166,6 +1340,12 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
                 --sz;
             }
         }
+
+        contact_online_state_e cos_ = (contact_online_state_e)prf().manual_cos();
+        if (cos_ != COS_ONLINE)
+            g_app->set_status( cos_, true );
+
+        return 0;
     }
 
     if (msg.tabi == pt_unfinished_file_transfer)
@@ -1188,7 +1368,12 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
             return false;
         })) { if (row->deleted()) prf().changed(); }
 
+        return 0;
     }
+
+    if (msg.tabi == pt_active_protocol)
+        g_app->recreate_ctls();
+
     return 0;
 }
 
@@ -1215,6 +1400,13 @@ bool contacts_c::is_groupchat_member( const contact_key_s &ck )
 void contacts_c::kill(const contact_key_s &ck)
 {
     contact_c * cc = find(ck);
+    if (!cc) return;
+
+    ts::safe_ptr<gui_contact_item_c> guiitem = cc->gui_item;
+    bool selself = !guiitem.expired() && g_app->active_contact_item.get() == guiitem.get();
+
+    if (cc->getkey().is_group() && cc->get_options().unmasked().is(contact_c::F_AUDIO_GCHAT))
+        cc->av(false);
 
     if (cc->is_meta())
     {
@@ -1296,6 +1488,12 @@ void contacts_c::kill(const contact_key_s &ck)
         prf().killcontact(cc->getkey());
         del(cc->getkey());
     }
+
+    if (guiitem)
+        TSDEL(guiitem);
+
+    if (selself)
+        contacts().get_self().reselect(true);
 }
 
 contact_c *contacts_c::create_new_meta()
@@ -1480,9 +1678,6 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                 }
             }
 
-            if (c->get_state() == CS_INVITE_RECEIVE)
-                c->check_invite();
-
             if ( CS_UNKNOWN == oldst )
             {
                 contact_c *meta = create_new_meta();
@@ -1558,6 +1753,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
         gmsg<ISOGM_NOTICE>( self, nullptr, NOTICE_NEWVERSION, nv.ver.as_sptr()).send();
 
     play_sound( snd_new_version, false );
+    g_app->new_blink_reason( contact_key_s() ).new_version();
 
     return 0;
 }
@@ -1647,6 +1843,8 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
 
                 if (file_transfer_s *ft = g_app->register_file_transfer(historian->getkey(), ifl.sender, ifl.utag, ifl.filename, ifl.filesize))
                 {
+                    g_app->new_blink_reason(historian->getkey()).file_download_progress_add(ft->utag);
+
                     ft->filename_on_disk = fod;
                     tft.other.filename_on_disk = fod;
                     ft->resume();
@@ -1660,6 +1858,8 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
                 not_resume:
                 if (file_transfer_s *ft = g_app->register_file_transfer(historian->getkey(), ifl.sender, ifl.utag, ifl.filename, ifl.filesize))
                 {
+                    g_app->new_blink_reason(historian->getkey()).file_download_request_add(ft->utag);
+
                     if (ft->confirm_required())
                     {
                         play_sound(snd_incoming_file, false);
@@ -1748,18 +1948,26 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
     msg.post.message_utf8.trim();
     msg.send();
 
-    bool up_unread = true;
     switch (imsg.mt)
     {
     case MTA_FRIEND_REQUEST:
-        sender->friend_request();
+        {
+            contact_c *historian = msg.get_historian();
+            if (CHECK(historian))
+                g_app->new_blink_reason(historian->getkey()).friend_invite();
+        }
     case MTA_MESSAGE:
+        if (MTA_MESSAGE == imsg.mt)
+        {
+            contact_c *historian = msg.get_historian();
+            if (CHECK(historian))
+                g_app->new_blink_reason(historian->getkey()).up_unread();
+        }
     case MTA_ACTION:
         if (g_app->is_inactive(true) || !msg.current)
             play_sound( snd_incoming_message, false );
         break;
     case MTA_INCOMING_CALL:
-        up_unread = false;
         if (historian->get_aaac())
             DEFERRED_UNIQUE_CALL(0, DELEGATE(sender, b_accept_call), historian->get_aaac());
         else
@@ -1768,23 +1976,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
     case MTA_CALL_ACCEPTED:
         sender->calltone(false, true);
         sender->av(true);
-        up_unread = false;
         break;
-    }
-
-    if (up_unread)
-    {
-        contact_c *historian = msg.get_historian();
-        if (CHECK(historian) && historian->gui_item)
-        {
-            LOG("unread up" << historian->getkey());
-
-            ++historian->gui_item->n_unread;
-            g_app->F_NEEDFLASH = true;
-            g_app->F_SETNOTIFYICON = true;
-            historian->gui_item->getengine().redraw();
-            g_app->need_recalc_unread(historian->getkey());
-        }
     }
 
     return 0;

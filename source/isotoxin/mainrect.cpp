@@ -45,7 +45,7 @@ ts::uint32 mainrect_c::gm_handler( gmsg<ISOGM_APPRISE> & )
     
     gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self()).send(); // 1st selected item, yo
 
-    g_app->F_ALLOW_AUTOUPDATE = true;
+    g_app->F_ALLOW_AUTOUPDATE = !g_app->F_READONLY_MODE;
 }
 
 void mainrect_c::onclosesave()

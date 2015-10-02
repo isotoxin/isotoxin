@@ -21,7 +21,7 @@ template<> struct MAKE_CHILD<gui_contact_item_c> : public _PCHILD(gui_contact_it
 template<> struct MAKE_ROOT<gui_contact_item_c> : public _PROOT(gui_contact_item_c)
 {
     contact_c *contact;
-    MAKE_ROOT(drawcollector &dch, contact_c *c) : _PROOT(gui_contact_item_c)(dch), contact(c) { init(false); }
+    MAKE_ROOT(contact_c *c) : _PROOT(gui_contact_item_c)(), contact(c) { init(false); }
     ~MAKE_ROOT() {}
 };
 
@@ -31,11 +31,32 @@ class gui_contact_item_c : public gui_label_c
     ts::shared_ptr<contact_c> contact;
     contact_item_role_e role = CIR_LISTITEM;
     GM_RECEIVER( gui_contact_item_c, ISOGM_SELECT_CONTACT );
-    GM_RECEIVER( gui_contact_item_c, ISOGM_SOMEUNREAD );
     
     ts::svec2 shiftstateicon;
 
-    ts::wstr_c protocols;
+    struct protocols_s
+    {
+        ts::safe_ptr<gui_contact_item_c> owner;
+        ts::wstr_c str;
+        ts::ivec2 size = ts::ivec2(0);
+        bool dirty = true;
+        protocols_s(gui_contact_item_c *itm):owner(itm) {}
+        void update();
+        void clear() { dirty = true; str.clear(); }
+    };
+
+    const protocols_s *protocols() const
+    {
+        ASSERT( CIR_CONVERSATION_HEAD == role );
+        return (const protocols_s *)get_customdata();
+    }
+    protocols_s *protocols( bool create )
+    {
+        ASSERT(CIR_CONVERSATION_HEAD == role);
+        if (!get_customdata() && create)
+            set_customdata_obj<protocols_s>(this);
+        return (protocols_s *)get_customdata();
+    }
 
     static const ts::flags32_s::BITS  F_PROTOHIT    = FLAGS_FREEBITSTART_LABEL << 0;
     static const ts::flags32_s::BITS  F_NOPROTOHIT  = FLAGS_FREEBITSTART_LABEL << 1;
@@ -48,7 +69,6 @@ class gui_contact_item_c : public gui_label_c
 
     friend class contact_c;
     friend class contacts_c;
-    int n_unread =0;
 
     void set_default_proto(const ts::str_c&ost);
 
@@ -69,6 +89,8 @@ public:
 
     int contact_item_rite_margin();
 
+    bool allow_drag() const;
+    bool allow_drop() const;
     /*virtual*/ void update_dndobj(guirect_c *donor) override;
     /*virtual*/ guirect_c * summon_dndobj(const ts::ivec2 &deltapos) override;
 
@@ -95,6 +117,8 @@ public:
         if (is_noprotohit()) return 1;
         return 2;
     }
+
+    void clearprotocols();
     void protohit();
     bool update_buttons( RID r = RID(), GUIPARAM p = nullptr );
     bool cancel_edit( RID r = RID(), GUIPARAM p = nullptr);
@@ -146,6 +170,7 @@ class gui_contactlist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_contactlist_c, ISOGM_PROTO_LOADED);
     GM_RECEIVER(gui_contactlist_c, ISOGM_CHANGED_SETTINGS);
     GM_RECEIVER(gui_contactlist_c, ISOGM_V_UPDATE_CONTACT);
+    GM_RECEIVER(gui_contactlist_c, ISOGM_DO_POSTEFFECT);
     GM_RECEIVER(gui_contactlist_c, GM_HEARTBEAT);
     GM_RECEIVER(gui_contactlist_c, GM_DRAGNDROP);
     GM_RECEIVER(gui_contactlist_c, GM_UI_EVENT)

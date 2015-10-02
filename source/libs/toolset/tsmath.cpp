@@ -155,7 +155,7 @@ float time_float_c::find_t(float v) const
         if ( (v >= k0.val && v <= k1.val) || (v <= k0.val && v >= k1.val) )
         {
             float dval = k1.val - k0.val;
-            if (dval == 0) return k0.time;
+            if (dval == 0) return k0.time; //-V550
             return (v - k0.val) * (k1.time - k0.time) / dval + k0.time;
         }
         

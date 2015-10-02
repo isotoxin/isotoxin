@@ -19,7 +19,7 @@ enum system_query_e
     SQ_RECT_CHANGED,                // evt_data_s::changed .pos_changed .size_changed .rect
     SQ_PARENT_RECT_CHANGED,         // evt_data_s::changed .pos_changed .size_changed .rect
 
-    SQ_VISIBILITY_CHANGED,          // evt_data_s::changed .is_visible
+    SQ_CHILD_VISIBILITY_CHANGED,    // evt_data_s::rect .id .is_visible
     SQ_PARENT_VISIBILITY_CHANGED,   // evt_data_s::changed .is_visible
 
     SQ_ZINDEX_CHANGED,              // evt_data_s::changed .zindex
@@ -63,7 +63,6 @@ enum system_query_e
     SQ_OPEN_GROUP,
     SQ_KILL_CHILD,          // parent decides what the child must die in accordance with strparam
     SQ_YOU_WANNA_DIE,       // message to child in while processing SQ_KILL_CHILD
-    SQ_CHILDREN_REPOS,
     SQ_CTL_ENABLE,
     SQ_GET_ROOT_PARENT,
 
@@ -168,7 +167,6 @@ struct evt_data_s
         struct
         {
             ts::make_pod<ts::irect> rect;
-            bool is_visible;
             bool focus;
             bool is_active_focus;
             bool pos_changed;
@@ -204,6 +202,7 @@ struct evt_data_s
         {
             ts::make_pod<RID> id;
             int index;
+            bool is_visible;
         } rect;
 
         struct
@@ -249,6 +248,19 @@ struct evt_data_s
 
 class guirect_c;
 struct draw_data_s;
+
+class text_rect_dynamic_c : public ts::text_rect_c
+{
+    friend class gui_c;
+    DECLARE_EYELET(text_rect_dynamic_c);
+    ts::Time last_use_time = ts::Time::past();
+    ts::drawable_bitmap_c * curtexture = nullptr;
+public:
+    /*virtual*/ ~text_rect_dynamic_c();
+    /*virtual*/ ts::drawable_bitmap_c &texture() override;
+    /*virtual*/ void texture_no_need() override;
+};
+
 
 struct sqhandler_i : public ts::safe_object
 {
@@ -429,8 +441,7 @@ struct drawcollector;
 template<typename R> struct MAKE_ROOT : public initial_rect_data_s
 {
     R *me = nullptr;
-    drawcollector &dcoll;
-    MAKE_ROOT(drawcollector &dcoll);
+    MAKE_ROOT();
     operator RID() const { return id; }
     operator R&() { ASSERT(me); return *me; }
     void operator=(const MAKE_ROOT&) UNUSED;
@@ -441,8 +452,7 @@ template<typename R> struct MAKE_ROOT : public initial_rect_data_s
 template<typename R> struct MAKE_ROOT< newrectkitchen::rectwrapper<R> > : public initial_rect_data_s
 {
     R *me = nullptr;
-    drawcollector &dcoll;
-    MAKE_ROOT(drawcollector &dcoll):dcoll(dcoll) {}
+    MAKE_ROOT() {}
     operator RID() const { return id; }
     operator R&() { ASSERT(me); return *me; }
     operator ts::safe_ptr<R>() { ASSERT(me); return ts::safe_ptr<R>(me); }
@@ -845,7 +855,7 @@ class gui_button_c : public gui_control_c
 
         if (ts::pwstr_c(t).begins(CONSTWSTR("<img=")))
         {
-            int x = ts::pwstr_c(t).find_pos(5,'>');
+            ts::aint x = ts::pwstr_c(t).find_pos(5,'>');
             if (ASSERT(x>5))
             {
                 text.set( t.skip(x+1) );
@@ -915,7 +925,7 @@ protected:
     static const ts::flags32_s::BITS FLAGS_VCENTER              = FLAGS_FREEBITSTART << 3;
     static const ts::flags32_s::BITS FLAGS_FREEBITSTART_LABEL   = FLAGS_FREEBITSTART << 4;
 
-    ts::text_rect_c textrect;
+    text_rect_dynamic_c textrect;
 
     void draw( draw_data_s &dd, const text_draw_params_s &tdp ); // use it if want selection
 
@@ -995,7 +1005,7 @@ class gui_tooltip_c;
 template<> struct MAKE_ROOT<gui_tooltip_c> : public _PROOT(gui_tooltip_c)
 {
     RID owner;
-    MAKE_ROOT(drawcollector &dcoll, RID owner):_PROOT(gui_tooltip_c)(dcoll), owner(owner) { init(false); }
+    MAKE_ROOT(RID owner):_PROOT(gui_tooltip_c)(), owner(owner) { init(false); }
 };
 
 class gui_tooltip_c : public gui_label_c
@@ -1031,8 +1041,6 @@ class gui_group_c : public gui_control_c // group
 {
     DUMMY(gui_group_c);
 
-    bool children_repos_delay_do(RID, GUIPARAM);
-
 protected:
 
     struct cri_s
@@ -1043,9 +1051,6 @@ protected:
         int         areasize;
     };
 
-    void children_repos_delay();
-
-    virtual void children_repos();
     virtual void children_repos_info( cri_s &info ) const;
     virtual void on_add_child(RID id) {} // new child was added and children array was increased
     virtual void on_die_child(int index) {} // child has died, but children array not yet changed
@@ -1055,6 +1060,9 @@ public:
     gui_group_c(initial_rect_data_s &data) :gui_control_c(data) {}
     ~gui_group_c();
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+
+    virtual void children_repos();
+
 };
 
 
@@ -1117,7 +1125,7 @@ public:
     void set_proportions(const ts::str_c&values, int div);
 
     bool allow_move_splitter() const {return flags.is(F_ALLOW_MOVE_SPLITTER); }
-    void allow_move_splitter( bool b ) { bool changed = flags.is(F_ALLOW_MOVE_SPLITTER) != b; flags.init(F_ALLOW_MOVE_SPLITTER,b); if (changed) children_repos(); }
+    void allow_move_splitter( bool b );
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ ts::ivec2 get_max_size() const override;
@@ -1171,11 +1179,10 @@ class gui_vscrollgroup_c : public gui_group_c // vertical group with vertical sc
     static const ts::flags32_s::BITS F_SBVISIBLE = FLAGS_FREEBITSTART << 0;
     static const ts::flags32_s::BITS F_SBHL = FLAGS_FREEBITSTART << 1;
 protected:
-    static const ts::flags32_s::BITS F_NO_REPOS = FLAGS_FREEBITSTART << 2;
-    static const ts::flags32_s::BITS F_LAST_REPOS_AT_END = FLAGS_FREEBITSTART << 3;
-    static const ts::flags32_s::BITS F_SCROLL_TO_MAX_TOP = FLAGS_FREEBITSTART << 4;
-    static const ts::flags32_s::BITS F_SB_OVER_ITEMS = FLAGS_FREEBITSTART << 5;
-    static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 6;
+    static const ts::flags32_s::BITS F_LAST_REPOS_AT_END = FLAGS_FREEBITSTART << 2;
+    static const ts::flags32_s::BITS F_SCROLL_TO_MAX_TOP = FLAGS_FREEBITSTART << 3;
+    static const ts::flags32_s::BITS F_SB_OVER_ITEMS = FLAGS_FREEBITSTART << 4;
+    static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 5;
 
     /*virtual*/ void children_repos() override;
     /*virtual*/ void on_add_child(RID id) override;
@@ -1185,12 +1192,6 @@ public:
     /*virtual*/ ~gui_vscrollgroup_c() {}
 
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
-
-    void no_repos(bool b = true)
-    {
-        flags.init(F_NO_REPOS, b);
-    }
-
 
     bool is_sb_visible() const { return flags.is(F_SBVISIBLE); };
 
@@ -1205,25 +1206,10 @@ public:
         flags.clear(F_LAST_REPOS_AT_END);
     }
 
-    void scroll_to_begin(bool repos = false)
-    {
-        sbhelper.shift = 0;
-        if (repos) children_repos();
-    }
-
-    void scroll_to_end( bool repos = false )
-    {
-        sbhelper.shift = minimum<int>::value;
-        if (repos) children_repos();
-    }
-
-    void scroll_to( rectengine_c *reng, bool maxtop, bool repos_now )
-    {
-        flags.init( F_SCROLL_TO_MAX_TOP, maxtop );
-        scroll_target = reng;
-        if (repos_now) children_repos();
-    }
-
+    void scroll_to_begin();
+    void scroll_to_end();
+    void scroll_to( rectengine_c *reng, bool maxtop );
+    
     int width_for_children() const
     {
         cri_s info;
@@ -1240,7 +1226,7 @@ template<> struct MAKE_ROOT<gui_popup_menu_c> : public _PROOT(gui_popup_menu_c)
     menu_c menu;
     RID parentmenu;
     bool sys;
-    MAKE_ROOT(drawcollector &dcoll, const menu_anchor_s& screenpos, const menu_c &menu, bool sys, RID parentmenu) : _PROOT(gui_popup_menu_c)(dcoll), screenpos(screenpos), menu(menu), parentmenu(parentmenu), sys(sys) { init(sys); }
+    MAKE_ROOT(const menu_anchor_s& screenpos, const menu_c &menu, bool sys, RID parentmenu) : _PROOT(gui_popup_menu_c)(), screenpos(screenpos), menu(menu), parentmenu(parentmenu), sys(sys) { init(sys); }
     ~MAKE_ROOT();
 };
 
@@ -1267,7 +1253,7 @@ class gui_popup_menu_c : public gui_vscrollgroup_c
 
     menu_anchor_s showpoint;
 
-    static gui_popup_menu_c & create(drawcollector &dch, const menu_anchor_s& screenpos, const menu_c &mnu, bool sys, RID parentmenu);
+    static gui_popup_menu_c & create(const menu_anchor_s& screenpos, const menu_c &mnu, bool sys, RID parentmenu);
 
     static const ts::flags32_s::BITS F_SYSMENU = F_VSCROLLFREEBITSTART << 0;
     

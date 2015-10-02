@@ -94,7 +94,7 @@ void exception_operator_c::trace_info(EXCEPTION_POINTERS* pExp)
 #ifdef _M_IX86
 		if (pExp->ContextRecord-> Eip && !pExp->ExceptionRecord->ExceptionRecord)
 		{
-			code = (unsigned char*)(pExp->ContextRecord-> Eip);
+			code = (unsigned char*)(pExp->ContextRecord-> Eip); //-V204
 			len =_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "Bytes at CS::EIP:\r\n%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X\r\n\r\n",
 				code[0], code[1], code[2], code[3], code[4], code[5], code[6], code[7],
 				code[8], code[9], code[10], code[11], code[12], code[13], code[14], code[15]);
@@ -122,7 +122,7 @@ void exception_operator_c::trace_info(EXCEPTION_POINTERS* pExp)
 #ifdef _M_IX86
 		if (pExp->ContextRecord -> Esp && !pExp->ExceptionRecord->ExceptionRecord)
 		{
-			stack = (void**)(pExp->ContextRecord -> Esp);
+			stack = (void**)(pExp->ContextRecord -> Esp); //-V204
 			len =_snprintf_s(outBuffer, STACKWALK_MAX_NAMELEN, "nStack dump:\r\n%p %p %p %p %p %p %p %p\r\n%p %p %p %p %p %p %p %p\r\n%p %p %p %p %p %p %p %p\r\n%p %p %p %p %p %p %p %p\r\n\r\n",
 				stack[0], stack[1], stack[2], stack[3], stack[4], stack[5], stack[6], stack[7],
 				stack[8], stack[9], stack[10], stack[11], stack[12], stack[13], stack[14], stack[15],

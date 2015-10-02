@@ -5,6 +5,8 @@ struct dialog_msgbox_params_s
     dlg_title_e etitle = DT_CUSTOM;
     ts::wstr_c title;
     ts::wstr_c desc;
+    ts::wstr_c ok_button_text;
+    ts::wstr_c cancel_button_text;
     MENUHANDLER on_ok_h;
     ts::str_c on_ok_par;
     MENUHANDLER on_cancel_h;
@@ -21,7 +23,8 @@ struct dialog_msgbox_params_s
                            const ts::wstr_c &desc
                            ) :etitle(tt), desc(desc)  {}
 
-    dialog_msgbox_params_s& bcancel(bool f=true) {bcancel_ = f; return *this;}
+    dialog_msgbox_params_s& bok(const ts::wsptr &t) {ok_button_text = t; return *this;}
+    dialog_msgbox_params_s& bcancel(bool f=true, const ts::wsptr &t = ts::wsptr()) {bcancel_ = f; cancel_button_text = t; return *this;}
     dialog_msgbox_params_s& on_ok(MENUHANDLER mh, const ts::str_c &par) {on_ok_h = mh; on_ok_par = par; return *this;}
     dialog_msgbox_params_s& on_cancel(MENUHANDLER mh, const ts::str_c &par) {on_cancel_h = mh; on_cancel_par = par; return *this;}
 };
@@ -30,7 +33,7 @@ class dialog_msgbox_c;
 template<> struct MAKE_ROOT<dialog_msgbox_c> : public _PROOT(dialog_msgbox_c)
 {
     dialog_msgbox_params_s prms;
-    MAKE_ROOT(drawcollector &dch, const dialog_msgbox_params_s &prms) : _PROOT(dialog_msgbox_c)(dch), prms(prms) { init(false); }
+    MAKE_ROOT(const dialog_msgbox_params_s &prms) : _PROOT(dialog_msgbox_c)(), prms(prms) { init(false); }
     ~MAKE_ROOT() {}
 };
 

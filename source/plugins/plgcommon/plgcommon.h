@@ -145,7 +145,7 @@ wstr_c get_exe_full_name();
 
 inline wstr_c fn_change_name_ext(const wstr_c &full, const wsptr &name, const wsptr &ext)
 {
-    int i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
+    ptrdiff_t i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
     return wstr_c(wsptr(full.cstr(), i)).append(name).append_char('.').append(ext);
 }
 
@@ -235,12 +235,12 @@ struct loader
             if (d[offset] == chunkid)
             {
                 current_chunk = offset + 5;
-                int chunksz = *(int *)(d + offset + 1);
+                int chunksz = *(int *)(d + ptrdiff_t(offset) + 1);
                 offset += 1 + chunksz;
                 current_chunk_data_size = chunksz - 4;
                 return current_chunk_data_size;
             }
-            int skipbytes = *(int *)(d + offset + 1);
+            int skipbytes = *(int *)(d + ptrdiff_t(offset) + 1);
             offset += 1 + skipbytes;
         }
         offset = store_offset;
@@ -248,14 +248,14 @@ struct loader
         return 0;
     }
 
-    template<typename T> const T& __get() { int rptr = offset; offset += sizeof(T); ASSERT(offset <= sz); return *(T *)(d + rptr); }
+    template<typename T> const T& __get() { int rptr = offset; offset += sizeof(T); ASSERT(offset <= sz); return *(T *)(d + ptrdiff_t(rptr)); }
     const void *get_data(int &rsz)
     {
         rsz = __get<int>();
         int rptr = offset;
         offset += rsz;
         if (ASSERT(offset <= sz))
-            return d + rptr;
+            return d + ptrdiff_t(rptr);
         return nullptr;
     }
     int read_list_size() { return __get<int>(); }

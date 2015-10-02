@@ -27,6 +27,9 @@ void active_protocol_s::set(int column, ts::data_value_s &v)
         case 7:
             avatar = v.blob;
             return;
+        case 8:
+            sort_factor = (int)v.i;
+            return;
     }
 }
 
@@ -59,6 +62,9 @@ void active_protocol_s::get(int column, ts::data_pair_s& v)
         case 7:
             v.blob = avatar;
             return;
+        case 8:
+            v.i = sort_factor;
+            return;
     }
 }
 
@@ -75,6 +81,7 @@ ts::data_type_e active_protocol_s::get_column_type(int index)
         case 7:
             return ts::data_type_e::t_blob;
         case 6:
+        case 8:
             return ts::data_type_e::t_int;
     }
     FORBIDDEN();
@@ -108,6 +115,9 @@ void active_protocol_s::get_column_desc(int index, ts::column_desc_s&cd)
         case 7:
             cd.name_ = CONSTASTR("avatar");
             break;
+        case 8:
+            cd.name_ = CONSTASTR("sortfactor");
+            break;
         default:
             FORBIDDEN();
     }
@@ -134,6 +144,7 @@ void default_rows<active_protocol_s>::setup_default(int index, active_protocol_s
             d.config.clear();
             d.avatar.clear();
             d.options = active_protocol_data_s().options;
+            d.sort_factor = 0;
             return;
         default:
             FORBIDDEN();
@@ -525,7 +536,7 @@ void unfinished_file_transfer_s::get_column_desc(int index, ts::column_desc_s&cd
 // transfer file
 
 
-template<typename T, profile_table_e tabi> void tableview_t<T, tabi>::prepare( ts::sqlitedb_c *db )
+template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::prepare( ts::sqlitedb_c *db )
 {
     ts::tmp_array_inplace_t<ts::column_desc_s, 0> cds( T::columns );
 
@@ -538,11 +549,16 @@ template<typename T, profile_table_e tabi> void tableview_t<T, tabi>::prepare( t
     for(int i=1;i<T::columns;++i)
         T::get_column_desc(i, cds.add());
 
-    if (db->update_table_struct(T::get_table_name(), cds.array(), false))
-        for(int i = 0; i<default_rows<T>::value; ++i)
+    int rslt = db->update_table_struct(T::get_table_name(), cds.array(), false);
+    if (rslt < 0) return false;
+    if (rslt)
+    {
+        for (int i = 0; i < default_rows<T>::value; ++i) //-V621
             default_rows<T>::setup_default(i, getcreate(0).other);
+    }
 
     flush( db, true, false );
+    return true;
 }
 
 
@@ -747,6 +763,18 @@ ts::uint32 profile_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
                 row->other.user_statusmsg = ch.s, row->changed(), changed = true;
             break;
         }
+
+    if (ch.pass == 0 && PP_ACTIVEPROTO_SORT == ch.sp)
+    {
+        for (const active_protocol_c *ap : protocols)
+            if (ap && !ap->is_dip())
+            {
+                int sortfactor = ap->sort_factor();
+                if (auto *row = get_table_active_protocol().find<true>(ap->getid()))
+                    if (row->other.sort_factor != sortfactor)
+                        row->other.sort_factor = sortfactor, row->changed(), changed = true;
+            }
+    }
 
     if (changed)
         this->changed();
@@ -1076,10 +1104,11 @@ int  profile_c::calc_history_before( const contact_key_s&historian, time_t time 
     return db->count(CONSTASTR("history"), whr);
 }
 
-int  profile_c::calc_history_after(const contact_key_s&historian, time_t time)
+int  profile_c::calc_history_after(const contact_key_s&historian, time_t time, bool only_messages)
 {
     if (!db) return 0;
     ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num<int64>(ts::ref_cast<int64>(historian));
+    if (only_messages) whr.append( CONSTASTR(" and mtype==0") );
     whr.append(CONSTASTR(" and mtime>=")).append_as_num<int64>(time);
     return db->count(CONSTASTR("history"), whr);
 }
@@ -1117,13 +1146,13 @@ bool profile_c::load(const ts::wstr_c& pfn)
     values.clear();
     dirty.clear();
     path = pfn;
-    db = ts::sqlitedb_c::connect(path);
+    db = ts::sqlitedb_c::connect(path, g_app->F_READONLY_MODE);
 
     if (ASSERT(db))
     {
         prepare_conf_table(db);
 
-#define TAB(tab) table_##tab.prepare( db );
+#define TAB(tab) if (!table_##tab.prepare( db )) { return false; }
         PROFILE_TABLES
 #undef TAB
 
@@ -1200,20 +1229,51 @@ profile_c::~profile_c()
         CloseHandle(mutex);
 }
 
-void profile_c::error_unique_profile( const ts::wsptr & prfn, bool modal )
+void profile_c::mb_warning_readonly(bool minimize)
 {
-    ts::wstr_c text = TTT("Profile [$] is busy!",270) / prfn;
-    if (modal)
+    struct s
     {
-        MessageBoxW(nullptr, text, L"error", MB_OK|MB_ICONERROR);
+        static void conti(const ts::str_c&p)
+        {
+            g_app->F_READONLY_MODE_WARN = true;
+            g_sysconf.mainwindow = nullptr;
+            g_app->summon_main_rect( p.equals(CONSTASTR("1") ) );
+        }
+        static void exit_now(const ts::str_c&)
+        {
+            g_sysconf.mainwindow = nullptr;
+            sys_exit(0);
+        }
+    };
+    redraw_collector_s dch;
+    SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
+        DT_MSGBOX_WARNING,
+        TTT("Profile and configuration are write protected![br][appname] is in [b]read-only[/b] mode!", 332)
+        ).on_ok(s::conti, minimize ? CONSTASTR("1") : CONSTASTR("0"))
+        .on_cancel(s::exit_now, ts::asptr()).bcancel(true, loc_text(loc_exit)).bok(TTT("Continue",334)));
 
-    } else
+}
+
+void profile_c::mb_error_unique_profile( const ts::wsptr & prfn, bool modal )
+{
+    ts::wstr_c text = TTT("Profile [b]$[/b] is busy!",270) / prfn;
+    if (g_app->F_READONLY_MODE)
+        text = TTT("Profile [b]$[/b] has old format and can not be upgraded due it write protected!",333) / prfn;
+
+    struct s
     {
-        SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-            DT_MSGBOX_ERROR,
-            text
-            ));
-    }
+        static void exit_now(const ts::str_c&)
+        {
+            g_sysconf.mainwindow = nullptr;
+            sys_exit(10);
+        }
+    };
+
+    redraw_collector_s dch;
+    SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
+        DT_MSGBOX_ERROR,
+        text
+        ).bok( modal ? loc_text(loc_exit) : ts::wsptr() ).on_ok(modal ? s::exit_now : MENUHANDLER(), ts::asptr()));
 }
 
 void profile_c::shutdown_aps()

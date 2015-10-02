@@ -163,7 +163,17 @@ static bool check_instance()
     return true;
 }
 
-static bool parsecmdl(const wchar_t *cmdl, bool &checkinstance, bool &minimize)
+namespace
+{
+    struct parse_result_s
+    {
+        bool checkinstance = true;
+        bool minimize = false;
+        bool readonlymode = false;
+    };
+}
+
+static bool parsecmdl(const wchar_t *cmdl, parse_result_s&prslt)
 {
     ts::wstr_c wd;
     ts::set_work_dir(wd);
@@ -196,10 +206,13 @@ static bool parsecmdl(const wchar_t *cmdl, bool &checkinstance, bool &minimize)
             wait_cmd = true;
 
         if (cmds->equals(CONSTWSTR("multi")))
-            checkinstance = false;
+            prslt.checkinstance = false;
 
         if (cmds->equals(CONSTWSTR("minimize")))
-            minimize = true;
+            prslt.minimize = true;
+
+        if (cmds->equals(CONSTWSTR("readonly")))
+            prslt.readonlymode = true;
 
         if (cmds->equals(CONSTWSTR("installto")))
             installto = true;
@@ -230,16 +243,15 @@ bool _cdecl app_preinit( const wchar_t *cmdl )
 
     sodium_init();
 
-    bool checkinstance = true;
-    bool minimize = false;
-    if (!parsecmdl(cmdl, checkinstance, minimize))
+    parse_result_s prslt;
+    if (!parsecmdl(cmdl, prslt))
         return false;
 
     if (!check_autoupdate())
         return false;
 
 #ifdef _FINAL
-    if (checkinstance)
+    if (prslt.checkinstance)
         if (!check_instance()) return false;
 #endif // _FINAL
 
@@ -258,7 +270,7 @@ bool _cdecl app_preinit( const wchar_t *cmdl )
     debug_name();
 #endif
 
-	TSNEW(application_c, cmdl, minimize); // not a memory leak! see SEV_EXIT handler
+	TSNEW(application_c, cmdl, prslt.minimize, prslt.readonlymode); // not a memory leak! see SEV_EXIT handler
 
 	return true;
 }

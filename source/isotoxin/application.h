@@ -1,5 +1,7 @@
 #pragma once
 
+#define IDI_ICON_APP IDI_ICON_ONLINE
+
 #define BUTTON_FACE_PRELOADED( face ) (GET_BUTTON_FACE) ([]()->button_desc_s * { return g_app->buttons().face; } )
 
 #define HOTKEY_TOGGLE_SEARCH_BAR SSK_F, gui_c::casw_ctrl
@@ -10,7 +12,7 @@ struct preloaded_buttons_s
     ts::shared_ptr<button_desc_s> groupchat;
     ts::shared_ptr<button_desc_s> online, online2;
     ts::shared_ptr<button_desc_s> invite;
-    ts::shared_ptr<button_desc_s> unread;
+    ts::shared_ptr<button_desc_s> achtung;
     ts::shared_ptr<button_desc_s> callb;
     ts::shared_ptr<button_desc_s> fileb;
 
@@ -176,7 +178,17 @@ struct file_transfer_s : public unfinished_file_transfer_s
 class application_c : public gui_c
 {
     bool b_customize(RID r, GUIPARAM param);
+
 public:
+    static const ts::flags32_s::BITS PEF_RECREATE_CTLS = PEF_FREEBITSTART << 0;
+    static const ts::flags32_s::BITS PEF_UPDATE_BUTTONS_HEAD = PEF_FREEBITSTART << 1;
+    static const ts::flags32_s::BITS PEF_UPDATE_BUTTONS_MSG = PEF_FREEBITSTART << 2;
+    static const ts::flags32_s::BITS PEF_SHOW_HIDE_EDITOR = PEF_FREEBITSTART << 3;
+    
+    
+    static const ts::flags32_s::BITS PEF_APP = (ts::flags32_s::BITS)(-1) & (~(PEF_FREEBITSTART-1));
+    
+
     /*virtual*/ HICON app_icon(bool for_tray) override;
     /*virtual*/ void app_setup_custom_button(bcreate_s & bcr) override
     {
@@ -208,6 +220,9 @@ public:
     /*virtual*/ void app_path_expand_env(ts::wstr_c &path);
     /*virtual*/ void app_active_state(bool is_active);
 
+    /*virtual*/ void do_post_effect() override;
+
+
     ///////////// application_c itself
 
     RID main;
@@ -215,13 +230,16 @@ public:
     unsigned F_INITIALIZATION : 1;
     unsigned F_NEWVERSION : 1;
     unsigned F_NONEWVERSION : 1;
-    unsigned F_UNREADICONFLASH : 1;
     unsigned F_UNREADICON : 1;
-    unsigned F_NEEDFLASH : 1;
-    unsigned F_FLASHIP : 1;
+    unsigned F_NEED_BLINK_ICON : 1;
+    unsigned F_BLINKING_FLAG : 1;
+    unsigned F_BLINKING_ICON : 1;
     unsigned F_SETNOTIFYICON : 1; // once
     unsigned F_OFFLINE_ICON : 1;
     unsigned F_ALLOW_AUTOUPDATE : 1;
+    unsigned F_PROTOSORTCHANGED : 1;
+    unsigned F_READONLY_MODE : 1;
+    unsigned F_READONLY_MODE_WARN : 1;
 
 
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_EXIT);
@@ -243,13 +261,124 @@ public:
 
     ts::array_del_t<file_transfer_s, 2> m_files;
 
-    ts::tbuf_t<contact_key_s> m_need_recalc_unread;
+    struct blinking_reason_s
+    {
+        contact_key_s historian;
+        ts::Time nextblink = ts::Time::undefined();
+        int unread_count = 0;
+        ts::flags32_s flags;
+        ts::tbuf_t<uint64> ftags_request, ftags_progress;
+
+        static const ts::flags32_s::BITS F_BLINKING_FLAG = SETBIT(0);
+        static const ts::flags32_s::BITS F_CONTACT_BLINKING = SETBIT(1);
+        static const ts::flags32_s::BITS F_RINGTONE = SETBIT(2);
+        static const ts::flags32_s::BITS F_INVITE_FRIEND = SETBIT(3);
+        static const ts::flags32_s::BITS F_RECALC_UNREAD = SETBIT(4);
+        static const ts::flags32_s::BITS F_NEW_VERSION = SETBIT(5);
+        static const ts::flags32_s::BITS F_REDRAW = SETBIT(6);
+
+        void do_recalc_unread_now();
+        bool tick();
+
+        bool get_blinking() const {return flags.is(F_BLINKING_FLAG);}
+
+        bool is_blank() const
+        {
+            if (contacts().find(historian) == nullptr) return true;
+            return unread_count == 0 && ftags_request.count() == 0 && ftags_progress.count() == 0 && (flags.__bits & ~(F_CONTACT_BLINKING|F_BLINKING_FLAG)) == 0;
+        }
+        bool notification_icon_need_blink() const
+        {
+            return flags.is(F_RINGTONE | F_INVITE_FRIEND) || unread_count > 0 || is_file_download_request();
+        }
+        bool contact_need_blink() const
+        {
+            return notification_icon_need_blink() || is_file_download_process();
+        }
+
+        void ringtone(bool f = true)
+        {
+            if (flags.is(F_RINGTONE) != f)
+            {
+                flags.init(F_RINGTONE, f);
+                flags.set(F_REDRAW);
+            }
+        }
+        void friend_invite(bool f = true)
+        {
+            if (flags.is(F_INVITE_FRIEND) != f)
+            {
+                flags.init(F_INVITE_FRIEND, f);
+                flags.set(F_REDRAW);
+            }
+        }
+        bool is_file_download() const { return is_file_download_request() || is_file_download_process(); }
+        bool is_file_download_request() const { return ftags_request.count() > 0; }
+        bool is_file_download_process() const { return ftags_progress.count() > 0; }
+        void file_download_request_add( uint64 ftag )
+        {
+            bool dirty = ftags_progress.find_remove_fast(ftag);
+            int oldc = ftags_request.count();
+            ftags_request.set(ftag);
+            if (dirty || oldc != ftags_request.count())
+                flags.set(F_REDRAW);
+        }
+        void file_download_progress_add( uint64 ftag )
+        {
+            bool dirty = ftags_request.find_remove_fast(ftag);
+            int oldc = ftags_progress.count();
+            ftags_progress.set(ftag);
+            if (dirty || oldc != ftags_progress.count())
+                flags.set(F_REDRAW);
+        }
+        void file_download_remove( uint64 ftag )
+        {
+            bool was_f = is_file_download();
+            if (!ftag)
+                ftags_request.clear(), ftags_progress.clear();
+            else
+                ftags_request.find_remove_fast(ftag), ftags_progress.find_remove_fast(ftag);
+            if (was_f)
+                flags.set(F_REDRAW);
+        }
+        void new_version(bool f = true)
+        {
+            if (flags.is(F_NEW_VERSION) != f)
+            {
+                flags.init(F_NEW_VERSION, f);
+                flags.set(F_REDRAW);
+            }
+        }
+
+        void recalc_unread()
+        {
+            flags.set(F_RECALC_UNREAD);
+        }
+
+        void up_unread()
+        {
+            ++unread_count;
+            flags.set(F_REDRAW);
+            g_app->F_SETNOTIFYICON = true;
+        }
+
+        void set_unread(int unread)
+        {
+            if (unread != unread_count)
+            {
+                flags.set(F_REDRAW);
+                unread_count = unread;
+                g_app->F_SETNOTIFYICON = true;
+            }
+        }
+
+    };
+
+    ts::array_inplace_t<blinking_reason_s,2> m_blink_reasons;
     ts::tbuf_t<contact_key_s> m_locked_recalc_unread;
     
     sound_capture_handler_c *m_currentsc = nullptr;
     ts::pointers_t<sound_capture_handler_c, 0> m_scaptures;
-
-    ts::tbuf_t<RID> m_flashredraw;
 
     struct send_queue_s
     {
@@ -260,14 +389,10 @@ public:
 
     ts::array_del_t<send_queue_s, 1> m_undelivered;
 
-    contact_online_state_e manual_cos = COS_ONLINE;
-
 public:
     bool b_send_message(RID r, GUIPARAM param);
     bool flash_notification_icon(RID r = RID(), GUIPARAM param = nullptr);
-    bool flashiconflag() const {return F_UNREADICONFLASH;};
     bool flashingicon() const {return F_UNREADICON;};
-    void flashredraw(RID r) { m_flashredraw.set(r); }
 public:
 
     ts::safe_ptr<gui_contact_item_c> active_contact_item;
@@ -277,13 +402,13 @@ public:
     const ts::font_desc_c *font_conv_time = &ts::g_default_text_font;
     int contactheight = 55;
     int mecontactheight = 60;
-    int protowidth = 100;
+    int minprotowidth = 100;
     int protoiconsize = 10;
 
     time_t autoupdate_next;
     ts::ivec2 download_progress = ts::ivec2(0);
 
-	application_c( const ts::wchar * cmdl, bool minimize );
+	application_c( const ts::wchar * cmdl, bool minimize, bool readonly );
 	~application_c();
 
     static ts::str_c get_downloaded_ver();
@@ -312,10 +437,30 @@ public:
     }
 
     void summon_main_rect(bool minimize);
+    void load_profile_and_summon_main_rect(bool minimize);
     preloaded_buttons_s &buttons() {return m_buttons;}
 
     void lock_recalc_unread( const contact_key_s &ck ) { m_locked_recalc_unread.set(ck); };
-    void need_recalc_unread( const contact_key_s &ck ) { m_need_recalc_unread.set(ck); };
+    blinking_reason_s &new_blink_reason(const contact_key_s &historian);
+    void update_blink_reason(const contact_key_s &historian);
+    blinking_reason_s *find_blink_reason(const contact_key_s &historian, bool skip_locked)
+    { 
+        for (blinking_reason_s &br : m_blink_reasons)
+            if (br.historian == historian)
+            {
+                if (skip_locked && m_locked_recalc_unread.find_index(historian) >= 0)
+                    return nullptr;
+                return &br;
+            }
+        return nullptr;
+    }
+    bool present_unread_blink_reason() const
+    {
+        for (const blinking_reason_s &br : m_blink_reasons)
+            if (br.unread_count > 0)
+                return true;
+        return false;
+    }
 
     void handle_sound_capture( const void *data, int size );
     void register_capture_handler( sound_capture_handler_c *h );
@@ -337,7 +482,7 @@ public:
             if (ftr->historian == historian)
                 r(*ftr);
     }
-    bool present_file_transfer_by_historian(const contact_key_s &historian, bool accept_only_rquest);
+    bool present_file_transfer_by_historian(const contact_key_s &historian);
     bool present_file_transfer_by_sender(const contact_key_s &sender, bool accept_only_rquest);
     file_transfer_s *find_file_transfer(uint64 utag);
     file_transfer_s *find_file_transfer_by_msgutag(uint64 utag);
@@ -349,13 +494,13 @@ public:
     void undelivered_message( const post_s &p );
 
     void set_status(contact_online_state_e cos_, bool manual);
+
+    void recreate_ctls() { m_post_effect.set(PEF_RECREATE_CTLS); };
+    void update_buttons_head() { m_post_effect.set(PEF_UPDATE_BUTTONS_HEAD); };
+    void update_buttons_msg() { m_post_effect.set(PEF_UPDATE_BUTTONS_MSG); };
+    void hide_show_messageeditor() { m_post_effect.set(PEF_SHOW_HIDE_EDITOR); };
+
 };
 
 extern application_c *g_app;
 
-INLINE bool contact_c::achtung() const
-{
-    if (is_ringtone() || is_filein()) return true;
-    if (key.is_self()) return g_app->newversion();
-    return false;
-}

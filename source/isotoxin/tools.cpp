@@ -456,6 +456,37 @@ ipc::ipc_result_e isotoxin_ipc_s::processor_func(void *par, void *data, int data
     return ipc::IPCR_BREAK;
 }
 
+bool text_find_link(ts::str_c &message, int from, ts::ivec2 & rslt)
+{
+    int i = message.find_pos(from, CONSTASTR("http://"));
+    if (i < 0) i = message.find_pos(from, CONSTASTR("https://"));
+    if (i < 0) i = message.find_pos(from, CONSTASTR("ftp://"));
+    if (i < 0)
+    {
+        int j = message.find_pos(from, CONSTASTR("www."));
+        if (j == 0 || (j > 0 && message.get_char(j - 1) == ' '))
+            i = j;
+    }
+
+    if (i >= 0)
+    {
+        int cnt = message.get_length();
+        int j = i;
+        for (; j < cnt; ++j)
+        {
+            ts::wchar c = message.get_char(j);
+            if (ts::CHARz_find(L" \\<>\r\n\t", c) >= 0) break;
+        }
+
+        rslt.r0 = i;
+        rslt.r1 = j;
+        return true;
+    }
+
+    return false;
+}
+
+
 
 static ts::asptr bb_tags[] = { CONSTASTR("u"), CONSTASTR("i"), CONSTASTR("b"), CONSTASTR("s") };
 
@@ -609,6 +640,8 @@ ts::wstr_c loc_text(loctext_e lt)
             return TTT("yes",315);
         case loc_no:
             return TTT("no",316);
+        case loc_exit:
+            return TTT("Exit",117);
     }
     return ts::wstr_c();
 }
@@ -862,7 +895,7 @@ ts::drawable_bitmap_c * prepare_proto_icon( const ts::asptr &prototag, const voi
     }
     if (!ricon)
     {
-        ts::text_rect_c tr;
+        ts::text_rect_static_c tr;
         tr.set_size(ts::ivec2(64,32));
 
         ts::wstr_c t = ts::to_wstr(prototag);
@@ -1174,16 +1207,40 @@ void autostart(const ts::wstr_c &exepath, const ts::wsptr &cmdpar)
 
 }
 
+bool elevate()
+{
+    ts::wstr_c prm(CONSTWSTR("wait ")); prm.append_as_uint(GetCurrentProcessId());
+    ts::wstr_c exe(ts::get_exe_full_name());
+
+    SHELLEXECUTEINFOW shExInfo = { 0 };
+    shExInfo.cbSize = sizeof(shExInfo);
+    shExInfo.fMask = 0;
+    shExInfo.hwnd = 0;
+    shExInfo.lpVerb = L"runas";
+    shExInfo.lpFile = exe;
+    shExInfo.lpParameters = prm;
+    shExInfo.lpDirectory = 0;
+    shExInfo.nShow = SW_NORMAL;
+    shExInfo.hInstApp = 0;
+
+    if (ShellExecuteExW(&shExInfo))
+    {
+        return true;
+    }
+    return false;
+}
+
 static void ChuckNorrisCopy(const ts::wstr_c &copyto)
 {
     ts::wstr_c prm(CONSTWSTR("installto ")); prm.append(copyto).replace_all(10, ' ', '*');
+    ts::wstr_c exe( ts::get_exe_full_name() );
 
     SHELLEXECUTEINFOW shExInfo = { 0 };
     shExInfo.cbSize = sizeof(shExInfo);
     shExInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
     shExInfo.hwnd = 0;
     shExInfo.lpVerb = L"runas";
-    shExInfo.lpFile = ts::get_exe_full_name();
+    shExInfo.lpFile = exe;
     shExInfo.lpParameters = prm;
     shExInfo.lpDirectory = 0;
     shExInfo.nShow = SW_NORMAL;
@@ -1209,7 +1266,7 @@ void install_to(const ts::wstr_c &path, bool acquire_admin_if_need)
     ts::wstr_c path_from = ts::fn_get_path( ts::get_exe_full_name() );
 
     ts::wstrings_c files;
-    ts::find_files( ts::fn_join(path_from, CONSTWSTR("*.*")), files, 0xFFFFFFFF, true);
+    ts::find_files( ts::fn_join(path_from, CONSTWSTR("*.*")), files, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, true);
 
     for(const ts::wstr_c &fn2c : files)
     {

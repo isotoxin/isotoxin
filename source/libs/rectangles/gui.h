@@ -210,14 +210,19 @@ class gui_c
     ts::tbuf_t<int> m_usedtags4buf;
     int m_checkindex = 0;
 
+    int get_temp_buf(double ttl, ts::aint sz);
+    void *lock_temp_buf(int tag);
+    void kill_temp_buf(int tag);
+
     ts::flags32_s m_flags;
 
 	static const ts::flags32_s::BITS F_INITIALIZATION   = SETBIT(0);
     static const ts::flags32_s::BITS F_DIRTY_HOVER_DATA = SETBIT(1);
     static const ts::flags32_s::BITS F_DO_MOUSEMOUVE = SETBIT(2);
+    static const ts::flags32_s::BITS F_PROCESSING_REPOS = SETBIT(3);
 
     int m_tagpool = 1;
-    ts::text_rect_c m_textrect; // temp usage
+    text_rect_dynamic_c m_textrect; // temp usage
 	theme_c m_theme;
     hover_data_s m_hoverdata;
 	
@@ -232,8 +237,16 @@ class gui_c
     typedef ts::pair_s<ts::Time,RID> free_rid;
 	ts::tbuf_t< free_rid > m_emptyids;
 
+    ts::array_safe_t<gui_group_c, 4> m_children_repos;
+
     ts::array_inplace_t<drawcollector, 4> m_dcolls;
     int m_dcolls_ref = 0;
+
+    static const ts::flags32_s::BITS PEF_CHILDREN_REPOS = SETBIT(0);
+protected:
+    ts::flags32_s m_post_effect;
+    static const ts::flags32_s::BITS PEF_FREEBITSTART = SETBIT(1);
+private:
 
     struct kbd_press_callback_s
     {
@@ -244,6 +257,16 @@ class gui_c
         ts::uint32 scancode;
     };
     ts::array_inplace_t<kbd_press_callback_s, 1> m_kbdhandlers;
+
+
+    struct texture_s
+    {
+        ts::iweak_ptr<text_rect_dynamic_c> owner;
+        ts::drawable_bitmap_c texture;
+    };
+    ts::array_del_t<texture_s, 32> m_textures;
+
+
 
     RID get_free_rid();
 
@@ -313,6 +336,9 @@ public:
     gui_c();
 	~gui_c();
 
+    ts::drawable_bitmap_c * acquire_texture( text_rect_dynamic_c *requester, const ts::ivec2 &size );
+    void release_texture( ts::drawable_bitmap_c * t );
+
     bool load_theme( const ts::wsptr&thn );
     
     const ts::font_desc_c & get_font( const ts::asptr &fontname );
@@ -320,26 +346,49 @@ public:
 
     void resort_roots();
 
+    void repos_children( gui_group_c *g );
     void prepare_redraw_collector()
     {
         ++m_dcolls_ref;
         if (m_dcolls_ref == 1)
         {
+            m_post_effect.clear();
+            if (m_children_repos.size()) m_post_effect.set(PEF_CHILDREN_REPOS);
             for (RID r : m_roots)
                 m_dcolls.add() = HOLD(r)().getroot();
         }
     }
     void flush_redraw_collector()
     {
+        if (m_post_effect.__bits && m_dcolls_ref == 1)
+            do_post_effect();
+
         --m_dcolls_ref;
         ASSERT(m_dcolls_ref >= 0);
         if (m_dcolls_ref == 0)
             m_dcolls.clear();
     }
 
-    int get_temp_buf(double ttl, ts::aint sz);
-    void *lock_temp_buf(int tag);
-    void kill_temp_buf(int tag);
+    drawcollector& allocate_dcoll()
+    {
+        ASSERT( m_dcolls_ref > 0 );
+        return m_dcolls.add();
+    }
+    void process_children_repos();
+    virtual void do_post_effect();
+
+    template<typename T> int temp_store( const T&t, double ttl = 1.0 )
+    {
+        TS_STATIC_CHECK( ts::is_movable<T>::value, "not movable!" );
+        int b = get_temp_buf(ttl, sizeof(T));
+        T *st = (T *)gui->lock_temp_buf(b);
+        memcpy(st, &t, sizeof(T));
+        return b;
+    }
+    template<typename T> T *temp_restore( int b )
+    {
+        return (T *)lock_temp_buf(b);
+    }
 
     void enqueue_gmsg( gmsgbase *m )
     {
@@ -550,17 +599,17 @@ INLINE const ts::font_desc_c &gui_button_c::get_font() const
 }
 
 
-template<typename R> MAKE_ROOT<R>::MAKE_ROOT(drawcollector &dcoll):dcoll(dcoll)
+template<typename R> MAKE_ROOT<R>::MAKE_ROOT()
 {
     engine = TSNEW(rectengine_root_c, false);
-    dcoll = (rectengine_root_c *)engine;
+    gui->allocate_dcoll() = (rectengine_root_c *)engine;
     gui->newrect<newrectkitchen::rectwrapper<R>::type>( *this );
 }
 template<typename R> void MAKE_ROOT< newrectkitchen::rectwrapper<R> >::init( bool sys )
 {
     if (me) return;
     engine = TSNEW(rectengine_root_c, sys);
-    dcoll = (rectengine_root_c *)engine;
+    gui->allocate_dcoll() = (rectengine_root_c *)engine;
     gui->newrect<R, MAKE_ROOT<R> >( (MAKE_ROOT<R> &)(*this) );
 }
 

@@ -191,7 +191,8 @@ void socket_s::flush_and_close()
 {
     if (_socket != INVALID_SOCKET)
     {
-        shutdown(_socket, SD_SEND);
+        int errm = shutdown(_socket, SD_SEND);
+        logm( "socket shutdown %i", errm );
         closesocket(_socket);
         _socket = INVALID_SOCKET;
     }
@@ -430,7 +431,14 @@ packet_id_e tcp_pipe::packet_id()
     {
         USHORT sz = ntohs(*(USHORT *)(rcvbuf+2));
         if (rcvbuf_sz >= sz)
-            return (packet_id_e)ntohs(*(short *)rcvbuf);;
+        {
+            packet_id_e pid = (packet_id_e)ntohs(*(short *)rcvbuf);;
+#if LOGGING
+            asptr pidname = pid_name(pid);
+            if (pid != PID_NONE) Log("recv: %s", pidname.s);
+#endif
+            return pid;
+        }
     }
     return connected() ? PID_NONE : PID_DEAD;
 }
@@ -868,13 +876,15 @@ void lan_engine::tick(int *sleep_time_ms)
                 if (c->pipe.connected())
                 {
                     pg_reject();
-                    if (c->pipe.send(packet_buf_encoded, packet_buf_encoded_len))
-                        c->pipe.flush_and_close();
+                    c->pipe.send(packet_buf_encoded, packet_buf_encoded_len);
+                    c->state = contact_s::ALMOST_ROTTEN;
+                    c->nextactiontime = ct + 5000;
+                } else
+                {
+                    c->state = contact_s::ROTTEN;
+                    c->nextactiontime = ct;
+                    if (rotten == nullptr) rotten = c;
                 }
-
-                c->state = contact_s::ROTTEN;
-                c->nextactiontime = ct;
-                if (rotten == nullptr) rotten = c;
                 c->data_changed = true;
                 break;
             case contact_s::ONLINE:
@@ -886,6 +896,10 @@ void lan_engine::tick(int *sleep_time_ms)
                 {
                     c->to_offline(ct);
                 }
+                break;
+            case contact_s::ALMOST_ROTTEN:
+                if (c->pipe.connected())
+                    c->pipe.close();
                 break;
             }
             
@@ -905,6 +919,12 @@ void lan_engine::tick(int *sleep_time_ms)
         {
             if (c->state == contact_s::ONLINE)
                 c->to_offline( ct );
+            else if (c->state == contact_s::ALMOST_ROTTEN)
+            {
+                c->state = contact_s::ROTTEN;
+                c->nextactiontime = ct;
+                c->data_changed = true;
+            }
         }
         
         if (need_some_hallo)
@@ -1681,10 +1701,11 @@ void lan_engine::del_contact(int id)
 {
     if (id)
         if (contact_s *c = find(id))
-        {
-            c->state = contact_s::ROTTEN;
-            c->data_changed = false; // no need to send data to host
-        }
+            if (c->state != contact_s::ROTTEN && c->state != contact_s::ALMOST_ROTTEN && c->state != contact_s::REJECT)
+            {
+                c->state = contact_s::ROTTEN;
+                c->data_changed = false; // no need to send data to host
+            }
 
 }
 
@@ -1757,7 +1778,10 @@ void lan_engine::reject(int id)
 {
     if (contact_s *c = find(id))
         if (c->state == contact_s::INVITE_RECV)
+        {
             c->state = contact_s::REJECT;
+            c->nextactiontime = time_ms();
+        }
 }
 
 void lan_engine::call(int id, const call_info_s *callinf)
@@ -1912,6 +1936,9 @@ void lan_engine::contact_s::start_media()
 
 void lan_engine::contact_s::recv()
 {
+    if (ALMOST_ROTTEN == state)
+        return;
+
     byte tmpbuf[65536];
     if (pipe.connected() && state != ROTTEN)
     {
@@ -1921,7 +1948,7 @@ void lan_engine::contact_s::recv()
         {
 #if LOGGING
             asptr pidname = pid_name(pid);
-            if (pid != PID_NONE) Log("recv: %s", pidname.s);
+            if (pid != PID_NONE) Log("processing recv: %s", pidname.s);
 #endif
 
             if (_tcp_encrypted_begin_ < pid  && pid < _tcp_encrypted_end_)
@@ -2025,6 +2052,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
     case PID_REJECT:
         state = REJECTED;
         data_changed = true;
+        pipe.close();
         break;
     case PID_READY:
         if (const byte *pubid = r.read(SIZE_PUBID))

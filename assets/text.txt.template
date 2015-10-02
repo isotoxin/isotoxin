@@ -1,0 +1,13 @@
+====header
+------------------------------------- {NAME} -------------------------------------
+
+====mine
+{TIME}: {TEXT}====namedmine
+
+[{NAME}]
+{TIME}: {TEXT}
+====other
+{TIME}: {TEXT}====namedother
+
+[{NAME}]
+{TIME}: {TEXT}

@@ -1182,10 +1182,10 @@ struct lnk_s
     template<> INLINE const char *shorttypename<float>() {return "f";};
     template<> INLINE const char *shorttypename<double>() {return "d";};
 
-    template<typename STRTYPE, typename VT, int VSZ> INLINE streamstr<STRTYPE> & operator<<( streamstr<STRTYPE> &dl, const vec_t<VT,VSZ> &v )
+    template<typename STRTYPE, typename VT, aint VSZ> INLINE streamstr<STRTYPE> & operator<<( streamstr<STRTYPE> &dl, const vec_t<VT,VSZ> &v )
     {
         (dl << shorttypename<VT>()).raw_append("vec[");
-        for(int i=0;i<VSZ;++i)
+        for(aint i=0;i<VSZ;++i)
         {
             dl << v[i];
             if (i < VSZ-1) dl << ",";

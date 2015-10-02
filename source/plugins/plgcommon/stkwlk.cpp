@@ -1050,8 +1050,8 @@ void StackWalker::TraceRegisters( const HANDLE thread, const CONTEXT* pCxt )cons
 EAX=%p  EBX=%p  ECX=%p  EDX=%p  ESI=%p\r\n\
 EDI=%p  EBP=%p  ESP=%p  EIP=%p  FLG=%p\r\n\
 CS=%04X   DS=%04X  SS=%04X  ES=%04X   FS=%04X  GS=%04X\r\n\r\n", thread,
-        (LPVOID)pCxt->Eax, (LPVOID)pCxt->Ebx, (LPVOID)pCxt->Ecx, (LPVOID)pCxt->Edx, (LPVOID)pCxt->Esi,
-        (LPVOID)pCxt->Edi, (LPVOID)pCxt->Ebp, (LPVOID)pCxt->Esp, (LPVOID)pCxt->Eip, (LPVOID)pCxt->EFlags,
+        (LPVOID)pCxt->Eax, (LPVOID)pCxt->Ebx, (LPVOID)pCxt->Ecx, (LPVOID)pCxt->Edx, (LPVOID)pCxt->Esi, //-V204
+        (LPVOID)pCxt->Edi, (LPVOID)pCxt->Ebp, (LPVOID)pCxt->Esp, (LPVOID)pCxt->Eip, (LPVOID)pCxt->EFlags, //-V204
         pCxt->SegCs,pCxt->SegDs,pCxt->SegSs,
         pCxt->SegEs,pCxt->SegFs,pCxt->SegGs);
 #elif _M_X64

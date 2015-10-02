@@ -66,7 +66,6 @@ typedef fastdelegate::FastDelegate<bool (int, SQLITE_DATAGETTER)> SQLITE_TABLERE
 class sqlitedb_c
 {
     DECLARE_EYELET( sqlitedb_c );
-
 protected:
     sqlitedb_c() {}
     ~sqlitedb_c() {}
@@ -75,7 +74,7 @@ public:
     virtual void close() = 0; // no need to call due no resource leak - all databases will be destroyed automatically at end of program
     virtual bool is_table_exist( const asptr& tablename ) = 0;
     virtual void create_table( const asptr& tablename, array_wrapper_c<const column_desc_s> columns, bool norowid ) = 0;
-    virtual bool update_table_struct( const asptr& tablename, array_wrapper_c<const column_desc_s> columns, bool norowid ) = 0; // create or add/remove/update columns
+    virtual int update_table_struct( const asptr& tablename, array_wrapper_c<const column_desc_s> columns, bool norowid ) = 0; // create or add/remove/update columns
     virtual void read_table( const asptr& tablename, SQLITE_TABLEREADER reader, const asptr& where_items = asptr() ) = 0;
     virtual int  insert( const asptr& tablename, array_wrapper_c<const data_pair_s> fields ) = 0;
     virtual void delrow( const asptr& tablename, int id ) = 0;
@@ -85,7 +84,7 @@ public:
     virtual int  find_free( const asptr& tablename, const asptr& id ) = 0;
     
 
-    static sqlitedb_c *sqlitedb_c::connect( const wsptr &fn ); // will create file if not exist / returns already connected db
+    static sqlitedb_c *sqlitedb_c::connect( const wsptr &fn, bool readonly ); // will create file if not exist / returns already connected db
 };
 
 

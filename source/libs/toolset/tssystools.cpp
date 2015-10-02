@@ -2,7 +2,7 @@
 
 namespace ts
 {
-__declspec(thread) DWORD Time::threadCurrentTime = 0;
+__declspec(thread) DWORD Time::thread_current_time = 0;
 
 void	TSCALL hide_hardware_cursor()
 {

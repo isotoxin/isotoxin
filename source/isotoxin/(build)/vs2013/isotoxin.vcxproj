@@ -176,16 +176,20 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\res\appver.inl" />
-    <None Include="..\..\res\icon.ico" />
     <None Include="..\..\signpk.inl" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\..\res\isotoxin.rc" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="..\..\res\hollow.ico" />
-    <Image Include="..\..\res\icon2.ico" />
-    <Image Include="..\..\res\icon_normal.ico" />
+    <Image Include="..\..\res\away.ico" />
+    <Image Include="..\..\res\away_msg.ico" />
+    <Image Include="..\..\res\dnd.ico" />
+    <Image Include="..\..\res\dnd_msg.ico" />
+    <Image Include="..\..\res\offline.ico" />
+    <Image Include="..\..\res\offline_msg.ico" />
+    <Image Include="..\..\res\online.ico" />
+    <Image Include="..\..\res\online_msg.ico" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

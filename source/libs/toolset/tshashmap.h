@@ -16,16 +16,16 @@ inline unsigned calc_hash(const unsigned i)
 	return i;
 }
 
-inline unsigned calc_hash(const void *obj, unsigned len/*, unsigned int seed*/)
+inline unsigned calc_hash(const void *obj, aint len/*, unsigned int seed*/)
 {
 	//MurmurHash2
 	const unsigned m = 0x5bd1e995;//'m' and 'r' are mixing constants generated offline.
 	const int r = 24;             //They're not really 'magic', they just happen to work well.
-	unsigned h = /*seed ^*/ len;  //Initialize the hash to a 'random' value
+	unsigned h = /*seed ^*/ len;  //Initialize the hash to a 'random' value //-V103
 
 	const unsigned char *data = (unsigned char*)obj;//Mix 4 bytes at a time into the hash
 	unsigned rem = len & 3;
-	for (len >>= 2; len > 0; data += 4, len--)
+	for (len >>= 2; len > 0; data += 4, len--) //-V112
 	{
 		unsigned k = *(unsigned*)data;
 
@@ -86,8 +86,8 @@ public:
 	struct litm_s;
 private:
 	litm_s **table = nullptr;
-	int table_size = 0;
-    int used = 0;
+	aint table_size = 0;
+    aint used = 0;
 
 public:
 
@@ -103,11 +103,11 @@ public:
 	class iterator
 	{
 		const hashmap_t *hashmap;
-		int table_index;
+		aint table_index;
 		litm_s *item = nullptr;
 
 	public:
-		iterator(const hashmap_t *hashmap, int start_index = -1) : hashmap(hashmap), table_index(start_index) {}
+		iterator(const hashmap_t *hashmap, aint start_index = -1) : hashmap(hashmap), table_index(start_index) {}
 
 		const KEYTYPE &key() const {ASSERT(operator bool()); return item->key;}
         VALTYPE &value() { return  item->value; }
@@ -175,7 +175,7 @@ public:
 	iterator   end() const { return   iterator(this, table_size); }
 
 	hashmap_t() {}
-	hashmap_t(int size)
+	explicit hashmap_t(aint size)
 	{
 		reserve(size);
 	}
@@ -194,7 +194,7 @@ public:
 		if (table) MM_FREE(table);
 	}
 
-	void reserve(int size)
+	void reserve(aint size)
 	{
 		if (size > table_size)
 		{
@@ -204,7 +204,7 @@ public:
 
 			if (table) // move data from old table to new one
 			{
-				for (int i=0; i<table_size; i++)
+				for (aint i=0; i<table_size; i++)
 					for (litm_s *sli = table[i], *next; sli; sli = next)
 					{
 						next = sli->next;
@@ -221,12 +221,12 @@ public:
 		}
 	}
 
-	int  size() const { return used; }
+	aint  size() const { return used; }
 	bool is_empty() const { return used == 0; }
 
 	void clear()
 	{
-		for (int i=0; i<table_size; ++i)
+		for (aint i=0; i<table_size; ++i)
 		{
 			for (litm_s *li = table[i], *next; li; li = next)
 			{
@@ -260,7 +260,7 @@ public:
             table_size = hm.table_size;
             used = hm.used;
 
-            for (int i=0; i<table_size; i++)
+            for (aint i=0; i<table_size; i++)
             {
                 litm_s **prev_next = &table[i];
                 for (litm_s *sli = hm.table[i]; sli; sli = sli->next)

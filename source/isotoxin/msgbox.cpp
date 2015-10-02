@@ -14,6 +14,8 @@ dialog_msgbox_c::dialog_msgbox_c(MAKE_ROOT<dialog_msgbox_c> &data) :gui_isodialo
         bcr.tag = 0;
         __super::getbutton(bcr);
         bcr.tag = m_buttons.size()-1;
+        if (!m_params.cancel_button_text.is_empty())
+            bcr.btext = m_params.cancel_button_text;
     }
     if (m_params.bok_)
     {
@@ -21,6 +23,8 @@ dialog_msgbox_c::dialog_msgbox_c(MAKE_ROOT<dialog_msgbox_c> &data) :gui_isodialo
         bcr.tag = 1;
         __super::getbutton(bcr);
         bcr.tag = m_buttons.size() - 1;
+        if (!m_params.ok_button_text.is_empty())
+            bcr.btext = m_params.ok_button_text;
     }
 }
 

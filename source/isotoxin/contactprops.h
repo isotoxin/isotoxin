@@ -12,8 +12,8 @@ class dialog_contact_props_c;
 template<> struct MAKE_ROOT<dialog_contact_props_c> : public _PROOT(dialog_contact_props_c)
 {
     dialog_contactprops_params_s prms;
-    MAKE_ROOT(drawcollector &dch) :_PROOT(dialog_contact_props_c)(dch) { init(false); }
-    MAKE_ROOT(drawcollector &dch, const dialog_contactprops_params_s &prms) :_PROOT(dialog_contact_props_c)(dch), prms(prms) { init(false); }
+    MAKE_ROOT() :_PROOT(dialog_contact_props_c)() { init(false); }
+    MAKE_ROOT(const dialog_contactprops_params_s &prms) :_PROOT(dialog_contact_props_c)(), prms(prms) { init(false); }
     ~MAKE_ROOT() {}
 };
 

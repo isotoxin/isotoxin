@@ -124,8 +124,8 @@ public:
     typedef fastdelegate::FastDelegate< bool (rectengine_c *, rectengine_c *) > SWAP_TESTER;
 
     void cleanup_children_now();
-    void resort_children(); // resort children according to zindex
-    bool children_sort( SWAP_TESTER swap_them );
+    void z_resort_children(); // resort children according to zindex
+    bool children_sort( SWAP_TESTER swap_them ); // custom order of children
     void child_move_top( rectengine_c *e ) { child_move_to(0, e); }
     void child_move_to( int index, rectengine_c *e );
     
@@ -344,7 +344,7 @@ public:
     ts::wstr_c  load_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, const ts::wsptr &filt, const ts::wchar *defext, const ts::wchar *title);
     bool        load_filename_dialog(ts::wstrings_c &files, const ts::wsptr &iroot, const ts::wsptr& name, const ts::wsptr &filt, const ts::wchar *defext, const ts::wchar *title);
     ts::wstr_c  save_directory_dialog(const ts::wsptr &root, const ts::wsptr &title, const ts::wsptr &selectpath = ts::wsptr(), bool nonewfolder = false);
-    ts::wstr_c  save_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, const ts::wsptr &filt, const ts::wchar *defext, const ts::wchar *title);
+    ts::wstr_c  save_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, ts::extensions_s & exts, const ts::wchar *title);
 
 };
 
@@ -399,6 +399,7 @@ struct drawcollector
             engine->flags.clear(rectengine_root_c::F_REDRAW_COLLECTOR);
         }
     }
+
     drawcollector(drawcollector&&odch) :engine(odch.engine) { odch.engine = nullptr; }
     drawcollector &operator=(rectengine_root_c *root)
     {

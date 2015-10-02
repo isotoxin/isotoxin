@@ -820,15 +820,14 @@ public:
         return other_order;
     }
 
-    /// Quick-sort the array.
-    /// Parameter is functional object
+    // quick-sort the array.
     template < typename F > bool sort ( const F &comp, aint ileft=0, aint irite=-1 )
     {
         if (size() <= 1) return false;
 
         if ( ileft<0 ) ileft = size()+ileft;
         if ( irite<0 ) irite = size()+irite;
-        ASSERT( ileft<=irite, "incorrect range for servarray_c::sort" );
+        ASSERT( ileft<=irite, "incorrect range" );
 
         aint st0[32], st1[32];
         aint a, b, k, i, j;
@@ -853,14 +852,17 @@ public:
                     while ( comp ( *x, m_list[j] ) ) j--;
                     if (i <= j)
                     {
-                        swap_unsafe( i, j );
+                        if (i!=j)
+                        {
+                            swap_unsafe( i, j );
+                            sorted = true;
+                        }
 
                         if (centeri == i) { x = m_list + j; centeri = j; }
                         else if (centeri == j) { x = m_list + i; centeri = i; }
 
                         i++;
                         j--;
-                        sorted = true;
                     }
                 }
                 if (j-a >= b-i)
