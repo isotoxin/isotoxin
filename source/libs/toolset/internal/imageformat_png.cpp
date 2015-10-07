@@ -104,6 +104,7 @@ image_read_func img_reader_s::detect_png_format(const void *sourcebuf, int sourc
     png_set_bgr(idata.png_ptr);
     png_set_scale_16(idata.png_ptr);
     png_set_palette_to_rgb(idata.png_ptr);
+    png_set_gray_to_rgb(idata.png_ptr);
 
     if ((idata.info_ptr = png_create_info_struct(idata.png_ptr)) == nullptr) goto eggog;
 

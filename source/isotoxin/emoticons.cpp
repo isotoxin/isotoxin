@@ -190,11 +190,13 @@ namespace
                 emojiset = f.get();
             else if (fnd.ends(CONSTASTR(".gif")))
             {
-                fns.add( emoti().load_gif_smile( ts::to_wstr(fnd), f.get(), current_pack ) );
-            }
-            else if (fnd.ends(CONSTASTR(".png")))
+                ts::str_c fn = emoti().load_gif_smile( ts::to_wstr(fnd), f.get(), current_pack );
+                if (!fn.is_empty()) fns.add( fn );
+            } else if (fnd.ends(CONSTASTR(".png")))
             {
-                fns.add(emoti().load_png_smile(ts::to_wstr(fnd), f.get(), current_pack));
+                ts::str_c fn = emoti().load_png_smile(ts::to_wstr(fnd), f.get(), current_pack);
+                if (!fn.is_empty())
+                    fns.add( fn );
             }
 
             return true;
@@ -213,17 +215,20 @@ ts::str_c emoticons_c::load_gif_smile( const ts::wstr_c& fn, const ts::blob_c &b
     ts::str_c n = to_utf8(ts::fn_get_name(fn));
     int code = getunicode(n);
     for (const emoticon_s *e : arr)
-    {
         if (e->unicode == code)
             return n;
-    }
 
     emo_gif_s *gif = TSNEW(emo_gif_s, code);
     gif->current_pack = current_pack;
-    gif->load(body);
-    gif->def = n;
-    arr.add() = gif;
-    return gif->def;
+    if (gif->load(body))
+    {
+        gif->def = n;
+        arr.add() = gif;
+        return n;
+    }
+
+    TSDEL(gif);
+    return ts::str_c();
 }
 
 ts::str_c emoticons_c::load_png_smile(const ts::wstr_c& fn, const ts::blob_c &body, bool current_pack)
@@ -231,17 +236,21 @@ ts::str_c emoticons_c::load_png_smile(const ts::wstr_c& fn, const ts::blob_c &bo
     ts::str_c n = to_utf8(ts::fn_get_name(fn));
     int code = getunicode(n);
     for( const emoticon_s *e : arr )
-    {
         if (e->unicode == code)
             return n;
-    }
 
     emo_static_image_s *img = TSNEW(emo_static_image_s, code);
     img->current_pack = current_pack;
-    img->load(body);
-    img->def = n;
-    arr.add() = img;
-    return img->def;
+    if (img->load(body))
+    {
+        img->def = n;
+        arr.add() = img;
+        return n;
+    }
+
+    TSDEL(img);
+    return ts::str_c();
+
 }
 
 void emoticons_c::reload()

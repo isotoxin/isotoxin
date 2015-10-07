@@ -1613,14 +1613,18 @@ public:
     }
 
 
-    strpart substr(const ZSTRINGS_SIGNED idx0, const ZSTRINGS_SIGNED idx1) const /// returns substring from idx0 to idx1
+    strpart substr(ZSTRINGS_SIGNED idx0, ZSTRINGS_SIGNED idx1) const /// returns substring from idx0 to idx1
     {
         if (core.len() == 0) return strpart();
+        if (idx1 > get_length()) idx1 = get_length();
+        if (idx0 < 0) idx0 = 0;
+        if (idx0 > idx1) return strpart();
         return strpart(sptr<TCHARACTER>(core() + idx0, idx1 - idx0));
     }
     strpart substr(const ZSTRINGS_SIGNED idx) const /// returns substring from idx to end
     {
         if (core.len() == 0) return strpart();
+        if (idx > get_length()) return strpart();
         return strpart(sptr<TCHARACTER>(core() + idx, get_length() - idx));
     }
     strpart substr(ZSTRINGS_SIGNED &idx, TCHARACTER obr, TCHARACTER cbr) const /// find substring between obr and cbr characters
