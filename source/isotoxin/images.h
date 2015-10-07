@@ -72,6 +72,8 @@ public:
 
 class image_loader_c : public autoparam_i
 {
+    DUMMY(image_loader_c);
+
     ts::safe_ptr<gui_message_item_c> item;
     ts::wstr_c filename;
     picture_c *pic = nullptr;
@@ -101,3 +103,12 @@ public:
 
 };
 
+INLINE image_loader_c &gui_message_item_c::imgloader_get()
+{
+    addition_file_data_s *afd = ts::ptr_cast<addition_file_data_s *>(addition.get());
+    if (ASSERT(afd))
+        return afd->imgloader.get<image_loader_c>();
+    return ts::make_dummy<image_loader_c>();
+}
+
+image_loader_c &imgloader_get();

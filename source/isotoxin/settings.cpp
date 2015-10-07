@@ -243,10 +243,26 @@ bool dialog_settings_c::date_sep_tmpl_edit_handler(const ts::wstr_c &v)
 
 bool dialog_settings_c::ctl2send_handler( RID, GUIPARAM p )
 {
-    ctl2send = as_int(p);
+    ctl2send = (enter_key_options_s)as_int(p);
+    if (ctl2send == EKO_ENTER_NEW_LINE && double_enter)
+        ctl2send = EKO_ENTER_NEW_LINE_DOUBLE_ENTER;
+
+    ctlenable( CONSTASTR("dblenter1"), ctl2send != EKO_ENTER_SEND );
+
     mod();
     return true;
 }
+bool dialog_settings_c::ctl2send_handler_de(RID, GUIPARAM p)
+{
+    if (p)
+        ctl2send = EKO_ENTER_NEW_LINE_DOUBLE_ENTER;
+    else
+        ctl2send = EKO_ENTER_NEW_LINE;
+
+    mod();
+    return true;
+}
+
 
 bool dialog_settings_c::collapse_beh_handler(RID, GUIPARAM p)
 {
@@ -443,7 +459,7 @@ void dialog_settings_c::mod()
         PREPARE( username, prf().username(); text_prepare_for_edit(username) );
         PREPARE( userstatusmsg, prf().userstatus(); text_prepare_for_edit(userstatusmsg) );
 
-        PREPARE( ctl2send, prf().ctl_to_send() );
+        PREPARE( ctl2send, (enter_key_options_s)prf().ctl_to_send() );
 
         PREPARE( msgopts_current, prf().get_options().__bits );
         msgopts_changed = 0;
@@ -670,11 +686,17 @@ void dialog_settings_c::mod()
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
         dm().page_header(TTT("Chat settings",110));
         dm().vspace(10);
-        dm().radio(TTT("Enter and Ctrl+Enter",111), DELEGATE(this, ctl2send_handler), ctl2send).setmenu(
-            menu_c().add(TTT("Enter - send message, Ctrl+Enter - new line",112), 0, MENUHANDLER(), CONSTASTR("0"))
-                    .add(TTT("Enter - new line, Ctrl+Enter - send message",113), 0, MENUHANDLER(), CONSTASTR("1"))
-                    .add(TTT("Enter - new line, double Enter - send message",152), 0, MENUHANDLER(), CONSTASTR("2"))
+        int enter_key = ctl2send; if (enter_key == EKO_ENTER_NEW_LINE_DOUBLE_ENTER) enter_key = EKO_ENTER_NEW_LINE;
+        dm().radio(TTT("Enter key",111), DELEGATE(this, ctl2send_handler), enter_key).setmenu(
+            menu_c().add(TTT("Enter - send message, Shift+Enter or Ctrl+Enter - new line",112), 0, MENUHANDLER(), ts::amake<int>(EKO_ENTER_SEND))
+                    .add(TTT("Enter - new line, Shift+Enter or Ctrl+Enter - send message",113), 0, MENUHANDLER(), ts::amake<int>(EKO_ENTER_NEW_LINE))
             );
+        double_enter = ctl2send == EKO_ENTER_NEW_LINE_DOUBLE_ENTER ? 1 : 0;
+        dm().checkb(ts::wstr_c(), DELEGATE(this, ctl2send_handler_de), double_enter).setmenu(
+            menu_c().add(TTT("Double Enter - send message", 152), 0, MENUHANDLER(), CONSTASTR("1"))
+            ).setname(CONSTASTR("dblenter"));
+
+
         dm().vspace();
         dm().combik(TTT("Emoticon set",269)).setmenu(emoti().get_list_smile_pack( smilepack, DELEGATE(this, smile_pack_selected) )).setname(CONSTASTR("avasmliepack"));
         dm().vspace();
@@ -1025,6 +1047,8 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
     if (mask & MASK_PROFILE_CHAT)
     {
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, msgopts_handler), msgopts_current);
+        int enter_key = ctl2send; if (enter_key == EKO_ENTER_NEW_LINE_DOUBLE_ENTER) enter_key = EKO_ENTER_NEW_LINE;
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, ctl2send_handler), enter_key);
     }
     if (mask & MASK_PROFILE_HISTORY)
     {

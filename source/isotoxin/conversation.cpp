@@ -625,23 +625,45 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
 
     pubid = pubid_;
     ts::wstr_c sost, plugdesc, uname, ustatus, netname;
+    cmd_result_e curstate = CR_OK;
     bool is_autoconnect = false;
     prf().iterate_aps([&](const active_protocol_c &ap) {
 
         if (contact_c *c = contacts().find_subself(ap.getid()))
             if ((networkid == 0 && c->get_pubid() == pubid) || (networkid == ap.getid()))
             {
+                curstate = ap.get_current_state();
                 networkid = ap.getid();
                 plugdesc = from_utf8(ap.get_desc());
                 netname = from_utf8(ap.get_name());
                 is_autoconnect = ap.is_autoconnect();
 
-                if (c->get_state() == CS_ONLINE)
-                    sost.set(CONSTWSTR("</l><b>"))
-                    .append(maketag_color<ts::wchar>(get_default_text_color(0))).append(TTT("Online",100)).append(CONSTWSTR("</color></b><l>"));
+                if (CR_OK == curstate)
+                {
+                    if (c->get_state() == CS_ONLINE)
+                        sost.set(CONSTWSTR("</l><b>"))
+                        .append(maketag_color<ts::wchar>(get_default_text_color(COLOR_ONLINE_STATUS))).append(TTT("Online", 100)).append(CONSTWSTR("</color></b><l>"));
 
-                if (c->get_state() == CS_OFFLINE)
-                    sost.set(maketag_color<ts::wchar>(get_default_text_color(1))).append(TTT("Offline",101)).append(CONSTWSTR("</color>"));
+                    if (c->get_state() == CS_OFFLINE)
+                        sost.set(maketag_color<ts::wchar>(get_default_text_color(COLOR_OFFLINE_STATUS))).append(TTT("Offline", 101)).append(CONSTWSTR("</color>"));
+                } else
+                {
+                    ts::wstr_c errs;
+                    switch (curstate)
+                    {
+                        case CR_NETWORK_ERROR:
+                            errs = TTT("Network error",335);
+                            break;
+                        case CR_CORRUPT:
+                            errs = TTT("Data corrupt",336);
+                            break;
+                        default:
+                            errs = TTT("Error $",334)/ts::wmake<uint>( curstate );
+                            break;
+                    }
+                    sost.set(CONSTWSTR("</l><b>"))
+                        .append(maketag_color<ts::wchar>(get_default_text_color(COLOR_ERROR_STATUS))).append(errs).append(CONSTWSTR("</color></b><l>"));
+                }
 
                 int online = 0, all = 0;
                 contacts().iterate_proto_contacts( [&]( contact_c *c ) {
@@ -669,11 +691,11 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
         ts::str_c n = prf().username();
         text_convert_from_bbcode(n);
         text_remove_tags(n);
-        uname.set(maketag_color<ts::wchar>(get_default_text_color(4))).append(from_utf8(n)).append(CONSTWSTR("</color>"));
+        uname.set(maketag_color<ts::wchar>(get_default_text_color(COLOR_DEFAULT_VALUE))).append(from_utf8(n)).append(CONSTWSTR("</color>"));
     } else
         uname.insert(0,CONSTWSTR("</l><b>")).append(CONSTWSTR("</b><l>"));
     if (ustatus.is_empty())
-        ustatus.set(maketag_color<ts::wchar>(get_default_text_color(4))).append( from_utf8(prf().userstatus()) ).append(CONSTWSTR("</color>"));
+        ustatus.set(maketag_color<ts::wchar>(get_default_text_color(COLOR_DEFAULT_VALUE))).append( from_utf8(prf().userstatus()) ).append(CONSTWSTR("</color>"));
     else
         ustatus.insert(0, CONSTWSTR("</l><b>")).append(CONSTWSTR("</b><l>"));
 
@@ -763,6 +785,8 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
     connect_handler::offline_online(b_connect, networkid, is_autoconnect);
     b_connect.leech(TSNEW(leech_dock_right_center_s, sz2.x, sz2.y, 5, -5, 0, 1));
     MODIFY(b_connect).visible(true);
+    if (curstate != CR_OK)
+        b_connect.disable();
 
     gui_button_c &b_setup = MAKE_CHILD<gui_button_c>(getrid());
     b_setup.set_constant_size(sz1);
@@ -771,6 +795,8 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
     b_setup.leech(TSNEW(leech_at_left_s, &b_connect, 5));
     b_setup.set_handler(connect_handler::netsetup, as_param(networkid));
     MODIFY(b_setup).visible(true);
+    if (curstate != CR_OK)
+        b_setup.disable();
 
     gui_button_c &b_copy = MAKE_CHILD<gui_button_c>(getrid());
     b_copy.set_constant_size(sz0);
@@ -808,6 +834,14 @@ bool gui_notice_network_c::resetup(RID, GUIPARAM)
 ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT>&c)
 {
     refresh |= c.contact->getkey().protoid == networkid;
+    return 0;
+}
+
+ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CMD_RESULT> &rslt)
+{
+    if (rslt.cmd == AQ_SET_CONFIG && rslt.networkid == networkid)
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, resetup), nullptr);
+
     return 0;
 }
 
@@ -946,7 +980,7 @@ int gui_notice_network_c::sortfactor() const
             if (flags.is(F_OVERAVATAR))
             {
                 int y = (ca.size().y - left_margin) / 2;
-                m_engine->draw(ts::irect(ca.lt.x, ca.lt.y+y, ca.lt.x + left_margin, ca.lt.y+y+left_margin), get_default_text_color(3));
+                m_engine->draw(ts::irect(ca.lt.x, ca.lt.y+y, ca.lt.x + left_margin, ca.lt.y+y+left_margin), get_default_text_color(COLOR_OVERAVATAR));
             }
 
             if (contact_c *contact = contacts().find_subself(networkid))
@@ -1108,7 +1142,7 @@ bool gui_notice_network_c::flash_pereflash(RID, GUIPARAM)
     if (flashing & 1)
     {
         text.replace(i2, i3 - i2, CONSTWSTR("</color>"));
-        text.replace(i0, i1 - i0, maketag_color<ts::wchar>(get_default_text_color(2)));
+        text.replace(i0, i1 - i0, maketag_color<ts::wchar>(get_default_text_color(COLOR_BLINKED)));
     }
     else
     {
@@ -1373,12 +1407,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                 ap.y = row.other.sort_factor;
             }
 
-            auto srt = []( ts::ivec2 *s1, ts::ivec2 *s2 )
-            {
-                return s1->y < s2->y;
-            };
-
-            splist.tsort<ts::ivec2>( srt );
+            splist.tsort<ts::ivec2>( []( const ts::ivec2 *s1, const ts::ivec2 *s2 ) { return s1->y < s2->y; } );
 
             for(const ts::ivec2 &s : splist)
             {
@@ -1486,25 +1515,41 @@ void gui_message_item_c::created()
     __super::created();
 }
 
+void gui_message_item_c::mark_found()
+{
+    if (flags.is(F_FOUND_ITEM) && g_app->found_items && g_app->found_items->fsplit.size())
+    {
+        ts::tmp_tbuf_t<ts::ivec2> marki;
+        ts::wstr_c t = textrect.get_text();
+        text_find_inds(t, marki, g_app->found_items->fsplit);
+        for(const ts::ivec2 &m : marki)
+            t.insert(m.r1,CONSTWSTR("<cstm=y>")).insert(m.r0,CONSTWSTR("<cstm=x>"));
+        textrect.set_text_only(t, true);
+    }
+}
+
 void gui_message_item_c::rebuild_text()
 {
     ts::wstr_c newtext;
+
+#if JOIN_MESSAGES
     if (prf().get_options().is(MSGOP_JOIN_MESSAGES))
     {
         ts::wstr_c pret, postt;
         prepare_str_prefix(pret, postt);
 
-        for (record &r : records)
+        rec.append(newtext, pret, postt);
+        for (record &r : other_records)
             r.append(newtext, pret, postt);
 
         timestr.clear();
 
-    } else if (records.size())
-    {
-         timestrwidth = records.get(0).append(newtext, timestr);
-    }
+    } else 
+#endif
+        timestrwidth = zero_rec.append(newtext, timestr);
 
     textrect.set_text_only(newtext, false);
+    mark_found();
 }
 
 void gui_message_item_c::ctx_menu_golink(const ts::str_c & lnk)
@@ -1541,7 +1586,7 @@ void gui_message_item_c::ctx_menu_delmessage(const ts::str_c &mutag)
     if (remove_utag(utag))
     {
         RID parent = getparent();
-        if (records.size() == 0 || subtype == ST_RECV_FILE || subtype == ST_SEND_FILE)
+        if (zero_rec.utag == 0 || subtype == ST_RECV_FILE || subtype == ST_SEND_FILE)
         {
             if (!flags.is(F_NO_AUTHOR))
                 if (rectengine_c *next = HOLD(parent).engine().get_next_child( &getengine() ))
@@ -1551,7 +1596,7 @@ void gui_message_item_c::ctx_menu_delmessage(const ts::str_c &mutag)
 
             TSDEL(this);
         }
-        gui->repos_children(&HOLD(parent).as<gui_group_c>());
+        //gui->repos_children(&HOLD(parent).as<gui_group_c>());
     }
 }
 
@@ -1581,6 +1626,9 @@ static gui_messagelist_c *current_draw_list = nullptr;
 {
     if (rid != getrid())
     {
+        if (SQ_MOUSE_WHEELDOWN == qp || SQ_MOUSE_WHEELUP == qp)
+            return __super::sq_evt(qp, getrid(), data);
+
         // from submenu
         if (popupmenu && popupmenu->getrid() == rid)
         {
@@ -1644,9 +1692,9 @@ static gui_messagelist_c *current_draw_list = nullptr;
 
                     /*
 
-                    if (flags.is(F_OVERIMAGE) && get_customdata())
+                    if (flags.is(F_OVERIMAGE) && imgloader())
                     {
-                        image_loader_c &ldr = get_customdata_obj<image_loader_c>();
+                        image_loader_c &ldr = imgloader_get();
                         if (const picture_c *p = ldr.get_picture())
                         {
                             ts::irect r( ldr.local_p, ldr.local_p + p->framesize() + ts::ivec2(8) );
@@ -1665,7 +1713,11 @@ static gui_messagelist_c *current_draw_list = nullptr;
                     draw(dd, tdp);
                     */
 
-                    if (!prf().get_options().is(MSGOP_JOIN_MESSAGES) && gui_message_item_c::ST_TYPING != subtype)
+                    if (
+#if JOIN_MESSAGES
+                        !prf().get_options().is(MSGOP_JOIN_MESSAGES) &&
+#endif
+                        gui_message_item_c::ST_TYPING != subtype)
                     {
                         dd.size.x = timestrwidth + 1;
                         dd.size.y = g_app->font_conv_time->height();
@@ -1684,7 +1736,11 @@ static gui_messagelist_c *current_draw_list = nullptr;
             case gui_message_item_c::ST_JUST_TEXT:
                 __super::sq_evt(qp, rid, data);
 
-                if (!prf().get_options().is(MSGOP_JOIN_MESSAGES) && m_engine)
+                if (
+#if JOIN_MESSAGES
+                    !prf().get_options().is(MSGOP_JOIN_MESSAGES) && 
+#endif
+                    m_engine)
                 {
                     ts::irect ca = get_client_area();
                     draw_data_s &dd = getengine().begin_draw();
@@ -1708,8 +1764,13 @@ static gui_messagelist_c *current_draw_list = nullptr;
                 if (m_engine)
                 {
                     if (historian && current_draw_list)
-                        for (const record &r : records)
+                    {
+                        current_draw_list->update_last_seen_message_time(zero_rec.time);
+#if JOIN_MESSAGES
+                        for (const record &r : other_records)
                             current_draw_list->update_last_seen_message_time(r.time);
+#endif
+                    }
 
                     ts::irect ca = get_client_area();
                     if (ca.size() >> 0)
@@ -1747,7 +1808,9 @@ static gui_messagelist_c *current_draw_list = nullptr;
                         glyphs_pos = sz + ca.lt;
                         if (gui->selcore().owner == this) gui->selcore().glyphs_pos = glyphs_pos;
 
+#if JOIN_MESSAGES
                         if (!prf().get_options().is(MSGOP_JOIN_MESSAGES))
+#endif
                         {
                             dd.size.x = timestrwidth + 1;
                             dd.size.y = g_app->font_conv_time->height();
@@ -1775,22 +1838,23 @@ static gui_messagelist_c *current_draw_list = nullptr;
         {
             ts::str_c lnk = get_link_under_cursor(to_local(data.mouse.screenpos));
             if (!lnk.is_empty()) ctx_menu_golink(lnk);
-        } else if (flags.is(F_OVERIMAGE_LBDN) && get_customdata())
+        } else if (flags.is(F_OVERIMAGE_LBDN) && imgloader())
         {
             flags.clear(F_OVERIMAGE|F_OVERIMAGE_LBDN);
             getengine().redraw();
 
-            image_loader_c &ldr = get_customdata_obj<image_loader_c>();
+            image_loader_c &ldr = imgloader_get();
             if (ldr.get_picture())
                 ts::open_link(ldr.get_fn());
         }
         break;
     case SQ_MOUSE_RUP:
-        if ((records.size() == 1 && records.get(0).text.is_empty()) || subtype != ST_CONVERSATION)
+        if (zero_rec.text.is_empty() || subtype != ST_CONVERSATION)
         {
-            if (records.size() == 0) break;
+            if (zero_rec.utag == 0)
+                break;
             if (ST_SEND_FILE == subtype || ST_RECV_FILE == subtype)
-                if (g_app->find_file_transfer_by_msgutag(records.get(0).utag))
+                if (g_app->find_file_transfer_by_msgutag(zero_rec.utag))
                     break; // do not delete file transfer in progress
             del_only = true;
         } else if (!some_selected() && check_overlink(to_local(data.mouse.screenpos)))
@@ -1838,7 +1902,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
             uint64 mutag = 0;
             if (del_only)
             {
-                mutag = records.get(0).utag;
+                mutag = zero_rec.utag;
             } else
             {
                 bool some_selection = some_selected();
@@ -1862,7 +1926,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
 
         if (SQ_MOUSE_LDOWN == qp)
         {
-            if (flags.is(F_OVERIMAGE) && get_customdata())
+            if (flags.is(F_OVERIMAGE) && imgloader())
                 flags.set(F_OVERIMAGE_LBDN);
         }
 
@@ -1896,9 +1960,9 @@ static gui_messagelist_c *current_draw_list = nullptr;
                     return true;
                 }
             }
-            if (get_customdata())
+            if (imgloader())
             {
-                image_loader_c &ldr = get_customdata_obj<image_loader_c>();
+                image_loader_c &ldr = imgloader_get();
                 if (const picture_c *p = ldr.get_picture())
                 {
                     ts::irect r( ldr.local_p, ldr.local_p + p->framerect().size() + ts::ivec2(8) );
@@ -1992,51 +2056,71 @@ void gui_message_item_c::init_load( int n_load )
 
 bool gui_message_item_c::with_utag(uint64 utag) const
 {
-    for (const record &rec : records)
+    if (utag == zero_rec.utag)
+        return true;
+#if JOIN_MESSAGES
+    for (const record &rec : other_records)
         if (rec.utag == utag) return true;
+#endif
     return false;
 }
 
 bool gui_message_item_c::remove_utag(uint64 utag)
 {
-    int cnt = records.size();
+    if (zero_rec.utag == utag)
+    {
+        zero_rec.utag = 0;
+        return true;
+    }
+#if JOIN_MESSAGES
+    int cnt = other_records.size();
     for (int i=0;i<cnt;++i)
     {
-        record &rec = records.get(i);
+        record &rec = other_records.get(i);
         if (rec.utag == utag)
         {
-            records.remove_slow(i);
+            other_records.remove_slow(i);
             flags.set(F_DIRTY_HEIGHT_CACHE);
             rebuild_text();
             return true;
         }
     }
+#endif
     return false;
 }
 
 bool gui_message_item_c::delivered(uint64 utag)
 {
-    for(record &rec : records)
+    if (utag == zero_rec.utag)
+    {
+        if (zero_rec.undelivered == 0) return false;
+        zero_rec.undelivered = 0;
+
+        goto rbld;
+        rbld:
+        rebuild_text();
+        flags.set(F_DIRTY_HEIGHT_CACHE);
+
+        int h = get_height_by_width(getprops().size().x);
+        if (h != height)
+        {
+            height = h;
+            MODIFY(*this).sizeh(height);
+        }
+
+        return true;
+    }
+#if JOIN_MESSAGES
+    for(record &rec : other_records)
     {
         if (rec.utag == utag)
         {
             if (rec.undelivered == 0) return false;
             rec.undelivered = 0;
-
-            rebuild_text();
-
-            flags.set(F_DIRTY_HEIGHT_CACHE);
-
-            int h = get_height_by_width(getprops().size().x);
-            if (h != height)
-            {
-                height = h;
-                MODIFY(*this).sizeh(height);
-            }
-
-            return true;
+            goto rbld;
         }
     }
+#endif
 
     return false;
 }
@@ -2083,9 +2167,11 @@ ts::uint16 gui_message_item_c::record::append( ts::wstr_c &t, ts::wstr_c &pret, 
     tstr.append_as_uint(tt.tm_min);
 
     ts::uint16 time_str_width = 0;
+#if JOIN_MESSAGES
     if (prf().get_options().is(MSGOP_JOIN_MESSAGES))
         t.append(pret).append(tstr).append(postt);
     else
+#endif
     {
         ts::ivec2 timeszie = g_app->tr().calc_text_size( *g_app->font_conv_time, tstr, 1024, 0, nullptr );
         time_str_width = (ts::uint16)timeszie.x;
@@ -2155,7 +2241,9 @@ ts::ivec2 gui_message_item_c::extract_message(int chari, uint64 &mutag) const
 {
     int rite = textrect.get_text().find_pos(chari, CONSTWSTR("<p><r>")); //-V807
     if (rite < 0) rite = textrect.get_text().get_length();
-    int left = textrect.get_text().substr(0, chari).find_last_pos(CONSTWSTR("</r>")) + 4;
+    int left = 0;
+    if ( textrect.get_text().begins( CONSTWSTR("<cstm=z>") ) )
+        left = 8;
 
     int r2 = rite - 8 - 16;
     if (CHECK(textrect.get_text().substr(r2, r2+7).equals(CONSTWSTR("<null=t"))))
@@ -2189,15 +2277,34 @@ ts::ivec2 gui_message_item_c::extract_message(int chari, uint64 &mutag) const
 
 }
 
+void gui_message_item_c::setup_found_item( uint64 prev, uint64 next )
+{
+    addition_prevnext_s *pn = TSNEW( addition_prevnext_s );
+    pn->prev = prev;
+    pn->next = next;
+    addition.reset( pn );
+    flags.set(F_FOUND_ITEM);
+    MODIFY( *this ).highlight(true);
+}
+
 void gui_message_item_c::append_text( const post_s &post, bool resize_now )
 {
-    bool use0rec = (records.size() && records.get(0).utag == post.utag);
-    record &rec = use0rec ? records.get(0) : records.add();
+#if JOIN_MESSAGES
+    bool use0rec = (zero_rec.utag == post.utag);
+    record &rec = use0rec ? zero_rec : other_records.add();
     if (!use0rec)
     {
         rec.utag = post.utag;
         rec.time = post.time;
     }
+#else
+    record &rec = zero_rec;
+    if (zero_rec.utag == 0)
+    {
+        zero_rec.utag = post.utag;
+        zero_rec.time = post.time;
+    }
+#endif
 
     if (MTA_UNDELIVERED_MESSAGE != post.mt())
         mt = post.mt();
@@ -2280,7 +2387,11 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             if (message.is_empty()) message.set(CONSTASTR("error"));
             else {
                 text_adapt_user_input(message);
-                parse_links(message, records.size() == 1);
+#if JOIN_MESSAGES
+                parse_links(message, other_records.size() == 0);
+#else
+                parse_links(message, true);
+#endif
                 emoti().parse(message);
             }
 
@@ -2288,6 +2399,7 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             rec.undelivered = post.type == MTA_UNDELIVERED_MESSAGE ? get_default_text_color(1) : 0;
 
             ts::wstr_c newtext(textrect.get_text());
+#if JOIN_MESSAGES
             if (prf().get_options().is(MSGOP_JOIN_MESSAGES))
             {
                 ts::wstr_c pret, postt;
@@ -2305,9 +2417,20 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
                 timestr.clear();
 
             } else
+#endif
             {
+                if (flags.is(F_FOUND_ITEM))
+                {
+                    //ts::wstr_c bbb(CONSTWSTR("<p=c><rect=65000,120,-25,3><nbsp><rect=65001,120,-25,3></p><br>"));
+                    //bbb.append_as_uint(100).append_char(',').append_as_int(-sz.y).append(CONSTWSTR(",2>"));
+                    if ( addition_prevnext_s *pn = ts::ptr_cast<addition_prevnext_s *>(addition.get()) )
+                        pn->prevnext = CONSTWSTR("<p=c><rect=65000,120,-25,3><nbsp><rect=65001,120,-25,3></p><br>");
+                    newtext.insert(0,CONSTWSTR("<cstm=z>"));
+                }
+
                 timestrwidth = rec.append(newtext, timestr);
                 textrect.set_text_only(newtext, false);
+                mark_found();
             }
 
         }
@@ -2330,12 +2453,14 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
 
 bool gui_message_item_c::message_prefix(ts::wstr_c &newtext, time_t posttime)
 {
+#if JOIN_MESSAGES
     if (prf().get_options().is(MSGOP_JOIN_MESSAGES))
     {
         newtext.set(CONSTWSTR("<r><font=conv_text><color=#"));
         ts::TSCOLOR c = get_default_text_color(2);
         newtext.append_as_hex(ts::RED(c)).append_as_hex(ts::GREEN(c)).append_as_hex(ts::BLUE(c)).append_as_hex(ts::ALPHA(c)).append(CONSTWSTR("> "));
     } else
+#endif
         newtext.clear();
 
     tm tt;
@@ -2354,6 +2479,7 @@ bool gui_message_item_c::message_prefix(ts::wstr_c &newtext, time_t posttime)
         newtext.append_char(':');
     newtext.append_as_uint(tt.tm_min);
 
+#if JOIN_MESSAGES
     if (prf().get_options().is(MSGOP_JOIN_MESSAGES))
     {
         newtext.append(CONSTWSTR("</color></font></r>"));
@@ -2362,6 +2488,7 @@ bool gui_message_item_c::message_prefix(ts::wstr_c &newtext, time_t posttime)
         return true;
 
     } else
+#endif
     {
         timestr = newtext;
         newtext.clear();
@@ -2377,12 +2504,43 @@ void gui_message_item_c::message_postfix(ts::wstr_c &newtext)
         newtext.append( CONSTWSTR("<nbsp=") ).append_as_uint(timestrwidth + ADDTIMESPACE).append_char('>');
 }
 
+void gui_message_item_c::goto_item( uint64 utag )
+{
+    rectengine_c &lst = HOLD(getparent()).engine();
+
+    for (rectengine_c *e : lst)
+        if (e)
+        {
+            gui_message_item_c &mi = *ts::ptr_cast<gui_message_item_c *>(&e->getrect());
+            if (mi.get_mt() == MTA_TYPING)
+                continue;
+
+            if (mi.with_utag(utag))
+            {
+                gui_messagelist_c &ml = *ts::ptr_cast<gui_messagelist_c *>(&lst.getrect());
+                ml.scroll_to_child( &mi.getengine(), true );
+            }
+        }
+}
+
+bool gui_message_item_c::b_prev(RID, GUIPARAM)
+{
+    if ( addition_prevnext_s *pn = ts::ptr_cast<addition_prevnext_s *>(addition.get()) )
+        goto_item( pn->prev );
+    return true;
+}
+bool gui_message_item_c::b_next(RID, GUIPARAM)
+{
+    if (addition_prevnext_s *pn = ts::ptr_cast<addition_prevnext_s *>(addition.get()))
+        goto_item(pn->next);
+    return true;
+}
+
+
 bool gui_message_item_c::b_explore(RID, GUIPARAM)
 {
-    ASSERT(records.size());
-    record &rec = records.get(0);
-    if (rec.text.get_char(0) == '*' || rec.text.get_char(0) == '?') return true;
-    ts::wstr_c fn = from_utf8(rec.text);
+    if (zero_rec.text.get_char(0) == '*' || zero_rec.text.get_char(0) == '?') return true;
+    ts::wstr_c fn = from_utf8(zero_rec.text);
     if (ts::is_file_exists(fn))
     {
         ShellExecuteW(nullptr, L"open", L"explorer", CONSTWSTR("/select,") + ts::fn_autoquote(ts::fn_get_name_with_ext(fn)), ts::fn_get_path(fn), SW_SHOWDEFAULT);
@@ -2403,34 +2561,31 @@ bool gui_message_item_c::b_explore(RID, GUIPARAM)
 }
 bool gui_message_item_c::b_break(RID btn, GUIPARAM)
 {
-    ASSERT(records.size());
-    record &rec = records.get(0);
-
     ts::safe_ptr<rectengine_c> e = &HOLD(btn).engine();
 
-    file_transfer_s *ft = g_app->find_file_transfer_by_msgutag(rec.utag);
+    file_transfer_s *ft = g_app->find_file_transfer_by_msgutag(zero_rec.utag);
     if (ft && ft->is_active())
         ft->kill();
 
     if (e) kill_button(e, 1);
 
-    if (rec.text.get_char(0) == '?')
+    if (zero_rec.text.get_char(0) == '?')
     {
         // unfinished
-        rec.text.set_char(0, '*');
+        zero_rec.text.set_char(0, '*');
 
-        if (auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.msgitem_utag == rec.utag; }))
+        if (auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.msgitem_utag == zero_rec.utag; }))
         {
 
             post_s p;
             p.sender = row->other.sender;
-            p.message_utf8 = rec.text;
-            p.utag = rec.utag;
+            p.message_utf8 = zero_rec.text;
+            p.utag = zero_rec.utag;
             prf().change_history_item(row->other.historian, p, HITM_MESSAGE);
             if (contact_c * h = contacts().find(row->other.historian)) h->iterate_history([&](post_s &p)->bool {
-                if (p.utag == rec.utag)
+                if (p.utag == zero_rec.utag)
                 {
-                    p.message_utf8 = rec.text;
+                    p.message_utf8 = zero_rec.text;
                     return true;
                 }
                 return false;
@@ -2454,8 +2609,6 @@ bool gui_message_item_c::b_pause_unpause(RID btn, GUIPARAM p)
         return true;
     }
 
-    ASSERT(records.size());
-    record &rec = records.get(0);
     gui_button_c &b = HOLD(RID::from_param(p)).as<gui_button_c>();
     int r = as_int(b.get_customdata());
     int r_to = r ^ 1;
@@ -2469,7 +2622,7 @@ bool gui_message_item_c::b_pause_unpause(RID btn, GUIPARAM p)
     b.set_customdata(as_param(r_to));
     repl_button(r, r_to);
 
-    file_transfer_s *ft = g_app->find_file_transfer_by_msgutag(rec.utag);
+    file_transfer_s *ft = g_app->find_file_transfer_by_msgutag(zero_rec.utag);
     if (ft && ft->is_active())
         ft->pause_by_me(r == BTN_PAUSE);
 
@@ -2488,31 +2641,33 @@ void gui_message_item_c::repl_button( int r_from, int r_to )
         textrect.set_text_only(tt, false);
     }
     
-    int cnt = records.size();
-    for (int i = 1; i < cnt; ++i)
+    if (addition_file_data_s *ftb = ts::ptr_cast<addition_file_data_s *>( addition.get() ))
     {
-        record &rec = records.get(i);
-        if ((rec.utag & 0xFFFFFFFF) == r_from)
+        for( addition_file_data_s::btn_s &b : ftb->btns )
         {
-            rec.utag = (rec.utag & 0xFFFFFFFF00000000ull) | r_to;
-            break;
+            if (b.r == r_from)
+            {
+                b.r = r_to;
+                break;
+            }
         }
     }
 }
 
 void gui_message_item_c::kill_button( rectengine_c *beng, int r )
 {
-    for (int i = records.size() - 1; i > 0; --i)
+    if (addition_file_data_s *ftb = ts::ptr_cast<addition_file_data_s *>(addition.get()))
     {
-        RID br = RID(records.get(i).utag >> 32);
-        if (br == beng->getrid())
+        for (addition_file_data_s::btn_s &b : ftb->btns)
         {
-            ASSERT( (records.get(i).utag & 0xFFFFFFFF) == r );
-            records.remove_fast(i);
-            break;
+            if (b.rid == beng->getrid())
+            {
+                ftb->btns.remove_fast( &b - ftb->btns.begin() );
+                break;
+            }
         }
     }
-
+        
     // hint! remove rect tag from text, to avoid button creation on next redraw
     int ri = textrect.get_text().find_pos( ts::wstr_c(CONSTWSTR("<rect=")).append_as_uint(r).append_char(',') );
     if (ri >= 0)
@@ -2532,6 +2687,46 @@ void gui_message_item_c::kill_button( rectengine_c *beng, int r )
 
 void gui_message_item_c::updrect_emoticons(const void *, int r, const ts::ivec2 &p)
 {
+    if (flags.is(F_FOUND_ITEM) && r >= BTN_PREV)
+    {
+        addition_prevnext_s *pn = ts::ptr_cast<addition_prevnext_s *>(addition.get());
+        if (r == BTN_PREV && pn->rid_prev)
+        {
+            MODIFY(pn->rid_prev).pos(root_to_local(p));
+            return;
+        }
+        if (r == BTN_NEXT && pn->rid_next)
+        {
+            MODIFY(pn->rid_next).pos(root_to_local(p));
+            return;
+        }
+
+        gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
+        bc.set_face_getter(BUTTON_FACE(button));
+        MODIFY(bc).size(120, 25).pos(root_to_local(p)).visible(true);
+        if (r == BTN_PREV)
+        {
+            bc.set_handler(DELEGATE(this, b_prev), nullptr);
+            bc.set_text(TTT("Previous", 339));
+            bc.leech(this);
+            if (!pn->prev)
+                bc.disable();
+            pn->rid_prev = bc.getrid();
+        }
+        else if (r == BTN_NEXT)
+        {
+            bc.set_handler(DELEGATE(this, b_next), nullptr);
+            bc.set_text(TTT("Next", 340));
+            bc.leech(this);
+            if (!pn->next)
+                bc.disable();
+            pn->rid_next = bc.getrid();
+        }
+
+        return;
+    }
+
+
     emoti().draw( getroot(), p, r );
 }
 
@@ -2540,9 +2735,9 @@ void gui_message_item_c::updrect(const void *, int r, const ts::ivec2 &p)
     if (RECT_IMAGE == r)
     {
         // image
-        if (get_customdata())
+        if (imgloader())
         {
-            image_loader_c &ldr = get_customdata_obj<image_loader_c>();
+            image_loader_c &ldr = imgloader_get();
             ldr.local_p = root_to_local(p) - ts::ivec2(4, 0);
             ldr.upd_btnpos();
             if (const picture_c *pic = ldr.get_picture())
@@ -2552,14 +2747,13 @@ void gui_message_item_c::updrect(const void *, int r, const ts::ivec2 &p)
     } else if (TYPING_SPACERECT == r)
         return;
 
-    int cnt = records.size();
-    for(int i=1; i<cnt; ++i)
+
+    addition_file_data_s &ftb = addition_file_data();
+    for (addition_file_data_s::btn_s &b : ftb.btns)
     {
-        record &rec = records.get(i);
-        if ( (rec.utag & 0xFFFFFFFF) == r )
+        if (b.r == r)
         {
-            RID rid(rec.utag >> 32); 
-            MODIFY(rid).pos(root_to_local(p));
+            MODIFY(b.rid).pos(root_to_local(p));
             return;
         }
     }
@@ -2608,8 +2802,9 @@ void gui_message_item_c::updrect(const void *, int r, const ts::ivec2 &p)
     }
     if (b)
     {
-        record &rec = records.add();
-        rec.utag = r | (((uint64)b.index()) << 32);
+        addition_file_data_s::btn_s &btn = ftb.btns.add();
+        btn.rid = b;
+        btn.r = r;
     }
 }
 
@@ -2618,15 +2813,20 @@ ts::wstr_c gui_message_item_c::prepare_button_rect(int r, const ts::ivec2 &sz)
     ts::wstr_c button(CONSTWSTR("<rect=")); button.append_as_uint(r).append_char(',');
     button.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTWSTR(",2>"));
 
-    int cnt = records.size();
-    for (int i = 1; i < cnt; ++i)
-    {
-        record &rec = records.get(i);
-        if ((rec.utag & 0xFFFFFFFF) == r)
-            rec.time = 0;
-    }
 
+    addition_file_data_s &ftb = addition_file_data();
+    for (addition_file_data_s::btn_s &b : ftb.btns)
+        if (b.r == r)
+        {
+            b.used = true;
+            break;
+        }
     return button;
+}
+
+/*virtual*/ gui_message_item_c::addition_file_data_s::~addition_file_data_s()
+{
+    imgloader.destroy<image_loader_c>();
 }
 
 void gui_message_item_c::update_text(int for_width)
@@ -2640,20 +2840,19 @@ void gui_message_item_c::update_text(int for_width)
         {
             // for_width != 0 means fake update, just for correct height calculation
 
-            ASSERT(for_width == 0 || get_customdata());
+            ASSERT(for_width == 0 || imgloader());
 
             int rectw = for_width ? for_width : getprops().size().x;
             int oldh = for_width ? 0 : get_height_by_width(rectw);
 
             set_selectable(false);
-            ASSERT(records.size());
-            record &rec = records.get(0);
             
-            for (int i = 1, cnt = records.size(); i < cnt; ++i)
-                records.get(i).time = 1;
+            if (addition_file_data_s *ftb = ts::ptr_cast<addition_file_data_s *>(addition.get()))
+                for (addition_file_data_s::btn_s &b : ftb->btns)
+                    b.used = false;
 
             ts::wstr_c newtext(256,false);
-            bool r_inserted = message_prefix(newtext, rec.time);
+            bool r_inserted = message_prefix(newtext, zero_rec.time);
             ts::wstr_c btns;
             auto insert_button = [&]( int r, const ts::ivec2 &sz )
             {
@@ -2670,8 +2869,8 @@ void gui_message_item_c::update_text(int for_width)
                 }
             };
 
-            ts::wstr_c fn = ts::fn_get_name_with_ext(from_utf8(rec.text));
-            ts::wchar fc = rec.text.get_char(0);
+            ts::wstr_c fn = ts::fn_get_name_with_ext(from_utf8(zero_rec.text));
+            ts::wchar fc = zero_rec.text.get_char(0);
             file_transfer_s *ft = nullptr;
             if (fc == '*')
             {
@@ -2682,7 +2881,7 @@ void gui_message_item_c::update_text(int for_width)
                     newtext.append(TTT("Download canceled: $",182) / fn);
             } else if (fc == '?')
             {
-                ft = g_app->find_file_transfer_by_msgutag(rec.utag);
+                ft = g_app->find_file_transfer_by_msgutag(zero_rec.utag);
                 if (ft && ft->is_active()) goto transfer_alive;
 
                 insert_button( BTN_BREAK, g_app->buttons().breakb->size );
@@ -2697,7 +2896,7 @@ void gui_message_item_c::update_text(int for_width)
 
                 newtext.append(CONSTWSTR("<img=file,-1>"));
 
-                if (nullptr == ft) ft = g_app->find_file_transfer_by_msgutag(rec.utag);
+                if (nullptr == ft) ft = g_app->find_file_transfer_by_msgutag(zero_rec.utag);
                 if (ft && ft->is_active())
                 {
                     insert_button( BTN_BREAK, g_app->buttons().breakb->size );
@@ -2736,14 +2935,16 @@ void gui_message_item_c::update_text(int for_width)
                     else
                         newtext.append(TTT("File: $",192) / fn);
 
-                    if (nullptr == get_customdata() && image_loader_c::is_image_fn(rec.text))
-                        set_customdata_obj<image_loader_c>( this, from_utf8(rec.text) );
+                    
+                    addition_file_data_s &ab = addition_file_data();
+                    if (!ab.imgloader && image_loader_c::is_image_fn(zero_rec.text))
+                        ab.imgloader.initialize<image_loader_c>( this, from_utf8(zero_rec.text) );
                 }
             }
 
-            if (get_customdata() && rectw > 0)
+            if (imgloader() && rectw > 0)
             {
-                image_loader_c &imgldr = get_customdata_obj<image_loader_c>();
+                image_loader_c &imgldr = imgloader_get();
                 if (picture_c *pic = imgldr.get_picture())
                 {
                     const theme_rect_s *thr = themerect();
@@ -2767,8 +2968,9 @@ void gui_message_item_c::update_text(int for_width)
                     {
                         if ( imgldr.explorebtn.expired() )
                         {
-                            for (int i = 1, cnt = records.size(); i < cnt; ++i)
-                                records.get(i).time = 1; // flag to delete unupdated button
+                            if (addition_file_data_s *ftb = ts::ptr_cast<addition_file_data_s *>(addition.get()))
+                                for (addition_file_data_s::btn_s &b : ftb->btns)
+                                    b.used = false;
 
                             imgldr.explorebtn = MAKE_CHILD<gui_button_c>(getrid());
                             imgldr.explorebtn->set_face_getter(BUTTON_FACE_PRELOADED(exploreb));
@@ -2789,13 +2991,16 @@ void gui_message_item_c::update_text(int for_width)
 
             textrect.set_text_only(newtext,false);
 
-            for (int i = records.size() - 1; i > 0; --i)
+            if (addition_file_data_s *ftb = ts::ptr_cast<addition_file_data_s *>(addition.get()))
             {
-                record &r = records.get(i);
-                if (rec.time)
+                for (int i =  ftb->btns.size() - 1; i >= 0; --i)
                 {
-                    TSDEL(&HOLD(RID(r.utag >> 32)).engine());
-                    records.remove_fast(i);
+                    addition_file_data_s::btn_s &b = ftb->btns.get(i);
+                    if (!b.used)
+                    {
+                        TSDEL(&HOLD(RID(b.rid)).engine());
+                        ftb->btns.remove_fast(i);
+                    }
                 }
             }
 
@@ -2852,7 +3057,7 @@ void gui_message_item_c::update_text(int for_width)
                 gui->repos_children(&HOLD(getparent()).as<gui_group_c>());
         }
         break;
-        default:
+    default:
         break;
     }
 }
@@ -2873,6 +3078,31 @@ ts::wstr_c gui_message_item_c::hdr() const
     }
     return from_utf8(n);
 }
+
+/*virtual*/ bool gui_message_item_c::custom_tag_parser(ts::wstr_c& r, const ts::wsptr &tv) const
+{
+    if (tv.l)
+    {
+        if (tv.s[0] == 'x')
+        {
+            r = CONSTWSTR("<b>");
+            return true;
+        } else if (tv.s[0] == 'y')
+        {
+            r = CONSTWSTR("</b>");
+            return true;
+        } else if (tv.s[0] == 'z')
+        {
+            if ( addition_prevnext_s *pn = ts::ptr_cast<addition_prevnext_s *>(addition.get()) )
+            {
+                r = pn->prevnext;
+                return true;
+            }
+        }
+    }
+    return __super::custom_tag_parser(r,tv);
+}
+
 
 int gui_message_item_c::calc_height_by_width(int w)
 {
@@ -2924,7 +3154,7 @@ update_size_mode:
                     h += sz.y;
                 }
 
-                if (get_customdata() && ww)
+                if (imgloader() && ww)
                 {
                     ts::wstr_c storetext = textrect.get_text();
                     update_text(ww); // do not resize picture now, just generate text with correct-sized image
@@ -3138,12 +3368,16 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
         {
             if (mi.get_author() == author && mi.themename().equals(CONSTASTR("message."), skin))
             {
+#if JOIN_MESSAGES
                 if (prf().get_options().is(MSGOP_JOIN_MESSAGES))
                     return mi;
+#endif
                 is_same_author = true;
             }
+#if JOIN_MESSAGES
             if (post_time < mi.get_last_post_time())
                 author->reselect(true);
+#endif
         }
     }
 
@@ -3192,6 +3426,19 @@ DWORD gui_messagelist_c::handler_SEV_ACTIVE_STATE(const system_event_param_s & p
                 ml->getengine().redraw();
         DEFERRED_EXECUTION_BLOCK_END(this)
     }
+    return 0;
+}
+
+ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_REFRESH_SEARCH_RESULT> &)
+{
+    if (historian)
+        if (historian->is_full_search_result() != flags.is(F_SEARCH_RESULTS_HERE) ||
+            (g_app->active_contact_item == historian->gui_item && historian->is_full_search_result()))
+        {
+            flags.init(F_SEARCH_RESULTS_HERE, historian->is_full_search_result());
+            historian->reselect(true);
+        }
+
     return 0;
 }
 
@@ -3318,9 +3565,17 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
                 cs = contacts().find_subself(receiver->getkey().protoid);
 
             gui_message_item_c &mi = get_message_item(p.post.mt(), cs, calc_message_skin(p.post.mt(), p.post.sender), p.post.time, p.replace_post ? p.post.utag : 0);
-            mi.append_text(p.post, false);
-            if (p.unread && *p.unread == nullptr && p.post.time >= historian->get_readtime())
+
+            if (p.found_item)
+            {
+                mi.setup_found_item(p.prev_found, p.next_found);
+                if (p.unread && *p.unread == nullptr)
+                    *p.unread = &mi.getengine();
+            }
+            else if (p.unread && *p.unread == nullptr && p.post.time >= historian->get_readtime())
                 *p.unread = &mi.getengine();
+
+            mi.append_text(p.post, false);
             if (p.replace_post && p.post.mt() != MTA_RECV_FILE && p.post.mt() != MTA_SEND_FILE)
                 h->reselect(true);
         }
@@ -3350,7 +3605,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
         gmsg<ISOGM_NOTICE>( &contacts().get_self(), nullptr, NOTICE_NETWORK, ts::str_c() ).send(); // init notice list
         return 0;
     }
-
+    flags.init(F_SEARCH_RESULTS_HERE, historian->is_full_search_result());
     gmsg<ISOGM_NOTICE>( historian, nullptr, NOTICE_NETWORK, ts::str_c() ).send(); // init notice list
 
     time_t before = now();
@@ -3360,10 +3615,20 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     int cur_hist_size = p.contact->history_size();
 
     int needload = min_hist_size - cur_hist_size;
-    if (historian->get_readtime() < before)
+    time_t at_least = historian->get_readtime();
+    const found_item_s *found_item = nullptr;
+    if (historian->is_full_search_result() && g_app->found_items)
+        for (const found_item_s &fi : g_app->found_items->items)
+            if (fi.historian == historian->getkey())
+            {
+                found_item = &fi;
+                if (fi.mintime < at_least) at_least = fi.mintime;
+                break;
+            }
+    if (at_least < before)
     {
         // we have to load all read
-        int unread = prf().calc_history_between(historian->getkey(), historian->get_readtime(), before);
+        int unread = prf().calc_history_between(historian->getkey(), at_least, before);
         if (unread > needload)
             needload = unread;
     }
@@ -3389,7 +3654,30 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     rectengine_c *first_unread = nullptr;
     p.contact->iterate_history([&](const post_s &p)
     {
-        gmsg<ISOGM_SUMMON_POST>(p, &first_unread, historian).send();
+        uint64 utag_prev = 0;
+        uint64 utag_next = 0;
+        bool fitm = false;
+        if (found_item)
+        {
+            int index = found_item->utags.find_index( p.utag );
+            if (index >= 0)
+            {
+                fitm = true;
+                if (index > 0)
+                    utag_prev = found_item->utags.get( index - 1 );
+                if ( index < found_item->utags.count() - 1 )
+                    utag_next = found_item->utags.get( index + 1 );
+            }
+        }
+
+        gmsg<ISOGM_SUMMON_POST> summon(p, &first_unread, historian);
+        if (fitm)
+        {
+            summon.prev_found = utag_prev;
+            summon.next_found = utag_next;
+            summon.found_item = true;
+        }
+        summon.send();
         return false;
     });
 
@@ -3397,7 +3685,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     if (p.scrollend)
     {
         if (first_unread)
-            scroll_to(first_unread, true);
+            scroll_to_child(first_unread, true);
         else
             scroll_to_end();
     } else
@@ -3419,23 +3707,23 @@ bool gui_message_editor_c::on_enter_press_func(RID, GUIPARAM param)
     bool fix_last_enter = false;
     if (param != nullptr)
     {
-        static DWORD last_enter_pressed = 0;
-        int behsend = prf().ctl_to_send();
-        bool ctrl = GetKeyState(VK_CONTROL) < 0;
-        if (behsend == 2)
+        static ts::Time last_enter_pressed = ts::Time::past();
+        enter_key_options_s behsend = (enter_key_options_s)prf().ctl_to_send();
+        bool ctrl_or_shift = GetKeyState(VK_CONTROL) < 0 || GetKeyState(VK_SHIFT) < 0;
+        if (behsend == EKO_ENTER_NEW_LINE_DOUBLE_ENTER)
         {
-            DWORD tpressed = timeGetTime();
+            ts::Time tpressed = ts::Time::current();
             if ((tpressed - last_enter_pressed) < 500)
             {
-                ctrl = true;
+                ctrl_or_shift = true;
                 fix_last_enter = true;
             }
-            behsend = 1;
+            behsend = EKO_ENTER_NEW_LINE;
         }
-        if (behsend == 0) ctrl = !ctrl;
-        if (!ctrl)
+        if (behsend == EKO_ENTER_SEND) ctrl_or_shift = !ctrl_or_shift;
+        if (!ctrl_or_shift)
         {
-            last_enter_pressed = timeGetTime();
+            last_enter_pressed = ts::Time::current();
             return false;
         }
     }
@@ -3613,6 +3901,9 @@ gui_message_area_c::~gui_message_area_c()
 
 bool gui_message_area_c::change_text_handler(const ts::wstr_c &t)
 {
+    if (t.get_length() > 4096)
+        return false; // limit size
+
     send_button->disable( t.is_empty() );
 
     if (contact_c * contact = message_editor->get_historian())

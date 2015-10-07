@@ -179,5 +179,6 @@ struct sbhelper_s
 bool check_always_ok(const ts::wstr_c &);
 
 void text_remove_tags(ts::str_c &text_utf8);
+ts::str_c text_remove_cstm(const ts::str_c &text_utf8);
 
 #define TOOLTIP( ttt ) (GET_TOOLTIP) ([]()->ts::wstr_c { return ttt; } )

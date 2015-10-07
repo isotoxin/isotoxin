@@ -576,6 +576,28 @@ void gui_contact_item_c::update_text()
                         if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
                         newtext.append(colorize(to_utf8(TTT("Waiting...",154)).as_sptr(), get_default_text_color(0)));
                         t2.clear();
+                    } else if (contact->is_full_search_result() && g_app->found_items)
+                    {
+                        // Simple linear iteration... not so fast, yeah. 
+                        // But I hope number of found items is not so huge
+
+                        int cntitems = 0;
+                        for (const found_item_s &fi : g_app->found_items->items)
+                            if (fi.historian == contact->getkey())
+                            {
+                                cntitems = fi.utags.count();
+                                break;
+                            }
+                        if (cntitems > 0)
+                        {
+
+                            if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
+                            newtext.append(CONSTASTR("<l>")).
+                                append(colorize(to_utf8(TTT("Found: $",338)/ts::wmake(cntitems)).as_sptr(), get_default_text_color(2))).
+                                append(CONSTASTR("</l>"));
+                            t2.clear();
+                        }
+
                     }
                     if (count == 1 && deactivated > 0)
                     {
@@ -955,7 +977,7 @@ bool gui_contact_item_c::allow_drop() const
                 });
             }
 
-            if (contact->is_av() && CIR_CONVERSATION_HEAD != role)
+            if (contact->is_av() && !contact->is_full_search_result() && CIR_CONVERSATION_HEAD != role)
             {
                 const theme_image_s *img_voicecall = contact->getkey().is_group() ? nullptr : gui->theme().get_image(CONSTASTR("voicecall"));
                 const theme_image_s *img_micoff = gui->theme().get_image(CONSTASTR("micoff"));
@@ -1673,7 +1695,10 @@ void gui_contactlist_c::recreate_ctls(bool focus_filter)
         getengine().child_move_to(0, &addcbtn->getengine());
 
         if ( !prf().is_any_active_ap() )
+        {
+            addcbtn->tooltip(TOOLTIP(loc_text(loc_nonetwork)));
             addcbtn->disable();
+        }
 
         if (baddg)
         {
@@ -1685,15 +1710,9 @@ void gui_contactlist_c::recreate_ctls(bool focus_filter)
             MODIFY(*addgbtn).zindex(1.0f).visible(true);
             getengine().child_move_to(1, &addgbtn->getengine());
 
-            bool support_groupchats = false;
-            prf().iterate_aps( [&](const active_protocol_c &ap) {
-                if (ap.get_features() & PF_GROUP_CHAT)
-                    support_groupchats = true;
-            } );
-
-            if (!support_groupchats)
+            if (!prf().is_any_active_ap(PF_GROUP_CHAT))
             {
-                addgbtn->tooltip(TOOLTIP(TTT("No any active network with group chat support",247)));
+                addgbtn->tooltip(TOOLTIP(TTT("No any active networks with group chat support",247)));
                 addgbtn->disable();
             }
         }
@@ -1754,13 +1773,28 @@ bool gui_contactlist_c::on_filter_deactivate(RID, GUIPARAM)
 
     contacts().iterate_meta_contacts([](contact_c *c)->bool{
     
+        bool redraw = false;
+        if (c->is_full_search_result())
+        {
+            c->full_search_result(false);
+            redraw = true;
+        }
         if (c->gui_item)
+        {
             MODIFY(*c->gui_item).visible(true);
+            if (redraw)
+            {
+                c->gui_item->update_text();
+                c->gui_item->getengine().redraw();
+            }
+        }
         return true;
     });
 
     if (active)
-        scroll_to(active, false);
+        scroll_to_child(active, false);
+
+    gmsg<ISOGM_REFRESH_SEARCH_RESULT>().send();
 
     return true;
 }
@@ -1964,7 +1998,7 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
         if (getengine().children_sort( (rectengine_c::SWAP_TESTER)swap_them ))
         {
             if (g_app->active_contact_item)
-                scroll_to(&g_app->active_contact_item->getengine(), false);
+                scroll_to_child(&g_app->active_contact_item->getengine(), false);
 
             gui->repos_children(this);
         }

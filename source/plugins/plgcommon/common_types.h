@@ -65,6 +65,9 @@ enum cmd_result_e
     CR_MEMORY_ERROR,
     CR_TIMEOUT,
     CR_OPERATION_IN_PROGRESS,
+    CR_NETWORK_ERROR,
+    CR_CORRUPT,
+    CR_UNKNOWN_ERROR,
 };
 
 enum stop_call_e

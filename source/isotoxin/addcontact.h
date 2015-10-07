@@ -28,6 +28,7 @@ class dialog_addcontact_c : public gui_isodialog_c
     ts::str_c invitemessage; // utf8
 
     dialog_addcontact_params_s inparam;
+    bool networks_available = false;
 
 protected:
     /*virtual*/ int unique_tag() { return UD_ADDCONTACT; }
@@ -58,6 +59,7 @@ class dialog_addgroup_c : public gui_isodialog_c
     int apid = 0;
     ts::str_c groupname; // utf8
     bool persistent = true;
+    bool networks_available = false;
 
 protected:
     /*virtual*/ int unique_tag() { return UD_ADDCONTACT; }

@@ -200,7 +200,6 @@ class gui_contactlist_c : public gui_vscrollgroup_c
     void recreate_ctls(bool focus_filter = false);
     /*virtual*/ bool i_leeched( guirect_c &to ) override;
     bool filter_proc(system_query_e qp, evt_data_s &data);
-    void update_filter_pos();
 
     /*virtual*/ void children_repos_info(cri_s &info) const override;
 public:
@@ -217,5 +216,6 @@ public:
 
     rectengine_c *get_first_contact_item() {return getengine().children_count() > skipctl ? getengine().get_child(skipctl) : nullptr; }
     bool on_filter_deactivate(RID, GUIPARAM);
+    void update_filter_pos();
 
 };

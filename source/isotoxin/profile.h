@@ -14,6 +14,7 @@ PROFILE_TABLES
 #undef TAB
     pt_count };
 
+#define JOIN_MESSAGES 0
 
 enum messages_options_e
 {
@@ -21,10 +22,13 @@ enum messages_options_e
     MSGOP_SHOW_DATE_SEPARATOR   = SETBIT(1),
     MSGOP_SHOW_PROTOCOL_NAME    = SETBIT(2),
     MSGOP_KEEP_HISTORY          = SETBIT(3),
+#if JOIN_MESSAGES
     MSGOP_JOIN_MESSAGES         = SETBIT(4), // hidden option
+#endif
     MSGOP_SEND_TYPING           = SETBIT(5),
     MSGOP_IGNORE_OTHER_TYPING   = SETBIT(6),
     MSGOP_LOAD_WHOLE_HISTORY    = SETBIT(7),
+    MSGOP_FULL_SEARCH           = SETBIT(8),
     UIOPT_SHOW_SEARCH_BAR       = SETBIT(16),
     UIOPT_PROTOICONS            = SETBIT(17),
     UIOPT_AWAYONSCRSAVER        = SETBIT(18),
@@ -33,7 +37,7 @@ enum messages_options_e
     GCHOPT_MUTE_SPEAKER_ON_INVITE = SETBIT(25),
 };
 
-#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|UIOPT_SHOW_SEARCH_BAR|UIOPT_AWAYONSCRSAVER | GCHOPT_MUTE_MIC_ON_INVITE)
+#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_AWAYONSCRSAVER | GCHOPT_MUTE_MIC_ON_INVITE)
 
 
 enum dsp_flags_e
@@ -79,6 +83,18 @@ struct contacts_s
 
 struct history_s : public post_s
 {
+    enum column_e
+    {
+        C_ID,
+        C_TIME,
+        C_HISTORIAN,
+        C_SENDER,
+        C_RECEIVER,
+        C_TYPE_AND_OPTIONS,
+        C_MSG,
+        C_UTAG
+    };
+
     contact_key_s historian;
 
     void set(int column, ts::data_value_s& v);
@@ -253,6 +269,13 @@ enum hitsory_item_field_e
     HITM_MESSAGE = SETBIT(2),
 };
 
+enum enter_key_options_s
+{
+    EKO_ENTER_SEND,
+    EKO_ENTER_NEW_LINE,
+    EKO_ENTER_NEW_LINE_DOUBLE_ENTER,
+};
+
 class profile_c : public config_base_c
 {
     #define TAB(tab) tableview_##tab##_s table_##tab;
@@ -324,10 +347,10 @@ public:
         return nullptr;
     }
     active_protocol_c *ap(int id) { for( active_protocol_c *ap : protocols ) if (ap && ap->getid() == id && !ap->is_dip()) return ap; return nullptr; }
-    bool is_any_active_ap() const
+    bool is_any_active_ap(int required_features = -1) const
     {
         for (const active_protocol_c *ap : protocols)
-            if (ap && !ap->is_dip())
+            if (ap && !ap->is_dip() && ap->get_current_state() == CR_OK && (required_features == -1 || (ap->get_features() & required_features) == required_features))
                 return true;
         return false;
     }
@@ -395,7 +418,7 @@ public:
     TEXTAPAR( username, "IsotoxinUser" )
     TEXTAPAR( userstatus, "" )
     INTPAR( min_history, 10 )
-    INTPAR( ctl_to_send, 1 )
+    INTPAR( ctl_to_send, EKO_ENTER_NEW_LINE )
     INTPAR( inactive_time, 5 )
     INTPAR( manual_cos, COS_ONLINE )
     

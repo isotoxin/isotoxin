@@ -462,7 +462,7 @@ public:
     {
         fn = fn_;
         ts::str_c utf8name = to_utf8( fn );
-        sqlite3_open_v2(utf8name, &db, readonly ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE), nullptr);
+        sqlite3_open_v2(utf8name, &db, SQLITE_OPEN_FULLMUTEX | (readonly ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)), nullptr);
     }
 };
 

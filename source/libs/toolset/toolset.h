@@ -543,6 +543,36 @@ public:
 };
 
 
+template<aint sz> class uninitialized
+{
+    byte data[sz];
+    bool initialized = false;
+public:
+    template<typename T, class... _Valty> T &initialize(_Valty&&... _Val)
+    {
+        TS_STATIC_CHECK( sizeof(T) == sz, "please provide correct size" );
+        ASSERT(!initialized);
+        initialized = true;
+        T &t = get<T>();
+        TSPLACENEW(&t, std::forward<_Valty>(_Val)...);
+        return t;
+    }
+    template<typename T> void destroy()
+    {
+        if (initialized)
+        {
+            get<T>().~T();
+            initialized = false;
+        }
+    }
+    ~uninitialized()
+    {
+        ASSERT(!initialized);
+    }
+    operator bool() const {return initialized;}
+    template<typename T> T& get() { ASSERT(initialized); TS_STATIC_CHECK( sizeof(T) == sz, "please provide correct size" ); return *(T *)data; }
+};
+
 struct sobase
 {
 	static sobase *first;

@@ -254,7 +254,9 @@ private:
     ts::wstr_c downloadfolder;
     int fileconfirm = 0;
 
-    int ctl2send = 1;
+    enter_key_options_s ctl2send = EKO_ENTER_NEW_LINE;
+    int double_enter = 0;
+
     int collapse_beh = 2;
     int oautoupdate = 0;
     int autoupdate = 2;
@@ -278,8 +280,8 @@ private:
     bool downloadfolder_edit_handler(const ts::wstr_c &v);
     bool date_msg_tmpl_edit_handler(const ts::wstr_c &v);
     bool date_sep_tmpl_edit_handler(const ts::wstr_c &v);
-    //void create_network_props_ctls( int id );
     bool ctl2send_handler( RID, GUIPARAM );
+    bool ctl2send_handler_de( RID, GUIPARAM );
     bool collapse_beh_handler( RID, GUIPARAM );
     bool autoupdate_handler( RID, GUIPARAM );
     void autoupdate_proxy_handler( const ts::str_c& );

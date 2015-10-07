@@ -301,26 +301,26 @@ void history_s::set(int column, ts::data_value_s &v)
 {
     switch (column)
     {
-        case 1:
+        case C_TIME:
             time = v.i;
             return;
-        case 2:
+        case C_HISTORIAN:
             historian = ts::ref_cast<contact_key_s>(v.i);
             return;
-        case 3:
+        case C_SENDER:
             sender = ts::ref_cast<contact_key_s>(v.i);
             return;
-        case 4:
+        case C_RECEIVER:
             receiver = ts::ref_cast<contact_key_s>(v.i);
             return;
-        case 5:
+        case C_TYPE_AND_OPTIONS:
             type = v.i & (SETBIT(type_size_bits)-1);
             options = (v.i >> 16) & (SETBIT(options_size_bits)-1);
             return;
-        case 6:
+        case C_MSG:
             message_utf8 = v.text;
             return;
-        case 7:
+        case C_UTAG:
             utag = v.i;
             return;
     }
@@ -334,26 +334,26 @@ void history_s::get(int column, ts::data_pair_s& v)
     v.name = ccd.name_;
     switch (column)
     {
-        case 1:
+        case C_TIME:
             v.i = time;
             return;
-        case 2:
+        case C_HISTORIAN:
             v.i = ts::ref_cast<int64>(historian);
             return;
-        case 3:
+        case C_SENDER:
             v.i = ts::ref_cast<int64>( sender );
             return;
-        case 4:
+        case C_RECEIVER:
             v.i = ts::ref_cast<int64>( receiver );
             return;
-        case 5:
+        case C_TYPE_AND_OPTIONS:
             v.i = type;
             v.i |= ((int64)options) << 16;
             return;
-        case 6:
+        case C_MSG:
             v.text = message_utf8;
             return;
-        case 7:
+        case C_UTAG:
             v.i = utag;
             return;
     }
@@ -363,15 +363,15 @@ ts::data_type_e history_s::get_column_type(int index)
 {
     switch (index)
     {
-        case 1:
-        case 2:
-        case 3:
-        case 4:
-        case 7:
+        case C_TIME:
+        case C_HISTORIAN:
+        case C_SENDER:
+        case C_RECEIVER:
+        case C_UTAG:
             return ts::data_type_e::t_int64;
-        case 5:
+        case C_TYPE_AND_OPTIONS:
             return ts::data_type_e::t_int;
-        case 6:
+        case C_MSG:
             return ts::data_type_e::t_str;
     }
     FORBIDDEN();
@@ -383,25 +383,25 @@ void history_s::get_column_desc(int index, ts::column_desc_s&cd)
     cd.type_ = get_column_type(index);
     switch (index)
     {
-        case 1:
+        case C_TIME:
             cd.name_ = CONSTASTR("mtime");
             break;
-        case 2:
+        case C_HISTORIAN:
             cd.name_ = CONSTASTR("historian");
             break;
-        case 3:
+        case C_SENDER:
             cd.name_ = CONSTASTR("sender");
             break;
-        case 4:
+        case C_RECEIVER:
             cd.name_ = CONSTASTR("receiver");
             break;
-        case 5:
+        case C_TYPE_AND_OPTIONS:
             cd.name_ = CONSTASTR("mtype");
             break;
-        case 6:
+        case C_MSG:
             cd.name_ = CONSTASTR("msg");
             break;
-        case 7:
+        case C_UTAG:
             cd.name_ = CONSTASTR("utag");
             cd.index = true;
             break;
@@ -1223,7 +1223,8 @@ contact_c *profile_c::find_corresponding_historian(const contact_key_s &subconta
 
 profile_c::~profile_c()
 {
-    shutdown_aps();
+    if (db)
+        shutdown_aps();
 
     if (mutex)
         CloseHandle(mutex);
@@ -1250,7 +1251,7 @@ void profile_c::mb_warning_readonly(bool minimize)
         DT_MSGBOX_WARNING,
         TTT("Profile and configuration are write protected![br][appname] is in [b]read-only[/b] mode!", 332)
         ).on_ok(s::conti, minimize ? CONSTASTR("1") : CONSTASTR("0"))
-        .on_cancel(s::exit_now, ts::asptr()).bcancel(true, loc_text(loc_exit)).bok(TTT("Continue",334)));
+        .on_cancel(s::exit_now, ts::asptr()).bcancel(true, loc_text(loc_exit)).bok(TTT("Continue",117)));
 
 }
 

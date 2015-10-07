@@ -402,7 +402,10 @@ bool image_loader_c::signal_loaded(RID, GUIPARAM p)
 {
     pic = (picture_c *)p;
     if (item)
+    {
         item->update_text();
+        gui->repos_children( &HOLD(item->getparent()).as<gui_group_c>() );
+    }
     return true;
 }
 

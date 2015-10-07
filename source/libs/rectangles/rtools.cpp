@@ -107,6 +107,25 @@ void sbhelper_s::draw( const theme_rect_s *thr, rectengine_c &engine, evt_data_s
     sbrect = dd.draw_thr.sbrect();
 }
 
+ts::str_c text_remove_cstm(const ts::str_c &text_utf8)
+{
+    ts::str_c text(text_utf8);
+    for (int i = text.find_pos('<'); i >= 0; i = text.find_pos(i, '<'))
+    {
+        if (text.substr(i+1).begins(CONSTASTR("cstm=")))
+        {
+            int j = text.find_pos(i + 1, '>');
+            if (j < 0)
+            {
+                text.set_length(i);
+                break;
+            }
+            text.cut(i, j - i + 1);
+        }
+    }
+    return text;
+}
+
 void text_remove_tags(ts::str_c &text)
 {
     for (int i = text.find_pos('<'); i >= 0; i = text.find_pos(i, '<'))

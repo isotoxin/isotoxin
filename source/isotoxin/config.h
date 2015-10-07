@@ -47,6 +47,7 @@ public:
 
     static void prepare_conf_table( ts::sqlitedb_c *db );
 
+    ts::sqlitedb_c *get_db() { return  db;}
     bool is_loaded() const { return db != nullptr; }
     const ts::wstr_c &get_path() const {return path;};
 

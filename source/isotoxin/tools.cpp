@@ -557,7 +557,7 @@ void text_close_bbcode(ts::str_c &text_utf8)
                     }
                     if (!removed)
                     {
-                        // лишний закрывающий тэг
+                        // odd closing tag
                         //text.cut(i,j-i+1);
                         text_utf8.insert(0,ts::str_c(CONSTASTR("[")).append(tag).append_char(']'));
                         i = j + tag.get_length() + 2;
@@ -626,6 +626,133 @@ void text_prepare_for_edit(ts::str_c &text)
 
 }
 
+extern "C"
+{
+    int isotoxin_compare(const unsigned char *row_text, const unsigned char *pattern) // sqlite likeFunc override
+    {
+        const ts::wstrings_c &fsplit = *(const ts::wstrings_c *)ts::pstr_c( ts::asptr((const char *)pattern+1,2 * sizeof(void *)) ).decode_pointer();
+
+        ts::wstr_c rowtext( ts::from_utf8( ts::asptr((const char *)row_text) ) );
+        rowtext.case_down();
+
+        for(const ts::wstr_c &s : fsplit)
+            if (rowtext.find_pos( s ) < 0)
+                return 0;
+        
+        return 1;
+    }
+}
+
+bool text_find_inds( const ts::wstr_c &t, ts::tmp_tbuf_t<ts::ivec2> &marks, const ts::wstrings_c &fsplit )
+{
+    ASSERT(fsplit.size());
+
+    ts::tmp_tbuf_t<ts::ivec2> cc;
+    ts::swstr_t<2> c(1, false);
+
+    auto do_find = [&]()
+    {
+        for (const ts::wstr_c &f : fsplit)
+        {
+            int fl = f.get_length();
+            if (fl < cc.count())
+            {
+                bool fail = false;
+                for (int j = 0; j < fl; ++j)
+                {
+                    if (cc.get(j).y != f.get_char(j))
+                    {
+                        fail = true;
+                        break;
+                    }
+                }
+                if (!fail)
+                {
+                    ts::ivec2 &m = marks.add();
+                    m.r0 = cc.get(0).x;
+                    m.r1 = cc.get(fl).x;
+                }
+            }
+        }
+    };
+
+    bool in_tag = false;
+    int l = t.get_length();
+    for (int i = 0; i < l;)
+    {
+        c.set_char(0, t.get_char(i));
+        if (in_tag)
+        {
+            if (c.get_char(0) == '>')
+                in_tag = false;
+            ++i;
+            continue;
+        }
+        int ci = i;
+        if (c.get_char(0) == '<')
+        {
+            if (t.substr(i + 1).begins(CONSTWSTR("char=")))
+            {
+                int j = i + 6;
+                for (; j<l; ++j)
+                    if (t.get_char(j) == '>')
+                        break;
+                if (j == l) return false;
+                c.set_char(0, (ts::wchar)t.substr(i + 6, j).as_int());
+                i = j+1;
+            }
+            else
+            {
+                in_tag = true;
+                ++i;
+                continue;
+            }
+        } else
+            ++i;
+
+        if (cc.count() > fsplit.get(0).get_length())
+            cc.remove_slow(0); // keep cc length same as longest search word
+
+        ts::ivec2 &nc = cc.add();
+        nc.x = ci;
+        nc.y = c.case_down().get_char(0);
+
+        do_find();
+    }
+
+    cc.add( ts::ivec2(l, 0) );
+    while( cc.count() > 1 )
+    {
+        do_find();
+        cc.remove_slow(0);
+    }
+
+    for(int i=marks.count()-1;i>0;--i)
+    {
+        const ts::ivec2 &range = marks.get(i);
+        ASSERT(range.r1 > range.r0);
+        for (int j = i-1; j >= 0; --j)
+        {
+            ts::ivec2 &range_test = marks.get(j);
+            ASSERT(range_test.r1 > range_test.r0);
+            ASSERT(range_test.r0 <= range.r0);
+
+            if (range_test.r1 < range.r0)
+                continue;
+
+            if (range.r1 > range_test.r1)
+                range_test.r1 = range.r1;
+            
+            marks.remove_fast(i);
+            break;
+        }
+    }
+
+    marks.tsort<ts::ivec2>( []( const ts::ivec2 *s1, const ts::ivec2 *s2 ) { return s1->x > s2->x; } );
+
+    return marks.count() > 0;
+}
+
 ts::wstr_c loc_text(loctext_e lt)
 {
     switch (lt)
@@ -641,7 +768,11 @@ ts::wstr_c loc_text(loctext_e lt)
         case loc_no:
             return TTT("no",316);
         case loc_exit:
-            return TTT("Exit",117);
+            return TTT("Exit",3);
+        case loc_network:
+            return TTT("Network",66);
+        case loc_nonetwork:
+            return TTT("No available networks to select",248);
     }
     return ts::wstr_c();
 }

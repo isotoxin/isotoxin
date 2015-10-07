@@ -57,11 +57,11 @@ ZSTRINGS_SIGNED    str_wrap_text_ucs2_to_utf8(char *out, ZSTRINGS_SIGNED maxlen,
 }
 bool   str_wrap_text_iequalsw(const wchar_t *s1, const wchar_t *s2, ZSTRINGS_SIGNED len)
 {
-	return CSTR_EQUAL == CompareStringW(LOCALE_SYSTEM_DEFAULT,NORM_IGNORECASE,s1,len,s2,len);
+	return CSTR_EQUAL == CompareStringW(LOCALE_USER_DEFAULT,NORM_IGNORECASE,s1,len,s2,len);
 }
 bool   str_wrap_text_iequalsa(const char *s1, const char *s2, ZSTRINGS_SIGNED len)
 {
-	return CSTR_EQUAL == CompareStringA(LOCALE_SYSTEM_DEFAULT,NORM_IGNORECASE,s1,len,s2,len);
+	return CSTR_EQUAL == CompareStringA(LOCALE_USER_DEFAULT,NORM_IGNORECASE,s1,len,s2,len);
 }
 
 void  str_wrap_text_lowercase(wchar_t *out, ZSTRINGS_SIGNED maxlen)

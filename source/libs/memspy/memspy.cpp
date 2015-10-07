@@ -8,7 +8,7 @@
 //if you get a memory problem, change values of config here and recompile - it is ok 
 
 #define MEMSPY_DISABLE 0
-#define MEMSPY_CALL_STACK 0                 // store callstack for every allocation
+#define MEMSPY_CALL_STACK 1                 // store callstack for every allocation
 #define MEMSPY_CALL_STACK_DEEP 4            // bigger values - slower (captain obvious)
 #define MEMSPY_CALL_STACK_SKIP 3            // skip top of stack addresses
 #define MEMSPY_SPY_SHOWCONTENT 10           // report

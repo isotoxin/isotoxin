@@ -219,6 +219,7 @@ public:
 
 
     // not saved
+    static const ts::flags32_s::BITS F_FULL_SEARCH_RESULT = SETBIT(21);
     static const ts::flags32_s::BITS F_SPEAKER_OFF = SETBIT(22);
     static const ts::flags32_s::BITS F_MIC_OFF = SETBIT(23);
     static const ts::flags32_s::BITS F_CALL_INACTIVE = SETBIT(24);
@@ -248,7 +249,7 @@ public:
         }
     }
 
-    void reselect(bool);
+    void reselect(bool scroll_to_end_or_1st_unread);
 
     void setup( const contacts_s * c, time_t nowtime );
     bool save( contacts_s * c ) const;
@@ -528,6 +529,9 @@ public:
 
     bool is_calltone() const { return opts.unmasked().is(F_CALLTONE); }
     bool calltone( bool f = true, bool call_accepted = false );
+
+    bool is_full_search_result() const { return opts.unmasked().is(F_FULL_SEARCH_RESULT); }
+    void full_search_result(bool f) { opts.unmasked().init(F_FULL_SEARCH_RESULT, f); }
 
     int avatar_tag() const {return avatar ? avatar->tag : 0; }
     void set_avatar( const void *body, int size, int tag = 0 )

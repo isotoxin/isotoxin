@@ -74,6 +74,8 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     audio_fmt.bitsPerSample = r.get<short>();
 
                     auto w = syncdata.lock_write();
+                    
+                    w().set_config_result = CR_OK;
                     w().description.set_as_utf8(desc);
 
                     int icondatasize;
@@ -108,10 +110,19 @@ bool active_protocol_c::cmdhandler(ipcr r)
                 {
                     return false;
                 }
+            } else if (c == AQ_SET_CONFIG)
+            {
+                if (s != CR_OK)
+                {
+                    syncdata.lock_write()().set_config_result = s;
+                    goto we_shoud_broadcast_result;
+                }
+
             } else
             {
+            we_shoud_broadcast_result:
                 DMSG( "cmd status: " << (int)c << (int)s );
-                gmsg<ISOGM_CMD_RESULT> *m = TSNEW(gmsg<ISOGM_CMD_RESULT>, c, s);
+                gmsg<ISOGM_CMD_RESULT> *m = TSNEW(gmsg<ISOGM_CMD_RESULT>, id, c, s);
                 m->send_to_main_thread();
             }
         }
@@ -431,14 +442,21 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
     // brackets to destruct r
     {
         auto r = syncdata.lock_read();
+        cmd_result_e curstate = r().set_config_result;
         is_online = r().flags.is(F_CURRENT_ONLINE);
+
+        bool is_ac = false;
+        if (curstate != CR_OK && r().flags.is(F_ONLINE_SWITCH))
+            goto to_offline;
+
         if (r().flags.is(F_SET_PROTO_OK))
         {
-            bool is_ac = 0 != (r().data.options & active_protocol_data_s::O_AUTOCONNECT);
+            is_ac = 0 != (r().data.options & active_protocol_data_s::O_AUTOCONNECT);
             if (r().flags.is(F_ONLINE_SWITCH))
             {
                 if (!is_ac)
                 {
+            to_offline:
                     r.unlock();
                     ipcp->send(ipcw(AQ_OFFLINE));
                     syncdata.lock_write()().flags.clear(F_ONLINE_SWITCH);

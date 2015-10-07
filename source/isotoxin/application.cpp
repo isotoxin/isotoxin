@@ -238,9 +238,9 @@ HICON application_c::app_icon(bool for_tray)
         case LL_ABTT_CLOSE:
             if (cfg().collapse_beh() == 2)
             {
-                return TTT("Minimize to notification area[br](Hold Ctrl key to close)",122);
+                return TTT("Minimize to notification area[br](Hold Ctrl key to exit)",122);
             }
-            return TTT("Close",3);
+            return loc_text(loc_exit);
         case LL_ABTT_MAXIMIZE: return TTT("Expand",4);
         case LL_ABTT_NORMALIZE: return TTT("Normal size",5);
         case LL_ABTT_MINIMIZE:
@@ -557,6 +557,47 @@ bool application_c::blinking_reason_s::tick()
         
 }
 
+void application_c::select_last_unread_contact()
+{
+    time_t latest = 0;
+    contact_key_s historian;
+    for (blinking_reason_s &br : m_blink_reasons)
+    {
+        if (br.notification_icon_need_blink())
+        {
+            if (br.last_update > latest)
+            {
+                latest = br.last_update;
+                historian = br.historian;
+            }
+        }
+    }
+    if (latest)
+    {
+        if (contact_c *h = contacts().find(historian))
+        {
+            if (h->gui_item)
+            {
+                gui_contactlist_c &cl = HOLD(h->gui_item->getparent()).as<gui_contactlist_c>();
+                cl.scroll_to_child(&h->gui_item->getengine(), false);
+            }
+
+            h->reselect(true);
+        }
+    } else
+    {
+        if (active_contact_item)
+        {
+            gui_contactlist_c &cl = HOLD(active_contact_item->getparent()).as<gui_contactlist_c>();
+            cl.scroll_to_child(&active_contact_item->getengine(), false);
+        } else if (gui_contact_item_c *active = contacts().get_self().gui_item)
+        {
+            gui_contactlist_c &cl = HOLD(active->getparent()).as<gui_contactlist_c>();
+            cl.scroll_to_begin();
+        }
+    }
+}
+
 /*virtual*/ void application_c::app_notification_icon_action(naction_e act, RID iconowner)
 {
     HOLD m(iconowner);
@@ -564,8 +605,10 @@ bool application_c::blinking_reason_s::tick()
     if (act == NIA_L2CLICK)
     {
         if (m().getprops().is_collapsed())
+        {
             MODIFY(iconowner).decollapse();
-        else
+            select_last_unread_contact();
+        } else
             MODIFY(iconowner).micromize(true);
     } else if (act == NIA_RCLICK)
     {
@@ -580,9 +623,7 @@ bool application_c::blinking_reason_s::tick()
         DEFERRED_EXECUTION_BLOCK_BEGIN(0)
             
             menu_c m;
-
             add_status_items(m);
-
             m.add_separator();
             m.add(loc_text(loc_exit), 0, handlers::m_exit);
             gui_popup_menu_c::show(menu_anchor_s(true, menu_anchor_s::RELPOS_TYPE_3), m, true);
@@ -689,6 +730,10 @@ bool application_c::b_customize(RID r, GUIPARAM param)
         {
             SUMMON_DIALOG<dialog_about_c>(UD_ABOUT);
         }
+        static void m_exit(const ts::str_c&)
+        {
+            sys_exit(0);
+        }
     };
 
 #ifndef _FINAL
@@ -723,6 +768,8 @@ bool application_c::b_customize(RID r, GUIPARAM param)
     m.add( TTT("Settings",42), 0, handlers::m_settings );
     m.add_separator();
     m.add( TTT("About",206), 0, handlers::m_about );
+    m.add_separator();
+    m.add(loc_text(loc_exit), 0, handlers::m_exit);
     gui_popup_menu_c::show(r.call_get_popup_menu_pos(), m);
 
     //SUMMON_DIALOG<dialog_settings_c>(L"dialog_settings");

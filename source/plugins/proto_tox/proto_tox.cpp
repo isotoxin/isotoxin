@@ -211,6 +211,7 @@ enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
     chunk_proxy_address,
     chunk_server_port,
     chunk_use_udp,
+    chunk_toxid,
 };
 
 struct dht_node_s
@@ -1527,34 +1528,43 @@ void contact_descriptor_s::set_id(int id_)
 
 
 static bool online_flag = false;
-contact_state_e self_state;
-byte lastmypubid[TOX_ADDRESS_SIZE];
+contact_state_e self_state; // cleared in handshake
+byte lastmypubid[TOX_ADDRESS_SIZE]; // cleared in handshake
 
 void update_self()
 {
     if (tox)
-    {
         tox_self_get_address(tox,lastmypubid);
-        str_c pubid(TOX_ADDRESS_SIZE * 2, true); pubid.append_as_hex(lastmypubid,TOX_ADDRESS_SIZE);
+    
+    str_c pubid(TOX_ADDRESS_SIZE * 2, true);
+    pubid.append_as_hex(lastmypubid,TOX_ADDRESS_SIZE);
 
-        str_c name( tox_self_get_name_size(tox), false );
+    int m = 0;
+
+    str_c name( tox ? tox_self_get_name_size(tox) : 0, false );
+    if (tox)
+    {
         tox_self_get_name(tox,(byte*)name.str());
-
-        str_c statusmsg(tox_self_get_status_message_size(tox), false);
-        tox_self_get_status_message(tox, (byte*)statusmsg.str());
-
-        contact_data_s self( 0, CDM_PUBID | CDM_NAME | CDM_STATUSMSG | CDM_STATE | CDM_ONLINE_STATE | CDM_GENDER | CDM_AVATAR_TAG );
-        self.public_id = pubid.cstr();
-        self.public_id_len = pubid.get_length();
-        self.name = name.cstr();
-        self.name_len = name.get_length();
-        self.status_message = statusmsg.cstr();
-        self.status_message_len = statusmsg.get_length();
-        self.state = self_state;
-        self.avatar_tag = 0;
-        hf->update_contact(&self);
-
+        m |= CDM_NAME;
     }
+
+    str_c statusmsg(tox ? tox_self_get_status_message_size(tox) : 0, false);
+    if (tox)
+    {
+        tox_self_get_status_message(tox, (byte*)statusmsg.str());
+        m |= CDM_STATUSMSG;
+    }
+
+    contact_data_s self( 0, CDM_PUBID | CDM_STATE | CDM_ONLINE_STATE | CDM_GENDER | CDM_AVATAR_TAG | m );
+    self.public_id = pubid.cstr();
+    self.public_id_len = pubid.get_length();
+    self.name = name.cstr();
+    self.name_len = name.get_length();
+    self.status_message = statusmsg.cstr();
+    self.status_message_len = statusmsg.get_length();
+    self.state = self_state;
+    self.avatar_tag = 0;
+    hf->update_contact(&self);
 }
 
 static void update_contact( const contact_descriptor_s *desc )
@@ -2428,7 +2438,7 @@ static DWORD WINAPI audio_sender(LPVOID)
     return 0;
 }
 
-static void prepare(const byte *data, size_t length)
+static TOX_ERR_NEW prepare(const byte *data, size_t length)
 {
     if (tox) tox_kill(tox);
 
@@ -2463,7 +2473,10 @@ static void prepare(const byte *data, size_t length)
     options.savedata_data = data;
     options.savedata_length = length;
 
-    tox = tox_new(&options, nullptr);
+    TOX_ERR_NEW errnew;
+    tox = tox_new(&options, &errnew);
+    if (!tox)
+        return errnew;
 
     tox_callback_friend_lossless_packet(tox, cb_isotoxin, nullptr);
 
@@ -2511,6 +2524,8 @@ static void prepare(const byte *data, size_t length)
         CloseHandle(CreateThread(nullptr, 0, audio_sender, nullptr, 0, nullptr));
         for (; !state.lock_read()().audio_sender; Sleep(1)); // wait audio sender start
     }
+
+    return TOX_ERR_NEW_OK;
 }
 
 
@@ -2799,8 +2814,41 @@ void __stdcall set_avatar(const void*data, int isz)
 
 }
 
+static cmd_result_e tox_err_to_cmd_result( TOX_ERR_NEW toxerr )
+{
+    switch (toxerr) //-V719
+    {
+        case TOX_ERR_NEW_OK:
+            return CR_OK;
+
+        case TOX_ERR_NEW_PORT_ALLOC:
+        case TOX_ERR_NEW_PROXY_BAD_TYPE:
+        case TOX_ERR_NEW_PROXY_BAD_HOST:
+        case TOX_ERR_NEW_PROXY_BAD_PORT:
+        case TOX_ERR_NEW_PROXY_NOT_FOUND:
+            return CR_NETWORK_ERROR;
+        case TOX_ERR_NEW_LOAD_BAD_FORMAT:
+            return CR_CORRUPT;
+    }
+    return CR_UNKNOWN_ERROR;
+}
+
 void __stdcall set_config(const void*data, int isz)
 {
+    struct on_return
+    {
+        TOX_ERR_NEW toxerr = TOX_ERR_NEW_OK;
+        ~on_return()
+        {
+            if (!tox)
+                hf->operation_result(LOP_SETCONFIG, tox_err_to_cmd_result(toxerr));
+        }
+        void operator=(TOX_ERR_NEW err)
+        {
+            toxerr = err;
+        }
+    } toxerr;
+
     u64 _now = now();
     if (isz>8 && (*(uint32_t *)data) == 0 && (*((uint32_t *)data+1)) == 0x15ed1b1f)
     {
@@ -2809,7 +2857,7 @@ void __stdcall set_config(const void*data, int isz)
         options.udp_enabled = true;
 
         // raw tox_save
-        prepare( (const byte *)data, isz );
+        toxerr = prepare( (const byte *)data, isz );
 
     } else if (isz>4 && (*(uint32_t *)data) != 0)
     {
@@ -2823,15 +2871,28 @@ void __stdcall set_config(const void*data, int isz)
             options.tcp_port = (uint16_t)ldr.get_int();
         if (ldr(chunk_use_udp))
             options.udp_enabled = ldr.get_int() != 0;
+        if (int sz = ldr(chunk_toxid))
+        {
+            loader l(ldr.chunkdata(), sz);
+            int dsz;
+            if (const void *toxid = l.get_data(dsz))
+                if (TOX_ADDRESS_SIZE == dsz)
+                    memcpy( lastmypubid, toxid, TOX_ADDRESS_SIZE);
+        }
 
         if (int sz = ldr(chunk_tox_data))
         {
             loader l(ldr.chunkdata(), sz);
             int dsz;
             if (const void *toxdata = l.get_data(dsz))
-                prepare((const byte *)toxdata, dsz);
+            {
+                toxerr = prepare((const byte *)toxdata, dsz);
+            }
         } else
-            if (!tox) prepare(nullptr,0); // prepare anyway
+            if (!tox) toxerr = prepare(nullptr,0); // prepare anyway
+        
+        if (!tox)
+            return;
 
         if (int sz = ldr(chunk_descriptors))
         {
@@ -2977,7 +3038,7 @@ void __stdcall set_config(const void*data, int isz)
         }
 
     } else
-        if (!tox) prepare(nullptr, 0);
+        if (!tox) toxerr = prepare(nullptr, 0);
 
     // now send configurable fields to application
 
@@ -2991,12 +3052,13 @@ void __stdcall set_config(const void*data, int isz)
 
     hf->configurable(4, fields, values);
 }
+
 void __stdcall init_done()
 {
+    update_self();
+
     if (tox)
     {
-        update_self();
-
         int cnt = tox_self_get_friend_list_size(tox);
         for(int i=0;i<cnt;++i)
         {
@@ -3063,7 +3125,7 @@ static void save_current_stuff( savebuffer &b )
     chunk(b, chunk_proxy_address) << ( str_c(tox_proxy_host).append_char(':').append_as_uint(tox_proxy_port) );
     chunk(b, chunk_server_port) << (int)options.tcp_port;
     chunk(b, chunk_use_udp) << (int)(options.udp_enabled ? 1 : 0);
-    
+    chunk(b, chunk_toxid) << bytes(lastmypubid, TOX_ADDRESS_SIZE);
 
     size_t sz = tox_get_savedata_size(tox);
     void *data = chunk(b, chunk_tox_data).alloc(sz);
@@ -3703,6 +3765,8 @@ proto_functions_s* __stdcall handshake(host_functions_s *hf_)
     hf = hf_;
 
     self_state = CS_OFFLINE;
+    memset(lastmypubid, 0, TOX_ADDRESS_SIZE);
+
     memset( &options, 0, sizeof(options) );
     options.udp_enabled = true;
 

@@ -85,6 +85,7 @@ struct sync_data_s
     float volume = 1.0f;
     int dsp_flags = 0;
     contact_online_state_e manual_cos = COS_ONLINE;
+    cmd_result_e set_config_result;
 };
 
 class active_protocol_c : public ts::safe_object
@@ -159,6 +160,7 @@ public:
 
     void set_current_online(bool oflg) { syncdata.lock_write()().flags.init(F_CURRENT_ONLINE, oflg); }
     bool is_current_online() const { return syncdata.lock_read()().flags.is(F_CURRENT_ONLINE); }
+    cmd_result_e get_current_state() const { return syncdata.lock_read()().set_config_result; }
 
     int sort_factor() const { return syncdata.lock_read()().data.sort_factor; }
     void set_sortfactor(int sf);

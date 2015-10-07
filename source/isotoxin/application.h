@@ -263,6 +263,7 @@ public:
 
     struct blinking_reason_s
     {
+        time_t last_update = now();
         contact_key_s historian;
         ts::Time nextblink = ts::Time::undefined();
         int unread_count = 0;
@@ -357,6 +358,7 @@ public:
 
         void up_unread()
         {
+            last_update = now();
             ++unread_count;
             flags.set(F_REDRAW);
             g_app->F_SETNOTIFYICON = true;
@@ -407,6 +409,8 @@ public:
 
     time_t autoupdate_next;
     ts::ivec2 download_progress = ts::ivec2(0);
+
+    found_stuff_s *found_items = nullptr;
 
 	application_c( const ts::wchar * cmdl, bool minimize, bool readonly );
 	~application_c();
@@ -461,6 +465,8 @@ public:
                 return true;
         return false;
     }
+    void select_last_unread_contact();
+
 
     void handle_sound_capture( const void *data, int size );
     void register_capture_handler( sound_capture_handler_c *h );

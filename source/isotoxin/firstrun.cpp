@@ -1,10 +1,5 @@
 #include "isotoxin.h"
 
-static ts::wstr_c enquote( const ts::wstr_c &x )
-{
-    return ts::wstr_c(CONSTWSTR("\""),x).append(CONSTWSTR("\""));
-}
-
 dialog_firstrun_c::dialog_firstrun_c(initial_rect_data_s &data) :gui_isodialog_c(data)
 {
     deflng = detect_language();

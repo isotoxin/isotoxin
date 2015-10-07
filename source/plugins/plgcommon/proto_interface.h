@@ -130,6 +130,7 @@ struct file_portion_s
 enum long_operation_e
 {
     LOP_ADDCONTACT,
+    LOP_SETCONFIG,
 };
 
 struct host_functions_s // plugin can (or must) call these functions to do its job
@@ -283,7 +284,8 @@ typedef proto_functions_s * ( __stdcall *handshake_pf)( host_functions_s* );
  3. set_config(...) called by host. it can be zero size - it means new default settings
  4. set_name(...) and set_statusmsg(...) called by host - not need call update_contact
  5. init_done() called.  ACHTUNG! at this point library MUST call update_contact with 0 (zero) id - it means self user. also other contacts (apparently loaded) must be provided
- 
+
+ Plugin must call operation_result(LOP_SETCONFIG, ERROR) to indicate initialization fail. If CR_OK, no need to call.
  
  
  x. idle work.....

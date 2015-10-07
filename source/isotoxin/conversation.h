@@ -112,6 +112,17 @@ class gui_notice_network_c : public gui_notice_c
     GM_RECEIVER(gui_notice_network_c, ISOGM_CHANGED_SETTINGS);
     GM_RECEIVER(gui_notice_network_c, GM_HEARTBEAT);
     GM_RECEIVER(gui_notice_network_c, ISOGM_V_UPDATE_CONTACT);
+    GM_RECEIVER(gui_notice_network_c, ISOGM_CMD_RESULT);
+    
+    enum color_e
+    {
+        COLOR_ONLINE_STATUS = 0,
+        COLOR_OFFLINE_STATUS = 1,
+        COLOR_BLINKED = 2,
+        COLOR_OVERAVATAR = 3,
+        COLOR_DEFAULT_VALUE = 4,
+        COLOR_ERROR_STATUS = 5,
+    };
     
     ts::str_c pubid;
     int flashing = 0;
@@ -189,6 +200,8 @@ template<> struct MAKE_CHILD<gui_message_item_c> : public _PCHILD(gui_message_it
     ~MAKE_CHILD();
 };
 
+class image_loader_c;
+
 class gui_message_item_c : public gui_label_ex_c
 {
     DUMMY(gui_message_item_c);
@@ -203,15 +216,69 @@ class gui_message_item_c : public gui_label_ex_c
     static const int BTN_UNPAUSE = 3;
     static const int RECT_IMAGE = 1000;
     static const int TYPING_SPACERECT = 1001;
+
+    static const int BTN_PREV = 65000;
+    static const int BTN_NEXT = 65001;
     
+    struct addition_data_s
+    {
+        virtual ~addition_data_s() {}
+    };
+    struct addition_file_data_s : public addition_data_s
+    {
+        struct btn_s
+        {
+            RID rid;
+            int r = -1;
+            bool used = false;
+        };
+        ts::array_inplace_t<btn_s, 1>  btns;
+        ts::uninitialized<44 /* sizeof(image_loader_c) */ > imgloader;
+
+        /*virtual*/ ~addition_file_data_s();
+    };
+
+    struct addition_prevnext_s : public addition_data_s
+    {
+        RID rid_prev;
+        RID rid_next;
+
+        uint64 prev;
+        uint64 next;
+
+        ts::wstr_c prevnext;
+    };
+
+
+    UNIQUE_PTR( addition_data_s ) addition;
+
+    bool imgloader() const
+    {
+        if (subtype != ST_RECV_FILE && subtype != ST_SEND_FILE)
+            return false;
+        if (addition_file_data_s *afd = ts::ptr_cast<addition_file_data_s *>(addition.get()))
+            return afd->imgloader;
+        return false;
+    }
+
+    image_loader_c &imgloader_get();
+
+    addition_file_data_s &addition_file_data()
+    {
+        ASSERT(ST_RECV_FILE == subtype || ST_SEND_FILE == subtype);
+
+        if (!addition)
+            addition.reset(TSNEW(addition_file_data_s));
+        return *ts::ptr_cast<addition_file_data_s *>(addition.get());
+    }
 
     struct record
     {
         DUMMY(record);
         record() {}
 
-        uint64 utag;
-        time_t time;
+        uint64 utag = 0;
+        time_t time = 0;
         ts::str_c text; // utf8
         ts::TSCOLOR undelivered = 0;
         ts::uint16 append( ts::wstr_c &t, ts::wstr_c &pret, const ts::wsptr &postt = ts::wsptr() );
@@ -219,9 +286,13 @@ class gui_message_item_c : public gui_label_ex_c
         {
             return time < r.time;
         }
-    };
-    ts::array_inplace_t<record, 2> records;
+    } zero_rec;
+
+#if JOIN_MESSAGES
+    ts::array_inplace_t<record, 2> other_records;
+#endif
     void rebuild_text();
+    void mark_found();
 
     ts::shared_ptr<contact_c> historian;
     ts::shared_ptr<contact_c> author;
@@ -232,6 +303,7 @@ class gui_message_item_c : public gui_label_ex_c
     static const ts::flags32_s::BITS F_NO_AUTHOR            = FLAGS_FREEBITSTART_LABEL << 1;
     static const ts::flags32_s::BITS F_OVERIMAGE            = FLAGS_FREEBITSTART_LABEL << 2; // mouse cursor above image
     static const ts::flags32_s::BITS F_OVERIMAGE_LBDN       = FLAGS_FREEBITSTART_LABEL << 3;
+    static const ts::flags32_s::BITS F_FOUND_ITEM           = FLAGS_FREEBITSTART_LABEL << 4;
 
     static const int m_left = 10; // recta width and this value should be same
     static const int m_top = 3;
@@ -273,6 +345,11 @@ class gui_message_item_c : public gui_label_ex_c
     void updrect(const void *, int r, const ts::ivec2 &p);
     void updrect_emoticons(const void *, int r, const ts::ivec2 &p);
     
+    /*virtual*/ bool custom_tag_parser(ts::wstr_c& r, const ts::wsptr &tv) const override;
+    void goto_item( uint64 utag );
+    bool b_prev(RID, GUIPARAM);
+    bool b_next(RID, GUIPARAM);
+
     bool b_explore(RID, GUIPARAM);
     bool b_break(RID, GUIPARAM);
     bool b_pause_unpause(RID, GUIPARAM);
@@ -323,12 +400,15 @@ public:
     contact_c * get_author() const {return author;}
     message_type_app_e get_mt() const {return mt;}
 
-    time_t get_first_post_time() const {return records.size() ? records.get(0).time : 0;}
-    time_t get_last_post_time() const {return records.size() ? records.last().time : 0;}
+    time_t get_first_post_time() const {return zero_rec.time;}
+#if JOIN_MESSAGES
+    time_t get_last_post_time() const {return other_records.size() ? other_records.last().time : 0;}
+#endif
 
     void update_text(int for_width = 0);
     void set_no_author( bool f = true ) { bool ona = flags.is(F_NO_AUTHOR); flags.init(F_NO_AUTHOR, f); if (ona != f) flags.set(F_DIRTY_HEIGHT_CACHE); }
 
+    void setup_found_item( uint64 prev, uint64 next );
     void append_text( const post_s &post, bool resize_now = true );
     bool delivered(uint64 utag);
     bool with_utag(uint64 utag) const;
@@ -353,10 +433,11 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_messagelist_c, ISOGM_TYPING);
     GM_RECEIVER(gui_messagelist_c, GM_DROPFILES);
     GM_RECEIVER(gui_messagelist_c, GM_HEARTBEAT);
-    
+    GM_RECEIVER(gui_messagelist_c, ISOGM_REFRESH_SEARCH_RESULT );
+
     SIMPLE_SYSTEM_EVENT_RECEIVER(gui_messagelist_c, SEV_ACTIVE_STATE);
 
-    //static const ts::flags32_s::BITS F_OVER_NOKEEPH = F_VSCROLLFREEBITSTART << 0;
+    static const ts::flags32_s::BITS F_SEARCH_RESULTS_HERE = F_VSCROLLFREEBITSTART << 0;
 
     time_t last_seen_post_time = 0;
     tm last_post_time;

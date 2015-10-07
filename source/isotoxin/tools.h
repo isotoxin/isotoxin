@@ -132,6 +132,12 @@ void text_close_bbcode(ts::str_c &text_utf8);
 void text_convert_char_tags(ts::str_c &text_utf8);
 void text_adapt_user_input(ts::str_c &text_utf8); // before print
 void text_prepare_for_edit(ts::str_c &text_utf8);
+INLINE ts::wstr_c enquote(const ts::wstr_c &x)
+{
+    return ts::wstr_c(CONSTWSTR("\""), x).append(CONSTWSTR("\""));
+}
+
+bool text_find_inds( const ts::wstr_c &t, ts::tmp_tbuf_t<ts::ivec2> &marks, const ts::wstrings_c &fsplit );
 
 typedef ts::sstr_t<4> SLANGID;
 typedef ts::array_inplace_t<SLANGID, 0> SLANGIDS;
@@ -197,6 +203,7 @@ enum isogmsg_e
     ISOGM_AVATAR,
     ISOGM_DO_POSTEFFECT,
     ISOGM_TYPING,
+    ISOGM_REFRESH_SEARCH_RESULT,
 
     ISOGM_COUNT,
 };
@@ -241,7 +248,8 @@ template<> struct gmsg<ISOGM_DELIVERED> : public gmsgbase
 
 template<> struct gmsg<ISOGM_CMD_RESULT> : public gmsgbase
 {
-    gmsg(commands_e cmd, cmd_result_e rslt) :gmsgbase(ISOGM_CMD_RESULT), cmd(cmd), rslt(rslt) {}
+    gmsg(int networkid, commands_e cmd, cmd_result_e rslt) :gmsgbase(ISOGM_CMD_RESULT), networkid(networkid), cmd(cmd), rslt(rslt) {}
+    int networkid;
     commands_e cmd;
     cmd_result_e rslt;
 };
@@ -270,9 +278,15 @@ template<> struct gmsg<ISOGM_SUMMON_POST> : public gmsgbase
     }
     contact_c *historian = nullptr;
     contact_c *fake_sender = nullptr; // only used for messages from groupchat non-contactlist members
-    rectengine_c **unread; // если время поста больше чем readtime текущего историка - сюда запишется новосозданный элемент интерфейса - на него отскролируемся
+    rectengine_c **unread; // if post time > readtime of current historian, this field will be set with new created gui element - scroll_to_child will be called for it
     const post_s &post;
+    
+    uint64 prev_found = 0;
+    uint64 next_found = 0;
+
     bool replace_post;
+    bool found_item = false;
+
     void operator =(gmsg &) UNUSED;
 };
 
@@ -330,6 +344,8 @@ enum loctext_e
     loc_yes,
     loc_no,
     loc_exit,
+    loc_network,
+    loc_nonetwork,
 };
 
 ts::wstr_c loc_text(loctext_e);

@@ -22,8 +22,9 @@ dialog_addcontact_c::~dialog_addcontact_c()
 {
     set_theme_rect(CONSTASTR("main"), false);
     __super::created();
-    tabsel( CONSTASTR("1") );
-
+    tabsel(CONSTASTR("1"));
+    if (!networks_available)
+        ctlenable(CONSTASTR("dialog_button_1"), false);
 }
 
 /*virtual*/ ts::ivec2 dialog_addcontact_c::get_min_size() const
@@ -45,10 +46,23 @@ void dialog_addcontact_c::network_selected( const ts::str_c &prm )
 
 menu_c dialog_addcontact_c::networks()
 {
+    networks_available = false;
     menu_c nm;
-    prf().iterate_aps([&](const active_protocol_c &ap) {
-        if (apid == 0) apid = ap.getid();
-        nm.add(from_utf8(ap.get_name()), ap.getid() == apid ? MIF_MARKED : 0, DELEGATE(this, network_selected), ts::amake(ap.getid()));
+    prf().iterate_aps([&](const active_protocol_c &ap)
+    {
+        int mif = 0;
+        if (ap.get_current_state() != CR_OK)
+            mif |= MIF_DISABLED;
+
+        if (apid == 0)
+        {
+            apid = ap.getid();
+            mif |= MIF_MARKED;
+        }
+        nm.add(from_utf8(ap.get_name()), mif, DELEGATE(this, network_selected), ts::amake(ap.getid()));
+
+        if (0 == (mif & MIF_DISABLED))
+            networks_available = true;
     });
     return nm;
 }
@@ -62,7 +76,15 @@ menu_c dialog_addcontact_c::networks()
 
     if (inparam.key.protoid == 0)
     {
-        dm().combik(TTT("Network",66)).setmenu(networks());
+        menu_c m = networks();
+        if (networks_available)
+        {
+            dm().combik(loc_text(loc_network)).setmenu(m);
+        } else
+        {
+            ts::wstr_c errs(CONSTWSTR("<b>"), loc_text(loc_nonetwork));
+            dm().label(errs);
+        }
         dm().vspace(5);
     } else
     {
@@ -170,7 +192,7 @@ dialog_addgroup_c::~dialog_addgroup_c()
 
 /*virtual*/ ts::wstr_c dialog_addgroup_c::get_name() const
 {
-    return TTT("[appname]: New group chat",248);
+    return TTT("[appname]: New group chat",249);
 }
 
 
@@ -180,6 +202,8 @@ dialog_addgroup_c::~dialog_addgroup_c()
     __super::created();
     tabsel(CONSTASTR("1"));
     update_lifetime();
+    if (!networks_available)
+        ctlenable( CONSTASTR("dialog_button_1"), false );
 }
 
 /*virtual*/ ts::ivec2 dialog_addgroup_c::get_min_size() const
@@ -201,14 +225,25 @@ void dialog_addgroup_c::network_selected(const ts::str_c &prm)
 
 menu_c dialog_addgroup_c::networks()
 {
+    networks_available = false;
     menu_c nm;
     prf().iterate_aps([&](const active_protocol_c &ap) {
+        int mif = 0;
+        if (ap.get_current_state() != CR_OK)
+            mif |= MIF_DISABLED;
         int f = ap.get_features();
-        if (f & PF_GROUP_CHAT)
+        if (0 != (f & PF_GROUP_CHAT))
         {
-            if (apid == 0) apid = ap.getid();
-            nm.add(from_utf8(ap.get_name()), ap.getid() == apid ? MIF_MARKED : 0, DELEGATE(this, network_selected), ts::amake(ap.getid()));
-        }
+            if (apid == 0)
+            {
+                apid = ap.getid();
+                mif |= MIF_MARKED;
+            }
+        } else
+            mif |= MIF_DISABLED;
+        nm.add(from_utf8(ap.get_name()), mif, DELEGATE(this, network_selected), ts::amake(ap.getid()));
+        if (0 == (mif & MIF_DISABLED))
+            networks_available = true;
     });
     return nm;
 }
@@ -225,7 +260,7 @@ void dialog_addgroup_c::update_lifetime()
     {
         if ( 0 == (ap->get_features() & PF_GROUP_CHAT_PERSISTENT) )
         {
-            // persistent groupchats not supported
+            // persistent group chats not supported yet
             ctlenable(CONSTASTR("lifetime0"), false);
             if (persistent)
                 if (RID p = find(CONSTASTR("lifetime1")))
@@ -242,7 +277,15 @@ void dialog_addgroup_c::update_lifetime()
     descmaker dm(descs);
     dm << 1;
 
-    dm().combik(TTT("Network",249)).setmenu(networks()).setname(CONSTASTR("networks"));
+    menu_c m = networks();
+    if (networks_available)
+    {
+        dm().combik(loc_text(loc_network)).setmenu(m).setname(CONSTASTR("networks"));
+    } else
+    {
+        ts::wstr_c errs(CONSTWSTR("<b>"), loc_text(loc_nonetwork));
+        dm().label(errs);
+    }
     dm().vspace(5);
 
     dm().textfield(TTT("Group chat name",250), CONSTWSTR(""), DELEGATE(this, groupname_handler)).focus(true);

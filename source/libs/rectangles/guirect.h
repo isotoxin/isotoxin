@@ -1174,16 +1174,17 @@ class gui_vscrollgroup_c : public gui_group_c // vertical group with vertical sc
 
     sbhelper_s sbhelper;
     ts::buf0_c drawflags;
-    rectengine_c *scroll_target = nullptr;
+    ts::safe_ptr<rectengine_c> scroll_target = nullptr;
 
     static const ts::flags32_s::BITS F_SBVISIBLE = FLAGS_FREEBITSTART << 0;
     static const ts::flags32_s::BITS F_SBHL = FLAGS_FREEBITSTART << 1;
 protected:
-    static const ts::flags32_s::BITS F_LAST_REPOS_AT_END = FLAGS_FREEBITSTART << 2;
+    static const ts::flags32_s::BITS F_SCROLL_TO_END = FLAGS_FREEBITSTART << 2;
     static const ts::flags32_s::BITS F_SCROLL_TO_MAX_TOP = FLAGS_FREEBITSTART << 3;
     static const ts::flags32_s::BITS F_SB_OVER_ITEMS = FLAGS_FREEBITSTART << 4;
     static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 5;
 
+    virtual void on_manual_scroll() { scroll_target = nullptr; flags.clear(F_SCROLL_TO_END); }; // called on scroll initiated by user (mouse wheel or scrollbar)
     /*virtual*/ void children_repos() override;
     /*virtual*/ void on_add_child(RID id) override;
     gui_vscrollgroup_c() {}
@@ -1198,17 +1199,17 @@ public:
     bool is_at_end() const
     {
         if (!flags.is(F_SBVISIBLE)) return true;
-        return flags.is(F_LAST_REPOS_AT_END);
+        return flags.is(F_SCROLL_TO_END);
     }
 
     void not_at_end()
     {
-        flags.clear(F_LAST_REPOS_AT_END);
+        flags.clear(F_SCROLL_TO_END);
     }
 
     void scroll_to_begin();
     void scroll_to_end();
-    void scroll_to( rectengine_c *reng, bool maxtop );
+    void scroll_to_child( rectengine_c *reng, bool maxtop );
     
     int width_for_children() const
     {

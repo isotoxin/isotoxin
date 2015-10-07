@@ -142,11 +142,19 @@ rects
     c=2,2,2,2,#e5fadd
     colors=#0b2f12,#afac8e,#709def,#0000FF
   }
+  message.mine.h=message.mine
+  {
+    c=2,2,2,2,#e0ffd0
+  }
   message.other=sb
   {
     clientborder=4,4,4,4
     c=2,2,2,2,#f5eef9
     colors=#8f5b35,#000000,#709def,#0000FF
+  }
+  message.other.h=message.other
+  {
+    c=2,2,2,2,#ffe0f0
   }
   message.invite=sb
   {
@@ -185,8 +193,7 @@ rects
   {
     c=2,0,2,2,#c2c3d4
     clientborder=4,2,4,4
-    colors=#367320,#505050,#FFFFFF,#d9840f,#707070
-
+    colors=#367320,#505050,#FFFFFF,#d9840f,#707070,#803030
   }
   notice.invite=sb
   {
@@ -281,7 +288,7 @@ rects
     c=0,0,0,1,#f0f9ee,#d0d0d0
     clientborder=2,2,2,2
     deftextcolor=#8d8581
-    colors=#6b6500,#000000
+    colors=#6b6500,#000000,#006000
     addition
     {
       shiftstateicon=2,1
@@ -290,19 +297,19 @@ rects
   contact.h=contact
   {
     c=0,0,0,1,#30a6a3,#d0d0d0
-    colors=#fff000,#000000
+    colors=#fff000,#000000,#d8ffd8
     deftextcolor=#d8fff8
   }
   contact.a=contact
   {
     c=0,0,0,1,#586b7e,#d0d0d0
-    colors=#fff000,#000000
+    colors=#fff000,#000000,#d8ffd8
     deftextcolor=#d8fff8
   }
   contact.ah=contact
   {
     c=0,0,0,1,#3096a3,#d0d0d0
-    colors=#fff000,#000000
+    colors=#fff000,#000000,#d8ffd8
     deftextcolor=#d8fff8
   }
 

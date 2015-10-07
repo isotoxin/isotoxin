@@ -2187,6 +2187,30 @@ public:
         }
     }
 
+    str_t & encode_pointer( const void * p ) // encode format: 'A' + 4 bit
+    {
+        const ZSTRINGS_BYTE * s = (const ZSTRINGS_BYTE *)&p;
+        for( const ZSTRINGS_BYTE * e = s + sizeof(p); s<e; ++s )
+            append_char( 'A' + (*s & 15) ).append_char( 'A' + (*s >> 4) );
+        return *this;
+    }
+
+    const void * decode_pointer( ZSTRINGS_SIGNED from = 0 ) const
+    {
+        if ( from + (ZSTRINGS_SIGNED)(sizeof(void *)*2) > get_length() )
+            return nullptr;
+        const void *ptr;
+        ZSTRINGS_BYTE * s = (ZSTRINGS_BYTE *)&ptr;
+        for( ZSTRINGS_SIGNED i = 0; i < (2*sizeof(void *)); i+=2, ++s )
+        {
+            ZSTRINGS_BYTE c0 = get_char(from + i) - 'A';
+            ZSTRINGS_BYTE c1 = get_char(from + i + 1) - 'A';
+            *s = c0 | (c1 << 4);
+        }
+        return ptr;
+    }
+
+
     str_t & operator = (const str_t &s) { return set(s); }
     
     /* 

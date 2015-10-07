@@ -3,6 +3,7 @@
 namespace ts
 {
 
+
 template <typename TCHARACTER, class S_CORE = str_core_copy_on_demand_c<TCHARACTER> > class strings_t : public array_inplace_t<str_t<TCHARACTER, S_CORE>, 8>
 {
     typedef str_t<TCHARACTER, S_CORE> strtype;
@@ -11,12 +12,12 @@ template <typename TCHARACTER, class S_CORE = str_core_copy_on_demand_c<TCHARACT
 public:
 
     strings_t() {};
-    strings_t(const arrtype &othera):array_inplace_t( othera.size() )
+    strings_t(const arrtype &othera):array_inplace_t<str_t<TCHARACTER, S_CORE>, 8>( othera.size() )
     {
         for (const strtype&s :othera)
             add( s );
     }
-    strings_t(arrtype &&othera) :array_inplace_t(std::move(othera))
+    strings_t(arrtype &&othera) :array_inplace_t<str_t<TCHARACTER, S_CORE>, 8>(std::move(othera))
     {
     }
 
@@ -398,21 +399,17 @@ public:
     bool operator==( const arrtype &a ) const
     {
         aint cnt = size();
-        if (a.size() != size()) return false;
+        if (a.size() != cnt) return false;
         for (aint i=0;i<cnt;++i)
-        {
             if (!a.get(i).equals(get(i))) return false;
-        }
         return true;
     }
     bool operator!=( const arrtype &a ) const
     {
         aint cnt = size();
-        if (a.size() != size()) return true;
+        if (a.size() != cnt) return true;
         for (aint i=0;i<cnt;++i)
-        {
             if (!a.get(i).equals(get(i))) return true;
-        }
         return false;
     }
 
@@ -670,7 +667,7 @@ public:
         }
     }
 
-	template <typename T> void sort(T &sorter)
+	template <typename T> void sort(const T &sorter)
 	{
 		__super::sort(sorter);
 	}

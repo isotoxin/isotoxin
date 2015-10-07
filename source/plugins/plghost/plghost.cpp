@@ -884,6 +884,10 @@ static void __stdcall operation_result(long_operation_e op, int rslt)
             IPCW(HA_CMD_STATUS) << (int)AQ_ADD_CONTACT << rslt;
             break;
         }
+    case LOP_SETCONFIG: {
+            IPCW(HA_CMD_STATUS) << (int)AQ_SET_CONFIG << rslt;
+            break;
+        }
     }
 }
 

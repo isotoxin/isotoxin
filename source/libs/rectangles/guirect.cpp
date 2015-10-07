@@ -1143,7 +1143,7 @@ ts::ivec2 gui_label_ex_c::get_link_pos_under_cursor(const ts::ivec2 &localpos) c
 ts::str_c gui_label_ex_c::get_link_under_cursor(const ts::ivec2 &localpos) const
 {
     ts::ivec2 p = get_link_pos_under_cursor(localpos);
-    if (p.r0 >= 0 && p.r1 >= p.r0) return to_utf8(textrect.get_text().substr(p.r0, p.r1));
+    if (p.r0 >= 0 && p.r1 >= p.r0) return text_remove_cstm( to_utf8(textrect.get_text().substr(p.r0, p.r1)) );
     return ts::str_c();
 }
 
@@ -2067,6 +2067,9 @@ void gui_vscrollgroup_c::children_repos()
     if (info.count <= 0) return;
     if (!info.area) return;
 
+    if (flags.is(F_SCROLL_TO_END))
+        sbhelper.shift = minimum<int>::value;
+
     int height_need = info.area.height() / info.count;
 
     struct ctl_info_s
@@ -2133,9 +2136,7 @@ void gui_vscrollgroup_c::children_repos()
             if ((scroll_target_y + scroll_target_h) > botscrollshift)
                 sbhelper.shift = info.area.height() - scroll_target_y - scroll_target_h;
         }
-
-    } else if (flags.is(F_LAST_REPOS_AT_END) && flags.is(F_SBVISIBLE))
-        sbhelper.shift = info.area.height() - vheight;
+    }
 
     for( ts::aint i = 0, y = sbhelper.shift; i < info.count; ++i )
     {
@@ -2163,9 +2164,7 @@ void gui_vscrollgroup_c::children_repos()
         y += h;
     }
 
-    scroll_target = nullptr;
-
-    flags.init( F_LAST_REPOS_AT_END, !flags.is(F_SBVISIBLE) || sbhelper.at_end(info.area.height()) );
+    flags.init( F_SCROLL_TO_END, !flags.is(F_SBVISIBLE) || sbhelper.at_end(info.area.height()) );
 
 }
 
@@ -2176,19 +2175,23 @@ void gui_vscrollgroup_c::on_add_child(RID id)
 
 void gui_vscrollgroup_c::scroll_to_begin()
 {
+    flags.clear(F_SCROLL_TO_END);
+    scroll_target = nullptr;
     sbhelper.shift = 0;
     gui->repos_children(this);
 }
 
 void gui_vscrollgroup_c::scroll_to_end()
 {
-    sbhelper.shift = minimum<int>::value;
+    flags.set(F_SCROLL_TO_END);
+    scroll_target = nullptr;
     gui->repos_children(this);
 }
 
-void gui_vscrollgroup_c::scroll_to(rectengine_c *reng, bool maxtop)
+void gui_vscrollgroup_c::scroll_to_child(rectengine_c *reng, bool maxtop)
 {
     flags.init(F_SCROLL_TO_MAX_TOP, maxtop);
+    flags.clear(F_SCROLL_TO_END);
     scroll_target = reng;
     gui->repos_children(this);
 }
@@ -2255,7 +2258,7 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
         sbhelper.shift += MWHEELPIXELS * 2;
     case SQ_MOUSE_WHEELDOWN:
         sbhelper.shift -= MWHEELPIXELS;
-        flags.clear(F_LAST_REPOS_AT_END);
+        on_manual_scroll();
         gui->repos_children(this);
         break;
     case SQ_MOUSE_OUT:
@@ -2296,7 +2299,6 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
     case SQ_MOUSE_MOVE_OP:
         if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_SBMOVE)) 
         {
-            flags.clear(F_LAST_REPOS_AT_END);
             int dmouse = data.mouse.screenpos().y - opd->mpos.y;
 
             cri_s info;
@@ -2304,6 +2306,7 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 
             if (sbhelper.scroll(opd->rect.lt.y + dmouse, info.area.height()))
             {
+                on_manual_scroll();
                 gui->repos_children(this);
             }
         }
