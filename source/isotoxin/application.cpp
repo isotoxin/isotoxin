@@ -12,11 +12,21 @@ static bool __toggle_search_bar(RID, GUIPARAM)
 {
     bool sbshow = prf().get_options().is(UIOPT_SHOW_SEARCH_BAR);
     prf().set_options( sbshow ? 0 : UIOPT_SHOW_SEARCH_BAR, UIOPT_SHOW_SEARCH_BAR );
-    gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS).send();
+    gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS, UIOPT_SHOW_SEARCH_BAR).send();
     return true;
 }
 
-application_c::application_c(const ts::wchar * cmdl, bool minimize, bool readonly)
+static bool __toggle_newcon_bar(RID, GUIPARAM)
+{
+    bool sbshow = prf().get_options().is(UIOPT_SHOW_NEWCONN_BAR);
+    prf().set_options(sbshow ? 0 : UIOPT_SHOW_NEWCONN_BAR, UIOPT_SHOW_NEWCONN_BAR);
+    gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS, UIOPT_SHOW_NEWCONN_BAR).send();
+    return true;
+}
+
+extern parsed_command_line_s g_commandline;
+
+application_c::application_c(const ts::wchar * cmdl)
 {
     F_NEWVERSION = false;
     F_BLINKING_FLAG = false;
@@ -26,20 +36,22 @@ application_c::application_c(const ts::wchar * cmdl, bool minimize, bool readonl
     F_SETNOTIFYICON = false;
     F_OFFLINE_ICON = true;
     F_ALLOW_AUTOUPDATE = false;
-    F_READONLY_MODE = readonly;
-    F_READONLY_MODE_WARN = readonly; // suppress warn
+    F_READONLY_MODE = g_commandline.readonlymode;
+    F_READONLY_MODE_WARN = g_commandline.readonlymode; // suppress warn
 
     autoupdate_next = now() + 10;
 	g_app = this;
     cfg().load();
     if (cfg().is_loaded())
-        load_profile_and_summon_main_rect(minimize);
+        load_profile_and_summon_main_rect(g_commandline.minimize);
 
 #ifndef _FINAL
     dotests();
 #endif
 
     register_kbd_callback( __toggle_search_bar, HOTKEY_TOGGLE_SEARCH_BAR );
+    register_kbd_callback( __toggle_newcon_bar, HOTKEY_TOGGLE_NEW_CONNECTION_BAR );
+    
 }
 
 
@@ -110,6 +122,8 @@ void application_c::load_locale( const SLANGID& lng )
                 l.replace_all(CONSTWSTR("[/b]"), CONSTWSTR("</b>"));
                 l.replace_all(CONSTWSTR("[l]"), CONSTWSTR("<l>"));
                 l.replace_all(CONSTWSTR("[/l]"), CONSTWSTR("</l>"));
+                l.replace_all(CONSTWSTR("[i]"), CONSTWSTR("<i>"));
+                l.replace_all(CONSTWSTR("[/i]"), CONSTWSTR("</i>"));
                 l.replace_all(CONSTWSTR("[quote]"), CONSTWSTR("\""));
                 l.replace_all(CONSTWSTR("[appname]"), CONSTWSTR(APPNAME));
                 l.replace_all(CONSTWSTR(APPNAME), ts::wstr_c(CONSTWSTR("<color=0,50,0><b>")).append(CONSTWSTR(APPNAME)).append(CONSTWSTR("</b></color>")));
@@ -270,6 +284,18 @@ HICON application_c::app_icon(bool for_tray)
     path_expand_env(path);
 }
 
+/*virtual*/ void application_c::app_font_par(const ts::str_c&fn, ts::font_params_s&fprm)
+{
+    if (prf().is_loaded())
+    {
+        if (fn.begins(CONSTASTR("conv_text")))
+        {
+            float k = prf().fontscale_conv_text();
+            fprm.size.x = ts::lround(k * fprm.size.x);
+            fprm.size.y = ts::lround(k * fprm.size.y);
+        }
+    }
+}
 
 /*virtual*/ void application_c::do_post_effect()
 {
@@ -335,7 +361,7 @@ static DWORD WINAPI autoupdater(LPVOID)
         if (!nonewversion())
         {
             if (!newversion() && new_version())
-                gmsg<ISOGM_NEWVERSION>(cfg().autoupdate_newver()).send();
+                gmsg<ISOGM_NEWVERSION>(cfg().autoupdate_newver(), gmsg<ISOGM_NEWVERSION>::E_OK).send();
             nonewversion(true);
         }
     }
@@ -1268,7 +1294,7 @@ void application_c::resend_undelivered_messages( const contact_key_s& rcv )
 
         if ((q->receiver == rcv || rcv.is_empty()))
         {
-            while ( !rcv.is_empty() || (ts::Time::current() - q->last_try_send_time) > 5000 /* try 2 resend every 5 seconds */ )
+            while ( !rcv.is_empty() || (ts::Time::current() - q->last_try_send_time) > 60000 /* try 2 resend every 1 minute */ )
             {
                 q->last_try_send_time = ts::Time::current();
                 contact_c *receiver = contacts().find( q->receiver );
@@ -1304,6 +1330,23 @@ void application_c::resend_undelivered_messages( const contact_key_s& rcv )
                 break;
         }
         ++qi;
+    }
+}
+
+void application_c::kill_undelivered( uint64 utag )
+{
+    for (send_queue_s *q : m_undelivered)
+    {
+        int cnt = q->queue.size();
+        for (int i = 0; i < cnt; ++i)
+        {
+            const post_s &qp = q->queue.get(i);
+            if (qp.utag == utag)
+            {
+                q->queue.get_remove_slow(i);
+                return;
+            }
+        }
     }
 }
 
@@ -1360,6 +1403,19 @@ void application_c::undelivered_message( const post_s &p )
 
 }
 
+void application_c::reload_fonts()
+{
+    __super::reload_fonts();
+    update_fonts();
+}
+
+void application_c::update_fonts()
+{
+    font_conv_name = &get_font(CONSTASTR("conv_name"));
+    font_conv_text = &get_font(CONSTASTR("conv_text"));
+    font_conv_time = &get_font(CONSTASTR("conv_time"));
+}
+
 bool application_c::load_theme( const ts::wsptr&thn )
 {
     if (!__super::load_theme(thn))
@@ -1373,13 +1429,17 @@ bool application_c::load_theme( const ts::wsptr&thn )
     }
     m_buttons.reload();
 
-    font_conv_name = &get_font( CONSTASTR("conv_name") );
-    font_conv_text = &get_font( CONSTASTR("conv_text") );
-    font_conv_time = &get_font( CONSTASTR("conv_time") );
+    update_fonts();
     contactheight= theme().conf().get_string(CONSTASTR("contactheight")).as_int(55);
     mecontactheight = theme().conf().get_string(CONSTASTR("mecontactheight")).as_int(60);
     minprotowidth = theme().conf().get_string(CONSTASTR("minprotowidth")).as_int(100);
     protoiconsize = theme().conf().get_string(CONSTASTR("protoiconsize")).as_int(10);
+
+    selection_color = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("selection_color")), ts::ARGB(255, 255, 0) );
+    selection_bg_color = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("selection_bg_color")), ts::ARGB(100, 100, 255) );
+    selection_bg_color_blink = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("selection_bg_color_blink")), ts::ARGB(0, 0, 155) );
+    found_mark_color = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("found_mark_color")), ts::ARGB(50, 50, 0) );
+    found_mark_bg_color = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("found_mark_bg_color")), ts::ARGB(255, 100, 255) );
 
     emoti().reload();
 
@@ -1429,10 +1489,9 @@ file_transfer_s::~file_transfer_s()
 {
     if (query_task)
     {
-        while (query_task->rslt == query_task_s::rslt_inprogress) // oops. query task in progress (other thread job). wait...
-            Sleep(1);
-
-        query_task->ftr = nullptr;
+        auto w = query_task->sync.lock_write();
+        w().rslt = query_task_s::rslt_kill;
+        w().ftr = nullptr;
     }
 
     if (HANDLE handle = file_handle())
@@ -1493,7 +1552,9 @@ int file_transfer_s::progress(int &bps) const
 {
     auto rdata = data.lock_read();
     bps = rdata().bytes_per_sec;
-    return (int)(rdata().progrez * 100 / filesize);
+    int prc = (int)(rdata().progrez * 100 / filesize);
+    if (prc > 100) prc = 100;
+    return prc;
 }
 
 void file_transfer_s::pause_by_remote( bool p )
@@ -1635,13 +1696,15 @@ void file_transfer_s::data_s::tr( uint64 _offset0, uint64 _offset1 )
         {
             r.offset0 = _offset0;
             transfered.remove_slow(i);
-            return tr(r.offset0, r.offset1);
+            tr(r.offset0, r.offset1);
+            return;
         }
         if (_offset0 == r.offset1)
         {
             r.offset1 = _offset1;
             transfered.remove_slow(i);
-            return tr(r.offset0, r.offset1);
+            tr(r.offset0, r.offset1);
+            return;
         }
 
         return;
@@ -1652,40 +1715,84 @@ void file_transfer_s::data_s::tr( uint64 _offset0, uint64 _offset1 )
     rr.offset1 = _offset1;
 }
 
+query_task_s::query_task_s(file_transfer_s *ftr)
+{
+    sync.lock_write()().ftr = ftr;
+}
+
 query_task_s::~query_task_s()
 {
-    if (ftr)
-        ftr->query_task = nullptr;
+    auto w = sync.lock_write();
+    if (w().ftr)
+        w().ftr->query_task = nullptr;
 }
 
 
 /*virtual*/ int query_task_s::iterate(int pass)
 {
-    job_s cj = sync.lock_read()().current_job;
+    auto rr = sync.lock_read();
+    if (rslt_kill == rr().rslt || !rr().ftr)
+        return R_CANCEL;
 
-    if (ftr->get_offset() != cj.offset)
+    if (rslt_idle == rr().rslt)
     {
-        auto wdata = ftr->data.lock_write();
-        LARGE_INTEGER li;
-        li.QuadPart = cj.offset;
-        SetFilePointer(wdata().handle, li.LowPart, &li.HighPart, FILE_BEGIN);
-        wdata().offset = cj.offset;
+        rr.unlock();
+        Sleep(0);
+        return pass + 1;
     }
-    int sz = (int)ts::tmin<int64>(cj.sz, (int64)(ftr->filesize - cj.offset));
-    ts::tmp_buf_c b(sz, true);
-    DWORD r;
-    if (!ReadFile(ftr->file_handle(), b.data(), sz, &r, nullptr))
+
+    job_s cj = rr().current_job;
+    rr.unlock();
+
+    if( cj.sz == 0 || cj.offset == 0xFFFFFFFFFFFFFFFFull )
     {
-        rslt = rslt_kill;
+        auto d = sync.lock_write();
+        if (d().jobarray.size())
+        {
+            d().current_job = d().jobarray.get_remove_slow();
+            d().rslt = rslt_inprogress;
+            cj = d().current_job;
+        } else
+        {
+            d().rslt = rslt_idle;
+            return pass + 1;
+        }
+    }
+
+    rr = sync.lock_read();
+    if (!rr().ftr)
+        return R_CANCEL;
+    HANDLE handler = rr().ftr->file_handle(); //-V807
+    int protoid = rr().ftr->sender.protoid;
+    uint64 utag = rr().ftr->utag;
+
+    // always set file pointer
+    LARGE_INTEGER li;
+    li.QuadPart = cj.offset;
+    SetFilePointer(handler, li.LowPart, &li.HighPart, FILE_BEGIN);
+
+    int sz = (int)ts::tmin<int64>(cj.sz, (int64)(rr().ftr->filesize - cj.offset));
+    ts::tmp_buf_c b(sz, true);
+
+    rr.unlock();
+
+    DWORD r;
+    if (!ReadFile(handler, b.data(), sz, &r, nullptr))
+    {
+        sync.lock_write()().rslt = rslt_kill;
         return R_DONE;
     }
 
-    if (active_protocol_c *ap = prf().ap(ftr->sender.protoid))
-        ap->file_portion(ftr->utag, cj.offset, b.data(), cj.sz);
+    if (active_protocol_c *ap = prf().ap(protoid))
+        ap->file_portion(utag, cj.offset, b.data(), sz);
 
     if (cj.sz)
     {
-        auto wdata = ftr->data.lock_write();
+        auto wftr = sync.lock_write();
+        if (!wftr().ftr)
+            return R_CANCEL;
+
+        auto wdata = wftr().ftr->data.lock_write();
 
         if (wdata().bytes_per_sec >= file_transfer_s::BPSSV_ALLOW_CALC)
         {
@@ -1697,43 +1804,52 @@ query_task_s::~query_task_s()
                 wdata().upduitime -= 0.3f;
                 wdata().bytes_per_sec = lround((float)wdata().trsz() / 0.3f);
                 wdata().transfered.clear();
-                ftr->update_item = true;
+                wftr().ftr->update_item = true;
             }
         }
 
-        wdata().offset += cj.sz;
-        wdata().progrez = wdata().offset + cj.sz;
+        //wdata().offset += cj.sz;
+        wdata().progrez += cj.sz;
     }
 
-
     auto d = sync.lock_write();
+
+    d().current_job.offset = 0xFFFFFFFFFFFFFFFFull;
+    d().current_job.sz = 0;
+
     if (d().jobarray.size())
     {
         d().current_job = d().jobarray.get_remove_slow();
-        rslt = rslt_inprogress;
+        d().rslt = rslt_inprogress;
         return R_RESULT;
     }
 
-    rslt = rslt_ok;
-    return R_DONE;
+    if (rslt_kill == d().rslt)
+        return R_CANCEL;
+
+    d().rslt = rslt_idle;
+    return pass + 1;
+
 }
 /*virtual*/ void query_task_s::done(bool canceled)
 {
+    auto w = sync.lock_write();
+    file_transfer_s *ftr = w().ftr;
+
     if (canceled || ftr == nullptr)
     {
         __super::done(canceled);
         return;
     }
 
-    if (rslt == rslt_kill)
+    if (w().rslt == rslt_kill)
     {
-        ftr->kill(); //-V595
-        ASSERT(ftr == nullptr);
+        ftr->kill();
         __super::done(canceled);
         return;
     }
 
-    ASSERT( rslt == rslt_ok );
+    ASSERT( w().rslt == rslt_ok );
 
     ftr->upd_message_item(false);
 
@@ -1742,6 +1858,7 @@ query_task_s::~query_task_s()
 
 /*virtual*/ void query_task_s::result()
 {
+    file_transfer_s *ftr = sync.lock_write()().ftr;
     if (ftr) ftr->upd_message_item(false);
 }
 
@@ -1753,6 +1870,8 @@ void file_transfer_s::query( uint64 offset_, int sz )
         auto &job = d().jobarray.add();
         job.offset = offset_;
         job.sz = sz;
+        ASSERT( d().rslt == query_task_s::rslt_idle || d().rslt == query_task_s::rslt_inprogress );
+        d().rslt = query_task_s::rslt_inprogress;
         return;
     }
         
@@ -1790,15 +1909,15 @@ void file_transfer_s::resume()
 
     LARGE_INTEGER fsz = { 0 };
     GetFileSizeEx(wdata().handle, &fsz);
-    wdata().offset = fsz.QuadPart > 1024 ? fsz.QuadPart - 1024 : 0;
-    wdata().progrez = wdata().offset;
-    fsz.QuadPart = wdata().offset;
+    uint64 offset = fsz.QuadPart > 1024 ? fsz.QuadPart - 1024 : 0;
+    wdata().progrez = offset;
+    fsz.QuadPart = offset;
     SetFilePointer(wdata().handle, fsz.LowPart, &fsz.HighPart, FILE_BEGIN);
 
     accepted = true;
 
     if (active_protocol_c *ap = prf().ap(sender.protoid))
-        ap->file_resume( utag, wdata().offset );
+        ap->file_resume( utag, offset );
 
 }
 
@@ -1829,13 +1948,9 @@ void file_transfer_s::save(uint64 offset_, const ts::buf0_c&bdata)
 
     auto wdata = data.lock_write();
 
-    if ( wdata().offset != offset_ )
-    {
-        LARGE_INTEGER li;
-        li.QuadPart = offset_;
-        SetFilePointer(wdata().handle, li.LowPart, &li.HighPart, FILE_BEGIN);
-        wdata().offset = offset_;
-    }
+    LARGE_INTEGER li;
+    li.QuadPart = offset_;
+    SetFilePointer(wdata().handle, li.LowPart, &li.HighPart, FILE_BEGIN);
 
     DWORD w;
     WriteFile(wdata().handle, bdata.data(), bdata.size(), &w, nullptr);
@@ -1845,7 +1960,6 @@ void file_transfer_s::save(uint64 offset_, const ts::buf0_c&bdata)
         return;
     }
 
-    wdata().offset += bdata.size();
     wdata().progrez += bdata.size();
 
     if (bdata.size())

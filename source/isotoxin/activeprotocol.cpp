@@ -69,6 +69,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     features = r.get<int>();
                     conn_features = r.get<int>();
                     auto desc = r.getastr();
+                    auto desc_t = r.getastr();
                     audio_fmt.sampleRate = r.get<int>();
                     audio_fmt.channels = r.get<short>();
                     audio_fmt.bitsPerSample = r.get<short>();
@@ -77,6 +78,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     
                     w().set_config_result = CR_OK;
                     w().description.set_as_utf8(desc);
+                    w().description_t.set_as_utf8(desc_t);
 
                     int icondatasize;
                     const void *icondata = r.get_data(icondatasize);
@@ -204,26 +206,34 @@ bool active_protocol_c::cmdhandler(ipcr r)
     case HA_CONFIGURABLE:
         {
             auto w = syncdata.lock_write();
-
-            int n = r.get<int>();
-            for(int i = 0;i<n;++i)
-            {
-                ts::str_c f = r.getastr();
-                ts::str_c v = r.getastr();
-                if ( f.equals(CONSTASTR(CFGF_PROXY_TYPE)) )
-                    w().data.configurable.proxy.proxy_type = v.as_int();
-                else if ( f.equals(CONSTASTR(CFGF_PROXY_ADDR)) )
-                    w().data.configurable.proxy.proxy_addr = v;
-                else if (f.equals(CONSTASTR(CFGF_PROXY_ADDR)))
-                    w().data.configurable.proxy.proxy_addr = v;
-                else if (f.equals(CONSTASTR(CFGF_SERVER_PORT)))
-                    w().data.configurable.server_port = v.as_int();
-                else if (f.equals(CONSTASTR(CFGF_UDP_ENABLE)))
-                    w().data.configurable.udp_enable = v.as_int() != 0;
-                
-                w().data.configurable.initialized = true;
-            }
             w().flags.set(F_CONFIGURABLE_RCVD);
+            if (w().data.configurable.initialized)
+            {
+                configurable_s oldc = std::move(w().data.configurable);
+                w.unlock();
+                set_configurable(oldc,true);
+            } else
+            {
+                int n = r.get<int>();
+                for (int i = 0; i < n; ++i)
+                {
+                    ts::str_c f = r.getastr();
+                    ts::str_c v = r.getastr();
+                    if (f.equals(CONSTASTR(CFGF_PROXY_TYPE)))
+                        w().data.configurable.proxy.proxy_type = v.as_int();
+                    else if (f.equals(CONSTASTR(CFGF_PROXY_ADDR)))
+                        w().data.configurable.proxy.proxy_addr = v;
+                    else if (f.equals(CONSTASTR(CFGF_PROXY_ADDR)))
+                        w().data.configurable.proxy.proxy_addr = v;
+                    else if (f.equals(CONSTASTR(CFGF_SERVER_PORT)))
+                        w().data.configurable.server_port = v.as_int();
+                    else if (f.equals(CONSTASTR(CFGF_UDP_ENABLE)))
+                        w().data.configurable.udp_enable = v.as_int() != 0;
+
+                    w().data.configurable.initialized = true;
+                }
+            }
+
         }
         break;
     case HQ_PLAY_AUDIO:
@@ -553,8 +563,8 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
                 set_ostate(c->get_ostate());
             break;
         case PP_PROFILEOPTIONS:
-            if (!prf().get_options().is(UIOPT_PROTOICONS))
-                icons_cache.clear();
+            if (0 != (ch.bits & UIOPT_PROTOICONS) && !prf().get_options().is(UIOPT_PROTOICONS))
+                icons_cache.clear(); // FREE MEMORY
             break;
         case CFG_TALKVOLUME:
             syncdata.lock_write()().volume = cfg().vol_talk();
@@ -842,12 +852,15 @@ void active_protocol_c::stop_call(int cid, stop_call_e sc)
     ipcp->send(ipcw(AQ_STOP_CALL) << cid << ((char)sc));
 }
 
-void active_protocol_c::set_configurable( const configurable_s &c )
+void active_protocol_c::set_configurable( const configurable_s &c, bool force_send )
 {
     ASSERT(c.initialized);
-
     auto w = syncdata.lock_write();
-    if (!w().flags.is(F_CONFIGURABLE_RCVD)) return;
+    if (!w().flags.is(F_CONFIGURABLE_RCVD))
+    {
+        w().data.configurable = c; // just update, not send
+        return;
+    }
 
     configurable_s oldc = std::move(w().data.configurable);
     w().data.configurable = c;
@@ -855,7 +868,7 @@ void active_protocol_c::set_configurable( const configurable_s &c )
     if (!check_netaddr(w().data.configurable.proxy.proxy_addr))
         w().data.configurable.proxy.proxy_addr = CONSTASTR(DEFAULT_PROXY);
 
-    if (oldc != w().data.configurable)
+    if (force_send || oldc != w().data.configurable)
     {
         if (ipcp)
         {

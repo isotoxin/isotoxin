@@ -52,7 +52,6 @@ class gui_dialog_c : public gui_vscrollgroup_c
     DUMMY(gui_dialog_c);
 
     GM_RECEIVER(gui_dialog_c, GM_DIALOG_PRESENT);
-    GM_RECEIVER(gui_dialog_c, GM_CLOSE_DIALOG);
 
     int numtopbuttons = 0;
     int skipctls = 0;

@@ -161,11 +161,25 @@ template<> struct gmsg<GM_DRAGNDROP> : public gmsgbase
 
 extern int sysmodal;
 
+class guirect_watch_c
+{
+    friend class gui_c;
+    guirect_watch_c *prev = nullptr;
+    guirect_watch_c *next = nullptr;
+    GUIPARAMHANDLER h;
+    GUIPARAM p;
+    RID watchrid;
+public:
+    guirect_watch_c( RID r, GUIPARAMHANDLER h, GUIPARAM p = nullptr );
+    ~guirect_watch_c();
+};
+
 class gui_c
 {
 	friend class HOLD;
     friend class MODIFY;
     friend class delay_event_c;
+    friend class guirect_watch_c;
     template<typename R> friend struct MAKE_CHILD;
     template<typename R> friend struct MAKE_VISIBLE_CHILD;
 
@@ -179,6 +193,10 @@ class gui_c
 
     GM_RECEIVER(gui_c, GM_ROOT_FOCUS);
     GM_RECEIVER(gui_c, GM_UI_EVENT);
+
+    guirect_watch_c *first_watch = nullptr;
+    guirect_watch_c *last_watch = nullptr;
+
 
     ts::uint32 handle_char( ts::wchar c );
     ts::uint32 keyboard(const system_event_param_s & p);
@@ -310,9 +328,15 @@ private:
     void    delete_event(delay_event_c *dc);
 
     void heartbeat(); // every 1 second
+    void font_par(const ts::str_c& fn, ts::font_params_s& fprm) { app_font_par(fn, fprm); }
 protected:
     virtual void app_setup_custom_button(bcreate_s &) {};
+    virtual void app_font_par(const ts::str_c&, ts::font_params_s&fprm) { }
 public:
+
+    ts::TSCOLOR selection_color = ts::ARGB(255, 255, 0);
+    ts::TSCOLOR selection_bg_color = ts::ARGB(100, 100, 255);
+    ts::TSCOLOR selection_bg_color_blink = ts::ARGB(0, 0, 155);
 
     static const ts::uint32 casw_ctrl = 1U << 31;
     static const ts::uint32 casw_alt = 1U << 30;
@@ -339,6 +363,7 @@ public:
     ts::drawable_bitmap_c * acquire_texture( text_rect_dynamic_c *requester, const ts::ivec2 &size );
     void release_texture( ts::drawable_bitmap_c * t );
 
+    void reload_fonts();
     bool load_theme( const ts::wsptr&thn );
     
     const ts::font_desc_c & get_font( const ts::asptr &fontname );
@@ -346,6 +371,7 @@ public:
 
     void resort_roots();
 
+    bool repos_in_progress() const { return m_flags.is(F_PROCESSING_REPOS); }
     void repos_children( gui_group_c *g );
     void prepare_redraw_collector()
     {

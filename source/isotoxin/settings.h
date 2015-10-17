@@ -5,32 +5,44 @@ typedef fastdelegate::FastDelegate<bool (dialog_protosetup_params_s &params)> CO
 
 struct dialog_protosetup_params_s
 {
+    RID watch;
+
+    // new
+    ts::iweak_ptr<available_protocols_s> avprotos;
+    ts::str_c networktag; // if empty - choose network
+    tableview_active_protocol_s *protocols = nullptr;
+    CONFIRM_PROTOSETUP confirm;
+
+    // edit
+    ts::str_c proto_desc; // set only for edit new connections
     int protoid = 0;
     int features = 0;
     int conn_features = 0;
-    ts::str_c networktag;
 
     ts::str_c uname; // utf8
     ts::str_c ustatus; // utf8
     ts::str_c networkname; // utf8
     ts::wstr_c importcfg; // filename
-    CONFIRM_PROTOSETUP confirm;
     configurable_s configurable;
     bool connect_at_startup = true;
 
-
+    static ts::str_c setup_name( const ts::asptr &tag, int n );
 
     dialog_protosetup_params_s() {}
+
+    // new
+    dialog_protosetup_params_s(available_protocols_s *avprotos, tableview_active_protocol_s *protocols, CONFIRM_PROTOSETUP confirm) :
+        avprotos(avprotos), protocols(protocols), confirm(confirm) {}
+
+    // edit exist
+    dialog_protosetup_params_s(CONFIRM_PROTOSETUP confirm) : confirm(confirm) {}
     dialog_protosetup_params_s(int protoid);
-    dialog_protosetup_params_s(const ts::str_c &networktag,
-                               const ts::str_c &networkname,
-                               int f, int cf,
-                               CONFIRM_PROTOSETUP confirm
-                               ) : networktag(networktag), networkname(networkname), confirm(confirm), features(f), conn_features(cf) {}
-    dialog_protosetup_params_s(int protoid, const ts::str_c &uname,
-                               const ts::str_c &ustatus,
-                               const ts::str_c &networkname
-                               ) : protoid(protoid), uname(uname), ustatus(ustatus), networkname(networkname) {}
+
+
+    //dialog_protosetup_params_s(int protoid, const ts::str_c &uname,
+    //                           const ts::str_c &ustatus,
+    //                           const ts::str_c &networkname
+    //                           ) : protoid(protoid), uname(uname), ustatus(ustatus), networkname(networkname) {}
 };
 
 class dialog_setup_network_c;
@@ -44,8 +56,10 @@ template<> struct MAKE_ROOT<dialog_setup_network_c> : public _PROOT(dialog_setup
 
 class dialog_setup_network_c : public gui_isodialog_c
 {
+    guirect_watch_c watch;
     dialog_protosetup_params_s params;
     int addh = 0;
+    bool predie = false;
 
     bool uname_edit(const ts::wstr_c &t);
     bool ustatus_edit(const ts::wstr_c &t);
@@ -58,8 +72,13 @@ class dialog_setup_network_c : public gui_isodialog_c
     void set_proxy_type_handler(const ts::str_c&);
     bool set_proxy_addr_handler(const ts::wstr_c & t);
 
+    bool lost_contact(RID, GUIPARAM p);
+
+    void available_network_selected(const ts::str_c&);
+    menu_c get_list_avaialble_networks();
+
 protected:
-    /*virtual*/ int unique_tag() { return params.confirm ? UD_PROTOSETUPSETTINGS : UD_PROTOSETUP; }
+    /*virtual*/ int unique_tag() { return predie ? UD_NOT_UNIQUE : (params.watch ? UD_PROTOSETUPSETTINGS : UD_PROTOSETUP); }
     /*virtual*/ void created() override;
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
     /*virtual*/ int additions(ts::irect & border) override;
@@ -197,32 +216,19 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     ts::wstr_c sndvolctl[snd_count];
     ts::wstr_c sndplayctl[snd_count];
 
-
     int startopt = 0;
     bool startopt_handler( RID, GUIPARAM );
     int detect_startopts();
     void set_startopts();
     
 
-public:
-    struct protocols_s
-    {
-        UNIQUE_PTR( ts::drawable_bitmap_c ) icon;
-        ts::str_c  tag; // lan, tox
-        ts::str_c description; // utf8
-        int connection_features;
-        int features;
-    };
 private:
 
-    ts::array_inplace_t<protocols_s,0> available_prots;
-    const protocols_s *find_protocol(const ts::str_c& tag) const
+    struct avprots_s : public available_protocols_s
     {
-        for(const protocols_s& p : available_prots)
-            if (p.tag == tag)
-                return &p;
-        return nullptr;
-    }
+        /*virtual*/ void done(bool fail) override;
+    } available_prots;
+
     tableview_active_protocol_s * table_active_protocol = nullptr;
     tableview_active_protocol_s table_active_protocol_underedit;
 
@@ -234,25 +240,62 @@ private:
     bool profile_selected = false;
     bool checking_new_version = false;
 
-    bool mute_mic_on_gchat_invite = false;
-    bool mute_speaker_on_gchat_invite = false;
 
-    int common_opts_orig = 0;
-    int common_opts = 0;
+    enum bits_group_e
+    {
+        BGROUP_COMMON1,
+        BGROUP_COMMON2,
+        BGROUP_GCHAT,
+        BGROUP_MSGOPTS,
+        BGROUP_TYPING,
+        BGROUP_HISTORY,
 
-    int hist_opts_orig = 0;
-    int hist_opts = 0;
+        BGROUP_count
+    };
+
+    struct bits_edit_s
+    {
+        dialog_settings_c *settings = nullptr;
+        ts::flags32_s::BITS *source = nullptr;
+        int current = 0;
+
+        ts::flags32_s::BITS masks[8];
+        int nmasks = 0;
+        void add( ts::flags32_s::BITS m, bool value = false)
+        {
+            ASSERT(nmasks < ARRAY_SIZE(masks)-1);
+            int curvm = 1 << nmasks;
+            if (m)
+            {
+                bool srcval = (*source & m) != 0;
+                INITFLAG(current, curvm, srcval);
+            } else
+            {
+                INITFLAG(current, curvm, value);
+            }
+            masks[nmasks++] = m;
+        }
+        void flush();
+        bool handler(RID, GUIPARAM p);
+
+    } bgroups[BGROUP_count];
+
     
     int load_history_count = 0;
+    int set_away_on_timer_minutes_value_last = 0;
     int set_away_on_timer_minutes_value = 0;
 
     ts::flags32_s::BITS msgopts_current = 0;
-    ts::flags32_s::BITS msgopts_changed = 0;
+    ts::flags32_s::BITS msgopts_original = 0;
 
     ts::wstr_c auto_download_masks;
     ts::wstr_c manual_download_masks;
     ts::wstr_c downloadfolder;
     int fileconfirm = 0;
+
+    int fontsz = 1000;
+    float font_scale = 1.0f;
+    bool scale_font(RID, GUIPARAM);
 
     enter_key_options_s ctl2send = EKO_ENTER_NEW_LINE;
     int double_enter = 0;
@@ -263,14 +306,11 @@ private:
     int autoupdate_proxy = 0;
     ts::str_c autoupdate_proxy_addr;
 
-    ts::str_c selected_available_network;
     void on_delete_network(const ts::str_c&);
     bool delete_used_network(RID, GUIPARAM);
     void on_delete_network_2(const ts::str_c&);
     bool addeditnethandler(dialog_protosetup_params_s &params);
     bool addnetwork(RID, GUIPARAM);
-    menu_c get_list_avaialble_networks();
-    void available_network_selected(const ts::str_c&);
 
     bool check_update_now(RID, GUIPARAM);
 
@@ -287,12 +327,11 @@ private:
     void autoupdate_proxy_handler( const ts::str_c& );
     bool autoupdate_proxy_addr_handler( const ts::wstr_c & t );
     
-    const protocols_s * describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const;
+    const protocol_description_s * describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const;
 
     bool msgopts_handler( RID, GUIPARAM );
     bool commonopts_handler( RID, GUIPARAM );
     bool histopts_handler( RID, GUIPARAM );
-    bool gchatopts_handler( RID, GUIPARAM );
     bool away_minutes_handler(const ts::wstr_c &v);
     bool load_history_count_handler(const ts::wstr_c &v);
 
@@ -365,6 +404,5 @@ public:
     /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(830, 500); }
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
-    void protocols_loaded(ts::array_inplace_t<protocols_s, 0> &prots);
 };
 

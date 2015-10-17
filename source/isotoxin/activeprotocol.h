@@ -81,6 +81,7 @@ struct sync_data_s
     ts::buf0_c icon;
     active_protocol_data_s data;
     ts::str_c description; // utf8
+    ts::str_c description_t; // utf8
     ts::flags32_s flags;
     float volume = 1.0f;
     int dsp_flags = 0;
@@ -143,6 +144,7 @@ public:
     ~active_protocol_c();
 
     const ts::str_c &get_desc() const {return syncdata.lock_read()().description;};
+    const ts::str_c &get_desc_t() const {return syncdata.lock_read()().description_t;};
     const ts::str_c &get_name() const {return syncdata.lock_read()().data.name;};
     int get_features() const {return features; }
     int get_conn_features() const { return conn_features; }
@@ -152,7 +154,7 @@ public:
     const ts::str_c &get_ustatusmsg() const {return syncdata.lock_read()().data.user_statusmsg;};
     
     configurable_s get_configurable() const { return syncdata.lock_read()().data.configurable; };
-    void set_configurable( const configurable_s &c );
+    void set_configurable( const configurable_s &c, bool force_send = false );
 
     const s3::Format& defaudio() const {return audio_fmt;}
 

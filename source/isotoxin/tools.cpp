@@ -1,5 +1,6 @@
 #include "isotoxin.h"
 
+#define PROTO_ICON_SIZE 32
 
 const wraptranslate<ts::wsptr> __translation(const ts::wsptr &txt, int tag)
 {
@@ -161,10 +162,11 @@ void leech_dock_bottom_center_s::update_ctl_pos()
 {
     HOLD r(owner->getparent());
     ts::irect cr = r().get_client_area();
+    int xx = cr.lt.x;
     int xspace = x_space;
     if (xspace < 0)
     {
-        int rqw = (width * num) + (-xspace * (num + 1));
+        int rqw = (width * num) + (-xspace * (num - 1));
         xspace = (cr.width() - rqw) / 2;
     }
     cr.lt.x += xspace;
@@ -172,7 +174,7 @@ void leech_dock_bottom_center_s::update_ctl_pos()
     cr.rb.y -= y_space;
 
     float fx = (float)(cr.width() - (width * num)) / (float)(num + 1);
-    int x = xspace + lround(fx + (width + fx) * index);
+    int x = xx + xspace + lround(fx + (width + fx) * index);
 
     MODIFY(*owner).pos(x, cr.rb.y - height).size(width, height);
 }
@@ -186,6 +188,51 @@ void leech_dock_bottom_center_s::update_ctl_pos()
     {
         HOLD r(owner->getparent());
         ts::ivec2 szmin( width * num + x_space * 2, height + y_space );
+        ts::ivec2 szmax = HOLD(owner->getparent())().get_max_size();
+        r().calc_min_max_by_client_area(szmin, szmax);
+        fixrect(data.rectchg.rect, szmin, szmax, data.rectchg.area);
+        return false;
+    }
+
+    if (qp == SQ_PARENT_RECT_CHANGED)
+    {
+        update_ctl_pos();
+        return false;
+    }
+
+    return false;
+}
+
+void leech_dock_top_center_s::update_ctl_pos()
+{
+    HOLD r(owner->getparent());
+    ts::irect cr = r().get_client_area();
+    int xx = cr.lt.x;
+    int xspace = x_space;
+    if (xspace < 0)
+    {
+        int rqw = (width * num) + (-xspace * (num - 1));
+        xspace = (cr.width() - rqw) / 2;
+    }
+    cr.lt.x += xspace;
+    cr.rb.x -= xspace;
+    cr.lt.y += y_space;
+
+    float fx = (float)(cr.width() - (width * num)) / (float)(num + 1);
+    int x = xx + xspace + lround(fx + (width + fx) * index);
+
+    MODIFY(*owner).pos(x, cr.lt.y).size(width, height);
+}
+
+/*virtual*/ bool leech_dock_top_center_s::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    if (!ASSERT(owner)) return false;
+    if (owner->getrid() != rid) return false;
+
+    if (qp == SQ_PARENT_RECT_CHANGING)
+    {
+        HOLD r(owner->getparent());
+        ts::ivec2 szmin(width * num + x_space * 2, height + y_space);
         ts::ivec2 szmax = HOLD(owner->getparent())().get_max_size();
         r().calc_min_max_by_client_area(szmin, szmax);
         fixrect(data.rectchg.rect, szmin, szmax, data.rectchg.area);
@@ -588,6 +635,9 @@ void text_convert_char_tags(ts::str_c &text)
 }
 void text_adapt_user_input(ts::str_c &text)
 {
+    text.replace_all('\t', ' ');
+    text.replace_all(CONSTASTR("\r"), CONSTASTR(""));
+
     text.replace_all('<', '\1');
     text.replace_all('>', '\2');
     text.replace_all(CONSTASTR("\1"), CONSTASTR("<char=60>"));
@@ -773,6 +823,10 @@ ts::wstr_c loc_text(loctext_e lt)
             return TTT("Network",66);
         case loc_nonetwork:
             return TTT("No available networks to select",248);
+        case loc_disk_write_error:
+            return TTT("Disk write error (full?)",343);
+        case loc_import_from_file:
+            return TTT("Import configuration from file",56);
     }
     return ts::wstr_c();
 }
@@ -1409,6 +1463,89 @@ void install_to(const ts::wstr_c &path, bool acquire_admin_if_need)
                 return;
             }
     }
+}
+
+
+namespace
+{
+    struct load_proto_list_s : public ts::task_c
+    {
+        ts::iweak_ptr<available_protocols_s> prots2load;
+        load_proto_list_s(available_protocols_s *prots) :prots2load(prots) {}
+        ~load_proto_list_s() {}
+
+        int result_x = 1;
+        available_protocols_s available_prots;
+
+        bool ipchandler(ipcr r)
+        {
+            if (r.d == nullptr)
+            {
+                // lost contact to plghost
+                // just close settings
+                if (prots2load)
+                    prots2load->done(true);
+
+                result_x = R_CANCEL;
+                return false;
+            }
+            else
+            {
+                switch (r.header().cmd)
+                {
+                    case HA_PROTOCOLS_LIST:
+                    {
+                        int n = r.get<int>();
+                        while (--n >= 0)
+                        {
+                            protocol_description_s &proto = available_prots.add();
+                            r.getwstr(); // dll name / unused
+                            proto.tag = r.getastr();
+                            proto.description = r.getastr();
+                            proto.description_t = r.getastr();
+                            proto.version = r.getastr();
+                            proto.features = r.get<int>();
+                            proto.connection_features = r.get<int>();
+
+                            int icosz;
+                            const void *icodata = r.get_data(icosz);
+                            proto.icon.reset(prepare_proto_icon(proto.tag, icodata, icosz, PROTO_ICON_SIZE, IT_NORMAL));
+                        }
+
+                        result_x = R_DONE;
+                    }
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+
+        /*virtual*/ int iterate(int pass) override
+        {
+            isotoxin_ipc_s ipcj(ts::str_c(CONSTASTR("get_protocols_list_")).append_as_uint(GetCurrentThreadId()), DELEGATE(this, ipchandler));
+            ipcj.send(ipcw(AQ_GET_PROTOCOLS_LIST));
+            ipcj.wait_loop(nullptr);
+            ASSERT(result_x != 1);
+            return result_x;
+        }
+        /*virtual*/ void done(bool canceled) override
+        {
+            if (!canceled && prots2load)
+            {
+                *prots2load = std::move( available_prots );
+                prots2load->done(false);
+            }
+
+            __super::done(canceled);
+        }
+    };
+}
+
+void available_protocols_s::load()
+{
+    g_app->add_task(TSNEW(load_proto_list_s, this));
 }
 
 

@@ -11,6 +11,7 @@ enum notice_e
     NOTICE_CALL,
     NOTICE_FILE,
     NOTICE_GROUP_CHAT,
+    NOTICE_PREV_NEXT,
 };
 
 class gui_notice_c;
@@ -216,10 +217,8 @@ class gui_message_item_c : public gui_label_ex_c
     static const int BTN_UNPAUSE = 3;
     static const int RECT_IMAGE = 1000;
     static const int TYPING_SPACERECT = 1001;
+    static const int CTL_PROGRESSBAR = 1002;
 
-    static const int BTN_PREV = 65000;
-    static const int BTN_NEXT = 65001;
-    
     struct addition_data_s
     {
         virtual ~addition_data_s() {}
@@ -235,18 +234,21 @@ class gui_message_item_c : public gui_label_ex_c
         ts::array_inplace_t<btn_s, 1>  btns;
         ts::uninitialized<44 /* sizeof(image_loader_c) */ > imgloader;
 
+        ts::safe_ptr<gui_hslider_c> pbar;
+        ts::wstr_c rectt, pbtext;
+        float progress = 0;
+        int rwidth = 0, clw = -1;
+        ts::ivec2 pbsize = ts::ivec2(0);
+        const ts::wstr_c &getrectt(gui_message_item_c *mi);
+
         /*virtual*/ ~addition_file_data_s();
     };
 
     struct addition_prevnext_s : public addition_data_s
     {
-        RID rid_prev;
-        RID rid_next;
-
         uint64 prev;
         uint64 next;
-
-        ts::wstr_c prevnext;
+        int offset;
     };
 
 
@@ -346,9 +348,6 @@ class gui_message_item_c : public gui_label_ex_c
     void updrect_emoticons(const void *, int r, const ts::ivec2 &p);
     
     /*virtual*/ bool custom_tag_parser(ts::wstr_c& r, const ts::wsptr &tv) const override;
-    void goto_item( uint64 utag );
-    bool b_prev(RID, GUIPARAM);
-    bool b_next(RID, GUIPARAM);
 
     bool b_explore(RID, GUIPARAM);
     bool b_break(RID, GUIPARAM);
@@ -396,6 +395,36 @@ public:
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
+    uint64 get_prev_found() const
+    {
+        ASSERT( flags.is(F_FOUND_ITEM) && addition );
+        if (addition_prevnext_s *pn = ts::ptr_cast<addition_prevnext_s *>( addition.get() ))
+            return pn->prev;
+        return 0;
+    }
+    uint64 get_next_found() const
+    {
+        ASSERT(flags.is(F_FOUND_ITEM) && addition);
+        if (addition_prevnext_s *pn = ts::ptr_cast<addition_prevnext_s *>(addition.get()))
+            return pn->next;
+        return 0;
+    }
+    /*virtual*/ void update_offset(int offset) override
+    {
+        if (flags.is(F_FOUND_ITEM))
+            if (addition_prevnext_s *pn = ts::ptr_cast<addition_prevnext_s *>(addition.get()))
+                pn->offset = offset;
+    }
+    int get_offset() const
+    {
+        ASSERT(flags.is(F_FOUND_ITEM) && addition);
+        if (const addition_prevnext_s *pn = ts::ptr_cast<const addition_prevnext_s *>(addition.get()))
+            return pn->offset;
+        return 0;
+    }
+
+    bool found_item() const { return flags.is(F_FOUND_ITEM); }
+
     ts::wstr_c hdr() const;
     contact_c * get_author() const {return author;}
     message_type_app_e get_mt() const {return mt;}
@@ -413,6 +442,7 @@ public:
     bool delivered(uint64 utag);
     bool with_utag(uint64 utag) const;
     bool remove_utag(uint64 utag);
+    uint64 zero_utag() const {return zero_rec.utag;}
     
     void init_date_separator( const tm &tmtm );
     void init_request( const ts::str_c &message_utf8 );
@@ -434,26 +464,71 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_messagelist_c, GM_DROPFILES);
     GM_RECEIVER(gui_messagelist_c, GM_HEARTBEAT);
     GM_RECEIVER(gui_messagelist_c, ISOGM_REFRESH_SEARCH_RESULT );
+    GM_RECEIVER(gui_messagelist_c, ISOGM_CHANGED_SETTINGS );
+    
 
     SIMPLE_SYSTEM_EVENT_RECEIVER(gui_messagelist_c, SEV_ACTIVE_STATE);
 
     static const ts::flags32_s::BITS F_SEARCH_RESULTS_HERE = F_VSCROLLFREEBITSTART << 0;
+    static const ts::flags32_s::BITS F_EMPTY_MODE          = F_VSCROLLFREEBITSTART << 1;
+    static const ts::flags32_s::BITS F_IN_REPOS            = F_VSCROLLFREEBITSTART << 2;
+    static const ts::flags32_s::BITS F_SCROLLING_TO_TGT    = F_VSCROLLFREEBITSTART << 3;
 
     time_t last_seen_post_time = 0;
     tm last_post_time;
     ts::shared_ptr<contact_c> historian;
     ts::array_safe_t< gui_message_item_c, 1 > typing;
 
-    void clear_list();
+    void clear_list(bool empty_mode);
     gui_message_item_c &get_message_item(message_type_app_e mt, contact_c *author, const ts::str_c &skin, time_t post_time = 0, uint64 replace_post = 0);
+
+    void create_empty_mode_stuff();
+    void repos_empty_mode_stuff();
+
+    ts::safe_ptr<gui_button_c> btn_prev;
+    ts::safe_ptr<gui_button_c> btn_next;
+    int target_offset = 0;
+    int prevdelta = 0;
+
+    /*virtual*/ void on_manual_scroll() override
+    {
+        flags.clear(F_SCROLLING_TO_TGT);
+        __super::on_manual_scroll();
+    }
+
+    bool font_size_up(RID, GUIPARAM);
+    bool font_size_down(RID, GUIPARAM);
+
+    bool scroll_do(RID, GUIPARAM);
+    void scroll(int shift);
+    bool pageup(RID, GUIPARAM);
+    bool pagedown(RID, GUIPARAM);
+    bool totop(RID, GUIPARAM);
+    bool tobottom(RID, GUIPARAM);
+    bool lineup(RID, GUIPARAM);
+    bool linedown(RID, GUIPARAM);
 
 public:
     gui_messagelist_c(initial_rect_data_s &data);
     /*virtual*/ ~gui_messagelist_c();
 
+
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+
+    /*virtual*/ void children_repos_info(cri_s &info) const override;
+    /*virtual*/ void children_repos() override;
+
+    void find_prev_next(uint64 *prevutag, uint64 *nextutag);
+    void goto_item(uint64 utag);
+    bool b_prev(RID, GUIPARAM);
+    bool b_next(RID, GUIPARAM);
+    void set_prev_next_buttons(gui_button_c &_prev, gui_button_c &_next)
+    {
+        btn_prev = &_prev;
+        btn_next = &_next;
+    }
 
     void update_last_seen_message_time(time_t t)
     {
@@ -565,7 +640,8 @@ public:
     gui_conversation_c(initial_rect_data_s &data) :gui_vgroup_c(data) { /*defaultthrdraw = DTHRO_BASE;*/ }
     /*virtual*/ ~gui_conversation_c();
 
-    RID get_msglist() const { return msglist->getrid(); }
+    const gui_messagelist_c &get_msglist() const {return *msglist;}
+    gui_messagelist_c &get_msglist() { return *msglist; }
     void always_show_editor(bool f = true) { flags.init(F_ALWAYS_SHOW_EDITOR, f); hide_show_messageeditor(); }
 
     /*virtual*/ ts::ivec2 get_min_size() const override;

@@ -50,10 +50,10 @@ glyph_s &font_c::operator[](wchar c)
 	return *glyphs[c];
 }
 
-
-static bool operator==(const font_params_s &f1,const font_params_s &f2)
-{ return memcmp(&f1, &f2, sizeof(font_params_s)) == 0; }
-unsigned calc_hash(const font_params_s &f) {return calc_hash(&f, sizeof(f));}
+inline unsigned calc_hash(const font_params_s& fp)
+{
+    return calc_hash(fp.filename.as_sptr()) ^ calc_hash(&fp.size, sizeof(fp.size) + sizeof(fp.flags) + sizeof(fp.additional_line_spacing) + +sizeof(fp.outline_radius) + +sizeof(fp.outline_shift));
+}
 
 str_c font_c::makename_bold()
 {
@@ -136,7 +136,7 @@ namespace
         FT_Library ftlibrary;
         hashmap_t<wstr_c, font_face_s> font_faces_cache;
 	    hashmap_t<scaled_image_key_s, scaled_image_container_s> scaled_images_cache;
-	    hashmap_t<str_c, font_alias_s> fonts;
+	    hashmap_t<str_c, font_params_s> fonts;
 	    wstrings_c fonts_dirs;
 	    wstrings_c images_dirs;
 	    int font_cache_sig;
@@ -237,10 +237,19 @@ void add_image(const wsptr&name, const uint8* data, const imgdesc_s &imgdesc, bo
     i.height = imgdesc.sz.y;
 }
 
-font_c &font_c::buildfont(const wstr_c &filename, const str_c &fontname, const ivec2 &size, bool hinting, int additional_line_spacing, float outline_radius, float outline_shift)
+//const wstr_c &filename, const str_c &fontname, const ivec2 & size, bool hinting = true, int additional_line_spacing = 0, float outline_radius = .2f, float outline_shift = 0
+
+font_c &font_c::buildfont(const str_c &fontname, const font_params_s&fprs)
 {
+    //int scale = 100;
+    const ivec2 &size = fprs.size; //scale ? (fprs.size * (ui_scale(100) * scale/* + 50*/) + 5000) / 10000 : fprs.size;
+    bool hinting = fprs.flags != 0;
+    int additional_line_spacing = ui_scale(fprs.additional_line_spacing);
+    float outline_radius = fprs.outline_radius;
+    float outline_shift = fprs.outline_shift;
+
     internal_data_s &idta = idata();
-    wstr_c face(filename);
+    wstr_c face(fprs.filename);
 	//face.makeLowerCase();
 	if (face.find_pos('.') < 0) face.append(CONSTWSTR(".otf"));
 	bool added;
@@ -279,6 +288,7 @@ font_c &font_c::buildfont(const wstr_c &filename, const str_c &fontname, const i
 	}
 
 	font_params_s fp(size, hinting ? 0 : FT_LOAD_NO_HINTING, additional_line_spacing, outline_radius, outline_shift);
+    fp.filename = fprs.filename;
 	font_c &f = ff.fonts_cache.add(fp, added);
 	if (added)
 	{
@@ -376,41 +386,27 @@ scaled_image_s *scaled_image_s::load(const wsptr &filename_, const ivec2 &scale)
 	return &i;
 }
 
-static void add_font_internal(const asptr &name, const asptr &fdata)
+void font_params_s::setup(const asptr &fparams)
 {
-
-    font_alias_s &fa = idata().fonts.add(name);
-    token<char> t(fdata, ',');
-    fa.file = *t;
+    token<char> t(fparams, ',');
+    
+    filename = to_wstr(*t);
 
     ++t; token<char> tt(*t, '/');
 
-    fa.fp.size.x = tt->as_int();
-    ++tt; fa.fp.size.y = tt->as_int(fa.fp.size.x);
-    ++t; fa.fp.flags = t ? t->as_int(1) : 1;
-    ++t; fa.fp.additional_line_spacing = t ? t->as_int() : 0;
-    ++t; fa.fp.outline_radius = t ? t->as_float(.2f) : .2f;
-    ++t; fa.fp.outline_shift = t ? tmin(t->as_float(.99f), .99f) : 0;
+    size.x = tt->as_int();
+    ++tt; size.y = tt->as_int(size.x);
+    ++t; flags = t ? t->as_int(1) : 1;
+    ++t; additional_line_spacing = t ? t->as_int() : 0;
+    ++t; outline_radius = t ? t->as_float(.2f) : .2f;
+    ++t; outline_shift = t ? tmin(t->as_float(.99f), .99f) : 0;
+    dirty = true;
 }
 
-
-void add_font(const asptr &name, const asptr &fdata)
+void add_font(const asptr &name, const font_params_s &fparams)
 {
-    add_font_internal(name,fdata);
-}
-
-void load_fonts( const abp_c &bp )
-{
-	idata().fonts.clear();
-
-	for (auto bpr = bp.begin(); bpr; ++bpr)
-        add_font_internal(bpr.name(), bpr->as_string().as_sptr());
-}
-
-void font_desc_c::update_font()
-{
-    if (fontsig != idata().font_cache_sig)
-        update();
+    font_params_s &fp = idata().fonts.add(name);
+    fp = fparams;
 }
 
 font_c *font_desc_c::get_font() const
@@ -425,41 +421,29 @@ font_c *font_desc_c::get_font() const
 	return font;
 }
 
-bool font_desc_c::assign(const asptr &iparams, bool andUpdate)
+bool font_desc_c::assign(const str_c &fontname_)
 {
-    if (params.equals(iparams)) return false;
-    params.set(iparams);
-	
-    token<char> t(params,',');
-    fontname = *t;
-	font_alias_s *fa = idata().fonts.get(fontname);
-	if (!CHECK(fa, "Font alias not found: " << (*t)))
-    {
-        fontname = CONSTASTR("default");
-        fa = idata().fonts.get(fontname);
-    }
-	filename = to_wstr(fa->file);
-	fp = fa->fp;
-    
-    ++t;
-	if (t)
-	{
-        token<char> tt(*t,'/');
-
-		fp.size.x = tt->as_int();
-        ++tt; fp.size.y = tt->as_int(fp.size.x);
-		fp.additional_line_spacing = (fp.additional_line_spacing * fp.size.y + 50) / 100;
-		fp.size = (fa->fp.size * fp.size + 50) / 100;
-	}
-	if (andUpdate) update();
-
+    fontname = fontname_;
+    update();
     return true;
 }
 
-void font_desc_c::update(int scale)
+void font_desc_c::update()
 {
-	font = &font_c::buildfont(filename, fontname, scale ? (fp.size * (ui_scale(100) * scale/* + 50*/) + 5000) / 10000 : fp.size, fp.flags != 0, ui_scale(fp.additional_line_spacing), fp.outline_radius, fp.outline_shift);
-	fontsig = idata().font_cache_sig;
+    font_params_s *fp_ = idata().fonts.get(fontname);
+    if (!CHECK(fp_, "Font not found: " << fontname))
+    {
+        fontname = CONSTASTR("default");
+        fp_ = idata().fonts.get(fontname);
+    }
+    fp = *fp_;
+
+    if (fp.dirty || fontsig != idata().font_cache_sig)
+    {
+        font = &font_c::buildfont(fontname, fp);
+        fontsig = idata().font_cache_sig;
+        fp.dirty = false;
+    }
 }
 
 

@@ -57,12 +57,13 @@ __forceinline time_t now()
 bool AssertFailed(const char *file, int line, const char *s, ...);
 inline bool AssertFailed(const char *file, int line) {return AssertFailed(file, line, "");}
 
-void LogMessage(const char *caption, const char *msg);
+void LogMessage(const char *fn, const char *caption, const char *msg);
 int LoggedMessageBox(const char *text, const char *caption, UINT type);
 
 bool Warning(const char *s, ...);
 void Error(const char *s, ...);
 void Log(const char *s, ...);
+void LogToFile(const char *fn, const char *s, ...);
 
 #define NOWARNING(n,...) __pragma(warning(push)) __pragma(warning(disable:n)) __VA_ARGS__ __pragma(warning(pop))
 
@@ -370,12 +371,19 @@ public:
     void add_data(const void *d, int s)
     {
         auto &b = buf[newdata];
-
         size_t offset = b.size();
         b.resize(offset + s);
         memcpy(b.data() + offset, d, s);
-
     }
+    void add_data( fifo_stream_c &ofifo )
+    {
+        size_t av = ofifo.available();
+        auto &b = buf[newdata];
+        size_t offset = b.size();
+        b.resize(offset + av);
+        ofifo.read_data( b.data() + offset, av );
+    }
+
     void get_data(int offset, byte *dest, int size); // copy data and leave it in buffer
     int read_data(byte *dest, int size); // dest can be null
     void clear()
@@ -386,7 +394,61 @@ public:
         newdata = 0;
         readpos = 0;
     }
-    int available()  const { return buf[readbuf].size() - readpos + buf[readbuf ^ 1].size(); }
+    size_t available()  const { return buf[readbuf].size() - readpos + buf[readbuf ^ 1].size(); }
+};
+
+struct ranges_s
+{
+    struct range_s
+    {
+        u64 offset0;
+        u64 offset1;
+        range_s(u64 _offset0, u64 _offset1):offset0(_offset0), offset1(_offset1) {}
+    };
+    std::vector<range_s> ranges;
+
+    void add(u64 _offset0, u64 _offset1)
+    {
+        if (ranges.size() == 0)
+        {
+            ranges.emplace_back(_offset0, _offset1);
+            return;
+        }
+
+        int cnt = ranges.size();
+        for (int i = 0; i < cnt; ++i)
+        {
+            range_s r = ranges[i]; // copy
+
+            if (_offset0 > r.offset1)
+                continue;
+
+            if (_offset1 < r.offset0)
+            {
+                ranges.insert(ranges.begin()+i, range_s(_offset0,_offset1));
+                return;
+            }
+            if (_offset1 == r.offset0)
+            {
+                r.offset0 = _offset0;
+                ranges.erase(ranges.begin()+i);
+                add(r.offset0, r.offset1);
+                return;
+            }
+            if (_offset0 == r.offset1)
+            {
+                r.offset1 = _offset1;
+                ranges.erase(ranges.begin()+i);
+                add(r.offset0, r.offset1);
+                return;
+            }
+
+            return;
+        }
+
+        ranges.emplace_back(_offset0, _offset1);
+    }
+
 };
 
 template< typename VEC, typename EL > int findIndex(const VEC &vec, const EL & el)

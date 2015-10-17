@@ -5,6 +5,12 @@
 
 #include "glyphscache.h"
 
+#define GTYPE_RECTANGLE ((ts::uint8 *)1) // special pointer value - 1 - means rectangle
+#define GTYPE_BGCOLOR_BEGIN ((ts::uint8 *)2)
+#define GTYPE_BGCOLOR_MIDDLE ((ts::uint8 *)3)
+#define GTYPE_BGCOLOR_END ((ts::uint8 *)4)
+#define GTYPE_DRAWABLE ((ts::uint8 *)16) // nullptr or value less 16 means special glyph, skipped while draw. 16 value let this glyph drawable
+
 namespace ts
 {
 	NUMGEN_START(dopb, 0);

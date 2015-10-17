@@ -90,25 +90,32 @@ void config_base_c::changed(bool save_all_now)
     DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, save_dirty), save_all_now ? 1 : 0);
 }
 
+extern parsed_command_line_s g_commandline;
 bool find_config(ts::wstr_c &path)
 {
     bool local_write_protected = false;
     ts::wstr_c exepath = ts::get_exe_full_name();
-    if (ts::check_write_access( ts::fn_get_path(exepath) ))
+    if (g_commandline.alternative_config_path.is_empty())
     {
-        // ignore write protected path
-        // never never never store config in program files
-        path = ts::fn_change_name_ext(exepath, CONSTWSTR("config.db"));
-        if (ts::is_file_exists(path)) return true;
+        if (ts::check_write_access(ts::fn_get_path(exepath)))
+        {
+            // ignore write protected path
+            // never never never store config in program files
+            path = ts::fn_change_name_ext(exepath, CONSTWSTR("config.db"));
+            if (ts::is_file_exists(path)) return true;
 
 #ifdef _DEBUG
-        if ( exepath.find_pos(CONSTWSTR("Program Files")) < 0 )
-            return false;
+            if (exepath.find_pos(CONSTWSTR("Program Files")) < 0)
+                return false;
 #endif
-    } else
-        local_write_protected = g_app != nullptr;
+        }
+        else
+            local_write_protected = g_app != nullptr;
 
-    path = ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%APPDATA%\\Isotoxin\\config.db")), FNO_FULLPATH | FNO_PARSENENV);
+        path = ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%APPDATA%\\Isotoxin\\config.db")), FNO_FULLPATH | FNO_PARSENENV);
+    } else
+        path = ts::fn_fix_path(ts::fn_join(g_commandline.alternative_config_path, CONSTWSTR("config.db")), FNO_FULLPATH | FNO_PARSENENV);
+
     bool prsnt = ts::is_file_exists(path);
     if (!prsnt)
     {

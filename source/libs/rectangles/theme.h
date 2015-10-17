@@ -240,6 +240,8 @@ struct theme_image_s : ts::image_extbody_c
     void draw( rectengine_c &eng, const ts::ivec2 &p ) const;
 };
 
+typedef fastdelegate::FastDelegate<void(const ts::str_c&, ts::font_params_s&)> FONTPAR;
+
 class theme_c
 {
     
@@ -253,13 +255,28 @@ class theme_c
 
 	const ts::drawable_bitmap_c &loadimage( const ts::wsptr &name );
 
+    struct theme_font_s
+    {
+        ts::str_c fontname;
+        ts::font_params_s fontparam;
+        theme_font_s(const ts::str_c &fontname, const ts::font_params_s &fontparam):fontname(fontname), fontparam(fontparam) {}
+    };
+    ts::array_inplace_t<theme_font_s, 1> prefonts;
+
 public:
 	theme_c();
 	~theme_c();
 
     int ver() const {return iver;}
 
-	bool load( const ts::wsptr &name );
+    template<typename FF> void font_params( const ts::asptr &fname, const FF &ff ) const
+    {
+        for (const theme_font_s &thf : prefonts)
+            if (thf.fontname.begins(fname))
+                return ff(thf.fontparam);
+    }
+    void reload_fonts(FONTPAR fp);
+	bool load( const ts::wsptr &name, FONTPAR fp );
 	ts::shared_ptr<theme_rect_s> get_rect(const ts::asptr &rname) const
 	{
 		const ts::shared_ptr<theme_rect_s> *p = rects.get(rname);

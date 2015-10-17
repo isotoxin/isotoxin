@@ -32,12 +32,13 @@ enum messages_options_e
     UIOPT_SHOW_SEARCH_BAR       = SETBIT(16),
     UIOPT_PROTOICONS            = SETBIT(17),
     UIOPT_AWAYONSCRSAVER        = SETBIT(18),
+    UIOPT_SHOW_NEWCONN_BAR      = SETBIT(19),
 
     GCHOPT_MUTE_MIC_ON_INVITE   = SETBIT(24),
     GCHOPT_MUTE_SPEAKER_ON_INVITE = SETBIT(25),
 };
 
-#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_AWAYONSCRSAVER | GCHOPT_MUTE_MIC_ON_INVITE)
+#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | GCHOPT_MUTE_MIC_ON_INVITE)
 
 
 enum dsp_flags_e
@@ -129,9 +130,6 @@ struct unfinished_file_transfer_s
 
 template<typename T> struct load_on_start { static const bool value = true; };
 template<> struct load_on_start<history_s> { static const bool value = false; };
-
-template<typename T> struct default_rows { static const int value = 0; static void setup_default(int index, T& d) {} };
-template<> struct default_rows < active_protocol_s > { static const int value = 2; static void setup_default(int index, active_protocol_s& d); };
 
 
 template<typename T, profile_table_e tabi> struct tableview_t
@@ -276,6 +274,8 @@ enum enter_key_options_s
     EKO_ENTER_NEW_LINE_DOUBLE_ENTER,
 };
 
+struct dialog_protosetup_params_s;
+
 class profile_c : public config_base_c
 {
     #define TAB(tab) tableview_##tab##_s table_##tab;
@@ -318,6 +318,8 @@ public:
 
     static void mb_warning_readonly(bool minimize);
     static void mb_error_unique_profile(const ts::wsptr & prfn, bool modal = false);
+
+    bool addeditnethandler(dialog_protosetup_params_s &params);
 
     void shutdown_aps();
     template<typename APR> void iterate_aps( APR apr ) const
@@ -433,6 +435,8 @@ public:
     TEXTWPAR(auto_confirm_masks, "*.png; *.jpg; *.gif; *.avi; *.mp4; *.mkv");
     TEXTWPAR(manual_confirm_masks, "*.exe; *.com; *.bat; *.cmd; *.vbs");
     INTPAR(fileconfirm, 0);
+
+    FLOATPAR(fontscale_conv_text, 1.0f);
 
     TEXTAPAR( unique_profile_tag, "" )
 

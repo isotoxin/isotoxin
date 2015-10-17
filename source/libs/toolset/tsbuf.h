@@ -291,6 +291,7 @@ template<aint GRANULA, typename ALLOCATOR> struct BUFFER_RESIZABLE_COPY_ON_DEMAN
     }
 };
 
+bool check_disk_file(const wsptr &name, const uint8 *data, aint size);
 
 template<typename CORE> class buf_t
 {
@@ -665,7 +666,7 @@ public:
     }
     //////////////////////////////////////////////////////////////////////////////////////////////
 
-    void save_to_file(const wsptr &name, int disp = 0) const
+    bool save_to_file(const wsptr &name, aint disp = 0, bool check_write = false) const
     {
         HANDLE f = CreateFileW(tmp_wstr_c(name), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (f != INVALID_HANDLE_VALUE)
@@ -673,7 +674,14 @@ public:
             DWORD w;
             WriteFile(f, core() + disp, core.size() - disp, &w, nullptr);
             CloseHandle(f);
+
+            if (check_write)
+                return check_disk_file( name, data() + disp, size() - disp );
+
+            return true;
         }
+
+        return false;
     }
 
     bool    load_from_disk_file(const wsptr &fn, bool text = false)

@@ -31,6 +31,14 @@ aint fifo_buf_c::read_data(void *dest, aint size)
 }
 
 
+bool check_disk_file(const wsptr &name, const uint8 *data, aint size)
+{
+    buf_c b;
+    b.load_from_disk_file(name);
+    if (b.size() != size)
+        return false;
 
+    return blk_cmp(b.data(), data, size);
+}
 
 } // namespace ts

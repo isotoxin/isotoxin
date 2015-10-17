@@ -142,15 +142,22 @@ gui_c::~gui_c()
     gui = nullptr;
 }
 
+void gui_c::reload_fonts()
+{
+    m_theme.reload_fonts( DELEGATE(this, font_par) );
+
+    for (auto it = m_fonts.begin(); it; ++it)
+        it->update();
+
+}
+
 bool gui_c::load_theme( const ts::wsptr&thn )
 {
-    if (!m_theme.load(thn)) return false;
+    if (!m_theme.load(thn, DELEGATE(this, font_par))) return false;
 
     for(auto it = m_fonts.begin(); it; ++it)
-    {
-        ts::str_c name = it->name();
-        it->reasign( name );
-    }
+        it->update();
+
     return true;
 }
 
@@ -158,8 +165,8 @@ const ts::font_desc_c & gui_c::get_font(const ts::asptr &fontname)
 {
     bool add = false;
     auto &val = m_fonts.add_get_item(fontname, add);
-    if (add) val.value.assign(fontname);
-    else val.value.update_font();
+    if (add) val.value.assign(val.key);
+    else val.value.update();
     return val.value;
 }
 
@@ -614,6 +621,20 @@ void gui_c::exclusive_input(RID r, bool set)
     }
 }
 
+guirect_watch_c::guirect_watch_c(RID r, GUIPARAMHANDLER h, GUIPARAM p):watchrid(r), h(h), p(p)
+{
+    if(gui && r)
+    {
+        LIST_ADD(this, gui->first_watch, gui->last_watch, prev, next);
+    }
+}
+guirect_watch_c::~guirect_watch_c()
+{
+    if (gui && watchrid)
+        LIST_DEL( this, gui->first_watch, gui->last_watch, prev, next );
+}
+
+
 void gui_c::nomorerect(RID rid, bool isroot)
 {
     if (isroot) m_roots.find_remove_fast(rid);
@@ -638,8 +659,22 @@ void gui_c::nomorerect(RID rid, bool isroot)
             }
     }
 
-    // обеспечиваем реюз RID-ов, т.к. RID по сути - индекс в массиве прямоугольников, а рост этого массива желательно минимизировать
-    m_emptyids.add( ts::pair_s<ts::Time, RID>( ts::Time::current() + 1000, rid ) ); // выставляем разрешающее время на секунду вперед
+    // provide RID's reuse
+    //due RID is index, we want to minimize RID grow
+    m_emptyids.add( ts::pair_s<ts::Time, RID>( ts::Time::current() + 1000, rid ) ); // reuse timeout set to 1 second
+
+    for(guirect_watch_c *x = first_watch; x; )
+    {
+        if (x->watchrid == rid)
+        {
+            LIST_DEL_CLEAR(x, first_watch, last_watch, prev, next);
+            x->watchrid = RID();
+            x->h(rid,x->p); // after call of this handler, watch list can be totally changed
+            x = first_watch; // so, we have to restart search from begining
+            continue;
+        }
+        x = x->next;
+    }
 }
 
 void gui_c::resort_roots()
@@ -1142,9 +1177,17 @@ bool selectable_core_s::selectword(RID, GUIPARAM p)
         int chari = ts::glyphs_get_charindex(glyphs,glyph_under_cursor);
         if (chari >= 0 && chari < owner->get_text().get_length())
         {
+            int glyphs_start = 0;
+            int glyph_count = glyphs.count();
+            if (glyph_count && glyphs.get(0).pixels == nullptr && glyphs.get(0).outline_index > 0)
+            {
+                glyphs_start = 1;
+                glyph_count = glyphs.get(0).outline_index;
+            }
+
             glyph_end_sel = glyph_start_sel = glyph_under_cursor;
-            for (; glyph_start_sel > 0 && !IS_WORDB(ggetchar(glyph_start_sel - 1)); glyph_start_sel--);
-            for (; glyph_end_sel < glyphs.count() && !IS_WORDB(ggetchar(glyph_end_sel)); glyph_end_sel++);
+            for (; glyph_start_sel > glyphs_start && !IS_WORDB(ggetchar(glyph_start_sel - 1)); glyph_start_sel--);
+            for (; glyph_end_sel < glyph_count && !IS_WORDB(ggetchar(glyph_end_sel)); glyph_end_sel++);
 
             char_start_sel = ts::glyphs_get_charindex(glyphs, glyph_start_sel);
             char_end_sel = ts::glyphs_get_charindex(glyphs, glyph_end_sel);
@@ -1162,12 +1205,20 @@ void selectable_core_s::select_by_charinds(gui_label_c *label, int char_start_se
     begin(label);
     ts::GLYPHS &glyphs = owner->get_glyphs();
     int cnt = glyphs.count();
+    int glyphs_start = 0;
+    if (cnt && glyphs.get(0).pixels == nullptr && glyphs.get(0).outline_index > 0)
+    {
+        glyphs_start = 1;
+        cnt = glyphs.get(0).outline_index;
+    }
+
+
     bool almost = false;
     bool altend = false;
-    for(int i=0;i<cnt;++i)
+    for(int i=glyphs_start;i<cnt;++i)
     {
         const ts::glyph_image_s &gi = glyphs.get(i);
-        if (gi.pixels >= (ts::uint8 *)(16))
+        if (gi.pixels >= GTYPE_DRAWABLE)
         {
             if (gi.charindex == char_start_sel_)
             {
@@ -1264,9 +1315,9 @@ void selectable_core_s::selection_stuff(ts::drawable_bitmap_c &texture, const ts
     ts::GLYPHS &glyphs = owner->get_glyphs();
     if (isel0 >= glyphs.count()) return;
 
-    ts::TSCOLOR selectionColor = ts::ARGB(255, 255, 0);
-    ts::TSCOLOR selectionBgColor = ts::ARGB(100, 100, 255);
-    if (flashing & 1) selectionBgColor = ts::ARGB(0, 0, 155);
+    ts::TSCOLOR selectionColor = gui->selection_color;
+    ts::TSCOLOR selectionBgColor = gui->selection_bg_color;
+    if (flashing & 1) selectionBgColor = gui->selection_bg_color_blink;
     for (int i = isel0; i < isel1; ++i)
     {
         ts::glyph_image_s &gi = glyphs.get(i);
@@ -1281,7 +1332,7 @@ void selectable_core_s::selection_stuff(ts::drawable_bitmap_c &texture, const ts
         if (gi.pixels == nullptr && gi.outline_index < 0)
         {
             y = gi.line_lt.y + 2;
-            h = gi.line_rb.y - y + 2;
+            h = gi.line_rb.y - y + 3;
             break;
         }
     }
@@ -1298,7 +1349,7 @@ void selectable_core_s::selection_stuff(ts::drawable_bitmap_c &texture, const ts
             if (gi.outline_index < 0)
             {
                 y = gi.line_lt.y + 2;
-                h = gi.line_rb.y - y + 2;
+                h = gi.line_rb.y - y + 3;
             }
             continue;
         }

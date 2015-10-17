@@ -525,10 +525,12 @@ void gui_button_c::draw()
             text_draw_params_s tdp;
             draw_data_s &dd = m_engine->begin_draw();
             if (flags.is(F_DISABLED_USE_ALPHA) && flags.is(F_DISABLED)) dd.alpha = 128;
-            dd.offset.x += desc->rects[drawstate].width();
+            int toffs = desc->rects[drawstate].width() + 2;
+            dd.offset.x += toffs;
             dd.size = sz;
+            dd.size.x -= toffs;
             tdp.forecolor = desc->colors + drawstate;
-            ts::flags32_s f; f.set(ts::TO_VCENTER);
+            ts::flags32_s f; f.set(ts::TO_VCENTER|ts::TO_LINE_END_ELLIPSIS);
             tdp.textoptions = &f;
             tdp.rectupdate = updaterect;
             if (dd.size >> 0) m_engine->draw(text, tdp);
@@ -1403,9 +1405,7 @@ void gui_group_c::children_repos()
 void gui_group_c::children_repos_info( cri_s &info ) const
 {
     info.area = get_client_area();
-    info.from = 0;
     info.count = getengine().children_count();
-    info.areasize = 0;
 }
 
 bool gui_group_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -1460,7 +1460,6 @@ void gui_hgroup_c::update_proportions()
 void gui_hgroup_c::children_repos_info(cri_s &info) const
 {
     info.area = get_client_area();
-    info.from = 0;
     info.count = getengine().children_count();
     info.areasize = info.area.width();
 }
@@ -2064,7 +2063,12 @@ void gui_vscrollgroup_c::children_repos()
     cri_s info;
     children_repos_info(info);
 
-    if (info.count <= 0) return;
+    if (info.count <= 0)
+    {
+        flags.clear(F_SBVISIBLE);
+        flags.set( F_SCROLL_TO_END );
+        return;
+    }
     if (!info.area) return;
 
     if (flags.is(F_SCROLL_TO_END))
@@ -2078,8 +2082,7 @@ void gui_vscrollgroup_c::children_repos()
         int maxw;
     };
 
-    ts::aint sz = sizeof(ctl_info_s) * info.count;
-    ctl_info_s *infs = (ctl_info_s *)_alloca(sz);
+    ts::tmp_tbuf_t<ctl_info_s> infs(info.count); infs.set_count(info.count);
 
     int sbwidth = 0;
 
@@ -2089,8 +2092,9 @@ void gui_vscrollgroup_c::children_repos()
     int vheight = 0;
     for(int i=0;i<info.count;++i)
     {
+        ctl_info_s &inf = infs.get(i);
         rectengine_c * e = getengine().get_child(i+info.from);
-        if (e == nullptr) { infs[i].h = 0; continue; }
+        if (e == nullptr) { inf.h = 0; continue; }
         const guirect_c &r = e->getrect();
         int h = r.get_height_by_width( info.area.width()-sbwidth );
         ts::ivec2 maxsz = r.get_max_size();
@@ -2098,8 +2102,8 @@ void gui_vscrollgroup_c::children_repos()
             h = r.getprops().is_visible() ? ts::CLAMP(height_need, r.get_min_size().y, maxsz.y) : 0;
         e->__spec_set_outofbound(true);
 
-        infs[i].h = h;
-        infs[i].maxw = maxsz.x;
+        inf.h = h;
+        inf.maxw = maxsz.x;
         if (e == scroll_target)
         {
             scroll_target_y = vheight;
@@ -2137,31 +2141,50 @@ void gui_vscrollgroup_c::children_repos()
                 sbhelper.shift = info.area.height() - scroll_target_y - scroll_target_h;
         }
     }
-
+    top_visible = nullptr;
     for( ts::aint i = 0, y = sbhelper.shift; i < info.count; ++i )
     {
-        int h = infs[i].h;
-        if (h == 0)
+        ctl_info_s &inf = infs.get(i);
+        if (inf.h == 0)
             continue;
 
-        ts::irect crect( ts::ivec2(info.area.lt.x, info.area.lt.y + y), ts::ivec2(info.area.rb.x, info.area.lt.y + y + h) );
+        ts::irect crect( ts::ivec2(info.area.lt.x, info.area.lt.y + y), ts::ivec2(info.area.rb.x, info.area.lt.y + y + inf.h) );
         crect.intersect(info.area);
         if (!crect)
         {
+            if (info.update_offset)
+            {
+                rectengine_c *e = getengine().get_child(i+info.from);
+                e->getrect().update_offset(-(y-sbhelper.shift));
+
+                y += inf.h;
+                continue;
+            }
+
             if (y < 0)
             {
-                y += h;
+                y += inf.h;
                 continue;
             }
 
             break;
         }
         rectengine_c *e = getengine().get_child(i+info.from);
+
+        if (info.update_offset)
+            e->getrect().update_offset(-(y-sbhelper.shift));
+
+        if (top_visible.expired())
+        {
+            top_visible = e;
+            top_visible_offset = y;
+        }
+
         e->__spec_set_outofbound(false);
-        int w = ts::tmin( infs[i].maxw, info.area.width()-sbwidth );
-        MODIFY( e->getrect() ).pos( info.area.lt.x, info.area.lt.y + y ).size( w, h );
+        int w = ts::tmin( inf.maxw, info.area.width()-sbwidth );
+        MODIFY( e->getrect() ).pos( info.area.lt.x, info.area.lt.y + y ).size( w, inf.h );
         drawflags.set_bit(i, true);
-        y += h;
+        y += inf.h;
     }
 
     flags.init( F_SCROLL_TO_END, !flags.is(F_SBVISIBLE) || sbhelper.at_end(info.area.height()) );
@@ -2175,27 +2198,25 @@ void gui_vscrollgroup_c::on_add_child(RID id)
 
 void gui_vscrollgroup_c::scroll_to_begin()
 {
-    flags.clear(F_SCROLL_TO_END);
-    scroll_target = nullptr;
+    on_manual_scroll();
     sbhelper.shift = 0;
     gui->repos_children(this);
 }
 
 void gui_vscrollgroup_c::scroll_to_end()
 {
+    on_manual_scroll();
     flags.set(F_SCROLL_TO_END);
-    scroll_target = nullptr;
     gui->repos_children(this);
 }
 
 void gui_vscrollgroup_c::scroll_to_child(rectengine_c *reng, bool maxtop)
 {
+    on_manual_scroll();
     flags.init(F_SCROLL_TO_MAX_TOP, maxtop);
-    flags.clear(F_SCROLL_TO_END);
     scroll_target = reng;
     gui->repos_children(this);
 }
-
 
 bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
@@ -3150,9 +3171,21 @@ bool gui_hslider_c::setval(RID, GUIPARAM p)
 
 void gui_hslider_c::set_value(float val)
 {
+    if (flags.is(F_PBMODE)) return;
     pos = values.find_t(val);
     update_text_value();
     getengine().redraw();
+}
+
+void gui_hslider_c::set_level(float val, const ts::wstr_c &txt)
+{
+    if (!current_value_text.equals(txt))
+    {
+        current_value_text = txt;
+        getengine().redraw();
+    }
+
+    set_level(val);
 }
 
 void gui_hslider_c::set_level(float level_)
@@ -3220,9 +3253,16 @@ void gui_hslider_c::set_level(float level_)
                 }
 
 
-                int caret_width = th->sis[SI_CENTER].width();
-                int x = lround( (float)(cla.width() - caret_width) * pos ) + cla.lt.x;
-                m_engine->draw(ts::ivec2(x, cla.lt.y), th->src, th->sis[SI_CENTER], th->is_alphablend(SI_CENTER));
+                int caret_width = 0, x = 0;
+                if (flags.is(F_PBMODE))
+                {
+                    pos = 0;
+                } else
+                {
+                    caret_width = th->sis[SI_CENTER].width();
+                    x = lround((float)(cla.width() - caret_width) * pos) + cla.lt.x;
+                    m_engine->draw(ts::ivec2(x, cla.lt.y), th->src, th->sis[SI_CENTER], th->is_alphablend(SI_CENTER));
+                }
 
                 ts::ivec2 tsz = gui->tr().calc_text_size(ts::g_default_text_font, current_value_text, (cla.width()-caret_width)/2, 0, nullptr);
 

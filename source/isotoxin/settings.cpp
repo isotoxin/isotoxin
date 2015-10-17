@@ -4,8 +4,6 @@
 
 #define HGROUP_MEMBER ts::wsptr()
 
-#define PROTO_ICON_SIZE 32
-
 #define TEST_RECORD_LEN 5000
 
 static menu_c list_proxy_types(int cur, MENUHANDLER mh, int av = -1)
@@ -45,7 +43,10 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
     s3::get_capture_device(&mic_device_stored);
     profile_selected = prf().is_loaded();
 
-    //ts::tbuf0_t<theme_info_s> m_themes;
+    fontsz = 1000;
+    gui->theme().font_params(CONSTASTR("conv_text"), [&](const ts::font_params_s &fp) {
+        fontsz = ts::tmin(fontsz, fp.size.x, fp.size.y);
+    });
 
     ts::wstrings_c fns;
     ts::g_fileop->find(fns, CONSTWSTR("themes/*/struct.decl"), true);
@@ -122,8 +123,6 @@ dialog_settings_c::~dialog_settings_c()
         s3::set_capture_device( &mic_device_stored );
         g_app->capture_device_changed();
     }
-
-    gmsg<GM_CLOSE_DIALOG>( UD_PROTOSETUPSETTINGS ).send();
 
     if (gui)
     {
@@ -318,7 +317,7 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
     if (!checking_new_version) return 0;
     checking_new_version = false;
 
-    if (nv.is_error())
+    if (nv.error_num == gmsg<ISOGM_NEWVERSION>::E_NETWORK)
     {
         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
             DT_MSGBOX_ERROR,
@@ -328,7 +327,7 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
         return 0;
     }
 
-    if (nv.ver.is_empty())
+    if (nv.ver.is_empty() || nv.error_num != gmsg<ISOGM_NEWVERSION>::E_OK)
     {
         SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
             DT_MSGBOX_INFO,
@@ -349,12 +348,18 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 bool dialog_settings_c::histopts_handler(RID, GUIPARAM p)
 {
     int ip = as_int(p);
+
+    ASSERT(MSGOP_LOAD_WHOLE_HISTORY == bgroups[BGROUP_HISTORY].masks[1]);
+
+    int &hist_opts = bgroups[BGROUP_HISTORY].current;
     if (ip < 0)
     {
         INITFLAG(hist_opts, 2, ip == -1);
         ctlenable(CONSTASTR("loadcount"), ip == -2);
     } else
         hist_opts = (ip & ~2) | (hist_opts & 2);
+
+    bgroups[BGROUP_HISTORY].flush();
 
     mod();
     return true;
@@ -376,8 +381,10 @@ bool dialog_settings_c::load_history_count_handler(const ts::wstr_c &v)
 
 bool dialog_settings_c::commonopts_handler( RID, GUIPARAM p )
 {
-    common_opts = as_int(p);
-    ctlenable(CONSTASTR("away_min"), 0 != (common_opts & 8));
+    bgroups[BGROUP_COMMON2].handler(RID(), p);
+    ctlenable(CONSTASTR("away_min"), 0 != (bgroups[BGROUP_COMMON2].current & 2) );
+
+    set_away_on_timer_minutes_value = (bgroups[BGROUP_COMMON2].current & 2) ? set_away_on_timer_minutes_value_last : 0;
     mod();
     return true;
 }
@@ -389,29 +396,55 @@ bool dialog_settings_c::away_minutes_handler(const ts::wstr_c &v)
     set_away_on_timer_minutes_value = ts::CLAMP(o, 1, 180);
     if (o != set_away_on_timer_minutes_value)
         set_edit_value(CONSTASTR("away_min"), ts::wmake(set_away_on_timer_minutes_value));
-
+    set_away_on_timer_minutes_value_last = set_away_on_timer_minutes_value;
     mod();
     return true;
 }
 
-bool dialog_settings_c::gchatopts_handler(RID, GUIPARAM p)
+void dialog_settings_c::bits_edit_s::flush()
 {
-    int newo = as_int(p);
-    mute_mic_on_gchat_invite = 0 != (newo & 1);
-    mute_speaker_on_gchat_invite = 0 != (newo & 2);
+    for (int i = 0; i < nmasks; ++i)
+    {
+        if (masks[i] == 0)
+            continue;
 
-    mod();
+        int localmask = 1 << i;
+        bool newval = (localmask & current) != 0;
+        INITFLAG(*source, masks[i], newval);
+    }
+}
+
+bool dialog_settings_c::bits_edit_s::handler(RID, GUIPARAM p)
+{
+    current = as_int(p);
+
+    flush();
+
+    settings->mod();
     return true;
 }
 
 bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
 {
-    ts::flags32_s::BITS newo = (ts::flags32_s::BITS)p;
-    msgopts_changed |= newo ^ msgopts_current;
-    msgopts_current = newo;
+    bgroups[BGROUP_MSGOPTS].handler(RID(), p);
 
     ctlenable(CONSTASTR("date_msg_tmpl"), 0 != (msgopts_current & MSGOP_SHOW_DATE));
     ctlenable(CONSTASTR("date_sep_tmpl"), 0 != (msgopts_current & MSGOP_SHOW_DATE_SEPARATOR));
+
+    return true;
+}
+
+bool dialog_settings_c::scale_font(RID, GUIPARAM p)
+{
+    gui_hslider_c::param_s *pp = (gui_hslider_c::param_s *)p;
+    font_scale = pp->value;
+
+    int sz = ts::lround( font_scale * fontsz );
+
+    pp->custom_value_text = TTT("Message font size: $",346)/ts::wmake(sz);
+    if (sz == fontsz)
+        pp->custom_value_text.insert(0,CONSTWSTR("<b>")).append(CONSTWSTR("</b>"));
+
 
     mod();
     return true;
@@ -462,26 +495,39 @@ void dialog_settings_c::mod()
         PREPARE( ctl2send, (enter_key_options_s)prf().ctl_to_send() );
 
         PREPARE( msgopts_current, prf().get_options().__bits );
-        msgopts_changed = 0;
+        msgopts_original = msgopts_current;
+
+        for (bits_edit_s &b : bgroups)
+            b.settings = this, b.source = &msgopts_current;
+
 
         PREPARE(set_away_on_timer_minutes_value, prf().inactive_time());
+        set_away_on_timer_minutes_value_last = set_away_on_timer_minutes_value;
 
-        common_opts_orig = 0;
-        if (0 != (msgopts_current & UIOPT_SHOW_SEARCH_BAR)) common_opts_orig |= 1;
-        if (0 != (msgopts_current & UIOPT_PROTOICONS)) common_opts_orig |= 2;
-        if (0 != (msgopts_current & UIOPT_AWAYONSCRSAVER)) common_opts_orig |= 4;
-        if (set_away_on_timer_minutes_value > 0) common_opts_orig |= 8;
-        PREPARE( common_opts, common_opts_orig );
+        bgroups[BGROUP_COMMON1].add(UIOPT_SHOW_SEARCH_BAR);
+        bgroups[BGROUP_COMMON1].add(UIOPT_PROTOICONS);
+        bgroups[BGROUP_COMMON1].add(UIOPT_SHOW_NEWCONN_BAR);
 
-        hist_opts_orig = 0;
-        if (0 != (msgopts_current & MSGOP_KEEP_HISTORY)) hist_opts_orig |= 1;
-        if (0 != (msgopts_current & MSGOP_LOAD_WHOLE_HISTORY)) hist_opts_orig |= 2;
-        PREPARE(hist_opts, hist_opts_orig);
+        bgroups[BGROUP_COMMON2].add(UIOPT_AWAYONSCRSAVER);
+        bgroups[BGROUP_COMMON2].add(0, set_away_on_timer_minutes_value > 0);
+
+        bgroups[BGROUP_GCHAT].add(GCHOPT_MUTE_MIC_ON_INVITE);
+        bgroups[BGROUP_GCHAT].add(GCHOPT_MUTE_SPEAKER_ON_INVITE);
+
+        bgroups[BGROUP_MSGOPTS].add(MSGOP_SHOW_DATE);
+        bgroups[BGROUP_MSGOPTS].add(MSGOP_SHOW_DATE_SEPARATOR);
+        bgroups[BGROUP_MSGOPTS].add(MSGOP_SHOW_PROTOCOL_NAME);
+
+        bgroups[BGROUP_TYPING].add(MSGOP_SEND_TYPING);
+        bgroups[BGROUP_TYPING].add(MSGOP_IGNORE_OTHER_TYPING);
+
+        bgroups[BGROUP_HISTORY].add(MSGOP_KEEP_HISTORY);
+        bgroups[BGROUP_HISTORY].add(MSGOP_LOAD_WHOLE_HISTORY);
+
 
         PREPARE(load_history_count, prf().min_history());
 
-        PREPARE( mute_mic_on_gchat_invite, 0 != (msgopts_current & GCHOPT_MUTE_MIC_ON_INVITE) );
-        PREPARE( mute_speaker_on_gchat_invite, 0 != (msgopts_current & GCHOPT_MUTE_SPEAKER_ON_INVITE) );
+        PREPARE( font_scale, prf().fontscale_conv_text() );
 
         PREPARE( date_msg_tmpl, prf().date_msg_template() );
         PREPARE( date_sep_tmpl, prf().date_sep_template() );
@@ -554,6 +600,8 @@ void dialog_settings_c::mod()
     dm().combik(TTT("Language",107)).setmenu( list_langs( curlang, DELEGATE(this, select_lang) ) ).setname( CONSTASTR("langs") );
     dm().vspace(10);
     dm().combik(TTT("GUI theme",233)).setmenu(list_themes()).setname(CONSTASTR("themes"));
+    dm().vspace();
+
     dm().vspace();
     dm().radio(TTT("Updates",155), DELEGATE(this, autoupdate_handler), autoupdate).setmenu(
         menu_c()
@@ -665,10 +713,12 @@ void dialog_settings_c::mod()
         dm().vspace();
         dm().textfield(TTT("Status",68), from_utf8(userstatusmsg), DELEGATE(this, statusmsg_edit_handler)).setname(CONSTASTR("ustatus"));
         dm().vspace();
-        dm().checkb(ts::wstr_c(), DELEGATE(this, commonopts_handler), common_opts).setmenu(
+        dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_COMMON1, handler), bgroups[BGROUP_COMMON1].current).setmenu(
                 menu_c().add(TTT("Show search bar ($)",276) / CONSTWSTR("Ctrl+F"), 0, MENUHANDLER(), CONSTASTR("1"))
                         .add(TTT("Protocol icons as contact state indicator",296), 0, MENUHANDLER(), CONSTASTR("2"))
+                        .add(TTT("Show [i]join network[/i] button ($)",344)/ CONSTWSTR("Ctrl+N"), 0, MENUHANDLER(), CONSTASTR("4"))
             );
+
 
         dm().vspace();
 
@@ -678,9 +728,9 @@ void dialog_settings_c::mod()
         if (t_awaymin.find_pos(ctl) < 0) t_awaymin.append_char(' ').append(ctl);
 
 
-        dm().checkb(ts::wstr_c(), DELEGATE(this, commonopts_handler), common_opts).setmenu(
-            menu_c().add(TTT("Set [b]Away[/b] status on screen saver activation",323), 0, MENUHANDLER(), CONSTASTR("4"))
-                    .add(t_awaymin, 0, MENUHANDLER(), CONSTASTR("8"))
+        dm().checkb(ts::wstr_c(), DELEGATE(this, commonopts_handler), bgroups[BGROUP_COMMON2].current).setmenu(
+            menu_c().add(TTT("Set [b]Away[/b] status on screen saver activation",323), 0, MENUHANDLER(), CONSTASTR("1"))
+                    .add(t_awaymin, 0, MENUHANDLER(), CONSTASTR("2"))
             );
 
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
@@ -711,26 +761,31 @@ void dialog_settings_c::mod()
         ts::wstr_c t_showdatesep = TTT("Show separator $ between messages with different date",172) / ctl;
         if (t_showdatesep.find_pos(ctl)<0) t_showdate.append_char(' ').append(ctl);
 
-        dm().checkb(TTT("Messages",170), DELEGATE(this, msgopts_handler), msgopts_current).setmenu(
-                    menu_c().add(t_showdate, 0, MENUHANDLER(), ts::amake<int>( MSGOP_SHOW_DATE ))
-                            .add(t_showdatesep, 0, MENUHANDLER(), ts::amake<int>( MSGOP_SHOW_DATE_SEPARATOR ))
-                            .add(TTT("Show protocol name",173), 0, MENUHANDLER(), ts::amake<int>( MSGOP_SHOW_PROTOCOL_NAME ))
+        dm().checkb(TTT("Messages",170), DELEGATE(this, msgopts_handler), bgroups[BGROUP_MSGOPTS].current).setmenu(
+                    menu_c().add(t_showdate, 0, MENUHANDLER(), CONSTASTR("1"))
+                            .add(t_showdatesep, 0, MENUHANDLER(), CONSTASTR("2"))
+                            .add(TTT("Show protocol name",173), 0, MENUHANDLER(), CONSTASTR("4"))
                     );
 
+        float minscale = fontsz ? (8.0f / fontsz) : ts::tmin(0.9f, font_scale);
+        float maxscale = fontsz ? (20.0f / fontsz) : ts::tmax(1.1f, font_scale);
+        ts::wstr_c initstr( CONSTWSTR("0/") );
+        initstr.append_as_float(minscale).append(CONSTWSTR("/0.5/1/1/")).append_as_float(maxscale);
+
+        dm().hslider(ts::wstr_c(), font_scale, initstr, DELEGATE(this, scale_font));
+
+
         dm().vspace();
-        dm().checkb(TTT("Typing notification",272), DELEGATE(this, msgopts_handler), msgopts_current).setmenu(
-            menu_c().add(TTT("Send typing notification",273), 0, MENUHANDLER(), ts::amake<int>(MSGOP_SEND_TYPING))
-                    .add(TTT("Ignore typing notifications",274), 0, MENUHANDLER(), ts::amake<int>(MSGOP_IGNORE_OTHER_TYPING))
+        dm().checkb(TTT("Typing notification",272), DELEGATE(bgroups+BGROUP_TYPING, handler), bgroups[BGROUP_TYPING].current).setmenu(
+            menu_c().add(TTT("Send typing notification",273), 0, MENUHANDLER(), CONSTASTR("1"))
+                    .add(TTT("Ignore typing notifications",274), 0, MENUHANDLER(), CONSTASTR("2"))
             );
 
         dm << MASK_PROFILE_GCHAT; //____________________________________________________________________________________________________//
         dm().page_header(TTT("Group chat settings",306));
         dm().vspace(10);
 
-        int gchpts = 0;
-        if (mute_mic_on_gchat_invite) gchpts |= 1;
-        if (mute_speaker_on_gchat_invite) gchpts |= 2;
-        dm().checkb(ts::wstr_c(), DELEGATE(this, gchatopts_handler), gchpts).setmenu(
+        dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_GCHAT, handler), bgroups[BGROUP_GCHAT].current).setmenu(
             menu_c().add(TTT("Mute microphone on audio group chat invite",307), 0, MENUHANDLER(), CONSTASTR("1"))
                     .add(TTT("Mute speakers on audio group chat invite",308), 0, MENUHANDLER(), CONSTASTR("2"))
             );
@@ -740,7 +795,7 @@ void dialog_settings_c::mod()
         dm().page_header(TTT("Message log settings",328));
         dm().vspace(10);
 
-        dm().checkb(ts::wstr_c(), DELEGATE(this, histopts_handler), hist_opts).setmenu(
+        dm().checkb(ts::wstr_c(), DELEGATE(this, histopts_handler), bgroups[BGROUP_HISTORY].current).setmenu(
             menu_c().add(TTT("Keep message history", 222), 0, MENUHANDLER(), CONSTASTR("1"))
             );
 
@@ -750,7 +805,7 @@ void dialog_settings_c::mod()
         if (t_loadcount.find_pos(ctl) < 0) t_loadcount.append_char(' ').append(ctl);
 
         dm().vspace();
-        dm().radio(TTT("On select contact...",331), DELEGATE(this, histopts_handler), (hist_opts & 2) ? -1 : -2).setmenu(
+        dm().radio(TTT("On select contact...",331), DELEGATE(this, histopts_handler), (bgroups[BGROUP_HISTORY].current & 2) ? -1 : -2).setmenu(
             menu_c()
             .add(TTT("...load whole history", 329), 0, MENUHANDLER(), CONSTASTR("-1"))
             .add(t_loadcount, 0, MENUHANDLER(), CONSTASTR("-2")) );
@@ -778,9 +833,7 @@ void dialog_settings_c::mod()
         dm().vspace(10);
         dm().list(TTT("Active network connections",54), L"", -270).setname(CONSTASTR("protoactlist"));
         dm().vspace();
-        dm().hgroup(TTT("Available networks",53));
-        dm().combik(HGROUP_MEMBER).setmenu(get_list_avaialble_networks()).setname(CONSTASTR("availablenets"));
-        dm().button(HGROUP_MEMBER, TTT("Add network connection",58), DELEGATE(this, addnetwork)).width(250).height(25).setname(CONSTASTR("addnet"));
+        dm().button(HGROUP_MEMBER, TTT("Add new network connection",58), DELEGATE(this, addnetwork)).height(35).setname(CONSTASTR("addnet"));
     }
 
     gui_vtabsel_c &tab = MAKE_CHILD<gui_vtabsel_c>( getrid(), m );
@@ -909,9 +962,9 @@ menu_c dialog_settings_c::get_sounds_menu()
 }
 
 
-const dialog_settings_c::protocols_s * dialog_settings_c::describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const
+const protocol_description_s * dialog_settings_c::describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const
 {
-    const protocols_s *p = find_protocol(tag);
+    const protocol_description_s *p = available_prots.find(tag);
     if (p == nullptr)
     {
         desc.replace_all(CONSTWSTR("{name}"), TTT("$ (Unknown protocol: $)",57) / from_utf8(name) / ts::to_wstr(tag));
@@ -936,89 +989,21 @@ void dialog_settings_c::networks_tab_selected()
     {
         for (auto &row : table_active_protocol_underedit)
             add_active_proto(lst, row.id, row.other);
-        available_network_selected(selected_available_network);
     }
+    ctlenable(CONSTASTR("addnet"), true);
 }
 
-namespace
+/*virtual*/ void dialog_settings_c::avprots_s::done(bool fail)
 {
-    struct load_proto_list_s : public ts::task_c
+    dialog_settings_c *dlg = (dialog_settings_c *)(((char *)this) - offsetof( dialog_settings_c, available_prots ));
+    if (fail)
     {
-        ts::safe_ptr<dialog_settings_c> dlg;
-        load_proto_list_s(dialog_settings_c *dlg) :dlg(dlg) {}
-        ~load_proto_list_s() {}
-
-        int result_x = 1;
-        ts::array_inplace_t<dialog_settings_c::protocols_s, 0> available_prots;
-
-        bool ipchandler(ipcr r)
-        {
-            if (r.d == nullptr)
-            {
-                // lost contact to plghost
-                // just close settings
-                if (dlg)
-                    DEFERRED_UNIQUE_CALL(0, dlg->get_close_button_handler(), nullptr);
-
-                result_x = R_CANCEL;
-                return false;
-            }
-            else
-            {
-                switch (r.header().cmd)
-                {
-                    case HA_PROTOCOLS_LIST:
-                    {
-                        int n = r.get<int>();
-                        while (--n >= 0)
-                        {
-                            ts::pstr_c d = r.getastr();
-                            int p = d.find_pos(':');
-                            dialog_settings_c::protocols_s &proto = available_prots.add();
-                            proto.description = d.substr(p + 2);
-                            proto.tag = d.substr(0, p);
-                            proto.features = r.get<int>();
-                            proto.connection_features = r.get<int>();
-
-                            int icosz;
-                            const void *icodata = r.get_data(icosz);
-                            proto.icon.reset( prepare_proto_icon( proto.tag, icodata, icosz, PROTO_ICON_SIZE, IT_NORMAL ) );
-                        }
-
-                        result_x = R_DONE;
-                    }
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-
-        /*virtual*/ int iterate(int pass) override
-        {
-            isotoxin_ipc_s ipcj(ts::str_c(CONSTASTR("isotoxin_settings_")).append_as_uint(GetCurrentThreadId()), DELEGATE(this, ipchandler) );
-            ipcj.send(ipcw(AQ_GET_PROTOCOLS_LIST));
-            ipcj.wait_loop(nullptr);
-            ASSERT(result_x != 1);
-            return result_x;
-        }
-        /*virtual*/ void done(bool canceled) override
-        {
-            if (!canceled && dlg)
-                dlg->protocols_loaded(available_prots);
-
-            __super::done(canceled);
-        }
-    };
-}
-
-void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &prots)
-{
-    available_prots = std::move(prots);
-    set_combik_menu(CONSTASTR("availablenets"), get_list_avaialble_networks());
-    if (is_networks_tab_selected) networks_tab_selected();
-    proto_list_loaded = true;
+        DEFERRED_UNIQUE_CALL(0, dlg->get_close_button_handler(), nullptr);
+    } else
+    {
+        if (dlg->is_networks_tab_selected) dlg->networks_tab_selected();
+        dlg->proto_list_loaded = true;
+    }
 }
 
 
@@ -1039,7 +1024,7 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
             ctlenable(CONSTASTR("addnet"), false);
             set_list_emptymessage(CONSTASTR("protoactlist"), TTT("Loading",277));
             ASSERT( prf().is_loaded() );
-            g_app->add_task(TSNEW(load_proto_list_s, this));
+            available_prots.load();
             return;
         }
     }
@@ -1052,7 +1037,7 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
     }
     if (mask & MASK_PROFILE_HISTORY)
     {
-        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, histopts_handler), hist_opts);
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, histopts_handler), (bgroups[BGROUP_HISTORY].current & 2) ? -1 : -2);
     }
 
     if (mask & MASK_PROFILE_FILES)
@@ -1062,7 +1047,7 @@ void dialog_settings_c::protocols_loaded(ts::array_inplace_t<protocols_s, 0> &pr
 
     if (mask & MASK_PROFILE_COMMON)
     {
-        DEFERRED_UNIQUE_CALL(0.1, DELEGATE(this, commonopts_handler), common_opts);
+        DEFERRED_UNIQUE_CALL(0.1, DELEGATE(this, commonopts_handler), bgroups[BGROUP_COMMON2].current);
     }
 
     if (mask & MASK_APPLICATION_COMMON)
@@ -1263,58 +1248,29 @@ bool dialog_settings_c::addeditnethandler(dialog_protosetup_params_s &params)
     return true;
 }
 
+ts::str_c dialog_protosetup_params_s::setup_name( const ts::asptr &tag, int n )
+{
+    ts::wstr_c name = TTT("Connection $", 63) / ts::to_wstr(tag).append_char(' ').append(ts::wmake(n));
+    return to_utf8(name);
+}
+
 bool dialog_settings_c::addnetwork(RID, GUIPARAM)
 {
-    const protocols_s *p = find_protocol(selected_available_network);
-    if (!p) return true;
-    int n = table_active_protocol_underedit.rows.size() + 1;
-    again:
-    for (auto &row : table_active_protocol_underedit)
-    {
-        if (row.other.name.extract_numbers().as_int() == n)
-        {
-            ++n;
-            goto again;
-        }
-    }
-    ts::wstr_c name = TTT("Connection $",63) / ts::to_wstr(selected_available_network).append_char(' ').append(ts::wmake(n));
-
-    dialog_protosetup_params_s prms(selected_available_network, to_utf8(name), p->features, p->connection_features, DELEGATE(this,addeditnethandler));
+    dialog_protosetup_params_s prms( &available_prots, &table_active_protocol_underedit, DELEGATE(this,addeditnethandler));
     prms.configurable.udp_enable = true;
     prms.configurable.server_port = 0;
     prms.configurable.initialized = true;
     prms.connect_at_startup = true;
+    prms.watch = getrid();
     SUMMON_DIALOG<dialog_setup_network_c>(UD_PROTOSETUPSETTINGS, prms);
 
     return true;
 }
 
-void dialog_settings_c::available_network_selected(const ts::str_c& ntag)
-{
-    selected_available_network = ntag;
-    ctlenable(CONSTASTR("addnet"), !selected_available_network.is_empty());
-    set_combik_menu(CONSTASTR("availablenets"), get_list_avaialble_networks());
-}
-
-menu_c dialog_settings_c::get_list_avaialble_networks()
-{
-    menu_c m;
-    m.add(TTT("Choose network",201), selected_available_network.is_empty() ? MIF_MARKED : 0, DELEGATE( this,  available_network_selected ));
-    bool sep = false;
-    for (const protocols_s&proto : available_prots)
-    {
-        if (!sep) m.add_separator();
-        sep = true;
-        m.add( from_utf8(proto.description), selected_available_network.equals(proto.tag) ? MIF_MARKED : 0, DELEGATE( this,  available_network_selected ), proto.tag);
-    }
-    return m;
-}
-
-
 void dialog_settings_c::add_active_proto( RID lst, int id, const active_protocol_data_s &apdata )
 {
     ts::wstr_c desc = make_proto_desc( MPD_NAME | MPD_MODULE | MPD_ID );
-    const protocols_s *p = describe_network(desc, apdata.name, apdata.tag, id);
+    const protocol_description_s *p = describe_network(desc, apdata.name, apdata.tag, id);
 
     ts::str_c par(CONSTASTR("2/")); par.append(apdata.tag).append_char('/').append_as_int(id);
     MAKE_CHILD<gui_listitem_c>(lst, desc, par) << DELEGATE(this, getcontextmenu) << (const ts::drawable_bitmap_c *)(p ? p->icon.get() : nullptr);
@@ -1350,10 +1306,15 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
         auto *row = table_active_protocol_underedit.find<true>(t->as_int());
         if (CHECK(row))
         {
-            const protocols_s *p = find_protocol(row->other.tag);
+            const protocol_description_s *p = available_prots.find(row->other.tag);
             if (CHECK(p))
             {
-                dialog_protosetup_params_s prms(row->other.tag, row->other.name, p->features, p->connection_features, DELEGATE(this, addeditnethandler));
+                dialog_protosetup_params_s prms(DELEGATE(this, addeditnethandler));
+                prms.proto_desc = p->description_t;
+                prms.networktag = row->other.tag;
+                prms.networkname = row->other.name;
+                prms.features = p->features;
+                prms.conn_features = p->connection_features;
                 prms.uname = row->other.user_name;
                 prms.ustatus = row->other.user_statusmsg;
                 prms.protoid = row->id;
@@ -1429,7 +1390,7 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
         g_app->load_locale(curlang);
         gmsg<ISOGM_CHANGED_SETTINGS>(0, CFG_LANGUAGE, curlang).send();
     }
-
+    bool fontchanged = false;
     if (profile_selected)
     {
         bool ch1 = prf().username(username);
@@ -1440,27 +1401,13 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
         ch1 = prf().date_msg_template(date_msg_tmpl);
         ch1 |= prf().date_sep_template(date_sep_tmpl);
 
-#define UPSETOPT(b,m) if (is_changed(b)) { msgopts_changed |= m; INITFLAG(msgopts_current, m, b); }
-        UPSETOPT(mute_mic_on_gchat_invite, GCHOPT_MUTE_MIC_ON_INVITE);
-        UPSETOPT(mute_speaker_on_gchat_invite, GCHOPT_MUTE_SPEAKER_ON_INVITE);
-#undef UPSETOPT
-
-#define UPSETOPT(bm,m) if ((common_opts_orig ^ common_opts) & bm) { msgopts_changed |= m; INITFLAG(msgopts_current, m, 0 != (common_opts & bm)); }
-        UPSETOPT(1, UIOPT_SHOW_SEARCH_BAR);
-        UPSETOPT(2, UIOPT_PROTOICONS);
-        UPSETOPT(4, UIOPT_AWAYONSCRSAVER);
-#undef UPSETOPT
-
-#define UPSETOPT(bm,m) if ((hist_opts_orig ^ hist_opts) & bm) { msgopts_changed |= m; INITFLAG(msgopts_current, m, 0 != (hist_opts & bm)); }
-        UPSETOPT(1, MSGOP_KEEP_HISTORY);
-        UPSETOPT(2, MSGOP_LOAD_WHOLE_HISTORY);
-#undef UPSETOPT
-
         prf().min_history(load_history_count);
-        prf().inactive_time( (common_opts & 8) ? set_away_on_timer_minutes_value : 0 );
+        prf().inactive_time( (bgroups[BGROUP_COMMON2].current & 2) ? set_away_on_timer_minutes_value : 0 );
+
+        ts::flags32_s::BITS msgopts_changed = msgopts_current ^ msgopts_original;
 
         if (prf().set_options( msgopts_current, msgopts_changed ) || ch1)
-            gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS).send();
+            gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS, msgopts_changed).send();
 
         prf().download_folder(downloadfolder);
         prf().auto_confirm_masks( auto_download_masks );
@@ -1471,10 +1418,12 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
             emoti().reload();
             gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_EMOJISET).send();
         }
+        fontchanged = prf().fontscale_conv_text(font_scale);
     }
 
     if (is_changed(startopt))
         set_startopts();
+
 
     if (autoupdate_proxy > 0 && !check_netaddr(autoupdate_proxy_addr))
         autoupdate_proxy_addr = CONSTASTR(DEFAULT_PROXY);
@@ -1528,9 +1477,16 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
             {
                 cfg().theme(thi.folder);
                 g_app->load_theme(thi.folder);
+                fontchanged = false;
             }
             break;
         }
+    }
+
+    if (fontchanged)
+    {
+        g_app->reload_fonts();
+        gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_FONTSCALE).send();
     }
 
     if (profile_selected)
@@ -1840,7 +1796,7 @@ bool dialog_settings_c::dspf_handler( RID, GUIPARAM p )
 
 // proto setup
 
-dialog_setup_network_c::dialog_setup_network_c(MAKE_ROOT<dialog_setup_network_c> &data) :gui_isodialog_c(data), params(data.prms)
+dialog_setup_network_c::dialog_setup_network_c(MAKE_ROOT<dialog_setup_network_c> &data) :gui_isodialog_c(data), params(data.prms), watch( data.prms.watch, DELEGATE(this, lost_contact), nullptr )
 {
     if (params.protoid && !params.confirm)
         if (active_protocol_c *ap = prf().ap(params.protoid))
@@ -1849,6 +1805,27 @@ dialog_setup_network_c::dialog_setup_network_c(MAKE_ROOT<dialog_setup_network_c>
             params.ustatus = ap->get_ustatusmsg();
             params.networkname = ap->get_name();
         }
+
+    if (params.avprotos && !params.networktag.is_empty() && params.protocols)
+    {
+        // generate name
+
+        if (const protocol_description_s *p = params.avprotos->find(params.networktag))
+        {
+            int n = params.protocols->rows.size() + 1;
+        again:
+            for (auto &row : *params.protocols)
+            {
+                if (row.other.name.extract_numbers().as_int() == n)
+                {
+                    ++n;
+                    goto again;
+                }
+            }
+
+            params.networkname = dialog_protosetup_params_s::setup_name(params.networktag, n);
+        }
+    }
 }
 
 dialog_setup_network_c::~dialog_setup_network_c()
@@ -1856,6 +1833,11 @@ dialog_setup_network_c::~dialog_setup_network_c()
     //gui->delete_event(DELEGATE(this, refresh_current_page));
 }
 
+bool dialog_setup_network_c::lost_contact(RID, GUIPARAM p)
+{
+    TSDEL(this);
+    return true;
+}
 
 /*virtual*/ void dialog_setup_network_c::created()
 {
@@ -1869,24 +1851,84 @@ void dialog_setup_network_c::getbutton(bcreate_s &bcr)
     __super::getbutton(bcr);
 }
 
+void dialog_setup_network_c::available_network_selected(const ts::str_c&tag)
+{
+    params.networktag = tag;
+    if (!tag.is_empty())
+        if (const protocol_description_s *p = params.avprotos->find(params.networktag))
+        {
+            params.features = p->features;
+            params.conn_features = p->connection_features;
+        }
+
+    predie = true;
+    SUMMON_DIALOG<dialog_setup_network_c>(UD_PROTOSETUPSETTINGS, params);
+    TSDEL( this );
+}
+
+menu_c dialog_setup_network_c::get_list_avaialble_networks()
+{
+    menu_c m;
+
+    if ( params.avprotos )
+    {
+        m.add(TTT("(not selected)", 201), params.networktag.is_empty() ? MIF_MARKED : 0, DELEGATE(this, available_network_selected));
+        bool sep = false;
+        for (const protocol_description_s&proto : *params.avprotos)
+        {
+            if (!sep) m.add_separator();
+            sep = true;
+            m.add(from_utf8(proto.description), params.networktag.equals(proto.tag) ? MIF_MARKED : 0, DELEGATE(this, available_network_selected), proto.tag);
+        }
+    }
+
+    return m;
+}
+
+
+
 /*virtual*/ int dialog_setup_network_c::additions(ts::irect & border)
 {
-
+    addh = 0;
     descmaker dm(descs);
     dm << 1;
 
     ts::wstr_c hdr(CONSTWSTR("<l>"));
 
-    bool newnet = true;
-    if (params.protoid)
+    bool newnet = params.avprotos != nullptr;
+    bool addheader = true;
+    if (params.protoid < 0)
+    {
+        hdr.append(from_utf8(params.proto_desc));
+        newnet = false;
+
+    } else if (params.protoid)
         if (active_protocol_c *ap = prf().ap(params.protoid))
-            hdr.append(from_utf8(ap->get_desc())), newnet = false;
+            hdr.append(from_utf8(ap->get_desc_t())), newnet = false;
+
     if (newnet)
-        hdr.append(TTT("new network connection will be created: $",62) / ts::to_wstr(params.networktag));
-    hdr.append(CONSTWSTR("</l>"));
+    {
+        addheader = false;
+    }
+    if (addheader)
+    {
+        hdr.append(CONSTWSTR("</l>"));
+        dm().page_header(hdr);
+    }
 
-    dm().page_header(hdr);
+    if (params.avprotos)
+    {
+        if (!addheader)
+            dm().vspace(15);
 
+        dm().combik(TTT("Select network", 62)).setmenu(get_list_avaialble_networks()).setname(CONSTASTR("availablenets"));
+        if (params.networktag.is_empty())
+        {
+            ctlenable(CONSTASTR("dialog_button_1"), false);
+            return 0;
+        }
+        addh += 22;
+    }
 
     dm().vspace(15);
     dm().textfield(TTT("Network connection name",70), from_utf8(params.networkname), DELEGATE(this, netname_edit)).focus(true);
@@ -1894,8 +1936,8 @@ void dialog_setup_network_c::getbutton(bcreate_s &bcr)
     dm().textfield(TTT("Your name on this network",261), from_utf8(params.uname), DELEGATE(this, uname_edit));
     dm().vspace();
     dm().textfield(TTT("Your status on this network",262), from_utf8(params.ustatus), DELEGATE(this, ustatus_edit));
-
     dm().vspace();
+    addh += 100;
 
     if ( params.confirm )
     {
@@ -1951,7 +1993,7 @@ void dialog_setup_network_c::getbutton(bcreate_s &bcr)
             iroot = ts::fn_join(iroot, ts::to_wstr(params.networktag));
         ts::fix_path(iroot, FNO_APPENDSLASH);
 
-        dm().file(TTT("Import configuration from file",56), iroot, ts::wstr_c(), DELEGATE(this, network_importfile));
+        dm().file(loc_text(loc_import_from_file), iroot, params.importcfg, DELEGATE(this, network_importfile));
     }
 
     return 0;
@@ -2013,11 +2055,13 @@ bool dialog_setup_network_c::netname_edit(const ts::wstr_c &t)
 
 /*virtual*/ ts::wstr_c dialog_setup_network_c::get_name() const
 {
+    if (params.avprotos)
+        return TTT("[appname]: New network",53);
     return TTT("[appname]: Connection properties",263);
 }
 /*virtual*/ ts::ivec2 dialog_setup_network_c::get_min_size() const
 {
-    return ts::ivec2(400, 300 + addh);
+    return ts::ivec2(400, 200 + addh);
 }
 
 bool dialog_setup_network_c::network_importfile(const ts::wstr_c & t)

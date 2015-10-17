@@ -131,6 +131,79 @@ namespace
     }
 }
 
+static void set_common_curl_options(CURL *curl)
+{
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, USERAGENT);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+
+    curl_easy_setopt(curl, CURLOPT_PROXY, nullptr);
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 50);
+    curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "curl");
+
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
+    curl_easy_setopt(curl, CURLOPT_HEADER, 0);
+    curl_easy_setopt(curl, CURLOPT_PROXY, nullptr);
+    curl_easy_setopt(curl, CURLOPT_PROXYUSERPWD, nullptr);
+    curl_easy_setopt(curl, CURLOPT_USERPWD, nullptr);
+    curl_easy_setopt(curl, CURLOPT_KEYPASSWD, nullptr);
+    curl_easy_setopt(curl, CURLOPT_RANGE, nullptr);
+    curl_easy_setopt(curl, CURLOPT_HTTPPROXYTUNNEL, 0);
+    curl_easy_setopt(curl, CURLOPT_NOPROXY, nullptr);
+    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 0);
+    curl_easy_setopt(curl, CURLOPT_UPLOAD, 0);
+    curl_easy_setopt(curl, CURLOPT_DIRLISTONLY, 0);
+    curl_easy_setopt(curl, CURLOPT_APPEND, 0);
+    curl_easy_setopt(curl, CURLOPT_NETRC, CURL_NETRC_IGNORED);
+    curl_easy_setopt(curl, CURLOPT_TRANSFERTEXT, 0);
+
+    //char errorbuffer[CURL_ERROR_SIZE];
+    //curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errorbuffer);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 0ull);
+    curl_easy_setopt(curl, CURLOPT_UNRESTRICTED_AUTH, 0);
+    curl_easy_setopt(curl, CURLOPT_REFERER, nullptr);
+    curl_easy_setopt(curl, CURLOPT_AUTOREFERER, 0);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, nullptr);
+    curl_easy_setopt(curl, CURLOPT_POSTREDIR, 0);
+    curl_easy_setopt(curl, CURLOPT_FTPPORT, 0);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 0);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 0);
+    curl_easy_setopt(curl, CURLOPT_MAX_SEND_SPEED_LARGE, 0ull);
+    curl_easy_setopt(curl, CURLOPT_MAX_RECV_SPEED_LARGE, 0ull);
+    curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE, 0ull);
+    curl_easy_setopt(curl, CURLOPT_SSLCERT, nullptr);
+    curl_easy_setopt(curl, CURLOPT_SSLCERTTYPE, nullptr);
+    curl_easy_setopt(curl, CURLOPT_SSLKEY, nullptr);
+    curl_easy_setopt(curl, CURLOPT_SSLKEYTYPE, nullptr);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0);
+    curl_easy_setopt(curl, CURLOPT_SSLVERSION, 0);
+    curl_easy_setopt(curl, CURLOPT_CRLF, 0);
+    curl_easy_setopt(curl, CURLOPT_QUOTE, nullptr);
+    curl_easy_setopt(curl, CURLOPT_POSTQUOTE, nullptr);
+    curl_easy_setopt(curl, CURLOPT_PREQUOTE, nullptr);
+    curl_easy_setopt(curl, CURLOPT_COOKIESESSION, 0);
+    curl_easy_setopt(curl, CURLOPT_TIMECONDITION, 0);
+    curl_easy_setopt(curl, CURLOPT_TIMEVALUE, 0);
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, nullptr);
+    //curl_easy_setopt(curl, CURLOPT_STDERR, stdout);
+    curl_easy_setopt(curl, CURLOPT_INTERFACE, nullptr);
+    curl_easy_setopt(curl, CURLOPT_KRBLEVEL, nullptr);
+    curl_easy_setopt(curl, CURLOPT_TELNETOPTIONS, nullptr);
+    curl_easy_setopt(curl, CURLOPT_RANDOM_FILE, nullptr);
+    curl_easy_setopt(curl, CURLOPT_EGDSOCKET, nullptr);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 0);
+    curl_easy_setopt(curl, CURLOPT_FTP_CREATE_MISSING_DIRS, 0);
+    curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_WHATEVER);
+    curl_easy_setopt(curl, CURLOPT_FTP_ACCOUNT, nullptr);
+    curl_easy_setopt(curl, CURLOPT_IGNORE_CONTENT_LENGTH, 0);
+    curl_easy_setopt(curl, CURLOPT_FTP_SKIP_PASV_IP, 0);
+    curl_easy_setopt(curl, CURLOPT_FTP_FILEMETHOD, 0);
+    curl_easy_setopt(curl, CURLOPT_FTP_ALTERNATIVE_TO_USER, nullptr);
+
+}
+
+
 void autoupdater()
 {
     ts::tmpalloc_c tmpalloc;
@@ -151,6 +224,7 @@ void autoupdater()
     {
         CURL *curl;
         ts::str_c newver;
+        gmsg<ISOGM_NEWVERSION>::error_e error_num = gmsg<ISOGM_NEWVERSION>::E_OK;
         bool send_newver = false;
         curl_s()
         {
@@ -168,7 +242,7 @@ void autoupdater()
             w.unlock();
 
             if (send_newver)
-                TSNEW(gmsg<ISOGM_NEWVERSION>, newver)->send_to_main_thread();
+                TSNEW(gmsg<ISOGM_NEWVERSION>, newver, error_num)->send_to_main_thread();
         }
         operator CURL *() {return curl;}
     } curl;
@@ -185,7 +259,7 @@ next_address:
         if (ok_sign)
             curl.newver.clear();
         else
-            curl.newver = CONSTASTR("error");
+            curl.error_num = gmsg<ISOGM_NEWVERSION>::E_NETWORK;
         return;
     }
     
@@ -206,6 +280,8 @@ next_address:
         auparams().lock_write()().proxy_type = 3;
     }
 #endif
+
+    set_common_curl_options(curl);
 
     auto r = auparams().lock_read();
     if (r().proxy_type > 0)
@@ -228,8 +304,6 @@ next_address:
     r.unlock();
 
     rslt = curl_easy_setopt(curl, CURLOPT_URL, addresses.get(addri).cstr());
-    rslt = curl_easy_setopt(curl, CURLOPT_USERAGENT, USERAGENT);
-    rslt = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
     rslt = curl_easy_perform(curl);
 
     // extract info from github wiki
@@ -334,8 +408,17 @@ next_address:
     }
 
     ts::make_path( auparams().lock_read()().path, 0 );
-    latest.save_to_file( ts::fn_join( auparams().lock_read()().path, CONSTWSTR("latest.txt") ) );
-    d.save_to_file( ts::fn_join( auparams().lock_read()().path, pakname ) );
+    if (!latest.save_to_file( ts::fn_join( auparams().lock_read()().path, CONSTWSTR("latest.txt") ), 0, true ))
+    {
+        curl.error_num = gmsg<ISOGM_NEWVERSION>::E_DISK;
+        return;
+    }
+
+    if (!d.save_to_file( ts::fn_join( auparams().lock_read()().path, pakname ), 0, true ))
+    {
+        curl.error_num = gmsg<ISOGM_NEWVERSION>::E_DISK;
+        return;
+    }
 
     auparams().lock_write()().downloaded = true;
     curl.newver = aver;
@@ -367,6 +450,7 @@ struct updater
             // update failed
             // rollback
 
+            rollback:
             updfail = true;
             // oops
             for (const ts::wstr_c &mf : moved)
@@ -377,7 +461,9 @@ struct updater
             return false;
         }
 
-        f.get().save_to_file(wfn);
+        if (!f.get().save_to_file(wfn, 0, true))
+            goto rollback;
+
         return true;
     }
 };

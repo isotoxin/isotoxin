@@ -163,17 +163,9 @@ static bool check_instance()
     return true;
 }
 
-namespace
-{
-    struct parse_result_s
-    {
-        bool checkinstance = true;
-        bool minimize = false;
-        bool readonlymode = false;
-    };
-}
+parsed_command_line_s g_commandline;
 
-static bool parsecmdl(const wchar_t *cmdl, parse_result_s&prslt)
+static bool parsecmdl(const wchar_t *cmdl)
 {
     ts::wstr_c wd;
     ts::set_work_dir(wd);
@@ -181,6 +173,7 @@ static bool parsecmdl(const wchar_t *cmdl, parse_result_s&prslt)
     ts::token<wchar_t> cmds(cmdl, ' ');
     bool wait_cmd = false;
     bool installto = false;
+    bool conf = false;
     uint processwait = 0;
     for (; cmds; ++cmds)
     {
@@ -202,20 +195,56 @@ static bool parsecmdl(const wchar_t *cmdl, parse_result_s&prslt)
             return false;
         }
 
+        if (conf)
+        {
+            if (!g_commandline.alternative_config_path.is_empty()) g_commandline.alternative_config_path.append_char(' ');
+            g_commandline.alternative_config_path.append(*cmds);
+            if ( g_commandline.alternative_config_path.get_char(0) != '\"' || g_commandline.alternative_config_path.get_last_char() == '\"' )
+            {
+                conf = false;
+                g_commandline.alternative_config_path.trunc_char('\"');
+                if (g_commandline.alternative_config_path.get_char(0) == '\"')
+                    g_commandline.alternative_config_path.cut(0);
+            }
+            continue;
+        }
+
         if (cmds->equals(CONSTWSTR("wait")))
+        {
             wait_cmd = true;
+            continue;
+        }
 
         if (cmds->equals(CONSTWSTR("multi")))
-            prslt.checkinstance = false;
+        {
+            g_commandline.checkinstance = false;
+            continue;
+        }
 
         if (cmds->equals(CONSTWSTR("minimize")))
-            prslt.minimize = true;
+        {
+            g_commandline.minimize = true;
+            continue;
+        }
 
         if (cmds->equals(CONSTWSTR("readonly")))
-            prslt.readonlymode = true;
+        {
+            g_commandline.readonlymode = true;
+            continue;
+        }
 
         if (cmds->equals(CONSTWSTR("installto")))
+        {
             installto = true;
+            continue;
+        }
+
+        if (cmds->equals(CONSTWSTR("config")))
+        {
+            conf = true;
+            continue;
+        }
+
     }
 
     if (processwait)
@@ -243,15 +272,14 @@ bool _cdecl app_preinit( const wchar_t *cmdl )
 
     sodium_init();
 
-    parse_result_s prslt;
-    if (!parsecmdl(cmdl, prslt))
+    if (!parsecmdl(cmdl))
         return false;
 
     if (!check_autoupdate())
         return false;
 
 #ifdef _FINAL
-    if (prslt.checkinstance)
+    if (g_commandline.checkinstance)
         if (!check_instance()) return false;
 #endif // _FINAL
 
@@ -270,7 +298,7 @@ bool _cdecl app_preinit( const wchar_t *cmdl )
     debug_name();
 #endif
 
-	TSNEW(application_c, cmdl, prslt.minimize, prslt.readonlymode); // not a memory leak! see SEV_EXIT handler
+	TSNEW(application_c, cmdl); // not a memory leak! see SEV_EXIT handler
 
 	return true;
 }

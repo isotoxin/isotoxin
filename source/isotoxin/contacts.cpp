@@ -1744,7 +1744,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
 
 ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 {
-    if (nv.ver.is_empty() || nv.is_error()) return 0; // notification about no new version
+    if (nv.ver.is_empty() || nv.error_num != gmsg<ISOGM_NEWVERSION>::E_OK) return 0; // notification about no new version
     if ( new_version( cfg().autoupdate_newver(), nv.ver ) )
         cfg().autoupdate_newver( nv.ver );
     g_app->newversion( new_version() );

@@ -33,20 +33,50 @@ struct scaled_image_s
 
 struct font_params_s
 {
+    wstr_c filename; // .ttf
 	ivec2 size;
 	int flags;
 	int additional_line_spacing;
 	float outline_radius, outline_shift;
+    bool dirty = true;
     font_params_s(): size(0), flags(0), additional_line_spacing(0), outline_radius(0), outline_shift(0) {}
     font_params_s( const ivec2 &size, int flags, int additional_line_spacing, float outline_radius, float outline_shift ):
         size(size), flags(flags), additional_line_spacing(additional_line_spacing), outline_radius(outline_radius), outline_shift(outline_shift) {}
+    font_params_s &operator=(const font_params_s&ofp)
+    {
+        if (*this != ofp)
+        {
+            filename = ofp.filename;
+            size = ofp.size;
+            flags = ofp.flags;
+            additional_line_spacing = ofp.additional_line_spacing;
+            outline_radius = ofp.outline_radius;
+            outline_shift = ofp.outline_shift;
+            dirty = true;
+        }
+        return *this;
+    }
+    bool operator!=(const font_params_s &ofp) const
+    {
+        return filename != ofp.filename || size != ofp.size || flags != ofp.flags || additional_line_spacing != ofp.additional_line_spacing
+            || outline_radius != ofp.outline_radius || outline_shift != ofp.outline_shift;
+    }
+
+    bool operator==(const font_params_s &ofp) const
+    {
+        return filename == ofp.filename && size == ofp.size && flags == ofp.flags && additional_line_spacing == ofp.additional_line_spacing
+            && outline_radius == ofp.outline_radius && outline_shift == ofp.outline_shift;
+    }
+
+
+    void setup(const asptr &sparams); // returns font filename
 };
 
 typedef struct FT_FaceRec_*  FT_Face;
 
 class font_c // "parametrized" font
 {
-    str_c fontname;
+    str_c fontname; // default or default.bold ... etc
 	FT_Face face;
 	glyph_s *glyphs[0xFFFF]; // cache itself
 
@@ -60,7 +90,7 @@ public:
 
 	~font_c();
 	glyph_s &operator[](wchar c);
-	static font_c &buildfont(const wstr_c &filename, const str_c &fontname, const ivec2 & size, bool hinting = true, int additional_line_spacing = 0, float outline_radius = .2f, float outline_shift = 0);
+	static font_c &buildfont(const str_c &fontname, const font_params_s&fp);
 	int kerning_ci(int left, int right);
 	int kerning(wchar_t left, wchar_t right) { return kerning_ci(operator[](left).char_index, operator[](right).char_index); }
 
@@ -69,13 +99,10 @@ public:
     str_c makename_italic();
 };
 
-struct font_alias_s {str_c file; font_params_s fp;};// or struct FontInfo
-
 class font_desc_c
 {
 	font_c *font;
-	str_c params, fontname;
-    wstr_c filename;
+	str_c fontname;
     font_params_s fp;
 	int fontsig;
 	font_c *get_font() const;
@@ -84,10 +111,8 @@ public:
 	font_desc_c() : font(nullptr) {}
 	//explicit font_desc_c(const asptr &params) : font(nullptr) { assign(params); }
     const str_c &name() const {return fontname;}
-    void reasign( const asptr &p ) { params.clear(); assign(p); };
-	bool assign(const asptr &params, bool andUpdate = true);
-	void update(int scale = 100);
-    void update_font();
+	bool assign(const str_c &fontname);
+	void update();
 
     int height() const {return font ? font->height : 0;}
 
@@ -95,8 +120,8 @@ public:
 	font_c *operator->() const {return get_font();}
 };
 
-void add_font(const asptr &name, const asptr &fdata);
-void load_fonts(abp_c &bp);
+void add_font(const asptr &name, const font_params_s &fprms);
+
 void set_fonts_dir(const wsptr&dir, bool add = false);
 void set_images_dir(const wsptr&dir, bool add = false); // for parser
 void add_image(const wsptr&name, const bitmap_c&bmp, const irect& rect);

@@ -501,8 +501,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             auto cnt = w.w->reserve<int>();
 
             wstr_c path = mypath();
-            str_c outstr;
-            sstr_c proto_name, description;
+            sstr_c proto_name, description, description_t, version;
             int truncp = path.find_last_pos_of(CONSTWSTR("/\\"));
             if (truncp>0)
             {
@@ -522,11 +521,22 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                     info.protocol_name_buflen = proto_name.get_capacity();
                     info.description = description.str();
                     info.description_buflen = description.get_capacity();
+                    info.description_with_tags = description_t.str();
+                    info.description_with_tags_buflen = description_t.get_capacity();
+                    info.version = version.str();
+                    info.version_buflen = version.get_capacity();
                     f(&info);
 
-                    outstr.set( asptr(info.protocol_name) ).append(CONSTASTR(": ")).append(asptr(info.description));
+                    proto_name.set_length( CHARz_nlen(proto_name.cstr(), proto_name.get_capacity()) );
+                    description.set_length( CHARz_nlen(description.cstr(), description.get_capacity()) );
+                    description_t.set_length( CHARz_nlen(description_t.cstr(), description_t.get_capacity()) );
+                    version.set_length( CHARz_nlen(version.cstr(), version.get_capacity()) );
 
-                    w << outstr.as_sptr();
+                    w << path.as_sptr();
+                    w << proto_name.as_sptr();
+                    w << description.as_sptr();
+                    w << description_t.as_sptr();
+                    w << version.as_sptr();
                     w << info.features;
                     w << info.connection_features;
                     w << data_block_s( info.icon, info.icon_buflen );
@@ -546,7 +556,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             ipcr r(d->get_reader());
             tmp_str_c proto = r.getastr();
             tmp_wstr_c path = mypath();
-            str_c desc(1024,true);
+            sstr_c description, description_t;
             proto_info_s pi;
 
             int truncp = path.find_last_pos_of(CONSTWSTR("/\\"));
@@ -560,9 +570,10 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
 
                 if (fh != INVALID_HANDLE_VALUE)
                 {
-                    desc.set_length(1024);
-                    pi.description = desc.str();
-                    pi.description_buflen = 1023;
+                    pi.description = description.str();
+                    pi.description_buflen = description.get_capacity();
+                    pi.description_with_tags = description_t.str();
+                    pi.description_with_tags_buflen = description_t.get_capacity();
 
                     rst = protolib.load(path, pi);
 #if defined _DEBUG || defined _CRASH_HANDLER
@@ -571,12 +582,13 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                         exception_operator_c::dump_filename.replace_all(CONSTWSTR(".dmp"), wstr_c(CONSTWSTR(".")).appendcvt(proto).append(CONSTWSTR(".dmp")));
                     }
 #endif
+                    description.set_length(CHARz_nlen(description.cstr(), description.get_capacity()));
+                    description_t.set_length(CHARz_nlen(description_t.cstr(), description_t.get_capacity()));
 
                     FindClose(fh);
-                    desc.set_length();
                 }
             }
-            IPCW(HA_CMD_STATUS) << (int)AQ_SET_PROTO << (int)rst << pi.priority << pi.features << pi.connection_features << desc.as_sptr()
+            IPCW(HA_CMD_STATUS) << (int)AQ_SET_PROTO << (int)rst << pi.priority << pi.features << pi.connection_features << description.as_sptr() << description_t.as_sptr()
                 << pi.audio_fmt.sample_rate
                 << pi.audio_fmt.channels
                 << pi.audio_fmt.bits
@@ -834,7 +846,10 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             file_portion_s fp;
             fp.offset = r.get<u64>();
             fp.data = r.get_data(fp.size);
+
             protolib.functions->file_portion(utag, &fp);
+
+            //LogToFile("portion.log", "rcv: %llu %i", fp.offset, fp.size);
         }
         break;
     case AQ_GET_AVATAR_DATA:

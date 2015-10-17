@@ -40,13 +40,27 @@ struct udp_listner : public socket_s
     udp_listner(int port):port(port) {}
 };
 
-struct udp_sender : public socket_s
+struct udp_sender
 {
     int port;
 
+    struct prepared_sock_s
+    {
+        SOCKET s;
+        unsigned int ip;
+        prepared_sock_s(SOCKET s, unsigned int ip):s(s), ip(ip) {}
+    };
+
+    std::vector<prepared_sock_s> socks; // one per interface
+
     void prepare();
     void send(const void *data, int size, int portshift);
+    void close();
     udp_sender(int port) :port(port) {}
+    ~udp_sender()
+    {
+        close();
+    }
 };
 
 struct tcp_pipe : public socket_s
@@ -516,9 +530,18 @@ private:
         static const int PORTION_SIZE = 65536;
         static const int MAX_TRANSFERING_CHUNKS = 16;
 
-        u64 dtgs[ MAX_TRANSFERING_CHUNKS ];
-
         u64 offset = 0;
+
+        struct requested_chunk_s
+        {
+            u64 dtg = 0;
+            u64 offset = 0;
+            int size = 0;
+#ifdef _DEBUG
+            int requesttime = 0;
+#endif
+        } rchunks[ MAX_TRANSFERING_CHUNKS ];
+
         int requested_chunks = 0;
         bool is_accepted = false;
         bool is_paused = false;

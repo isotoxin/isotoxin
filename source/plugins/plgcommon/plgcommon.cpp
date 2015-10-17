@@ -2,11 +2,11 @@
 
 #define LENGTH(a) (sizeof(a)/sizeof(a[0]))
 
-void LogMessage(const char *caption, const char *msg)
+void LogMessage(const char *fn, const char *caption, const char *msg)
 {
 #if defined _DEBUG || defined _DEBUG_OPTIMIZED
     FILE *f = nullptr;
-    fopen_s(&f, "plghost.log", "ab");
+    fopen_s(&f, fn ? fn : "plghost.log", "ab");
     if (f)
     {
         char module[MAX_PATH];
@@ -31,7 +31,7 @@ int MessageBoxDef(const char *text, const char *notLoggedText, const char *capti
 
 inline int LoggedMessageBox(const str_c &text, const char *notLoggedText, const char *caption, UINT type)
 {
-    LogMessage(caption, text);
+    LogMessage(nullptr, caption, text);
     return MessageBoxDef(text, notLoggedText, caption, type);
 }
 
@@ -71,7 +71,7 @@ void Error(const char *s, ...)
     vsprintf_s(str, LENGTH(str), s, args);
     va_end(args);
 
-    LogMessage("Error", str);
+    LogMessage(nullptr, "Error", str);
     if (MessageBoxDef(str, "", "Error", IsDebuggerPresent() ? MB_OKCANCEL : MB_OK) == IDCANCEL)
         __debugbreak();
 }
@@ -85,8 +85,21 @@ void Log(const char *s, ...)
     vsprintf_s(str, LENGTH(str), s, args);
     va_end(args);
 
-    LogMessage(nullptr, str);
+    LogMessage(nullptr ,nullptr, str);
 }
+
+void LogToFile(const char *fn, const char *s, ...)
+{
+    char str[4000];
+
+    va_list args;
+    va_start(args, s);
+    vsprintf_s(str, LENGTH(str), s, args);
+    va_end(args);
+
+    LogMessage(fn, nullptr, str);
+}
+
 
 
 bool AssertFailed(const char *file, int line, const char *s, ...)

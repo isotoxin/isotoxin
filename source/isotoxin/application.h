@@ -5,6 +5,7 @@
 #define BUTTON_FACE_PRELOADED( face ) (GET_BUTTON_FACE) ([]()->button_desc_s * { return g_app->buttons().face; } )
 
 #define HOTKEY_TOGGLE_SEARCH_BAR SSK_F, gui_c::casw_ctrl
+#define HOTKEY_TOGGLE_NEW_CONNECTION_BAR SSK_N, gui_c::casw_ctrl
 
 struct preloaded_buttons_s
 {
@@ -56,33 +57,33 @@ struct autoupdate_params_s
 struct file_transfer_s;
 struct query_task_s : public ts::task_c
 {
-    file_transfer_s *ftr;
-
     struct job_s
     {
         DUMMY(job_s);
-        uint64 offset;
-        int sz;
+        uint64 offset = 0xFFFFFFFFFFFFFFFFull;
+        int sz = 0;
         job_s() {}
+    };
+
+    enum rslt_e
+    {
+        rslt_inprogress,
+        rslt_idle,
+        rslt_kill,
+        rslt_ok,
     };
 
     struct sync_s
     {
+        file_transfer_s *ftr = nullptr;
         job_s current_job;
         ts::array_inplace_t<job_s, 1> jobarray;
+        rslt_e rslt = rslt_inprogress;
     };
 
     spinlock::syncvar<sync_s> sync;
 
-    volatile enum 
-    {
-        rslt_inprogress,
-        rslt_kill,
-        rslt_ok,
-
-    } rslt = rslt_inprogress;
-
-    query_task_s(file_transfer_s *ftr):ftr(ftr) {}
+    query_task_s(file_transfer_s *ftr);
     ~query_task_s();
     /*virtual*/ int iterate(int pass) override;
     /*virtual*/ void done(bool canceled) override;
@@ -103,7 +104,7 @@ struct file_transfer_s : public unfinished_file_transfer_s
 
     struct data_s
     {
-        uint64 offset = 0;
+        //uint64 offset = 0;
         uint64 progrez = 0;
         HANDLE handle = nullptr;
         double notfreq = 1.0;
@@ -145,7 +146,7 @@ struct file_transfer_s : public unfinished_file_transfer_s
     spinlock::syncvar<data_s> data;
 
     HANDLE file_handle() const { return data.lock_read()().handle; }
-    uint64 get_offset() const { return data.lock_read()().offset; }
+    //uint64 get_offset() const { return data.lock_read()().offset; }
 
     bool accepted = false; // prepare_fn called - file receive accepted // used only for receive
     bool update_item = false;
@@ -217,10 +218,10 @@ public:
     /*virtual*/ void app_loop_event() override;
     /*virtual*/ void app_b_minimize(RID main) override;
     /*virtual*/ void app_b_close(RID main) override;
-    /*virtual*/ void app_path_expand_env(ts::wstr_c &path);
-    /*virtual*/ void app_active_state(bool is_active);
-
+    /*virtual*/ void app_path_expand_env(ts::wstr_c &path) override;
     /*virtual*/ void do_post_effect() override;
+    /*virtual*/ void app_font_par(const ts::str_c&, ts::font_params_s&fprm) override;
+
 
 
     ///////////// application_c itself
@@ -391,6 +392,8 @@ public:
 
     ts::array_del_t<send_queue_s, 1> m_undelivered;
 
+    void update_fonts();
+
 public:
     bool b_send_message(RID r, GUIPARAM param);
     bool flash_notification_icon(RID r = RID(), GUIPARAM param = nullptr);
@@ -407,12 +410,16 @@ public:
     int minprotowidth = 100;
     int protoiconsize = 10;
 
+    ts::TSCOLOR found_mark_color = ts::ARGB( 50, 50, 0 );
+    ts::TSCOLOR found_mark_bg_color = ts::ARGB( 255, 100, 255 );
+
+
     time_t autoupdate_next;
     ts::ivec2 download_progress = ts::ivec2(0);
 
     found_stuff_s *found_items = nullptr;
 
-	application_c( const ts::wchar * cmdl, bool minimize, bool readonly );
+	application_c( const ts::wchar * cmdl );
 	~application_c();
 
     static ts::str_c get_downloaded_ver();
@@ -429,6 +436,7 @@ public:
     void set_notification_icon();
     bool is_inactive(bool do_incoming_message_stuff);
 
+    void reload_fonts();
     bool load_theme( const ts::wsptr&thn );
 
     const SLANGID &current_lang() const {return m_locale_tag;};
@@ -498,6 +506,7 @@ public:
 
     void resend_undelivered_messages( const contact_key_s& rcv = contact_key_s() );
     void undelivered_message( const post_s &p );
+    void kill_undelivered( uint64 utag );
 
     void set_status(contact_online_state_e cos_, bool manual);
 

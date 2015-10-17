@@ -24,6 +24,9 @@ gui_notice_c::gui_notice_c(MAKE_CHILD<gui_notice_c> &data) :gui_label_c(data), n
         case NOTICE_GROUP_CHAT:
             set_theme_rect(CONSTASTR("notice.gchat"), false);
             break;
+        case NOTICE_PREV_NEXT:
+            set_theme_rect(CONSTASTR("notice.found"), false);
+            break;
         //case NOTICE_FRIEND_REQUEST_RECV:
         //case NOTICE_INCOMING_CALL:
         //case NOTICE_CALL_INPROGRESS:
@@ -168,14 +171,20 @@ extern ts::static_setup<spinlock::syncvar<autoupdate_params_s>,1000> auparams;
 
 ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 {
-    if (notice == NOTICE_NEWVERSION && nv.is_error())
+    if (notice == NOTICE_NEWVERSION && nv.error_num != gmsg<ISOGM_NEWVERSION>::E_OK)
     {
         g_app->download_progress = ts::ivec2(0);
         ts::wstr_c ot = textrect.get_text();
         int pp = ot.find_pos(CONSTWSTR("<null=px>"));
         if (pp >= 0)
         {
-            ot.set_length(pp).append(loc_text(loc_connection_failed));
+            ts::wstr_c errt;
+            if (nv.error_num == gmsg<ISOGM_NEWVERSION>::E_NETWORK)
+                errt = loc_text(loc_connection_failed);
+            else if (nv.error_num == gmsg<ISOGM_NEWVERSION>::E_DISK)
+                errt = loc_text(loc_disk_write_error);
+
+            ot.set_length(pp).append(errt);
             textrect.set_text_only(ot, false);
             getengine().redraw();
         }
@@ -546,6 +555,34 @@ void gui_notice_c::setup(contact_c *sender)
 
                 addheight = 50;
             }
+
+        }
+        break;
+    case NOTICE_PREV_NEXT:
+        {
+            getengine().trunc_children(0);
+
+            gui_messagelist_c &ml = HOLD(HOLD(getparent())().getparent()).as<gui_conversation_c>().get_msglist();
+
+            gui_button_c &b_prev = MAKE_CHILD<gui_button_c>(getrid());
+            b_prev.set_face_getter(BUTTON_FACE(button));
+            b_prev.set_handler(DELEGATE(&ml, b_prev), nullptr);
+            b_prev.set_text(TTT("Previous", 339));
+            b_prev.leech(TSNEW(leech_dock_bottom_center_s, 130, 30, -5, 5, 0, 2));
+            b_prev.disable(true);
+            MODIFY(b_prev).visible(true);
+
+            gui_button_c &b_next = MAKE_CHILD<gui_button_c>(getrid());
+            b_next.set_face_getter(BUTTON_FACE(button));
+            b_next.set_handler(DELEGATE(&ml, b_next), nullptr);
+            b_next.set_text(TTT("Next", 340));
+            b_next.leech(TSNEW(leech_dock_bottom_center_s, 130, 30, -5, 5, 1, 2));
+            b_next.disable(true);
+            MODIFY(b_next).visible(true);
+
+            ml.set_prev_next_buttons(b_prev, b_next);
+
+            addheight = 40;
 
         }
         break;
@@ -1451,6 +1488,12 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                         n.setup(c);
                     }
                 });
+
+            if (owner->is_full_search_result())
+            {
+                gui_notice_c &n = create_notice(NOTICE_PREV_NEXT);
+                n.setup(owner);
+            }
         }
 
         refresh();
@@ -1582,6 +1625,8 @@ void gui_message_item_c::ctx_menu_delmessage(const ts::str_c &mutag)
     if (auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.msgitem_utag == utag; }))
         if (row->deleted())
             prf().changed();
+
+    g_app->kill_undelivered(utag);
 
     if (remove_utag(utag))
     {
@@ -2242,8 +2287,6 @@ ts::ivec2 gui_message_item_c::extract_message(int chari, uint64 &mutag) const
     int rite = textrect.get_text().find_pos(chari, CONSTWSTR("<p><r>")); //-V807
     if (rite < 0) rite = textrect.get_text().get_length();
     int left = 0;
-    if ( textrect.get_text().begins( CONSTWSTR("<cstm=z>") ) )
-        left = 8;
 
     int r2 = rite - 8 - 16;
     if (CHECK(textrect.get_text().substr(r2, r2+7).equals(CONSTWSTR("<null=t"))))
@@ -2421,11 +2464,6 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             {
                 if (flags.is(F_FOUND_ITEM))
                 {
-                    //ts::wstr_c bbb(CONSTWSTR("<p=c><rect=65000,120,-25,3><nbsp><rect=65001,120,-25,3></p><br>"));
-                    //bbb.append_as_uint(100).append_char(',').append_as_int(-sz.y).append(CONSTWSTR(",2>"));
-                    if ( addition_prevnext_s *pn = ts::ptr_cast<addition_prevnext_s *>(addition.get()) )
-                        pn->prevnext = CONSTWSTR("<p=c><rect=65000,120,-25,3><nbsp><rect=65001,120,-25,3></p><br>");
-                    newtext.insert(0,CONSTWSTR("<cstm=z>"));
                 }
 
                 timestrwidth = rec.append(newtext, timestr);
@@ -2503,39 +2541,6 @@ void gui_message_item_c::message_postfix(ts::wstr_c &newtext)
     if (timestrwidth)
         newtext.append( CONSTWSTR("<nbsp=") ).append_as_uint(timestrwidth + ADDTIMESPACE).append_char('>');
 }
-
-void gui_message_item_c::goto_item( uint64 utag )
-{
-    rectengine_c &lst = HOLD(getparent()).engine();
-
-    for (rectengine_c *e : lst)
-        if (e)
-        {
-            gui_message_item_c &mi = *ts::ptr_cast<gui_message_item_c *>(&e->getrect());
-            if (mi.get_mt() == MTA_TYPING)
-                continue;
-
-            if (mi.with_utag(utag))
-            {
-                gui_messagelist_c &ml = *ts::ptr_cast<gui_messagelist_c *>(&lst.getrect());
-                ml.scroll_to_child( &mi.getengine(), true );
-            }
-        }
-}
-
-bool gui_message_item_c::b_prev(RID, GUIPARAM)
-{
-    if ( addition_prevnext_s *pn = ts::ptr_cast<addition_prevnext_s *>(addition.get()) )
-        goto_item( pn->prev );
-    return true;
-}
-bool gui_message_item_c::b_next(RID, GUIPARAM)
-{
-    if (addition_prevnext_s *pn = ts::ptr_cast<addition_prevnext_s *>(addition.get()))
-        goto_item(pn->next);
-    return true;
-}
-
 
 bool gui_message_item_c::b_explore(RID, GUIPARAM)
 {
@@ -2687,46 +2692,6 @@ void gui_message_item_c::kill_button( rectengine_c *beng, int r )
 
 void gui_message_item_c::updrect_emoticons(const void *, int r, const ts::ivec2 &p)
 {
-    if (flags.is(F_FOUND_ITEM) && r >= BTN_PREV)
-    {
-        addition_prevnext_s *pn = ts::ptr_cast<addition_prevnext_s *>(addition.get());
-        if (r == BTN_PREV && pn->rid_prev)
-        {
-            MODIFY(pn->rid_prev).pos(root_to_local(p));
-            return;
-        }
-        if (r == BTN_NEXT && pn->rid_next)
-        {
-            MODIFY(pn->rid_next).pos(root_to_local(p));
-            return;
-        }
-
-        gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
-        bc.set_face_getter(BUTTON_FACE(button));
-        MODIFY(bc).size(120, 25).pos(root_to_local(p)).visible(true);
-        if (r == BTN_PREV)
-        {
-            bc.set_handler(DELEGATE(this, b_prev), nullptr);
-            bc.set_text(TTT("Previous", 339));
-            bc.leech(this);
-            if (!pn->prev)
-                bc.disable();
-            pn->rid_prev = bc.getrid();
-        }
-        else if (r == BTN_NEXT)
-        {
-            bc.set_handler(DELEGATE(this, b_next), nullptr);
-            bc.set_text(TTT("Next", 340));
-            bc.leech(this);
-            if (!pn->next)
-                bc.disable();
-            pn->rid_next = bc.getrid();
-        }
-
-        return;
-    }
-
-
     emoti().draw( getroot(), p, r );
 }
 
@@ -2746,6 +2711,19 @@ void gui_message_item_c::updrect(const void *, int r, const ts::ivec2 &p)
         return;
     } else if (TYPING_SPACERECT == r)
         return;
+    else if (CTL_PROGRESSBAR == r)
+    {
+        addition_file_data_s &ftb = addition_file_data();
+        if (ftb.pbar.expired())
+        {
+            gui_hslider_c &pbar = MAKE_CHILD<gui_hslider_c>(getrid());
+            pbar.set_pb_mode();
+            pbar.set_level(ftb.progress, ftb.pbtext);
+            ftb.pbar = &pbar;
+        }
+        MODIFY(*ftb.pbar).pos(root_to_local(p)).size( ftb.pbsize );
+        return;
+    }
 
 
     addition_file_data_s &ftb = addition_file_data();
@@ -2829,6 +2807,33 @@ ts::wstr_c gui_message_item_c::prepare_button_rect(int r, const ts::ivec2 &sz)
     imgloader.destroy<image_loader_c>();
 }
 
+const ts::wstr_c &gui_message_item_c::addition_file_data_s::getrectt(gui_message_item_c *mi)
+{
+    int miw = mi->getprops().size().x;
+    if (!rectt.is_empty() && rwidth == miw)
+        return rectt;
+
+    rwidth = miw;
+    if ( clw < 0 )
+    {
+        const theme_rect_s *thr = mi->themerect();
+        clw = thr ? thr->clborder_x() : 0;
+    }
+
+    rectt.set(CONSTWSTR("<br><rect=1002,"));
+    //                             CTL_PROGRESSBAR
+    if (!pbsize.y)
+    {
+        pbsize.y = 30;
+        if (const theme_rect_s *thr = g_app->theme().get_rect(CONSTASTR("hslider")))
+            pbsize.y = thr->sis[SI_TOP].height();
+    }
+
+    pbsize.x = miw - clw - 4;
+    rectt.append_as_int(pbsize.x).append_char(',').append_as_int(pbsize.y).append(CONSTWSTR("><br=3>"));
+    return rectt;
+}
+
 void gui_message_item_c::update_text(int for_width)
 {
     bool is_send = false;
@@ -2847,7 +2852,8 @@ void gui_message_item_c::update_text(int for_width)
 
             set_selectable(false);
             
-            if (addition_file_data_s *ftb = ts::ptr_cast<addition_file_data_s *>(addition.get()))
+            addition_file_data_s *ftb = ts::ptr_cast<addition_file_data_s *>(addition.get());
+            if (ftb)
                 for (addition_file_data_s::btn_s &b : ftb->btns)
                     b.used = false;
 
@@ -2874,6 +2880,7 @@ void gui_message_item_c::update_text(int for_width)
             file_transfer_s *ft = nullptr;
             if (fc == '*')
             {
+                if (ftb) TSDEL( ftb->pbar.get() );
                 newtext.append(CONSTWSTR("<img=file,-1>"));
                 if (is_send)
                     newtext.append(TTT("Upload canceled: $",181) / fn);
@@ -2881,6 +2888,7 @@ void gui_message_item_c::update_text(int for_width)
                     newtext.append(TTT("Download canceled: $",182) / fn);
             } else if (fc == '?')
             {
+                if (ftb) TSDEL( ftb->pbar.get() );
                 ft = g_app->find_file_transfer_by_msgutag(zero_rec.utag);
                 if (ft && ft->is_active()) goto transfer_alive;
 
@@ -2896,6 +2904,8 @@ void gui_message_item_c::update_text(int for_width)
 
                 newtext.append(CONSTWSTR("<img=file,-1>"));
 
+                addition_file_data_s &ab = addition_file_data();
+
                 if (nullptr == ft) ft = g_app->find_file_transfer_by_msgutag(zero_rec.utag);
                 if (ft && ft->is_active())
                 {
@@ -2906,8 +2916,12 @@ void gui_message_item_c::update_text(int for_width)
                     else
                         newtext.append(TTT("Download: $",184) / fn);
 
+                    newtext.append(ab.getrectt(this));
+
                     int bps;
-                    newtext.append(CONSTWSTR(" (<b>")).append_as_uint( ft->progress(bps) ).append(CONSTWSTR("</b>%, "));
+                    int prgrs = ft->progress(bps);
+                    ab.pbtext.set(CONSTWSTR("<b>")).append_as_uint( prgrs ).append(CONSTWSTR("</b>%, "));
+                    ab.progress = (float)prgrs * (float)(1.0/100);
                     
                     if (bps >= file_transfer_s::BPSSV_ALLOW_CALC)
                         insert_button( BTN_PAUSE, g_app->buttons().pauseb->size );
@@ -2917,26 +2931,27 @@ void gui_message_item_c::update_text(int for_width)
                         if (bps == file_transfer_s::BPSSV_PAUSED_BY_ME)
                             insert_button( BTN_UNPAUSE, g_app->buttons().unpauseb->size );
                         if (bps == file_transfer_s::BPSSV_WAIT_FOR_ACCEPT) 
-                            newtext.append(TTT("waiting",185));
+                            ab.pbtext.append(TTT("waiting",185));
                         else
-                            newtext.append(TTT("pause",186));
+                            ab.pbtext.append(TTT("pause",186));
                     } else if (bps < 1024)
-                        newtext.append(TTT("$ bytes per second",189) / ts::wmake(bps));
+                        ab.pbtext.append(TTT("$ bytes per second",189) / ts::wmake(bps));
                     else if (bps < 1024 * 1024)
-                        newtext.append(TTT("$ kbytes per second",190) / ts::wmake(bps/1024));
+                        ab.pbtext.append(TTT("$ kbytes per second",190) / ts::wmake(bps/1024));
                     else
-                        newtext.append(TTT("$ Mb per second",191) / ts::wmake(bps/(1024*1024)));
+                        ab.pbtext.append(TTT("$ Mb per second",191) / ts::wmake(bps/(1024*1024)));
 
-                    newtext.append_char(')');
+                    if (ab.pbar) ab.pbar->set_level(ab.progress, ab.pbtext);
+
                 } else
                 {
+                    TSDEL(ab.pbar.get());
+
                     if (is_send)
                         newtext.append(TTT("File uploaded: $",193) / fn);
                     else
                         newtext.append(TTT("File: $",192) / fn);
 
-                    
-                    addition_file_data_s &ab = addition_file_data();
                     if (!ab.imgloader && image_loader_c::is_image_fn(zero_rec.text))
                         ab.imgloader.initialize<image_loader_c>( this, from_utf8(zero_rec.text) );
                 }
@@ -3010,7 +3025,7 @@ void gui_message_item_c::update_text(int for_width)
                 int newh = get_height_by_width(rectw);
                 if (newh == oldh)
                     getengine().redraw();
-                else
+                else if (!gui->repos_in_progress())
                     gui->repos_children(&HOLD(getparent()).as<gui_group_c>());
             }
         }
@@ -3085,19 +3100,13 @@ ts::wstr_c gui_message_item_c::hdr() const
     {
         if (tv.s[0] == 'x')
         {
-            r = CONSTWSTR("<b>");
+            r = maketag_mark<ts::wchar>(g_app->found_mark_bg_color);
+            r.append( maketag_color<ts::wchar>(g_app->found_mark_color) );
             return true;
         } else if (tv.s[0] == 'y')
         {
-            r = CONSTWSTR("</b>");
+            r = CONSTWSTR("</color></mark>");
             return true;
-        } else if (tv.s[0] == 'z')
-        {
-            if ( addition_prevnext_s *pn = ts::ptr_cast<addition_prevnext_s *>(addition.get()) )
-            {
-                r = pn->prevnext;
-                return true;
-            }
         }
     }
     return __super::custom_tag_parser(r,tv);
@@ -3215,6 +3224,15 @@ gui_messagelist_c::gui_messagelist_c(initial_rect_data_s &data) :gui_vscrollgrou
 }
 gui_messagelist_c::~gui_messagelist_c()
 {
+    g_app->unregister_kbd_callback(DELEGATE(this, pageup));
+    g_app->unregister_kbd_callback(DELEGATE(this, pagedown));
+    g_app->unregister_kbd_callback(DELEGATE(this, totop));
+    g_app->unregister_kbd_callback(DELEGATE(this, tobottom));
+    g_app->unregister_kbd_callback(DELEGATE(this, lineup));
+    g_app->unregister_kbd_callback(DELEGATE(this, linedown));
+    g_app->unregister_kbd_callback(DELEGATE(this, font_size_up));
+    g_app->unregister_kbd_callback(DELEGATE(this, font_size_down));
+
 }
 
 /*virtual*/ ts::ivec2 gui_messagelist_c::get_min_size() const
@@ -3224,9 +3242,48 @@ gui_messagelist_c::~gui_messagelist_c()
 
 /*virtual*/ void gui_messagelist_c::created()
 {
+    g_app->register_kbd_callback(DELEGATE(this, font_size_up), SSK_PADPLUS, gui_c::casw_ctrl);
+    g_app->register_kbd_callback(DELEGATE(this, font_size_down), SSK_PADMINUS, gui_c::casw_ctrl);
+    g_app->register_kbd_callback( DELEGATE( this, pageup ), SSK_PGUP, 0 );
+    g_app->register_kbd_callback( DELEGATE( this, pagedown ), SSK_PGDN, 0 );
+    g_app->register_kbd_callback( DELEGATE( this, totop ), SSK_HOME, gui_c::casw_ctrl);
+    g_app->register_kbd_callback( DELEGATE( this, tobottom ), SSK_END, gui_c::casw_ctrl);
+    g_app->register_kbd_callback(DELEGATE(this, lineup), SSK_UP, 0);
+    g_app->register_kbd_callback(DELEGATE(this, linedown), SSK_DOWN, 0);
+
     set_theme_rect(CONSTASTR("msglist"), false);
     defaultthrdraw = DTHRO_BASE;
     __super::created();
+}
+
+/*virtual*/ void gui_messagelist_c::children_repos_info(cri_s &info) const
+{
+    if (flags.is(F_EMPTY_MODE))
+    {
+        info.area = get_client_area();
+        info.from = getengine().children_count();
+    }
+    else
+        __super::children_repos_info(info);
+
+    if (flags.is(F_SEARCH_RESULTS_HERE))
+        info.update_offset = true;
+}
+
+/*virtual*/ void gui_messagelist_c::children_repos()
+{
+    if (flags.is(F_EMPTY_MODE))
+    {
+        nosb();
+        repos_empty_mode_stuff();
+        return;
+    }
+    __super::children_repos();
+
+    uint64 utag_prev = 0, utag_next = 0;
+    find_prev_next(&utag_prev, &utag_next);
+    if (btn_prev) btn_prev->disable(0 == utag_prev);
+    if (btn_next) btn_next->disable(0 == utag_next);
 }
 
 /*virtual*/ bool gui_messagelist_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -3411,10 +3468,385 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_MESSAGE> &p) // show message
     return 0;
 }
 
-void gui_messagelist_c::clear_list()
+bool gui_messagelist_c::scroll_do(RID, GUIPARAM)
+{
+    if (flags.is(F_SCROLLING_TO_TGT) && is_sb_visible())
+    {
+        int curshift = sbshift();
+
+        if (curshift != target_offset)
+        {
+            int delta = lround( 0.3f * (target_offset - curshift) );
+            if (prevdelta == delta)
+            {
+                sbshift(target_offset);
+                gui->repos_children(this);
+            } else
+            {
+                prevdelta = delta;
+                if (!delta)
+                    sbshift(target_offset);
+                else
+                    sbshift(curshift + delta);
+                gui->repos_children(this);
+                DEFERRED_UNIQUE_CALL(0, DELEGATE(this, scroll_do), nullptr);
+                return true;
+            }
+        }
+    }
+    flags.clear(F_SCROLLING_TO_TGT);
+    return true;
+}
+
+bool gui_messagelist_c::font_size_up(RID, GUIPARAM)
+{
+    float k = prf().fontscale_conv_text();
+
+    int minsz = 1000;
+    gui->theme().font_params(CONSTASTR("conv_text"), [&](const ts::font_params_s &fp) {
+        minsz = ts::tmin( minsz, fp.size.x, fp.size.y );
+    });
+
+
+    int cursz = ts::lround(k * minsz);
+    if (cursz >= 20)
+        return true;
+
+    ++cursz;
+
+    k = (float)cursz / (float)minsz;
+    prf().fontscale_conv_text(k);
+
+    g_app->reload_fonts();
+
+    if (historian) historian->reselect(false);
+
+    return true;
+}
+bool gui_messagelist_c::font_size_down(RID, GUIPARAM)
+{
+    float k = prf().fontscale_conv_text();
+    int minsz = 1000;
+
+    gui->theme().font_params(CONSTASTR("conv_text"), [&](const ts::font_params_s &fp) {
+        minsz = ts::tmin(minsz, fp.size.x, fp.size.y);
+    });
+
+
+    int cursz = ts::lround(k * minsz);
+    if (cursz <= 8)
+        return true;
+    --cursz;
+
+    k = (float)cursz / (float)minsz;
+    prf().fontscale_conv_text(k);
+
+    g_app->reload_fonts();
+
+    if (historian) historian->reselect(false);
+
+    return true;
+}
+
+bool gui_messagelist_c::lineup(RID, GUIPARAM)
+{
+    scroll(sbshift() + 20);
+    return true;
+}
+bool gui_messagelist_c::linedown(RID, GUIPARAM)
+{
+    scroll(sbshift() - 20);
+    return true;
+}
+
+
+bool gui_messagelist_c::pageup(RID,GUIPARAM)
+{
+    scroll(sbshift() + getprops().size().y);
+    return true;
+}
+
+bool gui_messagelist_c::pagedown(RID,GUIPARAM)
+{
+    scroll(sbshift() - getprops().size().y);
+    return true;
+}
+
+bool gui_messagelist_c::totop(RID, GUIPARAM)
+{
+    scroll_to_begin();
+    return true;
+}
+bool gui_messagelist_c::tobottom(RID, GUIPARAM)
+{
+    scroll_to_end();
+    return true;
+}
+
+
+void gui_messagelist_c::scroll(int shift)
+{
+    target_offset = shift;
+    prevdelta = 1 + lround(0.3f * (target_offset - sbshift()));
+    flags.set(F_SCROLLING_TO_TGT);
+    __super::on_manual_scroll();
+    scroll_do(RID(), nullptr);
+}
+
+void gui_messagelist_c::goto_item(uint64 utag)
+{
+    for (rectengine_c *e : getengine())
+        if (e)
+        {
+            gui_message_item_c &mi = *ts::ptr_cast<gui_message_item_c *>(&e->getrect());
+            if (mi.get_mt() == MTA_TYPING)
+                continue;
+
+            if (mi.with_utag(utag))
+            {
+                //scroll_to_child(&mi.getengine(), true);
+                scroll( mi.get_offset() );
+                break;
+            }
+        }
+}
+
+void gui_messagelist_c::find_prev_next(uint64 *prevutag, uint64 *nextutag)
+{
+    if (prevutag) *prevutag = 0;
+    if (nextutag) *nextutag = 0;
+
+    auto find_prev = [this](gui_message_item_c *msg)->uint64
+    {
+        if ( msg->found_item() )
+            return msg->get_prev_found();
+        for(int index = getengine().get_child_index(&msg->getengine())-1;index >= 0;--index)
+        {
+            if (rectengine_c *e = getengine().get_child(index))
+            {
+                gui_message_item_c *m2c = ts::ptr_cast<gui_message_item_c *>(&e->getrect());
+                if (m2c->found_item())
+                    return m2c->zero_utag();
+            }
+        }
+        return 0;
+    };
+    auto find_next = [this](gui_message_item_c *msg)->uint64
+    {
+        if (msg->found_item())
+            return msg->get_next_found();
+        int cnt = getengine().children_count();
+        for (int index = getengine().get_child_index(&msg->getengine()) + 1; index < cnt; ++index)
+        {
+            if (rectengine_c *e = getengine().get_child(index))
+            {
+                gui_message_item_c *m2c = ts::ptr_cast<gui_message_item_c *>(&e->getrect());
+                if (m2c->found_item())
+                    return m2c->zero_utag();
+            }
+        }
+        return 0;
+    };
+
+    int offset;
+    if (rectengine_c *topvis = get_top_visible(&offset))
+    {
+        gui_message_item_c *msg = ts::ptr_cast<gui_message_item_c *>(&topvis->getrect());
+        if (prevutag)
+            *prevutag = (msg->found_item() && offset < 0) ? msg->zero_utag() : find_prev(msg);
+
+        if (nextutag)
+            *nextutag = find_next(msg);
+    }
+}
+
+bool gui_messagelist_c::b_prev(RID, GUIPARAM)
+{
+    uint64 tag;
+    find_prev_next(&tag, nullptr);
+
+    if (tag)
+        goto_item(tag);
+    return true;
+}
+bool gui_messagelist_c::b_next(RID, GUIPARAM)
+{
+    uint64 tag;
+    find_prev_next(nullptr, &tag);
+
+    if (tag)
+        goto_item(tag);
+    return true;
+}
+
+
+void gui_messagelist_c::clear_list(bool empty_mode)
 {
     last_seen_post_time = 0;
-    getengine().trunc_children(0);
+
+    if ( empty_mode && prf().get_options().is(UIOPT_SHOW_NEWCONN_BAR))
+    {
+        if (!flags.is(F_EMPTY_MODE))
+        {
+            getengine().trunc_children(0);
+            flags.set(F_EMPTY_MODE);
+        }
+
+        if (getengine().children_count() == 0)
+            create_empty_mode_stuff();
+    } else
+    {
+        flags.clear(F_EMPTY_MODE);
+        getengine().trunc_children(0);
+    }
+}
+
+namespace
+{
+    class gui_new_proto_c : public gui_label_ex_c
+    {
+        int addh = 100;
+        struct avprots_s : public available_protocols_s
+        {
+            gui_new_proto_c *owner;
+            bool loaded = false;
+            /*virtual*/ void done(bool fail) override
+            {
+                loaded = true;
+                owner->_new_connection(RID(), nullptr);
+            }
+            avprots_s(gui_new_proto_c *owner) :owner(owner)
+            {
+                load();
+            }
+        };
+        UNIQUE_PTR(avprots_s) avprots;
+    public:
+        gui_new_proto_c( initial_rect_data_s &data ):gui_label_ex_c(data) {}
+        /*virtual*/ ts::ivec2 get_min_size() const override
+        {
+            int ah = 0;
+            int w = getprops().size().x;
+            if (const theme_rect_s *th = themerect())
+                w -= th->clborder_x(), ah = th->clborder_y();
+
+            int h = gui->textsize( ts::g_default_text_font, get_text(), w ).y;
+            h += addh;
+
+            return ts::ivec2(100, h + ah);
+        }
+        /*virtual*/ ts::ivec2 get_max_size() const override
+        {
+            return ts::ivec2(100, 1024);
+        }
+        /*virtual*/ void created() override
+        {
+            set_theme_rect(CONSTASTR("newproto"), false);
+            __super::created();
+        }
+
+        bool _new_connection(RID, GUIPARAM)
+        {
+            if ( avprots && avprots->loaded )
+            {
+                dialog_protosetup_params_s prms(avprots.get(), &prf().get_table_active_protocol(), DELEGATE(&prf(), addeditnethandler));
+                prms.configurable.udp_enable = true;
+                prms.configurable.server_port = 0;
+                prms.configurable.initialized = true;
+                prms.connect_at_startup = true;
+                prms.watch = getrid();
+                SUMMON_DIALOG<dialog_setup_network_c>(UD_PROTOSETUPSETTINGS, prms);
+            } else if (!avprots)
+                avprots.reset( TSNEW(avprots_s, this) );
+
+            return true;
+        }
+        void header()
+        {
+            ts::wstr_c lt(CONSTWSTR("<p=c>"), TTT("Join network",345));
+            set_text(lt);
+            gui_button_c &b = MAKE_CHILD<gui_button_c>(getrid());
+            b.set_face_getter(BUTTON_FACE(addnetwork));
+            b.set_handler(DELEGATE(this, _new_connection), this);
+            ts::ivec2 minsz = b.get_min_size();
+            b.leech(TSNEW(leech_dock_top_center_s, minsz.x, minsz.y, -5, 5, 0, 1));
+            MODIFY(b).visible(true);
+            textrect.set_margins(0,minsz.y+5,0);
+            addh = minsz.y + 10;
+
+        }
+
+        /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+        {
+            if (qp == SQ_DRAW && rid == getrid())
+            {
+                __super::sq_evt(qp, rid, data);
+
+                return true;
+            }
+
+            if (__super::sq_evt(qp, rid, data)) return true;
+
+            return false;
+        }
+
+
+    };
+}
+
+void gui_messagelist_c::repos_empty_mode_stuff()
+{
+    if (flags.is(F_IN_REPOS)) return;
+    AUTOCLEAR( flags, F_IN_REPOS );
+    ts::irect clar = get_client_area();
+    int totalh = 0;
+
+    ts::tmp_buf_c vbits;
+    int cnt = getengine().children_count();
+    for (int i=0; i<cnt; ++i) vbits.set_bit(i, true);
+
+    for(;;)
+    {
+        totalh = 0;
+        int index = 0, lasti = -1;
+        for (rectengine_c *e : getengine())
+        {
+            if (e && vbits.get_bit(index))
+            {
+                totalh += e->getrect().get_min_size().y;
+                lasti = index;
+            }
+            ++index;
+        }
+
+        if (totalh > clar.height())
+        {
+            if (lasti >= 0)
+                vbits.set_bit(lasti, false);
+            continue;
+        }
+        break;
+    }
+    //if (!vbits.get_bit(1))
+    //    vbits.set_bit(0,false);
+    for (int i = 0; i < cnt; ++i)
+        MODIFY( getengine().get_child(i)->getrect() ).visible( vbits.get_bit(i) );
+
+    int y = clar.lt.y + (clar.height()-totalh)/2;
+    for (rectengine_c *e : getengine())
+        if (e && e->getrect().getprops().is_visible())
+        {
+            int h = e->getrect().get_min_size().y;
+            MODIFY(e->getrect()).pos( clar.lt.x + 10, y ).size( clar.width()-20, h );
+            y += h;
+        }
+}
+
+void gui_messagelist_c::create_empty_mode_stuff()
+{
+    gui_new_proto_c &lbl = MAKE_VISIBLE_CHILD<gui_new_proto_c>(getrid());
+    lbl.header();
+    
 }
 
 DWORD gui_messagelist_c::handler_SEV_ACTIVE_STATE(const system_event_param_s & p)
@@ -3436,7 +3868,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_REFRESH_SEARCH_RESULT> &)
             (g_app->active_contact_item == historian->gui_item && historian->is_full_search_result()))
         {
             flags.init(F_SEARCH_RESULTS_HERE, historian->is_full_search_result());
-            historian->reselect(true);
+            historian->reselect(flags.is(F_SEARCH_RESULTS_HERE));
         }
 
     return 0;
@@ -3453,7 +3885,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &p)
 
         if (p.contact->get_state() == CS_ROTTEN)
         {
-            clear_list();
+            clear_list( true );
             historian = nullptr;
             return 0;
         }
@@ -3521,6 +3953,20 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED> &p)
     return 0;
 }
 
+ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
+{
+    if (ch.sp == PP_PROFILEOPTIONS && historian && historian->getkey().is_self() && 0 != (ch.bits & UIOPT_SHOW_NEWCONN_BAR))
+        historian->reselect(false);
+    else if (ch.sp == PP_FONTSCALE && historian && !historian->getkey().is_self())
+        historian->reselect(false);
+    else if (ch.sp == CFG_LANGUAGE && flags.is(F_EMPTY_MODE) && prf().get_options().is(UIOPT_SHOW_NEWCONN_BAR))
+    {
+        getengine().trunc_children(0);
+        create_empty_mode_stuff();
+    }
+    return 0;
+}
+
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_TYPING> &p)
 {
     if (prf().get_options().is(MSGOP_IGNORE_OTHER_TYPING))
@@ -3572,7 +4018,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
                 if (p.unread && *p.unread == nullptr)
                     *p.unread = &mi.getengine();
             }
-            else if (p.unread && *p.unread == nullptr && p.post.time >= historian->get_readtime())
+            else if (p.post.mt() == MTA_MESSAGE && p.unread && *p.unread == nullptr && p.post.time >= historian->get_readtime())
                 *p.unread = &mi.getengine();
 
             mi.append_text(p.post, false);
@@ -3590,7 +4036,16 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
 
     memset( &last_post_time, 0, sizeof(last_post_time) );
 
-    clear_list();
+    uint64 scrollto = 0;
+    if (!p.scrollend)
+        for (rectengine_c *v = get_top_visible(nullptr);v;v = getengine().get_next_child(v))
+            if (gui_message_item_c *mi = dynamic_cast<gui_message_item_c *>(&v->getrect()))
+            {
+                scrollto = mi->zero_utag();
+                break;
+            }
+
+    clear_list( p.contact == nullptr || self_selected );
 
     historian = p.contact;
     last_seen_post_time = historian ? historian->get_readtime() : 0;
@@ -3651,6 +4106,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
         }
     }
 
+    rectengine_c *scroll_to = nullptr;
     rectengine_c *first_unread = nullptr;
     p.contact->iterate_history([&](const post_s &p)
     {
@@ -3678,6 +4134,10 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
             summon.found_item = true;
         }
         summon.send();
+
+        if (p.utag == scrollto)
+            scroll_to = getengine().get_last_child();
+
         return false;
     });
 
@@ -3688,7 +4148,9 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
             scroll_to_child(first_unread, true);
         else
             scroll_to_end();
-    } else
+    } else if (scroll_to)
+        scroll_to_child(scroll_to, true);
+    else
         scroll_to_begin();
         
     gui->repos_children(this);
@@ -4279,7 +4741,7 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
     }
     if (ch.pass == 0 && caption->contacted())
     {
-        if (ch.sp == PP_PROFILEOPTIONS)
+        if (ch.sp == PP_PROFILEOPTIONS && 0 == (ch.bits & UIOPT_SHOW_SEARCH_BAR))
             caption->getcontact().reselect(true);
     }
     if (ch.sp == PP_EMOJISET && caption->contacted())

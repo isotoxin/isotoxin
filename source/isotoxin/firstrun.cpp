@@ -27,6 +27,17 @@ void dialog_firstrun_c::set_defaults()
     is_autostart = true;
 }
 
+void dialog_firstrun_c::set_portable()
+{
+    copyto = path_by_choice(PCH_HERE);
+    profilename = CONSTWSTR("%USER%");
+    parse_env(profilename);
+    if (profilename.find_pos('%') >= 0) profilename = CONSTWSTR("profile");
+    choice0 = PCH_HERE;
+    choice1 = PCH_INSTALLPATH;
+    is_autostart = false;
+}
+
 
 ts::wstr_c dialog_firstrun_c::gen_info() const
 {
@@ -64,7 +75,7 @@ ts::wstr_c dialog_firstrun_c::gen_info() const
     switch (page)
     {
     case 0:
-        if (!i_am_noob)
+        if (mode == 2)
             break;
         // no break here
     case 3:
@@ -176,12 +187,14 @@ bool dialog_firstrun_c::refresh_current_page( RID, GUIPARAM )
 
 bool dialog_firstrun_c::noob_or_father( RID, GUIPARAM par )
 {
-    i_am_noob = par != nullptr;
+    mode = as_int(par);
     //update_buttons();
     DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, refresh_current_page), nullptr );
 
-    if (i_am_noob)
+    if (0 == mode)
         set_defaults();
+    if (1 == mode)
+        set_portable();
 
     return true;
 }
@@ -234,14 +247,16 @@ void dialog_firstrun_c::go2page(int page_)
         {
             radio_item_s items[] =
             {
-                radio_item_s(TTT("Default initialization",25), as_param(1), CONSTASTR("radio00")),
-                radio_item_s(TTT("Manual setup",26), as_param(0))
+                radio_item_s(TTT("Default initialization",25), as_param(0)),
+                radio_item_s(TTT("Portable mode",341), as_param(1), CONSTASTR("radio00")),
+                radio_item_s(TTT("Manual setup",26), as_param(2))
             };
 
             label( ts::wstr_c(CONSTWSTR("<l>")).append(TTT("Choice",115)).append(CONSTWSTR("</l>")) );
-            radio(ARRAY_WRAPPER(items), DELEGATE(this, noob_or_father), as_param((i_am_noob && !developing) ? 1 : 0));
+            radio(ARRAY_WRAPPER(items), DELEGATE(this, noob_or_father), as_param(mode));
 
-            if (developing) ctlenable( CONSTASTR("radio00"), false );
+            if (!check_write_access(path_by_choice(PCH_HERE)))
+                ctlenable( CONSTASTR("radio00"), false );
         }
 
         vspace(20);
@@ -261,21 +276,12 @@ void dialog_firstrun_c::go2page(int page_)
         {
             radio_item_s items[] =
             {
-                radio_item_s(TTT("Copy to[br][l]$[/l]",16) / enquote(path_by_choice(PCH_PROGRAMFILES)), as_param(PCH_PROGRAMFILES), CONSTASTR("radio01")),
+                radio_item_s(TTT("Copy to[br][l]$[/l]",16) / enquote(path_by_choice(PCH_PROGRAMFILES)), as_param(PCH_PROGRAMFILES)),
                 radio_item_s(TTT("[appname] already in right place[br]([l]leave it here: $[/l])",15) / enquote(path_by_choice(PCH_HERE)), as_param(PCH_HERE)),
-                radio_item_s(TTT("Select another folder...",17), as_param(PCH_CUSTOM), CONSTASTR("radio02"))
+                radio_item_s(TTT("Select another folder...",17), as_param(PCH_CUSTOM))
             };
 
-            if (developing)
-                choice0 = PCH_HERE;
-
             radio(ARRAY_WRAPPER(items), DELEGATE(this, handler_0), as_param(choice0));
-
-            if (developing)
-            {
-                ctlenable( CONSTASTR("radio01"), false );
-                ctlenable( CONSTASTR("radio02"), false );
-            }
 
             selpath = textfield(CONSTWSTR(""), MAX_PATH, TFR_PATH_SELECTOR, DELEGATE(this, path_check_0));
             handler_0(RID(), as_param(choice0));
@@ -306,22 +312,17 @@ void dialog_firstrun_c::go2page(int page_)
             ts::wstr_c samepath = path_by_choice(PCH_INSTALLPATH);
             radio_item_s items[] =
             {
-                radio_item_s(TTT("By default[br][l]$[/l]",20) / enquote(path_by_choice(PCH_APPDATA)), as_param(PCH_APPDATA), CONSTASTR("radio03")),
+                radio_item_s(TTT("By default[br][l]$[/l]",20) / enquote(path_by_choice(PCH_APPDATA)), as_param(PCH_APPDATA)),
                 radio_item_s(TTT("Same folder of [appname][br][l]$[/l]",19) / enquote(samepath), as_param(PCH_INSTALLPATH), CONSTASTR("radio04")),
             };
 
             bool oops = !ts::check_write_access(samepath);
-
-            if (developing)
-                choice1 = PCH_INSTALLPATH;
-            else if (oops)
+            if (oops)
                 choice1 = PCH_APPDATA;
 
             radio(ARRAY_WRAPPER(items), DELEGATE(this, handler_1), as_param(choice1));
 
-            if (developing)
-                ctlenable( CONSTASTR("radio03"), false );
-            else if (oops)
+            if (oops)
                 ctlenable( CONSTASTR("radio04"), false );
         }
 
@@ -375,9 +376,11 @@ void dialog_firstrun_c::getbutton(bcreate_s &bcr)
     {
         if (page == 0)
         {
-            if (i_am_noob && !developing)
+            if (mode < 2)
             {
-                bcr.tooltip = TOOLTIP( TTT("Initialize by default and run application",28) );
+                mode == 0 ?
+                    bcr.tooltip = TOOLTIP( TTT("Initialize by default and run application",28) )
+                : bcr.tooltip = TOOLTIP( TTT("Initialize portable mode and run application",342) );
             make_pusk:
 
                 start_button_text = TTT("Start",27);
@@ -430,6 +433,32 @@ void dialog_firstrun_c::getbutton(bcreate_s &bcr)
     return false;
 }
 
+static bool check_copy_valid(const ts::wstr_c &copyto, const ts::wstr_c &from)
+{
+    ts::wstrings_c files;
+    ts::find_files(ts::fn_join(from, CONSTWSTR("*.*")), files, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, true);
+
+    ts::buf_c b;
+    for (const ts::wstr_c &fn2c : files)
+    {
+        if (fn2c.ends_ignore_case(CONSTWSTR(".exe")) || fn2c.ends_ignore_case(CONSTWSTR(".dll")) || fn2c.ends_ignore_case(CONSTWSTR(".data")))
+        {
+            ts::wstr_c other_fn = ts::fn_join( copyto, ts::fn_get_name_with_ext(fn2c) );
+            if (!ts::is_file_exists(other_fn))
+                return false;
+            b.load_from_disk_file(other_fn);
+            if (b.size() == 0)
+                return false;
+            ts::md5_c h1( b );
+            b.load_from_disk_file(fn2c);
+            ts::md5_c h2( b );
+            if (h1 != h2)
+                return false;
+        }
+    }
+    return true;
+}
+
 bool dialog_firstrun_c::start( RID, GUIPARAM )
 {
     bool exit = false;
@@ -443,8 +472,7 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     if (curd != fn_fix_path(copyto, FNO_SIMPLIFY | FNO_TRIMLASTSLASH))
     {
         install_to( copyto, true );
-        exepath = ts::fn_join(copyto, ts::fn_get_name_with_ext(ts::get_exe_full_name()));
-        if ( !ts::is_file_exists(exepath) )
+        if ( !check_copy_valid(copyto, curd) )
         {
             SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
                 DT_MSGBOX_ERROR,

@@ -56,22 +56,24 @@ extern HMODULE dll_module;
 void __stdcall get_info( proto_info_s *info )
 {
     if (info->protocol_name) strncpy_s(info->protocol_name, info->protocol_name_buflen, "tox", _TRUNCATE);
-    if (info->description)
+    if (info->description) strncpy_s(info->description, info->description_buflen, "Tox protocol", _TRUNCATE);
+    if (info->description_with_tags) strncpy_s(info->description_with_tags, info->description_with_tags_buflen, "<b>Tox</b> protocol", _TRUNCATE);
+    if (info->version)
     {
-        sstr_t<1024> desc( "Isotoxin tox wrapper " SS(PLUGINVER) ); 
-        desc.append(CONSTASTR(" (toxcore: "));
-        desc.append_as_uint(TOX_VERSION_MAJOR);
-        desc.append_char('.');
-        desc.append_as_uint(TOX_VERSION_MINOR);
-        desc.append_char('.');
-        desc.append_as_uint(TOX_VERSION_PATCH);
-        desc.append_char(')');
+        sstr_t<1024> vers( "plugin: " SS(PLUGINVER) ", toxcore: " ); 
 
-        strncpy_s(info->description, info->description_buflen, desc, _TRUNCATE);
+        vers.append_as_uint(TOX_VERSION_MAJOR);
+        vers.append_char('.');
+        vers.append_as_uint(TOX_VERSION_MINOR);
+        vers.append_char('.');
+        vers.append_as_uint(TOX_VERSION_PATCH);
+        vers.append_char(')');
+
+        strncpy_s(info->version, info->version_buflen, vers, _TRUNCATE);
     }
 
     info->priority = 500;
-    info->features = PF_AVATARS | PF_OFFLINE_INDICATOR | PF_IMPORT | PF_AUDIO_CALLS | PF_SEND_FILE | PF_GROUP_CHAT; //PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT;
+    info->features = PF_AVATARS | PF_OFFLINE_INDICATOR | PF_PURE_NEW | PF_IMPORT | PF_AUDIO_CALLS | PF_SEND_FILE | PF_GROUP_CHAT; //PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT;
     info->connection_features = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_SOCKS5 | CF_UDP_OPTION | CF_SERVER_OPTION;
     info->audio_fmt.sample_rate = av_DefaultSettings.audio_sample_rate;
     info->audio_fmt.channels = (short)av_DefaultSettings.audio_channels;
@@ -397,7 +399,7 @@ struct message2send_s
     int fid;
     int mid;
     int next_try_time;
-    int resend_time = 0;
+    int send_timeout = 0;
     str_c msg;
     time_t create_time;
     message2send_s( u64 utag, message_type_e mt, int fid, const asptr &utf8, int imid = -10000, time_t create_time = now() ):utag(utag), mt(mt), fid(fid), mid(imid), next_try_time(time_ms()), create_time(create_time)
@@ -487,10 +489,27 @@ struct message2send_s
                 x->try_send(ct);
                 if ( x->mid == 0 )
                     addIfNotPresent(disabled, x->fid); // to preserve delivery order
-            } else if ( (ct - x->resend_time) > 0 )
+            } else if ( (ct - x->send_timeout) > 0 )
             {
-                // seems message not delivered: no delivery notification received in 10 seconds
-                x->mid = 0;
+                // seems message not delivered - just kill it
+                // application will send it again
+                u64 utag_multipart = x->utag;
+                delete x;
+
+                if (utag_multipart)
+                {
+                    // set timeout for other parts of message
+                    for (message2send_s *x = first; x; x = x->next)
+                    {
+                        if (x->utag == utag_multipart)
+                        {
+                            // next message part...
+                            x->send_timeout = ct;
+                        }
+                    }
+                }
+
+                break;
             }
         }
 
@@ -738,7 +757,7 @@ struct transmitting_data_s : public file_transfer_s
         req() {};
         req(u64 offset, u32 size):offset(offset), size(size) {}
         u64 offset;
-        u32 size;
+        u32 size = 0;
     };
 
     fifo_stream_c requests;
@@ -767,6 +786,8 @@ struct transmitting_data_s : public file_transfer_s
     virtual void portion( u64 /*offset*/, const void * /*data*/, int /*size*/ ) {}
     virtual void try_send_requested_chunk() = 0;
 
+    req last_req;
+
     void transmit(const req &r)
     {
         if (r.size == 0)
@@ -775,7 +796,8 @@ struct transmitting_data_s : public file_transfer_s
             return;
         }
 
-        //Log("req chunk: %llu:%i", r.offset, r.size);
+        ASSERT(last_req.size == 0 || (last_req.offset + last_req.size) == r.offset);
+
         requests.add_data( &r, sizeof(req) );
         try_send_requested_chunk();
     }
@@ -816,10 +838,22 @@ struct transmitting_file_s : public transmitting_data_s
 
     fifo_stream_c fifo;
     u64 fifooffset = 0;
+    u64 end_offset() const { return fifooffset + fifo.available(); }
+
+    struct buf_s
+    {
+        std::vector<byte> buf;
+        u64 offset = 0;
+        buf_s(u64 offset, const void *data, int size):offset(offset), buf(size)
+        {
+            memcpy(buf.data(),data,size);
+        }
+    };
+
+    std::vector<buf_s> shuffled;
+    u64 requested_offset_end = 0;
     int requested_chunks = 0;
 
-    u64 roffset0 = 0;
-    u64 roffset1 = 0;
 
     transmitting_file_s(u32 fid_, u32 fnn_, u64 utag_, const byte * id_, u64 fsz_, const asptr &fn) : transmitting_data_s(fid_, fnn_, utag_, id_, fsz_, fn)
     {
@@ -847,121 +881,87 @@ struct transmitting_file_s : public transmitting_data_s
         ASSERT(requested_chunks > 0);
         --requested_chunks;
 
-        if (offset == (fifooffset + fifo.available()))
+        ASSERT((offset+size) <= requested_offset_end);
+
+        if (end_offset() == offset)
         {
             fifo.add_data(data, size);
-        }
-        else
-        {
-            fifo.clear();
-            fifo.add_data(data, size);
-            fifooffset = offset;
-        }
-
-        //Log("portion: %llu:%i", offset, size);
-        //Log("fifo: %llu:%i", fifooffset, fifo.available());
-
-        try_send_requested_chunk();
-    }
-
-    void nextoffset(u64 &fixoffset, int &fixsize)
-    {
-        if (fixoffset >= roffset0 && fixoffset < roffset1)
-        {
-            fixoffset = roffset1;
-            u64 ost = fsz - roffset1;
-            if ( ost < (u64)fixsize )
-                fixsize = (int)ost;
-            roffset1 += fixsize;
         } else
         {
-            roffset0 = fixoffset;
-            roffset1 = roffset0 + fixsize;
+            bool added = false;
+            for (buf_s &b : shuffled)
+            {
+                if (offset == b.offset + b.buf.size())
+                {
+                    added = true;
+                    size_t oo = b.buf.size();
+                    b.buf.resize( b.buf.size() + size );
+                    memcpy( b.buf.data() + oo, data, size );
+                }
+            }
+            if (!added)
+            {
+                shuffled.emplace_back(offset, data, size);
+            }
         }
+
+        try_send_requested_chunk();
     }
 
     void request_portion()
     {
         if (requested_chunks >= MAX_CHUNKS_REQUESTED) return;
+        
+        size_t avaialble = fifo.available();
+        for (const buf_s &b : shuffled)
+            avaialble += b.buf.size();
+        if (avaialble >= 65536)
+            return;
 
-        req r;
-        bool oof = false;
-        if (requests.available())
+        // always request until end of file 
+        if ( requested_offset_end < fsz )
         {
-            requests.get_data(0, (byte *)&r, sizeof(req));
-
-            if (r.offset < fifooffset || (r.offset - fifooffset) > fifo.available())
+            if (int rqsz = (int)min(65536, fsz - requested_offset_end))
             {
-                oof = true; // out of available fifo data
-                fifo.clear();
-                roffset0 = r.offset;
-                roffset1 = r.offset;
-            }
-        }
-        else if (fifo.available() == 0)
-        {
-            return; // no requests, no fifo - do nothing (wait chunk request from tox core)
-        }
-
-        if (fifo.available() < (65536 * MAX_CHUNKS_REQUESTED) / 2)
-        {
-            if (oof || fifo.available() == 0)
-            {
-                int rqsz = (int)min(65536, fsz - r.offset);
-                if (rqsz)
-                {
-                    u64 roffs = r.offset;
-                    nextoffset(roffs, rqsz);
-                    hf->file_portion(utag, roffs, nullptr, rqsz);
-                    ++requested_chunks;
-                }
-                //Log( "request from app 1: %llu:%i", r.offset, rqsz );
-            }
-            else
-            {
-                u64 roffs = fifooffset + fifo.available();
-                int rqsz = (int)min(65536, fsz - roffs);
-                nextoffset(roffs, rqsz);
-                hf->file_portion(utag, roffs, nullptr, rqsz);
+                hf->file_portion(utag, requested_offset_end, nullptr, rqsz);
                 ++requested_chunks;
-                //Log( "request from app 2: %llu:%i", roffs, rqsz );
+                requested_offset_end += rqsz;
             }
         }
-        //Log("fifo: %llu:%i", fifooffset, fifo.available());
     }
 
     void try_send_requested_chunk() override
     {
-        u64 fifolast = fifooffset + fifo.available();
+        u64 curend = end_offset();
+        for (buf_s &b : shuffled)
+        {
+            if (b.offset == curend)
+            {
+                fifo.add_data( b.buf.data(), b.buf.size() );
+                shuffled.erase( shuffled.begin() + ( &b - shuffled.data() ) );
+                break;
+            }
+        }
 
         if (requests.available())
         {
             req r;
             requests.get_data(0, (byte *)&r, sizeof(req));
 
-            if (r.offset >= fifooffset)
+            if (r.offset == fifooffset)
             {
-                if ((r.offset + r.size) <= fifolast)
+                if (fifo.available() >= r.size)
                 {
-                    // fifo has data
-                    // just send
-
-                    byte *d = (byte *)_alloca(r.size);
-                    fifo.get_data((int)(r.offset - fifooffset), d, r.size);
+                    byte *d = (byte *)_alloca(r.size); //-V505
+                    fifo.get_data(0, d, r.size);
 
                     TOX_ERR_FILE_SEND_CHUNK er;
                     tox_file_send_chunk(tox, fid, fnn, r.offset, d, r.size, &er);
                     if (TOX_ERR_FILE_SEND_CHUNK_OK == er)
                     {
-                        if (r.offset == fifooffset)
-                        {
-                            fifo.read_data(nullptr, r.size);
-                            fifooffset += r.size;
-                        }
+                        fifo.read_data(nullptr, r.size);
+                        fifooffset += r.size;
                         requests.read_data(nullptr, sizeof(req));
-
-                        //Log("send ok: %llu:%i", r.offset, r.size);
-                        //Log("fifo: %llu:%i", fifooffset, fifo.available());
                     }
                 }
             }
@@ -1450,7 +1450,7 @@ void message2send_s::try_send(int time)
             if (mt == MT_ACTION)
                 mid = tox_friend_send_message(tox, fid, TOX_MESSAGE_TYPE_ACTION, (const byte *)m.s, m.l, nullptr);
         }
-        if (mid) resend_time = time + 10000;
+        if (mid) send_timeout = time + 60000;
         next_try_time = time + 1000;
     }
 }
@@ -2833,6 +2833,21 @@ static cmd_result_e tox_err_to_cmd_result( TOX_ERR_NEW toxerr )
     return CR_UNKNOWN_ERROR;
 }
 
+static void send_configurable()
+{
+    const char * fields[] = { CFGF_PROXY_TYPE, CFGF_PROXY_ADDR, CFGF_UDP_ENABLE, CFGF_SERVER_PORT };
+    str_c svalues[4];
+    svalues[0].set_as_int(tox_proxy_type);
+    if (tox_proxy_type) svalues[1].set(tox_proxy_host).append_char(':').append_as_uint(tox_proxy_port);
+    svalues[2].set_as_int(options.udp_enabled ? 1 : 0);
+    svalues[3].set_as_int(options.tcp_port);
+    const char * values[] = { svalues[0].cstr(), svalues[1].cstr(), svalues[2].cstr(), svalues[3].cstr() };
+
+    hf->configurable(4, fields, values);
+}
+
+
+
 void __stdcall set_config(const void*data, int isz)
 {
     struct on_return
@@ -3041,16 +3056,7 @@ void __stdcall set_config(const void*data, int isz)
         if (!tox) toxerr = prepare(nullptr, 0);
 
     // now send configurable fields to application
-
-    const char * fields[] = { CFGF_PROXY_TYPE, CFGF_PROXY_ADDR, CFGF_UDP_ENABLE, CFGF_SERVER_PORT };
-    str_c svalues[ 4 ];
-    svalues[0].set_as_int( tox_proxy_type );
-    if (tox_proxy_type) svalues[1].set(tox_proxy_host).append_char(':').append_as_uint(tox_proxy_port);
-    svalues[2].set_as_int( options.udp_enabled ? 1 : 0 );
-    svalues[3].set_as_int( options.tcp_port );
-    const char * values[] = { svalues[0].cstr(), svalues[1].cstr(), svalues[2].cstr(), svalues[3].cstr() };
-
-    hf->configurable(4, fields, values);
+    send_configurable();
 }
 
 void __stdcall init_done()
@@ -3498,7 +3504,7 @@ void __stdcall send_audio(int id, const call_info_s * ci)
             ss.fifo.add_data( ci->audio_data, ci->audio_data_size );
             w().active_calls |= (1 << cd->audiostream);
 
-            if (ss.fifo.available() > ((audio_format_s)ss).avgBytesPerSec())
+            if ((int)ss.fifo.available() > ((audio_format_s)ss).avgBytesPerSec())
                 ss.fifo.read_data(nullptr, ci->audio_data_size);
         }
     }

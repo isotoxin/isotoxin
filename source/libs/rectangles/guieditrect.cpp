@@ -2,6 +2,9 @@
 
 gui_textedit_c::gui_textedit_c(initial_rect_data_s &data) : gui_control_c(data), start_sel(-1), caret_line(0), caret_offset(0), scroll_left(0), under_mouse_active_element(nullptr)
 {
+    selection_color = gui->selection_color;
+    selection_bg_color = gui->selection_bg_color;
+
     flags.set(F_CARET_SHOW);
 	lines.add(ts::ivec2(0,0));
 }
@@ -356,6 +359,7 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
                 res = true;
                 break;
 			case SSK_HOME:
+                if (text.size() == 0) return false;
 				caret_offset = 0;
 				caret_line = 0;
 				scroll_to_caret();
@@ -363,6 +367,7 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 				def = false;
 				break;
 			case SSK_END:
+                if (text.size() == 0) return false;
                 end();
 				res = true;
 				def = false;
@@ -441,15 +446,18 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 				    break;
 			    case SSK_UP:
 			    case SSK_DOWN:
+                    if (text.size() == 0) return false;
 				    set_caret_pos(get_caret_pos()+ts::ivec2(0,(*font)->height*(scan==SSK_UP ? -1 : 1)));
 				    res = true;
 				    break;
 			    case SSK_HOME:
+                    if (text.size() == 0) return false;
 				    caret_offset=0;
 				    scroll_to_caret();
 				    res = true;
 				    break;
 			    case SSK_END:
+                    if (text.size() == 0) return false;
 				    caret_offset=lines.get(caret_line).delta();
 				    scroll_to_caret();
 				    res = true;

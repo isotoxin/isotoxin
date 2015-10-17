@@ -1859,12 +1859,8 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
             self->getengine().redraw();
 
     if (ch.pass == 0)
-        if (PP_PROFILEOPTIONS == ch.sp)
-        {
-            bool show_filter = prf().get_options().is(UIOPT_SHOW_SEARCH_BAR);
-            if ((filter && !show_filter) || (!filter && show_filter))
-                recreate_ctls(true);
-        }
+        if (PP_PROFILEOPTIONS == ch.sp && (ch.bits & UIOPT_SHOW_SEARCH_BAR))
+            recreate_ctls(true);
 
     return 0;
 }
@@ -2015,7 +2011,6 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
 
     info.from = skipctl;
     info.count = getengine().children_count() - skipctl;
-    info.areasize = 0;
 }
 
 /*virtual*/ bool gui_contactlist_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)

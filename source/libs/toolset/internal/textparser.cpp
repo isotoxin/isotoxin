@@ -30,7 +30,7 @@ namespace
 	    short shadow;
 	    wchar_t ch;
         int charindex;
-	    TSCOLOR shadow_color, outline_color;
+	    TSCOLOR shadow_color, outline_color, bg_color;
 	    int image_offset_Y;
 
 	    enum mgtype_e {
@@ -88,7 +88,7 @@ namespace
 			    gi.pos = svec2(0, (int16)(-image->height+image_offset_Y));
 			    break;
             case RECTANGLE:
-                gi.pixels = (uint8 *)1; // special pointer value - 1 - means rectangle
+                gi.pixels = GTYPE_RECTANGLE;
                 gi.width = (uint16)advance;
                 gi.height = shadow;
                 gi.pitch = ch;
@@ -106,12 +106,31 @@ namespace
             gi.pos.y += (int16)pos.y;
 	    }
 
-	    void add_glyph_image(GLYPHS &outlined_glyphs, GLYPHS *glyphs, const ivec2 &pos, int add_underline_len = 0) const
+	    void add_glyph_image(GLYPHS &outlined_glyphs, GLYPHS *glyphs, const ivec2 &pos, int add_underline_len) const
 	    {
+            if ( bg_color )
+            {
+                if ( meta_glyph_s::CHAR == type || meta_glyph_s::SPACE == type )
+                {
+                    glyph_image_s &gi = outlined_glyphs.add();
+                    gi.pixels = GTYPE_BGCOLOR_MIDDLE;
+                    gi.color = bg_color;
+
+                    gi.width = (uint16)glyph->advance+1;
+                    gi.height = (uint16)tabs(font->ascender - font->descender);
+                    gi.pitch = 0;
+                    gi.pos = svec2((int16)(glyph->left + pos.x-1), (int16)(pos.y-font->ascender));
+                    gi.charindex = charindex;
+                    gi.length = 0;
+                    gi.start_pos = svec2(0, (int16)underline_offset) - gi.pos;
+                    gi.thickness = 0;
+                }
+            }
+
             if (type != meta_glyph_s::RECTANGLE)
             {
                 // generate shadow glyphs
-                for (int i = 1, n = ui_scale(shadow); i <= n; i++) // valid any direction due same result: lerp(lerp(S, D, A1), D, A2) == lerp(lerp(S, D, A2), D, A1)
+                for (int i = 1, n = ui_scale(shadow); i <= n; ++i) // valid any direction due same result: lerp(lerp(S, D, A1), D, A2) == lerp(lerp(S, D, A2), D, A1)
                     export_to_glyph_image(glyphs, pos + ui_scale(ivec2(i)), add_underline_len, shadow_color);
             }
 
@@ -200,6 +219,7 @@ struct text_parser_s
 	};
 	tbuf_t<shadow_pars_s> shadow_stack;
 	tbuf_t<TSCOLOR> outline_stack;
+    tbuf_t<TSCOLOR> marker_stack;
 	tbuf_t<int> underline_stack;
 	int hyphenation_tag_nesting_level;
 	int line_width, last_line_descender;
@@ -237,6 +257,7 @@ struct text_parser_s
         paragraphs_stack.clear();
         shadow_stack.clear();
         outline_stack.clear();
+        marker_stack.clear();
         underline_stack.clear();
         last_line.clear();
 
@@ -251,6 +272,7 @@ struct text_parser_s
 		paragraphs_stack.add(paragraph_s());
         if (flags & TO_HCENTER) paragraphs_stack.last().align = paragraph_s::ACENTER;
 		outline_stack.add(0);
+        marker_stack.add(0);
 
 		if (glyphs)
         {
@@ -325,7 +347,7 @@ struct text_parser_s
             for (int i = rite_rite, cnt = last_line.count(); i < cnt; ++i)
             {
                 const meta_glyph_s &mg = last_line.get(i);
-                mg.add_glyph_image(outlined_glyphs, glyphs, pen + offset);
+                mg.add_glyph_image(outlined_glyphs, glyphs, pen + offset, 0);
                 if (mg.image_offset_Y > 0)
                     for (ivec2 &x : addhs)
                         if (x.x == i) { x.x = pen.x + offset.x; break; }
@@ -339,7 +361,7 @@ struct text_parser_s
                 {
                     meta_glyph_s &mg = last_line.get(i);
                     mg.charindex = -1;
-                    mg.add_glyph_image(outlined_glyphs, glyphs, pen + offset);
+                    mg.add_glyph_image(outlined_glyphs, glyphs, pen + offset, 0);
                     if (mg.image_offset_Y > 0)
                         for (ivec2 &x : addhs)
                             if (x.x == i) { x.x = pen.x + offset.x; break; }
@@ -440,6 +462,7 @@ struct text_parser_s
 			mg.shadow_color = shadow_stack.last().color;
 		}
 		mg.outline_color = outline_stack.last();
+        mg.bg_color = marker_stack.last();
 		mg.ch = 0;
 
 		return mg;
@@ -495,26 +518,6 @@ struct text_parser_s
 		else if (tag == CONSTWSTR("/u") || tag == CONSTWSTR("/s"))
 		{
 			if (CHECK(underline_stack.count()>0)) underline_stack.pop();
-		}
-		else if (tag == CONSTWSTR("shadow"))
-		{
-			shadow_pars_s &sp = shadow_stack.add();
-            token<wchar> t( tagbody, L';' );
-			sp.len = t ? t->as_int() : 2;
-			++t;
-			sp.color = t ? parsecolor(t->as_sptr(), ARGB(0,0,0)) : ARGB(0,0,0);
-		}
-		else if (tag == CONSTWSTR("/shadow"))
-		{
-			if (CHECK(shadow_stack.count() > 0)) shadow_stack.pop();
-		}
-		else if (tag == CONSTWSTR("outline"))
-		{
-            outline_stack.add(parsecolor(tagbody.as_sptr(), ARGB(0,0,0)));
-		}
-		else if (tag == CONSTWSTR("/outline"))
-		{
-			if (CHECK(outline_stack.count() > 1)) outline_stack.pop();
 		}
 		else if (tag == CONSTWSTR("p") || tag == CONSTWSTR("pn"))
 		{
@@ -624,7 +627,7 @@ struct text_parser_s
 			if (glyphs)
 			{
 				glyph_image_s &gi = glyphs->add();
-                gi.pixels = (uint8 *)16; // nullptr or value less 16 means special glyph, skipped while draw. 16 value let this glyph drawable
+                gi.pixels = GTYPE_DRAWABLE;
 				gi.color = colors_stack.last();
 				gi.width = gi.height = 0; // zeros - no one lookup to gi.pixels 
 				gi.pos.x = (int16)(pen.x + sideindent);
@@ -652,6 +655,34 @@ struct text_parser_s
 			mg.advance = mg.image->width;
 			line_width += mg.advance;
 		}
+        else if (tag == CONSTWSTR("shadow"))
+        {
+            shadow_pars_s &sp = shadow_stack.add();
+            token<wchar> t(tagbody, L';');
+            sp.len = t ? t->as_int() : 2;
+            ++t;
+            sp.color = t ? parsecolor(t->as_sptr(), ARGB(0, 0, 0)) : ARGB(0, 0, 0);
+        }
+        else if (tag == CONSTWSTR("/shadow"))
+        {
+            if (CHECK(shadow_stack.count() > 0)) shadow_stack.pop();
+        }
+        else if (tag == CONSTWSTR("outline"))
+        {
+            outline_stack.add(parsecolor(tagbody.as_sptr(), ARGB(0, 0, 0)));
+        }
+        else if (tag == CONSTWSTR("/outline"))
+        {
+            if (CHECK(outline_stack.count() > 1)) outline_stack.pop();
+        }
+        else if (tag == CONSTWSTR("mark"))
+        {
+            marker_stack.add(parsecolor(tagbody.as_sptr(), ARGB(0, 0, 0)));
+        }
+        else if (tag == CONSTWSTR("/mark"))
+        {
+            if (CHECK(marker_stack.count() > 1)) marker_stack.pop();
+        }
 		else if (tag == CONSTWSTR("imgl") || tag == CONSTWSTR("imgr"))
 		{
 			side_text_limit &sl = tag == CONSTWSTR("imgl") ? leftSL : rightSL;
@@ -782,6 +813,7 @@ struct text_parser_s
                     mg.shadow = mgf.shadow;
                     mg.shadow_color = mgf.shadow_color;
                     mg.outline_color = mgf.outline_color;
+                    mg.bg_color = mgf.bg_color;
                     mg.underlined = mgf.underlined;
                     mg.underline_offset = mgf.underline_offset;
                     break;
@@ -909,7 +941,7 @@ struct text_parser_s
 						//Перенос слов по слогам реализован на основе упрощённого алгоритма П.Христова http://sites.google.com/site/foliantapp/project-updates/hyphenation
 						int nn = tmin(n+3, text.l - (cur_text_index-n+1)), i = 0;
 
-						while (i<n && wcschr(L"(\"«", last_line.get(i+start).ch))//пропускаем допустимые символы перед началом слова
+						while (i<n && wcschr(L"(\"«", last_line.get(i+start).ch)) // skip valid characters before word begin
 							charclass[i++] = 0;
 
 						for (; i<nn; i++)
@@ -932,11 +964,11 @@ struct text_parser_s
 								charclass[i] = 'x';
 							else if (ch == '-')
 								charclass[i] = '-';
-							else if (wcschr(L".,;:!?)\"»", ch))//допустимые символы после конца слова
+							else if (wcschr(L".,;:!?)\"»", ch)) // valid characters after word end
 								{nn = i; break;}
 							else if (i < n)
-								goto skipHyphenate;//нашли хоть один посторонний символ - значит это не простое слово и лучше его не переносить
-							else {nn = i; break;}//неизвестно, что это (возможно тег или знак препинания), поэтому просто останавливаемся на этом символе
+								goto skipHyphenate; // found unknown character - do not hyphenate this word
+							else {nn = i; break;} // unknown word (may be tag or punctuation mark) => just stop at this word
 						}
 						for (int i=0; i<nn-2; i++)//[x, l+l]
 							if (charclass[i] == 'x')
@@ -967,7 +999,7 @@ struct text_parser_s
 								if (last_line.get(i + start - 1).ch != '-')
 								{
 									line_size++;
-									meta_glyph_s mg = add_meta_glyph(meta_glyph_s::CHAR, cur_text_index);//добавляем метаглиф
+									meta_glyph_s mg = add_meta_glyph(meta_glyph_s::CHAR, cur_text_index);
 									mg.glyph = &hyphenGlyph;
 									mg.advance = mg.glyph->advance;
 									last_line.pop();
@@ -978,12 +1010,12 @@ struct text_parser_s
 skipHyphenate:;
 					}
 
-					if (j >= rite_rite)//Пробел был найден - слово не единственное => формируем новую строку
+					if (j >= rite_rite) // space found - word is not single => generate new line
 					{
-						last_line.remove_slow(j);//удаляем пробел (чтобы он не участвовал в подсчете пробелов ниже, а также чтобы не добавлялся соответствующий глиф - его может быть видно при подчеркивании)
-						line_size = j;//строку прерываем на символе, идущем сразу после пробела
+						last_line.remove_slow(j); // удаляем пробел (чтобы он не участвовал в подсчете пробелов ниже, а также чтобы не добавлялся соответствующий глиф - его может быть видно при подчеркивании)
+						line_size = j; // break line on character after space
 					}
-					else//Также формируем новую строку, но уже не по последнему пробелу, а по части слова, вмещающегося в строку
+					else // Также формируем новую строку, но уже не по последнему пробелу, а по части слова, вмещающегося в строку
 					{
 inlineBreak:
 						line_size = last_line.count()-1;//длину строки ограничиваем до текущего символа (невключительно)
@@ -1049,7 +1081,7 @@ end:;
                         {
                             meta_glyph_s &mg = last_line.get(i);
                             mg.charindex = -1;
-                            mg.add_glyph_image(outlined_glyphs, glyphs, pen + offset);
+                            mg.add_glyph_image(outlined_glyphs, glyphs, pen + offset, 0);
                             if (mg.image_offset_Y > 0)
                                 for (ivec2 &x : addhs)
                                     if (x.x == i) { x.x = pen.x + offset.x; break; }
@@ -1129,14 +1161,19 @@ irect glyphs_bound_rect(const GLYPHS &glyphs)
 int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p, bool strong)
 {
     int cnt = glyphs.count();
-    for (int i=0;i<cnt;)
+    int glyphs_start = 0;
+    if (cnt && glyphs.get(0).pixels == nullptr && glyphs.get(0).outline_index > 0)
+    {
+        glyphs_start = 1;
+        cnt = glyphs.get(0).outline_index;
+    }
+    for (int i=glyphs_start;i<cnt;)
     {
         const glyph_image_s &gi = glyphs.get(i);
         if (gi.pixels == nullptr)
         {
-            if (gi.outline_index >= 0)
+            if( gi.outline_index == 0 )
             {
-                if (gi.outline_index > 0) cnt = gi.outline_index;
                 ++i;
                 continue;
             }

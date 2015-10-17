@@ -105,9 +105,34 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
 	for (; g<glyphs.size(); g++)
 	{
 		const glyph_image_s &glyph = glyphs[g];
-        if (glyph.pixels < (uint8 *)16)
+        if (glyph.pixels < GTYPE_DRAWABLE)
         {
-            rectangles |= (glyph.pixels == (uint8 *)1);
+            if ( glyph.pixels == GTYPE_BGCOLOR_MIDDLE )
+            {
+                // draw bg
+                ivec2 pos(glyph.pos);  pos += offset; // glyph rendering position
+                dst = dst_ + pos.x * sizeof(TSCOLOR) + pos.y * pitch;
+
+                int clipped_width = glyph.width;
+                int clipped_height = glyph.height;
+                // clipping
+                if (pos.x < 0) clipped_width += pos.x, pos.x = 0;
+                if (pos.y < 0) clipped_height += pos.y, pos.y = 0;
+                if (pos.x + clipped_width > width) clipped_width = width - pos.x;
+                if (pos.y + clipped_height > height) clipped_height = height - pos.y;
+
+                if (clipped_width <= 0 || clipped_height <= 0) continue; // fully clipped - skip
+
+                ts::TSCOLOR col = glyph.color;
+                for (; clipped_height; clipped_height--, dst += pitch)
+                    for (int i = 0; i < clipped_width; i++)
+                        write_pixel_pm(((TSCOLOR*)dst)[i], col);
+
+
+                continue;
+            }
+
+            rectangles |= (glyph.pixels == GTYPE_RECTANGLE);
             continue; // pointer value < 16 means special glyph. Special glyph should be skipped while rendering
         }
 
@@ -144,28 +169,28 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
 		}
 
 		// draw glyph
-		int clippedWidth  = glyph.width;
-		int clippedHeight = glyph.height;
+		int clipped_width  = glyph.width;
+		int clipped_height = glyph.height;
 		const uint8 *src = glyph.pixels;
 		// clipping
-		if (pos.x < 0) src -= pos.x*bpp       , clippedWidth  += pos.x, pos.x = 0;
-		if (pos.y < 0) src -= pos.y*glyphPitch, clippedHeight += pos.y, pos.y = 0;
-		if (pos.x + clippedWidth  > width ) clippedWidth  = width  - pos.x;
-		if (pos.y + clippedHeight > height) clippedHeight = height - pos.y;
+		if (pos.x < 0) src -= pos.x*bpp       , clipped_width  += pos.x, pos.x = 0;
+		if (pos.y < 0) src -= pos.y*glyphPitch, clipped_height += pos.y, pos.y = 0;
+		if (pos.x + clipped_width  > width ) clipped_width  = width  - pos.x;
+		if (pos.y + clipped_height > height) clipped_height = height - pos.y;
 
-		if (clippedWidth <= 0 || clippedHeight <= 0) continue; // fully clipped - skip
+		if (clipped_width <= 0 || clipped_height <= 0) continue; // fully clipped - skip
 
 		dst = dst_ + pos.x * sizeof(TSCOLOR) + pos.y * pitch;
 
         if (bpp == 1)
         {
-            for (; clippedHeight; clippedHeight--, src += glyphPitch, dst += pitch)
-                for (int i = 0; i < clippedWidth; i++)
+            for (; clipped_height; clipped_height--, src += glyphPitch, dst += pitch)
+                for (int i = 0; i < clipped_width; i++)
                     write_pixel( ((TSCOLOR*)dst)[i], gcol, src[i] );
         } else
         {
-            for (; clippedHeight; clippedHeight--, src += glyphPitch, dst += pitch)
-                for (int i = 0; i < clippedWidth; i++)
+            for (; clipped_height; clipped_height--, src += glyphPitch, dst += pitch)
+                for (int i = 0; i < clipped_width; i++)
                     write_pixel_pm( ((TSCOLOR*)dst)[i], ((TSCOLOR*)src)[i] );
         }
 

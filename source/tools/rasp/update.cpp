@@ -17,8 +17,8 @@ static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdat
 
 int proc_upd(const ts::wstrings_c & pars)
 {
-    int autoupdate_proxy = 3;
-    ts::str_c address( "http://95.215.46.114/latest.txt" );
+    int autoupdate_proxy = 0;
+    ts::str_c address( "https://github.com/Rotkaermota/Isotoxin/releases/download/0.2.371/isotoxin.0.2.371.zip" );
     ts::str_c proxy( "srv:9050" );
 
     CURL *curl = curl_easy_init();
@@ -27,6 +27,72 @@ int proc_upd(const ts::wstrings_c & pars)
     rslt = curl_easy_setopt(curl, CURLOPT_WRITEDATA, &d);
     rslt = curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
     rslt = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+    rslt = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+
+    rslt = curl_easy_setopt(curl, CURLOPT_PROXY, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 50);
+    rslt = curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
+    rslt = curl_easy_setopt(curl, CURLOPT_USERAGENT, "curl");
+    
+    rslt = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_HEADER, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_PROXY, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_PROXYUSERPWD, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_USERPWD, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_KEYPASSWD, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_RANGE, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_HTTPPROXYTUNNEL, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_NOPROXY, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_FAILONERROR, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_UPLOAD, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_DIRLISTONLY, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_APPEND, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_NETRC, CURL_NETRC_IGNORED);
+    rslt = curl_easy_setopt(curl, CURLOPT_TRANSFERTEXT, 0);
+
+    char errorbuffer[CURL_ERROR_SIZE];
+    rslt = curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errorbuffer);
+    rslt = curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 0ull);
+    rslt = curl_easy_setopt(curl, CURLOPT_UNRESTRICTED_AUTH, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_REFERER, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_AUTOREFERER, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_POSTREDIR, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_FTPPORT, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_MAX_SEND_SPEED_LARGE, 0ull);
+    rslt = curl_easy_setopt(curl, CURLOPT_MAX_RECV_SPEED_LARGE, 0ull);
+    rslt = curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE, 0ull);
+    rslt = curl_easy_setopt(curl, CURLOPT_SSLCERT, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_SSLCERTTYPE, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_SSLKEY, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_SSLKEYTYPE, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_SSLVERSION, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_CRLF, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_QUOTE, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_POSTQUOTE, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_PREQUOTE, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_COOKIESESSION, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_TIMECONDITION, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_TIMEVALUE, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_STDERR, stdout);
+    rslt = curl_easy_setopt(curl, CURLOPT_INTERFACE, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_KRBLEVEL, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_TELNETOPTIONS, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_RANDOM_FILE, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_EGDSOCKET, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_FTP_CREATE_MISSING_DIRS, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_WHATEVER);
+    rslt = curl_easy_setopt(curl, CURLOPT_FTP_ACCOUNT, nullptr);
+    rslt = curl_easy_setopt(curl, CURLOPT_IGNORE_CONTENT_LENGTH, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_FTP_SKIP_PASV_IP, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_FTP_FILEMETHOD, 0);
+    rslt = curl_easy_setopt(curl, CURLOPT_FTP_ALTERNATIVE_TO_USER, nullptr);
 
     if (autoupdate_proxy > 0)
     {
@@ -45,27 +111,13 @@ int proc_upd(const ts::wstrings_c & pars)
         rslt = curl_easy_setopt(curl, CURLOPT_PROXYTYPE, pt);
     }
 
+    
     rslt = curl_easy_setopt(curl, CURLOPT_URL, address.cstr());
     rslt = curl_easy_perform(curl);
 
-    ts::token<char> t(d.cstr(), '=');
-    ts::str_c ver(*t); ++t;
-    ts::str_c addr(*t);
-
-    if (true)
-    {
-        if (addr.get_char(0) == '/')
-        {
-            address.set_length( address.find_pos(7, '/') ).append(addr).trim();
-            d.clear();
-            rslt = curl_easy_setopt(curl, CURLOPT_URL, address.cstr());
-            rslt = curl_easy_perform(curl);
-        }
-    }
-
     if (curl) curl_easy_cleanup(curl);
 
-    d.save_to_file(L"updateresult.bin");
+    d.save_to_file(L"isotoxin.0.2.371.zip");
 
     return 0;
 }

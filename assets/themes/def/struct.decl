@@ -15,6 +15,13 @@ conf
   emomaxheight=30
   filtereditheight=25
   protoiconsize=16
+
+  selection_color=255,255,0
+  selection_bg_color=100,100,255
+  selection_bg_color_blink=0,0,155
+  found_mark_color=#e7f800
+  found_mark_bg_color=#64a7ff
+
 }
 
 rects
@@ -210,7 +217,17 @@ rects
     c=2,2,2,2,#e5eea9
     clientborder=4,4,4,4
   }
+  notice.found=sb
+  {
+    c=2,2,2,2,#64a7ff
+    clientborder=4,4,4,4
+  }
 
+  newproto=sb
+  {
+    c=2,0,2,2,#f1f9ee
+    clientborder=4,2,4,4
+  }
 
   menu=sb
   {
@@ -617,6 +634,10 @@ images
   uac
   {
     src=back.png,255,269,275,289
+  }
+  plus
+  {
+    src=back.png,288,270,308,290
   }
 }
 
@@ -1115,6 +1136,29 @@ buttons
       shadow=0
       k-press=0.97
       image=smile
+    }
+  }
+
+  addnetwork
+  {
+    gen 
+    { 
+      shape=circle
+      color=#30a6a3
+      border=0
+      border-color=#000000
+      border-add-size=-1
+      border-width=2
+      radius=16
+      shadow=1
+      shadow-shift=4,4
+      shadow-shift-press=2,2
+      shadow-color-out=#00000005
+      shadow-color-in=#000000ff
+      shadow-radius-out=16
+      shadow-radius-in=10
+      k-press=0.95
+      image=plus
     }
   }
 

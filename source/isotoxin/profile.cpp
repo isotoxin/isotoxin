@@ -123,34 +123,6 @@ void active_protocol_s::get_column_desc(int index, ts::column_desc_s&cd)
     }
 }
 
-void default_rows<active_protocol_s>::setup_default(int index, active_protocol_s& d)
-{
-    switch (index)
-    {
-        case 0:
-            d.tag = CONSTASTR("tox");
-            d.name = CONSTASTR("Tox");
-            d.user_name.clear();
-            d.user_statusmsg.clear();
-            d.config.clear();
-            d.avatar.clear();
-            d.options = active_protocol_data_s().options;
-            return;
-        case 1:
-            d.tag = CONSTASTR("lan");
-            d.name = CONSTASTR("Lan");
-            d.user_name.clear();
-            d.user_statusmsg.clear();
-            d.config.clear();
-            d.avatar.clear();
-            d.options = active_protocol_data_s().options;
-            d.sort_factor = 0;
-            return;
-        default:
-            FORBIDDEN();
-    }
-}
-
 /////// contacts
 
 void contacts_s::set(int column, ts::data_value_s &v)
@@ -553,8 +525,7 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::prepare( t
     if (rslt < 0) return false;
     if (rslt)
     {
-        for (int i = 0; i < default_rows<T>::value; ++i) //-V621
-            default_rows<T>::setup_default(i, getcreate(0).other);
+        // ok
     }
 
     flush( db, true, false );
@@ -1190,6 +1161,11 @@ bool profile_c::load(const ts::wstr_c& pfn)
 
     emoti().reload();
 
+    if (1.0f != fontscale_conv_text())
+    {
+        g_app->reload_fonts();
+    }
+
     return true;
 }
 
@@ -1275,6 +1251,39 @@ void profile_c::mb_error_unique_profile( const ts::wsptr & prfn, bool modal )
         DT_MSGBOX_ERROR,
         text
         ).bok( modal ? loc_text(loc_exit) : ts::wsptr() ).on_ok(modal ? s::exit_now : MENUHANDLER(), ts::asptr()));
+}
+
+bool profile_c::addeditnethandler(dialog_protosetup_params_s &params)
+{
+    active_protocol_data_s *apd = nullptr;
+    int id = 0;
+    if (params.protoid == 0)
+    {
+        auto &r = get_table_active_protocol().getcreate(0);
+        id = r.id;
+        r.other.tag = params.networktag;
+        if (!params.importcfg.is_empty())
+            r.other.config.load_from_disk_file(params.importcfg);
+        apd = &r.other;
+    }
+    else
+    {
+        auto *row = get_table_active_protocol().find<true>(params.protoid);
+        apd = &row->other;
+        id = params.protoid;
+        row->changed();
+    }
+
+    apd->user_name = params.uname;
+    apd->user_statusmsg = params.ustatus;
+    apd->tag = params.networktag;
+    apd->name = params.networkname;
+    INITFLAG(apd->options, active_protocol_data_s::O_AUTOCONNECT, params.connect_at_startup);
+    apd->configurable = params.configurable;
+
+    changed(true);
+
+    return true;
 }
 
 void profile_c::shutdown_aps()

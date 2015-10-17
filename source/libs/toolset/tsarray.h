@@ -504,7 +504,7 @@ public:
     T  &insert(aint idx)
     {
         if (idx >= m_count)
-            return m_list[idx];
+            return add();
 
         _upsize(m_count+1, idx, 1);
         BEHAVIOUR::init(m_list + idx, 1);

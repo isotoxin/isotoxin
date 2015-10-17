@@ -8,7 +8,6 @@ enum gmsg_e
     GM_KILL_TOOLTIPS,
     GM_GROUP_SIGNAL,
     GM_DIALOG_PRESENT,
-    GM_CLOSE_DIALOG,
     GM_ROOT_FOCUS,
     GM_HEARTBEAT,
     GM_UI_EVENT,
@@ -74,12 +73,6 @@ template<> struct gmsg<GM_GROUP_SIGNAL> : public gmsgbase
 template<> struct gmsg<GM_DIALOG_PRESENT> : public gmsgbase
 {
     gmsg(int udt) :gmsgbase(GM_DIALOG_PRESENT), unique_tag(udt) {}
-    int unique_tag;
-};
-
-template<> struct gmsg<GM_CLOSE_DIALOG> : public gmsgbase
-{
-    gmsg(int udt) :gmsgbase(GM_CLOSE_DIALOG), unique_tag(udt) {}
     int unique_tag;
 };
 

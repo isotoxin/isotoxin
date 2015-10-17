@@ -32,6 +32,13 @@ struct proto_info_s
 
     char *description = nullptr;
     int   description_buflen = 0;
+
+    char *description_with_tags = nullptr;
+    int   description_with_tags_buflen = 0;
+
+    char *version = nullptr;
+    int   version_buflen = 0;
+
     int   priority = 0; // bigger -> higher (automatic select default subcontact of metacontact)
     int   features = 0;
     int   connection_features = 0;

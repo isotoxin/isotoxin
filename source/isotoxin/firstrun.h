@@ -27,8 +27,7 @@ class dialog_firstrun_c : public gui_isodialog_c
     };
     SLANGID deflng;
     ts::wstr_c copyto, profilename, pathselected;
-    bool developing = false;
-    bool i_am_noob = true;
+    int mode = 0; // 0 noob, 1 portable, 2 setup
     bool is_autostart = true;
     path_choice_e choice0 = PCH_PROGRAMFILES;
     path_choice_e choice1 = PCH_APPDATA;
@@ -43,6 +42,7 @@ class dialog_firstrun_c : public gui_isodialog_c
     void updinfo();
 
     void set_defaults();
+    void set_portable();
 protected:
     /*virtual*/ void created() override;
     /*virtual*/ void on_close() override;
@@ -53,7 +53,7 @@ public:
 
     /*virtual*/ ts::wstr_c get_name() const override;
 
-    /*virtual*/ ts::ivec2 get_min_size() const { return ts::ivec2(510,450); }
+    /*virtual*/ ts::ivec2 get_min_size() const { return ts::ivec2(510,480); }
     
     //sqhandler_i
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;

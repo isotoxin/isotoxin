@@ -65,6 +65,18 @@ enum mpd_e
 
 ts::wstr_c make_proto_desc(int mask);
 
+template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_mark(ts::TSCOLOR c)
+{
+    ts::str_t<TCHARACTER> s(CONSTSTR(TCHARACTER, "<mark=#"));
+    s.append_as_hex(ts::RED(c))
+        .append_as_hex(ts::GREEN(c))
+        .append_as_hex(ts::BLUE(c))
+        .append_as_hex(ts::ALPHA(c))
+        .append_char('>');
+    return s;
+}
+
+
 template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_color( ts::TSCOLOR c )
 {
     ts::str_t<TCHARACTER> s( CONSTSTR(TCHARACTER,"<color=#") );
@@ -72,7 +84,7 @@ template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_color( ts::TSCOLOR c
     .append_as_hex(ts::GREEN(c))
     .append_as_hex(ts::BLUE(c))
     .append_as_hex(ts::ALPHA(c))
-    .append(CONSTSTR(TCHARACTER,">"));
+    .append_char('>');
     return s;
 }
 
@@ -89,7 +101,7 @@ template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_outline(ts::TSCOLOR 
         .append_as_hex(ts::GREEN(c))
         .append_as_hex(ts::BLUE(c))
         .append_as_hex(ts::ALPHA(c))
-        .append(CONSTSTR(TCHARACTER, ">"));
+        .append_char('>');
     return s;
 }
 template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_shadow(ts::TSCOLOR c, int len = 2)
@@ -100,7 +112,7 @@ template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_shadow(ts::TSCOLOR c
         .append_as_hex(ts::GREEN(c))
         .append_as_hex(ts::BLUE(c))
         .append_as_hex(ts::ALPHA(c))
-        .append(CONSTSTR(TCHARACTER, ">"));
+        .append_char('>');
     return s;
 }
 
@@ -171,6 +183,13 @@ public:
 
 };
 
+struct parsed_command_line_s
+{
+    ts::swstr_t<MAX_PATH + 16> alternative_config_path;
+    bool checkinstance = true;
+    bool minimize = false;
+    bool readonlymode = false;
+};
 
 
 // isotoxin gmsgs
@@ -216,9 +235,16 @@ template<> struct gmsg<ISOGM_AV_COUNT> : public gmsgbase
 
 template<> struct gmsg<ISOGM_NEWVERSION> : public gmsgbase
 {
-    gmsg(ts::asptr ver) :gmsgbase(ISOGM_NEWVERSION), ver(ver) {}
+    enum error_e
+    {
+        E_OK,
+        E_NETWORK,
+        E_DISK,
+    };
+
+    gmsg(ts::asptr ver, error_e en) :gmsgbase(ISOGM_NEWVERSION), ver(ver), error_num(en) {}
     ts::sstr_t<-16> ver;
-    bool is_error() const { return ver.equals(CONSTASTR("error")); }
+    error_e error_num = E_OK;
 };
 
 template<> struct gmsg<ISOGM_DOWNLOADPROGRESS> : public gmsgbase
@@ -310,6 +336,7 @@ enum settingsparam_e
     PP_NETWORKNAME,
     PP_EMOJISET,
     PP_ACTIVEPROTO_SORT,
+    PP_FONTSCALE,
 
     // config
     CFG_MICVOLUME,
@@ -320,10 +347,11 @@ enum settingsparam_e
 template<> struct gmsg<ISOGM_CHANGED_SETTINGS> : public gmsgbase
 {
     gmsg(int protoid, settingsparam_e sp, const ts::str_c &s) :gmsgbase(ISOGM_CHANGED_SETTINGS), protoid(protoid), sp(sp), s(s) {}
-    gmsg(int protoid, settingsparam_e sp) :gmsgbase(ISOGM_CHANGED_SETTINGS), protoid(protoid), sp(sp) {}
+    gmsg(int protoid, settingsparam_e sp, int bits = 0) :gmsgbase(ISOGM_CHANGED_SETTINGS), protoid(protoid), sp(sp), bits(bits) {}
     int protoid;
     settingsparam_e sp;
     ts::str_c s;
+    int bits = 0;
 };
 //
 
@@ -346,6 +374,8 @@ enum loctext_e
     loc_exit,
     loc_network,
     loc_nonetwork,
+    loc_disk_write_error,
+    loc_import_from_file,
 };
 
 ts::wstr_c loc_text(loctext_e);
@@ -459,6 +489,20 @@ struct leech_dock_bottom_center_s : public autoparam_i
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
+struct leech_dock_top_center_s : public autoparam_i
+{
+    int width;
+    int height;
+    int x_space;
+    int y_space;
+    int index;
+    int num;
+    leech_dock_top_center_s(int width, int height, int x_space = 0, int y_space = 0, int index = 0, int num = 1) :width(width), height(height), x_space(x_space), y_space(y_space), index(index), num(num){}
+    void update_ctl_pos();
+    /*virtual*/ bool i_leeched(guirect_c &to) override { if (__super::i_leeched(to)) { update_ctl_pos(); return true; } return false; };
+    virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+};
+
 struct leech_dock_right_center_s : public autoparam_i
 {
     int width;
@@ -552,3 +596,53 @@ struct leech_save_size_s : public autoparam_i
     }
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
+
+
+
+struct protocol_description_s
+{
+    UNIQUE_PTR(ts::drawable_bitmap_c) icon;
+    ts::str_c  tag; // lan, tox
+    ts::str_c description; // utf8
+    ts::str_c description_t; // utf8
+    ts::str_c version; // utf8
+    int connection_features = 0;
+    int features = 0;
+    protocol_description_s() {}
+    protocol_description_s(const protocol_description_s&) UNUSED;
+    protocol_description_s &operator=(const protocol_description_s&) UNUSED;
+};
+
+struct available_protocols_s : public ts::array_inplace_t<protocol_description_s,0>
+{
+    DECLARE_EYELET( available_protocols_s );
+
+public:
+    const protocol_description_s *find(const ts::str_c& tag) const
+    {
+        for (const protocol_description_s& p : *this)
+            if (p.tag == tag)
+                return &p;
+        return nullptr;
+    }
+
+    void load();
+    virtual void done(bool fail) {};
+
+    available_protocols_s() {}
+    available_protocols_s(const available_protocols_s&) UNUSED;
+    available_protocols_s &operator=(const available_protocols_s &o) UNUSED;
+    available_protocols_s &operator=(available_protocols_s &&o)
+    {
+        ts::array_inplace_t<protocol_description_s,0> *me = this;
+        ts::array_inplace_t<protocol_description_s,0> *oth = &o;
+        *me = std::move( *oth );
+        return *this;
+    }
+
+};
+
+
+
+
+

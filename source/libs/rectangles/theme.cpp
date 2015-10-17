@@ -272,7 +272,19 @@ const drawable_bitmap_c &theme_c::loadimage( const wsptr &name )
 	return dbmp;
 }
 
-bool theme_c::load( const ts::wsptr &name )
+void theme_c::reload_fonts(FONTPAR fp)
+{
+    for(const theme_font_s &thf : prefonts)
+    {
+        font_params_s fpt( thf.fontparam );
+        fp(thf.fontname, fpt);
+        add_font(thf.fontname, fpt);
+    }
+    ts::g_default_text_font = gui->get_font(gui->default_font_name());
+
+}
+
+bool theme_c::load( const ts::wsptr &name, FONTPAR fp )
 {
 	wstr_c path(CONSTWSTR("themes/"));
     path.append(name).append_char('/');
@@ -327,11 +339,12 @@ bool theme_c::load( const ts::wsptr &name )
     {
         for (auto it = fonts->begin(); it; ++it)
         {
-            add_font(it.name(), it->as_string());
+            ts::font_params_s fp;
+            fp.setup( it->as_string() );
+            prefonts.addnew( it.name(), fp );
         }
     }
-
-    ts::g_default_text_font = gui->get_font( gui->default_font_name() ); // not gui->default_font(), due m_deffont not yet initialized
+    reload_fonts(fp);
 
 	if (const abp_c * rs = bp.get("rects"))
 	{

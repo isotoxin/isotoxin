@@ -235,7 +235,7 @@ ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
     if (!checking_new_version) return 0;
     checking_new_version = false;
 
-    if (nv.is_error())
+    if (nv.error_num == gmsg<ISOGM_NEWVERSION>::E_NETWORK)
     {
         set_label_text(CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(0)) + loc_text(loc_connection_failed));
         if (RID no = find(CONSTASTR("upd")))
@@ -243,7 +243,7 @@ ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
         return 0;
     }
 
-    if (nv.ver.is_empty())
+    if (nv.ver.is_empty() || nv.error_num != gmsg<ISOGM_NEWVERSION>::E_OK)
     {
         set_label_text( CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(0)) + TTT("Update not found",207) );
         if (RID no = find(CONSTASTR("upd")))

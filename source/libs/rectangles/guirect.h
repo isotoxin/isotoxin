@@ -505,14 +505,14 @@ template<typename R> struct MAKE_VISIBLE_CHILD : public initial_rect_data_s
 /*
   sorry, my dear english-speaking friends, but my english is too bad to write this description in english
   in russian:
-  вобщем, тут конечно дикий изврат с шаблонами. попробую объяснить
+  вобщем, тут конечно дикий изврат с шаблонами. Попробую объяснить
   MAKE_ROOT и MAKE_CHILD по сути ничем не отличаются, кроме того, какой движок прямоугольнику они создают.
   template 1 и template 3 эквивалентны и используются для создания прямоугольника без параметров, точнее с дефолтовым параметром в виде структуры initial_rect_data_s
   веселье начинается, когда нужно передать дополнительные параметры в конструктор прямоугольника. Вот тут начинают работать template 2 и/или template 4
   по сути эти шаблоны - это предки для специализированных структур с дополнительными параметрами
   как можно заметить при внимательном рассмотрении, эти шаблоны по сути специализация MAKE_ROOT и MAKE_CHILD, но специальным враппером: newrectkitchen::rectwrapper
-  такой изврат позволяет использовать вынести дефолтовую инициализацию движка в отдельную функцию init вылывать ее из специализированного потомка
-  на самом деле ничего сложного. это ж не буст
+  такой изврат позволяет вынести дефолтовую инициализацию движка в отдельную функцию init и вызывать ее из специализированного потомка
+  на самом деле ничего сложного. Это ж не буст.
 */
 
 typedef fastdelegate::FastDelegate<ts::wstr_c ()> GET_TOOLTIP;
@@ -555,6 +555,8 @@ public:
 
 	guirect_c(initial_rect_data_s &data);
 	virtual ~guirect_c();
+
+    virtual void update_offset(int offset) {} // called from gui_vscrollgroup_c; offset - value of scrollbar shift, required to make rect top
 
     virtual void update_dndobj(guirect_c *donor) {}
     virtual guirect_c * summon_dndobj(const ts::ivec2 &deltapos) { return nullptr; };
@@ -1045,10 +1047,11 @@ protected:
 
     struct cri_s
     {
-        ts::irect   area;
-        int         from;
-        int         count;
-        int         areasize;
+        ts::irect   area = ts::irect(0);
+        int         from = 0;
+        int         count = 0;
+        int         areasize = 0;
+        bool        update_offset = false;
     };
 
     virtual void children_repos_info( cri_s &info ) const;
@@ -1174,7 +1177,9 @@ class gui_vscrollgroup_c : public gui_group_c // vertical group with vertical sc
 
     sbhelper_s sbhelper;
     ts::buf0_c drawflags;
-    ts::safe_ptr<rectengine_c> scroll_target = nullptr;
+    ts::safe_ptr<rectengine_c> scroll_target;
+    ts::safe_ptr<rectengine_c> top_visible;
+    int top_visible_offset = 0;
 
     static const ts::flags32_s::BITS F_SBVISIBLE = FLAGS_FREEBITSTART << 0;
     static const ts::flags32_s::BITS F_SBHL = FLAGS_FREEBITSTART << 1;
@@ -1188,6 +1193,11 @@ protected:
     /*virtual*/ void children_repos() override;
     /*virtual*/ void on_add_child(RID id) override;
     gui_vscrollgroup_c() {}
+
+    void nosb() {flags.clear(F_SBVISIBLE);};
+    int sbshift() const {return sbhelper.shift;}
+    void sbshift( int s ) {sbhelper.shift = s;} // please call gui->repos_children(this);
+
 public:
     gui_vscrollgroup_c(initial_rect_data_s &data) :gui_group_c(data) {}
     /*virtual*/ ~gui_vscrollgroup_c() {}
@@ -1210,6 +1220,11 @@ public:
     void scroll_to_begin();
     void scroll_to_end();
     void scroll_to_child( rectengine_c *reng, bool maxtop );
+    rectengine_c *get_top_visible(int *offset)
+    {
+        if (offset) *offset = top_visible_offset;
+        return top_visible;
+    }
     
     int width_for_children() const
     {
@@ -1515,6 +1530,7 @@ class gui_hslider_c : public gui_control_c
     ts::time_float_c values;
 
     static const ts::flags32_s::BITS F_LBDOWN = FLAGS_FREEBITSTART << 0;
+    static const ts::flags32_s::BITS F_PBMODE = FLAGS_FREEBITSTART << 1;
 
     GUIPARAMHANDLER handler;
     GETMENU_FUNC gm;
@@ -1545,7 +1561,10 @@ public:
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
     void set_value(float value);
+    void set_level(float level, const ts::wstr_c &txt);
     void set_level(float level);
+
+    void set_pb_mode() { flags.set(F_PBMODE); }
 };
 
 #endif

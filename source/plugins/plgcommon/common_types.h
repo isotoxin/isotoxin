@@ -12,9 +12,12 @@ enum proto_features_e
     PF_SEND_FILE                = (1 << 5),     // send (and recv, of course) files supported
     PF_GROUP_CHAT               = (1 << 6),     // group chats supported
     PF_GROUP_CHAT_PERSISTENT    = (1 << 7),     // persistent group chats supported
-    PF_IMPORT                   = (1 << 8),     // configuration import (set_config will receive imported file as is)
-    PF_OFFLINE_MESSAGING        = (1 << 9),     // protocol supports real offline messaging (not faux offline messaging)
-    PF_OFFLINE_INDICATOR        = (1 << 10),    // protocol's state used as online/offline indicator of application
+    PF_PURE_NEW                 = (1 << 8),     // protocol support pure new
+    PF_NEW_REQUIRES_LOGIN       = (1 << 9),     // protocol support new with custom login/pass data
+    PF_LOGIN                    = (1 << 10),    // protocol support login/pass
+    PF_IMPORT                   = (1 << 11),    // protocol support creation with import; configuration import (set_config will receive imported file as is)
+    PF_OFFLINE_MESSAGING        = (1 << 12),    // protocol supports real offline messaging (not faux offline messaging)
+    PF_OFFLINE_INDICATOR        = (1 << 13),    // protocol's state used as online/offline indicator of application
 };
 
 enum connection_features_e

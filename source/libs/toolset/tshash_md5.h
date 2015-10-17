@@ -51,6 +51,15 @@ namespace ts
         void done();
         const unsigned char *result() const; // make sure done called
         void reset();
+
+        bool operator ==(const md5_c&o) const
+        {
+            return blk_cmp( result(), o.result(), 16 );
+        }
+        bool operator !=(const md5_c&o) const
+        {
+            return !blk_cmp(result(), o.result(), 16);
+        }
     };
 
 } // namespace ts

@@ -317,6 +317,12 @@ template <class TCHARACTER> ZSTRINGS_FORCEINLINE ZSTRINGS_SIGNED CHARz_len(const
     do {l++;} while (*(s+l));
     return l;
 }
+template <class TCHARACTER> ZSTRINGS_FORCEINLINE ZSTRINGS_SIGNED CHARz_nlen(const TCHARACTER *s, ZSTRINGS_SIGNED n)
+{
+    ZSTRINGS_SIGNED l = -1;
+    do { l++; } while (*(s + l) && l < n);
+    return l;
+}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 template <class TCHARACTER> __inline void    CHARz_copy(TCHARACTER *tgt, const TCHARACTER *src)

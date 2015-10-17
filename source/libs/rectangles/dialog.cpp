@@ -166,15 +166,6 @@ ts::uint32 gui_dialog_c::gm_handler(gmsg<GM_DIALOG_PRESENT> &p)
     return 0;
 }
 
-ts::uint32 gui_dialog_c::gm_handler(gmsg<GM_CLOSE_DIALOG> &p)
-{
-    int udt = unique_tag();
-    if (udt == 0) return 0;
-    if (p.unique_tag == udt)
-        on_close();
-    return 0;
-}
-
 namespace
 {
     struct finda
@@ -1277,6 +1268,4 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
     info.area.rb -= border.rb;
     info.from = skipctls;
     info.count = getengine().children_count() - skipctls;
-    info.areasize = 0;
-
 }
