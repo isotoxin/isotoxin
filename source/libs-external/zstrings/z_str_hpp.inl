@@ -1762,8 +1762,8 @@ public:
             if (*c == separator) 
             {
                 ZSTRINGS_SIGNED beglen = ZSTRINGS_SIGNED(c - first);
-                beg.set(sptr(first, beglen));
-                rem.set(sptr(c + 1, get_length() - beglen - 1));
+                beg.set(sptr<TCHARACTER>(first, beglen));
+                rem.set(sptr<TCHARACTER>(c + 1, get_length() - beglen - 1));
                 return;
             }
         }

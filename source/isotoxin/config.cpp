@@ -31,7 +31,7 @@ void config_base_c::prepare_conf_table( ts::sqlitedb_c *db )
     {
         ts::column_desc_s cfgcols[2];
         cfgcols[0].name_ = CONSTASTR("name");
-        cfgcols[0].primary = true;
+        cfgcols[0].options.set( ts::column_desc_s::f_primary );
         cfgcols[0].type_ = ts::data_type_e::t_str;
 
         cfgcols[1].name_ = CONSTASTR("value");
@@ -184,7 +184,6 @@ void config_c::load( const ts::wstr_c &path_override )
     {
         db->read_table( CONSTASTR("conf"), get_cfg_reader() );
     }
-
 }
 
 bool config_base_c::cfg_reader( int row, ts::SQLITE_DATAGETTER getta )

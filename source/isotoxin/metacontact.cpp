@@ -188,7 +188,7 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
         basec->gui_item->protohit();
         basec->gui_item->update_text();
     }
-    basec->reselect(true);
+    basec->reselect();
     __super::on_confirm();
 }
 

@@ -157,19 +157,24 @@ void contact_c::protohit( bool f )
 
 }
 
-void contact_c::reselect(bool scrollend)
+void contact_c::reselect(int options)
 {
     contact_c *h = get_historian();
-    if (scrollend)
+
+    struct reselect_data_s
+    {
+        contact_key_s hkey;
+        int options;
+        reselect_data_s(const contact_key_s &hkey, int options):hkey(hkey), options(options) {}
+    };
+
+    if (h)
     {
         DEFERRED_EXECUTION_BLOCK_BEGIN(0)
-            gmsg<ISOGM_SELECT_CONTACT>((contact_c *)param).send();
-        DEFERRED_EXECUTION_BLOCK_END(h)
-    } else
-    {
-        DEFERRED_EXECUTION_BLOCK_BEGIN(0)
-            gmsg<ISOGM_SELECT_CONTACT>((contact_c *)param, false).send();
-        DEFERRED_EXECUTION_BLOCK_END(h)
+            if ( reselect_data_s *rd = gui->temp_restore<reselect_data_s>(as_int(param)) )
+                if (contact_c *c = contacts().find(rd->hkey))
+                    gmsg<ISOGM_SELECT_CONTACT>(c,rd->options).send();
+        DEFERRED_EXECUTION_BLOCK_END(gui->temp_store( reselect_data_s(h->getkey(), options) ))
     }
 }
 
@@ -976,7 +981,7 @@ bool contact_c::b_accept(RID, GUIPARAM par)
         ap->accept(getkey().contactid);
 
     get_historian()->fix_history(MTA_FRIEND_REQUEST, MTA_OLD_REQUEST, getkey());
-    get_historian()->reselect(false);
+    get_historian()->reselect(0);
 
     prf().dirtycontact(getkey());
     return true;
@@ -1012,7 +1017,7 @@ bool contact_c::b_load(RID, GUIPARAM n)
 {
     int n_load = as_int(n);
     get_historian()->load_history(n_load);
-    get_historian()->reselect(false);
+    get_historian()->reselect(RSEL_INSERT_NEW);
     return true;
 }
 
@@ -1146,7 +1151,7 @@ void contacts_c::nomore_proto(int id)
         if (contact_c *c = find(ck))
             if (c->get_historian()->gui_item == g_app->active_contact_item)
             {
-                contacts().get_self().reselect(true);
+                contacts().get_self().reselect();
                 break;
             }
     }
@@ -1402,7 +1407,7 @@ void contacts_c::kill(const contact_key_s &ck)
     contact_c * cc = find(ck);
     if (!cc) return;
 
-    ts::safe_ptr<gui_contact_item_c> guiitem = cc->gui_item;
+    ts::safe_ptr<gui_contact_item_c> guiitem = cc->get_historian()->gui_item;
     bool selself = !guiitem.expired() && g_app->active_contact_item.get() == guiitem.get();
 
     if (cc->getkey().is_group() && cc->get_options().unmasked().is(contact_c::F_AUDIO_GCHAT))
@@ -1493,7 +1498,7 @@ void contacts_c::kill(const contact_key_s &ck)
         TSDEL(guiitem);
 
     if (selself)
-        contacts().get_self().reselect(true);
+        contacts().get_self().reselect();
 }
 
 contact_c *contacts_c::create_new_meta()
@@ -1663,7 +1668,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                     c->fix_history(MTA_FRIEND_REQUEST, MTA_OLD_REQUEST);
                     msg.send();
                     serious_change = c->getkey().protoid;
-                    c->reselect(true);
+                    c->reselect();
 
 
                 }
@@ -1674,7 +1679,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                     c->fix_history(MTA_FRIEND_REQUEST, MTA_OLD_REQUEST);
                     gmsg<ISOGM_MESSAGE>(c, &get_self(), MTA_ACCEPTED).send();
                     serious_change = c->getkey().protoid;
-                    c->reselect(true);
+                    c->reselect();
                 }
             }
 
@@ -1986,7 +1991,7 @@ void contacts_c::unload()
 {
     prf().shutdown_aps();
 
-    gmsg<ISOGM_SELECT_CONTACT>( nullptr ).send();
+    gmsg<ISOGM_SELECT_CONTACT>( nullptr, 0 ).send();
 
     for (contact_c *c : arr)
     {

@@ -45,6 +45,7 @@ int proc_hgver(const wstrings_c & pars);
 int proc_upd(const wstrings_c & pars);
 int proc_sign(const wstrings_c & pars);
 int proc_emoji(const wstrings_c & pars);
+int proc_dos2unix(const wstrings_c & pars);
 
 int proc_loc_(const wstrings_c & pars)
 {
@@ -86,6 +87,7 @@ struct command_s
     //command_s(L"upd", L"Load isotoxin update", proc_upd),
     command_s(L"sign", L"Sign archive", proc_sign),
     command_s(L"emoji", L"Create emoji table", proc_emoji),
+    command_s(L"dos2unix", L"Convert CRLF to LF", proc_dos2unix),
 };
 
 

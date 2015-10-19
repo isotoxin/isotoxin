@@ -357,6 +357,7 @@ void history_s::get_column_desc(int index, ts::column_desc_s&cd)
     {
         case C_TIME:
             cd.name_ = CONSTASTR("mtime");
+            cd.options.set( ts::column_desc_s::f_non_unique_index );
             break;
         case C_HISTORIAN:
             cd.name_ = CONSTASTR("historian");
@@ -375,7 +376,7 @@ void history_s::get_column_desc(int index, ts::column_desc_s&cd)
             break;
         case C_UTAG:
             cd.name_ = CONSTASTR("utag");
-            cd.index = true;
+            cd.options.set( ts::column_desc_s::f_unique_index );
             break;
         default:
             FORBIDDEN();
@@ -515,8 +516,7 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::prepare( t
     ts::column_desc_s &idc = cds.add();
     idc.name_ = CONSTASTR("id");
     idc.type_ = ts::data_type_e::t_int;
-    idc.primary = true;
-    idc.autoincrement = true;
+    idc.options.set( ts::column_desc_s::f_primary | ts::column_desc_s::f_autoincrement );
 
     for(int i=1;i<T::columns;++i)
         T::get_column_desc(i, cds.add());
@@ -1165,6 +1165,8 @@ bool profile_c::load(const ts::wstr_c& pfn)
     {
         g_app->reload_fonts();
     }
+
+    set_options( 0, _MSGOP_UNUSED_00_ ); // reset deprecated bit
 
     return true;
 }

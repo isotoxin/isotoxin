@@ -43,7 +43,7 @@ ts::uint32 mainrect_c::gm_handler( gmsg<ISOGM_APPRISE> & )
     RID chat = MAKE_CHILD<gui_conversation_c>( hg );
     hg.call_restore_signal();
     
-    gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self()).send(); // 1st selected item, yo
+    gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self(), 0).send(); // 1st selected item, yo
 
     g_app->F_ALLOW_AUTOUPDATE = !g_app->F_READONLY_MODE;
 }

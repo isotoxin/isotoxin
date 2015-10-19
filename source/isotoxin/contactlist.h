@@ -27,11 +27,25 @@ template<> struct MAKE_ROOT<gui_contact_item_c> : public _PROOT(gui_contact_item
 
 class gui_contact_item_c : public gui_label_c
 {
+    enum colors_e
+    {
+        COLOR_TEXT_SPECIAL,
+        COLOR_TEXT_TYPING,
+        COLOR_TEXT_FOUND,
+
+        COLOR_PROTO_TEXT_ONLINE = 1,
+        COLOR_PROTO_TEXT_OFFLINE,
+    };
+
     DUMMY(gui_contact_item_c);
     ts::shared_ptr<contact_c> contact;
     contact_item_role_e role = CIR_LISTITEM;
     GM_RECEIVER( gui_contact_item_c, ISOGM_SELECT_CONTACT );
     
+    ts::wstr_c typing_buf;
+    bool stop_typing(RID, GUIPARAM);
+    bool animate_typing(RID, GUIPARAM);
+
     ts::svec2 shiftstateicon;
 
     struct protocols_s
@@ -66,6 +80,7 @@ class gui_contact_item_c : public gui_label_c
     static const ts::flags32_s::BITS  F_LBDN        = FLAGS_FREEBITSTART_LABEL << 5;
     static const ts::flags32_s::BITS  F_DNDDRAW     = FLAGS_FREEBITSTART_LABEL << 6;
     static const ts::flags32_s::BITS  F_CALLBUTTON  = FLAGS_FREEBITSTART_LABEL << 7;
+    static const ts::flags32_s::BITS  F_SHOWTYPING  = FLAGS_FREEBITSTART_LABEL << 8;
 
     friend class contact_c;
     friend class contacts_c;
@@ -86,6 +101,8 @@ public:
     gui_contact_item_c(MAKE_ROOT<gui_contact_item_c> &data);
     gui_contact_item_c(MAKE_CHILD<gui_contact_item_c> &data);
     /*virtual*/ ~gui_contact_item_c();
+
+    void typing();
 
     int contact_item_rite_margin();
 
@@ -171,6 +188,7 @@ class gui_contactlist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_contactlist_c, ISOGM_CHANGED_SETTINGS);
     GM_RECEIVER(gui_contactlist_c, ISOGM_V_UPDATE_CONTACT);
     GM_RECEIVER(gui_contactlist_c, ISOGM_DO_POSTEFFECT);
+    GM_RECEIVER(gui_contactlist_c, ISOGM_TYPING);
     GM_RECEIVER(gui_contactlist_c, GM_HEARTBEAT);
     GM_RECEIVER(gui_contactlist_c, GM_DRAGNDROP);
     GM_RECEIVER(gui_contactlist_c, GM_UI_EVENT)

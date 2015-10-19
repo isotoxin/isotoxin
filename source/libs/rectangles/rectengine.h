@@ -183,13 +183,17 @@ public:
                     return re;
         return nullptr;
     }
-    rectengine_c *get_next_child( const rectengine_c *e )
+    rectengine_c *get_next_child( const rectengine_c *e, int *index = nullptr )
     {
         int i = children.find(e);
         if (i >= 0)
             while( ++i < children.size() )
                 if ( rectengine_c * re = children.get(i) )
+                {
+                    if (index) *index = i;
                     return re;
+                }
+        if (index) *index = children.size();
         return nullptr;
     }
 

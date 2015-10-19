@@ -271,7 +271,7 @@
 271=Typing
 272=Typing notification
 273=Send typing notification
-274=Ignore typing notifications
+274=Show typing notifications in contacts list
 275=Search
 276=Show search bar ($)
 277=Loading
@@ -344,6 +344,7 @@
 344=Show [i]join network[/i] button ($)
 345=Join network
 346=Message font size: $
+347=Show typing notifications in messages
 1000=Incoming message
 1001=Incoming file
 1002=File receiving started

@@ -21,15 +21,18 @@ struct column_desc_s
     asptr name_;
     asptr default_;
     data_type_e type_ = data_type_e::t_int;
-    bool primary = false;
-    bool autoincrement = false;
-    bool nullable = false;
-    bool index = false;
+    flags32_s options;
+
+    static const flags32_s::BITS f_primary = SETBIT(0);
+    static const flags32_s::BITS f_autoincrement = SETBIT(1);
+    static const flags32_s::BITS f_nullable = SETBIT(2);
+    static const flags32_s::BITS f_unique_index = SETBIT(3);
+    static const flags32_s::BITS f_non_unique_index = SETBIT(4);
 
     bool has_default() const
     {
         if (default_.s) return true;
-        return type_ != data_type_e::t_blob && !nullable && !autoincrement && !primary;
+        return type_ != data_type_e::t_blob && !options.is(f_nullable) && !options.is(f_autoincrement) && !options.is(f_primary);
     }
 
     str_c get_default() const

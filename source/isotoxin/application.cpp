@@ -608,7 +608,7 @@ void application_c::select_last_unread_contact()
                 cl.scroll_to_child(&h->gui_item->getengine(), false);
             }
 
-            h->reselect(true);
+            h->reselect();
         }
     } else
     {
@@ -748,7 +748,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
             }
 
             contacts().update_meta();
-            contacts().get_self().reselect(true);
+            contacts().get_self().reselect();
             g_app->recreate_ctls();
 
         }

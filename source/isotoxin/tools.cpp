@@ -831,6 +831,36 @@ ts::wstr_c loc_text(loctext_e lt)
     return ts::wstr_c();
 }
 
+ts::wstr_c text_typing(const ts::wstr_c &prev, ts::wstr_c &workbuf, const ts::wsptr &preffix)
+{
+    ts::wstr_c tt(TTT("Typing", 271));
+    ts::wstr_c ttc = prev;
+
+    ts::wsptr rectb = CONSTWSTR("_");
+
+    if (workbuf.is_empty())
+    {
+        ttc.clear();
+        workbuf.set(CONSTWSTR("__  __  __  __"));
+    }
+
+
+    if (ttc.is_empty()) ttc.set(preffix).append(rectb);
+    else
+    {
+        if (ttc.get_length() - preffix.l - rectb.l < tt.get_length())
+        {
+            ttc.set(preffix).append(tt.substr(0, ttc.get_length() - preffix.l - rectb.l + 1)).append(rectb);
+        }
+        else
+        {
+            ttc.trunc_length(rectb.l).append_char(workbuf.get_last_char()).append(rectb.skip(1));
+            workbuf.trunc_length();
+        }
+    }
+    return ttc;
+}
+
 void add_status_items(menu_c &m)
 {
     struct handlers

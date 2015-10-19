@@ -144,7 +144,7 @@ menu_c dialog_contact_props_c::getaacmenu()
         if (changed)
         {
             prf().dirtycontact(contactue->getkey());
-            contactue->reselect(true);
+            contactue->reselect();
         }
     }
 

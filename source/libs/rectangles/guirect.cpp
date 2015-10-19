@@ -3269,7 +3269,7 @@ void gui_hslider_c::set_level(float level_)
                 text_draw_params_s tdp;
                 ts::TSCOLOR c = get_default_text_color();
                 tdp.forecolor = &c;
-                ts::flags32_s f; f.setup( ts::TO_VCENTER );
+                ts::flags32_s f; f.setup( ts::TO_VCENTER | ts::TO_END_ELLIPSIS );
                 tdp.textoptions = &f;
 
                 dd.offset.y += cla.lt.y;

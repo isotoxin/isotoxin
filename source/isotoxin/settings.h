@@ -401,7 +401,7 @@ public:
     ~dialog_settings_c();
 
     /*virtual*/ ts::wstr_c get_name() const override;
-    /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(830, 500); }
+    /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(830, 520); }
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
 };

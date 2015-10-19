@@ -519,7 +519,8 @@ void dialog_settings_c::mod()
         bgroups[BGROUP_MSGOPTS].add(MSGOP_SHOW_PROTOCOL_NAME);
 
         bgroups[BGROUP_TYPING].add(MSGOP_SEND_TYPING);
-        bgroups[BGROUP_TYPING].add(MSGOP_IGNORE_OTHER_TYPING);
+        bgroups[BGROUP_TYPING].add(UIOPT_SHOW_TYPING_CONTACT);
+        bgroups[BGROUP_TYPING].add(UIOPT_SHOW_TYPING_MSGLIST);
 
         bgroups[BGROUP_HISTORY].add(MSGOP_KEEP_HISTORY);
         bgroups[BGROUP_HISTORY].add(MSGOP_LOAD_WHOLE_HISTORY);
@@ -778,7 +779,8 @@ void dialog_settings_c::mod()
         dm().vspace();
         dm().checkb(TTT("Typing notification",272), DELEGATE(bgroups+BGROUP_TYPING, handler), bgroups[BGROUP_TYPING].current).setmenu(
             menu_c().add(TTT("Send typing notification",273), 0, MENUHANDLER(), CONSTASTR("1"))
-                    .add(TTT("Ignore typing notifications",274), 0, MENUHANDLER(), CONSTASTR("2"))
+                    .add(TTT("Show typing notifications in contacts list",274), 0, MENUHANDLER(), CONSTASTR("2"))
+                    .add(TTT("Show typing notifications in messages",347), 0, MENUHANDLER(), CONSTASTR("4"))
             );
 
         dm << MASK_PROFILE_GCHAT; //____________________________________________________________________________________________________//

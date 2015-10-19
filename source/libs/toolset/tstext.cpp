@@ -111,7 +111,6 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
             {
                 // draw bg
                 ivec2 pos(glyph.pos);  pos += offset; // glyph rendering position
-                dst = dst_ + pos.x * sizeof(TSCOLOR) + pos.y * pitch;
 
                 int clipped_width = glyph.width;
                 int clipped_height = glyph.height;
@@ -122,6 +121,8 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
                 if (pos.y + clipped_height > height) clipped_height = height - pos.y;
 
                 if (clipped_width <= 0 || clipped_height <= 0) continue; // fully clipped - skip
+
+                dst = dst_ + pos.x * sizeof(TSCOLOR) + pos.y * pitch;
 
                 ts::TSCOLOR col = glyph.color;
                 for (; clipped_height; clipped_height--, dst += pitch)

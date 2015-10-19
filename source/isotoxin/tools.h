@@ -293,25 +293,22 @@ struct post_s;
 class contact_c;
 template<> struct gmsg<ISOGM_SUMMON_POST> : public gmsgbase
 {
-    gmsg(const post_s &post, contact_c *fake_sender) :gmsgbase(ISOGM_SUMMON_POST), post(post), unread(nullptr), fake_sender(fake_sender), replace_post(false)
+    gmsg(const post_s &post, contact_c *historian) :gmsgbase(ISOGM_SUMMON_POST), post(post), historian(historian), replace_post(false)
     {
     }
-    gmsg(const post_s &post, rectengine_c ** unread = nullptr, contact_c *historian = nullptr) :gmsgbase(ISOGM_SUMMON_POST), post(post), unread(unread), historian(historian), replace_post(false)
-    {
-    }
-    gmsg(const post_s &post, bool replace_post) :gmsgbase(ISOGM_SUMMON_POST), post(post), unread(nullptr), replace_post(replace_post)
+    gmsg(const post_s &post, bool replace_post) :gmsgbase(ISOGM_SUMMON_POST), post(post), replace_post(replace_post)
     {
     }
     contact_c *historian = nullptr;
-    contact_c *fake_sender = nullptr; // only used for messages from groupchat non-contactlist members
-    rectengine_c **unread; // if post time > readtime of current historian, this field will be set with new created gui element - scroll_to_child will be called for it
+    rectengine_c *created = nullptr;
     const post_s &post;
     
     uint64 prev_found = 0;
     uint64 next_found = 0;
 
-    bool replace_post;
+    bool replace_post = false;
     bool found_item = false;
+    bool filling = false; // true - insert new post at begin
 
     void operator =(gmsg &) UNUSED;
 };
@@ -379,6 +376,8 @@ enum loctext_e
 };
 
 ts::wstr_c loc_text(loctext_e);
+
+ts::wstr_c text_typing(const ts::wstr_c &prev, ts::wstr_c &workbuf, const ts::wsptr &preffix);
 
 void add_status_items(menu_c &m);
 

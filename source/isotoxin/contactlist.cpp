@@ -31,6 +31,8 @@ gui_contact_item_c::~gui_contact_item_c()
     {
         gui->delete_event(DELEGATE(this, update_buttons));
         gui->delete_event(DELEGATE(this, redraw_now));
+        gui->delete_event(DELEGATE(this, stop_typing));
+        gui->delete_event(DELEGATE(this, animate_typing));
     }
 }
 
@@ -459,6 +461,27 @@ void gui_contact_item_c::setcontact(contact_c *c)
     }
 }
 
+void gui_contact_item_c::typing()
+{
+    flags.set(F_SHOWTYPING);
+    DEFERRED_UNIQUE_CALL(1.5, DELEGATE(this, stop_typing), nullptr);
+    animate_typing(RID(), nullptr);
+}
+
+bool gui_contact_item_c::stop_typing(RID, GUIPARAM)
+{
+    typing_buf.clear();
+    flags.clear(F_SHOWTYPING);
+    update_text();
+    return true;
+}
+bool gui_contact_item_c::animate_typing(RID, GUIPARAM)
+{
+    update_text();
+    DEFERRED_UNIQUE_CALL(1.0 / 15.0, DELEGATE(this, animate_typing), nullptr);
+    return true;
+}
+
 void gui_contact_item_c::update_text()
 {
     if (CIR_CONVERSATION_HEAD == role)
@@ -536,14 +559,14 @@ void gui_contact_item_c::update_text()
 
                 DEFERRED_EXECUTION_BLOCK_END( gui->temp_store<contact_key_s>(contact->getkey()) )
             } else if (rej > 0)
-                newtext = colorize( to_utf8(TTT("Rejected",79)).as_sptr(), get_default_text_color(0) );
+                newtext = colorize( to_utf8(TTT("Rejected",79)).as_sptr(), get_default_text_color(COLOR_TEXT_SPECIAL) );
             else if (invsend > 0)
             {
                 newtext = contact->get_customname();
                 if (newtext.is_empty()) newtext = contact->get_name();
                 text_adapt_user_input(newtext);
                 if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
-                newtext.append( colorize(to_utf8(TTT("Request sent",88)).as_sptr(), get_default_text_color(0)) );
+                newtext.append( colorize(to_utf8(TTT("Request sent",88)).as_sptr(), get_default_text_color(COLOR_TEXT_SPECIAL)) );
             }
             else {
                 newtext = contact->get_customname();
@@ -565,7 +588,7 @@ void gui_contact_item_c::update_text()
                     if (invrcv)
                     {
                         if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
-                        newtext.append( colorize( to_utf8(TTT("Please, accept or reject",153)).as_sptr(), get_default_text_color(0) ) );
+                        newtext.append( colorize( to_utf8(TTT("Please, accept or reject",153)).as_sptr(), get_default_text_color(COLOR_TEXT_SPECIAL) ) );
                         t2.clear();
 
                         g_app->new_blink_reason(contact->getkey()).friend_invite();
@@ -574,7 +597,7 @@ void gui_contact_item_c::update_text()
                     if (wait)
                     {
                         if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
-                        newtext.append(colorize(to_utf8(TTT("Waiting...",154)).as_sptr(), get_default_text_color(0)));
+                        newtext.append(colorize(to_utf8(TTT("Waiting...",154)).as_sptr(), get_default_text_color(COLOR_TEXT_SPECIAL)));
                         t2.clear();
                     } else if (contact->is_full_search_result() && g_app->found_items)
                     {
@@ -593,12 +616,23 @@ void gui_contact_item_c::update_text()
 
                             if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
                             newtext.append(CONSTASTR("<l>")).
-                                append(colorize(to_utf8(TTT("Found: $",338)/ts::wmake(cntitems)).as_sptr(), get_default_text_color(2))).
+                                append(colorize(to_utf8(TTT("Found: $",338)/ts::wmake(cntitems)).as_sptr(), get_default_text_color(COLOR_TEXT_FOUND))).
                                 append(CONSTASTR("</l>"));
                             t2.clear();
                         }
 
+                    } else if (flags.is(F_SHOWTYPING))
+                    {
+                        ts::wstr_c t,b;
+                        typing_buf.split(t,b,'\1');
+                        t = text_typing( t, b, CONSTWSTR("<i>") );
+                        typing_buf.set(t).append_char('\1').append(b);
+                        if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
+
+                        newtext.append(colorize(to_utf8(t).as_sptr(), get_default_text_color(COLOR_TEXT_TYPING)));
+                        t2.clear();
                     }
+
                     if (count == 1 && deactivated > 0)
                     {
                         t2.clear();
@@ -778,7 +812,7 @@ void gui_contact_item_c::protocols_s::update()
 
         if (s.c->get_state() == CS_ONLINE)
         {
-            str.append(CONSTWSTR("<nl><shadow>")).append(maketag_color<ts::wchar>(owner->get_default_text_color(1)));
+            str.append(CONSTWSTR("<nl><shadow>")).append(maketag_color<ts::wchar>(owner->get_default_text_color(COLOR_PROTO_TEXT_ONLINE)));
             if (def == s.c) str.append(CONSTWSTR(" <u>")); else str.append_char(' ');
             str.append(from_utf8(s.row->other.name));
             if (def == s.c) str.append(CONSTWSTR("</u>"));
@@ -786,7 +820,7 @@ void gui_contact_item_c::protocols_s::update()
         }
         else
         {
-            str.append(CONSTWSTR("<nl>")).append(maketag_color<ts::wchar>(owner->get_default_text_color(2)));
+            str.append(CONSTWSTR("<nl>")).append(maketag_color<ts::wchar>(owner->get_default_text_color(COLOR_PROTO_TEXT_OFFLINE)));
             if (def == s.c) str.append(CONSTWSTR(" <u>")); else str.append_char(' ');
             str.append(from_utf8(s.row->other.name));
             if (def == s.c) str.append(CONSTWSTR("</u>"));
@@ -1241,7 +1275,7 @@ bool gui_contact_item_c::allow_drop() const
         if (flags.is(F_LBDN))
         {
             if (CIR_CONVERSATION_HEAD != role)
-                gmsg<ISOGM_SELECT_CONTACT>(contact).send();
+                gmsg<ISOGM_SELECT_CONTACT>(contact, RSEL_SCROLL_END).send();
 
             flags.clear(F_LBDN);
         }
@@ -1295,7 +1329,7 @@ bool gui_contact_item_c::allow_drop() const
                         upd.mask = CDM_STATE;
                         upd.state = c->get_state();
                         upd.send();
-                        historian->reselect(true);
+                        historian->reselect();
                     }
                 }
 
@@ -1823,6 +1857,17 @@ bool gui_contactlist_c::filter_proc(system_query_e qp, evt_data_s &data)
     }
 
     return false;
+}
+
+ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_TYPING> &p)
+{
+    if (prf().get_options().is(UIOPT_SHOW_TYPING_CONTACT))
+        if (contact_c *c = contacts().find(p.contact))
+            if (contact_c *historian = c->get_historian())
+                if (historian->gui_item)
+                    historian->gui_item->typing();
+
+    return 0;
 }
 
 ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&ch)

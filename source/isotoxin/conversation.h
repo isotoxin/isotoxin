@@ -443,7 +443,10 @@ public:
     bool with_utag(uint64 utag) const;
     bool remove_utag(uint64 utag);
     uint64 zero_utag() const {return zero_rec.utag;}
-    
+    time_t zero_time() const {return zero_rec.time;}
+
+    bool is_history_load_button() const {return MTA_SPECIAL == mt;}
+    bool is_date_separator() const {return MTA_DATE_SEPARATOR == mt;}
     void init_date_separator( const tm &tmtm );
     void init_request( const ts::str_c &message_utf8 );
     void init_load( int n_load );
@@ -474,13 +477,33 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     static const ts::flags32_s::BITS F_IN_REPOS            = F_VSCROLLFREEBITSTART << 2;
     static const ts::flags32_s::BITS F_SCROLLING_TO_TGT    = F_VSCROLLFREEBITSTART << 3;
 
+    struct filler_s
+    {
+        uint64 scrollto = 0;
+        gui_messagelist_c *owner;
+        rectengine_c *scroll_to = nullptr;
+        rectengine_c *first_unread = nullptr;
+        const found_item_s *found_item;
+        int fillindex = -1;
+        int numpertick = 20;
+        int load_n = 0;
+        int options = 0;
+        filler_s(gui_messagelist_c *owner, int n, int loadn):owner(owner), found_item(nullptr), fillindex(n-1), options(RSEL_INSERT_NEW), load_n(loadn) { tick(); }
+        filler_s(gui_messagelist_c *owner, const found_item_s *found_item, uint64 scrollto, int options, int loadn):owner(owner), found_item(found_item), scrollto(scrollto), options(options), load_n(loadn) { tick(); }
+        ~filler_s();
+        bool tick(RID r = RID(), GUIPARAM p = nullptr);
+    };
+    UNIQUE_PTR( filler_s ) filler;
+
     time_t last_seen_post_time = 0;
     tm last_post_time;
     ts::shared_ptr<contact_c> historian;
     ts::array_safe_t< gui_message_item_c, 1 > typing;
 
     void clear_list(bool empty_mode);
+    gui_message_item_c &insert_message_item(message_type_app_e mt, contact_c *author, const ts::str_c &skin, time_t post_time = 0);
     gui_message_item_c &get_message_item(message_type_app_e mt, contact_c *author, const ts::str_c &skin, time_t post_time = 0, uint64 replace_post = 0);
+    bool insert_date_separator( int index, tm &prev_post_time, time_t next_post_time );
 
     void create_empty_mode_stuff();
     void repos_empty_mode_stuff();

@@ -94,9 +94,9 @@ public:
                     ERROR("unknown columt type");
                     break;
                 }
-                if (c.primary) sql << CONSTASTR("PRIMARY KEY");
-                if (c.autoincrement) sql << CONSTASTR("AUTOINCREMENT");
-                if (!c.nullable && c.type_ != data_type_e::t_blob) sql << CONSTASTR("NOT NULL");
+                if (c.options.is(column_desc_s::f_primary)) sql << CONSTASTR("PRIMARY KEY");
+                if (c.options.is(column_desc_s::f_autoincrement)) sql << CONSTASTR("AUTOINCREMENT");
+                if (!c.options.is(column_desc_s::f_nullable) && c.type_ != data_type_e::t_blob) sql << CONSTASTR("NOT NULL");
                 if (c.has_default()) sql << CONSTASTR("default ") << c.get_default();
                 sql << CONSTASTR(",");
             }
@@ -114,10 +114,12 @@ public:
         tmp_str_c sql;
         for(const column_desc_s &cd : columns)
         {
-            if (cd.index)
+            if (cd.options.is(column_desc_s::f_unique_index | column_desc_s::f_non_unique_index))
             {
                 sql.clear();
-                sql.append(CONSTASTR("CREATE UNIQUE INDEX IF NOT EXISTS index_")).append(cd.name_);
+                sql.append(CONSTASTR("CREATE "));
+                if (cd.options.is(column_desc_s::f_unique_index)) sql.append(CONSTASTR("UNIQUE "));
+                sql.append(CONSTASTR("INDEX IF NOT EXISTS index_")).append(cd.name_);
                 sql.append(CONSTASTR(" ON ")).append(tablename);
                 sql.append(CONSTASTR(" (")).append(cd.name_).append_char(')');
                 execsql(sql);
@@ -152,7 +154,7 @@ public:
 
                 if (datatype == nullptr)
                 {
-                    if (cd.nullable || cd.type_ == data_type_e::t_blob)
+                    if (cd.options.is(column_desc_s::f_nullable) || cd.type_ == data_type_e::t_blob)
                         sc.append(',', CONSTASTR("NULL") );
                     else
                         sc.append(',', cd.get_default().as_sptr() );
@@ -164,9 +166,9 @@ public:
 
                 if (recreate) continue;
                 if (cid != index) { recreate = true; continue; }
-                if (cd.type_ != data_type_e::t_blob) if ((notnull==0) != cd.nullable) { recreate = true; continue; }
-                if ((primarykey!=0) != cd.primary) { recreate = true; continue; }
-                if ((autoinc!=0) != cd.autoincrement) { recreate = true; continue; }
+                if (cd.type_ != data_type_e::t_blob) if ((notnull==0) != cd.options.is(column_desc_s::f_nullable)) { recreate = true; continue; }
+                if ((primarykey!=0) != cd.options.is(column_desc_s::f_primary)) { recreate = true; continue; }
+                if ((autoinc!=0) != cd.options.is(column_desc_s::f_autoincrement)) { recreate = true; continue; }
                 switch (cd.type_)
                 {
                 case data_type_e::t_int:

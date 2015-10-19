@@ -173,6 +173,12 @@ enum auto_accept_audio_call_e
     AAAC_ACCEPT,
 };
 
+enum reselect_options_e
+{
+    RSEL_SCROLL_END = 1,
+    RSEL_INSERT_NEW = 2,
+};
+
 struct contacts_s;
 class gui_contact_item_c;
 class contact_c : public ts::shared_object
@@ -249,7 +255,7 @@ public:
         }
     }
 
-    void reselect(bool scroll_to_end_or_1st_unread);
+    void reselect(int options = RSEL_SCROLL_END);
 
     void setup( const contacts_s * c, time_t nowtime );
     bool save( contacts_s * c ) const;
@@ -598,9 +604,9 @@ template<> struct gmsg<ISOGM_TYPING> : public gmsgbase
 
 template<> struct gmsg<ISOGM_SELECT_CONTACT> : public gmsgbase
 {
-    gmsg(contact_c *c, bool scrollend = true) :gmsgbase(ISOGM_SELECT_CONTACT), contact(c), scrollend(scrollend) {}
+    gmsg(contact_c *c, int options) :gmsgbase(ISOGM_SELECT_CONTACT), contact(c), options(options) {}
     ts::shared_ptr<contact_c> contact;
-    bool scrollend;
+    int options;
 };
 
 template<> struct gmsg<ISOGM_AV> : public gmsgbase

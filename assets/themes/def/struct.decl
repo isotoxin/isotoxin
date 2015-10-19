@@ -305,7 +305,7 @@ rects
     c=0,0,0,1,#f0f9ee,#d0d0d0
     clientborder=2,2,2,2
     deftextcolor=#8d8581
-    colors=#6b6500,#000000,#006000
+    colors=#6b6500,#1b3147,#006000
     addition
     {
       shiftstateicon=2,1
@@ -314,19 +314,19 @@ rects
   contact.h=contact
   {
     c=0,0,0,1,#30a6a3,#d0d0d0
-    colors=#fff000,#000000,#d8ffd8
+    colors=#fff000,#1b3754,#d8ffd8
     deftextcolor=#d8fff8
   }
   contact.a=contact
   {
     c=0,0,0,1,#586b7e,#d0d0d0
-    colors=#fff000,#000000,#d8ffd8
+    colors=#fff000,#86c7fe,#d8ffd8
     deftextcolor=#d8fff8
   }
   contact.ah=contact
   {
     c=0,0,0,1,#3096a3,#d0d0d0
-    colors=#fff000,#000000,#d8ffd8
+    colors=#fff000,#baddff,#d8ffd8
     deftextcolor=#d8fff8
   }
 

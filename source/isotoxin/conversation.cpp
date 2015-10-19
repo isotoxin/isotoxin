@@ -1300,15 +1300,14 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
     return 0;
 }
 
-static bool self_selected = false;
 ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED> &)
 {
-    if (owner && owner->getkey().is_self())
+    if (g_app->active_contact_item.expired())
     {
         // just update self, if self-contactitem selected
         DEFERRED_EXECUTION_BLOCK_BEGIN(0.4)
-            if (self_selected)
-                gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self()).send();
+            if (g_app->active_contact_item.expired())
+                gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self(), 0).send();
         DEFERRED_EXECUTION_BLOCK_END(0)
     }
     return 0;
@@ -1322,8 +1321,8 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &p)
     {
         // just update self, if self-contactitem selected
         DEFERRED_EXECUTION_BLOCK_BEGIN(0.4)
-            if (self_selected)
-            gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self()).send();
+            if (g_app->active_contact_item.expired())
+                gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self(), 0).send();
         DEFERRED_EXECUTION_BLOCK_END(0)
     }
 
@@ -1412,8 +1411,8 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<GM_UI_EVENT> & e)
     if (UE_MAXIMIZED == e.evt || UE_NORMALIZED == e.evt)
     {
         DEFERRED_EXECUTION_BLOCK_BEGIN(0)
-        if (self_selected)
-            gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self()).send();
+        if (g_app->active_contact_item.expired())
+            gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self(), 0).send();
         DEFERRED_EXECUTION_BLOCK_END(0)
     }
     return 0;
@@ -2091,12 +2090,21 @@ void gui_message_item_c::init_load( int n_load )
     flags.set(F_DIRTY_HEIGHT_CACHE);
     addheight = 40;
 
-    gui_button_c &b_load = MAKE_CHILD<gui_button_c>(getrid());
-    b_load.set_text(TTT("Load $ message(s)",124) / ts::wstr_c().set_as_int(n_load));
-    b_load.set_face_getter(BUTTON_FACE(button));
-    b_load.set_handler(DELEGATE(author.get(), b_load), as_param(n_load));
-    b_load.leech(TSNEW(leech_dock_bottom_center_s, 300, 30, -5, 5, 0, 1));
-    MODIFY(b_load).visible(true);
+    gui_button_c *b_load = nullptr;
+    if (rectengine_c *be = getengine().get_last_child())
+        b_load = ts::ptr_cast<gui_button_c *>( &getengine().get_child(0)->getrect() );
+
+    if (!b_load)
+    {
+        gui_button_c &b = MAKE_CHILD<gui_button_c>(getrid());
+        b_load = &b;
+        b_load->set_face_getter(BUTTON_FACE(button));
+        b_load->leech(TSNEW(leech_dock_bottom_center_s, 300, 30, -5, 5, 0, 1));
+    }
+
+    b_load->set_handler(DELEGATE(author.get(), b_load), as_param(n_load));
+    b_load->set_text(TTT("Load $ message(s)",124) / ts::wstr_c().set_as_int(n_load));
+    MODIFY(*b_load).visible(true);
 }
 
 bool gui_message_item_c::with_utag(uint64 utag) const
@@ -3035,33 +3043,10 @@ void gui_message_item_c::update_text(int for_width)
             int rectw = getprops().size().x;
             int oldh = get_height_by_width(rectw);
 
-            ts::wstr_c tt(TTT("Typing",271));
-            ts::wstr_c ttc = textrect.get_text();
-
-            ts::wsptr recta = CONSTWSTR("<rect=1001,10,10>"); // width must be equal to m_left
+            ts::wsptr recta = CONSTWSTR("<rect=1001,10,10><i>"); // width must be equal to m_left
             //                                 TYPING_SPACERECT
-            ts::wsptr rectb = CONSTWSTR("_");
 
-            if (timestr.is_empty())
-            {
-                ttc.clear();
-                timestr.set(CONSTWSTR("__  __  __  __"));
-            }
-
-
-            if (ttc.is_empty()) ttc.set(recta).append(rectb);
-            else
-            {
-                if (ttc.get_length() - recta.l - rectb.l < tt.get_length())
-                {
-                    ttc.set(recta).append(tt.substr(0, ttc.get_length()-recta.l-rectb.l+1)).append(rectb);
-                }
-                else
-                {
-                    ttc.trunc_length(rectb.l).append_char(timestr.get_last_char()).append( rectb.skip(1) );
-                    timestr.trunc_length();
-                }
-            }
+            ts::wstr_c ttc = text_typing( textrect.get_text(), timestr, recta );
 
             textrect.set_text_only(ttc, false);
             flags.set(F_DIRTY_HEIGHT_CACHE);
@@ -3334,6 +3319,61 @@ static bool same_author( rectengine_c *prev, contact_c *author, const ts::str_c 
     return false;
 }
 
+bool gui_messagelist_c::insert_date_separator( int index, tm &prev_post_time, time_t next_post_time )
+{
+    tm tmtm;
+    _localtime64_s(&tmtm, &next_post_time);
+    if (tmtm.tm_year != prev_post_time.tm_year || tmtm.tm_mon != prev_post_time.tm_mon || tmtm.tm_mday != prev_post_time.tm_mday)
+    {
+        gui_message_item_c &sep = MAKE_CHILD<gui_message_item_c>(getrid(), nullptr, nullptr, CONSTASTR("date"), MTA_DATE_SEPARATOR);
+        sep.init_date_separator(tmtm);
+        if (index >= 0) getengine().child_move_to(index, &sep.getengine());
+        prev_post_time = tmtm;
+        return true;
+    }
+    prev_post_time = tmtm;
+    return false;
+}
+
+gui_message_item_c &gui_messagelist_c::insert_message_item(message_type_app_e mt, contact_c *author, const ts::str_c &skin, time_t post_time)
+{
+    int index = 0;
+    rectengine_c *e = nullptr;
+    int cnt = getengine().children_count();
+    while( index < cnt && nullptr == (e = getengine().get_child(index)))
+        ++index;
+
+    if (e && 0 == index)
+    {
+        gui_message_item_c &mi = *ts::ptr_cast<gui_message_item_c *>(&e->getrect());
+        if (mi.is_history_load_button())
+            e = getengine().get_next_child(e, &index);
+    }
+
+    if (e && MTA_SPECIAL != mt)
+    {
+        gui_message_item_c &mi = *ts::ptr_cast<gui_message_item_c *>(&e->getrect());
+        if (!mi.is_date_separator())
+        {
+            bool date_sep = false;
+            if (prf().get_options().is(MSGOP_SHOW_DATE_SEPARATOR) && post_time)
+            {
+                tm tmtm;
+                _localtime64_s(&tmtm, &post_time);
+                date_sep = insert_date_separator(index, tmtm, mi.zero_time());
+            }
+
+            if (!date_sep)
+                if (mi.get_author() == author && mi.themename().equals(CONSTASTR("message."), skin))
+                    mi.set_no_author();
+        }
+    }
+
+    gui_message_item_c &r = MAKE_CHILD<gui_message_item_c>(getrid(), historian, author, skin, mt);
+    getengine().child_move_to(index, &r.getengine());
+    return r;
+}
+
 gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, contact_c *author, const ts::str_c &skin, time_t post_time, uint64 replace_post)
 {
     ASSERT(MTA_FRIEND_REQUEST != mt);
@@ -3375,16 +3415,7 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
     }
 
     if ( prf().get_options().is(MSGOP_SHOW_DATE_SEPARATOR) && post_time )
-    {
-        tm tmtm;
-        _localtime64_s(&tmtm, &post_time);
-        if (tmtm.tm_year != last_post_time.tm_year || tmtm.tm_mon != last_post_time.tm_mon || tmtm.tm_mday != last_post_time.tm_mday)
-        {
-            gui_message_item_c &sep = MAKE_CHILD<gui_message_item_c>(getrid(), nullptr, nullptr, ("date"), MTA_DATE_SEPARATOR);
-            sep.init_date_separator(tmtm);
-        }
-        last_post_time = tmtm;
-    }
+        insert_date_separator( -1, last_post_time, post_time );
 
     if (replace_post)
         for (rectengine_c *e : getengine())
@@ -3459,7 +3490,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_MESSAGE> &p) // show message
     p.current = true;
     bool at_and = p.post.sender.is_self() || is_at_end();
 
-    gmsg<ISOGM_SUMMON_POST>( p.post, p.sender ).send();
+    gmsg<ISOGM_SUMMON_POST>( p.post, nullptr ).send();
 
     if (at_and) scroll_to_end();
 
@@ -3519,7 +3550,7 @@ bool gui_messagelist_c::font_size_up(RID, GUIPARAM)
 
     g_app->reload_fonts();
 
-    if (historian) historian->reselect(false);
+    if (historian) historian->reselect(0);
 
     return true;
 }
@@ -3543,7 +3574,7 @@ bool gui_messagelist_c::font_size_down(RID, GUIPARAM)
 
     g_app->reload_fonts();
 
-    if (historian) historian->reselect(false);
+    if (historian) historian->reselect(0);
 
     return true;
 }
@@ -3683,6 +3714,7 @@ bool gui_messagelist_c::b_next(RID, GUIPARAM)
 void gui_messagelist_c::clear_list(bool empty_mode)
 {
     last_seen_post_time = 0;
+    filler.reset();
 
     if ( empty_mode && prf().get_options().is(UIOPT_SHOW_NEWCONN_BAR))
     {
@@ -3868,7 +3900,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_REFRESH_SEARCH_RESULT> &)
             (g_app->active_contact_item == historian->gui_item && historian->is_full_search_result()))
         {
             flags.init(F_SEARCH_RESULTS_HERE, historian->is_full_search_result());
-            historian->reselect(flags.is(F_SEARCH_RESULTS_HERE));
+            historian->reselect(flags.is(F_SEARCH_RESULTS_HERE) ? RSEL_SCROLL_END : 0);
         }
 
     return 0;
@@ -3949,16 +3981,16 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_DELIVERED> &p)
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED> &p)
 {
     if (historian)
-        historian->reselect(false);
+        historian->reselect(0);
     return 0;
 }
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
 {
     if (ch.sp == PP_PROFILEOPTIONS && historian && historian->getkey().is_self() && 0 != (ch.bits & UIOPT_SHOW_NEWCONN_BAR))
-        historian->reselect(false);
+        historian->reselect(0);
     else if (ch.sp == PP_FONTSCALE && historian && !historian->getkey().is_self())
-        historian->reselect(false);
+        historian->reselect(0);
     else if (ch.sp == CFG_LANGUAGE && flags.is(F_EMPTY_MODE) && prf().get_options().is(UIOPT_SHOW_NEWCONN_BAR))
     {
         getengine().trunc_children(0);
@@ -3969,10 +4001,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_TYPING> &p)
 {
-    if (prf().get_options().is(MSGOP_IGNORE_OTHER_TYPING))
-        return 0;
-
-    if (historian)
+    if (prf().get_options().is(UIOPT_SHOW_TYPING_MSGLIST) && historian)
         if (contact_c *tc = historian->subget(p.contact))
             get_message_item(MTA_TYPING, tc, CONSTASTR("other"));
 
@@ -4010,20 +4039,17 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
             if (cs->getkey().is_self() && receiver->getkey().protoid)
                 cs = contacts().find_subself(receiver->getkey().protoid);
 
-            gui_message_item_c &mi = get_message_item(p.post.mt(), cs, calc_message_skin(p.post.mt(), p.post.sender), p.post.time, p.replace_post ? p.post.utag : 0);
+            gui_message_item_c &mi = p.filling ? 
+                insert_message_item(p.post.mt(), cs, calc_message_skin(p.post.mt(), p.post.sender), p.post.time) :
+                get_message_item(p.post.mt(), cs, calc_message_skin(p.post.mt(), p.post.sender), p.post.time, p.replace_post ? p.post.utag : 0);
+            p.created = &mi.getengine();
 
             if (p.found_item)
-            {
                 mi.setup_found_item(p.prev_found, p.next_found);
-                if (p.unread && *p.unread == nullptr)
-                    *p.unread = &mi.getengine();
-            }
-            else if (p.post.mt() == MTA_MESSAGE && p.unread && *p.unread == nullptr && p.post.time >= historian->get_readtime())
-                *p.unread = &mi.getengine();
 
             mi.append_text(p.post, false);
             if (p.replace_post && p.post.mt() != MTA_RECV_FILE && p.post.mt() != MTA_SEND_FILE)
-                h->reselect(true);
+                h->reselect();
         }
     }
 
@@ -4032,12 +4058,70 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
 {
-    self_selected = p.contact && p.contact->getkey().is_self();
+    auto calc_load_history = [this]( time_t before ) ->int
+    {
+        int load_n = 0;
+        if (!historian->getkey().is_self())
+        {
+            int not_yet_loaded = prf().calc_history_before(historian->getkey(), before);
+            int needload = ts::tmax(10, prf().min_history_load());
+            if (not_yet_loaded)
+            {
+                if ((not_yet_loaded - needload) < 10) needload = not_yet_loaded;
+                load_n = ts::tmin(not_yet_loaded, needload);
+            }
+        }
+        return load_n;
+
+    };
+
+    if (0 != (p.options & RSEL_INSERT_NEW))
+    {
+        ASSERT(historian && historian == p.contact);
+
+        int index = 1;
+        rectengine_c *e = nullptr;
+        int cnt = getengine().children_count();
+
+#ifdef _DEBUG
+        ASSERT(cnt > 0);
+        rectengine_c *ehl = getengine().get_child(0);
+        gui_message_item_c *mihl = ehl ? ts::ptr_cast<gui_message_item_c *>(&ehl->getrect()) : nullptr;
+        ASSERT( mihl && mihl->is_history_load_button() );
+        ASSERT( historian->history_size() );
+#endif // _DEBUG
+
+        while (index < cnt && nullptr == (e = getengine().get_child(index)))
+            ++index;
+
+        int load_n = calc_load_history(historian->get_history(0).time);
+        int n = historian->history_size();
+        if(ASSERT(e))
+        {
+            gui_message_item_c &mi = *ts::ptr_cast<gui_message_item_c *>(&e->getrect());
+            uint64 tag = mi.zero_utag();
+            for(int i = 0; i<n; ++i)
+            {
+                const post_s& post = historian->get_history(i);
+                if (tag == post.utag)
+                {
+                    n = i;
+                    break;
+                }
+            }
+        }
+
+
+        filler.reset( TSNEW(filler_s, this, n, load_n) );
+        return 0;
+    }
+
+    bool self_selected = p.contact && p.contact->getkey().is_self();
 
     memset( &last_post_time, 0, sizeof(last_post_time) );
 
     uint64 scrollto = 0;
-    if (!p.scrollend)
+    if (0 == (p.options & RSEL_SCROLL_END))
         for (rectengine_c *v = get_top_visible(nullptr);v;v = getengine().get_next_child(v))
             if (gui_message_item_c *mi = dynamic_cast<gui_message_item_c *>(&v->getrect()))
             {
@@ -4062,6 +4146,9 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     }
     flags.init(F_SEARCH_RESULTS_HERE, historian->is_full_search_result());
     gmsg<ISOGM_NOTICE>( historian, nullptr, NOTICE_NETWORK, ts::str_c() ).send(); // init notice list
+
+    if (self_selected)
+        return 0;
 
     time_t before = now();
     if (historian->history_size()) before = historian->get_history(0).time;
@@ -4090,26 +4177,46 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
 
     if (needload > 0)
     {
-        p.contact->load_history(needload);
+        historian->load_history(needload);
         if (historian->history_size()) before = historian->get_history(0).time;
     }
 
-    if (!historian->getkey().is_self())
+    int load_n = calc_load_history( before );
+    filler.reset( TSNEW(filler_s, this, found_item, scrollto, p.options, load_n) );
+
+    return 0;
+}
+
+gui_messagelist_c::filler_s::~filler_s()
+{
+    if (gui)
+        gui->delete_event( DELEGATE(this, tick) );
+}
+
+bool gui_messagelist_c::filler_s::tick(RID r, GUIPARAM p)
+{
+    contact_c *historian = owner->historian;
+    if (!historian) return true;
+    if ( fillindex < 0 ) 
     {
-        int not_yet_loaded = prf().calc_history_before(historian->getkey(), before);
-        needload = ts::tmax(10, prf().min_history_load());
-        if ( not_yet_loaded )
-        {
-            if ((not_yet_loaded - needload) < 10) needload = not_yet_loaded;
-            gui_message_item_c &lhb = get_message_item(MTA_SPECIAL, historian, CONSTASTR("load"));
-            lhb.init_load(ts::tmin(not_yet_loaded,needload));
-        }
+        fillindex = historian->history_size() - 1;
     }
 
-    rectengine_c *scroll_to = nullptr;
-    rectengine_c *first_unread = nullptr;
-    p.contact->iterate_history([&](const post_s &p)
+    const found_item_s *found_item_current = nullptr;
+    if (historian->is_full_search_result() && g_app->found_items)
+        for (const found_item_s &fi : g_app->found_items->items)
+            if (fi.historian == historian->getkey())
+            {
+                found_item_current = &fi;
+                break;
+            }
+    if (found_item_current != found_item)
+        return true; // found_item changed. stop filling
+
+    for( int n = numpertick; n > 0 && fillindex >= 0; --n, --fillindex )
     {
+        const post_s &p = historian->get_history( fillindex );
+    
         uint64 utag_prev = 0;
         uint64 utag_next = 0;
         bool fitm = false;
@@ -4126,34 +4233,62 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
             }
         }
 
-        gmsg<ISOGM_SUMMON_POST> summon(p, &first_unread, historian);
+        gmsg<ISOGM_SUMMON_POST> summon(p, historian);
+        summon.filling = true;
         if (fitm)
         {
             summon.prev_found = utag_prev;
             summon.next_found = utag_next;
             summon.found_item = true;
         }
-        summon.send();
+        owner->gm_handler(summon); // call directly
 
         if (p.utag == scrollto)
-            scroll_to = getengine().get_last_child();
+            scroll_to = summon.created;
 
-        return false;
-    });
+        // always overwrite first_unread due filling has back order
+        if (fitm)
+            first_unread = summon.created;
+        else if (p.mt() == MTA_MESSAGE && p.time >= historian->get_readtime())
+            first_unread = summon.created;
+    }
 
-    not_at_end();
-    if (p.scrollend)
+    owner->not_at_end();
+    if (0 != (options & RSEL_SCROLL_END))
     {
         if (first_unread)
-            scroll_to_child(first_unread, true);
+            owner->scroll_to_child(first_unread, true);
         else
-            scroll_to_end();
-    } else if (scroll_to)
-        scroll_to_child(scroll_to, true);
+            owner->scroll_to_end();
+    }
+    else if (scroll_to)
+        owner->scroll_to_child(scroll_to, true);
     else
-        scroll_to_begin();
-        
-    gui->repos_children(this);
+        owner->scroll_to_begin();
+
+    gui->repos_children(owner);
+
+
+    if (fillindex > 0)
+        DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, tick), nullptr );
+    else
+    {
+        gui_message_item_c *lhb = nullptr;
+        if (owner->getengine().children_count())
+            if (rectengine_c *e = owner->getengine().get_child(0))
+            {
+                gui_message_item_c &mi = *ts::ptr_cast<gui_message_item_c *>(&e->getrect());
+                if (mi.is_history_load_button())
+                    lhb = &mi;
+            }
+
+        if (load_n)
+        {
+            if (!lhb) lhb = &owner->insert_message_item(MTA_SPECIAL, historian, CONSTASTR("load"));
+            lhb->init_load(load_n);
+        } else
+            TSDEL(lhb);
+    }
 
     return 0;
 }
@@ -4742,10 +4877,10 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
     if (ch.pass == 0 && caption->contacted())
     {
         if (ch.sp == PP_PROFILEOPTIONS && 0 == (ch.bits & UIOPT_SHOW_SEARCH_BAR))
-            caption->getcontact().reselect(true);
+            caption->getcontact().reselect();
     }
     if (ch.sp == PP_EMOJISET && caption->contacted())
-        caption->getcontact().reselect(true);
+        caption->getcontact().reselect();
 
     if (ch.pass == 0 && ch.sp == PP_ACTIVEPROTO_SORT)
         caption->clearprotocols();
@@ -4758,7 +4893,7 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&p)
 {
     if (p.tabi == pt_active_protocol)
     {
-        if (caption->contacted()) caption->getcontact().reselect(true);
+        if (caption->contacted()) caption->getcontact().reselect();
         caption->update_text();
         g_app->update_buttons_head();
         g_app->hide_show_messageeditor();
