@@ -274,7 +274,7 @@ int proc_toxrelay(const ts::wstrings_c & pars)
     }
 
     if (enable_motd) {
-        if (bootstrap_set_callbacks(dht->net, DAEMON_VERSION_NUMBER, (uint8_t *)motd, strlen(motd) + 1) == 0) {
+        if (bootstrap_set_callbacks(dht->net, DAEMON_VERSION_NUMBER, (uint8_t *)motd, (uint16_t)strlen(motd) + 1) == 0) {
             Print(FOREGROUND_BLUE, "Set MOTD successfully.\n");
         } else {
             Print(FOREGROUND_RED, "Couldn't set MOTD: %s. Exiting.\n", motd);

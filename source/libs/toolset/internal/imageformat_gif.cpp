@@ -93,7 +93,7 @@ namespace ts
         uint32 tag = *(uint32 *)sourcebuf;
         if (tag != 944130375) return nullptr;
 
-        memset(data, 0, sizeof(gifread_s));
+        memset(data, 0, sizeof(gifread_s)); //-V512
         gifread_s & br = ref_cast<gifread_s>(data);
         br.sourcebuf = (const uint8 *)sourcebuf;
         br.ibuflen = sourcebufsize;

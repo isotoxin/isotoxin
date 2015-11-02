@@ -16,6 +16,9 @@
     <Filter Include="src\profile">
       <UniqueIdentifier>{f1a55b17-4567-413d-b722-4a9145d4cc95}</UniqueIdentifier>
     </Filter>
+    <Filter Include="src\videocapture">
+      <UniqueIdentifier>{af7deb82-37cf-4151-884f-fc5c52cc284a}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\contactlist.cpp">
@@ -99,6 +102,9 @@
     <ClCompile Include="..\..\filterbar.cpp">
       <Filter>src\gui</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\videocapture.cpp">
+      <Filter>src\videocapture</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\res\resource.h">
@@ -178,6 +184,9 @@
     </ClInclude>
     <ClInclude Include="..\..\filterbar.h">
       <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\videocapture.h">
+      <Filter>src\videocapture</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

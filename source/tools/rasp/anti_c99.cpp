@@ -448,11 +448,11 @@ bool fix_c99(astrings_c & lines, int sl, int el)
 
     for(int i=sl+1;i<el;)
     {
-        str_c &l = lines.get(i);
+        str_c &ln = lines.get(i);
         int i0, i1;
-        if ( find_sizeof(l, name_of_array, i0, i1) )
+        if ( find_sizeof(ln, name_of_array, i0, i1) )
         {
-            l.replace(i0,6,CONSTASTR("sizeOf"));
+            ln.replace(i0,6,CONSTASTR("sizeOf"));
             continue;
         }
         ++i;

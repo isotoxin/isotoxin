@@ -38,7 +38,7 @@ public:
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ ts::ivec2 get_max_size() const override;
     /*virtual*/ void created() override;
-    /*virtual*/ void set_text(const ts::wstr_c&text) override;
+    /*virtual*/ void set_text(const ts::wstr_c&text, bool full_height_last_line = false) override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
     /*virtual*/ int get_height_by_width(int width) const override;
@@ -100,6 +100,7 @@ protected:
         {
             _HGROUP,
             _VSPACE,
+            _PANEL,
             _STATIC,
             _STATIC_HIDDEN,
             _PATH,
@@ -171,6 +172,7 @@ protected:
         description_s& label( const ts::wsptr& text );
         description_s& hiddenlabel( const ts::wsptr& text, ts::TSCOLOR col );
         void page_header( const ts::wsptr& text );
+        description_s& panel(int h, GUIPARAMHANDLER drawhandler = nullptr);
         description_s& vspace( int h = 5, GUIPARAMHANDLER oncreatehanler = nullptr );
         description_s& selector( const ts::wsptr &desc, const ts::wsptr &t, GUIPARAMHANDLER behaviourhandler = nullptr );
         description_s& path( const ts::wsptr &desc, const ts::wsptr &path, gui_textedit_c::TEXTCHECKFUNC checker = gui_textedit_c::TEXTCHECKFUNC() );
@@ -189,7 +191,7 @@ protected:
     };
 
     ts::hashmap_t<int, ts::safe_ptr<guirect_c>> subctls;
-    void updrect(const void *, int r, const ts::ivec2 &p);
+    void updrect_def(const void *, int r, const ts::ivec2 &p);
     void removerctl(int r);
 
     typedef ts::array_inplace_t<description_s, 0> descarray;
@@ -257,6 +259,7 @@ protected:
     int check( const ts::array_wrapper_c<const check_item_s> & items, GUIPARAMHANDLER handler, ts::uint32 initial = 0, int tag = 0 );
     RID label(const ts::wstr_c &text, ts::TSCOLOR col = 0, bool visible = true);
     RID vspace(int height);
+    RID panel(int height, GUIPARAMHANDLER drawhandler);
     RID textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e role, gui_textedit_c::TEXTCHECKFUNC checker = gui_textedit_c::TEXTCHECKFUNC(), const evt_data_s *addition = nullptr, int multiline = 0, RID parent = RID() );
     RID list(int height, const ts::wstr_c & emptymessage);
     RID combik( const menu_c &m, RID parent = RID() );
@@ -272,16 +275,16 @@ protected:
 
     void set_selector_menu( const ts::asptr& ctl_name, const menu_c& m );
     void set_combik_menu( const ts::asptr& ctl_name, const menu_c& m );
-    void set_label_text( const ts::asptr& ctl_name, const ts::wstr_c& t );
+    void set_label_text( const ts::asptr& ctl_name, const ts::wstr_c& t, bool full_height_last_line = false );
     void set_list_emptymessage( const ts::asptr& ctl_name, const ts::wstr_c& t );
     void set_slider_value( const ts::asptr& ctl_name, float val );
     void set_pb_pos( const ts::asptr& ctl_name, float val );
     void set_edit_value( const ts::asptr& ctl_name, const ts::wstr_c& t );
 
-    ts::UPDATE_RECTANGLE getrectupdate() { return DELEGATE(this, updrect); }
+    virtual ts::UPDATE_RECTANGLE getrectupdate() { return DELEGATE(this, updrect_def); }
 
 public:
-    gui_dialog_c(initial_rect_data_s &data) :gui_vscrollgroup_c(data) {}
+    gui_dialog_c(initial_rect_data_s &data) :gui_vscrollgroup_c(data) { hcenter_small_ctls(true); }
     /*virtual*/ ~gui_dialog_c();
 
     /*virtual*/ void created() override;

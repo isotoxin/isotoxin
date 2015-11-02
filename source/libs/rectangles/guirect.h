@@ -101,6 +101,7 @@ NUMGEN_START(dthr, 0);
 enum dthr_options_e
 {
     DTHRO_BORDER        = SETBIT(NUMGEN_NEXT(dthr)),
+    DTHRO_BORDER_RECT   = SETBIT(NUMGEN_NEXT(dthr)),
     DTHRO_CENTER        = SETBIT(NUMGEN_NEXT(dthr)),
     DTHRO_CENTER_HOLE   = SETBIT(NUMGEN_NEXT(dthr)),
     DTHRO_CENTER_ONLY   = SETBIT(NUMGEN_NEXT(dthr)),
@@ -772,16 +773,25 @@ template<> struct MAKE_CHILD<gui_stub_c> : public _PCHILD(gui_stub_c)
     ~MAKE_CHILD();
 };
 
+class gui_panel_c;
+template<> struct MAKE_CHILD<gui_panel_c> : public _PCHILD(gui_panel_c)
+{
+    ts::ivec2 minsz;
+    ts::ivec2 maxsz;
+    MAKE_CHILD(RID parent_, ts::ivec2 minsz = ts::ivec2(-1), ts::ivec2 maxsz = ts::ivec2(-1)) :minsz(minsz), maxsz(maxsz) { parent = parent_; }
+    ~MAKE_CHILD();
+};
+
 class gui_stub_c : public gui_control_c
 {
     DUMMY(gui_stub_c);
 
+protected:
     ts::ivec2 minsz;
     ts::ivec2 maxsz;
-
-protected:
     gui_stub_c() {}
 public:
+    gui_stub_c(MAKE_CHILD<gui_panel_c> &data) :gui_control_c(data), minsz(data.minsz), maxsz(data.maxsz) {}
     gui_stub_c(MAKE_CHILD<gui_stub_c> &data) :gui_control_c(data), minsz(data.minsz), maxsz(data.maxsz) {}
     /*virtual*/ ~gui_stub_c() {}
 
@@ -800,12 +810,33 @@ public:
         return sz;
     }
 
+    void set_min_size(const ts::ivec2&sz) { minsz = sz; }
+    void set_max_size(const ts::ivec2&sz) { maxsz = sz; }
+
 
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &d) override
     {
         if (qp == SQ_DRAW) return false; // stub control - nothing to draw
         return __super::sq_evt(qp,rid,d);
     }
+};
+
+
+class gui_panel_c : public gui_stub_c
+{
+    DUMMY(gui_panel_c);
+public:
+    gui_panel_c() {}
+    gui_panel_c(MAKE_CHILD<gui_panel_c> &data) :gui_stub_c(data) {}
+    /*virtual*/ ~gui_panel_c() {}
+    GUIPARAMHANDLER drawhandler = nullptr;
+
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &d) override
+    {
+        if (qp == SQ_DRAW && drawhandler) return drawhandler(rid,&getengine()); // stub control - nothing to draw
+        return __super::sq_evt(qp, rid, d);
+    }
+
 };
 
 typedef fastdelegate::FastDelegate< button_desc_s *() > GET_BUTTON_FACE;
@@ -941,7 +972,7 @@ public:
     /*virtual*/ ~gui_label_c() { }
 
     const ts::font_desc_c &get_font() const;
-    virtual void set_text(const ts::wstr_c&text);
+    virtual void set_text(const ts::wstr_c&text, bool full_height_last_line = false);
     void set_font(const ts::font_desc_c *font);
     void set_vcenter(bool f = true) { flags.init(FLAGS_VCENTER, f); }
     void set_autoheight(bool f = true) { flags.init(FLAGS_AUTO_HEIGHT, f); }
@@ -999,7 +1030,7 @@ public:
     CLICK_LINK on_link_click;
 
     /*virtual*/ void created() override;
-    /*virtual*/ void set_text(const ts::wstr_c&text) override;
+    /*virtual*/ void set_text(const ts::wstr_c&text, bool full_height_last_line) override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
@@ -1187,7 +1218,8 @@ protected:
     static const ts::flags32_s::BITS F_SCROLL_TO_END = FLAGS_FREEBITSTART << 2;
     static const ts::flags32_s::BITS F_SCROLL_TO_MAX_TOP = FLAGS_FREEBITSTART << 3;
     static const ts::flags32_s::BITS F_SB_OVER_ITEMS = FLAGS_FREEBITSTART << 4;
-    static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 5;
+    static const ts::flags32_s::BITS F_HCENTER_SMALL_CTLS = FLAGS_FREEBITSTART << 5;
+    static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 6;
 
     virtual void on_manual_scroll() { scroll_target = nullptr; flags.clear(F_SCROLL_TO_END); }; // called on scroll initiated by user (mouse wheel or scrollbar)
     /*virtual*/ void children_repos() override;
@@ -1203,6 +1235,8 @@ public:
     /*virtual*/ ~gui_vscrollgroup_c() {}
 
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+
+    void hcenter_small_ctls(bool f) { flags.init(F_HCENTER_SMALL_CTLS,f); }
 
     bool is_sb_visible() const { return flags.is(F_SBVISIBLE); };
 

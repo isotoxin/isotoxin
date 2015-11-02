@@ -163,10 +163,10 @@ void leech_dock_bottom_center_s::update_ctl_pos()
     HOLD r(owner->getparent());
     ts::irect cr = r().get_client_area();
     int xx = cr.lt.x;
-    int xspace = x_space;
+    int xspace = (num == 1) ? 0 : x_space;
     if (xspace < 0)
     {
-        int rqw = (width * num) + (-xspace * (num - 1));
+        int rqw = (width * num) + (-xspace * (num + 1));
         xspace = (cr.width() - rqw) / 2;
     }
     cr.lt.x += xspace;
@@ -208,10 +208,10 @@ void leech_dock_top_center_s::update_ctl_pos()
     HOLD r(owner->getparent());
     ts::irect cr = r().get_client_area();
     int xx = cr.lt.x;
-    int xspace = x_space;
+    int xspace = (num == 1) ? 0 : x_space;
     if (xspace < 0)
     {
-        int rqw = (width * num) + (-xspace * (num - 1));
+        int rqw = (width * num) + (-xspace * (num + 1));
         xspace = (cr.width() - rqw) / 2;
     }
     cr.lt.x += xspace;
@@ -827,6 +827,13 @@ ts::wstr_c loc_text(loctext_e lt)
             return TTT("Disk write error (full?)",343);
         case loc_import_from_file:
             return TTT("Import configuration from file",56);
+        case loc_loading:
+            return TTT("Loading",345);
+        case loc_anyfiles:
+            return TTT("Any files",207);
+        case loc_camerabusy:
+            return TTT("Probably camera already used.[br]You have to stop using camera by another application.", 353);
+
     }
     return ts::wstr_c();
 }
@@ -860,6 +867,31 @@ ts::wstr_c text_typing(const ts::wstr_c &prev, ts::wstr_c &workbuf, const ts::ws
     }
     return ttc;
 }
+
+void draw_initialization(rectengine_c *e, ts::drawable_bitmap_c &pab, const ts::irect&viewrect, ts::TSCOLOR tcol, const ts::wsptr &additiontext)
+{
+    draw_data_s&dd = e->begin_draw();
+
+    ts::wstr_c t( TTT("Initialization...", 352) );
+    if (additiontext.l) t.append(CONSTWSTR("<br>")).append(additiontext);
+    ts::ivec2 tsz = gui->textsize( ts::g_default_text_font, t );
+    ts::ivec2 tpos = (viewrect.size() - tsz) / 2;
+
+    ts::ivec2 processpos(tpos.x - pab.info().sz.x - 5, (viewrect.height() - pab.info().sz.y) / 2);
+    e->draw(processpos + viewrect.lt, pab, ts::irect(0, pab.info().sz), true);
+
+
+    text_draw_params_s tdp;
+    tdp.forecolor = &tcol;
+
+    dd.offset += tpos + viewrect.lt;
+    dd.size = tsz;
+
+    e->draw(t, tdp);
+
+    e->end_draw();
+}
+
 
 void add_status_items(menu_c &m)
 {
@@ -930,7 +962,7 @@ menu_c list_langs( SLANGID curlang, MENUHANDLER h )
             curdef = f;
 
         path.set_length(cl).append(f);
-        ts::parse_text_file(path, ps);
+        ts::parse_text_file(path, ps, true);
         for (const ts::wstr_c &ls : ps)
         {
             ts::token<ts::wchar> t(ls, '=');

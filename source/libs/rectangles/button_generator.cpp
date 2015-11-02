@@ -232,7 +232,7 @@ struct gb_circle_s : public generated_button_data_s
             {
                 ts::vec2 ss = i == button_desc_s::PRESS ? parsevec2f( gen->get_string(CONSTASTR("shadow-shift-press")), ts::vec2(shadowshift) ) : shadowshift;
 
-                if (shadow_radius_in == shadow_radius_out)
+                if (shadow_radius_in == shadow_radius_out) //-V550
                     draw_circle(src, (float)(one_image_size.x) * 0.5f + ss.x + shiftx, (float)(one_image_size.y) * 0.5f + ss.y,shadow_radius_in * k, shadow_col_in);
                 else
                     draw_shadow(src, (float)(one_image_size.x) * 0.5f + ss.x + shiftx, (float)(one_image_size.y) * 0.5f + ss.y, shadow_radius_in * k, shadow_radius_out * k, shadow_col_in, shadow_col_out);

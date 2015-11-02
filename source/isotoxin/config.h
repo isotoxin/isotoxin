@@ -123,6 +123,7 @@ public:
     TEXTAPAR(autoupdate_proxy_addr, DEFAULT_PROXY)
     TEXTAPAR(autoupdate_newver, "")
     
+    TEXTWPAR(device_camera, "")
     TEXTAPAR(device_mic, "")
     TEXTAPAR(device_talk, "")
     TEXTAPAR(device_signal, "")

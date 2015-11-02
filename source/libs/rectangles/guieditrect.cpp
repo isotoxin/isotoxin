@@ -1264,11 +1264,11 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_HEARTBEAT> &)
     return 0;
 }
 
-void gui_textedit_c::snapshots_s::push(const ts::array_wrapper_c<const text_element_c> &text, int caret, int start_sel, change_e ch)
+void gui_textedit_c::snapshots_s::push(const ts::array_wrapper_c<const text_element_c> &txt, int caret, int ss, change_e ch)
 {
     if (0 == size() || CH_REPLACE == ch || CH_ADDSPECIAL == ch)
     {
-        addnew(text, caret, start_sel, CH_ADDSPECIAL == ch ? CH_ADDCHAR : ch);
+        addnew(txt, caret, ss, CH_ADDSPECIAL == ch ? CH_ADDCHAR : ch);
         return;
     }
 
@@ -1278,9 +1278,9 @@ void gui_textedit_c::snapshots_s::push(const ts::array_wrapper_c<const text_elem
         if (CH_ADDCHAR == ch && caret == ls.last_caret + 1) { ls.last_caret = caret; return; }
         else if (CH_DELCHAR == ch && (caret == ls.last_caret || caret == ls.last_caret - 1)) { ls.last_caret = caret; return; }
     }
-    if (ls.text == text) return;
+    if (ls.text == txt) return;
 
-    addnew(text, caret, start_sel, ch);
+    addnew(txt, caret, ss, ch);
 
     if (size() > 100) // limit with 100 undo items
         remove_slow(0);

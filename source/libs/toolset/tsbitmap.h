@@ -58,7 +58,7 @@ struct imgdesc_s
 void TSCALL img_helper_premultiply(uint8 *des, const imgdesc_s &des_info);
 void TSCALL img_helper_fill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color);
 void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info);
-void TSCALL img_helper_make_2x_smaller(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info);
+void TSCALL img_helper_shrink_2x(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info);
 void TSCALL img_helper_copy_components(uint8* des, const uint8* sou, const imgdesc_s &des_info, const imgdesc_s &sou_info, int num_comps );
 void TSCALL img_helper_merge_with_alpha(uint8 *des, const uint8 *basesrc, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &base_info, const imgdesc_s &sou_info, int oalphao = -1);
 
@@ -185,7 +185,7 @@ struct bmpcore_exbody_s
     {
     }
     bmpcore_exbody_s():m_body(nullptr) {}
-    bmpcore_exbody_s(aint) {}
+    bmpcore_exbody_s(aint) {} //-V730
 
     void before_modify(bitmap_t<bmpcore_exbody_s> *me) {}
     void clear()
@@ -375,6 +375,8 @@ public:
 
     void detect_alpha_channel( const bitmap_t & bmsou ); // me - black background, bmsou - white background
 
+    void render_cursor( const ivec2&pos, buf_c &cache );
+
     template <typename FILTER, typename CORE2> void copy_with_filter(bitmap_t<CORE2>& outimage, FILTER &f) const
     {
         if (!ASSERT(outimage.info().sz == info().sz)) return;
@@ -471,6 +473,7 @@ public:
     bool resize_to(bitmap_c& outimage, const ivec2 & newsize, resize_filter_e filt_mode = FILTER_NONE) const;
     bool resize_to(const bmpcore_exbody_s &eb, resize_filter_e filt_mode = FILTER_NONE) const;
     bool resize_from(const bmpcore_exbody_s &eb, resize_filter_e filt_mode = FILTER_NONE) const;
+    void shrink_2x_to(const bmpcore_exbody_s &eb, const ivec2 &lt, const ivec2 &sz) const;
     /*
 	bool resize(bitmap_c& outimage, float scale=2.f, resize_filter_e filt_mode=FILTER_NONE) const;
 	bool rotate(bitmap_c& outimage, float angle_rad, rot_filter_e filt_mode=FILTMODE_POINT, bool expand_dst=true) const;
@@ -479,7 +482,6 @@ public:
 	void rotate_180(bitmap_c& outimage, const ivec2 & pdes,const ivec2 & sizesou,const bitmap_t & bmsou,const ivec2 & spsou);
 	void rotate_270(bitmap_c& outimage, const ivec2 & pdes,const ivec2 & sizesou,const bitmap_t & bmsou,const ivec2 & spsou);
     void make_larger(bitmap_c& outimage, int factor) const;
-    void make_2x_smaller(bitmap_c& outimage, const ivec2 &lt, const ivec2 &sz) const;
 
 
     void crop(const ivec2 & lt, const ivec2 &sz);
@@ -562,6 +564,7 @@ public:
         return CRC32_End(crc);
     }
 
+    bool load_from_HBITMAP(HBITMAP bmp);
     void load_from_HWND(HWND hwnd);
     bool load_from_BMPHEADER(const BITMAPINFOHEADER * iH, int buflen);
 
@@ -618,7 +621,7 @@ public:
     bool    create_from_bitmap(const bitmap_c &bmp, bool flipy = false, bool premultiply = false, bool detect_alpha_pixels = false);
     void    save_to_bitmap(bitmap_c &bmp, bool save16as32 = false);
     void    save_to_bitmap(bitmap_c &bmp, const ivec2 & pos_from_dc);
-    void    create(const ivec2 &sz);
+    void    create(const ivec2 &sz, int monitor = -1);
 
     HBITMAP bitmap()    const  { return m_mem_bitmap; }
     HDC     DC()	    const  { return m_mem_dc; }

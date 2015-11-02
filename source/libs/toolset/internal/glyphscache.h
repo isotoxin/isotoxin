@@ -31,7 +31,7 @@ struct scaled_image_s
 	const uint8 *pixels; // scaled RGBA-image
 };
 
-struct font_params_s
+struct font_params_s //-V690
 {
     wstr_c filename; // .ttf
 	ivec2 size;
@@ -59,13 +59,13 @@ struct font_params_s
     bool operator!=(const font_params_s &ofp) const
     {
         return filename != ofp.filename || size != ofp.size || flags != ofp.flags || additional_line_spacing != ofp.additional_line_spacing
-            || outline_radius != ofp.outline_radius || outline_shift != ofp.outline_shift;
+            || outline_radius != ofp.outline_radius || outline_shift != ofp.outline_shift; //-V550
     }
 
     bool operator==(const font_params_s &ofp) const
     {
         return filename == ofp.filename && size == ofp.size && flags == ofp.flags && additional_line_spacing == ofp.additional_line_spacing
-            && outline_radius == ofp.outline_radius && outline_shift == ofp.outline_shift;
+            && outline_radius == ofp.outline_radius && outline_shift == ofp.outline_shift; //-V550
     }
 
 
@@ -115,6 +115,7 @@ public:
 	void update();
 
     int height() const {return font ? font->height : 0;}
+    int fheight() const { return font ? (font->ascender-font->descender) : 0; }
 
 	operator font_c * () const {return get_font();}
 	font_c *operator->() const {return get_font();}

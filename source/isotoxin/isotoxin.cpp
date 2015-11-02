@@ -5,6 +5,7 @@
 #pragma USELIB(rectangles)
 #pragma USELIB(ipc)
 #pragma USELIB(s3)
+#pragma USELIB(dshowcapture)
 #ifndef _FINAL
 #pragma USELIB(memspy)
 #endif

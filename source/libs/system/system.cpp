@@ -617,10 +617,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
         // Common controls.
         InitCommonControls();
 
-        //HRESULT hr = S_OK;
-        //hr = 
-        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        //Assert (hr == S_OK);
+        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     }
 
     while ( 0 == (SRBIT_ABORT & system_event_receiver_c::notify_system_receivers( SEV_INIT, g_par_def )) )

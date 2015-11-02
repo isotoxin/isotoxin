@@ -18,61 +18,111 @@ void	TSCALL show_hardware_cursor()
     }
 }
 
-static BOOL CALLBACK calcmc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
+wstr_c  TSCALL monitor_get_description(int monitor)
 {
-    int * cnt = (int *)dwData;
-    *cnt = *cnt + 1;
-    return TRUE;
+    struct mdata
+    {
+        int mi, mio;
+        ts::wstr_c desc;
+        static BOOL CALLBACK calcmc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
+        {
+            mdata *m = (mdata *)dwData;
+            if (m->mi == 0)
+            {
+                MONITORINFOEXW minf;
+                minf.cbSize = sizeof(MONITORINFOEXW);
+                GetMonitorInfo(hMonitor, &minf);
+
+                DEVMODEW dm; dm.dmSize = sizeof(DEVMODEW);
+                EnumDisplaySettingsW(minf.szDevice, ENUM_CURRENT_SETTINGS, &dm);
+
+                DISPLAY_DEVICEW dd; dd.cb = sizeof(DISPLAY_DEVICEW);
+                m->desc.set_as_char('#').append_as_int( m->mio + 1 ).append(CONSTWSTR(" (")).append_as_int(dm.dmPelsWidth).append_char('x').append_as_int(dm.dmPelsHeight).append(CONSTWSTR(") "));
+                for (int i = 0; 0 != EnumDisplayDevicesW(nullptr, i, &dd, EDD_GET_DEVICE_INTERFACE_NAME); ++i)
+                {
+                    if (CHARz_equal(minf.szDevice, dd.DeviceName))
+                    {
+                        m->desc.append(wsptr(dd.DeviceString));
+                        m->desc.trim();
+                        break;
+                    }
+                }
+
+
+                return FALSE;
+            }
+            --m->mi;
+            return TRUE;
+        }
+    } mm; mm.mi = monitor; mm.mio = monitor;
+
+    EnumDisplayMonitors(nullptr, nullptr, mdata::calcmc, (LPARAM)&mm);
+    return mm.desc;
 }
 
 int     TSCALL monitor_count()
 {
+    struct m
+    {
+        static BOOL CALLBACK calcmc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
+        {
+            int * cnt = (int *)dwData;
+            *cnt = *cnt + 1;
+            return TRUE;
+        }
+    };
+
     int cnt = 0;
-    EnumDisplayMonitors(nullptr, nullptr, calcmc, (LPARAM)&cnt);
+    EnumDisplayMonitors(nullptr, nullptr, m::calcmc, (LPARAM)&cnt);
     return cnt;
 }
 
-static BOOL CALLBACK calcmrect_fs(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
+irect   TSCALL monitor_get_max_size_fs(int monitor)
 {
-    int * mon = (int *)dwData;
-    if (*mon == 0)
+    struct m
     {
-        RECT * r = (RECT *)dwData;
-        *r = *lprcMonitor;
-        return FALSE;
-    }
-    *mon = *mon - 1;
-    return TRUE;
-}
-
-void    TSCALL monitor_get_max_size_fs(RECT *r, int monitor)
-{
-    *(int *)r = monitor;
-    EnumDisplayMonitors(nullptr, nullptr, calcmrect_fs, (LPARAM)r);
-}
-
-static BOOL CALLBACK calcmrect(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
-{
-    int * mon = (int *)dwData;
-    if (*mon == 0)
-    {
-        RECT * r = (RECT *)dwData;
-
-        MONITORINFO mi;
-        mi.cbSize = sizeof(MONITORINFO);
-        GetMonitorInfo(hMonitor, &mi);
-        *r = mi.rcWork;
-
-        return FALSE;
-    }
-    *mon = *mon - 1;
-    return TRUE;
+        irect rr;
+        int mi;
+        static BOOL CALLBACK calcmrect_fs(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
+        {
+            m * mm = (m *)dwData;
+            if (mm->mi == 0)
+            {
+                mm->rr = ref_cast<irect>(*lprcMonitor);
+                return FALSE;
+            }
+            --mm->mi;
+            return TRUE;
+        }
+    } mm; mm.mi = monitor;
+    EnumDisplayMonitors(nullptr, nullptr, m::calcmrect_fs, (LPARAM)&mm);
+    return mm.rr;
 }
 
 void    TSCALL monitor_get_max_size(RECT *r, int monitor)
 {
     *(int *)r = monitor;
-    EnumDisplayMonitors(nullptr, nullptr, calcmrect, (LPARAM)r);
+    struct m
+    {
+        static BOOL CALLBACK calcmrect(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
+        {
+            int * mon = (int *)dwData;
+            if (*mon == 0)
+            {
+                RECT * r = (RECT *)dwData;
+
+                MONITORINFO mi;
+                mi.cbSize = sizeof(MONITORINFO);
+                GetMonitorInfo(hMonitor, &mi);
+                *r = mi.rcWork;
+
+                return FALSE;
+            }
+            *mon = *mon - 1;
+            return TRUE;
+        }
+    };
+    EnumDisplayMonitors(nullptr, nullptr, m::calcmrect, (LPARAM)r);
 }
 
 ivec2   TSCALL wnd_get_center_pos( const ts::ivec2& size )
@@ -99,14 +149,14 @@ void    TSCALL wnd_fix_rect(irect &r, int minw, int minh)
     min.right = -1000000;
     min.top = 1000000;
     min.bottom = -1000000;
-    RECT mr;
+    
     for (int i = 0; i<mc; ++i)
     {
-        monitor_get_max_size_fs(&mr, i);
-        if (mr.left < min.left) min.left = mr.left;
-        if (mr.right > min.right) min.right = mr.right;
-        if (mr.top < min.top) min.top = mr.top;
-        if (mr.bottom > min.bottom) min.bottom = mr.bottom;
+        irect mr = monitor_get_max_size_fs(i);
+        if (mr.lt.x < min.left) min.left = mr.lt.x;
+        if (mr.rb.x > min.right) min.right = mr.rb.x;
+        if (mr.lt.y < min.top) min.top = mr.lt.y;
+        if (mr.rb.y > min.bottom) min.bottom = mr.rb.y;
     }
 
     int maxw = min.right - min.left;
@@ -116,6 +166,7 @@ void    TSCALL wnd_fix_rect(irect &r, int minw, int minh)
 
     for (int i = 0; i < mc; ++i)
     {
+        RECT mr;
         monitor_get_max_size(&mr, i);
         ivec2 csdvig(0, 0);
         if (r.lt.y < mr.top) csdvig.y += (mr.top - r.lt.y);

@@ -1410,7 +1410,7 @@ double _Lanczos3(double x)
 	const double R = 3.0;
 	if (x  < 0.0 ) x = - x;
 
-	if ( x == 0.0) return 1;
+	if ( x == 0.0) return 1; //-V550
 
 	if ( x < R)
 	{
@@ -1543,7 +1543,7 @@ BOOL resample(tmp_buf_c &bb, const BYTE * ibuf, LONG iw, LONG ih, BYTE * obuf, L
 		
 			weight = _Lanczos3( (center - j) * FILTER_FACTOR);
 			
-			if (weight == 0.0) continue;
+			if (weight == 0.0) continue; //-V550
 
 			n = h_count[i]; /* Since h_count[i] is our current index */
 			p_pixel[n] = j;
@@ -1629,7 +1629,7 @@ BOOL resample(tmp_buf_c &bb, const BYTE * ibuf, LONG iw, LONG ih, BYTE * obuf, L
 
 			weight = _Lanczos3((center -j)* FILTER_FACTOR);
 			
-			if ( weight == 0.0 ) continue;
+			if ( weight == 0.0 ) continue; //-V550
 			n = v_count[i]; /* Our current index */
 			p_pixel[n] = j;
 			p_weight[n] = weight;

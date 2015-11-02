@@ -363,6 +363,14 @@ struct auto_simple_lock
         if (lock)
             simple_unlock(*lock);
     }
+    void unlock()
+    {
+        if (lock)
+        {
+            simple_unlock(*lock);
+            lock = nullptr;
+        }
+    }
 };
 
 #define SIMPLELOCK( ll ) spinlock::auto_simple_lock UNIQIDLINE(__slock)( ll )

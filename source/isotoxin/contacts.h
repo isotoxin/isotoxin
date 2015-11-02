@@ -65,7 +65,7 @@ struct contact_key_s
     bool is_meta() const {return protoid == 0 && contactid > 0;}
     bool is_group() const {return contactid < 0 && protoid > 0;}
     bool is_self() const {return ts::ref_cast<int64>(*this) == 0; }
-    bool is_empty() const {return ts::ref_cast<int64>(*this) == 0; }
+    bool is_empty() const {return ts::ref_cast<int64>(*this) == 0; } //-V524
 
     bool operator==(const contact_key_s&oc) const { return ts::ref_cast<int64>(*this) == ts::ref_cast<int64>(oc); }
     bool operator!=(const contact_key_s&oc) const { return ts::ref_cast<int64>(*this) != ts::ref_cast<int64>(oc); }

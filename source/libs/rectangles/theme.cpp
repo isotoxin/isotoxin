@@ -339,9 +339,9 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp )
     {
         for (auto it = fonts->begin(); it; ++it)
         {
-            ts::font_params_s fp;
-            fp.setup( it->as_string() );
-            prefonts.addnew( it.name(), fp );
+            ts::font_params_s fpar;
+            fpar.setup( it->as_string() );
+            prefonts.addnew( it.name(), fpar);
         }
     }
     reload_fonts(fp);

@@ -27,7 +27,7 @@
 
   <ItemDefinitionGroup>
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;CURL_STATICLIB;SODIUM_STATIC;_HAS_ITERATOR_DEBUGGING=0;_ITERATOR_DEBUG_LEVEL=0;_HAS_EXCEPTIONS=0;WINVER=0x0501;_WIN32_WINNT=0x0501;_WINSOCK_DEPRECATED_NO_WARNINGS;OPUS_EXPORT=</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;CURL_STATICLIB;SODIUM_STATIC;_HAS_ITERATOR_DEBUGGING=0;_ITERATOR_DEBUG_LEVEL=0;_HAS_EXCEPTIONS=0;WINVER=0x05010100;_WIN32_WINNT=0x05010100;_WINSOCK_DEPRECATED_NO_WARNINGS;OPUS_EXPORT=</PreprocessorDefinitions>
       <PrecompiledHeaderOutputFile>$(IntDir)$(TargetName).pch</PrecompiledHeaderOutputFile>
       <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
       <ProgramDataBaseFileName>$(IntDir)vc$(PlatformToolset).pdb</ProgramDataBaseFileName>

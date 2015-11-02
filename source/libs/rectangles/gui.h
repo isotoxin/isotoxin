@@ -26,6 +26,7 @@ enum loc_label_e
     LL_ABTT_NORMALIZE,
     LL_ABTT_MINIMIZE,
 
+    LL_ANY_FILES,
 };
 
 enum naction_e

@@ -141,11 +141,11 @@ class message_poster_c
         WPARAM wp;
         LPARAM lp;
 
-        bool working;
-        bool stoping;
-        bool pause;
+        bool working = false;
+        bool stoping = false;
+        bool pause = false;
 
-        data_s() :working(false), stoping(false), pause(false) {}
+        data_s() {} //-V730
     };
 
     spinlock::syncvar<data_s> m_data;
@@ -153,7 +153,7 @@ class message_poster_c
 
     static DWORD WINAPI worker(LPVOID lpParameter);
 public:
-    message_poster_c(int pausems = 50);
+    message_poster_c(int pausems = 50) : m_pausems(pausems) {}
     ~message_poster_c();
 
     void start(HWND w, int msg, WPARAM wp, LPARAM lp);

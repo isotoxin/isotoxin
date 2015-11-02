@@ -182,3 +182,33 @@ void text_remove_tags(ts::str_c &text_utf8);
 ts::str_c text_remove_cstm(const ts::str_c &text_utf8);
 
 #define TOOLTIP( ttt ) (GET_TOOLTIP) ([]()->ts::wstr_c { return ttt; } )
+
+
+
+
+
+struct process_animation_s
+{
+    int sz = 32;
+    static const int N = 3;
+    float angle;
+    float devia;
+    ts::Time nexttime = ts::Time::current() + 50;
+    HPEN    pen, pen2, pen3;
+    HBRUSH br, br2, br3;
+
+    process_animation_s(int sz = 32);
+    ~process_animation_s();
+    void render(HDC dc, const ts::ivec2& shift);
+    void restart();
+
+};
+
+struct process_animation_bitmap_s : public process_animation_s
+{
+    ts::drawable_bitmap_c bmpr, bmp;
+    process_animation_bitmap_s();
+    void render();
+};
+
+

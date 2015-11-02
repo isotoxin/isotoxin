@@ -145,6 +145,7 @@
     <ClCompile Include="..\..\tests.cpp" />
     <ClCompile Include="..\..\todo.cpp" />
     <ClCompile Include="..\..\tools.cpp" />
+    <ClCompile Include="..\..\videocapture.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\activeprotocol.h" />
@@ -173,6 +174,7 @@
     <ClInclude Include="..\..\res\resource.h" />
     <ClInclude Include="..\..\settings.h" />
     <ClInclude Include="..\..\tools.h" />
+    <ClInclude Include="..\..\videocapture.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\res\appver.inl" />

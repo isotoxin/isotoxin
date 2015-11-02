@@ -190,13 +190,13 @@ namespace
                 emojiset = f.get();
             else if (fnd.ends(CONSTASTR(".gif")))
             {
-                ts::str_c fn = emoti().load_gif_smile( ts::to_wstr(fnd), f.get(), current_pack );
-                if (!fn.is_empty()) fns.add( fn );
+                ts::str_c ifn = emoti().load_gif_smile( ts::to_wstr(fnd), f.get(), current_pack );
+                if (!ifn.is_empty()) fns.add( ifn );
             } else if (fnd.ends(CONSTASTR(".png")))
             {
-                ts::str_c fn = emoti().load_png_smile(ts::to_wstr(fnd), f.get(), current_pack);
-                if (!fn.is_empty())
-                    fns.add( fn );
+                ts::str_c ifn = emoti().load_png_smile(ts::to_wstr(fnd), f.get(), current_pack);
+                if (!ifn.is_empty())
+                    fns.add( ifn );
             }
 
             return true;

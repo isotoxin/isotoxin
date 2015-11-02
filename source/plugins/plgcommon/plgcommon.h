@@ -1,6 +1,7 @@
 #pragma once
 
 #pragma warning (disable:4091) // 'typedef ' : ignored on left of '' when no variable is declared
+//-V::730
 
 #include <windows.h>
 #include <malloc.h>
@@ -524,7 +525,7 @@ __inline unsigned __int64 my_htonll(unsigned __int64 Value)
     return Retval;
 }
 
-__inline unsigned __int64 my_ntohll(unsigned __int64 Value)
+__inline unsigned __int64 my_ntohll(unsigned __int64 Value) //-V524
 {
     const unsigned __int64 Retval = _MY_WS2_32_WINSOCK_SWAP_LONGLONG(Value);
     return Retval;

@@ -637,7 +637,7 @@ template<typename T, profile_table_e tabi> typename tableview_t<T, tabi>::row_s 
 }
 
 
-template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::reader(int row, ts::SQLITE_DATAGETTER getta)
+template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::reader(int /*rowi*/, ts::SQLITE_DATAGETTER getta)
 {
     ts::data_value_s v;
     if (CHECK(ts::data_type_e::t_int == getta(0, v))) // always id

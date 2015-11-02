@@ -499,12 +499,12 @@ struct message2send_s
                 if (utag_multipart)
                 {
                     // set timeout for other parts of message
-                    for (message2send_s *x = first; x; x = x->next)
+                    for (message2send_s *m = first; m; m = m->next)
                     {
-                        if (x->utag == utag_multipart)
+                        if (m->utag == utag_multipart)
                         {
                             // next message part...
-                            x->send_timeout = ct;
+                            m->send_timeout = ct;
                         }
                     }
                 }
@@ -2307,7 +2307,7 @@ static void cb_toxav_ringing(void * /*av*/, int32_t /*call_index*/, void * /*use
 {
 }
 
-static void cb_toxav_requesttimeout(void *av, int32_t call_index, void * /*userdata*/)
+static void cb_toxav_requesttimeout(void *av, int32_t call_index, void * /*userdata*/) //-V524
 {
     if (av != toxav) return;
     call_stop_int(call_index);
@@ -3214,7 +3214,7 @@ static int send_request(const char*public_id, const char* invite_message_utf8, b
 
         TOX_ERR_FRIEND_ADD er = TOX_ERR_FRIEND_ADD_NULL;
         int fid = tox_friend_add(tox, toxaddr, (const byte *)invmsg.cstr(),invmsg.get_length(), &er);
-        switch (er)
+        switch (er) //-V719
         {
             case TOX_ERR_FRIEND_ADD_ALREADY_SENT:
                 return CR_ALREADY_PRESENT;
@@ -3625,7 +3625,7 @@ void __stdcall file_control(u64 utag, file_control_e fctl)
         for (incoming_file_s *f = incoming_file_s::first; f; f = f->next)
             if (f->utag == utag)
             {
-                switch(fctl)
+                switch(fctl) //-V719
                 {
                 case FIC_ACCEPT:
                 case FIC_UNPAUSE:

@@ -22,8 +22,8 @@ public:
     };
     virtual ~container_c() {};
 
-    void            SetTimeStamp(const FILETIME ft) { m_timestamp = ft; } //-V801
-    const FILETIME &GetTimeStamp() const        { return m_timestamp; }
+    void            set_time_stamp(const FILETIME ft) { m_timestamp = ft; } //-V801
+    const FILETIME &get_time_stamp() const        { return m_timestamp; }
 
     int get_priority() const {return m_priority;}
 	uint get_id() const {return m_id;}

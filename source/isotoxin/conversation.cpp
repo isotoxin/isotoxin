@@ -389,7 +389,7 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8, contact_c *sender, uint64 
 
 void gui_notice_c::setup(contact_c *sender)
 {
-    switch (notice)
+    switch (notice) //-V719
     {
     case NOTICE_FRIEND_REQUEST_SEND_OR_REJECT:
         {
@@ -451,7 +451,7 @@ void gui_notice_c::setup(contact_c *sender)
             b_reject.leech(TSNEW(leech_dock_bottom_center_s, minsz.x, minsz.y, -5, 5, 0, 1));
             MODIFY(b_reject).visible(true);
 
-            int wwx = -minsz.x - 5;
+            int wwx = -minsz.x - 15;
 
             gui_button_c &b_mute_mic = MAKE_CHILD<gui_button_c>(getrid());
 
@@ -1100,8 +1100,8 @@ int gui_notice_network_c::sortfactor() const
                 if (contact->get_avatar())
                 {
                     menu_c m;
-                    m.add(TTT("Change avatar",219), 0, x::set_self_avatar, ts::amake<int>(networkid));
-                    m.add(TTT("Remove avatar",220), 0, x::clear_self_avatar, ts::amake<int>(networkid));
+                    m.add(TTT("Change avatar",208), 0, x::set_self_avatar, ts::amake<int>(networkid));
+                    m.add(TTT("Remove avatar",209), 0, x::clear_self_avatar, ts::amake<int>(networkid));
                     popupmenu = &gui_popup_menu_c::show(menu_anchor_s(true), m);
                     popupmenu->leech(this);
                 }
@@ -1490,8 +1490,8 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
 
             if (owner->is_full_search_result())
             {
-                gui_notice_c &n = create_notice(NOTICE_PREV_NEXT);
-                n.setup(owner);
+                gui_notice_c &ntc = create_notice(NOTICE_PREV_NEXT);
+                ntc.setup(owner);
             }
         }
 
@@ -1957,7 +1957,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
                 mnu.add(TTT("Copy message",205), 0, DELEGATE(this, ctx_menu_copymessage), msg);
                 mnu.add_separator();
             }
-            mnu.add(TTT("Delete message",221), 0, DELEGATE(this, ctx_menu_delmessage), ts::str_c().append_as_hex(&mutag, sizeof(mutag)));
+            mnu.add(TTT("Delete message",206), 0, DELEGATE(this, ctx_menu_delmessage), ts::str_c().append_as_hex(&mutag, sizeof(mutag)));
 
             popupmenu = &gui_popup_menu_c::show(menu_anchor_s(true), mnu);
 
@@ -2991,7 +2991,9 @@ void gui_message_item_c::update_text(int for_width)
                     {
                         if ( imgldr.explorebtn.expired() )
                         {
-                            if (addition_file_data_s *ftb = ts::ptr_cast<addition_file_data_s *>(addition.get()))
+                            if (!ftb)
+                                ftb = ts::ptr_cast<addition_file_data_s *>(addition.get());
+                            if (ftb)
                                 for (addition_file_data_s::btn_s &b : ftb->btns)
                                     b.used = false;
 
@@ -3014,8 +3016,8 @@ void gui_message_item_c::update_text(int for_width)
 
             textrect.set_text_only(newtext,false);
 
-            if (addition_file_data_s *ftb = ts::ptr_cast<addition_file_data_s *>(addition.get()))
-            {
+            if (!ftb) ftb = ts::ptr_cast<addition_file_data_s *>(addition.get());
+            if (ftb)
                 for (int i =  ftb->btns.size() - 1; i >= 0; --i)
                 {
                     addition_file_data_s::btn_s &b = ftb->btns.get(i);
@@ -3025,7 +3027,6 @@ void gui_message_item_c::update_text(int for_width)
                         ftb->btns.remove_fast(i);
                     }
                 }
-            }
 
             if (!for_width)
             {
@@ -3360,7 +3361,7 @@ gui_message_item_c &gui_messagelist_c::insert_message_item(message_type_app_e mt
             {
                 tm tmtm;
                 _localtime64_s(&tmtm, &post_time);
-                date_sep = insert_date_separator(index, tmtm, mi.zero_time());
+                date_sep = insert_date_separator(index, tmtm, mi.get_first_post_time());
             }
 
             if (!date_sep)
@@ -3795,13 +3796,13 @@ namespace
         }
         void header()
         {
-            ts::wstr_c lt(CONSTWSTR("<p=c>"), TTT("Join network",345));
+            ts::wstr_c lt(CONSTWSTR("<p=c>"), TTT("Join network",223));
             set_text(lt);
             gui_button_c &b = MAKE_CHILD<gui_button_c>(getrid());
             b.set_face_getter(BUTTON_FACE(addnetwork));
             b.set_handler(DELEGATE(this, _new_connection), this);
             ts::ivec2 minsz = b.get_min_size();
-            b.leech(TSNEW(leech_dock_top_center_s, minsz.x, minsz.y, -5, 5, 0, 1));
+            b.leech(TSNEW(leech_dock_top_center_s, minsz.x, minsz.y, -5, 5 ));
             MODIFY(b).visible(true);
             textrect.set_margins(0,minsz.y+5,0);
             addh = minsz.y + 10;
@@ -4039,9 +4040,9 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
             if (cs->getkey().is_self() && receiver->getkey().protoid)
                 cs = contacts().find_subself(receiver->getkey().protoid);
 
-            gui_message_item_c &mi = p.filling ? 
-                insert_message_item(p.post.mt(), cs, calc_message_skin(p.post.mt(), p.post.sender), p.post.time) :
-                get_message_item(p.post.mt(), cs, calc_message_skin(p.post.mt(), p.post.sender), p.post.time, p.replace_post ? p.post.utag : 0);
+            gui_message_item_c &mi = p.down ? 
+                get_message_item(p.post.mt(), cs, calc_message_skin(p.post.mt(), p.post.sender), p.post.time, p.replace_post ? p.post.utag : 0) :
+                insert_message_item(p.post.mt(), cs, calc_message_skin(p.post.mt(), p.post.sender), p.post.time);
             p.created = &mi.getengine();
 
             if (p.found_item)
@@ -4187,6 +4188,71 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     return 0;
 }
 
+/*virtual*/ void gui_messagelist_c::on_manual_scroll()
+{
+    if (filler)
+        filler->dont_scroll = true;
+    flags.clear(F_SCROLLING_TO_TGT);
+    __super::on_manual_scroll();
+}
+
+
+gui_messagelist_c::filler_s::filler_s(gui_messagelist_c *owner, const found_item_s *found_item, uint64 scrollto_, int options, int loadn):
+    owner(owner), found_item(found_item), scrollto(scrollto_), options(options), load_n(loadn)
+{
+    if ( found_item && found_item->utags.count() )
+        scrollto = found_item->utags.get(0);
+
+    contact_c *h = owner->historian;
+    if (!h)
+    {
+        die();
+        return;
+    }
+    int cnt = h->history_size();
+    if (scrollto)
+    {
+        for (int i = 0; i < cnt; ++i)
+        {
+            const post_s &p = h->get_history(i);
+            if (p.utag == scrollto)
+            {
+                fillindex_down = i;
+                fillindex_down_end = cnt;
+                fillindex_up = i - 1;
+                break;
+            }
+        }
+    } else
+    {
+        for (int i = 0; i < cnt; ++i)
+        {
+            const post_s &p = h->get_history(i);
+            if (p.mt() == MTA_MESSAGE && p.time >= h->get_readtime())
+            {
+                fillindex_down = i;
+                fillindex_down_end = cnt;
+                fillindex_up = i - 1;
+                scrollto = p.utag;
+                break;
+            }
+        }
+
+        if (fillindex_down < 0)
+        {
+            fillindex_up = cnt - 1;
+            fillindex_down = cnt;
+            fillindex_down_end = cnt;
+        }
+    }
+
+    if (fillindex_down > 0)
+        _localtime64_s(&owner->last_post_time, &h->get_history(fillindex_down-1).time);
+
+    tick();
+}
+
+
 gui_messagelist_c::filler_s::~filler_s()
 {
     if (gui)
@@ -4195,46 +4261,44 @@ gui_messagelist_c::filler_s::~filler_s()
 
 bool gui_messagelist_c::filler_s::tick(RID r, GUIPARAM p)
 {
-    contact_c *historian = owner->historian;
-    if (!historian) return true;
-    if ( fillindex < 0 ) 
-    {
-        fillindex = historian->history_size() - 1;
-    }
-
+    contact_c *h = owner->historian;
+    if (!h) return true;
     const found_item_s *found_item_current = nullptr;
-    if (historian->is_full_search_result() && g_app->found_items)
+    if (h->is_full_search_result() && g_app->found_items)
         for (const found_item_s &fi : g_app->found_items->items)
-            if (fi.historian == historian->getkey())
+            if (fi.historian == h->getkey())
             {
                 found_item_current = &fi;
                 break;
             }
     if (found_item_current != found_item)
-        return true; // found_item changed. stop filling
-
-    for( int n = numpertick; n > 0 && fillindex >= 0; --n, --fillindex )
     {
-        const post_s &p = historian->get_history( fillindex );
-    
+        die();
+        return true; // found_item changed. stop filling
+    }
+
+    auto additem = [&]( int pindex, bool down )
+    {
+        const post_s &p = h->get_history(pindex);
+
         uint64 utag_prev = 0;
         uint64 utag_next = 0;
         bool fitm = false;
         if (found_item)
         {
-            int index = found_item->utags.find_index( p.utag );
+            int index = found_item->utags.find_index(p.utag);
             if (index >= 0)
             {
                 fitm = true;
                 if (index > 0)
-                    utag_prev = found_item->utags.get( index - 1 );
-                if ( index < found_item->utags.count() - 1 )
-                    utag_next = found_item->utags.get( index + 1 );
+                    utag_prev = found_item->utags.get(index - 1);
+                if (index < found_item->utags.count() - 1)
+                    utag_next = found_item->utags.get(index + 1);
             }
         }
 
-        gmsg<ISOGM_SUMMON_POST> summon(p, historian);
-        summon.filling = true;
+        gmsg<ISOGM_SUMMON_POST> summon(p, h);
+        summon.down = down;
         if (fitm)
         {
             summon.prev_found = utag_prev;
@@ -4245,31 +4309,33 @@ bool gui_messagelist_c::filler_s::tick(RID r, GUIPARAM p)
 
         if (p.utag == scrollto)
             scroll_to = summon.created;
+    };
 
-        // always overwrite first_unread due filling has back order
-        if (fitm)
-            first_unread = summon.created;
-        else if (p.mt() == MTA_MESSAGE && p.time >= historian->get_readtime())
-            first_unread = summon.created;
-    }
+    // fill down
+    int filldown_cnt = numpertick / 2 + ( ts::tmax(0, numpertick/2 - (fillindex_up + 1)) );
+    for( ; filldown_cnt > 0 && fillindex_down < fillindex_down_end; --filldown_cnt, ++fillindex_down )
+        additem(fillindex_down, true);
 
-    owner->not_at_end();
-    if (0 != (options & RSEL_SCROLL_END))
+    int fillup_cnt = numpertick / 2 + filldown_cnt;
+    for (; fillup_cnt > 0 && fillindex_up >= 0; --fillup_cnt, --fillindex_up)
+        additem(fillindex_up, false);
+
+
+    if (!dont_scroll)
     {
-        if (first_unread)
-            owner->scroll_to_child(first_unread, true);
-        else
+        owner->not_at_end();
+        if (scroll_to)
+            owner->scroll_to_child(scroll_to, true);
+        else if ((0 != (options & RSEL_SCROLL_END)))
             owner->scroll_to_end();
+        else
+            owner->scroll_to_begin();
     }
-    else if (scroll_to)
-        owner->scroll_to_child(scroll_to, true);
-    else
-        owner->scroll_to_begin();
 
     gui->repos_children(owner);
 
 
-    if (fillindex > 0)
+    if (fillindex_up >= 0 || fillindex_down < fillindex_down_end)
         DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, tick), nullptr );
     else
     {
@@ -4284,7 +4350,7 @@ bool gui_messagelist_c::filler_s::tick(RID r, GUIPARAM p)
 
         if (load_n)
         {
-            if (!lhb) lhb = &owner->insert_message_item(MTA_SPECIAL, historian, CONSTASTR("load"));
+            if (!lhb) lhb = &owner->insert_message_item(MTA_SPECIAL, h, CONSTASTR("load"));
             lhb->init_load(load_n);
         } else
             TSDEL(lhb);
@@ -4544,7 +4610,14 @@ bool gui_message_area_c::send_file(RID, GUIPARAM)
     if (fromdir.is_empty())
         fromdir = ts::fn_get_path(ts::get_exe_full_name());
     ts::wstr_c title(TTT("Send files",180));
-    if (getroot()->load_filename_dialog(files, fromdir, CONSTWSTR(""), CONSTWSTR(""), nullptr, title))
+
+    ts::extension_s ext;
+    ext.desc = loc_text(loc_anyfiles);
+    ext.desc.append(CONSTWSTR(" (*.*)"));
+    ext.ext = CONSTWSTR("*.*");
+    ts::extensions_s exts(&ext, 1, 0);
+
+    if (getroot()->load_filename_dialog(files, fromdir, CONSTWSTR(""), exts, title))
     {
         if (files.size())
             prf().last_filedir(ts::fn_get_path(files.get(0)));

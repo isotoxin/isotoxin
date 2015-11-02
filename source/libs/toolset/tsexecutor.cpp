@@ -90,32 +90,33 @@ void task_executor_c::work()
             t->resetflag( f_executing );
 
             timeout = false;
-            for(int r = 0;r >= 0;)
+            int r = t->call_iterate();
+
+            if (r == task_c::R_DONE)
             {
-                r = t->iterate( r );
+                t->setflag( f_finished );
+                finished.push(t);
 
-                if (r == task_c::R_DONE)
+            } else if (r == task_c::R_CANCEL)
+            {
+                t->setflag( f_canceled );
+                canceled.push(t);
+
+            } else if (r == task_c::R_RESULT)
+            {
+                t->setflag( f_executing );
+
+                if (0 == (t->queueflags & f_result))
                 {
-                    t->setflag( f_finished );
-                    finished.push(t);
-
-                } else if (r == task_c::R_CANCEL)
-                {
-                    t->setflag( f_canceled );
-                    canceled.push(t);
-
-                } else if (r == task_c::R_RESULT)
-                {
-                    t->setflag( f_executing );
-
-                    if (0 == (t->queueflags & f_result))
-                    {
-                        t->setflag(f_result);
-                        results.push(t); // only one result
-                    }
-
-                    executing.push(t);
+                    t->setflag(f_result);
+                    results.push(t); // only one result
                 }
+
+                executing.push(t);
+            } else
+            {
+                t->setflag( f_executing );
+                executing.push(t); // next iteration
             }
         }
 

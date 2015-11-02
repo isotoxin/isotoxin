@@ -24,7 +24,7 @@ gui_filterbar_c::~gui_filterbar_c()
 
     gui_textfield_c &e = (MAKE_CHILD<gui_textfield_c>(getrid(), L"", MAX_PATH, 0, false) << (gui_textedit_c::TEXTCHECKFUNC)DELEGATE(this,update_filter));
     edit = &e;
-    e.set_placeholder( TOOLTIP(TTT("Search",275)), get_default_text_color(0) );
+    e.set_placeholder( TOOLTIP(TTT("Search",277)), get_default_text_color(0) );
 
     search_in_messages = prf().is_loaded() && prf().get_options().is(MSGOP_FULL_SEARCH);
 
@@ -96,9 +96,9 @@ bool gui_filterbar_c::do_contact_check(RID, GUIPARAM p)
                     if (an.is_empty())
                         an = c.get_name();
 
-                    const ts::wstr_c n = from_utf8(an).case_down();
+                    const ts::wstr_c wn = from_utf8(an).case_down();
                     for (const ts::wstr_c &f : found_stuff.fsplit)
-                        if (n.find_pos(f) < 0)
+                        if (wn.find_pos(f) < 0)
                         {
                             match = false;
                             break;

@@ -67,7 +67,7 @@ menu_c dialog_addcontact_c::networks()
     return nm;
 }
 
-/*virtual*/ int dialog_addcontact_c::additions(ts::irect & border)
+/*virtual*/ int dialog_addcontact_c::additions(ts::irect &)
 {
     bool resend = !inparam.pubid.is_empty();
 
@@ -272,7 +272,7 @@ void dialog_addgroup_c::update_lifetime()
     }
 }
 
-/*virtual*/ int dialog_addgroup_c::additions(ts::irect & border)
+/*virtual*/ int dialog_addgroup_c::additions(ts::irect &)
 {
     descmaker dm(descs);
     dm << 1;

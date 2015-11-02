@@ -13,6 +13,7 @@
 #pragma warning (disable:4127) // condition expression is constant
 #pragma warning (disable:4201) // nameless struct/union
 #pragma warning (disable:4091) // 'typedef ' : ignored on left of '' when no variable is declared
+//-V::730 // disable 730 check globally - too unusable
 
 #pragma warning (push)
 #pragma warning (disable:4820)
@@ -511,10 +512,10 @@ public:
     }
 };
 
-template <class T> inline void safe_destruct(T &obj)
+template<class T, class... _Valty> inline void renew(T &obj, _Valty&&... _Val)
 {
-	obj.~T();
-    TSPLACENEW(&obj);
+    obj.~T();
+    TSPLACENEW(&obj,std::forward<_Valty>(_Val)...);
 }
 
 template<typename T> class make_pod // This hack is usable for hide constructors or copy operators of some pod type. Never use it for non true pod types...or... sure, you know what you do
@@ -892,7 +893,7 @@ template<typename Tout, typename Tin> Tout &ref_cast(Tin & t)
 template<typename Tout, typename Tin> const Tout &ref_cast(const Tin & t)
 {
     TS_STATIC_CHECK(sizeof(Tout) <= sizeof(Tin), "ref cast fail");
-    return (const Tout &)t;
+    return *(const Tout *)&t;
 }
 
 template<typename Tout, typename Tin> const Tout &ref_cast(const Tin & t1, const Tin & t2)
@@ -996,7 +997,7 @@ public:
 
 };
 
-struct dummyparam { dummyparam() {}; char unused; };
+struct dummyparam { dummyparam() {}; char unused; }; //-V730
 template <typename T> struct dummy
 {
     T t;
@@ -1205,6 +1206,21 @@ struct lnk_s
 
         return ARGB(oiR, oiG, oiB, oiA);
     }
+
+    INLINE TSCOLOR ALPHABLEND_PM(TSCOLOR dst, TSCOLOR src) // premultiplied alpha blend
+    {
+        uint8 ba = ALPHA(src); if (ba == 0) return dst;
+        float a = (float)((double)(ba)* (1.0 / 255.0));
+        float not_a = 1.0f - a;
+
+        auint oiB = lround(float(BLUE(dst)) * not_a) + BLUE(src);
+        auint oiG = lround(float(GREEN(dst)) * not_a) + GREEN(src);
+        auint oiR = lround(float(RED(dst)) * not_a) + RED(src);
+        auint oiA = lround(float(ALPHA(dst)) * not_a) + ALPHA(src);
+
+        return oiB | (oiG << 8) | (oiR << 16) | (oiA << 24);
+    }
+
 
     template<typename T> const char *shorttypename();
     template<> INLINE const char *shorttypename<short>() {return "s";};

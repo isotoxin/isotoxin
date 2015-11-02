@@ -72,12 +72,11 @@ menu_c dialog_contact_props_c::getaacmenu()
     return m;
 }
 
-/*virtual*/ int dialog_contact_props_c::additions(ts::irect & border)
+/*virtual*/ int dialog_contact_props_c::additions(ts::irect &)
 {
     descmaker dm(descs);
     dm << 1;
 
-    ts::wstr_c cname(TTT("Contact settings",225));
     if (contactue)
     {
         customname = contactue->get_customname();
@@ -86,9 +85,8 @@ menu_c dialog_contact_props_c::getaacmenu()
 
         ts::str_c n = contactue->get_name();
         text_adapt_user_input(n);
-        cname.append(CONSTWSTR("<br>")).append(from_utf8(n)); 
 
-        dm().page_header(cname);
+        dm().page_header(from_utf8(n));
         dm().vspace(10);
 
         dm().textfield(TTT("Custom name",229), from_utf8(customname), DELEGATE(this, custom_name))

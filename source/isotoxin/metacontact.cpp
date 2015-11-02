@@ -40,7 +40,7 @@ void dialog_metacontact_c::getbutton(bcreate_s &bcr)
     }
 }
 
-/*virtual*/ int dialog_metacontact_c::additions(ts::irect & border)
+/*virtual*/ int dialog_metacontact_c::additions(ts::irect &)
 {
     descmaker dm(descs);
     dm << 1;

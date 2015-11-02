@@ -168,7 +168,7 @@ void time_float_c::set_low(float low, bool correct)
     if (correct)
     {
         float k = m_high-low;
-        if (k != 0)
+        if (k != 0) //-V550
         {
             k = 1.0f / k;
             for (int i=0;i<get_keys_count();++i)
@@ -187,7 +187,7 @@ void time_float_c::set_high(float hi, bool correct)
     if (correct)
     {
         float k = hi-m_low;
-        if (k != 0)
+        if (k != 0) //-V550
         {
             k = 1.0f / k;
             for (int i=0;i<get_keys_count();++i)

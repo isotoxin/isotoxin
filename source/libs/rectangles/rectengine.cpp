@@ -1535,7 +1535,7 @@ void border_window_data_s::draw()
             rdraw.draw_v(x2 -= rdraw.rrep->width(), y, y2, thr.siso[SI_BASE].tile);
     }
 
-    if (options & (DTHRO_BORDER|DTHRO_CENTER|DTHRO_CENTER_HOLE))
+    if (options & (DTHRO_BORDER|DTHRO_BORDER_RECT|DTHRO_CENTER|DTHRO_CENTER_HOLE))
     {
         ASSERT( 0 == (options & (DTHRO_LEFT_CENTER|DTHRO_LT_T_RT|DTHRO_LB_B_RB)) );
 
@@ -1611,16 +1611,51 @@ void border_window_data_s::draw()
             }
         }
 
-        if (options & DTHRO_BORDER)
+        if (options & (DTHRO_BORDER|DTHRO_BORDER_RECT))
         {
+            ts::irect brect;
+            if ( options & DTHRO_BORDER_RECT )
+                brect = d->draw_thr.rect, use_alphablend = true;
+            else
+                brect.lt = dd.offset, brect.rb = rbpt;
+
             // top
-            bool top_drawn;
-            if (false != (top_drawn = *t))
+            enum class drawn_e
             {
-                rdraw.rbeg = lt; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_TOP);
+                no,
+                partial,
+                full
+            } lt_drawn = drawn_e::no;
+
+            bool rt_drawn = false;
+            if (*t)
+            {
+                int x1 = brect.rb.x;
+                ts::irect lt_crop;
+
+                if (lt->height() > t->height())
+                {
+                    lt_drawn = drawn_e::partial;
+                    lt_crop = *lt; lt_crop.setheight( t->height() );
+                    rdraw.rbeg = &lt_crop; //-V506
+                    rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_TOP);
+                } else 
+                {
+                    lt_drawn = drawn_e::full;
+                    rdraw.rbeg = lt; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_TOP);
+                }
+
                 rdraw.rrep = t; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_TOP);
-                rdraw.rend = rt; rdraw.a_end = use_alphablend && thr.is_alphablend(SI_RIGHT_TOP);
-                rdraw.draw_h(dd.offset.x, rbpt.x, dd.offset.y, thr.siso[SI_TOP].tile);
+                if (rt->height() == t->height())
+                {
+                    rdraw.rend = rt; rdraw.a_end = use_alphablend && thr.is_alphablend(SI_RIGHT_TOP);
+                    rt_drawn = true;
+                } else
+                {
+                    rdraw.rend = nullptr;
+                    x1 -= rt->width();
+                }
+                rdraw.draw_h(brect.lt.x, x1, brect.lt.y, thr.siso[SI_TOP].tile);
             }
 
             // bottom
@@ -1630,31 +1665,43 @@ void border_window_data_s::draw()
                 rdraw.rbeg = lb; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_BOTTOM);
                 rdraw.rrep = b; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_BOTTOM);
                 rdraw.rend = rb; rdraw.a_end = use_alphablend && thr.is_alphablend(SI_RIGHT_BOTTOM);
-                rdraw.draw_h(dd.offset.x, rbpt.x, rbpt.y - b->height(), thr.siso[SI_BOTTOM].tile);
+                rdraw.draw_h(brect.lt.x, brect.rb.x, brect.rb.y - b->height(), thr.siso[SI_BOTTOM].tile);
             }
 
             // left
             if (*l)
             {
-                int y0 = dd.offset.y;
-                int y1 = rbpt.y;
+                int y0 = brect.lt.y;
+                int y1 = brect.rb.y;
 
-                if (top_drawn) { rdraw.rbeg = nullptr; y0 += lt->height(); } else { rdraw.rbeg = lt; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_TOP); }
+                ts::irect lt_crop;
+                switch(lt_drawn)
+                {
+                case drawn_e::no:
+                case drawn_e::partial:
+                    rdraw.rbeg = lt; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_LEFT_TOP);
+                    if (lt->width() > l->width())
+                        lt_crop = *lt, lt_crop.setwidth(l->width()), rdraw.rbeg = &lt_crop;
+                    break;
+                case drawn_e::full:
+                    rdraw.rbeg = nullptr; y0 += lt->height();
+                    break;
+                }
                 rdraw.rrep = l; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_LEFT);
                 if (bottom_drawn) { rdraw.rend = nullptr;  y1 -= lb->height(); } else { rdraw.rend = lb; rdraw.a_end = use_alphablend && thr.is_alphablend(SI_LEFT_BOTTOM); }
-                rdraw.draw_v(dd.offset.x, y0, y1, thr.siso[SI_LEFT].tile);
+                rdraw.draw_v(brect.lt.x, y0, y1, thr.siso[SI_LEFT].tile);
             }
 
             // right
             if (*r)
             {
-                int y0 = dd.offset.y;
-                int y1 = rbpt.y;
+                int y0 = brect.lt.y;
+                int y1 = brect.rb.y;
 
-                if (top_drawn) { rdraw.rbeg = nullptr;  y0 += rt->height(); } else { rdraw.rbeg = rt; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_RIGHT_TOP); }
+                if (rt_drawn) { rdraw.rbeg = nullptr;  y0 += rt->height(); } else { rdraw.rbeg = rt; rdraw.a_beg = use_alphablend && thr.is_alphablend(SI_RIGHT_TOP); }
                 rdraw.rrep = r; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_RIGHT);
                 if (bottom_drawn) { rdraw.rend = nullptr; y1 -= rb->height(); } else { rdraw.rend = rb; rdraw.a_end = use_alphablend && thr.is_alphablend(SI_RIGHT_BOTTOM); }
-                rdraw.draw_v(rbpt.x - r->width(), y0, y1, thr.siso[SI_RIGHT].tile);
+                rdraw.draw_v(brect.rb.x - r->width(), y0, y1, thr.siso[SI_RIGHT].tile);
             }
 
         }
@@ -2185,7 +2232,7 @@ namespace ts {
 };
 #endif
 
-ts::wstr_c   rectengine_root_c::load_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, const ts::wsptr &filt, const ts::wchar *defext, const ts::wchar *title)
+ts::wstr_c   rectengine_root_c::load_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, ts::extensions_s & exts, const ts::wchar *title)
 {
     /*
         извините за этот небольшой win32 хак, но
@@ -2196,19 +2243,19 @@ ts::wstr_c   rectengine_root_c::load_filename_dialog(const ts::wsptr &iroot, con
     ts::g_main_window = hwnd;
 
     ++sysmodal;
-    ts::wstr_c r = ts::get_load_filename_dialog(iroot, name, filt, defext, title);
+    ts::wstr_c r = ts::get_load_filename_dialog(iroot, name, exts, title);
     --sysmodal;
     ts::g_main_window = ow;
 
     return r;
 }
-bool     rectengine_root_c::load_filename_dialog(ts::wstrings_c &files, const ts::wsptr &iroot, const ts::wsptr& name, const ts::wsptr &filt, const ts::wchar *defext, const ts::wchar *title)
+bool     rectengine_root_c::load_filename_dialog(ts::wstrings_c &files, const ts::wsptr &iroot, const ts::wsptr& name, ts::extensions_s & exts, const ts::wchar *title)
 {
     HWND ow = ts::g_main_window;
     ts::g_main_window = hwnd;
 
     ++sysmodal;
-    bool r = ts::get_load_filename_dialog(files, iroot, name, filt, defext, title);
+    bool r = ts::get_load_filename_dialog(files, iroot, name, exts, title);
     --sysmodal;
     ts::g_main_window = ow;
 

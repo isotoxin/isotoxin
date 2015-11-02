@@ -126,7 +126,7 @@ void application_c::load_locale( const SLANGID& lng )
                 l.replace_all(CONSTWSTR("[/i]"), CONSTWSTR("</i>"));
                 l.replace_all(CONSTWSTR("[quote]"), CONSTWSTR("\""));
                 l.replace_all(CONSTWSTR("[appname]"), CONSTWSTR(APPNAME));
-                l.replace_all(CONSTWSTR(APPNAME), ts::wstr_c(CONSTWSTR("<color=0,50,0><b>")).append(CONSTWSTR(APPNAME)).append(CONSTWSTR("</b></color>")));
+                l.replace_all(CONSTWSTR(APPNAME), APPNAME_CAPTION);
 
                 int nbr = l.find_pos(CONSTWSTR("[nbr]"));
                 if (nbr >= 0)
@@ -261,23 +261,25 @@ HICON application_c::app_icon(bool for_tray)
             if (cfg().collapse_beh() == 1)
                 return TTT("Minimize to notification area",123);
             return TTT("Minimize",6);
+        case LL_ANY_FILES:
+            return loc_text( loc_anyfiles );
     }
     return __super::app_loclabel(ll);
 }
 
-/*virtual*/ void application_c::app_b_minimize(RID main)
+/*virtual*/ void application_c::app_b_minimize(RID mr)
 {
     if (cfg().collapse_beh() == 1)
-        MODIFY(main).micromize(true);
+        MODIFY(mr).micromize(true);
     else
-        __super::app_b_minimize(main);
+        __super::app_b_minimize(mr);
 }
-/*virtual*/ void application_c::app_b_close(RID main)
+/*virtual*/ void application_c::app_b_close(RID mr)
 {
     if (GetKeyState(VK_CONTROL) >= 0 && cfg().collapse_beh() == 2)
-        MODIFY(main).micromize(true);
+        MODIFY(mr).micromize(true);
     else
-        __super::app_b_close(main);
+        __super::app_b_close(mr);
 }
 /*virtual*/ void application_c::app_path_expand_env(ts::wstr_c &path)
 {
@@ -722,7 +724,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
             ts::parse_env(defprofilename);
             SUMMON_DIALOG<dialog_entertext_c>(UD_PROFILENAME, dialog_entertext_c::params(
                                                 UD_PROFILENAME,
-                                                TTT("[appname]: profile name",44),
+                                                TTT("[appname]: Profile name",44),
                                                 TTT("Enter profile name. It is profile file name. You can create any number of profiles and switch them any time. Detailed settings of current profile are available in settings dialog.",43),
                                                 defprofilename,
                                                 ts::str_c(),
@@ -763,7 +765,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
     };
 
 #ifndef _FINAL
-    if (GetKeyState(VK_CONTROL)<0)
+    if (GetKeyState(VK_SHIFT)<0)
     {
         void summon_test_window();
         summon_test_window();
@@ -793,7 +795,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
 
     m.add( TTT("Settings",42), 0, handlers::m_settings );
     m.add_separator();
-    m.add( TTT("About",206), 0, handlers::m_about );
+    m.add( TTT("About",356), 0, handlers::m_about );
     m.add_separator();
     m.add(loc_text(loc_exit), 0, handlers::m_exit);
     gui_popup_menu_c::show(r.call_get_popup_menu_pos(), m);
@@ -990,7 +992,7 @@ ts::str_c application_c::appver()
         verb()  {}
         verb &operator/(int n) { v.append_as_int(n).append_char('.'); return *this; }
     } v;
-    v /
+    v / //-V609
 #include "version.inl"
         ;
     return v.v.trunc_length();

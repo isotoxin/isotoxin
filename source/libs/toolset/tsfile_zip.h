@@ -28,7 +28,7 @@ namespace ts
             aint            m_full_unp_size;
 
         public:
-            zip_file_entry_c( const wsptr &name ): zip_entry_c( name ) {}
+            zip_file_entry_c( const wsptr &name ): zip_entry_c( name ) {} //-V730
             virtual ~zip_file_entry_c();
 
             bool  read( unzFile unz, buf_wrapper_s &b );
@@ -41,7 +41,7 @@ namespace ts
             array_del_t<zip_file_entry_c, 32> m_files;
 
         public:
-            zip_folder_entry_c( const wsptr &name ): zip_entry_c( name ) {}
+            zip_folder_entry_c( const wsptr &name ): zip_entry_c( name ) {} //-V730
             virtual ~zip_folder_entry_c() {}
 
             zip_folder_entry_c * get_folder( const wsptr &fnn );

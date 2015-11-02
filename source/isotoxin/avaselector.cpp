@@ -5,14 +5,6 @@
 #pragma comment(lib, "pngquant.lib")
 #pragma comment(lib, "pnglib.lib")
 
-DWORD WINAPI dialog_avaselector_c::worker(LPVOID ap)
-{
-    UNSTABLE_CODE_PROLOG
-        ((dialog_avaselector_c *)ap)->compressor();
-    UNSTABLE_CODE_EPILOG
-    return 0;
-}
-
 namespace
 {
     struct png8_image_s
@@ -26,7 +18,7 @@ namespace
         png_color palette[256];
         ts::uint8 trans[256];
 
-        ts::buf_c outbuf;
+        ts::blob_c outbuf;
 
         ~png8_image_s()
         {
@@ -163,7 +155,7 @@ namespace
     }
 }
 
-static void encode_lossy_png( ts::buf_c &buf, const ts::bitmap_c &bmp )
+static void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp )
 {
     ts::bitmap_c b2e;
     if (bmp.info().bytepp() != 4 || bmp.info().pitch != bmp.info().sz.x * 4)
@@ -193,143 +185,147 @@ static void encode_lossy_png( ts::buf_c &buf, const ts::bitmap_c &bmp )
     liq_image_destroy(image);
     liq_result_destroy(res);
 
-    buf = std::move(pngshka.outbuf);
+    buf = pngshka.outbuf;
 }
 
-void dialog_avaselector_c::compressor()
+/*virtual*/ int dialog_avaselector_c::compressor_s::iterate(int pass)
 {
-    ts::tmpalloc_c t;
-    sync.lock_write()().compressor_working = true;
+    if (!dlg) return R_CANCEL;
 
-    int maximumsize = 16384;
-
-    int sln = 10;
-    for(;; Sleep(sln))
+    ts::aint maximumsize = 16384;
+    if (0 == pass)
     {
-        auto w = sync.lock_write();
-        if (w().compressor_should_stop) break;
+        encode_lossy_png(encoded, bitmap2encode);
+        best = encoded.size();
+        bestsz = bitmap2encode.info().sz;
 
-        if (w().bitmap2encode.info().sz >> 0) ; else
+        if (best <= maximumsize)
         {
-            sln = 10;
-            continue;
+            encoded_fit_16kb = encoded;
+            return R_DONE;
         }
 
-        ts::bitmap_c b2e = w().bitmap2encode;
-        w().bitmap2encode.clear();
-        int tag = w().source_tag;
-        w.unlock();
-
-        ts::buf_c encoded;
-        encode_lossy_png(encoded, b2e);
-
-        w = sync.lock_write();
-        if (tag != w().source_tag)
-        {
-            sln = 0;
-            continue;
-        }
-        int sz = encoded.size();
-        w().encoded = std::move(encoded);
-        if (sz <= maximumsize)
-            w().encoded_fit_16kb = w().encoded;
-
-        w.unlock();
-
-        sln = 10;
-
-        if (sz <= maximumsize)
-            continue;
-
-        int sz1 = 16;
-        int sz2 = ts::tmin(b2e.info().sz.x, b2e.info().sz.y);
-        int szc = (sz1 + sz2) / 2;
-
-        int best = sz;
-        ts::ivec2 bestsz = b2e.info().sz;
-
-        ts::buf_c e2;
-        for (;;)
-        {
-            if (tag != sync.lock_read()().source_tag)
-            {
-                sln = 0;
-                break;
-            }
-            ts::ivec2 newsz = b2e.info().sz;
-            if (newsz.x < newsz.y)
-            {
-                newsz.x = szc;
-                newsz.y = lround(((float)newsz.x / (float)b2e.info().sz.x) * (float)b2e.info().sz.y);
-            } else
-            {
-                newsz.y = szc;
-                newsz.x = lround(((float)newsz.y / (float)b2e.info().sz.y) * (float)b2e.info().sz.x);
-            }
-            ts::bitmap_c b;
-            e2.clear();
-            b2e.resize_to(b, newsz, ts::FILTER_LANCZOS3);
-            encode_lossy_png(e2, b);
-            sz = e2.size();
-
-            if (sz > maximumsize)
-            {
-                sz2 = szc;
-                szc = (sz1 + sz2) / 2;
-                if (szc == sz1 || szc == sz2) goto usebestrslt;
-                continue;
-            } else
-            {
-                int delta = maximumsize - sz;
-                if (delta < best)
-                {
-                    best = delta;
-                    bestsz = newsz;
-                    sz1 = szc;
-                    szc = (sz1 + sz2) / 2;
-                    if (szc == sz1 || szc == sz2) goto usebestrslt;
-                    continue;
-                } else
-                {
-                    usebestrslt:
-                    e2.clear();
-                    b2e.resize_to(b, bestsz, ts::FILTER_LANCZOS3);
-                    encode_lossy_png(e2, b);
-                    sz = e2.size();
-
-                    sync.lock_write()().encoded_fit_16kb = std::move(e2);
-                    break;
-                }
-            }
-
-        }
-
+        sz1 = 16;
+        sz2 = ts::tmin(bitmap2encode.info().sz.x, bitmap2encode.info().sz.y);
+        return 1;
     }
 
-    sync.lock_write()().compressor_working = false;
+    ts::bitmap_c b;
+
+    if (2 == pass)
+    {
+        // use best
+        temp.clear();
+        bitmap2encode.resize_to(b, bestsz, ts::FILTER_LANCZOS3);
+        encode_lossy_png(temp, b);
+        encoded_fit_16kb = temp;
+        return R_DONE;
+    }
+
+    ASSERT( 1 == pass );
+
+    int szc = (sz1 + sz2) / 2;
+
+    ts::ivec2 newsz = bitmap2encode.info().sz;
+    if (newsz.x < newsz.y)
+    {
+        newsz.x = szc;
+        newsz.y = lround(((float)newsz.x / (float)bitmap2encode.info().sz.x) * (float)bitmap2encode.info().sz.y);
+    }
+    else
+    {
+        newsz.y = szc;
+        newsz.x = lround(((float)newsz.y / (float)bitmap2encode.info().sz.y) * (float)bitmap2encode.info().sz.x);
+    }
+
+    temp.clear();
+    bitmap2encode.resize_to(b, newsz, ts::FILTER_LANCZOS3);
+    encode_lossy_png(temp, b);
+    int sz = temp.size();
+
+    if (sz > maximumsize)
+    {
+        if (szc != sz1 && szc != sz2)
+        {
+            sz2 = szc;
+            return 1; // next try
+        }
+    }
+    else
+    {
+        int delta = maximumsize - sz;
+        if (delta < best)
+        {
+            best = delta;
+            bestsz = newsz;
+            if (szc != sz1 && szc != sz2)
+            {
+                sz1 = szc;
+                return 1; // try next
+            }
+        }
+    }
+    return 2; // use best
+
 }
+/*virtual*/ void dialog_avaselector_c::compressor_s::done(bool canceled)
+{
+    if (!canceled && dlg)
+        dlg->compressor_job_done(this);
+
+    __super::done(canceled);
+}
+
+namespace
+{
+    struct enum_video_devices_s : public ts::task_c
+    {
+        vcd_list_t video_devices;
+        ts::safe_ptr<dialog_avaselector_c> dlg;
+
+        enum_video_devices_s(dialog_avaselector_c *dlg) :dlg(dlg) {}
+
+        /*virtual*/ int iterate(int pass) override
+        {
+            enum_video_capture_devices(video_devices, false);
+            return R_DONE;
+        }
+        /*virtual*/ void done(bool canceled) override
+        {
+            if (!canceled && dlg)
+                dlg->set_video_devices(std::move(video_devices));
+
+            __super::done(canceled);
+        }
+
+    };
+}
+
 
 dialog_avaselector_c::dialog_avaselector_c(MAKE_ROOT<dialog_avaselector_c> &data) :gui_isodialog_c(data), avarect(0), protoid(data.prms.protoid) 
 {
-    CloseHandle(CreateThread(nullptr, 0, worker, this, 0, nullptr));
-    while( !sync.lock_read()().compressor_working ) Sleep(1);
+    g_app->add_task(TSNEW(enum_video_devices_s, this));
+
+    shadow = gui->theme().get_rect(CONSTASTR("shadow"));
 
     gui->register_kbd_callback( DELEGATE( this, paste_hotkey_handler ), SSK_V, gui_c::casw_ctrl);
     gui->register_kbd_callback( DELEGATE( this, paste_hotkey_handler ), SSK_INSERT, gui_c::casw_shift);
+    gui->register_kbd_callback( DELEGATE( this, space_key ), SSK_SPACE, 0);
+
+    animation(RID(), nullptr);
+
 }
 
 dialog_avaselector_c::~dialog_avaselector_c()
 {
-    auto w = sync.lock_write();
-    w().compressor_should_stop = true;
-    w().source_tag += 1;
-    w.unlock();
+    if (compressor)
+        compressor->dlg = nullptr;
+
     if (gui)
     {
-        gui->delete_event(DELEGATE(this,flashavarect));
+        gui->delete_event(DELEGATE(this,animation));
         gui->unregister_kbd_callback(DELEGATE(this, paste_hotkey_handler));
     }
-    while( sync.lock_read()().compressor_working ) Sleep(1);
 }
 
 /*virtual*/ void dialog_avaselector_c::created()
@@ -341,45 +337,132 @@ dialog_avaselector_c::~dialog_avaselector_c()
 
 }
 
-/*virtual*/ int dialog_avaselector_c::additions(ts::irect & border)
+/*virtual*/ int dialog_avaselector_c::additions(ts::irect &)
 {
 
     descmaker dm(descs);
     dm << 1;
 
-    ts::wstr_c openimgbuttonface( TTT("Open image",212) );
-    ts::wstr_c l(CONSTWSTR("<p=l>"));
+    ts::wstr_c l(CONSTWSTR("<p=c>"));
 
-    ts::wstr_c sprtfmts;
-    ts::enum_supported_formats([&](const char *fmt) {sprtfmts.append(':',ts::to_wstr(fmt));});
-    sprtfmts.replace_all(CONSTWSTR(":"), CONSTWSTR(", "));
-
-    ts::wstr_c s(TTT("Supported formats: $",216) / sprtfmts);
-    s.insert(0,CONSTWSTR("<p=c>"));
-    s.append(CONSTWSTR("<br><l>")).append(TTT("To switch frame of animated image use space key",232)).append(CONSTWSTR("</l>"));
-
-    ts::wstr_c ctl;
+    ts::wstr_c ctlopen, ctlpaste, ctlcam;
 
     ts::ivec2 bsz(50,25);
     const button_desc_s *b = gui->theme().get_button("save");
     if (b)
         bsz = b->size;
 
-    dm().button(ts::wstr_c(), openimgbuttonface, DELEGATE(this, open_image)).width(200).height(25).subctl(0,ctl);
-    dm().button(ts::wstr_c(), b ? L"face=save" : L"save", DELEGATE(this, save_image)).width(bsz.x).height(bsz.y).subctl(1,savebtn);
+    ts::wstr_c openimgbuttonface(CONSTWSTR("open"));
+    ts::wstr_c pasteimgbuttonface(CONSTWSTR("paste"));
+    ts::wstr_c startcamera(CONSTWSTR("capture"));
 
-    dm().page_header(l+(TTT("Open image:[br] 1. Drag and drop image of one of supported formats[br] 2. Paste image from clipboard (Ctrl+V)[br] 3. Push $",211) / ctl)+s);
-    
-    
+    ts::ivec2 szopen(200, 25);
+    if (const button_desc_s *avopen = gui->theme().get_button(CONSTASTR("avopen")))
+        szopen = avopen->size, openimgbuttonface = CONSTWSTR("face=avopen");
+
+    ts::ivec2 szpaste(200, 25);
+    if (const button_desc_s *avpaste = gui->theme().get_button(CONSTASTR("avpaste")))
+        szpaste = avpaste->size, pasteimgbuttonface = CONSTWSTR("face=avpaste");
+
+    ts::ivec2 szcapture(200, 25);
+    if (const button_desc_s *avcapture = gui->theme().get_button(CONSTASTR("avcapture")))
+        szcapture = avcapture->size, startcamera = CONSTWSTR("face=avcapture");
+
+    dm().button(ts::wstr_c(), openimgbuttonface, DELEGATE(this, open_image)).width(szopen.x).height(szopen.y).subctl(0,ctlopen).sethint( TTT("Load image from file",210) );
+    dm().button(ts::wstr_c(), pasteimgbuttonface, DELEGATE(this, paste_hotkey_handler)).width(szpaste.x).height(szpaste.y).subctl(1, ctlpaste).sethint( TTT("Paste image from clipboard ($)",211) / CONSTWSTR("Ctrl+V") );
+    dm().button(ts::wstr_c(), startcamera, DELEGATE(this, start_capture_menu)).width(szcapture.x).height(szcapture.y).setname(CONSTASTR("startc")).subctl(2,ctlcam).sethint( TTT("Capture camera",212) );
+    dm().button(ts::wstr_c(), b ? L"face=save" : L"save", DELEGATE(this, save_image1)).width(bsz.x).height(bsz.y).subctl(3,savebtn1);
+    dm().button(ts::wstr_c(), b ? L"face=save" : L"save", DELEGATE(this, save_image2)).width(bsz.x).height(bsz.y).subctl(4,savebtn2);
+
+    l.append(ctlopen).append(CONSTWSTR("<nbsp>"));
+    l.append(ctlpaste).append(CONSTWSTR("<nbsp>"));
+    l.append(ctlcam);
+    dm().label(l);
+    dm().hiddenlabel(ts::wstr_c(), 0).setname(CONSTASTR("info"));
     dm().vspace(1).setname(CONSTASTR("last"));
     return 0;
 }
 
-bool dialog_avaselector_c::flashavarect(RID, GUIPARAM)
+bool dialog_avaselector_c::animation(RID, GUIPARAM)
 {
-    DEFERRED_UNIQUE_CALL(0.13, DELEGATE(this,flashavarect), nullptr);
+    if (!videodevicesloaded)
+        ctlenable( CONSTASTR("startc"), false );
+
     ++tickvalue;
+    DEFERRED_UNIQUE_CALL(0.05, DELEGATE(this, animation), nullptr);
     getengine().redraw();
+
+    if (camera)
+    {
+        if (RID b = find(CONSTASTR("dialog_button_1")))
+        {
+            b.call_enable(false);
+            disabled_ok = true;
+        }
+    }
+
+
+    return true;
+}
+
+void dialog_avaselector_c::set_video_devices(vcd_list_t &&_video_devices)
+{
+    video_devices = std::move(_video_devices);
+    videodevicesloaded = true;
+    ctlenable( CONSTASTR("startc"), video_devices.size() > 0 );
+}
+
+void dialog_avaselector_c::start_capture_menu_sel(const ts::str_c& prm)
+{
+    ts::wstr_c id = from_utf8(prm);
+    for (const vcd_descriptor_s &vd : video_devices)
+    {
+        if (vd.id == id)
+        {
+            start_capture(vd);
+            return;
+        }
+    }
+}
+
+void dialog_avaselector_c::start_capture(const vcd_descriptor_s &desc)
+{
+    animated = false;
+    if (compressor)
+    {
+        compressor->dlg = nullptr; // say goodbye to current compressor
+        compressor = nullptr;
+    }
+
+    camera.reset( vcd_c::build(desc) );
+    getengine().redraw();
+
+    caminit = false;
+    update_info();
+}
+
+
+bool dialog_avaselector_c::start_capture_menu(RID, GUIPARAM)
+{
+    if (video_devices.size() == 1)
+    {
+        start_capture( video_devices.get(0) );
+        return true;
+    }
+
+    if (RID b = find(CONSTASTR("startc")))
+    {
+        ts::irect br = HOLD(b)().getprops().screenrect();
+        menu_c m;
+
+        for (const vcd_descriptor_s &vd : video_devices)
+        {
+            m.add(vd.desc, 0, DELEGATE(this, start_capture_menu_sel), to_utf8(vd.id));
+        }
+
+        gui_popup_menu_c::show(menu_anchor_s(br, menu_anchor_s::RELPOS_TYPE_2), m);
+    }
+
     return true;
 }
 
@@ -406,32 +489,59 @@ bool dialog_avaselector_c::paste_hotkey_handler(RID, GUIPARAM)
     return true;
 }
 
-bool dialog_avaselector_c::save_image(RID, GUIPARAM)
+bool dialog_avaselector_c::space_key(RID, GUIPARAM)
 {
-    bool savesmall = (GetAsyncKeyState(VK_CONTROL)  & 0x8000)==0x8000;
+    if (animated)
+    {
+        nextframe();
+        return true;
+    }
+    if (camera)
+    {
+        if (ts::drawable_bitmap_c *b = camera->lockbuf(nullptr))
+        {
+            animated = false;
+            bitmap.create_RGB(b->info().sz);
+            bitmap.copy( ts::ivec2(0), b->info().sz, b->extbody(), ts::ivec2(0) );
+            camera->unlock(b);
+            newimage();
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static auto save_buffer = []( rectengine_root_c *root, const ts::wsptr &deffn, const ts::blob_c &buf )
+{
     ts::wstr_c fromdir;
     if (prf().is_loaded())
         fromdir = prf().last_filedir();
     if (fromdir.is_empty())
         fromdir = ts::fn_get_path(ts::get_exe_full_name());
 
-    ts::wstr_c title(TTT("Save avatar to png-file",217));
+    ts::wstr_c title(TTT("Save avatar to png-file",213));
 
     ts::extension_s e[2];
     e[0].desc = CONSTWSTR("png");
     e[0].ext = e[0].desc;
     e[1].desc = CONSTWSTR("(*.*)");
     e[1].ext = CONSTWSTR("*.*");
-    ts::extensions_s exts(e,2);
+    ts::extensions_s exts(e, 2);
 
-    ts::wstr_c fn = getroot()->save_filename_dialog(fromdir, CONSTWSTR("avatar.png"), exts, title);
-    if (!fn.is_empty())
-    {
-        if (savesmall)
-            sync.lock_read()().encoded_fit_16kb.save_to_file(fn);
-        else
-            sync.lock_read()().encoded.save_to_file(fn);
-    }
+    ts::wstr_c fn = root->save_filename_dialog(fromdir, deffn, exts, title);
+    buf.save_to_file(fn);
+};
+
+bool dialog_avaselector_c::save_image1(RID, GUIPARAM)
+{
+    save_buffer(getroot(), CONSTWSTR("avatar.png"), encoded);
+    return true;
+}
+
+bool dialog_avaselector_c::save_image2(RID, GUIPARAM)
+{
+    save_buffer(getroot(), CONSTWSTR("avatar_compressed.png"), encoded_fit_16kb);
     return true;
 }
 
@@ -443,7 +553,9 @@ bool dialog_avaselector_c::open_image(RID, GUIPARAM)
     if (fromdir.is_empty())
         fromdir = ts::fn_get_path(ts::get_exe_full_name());
 
-    ts::wstr_c title( TTT("Image",213) );
+    ts::wstr_c title( TTT("Image",214) );
+
+    ts::extension_s extsarr[2];
 
     ts::wstr_c sprtfmts, sprtfmts2(CONSTWSTR("*."));
     ts::enum_supported_formats([&](const char *fmt) {sprtfmts.append(':', ts::to_wstr(fmt)); });
@@ -451,14 +563,17 @@ bool dialog_avaselector_c::open_image(RID, GUIPARAM)
     sprtfmts.replace_all(CONSTWSTR(":"), CONSTWSTR(", "));
     sprtfmts2.replace_all(CONSTWSTR(":"), CONSTWSTR(";*."));
 
+    extsarr[0].desc = TTT("Images",215);
+    extsarr[0].desc.append(CONSTWSTR(" (")).append(sprtfmts).append_char(')');
+    extsarr[0].ext = sprtfmts2;
 
-    ts::wstr_c filter( CONSTWSTR("<imgs> (<list1>)/<list2>/<all> (*.*)/*.*//") );
-    filter.replace_all(CONSTWSTR("<list1>"), sprtfmts);
-    filter.replace_all(CONSTWSTR("<list2>"), sprtfmts2);
-    filter.replace_all(CONSTWSTR("<imgs>"), TTT("Images",214));
-    filter.replace_all(CONSTWSTR("<all>"), TTT("Any files",215));
+    extsarr[1].desc = loc_text(loc_anyfiles);
+    extsarr[1].desc.append(CONSTWSTR(" (*.*)"));
+    extsarr[1].ext = CONSTWSTR("*.*");
 
-    ts::wstr_c fn = getroot()->load_filename_dialog(fromdir, CONSTWSTR(""), filter, L"png", title);
+    ts::extensions_s exts(extsarr, 2, 0);
+
+    ts::wstr_c fn = getroot()->load_filename_dialog(fromdir, CONSTWSTR(""), exts, title);
 
     if (!fn.is_empty())
     {
@@ -476,14 +591,34 @@ void dialog_avaselector_c::nextframe()
     recompress();
 }
 
+void dialog_avaselector_c::update_info()
+{
+    bool v = false;
+    ts::wstr_c t(CONSTWSTR("<p=c>"));
+    if (camera && !camera->still_initializing())
+        t.append(TTT("Press [i]space[/i] key to take image",216)), v = true, caminit = true;
+    else if (animated)
+        t.append(TTT("Press [i]space[/i] to go to the next frame",217)), v = true;
+
+    set_label_text(CONSTASTR("info"), t);
+
+    if (RID no = find(CONSTASTR("info")))
+        MODIFY(no).visible(v);
+
+    gui->repos_children( this );
+    dirty = true;
+}
+
 void dialog_avaselector_c::newimage()
 {
+    camera.reset();
+    update_info();
+
     user_offset = ts::ivec2(0);
     resize_k = 1.0f;
     dirty = true;
     avarect = ts::irect(0, bitmap.info().sz);
     rebuild_bitmap();
-    flashavarect(RID(), nullptr);
     recompress();
 
     if (image.info().sz > viewrect.size())
@@ -532,7 +667,7 @@ void dialog_avaselector_c::rebuild_bitmap()
 
 /*virtual*/ ts::wstr_c dialog_avaselector_c::get_name() const
 {
-    return TTT("[appname]: avatar image",210);
+    return TTT("[appname]: Avatar creation tool",218);
 }
 
 void dialog_avaselector_c::prepare_stuff()
@@ -542,12 +677,12 @@ void dialog_avaselector_c::prepare_stuff()
     int y0 = 120;
     ts::ivec2 sz1( getprops().size() - ts::ivec2(30) );
     if (RID b = find(CONSTASTR("last")))
-        y0 = HOLD(b)().getprops().pos().y;
+        y0 = HOLD(b)().getprops().pos().y + 2;
     if (RID b = find( CONSTASTR("dialog_button_1") ))
-        sz1 = HOLD(b)().getprops().pos();
+        sz1 = HOLD(b)().getprops().pos() - ts::ivec2(2,10);
 
     ts::irect ca = get_client_area();
-    viewrect = ts::irect( ca.lt.x + 10, y0 + 2, ca.rb.x - 10, sz1.y - 2 );
+    viewrect = ts::irect( ca.lt.x + 10, y0 + 2, ca.rb.x - 10, sz1.y );
 
     imgrect.lt = ts::ivec2(0);
     imgrect.rb = image.info().sz;
@@ -583,10 +718,10 @@ void dialog_avaselector_c::prepare_stuff()
 
 
     inforect.lt.x = ca.lt.x + 5;
-    inforect.lt.y = sz1.y;
+    inforect.lt.y = sz1.y + 2;
 
     inforect.rb.x = sz1.x;
-    inforect.rb.y = ca.rb.y;
+    inforect.rb.y = ca.rb.y - 2;
 
     clamp_user_offset();
 }
@@ -625,6 +760,9 @@ static void draw_chessboard(rectengine_c &e, const ts::irect & r, ts::TSCOLOR c1
 
 void dialog_avaselector_c::recompress()
 {
+    if (compressor)
+        compressor->dlg = nullptr; // say goodbye to current compressor
+
     if (nullptr == gui->mtrack(getrid(), MTT_APPDEFINED1))
     {
         if (avarect.width() < avarect.height())
@@ -640,18 +778,19 @@ void dialog_avaselector_c::recompress()
     ts::bitmap_c b;
     b.create_RGBA( avarect.size() );
     b.copy(ts::ivec2(0), b.info().sz, image.extbody(), avarect.lt );
-    auto w = sync.lock_write();
-    ++w().source_tag;
-    w().bitmap2encode = b; b.clear();
-    w().encoded.clear();
-    w().encoded_fit_16kb.clear();
+    compressor = TSNEW(compressor_s, this, b);
+    b.clear(); // ref count decreased // compressor now can safely work in other thread
 
-    if (RID b = find(CONSTASTR("dialog_button_1")))
+    encoded.clear();
+    encoded_fit_16kb.clear();
+
+    if (RID bok = find(CONSTASTR("dialog_button_1")))
     {
-        b.call_enable(false);
+        bok.call_enable(false);
         disabled_ok = true;
     }
 
+    g_app->add_task(compressor); // run compressor
 }
 
 void dialog_avaselector_c::clamp_user_offset()
@@ -740,18 +879,109 @@ void dialog_avaselector_c::do_scale(float sf)
     recompress();
 }
 
+void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
+{
+    removerctl(3);
+    removerctl(4);
+
+    pa.render();
+
+    if (cam)
+    {
+        ts::wstr_c ainfo;
+        if (cambusy) ainfo = loc_text(loc_camerabusy);
+        draw_initialization(&getengine(), pa.bmp, viewrect, col, ainfo );
+    } else
+    {
+        draw_data_s &dd = getengine().begin_draw();
+        text_draw_params_s tdp;
+        tdp.forecolor = &col;
+        ts::flags32_s f(ts::TO_END_ELLIPSIS | ts::TO_VCENTER);
+        tdp.textoptions = &f;
+        getengine().draw(inforect.lt + ts::ivec2(0, (inforect.height() - pa.bmp.info().sz.y) / 2), pa.bmp, ts::irect(0, pa.bmp.info().sz), true);
+        int paw = pa.bmp.info().sz.x + 2;
+        dd.offset = inforect.lt + ts::ivec2(paw, 0);
+        dd.size = inforect.size(); dd.size.x -= paw;
+        getengine().draw(TTT("Compressing...",219), tdp);
+        getengine().end_draw();
+    }
+
+}
 
 /*virtual*/ bool dialog_avaselector_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
     if (rid == getrid())
     {
+        bool camdraw = false;
+
         switch (qp)
         {
         case SQ_DRAW:
             __super::sq_evt(qp, rid, data);
             prepare_stuff();
-            if (image.info().sz > ts::ivec2(0))
+
+            selrectvisible = false;
+            allowdndinfo = true;
+
+            if (camera)
             {
+                allowdndinfo = false;
+                if (!camera->still_initializing())
+                {
+                    if (!caminit)
+                        update_info();
+
+                    ts::ivec2 sz = viewrect.size();
+                    ts::ivec2 shadow_size(0);
+                    if (shadow)
+                    {
+                        shadow_size = ts::ivec2(shadow->clborder_x(), shadow->clborder_y());
+                        sz -= shadow_size;
+                    }
+
+                    sz = camera->fit_to_size(sz);
+                    if (ts::drawable_bitmap_c *b = camera->lockbuf(nullptr))
+                    {
+                        if (sz == b->info().sz)
+                        {
+                            getengine().begin_draw();
+
+                            ts::ivec2 vsz = viewrect.size();
+                            ts::ivec2 pos = (vsz - sz) / 2;
+
+                            getengine().draw(pos + viewrect.lt, *b, ts::irect(0, sz), false);
+
+                            if (shadow)
+                            {
+                                evt_data_s d;
+                                d.draw_thr.rect.get().lt = pos + viewrect.lt - shadow_size/2;
+                                d.draw_thr.rect.get().rb = d.draw_thr.rect.get().lt + sz + shadow_size;
+                                getengine().draw(*shadow, DTHRO_BORDER_RECT, &d);
+                            }
+
+                            getengine().end_draw();
+                            camdraw = true;
+                            allowdndinfo = false;
+
+                        }
+
+                        camera->unlock(b);
+                    }
+                }
+                if (!camdraw)
+                {
+                    ts::TSCOLOR info_c = ts::ARGB(0, 0, 0);
+                    if (const theme_rect_s *tr = themerect())
+                        info_c = tr->color(3);
+                    draw_process(info_c, true, camera->is_busy());
+                    allowdndinfo = false;
+                }
+            }
+            
+            if (camera == nullptr && (image.info().sz > ts::ivec2(0)))
+            {
+                allowdndinfo = false;
+
                 ts::TSCOLOR border_c = ts::ARGB(0,0,0);
                 ts::TSCOLOR info_c = ts::ARGB(0,0,0);
                 if (const theme_rect_s *tr = themerect())
@@ -766,69 +996,144 @@ void dialog_avaselector_c::do_scale(float sf)
                 {
                     draw_data_s &dd = getengine().begin_draw();
                     dd.cliprect = viewrect;
-
-                    //int drawe = 0;
-                    //if (out.lt.y <= 0) drawe |= AREA_TOP;
-                    //if (out.rb.y <= 0) drawe |= AREA_BOTTOM;
-                    //if (out.lt.x <= 0) drawe |= AREA_LEFT;
-                    //if (out.rb.x <= 0) drawe |= AREA_RITE;
-
-                    //draw_border(getengine(), ts::irect(offset - 1, offset + imgrect.size() + 1), drawe, border_c);
                     getengine().draw(offset, image, imgrect, alpha);
+                    ts::ivec2 o = offset - imgrect.lt;
 
-                    fd.draw(getengine(), avarect + offset - imgrect.lt, tickvalue);
-                    getengine().end_draw();
-                }
+                    fd.draw(getengine(), avarect + o, tickvalue);
 
-                //draw_border(getengine(), viewrect, -1);
-
-                ts::wstr_c infostr(ts::roundstr<ts::wstr_c, float>(resize_k * 100.0f, 1));
-                infostr.append(CONSTWSTR("%, "));
-                infostr.append_as_uint( avarect.width() );
-                infostr.append(CONSTWSTR(" x "));
-                infostr.append_as_uint( avarect.height() );
-                int sz = sync.lock_read()().encoded.size();
-                if (sz > 0 || prevsize > 0)
-                {
-                    ts::wsptr working[] = {CONSTWSTR("."), CONSTWSTR(" ."), CONSTWSTR("  ."), CONSTWSTR(" .")};
-                    ts::wstr_c n; n.set_as_uint( sz ? sz : prevsize );
-                    for(int ix = n.get_length() - 3; ix > 0; ix -= 3)
-                        n.insert(ix, '`');
-                    if (sz == 0) n.insert(0, CONSTWSTR("<s>")).append(CONSTWSTR("</s>"));
-                    infostr.append(CONSTWSTR(" ("));
-                    infostr.append( TTT("size: $ bytes",218) / n );
-                    infostr.append(CONSTWSTR(") "));
-                    if (sz == 0) { infostr.append(working[tickvalue & 3]); removerctl(1); }
-                    else if (sync.lock_read()().encoded_fit_16kb.size())
+                    if (avarect.lt.x > 0)
                     {
-                        infostr.append(savebtn);
-                        if (disabled_ok)
+                        // draw dark at left
+                        getengine().draw( ts::irect( o.x, o.y + avarect.lt.y, o.x + avarect.lt.x, o.y + avarect.rb.y ), ts::ARGB(0,0,50,50) );
+                    }
+                    int rw = image.info().sz.x - avarect.rb.x - 1;
+                    if ( rw > 0 )
+                    {
+                        // draw dark at rite
+                        getengine().draw( ts::irect( o.x + avarect.rb.x + 1, o.y + avarect.lt.y, o.x + image.info().sz.x, o.y + avarect.rb.y ), ts::ARGB(0,0,50,50) );
+                    }
+                    if (avarect.lt.y > 0)
+                    {
+                        // draw dark at top
+                        getengine().draw( ts::irect( o.x, o.y, o.x + image.info().sz.x, o.y + avarect.lt.y ), ts::ARGB(0,0,50,50) );
+                    }
+                    int rh = image.info().sz.y - avarect.rb.y - 1;
+                    if (rh > 0)
+                    {
+                        // draw dark at bottom
+                        getengine().draw(ts::irect(o.x, o.y + avarect.rb.y, o.x + image.info().sz.x, o.y + image.info().sz.y), ts::ARGB(0, 0, 50, 50));
+                    }
+
+
+                    getengine().end_draw();
+                    selrectvisible = true;
+                }
+                
+                if (compressor)
+                {
+                    draw_process( info_c, false, false );
+
+                } else
+                {
+                    ts::wstr_c infostr(ts::roundstr<ts::wstr_c, float>(resize_k * 100.0f, 1));
+                    infostr.append(CONSTWSTR("%, "));
+                    infostr.append_as_uint(avarect.width());
+                    infostr.append(CONSTWSTR(" x "));
+                    infostr.append_as_uint(avarect.height());
+                    int sz = encoded.size();
+                    if (sz > 0 || prevsize > 0)
+                    {
+                        auto add_size_str = [](ts::wstr_c &s, int sz)
                         {
-                            if (RID b = find(CONSTASTR("dialog_button_1")))
-                                b.call_enable(true);
-                            disabled_ok = false;
+                            ts::wstr_c n; n.set_as_uint(sz);
+                            for (int ix = n.get_length() - 3; ix > 0; ix -= 3)
+                                n.insert(ix, '`');
+
+                            s.append(CONSTWSTR(" ("));
+                            s.append(TTT("size: $ bytes",220) / n);
+                            s.append(CONSTWSTR(") "));
+                        };
+
+                        add_size_str(infostr, sz ? sz : prevsize);
+
+                        if (encoded_fit_16kb.size())
+                        {
+                            infostr.append(savebtn1);
+                            if (disabled_ok)
+                            {
+                                if (RID b = find(CONSTASTR("dialog_button_1")))
+                                    b.call_enable(true);
+                                disabled_ok = false;
+                            }
+                            ts::wstr_c szs;
+                            szs.append_as_uint(encoded_fit_16kb_size.x);
+                            szs.append(CONSTWSTR(" x "));
+                            szs.append_as_uint(encoded_fit_16kb_size.y);
+                            add_size_str(szs, encoded_fit_16kb.size());
+
+                            infostr.append(CONSTWSTR("<br>")).append(TTT("Compressed: $",221) / szs);
+                            infostr.append(savebtn2);
                         }
                     }
-                }
-                if (sz > 0) prevsize = sz;
+                    if (sz > 0) prevsize = sz;
 
-                draw_data_s &dd = getengine().begin_draw();
-                dd.offset = inforect.lt;
-                dd.size = inforect.size();
-                text_draw_params_s tdp;
-                tdp.rectupdate = getrectupdate();
-                tdp.forecolor = &info_c;
-                ts::flags32_s f( ts::TO_END_ELLIPSIS | ts::TO_VCENTER );
-                tdp.textoptions = &f;
-                getengine().draw(infostr,tdp);
-                getengine().end_draw();
+                    draw_data_s &dd = getengine().begin_draw();
+                    dd.offset = inforect.lt;
+                    dd.size = inforect.size();
+                    text_draw_params_s tdp;
+                    tdp.rectupdate = getrectupdate();
+                    tdp.forecolor = &info_c;
+                    ts::flags32_s f(ts::TO_END_ELLIPSIS | ts::TO_VCENTER);
+                    tdp.textoptions = &f;
+                    getengine().draw(infostr, tdp);
+                    getengine().end_draw();
+
+                }
             }
+
+            if (allowdndinfo)
+            {
+                // empty
+
+                draw_data_s&dd = getengine().begin_draw();
+
+                ts::wstr_c t(CONSTWSTR("<l>"),  TTT("Drop [i]image[/i] here",222)); t.append(CONSTWSTR("</l>"));
+                ts::ivec2 tsz = gui->textsize(ts::g_default_text_font, t);
+                ts::ivec2 tpos = (viewrect.size() - tsz) / 2;
+
+
+                if (const theme_image_s *img = gui->theme().get_image(CONSTASTR("avdroptarget")))
+                {
+                    ts::ivec2 imgpos(viewrect.lt + (viewrect.size() - img->info().sz) / 2);
+                    imgpos.y -= tsz.y / 2 + 2;
+                    img->draw(getengine(), imgpos);
+                    tpos.y += img->info().sz.y/2 + 1;
+                }
+
+
+                ts::TSCOLOR info_c = ts::ARGB(0, 0, 0);
+                if (const theme_rect_s *tr = themerect())
+                    info_c = tr->color(3);
+
+
+                text_draw_params_s tdp;
+                tdp.forecolor = &info_c;
+
+                dd.offset += tpos + viewrect.lt;
+                dd.size = tsz;
+
+                getengine().draw(t, tdp);
+
+                getengine().end_draw();
+
+            }
+
             return true;
         case SQ_DETECT_AREA:
             if (nullptr == gui->mtrack(getrid(), MTT_APPDEFINED1))
             {
                 area = 0;
-                if (data.detectarea.area == 0)
+                if (data.detectarea.area == 0 && selrectvisible)
                 {
                     ts::ivec2 mp = data.detectarea.pos() - offset + imgrect.lt;
                     if (ts::tabs(mp.x - avarect.lt.x) < 4) data.detectarea.area |= AREA_LEFT;
@@ -843,7 +1148,7 @@ void dialog_avaselector_c::do_scale(float sf)
             }
             break;
         case SQ_MOUSE_RDOWN:
-            if (viewrect.inside(to_local(data.mouse.screenpos)) && (bitmap.info().sz >> 0))
+            if (camera == nullptr && viewrect.inside(to_local(data.mouse.screenpos)) && (bitmap.info().sz >> 0))
             {
                 mousetrack_data_s &opd = gui->begin_mousetrack(getrid(), MTT_MOVECONTENT);
                 opd.mpos = user_offset - data.mouse.screenpos();
@@ -851,19 +1156,21 @@ void dialog_avaselector_c::do_scale(float sf)
             }
             break;
         case SQ_MOUSE_WHEELUP:
+            if (camera == nullptr)
             {
                 statrt_scale();
                 do_scale(1.0f / 0.9f);
             }
             break;
         case SQ_MOUSE_WHEELDOWN:
+            if (camera == nullptr)
             {
                 statrt_scale();
                 do_scale(0.9f);
             }
             break;
         case SQ_MOUSE_MDOWN:
-            if (viewrect.inside(to_local(data.mouse.screenpos)) && (bitmap.info().sz >> 0))
+            if (camera == nullptr && viewrect.inside(to_local(data.mouse.screenpos)) && (bitmap.info().sz >> 0))
             {
                 mousetrack_data_s &opd = gui->begin_mousetrack(getrid(), MTT_SCALECONTENT);
                 opd.mpos.y = data.mouse.screenpos().y;
@@ -872,21 +1179,25 @@ void dialog_avaselector_c::do_scale(float sf)
             }
             break;
         case SQ_MOUSE_LDOWN:
-            if (area)
+            if (camera == nullptr)
             {
-                mousetrack_data_s &opd = gui->begin_mousetrack(getrid(), MTT_APPDEFINED1);
-                opd.area = area;
-                opd.mpos = data.mouse.screenpos();
-                opd.rect = avarect;
-                return true;
-            } else if ((avarect + offset - imgrect.lt).inside(to_local(data.mouse.screenpos)) && (bitmap.info().sz >> 0))
-            {
-                mousetrack_data_s &opd = gui->begin_mousetrack(getrid(), MTT_APPDEFINED2);
-                opd.mpos = data.mouse.screenpos();
-                storeavarect = avarect;
-                return true;
-            }
+                if (area)
+                {
+                    mousetrack_data_s &opd = gui->begin_mousetrack(getrid(), MTT_APPDEFINED1);
+                    opd.area = area;
+                    opd.mpos = data.mouse.screenpos();
+                    opd.rect = avarect;
+                    return true;
+                }
+                else if ((avarect + offset - imgrect.lt).inside(to_local(data.mouse.screenpos)) && (bitmap.info().sz >> 0))
+                {
+                    mousetrack_data_s &opd = gui->begin_mousetrack(getrid(), MTT_APPDEFINED2);
+                    opd.mpos = data.mouse.screenpos();
+                    storeavarect = avarect;
+                    return true;
+                }
 
+            }
             break;
         case SQ_MOUSE_MUP:
             gui->end_mousetrack(getrid(), MTT_SCALECONTENT);
@@ -922,12 +1233,37 @@ void dialog_avaselector_c::do_scale(float sf)
                     avarect.lt.x = opd->rect.lt.x + data.mouse.screenpos().x - opd->mpos.x;
                     if (avarect.lt.x < 0) avarect.lt.x = 0;
                     if (avarect.width() < 16) avarect.lt.x = avarect.rb.x - 16;
+                    avarect.setheight( avarect.width() );
+                    if (avarect.rb.y > image.info().sz.y)
+                    {
+                        avarect.lt.y -= avarect.rb.y - image.info().sz.y;
+                        avarect.rb.y = image.info().sz.y;
+                    }
+                    if (avarect.lt.y < 0)
+                    {
+                        avarect.lt.x -= avarect.lt.y;
+                        avarect.lt.y = 0;
+                    }
+                    ASSERT( avarect.width() == avarect.height() );
                 }
                 else if(0 != (opd->area & AREA_RITE))
                 {
                     avarect.rb.x = opd->rect.rb.x + data.mouse.screenpos().x - opd->mpos.x;
                     if (avarect.rb.x > image.info().sz.x) avarect.rb.x = image.info().sz.x;
                     if (avarect.width() < 16) avarect.rb.x = avarect.lt.x + 16;
+                    
+                    avarect.setheight(avarect.width());
+                    if (avarect.rb.y > image.info().sz.y)
+                    {
+                        avarect.lt.y -= avarect.rb.y - image.info().sz.y;
+                        avarect.rb.y = image.info().sz.y;
+                    }
+                    if (avarect.lt.y < 0)
+                    {
+                        avarect.rb.x += avarect.lt.y;
+                        avarect.lt.y = 0;
+                    }
+                    ASSERT(avarect.width() == avarect.height());
                 }
 
                 if (0 != (opd->area & AREA_TOP))
@@ -935,12 +1271,41 @@ void dialog_avaselector_c::do_scale(float sf)
                     avarect.lt.y = opd->rect.lt.y + data.mouse.screenpos().y - opd->mpos.y;
                     if (avarect.lt.y < 0) avarect.lt.y = 0;
                     if (avarect.height() < 16) avarect.lt.y = avarect.rb.y - 16;
+
+                    avarect.setwidth(avarect.height());
+                    if (avarect.rb.x > image.info().sz.x)
+                    {
+                        avarect.lt.x -= avarect.rb.x - image.info().sz.x;
+                        avarect.rb.x = image.info().sz.x;
+                    }
+                    if (avarect.lt.x < 0)
+                    {
+                        avarect.lt.y -= avarect.lt.x;
+                        avarect.lt.x = 0;
+                    }
+                    ASSERT(avarect.width() == avarect.height());
+
+
                 }
                 else if (0 != (opd->area & AREA_BOTTOM))
                 {
                     avarect.rb.y = opd->rect.rb.y + data.mouse.screenpos().y - opd->mpos.y;
                     if (avarect.rb.y > image.info().sz.y) avarect.rb.y = image.info().sz.y;
                     if (avarect.height() < 16) avarect.rb.y = avarect.lt.y + 16;
+
+                    avarect.setwidth(avarect.height());
+                    if (avarect.rb.x > image.info().sz.x)
+                    {
+                        avarect.lt.x -= avarect.rb.x - image.info().sz.x;
+                        avarect.rb.x = image.info().sz.x;
+                    }
+                    if (avarect.lt.x < 0)
+                    {
+                        avarect.rb.y += avarect.lt.x;
+                        avarect.lt.x = 0;
+                    }
+                    ASSERT(avarect.width() == avarect.height());
+
                 }
                 recompress();
                 getengine().redraw();
@@ -976,10 +1341,6 @@ void dialog_avaselector_c::do_scale(float sf)
         case SQ_RECT_CHANGED:
             dirty = true;
             break;
-        case SQ_KEYDOWN:
-            if (animated)
-                nextframe();
-            break;
         }
 
     }
@@ -990,8 +1351,7 @@ void dialog_avaselector_c::do_scale(float sf)
 {
     if (!prf().is_loaded() || image.info().sz == ts::ivec2(0)) return;
 
-    ts::blob_c ava;
-    ava.append_buf( sync.lock_read()().encoded_fit_16kb );
+    ts::blob_c ava = encoded_fit_16kb;
 
     if (0 == protoid)
     {

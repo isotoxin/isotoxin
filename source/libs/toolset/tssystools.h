@@ -20,6 +20,8 @@ int     TSCALL monitor_count();
 irect   TSCALL monitor_get_max_size_fs(int monitor);
 irect   TSCALL monitor_get_max_size(int monitor);
 
+wstr_c  TSCALL monitor_get_description(int monitor);
+
 ivec2 TSCALL center_pos_by_window(HWND hwnd);
 
 wstr_c TSCALL get_clipboard_text();

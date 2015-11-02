@@ -118,7 +118,10 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
         MASK_APPLICATION_COMMON     = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_APPLICATION_SETSOUND   = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_APPLICATION_SOUNDS     = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_APPLICATION_VIDEO      = SETBIT( NUMGEN_NEXT(ctlm) ),
     };
+
+    ts::shared_ptr<theme_rect_s> shadow;
 
     struct value_watch_s
     {
@@ -234,6 +237,7 @@ private:
 
     void add_active_proto( RID lst, int id, const active_protocol_data_s &apdata );
 
+    bool is_video_tab_selected = false;
     bool is_networks_tab_selected = false;
     bool proto_list_loaded = false;
 
@@ -375,8 +379,8 @@ private:
 
     static BOOL __stdcall enum_capture_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule, void *lpContext);
     void enum_capture_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule);
-    void select_capture_device( const ts::str_c& prm );
-    menu_c list_capture_devices();
+    void select_audio_capture_device( const ts::str_c& prm );
+    menu_c list_audio_capture_devices();
 
     static BOOL __stdcall enum_play_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule, void *lpContext);
     void enum_play_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule);
@@ -385,6 +389,17 @@ private:
 
     void select_talk_device(const ts::str_c& prm);
     void select_signal_device(const ts::str_c& prm);
+
+
+    bool drawcamerapanel(RID, GUIPARAM);
+    void setup_video_device();
+    void select_video_capture_device( const ts::str_c& prm );
+    menu_c list_video_capture_devices();
+    vcd_list_t video_devices;
+
+    ts::wstrmap_c camera;
+    UNIQUE_PTR( vcd_c ) video_device;
+    process_animation_bitmap_s initializing_animation;
 
     void mod();
     void networks_tab_selected();
@@ -404,5 +419,7 @@ public:
     /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(830, 520); }
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
+
+    void set_video_devices( vcd_list_t &&video_devices );
 };
 

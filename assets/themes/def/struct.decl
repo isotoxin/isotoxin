@@ -452,6 +452,21 @@ rects
     }
   }
 
+  shadow
+  {
+    src=back.png
+    byrect=2,417,112,476
+    rt=103,417,112,435
+    r=103,435,112,467
+    t=20,417,103,426
+    b=20,467,103,476
+    lb=2,467,20,476
+    lt=2,417,20,435
+    l=2,435,11,467
+    clientborder=9,9,9,9
+  }
+
+
   button.normal
   {
     src=back.png
@@ -639,6 +654,23 @@ images
   {
     src=back.png,288,270,308,290
   }
+  avopen
+  {
+    src=back.png,302,76,342,108
+  }
+  avcapture
+  {
+    src=back.png,348,75,388,107
+  }
+  avpaste
+  {
+    src=back.png,390,76,430,110
+  }
+  avdroptarget
+  {
+    src=back.png,437,61,499,123
+  }
+
 }
 
 buttons
@@ -1159,6 +1191,73 @@ buttons
       shadow-radius-in=10
       k-press=0.95
       image=plus
+    }
+  }
+
+  avopen
+  {
+    gen 
+    { 
+      shape=circle
+      color=#30a6a3
+      border=0
+      border-color=#000000
+      border-add-size=-1
+      border-width=2
+      radius=26
+      shadow=1
+      shadow-shift=4,4
+      shadow-shift-press=2,2
+      shadow-color-out=#00000005
+      shadow-color-in=#000000ff
+      shadow-radius-out=26
+      shadow-radius-in=20
+      k-press=0.95
+      image=avopen
+    }
+  }
+  avpaste
+  {
+    gen 
+    { 
+      shape=circle
+      color=#30a6a3
+      border=0
+      border-color=#000000
+      border-add-size=-1
+      border-width=2
+      radius=26
+      shadow=1
+      shadow-shift=4,4
+      shadow-shift-press=2,2
+      shadow-color-out=#00000005
+      shadow-color-in=#000000ff
+      shadow-radius-out=26
+      shadow-radius-in=20
+      k-press=0.95
+      image=avpaste
+    }
+  }
+  avcapture
+  {
+    gen 
+    { 
+      shape=circle
+      color=#30a6a3
+      border=0
+      border-color=#000000
+      border-add-size=-1
+      border-width=2
+      radius=26
+      shadow=1
+      shadow-shift=4,4
+      shadow-shift-press=2,2
+      shadow-color-out=#00000005
+      shadow-color-in=#000000ff
+      shadow-radius-out=26
+      shadow-radius-in=20
+      k-press=0.95
+      image=avcapture
     }
   }
 

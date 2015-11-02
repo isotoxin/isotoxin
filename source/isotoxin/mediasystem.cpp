@@ -169,9 +169,9 @@ void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int
             protected_data_s &pd;
             s(protected_data_s &pd):pd(pd) {}
             void operator=(const s&) UNUSED;
-            void adddata(const s3::Format& fmt, const void *data, int size)
+            void adddata(const s3::Format& fmt, const void *d, int s)
             {
-                if (size) pd.add_data(data, size);
+                if (s) pd.add_data(d, s);
             }
 
         } ss(w());
@@ -465,7 +465,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
         {
             ts::int16 *sample16 = ((ts::int16 *)idata) + (i * ichnls);
             int sum = 0;
-            for (int i = 0; i < ichnls; ++i, ++sample16)
+            for (int c = 0; c < ichnls; ++c, ++sample16)
                 sum += *sample16;
             sum /= ichnls;
 
@@ -788,7 +788,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
         for (int i = 0; i < samples; ++i)
         {
             ts::int16 sample16 = ((ts::int16 *)idata)[i];
-            for (int i = 0; i < ofmt.channels; ++i, ++cvt)
+            for (int c = 0; c < ofmt.channels; ++c, ++cvt)
                 if (CHECK_INSIDE(cvt, 2))
                     *cvt = sample16;
         }

@@ -308,7 +308,7 @@ template<> struct gmsg<ISOGM_SUMMON_POST> : public gmsgbase
 
     bool replace_post = false;
     bool found_item = false;
-    bool filling = false; // true - insert new post at begin
+    bool down = true; // false - insert new post at begin
 
     void operator =(gmsg &) UNUSED;
 };
@@ -373,11 +373,16 @@ enum loctext_e
     loc_nonetwork,
     loc_disk_write_error,
     loc_import_from_file,
+    loc_loading,
+    loc_anyfiles,
+    loc_camerabusy,
 };
 
 ts::wstr_c loc_text(loctext_e);
 
 ts::wstr_c text_typing(const ts::wstr_c &prev, ts::wstr_c &workbuf, const ts::wsptr &preffix);
+
+void draw_initialization( rectengine_c *e, ts::drawable_bitmap_c &pab, const ts::irect&viewrect, ts::TSCOLOR tcol, const ts::wsptr &additiontext );
 
 void add_status_items(menu_c &m);
 

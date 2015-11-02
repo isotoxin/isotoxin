@@ -587,7 +587,7 @@ void tcp_pipe::rcv_all()
 
 
 
-void protect_raw_id( byte *raw_pub_id )
+static void protect_raw_id( byte *raw_pub_id )
 {
     for (int i = PUB_ID_INDEP_SIZE; i < SIZE_PUBID; ++i)
         raw_pub_id[i] = (byte)i;
@@ -595,13 +595,13 @@ void protect_raw_id( byte *raw_pub_id )
     byte hash[crypto_shorthash_BYTES];
     static_assert(crypto_shorthash_KEYBYTES <= PUB_ID_INDEP_SIZE, "pub id too short");
     crypto_shorthash(hash, raw_pub_id, PUB_ID_INDEP_SIZE, raw_pub_id + SIZE_PUBID - crypto_shorthash_KEYBYTES);
-    memcpy(raw_pub_id + PUB_ID_INDEP_SIZE, hash, PUB_ID_CHECKSUM_SIZE);
+    memcpy(raw_pub_id + PUB_ID_INDEP_SIZE, hash, PUB_ID_CHECKSUM_SIZE); //-V512
 }
 
-bool check_pubid_valid(const byte *raw_pub_id_i)
+static bool check_pubid_valid(const byte *raw_pub_id_i)
 {
     byte raw_pub_id[SIZE_PUBID];
-    memcpy(raw_pub_id,raw_pub_id_i, PUB_ID_INDEP_SIZE);
+    memcpy(raw_pub_id,raw_pub_id_i, PUB_ID_INDEP_SIZE); //-V512
     protect_raw_id(raw_pub_id);
     return 0 == memcmp(raw_pub_id+PUB_ID_INDEP_SIZE, raw_pub_id_i+PUB_ID_INDEP_SIZE,PUB_ID_CHECKSUM_SIZE);
 }
@@ -2746,7 +2746,7 @@ lan_engine::file_transfer_s *lan_engine::find_ftr(u64 utag)
 void lan_engine::file_control(u64 utag, file_control_e ctl)
 {
     if(file_transfer_s *f = find_ftr(utag))
-        switch (ctl)
+        switch (ctl) //-V719
         {
             case FIC_ACCEPT:
                 f->accepted(0);

@@ -283,5 +283,8 @@
     <CustomBuild Include="asm\asharpen.asm">
       <Filter>src\internal\asm</Filter>
     </CustomBuild>
+    <CustomBuild Include="asm\shrink2x.asm">
+      <Filter>src\internal\asm</Filter>
+    </CustomBuild>
   </ItemGroup>
 </Project>

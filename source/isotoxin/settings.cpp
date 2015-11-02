@@ -6,6 +6,8 @@
 
 #define TEST_RECORD_LEN 5000
 
+#define PREVIEW_HEIGHT 310
+
 static menu_c list_proxy_types(int cur, MENUHANDLER mh, int av = -1)
 {
     menu_c m;
@@ -33,14 +35,45 @@ static bool __kbd_chop(RID, GUIPARAM)
     return true;
 }
 
+namespace
+{
+    struct enum_video_devices_s : public ts::task_c
+    {
+        vcd_list_t video_devices;
+        ts::safe_ptr<dialog_settings_c> dlg;
+        
+        enum_video_devices_s( dialog_settings_c *dlg ):dlg(dlg) {}
+
+        /*virtual*/ int iterate(int pass) override
+        {
+            enum_video_capture_devices(video_devices, true);
+            return R_DONE;
+        }
+        /*virtual*/ void done(bool canceled) override
+        {
+            if (!canceled && dlg)
+                dlg->set_video_devices( std::move(video_devices) );
+
+            __super::done(canceled);
+        }
+
+    };
+}
+
+
 dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c(data), mic_test_rec_stop(ts::Time::undefined()), mic_level_refresh(ts::Time::past())
 {
+    shadow = gui->theme().get_rect(CONSTASTR("shadow"));
+
     gui->register_kbd_callback( __kbd_chop, HOTKEY_TOGGLE_SEARCH_BAR );
 
     s3::enum_sound_capture_devices(enum_capture_devices, this);
     s3::enum_sound_play_devices(enum_play_devices, this);
     media.init();
     s3::get_capture_device(&mic_device_stored);
+
+    g_app->add_task( TSNEW( enum_video_devices_s, this ) );
+
     profile_selected = prf().is_loaded();
 
     fontsz = 1000;
@@ -105,7 +138,7 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
             m.add(fn,0,nullptr /* no handler provided here - used onclick selector handler */, ts::to_utf8( ffn ));
         else if (ffn.ends_ignore_case(CONSTWSTR(".decl")))
         {
-            ts::wstr_c path = ts::fn_get_path(CONSTWSTR("/")+ffn); path.trim_left('/');
+            path = ts::fn_get_path(CONSTWSTR("/")+ffn); path.trim_left('/');
             ffn = ts::fn_join(ts::pwstr_c(CONSTWSTR("sounds")), ffn);
             sound_preset_s &spr = presets.add();
             spr.path = path;
@@ -129,6 +162,7 @@ dialog_settings_c::~dialog_settings_c()
         gui->delete_event(DELEGATE(this, fileconfirm_handler));
         gui->delete_event(DELEGATE(this, msgopts_handler));
         gui->delete_event(DELEGATE(this, delete_used_network));
+        gui->delete_event(DELEGATE(this, drawcamerapanel));
 
         gui->unregister_kbd_callback( __kbd_chop );
     }
@@ -483,7 +517,7 @@ void dialog_settings_c::mod()
 
 #define PREPARE(var, inits) var = inits; watch(var)
 
-/*virtual*/ int dialog_settings_c::additions( ts::irect & border )
+/*virtual*/ int dialog_settings_c::additions( ts::irect & edges )
 {
     PREPARE( force_change, 0 );
 
@@ -561,6 +595,14 @@ void dialog_settings_c::mod()
     PREPARE( talkdevice, cfg().device_talk() );
     PREPARE( signaldevice, cfg().device_signal() );
     PREPARE( micdevice, string_from_device(mic_device_stored) );
+    auto getcam = []()->ts::wstrmap_c
+    {
+        ts::wstrmap_c c( cfg().device_camera() );
+        if ( nullptr == c.find(CONSTWSTR("id")) )
+            c.set( CONSTWSTR("id") ) = CONSTWSTR("desktop");
+        return c;
+    };
+    PREPARE( camera, std::move(getcam()) );
 
     PREPARE( cvtmic.volume, cfg().vol_mic() );
     PREPARE( talk_vol, cfg().vol_talk() );
@@ -591,7 +633,8 @@ void dialog_settings_c::mod()
         .add(TTT("General",106), 0, TABSELMI(MASK_APPLICATION_COMMON))
         .add(TTT("System",35), 0, TABSELMI(MASK_APPLICATION_SYSTEM))
         .add(TTT("Audio",125), 0, TABSELMI(MASK_APPLICATION_SETSOUND))
-        .add(TTT("Sounds",293), 0, TABSELMI(MASK_APPLICATION_SOUNDS));
+        .add(TTT("Sounds",293), 0, TABSELMI(MASK_APPLICATION_SOUNDS))
+        .add(TTT("Video",347), 0, TABSELMI(MASK_APPLICATION_VIDEO));
 
     descmaker dm( descs );
     dm << MASK_APPLICATION_COMMON; //_________________________________________________________________________________________________//
@@ -644,7 +687,7 @@ void dialog_settings_c::mod()
     dm().page_header(TTT("Audio settings",127));
     dm().vspace(10);
     dm().hgroup(TTT("Microphone",126));
-    dm().combik(HGROUP_MEMBER).setmenu( list_capture_devices() ).setname( CONSTASTR("mic") );
+    dm().combik(HGROUP_MEMBER).setmenu( list_audio_capture_devices() ).setname( CONSTASTR("mic") );
     dm().button(HGROUP_MEMBER, CONSTWSTR("face=rec"), DELEGATE(this, test_mic) ).sethint(TTT("Record test 5 seconds",280)).setname( CONSTASTR("micrecb") );
     dm().vspace();
     dm().hslider(ts::wsptr(), cvtmic.volume, CONSTWSTR("0/0/0.5/1/1/5"), DELEGATE(this, micvolset)).setname(CONSTASTR("micvol")).setmenu(
@@ -705,6 +748,13 @@ void dialog_settings_c::mod()
         dm().hslider(ts::wstr_c(), sndvol[sndi], CONSTWSTR("0/0/1/1"), DELEGATE(this, sndvolhandler)).setname(CONSTASTR("sndvl") + isnd).width(www).height(slh).subctl(textrectid++, sndvolctl[sndi]);
     }
 
+    dm << MASK_APPLICATION_VIDEO; //______________________________________________________________________________________________//
+    dm().page_header(TTT("Video settings",348));
+    dm().vspace(10);
+    dm().combik(TTT("Default video source",349)).setmenu(list_video_capture_devices()).setname(CONSTASTR("camera"));
+    dm().vspace();
+    dm().panel(PREVIEW_HEIGHT, DELEGATE(this, drawcamerapanel)).setname(CONSTASTR("preview"));
+
     if (profile_selected)
     {
         dm << MASK_PROFILE_COMMON; //____________________________________________________________________________________________________//
@@ -715,7 +765,7 @@ void dialog_settings_c::mod()
         dm().textfield(TTT("Status",68), from_utf8(userstatusmsg), DELEGATE(this, statusmsg_edit_handler)).setname(CONSTASTR("ustatus"));
         dm().vspace();
         dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_COMMON1, handler), bgroups[BGROUP_COMMON1].current).setmenu(
-                menu_c().add(TTT("Show search bar ($)",276) / CONSTWSTR("Ctrl+F"), 0, MENUHANDLER(), CONSTASTR("1"))
+                menu_c().add(TTT("Show search bar ($)",341) / CONSTWSTR("Ctrl+F"), 0, MENUHANDLER(), CONSTASTR("1"))
                         .add(TTT("Protocol icons as contact state indicator",296), 0, MENUHANDLER(), CONSTASTR("2"))
                         .add(TTT("Show [i]join network[/i] button ($)",344)/ CONSTWSTR("Ctrl+N"), 0, MENUHANDLER(), CONSTASTR("4"))
             );
@@ -780,7 +830,7 @@ void dialog_settings_c::mod()
         dm().checkb(TTT("Typing notification",272), DELEGATE(bgroups+BGROUP_TYPING, handler), bgroups[BGROUP_TYPING].current).setmenu(
             menu_c().add(TTT("Send typing notification",273), 0, MENUHANDLER(), CONSTASTR("1"))
                     .add(TTT("Show typing notifications in contacts list",274), 0, MENUHANDLER(), CONSTASTR("2"))
-                    .add(TTT("Show typing notifications in messages",347), 0, MENUHANDLER(), CONSTASTR("4"))
+                    .add(TTT("Show typing notifications in messages",275), 0, MENUHANDLER(), CONSTASTR("4"))
             );
 
         dm << MASK_PROFILE_GCHAT; //____________________________________________________________________________________________________//
@@ -798,7 +848,7 @@ void dialog_settings_c::mod()
         dm().vspace(10);
 
         dm().checkb(ts::wstr_c(), DELEGATE(this, histopts_handler), bgroups[BGROUP_HISTORY].current).setmenu(
-            menu_c().add(TTT("Keep message history", 222), 0, MENUHANDLER(), CONSTASTR("1"))
+            menu_c().add(TTT("Keep message history", 232), 0, MENUHANDLER(), CONSTASTR("1"))
             );
 
         ctl.clear();
@@ -840,7 +890,7 @@ void dialog_settings_c::mod()
 
     gui_vtabsel_c &tab = MAKE_CHILD<gui_vtabsel_c>( getrid(), m );
     tab.leech( TSNEW(leech_dock_left_s, 170) );
-    border = ts::irect(175,0,0,0);
+    edges = ts::irect(175,0,0,0);
 
     mod();
 
@@ -1015,6 +1065,8 @@ void dialog_settings_c::networks_tab_selected()
         stop_capture();
 
     is_networks_tab_selected = false;
+    is_video_tab_selected = false;
+
     if ( mask & MASK_PROFILE_NETWORKS )
     {
         is_networks_tab_selected = true;
@@ -1024,7 +1076,7 @@ void dialog_settings_c::networks_tab_selected()
         } else
         {
             ctlenable(CONSTASTR("addnet"), false);
-            set_list_emptymessage(CONSTASTR("protoactlist"), TTT("Loading",277));
+            set_list_emptymessage(CONSTASTR("protoactlist"), loc_text(loc_loading));
             ASSERT( prf().is_loaded() );
             available_prots.load();
             return;
@@ -1077,6 +1129,12 @@ void dialog_settings_c::networks_tab_selected()
         testrec.clear();
         set_slider_value( CONSTASTR("micvol"), cvtmic.volume );
         start_capture();
+    }
+
+    if (mask & MASK_APPLICATION_VIDEO)
+    {
+        is_video_tab_selected = true;
+        ctlenable( CONSTASTR("camera"), video_devices.size() != 0 );
     }
 
     if (mask & MASK_APPLICATION_SOUNDS)
@@ -1135,8 +1193,9 @@ void dialog_settings_c::networks_tab_selected()
 
             l.scroll_to_begin();
         }
-
     }
+
+    setup_video_device();
 }
 
 void dialog_settings_c::on_delete_network_2(const ts::str_c&prm)
@@ -1448,6 +1507,8 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
     if (cfg().device_mic(micdevice))
         g_app->capture_device_changed();
 
+    cfg().device_camera(camera.to_str());
+
     if (is_changed(cvtmic.volume))
     {
         cfg().vol_mic(cvtmic.volume);
@@ -1513,17 +1574,17 @@ void dialog_settings_c::enum_capture_devices(s3::DEVICE *device, const wchar_t *
     sd.desc.set( ts::wsptr(lpcstrDescription) );
 }
 
-void dialog_settings_c::select_capture_device(const ts::str_c& prm)
+void dialog_settings_c::select_audio_capture_device(const ts::str_c& prm)
 {
     micdevice = prm;
     s3::DEVICE device = device_from_string(prm);
     s3::set_capture_device(&device);
-    set_combik_menu(CONSTASTR("mic"), list_capture_devices());
+    set_combik_menu(CONSTASTR("mic"), list_audio_capture_devices());
     s3::start_capture( capturefmt );
     mic_device_changed = true;
     mod();
 }
-menu_c dialog_settings_c::list_capture_devices()
+menu_c dialog_settings_c::list_audio_capture_devices()
 {
     s3::DEVICE device;
     s3::get_capture_device(&device);
@@ -1533,7 +1594,7 @@ menu_c dialog_settings_c::list_capture_devices()
     {
         ts::uint32 f = 0;
         if (device == sd.deviceid) f = MIF_MARKED;
-        m.add( sd.desc, f, DELEGATE(this, select_capture_device), string_from_device(sd.deviceid) );
+        m.add( sd.desc, f, DELEGATE(this, select_audio_capture_device), string_from_device(sd.deviceid) );
     }
 
     return m;
@@ -1788,11 +1849,180 @@ bool dialog_settings_c::dspf_handler( RID, GUIPARAM p )
     return true;
 }
 
+void dialog_settings_c::select_video_capture_device( const ts::str_c& prm )
+{
+    camera.set( CONSTWSTR("id") ) = from_utf8(prm);
+    set_combik_menu(CONSTASTR("camera"), list_video_capture_devices());
+    mod();
 
+    setup_video_device();
+}
 
+menu_c dialog_settings_c::list_video_capture_devices()
+{
+    menu_c m;
 
+    if (video_devices.size() == 0)
+    {
+        m.add(loc_text(loc_loading));
+        return m;
+    }
 
+    ts::wstr_c cid = camera.set( CONSTWSTR("id") );
+    for (const vcd_descriptor_s &vd : video_devices)
+    {
+        ts::uint32 f = 0;
+        if (vd.id == cid) f = MIF_MARKED;
+        m.add(vd.desc, f, DELEGATE(this, select_video_capture_device), to_utf8(vd.id));
+    }
 
+    return m;
+}
+
+void dialog_settings_c::set_video_devices( vcd_list_t &&_video_devices )
+{
+    video_devices = std::move(_video_devices);
+
+    if (is_video_tab_selected)
+        ctlenable(CONSTASTR("camera"), video_devices.size() != 0);
+
+    ts::wstr_c cid = camera.set( CONSTWSTR("id") );
+    bool camok = false;
+    for (const vcd_descriptor_s &d : video_devices)
+    {
+        if (d.id == cid)
+        {
+            camok = true;
+            break;
+        }
+    }
+
+    if (!camok && video_devices.size() > 0)
+    {
+        camera.set( CONSTWSTR("id") ) = video_devices.get(0).id;
+        mod();
+    }
+
+    set_combik_menu(CONSTASTR("camera"), list_video_capture_devices());
+    setup_video_device();
+   
+}
+
+void dialog_settings_c::setup_video_device()
+{
+    video_device.reset();
+    if (!is_video_tab_selected)
+        return;
+
+    if (video_devices.size() == 0)
+        return;
+
+    struct end_s
+    {
+        dialog_settings_c *dlg;
+        end_s(dialog_settings_c *dlg):dlg(dlg) {}
+        ~end_s()
+        {
+            if (dlg->video_device)
+                DEFERRED_UNIQUE_CALL(0, DELEGATE(dlg, drawcamerapanel), nullptr);
+        }
+
+    } end(this);
+
+    ts::wstr_c cid = camera.set( CONSTWSTR("id") );
+    const vcd_descriptor_s *dd = nullptr;
+    for (const vcd_descriptor_s &d : video_devices)
+    {
+        if (d.id == cid)
+        {
+            video_device.reset( vcd_c::build(d) );
+            return;
+        }
+        if (d.id.equals(CONSTWSTR("desktop")))
+            dd = &d;
+    }
+    if (dd)
+    {
+        initializing_animation.restart();
+        video_device.reset(vcd_c::build(*dd));
+    }
+}
+
+bool dialog_settings_c::drawcamerapanel(RID, GUIPARAM p)
+{
+    if (p == nullptr)
+    {
+        if (is_video_tab_selected && video_device)
+        {
+            if (video_device->updated())
+            {
+                if (RID prid = find(CONSTASTR("preview")))
+                {
+                    ts::ivec2 dsz = video_device->get_desired_size();
+                    if (dsz == ts::ivec2(0) && HOLD(prid))
+                    {
+                        ts::ivec2 sz( width_for_children(), PREVIEW_HEIGHT);
+                        ts::ivec2 shadow_size(0);
+                        if (shadow)
+                        {
+                            shadow_size = ts::ivec2(shadow->clborder_x(), shadow->clborder_y());
+                            sz -= shadow_size;
+                        }
+                        sz = video_device->fit_to_size(sz);
+
+                        sz += shadow_size;
+                        gui_panel_c &pnl = HOLD(prid).as<gui_panel_c>();
+                        pnl.set_min_size(sz);
+                        pnl.set_max_size(sz);
+                        MODIFY(prid).size(sz);
+                        gui->repos_children(this);
+                    }
+                    HOLD(prid).engine().redraw();
+                }
+            } else if (video_device->still_initializing())
+            {
+                if (RID prid = find(CONSTASTR("preview")))
+                    HOLD(prid).engine().redraw();
+            }
+
+            DEFERRED_UNIQUE_CALL(0, DELEGATE(this, drawcamerapanel), nullptr);
+        }
+        return true;
+    }
+
+    rectengine_c *e = (rectengine_c *)p;
+
+    //e->draw( ts::irect(0,0,100,100), ts::ARGB(255,0,0) );
+    if (video_device)
+    {
+        if (video_device->still_initializing())
+        {
+            initializing_animation.render();
+            ts::wstr_c ainfo;
+            if (video_device->is_busy()) ainfo = loc_text(loc_camerabusy);
+            draw_initialization(e, initializing_animation.bmp, e->getrect().getprops().szrect(), get_default_text_color(), ainfo );
+
+        } else if (ts::drawable_bitmap_c *b = video_device->lockbuf(nullptr))
+        {
+            ts::ivec2 dsz = video_device->get_desired_size();
+            if (dsz == b->info().sz)
+            {
+                e->begin_draw();
+                ts::ivec2 sz = e->getrect().getprops().size();
+                ts::ivec2 pos = (sz - dsz) / 2;
+                if (shadow)
+                    e->draw(*shadow, DTHRO_BORDER);
+
+                e->draw(pos, *b, ts::irect(0, dsz), false);
+                e->end_draw();
+            }
+
+            video_device->unlock(b);
+        }
+    }
+
+    return true;
+}
 
 
 
@@ -1889,7 +2119,7 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
 
 
 
-/*virtual*/ int dialog_setup_network_c::additions(ts::irect & border)
+/*virtual*/ int dialog_setup_network_c::additions(ts::irect &)
 {
     addh = 0;
     descmaker dm(descs);

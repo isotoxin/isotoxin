@@ -722,6 +722,123 @@ public:
 
 };
 
+template <typename S> struct strmap_pair_s
+{
+    S k,v;
+    typedef typename S::TCHAR TCHARACTER;
+    int operator()( const sptr<TCHARACTER> &_k ) const
+    {
+        return S::compare( _k, k );
+    }
+    int operator()( const S &_k ) const
+    {
+        return S::compare(_k, k);
+    }
+    bool operator==( const strmap_pair_s&m ) const
+    {
+        return k.equals(m.k) && v.equals(m.v);
+    }
+    bool operator!=(const strmap_pair_s&m) const
+    {
+        return !k.equals(m.k) || !v.equals(m.v);
+    }
+};
+
+template <typename S> class strmap_t : public array_inplace_t < strmap_pair_s< S >, 8 >
+{
+    typedef typename S::TCHAR TCHARACTER;
+public:
+    strmap_t() {}
+    explicit strmap_t( const sptr<TCHARACTER>&froms, TCHARACTER eq = '=' ) { parse( froms, eq ); }
+    strmap_t( const strmap_t&m ):array_c(m.size())
+    {
+        *this = m;
+    }
+    strmap_t(strmap_t&&m)
+    {
+        *this = std::move( m );
+    }
+    strmap_t &operator=( const strmap_t&m )
+    {
+        aint msz = tmin( size(), m.size() );
+        for(aint i=0;i<msz;++i)
+            get(i) = m.get(i);
+        if (m.size() > msz)
+        {
+            aint cnt = m.size();
+            for (; msz < cnt; ++msz)
+                add() = m.get(msz);
+        } else if (size() > msz)
+            truncate(msz);
+        return *this;
+    }
+    strmap_t &operator=(strmap_t&&m)
+    {
+        __super::operator=(std::move(m));
+        return *this;
+    }
+
+    void parse( const sptr<TCHARACTER>&froms, TCHARACTER eq = '=' )
+    {
+        ts::token<TCHARACTER> ver(froms, '\n');
+        for (; ver; ++ver)
+        {
+            auto s = ver->get_trimmed();
+            aint eqi = s.find_pos(eq);
+            if (eqi > 0)
+                set( s.substr(0,eqi) ) = s.substr(eqi+1);
+        }
+    }
+    S& set(const sptr<TCHARACTER>&k)
+    {
+        int index;
+        if (find_sorted(index, k))
+            return get(index).v;
+
+        auto &i = insert(index);
+        i.k = k;
+        return i.v;
+    }
+    const S *find(const sptr<TCHARACTER>&k) const
+    {
+        int index;
+        if (find_sorted(index, k))
+            return &get(index).v;
+        return nullptr;
+    }
+    S *find(const sptr<TCHARACTER>&k)
+    {
+        int index;
+        if (find_sorted(index, k))
+            return &get(index).v;
+        return nullptr;
+    }
+    S to_str( TCHARACTER eq = '=' )
+    {
+        S s;
+        for( const auto& i : *this )
+            s.append(i.k).append_char(eq).append(i.v).append_char('\n');
+        return s.trunc_length();
+    }
+    bool operator==( const strmap_t&m ) const
+    {
+        aint cnt = size();
+        if (cnt != m.size()) return false;
+        for(aint i=0;i<cnt;++i)
+            if ( get(i) != m.get(i) ) return false;
+        return true;
+    }
+    bool operator!=( const strmap_t&m ) const
+    {
+        return !(*this == m);
+    }
+    
+};
+
+typedef strmap_t<str_c> astrmap_c;
+typedef strmap_t<wstr_c> wstrmap_c;
+
+
 typedef strings_t<char> astrings_c;
 typedef strings_t<wchar> wstrings_c;
 

@@ -457,6 +457,14 @@ namespace ts
         {
             if (buffer.size() > 0)
             {
+                if (buffer.size() >= 3)
+                {
+                    if (*buffer.data() == 0xEF && buffer.data()[1] == 0xBB && buffer.data()[2] == 0xBF) // utf8 BOM
+                    {
+                        text.split<wchar>(from_utf8(buffer.cstr().skip(3)), '\n');
+                        return true;
+                    }
+                }
                 if (buffer.size() >= 2)
                 {
                     // TODO : is this stuff correct for big-endian architecture?
@@ -829,7 +837,7 @@ namespace ts
 		return buffer;
 	}
 
-	wstr_c   TSCALL get_load_filename_dialog(const wsptr &iroot, const wsptr &name, const wsptr &filt, const wchar *defext, const wchar *title)
+	wstr_c   TSCALL get_load_filename_dialog(const wsptr &iroot, const wsptr &name, extensions_s &exts, const wchar *title)
 	{
 		wchar cdp[ MAX_PATH ];
 		GetCurrentDirectoryW(MAX_PATH,cdp);
@@ -844,8 +852,14 @@ namespace ts
         o.hwndOwner = g_main_window;
         o.hInstance = GetModuleHandle(nullptr);
 
-		wstr_c filter(filt);
-		filter.replace_all(ENEMY_SLASH,0);
+		wstr_c filter;
+        if (exts.exts.size())
+        {
+            for( const extension_s &e : exts.exts )
+                filter.append( e.desc ).append(CONSTWSTR("/*.")).append( e.ext ).append_char('/');
+            filter.append_char('/');
+            filter.replace_all('/', 0);
+        }
 
 		wstr_c buffer;
 		buffer.set_length(2048);
@@ -854,7 +868,7 @@ namespace ts
 		o.lpstrTitle = title;
 		o.lpstrFile = buffer.str();
 		o.nMaxFile=2048;
-		o.lpstrDefExt = defext;
+		o.lpstrDefExt = exts.defext();
 
 		o.lpstrFilter = filter;
 		o.lpstrInitialDir = root;
@@ -873,7 +887,7 @@ namespace ts
 	}
 
 
-	bool    TSCALL get_load_filename_dialog(wstrings_c &files, const wsptr &iroot, const wsptr& name, const wsptr &filt, const wchar *defext, const wchar *title)
+	bool    TSCALL get_load_filename_dialog(wstrings_c &files, const wsptr &iroot, const wsptr& name, ts::extensions_s & exts, const wchar *title)
 	{
 		wchar cdp[ MAX_PATH ];
 		GetCurrentDirectoryW(MAX_PATH,cdp);
@@ -888,8 +902,14 @@ namespace ts
         o.hwndOwner = g_main_window;
         o.hInstance = GetModuleHandle(nullptr);
 
-		wstr_c filter(filt);
-		filter.replace_all(ENEMY_SLASH,0);
+		wstr_c filter;
+        if (exts.exts.size())
+        {
+            for( const extension_s &e : exts.exts )
+                filter.append( e.desc ).append(CONSTWSTR("/*.")).append( e.ext ).append_char('/');
+            filter.append_char('/');
+            filter.replace_all('/', 0);
+        }
 
 		wstr_c buffer(16384, true);
 		buffer.set(name);
@@ -897,7 +917,7 @@ namespace ts
 		o.lpstrTitle = title;
 		o.lpstrFile = buffer.str();
 		o.nMaxFile=16384;
-		o.lpstrDefExt = defext;
+		o.lpstrDefExt = exts.defext();
 
 		o.lpstrFilter = filter.cstr();
 		o.lpstrInitialDir = root.cstr();

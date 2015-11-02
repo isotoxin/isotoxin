@@ -114,9 +114,16 @@ void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_i
 
 }
 
-#pragma warning(push)
-#pragma warning(disable: 4731)
-void TSCALL img_helper_make_2x_smaller(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info)
+extern "C" void _cdecl asm_shrink2x(
+		void *dst,
+		const void *src,
+		unsigned long width,
+		unsigned long height,
+		unsigned long srcpitch,
+		unsigned long dstcorrectpitch);
+
+
+void TSCALL img_helper_shrink_2x(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info)
 {
     ASSERT(des_info.sz == (sou_info.sz / 2));
     ivec2 newsz = sou_info.sz / 2;
@@ -174,94 +181,9 @@ void TSCALL img_helper_make_2x_smaller(uint8 *des, const uint8 *sou, const imgde
         }
     }
     else if (sou_info.bytepp() == 4)
-    {
-        const int xxx = offsetof(imgdesc_s, sz) + offsetof(ivec2, x);
-        const int yyy = offsetof(imgdesc_s, sz) + offsetof(ivec2, y);
-        const int zzz = offsetof(imgdesc_s, pitch);
-
-        // TODO : rewrite with C++ for 64 bit
-
-        _asm
-        {
-
-            mov esi, sou
-            mov edi, des
-            movzx ebx, word ptr[sou_info+zzz]//sou_info.pitch
-
-            mov eax, dword ptr [des_info+yyy]
-        loopy :
-            push eax
-            push ebp
-
-            mov eax, dword ptr [des_info+xxx]
-        loopx :
-            push eax
-
-            xor ebp, ebp
-            xor ecx, ecx
-
-            mov ebp, [esi]
-            mov ecx, ebp
-            and ebp, 0x00FF00FF
-            and ecx, 0xFF00FF00
-
-            mov eax, [esi + 4]
-            mov edx, eax
-            and eax, 0x00FF00FF
-            and edx, 0xFF00FF00
-            add ebp, eax
-            add ecx, edx
-
-            mov eax, [esi + ebx]
-            adc ecx, 0
-            mov edx, eax
-            and eax, 0x00FF00FF
-            and edx, 0xFF00FF00
-            add ebp, eax
-            add ecx, edx
-
-            mov eax, [esi + ebx + 4]
-            adc ecx, 0
-            mov edx, eax
-            and eax, 0x00FF00FF
-            and edx, 0xFF00FF00
-            add eax, ebp
-            add edx, ecx
-            adc edx, 0
-
-            ror eax, 2
-            ror edx, 2
-            and eax, 0x00FF00FF
-            and edx, 0xFF00FF00
-            or  eax, edx
-
-            mov[edi], eax
-
-            add esi, 8
-            add edi, 4
-
-            pop eax
-            dec eax
-            jnz loopx
-
-            pop ebp
-
-            mov eax, sounl
-            add esi, ebx
-            add esi, eax
-            add edi, desnl
-
-            pop eax
-            dec eax
-            jnz loopy
-
-        };
-
-    }
+        asm_shrink2x(des, sou, des_info.sz.x, des_info.sz.y, sou_info.pitch, desnl);
 }
-#pragma warning(pop)
 
-//template<typename CORE> void bitmap_t<CORE>::copy_components(int num_comps, ivec2 size, int dc, int dpitch, uint8 *d, int sc, int spitch, const uint8 *s)
 void TSCALL img_helper_copy_components(uint8* des, const uint8* sou, const imgdesc_s &des_info, const imgdesc_s &sou_info, int num_comps)
 {
     aint dpitch = des_info.pitch;
@@ -273,9 +195,6 @@ void TSCALL img_helper_copy_components(uint8* des, const uint8* sou, const imgde
                 des[i] = sou[i];
 }
 
-
-#pragma warning (push)
-#pragma warning (disable : 4731)
 
 void img_helper_merge_with_alpha(uint8 *dst, const uint8 *basesrc, const uint8 *src, const imgdesc_s &des_info, const imgdesc_s &base_info, const imgdesc_s &sou_info, int oalphao)
 {
@@ -439,8 +358,6 @@ void img_helper_merge_with_alpha(uint8 *dst, const uint8 *basesrc, const uint8 *
 
 }
 
-#pragma warning (pop)
-
 
 void    bmpcore_normal_s::before_modify(bitmap_c *me)
 {
@@ -575,6 +492,17 @@ loop_1112:
 }
 #pragma warning (pop)
 
+template<typename CORE> void bitmap_t<CORE>::shrink_2x_to(const bmpcore_exbody_s &eb, const ivec2 &lt, const ivec2 &sz) const 
+{
+    if(info().bytepp()==2 || (sz/2) != eb.info().sz || info().bytepp() != eb.info().bytepp()) return;
+
+    uint8 *dst = eb();
+    const uint8 *src = body(lt);
+
+    img_helper_shrink_2x(dst, src, eb.info(), info( irect(0,sz) ));
+}
+
+
 #if 0
 
 template <typename CORE> void bitmap_t<CORE>::convert_32to16(bitmap_c &imgout) const
@@ -680,26 +608,6 @@ template<typename CORE> void bitmap_t<CORE>::crop_to_square()
         crop( ivec2(0, d0), ivec2(info().sz.x,info().sz.y-d0-d1) );
     }
 }
-
-template<typename CORE> void bitmap_t<CORE>::make_2x_smaller(bitmap_c &des_bitmap, const ivec2 & lu, const ivec2 & sz) const 
-{
-    if(info().bytepp()==2) return;
-
-    ivec2 newsz = sz / 2;
-
-    if(des_bitmap.info().sz != newsz || des_bitmap.info().bytepp() != info().bytepp() || des_bitmap.m_core->m_ref > 1)
-    {
-        if(info().bytepp()==1) des_bitmap.create_grayscale(newsz);
-        else if(info().bytepp()==3) des_bitmap.create_RGB(newsz);
-        else if(info().bytepp()==4) des_bitmap.create_RGBA(newsz);
-    }
-
-    uint8 * des=des_bitmap.body();
-    const uint8 * sou=body() + lu.x * info().bytepp() + info().pitch*lu.y;
-
-    img_helper_make_2x_smaller(des, sou, des_bitmap.info(), info());
-}
-
 
 template<typename CORE> void bitmap_t<CORE>::make_larger(int factor, bitmap_t<CORE> &out) const
 {
@@ -2141,6 +2049,205 @@ template<typename CORE> img_format_e bitmap_t<CORE>::load_from_file(const wsptr 
 	return if_none;
 }
 
+template<typename CORE> void bitmap_t<CORE>::render_cursor( const ivec2&pos, buf_c &cache )
+{
+    struct data_s
+    {
+        HICON iconcached;
+        ts::ivec2 sz, hotspot;
+    };
+
+    data_s *d = nullptr;
+    if (cache.size() >= sizeof(data_s))
+        d = (data_s *)cache.data();
+
+    CURSORINFO ci = { sizeof(CURSORINFO) };
+
+    auto preparedata = [&](HICON icn, HBITMAP hmask, HBITMAP hcolor)
+    {
+        BITMAP bm;
+        
+        if (0 == GetObject(hmask, sizeof(BITMAP), &bm))
+            return false;
+
+        ts::ivec2 sz( bm.bmWidth, bm.bmHeight );
+        if (!hcolor) sz.y /= 2;
+
+        drawable_bitmap_c dbmp;
+        dbmp.create(ivec2(sz.x, sz.y * 2));
+        dbmp.fill(ivec2(0), sz, ts::ARGB(0, 0, 0));
+        dbmp.fill(ivec2(0, sz.y), sz, ts::ARGB(255, 255, 255));
+        DrawIconEx(dbmp.DC(), 0, 0, icn, sz.x, sz.y, 0, nullptr, DI_NORMAL);
+        DrawIconEx(dbmp.DC(), 0, sz.y, icn, sz.x, sz.y, 0, nullptr, DI_NORMAL);
+
+        dbmp.fill_alpha(255);
+        //dbmp.save_as_png(L"bmp.png");
+
+        cache.set_size(sizeof(data_s) + (4 * sz.x * sz.y));
+        d = (data_s *)cache.data();
+        d->iconcached = ci.hCursor;
+        d->sz = sz;
+
+        TSCOLOR *dst = (TSCOLOR *)(d + 1);
+        TSCOLOR *src1 = (TSCOLOR *)dbmp.body();
+        TSCOLOR *src2 = (TSCOLOR *)( dbmp.body() + dbmp.info().pitch * sz.y );
+        int addsrc = (dbmp.info().pitch - sz.x * 4) / 4;
+
+        for(int y = 0; y < sz.y; ++y, src1 += addsrc, src2 += addsrc)
+        {
+            for(int x=0; x<sz.x; ++x, ++dst, ++src1, ++src2)
+            {
+                auto detectcolor = [](TSCOLOR c1, TSCOLOR c2)->TSCOLOR
+                {
+                    if (c1 == c2) return c1;
+                    if ( c1 == 0xFF000000u && c2 == 0xFFFFFFFFu ) return 0;
+                    if ( c2 == 0xFF000000u && c1 == 0xFFFFFFFFu) return 0x00FFFFFFu; // inversion!
+
+                    // detect premultiplied color
+
+                    int a0 = 255 - RED(c2) + RED(c1);
+                    int a1 = 255 - GREEN(c2) + GREEN(c1);
+                    int a2 = 255 - BLUE(c2) + BLUE(c1);
+                    int a = tmax(a0, a1, a2);
+
+                    return (c1 & 0x00FFFFFFu) | (CLAMP<uint8>(a) << 24);
+                };
+
+                *dst = detectcolor(*src1, *src2);
+            }
+        }
+        return true;
+    };
+
+    ts::ivec2 drawpos;
+    if (GetCursorInfo(&ci) && ci.flags == CURSOR_SHOWING)
+    {
+        if ( d == nullptr || d->iconcached != ci.hCursor )
+        {
+            HICON hicon = CopyIcon(ci.hCursor);
+            ICONINFO ii;
+            if (GetIconInfo(hicon, &ii))
+            {
+                if (!preparedata(hicon, ii.hbmMask, ii.hbmColor))
+                {
+                    if (nullptr == d)
+                    {
+                        if (cache.size() < sizeof(data_s))
+                            cache.set_size(sizeof(data_s));
+                        d = (data_s *)cache.data();
+                        d->iconcached = ci.hCursor;
+                    }
+                    d->sz = ivec2(0); // no render
+                }
+                d->hotspot.x = ii.xHotspot;
+                d->hotspot.y = ii.yHotspot;
+
+                DeleteObject(ii.hbmColor);
+                DeleteObject(ii.hbmMask);
+            }
+            DestroyIcon(hicon);
+        }
+
+        drawpos = ts::ivec2(ci.ptScreenPos.x - d->hotspot.x - pos.x, ci.ptScreenPos.y - d->hotspot.y - pos.y);
+    } else
+    {
+        cache.clear();
+        return;
+    }
+
+    if ( d == nullptr || 0 == d->sz.x )
+        return;
+
+    int yy = d->sz.y;
+    if (drawpos.y + yy < 0 || drawpos.y >= info().sz.y) return; // full over top / full below bottom
+
+    int xx = d->sz.x;
+    if (drawpos.x + xx < 0 || drawpos.x >= info().sz.x) return;
+
+    byte *my_body = body( drawpos );
+    const byte *src_color = (const byte *)(d + 1);
+        
+    if ( drawpos.y < 0 )
+    {
+        my_body -= info().pitch * drawpos.y;
+        src_color -= d->sz.x * 4 * drawpos.y;
+        drawpos.y = 0;
+    }
+    if ( (info().sz.y - drawpos.y) < yy ) yy = (info().sz.y - drawpos.y);
+
+    for (int y = 0; y < yy; ++y, my_body += info().pitch)
+    {
+        TSCOLOR *rslt = (TSCOLOR *)my_body;
+
+        for (int x = 0; x < xx; ++x, ++rslt, src_color += 4)
+        {
+            int drawposx = drawpos.x + x;
+            if (drawposx < 0 || drawposx >= info().sz.x) continue;
+
+            TSCOLOR c = *(TSCOLOR *)src_color;
+            if ( ALPHA(c) )
+                *rslt = ALPHABLEND_PM( *rslt, c );
+            else if (0x00FFFFFFu == c)
+                *rslt = ts::ARGB( 255-RED(*rslt), 255-GREEN(*rslt), 255-BLUE(*rslt), ALPHA(*rslt) );
+        }
+    }
+}
+
+
+template<typename CORE> bool bitmap_t<CORE>::load_from_HBITMAP(HBITMAP hbmp)
+{
+    BITMAP bm;
+    if (0 == GetObject(hbmp, sizeof(BITMAP), &bm)) return false;
+
+    struct {
+        struct {
+            BITMAPV4HEADER bmiHeader;
+        } bmi;
+        uint32 pal[256];
+    } b;
+
+    HDC dc = GetDC(0);
+    memset(&b, 0, sizeof(BITMAPV4HEADER));
+    b.bmi.bmiHeader.bV4Size = sizeof(BITMAPINFOHEADER);
+    b.bmi.bmiHeader.bV4Width = bm.bmWidth;
+    b.bmi.bmiHeader.bV4Height = -bm.bmHeight;
+    b.bmi.bmiHeader.bV4Planes = 1;
+
+    if (1 == bm.bmBitsPixel)
+    {
+        b.bmi.bmiHeader.bV4BitCount = 1;
+        b.bmi.bmiHeader.bV4SizeImage = bm.bmWidthBytes * bm.bmHeight;
+        byte *data = (byte *)_alloca(bm.bmWidthBytes * bm.bmHeight);
+        bool ok = GetDIBits(dc, hbmp, 0, bm.bmHeight, data, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) != 0;
+        if (ok)
+        {
+            create_grayscale(ivec2(bm.bmWidth, bm.bmHeight));
+
+            byte *my_body = body();
+            for (int y = 0; y < bm.bmHeight; ++y, data += bm.bmWidthBytes, my_body += info().pitch)
+            {
+                const byte *d2 = (const byte *)data;
+                byte *bb = my_body;
+                for (int x = 0; x < bm.bmWidth; x += 8, ++d2)
+                {
+                    ts::uint8 bits = *d2;
+                    for( int m = 128, xx = x; m>0; m >>=1, ++xx, ++bb )
+                        *bb = (bits & m) ? 255 : 0;
+                }
+            }
+
+        }
+
+        ReleaseDC(0, dc);
+        return ok;
+    }
+
+
+
+
+    return true;
+}
+
 template<typename CORE> void bitmap_t<CORE>::load_from_HWND(HWND hwnd)
 {
     RECT r;
@@ -2207,7 +2314,7 @@ void drawable_bitmap_c::clear()
 }
 
 
-void    drawable_bitmap_c::create(const ivec2 &sz)
+void    drawable_bitmap_c::create(const ivec2 &sz, int monitor)
 {
     clear();
 
@@ -2223,10 +2330,35 @@ void    drawable_bitmap_c::create(const ivec2 &sz)
     core.m_info.bitpp = 32;
 
     DEVMODEW devmode;
-    ZeroMemory(&devmode, sizeof(DEVMODE));
     devmode.dmSize = sizeof(DEVMODE);
 
-    EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &devmode);
+    if (monitor < 0)
+        EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &devmode);
+    else
+    {
+        struct mdata
+        {
+            DEVMODEW *devm;
+            int mi;
+            static BOOL CALLBACK calcmc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
+            {
+                mdata *m = (mdata *)dwData;
+                if (m->mi == 0)
+                {
+                    MONITORINFOEXW minf;
+                    minf.cbSize = sizeof(MONITORINFOEXW);
+                    GetMonitorInfo(hMonitor, &minf);
+                    EnumDisplaySettingsW(minf.szDevice, ENUM_CURRENT_SETTINGS, m->devm);
+                    return FALSE;
+                }
+                --m->mi;
+                return TRUE;
+            }
+        } mm; mm.mi = monitor; mm.devm = &devmode;
+
+        EnumDisplayMonitors(nullptr, nullptr, mdata::calcmc, (LPARAM)&mm);
+
+    }
 
     devmode.dmBitsPerPel = 32;
     devmode.dmPelsWidth = sz.x;
@@ -2346,7 +2478,6 @@ bool drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, const ivec2 &p, 
     //HDC tdc=GetDC(0);
 
     DEVMODEW devmode;
-    ZeroMemory(&devmode, sizeof(DEVMODE));
     devmode.dmSize = sizeof(DEVMODE);
 
     EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &devmode);

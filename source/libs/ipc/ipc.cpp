@@ -13,118 +13,163 @@ namespace ipc
 namespace
 {
 
-enum data_type_e
+enum datatype_e
 {
-    IPCDT_CUSTOM = 77182
+    DATATYPE_HANDSHAKE_ASK,
+    DATATYPE_HANDSHAKE_ANSWER,
+    DATATYPE_IDLEJOB_ASK,
+    DATATYPE_IDLEJOB_ANSWER,
+    DATATYPE_FIN_ASK,
+    DATATYPE_FIN_ANSWER,
+    DATATYPE_DATA_128k,
+    DATATYPE_DATA_BIG,
 };
 
-struct ipc_member_s
+struct handshake_ask_s
 {
-    HWND handler = nullptr;
-    DWORD pid = 0;
-    DWORD tid = 0;
+    int datasize = sizeof(handshake_ask_s);
+    int datatype = DATATYPE_HANDSHAKE_ASK;
+    int version = IPCVER;
+    DWORD pid = GetCurrentProcessId(); // processid
 };
 
-struct ipc_sync_s
+struct handshake_answer_s
 {
-    ipc_member_s members[2];
-
-    ipc_sync_s()
-    {
-        memset(members,0,sizeof(members));
-    }
+    int datasize = sizeof(handshake_ask_s);
+    int datatype = DATATYPE_HANDSHAKE_ANSWER;
+    int version = IPCVER;
+    DWORD pid = GetCurrentProcessId(); // processid
 };
 
-typedef spinlock::syncvar<ipc_sync_s> ipc_sync_struct_s;
+template<datatype_e d> struct signal_s
+{
+    int datasize = sizeof(signal_s);
+    int datatype = d;
+};
 
 struct ipc_data_s
 {
-    HANDLE mapfile;
+    long sync;
+    HANDLE pipe_in; // server
+    HANDLE pipe_out; // client
     processor_func *datahandler;
     idlejob_func *idlejobhandler;
     void *par_data;
     void *par_idlejob;
-    ipc_sync_struct_s *sync; // shared data. I know - process sync via spinlock - is bad idea. Believe me - I know what I do
-    int member;
     HANDLE watchdog[2];
+    DWORD other_pid;
     volatile bool quit_quit_quit;
-    volatile bool emergency_state;
     volatile bool watch_dog_works;
-};
 
-static LRESULT CALLBACK app_wndproc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    switch (message)
+    struct data_s
     {
-    case WM_NULL:
-        break;
-    case WM_CREATE:
-        {
-            CREATESTRUCT *cs = (CREATESTRUCT *)lParam;
-            SetWindowLongPtrW(hwnd, GWLP_USERDATA, (size_t)cs->lpCreateParams);
-        }
-        return 0;
-    case WM_COPYDATA:
-        {
-            ipc_data_s *data = (ipc_data_s *)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-            COPYDATASTRUCT *cds = (COPYDATASTRUCT *)lParam;
-            switch (cds->dwData)
-            {
-            case IPCDT_CUSTOM:
-                {
-                    ipc_result_e r = data->datahandler(data->par_data, cds->lpData, cds->cbData);
-                    if (r == IPCR_BREAK) { PostQuitMessage(0); data->quit_quit_quit = true; }
-                }
-            }
+        int datasize = sizeof(data_s);
+        int datatype = DATATYPE_DATA_128k;
+    };
 
-        }
-        return TRUE;
-    case WM_USER + 17532:
-        {
-            // idlejob
-            ipc_data_s *data = (ipc_data_s *)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-            if (IPCR_BREAK == data->idlejobhandler(data->par_idlejob)) { PostQuitMessage(0); data->quit_quit_quit = true; }
-        }
-        return 0;
-    case WM_USER + 7532:
-        {
-            ipc_data_s *data = (ipc_data_s *)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-            if (data->emergency_state || !data->sync->lock_read()().members[data->member ^ 1].handler)
-                if (IPCR_BREAK == data->datahandler(data->par_data, nullptr, 0))
-                    { PostQuitMessage(0); data->quit_quit_quit = true; }
-        }
-        return 0;
+    bool send(const void *data, int datasize)
+    {
+        spinlock::auto_simple_lock l(sync);
+
+        DWORD w = 0;
+
+        data_s dd; dd.datasize += datasize;
+
+        if (datasize > (65536 * 2))
+            dd.datatype = DATATYPE_DATA_BIG;
+
+        WriteFile(pipe_out, &dd, sizeof(data_s), &w, nullptr);
+        if (w != sizeof(data_s)) return false;
+
+        WriteFile(pipe_out, data, datasize, &w, nullptr);
+        if ((int)w != datasize) return false;
+
+        return true;
     }
 
-    return DefWindowProcA(hwnd,message,wParam,lParam);
-}
+    template<typename S> bool send(const S&s)
+    {
+        DWORD w = 0;
+        WriteFile(pipe_out, &s, sizeof(s), &w, nullptr);
+        return w == sizeof(s);
+    }
 
-static void reg_handler_class()
-{
-    // only once per application
-    static bool bRegistred = false;
-    if (bRegistred) return;
-    bRegistred = true;
+#define OOPS do { quit_quit_quit = true; return false; } while(0,false)
+//-V:OOPS:521
 
-    // register class
-    WNDCLASSEXA wcex;
+    bool tick()
+    {
+        if (quit_quit_quit)
+            return false;
 
-    wcex.cbSize = sizeof(WNDCLASSEX);
-    wcex.style = 0;
-    wcex.lpfnWndProc = (WNDPROC)app_wndproc;
-    wcex.cbClsExtra = 0;
-    wcex.cbWndExtra = 0;
-    wcex.hInstance = GetModuleHandle(nullptr);
-    wcex.hIcon = nullptr;
-    wcex.hCursor = nullptr;
-    wcex.hbrBackground = nullptr;
-    wcex.lpszMenuName = nullptr;
-    wcex.lpszClassName = "0LLRgdC10Lwg0LTQvtCx0YDQsA";
-    wcex.hIconSm = nullptr;
+        data_s d;
 
-    RegisterClassExA(&wcex);
-}
+        DWORD r;
+        ReadFile(pipe_in, &d, sizeof(d), &r, nullptr);
+        if (r != sizeof(d))
+        {
+            if (ERROR_PIPE_LISTENING == GetLastError())
+                return true;
 
+            OOPS;
+        }
+
+        switch(d.datatype)
+        {
+        case DATATYPE_HANDSHAKE_ASK:
+            if (other_pid || d.datasize != sizeof(handshake_ask_s))
+                OOPS;
+            
+            {
+                handshake_ask_s hsh;
+
+                ReadFile(pipe_in, ((char *)&hsh) + sizeof(data_s), sizeof(handshake_ask_s) - sizeof(data_s), &r, nullptr);
+                if (r != sizeof(handshake_ask_s) - sizeof(data_s) || hsh.version != IPCVER)
+                    OOPS;
+                other_pid = hsh.pid;
+            }
+
+            send( handshake_answer_s() );
+            return true;
+        case DATATYPE_IDLEJOB_ASK:
+            send(signal_s<DATATYPE_IDLEJOB_ANSWER>());
+            return true;
+        case DATATYPE_IDLEJOB_ANSWER:
+            if (d.datasize != sizeof(data_s))
+                OOPS;
+            if (IPCR_BREAK == idlejobhandler(par_idlejob))
+                OOPS;
+            return true;
+        case DATATYPE_FIN_ASK:
+            send(signal_s<DATATYPE_FIN_ANSWER>());
+            // no break here
+        case DATATYPE_FIN_ANSWER:
+        case DATATYPE_HANDSHAKE_ANSWER: // only client can receive this and only while connecting
+            OOPS;
+
+        case DATATYPE_DATA_128k:
+            {
+                int trdatasize = (d.datasize - sizeof(data_s));
+                if (trdatasize > (65536 * 2))
+                    OOPS;
+
+                void *dd = _alloca(trdatasize);
+                ReadFile(pipe_in, dd, trdatasize, &r, nullptr);
+                if ((int)r != trdatasize)
+                    OOPS;
+
+                if (IPCR_BREAK == datahandler(par_data, dd, trdatasize))
+                    OOPS;
+            }
+
+            return true;
+
+        }
+
+        OOPS;
+    }
+
+};
 
 }
 
@@ -135,45 +180,39 @@ DWORD WINAPI watchdog(LPVOID p)
 
     for(;!d.quit_quit_quit;)
     {
-        auto r = d.sync->lock_read();
-        int partner_index = d.member ^ 1;
-        auto & partner = r().members[partner_index];
-        if (partner.handler && partner.pid)
+        if (d.other_pid)
         {
-            HWND handler = r().members[d.member].handler;
-            d.watchdog[0] = OpenProcess(SYNCHRONIZE,FALSE, partner.pid);
-            r.unlock();
+            d.watchdog[0] = OpenProcess(SYNCHRONIZE,FALSE, d.other_pid);
             if (!d.watchdog[0])
             {
-                d.emergency_state = true;
-                PostMessageA(handler, WM_USER + 7532, 0, 0);
+                d.quit_quit_quit = true;
+                d.send(signal_s<DATATYPE_FIN_ASK>());
                 break;
             }
             HANDLE processhandler = d.watchdog[0];
             DWORD rtn = WaitForMultipleObjects(2, d.watchdog, FALSE, INFINITE);
             CloseHandle(processhandler);
+            d.watchdog[0] = nullptr;
 
             if (rtn - WAIT_OBJECT_0 == 0)
             {
-                d.emergency_state = true; // terminate partner process - is always emergency_state
-                PostMessageA(handler, WM_USER + 7532, 0, 0);
+                d.quit_quit_quit = true; // terminate partner process - is always emergency_state
+                d.send(signal_s<DATATYPE_FIN_ASK>());
             }
-            
             break;
         }
 
-        if (partner.pid)
+        if (d.other_pid)
         {
-            HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, partner.pid);
+            HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, d.other_pid);
             if (h)
             {
-                DWORD info = GetProcessVersion(partner.pid);
+                DWORD info = GetProcessVersion(d.other_pid);
                 if (info == 0) { CloseHandle(h); h = nullptr; }
             }
-            if (!h) PostMessageA(r().members[d.member].handler, WM_USER + 7532, 0, 0);
+            if (!h) d.send(signal_s<DATATYPE_FIN_ASK>());
             else CloseHandle(h);
         }
-        r.unlock();
         Sleep(1);
     }
 
@@ -187,104 +226,106 @@ int ipc_junction_s::start( const char *junction_name )
     static_assert( sizeof(ipc_junction_s) >= sizeof(ipc_data_s), "update size of ipc_junction_s" );
     ipc_data_s &d = (ipc_data_s &)(*this);
 
+    bool is_client = false;
 
-    strcpy(buf, "_ipcf_" __STR1__(IPCVER) "_");
+    strcpy(buf, "\\\\.\\pipe\\_ipcp0_" __STR1__(IPCVER) "_");
     strcat(buf, junction_name);
-    d.mapfile = CreateFileMappingA(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, 0, sizeof(ipc_sync_struct_s), buf);
-    d.member = (GetLastError() == ERROR_ALREADY_EXISTS) ? 1 : 0;
-    d.sync = (ipc_sync_struct_s *)MapViewOfFile(d.mapfile, FILE_MAP_WRITE, 0, 0, sizeof(ipc_sync_struct_s));
-    if (d.member == 0) d.sync->syncvar<ipc_sync_s>::syncvar();
-    d.datahandler = nullptr;
-    d.idlejobhandler = nullptr;
-    d.watchdog[0] = nullptr;
-    d.watchdog[1] = CreateEvent(nullptr,TRUE,FALSE,nullptr);
-    d.emergency_state = false;
-    d.quit_quit_quit = false;
-    d.watch_dog_works = false;
 
-    if (d.member == 1) Sleep(100); // sure 0 member initialized sync block
-
-    if ( d.sync->lock_read()().members[d.member].handler )
+    d.pipe_in = CreateNamedPipeA( buf, PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, 65536*2, 65536*2, 0, nullptr );
+    d.pipe_out = nullptr;
+    if (INVALID_HANDLE_VALUE == d.pipe_in)
     {
-        UnmapViewOfFile(d.sync);
-        CloseHandle(d.mapfile);
-        CloseHandle(d.watchdog[1]);
-        memset(buffer, 0, sizeof(buffer));
-        stop_called = true;
-        return -1;
-    }
-
-    reg_handler_class();
-
-    HWND handler = CreateWindowA("0LLRgdC10Lwg0LTQvtCx0YDQsA", nullptr, 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, GetModuleHandle(nullptr), this);
-    if (!handler)
-    {
-        UnmapViewOfFile(d.sync);
-        CloseHandle(d.mapfile);
-        CloseHandle(d.watchdog[1]);
-        memset(buffer, 0, sizeof(buffer));
-        stop_called = true;
-        return -1;
-    }
-
-    auto w = d.sync->lock_write();
-    w().members[d.member].tid = GetCurrentThreadId(); // debug purpose
-    w().members[d.member].handler = handler;
-    w().members[d.member].pid = GetCurrentProcessId();
-
-    bool wait_0_member = false;
-    if (d.member == 1)
-    {
-        if ( w().members[d.member ^ 1].handler == nullptr )
+        d.pipe_in = nullptr;
+        if (ERROR_PIPE_BUSY == GetLastError())
         {
-            // oops, no 0 member
-            wait_0_member = true;
-        }
-    }
-    w.unlock();
+            is_client = true;
+            // looks like self is client
 
-    if (wait_0_member)
-    {
-        for(int i=0;i<50;++i)
-        {
-            Sleep(100);
-            auto r = d.sync->lock_read();
-            if ( r().members[d.member ^ 1].handler != nullptr )
+            d.pipe_out = CreateFileA(buf, GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (INVALID_HANDLE_VALUE == d.pipe_out)
+                goto finita;
+
+            buf[14] = '1';
+
+            d.pipe_in = CreateFileA( buf, GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr );
+            if (INVALID_HANDLE_VALUE == d.pipe_in)
             {
-                wait_0_member = false;
-                break;
+                CloseHandle(d.pipe_out);
+                goto finita;
             }
-        }
-        if (wait_0_member)
-        {
-            auto ww = d.sync->lock_write();
-            ww().members[d.member].handler = nullptr;
-            ww().members[d.member].pid = 0;
-            ww.unlock();
 
-            UnmapViewOfFile(d.sync);
-            CloseHandle(d.mapfile);
-            CloseHandle(d.watchdog[1]);
-            DestroyWindow(handler);
+        } else
+        {
+            finita:
             memset(buffer, 0, sizeof(buffer));
             stop_called = true;
             return -1;
         }
+    } else
+    {
+        buf[14] = '1';
+        d.pipe_out = CreateNamedPipeA( buf, PIPE_ACCESS_OUTBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, 65536*2, 65536*2, 0, nullptr );
+        if (INVALID_HANDLE_VALUE == d.pipe_out)
+        {
+            CloseHandle(d.pipe_in);
+            goto finita;
+        }
     }
 
-    if (d.sync == nullptr)
-        __debugbreak();
+    d.sync = 0;
+    d.other_pid = 0;
+    d.datahandler = nullptr;
+    d.idlejobhandler = nullptr;
+    d.watchdog[0] = nullptr;
+    d.watchdog[1] = CreateEvent(nullptr,TRUE,FALSE,nullptr);
+    d.quit_quit_quit = false;
+    d.watch_dog_works = false;
+
+    if (is_client)
+    {
+        if ( !d.send( handshake_ask_s() ))
+        {
+        byebye:
+            if (d.pipe_in) CloseHandle(d.pipe_in);
+            if (d.pipe_out) CloseHandle(d.pipe_out);
+            CloseHandle(d.watchdog[1]);
+            goto finita;
+        }
+
+        DWORD r;
+        handshake_answer_s hsh;
+        for(;;)
+        {
+            ReadFile(d.pipe_in, &hsh, sizeof(hsh), &r, nullptr);
+            if (r != sizeof(hsh))
+            {
+                if (ERROR_PIPE_LISTENING == GetLastError())
+                {
+                    Sleep(0);
+                    continue;
+                }
+                goto byebye;
+            }
+            break;
+        }
+
+        if (hsh.datasize != sizeof(hsh) || hsh.datatype != DATATYPE_HANDSHAKE_ANSWER || hsh.version != IPCVER)
+            goto byebye;
+
+        d.other_pid = hsh.pid;
+
+    }
 
     CloseHandle(CreateThread(nullptr, 0, watchdog, this, 0, nullptr));
     stop_called = false;
     for( ; !d.watch_dog_works; ) Sleep(1);
-    return d.member;
+    return is_client ? 1 : 0;
 }
 
 void ipc_junction_s::stop()
 {
     ipc_data_s &d = (ipc_data_s &)(*this);
-    if (d.sync == nullptr)
+    if (d.pipe_in == nullptr && d.pipe_out == nullptr)
     {
         if (!stop_called || d.watch_dog_works)
             __debugbreak();
@@ -292,24 +333,16 @@ void ipc_junction_s::stop()
         return; // already cleared
     }
 
+    d.send(signal_s<DATATYPE_FIN_ASK>());
+
     SetEvent(d.watchdog[1]);
     CloseHandle(d.watchdog[1]);
 
     d.quit_quit_quit = true;
     for( ; d.watch_dog_works; ) Sleep(1);
     
-    auto w = d.sync->lock_write(d.emergency_state);
-    HWND handler = w().members[d.member].handler;
-    HWND partner = w().members[d.member ^ 1].handler;
-    w().members[d.member].handler = nullptr;
-    w().members[d.member].pid = 0;
-    w.unlock();
-
-    PostMessageA(partner, WM_USER + 7532, 0, 0);
-    DestroyWindow(handler);
-
-    UnmapViewOfFile(d.sync);
-    CloseHandle(d.mapfile);
+    if (d.pipe_in) CloseHandle(d.pipe_in);
+    if (d.pipe_out) CloseHandle(d.pipe_out);
 
     memset(buffer, 0, sizeof(buffer));
     stop_called = true;
@@ -318,11 +351,8 @@ void ipc_junction_s::stop()
 void ipc_junction_s::idlejob()
 {
     ipc_data_s &d = (ipc_data_s &)(*this);
-    if (!d.idlejobhandler || d.emergency_state) return;
-
-    HWND me = d.sync->lock_read()().members[d.member].handler;
-    PostMessageA( me, WM_USER + 17532, 0, 0 );
-
+    if (!d.idlejobhandler || d.quit_quit_quit) return;
+    d.send( signal_s<DATATYPE_IDLEJOB_ASK>() );
 }
 
 void ipc_junction_s::set_data_callback( processor_func *f, void *par )
@@ -340,45 +370,31 @@ void ipc_junction_s::wait( processor_func *df, void *par_data, idlejob_func *ij,
 
     d.idlejobhandler = ij;
     d.par_idlejob = par_ij;
-    BOOL bRet;
 
-    MSG msg;
-    while (!d.quit_quit_quit && (bRet = GetMessage(&msg, nullptr, 0, 0)) != 0) // WM_QUIT is good, but some times bad
-    {
-        if (bRet == -1) ; else
-        {
-            //TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
-    }
+    bool working = d.tick();
+    while (working)
+        working = d.tick();
 }
 
 bool ipc_junction_s::send( const void *data, int datasize )
 {
     ipc_data_s &d = (ipc_data_s &)(*this);
-    if (d.emergency_state || d.quit_quit_quit) return false;
+    if (d.quit_quit_quit) return false;
 
-    auto r = d.sync->lock_read();
-
-    HWND me = r().members[d.member].handler;
-    HWND receiver = r().members[d.member ^ 1].handler;
-
-    r.unlock();
-
-    COPYDATASTRUCT cds;
-    cds.dwData = IPCDT_CUSTOM;
-    cds.cbData = datasize;
-    cds.lpData = (void *)data;
-    HRESULT rslt = SendMessageTimeoutA( receiver, WM_COPYDATA, (WPARAM)me, (LPARAM)&cds, SMTO_NORMAL, 1000, nullptr );
-    return rslt != 0;
+    return d.send( data, datasize );
 }
 
 bool ipc_junction_s::wait_partner(int ms)
 {
     ipc_data_s &d = (ipc_data_s &)(*this);
     DWORD time = timeGetTime();
-    for(;!d.emergency_state && int(timeGetTime()-time)<ms;Sleep(1))
-        if (d.sync->lock_read()().members[d.member ^ 1].handler) return true;
+    for(;!d.quit_quit_quit && int(timeGetTime()-time)<ms;Sleep(1))
+    {
+        if (!d.tick())
+            return false;
+        if (d.other_pid) return true;
+    }
+
     return false;
 }
 

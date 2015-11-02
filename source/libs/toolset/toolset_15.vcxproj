@@ -247,6 +247,17 @@
 </Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
     </CustomBuild>
+    <CustomBuild Include="asm\shrink2x.asm">
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">ml /c /Zi /coff /safeseh /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">ml /c /Zi /coff /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">ml /c /Zi /coff /safeseh /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+    </CustomBuild>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

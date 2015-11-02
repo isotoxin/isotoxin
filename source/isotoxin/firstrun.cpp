@@ -248,7 +248,7 @@ void dialog_firstrun_c::go2page(int page_)
             radio_item_s items[] =
             {
                 radio_item_s(TTT("Default initialization",25), as_param(0)),
-                radio_item_s(TTT("Portable mode",341), as_param(1), CONSTASTR("radio00")),
+                radio_item_s(TTT("Portable mode",276), as_param(1), CONSTASTR("radio00")),
                 radio_item_s(TTT("Manual setup",26), as_param(2))
             };
 

@@ -79,14 +79,21 @@ public:
 
 class dialog_about_c : public gui_isodialog_c
 {
+    process_animation_bitmap_s pa;
     bool checking_new_version = false;
     bool check_update_now(RID, GUIPARAM);
     GM_RECEIVER(dialog_about_c, ISOGM_NEWVERSION);
+
+    bool updanim(RID, GUIPARAM);
+
 protected:
     /*virtual*/ int unique_tag() { return UD_ABOUT; }
     /*virtual*/ void created() override;
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
     /*virtual*/ int additions(ts::irect & border) override;
+
+    void updrect_about(const void *rr, int r, const ts::ivec2 &p);
+    /*virtual*/ ts::UPDATE_RECTANGLE getrectupdate() override { return DELEGATE(this, updrect_about); }
 
 public:
     dialog_about_c(initial_rect_data_s &data);

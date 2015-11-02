@@ -5,6 +5,7 @@
 
 class mainrect_c : public gui_control_c
 {
+    ts::wstr_c name;
     /*virtual*/ void created() override;
     void onclosesave();
 

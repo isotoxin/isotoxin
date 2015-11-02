@@ -60,7 +60,7 @@ struct extension_s
 struct extensions_s
 {
     extensions_s():exts(nullptr, 0) {}
-    extensions_s(const extension_s *e, int cnt):exts(e,cnt) {}
+    extensions_s(const extension_s *e, int cnt, int def = -1):exts(e,cnt), index(def) {}
     array_wrapper_c<const extension_s> exts;
     aint index = -1;
     const wchar *defext() const
@@ -70,8 +70,8 @@ struct extensions_s
     }
 };
 
-wstr_c   TSCALL get_load_filename_dialog(const wsptr &iroot, const wsptr &name, const wsptr &filt, const wchar *defext, const wchar *title);
-bool    TSCALL get_load_filename_dialog(wstrings_c &files, const wsptr &iroot, const wsptr& name, const wsptr &filt, const wchar *defext, const wchar *title);
+wstr_c   TSCALL get_load_filename_dialog(const wsptr &iroot, const wsptr &name, extensions_s &exts, const wchar *title);
+bool    TSCALL get_load_filename_dialog(wstrings_c &files, const wsptr &iroot, const wsptr& name, ts::extensions_s & exts, const wchar *title);
 wstr_c   TSCALL get_save_directory_dialog(const wsptr &root, const wsptr &title, const wsptr &selectpath = wsptr(), bool nonewfolder = false);
 wstr_c   TSCALL get_save_filename_dialog(const wsptr &iroot, const wsptr &name, extensions_s &exts, const wchar *title);
 

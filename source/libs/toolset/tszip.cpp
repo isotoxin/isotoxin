@@ -17,7 +17,7 @@ struct zlo : public zlib_filefunc_def,  public arc_file_s
 
     static voidpf ZCALLBACK fopen_file_func( voidpf, const char *, int )
     {
-        return (voidpf)1;
+        return (voidpf)1; //-V566
     }
 
     static uLong ZCALLBACK fread_file_func(voidpf opaque, voidpf stream, void* buf, uLong size)

@@ -89,7 +89,7 @@ uint  ccollection_c::add_container(const wsptr &name, int prior)
 
     if (pf) 
     {
-        pf->SetTimeStamp(filetime);
+        pf->set_time_stamp(filetime);
         int ins_pos = -1;
         uint cnt = m_containers.size();
         for(uint i = 0; i < cnt; ++i)
@@ -97,7 +97,7 @@ uint  ccollection_c::add_container(const wsptr &name, int prior)
             int pr = m_containers.get(i)->get_priority();
             if (pr <= prior)
             {
-                if ((pr < prior) || CompareFileTime(&filetime, &m_containers.get(i)->GetTimeStamp()) > 0)
+                if ((pr < prior) || CompareFileTime(&filetime, &m_containers.get(i)->get_time_stamp()) > 0)
                 {
                     ins_pos = i;
                     break;
@@ -225,11 +225,11 @@ void ccollection_c::find_by_mask(wstrings_c & files, const ts::wsptr &fnmask, bo
         iterate_folders(pwstr_c(fnmask).substr(0, x), DELEGATE(&fld, filer));
         for (const wstr_c &f : fld.m_folders)
         {
-            wstr_c curf(fnmask); curf.insert(x,CONSTWSTR("/") + f);
+            curf.set(fnmask); curf.insert(x,CONSTWSTR("/") + f);
             find_by_mask(files, curf, full_paths);
         }
         curf.set(masks.substr(0,x)).append(masks.substr(x+3));
-        masks.set( curf.as_sptr() );
+        masks.set( curf.as_sptr() ); // ACHTUNG! curf must be declared outside this block due masks is just a pointer
     }
 
     int lastd = masks.find_last_pos_of(CONSTWSTR("/\\"));

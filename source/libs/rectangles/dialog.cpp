@@ -67,9 +67,9 @@ void gui_listitem_c::created()
 }
 
 
-void gui_listitem_c::set_text(const ts::wstr_c&t)
+void gui_listitem_c::set_text(const ts::wstr_c&t, bool full_height_last_line)
 {
-    __super::set_text(t);
+    __super::set_text(t, full_height_last_line);
     int h = get_height_by_width(-INT_MAX);
 
     if (icon && icon->info().sz.y > h)
@@ -288,6 +288,14 @@ gui_dialog_c::description_s& gui_dialog_c::description_s::vspace(int h, GUIPARAM
     return *this;
 }
 
+gui_dialog_c::description_s& gui_dialog_c::description_s::panel(int h, GUIPARAMHANDLER drawhandler)
+{
+    ctl = _PANEL;
+    height_ = h;
+    handler = drawhandler;
+    return *this;
+}
+
 void gui_dialog_c::description_s::hgroup( const ts::wsptr& desc_ )
 {
     ctl = _HGROUP;
@@ -480,8 +488,13 @@ bool gui_dialog_c::file_selector(RID, GUIPARAM param)
         curp = tf.get_customdata_obj<ts::wstr_c>();
     gui->app_path_expand_env(curp);
 
+    ts::extension_s ext;
+    ext.desc = gui->app_loclabel(LL_ANY_FILES);
+    ext.desc.append(CONSTWSTR(" (*.*)"));
+    ext.ext = CONSTWSTR("*.*");
+    ts::extensions_s exts(&ext, 1, 0);
 
-    ts::wstr_c fn = getroot()->load_filename_dialog(ts::fn_get_path(curp), CONSTWSTR(""), CONSTWSTR(""), nullptr, label_file_selector_caption);
+    ts::wstr_c fn = getroot()->load_filename_dialog(ts::fn_get_path(curp), CONSTWSTR(""), exts, label_file_selector_caption);
 
     if (!fn.is_empty())
     {
@@ -591,9 +604,26 @@ void gui_dialog_c::set_combik_menu( const ts::asptr& ctl_name, const menu_c& m )
 {
     if (RID crid = find(ctl_name))
     {
-        gui_control_c &ctl = HOLD(crid).as<gui_control_c>();
+        gui_textfield_c &ctl = HOLD(crid).as<gui_textfield_c>();
         gui_textfield_c::behav_s &beh = ctl.get_customdata_obj<gui_textfield_c::behav_s>();
         beh.menu = m;
+
+        struct findamarked
+        {
+            ts::wstr_c name;
+
+            bool operator()(findamarked&, const ts::wsptr&) { return true; } // skip separator
+            bool operator()(findamarked&, const ts::wsptr&, const menu_c&) { return true; } // skip submenu
+            bool operator()(findamarked&, const ts::wstr_c&txt, ts::uint32 f, MENUHANDLER h, const ts::str_c&prm)
+            {
+                if (f & MIF_MARKED) name = txt;
+                return true;
+            }
+        } s;
+
+        m.iterate_items(s, s);
+        if (s.name.is_empty()) s.name = m.get_text(0);
+        ctl.set_text(s.name);
     }
 
     for (description_s &d : descs)
@@ -625,12 +655,12 @@ void gui_dialog_c::set_edit_value( const ts::asptr& ctl_name, const ts::wstr_c& 
     }
 }
 
-void gui_dialog_c::set_label_text( const ts::asptr& ctl_name, const ts::wstr_c& t )
+void gui_dialog_c::set_label_text( const ts::asptr& ctl_name, const ts::wstr_c& t, bool full_height_last_line )
 {
     if (RID lrid = find(ctl_name))
     {
         gui_label_simplehtml_c &ctl = HOLD(lrid).as<gui_label_simplehtml_c>();
-        ctl.set_text(t);
+        ctl.set_text(t, full_height_last_line);
     }
 }
 
@@ -842,7 +872,7 @@ void gui_dialog_c::ctlenable( const ts::asptr&name, bool enblflg )
 RID gui_dialog_c::list(int height, const ts::wstr_c & emptymessage)
 {
     gui_simple_dialog_list_c &lst = MAKE_CHILD<gui_simple_dialog_list_c>(getrid(), height, emptymessage);
-    lst.set_updaterect( DELEGATE(this, updrect) );
+    lst.set_updaterect(getrectupdate());
     return lst.getrid();
 }
 
@@ -857,7 +887,7 @@ int gui_dialog_c::radio( const ts::array_wrapper_c<const radio_item_s> & items, 
         r.set_handler(handler, ri.param);
         r.set_face_getter(BUTTON_FACE(radio));
         r.set_text(ri.text);
-        r.set_updaterect( DELEGATE(this, updrect) );
+        r.set_updaterect(getrectupdate());
 
         if ( !ri.name.is_empty() )
             ctl_by_name[ ri.name ] = &r;
@@ -879,7 +909,7 @@ int gui_dialog_c::check( const ts::array_wrapper_c<const check_item_s> & items, 
         c.set_handler(handler, as_param(ci.mask));
         c.set_face_getter(BUTTON_FACE(check));
         c.set_text(ci.text);
-        c.set_updaterect( DELEGATE(this, updrect) );
+        c.set_updaterect(getrectupdate());
 
         if (!ci.name.is_empty())
             ctl_by_name[ci.name] = &c;
@@ -929,8 +959,8 @@ RID gui_dialog_c::label(const ts::wstr_c &text, ts::TSCOLOR col, bool visible)
     gui_label_simplehtml_c &l = MAKE_VISIBLE_CHILD<gui_label_simplehtml_c>(getrid(),visible);
     l.on_link_click = (CLICK_LINK)ts::open_link;
     l.set_autoheight();
-    l.set_text(text);
-    l.set_updaterect( DELEGATE(this, updrect) );
+    l.set_text(text, true);
+    l.set_updaterect(getrectupdate());
     if (col) l.set_defcolor(col);
     return l.getrid();
 }
@@ -939,6 +969,13 @@ RID gui_dialog_c::vspace(int height)
 {
     RID stub = MAKE_CHILD<gui_stub_c>( getrid(), ts::ivec2(-1, height), ts::ivec2(-1, height) );
     return stub;
+}
+
+RID gui_dialog_c::panel(int height, GUIPARAMHANDLER drawhandler)
+{
+    gui_panel_c &pnl = MAKE_CHILD<gui_panel_c>(getrid(), ts::ivec2(-1, height), ts::ivec2(-1, height));
+    pnl.drawhandler = drawhandler;
+    return pnl.getrid();
 }
 
 void gui_dialog_c::removerctl(int r)
@@ -952,7 +989,7 @@ void gui_dialog_c::removerctl(int r)
     }
 }
 
-void gui_dialog_c::updrect(const void *rr, int r, const ts::ivec2 &p)
+void gui_dialog_c::updrect_def(const void *rr, int r, const ts::ivec2 &p)
 {
     ts::safe_ptr<guirect_c> & ctl = subctls[r];
     RID par = RID::from_param(rr);
@@ -1067,6 +1104,10 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             lasthgroup = RID();
             rctl = vspace(d.height_);
             if (d.handler) d.handler( rctl, nullptr );
+            break;
+        case description_s::_PANEL:
+            lasthgroup = RID();
+            rctl = panel(d.height_, d.handler);
             break;
         case description_s::_PATH:
             rctl = textfield(d.text,MAX_PATH, d.readonly_ ? TFR_PATH_VIEWER : TFR_PATH_SELECTOR, d.readonly_ ? nullptr : DELEGATE(&d, updvalue), nullptr, 0, parent);

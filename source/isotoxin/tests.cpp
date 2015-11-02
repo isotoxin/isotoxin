@@ -102,7 +102,7 @@ void test_ipc()
         int stime = timeGetTime();
         ts::uint8 data[16384];
         memset(data,1,sizeof(data));
-        ipcx = &ipcs;
+        ipcx = &ipcs; //-V506
         ipcs.send(ipcw(XX_PING) << data_block_s(data,sizeof(data)));
         ipcs.wait_loop(tickx);
 
@@ -404,7 +404,7 @@ void summon_test_window()
 {
     //cfg().autoupdate_next( now() + 2 );
     //cfg().autoupdate_newver(CONSTASTR("0.0.0"));
-    zero_version = true;
+    //zero_version = true;
     //gmsg<ISOGM_NEWVERSION> *m = TSNEW(gmsg<ISOGM_NEWVERSION>, CONSTASTR("0.1.225"));
     //m->send_to_main_thread();
 
@@ -413,7 +413,7 @@ void summon_test_window()
     //RID r = MAKE_ROOT<test_window>();
     //MODIFY(r).allow_move_resize().size(502,447).setcenterpos().visible(true);
 
-    //SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR, dialog_avasel_params_s(0));
+    SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR, dialog_avasel_params_s(0));
     
 }
 

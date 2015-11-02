@@ -69,6 +69,17 @@ public:
     void set_text_only(const wstr_c &text_, bool forcedirty) { if (forcedirty || !text.equals(text_)) { flags.set(F_DIRTY|F_INVALID_SIZE|F_INVALID_TEXTURE|F_INVALID_GLYPHS); text = text_; } }
 	bool set_text(const wstr_c &text, CUSTOM_TAG_PARSER ctp, bool do_parse_and_render_texture);
 	const wstr_c& get_text() const { return text; }
+    bool change_option( ts::flags32_s::BITS mask, ts::flags32_s::BITS value )
+    {
+        ts::flags32_s::BITS old = flags.__bits & mask;
+        flags.__bits = (flags.__bits & (~mask)) | (mask & value);
+        if ( old != (flags.__bits & mask) )
+        {
+            flags.set(F_DIRTY);
+            return true;
+        }
+        return false;
+    }
     void set_options(ts::flags32_s nf) //-V813
     {
         if ((flags.__bits & (TO_LAST_OPTION - 1)) != (nf.__bits & (TO_LAST_OPTION - 1)))
@@ -115,7 +126,7 @@ class text_rect_static_c : public text_rect_c
     }
     /*virtual*/ void texture_no_need() override
     {
-        safe_destruct(t);
+        renew(t);
     }
 public:
 };

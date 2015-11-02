@@ -355,6 +355,7 @@ __forceinline int __fastcall scan_f_to_index(int scan)
     case SSK_F12: return 11;
     }
     __debugbreak(); // opa
+    __assume(0);
 }
 
 __forceinline int __fastcall scan_num_to_index(int scan)
@@ -373,6 +374,7 @@ __forceinline int __fastcall scan_num_to_index(int scan)
     case SSK_9: return 9;
     }
     __debugbreak(); // opa
+    __assume(0);
 }
 
 __forceinline int __fastcall scan_pad_to_index(int scan)
@@ -391,6 +393,7 @@ __forceinline int __fastcall scan_pad_to_index(int scan)
     case SSK_PAD9: return 9;
     }
     __debugbreak(); // opa
+    __assume(0);
 }
 
 #pragma warning (pop)

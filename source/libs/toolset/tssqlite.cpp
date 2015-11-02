@@ -460,7 +460,7 @@ public:
 
 
     bool inactive() const {return db == nullptr;}
-    void open(const wsptr &fn_, bool readonly)
+    void open(const wsptr &fn_)
     {
         fn = fn_;
         ts::str_c utf8name = to_utf8( fn );
@@ -500,7 +500,7 @@ public:
         
         if (recruit == nullptr) recruit = &dbs.add();
         if (recruit->get() == nullptr) recruit->reset( TSNEW(sqlite3_c, readonly) );
-        recruit->get()->open(fnn, readonly);
+        recruit->get()->open(fnn);
         if (!recruit->get()->inactive()) return recruit->get();
         return nullptr;
     }

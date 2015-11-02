@@ -7,6 +7,7 @@ class task_c
 {
     friend class task_executor_c;
     int queueflags = 0;
+    int __pass = 0;
     void setflag( int flagmask )
     {
         if ( 0 != (queueflags & flagmask) )
@@ -26,9 +27,14 @@ public:
     static const int R_CANCEL = -2; // job canceled
     static const int R_RESULT = -3; // call result and iterate again
 
+    int call_iterate()
+    {
+        __pass = iterate( __pass );
+        return __pass;
+    }
 
     virtual int iterate(int pass) { return R_DONE; }; // can be called from any thread
-    virtual void done(bool cancleled) { TSDEL(this); } // called only from base thread. task should kill self
+    virtual void done(bool canceled) { TSDEL(this); } // called only from base thread. task should kill self
     virtual void result() {} // called only from base thread
 
 };

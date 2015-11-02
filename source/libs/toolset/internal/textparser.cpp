@@ -235,6 +235,7 @@ struct text_parser_s
 
     int rite_rite = 0; // index in glyph array for block <r></r> - align to right
     int addhtags = 0; // number of tags increasing height of line
+    int full_height_line = 0;
 
     bool first_char_in_paragraph, was_inword_break, current_line_end_ellipsis, current_line_with_rects;
     bool search_rects;
@@ -295,6 +296,7 @@ struct text_parser_s
         current_line_end_ellipsis = FLAG(flags,TO_LINE_END_ELLIPSIS);
         current_line_with_rects = false;
         search_rects = false;
+        full_height_line = 0;
 	}
 
 	void add_indent(int chari)
@@ -318,6 +320,7 @@ struct text_parser_s
 		if (pen.y < rightSL.bottom) cur_max_line_len -= rightSL.width;
 		line_width = 0;
         current_line_end_ellipsis = FLAG(flags,TO_LINE_END_ELLIPSIS);
+        full_height_line = 0;
 	}
 
 	void end_line(bool nextLn = true, bool acceptaddhnow = false) // break current line
@@ -393,7 +396,8 @@ struct text_parser_s
 
 		H = 0; spaces = 0; W = 0; WR = 0;
 		if (line_size == 0) return 0; // to do not corrupt value of last_line_descender due last empty line (single line)
-		last_line_descender = 0;
+		last_line_descender = full_height_line;
+        full_height_line = 0;
         int addH = 0;
 		for (int j = 0; j < line_size; j++)
 		{
@@ -769,6 +773,13 @@ struct text_parser_s
                 ++addhtags;
             mg.image = nullptr;
             line_width += mg.advance;
+        } else if (tag == CONSTWSTR("fullheight"))
+        {
+            font_c *f = fonts_stack.last();
+            glyph_s &g = (*f)['_'];
+            int h = g.top - g.height;
+            full_height_line = tmin(last_line_descender, h, f->underline_add_y-(int)lceil(f->uline_thickness*.5f));
+
         } else if (tag == CONSTWSTR(".")) // <.> always ignored
 			;
 		else

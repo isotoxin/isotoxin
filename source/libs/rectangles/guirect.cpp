@@ -201,11 +201,11 @@ bool rectprops_c::change_to(const rectprops_c &p, rectengine_c *engine)
         RID parr = engine->getrect().getparent();
         if (parr)
         {
-            HOLD p(parr);
+            HOLD holdp(parr);
             evt_data_s d;
             d.rect.id = engine->getrid();
             d.rect.is_visible = vis;
-            p.engine().sq_evt(SQ_CHILD_VISIBILITY_CHANGED, p().getrid(), d);
+            holdp.engine().sq_evt(SQ_CHILD_VISIBILITY_CHANGED, parr, d);
         }
     }
     if (zindex_changed)
@@ -454,6 +454,11 @@ void gui_control_c::disable(bool f)
 //________________________________________________________________________________________________________________________________ gui stub
 
 MAKE_CHILD<gui_stub_c>::~MAKE_CHILD()
+{
+    MODIFY(get()).visible(true);
+}
+
+MAKE_CHILD<gui_panel_c>::~MAKE_CHILD()
 {
     MODIFY(get()).visible(true);
 }
@@ -925,9 +930,10 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
     }
 }
 
-void gui_label_c::set_text(const ts::wstr_c&_text)
+void gui_label_c::set_text(const ts::wstr_c&_text, bool full_height_last_line)
 {
-    if (textrect.set_text(_text,custom_tag_parser_delegate(),false))
+    bool dirty = textrect.change_option( ts::TO_LASTLINEADDH, full_height_last_line ? ts::TO_LASTLINEADDH : 0 );
+    if (textrect.set_text(_text,custom_tag_parser_delegate(),false) || dirty)
         getengine().redraw();
 }
 
@@ -1230,7 +1236,7 @@ void gui_label_simplehtml_c::created()
     __super::created();
 }
 
-/*virtual*/ void gui_label_simplehtml_c::set_text(const ts::wstr_c&text)
+/*virtual*/ void gui_label_simplehtml_c::set_text(const ts::wstr_c&text, bool full_height_last_line)
 {
     ts::wstr_c t(text);
     ts::swstr_t<32> ct( CONSTWSTR("<cstm=b") ); int ctl = ct.get_length();
@@ -1248,7 +1254,7 @@ void gui_label_simplehtml_c::created()
         ct.set_char(6,'a');
         t.replace(x,y+2-x,ct);
     }
-    __super::set_text(t);
+    __super::set_text(t, full_height_last_line);
 }
 
 /*virtual*/ bool gui_label_simplehtml_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -2141,6 +2147,7 @@ void gui_vscrollgroup_c::children_repos()
                 sbhelper.shift = info.area.height() - scroll_target_y - scroll_target_h;
         }
     }
+    int area_width = info.area.width() - sbwidth;
     top_visible = nullptr;
     for( ts::aint i = 0, y = sbhelper.shift; i < info.count; ++i )
     {
@@ -2181,8 +2188,13 @@ void gui_vscrollgroup_c::children_repos()
         }
 
         e->__spec_set_outofbound(false);
-        int w = ts::tmin( inf.maxw, info.area.width()-sbwidth );
-        MODIFY( e->getrect() ).pos( info.area.lt.x, info.area.lt.y + y ).size( w, inf.h );
+        int w = ts::tmin( inf.maxw, area_width);
+
+        int addx = 0;
+        if (w < area_width && flags.is(F_HCENTER_SMALL_CTLS))
+            addx = (area_width - w) / 2;
+
+        MODIFY( e->getrect() ).pos( info.area.lt.x + addx, info.area.lt.y + y ).size( w, inf.h );
         drawflags.set_bit(i, true);
         y += inf.h;
     }
@@ -2385,7 +2397,7 @@ bool gui_popup_menu_c::update_size(RID, GUIPARAM)
         sz.y = (maxsz.height() - 50);
         height_decreased = true;
 
-        if (const theme_rect_s *thr = themerect())
+        if (thr)
             sz.x += thr->sbwidth();
     }
 

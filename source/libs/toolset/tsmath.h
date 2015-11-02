@@ -235,7 +235,7 @@ namespace ts
         return (bool) (((e - s).cross(p - s)) <= 0.0f);
     }
 
-	struct irect
+	struct irect //-V690
 	{
 		ivec2 lt;
 		ivec2 rb;

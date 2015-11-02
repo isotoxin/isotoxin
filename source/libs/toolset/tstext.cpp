@@ -19,23 +19,6 @@ inline void writePixelBlended(TSCOLOR &dst, const ivec4 &srcColor)
 	dst = ((dstColor.r & 0xFF00) << 8) | (dstColor.g & 0xFF00) | (dstColor.b >> 8) | ((dstColor.a & 0xFF00) << 16);
 }
 
-__forceinline void write_pixel_pm( TSCOLOR &dst, TSCOLOR src )
-{
-    TSCOLOR c = dst;
-
-    uint8 ba = ALPHA(src); if (ba == 0) return;
-    float a = (float)((double)(ba) * (1.0 / 255.0));
-    float not_a = 1.0f - a;
-
-    auint oiB = lround(float(BLUE(c)) * not_a) + BLUE(src);
-    auint oiG = lround(float(GREEN(c)) * not_a) + GREEN(src);
-    auint oiR = lround(float(RED(c)) * not_a) + RED(src);
-    auint oiA = lround(float(ALPHA(c)) * not_a) + ALPHA(src);
-
-    dst = oiB | (oiG << 8) | (oiR << 16) | (oiA << 24);
-
-}
-
 __forceinline void write_pixel(TSCOLOR &dst, TSCOLOR src, uint8 aa)
 {
     TSCOLOR c = dst;
@@ -127,7 +110,7 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
                 ts::TSCOLOR col = glyph.color;
                 for (; clipped_height; clipped_height--, dst += pitch)
                     for (int i = 0; i < clipped_width; i++)
-                        write_pixel_pm(((TSCOLOR*)dst)[i], col);
+                        ((TSCOLOR*)dst)[i] = ALPHABLEND_PM(((TSCOLOR*)dst)[i], col);
 
 
                 continue;
@@ -192,7 +175,7 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
         {
             for (; clipped_height; clipped_height--, src += glyphPitch, dst += pitch)
                 for (int i = 0; i < clipped_width; i++)
-                    write_pixel_pm( ((TSCOLOR*)dst)[i], ((TSCOLOR*)src)[i] );
+                    ((TSCOLOR*)dst)[i] = ALPHABLEND_PM( ((TSCOLOR*)dst)[i], ((TSCOLOR*)src)[i] );
         }
 
 	}

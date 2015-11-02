@@ -3,6 +3,7 @@
 #pragma warning (disable:4091) // 'typedef ' : ignored on left of '' when no variable is declared
 
 #define APPNAME "Isotoxin"
+#define APPNAME_CAPTION ts::wstr_c(CONSTWSTR("<color=0,50,0><b>")).append(CONSTWSTR(APPNAME)).append(CONSTWSTR("</b></color>"))
 
 #define WINDOWS_ONLY // #error
 
@@ -18,7 +19,6 @@
 #endif
 #include "filter_audio/filter_audio.h"
 
-
 #include "ipc/ipc.h"
 #include "rectangles/rectangles.h"
 
@@ -26,7 +26,6 @@
 #undef delete
 #include "s3/s3.h"
 #pragma pop_macro("delete")
-
 
 #define STRTYPE(TCHARACTER) ts::pstr_t<TCHARACTER>
 #define MAKESTRTYPE(TCHARACTER, s, l) STRTYPE(TCHARACTER)( ts::sptr<TCHARACTER>((s),(l)) )
@@ -55,6 +54,7 @@ INLINE ipcr & operator>>(ipcr &r, ts::astrings_c &s)
 
 #include "tools.h"
 #include "mediasystem.h"
+#include "videocapture.h"
 
 #include "contacts.h"
 #include "config.h"

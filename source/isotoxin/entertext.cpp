@@ -23,7 +23,7 @@ void dialog_entertext_c::getbutton(bcreate_s &bcr)
     __super::getbutton(bcr);
 }
 
-/*virtual*/ int dialog_entertext_c::additions(ts::irect & border)
+/*virtual*/ int dialog_entertext_c::additions(ts::irect &)
 {
 
     descmaker dm(descs);

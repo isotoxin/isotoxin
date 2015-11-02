@@ -84,7 +84,7 @@ static_assert( MAX_COMMANDS < 256, "255 values max" );
 
 #pragma pack(push)
 #pragma pack(1)
-struct data_header_s 
+struct data_header_s //-V690
 {
     int cmd; // ok, ok align! 32bit! happy?
     data_header_s(commands_e c):cmd((int)c) {}

@@ -40,7 +40,7 @@ spinlock_queue_s
 		pointer_t next;
 		node_t* StackNextFree;
 		T value;
-		node_t(){}
+		node_t(){} //-V730
 	};
 
 	volatile pointer_t Head;

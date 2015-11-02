@@ -625,7 +625,8 @@ void gui_contact_item_c::update_text()
                     {
                         ts::wstr_c t,b;
                         typing_buf.split(t,b,'\1');
-                        t = text_typing( t, b, CONSTWSTR("<i>") );
+                        ts::wstr_c ins(CONSTWSTR("<fullheight><i>"));
+                        t = text_typing( t, b, ins );
                         typing_buf.set(t).append_char('\1').append(b);
                         if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
 
@@ -678,7 +679,9 @@ bool gui_contact_item_c::edit1(RID, GUIPARAM)
 
 void gui_contact_item_c::updrect(const void *, int r, const ts::ivec2 &p)
 {
-    if (ASSERT(r < rbtn::EB_MAX) && prf().is_loaded())
+    if (r >= rbtn::EB_MAX) return;
+
+    if (prf().is_loaded())
     {
         hstuff().updr[r].p = root_to_local(p);
         hstuff().updr[r].updated = true;
@@ -769,11 +772,11 @@ void gui_contact_item_c::protocols_s::update()
     if (!owner)
         return;
 
-    contact_c *contact = owner->contact;
-    if (!contact)
+    contact_c *cc = owner->contact;
+    if (!cc)
         return;
 
-    const contact_c *def = !contact->getkey().is_self() ? contact->subget_default() : nullptr;
+    const contact_c *def = !cc->getkey().is_self() ? cc->subget_default() : nullptr;
 
     struct preproto_s
     {
@@ -783,7 +786,7 @@ void gui_contact_item_c::protocols_s::update()
     };
     ts::tmp_tbuf_t<preproto_s> splist;
 
-    contact->subiterate([&](contact_c *c) {
+    cc->subiterate([&](contact_c *c) {
         if (auto *row = prf().get_table_active_protocol().find<true>(c->getkey().protoid))
         {
             preproto_s &ap = splist.add();
@@ -1181,7 +1184,7 @@ bool gui_contact_item_c::allow_drop() const
                         dd.offset += ca.lt;
                         int oldxo = dd.offset.x;
                         ts::flags32_s f; f.setup(ts::TO_VCENTER | ts::TO_LINE_END_ELLIPSIS);
-                        tdp.textoptions = &f;
+                        tdp.textoptions = &f; //-V506
                         tdp.forecolor = nullptr;
                         tdp.rectupdate = DELEGATE( this, updrect );
                         draw(dd, tdp);
@@ -1408,7 +1411,7 @@ bool gui_contact_item_c::allow_drop() const
                     m.add(TTT("Leave group chat",304),0,handlers::m_delete,contact->getkey().as_str());
                 else
                     m.add(TTT("Delete",85),0,handlers::m_delete,contact->getkey().as_str());
-                m.add(TTT("Contact settings",223),0,handlers::m_contact_props,contact->getkey().as_str());
+                m.add(TTT("Contact settings",225),0,handlers::m_contact_props,contact->getkey().as_str());
 
                 ts::wstrings_c fns;
                 ts::g_fileop->find(fns, CONSTWSTR("*.template"), false);
@@ -1544,7 +1547,7 @@ void gui_contact_item_c::set_default_proto(const ts::str_c&cks)
 
 INLINE int statev(contact_state_e v)
 {
-    switch (v)
+    switch (v) //-V719
     {
         case CS_INVITE_RECEIVE:
             return 100;

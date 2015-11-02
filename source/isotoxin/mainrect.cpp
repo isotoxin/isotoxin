@@ -19,7 +19,9 @@ ts::uint32 mainrect_c::gm_handler( gmsg<ISOGM_APPRISE> & )
 
 /*virtual*/ ts::wstr_c mainrect_c::get_name() const
 {
-    return g_sysconf.name;
+    if (name.is_empty())
+        const_cast<ts::wstr_c &>(name).set(ts::wsptr(g_sysconf.name)).replace_all(CONSTWSTR(APPNAME), APPNAME_CAPTION);
+    return name;
 }
 
 /*virtual*/ void mainrect_c::created()

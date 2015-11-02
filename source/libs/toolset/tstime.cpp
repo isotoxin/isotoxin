@@ -151,10 +151,6 @@ void    timerprocessor_c::its_time(timer_subscriber_c *t, void * par)
     }
 }
 
-message_poster_c::message_poster_c(int pausems): m_pausems(pausems)
-{
-
-}
 message_poster_c::~message_poster_c()
 {
     stop();

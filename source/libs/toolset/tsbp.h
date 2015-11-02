@@ -56,7 +56,7 @@ public:
 
     bool value_not_specified() const
     {
-        return double_value_cache == DBL_MAX;
+        return double_value_cache == DBL_MAX; //-V550
     }
 	bool is_empty() const {return first_element == nullptr;}
 
@@ -233,7 +233,7 @@ public:
 	double as_double(double def = 0.0) const
 	{
 		if (value_not_specified()) return def;
-		if (double_value_cache == -DBL_MAX) double_value_cache = value.as_double();
+		if (double_value_cache == -DBL_MAX) double_value_cache = value.as_double(); //-V550
 		return double_value_cache;
 	}
 	int as_int(int def = 0) const {return (int)as_double(def);}

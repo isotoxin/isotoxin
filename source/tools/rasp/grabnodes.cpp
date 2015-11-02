@@ -139,7 +139,6 @@ int proc_emoji(const wstrings_c & pars)
             ts::str_c lnk = get_image_link( CONSTASTR("http://unicodey.com/emoji-data/"), google_link );
             
             buf_c imgb;
-            https_c httpsclient;
             httpsclient.get(lnk, imgb);
             imgb.save_to_file( fn_join(wstr_c(CONSTWSTR("emoji_google")),CONSTWSTR("0x") + to_wstr(utf8.substr(2).as_sptr())).append(CONSTWSTR(".png")) );
 

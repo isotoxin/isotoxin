@@ -249,10 +249,10 @@ bool active_protocol_c::cmdhandler(ipcr r)
             int dsz;
             const void *data = r.get_data(dsz);
 
-            auto r = syncdata.lock_read();
-            float vol = r().volume;
-            int dsp_flags = r().dsp_flags;
-            r.unlock();
+            auto rd = syncdata.lock_read();
+            float vol = rd().volume;
+            int dsp_flags = rd().dsp_flags;
+            rd.unlock();
 
             int dspf = 0;
             if (0 != (dsp_flags & DSP_SPEAKERS_NOISE)) dspf |= fmt_converter_s::FO_NOISE_REDUCTION;
@@ -366,10 +366,17 @@ void active_protocol_c::worker()
 void active_protocol_c::worker_check()
 #endif
 {
-    syncdata.lock_write()().flags.set(F_WORKER);
+    ts::str_c ipcname(CONSTASTR("isotoxin_ap_"));
+    uint64 utg = ts::uuid();
+    ipcname.append_as_hex(&utg, sizeof(utg)).append_char('_');
+
+    auto ww = syncdata.lock_write();
+    ww().flags.set(F_WORKER);
+    ipcname.append( ww().data.tag );
+    ww.unlock();
 
     // ipc allocated at stack
-    isotoxin_ipc_s ipcs(ts::str_c(CONSTASTR("_isotoxin_ap_")).append_as_num(ts::uuid()), DELEGATE(this,cmdhandler));
+    isotoxin_ipc_s ipcs(ipcname, DELEGATE(this,cmdhandler));
     if (ipcs.ipc_ok)
     {
         ipcp = &ipcs;

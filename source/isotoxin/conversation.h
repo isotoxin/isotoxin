@@ -443,7 +443,6 @@ public:
     bool with_utag(uint64 utag) const;
     bool remove_utag(uint64 utag);
     uint64 zero_utag() const {return zero_rec.utag;}
-    time_t zero_time() const {return zero_rec.time;}
 
     bool is_history_load_button() const {return MTA_SPECIAL == mt;}
     bool is_date_separator() const {return MTA_DATE_SEPARATOR == mt;}
@@ -482,18 +481,27 @@ class gui_messagelist_c : public gui_vscrollgroup_c
         uint64 scrollto = 0;
         gui_messagelist_c *owner;
         rectengine_c *scroll_to = nullptr;
-        rectengine_c *first_unread = nullptr;
         const found_item_s *found_item;
-        int fillindex = -1;
+        int fillindex_up = -1;
+        int fillindex_down = -1;
+        int fillindex_down_end = -1;
         int numpertick = 20;
         int load_n = 0;
         int options = 0;
-        filler_s(gui_messagelist_c *owner, int n, int loadn):owner(owner), found_item(nullptr), fillindex(n-1), options(RSEL_INSERT_NEW), load_n(loadn) { tick(); }
-        filler_s(gui_messagelist_c *owner, const found_item_s *found_item, uint64 scrollto, int options, int loadn):owner(owner), found_item(found_item), scrollto(scrollto), options(options), load_n(loadn) { tick(); }
+        bool dont_scroll = false;
+        filler_s(gui_messagelist_c *owner, int n, int loadn):owner(owner), found_item(nullptr), fillindex_up(n-1), fillindex_down(0), fillindex_down_end(0), options(RSEL_INSERT_NEW), load_n(loadn) { tick(); }
+        filler_s(gui_messagelist_c *owner, const found_item_s *found_item, uint64 scrollto, int options, int loadn);
         ~filler_s();
         bool tick(RID r = RID(), GUIPARAM p = nullptr);
+
+        void die()
+        {
+            owner->filler.reset();
+        }
+
     };
     UNIQUE_PTR( filler_s ) filler;
+
 
     time_t last_seen_post_time = 0;
     tm last_post_time;
@@ -513,11 +521,7 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     int target_offset = 0;
     int prevdelta = 0;
 
-    /*virtual*/ void on_manual_scroll() override
-    {
-        flags.clear(F_SCROLLING_TO_TGT);
-        __super::on_manual_scroll();
-    }
+    /*virtual*/ void on_manual_scroll() override;
 
     bool font_size_up(RID, GUIPARAM);
     bool font_size_down(RID, GUIPARAM);

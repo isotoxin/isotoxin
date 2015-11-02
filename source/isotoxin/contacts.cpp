@@ -586,12 +586,12 @@ void contact_c::export_history( const ts::wsptr &templatename, const ts::wsptr &
             if (!link.is_empty())
             {
                 ts::ivec2 linkinds;
-                for (int i = 0; text_find_link(text, i, linkinds);)
+                for (int j = 0; text_find_link(text, j, linkinds);)
                 {
                     ts::str_c lnk = link;
                     lnk.replace_all(CONSTASTR("{LINK}"), text.substr(linkinds.r0, linkinds.r1));
                     text.replace(linkinds.r0, linkinds.r1 - linkinds.r0, lnk);
-                    i = linkinds.r0 + lnk.get_length();
+                    j = linkinds.r0 + lnk.get_length();
                 }
             }
             bbrepls(text);
@@ -1297,8 +1297,8 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
             ts::aint index;
             if (CHECK(arr.find_sorted(index, contact_key_s(c->metaid))))
             {
-            meta_restored:
                 metac = arr.get(index);
+            meta_restored:
                 contact_c *cc = metac->subgetadd(c->key);
                 cc->setup(c, 0);
 
@@ -1307,7 +1307,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
             } else
             {
                 contact_key_s metakey(c->metaid);
-                contact_c *metac = TSNEW(contact_c, metakey);
+                metac = TSNEW(contact_c, metakey);
                 arr.insert(index, metac);
                 goto meta_restored;
             }
@@ -1957,16 +1957,16 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
     {
     case MTA_FRIEND_REQUEST:
         {
-            contact_c *historian = msg.get_historian();
-            if (CHECK(historian))
-                g_app->new_blink_reason(historian->getkey()).friend_invite();
+            contact_c *h = msg.get_historian();
+            if (CHECK(h))
+                g_app->new_blink_reason(h->getkey()).friend_invite();
         }
     case MTA_MESSAGE:
         if (MTA_MESSAGE == imsg.mt)
         {
-            contact_c *historian = msg.get_historian();
-            if (CHECK(historian))
-                g_app->new_blink_reason(historian->getkey()).up_unread();
+            contact_c *h = msg.get_historian();
+            if (CHECK(h))
+                g_app->new_blink_reason(h->getkey()).up_unread();
         }
     case MTA_ACTION:
         if (g_app->is_inactive(true) || !msg.current)
