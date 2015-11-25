@@ -276,6 +276,18 @@ enum enter_key_options_s
     EKO_ENTER_NEW_LINE_DOUBLE_ENTER,
 };
 
+enum camview_snap_e
+{
+    CVS_LEFT_TOP,
+    CVS_LEFT_BOTTOM,
+    CVS_TOP_LEFT,
+    CVS_TOP_RITE,
+    CVS_RITE_TOP,
+    CVS_RITE_BOTTOM,
+    CVS_BOTTOM_LEFT,
+    CVS_BOTTOM_RITE,
+};
+
 struct dialog_protosetup_params_s;
 
 class profile_c : public config_base_c
@@ -306,12 +318,15 @@ class profile_c : public config_base_c
 
     static const ts::flags32_s::BITS F_OPTIONS_VALID = SETBIT(0);
     static const ts::flags32_s::BITS F_LOADING = SETBIT(1);
+    static const ts::flags32_s::BITS F_CLOSING = SETBIT(2);
 
     ts::flags32_s profile_options;
     ts::flags32_s current_options;
 
     INTPAR(msgopts, 0)
     INTPAR(msgopts_edited, 0)
+
+    void create_aps();
 
 public:
 
@@ -323,6 +338,7 @@ public:
 
     bool addeditnethandler(dialog_protosetup_params_s &params);
 
+    void check_aps();
     void shutdown_aps();
     template<typename APR> void iterate_aps( APR apr ) const
     {
@@ -437,6 +453,10 @@ public:
     TEXTWPAR(auto_confirm_masks, "*.png; *.jpg; *.gif; *.avi; *.mp4; *.mkv");
     TEXTWPAR(manual_confirm_masks, "*.exe; *.com; *.bat; *.cmd; *.vbs");
     INTPAR(fileconfirm, 0);
+
+    INTPAR( camview_size, 25 );
+    INTPAR( camview_snap, CVS_RITE_BOTTOM );
+    INTPAR( camview_pos, 0 );
 
     FLOATPAR(fontscale_conv_text, 1.0f);
 

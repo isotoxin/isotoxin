@@ -546,7 +546,7 @@ bool gui_dialog_c::combo_drop(RID rid, GUIPARAM param)
     }
     if (tf.is_disabled()) return true;
     gui_textfield_c::behav_s &beh = tf.get_customdata_obj<gui_textfield_c::behav_s>();
-    tf.popupmenu = &gui_popup_menu_c::show(menu_anchor_s(tf.getprops().screenrect(), menu_anchor_s::RELPOS_TYPE_2), beh.menu).host(tf.getrid());
+    tf.popupmenu = &gui_popup_menu_c::show(menu_anchor_s(tf.getprops().screenrect(), menu_anchor_s::RELPOS_TYPE_BD), beh.menu).host(tf.getrid());
     tf.popupmenu->set_click_handler( DELEGATE(&beh, onclick) );
     return true;
 }
@@ -575,7 +575,7 @@ bool gui_dialog_c::custom_menu(RID rid, GUIPARAM param)
 
     ts::irect r = tf.getprops().screenrect();
     r.lt.x = r.rb.x - r.height();
-    tf.popupmenu = &gui_popup_menu_c::show(menu_anchor_s(r, menu_anchor_s::RELPOS_TYPE_2), beh.menu).host(tf.getrid());
+    tf.popupmenu = &gui_popup_menu_c::show(menu_anchor_s(r, menu_anchor_s::RELPOS_TYPE_BD), beh.menu).host(tf.getrid());
     tf.popupmenu->set_click_handler( DELEGATE(&beh, onclick) );
 
     return true;

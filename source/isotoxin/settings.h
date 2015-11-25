@@ -395,10 +395,10 @@ private:
     void setup_video_device();
     void select_video_capture_device( const ts::str_c& prm );
     menu_c list_video_capture_devices();
-    vcd_list_t video_devices;
+    vsb_list_t video_devices;
 
     ts::wstrmap_c camera;
-    UNIQUE_PTR( vcd_c ) video_device;
+    UNIQUE_PTR( vsb_c ) video_device;
     process_animation_bitmap_s initializing_animation;
 
     void mod();
@@ -420,6 +420,6 @@ public:
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
 
-    void set_video_devices( vcd_list_t &&video_devices );
+    void set_video_devices( vsb_list_t &&video_devices );
 };
 

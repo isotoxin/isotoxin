@@ -27,8 +27,48 @@ namespace
                 ts::irect frrect; 
                 const ts::drawable_bitmap_c&frame =  e->curframe(frrect);
 
-                bmp.create_RGBA(ts::ivec2(advance, maxh));
-                bmp.resize_from(frame.extbody(frrect), ts::FILTER_LANCZOS3);
+                ts::ivec2 tsz(advance, maxh);
+
+                if (tsz.x < 16 || tsz.y < 16)
+                {
+                    // too small target bmp - lanczos3 resize will fail
+                    ts::ivec2 lsz(tsz * 2);
+                    while (lsz.x < 16 || lsz.y < 16) lsz = lsz * 2;
+
+                    ts::bitmap_c tmp;
+                    if ( lsz == frrect.size() )
+                    {
+                        if (tsz == lsz / 2)
+                        {
+                            bmp.create_RGBA(tsz);
+                            frame.shrink_2x_to(frrect.lt, frrect.size(), bmp.extbody());
+                            return;
+                        } else
+                        {
+                            tmp.create_RGBA(lsz / 2);
+                            frame.shrink_2x_to(frrect.lt, frrect.size(), tmp.extbody());
+                            ASSERT(tmp.info().sz.x > tsz.x && tmp.info().sz.y > tsz.y);
+                        }
+                    } else
+                    {
+                        tmp.create_RGBA(lsz);
+                        tmp.resize_from(frame.extbody(frrect), ts::FILTER_LANCZOS3);
+                        ASSERT(tmp.info().sz.x > tsz.x && tmp.info().sz.y > tsz.y);
+                    }
+
+                    while(tmp.info().sz.x > tsz.x)
+                    {
+                        bmp.create_RGBA(tmp.info().sz / 2);
+                        tmp.shrink_2x_to(ts::ivec2(0), tmp.info().sz, bmp.extbody());
+                        tmp = bmp;
+                    }
+                    ASSERT(tmp.info().sz == bmp.info().sz);
+
+                } else
+                {   
+                    bmp.create_RGBA(tsz);
+                    bmp.resize_from(frame.extbody(frrect), ts::FILTER_LANCZOS3);
+                }
             }
         }
         /*virtual*/ void release() override

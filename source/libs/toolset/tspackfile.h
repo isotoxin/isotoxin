@@ -16,7 +16,7 @@ protected:
 	uint			m_id;
 
 public:
-    container_c(const wsptr &name, int priority, uint id) : m_filename(name), m_priority(priority), m_id(id)
+    container_c(const wsptr &name, int priority, uint id) : m_filename(name), m_priority(priority), m_id(id) //-V730
     {
         memset((void*)&m_timestamp, 0, sizeof(FILETIME));
     };

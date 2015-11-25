@@ -248,6 +248,14 @@ namespace ts
         irect(decltype(ivec2::x) v1, decltype(ivec2::x) v2) :lt(v1), rb(v2) {}
         template<typename T> irect(decltype(ivec2::x) lt_, const vec_t<T,2> &rb_) :lt(lt_, lt_), rb(rb_) {}
 
+        static irect from_center_and_size( const ivec2&c, const ivec2&sz )
+        {
+            irect r;
+            r.lt = c - sz/2;
+            r.rb = r.lt + sz;
+            return r;
+        }
+
 		auto width() const -> decltype(rb.x - lt.x) {return rb.x - lt.x;} 
 		auto height() const -> decltype(rb.y - lt.y) {return rb.y - lt.y;};
 		irect &setheight(int h) {rb.y = lt.y + h; return *this;}
@@ -354,14 +362,73 @@ namespace ts
 
 typedef float   mat44[4][4];
 
-#pragma warning(push)
-#pragma warning(disable:4127)
-template < typename T1, typename T2 > INLINE T1 CLAMP(T2 b)
+namespace internal
 {
-	if (!is_signed<T2>::value) return b > maximum<T1>::value ? maximum<T1>::value : (T1)b;
-	return b < 0 ? 0 : (b > maximum<T1>::value ? maximum<T1>::value : (T1)b);
+    template<typename IT> uint8 INLINE clamp2byte(IT n)
+    {
+        return n < 0 ? 0 : (n > 255 ? 255 : (uint8)n);
+    }
+
+    template<typename IT> uint8 INLINE clamp2byte_u(IT n)
+    {
+        return n > 255 ? 255 : (uint8)n;
+    }
+
+    template<typename RT, typename IT, bool issigned> struct clamper;
+
+    template<> struct clamper < uint8, float, true >
+    {
+        static uint8 dojob(float b)
+        {
+            return clamp2byte<aint>( lround(b) );
+        }
+    };
+
+    template<> struct clamper < uint8, double, true >
+    {
+        static uint8 dojob(double b)
+        {
+            return clamp2byte<aint>(lround(b));
+        }
+    };
+
+    template<typename IT> struct clamper < uint8, IT, true >
+    {
+        static uint8 dojob(IT n)
+        {
+            return clamp2byte<IT>(n);
+        }
+    };
+
+    template<typename IT> struct clamper < uint8, IT, false >
+    {
+        static uint8 dojob(IT n)
+        {
+            return clamp2byte_u<IT>(n);
+        }
+    };
+
+    template<typename RT, typename IT> struct clamper< RT, IT, false>
+    {
+        static RT dojob( IT b )
+        {
+            return b > maximum<RT>::value ? maximum<RT>::value : (RT)b;
+        }
+    };
+    template<typename RT, typename IT> struct clamper < RT, IT, true >
+    {
+        static RT dojob(IT b)
+        {
+            return b < minimum<RT>::value ? minimum<RT>::value : (b > maximum<RT>::value ? maximum<RT>::value : (RT)b);
+        }
+    };
+
+};
+
+template < typename RT, typename IT > INLINE RT CLAMP(IT b)
+{
+    return internal::clamper<RT, IT, is_signed<IT>::value>::dojob(b);
 }
-#pragma warning(pop)
 
 template < typename T1, typename T2, typename T3 >
 INLINE T1 CLAMP ( const T1 & a, const T2 & vmin, const T3 & vmax )
@@ -782,13 +849,13 @@ template < typename T1, typename T2, typename T3, typename T4, typename T5, type
     return tmin ( tmin ( v1, v2 ), tmin ( v3, v4 ), tmin ( v5, v6 ) );
 }
 
-template <typename T, int N> INLINE T tmin(const vec_t<T, N> &v)
+template <typename T, char N> INLINE T tmin(const vec_t<T, N> &v)
 {
     T r = v[0];
     for (aint i = 1; i < N; ++i) r = tmin(r, v[i]);
     return r;
 }
-template <typename T, int N> INLINE vec_t<T, N> tmin(const vec_t<T, N> &x, const vec_t<T, N> &y)
+template <typename T, char N> INLINE vec_t<T, N> tmin(const vec_t<T, N> &x, const vec_t<T, N> &y)
 {
     vec_t<T, N> r;
     EACH_COMPONENT(i) r[i] = tmin(x[i], y[i]);
@@ -832,14 +899,14 @@ template < typename T1, typename T2, typename T3, typename T4, typename T5, type
     return tmax ( tmax ( v1, v2 ), tmax ( v3, v4 ), tmax ( v5, v6 ) );
 }
 
-template <typename T, int N> INLINE T tmax(const vec_t<T, N> &v)
+template <typename T, char N> INLINE T tmax(const vec_t<T, N> &v)
 {
     T r = v[0];
     for (aint i = 1; i < N; ++i) r = tmax(r, v[i]);
     return r;
 }
 
-template <typename T, int N> INLINE const vec_t<T, N> tmax(const vec_t<T, N> &x, const vec_t<T, N> &y)
+template <typename T, char N> INLINE const vec_t<T, N> tmax(const vec_t<T, N> &x, const vec_t<T, N> &y)
 {
     vec_t<T, N> r;
     EACH_COMPONENT(i) r[i] = tmax(x[i], y[i]);

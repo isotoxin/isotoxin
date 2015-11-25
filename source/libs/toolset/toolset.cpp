@@ -46,7 +46,8 @@ tmpalloc_c tmpb;
 
 	bool tsfileop_c::load(const wsptr &fn, buf_wrapper_s &b, size_t reservebefore, size_t reserveafter)
 	{
-
+#pragma warning(push)
+#pragma warning(disable:4822) //: 'ts::tsfileop_c::load::bw::bw' : local class member function does not have a body
         struct bw : public buf_wrapper_s
         {
             buf_wrapper_s &b;
@@ -59,8 +60,10 @@ tmpalloc_c tmpb;
             }
             bw(buf_wrapper_s &b, size_t reservebefore, size_t reserveafter):b(b), reservebefore(reservebefore), reserveafter(reserveafter) {}
         private:
-            void operator=(const bw&) {};
+            bw(const bw&) UNUSED;
+            bw &operator=(const bw&) UNUSED;
         } me(b,reservebefore,reserveafter);
+#pragma warning(pop)
 
         return this->read(fn, me);
 	}

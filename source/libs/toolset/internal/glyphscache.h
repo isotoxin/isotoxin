@@ -101,14 +101,14 @@ public:
 
 class font_desc_c
 {
-	font_c *font;
+	font_c *font = nullptr;
 	str_c fontname;
     font_params_s fp;
-	int fontsig;
+	int fontsig = 0;
 	font_c *get_font() const;
 
 public:
-	font_desc_c() : font(nullptr) {}
+	font_desc_c() {}
 	//explicit font_desc_c(const asptr &params) : font(nullptr) { assign(params); }
     const str_c &name() const {return fontname;}
 	bool assign(const str_c &fontname);

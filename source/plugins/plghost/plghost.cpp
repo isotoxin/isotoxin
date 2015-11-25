@@ -21,7 +21,9 @@ static void __stdcall message(message_type_e mt, int gid, int cid, u64 create_ti
 static void __stdcall delivered(u64 utag);
 static void __stdcall save();
 static void __stdcall on_save(const void *data, int dlen, void *param);
-static void __stdcall play_audio(int gid, int cid, const audio_format_s *audio_format, const void *frame, int framesize);
+static void __stdcall av_data(int gid, int cid, const media_data_s *data);
+static void __stdcall free_video_data(const void *ptr);
+static void __stdcall av_stream_options(int gid, int cid, const stream_options_s *so);
 static void __stdcall configurable(int n, const char **fields, const char **values);
 static void __stdcall avatar_data(int cid, int tag, const void *avatar_body, int avatar_body_size);
 static void __stdcall incoming_file(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
@@ -85,7 +87,9 @@ struct protolib_s
         delivered,
         save,
         on_save,
-        play_audio,
+        av_data,
+        free_video_data,
+        av_stream_options,
         configurable,
         avatar_data,
         incoming_file,
@@ -156,39 +160,62 @@ prebuf_s *prebuf_s::first = nullptr;
 prebuf_s *prebuf_s::last = nullptr;
 long prebuf_s::prebuflock = 0;
 
-struct data_data_s
+namespace
 {
-    int sz;
-    data_header_s d;
-    data_data_s():d(NOP_COMMAND) {} // nobody call this constructor
+    struct data_data_s
+    {
+        int sz;
+        data_header_s d;
+        data_data_s():d(NOP_COMMAND) {} // nobody call this constructor
     
-    ipcr get_reader() const
-    {
-        ASSERT(sz > sizeof(data_header_s));
-        return ipcr(&d,sz);
-    }
-
-    static data_data_s *build( data_header_s *dd, int szsz )
-    {
-        if (szsz == sizeof(data_header_s))
+        ipcr get_reader() const
         {
-            data_data_s *me = (data_data_s*)ph_allocator::ma(sizeof(data_data_s));
-            me->sz = 0;
-            me->d = *dd;
-            return me;
-        } else
+            ASSERT(sz > sizeof(data_header_s));
+            return ipcr(&d,sz);
+        }
+
+        static data_data_s *build(int szsz)
         {
             data_data_s *me = (data_data_s*)ph_allocator::ma(sizeof(data_data_s) - sizeof(data_header_s) + szsz);
             me->sz = szsz;
-            memcpy(&me->d, dd, szsz);
             return me;
         }
-    }
-    void die()
-    {
-        ph_allocator::mf(this);
-    }
-};
+
+        static data_data_s *build( data_header_s *dd, int szsz )
+        {
+            if (szsz < 0)
+            {
+                data_data_s *me = (data_data_s *)(((char *)dd) - (sizeof(data_data_s) - sizeof(data_header_s)));
+                me->sz = szsz;
+                return me;
+            }
+
+            if (szsz == sizeof(data_header_s))
+            {
+                data_data_s *me = (data_data_s*)ph_allocator::ma(sizeof(data_data_s));
+                me->sz = 0;
+                me->d = *dd;
+                return me;
+            } else
+            {
+                data_data_s *me = (data_data_s*)ph_allocator::ma(sizeof(data_data_s) - sizeof(data_header_s) + szsz);
+                me->sz = szsz;
+                memcpy(&me->d, dd, szsz);
+                return me;
+            }
+        }
+        void die()
+        {
+            if (sz < 0)
+                ipcj->unlock_buffer( &d );
+            else
+                ph_allocator::mf(this);
+        }
+    };
+
+    static_assert(sizeof(data_data_s) - sizeof(data_header_s) <= ipc::XCHG_BUFFER_ADDITION_SPACE, "size error");
+
+}
 
 struct ipcwbuf_s
 {
@@ -325,12 +352,65 @@ struct IPCW
 
 };
 
-ipc::ipc_result_e event_processor( void *, void *data, int datasize )
+namespace
 {
+    struct bigdata_s
+    {
+        data_data_s *stord = nullptr;
+        data_data_s *curdd = nullptr;
+        int disp = 0;
+        ~bigdata_s()
+        {
+            ASSERT(curdd == nullptr);
+            if (stord && stord->d.cmd == 0)
+                stord->die();
+        }
+    };
+}
+
+ipc::ipc_result_e event_processor( void *dptr, void *data, int datasize )
+{
+    bigdata_s *bd = (bigdata_s *)dptr;
+
     if (data == nullptr)
     {
-        // lost partner
+        if ( bd->curdd )
+        {
+            // big data received
+            ASSERT( datasize == 0 );
+            tasks.push( bd->curdd );
+            bd->curdd = nullptr;
+            return ipc::IPCR_OK;
+        }
+        // big data
+
+        if (bd->stord && bd->stord->d.cmd > 0)
+            return ipc::IPCR_SKIP;
+
+        if (bd->stord == nullptr || datasize > bd->stord->sz)
+        {
+            if (bd->stord)
+                bd->stord->die();
+            bd->stord = data_data_s::build(datasize);
+        }
+        bd->curdd = bd->stord;
+        bd->disp = 0;
+        return ipc::IPCR_OK;
+    }
+
+    if (bd->curdd)
+    {
+        // big data
+        if (datasize == 0)
         return ipc::IPCR_BREAK;
+
+        ASSERT( (bd->disp + datasize) <= bd->curdd->sz );
+
+        char *ptr = (char *)&bd->curdd->d;
+        ptr += bd->disp;
+        memcpy( ptr, data, datasize );
+        bd->disp += datasize;
+        return ipc::IPCR_OK;
     }
 
     data_header_s *d = (data_header_s *)data;
@@ -415,7 +495,8 @@ int CALLBACK WinMainProtect(
 
     if (member == 1)
     {
-        ipcblob.wait(event_processor, nullptr, nullptr, nullptr);
+        bigdata_s bd;
+        ipcblob.wait(event_processor, &bd, nullptr, nullptr);
     }
     state.lock_write()().need_stop = true;
     while (state.lock_read()().working) Sleep(0); // worker must die
@@ -719,10 +800,12 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             int id = r.get<int>();
             int mt = r.get<int>();
             u64 utag = r.get<u64>();
+            u64 crtime = r.get<u64>();
             str_c message = r.getastr();
             message_s m;
             m.mt = (message_type_e)mt;
             m.utag = utag;
+            m.crtime = crtime;
             m.message = message.cstr();
             m.message_len = message.get_length();
             protolib.functions->send_message(id, &m);
@@ -766,8 +849,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         {
             ipcr r(d->get_reader());
             int id = r.get<int>();
-            stop_call_e sc = (stop_call_e)r.get<char>();
-            protolib.functions->stop_call(id, sc);
+            protolib.functions->stop_call(id);
         }
         break;
     case AQ_ACCEPT_CALL:
@@ -785,7 +867,19 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             int id = r.get<int>();
             call_info_s cinf;
             cinf.audio_data = r.get_data(cinf.audio_data_size);
-            protolib.functions->send_audio(id, &cinf);
+            protolib.functions->send_av(id, &cinf);
+        }
+        break;
+    case AQ_STREAM_OPTIONS:
+        if (LIBLOADED())
+        {
+            ipcr r(d->get_reader());
+            int id = r.get<int>();
+            stream_options_s so;
+            so.options = r.get<int>();
+            so.view_w = r.get<int>();
+            so.view_h = r.get<int>();
+            protolib.functions->stream_options(id, &so);
         }
         break;
     case AQ_CALL:
@@ -884,10 +978,36 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             IPCW(XX_PONG) << data_block_s(data, sz);
         }
         break;
+    case AQ_VIDEO:
+        {
+            struct inf_s
+            {
+                int cid;
+                int w;
+                int h;
+                int fmt;
+            };
+
+            inf_s *inf = (inf_s *)(d + 1);
+            call_info_s ci;
+            ci.video_data = inf + 1;
+            ci.w = inf->w;
+            ci.h = inf->h;
+            ci.fmt = (video_fmt_e)inf->fmt;
+
+            int r = protolib.functions->send_av(inf->cid, &ci);
+            if (r == SEND_AV_KEEP_VIDEO_DATA)
+            {
+                if (CHECK(d->sz < 0, "only xchg buffers"))
+                    return flags;
+            }
+        }
+
+        if (d->sz > ipc::BIG_DATA_SIZE)
+            return flags; // do not delete big data packet due it will be reused
     }
 
     d->die();
-
     return flags;
 }
 
@@ -957,11 +1077,107 @@ static void __stdcall on_save(const void *data, int dlen, void *param)
     memcpy( buffer->data() + offset, data, dlen );
 }
 
-static void __stdcall play_audio(int gid, int cid, const audio_format_s *audio_format, const void *frame, int framesize)
+static void __stdcall av_stream_options(int gid, int cid, const stream_options_s *so)
 {
-    IPCW(HQ_PLAY_AUDIO) << gid << cid
-        << audio_format->sample_rate << audio_format->channels << audio_format->bits
-        << data_block_s(frame, framesize);
+    IPCW(HQ_STREAM_OPTIONS) << gid << cid << so->options << so->view_w << so->view_h;
+}
+
+static void __stdcall av_data(int gid, int cid, const media_data_s *data)
+{
+    if (data->audio_framesize)
+    {
+        IPCW(HQ_AUDIO) << gid << cid
+            << data->afmt.sample_rate << data->afmt.channels << data->afmt.bits
+            << data_block_s(data->audio_frame, data->audio_framesize);
+    }
+
+    struct inf_s
+    {
+        int gid;
+        int cid;
+        int w;
+        int h;
+        int fmt;
+    };
+
+    if (data->vfmt.fmt != VFMT_NONE)
+    {
+        switch (data->vfmt.fmt)
+        {
+        case VFMT_I420:
+            {
+                int i420sz_y = data->vfmt.width * data->vfmt.height;
+                int i420sz_uv = i420sz_y / 4;
+
+                int ssz = i420sz_y + (i420sz_uv*2) + sizeof(inf_s) + sizeof(data_header_s);
+
+                data_header_s *dh = (data_header_s *)ipcj->lock_buffer(ssz);
+                if (!dh) return;
+                inf_s *d2s = (inf_s *)(dh+1);
+                dh->cmd = HQ_VIDEO;
+
+                d2s->gid = gid;
+                d2s->cid = cid;
+                d2s->fmt = data->vfmt.fmt;
+                d2s->w = data->vfmt.width;
+                d2s->h = data->vfmt.height;
+
+                byte *y = (byte *)(d2s + 1);
+
+                if ( data->vfmt.pitch[0] == data->vfmt.width )
+                {
+                    memcpy( y, data->video_frame[0], i420sz_y );
+                } else
+                {
+                    int pitch_to = data->vfmt.width;
+                    int pitch_from = data->vfmt.pitch[0];
+                    int tt = data->vfmt.height;
+                    const byte *dfrom = (const byte *)data->video_frame[0];
+                    for(int t = 0; t < tt; ++t, y += pitch_to, dfrom += pitch_from )
+                        memcpy( y, dfrom, pitch_to );
+                }
+
+                byte *u = (byte *)(d2s + 1); u += i420sz_y;
+                byte *v = u + i420sz_uv;
+
+                if (data->vfmt.pitch[1] == data->vfmt.width/2)
+                {
+                    memcpy(u, data->video_frame[1], i420sz_uv);
+                }
+                else
+                {
+                    int pitch_to = data->vfmt.width/2;
+                    int pitch_from = data->vfmt.pitch[1];
+                    int tt = data->vfmt.height/2;
+                    const byte *dfrom = (const byte *)data->video_frame[1];
+                    for (int t = 0; t < tt; ++t, u += pitch_to, dfrom += pitch_from)
+                        memcpy(u, dfrom, pitch_to);
+                }
+
+                if (data->vfmt.pitch[2] == data->vfmt.width / 2)
+                {
+                    memcpy(v, data->video_frame[2], i420sz_uv);
+                }
+                else
+                {
+                    int pitch_to = data->vfmt.width / 2;
+                    int pitch_from = data->vfmt.pitch[2];
+                    int tt = data->vfmt.height / 2;
+                    const byte *dfrom = (const byte *)data->video_frame[2];
+                    for (int t = 0; t < tt; ++t, v += pitch_to, dfrom += pitch_from)
+                        memcpy(v, dfrom, pitch_to);
+                }
+
+                ipcj->unlock_send_buffer(dh, ssz);
+            }
+            break;
+        }
+    }
+}
+
+static void __stdcall free_video_data(const void *ptr)
+{
+    ipcj->unlock_buffer(ptr);
 }
 
 static void __stdcall configurable(int n, const char **fields, const char **values)

@@ -11,37 +11,44 @@ struct evlst_s
 
 struct evt_internals_s
 {
+#ifdef _DEBUG
     int evs_count = 0;
+#endif // _DEBUG
     evlst_s *evs = nullptr;
 
     ~evt_internals_s()
     {
+#ifdef _DEBUG
         evs_count = -1;
+#endif // _DEBUG
         if (evs)
         {
             MM_FREE(evs);
             evs = nullptr;
         }
     }
+    void prepare(int evcnt)
+    {
+        ASSERT(evs_count == 0);
+        int sz = evcnt * sizeof(evlst_s);
+        evs = (evlst_s *)MM_ALLOC(sz);
+        memset(evs, 0, sz);
+#ifdef _DEBUG
+        evs_count = evcnt;
+#endif // _DEBUG
+    }
     evlst_s & operator()(int ev)
     {
-        ASSERT(evs_count >= 0);
-        if (ev >= evs_count)
-        {
-            evs = (evlst_s *)MM_RESIZE(evs,(ev+1) * sizeof(evlst_s));
-            memset( evs + evs_count, 0, (ev-evs_count+1) * sizeof(evlst_s) );
-            evs_count = ev+1;
-        }
+        ASSERT(ev < evs_count, "please, use GM_PREPARE(evcnt)");
         return evs[ev];
     }
 };
-ts::static_setup<evt_internals_s, 0> internals;
+ts::static_setup<evt_internals_s, -2> internals;
 }
 
 gm_receiver_c::gm_receiver_c(int ev)
 {
     evlst_s &l = internals()(ev);
-
     LIST_ADD(this, l._gmer_first, l._gmer_last, _gmer_prev, _gmer_next);
 }
 
@@ -50,6 +57,11 @@ void gm_receiver_c::unsubscribe(int ev)
     evlst_s &l = internals()(ev);
     if (l._curnext == this) l._curnext = _gmer_next;
     LIST_DEL(this, l._gmer_first, l._gmer_last, _gmer_prev, _gmer_next);
+}
+
+void gm_receiver_c::prepare( int evcnt )
+{
+    internals().prepare(evcnt);
 }
 
 DWORD gm_receiver_c::notify_receivers(int ev, gmsgbase &par)
@@ -74,7 +86,11 @@ DWORD gm_receiver_c::notify_receivers(int ev, gmsgbase &par)
             }
             f = l._curnext;
         }
-        if (!FLAG(bits, GMRBIT_CALLAGAIN)) return bits;
+        if (!FLAG(bits, GMRBIT_CALLAGAIN))
+        {
+            ASSERT( nullptr == l._curnext );
+            return bits;
+        }
         ++par.pass;
     }
 

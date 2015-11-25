@@ -1715,7 +1715,7 @@ Cleanup: /* CLEANUP */
         BYTE* dst;
         uint dst_h;
         uint dst_w;
-        uint dst_pitch;	
+        int  dst_pitch;	
 
         bool	fLetterbox;
         bool	fInterlaced;

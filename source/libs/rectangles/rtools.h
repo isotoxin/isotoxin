@@ -30,23 +30,27 @@ struct menu_anchor_s
 
     enum relpos_e
     {
-        RELPOS_TYPE_1, // at rite of rect, menu down
-        RELPOS_TYPE_2, // at bottom of rect, menu down
-        RELPOS_TYPE_3, // same as 1, useful for sysmenu
+        RELPOS_TYPE_RD, // at rite of rect, menu down
+        RELPOS_TYPE_BD, // at bottom of rect, menu down
+        RELPOS_TYPE_TU, // at top of rect, menu up
+        RELPOS_TYPE_SYS, // same as RELPOS_TYPE_RD, useful for sysmenu
 
         relpos_check,
-    } relpos = RELPOS_TYPE_1;
+    } relpos = RELPOS_TYPE_RD;
 
-    explicit menu_anchor_s(bool setup_by_mousepos = false, relpos_e rp = RELPOS_TYPE_1);
-    menu_anchor_s(const ts::irect &r, relpos_e rp = RELPOS_TYPE_1) : rect(r), relpos(rp) {}
+    explicit menu_anchor_s(bool setup_by_mousepos = false, relpos_e rp = RELPOS_TYPE_RD);
+    menu_anchor_s(const ts::irect &r, relpos_e rp = RELPOS_TYPE_RD) : rect(r), relpos(rp) {}
     ts::ivec2 pos() const
     {
         switch (relpos) //-V719
         {
-        case menu_anchor_s::RELPOS_TYPE_1:
-        case menu_anchor_s::RELPOS_TYPE_3:
+        case menu_anchor_s::RELPOS_TYPE_RD:
+        case menu_anchor_s::RELPOS_TYPE_SYS:
             return rect.rt();
-        case menu_anchor_s::RELPOS_TYPE_2: return rect.lb();
+        case menu_anchor_s::RELPOS_TYPE_BD:
+            return rect.lb();
+        case menu_anchor_s::RELPOS_TYPE_TU:
+            return rect.lt;
         }
         return rect.center();
     }
@@ -89,7 +93,7 @@ public:
     }
 
     // calls
-    menu_anchor_s  call_get_popup_menu_pos( menu_anchor_s::relpos_e rp = menu_anchor_s::RELPOS_TYPE_1 ) const;
+    menu_anchor_s  call_get_popup_menu_pos( menu_anchor_s::relpos_e rp = menu_anchor_s::RELPOS_TYPE_RD ) const;
     int         call_get_menu_level() const;
     menu_c      call_get_menu() const;
     bool        call_is_tooltip() const;

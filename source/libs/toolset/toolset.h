@@ -86,6 +86,8 @@ template<typename T> struct TSNEWDEL
     static void __tsdel(T *ptr) { if (!ptr) return; ptr->~T(); MM_FREE(ptr); }
 };
 
+#define DECLARE_DYNAMIC_BEGIN( cn ) friend struct TSNEWDEL<cn>; private:
+#define DECLARE_DYNAMIC_END( inheritance ) inheritance:
 
 #define TSPLACENEW(p, ...) TSNEWDEL< std::remove_reference<decltype(*(p))>::type >::__tsplacenew((p), __VA_ARGS__)
 #define TSNEW(T, ...) TSNEWDEL<T>::__tsnew(__VA_ARGS__)
@@ -148,6 +150,15 @@ template<typename T> struct is_signed
 {
 	static const bool value = (((T)-1) < 0);
 };
+template<> struct is_signed<float>
+{
+    static const bool value = true;
+};
+template<> struct is_signed < double >
+{
+    static const bool value = true;
+};
+
 
 template<typename NUM, int shiftval> struct makemaxint
 {
@@ -401,7 +412,7 @@ INLINE word as_word(uint64 aa) {return word(aa & 0xFFFF);}
 INLINE dword as_dword(uint64 aa) {return dword(aa & 0xFFFFFFFF);} //-V112
 
 
-template <typename T, int factor = sizeof(T)>
+template <typename T, aint factor = sizeof(T)>
 class aligned
 {
     char    store_[sizeof(T) + factor -1];
@@ -623,6 +634,9 @@ struct sobase
 
 template <typename T, aint _priority=10000 /*  Lower numbers indicate a higher priority */> class static_setup : public sobase
 {
+#ifdef _DEBUG
+    T *objptr; // debug purpose
+#endif
     make_pod<T> obj;
     bool me_initialized = false;
 	/*virtual*/ void destruct() override
@@ -635,6 +649,9 @@ template <typename T, aint _priority=10000 /*  Lower numbers indicate a higher p
         if (me_initialized) return;
         TSPLACENEW( &obj.get() );
         me_initialized = true;
+#ifdef _DEBUG
+        objptr = &obj.get();
+#endif
     }
 public:
 	static_setup() : sobase(_priority) { if (initialized || initializing) init(); }
@@ -779,11 +796,11 @@ template<size_t sz> struct enough
     typedef typename sztype<sz2sz>::type type;
 };
 
-template<int bsize, int count> class struct_pool_t
+template<aint bsize, aint count> class struct_pool_t
 {
     uint8 m_buffer[count * bsize];
-    int   m_current_count = 0;
-    int   m_free_count = 0;
+    aint  m_current_count = 0;
+    aint  m_free_count = 0;
     typedef typename enough<count>::type fbindex;
     fbindex m_free_buffer[count];
 
@@ -890,7 +907,7 @@ template<typename Tout, typename Tin> Tout &ref_cast(Tin & t)
     TS_STATIC_CHECK(sizeof(Tout) <= sizeof(Tin), "ref cast fail");
     return (Tout &)t;
 }
-template<typename Tout, typename Tin> const Tout &ref_cast(const Tin & t)
+template<typename Tout, typename Tin> const Tout &ref_cast(const Tin & t) //-V659
 {
     TS_STATIC_CHECK(sizeof(Tout) <= sizeof(Tin), "ref cast fail");
     return *(const Tout *)&t;
@@ -1118,15 +1135,15 @@ struct lnk_s
     INLINE uint8 BLUE(TSCOLOR c) { return as_byte(c); }
     INLINE uint8 ALPHA(TSCOLOR c) { return as_byte(c >> 24); }
 
-	INLINE TSCOLOR ARGB(auint r, auint g, auint b, auint a = 255)
+	template <typename CCC> INLINE TSCOLOR ARGB(CCC r, CCC g, CCC b, CCC a = 255)
 	{
-		return CLAMP<uint8>(b) | (CLAMP<uint8>(g) << 8) | (CLAMP<uint8>(r) << 16) | (CLAMP<uint8>(a) << 24);
+		return CLAMP<uint8, CCC>(b) | (CLAMP<uint8, CCC>(g) << 8) | (CLAMP<uint8, CCC>(r) << 16) | (CLAMP<uint8, CCC>(a) << 24);
 	}
 
     INLINE TSCOLOR GRAYSCALE(TSCOLOR c)
     {
         auint oi = lround(float(BLUE(c)) * 0.114f + float(GREEN(c)) * 0.587f + float(RED(c)) * 0.299);
-        return ARGB(oi, oi, oi, ALPHA(c));
+        return ARGB<auint>(oi, oi, oi, ALPHA(c));
     }
 
     INLINE TSCOLOR PREMULTIPLY(TSCOLOR c, float a)
@@ -1135,7 +1152,7 @@ struct lnk_s
         auint oiG = lround(float(GREEN(c)) * a);
         auint oiR = lround(float(RED(c)) * a);
 
-        return ARGB(oiR, oiG, oiB, ALPHA(c));
+        return ARGB<auint>(oiR, oiG, oiB, ALPHA(c));
     }
 
     INLINE TSCOLOR PREMULTIPLY(TSCOLOR c)
@@ -1146,7 +1163,7 @@ struct lnk_s
         auint oiG = lround(float(GREEN(c)) * a);
         auint oiR = lround(float(RED(c)) * a);
 
-        return ARGB(oiR, oiG, oiB, ALPHA(c));
+        return ARGB<auint>(oiR, oiG, oiB, ALPHA(c));
     }
 
     INLINE TSCOLOR PREMULTIPLY(TSCOLOR c, uint8 aa, double &not_a) // premultiply with addition alpha and return not-alpha
@@ -1159,7 +1176,7 @@ struct lnk_s
         auint oiR = lround(float(RED(c)) * a);
         auint oiA = lround(a * 255.0);
 
-        return ARGB(oiR, oiG, oiB, oiA);
+        return ARGB<auint>(oiR, oiG, oiB, oiA);
     }
 
     INLINE TSCOLOR MULTIPLY(TSCOLOR c1, TSCOLOR c2)
@@ -1170,7 +1187,7 @@ struct lnk_s
         auint oiR = lround(float(RED(c1)) * float(RED(c2)) * antidiv);
         auint oiA = lround(float(ALPHA(c1)) * float(ALPHA(c2)) * antidiv);
 
-        return ARGB(oiR, oiG, oiB, oiA);
+        return ARGB<auint>(oiR, oiG, oiB, oiA);
     }
 
     INLINE TSCOLOR ALPHABLEND( TSCOLOR target, TSCOLOR source, int constant_alpha = 255 ) // photoshop like Normal mode color blending
@@ -1204,7 +1221,7 @@ struct lnk_s
         auint oiG = lround(float(G) * A + float(oG) * k);
         auint oiR = lround(float(R) * A + float(oR) * k);
 
-        return ARGB(oiR, oiG, oiB, oiA);
+        return ARGB<auint>(oiR, oiG, oiB, oiA);
     }
 
     INLINE TSCOLOR ALPHABLEND_PM(TSCOLOR dst, TSCOLOR src) // premultiplied alpha blend

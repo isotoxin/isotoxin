@@ -54,7 +54,7 @@ INLINE ipcr & operator>>(ipcr &r, ts::astrings_c &s)
 
 #include "tools.h"
 #include "mediasystem.h"
-#include "videocapture.h"
+#include "videoprocessing.h"
 
 #include "contacts.h"
 #include "config.h"

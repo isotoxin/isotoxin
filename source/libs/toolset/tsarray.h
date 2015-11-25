@@ -70,10 +70,48 @@ protected:
     };
 };
 
+template <typename UNIT_PTR, typename ALLOCATOR> class DEFAULT_BEHAVIOUR_FREE : public DEFAULT_BEHAVIOUR<UNIT_PTR, ALLOCATOR>
+{
+protected:
+
+    typedef typename clean_type<UNIT_PTR>::type CLEAN_OBJTYPE;
+
+    TS_STATIC_CHECK( std::is_pointer<UNIT_PTR>::value, "UNIT_PTR must be pointer" );
+    static void destructor(UNIT_PTR u) { if (u) MM_FREE(u); }
+    static void init(UNIT_PTR *u, auint count) { blk_fill<UNIT_PTR>(u, count); }
+    template<typename TFROM, bool target_initialized, bool moveit> struct copy { copy(UNIT_PTR &to, TFROM from) { to = from; } };
+    /*
+    template<typename TFROM> struct copy<TFROM, false, false>
+    {
+        copy(UNIT_PTR &to, TFROM from)
+        {
+            ASSERT(false, "bad use of array of pointers");
+            to = from;
+        }
+    }
+    template<typename TFROM> struct copy<TFROM, true, false>
+    {
+        copy(UNIT_PTR &to, TFROM from)
+        {
+            ASSERT(false, "bad use of array of pointers");
+            to = from;
+        }
+    }
+    */
+    template<typename TFROM> struct copy<TFROM, true, true>
+    {
+        copy(UNIT_PTR &to, TFROM from)
+        {
+            destructor(to);
+            to = from;
+        }
+    };
+};
+
 template <typename UNIT_PTR, typename ALLOCATOR> class DEFAULT_BEHAVIOUR_REL : public DEFAULT_BEHAVIOUR<UNIT_PTR, ALLOCATOR>
 {
 protected:
-    typedef decltype(clean_type<UNIT_PTR>::type) CLEAN_OBJTYPE;
+    //typedef decltype(clean_type<UNIT_PTR>::type) CLEAN_OBJTYPE;
 
     TS_STATIC_CHECK( std::is_pointer<UNIT_PTR>::value, "UNIT_PTR must be pointer" );
     static void destructor(UNIT_PTR u) { if (u) u->release(); }
@@ -1042,6 +1080,7 @@ public:
 
 template<typename obj, int granula> using pointers_t = array_c < obj *, granula, DEFAULT_BEHAVIOUR<obj *, TS_DEFAULT_ALLOCATOR> >;
 template<typename obj, int granula> using array_del_t = array_c < obj *, granula, DEFAULT_BEHAVIOUR_DEL<obj *, TS_DEFAULT_ALLOCATOR> >;
+template<typename obj, int granula> using array_free_t = array_c < obj *, granula, DEFAULT_BEHAVIOUR_FREE<obj *, TS_DEFAULT_ALLOCATOR> >;
 template<typename obj, int granula> using array_release_t = array_c < obj *, granula, DEFAULT_BEHAVIOUR_REL<obj *, TS_DEFAULT_ALLOCATOR> >;
 template<typename obj, int granula> using array_safe_t = array_c<safe_ptr<obj>, granula, DEFAULT_BEHAVIOUR_SMARTPTR<safe_ptr<obj>, obj, TS_DEFAULT_ALLOCATOR> >;
 template<typename obj, int granula> using array_shared_t = array_c<shared_ptr<obj>, granula, DEFAULT_BEHAVIOUR_SMARTPTR<shared_ptr<obj>, obj, TS_DEFAULT_ALLOCATOR> >;
@@ -1049,6 +1088,7 @@ template<typename obj, int granula> using array_inplace_t = array_c<obj, granula
 
 template<typename obj, int granula> using tmp_pointers_t = ts::array_c<obj*,0,DEFAULT_BEHAVIOUR<obj*, TMP_ALLOCATOR> >;
 template<typename obj, int granula> using tmp_array_del_t = array_c < obj *, granula, DEFAULT_BEHAVIOUR_DEL<obj *, TMP_ALLOCATOR> > ;
+template<typename obj, int granula> using tmp_array_free_t = array_c < obj *, granula, DEFAULT_BEHAVIOUR_FREE<obj *, TMP_ALLOCATOR> > ;
 template<typename obj, int granula> using tmp_array_release_t = array_c < obj *, granula, DEFAULT_BEHAVIOUR_REL<obj *, TMP_ALLOCATOR> > ;
 template<typename obj, int granula> using tmp_array_safe_t = array_c < safe_ptr<obj>, granula, DEFAULT_BEHAVIOUR_SMARTPTR<safe_ptr<obj>, obj, TMP_ALLOCATOR> > ;
 template<typename obj, int granula> using tmp_array_shared_t = array_c < shared_ptr<obj>, granula, DEFAULT_BEHAVIOUR_SMARTPTR<shared_ptr<obj>, obj, TMP_ALLOCATOR> > ;

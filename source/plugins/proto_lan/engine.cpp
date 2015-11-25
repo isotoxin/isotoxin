@@ -282,6 +282,8 @@ void udp_sender::prepare()
             }
 
             closesocket(_socket);
+            infos = infos->Next;
+            if (!infos) break;
             continue;
         }
 
@@ -616,13 +618,15 @@ bool make_raw_pub_id( byte *raw_pub_id, const asptr &pub_id )
     return false;
 }
 
-bool check_pubid_valid(const asptr &pub_id)
+/*
+static bool check_pubid_valid(const asptr &pub_id)
 {
     byte raw_pub_id[SIZE_PUBID];
     if (make_raw_pub_id(raw_pub_id, pub_id))
         return check_pubid_valid(raw_pub_id);
     return false;
 }
+*/
 
 void make_raw_pub_id( byte *raw_pub_id, const byte *pk )
 {
@@ -1849,7 +1853,7 @@ void lan_engine::send_message(int id, const message_s *msg)
     if (MT_MESSAGE == msg->mt || MT_ACTION == msg->mt)
     {
         if (contact_s *c = find(id))
-            c->send_message((block_type_e)msg->mt, now(), asptr(msg->message, msg->message_len), msg->utag);
+            c->send_message((block_type_e)msg->mt, msg->crtime, asptr(msg->message, msg->message_len), msg->utag);
     }
 }
 
@@ -1895,7 +1899,7 @@ void lan_engine::call(int id, const call_info_s *callinf)
         }
 }
 
-void lan_engine::stop_call(int id, stop_call_e /*scr*/)
+void lan_engine::stop_call(int id)
 {
     if (contact_s *c = find(id))
         if (c->state == contact_s::ONLINE && contact_s::CALL_OFF != c->call_status)
@@ -1916,11 +1920,20 @@ void lan_engine::accept_call(int id)
         }
 }
 
-void lan_engine::send_audio(int id, const call_info_s * ci)
+void lan_engine::stream_options(int id, const stream_options_s *so)
 {
-    if (contact_s *c = find(id))
-        if (c->state == contact_s::ONLINE && contact_s::IN_PROGRESS == c->call_status && c->media)
-            c->media->add_audio( ci->audio_data, ci->audio_data_size );
+}
+
+int lan_engine::send_av(int id, const call_info_s * ci)
+{
+    if ( ci->audio_data )
+    {
+        if (contact_s *c = find(id))
+            if (c->state == contact_s::ONLINE && contact_s::IN_PROGRESS == c->call_status && c->media)
+                c->media->add_audio( ci->audio_data, ci->audio_data_size );
+    }
+
+    return SEND_AV_OK;
 }
 
 
@@ -2193,7 +2206,15 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                     audio_format_s fmt(AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS);
                     int sz = media->decode_audio(frame, flen);
                     if (sz > 0)
-                        engine->hf->play_audio(0, id, &fmt, media->uncompressed.data(), sz);
+                    {
+                        media_data_s mdt;
+                        mdt.afmt.sample_rate = AUDIO_SAMPLERATE;
+                        mdt.afmt.channels = AUDIO_CHANNELS;
+                        mdt.afmt.bits = AUDIO_BITS;
+                        mdt.audio_frame = media->uncompressed.data();
+                        mdt.audio_framesize = sz;
+                        engine->hf->av_data(0, id, &mdt);
+                    }
                 }
 
                 break;

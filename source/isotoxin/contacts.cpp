@@ -157,6 +157,18 @@ void contact_c::protohit( bool f )
 
 }
 
+void contact_c::redraw()
+{
+    if (get_historian()->gui_item)
+        get_historian()->gui_item->getengine().redraw();
+}
+
+void contact_c::redraw(float delay)
+{
+    if (get_historian()->gui_item)
+        get_historian()->gui_item->redraw(delay);
+}
+
 void contact_c::reselect(int options)
 {
     contact_c *h = get_historian();
@@ -687,64 +699,62 @@ void contact_c::send_file(const ts::wstr_c &fn)
     }
 }
 
+void contact_c::stop_av()
+{
+    ASSERT( is_meta() );
+
+    for (contact_c *c : subcontacts)
+    {
+        c->ringtone(false);
+        c->av(false, false);
+        c->calltone(false);
+    }
+}
+
+
+
 bool contact_c::ringtone(bool activate, bool play_stop_snd)
 {
-    ASSERT( activate || !get_aaac() );
+    if (!activate && get_aaac())
+    {
+        ASSERT(!is_ringtone());
+        return false;
+    }
 
     if (is_meta())
     {
-        opts.unmasked().init(F_RINGTONE, false);
-        subiterate( [this](contact_c *c) { if (c->is_ringtone()) opts.unmasked().init(F_RINGTONE, true); } );
+        opts.unmasked().clear(F_RINGTONE);
+        for (contact_c *c : subcontacts)
+            if (c->is_ringtone())
+            {
+                opts.unmasked().set(F_RINGTONE);
+                break;
+            }
 
         g_app->new_blink_reason( getkey() ).ringtone(activate);
+        g_app->update_ringtone(this, play_stop_snd);
 
     } else if (getmeta())
     {
         bool wasrt = opts.unmasked().is(F_RINGTONE);
         opts.unmasked().init(F_RINGTONE, activate);
-        getmeta()->ringtone(activate);
-        g_app->update_ringtone( this, play_stop_snd );
+        getmeta()->ringtone(activate, play_stop_snd);
         if (wasrt && !activate)
         {
-            gmsg<ISOGM_CALL_STOPED>(this, STOPCALL_REJECT).send();
+            gmsg<ISOGM_CALL_STOPED>(this).send();
             return true;
         }
     }
     return false;
 }
 
-void contact_c::call_inactive(bool ci)
-{
-    ASSERT(is_meta() || getkey().is_group());
-
-    bool osoff = is_speaker_off();
-
-    if (opts.unmasked().is(F_CALL_INACTIVE) != ci)
-    {
-        opts.unmasked().init(F_CALL_INACTIVE, ci);
-        if (gui_item)
-            gui_item->getengine().redraw();
-    }
-
-    if (osoff != is_speaker_off())
-        subiterate([this](contact_c *c) {
-            if (c->is_av())
-                g_app->mediasystem().voice_mute( ts::ref_cast<uint64>(c->getkey()), is_speaker_off() );
-        });
-}
-
-void contact_c::av( bool f )
+void contact_c::av( bool f, bool camera_ )
 {
     if (getkey().is_group())
     {
-        opts.unmasked().clear(F_CALL_INACTIVE | F_MIC_OFF | F_SPEAKER_OFF);
-        if ( prf().get_options().is(GCHOPT_MUTE_MIC_ON_INVITE) )
-            opts.unmasked().set(F_MIC_OFF);
-        if (prf().get_options().is(GCHOPT_MUTE_SPEAKER_ON_INVITE))
-            opts.unmasked().set(F_SPEAKER_OFF);
-
         if (opts.unmasked().is(F_AUDIO_GCHAT))
-            gmsg<ISOGM_AV>(this, f).send();
+            if (av_contact_s *avc = g_app->update_av(this, f))
+                avc->set_so_audio( false, !prf().get_options().is(GCHOPT_MUTE_MIC_ON_INVITE), !prf().get_options().is(GCHOPT_MUTE_SPEAKER_ON_INVITE) );
         return;
     }
 
@@ -752,24 +762,29 @@ void contact_c::av( bool f )
     {
         bool wasav = opts.unmasked().is(F_AV_INPROGRESS);
         opts.unmasked().init(F_AV_INPROGRESS, false);
-        subiterate([this](contact_c *c) { if (c->is_av()) opts.unmasked().init(F_AV_INPROGRESS, true); });
+        for (contact_c *c : subcontacts)
+            if (c->is_av())
+            {
+                opts.unmasked().set(F_AV_INPROGRESS);
+                break;
+            }
+
         if ( opts.unmasked().is(F_AV_INPROGRESS) != wasav )
         {
-            opts.unmasked().clear(F_CALL_INACTIVE | F_MIC_OFF | F_SPEAKER_OFF);
-            gmsg<ISOGM_AV>(this, !wasav).send();
+            av_contact_s *avc = g_app->update_av(this, !wasav);
             if (wasav)
-            {
                 play_sound(snd_hangup, false);
-            }
+            if (avc)
+                avc->camera( camera_ );
         }
         
     } else if (getmeta())
     {
         bool wasav = opts.unmasked().is(F_AV_INPROGRESS);
         opts.unmasked().init(F_AV_INPROGRESS, f);
-        getmeta()->av(f);
+        getmeta()->av(f, camera_);
         if (wasav && !f)
-            gmsg<ISOGM_CALL_STOPED>(this, STOPCALL_HANGUP).send();
+            gmsg<ISOGM_CALL_STOPED>(this).send();
 
     }
 }
@@ -781,7 +796,13 @@ bool contact_c::calltone(bool f, bool call_accepted)
     {
         bool wasct = opts.unmasked().is(F_CALLTONE);
         opts.unmasked().clear(F_CALLTONE);
-        subiterate([this](contact_c *c) { if (c->is_calltone()) opts.unmasked().set(F_CALLTONE); });
+        for (contact_c *c : subcontacts)
+            if (c->is_calltone())
+            {
+                opts.unmasked().set(F_CALLTONE);
+                break;
+            }
+
         if (opts.unmasked().is(F_CALLTONE) != wasct)
         {
             if (wasct)
@@ -797,7 +818,7 @@ bool contact_c::calltone(bool f, bool call_accepted)
         if ( getmeta()->calltone(f) )
         {
             if (!call_accepted)
-                gmsg<ISOGM_CALL_STOPED>(this, STOPCALL_CANCEL).send();
+                gmsg<ISOGM_CALL_STOPED>(this).send();
             return true;
         }
     }
@@ -806,7 +827,6 @@ bool contact_c::calltone(bool f, bool call_accepted)
 
 bool contact_c::b_accept_call(RID, GUIPARAM prm)
 {
-
     if (prm)
     {
         // autoaccept
@@ -815,6 +835,8 @@ bool contact_c::b_accept_call(RID, GUIPARAM prm)
 
     if (prm || ringtone(false, false))
     {
+        av(true, false); // TODO : VIDEO?
+
         if (active_protocol_c *ap = prf().ap(getkey().protoid))
             ap->accept_call(getkey().contactid);
 
@@ -823,13 +845,15 @@ bool contact_c::b_accept_call(RID, GUIPARAM prm)
             const post_s *p = get_historian()->fix_history(MTA_INCOMING_CALL, MTA_CALL_ACCEPTED, getkey(), get_historian()->nowtime());
             if (p) gmsg<ISOGM_SUMMON_POST>(*p, true).send();
         }
-
-        //gmsg<ISOGM_NOTICE>( get_historian(), this, NOTICE_CALL_INPROGRESS ).send();
-        av( true );
     }
 
     if ( AAAC_ACCEPT_MUTE_MIC == as_int(prm) )
-        b_mute_mic(RID(),nullptr);
+    {
+        if (av_contact_s *avc = g_app->find_avcontact_inprogress( get_historian() ))
+            avc->mic_off();
+    }
+
+    redraw();
 
     return true;
 }
@@ -842,14 +866,22 @@ bool contact_c::b_hangup(RID, GUIPARAM par)
     TSDEL(ownitm);
 
     if (active_protocol_c *ap = prf().ap(getkey().protoid))
-        ap->stop_call(getkey().contactid, STOPCALL_HANGUP);
+        ap->stop_call(getkey().contactid);
 
     if (CHECK(getmeta()))
     {
-        const post_s *p = get_historian()->fix_history(MTA_CALL_ACCEPTED, MTA_HANGUP, getkey(), get_historian()->nowtime());
+        ts::str_c times;
+        if (av_contact_s *avc = g_app->find_avcontact_inprogress(get_historian()))
+        {
+            int dt = (int)(now() - avc->starttime);
+            if (dt > 0)
+                times = to_utf8( text_seconds(dt) );
+        }
+
+        const post_s *p = get_historian()->fix_history(MTA_CALL_ACCEPTED, MTA_HANGUP, getkey(), get_historian()->nowtime(), times.is_empty() ? nullptr : &times);
         if (p) gmsg<ISOGM_SUMMON_POST>(*p, true).send();
     }
-    av( false );
+    av( false, false );
     return true;
 }
 
@@ -874,77 +906,10 @@ bool contact_c::b_cancel_call(RID, GUIPARAM par)
 
     if (calltone(false))
         if (active_protocol_c *ap = prf().ap(getkey().protoid))
-            ap->stop_call(getkey().contactid, STOPCALL_CANCEL);
+            ap->stop_call(getkey().contactid);
 
     return true;
 }
-
-bool contact_c::b_mute_mic(RID, GUIPARAM p)
-{
-    contact_c *meta = (is_meta() || getkey().is_group()) ? this : getmeta();
-    if (meta && meta->is_av())
-    {
-        meta->opts.unmasked().invert(F_MIC_OFF);
-        if (meta->gui_item)
-            meta->gui_item->getengine().redraw();
-
-        if (p)
-        {
-            gui_button_c *b = (gui_button_c *)p;
-            meta->opts.unmasked().is(F_MIC_OFF) ?
-                b->set_face_getter(BUTTON_FACE(unmute_mic)) :
-                b->set_face_getter(BUTTON_FACE(mute_mic));
-        }
-
-    }
-    return true;
-}
-
-bool contact_c::b_mute_speaker(RID, GUIPARAM p)
-{
-    if (!is_meta() && !getkey().is_group())
-    {
-        if (getmeta())
-            getmeta()->b_mute_speaker(RID(), p);
-        return true;
-    }
-
-    if (is_av() && ASSERT(p))
-    {
-        bool osoff = is_speaker_off();
-
-        opts.unmasked().invert(F_SPEAKER_OFF);
-
-        gui_button_c *b = (gui_button_c *)p;
-        opts.unmasked().is(F_SPEAKER_OFF) ?
-            b->set_face_getter(BUTTON_FACE(unmute_speaker)) :
-            b->set_face_getter(BUTTON_FACE(mute_speaker));
-
-        if (osoff != is_speaker_off())
-        {
-            if (gui_item)
-                gui_item->getengine().redraw();
-
-            if (getkey().is_group())
-            {
-                g_app->mediasystem().voice_mute([this](uint64 id)->bool {
-                
-                    contact_key_s &ck = ts::ref_cast<contact_key_s>(id);
-                    return ( getkey().protoid | (getkey().contactid << 16)) == ck.protoid;
-
-                }, is_speaker_off());
-
-            } else
-                subiterate([this](contact_c *c) {
-                    if (c->is_av())
-                        g_app->mediasystem().voice_mute(ts::ref_cast<uint64>(c->getkey()), is_speaker_off());
-                });
-        }
-
-    }
-    return true;
-}
-
 
 bool contact_c::b_reject_call(RID, GUIPARAM par)
 {
@@ -955,7 +920,7 @@ bool contact_c::b_reject_call(RID, GUIPARAM par)
 
     if (ringtone(false))
         if (active_protocol_c *ap = prf().ap(getkey().protoid))
-            ap->stop_call(getkey().contactid, STOPCALL_REJECT);
+            ap->stop_call(getkey().contactid);
 
     if (CHECK(getmeta()))
     {
@@ -1084,7 +1049,7 @@ bool contact_c::b_refuse_file(RID, GUIPARAM par)
 }
 
 
-const post_s * contact_c::fix_history( message_type_app_e oldt, message_type_app_e newt, const contact_key_s& sender, time_t update_time )
+const post_s * contact_c::fix_history( message_type_app_e oldt, message_type_app_e newt, const contact_key_s& sender, time_t update_time, const ts::str_c *update_text )
 {
     contact_c *historian = this;
     if (!historian->is_rootcontact()) historian = historian->getmeta();
@@ -1097,6 +1062,7 @@ const post_s * contact_c::fix_history( message_type_app_e oldt, message_type_app
             if (oldt == p.type && (sender.is_empty() || p.sender == sender))
             {
                 p.type = newt; 
+                if (update_text) p.message_utf8 = *update_text;
                 updated.add(p.utag);
                 if (update_time)
                     p.time = update_time++;
@@ -1108,7 +1074,7 @@ const post_s * contact_c::fix_history( message_type_app_e oldt, message_type_app
         {
             const post_s *p = historian->find_post_by_utag(utag);
             if (ASSERT(p))
-                prf().change_history_item(historian->getkey(), *p, HITM_MT|HITM_TIME);
+                prf().change_history_item(historian->getkey(), *p, HITM_MT|HITM_TIME|( update_text ? HITM_MESSAGE : 0 ));
         }
     }
     return r;
@@ -1395,8 +1361,7 @@ bool contacts_c::is_groupchat_member( const contact_key_s &ck )
     for (contact_c *c : arr)
         if (c->getkey().is_group() && c->subpresent(ck))
         {
-            if (c->gui_item)
-                c->gui_item->redraw(1.0f);
+            c->redraw(1.0f);
             yep = true;
         }
     return yep;
@@ -1411,19 +1376,15 @@ void contacts_c::kill(const contact_key_s &ck)
     bool selself = !guiitem.expired() && g_app->active_contact_item.get() == guiitem.get();
 
     if (cc->getkey().is_group() && cc->get_options().unmasked().is(contact_c::F_AUDIO_GCHAT))
-        cc->av(false);
+        cc->av(false, false);
 
     if (cc->is_meta())
     {
-        cc->subiterate([this](contact_c *c) {
-            c->ringtone(false);
-            c->av(false);
-            c->calltone(false);
-        });
+        cc->stop_av();
     } else
     {
         cc->ringtone(false);
-        cc->av(false);
+        cc->av(false, false);
         cc->calltone(false);
     }
 
@@ -1583,16 +1544,32 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
         {
             if (contact.key.is_group())
             {
+                auto calc_groupchats_amount = [this]()->int
+                {
+                    int n = 0;
+                    for (contact_c *c : arr)
+                        if (c->getkey().is_group())
+                            ++n;
+                    return n;
+                };
+
                 bool audio = 0 != (contact.mask & CDF_AUDIO_GCHAT);
                 c = TSNEW(contact_c, contact.key);
                 c->options().unmasked().init( contact_c::F_PERSISTENT_GCHAT, 0 != (contact.mask & CDF_PERSISTENT_GCHAT) );
                 c->options().unmasked().init( contact_c::F_AUDIO_GCHAT, 0 != (contact.mask & CDF_AUDIO_GCHAT) );
+                if (0 != (contact.mask & CDM_NAME) && !contact.name.is_empty())
+                    c->set_name(contact.name);
+                else
+                {
+                    c->set_name( CONSTASTR("Groupchat #") + ts::amake<int>( calc_groupchats_amount() ) );
+                    contact.mask &= ~CDM_NAME;
+                }
                 arr.insert(index, c);
                 prf().purifycontact(c->getkey());
                 serious_change = contact.key.protoid;
 
                 if (audio)
-                    c->av(true);
+                    c->av(true, false);
 
             } else if (contact.state == CS_UNKNOWN)
             {
@@ -1753,7 +1730,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
     if ( new_version( cfg().autoupdate_newver(), nv.ver ) )
         cfg().autoupdate_newver( nv.ver );
     g_app->newversion( new_version() );
-    self->gui_item->getengine().redraw();
+    self->redraw();
     if ( g_app->newversion() )
         gmsg<ISOGM_NOTICE>( self, nullptr, NOTICE_NEWVERSION, nv.ver.as_sptr()).send();
 
@@ -1878,8 +1855,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
                     ap->file_control(ifl.utag, FIC_REJECT);
             }
 
-            if (historian->gui_item)
-                historian->gui_item->getengine().redraw();
+            historian->redraw();
 
         }
         break;
@@ -1930,9 +1906,18 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
         } else if (sender->is_av())
         {
             // hangup by remote peer
-            const post_s * p = historian->fix_history(MTA_CALL_ACCEPTED, MTA_HANGUP, sender->getkey(), historian->nowtime());
+
+            ts::str_c times;
+            if (av_contact_s *avc = g_app->find_avcontact_inprogress(historian))
+            {
+                int dt = (int)(now() - avc->starttime);
+                if (dt > 0)
+                    times = to_utf8(text_seconds(dt));
+            }
+
+            const post_s * p = historian->fix_history(MTA_CALL_ACCEPTED, MTA_HANGUP, sender->getkey(), historian->nowtime(), times.is_empty() ? nullptr : &times);
             if (p) gmsg<ISOGM_SUMMON_POST>(*p, true).send();
-            sender->av(false);
+            sender->av(false, false);
         } else if (sender->is_calltone())
         {
             sender->calltone(false);
@@ -1980,7 +1965,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
         break;
     case MTA_CALL_ACCEPTED:
         sender->calltone(false, true);
-        sender->av(true);
+        sender->av(true, false); // TODO : VIDEO?
         break;
     }
 

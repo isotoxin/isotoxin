@@ -8,6 +8,8 @@ application_c *g_app = nullptr;
 void dotests();
 #endif
 
+GM_PREPARE( ISOGM_COUNT );
+
 static bool __toggle_search_bar(RID, GUIPARAM)
 {
     bool sbshow = prf().get_options().is(UIOPT_SHOW_SEARCH_BAR);
@@ -51,12 +53,15 @@ application_c::application_c(const ts::wchar * cmdl)
 
     register_kbd_callback( __toggle_search_bar, HOTKEY_TOGGLE_SEARCH_BAR );
     register_kbd_callback( __toggle_newcon_bar, HOTKEY_TOGGLE_NEW_CONNECTION_BAR );
-    
+ 
+    register_capture_handler(this);
 }
 
 
 application_c::~application_c()
 {
+    m_avcontacts.clear(); // remove all av contacts before delete GUI
+    unregister_capture_handler(this);
 	g_app = nullptr;
 }
 
@@ -325,6 +330,8 @@ static DWORD WINAPI autoupdater(LPVOID)
 
 /*virtual*/ void application_c::app_5second_event()
 {
+    prf().check_aps();
+
     enum
     {
         OST_UNKNOWN,
@@ -521,8 +528,7 @@ bool application_c::blinking_reason_s::tick()
     if (flags.is(F_REDRAW))
     {
         if (contact_c *h = contacts().find(historian))
-            if (h->gui_item)
-                h->gui_item->getengine().redraw();
+            h->redraw();
         flags.clear(F_REDRAW);
     }
     return is_blank();
@@ -579,6 +585,15 @@ bool application_c::blinking_reason_s::tick()
 
         s3::capture_tick(x::datacaptureaccept, nullptr);
         sleep_ms = 1;
+    }
+
+    for( av_contact_s &avc : m_avcontacts )
+    {
+        if ( avc.is_camera_on() )
+        {
+            avc.camera_tick();
+            sleep_ms = 1;
+        }
     }
 
     UNSTABLE_CODE_EPILOG
@@ -654,7 +669,7 @@ void application_c::select_last_unread_contact()
             add_status_items(m);
             m.add_separator();
             m.add(loc_text(loc_exit), 0, handlers::m_exit);
-            gui_popup_menu_c::show(menu_anchor_s(true, menu_anchor_s::RELPOS_TYPE_3), m, true);
+            gui_popup_menu_c::show(menu_anchor_s(true, menu_anchor_s::RELPOS_TYPE_SYS), m, true);
             g_app->set_notification_icon(); // just remove hint
 
         DEFERRED_EXECUTION_BLOCK_END(0)
@@ -1104,28 +1119,192 @@ void application_c::capture_device_changed()
     }        
 }
 
+int application_c::get_avinprogresscount() const
+{
+    int cnt = 0;
+    for (const av_contact_s &avc : m_avcontacts)
+        if (av_contact_s::AV_INPROGRESS == avc.state)
+            ++cnt;
+    return cnt;
+}
+
+int application_c::get_avringcount() const
+{
+    int cnt = 0;
+    for (const av_contact_s &avc : m_avcontacts)
+        if (av_contact_s::AV_RINGING == avc.state)
+            ++cnt;
+    return cnt;
+}
+
+av_contact_s * application_c::find_avcontact_inprogress( contact_c *c )
+{
+    for (av_contact_s &avc : m_avcontacts)
+        if (avc.c == c && av_contact_s::AV_INPROGRESS == avc.state)
+            return &avc;
+    return nullptr;
+}
+
+av_contact_s & application_c::get_avcontact( contact_c *c, av_contact_s::state_e st )
+{
+    for( av_contact_s &avc : m_avcontacts)
+        if (avc.c == c)
+        {
+            if (av_contact_s::AV_NONE != st)
+                avc.state = st;
+            return avc;
+        }
+    av_contact_s &avc = m_avcontacts.addnew(c, st);
+    avc.send_so(); // update stream options now
+    return avc;
+}
+
+void application_c::del_avcontact(contact_c *c)
+{
+    for(int i=m_avcontacts.size()-1;i>=0;--i)
+    {
+        av_contact_s &avc = m_avcontacts.get(i);
+        if (avc.c == c)
+            m_avcontacts.remove_fast(i);
+    }
+}
+
+void application_c::stop_all_av()
+{
+    gmsg<ISOGM_NOTICE>(nullptr, nullptr, NOTICE_KILL_CALL_INPROGRESS).send();
+
+    while (m_avcontacts.size())
+    {
+        av_contact_s &avc = m_avcontacts.get(0);
+        avc.c->stop_av();
+    }
+
+}
 
 void application_c::update_ringtone( contact_c *rt, bool play_stop_snd )
 {
+    ASSERT(rt->is_meta() || rt->getkey().is_group());
+
+    int avcount = get_avringcount();
     if (rt->is_ringtone())
-        m_ringing.set(rt);
+        get_avcontact(rt, av_contact_s::AV_RINGING);
     else
-        m_ringing.find_remove_fast(rt);
+        del_avcontact(rt);
 
 
-    if (m_ringing.size())
+    if (0 == avcount && get_avringcount())
     {
-        gmsg<ISOGM_AV_COUNT> avc; avc.send();
-        (avc.count == 0) ? 
+        (get_avinprogresscount() == 0) ? 
             play_sound(snd_ringtone, true) :
             play_sound(snd_ringtone2, true);
-    } else
+    } else if (avcount && 0 == get_avringcount())
     {
         stop_sound(snd_ringtone2);
         if (stop_sound(snd_ringtone) && play_stop_snd)
             play_sound(snd_call_cancel, false);
     }
 }
+
+av_contact_s * application_c::update_av( contact_c *avmc, bool activate )
+{
+    ASSERT(avmc->is_meta() || avmc->getkey().is_group());
+
+    av_contact_s *r = nullptr;
+
+    int was_avip = get_avinprogresscount();
+    
+    if (activate)
+    {
+        av_contact_s &avc = get_avcontact(avmc, av_contact_s::AV_INPROGRESS);
+
+        if (!avmc->getkey().is_group())
+            avmc->subiterate([&](contact_c *c) {
+                if (c->is_av())
+                    gmsg<ISOGM_NOTICE>(avmc, c, NOTICE_CALL_INPROGRESS).send();
+            });
+        r = &avc;
+
+    } else
+        del_avcontact(avmc);
+
+
+    if (0 == was_avip && get_avinprogresscount())
+        static_cast<sound_capture_handler_c*>(this)->start_capture();
+    else if (0 == get_avinprogresscount() && was_avip)
+        static_cast<sound_capture_handler_c*>(this)->stop_capture();
+
+    if (activate)
+        for (av_contact_s &avc : m_avcontacts)
+            if (av_contact_s::AV_INPROGRESS == avc.state)
+                avc.set_inactive(avc.c != avmc);
+
+
+    if (active_contact_item && active_contact_item->contacted())
+        if (avmc == &active_contact_item->getcontact())
+            update_buttons_head(); // it updates some stuff
+
+    return r;
+}
+
+/*virtual*/ void application_c::datahandler(const void *data, int size)
+{
+    contact_key_s current_receiver;
+
+    for (const av_contact_s &avc : m_avcontacts)
+    {
+        if (av_contact_s::AV_INPROGRESS != avc.state)
+            continue;
+
+        if (avc.is_mic_off())
+            continue;;
+
+        if (avc.c->getkey().is_group())
+        {
+            current_receiver = avc.c->getkey();
+            break;
+        }
+
+        avc.c->subiterate([&](contact_c *sc) {
+            if (sc->is_av())
+                current_receiver = sc->getkey();
+        });
+
+        if (!current_receiver.is_empty())
+            break;;
+    }
+
+    if (!current_receiver.is_empty()) // only one contact receives sound at one time
+        if (active_protocol_c *ap = prf().ap(current_receiver.protoid))
+            ap->send_audio(current_receiver.contactid, capturefmt, data, size);
+}
+
+/*virtual*/ s3::Format *application_c::formats(int &count)
+{
+    avformats.clear();
+
+    for (const av_contact_s &avc : m_avcontacts)
+    {
+        if (av_contact_s::AV_INPROGRESS != avc.state)
+            continue;
+
+        if (avc.c->getkey().is_group())
+        {
+            if (active_protocol_c *ap = prf().ap(avc.c->getkey().protoid))
+                avformats.set(ap->defaudio());
+        }
+        else avc.c->subiterate([this](contact_c *sc)
+        {
+            if (sc->is_av())
+                if (active_protocol_c *ap = prf().ap(sc->getkey().protoid))
+                    avformats.set(ap->defaudio());
+        });
+
+    }
+
+    count = avformats.count();
+    return count ? avformats.begin() : nullptr;
+}
+
 
 bool application_c::present_file_transfer_by_historian(const contact_key_s &historian)
 {
@@ -1939,8 +2118,7 @@ void file_transfer_s::save(uint64 offset_, const ts::buf0_c&bdata)
         }
         data.lock_write()().handle = h;
         if (contact_c *c = contacts().find(historian))
-            if (c->gui_item)
-                c->gui_item->getengine().redraw();
+            c->redraw();
     }
     if (offset_ + bdata.size() > filesize)
     {
@@ -2018,3 +2196,241 @@ void file_transfer_s::upd_message_item(bool force)
     }
 }
 
+av_contact_s::av_contact_s(contact_c *c, state_e st) :c(c), state(st)
+{
+    inactive = false;
+    dirty_cam_size = true;
+    if (st == AV_INPROGRESS)
+        options_handler.reset( TSNEW( OPTIONS_HANDLER, DELEGATE(this, ohandler) ) );
+    starttime = now();
+}
+
+bool av_contact_s::ohandler( gmsg<ISOGM_PEER_STREAM_OPTIONS> &rso )
+{
+    remote_so = rso.so;
+    remote_sosz = rso.videosize;
+    dirty_cam_size = true;
+    return false;
+}
+
+void av_contact_s::update_btn_face_camera(gui_button_c &btn)
+{
+    is_camera_on() ?
+        btn.set_face_getter(BUTTON_FACE(on_camera)) :
+    btn.set_face_getter(BUTTON_FACE(off_camera));
+}
+
+bool av_contact_s::b_mic_switch(RID, GUIPARAM p)
+{
+    mic_switch();
+    is_mic_off() ?
+        ((gui_button_c *)p)->set_face_getter(BUTTON_FACE(unmute_mic)) :
+        ((gui_button_c *)p)->set_face_getter(BUTTON_FACE(mute_mic));
+    return true;
+}
+
+bool av_contact_s::b_speaker_switch(RID, GUIPARAM p)
+{
+    speaker_switch();
+    is_speaker_off() ?
+        ((gui_button_c *)p)->set_face_getter(BUTTON_FACE(unmute_speaker)) :
+        ((gui_button_c *)p)->set_face_getter(BUTTON_FACE(mute_speaker));
+    return true;
+}
+
+void av_contact_s::mic_off()
+{
+    int oso = cur_so();
+    RESETFLAG(so, SO_SENDING_AUDIO);
+    if (cur_so() != oso)
+    {
+        send_so();
+        c->redraw();
+    }
+}
+
+void av_contact_s::camera_switch()
+{
+    int oso = cur_so();
+    INVERTFLAG(so, SO_SENDING_VIDEO);
+    if (cur_so() != oso)
+    {
+        if (!is_camera_on())
+            vsb.reset();
+
+        send_so();
+        c->redraw();
+    }
+}
+
+void av_contact_s::mic_switch()
+{
+    int oso = cur_so();
+    INVERTFLAG( so, SO_SENDING_AUDIO );
+    if (cur_so() != oso)
+    {
+        send_so();
+        c->redraw();
+    }
+}
+
+void av_contact_s::update_speaker()
+{
+    if (c->getkey().is_group())
+    {
+        g_app->mediasystem().voice_mute([this](uint64 id)->bool {
+
+            contact_key_s &ck = ts::ref_cast<contact_key_s>(id);
+            return (c->getkey().protoid | (c->getkey().contactid << 16)) == ck.protoid;
+
+        }, is_speaker_off());
+    }
+    else
+        c->subiterate([this](contact_c *cc) {
+        if (cc->is_av())
+            g_app->mediasystem().voice_mute(ts::ref_cast<uint64>(cc->getkey()), is_speaker_off());
+    });
+
+}
+
+void av_contact_s::speaker_switch()
+{
+    int oso = cur_so();
+    INVERTFLAG(so, SO_RECEIVING_AUDIO);
+
+    if (cur_so() != oso)
+    {
+        update_speaker();
+        send_so();
+        c->redraw();
+    }
+}
+
+void av_contact_s::camera( bool on )
+{
+    int oso = cur_so();
+    INITFLAG( so, SO_SENDING_VIDEO, on );
+
+    if (cur_so() != oso)
+    {
+        send_so();
+        c->redraw();
+    }
+}
+
+void av_contact_s::set_recv_video(bool allow_recv)
+{
+    int oso = cur_so();
+    INITFLAG( so, SO_RECEIVING_VIDEO, allow_recv );
+
+    if (cur_so() != oso)
+    {
+        send_so();
+        c->redraw();
+    }
+}
+
+void av_contact_s::set_inactive(bool inactive_)
+{
+    int oso = cur_so();
+    inactive = inactive_;
+
+    if ( cur_so() != oso )
+    {
+        update_speaker();
+        send_so();
+        c->redraw();
+    }
+}
+
+void av_contact_s::set_so_audio(bool inactive_, bool enable_mic, bool enable_speaker)
+{
+    int oso = cur_so();
+    inactive = inactive_;
+
+    INITFLAG( so, SO_SENDING_AUDIO, enable_mic );
+    INITFLAG( so, SO_RECEIVING_AUDIO, enable_speaker );
+
+    if (cur_so() != oso)
+    {
+        update_speaker();
+        send_so();
+        c->redraw();
+    }
+}
+
+void av_contact_s::set_video_res(const ts::ivec2 &vsz)
+{
+    if (sosz != vsz)
+    {
+        sosz = vsz;
+        send_so();
+    }
+}
+
+void av_contact_s::send_so()
+{
+    c->subiterate([this](contact_c *cc) {
+        if (cc->is_av())
+        {
+            if (active_protocol_c *ap = prf().ap(cc->getkey().protoid))
+                ap->set_stream_options(cc->getkey().contactid, cur_so(), sosz);
+        }
+    });
+}
+
+vsb_c *av_contact_s::createcam()
+{
+    if (currentvsb.id.is_empty())
+        return vsb_c::build();
+    return vsb_c::build(currentvsb);
+}
+
+void av_contact_s::camera_tick()
+{
+    if (!vsb)
+    {
+        vsb.reset( createcam() );
+        vsb->set_bmp_ready_handler( DELEGATE(this, on_frame_ready) );
+    }
+
+    ts::ivec2 dsz = vsb->get_video_size();
+    if (dirty_cam_size || dsz != prev_video_size)
+    {
+        prev_video_size = dsz;
+        if (remote_sosz.x == 0 || (remote_sosz >>= dsz))
+        {
+            vsb->set_desired_size(dsz);
+        }
+        else
+        {
+            dsz = vsb->fit_to_size(remote_sosz);
+        }
+        dirty_cam_size = false;
+    }
+
+    if (vsb->updated())
+    {
+        gmsg<ISOGM_CAMERA_TICK>(c).send();
+
+        ap4video = nullptr;
+        videocid = 0;
+        c->subiterate([&](contact_c *cc) {
+            if (nullptr == ap4video && cc->is_av())
+            {
+                videocid = cc->getkey().contactid;
+                ap4video = prf().ap(cc->getkey().protoid);
+            }
+        });
+    }
+
+}
+
+void av_contact_s::on_frame_ready( const ts::bmpcore_exbody_s &ebm )
+{
+    if (0 == (remote_so & SO_RECEIVING_VIDEO))
+        return;
+
+    if (ap4video)
+        ap4video->send_video_frame(videocid, ebm);
+}

@@ -116,6 +116,21 @@ template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_shadow(ts::TSCOLOR c
     return s;
 }
 
+INLINE ts::wstr_c text_seconds(int seconds)
+{
+    int m = seconds / 60;
+    int s = seconds - (m * 60);
+
+    ts::wstr_c t( (m < 10) ? CONSTWSTR(" (0") : CONSTWSTR(" (") );
+
+    t.append_as_uint(m).append_char(':');
+    if (s < 10) t.append(CONSTWSTR("0"));
+    t.append_as_uint(s);
+    t.append_char(')');
+
+    return t;
+}
+
 template<typename SCORE> void text_set_date(ts::str_t<ts::wchar, SCORE> & tstr, const ts::wstr_c &fmt, const tm &tt)
 {
     SYSTEMTIME st;
@@ -172,14 +187,14 @@ protected:
     sound_capture_handler_c();
     ~sound_capture_handler_c();
 
-    void start_capture();
-    void stop_capture();
-
 public:
     s3::Format &getfmt() { return capturefmt; }
     bool is_capture() const { return capture; };
     virtual void datahandler(const void *data, int size) = 0;
     virtual s3::Format *formats(int &count) { count = 0; return nullptr; };
+
+    void start_capture();
+    void stop_capture();
 
 };
 
@@ -212,8 +227,6 @@ enum isogmsg_e
     ISOGM_CHANGED_SETTINGS,
     ISOGM_NOTICE,
     ISOGM_SUMMON_POST,              // summon post_s into conversation
-    ISOGM_AV,
-    ISOGM_AV_COUNT,
     ISOGM_CALL_STOPED,
     ISOGM_METACREATE,
     ISOGM_APPRISE,
@@ -223,14 +236,11 @@ enum isogmsg_e
     ISOGM_DO_POSTEFFECT,
     ISOGM_TYPING,
     ISOGM_REFRESH_SEARCH_RESULT,
+    ISOGM_VIDEO_TICK,
+    ISOGM_CAMERA_TICK,
+    ISOGM_PEER_STREAM_OPTIONS,
 
     ISOGM_COUNT,
-};
-
-template<> struct gmsg<ISOGM_AV_COUNT> : public gmsgbase
-{
-    gmsg() :gmsgbase(ISOGM_AV_COUNT) {}
-    int count = 0;
 };
 
 template<> struct gmsg<ISOGM_NEWVERSION> : public gmsgbase
@@ -320,6 +330,17 @@ template<> struct gmsg<ISOGM_DO_POSTEFFECT> : public gmsgbase
 
 };
 
+template<> struct gmsg<ISOGM_VIDEO_TICK> : public gmsgbase
+{
+    gmsg(const ts::ivec2 &sz) :gmsgbase(ISOGM_VIDEO_TICK), videosize(sz) {}
+    ts::ivec2 videosize;
+};
+
+template<> struct gmsg<ISOGM_CAMERA_TICK> : public gmsgbase
+{
+    gmsg(contact_c *collocutor) :gmsgbase(ISOGM_CAMERA_TICK), collocutor(collocutor) {}
+    contact_c *collocutor;
+};
 
 enum settingsparam_e
 {
@@ -376,6 +397,7 @@ enum loctext_e
     loc_loading,
     loc_anyfiles,
     loc_camerabusy,
+    loc_initialization,
 };
 
 ts::wstr_c loc_text(loctext_e);

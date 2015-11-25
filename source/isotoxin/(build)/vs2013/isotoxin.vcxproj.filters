@@ -16,7 +16,7 @@
     <Filter Include="src\profile">
       <UniqueIdentifier>{f1a55b17-4567-413d-b722-4a9145d4cc95}</UniqueIdentifier>
     </Filter>
-    <Filter Include="src\videocapture">
+    <Filter Include="src\video">
       <UniqueIdentifier>{8c9050dd-4b4a-42d5-9699-f8e54441bcbe}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -102,8 +102,8 @@
     <ClCompile Include="..\..\filterbar.cpp">
       <Filter>src\gui</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\videocapture.cpp">
-      <Filter>src\videocapture</Filter>
+    <ClCompile Include="..\..\videoprocessing.cpp">
+      <Filter>src\video</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -185,8 +185,8 @@
     <ClInclude Include="..\..\filterbar.h">
       <Filter>src\gui</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\videocapture.h">
-      <Filter>src\videocapture</Filter>
+    <ClInclude Include="..\..\videoprocessing.h">
+      <Filter>src\video</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -824,7 +824,7 @@ ts::wstr_c loc_text(loctext_e lt)
         case loc_nonetwork:
             return TTT("No available networks to select",248);
         case loc_disk_write_error:
-            return TTT("Disk write error (full?)",343);
+            return TTT("Disk write error (full?)",142);
         case loc_import_from_file:
             return TTT("Import configuration from file",56);
         case loc_loading:
@@ -833,6 +833,8 @@ ts::wstr_c loc_text(loctext_e lt)
             return TTT("Any files",207);
         case loc_camerabusy:
             return TTT("Probably camera already used.[br]You have to stop using camera by another application.", 353);
+        case loc_initialization:
+            return TTT("Initialization...", 352);
 
     }
     return ts::wstr_c();
@@ -872,8 +874,7 @@ void draw_initialization(rectengine_c *e, ts::drawable_bitmap_c &pab, const ts::
 {
     draw_data_s&dd = e->begin_draw();
 
-    ts::wstr_c t( TTT("Initialization...", 352) );
-    if (additiontext.l) t.append(CONSTWSTR("<br>")).append(additiontext);
+    ts::wstr_c t( additiontext );
     ts::ivec2 tsz = gui->textsize( ts::g_default_text_font, t );
     ts::ivec2 tpos = (viewrect.size() - tsz) / 2;
 
@@ -1215,11 +1216,11 @@ bool file_mask_match( const ts::wsptr &filename, const ts::wsptr &masks )
 
 sound_capture_handler_c::sound_capture_handler_c()
 {
-    g_app->register_capture_handler(this);
+    if (g_app) g_app->register_capture_handler(this);
 }
 sound_capture_handler_c::~sound_capture_handler_c()
 {
-    g_app->unregister_capture_handler(this);
+    if (g_app) g_app->unregister_capture_handler(this);
 }
 
 void sound_capture_handler_c::start_capture()

@@ -207,6 +207,12 @@ rects
     c=2,2,2,2,#a5eea9
     clientborder=4,4,4,4
   }
+  notice.call=sb
+  {
+    c=2,2,2,2,#d6dbe9
+    clientborder=4,4,4,4
+    deftextcolor=#445255
+  }
   notice.reject=sb
   {
     c=2,2,2,2,#f5eea9
@@ -624,28 +630,59 @@ images
 
   voicecall
   {
-    src=back.png,132,280,153,300
+    src=back.png,240,479,256,495
   }
-  videocall
+  camera
   {
-    src=back.png,157,279,191,299
+    src=back.png,206,479,222,495
   }
   micoff
   {
-    src=back.png,158,299,179,321
+    src=back.png,138,479,154,495
   }
   speakeroff
   {
-    src=back.png,131,300,155,320
+    src=back.png,189,479,205,495
   }
   micon
   {
-    src=back.png,201,333,219,355
+    src=back.png,121,479,137,495
   }
   speakeron
   {
-    src=back.png,172,334,196,354
+    src=back.png,172,479,188,495
   }
+
+
+  bi_voicecall
+  {
+    src=back.png,240,496,256,512
+  }
+  bi_camera
+  {
+    src=back.png,206,496,222,512
+  }
+  bi_extra
+  {
+    src=back.png,223,496,239,512
+  }
+  bi_micoff
+  {
+    src=back.png,138,496,154,512
+  }
+  bi_speakeroff
+  {
+    src=back.png,189,496,205,512
+  }
+  bi_micon
+  {
+    src=back.png,121,496,137,512
+  }
+  bi_speakeron
+  {
+    src=back.png,172,496,188,512
+  }
+
   uac
   {
     src=back.png,255,269,275,289
@@ -1018,8 +1055,8 @@ buttons
       radius=15
       shadow-radius-out=15
       shadow-radius-in=10
-      color=#75d079
-      image=micon
+      color=#30a6a3
+      image=bi_micon
     }
   }
   unmute_mic=mute_mic
@@ -1027,7 +1064,7 @@ buttons
     gen 
     {
       color=#b1c0a8
-      image=micoff
+      image=bi_micoff
     }
   }
 
@@ -1035,7 +1072,7 @@ buttons
   {
     gen 
     {
-      image=speakeron
+      image=bi_speakeron
     }
   }
 
@@ -1044,7 +1081,32 @@ buttons
     gen 
     {
       color=#b1c0a8
-      image=speakeroff
+      image=bi_speakeroff
+    }
+  }
+
+  on_camera=mute_mic
+  {
+    gen 
+    {
+      image=bi_camera
+    }
+  }
+
+  off_camera=mute_mic
+  {
+    gen 
+    {
+      color=#b1c0a8
+      image=bi_camera
+    }
+  }
+
+  extra=mute_mic
+  {
+    gen 
+    {
+      image=bi_extra
     }
   }
 

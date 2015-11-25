@@ -43,7 +43,7 @@ void dialog_smileselector_c::build_rects(rects_t&a)
         ++i;
     });
 
-    areah = p.y + maxh + 2;
+    areah = p.y + maxh + 3;
     sbv = areah > sz.y;
     sb.set_size(areah, sz.y);
 
@@ -73,7 +73,7 @@ dialog_smileselector_c::~dialog_smileselector_c()
 /*virtual*/ ts::ivec2 dialog_smileselector_c::get_min_size() const 
 {
     if (const theme_rect_s *thr = themerect())
-        return thr->size_by_clientsize(sz + ts::ivec2(OTS+(sbv?ts::tmax(OTS,thr->sbwidth()):OTS),OTS+OTS), false);
+        return thr->size_by_clientsize(sz + ts::ivec2(2+OTS+(sbv?ts::tmax(OTS,thr->sbwidth()):OTS),OTS+OTS), false);
     return sz + ts::ivec2(OTS+OTS);
 }
 
@@ -119,7 +119,7 @@ bool dialog_smileselector_c::find_undermouse()
                 sb.draw(thr, getengine(), ds, sbhl);
             }
             draw_data_s &dd = getengine().begin_draw();
-            dd.cliprect = ts::irect(dd.offset + OTS, dd.offset + sz + ts::ivec2(OTS));
+            dd.cliprect = ts::irect(dd.offset + OTS, dd.offset + sz + ts::ivec2(OTS+2,OTS));
             ts::ivec2 d = ts::ivec2(drawarea.lt.x, drawarea.lt.y + sb.shift);
             for( const rectdef_s &rd : rects )
             {

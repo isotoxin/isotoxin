@@ -1,6 +1,6 @@
 #include "stdafx.h"
 
-#define IPCVER 1
+#define IPCVER 2
 
 #ifndef __STR1__
 #define __STR2__(x) #x
@@ -21,6 +21,9 @@ enum datatype_e
     DATATYPE_IDLEJOB_ANSWER,
     DATATYPE_FIN_ASK,
     DATATYPE_FIN_ANSWER,
+    DATATYPE_NEW_BUFFER,
+    DATATYPE_BUFFER_SENT,
+    DATATYPE_CLEANUP_BUFFERS,
     DATATYPE_DATA_128k,
     DATATYPE_DATA_BIG,
 };
@@ -41,11 +44,55 @@ struct handshake_answer_s
     DWORD pid = GetCurrentProcessId(); // processid
 };
 
+struct new_xchg_buffer_s
+{
+    int datasize = sizeof(new_xchg_buffer_s);
+    int datatype = DATATYPE_NEW_BUFFER;
+    int allocated;
+    char bufname[MAX_PATH];
+
+    new_xchg_buffer_s() {}; //-V730
+    new_xchg_buffer_s(int alc):allocated(alc) {} //-V730
+};
+
 template<datatype_e d> struct signal_s
 {
     int datasize = sizeof(signal_s);
     int datatype = d;
 };
+
+struct xchg_buffer_header_s
+{
+    enum bstate_e
+    {
+        BST_FREE, // pid is 0
+        BST_LOCKED, // pid is owner
+        BST_SEND, // pid is sender
+        BST_DEAD,
+    };
+
+    long sync;
+    int allocated;
+    int sendsize;
+    DWORD pid; // owner / sender
+    DWORD lastusetime;
+    bstate_e st;
+
+    void *getptr() const
+    {
+        char *p = (char *)(this + 1);
+        return p + XCHG_BUFFER_ADDITION_SPACE;
+    }
+
+    bool isptr(const void *ptr) const
+    {
+        char *pstart = (char *)this;
+        return ptr >= pstart && ptr < ((char *)getptr()+allocated);
+    }
+
+};
+
+#define MAX_XCHG_BUFFERS 16
 
 struct ipc_data_s
 {
@@ -56,10 +103,41 @@ struct ipc_data_s
     idlejob_func *idlejobhandler;
     void *par_data;
     void *par_idlejob;
+
+    
+    struct exchange_buffer_s
+    {
+        HANDLE mapping;
+        xchg_buffer_header_s *ptr;
+
+        void reset()
+        {
+            UnmapViewOfFile(ptr);
+            CloseHandle(mapping);
+            mapping = nullptr;
+            ptr = nullptr;
+        }
+
+    } xchg_buffers[MAX_XCHG_BUFFERS];
+    int xchg_buffers_count;
+    unsigned int xchg_buffer_tag;
+
+    void remove_xchg_buffer(int index)
+    {
+#ifdef _DEBUG
+        if (!sync || index >= xchg_buffers_count)
+            __debugbreak();
+#endif // _DEBUG
+        xchg_buffers[index].reset();
+        memcpy( xchg_buffers + index, xchg_buffers + index + 1, (--xchg_buffers_count - index) * sizeof(xchg_buffers[0]) );
+    }
+
+
     HANDLE watchdog[2];
     DWORD other_pid;
     volatile bool quit_quit_quit;
     volatile bool watch_dog_works;
+    volatile bool cleaup_buffers_signal;
 
     struct data_s
     {
@@ -72,10 +150,16 @@ struct ipc_data_s
         spinlock::auto_simple_lock l(sync);
 
         DWORD w = 0;
+        if (cleaup_buffers_signal)
+        {
+            signal_s<DATATYPE_CLEANUP_BUFFERS> cdb;
+            WriteFile(pipe_out, &cdb, sizeof(cdb), &w, nullptr);
+            cleaup_buffers_signal = false;
+        }
 
         data_s dd; dd.datasize += datasize;
 
-        if (datasize > (65536 * 2))
+        if (datasize > BIG_DATA_SIZE)
             dd.datatype = DATATYPE_DATA_BIG;
 
         WriteFile(pipe_out, &dd, sizeof(data_s), &w, nullptr);
@@ -89,14 +173,86 @@ struct ipc_data_s
 
     template<typename S> bool send(const S&s)
     {
+        spinlock::auto_simple_lock l(sync);
+
         DWORD w = 0;
+        if (cleaup_buffers_signal)
+        {
+            signal_s<DATATYPE_CLEANUP_BUFFERS> cdb;
+            WriteFile(pipe_out, &cdb, sizeof(cdb), &w, nullptr);
+            cleaup_buffers_signal = false;
+        }
+
         WriteFile(pipe_out, &s, sizeof(s), &w, nullptr);
         return w == sizeof(s);
     }
 
+    void insert_buffer( exchange_buffer_s *newexchb )
+    {
+#ifdef _DEBUG
+        if (!sync || xchg_buffers_count >= MAX_XCHG_BUFFERS)
+            __debugbreak(); // sync must be locked, xchg_buffers_count must be < MAX_XCHG_BUFFERS
+#endif // _DEBUG
+
+        for (int i = 0; i < xchg_buffers_count; ++i)
+        {
+            //allocated is constant and never changed, so it can be read without lock
+            if ( xchg_buffers[i].ptr->allocated > newexchb->ptr->allocated )
+            {
+                // insert here
+                memmove( xchg_buffers + i + 1, xchg_buffers + i, (xchg_buffers_count - i) * sizeof(xchg_buffers[0]) );
+                xchg_buffers[i] = *newexchb;
+                ++xchg_buffers_count;
+                return;
+            }
+        }
+
+        xchg_buffers[xchg_buffers_count++] = *newexchb;
+    }
+
+    void cleanup_buffers()
+    {
+#ifdef _DEBUG
+        if (!sync)
+            __debugbreak(); // sync must be locked
+#endif // _DEBUG
+
+        //DWORD pid = GetCurrentProcessId();
+        DWORD timestump = GetTickCount();
+
+        for (int i = xchg_buffers_count-1; i >= 0 ; --i)
+        {
+            exchange_buffer_s &b = xchg_buffers[i];
+            spinlock::auto_simple_lock x(b.ptr->sync);
+            if (b.ptr->st == xchg_buffer_header_s::BST_FREE)
+            {
+                if (int(timestump - b.ptr->lastusetime) > 5000)
+                {
+                    // 5 seconds unused...
+                    // die die die
+                    b.ptr->st = xchg_buffer_header_s::BST_DEAD;
+                    cleaup_buffers_signal = true;
+                    remove_i:
+                    x.unlock();
+                    remove_xchg_buffer(i);
+                }
+            } else if (XCHG_BUFFER_LOCK_TIMEOUT > 0 && b.ptr->st == xchg_buffer_header_s::BST_LOCKED)
+            {
+                if (int(timestump - b.ptr->lastusetime) > XCHG_BUFFER_LOCK_TIMEOUT)
+                {
+                    __debugbreak();
+                }
+
+            } else if (b.ptr->st == xchg_buffer_header_s::BST_DEAD)
+                goto remove_i;
+        }
+    }
+
+
+
 #define OOPS do { quit_quit_quit = true; return false; } while(0,false)
 //-V:OOPS:521
-
+    
     bool tick()
     {
         if (quit_quit_quit)
@@ -147,23 +303,117 @@ struct ipc_data_s
         case DATATYPE_HANDSHAKE_ANSWER: // only client can receive this and only while connecting
             OOPS;
 
+        case DATATYPE_CLEANUP_BUFFERS:
+            {
+                spinlock::auto_simple_lock l(sync);
+                cleanup_buffers();
+            }
+            return true;
+
+        case DATATYPE_NEW_BUFFER:
+            {
+                if (d.datasize != sizeof(new_xchg_buffer_s))
+                    OOPS;
+
+                new_xchg_buffer_s buf;
+                ReadFile(pipe_in, ((char *)&buf) + sizeof(d), sizeof(new_xchg_buffer_s) - sizeof(d), &r, nullptr);
+
+                ipc_data_s::exchange_buffer_s bb;
+                bb.mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, 0, sizeof(xchg_buffer_header_s) + XCHG_BUFFER_ADDITION_SPACE + buf.allocated, buf.bufname);
+                if (!bb.mapping)
+                    OOPS;
+                bb.ptr = (xchg_buffer_header_s *)MapViewOfFile(bb.mapping, FILE_MAP_WRITE, 0, 0, sizeof(xchg_buffer_header_s) + XCHG_BUFFER_ADDITION_SPACE + buf.allocated);
+                if (!bb.ptr)
+                {
+                    CloseHandle(bb.mapping);
+                    OOPS;
+                }
+
+
+                spinlock::auto_simple_lock l(sync);
+                cleanup_buffers();
+                if (xchg_buffers_count < MAX_XCHG_BUFFERS)
+                    insert_buffer(&bb);
+                else
+                    bb.reset();
+            }
+            return true;
+        case DATATYPE_BUFFER_SENT:
+            {
+                DWORD pid = GetCurrentProcessId();
+                spinlock::auto_simple_lock l(sync);
+                for (int i = 0; i < xchg_buffers_count;++i)
+                {
+                    exchange_buffer_s &b = xchg_buffers[i];
+                    spinlock::auto_simple_lock x(b.ptr->sync);
+                    if (b.ptr->st == xchg_buffer_header_s::BST_SEND && b.ptr->pid != pid)
+                    {
+                        b.ptr->st = xchg_buffer_header_s::BST_LOCKED;
+                        b.ptr->pid = pid;
+                        b.ptr->lastusetime = GetTickCount();
+
+                        xchg_buffer_header_s *hdr = b.ptr;
+                        x.unlock();
+                        l.unlock();
+
+                        if (IPCR_BREAK == datahandler(par_data, hdr->getptr(), -hdr->sendsize))
+                            OOPS;
+                        return true;
+                    }
+                }
+#ifdef _DEBUG
+                __debugbreak();
+#endif // _DEBUG
+            }
+            return true;
         case DATATYPE_DATA_128k:
             {
                 int trdatasize = (d.datasize - sizeof(data_s));
-                if (trdatasize > (65536 * 2))
+                if (trdatasize > BIG_DATA_SIZE)
                     OOPS;
 
                 void *dd = _alloca(trdatasize);
-                ReadFile(pipe_in, dd, trdatasize, &r, nullptr);
-                if ((int)r != trdatasize)
-                    OOPS;
+                int rsz = trdatasize;
+                for( char *t = (char *)dd; rsz > 0; )
+                {
+                    ReadFile(pipe_in, t, rsz, &r, nullptr);
+                    rsz -= (int)r;
+                    t += r;
+                    if ( rsz < 0 )
+                        OOPS;
+                }
 
                 if (IPCR_BREAK == datahandler(par_data, dd, trdatasize))
                     OOPS;
             }
-
             return true;
+        case DATATYPE_DATA_BIG:
+            {
+                int trdatasize = (d.datasize - sizeof(data_s));
+                ipc::ipc_result_e rslt = datahandler(par_data, nullptr, trdatasize);
+                if (IPCR_BREAK == rslt)
+                    OOPS;
+                void *dd = _alloca(BIG_DATA_SIZE);
 
+                for (char *t = (char *)dd; trdatasize > 0;)
+                {
+                    ReadFile(pipe_in, t, min(trdatasize, BIG_DATA_SIZE), &r, nullptr);
+                    trdatasize -= (int)r;
+
+                    if (IPCR_SKIP != rslt)
+                    {
+                        rslt = datahandler(par_data, dd, r);
+                        if (IPCR_BREAK == rslt)
+                        OOPS;
+                    }
+                }
+
+                if (IPCR_SKIP != rslt)
+                    if (IPCR_BREAK == datahandler(par_data, nullptr, 0))
+                        OOPS;
+
+            }
+            return true;
         }
 
         OOPS;
@@ -231,7 +481,7 @@ int ipc_junction_s::start( const char *junction_name )
     strcpy(buf, "\\\\.\\pipe\\_ipcp0_" __STR1__(IPCVER) "_");
     strcat(buf, junction_name);
 
-    d.pipe_in = CreateNamedPipeA( buf, PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, 65536*2, 65536*2, 0, nullptr );
+    d.pipe_in = CreateNamedPipeA( buf, PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, BIG_DATA_SIZE, BIG_DATA_SIZE, 0, nullptr );
     d.pipe_out = nullptr;
     if (INVALID_HANDLE_VALUE == d.pipe_in)
     {
@@ -264,7 +514,7 @@ int ipc_junction_s::start( const char *junction_name )
     } else
     {
         buf[14] = '1';
-        d.pipe_out = CreateNamedPipeA( buf, PIPE_ACCESS_OUTBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, 65536*2, 65536*2, 0, nullptr );
+        d.pipe_out = CreateNamedPipeA( buf, PIPE_ACCESS_OUTBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, BIG_DATA_SIZE, BIG_DATA_SIZE, 0, nullptr );
         if (INVALID_HANDLE_VALUE == d.pipe_out)
         {
             CloseHandle(d.pipe_in);
@@ -280,6 +530,9 @@ int ipc_junction_s::start( const char *junction_name )
     d.watchdog[1] = CreateEvent(nullptr,TRUE,FALSE,nullptr);
     d.quit_quit_quit = false;
     d.watch_dog_works = false;
+    d.cleaup_buffers_signal = false;
+    d.xchg_buffers_count = 0;
+    d.xchg_buffer_tag = 0;
 
     if (is_client)
     {
@@ -335,6 +588,28 @@ void ipc_junction_s::stop()
 
     d.send(signal_s<DATATYPE_FIN_ASK>());
 
+    {
+        for(;;Sleep(1))
+        {
+            spinlock::auto_simple_lock l(d.sync);
+            for (int i = d.xchg_buffers_count - 1; i >= 0; --i)
+            {
+                ipc_data_s::exchange_buffer_s &b = d.xchg_buffers[i];
+                spinlock::auto_simple_lock x(b.ptr->sync);
+                if (b.ptr->st == xchg_buffer_header_s::BST_LOCKED)
+                    if (d.other_pid != b.ptr->pid)
+                        continue; // we cant kill locked buffer due memory access violation
+
+                b.ptr->st = xchg_buffer_header_s::BST_DEAD;
+                x.unlock();
+                d.remove_xchg_buffer(i);
+            }
+            if (0 == d.xchg_buffers_count) break;
+            l.unlock();
+        }
+    }
+
+
     SetEvent(d.watchdog[1]);
     CloseHandle(d.watchdog[1]);
 
@@ -376,6 +651,137 @@ void ipc_junction_s::wait( processor_func *df, void *par_data, idlejob_func *ij,
         working = d.tick();
 }
 
+void *ipc_junction_s::lock_buffer(int size)
+{
+    ipc_data_s &d = (ipc_data_s &)(*this);
+    if (d.quit_quit_quit) return nullptr;
+
+    DWORD pid = GetCurrentProcessId();
+    DWORD timestump = GetTickCount();
+
+    spinlock::auto_simple_lock l(d.sync);
+    for( int i=0; i<d.xchg_buffers_count; )
+    {
+        ipc_data_s::exchange_buffer_s &b = d.xchg_buffers[i];
+        spinlock::auto_simple_lock x(b.ptr->sync);
+        if (b.ptr->st == xchg_buffer_header_s::BST_FREE)
+        {
+            if (b.ptr->allocated >= size)
+            {
+                b.ptr->st = xchg_buffer_header_s::BST_LOCKED;
+                b.ptr->pid = pid;
+                b.ptr->lastusetime = timestump;
+                return b.ptr->getptr();
+            }
+
+            if ( int(timestump - b.ptr->lastusetime) > 5000 )
+            {
+                // 5 seconds unused...
+                // die die die
+                b.ptr->st = xchg_buffer_header_s::BST_DEAD;
+                d.cleaup_buffers_signal = true;
+            remove_dead_buffer:
+                x.unlock();
+                d.remove_xchg_buffer(i);
+            }
+        } else if (b.ptr->st == xchg_buffer_header_s::BST_DEAD)
+            goto remove_dead_buffer;
+
+        ++i;
+    }
+    if (d.xchg_buffers_count == MAX_XCHG_BUFFERS) return nullptr;
+    l.unlock();
+
+    new_xchg_buffer_s buf(size);
+    sprintf_s(buf.bufname, sizeof(buf.bufname), "ipcb_" __STR1__(IPCVER) "_%u_%u", pid, d.xchg_buffer_tag++);
+
+    ipc_data_s::exchange_buffer_s b;
+    b.mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, 0, sizeof(xchg_buffer_header_s) + XCHG_BUFFER_ADDITION_SPACE + size, buf.bufname);
+    if (nullptr == b.mapping) return nullptr;
+    b.ptr = (xchg_buffer_header_s *)MapViewOfFile(b.mapping, FILE_MAP_WRITE, 0, 0, sizeof(xchg_buffer_header_s) + XCHG_BUFFER_ADDITION_SPACE + size);
+    if (!b.ptr)
+    {
+        CloseHandle(b.mapping);
+        return nullptr;
+    }
+    b.ptr->st = xchg_buffer_header_s::BST_LOCKED;
+    b.ptr->pid = pid;
+    b.ptr->allocated = size;
+    b.ptr->lastusetime = timestump;
+
+    d.send(buf);
+
+    spinlock::auto_simple_lock xl(d.sync);
+    d.insert_buffer( &b );
+    return b.ptr->getptr();
+}
+
+void ipc_junction_s::unlock_send_buffer(const void *ptr, int sendsize)
+{
+    ipc_data_s &d = (ipc_data_s &)(*this);
+    if (d.quit_quit_quit) return;
+
+    spinlock::auto_simple_lock l(d.sync);
+    for (int i = 0; i < d.xchg_buffers_count;++i)
+    {
+        ipc_data_s::exchange_buffer_s &b = d.xchg_buffers[i];
+        spinlock::auto_simple_lock x(b.ptr->sync);
+        
+        if (b.ptr->isptr( ptr ))
+        {
+#ifdef _DEBUG
+            if (xchg_buffer_header_s::BST_LOCKED != b.ptr->st || b.ptr->pid != GetCurrentProcessId())
+                __debugbreak();
+#endif // _DEBUG
+
+            if (sendsize > 0 && sendsize <= b.ptr->allocated)
+            {
+                b.ptr->st = xchg_buffer_header_s::BST_SEND;
+                b.ptr->lastusetime = GetTickCount();
+                b.ptr->sendsize = sendsize;
+                x.unlock();
+                l.unlock();
+                d.send(signal_s<DATATYPE_BUFFER_SENT>());
+            } else
+            {
+                b.ptr->st = xchg_buffer_header_s::BST_FREE;
+            }
+            return;
+        }
+    }
+#ifdef _DEBUG
+    __debugbreak();
+#endif // _DEBUG
+}
+
+void ipc_junction_s::unlock_buffer(const void *ptr)
+{
+    ipc_data_s &d = (ipc_data_s &)(*this);
+    if (d.quit_quit_quit) return;
+    spinlock::auto_simple_lock l(d.sync);
+    for (int i = 0; i < d.xchg_buffers_count;++i)
+    {
+        ipc_data_s::exchange_buffer_s &b = d.xchg_buffers[i];
+        spinlock::auto_simple_lock x(b.ptr->sync);
+
+        if (b.ptr->isptr( ptr ))
+        {
+#ifdef _DEBUG
+            if (xchg_buffer_header_s::BST_LOCKED != b.ptr->st || b.ptr->pid != GetCurrentProcessId())
+                __debugbreak();
+#endif // _DEBUG
+
+            b.ptr->st = xchg_buffer_header_s::BST_FREE;
+            return;
+        }
+    }
+
+#ifdef _DEBUG
+    __debugbreak();
+#endif // _DEBUG
+
+}
+
 bool ipc_junction_s::send( const void *data, int datasize )
 {
     ipc_data_s &d = (ipc_data_s &)(*this);
@@ -384,11 +790,30 @@ bool ipc_junction_s::send( const void *data, int datasize )
     return d.send( data, datasize );
 }
 
+void ipc_junction_s::cleanup_buffers()
+{
+    ipc_data_s &d = (ipc_data_s &)(*this);
+    if (d.quit_quit_quit) return;
+
+    spinlock::auto_simple_lock l(d.sync);
+
+    if (d.cleaup_buffers_signal)
+    {
+        // DATATYPE_CLEANUP_BUFFERS must be called directly (not using send)
+        signal_s<DATATYPE_CLEANUP_BUFFERS> cdb;
+        DWORD  w;
+        WriteFile(d.pipe_out, &cdb, sizeof(cdb), &w, nullptr);
+        d.cleaup_buffers_signal = false;
+    }
+
+    d.cleanup_buffers();
+}
+
 bool ipc_junction_s::wait_partner(int ms)
 {
     ipc_data_s &d = (ipc_data_s &)(*this);
-    DWORD time = timeGetTime();
-    for(;!d.quit_quit_quit && int(timeGetTime()-time)<ms;Sleep(1))
+    DWORD time = GetTickCount();
+    for(;!d.quit_quit_quit && int(GetTickCount()-time)<ms;Sleep(1))
     {
         if (!d.tick())
             return false;

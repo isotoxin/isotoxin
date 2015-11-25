@@ -110,6 +110,8 @@ class active_protocol_c : public ts::safe_object
     int typingsendcontact = 0;
 
     fmt_converter_s cvt;
+    long lbsync = 0;
+    ts::pointers_t<data_header_s,0> locked_bufs;
 
     static const ts::flags32_s::BITS F_DIP                  = SETBIT(0);
     static const ts::flags32_s::BITS F_WORKER               = SETBIT(1);
@@ -120,6 +122,7 @@ class active_protocol_c : public ts::safe_object
     static const ts::flags32_s::BITS F_ONLINE_SWITCH        = SETBIT(6);
     static const ts::flags32_s::BITS F_SET_PROTO_OK         = SETBIT(7);
     static const ts::flags32_s::BITS F_CURRENT_ONLINE       = SETBIT(8);
+    static const ts::flags32_s::BITS F_WORKER_STOPED        = SETBIT(9);
 
     struct icon_s
     {
@@ -142,6 +145,10 @@ class active_protocol_c : public ts::safe_object
 public:
     active_protocol_c(int id, const active_protocol_data_s &pd);
     ~active_protocol_c();
+
+    void once_per_5sec_tick();
+
+    void unlock_video_frame( incoming_video_frame_s *f );
 
     const ts::str_c &get_desc() const {return syncdata.lock_read()().description;};
     const ts::str_c &get_desc_t() const {return syncdata.lock_read()().description_t;};
@@ -192,9 +199,11 @@ public:
     void reject(int cid);
 
     void accept_call(int cid);
+    void send_video_frame(int cid, const ts::bmpcore_exbody_s &eb);
     void send_audio(int cid, const s3::Format &fmt, const void *data, int size);
     void call(int cid, int seconds);
-    void stop_call(int cid, stop_call_e sc);
+    void stop_call(int cid);
+    void set_stream_options(int cid, int so, const ts::ivec2 &vr); // tell to proto/other peer about recomended video resolution (if I see video in 320x240, why you send 640x480?)
 
     void file_resume(uint64 utag, uint64 offset);
     void file_control(uint64 utag, file_control_e fctl);

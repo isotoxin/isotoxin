@@ -6,6 +6,235 @@
 namespace ts
 {
 
+    // YUV to RGB conversion constants.
+    // Y contribution to R,G,B.  Scale and bias.
+    // TODO(fbarchard): Consider moving constants into a common header.
+#define YG 18997 /* round(1.164 * 64 * 256 * 256 / 257) */
+#define YGB 1160 /* 1.164 * 64 * 16 - adjusted for even error distribution */
+
+    // U and V contributions to R,G,B.
+#define UB -128 /* -min(128, round(2.018 * 64)) */
+#define UG 25 /* -round(-0.391 * 64) */
+#define VG 52 /* -round(-0.813 * 64) */
+#define VR -102 /* -round(1.596 * 64) */
+
+    // Bias values to subtract 16 from Y and 128 from U and V.
+#define BB (UB * 128            - YGB)
+#define BG (UG * 128 + VG * 128 - YGB)
+#define BR            (VR * 128 - YGB)
+
+    // C reference code that mimics the YUV assembly.
+    static __inline void YuvPixel(uint8 y, uint8 u, uint8 v,
+                                  uint8* b, uint8* g, uint8* r) {
+        uint32 y1 = (uint32)(y * 0x0101 * YG) >> 16;
+        *b = CLAMP<uint8>((int32)(BB - (u * UB) + y1) >> 6);
+        *g = CLAMP<uint8>((int32)(BG - (v * VG + u * UG) + y1) >> 6);
+        *r = CLAMP<uint8>((int32)(BR - (v * VR) + y1) >> 6);
+    }
+
+#define RGB_TO_YUV(t)                                                                       \
+    ( (0.257*(float)(t>>16)) + (0.504*(float)(t>>8&0xff)) + (0.098*(float)(t&0xff)) + 16),  \
+    (-(0.148*(float)(t>>16)) - (0.291*(float)(t>>8&0xff)) + (0.439*(float)(t&0xff)) + 128), \
+    ( (0.439*(float)(t>>16)) - (0.368*(float)(t>>8&0xff)) - (0.071*(float)(t&0xff)) + 128)
+
+static INLINE uint8 RGB_Y( TSCOLOR c )
+{
+    //return (uint8)( lround( (0.257*(float)RED(c)) + (0.504*(float)GREEN(c)) + (0.098*(float)BLUE(c)) + 16) );
+    return (uint8)((RED(c) * 16843 + GREEN(c) * 33030 + BLUE(c) * 6423 + 1048576) >> 16);
+}
+
+static INLINE uint8 RGB_U(TSCOLOR c)
+{
+    //return (uint8)( lround(-(0.148*(float)RED(c)) - (0.291*(float)GREEN(c)) + (0.439*(float)BLUE(c)) + 128) );
+    return (uint8)((8388608 - RED(c) * 9699 - GREEN(c) * 19071 + BLUE(c) * 28770) >> 16);
+}
+
+static INLINE uint8 RGB_V(TSCOLOR c)
+{
+    //return (uint8)( 0xff & lround((0.439*(float)RED(c)) - (0.368*(float)GREEN(c)) - (0.071*(float)BLUE(c)) + 128) );
+    return (uint8)((RED(c) * 28770 - GREEN(c) * 24117 - BLUE(c) * 4653 + 8388608) >> 16);
+}
+
+TSCOLOR INLINE coloravg( TSCOLOR c1, TSCOLOR c2, TSCOLOR c3, TSCOLOR c4 )
+{
+    //return ARGB<uint>((RED(c1) + RED(c2) + RED(c3) + RED(c4)) / 4, (GREEN(c1) + GREEN(c2) + GREEN(c3) + GREEN(c4)) / 4, (BLUE(c1) + BLUE(c2) + BLUE(c3) + BLUE(c4)) / 4);
+
+    _asm
+    {
+        mov eax, c1
+        mov ecx, c2
+        mov ebx, eax
+        mov edx, ecx
+        and eax, 0x00FF00FF
+        and ebx, 0x0000FF00
+
+        and ecx, 0x00FF00FF
+        and edx, 0x0000FF00
+        add eax, ecx
+        add ebx, edx
+
+        mov ecx, c3
+        mov edx, ecx
+        and ecx, 0x00FF00FF
+        and edx, 0x0000FF00
+        add eax, ecx
+        add ebx, edx
+
+        mov ecx, c4
+        mov edx, ecx
+        and ecx, 0x00FF00FF
+        and edx, 0x0000FF00
+        add eax, ecx
+        add ebx, edx
+
+        shr eax, 2
+        shr ebx, 2
+        and eax, 0x00FF00FF
+        and ebx, 0x0000FF00
+        or  eax, ebx
+
+    }
+}
+
+void TSCALL img_helper_rgb2yuv(uint8 *dst, const imgdesc_s &src_info, const uint8 *sou, yuv_fmt_e yuvfmt)
+{
+    switch (yuvfmt)
+    {
+    case ts::YFORMAT_I420:
+        {
+            uint8 *dst_u = dst + src_info.sz.x * src_info.sz.y;
+            uint8 *dst_v = dst_u + src_info.sz.x * src_info.sz.y / 4;
+
+            for( int y = 0; y < src_info.sz.y; y+=2, dst += src_info.sz.x, sou += src_info.pitch * 2 )
+            {
+                const TSCOLOR *clr0 = (const TSCOLOR *)sou;
+                const TSCOLOR *clr1 = (const TSCOLOR *)(sou + src_info.pitch);
+                for (int x = 0; x < src_info.sz.x; x+=2, dst += 2, clr0 += 2, clr1 += 2, ++dst_u, ++dst_v )
+                {
+                    TSCOLOR c1 = clr0[0];
+                    TSCOLOR c2 = clr0[1];
+                    TSCOLOR c3 = clr1[0];
+                    TSCOLOR c4 = clr1[1];
+
+                    dst[0] = RGB_Y( c1 );
+                    dst[1] = RGB_Y( c2 );
+                    dst[0 + src_info.sz.x] = RGB_Y(c3);
+                    dst[1 + src_info.sz.x] = RGB_Y(c4);
+
+                    TSCOLOR cc = coloravg( c1, c2, c3, c4 );
+
+                    *dst_u = RGB_U( cc );
+                    *dst_v = RGB_V( cc );
+                }
+            }
+            
+        }
+        break;
+    }
+}
+
+void TSCALL img_helper_yuv2rgb(uint8 *des, const imgdesc_s &des_info, const uint8 *sou, yuv_fmt_e yuvfmt)
+{
+    switch (yuvfmt)
+    {
+    case ts::YFORMAT_YUY2:
+        {
+            for(int y = 0; y<des_info.sz.y; ++y, des += des_info.pitch)
+            {
+                TSCOLOR *dst = (TSCOLOR *)des;
+                TSCOLOR *dste = dst + des_info.sz.x;
+                for(;dst < dste;sou += 4, dst += 2)
+                {
+                    uint32 YUYV = *(uint32 *)sou;
+
+                    int32 Y0 = (uint32)(( YUYV & 0xff ) * 0x0101 * YG) >> 16;
+                    int32 Y1 = (uint32)(( (YUYV>>16) & 0xff ) * 0x0101 * YG) >> 16;
+
+                    uint8 U = (YUYV >> 8) & 0xff;
+                    uint8 V = YUYV >> 24;
+
+                    int prer = BR - (V * VR);
+                    int preg = BG - (V * VG + U * UG);
+                    int preb = BB - (U * UB);
+
+                    dst[0] = ts::ARGB<int>((prer + Y0) >> 6, (preg + Y0) >> 6, (preb + Y0) >> 6);
+                    dst[1] = ts::ARGB<int>((prer + Y1) >> 6, (preg + Y1) >> 6, (preb + Y1) >> 6);
+
+                }
+            }
+
+        }
+        break;
+    case ts::YFORMAT_I420:
+        {
+            const uint8 *Y_plane = sou;
+            int sz = des_info.sz.x * des_info.sz.y;
+            const uint8 *U_plane = sou + sz;
+            const uint8 *V_plane = U_plane + sz / 4;
+
+            for (int y = 0; y < des_info.sz.y; y+=2, des += des_info.pitch * 2, Y_plane += des_info.sz.x)
+            {
+                TSCOLOR *dst0 = (TSCOLOR *)des;
+                TSCOLOR *dst1 = (TSCOLOR *)(des + des_info.pitch);
+                TSCOLOR *dste = dst0 + des_info.sz.x;
+                for (; dst0 < dste; ++U_plane, ++V_plane, dst0 += 2, dst1 += 2, Y_plane += 2)
+                {
+
+                    int Y0 = (int)(Y_plane[0] * 0x0101 * YG) >> 16;
+                    int Y1 = (int)(Y_plane[1] * 0x0101 * YG) >> 16;
+                    int Y2 = (int)(Y_plane[0 + des_info.sz.x] * 0x0101 * YG) >> 16;
+                    int Y3 = (int)(Y_plane[1 + des_info.sz.x] * 0x0101 * YG) >> 16;
+
+                    uint8 U = *U_plane;
+                    uint8 V = *V_plane;
+
+                    int prer = BR - (V * VR);
+                    int preg = BG - (V * VG + U * UG);
+                    int preb = BB - (U * UB);
+
+                    dst0[0] = ts::ARGB<int>((prer+Y0) >> 6, (preg+Y0) >> 6, (preb+Y0) >> 6);
+                    dst0[1] = ts::ARGB<int>((prer+Y1) >> 6, (preg+Y1) >> 6, (preb+Y1) >> 6);
+
+                    dst1[0] = ts::ARGB<int>((prer+Y2) >> 6, (preg+Y2) >> 6, (preb+Y2) >> 6);
+                    dst1[1] = ts::ARGB<int>((prer+Y3) >> 6, (preg+Y3) >> 6, (preb+Y3) >> 6);
+
+               }
+            }
+        }
+        break;
+    case ts::YFORMAT_I420x2:
+        {
+            ts::ivec2 yuv_size = des_info.sz * 2;
+            const uint8 *Y_plane = sou;
+            int sz = yuv_size.x * yuv_size.y;
+            const uint8 *U_plane = sou + sz;
+            const uint8 *V_plane = U_plane + sz / 4;
+
+            for (int y = 0; y < des_info.sz.y; ++y, des += des_info.pitch, Y_plane += yuv_size.x)
+            {
+                TSCOLOR *dst = (TSCOLOR *)des;
+                TSCOLOR *dste = dst + des_info.sz.x;
+                for (; dst < dste; ++U_plane, ++V_plane, ++dst, Y_plane += 2)
+                {
+
+                    int Y = ((int)Y_plane[0] + Y_plane[1] + Y_plane[0 + yuv_size.x] + Y_plane[1 + yuv_size.x]) / 4;
+                    int32 Y0 = (uint32)(Y * 0x0101 * YG) >> 16;
+
+                    uint8 U = *U_plane;
+                    uint8 V = *V_plane;
+
+                    int prer = BR - (V * VR);
+                    int preg = BG - (V * VG + U * UG);
+                    int preb = BB - (U * UB);
+
+                    *dst = ts::ARGB<int>((prer + Y0) >> 6, (preg + Y0) >> 6, (preb + Y0) >> 6);
+                }
+            }
+        }
+        break;
+    }
+}
+
 void TSCALL img_helper_premultiply(uint8 *des, const imgdesc_s &des_info)
 {
     int desnl = des_info.pitch - des_info.sz.x * 4;
@@ -83,9 +312,7 @@ void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_i
         else
         {
             for (int y = 0; y < sou_info.sz.y; ++y, des += des_info.pitch, sou += sou_info.pitch)
-            {
                 memcpy(des, sou, len);
-            }
         }
     }
     else
@@ -103,9 +330,8 @@ void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_i
             }
             int c = tmin(sou_info.bytepp(), des_info.bytepp());
             while (c--)
-            {
                 *des1++ = *sou1++;
-            }
+
             if (des_info.bytepp() == 4 && c == 3)
                 *des1 = 0xFF;
         }
@@ -238,7 +464,7 @@ void img_helper_merge_with_alpha(uint8 *dst, const uint8 *basesrc, const uint8 *
                     float A = float(double(alpha) * (1.0 / 255.0));
                     float nA = 1.0f - A;
 
-#define CCGOOD( C, oC ) CLAMP<uint8>( (uint)lround(float(C) * A) + float(oC) * nA )
+#define CCGOOD( C, oC ) CLAMP<uint8>( float(C) * A + float(oC) * nA )
 
                     ocolor = CCGOOD(B, oB) | (CCGOOD(G, oG) << 8) | (CCGOOD(R, oR) << 16);
 #undef CCGOOD
@@ -290,7 +516,7 @@ void img_helper_merge_with_alpha(uint8 *dst, const uint8 *basesrc, const uint8 *
                         float A = float(alpha) / 255.0f;
                         float nA = 1.0f - A;
 
-#define CCGOOD( C, oC ) CLAMP<uint8>( (uint)lround(float(C) * A) + float(oC) * nA )
+#define CCGOOD( C, oC ) CLAMP<uint8>( float(C) * A + float(oC) * nA )
                         uint oiA = (uint)lround(oalpha + float(255 - oalpha) * A);
                         ocolor = CCGOOD(B, oB) | (CCGOOD(G, oG) << 8) | (CCGOOD(R, oR) << 16) | (CLAMP<uint8>(oiA) << 24);
 #undef CCGOOD
@@ -492,14 +718,45 @@ loop_1112:
 }
 #pragma warning (pop)
 
-template<typename CORE> void bitmap_t<CORE>::shrink_2x_to(const bmpcore_exbody_s &eb, const ivec2 &lt, const ivec2 &sz) const 
+template<typename CORE> void bitmap_t<CORE>::convert_from_yuv( const ivec2 & pdes, const ivec2 & size, const uint8 *src, yuv_fmt_e fmt )
 {
-    if(info().bytepp()==2 || (sz/2) != eb.info().sz || info().bytepp() != eb.info().bytepp()) return;
+    ASSERT( info().sz >>= (pdes + size) );
+    ASSERT( info().bytepp() == 4 );
+    img_helper_yuv2rgb(body(pdes), info( irect(0, size) ), src, fmt);
+}
 
-    uint8 *dst = eb();
-    const uint8 *src = body(lt);
+template<typename CORE> void bitmap_t<CORE>::convert_to_yuv( const ivec2 & pdes, const ivec2 & size, buf_c &b, yuv_fmt_e fmt )
+{
+    ASSERT(info().sz >>= (pdes + size));
+    ASSERT(info().bytepp() == 4);
 
-    img_helper_shrink_2x(dst, src, eb.info(), info( irect(0,sz) ));
+    aint bsz = 0;
+    switch (fmt)
+    {
+    case ts::YFORMAT_YUY2:
+        break;
+    case ts::YFORMAT_I420:
+        bsz = size.x * size.y;
+        bsz += bsz/2;
+        break;
+    case ts::YFORMAT_I420x2:
+        break;
+    }
+    if (bsz == 0)
+        return;
+    b.set_size(bsz, false);
+
+    img_helper_rgb2yuv(b.data(), info(irect(0, size)), body(pdes), fmt);
+}
+
+template<typename CORE> void bitmap_t<CORE>::shrink_2x_to(const ivec2 &lt_source, const ivec2 &sz_source, const bmpcore_exbody_s &eb_target) const
+{
+    if(info().bytepp()==2 || (sz_source /2) != eb_target.info().sz || info().bytepp() != eb_target.info().bytepp()) return;
+
+    uint8 *dst = eb_target();
+    const uint8 *src = body(lt_source);
+
+    img_helper_shrink_2x(dst, src, eb_target.info(), info( irect(0, sz_source) ));
 }
 
 
@@ -2188,7 +2445,7 @@ template<typename CORE> void bitmap_t<CORE>::render_cursor( const ivec2&pos, buf
             if ( ALPHA(c) )
                 *rslt = ALPHABLEND_PM( *rslt, c );
             else if (0x00FFFFFFu == c)
-                *rslt = ts::ARGB( 255-RED(*rslt), 255-GREEN(*rslt), 255-BLUE(*rslt), ALPHA(*rslt) );
+                *rslt = ts::ARGB<auint>( 255-RED(*rslt), 255-GREEN(*rslt), 255-BLUE(*rslt), ALPHA(*rslt) );
         }
     }
 }
@@ -2537,7 +2794,7 @@ bool drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, const ivec2 &p, 
 
                     float A = float(alpha) / 255.0f;
 
-#define CCGOOD( C ) CLAMP<uint8>( (uint)lround(float(C) * A) )
+#define CCGOOD( C ) CLAMP<uint8>( float(C) * A )
 
                     ocolor = CCGOOD(B) | (CCGOOD(G) << 8) | (CCGOOD(R) << 16) | (alpha << 24);
 #undef CCGOOD

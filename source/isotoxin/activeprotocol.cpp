@@ -47,7 +47,11 @@ void active_protocol_c::run()
     if (g_app->F_READONLY_MODE && !g_app->F_READONLY_MODE_WARN)
         return; // no warn - no job
 
-    if (syncdata.lock_read()().flags.is(F_WORKER)) return;
+    auto r = syncdata.lock_read();
+    if (r().flags.is(F_WORKER)) return;
+    if (r().flags.is(F_WORKER_STOPED))
+        g_app->stop_all_av();
+    r.unlock();
 
     CloseHandle(CreateThread(nullptr, 0, worker, this, 0, nullptr));
 }
@@ -236,7 +240,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
 
         }
         break;
-    case HQ_PLAY_AUDIO:
+    case HQ_AUDIO:
         {
             int gid = r.get<int>();
             contact_key_s ck;
@@ -273,6 +277,31 @@ bool active_protocol_c::cmdhandler(ipcr r)
             ++cntc;
             */
 
+        }
+        break;
+    case HQ_STREAM_OPTIONS:
+        {
+            int gid = r.get<int>();
+            contact_key_s ck;
+            ck.protoid = id | (gid << 16); // assume 65536 unique groups max
+            ck.contactid = r.get<int>();
+            int so = r.get<int>();
+            ts::ivec2 sosz;
+            sosz.x = r.get<int>();
+            sosz.y = r.get<int>();
+            gmsg<ISOGM_PEER_STREAM_OPTIONS> *m = TSNEW(gmsg<ISOGM_PEER_STREAM_OPTIONS>, ck, so, sosz);
+            m->send_to_main_thread();
+
+        }
+        break;
+    case HQ_VIDEO:
+        {
+            ASSERT( r.sz < 0, "HQ_VIDEO must be xchg buffer" );
+            spinlock::auto_simple_lock l(lbsync);
+            locked_bufs.add((data_header_s *)r.d);
+            l.unlock();
+            incoming_video_frame_s *f = (incoming_video_frame_s *)(r.d + sizeof(data_header_s));
+            TSNEW( video_frame_decoder_c, this, f ); // not memory leak!
         }
         break;
     case AQ_CONTROL_FILE:
@@ -347,6 +376,24 @@ bool active_protocol_c::cmdhandler(ipcr r)
     return true;
 }
 
+void active_protocol_c::unlock_video_frame( incoming_video_frame_s *f )
+{
+    if (ipcp)
+    {
+        void *dh = ((char *)f) - sizeof(data_header_s);
+        ipcp->junct.unlock_buffer(dh);
+
+        spinlock::auto_simple_lock l(lbsync);
+        locked_bufs.find_remove_fast((data_header_s *)dh);
+    }
+}
+
+void active_protocol_c::once_per_5sec_tick()
+{
+    if (ipcp)
+        ipcp->junct.cleanup_buffers();
+}
+
 bool active_protocol_c::tick()
 {
     if (syncdata.lock_read()().flags.is(F_DIP))
@@ -372,6 +419,7 @@ void active_protocol_c::worker_check()
 
     auto ww = syncdata.lock_write();
     ww().flags.set(F_WORKER);
+    ww().flags.clear(F_WORKER_STOPED);
     ipcname.append( ww().data.tag );
     ww.unlock();
 
@@ -385,6 +433,13 @@ void active_protocol_c::worker_check()
         auto w = syncdata.lock_write();
         ipcp = nullptr;
         w().flags.clear(F_WORKER);
+        w().flags.set(F_WORKER_STOPED);
+        w.unlock();
+
+        spinlock::auto_simple_lock l(lbsync);
+        for(data_header_s *dh : locked_bufs)
+            ipcs.junct.unlock_buffer(dh);
+
     } else
         syncdata.lock_write()().flags.clear(F_WORKER);
     
@@ -534,7 +589,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
         if (typingsendcontact == target->getkey().contactid)
             typingsendcontact = 0;
 
-        ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().contactid << (int)MTA_MESSAGE << msg.post.utag << msg.post.message_utf8 );
+        ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().contactid << (int)MTA_MESSAGE << msg.post.utag << msg.post.time << msg.post.message_utf8 );
     }
     return 0;
 }
@@ -713,7 +768,7 @@ try_again_save:
         {
             Sleep(100);
             sys_idle();
-            DWORD ct = timeGetTime(); 
+            DWORD ct = GetTickCount(); 
             if (((int)ct - (int)ttt) > 1000)
             {
                 ttt = ct;
@@ -826,8 +881,41 @@ void active_protocol_c::accept_call(int cid)
     ipcp->send(ipcw(AQ_ACCEPT_CALL) << cid);
 }
 
+void active_protocol_c::send_video_frame(int cid, const ts::bmpcore_exbody_s &eb)
+{
+    if (!ipcp) return;
+    isotoxin_ipc_s *ipcc = ipcp;
+
+    struct inf_s
+    {
+        int cid;
+        int w;
+        int h;
+        int fmt;
+    };
+
+    int i420sz = eb.info().sz.x * eb.info().sz.y;
+    i420sz += i420sz / 2;
+    i420sz += sizeof(data_header_s) + sizeof(inf_s);
+    
+    if (data_header_s *dh = (data_header_s *)ipcc->junct.lock_buffer( i420sz ))
+    {
+        dh->cmd = AQ_VIDEO;
+        inf_s *inf = (inf_s *)(dh + 1);
+        inf->cid = cid;
+        inf->w = eb.info().sz.x;
+        inf->h = eb.info().sz.y;
+        inf->fmt = VFMT_I420;
+
+        ts::img_helper_rgb2yuv(((ts::uint8 *)(dh + 1)) + sizeof(inf_s), eb.info(), eb(), ts::YFORMAT_I420);
+        ipcc->junct.unlock_send_buffer(dh, i420sz);
+    }
+}
+
 void active_protocol_c::send_audio(int cid, const s3::Format &ifmt, const void *data, int size)
 {
+    if (!ipcp) return;
+
     struct s
     {
         int cid;
@@ -849,14 +937,19 @@ void active_protocol_c::call(int cid, int seconds)
     ipcp->send(ipcw(AQ_CALL) << cid << seconds);
 }
 
-void active_protocol_c::stop_call(int cid, stop_call_e sc)
+void active_protocol_c::stop_call(int cid)
 {
     contact_key_s ck;
     ck.protoid = id;
     ck.contactid = cid;
     g_app->mediasystem().free_voice_channel(ts::ref_cast<uint64>(ck));
 
-    ipcp->send(ipcw(AQ_STOP_CALL) << cid << ((char)sc));
+    ipcp->send(ipcw(AQ_STOP_CALL) << cid);
+}
+
+void active_protocol_c::set_stream_options(int cid, int so, const ts::ivec2 &vr)
+{
+    ipcp->send(ipcw(AQ_STREAM_OPTIONS) << cid << so << vr.x << vr.y);
 }
 
 void active_protocol_c::set_configurable( const configurable_s &c, bool force_send )

@@ -307,6 +307,6 @@ void process_animation_bitmap_s::render()
             }
         }
     }
-    bmpr.shrink_2x_to( bmp.extbody(), ts::ivec2(0), ts::ivec2(sz) );
+    bmpr.shrink_2x_to( ts::ivec2(0), ts::ivec2(sz), bmp.extbody());
     bmpr.premultiply();
 }

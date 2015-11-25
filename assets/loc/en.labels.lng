@@ -133,13 +133,13 @@
 133=Use speakers
 134=Incoming call from $
 135=Call rejected
-136=Call with $
+136=Call to $
 137=Call failed
 138=Call started with $
-139=Call with $ finished
+139=Call to $ finished
 140=Call
 141=Call not supported
-142=Call to $
+142=Disk write error (full?)
 143=Contact offline
 144=Please, create profile first
 145=Metacontact
@@ -340,7 +340,7 @@
 340=Next
 341=Show search bar ($)
 342=Initialize portable mode and run application
-343=Disk write error (full?)
+343=Waiting for video...
 344=Show [i]join network[/i] button ($)
 345=Loading
 346=Message font size: $
@@ -355,6 +355,9 @@
 355=Update not found
 356=About
 357=New version detected: $
+358=Enable video receive
+359=Disable video receive
+360=Default video source
 1000=Incoming message
 1001=Incoming file
 1002=File receiving started

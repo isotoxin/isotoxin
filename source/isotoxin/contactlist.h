@@ -189,6 +189,7 @@ class gui_contactlist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_contactlist_c, ISOGM_V_UPDATE_CONTACT);
     GM_RECEIVER(gui_contactlist_c, ISOGM_DO_POSTEFFECT);
     GM_RECEIVER(gui_contactlist_c, ISOGM_TYPING);
+    GM_RECEIVER(gui_contactlist_c, ISOGM_CALL_STOPED);
     GM_RECEIVER(gui_contactlist_c, GM_HEARTBEAT);
     GM_RECEIVER(gui_contactlist_c, GM_DRAGNDROP);
     GM_RECEIVER(gui_contactlist_c, GM_UI_EVENT)

@@ -46,6 +46,11 @@ int proc_upd(const wstrings_c & pars);
 int proc_sign(const wstrings_c & pars);
 int proc_emoji(const wstrings_c & pars);
 int proc_dos2unix(const wstrings_c & pars);
+int proc_unix2dos(const wstrings_c & pars);
+int proc_grab(const wstrings_c & pars);
+int proc_test(const wstrings_c & pars);
+int proc_rgbi420(const wstrings_c & pars);
+int proc_i420rgb(const wstrings_c & pars);
 
 int proc_loc_(const wstrings_c & pars)
 {
@@ -88,6 +93,11 @@ struct command_s
     command_s(L"sign", L"Sign archive", proc_sign),
     command_s(L"emoji", L"Create emoji table", proc_emoji),
     command_s(L"dos2unix", L"Convert CRLF to LF", proc_dos2unix),
+    command_s(L"unix2dos", L"Convert LF to CRLF", proc_unix2dos),
+    command_s(L"grab", L"grab monitor 0 to png", proc_grab),
+    command_s(L"test", L"internal tests, do not use", proc_test),
+    command_s(L"rgbi420", L"convert image [file] to i420", proc_rgbi420),
+    command_s(L"i420rgb", L"convert image [file] to png", proc_i420rgb),
 };
 
 
@@ -260,6 +270,130 @@ int proc_hgver(const wstrings_c & pars)
     return 0;
 }
 
+int proc_grab(const wstrings_c & pars)
+{
+    Sleep(5000);
+    Beep(1000,100);
+    int monitor = 0;
+    irect gr = monitor_get_max_size_fs(monitor);
+
+    ts::drawable_bitmap_c grabbuff;
+    if (gr.size() != grabbuff.info().sz)
+        grabbuff.create(gr.size(), monitor);
+
+    HWND hwnd = GetDesktopWindow();
+    HDC desktop_dc = GetDC(hwnd);
+    BitBlt(grabbuff.DC(), 0, 0, grabbuff.info().sz.x, grabbuff.info().sz.y, desktop_dc, gr.lt.x, gr.lt.y, SRCCOPY | CAPTUREBLT);
+    ReleaseDC(hwnd, desktop_dc);
+
+    buf_c cursorcachedata;
+    grabbuff.render_cursor(gr.lt, cursorcachedata);
+
+    grabbuff.fill_alpha(255);
+    grabbuff.save_as_png( L"m0.png" );
+
+    return 0;
+}
+
+int proc_rgbi420(const wstrings_c & pars)
+{
+    if (pars.size() < 2)
+        return 0;
+
+    bitmap_c bmp;
+    bmp.load_from_file( pars.get(1) );
+
+    buf_c buf;
+    bmp.convert_to_yuv( ivec2(0), bmp.info().sz, buf, YFORMAT_I420);
+    buf.save_to_file( L"i420.bin" );
+    return 0;
+}
+
+int proc_i420rgb(const wstrings_c & pars)
+{
+    if (pars.size() < 4)
+        return 0;
+
+    buf_c buf;
+    buf.load_from_disk_file(pars.get(1));
+
+    int w = pars.get(2).as_int();
+    int h = pars.get(3).as_int();
+
+    Print( "converting from i420 %i x %i\n", w, h );
+
+    int i420sz = w * h + w * h/2;
+    if (i420sz != buf.size())
+    {
+        Print( "bad file size, %i expected\n", i420sz );
+        return 0;
+    }
+
+    bitmap_c bmp;
+
+    bmp.create_RGBA( ivec2(w, h) );
+    bmp.convert_from_yuv(ivec2(0), bmp.info().sz, buf.data(), YFORMAT_I420);
+    bmp.save_as_png(L"i420.png");
+
+    bmp.create_RGBA(ivec2(w/2, h/2));
+    bmp.convert_from_yuv(ivec2(0), bmp.info().sz, buf.data(), YFORMAT_I420x2);
+    bmp.save_as_png(L"i420div2.png");
+
+    return 0;
+}
+
+
+int proc_test(const wstrings_c & pars)
+{
+    TSCOLOR c = ARGB<int>(-1,-2,-3,0);
+    if (c != 0)
+        __debugbreak();
+
+    buf_c buf; buf.load_from_disk_file(L"C:\\2\\1\\i420.bin");
+    bitmap_c bmp; bmp.create_RGBA(ivec2(1920,1200));
+    int n = 100;
+    if (pars.size() > 1) n = pars.get(1).as_int();
+    
+    for(int total = 0, cnt = 1;;++cnt)
+    {
+        int ct = timeGetTime();
+        for (int i = 0; i < n; ++i)
+        {
+            bmp.convert_from_yuv(ivec2(0), bmp.info().sz, buf.data(), YFORMAT_I420);
+        }
+        int delta = timeGetTime() - ct;
+        total += delta;
+        Print("work time: %i (%i) ms\n", delta, int(total/cnt));
+        Sleep(1);
+        if (delta > 10000)
+            break;
+    }
+
+
+    /*
+    bitmap_c bmp; bmp.load_from_file(L"C:\\2\\1\\test0.png");
+    buf_c buf;
+    int n = 100;
+    if (pars.size() > 1) n = pars.get(1).as_int();
+
+    for (int total = 0, cnt = 1;; ++cnt)
+    {
+        int ct = timeGetTime();
+        for (int i = 0; i < n; ++i)
+        {
+            bmp.convert_to_yuv(ivec2(0), bmp.info().sz, buf, YFORMAT_I420);
+        }
+        int delta = timeGetTime() - ct;
+        total += delta;
+        Print("work time: %i (%i) ms\n", delta, int(total / cnt));
+        Sleep(1);
+        if (delta > 10000)
+            break;
+    }
+    */
+
+    return 0;
+}
 
 // dlmalloc -----------------
 #define SLASSERT ASSERTO

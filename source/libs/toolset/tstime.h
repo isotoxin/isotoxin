@@ -173,48 +173,38 @@ public:
     frame_time_c();
 
     void takt();
-    void setFrameTime(float time) { m_frametime_f = time; }
+    void set_frame_time(float time) { m_frametime_f = time; }
     float frame_time() const { return m_frametime_f; }
 
 };
 
 template<int period_ms> struct time_reducer_s
 {
-    float m_current_period;
+    Time m_next_reaction;
 
-    time_reducer_s(float initial_period = (double(period_ms)*(1.0 / 1000.0))) { m_current_period = initial_period; }
+    time_reducer_s(int initial_period = period_ms):m_next_reaction( Time::current() + initial_period ) {}
 
     static int  get_period() { return period_ms; }
 
     void reset()
     {
-        float initial_period = (float)(double(period_ms)*(1.0 / 1000.0));
-        m_current_period = initial_period;
-    }
-
-    bool takt(float dt)
-    {
-        m_current_period -= dt;
-        return m_current_period < 0;
+        m_next_reaction = Time::current() + period_ms;
     }
 
     bool it_is_time_looped()
     {
-        bool r = m_current_period < 0;
-        if (r) m_current_period += (double(period_ms)*(1.0 / 1000.0));
-        return r;
+        Time ct = Time::current();
+        if ((ct - m_next_reaction) < 0) return false;
+        m_next_reaction += period_ms;
+        return true;
     }
 
     bool it_is_time_ones()
     {
-        bool r = m_current_period < 0;
-        if (r)
-        {
-            do {
-                m_current_period += (float)(double(period_ms)*(1.0 / 1000.0));
-            } while (m_current_period < 0);
-        }
-        return r;
+        Time ct = Time::current();
+        if ((ct - m_next_reaction) < 0) return false;
+        m_next_reaction = ct + period_ms;
+        return true;
     }
 
 };

@@ -2091,7 +2091,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                         IDC_SIZENWSE,
                     };
                     if ((hd.area & AREA_RESIZE) && (hd.area & AREA_RESIZE) < LENGTH(cursors)) return cursors[hd.area & AREA_RESIZE];
-                    if (hd.area & AREA_CAPTION) return IDC_SIZEALL;
+                    if (hd.area & (AREA_CAPTION|AREA_MOVECURSOR)) return IDC_SIZEALL;
                     if (hd.area & AREA_EDITTEXT) return IDC_IBEAM;
                     if (hd.area & AREA_HAND) return IDC_HAND;
                     

@@ -2261,8 +2261,6 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
         {
             rectengine_root_c &root = SAFE_REF(getroot());
 
-            const theme_rect_s *thr = themerect();
-
             cri_s info;
             children_repos_info(info);
 
@@ -2279,12 +2277,13 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 
             getengine().end_draw();
 
-            if (thr && flags.is(F_SBVISIBLE))
-            {
-                evt_data_s ds;
-                ds.draw_thr.sbrect = info.area;
-                sbhelper.draw(thr, root, ds, flags.is(F_SBHL));
-            }
+            if (flags.is(F_SBVISIBLE))
+                if (const theme_rect_s *thr = themerect())
+                {
+                    evt_data_s ds;
+                    ds.draw_thr.sbrect = info.area;
+                    sbhelper.draw(thr, root, ds, flags.is(F_SBHL));
+                }
         }
         break;
     case SQ_MOUSE_WHEELUP:
@@ -2400,22 +2399,31 @@ bool gui_popup_menu_c::update_size(RID, GUIPARAM)
         if (thr)
             sz.x += thr->sbwidth();
     }
-
+    switch (showpoint.relpos)
+    {
+    case menu_anchor_s::RELPOS_TYPE_TU:
+        cp.y = showpoint.rect.lt.y - sz.y;
+        break;
+    }
     if (cp.x + sz.x >= maxsz.rb.x) cp.x = maxsz.rb.x - sz.x;
     if (cp.y + sz.y >= maxsz.rb.y) cp.y = maxsz.rb.y - sz.y;
     if (cp.x < maxsz.lt.x) cp.x = maxsz.lt.x;
     if (cp.y < maxsz.lt.y) cp.y = maxsz.lt.y;
     switch (showpoint.relpos)
     {
-    case menu_anchor_s::RELPOS_TYPE_1:
+    case menu_anchor_s::RELPOS_TYPE_RD:
         if (cp.y < showpoint.rect.lt.y) cp.y = maxsz.rb.y - sz.y;
         if (cp.x < showpoint.rect.rb.x) cp.x = showpoint.rect.lt.x - sz.x;
         break;
-    case menu_anchor_s::RELPOS_TYPE_2:
+    case menu_anchor_s::RELPOS_TYPE_BD:
         if (cp.y < showpoint.rect.rb.y) cp.y = showpoint.rect.lt.y - sz.y;
         if (cp.x < showpoint.rect.lt.x) cp.x = showpoint.rect.rb.x - sz.x;
         break;
-    case menu_anchor_s::RELPOS_TYPE_3:
+    case menu_anchor_s::RELPOS_TYPE_TU:
+        if (cp.y+sz.y > showpoint.rect.lt.y) cp.y = showpoint.rect.rb.y;
+        if (cp.x < showpoint.rect.lt.x) cp.x = showpoint.rect.rb.x - sz.x;
+        break;
+    case menu_anchor_s::RELPOS_TYPE_SYS:
         if (cp.y < showpoint.rect.lt.y) cp.y = showpoint.rect.lt.y - sz.y;
         if (cp.x < showpoint.rect.rb.x) cp.x = showpoint.rect.lt.x - sz.x;
         break;
@@ -2423,7 +2431,7 @@ bool gui_popup_menu_c::update_size(RID, GUIPARAM)
         __debugbreak();
     }
 
-    TS_STATIC_CHECK( menu_anchor_s::relpos_check == 3, "woopz" );
+    TS_STATIC_CHECK( menu_anchor_s::relpos_check == 4, "woopz" );
 
     MODIFY(*this).pos(cp).size(sz);
 

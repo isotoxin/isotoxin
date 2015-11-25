@@ -9,7 +9,7 @@ enum gmsg_e
     GM_GROUP_SIGNAL,
     GM_DIALOG_PRESENT,
     GM_ROOT_FOCUS,
-    GM_HEARTBEAT,
+    GM_HEARTBEAT, // 1 sec
     GM_UI_EVENT,
     GM_DROPFILES,
     GM_DRAGNDROP, // drag'n'drop object drag or drop
@@ -92,6 +92,7 @@ class gm_receiver_c
 public:
 
     static ts::uint32 notify_receivers(int ev, gmsgbase &par);
+    static void prepare( int ev_max );
 
 
     gm_receiver_c(int ev);
@@ -100,7 +101,7 @@ public:
 
 };
 
-template<gmsg_e mid> struct gm_redirect_s : public gm_receiver_c
+template<int mid> struct gm_redirect_s : public gm_receiver_c
 {
     typedef fastdelegate::FastDelegate<bool (gmsg<mid> &)> HANDLER;
     HANDLER handler;
@@ -111,3 +112,5 @@ template<gmsg_e mid> struct gm_redirect_s : public gm_receiver_c
         return handler((gmsg<mid> &)param) ? GMRBIT_ACCEPTED : 0;
     }
 };
+
+#define GM_PREPARE( evcnt ) namespace { struct __evprepare { __evprepare() { gm_receiver_c::prepare(evcnt); } }; ts::static_setup<__evprepare, -1> __evprepare283948239; }

@@ -394,3 +394,62 @@ int proc_dos2unix(const wstrings_c & pars)
 
     return 0;
 }
+
+int proc_unix2dos(const wstrings_c & pars)
+{
+    if (pars.size() < 3) return 0;
+    wstr_c pts = pars.get(1); fix_path(pts, FNO_SIMPLIFY);
+
+    if (!dir_present(pts))
+    {
+        Print(FOREGROUND_RED, "path-to-files not found: %s", pts.cstr()); return 0;
+    }
+
+    wstrings_c exts(pars.get(2), '.');
+
+    if (exts.size() == 0)
+    {
+        Print(FOREGROUND_RED, "no exts defined");
+        return 0;
+    }
+
+
+    wstrings_c lines;
+    wstrings_c sfiles;
+    fill_dirs_and_files(pts, sfiles, lines);
+
+
+    for (const wstr_c & f : sfiles)
+    {
+        bool ok = false;
+        for (const wstr_c & e : exts)
+            if (f.ends(ts::wstr_c(CONSTWSTR(".")).append(e)) || fn_get_name_with_ext(f).equals(e))
+            {
+                ok = true;
+                break;
+            }
+
+        if (ok)
+        {
+            buf_c b;
+            b.load_from_disk_file(f);
+
+            for (int i = b.size() - 1; i >= 0; --i)
+            {
+                if (b.data()[i] == '\r')
+                    b.cut(i, 1);
+            }
+
+            for (int i = b.size() - 1; i >= 0; --i)
+            {
+                if (b.data()[i] == '\n')
+                    *b.expand(i, 1) = '\r';
+            }
+
+            b.save_to_file(f);
+        }
+    }
+
+
+    return 0;
+}

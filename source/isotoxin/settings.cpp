@@ -39,7 +39,7 @@ namespace
 {
     struct enum_video_devices_s : public ts::task_c
     {
-        vcd_list_t video_devices;
+        vsb_list_t video_devices;
         ts::safe_ptr<dialog_settings_c> dlg;
         
         enum_video_devices_s( dialog_settings_c *dlg ):dlg(dlg) {}
@@ -1869,7 +1869,7 @@ menu_c dialog_settings_c::list_video_capture_devices()
     }
 
     ts::wstr_c cid = camera.set( CONSTWSTR("id") );
-    for (const vcd_descriptor_s &vd : video_devices)
+    for (const vsb_descriptor_s &vd : video_devices)
     {
         ts::uint32 f = 0;
         if (vd.id == cid) f = MIF_MARKED;
@@ -1879,7 +1879,7 @@ menu_c dialog_settings_c::list_video_capture_devices()
     return m;
 }
 
-void dialog_settings_c::set_video_devices( vcd_list_t &&_video_devices )
+void dialog_settings_c::set_video_devices( vsb_list_t &&_video_devices )
 {
     video_devices = std::move(_video_devices);
 
@@ -1888,7 +1888,7 @@ void dialog_settings_c::set_video_devices( vcd_list_t &&_video_devices )
 
     ts::wstr_c cid = camera.set( CONSTWSTR("id") );
     bool camok = false;
-    for (const vcd_descriptor_s &d : video_devices)
+    for (const vsb_descriptor_s &d : video_devices)
     {
         if (d.id == cid)
         {
@@ -1930,12 +1930,12 @@ void dialog_settings_c::setup_video_device()
     } end(this);
 
     ts::wstr_c cid = camera.set( CONSTWSTR("id") );
-    const vcd_descriptor_s *dd = nullptr;
-    for (const vcd_descriptor_s &d : video_devices)
+    const vsb_descriptor_s *dd = nullptr;
+    for (const vsb_descriptor_s &d : video_devices)
     {
         if (d.id == cid)
         {
-            video_device.reset( vcd_c::build(d) );
+            video_device.reset( vsb_c::build(d) );
             return;
         }
         if (d.id.equals(CONSTWSTR("desktop")))
@@ -1944,7 +1944,7 @@ void dialog_settings_c::setup_video_device()
     if (dd)
     {
         initializing_animation.restart();
-        video_device.reset(vcd_c::build(*dd));
+        video_device.reset(vsb_c::build(*dd));
     }
 }
 
@@ -1998,8 +1998,8 @@ bool dialog_settings_c::drawcamerapanel(RID, GUIPARAM p)
         if (video_device->still_initializing())
         {
             initializing_animation.render();
-            ts::wstr_c ainfo;
-            if (video_device->is_busy()) ainfo = loc_text(loc_camerabusy);
+            ts::wstr_c ainfo( loc_text(loc_initialization) );
+            if (video_device->is_busy()) ainfo.append(CONSTWSTR("<br>")).append(loc_text(loc_camerabusy) );
             draw_initialization(e, initializing_animation.bmp, e->getrect().getprops().szrect(), get_default_text_color(), ainfo );
 
         } else if (ts::drawable_bitmap_c *b = video_device->lockbuf(nullptr))

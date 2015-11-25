@@ -450,7 +450,7 @@ Cleanup:
         return false;
     }
 
-    return fIsRunAsAdmin == TRUE;
+    return fIsRunAsAdmin != FALSE;
 }
 
 }

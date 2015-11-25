@@ -39,6 +39,25 @@ int _inline pthread_mutex_init(pthread_mutex_t * mutex, const pthread_mutexattr_
     return 0;
 }
 
+
+int _inline pthread_mutex_trylock(pthread_mutex_t * mutex)
+{
+    volatile lock_t *l = &mutex->lock;
+    lock_t thread = 0xFFFFFF & GetCurrentThreadId();
+    lock_t val = *l;
+    if ((val & 0xFFFFFF) == thread)
+    {
+        *l += 0x1000000; // simple increment due mutex locked by current thread
+        return 0;
+    }
+    thread |= 0x1000000;
+
+    lock_t tmp = 0;
+    val = thread;
+    val = _InterlockedCompareExchange(l, val, tmp);
+    return (val == tmp) ? 0 : 1;
+}
+
 int _inline pthread_mutex_lock (pthread_mutex_t * mutex)
 {
     volatile lock_t *l = &mutex->lock;
@@ -69,6 +88,13 @@ int _inline pthread_mutex_unlock (pthread_mutex_t * mutex)
 {
     volatile lock_t *l = &mutex->lock;
     lock_t tmp = *l;
+
+#ifdef _DEBUG
+    lock_t thread = 0xFFFFFF & GetCurrentThreadId();
+    if ((*l & 0xFFFFFF) != thread)
+        __debugbreak(); // fail fail fail
+#endif // _DEBUG
+
     lock_t val = tmp - 0x1000000;
     if (!(val & 0xFF000000))
         val = 0;

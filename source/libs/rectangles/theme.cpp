@@ -363,8 +363,8 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp )
                 }
             }
             const drawable_bitmap_c &dbmp = loadimage(to_wstr(it->get_string("src")));
-			r = theme_rect_s::build( dbmp, thc );
-			
+			r = TSNEW( theme_rect_s, dbmp, thc );
+
 			r->load_params(it);
 		}
 	}

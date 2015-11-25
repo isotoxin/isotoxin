@@ -176,9 +176,81 @@ struct file_transfer_s : public unfinished_file_transfer_s
     bool confirm_required() const;
 };
 
-class application_c : public gui_c
+struct av_contact_s
+{
+    time_t starttime;
+    ts::shared_ptr<contact_c> c; // multicontact
+    enum state_e
+    {
+        AV_NONE,
+        AV_RINGING,
+        AV_INPROGRESS,
+    };
+    int so = SO_SENDING_AUDIO | SO_RECEIVING_AUDIO | SO_RECEIVING_VIDEO; // default stream options
+    int remote_so = 0;
+    ts::ivec2 sosz = ts::ivec2(0);
+    ts::ivec2 remote_sosz = ts::ivec2(0);
+    ts::ivec2 prev_video_size = ts::ivec2(0);
+    vsb_descriptor_s currentvsb;
+    UNIQUE_PTR(vsb_c) vsb;
+    active_protocol_c *ap4video = nullptr;
+    int videocid = 0;
+
+    typedef gm_redirect_s<ISOGM_PEER_STREAM_OPTIONS> OPTIONS_HANDLER;
+    UNIQUE_PTR(OPTIONS_HANDLER) options_handler;
+
+    bool ohandler( gmsg<ISOGM_PEER_STREAM_OPTIONS> &so );
+
+    unsigned state : 4;
+    unsigned inactive : 1; // true - selected other av contact
+    unsigned dirty_cam_size : 1;
+
+    av_contact_s(contact_c *c, state_e st);
+
+    void on_frame_ready( const ts::bmpcore_exbody_s &ebm );
+    void camera_tick();
+
+    bool is_mic_off() const { return 0 == ( cur_so() & SO_SENDING_AUDIO ); }
+    bool is_mic_on() const { return 0 != ( cur_so() & SO_SENDING_AUDIO ); }
+
+    bool is_speaker_off() const { return 0 == (cur_so() & SO_RECEIVING_AUDIO); }
+    bool is_speaker_on() const { return 0 != (cur_so() & SO_RECEIVING_AUDIO); }
+
+    bool is_video_show() const { return is_receive_video() && 0 != ( remote_so & SO_SENDING_VIDEO ); }
+    bool is_receive_video() const { return 0 != (cur_so() & SO_RECEIVING_VIDEO); }
+    bool is_camera_on() const { return 0 != (cur_so() & SO_SENDING_VIDEO); }
+
+    bool b_mic_switch(RID, GUIPARAM p);
+    bool b_speaker_switch(RID, GUIPARAM p);
+
+    void update_btn_face_camera(gui_button_c &btn);
+
+    void update_speaker();
+
+    void set_recv_video(bool allow_recv);
+    void set_inactive( bool inactive );
+    void set_so_audio( bool inactive, bool enable_mic, bool enable_speaker );
+    void camera( bool on );
+    
+    void camera_switch();
+    void mic_off();
+    void mic_switch();
+    void speaker_switch();
+    void set_video_res( const ts::ivec2 &vsz );
+    void send_so();
+    int cur_so() const { return inactive ? ( so & ~(SO_SENDING_AUDIO|SO_RECEIVING_AUDIO|SO_RECEIVING_VIDEO) ) : so; }
+
+    vsb_c *createcam();
+};
+
+
+class application_c : public gui_c, public sound_capture_handler_c
 {
     bool b_customize(RID r, GUIPARAM param);
+
+    ts::tbuf_t<s3::Format> avformats;
+    /*virtual*/ void datahandler(const void *data, int size) override;
+    /*virtual*/ s3::Format *formats(int &count) override;
 
 public:
     static const ts::flags32_s::BITS PEF_RECREATE_CTLS = PEF_FREEBITSTART << 0;
@@ -250,7 +322,18 @@ public:
     GM_RECEIVER( application_c, GM_UI_EVENT );
     GM_RECEIVER( application_c, ISOGM_DELIVERED );
 
-    ts::pointers_t<contact_c,0> m_ringing;
+    ts::array_inplace_t<av_contact_s,0> m_avcontacts;
+
+    int get_avinprogresscount() const;
+    int get_avringcount() const;
+    av_contact_s & get_avcontact( contact_c *c, av_contact_s::state_e st );
+    av_contact_s * find_avcontact_inprogress( contact_c *c );
+    void del_avcontact(contact_c *c);
+    template<typename R> void iterate_avcontacts( const R &r ) const { for( const av_contact_s &avc : m_avcontacts) r(avc); }
+    template<typename R> void iterate_avcontacts( const R &r ) { for( av_contact_s &avc : m_avcontacts) r(avc); }
+    void stop_all_av();
+
+
     mediasystem_c m_mediasystem;
     ts::task_executor_c m_tasks_executor;
 
@@ -401,6 +484,7 @@ public:
 public:
 
     ts::safe_ptr<gui_contact_item_c> active_contact_item;
+    vsb_display_ptr_c current_video_display;
 
     const ts::font_desc_c *font_conv_name = &ts::g_default_text_font;
     const ts::font_desc_c *font_conv_text = &ts::g_default_text_font;
@@ -488,6 +572,7 @@ public:
     void add_task( ts::task_c *t ) { m_tasks_executor.add(t); }
 
     void update_ringtone( contact_c *rt, bool play_stop_snd = true );
+    av_contact_s * update_av( contact_c *avmc, bool activate );
 
 
     template<typename R> void enum_file_transfers_by_historian( const contact_key_s &historian, R r )

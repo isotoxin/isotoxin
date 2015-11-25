@@ -25,6 +25,29 @@ struct audio_format_s
 
 };
 
+struct video_format_s
+{
+    unsigned short width, height; // images dimensions
+    unsigned short pitch[3]; // distance between lines in bytes (3 planes: Y, U, V)
+    unsigned short fmt = VFMT_NONE; // image data format, see video_fmt_e
+};
+
+struct media_data_s
+{
+    audio_format_s afmt;
+    video_format_s vfmt;
+    const void *audio_frame = nullptr;
+    int audio_framesize = 0;
+
+    const void *video_frame[3]; // 3 planes
+    media_data_s()
+    {
+        video_frame[0] = nullptr;
+        video_frame[1] = nullptr;
+        video_frame[2] = nullptr;
+    }
+};
+
 struct proto_info_s
 {
     char *protocol_name = nullptr;
@@ -104,6 +127,7 @@ typedef unsigned long long u64;
 struct message_s
 {
     u64             utag;           // unique tag
+    u64             crtime;         // message creation time_t
     const char *    message;
     int             message_len;
     message_type_e  mt;
@@ -117,6 +141,18 @@ struct call_info_s
     // audio data has always format as it returned from get_info in proto_info_s struct
     const void *audio_data = nullptr;
     int audio_data_size = 0;
+
+    // video data
+    const void *video_data = nullptr;
+    int w = 0;
+    int h = 0;
+    video_fmt_e fmt = VFMT_NONE;
+};
+
+struct stream_options_s
+{
+    int options = 0;
+    int view_w = 0, view_h = 0; // valid only with SO_RECEIVING_VIDEO // 0,0 means any size
 };
 
 struct file_send_info_s
@@ -138,6 +174,12 @@ enum long_operation_e
 {
     LOP_ADDCONTACT,
     LOP_SETCONFIG,
+};
+
+enum send_av_ret_e
+{
+    SEND_AV_OK,
+    SEND_AV_KEEP_VIDEO_DATA, // dont foget to call free_video_data to reuse video data buffer
 };
 
 struct host_functions_s // plugin can (or must) call these functions to do its job
@@ -178,8 +220,8 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     void(__stdcall *on_save)(const void *data, int dlen, void *param);
 
     /*
-        plugin can request play any audio_format
-        audio player will be automatically allocated for gid/cid client
+        plugin should use this func to play audio ot show video
+        audio/video player will be automatically allocated for gid/cid client
 
         gid - negative (groupchat id) when groupchat message received, 0 - normal message
         cid - unique contact id (known and unknown contacts), see contact_data_s::id
@@ -187,7 +229,18 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
         audio system automatically allocates unique audio channel for gid-cid pair
         and releases it when the audio buffer empties
     */
-    void(__stdcall *play_audio)(int gid, int cid, const audio_format_s *audio_format, const void *frame, int framesize);
+    void(__stdcall *av_data)(int gid, int cid, const media_data_s *data);
+
+    /*
+        call to free video data, passed to send_av
+        if send_av return SEND_AV_KEEP_VIDEO_DATA
+    */
+    void(__stdcall *free_video_data)(const void *ptr);
+
+    /*
+        stream options from peer
+    */
+    void(__stdcall *av_stream_options)(int gid, int cid, const stream_options_s *so);
 
     /*
         plugin tells to Isotoxin its current values
@@ -253,9 +306,10 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     FUNC1( void, accept,         int ) \
     FUNC1( void, reject,         int ) \
     FUNC2( void, call,           int, const call_info_s * ) \
-    FUNC2( void, stop_call,      int, stop_call_e ) \
+    FUNC1( void, stop_call,      int ) \
     FUNC1( void, accept_call,    int ) \
-    FUNC2( void, send_audio,     int, const call_info_s * ) \
+    FUNC2( int,  send_av,        int, const call_info_s * ) \
+    FUNC2( void, stream_options, int, const stream_options_s * ) \
     FUNC2( void, configurable,   const char *, const char *) \
     FUNC2( void, file_send,      int, const file_send_info_s *) \
     FUNC2( void, file_resume,    u64, u64) \

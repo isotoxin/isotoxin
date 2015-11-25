@@ -13,10 +13,22 @@
 
 namespace ipc
 {
+    enum constants_e
+    {
+        BIG_DATA_SIZE = 65536 * 2, // big data (size > BIG_DATA_SIZE) received with multiple calls of processor_func
+        XCHG_BUFFER_ADDITION_SPACE = 16,
+#ifdef _DEBUG
+        XCHG_BUFFER_LOCK_TIMEOUT = 5000,
+#else
+        XCHG_BUFFER_LOCK_TIMEOUT = 0,
+#endif // _DEBUG
+    };
+
     enum ipc_result_e
     {
         IPCR_OK,
         IPCR_BREAK, // return it only when using processor_func via ipc_junction_s::wait
+        IPCR_SKIP,
     };
 
     typedef ipc_result_e processor_func( void *par, void *data, int datasize ); // callback
@@ -24,10 +36,10 @@ namespace ipc
 
     struct ipc_junction_s
     {
-        char buffer[63]; // internal data. ipc_junction_s must be allocated at your application. good news: no any new/malloc/delete/free memory routines called inside lib engine
+        char buffer[191]; // internal data. ipc_junction_s must be allocated at your application. good news: no any new/malloc/delete/free memory routines called inside lib engine
         bool stop_called;
 
-        ipc_junction_s():stop_called(true) {} // constructor do nothing: all initialization stuff in this->start
+        ipc_junction_s():stop_called(true) {} //-V730 constructor do nothing: all initialization stuff in this->start
         ~ipc_junction_s() { if (!stop_called) __debugbreak(); } // destructor do nothing: all finalization stuff in this->stop
 
         int start(const char *junction_name); // application should call this, to connect to ipc junction. junction_name is unique per system and only two apps (or one app twice) can use one junction_name
@@ -38,7 +50,11 @@ namespace ipc
 
         void set_data_callback( processor_func *f, void *par ); // use it, if your app already run windows message loop at current thread (WINDOWS only)
 
+        void *lock_buffer( int size );
+        void unlock_send_buffer( const void *ptr, int sendsize );
+        void unlock_buffer( const void *ptr );
         bool send( const void *data, int datasize ); // send data to partner
+        void cleanup_buffers(); // call periodically (once per 5 sec is enough) to remove unused buffers (garbage collect)
 
         bool wait_partner(int timeout_ms); // returns false if timeout
     };

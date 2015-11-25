@@ -35,16 +35,23 @@ enum resize_filter_e
 	FILTER_LANCZOS3			= 7
 };
 
+enum yuv_fmt_e
+{
+    YFORMAT_YUY2, // MEDIASUBTYPE_YUY2 // MAKEFOURCC('Y', 'U', 'Y', '2'):
+    YFORMAT_I420, // 3 planes yuy image from libvpx
+    YFORMAT_I420x2, // same as YFORMAT_I420, but dimension of Y plane is /2 (shrink during conversion)
+};
+
 struct imgdesc_s
 {
     ivec2 sz;
-    uint16 pitch;
+    int16 pitch; // pitch in signed and can be < 0
     uint8 bitpp;
     uint8 _dummy;
     imgdesc_s() {}
     imgdesc_s( const imgdesc_s &inf, const ivec2&sz ) :sz(sz), pitch(inf.pitch), bitpp(inf.bitpp) {}
     imgdesc_s( const ivec2&sz, uint8 bitpp):sz(sz), pitch(as_word(((bitpp + 1) >> 3) * sz.x)), bitpp(bitpp) {}
-    imgdesc_s( const ivec2&sz, uint8 bitpp, uint16 pitch ):sz(sz), pitch(pitch), bitpp(bitpp) { ASSERT(pitch>=(sz.x*bytepp())); }
+    imgdesc_s( const ivec2&sz, uint8 bitpp, int16 pitch ):sz(sz), pitch(pitch), bitpp(bitpp) { ASSERT(tabs(pitch)>=(sz.x*bytepp())); }
 
     aint bytepp() const { return (bitpp + 1) >> 3; };
     bool operator==(const imgdesc_s&d) const { return sz == d.sz && /*pitch == d.pitch &&*/ bitpp == d.bitpp; }
@@ -55,12 +62,15 @@ struct imgdesc_s
     imgdesc_s &set_size(const ivec2 &szz) { sz = szz; return *this; }
 };
 
+
 void TSCALL img_helper_premultiply(uint8 *des, const imgdesc_s &des_info);
 void TSCALL img_helper_fill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color);
 void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info);
 void TSCALL img_helper_shrink_2x(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info);
 void TSCALL img_helper_copy_components(uint8* des, const uint8* sou, const imgdesc_s &des_info, const imgdesc_s &sou_info, int num_comps );
 void TSCALL img_helper_merge_with_alpha(uint8 *des, const uint8 *basesrc, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &base_info, const imgdesc_s &sou_info, int oalphao = -1);
+void TSCALL img_helper_yuv2rgb(uint8 *des, const imgdesc_s &des_info, const uint8 *sou, yuv_fmt_e yuvfmt);
+void TSCALL img_helper_rgb2yuv(uint8 *dst, const imgdesc_s &src_info, const uint8 *sou, yuv_fmt_e yuvfmt);
 
 struct bmpcore_normal_s;
 template<typename CORE> class bitmap_t;
@@ -327,7 +337,7 @@ public:
     bmpcore_exbody_s extbody() const { return bmpcore_exbody_s( body(), info() ); }
     bmpcore_exbody_s extbody( const ts::irect &r ) const
     {
-        return bmpcore_exbody_s( body() + r.lt.x * info().bytepp() + r.lt.y * info().pitch, info(r) );
+        return bmpcore_exbody_s( body(r.lt), info(r) );
     }
 
     operator bool() const {return info().sz >> 0;}
@@ -344,6 +354,10 @@ public:
     bool equals(const bitmap_t & bm) const { return core == bm.core; }
 
     void convert_24to32(bitmap_c &imgout) const;
+
+    void convert_from_yuv( const ivec2 & pdes, const ivec2 & size, const uint8 *src, yuv_fmt_e fmt ); // src pitch must be equal to size.x * byte_per_pixrl of current yuv format
+    void convert_to_yuv( const ivec2 & pdes, const ivec2 & size, buf_c &b, yuv_fmt_e fmt );
+
     /*
     void convert_32to16(bitmap_c &imgout) const;
     void convert_32to24(bitmap_c &imgout) const;
@@ -473,7 +487,7 @@ public:
     bool resize_to(bitmap_c& outimage, const ivec2 & newsize, resize_filter_e filt_mode = FILTER_NONE) const;
     bool resize_to(const bmpcore_exbody_s &eb, resize_filter_e filt_mode = FILTER_NONE) const;
     bool resize_from(const bmpcore_exbody_s &eb, resize_filter_e filt_mode = FILTER_NONE) const;
-    void shrink_2x_to(const bmpcore_exbody_s &eb, const ivec2 &lt, const ivec2 &sz) const;
+    void shrink_2x_to(const ivec2 &lt_source, const ivec2 &sz_source, const bmpcore_exbody_s &eb_target) const;
     /*
 	bool resize(bitmap_c& outimage, float scale=2.f, resize_filter_e filt_mode=FILTER_NONE) const;
 	bool rotate(bitmap_c& outimage, float angle_rad, rot_filter_e filt_mode=FILTMODE_POINT, bool expand_dst=true) const;
@@ -572,11 +586,11 @@ public:
 	img_format_e load_from_file(const buf_c & buf);
 	img_format_e load_from_file(const wsptr &filename);
 
-#define FMT(fn) bool save_as_##fn(buf_c &buf, int options = DEFAULT_SAVE_OPT(fn)) { return save_to_##fn##_format(buf, extbody(), options); }
+#define FMT(fn) bool save_as_##fn(buf_c &buf, int options = DEFAULT_SAVE_OPT(fn)) const { return save_to_##fn##_format(buf, extbody(), options); }
     IMGFORMATS
 #undef FMT
 
-#define FMT(fn) bool save_as_##fn(const wsptr &filename, int options = DEFAULT_SAVE_OPT(fn)) { buf_c b; if (save_to_##fn##_format(b, extbody(), options)) { b.save_to_file(filename); return true;} return false; }
+#define FMT(fn) bool save_as_##fn(const wsptr &filename, int options = DEFAULT_SAVE_OPT(fn)) const { buf_c b; if (save_to_##fn##_format(b, extbody(), options)) { b.save_to_file(filename); return true;} return false; }
     IMGFORMATS
 #undef FMT
 
@@ -626,11 +640,35 @@ public:
     HBITMAP bitmap()    const  { return m_mem_bitmap; }
     HDC     DC()	    const  { return m_mem_dc; }
 
+    drawable_bitmap_c(const drawable_bitmap_c &) UNUSED;
+    drawable_bitmap_c(drawable_bitmap_c && ob)
+    {
+        m_mem_bitmap = ob.m_mem_bitmap;
+        m_mem_dc = ob.m_mem_dc;
+        core.m_body = ob.core.m_body;
+        core.m_info = ob.core.m_info;
+        memset(&ob, 0, sizeof(drawable_bitmap_c));
+    }
+
     drawable_bitmap_c() : image_extbody_c(nullptr, imgdesc_s(ivec2(0), 0)) {}
     explicit drawable_bitmap_c(const ivec2 &sz) : image_extbody_c(nullptr, imgdesc_s(ivec2(0), 0)) { create(sz); }
     explicit drawable_bitmap_c(const bitmap_c &bmp, bool flipy = false, bool premultiply = false) { create_from_bitmap(bmp, flipy, premultiply, false); }
 
     ~drawable_bitmap_c() { clear(); }
+
+    drawable_bitmap_c &operator=(drawable_bitmap_c && ob)
+    {
+        SWAP(m_mem_bitmap, ob.m_mem_bitmap);
+        SWAP(m_mem_dc, ob.m_mem_dc);
+        SWAP(core.m_body, ob.core.m_body);
+
+        SWAP(core.m_info.sz, ob.core.m_info.sz);
+        SWAP(core.m_info.pitch, ob.core.m_info.pitch);
+        SWAP(core.m_info.bitpp, ob.core.m_info.bitpp);
+        return *this;
+    }
+
+    drawable_bitmap_c &operator=(const drawable_bitmap_c & ) UNUSED;
 
     template <class W> void work(W & w)
     {

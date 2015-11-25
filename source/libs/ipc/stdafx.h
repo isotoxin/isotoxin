@@ -4,6 +4,7 @@
 
 #include <windows.h>
 #include <Mmsystem.h>
+#include <stdio.h>
 
 #define SLASSERT(c,...) (1,true)
 #define SLERROR(c,...) __debugbreak()

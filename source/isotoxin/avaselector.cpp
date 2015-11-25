@@ -280,7 +280,7 @@ namespace
 {
     struct enum_video_devices_s : public ts::task_c
     {
-        vcd_list_t video_devices;
+        vsb_list_t video_devices;
         ts::safe_ptr<dialog_avaselector_c> dlg;
 
         enum_video_devices_s(dialog_avaselector_c *dlg) :dlg(dlg) {}
@@ -348,7 +348,7 @@ dialog_avaselector_c::~dialog_avaselector_c()
     ts::wstr_c ctlopen, ctlpaste, ctlcam;
 
     ts::ivec2 bsz(50,25);
-    const button_desc_s *b = gui->theme().get_button("save");
+    const button_desc_s *b = gui->theme().get_button("save"); //-V807
     if (b)
         bsz = b->size;
 
@@ -405,7 +405,7 @@ bool dialog_avaselector_c::animation(RID, GUIPARAM)
     return true;
 }
 
-void dialog_avaselector_c::set_video_devices(vcd_list_t &&_video_devices)
+void dialog_avaselector_c::set_video_devices(vsb_list_t &&_video_devices)
 {
     video_devices = std::move(_video_devices);
     videodevicesloaded = true;
@@ -415,7 +415,7 @@ void dialog_avaselector_c::set_video_devices(vcd_list_t &&_video_devices)
 void dialog_avaselector_c::start_capture_menu_sel(const ts::str_c& prm)
 {
     ts::wstr_c id = from_utf8(prm);
-    for (const vcd_descriptor_s &vd : video_devices)
+    for (const vsb_descriptor_s &vd : video_devices)
     {
         if (vd.id == id)
         {
@@ -425,7 +425,7 @@ void dialog_avaselector_c::start_capture_menu_sel(const ts::str_c& prm)
     }
 }
 
-void dialog_avaselector_c::start_capture(const vcd_descriptor_s &desc)
+void dialog_avaselector_c::start_capture(const vsb_descriptor_s &desc)
 {
     animated = false;
     if (compressor)
@@ -434,7 +434,7 @@ void dialog_avaselector_c::start_capture(const vcd_descriptor_s &desc)
         compressor = nullptr;
     }
 
-    camera.reset( vcd_c::build(desc) );
+    camera.reset( vsb_c::build(desc) );
     getengine().redraw();
 
     caminit = false;
@@ -455,12 +455,12 @@ bool dialog_avaselector_c::start_capture_menu(RID, GUIPARAM)
         ts::irect br = HOLD(b)().getprops().screenrect();
         menu_c m;
 
-        for (const vcd_descriptor_s &vd : video_devices)
+        for (const vsb_descriptor_s &vd : video_devices)
         {
             m.add(vd.desc, 0, DELEGATE(this, start_capture_menu_sel), to_utf8(vd.id));
         }
 
-        gui_popup_menu_c::show(menu_anchor_s(br, menu_anchor_s::RELPOS_TYPE_2), m);
+        gui_popup_menu_c::show(menu_anchor_s(br, menu_anchor_s::RELPOS_TYPE_BD), m);
     }
 
     return true;
@@ -888,8 +888,8 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
 
     if (cam)
     {
-        ts::wstr_c ainfo;
-        if (cambusy) ainfo = loc_text(loc_camerabusy);
+        ts::wstr_c ainfo(loc_text(loc_initialization));
+        if (cambusy) ainfo.append(CONSTWSTR("<br>")).append(loc_text(loc_camerabusy));
         draw_initialization(&getengine(), pa.bmp, viewrect, col, ainfo );
     } else
     {
@@ -954,7 +954,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                             if (shadow)
                             {
                                 evt_data_s d;
-                                d.draw_thr.rect.get().lt = pos + viewrect.lt - shadow_size/2;
+                                d.draw_thr.rect.get().lt = pos + viewrect.lt - shadow_size/2; //-V807
                                 d.draw_thr.rect.get().rb = d.draw_thr.rect.get().lt + sz + shadow_size;
                                 getengine().draw(*shadow, DTHRO_BORDER_RECT, &d);
                             }
@@ -1307,8 +1307,6 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                     ASSERT(avarect.width() == avarect.height());
 
                 }
-                recompress();
-                getengine().redraw();
             }
             if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_APPDEFINED2))
             {
@@ -1318,24 +1316,26 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                 {
                     avarect.lt.x = 0;
                     if (avarect.width() < 16) avarect.rb.x = 16;
+                    avarect.setheight( avarect.width() );
                 }
                 if (avarect.rb.x > image.info().sz.x)
                 {
                     avarect.rb.x = image.info().sz.x;
                     if (avarect.width() < 16) avarect.lt.x = avarect.rb.x - 16;
+                    avarect.setheight( avarect.width() );
                 }
                 if (avarect.lt.y < 0)
                 {
                     avarect.lt.y = 0;
                     if (avarect.height() < 16) avarect.rb.y = 16;
+                    avarect.setwidth( avarect.height() );
                 }
                 if (avarect.rb.y > image.info().sz.y)
                 {
                     avarect.rb.y = image.info().sz.y;
                     if (avarect.height() < 16) avarect.lt.y = avarect.rb.y - 16;
+                    avarect.setwidth( avarect.height() );
                 }
-                recompress();
-                getengine().redraw();
             }
             break;
         case SQ_RECT_CHANGED:

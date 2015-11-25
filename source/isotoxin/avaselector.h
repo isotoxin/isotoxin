@@ -63,7 +63,7 @@ class dialog_avaselector_c : public gui_isodialog_c
     }
 
     process_animation_bitmap_s pa;
-    UNIQUE_PTR( vcd_c ) camera;
+    UNIQUE_PTR( vsb_c ) camera;
 
     framedrawer_s fd;
     ts::animated_c anm;
@@ -117,10 +117,10 @@ class dialog_avaselector_c : public gui_isodialog_c
     bool space_key(RID, GUIPARAM);
     bool paste_hotkey_handler(RID, GUIPARAM);
 
-    vcd_list_t video_devices;
+    vsb_list_t video_devices;
     bool start_capture_menu(RID, GUIPARAM);
     void start_capture_menu_sel( const ts::str_c& prm );
-    void start_capture( const vcd_descriptor_s &desc );
+    void start_capture( const vsb_descriptor_s &desc );
 
     void draw_process(ts::TSCOLOR col, bool cam, bool cambusy);
 
@@ -149,6 +149,6 @@ public:
         dirty = true;
     }
 
-    void set_video_devices(vcd_list_t &&_video_devices);
+    void set_video_devices(vsb_list_t &&_video_devices);
 
 };

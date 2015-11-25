@@ -173,8 +173,8 @@ struct tcp_listner : public socket_s
 #define PUB_ID_CHECKSUM_SIZE 4 // tail of pub id to check pub id valid
 #define PUB_ID_INDEP_SIZE (SIZE_PUBID - PUB_ID_CHECKSUM_SIZE)
 
-bool check_pubid_valid( const byte *raw_pub_id );
-bool check_pubid_valid( const asptr &pub_id );
+//bool check_pubid_valid( const byte *raw_pub_id );
+//bool check_pubid_valid( const asptr &pub_id );
 
 #pragma pack(push,1)
 

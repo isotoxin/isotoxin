@@ -84,18 +84,6 @@ struct theme_rect_s : ts::shared_object
     int sbwidth() const {return ts::tmax(sis[SI_SBREP].width(), sis[SI_SMREP].width());}
 
 	void load_params(ts::bp_t<char> * block);
-	static theme_rect_s * build( const ts::drawable_bitmap_c &dbmp, const theme_conf_s &thconf )
-	{
-        // hack due TSNEW
-		struct theme_rect_warp : public theme_rect_s
-		{
-			theme_rect_warp(const ts::drawable_bitmap_c &b, const theme_conf_s &thconf):theme_rect_s(b, thconf) {}
-		};
-
-		TS_STATIC_CHECK( sizeof(theme_rect_warp) == sizeof(theme_rect_s), "what_da_fak" );
-
-		return TSNEW( theme_rect_warp, dbmp, thconf );
-	}
 
     ts::ivec2 size_by_clientsize(const ts::ivec2 &sz, bool maximized) const	// calc rect's full size by raw client area
     {
@@ -133,14 +121,15 @@ struct theme_rect_s : ts::shared_object
     static const ts::flags32_s::BITS F_ROOTALPHABLEND = SETBIT(1);
     static const ts::flags32_s::BITS F_SPECIALBORDER = SETBIT(2);
 
-private:
-	// private constructor ensures that theme_rect_s will always be created in dynamic memory by theme_rect_s::build factory
-	theme_rect_s(const ts::drawable_bitmap_c &b, const theme_conf_s &thconf):src(b), hollowborder(0), resizearea(2), captop(20), captop_max(30), captexttab(5), capheight(20), capheight_max(32)
+    DECLARE_DYNAMIC_BEGIN(theme_rect_s)
+    theme_rect_s(const ts::drawable_bitmap_c &b, const theme_conf_s &thconf):src(b), hollowborder(0), resizearea(2), captop(20), captop_max(30), captexttab(5), capheight(20), capheight_max(32)
 	{
         flags.init(F_FASTBORDER, thconf.fastborder);
         flags.init(F_ROOTALPHABLEND, thconf.rootalphablend);
         flags.init(F_SPECIALBORDER, thconf.specialborder);
 	}
+    DECLARE_DYNAMIC_END(private)
+
     void init_subimage(subimage_e si, const ts::str_c &sidef);
 public:
 	~theme_rect_s();

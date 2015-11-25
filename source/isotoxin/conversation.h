@@ -12,6 +12,9 @@ enum notice_e
     NOTICE_FILE,
     NOTICE_GROUP_CHAT,
     NOTICE_PREV_NEXT,
+
+    // special
+    NOTICE_KILL_CALL_INPROGRESS,
 };
 
 class gui_notice_c;
@@ -41,14 +44,21 @@ template<> struct MAKE_CHILD<gui_notice_network_c> : public _PCHILD(gui_notice_n
     ~MAKE_CHILD();
 };
 
+class gui_notice_callinprogress_c;
+template<> struct MAKE_CHILD<gui_notice_callinprogress_c> : public _PCHILD(gui_notice_callinprogress_c)
+{
+    MAKE_CHILD(RID parent_) { parent = parent_; }
+    ~MAKE_CHILD();
+};
+
 class gui_notice_c : public gui_label_c
 {
     DUMMY(gui_notice_c);
 
 protected:
+    ts::shared_ptr<contact_c> historian, sender;
     notice_e notice;
     uint64 utag = 0;
-    int height = 0;
     int addheight = 0;
 
     GM_RECEIVER(gui_notice_c, ISOGM_NOTICE);
@@ -65,12 +75,13 @@ protected:
     mutable int next_cache_write_index = 0;
     /*virtual*/ int get_height_by_width(int width) const override;
 
-    void update_text(contact_c *sender);
+    void update_text(int dtimesec = 0);
 
 public:
     gui_notice_c() {}
     gui_notice_c(MAKE_CHILD<gui_notice_c> &data);
     gui_notice_c(MAKE_CHILD<gui_notice_network_c> &data);
+    gui_notice_c(MAKE_CHILD<gui_notice_callinprogress_c> &data);
     /*virtual*/ ~gui_notice_c();
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
@@ -87,6 +98,97 @@ public:
     bool setup_tail(RID r = RID(), GUIPARAM p = nullptr);
 
 };
+
+struct av_contact_s;
+class gui_notice_callinprogress_c : public gui_notice_c
+{
+    GM_RECEIVER(gui_notice_callinprogress_c, ISOGM_VIDEO_TICK);
+    GM_RECEIVER(gui_notice_callinprogress_c, ISOGM_CAMERA_TICK);
+    GM_RECEIVER(gui_notice_callinprogress_c, ISOGM_PEER_STREAM_OPTIONS);
+    GM_RECEIVER(gui_notice_callinprogress_c, GM_HEARTBEAT);
+
+    time_t showntime = 0;
+    ts::shared_ptr<theme_rect_s> shadow;
+    vsb_display_c *display = nullptr;
+    ts::ivec2 cur_vres = ts::ivec2(0);
+    ts::ivec2 last_video_size;
+    ts::ivec2 shadowsize = ts::ivec2(0);
+    ts::safe_ptr<gui_button_c> buttons[ 5 ];
+    process_animation_bitmap_s pa;
+    vsb_list_t video_devices;
+    UNIQUE_PTR( vsb_c ) camera;
+    ts::ivec2 cam_previewsize = ts::ivec2(0);
+    ts::ivec2 cam_position = ts::ivec2(0);
+    ts::irect cam_previewposrect = ts::irect(0);
+
+    ts::ivec2 display_size = ts::ivec2(0);
+    ts::ivec2 display_position = ts::ivec2(0);
+
+    ts::Time nommovetime = ts::Time::current();
+    ts::ivec2 mousepos = ts::ivec2(0);
+
+    int calc_rect_tag_frame = 0;
+    int calc_rect_tag = -1;
+
+    bool apply_preview_cam_pos(const ts::ivec2&p);
+
+    void update_btns_positions();
+    void set_height(int addh);
+
+    bool show_video_tick(RID, GUIPARAM p);
+    bool wait_animation(RID, GUIPARAM p);
+    bool b_extra(RID, GUIPARAM p);
+    bool b_camera_switch(RID, GUIPARAM p);
+
+    void menu_video(const ts::str_c &p);
+
+    void set_corresponding_height();
+    void calc_cam_display_rects();
+    int preview_cam_cursor_resize(const ts::ivec2 &p) const;
+    void video_off();
+
+    bool recalc_vsz(RID, GUIPARAM)
+    {
+        recalc_video_size(last_video_size);
+        return true;
+    }
+
+    void show_buttons(bool show);
+
+    static const ts::flags32_s::BITS F_WAITANIM = F_FREEBITSTART_NOTICE << 0;
+    static const ts::flags32_s::BITS F_CAMINITANIM = F_FREEBITSTART_NOTICE << 1;
+    static const ts::flags32_s::BITS F_VIDEO_SWOW = F_FREEBITSTART_NOTICE << 2;
+    static const ts::flags32_s::BITS F_RECTSOK = F_FREEBITSTART_NOTICE << 3;
+    static const ts::flags32_s::BITS F_OVERPREVIEWCAM = F_FREEBITSTART_NOTICE << 4;
+    static const ts::flags32_s::BITS F_MOVEPREVIEWCAM = F_FREEBITSTART_NOTICE << 5;
+    static const ts::flags32_s::BITS F_HIDDEN_CURSOR = F_FREEBITSTART_NOTICE << 6;
+    static const ts::flags32_s::BITS F_FULL_CAM_REDRAW = F_FREEBITSTART_NOTICE << 7;
+    static const ts::flags32_s::BITS F_FULL_DISPLAY_REDRAW = F_FREEBITSTART_NOTICE << 8;
+    
+
+    void vsb_draw( vsb_c *cam, const ts::ivec2& campos, const ts::ivec2& camsz, bool c );
+    void recalc_video_size(const ts::ivec2 &videosize);
+    void acquire_display();
+    av_contact_s *get_avc();
+
+public:
+    gui_notice_callinprogress_c(MAKE_CHILD<gui_notice_callinprogress_c> &data);
+    /*virtual*/ ~gui_notice_callinprogress_c();
+
+    /*virtual*/ void created() override;
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+
+    void setup(contact_c *collocutor);
+
+    void setcam( vsb_c *cam ) { camera.reset(cam); }
+
+    void set_video_devices(vsb_list_t &&_video_devices)
+    {
+        video_devices = std::move(_video_devices);
+    }
+};
+
+
 
 namespace rbtn
 {
@@ -147,12 +249,12 @@ public:
 
     int sortfactor() const;
 
-    gui_notice_network_c(MAKE_CHILD<gui_notice_network_c> &data):gui_notice_c(data) {}
+    gui_notice_network_c(MAKE_CHILD<gui_notice_network_c> &data):gui_notice_c(data) { notice = NOTICE_NETWORK; }
     /*virtual*/ ~gui_notice_network_c();
 
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
-    /*virtual*/ int gui_notice_network_c::get_height_by_width(int width) const override;
+    /*virtual*/ int get_height_by_width(int width) const override;
 
     void setup(const ts::str_c &pubid); // network
 
@@ -630,23 +732,18 @@ template<> struct MAKE_CHILD<gui_conversation_c> : public _PCHILD(gui_conversati
     ~MAKE_CHILD();
 };
 
-class gui_conversation_c : public gui_vgroup_c, public sound_capture_handler_c
+class gui_conversation_c : public gui_vgroup_c
 {
     DUMMY(gui_conversation_c);
 
     GM_RECEIVER(gui_conversation_c, ISOGM_V_UPDATE_CONTACT);
     GM_RECEIVER(gui_conversation_c, ISOGM_SELECT_CONTACT);
     GM_RECEIVER(gui_conversation_c, ISOGM_CHANGED_SETTINGS);
-    GM_RECEIVER(gui_conversation_c, ISOGM_AV);
-    GM_RECEIVER(gui_conversation_c, ISOGM_AV_COUNT);
     GM_RECEIVER(gui_conversation_c, ISOGM_CALL_STOPED);
     GM_RECEIVER(gui_conversation_c, ISOGM_PROFILE_TABLE_SAVED);
     GM_RECEIVER(gui_conversation_c, ISOGM_DO_POSTEFFECT);
     GM_RECEIVER(gui_conversation_c, GM_DRAGNDROP );
 
-    ts::tbuf_t<s3::Format> avformats;
-
-    ts::array_shared_t<contact_c,1> avs;
 
     ts::safe_ptr<gui_contact_item_c> caption;
     ts::safe_ptr<gui_messagelist_c> msglist;
@@ -657,9 +754,6 @@ class gui_conversation_c : public gui_vgroup_c, public sound_capture_handler_c
     static const ts::flags32_s::BITS F_DNDTARGET            = F_HGROUP_FREEBITSTART << 1;
 
     RID message_editor;
-
-    /*virtual*/ void datahandler(const void *data, int size) override;
-    /*virtual*/ s3::Format *formats(int &count) override;
 
     bool hide_show_messageeditor(RID r = RID(), GUIPARAM p = nullptr);
 

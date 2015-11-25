@@ -308,7 +308,7 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
                 int f = ap->get_features();
                 features |= f;
                 if (c->get_state() == CS_ONLINE) features_online |= f;
-                if (c->is_av()) now_disabled = true;
+                if (c->is_av() || c->is_ringtone() || c->is_calltone()) now_disabled = true;
             }
         });
 
@@ -336,10 +336,9 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
         }
 
         flags.set(F_CALLBUTTON);
-
-        g_app->update_buttons_msg();
-
     }
+
+    g_app->update_buttons_msg();
 
     return true;
 }
@@ -397,7 +396,7 @@ bool gui_contact_item_c::audio_call(RID btn, GUIPARAM)
             active_protocol_c *ap = prf().ap(c->getkey().protoid);
             if (ap && 0 != (PF_AUDIO_CALLS & ap->get_features()))
             {
-                if (c_call == nullptr || (cdef == c && c_call->get_state() != CS_ONLINE))
+                if (c_call == nullptr || (cdef == c && c->get_state() == CS_ONLINE))
                     c_call = c;
                 if (c->get_state() == CS_ONLINE && c_call != c && c_call->get_state() != CS_ONLINE)
                     c_call = c;
@@ -1004,8 +1003,9 @@ bool gui_contact_item_c::allow_drop() const
                             icon_type_e icot = IT_OFFLINE;
                             if (c->get_state() == CS_ONLINE)
                             {
-                                if (COS_AWAY == ost) icot = IT_AWAY;
-                                else if (COS_DND == ost) icot = IT_DND;
+                                contact_online_state_e ost1 = c->get_ostate();
+                                if (COS_AWAY == ost1) icot = IT_AWAY;
+                                else if (COS_DND == ost1) icot = IT_DND;
                                 else icot = IT_ONLINE;
                             }
 
@@ -1016,39 +1016,43 @@ bool gui_contact_item_c::allow_drop() const
 
             if (contact->is_av() && !contact->is_full_search_result() && CIR_CONVERSATION_HEAD != role)
             {
-                const theme_image_s *img_voicecall = contact->getkey().is_group() ? nullptr : gui->theme().get_image(CONSTASTR("voicecall"));
-                const theme_image_s *img_micoff = gui->theme().get_image(CONSTASTR("micoff"));
-                const theme_image_s *img_speakeroff = gui->theme().get_image(CONSTASTR("speakeroff"));
-                const theme_image_s *img_speakeron = contact->getkey().is_group() ? gui->theme().get_image(CONSTASTR("speakeron")) : nullptr;
-                const theme_image_s * drawarr[3];
-                int drawarr_cnt = 0;
-                if (img_voicecall)
-                    drawarr[drawarr_cnt++] = img_voicecall;
-                if (contact->is_mic_off() && img_micoff)
-                    drawarr[drawarr_cnt++] = img_micoff;
-                if (contact->is_speaker_off() && img_speakeroff)
-                    drawarr[drawarr_cnt++] = img_speakeroff;
-                if (!contact->is_speaker_off() && img_speakeron)
-                    drawarr[drawarr_cnt++] = img_speakeron;
+                if (const av_contact_s *avc = g_app->find_avcontact_inprogress(contact))
+                {
+                    const theme_image_s *img_voicecall = contact->getkey().is_group() ? nullptr : gui->theme().get_image(CONSTASTR("voicecall"));
+                    const theme_image_s *img_micoff = gui->theme().get_image(CONSTASTR("micoff"));
+                    const theme_image_s *img_speakeroff = gui->theme().get_image(CONSTASTR("speakeroff"));
+                    const theme_image_s *img_speakeron = contact->getkey().is_group() ? gui->theme().get_image(CONSTASTR("speakeron")) : nullptr;
+                    const theme_image_s * drawarr[3];
+                    int drawarr_cnt = 0;
+                    if (img_voicecall)
+                        drawarr[drawarr_cnt++] = img_voicecall;
+                    if (avc->is_mic_off() && img_micoff)
+                        drawarr[drawarr_cnt++] = img_micoff;
+                    if (avc->is_speaker_off() && img_speakeroff)
+                        drawarr[drawarr_cnt++] = img_speakeroff;
+                    if (avc->is_speaker_on() && img_speakeron)
+                        drawarr[drawarr_cnt++] = img_speakeron;
 
-                int h = 0;
-                for (int i = 0; i < drawarr_cnt; ++i)
-                {
-                    int hh = drawarr[i]->info().sz.y;
-                    if (hh > h) h = hh;
-                }
-                int addh[3];
-                for (int i = 0; i < drawarr_cnt; ++i)
-                {
-                    int hh = drawarr[i]->info().sz.y;
-                    addh[i] = (h - hh)/2;
-                }
+                    int h = 0;
+                    for (int i = 0; i < drawarr_cnt; ++i)
+                    {
+                        int hh = drawarr[i]->info().sz.y;
+                        if (hh > h) h = hh;
+                    }
+                    int addh[3];
+                    for (int i = 0; i < drawarr_cnt; ++i)
+                    {
+                        int hh = drawarr[i]->info().sz.y;
+                        addh[i] = (h - hh)/2;
+                    }
 
-                ts::ivec2 p(ca.rt());
-                for(int i=0;i<drawarr_cnt;++i)
-                {
-                    p.x -= drawarr[i]->info().sz.x;
-                    drawarr[i]->draw(*m_engine, ts::ivec2(p.x, p.y + addh[i]));
+                    ts::ivec2 p(ca.rt());
+                    for(int i=0;i<drawarr_cnt;++i)
+                    {
+                        p.x -= drawarr[i]->info().sz.x;
+                        drawarr[i]->draw(*m_engine, ts::ivec2(p.x, p.y + addh[i]));
+                        --p.x;
+                    }
                 }
             }
 
@@ -1822,7 +1826,7 @@ bool gui_contactlist_c::on_filter_deactivate(RID, GUIPARAM)
             if (redraw)
             {
                 c->gui_item->update_text();
-                c->gui_item->getengine().redraw();
+                c->redraw();
             }
         }
         return true;
@@ -1860,6 +1864,12 @@ bool gui_contactlist_c::filter_proc(system_query_e qp, evt_data_s &data)
     }
 
     return false;
+}
+
+ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CALL_STOPED> &p)
+{
+    p.subcontact->redraw();
+    return 0;
 }
 
 ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_TYPING> &p)

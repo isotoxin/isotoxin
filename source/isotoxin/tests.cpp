@@ -113,6 +113,25 @@ void test_ipc()
 
 void dotests()
 {
+    int fff = -1;
+    byte ttt = ts::CLAMP<byte>(fff);
+    fff = -255;
+    ttt = ts::CLAMP<byte>(fff);
+    fff = -256;
+    ttt = ts::CLAMP<byte>(fff);
+    fff = -122312;
+    ttt = ts::CLAMP<byte>(fff);
+    fff = 0;
+    ttt = ts::CLAMP<byte>(fff);
+    fff = 1;
+    ttt = ts::CLAMP<byte>(fff);
+    fff = 255;
+    ttt = ts::CLAMP<byte>(fff);
+    fff = 256;
+    ttt = ts::CLAMP<byte>(fff);
+    fff = 4234234;
+    ttt = ts::CLAMP<byte>(fff);
+
     //test_ipc();
 
     /*
@@ -124,18 +143,11 @@ void dotests()
     b.save_as_PNG(L"1\\out.png");
     */
 
-    ts::str_c aaa(CONSTASTR("a"));
-    aaa.append(',',CONSTASTR("b,"));
-    aaa.append(',',CONSTASTR(",c"));
-    aaa.append(',',CONSTASTR(",d"));
-    aaa.clear();
-    aaa.append(',', CONSTASTR("b,"));
-    aaa.append(',', CONSTASTR("c"));
-    aaa.append(',', CONSTASTR("d"));
-    aaa.clear();
-    aaa.append(',', CONSTASTR(",b,"));
-    aaa.append(',',CONSTASTR(",d"));
-
+    //ts::buf_c yuv; yuv.load_from_disk_file(L"i420.bin");
+    //ts::bitmap_c bmp;
+    //bmp.create_RGBA( ts::ivec2(1920,1200) );
+    //bmp.convert_from_yuv( ts::ivec2(0), bmp.info().sz, yuv.data(), ts::YFORMAT_I420 );
+    //bmp.save_as_png( L"out.png" );
 
     //uint64 u1 = ts::uuid();
     //uint64 u2 = ts::uuid();

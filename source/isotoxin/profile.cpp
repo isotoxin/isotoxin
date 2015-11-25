@@ -1161,7 +1161,7 @@ bool profile_c::load(const ts::wstr_c& pfn)
 
     emoti().reload();
 
-    if (1.0f != fontscale_conv_text())
+    if (1.0f != fontscale_conv_text()) //-V550
     {
         g_app->reload_fonts();
     }
@@ -1297,6 +1297,8 @@ void profile_c::shutdown_aps()
 
 /*virtual*/ void profile_c::onclose()
 {
+    profile_options.set(F_CLOSING);
+
     for (active_protocol_c *ap : protocols)
         if (ap) ap->save_config(true);
 }
@@ -1391,21 +1393,44 @@ void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, i
     return false;
 }
 
+void profile_c::check_aps()
+{
+    bool createaps = false;
+    int cnt = protocols.size();
+    for(int i=cnt-1;i>=0;--i)
+    {
+        active_protocol_c *ap = protocols.get(i);
+        if (nullptr == ap)
+        {
+            protocols.remove_fast(i);
+            createaps = true;
+        } else
+            ap->once_per_5sec_tick();
+    }
+    if (createaps)
+        create_aps();
+}
+
+void profile_c::create_aps()
+{
+    for (const auto& row : table_active_protocol.rows)
+    {
+        if (active_protocol_c *ap = this->ap(row.id))
+            continue;
+        protocols.add(TSNEW(active_protocol_c, row.id, row.other));
+    }
+
+}
+
 ts::uint32 profile_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
 {
-    if (p.tabi == pt_active_protocol && !profile_options.is(F_LOADING))
+    if (p.tabi == pt_active_protocol && !profile_options.is(F_LOADING) && !profile_options.is(F_CLOSING))
     {
         if (p.pass == 0)
             for(active_protocol_c *ap : protocols)
                 if (ap && ap->is_new()) return GMRBIT_CALLAGAIN;
-        
-        for( const auto& row : table_active_protocol.rows )
-        {
-            //if (0 != (row.other.options & active_protocol_data_s::O_SUSPENDED)) continue;
-            if ( active_protocol_c *ap = this->ap(row.id) )
-                continue;
-            protocols.add( TSNEW(active_protocol_c, row.id, row.other) );
-        }
+
+        create_aps();
     }
     return 0;
 }

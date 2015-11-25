@@ -10,14 +10,15 @@ enum proto_features_e
     PF_AUDIO_CALLS              = (1 << 3),     // audio calls supported
     PF_VIDEO_CALLS              = (1 << 4),     // video calls supported
     PF_SEND_FILE                = (1 << 5),     // send (and recv, of course) files supported
-    PF_GROUP_CHAT               = (1 << 6),     // group chats supported
-    PF_GROUP_CHAT_PERSISTENT    = (1 << 7),     // persistent group chats supported
-    PF_PURE_NEW                 = (1 << 8),     // protocol support pure new
-    PF_NEW_REQUIRES_LOGIN       = (1 << 9),     // protocol support new with custom login/pass data
-    PF_LOGIN                    = (1 << 10),    // protocol support login/pass
-    PF_IMPORT                   = (1 << 11),    // protocol support creation with import; configuration import (set_config will receive imported file as is)
-    PF_OFFLINE_MESSAGING        = (1 << 12),    // protocol supports real offline messaging (not faux offline messaging)
-    PF_OFFLINE_INDICATOR        = (1 << 13),    // protocol's state used as online/offline indicator of application
+    PF_GROUP_SEND_FILE          = (1 << 6),     // send (and recv, of course) files to/from group chat supported
+    PF_GROUP_CHAT               = (1 << 7),     // group chats supported
+    PF_GROUP_CHAT_PERSISTENT    = (1 << 8),     // persistent group chats supported
+    PF_PURE_NEW                 = (1 << 9),     // protocol support pure new
+    PF_NEW_REQUIRES_LOGIN       = (1 << 10),    // protocol support new with custom login/pass data
+    PF_LOGIN                    = (1 << 11),    // protocol support login/pass
+    PF_IMPORT                   = (1 << 12),    // protocol support creation with import; configuration import (set_config will receive imported file as is)
+    PF_OFFLINE_MESSAGING        = (1 << 13),    // protocol supports real offline messaging (not faux offline messaging)
+    PF_OFFLINE_INDICATOR        = (1 << 14),    // protocol's state used as online/offline indicator of application
 };
 
 enum connection_features_e
@@ -71,13 +72,6 @@ enum cmd_result_e
     CR_NETWORK_ERROR,
     CR_CORRUPT,
     CR_UNKNOWN_ERROR,
-};
-
-enum stop_call_e
-{
-    STOPCALL_REJECT, // reject incoming call
-    STOPCALL_CANCEL, // cancel outgoing call
-    STOPCALL_HANGUP, // break current call
 };
 
 enum file_control_e
@@ -140,6 +134,24 @@ enum contact_gender_e : unsigned
     contact_gender_count,
     contact_gender_bits = 1 + (::boost::static_log2<(contact_gender_count - 1)>::value)
 };
+
+enum video_fmt_e
+{
+    VFMT_NONE, // used to indicate empty video data
+    VFMT_I420,
+
+    // unused
+    //VFMT_RAW_RGB, // following 3 pixels == 9 bytes: (0x00, 0x00, 0xff) - red, (0x00, 0xff, 0x00) - green, (0xff, 0x00, 0x00) - blue
+};
+
+enum stream_options_e
+{
+    SO_SENDING_AUDIO = 1,
+    SO_RECEIVING_AUDIO = 2,
+    SO_SENDING_VIDEO = 4,
+    SO_RECEIVING_VIDEO = 8,
+};
+
 
 // known configurable fields
 #define CFGF_PROXY_TYPE     "proxy_type"

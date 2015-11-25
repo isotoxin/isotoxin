@@ -159,6 +159,15 @@ template<> struct gmsg<ISOGM_UPDATE_CONTACT> : public gmsgbase
     ts::tbuf_t<int> members;
 };
 
+template<> struct gmsg<ISOGM_PEER_STREAM_OPTIONS> : public gmsgbase
+{
+    gmsg(const contact_key_s &ck, int so, const ts::ivec2 &sz) :gmsgbase(ISOGM_PEER_STREAM_OPTIONS), ck(ck), so(so), videosize(sz) {}
+    contact_key_s ck;
+    int so;
+    ts::ivec2 videosize;
+};
+
+
 enum keep_contact_history_e
 {
     KCH_DEFAULT,
@@ -225,10 +234,7 @@ public:
 
 
     // not saved
-    static const ts::flags32_s::BITS F_FULL_SEARCH_RESULT = SETBIT(21);
-    static const ts::flags32_s::BITS F_SPEAKER_OFF = SETBIT(22);
-    static const ts::flags32_s::BITS F_MIC_OFF = SETBIT(23);
-    static const ts::flags32_s::BITS F_CALL_INACTIVE = SETBIT(24);
+    static const ts::flags32_s::BITS F_FULL_SEARCH_RESULT = SETBIT(24);
     static const ts::flags32_s::BITS F_AUDIO_GCHAT = SETBIT(25);
     static const ts::flags32_s::BITS F_PERSISTENT_GCHAT = SETBIT(26);
     static const ts::flags32_s::BITS F_PROTOHIT = SETBIT(27);
@@ -256,6 +262,9 @@ public:
     }
 
     void reselect(int options = RSEL_SCROLL_END);
+
+    void redraw();
+    void redraw(float delay);
 
     void setup( const contacts_s * c, time_t nowtime );
     bool save( contacts_s * c ) const;
@@ -505,7 +514,7 @@ public:
     time_t get_readtime() const { return is_rootcontact() ? readtime : 0;}
     void set_readtime(time_t t) { readtime = t; }
 
-    const post_s * fix_history( message_type_app_e oldt, message_type_app_e newt, const contact_key_s& sender = contact_key_s() /* self - empty - no matter */, time_t update_time = 0 /* 0 - no need update */ );
+    const post_s * fix_history( message_type_app_e oldt, message_type_app_e newt, const contact_key_s& sender = contact_key_s() /* self - empty - no matter */, time_t update_time = 0 /* 0 - no need update */, const ts::str_c *update_text = nullptr /* null - no need update */ );
 
     bool b_accept(RID, GUIPARAM);
     bool b_reject(RID, GUIPARAM);
@@ -517,21 +526,16 @@ public:
     bool b_hangup(RID, GUIPARAM);
     bool b_call(RID, GUIPARAM);
     bool b_cancel_call(RID, GUIPARAM);
-    bool b_mute_mic(RID, GUIPARAM);
-    bool b_mute_speaker(RID, GUIPARAM);
 
     bool b_receive_file(RID, GUIPARAM);
     bool b_receive_file_as(RID, GUIPARAM);
     bool b_refuse_file(RID, GUIPARAM);
     
+    void stop_av(); // must be called for multicontact
     bool ringtone(bool activate = true, bool play_stop_snd = true);
     bool is_ringtone() const { return opts.unmasked().is(F_RINGTONE); }
     bool is_av() const { return opts.unmasked().is(F_AV_INPROGRESS) || (getkey().is_group() && opts.unmasked().is(F_AUDIO_GCHAT)); }
-    void av( bool f = true );
-
-    bool is_mic_off() const { return opts.unmasked().is(F_MIC_OFF|F_CALL_INACTIVE); }
-    bool is_speaker_off() const { return opts.unmasked().is(F_SPEAKER_OFF|F_CALL_INACTIVE); }
-    void call_inactive(bool ci);
+    void av( bool f, bool video );
 
     bool is_calltone() const { return opts.unmasked().is(F_CALLTONE); }
     bool calltone( bool f = true, bool call_accepted = false );
@@ -609,18 +613,10 @@ template<> struct gmsg<ISOGM_SELECT_CONTACT> : public gmsgbase
     int options;
 };
 
-template<> struct gmsg<ISOGM_AV> : public gmsgbase
-{
-    gmsg(contact_c *c, bool activated) :gmsgbase(ISOGM_AV), multicontact(c), activated(activated) { ASSERT(c->is_meta() || c->getkey().is_group()); }
-    ts::shared_ptr<contact_c> multicontact;
-    bool activated;
-};
-
 template<> struct gmsg<ISOGM_CALL_STOPED> : public gmsgbase
 {
-    gmsg(contact_c *c, stop_call_e sc) :gmsgbase(ISOGM_CALL_STOPED), subcontact(c), sc(sc) { ASSERT(!c->is_meta()); }
+    gmsg(contact_c *c) :gmsgbase(ISOGM_CALL_STOPED), subcontact(c) { ASSERT(!c->is_meta()); }
     ts::shared_ptr<contact_c> subcontact;
-    stop_call_e sc;
 };
 
 uint64 uniq_history_item_tag();

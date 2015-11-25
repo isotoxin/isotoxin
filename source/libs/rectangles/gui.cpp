@@ -103,6 +103,8 @@ bool gui_c::b_normalize(RID r, GUIPARAM param)
 
 gui_c::gui_c()
 {
+    ts::Time::update_thread_time();
+
     m_deffont_name = CONSTASTR("default");
     gui = this;
     dirty_hover_data();
@@ -481,12 +483,10 @@ void gui_c::loop()
 
         ts::Time::update_thread_time();
         m_frametime.takt();
-        m_1second.takt(m_frametime.frame_time());
         if (m_1second.it_is_time_ones()) heartbeat();
         g_sysconf.sleep = lround(500.0f * m_timer_processor.takt(m_frametime.frame_time())); // sleep time 0.5 of time to next event
         if (g_sysconf.sleep < 0 || g_sysconf.sleep > 50) g_sysconf.sleep = 50;
 
-        m_5seconds.takt(m_frametime.frame_time());
         if (m_5seconds.it_is_time_ones()) app_5second_event();
         app_loop_event();
 

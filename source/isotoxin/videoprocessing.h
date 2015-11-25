@@ -2,17 +2,19 @@
 
 #include "dshowcap/dshowcapture.hpp"
 
-struct vcd_descriptor_s
+struct vsb_descriptor_s
 {
     ts::wstr_c id;
     ts::wstr_c desc;
 };
 
-typedef ts::array_inplace_t< vcd_descriptor_s, 0 > vcd_list_t;
+typedef ts::array_inplace_t< vsb_descriptor_s, 0 > vsb_list_t;
 
-void enum_video_capture_devices( vcd_list_t &list, bool add_desktop );
+void enum_video_capture_devices( vsb_list_t &list, bool add_desktop );
 
-class vcd_c // video capture device
+typedef fastdelegate::FastDelegate< void( const ts::bmpcore_exbody_s &ebm ) > bmp_ready_handler_t;
+
+class vsb_c // video streaming buffer
 {
     long sync = 0;
     ts::drawable_bitmap_c bufs[3]; // tripple buffer
@@ -23,6 +25,8 @@ class vcd_c // video capture device
 
     ts::ivec2 desired_size = ts::ivec2(0);
     ts::ivec2 video_size = ts::ivec2(0);
+
+    bmp_ready_handler_t bmpready;
 
     bool stoping = false;
 protected:
@@ -43,8 +47,10 @@ protected:
         }
     }
 public:
-    virtual ~vcd_c() {}
-    static vcd_c *build(const vcd_descriptor_s &desc);
+    vsb_c() {}
+    virtual ~vsb_c() {}
+    static vsb_c *build(const vsb_descriptor_s &desc);
+    static vsb_c *build(); // default video source
 
     bool still_initializing() const {return initializing;}
     bool is_busy() const {return busy;}
@@ -53,6 +59,9 @@ public:
         spinlock::auto_simple_lock l(sync);
         return last_updated >= 0;
     }
+
+    void set_bmp_ready_handler( bmp_ready_handler_t h ) { bmpready = h; }
+    void call_bmp_ready_handler( const ts::bmpcore_exbody_s &ebm ) { if (bmpready) bmpready(ebm); }
 
     const ts::ivec2 &get_video_size() const {return video_size;}
     const ts::ivec2 &get_desired_size() const {return desired_size;} // call only from base thread
@@ -134,7 +143,7 @@ public:
 
 };
 
-class vcd_dshow_camera_c : public vcd_c
+class vsb_dshow_camera_c : public vsb_c
 {
     class core_c : public DShow::Device, public ts::shared_object
     {
@@ -146,29 +155,30 @@ class vcd_dshow_camera_c : public vcd_c
         static core_c *last;
         core_c *prev = nullptr;
         core_c *next = nullptr;
-        ts::pointers_t<vcd_dshow_camera_c, 0> owners;
+        ts::pointers_t<vsb_dshow_camera_c, 0> owners;
+
         bool initializing = false;
         bool busy = false;
 
     public:
 
 
-        core_c(const vcd_descriptor_s &desc);
+        core_c(const vsb_descriptor_s &desc);
         ~core_c();
 
         void dshocb(const DShow::VideoConfig &config, unsigned char *data, size_t size, long long startTime, long long stopTime);
         void run_initializer(const DShow::VideoConfig &config);
-        bool add_owner( vcd_dshow_camera_c *owner );
-        void remove_owner( vcd_dshow_camera_c *owner );
+        bool add_owner( vsb_dshow_camera_c *owner );
+        void remove_owner( vsb_dshow_camera_c *owner );
         void initialized( const ts::ivec2 &videosize );
         void setbusy();
         
-        static bool get( vcd_dshow_camera_c *owner, const vcd_descriptor_s &desc );
+        static bool get( vsb_dshow_camera_c *owner, const vsb_descriptor_s &desc );
     };
 
     ts::shared_ptr<core_c> core;
 
-    void dshocb(const DShow::VideoConfig &config, unsigned char *data, size_t size, long long startTime, long long stopTime);
+    void dshocb( const ts::bmpcore_exbody_s &eb );
     void initialized( const ts::ivec2 &videosize )
     {
         set_video_size(videosize);
@@ -177,48 +187,147 @@ class vcd_dshow_camera_c : public vcd_c
     }
 
 public:
-    vcd_dshow_camera_c() {}
-    ~vcd_dshow_camera_c();
+    vsb_dshow_camera_c() {}
+    ~vsb_dshow_camera_c();
 
-    bool init( const vcd_descriptor_s &desc );
+    bool init( const vsb_descriptor_s &desc );
     // /*virtual*/ bool set_config( video_config_s& cfg ) override;
 
 };
 
-class vcd_desktop_c : public vcd_c
+class vsb_desktop_c : public vsb_c
 {
     struct grab_desktop : public ts::task_c
     {
-        vcd_desktop_c* cam;
         long sync = 0;
+        ts::buf_c cursorcachedata;
+        ts::drawable_bitmap_c grabbuff;
+        ts::irect grabrect;
+        int monitor;
+        static grab_desktop *first;
+        static grab_desktop *last;
+        grab_desktop *prev = nullptr;
+        grab_desktop *next = nullptr;
+        ts::pointers_t<vsb_desktop_c, 0> owners;
+
         int next_time;
         bool stop_job = false;
 
-        grab_desktop(vcd_desktop_c *cam) :cam(cam) { next_time = timeGetTime() + cam->gra; }
+        grab_desktop(const ts::irect &grabrect, int monitor);
+        ~grab_desktop();
 
+        void grab(const ts::irect &gr);
         /*virtual*/ int iterate(int pass) override;
-        void fin()
-        {
-            spinlock::auto_simple_lock sl(sync);
-            stop_job = true;
-            cam = nullptr;
-        }
 
+        void add_owner(vsb_desktop_c *owner);
+        void remove_owner(vsb_desktop_c *owner);
+
+        static void get(vsb_desktop_c *owner, const ts::irect &grabrect, int monitor);
     } *grabber = nullptr;
 
-    UNIQUE_PTR( ts::drawable_bitmap_c ) tmpbmp;
-    ts::buf_c cursorcachedata;
     ts::irect rect = ts::irect(0);
     int monitor = -1;
-    int gra = 1000/15;
 
-    int grab();
+    void grabcb(ts::drawable_bitmap_c &gbmp);
 
 public:
-    vcd_desktop_c() {}
-    ~vcd_desktop_c() { if (grabber) grabber->fin(); }
+    vsb_desktop_c() {}
+    ~vsb_desktop_c() { if (grabber) grabber->remove_owner(this); }
 
-    bool init(const vcd_descriptor_s &desc);
-    // /*virtual*/ bool set_config( video_config_s& cfg ) override;
+    bool init(const vsb_descriptor_s &desc);
+};
+
+class gui_notice_callinprogress_c;
+class vsb_display_c : public vsb_c
+{
+    friend class vsb_display_ptr_c;
+    int ref = 1;
+
+    DECLARE_DYNAMIC_BEGIN(vsb_display_c)
+    vsb_display_c() {}
+    ~vsb_display_c() {}
+    DECLARE_DYNAMIC_END(public)
+
+    ts::bitmap_c prebuf;
+    gui_notice_callinprogress_c* notice = nullptr; // pure pointer due it will be checked with nullptr in other thread
+    int gid = 0, cid = 0;
+
+    void addref() {++ref;}
+    void release();
+
+    void update_video_size( const ts::ivec2 &videosize, const ts::ivec2 &viewportsize );
+};
+
+class vsb_display_ptr_c
+{
+    long sync = 0;
+    vsb_display_c *ptr = nullptr;
+public:
+
+    ~vsb_display_ptr_c()
+    {
+        reset();
+    }
+    vsb_display_c *get()
+    {
+        spinlock::auto_simple_lock l(sync);
+        if (ptr)
+        {
+            ptr->addref();
+            return ptr;
+        }
+        ptr = TSNEW(vsb_display_c);
+        ptr->addref();
+        return ptr;
+    }
+
+    void release( vsb_display_c * p )
+    {
+        spinlock::auto_simple_lock l(sync);
+        if (p == ptr)
+        {
+            ASSERT(p->ref > 1);
+            --p->ref;
+
+        } else
+            p->release();
+    }
+
+    void reset()
+    {
+        spinlock::auto_simple_lock l(sync);
+        if (ptr)
+        {
+            ptr->release();
+            ptr = nullptr;
+        }
+    }
+};
+
+
+
+struct incoming_video_frame_s
+{
+    int gid, cid;
+    ts::ivec2 sz;
+    int fmt;
+
+    ts::uint8 *data() {  return (ts::uint8 *)(this + 1);}
+};
+
+class active_protocol_c;
+class video_frame_decoder_c : public ts::task_c
+{
+    active_protocol_c *ap;
+    ts::ivec2 videosize = ts::ivec2(640,480);
+    incoming_video_frame_s *f;
+    vsb_display_c *display = nullptr;
+
+    /*virtual*/ int iterate(int pass) override;
+    /*virtual*/ void done(bool canceled) override;
+    /*virtual*/ void result() override;
+public:
+    video_frame_decoder_c( active_protocol_c *ap, incoming_video_frame_s *f );
+    ~video_frame_decoder_c();
 
 };
