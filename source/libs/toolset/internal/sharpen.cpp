@@ -133,82 +133,6 @@ static inline unsigned long do_conv2(unsigned long *data, long *m, long pit) {
 }
 #endif
 
-enum MMXSTATE
-{
-    MMX_UNKNOWN,
-    MMX_PRESENT,
-    MMX_ABSENT
-
-};
-
-#define _CPU_FEATURE_MMX 0x0001 
-#define _CPU_FEATURE_SSE 0x0002 
-#define _CPU_FEATURE_SSE2 0x0004 
-//#define _CPU_FEATURE_3DNOW 0x0008 
-
-
-bool IsCPUID() 
-{ 
-    __try
-    { 
-        _asm
-        { 
-            xor eax, eax 
-            cpuid 
-        } 
-    } 
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    { 
-        return false; 
-    } 
-    return true; 
-} 
-
-int _os_support(int feature) 
-{ 
-    __try
-    { 
-        switch (feature)
-        { 
-        case _CPU_FEATURE_SSE: 
-        __asm
-        { 
-            xorps xmm0, xmm0 // executing SSE instruction 
-        } 
-        break; 
-        case _CPU_FEATURE_SSE2: 
-        __asm
-        { 
-            xorpd xmm0, xmm0 // executing SSE2 instruction 
-        } 
-        //break; 
-        //case _CPU_FEATURE_3DNOW: 
-        //__asm
-        //{ 
-        //    pfrcp mm0, mm0 // executing 3DNow! instruction 
-        //    emms 
-        //} 
-        //break; 
-        case _CPU_FEATURE_MMX: 
-        __asm
-        { 
-            pxor mm0, mm0 // executing MMX instruction 
-            emms 
-        } 
-        break; 
-        } 
-    } 
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    { 
-        if (_exception_code() == STATUS_ILLEGAL_INSTRUCTION)
-        { 
-            return 0; 
-        } 
-        return 0; 
-    } 
-    return 1; 
-} 
-
 
 void TSCALL sharpen_run(bitmap_c &obm, const uint8 *sou, const imgdesc_s &souinfo, int lv)
 {
@@ -218,13 +142,6 @@ void TSCALL sharpen_run(bitmap_c &obm, const uint8 *sou, const imgdesc_s &souinf
 	const uint32 *src = (const uint32 *)sou;
     uint32 *dst = (uint32 *)obm.body();
 	auint pitch = souinfo.pitch;
-
-    static MMXSTATE mmx = MMX_UNKNOWN;
-
-    if (mmx == MMX_UNKNOWN)
-    {
-        mmx = _os_support(_CPU_FEATURE_MMX) ? MMX_PRESENT:MMX_ABSENT;
-    }
 
 //    ConvoluteFilterData fd;
 
@@ -241,7 +158,7 @@ void TSCALL sharpen_run(bitmap_c &obm, const uint8 *sou, const imgdesc_s &souinf
 	*dst++ = do_conv(src++, m, C_BOTTOMOK | C_LEFTOK, pitch);
 
 #ifdef USE_ASM
-    if (mmx == MMX_PRESENT)
+    if (CCAPS(CPU_MMX))
     {
         _asm emms
 	    asm_sharpen_run_MMX(

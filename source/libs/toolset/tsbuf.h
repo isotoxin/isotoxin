@@ -430,6 +430,18 @@ public:
         return *this;
     }
 
+    template<typename CORE2> bool operator==(const buf_t<CORE2> & tb)
+    {
+        if (size() != tb.size()) return false;
+        return blk_cmp(data(), tb.data(), size());
+    }
+
+    template<typename CORE2> bool operator!=(const buf_t<CORE2> & tb)
+    {
+        if (size() != tb.size()) return true;
+        return !blk_cmp( data(), tb.data(), size() );
+    }
+
     void set_size(aint sz, bool preserve_content = true)
     {
         aint newsize = sz;

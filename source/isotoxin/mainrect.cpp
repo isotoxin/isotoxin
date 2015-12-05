@@ -1,11 +1,14 @@
 #include "isotoxin.h"
 
-mainrect_c::mainrect_c(initial_rect_data_s &data):gui_control_c(data)
+mainrect_c::mainrect_c(MAKE_ROOT<mainrect_c> &data):gui_control_c(data)
 {
+    rrect = data.rect;
+    mrect = cfg().get<ts::irect>( CONSTASTR("main_rect_monitor"), ts::wnd_get_max_size(data.rect) );
 }
 
 mainrect_c::~mainrect_c() 
 {
+    if (gui) gui->delete_event( DELEGATE(this,saverectpos) );
     cfg().onclosedie( DELEGATE(this, onclosesave) );
 }
 
@@ -50,10 +53,37 @@ ts::uint32 mainrect_c::gm_handler( gmsg<ISOGM_APPRISE> & )
     g_app->F_ALLOW_AUTOUPDATE = !g_app->F_READONLY_MODE;
 }
 
+ts::uint32 mainrect_c::gm_handler(gmsg<GM_HEARTBEAT> &)
+{
+    // check monitor
+
+    if (0 != (checktick & 1) && !getprops().is_maximized())
+    {
+        ts::irect cmrect = ts::wnd_get_max_size(rrect);
+        if (cmrect != mrect || getprops().screenrect() != rrect)
+        {
+            ts::ivec2 newc = rrect.center() - mrect.center() + cmrect.center();
+            ts::irect newr = ts::irect::from_center_and_size(newc, rrect.size());
+            newr.movein(cmrect);
+            MODIFY(*this).pos(newr.lt).size(newr.size());
+        }
+    }
+    ++checktick;
+
+    return 0;
+}
+
 void mainrect_c::onclosesave()
 {
-    cfg().param(CONSTASTR("main_rect_pos"), ts::amake<ts::ivec2>(getprops().pos()));
-    cfg().param(CONSTASTR("main_rect_size"), ts::amake<ts::ivec2>(getprops().size()));
+    cfg().param(CONSTASTR("main_rect_pos"), ts::amake<ts::ivec2>(rrect.lt));
+    cfg().param(CONSTASTR("main_rect_size"), ts::amake<ts::ivec2>(rrect.size()));
+    cfg().param(CONSTASTR("main_rect_monitor"), ts::amake<ts::irect>(mrect));
+}
+
+bool mainrect_c::saverectpos(RID,GUIPARAM)
+{
+    onclosesave();
+    return true;
 }
 
 /*virtual*/ bool mainrect_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -61,6 +91,12 @@ void mainrect_c::onclosesave()
     if (qp == SQ_RECT_CHANGED)
     {
         cfg().onclosereg( DELEGATE(this, onclosesave) );
+        if (data.changed.manual)
+        {
+            rrect = getprops().screenrect();
+            mrect = ts::wnd_get_max_size(rrect);
+            DEFERRED_UNIQUE_CALL( 1.0, DELEGATE(this,saverectpos), nullptr );
+        }
     }
 
     if (__super::sq_evt(qp, rid, data)) return true;

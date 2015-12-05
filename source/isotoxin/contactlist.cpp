@@ -1910,6 +1910,15 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
                 self->update_text();
                 break;
         }
+    } else if ( ch.pass == 0 && ch.protoid == 0 && self )
+    {
+        switch (ch.sp)
+        {
+            case PP_USERNAME:
+            case PP_USERSTATUSMSG:
+                self->update_text();
+                break;
+        }
     }
 
     if (ch.pass == 0 && self)

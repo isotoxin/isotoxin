@@ -174,6 +174,7 @@ struct evt_data_s
             bool size_changed;
             bool zindex;
             bool width_changed;
+            bool manual;
         } changed;
 
         ts::make_pod<draw_s> draw;
@@ -306,7 +307,7 @@ class rectprops_c // pod
     void updatefs()
     {
         ASSERT(is_maximized());
-        m_fsrect = ts::wnd_get_max_size( screenrect() );
+        m_fsrect = ts::wnd_get_max_size( screenrect(false) );
     }
 
 public:
@@ -336,7 +337,7 @@ public:
 	const ts::ivec2 &size() const {return m_size;}
     const ts::ivec2 currentsize() const {return is_maximized() ? m_fsrect.size() : m_size;}
 	ts::irect rect() const {return ts::irect(m_pos, m_pos + m_size);}
-    ts::irect screenrect() const { return is_maximized() ? m_fsrect : ts::irect(m_screenpos, m_screenpos + m_size); }
+    ts::irect screenrect(bool maxmask = true) const { return (is_maximized()&&maxmask) ? m_fsrect : ts::irect(m_screenpos, m_screenpos + m_size); }
 	ts::irect szrect() const { return ts::irect(ts::ivec2(0), m_size); } // just size
     ts::irect currentszrect() const { return ts::irect(ts::ivec2(0), currentsize() ); } // just size
     const ts::ivec2 &screenpos() const {return is_maximized() ? m_fsrect.lt : m_screenpos;}

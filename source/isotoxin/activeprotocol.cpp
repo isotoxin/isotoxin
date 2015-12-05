@@ -187,7 +187,6 @@ bool active_protocol_c::cmdhandler(ipcr r)
         break;
     case HA_CONFIG:
         {
-            auto w = syncdata.lock_write();
             int sz;
             if (const void *d = r.get_data(sz))
             {
@@ -198,11 +197,15 @@ bool active_protocol_c::cmdhandler(ipcr r)
                 const void *md5r = r.read_data(16);
                 if (md5r && 0 == memcmp(md5r, md5.result(), 16))
                 {
+                    auto w = syncdata.lock_write();
                     w().data.config.clear();
                     w().data.config.append_buf(d, sz);
 
-                    w().flags.set(F_CONFIG_OK);
+                    w().flags.set(F_CONFIG_OK|F_CONFIG_UPDATED);
                     lastconfig = ts::Time::current();
+                } else
+                {
+                    syncdata.lock_write()().flags.set(F_CONFIG_FAIL);
                 }
             }
         }
@@ -231,6 +234,8 @@ bool active_protocol_c::cmdhandler(ipcr r)
                         w().data.configurable.proxy.proxy_addr = v;
                     else if (f.equals(CONSTASTR(CFGF_SERVER_PORT)))
                         w().data.configurable.server_port = v.as_int();
+                    else if (f.equals(CONSTASTR(CFGF_IPv6_ENABLE)))
+                        w().data.configurable.ipv6_enable = v.as_int() != 0;
                     else if (f.equals(CONSTASTR(CFGF_UDP_ENABLE)))
                         w().data.configurable.udp_enable = v.as_int() != 0;
 
@@ -506,8 +511,21 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
 {
     run();
 
-    if (syncdata.lock_write()().flags.clearr(F_SAVE_REQUEST))
-        save_config(false);
+    if (auto sss = syncdata.lock_write(true))
+    {
+        if (!sss().flags.is(F_CFGSAVE_CHECKER))
+        {
+            if (sss().flags.clearr(F_SAVE_REQUEST))
+            {
+                save_config(false);
+            }
+            else if (sss().flags.clearr(F_CONFIG_UPDATED))
+            {
+                if (sss().flags.is(F_CONFIG_OK))
+                    save_config(sss().data.config);
+            }
+        }
+    }
 
     bool is_online = false;
 
@@ -680,25 +698,47 @@ bool active_protocol_c::check_die(RID, GUIPARAM)
 }
 bool active_protocol_c::check_save(RID, GUIPARAM)
 {
-    auto ttt = syncdata.lock_read();
+    auto ttt = syncdata.lock_write();
+    ttt().flags.clear(F_CFGSAVE_CHECKER);
     if (!ttt().flags.is(F_CONFIG_OK))
     {
         // config still not received. waiting again
-        DEFERRED_UNIQUE_CALL(0.01, DELEGATE(this, check_die), nullptr);
+        ttt().flags.set(F_CFGSAVE_CHECKER);
+        DEFERRED_UNIQUE_CALL(0.01, DELEGATE(this, check_save), nullptr);
     }
     else
     {
-        tableview_active_protocol_s &t = prf().get_table_active_protocol();
-        if (auto *r = t.find<true>(id))
-        {
-            r->other.config = ttt().data.config;
-            r->other.config.set_size(ttt().data.config.size()); // copy content
-            r->changed();
-            prf().changed();
-        }
-
+        ttt().flags.clear(F_CONFIG_UPDATED);
+        save_config( ttt().data.config );
     }
     return true;
+}
+
+void active_protocol_c::save_config( const ts::blob_c &cfg )
+{
+    tableview_active_protocol_s &t = prf().get_table_active_protocol();
+    if (auto *r = t.find<true>(id))
+    {
+        if ( r->other.config != cfg )
+        {
+            time_t n = now();
+            if ( (n-last_backup_time) > prf().backup_period() )
+            {
+                last_backup_time = n;
+                tableview_backup_protocol_s &backup = prf().get_table_backup_protocol();
+                auto &row = backup.getcreate(0);
+                row.other.time = now();
+                row.other.tick = GetTickCount();
+                row.other.protoid = id;
+                row.other.config = r->other.config;
+            }
+        }
+
+        r->other.config = cfg;
+        r->other.config.set_size(cfg.size()); // copy content
+        r->changed();
+        prf().changed();
+    }
 }
 
 void active_protocol_c::set_sortfactor(int sf)
@@ -747,11 +787,10 @@ void active_protocol_c::save_config(bool wait)
     ts::Time t = ts::Time::current();
 
     auto w = syncdata.lock_write();
-
     if (w().flags.is(F_CONFIG_OK))
         if ((t - lastconfig) < 1000) return;
 
-    w().flags.clear(F_CONFIG_OK|F_CONFIG_FAIL|F_SAVE_REQUEST);
+    w().flags.clear(F_CONFIG_OK|F_CONFIG_FAIL|F_SAVE_REQUEST|F_CONFIG_UPDATED);
     w().data.config.clear();
     w.unlock();
 
@@ -778,7 +817,10 @@ try_again_save:
         check_save(RID(),nullptr);
 
     } else
+    {
+        syncdata.lock_write()().flags.set(F_CFGSAVE_CHECKER);
         DEFERRED_UNIQUE_CALL( 0, DELEGATE(this,check_save), nullptr );
+    }
 }
 
 ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CMD_RESULT>& r)
@@ -976,10 +1018,11 @@ void active_protocol_c::set_configurable( const configurable_s &c, bool force_se
             w.unlock();
 
             ipcw s(AQ_CONFIGURABLE);
-            s << (int)4;
+            s << (int)5;
             s << CONSTASTR( CFGF_PROXY_TYPE ) << ts::amake<int>(oldc.proxy.proxy_type);
             s << CONSTASTR( CFGF_PROXY_ADDR ) << oldc.proxy.proxy_addr;
             s << CONSTASTR( CFGF_SERVER_PORT ) << ts::amake<int>(oldc.server_port);
+            s << CONSTASTR( CFGF_IPv6_ENABLE ) << (oldc.ipv6_enable ? CONSTASTR("1") : CONSTASTR("0"));
             s << CONSTASTR( CFGF_UDP_ENABLE ) << (oldc.udp_enable ? CONSTASTR("1") : CONSTASTR("0"));
 
             ipcp->send(s);

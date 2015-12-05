@@ -220,7 +220,7 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     void(__stdcall *on_save)(const void *data, int dlen, void *param);
 
     /*
-        plugin should use this func to play audio ot show video
+        plugin should use this func to play audio or show video
         audio/video player will be automatically allocated for gid/cid client
 
         gid - negative (groupchat id) when groupchat message received, 0 - normal message

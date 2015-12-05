@@ -823,6 +823,8 @@ ts::wstr_c loc_text(loctext_e lt)
             return TTT("Network",66);
         case loc_nonetwork:
             return TTT("No available networks to select",248);
+        case loc_networks:
+            return TTT("Networks", 33);
         case loc_disk_write_error:
             return TTT("Disk write error (full?)",142);
         case loc_import_from_file:

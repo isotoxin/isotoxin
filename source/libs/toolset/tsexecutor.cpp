@@ -12,6 +12,9 @@ task_executor_c::task_executor_c()
 {
     base_thread_id = GetCurrentThreadId();
     evt = CreateEvent(nullptr,FALSE,FALSE,nullptr);
+    maximum_workers = g_cpu_cores - 1;
+    if (maximum_workers < 1) maximum_workers = 1;
+    if (maximum_workers == 1 && g_cpu_cores == 2) maximum_workers = 2;
 }
 
 task_executor_c::~task_executor_c()
@@ -28,13 +31,14 @@ task_executor_c::~task_executor_c()
     for (;;)
     {
         auto w = sync.lock_write();
-        if (w().worker_works || w().worker_started)
+        w().tasks = 0;
+        if (w().workers || w().worker_started)
         {
             w().worker_should_stop = true;
             SetEvent(evt);
+            w.unlock();
             Sleep(1);
-        }
-        else
+        } else
             break;
     }
 
@@ -69,7 +73,13 @@ task_executor_c::~task_executor_c()
 DWORD WINAPI task_executor_c::worker_proc(LPVOID ap)
 {
     tmpalloc_c tmp;
+
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
     ((task_executor_c *)ap)->work();
+
+    CoUninitialize();
+
     return 0;
 }
 
@@ -77,7 +87,7 @@ void task_executor_c::work()
 {
     auto w = sync.lock_write();
     w().worker_started = false;
-    w().worker_works = true;
+    ++w().workers;
     w.unlock();
 
     for (;!sync.lock_read()().worker_should_stop;)
@@ -125,14 +135,14 @@ void task_executor_c::work()
         
     }
 
-    sync.lock_write()().worker_works = false;
+    --sync.lock_write()().workers;
 }
 
 void task_executor_c::check_worker()
 {
     auto w = sync.lock_write();
 
-    if (w().worker_must && !w().worker_works && !w().worker_started)
+    if (w().worker_must && w().workers < tmin(maximum_workers,w().tasks) && !w().worker_started)
     {
         w().worker_started = true;
         CloseHandle(CreateThread(nullptr, 0, worker_proc, this, 0, nullptr));
@@ -150,6 +160,7 @@ void task_executor_c::add(task_c *task)
         return;
     }
     w().worker_must = true;
+    ++w().tasks;
     w.unlock();
 
     task->setflag(f_executing);
@@ -164,6 +175,8 @@ void task_executor_c::tick()
 {
     task_c *t;
 
+    int finished_tasks = 0;
+
     if ( GetCurrentThreadId() == base_thread_id )
     {
         while (results.try_pop(t))
@@ -176,14 +189,18 @@ void task_executor_c::tick()
         {
             t->resetflag(f_finished);
             t->done(false);
+            ++finished_tasks;
         }
 
         while (canceled.try_pop(t))
         {
             t->resetflag(f_canceled);
             t->done(true);
+            ++finished_tasks;
         }
     }
+
+    sync.lock_write()().tasks -= finished_tasks;
 }
 
 

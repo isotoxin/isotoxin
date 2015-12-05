@@ -94,6 +94,8 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="internal\convert.cpp" />
+    <ClCompile Include="internal\cpu_detector.cpp" />
     <ClCompile Include="internal\excpn.cpp" />
     <ClCompile Include="internal\glyphscache.cpp" />
     <ClCompile Include="internal\imageformat_bmp.cpp" />
@@ -109,14 +111,6 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">Create</PrecompiledHeader>
-    </ClCompile>
-    <ClCompile Include="internal\cpuaccel.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">
-      </PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-      </PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">
-      </PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="internal\imageformat_dds.cpp" />
     <ClCompile Include="internal\imageformat_png.cpp" />
@@ -149,6 +143,8 @@
     <ClCompile Include="tszip.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="internal\cpu_detector.h" />
+    <ClInclude Include="internal\fourcc.h" />
     <ClInclude Include="tsexecutor.h" />
     <ClInclude Include="internal\excpn.h" />
     <ClInclude Include="internal\glyphscache.h" />
@@ -158,7 +154,6 @@
     <ClInclude Include="tsarray.h" />
     <ClInclude Include="tsbitmap.h" />
     <ClInclude Include="toolset.h" />
-    <ClInclude Include="internal\cpuaccel.h" />
     <ClInclude Include="internal\math.h" />
     <ClInclude Include="internal\pixmap.h" />
     <ClInclude Include="internal\resample.h" />

@@ -246,12 +246,16 @@ gui_dialog_c::description_s& gui_dialog_c::description_s::hiddenlabel( const ts:
     return *this;
 }
 
+void gui_dialog_c::description_s::page_caption(const ts::wsptr& text_)
+{
+    ctl = _CAPTION;
+    text = text_;
+}
+
 void gui_dialog_c::description_s::page_header(const ts::wsptr& text_)
 {
-    ctl = _STATIC;
-    text.set(CONSTWSTR("<p=c>"))
-        .append(text_)
-        .append(CONSTWSTR("<color=#808080><hr=5,1,1>"));
+    ctl = _HEADER;
+    text = text_;
 }
 
 gui_dialog_c::description_s&gui_dialog_c::description_s::subctl(int tag, ts::wstr_c &ctldesc)
@@ -1088,6 +1092,20 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
         RID rctl;
         switch (d.ctl)
         {
+        case description_s::_CAPTION:
+            {
+                captiontext = d.text;
+                if (const theme_rect_s *thr = themerect())
+                {
+                    ts::irect r = getprops().szrect();
+                    r.rb.y = ts::tmax(thr->capheight, thr->capheight_max);
+                    getengine().redraw(&r);
+                }
+            }
+            break;
+        case description_s::_HEADER:
+            rctl = label(ts::wstr_c(header_prepend,d.text).append(header_append), d.color, true);
+            break;
         case description_s::_HGROUP:
             {
                 gui_hgroup_c &g = MAKE_VISIBLE_CHILD<gui_hgroup_c>( getrid() );
@@ -1294,6 +1312,10 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
     numtopbuttons = getengine().children_count();
 
     reset();
+
+    header_prepend = to_wstr(gui->theme().conf().get_string(CONSTASTR("header_prepend"), CONSTASTR("")));
+    header_append = to_wstr(gui->theme().conf().get_string(CONSTASTR("header_append"), CONSTASTR("")));
+    
 
     return __super::created();
 }

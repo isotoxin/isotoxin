@@ -14,6 +14,7 @@ static const char *contants[] = {
     "RETURN_1",
     "RETURN_2",
     "MAX_ONION_CLIENTS",
+    "MAX_ONION_CLIENTS_ANNOUNCE",
     "MAX_EVENTS",
     "MAX_SAVED_DHT_NODES",
 };

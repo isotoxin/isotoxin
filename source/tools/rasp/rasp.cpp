@@ -343,57 +343,6 @@ int proc_i420rgb(const wstrings_c & pars)
 }
 
 
-int proc_test(const wstrings_c & pars)
-{
-    TSCOLOR c = ARGB<int>(-1,-2,-3,0);
-    if (c != 0)
-        __debugbreak();
-
-    buf_c buf; buf.load_from_disk_file(L"C:\\2\\1\\i420.bin");
-    bitmap_c bmp; bmp.create_RGBA(ivec2(1920,1200));
-    int n = 100;
-    if (pars.size() > 1) n = pars.get(1).as_int();
-    
-    for(int total = 0, cnt = 1;;++cnt)
-    {
-        int ct = timeGetTime();
-        for (int i = 0; i < n; ++i)
-        {
-            bmp.convert_from_yuv(ivec2(0), bmp.info().sz, buf.data(), YFORMAT_I420);
-        }
-        int delta = timeGetTime() - ct;
-        total += delta;
-        Print("work time: %i (%i) ms\n", delta, int(total/cnt));
-        Sleep(1);
-        if (delta > 10000)
-            break;
-    }
-
-
-    /*
-    bitmap_c bmp; bmp.load_from_file(L"C:\\2\\1\\test0.png");
-    buf_c buf;
-    int n = 100;
-    if (pars.size() > 1) n = pars.get(1).as_int();
-
-    for (int total = 0, cnt = 1;; ++cnt)
-    {
-        int ct = timeGetTime();
-        for (int i = 0; i < n; ++i)
-        {
-            bmp.convert_to_yuv(ivec2(0), bmp.info().sz, buf, YFORMAT_I420);
-        }
-        int delta = timeGetTime() - ct;
-        total += delta;
-        Print("work time: %i (%i) ms\n", delta, int(total / cnt));
-        Sleep(1);
-        if (delta > 10000)
-            break;
-    }
-    */
-
-    return 0;
-}
 
 // dlmalloc -----------------
 #define SLASSERT ASSERTO

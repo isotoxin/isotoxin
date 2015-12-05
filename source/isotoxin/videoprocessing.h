@@ -78,10 +78,9 @@ public:
         if (stoping) return nullptr;
         if (desired_size_)
         {
-#ifdef _DEBUG
             if (updating >= 0)
-                __debugbreak();
-#endif // _DEBUG
+                return nullptr; // already updating (other thread?). Anyway, video stream too big - ignore this frame
+
             for (int i = 0; i < 3;++i)
             {
                 if (i == reading) continue;
@@ -145,10 +144,11 @@ public:
 
 class vsb_dshow_camera_c : public vsb_c
 {
-    class core_c : public DShow::Device, public ts::shared_object
+    class core_c : public ts::shared_object
     {
         DECLARE_EYELET( core_c );
 
+    protected:
         long sync = 0;
         ts::wstr_c id;
         static core_c *first;
@@ -156,18 +156,18 @@ class vsb_dshow_camera_c : public vsb_c
         core_c *prev = nullptr;
         core_c *next = nullptr;
         ts::pointers_t<vsb_dshow_camera_c, 0> owners;
-
-        bool initializing = false;
-        bool busy = false;
-
-    public:
-
+        volatile vsb_dshow_camera_c *locked = nullptr;
+        int frametag = 0;
 
         core_c(const vsb_descriptor_s &desc);
-        ~core_c();
 
-        void dshocb(const DShow::VideoConfig &config, unsigned char *data, size_t size, long long startTime, long long stopTime);
-        void run_initializer(const DShow::VideoConfig &config);
+        bool busy = false;
+    public:
+        bool initializing = false;
+
+
+        virtual ~core_c();
+
         bool add_owner( vsb_dshow_camera_c *owner );
         void remove_owner( vsb_dshow_camera_c *owner );
         void initialized( const ts::ivec2 &videosize );
@@ -176,7 +176,19 @@ class vsb_dshow_camera_c : public vsb_c
         static bool get( vsb_dshow_camera_c *owner, const vsb_descriptor_s &desc );
     };
 
+    class core_dshow_c : public core_c, public DShow::Device
+    {
+        void run_initializer(const DShow::VideoConfig &config);
+    public:
+        core_dshow_c(const vsb_descriptor_s &desc);
+        virtual ~core_dshow_c();
+
+        void dshocb(const DShow::VideoConfig &config, unsigned char *data, size_t size, long long startTime, long long stopTime);
+
+    };
+
     ts::shared_ptr<core_c> core;
+    int frametag = 0;
 
     void dshocb( const ts::bmpcore_exbody_s &eb );
     void initialized( const ts::ivec2 &videosize )
@@ -209,7 +221,9 @@ class vsb_desktop_c : public vsb_c
         grab_desktop *prev = nullptr;
         grab_desktop *next = nullptr;
         ts::pointers_t<vsb_desktop_c, 0> owners;
+        volatile vsb_desktop_c *locked = nullptr;
 
+        int grabtag = 0;
         int next_time;
         bool stop_job = false;
 
@@ -227,6 +241,7 @@ class vsb_desktop_c : public vsb_c
 
     ts::irect rect = ts::irect(0);
     int monitor = -1;
+    int grabtag = -1;
 
     void grabcb(ts::drawable_bitmap_c &gbmp);
 
@@ -248,7 +263,6 @@ class vsb_display_c : public vsb_c
     ~vsb_display_c() {}
     DECLARE_DYNAMIC_END(public)
 
-    ts::bitmap_c prebuf;
     gui_notice_callinprogress_c* notice = nullptr; // pure pointer due it will be checked with nullptr in other thread
     int gid = 0, cid = 0;
 
@@ -306,11 +320,10 @@ public:
 
 
 
-struct incoming_video_frame_s
+struct incoming_video_frame_s // XRGB always
 {
     int gid, cid;
     ts::ivec2 sz;
-    int fmt;
 
     ts::uint8 *data() {  return (ts::uint8 *)(this + 1);}
 };

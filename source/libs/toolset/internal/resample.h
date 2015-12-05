@@ -1,12 +1,8 @@
-#ifndef f_VD2_KASUMI_RESAMPLE_H
-#define f_VD2_KASUMI_RESAMPLE_H
-
+#pragma once
 #include <float.h>
 #include "../toolset.h"
 #include "vdstl.h"
 #include "math.h"
-#include "cpuaccel.h"
-
 
 struct VDPixmap;
 
@@ -35,4 +31,3 @@ public:
 bool VDPixmapResample(const VDPixmap& dst, const VDPixmap& src, IVDPixmapResampler::FilterMode filter);
 
 }
-#endif

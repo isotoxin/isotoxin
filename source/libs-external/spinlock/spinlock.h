@@ -353,22 +353,28 @@ inline void simple_unlock(volatile long &lock)
 
 struct auto_simple_lock
 {
-    long *lock;
-    auto_simple_lock(long& _lock) : lock(&_lock)
+    long *lockvar;
+    auto_simple_lock(long& _lock) : lockvar(&_lock)
     {
-        simple_lock(*lock);
+        simple_lock(*lockvar);
     }
     ~auto_simple_lock()
     {
-        if (lock)
-            simple_unlock(*lock);
+        if (lockvar)
+            simple_unlock(*lockvar);
+    }
+    void lock(long& _lock)
+    {
+        if (lockvar) simple_unlock(*lockvar);
+        lockvar = &_lock;
+        simple_lock(*lockvar);
     }
     void unlock()
     {
-        if (lock)
+        if (lockvar)
         {
-            simple_unlock(*lock);
-            lock = nullptr;
+            simple_unlock(*lockvar);
+            lockvar = nullptr;
         }
     }
 };

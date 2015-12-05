@@ -69,9 +69,10 @@ enum area_e
 	AREA_TOP = 4,
 	AREA_BOTTOM = 8,
 	AREA_CAPTION = 16,
-    AREA_EDITTEXT = 32,
-    AREA_HAND = 64,
-    AREA_MOVECURSOR = 128,
+    AREA_CAPTION_NOMOVE = 32,
+    AREA_EDITTEXT = 64,
+    AREA_HAND = 128,
+    AREA_MOVECURSOR = 256,
 
     AREA_NORESIZE = 65536,
 	AREA_RESIZE = AREA_LEFT|AREA_RITE|AREA_TOP|AREA_BOTTOM,
@@ -203,6 +204,9 @@ public:
     //sqhandler_i
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override; // system query - called by system
 
+    virtual void manual_move_resize( bool ) {}
+    virtual bool is_manual_move_resize() const { return false; }
+
     void mouse_lock();
     void mouse_unlock();
 
@@ -271,6 +275,7 @@ class rectengine_root_c : public rectengine_c
     static const ts::flags32_s::BITS F_REDRAW_COLLECTOR = SETBIT(1);
     static const ts::flags32_s::BITS F_NOTIFY_ICON = SETBIT(2);
     static const ts::flags32_s::BITS F_SYSTEM = SETBIT(3);
+    static const ts::flags32_s::BITS F_MANUAL = SETBIT(4);
 
 	static int regclassref;
 	void registerclass();
@@ -315,6 +320,9 @@ class rectengine_root_c : public rectengine_c
 public:
 	rectengine_root_c(bool sys);
 	~rectengine_root_c();
+
+    /*virtual*/ void manual_move_resize( bool f ) { flags.init(F_MANUAL, f); }
+    /*virtual*/ bool is_manual_move_resize() const { return flags.is(F_MANUAL); }
 
     bool is_dip() const {return flags.is(F_DIP) || nullptr == rect();}
 
@@ -428,6 +436,19 @@ class rectengine_child_c : public rectengine_c
 public:
 	rectengine_child_c(guirect_c *parent, RID after);
 	~rectengine_child_c();
+
+    /*virtual*/ void manual_move_resize( bool f )
+    {
+        if (rectengine_root_c *root = getrect().getroot())
+            root->manual_move_resize(f);
+    }
+    /*virtual*/ bool is_manual_move_resize() const
+    {
+        if (rectengine_root_c *root = getrect().getroot())
+            return root->is_manual_move_resize();
+        return false;
+    }
+
 
     /*virtual*/ void redraw(const ts::irect *invalidate_rect = nullptr) override;
 

@@ -771,11 +771,9 @@ void contact_c::av( bool f, bool camera_ )
 
         if ( opts.unmasked().is(F_AV_INPROGRESS) != wasav )
         {
-            av_contact_s *avc = g_app->update_av(this, !wasav);
+            g_app->update_av(this, !wasav, camera_);
             if (wasav)
                 play_sound(snd_hangup, false);
-            if (avc)
-                avc->camera( camera_ );
         }
         
     } else if (getmeta())
@@ -825,17 +823,29 @@ bool contact_c::calltone(bool f, bool call_accepted)
     return false;
 }
 
+bool contact_c::b_accept_call_with_video(RID, GUIPARAM)
+{
+    accept_call( AAAC_NOT, true );
+    return true;
+}
+
 bool contact_c::b_accept_call(RID, GUIPARAM prm)
 {
-    if (prm)
+    accept_call( (auto_accept_audio_call_e)as_int(prm), false );
+    return true;
+}
+
+void contact_c::accept_call(auto_accept_audio_call_e aa, bool video)
+{
+    if (aa)
     {
         // autoaccept
         play_sound(snd_call_accept, false);
     }
 
-    if (prm || ringtone(false, false))
+    if (aa || ringtone(false, false))
     {
-        av(true, false); // TODO : VIDEO?
+        av(true, video);
 
         if (active_protocol_c *ap = prf().ap(getkey().protoid))
             ap->accept_call(getkey().contactid);
@@ -847,15 +857,13 @@ bool contact_c::b_accept_call(RID, GUIPARAM prm)
         }
     }
 
-    if ( AAAC_ACCEPT_MUTE_MIC == as_int(prm) )
+    if ( AAAC_ACCEPT_MUTE_MIC == aa )
     {
         if (av_contact_s *avc = g_app->find_avcontact_inprogress( get_historian() ))
             avc->mic_off();
     }
 
     redraw();
-
-    return true;
 }
 
 bool contact_c::b_hangup(RID, GUIPARAM par)
@@ -1122,7 +1130,7 @@ void contacts_c::nomore_proto(int id)
             }
     }
     for( const contact_key_s &ck : c2d )
-        kill(ck);
+        kill(ck, true);
 }
 
 bool contacts_c::present_protoid(int id) const
@@ -1367,7 +1375,7 @@ bool contacts_c::is_groupchat_member( const contact_key_s &ck )
     return yep;
 }
 
-void contacts_c::kill(const contact_key_s &ck)
+void contacts_c::kill(const contact_key_s &ck, bool kill_with_history)
 {
     contact_c * cc = find(ck);
     if (!cc) return;
@@ -1417,7 +1425,8 @@ void contacts_c::kill(const contact_key_s &ck)
     {
         if (contact_c *meta = cc->getmeta())
         {
-            if (prf().calc_history(meta->getkey()) == 0)
+            bool historian_killed_too = false;
+            if (kill_with_history || prf().calc_history(meta->getkey()) == 0)
             {
                 int live = 0;
                 meta->subiterate([&](contact_c *c) {
@@ -1431,8 +1440,11 @@ void contacts_c::kill(const contact_key_s &ck)
                     prf().kill_history(meta->getkey());
                     del(meta->getkey());
                     g_app->cancel_file_transfers( meta->getkey() );
+                    historian_killed_too = true;
                 }
             }
+            if (!historian_killed_too)
+                guiitem = nullptr, selself = false; // avoid kill gui item
         } else
         {
             ASSERT(cc->getkey().is_group() || cc->get_state() == CS_UNKNOWN);
@@ -1692,6 +1704,8 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
             }
             else if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
                 ap->avatar_data_request( contact.key.contactid );
+
+            c->redraw();
         }
     }
 

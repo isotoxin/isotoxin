@@ -18,7 +18,7 @@ namespace ipc
         BIG_DATA_SIZE = 65536 * 2, // big data (size > BIG_DATA_SIZE) received with multiple calls of processor_func
         XCHG_BUFFER_ADDITION_SPACE = 16,
 #ifdef _DEBUG
-        XCHG_BUFFER_LOCK_TIMEOUT = 5000,
+        XCHG_BUFFER_LOCK_TIMEOUT = 0,
 #else
         XCHG_BUFFER_LOCK_TIMEOUT = 0,
 #endif // _DEBUG

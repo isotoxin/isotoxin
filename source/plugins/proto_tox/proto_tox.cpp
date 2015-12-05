@@ -20,6 +20,25 @@
 
 #include "toxcore/toxcore/tox_old.h"
 
+#define PACKET_ID_ONLINE 24
+#define PACKET_ID_OFFLINE 25
+#define PACKET_ID_NICKNAME 48
+#define PACKET_ID_STATUSMESSAGE 49
+#define PACKET_ID_USERSTATUS 50
+#define PACKET_ID_TYPING 51
+#define PACKET_ID_MESSAGE 64
+#define PACKET_ID_ACTION (PACKET_ID_MESSAGE + MESSAGE_ACTION) /* 65 */
+#define PACKET_ID_MSI 69
+#define PACKET_ID_FILE_SENDREQUEST 80
+#define PACKET_ID_FILE_CONTROL 81
+#define PACKET_ID_FILE_DATA 82
+#define PACKET_ID_INVITE_GROUPCHAT 96
+#define PACKET_ID_ONLINE_PACKET 97
+#define PACKET_ID_DIRECT_GROUPCHAT 98
+#define PACKET_ID_MESSAGE_GROUPCHAT 99
+#define PACKET_ID_LOSSY_GROUPCHAT 199
+
+
 #define CHECKIT() __pragma(message(__LOC__ "check it: " __FUNCTION__))
 
 #pragma USELIB("plgcommon")
@@ -47,7 +66,6 @@
 
 #include "appver.inl"
 
-#define PACKETID_IDENTITY 173
 #define PACKETID_EXTENSION 174
 #define SAVE_VERSION 1
 
@@ -81,7 +99,7 @@ void __stdcall get_info( proto_info_s *info )
 
     info->priority = 500;
     info->features = PF_AVATARS | PF_OFFLINE_INDICATOR | PF_PURE_NEW | PF_IMPORT | PF_AUDIO_CALLS | PF_VIDEO_CALLS | PF_SEND_FILE | PF_GROUP_CHAT; //PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT;
-    info->connection_features = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_SOCKS5 | CF_UDP_OPTION | CF_SERVER_OPTION;
+    info->connection_features = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_SOCKS5 | CF_IPv6_OPTION | CF_UDP_OPTION | CF_SERVER_OPTION;
     info->audio_fmt.sample_rate = 48000;
     info->audio_fmt.channels = 1;
     info->audio_fmt.bits = 16;
@@ -219,6 +237,7 @@ enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
     chunk_server_port,
     chunk_use_udp,
     chunk_toxid,
+    chunk_use_ipv6,
 };
 
 struct dht_node_s
@@ -417,20 +436,29 @@ struct message2send_s
             mid = 0;
         }
 
+        int timepreffix = msg.get_length();
         msg.append( utf8 );
 
         int e = TOX_MAX_MESSAGE_LENGTH - 3;
         if (utf8.l >= e)
         {
-            for(;e>=0;--e)
+            for(;e>=(TOX_MAX_MESSAGE_LENGTH/2-8);--e)
                 if (msg.get_char(e) == ' ')
                     break;
+
             if (e < TOX_MAX_MESSAGE_LENGTH/2)
-                msg.set_length(TOX_MAX_MESSAGE_LENGTH-1); // just clamp - no-spaces crap must die
-            else
             {
-                if ((utf8.l - e - 1) > 0) new message2send_s(utag, mt, fid, utf8.skip(e + 1), create_time, -1); // not memory leak
-                msg.set_length(e).append(CONSTASTR("\t\t")); // double tabs indicates that it is multi-part message
+                // no spaces from TOX_MAX_MESSAGE_LENGTH/2 to end of message!
+                // it is not good
+                // so, force clamp such long long word
+
+                asptr mclamp = utf8clamp( msg, TOX_MAX_MESSAGE_LENGTH-3 );
+                e = mclamp.l;
+            }
+
+            {
+                if ((utf8.l - e - timepreffix) > 0) new message2send_s(utag, mt, fid, utf8.skip(e - timepreffix), create_time, -1); // not memory leak
+                msg.set_length(e).append(CONSTASTR("\1\1")); // double tabs indicates that it is multi-part message
             }
         }
     }
@@ -564,7 +592,7 @@ struct message_part_s
 
     static void msg(message_type_e mt, int cid, u64 create_time, const char *msgbody, int len)
     {
-        if ( len > TOX_MAX_MESSAGE_LENGTH/2 && msgbody[len-1] == '\t' && msgbody[len-2] == '\t' )
+        if ( len > TOX_MAX_MESSAGE_LENGTH/2 && msgbody[len-1] == '\1' && msgbody[len-2] == '\1' )
         {
             // multi-part message
             // wait other parts 5 seconds
@@ -1204,6 +1232,14 @@ enum idgen_e
 
 static void run_senders();
 
+enum contact_caps_e
+{
+    CCC_MSG_CHAIN = 1,  // contacts's client support message chaining
+    CCC_MSG_CRTIME = 2, // contacts's client support message create time
+    CCC_RESYNC = 4,     // contacts's client support time resync packet
+    CCC_VIEW_SIZE = 8,  // contacts's client support video view size adjustment
+};
+
 struct contact_descriptor_s
 {
     static contact_descriptor_s *first_desc;
@@ -1284,17 +1320,19 @@ public:
     str_c pubid;
 
     int correct_create_time = 0; // delta
-    int wait_client_id = 0;
     int next_sync = 0;
 
     static const int F_IS_ONLINE = 1;
-    static const int F_ISOTOXIN = 2;
-    static const int F_NEED_RESYNC = 4;
-    static const int F_AVASEND = 8;
-    static const int F_AVARECIVED = 16;
-    static const int F_FIDVALID = 32;
+    static const int F_NEED_RESYNC = 2;
+    static const int F_AVASEND = 4;
+    static const int F_AVARECIVED = 8;
+    static const int F_FIDVALID = 16;
 
     int flags = 0;
+    int ccc_caps = 0;
+
+    str_c clientname;
+    str_c bbcodes_supported;
 
     contact_descriptor_s(idgen_e init_new_id, int fid = -1);
     ~contact_descriptor_s()
@@ -1320,8 +1358,8 @@ public:
     {
         UNSETFLAG(flags, F_IS_ONLINE);
         UNSETFLAG(flags, F_NEED_RESYNC);
-        UNSETFLAG(flags, F_ISOTOXIN);
         UNSETFLAG(flags, F_AVASEND);
+        ccc_caps = 0;
         avatag_self = gavatag - 1;
         correct_create_time = 0;
         avatar_recv_fnn = -1;
@@ -1347,14 +1385,30 @@ public:
     void set_fid(int fid_, bool fid_valid);
     void set_id(int id_);
 
-    void send_identity(bool resync)
+    void send_resync( bool request_resync )
     {
-        sstr_t<-128> isotoxin_id("-isotoxin/" SS(PLUGINVER) "/"); isotoxin_id.append_as_num<u64>(now());
-        if (resync) isotoxin_id.append(CONSTASTR("/resync"));
-        *(byte *)isotoxin_id.str() = PACKETID_IDENTITY;
-        TOX_ERR_FRIEND_CUSTOM_PACKET err = TOX_ERR_FRIEND_CUSTOM_PACKET_OK;
-        tox_friend_send_lossless_packet(tox, fid, (const byte *)isotoxin_id.cstr(), isotoxin_id.get_length(), &err);
+        if (ccc_caps & CCC_RESYNC)
+        {
+            sstr_t<-128> resync_packet(CONSTASTR("-resync/")); resync_packet.append_as_num<u64>(now());
+            if (request_resync) resync_packet.append(CONSTASTR("/req"));
+            *(byte *)resync_packet.str() = PACKETID_EXTENSION;
+            tox_friend_send_lossless_packet(tox, fid, (const byte *)resync_packet.cstr(), resync_packet.get_length(), nullptr);
+        }
     }
+
+    void send_viewsize(int w, int h)
+    {
+        if (ccc_caps & CCC_VIEW_SIZE)
+        {
+            ASSERT(w >= 0 && h >= 0);
+
+            sstr_t<-128> viewinfo("-viewsize/");
+            viewinfo.append_as_int(w).append_char('/').append_as_int(h);
+            *(byte *)viewinfo.str() = PACKETID_EXTENSION;
+            tox_friend_send_lossless_packet(tox, fid, (const byte *)viewinfo.cstr(), viewinfo.get_length(), nullptr);
+        }
+    }
+
 
     void send_avatar()
     {
@@ -1472,6 +1526,7 @@ void message2send_s::try_send(int time)
     if ((time - next_try_time) > 0)
     {
         bool send_create_time = false;
+        bool support_msg_chain = false;
         if (fid < GROUP_ID_OFFSET)
             if (contact_descriptor_s *desc = find_restore_descriptor(fid))
             {
@@ -1480,16 +1535,8 @@ void message2send_s::try_send(int time)
                     mid = 0;
                     return; // not yet
                 }
-                if (desc->wait_client_id)
-                {
-                    if ((time - desc->wait_client_id) < 0)
-                    {
-                        mid = 0;
-                        return; // not yet
-                    }
-                    desc->wait_client_id = 0;
-                }
-                send_create_time = ISFLAG(desc->flags, contact_descriptor_s::F_ISOTOXIN);
+                send_create_time = ISFLAG(desc->ccc_caps, CCC_MSG_CRTIME);
+                support_msg_chain = ISFLAG(desc->ccc_caps, CCC_MSG_CHAIN);
             }
 
         asptr m = msg.as_sptr();
@@ -1499,6 +1546,8 @@ void message2send_s::try_send(int time)
             if (skipchars >= 0)
                 m = m.skip(skipchars + 1);
         }
+        if (!support_msg_chain && pstr_c(m).ends(CONSTASTR("\1\1")))
+            m = m.trim(2);
 
         mid = 0;
         if (fid >= GROUP_ID_OFFSET)
@@ -1930,30 +1979,62 @@ static void cb_read_receipt(Tox *, uint32_t fid, uint32_t message_id, void *)
     message2send_s::read(fid, message_id);
 }
 
+static asptr bb_tags[] = { CONSTASTR("u"), CONSTASTR("i"), CONSTASTR("b"), CONSTASTR("s") };
+
+static uint32_t cb_isotoxin_special(Tox *, uint32_t fid, uint8_t *packet, uint32_t len, uint32_t /*max_len*/, void * /*user_data*/)
+{
+    switch (packet[0])
+    {
+    case PACKET_ID_NICKNAME:
+    case PACKET_ID_STATUSMESSAGE:
+    //case PACKET_ID_MESSAGE:
+    //case PACKET_ID_ACTION:
+        if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+        {
+            pstr_c s( asptr((const char *)packet+1,len-1) );
+            sstr_t<32> bopen(CONSTASTR("[")), bclose(CONSTASTR("[/"));
+            str_c fixed;
+            for( const asptr & bb : bb_tags )
+            {
+                bool supported = false;
+                for (token<char> bbsupported(desc->bbcodes_supported,','); bbsupported; ++bbsupported )
+                    if (bbsupported->equals(bb))
+                    {
+                        supported = true;
+                        break;
+                    }
+                if (supported)
+                    continue;
+
+                bopen.set_length(1).append( bb ).append_char(']');
+                if (s.find_pos(bopen) >= 0)
+                {
+                    if (fixed.is_empty())
+                        fixed = s;
+
+                    bclose.set_length(2).append(bb).append_char(']');
+                    fixed.replace_all( bopen, CONSTASTR("") );
+                    fixed.replace_all( bclose, CONSTASTR("") );
+                    s.set( fixed.as_sptr() );
+                }
+            }
+            if ( fixed.get_length() )
+            {
+                memcpy( packet + 1, fixed.cstr(), fixed.get_length() );
+                return fixed.get_length() + 1;
+            }
+        }
+        break;
+    }
+    return len;
+}
+
+
 static void cb_isotoxin(Tox *, uint32_t fid, const byte *data, size_t len, void * /*object*/)
 {
     if (contact_descriptor_s *desc = find_restore_descriptor(fid))
     {
-        if (PACKETID_IDENTITY == *data)
-        {
-            desc->wait_client_id = 0;
-            token<char> t(asptr((const char *)data + 1, len - 1), '/');
-            SETUPFLAG(desc->flags, contact_descriptor_s::F_ISOTOXIN, t && t->equals(CONSTASTR("isotoxin")));
-            if (ISFLAG(desc->flags, contact_descriptor_s::F_ISOTOXIN))
-            {
-                ++t; // version
-                ++t; // time of peer
-                if (t)
-                {
-                    time_t remote_peer_time = t->as_num<u64>();
-                    desc->correct_create_time = (int)((long long)now() - (long long)remote_peer_time);
-                    SETUPFLAG(desc->flags, contact_descriptor_s::F_NEED_RESYNC, abs(desc->correct_create_time) > 10); // 10+ seconds time delta :( resync it every 2 min
-                    if (ISFLAG(desc->flags, contact_descriptor_s::F_NEED_RESYNC)) desc->next_sync = time_ms() + 120000;
-                    ++t;
-                    if (t && t->equals(CONSTASTR("resync"))) desc->send_identity(false);
-                }
-            }
-        } else if (PACKETID_EXTENSION == *data && desc->cip)
+        if (PACKETID_EXTENSION == *data && desc->cip)
         {
             token<char> t(asptr((const char *)data + 1, len - 1), '/');
             if (t && t->equals(CONSTASTR("viewsize")))
@@ -1971,6 +2052,20 @@ static void cb_isotoxin(Tox *, uint32_t fid, const byte *data, size_t len, void 
                     desc->cip->remote_so.view_h = h;
                     hf->av_stream_options(0, desc->get_id(), &desc->cip->remote_so);
                 }
+            } else if (t && t->equals(CONSTASTR("resync")))
+            {
+                ++t; // time of peer
+                if (t)
+                {
+                    time_t remote_peer_time = t->as_num<u64>();
+                    desc->correct_create_time = (int)((long long)now() - (long long)remote_peer_time);
+                    desc->ccc_caps |= CCC_RESYNC;
+                    SETUPFLAG(desc->flags, contact_descriptor_s::F_NEED_RESYNC, abs(desc->correct_create_time) > 10); // 10+ seconds time delta :( resync it every 2 min
+                    if (ISFLAG(desc->flags, contact_descriptor_s::F_NEED_RESYNC)) desc->next_sync = time_ms() + 120000;
+                    ++t;
+                    if (t && t->equals(CONSTASTR("req"))) desc->send_resync(false);
+                }
+
             }
         }
     }
@@ -2006,22 +2101,37 @@ static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_
                     if (ln->equals(CONSTASTR("client")))
                     {
                         ++ln;
-                        SETUPFLAG(desc->flags, contact_descriptor_s::F_ISOTOXIN, ln && ln->begins(CONSTASTR("isotoxin/")));
-                        break;
+                        desc->clientname = *ln;
+                    } else if (ln->equals(CONSTASTR("support_viewsize")))
+                    {
+                        ++ln;
+                        if (ln->as_uint((unsigned)-1) == 1)
+                            desc->ccc_caps |= CCC_VIEW_SIZE;
+                    } else if (ln->equals(CONSTASTR("support_msg_chain")))
+                    {
+                        ++ln;
+                        if (ln->as_uint((unsigned)-1) == 1)
+                            desc->ccc_caps |= CCC_MSG_CHAIN;
+                    } else if (ln->equals(CONSTASTR("support_msg_cr_time")))
+                    {
+                        ++ln;
+                        if (ln->as_uint((unsigned)-1) == 1)
+                            desc->ccc_caps |= CCC_MSG_CRTIME;
+                    } else if (ln->equals(CONSTASTR("support_resync")))
+                    {
+                        ++ln;
+                        if (ln->as_uint((unsigned)-1) == 1)
+                            desc->ccc_caps |= CCC_RESYNC;
+                    } else if (ln->equals(CONSTASTR("support_bbtags")))
+                    {
+                        ++ln;
+                        desc->bbcodes_supported = *ln;
                     }
-                    // TODO : other caps
                 }
 
             }
-            desc->wait_client_id = 0;
-            if (!ISFLAG(desc->flags, contact_descriptor_s::F_ISOTOXIN))
-            {
-                 // wait 2 sec client name if it is not isotoxin (may be isotoxin?)
-                desc->wait_client_id = time_ms() + 2000;
-                if (desc->wait_client_id == 0) desc->wait_client_id++;
-            }
 
-            desc->send_identity(false);
+            desc->send_resync(false);
             desc->send_avatar();
 
         } else if (!desc->is_online())
@@ -2384,6 +2494,10 @@ static void cb_toxav_call_state(ToxAV *av, uint32_t friend_number, uint32_t stat
             desc->cip->started = true;
             desc->cip->calling = false;
             hf->message(MT_CALL_ACCEPTED, 0, desc->get_id(), now(), nullptr, 0);
+
+            // WORKAROUND
+            // signal to other peer that we always accept video, even audio call
+            toxav_call_control(toxav, desc->get_fid(), 0 == (desc->cip->local_so.options & SO_RECEIVING_VIDEO) ? TOXAV_CALL_CONTROL_HIDE_VIDEO : TOXAV_CALL_CONTROL_SHOW_VIDEO, nullptr);
         }
 
         hf->av_stream_options(0, desc->get_id(), &desc->cip->remote_so);
@@ -2640,26 +2754,24 @@ static TOX_ERR_NEW prepare(const byte *data, size_t length)
 {
     if (tox) tox_kill(tox);
 
-    bool allow_ipv6 = false;
-
-    /*
-
-    ipv6 temporary disabled
-
-    OSVERSIONINFO v = { sizeof(OSVERSIONINFO),0 };
-    GetVersionExW(&v);
-    if (v.dwMajorVersion >= 6)
+    if (options.ipv6_enabled)
     {
-        SOCKET sock6 = socket(AF_INET6, SOCK_STREAM, 0);
-        if (sock6)
-        {
-            allow_ipv6 = true;
-            closesocket(sock6);
-        }
-    }
-    */
+        bool allow_ipv6 = false;
 
-    options.ipv6_enabled = allow_ipv6 ? 1 : 0;
+        OSVERSIONINFO v = { sizeof(OSVERSIONINFO), 0 };
+        GetVersionExW(&v);
+        if (v.dwMajorVersion >= 6)
+        {
+            SOCKET sock6 = socket(AF_INET6, SOCK_STREAM, 0);
+            if (INVALID_SOCKET != sock6)
+            {
+                allow_ipv6 = true;
+                closesocket(sock6);
+            }
+        }
+        options.ipv6_enabled = allow_ipv6 ? 1 : 0;
+    }
+
     options.proxy_host = tox_proxy_host.cstr();
     options.proxy_port = 0;
     options.proxy_type = TOX_PROXY_TYPE_NONE;
@@ -2692,13 +2804,16 @@ static TOX_ERR_NEW prepare(const byte *data, size_t length)
 
     const char *caps = "client:isotoxin/" SS(PLUGINVER) "\n"
         "support_bbtags:b,s,u,i\n"
-        "support_viewsize:1\n";
-        /* "support_msg_chain:1\n"
-        "support_msg_cr_time:1\n"; */
+        "support_viewsize:1\n"
+        "support_resync:1\n"
+        "support_msg_chain:1\n"
+        "support_msg_cr_time:1\n";
 
     tox = tox_new(caps, &options, &errnew);
     if (!tox)
         return errnew;
+
+    tox_callback_cryptpacket_before_send(tox, cb_isotoxin_special, nullptr);
 
     tox_callback_friend_lossless_packet(tox, cb_isotoxin, nullptr);
 
@@ -2887,7 +3002,7 @@ void __stdcall tick(int *sleep_time_ms)
                 if (ISFLAG(f->flags, contact_descriptor_s::F_NEED_RESYNC) && f->is_online() && (curt - f->next_sync) > 0)
                 {
                     f->next_sync = curt + 120000;
-                    f->send_identity(true);
+                    f->send_resync(true);
                     break;
                 }
             nexttresync = curt + 3001;
@@ -3051,15 +3166,20 @@ static cmd_result_e tox_err_to_cmd_result( TOX_ERR_NEW toxerr )
 
 static void send_configurable()
 {
-    const char * fields[] = { CFGF_PROXY_TYPE, CFGF_PROXY_ADDR, CFGF_UDP_ENABLE, CFGF_SERVER_PORT };
-    str_c svalues[4];
+    const char * fields[] = { CFGF_PROXY_TYPE, CFGF_PROXY_ADDR, CFGF_IPv6_ENABLE, CFGF_UDP_ENABLE, CFGF_SERVER_PORT };
+    str_c svalues[5];
     svalues[0].set_as_int(tox_proxy_type);
     if (tox_proxy_type) svalues[1].set(tox_proxy_host).append_char(':').append_as_uint(tox_proxy_port);
-    svalues[2].set_as_int(options.udp_enabled ? 1 : 0);
-    svalues[3].set_as_int(options.tcp_port);
-    const char * values[] = { svalues[0].cstr(), svalues[1].cstr(), svalues[2].cstr(), svalues[3].cstr() };
+    svalues[2].set_as_int(options.ipv6_enabled ? 1 : 0);
+    svalues[3].set_as_int(options.udp_enabled ? 1 : 0);
+    svalues[4].set_as_int(options.tcp_port);
+    const char * values[] = { svalues[0].cstr(), svalues[1].cstr(), svalues[2].cstr(), svalues[3].cstr(), svalues[4].cstr() };
 
-    hf->configurable(4, fields, values);
+    #define LENGTH(a) (sizeof(a)/sizeof(a[0]))
+
+    static_assert( LENGTH(fields) == LENGTH(values) && LENGTH(values) == LENGTH(svalues), "check len" );
+
+    hf->configurable(5, fields, values);
 }
 
 
@@ -3094,12 +3214,17 @@ void __stdcall set_config(const void*data, int isz)
     {
         loader ldr(data,isz);
 
+        tox_proxy_type = 0;
+        memset( &options, 0, sizeof(options) );
+
         if (ldr(chunk_proxy_type))
             tox_proxy_type = ldr.get_int();
         if (ldr(chunk_proxy_address))
             set_proxy_addr(ldr.get_astr());
         if (ldr(chunk_server_port))
             options.tcp_port = (uint16_t)ldr.get_int();
+        if (ldr(chunk_use_ipv6))
+            options.ipv6_enabled = ldr.get_int() != 0;
         if (ldr(chunk_use_udp))
             options.udp_enabled = ldr.get_int() != 0;
         if (int sz = ldr(chunk_toxid))
@@ -3310,6 +3435,7 @@ static void save_current_stuff( savebuffer &b )
     chunk(b, chunk_proxy_type) << tox_proxy_type;
     chunk(b, chunk_proxy_address) << ( str_c(tox_proxy_host).append_char(':').append_as_uint(tox_proxy_port) );
     chunk(b, chunk_server_port) << (int)options.tcp_port;
+    chunk(b, chunk_use_ipv6) << (int)(options.ipv6_enabled ? 1 : 0);
     chunk(b, chunk_use_udp) << (int)(options.udp_enabled ? 1 : 0);
     chunk(b, chunk_toxid) << bytes(lastmypubid, TOX_ADDRESS_SIZE);
 
@@ -3633,6 +3759,7 @@ void __stdcall accept_call(int id)
         cd->cip->started = toxav_answer(toxav, cd->get_fid(),
             0 != (cd->cip->local_so.options & SO_SENDING_AUDIO) ? DEFAULT_AUDIO_BITRATE : 0,
             0 != (cd->cip->local_so.options & SO_SENDING_VIDEO) ? DEFAULT_VIDEO_BITRATE : 0, nullptr);
+
     }
 }
 
@@ -3672,15 +3799,14 @@ void __stdcall stream_options(int id, const stream_options_s * so)
                             toxav_call_control(toxav, cd->get_fid(), 0 == (cd->cip->local_so.options & SO_RECEIVING_VIDEO) ? TOXAV_CALL_CONTROL_HIDE_VIDEO : TOXAV_CALL_CONTROL_SHOW_VIDEO, nullptr);
                     }
 
-                    if (oldx != cd->cip->local_so.view_w || oldy != cd->cip->local_so.view_h)
+                    if (cd->cip->local_so.view_w < 0 || cd->cip->local_so.view_h < 0)
                     {
-                        sstr_t<-128> viewinfo("-viewsize/");
-                        viewinfo.append_as_int(cd->cip->local_so.view_w);
-                        viewinfo.append_char('/').append_as_int(cd->cip->local_so.view_h);
-                        *(byte *)viewinfo.str() = PACKETID_EXTENSION;
-                        tox_friend_send_lossless_packet(tox, cd->get_fid(), (const byte *)viewinfo.cstr(), viewinfo.get_length(), nullptr);
-
+                        cd->cip->local_so.view_w = 0;
+                        cd->cip->local_so.view_h = 0;
                     }
+
+                    if (oldx != cd->cip->local_so.view_w || oldy != cd->cip->local_so.view_h)
+                        cd->send_viewsize( cd->cip->local_so.view_w, cd->cip->local_so.view_h );
                 }
             }
         }
@@ -3751,6 +3877,14 @@ void __stdcall configurable(const char *field, const char *val)
         int new_server_port = pstr_c(asptr(val)).as_int();
         if (new_server_port != options.tcp_port)
             options.tcp_port = (uint16_t)new_server_port, reconnect = true;
+        return;
+    }
+
+    if (0 == strcmp(CFGF_IPv6_ENABLE, field))
+    {
+        bool ipv6 = pstr_c(asptr(val)).as_int() != 0;
+        if (ipv6 != options.ipv6_enabled)
+            options.ipv6_enabled = ipv6, reconnect = true;
         return;
     }
 

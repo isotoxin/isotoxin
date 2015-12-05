@@ -26,6 +26,17 @@
 #pragma warning (disable:4456) // declaration of 'xxx' hides previous local declaration
 #pragma warning (disable:4458) // declaration of 'xxx' hides class member
 
+void VDCPUCleanupExtensions() {
+#ifndef _M_AMD64
+    if (ts::CCAPS(ts::CPU_SSE))
+        __asm sfence
+    if (ts::CCAPS(ts::CPU_MMX))
+        __asm emms
+#else
+    _mm_sfence();
+#endif
+}
+
 ///////////////////////////////////////////////////////////////////////////
 //
 // utility functions
@@ -194,6 +205,9 @@ namespace {
 ///////////////////////////////////////////////////////////////////////////
 
 namespace {
+    class IVDResamplerSeparableRowStage;
+    class IVDResamplerSeparableColStage;
+    class IVDResamplerFilter;
 	class VDSteppedAllocator {
 	public:
 		typedef	size_t		size_type;
@@ -205,12 +219,41 @@ namespace {
 		void clear();
 		void *allocate(size_type n);
 
-        template<class T, class... _Valty> T* build(_Valty&&... _Val)
+        //template<class T, class... _Valty> T* build(_Valty&&... _Val)
+        //{
+        //    T * t = (T *)allocate(sizeof(T));
+        //    TSPLACENEW(t, std::forward<_Valty>(_Val)...);
+        //    return t;
+        //}
+
+        template<class T> T* build()
         {
             T * t = (T *)allocate(sizeof(T));
-            TSPLACENEW(t, std::forward<_Valty>(_Val)...);
+            TSPLACENEW(t);
             return t;
         }
+        template<class T> T* build(double p)
+        {
+            T * t = (T *)allocate(sizeof(T));
+            TSPLACENEW(t, p);
+            return t;
+        }
+
+        template<class T> T* build(IVDResamplerSeparableRowStage *p0, IVDResamplerSeparableColStage *p1)
+        {
+            T * t = (T *)allocate(sizeof(T));
+            TSPLACENEW(t, p0, p1);
+            return t;
+        }
+
+        template<class T> T* build(const IVDResamplerFilter& p)
+        {
+            T * t = (T *)allocate(sizeof(T));
+            TSPLACENEW(t, p);
+            return t;
+        }
+        
+        
 
 	protected:
 		struct Block {
@@ -271,15 +314,11 @@ namespace {
 		return p;
 	}
 
-}
-
-///////////////////////////////////////////////////////////////////////////
-//
-// filter kernels
-//
-///////////////////////////////////////////////////////////////////////////
-
-namespace {
+    ///////////////////////////////////////////////////////////////////////////
+    //
+    // filter kernels
+    //
+    ///////////////////////////////////////////////////////////////////////////
 	class IVDResamplerFilter {
 	public:
 		virtual int GetFilterWidth() const = 0;
@@ -398,45 +437,43 @@ namespace {
 		float		mScale;
 		unsigned	mTaps;
 	};
-}
 
-///////////////////////////////////////////////////////////////////////////
-//
-// resampler stages (common)
-//
-///////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////
+    //
+    // resampler stages (common)
+    //
+    ///////////////////////////////////////////////////////////////////////////
 
-class IVDResamplerStage {
-public:
-	virtual ~IVDResamplerStage() {}
+    class IVDResamplerStage {
+    public:
+        virtual ~IVDResamplerStage() {}
 
-	virtual void Process(const VDResamplerInfo& info) {}
+        virtual void Process(const VDResamplerInfo& info) {}
 
-	virtual sint32 GetHorizWindowSize() const { return 1; }
-	virtual sint32 GetVertWindowSize() const { return 1; }
-};
+        virtual sint32 GetHorizWindowSize() const { return 1; }
+        virtual sint32 GetVertWindowSize() const { return 1; }
+    };
 
-class IVDResamplerSeparableRowStage : public IVDResamplerStage {
-	using IVDResamplerStage::Process; // no warning #1125 (ICC)
-public:
-	virtual void Process(void *dst, const void *src, uint32 w, uint32 u, uint32 dudx) = 0;
-	virtual int GetWindowSize() const = 0;
-};
+    class IVDResamplerSeparableRowStage : public IVDResamplerStage {
+        using IVDResamplerStage::Process; // no warning #1125 (ICC)
+    public:
+        virtual void Process(void *dst, const void *src, uint32 w, uint32 u, uint32 dudx) = 0;
+        virtual int GetWindowSize() const = 0;
+    };
 
-class IVDResamplerSeparableColStage : public IVDResamplerStage {
-	using IVDResamplerStage::Process; // no warning #1125 (ICC)
-public:
-	virtual int GetWindowSize() const = 0;
-	virtual void Process(void *dst, const void *const *src, uint32 w, sint32 phase) = 0;
-};
+    class IVDResamplerSeparableColStage : public IVDResamplerStage {
+        using IVDResamplerStage::Process; // no warning #1125 (ICC)
+    public:
+        virtual int GetWindowSize() const = 0;
+        virtual void Process(void *dst, const void *const *src, uint32 w, sint32 phase) = 0;
+    };
 
-///////////////////////////////////////////////////////////////////////////
-//
-// resampler stages (portable)
-//
-///////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////
+    //
+    // resampler stages (portable)
+    //
+    ///////////////////////////////////////////////////////////////////////////
 
-namespace {
 	void GenerateTable(sint32 *dst, const IVDResamplerFilter& filter)
     {
 		const unsigned width = filter.GetFilterWidth();
@@ -587,7 +624,7 @@ public:
 	}
 
 protected:
-	tbuf_t<sint32>	mFilterBank;
+	tmp_tbuf_t<sint32>	mFilterBank;
 };
 
 class VDResamplerSeparableTableColStage : public IVDResamplerSeparableColStage {
@@ -1177,8 +1214,6 @@ VDPixmapResampler::~VDPixmapResampler() {
 bool VDPixmapResampler::Init(double dw, double dh, int dstformat, double sw, double sh, int srcformat, FilterMode hfilter, FilterMode vfilter, bool bInterpolationOnly) {
 	Shutdown();
 
-	CPUEnableExtensions(CPUF_SUPPORTS_MMX | CPUF_SUPPORTS_SSE2);
-
 	if (dstformat != srcformat || srcformat != nsVDPixmap::kPixFormat_XRGB8888)
 		return false;
 
@@ -1219,9 +1254,8 @@ bool VDPixmapResampler::Init(double dw, double dh, int dstformat, double sw, dou
 
 	if (hfilter == kFilterPoint) {
 #ifndef _M_AMD64
-		long flags = CPUGetEnabledExtensions();
 
-		if (flags & CPUF_SUPPORTS_MMX)
+		if (CCAPS(CPU_MMX))
 			pRowStage = mStageAllocator.build<VDResamplerSeparablePointRowStageMMX>();
 		else
 			pRowStage = mStageAllocator.build<VDResamplerSeparablePointRowStageX86>();
@@ -1231,9 +1265,8 @@ bool VDPixmapResampler::Init(double dw, double dh, int dstformat, double sw, dou
 	} else if (hfilter == kFilterLinear) {
 		if (x_2fc >= 1.0) {
 #ifndef _M_AMD64
-			long flags = CPUGetEnabledExtensions();
 
-			if (flags & CPUF_SUPPORTS_MMX)
+			if (CCAPS(CPU_MMX))
 				pRowStage = mStageAllocator.build<VDResamplerSeparableLinearRowStageMMX>();
 			else
 #endif
@@ -1242,9 +1275,7 @@ bool VDPixmapResampler::Init(double dw, double dh, int dstformat, double sw, dou
 			pRowStage = CreateRowStage(VDResamplerLinearFilter((float)x_2fc));
 	} else if (hfilter == kFilterCubic) {
 #ifndef _M_AMD64
-		long flags = CPUGetEnabledExtensions();
-
-		if (x_2fc >= 1.0 && (flags & CPUF_SUPPORTS_MMX))
+		if (x_2fc >= 1.0 && CCAPS(CPU_MMX))
 			pRowStage = mStageAllocator.build<VDResamplerSeparableCubicRowStageMMX>(mSplineFactor);
 		else
 #endif
@@ -1255,9 +1286,7 @@ bool VDPixmapResampler::Init(double dw, double dh, int dstformat, double sw, dou
 	if (hfilter == kFilterLinear) {
 		if (y_2fc >= 1.0) {
 #ifndef _M_AMD64
-			long flags = CPUGetEnabledExtensions();
-
-			if (flags & CPUF_SUPPORTS_MMX)
+			if (CCAPS(CPU_MMX))
 				pColStage = mStageAllocator.build<VDResamplerSeparableLinearColStageMMX>();
 			else
 #endif
@@ -1266,10 +1295,8 @@ bool VDPixmapResampler::Init(double dw, double dh, int dstformat, double sw, dou
 			pColStage = CreateColStage(VDResamplerLinearFilter( (float)y_2fc ));
 	} else if (hfilter == kFilterCubic) {
 #ifndef _M_AMD64
-		long flags = CPUGetEnabledExtensions();
-
-		if (y_2fc >= 1.0 && (flags & CPUF_SUPPORTS_MMX)) {
-			if (flags & CPUF_SUPPORTS_SSE2)
+		if (y_2fc >= 1.0 && CCAPS(CPU_MMX)) {
+			if (CCAPS(CPU_SSE2))
 				pColStage = mStageAllocator.build<VDResamplerSeparableCubicColStageSSE2>(mSplineFactor);
 			else
 				pColStage = mStageAllocator.build<VDResamplerSeparableCubicColStageMMX>(mSplineFactor);
@@ -1289,11 +1316,9 @@ bool VDPixmapResampler::Init(double dw, double dh, int dstformat, double sw, dou
 
 IVDResamplerSeparableRowStage *VDPixmapResampler::CreateRowStage(const IVDResamplerFilter& filter) {
 #ifndef _M_AMD64
-	long flags = CPUGetEnabledExtensions();
-
-	if (flags & CPUF_SUPPORTS_SSE2)
+	if (CCAPS(CPU_SSE2))
 		return mStageAllocator.build<VDResamplerSeparableTableRowStageSSE2>(filter);
-	else if (flags & CPUF_SUPPORTS_MMX)
+	else if (CCAPS(CPU_MMX))
 		return mStageAllocator.build<VDResamplerSeparableTableRowStageMMX>(filter);
 	else
 		return mStageAllocator.build<VDResamplerSeparableTableRowStage>(filter);
@@ -1304,11 +1329,9 @@ IVDResamplerSeparableRowStage *VDPixmapResampler::CreateRowStage(const IVDResamp
 
 IVDResamplerSeparableColStage *VDPixmapResampler::CreateColStage(const IVDResamplerFilter& filter) {
 #ifndef _M_AMD64
-	long flags = CPUGetEnabledExtensions();
-
-	if (flags & CPUF_SUPPORTS_SSE2)
+	if (CCAPS(CPU_SSE2))
 		return mStageAllocator.build<VDResamplerSeparableTableColStageSSE2>(filter);
-	else if (flags & CPUF_SUPPORTS_MMX)
+	else if (CCAPS(CPU_MMX))
 		return mStageAllocator.build<VDResamplerSeparableTableColStageMMX>(filter);
 	else
 		return mStageAllocator.build<VDResamplerSeparableTableColStage>(filter);

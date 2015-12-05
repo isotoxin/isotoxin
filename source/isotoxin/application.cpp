@@ -484,7 +484,7 @@ void application_c::blinking_reason_s::do_recalc_unread_now()
             if (!invite) friend_invite(false);
         }
 
-        if (flags.is(F_RECALC_UNREAD) || hi->gui_item->getprops().is_active())
+        if (flags.is(F_RECALC_UNREAD) || (hi->gui_item && hi->gui_item->getprops().is_active()))
         {
             if (is_file_download_process() || is_file_download_request())
             {
@@ -872,11 +872,11 @@ void application_c::load_profile_and_summon_main_rect(bool minimize)
 
 void application_c::summon_main_rect(bool minimize)
 {
-    redraw_collector_s dch;
-    main = MAKE_ROOT<mainrect_c>();
     ts::ivec2 sz = cfg().get<ts::ivec2>(CONSTASTR("main_rect_size"), ts::ivec2(800, 600));
-    ts::irect mr( cfg().get<ts::ivec2>(CONSTASTR("main_rect_pos"), ts::wnd_get_center_pos(sz)), sz );
-    mr.rb += mr.lt;
+    ts::irect mr = ts::irect::from_lt_and_size(cfg().get<ts::ivec2>(CONSTASTR("main_rect_pos"), ts::wnd_get_center_pos(sz)), sz);
+
+    redraw_collector_s dch;
+    main = MAKE_ROOT<mainrect_c>( mr );
 
     ts::wnd_fix_rect(mr, sz.x, sz.y);
 
@@ -1205,7 +1205,7 @@ void application_c::update_ringtone( contact_c *rt, bool play_stop_snd )
     }
 }
 
-av_contact_s * application_c::update_av( contact_c *avmc, bool activate )
+av_contact_s * application_c::update_av( contact_c *avmc, bool activate, bool camera )
 {
     ASSERT(avmc->is_meta() || avmc->getkey().is_group());
 
@@ -1216,6 +1216,7 @@ av_contact_s * application_c::update_av( contact_c *avmc, bool activate )
     if (activate)
     {
         av_contact_s &avc = get_avcontact(avmc, av_contact_s::AV_INPROGRESS);
+        avc.camera(camera);
 
         if (!avmc->getkey().is_group())
             avmc->subiterate([&](contact_c *c) {
@@ -2361,7 +2362,7 @@ void av_contact_s::set_so_audio(bool inactive_, bool enable_mic, bool enable_spe
 
 void av_contact_s::set_video_res(const ts::ivec2 &vsz)
 {
-    if (sosz != vsz)
+    if (ts::tabs(sosz.x-vsz.x) >= 4 || ts::tabs(sosz.y - vsz.y) >= 4)
     {
         sosz = vsz;
         send_so();

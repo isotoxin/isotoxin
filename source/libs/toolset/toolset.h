@@ -136,13 +136,6 @@ template<typename T> struct TSNEWDEL
 //#define TS_STATIC_CHECK(expr, msg) typedef char UNIQID(static_check) [(expr) ? 1 : -1]
 #define TS_STATIC_CHECK(expr, msg) static_assert((expr), msg)
 
-
-#ifndef MAKEFOURCC
-#define MAKEFOURCC(ch0, ch1, ch2, ch3)                              \
-    ((DWORD)(BYTE)(ch0) | ((DWORD)(BYTE)(ch1) << 8) |   \
-    ((DWORD)(BYTE)(ch2) << 16) | ((DWORD)(BYTE)(ch3) << 24 ))
-#endif //defined(MAKEFOURCC)
-
 //#define SIMPLE_STR_HASH4( s ) MAKEFOURCC( (s)[0], (s)[1], (s)[2], (s)[3] )
 //#define SIMPLE_STR_HASH( s ) SIMPLE_STR_HASH4(s) ^ SIMPLE_STR_HASH4( s + sizeof(s) - 4 )
 
@@ -207,7 +200,6 @@ template<typename NUM> struct minimum
 #define SEC_PER_DAY     (SEC_PER_HOUR * 24U)
 #define SEC_PER_MONTH   (SEC_PER_DAY * 31U)
 #define SEC_PER_YEAR    (SEC_PER_DAY * 365U)
-
 
 #define IS_UNICODE_OS() true //(GetVersion()<0x80000000)
 
@@ -1053,8 +1045,26 @@ template <typename T> struct dummy
 
 #pragma pack (pop)
 
+extern "C" { extern ts::uint32 g_cpu_caps; extern int g_cpu_cores; }
+
 namespace ts
 {
+
+enum cpu_caps_e
+{
+    CPU_MMX     = SETBIT(0),
+    CPU_SSE     = SETBIT(1),
+    CPU_SSE2    = SETBIT(2),
+    CPU_SSE3    = SETBIT(3),
+    CPU_SSSE3   = SETBIT(4),
+    CPU_SSE41   = SETBIT(5),
+    CPU_AVX     = SETBIT(6),
+    CPU_AVX2    = SETBIT(7),
+};
+
+static_assert( CPU_MMX == 1, "check a_resize.asm" );
+
+INLINE bool CCAPS( uint32 mask ) { return 0 != (g_cpu_caps & mask); }
 
 class tsfileop_c
 {

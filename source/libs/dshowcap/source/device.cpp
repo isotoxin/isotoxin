@@ -50,6 +50,27 @@ HDevice::~HDevice()
 		Sleep(ROCKET_WAIT_TIME_MS);
 		SetRocketEnabled(rocketEncoder, false);
 	}
+
+    control.Clear();
+    builder.Clear();
+    videoFilter.Clear();
+    videoCapture.Clear();
+    rocketEncoder.Clear();
+    __try
+    {
+        // I don't know why this clear crashes sometimes on windows XP
+        graph.Clear();
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        graph.Detach();
+    }
+
+#ifdef AUDIO_CAPTURE
+    audioFilter.Clear();
+    audioCapture.Clear();
+    audioOutput.Clear();
+#endif
 }
 
 bool HDevice::EnsureInitialized(const wchar_t *func)

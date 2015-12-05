@@ -21,6 +21,11 @@ namespace ts
 		return r;
 	}
 
+    template < typename T1, typename T2, typename T3 >
+    INLINE T1 CLAMP(const T1 & a, const T2 & vmin, const T3 & vmax)
+    {
+        return (T1)(((a) > (vmax)) ? (vmax) : (((a) < (vmin)) ? (vmin) : (a)));
+    }
 
 	struct f_rect_s
 	{
@@ -255,6 +260,14 @@ namespace ts
             r.rb = r.lt + sz;
             return r;
         }
+        static irect from_lt_and_size(const ivec2&lt, const ivec2&sz)
+        {
+            irect r;
+            r.lt = lt;
+            r.rb = r.lt + sz;
+            return r;
+        }
+        
 
 		auto width() const -> decltype(rb.x - lt.x) {return rb.x - lt.x;} 
 		auto height() const -> decltype(rb.y - lt.y) {return rb.y - lt.y;};
@@ -267,6 +280,52 @@ namespace ts
         ivec2 lb() const {return ivec2( lt.x, rb.y );}
 
         ivec2 center() const { return ivec2((lt.x + rb.x) / 2, (lt.y + rb.y) / 2); }
+
+        ivec2 prc( const ivec2 &c, bool clamp ) const
+        {
+            ivec2 s = size();
+            ivec2 r( s.x ? (10000 * (c.x - lt.x) / s.x) : 0, s.y ? (10000 * (c.y - lt.y) / s.y) : 0 );
+            return clamp ? ivec2( CLAMP(r.x, 0, 10000), CLAMP(r.y, 0, 10000) ) : r;
+        }
+
+        ivec2 byprc(const ivec2 &pprc) const
+        {
+            return ivec2( lt.x + width() * pprc.x / 10000, lt.y + height() * pprc.y / 10000 );
+        }
+
+        irect &movein(const irect &r)
+        {
+            if (lt.x < r.lt.x)
+            {
+                int addx = r.lt.x - lt.x;
+                lt.x += addx;
+                rb.x += addx;
+            }
+            if (lt.y < r.lt.y)
+            {
+                int addy = r.lt.y - lt.y;
+                lt.y += addy;
+                rb.y += addy;
+            }
+            
+            if (rb.x > r.rb.x)
+            {
+                int subx = rb.x - r.rb.x;
+                lt.x -= subx;
+                rb.x -= subx;
+                if (lt.x < r.lt.x) lt.x = r.lt.x;
+            }
+
+            if (rb.y > r.rb.y)
+            {
+                int suby = rb.y - r.rb.y;
+                lt.y -= suby;
+                rb.y -= suby;
+                if (lt.y < r.lt.y) lt.y = r.lt.y;
+            }
+
+            return *this;
+        }
 
         int area() const { return width() * height(); }
         operator bool () const {return rb.x > lt.x && rb.y > lt.y; }
@@ -360,6 +419,8 @@ namespace ts
 		ty = float (-C/B);
 	}
 
+    template<> inline str_c amake(irect r) { return str_c().set_as_int(r.lt.x).append_char(',').append_as_int(r.lt.y).append_char(',').append_as_int(r.rb.x).append_char(',').append_as_int(r.rb.y); }
+
 typedef float   mat44[4][4];
 
 namespace internal
@@ -428,12 +489,6 @@ namespace internal
 template < typename RT, typename IT > INLINE RT CLAMP(IT b)
 {
     return internal::clamper<RT, IT, is_signed<IT>::value>::dojob(b);
-}
-
-template < typename T1, typename T2, typename T3 >
-INLINE T1 CLAMP ( const T1 & a, const T2 & vmin, const T3 & vmax )
-{
-    return (T1)(((a) > (vmax)) ? (vmax): (((a) < (vmin)) ? (vmin) : (a)));
 }
 
 template < typename T1, typename T2, typename T3 >

@@ -12,7 +12,7 @@ dialog_contact_props_c::~dialog_contact_props_c()
 
 /*virtual*/ ts::wstr_c dialog_contact_props_c::get_name() const
 {
-    return TTT("[appname]: Contact settings",224);
+    return ts::wstr_c(TTT("[appname]: Contact settings",224)).append(CONSTWSTR(" - ")).append(__super::get_name());
 }
 
 
@@ -86,8 +86,7 @@ menu_c dialog_contact_props_c::getaacmenu()
         ts::str_c n = contactue->get_name();
         text_adapt_user_input(n);
 
-        dm().page_header(from_utf8(n));
-        dm().vspace(10);
+        dm().page_caption(from_utf8(n));
 
         dm().textfield(TTT("Custom name",229), from_utf8(customname), DELEGATE(this, custom_name))
             .focus(true);

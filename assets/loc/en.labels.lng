@@ -358,6 +358,7 @@
 358=Enable video receive
 359=Disable video receive
 360=Default video source
+361=Allow IPv6
 1000=Incoming message
 1001=Incoming file
 1002=File receiving started

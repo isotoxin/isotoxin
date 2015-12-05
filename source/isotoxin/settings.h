@@ -67,6 +67,7 @@ class dialog_setup_network_c : public gui_isodialog_c
 
     bool network_importfile(const ts::wstr_c & t);
     bool network_serverport(const ts::wstr_c & t);
+    bool network_ipv6(RID, GUIPARAM p);
     bool network_udp(RID, GUIPARAM p);
     bool network_connect(RID, GUIPARAM p);
     void set_proxy_type_handler(const ts::str_c&);

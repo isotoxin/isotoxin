@@ -392,6 +392,7 @@ enum loctext_e
     loc_exit,
     loc_network,
     loc_nonetwork,
+    loc_networks,
     loc_disk_write_error,
     loc_import_from_file,
     loc_loading,

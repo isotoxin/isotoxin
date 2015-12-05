@@ -88,8 +88,21 @@ public:
         if (added) { v.set_as_int(def.x).append_char(',').append_as_int(def.y); return def; }
         ts::token<char> t( v, ',' );
         ts::ivec2 r;
-        r.x = t->as_int(def.x);
-        ++t; r.y = t->as_int(def.y);
+        r.x = t ? t->as_int(def.x) : def.x;
+        ++t; r.y = t ? t->as_int(def.y) : def.y;
+        return r;
+    }
+    template<> ts::irect get(const ts::asptr& pn, const ts::irect&def)
+    {
+        bool added = false;
+        ts::str_c &v = values.add(pn, added);
+        if (added) { v.set_as_int(def.lt.x).append_char(',').append_as_int(def.lt.y).append_char(',').append_as_int(def.rb.x).append_char(',').append_as_int(def.rb.y); return def; }
+        ts::token<char> t(v, ',');
+        ts::irect r;
+        r.lt.x = t ? t->as_int(def.lt.x) : def.lt.x;
+        ++t; r.lt.y = t ? t->as_int(def.lt.y) : def.lt.y;
+        ++t; r.rb.x = t ? t->as_int(def.rb.x) : def.rb.x;
+        ++t; r.rb.y = t ? t->as_int(def.rb.y) : def.rb.y;
         return r;
     }
 };

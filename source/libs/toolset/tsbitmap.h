@@ -25,14 +25,15 @@ enum rot_filter_e
 
 enum resize_filter_e
 {
-	FILTER_NONE				= 0,
-	FILTER_BILINEAR			= 1,
-	FILTER_BICUBIC			= 2,
-	FILTER_TABLEBILINEAR	= 3,
-	FILTER_TABLEBICUBIC075	= 4,
-	FILTER_TABLEBICUBIC060	= 5,
-	FILTER_TABLEBICUBIC100	= 6,
-	FILTER_LANCZOS3			= 7
+	FILTER_NONE,
+	FILTER_BILINEAR,
+	FILTER_BICUBIC,
+	FILTER_TABLEBILINEAR,
+	FILTER_TABLEBICUBIC075,
+	FILTER_TABLEBICUBIC060,
+	FILTER_TABLEBICUBIC100,
+	FILTER_LANCZOS3,
+    FILTER_BOX_LANCZOS3,
 };
 
 enum yuv_fmt_e
@@ -45,7 +46,7 @@ enum yuv_fmt_e
 struct imgdesc_s
 {
     ivec2 sz;
-    int16 pitch; // pitch in signed and can be < 0
+    int16 pitch; // pitch is signed and can be < 0
     uint8 bitpp;
     uint8 _dummy;
     imgdesc_s() {}
@@ -71,6 +72,9 @@ void TSCALL img_helper_copy_components(uint8* des, const uint8* sou, const imgde
 void TSCALL img_helper_merge_with_alpha(uint8 *des, const uint8 *basesrc, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &base_info, const imgdesc_s &sou_info, int oalphao = -1);
 void TSCALL img_helper_yuv2rgb(uint8 *des, const imgdesc_s &des_info, const uint8 *sou, yuv_fmt_e yuvfmt);
 void TSCALL img_helper_rgb2yuv(uint8 *dst, const imgdesc_s &src_info, const uint8 *sou, yuv_fmt_e yuvfmt);
+
+// see convert.cpp
+void TSCALL img_helper_i420_to_ARGB(const uint8* src_y, int src_stride_y, const uint8* src_u, int src_stride_u, const uint8* src_v, int src_stride_v, uint8* dst_argb, int dst_stride_argb, int width, int height);
 
 struct bmpcore_normal_s;
 template<typename CORE> class bitmap_t;

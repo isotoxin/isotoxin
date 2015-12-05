@@ -36,6 +36,7 @@
     <ClCompile Include="stkwlk.cpp">
       <Filter>crashhandler</Filter>
     </ClCompile>
+    <ClCompile Include="imgcvt.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="spinlock">

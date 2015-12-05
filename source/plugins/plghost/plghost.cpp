@@ -1097,78 +1097,67 @@ static void __stdcall av_data(int gid, int cid, const media_data_s *data)
         int cid;
         int w;
         int h;
-        int fmt;
     };
 
     if (data->vfmt.fmt != VFMT_NONE)
     {
         switch (data->vfmt.fmt)
         {
+        case VFMT_XRGB:
+            {
+                int xrgb_sz = data->vfmt.width * data->vfmt.height * 4;
+                data_header_s *dh = (data_header_s *)ipcj->lock_buffer(xrgb_sz);
+
+                if (!dh) return;
+                inf_s *d2s = (inf_s *)(dh + 1);
+                dh->cmd = HQ_VIDEO;
+
+                d2s->gid = gid;
+                d2s->cid = cid;
+                d2s->w = data->vfmt.width;
+                d2s->h = data->vfmt.height;
+
+                byte *body = (byte *)(d2s + 1);
+
+                if (data->vfmt.pitch[0] == data->vfmt.width * 4)
+                {
+                    // same pitch
+                    memcpy(body, data->video_frame[0], xrgb_sz);
+                }
+                else
+                {
+                    int pitch_to = data->vfmt.width * 4;
+                    int pitch_from = data->vfmt.pitch[0];
+                    int tt = data->vfmt.height;
+                    const byte *dfrom = (const byte *)data->video_frame[0];
+                    for (int t = 0; t < tt; ++t, body += pitch_to, dfrom += pitch_from)
+                        memcpy(body, dfrom, pitch_to);
+                }
+
+                ipcj->unlock_send_buffer(dh, xrgb_sz);
+            }
+            break;
         case VFMT_I420:
             {
-                int i420sz_y = data->vfmt.width * data->vfmt.height;
-                int i420sz_uv = i420sz_y / 4;
-
-                int ssz = i420sz_y + (i420sz_uv*2) + sizeof(inf_s) + sizeof(data_header_s);
-
-                data_header_s *dh = (data_header_s *)ipcj->lock_buffer(ssz);
+                int xrgb_sz = data->vfmt.width * data->vfmt.height * 4;
+                data_header_s *dh = (data_header_s *)ipcj->lock_buffer(xrgb_sz);
                 if (!dh) return;
                 inf_s *d2s = (inf_s *)(dh+1);
                 dh->cmd = HQ_VIDEO;
 
                 d2s->gid = gid;
                 d2s->cid = cid;
-                d2s->fmt = data->vfmt.fmt;
                 d2s->w = data->vfmt.width;
                 d2s->h = data->vfmt.height;
 
-                byte *y = (byte *)(d2s + 1);
+                byte *body = (byte *)(d2s + 1);
 
-                if ( data->vfmt.pitch[0] == data->vfmt.width )
-                {
-                    memcpy( y, data->video_frame[0], i420sz_y );
-                } else
-                {
-                    int pitch_to = data->vfmt.width;
-                    int pitch_from = data->vfmt.pitch[0];
-                    int tt = data->vfmt.height;
-                    const byte *dfrom = (const byte *)data->video_frame[0];
-                    for(int t = 0; t < tt; ++t, y += pitch_to, dfrom += pitch_from )
-                        memcpy( y, dfrom, pitch_to );
-                }
+                img_helper_i420_to_ARGB((const byte *)data->video_frame[0], data->vfmt.pitch[0],
+                                        (const byte *)data->video_frame[1], data->vfmt.pitch[1], 
+                                        (const byte *)data->video_frame[2], data->vfmt.pitch[2], 
+                                        body, data->vfmt.width * 4, data->vfmt.width, data->vfmt.height);
 
-                byte *u = (byte *)(d2s + 1); u += i420sz_y;
-                byte *v = u + i420sz_uv;
-
-                if (data->vfmt.pitch[1] == data->vfmt.width/2)
-                {
-                    memcpy(u, data->video_frame[1], i420sz_uv);
-                }
-                else
-                {
-                    int pitch_to = data->vfmt.width/2;
-                    int pitch_from = data->vfmt.pitch[1];
-                    int tt = data->vfmt.height/2;
-                    const byte *dfrom = (const byte *)data->video_frame[1];
-                    for (int t = 0; t < tt; ++t, u += pitch_to, dfrom += pitch_from)
-                        memcpy(u, dfrom, pitch_to);
-                }
-
-                if (data->vfmt.pitch[2] == data->vfmt.width / 2)
-                {
-                    memcpy(v, data->video_frame[2], i420sz_uv);
-                }
-                else
-                {
-                    int pitch_to = data->vfmt.width / 2;
-                    int pitch_from = data->vfmt.pitch[2];
-                    int tt = data->vfmt.height / 2;
-                    const byte *dfrom = (const byte *)data->video_frame[2];
-                    for (int t = 0; t < tt; ++t, v += pitch_to, dfrom += pitch_from)
-                        memcpy(v, dfrom, pitch_to);
-                }
-
-                ipcj->unlock_send_buffer(dh, ssz);
+                ipcj->unlock_send_buffer(dh, xrgb_sz);
             }
             break;
         }

@@ -159,47 +159,16 @@ void TSCALL img_helper_yuv2rgb(uint8 *des, const imgdesc_s &des_info, const uint
 
                     dst[0] = ts::ARGB<int>((prer + Y0) >> 6, (preg + Y0) >> 6, (preb + Y0) >> 6);
                     dst[1] = ts::ARGB<int>((prer + Y1) >> 6, (preg + Y1) >> 6, (preb + Y1) >> 6);
-
                 }
             }
-
         }
         break;
     case ts::YFORMAT_I420:
         {
-            const uint8 *Y_plane = sou;
             int sz = des_info.sz.x * des_info.sz.y;
             const uint8 *U_plane = sou + sz;
             const uint8 *V_plane = U_plane + sz / 4;
-
-            for (int y = 0; y < des_info.sz.y; y+=2, des += des_info.pitch * 2, Y_plane += des_info.sz.x)
-            {
-                TSCOLOR *dst0 = (TSCOLOR *)des;
-                TSCOLOR *dst1 = (TSCOLOR *)(des + des_info.pitch);
-                TSCOLOR *dste = dst0 + des_info.sz.x;
-                for (; dst0 < dste; ++U_plane, ++V_plane, dst0 += 2, dst1 += 2, Y_plane += 2)
-                {
-
-                    int Y0 = (int)(Y_plane[0] * 0x0101 * YG) >> 16;
-                    int Y1 = (int)(Y_plane[1] * 0x0101 * YG) >> 16;
-                    int Y2 = (int)(Y_plane[0 + des_info.sz.x] * 0x0101 * YG) >> 16;
-                    int Y3 = (int)(Y_plane[1 + des_info.sz.x] * 0x0101 * YG) >> 16;
-
-                    uint8 U = *U_plane;
-                    uint8 V = *V_plane;
-
-                    int prer = BR - (V * VR);
-                    int preg = BG - (V * VG + U * UG);
-                    int preb = BB - (U * UB);
-
-                    dst0[0] = ts::ARGB<int>((prer+Y0) >> 6, (preg+Y0) >> 6, (preb+Y0) >> 6);
-                    dst0[1] = ts::ARGB<int>((prer+Y1) >> 6, (preg+Y1) >> 6, (preb+Y1) >> 6);
-
-                    dst1[0] = ts::ARGB<int>((prer+Y2) >> 6, (preg+Y2) >> 6, (preb+Y2) >> 6);
-                    dst1[1] = ts::ARGB<int>((prer+Y3) >> 6, (preg+Y3) >> 6, (preb+Y3) >> 6);
-
-               }
-            }
+            img_helper_i420_to_ARGB( sou, des_info.sz.x, U_plane, des_info.sz.x/2, V_plane, des_info.sz.x/2, des, des_info.pitch, des_info.sz.x, des_info.sz.y );
         }
         break;
     case ts::YFORMAT_I420x2:
@@ -1984,20 +1953,55 @@ template<typename CORE> void bitmap_t<CORE>::sharpen(bitmap_c& outimage, int lv)
 }
 
 bool resize3(const bmpcore_exbody_s &extbody, const uint8 *sou, const imgdesc_s &souinfo, resize_filter_e filt_mode);
+static bool resize3box(const bmpcore_exbody_s &extbody, const uint8 *sou, const imgdesc_s &souinfo, resize_filter_e filt_mode)
+{
+    if ( filt_mode == FILTER_BOX_LANCZOS3 )
+    {
+        ASSERT( extbody.info().sz >>= ts::ivec2(16) );
+
+        ivec2 sz2 = souinfo.sz / 2;
+        if ( sz2 >>= extbody.info().sz )
+        {
+            uint8 * tmp = (uint8 *)MM_ALLOC( sz2.x * sz2.y * 4 );
+
+            imgdesc_s desinf(sz2, 32);
+            img_helper_shrink_2x( tmp, sou, desinf, souinfo );
+
+
+            imgdesc_s souinf = desinf;
+            sz2 = sz2/2;
+            for(;sz2 >>= extbody.info().sz;)
+            {
+                desinf = imgdesc_s(sz2, 32);
+                img_helper_shrink_2x( tmp, tmp, desinf, souinf );
+                souinf = desinf;
+                sz2 = sz2 / 2;
+            }
+
+
+            bool r = resize3( extbody, tmp, souinf, FILTER_LANCZOS3 );
+            MM_FREE(tmp);
+            return r;
+        }
+        filt_mode = FILTER_LANCZOS3;
+    }
+
+    return resize3( extbody, sou, souinfo, filt_mode );
+}
 template<typename CORE> bool bitmap_t<CORE>::resize_to(bitmap_c& obm, const ivec2 & newsize, resize_filter_e filt_mode) const
 {
     obm.create_RGBA(newsize);
-    return resize3(obm.extbody(), body(), info(), filt_mode);
+    return resize3box(obm.extbody(), body(), info(), filt_mode);
 }
 
 template<typename CORE> bool bitmap_t<CORE>::resize_to(const bmpcore_exbody_s &extbody_, resize_filter_e filt_mode) const
 {
-    return resize3(extbody_, body(), info(), filt_mode);
+    return resize3box(extbody_, body(), info(), filt_mode);
 }
 
 template<typename CORE> bool bitmap_t<CORE>::resize_from(const bmpcore_exbody_s &extbody_, resize_filter_e filt_mode) const
 {
-    return resize3(extbody(), extbody_(), extbody_.info(), filt_mode);
+    return resize3box(extbody(), extbody_(), extbody_.info(), filt_mode);
 }
 
 template<typename CORE> void bitmap_t<CORE>::make_grayscale()

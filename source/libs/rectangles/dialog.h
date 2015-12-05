@@ -53,6 +53,7 @@ class gui_dialog_c : public gui_vscrollgroup_c
 
     GM_RECEIVER(gui_dialog_c, GM_DIALOG_PRESENT);
 
+    ts::wstr_c captiontext;
     int numtopbuttons = 0;
     int skipctls = 0;
     ts::irect border = ts::irect(0);
@@ -98,6 +99,8 @@ protected:
         ts::TSCOLOR color = 0;
         enum ctl_e
         {
+            _CAPTION,
+            _HEADER,
             _HGROUP,
             _VSPACE,
             _PANEL,
@@ -171,6 +174,7 @@ protected:
         void hgroup( const ts::wsptr& desc );
         description_s& label( const ts::wsptr& text );
         description_s& hiddenlabel( const ts::wsptr& text, ts::TSCOLOR col );
+        void page_caption( const ts::wsptr& text );
         void page_header( const ts::wsptr& text );
         description_s& panel(int h, GUIPARAMHANDLER drawhandler = nullptr);
         description_s& vspace( int h = 5, GUIPARAMHANDLER oncreatehanler = nullptr );
@@ -217,6 +221,8 @@ protected:
         descmaker(const descmaker&) UNUSED;
     };
 
+    ts::wstr_c header_prepend;
+    ts::wstr_c header_append;
     ts::wstr_c label_path_selector_caption;
     ts::wstr_c label_file_selector_caption;
 
@@ -289,5 +295,5 @@ public:
 
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
-
+    /*virtual*/ ts::wstr_c get_name() const { return captiontext; }
 };

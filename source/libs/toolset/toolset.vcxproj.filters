@@ -27,9 +27,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="internal\cpuaccel.cpp">
-      <Filter>src\internal\bitmaps</Filter>
-    </ClCompile>
     <ClCompile Include="internal\resample.cpp">
       <Filter>src\internal\bitmaps</Filter>
     </ClCompile>
@@ -144,11 +141,14 @@
     <ClCompile Include="internal\lnkreader.cpp">
       <Filter>src\internal</Filter>
     </ClCompile>
+    <ClCompile Include="internal\cpu_detector.cpp">
+      <Filter>src\internal</Filter>
+    </ClCompile>
+    <ClCompile Include="internal\convert.cpp">
+      <Filter>src\internal\bitmaps</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="internal\cpuaccel.h">
-      <Filter>src\internal\bitmaps</Filter>
-    </ClInclude>
     <ClInclude Include="internal\math.h">
       <Filter>src\internal\bitmaps</Filter>
     </ClInclude>
@@ -264,6 +264,12 @@
       <Filter>src\internal\bitmaps</Filter>
     </ClInclude>
     <ClInclude Include="tsexecutor.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="internal\cpu_detector.h">
+      <Filter>src\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="internal\fourcc.h">
       <Filter>src</Filter>
     </ClInclude>
   </ItemGroup>

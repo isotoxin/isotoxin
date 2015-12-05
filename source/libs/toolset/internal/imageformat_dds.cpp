@@ -1,4 +1,5 @@
 #include "toolset.h"
+#include "fourcc.h"
 #include <ddraw.h>
 
 namespace ts
@@ -32,12 +33,6 @@ namespace ts
 #define DDS_CUBEMAP_NEGATIVEY   0x00002000L
 #define DDS_CUBEMAP_POSITIVEZ   0x00004000L
 #define DDS_CUBEMAP_NEGATIVEZ   0x00008000L
-
-
-#define IL_MAKEFOURCC(ch0, ch1, ch2, ch3)                              \
-            ((int)(byte)(ch0) | ((int)(byte)(ch1) << 8) |   \
-            ((int)(byte)(ch2) << 16) | ((int)(byte)(ch3) << 24 ))
-
 
 #ifdef _WIN32
     #pragma pack(push, dds_struct, 1)
@@ -137,7 +132,7 @@ image_read_func img_reader_s::detect_dds_format(const void *sourcebuf, int sourc
     {
         switch (dds->FourCC)
         {
-            case IL_MAKEFOURCC('D','X','T','1'):
+            case MAKEFOURCC('D','X','T','1'):
                 ((dds_decompressor_dxt1_s *)&data)->dds = dds;
                 size.x = dds->Width;
                 size.y = dds->Height;
@@ -147,7 +142,7 @@ image_read_func img_reader_s::detect_dds_format(const void *sourcebuf, int sourc
             //case IL_MAKEFOURCC('D','X','T','2'):
             //    break;
 
-            case IL_MAKEFOURCC('D','X','T','3'):
+            case MAKEFOURCC('D','X','T','3'):
                 ((dds_decompressor_dxt3_s *)&data)->dds = dds;
                 size.x = dds->Width;
                 size.y = dds->Height;
@@ -157,7 +152,7 @@ image_read_func img_reader_s::detect_dds_format(const void *sourcebuf, int sourc
             //case IL_MAKEFOURCC('D','X','T','4'):
             //    break;
 
-            case IL_MAKEFOURCC('D','X','T','5'):
+            case MAKEFOURCC('D','X','T','5'):
                 ((dds_decompressor_dxt5_s *)&data)->dds = dds;
                 size.x = dds->Width;
                 size.y = dds->Height;

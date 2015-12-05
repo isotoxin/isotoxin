@@ -26,7 +26,6 @@ static void lcb(DShow::LogType type, const wchar_t *msg, void *param)
 }
 #endif
 
-
 void enum_video_capture_devices(vsb_list_t &list, bool add_desktop)
 {
 #ifdef DSHOW_LOGGING
@@ -34,13 +33,13 @@ void enum_video_capture_devices(vsb_list_t &list, bool add_desktop)
 #endif
 
     std::vector<VideoDevice> devices;
-    Device::EnumVideoDevices( devices );
+    Device::EnumVideoDevices(devices);
 
-    for(const VideoDevice &vd : devices)
+    for (const VideoDevice &vd : devices)
     {
         vsb_descriptor_s &d = list.add();
-        d.desc.set( vd.name.c_str(), vd.name.length() );
-        d.id.set( vd.path.c_str(), vd.path.length() );
+        d.desc.set(vd.name.c_str(), vd.name.length());
+        d.id.set(vd.path.c_str(), vd.path.length());
     }
 
     if (add_desktop)
@@ -82,9 +81,7 @@ vsb_c *vsb_c::build( const vsb_descriptor_s &desc )
         vsb_dshow_camera_c *cam = TSNEW(vsb_dshow_camera_c);
         if (cam->init(desc))
             return cam;
-
         TSDEL(cam);
-
     }
 
     vsb_desktop_c *cam = TSNEW( vsb_desktop_c );
@@ -162,6 +159,13 @@ void vsb_desktop_c::grab_desktop::remove_owner(vsb_desktop_c *owner)
 {
     spinlock::auto_simple_lock l(sync);
 
+    while (locked == owner)
+    {
+        l.unlock();
+        Sleep(1);
+        l.lock(sync);
+    }
+
     int cnt = owners.size();
     for (int i = 0; i < cnt; ++i)
     {
@@ -224,9 +228,25 @@ void vsb_desktop_c::grab_desktop::grab(const ts::irect &gr)
         return R_CANCEL;
     }
 
-    for (vsb_desktop_c * c : owners)
-        c->grabcb(grabbuff);
+    ++grabtag;
+    bool some_processed = false;
+    do
+    {
+        some_processed = false;
+        for (vsb_desktop_c * c : owners)
+        {
+            if (c->grabtag == grabtag) continue;
+            c->grabtag = grabtag;
+            locked = c;
+            spinlock::simple_unlock(sync);
 
+            c->grabcb(grabbuff);
+
+            spinlock::simple_lock(sync);
+            locked = nullptr;
+            some_processed = true;
+        }
+    } while (some_processed);
 
     next_time += 1000/GRAB_DESKTOP_FPS;
     
@@ -256,7 +276,7 @@ void vsb_desktop_c::grabcb(ts::drawable_bitmap_c &gbmp)
             if (b->info().sz != dsz)
                 b->create(dsz);
 
-            b->resize_from(gbmp.extbody(), ts::FILTER_LANCZOS3);
+            b->resize_from(gbmp.extbody(), ts::FILTER_BOX_LANCZOS3);
         }
         call_bmp_ready_handler(b->extbody());
         unlock(b);
@@ -284,28 +304,106 @@ bool vsb_desktop_c::init(const vsb_descriptor_s &desc)
 vsb_dshow_camera_c::core_c *vsb_dshow_camera_c::core_c::first = nullptr;
 vsb_dshow_camera_c::core_c *vsb_dshow_camera_c::core_c::last = nullptr;
 
-vsb_dshow_camera_c::core_c::core_c(const vsb_descriptor_s &desc_):Device(DShow::InitGraph::True), id(desc_.id)
+vsb_dshow_camera_c::core_c::core_c(const vsb_descriptor_s &desc_):id(desc_.id)
 {
     LIST_ADD( this, first, last, prev, next );
+    initializing = true;
+}
+
+vsb_dshow_camera_c::core_c::~core_c()
+{
+    LIST_DEL( this, first, last, prev, next );
+}
+
+bool vsb_dshow_camera_c::core_c::get(vsb_dshow_camera_c *owner, const vsb_descriptor_s &desc)
+{
+    for( core_c *f = first; f; f = f->next )
+        if (f->id.equals(desc.id))
+            return f->add_owner( owner );
+
+    core_c *newcore = TSNEW(core_dshow_c, desc);
+    return newcore->add_owner(owner);
+}
+
+bool vsb_dshow_camera_c::core_c::add_owner( vsb_dshow_camera_c *owner )
+{
+    spinlock::auto_simple_lock l(sync);
+
+    for( vsb_dshow_camera_c *ptr : owners )
+        if (ptr == owner)
+        {
+            ASSERT( owner->core == this );
+            return initializing;
+        }
+
+    owners.add( owner );
+    owner->core = this;
+    if (owners.size() >= 2)
+        owner->set_video_size( owners.get(0)->get_video_size() );
+    return initializing;
+}
+
+void vsb_dshow_camera_c::core_c::remove_owner( vsb_dshow_camera_c *owner )
+{
+    spinlock::auto_simple_lock l(sync);
+
+    while (locked == owner)
+    {
+        l.unlock();
+        Sleep(1);
+        l.lock(sync);
+    }
+
+    int cnt = owners.size();
+    for(int i=0;i<cnt;++i)
+    {
+        if ( owners.get(i) == owner )
+        {
+            ts::shared_ptr<core_c> refcore = this; // up ref
+            owners.remove_fast(i);
+            owner->core = nullptr;
+            l.unlock();
+            return;
+        }
+    }
+}
+
+void vsb_dshow_camera_c::core_c::initialized( const ts::ivec2 &videosize )
+{
+    spinlock::auto_simple_lock l(sync);
+    busy = false;
+    for (vsb_dshow_camera_c * c : owners)
+        c->initialized(videosize);
+}
+
+void vsb_dshow_camera_c::core_c::setbusy()
+{
+    spinlock::auto_simple_lock l(sync);
+    busy = false;
+    for (vsb_dshow_camera_c * c : owners)
+        c->busy = true;
+}
+
+
+
+vsb_dshow_camera_c::core_dshow_c::core_dshow_c(const vsb_descriptor_s &desc_):core_c(desc_), Device(DShow::InitGraph::True)
+{
     VideoConfig config;
 
     config.name = desc_.desc;
     config.path = desc_.id;
     config.callback = DELEGATE(this, dshocb);
 
-    initializing = true;
     run_initializer(config);
 
 }
-
-vsb_dshow_camera_c::core_c::~core_c()
+vsb_dshow_camera_c::core_dshow_c::~core_dshow_c()
 {
-    LIST_DEL( this, first, last, prev, next );
     if (!initializing && Active())
         Stop();
 }
 
-void vsb_dshow_camera_c::core_c::run_initializer(const VideoConfig &config)
+void vsb_dshow_camera_c::core_dshow_c::run_initializer(const VideoConfig &config)
 {
     struct init_camera : public ts::task_c
     {
@@ -327,7 +425,7 @@ void vsb_dshow_camera_c::core_c::run_initializer(const VideoConfig &config)
 
             camera.SetVideoConfig(&config);
 
-            //if (VideoFormat::YUY2 != config.format)
+            if (VideoFormat::XRGB != config.format)
             {
                 config.useDefaultConfig = false;
                 config.format = VideoFormat::XRGB;
@@ -366,8 +464,10 @@ void vsb_dshow_camera_c::core_c::run_initializer(const VideoConfig &config)
                 camcore->initializing = false;
                 if (!canceled && camera.Valid() && camera.Active())
                 {
-                    *((DShow::Device *)camcore) = std::move(camera);
-                    camcore->initialized(ts::ivec2( config.cx, config.cy ));
+                    core_dshow_c *dshowcam = ts::ptr_cast<core_dshow_c *>( camcore.get() );
+                    DShow::Device *ll = ts::ptr_cast<DShow::Device *>(dshowcam);
+                    *ll = std::move(camera);
+                    camcore->initialized(ts::ivec2(config.cx, config.cy));
                 }
             }
 
@@ -383,81 +483,33 @@ void vsb_dshow_camera_c::core_c::run_initializer(const VideoConfig &config)
 }
 
 
-bool vsb_dshow_camera_c::core_c::get(vsb_dshow_camera_c *owner, const vsb_descriptor_s &desc)
-{
-    for( core_c *f = first; f; f = f->next )
-        if (f->id.equals(desc.id))
-            return f->add_owner( owner );
-
-    core_c *newcore = TSNEW( core_c, desc );
-    return newcore->add_owner(owner);
-}
-
-bool vsb_dshow_camera_c::core_c::add_owner( vsb_dshow_camera_c *owner )
+void vsb_dshow_camera_c::core_dshow_c::dshocb(const DShow::VideoConfig &config, unsigned char *data, size_t datasize, long long startTime, long long stopTime)
 {
     spinlock::auto_simple_lock l(sync);
-
-    for( vsb_dshow_camera_c *ptr : owners )
-        if (ptr == owner)
-        {
-            ASSERT( owner->core == this );
-            return initializing;
-        }
-
-    owners.add( owner );
-    owner->core = this;
-    if (owners.size() >= 2)
-        owner->set_video_size( owners.get(0)->get_video_size() );
-    return initializing;
-}
-
-void vsb_dshow_camera_c::core_c::remove_owner( vsb_dshow_camera_c *owner )
-{
-    spinlock::auto_simple_lock l(sync);
-
-    int cnt = owners.size();
-    for(int i=0;i<cnt;++i)
-    {
-        if ( owners.get(i) == owner )
-        {
-            ts::shared_ptr<core_c> refcore = this; // up ref
-            owners.remove_fast(i);
-            owner->core = nullptr;
-            l.unlock();
-            return;
-        }
-    }
-}
-
-void vsb_dshow_camera_c::core_c::dshocb(const DShow::VideoConfig &config, unsigned char *data, size_t datasize, long long startTime, long long stopTime)
-{
-    spinlock::auto_simple_lock l(sync);
-
     ts::tmpalloc_c talloc; // ugly, but this thread was created by system, not me :(
 
-    for (vsb_dshow_camera_c * c : owners)
+    ++frametag;
+    bool some_processed = false;
+    do
     {
-        ts::bmpcore_exbody_s eb(data + config.cx * 4 * (config.cy-1), ts::imgdesc_s(ts::ivec2(config.cx, config.cy), 32, ts::int16(-config.cx * 4)));
-        c->dshocb(eb);
-    }
-}
+        some_processed = false;
+        for (vsb_dshow_camera_c * c : owners)
+        {
+            if (c->frametag == frametag) continue;
+            c->frametag = frametag;
+            locked = c;
+            l.unlock();
 
-void vsb_dshow_camera_c::core_c::initialized( const ts::ivec2 &videosize )
-{
-    spinlock::auto_simple_lock l(sync);
-    busy = false;
-    for (vsb_dshow_camera_c * c : owners)
-        c->initialized(videosize);
-}
+            ts::bmpcore_exbody_s eb(data + config.cx * 4 * (config.cy - 1), ts::imgdesc_s(ts::ivec2(config.cx, config.cy), 32, ts::int16(-config.cx * 4)));
+            c->dshocb(eb);
 
-void vsb_dshow_camera_c::core_c::setbusy()
-{
-    spinlock::auto_simple_lock l(sync);
-    busy = false;
-    for (vsb_dshow_camera_c * c : owners)
-        c->busy = true;
-}
+            l.lock(sync);
+            locked = nullptr;
+            some_processed = true;
+        }
+    } while (some_processed);
 
+}
 
 void vsb_dshow_camera_c::dshocb(const ts::bmpcore_exbody_s &eb)
 {
@@ -476,7 +528,7 @@ void vsb_dshow_camera_c::dshocb(const ts::bmpcore_exbody_s &eb)
             if (b->info().sz != dsz)
                 b->create(dsz);
 
-            b->resize_from( eb, ts::FILTER_LANCZOS3 );
+            b->resize_from( eb, ts::FILTER_BOX_LANCZOS3 );
         }
         call_bmp_ready_handler(b->extbody());
         unlock(b);
@@ -492,13 +544,11 @@ vsb_dshow_camera_c::~vsb_dshow_camera_c()
     stop_lockers();
 }
 
-
 bool vsb_dshow_camera_c::init(const vsb_descriptor_s &desc_)
 {
     initializing = core_c::get(this, desc_);
     return true;
 }
-
 
 video_frame_decoder_c::video_frame_decoder_c(active_protocol_c *ap, incoming_video_frame_s *f_) :f(f_), ap(ap)
 {
@@ -513,6 +563,7 @@ video_frame_decoder_c::video_frame_decoder_c(active_protocol_c *ap, incoming_vid
 
     g_app->add_task( this );
 }
+
 video_frame_decoder_c::~video_frame_decoder_c()
 {
     if (f)
@@ -530,44 +581,16 @@ video_frame_decoder_c::~video_frame_decoder_c()
 /*virtual*/ int video_frame_decoder_c::iterate(int pass)
 {
     if (nullptr == f || nullptr == display->notice) return R_CANCEL;
+    if ( display->get_desired_size() == ts::ivec2(0) ) return R_CANCEL;
 
-    ts::bitmap_c &prebuf = display->prebuf;
-    ts::ivec2 prebufsz;
 
-    switch (f->fmt)
+    ts::ivec2 lsz;
+    if (ts::drawable_bitmap_c *b = display->lockbuf(&lsz))
     {
-    case VFMT_I420:
+        if (lsz != b->info().sz)
+            b->create(lsz);
 
-        prebufsz = f->sz/2;
-        if ( prebufsz >>= display->get_desired_size() )
-        {
-            // desired size less then 1/4 of received image, so
-            // do 2x shrink while I420 -> RGB conversion (faster conversion and better quality)
-            if (prebufsz > prebuf.info().sz)
-                prebuf.create_RGBA(prebufsz);
-
-            prebuf.convert_from_yuv(ts::ivec2(0), prebufsz, f->data(), ts::YFORMAT_I420x2);
-
-        } else
-        {
-            prebufsz = f->sz;
-            if (prebufsz > prebuf.info().sz)
-                prebuf.create_RGBA(f->sz);
-
-            prebuf.convert_from_yuv(ts::ivec2(0), prebufsz, f->data(), ts::YFORMAT_I420);
-        }
-
-
-        break;
-    }
-
-    ts::bmpcore_exbody_s pbextbody = prebuf.extbody( ts::irect(0, prebufsz) );
-    if (ts::drawable_bitmap_c *b = display->lockbuf(&prebufsz))
-    {
-        if (prebufsz != b->info().sz)
-            b->create(prebufsz);
-
-        b->resize_from( pbextbody, ts::FILTER_LANCZOS3);
+        b->resize_from(ts::bmpcore_exbody_s(f->data(), ts::imgdesc_s(f->sz, 32)), ts::FILTER_BOX_LANCZOS3);
 
         display->unlock(b);
     }

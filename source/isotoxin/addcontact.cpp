@@ -70,6 +70,7 @@ menu_c dialog_addcontact_c::networks()
 /*virtual*/ int dialog_addcontact_c::additions(ts::irect &)
 {
     bool resend = !inparam.pubid.is_empty();
+    if (resend) networks_available = true;
 
     descmaker dm(descs);
     dm << 1;

@@ -78,11 +78,7 @@ struct xchg_buffer_header_s
     DWORD lastusetime;
     bstate_e st;
 
-    void *getptr() const
-    {
-        char *p = (char *)(this + 1);
-        return p + XCHG_BUFFER_ADDITION_SPACE;
-    }
+    void *getptr() const;
 
     bool isptr(const void *ptr) const
     {
@@ -91,6 +87,21 @@ struct xchg_buffer_header_s
     }
 
 };
+
+namespace
+{
+    enum padding_e
+    {
+        XCHG_BUF_HDR_SIZE = (sizeof(xchg_buffer_header_s) + XCHG_BUFFER_ADDITION_SPACE + 31) & (~31),
+    };
+}
+
+_inline void *xchg_buffer_header_s::getptr() const
+{
+    char *p = (char *)this;
+    return p + XCHG_BUF_HDR_SIZE;
+}
+
 
 #define MAX_XCHG_BUFFERS 16
 
@@ -319,10 +330,10 @@ struct ipc_data_s
                 ReadFile(pipe_in, ((char *)&buf) + sizeof(d), sizeof(new_xchg_buffer_s) - sizeof(d), &r, nullptr);
 
                 ipc_data_s::exchange_buffer_s bb;
-                bb.mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, 0, sizeof(xchg_buffer_header_s) + XCHG_BUFFER_ADDITION_SPACE + buf.allocated, buf.bufname);
+                bb.mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, 0, XCHG_BUF_HDR_SIZE + buf.allocated, buf.bufname);
                 if (!bb.mapping)
                     OOPS;
-                bb.ptr = (xchg_buffer_header_s *)MapViewOfFile(bb.mapping, FILE_MAP_WRITE, 0, 0, sizeof(xchg_buffer_header_s) + XCHG_BUFFER_ADDITION_SPACE + buf.allocated);
+                bb.ptr = (xchg_buffer_header_s *)MapViewOfFile(bb.mapping, FILE_MAP_WRITE, 0, 0, XCHG_BUF_HDR_SIZE + buf.allocated);
                 if (!bb.ptr)
                 {
                     CloseHandle(bb.mapping);
@@ -696,9 +707,9 @@ void *ipc_junction_s::lock_buffer(int size)
     sprintf_s(buf.bufname, sizeof(buf.bufname), "ipcb_" __STR1__(IPCVER) "_%u_%u", pid, d.xchg_buffer_tag++);
 
     ipc_data_s::exchange_buffer_s b;
-    b.mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, 0, sizeof(xchg_buffer_header_s) + XCHG_BUFFER_ADDITION_SPACE + size, buf.bufname);
+    b.mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, 0, XCHG_BUF_HDR_SIZE + size, buf.bufname);
     if (nullptr == b.mapping) return nullptr;
-    b.ptr = (xchg_buffer_header_s *)MapViewOfFile(b.mapping, FILE_MAP_WRITE, 0, 0, sizeof(xchg_buffer_header_s) + XCHG_BUFFER_ADDITION_SPACE + size);
+    b.ptr = (xchg_buffer_header_s *)MapViewOfFile(b.mapping, FILE_MAP_WRITE, 0, 0, XCHG_BUF_HDR_SIZE + size);
     if (!b.ptr)
     {
         CloseHandle(b.mapping);
@@ -766,6 +777,14 @@ void ipc_junction_s::unlock_buffer(const void *ptr)
 
         if (b.ptr->isptr( ptr ))
         {
+            if (xchg_buffer_header_s::BST_DEAD == b.ptr->st)
+            {
+                d.cleaup_buffers_signal = true;
+                x.unlock();
+                d.remove_xchg_buffer(i);
+                return;
+            }
+
 #ifdef _DEBUG
             if (xchg_buffer_header_s::BST_LOCKED != b.ptr->st || b.ptr->pid != GetCurrentProcessId())
                 __debugbreak();

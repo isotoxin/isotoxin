@@ -197,7 +197,7 @@ void dialog_settings_c::set_startopts()
 
 /*virtual*/ ts::wstr_c dialog_settings_c::get_name() const
 {
-    return TTT("[appname]: Settings",31);
+    return ts::wstr_c(TTT("[appname]: Settings",31)).append(CONSTWSTR(" / ")).append(__super::get_name());
 }
 
 /*virtual*/ void dialog_settings_c::created()
@@ -626,7 +626,7 @@ void dialog_settings_c::mod()
             .add(TTT("Group chat",305), 0, TABSELMI(MASK_PROFILE_GCHAT) )
             .add(TTT("History",327), 0, TABSELMI(MASK_PROFILE_HISTORY) )
             .add(TTT("File receive",236), 0, TABSELMI(MASK_PROFILE_FILES) )
-            .add(TTT("Networks",33), 0, TABSELMI(MASK_PROFILE_NETWORKS) );
+            .add(loc_text(loc_networks), 0, TABSELMI(MASK_PROFILE_NETWORKS) );
     }
 
     m.add_sub(TTT("Application",34))
@@ -639,8 +639,7 @@ void dialog_settings_c::mod()
     descmaker dm( descs );
     dm << MASK_APPLICATION_COMMON; //_________________________________________________________________________________________________//
 
-    dm().page_header(TTT("General application settings",108));
-    dm().vspace(10);
+    dm().page_caption(TTT("General application settings",108));
     dm().combik(TTT("Language",107)).setmenu( list_langs( curlang, DELEGATE(this, select_lang) ) ).setname( CONSTASTR("langs") );
     dm().vspace(10);
     dm().combik(TTT("GUI theme",233)).setmenu(list_themes()).setname(CONSTASTR("themes"));
@@ -661,8 +660,7 @@ void dialog_settings_c::mod()
 
     dm << MASK_APPLICATION_SYSTEM; //_________________________________________________________________________________________________//
 
-    dm().page_header( TTT("Some system settings of application",36) );
-    dm().vspace(10);
+    dm().page_caption( TTT("Some system settings of application",36) );
 
     dm().checkb(TTT("Autostart", 309), DELEGATE(this, startopt_handler), startopt).setname(CONSTASTR("start")).setmenu(
         menu_c().add(loc_text(loc_autostart), 0, MENUHANDLER(), CONSTASTR("1"))
@@ -684,8 +682,7 @@ void dialog_settings_c::mod()
 
 
     dm << MASK_APPLICATION_SETSOUND; //______________________________________________________________________________________________//
-    dm().page_header(TTT("Audio settings",127));
-    dm().vspace(10);
+    dm().page_caption(TTT("Audio settings",127));
     dm().hgroup(TTT("Microphone",126));
     dm().combik(HGROUP_MEMBER).setmenu( list_audio_capture_devices() ).setname( CONSTASTR("mic") );
     dm().button(HGROUP_MEMBER, CONSTWSTR("face=rec"), DELEGATE(this, test_mic) ).sethint(TTT("Record test 5 seconds",280)).setname( CONSTASTR("micrecb") );
@@ -722,8 +719,7 @@ void dialog_settings_c::mod()
     dm().label(L"").setname("soundhint");
 
     dm << MASK_APPLICATION_SOUNDS; //______________________________________________________________________________________________//
-    dm().page_header(TTT("Sounds",294));
-    dm().vspace(10);
+    dm().page_caption(TTT("Sounds",294));
     dm().list(TTT("Sounds list",295), L"", -270).setname(CONSTASTR("soundslist"));
     dm().vspace();
     dm().hgroup(TTT("Presets",298));
@@ -749,8 +745,8 @@ void dialog_settings_c::mod()
     }
 
     dm << MASK_APPLICATION_VIDEO; //______________________________________________________________________________________________//
-    dm().page_header(TTT("Video settings",348));
-    dm().vspace(10);
+    dm().page_caption(TTT("Video settings",348));
+    dm().vspace(15);
     dm().combik(TTT("Default video source",349)).setmenu(list_video_capture_devices()).setname(CONSTASTR("camera"));
     dm().vspace();
     dm().panel(PREVIEW_HEIGHT, DELEGATE(this, drawcamerapanel)).setname(CONSTASTR("preview"));
@@ -758,8 +754,7 @@ void dialog_settings_c::mod()
     if (profile_selected)
     {
         dm << MASK_PROFILE_COMMON; //____________________________________________________________________________________________________//
-        dm().page_header( TTT("General profile settings",38) );
-        dm().vspace(10);
+        dm().page_caption( TTT("General profile settings",38) );
         dm().textfield( TTT("Name",52), from_utf8(username), DELEGATE(this,username_edit_handler) ).setname(CONSTASTR("uname")).focus(true);
         dm().vspace();
         dm().textfield(TTT("Status",68), from_utf8(userstatusmsg), DELEGATE(this, statusmsg_edit_handler)).setname(CONSTASTR("ustatus"));
@@ -785,8 +780,7 @@ void dialog_settings_c::mod()
             );
 
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
-        dm().page_header(TTT("Chat settings",110));
-        dm().vspace(10);
+        dm().page_caption(TTT("Chat settings",110));
         int enter_key = ctl2send; if (enter_key == EKO_ENTER_NEW_LINE_DOUBLE_ENTER) enter_key = EKO_ENTER_NEW_LINE;
         dm().radio(TTT("Enter key",111), DELEGATE(this, ctl2send_handler), enter_key).setmenu(
             menu_c().add(TTT("Enter - send message, Shift+Enter or Ctrl+Enter - new line",112), 0, MENUHANDLER(), ts::amake<int>(EKO_ENTER_SEND))
@@ -834,8 +828,7 @@ void dialog_settings_c::mod()
             );
 
         dm << MASK_PROFILE_GCHAT; //____________________________________________________________________________________________________//
-        dm().page_header(TTT("Group chat settings",306));
-        dm().vspace(10);
+        dm().page_caption(TTT("Group chat settings",306));
 
         dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_GCHAT, handler), bgroups[BGROUP_GCHAT].current).setmenu(
             menu_c().add(TTT("Mute microphone on audio group chat invite",307), 0, MENUHANDLER(), CONSTASTR("1"))
@@ -844,8 +837,7 @@ void dialog_settings_c::mod()
 
         dm << MASK_PROFILE_HISTORY; //____________________________________________________________________________________________________//
 
-        dm().page_header(TTT("Message log settings",328));
-        dm().vspace(10);
+        dm().page_caption(TTT("Message log settings",328));
 
         dm().checkb(ts::wstr_c(), DELEGATE(this, histopts_handler), bgroups[BGROUP_HISTORY].current).setmenu(
             menu_c().add(TTT("Keep message history", 232), 0, MENUHANDLER(), CONSTASTR("1"))
@@ -864,8 +856,7 @@ void dialog_settings_c::mod()
 
 
         dm << MASK_PROFILE_FILES; //____________________________________________________________________________________________________//
-        dm().page_header(TTT("File receive settings",237));
-        dm().vspace(10);
+        dm().page_caption(TTT("File receive settings",237));
         dm().path(TTT("Default download folder",174), downloadfolder, DELEGATE(this, downloadfolder_edit_handler));
         dm().vspace();
 
@@ -881,6 +872,7 @@ void dialog_settings_c::mod()
 
 
         dm << MASK_PROFILE_NETWORKS; //_________________________________________________________________________________________________//
+        dm().page_caption(loc_text(loc_networks));
         dm().page_header(TTT("[appname] supports simultaneous connections to multiple networks.",130));
         dm().vspace(10);
         dm().list(TTT("Active network connections",54), L"", -270).setname(CONSTASTR("protoactlist"));
@@ -1318,6 +1310,7 @@ ts::str_c dialog_protosetup_params_s::setup_name( const ts::asptr &tag, int n )
 bool dialog_settings_c::addnetwork(RID, GUIPARAM)
 {
     dialog_protosetup_params_s prms( &available_prots, &table_active_protocol_underedit, DELEGATE(this,addeditnethandler));
+    prms.configurable.ipv6_enable = true;
     prms.configurable.udp_enable = true;
     prms.configurable.server_port = 0;
     prms.configurable.initialized = true;
@@ -2145,7 +2138,7 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
     if (addheader)
     {
         hdr.append(CONSTWSTR("</l>"));
-        dm().page_header(hdr);
+        dm().page_caption(hdr);
     }
 
     if (params.avprotos)
@@ -2177,6 +2170,14 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
             menu_c().add(TTT("Connect at startup",204), 0, MENUHANDLER(), CONSTASTR("1"))  );
 
         addh += 22;
+    }
+
+    if (0 != (params.conn_features & CF_IPv6_OPTION))
+    {
+        ASSERT(params.configurable.initialized);
+        addh += 22;
+        dm().checkb(ts::wstr_c(), DELEGATE(this, network_ipv6), params.configurable.ipv6_enable ? 1 : 0).setmenu(
+            menu_c().add(TTT("Allow IPv6",361), 0, MENUHANDLER(), CONSTASTR("1")));
     }
 
     if (0 != (params.conn_features & CF_UDP_OPTION))
@@ -2287,9 +2288,17 @@ bool dialog_setup_network_c::netname_edit(const ts::wstr_c &t)
 
 /*virtual*/ ts::wstr_c dialog_setup_network_c::get_name() const
 {
+    ts::wstr_c n;
     if (params.avprotos)
-        return TTT("[appname]: New network",53);
-    return TTT("[appname]: Connection properties",263);
+        n = TTT("[appname]: New network",53);
+    else
+        n = TTT("[appname]: Connection properties",263);
+
+    ts::wstr_c nn = __super::get_name();
+    if (!nn.is_empty())
+        n.append(CONSTWSTR(" (")).append(__super::get_name()).append_char(')');
+    return n;
+
 }
 /*virtual*/ ts::ivec2 dialog_setup_network_c::get_min_size() const
 {
@@ -2308,6 +2317,13 @@ bool dialog_setup_network_c::network_serverport(const ts::wstr_c & t)
     params.configurable.server_port = t.as_int();
     if (params.configurable.server_port < 0 || params.configurable.server_port > 65535)
         params.configurable.server_port = 0;
+    return true;
+}
+
+bool dialog_setup_network_c::network_ipv6(RID, GUIPARAM p)
+{
+    params.configurable.initialized = true;
+    params.configurable.ipv6_enable = p != nullptr;
     return true;
 }
 

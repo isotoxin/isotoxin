@@ -530,3 +530,24 @@ __inline unsigned __int64 my_ntohll(unsigned __int64 Value) //-V524
     const unsigned __int64 Retval = _MY_WS2_32_WINSOCK_SWAP_LONGLONG(Value);
     return Retval;
 }
+
+extern "C" { extern DWORD g_cpu_caps; extern int g_cpu_cores; }
+
+namespace cpu_detect
+{
+    enum cpu_caps_e
+    {
+        CPU_MMX = 1,
+        CPU_SSE = 2,
+        CPU_SSE2 = 4,
+        CPU_SSE3 = 8,
+        CPU_SSSE3 = 16,
+        CPU_SSE41 = 32,
+        CPU_AVX = 64,
+        CPU_AVX2 = 128,
+    };
+
+    __inline bool CCAPS(u32 mask) { return 0 != (g_cpu_caps & mask); }
+}
+
+void img_helper_i420_to_ARGB(const byte* src_y, int src_stride_y, const byte* src_u, int src_stride_u, const byte* src_v, int src_stride_v, byte* dst_argb, int dst_stride_argb, int width, int height);

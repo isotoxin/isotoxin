@@ -516,11 +516,14 @@ public:
 
     const post_s * fix_history( message_type_app_e oldt, message_type_app_e newt, const contact_key_s& sender = contact_key_s() /* self - empty - no matter */, time_t update_time = 0 /* 0 - no need update */, const ts::str_c *update_text = nullptr /* null - no need update */ );
 
+    void accept_call( auto_accept_audio_call_e aaac, bool video );
+
     bool b_accept(RID, GUIPARAM);
     bool b_reject(RID, GUIPARAM);
     bool b_resend(RID, GUIPARAM);
     bool b_kill(RID, GUIPARAM);
     bool b_load(RID, GUIPARAM);
+    bool b_accept_call_with_video(RID, GUIPARAM);
     bool b_accept_call(RID, GUIPARAM);
     bool b_reject_call(RID, GUIPARAM);
     bool b_hangup(RID, GUIPARAM);
@@ -712,7 +715,7 @@ public:
     const contact_c & get_self() const { return *self; }
     contact_c & get_self() { return *self; }
 
-    void kill(const contact_key_s &ck);
+    void kill(const contact_key_s &ck, bool kill_with_history = false);
 
     void update_meta();
 

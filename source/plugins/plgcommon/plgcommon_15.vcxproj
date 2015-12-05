@@ -85,6 +85,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="excpn.cpp" />
+    <ClCompile Include="imgcvt.cpp" />
     <ClCompile Include="md5.cpp" />
     <ClCompile Include="plgcommon.cpp" />
     <ClCompile Include="stkwlk.cpp" />

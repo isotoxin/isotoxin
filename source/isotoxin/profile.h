@@ -6,6 +6,7 @@
     TAB( contacts ) \
     TAB( history ) \
     TAB( unfinished_file_transfer ) \
+    TAB( backup_protocol ) \
 
 
 enum profile_table_e {
@@ -59,6 +60,22 @@ struct active_protocol_s : public active_protocol_data_s
     static const int maxid = 65000;
     static const int columns = 1 + 8; // tag, name, uname, ustatus, conf, options, avatar, sortfactor
     static ts::asptr get_table_name() {return CONSTASTR("protocols");}
+    static void get_column_desc(int index, ts::column_desc_s&cd);
+    static ts::data_type_e get_column_type(int index);
+};
+
+struct backup_protocol_s
+{
+    time_t time;
+    int tick;
+    int protoid;
+    ts::blob_c config;
+
+    void set(int column, ts::data_value_s& v);
+    void get(int column, ts::data_pair_s& v);
+
+    static const int columns = 1 + 4; // time, tick, protoid, conf
+    static ts::asptr get_table_name() { return CONSTASTR("backup_protocols"); }
     static void get_column_desc(int index, ts::column_desc_s&cd);
     static ts::data_type_e get_column_type(int index);
 };
@@ -132,6 +149,7 @@ struct unfinished_file_transfer_s
 
 template<typename T> struct load_on_start { static const bool value = true; };
 template<> struct load_on_start<history_s> { static const bool value = false; };
+template<> struct load_on_start<backup_protocol_s> { static const bool value = false; };
 
 
 template<typename T, profile_table_e tabi> struct tableview_t
@@ -465,6 +483,9 @@ public:
     #define TAB(tab) tableview_##tab##_s &get_table_##tab() { return table_##tab; };
     PROFILE_TABLES
     #undef TAB
+
+    INTPAR( backup_period, 3600 ); // seconds
+    INTPAR( backup_keeptime, 30 ); // days
 
     HANDLE mutex = nullptr;
 };

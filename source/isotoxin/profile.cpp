@@ -123,6 +123,88 @@ void active_protocol_s::get_column_desc(int index, ts::column_desc_s&cd)
     }
 }
 
+/////// backup protocols
+
+void backup_protocol_s::set(int column, ts::data_value_s &v)
+{
+    switch (column)
+    {
+        case 1:
+            time = v.i;
+            return;
+        case 2:
+            tick = (int)v.i;
+            return;
+        case 3:
+            protoid = (int)v.i;
+            return;
+        case 4:
+            config = v.blob;
+            return;
+    }
+}
+
+void backup_protocol_s::get(int column, ts::data_pair_s& v)
+{
+    ts::column_desc_s ccd;
+    get_column_desc(column, ccd);
+    v.type_ = ccd.type_;
+    v.name = ccd.name_;
+    switch (column)
+    {
+        case 1:
+            v.i = time;
+            return;
+        case 2:
+            v.i = tick;
+            return;
+        case 3:
+            v.i = protoid;
+            return;
+        case 4:
+            v.blob = config;
+            return;
+    }
+}
+
+ts::data_type_e backup_protocol_s::get_column_type(int index)
+{
+    switch (index)
+    {
+        case 1:
+        case 2:
+        case 3:
+            return ts::data_type_e::t_int;
+        case 4:
+            return ts::data_type_e::t_blob;
+    }
+    FORBIDDEN();
+    return ts::data_type_e::t_null;
+}
+
+void backup_protocol_s::get_column_desc(int index, ts::column_desc_s&cd)
+{
+    cd.type_ = get_column_type(index);
+    switch (index)
+    {
+        case 1:
+            cd.name_ = CONSTASTR("time");
+            cd.options.set( ts::column_desc_s::f_non_unique_index );
+            break;
+        case 2:
+            cd.name_ = CONSTASTR("tick");
+            break;
+        case 3:
+            cd.name_ = CONSTASTR("protoid");
+            break;
+        case 4:
+            cd.name_ = CONSTASTR("conf");
+            break;
+        default:
+            FORBIDDEN();
+    }
+}
+
 /////// contacts
 
 void contacts_s::set(int column, ts::data_value_s &v)
@@ -1389,6 +1471,12 @@ void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, i
 #define TAB(tab) if (table_##tab.flush(db, false)) return true;
     PROFILE_TABLES
 #undef TAB
+
+    if (db)
+    {
+        time_t oldbackuptime = now() - backup_keeptime() * 86400;
+        db->delrows(backup_protocol_s::get_table_name(), ts::tmp_str_c(CONSTASTR("time<")).append_as_num<int64>(oldbackuptime));
+    }
 
     return false;
 }

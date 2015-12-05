@@ -31,12 +31,13 @@ struct configurable_s
 {
     proxy_settings_s proxy;
     int server_port = 0;
+    bool ipv6_enable = true;
     bool udp_enable = true;
     bool initialized = false;
 
     bool operator != (const configurable_s &o) const
     {
-        return initialized != o.initialized || proxy != o.proxy || server_port != o.server_port || udp_enable != o.udp_enable;
+        return initialized != o.initialized || proxy != o.proxy || server_port != o.server_port || ipv6_enable != o.ipv6_enable || udp_enable != o.udp_enable;
     }
     configurable_s() {}
     configurable_s(const configurable_s &c)
@@ -48,6 +49,7 @@ struct configurable_s
         if (!c.initialized) return *this;
         proxy = c.proxy;
         server_port = c.server_port;
+        ipv6_enable = c.ipv6_enable;
         udp_enable = c.udp_enable;
         initialized = true;
         return *this;
@@ -109,6 +111,8 @@ class active_protocol_c : public ts::safe_object
     ts::Time typingtime = ts::Time::past();
     int typingsendcontact = 0;
 
+    time_t last_backup_time = 0;
+
     fmt_converter_s cvt;
     long lbsync = 0;
     ts::pointers_t<data_header_s,0> locked_bufs;
@@ -118,11 +122,13 @@ class active_protocol_c : public ts::safe_object
     static const ts::flags32_s::BITS F_CONFIG_OK            = SETBIT(2);
     static const ts::flags32_s::BITS F_CONFIG_FAIL          = SETBIT(3);
     static const ts::flags32_s::BITS F_SAVE_REQUEST         = SETBIT(4);
-    static const ts::flags32_s::BITS F_CONFIGURABLE_RCVD    = SETBIT(5);
-    static const ts::flags32_s::BITS F_ONLINE_SWITCH        = SETBIT(6);
-    static const ts::flags32_s::BITS F_SET_PROTO_OK         = SETBIT(7);
-    static const ts::flags32_s::BITS F_CURRENT_ONLINE       = SETBIT(8);
-    static const ts::flags32_s::BITS F_WORKER_STOPED        = SETBIT(9);
+    static const ts::flags32_s::BITS F_CONFIG_UPDATED       = SETBIT(5);
+    static const ts::flags32_s::BITS F_CFGSAVE_CHECKER      = SETBIT(6);
+    static const ts::flags32_s::BITS F_CONFIGURABLE_RCVD    = SETBIT(7);
+    static const ts::flags32_s::BITS F_ONLINE_SWITCH        = SETBIT(8);
+    static const ts::flags32_s::BITS F_SET_PROTO_OK         = SETBIT(9);
+    static const ts::flags32_s::BITS F_CURRENT_ONLINE       = SETBIT(10);
+    static const ts::flags32_s::BITS F_WORKER_STOPED        = SETBIT(11);
 
     struct icon_s
     {
@@ -141,6 +147,7 @@ class active_protocol_c : public ts::safe_object
 #endif
     bool check_die(RID, GUIPARAM);
     bool check_save(RID, GUIPARAM);
+    void save_config( const ts::blob_c &cfg );
     void run();
 public:
     active_protocol_c(int id, const active_protocol_data_s &pd);

@@ -22,6 +22,8 @@ conf
   found_mark_color=#e7f800
   found_mark_bg_color=#64a7ff
 
+  header_prepend=`<p=c>`
+  header_append=`<color=#d0d0d0><hr=5,1,1>`
 }
 
 rects
@@ -79,13 +81,14 @@ rects
 
   main=base
   {
-    capstart=0,128,4,129
-    caprep=4,128,12,129
-    capend=10,128,16,129
+    //capstart=0,128,4,129
+    //caprep=4,128,12,129
+    //capend=10,128,16,129
+    caprep=-2,-2,-2,3,#dddddd
     captop=20
     captop_max=30
-    capheight=22
-    capheight_max=32
+    capheight=24
+    capheight_max=34
     captexttab=5
     capfont=caption
 
@@ -570,6 +573,10 @@ images
   {
     src=back.png,123,353,154,385
   }
+  video_accept
+  {
+    src=back.png,160,392,184,410
+  }
   tube_accept
   {
     src=back.png,160,357,185,383
@@ -1048,6 +1055,26 @@ buttons
     }
   }
 
+  accept_call_video
+  {
+    gen 
+    { 
+      shape=circle
+      color=#00a600
+      border=0
+      radius=20
+      shadow=1
+      shadow-shift=4,4
+      shadow-shift-press=2,2
+      shadow-color-out=#00000005
+      shadow-color-in=#000000ff
+      shadow-radius-out=20
+      shadow-radius-in=13
+      k-press=0.97
+      image=video_accept
+    }
+  }
+
   mute_mic=accept_call
   {
     gen 
@@ -1339,6 +1366,7 @@ fonts
 
   caption=arial.ttf,13,0,0,0.15,0.1
   caption.bold=arialbd.ttf,13,0,0,0.15,0.1
+  caption.light=arial.ttf,12,0,0,0.15,0.1
 
   conv_name=DejaVuSans.ttf,12,0,0,0.15,0.1
   conv_name.bold=DejaVuSans-Bold.ttf,12,0,0,0.15,0.1

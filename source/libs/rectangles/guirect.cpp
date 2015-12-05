@@ -194,6 +194,7 @@ bool rectprops_c::change_to(const rectprops_c &p, rectengine_c *engine)
     if (evtd.changed.pos_changed || evtd.changed.size_changed)
     {
         engine->redraw();
+        evtd.changed.manual = engine->is_manual_move_resize();
         engine->sq_evt(SQ_RECT_CHANGED, engine->getrid(), evtd);
     }
     if (vis_changed)

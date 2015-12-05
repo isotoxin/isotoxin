@@ -75,8 +75,7 @@ MMX_roundval		dq	0000200000002000h, 0000200000002000h
 
 	.code
 
-	extern _MMX_enabled : byte
-	extern _FPU_enabled : byte
+	extern _g_cpu_caps : dword
 
 
 ;**************************************************************************
@@ -92,7 +91,7 @@ MMX_roundval		dq	0000200000002000h, 0000200000002000h
 
 
 _asm_resize_interp_row_run:
-	test	_MMX_enabled,1
+	test	_g_cpu_caps,1
 	jnz	_asm_resize_interp_row_run_MMX
 
 	push	ebp
@@ -271,7 +270,7 @@ colloop_interp_row_MMX:
 
 
 _asm_resize_interp_col_run:
-	test	_MMX_enabled,1
+	test	_g_cpu_caps,1
 	jnz	_asm_resize_interp_col_run_MMX
 
 	push	ebp

@@ -572,7 +572,7 @@ public:
     void add_task( ts::task_c *t ) { m_tasks_executor.add(t); }
 
     void update_ringtone( contact_c *rt, bool play_stop_snd = true );
-    av_contact_s * update_av( contact_c *avmc, bool activate );
+    av_contact_s * update_av( contact_c *avmc, bool activate, bool camera = false );
 
 
     template<typename R> void enum_file_transfers_by_historian( const contact_key_s &historian, R r )

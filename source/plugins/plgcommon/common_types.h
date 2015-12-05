@@ -26,8 +26,9 @@ enum connection_features_e
     CF_PROXY_SUPPORT_HTTP   = 1,
     CF_PROXY_SUPPORT_SOCKS4 = 2,
     CF_PROXY_SUPPORT_SOCKS5 = 4,
-    CF_UDP_OPTION           = 8,
-    CF_SERVER_OPTION        = 16,
+    CF_IPv6_OPTION          = 8,
+    CF_UDP_OPTION           = 16,
+    CF_SERVER_OPTION        = 32,
 
     CF_PROXY_MASK = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_SOCKS4 | CF_PROXY_SUPPORT_SOCKS5,
 };
@@ -135,13 +136,15 @@ enum contact_gender_e : unsigned
     contact_gender_bits = 1 + (::boost::static_log2<(contact_gender_count - 1)>::value)
 };
 
+ /*
+     plugin should provide format without any conversions, as possible
+     so, if decoder's output is I420, do not convert it to XRGB
+ */
 enum video_fmt_e
 {
     VFMT_NONE, // used to indicate empty video data
-    VFMT_I420,
-
-    // unused
-    //VFMT_RAW_RGB, // following 3 pixels == 9 bytes: (0x00, 0x00, 0xff) - red, (0x00, 0xff, 0x00) - green, (0xff, 0x00, 0x00) - blue
+    VFMT_XRGB, // following 3 pixels == 12 bytes: (0x00, 0x00, 0xff, 0x??) - red, (0x00, 0xff, 0x00, 0x??) - green, (0xff, 0x00, 0x00, 0x??) - blue
+    VFMT_I420, // Y plane, U plane (4x smaller), V plane (4x smaller)
 };
 
 enum stream_options_e
@@ -157,4 +160,5 @@ enum stream_options_e
 #define CFGF_PROXY_TYPE     "proxy_type"
 #define CFGF_PROXY_ADDR     "proxy_addr"
 #define CFGF_UDP_ENABLE     "udp_enable"
+#define CFGF_IPv6_ENABLE    "ipv6_enable"
 #define CFGF_SERVER_PORT    "server_port"

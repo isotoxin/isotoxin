@@ -291,9 +291,9 @@ ts::uint32 rectengine_c::detect_area(const ts::ivec2 &p)
                     d.detectarea.area |= AREA_BOTTOM;
             }
 
-            if (!d.detectarea.area && rps.allow_move())
-                if (themerect->captionrect(rps.szrect(), rps.is_maximized()).inside(p))
-                    d.detectarea.area |= AREA_CAPTION;
+            if (!d.detectarea.area)
+                if (themerect->captionrect(rps.currentszrect(), rps.is_maximized()).inside(p))
+                    d.detectarea.area |= rps.allow_move() ? AREA_CAPTION : AREA_CAPTION_NOMOVE;
 
         }
 
@@ -372,6 +372,8 @@ rectengine_c *rectengine_c::get_last_child()
 	case SQ_MOUSE_MOVE:
 		if (const mousetrack_data_s *mtd = gui->mtrack( getrid(), MTT_RESIZE | MTT_MOVE ))
 		{
+            manual_move_resize( true );
+
 			evt_data_s d;
 			d.rectchg.rect = mtd->rect;
 			d.rectchg.area = mtd->area;
@@ -393,8 +395,9 @@ rectengine_c *rectengine_c::get_last_child()
             {
                 d.rectchg.rect.get() += delta;
             }
-
 			sq_evt(SQ_RECT_CHANGING, getrid(), d);
+
+            manual_move_resize( false );
 
 		} else if (gui->mtrack(getrid(), MTT_ANY))
             if (guirect_c *r = rect())
@@ -1861,10 +1864,19 @@ void border_window_data_s::draw()
         }
 
         // bottom
-        rdraw.rbeg = thr.sis+SI_CAPSTART; rdraw.a_beg = thr.is_alphablend(SI_CAPSTART);
-        rdraw.rrep = thr.sis+SI_CAPREP; rdraw.a_beg = thr.is_alphablend(SI_CAPREP);
-        rdraw.rend = thr.sis+SI_CAPEND; rdraw.a_beg = thr.is_alphablend(SI_CAPEND);
-        rdraw.draw_h(caprect.lt.x, caprect.rb.x, caprect.lt.y + ((rps.is_maximized() || thr.fastborder()) ? thr.captop_max : thr.captop), thr.siso[SI_CAPREP].tile);
+        if (0 != ts::ALPHA(thr.siso[SI_CAPREP].fillcolor))
+        {
+            fillrect.lt = caprect.lt + thr.sis[SI_CAPREP].lt;
+            fillrect.rb = caprect.rb - thr.sis[SI_CAPREP].rb;
+            caprect = fillrect;
+            filler(thr.siso[SI_CAPREP].fillcolor);
+        } else
+        {
+            rdraw.rbeg = thr.sis + SI_CAPSTART; rdraw.a_beg = thr.is_alphablend(SI_CAPSTART);
+            rdraw.rrep = thr.sis + SI_CAPREP; rdraw.a_beg = thr.is_alphablend(SI_CAPREP);
+            rdraw.rend = thr.sis + SI_CAPEND; rdraw.a_beg = thr.is_alphablend(SI_CAPEND);
+            rdraw.draw_h(caprect.lt.x, caprect.rb.x, caprect.lt.y + ((rps.is_maximized() || thr.fastborder()) ? thr.captop_max : thr.captop), thr.siso[SI_CAPREP].tile);
+        }
 
 		// caption text
         if ((options & DTHRO_CAPTION_TEXT) != 0)
@@ -1882,6 +1894,7 @@ void border_window_data_s::draw()
             ddd.offset = caprect.lt;
             ddd.offset.x += thr.captexttab;
             ddd.size = caprect.size();
+
             draw(dn, tdp);
             end_draw();
         }
@@ -1976,8 +1989,8 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
 		break;
 	case SQ_RECT_CHANGING:
         {
-            // вызывается во время ресайза и мува мышкой ( data.newsize.apply == true )
-            // а также при необходимости расчитать допустимые размеры ( data.newsize.apply == false )
+            // called on resize or move by mouse ( data.newsize.apply == true )
+            // also called when it is need to calc size limits ( data.newsize.apply == false )
 
 			evt_data_s data2;
 			data2.rectchg.rect = data.rectchg.rect;
@@ -2128,7 +2141,19 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
             if (hd.rid == getrid())
             {
                 if (guirect_c *r = rect())
-                    return r->sq_evt(qp, rid, data);
+                    if (r->sq_evt(qp, rid, data))
+                        return true;
+                if (SQ_MOUSE_L2CLICK == qp && (hd.area & (AREA_CAPTION|AREA_CAPTION_NOMOVE)))
+                {
+                    if (guirect_c *r = rect())
+                    {
+                        if (r->getprops().is_maximized())
+                            MODIFY(*r).maximize(false);
+                        else if (!r->getprops().is_collapsed())
+                            MODIFY(*r).maximize(true);
+                    }
+                }
+                return false;
             } else
                 if (hd.rid)
                     return HOLD(hd.rid).engine().sq_evt(qp, hd.rid, data);

@@ -54,9 +54,10 @@ class task_executor_c
 
     struct sync_s
     {
+        int tasks = 0;
+        int workers = 0;
         bool worker_must = false;
         bool worker_started = false;
-        bool worker_works = false;
         bool worker_should_stop = false;
     };
 
@@ -67,6 +68,7 @@ class task_executor_c
 
     HANDLE evt = nullptr;
     DWORD base_thread_id;
+    int maximum_workers = 1;
 
     void check_worker();
 
