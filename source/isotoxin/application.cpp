@@ -249,7 +249,7 @@ HICON application_c::app_icon(bool for_tray)
 {
     switch (ll)
     {
-        case LL_CTXMENU_COPY: return TTT("Copy",92);
+        case LL_CTXMENU_COPY: return loc_text(loc_copy);
         case LL_CTXMENU_CUT: return TTT("Cut",93);
         case LL_CTXMENU_PASTE: return TTT("Paste",94);
         case LL_CTXMENU_DELETE: return TTT("Delete",95);
@@ -1499,7 +1499,8 @@ void application_c::resend_undelivered_messages( const contact_key_s& rcv )
                 gmsg<ISOGM_MESSAGE> msg(&contacts().get_self(), receiver, MTA_UNDELIVERED_MESSAGE);
 
                 const post_s& post = q->queue.get(0);
-                msg.post.time = post.time;
+                msg.post.recv_time = post.recv_time;
+                msg.post.cr_time = post.cr_time;
                 msg.post.utag = post.utag;
                 msg.post.message_utf8 = post.message_utf8;
                 msg.resend = true;
@@ -1558,7 +1559,7 @@ void application_c::undelivered_message( const post_s &p )
             for(int i=0;i<cnt;++i)
             {
                 const post_s &qp = q->queue.get(i);
-                if (qp.time > p.time)
+                if (qp.recv_time > p.recv_time)
                 {
                     post_s &insp = q->queue.insert(i);
                     insp = p;
@@ -1825,7 +1826,10 @@ void file_transfer_s::kill( file_control_e fctl )
             if (!upload && fctl != FIC_DISCONNECT) 
                 DeleteFileW(ts::wstr_c(filename_on_disk.as_sptr().skip(1)).append(CONSTWSTR(".!rcv")));
         } else if (!upload && fctl == FIC_DONE)
+        {
             MoveFileW(filename_on_disk + CONSTWSTR(".!rcv"), filename_on_disk);
+            play_sound( snd_file_received, false );
+        }
     }
     data.lock_write()().deltatime(true, -60);
     if (fctl != FIC_REJECT) upd_message_item(true);
@@ -2187,7 +2191,7 @@ void file_transfer_s::upd_message_item(bool force)
     } else if (contact_c *c = contacts().find(sender))
     {
         gmsg<ISOGM_MESSAGE> msg(c, &contacts().get_self(), upload ? MTA_SEND_FILE : MTA_RECV_FILE);
-        msg.create_time = now();
+        msg.post.cr_time = now();
         msg.post.message_utf8 = to_utf8(filename_on_disk);
         if (msg.post.message_utf8.ends(CONSTASTR(".!rcv")))
             msg.post.message_utf8.trunc_length(5);

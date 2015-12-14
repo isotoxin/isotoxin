@@ -129,6 +129,7 @@
     <ClCompile Include="tsfilesystem.cpp" />
     <ClCompile Include="tsfile_zip.cpp" />
     <ClCompile Include="tshash_md5.cpp" />
+    <ClCompile Include="tsjson.cpp" />
     <ClCompile Include="tsmath.cpp" />
     <ClCompile Include="tspackcol.cpp" />
     <ClCompile Include="tspackfile.cpp" />
@@ -165,6 +166,7 @@
     <ClInclude Include="tscrc.h" />
     <ClInclude Include="tsdebug.h" />
     <ClInclude Include="tshash_md5.h" />
+    <ClInclude Include="tsjson.h" />
     <ClInclude Include="tsstreamstr.h" />
     <ClInclude Include="tsfilesystem.h" />
     <ClInclude Include="tsfile_zip.h" />

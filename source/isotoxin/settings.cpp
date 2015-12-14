@@ -984,13 +984,21 @@ bool dialog_settings_c::applysoundpreset(RID, GUIPARAM)
 #undef SND
         };
 
-        sound_preset_s &prst = presets.get(selected_preset);
+        const sound_preset_s &prst = presets.get(selected_preset);
+
+        float volk = (float)prst.preset.get_int( CONSTASTR("setvolume"), 100 ) / 100.0f;
+
         for(int i=0;i<snd_count;++i)
             if (const ts::abp_c *rec = prst.preset.get(names[i]))
             {
                 sndfn[i] = ts::fn_join( prst.path, ts::from_utf8(rec->as_string()) );
+                sndvol[i] = volk;
+
                 if (RID ectl = find( ts::amake(CONSTASTR("sndfn"), i) ))
                     HOLD(ectl).as<gui_textedit_c>().set_text(sndfn[i]);
+
+                if (RID sctl = find(ts::amake(CONSTASTR("sndvl"), i)))
+                    HOLD(sctl).as<gui_hslider_c>().set_value(volk);
             }
 
         mod();
@@ -1135,8 +1143,12 @@ void dialog_settings_c::networks_tab_selected()
 
         ts::wsptr sdescs[snd_count] = {
             TTT("Incoming message",1000),
+            TTT("Incoming message (current conversation)",1010),
             TTT("Incoming file",1001),
             TTT("File receiving started",1002),
+            TTT("File received",1011),
+            TTT("Contact online",1012),
+            TTT("Contact offline",1013),
             TTT("Ringtone",1003),
             TTT("Ringtone during call",1004),
             TTT("Call accept",1005),
@@ -1148,8 +1160,12 @@ void dialog_settings_c::networks_tab_selected()
 
         int sorted[snd_count] = {
             snd_incoming_message,
+            snd_incoming_message2,
             snd_incoming_file,
             snd_start_recv_file,
+            snd_file_received,
+            snd_friend_online,
+            snd_friend_offline,
             snd_ringtone,
             snd_ringtone2,
             snd_calltone,
@@ -1327,7 +1343,7 @@ void dialog_settings_c::add_active_proto( RID lst, int id, const active_protocol
     const protocol_description_s *p = describe_network(desc, apdata.name, apdata.tag, id);
 
     ts::str_c par(CONSTASTR("2/")); par.append(apdata.tag).append_char('/').append_as_int(id);
-    MAKE_CHILD<gui_listitem_c>(lst, desc, par) << DELEGATE(this, getcontextmenu) << (const ts::drawable_bitmap_c *)(p ? p->icon.get() : nullptr);
+    MAKE_CHILD<gui_listitem_c>(lst, desc, par) << DELEGATE(this, getcontextmenu) << (const ts::bitmap_c *)(p ? p->icon.get() : nullptr);
 }
 
 void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
@@ -2006,7 +2022,7 @@ bool dialog_settings_c::drawcamerapanel(RID, GUIPARAM p)
                 if (shadow)
                     e->draw(*shadow, DTHRO_BORDER);
 
-                e->draw(pos, *b, ts::irect(0, dsz), false);
+                e->draw(pos, b->extbody(), ts::irect(0, dsz), false);
                 e->end_draw();
             }
 

@@ -132,7 +132,7 @@ class active_protocol_c : public ts::safe_object
 
     struct icon_s
     {
-        UNIQUE_PTR(ts::drawable_bitmap_c) bmp;
+        UNIQUE_PTR(ts::bitmap_c) bmp;
         icon_type_e icot;
     };
 
@@ -172,7 +172,7 @@ public:
 
     const s3::Format& defaudio() const {return audio_fmt;}
 
-    const ts::drawable_bitmap_c &get_icon(int sz, icon_type_e icot);
+    const ts::bitmap_c &get_icon(int sz, icon_type_e icot);
 
     void set_current_online(bool oflg) { syncdata.lock_write()().flags.init(F_CURRENT_ONLINE, oflg); }
     bool is_current_online() const { return syncdata.lock_read()().flags.is(F_CURRENT_ONLINE); }

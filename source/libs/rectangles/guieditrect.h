@@ -24,7 +24,7 @@ class gui_textedit_c : public gui_control_c
 
     ts::wstr_c placeholder_text; // prev value
     GET_TOOLTIP placeholder;
-	ts::drawable_bitmap_c texture;
+	ts::bitmap_c texture;
     sbhelper_s sbhelper;
 	ts::TSCOLOR caret_color         = ts::ARGB(0,0,0),
                 color               = ts::ARGB(0,0,0),
@@ -119,7 +119,8 @@ private:
 	int start_sel, caret_line, caret_offset, scroll_left;
 	float wheel_scroll_step_size = 50.0f;
 	int caret_width = 2, baseline_offset = 0, chars_limit = 0;
-	int margin_left = 0, margin_right = 0, margin_top = 0, margin_bottom = 0;
+    ts::ivec2 margins_lt = ts::ivec2(0);
+    ts::ivec2 margins_rb = ts::ivec2(0);
     ts::irect caretrect = ts::irect(0);
 
     enum change_e
@@ -258,7 +259,9 @@ public:
     void arrow_cursor(bool f = true) {flags.init(F_ARROW_CURSOR, f);}
 	bool is_empty() const {return text.size() == 0;}
     void set_chars_limit( int cl ) { chars_limit = cl; }
-    void set_margins( int left = 0, int rite = 0, int top = 0 ) { margin_left = left; margin_right = rite; margin_top = top; }
+    void set_margins_lt( const ts::ivec2 &mlt ) { margins_lt = mlt; }
+    void set_margins_rb( const ts::ivec2 &mrb ) { margins_rb = mrb; }
+    const ts::ivec2 &get_margins_lt() const { return margins_lt; }
 
     void set_placeholder(GET_TOOLTIP plht);
     void set_placeholder(GET_TOOLTIP plht, ts::TSCOLOR phcolor) { placeholder_color = phcolor; set_placeholder(plht); }

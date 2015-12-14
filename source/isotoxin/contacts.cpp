@@ -23,7 +23,7 @@ void avatar_s::load( const void *body, int size, int tag_ )
 
             if (bmp.info().sz.x != bmp.info().sz.y)
             {
-                bmprsz.create_RGBA(ts::ivec2(ts::tmax(bmp.info().sz.x,bmp.info().sz.y)));
+                bmprsz.create_ARGB(ts::ivec2(ts::tmax(bmp.info().sz.x,bmp.info().sz.y)));
                 bmprsz.fill(0);
                 bmprsz.copy( (bmprsz.info().sz - bmp.info().sz) / 2, bmp.info().sz, bmp.extbody(), ts::ivec2(0) );
                 bmp = bmprsz;
@@ -32,7 +32,7 @@ void avatar_s::load( const void *body, int size, int tag_ )
             bmp = bmprsz;
         }
 
-        if (bmp.has_alpha())
+        if (bmp.is_alpha_blend())
         {
             alpha_pixels = true;
         } else
@@ -45,7 +45,7 @@ void avatar_s::load( const void *body, int size, int tag_ )
                     if (mask->info().sz > bmp.info().sz)
                     {
                         ts::bitmap_c bmplarger;
-                        bmplarger.create_RGBA(ts::tmax( mask->info().sz, bmp.info().sz ));
+                        bmplarger.create_ARGB(ts::tmax( mask->info().sz, bmp.info().sz ));
                         bmplarger.fill(0);
                         bmplarger.copy( (bmplarger.info().sz - bmp.info().sz) / 2, bmp.info().sz, bmp.extbody(), ts::ivec2(0) );
                         bmp = bmplarger;
@@ -60,7 +60,7 @@ void avatar_s::load( const void *body, int size, int tag_ )
                 if (avabase->info().sz >>= bmp.info().sz)
                 {
                     ts::bitmap_c prepared;
-                    prepared.create_RGBA(avabase->info().sz);
+                    prepared.create_ARGB(avabase->info().sz);
                     ts::ivec2 offs = (avabase->info().sz - bmp.info().sz) / 2;
                     prepared.alpha_blend(offs, bmp.extbody(), avabase->extbody());
                     bmp = prepared;
@@ -68,8 +68,8 @@ void avatar_s::load( const void *body, int size, int tag_ )
             }
         }
     
-        bool a = create_from_bitmap(bmp, false, true, !alpha_pixels);
-        if (!alpha_pixels) alpha_pixels = a;
+        *(ts::bitmap_c *)this = std::move(bmp);
+        alpha_pixels = premultiply();
     }
 
 }
@@ -79,7 +79,8 @@ ts::static_setup<contacts_c> contacts;
 gmsg<ISOGM_MESSAGE>::gmsg(contact_c *sender, contact_c *receiver, message_type_app_e mt) :gmsgbase(ISOGM_MESSAGE), sender(sender), receiver(receiver)
 {
     post.utag = prf().uniq_history_item_tag();
-    post.time = 0; // initialized after history add
+    post.recv_time = 0; // initialized after history add
+    post.cr_time = 0;
     post.type = mt;
     post.sender = sender->getkey();
     post.receiver = receiver->getkey();
@@ -390,19 +391,19 @@ void contact_c::del_history(uint64 utag)
 }
 
 
-void contact_c::make_time_unique(time_t &t)
+void contact_c::make_time_unique(time_t &t) const
 {
-    if (history.size() == 0 || t < history.get(0).time )
+    if (history.size() == 0 || t < history.get(0).recv_time )
         prf().load_history(getkey()); // load whole history to correct uniquzate t
 
     for( const post_s &p : history )
-        if (p.time == t)
+        if (p.recv_time == t)
             ++t;
-        else if (p.time > t)
+        else if (p.recv_time > t)
             break;
 }
 
-int contact_c::calc_unread()
+int contact_c::calc_unread() const
 {
     if (keep_history())
         return prf().calc_history_after(getkey(), get_readtime(), true);
@@ -412,7 +413,7 @@ int contact_c::calc_unread()
     for(int i=history.size()-1;i>=0;--i)
     {
         const post_s &p = history.get(i);
-        if (p.time <= rt) break;
+        if (p.recv_time <= rt) break;
         if (p.mt() == MTA_MESSAGE)
             ++cnt;
     }
@@ -431,7 +432,7 @@ void contact_c::export_history( const ts::wsptr &templatename, const ts::wsptr &
 
         auto sorthist = []( const post_s *p1, const post_s *p2 ) -> bool
         {
-            return p1->time < p2->time;
+            return p1->recv_time < p2->recv_time;
         };
 
         hist.sort(sorthist);
@@ -551,7 +552,7 @@ void contact_c::export_history( const ts::wsptr &templatename, const ts::wsptr &
             const post_s *post = hist.get(i);
 
             tm tmtm;
-            _localtime64_s(&tmtm, &post->time);
+            _localtime64_s(&tmtm, &post->recv_time);
 
             if (!datesep.is_empty())
             {
@@ -635,7 +636,7 @@ void contact_c::load_history(int n_last_items)
     ASSERT( get_historian() == this );
 
     time_t before = 0;
-    if (history.size()) before = history.get(0).time;
+    if (history.size()) before = history.get(0).recv_time;
     ts::tmp_tbuf_t<int> ids;
     prf().load_history( getkey(), before, n_last_items, ids );
 
@@ -668,7 +669,7 @@ void contact_c::load_history(int n_last_items)
                 }
             }
 
-            add_history(row->other.time) = row->other;
+            add_history(row->other.recv_time, row->other.cr_time) = row->other;
         }
     }
 }
@@ -1073,7 +1074,10 @@ const post_s * contact_c::fix_history( message_type_app_e oldt, message_type_app
                 if (update_text) p.message_utf8 = *update_text;
                 updated.add(p.utag);
                 if (update_time)
-                    p.time = update_time++;
+                {
+                    p.recv_time = update_time++;
+                    p.cr_time = p.recv_time;
+                }
             }
             return true;
         });
@@ -1576,6 +1580,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                     c->set_name( CONSTASTR("Groupchat #") + ts::amake<int>( calc_groupchats_amount() ) );
                     contact.mask &= ~CDM_NAME;
                 }
+
                 arr.insert(index, c);
                 prf().purifycontact(c->getkey());
                 serious_change = contact.key.protoid;
@@ -1640,6 +1645,9 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
     if (0 != (contact.mask & CDM_STATUSMSG))
         c->set_statusmsg( contact.statusmsg );
 
+    if (0 != (contact.mask & CDM_DETAILS))
+        c->set_details(contact.details);
+
     if (0 != (contact.mask & CDM_STATE))
     {
         c->protohit(true);
@@ -1648,6 +1656,15 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
 
         if ( c->get_state() != oldst )
         {
+            if (!is_self)
+            {
+                if (contact.state == CS_ONLINE)
+                    play_sound(snd_friend_online, false);
+
+                if (contact.state == CS_OFFLINE)
+                    play_sound(snd_friend_offline, false);
+            }
+
             if (contact.state == CS_ONLINE || contact.state == CS_OFFLINE)
             {
                 if (oldst == CS_INVITE_RECEIVE)
@@ -1947,7 +1964,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
 
 
     gmsg<ISOGM_MESSAGE> msg(sender, imsg.groupchat.is_empty() ? &get_self() : contacts().find(imsg.groupchat), imsg.mt);
-    msg.create_time = imsg.create_time;
+    msg.post.cr_time = imsg.create_time;
     msg.post.message_utf8 = imsg.msgutf8;
     msg.post.message_utf8.trim();
     msg.send();
@@ -1970,6 +1987,8 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
     case MTA_ACTION:
         if (g_app->is_inactive(true) || !msg.current)
             play_sound( snd_incoming_message, false );
+        else if (msg.current)
+            play_sound(snd_incoming_message2, false);
         break;
     case MTA_INCOMING_CALL:
         if (historian->get_aaac())

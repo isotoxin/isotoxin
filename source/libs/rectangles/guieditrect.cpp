@@ -94,7 +94,7 @@ bool gui_textedit_c::text_replace(int pos, int num, const ts::wsptr &str, active
 
 		if (chars_limit > 0) if (ttext.get_length() <= chars_limit) goto ok; else return false;
 
-		int w = editwidth-ts::ui_scale(margin_left)-ts::ui_scale(margin_right)-ts::ui_scale(is_vsb() ? sbhelper.sbrect.width() : 0);
+		int w = editwidth-ts::ui_scale(margins_lt.x)-ts::ui_scale(margins_rb.x)-ts::ui_scale(is_vsb() ? sbhelper.sbrect.width() : 0);
 		if (!password_char)
 			for (ts::wchar c : ttext) w -= (*(*font))[c].advance;
 		else
@@ -234,14 +234,14 @@ ts::ivec2 gui_textedit_c::get_caret_pos() const
 {
 	int i=0, x=0, s=lines.get(caret_line).r0;
 	for (;i<caret_offset;i++) x+=text_el_advance(s+i);
-	return ts::ivec2(x + ts::ui_scale(margin_left) - scroll_left, caret_line * (*font)->height + ts::ui_scale(margin_top) - scroll_top());
+	return ts::ivec2(x + ts::ui_scale(margins_lt.x) - scroll_left, caret_line * (*font)->height + ts::ui_scale(margins_lt.y) - scroll_top());
 }
 
 void gui_textedit_c::scroll_to_caret()
 {
     ts::ivec2 sz = size();
     bool dirty_texture = false;
-	int newST = ts::tmax((caret_line+1) * (*font)->height - sz.y + ts::ui_scale(margin_top) + ts::ui_scale(margin_bottom), ts::tmin(scroll_top(), caret_line * (*font)->height));
+	int newST = ts::tmax((caret_line+1) * (*font)->height - sz.y + ts::ui_scale(margins_lt.y) + ts::ui_scale(margins_rb.y), ts::tmin(scroll_top(), caret_line * (*font)->height));
 	if (newST != scroll_top())
     {
         sbhelper.shift = -newST;
@@ -254,8 +254,8 @@ void gui_textedit_c::scroll_to_caret()
 		int i = 0, caretX = 0, lineW = 0;
 		for (; i<caret_offset; i++) caretX += text_el_advance(i);
 		for (lineW = caretX; i<lines.get(0).r1; i++) lineW += text_el_advance(i);
-		scroll_left = ts::tmax(caretX /*+ ts::ui_scale(caretWidth)*/ - editwidth + ts::ui_scale(margin_left) + ts::ui_scale(margin_right), ts::tmin(scroll_left, caretX));
-		scroll_left = ts::tmax(0, ts::tmin(scroll_left, lineW + ts::ui_scale(margin_left) + ts::ui_scale(margin_right) - editwidth));
+		scroll_left = ts::tmax(caretX /*+ ts::ui_scale(caretWidth)*/ - editwidth + ts::ui_scale(margins_lt.x) + ts::ui_scale(margins_rb.x), ts::tmin(scroll_left, caretX));
+		scroll_left = ts::tmax(0, ts::tmin(scroll_left, lineW + ts::ui_scale(margins_lt.x) + ts::ui_scale(margins_rb.x) - editwidth));
 	}
 	flags.set(F_CARET_SHOW);
     redraw(dirty_texture);
@@ -264,8 +264,8 @@ void gui_textedit_c::scroll_to_caret()
 void gui_textedit_c::set_caret_pos(ts::ivec2 p)
 {
     if (!font) return;
-	p.x += scroll_left - ts::ui_scale(margin_left);
-	int line=ts::tmax(0,ts::tmin((p.y-ts::ui_scale(margin_top)+scroll_top())/(*font)->height,lines.count()-1));
+	p.x += scroll_left - ts::ui_scale(margins_lt.x);
+	int line=ts::tmax(0,ts::tmin((p.y-ts::ui_scale(margins_lt.y)+scroll_top())/(*font)->height,lines.count()-1));
 	int lineW=0;
 	int i=0;
 	for (;i<lines.get(line).delta();i++)
@@ -573,7 +573,7 @@ bool gui_textedit_c::prepare_lines(int startchar)
 		}
 
 		linew+=text_el_advance(i);
-		if (linew>sz.x-ts::ui_scale(margin_left)-ts::ui_scale(margin_right)-ts::ui_scale(is_vsb() ? sbhelper.sbrect.width() : 0) && /*обязательно проверяем - вдруг это первый символ, т.к. ситуация когда символ не помещается во всей строке не может быть корректно обработана*/i>linestart)
+		if (linew>sz.x-ts::ui_scale(margins_lt.x)-ts::ui_scale(margins_rb.x)-ts::ui_scale(is_vsb() ? sbhelper.sbrect.width() : 0) && /*обязательно проверяем - вдруг это первый символ, т.к. ситуация когда символ не помещается во всей строке не может быть корректно обработана*/i>linestart)
 		{
             //Сразу формировать новую строку нельзя - если окажется, что это единственное слово в строке, то его надо не переносить, а разбивать
             //Поиск последнего разделителя (только пробел, табуляция обрабатывается некорректно!)
@@ -601,7 +601,7 @@ bool gui_textedit_c::prepare_lines(int startchar)
 	under_mouse_active_element = nullptr;
     flags.clear(F_LINESDIRTY);
 
-    sbhelper.set_size( lines.count() * (*font)->height+ ts::ui_scale(margin_top) + ts::ui_scale(margin_bottom), sz.y );
+    sbhelper.set_size( lines.count() * (*font)->height+ ts::ui_scale(margins_lt.y) + ts::ui_scale(margins_rb.y), sz.y );
 
     if (caret_line >= lines.count()) caret_line = lines.count() - 1;
 
@@ -703,8 +703,8 @@ void gui_textedit_c::prepare_texture()
         // placeholder only
 
         int w = asize.x;
-        texture.ajust(ts::ivec2(w, asize.y), false);
-        ts::ivec2 pen(ts::ui_scale(margin_left) + 4, (*font)->ascender + ts::ui_scale(margin_top));
+        texture.ajust_ARGB(ts::ivec2(w, asize.y), false);
+        ts::ivec2 pen(ts::ui_scale(margins_lt.x) + 4, (*font)->ascender + ts::ui_scale(margins_lt.y));
 
         int advoffset = 0;
         int cnt = placeholder_text.get_length();
@@ -729,7 +729,7 @@ void gui_textedit_c::prepare_texture()
         return;
     }
 
-	ts::ivec2 visible_lines = (ts::ivec2(0, asize.y) + (scroll_top() - ts::ui_scale(margin_top)))/(*font)->height & ts::ivec2(0, lines.count()-1);
+	ts::ivec2 visible_lines = (ts::ivec2(0, asize.y) + (scroll_top() - ts::ui_scale(margins_lt.y)))/(*font)->height & ts::ivec2(0, lines.count()-1);
 	int firstvischar = lines.get(visible_lines.r0).r0;
     int numcolors = lines.get(visible_lines.r1).r1 - firstvischar;
     ts::tmp_tbuf_t< ts::pair_s<ts::TSCOLOR, ts::TSCOLOR> > colors( numcolors );
@@ -755,7 +755,7 @@ void gui_textedit_c::prepare_texture()
 
 	int w = asize.x-ts::ui_scale(is_vsb() ? sbhelper.sbrect.width() : 0);
 	if (!CHECK(w > 0 && asize.y > 0)) return;
-    texture.ajust(ts::ivec2(w, asize.y), false);
+    texture.ajust_ARGB(ts::ivec2(w, asize.y), false);
 
 	
     texture.fill(ts::ivec2(0), ts::ivec2(w, asize.y), 0);
@@ -783,7 +783,7 @@ void gui_textedit_c::prepare_texture()
 	for (int l = visible_lines.r0; l <= visible_lines.r1; ++l) // lines
 	{
 		if (l > 0 && text.get(lines.get(l).r0-1) == L'\n') current_color = 0; //-V807 // new line always reset current color
-		ts::ivec2 pen(ts::ui_scale(margin_left) - scroll_left, (*font)->ascender + l*(*font)->height + ts::ui_scale(margin_top) - scroll_top());
+		ts::ivec2 pen(ts::ui_scale(margins_lt.x) - scroll_left, (*font)->ascender + l*(*font)->height + ts::ui_scale(margins_lt.y) - scroll_top());
 
 		for (int i = lines.get(l).r0; i < lines.get(l).r1; ++i) // chars at current line
 		{
@@ -1090,8 +1090,8 @@ bool gui_textedit_c::summoncontextmenu()
 
             ts::ivec2 p = to_local(data.mouse.screenpos) - get_client_area().lt;
 
-            p.x += scroll_left - ts::ui_scale(margin_left);
-            ts::aint l = (p.y - ts::ui_scale(margin_top) + scroll_top()) / (*font)->height;
+            p.x += scroll_left - ts::ui_scale(margins_lt.x);
+            ts::aint l = (p.y - ts::ui_scale(margins_lt.y) + scroll_top()) / (*font)->height;
             if (unsigned(l) < (unsigned)lines.count())
             {
                 ts::ivec2 line = lines.get(l);
@@ -1104,7 +1104,7 @@ bool gui_textedit_c::summoncontextmenu()
                         if (!text[i].is_char())
                         {
                             under_mouse_active_element = text[i].p;
-                            under_mouse_active_element_pos = ts::ivec2(x + ts::ui_scale(margin_left), l * (*font)->height + ts::ui_scale(margin_top));
+                            under_mouse_active_element_pos = ts::ivec2(x + ts::ui_scale(margins_lt.x), l * (*font)->height + ts::ui_scale(margins_lt.y));
                             if (under_mouse_active_element->hand_cursor()) flags.set(F_HANDCURSOR);
                         }
                         break;
@@ -1146,7 +1146,7 @@ bool gui_textedit_c::summoncontextmenu()
             ts::irect drawarea = get_client_area();
             if (is_vsb())
             {
-                sbhelper.set_size(lines.count()*(*font)->height + ts::ui_scale(margin_top) + ts::ui_scale(margin_bottom), drawarea.height()); // clamp scrollTop() value
+                sbhelper.set_size(lines.count()*(*font)->height + ts::ui_scale(margins_lt.y) + ts::ui_scale(margins_rb.y), drawarea.height()); // clamp scrollTop() value
 
                 evt_data_s ds;
                 ds.draw_thr.sbrect() = drawarea;
@@ -1176,7 +1176,7 @@ bool gui_textedit_c::summoncontextmenu()
                 dd.alpha = 128;
             }
 
-            root.draw( drawarea.lt, texture, ts::irect( ts::ivec2(0), drawarea.size() - ts::ivec2(margin_right,0) ), true );
+            root.draw( drawarea.lt, texture.extbody(), ts::irect( ts::ivec2(0), drawarea.size() - ts::ivec2(margins_rb.x,0) ), true );
             
             if (gray)
                 root.end_draw();

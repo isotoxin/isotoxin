@@ -19,8 +19,8 @@ template<> struct MAKE_ROOT<dialog_avaselector_c> : public _PROOT(dialog_avasele
 
 struct framedrawer_s
 {
-    ts::drawable_bitmap_c h;
-    ts::drawable_bitmap_c v;
+    ts::bitmap_c h;
+    ts::bitmap_c v;
 
     void prepare( ts::TSCOLOR col1, ts::TSCOLOR col2 );
     void draw(rectengine_c &e, const ts::irect &r, int tickvalue);
@@ -69,7 +69,7 @@ class dialog_avaselector_c : public gui_isodialog_c
     ts::animated_c anm;
 
     ts::bitmap_c bitmap;
-    ts::drawable_bitmap_c image;
+    ts::bitmap_c image;
 
     ts::irect out;
     ts::irect imgrect;

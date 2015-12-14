@@ -282,7 +282,7 @@ void process_animation_s::render(HDC dc, const ts::ivec2& shift)
 process_animation_bitmap_s::process_animation_bitmap_s():process_animation_s(64)
 {
     bmpr.create(ts::ivec2(sz));
-    bmp.create(ts::ivec2(sz/2));
+    bmp.create_ARGB(ts::ivec2(sz/2));
 }
 
 void process_animation_bitmap_s::render()

@@ -1,0 +1,15 @@
+// sound_tag=filename (path relative to this decl file)
+// sound system supports wav, ogg, flac
+
+presetname=Tox Chippy
+setvolume=30 // 0 .. 100 %
+
+calltone=ToxChippy/Tox-Dialing.ogg
+ringtone=ToxChippy/Tox-Ringtone.ogg
+incoming_message=ToxChippy/Tox-Message.ogg
+file_received=ToxChippy/Tox-Transfer-Sucess.ogg
+friend_online=ToxChippy/Tox-User-Login.ogg
+friend_offline=ToxChippy/Tox-User-Logout.ogg
+
+
+

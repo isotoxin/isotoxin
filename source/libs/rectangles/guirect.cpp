@@ -520,7 +520,7 @@ void gui_button_c::draw()
                 dd.alpha = 128;
             }
             int y = (sz.y - desc->rects[drawstate].height()) / 2;
-            m_engine->draw(ts::ivec2(0, y), desc->src, desc->rects[drawstate], desc->is_alphablend(drawstate));
+            m_engine->draw(ts::ivec2(0, y), desc->src.extbody(), desc->rects[drawstate], desc->is_alphablend(drawstate));
             
             if (flags.is(F_DISABLED_USE_ALPHA) && flags.is(F_DISABLED)) 
                 m_engine->end_draw();
@@ -920,7 +920,7 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
         }
     }
 
-    m_engine->draw(ts::ivec2(0), textrect.get_texture(), ts::irect(ts::ivec2(0), tmin(dd.size, textrect.size)), true);
+    m_engine->draw(ts::ivec2(0), textrect.get_texture().extbody(), ts::irect(ts::ivec2(0), tmin(dd.size, textrect.size)), true);
     if (do_updr && tdp.rectupdate)
     {
         ts::rectangle_update_s updr;
@@ -1088,6 +1088,11 @@ static ts::ivec2 extract_link(const ts::wstr_c &message, int chari)
     return ts::ivec2(-1);
 }
 
+ts::ivec2 gui_label_ex_c::glyphs_shift() const
+{
+    return glyphs_pos + textrect.get_offset();
+}
+
 bool gui_label_ex_c::check_overlink(const ts::ivec2 &pos)
 {
     if (textrect.is_invalid_glyphs()) return false;
@@ -1097,10 +1102,9 @@ bool gui_label_ex_c::check_overlink(const ts::ivec2 &pos)
     {
         ts::GLYPHS &glyphs = get_glyphs();
         ts::irect gr = ts::glyphs_bound_rect(glyphs);
-        gr += glyphs_pos;
-        if (gr.inside(pos))
+        ts::ivec2 cp = pos - glyphs_shift();
+        if (gr.inside(cp))
         {
-            ts::ivec2 cp = pos - glyphs_pos;
             int glyph_under_cursor = ts::glyphs_nearest_glyph(glyphs, cp, true);
             int char_index = ts::glyphs_get_charindex(glyphs, glyph_under_cursor);
             if (char_index >= 0 && char_index < textrect.get_text().get_length())
@@ -1136,10 +1140,9 @@ ts::ivec2 gui_label_ex_c::get_link_pos_under_cursor(const ts::ivec2 &localpos) c
     {
         const ts::GLYPHS &glyphs = get_glyphs();
         ts::irect gr = ts::glyphs_bound_rect(glyphs);
-        gr += glyphs_pos;
-        if (gr.inside(localpos))
+        ts::ivec2 cp = localpos - glyphs_shift();
+        if (gr.inside(cp))
         {
-            ts::ivec2 cp = localpos - glyphs_pos;
             int glyph_under_cursor = ts::glyphs_nearest_glyph(glyphs, cp, true);
             int char_index = ts::glyphs_get_charindex(glyphs, glyph_under_cursor);
             if (char_index >= 0 && char_index < textrect.get_text().get_length())
@@ -1332,7 +1335,7 @@ ts::ivec2 gui_tooltip_c::get_min_size() const
 {
     set_theme_rect(CONSTASTR("tooltip"), false);
     __super::created();
-    textrect.set_margins(5,5,0);
+    textrect.set_margins(ts::ivec2(5),0);
     DEFERRED_UNIQUE_CALL( 0.1, DELEGATE(this, check_text), nullptr );
     HOLD(ownrect)().leech(this);
 }
@@ -2823,7 +2826,7 @@ MAKE_CHILD<gui_textfield_c>::~MAKE_CHILD()
         get().selector->set_face_getter(selectorface ? selectorface : BUTTON_FACE(selector)); //-V807
         get().selector->set_handler(handler, param);
         ts::ivec2 minsz = get().selector->get_min_size();
-        get().set_margins(0, minsz.x);
+        get().set_margins_rb(ts::ivec2(minsz.x, 0));
         get().height = ts::tmax( minsz.y, get().get_font()->height );
     } else
     {
@@ -3282,7 +3285,7 @@ void gui_hslider_c::set_level(float level_)
                 {
                     caret_width = th->sis[SI_CENTER].width();
                     x = lround((float)(cla.width() - caret_width) * pos) + cla.lt.x;
-                    m_engine->draw(ts::ivec2(x, cla.lt.y), th->src, th->sis[SI_CENTER], th->is_alphablend(SI_CENTER));
+                    m_engine->draw(ts::ivec2(x, cla.lt.y), th->src.extbody(), th->sis[SI_CENTER], th->is_alphablend(SI_CENTER));
                 }
 
                 ts::ivec2 tsz = gui->tr().calc_text_size(ts::g_default_text_font, current_value_text, (cla.width()-caret_width)/2, 0, nullptr);

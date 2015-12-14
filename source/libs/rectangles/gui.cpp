@@ -1305,7 +1305,7 @@ void selectable_core_s::endtrack()
     }
 }
 
-void selectable_core_s::selection_stuff(ts::drawable_bitmap_c &texture, const ts::ivec2 &size)
+void selectable_core_s::selection_stuff(ts::bitmap_c &texture, const ts::ivec2 &size)
 {
     texture.fill(ts::ivec2(0), size, 0);
 
@@ -1442,7 +1442,7 @@ static bool is_better_size( const ts::ivec2 &need_size, const ts::ivec2 &current
     return false;
 }
 
-ts::drawable_bitmap_c * gui_c::acquire_texture(text_rect_dynamic_c *requester, const ts::ivec2 &size)
+ts::bitmap_c * gui_c::acquire_texture(text_rect_dynamic_c *requester, const ts::ivec2 &size)
 {
     texture_s *candidate = nullptr;
 
@@ -1532,7 +1532,7 @@ ts::drawable_bitmap_c * gui_c::acquire_texture(text_rect_dynamic_c *requester, c
     return &candidate->texture;
 }
 
-void gui_c::release_texture(ts::drawable_bitmap_c * t)
+void gui_c::release_texture(ts::bitmap_c * t)
 {
     for(texture_s *tt :m_textures)
     {
@@ -1555,7 +1555,7 @@ text_rect_dynamic_c::~text_rect_dynamic_c()
         gui->release_texture(curtexture);
 }
 
-/*virtual*/ ts::drawable_bitmap_c &text_rect_dynamic_c::texture()
+/*virtual*/ ts::bitmap_c &text_rect_dynamic_c::texture()
 {
     last_use_time = ts::Time::current();
     if ( curtexture ) return *curtexture;

@@ -50,7 +50,7 @@ struct theme_conf_s
 
 struct theme_rect_s : ts::shared_object
 {
-	const ts::drawable_bitmap_c &src;
+	const ts::bitmap_c &src;
 	ts::irect sis[SI_count];
     struct  
     {
@@ -112,7 +112,7 @@ struct theme_rect_s : ts::shared_object
         }
         auto x = alphablend.get(si);
         if (x) return x == 1;
-        x = src.is_alphablend( sis[si] ) ? 1 : 2;
+        x = src.is_alpha_blend( sis[si] ) ? 1 : 2;
         alphablend.set(si,x);
         return x == 1;
     }
@@ -122,7 +122,7 @@ struct theme_rect_s : ts::shared_object
     static const ts::flags32_s::BITS F_SPECIALBORDER = SETBIT(2);
 
     DECLARE_DYNAMIC_BEGIN(theme_rect_s)
-    theme_rect_s(const ts::drawable_bitmap_c &b, const theme_conf_s &thconf):src(b), hollowborder(0), resizearea(2), captop(20), captop_max(30), captexttab(5), capheight(20), capheight_max(32)
+    theme_rect_s(const ts::bitmap_c &b, const theme_conf_s &thconf):src(b), hollowborder(0), resizearea(2), captop(20), captop_max(30), captexttab(5), capheight(20), capheight_max(32)
 	{
         flags.init(F_FASTBORDER, thconf.fastborder);
         flags.init(F_ROOTALPHABLEND, thconf.rootalphablend);
@@ -149,7 +149,7 @@ class theme_c;
 struct button_desc_s;
 struct generated_button_data_s
 {
-    ts::drawable_bitmap_c src;
+    ts::bitmap_c src;
     static generated_button_data_s *generate( const ts::abp_c *gen );
     generated_button_data_s() {}
     virtual ~generated_button_data_s() {}
@@ -181,7 +181,7 @@ struct button_desc_s : ts::shared_object
     };
     UNIQUE_PTR( generated_button_data_s ) genb;
     ts::ivec2 size;
-    const ts::drawable_bitmap_c &src;
+    const ts::bitmap_c &src;
     ts::wstr_c text;
     ts::irect rects[numstates];
     ts::shared_ptr<theme_rect_s> rectsf[numstates];
@@ -190,41 +190,31 @@ struct button_desc_s : ts::shared_object
     ts::uint32 align = UNDEFINED;
 
     void load_params(theme_c *th, const ts::bp_t<char> * block);
-    static button_desc_s * build(const ts::drawable_bitmap_c &dbmp)
-    {
-        struct button_desc_warp : public button_desc_s
-        {
-            button_desc_warp(const ts::drawable_bitmap_c &b) :button_desc_s(b) {}
-        };
-
-        TS_STATIC_CHECK(sizeof(button_desc_warp) == sizeof(button_desc_s), "what_da_fak" );
-
-        return TSNEW(button_desc_warp, dbmp);
-    }
 
     bool is_alphablend(states s) const
     {
         auto x = alphablend.get(s);
         if (x) return x == 1;
-        x = src.is_alphablend(rects[s]) ? 1 : 2;
+        x = src.is_alpha_blend(rects[s]) ? 1 : 2;
         alphablend.set(s, x);
         return x == 1;
     }
 
     ts::ivec2 draw( rectengine_c *engine, states st, const ts::irect& area, ts::uint32 defalign );
 
-private:
+    DECLARE_DYNAMIC_BEGIN(button_desc_s)
     // private constructor ensures that theme_rect_s will always be created in dynamic memory by theme_rect_s::build factory
-    button_desc_s(const ts::drawable_bitmap_c &b) :src(b)
+    button_desc_s(const ts::bitmap_c &b) :src(b)
     {
     }
-public:
+    DECLARE_DYNAMIC_END(public)
+
     ~button_desc_s();
 };
 
 struct theme_image_s : ts::image_extbody_c
 {
-    const ts::drawable_bitmap_c *dbmp = nullptr;
+    const ts::bitmap_c *dbmp = nullptr;
     ts::irect rect;
     void draw( rectengine_c &eng, const ts::ivec2 &p ) const;
 };
@@ -235,14 +225,14 @@ class theme_c
 {
     
     ts::hashmap_t<ts::str_c, theme_image_s> images;
-	ts::hashmap_t<ts::wstr_c, ts::drawable_bitmap_c> bitmaps;
+	ts::hashmap_t<ts::wstr_c, ts::bitmap_c> bitmaps;
 	ts::hashmap_t<ts::str_c, ts::shared_ptr<theme_rect_s> > rects;
     ts::hashmap_t<ts::str_c, ts::shared_ptr<button_desc_s> > buttons;
 	ts::wstr_c m_name;
     ts::abp_c m_conf;
     int iver = -1;
 
-	const ts::drawable_bitmap_c &loadimage( const ts::wsptr &name );
+	const ts::bitmap_c &loadimage( const ts::wsptr &name );
 
     struct theme_font_s
     {

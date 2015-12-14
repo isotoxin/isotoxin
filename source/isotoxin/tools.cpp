@@ -837,9 +837,31 @@ ts::wstr_c loc_text(loctext_e lt)
             return TTT("Probably camera already used.[br]You have to stop using camera by another application.", 353);
         case loc_initialization:
             return TTT("Initialization...", 352);
+        case loc_copy:
+             return TTT("Copy",92);
+
+        case loc_connection_name:
+            return TTT("Connection name", 102);
+        case loc_module:
+            return TTT("Module", 105);
+        case loc_id:
+            return TTT("ID", 103);
+        case loc_state:
+            return TTT("State", 104);
 
     }
     return ts::wstr_c();
+}
+
+ts::wstr_c text_contact_state(ts::TSCOLOR color_online, ts::TSCOLOR color_offline, contact_state_e st)
+{
+    ts::wstr_c sost;
+    if (CS_ONLINE == st)
+        sost.set(CONSTWSTR("<b>")).append(maketag_color<ts::wchar>(color_online)).append(TTT("Online", 100)).append(CONSTWSTR("</color></b>"));
+    else if (CS_OFFLINE == st)
+        sost.set(CONSTWSTR("<l>")).append(maketag_color<ts::wchar>(color_offline)).append(TTT("Offline", 101)).append(CONSTWSTR("</color></l>"));
+
+    return sost;
 }
 
 ts::wstr_c text_typing(const ts::wstr_c &prev, ts::wstr_c &workbuf, const ts::wsptr &preffix)
@@ -872,7 +894,7 @@ ts::wstr_c text_typing(const ts::wstr_c &prev, ts::wstr_c &workbuf, const ts::ws
     return ttc;
 }
 
-void draw_initialization(rectengine_c *e, ts::drawable_bitmap_c &pab, const ts::irect&viewrect, ts::TSCOLOR tcol, const ts::wsptr &additiontext)
+void draw_initialization(rectengine_c *e, ts::bitmap_c &pab, const ts::irect&viewrect, ts::TSCOLOR tcol, const ts::wsptr &additiontext)
 {
     draw_data_s&dd = e->begin_draw();
 
@@ -881,7 +903,7 @@ void draw_initialization(rectengine_c *e, ts::drawable_bitmap_c &pab, const ts::
     ts::ivec2 tpos = (viewrect.size() - tsz) / 2;
 
     ts::ivec2 processpos(tpos.x - pab.info().sz.x - 5, (viewrect.height() - pab.info().sz.y) / 2);
-    e->draw(processpos + viewrect.lt, pab, ts::irect(0, pab.info().sz), true);
+    e->draw(processpos + viewrect.lt, pab.extbody(), ts::irect(0, pab.info().sz), true);
 
 
     text_draw_params_s tdp;
@@ -1012,10 +1034,10 @@ ts::wstr_c make_proto_desc( int mask )
     ts::wstr_c r(1024,true);
     if (0 != (mask & MPD_UNAME))    r.append(TTT("Your name",259)).append(CONSTWSTR(": <l>{uname}</l><br>"));
     if (0 != (mask & MPD_USTATUS))  r.append(TTT("Your status",260)).append(CONSTWSTR(": <l>{ustatus}</l><br>"));
-    if (0 != (mask & MPD_NAME))     r.append(TTT("Connection name",102)).append(CONSTWSTR(": <l>{name}</l><br>"));
-    if (0 != (mask & MPD_MODULE))   r.append(TTT("Module",105)).append(CONSTWSTR(": <l>{module}</l><br>"));
-    if (0 != (mask & MPD_ID))       r.append(TTT("ID",103)).append(CONSTWSTR(": <l>{id}</l><br>"));
-    if (0 != (mask & MPD_STATE))    r.append(TTT("State",104)).append(CONSTWSTR(": <l>{state}</l><br>"));
+    if (0 != (mask & MPD_NAME))     r.append(loc_text(loc_connection_name)).append(CONSTWSTR(": <l>{name}</l><br>"));
+    if (0 != (mask & MPD_MODULE))   r.append(loc_text(loc_module)).append(CONSTWSTR(": <l>{module}</l><br>"));
+    if (0 != (mask & MPD_ID))       r.append(loc_text(loc_id)).append(CONSTWSTR(": <l>{id}</l><br>"));
+    if (0 != (mask & MPD_STATE))    r.append(loc_text(loc_state)).append(CONSTWSTR(": <l>{state}</l><br>"));
 
     if (r.ends(CONSTWSTR("<br>"))) r.trunc_length(4);
     return r;
@@ -1044,9 +1066,9 @@ bool new_version()
     return new_version( application_c::appver(), cfg().autoupdate_newver() );
 }
 
-ts::drawable_bitmap_c * prepare_proto_icon( const ts::asptr &prototag, const void *icodata, int icodatasz, int imgsize, icon_type_e icot )
+ts::bitmap_c * prepare_proto_icon( const ts::asptr &prototag, const void *icodata, int icodatasz, int imgsize, icon_type_e icot )
 {
-    ts::drawable_bitmap_c * ricon = nullptr;
+    ts::bitmap_c * ricon = nullptr;
     if (icodatasz)
     {
         ts::bitmap_c bmp;
@@ -1074,16 +1096,16 @@ ts::drawable_bitmap_c * prepare_proto_icon( const ts::asptr &prototag, const voi
             if (input_images_size != imgsize || numimages == 0)
             {
                 ts::bitmap_c bmpsz;
-                bmpsz.create_RGBA( ts::ivec2(imgsize) );
+                bmpsz.create_ARGB( ts::ivec2(imgsize) );
                 bmpsz.resize_from(srcb, ts::FILTER_LANCZOS3);
-                bmp = bmpsz;
+                bmp = std::move(bmpsz);
             } else if (input_images_size != bmp.info().sz.y)
             {
                 ASSERT( srcb.info().sz == ts::ivec2(imgsize) );
                 ts::bitmap_c bmpx;
-                bmpx.create_RGBA( ts::ivec2(imgsize) );
+                bmpx.create_ARGB( ts::ivec2(imgsize) );
                 bmpx.copy(ts::ivec2(0), bmpx.info().sz, srcb, ts::ivec2(0));
-                bmp = bmpx;
+                bmp = std::move(bmpx);
             }
 
             if ( do_online_offline_effects )
@@ -1140,7 +1162,8 @@ ts::drawable_bitmap_c * prepare_proto_icon( const ts::asptr &prototag, const voi
                 }
             }
 
-            ricon = TSNEW(ts::drawable_bitmap_c, bmp, false, true);
+            ricon = TSNEW(ts::bitmap_c, std::move(bmp));
+            ricon->premultiply();
         }
     }
     if (!ricon)
@@ -1177,7 +1200,7 @@ ts::drawable_bitmap_c * prepare_proto_icon( const ts::asptr &prototag, const voi
         tr.parse_and_render_texture(nullptr, nullptr, true);
 
         ts::bitmap_c bmp;
-        bmp.create_RGBA(tr.size);
+        bmp.create_ARGB(tr.size);
         bmp.copy(ts::ivec2(0), tr.size, tr.get_texture().extbody(), ts::ivec2(0));
 
         if (bmp.info().sz != ts::ivec2(imgsize))
@@ -1187,7 +1210,8 @@ ts::drawable_bitmap_c * prepare_proto_icon( const ts::asptr &prototag, const voi
             bmp = bmpsz;
         }
 
-        ricon = TSNEW(ts::drawable_bitmap_c, bmp, false, true);
+        ricon = TSNEW(ts::bitmap_c, std::move(bmp));
+        ricon->premultiply();
     }
     return ricon;
 }

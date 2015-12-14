@@ -175,7 +175,7 @@ namespace ts
 
         if (bmp.info().sz.x != br.gif->SWidth || bmp.info().sz.y != br.gif->SHeight)
         {
-            bmp.create_RGBA( ivec2(br.gif->SWidth, br.gif->SHeight) );
+            bmp.create_ARGB( ivec2(br.gif->SWidth, br.gif->SHeight) );
             bmp.fill( br.colors[br.gif->SBackGroundColor] );
         }
         return nextframe( bmp.extbody() );

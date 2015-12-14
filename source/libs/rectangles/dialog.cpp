@@ -9,19 +9,21 @@ MAKE_CHILD<gui_listitem_c>::~MAKE_CHILD()
     get().gm = gm;
 }
 
-gui_listitem_c::gui_listitem_c(MAKE_CHILD<gui_listitem_c> &data) :gui_label_c(data), param(data.param), icon(data.icon)
+gui_listitem_c::gui_listitem_c(initial_rect_data_s &data, gui_listitem_params_s &prms) : gui_label_ex_c(data), param(prms.param), icon(prms.icon)
 {
-    if (data.themerect.is_empty())
+    if (prms.themerect.is_empty())
         set_theme_rect(CONSTASTR("lstitem"), false);
     else
-        set_theme_rect(data.themerect, false);
+        set_theme_rect(prms.themerect, false);
 
     height = 1;
+    marginleft_icon = prms.addmarginleft_icon;
+    textrect.change_option(ts::TO_VCENTER, ts::TO_VCENTER);
     textrect.make_dirty(true, true, true);
     if (icon)
     {
-        textrect.set_margins( icon->info().sz.x + 3, 0, 0 );
-        if ( icon->info().sz.y > height )
+        textrect.set_margins(ts::ivec2(icon->info().sz.x + prms.addmarginleft_icon + prms.addmarginleft, 0));
+        if (icon->info().sz.y > height)
             height = icon->info().sz.y;
     }
 }
@@ -57,10 +59,10 @@ void gui_listitem_c::created()
     {
         if (const theme_rect_s *thr = themerect())
         {
-            return textrect.calc_text_size(width - thr->clborder_x(), custom_tag_parser_delegate()).y + 4 + thr->clborder_y();
+            return ts::tmax(height, textrect.calc_text_size(width - thr->clborder_x(), custom_tag_parser_delegate()).y) + 4 + thr->clborder_y();
         } else
         {
-            return textrect.calc_text_size(width, custom_tag_parser_delegate()).y + 4;
+            return ts::tmax(height, textrect.calc_text_size(width, custom_tag_parser_delegate()).y) + 4;
         }
     }
     return 0;
@@ -84,20 +86,31 @@ void gui_listitem_c::set_text(const ts::wstr_c&t, bool full_height_last_line)
 
 /*virtual*/ bool gui_listitem_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if ( rid != getrid() && (getrid() >> rid) )
+    if ( rid != getrid() )
     {
-        switch (qp)
+        if (popupmenu && popupmenu->getrid() == rid)
         {
-        case SQ_MOUSE_WHEELUP:
-        case SQ_MOUSE_WHEELDOWN:
-            return __super::sq_evt(qp, rid, data);;
-        case SQ_MOUSE_IN:
-            MODIFY(getrid()).highlight(true);
-            break;
-        case SQ_MOUSE_OUT:
-            MODIFY(getrid()).highlight(false);
-            break;
+            //if (SQ_POPUP_MENU_DIE == qp)
+            //    MODIFY(*this).highlight( gui->get_hoverdata( gui->get_cursor_pos() ).minside == getrid() );
+            return false;
         }
+
+        if (getrid() >> rid)
+        {
+            switch (qp)
+            {
+            case SQ_MOUSE_WHEELUP:
+            case SQ_MOUSE_WHEELDOWN:
+                return __super::sq_evt(qp, rid, data);;
+            case SQ_MOUSE_IN:
+                MODIFY(getrid()).highlight(true);
+                break;
+            case SQ_MOUSE_OUT:
+                MODIFY(getrid()).highlight(!popupmenu.expired());
+                break;
+            }
+        }
+
         return false;
     }
 
@@ -110,7 +123,7 @@ void gui_listitem_c::set_text(const ts::wstr_c&t, bool full_height_last_line)
         MODIFY(getrid()).highlight(true);
         return false;
     case SQ_MOUSE_OUT:
-        MODIFY(getrid()).highlight(false);
+        MODIFY(getrid()).highlight(!popupmenu.expired());
         return false;
     case SQ_MOUSE_RUP:
         if (gm)
@@ -124,7 +137,7 @@ void gui_listitem_c::set_text(const ts::wstr_c&t, bool full_height_last_line)
         }
         return false;
     case SQ_MOUSE_L2CLICK:
-        gm(param, true);
+        if (gm) gm(param, true);
         return false;
     case SQ_YOU_WANNA_DIE:
         return param.equals(data.strparam);
@@ -137,7 +150,7 @@ void gui_listitem_c::set_text(const ts::wstr_c&t, bool full_height_last_line)
         {
             ts::irect cla = get_client_area();
             getengine().begin_draw();
-            getengine().draw( ts::ivec2(cla.lt.x, (cla.height()-icon->info().sz.y)/2+cla.lt.y), *icon, ts::irect(0, icon->info().sz), true );
+            getengine().draw( ts::ivec2(cla.lt.x + marginleft_icon, (cla.height()-icon->info().sz.y)/2+cla.lt.y), icon->extbody(), ts::irect(0, icon->info().sz), true );
             getengine().end_draw();
         }
         return true;

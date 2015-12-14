@@ -1041,6 +1041,10 @@ static void __stdcall update_contact(const contact_data_s *cd)
         for(int i=0; i<cd->members_count; ++i)
             ucs << cd->members[i];
     }
+    if (0 != (cd->mask & CDM_DETAILS))
+    {
+        ucs << asptr(cd->details, cd->details_len);
+    }
 }
 
 static void __stdcall message(message_type_e mt, int gid, int cid, u64 create_time, const char *msgbody_utf8, int mlen)

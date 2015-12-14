@@ -17,7 +17,7 @@ struct emoticon_s
 
     union 
     {
-        ts::drawable_bitmap_c *frame;
+        ts::bitmap_c *frame;
         ts::bitmap_c *preframe;
     };
 
@@ -25,7 +25,7 @@ struct emoticon_s
     virtual bool load(const ts::blob_c &body) = 0;
 
     virtual void draw(rectengine_root_c *e, const ts::ivec2 &pos) const = 0;
-    virtual const ts::drawable_bitmap_c &curframe(ts::irect &frect) const = 0;
+    virtual const ts::bitmap_c &curframe(ts::irect &frect) const = 0;
     virtual ts::irect framerect() const = 0;
 
     gui_textedit_c::active_element_s * ee = nullptr;
@@ -40,7 +40,7 @@ class emoticons_c
         ts::str_c s;
     };
 
-    ts::drawable_bitmap_c fullframe;
+    ts::bitmap_c fullframe;
     ts::array_inplace_t< match_point_s, 128 > matchs;
 
     struct emo_gif_s : public emoticon_s, public picture_gif_c
@@ -50,14 +50,14 @@ class emoticons_c
         
         /*virtual*/ void draw(rectengine_root_c *e, const ts::ivec2 &pos) const { picture_gif_c::draw(e,pos); }
 
-        /*virtual*/ const ts::drawable_bitmap_c &curframe(ts::irect &fr) const override
+        /*virtual*/ const ts::bitmap_c &curframe(ts::irect &fr) const override
         {
             ASSERT(!ispreframe);
             fr = frect;
             return *frame;
         }
         /*virtual*/ ts::irect framerect() const override { return frect; }
-        /*virtual*/ ts::drawable_bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &fr) override
+        /*virtual*/ ts::bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &fr) override
         {
             FORBIDDEN();
             __assume(0);
@@ -72,14 +72,14 @@ class emoticons_c
 
         /*virtual*/ void draw(rectengine_root_c *e, const ts::ivec2 &pos) const { picture_c::draw(e,pos); }
 
-        /*virtual*/ const ts::drawable_bitmap_c &curframe(ts::irect &fr) const override
+        /*virtual*/ const ts::bitmap_c &curframe(ts::irect &fr) const override
         {
             ASSERT(!ispreframe);
             fr = frect;
             return *frame;
         }
         /*virtual*/ ts::irect framerect() const override { return frect; }
-        /*virtual*/ ts::drawable_bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &fr) override
+        /*virtual*/ ts::bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &fr) override
         {
             FORBIDDEN();
             __assume(0);

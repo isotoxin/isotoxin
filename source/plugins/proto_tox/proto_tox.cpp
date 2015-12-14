@@ -208,6 +208,7 @@ enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
     chunk_descriptor_state,
     chunk_descriptor_avatartag,
     chunk_descriptor_avatarhash,
+    chunk_descriptor_dnsname,
 
     /*
 
@@ -1074,7 +1075,7 @@ struct transmitting_avatar_s : public transmitting_data_s
 transmitting_data_s *transmitting_data_s::first = nullptr;
 transmitting_data_s *transmitting_data_s::last = nullptr;
 
-static int send_request(const char*public_id, const char* invite_message_utf8, bool resend);
+static int send_request(const char *dnsname, const char*public_id, const char* invite_message_utf8, bool resend);
 
 struct discoverer_s
 {
@@ -1135,7 +1136,7 @@ struct discoverer_s
             hf->operation_result(LOP_ADDCONTACT, CR_INVALID_PUB_ID);
         } else
         {
-            int rslt = send_request(r().pubid,invmsg,false);
+            int rslt = send_request(r().ids, r().pubid,invmsg,false);
             hf->operation_result(LOP_ADDCONTACT, rslt);
         }
         r.unlock(); // unlock now to avoid deadlock
@@ -1251,6 +1252,8 @@ struct contact_descriptor_s
     contact_descriptor_s *next_call = nullptr;
     contact_descriptor_s *prev_call = nullptr;
 
+    uint8_t nospam[6];
+
 private:
     int id = 0;
     int fid; 
@@ -1327,10 +1330,13 @@ public:
     static const int F_AVASEND = 4;
     static const int F_AVARECIVED = 8;
     static const int F_FIDVALID = 16;
+    static const int F_DETAILS_SENT = 32;
+    static const int F_NOSPAM_PRESENT = 64;
 
     int flags = 0;
     int ccc_caps = 0;
 
+    str_c dnsname;
     str_c clientname;
     str_c bbcodes_supported;
 
@@ -1359,6 +1365,8 @@ public:
         UNSETFLAG(flags, F_IS_ONLINE);
         UNSETFLAG(flags, F_NEED_RESYNC);
         UNSETFLAG(flags, F_AVASEND);
+        UNSETFLAG(flags, F_DETAILS_SENT);
+        
         ccc_caps = 0;
         avatag_self = gavatag - 1;
         correct_create_time = 0;
@@ -1375,6 +1383,75 @@ public:
                 break;
             }
         }
+    }
+
+    void prepare_details( str_c &tmps, const uint8_t *iid, contact_data_s &cd ) const
+    {
+        if (!ISFLAG(flags, F_DETAILS_SENT))
+        {
+
+            byte idbytes[TOX_PUBLIC_KEY_SIZE] = {0};
+            if (!iid)
+            {
+                if (get_fid() >= 0)
+                {
+                    TOX_ERR_FRIEND_GET_PUBLIC_KEY e;
+                    tox_friend_get_public_key(tox, get_fid(), idbytes, &e);
+                    if (TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK != e) memset(idbytes, 0, sizeof(id));
+                }
+            }
+
+            str_c idstr = get_details_pubid(iid ? iid : idbytes);
+            if (idstr.ends(CONSTASTR("????????????")))
+                tmps.set(asptr("{\"" CDET_PUBLIC_ID_BAD "\":\""));
+            else
+                tmps.set(asptr("{\"" CDET_PUBLIC_ID "\":\""));
+            tmps.append(idstr);
+
+            if ( !dnsname.is_empty() )
+            {
+                tmps.append(asptr("\",\"" CDET_DNSNAME "\":"));
+                tmps.append(dnsname);
+            }
+
+            tmps.append(asptr("\",\"" CDET_CLIENT_CAPS "\":["));
+
+            for (token<char> bbsupported(bbcodes_supported, ','); bbsupported; ++bbsupported)
+                tmps.append(CONSTASTR("\"bb")).append(*bbsupported).append(CONSTASTR("\","));
+
+            tmps.append(asptr("\"tox\"],\"" CDET_CLIENT "\":\""));
+            tmps.append(clientname);
+            tmps.append(CONSTASTR("\"}"));
+
+            cd.mask |= CDM_DETAILS;
+            cd.details = tmps.cstr();
+            cd.details_len = tmps.get_length();
+
+            contact_descriptor_s *desc = const_cast<contact_descriptor_s *>(this);
+            SETFLAG(desc->flags, F_DETAILS_SENT);
+        }
+
+    }
+
+    str_c get_details_pubid( const uint8_t *pubkey ) const
+    {
+        str_c s;
+        s.append_as_hex(pubkey, TOX_PUBLIC_KEY_SIZE);
+        if (ISFLAG(flags, F_NOSPAM_PRESENT))
+        {
+            s.append_as_hex(nospam, 6);
+            return s;
+        }
+        
+        str_c p(pubid);
+        p.case_up();
+
+        if ( p.begins(s) && p.get_length() > s.get_length() )
+            return p;
+        
+        s.append(CONSTASTR("????????????"));
+        return s;
+   
     }
 
     int get_fidgnum() const {return fid;}
@@ -1700,10 +1777,10 @@ static void update_contact( const contact_descriptor_s *desc )
         TOX_USER_STATUS st = desc->get_fid() >= 0 ? tox_friend_get_status(tox, desc->get_fid(), &err) : (TOX_USER_STATUS)(-1);
         if (err != TOX_ERR_FRIEND_QUERY_OK) st = (TOX_USER_STATUS)(-1);
 
+        byte id[TOX_PUBLIC_KEY_SIZE];
         sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
         if (desc->get_fid() >= 0)
         {
-            byte id[TOX_PUBLIC_KEY_SIZE];
             TOX_ERR_FRIEND_GET_PUBLIC_KEY e;
             tox_friend_get_public_key(tox, desc->get_fid(), id, &e);
             if (TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK != e) memset(id,0,sizeof(id));
@@ -1765,6 +1842,8 @@ static void update_contact( const contact_descriptor_s *desc )
                 break;
         }
 
+        str_c details_json_string;
+        desc->prepare_details(details_json_string, id, cd);
         hf->update_contact(&cd);
     }
 }
@@ -2089,8 +2168,6 @@ static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_
             cd.public_id_len = TOX_PUBLIC_KEY_SIZE * 2;
         }
 
-        hf->update_contact(&cd);
-
         if (!prev_online && desc->is_online())
         {
             if (const char * clidcaps = (const char *)tox_friend_get_client_caps(tox, fid))
@@ -2101,7 +2178,11 @@ static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_
                     if (ln->equals(CONSTASTR("client")))
                     {
                         ++ln;
-                        desc->clientname = *ln;
+                        if (!desc->clientname.equals(*ln))
+                        {
+                            desc->clientname = *ln;
+                            UNSETFLAG( desc->flags, contact_descriptor_s::F_DETAILS_SENT );
+                        }
                     } else if (ln->equals(CONSTASTR("support_viewsize")))
                     {
                         ++ln;
@@ -2138,6 +2219,11 @@ static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_
         {
             desc->on_offline();
         }
+
+        str_c details_json_string;
+        desc->prepare_details(details_json_string, nullptr, cd);
+
+        hf->update_contact(&cd);
     }
 }
 
@@ -3272,6 +3358,8 @@ void __stdcall set_config(const void*data, int isz)
                         id = lc.get_int();
                     if (lc(chunk_descriptor_pubid))
                         desc->pubid = lc.get_astr();
+                    if (lc(chunk_descriptor_dnsname))
+                        desc->dnsname = lc.get_astr();
                     if (lc(chunk_descriptor_state))
                         desc->state = (contact_state_e)lc.get_int();
                     if (lc(chunk_descriptor_avatartag))
@@ -3396,6 +3484,7 @@ void operator<<(chunk &chunkm, const contact_descriptor_s &desc)
 
     chunk(chunkm.b, chunk_descriptor_id) << desc.get_id();
     chunk(chunkm.b, chunk_descriptor_pubid) << desc.pubid;
+    chunk(chunkm.b, chunk_descriptor_dnsname) << desc.dnsname;
     chunk(chunkm.b, chunk_descriptor_state) << (int)desc.state;
     chunk(chunkm.b, chunk_descriptor_avatartag) << desc.avatar_tag;
     if (desc.avatar_tag != 0)
@@ -3501,7 +3590,7 @@ void __stdcall save_config(void * param)
     }
 }
 
-static int send_request(const char*public_id, const char* invite_message_utf8, bool resend)
+static int send_request(const char *dnsname, const char *public_id, const char *invite_message_utf8, bool resend)
 {
     if (tox)
     {
@@ -3534,6 +3623,7 @@ static int send_request(const char*public_id, const char* invite_message_utf8, b
         contact_descriptor_s *desc = contact_descriptor_s::find( asptr(public_id, TOX_PUBLIC_KEY_SIZE * 2) );
         if (desc) desc->set_fid(fid, fid >= 0);
         else desc = new contact_descriptor_s( ID_CONTACT, fid );
+        desc->dnsname = dnsname;
         desc->pubid = s;
         desc->state = CS_INVITE_SEND;
 
@@ -3555,7 +3645,7 @@ int __stdcall resend_request(int id, const char* invite_message_utf8)
         auto it = id2desc.find(id);
         if (it == id2desc.end()) return CR_FUNCTION_NOT_FOUND;
         contact_descriptor_s *cd = it->second;
-        return send_request(cd->pubid, invite_message_utf8, true);
+        return send_request(cd->dnsname, cd->pubid, invite_message_utf8, true);
     }
     return CR_FUNCTION_NOT_FOUND;
 }
@@ -3565,7 +3655,7 @@ int __stdcall add_contact(const char* public_id, const char* invite_message_utf8
 {
     pstr_c s = asptr(public_id);
     if (s.get_length() == (TOX_ADDRESS_SIZE * 2) && s.contain_chars(CONSTASTR("0123456789abcdefABCDEF")))
-        return send_request(public_id, invite_message_utf8, false);
+        return send_request("", public_id, invite_message_utf8, false);
 
     if (s.find_pos('@') > 0)
     {

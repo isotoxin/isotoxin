@@ -70,6 +70,7 @@ class gui_filterbar_c : public gui_label_ex_c
 
     bool search_in_messages = true;
 
+    bool cancel_filter(RID, GUIPARAM);
     bool option_handler(RID, GUIPARAM);
     bool update_filter(const ts::wstr_c & e);
     bool do_contact_check(RID, GUIPARAM);

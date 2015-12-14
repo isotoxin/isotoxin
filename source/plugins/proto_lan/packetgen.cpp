@@ -63,6 +63,8 @@ void packetgen::pg_meet(const byte *other_public_key, const byte *temporary_key)
     encopy();
 }
 
+static char clname[64] = "isotoxin/" SS(PLUGINVER);
+
 void packetgen::pg_nonce(const byte *other_public_key, const byte *auth_key /* nonce + contact key */)
 {
     logm("pg_nonce =================================================================================");
@@ -91,6 +93,8 @@ void packetgen::pg_nonce(const byte *other_public_key, const byte *auth_key /* n
 
     log_bytes("hash of authkey", hash, crypto_generichash_BYTES);
 
+    push(64, asptr(clname));
+
     encopy();
 
 }
@@ -118,6 +122,9 @@ void packetgen::pg_ready(const byte *raw_public_id, const byte *crypt_packet_key
 {
     push_pid( PID_READY );
     push(raw_public_id, SIZE_PUBID);
+
+    push(64, asptr(clname) );
+
     encode(crypt_packet_key);
     log_auth_key("PID_READY encoded", crypt_packet_key);
 }

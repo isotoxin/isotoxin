@@ -159,6 +159,10 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     m->members.add( r.get<int>() );
             }
 
+            if (0 != (m->mask & CDM_DETAILS))
+                m->details = r.getastr();
+
+
             m->send_to_main_thread();
         }
         break;
@@ -607,7 +611,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
         if (typingsendcontact == target->getkey().contactid)
             typingsendcontact = 0;
 
-        ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().contactid << (int)MTA_MESSAGE << msg.post.utag << msg.post.time << msg.post.message_utf8 );
+        ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().contactid << (int)MTA_MESSAGE << msg.post.utag << msg.post.cr_time << msg.post.message_utf8 );
     }
     return 0;
 }
@@ -665,7 +669,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
     return 0;
 }
 
-const ts::drawable_bitmap_c &active_protocol_c::get_icon(int sz, icon_type_e icot)
+const ts::bitmap_c &active_protocol_c::get_icon(int sz, icon_type_e icot)
 {
     for(const icon_s &icon : icons_cache)
         if (icon.icot == icot && icon.bmp->info().sz.x == sz)
@@ -673,7 +677,7 @@ const ts::drawable_bitmap_c &active_protocol_c::get_icon(int sz, icon_type_e ico
 
     auto r = syncdata.lock_read();
 
-    ts::drawable_bitmap_c *icon = prepare_proto_icon( r().data.tag, r().icon.data(), r().icon.size(), sz, icot );
+    ts::bitmap_c *icon = prepare_proto_icon( r().data.tag, r().icon.data(), r().icon.size(), sz, icot );
     icon_s &ic = icons_cache.add();
     ic.bmp.reset(icon);
     ic.icot = icot;

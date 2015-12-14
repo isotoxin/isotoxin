@@ -4,8 +4,12 @@
 
 #define SOUNDS \
     SND( incoming_message ) \
+    SND( incoming_message2 ) \
     SND( incoming_file ) \
     SND( start_recv_file ) \
+    SND( file_received ) \
+    SND( friend_online ) \
+    SND( friend_offline ) \
     SND( ringtone ) \
     SND( ringtone2 ) \
     SND( call_accept ) \
@@ -13,6 +17,7 @@
     SND( hangup ) \
     SND( calltone ) \
     SND( new_version ) \
+
 
 
 enum sound_e

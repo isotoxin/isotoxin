@@ -157,6 +157,18 @@ void dotests()
 
     //ts::packed_buf_c<20, 121, int> b0;
 
+    //{
+    //    ts::buf_c b;
+    //    b.load_from_disk_file(L"C:\\2\\1\\nodes");
+    //    //b.load_from_disk_file(L"C:\\2\\1\\json1");
+    //    ts::json_c jsn;
+    //    int n = jsn.parse( b.cstr() );
+    //    __debugbreak();
+    //}
+
+
+
+
     ts::packed_buf_c<1,121> b1;
     ts::packed_buf_c<2,113> b2;
     ts::packed_buf_c<3,97> b3;
@@ -331,7 +343,7 @@ protected:
             l.setup_found_item(0,0);
             //l.mark_found();
 
-            p.time = now() - 2500;
+            p.recv_time = now() - 2500;
             p.message_utf8 = ts::asptr("234234");
             p.utag = ts::uuid();
             l.append_text(p);
@@ -339,7 +351,7 @@ protected:
 
         {
             gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
-            p.time = now() - 2100;
+            p.recv_time = now() - 2100;
             //p.type = MTA_UNDELIVERED_MESSAGE;
             p.message_utf8 = ts::to_utf8(L"унделиверед www.microsoft.com\nsdfsddddf *LOL*");
             p.utag = ts::uuid();
@@ -348,7 +360,7 @@ protected:
 
         {
             gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
-            p.time = now() - 4;
+            p.recv_time = now() - 4;
             p.message_utf8 = ts::to_utf8(L"http://www.microsoft.com/sdfsdf");
             p.utag = ts::uuid();
             l.append_text(p);
@@ -356,7 +368,7 @@ protected:
 
         {
             gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
-            p.time = now() - 3;
+            p.recv_time = now() - 3;
             p.message_utf8 = ts::to_utf8(L"ttp://www.microsoft.com/sdfsdf");
             p.utag = ts::uuid();
             l.append_text(p);
@@ -364,7 +376,7 @@ protected:
 
         {
             gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
-            p.time = now() - 2;
+            p.recv_time = now() - 2;
             p.message_utf8 = ts::to_utf8(L"http://www.microsoft.com/sdfsdf");
             p.utag = ts::uuid();
             l.append_text(p);
@@ -405,6 +417,45 @@ public:
     }
 };
 
+class test_window_2 : public gui_isodialog_c
+{
+protected:
+    // /*virtual*/ int unique_tag() { return UD_NOT_UNIQUE; }
+    /*virtual*/ void created() override
+    {
+        set_theme_rect(CONSTASTR("main"), false);
+        __super::created();
+    }
+
+public:
+    test_window_2(initial_rect_data_s &data) :gui_isodialog_c(data) {}
+    ~test_window_2() {}
+
+    /*virtual*/ ts::ivec2 get_min_size() const { return ts::ivec2(150, 150); }
+
+    //sqhandler_i
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override
+    {
+        if (qp == SQ_PARENT_RECT_CHANGED)
+        {
+            return false;
+        }
+
+        return __super::sq_evt(qp, rid, data);
+    }
+
+    void getbutton(bcreate_s &bcr)
+    {
+        if (bcr.tag == 0)
+        {
+            __super::getbutton(bcr);
+        }
+    }
+
+    /*virtual*/ void on_confirm() override
+    {
+    }
+};
 
 
 
@@ -421,11 +472,12 @@ void summon_test_window()
     //m->send_to_main_thread();
 
 
-    //drawcollector dch;
+    drawcollector dch;
     //RID r = MAKE_ROOT<test_window>();
-    //MODIFY(r).allow_move_resize().size(502,447).setcenterpos().visible(true);
+    RID r = MAKE_ROOT<test_window_2>();
+    MODIFY(r).allow_move_resize().size(502,447).setcenterpos().visible(true);
 
-    SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR, dialog_avasel_params_s(0));
+    //SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR, dialog_avasel_params_s(0));
     
 }
 

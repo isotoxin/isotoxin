@@ -841,7 +841,7 @@ bool rotate2(ts::bitmap_c &obm, ts::bitmap_c &ibm, int angle, rot_filter_e filt_
 
 	switch( ibm.info().bytepp() )
 	{
-		case 4: obm.create_RGBA(ivec2(mfd.dst_w,mfd.dst_h)); break;
+		case 4: obm.create_ARGB(ivec2(mfd.dst_w,mfd.dst_h)); break;
 		default: return false;
 	}
 

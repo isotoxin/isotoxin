@@ -9,9 +9,9 @@ public:
     virtual bool load(const ts::blob_c &body) = 0;
     virtual ts::ivec2 framesize_by_width(int w) { return ts::ivec2(0); };
     virtual void fit_to_width(int w) {}
-    virtual const ts::drawable_bitmap_c &curframe(ts::irect &frect) const  = 0;
+    virtual const ts::bitmap_c &curframe(ts::irect &frect) const  = 0;
     virtual ts::irect framerect() const = 0;
-    virtual ts::drawable_bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &frect)  = 0;
+    virtual ts::bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &frect)  = 0;
 
     virtual void draw(rectengine_root_c *e, const ts::ivec2 &pos) const;
 };

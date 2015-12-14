@@ -79,7 +79,7 @@ namespace
         return 0;
     }
 
-    void draw_circle( ts::drawable_bitmap_c &bmp, float cx, float cy, float r, ts::TSCOLOR col )
+    void draw_circle( ts::bitmap_c &bmp, float cx, float cy, float r, ts::TSCOLOR col )
     {
         int y0 = lround(cy - r - 1);
         int y1 = lround(cy + r + 1);
@@ -106,7 +106,7 @@ namespace
             }
         }
     }
-    void draw_ring(ts::drawable_bitmap_c &bmp, float cx, float cy, float r0, float r1, ts::TSCOLOR col)
+    void draw_ring(ts::bitmap_c &bmp, float cx, float cy, float r0, float r1, ts::TSCOLOR col)
     {
         int y0 = lround(cy - r1 - 1);
         int y1 = lround(cy + r1 + 1);
@@ -129,7 +129,7 @@ namespace
         }
     }
 
-    void draw_shadow(ts::drawable_bitmap_c &bmp, float cx, float cy, float r0, float r1, ts::TSCOLOR col0, ts::TSCOLOR col1)
+    void draw_shadow(ts::bitmap_c &bmp, float cx, float cy, float r0, float r1, ts::TSCOLOR col0, ts::TSCOLOR col1)
     {
         int y0 = lround(cy - r1 - 1);
         int y1 = lround(cy + r1 + 1);
@@ -211,7 +211,7 @@ struct gb_circle_s : public generated_button_data_s
         one_image_rect.combine( ts::irect(one_image_rect.center() - ts::ivec2(lround(r + border_add_size + border_width)), one_image_rect.center() + ts::ivec2(lround(r + border_add_size + border_width))) );
 
         ts::ivec2 one_image_size = one_image_rect.size();
-        src.create( ts::ivec2((one_image_size.x + margin_right)* 4, one_image_size.y) );
+        src.create_ARGB( ts::ivec2((one_image_size.x + margin_right)* 4, one_image_size.y) );
         src.fill(0);
 
         ts::TSCOLOR bcol = border ? ts::parsecolor<char>(gen->get_string(CONSTASTR("border-color")), ts::ARGB(0, 0, 0)) : 0;

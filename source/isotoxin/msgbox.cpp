@@ -213,10 +213,11 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR(" <a href=\"https://sqlite.org\">SQLite</a>") );
     title.append( CONSTWSTR("</l><br><br>Other sources and assets used<hr><l><a href=\"http://virtualdub.sourceforge.net/\">VirtualDub</a>") );
     title.append( CONSTWSTR(" <a href=\"https://github.com/sarbian/libsquish\">libsquish</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://code.google.com/p/libyuv\">libuv</a>") );
     title.append( CONSTWSTR(" <a href=\"https://github.com/libyal/liblnk\">liblink</a>") );
     title.append( CONSTWSTR(" <a href=\"http://www.efgh.com/software/md5.htm\">md5</a>") );
     title.append( CONSTWSTR(" <a href=\"http://dejavu-fonts.org\">DejaVu fonts</a>") );
-    title.append(CONSTWSTR(" <a href=\"http://www.kolobok.us\">Copyright<nbsp>©<nbsp>Aiwan.<nbsp>Kolobok<nbsp>Smiles</a>"));
+    title.append( CONSTWSTR(" <a href=\"http://www.kolobok.us\">Copyright<nbsp>©<nbsp>Aiwan.<nbsp>Kolobok<nbsp>Smiles</a>"));
     
     dm().label( title );
 
@@ -228,7 +229,7 @@ void dialog_about_c::updrect_about(const void *rr, int r, const ts::ivec2 &p)
     if (1000 == r)
     {
         rectengine_root_c *root = getroot();
-        root->draw(p - root->get_current_draw_offset(), pa.bmp, ts::irect(0,pa.bmp.info().sz), true );
+        root->draw(p - root->get_current_draw_offset(), pa.bmp.extbody(), ts::irect(0,pa.bmp.info().sz), true );
 
     } else
         updrect_def(rr,r,p);

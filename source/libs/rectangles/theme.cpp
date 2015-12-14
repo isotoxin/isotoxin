@@ -241,7 +241,7 @@ ts::ivec2 button_desc_s::draw( rectengine_c *engine, states st, const ts::irect&
             p.y += (area.height() - sz.y) / 2;
             break;
     }
-    engine->draw(p,src,rects[st],is_alphablend(st));
+    engine->draw(p,src.extbody(),rects[st],is_alphablend(st));
     return p;
 }
 
@@ -255,20 +255,21 @@ theme_c::~theme_c()
 
 }
 
-const drawable_bitmap_c &theme_c::loadimage( const wsptr &name )
+const bitmap_c &theme_c::loadimage( const wsptr &name )
 {
-	drawable_bitmap_c &dbmp = bitmaps[name];
+	bitmap_c &dbmp = bitmaps[name];
     if (dbmp.info().pitch != 0)
         return dbmp;
     bitmap_c bmp;
     if (blob_c b = load_image(name))
     {
         if (!bmp.load_from_file(b.data(),b.size()))
-            bmp.create_RGBA(ts::ivec2(128,128)).fill(ARGB(255,0,255));
+            bmp.create_ARGB(ts::ivec2(128,128)).fill(ARGB(255,0,255));
     } else
-        bmp.create_RGBA(ts::ivec2(128,128)).fill(ARGB(255, 0, 255));
+        bmp.create_ARGB(ts::ivec2(128,128)).fill(ARGB(255, 0, 255));
 
-    dbmp.create_from_bitmap(bmp, false, true);
+    dbmp = std::move(bmp);
+    dbmp.premultiply();
 	return dbmp;
 }
 
@@ -362,7 +363,7 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp )
                     bn = parnt->as_string();
                 }
             }
-            const drawable_bitmap_c &dbmp = loadimage(to_wstr(it->get_string("src")));
+            const bitmap_c &dbmp = loadimage(to_wstr(it->get_string("src")));
 			r = TSNEW( theme_rect_s, dbmp, thc );
 
 			r->load_params(it);
@@ -377,7 +378,7 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp )
             if (ASSERT(!src.is_empty()))
             {
                 token<char> t(src.as_sptr());
-                const drawable_bitmap_c &dbmp = loadimage(to_wstr(t->as_sptr()));
+                const bitmap_c &dbmp = loadimage(to_wstr(t->as_sptr()));
                 ++t;
                 irect r = ts::parserect(t,irect(ivec2(0),dbmp.info().sz));
                 theme_image_s &img = images.add(it.name());
@@ -416,7 +417,7 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp )
                 {
                     if (generated_button_data_s *bgenstuff = generated_button_data_s::generate(gen))
                     {
-                        bd = button_desc_s::build(bgenstuff->src);
+                        bd = TSNEW(button_desc_s, bgenstuff->src);
                         bgenstuff->setup(*bd);
 
                     } else
@@ -425,13 +426,13 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp )
 
                 if (!gen)
                 {
-                    bd = button_desc_s::build(make_dummy<drawable_bitmap_c>(true));
+                    bd = TSNEW( button_desc_s, make_dummy<bitmap_c>(true));
                     bd->load_params(this, it);
                 }
             } else
             {
-                const drawable_bitmap_c &dbmp = loadimage(to_wstr(src));
-                bd = button_desc_s::build(dbmp);
+                const bitmap_c &dbmp = loadimage(to_wstr(src));
+                bd = TSNEW( button_desc_s, dbmp);
                 bd->load_params(this, it);
             }
         }
@@ -445,7 +446,7 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp )
             if (ASSERT(!src.is_empty()))
             {
                 token<char> t(src.as_sptr());
-                drawable_bitmap_c &dbmp = const_cast<drawable_bitmap_c &>(loadimage(to_wstr(t->as_sptr())));
+                bitmap_c &dbmp = const_cast<bitmap_c &>(loadimage(to_wstr(t->as_sptr())));
                 ++t;
                 irect r = ts::parserect(t, irect(ivec2(0), dbmp.info().sz));
                 if (it.name().equals( CONSTASTR("zeroalpha") ))

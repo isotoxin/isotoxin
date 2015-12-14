@@ -25,7 +25,7 @@ namespace
                 advance = lround(k * advance);
 
                 ts::irect frrect; 
-                const ts::drawable_bitmap_c&frame =  e->curframe(frrect);
+                const ts::bitmap_c&frame =  e->curframe(frrect);
 
                 ts::ivec2 tsz(advance, maxh);
 
@@ -40,25 +40,25 @@ namespace
                     {
                         if (tsz == lsz / 2)
                         {
-                            bmp.create_RGBA(tsz);
+                            bmp.create_ARGB(tsz);
                             frame.shrink_2x_to(frrect.lt, frrect.size(), bmp.extbody());
                             return;
                         } else
                         {
-                            tmp.create_RGBA(lsz / 2);
+                            tmp.create_ARGB(lsz / 2);
                             frame.shrink_2x_to(frrect.lt, frrect.size(), tmp.extbody());
                             ASSERT(tmp.info().sz.x > tsz.x && tmp.info().sz.y > tsz.y);
                         }
                     } else
                     {
-                        tmp.create_RGBA(lsz);
+                        tmp.create_ARGB(lsz);
                         tmp.resize_from(frame.extbody(frrect), ts::FILTER_LANCZOS3);
                         ASSERT(tmp.info().sz.x > tsz.x && tmp.info().sz.y > tsz.y);
                     }
 
                     while(tmp.info().sz.x > tsz.x)
                     {
-                        bmp.create_RGBA(tmp.info().sz / 2);
+                        bmp.create_ARGB(tmp.info().sz / 2);
                         tmp.shrink_2x_to(ts::ivec2(0), tmp.info().sz, bmp.extbody());
                         tmp = bmp;
                     }
@@ -66,7 +66,7 @@ namespace
 
                 } else
                 {   
-                    bmp.create_RGBA(tsz);
+                    bmp.create_ARGB(tsz);
                     bmp.resize_from(frame.extbody(frrect), ts::FILTER_LANCZOS3);
                 }
             }
@@ -103,7 +103,7 @@ namespace
             } else
             {
                 ts::irect frrect;
-                const ts::drawable_bitmap_c&frame = e->curframe(frrect);
+                const ts::bitmap_c&frame = e->curframe(frrect);
 
                 gi.width = (ts::uint16)frrect.width();
                 gi.height = (ts::uint16)frrect.height();
@@ -183,7 +183,7 @@ gui_textedit_c::active_element_s * emoticon_s::get_edit_element(int maxh)
 
         ispreframe = true;
         preframe = TSNEW(ts::bitmap_c);
-        preframe->create_RGBA( ts::ivec2(neww, emoti().maxheight) );
+        preframe->create_ARGB( ts::ivec2(neww, emoti().maxheight) );
 
         bmp.resize_to( preframe->extbody(), ts::FILTER_LANCZOS3 );
         preframe->premultiply();
@@ -684,7 +684,7 @@ void emoticons_c::generate_full_frame()
 
     ts::ivec2 fullframesize( maxw, pos.y + lineheight );
     if ( fullframe.info().sz != fullframesize )
-        fullframe.create( fullframesize );
+        fullframe.create_ARGB( fullframesize );
 
     for (emoticon_s *e : arr)
     {

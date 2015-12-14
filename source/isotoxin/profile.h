@@ -106,7 +106,8 @@ struct history_s : public post_s
     enum column_e
     {
         C_ID,
-        C_TIME,
+        C_RECV_TIME,
+        C_CR_TIME,
         C_HISTORIAN,
         C_SENDER,
         C_RECEIVER,
@@ -120,7 +121,7 @@ struct history_s : public post_s
     void set(int column, ts::data_value_s& v);
     void get(int column, ts::data_pair_s& v);
 
-    static const int columns = 1 + 7; // mtime, historian, sender, receiver, mtype, msg, utag
+    static const int columns = 1 + 8; // mtime, crtime, historian, sender, receiver, mtype, msg, utag
     static ts::asptr get_table_name() { return CONSTASTR("history"); }
     static void get_column_desc(int index, ts::column_desc_s&cd);
     static ts::data_type_e get_column_type(int index);

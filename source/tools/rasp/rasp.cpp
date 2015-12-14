@@ -331,13 +331,16 @@ int proc_i420rgb(const wstrings_c & pars)
 
     bitmap_c bmp;
 
-    bmp.create_RGBA( ivec2(w, h) );
+    bmp.create_ARGB( ivec2(w, h) );
     bmp.convert_from_yuv(ivec2(0), bmp.info().sz, buf.data(), YFORMAT_I420);
-    bmp.save_as_png(L"i420.png");
+    //bmp.save_as_png(L"i420.png");
+    bmp.save_as_png(fn_get_name( pars.get(1) ).append(CONSTWSTR(".png")));
+    
 
-    bmp.create_RGBA(ivec2(w/2, h/2));
+    bmp.create_ARGB(ivec2(w/2, h/2));
     bmp.convert_from_yuv(ivec2(0), bmp.info().sz, buf.data(), YFORMAT_I420x2);
-    bmp.save_as_png(L"i420div2.png");
+    //bmp.save_as_png(L"i420div2.png");
+    bmp.save_as_png(fn_get_name( pars.get(1) ).append(CONSTWSTR("_div2.png")));
 
     return 0;
 }

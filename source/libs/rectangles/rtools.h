@@ -210,7 +210,8 @@ struct process_animation_s
 
 struct process_animation_bitmap_s : public process_animation_s
 {
-    ts::drawable_bitmap_c bmpr, bmp;
+    ts::drawable_bitmap_c bmpr;
+    ts::bitmap_c bmp;
     process_animation_bitmap_s();
     void render();
 };

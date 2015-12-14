@@ -1249,7 +1249,7 @@ void rectengine_root_c::redraw_now()
 void rectengine_root_c::draw_back_buffer()
 {
     if (dc)
-        backbuffer.draw(dc, 0, 0, getrect().getprops().currentszrect()); // WM_PAINT - draw whole backbuffer
+        backbuffer.draw(ts::draw_target_s(dc), 0, 0, getrect().getprops().currentszrect()); // WM_PAINT - draw whole backbuffer
     else
     {
         if (!redraw_rect)
@@ -1258,31 +1258,29 @@ void rectengine_root_c::draw_back_buffer()
         //DMSG( "bb:" << redraw_rect );
 
         HDC tdc = GetDC(hwnd);
-        backbuffer.draw(tdc, redraw_rect.lt.x, redraw_rect.lt.y, redraw_rect);
+        backbuffer.draw(ts::draw_target_s(tdc), redraw_rect.lt.x, redraw_rect.lt.y, redraw_rect);
         ReleaseDC(hwnd, tdc);
     }
 }
 
-static void draw_image( HDC dc, const ts::drawable_bitmap_c &image, ts::aint x, ts::aint y, const ts::irect &imgrect, const ts::irect &cliprect, int alpha )
+static void draw_image( const ts::bmpcore_exbody_s &tgt, const ts::bmpcore_exbody_s &image, ts::aint x, ts::aint y, const ts::irect &imgrect, const ts::irect &cliprect, int alpha )
 {
-    if (image.DC() == nullptr) return;
     ts::irect imgrectnew = imgrect.szrect();
     imgrectnew += ts::ivec2(x,y);
     imgrectnew.intersect(cliprect);
-    
     if (!imgrectnew) return;
 
     imgrectnew -= ts::ivec2(x,y);
     x += imgrectnew.lt.x; y += imgrectnew.lt.y;
     imgrectnew += imgrect.lt;
 
-    image.draw(dc, x, y, imgrectnew, alpha);
+    image.draw(tgt, x, y, imgrectnew, alpha);
 }
 
 struct repdraw //-V690
 {
-    HDC dc;
-    const ts::drawable_bitmap_c &image;
+    const ts::bmpcore_exbody_s &tgt;
+    const ts::bmpcore_exbody_s &image;
     const ts::irect &cliprect;
     const ts::irect *rbeg;
     const ts::irect *rrep;
@@ -1290,11 +1288,12 @@ struct repdraw //-V690
     int alpha;
     bool a_beg, a_rep, a_end;
     void operator=(const repdraw &) UNUSED;
-    repdraw(HDC dc, const ts::drawable_bitmap_c &image, const ts::irect &cliprect, int alpha):dc(dc), image(image), cliprect(cliprect), alpha(alpha) {}
+    repdraw(const ts::bmpcore_exbody_s &tgt, const ts::bmpcore_exbody_s &image, const ts::irect &cliprect, int alpha):tgt(tgt), image(image), cliprect(cliprect), alpha(alpha) {}
+    //repdraw(HDC dc, const ts::drawable_bitmap_c &image, const ts::irect &cliprect, int alpha):dc(dc), image(image), cliprect(cliprect), alpha(alpha) {}
 
     void draw_h( ts::aint x1, ts::aint x2, ts::aint y, bool tile )
     {
-        if (rbeg) draw_image( dc, image, x1, y, *rbeg, cliprect, a_beg ? alpha : -1);
+        if (rbeg) draw_image( tgt, image, x1, y, *rbeg, cliprect, a_beg ? alpha : -1);
     
         if (tile)
         {
@@ -1307,20 +1306,20 @@ struct repdraw //-V690
                 int sx1 = x2 - (rend ? rend->width() : 0);
                 int z = sx0 + dx;
                 for (; z <= sx1; z += dx)
-                    draw_image(dc, image, z - dx, y, *rrep, cliprect, a);
+                    draw_image(tgt, image, z - dx, y, *rrep, cliprect, a);
                 z -= dx;
                 if (z < sx1)
-                    draw_image(dc, image, z, y, ts::irect(*rrep).setwidth(sx1 - z), cliprect, a);
+                    draw_image(tgt, image, z, y, ts::irect(*rrep).setwidth(sx1 - z), cliprect, a);
             }
         } else
         {
             ASSERT(false, "stretch");
         }
-        if (rend) draw_image( dc, image, x2 - rend->width(), y, *rend, cliprect, a_end ? alpha : -1);
+        if (rend) draw_image( tgt, image, x2 - rend->width(), y, *rend, cliprect, a_end ? alpha : -1);
     }
     void draw_v(ts::aint x, ts::aint y1, ts::aint y2, bool tile)
     {
-        if (rbeg) draw_image(dc, image, x, y1, *rbeg, cliprect, a_beg ? alpha : -1);
+        if (rbeg) draw_image(tgt, image, x, y1, *rbeg, cliprect, a_beg ? alpha : -1);
 
         if (tile)
         {
@@ -1333,10 +1332,10 @@ struct repdraw //-V690
                 int sy1 = y2 - (rend ? rend->height() : 0);
                 int z = sy0 + dy;
                 for (; z <= sy1; z += dy)
-                    draw_image(dc, image, x, z - dy, *rrep, cliprect, a);
+                    draw_image(tgt, image, x, z - dy, *rrep, cliprect, a);
                 z -= dy;
                 if (z < sy1)
-                    draw_image(dc, image, x, z, ts::irect(*rrep).setheight(sy1 - z), cliprect, a);
+                    draw_image(tgt, image, x, z, ts::irect(*rrep).setheight(sy1 - z), cliprect, a);
             }
         }
         else
@@ -1344,7 +1343,7 @@ struct repdraw //-V690
             ASSERT(false, "stretch");
         }
 
-        if (rend) draw_image(dc, image, x, y2 - rend->height(), *rend, cliprect, a_end ? alpha : -1 );
+        if (rend) draw_image(tgt, image, x, y2 - rend->height(), *rend, cliprect, a_end ? alpha : -1 );
     }
 
     void draw_c(ts::aint x1, ts::aint x2, ts::aint y1, ts::aint y2, bool tile)
@@ -1366,7 +1365,7 @@ struct repdraw //-V690
             for (; y < sy1; y += dy)
             {
                 for (x = sx0; x < sx1; x += dx)
-                    draw_image(dc, image, x, y, *rrep, cliprect, a);
+                    draw_image(tgt, image, x, y, *rrep, cliprect, a);
 
                 if (!rr_initialized)
                 {
@@ -1379,18 +1378,18 @@ struct repdraw //-V690
                 }
 
                 if (rr_initialized)
-                    draw_image(dc, image, x, y, rr, cliprect, a);
+                    draw_image(tgt, image, x, y, rr, cliprect, a);
             }
             if (y < (sy1 + dy))
             {
                 ts::irect rrb = *rrep;
                 rrb.setheight(sy1 + dy - y);
                 for (x = sx0; x < sx1; x += dx)
-                    draw_image(dc, image, x, y, rrb, cliprect, a);
+                    draw_image(tgt, image, x, y, rrb, cliprect, a);
                 if (rr_initialized)
-                    draw_image(dc, image, x, y, rrb.setwidth(rr.width()), cliprect, a);
+                    draw_image(tgt, image, x, y, rrb.setwidth(rr.width()), cliprect, a);
                 else
-                    draw_image(dc, image, x, y, rrb.setwidth(sx1 + dx - x), cliprect, a);
+                    draw_image(tgt, image, x, y, rrb.setwidth(sx1 + dx - x), cliprect, a);
             }
         } else
         {
@@ -1404,7 +1403,9 @@ void border_window_data_s::draw()
     backbuffer.ajust(rect.size(), false);
     const theme_rect_s *thr = owner->themerect();
     ts::irect szr = rect.szrect();
-    repdraw rdraw( backbuffer.DC(), thr->src, szr, 255 );
+    ts::bmpcore_exbody_s bb = backbuffer.extbody();
+    ts::bmpcore_exbody_s src = thr->src.extbody();
+    repdraw rdraw( bb, src, szr, 255 );
 
     ts::irect prev, rep, last;
 
@@ -1486,7 +1487,9 @@ void border_window_data_s::draw()
     bool self_draw = dd.engine == this;
     bool use_alphablend = !self_draw; //!flags.is(F_SELF_DRAW);
 
-    repdraw rdraw( backbuffer.DC(), thr.src, dd.cliprect, dd.alpha );
+    ts::bmpcore_exbody_s bb = backbuffer.extbody();
+    ts::bmpcore_exbody_s src = thr.src.extbody();
+    repdraw rdraw( bb, src, dd.cliprect, dd.alpha );
     ts::ivec2 rbpt = dd.offset + dd.size;
 
     ts::irect fillrect;
@@ -1502,12 +1505,59 @@ void border_window_data_s::draw()
         }
     };
 
+    auto fillc = [&]( const ts::irect &r, subimage_e si )
+    {
+        if (0 != ts::ALPHA(thr.siso[si].fillcolor))
+        {
+            fillrect.lt = r.lt + thr.sis[si].lt;
+            fillrect.rb = r.rb - thr.sis[si].rb;
+            filler(thr.siso[si].fillcolor);
+        }
+        else
+        {
+            rdraw.rrep = thr.sis + si; rdraw.a_rep = use_alphablend && thr.is_alphablend(si);
+
+            if (!*rdraw.rrep)
+            {
+                si = SI_BASE;
+                rdraw.rrep = thr.sis + si;
+                rdraw.a_beg = use_alphablend && thr.is_alphablend(si);
+            }
+
+            rdraw.draw_c(r.lt.x, r.rb.x, r.lt.y, r.rb.y, thr.siso[si].tile);
+        }
+    };
+
     if (options & DTHRO_BASE)
+    {
+        fillc( ts::irect(dd.offset, rbpt), SI_BASE);
+
+    } else if (0 != (options & DTHRO_BASE_HOLE) && d && ASSERT(thr.sis[SI_BASE] || 0 != ts::ALPHA(thr.siso[SI_BASE].fillcolor)))
     {
         if (0 != ts::ALPHA(thr.siso[SI_BASE].fillcolor))
         {
-            fillrect.lt = dd.offset + thr.sis[SI_BASE].lt;
-            fillrect.rb = rbpt - thr.sis[SI_BASE].rb;
+            // top
+            fillrect.lt = dd.offset;
+            fillrect.rb.x = rbpt.x;
+            fillrect.rb.y = d->draw_thr.rect().lt.y + dd.offset.y; //-V807
+            filler(thr.siso[SI_BASE].fillcolor);
+
+            // left
+            fillrect.lt.x = dd.offset.x;
+            fillrect.lt.y = d->draw_thr.rect().lt.y + dd.offset.y;
+            fillrect.rb = d->draw_thr.rect().lb() + dd.offset;
+            filler(thr.siso[SI_BASE].fillcolor);
+
+            // rite
+            fillrect.lt = d->draw_thr.rect().rt() + dd.offset;
+            fillrect.rb.x = rbpt.x;
+            fillrect.rb.y = d->draw_thr.rect().rb.y + dd.offset.y;
+            filler(thr.siso[SI_BASE].fillcolor);
+
+            // bottom
+            fillrect.lt.x = dd.offset.x;
+            fillrect.lt.y = d->draw_thr.rect().rb.y + dd.offset.y;
+            fillrect.rb = rbpt;
             filler(thr.siso[SI_BASE].fillcolor);
 
         } else
@@ -1515,27 +1565,22 @@ void border_window_data_s::draw()
             rdraw.rbeg = nullptr;
             rdraw.rrep = thr.sis + SI_BASE; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_BASE);
             rdraw.rend = nullptr;
-            rdraw.draw_c(dd.offset.x, rbpt.x, dd.offset.y, rbpt.y, thr.siso[SI_BASE].tile);
+
+            int y = dd.offset.y;
+            for (int ylmt = d->draw_thr.rect().lt.y + dd.offset.y; y < ylmt; y += rdraw.rrep->height()) //-V807
+                rdraw.draw_h(dd.offset.x, rbpt.x, y, thr.siso[SI_BASE].tile);
+
+            int y2 = rbpt.y;
+            for (int ylmt = d->draw_thr.rect().rb.y + dd.offset.y; y2 >= ylmt;)
+                rdraw.draw_h(dd.offset.x, rbpt.x, y2 -= rdraw.rrep->height(), thr.siso[SI_BASE].tile);
+
+            for (int x = dd.offset.x, xlmt = d->draw_thr.rect().lt.x + dd.offset.x; x < xlmt; x += rdraw.rrep->width())
+                rdraw.draw_v(x, y, y2, thr.siso[SI_BASE].tile);
+
+            for (int x2 = rbpt.x, xlmt = d->draw_thr.rect().rb.x + dd.offset.x; x2 >= xlmt;)
+                rdraw.draw_v(x2 -= rdraw.rrep->width(), y, y2, thr.siso[SI_BASE].tile);
         }
-    } else if (0 != (options & DTHRO_BASE_HOLE) && d && ASSERT(thr.sis[SI_BASE]))
-    {
-        rdraw.rbeg = nullptr;
-        rdraw.rrep = thr.sis + SI_BASE; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_BASE);
-        rdraw.rend = nullptr;
 
-        int y = dd.offset.y;
-        for (int ylmt = d->draw_thr.rect().lt.y + dd.offset.y; y < ylmt; y += rdraw.rrep->height()) //-V807
-            rdraw.draw_h(dd.offset.x, rbpt.x, y, thr.siso[SI_BASE].tile);
-
-        int y2 = rbpt.y;
-        for (int ylmt = d->draw_thr.rect().rb.y + dd.offset.y; y2 >= ylmt;)
-            rdraw.draw_h(dd.offset.x, rbpt.x, y2 -= rdraw.rrep->height(), thr.siso[SI_BASE].tile);
-
-        for (int x = dd.offset.x, xlmt = d->draw_thr.rect().lt.x + dd.offset.x; x < xlmt; x += rdraw.rrep->width())
-            rdraw.draw_v(x, y, y2, thr.siso[SI_BASE].tile);
-
-        for (int x2 = rbpt.x, xlmt = d->draw_thr.rect().rb.x + dd.offset.x; x2 >= xlmt;)
-            rdraw.draw_v(x2 -= rdraw.rrep->width(), y, y2, thr.siso[SI_BASE].tile);
     }
 
     if (options & (DTHRO_BORDER|DTHRO_BORDER_RECT|DTHRO_CENTER|DTHRO_CENTER_HOLE))
@@ -1710,13 +1755,8 @@ void border_window_data_s::draw()
         }
         if (0 != (options & DTHRO_CENTER))
         {
-            if (0 == ts::ALPHA(thr.siso[SI_CENTER].fillcolor))
-            {
-                rdraw.rbeg = nullptr;
-                rdraw.rrep = thr.sis + SI_CENTER; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_CENTER);
-                rdraw.rend = nullptr;
-                rdraw.draw_c(dd.offset.x + l->width(), rbpt.x - r->width(), dd.offset.y + t->height(), rbpt.y - b->height(), thr.siso[SI_CENTER].tile);
-            }
+            fillc( ts::irect(dd.offset.x + l->width(), dd.offset.y + t->height(), rbpt.x - r->width(), rbpt.y - b->height()), SI_CENTER );
+
         } else if (0 != (options & DTHRO_CENTER_HOLE) && d)
         {
             // draw center with hole (faster)
@@ -1747,18 +1787,7 @@ void border_window_data_s::draw()
         rdraw.rend = nullptr;
         rdraw.draw_v(dd.offset.x, dd.offset.y, rbpt.y, thr.siso[SI_LEFT].tile);
 
-        if (0 != ts::ALPHA(thr.siso[SI_CENTER].fillcolor))
-        {
-            fillrect.lt.x = dd.offset.x + thr.sis[SI_LEFT].width();
-            fillrect.lt.y = dd.offset.y;
-            fillrect.rb = rbpt - thr.sis[SI_CENTER].rb;
-            fillrect.lt += thr.sis[SI_CENTER].lt;
-            filler(thr.siso[SI_CENTER].fillcolor);
-        } else
-        {
-            rdraw.rrep = thr.sis + SI_CENTER; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_CENTER);
-            rdraw.draw_c(dd.offset.x + thr.sis[SI_LEFT].width(), rbpt.x, dd.offset.y, rbpt.y, thr.siso[SI_CENTER].tile);
-        }
+        fillc( ts::irect(dd.offset.x + thr.sis[SI_LEFT].width(), dd.offset.y, rbpt.x, rbpt.y), SI_CENTER );
 
         if (options & DTHRO_BOTTOM)
         {
@@ -1769,7 +1798,7 @@ void border_window_data_s::draw()
         }
         if (options & DTHRO_RIGHT)
         {
-            draw_image( backbuffer.DC(), thr.src, rbpt.x - thr.sis[SI_RIGHT].width(), (dd.offset.y + rbpt.y - thr.sis[SI_RIGHT].height())/2, thr.sis[SI_RIGHT], dd.cliprect, use_alphablend && thr.is_alphablend(SI_RIGHT) ? dd.alpha : -1 );
+            draw_image( bb, src, rbpt.x - thr.sis[SI_RIGHT].width(), (dd.offset.y + rbpt.y - thr.sis[SI_RIGHT].height())/2, thr.sis[SI_RIGHT], dd.cliprect, use_alphablend && thr.is_alphablend(SI_RIGHT) ? dd.alpha : -1 );
         }
     } else if (options & DTHRO_LT_T_RT)
     {
@@ -1797,10 +1826,7 @@ void border_window_data_s::draw()
 
     } else if (0 != (options & DTHRO_CENTER_ONLY) && d)
     {
-        rdraw.rrep = thr.sis + SI_CENTER; rdraw.a_rep = use_alphablend && thr.is_alphablend(SI_CENTER);
-        rdraw.draw_c(dd.offset.x + d->draw_thr.rect().lt.x, dd.offset.x + d->draw_thr.rect().rb.x, 
-                     dd.offset.y + d->draw_thr.rect().lt.y, dd.offset.y + d->draw_thr.rect().rb.y, thr.siso[SI_CENTER].tile);
-
+        fillc( d->draw_thr.rect() + dd.offset, SI_CENTER );
     }
 
     if ((options & DTHRO_VSB) && d)
@@ -1850,17 +1876,7 @@ void border_window_data_s::draw()
 
         if ((options & (DTHRO_CENTER|DTHRO_CENTER_HOLE|DTHRO_BASE)) == 0)
         {
-            subimage_e si = SI_CENTER;
-            rdraw.rbeg = nullptr;
-            rdraw.rrep = thr.sis + si; rdraw.a_beg = use_alphablend && thr.is_alphablend(si);
-            if (! *rdraw.rrep)
-            {
-                si = SI_BASE;
-                rdraw.rrep = thr.sis + si;
-                rdraw.a_beg = use_alphablend && thr.is_alphablend(si);
-            }
-            rdraw.rend = nullptr;
-            rdraw.draw_c(caprect.lt.x, caprect.rb.x, caprect.lt.y, caprect.rb.y, thr.siso[si].tile);
+            fillc( caprect, SI_CENTER );
         }
 
         // bottom
@@ -1929,7 +1945,10 @@ void border_window_data_s::draw()
     } else
         tr.parse_and_render_texture(nullptr, nullptr);
 
-    draw_image( backbuffer.DC(), tr.get_texture(), dd.offset.x, dd.offset.y, ts::irect( ts::ivec2(0), dd.size ), dd.cliprect, dd.alpha );
+    ts::bmpcore_exbody_s bb = backbuffer.extbody();
+    ts::bmpcore_exbody_s src = tr.get_texture().extbody();
+
+    draw_image( bb, src, dd.offset.x, dd.offset.y, ts::irect( ts::ivec2(0), dd.size ), dd.cliprect, dd.alpha );
     if (tdp.sz)
         *tdp.sz = gui->tr().lastdrawsize;
     //if (tdp.glyphs)
@@ -1958,10 +1977,10 @@ void border_window_data_s::draw()
     }
 }
 
-/*virtual*/ void rectengine_root_c::draw( const ts::ivec2 & p, const ts::drawable_bitmap_c &bmp, const ts::irect& bmprect, bool alphablend)
+/*virtual*/ void rectengine_root_c::draw( const ts::ivec2 & p, const ts::bmpcore_exbody_s &bmp, const ts::irect& bmprect, bool alphablend)
 {
     const draw_data_s &dd = drawdata.last();
-    draw_image( backbuffer.DC(), bmp, dd.offset.x + p.x, dd.offset.y + p.y, bmprect, dd.cliprect, alphablend ? dd.alpha : -1 );
+    draw_image( backbuffer.extbody(), bmp, dd.offset.x + p.x, dd.offset.y + p.y, bmprect, dd.cliprect, alphablend ? dd.alpha : -1 );
 }
 
 void rectengine_root_c::simulate_mousemove()
@@ -2409,7 +2428,7 @@ rectengine_child_c::~rectengine_child_c()
         root->draw(text, tdp);
 }
 
-/*virtual*/ void rectengine_child_c::draw( const ts::ivec2 & p, const ts::drawable_bitmap_c &bmp, const ts::irect& bmprect, bool alphablend)
+/*virtual*/ void rectengine_child_c::draw( const ts::ivec2 & p, const ts::bmpcore_exbody_s &bmp, const ts::irect& bmprect, bool alphablend)
 {
     if (rectengine_root_c *root = getrect().getroot())
         root->draw(p, bmp, bmprect, alphablend);

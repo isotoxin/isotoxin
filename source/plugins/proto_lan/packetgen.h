@@ -44,7 +44,7 @@ enum packet_id_e
 
     PID_INVITE,
     PID_ACCEPT,
-    PID_READY,  // answer to accept
+    PID_READY,  // answer to accept or to nonce
     PID_DATA,
     PID_DELIVERED,
     PID_SYNC, // sync time

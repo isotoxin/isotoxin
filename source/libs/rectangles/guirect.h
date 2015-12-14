@@ -5,6 +5,8 @@
 
 enum system_query_e
 {
+    SQ_NOP,
+
     SQ_DRAW, // [begin_draw] already called before this query and [end_draw] will be called after. (it's true only for rect sq_evt)
 
     // by mouse
@@ -256,10 +258,10 @@ class text_rect_dynamic_c : public ts::text_rect_c
     friend class gui_c;
     DECLARE_EYELET(text_rect_dynamic_c);
     ts::Time last_use_time = ts::Time::past();
-    ts::drawable_bitmap_c * curtexture = nullptr;
+    ts::bitmap_c * curtexture = nullptr;
 public:
     /*virtual*/ ~text_rect_dynamic_c();
-    /*virtual*/ ts::drawable_bitmap_c &texture() override;
+    /*virtual*/ ts::bitmap_c &texture() override;
     /*virtual*/ void texture_no_need() override;
 };
 
@@ -995,6 +997,8 @@ public:
 class gui_label_ex_c : public gui_label_c
 {
     DUMMY(gui_label_ex_c);
+
+    ts::ivec2 glyphs_shift() const;
 
 protected:
     gui_label_ex_c() {}

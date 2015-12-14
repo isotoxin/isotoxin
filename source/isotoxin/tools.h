@@ -399,13 +399,21 @@ enum loctext_e
     loc_anyfiles,
     loc_camerabusy,
     loc_initialization,
+    loc_copy,
+
+    loc_connection_name,
+    loc_module,
+    loc_id,
+    loc_state,
 };
 
 ts::wstr_c loc_text(loctext_e);
 
+ts::wstr_c text_contact_state( ts::TSCOLOR color_online, ts::TSCOLOR color_offline, contact_state_e st );
+
 ts::wstr_c text_typing(const ts::wstr_c &prev, ts::wstr_c &workbuf, const ts::wsptr &preffix);
 
-void draw_initialization( rectengine_c *e, ts::drawable_bitmap_c &pab, const ts::irect&viewrect, ts::TSCOLOR tcol, const ts::wsptr &additiontext );
+void draw_initialization( rectengine_c *e, ts::bitmap_c &pab, const ts::irect&viewrect, ts::TSCOLOR tcol, const ts::wsptr &additiontext );
 
 void add_status_items(menu_c &m);
 
@@ -418,7 +426,7 @@ enum icon_type_e
     IT_DND,
 };
 
-ts::drawable_bitmap_c * prepare_proto_icon( const ts::asptr &prototag, const void *icodata, int icodatasz, int imgsize, icon_type_e icot );
+ts::bitmap_c * prepare_proto_icon( const ts::asptr &prototag, const void *icodata, int icodatasz, int imgsize, icon_type_e icot );
 
 struct data_block_s
 {
@@ -628,7 +636,7 @@ struct leech_save_size_s : public autoparam_i
 
 struct protocol_description_s
 {
-    UNIQUE_PTR(ts::drawable_bitmap_c) icon;
+    UNIQUE_PTR(ts::bitmap_c) icon;
     ts::str_c  tag; // lan, tox
     ts::str_c description; // utf8
     ts::str_c description_t; // utf8

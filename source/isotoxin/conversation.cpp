@@ -753,7 +753,7 @@ void gui_notice_callinprogress_c::vsb_draw( vsb_c *cam, const ts::ivec2& campos,
         draw_data_s &dd = getengine().begin_draw();
         ts::irect clr = ts::irect::from_center_and_size( campos, camsz );
 
-        getengine().draw(clr.lt, *b, ts::irect(0, b->info().sz), false);
+        getengine().draw(clr.lt, b->extbody(), ts::irect(0, b->info().sz), false);
 
         if (shadow)
         {
@@ -1092,7 +1092,7 @@ int gui_notice_callinprogress_c::preview_cam_cursor_resize( const ts::ivec2 &p )
                 ts::irect clr = ts::irect::from_center_and_size(cam_position, cam_previewsize);
 
                 getengine().draw(clr, ts::ARGB(30, 30, 30));
-                getengine().draw(clr.center() - pa.bmp.info().sz / 2, pa.bmp, ts::irect(0, pa.bmp.info().sz), true);
+                getengine().draw(clr.center() - pa.bmp.info().sz / 2, pa.bmp.extbody(), ts::irect(0, pa.bmp.info().sz), true);
 
                 if (draw_shadow && shadow)
                 {
@@ -1918,12 +1918,12 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
 
                 if (CR_OK == curstate)
                 {
-                    if (c->get_state() == CS_ONLINE)
-                        sost.set(CONSTWSTR("</l><b>"))
-                        .append(maketag_color<ts::wchar>(get_default_text_color(COLOR_ONLINE_STATUS))).append(TTT("Online", 100)).append(CONSTWSTR("</color></b><l>"));
+                    sost = CONSTWSTR("</l>") + text_contact_state(
+                        get_default_text_color(COLOR_ONLINE_STATUS),
+                        get_default_text_color(COLOR_OFFLINE_STATUS),
+                        c->get_state()
+                        ) + CONSTWSTR("<l>");
 
-                    if (c->get_state() == CS_OFFLINE)
-                        sost.set(maketag_color<ts::wchar>(get_default_text_color(COLOR_OFFLINE_STATUS))).append(TTT("Offline", 101)).append(CONSTWSTR("</color>"));
                 } else
                 {
                     ts::wstr_c errs;
@@ -2267,7 +2267,7 @@ int gui_notice_network_c::sortfactor() const
                 {
                     int x = (left_margin - ava->info().sz.x) / 2;
                     int y = (ca.size().y - ava->info().sz.y) / 2;
-                    m_engine->draw(ca.lt + ts::ivec2(x, y), *ava, ts::irect(0, ava->info().sz), ava->alpha_pixels);
+                    m_engine->draw(ca.lt + ts::ivec2(x, y), ava->extbody(), ts::irect(0, ava->info().sz), ava->alpha_pixels);
                 }
                 else
                 {
@@ -3068,10 +3068,10 @@ static gui_messagelist_c *current_draw_list = nullptr;
                 {
                     if (historian && current_draw_list)
                     {
-                        current_draw_list->update_last_seen_message_time(zero_rec.time);
+                        current_draw_list->update_last_seen_message_time(zero_rec.rcv_time);
 #if JOIN_MESSAGES
                         for (const record &r : other_records)
-                            current_draw_list->update_last_seen_message_time(r.time);
+                            current_draw_list->update_last_seen_message_time(r.rcv_time);
 #endif
                     }
 
@@ -3465,7 +3465,7 @@ ts::uint16 gui_message_item_c::record::append( ts::wstr_c &t, ts::wstr_c &pret, 
 {
     ts::wstr_c tstr;
     tm tt;
-    _localtime64_s(&tt, &time);
+    _localtime64_s(&tt, &cr_time);
     if ( prf().get_options().is(MSGOP_SHOW_DATE) )
     {
         text_set_date(tstr,from_utf8(prf().date_msg_template()),tt);
@@ -3605,14 +3605,16 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
     if (!use0rec)
     {
         rec.utag = post.utag;
-        rec.time = post.time;
+        rec.rcv_time = post.recv_time;
+        rec.cr_time = post.get_crtime();
     }
 #else
     record &rec = zero_rec;
     if (zero_rec.utag == 0)
     {
         zero_rec.utag = post.utag;
-        zero_rec.time = post.time;
+        zero_rec.rcv_time = post.recv_time;
+        zero_rec.cr_time = post.get_crtime();
     }
 #endif
 
@@ -3649,7 +3651,7 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             subtype = ST_JUST_TEXT;
 
             ts::wstr_c newtext(512, false);
-            message_prefix(newtext, post.time);
+            message_prefix(newtext, post.recv_time);
             newtext.append(CONSTWSTR("<img=call,-1>"));
             ts::str_c aname = author->get_name();
             text_adapt_user_input(aname);
@@ -4129,7 +4131,7 @@ void gui_message_item_c::update_text(int for_width)
                     b.used = false;
 
             ts::wstr_c newtext(256,false);
-            bool r_inserted = message_prefix(newtext, zero_rec.time);
+            bool r_inserted = message_prefix(newtext, zero_rec.rcv_time);
             ts::wstr_c btns;
             auto insert_button = [&]( int r, const ts::ivec2 &sz )
             {
@@ -4624,7 +4626,7 @@ gui_message_item_c &gui_messagelist_c::insert_message_item(message_type_app_e mt
             {
                 tm tmtm;
                 _localtime64_s(&tmtm, &post_time);
-                date_sep = insert_date_separator(index, tmtm, mi.get_first_post_time());
+                date_sep = insert_date_separator(index, tmtm, mi.get_first_post_recv_time()); // separator shows recv time
             }
 
             if (!date_sep)
@@ -4744,10 +4746,10 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_MESSAGE> &p) // show message
     if (p.resend) return 0;
     if (historian != p.get_historian()) return 0;
 
-    if (p.post.time == 0 && p.pass == 0)
+    if (p.post.recv_time == 0 && p.pass == 0)
     {
         // time will be initialized at 2nd pass
-        p.post.time = 1; // indicate 2nd pass required
+        p.post.recv_time = 1; // indicate 2nd pass required
         return 0;
     }
 
@@ -5068,7 +5070,7 @@ namespace
             ts::ivec2 minsz = b.get_min_size();
             b.leech(TSNEW(leech_dock_top_center_s, minsz.x, minsz.y, -5, 5 ));
             MODIFY(b).visible(true);
-            textrect.set_margins(0,minsz.y+5,0);
+            textrect.set_margins(ts::ivec2(0,minsz.y+5));
             addh = minsz.y + 10;
 
         }
@@ -5303,8 +5305,8 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
                 cs = contacts().find_subself(receiver->getkey().protoid);
 
             gui_message_item_c &mi = p.down ? 
-                get_message_item(p.post.mt(), cs, calc_message_skin(p.post.mt(), p.post.sender), p.post.time, p.replace_post ? p.post.utag : 0) :
-                insert_message_item(p.post.mt(), cs, calc_message_skin(p.post.mt(), p.post.sender), p.post.time);
+                get_message_item(p.post.mt(), cs, calc_message_skin(p.post.mt(), p.post.sender), p.post.recv_time, p.replace_post ? p.post.utag : 0) :
+                insert_message_item(p.post.mt(), cs, calc_message_skin(p.post.mt(), p.post.sender), p.post.recv_time);
             p.created = &mi.getengine();
 
             if (p.found_item)
@@ -5357,7 +5359,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
         while (index < cnt && nullptr == (e = getengine().get_child(index)))
             ++index;
 
-        int load_n = calc_load_history(historian->get_history(0).time);
+        int load_n = calc_load_history(historian->get_history(0).recv_time);
         int n = historian->history_size();
         if(ASSERT(e))
         {
@@ -5414,7 +5416,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
         return 0;
 
     time_t before = now();
-    if (historian->history_size()) before = historian->get_history(0).time;
+    if (historian->history_size()) before = historian->get_history(0).recv_time;
 
     int min_hist_size = prf().min_history_load();
     int cur_hist_size = p.contact->history_size();
@@ -5441,7 +5443,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     if (needload > 0)
     {
         historian->load_history(needload);
-        if (historian->history_size()) before = historian->get_history(0).time;
+        if (historian->history_size()) before = historian->get_history(0).recv_time;
     }
 
     int load_n = calc_load_history( before );
@@ -5490,7 +5492,7 @@ gui_messagelist_c::filler_s::filler_s(gui_messagelist_c *owner, const found_item
         for (int i = 0; i < cnt; ++i)
         {
             const post_s &p = h->get_history(i);
-            if (p.mt() == MTA_MESSAGE && p.time >= h->get_readtime())
+            if (p.mt() == MTA_MESSAGE && p.recv_time >= h->get_readtime())
             {
                 fillindex_down = i;
                 fillindex_down_end = cnt;
@@ -5509,7 +5511,7 @@ gui_messagelist_c::filler_s::filler_s(gui_messagelist_c *owner, const found_item
     }
 
     if (fillindex_down > 0)
-        _localtime64_s(&owner->last_post_time, &h->get_history(fillindex_down-1).time);
+        _localtime64_s(&owner->last_post_time, &h->get_history(fillindex_down-1).recv_time);
 
     tick();
 }
@@ -5665,6 +5667,7 @@ bool gui_message_editor_c::on_enter_press_func(RID, GUIPARAM param)
     gmsg<ISOGM_MESSAGE> msg(&contacts().get_self(), receiver, MTA_UNDELIVERED_MESSAGE );
 
     msg.post.message_utf8 = get_text_utf8();
+    msg.post.message_utf8.trim();
     if (msg.post.message_utf8.is_empty()) return true;
     emoti().parse( msg.post.message_utf8, true );
     msg.post.message_utf8.trim_right( CONSTASTR("\r\n") );

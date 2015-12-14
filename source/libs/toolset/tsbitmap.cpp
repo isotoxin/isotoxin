@@ -23,78 +23,10 @@ namespace ts
 #define BG (UG * 128 + VG * 128 - YGB)
 #define BR            (VR * 128 - YGB)
 
-    // C reference code that mimics the YUV assembly.
-    static __inline void YuvPixel(uint8 y, uint8 u, uint8 v,
-                                  uint8* b, uint8* g, uint8* r) {
-        uint32 y1 = (uint32)(y * 0x0101 * YG) >> 16;
-        *b = CLAMP<uint8>((int32)(BB - (u * UB) + y1) >> 6);
-        *g = CLAMP<uint8>((int32)(BG - (v * VG + u * UG) + y1) >> 6);
-        *r = CLAMP<uint8>((int32)(BR - (v * VR) + y1) >> 6);
-    }
-
 #define RGB_TO_YUV(t)                                                                       \
     ( (0.257*(float)(t>>16)) + (0.504*(float)(t>>8&0xff)) + (0.098*(float)(t&0xff)) + 16),  \
     (-(0.148*(float)(t>>16)) - (0.291*(float)(t>>8&0xff)) + (0.439*(float)(t&0xff)) + 128), \
     ( (0.439*(float)(t>>16)) - (0.368*(float)(t>>8&0xff)) - (0.071*(float)(t&0xff)) + 128)
-
-static INLINE uint8 RGB_Y( TSCOLOR c )
-{
-    //return (uint8)( lround( (0.257*(float)RED(c)) + (0.504*(float)GREEN(c)) + (0.098*(float)BLUE(c)) + 16) );
-    return (uint8)((RED(c) * 16843 + GREEN(c) * 33030 + BLUE(c) * 6423 + 1048576) >> 16);
-}
-
-static INLINE uint8 RGB_U(TSCOLOR c)
-{
-    //return (uint8)( lround(-(0.148*(float)RED(c)) - (0.291*(float)GREEN(c)) + (0.439*(float)BLUE(c)) + 128) );
-    return (uint8)((8388608 - RED(c) * 9699 - GREEN(c) * 19071 + BLUE(c) * 28770) >> 16);
-}
-
-static INLINE uint8 RGB_V(TSCOLOR c)
-{
-    //return (uint8)( 0xff & lround((0.439*(float)RED(c)) - (0.368*(float)GREEN(c)) - (0.071*(float)BLUE(c)) + 128) );
-    return (uint8)((RED(c) * 28770 - GREEN(c) * 24117 - BLUE(c) * 4653 + 8388608) >> 16);
-}
-
-TSCOLOR INLINE coloravg( TSCOLOR c1, TSCOLOR c2, TSCOLOR c3, TSCOLOR c4 )
-{
-    //return ARGB<uint>((RED(c1) + RED(c2) + RED(c3) + RED(c4)) / 4, (GREEN(c1) + GREEN(c2) + GREEN(c3) + GREEN(c4)) / 4, (BLUE(c1) + BLUE(c2) + BLUE(c3) + BLUE(c4)) / 4);
-
-    _asm
-    {
-        mov eax, c1
-        mov ecx, c2
-        mov ebx, eax
-        mov edx, ecx
-        and eax, 0x00FF00FF
-        and ebx, 0x0000FF00
-
-        and ecx, 0x00FF00FF
-        and edx, 0x0000FF00
-        add eax, ecx
-        add ebx, edx
-
-        mov ecx, c3
-        mov edx, ecx
-        and ecx, 0x00FF00FF
-        and edx, 0x0000FF00
-        add eax, ecx
-        add ebx, edx
-
-        mov ecx, c4
-        mov edx, ecx
-        and ecx, 0x00FF00FF
-        and edx, 0x0000FF00
-        add eax, ecx
-        add ebx, edx
-
-        shr eax, 2
-        shr ebx, 2
-        and eax, 0x00FF00FF
-        and ebx, 0x0000FF00
-        or  eax, ebx
-
-    }
-}
 
 void TSCALL img_helper_rgb2yuv(uint8 *dst, const imgdesc_s &src_info, const uint8 *sou, yuv_fmt_e yuvfmt)
 {
@@ -102,32 +34,10 @@ void TSCALL img_helper_rgb2yuv(uint8 *dst, const imgdesc_s &src_info, const uint
     {
     case ts::YFORMAT_I420:
         {
-            uint8 *dst_u = dst + src_info.sz.x * src_info.sz.y;
-            uint8 *dst_v = dst_u + src_info.sz.x * src_info.sz.y / 4;
-
-            for( int y = 0; y < src_info.sz.y; y+=2, dst += src_info.sz.x, sou += src_info.pitch * 2 )
-            {
-                const TSCOLOR *clr0 = (const TSCOLOR *)sou;
-                const TSCOLOR *clr1 = (const TSCOLOR *)(sou + src_info.pitch);
-                for (int x = 0; x < src_info.sz.x; x+=2, dst += 2, clr0 += 2, clr1 += 2, ++dst_u, ++dst_v )
-                {
-                    TSCOLOR c1 = clr0[0];
-                    TSCOLOR c2 = clr0[1];
-                    TSCOLOR c3 = clr1[0];
-                    TSCOLOR c4 = clr1[1];
-
-                    dst[0] = RGB_Y( c1 );
-                    dst[1] = RGB_Y( c2 );
-                    dst[0 + src_info.sz.x] = RGB_Y(c3);
-                    dst[1 + src_info.sz.x] = RGB_Y(c4);
-
-                    TSCOLOR cc = coloravg( c1, c2, c3, c4 );
-
-                    *dst_u = RGB_U( cc );
-                    *dst_v = RGB_V( cc );
-                }
-            }
-            
+            int sz = src_info.sz.x * src_info.sz.y;
+            uint8 *U_plane = dst + sz;
+            uint8 *V_plane = U_plane + sz / 4;
+            img_helper_ARGB_to_i420(sou, src_info.pitch, dst, src_info.sz.x, U_plane, src_info.sz.x/2, V_plane, src_info.sz.x/2, src_info.sz.x, src_info.sz.y);
         }
         break;
     }
@@ -204,10 +114,10 @@ void TSCALL img_helper_yuv2rgb(uint8 *des, const imgdesc_s &des_info, const uint
     }
 }
 
-void TSCALL img_helper_premultiply(uint8 *des, const imgdesc_s &des_info)
+bool TSCALL img_helper_premultiply(uint8 *des, const imgdesc_s &des_info)
 {
     int desnl = des_info.pitch - des_info.sz.x * 4;
-
+    bool is_alpha = false;
     for (int y = 0; y < des_info.sz.y; ++y, des += desnl)
     {
         for (int x = 0; x < des_info.sz.x; ++x, des += 4)
@@ -218,20 +128,20 @@ void TSCALL img_helper_premultiply(uint8 *des, const imgdesc_s &des_info)
             if (alpha == 255)
             {
                 continue;
-            }
-            else if (alpha == 0)
+            } else if (alpha == 0)
             {
                 ocolor = 0;
-            }
-            else
+                is_alpha = true;
+            } else
             {
                 ocolor = PREMULTIPLY(color);
+                is_alpha = true;
             }
 
             *(TSCOLOR *)des = ocolor;
         }
     }
-
+    return is_alpha;
 }
 
 void TSCALL img_helper_fill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color)
@@ -241,30 +151,319 @@ void TSCALL img_helper_fill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color
 
     switch (des_info.bytepp())
     {
-        case 1:
+    case 1:
+        for (int y = 0; y < des_info.sz.y; y++, des += desnl)
+            for (int x = 0; x < des_info.sz.x; x++, des += desnp)
+                *(uint8 *)des = (uint8)color;
+        break;
+    case 2:
+        for (int y = 0; y < des_info.sz.y; y++, des += desnl)
+            for (int x = 0; x < des_info.sz.x; x++, des += desnp)
+                *(uint16 *)des = (uint16)color;
+        break;
+    case 3:
+        for (int y = 0; y < des_info.sz.y; y++, des += desnl) {
+            for (int x = 0; x < des_info.sz.x; x++, des += desnp) {
+                *(uint16 *)des = (uint16)color;
+                *(uint8 *)(des + 2) = (uint8)(color >> 16);
+            }
+        }
+        break;
+    case 4:
+        for (int y = 0; y < des_info.sz.y; y++, des += desnl)
+            for (int x = 0; x < des_info.sz.x; x++, des += desnp)
+                *(uint32 *)des = color;
+        break;
+    }
+}
+
+uint8 __declspec(align(256)) multbl[256][256]; // Im very surprised, but multiplication table is faster then raw (a * b / 255)
+
+static const __declspec(align(16)) uint16 min255[16] = { 255, 255, 255, 255, 255, 255, 255, 255 };
+
+//alphablend constats
+static const __declspec(align(16)) uint8 preparealphas[16] = { 6, 255, 6, 255, 6, 255, 6, 255, 14, 255, 14, 255, 14, 255, 14, 255 };
+static const __declspec(align(16)) uint16 sub256[16] = { 256, 256, 256, 256, 256, 256, 256, 256 };
+static const __declspec(align(16)) uint8 preparesrcs_1[16] = { 0, 255, 1, 255, 2, 255, 3, 255, 4, 255, 5, 255, 6, 255, 7, 255 };
+static const __declspec(align(16)) uint8 preparesrcs_2[16] = { 8, 255, 9, 255, 10, 255, 11, 255, 12, 255, 13, 255, 14, 255, 15, 255 };
+
+namespace sse_consts
+{
+__declspec(align(16)) uint8 preparetgtc_1[16] = { 255, 0, 255, 1, 255, 2, 255, 3, 255, 4, 255, 5, 255, 6, 255, 7 };
+__declspec(align(16)) uint8 preparetgtc_2[16] = { 255, 8, 255, 9, 255, 10, 255, 11, 255, 12, 255, 13, 255, 14, 255, 15 };
+__declspec(align(16)) uint8 packcback_1[16] = { 0, 2, 4, 6, 8, 10, 12, 14, 255, 255, 255, 255, 255, 255, 255, 255 };
+__declspec(align(16)) uint8 packcback_2[16] = { 255, 255, 255, 255, 255, 255, 255, 255, 0, 2, 4, 6, 8, 10, 12, 14 };
+};
+
+
+class setup_multbl
+{
+public:
+    setup_multbl()
+    {
+        for (int i = 0; i < 256; ++i)
+            for (int j = 0; j < 256; ++j)
+            {
+                int k = i * j / 255;
+                multbl[i][j] = (uint8)k;
+            }
+
+    }
+} setup_multbl_;
+
+
+__declspec(naked) void overfill_row_sse(uint8 *dst_argb, int w, const uint16 *ctbl)
+{
+    __asm {
+        mov        edx, [esp + 0 + 4]   // dst_argb
+        mov        ecx, [esp + 0 + 8]   // dst_width
+        mov        eax, [esp + 0 + 12]  // ctbl
+
+        movdqa     xmm4, sse_consts::preparetgtc_1
+        movdqa     xmm5, min255
+
+        movdqa     xmm6, [eax]          // na
+        movdqa     xmm7, [eax + 16]     // color
+
+    overloop :
+
+        lddqu      xmm0, [edx]          // take 0..3 pixels
+        lddqu      xmm2, [edx + 16]       // take 4..7 pixels
+        movdqa     xmm1, xmm0
+        movdqa     xmm3, xmm2
+        pshufb     xmm0, xmm4
+        pshufb     xmm1, sse_consts::preparetgtc_2
+        pshufb     xmm2, xmm4
+        pshufb     xmm3, sse_consts::preparetgtc_2
+
+        pmulhuw    xmm0, xmm6
+        pmulhuw    xmm1, xmm6
+        pmulhuw    xmm2, xmm6
+        pmulhuw    xmm3, xmm6
+
+        paddw      xmm0, xmm7
+        paddw      xmm1, xmm7
+        paddw      xmm2, xmm7
+        paddw      xmm3, xmm7
+
+        pminsw     xmm0, xmm5
+        pminsw     xmm1, xmm5
+        pminsw     xmm2, xmm5
+        pminsw     xmm3, xmm5
+
+        pshufb     xmm0, sse_consts::packcback_1
+        pshufb     xmm1, sse_consts::packcback_2
+        pshufb     xmm2, sse_consts::packcback_1
+        pshufb     xmm3, sse_consts::packcback_2
+
+        por        xmm0, xmm1
+        por        xmm2, xmm3
+
+        movdqu[edx], xmm0
+        movdqu[edx + 16], xmm2
+
+        lea        edx, [edx + 32]
+
+        sub        ecx, 8               // 8 dst pixels at once
+        jg         overloop
+
+        ret
+    }
+}
+
+__declspec(naked) void overfill_row_sse_no_clamp(uint8 *dst_argb, int w, const uint16 *ctbl )
+{
+    __asm {
+        mov        edx, [esp + 0 + 4]   // dst_argb
+        mov        ecx, [esp + 0 + 8]   // dst_width
+        mov        eax, [esp + 0 + 12]  // ctbl
+
+        movdqa     xmm4, sse_consts::preparetgtc_1
+        movdqa     xmm5, sse_consts::preparetgtc_2
+
+        movdqa     xmm6, [eax]          // na
+        movdqa     xmm7, [eax+16]       // color
+
+    overloop :
+
+        lddqu      xmm0, [edx]          // take 0..3 pixels
+        lddqu      xmm2, [edx+16]       // take 4..7 pixels
+        movdqa     xmm1, xmm0
+        movdqa     xmm3, xmm2
+        pshufb     xmm0, xmm4
+        pshufb     xmm1, xmm5
+        pshufb     xmm2, xmm4
+        pshufb     xmm3, xmm5
+
+        pmulhuw    xmm0, xmm6
+        pmulhuw    xmm1, xmm6
+        pmulhuw    xmm2, xmm6
+        pmulhuw    xmm3, xmm6
+
+        paddw      xmm0, xmm7
+        paddw      xmm1, xmm7
+        paddw      xmm2, xmm7
+        paddw      xmm3, xmm7
+
+        pshufb     xmm0, sse_consts::packcback_1
+        pshufb     xmm1, sse_consts::packcback_2
+        pshufb     xmm2, sse_consts::packcback_1
+        pshufb     xmm3, sse_consts::packcback_2
+
+        por        xmm0, xmm1
+        por        xmm2, xmm3
+
+        movdqu  [edx], xmm0
+        movdqu  [edx+16], xmm2
+
+        lea        edx, [edx + 32]
+
+        sub        ecx, 8               // 8 dst pixels at once
+        jg         overloop
+
+        ret
+
+    }
+}
+
+
+
+void TSCALL img_helper_overfill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color_pm)
+{
+    switch (des_info.bytepp())
+    {
+    case 3:
+        {
+            int desnl = des_info.pitch - des_info.sz.x*des_info.bytepp();
+            uint not_a = (255 - ALPHA(color_pm)) * 256 / 255;
+
             for (int y = 0; y < des_info.sz.y; y++, des += desnl)
-                for (int x = 0; x < des_info.sz.x; x++, des += desnp)
-                    *(uint8 *)des = (uint8)color;
-            break;
-        case 2:
-            for (int y = 0; y < des_info.sz.y; y++, des += desnl)
-                for (int x = 0; x < des_info.sz.x; x++, des += desnp)
-                    *(uint16 *)des = (uint16)color;
-            break;
-        case 3:
-            for (int y = 0; y < des_info.sz.y; y++, des += desnl) {
-                for (int x = 0; x < des_info.sz.x; x++, des += desnp) {
-                    *(uint16 *)des = (uint16)color;
-                    *(uint8 *)(des + 2) = (uint8)(color >> 16);
+            {
+                for (int x = 0; x < des_info.sz.x; x++, des += 3)
+                {
+
+                    uint oiB = des[0] * not_a + BLUEx256(color_pm);
+                    uint oiG = des[1] * not_a + GREENx256(color_pm);
+                    uint oiR = des[2] * not_a + REDx256(color_pm);
+
+                    *(uint16 *)des = CLAMP<uint8>(oiB >> 8) | (CLAMP<uint8>(oiG >> 8) << 8);
+                    *(uint8 *)(des + 2) = (uint8)CLAMP<uint8>(oiR >> 8);
+
                 }
             }
-            break;
-        case 4:
-            for (int y = 0; y < des_info.sz.y; y++, des += desnl)
-                for (int x = 0; x < des_info.sz.x; x++, des += desnp)
-                    *(uint32 *)des = color;
-            break;
+        }
+        break;
+    case 4:
+        {
+            auto overfill_row_no_clamp = [](uint8 *dst_argb, TSCOLOR c, int w)
+            {
+                /*
+
+                // without use of table
+                // it slower!
+
+                uint not_a = 256 - ALPHA(c);
+                for (int x = 0; x < w; ++x, dst_argb += 4)
+                {
+                    TSCOLOR cdst = *(TSCOLOR *)dst_argb;
+                    *(TSCOLOR *)dst_argb = c + (((not_a * BLUEx256(cdst))>>16) |
+                                            (((not_a * GREENx256(cdst))>>8) & 0xff00) |
+                                            (((not_a * REDx256(cdst)))  & 0xff0000) |
+                                            (((not_a * ALPHAx256(cdst))<<8) & 0xff000000));
+                }
+                */
+
+
+                uint8 not_a = 255 - ALPHA(c);
+                for (int x = 0; x < w; ++x, dst_argb += 4)
+                {
+                    TSCOLOR cdst = *(TSCOLOR *)dst_argb;
+
+                    *(TSCOLOR *)dst_argb = c + ((multbl[not_a][cdst & 0xff]) |
+                                (((uint)multbl[not_a][(cdst >> 8) & 0xff]) << 8) |
+                                (((uint)multbl[not_a][(cdst >> 16) & 0xff]) << 16) |
+                                (((uint)multbl[not_a][(cdst >> 24) & 0xff]) << 24));
+                }
+
+            };
+
+            auto overfill_row = [](uint8 *dst_argb, TSCOLOR c, int w)
+            {
+                uint8 not_a = 255 - ALPHA(c);
+                for (int x = 0; x < w; ++x, dst_argb += 4)
+                {
+                    TSCOLOR cdst = *(TSCOLOR *)dst_argb;
+
+                    uint B = multbl[not_a][BLUE(cdst)] + BLUE(c);
+                    uint G = multbl[not_a][GREEN(cdst)] + GREEN(c);
+                    uint R = multbl[not_a][RED(cdst)] + RED(c);
+                    uint A = multbl[not_a][ALPHA(cdst)] + ALPHA(c);
+
+                    *(TSCOLOR *)dst_argb = CLAMP<uint8>(B) | (CLAMP<uint8>(G) << 8) | (CLAMP<uint8>(R) << 16) | (A << 24);
+                }
+            };
+
+
+            if (CCAPS(CPU_SSSE3))
+            {
+                uint16 na = 256 - ALPHA(color_pm);
+
+                __declspec(align(16)) uint16 xtabl[16] =
+                {
+                    na, na, na, na, na, na, na, na,  // 2 pixels x (1-A)
+                    BLUE(color_pm), GREEN(color_pm), RED(color_pm), ALPHA(color_pm), BLUE(color_pm), GREEN(color_pm), RED(color_pm), ALPHA(color_pm) // add color
+                };
+
+                int w = des_info.sz.x & ~7;
+                uint8 * dst_sse = des;
+
+                if (PREMULTIPLIED(color_pm))
+                {
+                    if (ALPHA(color_pm))
+                    {
+                        if (w)
+                            for (int y = 0; y < des_info.sz.y; ++y, dst_sse += des_info.pitch)
+                                overfill_row_sse_no_clamp(dst_sse, w, xtabl);
+
+                        if (int ost = (des_info.sz.x & 7))
+                        {
+                            des += w * 4;
+                            for (int y = 0; y < des_info.sz.y; ++y, des += des_info.pitch)
+                                overfill_row_no_clamp(des, color_pm, ost);
+                        }
+                    }
+                } else
+                {
+                    if (w)
+                        for (int y = 0; y < des_info.sz.y; ++y, dst_sse += des_info.pitch)
+                            overfill_row_sse(dst_sse, w, xtabl);
+
+                    if (int ost = (des_info.sz.x & 7))
+                    {
+                        des += w * 4;
+                        for (int y = 0; y < des_info.sz.y; ++y, des += des_info.pitch)
+                            overfill_row(des, color_pm, ost);
+                    }
+                }
+
+
+            }
+            else
+            {
+                if (PREMULTIPLIED(color_pm))
+                {
+                    if (ALPHA(color_pm))
+                        for (int y = 0; y < des_info.sz.y; ++y, des += des_info.pitch)
+                            overfill_row_no_clamp(des, color_pm, des_info.sz.x);
+                } else
+                    for (int y = 0; y < des_info.sz.y; ++y, des += des_info.pitch)
+                        overfill_row(des, color_pm, des_info.sz.x);
+            }
+
+        }
+        break;
     }
+
 }
 
 void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info)
@@ -317,6 +516,52 @@ extern "C" void _cdecl asm_shrink2x(
 		unsigned long srcpitch,
 		unsigned long dstcorrectpitch);
 
+__declspec(naked) void shrink_row_sse2_16px(const uint8* src_argb, int src_stride_argb, uint8* dst_argb, int dst_width)
+{
+    __asm {
+        push       esi
+        mov        eax, [esp + 4 + 4]   // src_argb
+        mov        esi, [esp + 4 + 8]   // src_stride_argb
+        mov        edx, [esp + 4 + 12]  // dst_argb
+        mov        ecx, [esp + 4 + 16]  // dst_width
+
+    convertloop :
+        
+        movdqu     xmm0, [eax]          // take 0..3 pixels line 0
+        movdqu     xmm4, [eax + esi]    // take 0..3 pixels line 1
+        pavgb      xmm0, xmm4
+        movdqu     xmm1, [eax + 16]         // 4..7
+        movdqu     xmm4, [eax + esi + 16]   // 4..7
+        pavgb      xmm1, xmm4
+        movdqu     xmm2, [eax + 32]         // 8..11
+        movdqu     xmm4, [eax + esi + 32]   // 8..11
+        pavgb      xmm2, xmm4
+        movdqu     xmm3, [eax + 48]         // 12..15
+        movdqu     xmm4, [eax + esi + 48]   // 12..15
+        pavgb      xmm3, xmm4
+
+        lea        eax, [eax + 64]
+        movdqa     xmm4, xmm0
+        shufps     xmm0, xmm1, 0x88
+        shufps     xmm4, xmm1, 0xdd
+        pavgb      xmm0, xmm4           // now xmm0 contains 4 final pixels
+            
+        movdqa     xmm4, xmm2
+        shufps     xmm2, xmm3, 0x88
+        shufps     xmm4, xmm3, 0xdd
+        pavgb      xmm2, xmm4           // now xmm2 contains next 4 final pixels
+
+        movdqu     [edx], xmm0
+        movdqu     [edx+16], xmm2
+
+        sub        ecx, 8               // 8 dst pixels at once
+        lea        edx, [edx + 32]
+        jg         convertloop
+
+        pop        esi
+        ret
+    }
+}
 
 void TSCALL img_helper_shrink_2x(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info)
 {
@@ -326,8 +571,9 @@ void TSCALL img_helper_shrink_2x(uint8 *des, const uint8 *sou, const imgdesc_s &
     aint desnl = des_info.pitch - des_info.sz.x*des_info.bytepp();
     aint sounl = sou_info.pitch - sou_info.sz.x*sou_info.bytepp();
 
-    if (sou_info.bytepp() == 1)
+    switch (sou_info.bytepp())
     {
+    case 1:
         for (int y = 0; y < sou_info.sz.y; y += 2)
         {
             for (int x = 0; x < sou_info.sz.x; x += 2, ++des)
@@ -345,9 +591,8 @@ void TSCALL img_helper_shrink_2x(uint8 *des, const uint8 *sou, const imgdesc_s &
 
             sou += sou_info.pitch * 2;
         }
-    }
-    else if (sou_info.bytepp() == 2)
-    {
+        break;
+    case 2:
         for (aint y = 0; y < newsz.y; y++, sou += sou_info.pitch + sounl, des += desnl)
         {
             for (aint x = 0; x < newsz.x; x++, des += 3, sou += 3 + 3)
@@ -374,9 +619,30 @@ void TSCALL img_helper_shrink_2x(uint8 *des, const uint8 *sou, const imgdesc_s &
                 *(des + 2) = (uint8)(b2 >> 2);
             }
         }
+        break;
+    case 4:
+
+        if (CCAPS(CPU_SSE2))
+        {
+            ASSERT( des != sou || des_info.pitch == sou_info.pitch ); // shrink to source allowed only with same pitch == keep unprocessed pixels unchanged
+
+            uint8 *dst_sse = des;
+            const uint8 *src_sse = sou;
+
+            int dw = des_info.sz.x & ~7;
+            for( int y = 0; y < des_info.sz.y; ++y, dst_sse += des_info.pitch, src_sse += sou_info.pitch * 2 )
+                shrink_row_sse2_16px( src_sse, sou_info.pitch, dst_sse, dw );
+
+            if (int ost = (des_info.sz.x & 7))
+                asm_shrink2x(des + dw * 4, sou + dw * 8, ost, des_info.sz.y, sou_info.pitch, des_info.pitch - ost*4);
+
+        } else
+            asm_shrink2x(des, sou, des_info.sz.x, des_info.sz.y, sou_info.pitch, desnl);
     }
-    else if (sou_info.bytepp() == 4)
-        asm_shrink2x(des, sou, des_info.sz.x, des_info.sz.y, sou_info.pitch, desnl);
+
+
+
+
 }
 
 void TSCALL img_helper_copy_components(uint8* des, const uint8* sou, const imgdesc_s &des_info, const imgdesc_s &sou_info, int num_comps)
@@ -550,13 +816,210 @@ void img_helper_merge_with_alpha(uint8 *dst, const uint8 *basesrc, const uint8 *
             }
         }
     }
+}
 
+/*
+    alphablend row with addition alpha
+    source pixels must be premultiplied! no clamp provided!
+*/
+__declspec(naked) void alphablend_row_sse_no_clamp_aa(uint8 *dst_argb, const uint8 *src_argb, int w, const uint16 * alpha_mul)
+{
+    __asm {
+        mov        edx, [esp + 0 + 4]   // dst_argb
+        mov        ecx, [esp + 0 + 12]  // width
+        mov        eax, [esp + 0 + 16]  // alpha mul
+        movdqa     xmm3, [eax]
+        mov        eax, [esp + 0 + 8]   // src_argb
+
+        movdqa     xmm4, sub256
+
+    alphablendloop :
+
+        lddqu      xmm5, [eax]          // src take 0..3 pixels
+
+        movdqa     xmm6, xmm5
+        pshufb     xmm5, preparesrcs_1
+        pshufb     xmm6, preparesrcs_2
+        pmulhuw    xmm5, xmm3
+
+        movdqa     xmm2, xmm5
+        pshufb     xmm2, preparealphas
+        movdqa     xmm7, xmm4
+        psubw      xmm7, xmm2
+
+        movdqu     xmm0, [edx]
+        movdqa     xmm1, xmm0
+        pshufb     xmm0, sse_consts::preparetgtc_1
+        pmulhuw    xmm0, xmm7
+        paddw      xmm0, xmm5
+        pshufb     xmm0, sse_consts::packcback_1
+
+        lea        eax, [eax + 16]
+
+        pmulhuw    xmm6, xmm3
+
+        movdqa     xmm2, xmm6
+        pshufb     xmm2, preparealphas
+        movdqa     xmm7, xmm4
+        psubw      xmm7, xmm2
+
+        pshufb     xmm1, sse_consts::preparetgtc_2
+        pmulhuw    xmm1, xmm7
+        paddw      xmm1, xmm6
+        pshufb     xmm1, sse_consts::packcback_2
+
+        por        xmm0, xmm1
+
+        movdqu     [edx], xmm0
+
+        lea        edx, [edx + 16]
+
+        sub        ecx, 4               // 4 dst pixels at once
+        jg         alphablendloop
+
+        ret
+    }
+}
+
+/*
+    alphablend row
+    source pixels must be premultiplied! no clamp provided!
+*/
+__declspec(naked) void alphablend_row_sse_no_clamp(uint8 *dst_argb, const uint8 *src_argb, int w)
+{
+    __asm {
+        mov        edx, [esp + 0 + 4]   // dst_argb
+        mov        eax, [esp + 0 + 8]   // src_argb
+        mov        ecx, [esp + 0 + 12]  // width
+
+        movdqa     xmm4, sub256
+        movdqa     xmm3, preparealphas
+
+    alphablendloop :
+
+        lddqu      xmm5, [eax]          // src take 0..3 pixels
+
+        movdqa     xmm6, xmm5
+        pshufb     xmm5, preparesrcs_1
+        pshufb     xmm6, preparesrcs_2
+
+        movdqa     xmm2, xmm5
+        pshufb     xmm2, xmm3
+        movdqa     xmm7, xmm4
+        psubw      xmm7, xmm2
+
+        movdqu     xmm0, [edx]
+        movdqa     xmm1, xmm0
+        pshufb     xmm0, sse_consts::preparetgtc_1
+        pmulhuw    xmm0, xmm7
+        paddw      xmm0, xmm5
+        pshufb     xmm0, sse_consts::packcback_1
+
+        lea        eax, [eax + 16]
+
+        movdqa     xmm2, xmm6
+        pshufb     xmm2, xmm3
+        movdqa     xmm7, xmm4
+        psubw      xmm7, xmm2
+
+        pshufb     xmm1, sse_consts::preparetgtc_2
+        pmulhuw    xmm1, xmm7
+        paddw      xmm1, xmm6
+        pshufb     xmm1, sse_consts::packcback_2
+
+        por        xmm0, xmm1
+
+        movdqu[edx], xmm0
+
+        lea        edx, [edx + 16]
+
+        sub        ecx, 4               // 4 dst pixels at once
+        jg         alphablendloop
+
+        ret
+    }
 }
 
 
+void TSCALL img_helper_alpha_blend_pm( uint8 *dst, int dst_pitch, const uint8 *sou, const imgdesc_s &src_info, uint8 alpha, bool guaranteed_premultiplied )
+{
+    auto alphablend_row_1 = [](uint8 *dst, const uint8 *sou, int width)
+    {
+        for(const uint8 *soue = sou + width * 4; sou < soue; dst += 4, sou += 4)
+            *(TSCOLOR *)dst = ALPHABLEND_PM( *(TSCOLOR *)dst, *(TSCOLOR *)sou );
+    };
+
+    auto alphablend_row_1_noclamp = [](uint8 *dst, const uint8 *sou, int width)
+    {
+        for (const uint8 *soue = sou + width * 4; sou < soue; dst += 4, sou += 4)
+            *(TSCOLOR *)dst = ALPHABLEND_PM_NO_CLAMP(*(TSCOLOR *)dst, *(TSCOLOR *)sou);
+    };
+
+    auto alphablend_row_2 = [](uint8 *dst, const uint8 *sou, int width, uint8 alpha)
+    {
+        for(const uint8 *soue = sou + width * 4; sou < soue; dst += 4, sou += 4)
+            *(TSCOLOR *)dst = ALPHABLEND_PM(*(TSCOLOR *)dst, *(TSCOLOR *)sou, alpha);
+    };
+
+    if (CCAPS(CPU_SSSE3) && guaranteed_premultiplied)
+    {
+        int w = src_info.sz.x & ~3;
+        uint8 * dst_sse = dst;
+        const uint8 * src_sse = sou;
+
+        if (alpha == 255)
+        {
+            if (w)
+                for (int y = 0; y < src_info.sz.y; ++y, dst_sse += dst_pitch, src_sse += src_info.pitch)
+                    alphablend_row_sse_no_clamp(dst_sse, src_sse, w);
+            
+            if (int ost = src_info.sz.x & 3)
+            {
+                dst += w * 4;
+                sou += w * 4;
+                for (int y = 0; y < src_info.sz.y; ++y, dst += dst_pitch, sou += src_info.pitch)
+                    alphablend_row_1_noclamp(dst, sou, ost);
+            }
+        } else
+        {
+            ts::uint16 am = (uint16)(alpha+1) << 8; // valid due alpha < 255
+            __declspec(align(16)) ts::uint16 amul[8] = { am, am, am, am, am, am, am, am };
+
+            if (w)
+                for (int y = 0; y < src_info.sz.y; ++y, dst_sse += dst_pitch, src_sse += src_info.pitch)
+                    alphablend_row_sse_no_clamp_aa(dst_sse, src_sse, w, amul);
+
+
+            if (int ost = src_info.sz.x & 3)
+            {
+                dst += w * 4;
+                sou += w * 4;
+                for (int y = 0; y < src_info.sz.y; ++y, dst += dst_pitch, sou += src_info.pitch)
+                    alphablend_row_2(dst, sou, ost, alpha);
+            }
+
+        }
+
+        return;
+    }
+
+    if (alpha == 255)
+    { 
+        if (guaranteed_premultiplied)
+            for(int y=0;y<src_info.sz.y;++y, dst += dst_pitch, sou += src_info.pitch)
+                alphablend_row_1_noclamp( dst, sou, src_info.sz.x );
+        else
+            for (int y = 0; y < src_info.sz.y; ++y, dst += dst_pitch, sou += src_info.pitch)
+                alphablend_row_1(dst, sou, src_info.sz.x);
+
+    } else
+        for (int y = 0; y < src_info.sz.y; ++y, dst += dst_pitch, sou += src_info.pitch)
+            alphablend_row_2(dst, sou, src_info.sz.x, alpha);
+}
+
 void    bmpcore_normal_s::before_modify(bitmap_c *me)
 {
-    if (m_core->m_ref == 1) return;
+    if (m_core == nullptr || m_core->m_ref == 1) return;
 
     bitmap_c b( *me );
 
@@ -564,7 +1027,7 @@ void    bmpcore_normal_s::before_modify(bitmap_c *me)
     else if (b.info().bitpp == 15) me->create_15(b.info().sz);
     else if (b.info().bitpp == 16) me->create_16(b.info().sz);
     else if (b.info().bitpp == 24) me->create_RGB(b.info().sz);
-    if (b.info().bitpp == 32) me->create_RGBA(b.info().sz);
+    if (b.info().bitpp == 32) me->create_ARGB(b.info().sz);
 
     me->copy(ivec2(0), b.info().sz, b.extbody(), ivec2(0));
 }
@@ -572,6 +1035,7 @@ void    bmpcore_normal_s::before_modify(bitmap_c *me)
 bool bmpcore_normal_s::operator==(const bmpcore_normal_s & bm) const
 {
     if (m_core == bm.m_core) return true;
+    if (m_core == nullptr || bm.m_core == nullptr) return false;
 
     if (m_core->m_info != bm.m_core->m_info) return false;
     aint ln = m_core->m_info.sz.x * m_core->m_info.bytepp();
@@ -629,7 +1093,7 @@ template <typename CORE> void bitmap_t<CORE>::convert_24to32(bitmap_c &imgout) c
 
 	if (info().pitch * info().sz.y % 12 != 0) // for small images 1x1 or 2x2
 	{
-		imgout.create_RGBA(info().sz);
+		imgout.create_ARGB(info().sz);
 		imgout.copy(ts::ivec2(0),info().sz,extbody(),ts::ivec2(0));
 		return;
 	}
@@ -972,20 +1436,27 @@ template<typename CORE> irect bitmap_t<CORE>::calc_visible_rect() const
     return r;
 }
 
-template<typename CORE> uint32 bitmap_t<CORE>::get_area_type(const ivec2 & p,const ivec2 & size) const
+template<typename CORE> uint32 bitmap_t<CORE>::get_area_type(const irect &r) const
 {
-    if (info().bytepp()!=4) return IMAGE_AREA_SOLID;
-	uint32 * ptr=(uint32 *)((uint8 *)body()+4*p.x+info().pitch*p.y);
+    if (info().bitpp != 32) return IMAGE_AREA_SOLID;
+
+    ASSERT( r.lt.x >= 0 && r.lt.y >= 0 );
+
+	const uint8 * src = body(r.lt) + 3;
 
     uint32 at = 0;
 
-    for (int j = 0; j<size.y; ++j)
+    int ww = tmin(r.width(), info().sz.x - r.lt.x);
+    int hh = tmin(r.height(), info().sz.y - r.lt.y);
+
+    for (int y = 0; y<hh; ++y, src += info().pitch)
     {
-        for (int i = 0; i<size.x; ++i)
+        for (int x = 0; x<ww; ++x)
         {
-            uint32 ap = (0xFF000000 & (*(ptr + i)));
-            bool t_empty_found = (ap == 0x00000000);
-            bool t_solid_found = (ap == 0xFF000000);
+            uint8 ap = src[ x * 4 ];
+
+            bool t_empty_found = (ap == 0x00);
+            bool t_solid_found = (ap == 0xFF);
 
             if ( !t_empty_found && !t_solid_found  ) at |=IMAGE_AREA_SEMITRANSPARENT;
             if (t_empty_found) at |= IMAGE_AREA_TRANSPARENT;
@@ -993,7 +1464,6 @@ template<typename CORE> uint32 bitmap_t<CORE>::get_area_type(const ivec2 & p,con
 
             if (at == IMAGE_AREA_ALLTYPE) return at;
         }
-        ptr = (uint32 *)(((uint8 *)ptr) + info().pitch);
     }
     return at;
 }
@@ -1106,40 +1576,6 @@ template<typename CORE> void bitmap_t<CORE>::fill_alpha(const ivec2 & pdes, cons
         }
     }
 }
-
-template<typename CORE> bool bitmap_t<CORE>::has_alpha() const
-{
-    if (info().bytepp() != 4) return false;
-
-    if (info().pitch == 4 * info().sz.x)
-    {
-        const uint8 * o = body() + 3;
-        int cnt = info().sz.x * info().sz.y;
-        for (; cnt > 0; --cnt, o += 4)
-            if (*o < 255) return true;
-        return false;
-    }
-    return has_alpha(ts::ivec2(0), info().sz);
-
-}
-
-template<typename CORE> bool bitmap_t<CORE>::has_alpha(const ivec2 & pdes, const ivec2 & size) const
-{
-    if (info().bytepp() != 4) return false;
-    if (pdes.x < 0 || pdes.y < 0) return false;
-    if ((pdes.x + size.x) > info().sz.x || (pdes.y + size.y) > info().sz.y) return false;
-
-    const uint8 * des = body() + info().bytepp()*pdes.x + info().pitch*pdes.y + 3;
-    int desnl = info().pitch - size.x*info().bytepp();
-    int desnp = info().bytepp();
-
-    for (int y = 0; y < size.y; y++, des += desnl)
-        for (int x = 0; x < size.x; x++, des += desnp)
-            if (*des < 255) return true;
-
-    return false;
-}
-
 template<typename CORE> void bitmap_t<CORE>::detect_alpha_channel( const bitmap_t<CORE> & bmsou )
 {
     class ADFILTERFILTER
@@ -1232,66 +1668,23 @@ template<typename CORE> void bitmap_t<CORE>::overfill(const ivec2 & pdes,const i
     // formula is: (1-src.alpha) * dst + src.color
     // dont check 0 alpha due it can be (1 * desc + src) op
 
-    uint8 * des=body()+info().bytepp()*pdes.x+info().pitch*pdes.y;
-    int desnl=info().pitch-size.x*info().bytepp();
-    int desnp=info().bytepp();
+    uint8 * des = body() + info().bytepp()*pdes.x + info().pitch*pdes.y;
 
-    if(info().bytepp()==1) {
-        // unsupported
-    } else if(info().bytepp()==2) {
-        // unsupported
-    } else if(info().bytepp()==3) {
-
-        double a = ((double)ALPHA(color) * 1.0 / 255.0);
-        double not_a = 1.0 - a;
-
-        for(int y=0;y<size.y;y++,des+=desnl) {
-            for(int x=0;x<size.x;x++,des+=desnp) {
-
-                auint oiB = lround(float(des[0]) * not_a) + BLUE(color);
-                auint oiG = lround(float(des[1]) * not_a) + GREEN(color);
-                auint oiR = lround(float(des[2]) * not_a) + RED(color);
-
-                *(uint16 *)des = CLAMP<uint8>(oiB) | (CLAMP<uint8>(oiG) << 8);
-                *(uint8 *)(des+2) = (uint8)CLAMP<uint8>(oiR);
-
-            }			
-        }
-    } else if(info().bytepp()==4) {
-
-        double a = ((double)ALPHA(color) * 1.0 / 255.0);
-        double not_a = 1.0 - a;
-
-        for(int y=0;y<size.y;y++,des+=desnl) {
-            for(int x=0;x<size.x;x++,des+=desnp) {
-
-                TSCOLOR c = *(TSCOLOR *)des;
-
-                auint oiB = lround(float(BLUE(c)) * not_a) + BLUE(color);
-                auint oiG = lround(float(GREEN(c)) * not_a) + GREEN(color);
-                auint oiR = lround(float(RED(c)) * not_a) + RED(color);
-                auint oiA = lround(float(ALPHA(c)) * not_a) + ALPHA(color);
-
-                c = CLAMP<uint8>(oiB) | (CLAMP<uint8>(oiG) << 8) | (CLAMP<uint8>(oiR) << 16) | (CLAMP<uint8>(oiA) << 24);
-
-                *(TSCOLOR *)des = c;
-            }			
-        }
-    }
+    img_helper_overfill(des, info( irect(0, size) ), color);
 }
 
-template<typename CORE> void bitmap_t<CORE>::premultiply()
+template<typename CORE> bool bitmap_t<CORE>::premultiply()
 {
-    if(info().bytepp()!=4) return;
+    if(info().bytepp()!=4) return false;
     before_modify();
-    img_helper_premultiply( body(), info() );
+    return img_helper_premultiply( body(), info() );
 }
 
-template<typename CORE> void bitmap_t<CORE>::premultiply( const irect &rect )
+template<typename CORE> bool bitmap_t<CORE>::premultiply( const irect &rect )
 {
-    if (info().bytepp() != 4) return;
+    if (info().bytepp() != 4) return false;
     before_modify();
-    img_helper_premultiply( body(rect.lt), info(rect) );
+    return img_helper_premultiply( body(rect.lt), info(rect) );
 }
 
 
@@ -1606,7 +1999,7 @@ template<typename CORE> void bitmap_t<CORE>::alpha_blend( const ivec2 &p, const 
 {
     ASSERT( img.info().bytepp() == 4 );
     if (info().sz != base.info().sz)
-        create_RGBA( base.info().sz );
+        create_ARGB( base.info().sz );
     else
         before_modify();
 
@@ -1948,7 +2341,7 @@ template<typename CORE> void bitmap_t<CORE>::modulate_grayscale_with_alpha(const
 void TSCALL sharpen_run(bitmap_c &obm, const uint8 *sou, const imgdesc_s &souinfo, int lv);
 template<typename CORE> void bitmap_t<CORE>::sharpen(bitmap_c& outimage, int lv) const
 {
-    outimage.create_RGBA(info().sz);
+    outimage.create_ARGB(info().sz);
     sharpen_run(outimage, body(), info(), lv);
 }
 
@@ -1962,9 +2355,10 @@ static bool resize3box(const bmpcore_exbody_s &extbody, const uint8 *sou, const 
         ivec2 sz2 = souinfo.sz / 2;
         if ( sz2 >>= extbody.info().sz )
         {
-            uint8 * tmp = (uint8 *)MM_ALLOC( sz2.x * sz2.y * 4 );
+            ts::int16 stride = ((sz2.x * 4) + 15) & ~15;
+            uint8 * tmp = (uint8 *)MM_ALLOC( stride * sz2.y );
 
-            imgdesc_s desinf(sz2, 32);
+            imgdesc_s desinf(sz2, 32, stride);
             img_helper_shrink_2x( tmp, sou, desinf, souinfo );
 
 
@@ -1972,7 +2366,7 @@ static bool resize3box(const bmpcore_exbody_s &extbody, const uint8 *sou, const 
             sz2 = sz2/2;
             for(;sz2 >>= extbody.info().sz;)
             {
-                desinf = imgdesc_s(sz2, 32);
+                desinf = imgdesc_s(sz2, 32, stride);
                 img_helper_shrink_2x( tmp, tmp, desinf, souinf );
                 souinf = desinf;
                 sz2 = sz2 / 2;
@@ -1990,7 +2384,7 @@ static bool resize3box(const bmpcore_exbody_s &extbody, const uint8 *sou, const 
 }
 template<typename CORE> bool bitmap_t<CORE>::resize_to(bitmap_c& obm, const ivec2 & newsize, resize_filter_e filt_mode) const
 {
-    obm.create_RGBA(newsize);
+    obm.create_ARGB(newsize);
     return resize3box(obm.extbody(), body(), info(), filt_mode);
 }
 
@@ -2239,7 +2633,7 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_BMPHEADER(const BITMAPINF
 	switch (iH->biBitCount)
 	{
 	case 24: create_RGB (sz); break;
-	case 32: create_RGBA(sz); break;
+	case 32: create_ARGB(sz); break;
 	default: return false;
 	}
 
@@ -2285,7 +2679,7 @@ template<typename CORE> img_format_e bitmap_t<CORE>::load_from_file(const void *
                 if (r(reader, body(), info().pitch)) return fmt;
                 break;
             case 32:
-                create_RGBA(reader.size);
+                create_ARGB(reader.size);
                 if (r(reader, body(), info().pitch)) return fmt;
                 break;
             }
@@ -2546,7 +2940,7 @@ template<typename CORE> void bitmap_t<CORE>::load_from_HWND(HWND hwnd)
 
     BitBlt(memDC,0,0,info().sz.x,info().sz.y,dc,0,0,SRCCOPY);
 
-    if (info().sz != sz || info().bytepp() != 4) create_RGBA( sz );
+    if (info().sz != sz || info().bytepp() != 4) create_ARGB( sz );
 
     img_helper_copy( body(), bits, info(), imgdesc_s( sz, 32, (uint16)lPitch ) );
 
@@ -2554,6 +2948,9 @@ template<typename CORE> void bitmap_t<CORE>::load_from_HWND(HWND hwnd)
     DeleteObject(memBM);
     DeleteDC(memDC);
 }
+
+
+
 
 #ifdef _DEBUG
 int dbmpcnt = 0;
@@ -2658,43 +3055,6 @@ void    drawable_bitmap_c::create(const ivec2 &sz, int monitor)
     CHECK(SelectObject(m_mem_dc, m_mem_bitmap));
     DeleteDC(tdc);
 }
-
-bool    drawable_bitmap_c::is_alphablend(const irect &r) const
-{
-    if (!m_mem_dc || !m_mem_bitmap) return false;
-
-    struct {
-        struct {
-            BITMAPV4HEADER bmiHeader;
-        } bmi;
-        uint32 pal[256];
-    } b;
-
-    memset(&b, 0, sizeof(BITMAPV4HEADER));
-    b.bmi.bmiHeader.bV4Size = sizeof(BITMAPINFOHEADER);
-    if (GetDIBits(m_mem_dc, m_mem_bitmap, 0, 0, nullptr, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return false;
-
-    if (b.bmi.bmiHeader.bV4BitCount == 32 && core.m_body)
-    {
-        const uint8 * src = core() + (info().pitch*r.lt.y); //(BYTE *)(m_pDIBits)+info().pitch*uint32(b.bmi.bmiHeader.bV4Height - 1 - r.lt.y);
-        src += r.lt.x * 4;
-
-        int hh = tmin(r.height(), b.bmi.bmiHeader.bV4Height - r.lt.y);
-        int ll = 4 * tmin(r.width(), b.bmi.bmiHeader.bV4Width - r.lt.x);
-        for (int y = 0; y < hh; y++)
-        {
-            for (int i = 0; i < ll; i += 4)
-            {
-                uint32 s = *(uint32 *)(src + i);
-                if ((s & 0xFF000000) != 0xFF000000) return true;
-            }
-            src += info().pitch;
-        }
-    }
-
-    return false;
-}
-
 bool    drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, bool flipy, bool premultiply, bool detect_alpha_pixels)
 {
     return create_from_bitmap(bmp, ivec2(0, 0), bmp.info().sz, flipy, premultiply, detect_alpha_pixels);
@@ -2779,7 +3139,7 @@ bool drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, const ivec2 &p, 
             {
                 uint32 ocolor;
                 uint32 color = ((uint32 *)bsou)[x];
-                uint8 alpha = uint8(color >> 24);
+                uint8 alpha = ALPHA(color);
                 if (alpha == 255)
                 {
                     ocolor = color;
@@ -2792,18 +3152,13 @@ bool drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, const ivec2 &p, 
                 else
                 {
 
-                    uint8 R = as_byte(color >> 16);
-                    uint8 G = as_byte(color >> 8);
-                    uint8 B = as_byte(color);
-
-                    float A = float(alpha) / 255.0f;
-
-#define CCGOOD( C ) CLAMP<uint8>( float(C) * A )
-
-                    ocolor = CCGOOD(B) | (CCGOOD(G) << 8) | (CCGOOD(R) << 16) | (alpha << 24);
-#undef CCGOOD
+                    ocolor = multbl[alpha][color & 0xff] |
+                        ((uint)multbl[alpha][(color >> 8) & 0xff] << 8) |
+                        ((uint)multbl[alpha][(color >> 16) & 0xff] << 16) |
+                        (color & 0xff000000);
 
                     alphablend = true;
+
                 }
 
                 ((uint32 *)bdes)[x] = ocolor;
@@ -2938,7 +3293,7 @@ void drawable_bitmap_c::save_to_bitmap(bitmap_c &bmp, bool save16as32)
     {
         uint32 ll = uint32(b.bmi.bmiHeader.bV4Width * 4);
         const uint8 * src = core()+info().pitch*uint32(b.bmi.bmiHeader.bV4Height - 1);
-        bmp.create_RGBA(ref_cast<ivec2>(b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height));
+        bmp.create_ARGB(ref_cast<ivec2>(b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height));
         uint8 * dst = bmp.body();
         for (int y = 0; y < bmp.info().sz.y; y++)
         {
@@ -2960,7 +3315,7 @@ void drawable_bitmap_c::save_to_bitmap(bitmap_c &bmp, bool save16as32)
 
     if (b.bmi.bmiHeader.bV4BitCount == 16) bmp.create_16(ref_cast<ivec2>(b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height));
     else if (b.bmi.bmiHeader.bV4BitCount == 24) bmp.create_RGB(ref_cast<ivec2>(b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height));
-    else if (b.bmi.bmiHeader.bV4BitCount == 32) bmp.create_RGBA(ref_cast<ivec2>(b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height));
+    else if (b.bmi.bmiHeader.bV4BitCount == 32) bmp.create_ARGB(ref_cast<ivec2>(b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height));
     bmp.fill(0);
 
     if (GetDIBits(m_mem_dc, m_mem_bitmap, 0, b.bmi.bmiHeader.bV4Height, bmp.body(), (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return;
@@ -2972,37 +3327,71 @@ void drawable_bitmap_c::save_to_bitmap(bitmap_c &bmp, bool save16as32)
 
 }
 
-void drawable_bitmap_c::draw(HDC dc, aint xx, aint yy, int alpha) const
-{
-    struct {
-        struct {
-            BITMAPV4HEADER bmiHeader;
-        } bmi;
-        uint32 pal[256];
-    } b;
 
-    memset(&b, 0, sizeof(BITMAPV4HEADER));
-    b.bmi.bmiHeader.bV4Size = sizeof(BITMAPINFOHEADER);
-    if (GetDIBits(m_mem_dc, m_mem_bitmap, 0, 0, nullptr, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return;
+void bmpcore_exbody_s::draw(const bmpcore_exbody_s &eb, aint xx, aint yy, int alpha) const
+{
+    ASSERT(xx + info().sz.x <= eb.info().sz.x);
+    ASSERT(yy + info().sz.y <= eb.info().sz.y);
+
     if (alpha > 0)
+        img_helper_alpha_blend_pm(eb(ivec2(xx, yy)), eb.info().pitch, (*this)(), info(), (uint8)alpha);
+    else
+        img_helper_copy(eb(ivec2(xx, yy)), (*this)(), eb.info().chsize(info().sz), info());
+
+}
+
+void bmpcore_exbody_s::draw(const bmpcore_exbody_s &eb, aint xx, aint yy, const irect &r, int alpha) const
+{
+    const uint8 *src = (*this)(r.lt);
+    imgdesc_s sinf(r.size(), 32, info().pitch);
+
+    ASSERT(xx + r.width() <= eb.info().sz.x);
+    ASSERT(yy + r.height() <= eb.info().sz.y);
+
+    if (alpha > 0)
+        img_helper_alpha_blend_pm(eb(ivec2(xx, yy)), eb.info().pitch, src, sinf, (uint8)alpha);
+    else
+        img_helper_copy(eb(ivec2(xx, yy)), src, eb.info().chsize(sinf.sz), sinf);
+
+}
+
+
+void drawable_bitmap_c::draw(const draw_target_s &dt, aint xx, aint yy, int alpha) const
+{
+    if (dt.eb)
     {
-        BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, (uint8)alpha, AC_SRC_ALPHA };
-        AlphaBlend(dc, xx, yy, b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height, m_mem_dc, 0, 0, b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height, blendPixelFunction);
-    } else if (alpha < 0)
+        __super::draw((*dt.eb), xx, yy, alpha);
+    
+    } else
     {
-        BitBlt(dc, xx, yy, b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height, m_mem_dc, 0, 0, SRCCOPY);
+        if (alpha > 0)
+        {
+            BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, (uint8)alpha, AC_SRC_ALPHA };
+            AlphaBlend(dt.dc, xx, yy, info().sz.x, info().sz.y, m_mem_dc, 0, 0, info().sz.x, info().sz.y, blendPixelFunction);
+        }
+        else if (alpha < 0)
+        {
+            BitBlt(dt.dc, xx, yy, info().sz.x, info().sz.y, m_mem_dc, 0, 0, SRCCOPY);
+        }
     }
 }
 
-void drawable_bitmap_c::draw(HDC dc, aint xx, aint yy, const irect &r, int alpha) const
+void drawable_bitmap_c::draw(const draw_target_s &dt, aint xx, aint yy, const irect &r, int alpha) const
 {
-    if (alpha > 0)
+    if (dt.eb)
     {
-        BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, (uint8)alpha, AC_SRC_ALPHA };
-        AlphaBlend(dc, xx, yy, r.width(), r.height(), m_mem_dc, r.lt.x, r.lt.y, r.width(), r.height(), blendPixelFunction);
-    } else if (alpha < 0)
+        __super::draw( (*dt.eb), xx, yy, r, alpha );
+    }
+    else
     {
-        BitBlt(dc, xx, yy, r.width(), r.height(), m_mem_dc, r.lt.x, r.lt.y, SRCCOPY);
+        if (alpha > 0)
+        {
+            BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, (uint8)alpha, AC_SRC_ALPHA };
+            AlphaBlend(dt.dc, xx, yy, r.width(), r.height(), m_mem_dc, r.lt.x, r.lt.y, r.width(), r.height(), blendPixelFunction);
+        } else if (alpha < 0)
+        {
+            BitBlt(dt.dc, xx, yy, r.width(), r.height(), m_mem_dc, r.lt.x, r.lt.y, SRCCOPY);
+        }
     }
 }
 

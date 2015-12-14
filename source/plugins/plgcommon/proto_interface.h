@@ -81,7 +81,7 @@ struct contact_data_s
         Positive (>0) values - ids of contacts
         Negative (<0) values - ids of group chats
 
-        id - stable identifier - must never be changed while contact lifetime
+        id - stable identifier - must never be changed during contact lifetime
         unused values (eg: deleted contacts or group chats) can be used with new ones
     */
     int id;
@@ -93,6 +93,8 @@ struct contact_data_s
     int name_len;
     const char *status_message; // utf8
     int status_message_len;
+    const char *details; // utf8 // json
+    int details_len;
 
     int avatar_tag;
 

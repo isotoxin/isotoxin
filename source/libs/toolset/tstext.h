@@ -21,10 +21,11 @@ protected:
     wstr_c text;
     flags32_s flags;
     int scroll_top = 0;
-    int margin_left = 0, margin_right = 0, margin_top = 0; // offset of text in texture
+    ts::ivec2 margins_lt = ts::ivec2(0);
+    int margin_right = 0; // offset of text in texture
     int text_height;
 
-    virtual drawable_bitmap_c &texture() = 0;
+    virtual bitmap_c &texture() = 0;
     virtual void texture_no_need() = 0;
 
 public:
@@ -58,17 +59,19 @@ public:
     bool is_invalid_glyphs() const { return flags.is(F_INVALID_GLYPHS); }
     bool is_invalid_texture() const { return flags.is(F_INVALID_TEXTURE); }
     
-    void set_margins(int mleft, int mtop, int mrite)
+    void set_margins(const ts::ivec2 &mlt, int mrite = 0)
     {
-        if (mleft != margin_left) { flags.set(F_DIRTY|F_INVALID_TEXTURE|F_INVALID_GLYPHS); margin_left = mleft; }
-        if (mtop != margin_top) { flags.set(F_DIRTY|F_INVALID_TEXTURE|F_INVALID_GLYPHS); margin_top = mtop; }
+        if (mlt.x != margins_lt.x) { flags.set(F_DIRTY|F_INVALID_TEXTURE|F_INVALID_GLYPHS); margins_lt.x = mlt.x; }
+        if (mlt.y != margins_lt.y) { flags.set(F_DIRTY|F_INVALID_TEXTURE|F_INVALID_GLYPHS); margins_lt.y = mlt.y; }
         if (mrite != margin_right) { flags.set(F_DIRTY|F_INVALID_TEXTURE|F_INVALID_GLYPHS); margin_right = mrite; }
     }
+    const ts::ivec2 & get_margins_lt() const {return margins_lt;}
     void set_def_color( TSCOLOR c ) { if (default_color != c) { flags.set(F_DIRTY|F_INVALID_TEXTURE|F_INVALID_GLYPHS); default_color = c; } }
     void set_size(const ts::ivec2 &sz) { flags.init(F_INVALID_SIZE, !(sz >> 0)); if (size != sz) { flags.set(F_DIRTY|F_INVALID_TEXTURE|F_INVALID_GLYPHS); size = sz; } }
     void set_text_only(const wstr_c &text_, bool forcedirty) { if (forcedirty || !text.equals(text_)) { flags.set(F_DIRTY|F_INVALID_SIZE|F_INVALID_TEXTURE|F_INVALID_GLYPHS); text = text_; } }
 	bool set_text(const wstr_c &text, CUSTOM_TAG_PARSER ctp, bool do_parse_and_render_texture);
 	const wstr_c& get_text() const { return text; }
+    bool is_options( ts::flags32_s::BITS mask ) const {return flags.is(mask); }
     bool change_option( ts::flags32_s::BITS mask, ts::flags32_s::BITS value )
     {
         ts::flags32_s::BITS old = flags.__bits & mask;
@@ -101,7 +104,7 @@ public:
         return false;
     }
 	void parse_and_render_texture( rectangle_update_s * updr, CUSTOM_TAG_PARSER ctp, bool do_render = true );
-    void render_texture( rectangle_update_s * updr, fastdelegate::FastDelegate< void (drawable_bitmap_c&, const ivec2 &size) > clearp ); // custom clear
+    void render_texture( rectangle_update_s * updr, fastdelegate::FastDelegate< void (bitmap_c&, const ivec2 &size) > clearp ); // custom clear
     void render_texture( rectangle_update_s * updr );
     void update_rectangles( rectangle_update_s * updr );
 
@@ -109,8 +112,12 @@ public:
     ivec2 calc_text_size(const font_desc_c& font, const wstr_c&text, int maxwidth, uint flags, CUSTOM_TAG_PARSER ctp) const;
 
 	int  get_scroll_top() const {return scroll_top;}
+    ts::ivec2 get_offset() const
+    {
+        return ivec2(ui_scale(margins_lt.x), ui_scale(margins_lt.y) - scroll_top + (flags.is(TO_VCENTER) ? (size.y - text_height) / 2 : 0));
+    }
 
-    drawable_bitmap_c &get_texture() { ASSERT(!flags.is(F_INVALID_TEXTURE|F_INVALID_GLYPHS)); return texture();};
+    bitmap_c &get_texture() { ASSERT(!flags.is(F_INVALID_TEXTURE|F_INVALID_GLYPHS)); return texture();};
 
 	//render glyphs to RGBA buffer with full alpha-blending
 	//offset can be used for scrolling or margins
@@ -119,8 +126,8 @@ public:
 
 class text_rect_static_c : public text_rect_c
 {
-    drawable_bitmap_c t;
-    /*virtual*/ drawable_bitmap_c &texture() override
+    bitmap_c t;
+    /*virtual*/ bitmap_c &texture() override
     {
         return t;
     }

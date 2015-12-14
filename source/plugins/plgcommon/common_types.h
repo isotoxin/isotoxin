@@ -46,6 +46,7 @@ enum cd_mask_e
     CDM_AVATAR_TAG      = 1 << 6,
     CDM_MEMBERS         = 1 << 7,
     CDM_PERMISSIONS     = 1 << 8,
+    CDM_DETAILS         = 1 << 9,
 
     CDF_PERSISTENT_GCHAT = 1 << 30,
     CDF_AUDIO_GCHAT      = 1 << 29,
@@ -162,3 +163,17 @@ enum stream_options_e
 #define CFGF_UDP_ENABLE     "udp_enable"
 #define CFGF_IPv6_ENABLE    "ipv6_enable"
 #define CFGF_SERVER_PORT    "server_port"
+
+
+#define CDET_PUBLIC_ID      "pubid"     // id, login, uin, etc...
+#define CDET_PUBLIC_ID_BAD  "badpubid"  // id broken
+#define CDET_EMAIL          "email"     // email
+#define CDET_DNSNAME        "dnsname"   // dns name (alias for id, ToxDNS for example)
+#define CDET_CLIENT         "client"    // client name and version. eg: isotoxin/0.3.393
+#define CDET_CLIENT_CAPS    "clcaps"    // client caps - caps keywords. eg: 
+
+
+#define CLCAP_BBCODE_B      "bbb"
+#define CLCAP_BBCODE_U      "bbu"
+#define CLCAP_BBCODE_S      "bbs"
+#define CLCAP_BBCODE_I      "bbi"

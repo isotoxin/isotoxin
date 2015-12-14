@@ -118,7 +118,7 @@ struct selectable_core_s
     bool try_begin( gui_label_c *label );
     bool sure_selected();
     bool some_selected() const { return owner && char_start_sel >= 0 && char_end_sel >= 0 && char_start_sel != char_end_sel; }
-    void selection_stuff(ts::drawable_bitmap_c &bmp, const ts::ivec2 &size);
+    void selection_stuff(ts::bitmap_c &bmp, const ts::ivec2 &size);
     void clear_selection();
     void track();
     void endtrack();
@@ -281,7 +281,7 @@ private:
     struct texture_s
     {
         ts::iweak_ptr<text_rect_dynamic_c> owner;
-        ts::drawable_bitmap_c texture;
+        ts::bitmap_c texture;
     };
     ts::array_del_t<texture_s, 32> m_textures;
 
@@ -361,8 +361,8 @@ public:
     gui_c();
 	~gui_c();
 
-    ts::drawable_bitmap_c * acquire_texture( text_rect_dynamic_c *requester, const ts::ivec2 &size );
-    void release_texture( ts::drawable_bitmap_c * t );
+    ts::bitmap_c * acquire_texture( text_rect_dynamic_c *requester, const ts::ivec2 &size );
+    void release_texture( ts::bitmap_c * t );
 
     void reload_fonts();
     bool load_theme( const ts::wsptr&thn );

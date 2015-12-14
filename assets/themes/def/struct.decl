@@ -8,7 +8,7 @@ conf
   mecontactheight=60
   contactheight=54
   minprotowidth=100
-  cltop=65
+  cltop=62
   clbottom=65
   name=default
   appearance=light
@@ -60,8 +60,8 @@ rects
     r=80,48,128,80
     t=48,0,80,48
     b=48,80,80,128
-    c=34,34,94,94
-    base=34,34,94,94
+    c=0,0,0,0,#f1f9ee //34,34,94,94
+    base=0,0,0,0,#f1f9ee //34,34,94,94
 
     resizearea=3
     hollowborder=32,32,32,32
@@ -97,6 +97,10 @@ rects
   {
     src=back.png
     colors=#0000FF
+  }
+  cprops=main
+  {
+    colors=#367320,#505050,#000060,#900000
   }
   about=main
   {
@@ -140,11 +144,11 @@ rects
   {
     byrect=0,130,19,149
     clientborder=4,4,4,4
-    base=34,34,94,94
+    base=0,0,0,0,#f1f9ee //34,34,94,94
   }
   msglist=sb
   {
-    base=34,34,94,94
+    base=0,0,0,0,#f1f9ee //34,34,94,94
   }
   message.mine=sb
   {
@@ -375,14 +379,14 @@ rects
      //byrect=17,354,117,415
      clientborder=2,2,5,5
      lb=17,410,25,415
-     b=25,410,111,415
+     b=28,410,108,415 // 25,410,111,415
      rt=112,356,117,362
      r=112,362,117,410
      rb=112,410,117,415
 
      c=2,0,5,5,#707070
 
-     base=34,34,94,94
+     base=0,0,0,0,#f1f9ee //34,34,94,94
      colors=#fff000,#000000
      deftextcolor=#d8fff8
   }
@@ -405,7 +409,7 @@ rects
 
   contacts=sb
   {
-    base=34,34,94,94
+    base=0,0,0,0,#f1f9ee //34,34,94,94
     //byrect=22,316,54,348
     //clientborder=3,3,3,3
   }

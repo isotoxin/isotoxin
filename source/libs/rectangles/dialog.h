@@ -4,35 +4,48 @@
 
 bool TSCALL dialog_already_present( int );
 
-class gui_listitem_c;
-template<> struct MAKE_CHILD<gui_listitem_c> : public _PCHILD(gui_listitem_c)
+struct gui_listitem_params_s
 {
     ts::wstr_c text;
     ts::str_c  param;
     ts::str_c  themerect;
     GETMENU_FUNC gm;
-    const ts::drawable_bitmap_c *icon = nullptr;
-    MAKE_CHILD(RID parent_, const ts::wstr_c &text, const ts::str_c &param) :text(text), param(param) { parent = parent_; }
+    const ts::bitmap_c *icon = nullptr;
+    int addmarginleft_icon = 0;
+    int addmarginleft = 3;
+};
+class gui_listitem_c;
+template<> struct MAKE_CHILD<gui_listitem_c> : public _PCHILD(gui_listitem_c), public gui_listitem_params_s
+{
+    MAKE_CHILD(RID parent_, const ts::wstr_c &text_, const ts::str_c &param_)
+    {
+        parent = parent_;
+        text = text_;
+        param = param_;
+    }
     ~MAKE_CHILD();
 
-    MAKE_CHILD &operator<<( const ts::drawable_bitmap_c *_icon ) { icon = _icon; return *this; }
+    MAKE_CHILD &operator<<( const ts::bitmap_c *_icon ) { icon = _icon; return *this; }
     MAKE_CHILD &operator<<( GETMENU_FUNC _gm ) { gm = _gm; return *this; }
     MAKE_CHILD &threct( const ts::asptr&thr ) { themerect = thr; return *this; }
 };
 
-class gui_listitem_c : public gui_label_c
+class gui_listitem_c : public gui_label_ex_c
 {
     friend struct MAKE_CHILD<gui_listitem_c>;
     DUMMY(gui_listitem_c);
     ts::str_c  param;
     GETMENU_FUNC gm; // get menu on rite click
-    const ts::drawable_bitmap_c *icon = nullptr;
+    const ts::bitmap_c *icon = nullptr;
     int height = 0;
+    int marginleft_icon;
 
     GM_RECEIVER( gui_listitem_c, GM_POPUPMENU_DIED );
 public:
 
-    gui_listitem_c(MAKE_CHILD<gui_listitem_c> &data);
+    gui_listitem_c(initial_rect_data_s &data, gui_listitem_params_s &prms);
+    gui_listitem_c(MAKE_CHILD<gui_listitem_c> &data) :gui_listitem_c(data, data) {}
+
     /*virtual*/ ~gui_listitem_c();
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
@@ -44,8 +57,9 @@ public:
     /*virtual*/ int get_height_by_width(int width) const override;
 
     const ts::str_c  &getparam() const {return param;}
-};
 
+    void set_gm(GETMENU_FUNC gm_) { gm = gm_; }
+};
 
 class gui_dialog_c : public gui_vscrollgroup_c
 {

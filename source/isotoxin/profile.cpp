@@ -355,8 +355,11 @@ void history_s::set(int column, ts::data_value_s &v)
 {
     switch (column)
     {
-        case C_TIME:
-            time = v.i;
+        case C_RECV_TIME:
+            recv_time = v.i;
+            return;
+        case C_CR_TIME:
+            cr_time = v.i;
             return;
         case C_HISTORIAN:
             historian = ts::ref_cast<contact_key_s>(v.i);
@@ -388,8 +391,11 @@ void history_s::get(int column, ts::data_pair_s& v)
     v.name = ccd.name_;
     switch (column)
     {
-        case C_TIME:
-            v.i = time;
+        case C_RECV_TIME:
+            v.i = recv_time;
+            return;
+        case C_CR_TIME:
+            v.i = cr_time;
             return;
         case C_HISTORIAN:
             v.i = ts::ref_cast<int64>(historian);
@@ -417,7 +423,8 @@ ts::data_type_e history_s::get_column_type(int index)
 {
     switch (index)
     {
-        case C_TIME:
+        case C_RECV_TIME:
+        case C_CR_TIME:
         case C_HISTORIAN:
         case C_SENDER:
         case C_RECEIVER:
@@ -437,9 +444,12 @@ void history_s::get_column_desc(int index, ts::column_desc_s&cd)
     cd.type_ = get_column_type(index);
     switch (index)
     {
-        case C_TIME:
+        case C_RECV_TIME:
             cd.name_ = CONSTASTR("mtime");
             cd.options.set( ts::column_desc_s::f_non_unique_index );
+            break;
+        case C_CR_TIME:
+            cd.name_ = CONSTASTR("crtime");
             break;
         case C_HISTORIAN:
             cd.name_ = CONSTASTR("historian");
@@ -763,7 +773,7 @@ ts::uint32 profile_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // record history
 {
     if (msg.resend) return 0;
     if (msg.pass != 0) return 0;
-    bool second_pass_requred = msg.post.time == 1;
+    bool second_pass_requred = msg.post.recv_time == 1;
     contact_c *historian = msg.get_historian();
     if (historian == nullptr) return 0;
     //bool record_it = true;
@@ -771,14 +781,13 @@ ts::uint32 profile_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // record history
     //if (record_it)
     {
         time_t nowt = historian->nowtime();
-        if (msg.create_time && msg.create_time <= nowt)
-        {
-            historian->make_time_unique(msg.create_time);
-            nowt = msg.create_time;
-        }
+        time_t crt = msg.post.cr_time;
+        if (crt == 0)
+            crt = nowt;
 
-        post_s &post = historian->add_history(nowt);
-        msg.post.time = post.time;
+        post_s &post = historian->add_history(nowt, crt);
+        msg.post.recv_time = post.recv_time;
+        msg.post.cr_time = post.cr_time;
         // [POST_INIT]
         post.sender = msg.post.sender;
         post.receiver = msg.post.receiver;
@@ -853,7 +862,7 @@ uint64 profile_c::uniq_history_item_tag()
 
 void profile_c::record_history( const contact_key_s&historian, const post_s &history_item )
 {
-    ASSERT(history_item.time != 0);
+    ASSERT(history_item.recv_time != 0);
     g_app->lock_recalc_unread(historian);
     auto &row = table_history.getcreate(0);
     row.other.historian = historian;
@@ -926,7 +935,7 @@ void profile_c::change_history_item(const contact_key_s&historian, const post_s 
         if (h.historian == historian && h.utag == post.utag)
         {
             if (0 != (change_what & HITM_MT)) h.type = post.type;
-            if (0 != (change_what & HITM_TIME)) h.time = post.time;
+            if (0 != (change_what & HITM_TIME)) h.recv_time = post.recv_time, h.cr_time = post.cr_time;;
             if (0 != (change_what & HITM_MESSAGE)) h.message_utf8 = post.message_utf8;
             return true;
         }
@@ -937,7 +946,7 @@ void profile_c::change_history_item(const contact_key_s&historian, const post_s 
     whr.append( CONSTASTR(" and utag=") ).append_as_num<int64>(ts::ref_cast<int64>(post.utag));
     whr.append( CONSTASTR(" and sender=") ).append_as_num<int64>(ts::ref_cast<int64>(post.sender));
 
-    ts::data_pair_s dp[3]; int n = 0;
+    ts::data_pair_s dp[4]; int n = 0;
     if (0 != (change_what & HITM_MT))
     {
         dp[n].name = CONSTASTR("mtype");
@@ -949,7 +958,12 @@ void profile_c::change_history_item(const contact_key_s&historian, const post_s 
     {
         dp[n].name = CONSTASTR("mtime");
         dp[n].type_ = ts::data_type_e::t_int64;
-        dp[n].i = post.time;
+        dp[n].i = post.recv_time;
+        ++n;
+
+        dp[n].name = CONSTASTR("crtime");
+        dp[n].type_ = ts::data_type_e::t_int64;
+        dp[n].i = post.cr_time;
         ++n;
     }
     if (0 != (change_what & HITM_MESSAGE))
@@ -987,8 +1001,8 @@ void profile_c::load_history( const contact_key_s&historian, time_t time, int nl
 
         for (auto &row : table_history.rows)
         {
-            if (row.other.historian != historian || row.other.time < time) continue;
-            row.other.time = (++ct);
+            if (row.other.historian != historian || row.other.recv_time < time) continue;
+            row.other.recv_time = (++ct);
             bool fixed = fix(row.other);
 
             whr.set(CONSTASTR("utag=")); whr.append_as_num<int64>(ts::ref_cast<int64>(row.other.utag));
@@ -1013,12 +1027,12 @@ void profile_c::load_history( const contact_key_s&historian, time_t time, int nl
     ts::tmp_pointers_t< hitm, 16 > candidates;
     for (auto &hi : table_history.rows)
         if (!hi.is_deleted())
-            if (hi.other.historian == historian && hi.other.time < time)
+            if (hi.other.historian == historian && hi.other.recv_time < time)
                 candidates.add(&hi);
     if (candidates.size() > nload)
     {
         candidates.sort([](hitm *p1, hitm *p2)->bool {
-            return p1->other.time > p2->other.time;
+            return p1->other.recv_time > p2->other.recv_time;
         });
         candidates.truncate(nload);
     } // else - no else here
@@ -1034,8 +1048,8 @@ void profile_c::load_history( const contact_key_s&historian, time_t time, int nl
         for (auto *hi : candidates)
         {
             loaded_ids.add(hi->id);
-            if (hi->other.time < mint)
-                mint = hi->other.time;
+            if (hi->other.recv_time < mint)
+                mint = hi->other.recv_time;
         }
         time = mint;
         nload -= candidates.size();
@@ -1119,16 +1133,16 @@ void profile_c::merge_history( const contact_key_s&base_historian, const contact
         }
     }
     baseitems.sort([](hitm *p1, hitm *p2)->bool {
-        return p1->other.time < p2->other.time;
+        return p1->other.recv_time < p2->other.recv_time;
     });
     int cnt = baseitems.size();
     for( int i=1; i<cnt;++i )
     {
         hitm *prevh = baseitems.get(i-1);
         hitm *h = baseitems.get(i);
-        if (h->other.time <= prevh->other.time)
+        if (h->other.recv_time <= prevh->other.recv_time)
         {
-            h->other.time = prevh->other.time + 1;
+            h->other.recv_time = prevh->other.recv_time + 1;
             h->changed();
             changed = true;
         }

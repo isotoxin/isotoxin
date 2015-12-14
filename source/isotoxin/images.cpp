@@ -3,8 +3,8 @@
 void picture_c::draw(rectengine_root_c *e, const ts::ivec2 &pos) const
 {
     ts::irect r;
-    const ts::drawable_bitmap_c &dbmp = curframe(r);
-    e->draw(pos - e->get_current_draw_offset(), dbmp, r, true);
+    const ts::bitmap_c &dbmp = curframe(r);
+    e->draw(pos - e->get_current_draw_offset(), dbmp.extbody(), r, true);
 }
 
 picture_animated_c *picture_animated_c::first = nullptr;
@@ -87,7 +87,7 @@ bool picture_gif_c::load_only_gif( ts::bitmap_c &first_frame, const ts::blob_c &
     if (!load_only_gif(bmp, body)) return false;
    
     ts::irect frect;
-    ts::drawable_bitmap_c &frame = prepare_frame( bmp.info().sz, frect );
+    ts::bitmap_c &frame = prepare_frame( bmp.info().sz, frect );
     frame.copy( frect.lt, bmp.info().sz, bmp.extbody(), ts::ivec2(0) );
 
     return true;
@@ -96,7 +96,7 @@ bool picture_gif_c::load_only_gif( ts::bitmap_c &first_frame, const ts::blob_c &
 int picture_gif_c::nextframe()
 {
     ts::irect frect;
-    const ts::drawable_bitmap_c &frame = curframe(frect);
+    const ts::bitmap_c &frame = curframe(frect);
 
     return gif.nextframe(frame.extbody(frect));
 }
@@ -105,13 +105,13 @@ namespace
 {
     struct gif_thumb_s : public picture_gif_c
     {
-        ts::drawable_bitmap_c frame;
+        ts::bitmap_c frame;
         ts::bitmap_c bmp;
         ts::ivec2 origsz;
         bool rsz_required = false;
         bool frame_dirty = false;
 
-        /*virtual*/ const ts::drawable_bitmap_c &curframe(ts::irect &frect) const override
+        /*virtual*/ const ts::bitmap_c &curframe(ts::irect &frect) const override
         {
             frect = ts::irect(0, frame.info().sz);
             return frame;
@@ -120,7 +120,7 @@ namespace
         {
             return ts::irect(0,frame.info().sz);
         }
-        /*virtual*/ ts::drawable_bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &frect) override
+        /*virtual*/ ts::bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &frect) override
         {
             FORBIDDEN();
             __assume(0);
@@ -151,11 +151,10 @@ namespace
 
                     if (bmp.info().sz != origsz)
                     {
-                        bmp.create_RGBA(origsz);
+                        bmp.create_ARGB(origsz);
                         frame.resize_to(bmp.extbody(), ts::FILTER_BOX_LANCZOS3);
                     }
-                    frame.create_from_bitmap(bmp);
-                    bmp.clear();
+                    frame = std::move(bmp);
                 }
                 rsz_required = false;
 
@@ -165,13 +164,13 @@ namespace
                 int newh = lround(k * origsz.y);
                 if (bmp.info().sz != origsz)
                 {
-                    bmp.create_RGBA(origsz);
+                    bmp.create_ARGB(origsz);
                     frame.resize_to(bmp.extbody(), ts::FILTER_BOX_LANCZOS3);
                     frame_dirty = true;
                 }
                 if (frame.info().sz != ts::ivec2(w, newh))
                 {
-                    frame.create(ts::ivec2(w, newh));
+                    frame.create_ARGB(ts::ivec2(w, newh));
                     frame_dirty = true;
                 }
                 if (frame_dirty)
@@ -191,8 +190,7 @@ namespace
             delay = gif.firstframe(bmp);
             origsz = bmp.info().sz;
 
-            frame.create_from_bitmap(bmp);
-            bmp.clear();
+            frame = std::move(bmp);
             rsz_required = false;
 
             next_frame_tick = ts::Time::current() + delay;
@@ -216,10 +214,10 @@ namespace
     };
     struct static_thumb_s : public picture_c
     {
-        ts::drawable_bitmap_c frame;
+        ts::bitmap_c frame;
         ts::bitmap_c bmp;
 
-        /*virtual*/ const ts::drawable_bitmap_c &curframe(ts::irect &frect) const override
+        /*virtual*/ const ts::bitmap_c &curframe(ts::irect &frect) const override
         {
             frect = ts::irect(0, frame.info().sz);
             return frame;
@@ -228,7 +226,7 @@ namespace
         {
             return ts::irect(0, frame.info().sz);
         }
-        /*virtual*/ ts::drawable_bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &frect) override
+        /*virtual*/ ts::bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &frect) override
         {
             FORBIDDEN();
             __assume(0);
@@ -250,7 +248,7 @@ namespace
             if ( w >= bmp.info().sz.x )
             {
                 if (frame.info().sz != bmp.info().sz)
-                    frame.create(bmp.info().sz);
+                    frame.create_ARGB(bmp.info().sz);
 
                 frame.copy(ts::ivec2(0), bmp.info().sz, bmp.extbody(), ts::ivec2(0));
             } else
@@ -258,7 +256,7 @@ namespace
                 float k = (float)w / (float)bmp.info().sz.x;
                 int newh = lround(k * bmp.info().sz.y);
                 if (frame.info().sz != ts::ivec2(w, newh))
-                    frame.create(ts::ivec2(w, newh));
+                    frame.create_ARGB(ts::ivec2(w, newh));
                 bmp.resize_to(frame.extbody(), ts::FILTER_BOX_LANCZOS3);
             }
             frame.premultiply();
@@ -271,12 +269,13 @@ namespace
 
             if (bmp.info().bytepp() != 4)
             {
-                ts::bitmap_c b4; b4.create_RGBA(bmp.info().sz);
+                ts::bitmap_c b4; b4.create_ARGB(bmp.info().sz);
                 b4.copy(ts::ivec2(0), bmp.info().sz, bmp.extbody(), ts::ivec2(0));
                 bmp = b4;
             }
 
-            frame.create_from_bitmap(bmp, false, true);
+            frame = bmp;
+            frame.premultiply();
             return true;
         }
     };

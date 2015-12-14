@@ -130,7 +130,6 @@ namespace
         for(unsigned int i=0; i < palette->count; i++)
             if (palette->entries[i].a < 255)
                 output_image.num_trans = i+1;
-
         return 0;
     }
 
@@ -160,7 +159,7 @@ static void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp )
     ts::bitmap_c b2e;
     if (bmp.info().bytepp() != 4 || bmp.info().pitch != bmp.info().sz.x * 4)
     {
-        b2e.create_RGBA(b2e.info().sz);
+        b2e.create_ARGB(b2e.info().sz);
         b2e.copy(ts::ivec2(0), b2e.info().sz, bmp.extbody(), ts::ivec2(0));
     } else
         b2e = bmp;
@@ -190,7 +189,7 @@ static void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp )
 
 /*virtual*/ int dialog_avaselector_c::compressor_s::iterate(int pass)
 {
-    if (!dlg) return R_CANCEL;
+    if (!dlg || bitmap2encode.info().sz < ts::ivec2(1) ) return R_CANCEL;
 
     ts::aint maximumsize = 16384;
     if (0 == pass)
@@ -630,14 +629,19 @@ void dialog_avaselector_c::newimage()
 
 void dialog_avaselector_c::load_image(const ts::wstr_c &fn)
 {
-    animated = false;
     ts::buf_c b; b.load_from_file(fn);
     if (b.size())
     {
-        if (ts::if_gif == bitmap.load_from_file(b))
-            if (false != (animated = anm.load(b.data(),b.size())))
-                anm.firstframe(bitmap);
-        newimage();
+        ts::bitmap_c newb;
+        if (ts::img_format_e fmt = newb.load_from_file(b))
+        {
+            bitmap = newb;
+            animated = false;
+            if (ts::if_gif == fmt)
+                if (false != (animated = anm.load(b.data(), b.size())))
+                    anm.firstframe(bitmap);
+            newimage();
+        }
     }
 }
 
@@ -648,7 +652,7 @@ void dialog_avaselector_c::rebuild_bitmap()
         ts::bitmap_c b;
         if (bitmap.info().bytepp() != 4)
         {
-            b.create_RGBA(bitmap.info().sz);
+            b.create_ARGB(bitmap.info().sz);
             b.copy(ts::ivec2(0), bitmap.info().sz, bitmap.extbody(), ts::ivec2(0));
             bitmap = b;
         }
@@ -659,7 +663,8 @@ void dialog_avaselector_c::rebuild_bitmap()
         } else
             b = bitmap;
 
-        alpha = image.create_from_bitmap(b, false, true, true);
+        image = std::move(b);
+        alpha = image.premultiply();
         dirty = true;
         getengine().redraw();
     }
@@ -776,7 +781,7 @@ void dialog_avaselector_c::recompress()
     }
 
     ts::bitmap_c b;
-    b.create_RGBA( avarect.size() );
+    b.create_ARGB( avarect.size() );
     b.copy(ts::ivec2(0), b.info().sz, image.extbody(), avarect.lt );
     compressor = TSNEW(compressor_s, this, b);
     b.clear(); // ref count decreased // compressor now can safely work in other thread
@@ -898,7 +903,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
         tdp.forecolor = &col;
         ts::flags32_s f(ts::TO_END_ELLIPSIS | ts::TO_VCENTER);
         tdp.textoptions = &f;
-        getengine().draw(inforect.lt + ts::ivec2(0, (inforect.height() - pa.bmp.info().sz.y) / 2), pa.bmp, ts::irect(0, pa.bmp.info().sz), true);
+        getengine().draw(inforect.lt + ts::ivec2(0, (inforect.height() - pa.bmp.info().sz.y) / 2), pa.bmp.extbody(), ts::irect(0, pa.bmp.info().sz), true);
         int paw = pa.bmp.info().sz.x + 2;
         dd.offset = inforect.lt + ts::ivec2(paw, 0);
         dd.size = inforect.size(); dd.size.x -= paw;
@@ -949,7 +954,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                             ts::ivec2 vsz = viewrect.size();
                             ts::ivec2 pos = (vsz - sz) / 2;
 
-                            getengine().draw(pos + viewrect.lt, *b, ts::irect(0, sz), false);
+                            getengine().draw(pos + viewrect.lt, b->extbody(), ts::irect(0, sz), false);
 
                             if (shadow)
                             {
@@ -996,7 +1001,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                 {
                     draw_data_s &dd = getengine().begin_draw();
                     dd.cliprect = viewrect;
-                    getengine().draw(offset, image, imgrect, alpha);
+                    getengine().draw(offset, image.extbody(), imgrect, alpha);
                     ts::ivec2 o = offset - imgrect.lt;
 
                     fd.draw(getengine(), avarect + o, tickvalue);
@@ -1370,16 +1375,13 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
 
 void framedrawer_s::prepare(ts::TSCOLOR col1, ts::TSCOLOR col2)
 {
-    ts::bitmap_c b;
-    b.create_RGBA(ts::ivec2(128,1));
+    h.create_ARGB(ts::ivec2(128,1));
     for(int i=0;i<128;++i)
-        b.ARGBPixel(i,0,(i&4)?col1:col2);
-    h.create_from_bitmap(b);
+        h.ARGBPixel(i,0,(i&4)?col1:col2);
 
-    b.create_RGBA(ts::ivec2(1, 128));
+    v.create_ARGB(ts::ivec2(1, 128));
     for (int i = 0; i < 128; ++i)
-        b.ARGBPixel(0, i, (i & 4) ? col1 : col2);
-    v.create_from_bitmap(b);
+        v.ARGBPixel(0, i, (i & 4) ? col1 : col2);
 }
 
 void framedrawer_s::draw(rectengine_c &e, const ts::irect &r, int tickvalue)
@@ -1388,20 +1390,20 @@ void framedrawer_s::draw(rectengine_c &e, const ts::irect &r, int tickvalue)
     int x = r.lt.x + 120;
     for(; x<=r.rb.x; x+=120)
     {
-        e.draw(ts::ivec2(x - 120, r.lt.y), h, ts::irect(shiftr, 0, 120+shiftr, 1), false);
-        e.draw(ts::ivec2(x - 120, r.rb.y-1), h, ts::irect(7-shiftr, 0, 127-shiftr, 1), false);
+        e.draw(ts::ivec2(x - 120, r.lt.y), h.extbody(), ts::irect(shiftr, 0, 120+shiftr, 1), false);
+        e.draw(ts::ivec2(x - 120, r.rb.y-1), h.extbody(), ts::irect(7-shiftr, 0, 127-shiftr, 1), false);
     }
-    e.draw(ts::ivec2(x - 120, r.lt.y), h, ts::irect(shiftr, 0, r.rb.x - x + 120 + shiftr, 1), false);
-    e.draw(ts::ivec2(x - 120, r.rb.y-1), h, ts::irect(7-shiftr, 0, r.rb.x - x + 127 - shiftr, 1), false);
+    e.draw(ts::ivec2(x - 120, r.lt.y), h.extbody(), ts::irect(shiftr, 0, r.rb.x - x + 120 + shiftr, 1), false);
+    e.draw(ts::ivec2(x - 120, r.rb.y-1), h.extbody(), ts::irect(7-shiftr, 0, r.rb.x - x + 127 - shiftr, 1), false);
 
     int y = r.lt.y + 120;
     for (; y <= r.rb.y; y += 120)
     {
-        e.draw(ts::ivec2(r.lt.x, y - 120), v, ts::irect(0, 7 - shiftr, 1, 127 - shiftr), false);
-        e.draw(ts::ivec2(r.rb.x - 1, y - 120), v, ts::irect(0, shiftr, 1, 120 + shiftr), false);
+        e.draw(ts::ivec2(r.lt.x, y - 120), v.extbody(), ts::irect(0, 7 - shiftr, 1, 127 - shiftr), false);
+        e.draw(ts::ivec2(r.rb.x - 1, y - 120), v.extbody(), ts::irect(0, shiftr, 1, 120 + shiftr), false);
     }
-    e.draw(ts::ivec2(r.lt.x, y - 120), v, ts::irect(0, 7 - shiftr, 1, r.rb.y - y + 127 - shiftr), false);
-    e.draw(ts::ivec2(r.rb.x - 1, y - 120), v, ts::irect(0, shiftr, 1, r.rb.y - y + 120 + shiftr), false);
+    e.draw(ts::ivec2(r.lt.x, y - 120), v.extbody(), ts::irect(0, 7 - shiftr, 1, r.rb.y - y + 127 - shiftr), false);
+    e.draw(ts::ivec2(r.rb.x - 1, y - 120), v.extbody(), ts::irect(0, shiftr, 1, r.rb.y - y + 120 + shiftr), false);
 
 }
 

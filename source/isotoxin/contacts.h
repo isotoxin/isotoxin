@@ -125,17 +125,19 @@ struct post_s
     static const int options_size_bits = 8;
 
     uint64 utag;
-    time_t time = 0;
+    time_t recv_time = 0;
+    time_t cr_time = 0;
     ts::str_c message_utf8;
     contact_key_s sender;
     contact_key_s receiver;
     unsigned type : type_size_bits;
     unsigned options : options_size_bits;
 
+    const time_t &get_crtime() const { return cr_time != 0 ? cr_time : recv_time; }
     message_type_app_e mt() const {return (message_type_app_e)type;}
 };
 
-struct avatar_s : public ts::drawable_bitmap_c
+struct avatar_s : public ts::bitmap_c
 {
     int tag = 0;
     bool alpha_pixels = false;
@@ -151,6 +153,7 @@ template<> struct gmsg<ISOGM_UPDATE_CONTACT> : public gmsgbase
     ts::str_c pubid;
     ts::str_c name;
     ts::str_c statusmsg;
+    ts::str_c details;
     int avatar_tag = 0;
     contact_state_e state = CS_INVITE_SEND;
     contact_online_state_e ostate = COS_ONLINE;
@@ -199,6 +202,7 @@ class contact_c : public ts::shared_object
     ts::str_c name;
     ts::str_c customname;
     ts::str_c statusmsg;
+    ts::str_c details;
     time_t readtime = 0; // all messages after readtime considered unread
     UNIQUE_PTR( avatar_s ) avatar;
 
@@ -379,10 +383,10 @@ public:
     time_t nowtime() const
     {
         time_t time = now();
-        if (history.size() && history.last().time >= time) time = history.last().time + 1;
+        if (history.size() && history.last().recv_time >= time) time = history.last().recv_time + 1;
         return time;
     }
-    void make_time_unique(time_t &t);
+    void make_time_unique(time_t &t) const;
 
     bool keep_history() const;
     
@@ -391,23 +395,26 @@ public:
     post_s& add_history()
     {
         post_s &p = history.add();
-        p.time = nowtime();
+        p.recv_time = nowtime();
+        p.cr_time = p.recv_time;
         return p;
     }
-    post_s& add_history(time_t t)
+    post_s& add_history(time_t recv_t, time_t send_t)
     {
         int cnt = history.size();
         for (int i=0;i<cnt;++i)
         {
-            if ( t < history.get(i).time )
+            if ( recv_t < history.get(i).recv_time )
             {
                 post_s &p = history.insert(i);
-                p.time = t;
+                p.recv_time = recv_t;
+                p.cr_time = send_t;
                 return p;
             }
         }
         post_s &p = history.add();
-        p.time = t;
+        p.recv_time = recv_t;
+        p.cr_time = send_t;
         return p;
     }
 
@@ -418,7 +425,7 @@ public:
         history.clear();
     }
 
-    int calc_unread();
+    int calc_unread() const;
 
     void export_history( const ts::wsptr &templatename, const ts::wsptr &fname );
 
@@ -448,9 +455,9 @@ public:
         {
             r = i;
             post_s &p = history.get(i);
-            time_t t = p.time;
+            time_t t = p.recv_time;
             bool cont = f(p);
-            if (t != p.time)
+            if (t != p.recv_time)
             {
                 temp.add( p );
                 history.remove_slow(i);
@@ -462,7 +469,7 @@ public:
         }
         for( post_s &p : temp )
         {
-            post_s *x = &add_history(p.time);
+            post_s *x = &add_history(p.recv_time, p.cr_time);
             *x = p;
             r = x - history.begin();
         }
@@ -476,10 +483,13 @@ public:
     void set_name( const ts::str_c &name_ ) { name = name_; }
     void set_customname( const ts::str_c &name_ ) { customname = name_; }
     void set_statusmsg( const ts::str_c &statusmsg_ ) { statusmsg = statusmsg_; }
+    void set_details( const ts::str_c &details_ ) { details = details_; }
     void set_state( contact_state_e st ) { state = st; opts.init(F_UNKNOWN, st == CS_UNKNOWN); }
     void set_ostate( contact_online_state_e ost ) { ostate = ost; }
     void set_gender( contact_gender_e g ) { gender = g; }
     
+    const ts::str_c &get_details() const { return details; }
+
     keep_contact_history_e get_keeph() const { return keeph; }
     void set_keeph( keep_contact_history_e v ) { keeph = v; }
 
@@ -625,13 +635,13 @@ template<> struct gmsg<ISOGM_CALL_STOPED> : public gmsgbase
 uint64 uniq_history_item_tag();
 template<> struct gmsg<ISOGM_MESSAGE> : public gmsgbase
 {
-    time_t create_time = 0;
     post_s post;
 
     gmsg() :gmsgbase(ISOGM_MESSAGE)
     {
         post.utag = uniq_history_item_tag();
-        post.time = 0; // initialized after history add
+        post.recv_time = 0; // initialized after history add
+        post.cr_time = 0;
         post.type = MTA_MESSAGE;
     }
     gmsg(contact_c *sender, contact_c *receiver, message_type_app_e mt = MTA_MESSAGE);

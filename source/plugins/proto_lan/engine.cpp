@@ -317,9 +317,9 @@ void udp_sender::send(const void *data, int size, int portshift)
             int r = sendto(s.s, (const char *)data, size, 0, (sockaddr *)&dest_addr, sizeof(dest_addr));
             if (0 > r)
             {
-                int error = WSAGetLastError();
-                if (10054 == error) continue;
-                if ((10049 == error || 10065 == error) /*&& ADDR_BROADCAST == dest_addr->sin_addr.S_un.S_addr*/) continue;
+                //int error = WSAGetLastError();
+                //if (10054 == error) continue;
+                //if ((10049 == error || 10065 == error) /*&& ADDR_BROADCAST == dest_addr->sin_addr.S_un.S_addr*/) continue;
                 close();
             };
             break;
@@ -1344,6 +1344,10 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
             c->nextactiontime = time_ms();
             c->pipe.cpdone();
             c->changed_self = -1;
+            c->client.clear();
+
+            if ( !r.end() )
+                c->client = r.reads();
 
             pg_ready(c->raw_public_id, c->authorized_key);
             c->pipe.send(packet_buf_encoded, packet_buf_encoded_len);
@@ -2101,6 +2105,22 @@ void lan_engine::contact_s::recv()
 
         contact_data_s cd(0, 0);
         fill_data(cd);
+
+        cd.mask |= CDM_DETAILS;
+        str_c dstr( asptr("{\"" CDET_PUBLIC_ID "\":\""));
+        dstr.append( public_id );
+
+        dstr.append(asptr("\",\"" CDET_CLIENT "\":\""));
+        if (client.is_empty())
+            dstr.append(CONSTASTR("isotoxin/0.?.???"));
+        else
+            dstr.append(client);
+
+        dstr.append(asptr("\",\"" CDET_CLIENT_CAPS "\":[\"" CLCAP_BBCODE_B "\",\"" CLCAP_BBCODE_U "\",\"" CLCAP_BBCODE_I "\",\"" CLCAP_BBCODE_S "\"]}"));
+
+        cd.details = dstr.cstr();
+        cd.details_len = dstr.get_length();
+
         engine->hf->update_contact(&cd);
     }
 
@@ -2187,6 +2207,13 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                     engine->pg_sync(false, authorized_key);
                     pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
                 }
+
+                if (!r.end())
+                {
+                    client = r.reads();
+                    data_changed = true;
+                }
+
             }
         }
         break;

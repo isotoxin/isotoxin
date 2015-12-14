@@ -34,21 +34,57 @@ License: BSD
       memset(temp, 0, 64 * 3);  /* for YUY2 and msan */                        \
       int r = width & MASK;                                                    \
       int n = width & ~MASK;                                                   \
-      if (n > 0) {                                                             \
-        ANY_SIMD(y_buf, u_buf, v_buf, dst_ptr, n);                             \
-            }                                                                        \
+      if (n > 0) { ANY_SIMD(y_buf, u_buf, v_buf, dst_ptr, n); }                \
       memcpy(temp, y_buf + n, r);                                              \
       memcpy(temp + 64, u_buf + (n >> UVSHIFT), SS(r, UVSHIFT));               \
       memcpy(temp + 128, v_buf + (n >> UVSHIFT), SS(r, UVSHIFT));              \
       ANY_SIMD(temp, temp + 64, temp + 128, temp + 192, MASK + 1);             \
       memcpy(dst_ptr + (n >> DUVSHIFT) * BPP, temp + 192,                      \
-             SS(r, DUVSHIFT) * BPP);                                           \
-        }
+             SS(r, DUVSHIFT) * BPP); }
+
+
+
+// Any 1 to 2 with source stride (2 rows of source).  Outputs UV planes.
+// 128 byte row allows for 32 avx ARGB pixels.
+#define ANY12S(NAMEANY, ANY_SIMD, UVSHIFT, BPP, MASK)                          \
+    void NAMEANY(const uint8* src_ptr, int src_stride_ptr,                     \
+                 uint8* dst_u, uint8* dst_v, int width) {                      \
+      SIMD_ALIGNED(uint8 temp[128 * 4]);                                       \
+      memset(temp, 0, 128 * 2);  /* for msan */                                \
+      int r = width & MASK;                                                    \
+      int n = width & ~MASK;                                                   \
+      if (n > 0) { ANY_SIMD(src_ptr, src_stride_ptr, dst_u, dst_v, n); }       \
+      memcpy(temp, src_ptr  + (n >> UVSHIFT) * BPP, SS(r, UVSHIFT) * BPP);     \
+      memcpy(temp + 128, src_ptr  + src_stride_ptr + (n >> UVSHIFT) * BPP,     \
+             SS(r, UVSHIFT) * BPP);                                            \
+      if ((width & 1) && BPP == 4) {  /* repeat last 4 bytes for subsampler */ \
+        memcpy(temp + SS(r, UVSHIFT) * BPP,                                    \
+               temp + SS(r, UVSHIFT) * BPP - BPP, 4);                          \
+        memcpy(temp + 128 + SS(r, UVSHIFT) * BPP,                              \
+               temp + 128 + SS(r, UVSHIFT) * BPP - BPP, 4);  }                 \
+      ANY_SIMD(temp, 128, temp + 256, temp + 384, MASK + 1);                   \
+      memcpy(dst_u + (n >> 1), temp + 256, SS(r, 1));                          \
+      memcpy(dst_v + (n >> 1), temp + 384, SS(r, 1)); }
+
+// Any 1 to 1.
+#define ANY11(NAMEANY, ANY_SIMD, UVSHIFT, SBPP, BPP, MASK)                     \
+    void NAMEANY(const uint8* src_ptr, uint8* dst_ptr, int width) {            \
+      SIMD_ALIGNED(uint8 temp[128 * 2]);                                       \
+      memset(temp, 0, 128);  /* for YUY2 and msan */                           \
+      int r = width & MASK;                                                    \
+      int n = width & ~MASK;                                                   \
+      if (n > 0) { ANY_SIMD(src_ptr, dst_ptr, n); }                            \
+      memcpy(temp, src_ptr + (n >> UVSHIFT) * SBPP, SS(r, UVSHIFT) * SBPP);    \
+      ANY_SIMD(temp, temp + 128, MASK + 1);                                    \
+      memcpy(dst_ptr + n * BPP, temp + 128, r * BPP); }
+
 
 
 namespace ts
 {
 typedef __declspec(align(16)) uint8 uvec8[16];
+typedef __declspec(align(16)) int8 vec8[16];
+typedef __declspec(align(32)) int32 lvec32[8];
 
 
 // Shuffle table for converting BGRA to ARGB.
@@ -283,44 +319,6 @@ ANY31(I422ToARGBRow_Any_SSSE3, I422ToARGBRow_SSSE3, 1, 0, 4, 7)
 ANY31(I422ToARGBRow_Any_AVX2, I422ToARGBRow_AVX2, 1, 0, 4, 15)
 
 
-
-
-struct FourCCAliasEntry {
-    uint32 alias;
-    uint32 canonical;
-};
-
-static const struct FourCCAliasEntry kFourCCAliases[] = {
-    { FOURCC_IYUV, FOURCC_I420 },
-    { FOURCC_YU16, FOURCC_I422 },
-    { FOURCC_YU24, FOURCC_I444 },
-    { FOURCC_YUYV, FOURCC_YUY2 },
-    { FOURCC_YUVS, FOURCC_YUY2 },  // kCMPixelFormat_422YpCbCr8_yuvs
-    { FOURCC_HDYC, FOURCC_UYVY },
-    { FOURCC_2VUY, FOURCC_UYVY },  // kCMPixelFormat_422YpCbCr8
-    { FOURCC_JPEG, FOURCC_MJPG },  // Note: JPEG has DHT while MJPG does not.
-    { FOURCC_DMB1, FOURCC_MJPG },
-    { FOURCC_BA81, FOURCC_BGGR },  // deprecated.
-    { FOURCC_RGB3, FOURCC_RAW },
-    { FOURCC_BGR3, FOURCC_24BG },
-    { FOURCC_CM32, FOURCC_BGRA },  // kCMPixelFormat_32ARGB
-    { FOURCC_CM24, FOURCC_RAW },  // kCMPixelFormat_24RGB
-    { FOURCC_L555, FOURCC_RGBO },  // kCMPixelFormat_16LE555
-    { FOURCC_L565, FOURCC_RGBP },  // kCMPixelFormat_16LE565
-    { FOURCC_5551, FOURCC_RGBO },  // kCMPixelFormat_16LE5551
-};
-
-uint32 CanonicalFourCC(uint32 fourcc) {
-    int i;
-    for (i = 0; i < ARRAY_SIZE(kFourCCAliases); ++i) {
-        if (kFourCCAliases[i].alias == fourcc) {
-            return kFourCCAliases[i].canonical;
-        }
-    }
-    // Not an alias, so return it as-is.
-    return fourcc;
-}
-
 #define USE_BRANCHLESS 1
 #if USE_BRANCHLESS
 static __inline int32 clamp0(int32 v) {
@@ -508,121 +506,7 @@ int ARGBCopy(const uint8* src_argb, int src_stride_argb, uint8* dst_argb, int ds
     return 0;
 }
 
-static void I411ToARGBRow_C(const uint8* src_y, const uint8* src_u, const uint8* src_v, uint8* rgb_buf, int width)
-{
-    int x;
-    for (x = 0; x < width - 3; x += 4) {
-        YuvPixel(src_y[0], src_u[0], src_v[0],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-        YuvPixel(src_y[1], src_u[0], src_v[0],
-                 rgb_buf + 4, rgb_buf + 5, rgb_buf + 6);
-        rgb_buf[7] = 255;
-        YuvPixel(src_y[2], src_u[0], src_v[0],
-                 rgb_buf + 8, rgb_buf + 9, rgb_buf + 10);
-        rgb_buf[11] = 255;
-        YuvPixel(src_y[3], src_u[0], src_v[0],
-                 rgb_buf + 12, rgb_buf + 13, rgb_buf + 14);
-        rgb_buf[15] = 255;
-        src_y += 4;
-        src_u += 1;
-        src_v += 1;
-        rgb_buf += 16;  // Advance 4 pixels.
-    }
-    if (width & 2) {
-        YuvPixel(src_y[0], src_u[0], src_v[0],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-        YuvPixel(src_y[1], src_u[0], src_v[0],
-                 rgb_buf + 4, rgb_buf + 5, rgb_buf + 6);
-        rgb_buf[7] = 255;
-        src_y += 2;
-        rgb_buf += 8;  // Advance 2 pixels.
-    }
-    if (width & 1) {
-        YuvPixel(src_y[0], src_u[0], src_v[0],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-    }
-}
-
-static void I444ToARGBRow_C(const uint8* src_y, const uint8* src_u, const uint8* src_v, uint8* rgb_buf, int width)
-{
-    int x;
-    for (x = 0; x < width; ++x) {
-        YuvPixel(src_y[0], src_u[0], src_v[0],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-        src_y += 1;
-        src_u += 1;
-        src_v += 1;
-        rgb_buf += 4;  // Advance 1 pixel.
-    }
-}
-
 #pragma region row_c
-
-static void YUY2ToARGBRow_C(const uint8* src_yuy2, uint8* rgb_buf, int width)
-{
-    int x;
-    for (x = 0; x < width - 1; x += 2) {
-        YuvPixel(src_yuy2[0], src_yuy2[1], src_yuy2[3],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-        YuvPixel(src_yuy2[2], src_yuy2[1], src_yuy2[3],
-                 rgb_buf + 4, rgb_buf + 5, rgb_buf + 6);
-        rgb_buf[7] = 255;
-        src_yuy2 += 4;
-        rgb_buf += 8;  // Advance 2 pixels.
-    }
-    if (width & 1) {
-        YuvPixel(src_yuy2[0], src_yuy2[1], src_yuy2[3],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-    }
-}
-
-static void UYVYToARGBRow_C(const uint8* src_uyvy, uint8* rgb_buf, int width)
-{
-    int x;
-    for (x = 0; x < width - 1; x += 2) {
-        YuvPixel(src_uyvy[1], src_uyvy[0], src_uyvy[2],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-        YuvPixel(src_uyvy[3], src_uyvy[0], src_uyvy[2],
-                 rgb_buf + 4, rgb_buf + 5, rgb_buf + 6);
-        rgb_buf[7] = 255;
-        src_uyvy += 4;
-        rgb_buf += 8;  // Advance 2 pixels.
-    }
-    if (width & 1) {
-        YuvPixel(src_uyvy[1], src_uyvy[0], src_uyvy[2],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-    }
-}
-
-static void J422ToARGBRow_C(const uint8* src_y, const uint8* src_u, const uint8* src_v, uint8* rgb_buf, int width)
-{
-    int x;
-    for (x = 0; x < width - 1; x += 2) {
-        YuvJPixel(src_y[0], src_u[0], src_v[0],
-                  rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-        YuvJPixel(src_y[1], src_u[0], src_v[0],
-                  rgb_buf + 4, rgb_buf + 5, rgb_buf + 6);
-        rgb_buf[7] = 255;
-        src_y += 2;
-        src_u += 1;
-        src_v += 1;
-        rgb_buf += 8;  // Advance 2 pixels.
-    }
-    if (width & 1) {
-        YuvJPixel(src_y[0], src_u[0], src_v[0],
-                  rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-    }
-}
 
 static void RGB24ToARGBRow_C(const uint8* src_rgb24, uint8* dst_argb, int width) {
     int x;
@@ -636,38 +520,6 @@ static void RGB24ToARGBRow_C(const uint8* src_rgb24, uint8* dst_argb, int width)
         dst_argb[3] = 255u;
         dst_argb += 4;
         src_rgb24 += 3;
-    }
-}
-
-static void RAWToARGBRow_C(const uint8* src_raw, uint8* dst_argb, int width)
-{
-    int x;
-    for (x = 0; x < width; ++x) {
-        uint8 r = src_raw[0];
-        uint8 g = src_raw[1];
-        uint8 b = src_raw[2];
-        dst_argb[0] = b;
-        dst_argb[1] = g;
-        dst_argb[2] = r;
-        dst_argb[3] = 255u;
-        dst_argb += 4;
-        src_raw += 3;
-    }
-}
-
-static void RGB565ToARGBRow_C(const uint8* src_rgb565, uint8* dst_argb, int width)
-{
-    int x;
-    for (x = 0; x < width; ++x) {
-        uint8 b = src_rgb565[0] & 0x1f;
-        uint8 g = (src_rgb565[0] >> 5) | ((src_rgb565[1] & 0x07) << 3);
-        uint8 r = src_rgb565[1] >> 3;
-        dst_argb[0] = (b << 3) | (b >> 2);
-        dst_argb[1] = (g << 2) | (g >> 4);
-        dst_argb[2] = (r << 3) | (r >> 2);
-        dst_argb[3] = 255u;
-        dst_argb += 4;
-        src_rgb565 += 2;
     }
 }
 
@@ -688,22 +540,6 @@ static void ARGB1555ToARGBRow_C(const uint8* src_argb1555, uint8* dst_argb, int 
     }
 }
 
-static void ARGB4444ToARGBRow_C(const uint8* src_argb4444, uint8* dst_argb, int width)
-{
-    int x;
-    for (x = 0; x < width; ++x) {
-        uint8 b = src_argb4444[0] & 0x0f;
-        uint8 g = src_argb4444[0] >> 4;
-        uint8 r = src_argb4444[1] & 0x0f;
-        uint8 a = src_argb4444[1] >> 4;
-        dst_argb[0] = (b << 4) | b;
-        dst_argb[1] = (g << 4) | g;
-        dst_argb[2] = (r << 4) | r;
-        dst_argb[3] = (a << 4) | a;
-        dst_argb += 4;
-        src_argb4444 += 2;
-    }
-}
 /*
 static void ARGBToRGB24Row_C(const uint8* src_argb, uint8* dst_rgb, int width)
 {
@@ -783,385 +619,7 @@ static void ARGBShuffleRow_C(const uint8* src_argb, uint8* dst_argb, const uint8
     }
 }
 
-static void I400ToARGBRow_C(const uint8* src_y, uint8* rgb_buf, int width)
-{
-    int x;
-    for (x = 0; x < width - 1; x += 2) {
-        YPixel(src_y[0], rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-        YPixel(src_y[1], rgb_buf + 4, rgb_buf + 5, rgb_buf + 6);
-        rgb_buf[7] = 255;
-        src_y += 2;
-        rgb_buf += 8;  // Advance 2 pixels.
-    }
-    if (width & 1) {
-        YPixel(src_y[0], rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-    }
-}
-
-static void NV12ToARGBRow_C(const uint8* src_y, const uint8* src_uv, uint8* rgb_buf, int width)
-{
-    int x;
-    for (x = 0; x < width - 1; x += 2) {
-        YuvPixel(src_y[0], src_uv[0], src_uv[1],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-        YuvPixel(src_y[1], src_uv[0], src_uv[1],
-                 rgb_buf + 4, rgb_buf + 5, rgb_buf + 6);
-        rgb_buf[7] = 255;
-        src_y += 2;
-        src_uv += 2;
-        rgb_buf += 8;  // Advance 2 pixels.
-    }
-    if (width & 1) {
-        YuvPixel(src_y[0], src_uv[0], src_uv[1],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-    }
-}
-
-static void NV21ToARGBRow_C(const uint8* src_y, const uint8* src_vu, uint8* rgb_buf, int width)
-{
-    int x;
-    for (x = 0; x < width - 1; x += 2) {
-        YuvPixel(src_y[0], src_vu[1], src_vu[0],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-
-        YuvPixel(src_y[1], src_vu[1], src_vu[0],
-                 rgb_buf + 4, rgb_buf + 5, rgb_buf + 6);
-        rgb_buf[7] = 255;
-
-        src_y += 2;
-        src_vu += 2;
-        rgb_buf += 8;  // Advance 2 pixels.
-    }
-    if (width & 1) {
-        YuvPixel(src_y[0], src_vu[1], src_vu[0],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-    }
-}
-
-/*
-static void NV12ToRGB565Row_C(const uint8* src_y, const uint8* src_uv, uint8* dst_rgb565, int width)
-{
-    uint8 b0;
-    uint8 g0;
-    uint8 r0;
-    uint8 b1;
-    uint8 g1;
-    uint8 r1;
-    int x;
-    for (x = 0; x < width - 1; x += 2) {
-        YuvPixel(src_y[0], src_uv[0], src_uv[1], &b0, &g0, &r0);
-        YuvPixel(src_y[1], src_uv[0], src_uv[1], &b1, &g1, &r1);
-        b0 = b0 >> 3;
-        g0 = g0 >> 2;
-        r0 = r0 >> 3;
-        b1 = b1 >> 3;
-        g1 = g1 >> 2;
-        r1 = r1 >> 3;
-        *(uint32*)(dst_rgb565) = b0 | (g0 << 5) | (r0 << 11) |
-            (b1 << 16) | (g1 << 21) | (r1 << 27);
-        src_y += 2;
-        src_uv += 2;
-        dst_rgb565 += 4;  // Advance 2 pixels.
-    }
-    if (width & 1) {
-        YuvPixel(src_y[0], src_uv[0], src_uv[1], &b0, &g0, &r0);
-        b0 = b0 >> 3;
-        g0 = g0 >> 2;
-        r0 = r0 >> 3;
-        *(uint16*)(dst_rgb565) = b0 | (g0 << 5) | (r0 << 11);
-    }
-}
-
-static void NV21ToRGB565Row_C(const uint8* src_y, const uint8* vsrc_u, uint8* dst_rgb565, int width)
-{
-    uint8 b0;
-    uint8 g0;
-    uint8 r0;
-    uint8 b1;
-    uint8 g1;
-    uint8 r1;
-    int x;
-    for (x = 0; x < width - 1; x += 2) {
-        YuvPixel(src_y[0], vsrc_u[1], vsrc_u[0], &b0, &g0, &r0);
-        YuvPixel(src_y[1], vsrc_u[1], vsrc_u[0], &b1, &g1, &r1);
-        b0 = b0 >> 3;
-        g0 = g0 >> 2;
-        r0 = r0 >> 3;
-        b1 = b1 >> 3;
-        g1 = g1 >> 2;
-        r1 = r1 >> 3;
-        *(uint32*)(dst_rgb565) = b0 | (g0 << 5) | (r0 << 11) |
-            (b1 << 16) | (g1 << 21) | (r1 << 27);
-        src_y += 2;
-        vsrc_u += 2;
-        dst_rgb565 += 4;  // Advance 2 pixels.
-    }
-    if (width & 1) {
-        YuvPixel(src_y[0], vsrc_u[1], vsrc_u[0], &b0, &g0, &r0);
-        b0 = b0 >> 3;
-        g0 = g0 >> 2;
-        r0 = r0 >> 3;
-        *(uint16*)(dst_rgb565) = b0 | (g0 << 5) | (r0 << 11);
-    }
-}
-*/
-
-// Also used for 420
-static void I422ToARGBRow_C(const uint8* src_y, const uint8* src_u, const uint8* src_v, uint8* rgb_buf, int width)
-{
-    int x;
-    for (x = 0; x < width - 1; x += 2) {
-        YuvPixel(src_y[0], src_u[0], src_v[0],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-        YuvPixel(src_y[1], src_u[0], src_v[0],
-                 rgb_buf + 4, rgb_buf + 5, rgb_buf + 6);
-        rgb_buf[7] = 255;
-        src_y += 2;
-        src_u += 1;
-        src_v += 1;
-        rgb_buf += 8;  // Advance 2 pixels.
-    }
-    if (width & 1) {
-        YuvPixel(src_y[0], src_u[0], src_v[0],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        rgb_buf[3] = 255;
-    }
-}
-
-/*
-static void I422ToRGB24Row_C(const uint8* src_y, const uint8* src_u, const uint8* src_v, uint8* rgb_buf, int width)
-{
-    int x;
-    for (x = 0; x < width - 1; x += 2) {
-        YuvPixel(src_y[0], src_u[0], src_v[0],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-        YuvPixel(src_y[1], src_u[0], src_v[0],
-                 rgb_buf + 3, rgb_buf + 4, rgb_buf + 5);
-        src_y += 2;
-        src_u += 1;
-        src_v += 1;
-        rgb_buf += 6;  // Advance 2 pixels.
-    }
-    if (width & 1) {
-        YuvPixel(src_y[0], src_u[0], src_v[0],
-                 rgb_buf + 0, rgb_buf + 1, rgb_buf + 2);
-    }
-}
-*/
-
 #pragma endregion row_c
-
-
-static int YUY2ToARGB(const uint8* src_yuy2, int src_stride_yuy2, uint8* dst_argb, int dst_stride_argb, int width, int height)
-{
-    int y;
-    void(*YUY2ToARGBRow)(const uint8* src_yuy2, uint8* dst_argb, int pix) =
-        YUY2ToARGBRow_C;
-    if (!src_yuy2 || !dst_argb ||
-        width <= 0 || height == 0) {
-        return -1;
-    }
-    // Negative height means invert the image.
-    if (height < 0) {
-        height = -height;
-        src_yuy2 = src_yuy2 + (height - 1) * src_stride_yuy2;
-        src_stride_yuy2 = -src_stride_yuy2;
-    }
-    // Coalesce rows.
-    if (src_stride_yuy2 == width * 2 &&
-        dst_stride_argb == width * 4) {
-        width *= height;
-        height = 1;
-        src_stride_yuy2 = dst_stride_argb = 0;
-    }
-#if defined(HAS_YUY2TOARGBROW_SSSE3)
-    if (TestCpuFlag(kCpuHasSSSE3)) {
-        YUY2ToARGBRow = YUY2ToARGBRow_Any_SSSE3;
-        if (IS_ALIGNED(width, 16)) {
-            YUY2ToARGBRow = YUY2ToARGBRow_SSSE3;
-        }
-    }
-#endif
-#if defined(HAS_YUY2TOARGBROW_AVX2)
-    if (TestCpuFlag(kCpuHasAVX2)) {
-        YUY2ToARGBRow = YUY2ToARGBRow_Any_AVX2;
-        if (IS_ALIGNED(width, 32)) {
-            YUY2ToARGBRow = YUY2ToARGBRow_AVX2;
-        }
-    }
-#endif
-    for (y = 0; y < height; ++y) {
-        YUY2ToARGBRow(src_yuy2, dst_argb, width);
-        src_yuy2 += src_stride_yuy2;
-        dst_argb += dst_stride_argb;
-    }
-    return 0;
-}
-
-// Convert UYVY to ARGB.
-int UYVYToARGB(const uint8* src_uyvy, int src_stride_uyvy, uint8* dst_argb, int dst_stride_argb, int width, int height)
-{
-    int y;
-    void(*UYVYToARGBRow)(const uint8* src_uyvy, uint8* dst_argb, int pix) =
-        UYVYToARGBRow_C;
-    if (!src_uyvy || !dst_argb ||
-        width <= 0 || height == 0) {
-        return -1;
-    }
-    // Negative height means invert the image.
-    if (height < 0) {
-        height = -height;
-        src_uyvy = src_uyvy + (height - 1) * src_stride_uyvy;
-        src_stride_uyvy = -src_stride_uyvy;
-    }
-    // Coalesce rows.
-    if (src_stride_uyvy == width * 2 &&
-        dst_stride_argb == width * 4) {
-        width *= height;
-        height = 1;
-        src_stride_uyvy = dst_stride_argb = 0;
-    }
-#if defined(HAS_UYVYTOARGBROW_SSSE3)
-    if (TestCpuFlag(kCpuHasSSSE3)) {
-        UYVYToARGBRow = UYVYToARGBRow_Any_SSSE3;
-        if (IS_ALIGNED(width, 16)) {
-            UYVYToARGBRow = UYVYToARGBRow_SSSE3;
-        }
-    }
-#endif
-#if defined(HAS_UYVYTOARGBROW_AVX2)
-    if (TestCpuFlag(kCpuHasAVX2)) {
-        UYVYToARGBRow = UYVYToARGBRow_Any_AVX2;
-        if (IS_ALIGNED(width, 32)) {
-            UYVYToARGBRow = UYVYToARGBRow_AVX2;
-        }
-    }
-#endif
-    for (y = 0; y < height; ++y) {
-        UYVYToARGBRow(src_uyvy, dst_argb, width);
-        src_uyvy += src_stride_uyvy;
-        dst_argb += dst_stride_argb;
-    }
-    return 0;
-}
-
-// Convert J420 to ARGB.
-int J420ToARGB(const uint8* src_y, int src_stride_y,
-const uint8* src_u, int src_stride_u,
-const uint8* src_v, int src_stride_v,
-uint8* dst_argb, int dst_stride_argb,
-int width, int height) {
-    int y;
-    void(*J422ToARGBRow)(const uint8* y_buf,
-                         const uint8* u_buf,
-                         const uint8* v_buf,
-                         uint8* rgb_buf,
-                         int width) = J422ToARGBRow_C;
-    if (!src_y || !src_u || !src_v || !dst_argb ||
-        width <= 0 || height == 0) {
-        return -1;
-    }
-    // Negative height means invert the image.
-    if (height < 0) {
-        height = -height;
-        dst_argb = dst_argb + (height - 1) * dst_stride_argb;
-        dst_stride_argb = -dst_stride_argb;
-    }
-#if defined(HAS_J422TOARGBROW_SSSE3)
-    if (TestCpuFlag(kCpuHasSSSE3)) {
-        J422ToARGBRow = J422ToARGBRow_Any_SSSE3;
-        if (IS_ALIGNED(width, 8)) {
-            J422ToARGBRow = J422ToARGBRow_SSSE3;
-        }
-    }
-#endif
-#if defined(HAS_J422TOARGBROW_AVX2)
-    if (TestCpuFlag(kCpuHasAVX2)) {
-        J422ToARGBRow = J422ToARGBRow_Any_AVX2;
-        if (IS_ALIGNED(width, 16)) {
-            J422ToARGBRow = J422ToARGBRow_AVX2;
-        }
-    }
-#endif
-
-    for (y = 0; y < height; ++y) {
-        J422ToARGBRow(src_y, src_u, src_v, dst_argb, width);
-        dst_argb += dst_stride_argb;
-        src_y += src_stride_y;
-        if (y & 1) {
-            src_u += src_stride_u;
-            src_v += src_stride_v;
-        }
-    }
-    return 0;
-}
-
-// Convert J422 to ARGB.
-int J422ToARGB(const uint8* src_y, int src_stride_y,
-const uint8* src_u, int src_stride_u,
-const uint8* src_v, int src_stride_v,
-uint8* dst_argb, int dst_stride_argb,
-int width, int height) {
-    int y;
-    void(*J422ToARGBRow)(const uint8* y_buf,
-                         const uint8* u_buf,
-                         const uint8* v_buf,
-                         uint8* rgb_buf,
-                         int width) = J422ToARGBRow_C;
-    if (!src_y || !src_u || !src_v ||
-        !dst_argb ||
-        width <= 0 || height == 0) {
-        return -1;
-    }
-    // Negative height means invert the image.
-    if (height < 0) {
-        height = -height;
-        dst_argb = dst_argb + (height - 1) * dst_stride_argb;
-        dst_stride_argb = -dst_stride_argb;
-    }
-    // Coalesce rows.
-    if (src_stride_y == width &&
-        src_stride_u * 2 == width &&
-        src_stride_v * 2 == width &&
-        dst_stride_argb == width * 4) {
-        width *= height;
-        height = 1;
-        src_stride_y = src_stride_u = src_stride_v = dst_stride_argb = 0;
-    }
-#if defined(HAS_J422TOARGBROW_SSSE3)
-    if (TestCpuFlag(kCpuHasSSSE3)) {
-        J422ToARGBRow = J422ToARGBRow_Any_SSSE3;
-        if (IS_ALIGNED(width, 8)) {
-            J422ToARGBRow = J422ToARGBRow_SSSE3;
-        }
-    }
-#endif
-#if defined(HAS_J422TOARGBROW_AVX2)
-    if (TestCpuFlag(kCpuHasAVX2)) {
-        J422ToARGBRow = J422ToARGBRow_Any_AVX2;
-        if (IS_ALIGNED(width, 16)) {
-            J422ToARGBRow = J422ToARGBRow_AVX2;
-        }
-    }
-#endif
-
-    for (y = 0; y < height; ++y) {
-        J422ToARGBRow(src_y, src_u, src_v, dst_argb, width);
-        dst_argb += dst_stride_argb;
-        src_y += src_stride_y;
-        src_u += src_stride_u;
-        src_v += src_stride_v;
-    }
-    return 0;
-}
-
 
 
 int RGB24ToARGB(const uint8* src_rgb24, int src_stride_rgb24, uint8* dst_argb, int dst_stride_argb, int width, int height)
@@ -1198,95 +656,6 @@ int RGB24ToARGB(const uint8* src_rgb24, int src_stride_rgb24, uint8* dst_argb, i
     for (y = 0; y < height; ++y) {
         RGB24ToARGBRow(src_rgb24, dst_argb, width);
         src_rgb24 += src_stride_rgb24;
-        dst_argb += dst_stride_argb;
-    }
-    return 0;
-}
-
-
-int RAWToARGB(const uint8* src_raw, int src_stride_raw,
-              uint8* dst_argb, int dst_stride_argb,
-              int width, int height) {
-    int y;
-    void(*RAWToARGBRow)(const uint8* src_rgb, uint8* dst_argb, int pix) =
-        RAWToARGBRow_C;
-    if (!src_raw || !dst_argb ||
-        width <= 0 || height == 0) {
-        return -1;
-    }
-    // Negative height means invert the image.
-    if (height < 0) {
-        height = -height;
-        src_raw = src_raw + (height - 1) * src_stride_raw;
-        src_stride_raw = -src_stride_raw;
-    }
-    // Coalesce rows.
-    if (src_stride_raw == width * 3 &&
-        dst_stride_argb == width * 4) {
-        width *= height;
-        height = 1;
-        src_stride_raw = dst_stride_argb = 0;
-    }
-#if defined(HAS_RAWTOARGBROW_SSSE3)
-    if (TestCpuFlag(kCpuHasSSSE3)) {
-        RAWToARGBRow = RAWToARGBRow_Any_SSSE3;
-        if (IS_ALIGNED(width, 16)) {
-            RAWToARGBRow = RAWToARGBRow_SSSE3;
-        }
-    }
-#endif
-
-    for (y = 0; y < height; ++y) {
-        RAWToARGBRow(src_raw, dst_argb, width);
-        src_raw += src_stride_raw;
-        dst_argb += dst_stride_argb;
-    }
-    return 0;
-}
-
-// Convert RGB565 to ARGB.
-static int RGB565ToARGB(const uint8* src_rgb565, int src_stride_rgb565, uint8* dst_argb, int dst_stride_argb, int width, int height)
-{
-    int y;
-    void(*RGB565ToARGBRow)(const uint8* src_rgb565, uint8* dst_argb, int pix) =
-        RGB565ToARGBRow_C;
-    if (!src_rgb565 || !dst_argb ||
-        width <= 0 || height == 0) {
-        return -1;
-    }
-    // Negative height means invert the image.
-    if (height < 0) {
-        height = -height;
-        src_rgb565 = src_rgb565 + (height - 1) * src_stride_rgb565;
-        src_stride_rgb565 = -src_stride_rgb565;
-    }
-    // Coalesce rows.
-    if (src_stride_rgb565 == width * 2 &&
-        dst_stride_argb == width * 4) {
-        width *= height;
-        height = 1;
-        src_stride_rgb565 = dst_stride_argb = 0;
-    }
-#if defined(HAS_RGB565TOARGBROW_SSE2)
-    if (TestCpuFlag(kCpuHasSSE2)) {
-        RGB565ToARGBRow = RGB565ToARGBRow_Any_SSE2;
-        if (IS_ALIGNED(width, 8)) {
-            RGB565ToARGBRow = RGB565ToARGBRow_SSE2;
-        }
-    }
-#endif
-#if defined(HAS_RGB565TOARGBROW_AVX2)
-    if (TestCpuFlag(kCpuHasAVX2)) {
-        RGB565ToARGBRow = RGB565ToARGBRow_Any_AVX2;
-        if (IS_ALIGNED(width, 16)) {
-            RGB565ToARGBRow = RGB565ToARGBRow_AVX2;
-        }
-    }
-#endif
-
-    for (y = 0; y < height; ++y) {
-        RGB565ToARGBRow(src_rgb565, dst_argb, width);
-        src_rgb565 += src_stride_rgb565;
         dst_argb += dst_stride_argb;
     }
     return 0;
@@ -1357,7 +726,6 @@ static int BGRAToARGB(const uint8* src_bgra, int src_stride_bgra, uint8* dst_arg
                        width, height);
 }
 
-/*
 // Convert ARGB to BGRA (same as BGRAToARGB).
 static int ARGBToBGRA(const uint8* src_bgra, int src_stride_bgra, uint8* dst_argb, int dst_stride_argb, int width, int height)
 {
@@ -1366,7 +734,6 @@ static int ARGBToBGRA(const uint8* src_bgra, int src_stride_bgra, uint8* dst_arg
                        (const uint8*)(&kShuffleMaskBGRAToARGB),
                        width, height);
 }
-*/
 
 // Convert ABGR to ARGB.
 static int ABGRToARGB(const uint8* src_abgr, int src_stride_abgr, uint8* dst_argb, int dst_stride_argb, int width, int height)
@@ -1377,7 +744,6 @@ static int ABGRToARGB(const uint8* src_abgr, int src_stride_abgr, uint8* dst_arg
                        width, height);
 }
 
-/*
 // Convert ARGB to ABGR to (same as ABGRToARGB).
 static int ARGBToABGR(const uint8* src_abgr, int src_stride_abgr, uint8* dst_argb, int dst_stride_argb, int width, int height)
 {
@@ -1386,7 +752,6 @@ static int ARGBToABGR(const uint8* src_abgr, int src_stride_abgr, uint8* dst_arg
                        (const uint8*)(&kShuffleMaskABGRToARGB),
                        width, height);
 }
-*/
 
 
 // Convert RGBA to ARGB.
@@ -1447,242 +812,6 @@ int ARGB1555ToARGB(const uint8* src_argb1555, int src_stride_argb1555, uint8* ds
 }
 
 
-// Convert ARGB4444 to ARGB.
-static int ARGB4444ToARGB(const uint8* src_argb4444, int src_stride_argb4444, uint8* dst_argb, int dst_stride_argb, int width, int height)
-{
-    int y;
-    void(*ARGB4444ToARGBRow)(const uint8* src_argb4444, uint8* dst_argb,
-                             int pix) = ARGB4444ToARGBRow_C;
-    if (!src_argb4444 || !dst_argb ||
-        width <= 0 || height == 0) {
-        return -1;
-    }
-    // Negative height means invert the image.
-    if (height < 0) {
-        height = -height;
-        src_argb4444 = src_argb4444 + (height - 1) * src_stride_argb4444;
-        src_stride_argb4444 = -src_stride_argb4444;
-    }
-    // Coalesce rows.
-    if (src_stride_argb4444 == width * 2 &&
-        dst_stride_argb == width * 4) {
-        width *= height;
-        height = 1;
-        src_stride_argb4444 = dst_stride_argb = 0;
-    }
-#if defined(HAS_ARGB4444TOARGBROW_SSE2)
-    if (TestCpuFlag(kCpuHasSSE2)) {
-        ARGB4444ToARGBRow = ARGB4444ToARGBRow_Any_SSE2;
-        if (IS_ALIGNED(width, 8)) {
-            ARGB4444ToARGBRow = ARGB4444ToARGBRow_SSE2;
-        }
-    }
-#endif
-#if defined(HAS_ARGB4444TOARGBROW_AVX2)
-    if (TestCpuFlag(kCpuHasAVX2)) {
-        ARGB4444ToARGBRow = ARGB4444ToARGBRow_Any_AVX2;
-        if (IS_ALIGNED(width, 16)) {
-            ARGB4444ToARGBRow = ARGB4444ToARGBRow_AVX2;
-        }
-    }
-#endif
-
-    for (y = 0; y < height; ++y) {
-        ARGB4444ToARGBRow(src_argb4444, dst_argb, width);
-        src_argb4444 += src_stride_argb4444;
-        dst_argb += dst_stride_argb;
-    }
-    return 0;
-}
-
-// Convert I400 to ARGB.
-int I400ToARGB(const uint8* src_y, int src_stride_y, uint8* dst_argb, int dst_stride_argb, int width, int height)
-{
-    int y;
-    void(*I400ToARGBRow)(const uint8* y_buf,
-                         uint8* rgb_buf,
-                         int width) = I400ToARGBRow_C;
-    if (!src_y || !dst_argb ||
-        width <= 0 || height == 0) {
-        return -1;
-    }
-    // Negative height means invert the image.
-    if (height < 0) {
-        height = -height;
-        dst_argb = dst_argb + (height - 1) * dst_stride_argb;
-        dst_stride_argb = -dst_stride_argb;
-    }
-    // Coalesce rows.
-    if (src_stride_y == width &&
-        dst_stride_argb == width * 4) {
-        width *= height;
-        height = 1;
-        src_stride_y = dst_stride_argb = 0;
-    }
-#if defined(HAS_I400TOARGBROW_SSE2)
-    if (TestCpuFlag(kCpuHasSSE2)) {
-        I400ToARGBRow = I400ToARGBRow_Any_SSE2;
-        if (IS_ALIGNED(width, 8)) {
-            I400ToARGBRow = I400ToARGBRow_SSE2;
-        }
-    }
-#endif
-#if defined(HAS_I400TOARGBROW_AVX2)
-    if (TestCpuFlag(kCpuHasAVX2)) {
-        I400ToARGBRow = I400ToARGBRow_Any_AVX2;
-        if (IS_ALIGNED(width, 16)) {
-            I400ToARGBRow = I400ToARGBRow_AVX2;
-        }
-    }
-#endif
-
-    for (y = 0; y < height; ++y) {
-        I400ToARGBRow(src_y, dst_argb, width);
-        dst_argb += dst_stride_argb;
-        src_y += src_stride_y;
-    }
-    return 0;
-}
-
-// Convert NV12 to ARGB.
-int NV12ToARGB(const uint8* src_y, int src_stride_y, const uint8* src_uv, int src_stride_uv, uint8* dst_argb, int dst_stride_argb, int width, int height)
-{
-    int y;
-    void(*NV12ToARGBRow)(const uint8* y_buf,
-                         const uint8* uv_buf,
-                         uint8* rgb_buf,
-                         int width) = NV12ToARGBRow_C;
-    if (!src_y || !src_uv || !dst_argb ||
-        width <= 0 || height == 0) {
-        return -1;
-    }
-    // Negative height means invert the image.
-    if (height < 0) {
-        height = -height;
-        dst_argb = dst_argb + (height - 1) * dst_stride_argb;
-        dst_stride_argb = -dst_stride_argb;
-    }
-#if defined(HAS_NV12TOARGBROW_SSSE3)
-    if (TestCpuFlag(kCpuHasSSSE3)) {
-        NV12ToARGBRow = NV12ToARGBRow_Any_SSSE3;
-        if (IS_ALIGNED(width, 8)) {
-            NV12ToARGBRow = NV12ToARGBRow_SSSE3;
-        }
-    }
-#endif
-#if defined(HAS_NV12TOARGBROW_AVX2)
-    if (TestCpuFlag(kCpuHasAVX2)) {
-        NV12ToARGBRow = NV12ToARGBRow_Any_AVX2;
-        if (IS_ALIGNED(width, 16)) {
-            NV12ToARGBRow = NV12ToARGBRow_AVX2;
-        }
-    }
-#endif
-
-    for (y = 0; y < height; ++y) {
-        NV12ToARGBRow(src_y, src_uv, dst_argb, width);
-        dst_argb += dst_stride_argb;
-        src_y += src_stride_y;
-        if (y & 1) {
-            src_uv += src_stride_uv;
-        }
-    }
-    return 0;
-}
-
-// Convert NV21 to ARGB.
-static int NV21ToARGB(const uint8* src_y, int src_stride_y, const uint8* src_uv, int src_stride_uv, uint8* dst_argb, int dst_stride_argb, int width, int height)
-{
-    int y;
-    void(*NV21ToARGBRow)(const uint8* y_buf,
-                         const uint8* uv_buf,
-                         uint8* rgb_buf,
-                         int width) = NV21ToARGBRow_C;
-    if (!src_y || !src_uv || !dst_argb ||
-        width <= 0 || height == 0) {
-        return -1;
-    }
-    // Negative height means invert the image.
-    if (height < 0) {
-        height = -height;
-        dst_argb = dst_argb + (height - 1) * dst_stride_argb;
-        dst_stride_argb = -dst_stride_argb;
-    }
-#if defined(HAS_NV21TOARGBROW_SSSE3)
-    if (TestCpuFlag(kCpuHasSSSE3)) {
-        NV21ToARGBRow = NV21ToARGBRow_Any_SSSE3;
-        if (IS_ALIGNED(width, 8)) {
-            NV21ToARGBRow = NV21ToARGBRow_SSSE3;
-        }
-    }
-#endif
-#if defined(HAS_NV21TOARGBROW_AVX2)
-    if (TestCpuFlag(kCpuHasAVX2)) {
-        NV21ToARGBRow = NV21ToARGBRow_Any_AVX2;
-        if (IS_ALIGNED(width, 16)) {
-            NV21ToARGBRow = NV21ToARGBRow_AVX2;
-        }
-    }
-#endif
-
-    for (y = 0; y < height; ++y) {
-        NV21ToARGBRow(src_y, src_uv, dst_argb, width);
-        dst_argb += dst_stride_argb;
-        src_y += src_stride_y;
-        if (y & 1) {
-            src_uv += src_stride_uv;
-        }
-    }
-    return 0;
-}
-
-// Convert M420 to ARGB.
-static int M420ToARGB(const uint8* src_m420, int src_stride_m420, uint8* dst_argb, int dst_stride_argb, int width, int height)
-{
-    int y;
-    void(*NV12ToARGBRow)(const uint8* y_buf,
-                         const uint8* uv_buf,
-                         uint8* rgb_buf,
-                         int width) = NV12ToARGBRow_C;
-    if (!src_m420 || !dst_argb ||
-        width <= 0 || height == 0) {
-        return -1;
-    }
-    // Negative height means invert the image.
-    if (height < 0) {
-        height = -height;
-        dst_argb = dst_argb + (height - 1) * dst_stride_argb;
-        dst_stride_argb = -dst_stride_argb;
-    }
-#if defined(HAS_NV12TOARGBROW_SSSE3)
-    if (TestCpuFlag(kCpuHasSSSE3)) {
-        NV12ToARGBRow = NV12ToARGBRow_Any_SSSE3;
-        if (IS_ALIGNED(width, 8)) {
-            NV12ToARGBRow = NV12ToARGBRow_SSSE3;
-        }
-    }
-#endif
-#if defined(HAS_NV12TOARGBROW_AVX2)
-    if (TestCpuFlag(kCpuHasAVX2)) {
-        NV12ToARGBRow = NV12ToARGBRow_Any_AVX2;
-        if (IS_ALIGNED(width, 16)) {
-            NV12ToARGBRow = NV12ToARGBRow_AVX2;
-        }
-    }
-#endif
-
-    for (y = 0; y < height - 1; y += 2) {
-        NV12ToARGBRow(src_m420, src_m420 + src_stride_m420 * 2, dst_argb, width);
-        NV12ToARGBRow(src_m420 + src_stride_m420, src_m420 + src_stride_m420 * 2,
-                      dst_argb + dst_stride_argb, width);
-        dst_argb += dst_stride_argb * 2;
-        src_m420 += src_stride_m420 * 3;
-    }
-    if (height & 1) {
-        NV12ToARGBRow(src_m420, src_m420 + src_stride_m420 * 2, dst_argb, width);
-    }
-    return 0;
-}
 
 // Convert I420 to ARGB.
 void img_helper_i420_to_ARGB(const uint8* src_y, int src_stride_y, const uint8* src_u, int src_stride_u, const uint8* src_v, int src_stride_v, uint8* dst_argb, int dst_stride_argb, int width, int height)
@@ -1723,7 +852,7 @@ void img_helper_i420_to_ARGB(const uint8* src_y, int src_stride_y, const uint8* 
 
     if (CCAPS(CPU_SSSE3))
     {
-        if (IS_ALIGNED(width, 16))
+        if (IS_ALIGNED(width, 8))
             loopf(I422ToARGBRow_SSSE3);
         else
             loopf(I422ToARGBRow_Any_SSSE3);
@@ -1765,454 +894,394 @@ void img_helper_i420_to_ARGB(const uint8* src_y, int src_stride_y, const uint8* 
 }
 
 
-// Convert I422 to ARGB.
-static int I422ToARGB(const uint8* src_y, int src_stride_y, const uint8* src_u, int src_stride_u, const uint8* src_v, int src_stride_v, uint8* dst_argb, int dst_stride_argb, int width, int height)
+
+static const uvec8 kAddUV128 = {
+    128u, 128u, 128u, 128u, 128u, 128u, 128u, 128u,
+    128u, 128u, 128u, 128u, 128u, 128u, 128u, 128u
+};
+
+static const vec8 kARGBToU = {
+    112, -74, -38, 0, 112, -74, -38, 0, 112, -74, -38, 0, 112, -74, -38, 0
+};
+
+static const vec8 kARGBToV = {
+    -18, -94, 112, 0, -18, -94, 112, 0, -18, -94, 112, 0, -18, -94, 112, 0,
+};
+
+// Constants for ARGB.
+static const vec8 kARGBToY = {
+    13, 65, 33, 0, 13, 65, 33, 0, 13, 65, 33, 0, 13, 65, 33, 0
+};
+
+static const uvec8 kAddY16 = {
+    16u, 16u, 16u, 16u, 16u, 16u, 16u, 16u, 16u, 16u, 16u, 16u, 16u, 16u, 16u, 16u
+};
+
+
+
+__declspec(naked) void ARGBToUVRow_SSSE3(const uint8* src_argb0, int src_stride_argb, uint8* dst_u, uint8* dst_v, int width)
 {
-    int y;
-    void(*I422ToARGBRow)(const uint8* y_buf,
-                         const uint8* u_buf,
-                         const uint8* v_buf,
-                         uint8* rgb_buf,
-                         int width) = I422ToARGBRow_C;
-    if (!src_y || !src_u || !src_v ||
-        !dst_argb ||
-        width <= 0 || height == 0) {
-        return -1;
+    __asm {
+        push       esi
+        push       edi
+        mov        eax, [esp + 8 + 4]   // src_argb
+        mov        esi, [esp + 8 + 8]   // src_stride_argb
+        mov        edx, [esp + 8 + 12]  // dst_u
+        mov        edi, [esp + 8 + 16]  // dst_v
+        mov        ecx, [esp + 8 + 20]  // pix
+        movdqa     xmm5, kAddUV128
+        movdqa     xmm6, kARGBToV
+        movdqa     xmm7, kARGBToU
+        sub        edi, edx             // stride from u to v
+
+    convertloop :
+        /* step 1 - subsample 16x2 argb pixels to 8x1 */
+        movdqu     xmm0, [eax]
+        movdqu     xmm4, [eax + esi]
+        pavgb      xmm0, xmm4
+        movdqu     xmm1, [eax + 16]
+        movdqu     xmm4, [eax + esi + 16]
+        pavgb      xmm1, xmm4
+        movdqu     xmm2, [eax + 32]
+        movdqu     xmm4, [eax + esi + 32]
+        pavgb      xmm2, xmm4
+        movdqu     xmm3, [eax + 48]
+        movdqu     xmm4, [eax + esi + 48]
+        pavgb      xmm3, xmm4
+
+        lea        eax, [eax + 64]
+        movdqa     xmm4, xmm0
+        shufps     xmm0, xmm1, 0x88
+        shufps     xmm4, xmm1, 0xdd
+        pavgb      xmm0, xmm4
+        movdqa     xmm4, xmm2
+        shufps     xmm2, xmm3, 0x88
+        shufps     xmm4, xmm3, 0xdd
+        pavgb      xmm2, xmm4
+
+        // step 2 - convert to U and V
+        // from here down is very similar to Y code except
+        // instead of 16 different pixels, its 8 pixels of U and 8 of V
+        movdqa     xmm1, xmm0
+        movdqa     xmm3, xmm2
+        pmaddubsw  xmm0, xmm7  // U
+        pmaddubsw  xmm2, xmm7
+        pmaddubsw  xmm1, xmm6  // V
+        pmaddubsw  xmm3, xmm6
+        phaddw     xmm0, xmm2
+        phaddw     xmm1, xmm3
+        psraw      xmm0, 8
+        psraw      xmm1, 8
+        packsswb   xmm0, xmm1
+        paddb      xmm0, xmm5            // -> unsigned
+
+        // step 3 - store 8 U and 8 V values
+        movlps     qword ptr[edx], xmm0 // U
+        movhps     qword ptr[edx + edi], xmm0 // V
+        lea        edx, [edx + 8]
+        sub        ecx, 16
+        jg         convertloop
+
+        pop        edi
+        pop        esi
+        ret
     }
+}
+
+// Convert 16 ARGB pixels (64 bytes) to 16 Y values.
+__declspec(naked) void ARGBToYRow_SSSE3(const uint8* src_argb, uint8* dst_y, int pix)
+{
+    __asm {
+        mov        eax, [esp + 4]   /* src_argb */
+        mov        edx, [esp + 8]   /* dst_y */
+        mov        ecx, [esp + 12]  /* pix */
+        movdqa     xmm4, kARGBToY
+        movdqa     xmm5, kAddY16
+
+    convertloop :
+        movdqu     xmm0, [eax]
+        movdqu     xmm1, [eax + 16]
+        movdqu     xmm2, [eax + 32]
+        movdqu     xmm3, [eax + 48]
+        pmaddubsw  xmm0, xmm4
+        pmaddubsw  xmm1, xmm4
+        pmaddubsw  xmm2, xmm4
+        pmaddubsw  xmm3, xmm4
+        lea        eax, [eax + 64]
+        phaddw     xmm0, xmm1
+        phaddw     xmm2, xmm3
+        psrlw      xmm0, 7
+        psrlw      xmm2, 7
+        packuswb   xmm0, xmm2
+        paddb      xmm0, xmm5
+        movdqu[edx], xmm0
+        lea        edx, [edx + 16]
+        sub        ecx, 16
+        jg         convertloop
+        ret
+    }
+}
+
+
+ANY12S(ARGBToUVRow_Any_SSSE3, ARGBToUVRow_SSSE3, 0, 4, 15)
+ANY11(ARGBToYRow_Any_SSSE3, ARGBToYRow_SSSE3, 0, 4, 1, 15)
+
+// vpermd for vphaddw + vpackuswb vpermd.
+static const lvec32 kPermdARGBToY_AVX = {
+    0, 4, 1, 5, 2, 6, 3, 7
+};
+
+// vpshufb for vphaddw + vpackuswb packed to shorts.
+static const lvec8 kShufARGBToUV_AVX = {
+    0, 1, 8, 9, 2, 3, 10, 11, 4, 5, 12, 13, 6, 7, 14, 15,
+    0, 1, 8, 9, 2, 3, 10, 11, 4, 5, 12, 13, 6, 7, 14, 15
+};
+
+
+// Convert 32 ARGB pixels (128 bytes) to 32 Y values.
+__declspec(naked) void ARGBToYRow_AVX2(const uint8* src_argb, uint8* dst_y, int pix)
+{
+    __asm {
+        mov        eax, [esp + 4]   /* src_argb */
+        mov        edx, [esp + 8]   /* dst_y */
+        mov        ecx, [esp + 12]  /* pix */
+        vbroadcastf128 ymm4, kARGBToY
+        vbroadcastf128 ymm5, kAddY16
+        vmovdqu    ymm6, kPermdARGBToY_AVX
+
+    convertloop :
+        vmovdqu    ymm0, [eax]
+        vmovdqu    ymm1, [eax + 32]
+        vmovdqu    ymm2, [eax + 64]
+        vmovdqu    ymm3, [eax + 96]
+        vpmaddubsw ymm0, ymm0, ymm4
+        vpmaddubsw ymm1, ymm1, ymm4
+        vpmaddubsw ymm2, ymm2, ymm4
+        vpmaddubsw ymm3, ymm3, ymm4
+        lea        eax, [eax + 128]
+        vphaddw    ymm0, ymm0, ymm1  // mutates.
+        vphaddw    ymm2, ymm2, ymm3
+        vpsrlw     ymm0, ymm0, 7
+        vpsrlw     ymm2, ymm2, 7
+        vpackuswb  ymm0, ymm0, ymm2  // mutates.
+        vpermd     ymm0, ymm6, ymm0  // For vphaddw + vpackuswb mutation.
+        vpaddb     ymm0, ymm0, ymm5  // add 16 for Y
+        vmovdqu[edx], ymm0
+        lea        edx, [edx + 32]
+        sub        ecx, 32
+        jg         convertloop
+        vzeroupper
+        ret
+    }
+}
+
+__declspec(naked) void ARGBToUVRow_AVX2(const uint8* src_argb0, int src_stride_argb, uint8* dst_u, uint8* dst_v, int width)
+{
+    __asm {
+        push       esi
+        push       edi
+        mov        eax, [esp + 8 + 4]   // src_argb
+        mov        esi, [esp + 8 + 8]   // src_stride_argb
+        mov        edx, [esp + 8 + 12]  // dst_u
+        mov        edi, [esp + 8 + 16]  // dst_v
+        mov        ecx, [esp + 8 + 20]  // pix
+        vbroadcastf128 ymm5, kAddUV128
+        vbroadcastf128 ymm6, kARGBToV
+        vbroadcastf128 ymm7, kARGBToU
+        sub        edi, edx             // stride from u to v
+
+    convertloop :
+        /* step 1 - subsample 32x2 argb pixels to 16x1 */
+        vmovdqu    ymm0, [eax]
+        vmovdqu    ymm1, [eax + 32]
+        vmovdqu    ymm2, [eax + 64]
+        vmovdqu    ymm3, [eax + 96]
+        vpavgb     ymm0, ymm0, [eax + esi]
+        vpavgb     ymm1, ymm1, [eax + esi + 32]
+        vpavgb     ymm2, ymm2, [eax + esi + 64]
+        vpavgb     ymm3, ymm3, [eax + esi + 96]
+        lea        eax, [eax + 128]
+        vshufps    ymm4, ymm0, ymm1, 0x88
+        vshufps    ymm0, ymm0, ymm1, 0xdd
+        vpavgb     ymm0, ymm0, ymm4  // mutated by vshufps
+        vshufps    ymm4, ymm2, ymm3, 0x88
+        vshufps    ymm2, ymm2, ymm3, 0xdd
+        vpavgb     ymm2, ymm2, ymm4  // mutated by vshufps
+
+        // step 2 - convert to U and V
+        // from here down is very similar to Y code except
+        // instead of 32 different pixels, its 16 pixels of U and 16 of V
+        vpmaddubsw ymm1, ymm0, ymm7  // U
+        vpmaddubsw ymm3, ymm2, ymm7
+        vpmaddubsw ymm0, ymm0, ymm6  // V
+        vpmaddubsw ymm2, ymm2, ymm6
+        vphaddw    ymm1, ymm1, ymm3  // mutates
+        vphaddw    ymm0, ymm0, ymm2
+        vpsraw     ymm1, ymm1, 8
+        vpsraw     ymm0, ymm0, 8
+        vpacksswb  ymm0, ymm1, ymm0  // mutates
+        vpermq     ymm0, ymm0, 0xd8  // For vpacksswb
+        vpshufb    ymm0, ymm0, kShufARGBToUV_AVX  // For vshufps + vphaddw
+        vpaddb     ymm0, ymm0, ymm5  // -> unsigned
+
+        // step 3 - store 16 U and 16 V values
+        vextractf128[edx], ymm0, 0 // U
+        vextractf128[edx + edi], ymm0, 1 // V
+        lea        edx, [edx + 16]
+        sub        ecx, 32
+        jg         convertloop
+
+        pop        edi
+        pop        esi
+        vzeroupper
+        ret
+    }
+}
+
+ANY11(ARGBToYRow_Any_AVX2, ARGBToYRow_AVX2, 0, 4, 1, 31)
+ANY12S(ARGBToUVRow_Any_AVX2, ARGBToUVRow_AVX2, 0, 4, 31)
+
+static INLINE uint8 RGB_Y(TSCOLOR c)
+{
+    //return (uint8)( lround( (0.257*(float)RED(c)) + (0.504*(float)GREEN(c)) + (0.098*(float)BLUE(c)) + 16) );
+    return (uint8)((RED(c) * 16843 + GREEN(c) * 33030 + BLUE(c) * 6423 + 1048576) >> 16);
+}
+
+static INLINE uint8 RGB_U(TSCOLOR c)
+{
+    //return (uint8)( lround(-(0.148*(float)RED(c)) - (0.291*(float)GREEN(c)) + (0.439*(float)BLUE(c)) + 128) );
+    return (uint8)((8388608 - RED(c) * 9699 - GREEN(c) * 19071 + BLUE(c) * 28770) >> 16);
+}
+
+static INLINE uint8 RGB_V(TSCOLOR c)
+{
+    //return (uint8)( 0xff & lround((0.439*(float)RED(c)) - (0.368*(float)GREEN(c)) - (0.071*(float)BLUE(c)) + 128) );
+    return (uint8)((RED(c) * 28770 - GREEN(c) * 24117 - BLUE(c) * 4653 + 8388608) >> 16);
+}
+
+TSCOLOR INLINE coloravg(TSCOLOR c1, TSCOLOR c2, TSCOLOR c3, TSCOLOR c4)
+{
+    //return ARGB<uint>((RED(c1) + RED(c2) + RED(c3) + RED(c4)) / 4, (GREEN(c1) + GREEN(c2) + GREEN(c3) + GREEN(c4)) / 4, (BLUE(c1) + BLUE(c2) + BLUE(c3) + BLUE(c4)) / 4);
+
+    _asm
+    {
+        mov eax, c1
+        mov ecx, c2
+        mov ebx, eax
+        mov edx, ecx
+        and eax, 0x00FF00FF
+        and ebx, 0x0000FF00
+
+        and ecx, 0x00FF00FF
+        and edx, 0x0000FF00
+        add eax, ecx
+        add ebx, edx
+
+        mov ecx, c3
+        mov edx, ecx
+        and ecx, 0x00FF00FF
+        and edx, 0x0000FF00
+        add eax, ecx
+        add ebx, edx
+
+        mov ecx, c4
+        mov edx, ecx
+        and ecx, 0x00FF00FF
+        and edx, 0x0000FF00
+        add eax, ecx
+        add ebx, edx
+
+        shr eax, 2
+        shr ebx, 2
+        and eax, 0x00FF00FF
+        and ebx, 0x0000FF00
+        or  eax, ebx
+
+    }
+}
+
+// Convert ARGB to I420.
+void img_helper_ARGB_to_i420(const uint8* src_argb, int src_stride_argb, uint8* dst_y, int dst_stride_y, uint8* dst_u, int dst_stride_u, uint8* dst_v, int dst_stride_v, int width, int height)
+{
+
+
+    typedef void ROWFUNC_Y(const uint8* src_argb, uint8* dst_y, int width);
+    typedef void ROWFUNC_UV(const uint8* src_argb0, int src_stride_argb, uint8* dst_u, uint8* dst_v, int width);
+
+    auto loopf = [&](ROWFUNC_Y rowfunc_y, ROWFUNC_UV rowfunc_uv)
+    {
+        int my = (height-1);
+        for (int y = 0; y < my; y += 2)
+        {
+            rowfunc_uv(src_argb, src_stride_argb, dst_u, dst_v, width);
+            rowfunc_y(src_argb, dst_y, width);
+            rowfunc_y(src_argb + src_stride_argb, dst_y + dst_stride_y, width);
+            src_argb += src_stride_argb * 2;
+            dst_y += dst_stride_y * 2;
+            dst_u += dst_stride_u;
+            dst_v += dst_stride_v;
+        }
+        if (height & 1) {
+            rowfunc_uv(src_argb, 0, dst_u, dst_v, width);
+            rowfunc_y(src_argb, dst_y, width);
+        }
+    };
+
     // Negative height means invert the image.
     if (height < 0) {
         height = -height;
-        dst_argb = dst_argb + (height - 1) * dst_stride_argb;
-        dst_stride_argb = -dst_stride_argb;
+        src_argb = src_argb + (height - 1) * src_stride_argb;
+        src_stride_argb = -src_stride_argb;
     }
-    // Coalesce rows.
-    if (src_stride_y == width &&
-        src_stride_u * 2 == width &&
-        src_stride_v * 2 == width &&
-        dst_stride_argb == width * 4) {
-        width *= height;
-        height = 1;
-        src_stride_y = src_stride_u = src_stride_v = dst_stride_argb = 0;
-    }
-#if defined(HAS_I422TOARGBROW_SSSE3)
-    if (TestCpuFlag(kCpuHasSSSE3)) {
-        I422ToARGBRow = I422ToARGBRow_Any_SSSE3;
-        if (IS_ALIGNED(width, 8)) {
-            I422ToARGBRow = I422ToARGBRow_SSSE3;
-        }
-    }
-#endif
-#if defined(HAS_I422TOARGBROW_AVX2)
-    if (TestCpuFlag(kCpuHasAVX2)) {
-        I422ToARGBRow = I422ToARGBRow_Any_AVX2;
-        if (IS_ALIGNED(width, 16)) {
-            I422ToARGBRow = I422ToARGBRow_AVX2;
-        }
-    }
-#endif
 
-    for (y = 0; y < height; ++y) {
-        I422ToARGBRow(src_y, src_u, src_v, dst_argb, width);
-        dst_argb += dst_stride_argb;
-        src_y += src_stride_y;
-        src_u += src_stride_u;
-        src_v += src_stride_v;
+    if (CCAPS(CPU_AVX2))
+    {
+        if (IS_ALIGNED(width, 32))
+            loopf(ARGBToYRow_AVX2, ARGBToUVRow_AVX2);
+        else
+            loopf(ARGBToYRow_Any_AVX2, ARGBToUVRow_Any_AVX2);
+        return;
     }
-    return 0;
-}
 
-// Convert I411 to ARGB.
-static int I411ToARGB(const uint8* src_y, int src_stride_y, const uint8* src_u, int src_stride_u, const uint8* src_v, int src_stride_v, uint8* dst_argb, int dst_stride_argb, int width, int height) {
-    int y;
-    void(*I411ToARGBRow)(const uint8* y_buf,
-                         const uint8* u_buf,
-                         const uint8* v_buf,
-                         uint8* rgb_buf,
-                         int width) = I411ToARGBRow_C;
-    if (!src_y || !src_u || !src_v ||
-        !dst_argb ||
-        width <= 0 || height == 0) {
-        return -1;
+    if (CCAPS(CPU_SSSE3))
+    {
+        if (IS_ALIGNED(width, 16))
+            loopf(ARGBToYRow_SSSE3, ARGBToUVRow_SSSE3);
+        else
+            loopf(ARGBToYRow_Any_SSSE3, ARGBToUVRow_Any_SSSE3);
+        return;
     }
-    // Negative height means invert the image.
-    if (height < 0) {
-        height = -height;
-        dst_argb = dst_argb + (height - 1) * dst_stride_argb;
-        dst_stride_argb = -dst_stride_argb;
-    }
-    // Coalesce rows.
-    if (src_stride_y == width &&
-        src_stride_u * 4 == width &&
-        src_stride_v * 4 == width &&
-        dst_stride_argb == width * 4) {
-        width *= height;
-        height = 1;
-        src_stride_y = src_stride_u = src_stride_v = dst_stride_argb = 0;
-    }
-#if defined(HAS_I411TOARGBROW_SSSE3)
-    if (TestCpuFlag(kCpuHasSSSE3)) {
-        I411ToARGBRow = I411ToARGBRow_Any_SSSE3;
-        if (IS_ALIGNED(width, 8)) {
-            I411ToARGBRow = I411ToARGBRow_SSSE3;
+
+    int addy = dst_stride_y*2 - width;
+    int my = height-1;
+    int mx = width-1;
+    for (int y = 0; y < my; y += 2, dst_y += addy, src_argb += src_stride_argb * 2)
+    {
+        const TSCOLOR *clr0 = (const TSCOLOR *)src_argb;
+        const TSCOLOR *clr1 = (const TSCOLOR *)(src_argb + src_stride_argb);
+
+        for (int x = 0; x < mx; x += 2, dst_y += 2, clr0 += 2, clr1 += 2, ++dst_u, ++dst_v)
+        {
+            TSCOLOR c1 = clr0[0];
+            TSCOLOR c2 = clr0[1];
+            TSCOLOR c3 = clr1[0];
+            TSCOLOR c4 = clr1[1];
+
+            dst_y[0] = RGB_Y(c1);
+            dst_y[1] = RGB_Y(c2);
+            dst_y[0 + dst_stride_y] = RGB_Y(c3);
+            dst_y[1 + dst_stride_y] = RGB_Y(c4);
+
+            TSCOLOR cc = coloravg(c1, c2, c3, c4);
+
+            *dst_u = RGB_U(cc);
+            *dst_v = RGB_V(cc);
         }
     }
-#endif
-#if defined(HAS_I411TOARGBROW_AVX2)
-    if (TestCpuFlag(kCpuHasAVX2)) {
-        I411ToARGBRow = I411ToARGBRow_Any_AVX2;
-        if (IS_ALIGNED(width, 16)) {
-            I411ToARGBRow = I411ToARGBRow_AVX2;
-        }
-    }
-#endif
 
-    for (y = 0; y < height; ++y) {
-        I411ToARGBRow(src_y, src_u, src_v, dst_argb, width);
-        dst_argb += dst_stride_argb;
-        src_y += src_stride_y;
-        src_u += src_stride_u;
-        src_v += src_stride_v;
-    }
-    return 0;
-}
-
-// Convert I444 to ARGB.
-int I444ToARGB(const uint8* src_y, int src_stride_y, const uint8* src_u, int src_stride_u, const uint8* src_v, int src_stride_v, uint8* dst_argb, int dst_stride_argb, int width, int height)
-{
-    int y;
-    void(*I444ToARGBRow)(const uint8* y_buf,
-                         const uint8* u_buf,
-                         const uint8* v_buf,
-                         uint8* rgb_buf,
-                         int width) = I444ToARGBRow_C;
-    if (!src_y || !src_u || !src_v ||
-        !dst_argb ||
-        width <= 0 || height == 0) {
-        return -1;
-    }
-    // Negative height means invert the image.
-    if (height < 0) {
-        height = -height;
-        dst_argb = dst_argb + (height - 1) * dst_stride_argb;
-        dst_stride_argb = -dst_stride_argb;
-    }
-    // Coalesce rows.
-    if (src_stride_y == width &&
-        src_stride_u == width &&
-        src_stride_v == width &&
-        dst_stride_argb == width * 4) {
-        width *= height;
-        height = 1;
-        src_stride_y = src_stride_u = src_stride_v = dst_stride_argb = 0;
-    }
-#if defined(HAS_I444TOARGBROW_SSSE3)
-    if (TestCpuFlag(kCpuHasSSSE3)) {
-        I444ToARGBRow = I444ToARGBRow_Any_SSSE3;
-        if (IS_ALIGNED(width, 8)) {
-            I444ToARGBRow = I444ToARGBRow_SSSE3;
-        }
-    }
-#endif
-#if defined(HAS_I444TOARGBROW_AVX2)
-    if (TestCpuFlag(kCpuHasAVX2)) {
-        I444ToARGBRow = I444ToARGBRow_Any_AVX2;
-        if (IS_ALIGNED(width, 16)) {
-            I444ToARGBRow = I444ToARGBRow_AVX2;
-        }
-    }
-#endif
-
-    for (y = 0; y < height; ++y) {
-        I444ToARGBRow(src_y, src_u, src_v, dst_argb, width);
-        dst_argb += dst_stride_argb;
-        src_y += src_stride_y;
-        src_u += src_stride_u;
-        src_v += src_stride_v;
-    }
-    return 0;
 }
 
 
 
-
-
-
-
-
-// Convert camera sample to ARGB with cropping, rotation and vertical flip.
-// "src_size" is needed to parse MJPG.
-// "dst_stride_argb" number of bytes in a row of the dst_argb plane.
-//   Normally this would be the same as dst_width, with recommended alignment
-//   to 16 bytes for better efficiency.
-//   If rotation of 90 or 270 is used, stride is affected. The caller should
-//   allocate the I420 buffer according to rotation.
-// "dst_stride_u" number of bytes in a row of the dst_u plane.
-//   Normally this would be the same as (dst_width + 1) / 2, with
-//   recommended alignment to 16 bytes for better efficiency.
-//   If rotation of 90 or 270 is used, stride is affected.
-// "crop_x" and "crop_y" are starting position for cropping.
-//   To center, crop_x = (src_width - dst_width) / 2
-//              crop_y = (src_height - dst_height) / 2
-// "src_width" / "src_height" is size of src_frame in pixels.
-//   "src_height" can be negative indicating a vertically flipped image source.
-// "crop_width" / "crop_height" is the size to crop the src to.
-//    Must be less than or equal to src_width/src_height
-//    Cropping parameters are pre-rotation.
-// "rotation" can be 0, 90, 180 or 270.
-// "format" is a fourcc. ie 'I420', 'YUY2'
-// Returns 0 for successful; -1 for invalid parameter. Non-zero for failure.
-int ConvertToARGB(const uint8* sample, size_t sample_size,
-                  uint8* crop_argb, int argb_stride,
-                  int crop_x, int crop_y,
-                  int src_width, int src_height, int crop_width, int crop_height,
-                  uint32 fourcc )
-{
-    uint32 format = CanonicalFourCC(fourcc);
-    int aligned_src_width = (src_width + 1) & ~1;
-    const uint8* src;
-    const uint8* src_uv;
-    int abs_src_height = (src_height < 0) ? -src_height : src_height;
-    int inv_crop_height = (crop_height < 0) ? -crop_height : crop_height;
-    int r = 0;
-
-    // One pass rotation is available for some formats. For the rest, convert
-    // to I420 (with optional vertical flipping) into a temporary I420 buffer,
-    // and then rotate the I420 to the final destination buffer.
-    // For in-place conversion, if destination crop_argb is same as source sample,
-    // also enable temporary buffer.
-    //bool need_buf = (rotation && format != FOURCC_ARGB) || crop_argb == sample;
-    //uint8* tmp_argb = crop_argb;
-    //int tmp_argb_stride = argb_stride;
-    //uint8* rotate_buffer = NULL;
-    //int abs_crop_height = (crop_height < 0) ? -crop_height : crop_height;
-
-    if (crop_argb == NULL || sample == NULL ||
-        src_width <= 0 || crop_width <= 0 ||
-        src_height == 0 || crop_height == 0) {
-        return -1;
-    }
-    if (src_height < 0) {
-        inv_crop_height = -inv_crop_height;
-    }
-
-    switch (format) {
-        // Single plane formats
-        case FOURCC_YUY2:
-            src = sample + (aligned_src_width * crop_y + crop_x) * 2;
-            r = YUY2ToARGB(src, aligned_src_width * 2,
-                           crop_argb, argb_stride,
-                           crop_width, inv_crop_height);
-            break;
-        case FOURCC_UYVY:
-            src = sample + (aligned_src_width * crop_y + crop_x) * 2;
-            r = UYVYToARGB(src, aligned_src_width * 2,
-                           crop_argb, argb_stride,
-                           crop_width, inv_crop_height);
-            break;
-        case FOURCC_24BG:
-            src = sample + (src_width * crop_y + crop_x) * 3;
-            r = RGB24ToARGB(src, src_width * 3,
-                            crop_argb, argb_stride,
-                            crop_width, inv_crop_height);
-            break;
-        case FOURCC_RAW:
-            src = sample + (src_width * crop_y + crop_x) * 3;
-            r = RAWToARGB(src, src_width * 3,
-                          crop_argb, argb_stride,
-                          crop_width, inv_crop_height);
-            break;
-        case FOURCC_ARGB:
-            src = sample + (src_width * crop_y + crop_x) * 4;
-            r = ARGBToARGB(src, src_width * 4,
-                           crop_argb, argb_stride,
-                           crop_width, inv_crop_height);
-            break;
-        case FOURCC_BGRA:
-            src = sample + (src_width * crop_y + crop_x) * 4;
-            r = BGRAToARGB(src, src_width * 4,
-                           crop_argb, argb_stride,
-                           crop_width, inv_crop_height);
-            break;
-        case FOURCC_ABGR:
-            src = sample + (src_width * crop_y + crop_x) * 4;
-            r = ABGRToARGB(src, src_width * 4,
-                           crop_argb, argb_stride,
-                           crop_width, inv_crop_height);
-            break;
-        case FOURCC_RGBA:
-            src = sample + (src_width * crop_y + crop_x) * 4;
-            r = RGBAToARGB(src, src_width * 4,
-                           crop_argb, argb_stride,
-                           crop_width, inv_crop_height);
-            break;
-        case FOURCC_RGBP:
-            src = sample + (src_width * crop_y + crop_x) * 2;
-            r = RGB565ToARGB(src, src_width * 2,
-                             crop_argb, argb_stride,
-                             crop_width, inv_crop_height);
-            break;
-        case FOURCC_RGBO:
-            src = sample + (src_width * crop_y + crop_x) * 2;
-            r = ARGB1555ToARGB(src, src_width * 2,
-                               crop_argb, argb_stride,
-                               crop_width, inv_crop_height);
-            break;
-        case FOURCC_R444:
-            src = sample + (src_width * crop_y + crop_x) * 2;
-            r = ARGB4444ToARGB(src, src_width * 2,
-                               crop_argb, argb_stride,
-                               crop_width, inv_crop_height);
-            break;
-        case FOURCC_I400:
-            src = sample + src_width * crop_y + crop_x;
-            r = I400ToARGB(src, src_width,
-                           crop_argb, argb_stride,
-                           crop_width, inv_crop_height);
-            break;
-
-            // Biplanar formats
-        case FOURCC_NV12:
-            src = sample + (src_width * crop_y + crop_x);
-            src_uv = sample + aligned_src_width * (src_height + crop_y / 2) + crop_x;
-            r = NV12ToARGB(src, src_width,
-                           src_uv, aligned_src_width,
-                           crop_argb, argb_stride,
-                           crop_width, inv_crop_height);
-            break;
-        case FOURCC_NV21:
-            src = sample + (src_width * crop_y + crop_x);
-            src_uv = sample + aligned_src_width * (src_height + crop_y / 2) + crop_x;
-            // Call NV12 but with u and v parameters swapped.
-            r = NV21ToARGB(src, src_width,
-                           src_uv, aligned_src_width,
-                           crop_argb, argb_stride,
-                           crop_width, inv_crop_height);
-            break;
-        case FOURCC_M420:
-            src = sample + (src_width * crop_y) * 12 / 8 + crop_x;
-            r = M420ToARGB(src, src_width,
-                           crop_argb, argb_stride,
-                           crop_width, inv_crop_height);
-            break;
-            // Triplanar formats
-        case FOURCC_I420:
-        case FOURCC_YU12:
-        case FOURCC_YV12: {
-            const uint8* src_y = sample + (src_width * crop_y + crop_x);
-            const uint8* src_u;
-            const uint8* src_v;
-            int halfwidth = (src_width + 1) / 2;
-            int halfheight = (abs_src_height + 1) / 2;
-            if (format == FOURCC_YV12) {
-                src_v = sample + src_width * abs_src_height +
-                    (halfwidth * crop_y + crop_x) / 2;
-                src_u = sample + src_width * abs_src_height +
-                    halfwidth * (halfheight + crop_y / 2) + crop_x / 2;
-            }
-            else {
-                src_u = sample + src_width * abs_src_height +
-                    (halfwidth * crop_y + crop_x) / 2;
-                src_v = sample + src_width * abs_src_height +
-                    halfwidth * (halfheight + crop_y / 2) + crop_x / 2;
-            }
-            r = 0;
-                img_helper_i420_to_ARGB(src_y, src_width,
-                           src_u, halfwidth,
-                           src_v, halfwidth,
-                           crop_argb, argb_stride,
-                           crop_width, inv_crop_height);
-            break;
-        }
-
-        case FOURCC_J420: {
-            const uint8* src_y = sample + (src_width * crop_y + crop_x);
-            const uint8* src_u;
-            const uint8* src_v;
-            int halfwidth = (src_width + 1) / 2;
-            int halfheight = (abs_src_height + 1) / 2;
-            src_u = sample + src_width * abs_src_height +
-                (halfwidth * crop_y + crop_x) / 2;
-            src_v = sample + src_width * abs_src_height +
-                halfwidth * (halfheight + crop_y / 2) + crop_x / 2;
-            r = J420ToARGB(src_y, src_width,
-                           src_u, halfwidth,
-                           src_v, halfwidth,
-                           crop_argb, argb_stride,
-                           crop_width, inv_crop_height);
-            break;
-        }
-
-        case FOURCC_I422:
-        case FOURCC_YV16: {
-            const uint8* src_y = sample + src_width * crop_y + crop_x;
-            const uint8* src_u;
-            const uint8* src_v;
-            int halfwidth = (src_width + 1) / 2;
-            if (format == FOURCC_YV16) {
-                src_v = sample + src_width * abs_src_height +
-                    halfwidth * crop_y + crop_x / 2;
-                src_u = sample + src_width * abs_src_height +
-                    halfwidth * (abs_src_height + crop_y) + crop_x / 2;
-            }
-            else {
-                src_u = sample + src_width * abs_src_height +
-                    halfwidth * crop_y + crop_x / 2;
-                src_v = sample + src_width * abs_src_height +
-                    halfwidth * (abs_src_height + crop_y) + crop_x / 2;
-            }
-            r = I422ToARGB(src_y, src_width,
-                           src_u, halfwidth,
-                           src_v, halfwidth,
-                           crop_argb, argb_stride,
-                           crop_width, inv_crop_height);
-            break;
-        }
-        case FOURCC_I444:
-        case FOURCC_YV24: {
-            const uint8* src_y = sample + src_width * crop_y + crop_x;
-            const uint8* src_u;
-            const uint8* src_v;
-            if (format == FOURCC_YV24) {
-                src_v = sample + src_width * (abs_src_height + crop_y) + crop_x;
-                src_u = sample + src_width * (abs_src_height * 2 + crop_y) + crop_x;
-            }
-            else {
-                src_u = sample + src_width * (abs_src_height + crop_y) + crop_x;
-                src_v = sample + src_width * (abs_src_height * 2 + crop_y) + crop_x;
-            }
-            r = I444ToARGB(src_y, src_width,
-                           src_u, src_width,
-                           src_v, src_width,
-                           crop_argb, argb_stride,
-                           crop_width, inv_crop_height);
-            break;
-        }
-        case FOURCC_I411: {
-            int quarterwidth = (src_width + 3) / 4;
-            const uint8* src_y = sample + src_width * crop_y + crop_x;
-            const uint8* src_u = sample + src_width * abs_src_height +
-                quarterwidth * crop_y + crop_x / 4;
-            const uint8* src_v = sample + src_width * abs_src_height +
-                quarterwidth * (abs_src_height + crop_y) + crop_x / 4;
-            r = I411ToARGB(src_y, src_width,
-                           src_u, quarterwidth,
-                           src_v, quarterwidth,
-                           crop_argb, argb_stride,
-                           crop_width, inv_crop_height);
-            break;
-        }
-#ifdef HAVE_JPEG
-        case FOURCC_MJPG:
-            r = MJPGToARGB(sample, sample_size,
-                           crop_argb, argb_stride,
-                           src_width, abs_src_height, crop_width, inv_crop_height);
-            break;
-#endif
-        default:
-            r = -1;  // unknown fourcc - return failure code.
-    }
-
-    return r;
-}
 
 } // namespace ts

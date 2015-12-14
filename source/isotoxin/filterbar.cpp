@@ -25,11 +25,20 @@ gui_filterbar_c::~gui_filterbar_c()
     gui_textfield_c &e = (MAKE_CHILD<gui_textfield_c>(getrid(), L"", MAX_PATH, 0, false) << (gui_textedit_c::TEXTCHECKFUNC)DELEGATE(this,update_filter));
     edit = &e;
     e.set_placeholder( TOOLTIP(TTT("Search",277)), get_default_text_color(0) );
+    e.register_kbd_callback(DELEGATE( this, cancel_filter ), SSK_ESC, false);
 
     search_in_messages = prf().is_loaded() && prf().get_options().is(MSGOP_FULL_SEARCH);
 
     __super::created();
 }
+
+bool gui_filterbar_c::cancel_filter(RID, GUIPARAM)
+{
+    edit->set_text(ts::wstr_c());
+    return true;
+}
+
+
 
 void gui_filterbar_c::show_options(bool show)
 {
@@ -310,12 +319,12 @@ bool gui_filterbar_c::full_search_s::reader(int row, ts::SQLITE_DATAGETTER getta
 
             if (itm.mintime == 0)
             {
-                getta(history_s::C_TIME, v);
+                getta(history_s::C_RECV_TIME, v);
                 itm.mintime = v.i;
             } else
             {
 #ifdef _DEBUG
-                getta(history_s::C_TIME, v);
+                getta(history_s::C_RECV_TIME, v);
                 ASSERT( itm.mintime < v.i );
 #endif
             }

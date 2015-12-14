@@ -369,6 +369,7 @@ public:
         str_c name;
         str_c statusmsg;
         str_c invitemessage;
+        str_c client;
 
         contact_online_state_e ostate = COS_ONLINE;
         contact_gender_e gender = CSEX_UNKNOWN;

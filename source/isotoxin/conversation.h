@@ -382,13 +382,14 @@ class gui_message_item_c : public gui_label_ex_c
         record() {}
 
         uint64 utag = 0;
-        time_t time = 0;
+        time_t rcv_time = 0;
+        time_t cr_time = 0;
         ts::str_c text; // utf8
         ts::TSCOLOR undelivered = 0;
         ts::uint16 append( ts::wstr_c &t, ts::wstr_c &pret, const ts::wsptr &postt = ts::wsptr() );
         bool operator()( const record&r ) const
         {
-            return time < r.time;
+            return rcv_time < r.rcv_time;
         }
     } zero_rec;
 
@@ -531,7 +532,8 @@ public:
     contact_c * get_author() const {return author;}
     message_type_app_e get_mt() const {return mt;}
 
-    time_t get_first_post_time() const {return zero_rec.time;}
+    time_t get_first_post_recv_time() const {return zero_rec.rcv_time;}
+    time_t get_first_post_cr_time() const {return zero_rec.cr_time;}
 #if JOIN_MESSAGES
     time_t get_last_post_time() const {return other_records.size() ? other_records.last().time : 0;}
 #endif

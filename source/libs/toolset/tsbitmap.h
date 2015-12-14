@@ -61,20 +61,26 @@ struct imgdesc_s
     imgdesc_s &set_width(int w) { sz.x = w; return *this; }
     imgdesc_s &set_height(int h) { sz.y = h; return *this; }
     imgdesc_s &set_size(const ivec2 &szz) { sz = szz; return *this; }
+
+    imgdesc_s chsize( const ivec2 &szz ) const {return imgdesc_s(szz, bitpp, pitch); }
 };
 
+template<> INLINE imgdesc_s &make_dummy<imgdesc_s>(bool quiet) { static imgdesc_s t(ts::ivec2(0),0,0); DUMMY_USED_WARNING(quiet); return t; }
 
-void TSCALL img_helper_premultiply(uint8 *des, const imgdesc_s &des_info);
+bool TSCALL img_helper_premultiply(uint8 *des, const imgdesc_s &des_info);
 void TSCALL img_helper_fill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color);
+void TSCALL img_helper_overfill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color_pm);
 void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info);
 void TSCALL img_helper_shrink_2x(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info);
 void TSCALL img_helper_copy_components(uint8* des, const uint8* sou, const imgdesc_s &des_info, const imgdesc_s &sou_info, int num_comps );
 void TSCALL img_helper_merge_with_alpha(uint8 *des, const uint8 *basesrc, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &base_info, const imgdesc_s &sou_info, int oalphao = -1);
 void TSCALL img_helper_yuv2rgb(uint8 *des, const imgdesc_s &des_info, const uint8 *sou, yuv_fmt_e yuvfmt);
 void TSCALL img_helper_rgb2yuv(uint8 *dst, const imgdesc_s &src_info, const uint8 *sou, yuv_fmt_e yuvfmt);
+void TSCALL img_helper_alpha_blend_pm( uint8 *dst, int dst_pitch, const uint8 *sou, const imgdesc_s &src_info, uint8 alpha, bool guaranteed_premultiplied = true ); // only 32 bpp target and source
 
 // see convert.cpp
 void TSCALL img_helper_i420_to_ARGB(const uint8* src_y, int src_stride_y, const uint8* src_u, int src_stride_u, const uint8* src_v, int src_stride_v, uint8* dst_argb, int dst_stride_argb, int width, int height);
+void TSCALL img_helper_ARGB_to_i420(const uint8* src_argb, int src_stride_argb, uint8* dst_y, int dst_stride_y, uint8* dst_u, int dst_stride_u, uint8* dst_v, int dst_stride_v, int width, int height);
 
 struct bmpcore_normal_s;
 template<typename CORE> class bitmap_t;
@@ -140,34 +146,42 @@ struct bmpcore_normal_s
     } *m_core;
     TS_STATIC_CHECK(sizeof(core_s) == 16, "sizeof(core_s) must be 16");
 
-    bmpcore_normal_s( const bmpcore_normal_s&oth ):m_core(oth.m_core)
+    explicit bmpcore_normal_s( const bmpcore_normal_s&oth ):m_core(oth.m_core)
     {
-        m_core->ref_inc();
+        if (m_core) m_core->ref_inc();
+    }
+    explicit bmpcore_normal_s(bmpcore_normal_s &&oth) :m_core(oth.m_core)
+    {
+        oth.m_core = nullptr;
     }
 
-    bmpcore_normal_s( aint sz )
+    explicit bmpcore_normal_s( aint sz = 0 )
     {
-        m_core = core_s::build(sz);
+        m_core = sz ? core_s::build(sz) : nullptr;
     }
     ~bmpcore_normal_s()
     {
-        m_core->ref_dec();
+        if (m_core) m_core->ref_dec();
     }
 
     void before_modify(bitmap_c *me);
 
     void create( const imgdesc_s& info )
     {
-        m_core = m_core->reuse( info.sz.x * info.sz.y * info.bytepp() );
+        aint sz = info.sz.x * info.sz.y * info.bytepp();
+        m_core = m_core ? m_core->reuse( sz ) : core_s::build(sz);
         m_core->m_info = info;
     }
     void clear()
     {
-        m_core->ref_dec();
-        m_core = core_s::build(0);
+        if (m_core)
+        {
+            m_core->ref_dec();
+            m_core = nullptr;
+        }
     }
 
-    const imgdesc_s &info() const {return m_core->m_info; }
+    const imgdesc_s &info() const {return m_core ? m_core->m_info : make_dummy<imgdesc_s>(true); }
     uint8 *operator()() const { return (uint8 *)(m_core+1);}
 
     bool operator==(const bmpcore_normal_s &ocore) const;
@@ -175,9 +189,9 @@ struct bmpcore_normal_s
     {
         if (m_core != ocore.m_core)
         {
-            m_core->ref_dec();
+            if (m_core) m_core->ref_dec();
             m_core = ocore.m_core;
-            m_core->ref_inc();
+            if (m_core) m_core->ref_inc();
         }
         return *this;
     }
@@ -199,7 +213,15 @@ struct bmpcore_exbody_s
     {
     }
     bmpcore_exbody_s():m_body(nullptr) {}
-    bmpcore_exbody_s(aint) {} //-V730
+    explicit bmpcore_exbody_s(aint) {} //-V730
+
+    bmpcore_exbody_s(bmpcore_exbody_s &&ocore)
+    {
+        m_body = ocore.m_body;
+        m_info = ocore.m_info;
+        ocore.m_body = nullptr;
+    }
+
 
     void before_modify(bitmap_t<bmpcore_exbody_s> *me) {}
     void clear()
@@ -213,6 +235,7 @@ struct bmpcore_exbody_s
 
     const imgdesc_s &info() const { return m_info; }
     uint8 *operator()() const { return const_cast<uint8 *>(m_body); }
+    uint8 *operator()(const ivec2& pos) const { return (*this)() + pos.x * info().bytepp() + pos.y * info().pitch; }
 
     bool operator==(const bmpcore_exbody_s &ocore) const;
     bmpcore_exbody_s &operator=(const bmpcore_exbody_s &ocore)
@@ -227,9 +250,14 @@ struct bmpcore_exbody_s
         m_info = ocore.m_info;
         return *this;
     }
+
+    void draw(const bmpcore_exbody_s &eb, aint xx, aint yy, int alpha = -1 /* -1 means no alphablend used */) const;
+    void draw(const bmpcore_exbody_s &eb, aint xx, aint yy, const irect &r, int alpha = -1 /* -1 means no alphablend used */) const;
+
 };
 template<typename CORE> class bitmap_t
 {
+    DUMMY( bitmap_t );
 
 public:
     typedef const uint8 *FMATRIX[3][3];
@@ -315,8 +343,10 @@ public:
     }
 
 public:
-    bitmap_t():core(0) {}
+    bitmap_t() {}
+    explicit bitmap_t(const CORE &extcore):core(extcore) {}
     bitmap_t(const bitmap_t &bmp):core(bmp.core) {}
+    bitmap_t(bitmap_t &&bmp):core(std::move(bmp.core)) {}
     ~bitmap_t() {}
 
 	void clear()                    { core.clear(); }
@@ -372,7 +402,23 @@ public:
 	bitmap_t &create_16(const ivec2 &sz) { core.create(imgdesc_s(sz, 16)); return *this; }
 	bitmap_t &create_15(const ivec2 &sz) { core.create(imgdesc_s(sz, 15)); return *this; }
 	bitmap_t &create_RGB(const ivec2 &sz)  { core.create(imgdesc_s(sz, 24)); return *this; }
-	bitmap_t &create_RGBA(const ivec2 &sz)  { core.create(imgdesc_s(sz, 32)); return *this; } //-V112
+	bitmap_t &create_ARGB(const ivec2 &sz)  { core.create(imgdesc_s(sz, 32)); return *this; } //-V112
+
+    bool	ajust_ARGB(const ivec2 &sz, bool exact_size)
+    {
+        ivec2 newbbsz((sz.x + 15) & (~15), (sz.y + 15) & (~15));
+        ivec2 bbsz = info().sz;
+
+        if ((exact_size && newbbsz != bbsz) || sz > bbsz)
+        {
+            if (newbbsz.x < bbsz.x) newbbsz.x = bbsz.x;
+            if (newbbsz.y < bbsz.y) newbbsz.y = bbsz.y;
+            create_ARGB(newbbsz);
+            return true;
+        }
+        return false;
+    }
+
 
     void copy_components(bitmap_c &imageout, int num_comps, int dst_first_comp, int src_first_comp) const;//копирует только часть компонент (R|G|B|A) из bmsou
 
@@ -383,13 +429,10 @@ public:
     void fill_alpha(const ivec2 & pdes,const ivec2 & size, uint8 a);
     void fill_alpha(uint8 a);
 
-    bool has_alpha() const;
-    bool has_alpha(const ivec2 & pdes,const ivec2 & size) const;
-
     void overfill(const ivec2 & pdes,const ivec2 & size, TSCOLOR color); // draws rectangle with premultiplied color
 
-    void premultiply();
-    void premultiply( const irect &rect );
+    bool premultiply();
+    bool premultiply( const irect &rect );
 
     void detect_alpha_channel( const bitmap_t & bmsou ); // me - black background, bmsou - white background
 
@@ -506,8 +549,6 @@ public:
     void crop_to_square();
     */
 
-    uint32 get_area_type(const ivec2 & p,const ivec2 & size) const;
-
 	void flip_x(const ivec2 & pdes,const ivec2 & size, const bitmap_t & bmsou,const ivec2 & spsou);
 	void flip_y(const ivec2 & pdes,const ivec2 & size, const bitmap_t & bmsou,const ivec2 & spsou);
 	void flip_y(const ivec2 & pdes,const ivec2 & size);
@@ -573,6 +614,20 @@ public:
 
     irect calc_visible_rect() const;
 
+    uint32  get_area_type(const irect& r) const;
+    uint32  get_area_type() const { return get_area_type(irect(0, info().sz)); }
+    bool    is_alpha_blend(const irect& r) const
+    {
+        return 0 != (get_area_type(r) & (ts::IMAGE_AREA_TRANSPARENT|ts::IMAGE_AREA_SEMITRANSPARENT));
+    }
+    bool    is_alpha_blend() const
+    {
+        return 0 != (get_area_type() & (ts::IMAGE_AREA_TRANSPARENT | ts::IMAGE_AREA_SEMITRANSPARENT));
+    }
+    
+    
+    
+
     uint32 hash() const
     {
         uint32 crc = 0xFFFFFFFF; //-V112
@@ -599,6 +654,15 @@ public:
 #undef FMT
 
 
+    void draw(const bmpcore_exbody_s &eb, aint xx, aint yy, int alpha = -1 /* -1 means no alphablend used */) const
+    {
+        extbody().draw(eb,xx,yy,alpha);
+    }
+    void draw(const bmpcore_exbody_s &eb, aint xx, aint yy, const irect &r, int alpha = -1 /* -1 means no alphablend used */) const
+    {
+        extbody().draw(eb,xx,yy,r,alpha);
+    }
+
 };
 
 class image_extbody_c : public bitmap_t < bmpcore_exbody_s >
@@ -606,6 +670,14 @@ class image_extbody_c : public bitmap_t < bmpcore_exbody_s >
 public:
     image_extbody_c(): bitmap_t(nullptr, imgdesc_s(ivec2(0), 0)) {}
     image_extbody_c( const uint8 *imgbody, const imgdesc_s &info ): bitmap_t(imgbody, info) {}
+};
+
+struct draw_target_s
+{
+    const bmpcore_exbody_s *eb;
+    HDC dc;
+    explicit draw_target_s( const bmpcore_exbody_s &eb_ ):eb(&eb_), dc(nullptr) {}
+    explicit draw_target_s( HDC dc ):eb(nullptr), dc(dc) {}
 };
 
 class drawable_bitmap_c : public image_extbody_c
@@ -634,7 +706,6 @@ public:
         return false;
     }
 
-    bool    is_alphablend(const irect &r) const;
     bool    create_from_bitmap(const bitmap_c &bmp, const ivec2 &p, const ivec2 &sz, bool flipy = false, bool premultiply = false, bool detect_alpha_pixels = false);
     bool    create_from_bitmap(const bitmap_c &bmp, bool flipy = false, bool premultiply = false, bool detect_alpha_pixels = false);
     void    save_to_bitmap(bitmap_c &bmp, bool save16as32 = false);
@@ -690,8 +761,8 @@ public:
         }
     }
 
-    void draw(HDC dc, aint xx, aint yy, int alpha = -1 /* -1 means no alphablend used */) const;
-    void draw(HDC dc, aint xx, aint yy, const irect &r, int alpha = -1 /* -1 means no alphablend used */ ) const;
+    void draw(const draw_target_s &dt, aint xx, aint yy, int alpha = -1 /* -1 means no alphablend used */) const;
+    void draw(const draw_target_s &dt, aint xx, aint yy, const irect &r, int alpha = -1 /* -1 means no alphablend used */ ) const;
 };
 
 

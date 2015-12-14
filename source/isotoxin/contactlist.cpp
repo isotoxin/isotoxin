@@ -254,6 +254,8 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
         } else
         {
             eval = contact->get_customname();
+            if (eval.is_empty())
+                eval = contact->get_name();
         }
         text_prepare_for_edit(eval);
         if (hstuff().editor)
@@ -908,7 +910,17 @@ bool gui_contact_item_c::allow_drop() const
 
 /*virtual*/ bool gui_contact_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if (rid != getrid()) return false;
+    if (rid != getrid())
+    {
+        // from submenu
+        if (popupmenu && popupmenu->getrid() == rid)
+        {
+            if (SQ_POPUP_MENU_DIE == qp)
+                MODIFY(*this).highlight(false);
+        }
+        return false;
+    }
+
 
     switch (qp)
     {
@@ -1009,7 +1021,7 @@ bool gui_contact_item_c::allow_drop() const
                                 else icot = IT_ONLINE;
                             }
 
-                            m_engine->draw(p, ap->get_icon(isz, icot), ts::irect(0, 0, isz, isz), true);
+                            m_engine->draw(p, ap->get_icon(isz, icot).extbody(), ts::irect(0, 0, isz, isz), true);
                         }
                 });
             }
@@ -1142,7 +1154,7 @@ bool gui_contact_item_c::allow_drop() const
                     if (const avatar_s *ava = contact->get_avatar())
                     {
                         int y = (ca.size().y - ava->info().sz.y) / 2;
-                        m_engine->draw(ca.lt + ts::ivec2(y), *ava, ts::irect(0, ava->info().sz), ava->alpha_pixels);
+                        m_engine->draw(ca.lt + ts::ivec2(y), ava->extbody(), ts::irect(0, ava->info().sz), ava->alpha_pixels);
                         x_offset = g_app->buttons().icon[CSEX_UNKNOWN]->size.x;
                     }
                     else
@@ -1345,6 +1357,7 @@ bool gui_contact_item_c::allow_drop() const
                     contact_key_s ck(cks);
                     SUMMON_DIALOG<dialog_contact_props_c>(UD_CONTACTPROPS, dialog_contactprops_params_s(ck));
                 }
+
                 static void m_export_history(const ts::str_c&cks)
                 {
                     contact_key_s ck(cks);
@@ -1415,7 +1428,8 @@ bool gui_contact_item_c::allow_drop() const
                     m.add(TTT("Leave group chat",304),0,handlers::m_delete,contact->getkey().as_str());
                 else
                     m.add(TTT("Delete",85),0,handlers::m_delete,contact->getkey().as_str());
-                m.add(TTT("Contact settings",225),0,handlers::m_contact_props,contact->getkey().as_str());
+                if (!contact->getkey().is_group())
+                    m.add(TTT("Contact properties",225),0,handlers::m_contact_props,contact->getkey().as_str());
 
                 ts::wstrings_c fns;
                 ts::g_fileop->find(fns, CONSTWSTR("*.template"), false);

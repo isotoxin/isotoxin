@@ -222,8 +222,8 @@
 222=Drop [i]image[/i] here
 223=Join network
 224=[appname]: Contact settings
-225=Contact settings
-226=Default
+225=Contact properties
+226=Use global setting
 227=Always save
 228=Never save
 229=Custom name
@@ -359,6 +359,13 @@
 359=Disable video receive
 360=Default video source
 361=Allow IPv6
+362=unknown
+363=Details
+364=User name
+365=User status
+366=Client
+367=DNS name
+368=Email
 1000=Incoming message
 1001=Incoming file
 1002=File receiving started
@@ -369,3 +376,7 @@
 1007=Hang up
 1008=Dialing
 1009=New version
+1010=Incoming message (current conversation)
+1011=File received
+1012=Contact online
+1013=Contact offline

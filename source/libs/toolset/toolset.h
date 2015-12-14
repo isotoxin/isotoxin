@@ -1042,7 +1042,6 @@ template <typename T> struct dummy
 #include "tszip.h"
 #include "tsexecutor.h"
 
-
 #pragma pack (pop)
 
 extern "C" { extern ts::uint32 g_cpu_caps; extern int g_cpu_cores; }
@@ -1145,6 +1144,11 @@ struct lnk_s
     INLINE uint8 BLUE(TSCOLOR c) { return as_byte(c); }
     INLINE uint8 ALPHA(TSCOLOR c) { return as_byte(c >> 24); }
 
+    INLINE uint16 REDx256(TSCOLOR c) { return 0xff00 & (c >> 8); }
+    INLINE uint16 GREENx256(TSCOLOR c) { return 0xff00 & (c); }
+    INLINE uint16 BLUEx256(TSCOLOR c) { return 0xff00 & (c<<8); }
+    INLINE uint16 ALPHAx256(TSCOLOR c) { return 0xff00 & (c>>16); }
+
 	template <typename CCC> INLINE TSCOLOR ARGB(CCC r, CCC g, CCC b, CCC a = 255)
 	{
 		return CLAMP<uint8, CCC>(b) | (CLAMP<uint8, CCC>(g) << 8) | (CLAMP<uint8, CCC>(r) << 16) | (CLAMP<uint8, CCC>(a) << 24);
@@ -1154,6 +1158,12 @@ struct lnk_s
     {
         auint oi = lround(float(BLUE(c)) * 0.114f + float(GREEN(c)) * 0.587f + float(RED(c)) * 0.299);
         return ARGB<auint>(oi, oi, oi, ALPHA(c));
+    }
+
+    INLINE bool PREMULTIPLIED(TSCOLOR c)
+    {
+        uint8 a = ALPHA(c);
+        return RED(c) <= a && GREEN(c) <= a && BLUE(c) <= a;
     }
 
     INLINE TSCOLOR PREMULTIPLY(TSCOLOR c, float a)
@@ -1167,13 +1177,14 @@ struct lnk_s
 
     INLINE TSCOLOR PREMULTIPLY(TSCOLOR c)
     {
-        double a = ((double)ALPHA(c) * (1.0 / 255.0));
+        extern uint8 __declspec(align(256)) multbl[256][256];
 
-        auint oiB = lround(float(BLUE(c)) * a);
-        auint oiG = lround(float(GREEN(c)) * a);
-        auint oiR = lround(float(RED(c)) * a);
+        uint a = ALPHA(c);
+        return multbl[a][c & 0xff] |
+            ((uint)multbl[a][(c >> 8) & 0xff] << 8) |
+            ((uint)multbl[a][(c >> 16) & 0xff] << 16) |
+            (c & 0xff000000);
 
-        return ARGB<auint>(oiR, oiG, oiB, ALPHA(c));
     }
 
     INLINE TSCOLOR PREMULTIPLY(TSCOLOR c, uint8 aa, double &not_a) // premultiply with addition alpha and return not-alpha
@@ -1191,13 +1202,13 @@ struct lnk_s
 
     INLINE TSCOLOR MULTIPLY(TSCOLOR c1, TSCOLOR c2)
     {
-        const float antidiv = (1.0f/255.0f);
-        auint oiB = lround(float(BLUE(c1)) * float(BLUE(c2)) * antidiv);
-        auint oiG = lround(float(GREEN(c1)) * float(GREEN(c2)) * antidiv);
-        auint oiR = lround(float(RED(c1)) * float(RED(c2)) * antidiv);
-        auint oiA = lround(float(ALPHA(c1)) * float(ALPHA(c2)) * antidiv);
+        extern uint8 __declspec(align(256)) multbl[256][256];
+        
+        return multbl[c1 & 0xff][c2 & 0xff] |
+               ((uint)multbl[(c1 >> 8) & 0xff][(c2 >> 8) & 0xff] << 8) |
+               ((uint)multbl[(c1 >> 16) & 0xff][(c2 >> 16) & 0xff] << 16) |
+               ((uint)multbl[(c1 >> 24) & 0xff][(c2 >> 24) & 0xff] << 24);
 
-        return ARGB<auint>(oiR, oiG, oiB, oiA);
     }
 
     INLINE TSCOLOR ALPHABLEND( TSCOLOR target, TSCOLOR source, int constant_alpha = 255 ) // photoshop like Normal mode color blending
@@ -1234,18 +1245,39 @@ struct lnk_s
         return ARGB<auint>(oiR, oiG, oiB, oiA);
     }
 
+    INLINE TSCOLOR ALPHABLEND_PM_NO_CLAMP(TSCOLOR dst, TSCOLOR src) // premultiplied alpha blend
+    {
+        extern uint8 __declspec(align(256)) multbl[256][256];
+
+        uint8 not_a = 255 - ALPHA(src);
+
+        return src + ((multbl[not_a][dst & 0xff]) |
+                (((uint)multbl[not_a][(dst >> 8) & 0xff]) << 8) |
+                (((uint)multbl[not_a][(dst >> 16) & 0xff]) << 16) |
+                (((uint)multbl[not_a][(dst >> 24) & 0xff]) << 24));
+    }
+
     INLINE TSCOLOR ALPHABLEND_PM(TSCOLOR dst, TSCOLOR src) // premultiplied alpha blend
     {
-        uint8 ba = ALPHA(src); if (ba == 0) return dst;
-        float a = (float)((double)(ba)* (1.0 / 255.0));
-        float not_a = 1.0f - a;
+        if (PREMULTIPLIED(src))
+            return ALPHABLEND_PM_NO_CLAMP( dst, src );
 
-        auint oiB = lround(float(BLUE(dst)) * not_a) + BLUE(src);
-        auint oiG = lround(float(GREEN(dst)) * not_a) + GREEN(src);
-        auint oiR = lround(float(RED(dst)) * not_a) + RED(src);
-        auint oiA = lround(float(ALPHA(dst)) * not_a) + ALPHA(src);
+        extern uint8 __declspec(align(256)) multbl[256][256];
 
-        return oiB | (oiG << 8) | (oiR << 16) | (oiA << 24);
+        uint8 not_a = 255 - ALPHA(src);
+
+        uint B = multbl[not_a][BLUE(dst)] + BLUE(src);
+        uint G = multbl[not_a][GREEN(dst)] + GREEN(src);
+        uint R = multbl[not_a][RED(dst)] + RED(src);
+        uint A = multbl[not_a][ALPHA(dst)] + ALPHA(src);
+
+        return CLAMP<uint8>(B) | (CLAMP<uint8>(G) << 8) | (CLAMP<uint8>(R) << 16) | (A << 24);
+    }
+
+    INLINE TSCOLOR ALPHABLEND_PM(TSCOLOR dst, TSCOLOR src, uint8 calpha) // premultiplied alpha blend with addition constant alpha
+    {
+        if (calpha == 0) return dst;
+        return ALPHABLEND_PM( dst, MULTIPLY(src, ARGB(calpha, calpha, calpha, calpha)) );
     }
 
 
@@ -1277,6 +1309,7 @@ struct lnk_s
 #endif
 
 #include "tstext.h"
+#include "tsjson.h"
 
 // out of ts namespace functions
 

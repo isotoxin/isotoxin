@@ -221,7 +221,7 @@ void add_image(const wsptr&name, const uint8* data, const imgdesc_s &imgdesc, bo
 
     if (copyin)
     {
-        i.bitmap.create_RGBA(imgdesc.sz);
+        i.bitmap.create_ARGB(imgdesc.sz);
         img_helper_copy(i.bitmap.body(),data, i.bitmap.info(), imgdesc);
 
         i.pitch = i.bitmap.info().pitch;
