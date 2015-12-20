@@ -3157,8 +3157,199 @@ gui_vtabsel_item_c::~gui_vtabsel_item_c()
     __super::created();
 }
 
+//________________________________________________________________________________________________________________________________ gui_htabsel_c
 
-//////////////
+MAKE_CHILD<gui_htabsel_c>::~MAKE_CHILD()
+{
+    MODIFY(get()).visible(true);
+}
+
+
+/*virtual*/ gui_htabsel_c::~gui_htabsel_c()
+{}
+
+/*virtual*/ void gui_htabsel_c::created()
+{
+    __super::created();
+
+    set_theme_rect(CONSTASTR("htab"), false);
+
+    if (const theme_rect_s *th = themerect())
+    {
+        height = th->addition.get_int(CONSTASTR("height"), 32);
+    }
+
+
+    {
+        RID dummy;
+        menu.iterate_items(*this, dummy);
+
+        for (rectengine_c *c : getengine())
+        {
+            if (c)
+            {
+                MODIFY(c->getrid()).active(true);
+                break;
+            }
+        }
+
+    }
+    gui->repos_children(this);
+
+}
+
+ts::uint32 gui_htabsel_c::gm_handler(gmsg<GM_HEARTBEAT> &)
+{
+    if (!activeitem)
+    {
+        for (rectengine_c *c : getengine())
+        {
+            if (c && c->getrect().getprops().is_active())
+            {
+                activeitem = c->getrid();
+                HOLD(activeitem).as<gui_htabsel_item_c>().activate();
+                return 0;
+            }
+        }
+    }
+    return 0;
+}
+
+/*virtual*/ ts::ivec2 gui_htabsel_c::get_min_size() const
+{
+    ts::ivec2 sz = __super::get_min_size();
+    sz.y = height;
+    return sz;
+}
+/*virtual*/ ts::ivec2 gui_htabsel_c::get_max_size() const
+{
+    ts::ivec2 sz = __super::get_max_size();
+    sz.y = height;
+    return sz;
+}
+
+/*virtual*/ bool gui_htabsel_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    if (rid != getrid() && ASSERT(getrid() >> rid)) // child?
+    {
+        switch (qp)
+        {
+            case SQ_MOUSE_LDOWN:
+                for (rectengine_c *c : getengine())
+                    if (c && c->getrid() != rid) MODIFY(c->getrid()).active(false);
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    if ( SQ_PARENT_RECT_CHANGED == qp )
+    {
+        HOLD r(getparent());
+        ts::ivec2 p(0);
+        ts::ivec2 s( r().getprops().size() ); s.y = height;
+        if (const theme_rect_s *thr = r().themerect())
+            p.y += thr->clborder_y_caption();
+        MODIFY(*this).pos(p).size(s);
+    }
+
+    return __super::sq_evt(qp, rid, data);
+}
+
+bool gui_htabsel_c::operator()(RID, const ts::wsptr& txt) { return true; }
+bool gui_htabsel_c::operator()(RID, const ts::wsptr& txt, const menu_c &sm) { return true; }
+bool gui_htabsel_c::operator()(RID, const ts::wsptr& txt, ts::uint32 /*flags*/, MENUHANDLER handler, const ts::str_c& prm)
+{
+    MAKE_CHILD<gui_htabsel_item_c> make(getrid(), txt);
+    make << handler << prm;
+    return true;
+}
+
+MAKE_CHILD<gui_htabsel_item_c>::~MAKE_CHILD()
+{
+    MODIFY(get()).visible(true);
+}
+
+gui_htabsel_item_c::~gui_htabsel_item_c()
+{}
+
+/*virtual*/ ts::ivec2 gui_htabsel_item_c::get_min_size() const
+{
+    ts::ivec2 sz = __super::get_min_size();
+    sz.x = tw;
+    if (const theme_rect_s *thr = themerect())
+        sz.x += thr->clborder_x();
+    return sz;
+}
+
+/*virtual*/ ts::ivec2 gui_htabsel_item_c::get_max_size() const
+{
+    ts::ivec2 sz = __super::get_max_size();
+    sz.x = tw;
+    if (const theme_rect_s *thr = themerect())
+        sz.x += thr->clborder_x();
+    return sz;
+}
+
+void gui_htabsel_item_c::activate()
+{
+    MODIFY(*this).active(true);
+    if (handler)
+        handler(param);
+}
+
+/*virtual*/ bool gui_htabsel_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    switch (qp)
+    {
+        case SQ_MOUSE_LDOWN:
+            activate();
+            break;
+        case SQ_MOUSE_IN:
+            MODIFY(*this).highlight(true);
+            return false;
+        case SQ_MOUSE_OUT:
+            MODIFY(*this).highlight(false);
+            return false;
+        case SQ_DRAW:
+
+            if (ASSERT(m_engine))
+            {
+                gui_control_c::sq_evt(qp, rid, data);
+                if (const theme_rect_s *thr = themerect())
+                {
+                    //ts::uint32 options = DTHRO_LEFT_CENTER;
+                    //m_engine->draw(*thr, options);
+                }
+                ts::irect ca = get_client_area();
+                {
+                    draw_data_s &dd = m_engine->begin_draw();
+                    dd.size = ca.size();
+                    if (dd.size >> 0)
+                    {
+                        dd.offset += ca.lt;
+                        text_draw_params_s tdp;
+                        ts::flags32_s f; f.setup(ts::TO_HCENTER | ts::TO_VCENTER);
+                        tdp.textoptions = &f;
+                        draw(dd, tdp);
+                    }
+                    m_engine->end_draw();
+                }
+            }
+
+            return true;
+    }
+    return __super::sq_evt(qp, rid, data);
+}
+
+/*virtual*/ void gui_htabsel_item_c::created()
+{
+    set_theme_rect(CONSTASTR("htabitem"), false);
+    __super::created();
+}
+
+
+//________________________________________________________________________________________________________________________________ gui_hslider_c
 
 MAKE_CHILD<gui_hslider_c>::~MAKE_CHILD()
 {

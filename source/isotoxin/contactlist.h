@@ -102,6 +102,8 @@ public:
     gui_contact_item_c(MAKE_CHILD<gui_contact_item_c> &data);
     /*virtual*/ ~gui_contact_item_c();
 
+    ts::wstr_c tt();
+
     void typing();
 
     int contact_item_rite_margin();

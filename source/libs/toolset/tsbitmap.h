@@ -642,7 +642,15 @@ public:
     bool load_from_BMPHEADER(const BITMAPINFOHEADER * iH, int buflen);
 
 	img_format_e load_from_file(const void * buf, int buflen);
-	img_format_e load_from_file(const buf_c & buf);
+	img_format_e load_from_file(const buf_c & buf)
+    {
+        return load_from_file(buf.data(), buf.size());
+    }
+    img_format_e load_from_file(const blob_c & buf)
+    {
+        return load_from_file(buf.data(), buf.size());
+    }
+
 	img_format_e load_from_file(const wsptr &filename);
 
 #define FMT(fn) bool save_as_##fn(buf_c &buf, int options = DEFAULT_SAVE_OPT(fn)) const { return save_to_##fn##_format(buf, extbody(), options); }

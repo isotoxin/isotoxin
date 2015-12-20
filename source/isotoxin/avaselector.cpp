@@ -324,6 +324,7 @@ dialog_avaselector_c::~dialog_avaselector_c()
     {
         gui->delete_event(DELEGATE(this,animation));
         gui->unregister_kbd_callback(DELEGATE(this, paste_hotkey_handler));
+        gui->unregister_kbd_callback(DELEGATE(this, space_key));
     }
 }
 
@@ -367,9 +368,9 @@ dialog_avaselector_c::~dialog_avaselector_c()
     if (const button_desc_s *avcapture = gui->theme().get_button(CONSTASTR("avcapture")))
         szcapture = avcapture->size, startcamera = CONSTWSTR("face=avcapture");
 
-    dm().button(ts::wstr_c(), openimgbuttonface, DELEGATE(this, open_image)).width(szopen.x).height(szopen.y).subctl(0,ctlopen).sethint( TTT("Load image from file",210) );
-    dm().button(ts::wstr_c(), pasteimgbuttonface, DELEGATE(this, paste_hotkey_handler)).width(szpaste.x).height(szpaste.y).subctl(1, ctlpaste).sethint( TTT("Paste image from clipboard ($)",211) / CONSTWSTR("Ctrl+V") );
-    dm().button(ts::wstr_c(), startcamera, DELEGATE(this, start_capture_menu)).width(szcapture.x).height(szcapture.y).setname(CONSTASTR("startc")).subctl(2,ctlcam).sethint( TTT("Capture camera",212) );
+    dm().button(ts::wstr_c(), openimgbuttonface, DELEGATE(this, open_image)).width(szopen.x).height(szopen.y).subctl(0,ctlopen).sethint( loc_text(loc_loadimagefromfile) );
+    dm().button(ts::wstr_c(), pasteimgbuttonface, DELEGATE(this, paste_hotkey_handler)).width(szpaste.x).height(szpaste.y).subctl(1, ctlpaste).sethint(loc_text(loc_pasteimagefromclipboard));
+    dm().button(ts::wstr_c(), startcamera, DELEGATE(this, start_capture_menu)).width(szcapture.x).height(szcapture.y).setname(CONSTASTR("startc")).subctl(2,ctlcam).sethint( loc_text(loc_capturecamera) );
     dm().button(ts::wstr_c(), b ? L"face=save" : L"save", DELEGATE(this, save_image1)).width(bsz.x).height(bsz.y).subctl(3,savebtn1);
     dm().button(ts::wstr_c(), b ? L"face=save" : L"save", DELEGATE(this, save_image2)).width(bsz.x).height(bsz.y).subctl(4,savebtn2);
 
@@ -552,7 +553,7 @@ bool dialog_avaselector_c::open_image(RID, GUIPARAM)
     if (fromdir.is_empty())
         fromdir = ts::fn_get_path(ts::get_exe_full_name());
 
-    ts::wstr_c title( TTT("Image",214) );
+    ts::wstr_c title( loc_text(loc_image) );
 
     ts::extension_s extsarr[2];
 
@@ -562,7 +563,7 @@ bool dialog_avaselector_c::open_image(RID, GUIPARAM)
     sprtfmts.replace_all(CONSTWSTR(":"), CONSTWSTR(", "));
     sprtfmts2.replace_all(CONSTWSTR(":"), CONSTWSTR(";*."));
 
-    extsarr[0].desc = TTT("Images",215);
+    extsarr[0].desc = loc_text(loc_images);
     extsarr[0].desc.append(CONSTWSTR(" (")).append(sprtfmts).append_char(')');
     extsarr[0].ext = sprtfmts2;
 
@@ -595,7 +596,7 @@ void dialog_avaselector_c::update_info()
     bool v = false;
     ts::wstr_c t(CONSTWSTR("<p=c>"));
     if (camera && !camera->still_initializing())
-        t.append(TTT("Press [i]space[/i] key to take image",216)), v = true, caminit = true;
+        t.append(loc_text(loc_space2takeimage)), v = true, caminit = true;
     else if (animated)
         t.append(TTT("Press [i]space[/i] to go to the next frame",217)), v = true;
 
@@ -742,26 +743,6 @@ static void draw_border(rectengine_c &e, const ts::irect & r, int drawe, ts::TSC
 
 }
 */
-
-static void draw_chessboard(rectengine_c &e, const ts::irect & r, ts::TSCOLOR c1, ts::TSCOLOR c2)
-{
-    ts::ivec2 sz(32);
-    ts::TSCOLOR c[2] = {c1, c2};
-    int mx = r.width() / sz.x + 1;
-    int my = r.height() / sz.y + 1;
-    for(int y = 0; y < my;++y)
-    {
-        for(int x = 0; x < mx ;++x)
-        {
-            ts::irect rr(x * sz.x + r.lt.x, y * sz.y + r.lt.y, 0, 0);
-            rr.rb.x = ts::tmin(rr.lt.x + sz.x, r.rb.x);
-            rr.rb.y = ts::tmin(rr.lt.y + sz.y, r.rb.y);
-
-            if (rr)
-                e.draw(rr,c[1 & (x ^ y)]);
-        }
-    }
-}
 
 void dialog_avaselector_c::recompress()
 {
@@ -1015,7 +996,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                     if ( rw > 0 )
                     {
                         // draw dark at rite
-                        getengine().draw( ts::irect( o.x + avarect.rb.x + 1, o.y + avarect.lt.y, o.x + image.info().sz.x, o.y + avarect.rb.y ), ts::ARGB(0,0,50,50) );
+                        getengine().draw( ts::irect( o.x + avarect.rb.x, o.y + avarect.lt.y, o.x + image.info().sz.x, o.y + avarect.rb.y ), ts::ARGB(0,0,50,50) );
                     }
                     if (avarect.lt.y > 0)
                     {
@@ -1050,12 +1031,8 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                     {
                         auto add_size_str = [](ts::wstr_c &s, int sz)
                         {
-                            ts::wstr_c n; n.set_as_uint(sz);
-                            for (int ix = n.get_length() - 3; ix > 0; ix -= 3)
-                                n.insert(ix, '`');
-
                             s.append(CONSTWSTR(" ("));
-                            s.append(TTT("size: $ bytes",220) / n);
+                            s.append(text_sizebytes(sz));
                             s.append(CONSTWSTR(") "));
                         };
 
@@ -1102,7 +1079,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
 
                 draw_data_s&dd = getengine().begin_draw();
 
-                ts::wstr_c t(CONSTWSTR("<l>"),  TTT("Drop [i]image[/i] here",222)); t.append(CONSTWSTR("</l>"));
+                ts::wstr_c t(CONSTWSTR("<l>"),  loc_text(loc_dropimagehere)); t.append(CONSTWSTR("</l>"));
                 ts::ivec2 tsz = gui->textsize(ts::g_default_text_font, t);
                 ts::ivec2 tpos = (viewrect.size() - tsz) / 2;
 

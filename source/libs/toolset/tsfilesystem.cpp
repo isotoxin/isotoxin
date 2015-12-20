@@ -69,6 +69,20 @@ namespace ts
                                 break;
                             }
                         }
+                        else if (name == CONSTWSTR("TEMP"))
+                        {
+                            if (DWORD pl =GetTempPathW(MAX_PATH, b.str()))
+                            {
+                                if (b.cstr()[pl - 1] == '\\') --pl;
+                                envstr.replace(ii, ll + 2, wsptr(b, pl));
+                                break;
+                            }
+                            else
+                            {
+                                dprc = iie + 1;
+                                break;
+                            }
+                        }
                         else if (name == CONSTWSTR("PROGRAMS"))
                         {
                             if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PROGRAM_FILES | CSIDL_FLAG_CREATE, nullptr, 0, b.str())))

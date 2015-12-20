@@ -136,6 +136,7 @@
     <ClCompile Include="..\..\mainrect.cpp" />
     <ClCompile Include="..\..\metacontact.cpp" />
     <ClCompile Include="..\..\msgbox.cpp" />
+    <ClCompile Include="..\..\prepareimage.cpp" />
     <ClCompile Include="..\..\profile.cpp" />
     <ClCompile Include="..\..\mediasystem.cpp" />
     <ClCompile Include="..\..\contacts.cpp" />
@@ -166,6 +167,7 @@
     <ClInclude Include="..\..\mainrect.h" />
     <ClInclude Include="..\..\metacontact.h" />
     <ClInclude Include="..\..\msgbox.h" />
+    <ClInclude Include="..\..\prepareimage.h" />
     <ClInclude Include="..\..\profile.h" />
     <ClInclude Include="..\..\mediasystem.h" />
     <ClInclude Include="..\..\smileselector.h" />

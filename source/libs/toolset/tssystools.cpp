@@ -129,7 +129,7 @@ ivec2   TSCALL wnd_get_center_pos( const ts::ivec2& size )
 {
     ivec2 cp;
     GetCursorPos(&ref_cast<POINT>(cp));
-    irect r = wnd_get_max_size(cp.x, cp.y);
+    irect r = wnd_get_max_size(cp);
     return r.center() - size/2;
 }
 
@@ -216,12 +216,12 @@ irect    TSCALL wnd_get_max_size_fs(int x, int y)
 }
 
 
-irect    TSCALL wnd_get_max_size(int x, int y)
+irect    TSCALL wnd_get_max_size(const ts::ivec2& pt)
 {
     MONITORINFO mi;
     POINT p;
-    p.x = x;
-    p.y = y;
+    p.x = pt.x;
+    p.y = pt.y;
     HMONITOR m = MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST);
     if (m)
     {

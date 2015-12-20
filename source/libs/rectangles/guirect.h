@@ -613,6 +613,7 @@ public:
     virtual int       get_height_by_width(int width) const { return 0; /* 0 means not calculated */ } // calculate rect height by given rect width
     virtual size_policy_e size_policy() const {return SP_NORMAL;}
     virtual bool steal_active_focus_if_root() const {return true;} // default. tooltip should not steal
+    virtual bool allow_maximize() const { return false;}
 
     virtual ts::wstr_c get_name() const {return ts::wstr_c(); }
 
@@ -1458,6 +1459,83 @@ public:
 
 //////////////
 
+class gui_htabsel_c;
+template<> struct MAKE_CHILD<gui_htabsel_c> : public _PCHILD(gui_htabsel_c)
+{
+    menu_c menu;
+    MAKE_CHILD(RID parent_, const menu_c &menu) :menu(menu) { parent = parent_; }
+    ~MAKE_CHILD();
+};
+
+class gui_htabsel_c : public gui_hgroup_c
+{
+    DUMMY(gui_htabsel_c);
+
+    GM_RECEIVER( gui_htabsel_c, GM_HEARTBEAT );
+
+    menu_c menu;
+    RID activeitem;
+    int height = 32;
+
+public:
+    bool operator()(RID, const ts::wsptr& txt);
+    bool operator()(RID, const ts::wsptr& txt, const menu_c &sm);
+    bool operator()(RID, const ts::wsptr& txt, ts::uint32 flags, MENUHANDLER handler, const ts::str_c& prm);
+
+    gui_htabsel_c(MAKE_CHILD<gui_htabsel_c> &data) :gui_hgroup_c(data) { menu = data.menu; defaultthrdraw = DTHRO_BORDER | DTHRO_CENTER; }
+    /*virtual*/ ~gui_htabsel_c();
+
+    /*virtual*/ ts::ivec2 get_min_size() const override;
+    /*virtual*/ ts::ivec2 get_max_size() const override;
+
+    /*virtual*/ void created() override;
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+};
+
+class gui_htabsel_item_c;
+template<> struct MAKE_CHILD<gui_htabsel_item_c> : public _PCHILD(gui_htabsel_item_c)
+{
+    MENUHANDLER handler;
+    ts::wstr_c txt;
+    ts::str_c  param;
+    MAKE_CHILD(RID parent_, const ts::wstr_c &txt): txt(txt) { parent = parent_; }
+    ~MAKE_CHILD();
+
+    MAKE_CHILD &operator << (MENUHANDLER h) { handler = h; return *this; }
+    MAKE_CHILD &operator << (const ts::str_c &prm) { param = prm; return *this; }
+    //MAKE_CHILD &operator << (RID prev) { after = prev; return *this; }
+};
+
+class gui_htabsel_item_c : public gui_label_c
+{
+    DUMMY(gui_htabsel_item_c);
+
+    MENUHANDLER handler;
+    ts::str_c param;
+
+    int tw = 0;
+
+protected:
+    gui_htabsel_item_c() {}
+public:
+    gui_htabsel_item_c(MAKE_CHILD<gui_htabsel_item_c> &data) :gui_label_c(data), handler(data.handler), param(data.param)
+    {
+        set_text(data.txt);
+        tw = textrect.calc_text_size(-1, nullptr).x;
+    }
+    /*virtual*/ ~gui_htabsel_item_c();
+
+    /*virtual*/ ts::ivec2 get_min_size() const override;
+    /*virtual*/ ts::ivec2 get_max_size() const override;
+
+    /*virtual*/ void created() override;
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+
+    void activate();
+};
+
+//////////////
+
 class gui_vtabsel_c;
 template<> struct MAKE_CHILD<gui_vtabsel_c> : public _PCHILD(gui_vtabsel_c)
 {
@@ -1470,7 +1548,7 @@ class gui_vtabsel_c : public gui_vscrollgroup_c
 {
     DUMMY(gui_vtabsel_c);
 
-    GM_RECEIVER( gui_vtabsel_c, GM_HEARTBEAT );
+    GM_RECEIVER(gui_vtabsel_c, GM_HEARTBEAT);
 
     menu_c menu;
     RID currentgroup;
@@ -1496,7 +1574,7 @@ template<> struct MAKE_CHILD<gui_vtabsel_item_c> : public _PCHILD(gui_vtabsel_it
     ts::wstr_c txt;
     ts::str_c  param;
     int lv;
-    MAKE_CHILD(RID parent_, const ts::wstr_c &txt, int lv): txt(txt), lv(lv) { parent = parent_; }
+    MAKE_CHILD(RID parent_, const ts::wstr_c &txt, int lv) : txt(txt), lv(lv) { parent = parent_; }
     ~MAKE_CHILD();
 
     MAKE_CHILD &operator << (MENUHANDLER h) { handler = h; return *this; }
@@ -1520,22 +1598,19 @@ public:
     gui_vtabsel_item_c(MAKE_CHILD<gui_vtabsel_item_c> &data) :gui_label_c(data), submnu(data.menu), handler(data.handler), param(data.param), lv(data.lv)
     {
         if (lv > 0)
-            set_text(ts::tmp_wstr_c(lv + data.txt.get_length() + 7, true).set(CONSTWSTR("<l>")).append_chars(ts::tmin(3,lv), '.').append(data.txt).append(CONSTWSTR("</l>")));
+            set_text(ts::tmp_wstr_c(lv + data.txt.get_length() + 7, true).set(CONSTWSTR("<l>")).append_chars(ts::tmin(3, lv), '.').append(data.txt).append(CONSTWSTR("</l>")));
         else
             set_text(data.txt);
     }
     /*virtual*/ ~gui_vtabsel_item_c();
 
-    ///*virtual*/ const theme_rect_s *themerect() const
-    //{
-    //    return thrname.is_empty() ? nullptr : thrcache(thrname, (getprops().is_highlighted()));
-    //}
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ ts::ivec2 get_max_size() const override;
 
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
+
 
 //////////////
 

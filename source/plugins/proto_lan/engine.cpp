@@ -302,7 +302,7 @@ void udp_sender::prepare()
     } while (infos);
 }
 
-void udp_sender::send(const void *data, int size, int portshift)
+bool udp_sender::send(const void *data, int size, int portshift)
 {
     prepare();
     sockaddr_in dest_addr;
@@ -321,11 +321,13 @@ void udp_sender::send(const void *data, int size, int portshift)
                 //if (10054 == error) continue;
                 //if ((10049 == error || 10065 == error) /*&& ADDR_BROADCAST == dest_addr->sin_addr.S_un.S_addr*/) continue;
                 close();
+                return false;
             };
             break;
         }
     }
 
+    return true;
 }
 
 int udp_listner::open()
@@ -806,7 +808,8 @@ void lan_engine::tick(int *sleep_time_ms)
             case contact_s::SEARCH:
                 
                 pg_search(listen_port, c->raw_public_id);
-                broadcast_seek.send(packet_buf_encoded, packet_buf_encoded_len, c->portshift);
+                if (!broadcast_seek.send(packet_buf_encoded, packet_buf_encoded_len, c->portshift))
+                    fatal_error = true;
                 ++c->portshift;
                 if (c->portshift >= BROADCAST_RANGE)
                 {
@@ -1132,6 +1135,9 @@ void lan_engine::tick(int *sleep_time_ms)
 
     if (media_data_transfer)
         *sleep_time_ms = 0;
+
+    if (fatal_error)
+        *sleep_time_ms = -1;
 }
 
 void lan_engine::pp_search( unsigned int IPv4, int back_port, const byte *trapped_contact_public_key, const byte *seeking_raw_public_id )

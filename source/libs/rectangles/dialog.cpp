@@ -1307,6 +1307,7 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
     defaultthrdraw = DTHRO_BORDER | DTHRO_BASE | /*DTHRO_CENTER_HOLE |*/ DTHRO_CAPTION | DTHRO_CAPTION_TEXT;
 
     ts::uint32 allowb = SETBIT(ABT_CLOSE) | (g_sysconf.mainwindow ? 0 : SETBIT(ABT_MINIMIZE));
+    if (allow_maximize()) allowb |= SETBIT(ABT_MAXIMIZE) | SETBIT(ABT_NORMALIZE);
     GET_TOOLTIP ttt = nullptr;
     if (g_sysconf.mainwindow)
     {

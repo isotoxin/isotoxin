@@ -626,6 +626,9 @@ void gui_textedit_c::set_placeholder(GET_TOOLTIP plht)
 
 void gui_textedit_c::set_text(const ts::wstr_c &text_, bool move_caret2end, bool setup_undo)
 {
+    if (text_.is_empty())
+        flags.clear(F_LOCKED);
+
     if (flags.is(F_CHANGE_HANDLER))
     {
         if (placeholder_text.equals(text_)) return; // why placeholder_text? it's a hack! see text_replace
@@ -646,9 +649,9 @@ void gui_textedit_c::set_text(const ts::wstr_c &text_, bool move_caret2end, bool
     }
 
 
-	ts::ivec2 prevCaretPos = get_caret_pos();
+	ts::ivec2 prev_caret_pos = get_caret_pos();
 	if (text_replace(0, text.size(), text_, false))
-		if (move_caret2end) set_caret_pos(text.size()); else set_caret_pos(prevCaretPos);
+		if (move_caret2end) set_caret_pos(text.size()); else set_caret_pos(prev_caret_pos);
 
     if (setup_undo && !flags.is(F_CHANGE_HANDLER))
     {

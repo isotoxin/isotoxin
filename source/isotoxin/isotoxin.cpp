@@ -136,6 +136,8 @@ namespace
 #ifndef _FINAL
 void debug_name()
 {
+    ts::CHARz_add_str(g_sysconf.name, L" ");
+    ts::CHARz_add_str(g_sysconf.name, ts::to_wstr(application_c::appver()).cstr());
     ts::CHARz_add_str<wchar_t>(g_sysconf.name, L" - CRC:");
     ts::buf_c b;
     b.load_from_disk_file(ts::get_exe_full_name());
@@ -292,8 +294,6 @@ bool _cdecl app_preinit( const wchar_t *cmdl )
 	ts::tsfileop_c::setup<fileop_c>();
 
 	ts::CHARz_copy( g_sysconf.name, CONSTWSTR(APPNAME) .s );
-    ts::CHARz_add_str( g_sysconf.name, L" " );
-    ts::CHARz_add_str( g_sysconf.name, ts::to_wstr(application_c::appver()).cstr() );
     
 #ifndef _FINAL
     debug_name();

@@ -5631,7 +5631,6 @@ gui_message_editor_c::~gui_message_editor_c()
 
 bool gui_message_editor_c::on_enter_press_func(RID, GUIPARAM param)
 {
-    bool fix_last_enter = false;
     if (param != nullptr)
     {
         static ts::Time last_enter_pressed = ts::Time::past();
@@ -5643,7 +5642,6 @@ bool gui_message_editor_c::on_enter_press_func(RID, GUIPARAM param)
             if ((tpressed - last_enter_pressed) < 500)
             {
                 ctrl_or_shift = true;
-                fix_last_enter = true;
             }
             behsend = EKO_ENTER_NEW_LINE;
         }
@@ -5654,9 +5652,6 @@ bool gui_message_editor_c::on_enter_press_func(RID, GUIPARAM param)
             return false;
         }
     }
-
-    if (fix_last_enter)
-        backspace();
 
     contact_c *receiver = historian;
     if (receiver == nullptr) return true;
@@ -5673,6 +5668,7 @@ bool gui_message_editor_c::on_enter_press_func(RID, GUIPARAM param)
     msg.post.message_utf8.trim_right( CONSTASTR("\r\n") );
 
     msg.send();
+    set_locked();
 
     return true;
 }
@@ -5739,7 +5735,7 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     register_kbd_callback( DELEGATE( this, show_smile_selector ), SSK_S, true );
     set_multiline(true);
     set_theme_rect(CONSTASTR("entertext"), false);
-    defaultthrdraw = DTHRO_BORDER;
+    defaultthrdraw = DTHRO_BORDER | DTHRO_CENTER;
 
     gui_button_c &smiles = MAKE_CHILD<gui_button_c>(getrid());
     smiles.set_face_getter(BUTTON_FACE_PRELOADED(smile));
@@ -5788,6 +5784,19 @@ bool gui_message_editor_c::show_smile_selector(RID, GUIPARAM)
         .show();
 
     return true;
+}
+
+/*virtual*/ void gui_message_editor_c::paste_(int cp)
+{
+    ts::bitmap_c bmp = ts::get_clipboard_bitmap();
+    if (bmp.info().sz >> 0)
+    {
+        if (contact_c *h = get_historian())
+            SUMMON_DIALOG<dialog_prepareimage_c>(UD_PREPARE_IMAGE, h->getkey(), bmp);
+
+        return;
+    }
+    __super::paste_(cp);
 }
 
 /*virtual*/ void gui_message_editor_c::cb_scrollbar_width(int w)
@@ -5861,20 +5870,27 @@ bool gui_message_area_c::change_text_handler(const ts::wstr_c &t)
 
     update_buttons();
 
-    set_theme_rect(CONSTASTR("entertext"), false);
+    set_theme_rect(CONSTASTR("msgarea"), false);
     defaultthrdraw = DTHRO_BASE;
     __super::created();
 
     flags.set( F_INITIALIZED );
 }
 
-bool gui_message_area_c::send_file(RID, GUIPARAM)
+void gui_message_area_c::send_file_item(const ts::str_c& prm)
 {
+    if (prm.equals(CONSTASTR("i")))
+    {
+        if (contact_c *h = message_editor->get_historian())
+            SUMMON_DIALOG<dialog_prepareimage_c>(UD_PREPARE_IMAGE, h->getkey());
+        return;
+    }
+
     ts::wstrings_c files;
     ts::wstr_c fromdir = prf().last_filedir();
     if (fromdir.is_empty())
         fromdir = ts::fn_get_path(ts::get_exe_full_name());
-    ts::wstr_c title(TTT("Send files",180));
+    ts::wstr_c title(TTT("Send files", 180));
 
     ts::extension_s ext;
     ext.desc = loc_text(loc_anyfiles);
@@ -5892,6 +5908,15 @@ bool gui_message_area_c::send_file(RID, GUIPARAM)
                 c->send_file(fn);
     }
 
+}
+
+bool gui_message_area_c::send_file(RID btn, GUIPARAM)
+{
+    ts::irect br = HOLD(btn)().getprops().screenrect();
+    menu_c m;
+    m.add(TTT("Send image",375), 0, DELEGATE(this, send_file_item), CONSTASTR("i"));
+    m.add(TTT("Send file",376), 0, DELEGATE(this, send_file_item), CONSTASTR("f"));
+    gui_popup_menu_c::show(menu_anchor_s(br, menu_anchor_s::RELPOS_TYPE_TU), m);
     return true;
 }
 

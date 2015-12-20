@@ -2693,10 +2693,6 @@ template<typename CORE> img_format_e bitmap_t<CORE>::load_from_file(const void *
     clear();
     return if_none;
 }
-template<typename CORE> img_format_e bitmap_t<CORE>::load_from_file(const buf_c & buf)
-{
-	return load_from_file( buf.data(), buf.size() );
-}
 template<typename CORE> img_format_e bitmap_t<CORE>::load_from_file(const wsptr &filename)
 {
 	if (blob_c b = g_fileop->load(filename))
@@ -3345,8 +3341,10 @@ void bmpcore_exbody_s::draw(const bmpcore_exbody_s &eb, aint xx, aint yy, const 
     const uint8 *src = (*this)(r.lt);
     imgdesc_s sinf(r.size(), 32, info().pitch);
 
-    ASSERT(xx + r.width() <= eb.info().sz.x);
-    ASSERT(yy + r.height() <= eb.info().sz.y);
+    if (xx + r.width() > eb.info().sz.x)
+        sinf.sz.x = eb.info().sz.x - xx;
+    if (yy + r.height() > eb.info().sz.y)
+        sinf.sz.x = eb.info().sz.y - yy;
 
     if (alpha > 0)
         img_helper_alpha_blend_pm(eb(ivec2(xx, yy)), eb.info().pitch, src, sinf, (uint8)alpha);

@@ -288,7 +288,7 @@ HICON application_c::app_icon(bool for_tray)
 }
 /*virtual*/ void application_c::app_path_expand_env(ts::wstr_c &path)
 {
-    path_expand_env(path);
+    path_expand_env(path, ts::wstr_c(CONSTWSTR("0")));
 }
 
 /*virtual*/ void application_c::app_font_par(const ts::str_c&fn, ts::font_params_s&fprm)
@@ -1697,8 +1697,9 @@ bool file_transfer_s::confirm_required() const
 
 void file_transfer_s::auto_confirm()
 {
-    ts::wstr_c downf = prf().download_folder();
-    path_expand_env(downf);
+    bool image = image_loader_c::is_image_fn(to_utf8(filename));
+    ts::wstr_c downf = image ? prf().download_folder_images() : prf().download_folder();
+    path_expand_env(downf, ts::wmake<uint>(historian.contactid));
     ts::make_path(downf, 0);
     prepare_fn(ts::fn_join(downf, filename), false);
 

@@ -43,11 +43,12 @@ bool check_netaddr(const ts::asptr & netaddr)
     return true;
 }
 
-void path_expand_env(ts::wstr_c &path)
+void path_expand_env(ts::wstr_c &path, const ts::wstr_c &contactid)
 {
     ts::parse_env(path);
     //ts::wstr_c cfgfolder = cfg().get_path();
     path.replace_all(CONSTWSTR("%CONFIG%"), ts::fn_get_path(cfg().get_path()).trunc_char(NATIVE_SLASH));
+    path.replace_all(CONSTWSTR("%CONTACTID%"), contactid);
 
 }
 
@@ -840,6 +841,21 @@ ts::wstr_c loc_text(loctext_e lt)
         case loc_copy:
              return TTT("Copy",92);
 
+        case loc_image:
+            return TTT("Image", 214);
+        case loc_images:
+            return TTT("Images", 215);
+        case loc_space2takeimage:
+            return TTT("Press [i]space[/i] key to take image", 216);
+        case loc_dropimagehere:
+            return TTT("Drop [i]image[/i] here",222);
+        case loc_loadimagefromfile:
+            return TTT("Load image from file", 210);
+        case loc_pasteimagefromclipboard:
+            return TTT("Paste image from clipboard ($)", 211) / CONSTWSTR("Ctrl+V");
+        case loc_capturecamera:
+            return TTT("Capture camera", 212);
+
         case loc_connection_name:
             return TTT("Connection name", 102);
         case loc_module:
@@ -851,6 +867,15 @@ ts::wstr_c loc_text(loctext_e lt)
 
     }
     return ts::wstr_c();
+}
+
+ts::wstr_c text_sizebytes(int sz)
+{
+    ts::wstr_c n; n.set_as_uint(sz);
+    for (int ix = n.get_length() - 3; ix > 0; ix -= 3)
+        n.insert(ix, '`');
+
+    return TTT("size: $ bytes", 220) / n;
 }
 
 ts::wstr_c text_contact_state(ts::TSCOLOR color_online, ts::TSCOLOR color_offline, contact_state_e st)
@@ -916,6 +941,27 @@ void draw_initialization(rectengine_c *e, ts::bitmap_c &pab, const ts::irect&vie
 
     e->end_draw();
 }
+
+void draw_chessboard(rectengine_c &e, const ts::irect & r, ts::TSCOLOR c1, ts::TSCOLOR c2)
+{
+    ts::ivec2 sz(32);
+    ts::TSCOLOR c[2] = { c1, c2 };
+    int mx = r.width() / sz.x + 1;
+    int my = r.height() / sz.y + 1;
+    for (int y = 0; y < my; ++y)
+    {
+        for (int x = 0; x < mx; ++x)
+        {
+            ts::irect rr(x * sz.x + r.lt.x, y * sz.y + r.lt.y, 0, 0);
+            rr.rb.x = ts::tmin(rr.lt.x + sz.x, r.rb.x);
+            rr.rb.y = ts::tmin(rr.lt.y + sz.y, r.rb.y);
+
+            if (rr)
+                e.draw(rr, c[1 & (x ^ y)]);
+        }
+    }
+}
+
 
 
 void add_status_items(menu_c &m)

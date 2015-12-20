@@ -80,7 +80,7 @@ void theme_rect_s::load_params(abp_c * block)
     capbuttonsshift_max = parsevec2( block->get_string(CONSTASTR("bshiftmax")), ts::ivec2(0) );
     activesbshift = parsevec2( block->get_string(CONSTASTR("smh")), ts::ivec2(0) );
 
-    captexttab = block->get_int(CONSTASTR("captexttab"), 5);
+    captextadd = parsevec2( block->get_string(CONSTASTR("captextadd")), ts::ivec2(5,0) );
 	captop = block->get_int(CONSTASTR("captop"), 0);
     captop_max = block->get_int(CONSTASTR("captop_max"), 0);
 	capheight = block->get_int(CONSTASTR("capheight"), 0);
@@ -386,7 +386,7 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp )
                 img.rect = r;
                 (ts::image_extbody_c &)img = std::move(ts::image_extbody_c(dbmp.body(r.lt), imgdesc_s(r.size(),32,dbmp.info().pitch)));
 
-                add_image(to_wstr(it.name()),img.body(),img.info(),false /* no need to copy */);
+                ts::add_image(to_wstr(it.name()),img.body(),img.info(),false /* no need to copy */);
             }
         }
     }
@@ -498,7 +498,18 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp )
 	return true;
 }
 
-irect theme_rect_s::captionrect( const ts::irect &rr, bool maximized ) const
+void theme_c::add_image( const asptr & tag, bitmap_c &bmp )
+{
+    static int num = 1;
+    bitmap_c &dbmp = bitmaps[wstr_c(CONSTWSTR("???")).append_as_uint(num++)];
+    dbmp = bmp;
+    theme_image_s &img = images.add(tag);
+    img.dbmp = &dbmp;
+    img.rect.lt = ts::ivec2(0);
+    img.rect.rb = dbmp.info().sz;
+}
+
+irect theme_rect_s::captionrect( const irect &rr, bool maximized ) const
 {
 	irect r;
     if (maximized || fastborder())

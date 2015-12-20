@@ -14,6 +14,7 @@
 #endif
 
 ipc::ipc_junction_s *ipcj = nullptr;
+static bool panica = false;
 
 static void __stdcall operation_result(long_operation_e op, int rslt);
 static void __stdcall update_contact(const contact_data_s *);
@@ -370,6 +371,9 @@ namespace
 
 ipc::ipc_result_e event_processor( void *dptr, void *data, int datasize )
 {
+    if (panica)
+        return ipc::IPCR_BREAK;
+
     bigdata_s *bd = (bigdata_s *)dptr;
 
     if (data == nullptr)
@@ -447,6 +451,12 @@ DWORD WINAPI worker(LPVOID nonzerothread)
 
         if (protolib.loaded() && !nonzerothread) // nonzerothread: tick is single-threaded, so i can be called only in one thread
             protolib.functions->tick(&sleepvalue);
+        
+        if (sleepvalue < 0)
+        {
+            panica = true;
+            break;
+        }
 
         DELTA_TIME_CHECKPOINT( x1 );
 

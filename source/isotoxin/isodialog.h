@@ -14,6 +14,7 @@ enum unique_dialog_e
     UD_CONTACTPROPS,
     UD_PROTOSETUP,
     UD_PROTOSETUPSETTINGS,
+    UD_PREPARE_IMAGE,
 
 };
 
@@ -45,12 +46,11 @@ public:
 
 };
 
-
-template<typename DLGT, typename PRMS> void SUMMON_DIALOG(unique_dialog_e udtag, const PRMS &prms)
+template<typename DLGT, class... _Valty> void SUMMON_DIALOG(unique_dialog_e udtag, _Valty&&... _Val)
 {
     if (udtag && dialog_already_present(udtag)) return;
 
-    RID r = MAKE_ROOT<DLGT>(prms);
+    RID r = MAKE_ROOT<DLGT>(std::forward<_Valty>(_Val)...);
     {
         MODIFY(r)
             .setminsize(r)

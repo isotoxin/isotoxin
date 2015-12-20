@@ -25,10 +25,13 @@ class mainrect_c : public gui_control_c
     GM_RECEIVER( mainrect_c, ISOGM_APPRISE );
     GM_RECEIVER( mainrect_c, GM_HEARTBEAT );
     
+    ts::bitmap_c icons[2];
+
 public:
 	mainrect_c(MAKE_ROOT<mainrect_c> &data);
 	~mainrect_c();
 
+    /*virtual*/ bool allow_maximize() const override { return true;}
     /*virtual*/ ts::wstr_c get_name() const override;
     
         //sqhandler_i

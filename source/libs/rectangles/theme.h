@@ -64,7 +64,7 @@ struct theme_rect_s : ts::shared_object
     ts::irect maxcutborder; // widths of overgraphics, which must be cut in maximized mode
 	ts::irect clientborder;
 	int resizearea;
-    int captexttab;
+    ts::ivec2 captextadd = ts::ivec2(5,0);
 	int captop; // v position of caption bitmaps (from top part of border)
     int captop_max;
 	int capheight; // logical height of caption
@@ -95,6 +95,7 @@ struct theme_rect_s : ts::shared_object
 
     int clborder_x() const { if (fastborder()) return clientborder.lt.x + clientborder.rb.x - maxcutborder.lt.x - maxcutborder.rb.x; else return clientborder.lt.x + clientborder.rb.x; }
     int clborder_y() const { if (fastborder()) return clientborder.lt.y + clientborder.rb.y + capheight_max - maxcutborder.lt.y - maxcutborder.rb.y; else return clientborder.lt.y + clientborder.rb.y + capheight; }
+    int clborder_y_caption() const { if (fastborder()) return capheight_max; else return capheight; }
 
     ts::irect captionrect( const ts::irect &rr, bool maximized ) const;	// calc caption rect
 	ts::irect clientrect( const ts::ivec2 &sz, bool maximized ) const;	// calc raw client area
@@ -122,7 +123,7 @@ struct theme_rect_s : ts::shared_object
     static const ts::flags32_s::BITS F_SPECIALBORDER = SETBIT(2);
 
     DECLARE_DYNAMIC_BEGIN(theme_rect_s)
-    theme_rect_s(const ts::bitmap_c &b, const theme_conf_s &thconf):src(b), hollowborder(0), resizearea(2), captop(20), captop_max(30), captexttab(5), capheight(20), capheight_max(32)
+    theme_rect_s(const ts::bitmap_c &b, const theme_conf_s &thconf):src(b), hollowborder(0), resizearea(2), captop(20), captop_max(30), capheight(20), capheight_max(32)
 	{
         flags.init(F_FASTBORDER, thconf.fastborder);
         flags.init(F_ROOTALPHABLEND, thconf.rootalphablend);
@@ -223,7 +224,6 @@ typedef fastdelegate::FastDelegate<void(const ts::str_c&, ts::font_params_s&)> F
 
 class theme_c
 {
-    
     ts::hashmap_t<ts::str_c, theme_image_s> images;
 	ts::hashmap_t<ts::wstr_c, ts::bitmap_c> bitmaps;
 	ts::hashmap_t<ts::str_c, ts::shared_ptr<theme_rect_s> > rects;
@@ -245,6 +245,8 @@ class theme_c
 public:
 	theme_c();
 	~theme_c();
+
+    void add_image( const ts::asptr & tag, ts::bitmap_c &bmp );
 
     int ver() const {return iver;}
 

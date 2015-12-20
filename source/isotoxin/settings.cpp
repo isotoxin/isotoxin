@@ -260,6 +260,13 @@ bool dialog_settings_c::downloadfolder_edit_handler(const ts::wstr_c &v)
     return true;
 }
 
+bool dialog_settings_c::downloadfolder_images_edit_handler(const ts::wstr_c &v)
+{
+    downloadfolder_images = v;
+    mod();
+    return true;
+}
+
 bool dialog_settings_c::date_msg_tmpl_edit_handler(const ts::wstr_c &v)
 {
     date_msg_tmpl = to_utf8(v);
@@ -567,6 +574,7 @@ void dialog_settings_c::mod()
         PREPARE( date_msg_tmpl, prf().date_msg_template() );
         PREPARE( date_sep_tmpl, prf().date_sep_template() );
         PREPARE( downloadfolder, prf().download_folder() );
+        PREPARE( downloadfolder_images, prf().download_folder_images() );
         PREPARE( fileconfirm, prf().fileconfirm() );
         PREPARE( auto_download_masks, prf().auto_confirm_masks() );
         PREPARE( manual_download_masks, prf().manual_confirm_masks() );
@@ -858,6 +866,8 @@ void dialog_settings_c::mod()
         dm << MASK_PROFILE_FILES; //____________________________________________________________________________________________________//
         dm().page_caption(TTT("File receive settings",237));
         dm().path(TTT("Default download folder",174), downloadfolder, DELEGATE(this, downloadfolder_edit_handler));
+        dm().vspace();
+        dm().path(TTT("Default download folder for images",372), downloadfolder_images, DELEGATE(this, downloadfolder_images_edit_handler));
         dm().vspace();
 
         dm().radio(TTT("Confirmation",240), DELEGATE(this, fileconfirm_handler), fileconfirm).setmenu(
@@ -1480,6 +1490,7 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
             gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS, msgopts_changed).send();
 
         prf().download_folder(downloadfolder);
+        prf().download_folder_images(downloadfolder_images);
         prf().auto_confirm_masks( auto_download_masks );
         prf().manual_confirm_masks( manual_download_masks );
         prf().fileconfirm( fileconfirm );

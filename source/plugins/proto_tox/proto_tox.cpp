@@ -4207,6 +4207,8 @@ proto_functions_s* __stdcall handshake(host_functions_s *hf_)
 
 #include "dht_nodes.inl"
 
+    //nodes.emplace_back( CONSTASTR("isotoxin.im"), 33445, CONSTASTR("5823FB947FF24CF83DDFAC3F3BAA18F96EA2018B16CC08429CB97FA502F40C23") );
+
     pinnedservs.clear();
     pinnedservs.reserve(4);
 #define PINSERV(a, b) pinnedservs.emplace_back( CONSTASTR(a), CONSTASTR(b) );

@@ -718,12 +718,12 @@ bool active_protocol_c::check_save(RID, GUIPARAM)
     return true;
 }
 
-void active_protocol_c::save_config( const ts::blob_c &cfg )
+void active_protocol_c::save_config( const ts::blob_c &cfg_ )
 {
     tableview_active_protocol_s &t = prf().get_table_active_protocol();
     if (auto *r = t.find<true>(id))
     {
-        if ( r->other.config != cfg )
+        if ( r->other.config != cfg_)
         {
             time_t n = now();
             if ( (n-last_backup_time) > prf().backup_period() )
@@ -738,8 +738,8 @@ void active_protocol_c::save_config( const ts::blob_c &cfg )
             }
         }
 
-        r->other.config = cfg;
-        r->other.config.set_size(cfg.size()); // copy content
+        r->other.config = cfg_;
+        r->other.config.set_size(cfg_.size()); // copy content
         r->changed();
         prf().changed();
     }

@@ -183,7 +183,6 @@ private:
 	void scroll_to_caret();
 	bool cut_(int cp, bool copy2clipboard = true);//used internally
 	bool copy_(int cp);//used internally
-	void paste_(int cp);//used internally
 	bool prepare_lines(int startChar = 0); // split text to lines
 
     struct kbd_press_callback_s
@@ -212,11 +211,15 @@ private:
     DECLAREBIT( F_PREV_SB_VIS );
     DECLAREBIT( F_CHANGE_HANDLER );
     DECLAREBIT( F_CHANGED_DURING_CHANGE_HANDLER );
+    DECLAREBIT( F_LOCKED ); // locked until empty
 
 protected:
     DECLAREBIT( F_TEXTEDIT_FREBITSTART ); // free bit start for child
     FREE_BIT_START_CHECK( FLAGS_FREEBITSTART, NUMGEN_NEXT(fff) - 1 );
 #undef DECLAREBIT
+
+    virtual void paste_(int cp);
+
     gui_textedit_c() {}
 public:
 
@@ -251,8 +254,9 @@ public:
 
         return false;
     }
+    void set_locked(bool l = true) { flags.init(F_LOCKED, l); }
     void set_multiline(bool ml = true) { flags.init(F_MULTILINE, ml); }
-	bool is_readonly() const {return flags.is(F_READONLY|F_DISABLED);}
+	bool is_readonly() const {return flags.is(F_READONLY|F_DISABLED|F_LOCKED);}
     bool is_disabled_caret() const { return flags.is(F_DISABLE_CARET);}
 	void set_readonly(bool ro = true) {flags.init(F_READONLY, ro);}
     void disable_caret(bool dc = true) {flags.init(F_DISABLE_CARET, dc);}

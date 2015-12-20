@@ -82,12 +82,29 @@ struct backup_protocol_s
 
 struct contacts_s
 {
+    enum column_e
+    {
+        C_ID,
+        C_CONTACT_ID,
+        C_PROTO_ID,
+        C_META_ID,
+        C_OPTIONS,
+        C_NAME,
+        C_STATUSMSG,
+        C_READTIME,
+        C_CUSTOMNAME,
+        C_COMMENT,
+        C_AVATAR,
+        C_AVATAR_TAG,
+    };
+
     contact_key_s key;
     int metaid;
     int options;
     ts::str_c name;
     ts::str_c statusmsg;
     ts::str_c customname;
+    ts::str_c comment;
     time_t readtime; // time of last seen message
     ts::blob_c avatar;
     int avatar_tag;
@@ -95,7 +112,7 @@ struct contacts_s
     void set(int column, ts::data_value_s& v);
     void get(int column, ts::data_pair_s& v);
 
-    static const int columns = 1 + 10; // contact_id, proto_id, meta_id, options, name, statusmsg, readtime, customname, avatar, avatar_tag
+    static const int columns = 1 + 11; // contact_id, proto_id, meta_id, options, name, statusmsg, readtime, customname, comment, avatar, avatar_tag
     static ts::asptr get_table_name() { return CONSTASTR("contacts"); }
     static void get_column_desc(int index, ts::column_desc_s&cd);
     static ts::data_type_e get_column_type(int index);
@@ -464,6 +481,7 @@ public:
     TEXTAPAR( date_msg_template, "d MMMM" )
     TEXTAPAR( date_sep_template, "dddd d MMMM yyyy" )
     TEXTWPAR( download_folder, "%CONFIG%\\download" )
+    TEXTWPAR( download_folder_images, "%CONFIG%\\images\\%CONTACTID%" )
     TEXTWPAR( last_filedir, "" )
 
     TEXTWPAR( emoticons_pack, "" )

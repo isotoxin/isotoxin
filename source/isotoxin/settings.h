@@ -296,6 +296,7 @@ private:
     ts::wstr_c auto_download_masks;
     ts::wstr_c manual_download_masks;
     ts::wstr_c downloadfolder;
+    ts::wstr_c downloadfolder_images;
     int fileconfirm = 0;
 
     int fontsz = 1000;
@@ -323,6 +324,7 @@ private:
     bool fileconfirm_auto_masks_handler(const ts::wstr_c &v);
     bool fileconfirm_manual_masks_handler(const ts::wstr_c &v);
     bool downloadfolder_edit_handler(const ts::wstr_c &v);
+    bool downloadfolder_images_edit_handler(const ts::wstr_c &v);
     bool date_msg_tmpl_edit_handler(const ts::wstr_c &v);
     bool date_sep_tmpl_edit_handler(const ts::wstr_c &v);
     bool ctl2send_handler( RID, GUIPARAM );

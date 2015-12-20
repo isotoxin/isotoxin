@@ -20,6 +20,7 @@ gui_contact_item_c::gui_contact_item_c(MAKE_CHILD<gui_contact_item_c> &data) :gu
     if (contact && (CIR_LISTITEM == role || CIR_ME == role))
         if (ASSERT(contact->is_rootcontact()))
         {
+            tooltip( DELEGATE(this,tt) );
             contact->gui_item = this;
             g_app->new_blink_reason( contact->getkey() ).recalc_unread();
         }
@@ -34,6 +35,13 @@ gui_contact_item_c::~gui_contact_item_c()
         gui->delete_event(DELEGATE(this, stop_typing));
         gui->delete_event(DELEGATE(this, animate_typing));
     }
+}
+
+ts::wstr_c gui_contact_item_c::tt()
+{
+    if (contact && !contact->get_comment().is_empty())
+        return from_utf8( contact->get_comment() );
+    return ts::wstr_c();
 }
 
 /*virtual*/ ts::ivec2 gui_contact_item_c::get_min_size() const
@@ -1367,7 +1375,7 @@ bool gui_contact_item_c::allow_drop() const
                         if (c->gui_item)
                         {
                             ts::wstr_c downf = prf().download_folder();
-                            path_expand_env(downf);
+                            path_expand_env(downf, c->contactidfolder());
                             ts::make_path(downf, 0);
 
                             ts::wstr_c n = from_utf8(c->get_name());

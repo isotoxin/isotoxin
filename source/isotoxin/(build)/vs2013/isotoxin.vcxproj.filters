@@ -105,6 +105,9 @@
     <ClCompile Include="..\..\videoprocessing.cpp">
       <Filter>src\video</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\prepareimage.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\res\resource.h">
@@ -187,6 +190,9 @@
     </ClInclude>
     <ClInclude Include="..\..\videoprocessing.h">
       <Filter>src\video</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\prepareimage.h">
+      <Filter>src\gui</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

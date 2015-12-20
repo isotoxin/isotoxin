@@ -26,6 +26,9 @@ class dialog_contact_props_c : public gui_isodialog_c
     ts::str_c customname; // utf8
     bool custom_name( const ts::wstr_c & );
 
+    ts::str_c ccomment; // utf8
+    bool comment( const ts::wstr_c & );
+
     keep_contact_history_e keeph = KCH_DEFAULT;
     auto_accept_audio_call_e aaac = AAAC_NOT;
     

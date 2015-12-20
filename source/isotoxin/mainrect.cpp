@@ -30,7 +30,7 @@ ts::uint32 mainrect_c::gm_handler( gmsg<ISOGM_APPRISE> & )
 /*virtual*/ void mainrect_c::created()
 {
     defaultthrdraw = DTHRO_BORDER | /*DTHRO_CENTER_HOLE |*/ DTHRO_CAPTION | DTHRO_CAPTION_TEXT;
-    set_theme_rect(CONSTASTR("main"), false);
+    set_theme_rect(CONSTASTR("mainrect"), false);
     __super::created();
     gui->make_app_buttons( m_rid );
 
@@ -51,6 +51,31 @@ ts::uint32 mainrect_c::gm_handler( gmsg<ISOGM_APPRISE> & )
     gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self(), 0).send(); // 1st selected item, yo
 
     g_app->F_ALLOW_AUTOUPDATE = !g_app->F_READONLY_MODE;
+
+
+    if (const theme_rect_s *tr = themerect())
+    {
+        if (tr->captextadd.x >= 18)
+        {
+            int sz = tr->captextadd.x - 2;
+            ts::bitmap_c icon, rsz;
+            if (icon.load_from_file(CONSTWSTR("icon.png")))
+            {
+                rsz.create_ARGB(ts::ivec2(sz));
+                icon.resize_to( rsz.extbody(), ts::FILTER_BOX_LANCZOS3 );
+                rsz.premultiply();
+                icons[0] = rsz;
+            }
+
+            if (icon.load_from_file(CONSTWSTR("icon-offline.png")))
+            {
+                rsz.create_ARGB(ts::ivec2(sz));
+                icon.resize_to(rsz.extbody(), ts::FILTER_BOX_LANCZOS3);
+                rsz.premultiply();
+                icons[1] = rsz;
+            }
+        }
+    }
 }
 
 ts::uint32 mainrect_c::gm_handler(gmsg<GM_HEARTBEAT> &)
@@ -101,13 +126,24 @@ bool mainrect_c::saverectpos(RID,GUIPARAM)
 
     if (__super::sq_evt(qp, rid, data)) return true;
 
-	//switch( qp )
-	//{
-	//case SQ_DRAW:
-	//	if (const theme_rect_s *tr = themerect())
-	//		draw( *tr );
-	//	break;
-	//}
+	switch( qp )
+	{
+	case SQ_DRAW:
+        if (const theme_rect_s *tr = themerect())
+		if (icons[0].info().sz.x > 0 && icons[1].info().sz.x)
+        {
+            ts::irect cr = tr->captionrect( getprops().currentszrect(), getprops().is_maximized() );
+
+            ts::bitmap_c &icon = icons[ g_app->F_OFFLINE_ICON ? 1 : 0 ];
+            //cr.lt.y += (cr.height() - icon.info().sz.y)/2;
+            cr.lt.y += tr->captextadd.y;
+
+            getengine().begin_draw();
+            getengine().draw( cr.lt, icon.extbody(), ts::irect(0, icon.info().sz), true );
+            getengine().end_draw();
+        }
+		break;
+	}
 
     return false;
 }

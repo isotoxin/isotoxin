@@ -674,6 +674,11 @@ void contact_c::load_history(int n_last_items)
     }
 }
 
+ts::wstr_c contact_c::contactidfolder() const
+{
+    return ts::wmake<uint>( get_historian()->getkey().contactid );
+}
+
 void contact_c::send_file(const ts::wstr_c &fn)
 {
     contact_c *historian = get_historian();
@@ -1016,7 +1021,7 @@ bool contact_c::b_receive_file_as(RID, GUIPARAM par)
     if (file_transfer_s *ft = g_app->find_file_transfer(utag))
     {
         ts::wstr_c downf = prf().download_folder();
-        path_expand_env(downf);
+        path_expand_env(downf, contactidfolder());
         ts::make_path(downf, 0);
                     
         ts::wstr_c title = TTT("Save file",179);
@@ -1176,6 +1181,7 @@ void contact_c::setup( const contacts_s * c, time_t nowtime )
     set_name(c->name);
     set_customname(c->customname);
     set_statusmsg(c->statusmsg);
+    set_comment(c->comment);
     set_avatar(c->avatar.data(), c->avatar.size(), c->avatar_tag);
     set_readtime(ts::tmin(nowtime, c->readtime));
 
@@ -1199,6 +1205,7 @@ bool contact_c::save( contacts_s * c ) const
     c->options = get_options() | (get_keeph() << 16) | (get_aaac() << 19);
     c->name = get_name(false);
     c->customname = get_customname();
+    c->comment = get_comment();
     c->statusmsg = get_statusmsg(false);
     c->readtime = get_readtime();
     // avatar data copied not here, see profile_c::set_avatar
@@ -1512,7 +1519,14 @@ ts::uint32 contacts_c::gm_handler(gmsg<GM_UI_EVENT> &e)
 ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_AVATAR> &ava)
 {
     if (contact_c *c = find(ava.contact))
+    {
         c->set_avatar( ava.data.data(), ava.data.size(), ava.tag );
+
+        ts::wstr_c downf = prf().download_folder_images();
+        path_expand_env(downf, c->contactidfolder());
+        ts::make_path(downf, 0);
+        ava.data.save_to_file( ts::fn_join(downf,CONSTWSTR("avatar_")).append_as_uint(ava.tag).append(CONSTWSTR(".png")) );
+    }
 
     prf().set_avatar( ava.contact, ava.data, ava.tag );
     
@@ -1548,6 +1562,8 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                 {
                     g_app->F_OFFLINE_ICON = oflg;
                     g_app->set_notification_icon();
+                    ts::irect ir(0,0,64,64);
+                    HOLD(g_app->main).engine().redraw( &ir );
                 }
             }
         }

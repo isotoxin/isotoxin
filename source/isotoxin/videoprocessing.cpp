@@ -94,7 +94,15 @@ vsb_c *vsb_c::build( const vsb_descriptor_s &desc )
 
 ts::ivec2 vsb_c::fit_to_size( const ts::ivec2 &sz_ )
 {
+    if (sz_ == ts::ivec2(0))
+    {
+        ts::ivec2 s = get_video_size();
+        set_desired_size( s );
+        return s;
+    }
+
     if(initializing) return sz_;
+
     ts::ivec2 sz = sz_;
     sz.y &= ~1;
 

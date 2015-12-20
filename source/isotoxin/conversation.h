@@ -692,6 +692,8 @@ class gui_message_editor_c : public gui_textedit_c
     bool on_enter_press_func(RID, GUIPARAM);
     /*virtual*/ void cb_scrollbar_width(int w) override;
 
+    /*virtual*/ void paste_(int cp) override;
+
 public:
     gui_message_editor_c(initial_rect_data_s &data) :gui_textedit_c(data) {}
     /*virtual*/ ~gui_message_editor_c();
@@ -721,6 +723,7 @@ public:
     /*virtual*/ size_policy_e size_policy() const override {return SP_KEEP;}
     /*virtual*/ void created() override;
 
+    void send_file_item(const ts::str_c& prm);
     bool send_file(RID, GUIPARAM);
 
     void update_buttons();

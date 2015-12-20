@@ -89,9 +89,13 @@ rects
     captop_max=30
     capheight=24
     capheight_max=34
-    captexttab=5
+    captextadd=5,0
     capfont=caption
 
+  }
+  mainrect=main
+  {
+    captextadd=28,1
   }
   html
   {
@@ -107,6 +111,10 @@ rects
     colors=#FF0000,#009000
   }
   avasel=main
+  {
+    colors=#b0b0c0,#d0d0e0,#303050,#000000,#000080,#ffff80
+  }
+  prepimg=main
   {
     colors=#b0b0c0,#d0d0e0,#303050,#000000,#000080,#ffff80
   }
@@ -143,9 +151,16 @@ rects
   entertext=sb
   {
     byrect=0,130,19,149
+    c=2,2,2,2,#e5fadd
     clientborder=4,4,4,4
-    base=0,0,0,0,#f1f9ee //34,34,94,94
+    //base=2,2,2,2,#e5fadd //34,34,94,94
   }
+  msgarea=sb
+  {
+    base=0,0,0,0,#f1f9ee //34,34,94,94
+    clientborder=4,4,4,4
+  }
+
   msglist=sb
   {
     base=0,0,0,0,#f1f9ee //34,34,94,94
@@ -295,6 +310,7 @@ rects
     r=0,284,22,306
     clientborder=24,3,10,0
   }
+
   vtabitem.h=vtabitem
   { 
     c=0,0,0,0,#2ea200
@@ -311,6 +327,32 @@ rects
     c=0,0,0,0,#00a200
     deftextcolor=255,255,0
     l=139,232,161,254
+  }
+
+  htab
+  {
+    c=0,0,0,0,#dddddd
+    addition {
+      height=30
+    }
+  }
+  htabitem
+  { 
+    c=0,0,0,0,#dfdfdf
+    clientborder=6,2,6,0
+  }
+  htabitem.a=htabitem
+  { 
+    c=2,2,2,0,#f1f9ee
+  }
+  htabitem.h=htabitem
+  { 
+    deftextcolor=0,0,155
+  }
+  htabitem.ah=htabitem
+  { 
+    c=2,2,2,0,#f1f9ee
+    deftextcolor=0,0,155
   }
 
   contact
@@ -429,6 +471,8 @@ rects
     lb=17,409,25,415
     b=25,409,111,415
     c=22,261,128,283
+    r=111,366,117,401
+    rt=111,354,117,366
     maxcutborder=2,2,5,5
 
   }

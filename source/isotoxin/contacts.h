@@ -203,6 +203,7 @@ class contact_c : public ts::shared_object
     ts::str_c customname;
     ts::str_c statusmsg;
     ts::str_c details;
+    ts::str_c comment;
     time_t readtime = 0; // all messages after readtime considered unread
     UNIQUE_PTR( avatar_s ) avatar;
 
@@ -476,12 +477,14 @@ public:
 
         return r;
     }
-
+    
+    ts::wstr_c contactidfolder() const;
     void send_file(const ts::wstr_c &fn);
 
     void set_pubid( const ts::str_c &pubid_ ) { pubid = pubid_; }
     void set_name( const ts::str_c &name_ ) { name = name_; }
     void set_customname( const ts::str_c &name_ ) { customname = name_; }
+    void set_comment( const ts::str_c &c_ ) { comment = c_; }
     void set_statusmsg( const ts::str_c &statusmsg_ ) { statusmsg = statusmsg_; }
     void set_details( const ts::str_c &details_ ) { details = details_; }
     void set_state( contact_state_e st ) { state = st; opts.init(F_UNKNOWN, st == CS_UNKNOWN); }
@@ -509,7 +512,8 @@ public:
         return t;
     }
     ts::str_c get_name(bool metacompile = true) const {return (name.is_empty() && is_meta() && metacompile) ? compile_name() : name;};
-    const ts::str_c &get_customname() const { return customname;}
+    const ts::str_c &get_comment() const { return comment;}
+    const ts::str_c &get_customname() const { return customname; }
     ts::str_c get_statusmsg(bool metacompile = true) const {return (statusmsg.is_empty() && is_meta() && metacompile) ? compile_statusmsg() : statusmsg;};
     contact_state_e get_state() const {return state;}
     contact_online_state_e get_ostate() const {return ostate;}

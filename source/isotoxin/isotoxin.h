@@ -78,6 +78,7 @@ INLINE ipcr & operator>>(ipcr &r, ts::astrings_c &s)
 #include "entertext.h"
 #include "avaselector.h"
 #include "smileselector.h"
+#include "prepareimage.h"
 
 #include "res/resource.h"
 #include "application.h"

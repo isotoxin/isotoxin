@@ -211,34 +211,37 @@ void contacts_s::set(int column, ts::data_value_s &v)
 {
     switch (column)
     {
-        case 1:
+        case C_CONTACT_ID:
             key.contactid = (int)v.i;
             return;
-        case 2:
+        case C_PROTO_ID:
             key.protoid = (int)v.i;
             return;
-        case 3:
+        case C_META_ID:
             metaid = (int)v.i;
             return;
-        case 4:
+        case C_OPTIONS:
             options = (int)v.i;
             return;
-        case 5:
+        case C_NAME:
             name = v.text;
             return;
-        case 6:
+        case C_STATUSMSG:
             statusmsg = v.text;
             return;
-        case 7:
+        case C_READTIME:
             readtime = v.i;
             return;
-        case 8:
+        case C_CUSTOMNAME:
             customname = v.text;
             return;
-        case 9:
+        case C_COMMENT:
+            comment = v.text;
+            return;
+        case C_AVATAR:
             avatar = v.blob;
             return;
-        case 10:
+        case C_AVATAR_TAG:
             avatar_tag = (int)v.i;
             return;
     }
@@ -252,34 +255,37 @@ void contacts_s::get(int column, ts::data_pair_s& v)
     v.name = ccd.name_;
     switch (column)
     {
-        case 1:
+        case C_CONTACT_ID:
             v.i = key.contactid;
             return;
-        case 2:
+        case C_PROTO_ID:
             v.i = key.protoid;
             return;
-        case 3:
+        case C_META_ID:
             v.i = metaid;
             return;
-        case 4:
+        case C_OPTIONS:
             v.i = options;
             return;
-        case 5:
+        case C_NAME:
             v.text = name;
             return;
-        case 6:
+        case C_STATUSMSG:
             v.text = statusmsg;
             return;
-        case 7:
+        case C_READTIME:
             v.i = readtime;
             return;
-        case 8:
+        case C_CUSTOMNAME:
             v.text = customname;
             return;
-        case 9:
+        case C_COMMENT:
+            v.text = comment;
+            return;
+        case C_AVATAR:
             v.blob = avatar;
             return;
-        case 10:
+        case C_AVATAR_TAG:
             v.i = avatar_tag;
             return;
     }
@@ -289,19 +295,20 @@ ts::data_type_e contacts_s::get_column_type(int index)
 {
     switch (index)
     {
-        case 1:
-        case 2:
-        case 3:
-        case 4:
-        case 10:
+        case C_CONTACT_ID:
+        case C_PROTO_ID:
+        case C_META_ID:
+        case C_OPTIONS:
+        case C_AVATAR_TAG:
             return ts::data_type_e::t_int;
-        case 5:
-        case 6:
-        case 8:
+        case C_NAME:
+        case C_STATUSMSG:
+        case C_CUSTOMNAME:
+        case C_COMMENT:
             return ts::data_type_e::t_str;
-        case 7:
+        case C_READTIME:
             return ts::data_type_e::t_int64;
-        case 9:
+        case C_AVATAR:
             return ts::data_type_e::t_blob;
     }
     FORBIDDEN();
@@ -313,34 +320,37 @@ void contacts_s::get_column_desc(int index, ts::column_desc_s&cd)
     cd.type_ = get_column_type(index);
     switch (index)
     {
-        case 1:
+        case C_CONTACT_ID:
             cd.name_ = CONSTASTR("contact_id");
             break;
-        case 2:
+        case C_PROTO_ID:
             cd.name_ = CONSTASTR("proto_id");
             break;
-        case 3:
+        case C_META_ID:
             cd.name_ = CONSTASTR("meta_id");
             break;
-        case 4:
+        case C_OPTIONS:
             cd.name_ = CONSTASTR("options");
             break;
-        case 5:
+        case C_NAME:
             cd.name_ = CONSTASTR("name");
             break;
-        case 6:
+        case C_STATUSMSG:
             cd.name_ = CONSTASTR("statusmsg");
             break;
-        case 7:
+        case C_READTIME:
             cd.name_ = CONSTASTR("readtime");
             break;
-        case 8:
+        case C_CUSTOMNAME:
             cd.name_ = CONSTASTR("customname");
             break;
-        case 9:
+        case C_COMMENT:
+            cd.name_ = CONSTASTR("comment");
+            break;
+        case C_AVATAR:
             cd.name_ = CONSTASTR("avatar");
             break;
-        case 10:
+        case C_AVATAR_TAG:
             cd.name_ = CONSTASTR("avatar_tag");
             break;
         default:

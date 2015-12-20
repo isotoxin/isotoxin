@@ -333,6 +333,9 @@ private:
 protected:
     virtual void app_setup_custom_button(bcreate_s &) {};
     virtual void app_font_par(const ts::str_c&, ts::font_params_s&fprm) { }
+
+    theme_c &get_theme() {return m_theme;}
+
 public:
 
     ts::TSCOLOR selection_color = ts::ARGB(255, 255, 0);

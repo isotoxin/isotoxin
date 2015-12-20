@@ -474,10 +474,11 @@ void summon_test_window()
 
     drawcollector dch;
     //RID r = MAKE_ROOT<test_window>();
-    RID r = MAKE_ROOT<test_window_2>();
-    MODIFY(r).allow_move_resize().size(502,447).setcenterpos().visible(true);
+    //RID r = MAKE_ROOT<test_window_2>();
+    //MODIFY(r).allow_move_resize().size(502,447).setcenterpos().visible(true);
 
     //SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR, dialog_avasel_params_s(0));
+    SUMMON_DIALOG<dialog_prepareimage_c>(UD_PREPARE_IMAGE, contact_key_s());
     
 }
 

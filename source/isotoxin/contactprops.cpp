@@ -13,7 +13,7 @@ dialog_contact_props_c::~dialog_contact_props_c()
 
 /*virtual*/ ts::wstr_c dialog_contact_props_c::get_name() const
 {
-    return ts::wstr_c(TTT("[appname]: Contact settings",224)).append(CONSTWSTR(" - ")).append(__super::get_name());
+    return ts::wstr_c(TTT("[appname]: Contact properties",224)).append(CONSTWSTR(" - ")).append(__super::get_name());
 }
 
 
@@ -27,7 +27,7 @@ dialog_contact_props_c::~dialog_contact_props_c()
 
 /*virtual*/ ts::ivec2 dialog_contact_props_c::get_min_size() const
 {
-    return ts::ivec2(530, 530);
+    return ts::ivec2(530, 385);
 }
 
 void dialog_contact_props_c::getbutton(bcreate_s &bcr)
@@ -38,6 +38,12 @@ void dialog_contact_props_c::getbutton(bcreate_s &bcr)
 bool dialog_contact_props_c::custom_name( const ts::wstr_c & cn )
 {
     customname = to_utf8(cn);
+    return true;
+}
+
+bool dialog_contact_props_c::comment( const ts::wstr_c &c )
+{
+    ccomment = to_utf8(c);
     return true;
 }
 
@@ -73,16 +79,18 @@ menu_c dialog_contact_props_c::getaacmenu()
     return m;
 }
 
-/*virtual*/ int dialog_contact_props_c::additions(ts::irect &)
+/*virtual*/ int dialog_contact_props_c::additions(ts::irect &edges)
 {
     descmaker dm(descs);
-    dm << 1;
 
     if (contactue)
     {
         customname = contactue->get_customname();
+        ccomment = contactue->get_comment();
         keeph = contactue->get_keeph();
         aaac = contactue->get_aaac();
+
+        dm << 1;
 
         ts::str_c n = contactue->get_name();
         text_adapt_user_input(n);
@@ -99,12 +107,23 @@ menu_c dialog_contact_props_c::getaacmenu()
         dm().combik(TTT("Auto accept audio calls",288)).setmenu(getaacmenu()).setname(CONSTASTR("aaac"));
         dm().vspace();
 
+        dm << 2;
+        dm().list(TTT("Details",363), L"", -250).setname(CONSTASTR("list"));
 
-        dm().list(TTT("Details",363), L"", -265).setname(CONSTASTR("list"));
-
+        dm << 4;
+        dm().textfieldml(L"", from_utf8(ccomment), DELEGATE(this, comment), 12).focus(true);
     }
 
-    return 0;
+    menu_c m;
+    m.add( TTT("Settings",369), 0 , TABSELMI(1) );
+    m.add( TTT("Details",370), 0 , TABSELMI(2) );
+    m.add( TTT("Comment",371), 0 , TABSELMI(4) );
+
+    gui_htabsel_c &tab = MAKE_CHILD<gui_htabsel_c>(getrid(), m);
+    edges = ts::irect(0, tab.get_min_size().y, 0, 0);
+
+
+    return 1;
 }
 
 /*virtual*/ bool dialog_contact_props_c::sq_evt(system_query_e qp, RID rid, evt_data_s &d)
@@ -131,6 +150,11 @@ menu_c dialog_contact_props_c::getaacmenu()
         {
             changed = true;
             contactue->set_customname(customname);
+        }
+        if (contactue->get_comment() != ccomment)
+        {
+            changed = true;
+            contactue->set_comment(ccomment);
         }
         if (contactue->get_keeph() != keeph)
         {

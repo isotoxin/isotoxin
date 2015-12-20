@@ -377,7 +377,7 @@ bool check_profile_name(const ts::wstr_c &);
 
 bool check_netaddr( const ts::asptr & );
 
-void path_expand_env(ts::wstr_c &path);
+void path_expand_env(ts::wstr_c &path, const ts::wstr_c &contactid);
 
 void install_to(const ts::wstr_c &path, bool acquire_admin_if_need);
 bool elevate();
@@ -400,6 +400,13 @@ enum loctext_e
     loc_camerabusy,
     loc_initialization,
     loc_copy,
+    loc_image,
+    loc_images,
+    loc_space2takeimage,
+    loc_dropimagehere,
+    loc_loadimagefromfile,
+    loc_pasteimagefromclipboard,
+    loc_capturecamera,
 
     loc_connection_name,
     loc_module,
@@ -409,11 +416,12 @@ enum loctext_e
 
 ts::wstr_c loc_text(loctext_e);
 
+ts::wstr_c text_sizebytes( int sz );
 ts::wstr_c text_contact_state( ts::TSCOLOR color_online, ts::TSCOLOR color_offline, contact_state_e st );
-
 ts::wstr_c text_typing(const ts::wstr_c &prev, ts::wstr_c &workbuf, const ts::wsptr &preffix);
 
 void draw_initialization( rectengine_c *e, ts::bitmap_c &pab, const ts::irect&viewrect, ts::TSCOLOR tcol, const ts::wsptr &additiontext );
+void draw_chessboard(rectengine_c &e, const ts::irect & r, ts::TSCOLOR c1, ts::TSCOLOR c2);
 
 void add_status_items(menu_c &m);
 

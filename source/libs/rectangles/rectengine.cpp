@@ -408,7 +408,8 @@ rectengine_c *rectengine_c::get_last_child()
 		{
             const hover_data_s &hd = gui->get_hoverdata(data.mouse.screenpos);
 			if (hd.rid == getrid() && !getrect().getprops().is_maximized())
-            {   if (0 != (hd.area & AREA_RESIZE) && 0 == (hd.area & AREA_NORESIZE))
+            {
+                if (0 != (hd.area & AREA_RESIZE) && 0 == (hd.area & AREA_NORESIZE))
 			    {
                     gui->set_focus(hd.rid);
 				    sq_evt(SQ_RESIZE_START, getrid(), ts::make_dummy<evt_data_s>(true));
@@ -418,7 +419,7 @@ rectengine_c *rectengine_c::get_last_child()
 				    oo.mpos = data.mouse.screenpos;
 				    return true;
 			    }
-			    if (0 != (hd.area & AREA_MOVE))
+			    if (0 != (hd.area & AREA_MOVE) && 0 == (hd.area & AREA_NOMOVE))
 			    {
                     gui->set_focus(hd.rid);
 				    sq_evt(SQ_MOVE_START, getrid(), ts::make_dummy<evt_data_s>(true));
@@ -1907,8 +1908,7 @@ void border_window_data_s::draw()
             tdp.textoptions = &f;
 
             draw_data_s &ddd = begin_draw();
-            ddd.offset = caprect.lt;
-            ddd.offset.x += thr.captexttab;
+            ddd.offset = caprect.lt + thr.captextadd;
             ddd.size = caprect.size();
 
             draw(dn, tdp);
@@ -2089,6 +2089,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                 //DMSG("capture" << hwnd);
             }
 
+            bool noresize_nomove = false;
             if (hd.rid == rid)
             {
                 if (guirect_c *r = rect())
@@ -2096,7 +2097,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                     r->sq_evt(SQ_MOUSE_MOVE, rid, data);
                     if (r->getprops().is_maximized())
                     {
-                        data.mouse.allowchangecursor = false;
+                        noresize_nomove = true;
                         SetCursor(LoadCursorW(nullptr, IDC_ARROW));
                     }
                 }
@@ -2107,7 +2108,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
             }
             if (data.mouse.allowchangecursor)
             {
-                auto getcs = [=]()-> const ts::wchar *
+                auto getcs = [&]()-> const ts::wchar *
                 {
                     static const ts::wchar *cursors[] = {
                         IDC_ARROW,
@@ -2122,16 +2123,24 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                         IDC_SIZENESW,
                         IDC_SIZENWSE,
                     };
-                    if ((hd.area & AREA_RESIZE) && (hd.area & AREA_RESIZE) < LENGTH(cursors)) return cursors[hd.area & AREA_RESIZE];
-                    if (hd.area & (AREA_CAPTION|AREA_MOVECURSOR)) return IDC_SIZEALL;
+                    if ((hd.area & AREA_RESIZE) && (hd.area & AREA_RESIZE) < LENGTH(cursors))
+                    {
+                        if (noresize_nomove && 0 == (hd.area & AREA_FORCECURSOR)) return nullptr;
+                        return cursors[hd.area & AREA_RESIZE];
+                    }
+                    if (hd.area & (AREA_MOVE))
+                    {
+                        if (noresize_nomove && 0 == (hd.area & AREA_FORCECURSOR)) return nullptr;
+                        return IDC_SIZEALL;
+                    }
                     if (hd.area & AREA_EDITTEXT) return IDC_IBEAM;
                     if (hd.area & AREA_HAND) return IDC_HAND;
                     
 
                     return IDC_ARROW;
                 };
-
-                SetCursor(LoadCursorW(nullptr, getcs()));
+                if (const ts::wchar * crsr = getcs())
+                    SetCursor(LoadCursorW(nullptr, crsr));
             }
             return false;
 		}
@@ -2166,10 +2175,13 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                 {
                     if (guirect_c *r = rect())
                     {
-                        if (r->getprops().is_maximized())
-                            MODIFY(*r).maximize(false);
-                        else if (!r->getprops().is_collapsed())
-                            MODIFY(*r).maximize(true);
+                        if ( r->allow_maximize() )
+                        {
+                            if (r->getprops().is_maximized())
+                                MODIFY(*r).maximize(false);
+                            else if (!r->getprops().is_collapsed())
+                                MODIFY(*r).maximize(true);
+                        }
                     }
                 }
                 return false;

@@ -54,7 +54,7 @@ struct udp_sender
     std::vector<prepared_sock_s> socks; // one per interface
 
     void prepare();
-    void send(const void *data, int size, int portshift);
+    bool send(const void *data, int size, int portshift);
     void close();
     udp_sender(int port) :port(port) {}
     ~udp_sender()
@@ -250,6 +250,7 @@ class lan_engine : public packetgen
     std::vector<byte> avatar;
     bool avatar_set = false;
     bool media_data_transfer = false;
+    bool fatal_error = false;
 
     int nextmastertaggeneration = 0;
     int nexthallo = 0;

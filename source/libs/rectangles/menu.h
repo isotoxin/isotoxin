@@ -165,6 +165,7 @@ public:
     // can change item's state
     template<typename F, typename PAR> void iterate_items(F & f, PAR &par)
     {
+        if (!curbp) return;
         bool normal_item = false;
         bool need_separator = false;
         for (auto it = curbp->begin(); it; ++it)

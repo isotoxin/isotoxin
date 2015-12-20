@@ -221,7 +221,7 @@
 221=Compressed: $
 222=Drop [i]image[/i] here
 223=Join network
-224=[appname]: Contact settings
+224=[appname]: Contact properties
 225=Contact properties
 226=Use global setting
 227=Always save
@@ -366,6 +366,14 @@
 366=Client
 367=DNS name
 368=Email
+369=Settings
+370=Details
+371=Comment
+372=Default download folder for images
+373=[appname]: Prepare image
+374=Send image
+375=Send image
+376=Send file
 1000=Incoming message
 1001=Incoming file
 1002=File receiving started
