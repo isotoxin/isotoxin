@@ -123,6 +123,7 @@ protected:
             _PATH,
             _FILE,
             _TEXT,
+            _PASSWD,
             _SELECTOR,
             _COMBIK,
             _LIST,
@@ -141,7 +142,7 @@ protected:
 
         bool updvalue( const ts::wstr_c &t )
         {
-            ASSERT( _TEXT == ctl || _PATH == ctl || _FILE == ctl );
+            ASSERT( _TEXT == ctl || _PASSWD == ctl || _PATH == ctl || _FILE == ctl );
             changed = false;
             if (textchecker && textchecker(t))
             {
@@ -183,7 +184,7 @@ protected:
         description_s&height(int h) { height_ = h; return *this; }
         description_s&size(int w, int h) { width_ = w; height_ = h; return *this; }
         description_s&subctl(int tag,ts::wstr_c &ctldesc);
-
+        description_s&passwd(bool p) { ASSERT(_TEXT == ctl || _PASSWD == ctl); ctl = p ? _PASSWD : _TEXT; return *this; }
 
         void hgroup( const ts::wsptr& desc );
         description_s& label( const ts::wsptr& text );
@@ -266,6 +267,7 @@ protected:
     enum tfrole_e
     {
         TFR_TEXT_FILED,
+        TFR_TEXT_FILED_PASSWD,
         TFR_TEXT_FILED_RO,
         TFR_PATH_SELECTOR,
         TFR_PATH_VIEWER,
@@ -292,6 +294,8 @@ protected:
     virtual void tabselected(ts::uint32 mask) {}
 
     void ctlenable( const ts::asptr&name, bool enblflg );
+
+    void set_check_value( const ts::asptr&name, bool v );
 
     void set_selector_menu( const ts::asptr& ctl_name, const menu_c& m );
     void set_combik_menu( const ts::asptr& ctl_name, const menu_c& m );

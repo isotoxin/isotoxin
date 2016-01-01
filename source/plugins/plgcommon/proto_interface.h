@@ -176,6 +176,7 @@ enum long_operation_e
 {
     LOP_ADDCONTACT,
     LOP_SETCONFIG,
+    LOP_ONLINE,
 };
 
 enum send_av_ret_e

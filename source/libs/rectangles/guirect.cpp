@@ -486,9 +486,21 @@ bool gui_button_c::group_handler(gmsg<GM_GROUP_SIGNAL> & signal)
         } else if (flags.is(F_CHECKBUTTON))
         {
             if (signal.sender == getrid())
-                flags.invert(F_MARK);
+                switch (signal.dodo)
+                {
+                case gmsg<GM_GROUP_SIGNAL>::WTD_DEFAULT:
+                    flags.invert(F_MARK);
+                    break;
+                case gmsg<GM_GROUP_SIGNAL>::WTD_SET:
+                    flags.set(F_MARK);
+                    break;
+                case gmsg<GM_GROUP_SIGNAL>::WTD_CLEAR:
+                    flags.clear(F_MARK);
+                    break;
+                }
+                
             if (flags.is(F_MARK))
-                signal.mask |= (ts::uint32)param; //-V205
+                signal.mask |= as_int(param);
         }
 
         if (flags.is(F_MARK) != om)
@@ -733,6 +745,7 @@ void gui_button_c::set_face( button_desc_s *bdesc )
     switch(qp)
     {
     case SQ_DRAW:
+        if (rid != getrid()) return false;
         draw();
         return true;
     case SQ_MOUSE_MOVE:
@@ -791,11 +804,21 @@ void gui_button_c::set_face( button_desc_s *bdesc )
     }
 
     if (action)
-    {
         push();
-    }
 
     return false;
+}
+
+void gui_button_c::set_check_value(bool v)
+{
+    if (flags.is(F_CHECKBUTTON))
+    {
+        gmsg<GM_GROUP_SIGNAL> s(getrid(), grouptag);
+        s.dodo = v ? gmsg<GM_GROUP_SIGNAL>::WTD_SET : gmsg<GM_GROUP_SIGNAL>::WTD_CLEAR;
+        s.send();
+        CHECK(handler && handler(getrid(), as_param(s.mask)));
+        return;
+    }
 }
 
 void gui_button_c::push()
@@ -985,6 +1008,7 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
     switch (qp)
     {
     case SQ_DRAW:
+        if (rid != getrid()) return false;
         draw();
         return true;
     case SQ_MOUSE_L2CLICK:
@@ -1967,7 +1991,7 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
         return true;
     case SQ_DRAW:
         {
-        if (allow_move_splitter())
+            if (allow_move_splitter())
             if (const theme_rect_s *thr = themerect())
             {
                 evt_data_s d;
@@ -2083,6 +2107,9 @@ void gui_vscrollgroup_c::children_repos()
 
     if (flags.is(F_SCROLL_TO_END))
         sbhelper.shift = minimum<int>::value;
+    else if (flags.is(F_KEEP_TOP_VISIBLE))
+        scroll_target = top_visible;
+    int scroll_top_keep = top_visible_offset;
 
     int height_need = info.area.height() / info.count;
 
@@ -2139,7 +2166,9 @@ void gui_vscrollgroup_c::children_repos()
     sbhelper.set_size(vheight, info.area.height());
     if (scroll_target_y >= 0)
     {
-        if (flags.is(F_SCROLL_TO_MAX_TOP))
+        if (flags.is(F_KEEP_TOP_VISIBLE))
+            sbhelper.shift = ts::tmax(-scroll_target_y+scroll_top_keep, ts::tmin(0, info.area.height() - vheight));
+        else if (flags.is(F_SCROLL_TO_MAX_TOP))
             sbhelper.shift = ts::tmax( -scroll_target_y, ts::tmin(0, info.area.height() - vheight) );
         else
         {
@@ -2205,6 +2234,8 @@ void gui_vscrollgroup_c::children_repos()
 
     flags.init( F_SCROLL_TO_END, !flags.is(F_SBVISIBLE) || sbhelper.at_end(info.area.height()) );
 
+    if (flags.is(F_KEEP_TOP_VISIBLE))
+        scroll_target = nullptr;
 }
 
 void gui_vscrollgroup_c::on_add_child(RID id)
@@ -2703,7 +2734,7 @@ gui_menu_item_c::~gui_menu_item_c()
         }
         return true;
     case SQ_DRAW:
-        
+        if (rid != getrid()) return false;
         if (ASSERT(m_engine))
         {
             if (const theme_rect_s *thr = themerect())
@@ -3123,7 +3154,7 @@ gui_vtabsel_item_c::~gui_vtabsel_item_c()
         MODIFY(*this).highlight(false);
         return false;
     case SQ_DRAW:
-
+        if (rid != getrid()) return false;
         if (ASSERT(m_engine))
         {
             const theme_rect_s *thr = themerect();
@@ -3312,7 +3343,7 @@ void gui_htabsel_item_c::activate()
             MODIFY(*this).highlight(false);
             return false;
         case SQ_DRAW:
-
+            if (rid != getrid()) return false;
             if (ASSERT(m_engine))
             {
                 gui_control_c::sq_evt(qp, rid, data);
@@ -3446,6 +3477,7 @@ void gui_hslider_c::set_level(float level_)
     switch (qp)
     {
     case SQ_DRAW:
+        if (rid != getrid()) return false;
         if (ASSERT(m_engine))
         {
             if (const theme_rect_s *th = themerect())

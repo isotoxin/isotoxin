@@ -1033,6 +1033,10 @@ static void __stdcall operation_result(long_operation_e op, int rslt)
             IPCW(HA_CMD_STATUS) << (int)AQ_SET_CONFIG << rslt;
             break;
         }
+    case LOP_ONLINE: {
+            IPCW(HA_CMD_STATUS) << (int)AQ_ONLINE << rslt;
+            break;
+        }
     }
 }
 

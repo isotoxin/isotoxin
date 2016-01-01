@@ -145,6 +145,7 @@ void gui_listitem_c::set_text(const ts::wstr_c&t, bool full_height_last_line)
         textrect.make_dirty(false, false, true);
         break;
     case SQ_DRAW:
+        if (rid != getrid()) return false;
         __super::sq_evt(qp, rid, data);
         if (icon)
         {
@@ -275,7 +276,7 @@ gui_dialog_c::description_s&gui_dialog_c::description_s::subctl(int tag, ts::wst
 {
     ASSERT(tag >= 0);
     subctltag = tag;
-    if (ctl == _TEXT)
+    if (ctl == _TEXT || ctl == _PASSWD)
     {
         ASSERT(height_ == 0);
         height_ = ts::g_default_text_font->height;
@@ -617,6 +618,15 @@ void gui_dialog_c::set_selector_menu(const ts::asptr& ctl_name, const menu_c& m)
     }
 }
 
+void gui_dialog_c::set_check_value( const ts::asptr&name, bool v )
+{
+    if (RID crid = find(name))
+    {
+        gui_button_c &cb = HOLD(crid).as<gui_button_c>();
+        cb.set_check_value(v);
+    }
+}
+
 void gui_dialog_c::set_combik_menu( const ts::asptr& ctl_name, const menu_c& m )
 {
     if (RID crid = find(ctl_name))
@@ -663,7 +673,7 @@ void gui_dialog_c::set_edit_value( const ts::asptr& ctl_name, const ts::wstr_c& 
     }
     for (description_s &d : descs)
     {
-        if (d.ctl == description_s::_TEXT && d.name == ctl_name)
+        if ((d.ctl == description_s::_TEXT || d.ctl == description_s::_PASSWD) && d.name == ctl_name)
         {
             d.text = t;
             d.changed = true;
@@ -718,6 +728,7 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
     {
     case TFR_TEXT_FILED:
     case TFR_TEXT_FILED_RO:
+    case TFR_TEXT_FILED_PASSWD:
         break;
     case TFR_PATH_SELECTOR:
         selector = DELEGATE( this, path_selector );
@@ -776,6 +787,11 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
     } else if (role == TFR_TEXT_FILED)
     {
         tf.selectall();
+
+    } else if (role == TFR_TEXT_FILED_PASSWD)
+    {
+        tf.selectall();
+        tf.set_password_char('*');
     }
 
     //ctls[ ts::pair_s<int,int>(tag, 0) ] = &creator.get();
@@ -843,6 +859,7 @@ public:
             }
             break;
         case SQ_DRAW:
+            if (rid != getrid()) return false;
             if ( getengine().children_count() == 0 && !emptymessage.is_empty() )
             {
                 __super::sq_evt(qp, rid, data);
@@ -1218,6 +1235,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             }
             break;
         case description_s::_TEXT:
+        case description_s::_PASSWD:
         case description_s::_BUTTON:
         case description_s::_HSLIDER:
         case description_s::_SELECTOR:
@@ -1245,7 +1263,9 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
     {
     case _TEXT:
         return dlg->textfield(text, MAX_PATH, readonly_ ? TFR_TEXT_FILED_RO : TFR_TEXT_FILED, DELEGATE(this, updvalue), nullptr, height_, parent);
-    case description_s::_SELECTOR:
+    case _PASSWD:
+        return dlg->textfield(text, MAX_PATH, TFR_TEXT_FILED_PASSWD, DELEGATE(this, updvalue), nullptr, height_, parent);
+    case _SELECTOR:
         {
             evt_data_s dd;
             dd.textfield.menu = &items;
@@ -1306,16 +1326,16 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
     ASSERT( getengine().children_count() == 0, "Please, do not create any controls before call this method" );
     defaultthrdraw = DTHRO_BORDER | DTHRO_BASE | /*DTHRO_CENTER_HOLE |*/ DTHRO_CAPTION | DTHRO_CAPTION_TEXT;
 
-    ts::uint32 allowb = SETBIT(ABT_CLOSE) | (g_sysconf.mainwindow ? 0 : SETBIT(ABT_MINIMIZE));
-    if (allow_maximize()) allowb |= SETBIT(ABT_MAXIMIZE) | SETBIT(ABT_NORMALIZE);
+    ts::uint32 allowb = caption_buttons();
     GET_TOOLTIP ttt = nullptr;
     if (g_sysconf.mainwindow)
     {
+        RESETFLAG(allowb, SETBIT(CBT_MINIMIZE));
         ttt = (GET_TOOLTIP)[]()->ts::wstr_c { return ts::wstr_c(); };
     }
     gui->make_app_buttons(getrid(), allowb, ttt);
 
-    if (ASSERT(0 < getengine().children_count()))
+    if (0 < getengine().children_count())
     {
         bcreate_s bcr;
         bcr.tag = 0;

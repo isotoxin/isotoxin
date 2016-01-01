@@ -65,6 +65,7 @@ namespace
 
 dialog_prepareimage_c::dialog_prepareimage_c(MAKE_ROOT<dialog_prepareimage_c> &data) :gui_isodialog_c(data), croprect(0), ck(data.ck)
 {
+    deftitle = title_prepare_image;
     bitmap = data.bitmap;
 
     ts::irect msz = ts::wnd_get_max_size( gui->get_cursor_pos() );
@@ -487,11 +488,6 @@ bool dialog_prepareimage_c::prepare_working_image( RID, GUIPARAM )
     return true;
 }
 
-/*virtual*/ ts::wstr_c dialog_prepareimage_c::get_name() const
-{
-    return TTT("[appname]: Prepare image",373);
-}
-
 void dialog_prepareimage_c::prepare_stuff()
 {
     if (!dirty) return;
@@ -811,7 +807,7 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
                     infostr.append_as_uint(bitmapcroprect.width());
                     infostr.append(CONSTWSTR(" x "));
                     infostr.append_as_uint(bitmapcroprect.height());
-                    switch (saved_img_format)
+                    switch (saved_img_format) // -V719
                     {
                     case ts::if_none:
                         break;

@@ -60,10 +60,10 @@ struct theme_rect_s : ts::shared_object
         bool loaded = false;
     } siso[SI_count];
 	ts::flags32_s flags;
+    int resizearea;
 	ts::irect hollowborder; // widths of hollow border
     ts::irect maxcutborder; // widths of overgraphics, which must be cut in maximized mode
 	ts::irect clientborder;
-	int resizearea;
     ts::ivec2 captextadd = ts::ivec2(5,0);
 	int captop; // v position of caption bitmaps (from top part of border)
     int captop_max;

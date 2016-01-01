@@ -31,7 +31,7 @@ public:
 	mainrect_c(MAKE_ROOT<mainrect_c> &data);
 	~mainrect_c();
 
-    /*virtual*/ bool allow_maximize() const override { return true;}
+    /*virtual*/ ts::uint32 caption_buttons() const override { return SETBIT(CBT_MAXIMIZE) | SETBIT(CBT_NORMALIZE) | __super::caption_buttons(); }
     /*virtual*/ ts::wstr_c get_name() const override;
     
         //sqhandler_i

@@ -414,6 +414,12 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8, contact_c *sender_, uint64
             b_receive.leech(TSNEW(leech_dock_bottom_center_s, minw, 30, -5, 5, 0, 3));
             MODIFY(b_receive).visible(true);
 
+            ts::wstr_c downf = prf().download_folder();
+            path_expand_env(downf, sender_->contactidfolder());
+            make_path(downf, 0);
+            if (!dir_present(downf))
+                b_receive.disable();
+
             gui_button_c &b_refuse = MAKE_CHILD<gui_button_c>(getrid());
             b_refuse.set_face_getter(BUTTON_FACE(button));
             b_refuse.set_text(TTT("No",178));
@@ -1075,6 +1081,7 @@ int gui_notice_callinprogress_c::preview_cam_cursor_resize( const ts::ivec2 &p )
     switch (qp)
     {
     case SQ_DRAW:
+        if (rid == getrid())
         {
             __super::sq_evt(qp, rid, data);
 
@@ -1136,6 +1143,7 @@ int gui_notice_callinprogress_c::preview_cam_cursor_resize( const ts::ivec2 &p )
             ++calc_rect_tag_frame;
             return true;
         }
+        return false;
     case SQ_MOUSE_MOVE_OP:
         if (!display || !camera)
         {
@@ -1918,11 +1926,18 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
 
                 if (CR_OK == curstate)
                 {
-                    sost = CONSTWSTR("</l>") + text_contact_state(
-                        get_default_text_color(COLOR_ONLINE_STATUS),
-                        get_default_text_color(COLOR_OFFLINE_STATUS),
-                        c->get_state()
-                        ) + CONSTWSTR("<l>");
+                    if ( CS_OFFLINE == c->get_state() && ap.is_online_switch())
+                    {
+                        sost.set(maketag_color<ts::wchar>(get_default_text_color(COLOR_OFFLINE_STATUS))).append(TTT("Connecting...",68)).append(CONSTWSTR("</color>"));
+                    } else
+                    {
+                        sost = CONSTWSTR("</l>") + text_contact_state(
+                            get_default_text_color(COLOR_ONLINE_STATUS),
+                            get_default_text_color(COLOR_OFFLINE_STATUS),
+                            c->get_state()
+                            ) + CONSTWSTR("<l>");
+                    }
+
 
                 } else
                 {
@@ -2073,8 +2088,9 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
     b_setup.leech(TSNEW(leech_at_left_s, &b_connect, 5));
     b_setup.set_handler(connect_handler::netsetup, as_param(networkid));
     MODIFY(b_setup).visible(true);
-    if (curstate != CR_OK)
-        b_setup.disable();
+    
+    //if (curstate != CR_OK)
+    //    b_setup.disable();
 
     gui_button_c &b_copy = MAKE_CHILD<gui_button_c>(getrid());
     b_copy.set_constant_size(sz0);
@@ -2117,7 +2133,7 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT>&c)
 
 ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CMD_RESULT> &rslt)
 {
-    if (rslt.cmd == AQ_SET_CONFIG && rslt.networkid == networkid)
+    if ((rslt.cmd == AQ_SET_CONFIG || rslt.cmd == AQ_ONLINE) && rslt.networkid == networkid)
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, resetup), nullptr);
 
     return 0;
@@ -4637,6 +4653,7 @@ gui_message_item_c &gui_messagelist_c::insert_message_item(message_type_app_e mt
 
     gui_message_item_c &r = MAKE_CHILD<gui_message_item_c>(getrid(), historian, author, skin, mt);
     getengine().child_move_to(index, &r.getengine());
+    keep_top_visible();
     return r;
 }
 
@@ -4737,6 +4754,7 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
 
     gui_message_item_c &r = MAKE_CHILD<gui_message_item_c>(getrid(), historian, author, skin, mt);
     if (is_same_author) r.set_no_author();
+    keep_top_visible();
     return r;
 }
 
@@ -4982,7 +5000,7 @@ void gui_messagelist_c::clear_list(bool empty_mode)
     last_seen_post_time = 0;
     filler.reset();
 
-    if ( empty_mode && prf().get_options().is(UIOPT_SHOW_NEWCONN_BAR))
+    if ( empty_mode && (!prf().is_loaded() || prf().get_options().is(UIOPT_SHOW_NEWCONN_BAR)))
     {
         if (!flags.is(F_EMPTY_MODE))
         {
@@ -5045,6 +5063,12 @@ namespace
 
         bool _new_connection(RID, GUIPARAM)
         {
+            if (!prf().is_loaded())
+            {
+                dialog_msgbox_c::mb_error( loc_text(loc_please_create_profile) ).summon();
+                return true;
+            }
+
             if ( avprots && avprots->loaded )
             {
                 dialog_protosetup_params_s prms(avprots.get(), &prf().get_table_active_protocol(), DELEGATE(&prf(), addeditnethandler));
@@ -5062,16 +5086,23 @@ namespace
         }
         void header()
         {
-            ts::wstr_c lt(CONSTWSTR("<p=c>"), TTT("Join network",223));
-            set_text(lt);
-            gui_button_c &b = MAKE_CHILD<gui_button_c>(getrid());
-            b.set_face_getter(BUTTON_FACE(addnetwork));
-            b.set_handler(DELEGATE(this, _new_connection), this);
-            ts::ivec2 minsz = b.get_min_size();
-            b.leech(TSNEW(leech_dock_top_center_s, minsz.x, minsz.y, -5, 5 ));
-            MODIFY(b).visible(true);
-            textrect.set_margins(ts::ivec2(0,minsz.y+5));
-            addh = minsz.y + 10;
+            if (prf().is_loaded())
+            {
+                ts::wstr_c lt(CONSTWSTR("<p=c>"), TTT("Join network", 223));
+                set_text(lt);
+                gui_button_c &b = MAKE_CHILD<gui_button_c>(getrid());
+                b.set_face_getter(BUTTON_FACE(addnetwork));
+                b.set_handler(DELEGATE(this, _new_connection), this);
+                ts::ivec2 minsz = b.get_min_size();
+                b.leech(TSNEW(leech_dock_top_center_s, minsz.x, minsz.y, -5, 5));
+                MODIFY(b).visible(true);
+                textrect.set_margins(ts::ivec2(0, minsz.y + 5));
+                addh = minsz.y + 10;
+            } else
+            {
+                ts::wstr_c lt(CONSTWSTR("<p=c>"), loc_text(loc_please_create_profile));
+                set_text(lt);
+            }
 
         }
 
@@ -5266,6 +5297,20 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
     }
     return 0;
 }
+
+ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_DO_POSTEFFECT> &f)
+{
+    if (f.bits & application_c::PEF_RECREATE_CTLS)
+    {
+        if (flags.is(F_EMPTY_MODE) && prf().get_options().is(UIOPT_SHOW_NEWCONN_BAR))
+        {
+            getengine().trunc_children(0);
+            create_empty_mode_stuff();
+        }
+    }
+    return 0;
+}
+
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_TYPING> &p)
 {

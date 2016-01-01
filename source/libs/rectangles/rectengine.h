@@ -98,8 +98,10 @@ class rectengine_c : public sqhandler_i
 protected:
     bool cleanup_children(RID,GUIPARAM);
     ts::array_safe_t<rectengine_c, 2> children;
-    ts::array_safe_t<rectengine_c, 2> children_sorted; // zindex sorted
+    ts::array_safe_t<rectengine_c, 2> children_z_sorted; // zindex sorted
     int drawntag;
+
+    void prepare_children_z_sorted();
 
     int child_index(RID rid) const
     {
@@ -143,7 +145,8 @@ public:
     RID find_child_by_point(const ts::ivec2 & screenpos) const 
     {
         RID rr = getrid();
-        for (rectengine_c *c : children_sorted)
+        const_cast<rectengine_c *>(this)->prepare_children_z_sorted();
+        for (rectengine_c *c : children_z_sorted)
             if (c)
             {
                 const rectprops_c &rps = c->getrect().getprops();

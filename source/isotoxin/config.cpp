@@ -43,6 +43,8 @@ void config_base_c::prepare_conf_table( ts::sqlitedb_c *db )
 }
 bool config_base_c::save_dirty(RID, GUIPARAM save_all_now)
 {
+    ts::db_transaction_c __transaction(db);
+
     bool some_data_still_not_saved = save();
     for(;save_all_now && some_data_still_not_saved; some_data_still_not_saved = save()) ;
     if (some_data_still_not_saved) DEFERRED_UNIQUE_CALL( 1.0, DELEGATE(this, save_dirty), nullptr );
@@ -50,6 +52,8 @@ bool config_base_c::save_dirty(RID, GUIPARAM save_all_now)
 }
 bool config_base_c::save()
 {
+    ts::db_transaction_c __transaction(db);
+
     if (db && dirty.size())
     {
         ts::str_c vn = dirty.last();
@@ -177,7 +181,7 @@ void config_c::load( const ts::wstr_c &path_override )
 
     } else
     {
-        db = ts::sqlitedb_c::connect(path, g_app->F_READONLY_MODE);
+        db = ts::sqlitedb_c::connect(path, nullptr, g_app->F_READONLY_MODE);
     }
 
     if (db)

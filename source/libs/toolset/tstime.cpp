@@ -24,9 +24,9 @@ void    timerprocessor_c::do_all()
 
 float    timerprocessor_c::takt(double dt)
 {
-    RECURSIVE_ALERT();
+    //RECURSIVE_ALERT(); recursive calls allowed. sys_idle can be called from timeup
 
-    tmp_array_del_t<timer_subscriber_entry_s, 32> m_items_process;
+    tmp_array_del_t<timer_subscriber_entry_s, 32> processing;
 
     float nexttime = -1;
     aint cnt = m_items.size();
@@ -38,7 +38,7 @@ float    timerprocessor_c::takt(double dt)
             e->ttl -= dt;
             if (e->ttl < 0)
             {
-                m_items_process.add(m_items.get_remove_fast(i));
+                processing.add(m_items.get_remove_fast(i));
                 --cnt;
                 continue;
             } else
@@ -50,7 +50,7 @@ float    timerprocessor_c::takt(double dt)
         ++i;
     }
 
-    for (timer_subscriber_entry_s *e : m_items_process)
+    for (timer_subscriber_entry_s *e : processing)
     {
         timer_subscriber_c *t = e->hook.get();
         e->hook.unconnect();
@@ -69,7 +69,7 @@ float    timerprocessor_c::takt(double dt)
         ++i;
     }
 
-    while (m_items_process.size()) makefree(m_items_process.get_last_remove());
+    while (processing.size()) makefree(processing.get_last_remove());
     return nexttime;
 }
 

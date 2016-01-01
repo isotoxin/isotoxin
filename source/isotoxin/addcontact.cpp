@@ -3,6 +3,7 @@
 
 dialog_addcontact_c::dialog_addcontact_c(MAKE_ROOT<dialog_addcontact_c> &data) :gui_isodialog_c(data), inparam(data.prms)
 {
+    deftitle = title_new_contact;
 }
 
 dialog_addcontact_c::~dialog_addcontact_c()
@@ -14,7 +15,7 @@ dialog_addcontact_c::~dialog_addcontact_c()
 /*virtual*/ ts::wstr_c dialog_addcontact_c::get_name() const
 {
     if (!inparam.title.is_empty()) return inparam.title;
-    return TTT("[appname]: New contact",65);
+    return __super::get_name();
 }
 
 
@@ -42,6 +43,10 @@ void dialog_addcontact_c::network_selected( const ts::str_c &prm )
 {
     apid = prm.as_int();
     set_combik_menu(CONSTASTR("networks"), networks());
+    if (invitemessage_autogen.equals(from_utf8(invitemessage)))
+    {
+        set_edit_value( CONSTASTR("msg"), rtext() );
+    }
 }
 
 menu_c dialog_addcontact_c::networks()
@@ -58,13 +63,37 @@ menu_c dialog_addcontact_c::networks()
         {
             apid = ap.getid();
             mif |= MIF_MARKED;
-        }
+        } else if (apid == ap.getid())
+            mif |= MIF_MARKED;
+
         nm.add(from_utf8(ap.get_name()), mif, DELEGATE(this, network_selected), ts::amake(ap.getid()));
 
         if (0 == (mif & MIF_DISABLED))
             networks_available = true;
     });
     return nm;
+}
+
+ts::wstr_c dialog_addcontact_c::rtext()
+{
+    invitemessage_autogen = TTT("Please, add me to your contact list", 73);
+    ts::wstr_c n;
+    if ( active_protocol_c *ap = prf().ap(apid) )
+    {
+        if ( 0 == (ap->get_features() & PF_INVITE_NAME) )
+        {
+            if (ap->get_uname().is_empty())
+                n = from_utf8(contacts().get_self().get_name());
+            else
+                n = from_utf8(ap->get_uname());
+        }
+    }
+    if (!n.is_empty())
+    {
+        n.append(CONSTWSTR(": "));
+        invitemessage_autogen.insert(0,n);
+    }
+    return invitemessage_autogen;
 }
 
 /*virtual*/ int dialog_addcontact_c::additions(ts::irect &)
@@ -80,7 +109,7 @@ menu_c dialog_addcontact_c::networks()
         menu_c m = networks();
         if (networks_available)
         {
-            dm().combik(loc_text(loc_network)).setmenu(m);
+            dm().combik(loc_text(loc_network)).setname(CONSTASTR("networks")).setmenu(m);
         } else
         {
             ts::wstr_c errs(CONSTWSTR("<b>"), loc_text(loc_nonetwork));
@@ -95,7 +124,9 @@ menu_c dialog_addcontact_c::networks()
         .focus(!resend)
         .readonly(resend);
     dm().vspace(5);
-    dm().textfieldml(TTT("Message",72), TTT("$: Please, add me to your contact list",73) / from_utf8(contacts().get_self().get_name()), DELEGATE(this, invite_message_handler))
+
+    dm().textfieldml(TTT("Message",72), rtext(), DELEGATE(this, invite_message_handler))
+        .setname(CONSTASTR("msg"))
         .focus(resend);
     dm().vspace(5);
     dm().hiddenlabel(TTT("Invalid Public ID!",71), ts::ARGB(255,0,0)).setname(ts::amake<uint>(CONSTASTR("err"), CR_INVALID_PUB_ID));
@@ -183,6 +214,7 @@ ts::uint32 dialog_addcontact_c::gm_handler( gmsg<ISOGM_CMD_RESULT>& r)
 
 dialog_addgroup_c::dialog_addgroup_c(initial_rect_data_s &data) :gui_isodialog_c(data)
 {
+    deftitle = title_new_groupchat;
 }
 
 dialog_addgroup_c::~dialog_addgroup_c()
@@ -190,12 +222,6 @@ dialog_addgroup_c::~dialog_addgroup_c()
     if (gui)
         gui->delete_event(DELEGATE(this, hidectl));
 }
-
-/*virtual*/ ts::wstr_c dialog_addgroup_c::get_name() const
-{
-    return TTT("[appname]: New group chat",249);
-}
-
 
 /*virtual*/ void dialog_addgroup_c::created()
 {
@@ -239,7 +265,8 @@ menu_c dialog_addgroup_c::networks()
             {
                 apid = ap.getid();
                 mif |= MIF_MARKED;
-            }
+            } else if (apid == ap.getid())
+                mif |= MIF_MARKED;
         } else
             mif |= MIF_DISABLED;
         nm.add(from_utf8(ap.get_name()), mif, DELEGATE(this, network_selected), ts::amake(ap.getid()));

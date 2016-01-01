@@ -113,24 +113,6 @@ void test_ipc()
 
 void dotests()
 {
-    int fff = -1;
-    byte ttt = ts::CLAMP<byte>(fff);
-    fff = -255;
-    ttt = ts::CLAMP<byte>(fff);
-    fff = -256;
-    ttt = ts::CLAMP<byte>(fff);
-    fff = -122312;
-    ttt = ts::CLAMP<byte>(fff);
-    fff = 0;
-    ttt = ts::CLAMP<byte>(fff);
-    fff = 1;
-    ttt = ts::CLAMP<byte>(fff);
-    fff = 255;
-    ttt = ts::CLAMP<byte>(fff);
-    fff = 256;
-    ttt = ts::CLAMP<byte>(fff);
-    fff = 4234234;
-    ttt = ts::CLAMP<byte>(fff);
 
     //test_ipc();
 

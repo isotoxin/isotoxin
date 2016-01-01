@@ -7,6 +7,8 @@
 #define TEST_RECORD_LEN 5000
 
 #define PREVIEW_HEIGHT 310
+#define SETTINGS_VTAB_WIDTH 170
+#define VTAB_OTS 5
 
 static menu_c list_proxy_types(int cur, MENUHANDLER mh, int av = -1)
 {
@@ -63,6 +65,7 @@ namespace
 
 dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c(data), mic_test_rec_stop(ts::Time::undefined()), mic_level_refresh(ts::Time::past())
 {
+    deftitle = title_settings;
     shadow = gui->theme().get_rect(CONSTASTR("shadow"));
 
     gui->register_kbd_callback( __kbd_chop, HOTKEY_TOGGLE_SEARCH_BAR );
@@ -161,8 +164,15 @@ dialog_settings_c::~dialog_settings_c()
     {
         gui->delete_event(DELEGATE(this, fileconfirm_handler));
         gui->delete_event(DELEGATE(this, msgopts_handler));
+        gui->delete_event(DELEGATE(this, ctl2send_handler));
+        gui->delete_event(DELEGATE(this, histopts_handler));
         gui->delete_event(DELEGATE(this, delete_used_network));
         gui->delete_event(DELEGATE(this, drawcamerapanel));
+        gui->delete_event(DELEGATE(this, encrypt_handler));
+        gui->delete_event(DELEGATE(this, commonopts_handler));
+        gui->delete_event(DELEGATE(this, password_not_entered_to_decrypt));
+        gui->delete_event(DELEGATE(this, password_not_entered));
+        gui->delete_event(DELEGATE(this, save_and_close));
 
         gui->unregister_kbd_callback( __kbd_chop );
     }
@@ -197,7 +207,7 @@ void dialog_settings_c::set_startopts()
 
 /*virtual*/ ts::wstr_c dialog_settings_c::get_name() const
 {
-    return ts::wstr_c(TTT("[appname]: Settings",31)).append(CONSTWSTR(" / ")).append(__super::get_name());
+    return __super::get_name().append(CONSTWSTR(" / ")).append(gui_dialog_c::get_name());
 }
 
 /*virtual*/ void dialog_settings_c::created()
@@ -214,20 +224,6 @@ void dialog_settings_c::getbutton(bcreate_s &bcr)
         bcr.btext = TTT("Save",61);
     }
 
-}
-
-bool dialog_settings_c::username_edit_handler( const ts::wstr_c &v )
-{
-    username = to_utf8(v);
-    mod();
-    return true;
-}
-
-bool dialog_settings_c::statusmsg_edit_handler( const ts::wstr_c &v )
-{
-    userstatusmsg = to_utf8(v);
-    mod();
-    return true;
 }
 
 bool dialog_settings_c::fileconfirm_handler(RID, GUIPARAM p)
@@ -360,29 +356,17 @@ ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 
     if (nv.error_num == gmsg<ISOGM_NEWVERSION>::E_NETWORK)
     {
-        SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-            DT_MSGBOX_ERROR,
-            TTT("No new versions detected. Connection failed.",303)
-            ));
-
+        dialog_msgbox_c::mb_error( TTT("No new versions detected. Connection failed.",303) ).summon();
         return 0;
     }
 
     if (nv.ver.is_empty() || nv.error_num != gmsg<ISOGM_NEWVERSION>::E_OK)
     {
-        SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-            DT_MSGBOX_INFO,
-            TTT("No new versions detected.",194)
-            ));
-    
+        dialog_msgbox_c::mb_info( TTT("No new versions detected.",194) ).summon();
         return 0;
     }
 
-    SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-        DT_MSGBOX_INFO,
-        TTT("New version detected: $",196) / ts::to_wstr(nv.ver.as_sptr())
-        ));
-
+    dialog_msgbox_c::mb_info(TTT("New version detected: $",196) / ts::to_wstr(nv.ver.as_sptr())).summon();
     return 0;
 }
 
@@ -419,6 +403,168 @@ bool dialog_settings_c::load_history_count_handler(const ts::wstr_c &v)
     return true;
 }
 
+bool dialog_settings_c::password_entered(const ts::wstr_c &passwd, const ts::str_c &)
+{
+    gen_passwdhash(passwhash, passwd);
+    encrypted_profile_password.clear().append_as_hex(passwhash, CC_HASH_SIZE);
+
+    mod();
+
+    auto oldrekey = rekey;
+    rekey = was_encrypted_profile ? (is_changed(encrypted_profile_password) ? REKEY_REENCRYPT : REKEY_NOTHING_TO_DO) : REKEY_ENCRYPT;
+    if (oldrekey != rekey)
+        getengine().redraw();
+
+    return true;
+}
+
+bool dialog_settings_c::password_not_entered( RID, GUIPARAM p )
+{
+    if (p)
+    {
+        auto oldrekey = rekey;
+        rekey = was_encrypted_profile ? REKEY_REMOVECRYPT : REKEY_NOTHING_TO_DO;
+        if (oldrekey != rekey)
+            getengine().redraw();
+        encrypted_profile_password.clear();
+        set_check_value(CONSTASTR("encrypt1"), false);
+        mod();
+    } else
+        DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, password_not_entered), as_param(1) );
+    return true;
+}
+
+static ts::wstr_c forgot()
+{
+    return TTT("Forgot password? Still not a problem. Just toggle [i]Encrypted profile[/i] checkbox and enter password again.", 382);
+}
+
+bool dialog_settings_c::re_password_entered(const ts::wstr_c &passwd, const ts::str_c &)
+{
+    ts::uint8 passwhash_re[32];
+    gen_passwdhash(passwhash_re, passwd);
+    ts::str_c re_password;
+    re_password.append_as_hex(passwhash_re, CC_HASH_SIZE);
+    if (!re_password.equals(encrypted_profile_password))
+    {
+        dialog_msgbox_c::mb_warning( ts::wstr_c(TTT("You must enter same password, that was entered on checkbox set.",380)).append(CONSTWSTR("<br>")).append(forgot()) ).summon();
+        return true;
+    }
+
+    prf().encrypt(passwhash_re);
+
+    DEFERRED_UNIQUE_CALL( 0, DELEGATE( this, save_and_close ), nullptr );
+    return true;
+}
+bool dialog_settings_c::re_password_not_entered(RID, GUIPARAM)
+{
+    dialog_msgbox_c::mb_info( forgot() ).summon();
+    return true;
+}
+
+bool dialog_settings_c::password_entered_to_decrypt(const ts::wstr_c &passwd, const ts::str_c &)
+{
+    ts::uint8 _hash[32];
+    gen_passwdhash(_hash, passwd);
+    ts::str_c shash;
+    shash.append_as_hex(_hash, CC_HASH_SIZE);
+    ts::str_c chash = prf().get_keyhash_str();
+    if ( shash.equals(chash) )
+    {
+        auto oldrekey = rekey;
+        rekey = REKEY_REMOVECRYPT;
+        if (oldrekey != rekey)
+            getengine().redraw();
+        encrypted_profile_password.clear();
+        mod();
+    } else
+    {
+        dialog_msgbox_c::mb_error(TTT("Incorrect password! You have to enter correct current password to remove encryption. Sorry.", 8)).summon();
+        password_not_entered_to_decrypt(RID(), nullptr);
+    }
+
+    return true;
+}
+
+bool dialog_settings_c::password_not_entered_to_decrypt(RID, GUIPARAM p)
+{
+    if (p)
+    {
+        auto oldrekey = rekey;
+        rekey = REKEY_NOTHING_TO_DO;
+        if (oldrekey != rekey)
+            getengine().redraw();
+        lite_encset = true;
+        set_check_value(CONSTASTR("encrypt1"), true);
+        mod();
+    } else
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, password_not_entered_to_decrypt), as_param(1));
+
+    return true;
+}
+
+
+bool dialog_settings_c::encrypt_handler( RID, GUIPARAM pp )
+{
+    bool prevep = encrypted_profile;
+    int p = as_int(pp);
+    encrypted_profile = 0 != (p & 1);
+    if (lite_encset)
+    {
+        lite_encset = false;
+        return true;
+    }
+
+    if (!encrypted_profile)
+    {
+        TSDEL(epdlg.get());
+
+        if (was_encrypted_profile)
+        {
+            RID epr = SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, dialog_entertext_c::params(
+                UD_ENTERPASSWORD,
+                gui_isodialog_c::title(title_enter_password),
+                TTT("Please enter current password to remove encryption",31),
+                ts::wstr_c(),
+                ts::str_c(),
+                DELEGATE(this, password_entered_to_decrypt),
+                DELEGATE(this, password_not_entered_to_decrypt),
+                check_always_ok,
+                getrid()));
+            if (epr)
+                epdlg = &HOLD(epr).engine();
+        } else
+        {
+            auto oldrekey = rekey;
+            rekey = REKEY_NOTHING_TO_DO;
+            if (oldrekey != rekey)
+                getengine().redraw();
+
+            encrypted_profile_password.clear();
+
+        }
+
+    } else if (!prevep)
+    {
+        TSDEL( epdlg.get() );
+        RID epr = SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, dialog_entertext_c::params(
+            UD_ENTERPASSWORD,
+            gui_isodialog_c::title(title_enter_password),
+            TTT("ATTENTION! Your profile is about to be encrypted with password. The only one way to open password-encrypted profile - enter correct password. If you forget password, you will lose your profile!",383),
+            ts::wstr_c(),
+            ts::str_c(),
+            DELEGATE(this, password_entered),
+            DELEGATE(this, password_not_entered),
+            check_always_ok,
+            getrid() ) );
+        if (epr)
+            epdlg = &HOLD(epr).engine();
+
+    }
+
+    mod();
+    return true;
+}
 
 bool dialog_settings_c::commonopts_handler( RID, GUIPARAM p )
 {
@@ -530,8 +676,10 @@ void dialog_settings_c::mod()
 
     if(profile_selected)
     {
-        PREPARE( username, prf().username(); text_prepare_for_edit(username) );
-        PREPARE( userstatusmsg, prf().userstatus(); text_prepare_for_edit(userstatusmsg) );
+        rekey = REKEY_NOTHING_TO_DO;
+        was_encrypted_profile = prf().is_encrypted();
+        PREPARE( encrypted_profile, was_encrypted_profile);
+        PREPARE( encrypted_profile_password, prf().get_keyhash_str() );
 
         PREPARE( ctl2send, (enter_key_options_s)prf().ctl_to_send() );
 
@@ -763,9 +911,11 @@ void dialog_settings_c::mod()
     {
         dm << MASK_PROFILE_COMMON; //____________________________________________________________________________________________________//
         dm().page_caption( TTT("General profile settings",38) );
-        dm().textfield( TTT("Name",52), from_utf8(username), DELEGATE(this,username_edit_handler) ).setname(CONSTASTR("uname")).focus(true);
-        dm().vspace();
-        dm().textfield(TTT("Status",68), from_utf8(userstatusmsg), DELEGATE(this, statusmsg_edit_handler)).setname(CONSTASTR("ustatus"));
+        
+        dm().checkb(ts::wstr_c(), DELEGATE(this, encrypt_handler), enc_val()).setname(CONSTASTR("encrypt")).setmenu(
+            menu_c().add(TTT("Encrypted profile",52), 0, MENUHANDLER(), CONSTASTR("1"))
+            );
+        
         dm().vspace();
         dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_COMMON1, handler), bgroups[BGROUP_COMMON1].current).setmenu(
                 menu_c().add(TTT("Show search bar ($)",341) / CONSTWSTR("Ctrl+F"), 0, MENUHANDLER(), CONSTASTR("1"))
@@ -891,8 +1041,8 @@ void dialog_settings_c::mod()
     }
 
     gui_vtabsel_c &tab = MAKE_CHILD<gui_vtabsel_c>( getrid(), m );
-    tab.leech( TSNEW(leech_dock_left_s, 170) );
-    edges = ts::irect(175,0,0,0);
+    tab.leech( TSNEW(leech_dock_left_s, SETTINGS_VTAB_WIDTH) );
+    edges = ts::irect(SETTINGS_VTAB_WIDTH + VTAB_OTS,0,0,0);
 
     mod();
 
@@ -1112,6 +1262,10 @@ void dialog_settings_c::networks_tab_selected()
     if (mask & MASK_PROFILE_COMMON)
     {
         DEFERRED_UNIQUE_CALL(0.1, DELEGATE(this, commonopts_handler), bgroups[BGROUP_COMMON2].current);
+        if (g_app->F_READONLY_MODE)
+            ctlenable( CONSTASTR("encrypt1"), false );
+        else
+            DEFERRED_UNIQUE_CALL(0.1, DELEGATE(this, encrypt_handler), as_param(enc_val()));
     }
 
     if (mask & MASK_APPLICATION_COMMON)
@@ -1237,10 +1391,10 @@ bool dialog_settings_c::delete_used_network(RID, GUIPARAM param)
     auto *row = table_active_protocol_underedit.find<false>(as_int(param));
     if (ASSERT(row))
     {
-        SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-            DT_MSGBOX_WARNING,
-            TTT("Connection [b]$[/b] in use! All contacts of this connection will be deleted. History of these contacts will be deleted too. Are you still sure?",267) / from_utf8(row->other.name)
-            ).on_ok(DELEGATE(this, on_delete_network_2), ts::amake<int>(as_int(param))).bcancel());
+        dialog_msgbox_c::mb_warning( TTT("Connection [b]$[/b] in use! All contacts of this connection will be deleted. History of these contacts will be deleted too. Are you still sure?",267) / from_utf8(row->other.name) )
+            .on_ok(DELEGATE(this, on_delete_network_2), ts::amake<int>(as_int(param)))
+            .bcancel()
+            .summon();
     }
     return true;
 }
@@ -1372,10 +1526,10 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
             auto *row = table_active_protocol_underedit.find<false>(id);
             if (ASSERT(row))
             {
-                SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                    DT_MSGBOX_WARNING,
-                    TTT("Connection [b]$[/b] will be deleted![br]Are you sure?",266) / from_utf8(row->other.name)
-                    ).on_ok(DELEGATE(this, on_delete_network), *t).bcancel());
+                dialog_msgbox_c::mb_warning( TTT("Connection [b]$[/b] will be deleted![br]Are you sure?",266) / from_utf8(row->other.name) )
+                    .on_ok(DELEGATE(this, on_delete_network), *t)
+                    .bcancel()
+                    .summon();
             }
         }
 
@@ -1404,11 +1558,6 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
             }
         }
 
-    }
-    else if (*t == CONSTASTR("copy"))
-    {
-        ++t;
-        ts::set_clipboard_text(ts::to_wstr(*t));
     }
 }
 
@@ -1448,20 +1597,93 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
 
 /*virtual*/ bool dialog_settings_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
-    if (__super::sq_evt(qp, rid, data)) return true;
+    switch (qp)
+    {
+    case SQ_DRAW:
+        if (rid == getrid())
+        {
+            __super::sq_evt(qp, rid, data);
+            if ( rekey )
+                if (RID b = find(CONSTASTR("dialog_button_1")))
+                {
+                    ts::wstr_c infot;
+                    switch (rekey) //-V719
+                    {
+                    case dialog_settings_c::REKEY_ENCRYPT:
+                        infot = TTT("Profile will be encrypted after [b]Save[/b] button pressed",384);
+                        break;
+                    case dialog_settings_c::REKEY_REENCRYPT:
+                        infot = TTT("Profile will be re-encrypted after [b]Save[/b] button pressed",385);
+                        break;
+                    case dialog_settings_c::REKEY_REMOVECRYPT:
+                        infot = TTT("Encryption will be removed after [b]Save[/b] button pressed",386);
+                        break;
+                    }
 
-    //switch (qp)
-    //{
-    //case SQ_DRAW:
-    //    if (const theme_rect_s *tr = themerect())
-    //        draw(*tr);
-    //    break;
-    //}
+                    ts::wstr_c infostr( CONSTWSTR("<p=r><font=default><l><color=155,0,0>"), infot );
+                    infostr.append(L" \x2192");
+
+                    cri_s inf;
+                    children_repos_info(inf);
+
+                    ts::irect br = HOLD(b)().getprops().rect();
+                    br.rb.x = br.lt.x - VTAB_OTS;
+                    br.lt.x = inf.area.lt.x;
+
+                    draw_data_s &dd = getengine().begin_draw();
+                    dd.offset = br.lt;
+                    dd.size = br.size();
+                    text_draw_params_s tdp;
+                    ts::flags32_s f(ts::TO_END_ELLIPSIS | ts::TO_VCENTER);
+                    tdp.textoptions = &f;
+                    getengine().draw(infostr, tdp);
+                    getengine().end_draw();
+
+                }
+            return true;
+        }
+        return false;
+    }
+
+    if (__super::sq_evt(qp, rid, data)) return true;
 
     return false;
 }
 
 /*virtual*/ void dialog_settings_c::on_confirm()
+{
+    if (!g_app->F_READONLY_MODE)
+    {
+        if (REKEY_ENCRYPT == rekey || REKEY_REENCRYPT == rekey)
+        {
+            // reenter password
+
+            RID epr = SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, dialog_entertext_c::params(
+                UD_ENTERPASSWORD,
+                gui_isodialog_c::title(title_reenter_password),
+                TTT("Please re-enter password to confirm encrypt",387),
+                ts::wstr_c(),
+                ts::str_c(),
+                DELEGATE(this, re_password_entered),
+                DELEGATE(this, re_password_not_entered),
+                check_always_ok,
+                getrid()));
+
+            return;
+        }
+
+        if (REKEY_REMOVECRYPT == rekey)
+        {
+            // remove encryption
+            prf().encrypt(nullptr);
+        }
+    }
+
+
+    save_and_close();
+}
+
+bool dialog_settings_c::save_and_close(RID, GUIPARAM)
 {
     mic_device_changed = false; // to avoid restore in destructor
 
@@ -1473,12 +1695,8 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
     bool fontchanged = false;
     if (profile_selected)
     {
-        bool ch1 = prf().username(username);
-        bool ch2 = prf().userstatus(userstatusmsg);
-        if (ch1) gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_USERNAME, username).send();
-        if (ch2) gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_USERSTATUSMSG, userstatusmsg).send();
         prf().ctl_to_send(ctl2send);
-        ch1 = prf().date_msg_template(date_msg_tmpl);
+        bool ch1 = prf().date_msg_template(date_msg_tmpl);
         ch1 |= prf().date_sep_template(date_sep_tmpl);
 
         prf().min_history(load_history_count);
@@ -1579,6 +1797,7 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
     }
 
     __super::on_confirm();
+    return true;
 }
 
 
@@ -1773,8 +1992,7 @@ static float find_max(const s3::Format&fmt, const void *idata, int isize)
             if (iprc < 0) iprc = 0;
             if (iprc > 100) iprc = 100;
             ts::wstr_c prc; prc.set_as_int(100-iprc).append_char('%');
-            ts::wstr_c t(CONSTWSTR("<p=c><b>"));
-            t.append( maketag_color<ts::wchar>( ts::ARGB(155,0,0) ) );
+            ts::wstr_c t(CONSTWSTR("<p=c><b><color=155,0,0>"));
             t.append( TTT("Recording test sound...$",282) / prc );
 
             set_label_text(CONSTASTR("soundhint"), t);
@@ -2315,15 +2533,10 @@ bool dialog_setup_network_c::netname_edit(const ts::wstr_c &t)
 
 /*virtual*/ ts::wstr_c dialog_setup_network_c::get_name() const
 {
-    ts::wstr_c n;
-    if (params.avprotos)
-        n = TTT("[appname]: New network",53);
-    else
-        n = TTT("[appname]: Connection properties",263);
-
-    ts::wstr_c nn = __super::get_name();
+    ts::wstr_c n( title(params.avprotos ? title_new_network : title_connection_properties) );
+    ts::wstr_c nn = gui_dialog_c::get_name();
     if (!nn.is_empty())
-        n.append(CONSTWSTR(" (")).append(__super::get_name()).append_char(')');
+        n.append(CONSTWSTR(" (")).append(nn).append_char(')');
     return n;
 
 }

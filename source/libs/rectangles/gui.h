@@ -1,18 +1,5 @@
 #pragma once
 
-#ifndef _INCLUDE_GUI_H_
-#define _INCLUDE_GUI_H_
-
-enum app_button_tag_e
-{
-    ABT_CLOSE,
-    ABT_MAXIMIZE,
-    ABT_NORMALIZE,
-    ABT_MINIMIZE,
-    
-    ABT_APPCUSTOM, // application can define its own custom tags for app buttons
-};
-
 enum loc_label_e
 {
     LL_CTXMENU_COPY,
@@ -59,11 +46,11 @@ public:
 };
 
 #define DEFERRED_EXECUTION_BLOCK_BEGIN(t_sec) typedef struct UNIQIDLINE(dc) : public delay_event_c { static double gett() {return t_sec;} UNIQIDLINE(dc)(GUIPARAM param = nullptr):delay_event_c(param) {} virtual void  die() {gui->delete_event<UNIQIDLINE(dc)>(this);} virtual void doit() {
-#define DEFERRED_EXECUTION_BLOCK_END(param) } } UNIQIDLINE(dc); gui->add_event<UNIQIDLINE(dc)>(UNIQIDLINE(dc)::gett(), as_param(param));
+#define DEFERRED_EXECUTION_BLOCK_END(param) } } UNIQIDLINE(dc); gui->add_event_t<UNIQIDLINE(dc), GUIPARAM>(UNIQIDLINE(dc)::gett(), as_param(param));
 
-#define DEFERRED_CALL( t_sec, h, p ) do { delay_event_c &__dc = gui->add_event<delay_event_c>(t_sec); __dc.set_handler( (h), as_param(p) ); } while(false)
-#define DEFERRED_UNIQUE_CALL( t_sec, h, p ) do { auto hh = (h); gui->delete_event(hh); delay_event_c &__dc = gui->add_event<delay_event_c>(t_sec); __dc.set_handler( hh, as_param(p) ); } while (false)
-#define DEFERRED_UNIQUE_PAR_CALL( t_sec, h, p ) do { auto hh = (h); gui->delete_event(hh, as_param(p)); delay_event_c &__dc = gui->add_event<delay_event_c>(t_sec); __dc.set_handler( hh, as_param(p) ); } while (false)
+#define DEFERRED_CALL( t_sec, h, p ) do { delay_event_c &__dc = gui->add_event_t<delay_event_c, GUIPARAM>(t_sec, nullptr); __dc.set_handler( (h), as_param(p) ); } while(false)
+#define DEFERRED_UNIQUE_CALL( t_sec, h, p ) do { auto hh = (h); gui->delete_event(hh); delay_event_c &__dc = gui->add_event_t<delay_event_c, GUIPARAM>(t_sec, nullptr); __dc.set_handler( hh, as_param(p) ); } while (false)
+#define DEFERRED_UNIQUE_PAR_CALL( t_sec, h, p ) do { auto hh = (h); gui->delete_event(hh, as_param(p)); delay_event_c &__dc = gui->add_event_t<delay_event_c, GUIPARAM>(t_sec, nullptr); __dc.set_handler( hh, as_param(p) ); } while (false)
 
 
 struct hover_data_s
@@ -425,7 +412,7 @@ public:
         m_msgs.push(m);
     }
 
-    template<typename EVT> EVT  &add_event(double t, GUIPARAM param = nullptr)
+    template<typename EVT, typename PRM> EVT  &add_event_t(double t, PRM param)
     {
         EVT *dc;
         if (sizeof(EVT) == sizeof(delay_event_c))
@@ -664,5 +651,3 @@ template<typename R> void MAKE_CHILD< newrectkitchen::rectwrapper<R> >::init()
     engine = TSNEW(rectengine_child_c, gui->get_rect(parent), after);
     gui->newrect<R, MAKE_CHILD<R> >((MAKE_CHILD<R> &)(*this));
 }
-
-#endif

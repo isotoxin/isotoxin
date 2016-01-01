@@ -2,6 +2,7 @@
 
 dialog_firstrun_c::dialog_firstrun_c(initial_rect_data_s &data) :gui_isodialog_c(data)
 {
+    deftitle = title_first_run;
     deflng = detect_language();
     g_app->load_locale(deflng);
 }
@@ -9,11 +10,6 @@ dialog_firstrun_c::dialog_firstrun_c(initial_rect_data_s &data) :gui_isodialog_c
 dialog_firstrun_c::~dialog_firstrun_c()
 {
     gui->delete_event(DELEGATE(this, refresh_current_page));
-}
-
-/*virtual*/ ts::wstr_c dialog_firstrun_c::get_name() const
-{
-    return TTT("[appname]: First run",8);
 }
 
 void dialog_firstrun_c::set_defaults()
@@ -474,10 +470,7 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
         install_to( copyto, true );
         if ( !check_copy_valid(copyto, curd) )
         {
-            SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                DT_MSGBOX_ERROR,
-                TTT("Sorry, copy to $ failed.",312) / enquote(copyto)
-                ));
+            dialog_msgbox_c::mb_error( TTT("Sorry, copy to $ failed.",312) / enquote(copyto) ).summon();
             return true;
         }
         exit = true;
@@ -487,7 +480,7 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     make_path( path_by_choice(choice1), 0 );
     ts::wstr_c config_fn = ts::fn_join(path_by_choice(choice1), CONSTWSTR("config.db"));
 
-    if (ts::sqlitedb_c * db = ts::sqlitedb_c::connect( config_fn, g_app->F_READONLY_MODE ))
+    if (ts::sqlitedb_c * db = ts::sqlitedb_c::connect( config_fn, nullptr, g_app->F_READONLY_MODE ))
     {
         config_c::prepare_conf_table(db);
         db->close();
@@ -499,7 +492,7 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     {
         ts::wstr_c n = profilename;
         cfg().profile(n);
-        ts::sqlitedb_c::connect(ts::fn_change_name_ext(config_fn, n.append(CONSTWSTR(".profile"))), g_app->F_READONLY_MODE);
+        ts::sqlitedb_c::connect(ts::fn_change_name_ext(config_fn, n.append(CONSTWSTR(".profile"))), nullptr, g_app->F_READONLY_MODE);
     }
 
     cfg().language( deflng );

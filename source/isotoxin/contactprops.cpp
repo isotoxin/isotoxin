@@ -3,6 +3,7 @@
 
 dialog_contact_props_c::dialog_contact_props_c(MAKE_ROOT<dialog_contact_props_c> &data) :gui_isodialog_c(data)
 {
+    deftitle = title_contact_properties;
     contactue = contacts().find(data.prms.key);
     update();
 }
@@ -13,7 +14,7 @@ dialog_contact_props_c::~dialog_contact_props_c()
 
 /*virtual*/ ts::wstr_c dialog_contact_props_c::get_name() const
 {
-    return ts::wstr_c(TTT("[appname]: Contact properties",224)).append(CONSTWSTR(" - ")).append(__super::get_name());
+    return __super::get_name().append(CONSTWSTR(" - ")).append(gui_dialog_c::get_name());
 }
 
 

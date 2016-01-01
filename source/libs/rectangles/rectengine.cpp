@@ -203,10 +203,9 @@ void rectengine_c::cleanup_children_now()
     ts::aint oldchsz = children.size();
     for (ts::aint i = children.size() - 1; i >= 0; --i)
         if (children.get(i).expired()) children.remove_slow(i);
-    for (ts::aint i = children_sorted.size() - 1; i >= 0; --i)
-        if (children_sorted.get(i).expired()) children_sorted.remove_slow(i);
     if (oldchsz != children.size())
     {
+        children_z_sorted.clear();
         evt_data_s d;
         d.values.count = children.size();
         getrect().sq_evt(SQ_CHILD_ARRAY_COUNT, getrid(), d);
@@ -221,12 +220,25 @@ bool rectengine_c::cleanup_children(RID,GUIPARAM)
 
 void rectengine_c::z_resort_children()
 {
-    children_sorted.clear();
-    if (children.sortcopy( children_sorted ))
+    if (children_z_sorted.size())
     {
+        children_z_sorted.clear();
         gui->dirty_hover_data();
         redraw();
-        DEFERRED_UNIQUE_CALL(0,DELEGATE(this,cleanup_children),nullptr);
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, cleanup_children), nullptr);
+    }
+
+}
+
+void rectengine_c::prepare_children_z_sorted()
+{
+    if (children_z_sorted.size() != children.size())
+    {
+        // start resorting
+        children_z_sorted.clear();
+        for(rectengine_c *e : children)
+            if (e) children_z_sorted.add(e);
+        children_z_sorted.invsort();
     }
 }
 
@@ -1948,6 +1960,13 @@ void border_window_data_s::draw()
     ts::bmpcore_exbody_s bb = backbuffer.extbody();
     ts::bmpcore_exbody_s src = tr.get_texture().extbody();
 
+#ifdef _DEBUG
+    if (tdp.textoptions && tdp.textoptions->is(ts::TO_SAVETOFILE))
+    {
+        tr.get_texture().save_as_png(L"text.png");
+    }
+#endif // _DEBUG
+
     draw_image( bb, src, dd.offset.x, dd.offset.y, ts::irect( ts::ivec2(0), dd.size ), dd.cliprect, dd.alpha );
     if (tdp.sz)
         *tdp.sz = gui->tr().lastdrawsize;
@@ -2175,7 +2194,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                 {
                     if (guirect_c *r = rect())
                     {
-                        if ( r->allow_maximize() )
+                        if ( 0 != (r->caption_buttons() & SETBIT(CBT_MAXIMIZE)) )
                         {
                             if (r->getprops().is_maximized())
                                 MODIFY(*r).maximize(false);
@@ -2210,7 +2229,8 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
             dd.size = r->getprops().currentsize();
             r->sq_evt(qp, r->getrid(), data);
 
-            for( rectengine_c *c : children_sorted )
+            prepare_children_z_sorted();
+            for( rectengine_c *c : children_z_sorted )
                 if (c) c->sq_evt(qp, c->getrid(), data);
 
             end_draw();
@@ -2386,7 +2406,8 @@ rectengine_child_c::~rectengine_child_c()
             {
                 r->sq_evt(qp, r->getrid(), data);
 
-                for (rectengine_c *c : children_sorted)
+                prepare_children_z_sorted();
+                for (rectengine_c *c : children_z_sorted)
                     if (c) c->sq_evt(qp, c->getrid(), data);
             }
 

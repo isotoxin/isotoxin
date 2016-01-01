@@ -77,6 +77,16 @@ enum system_query_e
 #endif
 };
 
+enum caption_button_tag_e
+{
+    CBT_CLOSE,
+    CBT_MAXIMIZE,
+    CBT_NORMALIZE,
+    CBT_MINIMIZE,
+
+    CBT_APPCUSTOM, // application can define its own custom tags for caption buttons
+};
+
 
 enum ui_event_e
 {
@@ -613,7 +623,7 @@ public:
     virtual int       get_height_by_width(int width) const { return 0; /* 0 means not calculated */ } // calculate rect height by given rect width
     virtual size_policy_e size_policy() const {return SP_NORMAL;}
     virtual bool steal_active_focus_if_root() const {return true;} // default. tooltip should not steal
-    virtual bool allow_maximize() const { return false;}
+    virtual ts::uint32 caption_buttons() const { return SETBIT(CBT_CLOSE) | SETBIT(CBT_MINIMIZE);}
 
     virtual ts::wstr_c get_name() const {return ts::wstr_c(); }
 
@@ -907,6 +917,8 @@ class gui_button_c : public gui_control_c
 public:
     gui_button_c(initial_rect_data_s &data):gui_control_c(data) { handler = DELEGATE(this, default_handler); }
     /*virtual*/ ~gui_button_c() {}
+
+    void set_check_value(bool v);
 
     void mark() {flags.set(F_MARK);}
     void set_radio( int radiotag )
@@ -1225,9 +1237,10 @@ protected:
     static const ts::flags32_s::BITS F_SCROLL_TO_MAX_TOP = FLAGS_FREEBITSTART << 3;
     static const ts::flags32_s::BITS F_SB_OVER_ITEMS = FLAGS_FREEBITSTART << 4;
     static const ts::flags32_s::BITS F_HCENTER_SMALL_CTLS = FLAGS_FREEBITSTART << 5;
-    static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 6;
+    static const ts::flags32_s::BITS F_KEEP_TOP_VISIBLE = FLAGS_FREEBITSTART << 6;
+    static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 7;
 
-    virtual void on_manual_scroll() { scroll_target = nullptr; flags.clear(F_SCROLL_TO_END); }; // called on scroll initiated by user (mouse wheel or scrollbar)
+    virtual void on_manual_scroll() { scroll_target = nullptr; flags.clear(F_SCROLL_TO_END); flags.clear(F_KEEP_TOP_VISIBLE); }; // called on scroll initiated by user (mouse wheel or scrollbar)
     /*virtual*/ void children_repos() override;
     /*virtual*/ void on_add_child(RID id) override;
     gui_vscrollgroup_c() {}
@@ -1255,6 +1268,17 @@ public:
     void not_at_end()
     {
         flags.clear(F_SCROLL_TO_END);
+    }
+
+    void keep_top_visible(bool force = false)
+    {
+        if (force)
+        {
+            scroll_target = nullptr;
+            flags.clear(F_SCROLL_TO_END);
+        }
+        if (!flags.is(F_SCROLL_TO_END) && scroll_target.expired() && !top_visible.expired())
+            flags.set(F_KEEP_TOP_VISIBLE);
     }
 
     void scroll_to_begin();

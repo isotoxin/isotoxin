@@ -4,6 +4,8 @@ enum unique_dialog_e
 {
     UD_NOT_UNIQUE, // reserve zero value
 
+    UD_ENTERPASSWORD,
+
     UD_ADDCONTACT,
     UD_ADDGROUP,
     UD_METACONTACT,
@@ -15,17 +17,36 @@ enum unique_dialog_e
     UD_PROTOSETUP,
     UD_PROTOSETUPSETTINGS,
     UD_PREPARE_IMAGE,
+    UD_ENCRYPT_PROFILE_PB,
 
 };
 
-enum dlg_title_e
+enum rtitle_e
 {
-    DT_MSGBOX_ERROR,
-    DT_MSGBOX_INFO,
-    DT_MSGBOX_WARNING,
+    title_app,
 
-    DT_CUSTOM,
+    title_information,
+    title_warning,
+    title_error,
+
+    title_first_run,
+    title_settings,
+    title_new_contact,
+    title_repeat_request,
+    title_new_groupchat,
+    title_avatar_creation_tool,
+    title_contact_properties,
+    title_new_meta_contact,
+    title_prepare_image,
+    title_encrypting,
+    title_removing_encryption,
+    title_new_network,
+    title_connection_properties,
+    title_profile_name,
+    title_enter_password,
+    title_reenter_password,
 };
+
 
 class gui_isodialog_c : public gui_dialog_c
 {
@@ -34,6 +55,9 @@ class gui_isodialog_c : public gui_dialog_c
 protected:
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
     /*virtual*/ ts::irect get_client_area() const override;
+    rtitle_e deftitle = title_app;
+
+    /*virtual*/ ts::wstr_c get_name() const override { return title(deftitle); }
 
 public:
     gui_isodialog_c(initial_rect_data_s &data);
@@ -42,13 +66,13 @@ public:
     GUIPARAMHANDLER get_close_button_handler() { return DELEGATE(this, b_close); }
     GUIPARAMHANDLER get_confirm_button_handler() { return DELEGATE(this, b_confirm); }
 
-    static ts::wstr_c title( dlg_title_e d );
+    static ts::wstr_c title( rtitle_e t );
 
 };
 
-template<typename DLGT, class... _Valty> void SUMMON_DIALOG(unique_dialog_e udtag, _Valty&&... _Val)
+template<typename DLGT, class... _Valty> RID SUMMON_DIALOG(unique_dialog_e udtag, _Valty&&... _Val)
 {
-    if (udtag && dialog_already_present(udtag)) return;
+    if (udtag && dialog_already_present(udtag)) return RID();
 
     RID r = MAKE_ROOT<DLGT>(std::forward<_Valty>(_Val)...);
     {
@@ -60,11 +84,12 @@ template<typename DLGT, class... _Valty> void SUMMON_DIALOG(unique_dialog_e udta
     }
 
     HOLD(r)().getroot()->set_system_focus(true);
+    return r;
 }
 
-template<typename DLGT> void SUMMON_DIALOG(unique_dialog_e udtag = UD_NOT_UNIQUE)
+template<typename DLGT> RID SUMMON_DIALOG(unique_dialog_e udtag = UD_NOT_UNIQUE)
 {
-    if (udtag && dialog_already_present(udtag)) return;
+    if (udtag && dialog_already_present(udtag)) return RID();
     RID r = MAKE_ROOT<DLGT>();
     
     {
@@ -75,6 +100,6 @@ template<typename DLGT> void SUMMON_DIALOG(unique_dialog_e udtag = UD_NOT_UNIQUE
             .show();
     }
     HOLD(r)().getroot()->set_system_focus(true);
+    return r;
 }
-
 

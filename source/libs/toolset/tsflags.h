@@ -66,7 +66,7 @@ template <typename T, T FMASK = (T)(-1)> struct flags_t
 typedef flags_t<uint32> flags32_s;
 typedef flags_t<uint64> flags64_s;
 
-template<class FLAGS, decltype(FLAGS::BITS) v, bool v1, bool v2> struct auto_change_flags
+template<class FLAGS, typename FLAGS::BITS v, bool v1, bool v2> struct auto_change_flags
 {
     FLAGS &f;
     auto_change_flags(FLAGS &f):f(f) { f.init(v,v1); }

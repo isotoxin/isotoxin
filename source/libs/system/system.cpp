@@ -394,6 +394,13 @@ static void system_loop()
     MSG msg;
     while (!g_sysconf.is_app_need_quit && GetMessageW(&msg, nullptr, 0U, 0U))
     {
+        if (msg.message == WM_LOOPER_TICK)
+        {
+            MSG msgm;
+            if (PeekMessage( &msgm, nullptr, min(WM_KEYFIRST, WM_MOUSEFIRST), max(WM_KEYLAST, WM_MOUSELAST), PM_REMOVE))
+                msg = msgm;
+        }
+
         bool downkey = false;
         bool dispatch = true;
 
@@ -444,7 +451,6 @@ static void system_loop()
             case WM_XBUTTONDOWN:
             case WM_MOUSEWHEEL:
             case WM_LBUTTONDBLCLK:
-
                 {
 do_key:
                     system_event_param_s p;

@@ -68,6 +68,12 @@ template<> struct gmsg<GM_GROUP_SIGNAL> : public gmsgbase
     RID sender;
     int tag;
     ts::uint32 mask = 0;
+    enum what_to_do
+    {
+        WTD_DEFAULT, // invert for check, set for radio
+        WTD_SET,
+        WTD_CLEAR,
+    } dodo = WTD_DEFAULT;
 };
 
 template<> struct gmsg<GM_DIALOG_PRESENT> : public gmsgbase

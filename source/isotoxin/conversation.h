@@ -560,6 +560,7 @@ public:
 class gui_messagelist_c : public gui_vscrollgroup_c
 {
     DUMMY(gui_messagelist_c);
+    GM_RECEIVER(gui_messagelist_c, ISOGM_DO_POSTEFFECT);
     GM_RECEIVER(gui_messagelist_c, ISOGM_MESSAGE);
     GM_RECEIVER(gui_messagelist_c, ISOGM_SELECT_CONTACT);
     GM_RECEIVER(gui_messagelist_c, ISOGM_V_UPDATE_CONTACT);

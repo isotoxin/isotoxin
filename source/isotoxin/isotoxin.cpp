@@ -19,9 +19,14 @@
 #pragma comment(lib, "libresample.lib")
 #endif
 
+#if defined _DEBUG_OPTIMIZED || defined _FINAL
+#pragma comment(lib, "sqlite3.lib")
+#else
+#pragma comment(lib, "sqlite3d.lib")
+#endif
+
 #pragma comment(lib, "zlib.lib")
 #pragma comment(lib, "minizip.lib")
-#pragma comment(lib, "sqlite3.lib")
 #pragma comment(lib, "curl.lib")
 #pragma comment(lib, "libsodium.lib")
 

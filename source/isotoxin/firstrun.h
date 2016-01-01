@@ -51,8 +51,6 @@ public:
     dialog_firstrun_c(initial_rect_data_s &data);
     ~dialog_firstrun_c();
 
-    /*virtual*/ ts::wstr_c get_name() const override;
-
     /*virtual*/ ts::ivec2 get_min_size() const { return ts::ivec2(510,480); }
     
     //sqhandler_i

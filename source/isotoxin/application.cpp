@@ -40,6 +40,7 @@ application_c::application_c(const ts::wchar * cmdl)
     F_ALLOW_AUTOUPDATE = false;
     F_READONLY_MODE = g_commandline.readonlymode;
     F_READONLY_MODE_WARN = g_commandline.readonlymode; // suppress warn
+    F_MODAL_ENTER_PASSWORD = false;
 
     autoupdate_next = now() + 10;
 	g_app = this;
@@ -649,8 +650,15 @@ void application_c::select_last_unread_contact()
     {
         if (m().getprops().is_collapsed())
         {
-            MODIFY(iconowner).decollapse();
-            select_last_unread_contact();
+            if (F_MODAL_ENTER_PASSWORD)
+            {
+                TSNEW(gmsg<ISOGM_APPRISE>)->send_to_main_thread();
+
+            } else
+            {
+                MODIFY(iconowner).decollapse();
+                select_last_unread_contact();
+            }
         } else
             MODIFY(iconowner).micromize(true);
     } else if (act == NIA_RCLICK)
@@ -666,13 +674,182 @@ void application_c::select_last_unread_contact()
         DEFERRED_EXECUTION_BLOCK_BEGIN(0)
             
             menu_c m;
-            add_status_items(m);
-            m.add_separator();
+            if (prf().is_loaded())
+            {
+                add_status_items(m);
+                m.add_separator();
+            }
             m.add(loc_text(loc_exit), 0, handlers::m_exit);
             gui_popup_menu_c::show(menu_anchor_s(true, menu_anchor_s::RELPOS_TYPE_SYS), m, true);
             g_app->set_notification_icon(); // just remove hint
 
         DEFERRED_EXECUTION_BLOCK_END(0)
+    }
+}
+
+namespace
+{
+    struct profile_loader_s
+    {
+        ts::uint8 k[CC_SALT_SIZE + CC_HASH_SIZE];
+        ts::wstr_c wpn; // full filename
+        ts::wstr_c storwpn; // just name (for config)
+        ts::wstr_c prevname; // prev profile name
+
+        enum stage_e
+        {
+            STAGE_CHECK_DB,
+            STAGE_LOAD_NO_PASSWORD,
+            STAGE_ENTER_PASSWORD,
+            STAGE_CLEANUP_UI,
+            STAGE_LOAD_WITH_PASSWORD,
+        } st = STAGE_CHECK_DB;
+        db_check_e chk = DBC_IO_ERROR;
+        bool modal;
+        bool decollapse = false;
+
+        profile_loader_s(bool modal):modal(modal)
+        {
+        }
+
+        static bool load( const ts::wstr_c&name, bool modal ); // return true if encrypted
+
+        void tick_it()
+        {
+            DEFERRED_UNIQUE_CALL(0, DELEGATE(this, tick), nullptr);
+        }
+        bool tick(RID, GUIPARAM)
+        {
+            switch (st)
+            {
+            case STAGE_CHECK_DB:
+                {
+                    if (DBC_IO_ERROR == chk)
+                    {
+                        profile_c::mb_error_load_profile(wpn, PLR_CONNECT_FAILED);
+                        die();
+                        return true;
+                    }
+                    if (DBC_NOT_DB == chk)
+                    {
+                        dialog_msgbox_c::mb_error(TTT("File [b]$[/b] is not profile", 389) / wpn).summon();
+                        die();
+                        return true;
+                    }
+                    if (DBC_DB_ENCRTPTED == chk)
+                    {
+                        st = STAGE_ENTER_PASSWORD;
+                        tick_it();
+                        break;
+                    }
+                    st = STAGE_LOAD_NO_PASSWORD;
+                }
+                // no break
+            case STAGE_LOAD_NO_PASSWORD:
+            case STAGE_LOAD_WITH_PASSWORD:
+
+                contacts().unload();
+                {
+                    auto rslt = prf().xload(wpn, STAGE_LOAD_WITH_PASSWORD == st ? k : nullptr);
+                    if (PLR_OK == rslt)
+                    {
+                        cfg().profile(storwpn);
+
+                    } else if (!prevname.is_empty())
+                    {
+                        ts::wstr_c badpf = wpn;
+                        wpn = prevname;
+                        prevname.clear();
+                        storwpn = wpn;
+                        profile_c::path_by_name(wpn);
+                        chk = check_db(wpn, k);
+                        st = chk == DBC_DB ? STAGE_CHECK_DB : STAGE_CLEANUP_UI;
+                        profile_c::mb_error_load_profile(badpf, rslt, modal);
+                        tick_it();
+                        break;
+                    } else
+                    {
+                        profile_c::mb_error_load_profile(wpn, rslt, modal && rslt != PLR_CORRUPT_OR_ENCRYPTED);
+                    }
+                }
+
+                // no break here
+            case STAGE_CLEANUP_UI:
+
+                contacts().update_meta();
+                contacts().get_self().reselect();
+                g_app->recreate_ctls();
+
+                if (decollapse)
+                    TSNEW(gmsg<ISOGM_APPRISE>)->send_to_main_thread();
+
+                die();
+                return true;
+
+            case STAGE_ENTER_PASSWORD:
+
+                g_app->F_MODAL_ENTER_PASSWORD = modal;
+                SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, dialog_entertext_c::params(
+                    UD_ENTERPASSWORD,
+                    gui_isodialog_c::title(title_enter_password),
+                    TTT("Profile [b]$[/b] is encrypted.[br]You have to enter password to load encrypted profile.",390) / storwpn,
+                    ts::wstr_c(),
+                    ts::str_c(),
+                    DELEGATE(this, password_entered),
+                    DELEGATE(this, password_not_entered)));
+
+                break;
+            }
+
+            return true;
+        }
+
+        bool password_entered(const ts::wstr_c &passwd, const ts::str_c &)
+        {
+            st = STAGE_LOAD_WITH_PASSWORD;
+            gen_passwdhash( k + CC_SALT_SIZE, passwd );
+            tick_it();
+            decollapse = !g_commandline.minimize;
+            g_app->F_MODAL_ENTER_PASSWORD = false;
+            return true;
+        }
+
+        bool password_not_entered(RID, GUIPARAM)
+        {
+            st = STAGE_CLEANUP_UI;
+            tick_it();
+            decollapse = !g_commandline.minimize;
+            g_app->F_MODAL_ENTER_PASSWORD = false;
+            return true;
+        }
+
+
+        ~profile_loader_s()
+        {
+            if (gui)
+                gui->delete_event(DELEGATE(this, tick));
+        }
+        void die();
+    };
+    static UNIQUE_PTR(profile_loader_s) ploader;
+
+    bool profile_loader_s::load(const ts::wstr_c&name, bool modal)
+    {
+        ploader.reset( TSNEW(profile_loader_s, modal) );
+        ploader->prevname = cfg().profile();
+        ploader->wpn = name;
+        ploader->storwpn = name;
+        if (ploader->storwpn.equals(ploader->prevname))
+            ploader->prevname.clear();
+        profile_c::path_by_name(ploader->wpn);
+        ploader->chk = check_db(ploader->wpn, ploader->k);
+        ploader->tick_it();
+        return ploader->chk == DBC_DB_ENCRTPTED;
+    }
+
+    void profile_loader_s::die()
+    {
+        ploader.reset();
     }
 }
 
@@ -691,20 +868,14 @@ bool application_c::b_customize(RID r, GUIPARAM param)
             profile_c::path_by_name(pn);
             if (ts::is_file_exists(pn))
             {
-                SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                    DT_MSGBOX_ERROR,
-                    TTT("Such profile already exists",49)
-                    ));
+                dialog_msgbox_c::mb_error( TTT("Such profile already exists",49) ).summon();
                 return false;
             }
 
             HANDLE f = CreateFileW( pn, GENERIC_WRITE, FILE_SHARE_READ|FILE_SHARE_WRITE, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr );
             if (f == INVALID_HANDLE_VALUE)
             {
-                SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                    DT_MSGBOX_ERROR,
-                    TTT("Can't create profile ($)",50) / lasterror()
-                    ));
+                dialog_msgbox_c::mb_error( TTT("Can't create profile ($)",50) / lasterror() ).summon();
                 return true;
             }
             CloseHandle(f);
@@ -713,21 +884,16 @@ bool application_c::b_customize(RID r, GUIPARAM param)
             ts::wstr_c profname = cfg().profile();
             if (profname.is_empty())
             {
-                if (prf().load(pn))
+                auto rslt = prf().xload(pn, nullptr);
+                if (PLR_OK == rslt)
                 {
-                    SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                        DT_MSGBOX_INFO,
-                        TTT("Profile [b]$[/b] has created and set as default.",48) / prfn
-                        ));
+                    dialog_msgbox_c::mb_info( TTT("Profile [b]$[/b] has created and set as default.",48) / prfn ).summon();
                     cfg().profile(storpn);
                 } else
-                    profile_c::mb_error_unique_profile(pn);
+                    profile_c::mb_error_load_profile(pn, rslt);
             } else
             {
-                SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                    DT_MSGBOX_INFO,
-                    TTT("Profile with name [b]$[/b] has created. You can switch to it using settings menu.",51) / prfn
-                    ));
+                dialog_msgbox_c::mb_info( TTT("Profile with name [b]$[/b] has created. You can switch to it using settings menu.",51) / prfn ).summon();
             }
             
 
@@ -739,35 +905,18 @@ bool application_c::b_customize(RID r, GUIPARAM param)
             ts::parse_env(defprofilename);
             SUMMON_DIALOG<dialog_entertext_c>(UD_PROFILENAME, dialog_entertext_c::params(
                                                 UD_PROFILENAME,
-                                                TTT("[appname]: Profile name",44),
+                                                gui_isodialog_c::title(title_profile_name),
                                                 TTT("Enter profile name. It is profile file name. You can create any number of profiles and switch them any time. Detailed settings of current profile are available in settings dialog.",43),
                                                 defprofilename,
                                                 ts::str_c(),
                                                 m_newprofile_ok,
+                                                nullptr,
                                                 check_profile_name));
         }
+
         static void m_switchto(const ts::str_c& prfn)
         {
-            ts::wstr_c oldprfn = cfg().profile();
-
-            ts::wstr_c wpn(from_utf8(prfn));
-            ts::wstr_c storwpn(wpn);
-            profile_c::path_by_name(wpn);
-
-            contacts().unload();
-
-            if (prf().load(wpn))
-                cfg().profile(storwpn);
-            else
-            {
-                prf().load( oldprfn );
-                profile_c::mb_error_unique_profile( wpn );
-            }
-
-            contacts().update_meta();
-            contacts().get_self().reselect();
-            g_app->recreate_ctls();
-
+            profile_loader_s::load( from_utf8(prfn), false );
         }
         static void m_about(const ts::str_c&)
         {
@@ -803,7 +952,11 @@ bool application_c::b_customize(RID r, GUIPARAM param)
         ts::wsptr ext = CONSTWSTR(".profile");
         if (ASSERT(wfn.ends(ext))) wfn.trunc_length( ext.l );
         ts::uint32 mif = 0;
-        if (wfn == profname) mif = MIF_MARKED|MIF_DISABLED;
+        if (wfn == profname)
+        {
+            mif = MIF_MARKED;
+            if (prf().is_loaded()) mif |= MIF_DISABLED;
+        }
         pm.add(TTT("Switch to [b]$[/b]",41) / wfn, mif, handlers::m_switchto, ts::to_utf8(wfn));
     }
 
@@ -814,8 +967,6 @@ bool application_c::b_customize(RID r, GUIPARAM param)
     m.add_separator();
     m.add(loc_text(loc_exit), 0, handlers::m_exit);
     gui_popup_menu_c::show(r.call_get_popup_menu_pos(), m);
-
-    //SUMMON_DIALOG<dialog_settings_c>(L"dialog_settings");
 
     return true;
 }
@@ -854,11 +1005,7 @@ void application_c::load_profile_and_summon_main_rect(bool minimize)
         cfg().profile(profname);
     }
     if (!profname.is_empty())
-        if (!prf().load(profile_c::path_by_name(profname)))
-        {
-            profile_c::mb_error_unique_profile(profname, true);
-            return;
-        }
+        minimize |= profile_loader_s::load( profname, true );
 
     if (F_READONLY_MODE)
     {
@@ -1695,16 +1842,21 @@ bool file_transfer_s::confirm_required() const
     return true;
 }
 
-void file_transfer_s::auto_confirm()
+bool file_transfer_s::auto_confirm()
 {
     bool image = image_loader_c::is_image_fn(to_utf8(filename));
     ts::wstr_c downf = image ? prf().download_folder_images() : prf().download_folder();
     path_expand_env(downf, ts::wmake<uint>(historian.contactid));
     ts::make_path(downf, 0);
+    if (!ts::dir_present(downf))
+        return false;
+
     prepare_fn(ts::fn_join(downf, filename), false);
 
     if (active_protocol_c *ap = prf().ap(sender.protoid))
         ap->file_control(utag, FIC_ACCEPT);
+
+    return true;
 }
 
 

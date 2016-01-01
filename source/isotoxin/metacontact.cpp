@@ -3,6 +3,7 @@
 
 dialog_metacontact_c::dialog_metacontact_c(MAKE_ROOT<dialog_metacontact_c> &data) :gui_isodialog_c(data)
 {
+    deftitle = title_new_meta_contact;
     clist.add() = data.prms.key;
 }
 
@@ -11,12 +12,6 @@ dialog_metacontact_c::~dialog_metacontact_c()
     //if (gui)
     //    gui->delete_event(DELEGATE(this, hidectl));
 }
-
-/*virtual*/ ts::wstr_c dialog_metacontact_c::get_name() const
-{
-    return TTT("[appname]: New metacontact",146);
-}
-
 
 /*virtual*/ void dialog_metacontact_c::created()
 {
@@ -142,10 +137,7 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
 {
     if (clist.size() < 2)
     {
-        SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-            DT_MSGBOX_ERROR,
-            TTT("Metacontact - union of two or more contacts. The current list contains less then two contacts and to create metacontact this amount is not enough.",150)
-            ));
+        dialog_msgbox_c::mb_error( TTT("Metacontact - union of two or more contacts. The current list contains less then two contacts and to create metacontact this amount is not enough.",150) ).summon();
         return;
     }
 
@@ -156,6 +148,8 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
     contact_c *basec = contacts().find(clist.get_remove_slow());
     if (CHECK(basec))
     {
+        ts::db_transaction_c __transaction( prf().get_db() );
+
         basec->unload_history();
         for (const contact_key_s &ck : clist)
             if (contact_c * c = contacts().find(ck))

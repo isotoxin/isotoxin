@@ -813,7 +813,7 @@ ts::wstr_c loc_text(loctext_e lt)
         case loc_autostart:
             return TTT("Start [appname] with system", 310);
         case loc_please_create_profile:
-            return TTT("Please, create profile first", 144);
+            return TTT("Please, first create or load profile", 144);
         case loc_yes:
             return TTT("yes",315);
         case loc_no:
@@ -1682,6 +1682,36 @@ void available_protocols_s::load()
 {
     g_app->add_task(TSNEW(load_proto_list_s, this));
 }
+
+
+db_check_e check_db(const ts::wstr_c &fn, ts::uint8 *salt /* 16 bytes buffer */)
+{
+    HANDLE handle = CreateFileW(fn, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
+        return DBC_IO_ERROR;
+
+    DWORD r;
+    BOOL rslt = ReadFile(handle, salt, 16, &r, nullptr);
+    CloseHandle(handle);
+    if (!rslt) return DBC_IO_ERROR;
+    if (r > 0 && r != 16)
+        return DBC_NOT_DB;
+
+    const char * sql3hdr = "SQLite format 3";
+    if (!memcmp(sql3hdr, salt, 16))
+        return DBC_DB;
+
+    ts::uint8 x = 0;
+    for (int i = 0; i < 16; ++i)
+    {
+        x ^= salt[i];
+    }
+    if (x == (255 - salt[0]))
+        return DBC_DB_ENCRTPTED;
+
+    return DBC_NOT_DB;
+}
+
 
 
 // dlmalloc -----------------

@@ -199,7 +199,12 @@ bool gui_textedit_c::cut_(int cp, bool copy2clipboard)
 	{
 		int len=ts::tabs(start_sel-cp);
 		cp=ts::tmin(cp,start_sel);
-		if (copy2clipboard) ts::set_clipboard_text(text_substr(cp, len));
+		if (copy2clipboard)
+        {
+            ts::wstr_c t( text_substr(cp, len) );
+            if (password_char) for(int i=0;i<t.get_length();++i) t.set_char(i,password_char);
+            ts::set_clipboard_text(t);
+        }
 		text_erase(cp, len);
         return true;
 	}
@@ -210,7 +215,9 @@ bool gui_textedit_c::copy_(int cp)
 {
 	if (start_sel!=-1)
     {
-        ts::set_clipboard_text(text_substr(ts::tmin(cp,start_sel),abs(start_sel-cp)));
+        ts::wstr_c t(text_substr(ts::tmin(cp,start_sel),abs(start_sel-cp)));
+        if (password_char) for (int i = 0; i < t.get_length(); ++i) t.set_char(i, password_char);
+        ts::set_clipboard_text(t);
         return true;
     }
 	return false;
@@ -1132,6 +1139,7 @@ bool gui_textedit_c::summoncontextmenu()
     switch (qp)
     {
     case SQ_DRAW:
+        if (rid != getrid()) return false;
         {
             if (text.size() == 0 && placeholder)
             {

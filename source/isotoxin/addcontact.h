@@ -26,9 +26,12 @@ class dialog_addcontact_c : public gui_isodialog_c
     int apid = 0;
     ts::str_c publicid; // utf8
     ts::str_c invitemessage; // utf8
+    ts::wstr_c invitemessage_autogen;
 
     dialog_addcontact_params_s inparam;
     bool networks_available = false;
+
+    ts::wstr_c rtext();
 
 protected:
     /*virtual*/ int unique_tag() { return UD_ADDCONTACT; }
@@ -81,7 +84,6 @@ public:
     dialog_addgroup_c(initial_rect_data_s &data);
     ~dialog_addgroup_c();
 
-    /*virtual*/ ts::wstr_c get_name() const override;
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };

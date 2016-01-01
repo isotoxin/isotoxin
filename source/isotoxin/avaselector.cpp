@@ -303,6 +303,7 @@ namespace
 
 dialog_avaselector_c::dialog_avaselector_c(MAKE_ROOT<dialog_avaselector_c> &data) :gui_isodialog_c(data), avarect(0), protoid(data.prms.protoid) 
 {
+    deftitle = title_avatar_creation_tool;
     g_app->add_task(TSNEW(enum_video_devices_s, this));
 
     shadow = gui->theme().get_rect(CONSTASTR("shadow"));
@@ -669,11 +670,6 @@ void dialog_avaselector_c::rebuild_bitmap()
         dirty = true;
         getengine().redraw();
     }
-}
-
-/*virtual*/ ts::wstr_c dialog_avaselector_c::get_name() const
-{
-    return TTT("[appname]: Avatar creation tool",218);
 }
 
 void dialog_avaselector_c::prepare_stuff()

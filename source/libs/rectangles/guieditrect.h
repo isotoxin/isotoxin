@@ -276,7 +276,7 @@ public:
     ts::str_c get_text_utf8() const {return text_substr_utf8(0, text.size());}
 	void insert_text(const ts::wstr_c &t) {text_replace(get_caret_char_index(), t);} //insert text at current cursor pos
 	void set_color(ts::TSCOLOR c) { caret_color = color = c; redraw(); }
-	void set_password_char(ts::wchar pc) { password_char = pc; }
+	void set_password_char(ts::wchar pc) { password_char = pc; redraw(); }
 
 	int lines_count() const;
 	void remove_lines(int n);

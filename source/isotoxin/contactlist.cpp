@@ -933,6 +933,9 @@ bool gui_contact_item_c::allow_drop() const
     switch (qp)
     {
     case SQ_DRAW:
+        if (!prf().is_loaded())
+            return gui_control_c::sq_evt(qp, rid, data);
+
         if (flags.is( F_DNDDRAW ))
         {
             if ( gui->dragndrop_underproc() == this )
@@ -1329,10 +1332,7 @@ bool gui_contact_item_c::allow_drop() const
                         else
                             txt = TTT("Contact will be deleted:[br]$",84) / from_utf8(c->get_description());
                         
-                        SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                            DT_MSGBOX_WARNING,
-                            txt
-                            ).bcancel().on_ok(m_delete_doit, cks) );
+                        dialog_msgbox_c::mb_warning(txt).bcancel().on_ok(m_delete_doit, cks).summon();
                     }
                 }
                 static void m_metacontact_detach(const ts::str_c&cks)
@@ -1725,10 +1725,7 @@ void gui_contactlist_c::recreate_ctls(bool focus_filter)
                 if (prf().is_loaded())
                     SUMMON_DIALOG<dialog_addcontact_c>(UD_ADDCONTACT);
                 else
-                    SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                    DT_MSGBOX_ERROR,
-                    loc_text(loc_please_create_profile)
-                    ));
+                    dialog_msgbox_c::mb_error( loc_text(loc_please_create_profile) ).summon();
                 return true;
             }
             static bool summon_addgroup(RID, GUIPARAM)
@@ -1736,10 +1733,7 @@ void gui_contactlist_c::recreate_ctls(bool focus_filter)
                 if (prf().is_loaded())
                     SUMMON_DIALOG<dialog_addgroup_c>(UD_ADDGROUP);
                 else
-                    SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-                    DT_MSGBOX_ERROR,
-                    loc_text(loc_please_create_profile)
-                    ));
+                    dialog_msgbox_c::mb_error( loc_text(loc_please_create_profile) ).summon();
                 return true;
             }
         };
@@ -1775,7 +1769,10 @@ void gui_contactlist_c::recreate_ctls(bool focus_filter)
 
             if (!prf().is_any_active_ap(PF_GROUP_CHAT))
             {
-                addgbtn->tooltip(TOOLTIP(TTT("No any active networks with group chat support",247)));
+                if (prf().is_loaded())
+                    addgbtn->tooltip(TOOLTIP(TTT("No any active networks with group chat support",247)));
+                else
+                    addgbtn->tooltip(nullptr);
                 addgbtn->disable();
             }
         }
@@ -1789,7 +1786,7 @@ void gui_contactlist_c::recreate_ctls(bool focus_filter)
         flags.clear(F_NO_LEECH_CHILDREN);
 
         int other_ctls = 1;
-        if (prf().get_options().is(UIOPT_SHOW_SEARCH_BAR))
+        if (prf().is_loaded() && prf().get_options().is(UIOPT_SHOW_SEARCH_BAR))
         {
             other_ctls = 2;
             filter = MAKE_CHILD<gui_filterbar_c>(getrid());

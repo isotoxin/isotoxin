@@ -65,6 +65,7 @@ struct data_pair_s : public data_value_s
 
 typedef fastdelegate::FastDelegate<data_type_e (int, data_value_s &)> SQLITE_DATAGETTER;
 typedef fastdelegate::FastDelegate<bool (int, SQLITE_DATAGETTER)> SQLITE_TABLEREADER;
+typedef fastdelegate::FastDelegate<void(int, int)> SQLITE_ENCRYPT_PROCESS_CALLBACK;
 
 class sqlitedb_c
 {
@@ -73,6 +74,11 @@ protected:
     sqlitedb_c() {}
     ~sqlitedb_c() {}
 public:
+
+    virtual void begin_transaction() = 0;
+    virtual void end_transaction() = 0;
+
+    virtual bool is_correct() const = 0; // should be called just after connect to check that encrypted db was opened with correct key
 
     virtual void close() = 0; // no need to call due no resource leak - all databases will be destroyed automatically at end of program
     virtual bool is_table_exist( const asptr& tablename ) = 0;
@@ -86,10 +92,32 @@ public:
     virtual void update( const asptr& tablename, array_wrapper_c<const data_pair_s> fields, const asptr& where_items ) = 0;
     virtual int  find_free( const asptr& tablename, const asptr& id ) = 0;
     
+    virtual void rekey( const uint8 *k, SQLITE_ENCRYPT_PROCESS_CALLBACK cb ) = 0; // k must be 48 bytes length (16 salt + 32 password hash, salt will be saved into file as header)
 
-    static sqlitedb_c *sqlitedb_c::connect( const wsptr &fn, bool readonly ); // will create file if not exist / returns already connected db
+    static sqlitedb_c *sqlitedb_c::connect( const wsptr &fn, const uint8 *k /* 48 bytes; see rekey; can be null - mean unencrypted */, bool readonly ); // will create file if not exist / returns already connected db
 };
 
+class db_transaction_c
+{
+    iweak_ptr<sqlitedb_c> db;
+public:
+    db_transaction_c( sqlitedb_c *db ):db(db)
+    {
+        if (db) db->begin_transaction();
+    }
+    ~db_transaction_c()
+    {
+        end();
+    }
 
+    void end()
+    {
+        if (db)
+        {
+            db->end_transaction();
+            db.unconnect();
+        }
+    }
+};
 
 }

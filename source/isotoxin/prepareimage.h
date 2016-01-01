@@ -118,9 +118,8 @@ public:
     dialog_prepareimage_c(MAKE_ROOT<dialog_prepareimage_c> &data);
     ~dialog_prepareimage_c();
 
-    /*virtual*/ bool allow_maximize() const override { return true;}
+    /*virtual*/ ts::uint32 caption_buttons() const override { return SETBIT(CBT_MAXIMIZE) | SETBIT(CBT_NORMALIZE) | __super::caption_buttons(); }
     /*virtual*/ int additions(ts::irect & border) override;
-    /*virtual*/ ts::wstr_c get_name() const override;
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
     /*virtual*/ void on_confirm() override;

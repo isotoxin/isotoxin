@@ -40,16 +40,33 @@ gui_isodialog_c::~gui_isodialog_c()
     return clar;
 }
 
-ts::wstr_c gui_isodialog_c::title( dlg_title_e d )
+ts::wstr_c gui_isodialog_c::title( rtitle_e lbl )
 {
-    switch (d) //-V719
+#define MAKE_TITLE( s ) APPNAME_CAPTION.append(CONSTWSTR(": ")).append(s)
+
+    switch (lbl) //-V719
     {
-    case DT_MSGBOX_ERROR:
-        return TTT("[appname]: error",45);
-    case DT_MSGBOX_INFO:
-        return TTT("[appname]: information",46);
-    case DT_MSGBOX_WARNING:
-        return TTT("[appname]: warning",86);
+    case title_information:                 return MAKE_TITLE(TTT("information",900));
+    case title_warning:                     return MAKE_TITLE(TTT("warning",901));
+    case title_error:                       return MAKE_TITLE(TTT("error",902));
+
+    case title_first_run:                   return MAKE_TITLE(TTT("First run",903));
+    case title_settings:                    return MAKE_TITLE(TTT("Settings",904));
+    case title_new_contact:                 return MAKE_TITLE(TTT("New contact",905));
+    case title_repeat_request:              return MAKE_TITLE(TTT("Repeat request",906));
+    case title_new_groupchat:               return MAKE_TITLE(TTT("New group chat",907));
+    case title_avatar_creation_tool:        return MAKE_TITLE(TTT("Avatar creation tool",908));
+    case title_contact_properties:          return MAKE_TITLE(TTT("Contact properties",909));
+    case title_new_meta_contact:            return MAKE_TITLE(TTT("New metacontact",910));
+    case title_prepare_image:               return MAKE_TITLE(TTT("Prepare image",911));
+    case title_encrypting:                  return MAKE_TITLE(TTT("Encrypting...",912));
+    case title_removing_encryption:         return MAKE_TITLE(TTT("Removing encryption...",913));
+    case title_new_network:                 return MAKE_TITLE(TTT("New network",914));
+    case title_connection_properties:       return MAKE_TITLE(TTT("Connection properties",915));
+    case title_profile_name:                return MAKE_TITLE(TTT("Profile name",916));
+    case title_enter_password:              return MAKE_TITLE(TTT("Enter password",917));
+    case title_reenter_password:            return MAKE_TITLE(TTT("Re-enter password",918));
     }
-    return TTT("[appname]",47);
+
+    return APPNAME_CAPTION;
 }

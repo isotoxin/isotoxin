@@ -850,7 +850,7 @@ public:
         from.clear(false);
     }
 
-    template<typename ARR> bool sortcopy(ARR &arr)
+    template<typename ARR> bool invsortcopy(ARR &arr)
     {
         bool other_order = false;
         for(const T &t : *this)
@@ -932,6 +932,13 @@ public:
         return sort([](const T &o1, const T &o2)->bool
         {
             return BEHAVIOUR::compare(o1, o2) < 0;
+        });
+    }
+    bool invsort()
+    {
+        return sort([](const T &o1, const T &o2)->bool
+        {
+            return BEHAVIOUR::compare(o1, o2) > 0;
         });
     }
 

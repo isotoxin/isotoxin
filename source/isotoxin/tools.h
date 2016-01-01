@@ -239,6 +239,7 @@ enum isogmsg_e
     ISOGM_VIDEO_TICK,
     ISOGM_CAMERA_TICK,
     ISOGM_PEER_STREAM_OPTIONS,
+    ISOGM_ENCRYPT_PROCESS,
 
     ISOGM_COUNT,
 };
@@ -262,6 +263,14 @@ template<> struct gmsg<ISOGM_DOWNLOADPROGRESS> : public gmsgbase
     gmsg(int d, int t) :gmsgbase(ISOGM_DOWNLOADPROGRESS), downloaded(d), total(t) {}
     int downloaded;
     int total;
+};
+
+template<> struct gmsg<ISOGM_ENCRYPT_PROCESS> : public gmsgbase
+{
+    gmsg(const void *id, int i, int n) :gmsgbase(ISOGM_ENCRYPT_PROCESS), id(id), i(i), n(n) {}
+    const void *id;
+    int i;
+    int n;
 };
 
 enum profile_table_e;
@@ -685,7 +694,23 @@ public:
 
 };
 
+enum crypto_constants_e
+{
+    CC_SALT_SIZE = 16,
+    CC_HASH_SIZE = 32,
+};
 
+enum db_check_e
+{
+    DBC_IO_ERROR, // not found ot other IO error
+    DBC_NOT_DB,
+    DBC_DB,
+    DBC_DB_ENCRTPTED,
+};
 
+db_check_e check_db(const ts::wstr_c &fn, ts::uint8 *salt /* CC_SALT_SIZE bytes buffer */ );
+
+void gen_salt( ts::uint8 *buf, int blen );
+void gen_passwdhash(ts::uint8 *passwhash, const ts::wstr_c &passwd);
 
 

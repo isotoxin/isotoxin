@@ -88,7 +88,7 @@ struct sync_data_s
     float volume = 1.0f;
     int dsp_flags = 0;
     contact_online_state_e manual_cos = COS_ONLINE;
-    cmd_result_e set_config_result;
+    cmd_result_e current_state;
 };
 
 class active_protocol_c : public ts::safe_object
@@ -105,7 +105,7 @@ class active_protocol_c : public ts::safe_object
     int features = 0;
     int conn_features = 0;
     s3::Format audio_fmt;
-    isotoxin_ipc_s *ipcp = nullptr;
+    isotoxin_ipc_s * volatile ipcp = nullptr;
     spinlock::syncvar< sync_data_s > syncdata;
     ts::Time lastconfig;
     ts::Time typingtime = ts::Time::past();
@@ -176,7 +176,8 @@ public:
 
     void set_current_online(bool oflg) { syncdata.lock_write()().flags.init(F_CURRENT_ONLINE, oflg); }
     bool is_current_online() const { return syncdata.lock_read()().flags.is(F_CURRENT_ONLINE); }
-    cmd_result_e get_current_state() const { return syncdata.lock_read()().set_config_result; }
+    bool is_online_switch() const { return syncdata.lock_read()().flags.is(F_ONLINE_SWITCH); }
+    cmd_result_e get_current_state() const { return syncdata.lock_read()().current_state; }
 
     int sort_factor() const { return syncdata.lock_read()().data.sort_factor; }
     void set_sortfactor(int sf);

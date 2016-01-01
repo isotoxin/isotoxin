@@ -6,9 +6,16 @@ namespace ts
 
 namespace
 {
+struct sqlite_encrypt_stuff_s
+{
+    SQLITE_ENCRYPT_PROCESS_CALLBACK cb;
+};
+static sqlite_encrypt_stuff_s *estuff = nullptr;
+
 class sqlite3_c : public sqlitedb_c
 {
     sqlite3 *db = nullptr;
+    int transaction_ref = 0;
     bool readonly = false;
 public:
     sqlite3_c( bool readonly ):readonly(readonly) {}
@@ -42,6 +49,41 @@ public:
             WARNING(zErrMsg);
             sqlite3_free(zErrMsg);
         }
+    }
+
+    /*virtual*/ void begin_transaction() override
+    {
+        if (++transaction_ref == 1)
+        {
+            execsql(tmp_str_c("BEGIN TRANSACTION"));
+        }
+    }
+
+    /*virtual*/ void end_transaction() override
+    {
+        ASSERT(transaction_ref > 0);
+        if (--transaction_ref == 0)
+        {
+            execsql(tmp_str_c("END TRANSACTION"));
+        }
+    }
+
+
+    /*virtual*/ bool is_correct() const override
+    {
+        if (!db)
+            return false;
+
+        tmp_str_c tstr;
+        streamstr<tmp_str_c> sql(tstr);
+        sql << "SELECT name FROM sqlite_master WHERE type='table'";
+
+        sqlite3_stmt *stmt;
+        int erc = sqlite3_prepare_v2(db, sql.buffer(), sql.buffer().get_length(), &stmt, nullptr);
+        if (erc != SQLITE_OK) return false;
+        int step = sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+        return SQLITE_ROW == step;
     }
 
     /*virtual*/ bool is_table_exist( const asptr& tablename ) override
@@ -458,13 +500,35 @@ public:
         }
     }
 
+    /*virtual*/ void rekey(const uint8 *k, SQLITE_ENCRYPT_PROCESS_CALLBACK cb) override
+    {
+        // only one rekey allowed
+
+        if (readonly || estuff != nullptr)
+        {
+            cb( 0, 0 );
+            return;
+        }
+        readonly = true; // disallow any modifications during encrypt
+
+        sqlite_encrypt_stuff_s stuff;
+        stuff.cb = cb;
+        estuff = &stuff;
+
+        sqlite3_rekey(db, k, k ? 48 : 0);
+
+        estuff = nullptr;
+        readonly = false;
+    }
 
     bool inactive() const {return db == nullptr;}
-    void open(const wsptr &fn_)
+    void open(const wsptr &fn_, const uint8 *passhash)
     {
         fn = fn_;
         ts::str_c utf8name = to_utf8( fn );
         sqlite3_open_v2(utf8name, &db, SQLITE_OPEN_FULLMUTEX | (readonly ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)), nullptr);
+        if ( passhash )
+            sqlite3_key(db, passhash, 48);
     }
 };
 
@@ -482,7 +546,7 @@ public:
         sqlite3_shutdown();
     }
 
-    sqlitedb_c *get( const wsptr &fn, bool readonly )
+    sqlitedb_c *get( const wsptr &fn, const uint8 *passhash, bool readonly )
     {
         ts::wstr_c fnn(fn);
         ts::fix_path(fnn, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
@@ -500,7 +564,7 @@ public:
         
         if (recruit == nullptr) recruit = &dbs.add();
         if (recruit->get() == nullptr) recruit->reset( TSNEW(sqlite3_c, readonly) );
-        recruit->get()->open(fnn);
+        recruit->get()->open(fnn, passhash);
         if (!recruit->get()->inactive()) return recruit->get();
         return nullptr;
     }
@@ -511,9 +575,18 @@ static_setup<sqlite_init> sqliteinit;
 }
 
 
-sqlitedb_c *sqlitedb_c::connect(const wsptr &fn, bool readonly)
+sqlitedb_c *sqlitedb_c::connect(const wsptr &fn, const uint8 *k, bool readonly)
 {
-    return sqliteinit().get(fn, readonly);
+    return sqliteinit().get(fn, k, readonly);
 }
 
+}
+
+extern "C"
+{
+    void rekey_process_callback(const void *zKey, int nKey, int i, int n)
+    {
+        if (ts::estuff)
+            ts::estuff->cb( i, n );
+    }
 }

@@ -124,7 +124,6 @@
     <ClCompile Include="..\..\contactprops.cpp" />
     <ClCompile Include="..\..\conversation.cpp" />
     <ClCompile Include="..\..\emoticons.cpp" />
-    <ClCompile Include="..\..\entertext.cpp" />
     <ClCompile Include="..\..\filterbar.cpp" />
     <ClCompile Include="..\..\firstrun.cpp" />
     <ClCompile Include="..\..\images.cpp" />
@@ -136,7 +135,7 @@
     </ClCompile>
     <ClCompile Include="..\..\mainrect.cpp" />
     <ClCompile Include="..\..\metacontact.cpp" />
-    <ClCompile Include="..\..\msgbox.cpp" />
+    <ClCompile Include="..\..\simpledlg.cpp" />
     <ClCompile Include="..\..\prepareimage.cpp" />
     <ClCompile Include="..\..\profile.cpp" />
     <ClCompile Include="..\..\mediasystem.cpp" />
@@ -159,7 +158,6 @@
     <ClInclude Include="..\..\contactlist.h" />
     <ClInclude Include="..\..\conversation.h" />
     <ClInclude Include="..\..\emoticons.h" />
-    <ClInclude Include="..\..\entertext.h" />
     <ClInclude Include="..\..\filterbar.h" />
     <ClInclude Include="..\..\firstrun.h" />
     <ClInclude Include="..\..\images.h" />
@@ -167,7 +165,7 @@
     <ClInclude Include="..\..\isotoxin.h" />
     <ClInclude Include="..\..\mainrect.h" />
     <ClInclude Include="..\..\metacontact.h" />
-    <ClInclude Include="..\..\msgbox.h" />
+    <ClInclude Include="..\..\simpledlg.h" />
     <ClInclude Include="..\..\prepareimage.h" />
     <ClInclude Include="..\..\profile.h" />
     <ClInclude Include="..\..\mediasystem.h" />

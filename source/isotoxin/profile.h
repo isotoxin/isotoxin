@@ -273,7 +273,7 @@ template<typename T, profile_table_e tabi> struct tableview_t
     {
         friend struct tableview_t;
         TABTYPE *tab;
-        int index;
+        ts::aint index;
         iterator(TABTYPE *_tab, bool end):tab(_tab), index(end ? _tab->rows.size(): 0) { if (!end) skipdel(); }
         void skipdel()
         {
@@ -325,6 +325,16 @@ enum camview_snap_e
 };
 
 struct dialog_protosetup_params_s;
+class pb_job_c;
+
+enum profile_load_result_e
+{
+    PLR_OK,
+    PLR_CORRUPT_OR_ENCRYPTED,
+    PLR_UPGRADE_FAILED,
+    PLR_CONNECT_FAILED,
+    PLR_BUSY,
+};
 
 class profile_c : public config_base_c
 {
@@ -355,8 +365,10 @@ class profile_c : public config_base_c
     static const ts::flags32_s::BITS F_OPTIONS_VALID = SETBIT(0);
     static const ts::flags32_s::BITS F_LOADING = SETBIT(1);
     static const ts::flags32_s::BITS F_CLOSING = SETBIT(2);
+    static const ts::flags32_s::BITS F_ENCRYPTED = SETBIT(3);
+    static const ts::flags32_s::BITS F_ENCRYPT_PROCESS = SETBIT(4);
 
-    ts::flags32_s profile_options;
+    ts::flags32_s profile_flags;
     ts::flags32_s current_options;
 
     INTPAR(msgopts, 0)
@@ -364,13 +376,23 @@ class profile_c : public config_base_c
 
     void create_aps();
 
+    ts::uint8 keyhash[CC_HASH_SIZE]; // 256 bit hash
+
 public:
 
     profile_c() { dirty_sort(); }
     ~profile_c();
 
+    ts::sqlitedb_c *begin_encrypt();
+    void encrypt_done(const ts::uint8 *newpasshash);
+    void encrypt_failed();
+
+    void encrypt( const ts::uint8 *passwdhash /* 256 bit (32 bytes) hash */, float delay_before_start = 0.5f );
+    bool is_encrypted() const { return profile_flags.is(F_ENCRYPTED); }
+    ts::str_c get_keyhash_str() const { ts::str_c h; if (is_encrypted()) h.append_as_hex(keyhash, CC_HASH_SIZE); return h; }
+
     static void mb_warning_readonly(bool minimize);
-    static void mb_error_unique_profile(const ts::wsptr & prfn, bool modal = false);
+    static void mb_error_load_profile(const ts::wsptr & prfn, profile_load_result_e plr, bool modal = false);
 
     bool addeditnethandler(dialog_protosetup_params_s &params);
 
@@ -411,7 +433,7 @@ public:
         return false;
     }
 
-    bool load( const ts::wstr_c& pfn );
+    profile_load_result_e xload( const ts::wstr_c& pfn, const ts::uint8 *k );
 
     ts::blob_c get_avatar( const contact_key_s&k ) const;
     void set_avatar( const contact_key_s&k, const ts::blob_c &avadata, int tag );
@@ -447,12 +469,12 @@ public:
 
     ts::flags32_s get_options()
     {
-        if (!profile_options.is(F_OPTIONS_VALID))
+        if (!profile_flags.is(F_OPTIONS_VALID))
         {
             ts::flags32_s::BITS opts = msgopts();
             ts::flags32_s::BITS optse = msgopts_edited();
             current_options.setup( (opts & optse) | ( ~optse & DEFAULT_MSG_OPTIONS ) );
-            profile_options.set(F_OPTIONS_VALID);
+            profile_flags.set(F_OPTIONS_VALID);
         }
         return current_options;
     }

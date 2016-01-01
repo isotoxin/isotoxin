@@ -493,7 +493,7 @@ void gui_c::loop()
         ts::tmp_pointers_t<gmsgbase,1> executing;
 
         gmsgbase *m;
-        while (m_msgs.try_pop(m) && executing.size() < 100 /* limit maximum to avoid interface freeze */ )
+        while ( executing.size() < 100 /* limit maximum to avoid interface freeze */ && m_msgs.try_pop(m) )
             executing.add(m); // pop messages as fast as possible
 
         for( gmsgbase * me : executing ) // now executing
@@ -749,15 +749,15 @@ public:
                     int tag = as_int(ts::ptr_cast<gui_control_c *>(owner)->get_customdata());
                     switch (tag)
                     {
-                    case ABT_CLOSE:
+                    case CBT_CLOSE:
                         break;
-                    case ABT_MAXIMIZE:
+                    case CBT_MAXIMIZE:
                         _visible = !root.getprops().is_maximized();
                         if (!_visible) shiftleft = 0;
                         break;
-                    case ABT_MINIMIZE:
+                    case CBT_MINIMIZE:
                         break;
-                    case ABT_NORMALIZE:
+                    case CBT_NORMALIZE:
                         _visible = root.getprops().is_maximized();
                         if (!_visible) shiftleft = 0;
                         break;
@@ -781,15 +781,15 @@ public:
 void gui_c::make_app_buttons(RID rootappwindow, ts::uint32 allowed_buttons, GET_TOOLTIP closebhint)
 {
     bcreate_s buttons[] = { 
-        {BUTTON_FACE(close), DELEGATE( this, b_close ), ABT_CLOSE, DELEGATE( this, tt_close ) },
-        {BUTTON_FACE(maximize), DELEGATE( this, b_maximize ), ABT_MAXIMIZE, DELEGATE( this, tt_maximize ) },
-        {BUTTON_FACE(normalize), DELEGATE( this, b_normalize ), ABT_NORMALIZE, DELEGATE( this, tt_normalize ) },
-        {BUTTON_FACE(minimize), DELEGATE( this, b_minimize ), ABT_MINIMIZE, DELEGATE( this, tt_minimize ) },
+        {BUTTON_FACE(close), DELEGATE( this, b_close ), CBT_CLOSE, DELEGATE( this, tt_close ) },
+        {BUTTON_FACE(maximize), DELEGATE( this, b_maximize ), CBT_MAXIMIZE, DELEGATE( this, tt_maximize ) },
+        {BUTTON_FACE(normalize), DELEGATE( this, b_normalize ), CBT_NORMALIZE, DELEGATE( this, tt_normalize ) },
+        {BUTTON_FACE(minimize), DELEGATE( this, b_minimize ), CBT_MINIMIZE, DELEGATE( this, tt_minimize ) },
     };
     if (closebhint) buttons[0].tooltip = closebhint;
     auto setupcustom = [this](bcreate_s &bcr, int tag) -> bcreate_s * {
 
-        ASSERT(tag >= ABT_APPCUSTOM);
+        ASSERT(tag >= CBT_APPCUSTOM);
         bcr.tag = tag;
         bcr.face = GET_BUTTON_FACE();
         bcr.handler = GUIPARAMHANDLER();

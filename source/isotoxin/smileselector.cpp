@@ -106,6 +106,7 @@ bool dialog_smileselector_c::find_undermouse()
     switch (qp)
     {
     case SQ_DRAW:
+        if (rid != getrid()) return false;
         __super::sq_evt(qp, rid, data);
         {
             ts::irect drawarea = get_client_area();

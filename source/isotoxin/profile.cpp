@@ -1,5 +1,7 @@
 #include "isotoxin.h"
 
+#define minimum_encrypt_pb_duration 1.0f
+
 ts::static_setup<profile_c> prf;
 
 void active_protocol_s::set(int column, ts::data_value_s &v)
@@ -637,6 +639,8 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::prepare( t
 
 template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts::sqlitedb_c *db, bool all, bool notify_saved )
 {
+    ts::db_transaction_c __transaction( db );
+
     ts::tmp_array_inplace_t<ts::data_pair_s, 0> vals( T::columns );
     bool one_done = false;
     bool some_action = false;
@@ -700,6 +704,8 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts:
 
         }
     }
+
+    __transaction.end();
 
     if (notify_saved && some_action) gmsg<ISOGM_PROFILE_TABLE_SAVED>( tabi ).send();
     return false;
@@ -1107,7 +1113,7 @@ void profile_c::detach_history( const contact_key_s&prev_historian, const contac
     bool changed = false;
     for (auto &hi : table_history.rows)
     {
-        if (hi.other.historian == prev_historian && hi.other.sender == sender)
+        if (hi.other.historian == prev_historian && (hi.other.sender == sender || hi.other.receiver == sender))
         {
             hi.other.historian = new_historian;
             hi.changed();
@@ -1200,18 +1206,22 @@ int  profile_c::calc_history_between( const contact_key_s&historian, time_t time
 }
 
 
-bool profile_c::load(const ts::wstr_c& pfn)
+profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k)
 {
-    AUTOCLEAR( profile_options, F_LOADING );
+    AUTOCLEAR( profile_flags, F_LOADING );
 
     if (db)
     {
         save_dirty(RID(), as_param(1));
         db->close();
+        db = nullptr;
     }
 
     if (mutex)
+    {
         CloseHandle(mutex);
+        mutex = nullptr;
+    }
 
     closed = false;
 
@@ -1219,17 +1229,25 @@ bool profile_c::load(const ts::wstr_c& pfn)
     PROFILE_TABLES
 #undef TAB
 
-    profile_options.clear();
+    profile_flags.clear();
     values.clear();
     dirty.clear();
     path = pfn;
-    db = ts::sqlitedb_c::connect(path, g_app->F_READONLY_MODE);
+    db = ts::sqlitedb_c::connect(path, k, g_app->F_READONLY_MODE);
+    if (!db)
+        return PLR_CONNECT_FAILED;
 
-    if (ASSERT(db))
+    if (!db->is_correct())
+    {
+        db->close();
+        db = nullptr;
+        return PLR_CORRUPT_OR_ENCRYPTED;
+    }
+
     {
         prepare_conf_table(db);
 
-#define TAB(tab) if (!table_##tab.prepare( db )) { return false; }
+#define TAB(tab) if (!table_##tab.prepare( db )) { return PLR_UPGRADE_FAILED; }
         PROFILE_TABLES
 #undef TAB
 
@@ -1243,12 +1261,20 @@ bool profile_c::load(const ts::wstr_c& pfn)
         utag.set_as_num<uint64>(ts::uuid()), generated = true;
 
     mutex = CreateMutexW(nullptr, FALSE, CONSTWSTR("isotoxin_db_") + ts::to_wstr(utag));
-    if (!mutex) return false;
+    if (!mutex)
+    {
+        db->close();
+        db = nullptr;
+        return PLR_CONNECT_FAILED;
+    }
+
     if (ERROR_ALREADY_EXISTS == GetLastError())
     {
         CloseHandle(mutex);
         mutex = nullptr;
-        return false;
+        db->close();
+        db = nullptr;
+        return PLR_BUSY;
     }
     if (generated)
         unique_profile_tag( utag );
@@ -1274,7 +1300,13 @@ bool profile_c::load(const ts::wstr_c& pfn)
 
     set_options( 0, _MSGOP_UNUSED_00_ ); // reset deprecated bit
 
-    return true;
+    if (k)
+    {
+        memcpy(keyhash, k + CC_SALT_SIZE, CC_HASH_SIZE);
+        profile_flags.set(F_ENCRYPTED);
+    }
+
+    return PLR_OK;
 }
 
 void profile_c::load_undelivered()
@@ -1314,6 +1346,242 @@ profile_c::~profile_c()
         CloseHandle(mutex);
 }
 
+namespace
+{
+    struct encrypt_task_s : public ts::task_c
+    {
+        ts::sqlitedb_c *db;
+        ts::iweak_ptr<pb_job_c> pb;
+        ts::uint8 key[CC_SALT_SIZE + CC_HASH_SIZE];
+        ts::Time prevt = ts::Time::past();
+        int errc = 0;
+        int lasti = 0, lastn = 0;
+        bool remove_enc = false;
+
+        GM_RECEIVER(encrypt_task_s, ISOGM_ENCRYPT_PROCESS)
+        {
+            if (p.id == this && pb)
+            {
+                float t = 1000;
+                if (p.n > 0)
+                    t = (float)p.i / (float)p.n;
+                else
+                    errc = p.i;
+
+                pb->external_process(t);
+            }
+            return 0;
+        }
+
+        encrypt_task_s(ts::sqlitedb_c *db, pb_job_c *pb, const ts::uint8 *passwdhash):db(db), pb(pb)
+        {
+            if (passwdhash)
+                memcpy(key + CC_SALT_SIZE, passwdhash, CC_HASH_SIZE);
+            else
+                remove_enc = true;
+        }
+
+        void process_callback( int i, int n )
+        {
+            if (n)
+            {
+                int delta = ts::Time::current() - prevt;
+                if (delta < 10)
+                {
+                    lasti = i;
+                    lastn = n;
+                    return; // ignore too freq updates
+                }
+                prevt += 10;
+            } else if (lastn > 0)
+            {
+                TSNEW( gmsg<ISOGM_ENCRYPT_PROCESS>, this, lasti, lastn )->send_to_main_thread();
+            }
+
+            lasti = 0;
+            lastn = 0;
+
+            TSNEW( gmsg<ISOGM_ENCRYPT_PROCESS>, this, i, n )->send_to_main_thread();
+        }
+
+        /*virtual*/ int iterate(int pass) override
+        {
+            if (remove_enc)
+            {
+                db->rekey(nullptr, DELEGATE(this, process_callback));
+            } else
+            {
+                gen_salt(key, CC_SALT_SIZE);
+                db->rekey(key, DELEGATE(this, process_callback));
+            }
+            return R_DONE;
+        }
+        /*virtual*/ void done(bool canceled) override
+        {
+            if (errc == 0)
+                prf().encrypt_done(remove_enc ? nullptr : key + CC_SALT_SIZE);
+            else
+                prf().encrypt_failed();
+
+            __super::done(canceled);
+        }
+    };
+
+    class encryptor_c : public pb_job_c
+    {
+        ts::uint8 passwhash[CC_HASH_SIZE];
+        ts::safe_ptr<dialog_pb_c> pbd;
+        ts::Time starttime;
+        float oldv = -1;
+        float newv = 0;
+        int errc = 0;
+        bool remove_enc = false;
+
+        GM_RECEIVER(encryptor_c, ISOGM_ENCRYPT_PROCESS)
+        {
+            if (p.n == 0)
+                errc = p.i;
+            return 0;
+        }
+
+    public:
+        encryptor_c(const ts::uint8 *passwhash_):starttime(ts::Time::undefined())
+        {
+            if (passwhash_)
+                memcpy(passwhash, passwhash_, sizeof(passwhash));
+            else
+                remove_enc = true;
+        }
+        ~encryptor_c()
+        {
+            gui->delete_event(DELEGATE(this, tick));
+        }
+
+        /*virtual*/ void on_create(dialog_pb_c *pb) override
+        {
+            starttime = ts::Time::current();
+            tick(RID(), nullptr);
+            pbd = pb;
+            ts::sqlitedb_c *db = prf().begin_encrypt();
+            g_app->add_task(TSNEW(encrypt_task_s, db, this, remove_enc ? nullptr : passwhash));
+        }
+
+        /*virtual*/ void on_close() override
+        {
+            TSDEL(this);
+        }
+
+        /*virtual*/ void external_process(float p) override
+        {
+            newv = p;
+        }
+
+        bool tick(RID, GUIPARAM)
+        {
+            float processtime_t = (float)(ts::Time::current() - starttime) /  ( minimum_encrypt_pb_duration * 1000.0f );
+
+            float vv = ts::tmin(processtime_t, newv);
+            if (vv > 1.0f) vv = 1.0f;
+
+            if (oldv < vv)
+            {
+                if (pbd)
+                {
+                    pbd->set_level(vv, ts::roundstr<ts::wstr_c>(vv * 100.0f, 1).append(CONSTWSTR("%")));
+                }
+
+                oldv = vv;
+            }
+
+            if (processtime_t > 1.0f)
+            {
+                int e = errc;
+                bool enc = !remove_enc;
+                if (pbd)
+                    TSDEL(pbd);
+                else
+                    TSDEL(this);
+
+                if (e > 0)
+                    dialog_msgbox_c::mb_error(TTT("Your profile has not been encrypted. Error code: $", 378) / ts::wmake(e)).summon();
+                else
+                {
+                    if (enc)
+                        dialog_msgbox_c::mb_info(TTT("Your profile has been successfully encrypted. After [appname] restart, you will be prompted for password. Don't forget it!", 381)).summon();
+                    else
+                        dialog_msgbox_c::mb_info(TTT("Your profile has been successfully decrypted.", 377)).summon();
+                }
+
+                return true;
+            }
+
+
+            DEFERRED_UNIQUE_CALL(0.01, DELEGATE(this, tick), nullptr);
+            return true;
+        }
+    };
+
+
+    class encrypt_c : public delay_event_c
+    {
+        ts::uint8 passwhash[CC_HASH_SIZE];
+        bool remove_enc = false;
+    public:
+        encrypt_c(const ts::uint8 *passwhash_)
+        {
+            if (passwhash_)
+                memcpy(passwhash, passwhash_, sizeof(passwhash));
+            else
+                remove_enc = true;
+        }
+
+        /*virtual*/ void    doit() override
+        {
+            SUMMON_DIALOG<dialog_pb_c>(UD_ENCRYPT_PROFILE_PB, dialog_pb_c::params(
+                gui_isodialog_c::title(remove_enc ? title_removing_encryption : title_encrypting),
+                ts::wstr_c()
+                ).setpbproc(TSNEW(encryptor_c, remove_enc ? nullptr : passwhash)));
+        };
+        /*virtual*/ void    die() override { gui->delete_event<encrypt_c>(this); }
+    };
+
+}
+
+ts::sqlitedb_c *profile_c::begin_encrypt()
+{
+    profile_flags.set(F_ENCRYPT_PROCESS);
+    return db;
+}
+
+void profile_c::encrypt_done(const ts::uint8 *newpasshash)
+{
+    profile_flags.clear(F_ENCRYPT_PROCESS);
+    if (newpasshash)
+    {
+        memcpy(keyhash, newpasshash, sizeof(keyhash));
+        profile_flags.set(F_ENCRYPTED);
+
+    } else
+    {
+        profile_flags.clear(F_ENCRYPTED);
+    }
+}
+
+void profile_c::encrypt_failed()
+{
+    profile_flags.clear(F_ENCRYPT_PROCESS);
+}
+
+
+void profile_c::encrypt( const ts::uint8 *passwdhash /* 256 bit (CC_HASH_SIZE bytes) hash */, float delay_before_start )
+{
+    if (g_app->F_READONLY_MODE)
+        return;
+
+    gui->add_event_t<encrypt_c, const ts::uint8 *>(delay_before_start, passwdhash);
+}
+
+
 void profile_c::mb_warning_readonly(bool minimize)
 {
     struct s
@@ -1331,20 +1599,35 @@ void profile_c::mb_warning_readonly(bool minimize)
         }
     };
     redraw_collector_s dch;
-    SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-        DT_MSGBOX_WARNING,
-        TTT("Profile and configuration are write protected![br][appname] is in [b]read-only[/b] mode!", 332)
-        ).on_ok(s::conti, minimize ? CONSTASTR("1") : CONSTASTR("0"))
-        .on_cancel(s::exit_now, ts::asptr()).bcancel(true, loc_text(loc_exit)).bok(TTT("Continue",117)));
-
+    dialog_msgbox_c::mb_warning( TTT("Profile and configuration are write protected![br][appname] is in [b]read-only[/b] mode!", 332) )
+        .on_ok(s::conti, minimize ? CONSTASTR("1") : CONSTASTR("0"))
+        .on_cancel(s::exit_now, ts::asptr())
+        .bcancel(true, loc_text(loc_exit))
+        .bok(TTT("Continue",117))
+        .summon();
 }
 
-void profile_c::mb_error_unique_profile( const ts::wsptr & prfn, bool modal )
+void profile_c::mb_error_load_profile( const ts::wsptr & prfn, profile_load_result_e plr, bool modal )
 {
-    ts::wstr_c text = TTT("Profile [b]$[/b] is busy!",270) / prfn;
-    if (g_app->F_READONLY_MODE)
-        text = TTT("Profile [b]$[/b] has old format and can not be upgraded due it write protected!",333) / prfn;
-
+    ts::wstr_c text;
+    
+    switch (plr)
+    {
+        case PLR_CORRUPT_OR_ENCRYPTED:
+            text = TTT("Profile [b]$[/b] is corrupted or incorrect password!",47) / prfn;
+            break;
+        case PLR_UPGRADE_FAILED:
+            if (g_app->F_READONLY_MODE)
+                text = TTT("Profile [b]$[/b] has old format and can not be upgraded due it write protected!", 333) / prfn;
+            break;
+        case PLR_CONNECT_FAILED:
+            text = TTT("Can't open profile [b]$[/b]!", 388) / prfn;
+            break;
+        case PLR_BUSY:
+            text = TTT("Profile [b]$[/b] is busy!", 270) / prfn;
+            break;
+    }
+    
     struct s
     {
         static void exit_now(const ts::str_c&)
@@ -1355,10 +1638,10 @@ void profile_c::mb_error_unique_profile( const ts::wsptr & prfn, bool modal )
     };
 
     redraw_collector_s dch;
-    SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, dialog_msgbox_c::params(
-        DT_MSGBOX_ERROR,
-        text
-        ).bok( modal ? loc_text(loc_exit) : ts::wsptr() ).on_ok(modal ? s::exit_now : MENUHANDLER(), ts::asptr()));
+    dialog_msgbox_c::mb_error( text )
+        .bok( modal ? loc_text(loc_exit) : ts::wsptr() )
+        .on_ok(modal ? s::exit_now : MENUHANDLER(), ts::asptr())
+        .summon();
 }
 
 bool profile_c::addeditnethandler(dialog_protosetup_params_s &params)
@@ -1403,7 +1686,7 @@ void profile_c::shutdown_aps()
 
 /*virtual*/ void profile_c::onclose()
 {
-    profile_options.set(F_CLOSING);
+    profile_flags.set(F_CLOSING);
 
     for (active_protocol_c *ap : protocols)
         if (ap) ap->save_config(true);
@@ -1466,6 +1749,12 @@ void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, i
 
 /*virtual*/ bool profile_c::save()
 {
+    if (profile_flags.is(F_ENCRYPT_PROCESS))
+    {
+        Sleep(1);
+        return false;
+    }
+
     if (__super::save()) return true;
 
     for(const contact_key_s &ck : dirtycontacts)
@@ -1491,6 +1780,8 @@ void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, i
         }
     }
     dirtycontacts.clear();
+
+    ts::db_transaction_c __transaction( db );
 
 #define TAB(tab) if (table_##tab.flush(db, false)) return true;
     PROFILE_TABLES
@@ -1536,7 +1827,7 @@ void profile_c::create_aps()
 
 ts::uint32 profile_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
 {
-    if (p.tabi == pt_active_protocol && !profile_options.is(F_LOADING) && !profile_options.is(F_CLOSING))
+    if (p.tabi == pt_active_protocol && !profile_flags.is(F_LOADING) && !profile_flags.is(F_CLOSING))
     {
         if (p.pass == 0)
             for(active_protocol_c *ap : protocols)

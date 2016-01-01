@@ -120,6 +120,7 @@ __forceinline int time_ms()
     return (int)timeGetTime();
 }
 
+static std::vector<byte> buf_tox_config; // saved on offline
 
 static host_functions_s *hf;
 static Tox *tox = nullptr;
@@ -1284,8 +1285,6 @@ public:
 
         auto w = callstate.lock_write();
         LIST_ADD(this, w().first, w().last, prev_call, next_call);
-
-
     }
 
     void stop_call()
@@ -1389,7 +1388,6 @@ public:
     {
         if (!ISFLAG(flags, F_DETAILS_SENT))
         {
-
             byte idbytes[TOX_PUBLIC_KEY_SIZE] = {0};
             if (!iid)
             {
@@ -1454,10 +1452,13 @@ public:
    
     }
 
-    int get_fidgnum() const {return fid;}
-    int get_fid() const {return fid < GROUP_ID_OFFSET ? fid : -1;};
-    int get_gnum() const {return fid >= GROUP_ID_OFFSET ? (fid - GROUP_ID_OFFSET) : -1;};
-    bool is_group() const { return fid >= GROUP_ID_OFFSET; }
+    bool is_fid_ok() const { return ISFLAG(flags, F_FIDVALID); }
+    int get_fidgnum() const { ASSERT(is_fid_ok()); return fid; }
+    int get_fid() const { ASSERT(is_fid_ok()); return fid < GROUP_ID_OFFSET ? fid : -1;};
+    int get_gnum() const { ASSERT(is_fid_ok()); return fid >= GROUP_ID_OFFSET ? (fid - GROUP_ID_OFFSET) : -1;};
+    bool is_group() const { ASSERT(is_fid_ok()); return fid >= GROUP_ID_OFFSET; }
+
+
     int get_id() const {return id;};
     void set_fid(int fid_, bool fid_valid);
     void set_id(int id_);
@@ -1762,14 +1763,14 @@ void update_self()
     self.name_len = name.get_length();
     self.status_message = statusmsg.cstr();
     self.status_message_len = statusmsg.get_length();
-    self.state = self_state;
+    self.state = online_flag ? self_state : CS_OFFLINE;
     self.avatar_tag = 0;
     hf->update_contact(&self);
 }
 
 static void update_contact( const contact_descriptor_s *desc )
 {
-    if (ASSERT(tox))
+    if (tox)
     {
         contact_data_s cd( desc->get_id(), CDM_PUBID | CDM_STATE | CDM_ONLINE_STATE | CDM_AVATAR_TAG );
 
@@ -1779,7 +1780,7 @@ static void update_contact( const contact_descriptor_s *desc )
 
         byte id[TOX_PUBLIC_KEY_SIZE];
         sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
-        if (desc->get_fid() >= 0)
+        if (desc->is_fid_ok() && desc->get_fid() >= 0)
         {
             TOX_ERR_FRIEND_GET_PUBLIC_KEY e;
             tox_friend_get_public_key(tox, desc->get_fid(), id, &e);
@@ -1844,6 +1845,11 @@ static void update_contact( const contact_descriptor_s *desc )
 
         str_c details_json_string;
         desc->prepare_details(details_json_string, id, cd);
+        hf->update_contact(&cd);
+    } else
+    {
+        contact_data_s cd(desc->get_id(), CDM_STATE);
+        cd.state = CS_OFFLINE;
         hf->update_contact(&cd);
     }
 }
@@ -2938,6 +2944,12 @@ static TOX_ERR_NEW prepare(const byte *data, size_t length)
 
 static void connect()
 {
+    if (!tox)
+    {
+        hf->operation_result(LOP_ONLINE, CR_NETWORK_ERROR);
+        return;
+    }
+
     auto get_node = []()->const dht_node_s&
     {
         int min_used = INT_MAX;
@@ -3329,12 +3341,20 @@ void __stdcall set_config(const void*data, int isz)
             if (const void *toxdata = l.get_data(dsz))
             {
                 toxerr = prepare((const byte *)toxdata, dsz);
+                if (!tox)
+                {
+                    buf_tox_config.resize(dsz);
+                    memcpy(buf_tox_config.data(), toxdata, dsz);
+                }
             }
         } else
-            if (!tox) toxerr = prepare(nullptr,0); // prepare anyway
-        
-        if (!tox)
-            return;
+            if (!tox)
+            {
+                if (buf_tox_config.size())
+                    toxerr = prepare(buf_tox_config.data(), buf_tox_config.size());
+                else
+                    toxerr = prepare(nullptr, 0); // prepare anyway
+            }
 
         if (int sz = ldr(chunk_descriptors))
         {
@@ -3380,22 +3400,26 @@ void __stdcall set_config(const void*data, int isz)
 
                     if (desc->state != CS_UNKNOWN)
                     {
-                        byte buf[TOX_PUBLIC_KEY_SIZE];
-                        desc->pubid.hex2buf<TOX_PUBLIC_KEY_SIZE>(buf);
-                        fid = find_tox_fid(buf);
-
-                        if (fid >= 0)
+                        if (tox)
                         {
-                            auto it = fid2desc.find(fid);
-                            if (it != fid2desc.end())
+                            byte buf[TOX_PUBLIC_KEY_SIZE];
+                            desc->pubid.hex2buf<TOX_PUBLIC_KEY_SIZE>(buf);
+                            fid = find_tox_fid(buf);
+
+                            if (fid >= 0)
                             {
-                                // oops oops
-                                // contact dup!!!
-                                delete desc;
-                                continue;
+                                auto it = fid2desc.find(fid);
+                                if (it != fid2desc.end())
+                                {
+                                    // oops oops
+                                    // contact dup!!!
+                                    delete desc;
+                                    continue;
+                                }
+                                fid_ok = true;
                             }
-                            fid_ok = true;
                         }
+
                     } else
                     {
                         fid = -id;
@@ -3440,7 +3464,16 @@ void __stdcall set_config(const void*data, int isz)
         }
 
     } else
-        if (!tox) toxerr = prepare(nullptr, 0);
+        if (!tox)
+        {
+            if (buf_tox_config.size())
+                toxerr = prepare(buf_tox_config.data(), buf_tox_config.size());
+            else
+                toxerr = prepare(nullptr, 0);
+        }
+
+    if (tox)
+        buf_tox_config.clear();
 
     // now send configurable fields to application
     send_configurable();
@@ -3460,7 +3493,7 @@ void __stdcall init_done()
         }
         for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
         {
-            if (f->get_fid() < 0 && f->state == CS_INVITE_RECEIVE)
+            if (!f->is_fid_ok() && f->state == CS_INVITE_RECEIVE)
                 update_contact(f);
         }
     }
@@ -3475,6 +3508,24 @@ void __stdcall online()
     }
 
     online_flag = true;
+
+    if (!tox && buf_tox_config.size())
+        prepare((const byte *)buf_tox_config.data(), buf_tox_config.size());
+    
+    if (tox)
+    {
+        buf_tox_config.clear();
+
+        for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
+        {
+            byte buf[TOX_PUBLIC_KEY_SIZE];
+            f->pubid.hex2buf<TOX_PUBLIC_KEY_SIZE>(buf);
+            int fid = find_tox_fid(buf);
+            if (fid >= 0)
+                f->set_fid(fid, true);
+        }
+    }
+
     connect();
 }
 
@@ -3528,9 +3579,16 @@ static void save_current_stuff( savebuffer &b )
     chunk(b, chunk_use_udp) << (int)(options.udp_enabled ? 1 : 0);
     chunk(b, chunk_toxid) << bytes(lastmypubid, TOX_ADDRESS_SIZE);
 
-    size_t sz = tox_get_savedata_size(tox);
-    void *data = chunk(b, chunk_tox_data).alloc(sz);
-    tox_get_savedata(tox, (byte *)data);
+    if (tox)
+    {
+        size_t sz = tox_get_savedata_size(tox);
+        void *data = chunk(b, chunk_tox_data).alloc(sz);
+        tox_get_savedata(tox, (byte *)data);
+    } else if (buf_tox_config.size())
+    {
+        void *data = chunk(b, chunk_tox_data).alloc(buf_tox_config.size());
+        memcpy(data, buf_tox_config.data(), buf_tox_config.size());
+    }
 
     chunk(b, chunk_descriptors) << serlist<contact_descriptor_s>(contact_descriptor_s::first_desc);
     //chunk(b, chunk_msgs_sending) << serlist<message2send_s>(message2send_s::first);
@@ -3560,9 +3618,10 @@ void __stdcall offline()
         }
 
         size_t sz = tox_get_savedata_size(tox);
-        std::vector<byte> buf(sz);
-        tox_get_savedata(tox, buf.data());
-        prepare( (const byte *)buf.data(),sz );
+        buf_tox_config.resize(sz);
+        tox_get_savedata(tox, buf_tox_config.data());
+        prepare( (const byte *)buf_tox_config.data(), sz );
+        if (tox) buf_tox_config.clear();
 
         contact_data_s self(0, CDM_STATE);
         self.state = CS_OFFLINE;
@@ -3571,6 +3630,7 @@ void __stdcall offline()
         for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
         {
             f->on_offline();
+            if (!tox) f->set_fid(-1, false);
             update_contact(f);
         }
     }
@@ -3582,7 +3642,7 @@ void __stdcall offline()
 
 void __stdcall save_config(void * param)
 {
-    if (tox)
+    if (tox || buf_tox_config.size())
     {
         savebuffer b;
         save_current_stuff(b);

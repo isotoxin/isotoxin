@@ -14,6 +14,8 @@ mainrect_c::~mainrect_c()
 
 ts::uint32 mainrect_c::gm_handler( gmsg<ISOGM_APPRISE> & )
 {
+    if (g_app->F_MODAL_ENTER_PASSWORD) return 0;
+
     if (getprops().is_collapsed())
         MODIFY(*this).decollapse();
     if (getroot()) getroot()->set_system_focus(true);

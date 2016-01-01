@@ -67,6 +67,7 @@ struct contact_key_s
     bool is_self() const {return ts::ref_cast<int64>(*this) == 0; }
     bool is_empty() const {return ts::ref_cast<int64>(*this) == 0; } //-V524
 
+    bool operator<(const contact_key_s&oc) const { return ts::ref_cast<int64>(*this) < ts::ref_cast<int64>(oc); }
     bool operator==(const contact_key_s&oc) const { return ts::ref_cast<int64>(*this) == ts::ref_cast<int64>(oc); }
     bool operator!=(const contact_key_s&oc) const { return ts::ref_cast<int64>(*this) != ts::ref_cast<int64>(oc); }
     int operator()(const contact_key_s&oc) const 
@@ -239,6 +240,7 @@ public:
 
 
     // not saved
+    static const ts::flags32_s::BITS F_LAST_ACTIVITY = SETBIT(23);
     static const ts::flags32_s::BITS F_FULL_SEARCH_RESULT = SETBIT(24);
     static const ts::flags32_s::BITS F_AUDIO_GCHAT = SETBIT(25);
     static const ts::flags32_s::BITS F_PERSISTENT_GCHAT = SETBIT(26);
@@ -319,6 +321,7 @@ public:
 
     contact_c * subget_default() const;
     contact_c * subget_for_send() const;
+    void subactivity(const contact_key_s &ck);
 
     void subadd( contact_c *c )
     { 
@@ -682,7 +685,7 @@ class contacts_c
     bool is_groupchat_member( const contact_key_s &ck );
 
     int find_free_meta_id() const;
-    void del( const contact_key_s&k )
+    void delbykey( const contact_key_s&k )
     {
         int index;
         if (arr.find_sorted(index, k))

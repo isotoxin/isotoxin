@@ -57,7 +57,6 @@ public:
     dialog_metacontact_c(MAKE_ROOT<dialog_metacontact_c> &data);
     ~dialog_metacontact_c();
 
-    /*virtual*/ ts::wstr_c get_name() const override;
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };

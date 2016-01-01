@@ -507,3 +507,51 @@ bool check_autoupdate()
 
     return true;
 }
+
+
+
+
+
+// some crypto functions here due libsodium
+
+void gen_salt(ts::uint8 *buf, int blen)
+{
+    randombytes_buf(buf, blen);
+    ts::uint8 x = 0;
+    for(int i=0;i<blen;++i)
+    {
+        x ^= buf[i];
+    }
+    x = (255-buf[0]) ^ x;
+    buf[ 1 + randombytes_uniform( blen - 1 ) ] ^= x;
+
+    // salt has feature: xor(all salt bytes) == not(first salt byte)
+
+#ifdef _DEBUG
+    x = 0;
+    for (int i = 0; i < blen; ++i)
+    {
+        x ^= buf[i];
+    }
+    ASSERT( x == (255-buf[0]) );
+#endif // _DEBUG
+}
+
+void gen_passwdhash(ts::uint8 *passwhash, const ts::wstr_c &passwd)
+{
+    // this is my public key
+    // it used as static application salt for password hashing
+    // it can be any random sequence, but it should never been changed, due password encrypted profiles became a noise
+    ts::uint8 pk[] = {
+        0x6B, 0xBE, 0x62, 0xE2, 0x3C, 0x2A, 0x94, 0x86, 0xCC, 0x59, 0x7D, 0xE2, 0x17, 0x08, 0x47, 0xA7, 0xC0, 0x64, 0xDB, 0x20, 0xFE, 0x63, 0x4E, 0xEA, 0x98, 0x8D, 0x3D, 0xFD, 0x6C, 0xCA, 0x9D, 0x4F
+    };
+
+    ts::wstr_c p; p.append_as_hex( pk, sizeof(pk) ).append(passwd);
+
+    crypto_generichash( passwhash, CC_HASH_SIZE, (const ts::uint8 *)p.cstr(), p.get_length() * 2, nullptr, 0 );
+}
+
+
+
+
+

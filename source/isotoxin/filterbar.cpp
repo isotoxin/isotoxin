@@ -254,6 +254,7 @@ bool gui_filterbar_c::update_filter(const ts::wstr_c & e)
         }
         break;
     case SQ_DRAW:
+        if (rid == getrid())
         {
             /*
             ts::irect ca = get_client_area();
@@ -325,7 +326,7 @@ bool gui_filterbar_c::full_search_s::reader(int row, ts::SQLITE_DATAGETTER getta
             {
 #ifdef _DEBUG
                 getta(history_s::C_RECV_TIME, v);
-                ASSERT( itm.mintime < v.i );
+                ASSERT( itm.mintime <= v.i );
 #endif
             }
 

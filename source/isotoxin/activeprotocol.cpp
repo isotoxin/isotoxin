@@ -80,7 +80,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
 
                     auto w = syncdata.lock_write();
                     
-                    w().set_config_result = CR_OK;
+                    w().current_state = CR_OK;
                     w().description.set_as_utf8(desc);
                     w().description_t.set_as_utf8(desc_t);
 
@@ -116,11 +116,11 @@ bool active_protocol_c::cmdhandler(ipcr r)
                 {
                     return false;
                 }
-            } else if (c == AQ_SET_CONFIG)
+            } else if (c == AQ_SET_CONFIG || c == AQ_ONLINE)
             {
                 if (s != CR_OK)
                 {
-                    syncdata.lock_write()().set_config_result = s;
+                    syncdata.lock_write()().current_state = s;
                     goto we_shoud_broadcast_result;
                 }
 
@@ -536,7 +536,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
     // brackets to destruct r
     {
         auto r = syncdata.lock_read();
-        cmd_result_e curstate = r().set_config_result;
+        cmd_result_e curstate = r().current_state;
         is_online = r().flags.is(F_CURRENT_ONLINE);
 
         bool is_ac = false;
@@ -556,7 +556,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
                     syncdata.lock_write()().flags.clear(F_ONLINE_SWITCH);
                 }
             }
-            else if (is_ac)
+            else if (is_ac && curstate == CR_OK)
             {
                 r.unlock();
                 ipcp->send(ipcw(AQ_ONLINE));
@@ -798,8 +798,6 @@ void active_protocol_c::save_config(bool wait)
     w().data.config.clear();
     w.unlock();
 
-    DWORD ttt = t.raw();
-try_again_save:
     if (!ipcp) return;
     ipcp->send( ipcw(AQ_SAVE_CONFIG) );
     DMSG("save request" << id);
@@ -809,14 +807,10 @@ try_again_save:
         Sleep(10);
         while( !syncdata.lock_read()().flags.is(F_CONFIG_OK|F_CONFIG_FAIL) )
         {
-            Sleep(100);
+            Sleep(10);
             sys_idle();
-            DWORD ct = GetTickCount(); 
-            if (((int)ct - (int)ttt) > 1000)
-            {
-                ttt = ct;
-                goto try_again_save;
-            }
+            if (!syncdata.lock_read()().flags.is(F_WORKER))
+                return;
         }
         check_save(RID(),nullptr);
 
@@ -1032,6 +1026,15 @@ void active_protocol_c::set_configurable( const configurable_s &c, bool force_se
             ipcp->send(s);
             // do not save config now
             // protocol will initiate save procedure itself
+
+            w = syncdata.lock_write();
+            if (w().current_state == CR_NETWORK_ERROR)
+            {
+                w().current_state = CR_OK; // set to ok now. if error still exist, state will be set back to CR_NETWORK_ERROR by protocol
+                w().flags.set(F_ONLINE_SWITCH);
+                w.unlock();
+                ipcp->send(ipcw(AQ_ONLINE));
+            }
         }
     }
 

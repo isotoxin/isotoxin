@@ -184,15 +184,10 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
 
     ts::Time mic_test_rec_stop, mic_level_refresh;
 
-    ts::str_c username;
-    ts::str_c userstatusmsg;
     SLANGID curlang;
 
     ts::str_c date_msg_tmpl;
     ts::str_c date_sep_tmpl;
-
-    bool username_edit_handler( const ts::wstr_c & );
-    bool statusmsg_edit_handler( const ts::wstr_c & );
 
     struct sound_preset_s
     {
@@ -225,6 +220,29 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     int detect_startopts();
     void set_startopts();
     
+    ts::uint8 passwhash[32];
+    ts::safe_ptr<rectengine_c> epdlg;
+    enum rekey_e
+    {
+        REKEY_NOTHING_TO_DO,
+        REKEY_ENCRYPT,
+        REKEY_REENCRYPT,
+        REKEY_REMOVECRYPT,
+    } rekey = REKEY_NOTHING_TO_DO;
+    bool was_encrypted_profile = false;
+    bool encrypted_profile = false;
+    bool lite_encset = false;
+    ts::str_c encrypted_profile_password;
+    int enc_val() const { return encrypted_profile_password.is_empty() ? 0 : 1; }
+
+    bool password_entered_to_decrypt(const ts::wstr_c &passwd, const ts::str_c &);
+    bool password_not_entered_to_decrypt(RID, GUIPARAM);
+
+    bool password_entered(const ts::wstr_c &passwd, const ts::str_c &);
+    bool password_not_entered( RID, GUIPARAM );
+
+    bool re_password_entered(const ts::wstr_c &passwd, const ts::str_c &);
+    bool re_password_not_entered(RID, GUIPARAM);
 
 private:
 
@@ -336,6 +354,7 @@ private:
     
     const protocol_description_s * describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const;
 
+    bool encrypt_handler( RID, GUIPARAM );
     bool msgopts_handler( RID, GUIPARAM );
     bool commonopts_handler( RID, GUIPARAM );
     bool histopts_handler( RID, GUIPARAM );
@@ -406,6 +425,8 @@ private:
 
     void mod();
     void networks_tab_selected();
+
+    bool save_and_close(RID r = RID(), GUIPARAM prm = nullptr);
 
 protected:
     /*virtual*/ int unique_tag() { return UD_SETTINGS; }

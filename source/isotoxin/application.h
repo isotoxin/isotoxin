@@ -154,7 +154,7 @@ struct file_transfer_s : public unfinished_file_transfer_s
     file_transfer_s();
     ~file_transfer_s();
 
-    void auto_confirm();
+    bool auto_confirm();
 
     int progress(int &bytes_per_sec) const;
     void upd_message_item(bool force);
@@ -265,7 +265,7 @@ public:
     /*virtual*/ HICON app_icon(bool for_tray) override;
     /*virtual*/ void app_setup_custom_button(bcreate_s & bcr) override
     {
-        if (bcr.tag == ABT_APPCUSTOM)
+        if (bcr.tag == CBT_APPCUSTOM)
         {
             bcr.face = BUTTON_FACE(customize);
             bcr.handler = DELEGATE(this, b_customize);
@@ -274,7 +274,7 @@ public:
     }
     /*virtual*/ bool app_custom_button_state(int tag, int &shiftleft) override
     {
-        if (tag == ABT_APPCUSTOM)
+        if (tag == CBT_APPCUSTOM)
             shiftleft += 5;
 
         return true;
@@ -313,6 +313,7 @@ public:
     unsigned F_PROTOSORTCHANGED : 1;
     unsigned F_READONLY_MODE : 1;
     unsigned F_READONLY_MODE_WARN : 1;
+    unsigned F_MODAL_ENTER_PASSWORD : 1;
 
 
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_EXIT);
