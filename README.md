@@ -1,4 +1,39 @@
-# Build instruction
+# Isotoxin
+Multiprotocol messenger for windows XP and later with tox support
+
+## Features
+  * Standard features like:
+    * Nickname customization
+    * Status customization
+    * Friendlist
+    * One to one conversations
+    * Message history
+    * Unread messages notification
+  * Autoupdate
+  * Audio/Video calls
+  * Desktop sharing via video calls
+  * File transfers
+  * File transfer resuming
+  * UI Themes
+  * Multilangual
+  * Multiprofile
+  * Metacontacts
+  * Avatars
+  * Faux offline messaging
+  * DNS discovery (tox1 and tox3) 
+  * Tox group chats (and audio group chats)
+  * Send message create time (only Isotoxin to Isotoxin)
+  * Unlimited message length (only Isotoxin to Isotoxin)
+  * Emoticons
+  * Inline images
+
+## Screenshots
+
+![Main Window](http://isotoxin.im/screens/screenshot5.png)
+![Settings)](http://isotoxin.im/screens/screenshot7.png)
+![Prepare image)](http://isotoxin.im/screens/screenshot6.jpg)
+
+## Build instruction
 - Threre are 4 external utils used: **git**, **7z**, **grep**, **wget**<br>
 You have to install command line **git**<br>
 **7z**, **grep** and **wget** already in repo.<br>
