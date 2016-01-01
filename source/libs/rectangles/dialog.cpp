@@ -673,7 +673,7 @@ void gui_dialog_c::set_edit_value( const ts::asptr& ctl_name, const ts::wstr_c& 
     }
     for (description_s &d : descs)
     {
-        if ((d.ctl == description_s::_TEXT || d.ctl == description_s::_PASSWD) && d.name == ctl_name)
+        if ((d.ctl == description_s::_TEXT || d.ctl == description_s::_PASSWD || d.ctl == description_s::_SELECTOR) && d.name == ctl_name)
         {
             d.text = t;
             d.changed = true;

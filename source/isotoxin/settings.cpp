@@ -173,6 +173,7 @@ dialog_settings_c::~dialog_settings_c()
         gui->delete_event(DELEGATE(this, password_not_entered_to_decrypt));
         gui->delete_event(DELEGATE(this, password_not_entered));
         gui->delete_event(DELEGATE(this, save_and_close));
+        gui->delete_event(DELEGATE(this, addlistsound));
 
         gui->unregister_kbd_callback( __kbd_chop );
     }
@@ -1154,11 +1155,8 @@ bool dialog_settings_c::applysoundpreset(RID, GUIPARAM)
                 sndfn[i] = ts::fn_join( prst.path, ts::from_utf8(rec->as_string()) );
                 sndvol[i] = volk;
 
-                if (RID ectl = find( ts::amake(CONSTASTR("sndfn"), i) ))
-                    HOLD(ectl).as<gui_textedit_c>().set_text(sndfn[i]);
-
-                if (RID sctl = find(ts::amake(CONSTASTR("sndvl"), i)))
-                    HOLD(sctl).as<gui_hslider_c>().set_value(volk);
+                set_edit_value(ts::amake(CONSTASTR("sndfn"), i), sndfn[i]);
+                set_slider_value(ts::amake(CONSTASTR("sndvl"), i), volk);
             }
 
         mod();
@@ -1303,71 +1301,82 @@ void dialog_settings_c::networks_tab_selected()
 
     if (mask & MASK_APPLICATION_SOUNDS)
     {
-        // #snd
-
-        ts::wsptr sdescs[snd_count] = {
-            TTT("Incoming message",1000),
-            TTT("Incoming message (current conversation)",1010),
-            TTT("Incoming file",1001),
-            TTT("File receiving started",1002),
-            TTT("File received",1011),
-            TTT("Contact online",1012),
-            TTT("Contact offline",1013),
-            TTT("Ringtone",1003),
-            TTT("Ringtone during call",1004),
-            TTT("Call accept",1005),
-            TTT("Call cancel",1006),
-            TTT("Hang up",1007),
-            TTT("Dialing",1008),
-            TTT("New version",1009),
-        };
-
-        int sorted[snd_count] = {
-            snd_incoming_message,
-            snd_incoming_message2,
-            snd_incoming_file,
-            snd_start_recv_file,
-            snd_file_received,
-            snd_friend_online,
-            snd_friend_offline,
-            snd_ringtone,
-            snd_ringtone2,
-            snd_calltone,
-            snd_call_accept,
-            snd_call_cancel,
-            snd_hangup,
-            snd_new_version,
-        };
-
-        TS_STATIC_CHECK( ARRAY_SIZE(sdescs) == snd_count, "sz" );
-        TS_STATIC_CHECK( ARRAY_SIZE(sorted) == snd_count, "sz" );
-
         ctlenable(CONSTASTR("applypreset"), selected_preset >= 0);
-
-        if (RID lst = find(CONSTASTR("soundslist")))
-        {
-            gui_vscrollgroup_c &l = HOLD(lst).as<gui_vscrollgroup_c>();
-
-            for(int sndi = 0; sndi < snd_count; ++sndi)
-            {
-                int ssndi = sorted[sndi];
-
-                ts::wstr_c lit( CONSTWSTR("<b>") );
-                lit.append(sdescs[ssndi]);
-                lit.append(CONSTWSTR("</b><br=5><p=c>"));
-                lit.append(sndselctl[ssndi]).append_char(' ');
-                lit.append(sndvolctl[ssndi]);
-                lit.append(sndplayctl[ssndi]);
-                lit.append(CONSTWSTR("<br=-15> "));
-
-                MAKE_CHILD<gui_listitem_c>(lst, lit, ts::amake(ssndi));
-            }
-
-            l.scroll_to_begin();
-        }
+        DEFERRED_UNIQUE_CALL( 0.01, DELEGATE(this, addlistsound), as_param( snd_count -1 ) );
     }
 
     setup_video_device();
+}
+
+bool dialog_settings_c::addlistsound( RID, GUIPARAM p )
+{
+    // #snd
+
+    ts::wsptr sdescs[snd_count] = {
+        TTT("Incoming message", 1000),
+        TTT("Incoming message (current conversation)", 1010),
+        TTT("Incoming file", 1001),
+        TTT("File receiving started", 1002),
+        TTT("File received", 1011),
+        TTT("Contact online", 1012),
+        TTT("Contact offline", 1013),
+        TTT("Ringtone", 1003),
+        TTT("Ringtone during call", 1004),
+        TTT("Call accept", 1005),
+        TTT("Call cancel", 1006),
+        TTT("Hang up", 1007),
+        TTT("Dialing", 1008),
+        TTT("New version", 1009),
+    };
+
+    int sorted[snd_count] = {
+        snd_incoming_message,
+        snd_incoming_message2,
+        snd_incoming_file,
+        snd_start_recv_file,
+        snd_file_received,
+        snd_friend_online,
+        snd_friend_offline,
+        snd_ringtone,
+        snd_ringtone2,
+        snd_calltone,
+        snd_call_accept,
+        snd_call_cancel,
+        snd_hangup,
+        snd_new_version,
+    };
+
+    TS_STATIC_CHECK(ARRAY_SIZE(sdescs) == snd_count, "sz");
+    TS_STATIC_CHECK(ARRAY_SIZE(sorted) == snd_count, "sz");
+
+    if (RID lst = find(CONSTASTR("soundslist")))
+    {
+        int sndi = as_int(p);
+
+        gui_vscrollgroup_c &l = HOLD(lst).as<gui_vscrollgroup_c>();
+
+        int ssndi = sorted[sndi];
+
+        ts::wstr_c lit(CONSTWSTR("<b>"));
+        lit.append(sdescs[ssndi]);
+        lit.append(CONSTWSTR("</b><br=5><p=c>"));
+        lit.append(sndselctl[ssndi]).append_char(' ');
+        lit.append(sndvolctl[ssndi]);
+        lit.append(sndplayctl[ssndi]);
+        lit.append(CONSTWSTR("<br=-15> "));
+
+        gui_listitem_c &li = MAKE_CHILD<gui_listitem_c>(lst, lit, ts::amake(ssndi));
+        l.getengine().child_move_top(&li.getengine());
+
+        set_edit_value( ts::amake(CONSTASTR("sndfn"), ssndi), sndfn[ssndi] );
+        set_slider_value( ts::amake(CONSTASTR("sndvl"), ssndi), sndvol[ssndi] );
+
+        l.scroll_to_begin();
+        if (sndi > 0)
+            DEFERRED_UNIQUE_CALL( 0.01, DELEGATE(this, addlistsound), as_param( sndi - 1 ) );
+    }
+
+    return true;
 }
 
 void dialog_settings_c::on_delete_network_2(const ts::str_c&prm)

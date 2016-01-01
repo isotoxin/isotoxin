@@ -1694,7 +1694,11 @@ db_check_e check_db(const ts::wstr_c &fn, ts::uint8 *salt /* 16 bytes buffer */)
     BOOL rslt = ReadFile(handle, salt, 16, &r, nullptr);
     CloseHandle(handle);
     if (!rslt) return DBC_IO_ERROR;
-    if (r > 0 && r != 16)
+
+    if (r == 0)
+        return DBC_DB;
+
+    if (r != 16)
         return DBC_NOT_DB;
 
     const char * sql3hdr = "SQLite format 3";

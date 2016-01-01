@@ -2686,6 +2686,7 @@ gui_menu_item_c::~gui_menu_item_c()
         {
             submnu_shown = nullptr;
             sq_evt(SQ_THEMERECT_CHANGED, getrid(), ts::make_dummy<evt_data_s>(true));
+            getengine().redraw();
         }
         return false;
     }

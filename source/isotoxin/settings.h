@@ -207,6 +207,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     menu_c get_list_avaialble_sound_presets();
     bool applysoundpreset( RID, GUIPARAM );
     void soundpresetselected(const ts::str_c&);
+    bool addlistsound( RID, GUIPARAM );
     
     
     ts::wstr_c sndfn[snd_count];

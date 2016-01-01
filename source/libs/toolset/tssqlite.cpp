@@ -83,7 +83,7 @@ public:
         if (erc != SQLITE_OK) return false;
         int step = sqlite3_step(stmt);
         sqlite3_finalize(stmt);
-        return SQLITE_ROW == step;
+        return SQLITE_ROW == step || SQLITE_DONE == step;
     }
 
     /*virtual*/ bool is_table_exist( const asptr& tablename ) override
