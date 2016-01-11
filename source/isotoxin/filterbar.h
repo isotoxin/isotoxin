@@ -113,7 +113,7 @@ public:
 
         if (0 != (bitags & (1 << BIT_ALL)))
             return true;
-        if (0 == (bitags & (1 << BIT_ONLINE)))
+        if (0 == (bitags & (1 << BIT_ONLINE)) && 0 == (bitags & (1 << BIT_UNTAGGED)))
             return contacts().get_tags_bits().size() == 0;
 
         return false;
