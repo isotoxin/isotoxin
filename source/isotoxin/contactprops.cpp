@@ -4,7 +4,7 @@
 dialog_contact_props_c::dialog_contact_props_c(MAKE_ROOT<dialog_contact_props_c> &data) :gui_isodialog_c(data)
 {
     deftitle = title_contact_properties;
-    contactue = contacts().find(data.prms.key);
+    contactue = contacts().rfind(data.prms.key);
     update();
 }
 
@@ -45,6 +45,14 @@ bool dialog_contact_props_c::custom_name( const ts::wstr_c & cn )
 bool dialog_contact_props_c::comment( const ts::wstr_c &c )
 {
     ccomment = to_utf8(c);
+    return true;
+}
+
+bool dialog_contact_props_c::tags_handler(const ts::wstr_c &ht)
+{
+    tags.split<char>( to_utf8(ht), ',' );
+    tags.trim();
+    tags.sort(true);
     return true;
 }
 
@@ -90,6 +98,7 @@ menu_c dialog_contact_props_c::getaacmenu()
         ccomment = contactue->get_comment();
         keeph = contactue->get_keeph();
         aaac = contactue->get_aaac();
+        tags = contactue->get_tags();
 
         dm << 1;
 
@@ -108,11 +117,14 @@ menu_c dialog_contact_props_c::getaacmenu()
         dm().combik(TTT("Auto accept audio calls",288)).setmenu(getaacmenu()).setname(CONSTASTR("aaac"));
         dm().vspace();
 
+        dm().textfieldml(TTT("Tags (comma-separated list of phrases/words)", 53), from_utf8(tags.join(CONSTASTR(", "))), DELEGATE(this, tags_handler), 3).focus(true).setname(CONSTASTR("tags"));
+
         dm << 2;
-        dm().list(TTT("Details",363), L"", -250).setname(CONSTASTR("list"));
+        dm().list(L"", L"", -250).setname(CONSTASTR("list"));
 
         dm << 4;
         dm().textfieldml(L"", from_utf8(ccomment), DELEGATE(this, comment), 12).focus(true);
+
     }
 
     menu_c m;
@@ -144,7 +156,7 @@ menu_c dialog_contact_props_c::getaacmenu()
 
 /*virtual*/ void dialog_contact_props_c::on_confirm()
 {
-    if (contactue)
+    if (contactue && contacts().find(contactue->getkey()) != nullptr)
     {
         bool changed = false;
         if (contactue->get_customname() != customname)
@@ -166,6 +178,12 @@ menu_c dialog_contact_props_c::getaacmenu()
         {
             changed = true;
             contactue->set_aaac(aaac);
+        }
+        if (contactue->get_tags() != tags)
+        {
+            changed = true;
+            contactue->set_tags(tags);
+            contacts().rebuild_tags_bits();
         }
 
         if (changed)
@@ -230,7 +248,8 @@ namespace customel
     template<> struct MAKE_CHILD<gui_lli_c> : public _PCHILD(gui_lli_c), public gui_listitem_params_s
     {
         ts::astrings_c links;
-        MAKE_CHILD(ts::astrings_c &&links_, RID parent_, const ts::wstr_c &text_, const ts::str_c &param_)
+        ts::buf_c qrs;
+        MAKE_CHILD(ts::astrings_c &&links_, ts::buf_c &&qrs_, RID parent_, const ts::wstr_c &text_, const ts::str_c &param_)
         {
             parent = parent_;
             text = text_;
@@ -238,6 +257,7 @@ namespace customel
             addmarginleft = 5;
             addmarginleft_icon = 3;
             links = std::move(links_);
+            qrs = std::move(qrs_);
         }
         ~MAKE_CHILD();
 
@@ -249,6 +269,7 @@ namespace customel
     class gui_lli_c : public gui_listitem_c
     {
         ts::astrings_c links;
+        ts::buf_c qrs;
         int clicklink = -1;
         system_query_e clicka = SQ_NOP;
         int flashing = 0;
@@ -277,6 +298,7 @@ namespace customel
         gui_lli_c(MAKE_CHILD<gui_lli_c> &data):gui_listitem_c(data, data)
         {
             links = std::move(data.links);
+            qrs = std::move(data.qrs);
         }
         ~gui_lli_c()
         {
@@ -321,6 +343,11 @@ namespace customel
             text_convert_to_bbcode(c);
             ts::set_clipboard_text( from_utf8(c) );
             flash();
+        }
+
+        void ctx_qrcode(const ts::str_c &cc)
+        {
+            dialog_msgbox_c::mb_qrcode(from_utf8(cc)).summon();
         }
 
         /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -374,6 +401,7 @@ namespace customel
                 {
                     menu_c mnu;
                     mnu.add(loc_text(loc_copy), 0, DELEGATE(this, ctx_copy), links.get(overlink));
+                    if (qrs.get_bit(overlink)) mnu.add(loc_text(loc_qrcode), 0, DELEGATE(this, ctx_qrcode), links.get(overlink));
 
                     popupmenu = &gui_popup_menu_c::show(menu_anchor_s(true), mnu);
                     popupmenu->leech(this);
@@ -406,15 +434,20 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
 
     ts::wstr_c desc;
     ts::astrings_c vals;
+    ts::buf_c qrs;
 
-    auto addl = [&]( const ts::wsptr &fn, const ts::asptr &v, bool empty_as_unknown, bool ee, int link_i )
+    auto addl = [&]( const ts::wsptr &fn, const ts::asptr &v, bool empty_as_unknown, bool ee, bool qr, int link_i )
     {
         if (ee)
             desc.append(CONSTWSTR("<ee>"));
         desc.append(maketag_color<ts::wchar>(get_default_text_color(2))).append(fn).append(CONSTWSTR("</color>: "));
         if (v.l > 0)
         {
-            if (link_i >= 0) desc.append(CONSTWSTR("<cstm=a")).append_as_uint(link_i).append_char('>');
+            if (link_i >= 0)
+            {
+                desc.append(CONSTWSTR("<cstm=a")).append_as_uint(link_i).append_char('>');
+                if (qr) qrs.set_bit(link_i, true);
+            }
             desc.append(ts::from_utf8(v));
             if (link_i >= 0) desc.append(CONSTWSTR("<cstm=b")).append_as_uint(link_i).append_char('>');
 
@@ -441,11 +474,11 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
 
     ts::str_c temp( c->get_name() );
     text_adapt_user_input( temp );
-    addl( TTT("User name",364), temp, false, false, vals.add(temp) );
+    addl( TTT("User name",364), temp, false, false, false, vals.add(temp) );
 
     temp = c->get_statusmsg();
     text_adapt_user_input(temp);
-    addl(TTT("User status",365), temp, false, false, vals.add(temp) );
+    addl(TTT("User status",365), temp, false, false, false, vals.add(temp) );
 
     //desc.insert(desc.get_length()-1, CONSTWSTR("=3"));
 
@@ -455,31 +488,31 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
         if (dname.equals(CONSTASTR(CDET_CLIENT)))
         {
             something = true;
-            addl( TTT("Client",366), v.as_string(), true, false, vals.add(v.as_string()));
+            addl( TTT("Client",366), v.as_string(), true, false, false, vals.add(v.as_string()));
         } else if (dname.equals(CONSTASTR(CDET_PUBLIC_ID)))
         {
             ts::astrings_c pubids;
             extractpubids(pubids, v);
             for(const ts::str_c &idx : pubids)
-                addl( loc_text(loc_id), idx, true, true, vals.add(idx));
+                addl( loc_text(loc_id), idx, true, true, true, vals.add(idx));
         } else if (dname.equals(CONSTASTR(CDET_PUBLIC_ID_BAD)))
         {
             ts::astrings_c pubids;
             extractpubids(pubids, v);
             for (const ts::str_c &idx : pubids)
-                addl(loc_text(loc_id), maketag_color<char>(get_default_text_color(3)) + idx + CONSTASTR("</color>"), true, true, vals.add(idx));
+                addl(loc_text(loc_id), maketag_color<char>(get_default_text_color(3)) + idx + CONSTASTR("</color>"), true, true, true, vals.add(idx));
         } else if (dname.equals(CONSTASTR(CDET_DNSNAME)))
         {
             ts::astrings_c pubids;
             extractpubids(pubids, v);
             for (const ts::str_c &idx : pubids)
-                addl(TTT("DNS name",367), idx, true, true, vals.add(idx));
+                addl(TTT("DNS name",367), idx, true, true, true, vals.add(idx));
         } else if (dname.equals(CONSTASTR(CDET_EMAIL)))
         {
             ts::astrings_c pubids;
             extractpubids(pubids, v);
             for (const ts::str_c &idx : pubids)
-                addl(TTT("Email",368), idx, true, true, vals.add(idx));
+                addl(TTT("Email",368), idx, true, true, true, vals.add(idx));
         }
 
     });
@@ -489,12 +522,12 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
 
     if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
     {
-        addl(loc_text(loc_connection_name), ap->get_name(), false, false, vals.add(ap->get_name()));
-        addl(loc_text(loc_module), ap->get_desc_t(), false, false, vals.add(ap->get_desc_t()));
+        addl(loc_text(loc_connection_name), ap->get_name(), false, false, false, vals.add(ap->get_name()));
+        addl(loc_text(loc_module), ap->get_desc_t(), false, false, false, vals.add(ap->get_desc_t()));
     }
-    addl(loc_text(loc_state), to_utf8(text_contact_state(get_default_text_color(0), get_default_text_color(1), c->get_state())), true, false, -1);
+    addl(loc_text(loc_state), to_utf8(text_contact_state(get_default_text_color(0), get_default_text_color(1), c->get_state())), true, false, false, -1);
 
-    MAKE_CHILD<customel::gui_lli_c>(std::move(vals), lst, desc, par) << (const ts::bitmap_c *)(inf.bmp);
+    MAKE_CHILD<customel::gui_lli_c>(std::move(vals), std::move(qrs), lst, desc, par) << (const ts::bitmap_c *)(inf.bmp);
 }
 
 void dialog_contact_props_c::fill_list()
@@ -511,9 +544,41 @@ void dialog_contact_props_c::fill_list()
         }
 }
 
+void dialog_contact_props_c::tags_menu_handler(const ts::str_c&h)
+{
+    int hi = tags.find(h.as_sptr());
+    if (hi >= 0)
+    {
+        tags.remove_slow(hi);
+    } else
+    {
+        tags.add(h);
+        tags.sort(true);
+    }
+    set_edit_value(CONSTASTR("tags"), from_utf8(tags.join(CONSTASTR(", "))) );
+}
+
+void dialog_contact_props_c::tags_menu(menu_c &m)
+{
+    ts::astrings_c ctags( tags );
+    ctags.add(contacts().get_all_tags());
+    ctags.kill_dups_and_sort(true);
+
+    for (const ts::str_c &h : ctags)
+    {
+        m.add( ts::from_utf8(h), tags.find(h.as_sptr()) >= 0 ? MIF_MARKED : 0, DELEGATE(this, tags_menu_handler), h );
+    }
+}
+
 /*virtual*/ void dialog_contact_props_c::tabselected(ts::uint32 mask)
 {
-    fill_list();
+    if (mask & 1)
+        if (RID e = find(CONSTASTR("tags")))
+            HOLD(e).as<gui_textedit_c>().ctx_menu_func = DELEGATE(this, tags_menu);
+
+    if (mask & 2)
+        fill_list();
+
 }
 
 

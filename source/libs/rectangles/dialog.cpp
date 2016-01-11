@@ -3,7 +3,7 @@
 
 MAKE_CHILD<gui_listitem_c>::~MAKE_CHILD()
 {
-    MODIFY(get()).visible(true);
+    MODIFY(get()).show();
     //get().set_autoheight();
     get().set_text( text );
     get().gm = gm;
@@ -885,7 +885,7 @@ public:
 };
 MAKE_CHILD<gui_simple_dialog_list_c>::~MAKE_CHILD()
 {
-    MODIFY(get()).visible(true);
+    MODIFY(get()).show();
 }
 
 void gui_dialog_c::set_list_emptymessage(const ts::asptr& ctl_name, const ts::wstr_c& t)
@@ -1304,7 +1304,7 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
             if (height_)
                 b.set_constant_height(height_);
 
-            MODIFY(b).visible(true);
+            MODIFY(b).show();
             return b.getrid();
         }
         break;

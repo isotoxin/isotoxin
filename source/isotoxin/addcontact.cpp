@@ -82,10 +82,15 @@ ts::wstr_c dialog_addcontact_c::rtext()
     {
         if ( 0 == (ap->get_features() & PF_INVITE_NAME) )
         {
+            ts::str_c nn;
             if (ap->get_uname().is_empty())
-                n = from_utf8(contacts().get_self().get_name());
+                nn = contacts().get_self().get_name();
             else
-                n = from_utf8(ap->get_uname());
+                nn = ap->get_uname();
+
+            text_convert_from_bbcode(nn);
+            text_remove_tags(nn);
+            n = from_utf8(nn);
         }
     }
     if (!n.is_empty())

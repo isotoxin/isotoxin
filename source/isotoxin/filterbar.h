@@ -69,6 +69,7 @@ class gui_filterbar_c : public gui_label_ex_c
     int contact_index = 0;
 
     bool search_in_messages = true;
+    bool tagschanged = false;
 
     bool cancel_filter(RID, GUIPARAM);
     bool option_handler(RID, GUIPARAM);
@@ -78,6 +79,19 @@ class gui_filterbar_c : public gui_label_ex_c
     void show_options(bool show);
     void apply_full_text_search_result();
 
+    int rclicklink = -1;
+    int clicklink = -1;
+    int bitags = 0; // cache
+    ts::wstrmap_c binames; // cache
+
+    void do_tag_click(int lnk);
+    void do_tag_rclick(int lnk);
+    void fill_tags();
+    void ctx_rename_tag(const ts::str_c &cc);
+    bool renamed(const ts::wstr_c &ntags, const ts::str_c &);
+    ts::wstr_c tagname( int index ) const;
+    /*virtual*/ void get_link_prolog(ts::wstr_c &r, int linknum) const override;
+    /*virtual*/ void get_link_epilog(ts::wstr_c &r, int linknum) const override;
 public:
     gui_filterbar_c( MAKE_CHILD<gui_filterbar_c> &data );
     ~gui_filterbar_c();
@@ -89,4 +103,44 @@ public:
     void full_search_result( found_stuff_s::FOUND_STUFF_T &&stuff );
 
     void focus_edit();
+
+    void refresh_list();
+
+    bool is_tag_all() const
+    {
+        if (!prf().get_options().is(UIOPT_TAGFILETR_BAR))
+            return true;
+
+        if (0 != (bitags & (1 << BIT_ALL)))
+            return true;
+        if (0 == (bitags & (1 << BIT_ONLINE)))
+            return contacts().get_tags_bits().size() == 0;
+
+        return false;
+    }
+
+    bool is_all() const
+    {
+        return !found_stuff.fsplit.size() && is_tag_all();
+    }
+
+    bool check_one(contact_root_c *c) const
+    {
+        bool match = c->match_tags(bitags);
+        if (match && found_stuff.fsplit.size())
+        {
+            ts::str_c an = c->get_customname();
+            if (an.is_empty())
+                an = c->get_name();
+
+            const ts::wstr_c wn = from_utf8(an).case_down();
+            for (const ts::wstr_c &f : found_stuff.fsplit)
+                if (wn.find_pos(f) < 0)
+                {
+                    match = false;
+                    break;
+                }
+        }
+        return match;
+    }
 };

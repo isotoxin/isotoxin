@@ -814,7 +814,7 @@ void gui_c::make_app_buttons(RID rootappwindow, ts::uint32 allowed_buttons, GET_
         b.set_handler(cbc->handler, rootappwindow.to_param());
         b.set_customdata( as_param(cbc->tag) );
         b.leech( TSNEW(auto_app_buttons, prev, i) );
-        MODIFY(b).visible(true).size(b.get_min_size());
+        MODIFY(b).show().size(b.get_min_size());
         prev = &b;
     }
 }
@@ -1122,26 +1122,34 @@ bool selectable_core_s::flash(RID, GUIPARAM p)
     return true;
 }
 
-bool selectable_core_s::copy_hotkey_handler(RID, GUIPARAM)
+ts::wstr_c selectable_core_s::get_selected_text()
 {
     if (some_selected())
     {
         if (char_start_sel > char_end_sel) SWAP(char_start_sel, char_end_sel);
         int endi = char_end_sel;
 
-        if ( owner->get_text().get_char(endi-1) == '<' ) //-V807
+        if (owner->get_text().get_char(endi - 1) == '<') //-V807
         {
             int closebr = owner->get_text().find_pos(endi, '>');
-            if (closebr > endi && owner->get_text().substr(endi,closebr).begins(CONSTWSTR("char=")))
+            if (closebr > endi && owner->get_text().substr(endi, closebr).begins(CONSTWSTR("char=")))
             {
-                endi = closebr +1;
+                endi = closebr + 1;
             }
         }
 
         ts::str_c text = to_utf8(owner->get_text().substr(char_start_sel, endi));
-        gui->app_prepare_text_for_copy( text );
-        ts::set_clipboard_text(from_utf8(text));
+        gui->app_prepare_text_for_copy(text);
+        return from_utf8(text);
+    }
+    return ts::wstr_c();
+}
 
+bool selectable_core_s::copy_hotkey_handler(RID, GUIPARAM)
+{
+    if (some_selected())
+    {
+        ts::set_clipboard_text(get_selected_text());
         flash();
         return true;
     }

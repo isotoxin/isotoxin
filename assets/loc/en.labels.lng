@@ -41,12 +41,16 @@
 41=Switch to [b]$[/b]
 42=Settings
 43=Enter profile name. It is profile file name. You can create any number of profiles and switch them any time. Detailed settings of current profile are available in settings dialog.
+44=QR code
+45=Off
+46=Tags
 47=Profile [b]$[/b] is corrupted or incorrect password!
 48=Profile [b]$[/b] has created and set as default.
 49=Such profile already exists
 50=Can't create profile ($)
 51=Profile with name [b]$[/b] has created. You can switch to it using settings menu.
 52=Encrypted profile
+53=Tags (comma-separated list of phrases/words)
 54=Active network connections
 55=Setup network connection
 56=Import configuration from file
@@ -58,6 +62,7 @@
 62=Select network
 63=Connection $
 64=Add contact
+65=Show tags filter bar ($)
 66=Network
 67=Public ID
 68=Connecting...
@@ -75,8 +80,10 @@
 80=Your request was rejected. You can send request again.
 81=Again
 82=Delete
+83=All
 84=Contact will be deleted:[br]$
 85=Delete
+86=Online
 87=Such contact already present!
 88=Request sent
 89=Request sent. You can repeat request.
@@ -87,8 +94,8 @@
 94=Paste
 95=Delete
 96=Select all
-97=Copy ID to clipboard
-98=Disconnect
+97=Enter comma separated phrases/words
+98=Switch off
 99=Connect
 100=Online
 101=Offline
@@ -136,6 +143,7 @@
 143=Contact offline
 144=Please, first create or load profile
 145=Metacontact
+146=Create new tag
 147=Metacontact - union of some contacts with common message history.[br][l]Drag and drop addition contacts to this list.[/l]
 148=Remove
 149=Create metacontact
@@ -207,11 +215,13 @@
 215=Images
 216=Press [i]space[/i] key to take image
 217=Press [i]space[/i] to go to the next frame
+218=Rename tag $
 219=Compressing...
 220=size: $ bytes
 221=Compressed: $
 222=Drop [i]image[/i] here
 223=Join network
+224=Rename tag
 225=Contact properties
 226=Use global setting
 227=Always save
@@ -236,6 +246,7 @@
 246=Busy
 247=No any active networks with group chat support
 248=No available networks to select
+249=Empty - set default
 250=Group chat name
 251=Group chat name cannot be empty
 252=Group chat lifetime
@@ -249,6 +260,7 @@
 260=Your status
 261=Your name on this network
 262=Your status on this network
+263=Untagged
 264=Allow UDP
 265=Server port. If 0, the server is disabled.
 266=Connection [b]$[/b] will be deleted![br]Are you sure?
@@ -348,7 +360,7 @@
 360=Default video source
 361=Allow IPv6
 362=unknown
-363=Details
+363=Keep [b]Away[/b] status on user activity
 364=User name
 365=User status
 366=Client
@@ -394,6 +406,9 @@
 916=Profile name
 917=Enter password
 918=Re-enter password
+919=QR code
+920=New contact tag(s)
+921=Rename tag
 1000=Incoming message
 1001=Incoming file
 1002=File receiving started

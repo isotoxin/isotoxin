@@ -69,6 +69,7 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
     shadow = gui->theme().get_rect(CONSTASTR("shadow"));
 
     gui->register_kbd_callback( __kbd_chop, HOTKEY_TOGGLE_SEARCH_BAR );
+    gui->register_kbd_callback(__kbd_chop, HOTKEY_TOGGLE_TAGFILTER_BAR);
 
     s3::enum_sound_capture_devices(enum_capture_devices, this);
     s3::enum_sound_play_devices(enum_play_devices, this);
@@ -569,8 +570,13 @@ bool dialog_settings_c::encrypt_handler( RID, GUIPARAM pp )
 
 bool dialog_settings_c::commonopts_handler( RID, GUIPARAM p )
 {
+    bool is_away0 = 0 != (bgroups[BGROUP_COMMON2].current & 3);
     bgroups[BGROUP_COMMON2].handler(RID(), p);
     ctlenable(CONSTASTR("away_min"), 0 != (bgroups[BGROUP_COMMON2].current & 2) );
+    ctlenable(CONSTASTR("awayflags4"), 0 != (bgroups[BGROUP_COMMON2].current & 3));
+    bool is_away1 = 0 != (bgroups[BGROUP_COMMON2].current & 3);
+    if (is_away0 && !is_away1 && 0 != (bgroups[BGROUP_COMMON2].current & 4))
+        set_check_value(CONSTASTR("awayflags4"), false);
 
     set_away_on_timer_minutes_value = (bgroups[BGROUP_COMMON2].current & 2) ? set_away_on_timer_minutes_value_last : 0;
     mod();
@@ -695,11 +701,13 @@ void dialog_settings_c::mod()
         set_away_on_timer_minutes_value_last = set_away_on_timer_minutes_value;
 
         bgroups[BGROUP_COMMON1].add(UIOPT_SHOW_SEARCH_BAR);
+        bgroups[BGROUP_COMMON1].add(UIOPT_TAGFILETR_BAR);
         bgroups[BGROUP_COMMON1].add(UIOPT_PROTOICONS);
         bgroups[BGROUP_COMMON1].add(UIOPT_SHOW_NEWCONN_BAR);
 
         bgroups[BGROUP_COMMON2].add(UIOPT_AWAYONSCRSAVER);
         bgroups[BGROUP_COMMON2].add(0, set_away_on_timer_minutes_value > 0);
+        bgroups[BGROUP_COMMON2].add(UIOPT_KEEPAWAY);
 
         bgroups[BGROUP_GCHAT].add(GCHOPT_MUTE_MIC_ON_INVITE);
         bgroups[BGROUP_GCHAT].add(GCHOPT_MUTE_SPEAKER_ON_INVITE);
@@ -920,8 +928,9 @@ void dialog_settings_c::mod()
         dm().vspace();
         dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_COMMON1, handler), bgroups[BGROUP_COMMON1].current).setmenu(
                 menu_c().add(TTT("Show search bar ($)",341) / CONSTWSTR("Ctrl+F"), 0, MENUHANDLER(), CONSTASTR("1"))
-                        .add(TTT("Protocol icons as contact state indicator",296), 0, MENUHANDLER(), CONSTASTR("2"))
-                        .add(TTT("Show [i]join network[/i] button ($)",344)/ CONSTWSTR("Ctrl+N"), 0, MENUHANDLER(), CONSTASTR("4"))
+                        .add(TTT("Show tags filter bar ($)",65) / CONSTWSTR("Ctrl+T"), 0, MENUHANDLER(), CONSTASTR("2"))
+                        .add(TTT("Protocol icons as contact state indicator",296), 0, MENUHANDLER(), CONSTASTR("4"))
+                        .add(TTT("Show [i]join network[/i] button ($)",344)/ CONSTWSTR("Ctrl+N"), 0, MENUHANDLER(), CONSTASTR("8"))
             );
 
 
@@ -936,7 +945,8 @@ void dialog_settings_c::mod()
         dm().checkb(ts::wstr_c(), DELEGATE(this, commonopts_handler), bgroups[BGROUP_COMMON2].current).setmenu(
             menu_c().add(TTT("Set [b]Away[/b] status on screen saver activation",323), 0, MENUHANDLER(), CONSTASTR("1"))
                     .add(t_awaymin, 0, MENUHANDLER(), CONSTASTR("2"))
-            );
+                    .add(TTT("Keep [b]Away[/b] status on user activity",363), 0, MENUHANDLER(), CONSTASTR("4"))
+            ).setname(CONSTASTR("awayflags"));
 
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
         dm().page_caption(TTT("Chat settings",110));
@@ -1260,6 +1270,7 @@ void dialog_settings_c::networks_tab_selected()
     if (mask & MASK_PROFILE_COMMON)
     {
         DEFERRED_UNIQUE_CALL(0.1, DELEGATE(this, commonopts_handler), bgroups[BGROUP_COMMON2].current);
+        ctlenable(CONSTASTR("awayflags4"), 0 != (bgroups[BGROUP_COMMON2].current & 3));
         if (g_app->F_READONLY_MODE)
             ctlenable( CONSTASTR("encrypt1"), false );
         else

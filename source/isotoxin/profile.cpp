@@ -240,6 +240,9 @@ void contacts_s::set(int column, ts::data_value_s &v)
         case C_COMMENT:
             comment = v.text;
             return;
+        case C_TAGS:
+            tags.split<char>( v.text, ',' );
+            return;
         case C_AVATAR:
             avatar = v.blob;
             return;
@@ -284,6 +287,9 @@ void contacts_s::get(int column, ts::data_pair_s& v)
         case C_COMMENT:
             v.text = comment;
             return;
+        case C_TAGS:
+            v.text = tags.join(',');
+            return;
         case C_AVATAR:
             v.blob = avatar;
             return;
@@ -307,6 +313,7 @@ ts::data_type_e contacts_s::get_column_type(int index)
         case C_STATUSMSG:
         case C_CUSTOMNAME:
         case C_COMMENT:
+        case C_TAGS:
             return ts::data_type_e::t_str;
         case C_READTIME:
             return ts::data_type_e::t_int64;
@@ -348,6 +355,9 @@ void contacts_s::get_column_desc(int index, ts::column_desc_s&cd)
             break;
         case C_COMMENT:
             cd.name_ = CONSTASTR("comment");
+            break;
+        case C_TAGS:
+            cd.name_ = CONSTASTR("tags");
             break;
         case C_AVATAR:
             cd.name_ = CONSTASTR("avatar");
@@ -790,7 +800,7 @@ ts::uint32 profile_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // record history
     if (msg.resend) return 0;
     if (msg.pass != 0) return 0;
     bool second_pass_requred = msg.post.recv_time == 1;
-    contact_c *historian = msg.get_historian();
+    contact_root_c *historian = msg.get_historian();
     if (historian == nullptr) return 0;
     //bool record_it = true;
 
@@ -1298,8 +1308,6 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
         g_app->reload_fonts();
     }
 
-    set_options( 0, _MSGOP_UNUSED_00_ ); // reset deprecated bit
-
     if (k)
     {
         memcpy(keyhash, k + CC_SALT_SIZE, CC_HASH_SIZE);
@@ -1321,7 +1329,7 @@ void profile_c::load_undelivered()
 
 }
 
-contact_c *profile_c::find_corresponding_historian(const contact_key_s &subcontact, ts::array_wrapper_c<contact_c * const> possible_historians) //-V813
+contact_root_c *profile_c::find_corresponding_historian(const contact_key_s &subcontact, ts::array_wrapper_c<contact_root_c * const> possible_historians) //-V813
 {
     ts::tmp_str_c whr(CONSTASTR("sender=")); whr.append_as_num<int64>(ts::ref_cast<int64>(subcontact));
     whr.append(CONSTASTR(" or receiver=")).append_as_num<int64>(ts::ref_cast<int64>(subcontact));
@@ -1330,7 +1338,7 @@ contact_c *profile_c::find_corresponding_historian(const contact_key_s &subconta
     table.read(db, whr);
 
     for (const auto &row : table.rows)
-        for( contact_c * const c : possible_historians )
+        for( contact_root_c * const c : possible_historians )
             if (c->getkey() == row.other.historian)
                 return c;
 

@@ -494,8 +494,7 @@ ts::uint32 active_protocol_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
             int protoid = id;
             stop_and_die();
             contacts().nomore_proto(protoid);
-            prf().dirty_sort();
-            g_app->recreate_ctls();
+            g_app->recreate_ctls(true, true);
         }
     }
     return 0;

@@ -234,6 +234,9 @@ public:
     typedef fastdelegate::FastDelegate<bool (const ts::wstr_c &)> TEXTCHECKFUNC;
 	TEXTCHECKFUNC check_text_func; // check/update text callback
 
+    typedef fastdelegate::FastDelegate< void(menu_c &) > CTXMENUFUNC;
+    CTXMENUFUNC ctx_menu_func;
+
     void register_kbd_callback( GUIPARAMHANDLER handler, int scancode, bool ctrl )
     {
         kbd_press_callback_s &cb = kbdhandlers.add();

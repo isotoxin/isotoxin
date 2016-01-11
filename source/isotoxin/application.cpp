@@ -18,6 +18,14 @@ static bool __toggle_search_bar(RID, GUIPARAM)
     return true;
 }
 
+static bool __toggle_tagfilter_bar(RID, GUIPARAM)
+{
+    bool sbshow = prf().get_options().is(UIOPT_TAGFILETR_BAR);
+    prf().set_options(sbshow ? 0 : UIOPT_TAGFILETR_BAR, UIOPT_TAGFILETR_BAR);
+    gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS, UIOPT_TAGFILETR_BAR).send();
+    return true;
+}
+
 static bool __toggle_newcon_bar(RID, GUIPARAM)
 {
     bool sbshow = prf().get_options().is(UIOPT_SHOW_NEWCONN_BAR);
@@ -53,6 +61,7 @@ application_c::application_c(const ts::wchar * cmdl)
 #endif
 
     register_kbd_callback( __toggle_search_bar, HOTKEY_TOGGLE_SEARCH_BAR );
+    register_kbd_callback( __toggle_tagfilter_bar, HOTKEY_TOGGLE_TAGFILTER_BAR );
     register_kbd_callback( __toggle_newcon_bar, HOTKEY_TOGGLE_NEW_CONNECTION_BAR );
  
     register_capture_handler(this);
@@ -414,27 +423,33 @@ static DWORD WINAPI autoupdater(LPVOID)
     if (prf().manual_cos() == COS_ONLINE)
     {
         contact_online_state_e c = contacts().get_self().get_ostate();
-        contact_online_state_e cnew = COS_ONLINE;
-
-        if (prf().get_options().is(UIOPT_AWAYONSCRSAVER))
+        if (c == COS_AWAY && prf().get_options().is(UIOPT_KEEPAWAY))
         {
-            BOOL scrsvrun = FALSE;
-            SystemParametersInfoW(SPI_GETSCREENSAVERRUNNING, 0, &scrsvrun, 0);
-            if (scrsvrun) cnew = COS_AWAY;
-        }
-
-        int imins = prf().inactive_time();
-        if (imins > 0)
+            // keep away status
+        } else
         {
-            LASTINPUTINFO lii = { (UINT)sizeof(LASTINPUTINFO) };
-            GetLastInputInfo(&lii);
-            int cimins = (GetTickCount() - lii.dwTime) / 60000;
-            if (cimins >= imins)
-                cnew = COS_AWAY;
-        }
+            contact_online_state_e cnew = COS_ONLINE;
 
-        if (c != cnew)
-            set_status(cnew, false);
+            if (prf().get_options().is(UIOPT_AWAYONSCRSAVER))
+            {
+                BOOL scrsvrun = FALSE;
+                SystemParametersInfoW(SPI_GETSCREENSAVERRUNNING, 0, &scrsvrun, 0);
+                if (scrsvrun) cnew = COS_AWAY;
+            }
+
+            int imins = prf().inactive_time();
+            if (imins > 0)
+            {
+                LASTINPUTINFO lii = { (UINT)sizeof(LASTINPUTINFO) };
+                GetLastInputInfo(&lii);
+                int cimins = (GetTickCount() - lii.dwTime) / 60000;
+                if (cimins >= imins)
+                    cnew = COS_AWAY;
+            }
+
+            if (c != cnew)
+                set_status(cnew, false);
+        }
     }
 
 }
@@ -459,8 +474,19 @@ application_c::blinking_reason_s &application_c::new_blink_reason(const contact_
         if (fr.historian == historian)
             return fr;
     }
+
+    bool recrctls = false;
+    if (prf().get_options().is(UIOPT_TAGFILETR_BAR))
+        if (contact_root_c *r = contacts().rfind(historian))
+            if (!r->match_tags(prf().bitags()))
+                recrctls = true;
+
     blinking_reason_s &fr = m_blink_reasons.add();
     fr.historian = historian;
+
+    if (recrctls)
+        recreate_ctls(true, false);
+
     return fr;
 }
 
@@ -476,7 +502,7 @@ void application_c::update_blink_reason(const contact_key_s &historian_key)
 
 void application_c::blinking_reason_s::do_recalc_unread_now()
 {
-    if (contact_c *hi = contacts().find(historian))
+    if (contact_root_c *hi = contacts().rfind(historian))
     {
         if (flags.is(F_INVITE_FRIEND))
         {
@@ -618,7 +644,7 @@ void application_c::select_last_unread_contact()
     }
     if (latest)
     {
-        if (contact_c *h = contacts().find(historian))
+        if (contact_root_c *h = contacts().rfind(historian))
         {
             if (h->gui_item)
             {
@@ -778,7 +804,7 @@ namespace
 
                 contacts().update_meta();
                 contacts().get_self().reselect();
-                g_app->recreate_ctls();
+                g_app->recreate_ctls(true, true);
 
                 if (decollapse)
                     TSNEW(gmsg<ISOGM_APPRISE>)->send_to_main_thread();
@@ -1284,7 +1310,7 @@ int application_c::get_avringcount() const
     return cnt;
 }
 
-av_contact_s * application_c::find_avcontact_inprogress( contact_c *c )
+av_contact_s * application_c::find_avcontact_inprogress( contact_root_c *c )
 {
     for (av_contact_s &avc : m_avcontacts)
         if (avc.c == c && av_contact_s::AV_INPROGRESS == avc.state)
@@ -1292,7 +1318,7 @@ av_contact_s * application_c::find_avcontact_inprogress( contact_c *c )
     return nullptr;
 }
 
-av_contact_s & application_c::get_avcontact( contact_c *c, av_contact_s::state_e st )
+av_contact_s & application_c::get_avcontact( contact_root_c *c, av_contact_s::state_e st )
 {
     for( av_contact_s &avc : m_avcontacts)
         if (avc.c == c)
@@ -1306,7 +1332,7 @@ av_contact_s & application_c::get_avcontact( contact_c *c, av_contact_s::state_e
     return avc;
 }
 
-void application_c::del_avcontact(contact_c *c)
+void application_c::del_avcontact(contact_root_c *c)
 {
     for(int i=m_avcontacts.size()-1;i>=0;--i)
     {
@@ -1328,10 +1354,8 @@ void application_c::stop_all_av()
 
 }
 
-void application_c::update_ringtone( contact_c *rt, bool play_stop_snd )
+void application_c::update_ringtone( contact_root_c *rt, bool play_stop_snd )
 {
-    ASSERT(rt->is_meta() || rt->getkey().is_group());
-
     int avcount = get_avringcount();
     if (rt->is_ringtone())
         get_avcontact(rt, av_contact_s::AV_RINGING);
@@ -1352,7 +1376,7 @@ void application_c::update_ringtone( contact_c *rt, bool play_stop_snd )
     }
 }
 
-av_contact_s * application_c::update_av( contact_c *avmc, bool activate, bool camera )
+av_contact_s * application_c::update_av( contact_root_c *avmc, bool activate, bool camera )
 {
     ASSERT(avmc->is_meta() || avmc->getkey().is_group());
 
@@ -1626,7 +1650,7 @@ void application_c::resend_undelivered_messages( const contact_key_s& rcv )
             while ( !rcv.is_empty() || (ts::Time::current() - q->last_try_send_time) > 60000 /* try 2 resend every 1 minute */ )
             {
                 q->last_try_send_time = ts::Time::current();
-                contact_c *receiver = contacts().find( q->receiver );
+                contact_root_c *receiver = contacts().rfind( q->receiver );
 
                 if (receiver == nullptr)
                 {
@@ -1634,16 +1658,15 @@ void application_c::resend_undelivered_messages( const contact_key_s& rcv )
                     break;
                 }
 
-                if (receiver->is_meta())
-                    receiver = receiver->subget_for_send(); // get default subcontact for message target
+                contact_c *tgt = receiver->subget_for_send(); // get default subcontact for message target
 
-                if (receiver == nullptr)
+                if (tgt == nullptr)
                 {
                     q->queue.clear();
                     break;
                 }
 
-                gmsg<ISOGM_MESSAGE> msg(&contacts().get_self(), receiver, MTA_UNDELIVERED_MESSAGE);
+                gmsg<ISOGM_MESSAGE> msg(&contacts().get_self(), tgt, MTA_UNDELIVERED_MESSAGE);
 
                 const post_s& post = q->queue.get(0);
                 msg.post.recv_time = post.recv_time;
@@ -1967,7 +1990,7 @@ void file_transfer_s::kill( file_control_e fctl )
             p.message_utf8 = to_utf8(filename_on_disk);
             p.utag = msgitem_utag;
             prf().change_history_item(historian, p, HITM_MESSAGE);
-            if (contact_c * h = contacts().find(historian)) h->iterate_history([this](post_s &p)->bool {
+            if (contact_root_c * h = contacts().rfind(historian)) h->iterate_history([this](post_s &p)->bool {
                 if (p.utag == msgitem_utag)
                 {
                     p.message_utf8 = to_utf8(filename_on_disk);
@@ -1993,7 +2016,7 @@ void file_transfer_s::kill( file_control_e fctl )
         p.message_utf8 = to_utf8(filename_on_disk);
         p.utag = msgitem_utag;
         prf().change_history_item(historian, p, HITM_MESSAGE);
-        if (contact_c * h = contacts().find(historian)) h->iterate_history([this](post_s &p)->bool {
+        if (contact_root_c * h = contacts().rfind(historian)) h->iterate_history([this](post_s &p)->bool {
             if (p.utag == msgitem_utag)
             {
                 p.message_utf8 = to_utf8(filename_on_disk);
@@ -2354,7 +2377,7 @@ void file_transfer_s::upd_message_item(bool force)
     }
 }
 
-av_contact_s::av_contact_s(contact_c *c, state_e st) :c(c), state(st)
+av_contact_s::av_contact_s(contact_root_c *c, state_e st) :c(c), state(st)
 {
     inactive = false;
     dirty_cam_size = true;

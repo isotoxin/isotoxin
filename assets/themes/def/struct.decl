@@ -460,7 +460,7 @@ rects
   {
     base=0,0,0,0,#f1f9ee
     deftextcolor=#080f08
-    colors=#aaaaaa
+    colors=#aaaaaa,#aaaaaa,#aaaaca,#005f00,#009f00,#005f0050,#009f0050
   }
 
   tooltip
@@ -593,14 +593,6 @@ images
   {
     src=back.png,272,232,292,257
   }
-  connected
-  {
-    src=back.png,272,372,301,405
-  }
-  disconnected
-  {
-    src=back.png,272,337,301,370
-  }
   avamask
   {
     src=back.png,390,7,430,47
@@ -633,13 +625,9 @@ images
   {
     src=back.png,194,357,220,383
   }
-  id
-  {
-    src=back.png,235,344,261,368
-  }
   setup
   {
-    src=back.png,233,375,264,407
+    src=back.png,184,336,204,356
   }
   
   gch_online
@@ -966,7 +954,7 @@ buttons
     src=back.png
     normal=116,319,139,348
     hover=116,319,139,348
-    press=139,319,162,348
+    press=140,319,163,348
     disabled=116,319,139,348
     
     normaltextcolor=0,0,0
@@ -1017,60 +1005,24 @@ buttons
       image=addgroup
     }
   }
-  copyid
-  {
-    gen 
-    { 
-      shape=circle
-      color=#7da5ff
-      border=0
-      border-color=#000000
-      border-add-size=-1
-      border-width=2
-      radius=20
-      shadow=1
-      shadow-shift=4,4
-      shadow-shift-press=2,2
-      shadow-color-out=#00000005
-      shadow-color-in=#000000ff
-      shadow-radius-out=20
-      shadow-radius-in=12
-      k-press=0.99
-      image=id
-    }
-  }
-  to_offline=copyid
-  {
-    gen 
-    { 
-      image=connected
-    }
-  }
-  to_online=copyid
-  {
-    gen 
-    { 
-      image=disconnected
-    }
-  }
   netsetup
   {
     gen 
     { 
       shape=circle
-      color=#7da5ff
+      color=#30a6a3
       border=0
       border-color=#000000
       border-add-size=-1
       border-width=2
-      radius=20
+      radius=14
       shadow=1
       shadow-shift=4,4
       shadow-shift-press=2,2
       shadow-color-out=#00000005
       shadow-color-in=#000000ff
-      shadow-radius-out=20
-      shadow-radius-in=12
+      shadow-radius-out=14
+      shadow-radius-in=8
       k-press=0.99
       image=setup
     }

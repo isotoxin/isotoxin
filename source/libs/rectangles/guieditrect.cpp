@@ -957,6 +957,12 @@ bool gui_textedit_c::summoncontextmenu()
 
     int ss = sel_size();
 
+    if (ctx_menu_func)
+    {
+        ctx_menu_func(mnu);
+        if (!mnu.is_empty()) mnu.add_separator();
+    }
+
     mnu.add(gui->app_loclabel(LL_CTXMENU_CUT), (ss == 0 || is_readonly()) ? MIF_DISABLED : 0, DELEGATE(this,ctx_menu_cut) );
     mnu.add(gui->app_loclabel(LL_CTXMENU_COPY), (ss == 0) ? MIF_DISABLED : 0, DELEGATE(this,ctx_menu_copy) );
     mnu.add(gui->app_loclabel(LL_CTXMENU_PASTE), is_readonly() ? MIF_DISABLED : 0, DELEGATE(this,ctx_menu_paste) );

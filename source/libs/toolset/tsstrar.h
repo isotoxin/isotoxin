@@ -350,9 +350,7 @@ public:
     template <int N> void adda( const strtype s[N] )
     {
         for (aint i=0;i<N;++i)
-        {
             add( s[i] );
-        }
     }
 
     template<typename CORE2> aint add(const str_t<TCHARACTER, CORE2> &s)
@@ -360,6 +358,12 @@ public:
         aint r = size();
         __super::add().set(s);
         return r;
+    };
+
+    void add(const arrtype &a)
+    {
+        for (const strtype &s : a)
+            add(s);
     };
 
     template<typename TCHARACTER2, typename CORE2> aint add(const str_t<TCHARACTER2, CORE2> &s)
@@ -612,6 +616,15 @@ public:
                 }
     }
 
+    void kill_dups_and_sort(bool ascending = true)
+    {
+        sort(ascending);
+
+        for (aint i = size() - 2; i >= 0; --i)
+            if (get(i).equals(get(i + 1)))
+                remove_slow(i);
+    }
+
     void kill_empty_fast()
     {
         aint i = 0;
@@ -788,6 +801,16 @@ public:
             if (eqi > 0)
                 set( s.substr(0,eqi) ) = s.substr(eqi+1);
         }
+    }
+    bool unset(const sptr<TCHARACTER>&k)
+    {
+        int index;
+        if (find_sorted(index, k))
+        {
+            remove_slow(index);
+            return true;
+        }
+        return false;
     }
     S& set(const sptr<TCHARACTER>&k)
     {

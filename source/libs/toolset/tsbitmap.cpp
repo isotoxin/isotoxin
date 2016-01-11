@@ -1,4 +1,5 @@
 #include "toolset.h"
+#include "qrencode.h"
 
 //-V:bytepp:112
 //-V:bitpp:112
@@ -2946,7 +2947,77 @@ template<typename CORE> void bitmap_t<CORE>::load_from_HWND(HWND hwnd)
 }
 
 
+template<typename CORE> void bitmap_t<CORE>::gen_qrcore( int margins, int dotsize, const asptr& utf8string, int bitpp, TSCOLOR fg_color, TSCOLOR bg_color )
+{
+    QRcode *code = nullptr;
 
+    int micro = 0;
+    int eightbit = 0;
+    int casesensitive = 1;
+    int version = 0;
+    QRecLevel level = QR_ECLEVEL_L;
+    QRencodeMode hint = QR_MODE_8;
+
+    if (micro)
+    {
+        if (eightbit)
+        {
+            //code = QRcode_encodeDataMQR(utf8string.l, utf8string.s, version, level);
+        }
+        else 
+        {
+            tmp_str_c s( utf8string );
+            code = QRcode_encodeStringMQR(s.cstr(), version, level, hint, casesensitive);
+        }
+    } else
+    {
+        if (eightbit)
+        {
+            //code = QRcode_encodeData(length, intext, version, level);
+        }
+        else
+        {
+            tmp_str_c s( utf8string );
+            code = QRcode_encodeString(s.cstr(), version, level, hint, casesensitive);
+        }
+    }
+
+    if (code)
+    {
+        int sz = code->width * dotsize + margins * 2;
+        core.create(imgdesc_s(ts::ivec2(sz), (uint8)bitpp));
+
+        fill(ivec2(0), ivec2(sz, margins), bg_color);
+        fill(ivec2(0,sz-margins), ivec2(sz, margins), bg_color);
+        fill(ivec2(0,margins), ivec2(margins, sz-margins*2), bg_color);
+        fill(ivec2(sz-margins,margins), ivec2(margins, sz-margins*2), bg_color);
+
+        unsigned char *p = code->data;
+
+        uint8 *tgt = body( ivec2(margins) );
+        aint addtgtbyqr = dotsize * info().bytepp();
+        aint addtgtbyy = dotsize * info().pitch - addtgtbyqr * code->width;
+
+        for(int y = 0; y<code->width; ++y, tgt += addtgtbyy )
+        {
+            unsigned char *row = (p + (y*code->width));
+            for(int x = 0; x<code->width; ++x, tgt += addtgtbyqr )
+            {
+                TSCOLOR c = (*(row + x) & 0x1) ? fg_color : bg_color;
+
+                if (bitpp == 32)
+                {
+                    img_helper_fill( tgt, info(irect(0,0,dotsize,dotsize)), c );
+
+                } else
+                {
+                    ERROR("Sorry, supported only 32 bits per pixel"); // TODO
+                }
+            }
+        }
+        QRcode_free(code);
+    }
+}
 
 #ifdef _DEBUG
 int dbmpcnt = 0;

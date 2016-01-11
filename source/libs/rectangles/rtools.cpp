@@ -145,6 +145,11 @@ bool check_always_ok(const ts::wstr_c &)
     return true;
 }
 
+bool check_always_ok_except_empty(const ts::wstr_c &t)
+{
+    return !t.is_empty();
+}
+
 
 process_animation_s::process_animation_s(int sz):sz(sz)
 {

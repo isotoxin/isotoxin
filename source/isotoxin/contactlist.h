@@ -13,15 +13,16 @@ class gui_contact_item_c;
 template<> struct MAKE_CHILD<gui_contact_item_c> : public _PCHILD(gui_contact_item_c)
 {
     contact_item_role_e role = CIR_LISTITEM;
-    contact_c *contact;
-    MAKE_CHILD(RID parent_, contact_c *c):contact(c) { parent = parent_; }
+    contact_root_c *contact;
+    bool is_visible = true;
+    MAKE_CHILD(RID parent_, contact_root_c *c):contact(c) { parent = parent_; }
     ~MAKE_CHILD();
     MAKE_CHILD &operator << (contact_item_role_e r) { role = r; return *this; }
 };
 template<> struct MAKE_ROOT<gui_contact_item_c> : public _PROOT(gui_contact_item_c)
 {
-    contact_c *contact;
-    MAKE_ROOT(contact_c *c) : _PROOT(gui_contact_item_c)(), contact(c) { init(false); }
+    contact_root_c *contact;
+    MAKE_ROOT(contact_root_c *c) : _PROOT(gui_contact_item_c)(), contact(c) { init(false); }
     ~MAKE_ROOT() {}
 };
 
@@ -38,7 +39,7 @@ class gui_contact_item_c : public gui_label_c
     };
 
     DUMMY(gui_contact_item_c);
-    ts::shared_ptr<contact_c> contact;
+    ts::shared_ptr<contact_root_c> contact;
     contact_item_role_e role = CIR_LISTITEM;
     GM_RECEIVER( gui_contact_item_c, ISOGM_SELECT_CONTACT );
     
@@ -120,16 +121,16 @@ public:
     bool is_noprotohit() const {return flags.is(F_NOPROTOHIT);}
     int sort_power() const
     {
-        if (contact && contact->getkey().is_group())
+        if (!contact)
+            return -100;
+
+        if (contact->getkey().is_group())
             return contact->subonlinecount() + 2;
 
         if (!is_protohit())
         {
-            if (contact)
-            {
-                auto state = contact->get_meta_state();
-                if (CS_INVITE_RECEIVE == state || CS_INVITE_SEND == state) return 2;
-            }
+            auto state = contact->get_meta_state();
+            if (CS_INVITE_RECEIVE == state || CS_INVITE_SEND == state) return 2;
 
             return -100;
         }
@@ -155,9 +156,9 @@ public:
         if (flags.is(F_SKIPUPDATE)) return;
         contact = nullptr; update_text();
     }
-    void setcontact(contact_c *c);
-    contact_c &getcontact() {return SAFE_REF(contact.get());}
-    const contact_c &getcontact() const {return SAFE_REF(contact.get());}
+    void setcontact(contact_root_c *c);
+    contact_root_c &getcontact() {return SAFE_REF(contact.get());}
+    const contact_root_c &getcontact() const {return SAFE_REF(contact.get());}
     bool contacted() const {return contact != nullptr;}
     void update_text();
 
@@ -223,6 +224,9 @@ class gui_contactlist_c : public gui_vscrollgroup_c
     bool filter_proc(system_query_e qp, evt_data_s &data);
 
     /*virtual*/ void children_repos_info(cri_s &info) const override;
+
+    bool refresh_list(RID, GUIPARAM);
+
 public:
     gui_contactlist_c( MAKE_CHILD<gui_contactlist_c> &data) :gui_vscrollgroup_c(data) { defaultthrdraw = DTHRO_BASE; role = data.role; }
     /*virtual*/ ~gui_contactlist_c();

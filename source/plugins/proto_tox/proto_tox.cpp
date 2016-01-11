@@ -500,10 +500,7 @@ struct message2send_s
         }
 
         if (dtag)
-        {
             hf->delivered(dtag);
-            hf->save();
-        }
     }
 
     static void tick(int ct)
@@ -3796,10 +3793,7 @@ void __stdcall send_message(int id, const message_s *msg)
             tox_self_set_typing(tox, desc->get_fid(), false, nullptr);
             self_typing_contact = 0;
         }
-
-
         new message2send_s( msg->utag, msg->mt, desc->get_fidgnum(), asptr(msg->message, msg->message_len), msg->crtime ); // not memleak!
-        hf->save();
     }
 }
 

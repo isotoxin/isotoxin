@@ -49,6 +49,15 @@ INLINE bool is_special_mt(message_type_app_e mt)
     //return false;
 }
 
+enum buildin_tags_e
+{
+    BIT_ALL,
+    BIT_ONLINE,
+    BIT_UNTAGGED,
+
+    BIT_count
+};
+
 struct contact_key_s
 {
     DUMMY(contact_key_s);
@@ -192,47 +201,34 @@ enum reselect_options_e
     RSEL_INSERT_NEW = 2,
 };
 
-struct contacts_s;
 class gui_contact_item_c;
+struct contacts_s;
+class contact_root_c;
 class contact_c : public ts::shared_object
 {
+    friend class contact_root_c;
+
     DUMMY(contact_c);
     contact_key_s key;
-    ts::shared_ptr<contact_c> metacontact; // valid for non-meta contacts
+    ts::shared_ptr<contact_root_c> metacontact; // valid for non-meta contacts
     ts::str_c pubid;
     ts::str_c name;
     ts::str_c customname;
     ts::str_c statusmsg;
     ts::str_c details;
-    ts::str_c comment;
-    time_t readtime = 0; // all messages after readtime considered unread
     UNIQUE_PTR( avatar_s ) avatar;
 
     // TODO: lower memory usage: use bits
     contact_state_e state = CS_OFFLINE;
     contact_online_state_e ostate = COS_ONLINE;
     contact_gender_e gender = CSEX_UNKNOWN;
-    keep_contact_history_e keeph = KCH_DEFAULT;
-    auto_accept_audio_call_e aaac = AAAC_NOT;
 
     typedef ts::flags_t<ts::uint32, 0xFFFF> Options;
     Options opts;
 
-    ts::array_shared_t<contact_c, 0> subcontacts; // valid for meta contact
-    ts::array_inplace_t<post_s, 128> history; // valid for meta contact
-
-    ts::str_c compile_pubid() const;
-    ts::str_c compile_name() const;
-    ts::str_c compile_statusmsg() const;
-
-    void setmeta(contact_c *metac)
-    {
-        ASSERT( metac && metac->get_state() != CS_UNKNOWN && metac->subpresent(key) );
-        metacontact = metac;
-    }
+    void setmeta(contact_root_c *metac);
 
 public:
-    ts::safe_ptr<gui_contact_item_c> gui_item;
 
     static const ts::flags32_s::BITS F_DEFALUT      = SETBIT(0);
     static const ts::flags32_s::BITS F_AVA_DEFAULT  = SETBIT(1);
@@ -257,63 +253,163 @@ public:
 
     explicit contact_c( const contact_key_s &key );
     contact_c();
-    ~contact_c();
-    void prepare4die(contact_c *owner)
-    {
-        if (nullptr == owner || owner == metacontact)
-        {
-            opts.unmasked().set(F_DIP);
-            metacontact = nullptr; // dec ref count
-            subdelall();
-        }
-    }
+    virtual ~contact_c();
+
+    virtual void setup(const contacts_s * c, time_t nowtime);
+    virtual bool save(contacts_s * c) const;
+
+    void prepare4die(contact_root_c *owner);
 
     void reselect(int options = RSEL_SCROLL_END);
 
     void redraw();
     void redraw(float delay);
 
-    void setup( const contacts_s * c, time_t nowtime );
-    bool save( contacts_s * c ) const;
-
     bool is_protohit( bool strong );
     void protohit(bool f);
 
-    bool is_meta() const { return key.is_meta() && getmeta() == nullptr; };
+    bool is_meta() const { return key.is_meta() && getmeta() == nullptr; }; // meta, but not group
     bool is_rootcontact() const { return !opts.is(F_UNKNOWN) && (is_meta() || getkey().is_group() || getkey().is_self()); } // root contact - in contact list
 
     const Options &get_options() const {return opts;}
     Options &options() {return opts;}
 
-    bool subpresent( const contact_key_s&k ) const
+    contact_root_c *getmeta() {return metacontact;}
+    const contact_root_c *getmeta() const {return metacontact;}
+
+    const contact_root_c *get_historian() const;
+    contact_root_c *get_historian();
+
+    void set_pubid( const ts::str_c &pubid_ ) { pubid = pubid_; }
+    void set_name( const ts::str_c &name_ ) { name = name_; }
+    void set_customname( const ts::str_c &name_ ) { customname = name_; }
+    void set_statusmsg( const ts::str_c &statusmsg_ ) { statusmsg = statusmsg_; }
+    void set_details( const ts::str_c &details_ ) { details = details_; }
+    void set_state( contact_state_e st ) { state = st; opts.init(F_UNKNOWN, st == CS_UNKNOWN); }
+    void set_ostate( contact_online_state_e ost ) { ostate = ost; }
+    void set_gender( contact_gender_e g ) { gender = g; }
+    
+    const ts::str_c &get_details() const { return details; }
+
+    const ts::str_c &get_pubid() const {return pubid;};
+    virtual const ts::str_c get_pubid_desc() const { return get_pubid(); }
+    ts::str_c get_description() const
     {
-        for( contact_c *c : subcontacts )
+        ts::str_c t = get_name();
+        if (t.is_empty())
+            t.set(get_pubid_desc());
+        else
+            text_adapt_user_input(t);
+        return t;
+    }
+    ts::str_c get_name(bool metacompile = true) const;
+    const ts::str_c &get_customname() const { return customname; }
+    ts::str_c get_statusmsg(bool metacompile = true) const;
+    contact_state_e get_state() const {return state;}
+    contact_online_state_e get_ostate() const {return ostate;}
+    contact_gender_e get_gender() const {return gender;}
+
+    bool authorized() const { return get_state() == CS_OFFLINE || get_state() == CS_ONLINE; }
+
+    void accept_call( auto_accept_audio_call_e aaac, bool video );
+
+    bool b_accept(RID, GUIPARAM);
+    bool b_reject(RID, GUIPARAM);
+    bool b_resend(RID, GUIPARAM);
+    bool b_kill(RID, GUIPARAM);
+    bool b_load(RID, GUIPARAM);
+    bool b_accept_call_with_video(RID, GUIPARAM);
+    bool b_accept_call(RID, GUIPARAM);
+    bool b_reject_call(RID, GUIPARAM);
+    bool b_hangup(RID, GUIPARAM);
+    bool b_call(RID, GUIPARAM);
+    bool b_cancel_call(RID, GUIPARAM);
+
+    bool b_receive_file(RID, GUIPARAM);
+    bool b_receive_file_as(RID, GUIPARAM);
+    bool b_refuse_file(RID, GUIPARAM);
+    
+    virtual void stop_av();
+
+    virtual bool ringtone(bool activate = true, bool play_stop_snd = true);
+    virtual void av(bool f, bool video);
+    virtual bool calltone(bool f = true, bool call_accepted = false);
+
+    bool is_ringtone() const { return opts.unmasked().is(F_RINGTONE); }
+    bool is_av() const { return opts.unmasked().is(F_AV_INPROGRESS) || (getkey().is_group() && opts.unmasked().is(F_AUDIO_GCHAT)); }
+    bool is_calltone() const { return opts.unmasked().is(F_CALLTONE); }
+
+    int avatar_tag() const {return avatar ? avatar->tag : 0; }
+    void set_avatar( const void *body, int size, int tag = 0 )
+    {
+        if (size == 0)
+        {
+            avatar.reset();
+            return;
+        }
+
+        if (avatar)
+            avatar->load( body, size, tag );
+        else
+            avatar.reset( TSNEW(avatar_s, body, size, tag) );
+    }
+    virtual const avatar_s *get_avatar() const;
+
+};
+
+class contact_root_c : public contact_c // metas and groups
+{
+    DUMMY(contact_root_c);
+    ts::array_shared_t<contact_c, 0> subcontacts; // valid for meta contact
+    ts::array_inplace_t<post_s, 128> history; // valid for meta contact
+    ts::str_c comment;
+    ts::astrings_c tags;
+    ts::buf0_c tags_bits; // rebuilded
+
+    time_t readtime = 0; // all messages after readtime considered unread
+    keep_contact_history_e keeph = KCH_DEFAULT;
+    auto_accept_audio_call_e aaac = AAAC_NOT;
+
+
+public:
+    ts::safe_ptr<gui_contact_item_c> gui_item;
+
+    contact_root_c() {} // dummy
+    contact_root_c( const contact_key_s &key ):contact_c(key) {}
+    ~contact_root_c() {}
+
+    /*virtual*/ void setup(const contacts_s * c, time_t nowtime) override;
+    /*virtual*/ bool save(contacts_s * c) const override;
+    
+    void join_groupchat(contact_root_c *c);
+
+    /*virtual*/ const ts::str_c get_pubid_desc() const override { return compile_pubid(); };
+    /*virtual*/ const avatar_s *get_avatar() const override;
+
+    ts::wstr_c contactidfolder() const;
+    void send_file(const ts::wstr_c &fn);
+
+    /*virtual*/ void stop_av() override;
+    
+    /*virtual*/ bool ringtone(bool activate = true, bool play_stop_snd = true) override;
+    /*virtual*/ void av(bool f, bool video) override;
+    /*virtual*/ bool calltone(bool f = true, bool call_accepted = false) override;
+
+    bool subpresent(const contact_key_s&k) const
+    {
+        for (contact_c *c : subcontacts)
             if (c->getkey() == k) return true;
         return false;
     }
-
-    contact_c * subgetadd(const contact_key_s&k)
-    {
-        for (contact_c *c : subcontacts)
-            if (c->getkey() == k) return c;
-        contact_c *c = TSNEW( contact_c, k );
-        subcontacts.add(c);
-        c->setmeta( this );
-        return c;
-    }
-    contact_c * subget_proto(int protoid)
-    {
-        for (contact_c *c : subcontacts)
-            if (c->getkey().protoid == protoid) return c;
-        return nullptr;
-    }
+    contact_c * subgetadd(const contact_key_s&k);
+    contact_c * subget_proto(int protoid);
     contact_c * subget(const contact_key_s&k)
     {
         for (contact_c *c : subcontacts)
             if (c->getkey() == k) return c;
         return nullptr;
     }
-    int subcount() const {return subcontacts.size();}
+    int subcount() const { return subcontacts.size(); }
     contact_c * subget(int indx)
     {
         return subcontacts.get(indx);
@@ -323,42 +419,16 @@ public:
     contact_c * subget_for_send() const;
     void subactivity(const contact_key_s &ck);
 
-    void subadd( contact_c *c )
-    { 
-        if (ASSERT(key.is_meta() && !subpresent(c->getkey())))
-        {
-            subcontacts.add(c);
-            c->setmeta( this );
-        }
-    }
-    void subaddgchat(contact_c *c)
-    {
-        if (ASSERT(key.is_group() && !subpresent(c->getkey()) && c->getkey().protoid == getkey().protoid))
-        {
-            subcontacts.add(c);
-        }
-    }
-    bool subdel( contact_c *c )
-    {
-        if (ASSERT(is_meta() && subpresent(c->getkey())))
-        {
-            c->prepare4die(this);
-            subcontacts.find_remove_slow(c);
-        }
-        return subcontacts.size() == 0;
-    }
-    void subdelall()
-    {
-        for (contact_c *c : subcontacts)
-            c->prepare4die(this);
-        subcontacts.clear();
-    }
+    void subadd(contact_c *c);
+    void subaddgchat(contact_c *c);
+    bool subdel(contact_c *c);
+    void subdelall();
     void subclear() // do not use it!!! this function used only while metacontact creation or cleanup group
     {
         subcontacts.clear();
     }
 
-    template<typename ITR> void subiterate( ITR itr )
+    template<typename ITR> void subiterate(ITR itr)
     {
         for (contact_c *c : subcontacts)
             itr(c);
@@ -373,16 +443,14 @@ public:
         return online_count;
     }
 
-    void join_groupchat(contact_c *c);
 
-    contact_c *getmeta() {return metacontact;}
-    const contact_c *getmeta() const {return metacontact;}
+    time_t get_readtime() const { return readtime; }
+    void set_readtime(time_t t) { readtime = t; }
 
-    const contact_c *get_historian() const { return getmeta() ? getmeta() : this; }
-    contact_c *get_historian() { return getmeta() ? getmeta() : this; }
+    const post_s * fix_history(message_type_app_e oldt, message_type_app_e newt, const contact_key_s& sender = contact_key_s() /* self - empty - no matter */, time_t update_time = 0 /* 0 - no need update */, const ts::str_c *update_text = nullptr /* null - no need update */);
 
     const post_s& get_history(int index) const { return history.get(index); }
-    int history_size() const {return history.size();}
+    int history_size() const { return history.size(); }
 
     time_t nowtime() const
     {
@@ -392,8 +460,6 @@ public:
     }
     void make_time_unique(time_t &t) const;
 
-    bool keep_history() const;
-    
     void del_history(uint64 utag);
 
     post_s& add_history()
@@ -406,9 +472,9 @@ public:
     post_s& add_history(time_t recv_t, time_t send_t)
     {
         int cnt = history.size();
-        for (int i=0;i<cnt;++i)
+        for (int i = 0; i < cnt; ++i)
         {
-            if ( recv_t < history.get(i).recv_time )
+            if (recv_t < history.get(i).recv_time)
             {
                 post_s &p = history.insert(i);
                 p.recv_time = recv_t;
@@ -429,21 +495,19 @@ public:
         history.clear();
     }
 
-    int calc_unread() const;
-
-    void export_history( const ts::wsptr &templatename, const ts::wsptr &fname );
+    void export_history(const ts::wsptr &templatename, const ts::wsptr &fname);
 
     const post_s *find_post_by_utag(uint64 utg) const
     {
-        for( const post_s &p : history )
+        for (const post_s &p : history)
             if (p.utag == utg)
                 return &p;
         return nullptr;
     }
 
-    template<typename F> void iterate_history( F f ) const
+    template<typename F> void iterate_history(F f) const
     {
-        for( const post_s &p : history )
+        for (const post_s &p : history)
             if (f(p)) return;
     }
     template<typename F> void iterate_history(F f)
@@ -455,7 +519,7 @@ public:
     {
         int r = -1;
         ts::tmp_array_inplace_t<post_s, 4> temp;
-        for (int i = 0; i<history.size();)
+        for (int i = 0; i < history.size();)
         {
             r = i;
             post_s &p = history.get(i);
@@ -463,7 +527,7 @@ public:
             bool cont = f(p);
             if (t != p.recv_time)
             {
-                temp.add( p );
+                temp.add(p);
                 history.remove_slow(i);
                 if (!cont) break;
                 continue;
@@ -471,7 +535,7 @@ public:
             if (!cont) break;
             ++i;
         }
-        for( post_s &p : temp )
+        for (post_s &p : temp)
         {
             post_s *x = &add_history(p.recv_time, p.cr_time);
             *x = p;
@@ -480,108 +544,46 @@ public:
 
         return r;
     }
-    
-    ts::wstr_c contactidfolder() const;
-    void send_file(const ts::wstr_c &fn);
 
-    void set_pubid( const ts::str_c &pubid_ ) { pubid = pubid_; }
-    void set_name( const ts::str_c &name_ ) { name = name_; }
-    void set_customname( const ts::str_c &name_ ) { customname = name_; }
-    void set_comment( const ts::str_c &c_ ) { comment = c_; }
-    void set_statusmsg( const ts::str_c &statusmsg_ ) { statusmsg = statusmsg_; }
-    void set_details( const ts::str_c &details_ ) { details = details_; }
-    void set_state( contact_state_e st ) { state = st; opts.init(F_UNKNOWN, st == CS_UNKNOWN); }
-    void set_ostate( contact_online_state_e ost ) { ostate = ost; }
-    void set_gender( contact_gender_e g ) { gender = g; }
-    
-    const ts::str_c &get_details() const { return details; }
+    bool match_tags(int bitags) const;
+    void rebuild_tags_bits(const ts::astrings_c &allhts);
+    void toggle_tag(const ts::asptr &t);
 
-    keep_contact_history_e get_keeph() const { return keeph; }
-    void set_keeph( keep_contact_history_e v ) { keeph = v; }
+    const ts::astrings_c &get_tags() const {return tags;}
+    void set_tags( const ts::astrings_c &ht ) { tags = ht;}
 
-    auto_accept_audio_call_e get_aaac() const { return aaac; }
-    void set_aaac(auto_accept_audio_call_e v) { aaac = v; }
+    void set_comment(const ts::str_c &c_) { comment = c_; }
+    const ts::str_c &get_comment() const { return comment; }
 
-    const ts::str_c &get_pubid() const {return pubid;};
-    
-    const ts::str_c get_pubid_desc() const {return (pubid.is_empty() && is_meta()) ? compile_pubid() : pubid;};
-    ts::str_c get_description() const
-    {
-        ts::str_c t = get_name();
-        if (t.is_empty())
-            t.set(get_pubid_desc());
-        else
-            text_adapt_user_input(t);
-        return t;
-    }
-    ts::str_c get_name(bool metacompile = true) const {return (name.is_empty() && is_meta() && metacompile) ? compile_name() : name;};
-    const ts::str_c &get_comment() const { return comment;}
-    const ts::str_c &get_customname() const { return customname; }
-    ts::str_c get_statusmsg(bool metacompile = true) const {return (statusmsg.is_empty() && is_meta() && metacompile) ? compile_statusmsg() : statusmsg;};
-    contact_state_e get_state() const {return state;}
-    contact_online_state_e get_ostate() const {return ostate;}
-    contact_gender_e get_gender() const {return gender;}
+    ts::str_c compile_pubid() const;
+    ts::str_c compile_name() const;
+    ts::str_c compile_statusmsg() const;
 
     contact_state_e get_meta_state() const;
     contact_online_state_e get_meta_ostate() const;
     contact_gender_e get_meta_gender() const;
 
-    bool authorized() const { return get_state() == CS_OFFLINE || get_state() == CS_ONLINE; }
+    keep_contact_history_e get_keeph() const { return keeph; }
+    void set_keeph(keep_contact_history_e v) { keeph = v; }
 
-    time_t get_readtime() const { return is_rootcontact() ? readtime : 0;}
-    void set_readtime(time_t t) { readtime = t; }
+    auto_accept_audio_call_e get_aaac() const { return aaac; }
+    void set_aaac(auto_accept_audio_call_e v) { aaac = v; }
 
-    const post_s * fix_history( message_type_app_e oldt, message_type_app_e newt, const contact_key_s& sender = contact_key_s() /* self - empty - no matter */, time_t update_time = 0 /* 0 - no need update */, const ts::str_c *update_text = nullptr /* null - no need update */ );
-
-    void accept_call( auto_accept_audio_call_e aaac, bool video );
-
-    bool b_accept(RID, GUIPARAM);
-    bool b_reject(RID, GUIPARAM);
-    bool b_resend(RID, GUIPARAM);
-    bool b_kill(RID, GUIPARAM);
-    bool b_load(RID, GUIPARAM);
-    bool b_accept_call_with_video(RID, GUIPARAM);
-    bool b_accept_call(RID, GUIPARAM);
-    bool b_reject_call(RID, GUIPARAM);
-    bool b_hangup(RID, GUIPARAM);
-    bool b_call(RID, GUIPARAM);
-    bool b_cancel_call(RID, GUIPARAM);
-
-    bool b_receive_file(RID, GUIPARAM);
-    bool b_receive_file_as(RID, GUIPARAM);
-    bool b_refuse_file(RID, GUIPARAM);
-    
-    void stop_av(); // must be called for multicontact
-    bool ringtone(bool activate = true, bool play_stop_snd = true);
-    bool is_ringtone() const { return opts.unmasked().is(F_RINGTONE); }
-    bool is_av() const { return opts.unmasked().is(F_AV_INPROGRESS) || (getkey().is_group() && opts.unmasked().is(F_AUDIO_GCHAT)); }
-    void av( bool f, bool video );
-
-    bool is_calltone() const { return opts.unmasked().is(F_CALLTONE); }
-    bool calltone( bool f = true, bool call_accepted = false );
+    bool keep_history() const;
+    int calc_unread() const;
 
     bool is_full_search_result() const { return opts.unmasked().is(F_FULL_SEARCH_RESULT); }
     void full_search_result(bool f) { opts.unmasked().init(F_FULL_SEARCH_RESULT, f); }
-
-    int avatar_tag() const {return avatar ? avatar->tag : 0; }
-    void set_avatar( const void *body, int size, int tag = 0 )
-    {
-        if (size == 0)
-        {
-            avatar.reset();
-            return;
-        }
-
-        if (avatar)
-            avatar->load( body, size, tag );
-        else
-            avatar.reset( TSNEW(avatar_s, body, size, tag) );
-    }
-    const avatar_s *get_avatar() const;
-
 };
 
-contact_c *get_historian(contact_c *sender, contact_c * receiver);
+INLINE ts::str_c contact_c::get_name(bool metacompile) const { return (name.is_empty() && is_meta() && metacompile) ? get_historian()->compile_name() : name; };
+INLINE ts::str_c contact_c::get_statusmsg(bool metacompile) const { return (statusmsg.is_empty() && is_meta() && metacompile) ? get_historian()->compile_statusmsg() : statusmsg; };
+
+INLINE const contact_root_c *contact_c::get_historian() const { return getmeta() ? getmeta() : dynamic_cast<const contact_root_c *>(this); }
+INLINE contact_root_c *contact_c::get_historian() { return getmeta() ? getmeta() : dynamic_cast<contact_root_c *>(this); }
+
+
+contact_root_c *get_historian(contact_c *sender, contact_c * receiver);
 
 template<> struct gmsg<ISOGM_V_UPDATE_CONTACT> : public gmsgbase
 {
@@ -628,8 +630,8 @@ template<> struct gmsg<ISOGM_TYPING> : public gmsgbase
 
 template<> struct gmsg<ISOGM_SELECT_CONTACT> : public gmsgbase
 {
-    gmsg(contact_c *c, int options) :gmsgbase(ISOGM_SELECT_CONTACT), contact(c), options(options) {}
-    ts::shared_ptr<contact_c> contact;
+    gmsg(contact_root_c *c, int options) :gmsgbase(ISOGM_SELECT_CONTACT), contact(c), options(options) {}
+    ts::shared_ptr<contact_root_c> contact;
     int options;
 };
 
@@ -658,7 +660,7 @@ template<> struct gmsg<ISOGM_MESSAGE> : public gmsgbase
     bool current = false;
     bool resend = false;
 
-    contact_c *get_historian()
+    contact_root_c *get_historian()
     {
         return ::get_historian(sender, receiver);
     }
@@ -678,9 +680,11 @@ class contacts_c
     GM_RECEIVER(contacts_c, ISOGM_AVATAR);
     GM_RECEIVER(contacts_c, GM_UI_EVENT);
     
+    uint64 sorttag;
 
+    ts::tbuf_t<contact_key_s> activity; // last active historian at end of array
     ts::array_shared_t<contact_c, 8> arr;
-    ts::shared_ptr<contact_c> self;
+    ts::shared_ptr<contact_root_c> self;
 
     bool is_groupchat_member( const contact_key_s &ck );
 
@@ -697,15 +701,22 @@ class contacts_c
 
     }
 
+    ts::astrings_c all_tags;
+    ts::buf0_c enabled_tags;
+
+
 public:
 
     contacts_c();
     ~contacts_c();
 
+    const ts::astrings_c &get_all_tags() const { return all_tags; }
+    const ts::buf0_c &get_tags_bits() const { return enabled_tags; };
+
     ts::str_c find_pubid(int protoid) const;
     contact_c *find_subself(int protoid) const;
 
-    contact_c *create_new_meta();
+    contact_root_c *create_new_meta();
 
     void nomore_proto(int id);
     bool present_protoid(int id) const;
@@ -714,6 +725,13 @@ public:
     {
         int index;
         return arr.find_sorted(index,k);
+    }
+
+    contact_root_c *rfind(const contact_key_s&k)
+    {
+        int index;
+        if (arr.find_sorted(index, k)) return ts::ptr_cast<contact_root_c *>( arr.get(index).get() );
+        return nullptr;
     }
 
     contact_c *find( const contact_key_s&k )
@@ -729,8 +747,8 @@ public:
         return nullptr;
     }
 
-    const contact_c & get_self() const { return *self; }
-    contact_c & get_self() { return *self; }
+    const contact_root_c & get_self() const { return *self; }
+    contact_root_c & get_self() { return *self; }
 
     void kill(const contact_key_s &ck, bool kill_with_history = false);
 
@@ -749,10 +767,30 @@ public:
     {
         for (contact_c *c : arr)
             if (c->is_meta())
-                if (!r(c)) break;
+                if (!r( ts::ptr_cast<contact_root_c *>(c) )) break;
     }
 
     void unload(); // called before profile switch
+
+    uint64 sort_tag() const { return sorttag; }
+    void dirty_sort() { sorttag = ts::uuid(); };
+
+    void contact_activity( const contact_key_s &ck );
+    int contact_activity_power(const contact_key_s &ck) const
+    {
+        ASSERT(ck.is_meta() || ck.is_group());
+        int cnt = activity.count();
+        for (int i = 0; i < cnt; ++i)
+            if (activity.get(i) == ck)
+                return i;
+        return -1;
+    }
+
+    void replace_tags(int i, const ts::str_c &ntn);
+    void rebuild_tags_bits(bool refresh_ui = true);
+    void toggle_tag(int i);
+    bool is_tag_enabled(int i) const { return enabled_tags.get_bit(i); };
 };
 
 extern ts::static_setup<contacts_c> contacts;
+

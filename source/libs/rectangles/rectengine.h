@@ -274,6 +274,13 @@ class rectengine_root_c : public rectengine_c
 	ts::drawable_bitmap_c backbuffer;
     ts::array_inplace_t<draw_data_s, 4> drawdata;
 
+    struct shaker_s
+    {
+        ts::ivec2 p;
+        int countdown = 5;
+    };
+    UNIQUE_PTR( shaker_s ) shaker;
+
     int drawtag = 0;
     ts::flags32_s flags;
     static const ts::flags32_s::BITS F_DIP = SETBIT(0);
@@ -296,6 +303,7 @@ class rectengine_root_c : public rectengine_c
 	{
 		return ts::p_cast<rectengine_root_c *>( GetWindowLongPtrW( hwnd, GWLP_USERDATA ) );
 	}
+    void recreate_border();
 	void recreate_back_buffer(const ts::ivec2 &sz, bool exact_size = false);
 
     //sqhandler_i
@@ -307,6 +315,7 @@ class rectengine_root_c : public rectengine_c
 
     bool refresh_frame(RID r = RID(), GUIPARAM p = nullptr);
     void kill_window();
+    void kill_border();
 
     void draw_back_buffer();
 
@@ -321,6 +330,8 @@ class rectengine_root_c : public rectengine_c
         GetWindowRect(hwnd,&r);
         return ts::ref_cast<ts::irect>(r) == ts::wnd_get_max_size( getrect().getprops().screenrect() );
     }
+
+    bool shakeme(RID, GUIPARAM);
 
 public:
 	rectengine_root_c(bool sys);
@@ -347,6 +358,7 @@ public:
 
     const ts::ivec2 &get_current_draw_offset() const { return drawdata.last().offset; }
 
+    void shake();
     bool update_foreground();
     void set_system_focus(bool bring_to_front = false);
     void flash();

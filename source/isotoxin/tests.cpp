@@ -297,7 +297,7 @@ class test_window : public gui_isodialog_c
 {
     //gui_message_item_c *ll;
     ts::shared_ptr<contact_c> c;
-    ts::shared_ptr<contact_c> h;
+    ts::shared_ptr<contact_root_c> h;
 protected:
     // /*virtual*/ int unique_tag() { return UD_NOT_UNIQUE; }
     /*virtual*/ void created() override
@@ -312,7 +312,7 @@ protected:
         c = TSNEW( contact_c );
         c->set_name("Bla");
 
-        h = TSNEW(contact_c);
+        h = TSNEW(contact_root_c);
         h->set_name("Hi");
 
         post_s p;
@@ -461,7 +461,7 @@ void summon_test_window()
 
     //SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR, dialog_avasel_params_s(0));
     SUMMON_DIALOG<dialog_prepareimage_c>(UD_PREPARE_IMAGE, contact_key_s());
-    
+
 }
 
 

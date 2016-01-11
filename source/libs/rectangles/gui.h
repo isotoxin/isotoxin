@@ -111,6 +111,8 @@ struct selectable_core_s
     void endtrack();
     ts::uint32 detect_area(const ts::ivec2 &pos);
 
+    ts::wstr_c get_selected_text();
+
 };
 
 class dragndrop_processor_c : public ts::safe_object
@@ -512,7 +514,8 @@ public:
     void check_hintzone( const ts::ivec2 & screenmousepos );
 
     void exclusive_input(RID r, bool set = true);
-    bool allow_input(RID r) const { return sysmodal == 0 && m_exclusive_input.count() == 0 || m_exclusive_input.last(RID()) == r || ( m_exclusive_input.last(RID()) >> r ); }
+    RID get_exclusive() const { return m_exclusive_input.last( RID() ); }
+    bool allow_input(RID r) const { return sysmodal == 0 && (m_exclusive_input.count() == 0 || ( m_exclusive_input.last(RID()) >>= r )); }
 
     void dragndrop_lb( guirect_c *r );
     void dragndrop_update( guirect_c *r );

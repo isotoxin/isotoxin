@@ -29,6 +29,7 @@
 #pragma comment(lib, "minizip.lib")
 #pragma comment(lib, "curl.lib")
 #pragma comment(lib, "libsodium.lib")
+#pragma comment(lib, "libqrencode.lib")
 
 #pragma comment(lib, "Winmm.lib")
 #pragma comment(lib, "Msacm32.lib")

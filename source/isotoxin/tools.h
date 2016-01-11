@@ -310,15 +310,16 @@ template<> struct gmsg<ISOGM_PROTO_LOADED> : public gmsgbase
 
 struct post_s;
 class contact_c;
+class contact_root_c;
 template<> struct gmsg<ISOGM_SUMMON_POST> : public gmsgbase
 {
-    gmsg(const post_s &post, contact_c *historian) :gmsgbase(ISOGM_SUMMON_POST), post(post), historian(historian), replace_post(false)
+    gmsg(const post_s &post, contact_root_c *historian) :gmsgbase(ISOGM_SUMMON_POST), post(post), historian(historian), replace_post(false)
     {
     }
     gmsg(const post_s &post, bool replace_post) :gmsgbase(ISOGM_SUMMON_POST), post(post), replace_post(replace_post)
     {
     }
-    contact_c *historian = nullptr;
+    contact_root_c *historian = nullptr;
     rectengine_c *created = nullptr;
     const post_s &post;
     
@@ -347,8 +348,8 @@ template<> struct gmsg<ISOGM_VIDEO_TICK> : public gmsgbase
 
 template<> struct gmsg<ISOGM_CAMERA_TICK> : public gmsgbase
 {
-    gmsg(contact_c *collocutor) :gmsgbase(ISOGM_CAMERA_TICK), collocutor(collocutor) {}
-    contact_c *collocutor;
+    gmsg(contact_root_c *collocutor) :gmsgbase(ISOGM_CAMERA_TICK), collocutor(collocutor) {}
+    contact_root_c *collocutor;
 };
 
 enum settingsparam_e
@@ -416,6 +417,7 @@ enum loctext_e
     loc_loadimagefromfile,
     loc_pasteimagefromclipboard,
     loc_capturecamera,
+    loc_qrcode,
 
     loc_connection_name,
     loc_module,
@@ -578,6 +580,18 @@ struct leech_dock_bottom_right_s : public autoparam_i
     leech_dock_bottom_right_s(int width, int height, int x_space = 0, int y_space = 0) :width(width), height(height), x_space(x_space), y_space(y_space) {}
     void update_ctl_pos();
     /*virtual*/ bool i_leeched(guirect_c &to) override { if (__super::i_leeched(to)) { update_ctl_pos(); return true;} return false; };
+    virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+};
+
+struct leech_dock_top_right_s : public autoparam_i
+{
+    int width;
+    int height;
+    int x_space;
+    int y_space;
+    leech_dock_top_right_s(int width, int height, int x_space = 0, int y_space = 0) :width(width), height(height), x_space(x_space), y_space(y_space) {}
+    void update_ctl_pos();
+    /*virtual*/ bool i_leeched(guirect_c &to) override { if (__super::i_leeched(to)) { update_ctl_pos(); return true; } return false; };
     virtual bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 

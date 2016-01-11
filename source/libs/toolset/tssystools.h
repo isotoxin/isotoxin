@@ -2,6 +2,17 @@
 
 namespace ts
 {
+
+enum sys_beep_e
+{
+    SBEEP_INFO,
+    SBEEP_WARNING,
+    SBEEP_ERROR,
+    SBEEP_BADCLICK,
+};
+
+void	TSCALL sys_beep( sys_beep_e beep );
+
 void	TSCALL hide_hardware_cursor();
 void	TSCALL show_hardware_cursor();
 

@@ -14,7 +14,7 @@ MAKE_CHILD<gui_notice_c>::~MAKE_CHILD()
     MODIFY(get()).visible(true);
 }
 
-gui_notice_c::gui_notice_c(MAKE_CHILD<gui_notice_c> &data) :gui_label_c(data), notice(data.n)
+gui_notice_c::gui_notice_c(MAKE_CHILD<gui_notice_c> &data) :gui_label_ex_c(data), notice(data.n)
 {
     switch (notice)
     {
@@ -38,12 +38,12 @@ gui_notice_c::gui_notice_c(MAKE_CHILD<gui_notice_c> &data) :gui_label_c(data), n
     }
 }
 
-gui_notice_c::gui_notice_c(MAKE_CHILD<gui_notice_network_c> &data):gui_label_c(data), notice(NOTICE_NETWORK)
+gui_notice_c::gui_notice_c(MAKE_CHILD<gui_notice_network_c> &data):gui_label_ex_c(data), notice(NOTICE_NETWORK)
 {
     set_theme_rect(CONSTASTR("notice.net"), false);
 }
 
-gui_notice_c::gui_notice_c(MAKE_CHILD<gui_notice_callinprogress_c> &data) : gui_label_c(data), notice(NOTICE_NETWORK)
+gui_notice_c::gui_notice_c(MAKE_CHILD<gui_notice_callinprogress_c> &data) : gui_label_ex_c(data), notice(NOTICE_NETWORK)
 {
     set_theme_rect(CONSTASTR("notice.call"), false);
 }
@@ -415,7 +415,7 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8, contact_c *sender_, uint64
             MODIFY(b_receive).visible(true);
 
             ts::wstr_c downf = prf().download_folder();
-            path_expand_env(downf, sender_->contactidfolder());
+            path_expand_env(downf, sender_->get_historian()->contactidfolder());
             make_path(downf, 0);
             if (!dir_present(downf))
                 b_receive.disable();
@@ -535,8 +535,8 @@ void gui_notice_c::setup(contact_c *sender_)
     case NOTICE_GROUP_CHAT:
         {
             ts::wstr_c txt(CONSTWSTR("<p=c>"));
-            ASSERT( sender_->getkey().is_group() );
-            sender_->subiterate([&](contact_c *m) 
+            ASSERT( historian->getkey().is_group() );
+            historian->subiterate([&](contact_c *m) 
             {
                 switch (m->get_state())
                 {
@@ -564,11 +564,11 @@ void gui_notice_c::setup(contact_c *sender_)
                 txt.append(TTT("Nobody in group chat (except you)", 257));
             textrect.set_text_only(txt, false);
 
-            if (sender_->get_options().unmasked().is(contact_c::F_AUDIO_GCHAT))
+            if (historian->get_options().unmasked().is(contact_c::F_AUDIO_GCHAT))
             {
                 gui_button_c &b_mute_mic = MAKE_CHILD<gui_button_c>(getrid());
 
-                av_contact_s &avc = g_app->get_avcontact( sender_, av_contact_s::AV_INPROGRESS );
+                av_contact_s &avc = g_app->get_avcontact( historian, av_contact_s::AV_INPROGRESS );
 
                 avc.is_mic_off() ?
                     b_mute_mic.set_face_getter(BUTTON_FACE(unmute_mic)) :
@@ -1377,7 +1377,10 @@ av_contact_s *gui_notice_callinprogress_c::get_avc()
 {
     if (!sender) return nullptr;
     if (sender->getkey().is_group())
-        return g_app->find_avcontact_inprogress(sender);
+    {
+        ASSERT( sender == historian );
+        return g_app->find_avcontact_inprogress(historian);
+    }
     if (!historian) return nullptr;
     return g_app->find_avcontact_inprogress(historian);
 }
@@ -1905,14 +1908,50 @@ gui_notice_network_c::~gui_notice_network_c()
     }
 }
 
+/*virtual*/ void gui_notice_network_c::get_link_prolog(ts::wstr_c &r, int linknum) const
+{
+    //get_default_text_color(COLOR_BLINKED)
+
+    r.clear();
+    if (linknum == clicklink)
+    {
+        if (popupmenu || flashing > 0)
+        {
+            r = maketag_mark<ts::wchar>(0 != (flashing & 1) ? gui->selection_bg_color_blink : gui->selection_bg_color);
+            r.append(maketag_color<ts::wchar>(gui->selection_color));
+        }
+        return;
+    }
+
+    if (linknum == overlink)
+        r.set(CONSTWSTR("<u>"));
+
+}
+/*virtual*/ void gui_notice_network_c::get_link_epilog(ts::wstr_c &r, int linknum) const
+{
+    r.clear();
+    if (linknum == clicklink)
+    {
+        if (popupmenu || flashing > 0)
+        {
+            r = CONSTWSTR("</color></mark>");
+        }
+        return;
+    }
+    if (linknum == overlink)
+        r.set(CONSTWSTR("</u>"));
+}
+
+
 void gui_notice_network_c::setup(const ts::str_c &pubid_)
 {
     getengine().trunc_children(0); // just kill all buttons
 
     pubid = pubid_;
-    ts::wstr_c sost, plugdesc, uname, ustatus, netname;
-    cmd_result_e curstate = CR_OK;
-    bool is_autoconnect = false;
+    ts::wstr_c sost(CONSTWSTR("<cstm=a1>")), plugdesc, uname, ustatus, netname;
+    int sostl = sost.get_length();
+    curstate = CR_OK;
+    is_autoconnect = false;
     prf().iterate_aps([&](const active_protocol_c &ap) {
 
         if (contact_c *c = contacts().find_subself(ap.getid()))
@@ -1924,20 +1963,28 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
                 netname = from_utf8(ap.get_name());
                 is_autoconnect = ap.is_autoconnect();
 
+                sost.set_length(sostl);
+
                 if (CR_OK == curstate)
                 {
-                    if ( CS_OFFLINE == c->get_state() && ap.is_online_switch())
+                    if ( CS_OFFLINE == c->get_state() )
                     {
-                        sost.set(maketag_color<ts::wchar>(get_default_text_color(COLOR_OFFLINE_STATUS))).append(TTT("Connecting...",68)).append(CONSTWSTR("</color>"));
+                        sost.append(maketag_color<ts::wchar>(get_default_text_color(COLOR_OFFLINE_STATUS)));
+                        if (is_autoconnect)
+                            sost.append(TTT("Connecting...", 68));
+                        else
+                            sost.append(TTT("Off",45));
+                        sost.append(CONSTWSTR("</color>"));
                     } else
                     {
-                        sost = CONSTWSTR("</l>") + text_contact_state(
+                        sost.append(CONSTWSTR("</l>"));
+                        sost.append(text_contact_state(
                             get_default_text_color(COLOR_ONLINE_STATUS),
                             get_default_text_color(COLOR_OFFLINE_STATUS),
                             c->get_state()
-                            ) + CONSTWSTR("<l>");
+                            ));
+                        sost.append(CONSTWSTR("<l>"));
                     }
-
 
                 } else
                 {
@@ -1954,21 +2001,27 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
                             errs = TTT("Error $",334)/ts::wmake<uint>( curstate );
                             break;
                     }
-                    sost.set(CONSTWSTR("</l><b>"))
+                    sost.append(CONSTWSTR("</l><b>"))
                         .append(maketag_color<ts::wchar>(get_default_text_color(COLOR_ERROR_STATUS))).append(errs).append(CONSTWSTR("</color></b><l>"));
                 }
 
-                int online = 0, all = 0;
-                contacts().iterate_proto_contacts( [&]( contact_c *c ) {
-                
-                    if (c->getkey().protoid == ap.getid())
-                    {
-                        ++all;
-                        if (c->get_state() == CS_ONLINE) ++online;
-                    }
-                    return true;
-                } );
-                sost.append(CONSTWSTR(" [")).append_as_int(online).append_char('/').append_as_int(all).append_char(']');
+                if (CS_ONLINE == c->get_state())
+                {
+                    int online = 0, all = 0;
+                    contacts().iterate_proto_contacts([&](contact_c *c) {
+
+                        if (c->getkey().protoid == ap.getid())
+                        {
+                            ++all;
+                            if (c->get_state() == CS_ONLINE) ++online;
+                        }
+                        return true;
+                    });
+                    sost.append(CONSTWSTR("<cstm=b1> [")).append_as_int(online).append_char('/').append_as_int(all).append_char(']');
+                }
+                else
+                    sost.append(CONSTWSTR("<cstm=b1>"));
+
 
                 ts::str_c n = ap.get_uname();
                 text_convert_from_bbcode(n);
@@ -1998,74 +2051,20 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
                             .replace_all(CONSTWSTR("{ustatus}"), ustatus)
                             .replace_all(CONSTWSTR("{name}"), netname)
                             .replace_all(CONSTWSTR("{module}"), plugdesc)
-                            .replace_all(CONSTWSTR("{id}"), ts::wstr_c(CONSTWSTR("<ee><null=1><null=2>")).append(from_utf8(pubid)).append(CONSTWSTR("<null=3><null=4>")))
+                            .replace_all(CONSTWSTR("{id}"), ts::wstr_c(CONSTWSTR("<ee><cstm=a0>"), from_utf8(pubid)).append(CONSTWSTR("<cstm=b0>")))
                             .replace_all(CONSTWSTR("{state}"), sost),
 
                             true);
 
-    struct copydata
-    {
-        ts::str_c pubid;
-        ts::safe_ptr<gui_notice_network_c> notice;
-        bool copy_handler(RID b, GUIPARAM)
-        {
-            ts::set_clipboard_text(from_utf8(pubid));
-            if (notice) notice->flash();
-            return true;
-        }
-        copydata(const ts::str_c &pubid, gui_notice_network_c *notice) :pubid(pubid), notice(notice)
-        {
-        }
-    };
-
-    ts::ivec2 sz0(40), sz1(40), sz2(40);
+    ts::ivec2 sz1(40);
     if (const theme_rect_s * thr = themerect())
     {
-        if (const button_desc_s *bd = gui->theme().get_button(CONSTASTR("copyid")))
-            sz0 = bd->size;
-
         if (const button_desc_s *bd = gui->theme().get_button(CONSTASTR("netsetup")))
             sz1 = bd->size;
-
-        if (const button_desc_s *bd = gui->theme().get_button(CONSTASTR("to_online")))
-            sz2 = bd->size;
     }
 
     struct connect_handler
     {
-        static bool make_offline(RID b, GUIPARAM p)
-        {
-            int networkid = as_int(p);
-            if (active_protocol_c *ap = prf().ap(networkid))
-                ap->set_autoconnect(false);
-            offline_online(HOLD(b).as<gui_button_c>(), networkid, false);
-
-            return true;
-        }
-        static bool make_online(RID b, GUIPARAM p)
-        {
-            int networkid = as_int(p);
-            if (active_protocol_c *ap = prf().ap(networkid))
-                ap->set_autoconnect(true);
-            offline_online(HOLD(b).as<gui_button_c>(), networkid, true);
-
-            return true;
-        }
-        static void offline_online(gui_button_c &b, int networkid, bool current_is_autoconnect)
-        {
-            if (current_is_autoconnect)
-            {
-                b.set_face_getter(BUTTON_FACE(to_offline));
-                b.tooltip(TOOLTIP(TTT("Disconnect",98)));
-                b.set_handler(make_offline, as_param(networkid));
-            }
-            else
-            {
-                b.set_face_getter(BUTTON_FACE(to_online));
-                b.tooltip(TOOLTIP(TTT("Connect",99)));
-                b.set_handler(make_online, as_param(networkid));
-            }
-        }
         static bool netsetup(RID b, GUIPARAM p)
         {
             int networkid = as_int(p);
@@ -2074,35 +2073,15 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
         }
     };
 
-    gui_button_c &b_connect = MAKE_CHILD<gui_button_c>(getrid());
-    connect_handler::offline_online(b_connect, networkid, is_autoconnect);
-    b_connect.leech(TSNEW(leech_dock_right_center_s, sz2.x, sz2.y, 5, -5, 0, 1));
-    MODIFY(b_connect).visible(true);
-    if (curstate != CR_OK)
-        b_connect.disable();
-
     gui_button_c &b_setup = MAKE_CHILD<gui_button_c>(getrid());
     b_setup.set_constant_size(sz1);
     b_setup.set_face_getter(BUTTON_FACE(netsetup));
     b_setup.tooltip(TOOLTIP(TTT("Setup network connection",55)));
-    b_setup.leech(TSNEW(leech_at_left_s, &b_connect, 5));
+    b_setup.leech(TSNEW(leech_dock_top_right_s, sz1.x, sz1.y, 3, 3));
     b_setup.set_handler(connect_handler::netsetup, as_param(networkid));
     MODIFY(b_setup).visible(true);
     
-    //if (curstate != CR_OK)
-    //    b_setup.disable();
-
-    gui_button_c &b_copy = MAKE_CHILD<gui_button_c>(getrid());
-    b_copy.set_constant_size(sz0);
-    b_copy.set_customdata_obj<copydata>(pubid, this);
-    b_copy.set_face_getter(BUTTON_FACE(copyid));
-    b_copy.tooltip(TOOLTIP(TTT("Copy ID to clipboard",97)));
-
-    b_copy.set_handler(DELEGATE(&b_copy.get_customdata_obj<copydata>(), copy_handler), nullptr);
-    b_copy.leech(TSNEW(leech_at_left_s, &b_setup, 5));
-    MODIFY(b_copy).visible(true);
-
-    left_margin = g_app->buttons().icon[CSEX_UNKNOWN]->size.x + 6;
+    fake_margin.x = g_app->buttons().icon[CSEX_UNKNOWN]->size.x + 6;
     setup_tail();
 
 }
@@ -2177,7 +2156,56 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 /*virtual*/ int gui_notice_network_c::get_height_by_width(int width) const
 {
     if (width == -INT_MAX) return __super::get_height_by_width(width);
-    return __super::get_height_by_width( width - left_margin );
+    return __super::get_height_by_width( width - fake_margin.x );
+}
+
+void gui_notice_network_c::ctx_onlink_do(const ts::str_c &cc)
+{
+    if (cc.equals(CONSTASTR("copy")))
+    {
+        ts::set_clipboard_text(from_utf8( pubid ));
+        flash();
+    } else if (cc.equals(CONSTASTR("qrcode")))
+    {
+        dialog_msgbox_c::mb_qrcode(from_utf8(pubid)).summon();
+    } else if (cc.equals(CONSTASTR("on")))
+    {
+        if (active_protocol_c *ap = prf().ap(networkid))
+        {
+            ap->set_autoconnect(true);
+            is_autoconnect = true;
+            DEFERRED_UNIQUE_CALL(0, DELEGATE(this, resetup), nullptr);
+        }
+    } else if (cc.equals(CONSTASTR("off")))
+    {
+        if (active_protocol_c *ap = prf().ap(networkid))
+            ap->set_autoconnect(false), is_autoconnect = false;
+    }
+}
+
+void gui_notice_network_c::show_link_submenu()
+{
+    menu_c mnu;
+
+    if (overlink == 0)
+    {
+        mnu.add(loc_text(loc_copy), 0, DELEGATE(this, ctx_onlink_do), CONSTASTR("copy"));
+        mnu.add(loc_text(loc_qrcode), 0, DELEGATE(this, ctx_onlink_do), CONSTASTR("qrcode"));
+    } else if (overlink == 1)
+    {
+        if (is_autoconnect)
+            mnu.add(TTT("Switch off", 98), 0, DELEGATE(this, ctx_onlink_do), CONSTASTR("off"));
+        else
+            mnu.add(TTT("Connect", 99), (curstate != CR_OK) ? MIF_DISABLED : 0, DELEGATE(this, ctx_onlink_do), CONSTASTR("on"));
+    }
+
+
+    popupmenu = &gui_popup_menu_c::show(menu_anchor_s(true), mnu);
+    popupmenu->leech(this);
+    textrect.make_dirty();
+    getengine().redraw();
+    clicka = SQ_NOP;
+
 }
 
 void gui_notice_network_c::moveup(const ts::str_c&)
@@ -2250,14 +2278,11 @@ int gui_notice_network_c::sortfactor() const
         {
             if (SQ_POPUP_MENU_DIE == qp)
             {
-                MODIFY(*this).highlight(false);
-                bool prev = flags.is(F_OVERAVATAR);
+                if (flashing == 0)
+                    clicklink = -1;
+                textrect.make_dirty();
                 flags.clear(F_OVERAVATAR);
-                if (prev)
-                {
-                    //update_text();
-                    getengine().redraw();
-                }
+                getengine().redraw();
             }
         }
         return false;
@@ -2273,27 +2298,27 @@ int gui_notice_network_c::sortfactor() const
 
             if (flags.is(F_OVERAVATAR))
             {
-                int y = (ca.size().y - left_margin) / 2;
-                m_engine->draw(ts::irect(ca.lt.x, ca.lt.y+y, ca.lt.x + left_margin, ca.lt.y+y+left_margin), get_default_text_color(COLOR_OVERAVATAR));
+                int y = (ca.size().y - fake_margin.x) / 2;
+                m_engine->draw(ts::irect(ca.lt.x, ca.lt.y+y, ca.lt.x + fake_margin.x, ca.lt.y+y+ fake_margin.x), get_default_text_color(COLOR_OVERAVATAR));
             }
 
             if (contact_c *contact = contacts().find_subself(networkid))
             {
                 if (const avatar_s *ava = contact->get_avatar())
                 {
-                    int x = (left_margin - ava->info().sz.x) / 2;
+                    int x = (fake_margin.x - ava->info().sz.x) / 2;
                     int y = (ca.size().y - ava->info().sz.y) / 2;
                     m_engine->draw(ca.lt + ts::ivec2(x, y), ava->extbody(), ts::irect(0, ava->info().sz), ava->alpha_pixels);
                 }
                 else
                 {
                     button_desc_s *icon = g_app->buttons().icon[CSEX_UNKNOWN];
-                    int x = (left_margin - icon->size.x) / 2;
+                    int x = (fake_margin.x - icon->size.x) / 2;
                     icon->draw(m_engine.get(), button_desc_s::NORMAL, ts::irect(ca.lt + ts::ivec2(x,0), ca.rb), button_desc_s::ALEFT | button_desc_s::ATOP | button_desc_s::ABOTTOM);
                 }
             }
 
-            ca.lt.x += left_margin;
+            ca.lt.x += fake_margin.x;
 
             draw_data_s &dd = m_engine->begin_draw();
             dd.size = ca.size();
@@ -2315,7 +2340,7 @@ int gui_notice_network_c::sortfactor() const
         if (popupmenu.expired())
         {
             ts::irect ca = get_client_area();
-            ca.setwidth(left_margin);
+            ca.setwidth(fake_margin.x);
             bool prev = flags.is(F_OVERAVATAR);
             if (prev != flags.init(F_OVERAVATAR, ca.inside(data.detectarea.pos)))
                 getengine().redraw();
@@ -2323,15 +2348,29 @@ int gui_notice_network_c::sortfactor() const
         break;
     case SQ_MOUSE_OUT:
         {
-            flags.clear(F_RBDN);
             bool prev = flags.is(F_OVERAVATAR);
             flags.clear(F_OVERAVATAR);
             if (prev && popupmenu) flags.set(F_OVERAVATAR);
             if (prev) getengine().redraw();
+            clicka = SQ_NOP;
+        }
+        break;
+    case SQ_MOUSE_LDOWN:
+        if (popupmenu.expired())
+        {
+            clicklink = -1;
+            flashing = 0;
+            clicka = SQ_NOP;
+            if (overlink >= 0)
+                clicka = SQ_MOUSE_LUP, clicklink = overlink;
         }
         break;
     case SQ_MOUSE_LUP:
-        if (flags.is(F_OVERAVATAR))
+        if (clicka == qp && overlink == clicklink && overlink >= 0)
+        {
+            show_link_submenu();
+
+        } else if (flags.is(F_OVERAVATAR))
         {
             struct x
             {
@@ -2369,40 +2408,56 @@ int gui_notice_network_c::sortfactor() const
                 }
             }
             getengine().redraw();
-
         }
         break;
     case SQ_MOUSE_RDOWN:
-        flags.set(F_RBDN);
+        clicka = SQ_NOP;
+        if (popupmenu.expired())
+        {
+            clicklink = -1;
+            flashing = 0;
+            if (overlink >= 0)
+                clicklink = overlink;
+            clicka = SQ_MOUSE_RUP;
+        }
         break;
     case SQ_MOUSE_RUP:
-        if (flags.is(F_RBDN))
+        if (clicka == qp)
         {
-            int sortfactor = 0, minsortfactor = 0, maxsortfactor = 0;
-            prf().iterate_aps([&](const active_protocol_c &ap) {
-                
-                int sf = ap.sort_factor();
-                if (ap.getid() == networkid)
-                    sortfactor = sf;
-                else if (minsortfactor == 0 || minsortfactor > sf)
-                    minsortfactor = sf;
-                else if (maxsortfactor == 0 || maxsortfactor < sf)
-                    maxsortfactor = sf;
-            
-            });
-
-            bool allow_move_up = minsortfactor < sortfactor;
-            bool allow_move_down = maxsortfactor > sortfactor;
-
-            if (allow_move_up || allow_move_down)
+            if (overlink == clicklink && overlink >= 0)
             {
-                menu_c m;
-                if (allow_move_up) m.add(TTT("Move up",77), 0, DELEGATE(this, moveup));
-                if (allow_move_down) m.add(TTT("Move down",78), 0, DELEGATE(this, movedn));
-                gui_popup_menu_c::show(menu_anchor_s(true), m);
-            }
+                show_link_submenu();
+            } else
+            {
 
-            flags.clear(F_RBDN);
+                int sortfactor = 0, minsortfactor = 0, maxsortfactor = 0;
+                prf().iterate_aps([&](const active_protocol_c &ap) {
+                
+                    int sf = ap.sort_factor();
+                    if (ap.getid() == networkid)
+                        sortfactor = sf;
+                    else
+                    {
+                        if (minsortfactor == 0 || minsortfactor > sf)
+                            minsortfactor = sf;
+                        if (maxsortfactor == 0 || maxsortfactor < sf)
+                            maxsortfactor = sf;
+                    }
+            
+                });
+
+                bool allow_move_up = minsortfactor < sortfactor;
+                bool allow_move_down = maxsortfactor > sortfactor;
+
+                if (allow_move_up || allow_move_down)
+                {
+                    menu_c m;
+                    if (allow_move_up) m.add(TTT("Move up",77), 0, DELEGATE(this, moveup));
+                    if (allow_move_down) m.add(TTT("Move down",78), 0, DELEGATE(this, movedn));
+                    gui_popup_menu_c::show(menu_anchor_s(true), m);
+                }
+            }
+            clicka = SQ_NOP;
         }
         break;
     case SQ_RECT_CHANGED:
@@ -2424,29 +2479,12 @@ bool gui_notice_network_c::flash_pereflash(RID, GUIPARAM)
     --flashing;
     if (flashing > 0) DEFERRED_UNIQUE_CALL(0.1, DELEGATE(this, flash_pereflash), nullptr);
 
-    ts::wstr_c text = textrect.get_text();
-
-    int i0 = text.find_pos(CONSTWSTR("<null=1>")) + 8;
-    int i1 = text.find_pos(CONSTWSTR("<null=2>"));
-    int i2 = text.find_pos(CONSTWSTR("<null=3>")) + 8;
-    int i3 = text.find_pos(CONSTWSTR("<null=4>"));
-
-    ASSERT(i1 >= i0 && i2 > i1 && i3 >= i2);
-
-    if (flashing & 1)
-    {
-        text.replace(i2, i3 - i2, CONSTWSTR("</color>"));
-        text.replace(i0, i1 - i0, maketag_color<ts::wchar>(get_default_text_color(COLOR_BLINKED)));
-    }
-    else
-    {
-        // cut flash color
-        if (i3 > i2) text.cut(i2, i3 - i2);
-        if (i1 > i0) text.cut(i0, i1 - i0);
-    }
-    textrect.set_text_only(text, false);
-
+    textrect.make_dirty();
     getengine().redraw();
+
+    if (flashing == 0)
+        clicklink = -1;
+
     return true;
 }
 
@@ -2879,6 +2917,10 @@ void gui_message_item_c::ctx_menu_copylink(const ts::str_c & lnk)
     ts::set_clipboard_text(ts::from_utf8(lnk));
     gui->selcore().flash_and_clear_selection();
 }
+void gui_message_item_c::ctx_menu_qrcode(const ts::str_c &lnk)
+{
+    dialog_msgbox_c::mb_qrcode(ts::from_utf8(lnk)).summon();
+}
 
 void gui_message_item_c::ctx_menu_copymessage(const ts::str_c &msg)
 {
@@ -3190,6 +3232,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
             {
                 mnu.add(TTT("Open link",202), 0, DELEGATE(this, ctx_menu_golink), lnk);
                 mnu.add(TTT("Copy link",203), 0, DELEGATE(this, ctx_menu_copylink), lnk);
+                mnu.add(loc_text(loc_qrcode), 0, DELEGATE(this, ctx_menu_qrcode), lnk);
 
                 popupmenu = &gui_popup_menu_c::show(menu_anchor_s(true), mnu);
                 popupmenu->leech(this);
@@ -3231,6 +3274,17 @@ static gui_messagelist_c *current_draw_list = nullptr;
                 gui->app_prepare_text_for_copy(msg);
                 mnu.add(TTT("Copy message",205), 0, DELEGATE(this, ctx_menu_copymessage), msg);
                 mnu.add_separator();
+                if (some_selection)
+                {
+                    ts::wstr_c text = gui->selcore().get_selected_text();
+                    text.replace_all( '\r', ' ' );
+                    text.replace_all( '\n', ' ' );
+                    text.replace_all( '\t', ' ' );
+                    while( text.find_pos(CONSTWSTR("  ")) >= 0 )
+                        text.replace_all( CONSTWSTR("  "), CONSTWSTR(" ") );
+                    mnu.add(loc_text(loc_qrcode), text.get_length() < 256 ? 0 : MIF_DISABLED, DELEGATE(this, ctx_menu_qrcode), ts::to_utf8(text));
+                    mnu.add_separator();
+                }
             }
             mnu.add(TTT("Delete message",206), 0, DELEGATE(this, ctx_menu_delmessage), ts::str_c().append_as_hex(&mutag, sizeof(mutag)));
 
@@ -3876,7 +3930,7 @@ bool gui_message_item_c::b_break(RID btn, GUIPARAM)
             p.message_utf8 = zero_rec.text;
             p.utag = zero_rec.utag;
             prf().change_history_item(row->other.historian, p, HITM_MESSAGE);
-            if (contact_c * h = contacts().find(row->other.historian)) h->iterate_history([&](post_s &p)->bool {
+            if (contact_root_c * h = contacts().rfind(row->other.historian)) h->iterate_history([&](post_s &p)->bool {
                 if (p.utag == zero_rec.utag)
                 {
                     p.message_utf8 = zero_rec.text;
@@ -5300,7 +5354,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_DO_POSTEFFECT> &f)
 {
-    if (f.bits & application_c::PEF_RECREATE_CTLS)
+    if (f.bits & application_c::PEF_RECREATE_CTLS_MSG)
     {
         if (flags.is(F_EMPTY_MODE) && prf().get_options().is(UIOPT_SHOW_NEWCONN_BAR))
         {
@@ -5512,7 +5566,7 @@ gui_messagelist_c::filler_s::filler_s(gui_messagelist_c *owner, const found_item
     if ( found_item && found_item->utags.count() )
         scrollto = found_item->utags.get(0);
 
-    contact_c *h = owner->historian;
+    contact_root_c *h = owner->historian;
     if (!h)
     {
         die();
@@ -5570,7 +5624,7 @@ gui_messagelist_c::filler_s::~filler_s()
 
 bool gui_messagelist_c::filler_s::tick(RID r, GUIPARAM p)
 {
-    contact_c *h = owner->historian;
+    contact_root_c *h = owner->historian;
     if (!h) return true;
     const found_item_s *found_item_current = nullptr;
     if (h->is_full_search_result() && g_app->found_items)
@@ -5698,10 +5752,8 @@ bool gui_message_editor_c::on_enter_press_func(RID, GUIPARAM param)
         }
     }
 
-    contact_c *receiver = historian;
-    if (receiver == nullptr) return true;
-    if (receiver->is_meta())
-        receiver = receiver->subget_for_send(); // get default subcontact for message
+    if (historian == nullptr) return true;
+    contact_c *receiver = historian->subget_for_send(); // get default subcontact for message
     if (receiver == nullptr) return true;
     
     gmsg<ISOGM_MESSAGE> msg(&contacts().get_self(), receiver, MTA_UNDELIVERED_MESSAGE );
@@ -5836,7 +5888,7 @@ bool gui_message_editor_c::show_smile_selector(RID, GUIPARAM)
     ts::bitmap_c bmp = ts::get_clipboard_bitmap();
     if (bmp.info().sz >> 0)
     {
-        if (contact_c *h = get_historian())
+        if (contact_root_c *h = get_historian())
             SUMMON_DIALOG<dialog_prepareimage_c>(UD_PREPARE_IMAGE, h->getkey(), bmp);
 
         return;
@@ -5888,10 +5940,10 @@ bool gui_message_area_c::change_text_handler(const ts::wstr_c &t)
 
     send_button->disable( t.is_empty() );
 
-    if (contact_c * contact = message_editor->get_historian())
+    if (contact_root_c * contact = message_editor->get_historian())
         if (!contact->getkey().is_self())
         {
-            contact_c *tgt = contact->getkey().is_group() ? contact : ( contact->subcount() ? contact->subget_for_send() : nullptr);
+            contact_c *tgt = contact->subget_for_send();
             if (tgt && tgt->get_state() == CS_ONLINE)
                 if (active_protocol_c *ap = prf().ap(tgt->getkey().protoid))
                     ap->typing( t.is_empty() ? 0 : tgt->getkey().contactid );
@@ -5926,7 +5978,7 @@ void gui_message_area_c::send_file_item(const ts::str_c& prm)
 {
     if (prm.equals(CONSTASTR("i")))
     {
-        if (contact_c *h = message_editor->get_historian())
+        if (contact_root_c *h = message_editor->get_historian())
             SUMMON_DIALOG<dialog_prepareimage_c>(UD_PREPARE_IMAGE, h->getkey());
         return;
     }
@@ -5948,7 +6000,7 @@ void gui_message_area_c::send_file_item(const ts::str_c& prm)
         if (files.size())
             prf().last_filedir(ts::fn_get_path(files.get(0)));
 
-        if (contact_c *c = message_editor->get_historian())
+        if (contact_root_c *c = message_editor->get_historian())
             for (const ts::wstr_c &fn : files)
                 c->send_file(fn);
     }
@@ -5979,7 +6031,7 @@ void gui_message_area_c::update_buttons()
     int features_online = 0;
     bool now_disabled = false;
     bool is_groupchat = false;
-    if (contact_c * contact = message_editor->get_historian())
+    if (contact_root_c * contact = message_editor->get_historian())
     {
         is_groupchat = contact->getkey().is_group();
         contact->subiterate([&](contact_c *c) {
@@ -6139,7 +6191,7 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<GM_DRAGNDROP> &dnda)
     {
         if (flags.is(F_DNDTARGET))
         {
-            contact_c *c = get_selected_contact();
+            contact_root_c *c = get_selected_contact();
             if (c->getkey().is_group())
                 c->join_groupchat(&ciproc->getcontact());
         }
@@ -6188,7 +6240,7 @@ ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> &c )
     if (c.contact->getkey().is_group())
     {
         DEFERRED_EXECUTION_BLOCK_BEGIN(0)
-            gmsg<ISOGM_NOTICE>((contact_c *)param, (contact_c *)param, NOTICE_GROUP_CHAT).send();
+            gmsg<ISOGM_NOTICE>((contact_root_c *)param, (contact_c *)param, NOTICE_GROUP_CHAT).send();
         DEFERRED_EXECUTION_BLOCK_END(c.contact.get());
     }
 
@@ -6217,7 +6269,7 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 
     if (ch.pass == 0 && caption->contacted())
     {
-        if (ch.sp == PP_PROFILEOPTIONS && 0 == (ch.bits & UIOPT_SHOW_SEARCH_BAR))
+        if (ch.sp == PP_PROFILEOPTIONS && 0 == (ch.bits & (UIOPT_TAGFILETR_BAR | UIOPT_SHOW_SEARCH_BAR)))
             caption->getcontact().reselect();
     }
     if (ch.sp == PP_EMOJISET && caption->contacted())

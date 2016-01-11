@@ -27,21 +27,23 @@ enum messages_options_e
     MSGOP_JOIN_MESSAGES         = SETBIT(4), // hidden option
 #endif
     MSGOP_SEND_TYPING           = SETBIT(5),
-   _MSGOP_UNUSED_00_            = SETBIT(6),
+    UIOPT_TAGFILETR_BAR         = SETBIT(6),
     MSGOP_LOAD_WHOLE_HISTORY    = SETBIT(7),
     MSGOP_FULL_SEARCH           = SETBIT(8),
+
     UIOPT_SHOW_SEARCH_BAR       = SETBIT(16),
     UIOPT_PROTOICONS            = SETBIT(17),
     UIOPT_AWAYONSCRSAVER        = SETBIT(18),
     UIOPT_SHOW_NEWCONN_BAR      = SETBIT(19),
     UIOPT_SHOW_TYPING_CONTACT   = SETBIT(20),
     UIOPT_SHOW_TYPING_MSGLIST   = SETBIT(21),
+    UIOPT_KEEPAWAY              = SETBIT(22),
 
     GCHOPT_MUTE_MIC_ON_INVITE   = SETBIT(24),
     GCHOPT_MUTE_SPEAKER_ON_INVITE = SETBIT(25),
 };
 
-#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | GCHOPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST)
+#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_TAGFILETR_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | GCHOPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST)
 
 
 enum dsp_flags_e
@@ -94,8 +96,11 @@ struct contacts_s
         C_READTIME,
         C_CUSTOMNAME,
         C_COMMENT,
+        C_TAGS,
         C_AVATAR,
         C_AVATAR_TAG,
+
+        C_count,
     };
 
     contact_key_s key;
@@ -105,6 +110,7 @@ struct contacts_s
     ts::str_c statusmsg;
     ts::str_c customname;
     ts::str_c comment;
+    ts::astrings_c tags;
     time_t readtime; // time of last seen message
     ts::blob_c avatar;
     int avatar_tag;
@@ -112,7 +118,7 @@ struct contacts_s
     void set(int column, ts::data_value_s& v);
     void get(int column, ts::data_pair_s& v);
 
-    static const int columns = 1 + 11; // contact_id, proto_id, meta_id, options, name, statusmsg, readtime, customname, comment, avatar, avatar_tag
+    static const int columns = C_count; // contact_id, proto_id, meta_id, options, name, statusmsg, readtime, customname, comment, tags, avatar, avatar_tag
     static ts::asptr get_table_name() { return CONSTASTR("contacts"); }
     static void get_column_desc(int index, ts::column_desc_s&cd);
     static ts::data_type_e get_column_type(int index);
@@ -130,7 +136,9 @@ struct history_s : public post_s
         C_RECEIVER,
         C_TYPE_AND_OPTIONS,
         C_MSG,
-        C_UTAG
+        C_UTAG,
+
+        C_count
     };
 
     contact_key_s historian;
@@ -138,7 +146,7 @@ struct history_s : public post_s
     void set(int column, ts::data_value_s& v);
     void get(int column, ts::data_pair_s& v);
 
-    static const int columns = 1 + 8; // mtime, crtime, historian, sender, receiver, mtype, msg, utag
+    static const int columns = C_count; // mtime, crtime, historian, sender, receiver, mtype, msg, utag
     static ts::asptr get_table_name() { return CONSTASTR("history"); }
     static void get_column_desc(int index, ts::column_desc_s&cd);
     static ts::data_type_e get_column_type(int index);
@@ -360,8 +368,6 @@ class profile_c : public config_base_c
         return false;
     }
 
-    uint64 sorttag;
-
     static const ts::flags32_s::BITS F_OPTIONS_VALID = SETBIT(0);
     static const ts::flags32_s::BITS F_LOADING = SETBIT(1);
     static const ts::flags32_s::BITS F_CLOSING = SETBIT(2);
@@ -380,7 +386,7 @@ class profile_c : public config_base_c
 
 public:
 
-    profile_c() { dirty_sort(); }
+    profile_c() {}
     ~profile_c();
 
     ts::sqlitedb_c *begin_encrypt();
@@ -461,10 +467,8 @@ public:
     bool change_history_item(uint64 utag, contact_key_s & historian); // find item by tag and change type form MTA_UNDELIVERED_MESSAGE to MTA_MESSAGE, then return historian (if loaded)
     void flush_history_now();
     void load_undelivered();
-    contact_c *find_corresponding_historian(const contact_key_s &subcontact, ts::array_wrapper_c<contact_c * const> possible_historians);
+    contact_root_c *find_corresponding_historian(const contact_key_s &subcontact, ts::array_wrapper_c<contact_root_c * const> possible_historians);
 
-    uint64 sort_tag() const {return sorttag;}
-    void dirty_sort() { sorttag = ts::uuid(); };
     uint64 uniq_history_item_tag();
 
     ts::flags32_s get_options()
@@ -516,6 +520,10 @@ public:
     INTPAR( camview_size, 25 );
     INTPAR( camview_snap, CVS_RITE_BOTTOM );
     INTPAR( camview_pos, 0 );
+
+    TEXTAPAR( tags, "" );
+    TEXTWPAR( bitagnames, "" );
+    INTPAR(bitags, (1<<BIT_ALL) );
 
     FLOATPAR(fontscale_conv_text, 1.0f);
 

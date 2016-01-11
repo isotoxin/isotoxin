@@ -669,7 +669,7 @@ public:
             if (0 != (((auint *)core())[i] & bset.tbegin<auint>()[i])) return true;
         }
         aint index = cnt*sizeof(auint);
-        cnt = tmin(m_size - index, bset.size() - index);
+        cnt = tmin(core.size() - index, bset.size() - index);
         for (aint i = 0; i < cnt; ++i)
         {
             if (0 != (core()[index + i] & bset.data()[index + i])) return true;

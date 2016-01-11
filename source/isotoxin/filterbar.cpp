@@ -1,5 +1,13 @@
 #include "isotoxin.h"
 
+#define COL_PLACEHOLDER 0
+#define COL_INACTIVE 1
+#define COL_INACTIVE_HOVER 2
+#define COL_ACTIVE 3
+#define COL_ACTIVE_HOVER 4
+#define COL_ACTIVE_MUTED 5
+#define COL_ACTIVE_MUTED_HOVER 6
+
 MAKE_CHILD<gui_filterbar_c>::~MAKE_CHILD()
 {
     //MODIFY(get()).visible(true);
@@ -8,12 +16,17 @@ MAKE_CHILD<gui_filterbar_c>::~MAKE_CHILD()
 
 gui_filterbar_c::gui_filterbar_c(MAKE_CHILD<gui_filterbar_c> &data):gui_label_ex_c(data)
 {
+    bitags = prf().bitags();
+    binames.parse( prf().bitagnames() );
     g_app->found_items = &found_stuff;
-    //set_text(L"test test test test 111 klasdf lksd fjklasdfj wepo pweo powe opew oprweop rwepor powe");
 }
 gui_filterbar_c::~gui_filterbar_c()
 {
-    g_app->found_items = nullptr;
+    if (g_app)
+    {
+        g_app->found_items = nullptr;
+        g_app->delete_event( DELEGATE(this, do_contact_check) );
+    }
 }
 
 /*virtual*/ void gui_filterbar_c::created()
@@ -22,15 +35,178 @@ gui_filterbar_c::~gui_filterbar_c()
 
     filtereditheight = gui->theme().conf().get_int(CONSTASTR("filtereditheight"), 25);
 
-    gui_textfield_c &e = (MAKE_CHILD<gui_textfield_c>(getrid(), L"", MAX_PATH, 0, false) << (gui_textedit_c::TEXTCHECKFUNC)DELEGATE(this,update_filter));
-    edit = &e;
-    e.set_placeholder( TOOLTIP(TTT("Search",277)), get_default_text_color(0) );
-    e.register_kbd_callback(DELEGATE( this, cancel_filter ), SSK_ESC, false);
+    if (prf().get_options().is(UIOPT_SHOW_SEARCH_BAR))
+    {
+        gui_textfield_c &e = (MAKE_CHILD<gui_textfield_c>(getrid(), L"", MAX_PATH, 0, false) << (gui_textedit_c::TEXTCHECKFUNC)DELEGATE(this, update_filter));
+        edit = &e;
+        e.set_placeholder(TOOLTIP(TTT("Search", 277)), get_default_text_color(COL_PLACEHOLDER));
+        e.register_kbd_callback(DELEGATE(this, cancel_filter), SSK_ESC, false);
+    }
+    if (prf().get_options().is(UIOPT_TAGFILETR_BAR))
+    {
+        fill_tags();
+    }
 
     search_in_messages = prf().is_loaded() && prf().get_options().is(MSGOP_FULL_SEARCH);
 
+    if (!is_all())
+        refresh_list();
+
     __super::created();
 }
+
+void gui_filterbar_c::get_link_prolog(ts::wstr_c &r, int linknum) const
+{
+    bool is_active = false;
+    if (linknum < BIT_count)
+    {
+        is_active = 0 != (bitags & (1 << linknum));
+    } else
+    {
+        is_active = contacts().is_tag_enabled(linknum - BIT_count);
+    }
+
+    bool all = (0 != (bitags & (1 << BIT_ALL))) && linknum != BIT_ALL;
+
+    ts::TSCOLOR c;
+    if (linknum == overlink)
+    {
+        r.set(CONSTWSTR("<u>"));
+        c = get_default_text_color(is_active ? ( all ? COL_ACTIVE_MUTED_HOVER : COL_ACTIVE_HOVER) : COL_INACTIVE_HOVER);
+    } else
+    {
+        c = get_default_text_color(is_active ? (all ? COL_ACTIVE_MUTED : COL_ACTIVE) : COL_INACTIVE);
+    }
+    r.append(CONSTWSTR("<color=#")).append_as_hex(ts::RED(c))
+        .append_as_hex(ts::GREEN(c))
+        .append_as_hex(ts::BLUE(c))
+        .append_as_hex(ts::ALPHA(c))
+        .append_char('>');
+
+}
+void gui_filterbar_c::get_link_epilog(ts::wstr_c &r, int linknum) const
+{
+    if (linknum == overlink)
+        r.set(CONSTWSTR("</color></u>"));
+    else
+        r.set(CONSTWSTR("</color>"));
+
+}
+
+void gui_filterbar_c::do_tag_click(int lnk)
+{
+    if ( lnk < BIT_count )
+    {
+        // process buildin tags
+        INVERTFLAG( bitags, (1<<lnk) );
+        prf().bitags( bitags );
+    } else
+    {
+        lnk -= BIT_count;
+        contacts().toggle_tag(lnk);
+    }
+    refresh_list();
+    textrect.make_dirty();
+    getengine().redraw();
+}
+
+ts::wstr_c gui_filterbar_c::tagname( int index ) const
+{
+    if (index < BIT_count)
+    {
+        if ( const ts::wstr_c * n = binames.find( ts::wmake(index) ) )
+            return *n;
+
+        ts::wsptr bit[BIT_count] =
+        {
+            TTT("All", 83),
+            TTT("Online", 86),
+            TTT("Untagged",263),
+        };
+        return bit[index];
+    }
+    return from_utf8( contacts().get_all_tags().get(index - BIT_count) );
+}
+
+bool gui_filterbar_c::renamed(const ts::wstr_c &tn, const ts::str_c &tis)
+{
+    int ti = tis.as_int();
+
+    if (ti < BIT_count)
+    {
+        if (tn.is_empty())
+        {
+            binames.unset( to_wstr(tis) );
+        } else
+        {
+            binames.set( to_wstr(tis) ) = tn;
+        }
+        prf().bitagnames( binames.to_str() );
+    } else
+    {
+        ti -= BIT_count;
+        contacts().replace_tags( ti, to_utf8(tn) );
+    }
+
+    g_app->recreate_ctls(true, false);
+    return true;
+}
+
+void gui_filterbar_c::ctx_rename_tag(const ts::str_c &tis)
+{
+    int ti = tis.as_int();
+
+    ts::wstr_c hint = TTT("Rename tag $", 218) / ts::wstr_c(CONSTWSTR("<b>")).append(tagname(ti)).append(CONSTWSTR("</b>"));
+    if (ti < BIT_count)
+        hint.append(CONSTWSTR("<br>")).append( TTT("Empty - set default",249) );
+
+
+    SUMMON_DIALOG<dialog_entertext_c>(UD_RENTAG, dialog_entertext_c::params(
+        UD_RENTAG,
+        gui_isodialog_c::title(title_rentag),
+        hint,
+        tagname(ti),
+        tis,
+        DELEGATE(this, renamed),
+        nullptr,
+        ti < BIT_count ? check_always_ok : check_always_ok_except_empty,
+        getrid()));
+
+}
+
+void gui_filterbar_c::do_tag_rclick(int lnk)
+{
+    menu_c mnu;
+    mnu.add(TTT("Rename tag",224), 0, DELEGATE(this, ctx_rename_tag), ts::amake(lnk));
+    popupmenu = &gui_popup_menu_c::show(menu_anchor_s(true), mnu);
+    popupmenu->leech(this);
+    textrect.make_dirty();
+    getengine().redraw();
+
+}
+
+void gui_filterbar_c::fill_tags()
+{
+    int lnki = 0;
+    auto make_ht = [&]( const ts::wsptr &htt ) -> ts::wstr_c
+    {
+        ts::wstr_c x( CONSTWSTR("<cstm=a\1>"), htt );
+        x.append( CONSTWSTR("<cstm=b\1>, ") );
+        x.replace_all( CONSTWSTR("\1"), ts::wmake<int>( lnki++ ) );
+        return x;
+    };
+
+    ts::wstr_c t;
+    for (int i = 0; i < BIT_count; ++i)
+        t.append( make_ht(tagname(i)) );
+
+    for(const ts::str_c &ht : contacts().get_all_tags())
+        t.append(make_ht(from_utf8(ht)));
+    
+    t.trunc_length(2);
+    set_text(t);
+}
+
 
 bool gui_filterbar_c::cancel_filter(RID, GUIPARAM)
 {
@@ -73,7 +249,7 @@ bool gui_filterbar_c::option_handler(RID, GUIPARAM p)
     if (prf().is_loaded())
         prf().set_options( search_in_messages ? MSGOP_FULL_SEARCH : 0, MSGOP_FULL_SEARCH );
     found_stuff.fsplit.clear();
-    update_filter(edit->get_text());
+    refresh_list();
     return true;
 }
 
@@ -89,31 +265,19 @@ bool gui_filterbar_c::do_contact_check(RID, GUIPARAM p)
     for (int n = ts::tmax(1, contacts().count() / 10 ); contact_index < contacts().count() && n > 0; --n)
     {
         contact_c &c = contacts().get(contact_index++);
-        if (c.is_full_search_result())
+        if (c.is_rootcontact())
         {
-            c.full_search_result(false);
-            if (c.gui_item) c.gui_item->update_text();
-        }
-        if (c.is_meta())
-        {
-            if (c.gui_item)
-            {
-                bool match = true;
-                if (found_stuff.fsplit.size())
-                {
-                    ts::str_c an = c.get_customname();
-                    if (an.is_empty())
-                        an = c.get_name();
+            contact_root_c *cr = ts::ptr_cast<contact_root_c *>(&c);
 
-                    const ts::wstr_c wn = from_utf8(an).case_down();
-                    for (const ts::wstr_c &f : found_stuff.fsplit)
-                        if (wn.find_pos(f) < 0)
-                        {
-                            match = false;
-                            break;
-                        }
-                }
-                MODIFY(*c.gui_item).visible(match);
+            if (cr->is_full_search_result())
+            {
+                cr->full_search_result(false);
+                if (cr->gui_item) cr->gui_item->update_text();
+            }
+
+            if (cr->gui_item)
+            {
+                MODIFY(*cr->gui_item).visible(check_one(cr));
             }
         }
     }
@@ -138,13 +302,13 @@ bool gui_filterbar_c::do_contact_check(RID, GUIPARAM p)
 void gui_filterbar_c::apply_full_text_search_result()
 {
     for (found_item_s &itm : found_stuff.items)
-        if (contact_c *c = contacts().find(itm.historian))
+        if (contact_root_c *c = contacts().rfind(itm.historian))
         {
             c->full_search_result(true);
             if (c->gui_item)
             {
                 c->gui_item->update_text();
-                MODIFY(*c->gui_item).visible(true);
+                MODIFY(*c->gui_item).show();
             }
         }
 
@@ -157,6 +321,17 @@ void gui_filterbar_c::apply_full_text_search_result()
     gmsg<ISOGM_REFRESH_SEARCH_RESULT>().send();
 
 
+}
+
+void gui_filterbar_c::refresh_list()
+{
+    ts::wstr_c t;
+    if (edit)
+        t = edit->get_text();
+
+    tagschanged = true;
+
+    update_filter(t);
 }
 
 bool gui_filterbar_c::update_filter(const ts::wstr_c & e)
@@ -181,7 +356,7 @@ bool gui_filterbar_c::update_filter(const ts::wstr_c & e)
     // sort by length
     found_stuff.fsplit.sort([](const ts::wstr_c &s1,const ts::wstr_c &s2)->bool { return s1.get_length() == s2.get_length() ? (ts::wstr_c::compare(s1,s2) > 0) : s1.get_length() > s2.get_length(); });
 
-    if (found_stuff.fsplit == ospl)
+    if (!tagschanged && found_stuff.fsplit == ospl)
         return true;
 
     if (current_search)
@@ -192,7 +367,7 @@ bool gui_filterbar_c::update_filter(const ts::wstr_c & e)
 
     show_options(0 != found_stuff.fsplit.size());
 
-    if (!found_stuff.fsplit.size())
+    if (!tagschanged && is_all())
     {
         found_stuff.items.clear();
         gui_contactlist_c &cl = HOLD(getparent()).as<gui_contactlist_c>();
@@ -217,7 +392,8 @@ bool gui_filterbar_c::update_filter(const ts::wstr_c & e)
         active = cl.get_first_contact_item();
     }
 
-    contact_index = 0;
+    tagschanged = false;
+    contact_index = 1;
     do_contact_check(RID(),nullptr);
     return true;
 }
@@ -227,14 +403,17 @@ bool gui_filterbar_c::update_filter(const ts::wstr_c & e)
     ts::ivec2 sz(3);
     const theme_rect_s *thr = themerect();
     if (!textrect.get_text().is_empty())
-        sz = textrect.calc_text_size(width - (thr ? thr->clborder_x() : 0), custom_tag_parser_delegate());
-    sz.y += edit->getprops().size().y;
+    {
+        sz = textrect.calc_text_size(width - 10 - (thr ? thr->clborder_x() : 0), custom_tag_parser_delegate());
+        sz.y += 3;
+    }
+
     if (thr) sz.y += thr->clborder_y();
 
+    if (edit)
+        sz.y += edit->getprops().size().y;
     if (option1)
-    {
         sz.y += option1->get_min_size().y;
-    }
 
     return sz.y;
 }
@@ -246,33 +425,75 @@ bool gui_filterbar_c::update_filter(const ts::wstr_c & e)
     case SQ_RECT_CHANGED:
         {
             ts::irect cla = get_client_area();
-            MODIFY( *edit ).pos( cla.lt ).size( cla.width(), filtereditheight );
+            fake_margin.x = 5;
+            fake_margin.y = 0;
+            if (prf().get_options().is(UIOPT_TAGFILETR_BAR))
+            {
+                if (!textrect.get_text().is_empty())
+                {
+                    ts::ivec2 sz = textrect.calc_text_size(cla.width() - 10, custom_tag_parser_delegate());
+                    sz.y += 3;
+                    textrect.set_size(sz);
+                }
+            }
+            if (edit)
+            {
+                MODIFY(*edit).pos(cla.lt).size(cla.width(), filtereditheight);
+                fake_margin.y += filtereditheight;
+
+            }
             if (option1)
             {
-                MODIFY( *option1 ).pos( cla.lt + ts::ivec2(0,filtereditheight) ).size( cla.width(), option1->get_min_size().y );
+                int omy = option1->get_min_size().y;
+                MODIFY( *option1 ).pos( cla.lt + ts::ivec2(0,filtereditheight) ).size( cla.width(), omy );
+                fake_margin.y += omy;
             }
         }
+        return true;
+    case SQ_MOUSE_LUP:
+        if (overlink == clicklink && clicklink >= 0)
+            do_tag_click(clicklink);
+        clicklink = -1;
+        break;
+    case SQ_MOUSE_LDOWN:
+        if (overlink >= 0)
+            clicklink = overlink;
+        break;
+    case SQ_MOUSE_RUP:
+        if (overlink == rclicklink && rclicklink >= 0)
+            do_tag_rclick(rclicklink);
+        rclicklink = -1;
+        break;
+    case SQ_MOUSE_RDOWN:
+        if (overlink >= 0)
+            rclicklink = overlink;
         break;
     case SQ_DRAW:
         if (rid == getrid())
         {
-            /*
-            ts::irect ca = get_client_area();
-            draw_data_s &dd = getengine().begin_draw();
+            if (prf().get_options().is(UIOPT_TAGFILETR_BAR))
+            {
+                ts::irect ca = get_client_area();
+                draw_data_s &dd = getengine().begin_draw();
 
-            dd.offset += ca.lt;
-            dd.size = ca.size();
+                dd.offset += ca.lt; dd.offset.x += 5;
+                dd.size = ca.size();
+                dd.size.x -= 10;
 
-            text_draw_params_s tdp;
-            tdp.rectupdate = updaterect;
-            draw(dd, tdp);
-            getengine().end_draw();
+                if (edit)
+                    dd.offset.y += edit->getprops().size().y;
+                if (option1)
+                    dd.offset.y += option1->get_min_size().y;
+
+                text_draw_params_s tdp;
+                tdp.rectupdate = updaterect;
+                draw(dd, tdp);
+                getengine().end_draw();
+
+            }
+
             return gui_control_c::sq_evt(qp,rid,data);
-            */
 
-            return gui_control_c::sq_evt(qp,rid,data);
-
-            //return __super::sq_evt(qp,rid,data);
         }
         break;
     }

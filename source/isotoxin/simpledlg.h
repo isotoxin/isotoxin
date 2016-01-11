@@ -40,13 +40,20 @@ class dialog_msgbox_c : public gui_isodialog_c
 {
     dialog_msgbox_params_s m_params;
     ts::array_inplace_t<bcreate_s, 0> m_buttons;
+    int height = 190;
+    ts::bitmap_c qrbmp;
 
     bool copy_text(RID, GUIPARAM);
 
     bool on_enter_press_func(RID, GUIPARAM);
     bool on_esc_press_func(RID, GUIPARAM);
 
+    void updrect_msgbox(const void *, int r, const ts::ivec2 &p);
+
 protected:
+
+    /*virtual*/ ts::UPDATE_RECTANGLE getrectupdate() { return DELEGATE(this, updrect_msgbox); }
+
     /*virtual*/ void created() override;
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
     /*virtual*/ int additions(ts::irect & border) override;
@@ -61,8 +68,9 @@ public:
     static dialog_msgbox_params_s mb_info(const ts::wstr_c &text);
     static dialog_msgbox_params_s mb_warning(const ts::wstr_c &text);
     static dialog_msgbox_params_s mb_error(const ts::wstr_c &text);
+    static dialog_msgbox_params_s mb_qrcode(const ts::wstr_c &text);
 
-    /*virtual*/ ts::ivec2 get_min_size() const { return ts::ivec2(500, 190); }
+    /*virtual*/ ts::ivec2 get_min_size() const { return ts::ivec2(500, height); }
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 

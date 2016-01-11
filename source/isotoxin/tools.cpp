@@ -293,6 +293,37 @@ void leech_dock_right_center_s::update_ctl_pos()
     return false;
 }
 
+void leech_dock_top_right_s::update_ctl_pos()
+{
+    HOLD r(owner->getparent());
+    ts::irect cr = r().get_client_area();
+    MODIFY(*owner).pos(ts::ivec2(cr.rb.x - x_space - width, cr.lt.y + y_space)).size(width, height);
+}
+
+/*virtual*/ bool leech_dock_top_right_s::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    if (!ASSERT(owner)) return false;
+    if (owner->getrid() != rid) return false;
+
+    if (qp == SQ_PARENT_RECT_CHANGING)
+    {
+        HOLD r(owner->getparent());
+        ts::ivec2 szmin(width + x_space, height + y_space);
+        ts::ivec2 szmax = HOLD(owner->getparent())().get_max_size();
+        r().calc_min_max_by_client_area(szmin, szmax);
+        fixrect(data.rectchg.rect, szmin, szmax, data.rectchg.area);
+        return false;
+    }
+
+    if (qp == SQ_PARENT_RECT_CHANGED)
+    {
+        update_ctl_pos();
+        return false;
+    }
+
+    return false;
+}
+
 void leech_dock_bottom_right_s::update_ctl_pos()
 {
     HOLD r(owner->getparent());
@@ -323,7 +354,6 @@ void leech_dock_bottom_right_s::update_ctl_pos()
 
     return false;
 }
-
 
 bool leech_at_right::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
@@ -855,6 +885,8 @@ ts::wstr_c loc_text(loctext_e lt)
             return TTT("Paste image from clipboard ($)", 211) / CONSTWSTR("Ctrl+V");
         case loc_capturecamera:
             return TTT("Capture camera", 212);
+        case loc_qrcode:
+            return TTT("QR code", 44);
 
         case loc_connection_name:
             return TTT("Connection name", 102);

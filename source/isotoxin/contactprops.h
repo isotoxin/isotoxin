@@ -21,13 +21,16 @@ class dialog_contact_props_c : public gui_isodialog_c
 {
     GM_RECEIVER(dialog_contact_props_c, ISOGM_V_UPDATE_CONTACT);
 
-    ts::shared_ptr<contact_c> contactue;
+    ts::shared_ptr<contact_root_c> contactue;
 
     ts::str_c customname; // utf8
     bool custom_name( const ts::wstr_c & );
 
     ts::str_c ccomment; // utf8
     bool comment( const ts::wstr_c & );
+
+    ts::astrings_c tags;
+    bool tags_handler(const ts::wstr_c &);
 
     keep_contact_history_e keeph = KCH_DEFAULT;
     auto_accept_audio_call_e aaac = AAAC_NOT;
@@ -62,7 +65,8 @@ class dialog_contact_props_c : public gui_isodialog_c
 
     void update();
     void fill_list();
-
+    void tags_menu(menu_c &m);
+    void tags_menu_handler(const ts::str_c&);
 
 protected:
     /*virtual*/ int unique_tag() { return UD_CONTACTPROPS; }

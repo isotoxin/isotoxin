@@ -5,6 +5,7 @@
 #define BUTTON_FACE_PRELOADED( face ) (GET_BUTTON_FACE) ([]()->button_desc_s * { return g_app->buttons().face; } )
 
 #define HOTKEY_TOGGLE_SEARCH_BAR SSK_F, gui_c::casw_ctrl
+#define HOTKEY_TOGGLE_TAGFILTER_BAR SSK_T, gui_c::casw_ctrl
 #define HOTKEY_TOGGLE_NEW_CONNECTION_BAR SSK_N, gui_c::casw_ctrl
 
 struct preloaded_buttons_s
@@ -179,7 +180,7 @@ struct file_transfer_s : public unfinished_file_transfer_s
 struct av_contact_s
 {
     time_t starttime;
-    ts::shared_ptr<contact_c> c; // multicontact
+    ts::shared_ptr<contact_root_c> c;
     enum state_e
     {
         AV_NONE,
@@ -205,7 +206,7 @@ struct av_contact_s
     unsigned inactive : 1; // true - selected other av contact
     unsigned dirty_cam_size : 1;
 
-    av_contact_s(contact_c *c, state_e st);
+    av_contact_s(contact_root_c *c, state_e st);
 
     void on_frame_ready( const ts::bmpcore_exbody_s &ebm );
     void camera_tick();
@@ -253,10 +254,11 @@ class application_c : public gui_c, public sound_capture_handler_c
     /*virtual*/ s3::Format *formats(int &count) override;
 
 public:
-    static const ts::flags32_s::BITS PEF_RECREATE_CTLS = PEF_FREEBITSTART << 0;
-    static const ts::flags32_s::BITS PEF_UPDATE_BUTTONS_HEAD = PEF_FREEBITSTART << 1;
-    static const ts::flags32_s::BITS PEF_UPDATE_BUTTONS_MSG = PEF_FREEBITSTART << 2;
-    static const ts::flags32_s::BITS PEF_SHOW_HIDE_EDITOR = PEF_FREEBITSTART << 3;
+    static const ts::flags32_s::BITS PEF_RECREATE_CTLS_CL = PEF_FREEBITSTART << 0;
+    static const ts::flags32_s::BITS PEF_RECREATE_CTLS_MSG = PEF_FREEBITSTART << 1;
+    static const ts::flags32_s::BITS PEF_UPDATE_BUTTONS_HEAD = PEF_FREEBITSTART << 2;
+    static const ts::flags32_s::BITS PEF_UPDATE_BUTTONS_MSG = PEF_FREEBITSTART << 3;
+    static const ts::flags32_s::BITS PEF_SHOW_HIDE_EDITOR = PEF_FREEBITSTART << 4;
     
     
     static const ts::flags32_s::BITS PEF_APP = (ts::flags32_s::BITS)(-1) & (~(PEF_FREEBITSTART-1));
@@ -327,9 +329,9 @@ public:
 
     int get_avinprogresscount() const;
     int get_avringcount() const;
-    av_contact_s & get_avcontact( contact_c *c, av_contact_s::state_e st );
-    av_contact_s * find_avcontact_inprogress( contact_c *c );
-    void del_avcontact(contact_c *c);
+    av_contact_s & get_avcontact( contact_root_c *c, av_contact_s::state_e st );
+    av_contact_s * find_avcontact_inprogress( contact_root_c *c );
+    void del_avcontact(contact_root_c *c);
     template<typename R> void iterate_avcontacts( const R &r ) const { for( const av_contact_s &avc : m_avcontacts) r(avc); }
     template<typename R> void iterate_avcontacts( const R &r ) { for( av_contact_s &avc : m_avcontacts) r(avc); }
     void stop_all_av();
@@ -572,8 +574,8 @@ public:
 
     void add_task( ts::task_c *t ) { m_tasks_executor.add(t); }
 
-    void update_ringtone( contact_c *rt, bool play_stop_snd = true );
-    av_contact_s * update_av( contact_c *avmc, bool activate, bool camera = false );
+    void update_ringtone( contact_root_c *rt, bool play_stop_snd = true );
+    av_contact_s * update_av( contact_root_c *avmc, bool activate, bool camera = false );
 
 
     template<typename R> void enum_file_transfers_by_historian( const contact_key_s &historian, R r )
@@ -596,7 +598,11 @@ public:
 
     void set_status(contact_online_state_e cos_, bool manual);
 
-    void recreate_ctls() { m_post_effect.set(PEF_RECREATE_CTLS); };
+    void recreate_ctls(bool cl, bool m)
+    {
+        if (cl) m_post_effect.set(PEF_RECREATE_CTLS_CL); 
+        if (m) m_post_effect.set(PEF_RECREATE_CTLS_MSG);
+    };
     void update_buttons_head() { m_post_effect.set(PEF_UPDATE_BUTTONS_HEAD); };
     void update_buttons_msg() { m_post_effect.set(PEF_UPDATE_BUTTONS_MSG); };
     void hide_show_messageeditor() { m_post_effect.set(PEF_SHOW_HIDE_EDITOR); };
@@ -604,4 +610,32 @@ public:
 };
 
 extern application_c *g_app;
+
+INLINE bool contact_root_c::match_tags(int bitags) const
+{
+    if (bitags & (1 << BIT_ALL)) return true;
+
+    const ts::buf0_c &enabledbits = contacts().get_tags_bits();
+
+    bool bitag = false;
+    if (bitags & (1 << BIT_UNTAGGED))
+    {
+        if (!tags_bits.is_any_bit()) return true;
+        bitag = true;
+    }
+
+    if (bitags & (1 << BIT_ONLINE))
+    {
+        contact_state_e cs = get_meta_state();
+        if (CS_ONLINE == cs || contact_state_check == cs)
+            return true;
+        bitag = true;
+    }
+
+    if (g_app->find_blink_reason(getkey(), false) != nullptr)
+        return true;
+
+    if (enabledbits.size() == 0) return !bitag;
+    return contacts().get_tags_bits().is_any_common_bit(tags_bits);
+}
 

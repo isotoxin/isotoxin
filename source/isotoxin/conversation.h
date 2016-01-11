@@ -20,9 +20,9 @@ enum notice_e
 class gui_notice_c;
 template<> struct gmsg<ISOGM_NOTICE> : public gmsgbase
 {
-    gmsg(contact_c *owner, contact_c *sender, notice_e nid, const ts::str_c& text) :gmsgbase(ISOGM_NOTICE), owner(owner), sender(sender), n(nid), text(text) {}
-    gmsg(contact_c *owner, contact_c *sender, notice_e nid) :gmsgbase(ISOGM_NOTICE), owner(owner), sender(sender), n(nid) {}
-    contact_c *owner;
+    gmsg(contact_root_c *owner, contact_c *sender, notice_e nid, const ts::str_c& text) :gmsgbase(ISOGM_NOTICE), owner(owner), sender(sender), n(nid), text(text) {}
+    gmsg(contact_root_c *owner, contact_c *sender, notice_e nid) :gmsgbase(ISOGM_NOTICE), owner(owner), sender(sender), n(nid) {}
+    contact_root_c *owner;
     contact_c *sender;
     notice_e n;
     ts::str_c text; // utf8
@@ -51,12 +51,13 @@ template<> struct MAKE_CHILD<gui_notice_callinprogress_c> : public _PCHILD(gui_n
     ~MAKE_CHILD();
 };
 
-class gui_notice_c : public gui_label_c
+class gui_notice_c : public gui_label_ex_c
 {
     DUMMY(gui_notice_c);
 
 protected:
-    ts::shared_ptr<contact_c> historian, sender;
+    ts::shared_ptr<contact_root_c> historian;
+    ts::shared_ptr<contact_c> sender;
     notice_e notice;
     uint64 utag = 0;
     int addheight = 0;
@@ -228,21 +229,25 @@ class gui_notice_network_c : public gui_notice_c
     };
     
     ts::str_c pubid;
+    int clicklink = -1;
     int flashing = 0;
     int networkid = 0;
-    int left_margin = 0;
+    system_query_e clicka = SQ_NOP;
+    cmd_result_e curstate = CR_OK;
     bool refresh = false;
+    bool is_autoconnect = false;
 
     bool resetup(RID, GUIPARAM);
     bool flash_pereflash(RID, GUIPARAM);
 
     static const ts::flags32_s::BITS  F_OVERAVATAR  = F_FREEBITSTART_NOTICE << 0; // mouse cursor above avatar
-    static const ts::flags32_s::BITS  F_RBDN        = F_FREEBITSTART_NOTICE << 1;
 
     FREE_BIT_START_CHECK( F_FREEBITSTART_NOTICE, 1 );
 
     void moveup(const ts::str_c&);
     void movedn(const ts::str_c&);
+    void show_link_submenu();
+    void ctx_onlink_do(const ts::str_c &cc);
 
 public:
     void flash();
@@ -251,6 +256,9 @@ public:
 
     gui_notice_network_c(MAKE_CHILD<gui_notice_network_c> &data):gui_notice_c(data) { notice = NOTICE_NETWORK; }
     /*virtual*/ ~gui_notice_network_c();
+
+    /*virtual*/ void get_link_prolog(ts::wstr_c &r, int linknum) const override;
+    /*virtual*/ void get_link_epilog(ts::wstr_c &r, int linknum) const override;
 
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
@@ -269,7 +277,7 @@ class gui_noticelist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_noticelist_c, GM_UI_EVENT);
     GM_RECEIVER(gui_noticelist_c, ISOGM_CHANGED_SETTINGS);
 
-    ts::shared_ptr<contact_c> owner;
+    ts::shared_ptr<contact_root_c> owner;
 
     void clear_list(bool hide = true);
     gui_notice_c &create_notice(notice_e n);
@@ -296,10 +304,10 @@ class gui_message_item_c;
 template<> struct MAKE_CHILD<gui_message_item_c> : public _PCHILD(gui_message_item_c)
 {
     contact_c *author;
-    contact_c *historian;
+    contact_root_c *historian;
     ts::str_c skin;
     message_type_app_e mt;
-    MAKE_CHILD(RID parent_, contact_c *historian, contact_c *author, const ts::str_c &skin, message_type_app_e mt):historian(historian), author(author), skin(skin), mt(mt) { parent = parent_; }
+    MAKE_CHILD(RID parent_, contact_root_c *historian, contact_c *author, const ts::str_c &skin, message_type_app_e mt):historian(historian), author(author), skin(skin), mt(mt) { parent = parent_; }
     ~MAKE_CHILD();
 };
 
@@ -399,7 +407,7 @@ class gui_message_item_c : public gui_label_ex_c
     void rebuild_text();
     void mark_found();
 
-    ts::shared_ptr<contact_c> historian;
+    ts::shared_ptr<contact_root_c> historian;
     ts::shared_ptr<contact_c> author;
     mutable ts::str_c protodesc;
     ts::wstr_c timestr;
@@ -422,6 +430,7 @@ class gui_message_item_c : public gui_label_ex_c
     }
     void ctx_menu_golink(const ts::str_c &);
     void ctx_menu_copylink(const ts::str_c &);
+    void ctx_menu_qrcode(const ts::str_c &);
     void ctx_menu_copymessage(const ts::str_c &);
     void ctx_menu_delmessage(const ts::str_c &);
     
@@ -610,7 +619,7 @@ class gui_messagelist_c : public gui_vscrollgroup_c
 
     time_t last_seen_post_time = 0;
     tm last_post_time;
-    ts::shared_ptr<contact_c> historian;
+    ts::shared_ptr<contact_root_c> historian;
     ts::array_safe_t< gui_message_item_c, 1 > typing;
 
     void clear_list(bool empty_mode);
@@ -677,7 +686,7 @@ class gui_message_editor_c : public gui_textedit_c
     GM_RECEIVER(gui_message_editor_c, ISOGM_MESSAGE);
     GM_RECEIVER(gui_message_editor_c, ISOGM_SELECT_CONTACT);
     
-    ts::shared_ptr<contact_c> historian;
+    ts::shared_ptr<contact_root_c> historian;
     struct editstate_s
     {
         ts::wstr_c text;
@@ -699,7 +708,7 @@ public:
     gui_message_editor_c(initial_rect_data_s &data) :gui_textedit_c(data) {}
     /*virtual*/ ~gui_message_editor_c();
     /*virtual*/ void created() override;
-    contact_c *get_historian() { return historian; }
+    contact_root_c *get_historian() { return historian; }
 };
 
 class gui_message_area_c : public gui_group_c
@@ -775,5 +784,5 @@ public:
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
-    contact_c *get_selected_contact() { ASSERT(!caption.expired()); return caption->contacted() ? &caption->getcontact() : nullptr; }
+    contact_root_c *get_selected_contact() { ASSERT(!caption.expired()); return caption->contacted() ? &caption->getcontact() : nullptr; }
 };

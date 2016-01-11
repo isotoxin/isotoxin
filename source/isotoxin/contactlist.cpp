@@ -8,11 +8,12 @@ MAKE_CHILD<gui_contact_item_c>::~MAKE_CHILD()
 {
     ASSERT(parent);
     get().update_text();
-    MODIFY(get()).visible(true);
+    MODIFY(get()).visible(is_visible);
 }
 
 gui_contact_item_c::gui_contact_item_c(MAKE_ROOT<gui_contact_item_c> &data) :gui_label_c(data), role(CIR_DNDOBJ), contact(data.contact)
 {
+    ASSERT(!contact || contact->is_rootcontact());
 }
 
 gui_contact_item_c::gui_contact_item_c(MAKE_CHILD<gui_contact_item_c> &data) :gui_label_c(data), role(data.role), contact(data.contact)
@@ -444,7 +445,14 @@ ts::uint32 gui_contact_item_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> & c )
                 update_text();
 
                 if (n)
-                    g_app->active_contact_item = CIR_ME == role ? nullptr : contact->gui_item;
+                    g_app->active_contact_item = CIR_ME == role ? nullptr : this;
+                else
+                {
+                    if (prf().get_options().is(UIOPT_TAGFILETR_BAR))
+                        if (!contact->match_tags(prf().bitags()))
+                            g_app->recreate_ctls(true, false);
+                }
+
             }
         }
         break;
@@ -456,9 +464,8 @@ ts::uint32 gui_contact_item_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> & c )
     return 0;
 }
 
-void gui_contact_item_c::setcontact(contact_c *c)
+void gui_contact_item_c::setcontact(contact_root_c *c)
 {
-    ASSERT(c->is_rootcontact());
     bool changed = contact != c;
     contact = c;
     update_text(); 
@@ -649,6 +656,11 @@ void gui_contact_item_c::update_text()
                     }
                     t2.trim();
                     if (!t2.is_empty()) newtext.append(CONSTASTR("<br><l>")).append(t2).append(CONSTASTR("</l>"));
+
+#ifdef _DEBUG
+                    ts::str_c ids; ids.set_as_char('[').append_as_int(contact->getkey().contactid).append(CONSTASTR("] "));
+                    newtext.insert(0, ids);
+#endif
                 }
             }
 
@@ -781,7 +793,7 @@ void gui_contact_item_c::protocols_s::update()
     if (!owner)
         return;
 
-    contact_c *cc = owner->contact;
+    contact_root_c *cc = owner->contact;
     if (!cc)
         return;
 
@@ -1341,10 +1353,10 @@ bool gui_contact_item_c::allow_drop() const
                     ts::shared_ptr<contact_c> c = contacts().find(ck);
                     if (c && c->getmeta())
                     {
-                        contact_c *historian = c->get_historian();
+                        contact_root_c *historian = c->get_historian();
                         prf().load_history(historian->getkey()); // load whole history into memory table
                         historian->unload_history(); // clear history cache in contact
-                        contact_c *detached_meta = contacts().create_new_meta();
+                        contact_root_c *detached_meta = contacts().create_new_meta();
                         historian->subdel(c);
                         detached_meta->subadd(c);
                         if (historian->gui_item) historian->gui_item->update_text();
@@ -1365,12 +1377,64 @@ bool gui_contact_item_c::allow_drop() const
                     contact_key_s ck(cks);
                     SUMMON_DIALOG<dialog_contact_props_c>(UD_CONTACTPROPS, dialog_contactprops_params_s(ck));
                 }
+                static void m_contact_tag(const ts::str_c&p)
+                {
+                    ts::token<char> x(p,'/');
+                    contact_key_s ck(x->as_sptr());
+                    ++x;
+                    if (contact_root_c * c = contacts().rfind(ck))
+                        c->toggle_tag( x->as_sptr() );
+                }
+                static void m_newtag(const ts::str_c&cks)
+                {
+                    struct newtagmodule_s
+                    {
+                        contact_key_s ck;
+                        newtagmodule_s(const ts::str_c&cks):ck(cks) {}
+
+                        bool ok(const ts::wstr_c &ntags, const ts::str_c &)
+                        {
+                            if (contact_root_c * c = contacts().rfind(ck))
+                            {
+                                ts::astrings_c tags;
+                                tags.split<char>(to_utf8(ntags), ',');
+                                tags.trim();
+                                tags.add( c->get_tags() );
+                                tags.kill_dups_and_sort(true);
+                                c->set_tags(tags);
+                                prf().dirtycontact(ck);
+                                contacts().rebuild_tags_bits();
+                            }
+
+
+                            TSDEL(this);
+                            return true;
+                        }
+                        bool cancel(RID, GUIPARAM)
+                        {
+                            TSDEL(this);
+                            return true;
+                        }
+
+                    } *mdl = TSNEW( newtagmodule_s, cks );
+
+                    
+                    SUMMON_DIALOG<dialog_entertext_c>(UD_NEWTAG, dialog_entertext_c::params(
+                        UD_NEWTAG,
+                        gui_isodialog_c::title(title_newtags),
+                        TTT("Enter comma separated phrases/words",97),
+                        ts::wstr_c(),
+                        ts::str_c(),
+                        DELEGATE(mdl, ok),
+                        DELEGATE(mdl, cancel),
+                        check_always_ok));
+                }
 
                 static void m_export_history(const ts::str_c&cks)
                 {
                     contact_key_s ck(cks);
 
-                    if (contact_c *c = contacts().find(ck))
+                    if (contact_root_c *c = contacts().rfind(ck))
                     {
                         if (c->gui_item)
                         {
@@ -1418,7 +1482,7 @@ bool gui_contact_item_c::allow_drop() const
             if (!dialog_already_present(UD_CONTACTPROPS))
             {
                 menu_c m;
-                if (contact->is_meta() && contact->subcount() > 1) 
+                if (contact->is_meta() && contact->subcount() > 1)
                 {
                     menu_c mc = m.add_sub(TTT("Metacontact",145));
                     contact->subiterate([&](contact_c *c) {
@@ -1436,8 +1500,24 @@ bool gui_contact_item_c::allow_drop() const
                     m.add(TTT("Leave group chat",304),0,handlers::m_delete,contact->getkey().as_str());
                 else
                     m.add(TTT("Delete",85),0,handlers::m_delete,contact->getkey().as_str());
+
                 if (!contact->getkey().is_group())
+                {
                     m.add(TTT("Contact properties",225),0,handlers::m_contact_props,contact->getkey().as_str());
+                    
+                    if (prf().get_options().is(UIOPT_TAGFILETR_BAR))
+                    {
+                        menu_c mtags = m.add_sub(TTT("Tags",46));
+                        ts::astrings_c ctags(contact->get_tags());
+                        ctags.add(contacts().get_all_tags());
+                        ctags.kill_dups_and_sort(true);
+                        for (const ts::str_c &t : ctags)
+                            mtags.add(ts::from_utf8(t), contact->get_tags().find(t.as_sptr()) >= 0 ? MIF_MARKED : 0, handlers::m_contact_tag, contact->getkey().as_str().append_char('/').append(t));
+                        if (ctags.size())
+                            mtags.add_separator();
+                        mtags.add(TTT("Create new tag",146),0,handlers::m_newtag,contact->getkey().as_str());
+                    }
+                }
 
                 ts::wstrings_c fns;
                 ts::g_fileop->find(fns, CONSTWSTR("*.template"), false);
@@ -1581,9 +1661,8 @@ INLINE int statev(contact_state_e v)
         case CS_REJECTED:
             return 10;
         case CS_ONLINE:
-            return 50;
         case contact_state_check:
-            return 40;
+            return 50;
         case CS_WAIT:
             return 30;
         case CS_OFFLINE:
@@ -1594,11 +1673,19 @@ INLINE int statev(contact_state_e v)
 
 bool gui_contact_item_c::is_after(gui_contact_item_c &ci)
 {
+    if (contact->getkey() == ci.contact->getkey())
+        return false; // same not swap
+
     int mystate = statev(contact->get_meta_state()) + sort_power();
     int otherstate = statev(ci.contact->get_meta_state()) + ci.sort_power();
     if (otherstate > mystate) return true;
+    if (otherstate < mystate) return false;
 
-    return false;
+    int cap1 = contacts().contact_activity_power( contact->getkey() );
+    int cap2 = contacts().contact_activity_power( ci.contact->getkey() );
+    if (cap2 == cap1)
+        return ci.contact->getkey().contactid > contact->getkey().contactid;
+    return cap2 > cap1;
 }
 
 bool gui_contact_item_c::redraw_now(RID, GUIPARAM)
@@ -1616,13 +1703,16 @@ void gui_contact_item_c::redraw(float delay)
 MAKE_CHILD<gui_contactlist_c>::~MAKE_CHILD()
 {
     ASSERT(parent);
-    MODIFY(get()).visible(true);
+    MODIFY(get()).show();
 }
 
 gui_contactlist_c::~gui_contactlist_c()
 {
     if (gui)
-        gui->delete_event( DELEGATE(this, on_filter_deactivate) );
+    {
+        gui->delete_event(DELEGATE(this, on_filter_deactivate));
+        gui->delete_event(DELEGATE(this, refresh_list));
+    }
 }
 
 void gui_contactlist_c::array_mode( ts::array_inplace_t<contact_key_s, 2> & arr_ )
@@ -1656,13 +1746,13 @@ void gui_contactlist_c::refresh_array()
             if (ci->getcontact().getkey() == ck)
                 continue;
 
-            contact_c * c = contacts().find(ck);
+            contact_root_c * c = contacts().rfind(ck);
             if (!c)
             {
                 arr->remove_slow(index);
                 goto loopcheg;
             }
-            ci->setcontact(c);
+            ci->setcontact( c );
             MODIFY(*ci).active(false);
         }
     }
@@ -1748,7 +1838,7 @@ void gui_contactlist_c::recreate_ctls(bool focus_filter)
         addcbtn->set_face_getter(BUTTON_FACE(addcontact));
         addcbtn->set_handler(handlers::summon_addcontacts, nullptr);
         addcbtn->leech(TSNEW(leech_dock_bottom_center_s, baddc->size.x, baddc->size.y, -10, 10, 0, nbuttons));
-        MODIFY(*addcbtn).zindex(1.0f).visible(true);
+        MODIFY(*addcbtn).zindex(1.0f).show();
         getengine().child_move_to(0, &addcbtn->getengine());
 
         if ( !prf().is_any_active_ap() )
@@ -1764,7 +1854,7 @@ void gui_contactlist_c::recreate_ctls(bool focus_filter)
             addgbtn->set_face_getter(BUTTON_FACE(addgroup));
             addgbtn->set_handler(handlers::summon_addgroup, nullptr);
             addgbtn->leech(TSNEW(leech_dock_bottom_center_s, baddg->size.x, baddg->size.y, -10, 10, 1, 2));
-            MODIFY(*addgbtn).zindex(1.0f).visible(true);
+            MODIFY(*addgbtn).zindex(1.0f).show();
             getengine().child_move_to(1, &addgbtn->getengine());
 
             if (!prf().is_any_active_ap(PF_GROUP_CHAT))
@@ -1780,20 +1870,20 @@ void gui_contactlist_c::recreate_ctls(bool focus_filter)
         self = MAKE_CHILD<gui_contact_item_c>(getrid(), &contacts().get_self()) << CIR_ME;
         self->leech(TSNEW(leech_dock_top_s, g_app->mecontactheight));
         self->protohit();
-        MODIFY(*self).zindex(1.0f).visible(true);
+        MODIFY(*self).zindex(1.0f).show();
         getengine().child_move_to(nbuttons, &self->getengine());
 
         flags.clear(F_NO_LEECH_CHILDREN);
 
         int other_ctls = 1;
-        if (prf().is_loaded() && prf().get_options().is(UIOPT_SHOW_SEARCH_BAR))
+        if (prf().is_loaded() && prf().get_options().is(UIOPT_TAGFILETR_BAR| UIOPT_SHOW_SEARCH_BAR))
         {
             other_ctls = 2;
             filter = MAKE_CHILD<gui_filterbar_c>(getrid());
             getengine().child_move_to(nbuttons + 1, &filter->getengine());
             DEBUGCODE(skip_top_pixels = 0);
             update_filter_pos();
-            MODIFY(*filter).zindex(1.0f).visible(true);
+            MODIFY(*filter).zindex(1.0f).show();
 
             ASSERT(skip_top_pixels > 0); // it will be calculated via update_filter_pos
 
@@ -1825,13 +1915,16 @@ bool gui_contactlist_c::i_leeched( guirect_c &to )
 
 bool gui_contactlist_c::on_filter_deactivate(RID, GUIPARAM)
 {
+    if (filter && !filter->is_all())
+        return true;
+
     ts::safe_ptr<rectengine_c> active = g_app->active_contact_item ? &g_app->active_contact_item->getengine() : nullptr;
 
     if (!active)
         active = get_first_contact_item();
 
 
-    contacts().iterate_meta_contacts([](contact_c *c)->bool{
+    contacts().iterate_meta_contacts([](contact_root_c *c)->bool{
     
         bool redraw = false;
         if (c->is_full_search_result())
@@ -1841,7 +1934,7 @@ bool gui_contactlist_c::on_filter_deactivate(RID, GUIPARAM)
         }
         if (c->gui_item)
         {
-            MODIFY(*c->gui_item).visible(true);
+            MODIFY(*c->gui_item).show();
             if (redraw)
             {
                 c->gui_item->update_text();
@@ -1895,7 +1988,7 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_TYPING> &p)
 {
     if (prf().get_options().is(UIOPT_SHOW_TYPING_CONTACT))
         if (contact_c *c = contacts().find(p.contact))
-            if (contact_c *historian = c->get_historian())
+            if (contact_root_c *historian = c->get_historian())
                 if (historian->gui_item)
                     historian->gui_item->typing();
 
@@ -1905,13 +1998,13 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_TYPING> &p)
 ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&ch)
 {
     if (ch.tabi == pt_active_protocol)
-        g_app->recreate_ctls();
+        g_app->recreate_ctls(true, false);
     return 0;
 }
 
 ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED>&ch)
 {
-    g_app->recreate_ctls();
+    g_app->recreate_ctls(true, false);
     return 0;
 }
 
@@ -1945,7 +2038,7 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
             self->getengine().redraw();
 
     if (ch.pass == 0)
-        if (PP_PROFILEOPTIONS == ch.sp && (ch.bits & UIOPT_SHOW_SEARCH_BAR))
+        if (PP_PROFILEOPTIONS == ch.sp && (ch.bits & (UIOPT_TAGFILETR_BAR|UIOPT_SHOW_SEARCH_BAR)))
             recreate_ctls(true);
 
     return 0;
@@ -2010,6 +2103,14 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_DRAGNDROP> &dnda)
     return yo ? GMRBIT_ACCEPTED : 0;
 }
 
+bool gui_contactlist_c::refresh_list(RID, GUIPARAM)
+{
+    if (filter)
+        filter->refresh_list();
+
+    return true;
+}
+
 ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_V_UPDATE_CONTACT> & c )
 {
     if (c.contact->get_historian()->getkey().is_self())
@@ -2041,7 +2142,11 @@ ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_V_UPDATE_CONTACT> & c )
                 ci->update_text();
                 gui->dragndrop_update(ci);
                 if (same || !ci->getcontact().getkey().is_group())
+                {
+                    if (filter)
+                        DEFERRED_UNIQUE_CALL( 0.1, DELEGATE(this,refresh_list), nullptr);
                     return 0;
+                }
             }
         }
     }
@@ -2049,7 +2154,9 @@ ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_V_UPDATE_CONTACT> & c )
     if (role == CLR_MAIN_LIST && c.contact->get_state() != CS_UNKNOWN)
     {
         ASSERT( c.contact->get_historian()->get_state() != CS_UNKNOWN );
-        MAKE_CHILD<gui_contact_item_c>(getrid(), c.contact->get_historian());
+        MAKE_CHILD<gui_contact_item_c> mc(getrid(), c.contact->get_historian());
+        if (filter)
+            mc.is_visible = filter->check_one(mc.contact);
     }
 
     return 0;
@@ -2057,14 +2164,14 @@ ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_V_UPDATE_CONTACT> & c )
 
 ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_DO_POSTEFFECT> &f)
 {
-    if (f.bits & application_c::PEF_RECREATE_CTLS)
+    if (f.bits & application_c::PEF_RECREATE_CTLS_CL)
         recreate_ctls();
     return 0;
 }
 
 ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
 {
-    if (prf().sort_tag() != sort_tag && role == CLR_MAIN_LIST && gui->dragndrop_underproc() == nullptr)
+    if (contacts().sort_tag() != sort_tag && role == CLR_MAIN_LIST && gui->dragndrop_underproc() == nullptr)
     {
         auto swap_them = []( rectengine_c *e1, rectengine_c *e2 )->bool
         {
@@ -2084,7 +2191,7 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
 
             gui->repos_children(this);
         }
-        sort_tag = prf().sort_tag();
+        sort_tag = contacts().sort_tag();
     }
     return 0;
 }

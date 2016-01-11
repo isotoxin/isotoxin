@@ -16,6 +16,11 @@ dialog_msgbox_params_s dialog_msgbox_c::mb_error(const ts::wstr_c &text)
 {
     return dialog_msgbox_params_s(title_error, text);
 }
+dialog_msgbox_params_s dialog_msgbox_c::mb_qrcode(const ts::wstr_c &text)
+{
+    ts::wstr_c qr(CONSTWSTR("<ee>"), text); qr.append(CONSTWSTR("<br><qr>")).append(text).append(CONSTWSTR("</qr>"));
+    return dialog_msgbox_params_s(title_qr_code, qr);
+}
 
 RID dialog_msgbox_params_s::summon()
 {
@@ -49,6 +54,22 @@ dialog_msgbox_c::dialog_msgbox_c(MAKE_ROOT<dialog_msgbox_c> &data) :gui_isodialo
         if (!m_params.ok_button_text.is_empty())
             bcr.btext = m_params.ok_button_text;
     }
+
+    int qri = m_params.desc.find_pos(CONSTWSTR("<qr>"));
+    if (qri >= 0)
+    {
+        int qrie = m_params.desc.find_pos(CONSTWSTR("</qr>"));
+        if (qrie > qri)
+        {
+            qrbmp.gen_qrcore(10,5,ts::to_utf8(m_params.desc.substr( qri + 4, qrie )),32, ts::ARGB(0,0,0), ts::ARGB(0,0,0,0));
+            ts::wstr_c r( CONSTWSTR("<rect=17,") );
+            r.append_as_int( qrbmp.info().sz.x );
+            r.append_char(',');
+            r.append_as_int( qrbmp.info().sz.y );
+            r.append_char('>');
+            m_params.desc.replace( qri, qrie + 5 - qri, r );
+        }
+    }
 }
 
 dialog_msgbox_c::~dialog_msgbox_c()
@@ -58,6 +79,14 @@ dialog_msgbox_c::~dialog_msgbox_c()
         gui->unregister_kbd_callback(DELEGATE(this, copy_text));
         gui->unregister_kbd_callback(DELEGATE(this, on_enter_press_func));
         gui->unregister_kbd_callback(DELEGATE(this, on_esc_press_func));
+    }
+}
+
+void dialog_msgbox_c::updrect_msgbox(const void *, int r, const ts::ivec2 &p)
+{
+    if (r == 17)
+    {
+        getengine().draw(p - getroot()->get_current_draw_offset(), qrbmp.extbody(), ts::irect(0,qrbmp.info().sz), true);
     }
 }
 
@@ -84,7 +113,9 @@ bool dialog_msgbox_c::copy_text(RID, GUIPARAM)
 
 /*virtual*/ void dialog_msgbox_c::created()
 {
-    gui->exclusive_input(getrid());
+    if (m_params.etitle != title_qr_code)
+        gui->exclusive_input(getrid());
+
     set_theme_rect(CONSTASTR("main"), false);
     __super::created();
     tabsel(CONSTASTR("1"));
@@ -93,15 +124,23 @@ bool dialog_msgbox_c::copy_text(RID, GUIPARAM)
     switch (m_params.etitle) //-V719
     {
         case title_error:
-            MessageBeep(MB_ICONERROR);
+            ts::sys_beep( ts::SBEEP_ERROR );
             break;
         case title_information:
-            MessageBeep(MB_ICONINFORMATION);
+            ts::sys_beep( ts::SBEEP_INFO );
             break;
         case title_warning:
-            MessageBeep(MB_ICONWARNING);
+            ts::sys_beep( ts::SBEEP_WARNING );
             break;
     }
+
+    ts::ivec2 tsz = gui->textsize(ts::g_default_text_font, m_params.desc);
+    int y = 55; // sorry about this ugly constant
+    if (const theme_rect_s *thr = themerect())
+        y += thr->clborder_y();
+    if (tsz.y > height-y)
+        height = tsz.y+y;
+
 }
 
 void dialog_msgbox_c::getbutton(bcreate_s &bcr)
@@ -323,15 +362,22 @@ bool dialog_entertext_c::showpass_handler(RID, GUIPARAM p)
 
     dm().page_header(m_params.desc);
     dm().vspace(25);
-    dm().textfield(ts::wstr_c(), m_params.val, DELEGATE(this, on_edit)).focus(true).passwd(UD_ENTERPASSWORD == m_params.utag).setname(CONSTASTR("txt"));
 
-    if (UD_ENTERPASSWORD == m_params.utag)
+    switch (m_params.utag)
     {
-        dm().vspace();
-        dm().checkb(ts::wstr_c(), DELEGATE(this, showpass_handler), false).setmenu(
-            menu_c().add(TTT("Show password", 379), 0, MENUHANDLER(), CONSTASTR("1"))
-            );
-
+        case UD_ENTERPASSWORD:
+            dm().textfield(ts::wstr_c(), m_params.val, DELEGATE(this, on_edit)).focus(true).passwd(true).setname(CONSTASTR("txt"));
+            dm().vspace();
+            dm().checkb(ts::wstr_c(), DELEGATE(this, showpass_handler), false).setmenu(
+                menu_c().add(TTT("Show password", 379), 0, MENUHANDLER(), CONSTASTR("1"))
+                );
+            break;
+        case UD_NEWTAG:
+            dm().textfieldml(ts::wstr_c(), m_params.val, DELEGATE(this, on_edit), 3).focus(true).setname(CONSTASTR("txt"));
+            break;
+        default:
+            dm().textfield(ts::wstr_c(), m_params.val, DELEGATE(this, on_edit)).focus(true).setname(CONSTASTR("txt"));
+            break;
     }
 
     return 0;
@@ -339,8 +385,8 @@ bool dialog_entertext_c::showpass_handler(RID, GUIPARAM p)
 
 bool dialog_entertext_c::on_edit(const ts::wstr_c &t)
 {
-    if (!m_params.checker(t)) return false;
     m_params.val = t;
+    ctlenable( CONSTASTR("dialog_button_1"), m_params.checker(t) );
     return true;
 }
 
@@ -486,6 +532,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR(" <a href=\"http://pngquant.org\">pngquant library</a>") );
     title.append( CONSTWSTR(" <a href=\"http://libjpeg.sourceforge.net\">jpg image library</a>") );
     title.append( CONSTWSTR(" <a href=\"http://giflib.sourceforge.net\">The GIFLIB project</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://fukuchi.org/works/qrencode\">libqrencode</a>") );
     title.append( CONSTWSTR(" <a href=\"http://g.oswego.edu/dl/html/malloc.html\">dlmalloc</a>") );
     title.append( CONSTWSTR(" <a href=\"https://github.com/yxbh/FastDelegate\">C++11 fastdelegates</a>") );
     title.append( CONSTWSTR(" <a href=\"http://curl.haxx.se/libcurl\">Curl</a>") );

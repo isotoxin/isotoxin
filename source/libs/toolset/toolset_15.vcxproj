@@ -62,7 +62,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external\freetype\include;$(ProjectDir)..\..\libs-external\zlib\src;$(ProjectDir)..\..\libs-external;$(ProjectDir)..\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external\freetype\include;$(ProjectDir)..\..\libs-external\libqrencode\src;$(ProjectDir)..\..\libs-external\zlib\src;$(ProjectDir)..\..\libs-external;$(ProjectDir)..\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_LIB;_TOOLSETLIB;PNG_USER_CONFIG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeaderFile>toolset.h</PrecompiledHeaderFile>
     </ClCompile>
@@ -73,7 +73,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external\freetype\include;$(ProjectDir)..\..\libs-external\zlib\src;$(ProjectDir)..\..\libs-external;$(ProjectDir)..\;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external\freetype\include;$(ProjectDir)..\..\libs-external\libqrencode\src;$(ProjectDir)..\..\libs-external\zlib\src;$(ProjectDir)..\..\libs-external;$(ProjectDir)..\;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_LIB;_TOOLSETLIB;PNG_USER_CONFIG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeaderFile>toolset.h</PrecompiledHeaderFile>
     </ClCompile>
@@ -84,7 +84,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external\freetype\include;$(ProjectDir)..\..\libs-external\zlib\src;$(ProjectDir)..\..\libs-external;$(ProjectDir)..\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external\freetype\include;$(ProjectDir)..\..\libs-external\libqrencode\src;$(ProjectDir)..\..\libs-external\zlib\src;$(ProjectDir)..\..\libs-external;$(ProjectDir)..\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_LIB;_TOOLSETLIB;PNG_USER_CONFIG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <PrecompiledHeaderFile>toolset.h</PrecompiledHeaderFile>

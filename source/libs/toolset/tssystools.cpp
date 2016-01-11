@@ -4,6 +4,27 @@ namespace ts
 {
 __declspec(thread) DWORD Time::thread_current_time = 0;
 
+
+void	TSCALL sys_beep( sys_beep_e beep )
+{
+    switch (beep)
+    {
+        case ts::SBEEP_INFO:
+            MessageBeep(MB_ICONINFORMATION);
+            break;
+        case ts::SBEEP_WARNING:
+            MessageBeep(MB_ICONWARNING);
+            break;
+        case ts::SBEEP_ERROR:
+            MessageBeep(MB_ICONERROR);
+            break;
+        case ts::SBEEP_BADCLICK:
+            MessageBeep(0xFFFFFFFF);
+            break;
+    }
+
+}
+
 void	TSCALL hide_hardware_cursor()
 {
     while (ShowCursor(false) >= 0)

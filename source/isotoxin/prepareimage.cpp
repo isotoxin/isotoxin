@@ -1026,7 +1026,7 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
 {
     if (!prf().is_loaded() || image.info().sz == ts::ivec2(0)) return;
 
-    if (contact_c *c = contacts().find(ck))
+    if (contact_root_c *c = contacts().rfind(ck))
     {
         ts::wstr_c tmpsave(CONSTWSTR("%TEMP%\\$$$isotoxin\\sendimg\\"));
         path_expand_env(tmpsave, ts::wstr_c());

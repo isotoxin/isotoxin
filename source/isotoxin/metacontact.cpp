@@ -142,17 +142,17 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
     }
 
     for (const contact_key_s &ck : clist)
-        if (contact_c * c = contacts().find(ck))
-            prf().load_history( c->get_historian()->getkey() );
+        if (contact_root_c * c = contacts().rfind(ck))
+            prf().load_history( c->getkey() );
 
-    contact_c *basec = contacts().find(clist.get_remove_slow());
+    contact_root_c *basec = contacts().rfind(clist.get_remove_slow());
     if (CHECK(basec))
     {
         ts::db_transaction_c __transaction( prf().get_db() );
 
         basec->unload_history();
         for (const contact_key_s &ck : clist)
-            if (contact_c * c = contacts().find(ck))
+            if (contact_root_c * c = contacts().rfind(ck))
             {
                 ASSERT(c->is_meta());
                 c->unload_history();

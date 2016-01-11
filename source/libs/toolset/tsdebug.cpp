@@ -34,6 +34,10 @@ void LogMessage(const char *caption, const char *msg)
 
 int MessageBoxDef(const char *text, const char *notLoggedText, const char *caption, UINT type)
 {
+    
+    if (IsDebuggerPresent() && GetWindowThreadProcessId(g_main_window, nullptr) != GetCurrentThreadId())
+        __debugbreak();
+
 	return MessageBoxA(g_main_window && GetWindowThreadProcessId(g_main_window, nullptr) == GetCurrentThreadId() ? g_main_window : nullptr, notLoggedText[0] ? tmp_str_c(text).append(notLoggedText).cstr() : text, caption, type|MB_TASKMODAL|MB_TOPMOST);
 }
 int (*MessageBoxOverride)(const char *text, const char *notLoggedText, const char *caption, UINT type) = &MessageBoxDef;

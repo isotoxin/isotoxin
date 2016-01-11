@@ -129,7 +129,7 @@ struct border_window_data_s
         rect = getrect();
         if (!rect) return;
 
-        ts::uint32 af = WS_POPUP | WS_VISIBLE;
+        ts::uint32 af = WS_POPUP;
         ts::uint32 exf = WS_EX_LAYERED;
 
         hwnd = CreateWindowExW(exf, classname_border(), L"", af, rect.lt.x, rect.lt.y, rect.width(), rect.height(), parent, 0, g_sysconf.instance, this);
@@ -145,6 +145,8 @@ struct border_window_data_s
 
     void visualize(bool need_draw = true)
     {
+        ShowWindow(hwnd, SW_SHOWNA);
+
         BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
         POINT ptSrc; ptSrc.x = 0; ptSrc.y = 0; // start point of the copy from dcMemory to dcScreen
 
@@ -549,6 +551,28 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
 
     } engine(hwnd2engine(hwnd));
 
+    auto mouse_evt = [&]( system_query_e sq ) -> LRESULT
+    {
+        if (engine)
+        {
+            if (gui->allow_input(engine->getrid()))
+            {
+                evt_data_s d;
+                d.mouse.screenpos = ts::ivec2(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+                ClientToScreen(hwnd, &ts::ref_cast<POINT>(d.mouse.screenpos));
+                engine->sq_evt(sq, engine->getrid(), d);
+            } else if (sq == SQ_MOUSE_LDOWN)
+            {
+                if (RID exl = gui->get_exclusive())
+                {
+                    ts::sys_beep(ts::SBEEP_BADCLICK);
+                }
+            }
+        }
+
+        return 0;
+    };
+
     redraw_collector_s dch;
 
 	switch(msg)
@@ -559,7 +583,9 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
 				SetWindowLongPtrW(hwnd, GWLP_USERDATA, PTR_TO_UNSIGNED(cs->lpCreateParams) ); //-V221
 				rectengine_root_c *e = (rectengine_root_c *)cs->lpCreateParams;
                 e->hwnd = hwnd;
-				e->recreate_back_buffer( e->getrect().getprops().currentsize() );
+                const rectprops_c &pss = e->getrect().getprops();
+				e->recreate_back_buffer( pss.currentsize() );
+                if (!pss.is_collapsed()) e->recreate_border();
 			}
 			return 0;
 		case WM_DESTROY:
@@ -737,25 +763,30 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
         //        return 0;
         //    }
 
-#define MOUSE_HANDLER(sq) if (engine && gui->allow_input(engine->getrid())) { evt_data_s d; \
-				d.mouse.screenpos = ts::ivec2( GET_X_LPARAM( lparam ), GET_Y_LPARAM( lparam ) ); \
-				ClientToScreen(hwnd, &ts::ref_cast<POINT>(d.mouse.screenpos) ); \
-				engine->sq_evt( sq, engine->getrid(), d ); } return 0
+		case WM_MOUSEMOVE: return mouse_evt(SQ_MOUSE_MOVE);
+		case WM_LBUTTONDOWN: return mouse_evt(SQ_MOUSE_LDOWN);
+		case WM_LBUTTONUP: return mouse_evt(SQ_MOUSE_LUP);
+		case WM_RBUTTONDOWN: return mouse_evt(SQ_MOUSE_RDOWN);
+		case WM_RBUTTONUP: return mouse_evt(SQ_MOUSE_RUP);
+		case WM_MBUTTONDOWN: return mouse_evt(SQ_MOUSE_MDOWN);
+		case WM_MBUTTONUP: return mouse_evt(SQ_MOUSE_MUP);
+        case WM_LBUTTONDBLCLK: return mouse_evt(SQ_MOUSE_L2CLICK);
 
-		case WM_MOUSEMOVE: MOUSE_HANDLER(SQ_MOUSE_MOVE);
-		case WM_LBUTTONDOWN: MOUSE_HANDLER(SQ_MOUSE_LDOWN);
-		case WM_LBUTTONUP: MOUSE_HANDLER(SQ_MOUSE_LUP);
-		case WM_RBUTTONDOWN: MOUSE_HANDLER(SQ_MOUSE_RDOWN);
-		case WM_RBUTTONUP: MOUSE_HANDLER(SQ_MOUSE_RUP);
-		case WM_MBUTTONDOWN: MOUSE_HANDLER(SQ_MOUSE_MDOWN);
-		case WM_MBUTTONUP: MOUSE_HANDLER(SQ_MOUSE_MUP);
-        case WM_LBUTTONDBLCLK: MOUSE_HANDLER(SQ_MOUSE_L2CLICK);
+
 
         case WM_MOUSEWHEEL:
             return 0;
         case WM_MOUSEACTIVATE:
             if (!gui->allow_input(engine->getrid()))
+            {
+                if ( RID r = gui->get_exclusive() )
+                {
+                    ts::sys_beep(ts::SBEEP_BADCLICK);
+                    if (rectengine_root_c *root = HOLD( r )().getroot())
+                        root->shake();
+                }
                 return MA_NOACTIVATEANDEAT;
+            }
             return MA_NOACTIVATE;
         case WM_DROPFILES:
             {
@@ -833,7 +864,9 @@ rectengine_root_c::~rectengine_root_c()
 void rectengine_root_c::recreate_back_buffer(const ts::ivec2 &sz, bool exact_size)
 {
 	backbuffer.ajust(sz, exact_size);
-
+}
+void rectengine_root_c::recreate_border()
+{
     const theme_rect_s *thr = getrect().themerect();
     if (thr && thr->specialborder() && borderdata == nullptr)
     {
@@ -875,7 +908,7 @@ bool rectengine_root_c::refresh_frame(RID, GUIPARAM p)
     return true;
 }
 
-void rectengine_root_c::kill_window()
+void rectengine_root_c::kill_border()
 {
     if (borderdata)
     {
@@ -887,6 +920,11 @@ void rectengine_root_c::kill_window()
         (d + 3)->~border_window_data_s();
         MM_FREE(d);
     }
+}
+
+void rectengine_root_c::kill_window()
+{
+    kill_border();
 
     if (HWND h = hwnd)
     {
@@ -912,7 +950,9 @@ void rectengine_root_c::kill_window()
         rpss.change_to(pss, this);
 
 		// create visible window
-		ts::uint32 af = WS_POPUP| /*WS_VISIBLE|*/ WS_SYSMENU|WS_MINIMIZEBOX|WS_MAXIMIZEBOX; if (!pss.is_micromized()) af |= WS_VISIBLE;
+		ts::uint32 af = WS_POPUP| /*WS_VISIBLE|*/ WS_SYSMENU|WS_MINIMIZEBOX|WS_MAXIMIZEBOX;
+        if (!pss.is_micromized())
+            af |= WS_VISIBLE;
 		ts::uint32 exf = WS_EX_ACCEPTFILES;;
         
         if ( !g_sysconf.mainwindow )
@@ -1054,6 +1094,7 @@ void rectengine_root_c::kill_window()
         {
             update_frame = pss.is_alphablend(); // force draw for alphablend mode
             recreate_back_buffer(pss.currentsize());
+            if (!pss.is_collapsed() && pss.is_visible()) recreate_border();
         }
 
         if (pss.is_alphablend()) // in alphablend mode we have to draw rect before resize
@@ -1101,7 +1142,7 @@ void rectengine_root_c::kill_window()
             } else
                 SetWindowPos(hwnd, nullptr, pss.pos().x, pss.pos().y, pss.size().x, pss.size().y, flgs);
         }
-
+        bool cr_brd = false;
         int scmd = 0;
         if (remaximization || reminimization)
         {
@@ -1138,6 +1179,7 @@ void rectengine_root_c::kill_window()
                     {
                         ShowWindow(hwnd, SW_SHOWNA);
                         ShowWindow(hwnd, SW_RESTORE);
+                        set_system_focus(reminimization);
                     }
                     break;
                 case SW_RESTORE:
@@ -1146,7 +1188,17 @@ void rectengine_root_c::kill_window()
                     // no break here
                 case SW_MINIMIZE:
                     ShowWindow(hwnd, scmd);
-                    if (pss.is_micromized()) ShowWindow(hwnd, SW_HIDE);
+                    if (pss.is_collapsed())
+                    {
+                        if (pss.is_micromized())
+                            ShowWindow(hwnd, SW_HIDE);
+                        kill_border();
+                    } else
+                    {
+                        kill_border();
+                        cr_brd = true;
+                        set_system_focus(reminimization);
+                    }
                     break;
                 }
                     
@@ -1172,6 +1224,9 @@ void rectengine_root_c::kill_window()
             begin_draw();
             end_draw();
         }
+
+        if (cr_brd)
+            recreate_border(); // rect pos is ok now
 
         switch (scmd)
         {
@@ -2278,6 +2333,33 @@ void rectengine_root_c::notification_icon( const ts::wsptr& text )
     nd.szTip[copylen / sizeof(ts::wchar)] = 0;
 
     PostMessageW( hwnd, WM_USER + 7214, 0, (LPARAM)&nd );
+}
+
+bool rectengine_root_c::shakeme(RID, GUIPARAM)
+{
+    if (shaker)
+    {
+        ts::ivec2 p = shaker->p;
+        if (shaker->countdown > 0)
+        {
+            (shaker->countdown & 1) ?
+                p.x += shaker->countdown :
+                p.x -= shaker->countdown;
+            --shaker->countdown;
+            DEFERRED_UNIQUE_CALL( 0.03, DELEGATE(this, shakeme), nullptr );
+        } else
+            shaker.reset();
+        MODIFY( getrect() ).pos(p);
+    }
+    return true;
+}
+
+void rectengine_root_c::shake()
+{
+    shaker_s *sh = TSNEW( shaker_s );
+    sh->p = getrect().getprops().pos();
+    shaker.reset(sh);
+    DEFERRED_UNIQUE_CALL( 0.03, DELEGATE(this, shakeme), nullptr );
 }
 
 bool rectengine_root_c::update_foreground()

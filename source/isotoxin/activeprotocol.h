@@ -176,7 +176,6 @@ public:
 
     void set_current_online(bool oflg) { syncdata.lock_write()().flags.init(F_CURRENT_ONLINE, oflg); }
     bool is_current_online() const { return syncdata.lock_read()().flags.is(F_CURRENT_ONLINE); }
-    bool is_online_switch() const { return syncdata.lock_read()().flags.is(F_ONLINE_SWITCH); }
     cmd_result_e get_current_state() const { return syncdata.lock_read()().current_state; }
 
     int sort_factor() const { return syncdata.lock_read()().data.sort_factor; }

@@ -37,6 +37,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "giflib", "giflib\giflib_13.
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "filter_audio", "filter_audio\filter_audio_13.vcxproj", "{E01905DE-B27B-4DA5-831C-5F27344898BC}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libqrencode", "libqrencode\libqrencode_13.vcxproj", "{B3A669DA-9147-4C1A-B582-A72108CEADDA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -156,6 +158,12 @@ Global
 		{E01905DE-B27B-4DA5-831C-5F27344898BC}.Release|Win32.ActiveCfg = Release|Win32
 		{E01905DE-B27B-4DA5-831C-5F27344898BC}.Release|Win32.Build.0 = Release|Win32
 		{E01905DE-B27B-4DA5-831C-5F27344898BC}.Release|x64.ActiveCfg = Release|Win32
+		{B3A669DA-9147-4C1A-B582-A72108CEADDA}.Debug|Win32.ActiveCfg = Debug|Win32
+		{B3A669DA-9147-4C1A-B582-A72108CEADDA}.Debug|Win32.Build.0 = Debug|Win32
+		{B3A669DA-9147-4C1A-B582-A72108CEADDA}.Debug|x64.ActiveCfg = Debug|Win32
+		{B3A669DA-9147-4C1A-B582-A72108CEADDA}.Release|Win32.ActiveCfg = Release|Win32
+		{B3A669DA-9147-4C1A-B582-A72108CEADDA}.Release|Win32.Build.0 = Release|Win32
+		{B3A669DA-9147-4C1A-B582-A72108CEADDA}.Release|x64.ActiveCfg = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

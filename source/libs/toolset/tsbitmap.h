@@ -419,8 +419,9 @@ public:
         return false;
     }
 
+    void gen_qrcore( int margins, int dotsize, const asptr& utf8string, int bitpp = 32, TSCOLOR fg_color = ARGB<uint8>(0,0,0), TSCOLOR bg_color = ARGB<uint8>(255,255,255) );
 
-    void copy_components(bitmap_c &imageout, int num_comps, int dst_first_comp, int src_first_comp) const;//копирует только часть компонент (R|G|B|A) из bmsou
+    void copy_components(bitmap_c &imageout, int num_comps, int dst_first_comp, int src_first_comp) const;
 
 	void copy(const ivec2 & pdes,const ivec2 & size, const bmpcore_exbody_s & bmsou, const ivec2 & spsou);
     void tile(const ivec2 & pdes,const ivec2 & desize, const bmpcore_exbody_s & bmsou,const ivec2 & spsou, const ivec2 & szsou);

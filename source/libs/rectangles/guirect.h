@@ -1017,6 +1017,7 @@ protected:
     gui_label_ex_c() {}
     ts::ivec2 glyphs_pos = ts::ivec2(0);
     int overlink = -1;
+    ts::ivec2 fake_margin = ts::ivec2(0);
 
     bool check_overlink(const ts::ivec2 &localpos);
     ts::str_c get_link_under_cursor(const ts::ivec2 &localpos) const;

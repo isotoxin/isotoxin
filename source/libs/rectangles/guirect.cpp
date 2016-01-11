@@ -456,12 +456,12 @@ void gui_control_c::disable(bool f)
 
 MAKE_CHILD<gui_stub_c>::~MAKE_CHILD()
 {
-    MODIFY(get()).visible(true);
+    MODIFY(get()).show();
 }
 
 MAKE_CHILD<gui_panel_c>::~MAKE_CHILD()
 {
-    MODIFY(get()).visible(true);
+    MODIFY(get()).show();
 }
 
 //________________________________________________________________________________________________________________________________ gui button
@@ -1202,7 +1202,7 @@ ts::str_c gui_label_ex_c::get_link_under_cursor(const ts::ivec2 &localpos) const
         case SQ_DETECT_AREA:
             if (/*!popupmenu &&*/ textrect.get_text().find_pos(CONSTWSTR("<cstm=a")) >= 0 && !gui->mtrack(getrid(), MTT_TEXTSELECT))
             {
-                if (check_overlink(data.detectarea.pos))
+                if (check_overlink(data.detectarea.pos() - fake_margin))
                     data.detectarea.area = AREA_HAND;
             }
             break;
@@ -1320,7 +1320,7 @@ bool gui_tooltip_c::check_text(RID r, GUIPARAM param)
     const ts::wstr_c &tt = HOLD(ownrect)().tooltip();
     if (tt.is_empty())
     {
-        MODIFY( *this ).visible(false);
+        MODIFY( *this ).hide();
     } else
     {
         textrect.set_text_only(tt, false);
@@ -1342,7 +1342,7 @@ bool gui_tooltip_c::check_text(RID r, GUIPARAM param)
         if (cp.x < maxsz.lt.x) cp.x = maxsz.lt.x;
         if (cp.y < maxsz.lt.y) cp.y = maxsz.lt.y;
 
-        MODIFY( *this ).pos(cp).size(sz).visible(true);
+        MODIFY( *this ).pos(cp).size(sz).show();
     }
 
     DEFERRED_UNIQUE_CALL( 0.1, DELEGATE(this, check_text), nullptr );
@@ -2595,7 +2595,7 @@ gui_popup_menu_c & gui_popup_menu_c::show( const menu_anchor_s& screenpos, const
 
 MAKE_ROOT<gui_popup_menu_c>::~MAKE_ROOT()
 {
-    MODIFY(*me).pos(screenpos.pos()).visible(true);
+    MODIFY(*me).pos(screenpos.pos()).show();
     gui->set_focus(id);
     me->getroot()->set_system_focus(true);
 }
@@ -2779,7 +2779,7 @@ gui_menu_item_c::~gui_menu_item_c()
 
 MAKE_CHILD<gui_menu_item_c>::~MAKE_CHILD()
 {
-    MODIFY(get()).visible(true);
+    MODIFY(get()).show();
     get().set_text(text);
     get().applymif(flags);
 }
@@ -2865,7 +2865,7 @@ MAKE_CHILD<gui_textfield_c>::~MAKE_CHILD()
         get().height = get().get_font()->height;
     }
     if (multiline) get().height = multiline;
-    MODIFY(get()).setminsize(get().getrid()).visible(true);
+    MODIFY(get()).setminsize(get().getrid()).show();
 }
 
 bool gui_textfield_c::behav_s::onclick(RID, GUIPARAM mpar)
@@ -2966,7 +2966,7 @@ void gui_textfield_c::badvalue( bool b )
     {
         ts::irect clar = get_client_area();
         ts::ivec2 ssz = selector->get_min_size();
-        MODIFY(*selector).pos( clar.rb.x - ssz.x, clar.lt.y + (clar.height()-ssz.y)/2 ).size(ssz).visible(true);
+        MODIFY(*selector).pos( clar.rb.x - ssz.x, clar.lt.y + (clar.height()-ssz.y)/2 ).size(ssz).show();
     }
     if (qp == SQ_CTL_ENABLE)
     {
@@ -2983,7 +2983,7 @@ void gui_textfield_c::badvalue( bool b )
 
 MAKE_CHILD<gui_vtabsel_c>::~MAKE_CHILD()
 {
-    MODIFY(get()).visible(true);
+    MODIFY(get()).show();
 }
 
 
@@ -3097,7 +3097,7 @@ bool gui_vtabsel_c::operator()(ts::pair_s<RID, int>& cp, const ts::wsptr& txt, t
 
 MAKE_CHILD<gui_vtabsel_item_c>::~MAKE_CHILD()
 {
-    MODIFY(get()).visible(true);
+    MODIFY(get()).show();
 }
 
 gui_vtabsel_item_c::~gui_vtabsel_item_c()
@@ -3193,7 +3193,7 @@ gui_vtabsel_item_c::~gui_vtabsel_item_c()
 
 MAKE_CHILD<gui_htabsel_c>::~MAKE_CHILD()
 {
-    MODIFY(get()).visible(true);
+    MODIFY(get()).show();
 }
 
 
@@ -3299,7 +3299,7 @@ bool gui_htabsel_c::operator()(RID, const ts::wsptr& txt, ts::uint32 /*flags*/, 
 
 MAKE_CHILD<gui_htabsel_item_c>::~MAKE_CHILD()
 {
-    MODIFY(get()).visible(true);
+    MODIFY(get()).show();
 }
 
 gui_htabsel_item_c::~gui_htabsel_item_c()
@@ -3385,7 +3385,7 @@ void gui_htabsel_item_c::activate()
 
 MAKE_CHILD<gui_hslider_c>::~MAKE_CHILD()
 {
-    MODIFY(get()).visible(true);
+    MODIFY(get()).show();
 }
 
 gui_hslider_c::gui_hslider_c(MAKE_CHILD<gui_hslider_c> &data) :gui_control_c(data)

@@ -66,6 +66,9 @@ ts::wstr_c gui_isodialog_c::title( rtitle_e lbl )
     case title_profile_name:                return MAKE_TITLE(TTT("Profile name",916));
     case title_enter_password:              return MAKE_TITLE(TTT("Enter password",917));
     case title_reenter_password:            return MAKE_TITLE(TTT("Re-enter password",918));
+    case title_qr_code:                     return MAKE_TITLE(TTT("QR code",919));
+    case title_newtags:                     return MAKE_TITLE(TTT("New contact tag(s)",920));
+    case title_rentag:                      return MAKE_TITLE(TTT("Rename tag",921));
     }
 
     return APPNAME_CAPTION;

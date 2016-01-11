@@ -14,6 +14,8 @@ enum unique_dialog_e
     UD_ABOUT,
     UD_AVASELECTOR,
     UD_CONTACTPROPS,
+    UD_NEWTAG,
+    UD_RENTAG,
     UD_PROTOSETUP,
     UD_PROTOSETUPSETTINGS,
     UD_PREPARE_IMAGE,
@@ -45,6 +47,9 @@ enum rtitle_e
     title_profile_name,
     title_enter_password,
     title_reenter_password,
+    title_qr_code,
+    title_newtags,
+    title_rentag,
 };
 
 
