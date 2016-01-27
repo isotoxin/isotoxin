@@ -111,9 +111,50 @@ void test_ipc()
     }
 }
 
+void test_cairo()
+{
+    //ts::bitmap_c bmp;
+    //bmp.create_ARGB( ts::ivec2(512,512) );
+    //cairo_surface_t *s = cairo_image_surface_create_for_data( bmp.body(), CAIRO_FORMAT_ARGB32, bmp.info().sz.x, bmp.info().sz.y, bmp.info().pitch );
+    //cairo_t *c = cairo_create(s);
+    //cairo_surface_destroy(s);
+    //
+    //cairo_destroy(c);
+
+    ts::buf0_c b; b.load_from_text_file(L"process.svg");
+    char *testsvg = (char *)b.data();
+
+    rsvg_svg_c *n = rsvg_svg_c::build_from_xml(testsvg);
+    if (n)
+    {
+        ts::bitmap_c bmp;
+        bmp.create_ARGB( n->size() );
+
+        bmp.fill( ts::ARGB(45,66,78) );
+        n->render( bmp.extbody() );
+        bmp.save_as_png( L"svg_c.png" );
+
+        bmp.fill(0);
+        n->render(bmp.extbody());
+
+        ts::bitmap_c bsave;
+        bsave.create_ARGB(bmp.info().sz);
+        bsave.fill(0xffffffff);
+        //bsave.alpha_blend(ts::ivec2(0), bmp);
+        ts::img_helper_alpha_blend_pm(bsave.body(), bsave.info().pitch, bmp.body(), bmp.info(), 255);
+        bsave.save_as_png(L"svg_w.png");
+
+        n->release();
+    }
+}
+
+void dotests0()
+{
+    test_cairo();
+}
+
 void dotests()
 {
-
     //test_ipc();
 
     /*
@@ -460,7 +501,8 @@ void summon_test_window()
     //MODIFY(r).allow_move_resize().size(502,447).setcenterpos().visible(true);
 
     //SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR, dialog_avasel_params_s(0));
-    SUMMON_DIALOG<dialog_prepareimage_c>(UD_PREPARE_IMAGE, contact_key_s());
+    //SUMMON_DIALOG<dialog_prepareimage_c>(UD_PREPARE_IMAGE, contact_key_s());
+    SUMMON_DIALOG<dialog_colors_c>(UD_NOT_UNIQUE);
 
 }
 

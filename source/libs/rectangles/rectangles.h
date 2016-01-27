@@ -11,8 +11,10 @@
 #include "fastdelegate/FastDelegate.h"
 #pragma warning (pop)
 
+#include <src/cairo.h>
 #include "toolset/toolset.h"
 #include "system/system.h"
+#include "rsvg/rsvg.h"
 
 #define MWHEELPIXELS 20
 

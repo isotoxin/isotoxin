@@ -30,7 +30,7 @@ static void __stdcall avatar_data(int cid, int tag, const void *avatar_body, int
 static void __stdcall incoming_file(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
 static void __stdcall file_portion(u64 utag, u64 offset, const void *portion, int portion_size);
 static void __stdcall file_control(u64 utag, file_control_e fctl);
-static void __stdcall typing(int cid);
+static void __stdcall typing(int gid, int cid);
 
 struct protolib_s
 {
@@ -630,7 +630,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                     w << version.as_sptr();
                     w << info.features;
                     w << info.connection_features;
-                    w << data_block_s( info.icon, info.icon_buflen );
+                    w << asptr( info.icon, info.icon_buflen );
                     ++cnt;
 
                     FreeLibrary(l);
@@ -683,7 +683,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                 << pi.audio_fmt.sample_rate
                 << pi.audio_fmt.channels
                 << pi.audio_fmt.bits
-                << data_block_s(pi.icon, pi.icon_buflen)
+                << asptr(pi.icon, pi.icon_buflen)
                 ;
 
         }
@@ -1277,7 +1277,7 @@ static void __stdcall file_portion(u64 utag, u64 offset, const void *portion, in
     spinlock::simple_unlock(prebuf_s::prebuflock);
 }
 
-static void __stdcall typing(int cid)
+static void __stdcall typing(int gid, int cid)
 {
-    IPCW(HQ_TYPING) << cid;
+    IPCW(HQ_TYPING) << gid << cid;
 }

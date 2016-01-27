@@ -4,18 +4,37 @@ namespace ts
 {
 
 
-ivec2 TSCALL parsevec2(const asptr &s, const ivec2 &def)
+ivec2 TSCALL parsevec2(const asptr &s, const ivec2 &def, bool cloneval)
 {
     ivec2 v(def);
     typedef decltype(v.x) ivt;
     ivt * hackptr = (ivt *)&v;
-    ivt * hackptr_end = hackptr + 4;
+    ivt * hackptr_end = hackptr + 2;
     for (token<char> t(s, ','); t && hackptr < hackptr_end; ++t, ++hackptr)
     {
         *hackptr = t->as_num<ivt>(0);
+        if (cloneval)
+            *(hackptr + 1) = *hackptr, cloneval = false;
     }
     return v;
 }
+
+vec2 TSCALL parsevec2f(const asptr &s, const vec2 &def, bool cloneval)
+{
+    vec2 v(def);
+    typedef decltype(v.x) ivt;
+    ivt * hackptr = (ivt *)&v;
+    ivt * hackptr_end = hackptr + 2;
+    for (ts::token<char> t(s, ','); t && hackptr < hackptr_end; ++t, ++hackptr)
+    {
+        *hackptr = t->as_num<ivt>(0);
+        if (cloneval)
+            *(hackptr + 1) = *hackptr, cloneval = false;
+    }
+    return v;
+}
+
+
 irect TSCALL parserect(token<char> & tokens, const irect &def, str_c *tail)
 {
     irect r(def);

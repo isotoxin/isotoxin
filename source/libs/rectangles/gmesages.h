@@ -4,6 +4,7 @@ enum gmsg_e
 {
     GM_KILLPOPUPMENU_LEVEL,
     GM_POPUPMENU_DIED,
+    GM_CHECK_ALLOW_CLICK, // context menu check
     GM_TOOLTIP_PRESENT,
     GM_KILL_TOOLTIPS,
     GM_GROUP_SIGNAL,
@@ -35,6 +36,7 @@ enum gmsg_e
 #define GMRBIT_ACCEPTED  (1<<1)
 #define GMRBIT_FAIL      (1<<2)
 #define GMRBIT_CALLAGAIN (1<<3)
+#define GMRBIT_REJECTED  (1<<4)
 
 struct gmsgbase { int m; int pass = 0; gmsgbase(int m) :m(m) {} virtual ~gmsgbase() {} ts::flags32_s send(); void send_to_main_thread(); };
 template<int mid> struct gmsg : public gmsgbase { gmsg() :gmsgbase(mid) {} };

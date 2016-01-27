@@ -106,7 +106,7 @@ ts::wstr_c dialog_addcontact_c::rtext()
     bool resend = !inparam.pubid.is_empty();
     if (resend) networks_available = true;
 
-    descmaker dm(descs);
+    descmaker dm(this);
     dm << 1;
 
     if (inparam.key.protoid == 0)
@@ -307,7 +307,7 @@ void dialog_addgroup_c::update_lifetime()
 
 /*virtual*/ int dialog_addgroup_c::additions(ts::irect &)
 {
-    descmaker dm(descs);
+    descmaker dm(this);
     dm << 1;
 
     menu_c m = networks();

@@ -175,7 +175,7 @@ void glyph_s::get_outlined_glyph(glyph_image_s &gi, font_c *font, const ivec2 &p
 			for (int j=r.lt.y; j<=r.rb.y; j++)
 			for (int i=r.lt.x; i<=r.rb.x; i++)
 				if (pixels[i+width*j] > 0) nearest = tmin(nearest, (vec2((float)i, (float)j) - c).len() /* + 1.f*/ - pixels[i+width*j]/255.f); // if alpha > 0, it means at a distance of no more than one pixel, alpha = 255
-			outlined[p.x+gi.width*p.y] = (uint8)lround(CLAMP(oshift - (nearest/* - 1*/) * invr, 0.f, 1.f) * 0xff);
+			outlined[p.x+gi.width*p.y] = (uint8)ts::lround(CLAMP(oshift - (nearest/* - 1*/) * invr, 0.f, 1.f) * 0xff);
 		}
 	}
 	gi.pixels = outlined;

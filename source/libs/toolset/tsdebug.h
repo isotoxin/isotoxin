@@ -69,7 +69,7 @@ namespace ts
             LARGE_INTEGER   frq;
             QueryPerformanceFrequency(&frq);
             __int64 takts = timestamp.QuadPart - prevtimestamp.QuadPart;
-            int curms = lround(1000.0 * double(takts) / double(frq.QuadPart));
+            int curms = ts::lround(1000.0 * double(takts) / double(frq.QuadPart));
             if (curms < ms)
             {
                 r = true;

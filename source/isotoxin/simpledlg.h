@@ -254,7 +254,7 @@ public:
 
 class dialog_about_c : public gui_isodialog_c
 {
-    process_animation_bitmap_s pa;
+    process_animation_s pa;
     bool checking_new_version = false;
     bool check_update_now(RID, GUIPARAM);
     GM_RECEIVER(dialog_about_c, ISOGM_NEWVERSION);

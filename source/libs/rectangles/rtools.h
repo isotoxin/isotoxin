@@ -188,33 +188,37 @@ ts::str_c text_remove_cstm(const ts::str_c &text_utf8);
 
 #define TOOLTIP( ttt ) (GET_TOOLTIP) ([]()->ts::wstr_c { return ttt; } )
 
+INLINE void make_color(ts::str_c &s, ts::TSCOLOR c)
+{
+    s.set_as_char('#');
+    s.append_as_hex(ts::RED(c));
+    s.append_as_hex(ts::GREEN(c));
+    s.append_as_hex(ts::BLUE(c));
+    if (ts::ALPHA(c) != 0xff)
+        s.append_as_hex(ts::ALPHA(c));
+}
 
-
+INLINE ts::str_c make_color(ts::TSCOLOR c)
+{
+    ts::str_c s;
+    make_color(s, c);
+    return s;
+}
 
 
 struct process_animation_s
 {
-    int sz = 32;
-    static const int N = 3;
+    ts::bitmap_c bmp;
+    UNIQUE_PTR( rsvg_svg_c ) svg;
     float angle;
     float devia;
     ts::Time nexttime = ts::Time::current() + 50;
-    HPEN    pen, pen2, pen3;
-    HBRUSH br, br2, br3;
 
-    process_animation_s(int sz = 32);
+    process_animation_s();
     ~process_animation_s();
-    void render(HDC dc, const ts::ivec2& shift);
+    void render();
     void restart();
 
-};
-
-struct process_animation_bitmap_s : public process_animation_s
-{
-    ts::drawable_bitmap_c bmpr;
-    ts::bitmap_c bmp;
-    process_animation_bitmap_s();
-    void render();
 };
 
 

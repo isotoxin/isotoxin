@@ -90,7 +90,7 @@ menu_c dialog_contact_props_c::getaacmenu()
 
 /*virtual*/ int dialog_contact_props_c::additions(ts::irect &edges)
 {
-    descmaker dm(descs);
+    descmaker dm(this);
 
     if (contactue)
     {
@@ -214,14 +214,14 @@ void dialog_contact_props_c::update()
             if (!inf.btmp)
                 inf.btmp.reset( TSNEW(ts::bitmap_c) );
 
-            const button_desc_s *icon = g_app->buttons().icon[c->get_gender()];
+            const theme_image_s *icon = g_app->preloaded_stuff().icon[c->get_gender()];
             inf.bmp = inf.btmp.get();
-            ts::irect rect = icon->rects[button_desc_s::NORMAL];
+            ts::irect rect = icon->rect;
 
             if (inf.btmp->info().sz != rect.size())
                 inf.btmp->create_ARGB( rect.size() );
 
-            inf.btmp->copy( ts::ivec2(0), rect.size(), icon->src.extbody(), rect.lt );
+            inf.btmp->copy( ts::ivec2(0), rect.size(), icon->dbmp->extbody(), rect.lt );
 
 
         }

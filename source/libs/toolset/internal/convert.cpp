@@ -1143,19 +1143,19 @@ ANY12S(ARGBToUVRow_Any_AVX2, ARGBToUVRow_AVX2, 0, 4, 31)
 
 static INLINE uint8 RGB_Y(TSCOLOR c)
 {
-    //return (uint8)( lround( (0.257*(float)RED(c)) + (0.504*(float)GREEN(c)) + (0.098*(float)BLUE(c)) + 16) );
+    //return (uint8)( ts::lround( (0.257*(float)RED(c)) + (0.504*(float)GREEN(c)) + (0.098*(float)BLUE(c)) + 16) );
     return (uint8)((RED(c) * 16843 + GREEN(c) * 33030 + BLUE(c) * 6423 + 1048576) >> 16);
 }
 
 static INLINE uint8 RGB_U(TSCOLOR c)
 {
-    //return (uint8)( lround(-(0.148*(float)RED(c)) - (0.291*(float)GREEN(c)) + (0.439*(float)BLUE(c)) + 128) );
+    //return (uint8)( ts::lround(-(0.148*(float)RED(c)) - (0.291*(float)GREEN(c)) + (0.439*(float)BLUE(c)) + 128) );
     return (uint8)((8388608 - RED(c) * 9699 - GREEN(c) * 19071 + BLUE(c) * 28770) >> 16);
 }
 
 static INLINE uint8 RGB_V(TSCOLOR c)
 {
-    //return (uint8)( 0xff & lround((0.439*(float)RED(c)) - (0.368*(float)GREEN(c)) - (0.071*(float)BLUE(c)) + 128) );
+    //return (uint8)( 0xff & ts::lround((0.439*(float)RED(c)) - (0.368*(float)GREEN(c)) - (0.071*(float)BLUE(c)) + 128) );
     return (uint8)((RED(c) * 28770 - GREEN(c) * 24117 - BLUE(c) * 4653 + 8388608) >> 16);
 }
 

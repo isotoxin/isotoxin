@@ -80,10 +80,10 @@ struct active_protocol_data_s
 
 struct sync_data_s
 {
-    ts::buf0_c icon;
     active_protocol_data_s data;
     ts::str_c description; // utf8
     ts::str_c description_t; // utf8
+    ts::str_c icon;
     ts::flags32_s flags;
     float volume = 1.0f;
     int dsp_flags = 0;
@@ -132,7 +132,7 @@ class active_protocol_c : public ts::safe_object
 
     struct icon_s
     {
-        UNIQUE_PTR(ts::bitmap_c) bmp;
+        const ts::bitmap_c *bmp;
         icon_type_e icot;
     };
 

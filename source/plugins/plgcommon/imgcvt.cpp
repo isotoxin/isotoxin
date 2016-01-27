@@ -276,6 +276,26 @@ ANY31(I422ToARGBRow_Any_AVX2, I422ToARGBRow_AVX2, 1, 0, 4, 15)
 
 namespace internal
 {
+    __forceinline long int lround(double x)
+    {
+#ifdef _M_AMD64
+        return _mm_cvtsd_si32(_mm_load_sd(&x));
+#else
+        _asm
+        {
+            fld x
+                push eax
+                fistp dword ptr[esp]
+                pop eax
+        }
+#endif
+    }
+
+    __forceinline long int lround(float x)
+    {
+        return _mm_cvtss_si32(_mm_load_ss(&x));//assume that current rounding mode is always correct (i.e. round to nearest)
+    }
+
     typedef ptrdiff_t aint; // auto int (32/64 bit)
 
     template<typename T> struct is_signed
@@ -307,7 +327,7 @@ namespace internal
     {
         static byte dojob(float b)
         {
-            return clamp2byte<aint>(lround(b));
+            return clamp2byte<aint>(internal::lround(b));
         }
     };
 
@@ -315,7 +335,7 @@ namespace internal
     {
         static byte dojob(double b)
         {
-            return clamp2byte<aint>(lround(b));
+            return clamp2byte<aint>(internal::lround(b));
         }
     };
 

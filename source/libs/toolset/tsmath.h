@@ -280,6 +280,8 @@ namespace ts
         ivec2 lb() const {return ivec2( lt.x, rb.y );}
 
         ivec2 center() const { return ivec2((lt.x + rb.x) / 2, (lt.y + rb.y) / 2); }
+        auto hcenter() const -> decltype(rb.x - lt.x) { return (lt.x + rb.x) / 2; }
+        auto vcenter() const -> decltype(rb.x - lt.x) { return (lt.y + rb.y) / 2; }
 
         ivec2 prc( const ivec2 &c, bool clamp ) const
         {
@@ -423,6 +425,26 @@ namespace ts
 
 typedef float   mat44[4][4];
 
+INLINE long int lround(double x)
+{
+#ifdef _M_AMD64
+    return _mm_cvtsd_si32(_mm_load_sd(&x));
+#else
+    _asm
+    {
+        fld x
+            push eax
+            fistp dword ptr[esp]
+            pop eax
+    }
+#endif
+}
+
+INLINE long int lround(float x)
+{
+    return _mm_cvtss_si32(_mm_load_ss(&x));//assume that current rounding mode is always correct (i.e. round to nearest)
+}
+
 namespace internal
 {
     template<typename IT> uint8 INLINE clamp2byte(IT n)
@@ -441,7 +463,7 @@ namespace internal
     {
         static uint8 dojob(float b)
         {
-            return clamp2byte<aint>( lround(b) );
+            return clamp2byte<aint>( ts::lround(b) );
         }
     };
 
@@ -449,7 +471,7 @@ namespace internal
     {
         static uint8 dojob(double b)
         {
-            return clamp2byte<aint>(lround(b));
+            return clamp2byte<aint>( ts::lround(b));
         }
     };
 
@@ -684,26 +706,6 @@ INLINE aint Double2Int( double x )
  }
 #endif
  
-INLINE long int lround(double x)
-{
-#ifdef _M_AMD64
-	return _mm_cvtsd_si32(_mm_load_sd(&x));
-#else
-	_asm
-	{
-		fld x
-		push eax
-		fistp dword ptr[esp]
-		pop eax
-	}
-#endif
-}
-
-INLINE long int lround(float x)
-{
-	return _mm_cvtss_si32(_mm_load_ss(&x));//assume that current rounding mode is always correct (i.e. round to nearest)
-}
-
 //Fast floor and ceil ("Fast Rounding of Floating Point Numbers in C/C++ on Wintel Platform" - http://ldesoras.free.fr/doc/articles/rounding_en.pdf)
 //valid input: |x| < 2^30, wrong results: lfloor(-1e-8) = lceil(1e-8) = 0
 INLINE long int lfloor(float x) //http://www.masm32.com/board/index.php?topic=9515.0
@@ -722,16 +724,16 @@ INLINE TSCOLOR LERPCOLOR(TSCOLOR c0, TSCOLOR c1, float t)
 {
 	TSCOLOR c = 0;
 
-	c |= 0xFF & lround((0xFF & c0) + (int(0xFF & c1) - int(0xFF & c0)) * t);
+	c |= 0xFF & ts::lround((0xFF & c0) + (int(0xFF & c1) - int(0xFF & c0)) * t);
 
     c0 >>= 8; c1 >>= 8;
-	c |= (0xFF & lround((0xFF & c0) + (int(0xFF & c1) - int(0xFF & c0)) * t)) << 8;
+	c |= (0xFF & ts::lround((0xFF & c0) + (int(0xFF & c1) - int(0xFF & c0)) * t)) << 8;
 
     c0 >>= 8; c1 >>= 8;
-	c |= (0xFF & lround((0xFF & c0) + (int(0xFF & c1) - int(0xFF & c0)) * t)) << 16;
+	c |= (0xFF & ts::lround((0xFF & c0) + (int(0xFF & c1) - int(0xFF & c0)) * t)) << 16;
 
     c0 >>= 8; c1 >>= 8;
-	c |= (0xFF & lround((0xFF & c0) + (int(0xFF & c1) - int(0xFF & c0)) * t)) << 24;
+	c |= (0xFF & ts::lround((0xFF & c0) + (int(0xFF & c1) - int(0xFF & c0)) * t)) << 24;
     return c;
 }
 
@@ -822,6 +824,12 @@ INLINE bool point_line_side( const vec2 &p0, const vec2 &p1, const vec2 &p )
     vec2 ddp = p-p0;
     return (ddp.x * dp.y - ddp.y * dp.x) >= 0;
 }
+
+INLINE double dsqr(double value)
+{
+    return value * value;
+};
+
 
 INLINE auint isqr(aint x)
 {

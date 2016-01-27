@@ -37,7 +37,7 @@ class dialog_prepareimage_c : public gui_isodialog_c
 
     void saver_job_done(saver_s *s);
 
-    process_animation_bitmap_s pa;
+    process_animation_s pa;
     UNIQUE_PTR(vsb_c) camera;
 
     framedrawer_s fd;

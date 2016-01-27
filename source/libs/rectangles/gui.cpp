@@ -457,7 +457,7 @@ ts::uint32 gui_c::mouse(const system_event_param_s & p)
 
                 int rot = GET_WHEEL_DELTA_WPARAM(p.mouse.wp);
 
-                int rot2 = lround((float)rot / (float)WHEEL_DELTA);
+                int rot2 = ts::lround((float)rot / (float)WHEEL_DELTA);
                 if (rot2 == 0) rot2 = ts::isign(rot);
                 if (rot2 > 10) rot2 = 10;
                 if (rot2 < -10) rot2 = -10;
@@ -484,7 +484,7 @@ void gui_c::loop()
         ts::Time::update_thread_time();
         m_frametime.takt();
         if (m_1second.it_is_time_ones()) heartbeat();
-        g_sysconf.sleep = lround(500.0f * m_timer_processor.takt(m_frametime.frame_time())); // sleep time 0.5 of time to next event
+        g_sysconf.sleep = ts::lround(500.0f * m_timer_processor.takt(m_frametime.frame_time())); // sleep time 0.5 of time to next event
         if (g_sysconf.sleep < 0 || g_sysconf.sleep > 50) g_sysconf.sleep = 50;
 
         if (m_5seconds.it_is_time_ones()) app_5second_event();
@@ -619,6 +619,24 @@ void gui_c::exclusive_input(RID r, bool set)
             root->update_foreground();
         }
     }
+}
+
+bool gui_c::allow_input(RID r, bool check_click) const
+{
+    if (check_click)
+    {
+        gmsg<GM_CHECK_ALLOW_CLICK> chk(r);
+        ts::flags32_s f = chk.send();
+        if (f.is(GMRBIT_ACCEPTED)) return true;
+        if (!chk.mnu.expired())
+        {
+            TSDEL(chk.mnu.get());
+            return false;
+        }
+
+    }
+
+    return sysmodal == 0 && (m_exclusive_input.count() == 0 || (m_exclusive_input.last(RID()) >>= r));
 }
 
 guirect_watch_c::guirect_watch_c(RID r, GUIPARAMHANDLER h, GUIPARAM p):watchrid(r), h(h), p(p)

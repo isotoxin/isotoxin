@@ -49,6 +49,7 @@ application_c::application_c(const ts::wchar * cmdl)
     F_READONLY_MODE = g_commandline.readonlymode;
     F_READONLY_MODE_WARN = g_commandline.readonlymode; // suppress warn
     F_MODAL_ENTER_PASSWORD = false;
+    F_TYPING = false;
 
     autoupdate_next = now() + 10;
 	g_app = this;
@@ -114,6 +115,7 @@ void application_c::load_locale( const SLANGID& lng )
     fns.kill_dups();
     fns.sort(true);
 
+    ts::wstr_c appnamecap = APPNAME_CAPTION;
     ts::wstrings_c ps;
     for(const ts::wstr_c &f : fns)
     {
@@ -141,7 +143,7 @@ void application_c::load_locale( const SLANGID& lng )
                 l.replace_all(CONSTWSTR("[/i]"), CONSTWSTR("</i>"));
                 l.replace_all(CONSTWSTR("[quote]"), CONSTWSTR("\""));
                 l.replace_all(CONSTWSTR("[appname]"), CONSTWSTR(APPNAME));
-                l.replace_all(CONSTWSTR(APPNAME), APPNAME_CAPTION);
+                l.replace_all(CONSTWSTR(APPNAME), appnamecap);
 
                 int nbr = l.find_pos(CONSTWSTR("[nbr]"));
                 if (nbr >= 0)
@@ -423,7 +425,7 @@ static DWORD WINAPI autoupdater(LPVOID)
     if (prf().manual_cos() == COS_ONLINE)
     {
         contact_online_state_e c = contacts().get_self().get_ostate();
-        if (c == COS_AWAY && prf().get_options().is(UIOPT_KEEPAWAY))
+        if (!F_TYPING && c == COS_AWAY && prf().get_options().is(UIOPT_KEEPAWAY))
         {
             // keep away status
         } else
@@ -434,7 +436,8 @@ static DWORD WINAPI autoupdater(LPVOID)
             {
                 BOOL scrsvrun = FALSE;
                 SystemParametersInfoW(SPI_GETSCREENSAVERRUNNING, 0, &scrsvrun, 0);
-                if (scrsvrun) cnew = COS_AWAY;
+                if (scrsvrun)
+                    cnew = COS_AWAY, F_TYPING = false;
             }
 
             int imins = prf().inactive_time();
@@ -444,7 +447,7 @@ static DWORD WINAPI autoupdater(LPVOID)
                 GetLastInputInfo(&lii);
                 int cimins = (GetTickCount() - lii.dwTime) / 60000;
                 if (cimins >= imins)
-                    cnew = COS_AWAY;
+                    cnew = COS_AWAY, F_TYPING = false;
             }
 
             if (c != cnew)
@@ -1759,14 +1762,7 @@ void application_c::undelivered_message( const post_s &p )
 void application_c::reload_fonts()
 {
     __super::reload_fonts();
-    update_fonts();
-}
-
-void application_c::update_fonts()
-{
-    font_conv_name = &get_font(CONSTASTR("conv_name"));
-    font_conv_text = &get_font(CONSTASTR("conv_text"));
-    font_conv_time = &get_font(CONSTASTR("conv_time"));
+    preloaded_stuff().update_fonts();
 }
 
 bool application_c::load_theme( const ts::wsptr&thn )
@@ -1780,38 +1776,61 @@ bool application_c::load_theme( const ts::wsptr&thn )
         }
         return false;
     }
-    m_buttons.reload();
-
-    update_fonts();
-    contactheight= theme().conf().get_string(CONSTASTR("contactheight")).as_int(55);
-    mecontactheight = theme().conf().get_string(CONSTASTR("mecontactheight")).as_int(60);
-    minprotowidth = theme().conf().get_string(CONSTASTR("minprotowidth")).as_int(100);
-    protoiconsize = theme().conf().get_string(CONSTASTR("protoiconsize")).as_int(10);
+    m_preloaded_stuff.reload();
 
     selection_color = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("selection_color")), ts::ARGB(255, 255, 0) );
     selection_bg_color = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("selection_bg_color")), ts::ARGB(100, 100, 255) );
     selection_bg_color_blink = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("selection_bg_color_blink")), ts::ARGB(0, 0, 155) );
-    found_mark_color = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("found_mark_color")), ts::ARGB(50, 50, 0) );
-    found_mark_bg_color = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("found_mark_bg_color")), ts::ARGB(255, 100, 255) );
 
     emoti().reload();
 
     return true;
 }
 
-void preloaded_buttons_s::reload()
+void preloaded_stuff_s::update_fonts()
 {
+    font_conv_name = &gui->get_font(CONSTASTR("conv_name"));
+    font_conv_text = &gui->get_font(CONSTASTR("conv_text"));
+    font_conv_time = &gui->get_font(CONSTASTR("conv_time"));
+}
+
+void preloaded_stuff_s::reload()
+{
+    update_fonts();
+
     const theme_c &th = gui->theme();
 
-    icon[CSEX_UNKNOWN] = th.get_button(CONSTASTR("nosex"));
-    icon[CSEX_MALE] = th.get_button(CONSTASTR("male"));
-    icon[CSEX_FEMALE] = th.get_button(CONSTASTR("female"));
-    groupchat = th.get_button(CONSTASTR("groupchat"));
-            
-    online = th.get_button(CONSTASTR("online"));
-    online2 = th.get_button(CONSTASTR("online2"));
-    invite = th.get_button(CONSTASTR("invite"));
-    achtung = th.get_button(CONSTASTR("achtung"));
+    contactheight = th.conf().get_string(CONSTASTR("contactheight")).as_int(55);
+    mecontactheight = th.conf().get_string(CONSTASTR("mecontactheight")).as_int(60);
+    minprotowidth = th.conf().get_string(CONSTASTR("minprotowidth")).as_int(100);
+    protoiconsize = th.conf().get_string(CONSTASTR("protoiconsize")).as_int(10);
+    deftextcolor = ts::parsecolor<char>(th.conf().get_string(CONSTASTR("deftextcolor")), ts::ARGB(0, 0, 0));
+    appname_color = ts::parsecolor<char>(th.conf().get_string(CONSTASTR("appnamecolor")), ts::ARGB(0, 50, 0));
+    found_mark_color = ts::parsecolor<char>(th.conf().get_string(CONSTASTR("found_mark_color")), ts::ARGB(50, 50, 0));
+    found_mark_bg_color = ts::parsecolor<char>(th.conf().get_string(CONSTASTR("found_mark_bg_color")), ts::ARGB(255, 100, 255));
+    achtung_content_color = ts::parsecolor<char>(th.conf().get_string(CONSTASTR("achtung_content_color")), ts::ARGB(0, 0, 0));
+    state_online_color = ts::parsecolor<char>(th.conf().get_string(CONSTASTR("state_online_color")), ts::ARGB(0, 255, 0));
+    state_away_color = ts::parsecolor<char>(th.conf().get_string(CONSTASTR("state_away_color")), ts::ARGB(255, 255, 0));
+    state_dnd_color = ts::parsecolor<char>(th.conf().get_string(CONSTASTR("state_dnd_color")), ts::ARGB(255, 0, 0));
+
+    achtung_shift = ts::parsevec2(th.conf().get_string(CONSTASTR("achtung_shift")), ts::ivec2(0));
+
+    icon[CSEX_UNKNOWN] = th.get_image(CONSTASTR("nosex"));
+    icon[CSEX_MALE] = th.get_image(CONSTASTR("male"));
+    icon[CSEX_FEMALE] = th.get_image(CONSTASTR("female"));
+
+    groupchat = th.get_image(CONSTASTR("groupchat"));
+    nokeeph = th.get_image(CONSTASTR("nokeeph"));
+    achtung_bg = th.get_image(CONSTASTR("achtung_bg"));
+    invite_send = th.get_image(CONSTASTR("invite_send"));
+    invite_recv = th.get_image(CONSTASTR("invite_recv"));
+    invite_rej = th.get_image(CONSTASTR("invite_rej"));
+    online[COS_ONLINE] = th.get_image(CONSTASTR("online0"));
+    online[COS_AWAY] = th.get_image(CONSTASTR("online1"));
+    online[COS_DND] = th.get_image(CONSTASTR("online2"));
+    offline = th.get_image(CONSTASTR("offline"));
+    online_some = th.get_image(CONSTASTR("online_some"));
+
     callb = th.get_button(CONSTASTR("call"));
     fileb = th.get_button(CONSTASTR("file"));
 
@@ -1824,7 +1843,6 @@ void preloaded_buttons_s::reload()
     unpauseb = th.get_button(CONSTASTR("unpause"));
     exploreb = th.get_button(CONSTASTR("explore"));
 
-    nokeeph = th.get_button(CONSTASTR("nokeeph"));
     smile = th.get_button(CONSTASTR("smile"));
 }
 
@@ -2164,7 +2182,7 @@ query_task_s::~query_task_s()
             if (wdata().upduitime > 0.3f)
             {
                 wdata().upduitime -= 0.3f;
-                wdata().bytes_per_sec = lround((float)wdata().trsz() / 0.3f);
+                wdata().bytes_per_sec = ts::lround((float)wdata().trsz() / 0.3f);
                 wdata().transfered.clear();
                 wftr().ftr->update_item = true;
             }
@@ -2333,7 +2351,7 @@ void file_transfer_s::save(uint64 offset_, const ts::buf0_c&bdata)
             if (wdata().upduitime > 0.3f)
             {
                 wdata().upduitime -= 0.3f;
-                wdata().bytes_per_sec = lround((float)wdata().trsz() / 0.3f);
+                wdata().bytes_per_sec = ts::lround((float)wdata().trsz() / 0.3f);
                 wdata().transfered.clear();
                 wdata.unlock();
                 upd_message_item(true);

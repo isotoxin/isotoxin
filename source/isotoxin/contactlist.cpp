@@ -23,7 +23,7 @@ gui_contact_item_c::gui_contact_item_c(MAKE_CHILD<gui_contact_item_c> &data) :gu
         {
             tooltip( DELEGATE(this,tt) );
             contact->gui_item = this;
-            g_app->new_blink_reason( contact->getkey() ).recalc_unread();
+            if (CIR_ME != role) g_app->new_blink_reason( contact->getkey() ).recalc_unread();
         }
 }
 
@@ -49,7 +49,7 @@ ts::wstr_c gui_contact_item_c::tt()
 {
     if (CIR_ME == role || CIR_CONVERSATION_HEAD == role)
     {
-        return ts::ivec2( g_app->mecontactheight );
+        return ts::ivec2( GET_THEME_VALUE(mecontactheight) );
     }
 
     ts::ivec2 subsize(0);
@@ -58,7 +58,7 @@ ts::wstr_c gui_contact_item_c::tt()
         if (const theme_rect_s *thr = themerect())
             subsize = thr->maxcutborder.lt + thr->maxcutborder.rb;
     }
-    return g_app->contactheight - subsize;
+    return GET_THEME_VALUE(contactheight) - subsize;
 }
 
 /*virtual*/ ts::ivec2 gui_contact_item_c::get_max_size() const
@@ -133,7 +133,7 @@ struct leech_edit : public autoparam_i
             ts::irect cr = r().get_client_area();
 
             int width = cr.width() - sx - r.as<gui_contact_item_c>().contact_item_rite_margin() - 5 -
-                g_app->buttons().confirmb->size.x - g_app->buttons().cancelb->size.x;
+                g_app->preloaded_stuff().confirmb->size.x - g_app->preloaded_stuff().cancelb->size.x;
             if (width < 100) width = 100;
             int height = szmin.y;
 
@@ -514,7 +514,7 @@ void gui_contact_item_c::update_text()
             text_adapt_user_input(t2);
             if (CIR_CONVERSATION_HEAD == role)
             {
-                ts::ivec2 sz = g_app->buttons().editb->size;
+                ts::ivec2 sz = g_app->preloaded_stuff().editb->size;
                 newtext.append( CONSTASTR(" <rect=0,") );
                 newtext.append_as_uint( sz.x ).append_char(',').append_as_uint( -sz.y ).append(CONSTASTR(",2><br><l>"));
                 newtext.append(t2).append(CONSTASTR(" <rect=1,"));
@@ -542,7 +542,7 @@ void gui_contact_item_c::update_text()
 
             if (CIR_CONVERSATION_HEAD == role)
             {
-                ts::ivec2 sz = g_app->buttons().editb->size;
+                ts::ivec2 sz = g_app->preloaded_stuff().editb->size;
                 newtext.append(CONSTASTR(" <rect=0,"));
                 newtext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTASTR(",2>"));
             } else
@@ -593,7 +593,7 @@ void gui_contact_item_c::update_text()
 
                 if (CIR_CONVERSATION_HEAD == role)
                 {
-                    ts::ivec2 sz = g_app->buttons().editb->size;
+                    ts::ivec2 sz = g_app->preloaded_stuff().editb->size;
                     newtext.append(CONSTASTR(" <rect=0,"));
                     newtext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTASTR(",2>"));
                     t2.trim();
@@ -894,7 +894,7 @@ void gui_contact_item_c::draw_online_state_text(draw_data_s &dd)
 int gui_contact_item_c::contact_item_rite_margin()
 {
     if (!flags.is(F_CALLBUTTON)) return 5;
-    return g_app->buttons().callb->size.x + 15;
+    return g_app->preloaded_stuff().callb->size.x + 15;
 }
 
 bool gui_contact_item_c::allow_drag() const
@@ -968,48 +968,44 @@ bool gui_contact_item_c::allow_drop() const
                 if (role == CIR_CONVERSATION_HEAD)
                     st = contact_state_check;
             }
-            button_desc_s::states bst =  button_desc_s::DISABLED;
-            button_desc_s *bdesc = g_app->buttons().online;
+            const theme_image_s *state_icon = g_app->preloaded_stuff().offline;
             bool force_state_icon = CIR_ME == role || CIR_METACREATE == role;
             switch (st)
             {
                 case CS_INVITE_SEND:
-                    bdesc = g_app->buttons().invite;
-                    bst = button_desc_s::NORMAL;
+                    state_icon = g_app->preloaded_stuff().invite_send;
                     force_state_icon = true;
                     break;
                 case CS_INVITE_RECEIVE:
-                    bdesc = g_app->buttons().invite;
-                    bst = button_desc_s::HOVER;
+                    state_icon = g_app->preloaded_stuff().invite_recv;
                     force_state_icon = true;
                     break;
                 case CS_REJECTED:
-                    bdesc = g_app->buttons().invite;
-                    bst = button_desc_s::DISABLED;
+                    state_icon = g_app->preloaded_stuff().invite_rej;
                     force_state_icon = true;
                     break;
                 case CS_ONLINE:
-                    if (ost == COS_ONLINE) bst = button_desc_s::NORMAL;
-                    else if (ost == COS_AWAY) bst = button_desc_s::HOVER;
-                    else if (ost == COS_DND) bst = button_desc_s::PRESS;
+                    if (ost >= 0 && ost < ARRAY_SIZE(g_app->preloaded_stuff().online))
+                        state_icon = g_app->preloaded_stuff().online[ost];
+                    else
+                        state_icon = g_app->preloaded_stuff().online[COS_DND];
                     break;
                 case CS_WAIT:
-                    bdesc = nullptr;
+                    state_icon = nullptr;
                     break;
                 case CS_ROTTEN:
                 case CS_OFFLINE:
                     if (CIR_ME == role)
                         if ( contact->subcount() == 0 )
-                            bdesc = nullptr;
+                            state_icon = nullptr;
                     break;
                 case contact_state_check: // some online, some offline
                     if (role == CIR_CONVERSATION_HEAD)
                     {
-                        bdesc = nullptr;
+                        state_icon = nullptr;
                     } else
                     {
-                        bdesc = g_app->buttons().online2;
-                        bst = button_desc_s::NORMAL;
+                        state_icon = g_app->preloaded_stuff().online_some;
                     }
                     break;
             }
@@ -1017,17 +1013,17 @@ bool gui_contact_item_c::allow_drop() const
             m_engine->begin_draw();
             
             if (!force_state_icon && prf().get_options().is(UIOPT_PROTOICONS))
-                bdesc = nullptr;
+                state_icon = nullptr;
 
             // draw state
-            if (( force_state_icon || (flags.is(F_PROTOHIT) && st != CS_ROTTEN)) && bdesc)
+            if (( force_state_icon || (flags.is(F_PROTOHIT) && st != CS_ROTTEN)) && state_icon)
             {
-                bdesc->draw( m_engine.get(), bst, ca + ts::ivec2(shiftstateicon.x, shiftstateicon.y), button_desc_s::ARIGHT | button_desc_s::ABOTTOM );
+                state_icon->draw( *m_engine.get(), ca + ts::ivec2(shiftstateicon.x, shiftstateicon.y), ALGN_RIGHT | ALGN_BOTTOM );
 
             } else if (contact->is_meta() && flags.is(F_PROTOHIT)) // not group
             {
                 // draw proto icons
-                int isz = g_app->protoiconsize;
+                int isz = GET_THEME_VALUE(protoiconsize);
                 ts::ivec2 p(ca.rb.x,ca.rb.y-isz);
                 contact->subiterate([&](contact_c *c) {
                     if (c->is_protohit(false))
@@ -1094,7 +1090,7 @@ bool gui_contact_item_c::allow_drop() const
             /*
             if (contact->is_meta() && flags.is(F_PROTOHIT)) // not group
             {
-                int isz = g_app->protoiconsize;
+                int isz = GET_THEME_VALUE(protoiconsize);
                 statedd.alpha = 128;
                 ts::ivec2 p(ca.rt());
                 contact->subiterate([&](contact_c *c) {
@@ -1132,7 +1128,7 @@ bool gui_contact_item_c::allow_drop() const
 
                     ts::irect cac(ca);
 
-                    int x_offset = draw_ava ? (contact->get_avatar() ? g_app->buttons().icon[CSEX_UNKNOWN]->size.x : g_app->buttons().icon[contact->get_meta_gender()]->size.x) : 0;
+                    int x_offset = draw_ava ? (contact->get_avatar() ? g_app->preloaded_stuff().icon[CSEX_UNKNOWN]->info().sz.x : g_app->preloaded_stuff().icon[contact->get_meta_gender()]->info().sz.x) : 0;
 
                     cac.lt.x += x_offset + 5;
                     cac.rb.x -= 5;
@@ -1146,10 +1142,10 @@ bool gui_contact_item_c::allow_drop() const
                     }
                     while (draw_proto && w > curw)
                     {
-                        if ( curpww > g_app->minprotowidth )
+                        if ( curpww > GET_THEME_VALUE(minprotowidth) )
                         {
                             int shift = w - curw;
-                            if (shift <= (curpww - g_app->minprotowidth))
+                            if (shift <= (curpww - GET_THEME_VALUE(minprotowidth)))
                             {
                                 ritem -= curpww;
                                 curw += curpww;
@@ -1165,9 +1161,10 @@ bool gui_contact_item_c::allow_drop() const
                         draw_proto = false;
                     }
 
-                } else if (nullptr != (achtung = g_app->find_blink_reason(contact->getkey(), false)))
-                    if (!achtung->get_blinking())
-                        achtung = nullptr;
+                } else
+                {
+                    achtung = g_app->find_blink_reason(contact->getkey(), false);
+                }
 
                 
                 int x_offset = 0;
@@ -1178,13 +1175,13 @@ bool gui_contact_item_c::allow_drop() const
                     {
                         int y = (ca.size().y - ava->info().sz.y) / 2;
                         m_engine->draw(ca.lt + ts::ivec2(y), ava->extbody(), ts::irect(0, ava->info().sz), ava->alpha_pixels);
-                        x_offset = g_app->buttons().icon[CSEX_UNKNOWN]->size.x;
+                        x_offset = g_app->preloaded_stuff().icon[CSEX_UNKNOWN]->info().sz.x;
                     }
                     else
                     {
-                        button_desc_s *icon = contact->getkey().is_group() ? g_app->buttons().groupchat : g_app->buttons().icon[contact->get_meta_gender()];
-                        icon->draw(m_engine.get(), button_desc_s::NORMAL, ca, button_desc_s::ALEFT | button_desc_s::ATOP | button_desc_s::ABOTTOM);
-                        x_offset = icon->size.x;
+                        const theme_image_s *icon = contact->getkey().is_group() ? g_app->preloaded_stuff().groupchat : g_app->preloaded_stuff().icon[contact->get_meta_gender()];
+                        icon->draw(*m_engine.get(), ca.lt);
+                        x_offset = icon->info().sz.x;
                     }
                     m_engine->end_draw();
                 }
@@ -1240,22 +1237,26 @@ bool gui_contact_item_c::allow_drop() const
                 if (achtung)
                 {
                     draw_data_s &dd = m_engine->begin_draw();
-                    ts::ivec2 pos;
-                    if (button_desc_s *bachtung = g_app->buttons().achtung)
+                    if (const theme_image_s *bachtung = g_app->preloaded_stuff().achtung_bg)
                     {
-                        dd.offset += bachtung->draw(m_engine.get(), button_desc_s::NORMAL, noti_draw_area, button_desc_s::ALEFT | button_desc_s::ABOTTOM);
-                        dd.size = bachtung->size;
-                        tdp.forecolor = bachtung->colors + button_desc_s::NORMAL;
-                    } else
-                        pos = noti_draw_area.lt;
+                        ts::ivec2 p = GET_THEME_VALUE(achtung_shift) + noti_draw_area.lb();
+                        p.y -= bachtung->info().sz.y;
+                        bachtung->draw(*m_engine.get(), p);
+                        dd.offset += p;
+                        dd.size = bachtung->info().sz;
+                        tdp.forecolor = &GET_THEME_VALUE(achtung_content_color);
+                    }
+
+                    if (!achtung->get_blinking())
+                        dd.alpha = 128;
 
                     if (CS_INVITE_RECEIVE != st && achtung->is_file_download() || achtung->flags.is(application_c::blinking_reason_s::F_RINGTONE))
                     {
                         const theme_image_s *img = nullptr;
                         if (achtung->flags.is(application_c::blinking_reason_s::F_RINGTONE))
-                            img = gui->theme().get_image(CONSTASTR("call"));
+                            img = gui->theme().get_image(CONSTASTR("achtung_call"));
                         else if (achtung->is_file_download())
-                            img = gui->theme().get_image(CONSTASTR("file"));
+                            img = gui->theme().get_image(CONSTASTR("achtung_file"));
 
                         img->draw(*m_engine, (dd.size - img->info().sz) / 2);
 
@@ -1572,7 +1573,7 @@ bool gui_contact_item_c::allow_drop() const
             gui_popup_menu_c::show(menu_anchor_s(true), m);
         } else if (CIR_CONVERSATION_HEAD == role && !contact->getkey().is_self())
         {
-            int curpww = g_app->minprotowidth;
+            int curpww = GET_THEME_VALUE(minprotowidth);
             if ( protocols() ) curpww = protocols()->size.x;
 
             ts::irect ca = get_client_area();
@@ -1868,7 +1869,7 @@ void gui_contactlist_c::recreate_ctls(bool focus_filter)
         }
 
         self = MAKE_CHILD<gui_contact_item_c>(getrid(), &contacts().get_self()) << CIR_ME;
-        self->leech(TSNEW(leech_dock_top_s, g_app->mecontactheight));
+        self->leech(TSNEW(leech_dock_top_s, GET_THEME_VALUE(mecontactheight)));
         self->protohit();
         MODIFY(*self).zindex(1.0f).show();
         getengine().child_move_to(nbuttons, &self->getengine());

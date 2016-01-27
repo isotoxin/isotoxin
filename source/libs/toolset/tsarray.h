@@ -382,6 +382,15 @@ private:
 
 public:
 
+    template<class... _Valty> void add_and_init(aint count, _Valty&&... _Val)
+    {
+        for( ;count > 0; --count )
+        {
+            T &t = __addraw();
+            TSPLACENEW(&t, std::forward<_Valty>(_Val)...);
+        }
+    }
+
     template<class... _Valty> T &addnew(_Valty&&... _Val)
     {
         T &t = __addraw();
@@ -602,7 +611,7 @@ public:
         {
             aint new_count = idx + count;
 
-            _upsize(new_count, m_count, 0); // т.к. idx за пределами массива, то никакие переносы внутри _upsize не требуются
+            _upsize(new_count, m_count, 0); // no any moving inside _upsize do not required due idx is out of array bounds
 
             BEHAVIOUR::init(m_list + m_count, new_count - m_count);
             m_count = new_count;

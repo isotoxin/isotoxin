@@ -563,6 +563,7 @@ void gui_notice_c::setup(contact_c *sender_)
             else
                 txt.append(TTT("Nobody in group chat (except you)", 257));
             textrect.set_text_only(txt, false);
+            textrect.change_option(ts::TO_LASTLINEADDH, ts::TO_LASTLINEADDH);
 
             if (historian->get_options().unmasked().is(contact_c::F_AUDIO_GCHAT))
             {
@@ -1162,24 +1163,24 @@ int gui_notice_callinprogress_c::preview_cam_cursor_resize( const ts::ivec2 &p )
             float xy = (float)csz.y / (float)csz.x;
 
             if (opd->area & AREA_LEFT)
-                osz.x = opd->rect.rb.x + opd->mpos.x-data.mouse.screenpos().x, osz.y = lround( xy * osz.x );
+                osz.x = opd->rect.rb.x + opd->mpos.x-data.mouse.screenpos().x, osz.y = ts::lround( xy * osz.x );
             else if (opd->area & AREA_RITE)
-                osz.x = opd->rect.rb.x + data.mouse.screenpos().x-opd->mpos.x, osz.y = lround( xy * osz.x );
+                osz.x = opd->rect.rb.x + data.mouse.screenpos().x-opd->mpos.x, osz.y = ts::lround( xy * osz.x );
 
             if (opd->area & AREA_TOP)
-                osz.y = opd->rect.rb.y + opd->mpos.y - data.mouse.screenpos().y, osz.x = lround( osz.y / xy );
+                osz.y = opd->rect.rb.y + opd->mpos.y - data.mouse.screenpos().y, osz.x = ts::lround( osz.y / xy );
             else if (opd->area & AREA_BOTTOM)
-                osz.y = opd->rect.rb.y + data.mouse.screenpos().y - opd->mpos.y, osz.x = lround( osz.y / xy );
+                osz.y = opd->rect.rb.y + data.mouse.screenpos().y - opd->mpos.y, osz.x = ts::lround( osz.y / xy );
 
-            osz.y = lround( xy * osz.x );
+            osz.y = ts::lround( xy * osz.x );
 
             if (pa.bmp.info().sz > osz)
             {
                 float k1 = (float)pa.bmp.info().sz.x / dsz.x;
                 float k2 = (float)pa.bmp.info().sz.y / dsz.y;
                 float k = ts::tmax(k1, k2);
-                osz.x = lround(k * dsz.x);
-                osz.y = lround(k * dsz.y);
+                osz.x = ts::lround(k * dsz.x);
+                osz.y = ts::lround(k * dsz.y);
             }
 
             int k = osz.x * 100 / dsz.x;
@@ -1761,7 +1762,7 @@ void gui_notice_callinprogress_c::calc_cam_display_rects()
             if (csz.x)
             {
                 float xy = (float)csz.y / (float)csz.x;
-                cam_previewsize.y = lround(xy * cam_previewsize.x);
+                cam_previewsize.y = ts::lround(xy * cam_previewsize.x);
             }
         }
         if (pa.bmp.info().sz > cam_previewsize)
@@ -1769,8 +1770,8 @@ void gui_notice_callinprogress_c::calc_cam_display_rects()
             float k1 = (float)pa.bmp.info().sz.x / display_size.x;
             float k2 = (float)pa.bmp.info().sz.y / display_size.y;
             float k = ts::tmax(k1, k2);
-            cam_previewsize.x = lround(k * display_size.x);
-            cam_previewsize.y = lround(k * display_size.y);
+            cam_previewsize.x = ts::lround(k * display_size.x);
+            cam_previewsize.y = ts::lround(k * display_size.y);
         }
 
         if (camera)
@@ -1910,8 +1911,6 @@ gui_notice_network_c::~gui_notice_network_c()
 
 /*virtual*/ void gui_notice_network_c::get_link_prolog(ts::wstr_c &r, int linknum) const
 {
-    //get_default_text_color(COLOR_BLINKED)
-
     r.clear();
     if (linknum == clicklink)
     {
@@ -2081,7 +2080,7 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
     b_setup.set_handler(connect_handler::netsetup, as_param(networkid));
     MODIFY(b_setup).visible(true);
     
-    fake_margin.x = g_app->buttons().icon[CSEX_UNKNOWN]->size.x + 6;
+    fake_margin.x = g_app->preloaded_stuff().icon[CSEX_UNKNOWN]->info().sz.x + 6;
     setup_tail();
 
 }
@@ -2312,9 +2311,9 @@ int gui_notice_network_c::sortfactor() const
                 }
                 else
                 {
-                    button_desc_s *icon = g_app->buttons().icon[CSEX_UNKNOWN];
-                    int x = (fake_margin.x - icon->size.x) / 2;
-                    icon->draw(m_engine.get(), button_desc_s::NORMAL, ts::irect(ca.lt + ts::ivec2(x,0), ca.rb), button_desc_s::ALEFT | button_desc_s::ATOP | button_desc_s::ABOTTOM);
+                    const theme_image_s *icon = g_app->preloaded_stuff().icon[CSEX_UNKNOWN];
+                    int x = (fake_margin.x - icon->info().sz.x) / 2;
+                    icon->draw(*m_engine.get(), ca.lt + ts::ivec2(x,0));
                 }
             }
 
@@ -3029,7 +3028,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
 
                     if (!flags.is(F_NO_AUTHOR))
                     {
-                        tdp.font = g_app->font_conv_name;
+                        tdp.font = GET_FONT(font_conv_name);
                         ts::TSCOLOR c = get_default_text_color(0);
                         tdp.forecolor = &c; //-V506
                         tdp.sz = &sz;
@@ -3040,7 +3039,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
                     sz.y += m_top;
                     dd.offset += sz;
                     dd.size -= sz;
-                    tdp.font = g_app->font_conv_text;
+                    tdp.font = GET_FONT(font_conv_text);
                     ts::TSCOLOR c = get_default_text_color(0);
                     tdp.forecolor = &c;
                     tdp.sz = nullptr;
@@ -3081,10 +3080,10 @@ static gui_messagelist_c *current_draw_list = nullptr;
                         gui_message_item_c::ST_TYPING != subtype)
                     {
                         dd.size.x = timestrwidth + 1;
-                        dd.size.y = g_app->font_conv_time->height();
+                        dd.size.y = GET_FONT(font_conv_time)->height();
                         dd.offset = oo + ca.rb - dd.size;
 
-                        tdp.font = g_app->font_conv_time;
+                        tdp.font = GET_FONT(font_conv_time);
                         ts::TSCOLOR cc = get_default_text_color(2);
                         tdp.forecolor = &cc; //-V506
                         m_engine->draw(timestr, tdp);
@@ -3107,11 +3106,11 @@ static gui_messagelist_c *current_draw_list = nullptr;
                     draw_data_s &dd = getengine().begin_draw();
 
                     dd.size.x = timestrwidth + 1;
-                    dd.size.y = g_app->font_conv_time->height();
+                    dd.size.y = GET_FONT(font_conv_time)->height();
                     dd.offset += ca.rb - dd.size;
 
                     text_draw_params_s tdp;
-                    tdp.font = g_app->font_conv_time;
+                    tdp.font = GET_FONT(font_conv_time);
                     ts::TSCOLOR c = get_default_text_color(2);
                     tdp.forecolor = &c;
                     m_engine->draw(timestr, tdp);
@@ -3146,7 +3145,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
 
                         if (!flags.is(F_NO_AUTHOR))
                         {
-                            tdp.font = g_app->font_conv_name;
+                            tdp.font = GET_FONT(font_conv_name);
                             ts::TSCOLOR c = get_default_text_color( 0 );
                             tdp.forecolor = &c; //-V506
                             tdp.sz = &sz;
@@ -3157,7 +3156,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
                         sz.y += m_top;
                         dd.offset += sz;
                         dd.size -= sz;
-                        tdp.font = g_app->font_conv_text;
+                        tdp.font = GET_FONT(font_conv_text);
                         tdp.forecolor = nullptr; //get_default_text_color();
                         tdp.sz = nullptr;
                         ts::flags32_s f; f.set(ts::TO_LASTLINEADDH);
@@ -3174,10 +3173,10 @@ static gui_messagelist_c *current_draw_list = nullptr;
 #endif
                         {
                             dd.size.x = timestrwidth + 1;
-                            dd.size.y = g_app->font_conv_time->height();
+                            dd.size.y = GET_FONT(font_conv_time)->height();
                             dd.offset = oo + ca.rb - dd.size;
                                 
-                            tdp.font = g_app->font_conv_time;
+                            tdp.font = GET_FONT(font_conv_time);
                             ts::TSCOLOR c = get_default_text_color(2);
                             tdp.forecolor = &c; //-V506
                             tdp.sz = nullptr;
@@ -3555,7 +3554,7 @@ ts::uint16 gui_message_item_c::record::append( ts::wstr_c &t, ts::wstr_c &pret, 
     else
 #endif
     {
-        ts::ivec2 timeszie = g_app->tr().calc_text_size( *g_app->font_conv_time, tstr, 1024, 0, nullptr );
+        ts::ivec2 timeszie = g_app->tr().calc_text_size( *GET_FONT(font_conv_time), tstr, 1024, 0, nullptr );
         time_str_width = (ts::uint16)timeszie.x;
         pret = tstr;
     }
@@ -3767,7 +3766,7 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
     default:
         {
             subtype = ST_CONVERSATION;
-            textrect.set_font(g_app->font_conv_text);
+            textrect.set_font(GET_FONT(font_conv_text));
 
             ts::str_c message = post.message_utf8;
             if (message.is_empty()) message.set(CONSTASTR("error"));
@@ -3873,7 +3872,7 @@ bool gui_message_item_c::message_prefix(ts::wstr_c &newtext, time_t posttime)
     {
         timestr = newtext;
         newtext.clear();
-        ts::ivec2 timeszie = g_app->tr().calc_text_size(*g_app->font_conv_time, timestr, 1024, 0, nullptr);
+        ts::ivec2 timeszie = g_app->tr().calc_text_size(*GET_FONT(font_conv_time), timestr, 1024, 0, nullptr);
         timestrwidth = (ts::uint16)timeszie.x;
         return false;
     }
@@ -4235,7 +4234,7 @@ void gui_message_item_c::update_text(int for_width)
                 ft = g_app->find_file_transfer_by_msgutag(zero_rec.utag);
                 if (ft && ft->is_active()) goto transfer_alive;
 
-                insert_button( BTN_BREAK, g_app->buttons().breakb->size );
+                insert_button( BTN_BREAK, g_app->preloaded_stuff().breakb->size );
                 newtext.append(CONSTWSTR("<img=file,-1>"));
                 newtext.append(TTT("Disconnected: $",235) / fn);
             }
@@ -4243,7 +4242,7 @@ void gui_message_item_c::update_text(int for_width)
             {
                 transfer_alive:
                 if (!is_send)
-                    insert_button( BTN_EXPLORE, g_app->buttons().exploreb->size );
+                    insert_button( BTN_EXPLORE, g_app->preloaded_stuff().exploreb->size );
 
                 newtext.append(CONSTWSTR("<img=file,-1>"));
 
@@ -4252,7 +4251,7 @@ void gui_message_item_c::update_text(int for_width)
                 if (nullptr == ft) ft = g_app->find_file_transfer_by_msgutag(zero_rec.utag);
                 if (ft && ft->is_active())
                 {
-                    insert_button( BTN_BREAK, g_app->buttons().breakb->size );
+                    insert_button( BTN_BREAK, g_app->preloaded_stuff().breakb->size );
 
                     if (is_send)
                         newtext.append(TTT("Upload: $",183) / fn);
@@ -4267,12 +4266,12 @@ void gui_message_item_c::update_text(int for_width)
                     ab.progress = (float)prgrs * (float)(1.0/100);
                     
                     if (bps >= file_transfer_s::BPSSV_ALLOW_CALC)
-                        insert_button( BTN_PAUSE, g_app->buttons().pauseb->size );
+                        insert_button( BTN_PAUSE, g_app->preloaded_stuff().pauseb->size );
 
                     if (bps < file_transfer_s::BPSSV_ALLOW_CALC)
                     {
                         if (bps == file_transfer_s::BPSSV_PAUSED_BY_ME)
-                            insert_button( BTN_UNPAUSE, g_app->buttons().unpauseb->size );
+                            insert_button( BTN_UNPAUSE, g_app->preloaded_stuff().unpauseb->size );
                         if (bps == file_transfer_s::BPSSV_WAIT_FOR_ACCEPT) 
                             ab.pbtext.append(TTT("waiting",185));
                         else
@@ -4321,7 +4320,7 @@ void gui_message_item_c::update_text(int for_width)
                     newtext.clear().append(CONSTWSTR("<p=c><rect=1000,")).append_as_uint(picsz.x).append_char(',').append_as_int(picsz.y + 8).append(CONSTWSTR("><br></p>"));
                     //                                           RECT_IMAGE
 
-                    const button_desc_s *explorebdsc = g_app->buttons().exploreb;
+                    const button_desc_s *explorebdsc = g_app->preloaded_stuff().exploreb;
                     if (picsz.x > explorebdsc->size.x && picsz.y > explorebdsc->size.y)
                     {
                         if ( imgldr.explorebtn.expired() )
@@ -4421,8 +4420,8 @@ ts::wstr_c gui_message_item_c::hdr() const
     {
         if (tv.s[0] == 'x')
         {
-            r = maketag_mark<ts::wchar>(g_app->found_mark_bg_color);
-            r.append( maketag_color<ts::wchar>(g_app->found_mark_color) );
+            r = maketag_mark<ts::wchar>(g_app->preloaded_stuff().found_mark_bg_color);
+            r.append( maketag_color<ts::wchar>(g_app->preloaded_stuff().found_mark_color) );
             return true;
         } else if (tv.s[0] == 'y')
         {
@@ -4480,7 +4479,7 @@ update_size_mode:
                 int h = m_top;
                 if (authorlineheight && !flags.is(F_NO_AUTHOR))
                 {
-                    sz = gui->textsize(*g_app->font_conv_name, hdr(), ww);
+                    sz = gui->textsize(*GET_FONT(font_conv_name), hdr(), ww);
                     h += sz.y;
                 }
 
@@ -4516,7 +4515,7 @@ update_size_mode:
                 int h = m_top;
                 if ( !flags.is(F_NO_AUTHOR) )
                 {
-                    sz = gui->textsize(*g_app->font_conv_name, hdr(), ww);
+                    sz = gui->textsize(*GET_FONT(font_conv_name), hdr(), ww);
                     h += sz.y;
                 }
                 sz = textrect.calc_text_size(ww - m_left, custom_tag_parser_delegate());
@@ -4620,7 +4619,7 @@ gui_messagelist_c::~gui_messagelist_c()
         bool r = __super::sq_evt(qp, rid, data);
 
         if (historian && !historian->keep_history())
-            g_app->buttons().nokeeph->draw( m_engine.get(), button_desc_s::NORMAL, ts::irect(10,10,100,100), button_desc_s::ALEFT | button_desc_s::ATOP );
+            g_app->preloaded_stuff().nokeeph->draw( *m_engine.get(), ts::ivec2(10) );
 
         return r;
     }
@@ -4630,7 +4629,7 @@ gui_messagelist_c::~gui_messagelist_c()
         m_tooltip = GET_TOOLTIP();
         if (historian && !historian->keep_history())
         {
-            if (ts::irect(10, g_app->buttons().nokeeph->size + 10).inside(data.hintzone.pos))
+            if (ts::irect(10, g_app->preloaded_stuff().nokeeph->info().sz + 10).inside(data.hintzone.pos))
             {
                 m_tooltip = TOOLTIP(TTT("Message history is not saved!",231));
                 data.hintzone.accepted = true;
@@ -4845,7 +4844,7 @@ bool gui_messagelist_c::scroll_do(RID, GUIPARAM)
 
         if (curshift != target_offset)
         {
-            int delta = lround( 0.3f * (target_offset - curshift) );
+            int delta = ts::lround( 0.3f * (target_offset - curshift) );
             if (prevdelta == delta)
             {
                 sbshift(target_offset);
@@ -4956,7 +4955,7 @@ bool gui_messagelist_c::tobottom(RID, GUIPARAM)
 void gui_messagelist_c::scroll(int shift)
 {
     target_offset = shift;
-    prevdelta = 1 + lround(0.3f * (target_offset - sbshift()));
+    prevdelta = 1 + ts::lround(0.3f * (target_offset - sbshift()));
     flags.set(F_SCROLLING_TO_TGT);
     __super::on_manual_scroll();
     scroll_do(RID(), nullptr);
@@ -5369,8 +5368,13 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_DO_POSTEFFECT> &f)
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_TYPING> &p)
 {
     if (prf().get_options().is(UIOPT_SHOW_TYPING_MSGLIST) && historian)
-        if (contact_c *tc = historian->subget(p.contact))
-            get_message_item(MTA_TYPING, tc, CONSTASTR("other"));
+    {
+        int gid = p.contact.protoid >> 16;
+        int cgid = historian->getkey().is_group() ? historian->getkey().contactid : 0;
+        if ( gid == cgid )
+            if (contact_c *tc = historian->subget(p.contact))
+                get_message_item(MTA_TYPING, tc, CONSTASTR("other"));
+    }
 
     return 0;
 }

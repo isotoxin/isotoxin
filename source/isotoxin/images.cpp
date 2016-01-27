@@ -132,7 +132,7 @@ namespace
                 return origsz;
 
             float k = (float)w / (float)origsz.x;
-            int newh = lround(k * origsz.y);
+            int newh = ts::lround(k * origsz.y);
             return ts::ivec2(w, newh);
         }
 
@@ -161,7 +161,7 @@ namespace
             } else
             {
                 float k = (float)w / (float)origsz.x;
-                int newh = lround(k * origsz.y);
+                int newh = ts::lround(k * origsz.y);
                 if (bmp.info().sz != origsz)
                 {
                     bmp.create_ARGB(origsz);
@@ -238,7 +238,7 @@ namespace
                 return bmp.info().sz;
 
             float k = (float)w / (float)bmp.info().sz.x;
-            int newh = lround(k * bmp.info().sz.y);
+            int newh = ts::lround(k * bmp.info().sz.y);
             return ts::ivec2(w, newh);
         }
 
@@ -254,7 +254,7 @@ namespace
             } else
             {
                 float k = (float)w / (float)bmp.info().sz.x;
-                int newh = lround(k * bmp.info().sz.y);
+                int newh = ts::lround(k * bmp.info().sz.y);
                 if (frame.info().sz != ts::ivec2(w, newh))
                     frame.create_ARGB(ts::ivec2(w, newh));
                 bmp.resize_to(frame.extbody(), ts::FILTER_BOX_LANCZOS3);
@@ -429,7 +429,7 @@ bool image_loader_c::upd_btnpos(RID r, GUIPARAM p)
 
 void image_loader_c::update_ctl_pos()
 {
-    const button_desc_s *explorebdsc = g_app->buttons().exploreb;
+    const button_desc_s *explorebdsc = g_app->preloaded_stuff().exploreb;
 
     if (item)
     {

@@ -264,7 +264,7 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
 			{
 				dst = dst_ + start.y * pitch;
 				ivec4 c = bpp == 1 ? glyphColor : ivec4(255);
-				ivec4 ca(c.rgb(), lround(c.a*(1 + thick - d)));
+				ivec4 ca(c.rgb(), ts::lround(c.a*(1 + thick - d)));
 				// begin
 				for (int i=start.x; i<end.x; i++) writePixelBlended(((TSCOLOR*)dst)[i], ca);
 				start.y++, dst += pitch;

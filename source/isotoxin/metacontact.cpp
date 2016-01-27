@@ -37,7 +37,7 @@ void dialog_metacontact_c::getbutton(bcreate_s &bcr)
 
 /*virtual*/ int dialog_metacontact_c::additions(ts::irect &)
 {
-    descmaker dm(descs);
+    descmaker dm(this);
     dm << 1;
 
     dm().page_header(TTT("Metacontact - union of some contacts with common message history.[br][l]Drag and drop addition contacts to this list.[/l]",147));

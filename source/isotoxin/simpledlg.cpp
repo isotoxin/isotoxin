@@ -153,7 +153,7 @@ void dialog_msgbox_c::getbutton(bcreate_s &bcr)
 /*virtual*/ int dialog_msgbox_c::additions(ts::irect &)
 {
 
-    descmaker dm(descs);
+    descmaker dm(this);
     dm << 1;
 
     dm().label(CONSTWSTR("<p=c>") + m_params.desc).setname(CONSTASTR("label"));
@@ -251,7 +251,7 @@ void dialog_pb_c::getbutton(bcreate_s &bcr)
 
 /*virtual*/ int dialog_pb_c::additions(ts::irect &)
 {
-    descmaker dm(descs);
+    descmaker dm(this);
     dm << 1;
 
     if (!m_params.desc.is_empty())
@@ -357,7 +357,7 @@ bool dialog_entertext_c::showpass_handler(RID, GUIPARAM p)
 /*virtual*/ int dialog_entertext_c::additions(ts::irect &)
 {
 
-    descmaker dm(descs);
+    descmaker dm(this);
     dm << 1;
 
     dm().page_header(m_params.desc);
@@ -499,7 +499,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
 /*virtual*/ int dialog_about_c::additions(ts::irect &)
 {
 
-    descmaker dm(descs);
+    descmaker dm(this);
     dm << 1;
 
     ts::wstr_c title(256,true);

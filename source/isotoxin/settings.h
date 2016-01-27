@@ -422,7 +422,7 @@ private:
 
     ts::wstrmap_c camera;
     UNIQUE_PTR( vsb_c ) video_device;
-    process_animation_bitmap_s initializing_animation;
+    process_animation_s initializing_animation;
 
     void mod();
     void networks_tab_selected();

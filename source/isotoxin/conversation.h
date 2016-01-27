@@ -115,7 +115,7 @@ class gui_notice_callinprogress_c : public gui_notice_c
     ts::ivec2 last_video_size;
     ts::ivec2 shadowsize = ts::ivec2(0);
     ts::safe_ptr<gui_button_c> buttons[ 5 ];
-    process_animation_bitmap_s pa;
+    process_animation_s pa;
     vsb_list_t video_devices;
     UNIQUE_PTR( vsb_c ) camera;
     ts::ivec2 cam_previewsize = ts::ivec2(0);
@@ -222,10 +222,9 @@ class gui_notice_network_c : public gui_notice_c
     {
         COLOR_ONLINE_STATUS = 0,
         COLOR_OFFLINE_STATUS = 1,
-        COLOR_BLINKED = 2,
-        COLOR_OVERAVATAR = 3,
-        COLOR_DEFAULT_VALUE = 4,
-        COLOR_ERROR_STATUS = 5,
+        COLOR_OVERAVATAR = 2,
+        COLOR_DEFAULT_VALUE = 3,
+        COLOR_ERROR_STATUS = 4,
     };
     
     ts::str_c pubid;

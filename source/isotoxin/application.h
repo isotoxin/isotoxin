@@ -2,19 +2,45 @@
 
 #define IDI_ICON_APP IDI_ICON_ONLINE
 
-#define BUTTON_FACE_PRELOADED( face ) (GET_BUTTON_FACE) ([]()->button_desc_s * { return g_app->buttons().face; } )
+#define BUTTON_FACE_PRELOADED( face ) (GET_BUTTON_FACE) ([]()->button_desc_s * { return g_app->preloaded_stuff().face; } )
+#define GET_FONT( face ) g_app->preloaded_stuff().face
+#define GET_THEME_VALUE( name ) g_app->preloaded_stuff().name
 
 #define HOTKEY_TOGGLE_SEARCH_BAR SSK_F, gui_c::casw_ctrl
 #define HOTKEY_TOGGLE_TAGFILTER_BAR SSK_T, gui_c::casw_ctrl
 #define HOTKEY_TOGGLE_NEW_CONNECTION_BAR SSK_N, gui_c::casw_ctrl
 
-struct preloaded_buttons_s
+struct preloaded_stuff_s
 {
-    ts::shared_ptr<button_desc_s> icon[ contact_gender_count ];
-    ts::shared_ptr<button_desc_s> groupchat;
-    ts::shared_ptr<button_desc_s> online, online2;
-    ts::shared_ptr<button_desc_s> invite;
-    ts::shared_ptr<button_desc_s> achtung;
+    const ts::font_desc_c *font_conv_name = &ts::g_default_text_font;
+    const ts::font_desc_c *font_conv_text = &ts::g_default_text_font;
+    const ts::font_desc_c *font_conv_time = &ts::g_default_text_font;
+    int contactheight = 55;
+    int mecontactheight = 60;
+    int minprotowidth = 100;
+    int protoiconsize = 10;
+    ts::ivec2 achtung_shift = ts::ivec2(0);
+
+    ts::TSCOLOR appname_color = ts::ARGB(0, 50, 0);
+    ts::TSCOLOR deftextcolor = ts::ARGB(0, 0, 0);
+    ts::TSCOLOR found_mark_color = ts::ARGB(50, 50, 0);
+    ts::TSCOLOR found_mark_bg_color = ts::ARGB(255, 100, 255);
+    ts::TSCOLOR achtung_content_color = ts::ARGB(0, 0, 0);
+    ts::TSCOLOR state_online_color = ts::ARGB(0, 255, 0);
+    ts::TSCOLOR state_away_color = ts::ARGB(255, 255, 0);
+    ts::TSCOLOR state_dnd_color = ts::ARGB(255, 0, 0);
+
+    const theme_image_s* icon[contact_gender_count];
+    const theme_image_s* groupchat = nullptr;
+    const theme_image_s* nokeeph = nullptr;
+    const theme_image_s* achtung_bg = nullptr;
+    const theme_image_s* invite_send = nullptr;
+    const theme_image_s* invite_recv = nullptr;
+    const theme_image_s* invite_rej = nullptr;
+    const theme_image_s* online[contact_online_state_check];
+    const theme_image_s* offline = nullptr;
+    const theme_image_s* online_some = nullptr;
+    
     ts::shared_ptr<button_desc_s> callb;
     ts::shared_ptr<button_desc_s> fileb;
 
@@ -27,10 +53,10 @@ struct preloaded_buttons_s
     ts::shared_ptr<button_desc_s> unpauseb;
     ts::shared_ptr<button_desc_s> breakb;
     
-    ts::shared_ptr<button_desc_s> nokeeph;
     
     ts::shared_ptr<button_desc_s> smile;
 
+    void update_fonts();
     void reload();
 };
 
@@ -316,6 +342,7 @@ public:
     unsigned F_READONLY_MODE : 1;
     unsigned F_READONLY_MODE_WARN : 1;
     unsigned F_MODAL_ENTER_PASSWORD : 1;
+    unsigned F_TYPING : 1; // any typing
 
 
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_EXIT);
@@ -344,7 +371,7 @@ public:
     ts::hashmap_t<SLANGID, ts::wstr_c> m_locale_lng;
     SLANGID m_locale_tag;
 
-    preloaded_buttons_s m_buttons;
+    preloaded_stuff_s m_preloaded_stuff;
 
     ts::array_del_t<file_transfer_s, 2> m_files;
 
@@ -478,8 +505,6 @@ public:
 
     ts::array_del_t<send_queue_s, 1> m_undelivered;
 
-    void update_fonts();
-
 public:
     bool b_send_message(RID r, GUIPARAM param);
     bool flash_notification_icon(RID r = RID(), GUIPARAM param = nullptr);
@@ -488,18 +513,6 @@ public:
 
     ts::safe_ptr<gui_contact_item_c> active_contact_item;
     vsb_display_ptr_c current_video_display;
-
-    const ts::font_desc_c *font_conv_name = &ts::g_default_text_font;
-    const ts::font_desc_c *font_conv_text = &ts::g_default_text_font;
-    const ts::font_desc_c *font_conv_time = &ts::g_default_text_font;
-    int contactheight = 55;
-    int mecontactheight = 60;
-    int minprotowidth = 100;
-    int protoiconsize = 10;
-
-    ts::TSCOLOR found_mark_color = ts::ARGB( 50, 50, 0 );
-    ts::TSCOLOR found_mark_bg_color = ts::ARGB( 255, 100, 255 );
-
 
     time_t autoupdate_next;
     ts::ivec2 download_progress = ts::ivec2(0);
@@ -525,6 +538,14 @@ public:
 
     void reload_fonts();
     bool load_theme( const ts::wsptr&thn );
+    ts::bitmap_c &prepareimageplace(const ts::wsptr &name)
+    {
+        return get_theme().prepareimageplace(name);
+    }
+    void clearimageplace(const ts::wsptr &name)
+    {
+        return get_theme().clearimageplace(name);
+    }
 
     const SLANGID &current_lang() const {return m_locale_tag;};
     void load_locale( const SLANGID& lng );
@@ -537,7 +558,7 @@ public:
 
     void summon_main_rect(bool minimize);
     void load_profile_and_summon_main_rect(bool minimize);
-    preloaded_buttons_s &buttons() {return m_buttons;}
+    preloaded_stuff_s &preloaded_stuff() {return m_preloaded_stuff;}
 
     void lock_recalc_unread( const contact_key_s &ck ) { m_locked_recalc_unread.set(ck); };
     blinking_reason_s &new_blink_reason(const contact_key_s &historian);

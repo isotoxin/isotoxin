@@ -1156,7 +1156,7 @@ struct lnk_s
 
     INLINE TSCOLOR GRAYSCALE(TSCOLOR c)
     {
-        auint oi = lround(float(BLUE(c)) * 0.114f + float(GREEN(c)) * 0.587f + float(RED(c)) * 0.299);
+        auint oi = ts::lround(float(BLUE(c)) * 0.114f + float(GREEN(c)) * 0.587f + float(RED(c)) * 0.299);
         return ARGB<auint>(oi, oi, oi, ALPHA(c));
     }
 
@@ -1168,9 +1168,9 @@ struct lnk_s
 
     INLINE TSCOLOR PREMULTIPLY(TSCOLOR c, float a)
     {
-        auint oiB = lround(float(BLUE(c)) * a);
-        auint oiG = lround(float(GREEN(c)) * a);
-        auint oiR = lround(float(RED(c)) * a);
+        auint oiB = ts::lround(float(BLUE(c)) * a);
+        auint oiG = ts::lround(float(GREEN(c)) * a);
+        auint oiR = ts::lround(float(RED(c)) * a);
 
         return ARGB<auint>(oiR, oiG, oiB, ALPHA(c));
     }
@@ -1192,10 +1192,10 @@ struct lnk_s
         double a = ((double)(ALPHA(c) * aa) * (1.0 / 65025.0));
         not_a = 1.0 - a;
 
-        auint oiB = lround(float(BLUE(c)) * a);
-        auint oiG = lround(float(GREEN(c)) * a);
-        auint oiR = lround(float(RED(c)) * a);
-        auint oiA = lround(a * 255.0);
+        auint oiB = ts::lround(float(BLUE(c)) * a);
+        auint oiG = ts::lround(float(GREEN(c)) * a);
+        auint oiR = ts::lround(float(RED(c)) * a);
+        auint oiA = ts::lround(a * 255.0);
 
         return ARGB<auint>(oiR, oiG, oiB, oiA);
     }
@@ -1217,7 +1217,7 @@ struct lnk_s
 
         if (oA == 0)
         {
-            auint a = lround(double(constant_alpha * ALPHA(source)) * (1.0 / 255.0));
+            auint a = ts::lround(double(constant_alpha * ALPHA(source)) * (1.0 / 255.0));
             return (0x00FFFFFF & source) | (CLAMP<uint8>(a) << 24);
         }
 
@@ -1233,14 +1233,14 @@ struct lnk_s
         float A = float(double(constant_alpha * ALPHA(source)) * (1.0 / (255.0 * 255.0)));
         float nA = 1.0f - A;
 
-        auint oiA = lround(255.0f * A + float(oA) * nA);
+        auint oiA = ts::lround(255.0f * A + float(oA) * nA);
 
         float k = 0;
         if (oiA) k = 1.0f - (A * 255.0f / (float)oiA);
 
-        auint oiB = lround(float(B) * A + float(oB) * k);
-        auint oiG = lround(float(G) * A + float(oG) * k);
-        auint oiR = lround(float(R) * A + float(oR) * k);
+        auint oiB = ts::lround(float(B) * A + float(oB) * k);
+        auint oiG = ts::lround(float(G) * A + float(oG) * k);
+        auint oiR = ts::lround(float(R) * A + float(oR) * k);
 
         return ARGB<auint>(oiR, oiG, oiB, oiA);
     }

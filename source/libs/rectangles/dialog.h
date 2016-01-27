@@ -220,9 +220,10 @@ protected:
 
     struct descmaker
     {
+        gui_dialog_c*dlg;
         descarray& arr;
         ts::uint32 mask = 0;
-        descmaker(descarray& arr):arr(arr) { ASSERT(arr.size() == 0); }
+        descmaker(gui_dialog_c*dlg):dlg(dlg), arr(dlg->descs) { ASSERT(arr.size() == 0); }
         ~descmaker()
         {
 #ifndef _FINAL
@@ -230,7 +231,7 @@ protected:
                 d.initialization = false;
 #endif
         }
-        description_s& operator()() { description_s& d = arr.add(); d.mask = mask; return d; }
+        description_s& operator()() { description_s& d = arr.add(); d.mask = mask; d.color = dlg->get_default_text_color(); return d; }
         void operator << (ts::uint32 m) {mask = m;}
         void operator=(const descmaker&) UNUSED;
         descmaker(const descmaker&) UNUSED;

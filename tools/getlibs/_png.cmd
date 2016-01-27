@@ -5,18 +5,17 @@ set libdir=%1
 if x%libdir%==x set libdir=..\..\source\libs-external
 if exist %libdir%\pnglib\src\png.h goto alrd
 
-set PNGDIR=lpng1618
-set PNGARCHIVE=lpng1618.7z
-set PNGURL=http://netcologne.dl.sourceforge.net/project/libpng/libpng16/1.6.18/%PNGARCHIVE%
+if exist pnglib rd pnglib /S /Q
+git clone git://git.code.sf.net/p/libpng/code pnglib
 
-if exist %PNGDIR% rd %PNGDIR% /S /Q
-..\wget %PNGURL%
-..\7z x %PNGARCHIVE%
+cd pnglib
+git checkout "libpng-1.6.21-signed"
+cd ..
+
 if not exist %libdir%\pnglib\src md %libdir%\pnglib\src
-move %PNGDIR%\*.c %libdir%\pnglib\src >nul
-move %PNGDIR%\*.h %libdir%\pnglib\src >nul
-rd %PNGDIR% /S /Q
-del %PNGARCHIVE%
+move pnglib\*.c %libdir%\pnglib\src >nul
+move pnglib\*.h %libdir%\pnglib\src >nul
+rd pnglib /S /Q
 
 echo ok: %getlib% obtained
 goto enda

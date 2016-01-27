@@ -187,6 +187,12 @@ template <typename TCHARACTER> const TCHARACTER *bp_t<TCHARACTER>::load(const TC
 }
 
 
+template <typename TCHARACTER> static void append_value(str_t<TCHARACTER> &s, const str_t<TCHARACTER> &value)
+{
+    if (value.is_empty()) return;
+    s.append_char('=').append(value);
+}
+
 template <typename TCHARACTER> static const str_t<TCHARACTER> store_value(const str_t<TCHARACTER> &value, bool allow_unquoted = true)
 {
 	if (allow_unquoted && value.find_pos_of<char>(0, CONSTASTR(" \t\r\n`{}")) < 0) // any of these symbols mean string must be quoted
@@ -198,23 +204,23 @@ template <typename TCHARACTER> static const str_t<TCHARACTER> store_value(const 
 	}
 	str_t<TCHARACTER> r(value);
 	r.replace_all(CONSTSTR(TCHARACTER,"`"), CONSTSTR(TCHARACTER,"``"));
-	return TCHARACTER('`') + r + TCHARACTER('`');
+	return str_t<TCHARACTER>( CONSTSTR(TCHARACTER, "`"), r).append_char('`');
 }
 
 template <typename TCHARACTER> const str_t<TCHARACTER> bp_t<TCHARACTER>::store(int level) const
 {
 	// can be block stored as single line?
-	bool oneLine = true;
+	bool one_line = true;
 	if (elements.size() > 3 || level == 0 || preserve_comments)
-		oneLine = false;
+		one_line = false;
 	else
 	{
 		int totalLen = value.get_length();
 		for (element_s *e=first_element; e; e=e->next)
 		{
-			if (e->bp.first_element) {oneLine = false; break;} // no - there are inner blocks detected
+			if (e->bp.first_element) {one_line = false; break;} // no - there are inner blocks detected
 			totalLen += e->name->get_length() + e->bp.value.get_length();
-			if (totalLen > 40/*ONE_LINE_LIMIT*/) {oneLine = false; break;}
+			if (totalLen > 40/*ONE_LINE_LIMIT*/) {one_line = false; break;}
 		}
 	}
 	// write
@@ -223,17 +229,17 @@ template <typename TCHARACTER> const str_t<TCHARACTER> bp_t<TCHARACTER>::store(i
 	{
 		if (*e->name == string_type(TCHARACTER(0))) {r += e->bp.value; continue;} // this is comment
 		if (e->bp.value_not_specified() && !e->bp.first_element) {if (e == last_element) goto c_; continue;} // correct element skip
-		if (!oneLine && (level > 0 || e!=first_element)) r.append(CONSTSTR(TCHARACTER,"\r\n")).append_chars(level, '\t');
+		if (!one_line && (level > 0 || e!=first_element)) r.append(CONSTSTR(TCHARACTER,"\r\n")).append_chars(level, '\t');
 		int prev_len = r.get_length();
-		r += *e->name;
-		if (!e->bp.value_not_specified()) r += TCHARACTER('=') + store_value(e->bp.value, !oneLine || e == last_element);// do not write = symbol if value not defined
+		r.append( *e->name );
+		if (!e->bp.value_not_specified()) append_value( r, store_value(e->bp.value, !one_line || e == last_element) );
 		if (e->bp.first_element)// inner blocks?
 		{
 			if (r.get_length() > prev_len) r.append_char(' '); // to remove space in {a=3}\n {b=6}
 			r.append_char('{').append(e->bp.store(level + 1)).append_char('}');
 		}
-		if (e != last_element) {if (oneLine) r.append_char(' ');}
-		else {c_: if (!oneLine && level > 0) r.append(CONSTSTR(TCHARACTER,"\r\n")).append_chars(level-1, '\t');}
+		if (e != last_element) {if (one_line) r.append_char(' ');}
+		else {c_: if (!one_line && level > 0) r.append(CONSTSTR(TCHARACTER,"\r\n")).append_chars(level-1, '\t');}
 	}
 	return r;
 }

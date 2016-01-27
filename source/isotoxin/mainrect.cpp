@@ -22,6 +22,19 @@ ts::uint32 mainrect_c::gm_handler( gmsg<ISOGM_APPRISE> & )
     return 0;
 }
 
+ts::uint32 mainrect_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
+{
+    if (ch.pass == 0)
+        if (PP_ONLINESTATUS == ch.sp)
+        {
+            ts::irect r(0,0,100,100); // just redraw left top 100px square of main rect. (we hope that app icon less then 100px)
+            getengine().redraw( &r );
+        }
+
+    return 0;
+}
+
+
 /*virtual*/ ts::wstr_c mainrect_c::get_name() const
 {
     if (name.is_empty())
@@ -60,21 +73,24 @@ ts::uint32 mainrect_c::gm_handler( gmsg<ISOGM_APPRISE> & )
         if (tr->captextadd.x >= 18)
         {
             int sz = tr->captextadd.x - 2;
-            ts::bitmap_c icon, rsz;
-            if (icon.load_from_file(CONSTWSTR("icon.png")))
-            {
-                rsz.create_ARGB(ts::ivec2(sz));
-                icon.resize_to( rsz.extbody(), ts::FILTER_BOX_LANCZOS3 );
-                rsz.premultiply();
-                icons[0] = rsz;
-            }
 
-            if (icon.load_from_file(CONSTWSTR("icon-offline.png")))
+            ts::buf_c svgb; svgb.load_from_file( CONSTWSTR("icon.svg") );
+            ts::abp_c gen;
+            ts::str_c svgs( svgb.cstr() );
+            svgs.replace_all( CONSTASTR("[scale]"), ts::amake<float>( (float)sz * 0.01f ) );
+            gen.set(CONSTASTR("svg")).set_value( svgs );
+
+            gen.set(CONSTASTR("color")).set_value( make_color( GET_THEME_VALUE(state_online_color) ) );
+            gen.set(CONSTASTR("color-hover")).set_value(make_color( GET_THEME_VALUE(state_away_color) ) );
+            gen.set(CONSTASTR("color-press")).set_value(make_color( GET_THEME_VALUE(state_dnd_color) ) );
+            gen.set(CONSTASTR("color-disabled")).set_value(make_color( 0 ) );
+            gen.set(CONSTASTR("size")).set_value( ts::amake(ts::ivec2(sz)) );
+            colors_map_s cmap;
+            icons.clear();
+            if (generated_button_data_s *g = generated_button_data_s::generate( &gen, cmap, false ))
             {
-                rsz.create_ARGB(ts::ivec2(sz));
-                icon.resize_to(rsz.extbody(), ts::FILTER_BOX_LANCZOS3);
-                rsz.premultiply();
-                icons[1] = rsz;
+                icons = g->src;
+                TSDEL(g);
             }
         }
     }
@@ -132,16 +148,19 @@ bool mainrect_c::saverectpos(RID,GUIPARAM)
 	{
 	case SQ_DRAW:
         if (const theme_rect_s *tr = themerect())
-		if (icons[0].info().sz.x > 0 && icons[1].info().sz.x)
+		if (icons.info().sz.x > 0)
         {
             ts::irect cr = tr->captionrect( getprops().currentszrect(), getprops().is_maximized() );
-
-            ts::bitmap_c &icon = icons[ g_app->F_OFFLINE_ICON ? 1 : 0 ];
-            //cr.lt.y += (cr.height() - icon.info().sz.y)/2;
+            int st = g_app->F_OFFLINE_ICON ? contact_online_state_check : contacts().get_self().get_ostate();
+            ts::irect ir;
+            ir.lt.x = 0;
+            ir.rb.x = icons.info().sz.x;
+            ir.lt.y = st * ir.rb.x;
+            ir.rb.y = ir.lt.y + ir.rb.x;
             cr.lt.y += tr->captextadd.y;
 
             getengine().begin_draw();
-            getengine().draw( cr.lt, icon.extbody(), ts::irect(0, icon.info().sz), true );
+            getengine().draw( cr.lt, icons.extbody(), ir, true );
             getengine().end_draw();
         }
 		break;

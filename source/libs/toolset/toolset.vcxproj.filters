@@ -278,6 +278,12 @@
     <ClInclude Include="tsjson.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="internal\rapidxml.h">
+      <Filter>src\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="internal\rapidxml_iterators.h">
+      <Filter>src\internal</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="asm\a_resample_mmx.asm">

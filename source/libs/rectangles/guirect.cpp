@@ -548,6 +548,8 @@ void gui_button_c::draw()
             dd.size = sz;
             dd.size.x -= toffs;
             tdp.forecolor = desc->colors + drawstate;
+            if (flags.is(F_HOVER))
+                tdp.forecolor = desc->colors + button_desc_s::HOVER;
             ts::flags32_s f; f.set(ts::TO_VCENTER|ts::TO_LINE_END_ELLIPSIS);
             tdp.textoptions = &f;
             tdp.rectupdate = updaterect;
@@ -764,6 +766,7 @@ void gui_button_c::set_face( button_desc_s *bdesc )
         if (!flags.is(F_DISABLED))
         {
             curstate = button_desc_s::HOVER;
+            flags.set(F_HOVER);
             getengine().redraw();
         }
         break;
@@ -771,6 +774,7 @@ void gui_button_c::set_face( button_desc_s *bdesc )
         if (!flags.is(F_DISABLED))
         {
             curstate = button_desc_s::NORMAL;
+            flags.clear(F_HOVER);
             getengine().redraw();
         }
         break;
@@ -1598,21 +1602,21 @@ void gui_hgroup_c::children_repos()
 
         if (opd || ww.sz == 0)
         {
-            ww.sz = (ts::int16)lround((double)current_size_goal * tpropo[t] / proposum_working);
+            ww.sz = (ts::int16)ts::lround((double)current_size_goal * tpropo[t] / proposum_working);
         } else
         {
             switch (ww.sizepolicy)
             {
             case SP_NORMAL:
             case SP_ANY:
-                ww.sz = (ts::int16)lround((double)current_size_goal * tpropo[t] / proposum_working);
+                ww.sz = (ts::int16)ts::lround((double)current_size_goal * tpropo[t] / proposum_working);
                 break;
             case SP_NORMAL_MIN:
                 ww.sz = ww.szmin;
                 break;
             case SP_NORMAL_MAX:
                 ww.sz = ww.szmax;
-                if (ww.sz > current_size_goal) ww.sz = (ts::int16)lround(current_size_goal);
+                if (ww.sz > current_size_goal) ww.sz = (ts::int16)current_size_goal;
                 break;
             }
         }
@@ -1634,7 +1638,7 @@ void gui_hgroup_c::children_repos()
             rsize &ww = rsizes.get(t);
             if (ww.sz >= 0)
             {
-                int newsz_unclamped = lround((double)current_size_goal * ts::tabs(tpropo[t]) / proposum_working);
+                int newsz_unclamped = ts::lround((double)current_size_goal * ts::tabs(tpropo[t]) / proposum_working);
                 polices |= SETBIT(szpol_override[t]);
                 if (opd)
                     ww.sz = (ts::int16)ts::CLAMP(newsz_unclamped, ww.szmin, ww.szmax);
@@ -1651,7 +1655,7 @@ void gui_hgroup_c::children_repos()
                         break;
                     case SP_NORMAL_MAX:
                         ww.sz = ww.szmax;
-                        if (ww.sz > current_size_goal) ww.sz = (ts::int16)lround(current_size_goal);
+                        if (ww.sz > current_size_goal) ww.sz = (ts::int16)current_size_goal;
                         break;
                     case SP_KEEP:
                         break;
@@ -2451,7 +2455,7 @@ bool gui_popup_menu_c::update_size(RID, GUIPARAM)
         if (cp.x < showpoint.rect.rb.x) cp.x = showpoint.rect.lt.x - sz.x;
         break;
     case menu_anchor_s::RELPOS_TYPE_BD:
-        if (cp.y < showpoint.rect.rb.y) cp.y = showpoint.rect.lt.y - sz.y;
+        if (!height_decreased && cp.y < showpoint.rect.rb.y) cp.y = showpoint.rect.lt.y - sz.y;
         if (cp.x < showpoint.rect.lt.x) cp.x = showpoint.rect.rb.x - sz.x;
         break;
     case menu_anchor_s::RELPOS_TYPE_TU:
@@ -2652,6 +2656,19 @@ ts::uint32 gui_popup_menu_c::gm_handler(gmsg<GM_SYSMENU_PRESENT> &p)
     return flags.is(F_SYSMENU) ? GMRBIT_ACCEPTED : 0;
 }
 
+ts::uint32 gui_popup_menu_c::gm_handler(gmsg<GM_CHECK_ALLOW_CLICK> &p)
+{
+    ts::uint32 r = 0;
+    if (hostrid == p.onrid || (getrid() >>= p.onrid))
+        r |= GMRBIT_ACCEPTED;
+    else
+        r |= GMRBIT_REJECTED;
+
+    if (!parent_menu)
+        p.mnu = this;
+
+    return r;
+}
 
 gui_menu_item_c::~gui_menu_item_c()
 {
@@ -3508,7 +3525,7 @@ void gui_hslider_c::set_level(float level_)
                 } else
                 {
                     caret_width = th->sis[SI_CENTER].width();
-                    x = lround((float)(cla.width() - caret_width) * pos) + cla.lt.x;
+                    x = ts::lround((float)(cla.width() - caret_width) * pos) + cla.lt.x;
                     m_engine->draw(ts::ivec2(x, cla.lt.y), th->src.extbody(), th->sis[SI_CENTER], th->is_alphablend(SI_CENTER));
                 }
 
@@ -3549,7 +3566,7 @@ void gui_hslider_c::set_level(float level_)
             ts::ivec2 mplocal = to_local(data.mouse.screenpos);
             ts::ivec2 caret_size = th->sis[SI_CENTER].size();
             ts::irect cla = get_client_area();
-            ts::ivec2 caret_pos( lround((float)(cla.width() - caret_size.x) * pos) + cla.lt.x, cla.lt.y );
+            ts::ivec2 caret_pos( ts::lround((float)(cla.width() - caret_size.x) * pos) + cla.lt.x, cla.lt.y );
             ts::irect caret( caret_pos, caret_pos + caret_size );
 
             if (caret.inside(mplocal))

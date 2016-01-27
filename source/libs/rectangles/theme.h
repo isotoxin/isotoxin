@@ -48,6 +48,20 @@ struct theme_conf_s
     bool specialborder = false;
 };
 
+struct colors_map_s : public ts::hashmap_t<ts::str_c, ts::TSCOLOR>
+{
+    ts::TSCOLOR parse( const ts::asptr &s, const ts::TSCOLOR def ) const
+    {
+        if ( s.l > 2 && s.s[0] == '#' && s.s[1] == '#' )
+        {
+            if (const auto * v = find( s.skip(2) ))
+                return v->value;
+            return def;
+        }
+        return ts::parsecolor<char>( s, def );
+    }
+};
+
 struct theme_rect_s : ts::shared_object
 {
 	const ts::bitmap_c &src;
@@ -83,7 +97,7 @@ struct theme_rect_s : ts::shared_object
 	
     int sbwidth() const {return ts::tmax(sis[SI_SBREP].width(), sis[SI_SMREP].width());}
 
-	void load_params(ts::bp_t<char> * block);
+	void load_params(ts::bp_t<char> * block, const colors_map_s &colsmap);
 
     ts::ivec2 size_by_clientsize(const ts::ivec2 &sz, bool maximized) const	// calc rect's full size by raw client area
     {
@@ -131,7 +145,7 @@ struct theme_rect_s : ts::shared_object
 	}
     DECLARE_DYNAMIC_END(private)
 
-    void init_subimage(subimage_e si, const ts::str_c &sidef);
+    void init_subimage(subimage_e si, const ts::str_c &sidef, const colors_map_s &colsmap);
 public:
 	~theme_rect_s();
 
@@ -151,13 +165,24 @@ struct button_desc_s;
 struct generated_button_data_s
 {
     ts::bitmap_c src;
-    static generated_button_data_s *generate( const ts::abp_c *gen );
+    int num_states = 0;
+    static generated_button_data_s *generate( const ts::abp_c *gen, const colors_map_s &colsmap, bool one_face );
     generated_button_data_s() {}
     virtual ~generated_button_data_s() {}
-    virtual void setup(button_desc_s &desc);
+
+    bool is_valid() const {return num_states > 0 && src.info().sz >> 0;}
     
     generated_button_data_s(const generated_button_data_s&) UNUSED;
     generated_button_data_s &operator=(const generated_button_data_s&) UNUSED;
+};
+
+enum align_e
+{
+    ALGN_UNDEFINED,
+    ALGN_LEFT = SETBIT(0),
+    ALGN_TOP = SETBIT(1),
+    ALGN_RIGHT = SETBIT(2),
+    ALGN_BOTTOM = SETBIT(3),
 };
 
 struct button_desc_s : ts::shared_object
@@ -172,15 +197,6 @@ struct button_desc_s : ts::shared_object
         numstates
     };
 
-    enum
-    {
-        UNDEFINED,
-        ALEFT = SETBIT(0),
-        ATOP = SETBIT(1),
-        ARIGHT = SETBIT(2),
-        ABOTTOM = SETBIT(3),
-    };
-    UNIQUE_PTR( generated_button_data_s ) genb;
     ts::ivec2 size;
     const ts::bitmap_c &src;
     ts::wstr_c text;
@@ -188,9 +204,9 @@ struct button_desc_s : ts::shared_object
     ts::shared_ptr<theme_rect_s> rectsf[numstates];
     ts::TSCOLOR colors[numstates];
     mutable ts::packed_buf_c< 2, numstates > alphablend;
-    ts::uint32 align = UNDEFINED;
+    ts::uint32 align = ALGN_UNDEFINED;
 
-    void load_params(theme_c *th, const ts::bp_t<char> * block);
+    void load_params(theme_c *th, const ts::bp_t<char> * block, const colors_map_s &colsmap, bool load_face);
 
     bool is_alphablend(states s) const
     {
@@ -218,6 +234,7 @@ struct theme_image_s : ts::image_extbody_c
     const ts::bitmap_c *dbmp = nullptr;
     ts::irect rect;
     void draw( rectengine_c &eng, const ts::ivec2 &p ) const;
+    void draw( rectengine_c &eng, const ts::irect& area, ts::uint32 align ) const;
 };
 
 typedef fastdelegate::FastDelegate<void(const ts::str_c&, ts::font_params_s&)> FONTPAR;
@@ -246,7 +263,9 @@ public:
 	theme_c();
 	~theme_c();
 
-    void add_image( const ts::asptr & tag, ts::bitmap_c &bmp );
+    ts::bitmap_c &prepareimageplace(const ts::wsptr &name);
+    void clearimageplace(const ts::wsptr &name);
+    //void add_image( const ts::asptr & tag, ts::bitmap_c &bmp );
 
     int ver() const {return iver;}
 

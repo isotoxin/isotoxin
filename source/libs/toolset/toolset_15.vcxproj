@@ -147,6 +147,8 @@
   <ItemGroup>
     <ClInclude Include="internal\cpu_detector.h" />
     <ClInclude Include="internal\fourcc.h" />
+    <ClInclude Include="internal\rapidxml.h" />
+    <ClInclude Include="internal\rapidxml_iterators.h" />
     <ClInclude Include="tsexecutor.h" />
     <ClInclude Include="internal\excpn.h" />
     <ClInclude Include="internal\glyphscache.h" />

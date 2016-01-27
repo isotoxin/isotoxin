@@ -302,9 +302,9 @@ font_c &font_c::buildfont(const str_c &fontname, const font_params_s&fprs)
 		//f.height    = (f.face->size->metrics.height    + 32) >> 6;
 		float design_to_device_K = (float)size.y/f.face->units_per_EM; // K from font to pixels
 		f.ascender  =  lceil(design_to_device_K * f.face->ascender);
-		f.descender = lround(design_to_device_K * f.face->descender);
-		f.height    = lround(design_to_device_K * f.face->height);
-		f.underline_add_y  = lround(design_to_device_K * f.face->underline_position);
+		f.descender = ts::lround(design_to_device_K * f.face->descender);
+		f.height    = ts::lround(design_to_device_K * f.face->height);
+		f.underline_add_y  = ts::lround(design_to_device_K * f.face->underline_position);
 		f.uline_thickness = float(design_to_device_K * f.face->underline_thickness);
 
 		memset(f.glyphs, 0, sizeof(f.glyphs));
@@ -323,7 +323,7 @@ int font_c::kerning_ci(int left, int right)
 	FT_Get_Kerning( face, FT_Get_Char_Index(face, left), FT_Get_Char_Index(face, right), FT_KERNING_DEFAULT, &delta );
 	return delta.x >> 6;*/
 	FT_Get_Kerning( face, left, right, FT_KERNING_UNSCALED, &delta );
-	return lround((float)font_params.size.x/face->units_per_EM * delta.x);
+	return ts::lround((float)font_params.size.x/face->units_per_EM * delta.x);
 }
 
 scaled_image_s *scaled_image_s::load(const wsptr &filename_, const ivec2 &scale)

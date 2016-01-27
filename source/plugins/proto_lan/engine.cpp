@@ -2434,7 +2434,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                             }
                             break;
                         case BT_TYPING:
-                            engine->hf->typing( id );
+                            engine->hf->typing( 0, id );
                             break;
                         default:
                             if (bt < __bt_service)

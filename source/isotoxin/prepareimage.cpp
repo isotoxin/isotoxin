@@ -99,7 +99,7 @@ dialog_prepareimage_c::~dialog_prepareimage_c()
 /*virtual*/ void dialog_prepareimage_c::created()
 {
     set_theme_rect(CONSTASTR("prepimg"), false);
-    fd.prepare( get_default_text_color(4), get_default_text_color(5) );
+    fd.prepare( get_default_text_color(3), get_default_text_color(4) );
     __super::created();
     tabsel( CONSTASTR("1") );
 
@@ -115,7 +115,7 @@ dialog_prepareimage_c::~dialog_prepareimage_c()
 
 /*virtual*/ int dialog_prepareimage_c::additions(ts::irect &)
 {
-    descmaker dm(descs);
+    descmaker dm(this);
     dm << 1;
 
     ts::wstr_c l(CONSTWSTR("<p=c>"));
@@ -423,10 +423,10 @@ void dialog_prepareimage_c::load_image(const ts::wstr_c &fn)
 
 void dialog_prepareimage_c::backscale_croprect()
 {
-    bitmapcroprect.lt.x = lround(bckscale * croprect.lt.x);
-    bitmapcroprect.lt.y = lround(bckscale * croprect.lt.y);
-    bitmapcroprect.rb.x = ts::tmin( bitmap.info().sz.x, lround(bckscale * croprect.rb.x) );
-    bitmapcroprect.rb.y = ts::tmin( bitmap.info().sz.y, lround(bckscale * croprect.rb.y) );
+    bitmapcroprect.lt.x = ts::lround(bckscale * croprect.lt.x);
+    bitmapcroprect.lt.y = ts::lround(bckscale * croprect.lt.y);
+    bitmapcroprect.rb.x = ts::tmin( bitmap.info().sz.x, ts::lround(bckscale * croprect.rb.x) );
+    bitmapcroprect.rb.y = ts::tmin( bitmap.info().sz.y, ts::lround(bckscale * croprect.rb.y) );
 }
 
 bool dialog_prepareimage_c::prepare_working_image( RID, GUIPARAM )
@@ -453,10 +453,10 @@ bool dialog_prepareimage_c::prepare_working_image( RID, GUIPARAM )
 
         bitmap.resize_to(image, ts::ivec2(ts::lround(scale * bitmap.info().sz.x), ts::lround(scale * bitmap.info().sz.y)), ts::FILTER_LANCZOS3);
 
-        croprect.lt.x = lround(scale * bitmapcroprect.lt.x);
-        croprect.lt.y = lround(scale * bitmapcroprect.lt.y);
-        croprect.rb.x = lround(scale * bitmapcroprect.rb.x);
-        croprect.rb.y = lround(scale * bitmapcroprect.rb.y);
+        croprect.lt.x = ts::lround(scale * bitmapcroprect.lt.x);
+        croprect.lt.y = ts::lround(scale * bitmapcroprect.lt.y);
+        croprect.rb.x = ts::lround(scale * bitmapcroprect.rb.x);
+        croprect.rb.y = ts::lround(scale * bitmapcroprect.rb.y);
 
         bool backcorr = false;
         if (croprect.rb.x > image.info().sz.x)
@@ -738,7 +738,7 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
                 {
                     ts::TSCOLOR info_c = ts::ARGB(0, 0, 0);
                     if (const theme_rect_s *tr = themerect())
-                        info_c = tr->color(3);
+                        info_c = tr->color(2);
                     draw_process(info_c, true, camera->is_busy());
                     allowdndinfo = false;
                 }
@@ -748,14 +748,12 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
             {
                 allowdndinfo = false;
 
-                ts::TSCOLOR border_c = ts::ARGB(0,0,0);
                 ts::TSCOLOR info_c = ts::ARGB(0,0,0);
                 if (const theme_rect_s *tr = themerect())
                 {
                     if (alpha)
                         draw_chessboard(getengine(), viewrect, tr->color(0), tr->color(1));
-                    border_c = tr->color(2);
-                    info_c = tr->color(3);
+                    info_c = tr->color(2);
                 }
 
                 if (imgrect)
@@ -860,7 +858,7 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
 
                 ts::TSCOLOR info_c = ts::ARGB(0, 0, 0);
                 if (const theme_rect_s *tr = themerect())
-                    info_c = tr->color(3);
+                    info_c = tr->color(2);
 
 
                 text_draw_params_s tdp;

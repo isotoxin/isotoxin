@@ -39,6 +39,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "filter_audio", "filter_audi
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libqrencode", "libqrencode\libqrencode_15.vcxproj", "{B3A669DA-9147-4C1A-B582-A72108CEADDA}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cairo", "cairo\cairo_15.vcxproj", "{246F3084-604C-41B6-9B3B-281383F5E134}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -164,6 +166,12 @@ Global
 		{B3A669DA-9147-4C1A-B582-A72108CEADDA}.Release|Win32.ActiveCfg = Release|Win32
 		{B3A669DA-9147-4C1A-B582-A72108CEADDA}.Release|Win32.Build.0 = Release|Win32
 		{B3A669DA-9147-4C1A-B582-A72108CEADDA}.Release|x64.ActiveCfg = Release|Win32
+		{246F3084-604C-41B6-9B3B-281383F5E134}.Debug|Win32.ActiveCfg = Debug|Win32
+		{246F3084-604C-41B6-9B3B-281383F5E134}.Debug|Win32.Build.0 = Debug|Win32
+		{246F3084-604C-41B6-9B3B-281383F5E134}.Debug|x64.ActiveCfg = Debug|Win32
+		{246F3084-604C-41B6-9B3B-281383F5E134}.Release|Win32.ActiveCfg = Release|Win32
+		{246F3084-604C-41B6-9B3B-281383F5E134}.Release|Win32.Build.0 = Release|Win32
+		{246F3084-604C-41B6-9B3B-281383F5E134}.Release|x64.ActiveCfg = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

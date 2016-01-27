@@ -34,7 +34,7 @@ class gui_contact_item_c : public gui_label_c
         COLOR_TEXT_TYPING,
         COLOR_TEXT_FOUND,
 
-        COLOR_PROTO_TEXT_ONLINE = 1,
+        COLOR_PROTO_TEXT_ONLINE = 0,
         COLOR_PROTO_TEXT_OFFLINE,
     };
 

@@ -555,13 +555,14 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
     {
         if (engine)
         {
-            if (gui->allow_input(engine->getrid()))
+            bool act = sq == SQ_MOUSE_LDOWN;
+            if (gui->allow_input(engine->getrid(), act))
             {
                 evt_data_s d;
                 d.mouse.screenpos = ts::ivec2(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
                 ClientToScreen(hwnd, &ts::ref_cast<POINT>(d.mouse.screenpos));
                 engine->sq_evt(sq, engine->getrid(), d);
-            } else if (sq == SQ_MOUSE_LDOWN)
+            } else if (act)
             {
                 if (RID exl = gui->get_exclusive())
                 {
@@ -777,7 +778,7 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
         case WM_MOUSEWHEEL:
             return 0;
         case WM_MOUSEACTIVATE:
-            if (!gui->allow_input(engine->getrid()))
+            if (!gui->allow_input(engine->getrid(), true))
             {
                 if ( RID r = gui->get_exclusive() )
                 {

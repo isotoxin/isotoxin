@@ -229,12 +229,12 @@ static void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp )
     if (newsz.x < newsz.y)
     {
         newsz.x = szc;
-        newsz.y = lround(((float)newsz.x / (float)bitmap2encode.info().sz.x) * (float)bitmap2encode.info().sz.y);
+        newsz.y = ts::lround(((float)newsz.x / (float)bitmap2encode.info().sz.x) * (float)bitmap2encode.info().sz.y);
     }
     else
     {
         newsz.y = szc;
-        newsz.x = lround(((float)newsz.y / (float)bitmap2encode.info().sz.y) * (float)bitmap2encode.info().sz.x);
+        newsz.x = ts::lround(((float)newsz.y / (float)bitmap2encode.info().sz.y) * (float)bitmap2encode.info().sz.x);
     }
 
     temp.clear();
@@ -332,7 +332,7 @@ dialog_avaselector_c::~dialog_avaselector_c()
 /*virtual*/ void dialog_avaselector_c::created()
 {
     set_theme_rect(CONSTASTR("avasel"), false);
-    fd.prepare( get_default_text_color(4), get_default_text_color(5) );
+    fd.prepare( get_default_text_color(3), get_default_text_color(4) );
     __super::created();
     tabsel( CONSTASTR("1") );
 
@@ -341,7 +341,7 @@ dialog_avaselector_c::~dialog_avaselector_c()
 /*virtual*/ int dialog_avaselector_c::additions(ts::irect &)
 {
 
-    descmaker dm(descs);
+    descmaker dm(this);
     dm << 1;
 
     ts::wstr_c l(CONSTWSTR("<p=c>"));
@@ -825,10 +825,10 @@ void dialog_avaselector_c::statrt_scale()
 {
     click_resize_k = resize_k;
     storeavarect = avarect;
-    storeavarect.lt.x = lround(storeavarect.lt.x / resize_k);
-    storeavarect.lt.y = lround(storeavarect.lt.y / resize_k);
-    storeavarect.rb.x = lround(storeavarect.rb.x / resize_k);
-    storeavarect.rb.y = lround(storeavarect.rb.y / resize_k);
+    storeavarect.lt.x = ts::lround(storeavarect.lt.x / resize_k);
+    storeavarect.lt.y = ts::lround(storeavarect.lt.y / resize_k);
+    storeavarect.rb.x = ts::lround(storeavarect.rb.x / resize_k);
+    storeavarect.rb.y = ts::lround(storeavarect.rb.y / resize_k);
 
 }
 void dialog_avaselector_c::do_scale(float sf)
@@ -841,10 +841,10 @@ void dialog_avaselector_c::do_scale(float sf)
     rebuild_bitmap();
 
     avarect = storeavarect;
-    avarect.lt.x = lround(resize_k * avarect.lt.x);
-    avarect.lt.y = lround(resize_k * avarect.lt.y);
-    avarect.rb.x = lround(resize_k * avarect.rb.x);
-    avarect.rb.y = lround(resize_k * avarect.rb.y);
+    avarect.lt.x = ts::lround(resize_k * avarect.lt.x);
+    avarect.lt.y = ts::lround(resize_k * avarect.lt.y);
+    avarect.rb.x = ts::lround(resize_k * avarect.rb.x);
+    avarect.rb.y = ts::lround(resize_k * avarect.rb.y);
     if (avarect.rb.x > image.info().sz.x)
     {
         avarect.rb.x = image.info().sz.x;
@@ -954,7 +954,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                 {
                     ts::TSCOLOR info_c = ts::ARGB(0, 0, 0);
                     if (const theme_rect_s *tr = themerect())
-                        info_c = tr->color(3);
+                        info_c = tr->color(2);
                     draw_process(info_c, true, camera->is_busy());
                     allowdndinfo = false;
                 }
@@ -964,14 +964,12 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
             {
                 allowdndinfo = false;
 
-                ts::TSCOLOR border_c = ts::ARGB(0,0,0);
                 ts::TSCOLOR info_c = ts::ARGB(0,0,0);
                 if (const theme_rect_s *tr = themerect())
                 {
                     if (alpha)
                         draw_chessboard(getengine(), viewrect, tr->color(0), tr->color(1));
-                    border_c = tr->color(2);
-                    info_c = tr->color(3);
+                    info_c = tr->color(2);
                 }
 
                 if (imgrect)
@@ -1091,7 +1089,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
 
                 ts::TSCOLOR info_c = ts::ARGB(0, 0, 0);
                 if (const theme_rect_s *tr = themerect())
-                    info_c = tr->color(3);
+                    info_c = tr->color(2);
 
 
                 text_draw_params_s tdp;

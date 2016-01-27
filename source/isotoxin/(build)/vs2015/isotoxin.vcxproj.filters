@@ -105,6 +105,9 @@
     <ClCompile Include="..\..\simpledlg.cpp">
       <Filter>src\gui</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\colors.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\res\resource.h">
@@ -186,6 +189,9 @@
       <Filter>src\gui</Filter>
     </ClInclude>
     <ClInclude Include="..\..\simpledlg.h">
+      <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\colors.h">
       <Filter>src\gui</Filter>
     </ClInclude>
   </ItemGroup>

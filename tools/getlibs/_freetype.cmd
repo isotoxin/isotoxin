@@ -8,7 +8,7 @@ if exist %libdir%\freetype\include\freetype.h goto alrd
 if exist freetype2 rd freetype2 /S /Q
 git clone http://git.sv.nongnu.org/r/freetype/freetype2.git
 move freetype2\include %libdir%\freetype >nul
-move freetype2\src %1\freetype >nul
+move freetype2\src %libdir%\freetype >nul
 rd freetype2 /S /Q
 
 echo ok: %getlib% obtained

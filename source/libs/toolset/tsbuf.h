@@ -1028,6 +1028,13 @@ public:
         __super::append_buf(t.data(), t.size());
     }
 
+    void clone( aint from, aint to )
+    {
+        aint sz = sizeof(T) * (to - from);
+        T * t = (T*)expand(sz);
+        memcpy( t, begin() + from, sz );
+    }
+
     T & add()
     {
         return *(T*)expand(sizeof(T));

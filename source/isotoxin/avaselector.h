@@ -62,7 +62,7 @@ class dialog_avaselector_c : public gui_isodialog_c
         compressor = nullptr;
     }
 
-    process_animation_bitmap_s pa;
+    process_animation_s pa;
     UNIQUE_PTR( vsb_c ) camera;
 
     framedrawer_s fd;

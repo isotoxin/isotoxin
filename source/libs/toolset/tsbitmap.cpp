@@ -115,6 +115,46 @@ void TSCALL img_helper_yuv2rgb(uint8 *des, const imgdesc_s &des_info, const uint
     }
 }
 
+void TSCALL img_helper_mulcolor(uint8 *des, const imgdesc_s &des_info, TSCOLOR color)
+{
+    int desnl = des_info.pitch - des_info.sz.x * 4;
+    for (int y = 0; y < des_info.sz.y; ++y, des += desnl)
+        for (int x = 0; x < des_info.sz.x; ++x, des += 4)
+            *(TSCOLOR *)des = MULTIPLY( color, *(TSCOLOR *)des);
+}
+
+void TSCALL img_helper_colorclamp(uint8 *des, const imgdesc_s &des_info)
+{
+    int desnl = des_info.pitch - des_info.sz.x * 4;
+    for (int y = 0; y < des_info.sz.y; ++y, des += desnl)
+    {
+        for (int x = 0; x < des_info.sz.x; ++x, des += 4)
+        {
+            TSCOLOR ocolor;
+            TSCOLOR color = *(TSCOLOR *)des;
+            uint8 alpha = ALPHA(color);
+            if (alpha == 255)
+            {
+                continue;
+            } else if (alpha == 0)
+            {
+                ocolor = 0;
+            } else
+            {
+                ocolor = color;
+                if ( RED( color ) > alpha )
+                    ocolor = (ocolor & 0xff00ffff) | ( alpha << 16 );
+                if ( GREEN( color ) > alpha )
+                    ocolor = (ocolor & 0xffff00ff) | ( alpha << 8 );
+                if ( BLUE( color ) > alpha )
+                    ocolor = (ocolor & 0xffffff00) | alpha;
+            }
+
+            *(TSCOLOR *)des = ocolor;
+        }
+    }
+}
+
 bool TSCALL img_helper_premultiply(uint8 *des, const imgdesc_s &des_info)
 {
     int desnl = des_info.pitch - des_info.sz.x * 4;
@@ -753,7 +793,7 @@ void img_helper_merge_with_alpha(uint8 *dst, const uint8 *basesrc, const uint8 *
                         float nA = 1.0f - A;
 
 #define CCGOOD( C, oC ) CLAMP<uint8>( float(C) * A + float(oC) * nA )
-                        uint oiA = (uint)lround(oalpha + float(255 - oalpha) * A);
+                        uint oiA = (uint)ts::lround(oalpha + float(255 - oalpha) * A);
                         ocolor = CCGOOD(B, oB) | (CCGOOD(G, oG) << 8) | (CCGOOD(R, oR) << 16) | (CLAMP<uint8>(oiA) << 24);
 #undef CCGOOD
 
@@ -801,11 +841,11 @@ void img_helper_merge_with_alpha(uint8 *dst, const uint8 *basesrc, const uint8 *
                         float nA = 1.0f - A;
 
 
-                        int oiB = lround(float(B) * A + float(oB) * nA);
-                        int oiG = lround(float(G) * A + float(oG) * nA);
-                        int oiR = lround(float(R) * A + float(oR) * nA);
+                        int oiB = ts::lround(float(B) * A + float(oB) * nA);
+                        int oiG = ts::lround(float(G) * A + float(oG) * nA);
+                        int oiR = ts::lround(float(R) * A + float(oR) * nA);
 
-                        int oiA = lround(oalphao + float(255 - oalphao) * A);
+                        int oiA = ts::lround(oalphao + float(255 - oalphao) * A);
 
                         ocolor = ((oiB > 255) ? 255 : oiB) | (((oiG > 255) ? 255 : oiG) << 8) | (((oiR > 255) ? 255 : oiR) << 16) | (((oiA > 255) ? 255 : oiA) << 24);
 
@@ -1407,32 +1447,77 @@ template<typename CORE> void bitmap_t<CORE>::make_larger(int factor, bitmap_t<CO
 
 template<typename CORE> irect bitmap_t<CORE>::calc_visible_rect() const
 {
+    ts::ivec2 sz = info().sz;
+    if (info().bytepp() != 4)
+        return irect( 0, sz );
+
     irect r;
-    r.lt = info().sz - 1;
-    r.rb.x = 0;
-    r.rb.y = 0;
 
-    uint32 * ptr=(uint32 *)body();
+    const uint8 * ptr = body() + 3;
+    int addy = info().pitch - sz.x * 4;
 
-    for (int j = 0; j<info().sz.y; ++j)
+    // search top
+    for (int j = 0; j<sz.y; ++j, ptr += addy)
     {
-        for (int i = 0; i<info().sz.x; ++i)
+        for (int i = 0; i<sz.x; ++i, ptr += 4)
         {
-            uint32 ap = (0xFF000000 & (*(ptr + i)));
-            bool t_empty_found = (ap == 0x00000000);
-            //bool t_solid_found = (ap == 0xFF000000);
-
-            if (!t_empty_found)
+            if (*ptr)
             {
-				if (i < r.lt.x) r.lt.x = i;
-				if (i > r.rb.x) r.rb.x = i;
-				if (j < r.lt.y) r.lt.y = j;
-				if (j > r.rb.y) r.rb.y = j;
+                r.lt.x = r.rb.x = i;
+                r.lt.y = j;
+                goto brk;
             }
-
         }
-        ptr = (uint32 *)(((uint8 *)ptr) + info().pitch);
     }
+    return irect(0);
+brk:
+    // search bottom
+    ptr = body() + 3 + info().pitch * (sz.y - 1);
+    addy -= info().pitch * 2;
+    for (int j = sz.y-1; j > r.lt.y; --j, ptr += addy )
+    {
+        for (int i = 0; i < sz.x; ++i, ptr += 4)
+        {
+            if (*ptr)
+            {
+                if (i < r.lt.x) r.lt.x = i;
+                if (i > r.rb.x) r.rb.x = i;
+                r.rb.y = j+1;
+                goto brk2;
+            }
+        }
+    }
+brk2:
+    // search left
+    for (int i = 0; i < r.lt.x; ++i)
+    {
+        ptr = body() + 3 + i * 4 + r.lt.y * info().pitch;
+
+        for (int j = r.lt.y; j < r.rb.y; ++j, ptr += info().pitch)
+        {
+            if (*ptr)
+            {
+                r.lt.x = i;
+                goto brk3;
+            }
+        }
+    }
+brk3:
+    // search left
+    for (int i = sz.x - 1; i > r.rb.x; --i)
+    {
+        ptr = body() + 3 + i * 4 + r.lt.y * info().pitch;
+
+        for (int j = r.lt.y; j < r.rb.y; ++j, ptr += info().pitch)
+        {
+            if (*ptr)
+            {
+                r.rb.x = i+1;
+                goto brk4;
+            }
+        }
+    }
+brk4:
 
     return r;
 }
@@ -1688,6 +1773,21 @@ template<typename CORE> bool bitmap_t<CORE>::premultiply( const irect &rect )
     return img_helper_premultiply( body(rect.lt), info(rect) );
 }
 
+template<typename CORE> void bitmap_t<CORE>::colorclamp()
+{
+    if (info().bytepp() != 4) return;
+    before_modify();
+    img_helper_colorclamp(body(), info());
+}
+
+
+template<typename CORE> void bitmap_t<CORE>::mulcolor(const ivec2 & pdes, const ivec2 & size, TSCOLOR color)
+{
+    if (info().bytepp() != 4) return;
+    before_modify();
+    uint8 * des = body() + info().bytepp()*pdes.x + info().pitch*pdes.y;
+    img_helper_mulcolor(des, info(irect(0, size)), color);
+}
 
 #if 0
 
@@ -2136,11 +2236,11 @@ template<typename CORE> void bitmap_t<CORE>::merge_with_alpha_PM(const ivec2 & p
 
 			    //*des=   uint8((uint32(B)*(uint32(alpha)<<8))>>16)+uint8((uint32(oB)*(uint32(255-alpha)<<8))>>16); // не совсем точная формула =(
 
-                auint oiB = lround(float(B) + float(oB) * (1.0f - A));
-                auint oiG = lround(float(G) + float(oG) * (1.0f - A));
-                auint oiR = lround(float(R) + float(oR) * (1.0f - A));
+                auint oiB = ts::lround(float(B) + float(oB) * (1.0f - A));
+                auint oiG = ts::lround(float(G) + float(oG) * (1.0f - A));
+                auint oiR = ts::lround(float(R) + float(oR) * (1.0f - A));
 
-                auint oiA = lround(float(255-oalpha) * A);
+                auint oiA = ts::lround(float(255-oalpha) * A);
 
 				ocolor = CLAMP<uint8>(oiB) | (CLAMP<uint8>(oiG) << 8) | (CLAMP<uint8>(oiR) << 16) | (CLAMP<uint8>(oiA) << 24);
 

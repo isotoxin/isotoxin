@@ -86,7 +86,7 @@ template <class T> struct vecbase_t<T, 4> : vecbase_t < T, 3 >
 template <typename T, aint N> struct vec_t : public vecbase_t<T,N>
 {
 private:
-	static int __sqrt(int n) { return lround(fastsqrt((float)n)); }
+	static int __sqrt(int n) { return ts::lround(fastsqrt((float)n)); }
 	static float __sqrt(float n) { return fastsqrt(n); }
 
     template <class T> static INLINE const T __dot(const vec_t<T, 2> &v0, const vec_t<T, 2> &v1) { return v0.x*v1.x + v0.y*v1.y; }

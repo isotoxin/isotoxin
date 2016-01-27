@@ -84,13 +84,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     w().description.set_as_utf8(desc);
                     w().description_t.set_as_utf8(desc_t);
 
-                    int icondatasize;
-                    const void *icondata = r.get_data(icondatasize);
-                    if (icondatasize)
-                    {
-                        w().icon.set_size(icondatasize);
-                        memcpy( w().icon.data(), icondata, icondatasize );
-                    }
+                    w().icon.setcopy(r.getastr());
 
                     ipcp->send(ipcw(AQ_SET_CONFIG) << w().data.config);
                     ipcp->send(ipcw(AQ_SET_NAME) << (w().data.user_name.is_empty() ? prf().username() : w().data.user_name));
@@ -375,7 +369,9 @@ bool active_protocol_c::cmdhandler(ipcr r)
     case HQ_TYPING:
         {
             gmsg<ISOGM_TYPING> *m = TSNEW(gmsg<ISOGM_TYPING>);
-            m->contact.protoid = id;
+            int gid = r.get<int>();
+            contact_key_s ck;
+            m->contact.protoid = id | (gid << 16); // assume 65536 unique groups max
             m->contact.contactid = r.get<int>();
             m->send_to_main_thread();
         }
@@ -676,9 +672,9 @@ const ts::bitmap_c &active_protocol_c::get_icon(int sz, icon_type_e icot)
 
     auto r = syncdata.lock_read();
 
-    ts::bitmap_c *icon = prepare_proto_icon( r().data.tag, r().icon.data(), r().icon.size(), sz, icot );
+    const ts::bitmap_c *icon = &prepare_proto_icon( r().data.tag, r().icon, sz, icot );
     icon_s &ic = icons_cache.add();
-    ic.bmp.reset(icon);
+    ic.bmp = icon;
     ic.icot = icot;
     return *icon;
 }
@@ -1071,6 +1067,8 @@ void active_protocol_c::del_message(uint64 utag)
 
 void active_protocol_c::typing(int cid)
 {
+    g_app->F_TYPING = true;
+
     if ( !prf().get_options().is(MSGOP_SEND_TYPING) )
         return;
 

@@ -4,6 +4,7 @@
 namespace 
 {
 
+#if 0
     bool    square_circle_intersect(float halfsize, double sqradius, const ts::vec2& dst)
     {
         double d = 0.0f;
@@ -81,10 +82,10 @@ namespace
 
     void draw_circle( ts::bitmap_c &bmp, float cx, float cy, float r, ts::TSCOLOR col )
     {
-        int y0 = lround(cy - r - 1);
-        int y1 = lround(cy + r + 1);
-        int x0 = lround(cx - r - 1);
-        int x1 = lround(cx + r + 2);
+        int y0 = ts::lround(cy - r - 1);
+        int y1 = ts::lround(cy + r + 1);
+        int x0 = ts::lround(cx - r - 1);
+        int x1 = ts::lround(cx + r + 2);
         if (x0 < 0) x0 = 0;
         if (x1 > bmp.info().sz.x) x1 = bmp.info().sz.x;
         if (y0 < 0) y0 = 0;
@@ -97,7 +98,7 @@ namespace
                 float k = square_circle_intersect_area(0.5f,r2, ts::vec2(cx,cy) - ts::vec2(x+0.5f,y+0.5f));
                 if (k>0)
                 {
-                    int alpha = lround(k*255.0f);
+                    int alpha = ts::lround(k*255.0f);
                     if (alpha == 255)
                         bmp.ARGBPixel(x, y, col);
                     else
@@ -108,10 +109,10 @@ namespace
     }
     void draw_ring(ts::bitmap_c &bmp, float cx, float cy, float r0, float r1, ts::TSCOLOR col)
     {
-        int y0 = lround(cy - r1 - 1);
-        int y1 = lround(cy + r1 + 1);
-        int x0 = lround(cx - r1 - 1);
-        int x1 = lround(cx + r1 + 1);
+        int y0 = ts::lround(cy - r1 - 1);
+        int y1 = ts::lround(cy + r1 + 1);
+        int x0 = ts::lround(cx - r1 - 1);
+        int x1 = ts::lround(cx + r1 + 1);
         if (x0 < 0) x0 = 0;
         if (x1 > bmp.info().sz.x) x1 = bmp.info().sz.x;
         if (y0 < 0) y0 = 0;
@@ -124,17 +125,17 @@ namespace
             {
                 float k = square_ring_intersect_area(0.5f, r0_2, r1_2, ts::vec2(cx, cy) - ts::vec2(x + 0.5f, y + 0.5f));
                 if (k>0)
-                    bmp.ARGBPixel(x, y, col, lround(k*255.0f));
+                    bmp.ARGBPixel(x, y, col, ts::lround(k*255.0f));
             }
         }
     }
 
     void draw_shadow(ts::bitmap_c &bmp, float cx, float cy, float r0, float r1, ts::TSCOLOR col0, ts::TSCOLOR col1)
     {
-        int y0 = lround(cy - r1 - 1);
-        int y1 = lround(cy + r1 + 1);
-        int x0 = lround(cx - r1 - 1);
-        int x1 = lround(cx + r1 + 1);
+        int y0 = ts::lround(cy - r1 - 1);
+        int y1 = ts::lround(cy + r1 + 1);
+        int x0 = ts::lround(cx - r1 - 1);
+        int x1 = ts::lround(cx + r1 + 1);
         if (x0 < 0) x0 = 0;
         if (x1 > bmp.info().sz.x) x1 = bmp.info().sz.x;
         if (y0 < 0) y0 = 0;
@@ -145,7 +146,7 @@ namespace
         ts::vec2 c(cx, cy);
         for (int y = y0; y < y1; ++y)
         {
-            ts::vec2 p( 0, y + 0.5f );
+            ts::vec2 p(0, y + 0.5f);
             for (int x = x0; x < x1; ++x)
             {
                 p.x = x + 0.5f;
@@ -164,91 +165,78 @@ namespace
         }
     }
 
-    ts::vec2 parsevec2f(const ts::asptr &s, const ts::vec2 &def)
-    {
-        ts::vec2 v(def);
-        typedef decltype(v.x) ivt;
-        ivt * hackptr = (ivt *)&v;
-        ivt * hackptr_end = hackptr + 4;
-        for (ts::token<char> t(s, ','); t && hackptr < hackptr_end; ++t, ++hackptr)
-        {
-            *hackptr = t->as_num<ivt>(0);
-        }
-        return v;
-    }
-
     ts::ivec2 as_ivec(const ts::vec2 &v)
     {
-        return ts::ivec2( lround(v.x), lround(v.y) );
+        return ts::ivec2( ts::lround(v.x), ts::lround(v.y) );
     }
 
 struct gb_circle_s : public generated_button_data_s
 {
-    gb_circle_s(const ts::abp_c *gen)
+    gb_circle_s(const ts::abp_c *gen, const colors_map_s &colsmap)
     {
 
         ts::TSCOLOR col[button_desc_s::numstates];
-        col[button_desc_s::NORMAL] = ts::parsecolor<char>( gen->get_string(CONSTASTR("color")), ts::ARGB(255,255,255) );
-        col[button_desc_s::HOVER] = ts::parsecolor<char>( gen->get_string(CONSTASTR("color-hover")), ts::PREMULTIPLY(col[button_desc_s::NORMAL], 1.1f) );
-        col[button_desc_s::PRESS] = ts::parsecolor<char>( gen->get_string(CONSTASTR("color-press")), col[button_desc_s::HOVER] );
-        col[button_desc_s::DISABLED] = ts::parsecolor<char>( gen->get_string(CONSTASTR("color-hover")), ts::GRAYSCALE(col[button_desc_s::NORMAL]) );
+        col[button_desc_s::NORMAL] = colsmap.parse( gen->get_string(CONSTASTR("color")), ts::ARGB(255,255,255) );
+        col[button_desc_s::HOVER] = colsmap.parse( gen->get_string(CONSTASTR("color-hover")), ts::PREMULTIPLY(col[button_desc_s::NORMAL], 1.1f) );
+        col[button_desc_s::PRESS] = colsmap.parse( gen->get_string(CONSTASTR("color-press")), col[button_desc_s::HOVER] );
+        col[button_desc_s::DISABLED] = colsmap.parse( gen->get_string(CONSTASTR("color-hover")), ts::GRAYSCALE(col[button_desc_s::NORMAL]) );
         
         float r = gen->get_string(CONSTASTR("radius")).as_float(16.0f);
         bool border = gen->get_string(CONSTASTR("border")).as_int() != 0;
         bool shadow = gen->get_string(CONSTASTR("shadow")).as_int() != 0;
         float border_add_size = border ? gen->get_string(CONSTASTR("border-add-size")).as_float() : 0;
         float border_width = border ? gen->get_string(CONSTASTR("border-width")).as_float() : 0;
-        ts::vec2 shadowshift = shadow ? parsevec2f( gen->get_string(CONSTASTR("shadow-shift")), ts::vec2(2) ) : ts::vec2(0);
+        ts::vec2 shadowshift = shadow ? ts::parsevec2f( gen->get_string(CONSTASTR("shadow-shift")), ts::vec2(2) ) : ts::vec2(0);
         float shadow_radius_in = shadow ? gen->get_string(CONSTASTR("shadow-radius-in")).as_float(0) : 0;
         float shadow_radius_out = shadow ? gen->get_string(CONSTASTR("shadow-radius-out")).as_float(0) : 0;
         
         int margin_right = gen->get_string(CONSTASTR("margin-right")).as_int(0);
 
-        ts::irect one_image_rect(0,lround(r * 2)); one_image_rect.rb.x += 2;
-        ts::irect shadowr( one_image_rect.center() - ts::ivec2(lround(shadow_radius_out)), one_image_rect.center() + ts::ivec2(lround(shadow_radius_out)) );
+        ts::irect one_image_rect(0,ts::lround(r * 2)); one_image_rect.rb.x += 2;
+        ts::irect shadowr( one_image_rect.center() - ts::ivec2(ts::lround(shadow_radius_out)), one_image_rect.center() + ts::ivec2(ts::lround(shadow_radius_out)) );
         one_image_rect.combine( shadowr + as_ivec(shadowshift) );
         one_image_rect.combine( shadowr - as_ivec(shadowshift) );
-        one_image_rect.combine( ts::irect(one_image_rect.center() - ts::ivec2(lround(r + border_add_size + border_width)), one_image_rect.center() + ts::ivec2(lround(r + border_add_size + border_width))) );
+        one_image_rect.combine( ts::irect(one_image_rect.center() - ts::ivec2(ts::lround(r + border_add_size + border_width)), one_image_rect.center() + ts::ivec2(ts::lround(r + border_add_size + border_width))) );
 
         ts::ivec2 one_image_size = one_image_rect.size();
-        src.create_ARGB( ts::ivec2((one_image_size.x + margin_right)* 4, one_image_size.y) );
+        src.create_ARGB( ts::ivec2(one_image_size.x + margin_right, one_image_size.y * 4) );
         src.fill(0);
 
-        ts::TSCOLOR bcol = border ? ts::parsecolor<char>(gen->get_string(CONSTASTR("border-color")), ts::ARGB(0, 0, 0)) : 0;
+        ts::TSCOLOR bcol = border ? colsmap.parse(gen->get_string(CONSTASTR("border-color")), ts::ARGB(0, 0, 0)) : 0;
 
-        ts::TSCOLOR shadow_col_in = shadow ? ts::parsecolor<char>(gen->get_string(CONSTASTR("shadow-color-in")), ts::ARGB(0, 0, 0)) : 0;
-        ts::TSCOLOR shadow_col_out = shadow ? ts::parsecolor<char>(gen->get_string(CONSTASTR("shadow-color-out")), ts::ARGB(0, 0, 0, 0)) : 0;
+        ts::TSCOLOR shadow_col_in = shadow ? colsmap.parse(gen->get_string(CONSTASTR("shadow-color-in")), ts::ARGB(0, 0, 0)) : 0;
+        ts::TSCOLOR shadow_col_out = shadow ? colsmap.parse(gen->get_string(CONSTASTR("shadow-color-out")), ts::ARGB(0, 0, 0, 0)) : 0;
 
         ts::wstr_c imgname = to_wstr(gen->get_string(CONSTASTR("image")));
         ts::bmpcore_exbody_s img; if (!imgname.is_empty()) img = get_image(imgname.as_sptr());
 
         for(int i=0;i<button_desc_s::numstates;++i)
         {
-            int shiftx = (one_image_size.x + margin_right) * i;
+            int shifty = one_image_size.y * i;
             float k = 1.0f;
             if (i == button_desc_s::PRESS) k = gen->get_string(CONSTASTR("k-press")).as_float(1.0f);
 
             if (shadow)
             {
-                ts::vec2 ss = i == button_desc_s::PRESS ? parsevec2f( gen->get_string(CONSTASTR("shadow-shift-press")), ts::vec2(shadowshift) ) : shadowshift;
+                ts::vec2 ss = i == button_desc_s::PRESS ? ts::parsevec2f( gen->get_string(CONSTASTR("shadow-shift-press")), ts::vec2(shadowshift) ) : shadowshift;
 
                 if (shadow_radius_in == shadow_radius_out) //-V550
-                    draw_circle(src, (float)(one_image_size.x) * 0.5f + ss.x + shiftx, (float)(one_image_size.y) * 0.5f + ss.y,shadow_radius_in * k, shadow_col_in);
+                    draw_circle(src, (float)(one_image_size.x) * 0.5f + ss.x, (float)(one_image_size.y) * 0.5f + ss.y + shifty, shadow_radius_in * k, shadow_col_in);
                 else
-                    draw_shadow(src, (float)(one_image_size.x) * 0.5f + ss.x + shiftx, (float)(one_image_size.y) * 0.5f + ss.y, shadow_radius_in * k, shadow_radius_out * k, shadow_col_in, shadow_col_out);
+                    draw_shadow(src, (float)(one_image_size.x) * 0.5f + ss.x, (float)(one_image_size.y) * 0.5f + ss.y + shifty, shadow_radius_in * k, shadow_radius_out * k, shadow_col_in, shadow_col_out);
             }
 
             if (ts::ALPHA(col[i]))
-                draw_circle(src, (float)(one_image_size.x) * 0.5f + shiftx, (float)(one_image_size.y) * 0.5f, r * k, col[i]);
+                draw_circle(src, (float)(one_image_size.x) * 0.5f, (float)(one_image_size.y) * 0.5f + shifty, r * k, col[i]);
 
             if (border)
             {
-                draw_ring(src, (float)(one_image_size.x) * 0.5f + shiftx, (float)(one_image_size.y) * 0.5f, (r + border_add_size) * k, (r + border_add_size + border_width) * k, bcol);
+                draw_ring(src, (float)(one_image_size.x) * 0.5f, (float)(one_image_size.y) * 0.5f + shifty, (r + border_add_size) * k, (r + border_add_size + border_width) * k, bcol);
             }
 
             if (img())
             {
-                src.alpha_blend( (one_image_size - img.info().sz) / 2 + ts::ivec2(shiftx, 0), img );
+                src.alpha_blend( (one_image_size - img.info().sz) / 2 + ts::ivec2(0, shifty), img );
             }
         }
 
@@ -262,6 +250,192 @@ struct gb_circle_s : public generated_button_data_s
         __super::setup(desc);
     }
 };
+#endif
+
+
+struct gb_svg_s : public generated_button_data_s
+{
+    gb_svg_s(const ts::abp_c *gen, const colors_map_s &colsmap, const ts::str_c &svgs, bool one_face)
+    {
+        ts::TSCOLOR col[button_desc_s::numstates];
+        float shift[button_desc_s::numstates] = { 0 };
+        ts::str_c ins[button_desc_s::numstates];
+
+        col[button_desc_s::NORMAL] = colsmap.parse(gen->get_string(CONSTASTR("color")), ts::ARGB(255, 255, 255));
+        shift[button_desc_s::NORMAL] = gen->get_string(CONSTASTR("shift")).as_float(0.0f);
+        ins[button_desc_s::NORMAL] = gen->get_string(CONSTASTR("insert"));
+
+        bool gen_disabled = false;
+        if (!one_face)
+        {
+            col[button_desc_s::HOVER] = colsmap.parse(gen->get_string(CONSTASTR("color-hover")), ts::PREMULTIPLY(col[button_desc_s::NORMAL], 1.1f));
+            col[button_desc_s::PRESS] = colsmap.parse(gen->get_string(CONSTASTR("color-press")), col[button_desc_s::HOVER]);
+            col[button_desc_s::DISABLED] = colsmap.parse(gen->get_string(CONSTASTR("color-disabled")), ts::GRAYSCALE(col[button_desc_s::NORMAL]));
+
+            if ( col[button_desc_s::DISABLED] != col[button_desc_s::NORMAL] )
+                gen_disabled = true;
+
+            shift[button_desc_s::HOVER] = shift[button_desc_s::NORMAL];
+            shift[button_desc_s::PRESS] = gen->get_string(CONSTASTR("shift-press")).as_float(0.0f);
+            shift[button_desc_s::DISABLED] = shift[button_desc_s::NORMAL];
+
+            if (!gen_disabled && shift[button_desc_s::DISABLED] != shift[button_desc_s::NORMAL])
+                gen_disabled = true;
+
+            ins[button_desc_s::HOVER] = gen->get_string(CONSTASTR("insert-hover"));
+            ins[button_desc_s::PRESS] = gen->get_string(CONSTASTR("insert-press"));
+            ins[button_desc_s::DISABLED] = gen->get_string(CONSTASTR("insert-disabled"));
+
+            if (!gen_disabled && ins[button_desc_s::DISABLED] != ins[button_desc_s::NORMAL])
+                gen_disabled = true;
+
+        }
+
+        ts::bitmap_c face_surface;
+        ts::str_c rs;
+        ts::irect vr;
+
+        num_states = one_face ? 1 : ( gen_disabled ? button_desc_s::numstates : button_desc_s::numstates - 1);
+
+        for (int i = 0; i < num_states; ++i)
+        {
+            ts::str_c svg(svgs);
+            
+            svg.replace_all(CONSTASTR("[insert]"), ins[i]);
+
+            ts::str_c ct = make_color(col[i]);
+            svg.replace_all( CONSTASTR("[color]"), ct );
+
+            for(;;)
+            {
+                int cri = svg.find_pos(CONSTASTR("=\"##"));
+                if (cri >= 0)
+                {
+                    int y = svg.find_pos(cri + 4, '\"');
+                    if (y > cri)
+                    {
+                        ts::TSCOLOR c = colsmap.parse(svg.substr(cri + 2, y), ts::ARGB(0, 0, 0));
+                        rs.clear();
+                        rs.append_as_hex(ts::RED(c));
+                        rs.append_as_hex(ts::GREEN(c));
+                        rs.append_as_hex(ts::BLUE(c));
+                        if (ts::ALPHA(c) != 0xff)
+                            rs.append_as_hex(ts::ALPHA(c));
+                        svg.replace(cri + 3, y - cri - 3, rs);
+                        continue;
+                    }
+                }
+                break;
+            }
+
+            float k = 1.0f;
+            if (i == button_desc_s::PRESS) k = gen->get_string(CONSTASTR("k-press")).as_float(1.0f);
+            svg.replace_all( CONSTASTR("[scale]"), ts::amake<float>(k) );
+            svg.replace_all(CONSTASTR("[shift]"), ts::amake<float>(shift[i]));
+
+            if (rsvg_svg_c *n = rsvg_svg_c::build_from_xml(svg.str()))
+            {
+                if ( face_surface.info().sz != n->size() )
+                    face_surface.create_ARGB(n->size());
+                face_surface.fill(0);
+                n->render( face_surface.extbody() );
+                if ( i == 0 )
+                {
+#ifdef _DEBUG
+                    if (gen->get_int(CONSTASTR("break")))
+                        __debugbreak();
+                    if (const ts::abp_c *f = gen->get(CONSTASTR("save")))
+                        face_surface.save_as_png( to_wstr(f->as_string()) );
+#endif // _DEBUG
+
+                    vr = face_surface.calc_visible_rect();
+
+                    if ( !vr )
+                    {
+                        TSDEL(n);
+                        src.clear();
+                        return;
+                    }
+
+                    if ( const ts::abp_c *center = gen->get(CONSTASTR("center")))
+                    {
+                        ts::vec2 c = ts::parsevec2f( center->as_string(), ts::vec2(0) );
+                        if (c.x > 0)
+                        {
+                            float cr = vr.rb.x - c.x;
+                            float cl = c.x - vr.lt.x;
+                            if (cl < cr)
+                                vr.lt.x = ts::lround(c.x - cr);
+                            else if (cl > cr)
+                                vr.rb.x = ts::lround(c.x + cl);
+                        }
+
+                        if (c.y > 0)
+                        {
+                            float cb = vr.rb.y - c.y;
+                            float ctop = c.y - vr.lt.y;
+                            if (ctop < cb)
+                                vr.lt.y = ts::lround(c.y - cb);
+                            else if (ctop > cb)
+                                vr.rb.y = ts::lround(c.y + ctop);
+                        }
+
+                    }
+                    if (const ts::abp_c *addw = gen->get(CONSTASTR("add-width")))
+                    {
+                        ts::ivec2 addwi = ts::parsevec2( addw->as_string(), ts::ivec2(0), true );
+                        vr.lt.x -= addwi.x;
+                        vr.rb.x += addwi.y;
+                    }
+                    if (const ts::abp_c *addw = gen->get(CONSTASTR("add-height")))
+                    {
+                        ts::ivec2 addhi = ts::parsevec2(addw->as_string(), ts::ivec2(0), true);
+                        vr.lt.y -= addhi.x;
+                        vr.rb.y += addhi.y;
+                    }
+                    if (const ts::abp_c *cbsize = gen->get(CONSTASTR("size"))) // h-center / v-center size
+                    {
+                        ts::ivec2 cbsizei = ts::parsevec2(cbsize->as_string(), ts::ivec2(0), true);
+                        vr.lt.x = (vr.lt.x + vr.rb.x - cbsizei.x) / 2;
+                        vr.rb.x = vr.lt.x + cbsizei.x;
+                        vr.lt.y = (vr.lt.y + vr.rb.y - cbsizei.y) / 2;
+                        vr.rb.y = vr.lt.y + cbsizei.y;
+                    }
+                    if (const ts::abp_c *cbsize = gen->get(CONSTASTR("cbsize"))) // h-center / v-bottom size
+                    {
+                        ts::ivec2 cbsizei = ts::parsevec2(cbsize->as_string(), ts::ivec2(0), true);
+                        vr.lt.x = (vr.lt.x + vr.rb.x - cbsizei.x)/2;
+                        vr.rb.x = vr.lt.x + cbsizei.x;
+                        vr.lt.y = vr.rb.y - cbsizei.y;
+                    }
+                    vr.intersect(ts::irect(0, face_surface.info().sz));
+
+                    src.create_ARGB(ts::ivec2(vr.width(), vr.height() * num_states));
+                }
+
+#if 0
+                for (int i = vr.lt.x; i < vr.rb.x; ++i)
+                    face_surface.ARGBPixel(i, vr.lt.y, 0xff000000), face_surface.ARGBPixel(i, vr.rb.y-1, 0xff000000);
+                for (int j = vr.lt.y; j < vr.rb.y; ++j)
+                    face_surface.ARGBPixel(vr.lt.x, j, 0xff000000), face_surface.ARGBPixel(vr.rb.x-1, j, 0xff000000);
+                for (int i = vr.lt.x; i < vr.rb.x; ++i)
+                    for (int j = vr.lt.y; j < vr.rb.y; ++j)
+                        if ((0xff000000 & face_surface.ARGBPixel(i, j)) == 0x01000000)
+                            face_surface.ARGBPixel(i, j, 0xffff0000);
+#endif
+
+                src.copy( ts::ivec2(0, vr.height() * i), vr.size(), face_surface.extbody(), vr.lt );
+                TSDEL( n );
+            } else
+            {
+                src.clear();
+                return;
+            }
+        }
+
+        //src.premultiply(); // cairo generates already premultiplied images
+    }
+};
 
 }
 
@@ -273,26 +447,21 @@ struct gb_circle_s : public generated_button_data_s
 
 
 
-generated_button_data_s *generated_button_data_s::generate(const ts::abp_c *gen)
+generated_button_data_s *generated_button_data_s::generate(const ts::abp_c *gen, const colors_map_s &colsmap, bool one_face)
 {
+    if (const ts::abp_c *svg = gen->get(CONSTASTR("svg")))
+    {
+        gb_svg_s *g = TSNEW(gb_svg_s, gen, colsmap, svg->as_string(), one_face);
+        if (g->is_valid())
+            return g;
+    }
+
+#if 0
     ts::str_c shape = gen->get_string(CONSTASTR("shape"));
     if (shape.equals(CONSTASTR("circle")))
-        return TSNEW(gb_circle_s, gen);
-
+        return TSNEW(gb_circle_s, gen, colsmap);
+#endif
 
     return nullptr;
 }
 
-/*virtual*/ void generated_button_data_s::setup(button_desc_s &desc)
-{
-    desc.genb.reset(this);
-
-    int w = src.info().sz.x / button_desc_s::numstates;
-    desc.size.x = w;
-    desc.size.y = src.info().sz.y;
-    for (int i = 0; i < button_desc_s::numstates; ++i)
-    {
-        desc.rects[i].lt = ts::ivec2(w * i, 0);
-        desc.rects[i].rb = ts::ivec2(w * i + w, desc.size.y);
-    }
-}

@@ -383,7 +383,6 @@ INLINE void theme_image_s::draw(rectengine_c &eng, const ts::ivec2 &p) const
     eng.draw(p, dbmp->extbody(), rect, true);
 }
 
-
 INLINE rectengine_root_c *root_by_rid( RID r )
 {
     if (r)

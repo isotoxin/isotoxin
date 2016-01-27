@@ -1117,7 +1117,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             parent = lasthgroup;
         } else if (!d.desc.is_empty())
         {
-            label( CONSTWSTR("<l>") + d.desc + CONSTWSTR("</l>") );
+            label( CONSTWSTR("<l>") + d.desc + CONSTWSTR("</l>"), get_default_text_color() );
         }
         RID rctl;
         switch (d.ctl)

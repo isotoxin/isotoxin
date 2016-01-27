@@ -80,11 +80,9 @@ template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_mark(ts::TSCOLOR c)
 template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_color( ts::TSCOLOR c )
 {
     ts::str_t<TCHARACTER> s( CONSTSTR(TCHARACTER,"<color=#") );
-    s.append_as_hex(ts::RED(c))
-    .append_as_hex(ts::GREEN(c))
-    .append_as_hex(ts::BLUE(c))
-    .append_as_hex(ts::ALPHA(c))
-    .append_char('>');
+    s.append_as_hex(ts::RED(c)).append_as_hex(ts::GREEN(c)).append_as_hex(ts::BLUE(c));
+    if (ts::ALPHA(c) != 255) s.append_as_hex(ts::ALPHA(c));
+    s.append_char('>');
     return s;
 }
 
@@ -97,11 +95,9 @@ template<typename TCHARACTER> ts::str_t<TCHARACTER> colorize( const ts::sptr<TCH
 template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_outline(ts::TSCOLOR c)
 {
     ts::str_t<TCHARACTER> s(CONSTSTR(TCHARACTER, "<outline=#"));
-    s.append_as_hex(ts::RED(c))
-        .append_as_hex(ts::GREEN(c))
-        .append_as_hex(ts::BLUE(c))
-        .append_as_hex(ts::ALPHA(c))
-        .append_char('>');
+    s.append_as_hex(ts::RED(c)).append_as_hex(ts::GREEN(c)).append_as_hex(ts::BLUE(c));
+    if (ts::ALPHA(c) != 255) s.append_as_hex(ts::ALPHA(c));
+    s.append_char('>');
     return s;
 }
 template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_shadow(ts::TSCOLOR c, int len = 2)
@@ -445,7 +441,7 @@ enum icon_type_e
     IT_DND,
 };
 
-ts::bitmap_c * prepare_proto_icon( const ts::asptr &prototag, const void *icodata, int icodatasz, int imgsize, icon_type_e icot );
+const ts::bitmap_c &prepare_proto_icon( const ts::asptr &prototag, const ts::asptr &icond, int imgsize, icon_type_e icot );
 
 struct data_block_s
 {
@@ -667,11 +663,11 @@ struct leech_save_size_s : public autoparam_i
 
 struct protocol_description_s
 {
-    UNIQUE_PTR(ts::bitmap_c) icon;
     ts::str_c  tag; // lan, tox
     ts::str_c description; // utf8
     ts::str_c description_t; // utf8
     ts::str_c version; // utf8
+    ts::str_c  icon; // svg path d value
     int connection_features = 0;
     int features = 0;
     protocol_description_s() {}

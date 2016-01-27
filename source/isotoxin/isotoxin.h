@@ -3,7 +3,7 @@
 #pragma warning (disable:4091) // 'typedef ' : ignored on left of '' when no variable is declared
 
 #define APPNAME "Isotoxin"
-#define APPNAME_CAPTION ts::wstr_c(CONSTWSTR("<color=0,50,0><b>")).append(CONSTWSTR(APPNAME)).append(CONSTWSTR("</b></color>"))
+#define APPNAME_CAPTION maketag_color<ts::wchar>(GET_THEME_VALUE(appname_color)).append(CONSTWSTR("<b>")).append(CONSTWSTR(APPNAME)).append(CONSTWSTR("</b></color>"))
 
 #define WINDOWS_ONLY // #error
 
@@ -78,6 +78,7 @@ INLINE ipcr & operator>>(ipcr &r, ts::astrings_c &s)
 #include "avaselector.h"
 #include "smileselector.h"
 #include "prepareimage.h"
+#include "colors.h"
 
 #include "res/resource.h"
 #include "application.h"

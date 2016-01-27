@@ -22,7 +22,7 @@ namespace
             if (maxh && frect.height() > maxh)
             {
                 float k = (float)maxh / (float)frect.height();
-                advance = lround(k * advance);
+                advance = ts::lround(k * advance);
 
                 ts::irect frrect; 
                 const ts::bitmap_c&frame =  e->curframe(frrect);
@@ -179,7 +179,7 @@ gui_textedit_c::active_element_s * emoticon_s::get_edit_element(int maxh)
     if (bmp.info().sz.y > emoti().maxheight)
     {
         float k = (float)emoti().maxheight / (float)bmp.info().sz.y;
-        int neww = lround( k * bmp.info().sz.x );
+        int neww = ts::lround( k * bmp.info().sz.x );
 
         ispreframe = true;
         preframe = TSNEW(ts::bitmap_c);

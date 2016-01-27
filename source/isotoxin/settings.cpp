@@ -10,6 +10,10 @@
 #define SETTINGS_VTAB_WIDTH 170
 #define VTAB_OTS 5
 
+#define PROTO_ICON_SIZE 32
+
+
+
 static menu_c list_proxy_types(int cur, MENUHANDLER mh, int av = -1)
 {
     menu_c m;
@@ -801,7 +805,7 @@ void dialog_settings_c::mod()
         .add(TTT("Sounds",293), 0, TABSELMI(MASK_APPLICATION_SOUNDS))
         .add(TTT("Video",347), 0, TABSELMI(MASK_APPLICATION_VIDEO));
 
-    descmaker dm( descs );
+    descmaker dm(this);
     dm << MASK_APPLICATION_COMMON; //_________________________________________________________________________________________________//
 
     dm().page_caption(TTT("General application settings",108));
@@ -945,7 +949,7 @@ void dialog_settings_c::mod()
         dm().checkb(ts::wstr_c(), DELEGATE(this, commonopts_handler), bgroups[BGROUP_COMMON2].current).setmenu(
             menu_c().add(TTT("Set [b]Away[/b] status on screen saver activation",323), 0, MENUHANDLER(), CONSTASTR("1"))
                     .add(t_awaymin, 0, MENUHANDLER(), CONSTASTR("2"))
-                    .add(TTT("Keep [b]Away[/b] status on user activity",363), 0, MENUHANDLER(), CONSTASTR("4"))
+                    .add(TTT("Keep [b]Away[/b] status until user typing",363), 0, MENUHANDLER(), CONSTASTR("4"))
             ).setname(CONSTASTR("awayflags"));
 
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
@@ -1527,7 +1531,10 @@ void dialog_settings_c::add_active_proto( RID lst, int id, const active_protocol
     const protocol_description_s *p = describe_network(desc, apdata.name, apdata.tag, id);
 
     ts::str_c par(CONSTASTR("2/")); par.append(apdata.tag).append_char('/').append_as_int(id);
-    MAKE_CHILD<gui_listitem_c>(lst, desc, par) << DELEGATE(this, getcontextmenu) << (const ts::bitmap_c *)(p ? p->icon.get() : nullptr);
+
+    const ts::bitmap_c *icon = p ? &prepare_proto_icon(apdata.tag, p->icon.as_sptr(), PROTO_ICON_SIZE, IT_NORMAL) : nullptr;
+
+    MAKE_CHILD<gui_listitem_c>(lst, desc, par) << DELEGATE(this, getcontextmenu) << (const ts::bitmap_c *)icon;
 }
 
 void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
@@ -2380,7 +2387,7 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
 /*virtual*/ int dialog_setup_network_c::additions(ts::irect &)
 {
     addh = 0;
-    descmaker dm(descs);
+    descmaker dm(this);
     dm << 1;
 
     ts::wstr_c hdr(CONSTWSTR("<l>"));

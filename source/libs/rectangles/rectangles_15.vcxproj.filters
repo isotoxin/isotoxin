@@ -71,8 +71,5 @@
     <ClInclude Include="gmesages.h">
       <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="..\memspy\memspy.h">
-      <Filter>src</Filter>
-    </ClInclude>
   </ItemGroup>
 </Project>

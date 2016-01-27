@@ -982,7 +982,10 @@ bool gui_textedit_c::summoncontextmenu()
     flags.init(F_PREV_SB_VIS, is_vsb());
 
     set_font( nullptr );
-    return __super::created();
+    __super::created();
+
+    color = get_default_text_color();
+    caret_color = color;
 }
 
 /*virtual*/ bool gui_textedit_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)

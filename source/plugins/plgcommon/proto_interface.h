@@ -68,7 +68,7 @@ struct proto_info_s
 
     audio_format_s audio_fmt; // required audio format for proto plugin (app will convert audio on-the-fly if hardware not support)
 
-    void *icon = nullptr;
+    char *icon = nullptr; // svg path value of d attribute in box 100x100
     int   icon_buflen = 0;
 };
 
@@ -281,7 +281,7 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     /*
         plugin should call this function 1 per second for every typing client
     */
-    void(__stdcall *typing)(int cid);
+    void(__stdcall *typing)(int gid, int cid);
 };
 
 /*

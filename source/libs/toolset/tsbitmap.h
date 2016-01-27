@@ -67,7 +67,9 @@ struct imgdesc_s
 
 template<> INLINE imgdesc_s &make_dummy<imgdesc_s>(bool quiet) { static imgdesc_s t(ts::ivec2(0),0,0); DUMMY_USED_WARNING(quiet); return t; }
 
+void TSCALL img_helper_colorclamp(uint8 *des, const imgdesc_s &des_info); // fix components to match premultiplied
 bool TSCALL img_helper_premultiply(uint8 *des, const imgdesc_s &des_info);
+void TSCALL img_helper_mulcolor(uint8 *des, const imgdesc_s &des_info, TSCOLOR color);
 void TSCALL img_helper_fill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color);
 void TSCALL img_helper_overfill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color_pm);
 void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_info, const imgdesc_s &sou_info);
@@ -434,6 +436,9 @@ public:
 
     bool premultiply();
     bool premultiply( const irect &rect );
+    void colorclamp();
+
+    void mulcolor(const ivec2 & pdes, const ivec2 & size, TSCOLOR color);
 
     void detect_alpha_channel( const bitmap_t & bmsou ); // me - black background, bmsou - white background
 

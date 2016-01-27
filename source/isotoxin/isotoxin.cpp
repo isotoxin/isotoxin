@@ -6,6 +6,7 @@
 #pragma USELIB(ipc)
 #pragma USELIB(s3)
 #pragma USELIB(dshowcapture)
+#pragma USELIB(rsvg)
 #ifndef _FINAL
 #pragma USELIB(memspy)
 #endif
@@ -30,6 +31,7 @@
 #pragma comment(lib, "curl.lib")
 #pragma comment(lib, "libsodium.lib")
 #pragma comment(lib, "libqrencode.lib")
+#pragma comment(lib, "cairo.lib")
 
 #pragma comment(lib, "Winmm.lib")
 #pragma comment(lib, "Msacm32.lib")
@@ -152,6 +154,7 @@ void debug_name()
     wchar_t * t = ts::CHARz_make_str_unsigned<ts::wchar, uint>(bx, sz, b.crc());
     ts::CHARz_add_str<wchar_t>(g_sysconf.name, t);
 }
+void dotests0();
 #endif
 
 #pragma warning (disable : 4505) //: 'check_instance' : unreferenced local function has been removed
@@ -303,6 +306,7 @@ bool _cdecl app_preinit( const wchar_t *cmdl )
     
 #ifndef _FINAL
     debug_name();
+    dotests0();
 #endif
 
 	TSNEW(application_c, cmdl); // not a memory leak! see SEV_EXIT handler

@@ -673,6 +673,13 @@ public:
     void __spec_set_outofbound(bool f) { m_props.__spec_set_outofbound(f); }
 };
 
+template<> struct gmsg<GM_CHECK_ALLOW_CLICK> : public gmsgbase
+{
+    gmsg(RID onrid) :gmsgbase(GM_CHECK_ALLOW_CLICK), onrid(onrid) {}
+    RID onrid;
+    ts::safe_ptr<guirect_c> mnu;
+};
+
 INLINE rectengine_c &HOLD::engine() {return SAFE_REF(client).getengine(); }
 
 // gui controls
@@ -871,6 +878,7 @@ class gui_button_c : public gui_control_c
     static const ts::flags32_s::BITS F_CONSTANT_SIZE_X      = FLAGS_FREEBITSTART << 6;
     static const ts::flags32_s::BITS F_CONSTANT_SIZE_Y      = FLAGS_FREEBITSTART << 7;
     static const ts::flags32_s::BITS F_DISABLED_USE_ALPHA   = FLAGS_FREEBITSTART << 8;
+    static const ts::flags32_s::BITS F_HOVER                = FLAGS_FREEBITSTART << 9;
 
     typedef gm_redirect_s<GM_GROUP_SIGNAL> GROUPHANDLER;
     UNIQUE_PTR( GROUPHANDLER ) grouphandler;
@@ -1319,6 +1327,7 @@ class gui_popup_menu_c : public gui_vscrollgroup_c
     GM_RECEIVER( gui_popup_menu_c, GM_POPUPMENU_DIED );
     GM_RECEIVER( gui_popup_menu_c, GM_TOOLTIP_PRESENT );
     GM_RECEIVER( gui_popup_menu_c, GM_SYSMENU_PRESENT );
+    GM_RECEIVER( gui_popup_menu_c, GM_CHECK_ALLOW_CLICK );
     
 
     bool check_focus(RID r, GUIPARAM p);

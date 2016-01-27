@@ -515,7 +515,7 @@ public:
 
     void exclusive_input(RID r, bool set = true);
     RID get_exclusive() const { return m_exclusive_input.last( RID() ); }
-    bool allow_input(RID r) const { return sysmodal == 0 && (m_exclusive_input.count() == 0 || ( m_exclusive_input.last(RID()) >>= r )); }
+    bool allow_input(RID r, bool check_click = false) const;
 
     void dragndrop_lb( guirect_c *r );
     void dragndrop_update( guirect_c *r );
