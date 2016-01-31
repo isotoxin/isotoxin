@@ -357,9 +357,8 @@ public:
         int portshift = 0;
         int nextactiontime = 0;
         int call_stop_time = 0;
-        int correct_create_time = 0;
-        int next_sync = 0;
-        int sync_answer_deadline = 0;
+        int next_keepalive_packet = 0;
+        int keepalive_answer_deadline = 0;
 
         byte temporary_key[SIZE_KEY]; // crypto key for unauthorized interactions (before accept invite)
         byte authorized_key[SIZE_KEY];
@@ -383,7 +382,7 @@ public:
        
         bool key_sent = false;
         bool data_changed = false;
-        bool waiting_sync_answer = false;
+        bool waiting_keepalive_answer = false;
 
         enum { CALL_OFF, OUT_CALL, IN_CALL, IN_PROGRESS } call_status = CALL_OFF;
         enum { SEARCH, MEET, TRAPPED, INVITE_SEND, INVITE_RECV, REJECTED, ACCEPT, ACCEPT_RESTORE_CONNECT, REJECT, ONLINE, OFFLINE, BACKCONNECT, ROTTEN, ALMOST_ROTTEN } state = SEARCH;

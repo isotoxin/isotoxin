@@ -134,10 +134,10 @@ ts::wstr_c dialog_addcontact_c::rtext()
         .setname(CONSTASTR("msg"))
         .focus(resend);
     dm().vspace(5);
-    dm().hiddenlabel(TTT("Invalid Public ID!",71), ts::ARGB(255,0,0)).setname(ts::amake<uint>(CONSTASTR("err"), CR_INVALID_PUB_ID));
-    dm().hiddenlabel(TTT("Such contact already present!",87), ts::ARGB(255,0,0)).setname(ts::amake<uint>(CONSTASTR("err"), CR_ALREADY_PRESENT));
-    dm().hiddenlabel(L"memory error", ts::ARGB(255,0,0)).setname(ts::amake<uint>(CONSTASTR("err"), CR_MEMORY_ERROR)); // no need to translate it due rare error
-    dm().hiddenlabel(L"timeout", ts::ARGB(255,0,0)).setname(ts::amake<uint>(CONSTASTR("err"), CR_TIMEOUT)); // no need to translate it due rare error
+    dm().hiddenlabel(TTT("Invalid Public ID!",71), true).setname(ts::amake<uint>(CONSTASTR("err"), CR_INVALID_PUB_ID));
+    dm().hiddenlabel(TTT("Such contact already present!",87), true).setname(ts::amake<uint>(CONSTASTR("err"), CR_ALREADY_PRESENT));
+    dm().hiddenlabel(L"memory error", true).setname(ts::amake<uint>(CONSTASTR("err"), CR_MEMORY_ERROR)); // no need to translate it due rare error
+    dm().hiddenlabel(L"timeout", true).setname(ts::amake<uint>(CONSTASTR("err"), CR_TIMEOUT)); // no need to translate it due rare error
 
     return 0;
 }
@@ -332,7 +332,7 @@ void dialog_addgroup_c::update_lifetime()
 
     dm().vspace(5);
 
-    dm().hiddenlabel(TTT("Group chat name cannot be empty",251), ts::ARGB(255, 0, 0)).setname(CONSTASTR("err1"));
+    dm().hiddenlabel(TTT("Group chat name cannot be empty",251), true).setname(CONSTASTR("err1"));
 
     return 0;
 }

@@ -112,7 +112,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
         MASK_PROFILE_COMMON         = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_CHAT           = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_GCHAT          = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_PROFILE_HISTORY        = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_PROFILE_MSGSNHIST      = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_FILES          = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_NETWORKS       = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_APPLICATION_SYSTEM     = SETBIT( NUMGEN_NEXT(ctlm) ),

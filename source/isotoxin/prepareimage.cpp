@@ -152,7 +152,7 @@ dialog_prepareimage_c::~dialog_prepareimage_c()
     l.append(ctlpaste).append(CONSTWSTR("<nbsp>"));
     l.append(ctlcam);
     dm().label(l);
-    dm().hiddenlabel(ts::wstr_c(), 0).setname(CONSTASTR("info"));
+    dm().hiddenlabel(ts::wstr_c(), false).setname(CONSTASTR("info"));
     dm().vspace(1).setname(CONSTASTR("last"));
     return 0;
 }
@@ -715,7 +715,7 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
                             ts::ivec2 vsz = viewrect.size();
                             ts::ivec2 pos = (vsz - sz) / 2;
 
-                            getengine().draw(pos + viewrect.lt, b->extbody(), ts::irect(0, sz), false);
+                            getengine().draw(pos + viewrect.lt, b->extbody(), false);
 
                             if (shadow)
                             {
@@ -760,7 +760,7 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
                 {
                     draw_data_s &dd = getengine().begin_draw();
                     dd.cliprect = viewrect;
-                    getengine().draw(offset, image.extbody(), imgrect, alpha);
+                    getengine().draw(offset, image.extbody(imgrect), alpha);
                     ts::ivec2 o = offset - imgrect.lt;
 
                     fd.draw(getengine(), croprect + o, tickvalue);

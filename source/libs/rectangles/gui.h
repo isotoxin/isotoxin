@@ -327,6 +327,8 @@ protected:
 
 public:
 
+    ts::TSCOLOR deftextcolor = ts::ARGB(0, 0, 0);
+    ts::TSCOLOR errtextcolor = ts::ARGB(255, 0, 0);
     ts::TSCOLOR selection_color = ts::ARGB(255, 255, 0);
     ts::TSCOLOR selection_bg_color = ts::ARGB(100, 100, 255);
     ts::TSCOLOR selection_bg_color_blink = ts::ARGB(0, 0, 155);
@@ -357,7 +359,7 @@ public:
     void release_texture( ts::bitmap_c * t );
 
     void reload_fonts();
-    bool load_theme( const ts::wsptr&thn );
+    bool load_theme( const ts::wsptr&thn, bool summon_ch_signal = true );
     
     const ts::font_desc_c & get_font( const ts::asptr &fontname );
     const ts::str_c &default_font_name() const { return m_deffont_name; }

@@ -8,8 +8,16 @@
 /*virtual*/ void dialog_smileselector_c::created()
 {
     set_theme_rect(CONSTASTR("smilesel"), false);
-
     __super::created();
+
+    gui->register_kbd_callback(DELEGATE(this, esc_handler), SSK_ESC, 0);
+
+}
+
+bool dialog_smileselector_c::esc_handler(RID, GUIPARAM)
+{
+    TSDEL(this);
+    return true;
 }
 
 void dialog_smileselector_c::build_rects(rects_t&a)
@@ -63,6 +71,7 @@ dialog_smileselector_c::~dialog_smileselector_c()
     if (gui)
     {
         gui->delete_event(DELEGATE(this, check_focus));
+        gui->unregister_kbd_callback(DELEGATE(this, esc_handler));
     }
 }
 

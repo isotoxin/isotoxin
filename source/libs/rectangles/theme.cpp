@@ -4,6 +4,9 @@ using namespace ts;
 
 const theme_rect_s *cached_theme_rect_c::operator()( ts::uint32 st ) const
 {
+    if (themerect.is_empty())
+        return nullptr;
+
 	if (theme_ver != gui->theme().ver()) //-V807
 	{
         if (theme_ver>=0)
@@ -62,6 +65,11 @@ void theme_rect_s::init_subimage(subimage_e si, const str_c &sidef, const colors
 
 void theme_rect_s::load_params(abp_c * block, const colors_map_s &colsmap)
 {
+#ifdef _DEBUG
+    if (block->get_int(CONSTASTR("break")))
+        __debugbreak();
+#endif // _DEBUG
+
     static const char *sins[SI_count] = { "lt", "rt", "lb", "rb", "l", "t", "r", "b", "c", "base",
         "capstart", "caprep", "capend",
         "sbtop", "sbrep", "sbbot", "smtop", "smrep", "smbot" };
@@ -218,13 +226,17 @@ void button_desc_s::load_params(theme_c *th, const abp_c * block, const colors_m
         else if ( salign->equals(CONSTASTR("right") ) ) align |= ALGN_RIGHT;
         else if ( salign->equals(CONSTASTR("bottom") ) ) align |= ALGN_BOTTOM;
 
-    size = ts::ivec2(10);
+    size = ts::ivec2(0);
     for (int i = 0; i < numstates; ++i)
     {
-        if (rects[i].size().x > size.x) //-V807
-            size.x = rects[i].size().x;
-        if (rects[i].size().y > size.y)
-            size.y = rects[i].size().y;
+        if (rects[i].width() > size.x) //-V807
+            size.x = rects[i].width();
+        if (rects[i].height() > size.y)
+            size.y = rects[i].height();
+
+        ASSERT(size.x * src.info().bytepp() <= ts::tabs(src.info().pitch));
+        ASSERT(rects[i].lt.x + size.x <= src.info().sz.x);
+        ASSERT(rects[i].lt.y + size.y <= src.info().sz.y);
     }
     if (const ts::abp_c *sz = block->get(CONSTASTR("size")))
         size = parsevec2(sz->as_string(), size);
@@ -261,14 +273,14 @@ ts::ivec2 button_desc_s::draw( rectengine_c *engine, states st, const ts::irect&
     if (0 == (a & (ALGN_TOP | ALGN_BOTTOM))) a |= defalign & (ALGN_TOP | ALGN_BOTTOM);
 
     ts::ivec2 p = calc_p( rects[st].size(), area, a );
-    engine->draw(p,src.extbody(),rects[st],is_alphablend(st));
+    engine->draw(p,src.extbody(rects[st]),is_alphablend(st));
     return p;
 }
 
 void theme_image_s::draw(rectengine_c &eng, const ts::irect& area, ts::uint32 align) const
 {
     ts::ivec2 p = calc_p(info().sz, area, align);
-    eng.draw(p, dbmp->extbody(), rect, true);
+    eng.draw(p, dbmp->extbody(rect), true);
 }
 
 
@@ -321,7 +333,7 @@ void theme_c::reload_fonts(FONTPAR fp)
 
 }
 
-bool theme_c::load( const ts::wsptr &name, FONTPAR fp )
+bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
 {
     wstr_c colorsdecl;
     int dd = ts::pwstr_c(name).find_pos('@');
@@ -394,6 +406,62 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp )
             colsmap.add( it.name() ) = col;
         }
     }
+
+    ts::tmp_pointers_t<ts::bitmap_c, 16> premultiply;
+
+    if (const abp_c * corrs = bp.get("corrections"))
+    {
+        for (auto it = corrs->begin(); it; ++it)
+        {
+            bitmap_c &dbmp = const_cast<bitmap_c &>(loadimage(to_wstr(it.name())));
+
+            for (auto itf = it->begin(); itf; ++itf)
+            {
+                if (itf.name().equals(CONSTASTR("premultiply")) && itf->as_int())
+                    premultiply.add(&dbmp);
+                else
+                {
+                    irect r = ts::parserect(itf.name(), irect(ivec2(0), dbmp.info().sz));
+                    token<char> t(itf->as_string());
+
+                    if (t->equals(CONSTASTR("zeroalpha")))
+                    {
+                        dbmp.fill_alpha(r.lt, r.size(), 1);
+
+                    } else if (t->equals(CONSTASTR("fill")))
+                    {
+                        ++t;
+                        ts::TSCOLOR fc = colsmap.parse(*t, ARGB(0, 0, 0, 255));
+                        if (ts::ALPHA(fc) == 255)
+                            dbmp.fill(r.lt, r.size(), fc);
+                        else
+                            dbmp.overfill(r.lt, r.size(), ts::PREMULTIPLY(fc));
+                    } else if (t->equals(CONSTASTR("mulcolor")))
+                    {
+                        ++t;
+                        ts::TSCOLOR mc = colsmap.parse(*t, 0xffffffff);
+                        dbmp.mulcolor(r.lt, r.size(), mc);
+                    } else if (t->equals(CONSTASTR("replace")))
+                    {
+                        ts::TSCOLOR c1, c2;
+                        ++t;
+                        c1 = colsmap.parse(*t, 0xffffffff);
+                        ++t;
+                        c2 = colsmap.parse(*t, 0xffffffff);
+                        
+                        dbmp.process_pixels(r.lt, r.size(), [&](ts::TSCOLOR &c) { if (c == c1) c = c2; });
+
+                    } else if (t->equals(CONSTASTR("invert")))
+                    {
+                        dbmp.process_pixels(r.lt, r.size(), [](ts::TSCOLOR &c) { c = (c & 0xff000000) | (0x00ffffff - (c & 0x00ffffff)); });
+                    } 
+                }
+            }
+        }
+    }
+
+    for (ts::bitmap_c *b : premultiply)
+        b->premultiply();
 
     theme_conf_s thc;
     if (abp_c * conf = bp.get("conf"))
@@ -569,96 +637,8 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp )
         }
     }
 
-    ts::tmp_pointers_t<ts::bitmap_c, 16> premultiply;
-
-    if (const abp_c * corrs = bp.get("corrections"))
-    {
-        for (auto it = corrs->begin(); it; ++it)
-        {
-            const str_c &src = it->as_string();
-            if (ASSERT(!src.is_empty()))
-            {
-                token<char> t(src.as_sptr());
-                bitmap_c &dbmp = prepareimageplace(to_wstr(t->as_sptr()));
-                ++t;
-                irect r = ts::parserect(t, irect(ivec2(0), dbmp.info().sz));
-                if (it.name().equals(CONSTASTR("zeroalpha")))
-                {
-                    dbmp.fill_alpha(r.lt, r.size(), 1);
-
-                } else if (it.name().equals(CONSTASTR("fill")))
-                {
-                    ts::TSCOLOR fc = colsmap.parse(*t, ARGB(0, 0, 0, 255));
-                    if (ts::ALPHA(fc) == 255)
-                        dbmp.fill(r.lt, r.size(), fc);
-                    else
-                        dbmp.overfill(r.lt, r.size(), ts::PREMULTIPLY(fc));
-                } else if (it.name().equals(CONSTASTR("mulcolor")))
-                {
-                    ts::TSCOLOR mc = colsmap.parse(*t, 0xffffffff);
-                    dbmp.mulcolor(r.lt, r.size(), mc);
-
-                } else if (it.name().equals(CONSTASTR("invert")))
-                {
-                    struct
-                    {
-                        void operator()(uint8 * me, const image_extbody_c::FMATRIX &m)
-                        {
-                            me[0] = 255 - me[0];
-                            me[1] = 255 - me[1];
-                            me[2] = 255 - me[2];
-                        }
-                    } f;
-                    dbmp.apply_filter(r.lt, r.size(), f);
-
-                } else if (it.name().equals(CONSTASTR("highlight")))
-                {
-                    struct
-                    {
-                        ts::TSCOLOR c;
-
-                        void operator()(uint8 * me, const image_extbody_c::FMATRIX &m)
-                        {
-                            // dst = src + (1 - src.a) * dst;
-                            // need minimal src_a 
-                            // but final dst should not exceed 255
-
-                            // 1 >= src + (1 - src.a) * dst;
-                            // 1 - src >= dst - src.a * dst;
-                            // -(1 - src - dst)/dst >= src.a;
-                            // 1 - 1/dst + src/dst >= src.a
-
-                            const uint8 * src = m[1][1];
-
-                            float a0 = me[0] == 0 ? 0.0f : (1.0f + ((float)src[0] - 255.0f) / me[0]);
-                            float a1 = me[1] == 0 ? 0.0f : (1.0f + ((float)src[1] - 255.0f) / me[1]);
-                            float a2 = me[2] == 0 ? 0.0f : (1.0f + ((float)src[2] - 255.0f) / me[2]);
-
-                            int a = ts::lround(255.0f * ts::tmax(a0, a1, a2));
-                            if (a < 1) a = 1;
-
-                            if (me[3])
-                                me[3] = as_byte(a);
-
-                        }
-                    } f;
-                    f.c = colsmap.parse(*t, ARGB(0, 0, 0, 255));
-
-                    dbmp.apply_filter(r.lt, r.size(), f);
-
-                } else if (it.name().equals(CONSTASTR("premultiply")))
-                {
-                    premultiply.add(&dbmp);
-                }
-            }
-        }
-    }
-
-    for( ts::bitmap_c *b : premultiply )
-        b->premultiply();
-
 	m_name = name;
-    if (iver > 0) // 1st load (iver == 0) is not change
+    if (iver > 0 && summon_ch_signal) // 1st load (iver == 0) is not change
         gmsg<GM_UI_EVENT>(UE_THEMECHANGED).send();
 	return true;
 }

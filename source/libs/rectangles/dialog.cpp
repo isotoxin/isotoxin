@@ -9,8 +9,11 @@ MAKE_CHILD<gui_listitem_c>::~MAKE_CHILD()
     get().gm = gm;
 }
 
-gui_listitem_c::gui_listitem_c(initial_rect_data_s &data, gui_listitem_params_s &prms) : gui_label_ex_c(data), param(prms.param), icon(prms.icon)
+gui_listitem_c::gui_listitem_c(initial_rect_data_s &data, gui_listitem_params_s &prms) : gui_label_ex_c(data), param(prms.param)
 {
+    if (prms.icon)
+        icon = *prms.icon;
+
     if (prms.themerect.is_empty())
         set_theme_rect(CONSTASTR("lstitem"), false);
     else
@@ -20,11 +23,11 @@ gui_listitem_c::gui_listitem_c(initial_rect_data_s &data, gui_listitem_params_s 
     marginleft_icon = prms.addmarginleft_icon;
     textrect.change_option(ts::TO_VCENTER, ts::TO_VCENTER);
     textrect.make_dirty(true, true, true);
-    if (icon)
+    if (icon.info().sz.x)
     {
-        textrect.set_margins(ts::ivec2(icon->info().sz.x + prms.addmarginleft_icon + prms.addmarginleft, 0));
-        if (icon->info().sz.y > height)
-            height = icon->info().sz.y;
+        textrect.set_margins(ts::ivec2(icon.info().sz.x + prms.addmarginleft_icon + prms.addmarginleft, 0));
+        if (icon.info().sz.y > height)
+            height = icon.info().sz.y;
     }
 }
 
@@ -74,8 +77,8 @@ void gui_listitem_c::set_text(const ts::wstr_c&t, bool full_height_last_line)
     __super::set_text(t, full_height_last_line);
     int h = get_height_by_width(-INT_MAX);
 
-    if (icon && icon->info().sz.y > h)
-        h = icon->info().sz.y;
+    if (icon.info().sz.y > h)
+        h = icon.info().sz.y;
 
     if (h != height)
     {
@@ -147,11 +150,11 @@ void gui_listitem_c::set_text(const ts::wstr_c&t, bool full_height_last_line)
     case SQ_DRAW:
         if (rid != getrid()) return false;
         __super::sq_evt(qp, rid, data);
-        if (icon)
+        if (icon.info().sz.x > 0)
         {
             ts::irect cla = get_client_area();
             getengine().begin_draw();
-            getengine().draw( ts::ivec2(cla.lt.x + marginleft_icon, (cla.height()-icon->info().sz.y)/2+cla.lt.y), icon->extbody(), ts::irect(0, icon->info().sz), true );
+            getengine().draw( ts::ivec2(cla.lt.x + marginleft_icon, (cla.height()-icon.info().sz.y)/2+cla.lt.y), icon.extbody(), true );
             getengine().end_draw();
         }
         return true;
@@ -177,6 +180,17 @@ ts::uint32 gui_dialog_c::gm_handler(gmsg<GM_DIALOG_PRESENT> &p)
     int udt = unique_tag();
     if (udt == 0) return 0;
     if (p.unique_tag == udt) return GMRBIT_ACCEPTED;
+    return 0;
+}
+
+ts::uint32 gui_dialog_c::gm_handler(gmsg<GM_UI_EVENT> &e)
+{
+    if (e.evt == UE_THEMECHANGED)
+    {
+        update_header();
+        tabsel( ts::amake(tabselmask) ); // reselect current tab
+    }
+
     return 0;
 }
 
@@ -252,10 +266,10 @@ gui_dialog_c::description_s&  gui_dialog_c::description_s::label( const ts::wspt
     return *this;
 }
 
-gui_dialog_c::description_s& gui_dialog_c::description_s::hiddenlabel( const ts::wsptr& text_, ts::TSCOLOR col )
+gui_dialog_c::description_s& gui_dialog_c::description_s::hiddenlabel( const ts::wsptr& text_, bool err )
 {
     ctl = _STATIC_HIDDEN;
-    color = col;
+    is_err = err;
     text.set(text_);
     return *this;
 }
@@ -421,6 +435,12 @@ gui_dialog_c::description_s& gui_dialog_c::description_s::list( const ts::wsptr 
 
 gui_dialog_c::~gui_dialog_c()
 {
+}
+
+void gui_dialog_c::update_header()
+{
+    header_prepend = to_wstr(gui->theme().conf().get_string(CONSTASTR("header_prepend"), CONSTASTR("")));
+    header_append = to_wstr(gui->theme().conf().get_string(CONSTASTR("header_append"), CONSTASTR("")));
 }
 
 ts::str_c gui_dialog_c::find( RID crid ) const
@@ -988,14 +1008,14 @@ RID gui_dialog_c::combik(const menu_c &m, RID parent)
     return textfield(s.name, 128, TFR_COMBO, check_always_ok, &dd, 0, parent);
 }
 
-RID gui_dialog_c::label(const ts::wstr_c &text, ts::TSCOLOR col, bool visible)
+RID gui_dialog_c::label(const ts::wstr_c &text, bool visible, bool is_err)
 {
     gui_label_simplehtml_c &l = MAKE_VISIBLE_CHILD<gui_label_simplehtml_c>(getrid(),visible);
     l.on_link_click = (CLICK_LINK)ts::open_link;
     l.set_autoheight();
     l.set_text(text, true);
     l.set_updaterect(getrectupdate());
-    if (col) l.set_defcolor(col);
+    l.set_defcolor( is_err ? gui->errtextcolor : get_default_text_color() );
     return l.getrid();
 }
 
@@ -1105,11 +1125,11 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
 
     ts::tmp_array_inplace_t<checkset,2> chset;
 
-    ts::uint32 mask = par.as_uint();
+    tabselmask = par.as_uint();
     RID lasthgroup;
     for(description_s &d : descs)
     {
-        if (0 == (d.mask & mask)) continue;
+        if (0 == (d.mask & tabselmask)) continue;
         if (d.subctltag >= 0) continue;
         RID parent = getrid();
         if (d.desc.is_empty() && lasthgroup)
@@ -1117,7 +1137,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             parent = lasthgroup;
         } else if (!d.desc.is_empty())
         {
-            label( CONSTWSTR("<l>") + d.desc + CONSTWSTR("</l>"), get_default_text_color() );
+            label( CONSTWSTR("<l>") + d.desc + CONSTWSTR("</l>") );
         }
         RID rctl;
         switch (d.ctl)
@@ -1134,7 +1154,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             }
             break;
         case description_s::_HEADER:
-            rctl = label(ts::wstr_c(header_prepend,d.text).append(header_append), d.color, true);
+            rctl = label(ts::wstr_c(header_prepend,d.text).append(header_append), true);
             break;
         case description_s::_HGROUP:
             {
@@ -1143,10 +1163,10 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             }
             break;
         case description_s::_STATIC:
-            rctl = label(d.text, d.color, true);
+            rctl = label(d.text, true);
             break;
         case description_s::_STATIC_HIDDEN:
-            rctl = label(d.text, d.color, false);
+            rctl = label(d.text, false, d.is_err);
             break;
         case description_s::_VSPACE:
             lasthgroup = RID();
@@ -1252,7 +1272,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
                 ctl_by_name[d.name] = d.ctlptr;
         }
     }
-    tabselected(mask);
+    tabselected(tabselmask);
 }
 
 RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
@@ -1346,9 +1366,7 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
     numtopbuttons = getengine().children_count();
 
     reset();
-
-    header_prepend = to_wstr(gui->theme().conf().get_string(CONSTASTR("header_prepend"), CONSTASTR("")));
-    header_append = to_wstr(gui->theme().conf().get_string(CONSTASTR("header_append"), CONSTASTR("")));
+    update_header();
     
 
     return __super::created();

@@ -14,6 +14,7 @@ class gui_textedit_c : public gui_control_c
     DUMMY( gui_textedit_c );
 
     GM_RECEIVER( gui_textedit_c, GM_HEARTBEAT );
+    GM_RECEIVER( gui_textedit_c, GM_UI_EVENT );
 
     void ctx_menu_cut(const ts::str_c &);
     void ctx_menu_paste(const ts::str_c &);

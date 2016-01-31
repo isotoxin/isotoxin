@@ -224,15 +224,15 @@ void dialog_firstrun_c::go2page(int page_)
         page = page_;
         reset();
     }
+
     switch (page_)
     {
     case 0:
         
         // CHOOSE YOUR STYLE
 
-        label(ts::wstr_c(L"<p=c>")
-            .append(TTT("This is first run of [appname]. You have to select language. Also You can choose default initialization or you can manually set up some settings. Please select.",24))
-            .append(L"<color=#808080><hr=5,1,1>"));
+        label(ts::wstr_c(header_prepend, TTT("This is first run of [appname]. You have to select language. Also You can choose default initialization or you can manually set up some settings. Please select.",24))
+            .append(header_append));
 
         vspace(25);
 
@@ -263,9 +263,8 @@ void dialog_firstrun_c::go2page(int page_)
 
         // SELECT INSTALL PATH
 
-        label(ts::wstr_c(L"<p=c>")
-            .append(TTT("[appname] can copy self to work folder or can continue work in current folder",11))
-            .append(L"<color=#808080><hr=5,1,1>"));
+        label(ts::wstr_c(header_prepend, TTT("[appname] can copy self to work folder or can continue work in current folder",11))
+            .append(header_append));
 
         vspace(25);
 
@@ -300,9 +299,8 @@ void dialog_firstrun_c::go2page(int page_)
 
         // SELECT SETTINGS PATH
 
-        label(ts::wstr_c(L"<p=c>")
-            .append(TTT("You can select place for settings and profiles. Default choice recommended.",14))
-            .append(L"<color=#808080><hr=5,1,1>"));
+        label(ts::wstr_c(header_prepend, TTT("You can select place for settings and profiles. Default choice recommended.",14))
+            .append(header_append));
         vspace(25);
         {
             ts::wstr_c samepath = path_by_choice(PCH_INSTALLPATH);
@@ -329,9 +327,8 @@ void dialog_firstrun_c::go2page(int page_)
     case 3:
 
         // SELECT PROFILE NAME
-        label(ts::wstr_c(L"<p=c>")
-            .append(TTT("Last step - define profile name. You can leave this field empty and create profile later",18))
-            .append(L"<color=#808080><hr=5,1,1>"));
+        label(ts::wstr_c(header_prepend, TTT("Last step - define profile name. You can leave this field empty and create profile later", 18))
+            .append(header_append));
         vspace(25);
 
         profile = textfield(profilename, ts::tmax(0, MAX_PATH - copyto.get_length() - 1), TFR_TEXT_FILED, DELEGATE(this, path_check_1));

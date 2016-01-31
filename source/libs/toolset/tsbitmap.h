@@ -486,7 +486,7 @@ public:
 
     }
 
-    template <typename FILTER> void apply_filter(const ts::ivec2 &pdes, const ts::ivec2 &size, FILTER &f)
+    template <typename FILTER> void apply_filter(const ts::ivec2 &pdes, const ts::ivec2 &size, const FILTER &f)
     {
         if (pdes.x < 0 || pdes.y < 0) return;
         if ((pdes.x + size.x) > info().sz.x || (pdes.y + size.y) > info().sz.y) return;
@@ -530,8 +530,24 @@ public:
                 f(bu, mat);
             }
         }
-
     }
+
+    template <typename FILTER> void process_pixels(const ts::ivec2 &pdes, const ts::ivec2 &size, const FILTER &f)
+    {
+        if (pdes.x < 0 || pdes.y < 0) return;
+        if ((pdes.x + size.x) > info().sz.x || (pdes.y + size.y) > info().sz.y) return;
+
+        before_modify();
+
+        uint8 * bu = body() + info().bytepp()*pdes.x + info().pitch*pdes.y;
+        aint desnl = info().pitch - size.x*info().bytepp();
+        aint desnp = info().bytepp();
+
+        for (aint y = 0; y < size.y; ++y, bu += desnl)
+            for (int x = 0; x < size.x; ++x, bu += desnp)
+                f( *(TSCOLOR *)bu );
+    }
+
 
     void make_grayscale();
 

@@ -222,6 +222,7 @@ enum isogmsg_e
     ISOGM_FILE,
     ISOGM_CHANGED_SETTINGS,
     ISOGM_NOTICE,
+    ISOGM_NOTICE_PRESENT,
     ISOGM_SUMMON_POST,              // summon post_s into conversation
     ISOGM_CALL_STOPED,
     ISOGM_METACREATE,
@@ -236,6 +237,7 @@ enum isogmsg_e
     ISOGM_CAMERA_TICK,
     ISOGM_PEER_STREAM_OPTIONS,
     ISOGM_ENCRYPT_PROCESS,
+    ISOGM_EXPORT_PROTO_DATA,
 
     ISOGM_COUNT,
 };
@@ -252,6 +254,13 @@ template<> struct gmsg<ISOGM_NEWVERSION> : public gmsgbase
     gmsg(ts::asptr ver, error_e en) :gmsgbase(ISOGM_NEWVERSION), ver(ver), error_num(en) {}
     ts::sstr_t<-16> ver;
     error_e error_num = E_OK;
+};
+
+template<> struct gmsg<ISOGM_EXPORT_PROTO_DATA> : public gmsgbase
+{
+    gmsg(int id) :gmsgbase(ISOGM_EXPORT_PROTO_DATA), protoid(id) {}
+    int protoid;
+    ts::blob_c buf;
 };
 
 template<> struct gmsg<ISOGM_DOWNLOADPROGRESS> : public gmsgbase
@@ -424,7 +433,7 @@ enum loctext_e
 ts::wstr_c loc_text(loctext_e);
 
 ts::wstr_c text_sizebytes( int sz );
-ts::wstr_c text_contact_state( ts::TSCOLOR color_online, ts::TSCOLOR color_offline, contact_state_e st );
+ts::wstr_c text_contact_state( ts::TSCOLOR color_online, ts::TSCOLOR color_offline, contact_state_e st, int link = -1 );
 ts::wstr_c text_typing(const ts::wstr_c &prev, ts::wstr_c &workbuf, const ts::wsptr &preffix);
 
 void draw_initialization( rectengine_c *e, ts::bitmap_c &pab, const ts::irect&viewrect, ts::TSCOLOR tcol, const ts::wsptr &additiontext );

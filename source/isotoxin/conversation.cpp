@@ -81,6 +81,16 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_CALL_STOPED> & n)
 
     return 0;
 }
+
+ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NOTICE_PRESENT> & n)
+{
+    if (n.n == notice && n.sender == sender && n.owner == historian)
+        return GMRBIT_ACCEPTED;
+    return 0;
+}
+
+
+
 ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
 {
     if (NOTICE_KILL_CALL_INPROGRESS == n.n)
@@ -115,6 +125,16 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &c)
     return 0;
 }
 
+ts::uint32 gui_notice_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
+{
+    if (ue.evt == UE_THEMECHANGED)
+    {
+        textrect.set_def_color(get_default_text_color());
+        textrect.make_dirty();
+    }
+
+    return 0;
+}
 
 /*virtual*/ ts::ivec2 gui_notice_c::get_min_size() const
 {
@@ -760,7 +780,7 @@ void gui_notice_callinprogress_c::vsb_draw( vsb_c *cam, const ts::ivec2& campos,
         draw_data_s &dd = getengine().begin_draw();
         ts::irect clr = ts::irect::from_center_and_size( campos, camsz );
 
-        getengine().draw(clr.lt, b->extbody(), ts::irect(0, b->info().sz), false);
+        getengine().draw(clr.lt, b->extbody(), false);
 
         if (shadow)
         {
@@ -1100,7 +1120,7 @@ int gui_notice_callinprogress_c::preview_cam_cursor_resize( const ts::ivec2 &p )
                 ts::irect clr = ts::irect::from_center_and_size(cam_position, cam_previewsize);
 
                 getengine().draw(clr, ts::ARGB(30, 30, 30));
-                getengine().draw(clr.center() - pa.bmp.info().sz / 2, pa.bmp.extbody(), ts::irect(0, pa.bmp.info().sz), true);
+                getengine().draw(clr.center() - pa.bmp.info().sz / 2, pa.bmp.extbody(), true);
 
                 if (draw_shadow && shadow)
                 {
@@ -1947,8 +1967,7 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
     getengine().trunc_children(0); // just kill all buttons
 
     pubid = pubid_;
-    ts::wstr_c sost(CONSTWSTR("<cstm=a1>")), plugdesc, uname, ustatus, netname;
-    int sostl = sost.get_length();
+    ts::wstr_c sost, plugdesc, uname, ustatus, netname;
     curstate = CR_OK;
     is_autoconnect = false;
     prf().iterate_aps([&](const active_protocol_c &ap) {
@@ -1962,25 +1981,26 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
                 netname = from_utf8(ap.get_name());
                 is_autoconnect = ap.is_autoconnect();
 
-                sost.set_length(sostl);
+                sost.clear();
 
                 if (CR_OK == curstate)
                 {
                     if ( CS_OFFLINE == c->get_state() )
                     {
                         sost.append(maketag_color<ts::wchar>(get_default_text_color(COLOR_OFFLINE_STATUS)));
+                        sost.append(CONSTWSTR("<cstm=a1>"));
                         if (is_autoconnect)
                             sost.append(TTT("Connecting...", 68));
                         else
                             sost.append(TTT("Off",45));
-                        sost.append(CONSTWSTR("</color>"));
+                        sost.append(CONSTWSTR("<cstm=b1></color>"));
                     } else
                     {
                         sost.append(CONSTWSTR("</l>"));
                         sost.append(text_contact_state(
                             get_default_text_color(COLOR_ONLINE_STATUS),
                             get_default_text_color(COLOR_OFFLINE_STATUS),
-                            c->get_state()
+                            c->get_state(), 1
                             ));
                         sost.append(CONSTWSTR("<l>"));
                     }
@@ -2001,7 +2021,9 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
                             break;
                     }
                     sost.append(CONSTWSTR("</l><b>"))
-                        .append(maketag_color<ts::wchar>(get_default_text_color(COLOR_ERROR_STATUS))).append(errs).append(CONSTWSTR("</color></b><l>"));
+                        .append(maketag_color<ts::wchar>(get_default_text_color(COLOR_ERROR_STATUS))).append(CONSTWSTR("<cstm=a1>")).append(errs).append(CONSTWSTR("<cstm=b1>")).append(CONSTWSTR("</color></b><l>"));
+
+                    
                 }
 
                 if (CS_ONLINE == c->get_state())
@@ -2016,10 +2038,8 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
                         }
                         return true;
                     });
-                    sost.append(CONSTWSTR("<cstm=b1> [")).append_as_int(online).append_char('/').append_as_int(all).append_char(']');
+                    sost.append(CONSTWSTR(" [")).append_as_int(online).append_char('/').append_as_int(all).append_char(']');
                 }
-                else
-                    sost.append(CONSTWSTR("<cstm=b1>"));
 
 
                 ts::str_c n = ap.get_uname();
@@ -2117,6 +2137,7 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CMD_RESULT> &rslt)
     return 0;
 }
 
+
 ts::uint32 gui_notice_network_c::gm_handler(gmsg<GM_HEARTBEAT>&)
 {
     // just check protocol available
@@ -2179,6 +2200,10 @@ void gui_notice_network_c::ctx_onlink_do(const ts::str_c &cc)
     {
         if (active_protocol_c *ap = prf().ap(networkid))
             ap->set_autoconnect(false), is_autoconnect = false;
+    } else if (cc.equals(CONSTASTR("export")))
+    {
+        if (active_protocol_c *ap = prf().ap(networkid))
+            ap->export_data();
     }
 }
 
@@ -2190,6 +2215,16 @@ void gui_notice_network_c::show_link_submenu()
     {
         mnu.add(loc_text(loc_copy), 0, DELEGATE(this, ctx_onlink_do), CONSTASTR("copy"));
         mnu.add(loc_text(loc_qrcode), 0, DELEGATE(this, ctx_onlink_do), CONSTASTR("qrcode"));
+
+        bool support_export = false;
+        if (active_protocol_c *ap = prf().ap(networkid))
+            support_export = 0 != (ap->get_features() & PF_EXPORT);
+        if (support_export)
+        {
+            mnu.add_separator();
+            mnu.add(TTT("Export...",392), 0, DELEGATE(this, ctx_onlink_do), CONSTASTR("export"));
+        }
+
     } else if (overlink == 1)
     {
         if (is_autoconnect)
@@ -2307,13 +2342,14 @@ int gui_notice_network_c::sortfactor() const
                 {
                     int x = (fake_margin.x - ava->info().sz.x) / 2;
                     int y = (ca.size().y - ava->info().sz.y) / 2;
-                    m_engine->draw(ca.lt + ts::ivec2(x, y), ava->extbody(), ts::irect(0, ava->info().sz), ava->alpha_pixels);
+                    m_engine->draw(ca.lt + ts::ivec2(x, y), ava->extbody(), ava->alpha_pixels);
                 }
                 else
                 {
                     const theme_image_s *icon = g_app->preloaded_stuff().icon[CSEX_UNKNOWN];
                     int x = (fake_margin.x - icon->info().sz.x) / 2;
-                    icon->draw(*m_engine.get(), ca.lt + ts::ivec2(x,0));
+                    int y = (ca.size().y - icon->info().sz.y) / 2;
+                    icon->draw(*m_engine.get(), ca.lt + ts::ivec2(x,y));
                 }
             }
 
@@ -4420,8 +4456,8 @@ ts::wstr_c gui_message_item_c::hdr() const
     {
         if (tv.s[0] == 'x')
         {
-            r = maketag_mark<ts::wchar>(g_app->preloaded_stuff().found_mark_bg_color);
-            r.append( maketag_color<ts::wchar>(g_app->preloaded_stuff().found_mark_color) );
+            r = maketag_mark<ts::wchar>(GET_THEME_VALUE(found_mark_bg_color));
+            r.append( maketag_color<ts::wchar>(GET_THEME_VALUE(found_mark_color)) );
             return true;
         } else if (tv.s[0] == 'y')
         {
@@ -5244,6 +5280,14 @@ DWORD gui_messagelist_c::handler_SEV_ACTIVE_STATE(const system_event_param_s & p
     return 0;
 }
 
+ts::uint32 gui_messagelist_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
+{
+    if (historian && ue.evt == UE_THEMECHANGED)
+        historian->reselect();
+
+    return 0;
+}
+
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_REFRESH_SEARCH_RESULT> &)
 {
     if (historian)
@@ -5339,9 +5383,12 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED> &p)
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
 {
-    if (ch.sp == PP_PROFILEOPTIONS && historian && historian->getkey().is_self() && 0 != (ch.bits & UIOPT_SHOW_NEWCONN_BAR))
-        historian->reselect(0);
-    else if (ch.sp == PP_FONTSCALE && historian && !historian->getkey().is_self())
+    if (ch.sp == PP_PROFILEOPTIONS && historian && historian->getkey().is_self())
+    {
+        if (0 != (ch.bits & UIOPT_SHOW_NEWCONN_BAR) || 0 != (ch.bits & MSGOP_MAXIMIZE_INLINE_IMG))
+            historian->reselect(0);
+
+    } else if (ch.sp == PP_FONTSCALE && historian && !historian->getkey().is_self())
         historian->reselect(0);
     else if (ch.sp == CFG_LANGUAGE && flags.is(F_EMPTY_MODE) && prf().get_options().is(UIOPT_SHOW_NEWCONN_BAR))
     {
@@ -5721,6 +5768,14 @@ bool gui_messagelist_c::filler_s::tick(RID r, GUIPARAM p)
             lhb->init_load(load_n);
         } else
             TSDEL(lhb);
+
+        if (1 == h->subcount() && h->subget(0)->get_state() == CS_INVITE_RECEIVE)
+        {
+            if (!gmsg<ISOGM_NOTICE_PRESENT>( h, h->subget(0), NOTICE_FRIEND_REQUEST_RECV ).send().is(GMRBIT_ACCEPTED))
+            {
+                gmsg<ISOGM_NOTICE>(h, h->subget(0), NOTICE_FRIEND_REQUEST_RECV, ts::str_c()).send();
+            }
+        }
     }
 
     return 0;
@@ -6035,6 +6090,7 @@ void gui_message_area_c::update_buttons()
     int features_online = 0;
     bool now_disabled = false;
     bool is_groupchat = false;
+    bool is_authorized = true;
     if (contact_root_c * contact = message_editor->get_historian())
     {
         is_groupchat = contact->getkey().is_group();
@@ -6045,14 +6101,16 @@ void gui_message_area_c::update_buttons()
                 features |= f;
                 if (c->get_state() == CS_ONLINE) features_online |= f;
                 if (c->is_av()) now_disabled = true;
+                if (c->get_state() == CS_INVITE_RECEIVE || c->get_state() == CS_INVITE_SEND)
+                    is_authorized = false;
             }
         });
     }
 
     MODIFY(*file_button).visible(true);
 
-    bool disable = 0 == (features & PF_SEND_FILE);
-    if (!disable && is_groupchat) 
+    bool disable = !is_authorized || 0 == (features & PF_SEND_FILE);
+    if (!disable && is_groupchat)
         disable = 0 == (features & PF_GROUP_SEND_FILE);
 
     if (disable)

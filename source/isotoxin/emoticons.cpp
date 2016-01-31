@@ -167,7 +167,64 @@ gui_textedit_c::active_element_s * emoticon_s::get_edit_element(int maxh)
 {
     ispreframe = true;
     preframe = TSNEW( ts::bitmap_c );
-    return load_only_gif(*preframe, body);
+    if (load_only_gif(*preframe, body))
+    {
+        adapt_bg(preframe);
+        return true;
+    }
+    return false;
+}
+
+void emoticons_c::emo_gif_s::adapt_bg(const ts::bitmap_c *bmpx)
+{
+    uint c = ts::GRAYSCALE_C(GET_THEME_VALUE(common_bg_color));
+    if (c > 128)
+        return; // background is light: assume gif smiles designed for light background, so do nothing now
+
+    ts::irect r;
+    const ts::bitmap_c *f = bmpx ? nullptr : &curframe(r);
+    ts::bitmap_t<ts::bmpcore_exbody_s> b(bmpx ? bmpx->extbody() : f->extbody(r) );
+
+    b.apply_filter(ts::ivec2(0), b.info().sz, [&](ts::uint8 *p, ts::bitmap_t<ts::bmpcore_exbody_s>::FMATRIX &m) {
+
+        for (int x = 0; x < 3; ++x)
+        {
+            for (int y = 0; y < 3; ++y)
+            {
+                if (x == 1 && y == 1)
+                    continue;
+                if ( m[x][y] == nullptr )
+                    continue;
+
+                if (m[x][y][3] == 0)
+                {
+                    if ( ts::GRAYSCALE_C( *(ts::TSCOLOR *)p ) > 100 )
+                    {
+                        int minA = ts::tmax( 255 - p[0], 255 - p[1], 255 - p[2] );
+                        if (minA == 0)
+                        {
+                            p[0] = c & 0xff;
+                            p[1] = c & 0xff;
+                            p[2] = c & 0xff;
+                        } else
+                        {
+                            float invA = 255.0f / (float)minA;
+                            float c1 = (p[0] + minA - 255.0f) * invA;
+                            float c2 = (p[1] + minA - 255.0f) * invA;
+                            float c3 = (p[2] + minA - 255.0f) * invA;
+
+                            *(ts::TSCOLOR *)p = ts::PREMULTIPLY( ts::ARGB<uint>( ts::lround(c3), ts::lround(c2), ts::lround(c1), minA ) );
+                        }
+
+                    }
+                    return;
+                }
+            }
+        }
+    });
+
+
+
 }
 
 /*virtual*/ bool emoticons_c::emo_static_image_s::load(const ts::blob_c &b)
@@ -500,9 +557,23 @@ void emoticons_c::parse( ts::str_c &t, bool to_unicode )
         }
     }
 
+    bool skip_short = !prf().get_options().is(MSGOP_REPLACE_SHORT_SMILEYS);
 
     for( const match_point_s&mp : matchs )
     {
+        if (skip_short)
+        {
+            if (mp.s.get_length() > 4)
+                goto process;
+            if (mp.s.get_char(0) == mp.s.get_last_char() && ')' != mp.s.get_char(0) && '(' != mp.s.get_char(0))
+                goto process;
+            if (skip_utf8_char(mp.s, 0) == mp.s.get_length())
+                goto process;
+            continue;
+        }
+
+        process:
+
         int sf = 0;
         for(;;)
         {

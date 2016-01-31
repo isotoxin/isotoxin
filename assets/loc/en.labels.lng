@@ -324,8 +324,8 @@
 324=Export history
 325=Export history to file...
 326=As $ file
-327=History
-328=Message log settings
+327=Messages & History
+328=Messages & history settings
 329=...load whole history
 330=...load $ messages
 331=On select contact...
@@ -370,6 +370,7 @@
 370=Details
 371=Comment
 372=Default download folder for images
+373=Replace short smileys to emoticons
 374=Send image
 375=Send image
 376=Send file
@@ -387,6 +388,9 @@
 388=Can't open profile [b]$[/b]!
 389=File [b]$[/b] is not profile
 390=Profile [b]$[/b] is encrypted.[br]You have to enter password to load encrypted profile.
+391=Maximize inline images
+392=Export...
+393=Export protocol data: $
 900=information
 901=warning
 902=error

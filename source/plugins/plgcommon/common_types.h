@@ -19,6 +19,7 @@ enum proto_features_e
     PF_IMPORT                   = (1 << 12),    // protocol support creation with import; configuration import (set_config will receive imported file as is)
     PF_OFFLINE_MESSAGING        = (1 << 13),    // protocol supports real offline messaging (not faux offline messaging)
     PF_OFFLINE_INDICATOR        = (1 << 14),    // protocol's state used as online/offline indicator of application
+    PF_EXPORT                   = (1 << 15),    // protocol supports export
 };
 
 enum connection_features_e

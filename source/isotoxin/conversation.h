@@ -30,6 +30,14 @@ template<> struct gmsg<ISOGM_NOTICE> : public gmsgbase
     gui_notice_c *just_created = nullptr;
 };
 
+template<> struct gmsg<ISOGM_NOTICE_PRESENT> : public gmsgbase
+{
+    gmsg(contact_root_c *owner, contact_c *sender, notice_e nid) :gmsgbase(ISOGM_NOTICE_PRESENT), owner(owner), sender(sender), n(nid) {}
+    contact_root_c *owner;
+    contact_c *sender;
+    notice_e n;
+};
+
 template<> struct MAKE_CHILD<gui_notice_c> : public _PCHILD(gui_notice_c)
 {
     notice_e n;
@@ -63,11 +71,13 @@ protected:
     int addheight = 0;
 
     GM_RECEIVER(gui_notice_c, ISOGM_NOTICE);
+    GM_RECEIVER(gui_notice_c, ISOGM_NOTICE_PRESENT);
     GM_RECEIVER(gui_notice_c, ISOGM_CALL_STOPED);
     GM_RECEIVER(gui_notice_c, ISOGM_FILE);
     GM_RECEIVER(gui_notice_c, ISOGM_DOWNLOADPROGRESS);
     GM_RECEIVER(gui_notice_c, ISOGM_NEWVERSION);
     GM_RECEIVER(gui_notice_c, ISOGM_V_UPDATE_CONTACT);
+    GM_RECEIVER(gui_notice_c, GM_UI_EVENT);
 
     static const ts::flags32_s::BITS F_DIRTY_HEIGHT_CACHE = FLAGS_FREEBITSTART_LABEL << 0;
     static const ts::flags32_s::BITS F_FREEBITSTART_NOTICE = FLAGS_FREEBITSTART_LABEL << 1;
@@ -580,6 +590,7 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_messagelist_c, GM_HEARTBEAT);
     GM_RECEIVER(gui_messagelist_c, ISOGM_REFRESH_SEARCH_RESULT );
     GM_RECEIVER(gui_messagelist_c, ISOGM_CHANGED_SETTINGS );
+    GM_RECEIVER(gui_messagelist_c, GM_UI_EVENT );
     
 
     SIMPLE_SYSTEM_EVENT_RECEIVER(gui_messagelist_c, SEV_ACTIVE_STATE);

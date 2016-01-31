@@ -270,6 +270,7 @@ class text_rect_dynamic_c : public ts::text_rect_c
     ts::Time last_use_time = ts::Time::past();
     ts::bitmap_c * curtexture = nullptr;
 public:
+    text_rect_dynamic_c();
     /*virtual*/ ~text_rect_dynamic_c();
     /*virtual*/ ts::bitmap_c &texture() override;
     /*virtual*/ void texture_no_need() override;
@@ -1050,6 +1051,7 @@ class gui_label_simplehtml_c : public gui_label_ex_c
     DUMMY(gui_label_simplehtml_c);
     ts::wstrings_c links;
     ts::wstr_c tt() const;
+
 public:
     gui_label_simplehtml_c(initial_rect_data_s &data) :gui_label_ex_c(data) { m_tooltip = DELEGATE(this, tt); }
     /*virtual*/ ~gui_label_simplehtml_c() {}
@@ -1506,6 +1508,7 @@ class gui_htabsel_c : public gui_hgroup_c
     DUMMY(gui_htabsel_c);
 
     GM_RECEIVER( gui_htabsel_c, GM_HEARTBEAT );
+    GM_RECEIVER( gui_htabsel_c, GM_UI_EVENT );
 
     menu_c menu;
     RID activeitem;
@@ -1583,6 +1586,7 @@ class gui_vtabsel_c : public gui_vscrollgroup_c
     DUMMY(gui_vtabsel_c);
 
     GM_RECEIVER(gui_vtabsel_c, GM_HEARTBEAT);
+    GM_RECEIVER(gui_vtabsel_c, GM_UI_EVENT);
 
     menu_c menu;
     RID currentgroup;

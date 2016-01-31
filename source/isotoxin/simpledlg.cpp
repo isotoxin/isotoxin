@@ -86,7 +86,7 @@ void dialog_msgbox_c::updrect_msgbox(const void *, int r, const ts::ivec2 &p)
 {
     if (r == 17)
     {
-        getengine().draw(p - getroot()->get_current_draw_offset(), qrbmp.extbody(), ts::irect(0,qrbmp.info().sz), true);
+        getengine().draw(p - getroot()->get_current_draw_offset(), qrbmp.extbody(), true);
     }
 }
 
@@ -514,7 +514,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     dm().label( title );
 
     dm().vspace(5);
-    dm().hiddenlabel(ts::wstr_c(), 0).setname(CONSTASTR("upd"));
+    dm().hiddenlabel(ts::wstr_c(), false).setname(CONSTASTR("upd"));
     dm().vspace(5);
     dm().button(ts::wstr_c(), TTT("Check for update",354), DELEGATE(this, check_update_now)).height(35).setname(CONSTASTR("checkupdb"));
     dm().vspace(5);
@@ -533,6 +533,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR(" <a href=\"http://libjpeg.sourceforge.net\">jpg image library</a>") );
     title.append( CONSTWSTR(" <a href=\"http://giflib.sourceforge.net\">The GIFLIB project</a>") );
     title.append( CONSTWSTR(" <a href=\"http://fukuchi.org/works/qrencode\">libqrencode</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://cairographics.org\">Cairo Graphics</a>") );
     title.append( CONSTWSTR(" <a href=\"http://g.oswego.edu/dl/html/malloc.html\">dlmalloc</a>") );
     title.append( CONSTWSTR(" <a href=\"https://github.com/yxbh/FastDelegate\">C++11 fastdelegates</a>") );
     title.append( CONSTWSTR(" <a href=\"http://curl.haxx.se/libcurl\">Curl</a>") );
@@ -543,6 +544,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR("</l><br><br>Other sources and assets used<hr><l><a href=\"http://virtualdub.sourceforge.net/\">VirtualDub</a>") );
     title.append( CONSTWSTR(" <a href=\"https://github.com/sarbian/libsquish\">libsquish</a>") );
     title.append( CONSTWSTR(" <a href=\"http://code.google.com/p/libyuv\">libuv</a>") );
+    title.append( CONSTWSTR(" <a href=\"https://github.com/GNOME/librsvg\">librsvg</a>") );
     title.append( CONSTWSTR(" <a href=\"https://github.com/libyal/liblnk\">liblink</a>") );
     title.append( CONSTWSTR(" <a href=\"http://www.efgh.com/software/md5.htm\">md5</a>") );
     title.append( CONSTWSTR(" <a href=\"http://dejavu-fonts.org\">DejaVu fonts</a>") );
@@ -558,7 +560,7 @@ void dialog_about_c::updrect_about(const void *rr, int r, const ts::ivec2 &p)
     if (1000 == r)
     {
         rectengine_root_c *root = getroot();
-        root->draw(p - root->get_current_draw_offset(), pa.bmp.extbody(), ts::irect(0,pa.bmp.info().sz), true );
+        root->draw(p - root->get_current_draw_offset(), pa.bmp.extbody(), true );
 
     } else
         updrect_def(rr,r,p);
@@ -637,7 +639,7 @@ ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 }
 /*virtual*/ ts::ivec2 dialog_about_c::get_min_size() const
 {
-    return ts::ivec2(450, 490);
+    return ts::ivec2(450, 500);
 }
 
 /*virtual*/ bool dialog_about_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)

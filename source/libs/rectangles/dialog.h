@@ -36,7 +36,7 @@ class gui_listitem_c : public gui_label_ex_c
     DUMMY(gui_listitem_c);
     ts::str_c  param;
     GETMENU_FUNC gm; // get menu on rite click
-    const ts::bitmap_c *icon = nullptr;
+    ts::bitmap_c icon;
     int height = 0;
     int marginleft_icon;
 
@@ -66,14 +66,18 @@ class gui_dialog_c : public gui_vscrollgroup_c
     DUMMY(gui_dialog_c);
 
     GM_RECEIVER(gui_dialog_c, GM_DIALOG_PRESENT);
+    GM_RECEIVER(gui_dialog_c, GM_UI_EVENT);
 
     ts::wstr_c captiontext;
     int numtopbuttons = 0;
     int skipctls = 0;
+    ts::uint32 tabselmask = 0;
     ts::irect border = ts::irect(0);
     ts::hashmap_t<ts::str_c, guirect_c::sptr_t> ctl_by_name;
 
     friend class gui_textfield_c;
+
+    void update_header();
 
 protected:
 
@@ -110,7 +114,6 @@ protected:
         menu_c items;
         gui_textedit_c::TEXTCHECKFUNC textchecker;
         GUIPARAMHANDLER handler = GUIPARAMHANDLER();
-        ts::TSCOLOR color = 0;
         enum ctl_e
         {
             _CAPTION,
@@ -138,6 +141,7 @@ protected:
         bool focus_ = false;
         bool readonly_ = false;
         bool changed = false;
+        bool is_err = false;
         DEBUGCODE(bool initialization = true;) // protection flag - [this] can be changed while [initialization] == true due resize of array realloc.
 
         bool updvalue( const ts::wstr_c &t )
@@ -188,7 +192,7 @@ protected:
 
         void hgroup( const ts::wsptr& desc );
         description_s& label( const ts::wsptr& text );
-        description_s& hiddenlabel( const ts::wsptr& text, ts::TSCOLOR col );
+        description_s& hiddenlabel( const ts::wsptr& text, bool is_err );
         void page_caption( const ts::wsptr& text );
         void page_header( const ts::wsptr& text );
         description_s& panel(int h, GUIPARAMHANDLER drawhandler = nullptr);
@@ -231,7 +235,7 @@ protected:
                 d.initialization = false;
 #endif
         }
-        description_s& operator()() { description_s& d = arr.add(); d.mask = mask; d.color = dlg->get_default_text_color(); return d; }
+        description_s& operator()() { description_s& d = arr.add(); d.mask = mask; return d; }
         void operator << (ts::uint32 m) {mask = m;}
         void operator=(const descmaker&) UNUSED;
         descmaker(const descmaker&) UNUSED;
@@ -280,7 +284,7 @@ protected:
     RID hgroup( const ts::wsptr& desc );
     int radio( const ts::array_wrapper_c<const radio_item_s> & items, GUIPARAMHANDLER handler, GUIPARAM current = nullptr );
     int check( const ts::array_wrapper_c<const check_item_s> & items, GUIPARAMHANDLER handler, ts::uint32 initial = 0, int tag = 0 );
-    RID label(const ts::wstr_c &text, ts::TSCOLOR col = 0, bool visible = true);
+    RID label(const ts::wstr_c &text, bool visible = true, bool is_err = false);
     RID vspace(int height);
     RID panel(int height, GUIPARAMHANDLER drawhandler);
     RID textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e role, gui_textedit_c::TEXTCHECKFUNC checker = gui_textedit_c::TEXTCHECKFUNC(), const evt_data_s *addition = nullptr, int multiline = 0, RID parent = RID() );

@@ -21,8 +21,8 @@ struct preloaded_stuff_s
     int protoiconsize = 10;
     ts::ivec2 achtung_shift = ts::ivec2(0);
 
+    ts::TSCOLOR common_bg_color = 0xffffffff;
     ts::TSCOLOR appname_color = ts::ARGB(0, 50, 0);
-    ts::TSCOLOR deftextcolor = ts::ARGB(0, 0, 0);
     ts::TSCOLOR found_mark_color = ts::ARGB(50, 50, 0);
     ts::TSCOLOR found_mark_bg_color = ts::ARGB(255, 100, 255);
     ts::TSCOLOR achtung_content_color = ts::ARGB(0, 0, 0);
@@ -351,6 +351,8 @@ public:
     GM_RECEIVER( application_c, ISOGM_PROFILE_TABLE_SAVED );
     GM_RECEIVER( application_c, GM_UI_EVENT );
     GM_RECEIVER( application_c, ISOGM_DELIVERED );
+    GM_RECEIVER(application_c, ISOGM_EXPORT_PROTO_DATA);
+    
 
     ts::array_inplace_t<av_contact_s,0> m_avcontacts;
 
@@ -537,7 +539,7 @@ public:
     bool is_inactive(bool do_incoming_message_stuff);
 
     void reload_fonts();
-    bool load_theme( const ts::wsptr&thn );
+    bool load_theme( const ts::wsptr&thn, bool summon_ch_signal = true);
     ts::bitmap_c &prepareimageplace(const ts::wsptr &name)
     {
         return get_theme().prepareimageplace(name);

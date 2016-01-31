@@ -9,7 +9,7 @@ conf
   minprotowidth=100
   cltop=62
   clbottom=65
-  name=default
+  name=Default
   appearance=light
   emomaxheight=30
   filtereditheight=25
@@ -17,6 +17,9 @@ conf
 
   appnamecolor=##text_appname
   deftextcolor=##text_def
+  errtextcolor=##text_bad
+
+  common_bg_color=##bg
 
   selection_color=##sel
   selection_bg_color=##sel_bg
@@ -129,14 +132,10 @@ rects
     colors=##chessboard0,##chessboard1,##text_info,##seledge0,##seledge1
   }
 
-  greenrect=sb
-  {
-    byrect=22,316,54,348
-    clientborder=3,3,3,3
-  }
   simplelst=textfield
   {
     deftextcolor=##text_list_bg
+    c=2,2,2,2,##list_bg
   }
   lstitem=sb
   {
@@ -285,26 +284,29 @@ rects
   menuitem
   { 
     src=back.png
-    l=0,261,22,283
-    c=22,261,128,283
+    l=22,284,22s,22s
     b=0,283,128,284
     r=0,284,22,306
     clientborder=24,3,10,0
+    deftextcolor=##menu_item_text
+    c=0,0,0,0,##menu_bg
   }
   menuitem.h=menuitem
   { 
-    c=22,284,128,306
+    c=0,0,0,0,##menu_bg_h
     deftextcolor=##menu_item_text_h
   }
   menuitem.a=menuitem
   { 
-    l=139,232,161,254
+    c=0,0,0,0,##menu_bg_a
+    l=132,261,22s,22s
+    deftextcolor=##menu_item_text_a
   }
   menuitem.ah=menuitem
   { 
-    c=22,284,128,306
-    deftextcolor=##menu_item_text_h
-    l=139,232,161,254
+    c=0,0,0,0,##menu_bg_ah
+    deftextcolor=##menu_item_text_ah
+    l=132,261,22s,22s
   }
 
   vtab
@@ -320,6 +322,7 @@ rects
     b=0,283,128,284
     r=0,284,22,306
     clientborder=24,3,10,0
+    deftextcolor=##vtab_item_text
   }
 
   vtabitem.h=vtabitem
@@ -330,13 +333,13 @@ rects
   vtabitem.a=vtabitem
   { 
     c=0,0,0,0,##vtab_bg_a
-    deftextcolor=##vtab_item_text_h
+    deftextcolor=##vtab_item_text_a
     l=139,232,161,254
   }
   vtabitem.ah=vtabitem
   { 
     c=0,0,0,0,##vtab_bg_ah
-    deftextcolor=##vtab_item_text_h
+    deftextcolor=##vtab_item_text_ah
     l=139,232,161,254
   }
 
@@ -355,6 +358,7 @@ rects
   htabitem.a=htabitem
   { 
     c=2,2,2,0,##bg
+    deftextcolor=##htab_item_text_a
   }
   htabitem.h=htabitem
   { 
@@ -363,7 +367,7 @@ rects
   htabitem.ah=htabitem
   { 
     c=2,2,2,0,##bg
-    deftextcolor=##htab_item_text_h
+    deftextcolor=##htab_item_text_ah
   }
 
   contact
@@ -481,10 +485,12 @@ rects
     clientborder=3,3,6,6
     lb=17,409,25,415
     b=25,409,111,415
-    c=22,261,128,283
     r=111,366,117,401
     rt=111,354,117,366
     maxcutborder=2,2,5,5
+
+    c=0,0,0,0,##tooltip_bg
+    deftextcolor=##tooltip_text
 
   }
   textfield=sb
@@ -503,14 +509,15 @@ rects
   hslider
   {
     src=back.png
-    lt=185,305,196,327
-    t=196,305,242,327
-    rt=242,305,253,327
-    c=327,307,345,325
+	lt=7,313,11s,22s
+	t=18,313,46s,22s
+	rt=64,313,11s,22s
 
-    lb=271,307,280,325
-    b=280,307,308,325
-    rb=308,307,317,325
+    c=79,315,18s,18s
+
+    lb=100,315,9s,18s
+    b=109,315,28s,18s
+    rb=137,315,9s,18s
 
     clientborder=2,2,2,2
     deftextcolor=##hslider_text
@@ -538,42 +545,42 @@ rects
   button.normal
   {
     src=back.png
-    byrect=149,201,192,228
     clientborder=3,3,6,6
-    lb=149,222,157,228
-    b=157,222,186,228
-    rt=186,201,192,209
-    r=186,209,192,222
+    byrect=4,171,43s,27s
+    lb=4,192,8s,6s
+    b=12,192,29s,6s
+    rt=41,171,6s,8s
+    r=41,179,6s,13s
   }
   button.hover
   {
     src=back.png
-    byrect=192,201,235,228
     clientborder=3,3,6,6
-    lb=192,222,200,228
-    b=200,222,229,228
-    rt=229,201,235,209
-    r=229,209,235,222
+    byrect=47,171,43s,27s
+    lb=47,192,8s,6s
+    b=55,192,29s,6s
+    rt=84,171,6s,8s
+    r=84,179,6s,13s
   }
   button.press
   {
     src=back.png
     clientborder=3,3,6,6
-    byrect=235,201,278,228
-    lb=235,222,243,228
-    b=243,222,272,228
-    rt=272,201,278,209
-    r=272,209,278,222
+    byrect=90,171,43s,27s
+    lb=90,192,8s,6s
+    b=98,192,29s,6s
+    rt=127,171,6s,8s
+    r=127,179,6s,13s
   }
   button.disabled
   {
     src=back.png
-    byrect=149,201,192,228
+    byrect=4,171,43s,27s
     clientborder=3,3,6,6
-    lb=149,222,157,228
-    b=157,222,186,228
-    rt=186,201,192,209
-    r=186,209,192,222
+    lb=4,192,8s,6s
+    b=12,192,29s,6s
+    rt=41,171,6s,8s
+    r=41,179,6s,13s
     c=3,3,6,6,##btn_disabled_bg
   }
 }
@@ -672,27 +679,27 @@ images
 
   voicecall
   {
-    src=back.png,240,479,256,495
+    src=back.png,130,479,16s,16s
   }
   camera
   {
-    src=back.png,206,479,222,495
+    src=back.png,96,479,16s,16s
   }
   micoff
   {
-    src=back.png,138,479,154,495
+    src=back.png,28,479,16s,16s
   }
   speakeroff
   {
-    src=back.png,189,479,205,495
+    src=back.png,79,479,16s,16s
   }
   micon
   {
-    src=back.png,121,479,137,495
+    src=back.png,11,479,16s,16s
   }
   speakeron
   {
-    src=back.png,172,479,188,495
+    src=back.png,62,479,16s,16s
   }
 
   uac
@@ -889,6 +896,50 @@ buttons
     hover=button.hover
     press=button.press
     disabled=button.disabled
+
+	normaltextcolor=##btn_text_normal
+	hovertextcolor=##btn_text_hover
+	presstextcolor=##btn_text_press
+	disabledtextcolor=##btn_text_disabled
+
+  }
+
+  edit
+  {
+    gen 
+    { 
+	  svg=`<svg height="32" width="32">
+		<g stroke="##gen_z_border" stroke-width="5" fill="[color]" transform="scale(0.26)" >
+		<circle r="40" transform="translate(50 50) scale([scale])" />
+		<path stroke="none" fill="##gen_z_border" d="m 75.348117,35.580232 -6.101968,-6.102108 c -0.0011,-0.001 -0.0019,-0.0022 -0.0028,-0.0032 -0.0011,-0.001 -0.0027,-0.0019 -0.0032,-0.0029 l -6.102078,-6.102267 c -0.918192,-0.724984 -1.641147,-0.477371 -2.482523,0 L 31.104927,52.919973 c -0.242523,0.242522 -0.408512,0.550486 -0.478025,0.886394 L 27.450094,69.19399 c 0.22967,1.534848 0.95579,1.883108 2.074011,2.074013 l 15.386921,-3.177236 c 0.335909,-0.06937 0.643872,-0.235501 0.886395,-0.477882 L 75.348117,38.062613 c 0.685579,-0.685298 0.685579,-1.796802 0,-2.482381 z M 44.444177,65.233031 33.484644,54.385339 62.008725,25.749837 c 3.103257,2.906378 7.33506,7.026199 10.959674,10.847692 z" />
+		</g></svg>`
+
+      color=##gen_z
+	  k-press=0.97
+    }
+  }
+  confirmb=edit
+  {
+    gen 
+    { 
+	  svg=`<svg height="32" width="32">
+		<g stroke="##gen_z_border" stroke-width="7" fill="[color]" transform="scale(0.26)" >
+		<circle r="40" transform="translate(50 50) scale([scale])" stroke-width="5" />
+		<polyline points="21,50 41,70 88,23" />
+		</g></svg>`
+    }
+  }
+  cancelb=edit
+  {
+    gen 
+    { 
+	  svg=`<svg height="32" width="32">
+		<g stroke="##gen_z_border" stroke-width="7" fill="[color]" transform="scale(0.26)" >
+		<circle r="40" transform="translate(50 50) scale([scale])" stroke-width="5" />
+		<line x1="30" y1="30" x2="70" y2="70" />
+		<line x1="30" y1="70" x2="70" y2="30" />
+		</g></svg>`
+    }
   }
 
   play
@@ -908,20 +959,6 @@ buttons
 	}
   }
 
-  edit
-  {
-    gen 
-    { 
-	  svg=`<svg height="32" width="32">
-		<g stroke="##gen_grey_border" stroke-width="5" fill="[color]" transform="scale(0.26)" >
-		<circle r="40" transform="translate(50 50) scale([scale])" />
-		<path stroke="none" fill="##gen_grey_border" d="m 75.348117,35.580232 -6.101968,-6.102108 c -0.0011,-0.001 -0.0019,-0.0022 -0.0028,-0.0032 -0.0011,-0.001 -0.0027,-0.0019 -0.0032,-0.0029 l -6.102078,-6.102267 c -0.918192,-0.724984 -1.641147,-0.477371 -2.482523,0 L 31.104927,52.919973 c -0.242523,0.242522 -0.408512,0.550486 -0.478025,0.886394 L 27.450094,69.19399 c 0.22967,1.534848 0.95579,1.883108 2.074011,2.074013 l 15.386921,-3.177236 c 0.335909,-0.06937 0.643872,-0.235501 0.886395,-0.477882 L 75.348117,38.062613 c 0.685579,-0.685298 0.685579,-1.796802 0,-2.482381 z M 44.444177,65.233031 33.484644,54.385339 62.008725,25.749837 c 3.103257,2.906378 7.33506,7.026199 10.959674,10.847692 z" />
-		</g></svg>`
-
-      color=##gen_grey
-	  k-press=0.97
-    }
-  }
   save
   {
     gen 
@@ -955,35 +992,7 @@ buttons
 		color-press=##ctl_press_rec
 	}
   }
-  confirmb
-  {
-    gen 
-    { 
-	  svg=`<svg height="32" width="32">
-		<g stroke="##gen_grey_border" stroke-width="7" fill="[color]" transform="scale(0.26)" >
-		<circle r="40" transform="translate(50 50) scale([scale])" stroke-width="5" />
-		<polyline points="21,50 41,70 88,23" />
-		</g></svg>`
 
-      color=##gen_grey
-	  k-press=0.97
-    }
-  }
-  cancelb
-  {
-    gen 
-    { 
-	  svg=`<svg height="32" width="32">
-		<g stroke="##gen_grey_border" stroke-width="7" fill="[color]" transform="scale(0.26)" >
-		<circle r="40" transform="translate(50 50) scale([scale])" stroke-width="5" />
-		<line x1="30" y1="30" x2="70" y2="70" />
-		<line x1="30" y1="70" x2="70" y2="30" />
-		</g></svg>`
-
-      color=##gen_grey
-	  k-press=0.97
-    }
-  }
   close
   {
 	gen
@@ -1147,6 +1156,7 @@ buttons
 	presstextcolor=##ctl_normal
     normaltextcolor=##ctl_normal
     hovertextcolor=##ctl_hover
+	disabledtextcolor=##ctl_normal
   }
   radio=check
   {
@@ -1732,15 +1742,35 @@ fonts
 corrections
 {
   //zeroalpha - set alpha chanel to 1 (not 0)
-  //highlight - correct alpha so image is highlighted on specified background
   //fill - fill with specified color
   //mulcolor - color multiply (convert white to any color)
   //premultiply - multiply color with alpha - always executed as last correction
 
-  mulcolor=back.png,185,305,253,327,##slider_bg
-  mulcolor=back.png,271,307,317,325,##slider_level
-  mulcolor=back.png,327,307,345,325,##slider_caret
+  back.png
+  {
+	7,313,68s,22s=mulcolor,##slider_bg
+	100,315,46s,18s=mulcolor,##slider_level
+	79,315,18s,18s=mulcolor,##slider_caret
+	1,131,18,148=mulcolor,##textarea_edge
+	0,306,4,384=fill,##groupsplit
+	4,306,82,310=fill,##groupsplit
+	6,173,36s,20s=fill,##btn_normal_bg
+	49,173,36s,20s=fill,##btn_hover_bg
+	92,173,36s,20s=fill,##btn_press_bg
+	22,261,106s,22s=fill,##vtab_bg
+	0,261,22s,22s=fill,##vtab_bg_left
+	0,283,128s,1s=fill,##menu_sep
+	139,232,22s,22s=replace,#000000,##vtab_check
+	139,232,22s,22s=replace,#8fb281,##vtab_bg_a
+    132,261,22s,22s=replace,#000000,##vtab_check
+    132,261,22s,22s=replace,#8fb281,##menu_bg_a
+	19,356,93s,54s=fill,##menu_base
+	7,290,6s,11s=replace,#000000,##menu_sub
+	22,284,22s,22s=fill,##menu_bg_left
+	7,208,6s,30s=mulcolor,##sb_bg
+	18,208,6s,30s=mulcolor,##sb_bg_h
 
-  premultiply=back.png
+    premultiply=1
+  }
 
 }

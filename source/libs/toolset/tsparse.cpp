@@ -40,10 +40,18 @@ irect TSCALL parserect(token<char> & tokens, const irect &def, str_c *tail)
     irect r(def);
     typedef decltype(r.lt.x) irt;
     irt * hackptr = (irt *)&r;
-    irt * hackptr_end = hackptr + 4;
+    irt * hackptr_end = hackptr + 2;
     for (; tokens && hackptr < hackptr_end; ++tokens, ++hackptr)
         *hackptr = tokens->as_num<irt>(0);
-    if (tokens && tail) 
+    hackptr_end += 2;
+    for (; tokens && hackptr < hackptr_end; ++tokens, ++hackptr)
+    {
+        if (tokens->get_last_char() == 's')
+            *hackptr = *(hackptr - 2) + tokens->substr(0, tokens->get_length()-1).as_num<irt>(0);
+        else
+            *hackptr = tokens->as_num<irt>(0);
+    }
+    if (tokens && tail)
         tail->set(*tokens).append(tokens.sep(),tokens.tail());
     return r;
 }

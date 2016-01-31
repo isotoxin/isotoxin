@@ -62,7 +62,8 @@ class emoticons_c
             FORBIDDEN();
             __assume(0);
         }
-        /*virtual*/ int nextframe() override { return picture_gif_c::nextframe(); }
+        /*virtual*/ int nextframe() override { int r = picture_gif_c::nextframe(); adapt_bg(nullptr); return r; }
+        void adapt_bg(const ts::bitmap_c *bmpx);
     };
 
     struct emo_static_image_s : public emoticon_s, public picture_c

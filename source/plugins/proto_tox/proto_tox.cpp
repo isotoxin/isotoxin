@@ -96,7 +96,7 @@ void __stdcall get_info( proto_info_s *info )
     }
 
     info->priority = 500;
-    info->features = PF_AVATARS | PF_OFFLINE_INDICATOR | PF_PURE_NEW | PF_IMPORT | PF_AUDIO_CALLS | PF_VIDEO_CALLS | PF_SEND_FILE | PF_GROUP_CHAT; //PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT;
+    info->features = PF_AVATARS | PF_OFFLINE_INDICATOR | PF_PURE_NEW | PF_IMPORT | PF_EXPORT | PF_AUDIO_CALLS | PF_VIDEO_CALLS | PF_SEND_FILE | PF_GROUP_CHAT; //PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT;
     info->connection_features = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_SOCKS5 | CF_IPv6_OPTION | CF_UDP_OPTION | CF_SERVER_OPTION;
     info->audio_fmt.sample_rate = 48000;
     info->audio_fmt.channels = 1;
@@ -1226,8 +1226,7 @@ enum contact_caps_e
 {
     CCC_MSG_CHAIN = 1,  // contacts's client support message chaining
     CCC_MSG_CRTIME = 2, // contacts's client support message create time
-    CCC_RESYNC = 4,     // contacts's client support time resync packet
-    CCC_VIEW_SIZE = 8,  // contacts's client support video view size adjustment
+    CCC_VIEW_SIZE = 4,  // contacts's client support video view size adjustment
 };
 
 struct contact_descriptor_s
@@ -1309,16 +1308,12 @@ public:
     contact_state_e state = CS_ROTTEN;
     str_c pubid;
 
-    int correct_create_time = 0; // delta
-    int next_sync = 0;
-
     static const int F_IS_ONLINE = 1;
-    static const int F_NEED_RESYNC = 2;
-    static const int F_AVASEND = 4;
-    static const int F_AVARECIVED = 8;
-    static const int F_FIDVALID = 16;
-    static const int F_DETAILS_SENT = 32;
-    static const int F_NOSPAM_PRESENT = 64;
+    static const int F_AVASEND = 2;
+    static const int F_AVARECIVED = 4;
+    static const int F_FIDVALID = 8;
+    static const int F_DETAILS_SENT = 16;
+    static const int F_NOSPAM_PRESENT = 32;
 
     int flags = 0;
     int ccc_caps = 0;
@@ -1350,13 +1345,11 @@ public:
     void on_offline()
     {
         UNSETFLAG(flags, F_IS_ONLINE);
-        UNSETFLAG(flags, F_NEED_RESYNC);
         UNSETFLAG(flags, F_AVASEND);
         UNSETFLAG(flags, F_DETAILS_SENT);
         
         ccc_caps = 0;
         avatag_self = gavatag - 1;
-        correct_create_time = 0;
         avatar_recv_fnn = -1;
 
         if (self_typing_contact && self_typing_contact == get_id())
@@ -1379,11 +1372,11 @@ public:
             byte idbytes[TOX_PUBLIC_KEY_SIZE] = {0};
             if (!iid)
             {
-                if (get_fid() >= 0)
+                if (is_fid_ok() && get_fid() >= 0)
                 {
                     TOX_ERR_FRIEND_GET_PUBLIC_KEY e;
                     tox_friend_get_public_key(tox, get_fid(), idbytes, &e);
-                    if (TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK != e) memset(idbytes, 0, sizeof(id));
+                    if (TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK != e) memset(idbytes, 0, sizeof(idbytes));
                 }
             }
 
@@ -1450,17 +1443,6 @@ public:
     int get_id() const {return id;};
     void set_fid(int fid_, bool fid_valid);
     void set_id(int id_);
-
-    void send_resync( bool request_resync )
-    {
-        if (ccc_caps & CCC_RESYNC)
-        {
-            sstr_t<-128> resync_packet(CONSTASTR("-resync/")); resync_packet.append_as_num<u64>(now());
-            if (request_resync) resync_packet.append(CONSTASTR("/req"));
-            *(byte *)resync_packet.str() = PACKETID_EXTENSION;
-            tox_friend_send_lossless_packet(tox, fid, (const byte *)resync_packet.cstr(), resync_packet.get_length(), nullptr);
-        }
-    }
 
     void send_viewsize(int w, int h)
     {
@@ -1763,7 +1745,7 @@ static void update_contact( const contact_descriptor_s *desc )
         contact_data_s cd( desc->get_id(), CDM_PUBID | CDM_STATE | CDM_ONLINE_STATE | CDM_AVATAR_TAG );
 
         TOX_ERR_FRIEND_QUERY err = TOX_ERR_FRIEND_QUERY_NULL;
-        TOX_USER_STATUS st = desc->get_fid() >= 0 ? tox_friend_get_status(tox, desc->get_fid(), &err) : (TOX_USER_STATUS)(-1);
+        TOX_USER_STATUS st = desc->is_fid_ok() ? tox_friend_get_status(tox, desc->get_fid(), &err) : (TOX_USER_STATUS)(-1);
         if (err != TOX_ERR_FRIEND_QUERY_OK) st = (TOX_USER_STATUS)(-1);
 
         byte id[TOX_PUBLIC_KEY_SIZE];
@@ -1778,6 +1760,7 @@ static void update_contact( const contact_descriptor_s *desc )
         } else
         {
             pubid.append( asptr( desc->pubid.cstr(), TOX_PUBLIC_KEY_SIZE * 2 ) );
+            desc->pubid.hex2buf<TOX_PUBLIC_KEY_SIZE>(id);
         }
 
         cd.public_id = pubid.cstr();
@@ -1842,7 +1825,7 @@ static void update_contact( const contact_descriptor_s *desc )
     }
 }
 
-asptr message_part_s::extract_create_time(u64 &t, const asptr &msgbody, int cid)
+asptr message_part_s::extract_create_time(u64 &t, const asptr &msgbody, int /*cid*/)
 {
     int offset = 0;
     if (msgbody.s[0] == '\1')
@@ -1855,9 +1838,6 @@ asptr message_part_s::extract_create_time(u64 &t, const asptr &msgbody, int cid)
         else {
             ++offset;
             t = pstr_c(asptr(msgbody.s + 1, offset - 2)).as_num<u64>();
-
-            if (contact_descriptor_s *desc = find_descriptor(cid))
-                t += desc->correct_create_time;
         }
     }
 
@@ -1983,6 +1963,7 @@ static void cb_friend_request(Tox *, const byte *id, const byte *msg, size_t len
     time_t create_time = now();
 
     hf->message(MT_FRIEND_REQUEST, 0, desc->get_id(), create_time, (const char *)msg, length);
+    hf->save();
 }
 
 static void cb_friend_message(Tox *, uint32_t fid, TOX_MESSAGE_TYPE type, const byte *message, size_t length, void *)
@@ -2125,20 +2106,6 @@ static void cb_isotoxin(Tox *, uint32_t fid, const byte *data, size_t len, void 
                     desc->cip->remote_so.view_h = h;
                     hf->av_stream_options(0, desc->get_id(), &desc->cip->remote_so);
                 }
-            } else if (t && t->equals(CONSTASTR("resync")))
-            {
-                ++t; // time of peer
-                if (t)
-                {
-                    time_t remote_peer_time = t->as_num<u64>();
-                    desc->correct_create_time = (int)((long long)now() - (long long)remote_peer_time);
-                    desc->ccc_caps |= CCC_RESYNC;
-                    SETUPFLAG(desc->flags, contact_descriptor_s::F_NEED_RESYNC, abs(desc->correct_create_time) > 10); // 10+ seconds time delta :( resync it every 2 min
-                    if (ISFLAG(desc->flags, contact_descriptor_s::F_NEED_RESYNC)) desc->next_sync = time_ms() + 120000;
-                    ++t;
-                    if (t && t->equals(CONSTASTR("req"))) desc->send_resync(false);
-                }
-
             }
         }
     }
@@ -2192,11 +2159,6 @@ static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_
                         ++ln;
                         if (ln->as_uint((unsigned)-1) == 1)
                             desc->ccc_caps |= CCC_MSG_CRTIME;
-                    } else if (ln->equals(CONSTASTR("support_resync")))
-                    {
-                        ++ln;
-                        if (ln->as_uint((unsigned)-1) == 1)
-                            desc->ccc_caps |= CCC_RESYNC;
                     } else if (ln->equals(CONSTASTR("support_bbtags")))
                     {
                         ++ln;
@@ -2206,7 +2168,6 @@ static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_
 
             }
 
-            desc->send_resync(false);
             desc->send_avatar();
 
         } else if (!desc->is_online())
@@ -2830,7 +2791,7 @@ static void stop_senders()
 }
 
 
-static TOX_ERR_NEW prepare(const byte *data, size_t length)
+static TOX_ERR_NEW prepare()
 {
     if (tox) tox_kill(tox);
 
@@ -2875,23 +2836,24 @@ static TOX_ERR_NEW prepare(const byte *data, size_t length)
 
     //options.tcp_port = (uint16_t)server_port; // TODO
     //options.udp_enabled = options.proxy_type == TOX_PROXY_TYPE_NONE;
-
-    options.savedata_type = data ? TOX_SAVEDATA_TYPE_TOX_SAVE : TOX_SAVEDATA_TYPE_NONE;
-    options.savedata_data = data;
-    options.savedata_length = length;
+    
+    options.savedata_type = buf_tox_config.size() ? TOX_SAVEDATA_TYPE_TOX_SAVE : TOX_SAVEDATA_TYPE_NONE;
+    options.savedata_data = buf_tox_config.data();
+    options.savedata_length = buf_tox_config.size();
 
     TOX_ERR_NEW errnew;
 
     const char *caps = "client:isotoxin/" SS(PLUGINVER) "\n"
         "support_bbtags:b,s,u,i\n"
         "support_viewsize:1\n"
-        "support_resync:1\n"
         "support_msg_chain:1\n"
         "support_msg_cr_time:1\n";
 
     tox = tox_new(caps, &options, &errnew);
     if (!tox)
         return errnew;
+
+    buf_tox_config.clear();
 
     tox_callback_cryptpacket_before_send(tox, cb_isotoxin_special, nullptr);
 
@@ -2996,7 +2958,6 @@ void __stdcall tick(int *sleep_time_ms)
     int curt = time_ms();
     static int nextt = curt;
     static int nexttav = curt;
-    static int nexttresync = curt;
     static time_t tryconnect = now() + 60;
     if (tox)
     {
@@ -3082,19 +3043,7 @@ void __stdcall tick(int *sleep_time_ms)
             }
         }
 
-        if ((curt - nexttresync) > 0)
-        {
-            for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
-                if (ISFLAG(f->flags, contact_descriptor_s::F_NEED_RESYNC) && f->is_online() && (curt - f->next_sync) > 0)
-                {
-                    f->next_sync = curt + 120000;
-                    f->send_resync(true);
-                    break;
-                }
-            nexttresync = curt + 3001;
-        }
-
-        int nextticktime = min( min( nexttresync - curt, nexttav - curt ), nextt - curt );
+        int nextticktime = min( nexttav - curt, nextt - curt );
         if (nextticktime <= 0) nextticktime = 1;
         *sleep_time_ms = nextticktime;
     }
@@ -3293,8 +3242,11 @@ void __stdcall set_config(const void*data, int isz)
         memset( &options, 0, sizeof(options) );
         options.udp_enabled = true;
 
+        buf_tox_config.resize(isz);
+        memcpy( buf_tox_config.data(), data, isz );
+
         // raw tox_save
-        toxerr = prepare( (const byte *)data, isz );
+        toxerr = prepare();
 
     } else if (isz>4 && (*(uint32_t *)data) != 0)
     {
@@ -3328,21 +3280,17 @@ void __stdcall set_config(const void*data, int isz)
             int dsz;
             if (const void *toxdata = l.get_data(dsz))
             {
-                toxerr = prepare((const byte *)toxdata, dsz);
-                if (!tox)
-                {
-                    buf_tox_config.resize(dsz);
-                    memcpy(buf_tox_config.data(), toxdata, dsz);
-                }
+                buf_tox_config.resize(dsz);
+                memcpy(buf_tox_config.data(), toxdata, dsz);
+
+                toxerr = prepare();
             }
-        } else
-            if (!tox)
-            {
-                if (buf_tox_config.size())
-                    toxerr = prepare(buf_tox_config.data(), buf_tox_config.size());
-                else
-                    toxerr = prepare(nullptr, 0); // prepare anyway
-            }
+
+        } else if (!tox)
+        {
+            buf_tox_config.clear();
+            toxerr = prepare(); // prepare anyway
+        }
 
         if (int sz = ldr(chunk_descriptors))
         {
@@ -3451,17 +3399,11 @@ void __stdcall set_config(const void*data, int isz)
                 }
         }
 
-    } else
-        if (!tox)
-        {
-            if (buf_tox_config.size())
-                toxerr = prepare(buf_tox_config.data(), buf_tox_config.size());
-            else
-                toxerr = prepare(nullptr, 0);
-        }
-
-    if (tox)
+    } else if (!tox)
+    {
         buf_tox_config.clear();
+        toxerr = prepare();
+    }
 
     // now send configurable fields to application
     send_configurable();
@@ -3498,11 +3440,11 @@ void __stdcall online()
     online_flag = true;
 
     if (!tox && buf_tox_config.size())
-        prepare((const byte *)buf_tox_config.data(), buf_tox_config.size());
+        prepare();
     
     if (tox)
     {
-        buf_tox_config.clear();
+        ASSERT(buf_tox_config.size() == 0);
 
         for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
         {
@@ -3572,6 +3514,7 @@ static void save_current_stuff( savebuffer &b )
         size_t sz = tox_get_savedata_size(tox);
         void *data = chunk(b, chunk_tox_data).alloc(sz);
         tox_get_savedata(tox, (byte *)data);
+
     } else if (buf_tox_config.size())
     {
         void *data = chunk(b, chunk_tox_data).alloc(buf_tox_config.size());
@@ -3608,7 +3551,7 @@ void __stdcall offline()
         size_t sz = tox_get_savedata_size(tox);
         buf_tox_config.resize(sz);
         tox_get_savedata(tox, buf_tox_config.data());
-        prepare( (const byte *)buf_tox_config.data(), sz );
+        prepare();
         if (tox) buf_tox_config.clear();
 
         contact_data_s self(0, CDM_STATE);
@@ -3617,6 +3560,7 @@ void __stdcall offline()
 
         for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
         {
+            if ( f->state == CS_INVITE_RECEIVE || f->state == CS_INVITE_SEND ) continue;
             f->on_offline();
             if (!tox) f->set_fid(-1, false);
             update_contact(f);
@@ -3809,7 +3753,7 @@ void __stdcall accept(int id)
         if (it == id2desc.end()) return;
         contact_descriptor_s *desc = it->second;
         
-        if (desc->pubid.get_length() >= TOX_PUBLIC_KEY_SIZE * 2 && desc->get_fid() < 0)
+        if (desc->pubid.get_length() >= TOX_PUBLIC_KEY_SIZE * 2 && !desc->is_fid_ok())
         {
             byte buf[TOX_PUBLIC_KEY_SIZE];
             desc->pubid.hex2buf<TOX_PUBLIC_KEY_SIZE>(buf);
@@ -3824,6 +3768,7 @@ void __stdcall accept(int id)
             contact_data_s cdata( desc->get_id(), CDM_STATE );
             cdata.state = CS_WAIT;
             hf->update_contact(&cdata);
+            hf->save();
         }
     }
 }
@@ -3841,10 +3786,11 @@ void __stdcall reject(int id)
         cdata.state = CS_ROTTEN;
         hf->update_contact(&cdata);
 
-        if (desc->get_fid() >= 0)
+        if (desc->is_fid_ok() && desc->get_fid() >= 0)
             tox_friend_delete(tox, desc->get_fid(), nullptr);
 
         desc->die();
+        hf->save();
     }
 }
 
@@ -4223,6 +4169,24 @@ void __stdcall typing(int cid)
             self_typing_time = time_ms() + 1500;
         }
 }
+
+void __stdcall export_data()
+{
+    if ( tox )
+    {
+        size_t sz = tox_get_savedata_size(tox);
+        void *data = _alloca(sz);
+        tox_get_savedata(tox, (byte *)data);
+        hf->export_data( data, sz );
+    } else if (buf_tox_config.size())
+    {
+        hf->export_data(buf_tox_config.data(), buf_tox_config.size());
+    } else
+    {
+        hf->export_data(nullptr, 0);
+    }
+}
+
 
 proto_functions_s funcs =
 {

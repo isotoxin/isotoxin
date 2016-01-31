@@ -988,6 +988,20 @@ bool gui_textedit_c::summoncontextmenu()
     caret_color = color;
 }
 
+ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
+{
+    if (ue.evt == UE_THEMECHANGED)
+    {
+        color = get_default_text_color();
+        caret_color = color;
+        redraw();
+    }
+
+    return 0;
+}
+
+
+
 /*virtual*/ bool gui_textedit_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
     switch (qp) // wheel must be handled here: default wheel processing will hide wheel event for this rectangle
@@ -1196,7 +1210,7 @@ bool gui_textedit_c::summoncontextmenu()
                 dd.alpha = 128;
             }
 
-            root.draw( drawarea.lt, texture.extbody(), ts::irect( ts::ivec2(0), drawarea.size() - ts::ivec2(margins_rb.x,0) ), true );
+            root.draw( drawarea.lt, texture.extbody(ts::irect(ts::ivec2(0), drawarea.size() - ts::ivec2(margins_rb.x, 0))), true );
             
             if (gray)
                 root.end_draw();

@@ -222,7 +222,7 @@ public:
 	virtual void end_draw() {}
     virtual void draw( const theme_rect_s &thr, ts::uint32 options, evt_data_s *d = nullptr ) {}; // draw theme rect stuff
     virtual void draw( const ts::wstr_c & text, const text_draw_params_s & dp ) {}; // draw text
-    virtual void draw( const ts::ivec2 & p, const ts::bmpcore_exbody_s &bmp, const ts::irect& bmprect, bool alphablend) {}; // draw image
+    virtual void draw( const ts::ivec2 & p, const ts::bmpcore_exbody_s &bmp, bool alphablend) {}; // draw image
     virtual void draw( const ts::irect & rect, ts::TSCOLOR color, bool clip = true) {}; // draw rectangle
 
 
@@ -353,7 +353,7 @@ public:
 	/*virtual*/ void end_draw() override;
 	/*virtual*/ void draw( const theme_rect_s &thr, ts::uint32 options, evt_data_s *d = nullptr ) override;
 	/*virtual*/ void draw( const ts::wstr_c & text, const text_draw_params_s & dp ) override;
-    /*virtual*/ void draw( const ts::ivec2 & p, const ts::bmpcore_exbody_s &bmp, const ts::irect& bmprect, bool alphablend) override;
+    /*virtual*/ void draw( const ts::ivec2 & p, const ts::bmpcore_exbody_s &bmp, bool alphablend) override;
     /*virtual*/ void draw( const ts::irect & rect, ts::TSCOLOR color, bool clip ) override;
 
     const ts::ivec2 &get_current_draw_offset() const { return drawdata.last().offset; }
@@ -380,7 +380,7 @@ public:
 
 INLINE void theme_image_s::draw(rectengine_c &eng, const ts::ivec2 &p) const
 {
-    eng.draw(p, dbmp->extbody(), rect, true);
+    eng.draw(p, dbmp->extbody(rect), true);
 }
 
 INLINE rectengine_root_c *root_by_rid( RID r )
@@ -473,7 +473,7 @@ public:
 
 	/*virtual*/ void draw( const theme_rect_s &thr, ts::uint32 options, evt_data_s *d = nullptr ) override;
 	/*virtual*/ void draw(const ts::wstr_c & text, const text_draw_params_s & dp) override;
-    /*virtual*/ void draw( const ts::ivec2 & p, const ts::bmpcore_exbody_s &bmp, const ts::irect& bmprect, bool alphablend) override;
+    /*virtual*/ void draw( const ts::ivec2 & p, const ts::bmpcore_exbody_s &bmp, bool alphablend) override;
     /*virtual*/ void draw( const ts::irect & rect, ts::TSCOLOR color, bool clip) override;
 };
 

@@ -190,11 +190,11 @@ void packetgen::pg_delivered(u64 dtag, const byte *crypt_packet_key)
 
 void packetgen::pg_sync(bool resync, const byte *crypt_packet_key)
 {
-    push_pid(PID_SYNC);
+    push_pid(PID_KEEPALIVE);
     byte *randombytes = push(sizeof(u64));;
     randombytes_buf(randombytes, sizeof(u64));
     
-    pushll( now() );
+    pushll( 0 );
     pushb( resync ? 1 : 0 );
     encode(crypt_packet_key);
     log_auth_key("PID_SYNC encoded", crypt_packet_key);

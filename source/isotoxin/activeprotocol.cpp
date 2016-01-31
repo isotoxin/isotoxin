@@ -363,7 +363,17 @@ bool active_protocol_c::cmdhandler(ipcr r)
             memcpy(m->data.data(), data, dsz);
 
             m->send_to_main_thread();
+        }
+        break;
+    case HQ_EXPORT_DATA:
+        {
+            int dsz;
+            const void *data = r.get_data(dsz);
+            gmsg<ISOGM_EXPORT_PROTO_DATA> *m = TSNEW(gmsg<ISOGM_EXPORT_PROTO_DATA>, id);
+            m->buf.set_size(dsz);
+            memcpy(m->buf.data(), data, dsz);
 
+            m->send_to_main_thread();
         }
         break;
     case HQ_TYPING:
@@ -502,6 +512,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_UI_EVENT>&e)
     {
         // self avatar must be recreated to fit new gui theme
         set_avatar( contacts().find_subself(id) );
+        icons_cache.clear(); // FREE MEMORY
     }
     return 0;
 }
@@ -1080,4 +1091,9 @@ void active_protocol_c::typing(int cid)
         typingtime = ts::Time::current() + 5000;
     } else
         typingsendcontact = 0;
+}
+
+void active_protocol_c::export_data()
+{
+    ipcp->send( ipcw(AQ_EXPORT_DATA) );
 }

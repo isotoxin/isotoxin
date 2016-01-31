@@ -76,6 +76,52 @@ application_c::~application_c()
 	g_app = nullptr;
 }
 
+ts::uint32 application_c::gm_handler(gmsg<ISOGM_EXPORT_PROTO_DATA>&d)
+{
+    if (!main) return 0;
+
+    if (!d.buf.size())
+    {
+        ts::sys_beep(ts::SBEEP_ERROR);
+        return 0;
+    }
+
+    const active_protocol_c *ap = prf().ap( d.protoid );
+    if (!ap) return 0;
+
+    ts::wstr_c fromdir;
+    if (prf().is_loaded())
+        fromdir = prf().last_filedir();
+    if (fromdir.is_empty())
+        fromdir = ts::fn_get_path(ts::get_exe_full_name());
+
+    ts::wstr_c title(TTT("Export protocol data: $",393) / to_wstr(ap->get_desc()));
+
+    ts::extension_s e[1];
+    e[0].desc = CONSTWSTR("(*.*)");
+    e[0].ext = CONSTWSTR("*.*");
+    ts::extensions_s exts(e, 1);
+
+    ts::wstr_c deffn(to_wstr(ap->get_tag()));
+    if (deffn.equals(CONSTWSTR("tox")))  // not so good hardcode // TODO
+    {
+        fromdir = CONSTWSTR("%APPDATA%");
+        ts::parse_env(fromdir);
+
+        if (dir_present(ts::fn_join(fromdir, deffn)))
+            fromdir = ts::fn_join(fromdir, deffn);
+        ts::fix_path(fromdir, FNO_APPENDSLASH);
+        deffn.set(CONSTWSTR("isotoxin_tox_save.tox"));
+    }
+
+    ts::wstr_c fn = HOLD(main)().getroot()->save_filename_dialog(fromdir, deffn, exts, title);
+    if (!fn.is_empty())
+        d.buf.save_to_file(fn);
+
+
+    return 0;
+}
+
 ts::uint32 application_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&t )
 {
     if (t.tabi == pt_history)
@@ -1002,7 +1048,6 @@ bool application_c::b_customize(RID r, GUIPARAM param)
 
 void application_c::load_profile_and_summon_main_rect(bool minimize)
 {
-    load_locale(cfg().language());
     if (!load_theme(cfg().theme()))
     {
         MessageBoxW(nullptr, ts::wstr_c(TTT("Default GUI theme not found!",234)), L"error", MB_OK|MB_ICONERROR);
@@ -1765,9 +1810,9 @@ void application_c::reload_fonts()
     preloaded_stuff().update_fonts();
 }
 
-bool application_c::load_theme( const ts::wsptr&thn )
+bool application_c::load_theme( const ts::wsptr&thn, bool summon_ch_signal)
 {
-    if (!__super::load_theme(thn))
+    if (!__super::load_theme(thn, false))
     {
         if (!ts::pwstr_c(thn).equals(CONSTWSTR("def")))
         {
@@ -1778,11 +1823,18 @@ bool application_c::load_theme( const ts::wsptr&thn )
     }
     m_preloaded_stuff.reload();
 
+    deftextcolor = ts::parsecolor<char>(theme().conf().get_string(CONSTASTR("deftextcolor")), ts::ARGB(0, 0, 0));
+    errtextcolor = ts::parsecolor<char>(theme().conf().get_string(CONSTASTR("errtextcolor")), ts::ARGB(255, 0, 0));
     selection_color = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("selection_color")), ts::ARGB(255, 255, 0) );
     selection_bg_color = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("selection_bg_color")), ts::ARGB(100, 100, 255) );
     selection_bg_color_blink = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("selection_bg_color_blink")), ts::ARGB(0, 0, 155) );
 
     emoti().reload();
+
+    load_locale(cfg().language());
+
+    if (summon_ch_signal)
+        gmsg<GM_UI_EVENT>(UE_THEMECHANGED).send();
 
     return true;
 }
@@ -1804,7 +1856,7 @@ void preloaded_stuff_s::reload()
     mecontactheight = th.conf().get_string(CONSTASTR("mecontactheight")).as_int(60);
     minprotowidth = th.conf().get_string(CONSTASTR("minprotowidth")).as_int(100);
     protoiconsize = th.conf().get_string(CONSTASTR("protoiconsize")).as_int(10);
-    deftextcolor = ts::parsecolor<char>(th.conf().get_string(CONSTASTR("deftextcolor")), ts::ARGB(0, 0, 0));
+    common_bg_color = ts::parsecolor<char>(th.conf().get_string(CONSTASTR("common_bg_color")), 0xffffffff);
     appname_color = ts::parsecolor<char>(th.conf().get_string(CONSTASTR("appnamecolor")), ts::ARGB(0, 50, 0));
     found_mark_color = ts::parsecolor<char>(th.conf().get_string(CONSTASTR("found_mark_color")), ts::ARGB(50, 50, 0));
     found_mark_bg_color = ts::parsecolor<char>(th.conf().get_string(CONSTASTR("found_mark_bg_color")), ts::ARGB(255, 100, 255));

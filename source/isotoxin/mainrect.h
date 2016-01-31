@@ -22,9 +22,10 @@ class mainrect_c : public gui_control_c
     void onclosesave();
     bool saverectpos(RID,GUIPARAM);
 
-    GM_RECEIVER (mainrect_c, ISOGM_CHANGED_SETTINGS);
+    GM_RECEIVER( mainrect_c, ISOGM_CHANGED_SETTINGS );
     GM_RECEIVER( mainrect_c, ISOGM_APPRISE );
     GM_RECEIVER( mainrect_c, GM_HEARTBEAT );
+    GM_RECEIVER( mainrect_c, GM_UI_EVENT );
     
     ts::bitmap_c icons; // (contact_online_state_check + 1) square images tiled vertically
 

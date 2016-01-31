@@ -155,7 +155,7 @@ asptr pid_name(packet_id_e pid)
         DESC_PID( PID_DATA );
         DESC_PID( PID_DELIVERED );
         DESC_PID( PID_REJECT );
-        DESC_PID( PID_SYNC );
+        DESC_PID( PID_KEEPALIVE );
     }
     return CONSTASTR("pid unknown");
 }
@@ -1061,6 +1061,7 @@ void lan_engine::tick(int *sleep_time_ms)
     {
         ASSERT(!rotten->data_changed, "sure \'rotten\' state was sent to host");
         del(rotten);
+        hf->save();
     }
 
     if (first->data_changed) // send self status
@@ -1885,6 +1886,7 @@ void lan_engine::accept(int id)
             c->state = contact_s::ACCEPT;
             c->key_sent = false;
             c->invitemessage.clear();
+            hf->save();
         }
 }
 
@@ -1966,8 +1968,7 @@ void lan_engine::contact_s::to_offline(int ct)
 {
     state = contact_s::OFFLINE;
     data_changed = true;
-    correct_create_time = 0;
-    waiting_sync_answer = false;
+    waiting_keepalive_answer = false;
     engine->nexthallo = ct + min(500, abs(engine->nexthallo - ct));
 }
 
@@ -1976,21 +1977,21 @@ void lan_engine::contact_s::online_tick(int ct, int nexttime)
 {
     if (state == ONLINE)
     {
-        if (waiting_sync_answer && (ct-sync_answer_deadline)>0)
+        if (waiting_keepalive_answer && (ct-keepalive_answer_deadline)>0)
         {
             // oops
-            waiting_sync_answer = false;
+            waiting_keepalive_answer = false;
             pipe.close();
             return;
         }
 
-        if ((ct-next_sync)>0)
+        if ((ct-next_keepalive_packet)>0)
         {
             engine->pg_sync(true, authorized_key);
             pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
-            next_sync = ct + 50000;
-            sync_answer_deadline = ct + 10000;
-            waiting_sync_answer = true;
+            next_keepalive_packet = ct + 50000;
+            keepalive_answer_deadline = ct + 10000;
+            waiting_keepalive_answer = true;
         }
 
 
@@ -2186,7 +2187,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
             state = ONLINE;
             data_changed = true;
 
-            next_sync = nextactiontime + 5000;
+            next_keepalive_packet = nextactiontime + 5000;
             engine->pg_sync(false, authorized_key);
             pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
 
@@ -2209,7 +2210,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                 {
                     nextactiontime = time_ms();
                     changed_self = -1;
-                    next_sync = nextactiontime + 5000;
+                    next_keepalive_packet = nextactiontime + 5000;
                     engine->pg_sync(false, authorized_key);
                     pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
                 }
@@ -2474,20 +2475,16 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                     break;
                 }
         break;
-    case PID_SYNC:
+    case PID_KEEPALIVE:
         {
-            waiting_sync_answer = false;
+            waiting_keepalive_answer = false;
             r.read(sizeof(u64)); // skip random stuff
-            time_t remote_peer_time = r.readll(0);
-            if (remote_peer_time)
+            r.readll(0); // skip zero ll
+            bool resync = r.readb() != 0;
+            if (resync)
             {
-                bool resync = r.readb() != 0;
-                correct_create_time = (int)((long long)now() - (long long)remote_peer_time);
-                if (resync)
-                {
-                    engine->pg_sync(false, authorized_key);
-                    pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
-                }
+                engine->pg_sync(false, authorized_key);
+                pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
             }
         }
         break;
@@ -2850,6 +2847,11 @@ void lan_engine::typing(int id)
     if (contact_s *c = find(id))
         c->send_block(BT_TYPING, 0);
 }
+
+void lan_engine::export_data()
+{
+}
+
 
 //unused
 void lan_engine::configurable(const char * /*field*/, const char * /*value*/)

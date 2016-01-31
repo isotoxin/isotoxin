@@ -64,7 +64,7 @@ struct colors_map_s : public ts::hashmap_t<ts::str_c, ts::TSCOLOR>
 
 struct theme_rect_s : ts::shared_object
 {
-	const ts::bitmap_c &src;
+	ts::bitmap_c src;
 	ts::irect sis[SI_count];
     struct  
     {
@@ -198,13 +198,15 @@ struct button_desc_s : ts::shared_object
     };
 
     ts::ivec2 size;
-    const ts::bitmap_c &src;
+    ts::bitmap_c src;
     ts::wstr_c text;
     ts::irect rects[numstates];
     ts::shared_ptr<theme_rect_s> rectsf[numstates];
     ts::TSCOLOR colors[numstates];
     mutable ts::packed_buf_c< 2, numstates > alphablend;
     ts::uint32 align = ALGN_UNDEFINED;
+
+    DEBUGCODE(int id = 0);
 
     void load_params(theme_c *th, const ts::bp_t<char> * block, const colors_map_s &colsmap, bool load_face);
 
@@ -223,6 +225,12 @@ struct button_desc_s : ts::shared_object
     // private constructor ensures that theme_rect_s will always be created in dynamic memory by theme_rect_s::build factory
     button_desc_s(const ts::bitmap_c &b) :src(b)
     {
+#ifdef _DEBUG
+        static int idpool = 0;
+        id = idpool++;
+        //if (id == 2)
+        //    __debugbreak();
+#endif
     }
     DECLARE_DYNAMIC_END(public)
 
@@ -276,7 +284,7 @@ public:
                 return ff(thf.fontparam);
     }
     void reload_fonts(FONTPAR fp);
-	bool load( const ts::wsptr &name, FONTPAR fp );
+	bool load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal = true );
 	ts::shared_ptr<theme_rect_s> get_rect(const ts::asptr &rname) const
 	{
 		const ts::shared_ptr<theme_rect_s> *p = rects.get(rname);

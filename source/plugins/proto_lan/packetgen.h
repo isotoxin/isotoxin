@@ -47,7 +47,7 @@ enum packet_id_e
     PID_READY,  // answer to accept or to nonce
     PID_DATA,
     PID_DELIVERED,
-    PID_SYNC, // sync time
+    PID_KEEPALIVE, // sync time
 
     _tcp_encrypted_end_,
 

@@ -153,9 +153,9 @@ void gui_c::reload_fonts()
 
 }
 
-bool gui_c::load_theme( const ts::wsptr&thn )
+bool gui_c::load_theme( const ts::wsptr&thn, bool summon_ch_signal )
 {
-    if (!m_theme.load(thn, DELEGATE(this, font_par))) return false;
+    if (!m_theme.load(thn, DELEGATE(this, font_par)), summon_ch_signal) return false;
 
     for(auto it = m_fonts.begin(); it; ++it)
         it->update();
@@ -1573,6 +1573,12 @@ void gui_c::release_texture(ts::bitmap_c * t)
             break;
         }
     }
+}
+
+text_rect_dynamic_c::text_rect_dynamic_c()
+{
+    if (gui)
+        default_color = gui->deftextcolor;
 }
 
 text_rect_dynamic_c::~text_rect_dynamic_c()

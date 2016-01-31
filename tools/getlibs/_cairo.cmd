@@ -13,8 +13,10 @@ git clone git://anongit.freedesktop.org/git/pixman.git pixman
 md %libdir%\cairo\src
 md %libdir%\cairo\pixman
 
-move cairo\src\cairo*.c %libdir%\cairo\src >nul
-move cairo\src\cairo*.h %libdir%\cairo\src >nul
+move cairo\src\cairo-*.c %libdir%\cairo\src >nul
+move cairo\src\cairo-*.h %libdir%\cairo\src >nul
+move cairo\src\cairo.c %libdir%\cairo\src >nul
+move cairo\src\cairo.h %libdir%\cairo\src >nul
 move cairo\src\win32\cairo*.c %libdir%\cairo\src >nul
 move cairo\src\win32\cairo*.h %libdir%\cairo\src >nul
 

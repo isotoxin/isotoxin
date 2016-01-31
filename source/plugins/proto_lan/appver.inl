@@ -1,2 +1,2 @@
-#define APPVER 0,3,416 
-#define PLUGINVER 0.3.416 
+#define APPVER 0,3,417 
+#define PLUGINVER 0.3.417 

@@ -648,8 +648,8 @@ inline unsigned char_as_hex(ZSTRINGS_SIGNED c)
 template <typename TCHARACTER> inline void hex_to_data(void *idata, const sptr<TCHARACTER> &hex)
 {
 	ZSTRINGS_ASSERT(hex.l % 2 == 0);
-    uint8 *data = (uint8 *)idata;
+    ZSTRINGS_BYTE *data = (ZSTRINGS_BYTE *)idata;
 	for (const TCHARACTER *h = hex.s, *end = hex.s + hex.l; h < end; h += 2)
-		*(data++) = (uint8)((char_as_hex(h[0]) << 4) | char_as_hex(h[1]));
+		*(data++) = (ZSTRINGS_BYTE)((char_as_hex(h[0]) << 4) | char_as_hex(h[1]));
 }
 

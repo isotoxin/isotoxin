@@ -908,13 +908,20 @@ ts::wstr_c text_sizebytes(int sz)
     return TTT("size: $ bytes", 220) / n;
 }
 
-ts::wstr_c text_contact_state(ts::TSCOLOR color_online, ts::TSCOLOR color_offline, contact_state_e st)
+ts::wstr_c text_contact_state(ts::TSCOLOR color_online, ts::TSCOLOR color_offline, contact_state_e st, int link)
 {
-    ts::wstr_c sost;
+    ts::wstr_c sost, ins0, ins1;
+    if (link >= 0)
+    {
+        ins0.append(CONSTWSTR("<cstm=a")).append_as_int(link).append_char('>');
+        ins1 = ins0;
+        ins1.set_char(6,'b');
+    }
+
     if (CS_ONLINE == st)
-        sost.set(CONSTWSTR("<b>")).append(maketag_color<ts::wchar>(color_online)).append(TTT("Online", 100)).append(CONSTWSTR("</color></b>"));
+        sost.set(CONSTWSTR("<b>")).append(maketag_color<ts::wchar>(color_online)).append(ins0).append(TTT("Online", 100)).append(ins1).append(CONSTWSTR("</color></b>"));
     else if (CS_OFFLINE == st)
-        sost.set(CONSTWSTR("<l>")).append(maketag_color<ts::wchar>(color_offline)).append(TTT("Offline", 101)).append(CONSTWSTR("</color></l>"));
+        sost.set(CONSTWSTR("<l>")).append(maketag_color<ts::wchar>(color_offline)).append(ins0).append(TTT("Offline", 101)).append(ins1).append(CONSTWSTR("</color></l>"));
 
     return sost;
 }
@@ -958,7 +965,7 @@ void draw_initialization(rectengine_c *e, ts::bitmap_c &pab, const ts::irect&vie
     ts::ivec2 tpos = (viewrect.size() - tsz) / 2;
 
     ts::ivec2 processpos(tpos.x - pab.info().sz.x - 5, (viewrect.height() - pab.info().sz.y) / 2);
-    e->draw(processpos + viewrect.lt, pab.extbody(), ts::irect(0, pab.info().sz), true);
+    e->draw(processpos + viewrect.lt, pab.extbody(), true);
 
 
     text_draw_params_s tdp;
@@ -1151,7 +1158,7 @@ const ts::bitmap_c &prepare_proto_icon( const ts::asptr &prototag, const ts::asp
     switch (icot)
     {
     case IT_NORMAL:
-        c = GET_THEME_VALUE(deftextcolor); break;
+        c = gui->deftextcolor; break;
     case IT_ONLINE:
         c = GET_THEME_VALUE(state_online_color); break;
     case IT_AWAY:

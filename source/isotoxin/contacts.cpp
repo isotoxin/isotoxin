@@ -142,6 +142,9 @@ void contact_c::setup(const contacts_s * c, time_t nowtime)
 
 bool contact_c::save(contacts_s * c) const
 {
+    if (get_state() == CS_UNKNOWN)
+        return false; // do not save unknown contacts
+
     c->metaid = getmeta()->getkey().contactid;
     c->options = get_options();
     c->name = get_name(false);
@@ -957,6 +960,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<GM_UI_EVENT> &e)
 {
     if (UE_THEMECHANGED == e.evt)
     {
+        prf().get_table_contacts().cleanup();
         for(contact_c *c : arr)
         {
             if (c->getmeta() != nullptr && !c->getkey().is_self())
@@ -1719,12 +1723,17 @@ void contact_root_c::subdelall()
 contact_c * contact_root_c::subget_default() const
 {
     if (subcontacts.size() == 1) return subcontacts.get(0);
+
+    for (contact_c *c : subcontacts)
+        if (c->options().unmasked().is(contact_c::F_LAST_ACTIVITY) && c->get_state() == CS_ONLINE) return c;
+
+    for (contact_c *c : subcontacts)
+        if (c->options().is(contact_c::F_DEFALUT) && c->get_state() == CS_ONLINE) return c;
+
     contact_c *maxpriority = nullptr;
     int prior = 0;
     for (contact_c *c : subcontacts)
     {
-        if (c->options().is(contact_c::F_DEFALUT)) return c;
-
         if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
         {
             if (maxpriority == nullptr || ap->get_priority() > prior)
@@ -2229,7 +2238,7 @@ void contact_root_c::send_file(const ts::wstr_c &fn)
         active_protocol_c *ap = prf().ap(c->getkey().protoid);
         if (ap && 0 != (PF_SEND_FILE & ap->get_features()))
         {
-            if (c_file_to == nullptr || (cdef == c && c_file_to->get_state() != CS_ONLINE))
+            if (c_file_to == nullptr || (cdef == c && c->get_state() == CS_ONLINE))
                 c_file_to = c;
             if (c->get_state() == CS_ONLINE && c_file_to != c && c_file_to->get_state() != CS_ONLINE)
                 c_file_to = c;

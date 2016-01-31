@@ -1698,6 +1698,8 @@ void profile_c::shutdown_aps()
 
     for (active_protocol_c *ap : protocols)
         if (ap) ap->save_config(true);
+
+    save();
 }
 
 void profile_c::killcontact( const contact_key_s&ck )

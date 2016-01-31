@@ -34,6 +34,12 @@ ts::uint32 mainrect_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
     return 0;
 }
 
+ts::uint32 mainrect_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
+{
+    if (ue.evt == UE_THEMECHANGED)
+        name.clear();
+    return 0;
+}
 
 /*virtual*/ ts::wstr_c mainrect_c::get_name() const
 {
@@ -160,7 +166,7 @@ bool mainrect_c::saverectpos(RID,GUIPARAM)
             cr.lt.y += tr->captextadd.y;
 
             getengine().begin_draw();
-            getengine().draw( cr.lt, icons.extbody(), ir, true );
+            getengine().draw( cr.lt, icons.extbody(ir), true );
             getengine().end_draw();
         }
 		break;

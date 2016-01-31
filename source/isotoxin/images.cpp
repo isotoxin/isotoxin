@@ -4,7 +4,7 @@ void picture_c::draw(rectengine_root_c *e, const ts::ivec2 &pos) const
 {
     ts::irect r;
     const ts::bitmap_c &dbmp = curframe(r);
-    e->draw(pos - e->get_current_draw_offset(), dbmp.extbody(), r, true);
+    e->draw(pos - e->get_current_draw_offset(), dbmp.extbody(r), true);
 }
 
 picture_animated_c *picture_animated_c::first = nullptr;
@@ -128,9 +128,26 @@ namespace
 
         /*virtual*/ ts::ivec2 framesize_by_width(int w) override
         {
+            if (!prf().get_options().is(MSGOP_MAXIMIZE_INLINE_IMG))
+            {
+                int maxthumbh = prf().max_thumb_height();
+                if (maxthumbh < 10) maxthumbh = 10;
+                if (origsz.y <= maxthumbh)
+                    goto maybenoresize;
+
+                float k = (float)maxthumbh / (float)origsz.y;
+                int newx = ts::lround(k * origsz.x);
+                if (newx > w)
+                    goto fit2width;
+
+                return ts::ivec2(newx, maxthumbh);
+            }
+
+            maybenoresize:
             if (w >= origsz.x)
                 return origsz;
 
+            fit2width:
             float k = (float)w / (float)origsz.x;
             int newh = ts::lround(k * origsz.y);
             return ts::ivec2(w, newh);
@@ -138,6 +155,25 @@ namespace
 
         /*virtual*/ void fit_to_width(int w) override
         {
+            ts::ivec2 newsize;
+            if (!prf().get_options().is(MSGOP_MAXIMIZE_INLINE_IMG))
+            {
+                int maxthumbh = prf().max_thumb_height();
+                if (maxthumbh < 10) maxthumbh = 10;
+
+                if (origsz.y <= maxthumbh)
+                    goto maybenoresize;
+
+                float k = (float)maxthumbh / (float)origsz.y;
+                int newx = ts::lround(k * origsz.x);
+                if (newx > w)
+                    goto fit2width;
+
+                newsize = ts::ivec2(newx, maxthumbh);
+                goto do_resize;
+            }
+
+            maybenoresize:
             if (w >= origsz.x)
             {
                 // keep-original-size mode
@@ -160,17 +196,20 @@ namespace
 
             } else
             {
+            fit2width:
+                newsize.x = w;
                 float k = (float)w / (float)origsz.x;
-                int newh = ts::lround(k * origsz.y);
+                newsize.y = ts::lround(k * origsz.y);
+            do_resize:
                 if (bmp.info().sz != origsz)
                 {
                     bmp.create_ARGB(origsz);
                     frame.resize_to(bmp.extbody(), ts::FILTER_BOX_LANCZOS3);
                     frame_dirty = true;
                 }
-                if (frame.info().sz != ts::ivec2(w, newh))
+                if (frame.info().sz != newsize)
                 {
-                    frame.create_ARGB(ts::ivec2(w, newh));
+                    frame.create_ARGB(newsize);
                     frame_dirty = true;
                 }
                 if (frame_dirty)
@@ -234,9 +273,27 @@ namespace
 
         /*virtual*/ ts::ivec2 framesize_by_width(int w) override
         {
+            if (!prf().get_options().is(MSGOP_MAXIMIZE_INLINE_IMG))
+            {
+                int maxthumbh = prf().max_thumb_height();
+                if (maxthumbh < 10) maxthumbh = 10;
+
+                if (bmp.info().sz.y <= maxthumbh)
+                    goto maybenoresize;
+
+                float k = (float)maxthumbh / (float)bmp.info().sz.y;
+                int newx = ts::lround(k * bmp.info().sz.x);
+                if (newx > w)
+                    goto fit2width;
+
+                return ts::ivec2(newx, maxthumbh);
+            }
+
+            maybenoresize:
             if (w >= bmp.info().sz.x)
                 return bmp.info().sz;
 
+            fit2width:
             float k = (float)w / (float)bmp.info().sz.x;
             int newh = ts::lround(k * bmp.info().sz.y);
             return ts::ivec2(w, newh);
@@ -245,20 +302,45 @@ namespace
 
         /*virtual*/ void fit_to_width(int w) override
         {
-            if ( w >= bmp.info().sz.x )
+            if (!prf().get_options().is(MSGOP_MAXIMIZE_INLINE_IMG))
             {
-                if (frame.info().sz != bmp.info().sz)
-                    frame.create_ARGB(bmp.info().sz);
+                int maxthumbh = prf().max_thumb_height();
+                if (maxthumbh < 10) maxthumbh = 10;
 
-                frame.copy(ts::ivec2(0), bmp.info().sz, bmp.extbody(), ts::ivec2(0));
+                if (bmp.info().sz.y <= maxthumbh)
+                    goto maybenoresize;
+
+                float k = (float)maxthumbh / (float)bmp.info().sz.y;
+                int newx = ts::lround(k * bmp.info().sz.x);
+                if (newx > w)
+                    goto fit2width;
+
+                if (frame.info().sz != ts::ivec2(newx, maxthumbh))
+                    frame.create_ARGB(ts::ivec2(newx, maxthumbh));
+                bmp.resize_to(frame.extbody(), ts::FILTER_BOX_LANCZOS3);
+
             } else
             {
-                float k = (float)w / (float)bmp.info().sz.x;
-                int newh = ts::lround(k * bmp.info().sz.y);
-                if (frame.info().sz != ts::ivec2(w, newh))
-                    frame.create_ARGB(ts::ivec2(w, newh));
-                bmp.resize_to(frame.extbody(), ts::FILTER_BOX_LANCZOS3);
+            maybenoresize:
+
+                if (w >= bmp.info().sz.x)
+                {
+                    if (frame.info().sz != bmp.info().sz)
+                        frame.create_ARGB(bmp.info().sz);
+
+                    frame.copy(ts::ivec2(0), bmp.info().sz, bmp.extbody(), ts::ivec2(0));
+                }
+                else
+                {
+                fit2width:
+                    float k = (float)w / (float)bmp.info().sz.x;
+                    int newh = ts::lround(k * bmp.info().sz.y);
+                    if (frame.info().sz != ts::ivec2(w, newh))
+                        frame.create_ARGB(ts::ivec2(w, newh));
+                    bmp.resize_to(frame.extbody(), ts::FILTER_BOX_LANCZOS3);
+                }
             }
+
             frame.premultiply();
         }
 

@@ -1154,9 +1154,14 @@ struct lnk_s
 		return CLAMP<uint8, CCC>(b) | (CLAMP<uint8, CCC>(g) << 8) | (CLAMP<uint8, CCC>(r) << 16) | (CLAMP<uint8, CCC>(a) << 24);
 	}
 
+    INLINE auint GRAYSCALE_C(TSCOLOR c)
+    {
+        return ts::lround(float(BLUE(c)) * 0.114f + float(GREEN(c)) * 0.587f + float(RED(c)) * 0.299);
+    }
+
     INLINE TSCOLOR GRAYSCALE(TSCOLOR c)
     {
-        auint oi = ts::lround(float(BLUE(c)) * 0.114f + float(GREEN(c)) * 0.587f + float(RED(c)) * 0.299);
+        auint oi = GRAYSCALE_C(c);
         return ARGB<auint>(oi, oi, oi, ALPHA(c));
     }
 

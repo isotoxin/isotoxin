@@ -34,6 +34,7 @@ class dialog_smileselector_c : public gui_control_c
 
     void build_rects(rects_t&a);
     bool find_undermouse();
+    bool esc_handler(RID, GUIPARAM);
 protected:
     /*virtual*/ void created() override;
 

@@ -136,7 +136,7 @@ class active_protocol_c : public ts::safe_object
         icon_type_e icot;
     };
 
-    ts::array_inplace_t<icon_s, 1> icons_cache;
+    ts::array_inplace_t<icon_s, 1> icons_cache; // FREE MEMORY
 
     bool cmdhandler(ipcr r);
     bool tick();
@@ -160,6 +160,7 @@ public:
     const ts::str_c &get_desc() const {return syncdata.lock_read()().description;};
     const ts::str_c &get_desc_t() const {return syncdata.lock_read()().description_t;};
     const ts::str_c &get_name() const {return syncdata.lock_read()().data.name;};
+    const ts::str_c &get_tag() const { return syncdata.lock_read()().data.tag; };
     int get_features() const {return features; }
     int get_conn_features() const { return conn_features; }
     int get_priority() const {return priority; }
@@ -220,5 +221,7 @@ public:
     void avatar_data_request(int cid);
 
     void typing(int cid);
+    
+    void export_data();
 
 };

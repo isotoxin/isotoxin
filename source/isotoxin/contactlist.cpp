@@ -1040,7 +1040,7 @@ bool gui_contact_item_c::allow_drop() const
                                 else icot = IT_ONLINE;
                             }
 
-                            m_engine->draw(p, ap->get_icon(isz, icot).extbody(), ts::irect(0, 0, isz, isz), true);
+                            m_engine->draw(p, ap->get_icon(isz, icot).extbody(), true);
                         }
                 });
             }
@@ -1174,7 +1174,7 @@ bool gui_contact_item_c::allow_drop() const
                     if (const avatar_s *ava = contact->get_avatar())
                     {
                         int y = (ca.size().y - ava->info().sz.y) / 2;
-                        m_engine->draw(ca.lt + ts::ivec2(y), ava->extbody(), ts::irect(0, ava->info().sz), ava->alpha_pixels);
+                        m_engine->draw(ca.lt + ts::ivec2(y), ava->extbody(), ava->alpha_pixels);
                         x_offset = g_app->preloaded_stuff().icon[CSEX_UNKNOWN]->info().sz.x;
                     }
                     else
@@ -2044,6 +2044,34 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 
     return 0;
 }
+
+ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
+{
+    if (UE_THEMECHANGED == ue.evt)
+    {
+        recreate_ctls();
+
+        int count = getengine().children_count();
+        for (int i = skipctl; i < count; ++i)
+        {
+            if (rectengine_c *ch = getengine().get_child(i))
+            {
+                guirect_c &cirect = ch->getrect();
+                if (!cirect.getprops().is_visible()) continue;
+
+                bool a = HOLD(cirect)().getprops().is_active();
+                MODIFY(cirect).active(!a);
+                MODIFY(cirect).active(a);
+
+                gui_contact_item_c *ci = ts::ptr_cast<gui_contact_item_c *>(&cirect);
+                ci->update_text();
+            }
+        }
+
+    }
+    return 0;
+}
+
 
 ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_DRAGNDROP> &dnda)
 {

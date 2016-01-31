@@ -2490,14 +2490,14 @@ ZSTRINGS_FORCEINLINE const ZSTRINGS_ANSICHAR *to_str(const ZSTRINGS_ANSICHAR *s)
     return s;
 }
 
-inline str_c to_str(const wsptr &s)
+ZSTRINGS_FORCEINLINE str_c to_str(const wsptr &s)
 {
     str_c   sout(s.l,false);
     ZSTRINGS_SYSCALL(text_ucs2_to_ansi)(sout.str(), s.l+1, s);
     return sout;
 }
 
-inline str_c to_utf8(const wsptr &s)
+ZSTRINGS_FORCEINLINE str_c to_utf8(const wsptr &s)
 {
     str_c   sout(s.l*3,false); // hint: char at utf8 can be 6 bytes length, but ucs2 maximum code is 0xffff encoding to utf8 has 3 bytes len
     ZSTRINGS_SIGNED nl = ZSTRINGS_SYSCALL(text_ucs2_to_utf8)(sout.str(), s.l*3+1, s);
@@ -2505,7 +2505,7 @@ inline str_c to_utf8(const wsptr &s)
     return sout;
 }
 
-inline wstr_c from_utf8(const asptr &s)
+ZSTRINGS_FORCEINLINE wstr_c from_utf8(const asptr &s)
 {
     wstr_c   sout(s.l, false);
     sout.set_as_utf8(s);
@@ -2528,12 +2528,26 @@ ZSTRINGS_FORCEINLINE const ZSTRINGS_WIDECHAR *to_wstr(const ZSTRINGS_WIDECHAR *s
     return s;
 }
 
-inline wstr_c to_wstr(const asptr &s)
+ZSTRINGS_FORCEINLINE wstr_c to_wstr(const asptr &s)
 {
     wstr_c   sout(s.l,false);
     ZSTRINGS_SYSCALL(text_ansi_to_ucs2)(sout.str(), s.l+1, s);
     return sout;
 }
+
+ZSTRINGS_FORCEINLINE ZSTRINGS_SIGNED skip_utf8_char(const asptr &utf8, ZSTRINGS_SIGNED i = 0)
+{
+    ZSTRINGS_BYTE x = (ZSTRINGS_BYTE)utf8.s[i];
+    if (x == 0) return i;
+    if (x <= 0x7f) return i + 1;
+    if ((x & (~0x1f)) == 0xc0) return i + 2;
+    if ((x & (~0xf)) == 0xe0) return i + 3;
+    if ((x & (~0x7)) == 0xf0) return i + 4;
+    if ((x & (~0x3)) == 0xf8) return i + 5;
+    return i + 6;
+}
+
+
 
 inline bool CHARz_equal_ignore_case(const ZSTRINGS_WIDECHAR *src1, const ZSTRINGS_WIDECHAR *src2, ZSTRINGS_SIGNED len)
 {

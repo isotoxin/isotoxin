@@ -379,7 +379,7 @@ dialog_avaselector_c::~dialog_avaselector_c()
     l.append(ctlpaste).append(CONSTWSTR("<nbsp>"));
     l.append(ctlcam);
     dm().label(l);
-    dm().hiddenlabel(ts::wstr_c(), 0).setname(CONSTASTR("info"));
+    dm().hiddenlabel(ts::wstr_c(), false).setname(CONSTASTR("info"));
     dm().vspace(1).setname(CONSTASTR("last"));
     return 0;
 }
@@ -531,7 +531,7 @@ static auto save_buffer = []( rectengine_root_c *root, const ts::wsptr &deffn, c
     ts::extensions_s exts(e, 2);
 
     ts::wstr_c fn = root->save_filename_dialog(fromdir, deffn, exts, title);
-    buf.save_to_file(fn);
+    if (!fn.is_empty()) buf.save_to_file(fn);
 };
 
 bool dialog_avaselector_c::save_image1(RID, GUIPARAM)
@@ -880,7 +880,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
         tdp.forecolor = &col;
         ts::flags32_s f(ts::TO_END_ELLIPSIS | ts::TO_VCENTER);
         tdp.textoptions = &f;
-        getengine().draw(inforect.lt + ts::ivec2(0, (inforect.height() - pa.bmp.info().sz.y) / 2), pa.bmp.extbody(), ts::irect(0, pa.bmp.info().sz), true);
+        getengine().draw(inforect.lt + ts::ivec2(0, (inforect.height() - pa.bmp.info().sz.y) / 2), pa.bmp.extbody(), true);
         int paw = pa.bmp.info().sz.x + 2;
         dd.offset = inforect.lt + ts::ivec2(paw, 0);
         dd.size = inforect.size(); dd.size.x -= paw;
@@ -931,7 +931,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                             ts::ivec2 vsz = viewrect.size();
                             ts::ivec2 pos = (vsz - sz) / 2;
 
-                            getengine().draw(pos + viewrect.lt, b->extbody(), ts::irect(0, sz), false);
+                            getengine().draw(pos + viewrect.lt, b->extbody(), false);
 
                             if (shadow)
                             {
@@ -976,7 +976,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                 {
                     draw_data_s &dd = getengine().begin_draw();
                     dd.cliprect = viewrect;
-                    getengine().draw(offset, image.extbody(), imgrect, alpha);
+                    getengine().draw(offset, image.extbody(imgrect), alpha);
                     ts::ivec2 o = offset - imgrect.lt;
 
                     fd.draw(getengine(), avarect + o, tickvalue);
@@ -1361,20 +1361,20 @@ void framedrawer_s::draw(rectengine_c &e, const ts::irect &r, int tickvalue)
     int x = r.lt.x + 120;
     for(; x<=r.rb.x; x+=120)
     {
-        e.draw(ts::ivec2(x - 120, r.lt.y), h.extbody(), ts::irect(shiftr, 0, 120+shiftr, 1), false);
-        e.draw(ts::ivec2(x - 120, r.rb.y-1), h.extbody(), ts::irect(7-shiftr, 0, 127-shiftr, 1), false);
+        e.draw(ts::ivec2(x - 120, r.lt.y), h.extbody(ts::irect(shiftr, 0, 120 + shiftr, 1)), false);
+        e.draw(ts::ivec2(x - 120, r.rb.y-1), h.extbody(ts::irect(7 - shiftr, 0, 127 - shiftr, 1)), false);
     }
-    e.draw(ts::ivec2(x - 120, r.lt.y), h.extbody(), ts::irect(shiftr, 0, r.rb.x - x + 120 + shiftr, 1), false);
-    e.draw(ts::ivec2(x - 120, r.rb.y-1), h.extbody(), ts::irect(7-shiftr, 0, r.rb.x - x + 127 - shiftr, 1), false);
+    e.draw(ts::ivec2(x - 120, r.lt.y), h.extbody(ts::irect(shiftr, 0, r.rb.x - x + 120 + shiftr, 1)), false);
+    e.draw(ts::ivec2(x - 120, r.rb.y-1), h.extbody(ts::irect(7 - shiftr, 0, r.rb.x - x + 127 - shiftr, 1)), false);
 
     int y = r.lt.y + 120;
     for (; y <= r.rb.y; y += 120)
     {
-        e.draw(ts::ivec2(r.lt.x, y - 120), v.extbody(), ts::irect(0, 7 - shiftr, 1, 127 - shiftr), false);
-        e.draw(ts::ivec2(r.rb.x - 1, y - 120), v.extbody(), ts::irect(0, shiftr, 1, 120 + shiftr), false);
+        e.draw(ts::ivec2(r.lt.x, y - 120), v.extbody(ts::irect(0, 7 - shiftr, 1, 127 - shiftr)), false);
+        e.draw(ts::ivec2(r.rb.x - 1, y - 120), v.extbody(ts::irect(0, shiftr, 1, 120 + shiftr)), false);
     }
-    e.draw(ts::ivec2(r.lt.x, y - 120), v.extbody(), ts::irect(0, 7 - shiftr, 1, r.rb.y - y + 127 - shiftr), false);
-    e.draw(ts::ivec2(r.rb.x - 1, y - 120), v.extbody(), ts::irect(0, shiftr, 1, r.rb.y - y + 120 + shiftr), false);
+    e.draw(ts::ivec2(r.lt.x, y - 120), v.extbody(ts::irect(0, 7 - shiftr, 1, r.rb.y - y + 127 - shiftr)), false);
+    e.draw(ts::ivec2(r.rb.x - 1, y - 120), v.extbody(ts::irect(0, shiftr, 1, r.rb.y - y + 120 + shiftr)), false);
 
 }
 

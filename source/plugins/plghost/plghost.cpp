@@ -22,6 +22,7 @@ static void __stdcall message(message_type_e mt, int gid, int cid, u64 create_ti
 static void __stdcall delivered(u64 utag);
 static void __stdcall save();
 static void __stdcall on_save(const void *data, int dlen, void *param);
+static void __stdcall export_data(const void *data, int dlen);
 static void __stdcall av_data(int gid, int cid, const media_data_s *data);
 static void __stdcall free_video_data(const void *ptr);
 static void __stdcall av_stream_options(int gid, int cid, const stream_options_s *so);
@@ -88,6 +89,7 @@ struct protolib_s
         delivered,
         save,
         on_save,
+        export_data,
         av_data,
         free_video_data,
         av_stream_options,
@@ -1015,6 +1017,11 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
 
         if (d->sz > ipc::BIG_DATA_SIZE)
             return flags; // do not delete big data packet due it will be reused
+        break;
+
+    case AQ_EXPORT_DATA:
+        protolib.functions->export_data();
+        break;
     }
 
     d->die();
@@ -1098,6 +1105,11 @@ static void __stdcall on_save(const void *data, int dlen, void *param)
 static void __stdcall av_stream_options(int gid, int cid, const stream_options_s *so)
 {
     IPCW(HQ_STREAM_OPTIONS) << gid << cid << so->options << so->view_w << so->view_h;
+}
+
+static void __stdcall export_data(const void *data, int dlen)
+{
+    IPCW(HQ_EXPORT_DATA) << data_block_s(data, dlen);
 }
 
 static void __stdcall av_data(int gid, int cid, const media_data_s *data)

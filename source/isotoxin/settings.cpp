@@ -89,8 +89,58 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
         fontsz = ts::tmin(fontsz, fp.size.x, fp.size.y);
     });
 
-    ts::wstrings_c fns;
+    ts::wstrings_c fns, ifns;
     ts::g_fileop->find(fns, CONSTWSTR("themes/*/struct.decl"), true);
+
+    struct preset_s
+    {
+        ts::wstr_c fn;
+        ts::wstr_c name;
+    };
+
+    ts::tmp_array_inplace_t<preset_s, 4> tpresets;
+
+    auto detect_presets = [&](ts::wstr_c thn)
+    {
+        tpresets.clear();
+
+        ts::wstr_c path(CONSTWSTR("themes/"), thn);
+        path.append(CONSTWSTR("/*.decl"));
+
+        ts::g_fileop->find(ifns, path, true);
+        ifns.kill_dups_and_sort();
+        for (const ts::wstr_c &f : ifns)
+        {
+            ts::wstr_c pn = ts::fn_get_name(f);
+            if (pn.equals(CONSTWSTR("struct")))
+                continue;
+
+            for (const preset_s &p : tpresets)
+            {
+                if (p.fn.equals(pn))
+                {
+                    pn.clear();
+                    break;
+                }
+            }
+
+            if (pn.is_empty()) continue;
+
+            ts::abp_c pbp;
+            if (!ts::g_fileop->load(f, pbp)) continue;
+            const ts::abp_c *conf = pbp.get(CONSTASTR("conf"));
+
+            preset_s &p = tpresets.add();
+            p.fn = pn;
+            p.name = conf ? ts::from_utf8( conf->get_string(CONSTASTR("presetname"), ts::to_utf8(pn)) ) : pn;
+        }
+    };
+
+    ts::wstr_c curthn(cfg().theme());
+    if (curthn.find_pos('@') < 0)
+    {
+        curthn.append(CONSTWSTR("@defcolors"));
+    }
 
     for( const ts::wstr_c &f : fns )
     {
@@ -103,18 +153,41 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
                 break;
             }
         }
+
+        detect_presets(n);
+
         if (!n.is_empty())
         {
             ts::abp_c bp;
             if (!ts::g_fileop->load(f, bp)) continue;
             const ts::abp_c *conf = bp.get(CONSTASTR("conf"));
 
-            theme_info_s &thi = m_themes.add();
-            thi.folder = n;
-            thi.current = cfg().theme().equals(n);
-            thi.name.set_as_char('@').append(n);
-            if (conf)
-                thi.name = to_wstr(conf->get_string(CONSTASTR("name"), ts::to_str(thi.name)));
+            if (tpresets.size() == 0)
+            {
+                preset_s &p = tpresets.add();
+                p.fn = CONSTWSTR("defcolors");
+            }
+
+            for( const preset_s &cpn : tpresets )
+            {
+                theme_info_s &thi = m_themes.add();
+                thi.folder = n;
+                thi.name.set_as_char('@').append(n);
+                if (conf)
+                    thi.name = to_wstr(conf->get_string(CONSTASTR("name"), ts::to_str(thi.name)));
+                if (cpn.name.is_empty())
+                {
+                    thi.folder.append(CONSTWSTR("@defcolors"));
+
+                } else
+                {
+                    thi.folder.append_char('@').append(cpn.fn);
+                    thi.name.append(CONSTWSTR(" / ")).append(cpn.name);
+                }
+                thi.current = curthn.equals(thi.folder);
+            }
+
+
         }
     }
 
@@ -719,6 +792,9 @@ void dialog_settings_c::mod()
         bgroups[BGROUP_MSGOPTS].add(MSGOP_SHOW_DATE);
         bgroups[BGROUP_MSGOPTS].add(MSGOP_SHOW_DATE_SEPARATOR);
         bgroups[BGROUP_MSGOPTS].add(MSGOP_SHOW_PROTOCOL_NAME);
+        bgroups[BGROUP_MSGOPTS].add(MSGOP_REPLACE_SHORT_SMILEYS);
+        bgroups[BGROUP_MSGOPTS].add(MSGOP_MAXIMIZE_INLINE_IMG);
+        
 
         bgroups[BGROUP_TYPING].add(MSGOP_SEND_TYPING);
         bgroups[BGROUP_TYPING].add(UIOPT_SHOW_TYPING_CONTACT);
@@ -793,7 +869,7 @@ void dialog_settings_c::mod()
             .add(TTT("General",32), 0, TABSELMI(MASK_PROFILE_COMMON) )
             .add(TTT("Chat",109), 0, TABSELMI(MASK_PROFILE_CHAT) )
             .add(TTT("Group chat",305), 0, TABSELMI(MASK_PROFILE_GCHAT) )
-            .add(TTT("History",327), 0, TABSELMI(MASK_PROFILE_HISTORY) )
+            .add(TTT("Messages & History",327), 0, TABSELMI(MASK_PROFILE_MSGSNHIST) )
             .add(TTT("File receive",236), 0, TABSELMI(MASK_PROFILE_FILES) )
             .add(loc_text(loc_networks), 0, TABSELMI(MASK_PROFILE_NETWORKS) );
     }
@@ -964,35 +1040,6 @@ void dialog_settings_c::mod()
             menu_c().add(TTT("Double Enter - send message", 152), 0, MENUHANDLER(), CONSTASTR("1"))
             ).setname(CONSTASTR("dblenter"));
 
-
-        dm().vspace();
-        dm().combik(TTT("Emoticon set",269)).setmenu(emoti().get_list_smile_pack( smilepack, DELEGATE(this, smile_pack_selected) )).setname(CONSTASTR("avasmliepack"));
-        dm().vspace();
-
-        ctl.clear();
-        dm().textfield( ts::wstr_c(), from_utf8(date_msg_tmpl), DELEGATE(this,date_msg_tmpl_edit_handler) ).setname(CONSTASTR("date_msg_tmpl")).width(100).subctl(textrectid++, ctl);
-        ts::wstr_c t_showdate = TTT("Show message date (template: $)",171) / ctl;
-        if (t_showdate.find_pos(ctl)<0) t_showdate.append_char(' ').append(ctl);
-
-        ctl.clear();
-        dm().textfield(ts::wstr_c(), from_utf8(date_sep_tmpl), DELEGATE(this, date_sep_tmpl_edit_handler)).setname(CONSTASTR("date_sep_tmpl")).width(140).subctl(textrectid++, ctl);
-        ts::wstr_c t_showdatesep = TTT("Show separator $ between messages with different date",172) / ctl;
-        if (t_showdatesep.find_pos(ctl)<0) t_showdate.append_char(' ').append(ctl);
-
-        dm().checkb(TTT("Messages",170), DELEGATE(this, msgopts_handler), bgroups[BGROUP_MSGOPTS].current).setmenu(
-                    menu_c().add(t_showdate, 0, MENUHANDLER(), CONSTASTR("1"))
-                            .add(t_showdatesep, 0, MENUHANDLER(), CONSTASTR("2"))
-                            .add(TTT("Show protocol name",173), 0, MENUHANDLER(), CONSTASTR("4"))
-                    );
-
-        float minscale = fontsz ? (8.0f / fontsz) : ts::tmin(0.9f, font_scale);
-        float maxscale = fontsz ? (20.0f / fontsz) : ts::tmax(1.1f, font_scale);
-        ts::wstr_c initstr( CONSTWSTR("0/") );
-        initstr.append_as_float(minscale).append(CONSTWSTR("/0.5/1/1/")).append_as_float(maxscale);
-
-        dm().hslider(ts::wstr_c(), font_scale, initstr, DELEGATE(this, scale_font));
-
-
         dm().vspace();
         dm().checkb(TTT("Typing notification",272), DELEGATE(bgroups+BGROUP_TYPING, handler), bgroups[BGROUP_TYPING].current).setmenu(
             menu_c().add(TTT("Send typing notification",273), 0, MENUHANDLER(), CONSTASTR("1"))
@@ -1008,9 +1055,39 @@ void dialog_settings_c::mod()
                     .add(TTT("Mute speakers on audio group chat invite",308), 0, MENUHANDLER(), CONSTASTR("2"))
             );
 
-        dm << MASK_PROFILE_HISTORY; //____________________________________________________________________________________________________//
+        dm << MASK_PROFILE_MSGSNHIST; //____________________________________________________________________________________________________//
 
-        dm().page_caption(TTT("Message log settings",328));
+        dm().page_caption(TTT("Messages & history settings",328));
+
+        dm().combik(TTT("Emoticon set", 269)).setmenu(emoti().get_list_smile_pack(smilepack, DELEGATE(this, smile_pack_selected))).setname(CONSTASTR("avasmliepack"));
+        dm().vspace();
+
+        ctl.clear();
+        dm().textfield(ts::wstr_c(), from_utf8(date_msg_tmpl), DELEGATE(this, date_msg_tmpl_edit_handler)).setname(CONSTASTR("date_msg_tmpl")).width(100).subctl(textrectid++, ctl);
+        ts::wstr_c t_showdate = TTT("Show message date (template: $)", 171) / ctl;
+        if (t_showdate.find_pos(ctl) < 0) t_showdate.append_char(' ').append(ctl);
+
+        ctl.clear();
+        dm().textfield(ts::wstr_c(), from_utf8(date_sep_tmpl), DELEGATE(this, date_sep_tmpl_edit_handler)).setname(CONSTASTR("date_sep_tmpl")).width(140).subctl(textrectid++, ctl);
+        ts::wstr_c t_showdatesep = TTT("Show separator $ between messages with different date", 172) / ctl;
+        if (t_showdatesep.find_pos(ctl) < 0) t_showdate.append_char(' ').append(ctl);
+
+        dm().checkb(TTT("Messages", 170), DELEGATE(this, msgopts_handler), bgroups[BGROUP_MSGOPTS].current).setmenu(
+            menu_c().add(t_showdate, 0, MENUHANDLER(), CONSTASTR("1"))
+            .add(t_showdatesep, 0, MENUHANDLER(), CONSTASTR("2"))
+            .add(TTT("Show protocol name", 173), 0, MENUHANDLER(), CONSTASTR("4"))
+            .add(TTT("Replace short smileys to emoticons",373), 0, MENUHANDLER(), CONSTASTR("8"))
+            .add(TTT("Maximize inline images",391), 0, MENUHANDLER(), CONSTASTR("16"))
+            );
+
+        float minscale = fontsz ? (8.0f / fontsz) : ts::tmin(0.9f, font_scale);
+        float maxscale = fontsz ? (20.0f / fontsz) : ts::tmax(1.1f, font_scale);
+        ts::wstr_c initstr(CONSTWSTR("0/"));
+        initstr.append_as_float(minscale).append(CONSTWSTR("/0.5/1/1/")).append_as_float(maxscale);
+
+        dm().hslider(ts::wstr_c(), font_scale, initstr, DELEGATE(this, scale_font));
+
+        dm().vspace();
 
         dm().checkb(ts::wstr_c(), DELEGATE(this, histopts_handler), bgroups[BGROUP_HISTORY].current).setmenu(
             menu_c().add(TTT("Keep message history", 232), 0, MENUHANDLER(), CONSTASTR("1"))
@@ -1257,12 +1334,12 @@ void dialog_settings_c::networks_tab_selected()
 
     if (mask & MASK_PROFILE_CHAT)
     {
-        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, msgopts_handler), msgopts_current);
         int enter_key = ctl2send; if (enter_key == EKO_ENTER_NEW_LINE_DOUBLE_ENTER) enter_key = EKO_ENTER_NEW_LINE;
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, ctl2send_handler), enter_key);
     }
-    if (mask & MASK_PROFILE_HISTORY)
+    if (mask & MASK_PROFILE_MSGSNHIST)
     {
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, msgopts_handler), msgopts_current);
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, histopts_handler), (bgroups[BGROUP_HISTORY].current & 2) ? -1 : -2);
     }
 
@@ -2278,7 +2355,7 @@ bool dialog_settings_c::drawcamerapanel(RID, GUIPARAM p)
                 if (shadow)
                     e->draw(*shadow, DTHRO_BORDER);
 
-                e->draw(pos, b->extbody(), ts::irect(0, dsz), false);
+                e->draw(pos, b->extbody(), false);
                 e->end_draw();
             }
 

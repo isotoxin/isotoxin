@@ -114,18 +114,6 @@ bool AssertFailed(const char *file, int line, const char *s, ...)
     return Warning("Assert failed at %s (%i)\n%s", file, line, str);
 }
 
-int skip_utf8_char( const asptr &utf8, int i )
-{
-    byte x = (byte)utf8.s[i];
-    if (x == 0) return i;
-    if (x <= 0x7f) return i+1;
-    if ((x & (~0x1f)) == 0xc0) return i+2;
-    if ((x & (~0xf)) == 0xe0) return i+3;
-    if ((x & (~0x7)) == 0xf0) return i+4;
-    if ((x & (~0x3)) == 0xf8) return i+5;
-    return i+6;
-}
-
 asptr utf8clamp( const asptr &utf8, int maxbytesize )
 {
     if( utf8.l > maxbytesize )

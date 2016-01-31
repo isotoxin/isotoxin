@@ -1332,6 +1332,19 @@ void rectengine_root_c::draw_back_buffer()
     }
 }
 
+static void draw_image(const ts::bmpcore_exbody_s &tgt, const ts::bmpcore_exbody_s &image, ts::aint x, ts::aint y, const ts::irect &cliprect, int alpha)
+{
+    ts::irect imgrectnew(0, image.info().sz);
+    imgrectnew += ts::ivec2(x, y);
+    imgrectnew.intersect(cliprect);
+    if (!imgrectnew) return;
+
+    imgrectnew -= ts::ivec2(x, y);
+    x += imgrectnew.lt.x; y += imgrectnew.lt.y;
+
+    image.draw(tgt, x, y, imgrectnew, alpha);
+}
+
 static void draw_image( const ts::bmpcore_exbody_s &tgt, const ts::bmpcore_exbody_s &image, ts::aint x, ts::aint y, const ts::irect &imgrect, const ts::irect &cliprect, int alpha )
 {
     ts::irect imgrectnew = imgrect.szrect();
@@ -2052,10 +2065,10 @@ void border_window_data_s::draw()
     }
 }
 
-/*virtual*/ void rectengine_root_c::draw( const ts::ivec2 & p, const ts::bmpcore_exbody_s &bmp, const ts::irect& bmprect, bool alphablend)
+/*virtual*/ void rectengine_root_c::draw( const ts::ivec2 & p, const ts::bmpcore_exbody_s &bmp, bool alphablend)
 {
     const draw_data_s &dd = drawdata.last();
-    draw_image( backbuffer.extbody(), bmp, dd.offset.x + p.x, dd.offset.y + p.y, bmprect, dd.cliprect, alphablend ? dd.alpha : -1 );
+    draw_image( backbuffer.extbody(), bmp, dd.offset.x + p.x, dd.offset.y + p.y, dd.cliprect, alphablend ? dd.alpha : -1 );
 }
 
 void rectengine_root_c::simulate_mousemove()
@@ -2544,10 +2557,10 @@ rectengine_child_c::~rectengine_child_c()
         root->draw(text, tdp);
 }
 
-/*virtual*/ void rectengine_child_c::draw( const ts::ivec2 & p, const ts::bmpcore_exbody_s &bmp, const ts::irect& bmprect, bool alphablend)
+/*virtual*/ void rectengine_child_c::draw( const ts::ivec2 & p, const ts::bmpcore_exbody_s &bmp, bool alphablend)
 {
     if (rectengine_root_c *root = getrect().getroot())
-        root->draw(p, bmp, bmprect, alphablend);
+        root->draw(p, bmp, alphablend);
 }
 
 /*virtual*/ void rectengine_child_c::draw( const ts::irect & rect, ts::TSCOLOR color, bool clip)

@@ -195,11 +195,7 @@ class gui_contactlist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_contactlist_c, ISOGM_CALL_STOPED);
     GM_RECEIVER(gui_contactlist_c, GM_HEARTBEAT);
     GM_RECEIVER(gui_contactlist_c, GM_DRAGNDROP);
-    GM_RECEIVER(gui_contactlist_c, GM_UI_EVENT)
-    {
-        if (UE_THEMECHANGED == p.evt) recreate_ctls();
-        return 0;
-    }
+    GM_RECEIVER(gui_contactlist_c, GM_UI_EVENT);
 
 
     static const ts::flags32_s::BITS F_NO_LEECH_CHILDREN = F_VSCROLLFREEBITSTART << 0;

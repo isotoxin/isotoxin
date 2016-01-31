@@ -532,7 +532,7 @@ void gui_button_c::draw()
                 dd.alpha = 128;
             }
             int y = (sz.y - desc->rects[drawstate].height()) / 2;
-            m_engine->draw(ts::ivec2(0, y), desc->src.extbody(), desc->rects[drawstate], desc->is_alphablend(drawstate));
+            m_engine->draw(ts::ivec2(0, y), desc->src.extbody(desc->rects[drawstate]), desc->is_alphablend(drawstate));
             
             if (flags.is(F_DISABLED_USE_ALPHA) && flags.is(F_DISABLED)) 
                 m_engine->end_draw();
@@ -947,7 +947,7 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
         }
     }
 
-    m_engine->draw(ts::ivec2(0), textrect.get_texture().extbody(), ts::irect(ts::ivec2(0), tmin(dd.size, textrect.size)), true);
+    m_engine->draw(ts::ivec2(0), textrect.get_texture().extbody(ts::irect(ts::ivec2(0), tmin(dd.size, textrect.size))), true);
     if (do_updr && tdp.rectupdate)
     {
         ts::rectangle_update_s updr;
@@ -2389,6 +2389,7 @@ bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 
 gui_popup_menu_c::~gui_popup_menu_c()
 {
+    sq_evt(SQ_POPUP_MENU_DIE, getrid(), ts::make_dummy<evt_data_s>(true)); // send evt to self - leech will intercept it
     gmsg<GM_POPUPMENU_DIED>( menu.lv() ).send();
 
     if (gui)
@@ -2632,7 +2633,6 @@ ts::uint32 gui_popup_menu_c::gm_handler( gmsg<GM_KILLPOPUPMENU_LEVEL> &p )
     if (p.level <= menu.lv())
     {
         if (closehandler) closehandler(getrid(), nullptr);
-        sq_evt(SQ_POPUP_MENU_DIE, getrid(), ts::make_dummy<evt_data_s>(true)); // send evt to self - leech will intercept it
         TSDEL(this);
     }
     return 0;
@@ -3019,6 +3019,22 @@ MAKE_CHILD<gui_vtabsel_c>::~MAKE_CHILD()
     
 }
 
+ts::uint32 gui_vtabsel_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
+{
+    if (ue.evt == UE_THEMECHANGED)
+    {
+        for (rectengine_c *c : getengine())
+            if (c)
+            {
+                // ugly way to force vtab item apply new theme
+                bool a = HOLD( c->getrect() )().getprops().is_active();
+                MODIFY( c->getrect() ).active(!a);
+                MODIFY( c->getrect() ).active(a);
+            }
+    }
+    return 0;
+}
+
 ts::uint32 gui_vtabsel_c::gm_handler( gmsg<GM_HEARTBEAT> & )
 {
     if (!currentgroup)
@@ -3245,6 +3261,22 @@ MAKE_CHILD<gui_htabsel_c>::~MAKE_CHILD()
     }
     gui->repos_children(this);
 
+}
+
+ts::uint32 gui_htabsel_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
+{
+    if (ue.evt == UE_THEMECHANGED)
+    {
+        for (rectengine_c *c : getengine())
+            if (c)
+            {
+                // ugly way to force htab item apply new theme
+                bool a = HOLD(c->getrect())().getprops().is_active();
+                MODIFY(c->getrect()).active(!a);
+                MODIFY(c->getrect()).active(a);
+            }
+    }
+    return 0;
 }
 
 ts::uint32 gui_htabsel_c::gm_handler(gmsg<GM_HEARTBEAT> &)
@@ -3526,7 +3558,7 @@ void gui_hslider_c::set_level(float level_)
                 {
                     caret_width = th->sis[SI_CENTER].width();
                     x = ts::lround((float)(cla.width() - caret_width) * pos) + cla.lt.x;
-                    m_engine->draw(ts::ivec2(x, cla.lt.y), th->src.extbody(), th->sis[SI_CENTER], th->is_alphablend(SI_CENTER));
+                    m_engine->draw(ts::ivec2(x, cla.lt.y), th->src.extbody(th->sis[SI_CENTER]), th->is_alphablend(SI_CENTER));
                 }
 
                 ts::ivec2 tsz = gui->tr().calc_text_size(ts::g_default_text_font, current_value_text, (cla.width()-caret_width)/2, 0, nullptr);

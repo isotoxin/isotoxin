@@ -3510,12 +3510,14 @@ void bmpcore_exbody_s::draw(const bmpcore_exbody_s &eb, aint xx, aint yy, int al
 void bmpcore_exbody_s::draw(const bmpcore_exbody_s &eb, aint xx, aint yy, const irect &r, int alpha) const
 {
     const uint8 *src = (*this)(r.lt);
-    imgdesc_s sinf(r.size(), 32, info().pitch);
+    
+    ts::ivec2 sz = r.size();
+    if (xx + sz.x > eb.info().sz.x)
+        sz.x = eb.info().sz.x - xx;
+    if (yy + sz.y > eb.info().sz.y)
+        sz.x = eb.info().sz.y - yy;
 
-    if (xx + r.width() > eb.info().sz.x)
-        sinf.sz.x = eb.info().sz.x - xx;
-    if (yy + r.height() > eb.info().sz.y)
-        sinf.sz.x = eb.info().sz.y - yy;
+    imgdesc_s sinf(sz, 32, info().pitch);
 
     if (alpha > 0)
         img_helper_alpha_blend_pm(eb(ivec2(xx, yy)), eb.info().pitch, src, sinf, (uint8)alpha);

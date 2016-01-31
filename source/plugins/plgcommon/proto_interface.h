@@ -223,6 +223,11 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     void(__stdcall *on_save)(const void *data, int dlen, void *param);
 
     /*
+        plugin should call this function only from call of export_data
+    */
+    void(__stdcall *export_data)(const void *data, int dlen);
+
+    /*
         plugin should use this func to play audio or show video
         audio/video player will be automatically allocated for gid/cid client
 
@@ -300,6 +305,7 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     FUNC0( void, init_done ) \
     FUNC0( void, online ) \
     FUNC0( void, offline ) \
+    FUNC0( void, export_data ) \
     FUNC1( void, save_config,    void * ) \
     FUNC2( int,  add_contact,    const char*, const char* ) \
     FUNC2( int,  resend_request, int, const char* ) \
