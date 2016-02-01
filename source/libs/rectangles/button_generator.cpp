@@ -352,7 +352,7 @@ struct gb_svg_s : public generated_button_data_s
 
                     if ( !vr )
                     {
-                        TSDEL(n);
+                        n->release();
                         src.clear();
                         return;
                     }
@@ -425,7 +425,7 @@ struct gb_svg_s : public generated_button_data_s
 #endif
 
                 src.copy( ts::ivec2(0, vr.height() * i), vr.size(), face_surface.extbody(), vr.lt );
-                TSDEL( n );
+                n->release();
             } else
             {
                 src.clear();
@@ -454,6 +454,7 @@ generated_button_data_s *generated_button_data_s::generate(const ts::abp_c *gen,
         gb_svg_s *g = TSNEW(gb_svg_s, gen, colsmap, svg->as_string(), one_face);
         if (g->is_valid())
             return g;
+        TSDEL(g);
     }
 
 #if 0

@@ -37,7 +37,10 @@ ts::uint32 mainrect_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
 ts::uint32 mainrect_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
 {
     if (ue.evt == UE_THEMECHANGED)
+    {
         name.clear();
+        rebuild_icons();
+    }
     return 0;
 }
 
@@ -53,7 +56,7 @@ ts::uint32 mainrect_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
     defaultthrdraw = DTHRO_BORDER | /*DTHRO_CENTER_HOLE |*/ DTHRO_CAPTION | DTHRO_CAPTION_TEXT;
     set_theme_rect(CONSTASTR("mainrect"), false);
     __super::created();
-    gui->make_app_buttons( m_rid );
+    gui->make_app_buttons(m_rid);
 
     auto uiroot = [](RID p)->RID
     {
@@ -65,15 +68,19 @@ ts::uint32 mainrect_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
     };
 
     RID hg = uiroot(m_rid);
-    RID cl = MAKE_CHILD<gui_contactlist_c>( hg );
-    RID chat = MAKE_CHILD<gui_conversation_c>( hg );
+    RID cl = MAKE_CHILD<gui_contactlist_c>(hg);
+    RID chat = MAKE_CHILD<gui_conversation_c>(hg);
     hg.call_restore_signal();
-    
+
     gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self(), 0).send(); // 1st selected item, yo
 
     g_app->F_ALLOW_AUTOUPDATE = !g_app->F_READONLY_MODE;
 
+    rebuild_icons();
+}
 
+void mainrect_c::rebuild_icons()
+{
     if (const theme_rect_s *tr = themerect())
     {
         if (tr->captextadd.x >= 18)

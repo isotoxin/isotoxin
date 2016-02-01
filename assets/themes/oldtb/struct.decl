@@ -1,0 +1,61 @@
+parent=def
+
+conf
+{
+  name=Default with old style title bar icons
+}
+
+buttons
+{
+
+  close
+  {
+    gen=disable
+    src=icons.png
+    normal=0,96,24s,24s
+    hover=24,96,24s,24s
+    press=48,96,24s,24s
+    disabled=72,96,24s,24s
+  }
+  maximize
+  {
+    gen=disable
+    src=icons.png
+    normal=0,72,24s,24s
+    hover=24,72,24s,24s
+    press=48,72,24s,24s
+    disabled=72,72,24s,24s
+  }
+  minimize
+  {
+    gen=disable
+    src=icons.png
+    normal=0,48,24s,24s
+    hover=24,48,24s,24s
+    press=48,48,24s,24s
+    disabled=72,48,24s,24s
+  }
+  normalize
+  {
+    gen=disable
+    src=icons.png
+    normal=0,24,24s,24s
+    hover=24,24,24s,24s
+    press=48,24,24s,24s
+    disabled=72,24,24s,24s
+  }
+  customize
+  {
+    gen=disable
+    src=icons.png
+    normal=0,0,24s,24s
+    hover=24,0,24s,24s
+    press=48,0,24s,24s
+    disabled=72,0,24s,24s
+  }
+}
+
+corrections
+{
+  icons.png { premultiply=1 }
+}

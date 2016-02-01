@@ -108,6 +108,19 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
         path.append(CONSTWSTR("/*.decl"));
 
         ts::g_fileop->find(ifns, path, true);
+
+        for(;;)
+        {
+            ts::abp_c bp;
+            if (!ts::g_fileop->load(path.set_length(7).append(thn).append(CONSTWSTR("/struct.decl")), bp)) break;
+            ts::abp_c *par = bp.get(CONSTASTR("parent"));
+            if (!par) break;
+            thn = to_wstr( par->as_string() );
+            path.set_length(7).append(thn).append(CONSTWSTR("/*.decl"));
+            ts::g_fileop->find(ifns, path, true);
+        }
+
+
         ifns.kill_dups_and_sort();
         for (const ts::wstr_c &f : ifns)
         {

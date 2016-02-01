@@ -5,6 +5,7 @@ md ..\bin
 rd /S /Q ..\bin\~assets
 md ..\bin\~assets
 md ..\bin\~assets\smiles
+md ..\bin\~assets\themes
 
 cd ..\assets\smiles
 
@@ -18,7 +19,7 @@ ren ..\..\bin\~assets\smiles\s.zip %%i.zip
 cd ..
 
 xcopy .\loc ..\bin\~assets\loc /s /e /y /i
-xcopy .\themes ..\bin\~assets\themes /s /e /y /i
+xcopy .\themes\def ..\bin\~assets\themes\def /s /e /y /i
 xcopy .\sounds ..\bin\~assets\sounds /s /e /y /i
 copy .\*.template ..\bin\~assets\
 copy .\*.svg ..\bin\~assets\

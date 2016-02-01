@@ -4342,18 +4342,23 @@ void gui_message_item_c::update_text(int for_width)
                 {
                     const theme_rect_s *thr = themerect();
                     ts::ivec2 picsz;
+                    int vieww = rectw - (thr ? thr->clborder_x() : 0);
                     if (for_width == 0)
                     {
                         // normal picture size ajust
-                        pic->fit_to_width(rectw - (thr ? thr->clborder_x() : 0));
+                        pic->fit_to_width(vieww);
                         picsz = pic->framerect().size();
                     } else
                     {
-                        picsz = pic->framesize_by_width(rectw - (thr ? thr->clborder_x() : 0));
+                        picsz = pic->framesize_by_width(vieww);
                         // no need to real picture size ajust (it is slow op), but just calculate height of picture by width
                     }
 
-                    newtext.clear().append(CONSTWSTR("<p=c><rect=1000,")).append_as_uint(picsz.x).append_char(',').append_as_int(picsz.y + 8).append(CONSTWSTR("><br></p>"));
+                    int shrinkrectheight = 0;
+                    if (picsz.x <= vieww - 2 * (timestrwidth + ADDTIMESPACE))
+                        shrinkrectheight = 4 + GET_FONT(font_conv_time)->height();
+
+                    newtext.clear().append(CONSTWSTR("<p=c><rect=1000,")).append_as_uint(picsz.x).append_char(',').append_as_int(picsz.y + 8 - shrinkrectheight).append(CONSTWSTR("><br></p>"));
                     //                                           RECT_IMAGE
 
                     const button_desc_s *explorebdsc = g_app->preloaded_stuff().exploreb;

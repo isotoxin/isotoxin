@@ -662,6 +662,7 @@ void text_convert_char_tags(ts::str_c &text)
         text.replace(i,j-i+1,utf8char.as_sptr());
     }
 }
+
 void text_adapt_user_input(ts::str_c &text)
 {
     text.replace_all('\t', ' ');
@@ -689,6 +690,46 @@ void text_adapt_user_input(ts::str_c &text)
             text.replace_all(t1, t2);
         }
     }
+
+    // markdown
+    
+    struct md_s
+    {
+        ts::asptr md, x, y;
+    };
+    static md_s mdrepl[] =
+    {
+        { CONSTASTR("**"), CONSTASTR("<b>"), CONSTASTR("</b>") },
+        { CONSTASTR("__"), CONSTASTR("<b>"), CONSTASTR("</b>") },
+        { CONSTASTR("~~"), CONSTASTR("<s>"), CONSTASTR("</s>") },
+        { CONSTASTR("*"), CONSTASTR("<i>"), CONSTASTR("</i>") },
+        { CONSTASTR("_"), CONSTASTR("<i>"), CONSTASTR("</i>") },
+    };
+
+    auto process_text_md = [](const md_s &md, ts::str_c &text)
+    {
+        for (int i = 0; i < text.get_length();)
+        {
+            int md0 = text.find_pos(i, md.md);
+            if (md0 >= 0)
+            {
+                int md1 = text.find_pos(md0 + md.md.l + 1, md.md);
+                if (md1 > md0)
+                {
+                    text.replace(md0, md.md.l, md.x);
+                    text.replace(md1 + md.x.l - md.md.l, md.md.l, md.y);
+                    i = md1 + md.x.l + md.y.l - md.md.l * 2;
+                }
+                else
+                    i = md0 + md.md.l;
+            }
+            else
+                break;
+        }
+    };
+
+    for (int i = 0; i < ARRAY_SIZE(mdrepl); ++i)
+        process_text_md( mdrepl[i], text );
 }
 
 

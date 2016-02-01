@@ -85,10 +85,10 @@ colors {
 	vtab_bg_a=#97a9b2
 	vtab_bg_ah=#97a9b2
 	vtab_bg_left=#3a383c
-	htab_bg=#a8afb2
-	htab_item_bg=#a8afb2
+	htab_bg=#858186
+	htab_item_bg=#858186
 	htab_item_text_a=#cfcab6
-	htab_item_text_h=#c74e00
+	htab_item_text_h=#ffa200
 	htab_item_text_ah=#ff7100
 	c_bgo=#6b6f7c
 	c_text_dnd=#ffffff

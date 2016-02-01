@@ -333,6 +333,26 @@ void theme_c::reload_fonts(FONTPAR fp)
 
 }
 
+static bool try_load_parent( ts::wstr_c &path, const wstr_c &parent, const wstr_c &colorsdecl, ts::abp_c &bpc)
+{
+    ASSERT(path.begins(CONSTWSTR("themes/")));
+    path.set_length(7).append(parent).append_char('/');
+    int pl = path.get_length();
+
+    path.append(colorsdecl);
+    if (g_fileop->load(path, bpc))
+        return true;
+
+    path.set_length(pl).append(CONSTWSTR("struct.decl"));
+
+    abp_c bp;
+    if (!g_fileop->load(path, bp)) return false;
+    abp_c * pbp = bp.get(CONSTASTR("parent"));
+    if (!pbp) return false;
+
+    return try_load_parent(path, to_wstr(pbp->as_string()), colorsdecl, bpc);
+}
+
 bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
 {
     wstr_c colorsdecl;
@@ -351,12 +371,18 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
 	abp_c bp;
 	if (!g_fileop->load(path.append(CONSTWSTR("struct.decl")), bp)) return false;
 
+    abp_c * parent = bp.get(CONSTASTR("parent"));
     abp_c bpc;
     for(;;)
     {
         path.set_length(pl).append(colorsdecl);
         if (g_fileop->load(path, bpc))
             break;
+
+        ts::wstr_c x(path);
+        if (parent && try_load_parent(x, to_wstr(parent->as_string()), colorsdecl, bpc))
+            break;
+
         if ( colorsdecl == CONSTWSTR("defcolors.decl") )
             return false;
         colorsdecl = CONSTWSTR("defcolors.decl");
@@ -375,7 +401,6 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
     rects.clear();
     buttons.clear();
 
-    abp_c * parent = bp.get(CONSTASTR("parent"));
     abp_c bp_temp;
 
     while (parent)
@@ -448,8 +473,8 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
                         c1 = colsmap.parse(*t, 0xffffffff);
                         ++t;
                         c2 = colsmap.parse(*t, 0xffffffff);
-                        
-                        dbmp.process_pixels(r.lt, r.size(), [&](ts::TSCOLOR &c) { if (c == c1) c = c2; });
+                        if (c1 != c2)
+                            dbmp.process_pixels(r.lt, r.size(), [&](ts::TSCOLOR &c) { if (c == c1) c = c2; });
 
                     } else if (t->equals(CONSTASTR("invert")))
                     {
@@ -595,6 +620,7 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
 
             if (ts::abp_c *gen = it->get(CONSTASTR("gen")))
             {
+                if (!gen->as_string().equals(CONSTASTR("disable")))
                 if (generated_button_data_s *bgenstuff = generated_button_data_s::generate(gen, colsmap, false))
                 {
                     bitmap_c &b = prepareimageplace(to_wstr(it.name()).append(CONSTWSTR("?btn?")));

@@ -1533,6 +1533,7 @@ buttons
 
       color=##gen_call
       k-press=0.95
+	  add-height=0,1
     }
   }
 
@@ -1760,10 +1761,10 @@ corrections
 	22,261,106s,22s=fill,##vtab_bg
 	0,261,22s,22s=fill,##vtab_bg_left
 	0,283,128s,1s=fill,##menu_sep
-	139,232,22s,22s=replace,#000000,##vtab_check
-	139,232,22s,22s=replace,#8fb281,##vtab_bg_a
-    132,261,22s,22s=replace,#000000,##vtab_check
-    132,261,22s,22s=replace,#8fb281,##menu_bg_a
+	139,232,22s,22s,1=replace,#000000,##vtab_check
+	139,232,22s,22s,2=replace,#8fb281,##vtab_bg_a
+    132,261,22s,22s,1=replace,#000000,##vtab_check
+    132,261,22s,22s,2=replace,#8fb281,##menu_bg_a
 	19,356,93s,54s=fill,##menu_base
 	7,290,6s,11s=replace,#000000,##menu_sub
 	22,284,22s,22s=fill,##menu_bg_left

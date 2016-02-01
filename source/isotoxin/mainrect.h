@@ -28,7 +28,7 @@ class mainrect_c : public gui_control_c
     GM_RECEIVER( mainrect_c, GM_UI_EVENT );
     
     ts::bitmap_c icons; // (contact_online_state_check + 1) square images tiled vertically
-
+    void rebuild_icons();
 public:
 	mainrect_c(MAKE_ROOT<mainrect_c> &data);
 	~mainrect_c();
