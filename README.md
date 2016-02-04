@@ -29,7 +29,8 @@ Multiprotocol messenger for windows XP and later with tox support
 
 ## Screenshots
 
-![Main Window](http://isotoxin.im/screens/screenshot5.png)
+![Main Window (Dark Theme)](http://isotoxin.im/screens/screenshot8.png)
+![Main Window (Light Theme)](http://isotoxin.im/screens/screenshot5.png)
 ![Settings)](http://isotoxin.im/screens/screenshot7.png)
 ![Prepare image)](http://isotoxin.im/screens/screenshot6.jpg)
 
