@@ -208,14 +208,19 @@ void autoupdater()
 {
     ts::tmpalloc_c tmpalloc;
 
-    if (auparams().lock_read()().in_updater)
-        return;
-
     ts::astrings_c addresses;
 
-#ifdef _DEBUG
-    addresses.add("http://dev/latest.txt");
-#endif // _DEBUG
+    auto aar = auparams().lock_read();
+    if (aar().in_updater)
+        return;
+
+    if (!aar().aurl.is_empty())
+    {
+        addresses.add(aar().aurl);
+        addresses.last().clone();
+    }
+    aar.unlock();
+
     addresses.add("https://github.com/Rotkaermota/Isotoxin/wiki/latest");
     addresses.add("http://isotoxin.im/latest.txt");
     int addri = 0;

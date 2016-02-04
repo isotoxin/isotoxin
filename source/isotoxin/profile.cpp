@@ -1314,6 +1314,7 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
         profile_flags.set(F_ENCRYPTED);
     }
 
+    g_app->apply_debug_options();
     return PLR_OK;
 }
 

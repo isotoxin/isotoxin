@@ -178,3 +178,7 @@ enum stream_options_e
 #define CLCAP_BBCODE_U      "bbu"
 #define CLCAP_BBCODE_S      "bbs"
 #define CLCAP_BBCODE_I      "bbi"
+
+
+#define DEBUG_OPT_FULL_DUMP "full_dump"
+#define DEBUG_OPT_LOGGING   "logging"

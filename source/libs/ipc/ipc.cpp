@@ -586,6 +586,13 @@ int ipc_junction_s::start( const char *junction_name )
     return is_client ? 1 : 0;
 }
 
+void ipc_junction_s::stop_signal()
+{
+    ipc_data_s &d = (ipc_data_s &)(*this);
+    d.quit_quit_quit = true;
+    d.send(signal_s<DATATYPE_FIN_ASK>());
+}
+
 void ipc_junction_s::stop()
 {
     ipc_data_s &d = (ipc_data_s &)(*this);

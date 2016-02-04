@@ -14,6 +14,17 @@
 #include <map>
 #include <unordered_map>
 
+enum logging_flags_e
+{
+    LFLS_CLOSE = 1,
+    LFLS_ESTBLSH = 2,
+    LFLS_TIMEOUT = 4,
+};
+
+extern unsigned int g_logging_flags;
+extern HINSTANCE g_module;
+
+
 typedef unsigned long u32;
 typedef unsigned char byte;
 
@@ -64,6 +75,7 @@ int LoggedMessageBox(const char *text, const char *caption, UINT type);
 bool Warning(const char *s, ...);
 void Error(const char *s, ...);
 void Log(const char *s, ...);
+void MaskLog(unsigned mask, const char *s, ...);
 void LogToFile(const char *fn, const char *s, ...);
 
 #define NOWARNING(n,...) __pragma(warning(push)) __pragma(warning(disable:n)) __VA_ARGS__ __pragma(warning(pop))
@@ -551,3 +563,5 @@ namespace cpu_detect
 }
 
 void img_helper_i420_to_ARGB(const byte* src_y, int src_stride_y, const byte* src_u, int src_stride_u, const byte* src_v, int src_stride_v, byte* dst_argb, int dst_stride_argb, int width, int height);
+
+

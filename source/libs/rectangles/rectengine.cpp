@@ -1621,7 +1621,7 @@ void border_window_data_s::draw()
             // top
             fillrect.lt = dd.offset;
             fillrect.rb.x = rbpt.x;
-            fillrect.rb.y = d->draw_thr.rect().lt.y + dd.offset.y; //-V807
+            fillrect.rb.y = d->draw_thr.rect().lt.y + dd.offset.y;
             filler(thr.siso[SI_BASE].fillcolor);
 
             // left
@@ -1649,7 +1649,7 @@ void border_window_data_s::draw()
             rdraw.rend = nullptr;
 
             int y = dd.offset.y;
-            for (int ylmt = d->draw_thr.rect().lt.y + dd.offset.y; y < ylmt; y += rdraw.rrep->height()) //-V807
+            for (int ylmt = d->draw_thr.rect().lt.y + dd.offset.y; y < ylmt; y += rdraw.rrep->height())
                 rdraw.draw_h(dd.offset.x, rbpt.x, y, thr.siso[SI_BASE].tile);
 
             int y2 = rbpt.y;
@@ -2415,8 +2415,10 @@ ts::wstr_c   rectengine_root_c::load_filename_dialog(const ts::wsptr &iroot, con
     ts::g_main_window = hwnd;
 
     ++sysmodal;
+    g_sysconf.is_sys_loop = sysmodal > 0;
     ts::wstr_c r = ts::get_load_filename_dialog(iroot, name, exts, title);
     --sysmodal;
+    g_sysconf.is_sys_loop = sysmodal > 0;
     ts::g_main_window = ow;
 
     return r;
@@ -2427,8 +2429,10 @@ bool     rectengine_root_c::load_filename_dialog(ts::wstrings_c &files, const ts
     ts::g_main_window = hwnd;
 
     ++sysmodal;
+    g_sysconf.is_sys_loop = sysmodal > 0;
     bool r = ts::get_load_filename_dialog(files, iroot, name, exts, title);
     --sysmodal;
+    g_sysconf.is_sys_loop = sysmodal > 0;
     ts::g_main_window = ow;
 
     return r;
@@ -2440,8 +2444,10 @@ ts::wstr_c  rectengine_root_c::save_directory_dialog(const ts::wsptr &root, cons
     ts::g_main_window = hwnd;
 
     ++sysmodal;
+    g_sysconf.is_sys_loop = sysmodal > 0;
     ts::wstr_c r = ts::get_save_directory_dialog(root, title, selectpath, nonewfolder);
     --sysmodal;
+    g_sysconf.is_sys_loop = sysmodal > 0;
     ts::g_main_window = ow;
 
     return r;
@@ -2452,8 +2458,10 @@ ts::wstr_c  rectengine_root_c::save_filename_dialog(const ts::wsptr &iroot, cons
     ts::g_main_window = hwnd;
 
     ++sysmodal;
+    g_sysconf.is_sys_loop = sysmodal > 0;
     ts::wstr_c r = ts::get_save_filename_dialog(iroot, name, exts, title);
     --sysmodal;
+    g_sysconf.is_sys_loop = sysmodal > 0;
     ts::g_main_window = ow;
 
     return r;

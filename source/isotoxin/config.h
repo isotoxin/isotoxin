@@ -147,6 +147,8 @@ public:
 
     INTPAR(dsp_flags, 0)
 
+    TEXTAPAR(debug, "")
+
 #define SND(s) TEXTWPAR( snd_##s, #s ".ogg" )
     SOUNDS
 #undef SND

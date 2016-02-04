@@ -2007,7 +2007,7 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
                 {
                     rsize &szsz = rsizes.get(t - 1);
                     if (szsz.sz < 0) continue;
-                    d.draw_thr.rect().lt[vecindex] += szsz.sz; //-V807
+                    d.draw_thr.rect().lt[vecindex] += szsz.sz;
                     int next = d.draw_thr.rect().rb[vecindex] = d.draw_thr.rect().lt[vecindex] + szsz.szsplit;
                     if (szsz.szsplit && getroot()) getroot()->draw(*thr, DTHRO_CENTER_ONLY, &d);
                     d.draw_thr.rect().lt[vecindex] = next;
@@ -2872,7 +2872,7 @@ MAKE_CHILD<gui_textfield_c>::~MAKE_CHILD()
     if (selector)
     {
         get().selector = &(gui_button_c &)MAKE_CHILD<gui_button_c>(get().getrid());
-        get().selector->set_face_getter(selectorface ? selectorface : BUTTON_FACE(selector)); //-V807
+        get().selector->set_face_getter(selectorface ? selectorface : BUTTON_FACE(selector));
         get().selector->set_handler(handler, param);
         ts::ivec2 minsz = get().selector->get_min_size();
         get().set_margins_rb(ts::ivec2(minsz.x, 0));
@@ -2882,7 +2882,7 @@ MAKE_CHILD<gui_textfield_c>::~MAKE_CHILD()
         get().height = get().get_font()->height;
     }
     if (multiline) get().height = multiline;
-    MODIFY(get()).setminsize(get().getrid()).show();
+    MODIFY(get()).setminsize(get().getrid()).visible( create_visible );
 }
 
 bool gui_textfield_c::behav_s::onclick(RID, GUIPARAM mpar)
@@ -3543,7 +3543,7 @@ void gui_hslider_c::set_level(float level_)
                     int ww = ts::lround( ts::CLAMP( level, 0, 1 ) * (float)(dd.size.x - levelshift.x - levelshift.x - sidew) ) + sidew;
 
                     evt_data_s d;
-                    d.draw_thr.rect().lt.x = dd.offset.x + levelshift.x; //-V807
+                    d.draw_thr.rect().lt.x = dd.offset.x + levelshift.x;
                     d.draw_thr.rect().lt.y = dd.offset.y + levelshift.y;
                     d.draw_thr.rect().rb.x = d.draw_thr.rect().lt.x + ww;
                     m_engine->draw(*th, DTHRO_LB_B_RB, &d);

@@ -349,7 +349,7 @@ dialog_avaselector_c::~dialog_avaselector_c()
     ts::wstr_c ctlopen, ctlpaste, ctlcam;
 
     ts::ivec2 bsz(50,25);
-    const button_desc_s *b = gui->theme().get_button("save"); //-V807
+    const button_desc_s *b = gui->theme().get_button("save");
     if (b)
         bsz = b->size;
 
@@ -936,7 +936,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                             if (shadow)
                             {
                                 evt_data_s d;
-                                d.draw_thr.rect.get().lt = pos + viewrect.lt - shadow_size/2; //-V807
+                                d.draw_thr.rect.get().lt = pos + viewrect.lt - shadow_size/2;
                                 d.draw_thr.rect.get().rb = d.draw_thr.rect.get().lt + sz + shadow_size;
                                 getengine().draw(*shadow, DTHRO_BORDER_RECT, &d);
                             }

@@ -122,6 +122,32 @@ ts::uint32 application_c::gm_handler(gmsg<ISOGM_EXPORT_PROTO_DATA>&d)
     return 0;
 }
 
+void application_c::apply_debug_options()
+{
+    ts::astrmap_c d(cfg().debug());
+    if (!prf().get_options().is(OPTOPT_POWER_USER))
+        d.clear();
+
+#if defined _DEBUG || defined _CRASH_HANDLER
+    MINIDUMP_TYPE dump_type = (MINIDUMP_TYPE)(MiniDumpWithFullMemory /*| MiniDumpWithProcessThreadData*/ | MiniDumpWithDataSegs | MiniDumpWithHandleData /*| MiniDumpWithFullMemoryInfo | MiniDumpWithThreadInfo*/);
+    bool full_dump = d.get(CONSTASTR(DEBUG_OPT_FULL_DUMP)).as_int() != 0;
+    if (!full_dump)
+        dump_type = (MINIDUMP_TYPE)(MiniDumpWithDataSegs | MiniDumpWithHandleData);
+    ts::exception_operator_c::set_dump_type(dump_type);
+#endif
+}
+
+ts::uint32 application_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
+{
+    if (ch.pass == 0)
+    {
+        if (CFG_DEBUG == ch.sp)
+            apply_debug_options();
+
+    }
+    return 0;
+}
+
 ts::uint32 application_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&t )
 {
     if (t.tabi == pt_history)
@@ -508,7 +534,7 @@ void application_c::set_status(contact_online_state_e cos_, bool manual)
     if (manual)
         prf().manual_cos(cos_);
 
-    contacts().get_self().subiterate([&](contact_c *c) { //-V807
+    contacts().get_self().subiterate([&](contact_c *c) {
         c->set_ostate(cos_);
     });
     contacts().get_self().set_ostate(cos_);
@@ -1160,6 +1186,7 @@ bool application_c::b_update_ver(RID, GUIPARAM p)
         w().proxy_addr.setcopy(cfg().autoupdate_proxy_addr());
         w().proxy_type = cfg().autoupdate_proxy();
         w().autoupdate = req;
+        w().aurl = ts::astrmap_c( cfg().debug() ).get( CONSTASTR("local_upd_url") );
         w.unlock();
 
         CloseHandle(CreateThread(nullptr, 0, autoupdater, this, 0, nullptr));

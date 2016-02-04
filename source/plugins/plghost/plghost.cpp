@@ -53,6 +53,7 @@ struct protolib_s
             if (handshake)
             {
                 functions = handshake( &hostfunctions );
+                functions->logging_flags(g_logging_flags);
 
             } else
             {
@@ -457,6 +458,7 @@ DWORD WINAPI worker(LPVOID nonzerothread)
         if (sleepvalue < 0)
         {
             panica = true;
+            ipcj->stop_signal();
             break;
         }
 
@@ -531,12 +533,13 @@ int CALLBACK WinMainProtect(
 }
 
 int CALLBACK WinMain(
-    _In_  HINSTANCE,
+    _In_  HINSTANCE hInstance,
     _In_  HINSTANCE,
     _In_  LPSTR lpCmdLine,
     _In_  int
     )
 {
+    g_module = hInstance;
 #if defined _DEBUG || defined _CRASH_HANDLER
 #include "appver.inl"
     exception_operator_c::set_unhandled_exception_filter();
@@ -1021,6 +1024,46 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
 
     case AQ_EXPORT_DATA:
         protolib.functions->export_data();
+        break;
+    case AQ_DEBUG_SETTINGS:
+        {
+            g_logging_flags = 0;
+            if (protolib.functions) protolib.functions->logging_flags(0);
+#if defined _DEBUG || defined _CRASH_HANDLER
+            MINIDUMP_TYPE dump_type = (MINIDUMP_TYPE)(MiniDumpWithDataSegs | MiniDumpWithHandleData);
+#endif
+    
+
+            ipcr r(d->get_reader());
+            token<char> lns(r.getastr(), '\n');
+            for (; lns; ++lns)
+            {
+                auto s = lns->get_trimmed();
+                int eqi = s.find_pos('=');
+                if (eqi > 0)
+                {
+                    pstr_c k = s.substr(0, eqi);
+                    pstr_c v = s.substr(eqi + 1);
+
+                    if (k.equals(CONSTASTR(DEBUG_OPT_FULL_DUMP)))
+                    {
+#if defined _DEBUG || defined _CRASH_HANDLER
+                        if (v.as_int() != 0)
+                            dump_type = (MINIDUMP_TYPE)(MiniDumpWithFullMemory | MiniDumpWithDataSegs | MiniDumpWithHandleData );
+#endif
+                    } else if (k.equals(CONSTASTR(DEBUG_OPT_LOGGING)))
+                    {
+                        g_logging_flags = (unsigned)v.as_int();
+                        if (protolib.functions) protolib.functions->logging_flags(g_logging_flags);
+                    }
+                }
+            }
+
+#if defined _DEBUG || defined _CRASH_HANDLER
+            exception_operator_c::set_dump_type(dump_type);
+#endif
+
+        }
         break;
     }
 

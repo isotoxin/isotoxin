@@ -1,10 +1,5 @@
 #include "isotoxin.h"
 
-//-V:theme:807
-//-V:prf:807
-//-V:unmasked:807
-
-
 #define ADDTIMESPACE 5
 
 ////////////////////////// gui_notice_c
@@ -3239,7 +3234,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
             flags.clear(F_OVERIMAGE|F_OVERIMAGE_LBDN);
             getengine().redraw();
 
-            image_loader_c &ldr = imgloader_get();
+            image_loader_c &ldr = imgloader_get(nullptr);
             if (ldr.get_picture())
                 ts::open_link(ldr.get_fn());
         }
@@ -3370,7 +3365,7 @@ static gui_messagelist_c *current_draw_list = nullptr;
             }
             if (imgloader())
             {
-                image_loader_c &ldr = imgloader_get();
+                image_loader_c &ldr = imgloader_get(nullptr);
                 if (const picture_c *p = ldr.get_picture())
                 {
                     ts::irect r( ldr.local_p, ldr.local_p + p->framerect().size() + ts::ivec2(8) );
@@ -3656,7 +3651,7 @@ ts::ivec2 gui_message_item_c::get_message_pos_under_cursor(const ts::ivec2 &loca
 
 ts::ivec2 gui_message_item_c::extract_message(int chari, uint64 &mutag) const
 {
-    int rite = textrect.get_text().find_pos(chari, CONSTWSTR("<p><r>")); //-V807
+    int rite = textrect.get_text().find_pos(chari, CONSTWSTR("<p><r>"));
     if (rite < 0) rite = textrect.get_text().get_length();
     int left = 0;
 
@@ -4080,11 +4075,25 @@ void gui_message_item_c::updrect(const void *, int r, const ts::ivec2 &p)
         // image
         if (imgloader())
         {
-            image_loader_c &ldr = imgloader_get();
+            addition_file_data_s *ftb = nullptr;
+            image_loader_c &ldr = imgloader_get(&ftb);
             ldr.local_p = root_to_local(p) - ts::ivec2(4, 0);
             ldr.upd_btnpos();
             if (const picture_c *pic = ldr.get_picture())
-                pic->draw(getroot(), p + ts::ivec2(0, 4));
+            {
+                ts::ivec2 addp(p.x, p.y + 4);
+                if (ftb && ftb->shadow)
+                {
+                    ts::ivec2 shsz( ftb->shadow->clborder_x(), ftb->shadow->clborder_y() );
+                    evt_data_s d;
+                    d.draw_thr.rect.get().lt = addp;
+                    d.draw_thr.rect.get().rb = addp + pic->framerect().size() + shsz;
+                    getengine().draw(*ftb->shadow, DTHRO_BORDER_RECT, &d);
+                    addp += shsz / 2;
+
+                }
+                pic->draw(getroot(), addp);
+            }
         }
         return;
     } else if (TYPING_SPACERECT == r)
@@ -4337,12 +4346,22 @@ void gui_message_item_c::update_text(int for_width)
 
             if (imgloader() && rectw > 0)
             {
-                image_loader_c &imgldr = imgloader_get();
+                image_loader_c &imgldr = imgloader_get(&ftb);
                 if (picture_c *pic = imgldr.get_picture())
                 {
+                    const theme_rect_s *shadow = nullptr;
+                    if (ftb)
+                    {
+                        if (!ftb->shadow)
+                            ftb->shadow = gui->theme().get_rect(CONSTASTR("shadow"));
+                        shadow = ftb->shadow;
+                    }
+
+
                     const theme_rect_s *thr = themerect();
                     ts::ivec2 picsz;
                     int vieww = rectw - (thr ? thr->clborder_x() : 0);
+                    if (shadow) vieww -= shadow->clborder_x();
                     if (for_width == 0)
                     {
                         // normal picture size ajust
@@ -4352,6 +4371,11 @@ void gui_message_item_c::update_text(int for_width)
                     {
                         picsz = pic->framesize_by_width(vieww);
                         // no need to real picture size ajust (it is slow op), but just calculate height of picture by width
+                    }
+                    if (shadow)
+                    {
+                        picsz.x += shadow->clborder_x();
+                        picsz.y += shadow->clborder_y();
                     }
 
                     int shrinkrectheight = 0;
@@ -4366,8 +4390,6 @@ void gui_message_item_c::update_text(int for_width)
                     {
                         if ( imgldr.explorebtn.expired() )
                         {
-                            if (!ftb)
-                                ftb = ts::ptr_cast<addition_file_data_s *>(addition.get());
                             if (ftb)
                                 for (addition_file_data_s::btn_s &b : ftb->btns)
                                     b.used = false;
@@ -6184,7 +6206,7 @@ void gui_conversation_c::created()
 bool gui_conversation_c::hide_show_messageeditor(RID, GUIPARAM)
 {
     bool show = flags.is(F_ALWAYS_SHOW_EDITOR);
-    if (caption->contacted() && !caption->getcontact().getkey().is_self()) //-V807
+    if (caption->contacted() && !caption->getcontact().getkey().is_self())
     {
         if ( caption->getcontact().getkey().is_group() )
             show = true;

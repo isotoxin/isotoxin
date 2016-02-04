@@ -1,13 +1,11 @@
 #include "stdafx.h"
 
-HMODULE dll_module = nullptr;
-
 BOOL APIENTRY DllMain( HMODULE hModule,
                        DWORD  ul_reason_for_call,
                        LPVOID /*lpReserved*/
 					 )
 {
-    dll_module = hModule;
+    g_module = hModule;
 
 	switch (ul_reason_for_call)
 	{

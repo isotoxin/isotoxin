@@ -269,7 +269,7 @@ gui_dialog_c::description_s&  gui_dialog_c::description_s::label( const ts::wspt
 gui_dialog_c::description_s& gui_dialog_c::description_s::hiddenlabel( const ts::wsptr& text_, bool err )
 {
     ctl = _STATIC_HIDDEN;
-    is_err = err;
+    options.init(o_err, err);
     text.set(text_);
     return *this;
 }
@@ -445,9 +445,8 @@ void gui_dialog_c::update_header()
 
 ts::str_c gui_dialog_c::find( RID crid ) const
 {
-    const guirect_c *r = &HOLD(crid)();
     for (const description_s &d : descs)
-        if (d.ctlptr == r)
+        if (d.present(crid))
             return d.name;
     return ts::str_c();
 }
@@ -696,7 +695,7 @@ void gui_dialog_c::set_edit_value( const ts::asptr& ctl_name, const ts::wstr_c& 
         if ((d.ctl == description_s::_TEXT || d.ctl == description_s::_PASSWD || d.ctl == description_s::_SELECTOR) && d.name == ctl_name)
         {
             d.text = t;
-            d.changed = true;
+            d.options.set(description_s::o_changed);
             break;
         }
     }
@@ -739,7 +738,7 @@ void gui_dialog_c::set_pb_pos( const ts::asptr& ctl_name, float val )
 
 }
 
-RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e role, gui_textedit_c::TEXTCHECKFUNC checker, const evt_data_s *addition, int multiline, RID parent )
+RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e role, gui_textedit_c::TEXTCHECKFUNC checker, const evt_data_s *addition, int multiline, RID parent, bool create_visible )
 {
     //int tag = gui->get_free_tag();
 
@@ -768,7 +767,7 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
         
     }
     
-    MAKE_CHILD<gui_textfield_c> creator(parent ? parent : getrid(),deftext, chars_limit, multiline, selector != GUIPARAMHANDLER());
+    MAKE_CHILD<gui_textfield_c> creator(parent ? parent : getrid(),deftext, chars_limit, multiline, selector != GUIPARAMHANDLER(), create_visible);
     creator << selector << checker;
     gui_textfield_c &tf = creator;
     creator << ((RID)creator).to_param();
@@ -917,6 +916,19 @@ void gui_dialog_c::set_list_emptymessage(const ts::asptr& ctl_name, const ts::ws
     }
 }
 
+void gui_dialog_c::ctlshow( ts::uint32 cmask, bool vis )
+{
+    for (description_s &d : descs)
+    {
+        if ( 0 != (d.c_mask & cmask) )
+        {
+            d.options.init( description_s::o_visible, vis );
+            for ( guirect_c *r : d.ctlptrs )
+                if (r) MODIFY( *r ).visible(vis);
+        }
+    }
+}
+
 void gui_dialog_c::ctlenable( const ts::asptr&name, bool enblflg )
 {
     if (RID ctl = find(name))
@@ -952,13 +964,13 @@ int gui_dialog_c::radio( const ts::array_wrapper_c<const radio_item_s> & items, 
     return tag;
 }
 
-int gui_dialog_c::check( const ts::array_wrapper_c<const check_item_s> & items, GUIPARAMHANDLER handler, ts::uint32 initial, int tag )
+int gui_dialog_c::check( const ts::array_wrapper_c<const check_item_s> & items, GUIPARAMHANDLER handler, ts::uint32 initial, int tag, bool visible )
 {
     if (!tag) tag = gui->get_free_tag();
     //int index = 0;
     for (const check_item_s &ci : items)
     {
-        gui_button_c &c = MAKE_VISIBLE_CHILD<gui_button_c>(getrid());
+        gui_button_c &c = MAKE_VISIBLE_CHILD<gui_button_c>(getrid(), visible);
         c.set_check(tag);
         c.set_handler(handler, as_param(ci.mask));
         c.set_face_getter(BUTTON_FACE(check));
@@ -1062,7 +1074,7 @@ void gui_dialog_c::updrect_def(const void *rr, int r, const ts::ivec2 &p)
                     ctl->getengine().__spec_set_outofbound(false);
                 }
                 d.height_ = h;
-                d.ctlptr = ctl;
+                d.setctlptr( ctl );
                 if (!d.name.is_empty()) setctlname(d.name, *ctl);
                 return;
             }
@@ -1137,7 +1149,8 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             parent = lasthgroup;
         } else if (!d.desc.is_empty())
         {
-            label( CONSTWSTR("<l>") + d.desc + CONSTWSTR("</l>") );
+            RID lblr = label( CONSTWSTR("<l>") + d.desc + CONSTWSTR("</l>"), d.options.is(description_s::o_visible) );
+            d.setctlptr( &HOLD(lblr)() );
         }
         RID rctl;
         switch (d.ctl)
@@ -1166,7 +1179,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             rctl = label(d.text, true);
             break;
         case description_s::_STATIC_HIDDEN:
-            rctl = label(d.text, false, d.is_err);
+            rctl = label(d.text, false, d.options.is(description_s::o_err));
             break;
         case description_s::_VSPACE:
             lasthgroup = RID();
@@ -1178,12 +1191,12 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             rctl = panel(d.height_, d.handler);
             break;
         case description_s::_PATH:
-            rctl = textfield(d.text,MAX_PATH, d.readonly_ ? TFR_PATH_VIEWER : TFR_PATH_SELECTOR, d.readonly_ ? nullptr : DELEGATE(&d, updvalue), nullptr, 0, parent);
+            rctl = textfield(d.text,MAX_PATH, d.options.is(description_s::o_readonly) ? TFR_PATH_VIEWER : TFR_PATH_SELECTOR, d.options.is(description_s::o_readonly) ? nullptr : DELEGATE(&d, updvalue), nullptr, 0, parent);
             break;
         case description_s::_FILE: {
             evt_data_s dd;
             dd.wstrparam = d.hint.as_sptr();
-            rctl = textfield(d.text, MAX_PATH, TFR_FILE_SELECTOR, d.readonly_ ? nullptr : DELEGATE(&d, updvalue), &dd, 0, parent);
+            rctl = textfield(d.text, MAX_PATH, TFR_FILE_SELECTOR, d.options.is(description_s::o_readonly) ? nullptr : DELEGATE(&d, updvalue), &dd, 0, parent);
             break; }
         case description_s::_COMBIK:
             if (!d.items.is_empty())
@@ -1222,9 +1235,12 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
                     }
                 } s;
                 s.checkname = d.name;
-
                 d.items.iterate_items(s,s);
-                check( s.cis.array(), DELEGATE(&d, updvalue2), d.text.as_uint(), tag );
+                int chldcount = getengine().children_count();
+                check( s.cis.array(), DELEGATE(&d, updvalue2), d.text.as_uint(), tag, d.options.is(description_s::o_visible) );
+                int chldcount2 = getengine().children_count();
+                for(int i=chldcount; i<chldcount2;++i)
+                    d.setctlptr( &getengine().get_child(i)->getrect() );
             }
             break;
         case description_s::_RADIO:
@@ -1262,14 +1278,15 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             rctl = d.make_ctl(this, parent);
             break;
         }
-        if (rctl && d.focus_)
+        if (rctl && d.options.is(description_s::o_focus))
             gui->set_focus(rctl);
 
         if (rctl)
         {
-            d.ctlptr = &HOLD(rctl)();
+            guirect_c *r = &HOLD(rctl)();
+            d.setctlptr( r );
             if (!d.name.is_empty())
-                ctl_by_name[d.name] = d.ctlptr;
+                ctl_by_name[d.name] = r;
         }
     }
     tabselected(tabselmask);
@@ -1282,7 +1299,7 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
     switch (ctl)
     {
     case _TEXT:
-        return dlg->textfield(text, MAX_PATH, readonly_ ? TFR_TEXT_FILED_RO : TFR_TEXT_FILED, DELEGATE(this, updvalue), nullptr, height_, parent);
+        return dlg->textfield(text, MAX_PATH, options.is(o_readonly) ? TFR_TEXT_FILED_RO : TFR_TEXT_FILED, DELEGATE(this, updvalue), nullptr, height_, parent, options.is(o_visible));
     case _PASSWD:
         return dlg->textfield(text, MAX_PATH, TFR_TEXT_FILED_PASSWD, DELEGATE(this, updvalue), nullptr, height_, parent);
     case _SELECTOR:

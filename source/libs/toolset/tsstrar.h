@@ -760,6 +760,7 @@ template <typename S> struct strmap_pair_s
 template <typename S> class strmap_t : public array_inplace_t < strmap_pair_s< S >, 8 >
 {
     typedef typename S::TCHAR TCHARACTER;
+    typedef array_inplace_t < strmap_pair_s< S >, 8 > TSUPER;
 public:
     strmap_t() {}
     explicit strmap_t( const sptr<TCHARACTER>&froms, TCHARACTER eq = '=' ) { parse( froms, eq ); }
@@ -775,12 +776,12 @@ public:
     {
         aint msz = tmin( size(), m.size() );
         for(aint i=0;i<msz;++i)
-            get(i) = m.get(i);
+            __super::get(i) = ((TSUPER &)m).get(i);
         if (m.size() > msz)
         {
             aint cnt = m.size();
             for (; msz < cnt; ++msz)
-                add() = m.get(msz);
+                add() = ((TSUPER &)m).get(msz);
         } else if (size() > msz)
             truncate(msz);
         return *this;
@@ -793,10 +794,10 @@ public:
 
     void parse( const sptr<TCHARACTER>&froms, TCHARACTER eq = '=' )
     {
-        ts::token<TCHARACTER> ver(froms, '\n');
-        for (; ver; ++ver)
+        ts::token<TCHARACTER> lns(froms, '\n');
+        for (; lns; ++lns)
         {
-            auto s = ver->get_trimmed();
+            auto s = lns->get_trimmed();
             aint eqi = s.find_pos(eq);
             if (eqi > 0)
                 set( s.substr(0,eqi) ) = s.substr(eqi+1);
@@ -816,24 +817,31 @@ public:
     {
         int index;
         if (find_sorted(index, k))
-            return get(index).v;
+            return __super::get(index).v;
 
         auto &i = insert(index);
         i.k = k;
         return i.v;
     }
+    S get( const sptr<TCHARACTER>&k, const S&def = S() )
+    {
+        if (const S *s = find(k))
+            return *s;
+        return def;
+    }
+
     const S *find(const sptr<TCHARACTER>&k) const
     {
         int index;
         if (find_sorted(index, k))
-            return &get(index).v;
+            return &__super::get(index).v;
         return nullptr;
     }
     S *find(const sptr<TCHARACTER>&k)
     {
         int index;
         if (find_sorted(index, k))
-            return &get(index).v;
+            return &__super::get(index).v;
         return nullptr;
     }
     S to_str( TCHARACTER eq = '=' )
@@ -848,7 +856,7 @@ public:
         aint cnt = size();
         if (cnt != m.size()) return false;
         for(aint i=0;i<cnt;++i)
-            if ( get(i) != m.get(i) ) return false;
+            if ( __super::get(i) != ((TSUPER &)m).get(i) ) return false;
         return true;
     }
     bool operator!=( const strmap_t&m ) const

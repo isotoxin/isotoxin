@@ -201,6 +201,8 @@ enum reselect_options_e
     RSEL_INSERT_NEW = 2,
 };
 
+//-V:options():807
+
 class gui_contact_item_c;
 struct contacts_s;
 class contact_root_c;

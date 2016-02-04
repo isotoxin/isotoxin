@@ -145,6 +145,7 @@ enum size_policy_e
 
 */
 
+//-V:draw_thr:807
 
 struct evt_data_s
 {
@@ -1447,7 +1448,8 @@ template<> struct MAKE_CHILD<gui_textfield_c> : public _PCHILD(gui_textfield_c)
     GET_BUTTON_FACE selectorface;
     int multiline;
     bool selector;
-    MAKE_CHILD(RID parent_, const ts::wstr_c &text, int chars_limit = 0, int multiline = 0, bool selector = true) :text(text), chars_limit(chars_limit), multiline(multiline), selector(selector) { parent = parent_; }
+    bool create_visible;
+    MAKE_CHILD(RID parent_, const ts::wstr_c &text, int chars_limit = 0, int multiline = 0, bool selector = true, bool visible = true) :text(text), chars_limit(chars_limit), multiline(multiline), selector(selector), create_visible(visible) { parent = parent_; }
     ~MAKE_CHILD();
 
     MAKE_CHILD &operator << (GUIPARAMHANDLER h) { handler = h; return *this; }

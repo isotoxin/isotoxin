@@ -303,6 +303,7 @@ public:
         return images.get(iname);
     }
 
+    //-V:conf():807
     const ts::abp_c &conf() const {return m_conf;}
 
 };

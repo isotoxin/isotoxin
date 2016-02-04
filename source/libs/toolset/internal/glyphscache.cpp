@@ -21,7 +21,7 @@ glyph_s &font_c::operator[](wchar c)
 	if (glyphs[c]) return *glyphs[c];
 
 	FT_Set_Pixel_Sizes( face, font_params.size.x, font_params.size.y );
-	CHECK(FT_Load_Char( face, c, font_params.flags | FT_LOAD_RENDER ) == 0); //-V807
+	CHECK(FT_Load_Char( face, c, font_params.flags | FT_LOAD_RENDER ) == 0);
 
 	FT_Bitmap &b = face->glyph->bitmap;
 

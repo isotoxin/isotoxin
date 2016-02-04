@@ -2,6 +2,8 @@
 
 #include "internal/textparser.h"
 
+//-V:get_text():807
+
 namespace ts
 {
 

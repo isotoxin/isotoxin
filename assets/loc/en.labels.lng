@@ -391,6 +391,12 @@
 391=Maximize inline images
 392=Export...
 393=Export protocol data: $
+394=Advanced
+395=Debug
+396=I'm power user. Please, show me advanced settings.
+397=Create full memory dump on crash
+398=Enable logging
+399=Addition updates URL
 900=information
 901=warning
 902=error

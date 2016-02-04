@@ -155,7 +155,7 @@ void gui_c::reload_fonts()
 
 bool gui_c::load_theme( const ts::wsptr&thn, bool summon_ch_signal )
 {
-    if (!m_theme.load(thn, DELEGATE(this, font_par)), summon_ch_signal) return false;
+    if (!m_theme.load(thn, DELEGATE(this, font_par), summon_ch_signal)) return false;
 
     for(auto it = m_fonts.begin(); it; ++it)
         it->update();
@@ -362,7 +362,6 @@ void gui_c::heartbeat()
 DWORD gui_c::handler_SEV_BEFORE_INIT( const system_event_param_s & p )
 {
 	SetClassLong( g_sysconf.mainwindow, GCL_HICON, (LONG)app_icon(false) );
-	g_sysconf.is_loop_in_background = true;
 	return 0;
 }
 
@@ -476,7 +475,7 @@ ts::uint32 gui_c::mouse(const system_event_param_s & p)
 
 void gui_c::loop()
 {
-    g_sysconf.sleep = 1;
+    int sleep = 1;
 
     { // draw collector should be flushed before sleep
         redraw_collector_s dch;
@@ -484,8 +483,9 @@ void gui_c::loop()
         ts::Time::update_thread_time();
         m_frametime.takt();
         if (m_1second.it_is_time_ones()) heartbeat();
-        g_sysconf.sleep = ts::lround(500.0f * m_timer_processor.takt(m_frametime.frame_time())); // sleep time 0.5 of time to next event
-        if (g_sysconf.sleep < 0 || g_sysconf.sleep > 50) g_sysconf.sleep = 50;
+
+        sleep = ts::lround(500.0f * m_timer_processor.takt(m_frametime.frame_time())); // sleep time 0.5 of time to next event
+        if (sleep < 0 || sleep > 50) sleep = 50;
 
         if (m_5seconds.it_is_time_ones()) app_5second_event();
         app_loop_event();
@@ -513,8 +513,9 @@ void gui_c::loop()
             m_flags.clear(F_DO_MOUSEMOUVE);
         }
 
-        app_fix_sleep_value(g_sysconf.sleep);
+        app_fix_sleep_value(sleep);
     }
+    g_sysconf.sleep = sleep;
 }
 
 DWORD gui_c::handler_SEV_WCHAR(const system_event_param_s & p)

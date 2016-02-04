@@ -10,6 +10,10 @@
 #define HOTKEY_TOGGLE_TAGFILTER_BAR SSK_T, gui_c::casw_ctrl
 #define HOTKEY_TOGGLE_NEW_CONNECTION_BAR SSK_N, gui_c::casw_ctrl
 
+//-V:preloaded_stuff():807
+//-V:GET_FONT:807
+//-V:GET_THEME_VALUE:807
+
 struct preloaded_stuff_s
 {
     const ts::font_desc_c *font_conv_name = &ts::g_default_text_font;
@@ -73,6 +77,7 @@ struct autoupdate_params_s
 {
     ts::str_c ver;
     ts::wstr_c path;
+    ts::str_c aurl;
     ts::str_c proxy_addr;
     int proxy_type = 0;
     autoupdate_beh_e autoupdate = AUB_NO;
@@ -349,9 +354,10 @@ public:
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_INIT);
 
     GM_RECEIVER( application_c, ISOGM_PROFILE_TABLE_SAVED );
+    GM_RECEIVER( application_c, ISOGM_CHANGED_SETTINGS );
     GM_RECEIVER( application_c, GM_UI_EVENT );
     GM_RECEIVER( application_c, ISOGM_DELIVERED );
-    GM_RECEIVER(application_c, ISOGM_EXPORT_PROTO_DATA);
+    GM_RECEIVER( application_c, ISOGM_EXPORT_PROTO_DATA );
     
 
     ts::array_inplace_t<av_contact_s,0> m_avcontacts;
@@ -523,6 +529,8 @@ public:
 
 	application_c( const ts::wchar * cmdl );
 	~application_c();
+
+    void apply_debug_options();
 
     static ts::str_c get_downloaded_ver();
     bool b_update_ver(RID, GUIPARAM);

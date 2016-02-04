@@ -16,7 +16,7 @@ void avatar_s::load( const void *body, int size, int tag_ )
             bmp.convert_24to32(bmp4);
             bmp = bmp4;
         }
-        ts::ivec2 asz = parsevec2( gui->theme().conf().get_string(CONSTASTR("avatarsize")), ts::ivec2(32)); //-V807
+        ts::ivec2 asz = parsevec2( gui->theme().conf().get_string(CONSTASTR("avatarsize")), ts::ivec2(32));
         if (bmp.info().sz != asz)
         {
             ts::bitmap_c bmprsz;

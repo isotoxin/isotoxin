@@ -164,6 +164,8 @@ public:
     ~guirect_watch_c();
 };
 
+//-V:theme():807
+
 class gui_c
 {
 	friend class HOLD;

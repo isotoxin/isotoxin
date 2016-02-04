@@ -44,6 +44,7 @@ namespace ipc
 
         int start(const char *junction_name); // application should call this, to connect to ipc junction. junction_name is unique per system and only two apps (or one app twice) can use one junction_name
         void stop(); // don't forget to execute stop at end of all
+        void stop_signal();
 
         void wait( processor_func *df, void *par_data, idlejob_func *ij, void *par_ij ); // set callback and wait. processor_func should return IPCR_BREAK to stop waiting; it is possible to call idlejob from another thread
         void idlejob(); // initiate idlejob call - usable to call from another thread

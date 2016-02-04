@@ -59,7 +59,7 @@ DWORD WINAPI UpdateThreadProc(LPVOID pData)
 	return 0;
 }
 
-Player::Player()
+Player::Player() //-V730
 {
     player_data_s &pd = *(player_data_s *)&data;
     pd.player_data_s::player_data_s();

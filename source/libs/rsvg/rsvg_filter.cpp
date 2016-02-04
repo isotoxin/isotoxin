@@ -1,6 +1,7 @@
 #include "_precompiled.h"
 #include "rsvg_internals.h"
 
+//-V::550
 
 struct rsvg_working_surf_s
 {
@@ -950,10 +951,10 @@ void rsvg_filter_ctransfer_c::c_load(rsvg_load_context_s & ctx, ts::rapidxml::xm
         {
             if (ts::pstr_c(ai->value()).equals(CONSTASTR("linear")))
                 t = T_LINEAR;
-        } if (attrname.equals(CONSTASTR("slope")))
+        } else if (attrname.equals(CONSTASTR("slope")))
         {
             slope = ts::pstr_c(ai->value()).as_float();
-        } if (attrname.equals(CONSTASTR("intercept")))
+        } else if (attrname.equals(CONSTASTR("intercept")))
         {
             intercept = ts::pstr_c(ai->value()).as_float();
         }

@@ -15,6 +15,8 @@ Version: 1456
 License: BSD
 */
 
+//-V:ANY:512
+
 #include "toolset.h"
 #include "fourcc.h"
 

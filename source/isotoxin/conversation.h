@@ -352,6 +352,7 @@ class gui_message_item_c : public gui_label_ex_c
         };
         ts::array_inplace_t<btn_s, 1>  btns;
         ts::uninitialized<44 /* sizeof(image_loader_c) */ > imgloader;
+        ts::shared_ptr<theme_rect_s> shadow;
 
         ts::safe_ptr<gui_hslider_c> pbar;
         ts::wstr_c rectt, pbtext;
@@ -382,7 +383,7 @@ class gui_message_item_c : public gui_label_ex_c
         return false;
     }
 
-    image_loader_c &imgloader_get();
+    image_loader_c &imgloader_get(addition_file_data_s **ftb);
 
     addition_file_data_s &addition_file_data()
     {

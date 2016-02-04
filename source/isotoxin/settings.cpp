@@ -89,6 +89,7 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
         fontsz = ts::tmin(fontsz, fp.size.x, fp.size.y);
     });
 
+    ts::hashmap_t< ts::wstr_c, ts::abp_c > bps;
     ts::wstrings_c fns, ifns;
     ts::g_fileop->find(fns, CONSTWSTR("themes/*/struct.decl"), true);
 
@@ -99,6 +100,15 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
     };
 
     ts::tmp_array_inplace_t<preset_s, 4> tpresets;
+
+    auto getbp = [&]( const ts::wstr_c &fn ) -> ts::abp_c &
+    {
+        if (auto *b = bps.find(fn))
+            return b->value;
+        ts::abp_c &bp = bps[ fn ];
+        ts::g_fileop->load(fn, bp);
+        return bp;
+    };
 
     auto detect_presets = [&](ts::wstr_c thn)
     {
@@ -111,8 +121,8 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
 
         for(;;)
         {
-            ts::abp_c bp;
-            if (!ts::g_fileop->load(path.set_length(7).append(thn).append(CONSTWSTR("/struct.decl")), bp)) break;
+            ts::abp_c &bp = getbp( path.set_length(7).append(thn).append(CONSTWSTR("/struct.decl")) );
+            if (bp.is_empty()) break;
             ts::abp_c *par = bp.get(CONSTASTR("parent"));
             if (!par) break;
             thn = to_wstr( par->as_string() );
@@ -139,8 +149,8 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
 
             if (pn.is_empty()) continue;
 
-            ts::abp_c pbp;
-            if (!ts::g_fileop->load(f, pbp)) continue;
+            ts::abp_c &pbp = getbp(f);
+            if (pbp.is_empty()) continue;
             const ts::abp_c *conf = pbp.get(CONSTASTR("conf"));
 
             preset_s &p = tpresets.add();
@@ -171,8 +181,8 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
 
         if (!n.is_empty())
         {
-            ts::abp_c bp;
-            if (!ts::g_fileop->load(f, bp)) continue;
+            ts::abp_c &bp = getbp(f);
+            if (bp.is_empty()) continue;
             const ts::abp_c *conf = bp.get(CONSTASTR("conf"));
 
             if (tpresets.size() == 0)
@@ -799,6 +809,8 @@ void dialog_settings_c::mod()
         bgroups[BGROUP_COMMON2].add(0, set_away_on_timer_minutes_value > 0);
         bgroups[BGROUP_COMMON2].add(UIOPT_KEEPAWAY);
 
+        bgroups[BGROUP_COMMON3].add(OPTOPT_POWER_USER);
+
         bgroups[BGROUP_GCHAT].add(GCHOPT_MUTE_MIC_ON_INVITE);
         bgroups[BGROUP_GCHAT].add(GCHOPT_MUTE_SPEAKER_ON_INVITE);
 
@@ -815,7 +827,6 @@ void dialog_settings_c::mod()
 
         bgroups[BGROUP_HISTORY].add(MSGOP_KEEP_HISTORY);
         bgroups[BGROUP_HISTORY].add(MSGOP_LOAD_WHOLE_HISTORY);
-
 
         PREPARE(load_history_count, prf().min_history());
 
@@ -872,6 +883,12 @@ void dialog_settings_c::mod()
     SOUNDS
 #undef SND
 
+    auto getdebug = []()->ts::astrmap_c
+    {
+        ts::astrmap_c d(cfg().debug());
+        return d;
+    };
+    PREPARE(debug, std::move(getdebug()));
 
     int textrectid = 0;
 
@@ -893,6 +910,10 @@ void dialog_settings_c::mod()
         .add(TTT("Audio",125), 0, TABSELMI(MASK_APPLICATION_SETSOUND))
         .add(TTT("Sounds",293), 0, TABSELMI(MASK_APPLICATION_SOUNDS))
         .add(TTT("Video",347), 0, TABSELMI(MASK_APPLICATION_VIDEO));
+
+    if ( profile_selected && prf().get_options().is(OPTOPT_POWER_USER) )
+    m.add_sub(TTT("Advanced",394))
+        .add(TTT("Debug",395), 0, TABSELMI(MASK_ADVANCED_DEBUG));
 
     descmaker dm(this);
     dm << MASK_APPLICATION_COMMON; //_________________________________________________________________________________________________//
@@ -1041,6 +1062,11 @@ void dialog_settings_c::mod()
                     .add(TTT("Keep [b]Away[/b] status until user typing",363), 0, MENUHANDLER(), CONSTASTR("4"))
             ).setname(CONSTASTR("awayflags"));
 
+        dm().vspace(10);
+        dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_COMMON3, handler), bgroups[BGROUP_COMMON3].current).setmenu(
+            menu_c().add(TTT("I'm power user. Please, show me advanced settings.",396), 0, MENUHANDLER(), CONSTASTR("1"))
+            );
+
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
         dm().page_caption(TTT("Chat settings",110));
         int enter_key = ctl2send; if (enter_key == EKO_ENTER_NEW_LINE_DOUBLE_ENTER) enter_key = EKO_ENTER_NEW_LINE;
@@ -1145,6 +1171,24 @@ void dialog_settings_c::mod()
         dm().button(HGROUP_MEMBER, TTT("Add new network connection",58), DELEGATE(this, addnetwork)).height(35).setname(CONSTASTR("addnet"));
     }
 
+
+    dm << MASK_ADVANCED_DEBUG;
+
+    dm().vspace();
+    int dopts = 0;
+    dopts |= debug.get(CONSTASTR(DEBUG_OPT_FULL_DUMP)).as_int() ? 1 : 0;
+    dopts |= debug.get(CONSTASTR(DEBUG_OPT_LOGGING)).as_int() ? 2 : 0;
+
+    dm().checkb(ts::wstr_c(), DELEGATE(this, debug_handler), dopts).setmenu(
+        menu_c().add(TTT("Create full memory dump on crash",397), 0, MENUHANDLER(), CONSTASTR("1"))
+                .add(TTT("Enable logging",398), 0, MENUHANDLER(), CONSTASTR("2"))
+        ).custom_mask(1);
+
+    dm().vspace();
+    dm().textfield(TTT("Addition updates URL",399), to_wstr(debug.get(CONSTASTR("local_upd_url"))), DELEGATE(this, debug_local_upd_url)).custom_mask(1);
+
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     gui_vtabsel_c &tab = MAKE_CHILD<gui_vtabsel_c>( getrid(), m );
     tab.leech( TSNEW(leech_dock_left_s, SETTINGS_VTAB_WIDTH) );
     edges = ts::irect(SETTINGS_VTAB_WIDTH + VTAB_OTS,0,0,0);
@@ -1152,6 +1196,35 @@ void dialog_settings_c::mod()
     mod();
 
     return 1;
+}
+
+bool dialog_settings_c::debug_local_upd_url(const ts::wstr_c &v)
+{
+    if (v.is_empty())
+        debug.unset(CONSTASTR("local_upd_url"));
+    else
+        debug.set( CONSTASTR("local_upd_url") ) = ts::to_str(v);
+
+    mod();
+    return true;
+}
+
+bool dialog_settings_c::debug_handler(RID, GUIPARAM p)
+{
+    int opts = as_int(p);
+
+    if (0 == (opts & 1))
+        debug.unset(CONSTASTR(DEBUG_OPT_FULL_DUMP));
+    else
+        debug.set(CONSTASTR(DEBUG_OPT_FULL_DUMP)) = CONSTASTR("1");
+
+    if (0 == (opts & 2))
+        debug.unset(CONSTASTR(DEBUG_OPT_LOGGING));
+    else
+        debug.set(CONSTASTR(DEBUG_OPT_LOGGING)) = CONSTASTR("-1");
+
+    mod();
+    return true;
 }
 
 bool dialog_settings_c::startopt_handler( RID, GUIPARAM p )
@@ -1810,6 +1883,7 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
         gmsg<ISOGM_CHANGED_SETTINGS>(0, CFG_LANGUAGE, curlang).send();
     }
     bool fontchanged = false;
+    ts::flags32_s::BITS msgopts_changed = 0;
     if (profile_selected)
     {
         prf().ctl_to_send(ctl2send);
@@ -1819,7 +1893,7 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
         prf().min_history(load_history_count);
         prf().inactive_time( (bgroups[BGROUP_COMMON2].current & 2) ? set_away_on_timer_minutes_value : 0 );
 
-        ts::flags32_s::BITS msgopts_changed = msgopts_current ^ msgopts_original;
+        msgopts_changed = msgopts_current ^ msgopts_original;
 
         if (prf().set_options( msgopts_current, msgopts_changed ) || ch1)
             gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS, msgopts_changed).send();
@@ -1839,7 +1913,6 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
 
     if (is_changed(startopt))
         set_startopts();
-
 
     if (autoupdate_proxy > 0 && !check_netaddr(autoupdate_proxy_addr))
         autoupdate_proxy_addr = CONSTASTR(DEFAULT_PROXY);
@@ -1899,6 +1972,11 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
             }
             break;
         }
+    }
+
+    if (cfg().debug(debug.to_str()) || 0!=(msgopts_changed & OPTOPT_POWER_USER))
+    {
+        gmsg<ISOGM_CHANGED_SETTINGS>(0, CFG_DEBUG).send();
     }
 
     if (fontchanged)

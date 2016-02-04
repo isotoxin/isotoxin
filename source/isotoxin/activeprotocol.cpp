@@ -443,6 +443,7 @@ void active_protocol_c::worker_check()
     if (ipcs.ipc_ok)
     {
         ipcp = &ipcs;
+        push_debug_settings();
         ipcp->send(ipcw(AQ_SET_PROTO) << syncdata.lock_read()().data.tag);
         ipcp->wait_loop(DELEGATE(this, tick));
         auto w = syncdata.lock_write();
@@ -670,9 +671,20 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
                 syncdata.lock_write()().dsp_flags = flags;
             }
             break;
+        case CFG_DEBUG:
+            push_debug_settings();
+            break;
         }
     }
     return 0;
+}
+
+void active_protocol_c::push_debug_settings()
+{
+    if (prf().get_options().is(OPTOPT_POWER_USER))
+        ipcp->send(ipcw(AQ_DEBUG_SETTINGS) << cfg().debug());
+    else
+        ipcp->send(ipcw(AQ_DEBUG_SETTINGS) << ts::str_c());
 }
 
 const ts::bitmap_c &active_protocol_c::get_icon(int sz, icon_type_e icot)

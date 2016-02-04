@@ -693,6 +693,15 @@ void text_adapt_user_input(ts::str_c &text)
 
     // markdown
     
+    ts::tmp_tbuf_t< ts::ivec2 > nochange;
+    ts::ivec2 linkinds;
+    for (int i = 0; text_find_link(text, i, linkinds);)
+    {
+        nochange.add() = linkinds;
+        i = linkinds.r1;
+    }
+
+
     struct md_s
     {
         ts::asptr md, x, y;
@@ -706,19 +715,54 @@ void text_adapt_user_input(ts::str_c &text)
         { CONSTASTR("_"), CONSTASTR("<i>"), CONSTASTR("</i>") },
     };
 
-    auto process_text_md = [](const md_s &md, ts::str_c &text)
+    auto in_nochange_range = [&]( int i, int sz ) -> int
+    {
+        for (const ts::ivec2 &dr : nochange)
+            if (i > (dr.r0 - sz) && i < dr.r1)
+                return dr.r1;
+        return -1;
+    };
+
+    auto process_text_md = [&](const md_s &md, ts::str_c &text)
     {
         for (int i = 0; i < text.get_length();)
         {
             int md0 = text.find_pos(i, md.md);
             if (md0 >= 0)
             {
-                int md1 = text.find_pos(md0 + md.md.l + 1, md.md);
+                int inr = in_nochange_range(md0, md.md.l);
+                if (inr >= 0)
+                {
+                    i = inr;
+                    continue;
+                }
+
+                i = md0 + md.md.l + 1;
+            search_end_again:
+                int md1 = text.find_pos(i, md.md);
                 if (md1 > md0)
                 {
+                    inr = in_nochange_range(md1, md.md.l);
+                    if (inr >= 0)
+                    {
+                        i = inr;
+                        goto search_end_again;
+                    }
+
                     text.replace(md0, md.md.l, md.x);
                     text.replace(md1 + md.x.l - md.md.l, md.md.l, md.y);
-                    i = md1 + md.x.l + md.y.l - md.md.l * 2;
+                    int addi = md.x.l + md.y.l - md.md.l * 2;
+
+                    for (ts::ivec2 &dr : nochange)
+                    {
+                        if (dr.r0 > md1)
+                        {
+                            dr.r0 += addi;
+                            dr.r1 += addi;
+                        }
+                    }
+
+                    i = md1 + addi;
                 }
                 else
                     i = md0 + md.md.l;

@@ -1,5 +1,7 @@
 #include "_precompiled.h"
 
+//-V::550
+
 __forceinline double fRED( ts::TSCOLOR c )
 {
     return (double)ts::RED(c) * (1.0/255.0);
@@ -60,7 +62,10 @@ void cairo_paths_c::close()
 
     /* Add a 'move-to' element */
     if (last_move_to_index >= 0)
-        move_to( paths.get(last_move_to_index + 1).point.x, paths.get(last_move_to_index + 1).point.y );
+    {
+        const auto &p = paths.get(last_move_to_index + 1).point;
+        move_to( p.x, p.y );
+    }
 }
 
 void cairo_paths_c::line_to(double x, double y)

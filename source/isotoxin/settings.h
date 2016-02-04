@@ -120,6 +120,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
         MASK_APPLICATION_SETSOUND   = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_APPLICATION_SOUNDS     = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_APPLICATION_VIDEO      = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_ADVANCED_DEBUG         = SETBIT( NUMGEN_NEXT(ctlm) ),
     };
 
     ts::shared_ptr<theme_rect_s> shadow;
@@ -269,6 +270,7 @@ private:
     {
         BGROUP_COMMON1,
         BGROUP_COMMON2,
+        BGROUP_COMMON3,
         BGROUP_GCHAT,
         BGROUP_MSGOPTS,
         BGROUP_TYPING,
@@ -428,6 +430,10 @@ private:
     void networks_tab_selected();
 
     bool save_and_close(RID r = RID(), GUIPARAM prm = nullptr);
+
+    ts::astrmap_c debug;
+    bool debug_handler(RID, GUIPARAM p);
+    bool debug_local_upd_url(const ts::wstr_c &);
 
 protected:
     /*virtual*/ int unique_tag() { return UD_SETTINGS; }

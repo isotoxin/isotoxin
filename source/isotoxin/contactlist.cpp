@@ -985,7 +985,7 @@ bool gui_contact_item_c::allow_drop() const
                     force_state_icon = true;
                     break;
                 case CS_ONLINE:
-                    if (ost >= 0 && ost < ARRAY_SIZE(g_app->preloaded_stuff().online))
+                    if (ost < ARRAY_SIZE(g_app->preloaded_stuff().online))
                         state_icon = g_app->preloaded_stuff().online[ost];
                     else
                         state_icon = g_app->preloaded_stuff().online[COS_DND];

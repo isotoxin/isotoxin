@@ -137,7 +137,7 @@ public:
 
 class RawSource : public Source//базовый класс для пользовательских источников звука, данные которых уже распакованы (т.е. представлены в виде RAW-семплов без заголовка)
 {
-	int readStage;
+	int readStage = 0;
 	/*virtual*/ int read(char *dest, int size);
 	/*virtual*/ void rewind(bool start);
 
@@ -156,12 +156,12 @@ public:
 
 struct SoundGroupSlots
 {
-	class Slot *slots;
-	int active, max;
-	bool is3d;
-	float volume;
+	class Slot *slots = nullptr;
+	int active = 0, max = 0;
+	float volume = 1.0f;
+    bool is3d = false;
 
-	SoundGroupSlots() : slots(nullptr), active(0), volume(1) {}
+	SoundGroupSlots() {}
 	~SoundGroupSlots();
 	void initialize(const struct SlotInitParams &sip);
 };

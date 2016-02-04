@@ -1,15 +1,15 @@
 #include "stdafx.h"
 #include "appver.inl"
 
-#if LOGGING
-#define logm Log
-void log_auth_key( const char *what, const byte *key );
-void log_bytes( const char *what, const byte *b, int sz );
-#else
+//#if LOGGING
+//#define logm Log
+//void log_auth_key( const char *what, const byte *key );
+//void log_bytes( const char *what, const byte *b, int sz );
+//#else
 #define log_auth_key(a,b)
 #define log_bytes(a, b, c)
 #define logm(...)
-#endif 
+//#endif 
 
 packetgen::packetgen()
 {

@@ -85,6 +85,8 @@ enum commands_e
     AQ_EXPORT_DATA,
     HQ_EXPORT_DATA,
 
+    AQ_DEBUG_SETTINGS,
+
     MAX_COMMANDS
 };
 

@@ -25,11 +25,13 @@ ts::uint32 mainrect_c::gm_handler( gmsg<ISOGM_APPRISE> & )
 ts::uint32 mainrect_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
 {
     if (ch.pass == 0)
+    {
         if (PP_ONLINESTATUS == ch.sp)
         {
             ts::irect r(0,0,100,100); // just redraw left top 100px square of main rect. (we hope that app icon less then 100px)
             getengine().redraw( &r );
         }
+    }
 
     return 0;
 }

@@ -1085,6 +1085,13 @@ public:
         return *this;
     }
 
+    str_t & clone()
+    {
+        set_length( get_length(), true );
+        return *this;
+    }
+
+
     str_t &  append_unicode_as_utf8(long n) // encode utf8 form int32 code
     {
         static_assert( sizeof(TCHARACTER) == 1, "wide is bad" );

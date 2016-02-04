@@ -8,7 +8,7 @@ struct player_data_s
     LPDIRECTSOUNDBUFFER dsPrimaryBuffer = nullptr;
     HANDLE hQuitEvent = nullptr, hUpdateThread = nullptr;
     CRITICAL_SECTION critSect;
-    int sgCount;
+    int sgCount = 0;
     SoundGroupSlots *soundGroups = nullptr;
     Decoder *gdecoder = nullptr;
 

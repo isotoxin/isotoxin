@@ -103,11 +103,44 @@ protected:
 
     struct description_s
     {
-        guirect_c::sptr_t ctlptr; // can be nullptr (if other tab selected, or parent control not yet created)
+        ts::tmp_array_safe_t<guirect_c,0> ctlptrs;
+        //guirect_c::sptr_t ctlptr; // can be nullptr (if other tab selected, or parent control not yet created)
+        void setctlptr( guirect_c *r )
+        {
+            int cnt = ctlptrs.size();
+            int j = -1;
+            for( int i=0;i<cnt;++i )
+            {
+                guirect_c::sptr_t &ptr = ctlptrs.get(i);
+                if (ptr.get() == r)
+                {
+                    if (j >= 0)
+                        ctlptrs.remove_fast(j);
+                    return;
+                }
+                if (ptr.expired())
+                {
+                    j = i;
+                    continue;
+                }
+            }
+            if (j < 0)
+                ctlptrs.add() = r;
+            else
+                ctlptrs.get(j) = r;
+        }
+        bool present( RID r ) const
+        {
+            for( const guirect_c *rr : ctlptrs )
+                if (rr && rr->getrid() == r) return true;
+            return false;
+        }
+
 
         int subctltag = -1;
         ts::str_c name;
         ts::uint32 mask = 0;
+        ts::uint32 c_mask = 0;
         ts::wstr_c desc;
         ts::wstr_c text;
         ts::wstr_c hint;
@@ -138,21 +171,25 @@ protected:
         ctl_e ctl;
         int width_ = 0;
         int height_ = 0;
-        bool focus_ = false;
-        bool readonly_ = false;
-        bool changed = false;
-        bool is_err = false;
+
+        static const ts::flags32_s::BITS o_visible = SETBIT(0);
+        static const ts::flags32_s::BITS o_focus = SETBIT(1);
+        static const ts::flags32_s::BITS o_readonly = SETBIT(2);
+        static const ts::flags32_s::BITS o_changed = SETBIT(3);
+        static const ts::flags32_s::BITS o_err = SETBIT(4);
+        ts::flags32_s options = o_visible;
+
         DEBUGCODE(bool initialization = true;) // protection flag - [this] can be changed while [initialization] == true due resize of array realloc.
 
         bool updvalue( const ts::wstr_c &t )
         {
             ASSERT( _TEXT == ctl || _PASSWD == ctl || _PATH == ctl || _FILE == ctl );
-            changed = false;
+            options.clear( o_changed );
             if (textchecker && textchecker(t))
             {
-                if (!changed)
+                if (!options.is( o_changed ))
                     text = t;
-                changed = false;
+                options.clear( o_changed );
                 return true;
             }
             return false;
@@ -179,11 +216,13 @@ protected:
         }
         ts::wstr_c gethint() const {return hint;}
 
+        description_s&custom_mask(ts::uint32 cmask) { c_mask = cmask; return *this; }
         description_s&sethint(const ts::wsptr&h) { hint=h; return *this; }
         description_s&setname(const ts::asptr&n) { name=n; return *this; }
         description_s&setmenu( const menu_c &m ) { items = m; return *this; }
-        description_s&readonly(bool f = true) { readonly_ = f; return *this; }
-        description_s&focus(bool f = true) { focus_ = f; return *this; }
+        description_s&readonly(bool f = true) { options.init( o_readonly, f ); return *this; }
+        description_s&focus(bool f = true) { options.init( o_focus, f ); return *this; }
+        description_s&visible(bool f) { options.init( o_visible, f ); return *this; }
         description_s&width(int w) { width_ = w; return *this; }
         description_s&height(int h) { height_ = h; return *this; }
         description_s&size(int w, int h) { width_ = w; height_ = h; return *this; }
@@ -283,11 +322,11 @@ protected:
 
     RID hgroup( const ts::wsptr& desc );
     int radio( const ts::array_wrapper_c<const radio_item_s> & items, GUIPARAMHANDLER handler, GUIPARAM current = nullptr );
-    int check( const ts::array_wrapper_c<const check_item_s> & items, GUIPARAMHANDLER handler, ts::uint32 initial = 0, int tag = 0 );
+    int check( const ts::array_wrapper_c<const check_item_s> & items, GUIPARAMHANDLER handler, ts::uint32 initial = 0, int tag = 0, bool visible = true );
     RID label(const ts::wstr_c &text, bool visible = true, bool is_err = false);
     RID vspace(int height);
     RID panel(int height, GUIPARAMHANDLER drawhandler);
-    RID textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e role, gui_textedit_c::TEXTCHECKFUNC checker = gui_textedit_c::TEXTCHECKFUNC(), const evt_data_s *addition = nullptr, int multiline = 0, RID parent = RID() );
+    RID textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e role, gui_textedit_c::TEXTCHECKFUNC checker = gui_textedit_c::TEXTCHECKFUNC(), const evt_data_s *addition = nullptr, int multiline = 0, RID parent = RID(), bool create_visible = true );
     RID list(int height, const ts::wstr_c & emptymessage);
     RID combik( const menu_c &m, RID parent = RID() );
 
@@ -298,6 +337,7 @@ protected:
 
     virtual void tabselected(ts::uint32 mask) {}
 
+    void ctlshow( ts::uint32 cmask, bool vis );
     void ctlenable( const ts::asptr&name, bool enblflg );
 
     void set_check_value( const ts::asptr&name, bool v );

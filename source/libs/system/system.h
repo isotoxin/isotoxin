@@ -146,7 +146,7 @@ struct system_conf_s
     bool    is_exit; // sys_exit
     bool    is_aborting;
     bool    is_active;
-    bool    is_loop_in_background;
+    bool    is_sys_loop; // loop from system modal window
     bool    is_app_restart;
     bool    is_app_need_quit;
     bool    is_app_running;

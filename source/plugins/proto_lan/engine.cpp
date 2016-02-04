@@ -162,15 +162,19 @@ asptr pid_name(packet_id_e pid)
 
 void log_auth_key( const char *what, const byte *key )
 {
+    /*
     str_c nonce_part; nonce_part.append_as_hex(key, SIZE_KEY_NONCE_PART);
     str_c pass_part; pass_part.append_as_hex(key + SIZE_KEY_NONCE_PART, SIZE_KEY_PASS_PART);
     Log( "%s / %s - %s", nonce_part.cstr(), pass_part.cstr(), what );
+    */
 }
 
 void log_bytes( const char *what, const byte *b, int sz )
 {
+    /*
     str_c bs; bs.append_as_hex(b, sz);
     Log("%s - %s", bs.cstr(), what);
+    */
 }
 
 #define logm Log
@@ -186,6 +190,7 @@ void socket_s::close()
 {
     if (_socket != INVALID_SOCKET)
     {
+        MaskLog( LFLS_CLOSE, "%i", _socket );
         closesocket(_socket);
         _socket = INVALID_SOCKET;
     }
@@ -195,7 +200,7 @@ void socket_s::flush_and_close()
     if (_socket != INVALID_SOCKET)
     {
         int errm = shutdown(_socket, SD_SEND);
-        logm( "socket shutdown %i", errm );
+        MaskLog( LFLS_CLOSE, "shutdown %i", _socket );
         closesocket(_socket);
         _socket = INVALID_SOCKET;
     }
@@ -207,7 +212,10 @@ void socket_s::flush_and_close()
 void udp_sender::close()
 {
     for( prepared_sock_s &s : socks )
+    {
+        MaskLog(LFLS_CLOSE, "udp sender %i", s.s);
         closesocket(s.s);
+    }
 }
 
 void udp_sender::prepare()
@@ -398,17 +406,22 @@ static void sacceptor(tcp_listner *me)
         if (INVALID_SOCKET == me->_socket)
             continue;
 
+        MaskLog( LFLS_ESTBLSH, "listener %i, port %i", me->_socket, port );
+
         addr.sin_family = AF_INET;
         addr.sin_addr.S_un.S_addr = 0;
         addr.sin_port = htons((unsigned short)port);
 
-        if (SOCKET_ERROR == bind(me->_socket, (SOCKADDR*)&addr, sizeof(addr))){
+        if (SOCKET_ERROR == bind(me->_socket, (SOCKADDR*)&addr, sizeof(addr)))
+        {
+            MaskLog( LFLS_CLOSE, "bind fail %i, port %i", me->_socket, port );
             me->close();
             continue;
         };
         
         if (SOCKET_ERROR == listen(me->_socket, SOMAXCONN))
         {
+            MaskLog( LFLS_CLOSE, "listen fail %i, port %i", me->_socket, port );
             me->close();
             continue;
         }
@@ -425,8 +438,10 @@ static void sacceptor(tcp_listner *me)
             SOCKET s = accept(me->_socket, (sockaddr*)&addr, &AddrLen);
             if (INVALID_SOCKET == s)
                 break;
-            me->accepted.push( new tcp_pipe(s, addr) );
 
+            MaskLog( LFLS_ESTBLSH, "accept %i from %i.%i.%i.%i", s, (int)addr.sin_addr.S_un.S_un_b.s_b1, (int)addr.sin_addr.S_un.S_un_b.s_b2, (int)addr.sin_addr.S_un.S_un_b.s_b3, (int)addr.sin_addr.S_un.S_un_b.s_b4 );
+
+            me->accepted.push( new tcp_pipe(s, addr) );
         }
 
         break;
@@ -482,6 +497,8 @@ bool tcp_pipe::connect()
     if (INVALID_SOCKET == _socket)
         return false;
 
+    MaskLog( LFLS_ESTBLSH, "connect %i", _socket );
+
     int val = 1024 * 128;
     if (SOCKET_ERROR == setsockopt(_socket, SOL_SOCKET, SO_RCVBUF, (char*)&val, sizeof(val)))
     {
@@ -501,6 +518,9 @@ bool tcp_pipe::connect()
         //if (WSAEWOULDBLOCK != error_)
             return false;
     }
+
+    MaskLog( LFLS_ESTBLSH, "connected %i", _socket );
+
     return true;
 }
 
@@ -533,10 +553,6 @@ packet_id_e tcp_pipe::packet_id()
         if (rcvbuf_sz >= sz)
         {
             packet_id_e pid = (packet_id_e)ntohs(*(short *)rcvbuf);;
-#if LOGGING
-            asptr pidname = pid_name(pid);
-            if (pid != PID_NONE) Log("recv: %s", pidname.s);
-#endif
             return pid;
         }
     }
@@ -824,6 +840,8 @@ void lan_engine::tick(int *sleep_time_ms)
                 {
                     if (c->key_sent)
                     {
+                        MaskLog( LFLS_CLOSE, "c: %i, state: %i / key sent", c->id, c->state );
+
                         // oops. no invite still received
                         // it means no valid connection
                         c->pipe.close(); // goodbye connection
@@ -831,13 +849,15 @@ void lan_engine::tick(int *sleep_time_ms)
                     } else
                     {
                         pg_meet(c->public_key, c->temporary_key);
-                        bool ok = c->pipe.send(packet_buf_encoded, packet_buf_encoded_len);
-                        if (ok)
+                        if (c->pipe.send(packet_buf_encoded, packet_buf_encoded_len))
                         {
                             c->key_sent = true;
                             c->nextactiontime = ct + 2000;
                         } else
+                        {
+                            MaskLog( LFLS_CLOSE, "c: %i, state: %i / key send fail", c->id, c->state );
                             c->pipe.close();
+                        }
                     }
 
                 } else
@@ -857,6 +877,7 @@ void lan_engine::tick(int *sleep_time_ms)
                     {
                         c->pipe.connect();
                         c->nextactiontime = ct + 2000;
+                        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / connect / time: %i", c->id, c->state, c->nextactiontime);
                     }
                 }
                 break;
@@ -871,6 +892,7 @@ void lan_engine::tick(int *sleep_time_ms)
                         c->data_changed = true;
                     } else
                     {
+                        MaskLog( LFLS_CLOSE, "c: %i, state: %i / invite send fail", c->id, c->state );
                         c->pipe.close();
                         c->nextactiontime = ct;
                     }
@@ -886,25 +908,23 @@ void lan_engine::tick(int *sleep_time_ms)
                 {
                     if (c->key_sent)
                     {
-                        logm("pg_nonce close, next action time: %i", c->nextactiontime);
+                        MaskLog( LFLS_CLOSE, "c: %i, state: %i / key sent / time: %i", c->id, c->state, c->nextactiontime );
                         c->pipe.close();
                     } else
                     {
                         randombytes_buf(c->authorized_key, SIZE_KEY_NONCE_PART); // rebuild nonce
 
                         pg_nonce(c->public_key, c->authorized_key);
-                        bool ok = c->pipe.send(packet_buf_encoded, packet_buf_encoded_len);
-                        if (ok)
+                        if (c->pipe.send(packet_buf_encoded, packet_buf_encoded_len))
                         {
                             c->key_sent = true;
                             c->nextactiontime = ct + 5000; // waiting PID_READY in 5 seconds, then disconnect
 
-                            logm("pg_nonce send ok, next action time: %i", c->nextactiontime);
+                            MaskLog( LFLS_ESTBLSH, "c: %i, state: %i / key sent ok / time: %i", c->id, c->state, c->nextactiontime );
 
                         } else
                         {
-                            logm("pg_nonce send fail, close pipe");
-
+                            MaskLog( LFLS_CLOSE, "c: %i, state: %i / key send fail", c->id, c->state );
                             c->pipe.close();
                             c->nextactiontime = ct;
                         }
@@ -912,18 +932,18 @@ void lan_engine::tick(int *sleep_time_ms)
 
                 } else
                 {
-                    logm("pg_nonce not connected");
+                    MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / not connected", c->id, c->state);
 
                     if (c->key_sent)
                     {
-                        logm("pg_nonce ++reconnect");
+                        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / ++reconnect", c->id, c->state);
 
                         ++c->reconnect;
                         c->key_sent = false;
 
                         if (c->reconnect > 10)
                         {
-                            logm("pg_nonce max reconnect");
+                            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / max reconnect", c->id, c->state);
                             c->state = contact_s::OFFLINE;
                         }
                     }
@@ -934,7 +954,7 @@ void lan_engine::tick(int *sleep_time_ms)
                         c->pipe.connect();
                         c->nextactiontime = ct + 2000;
 
-                        logm("pg_nonce connect, next action time: %i", c->nextactiontime);
+                        MaskLog( LFLS_ESTBLSH, "c: %i, state: %i / connect / time: %i", c->id, c->state, c->nextactiontime );
                     }
                 }
                 break;
@@ -1006,7 +1026,10 @@ void lan_engine::tick(int *sleep_time_ms)
                 break;
             case contact_s::ALMOST_ROTTEN:
                 if (c->pipe.connected())
+                {
+                    MaskLog(LFLS_CLOSE, "c: %i, state: %i / almost rotten", c->id, c->state);
                     c->pipe.close();
+                }
                 break;
             }
             
@@ -1117,9 +1140,11 @@ void lan_engine::tick(int *sleep_time_ms)
         switch (pipe->packet_id())
         {
         case PID_MEET:
+            MaskLog(LFLS_ESTBLSH, "accepted meet %i", pipe->_socket);
             pipe = pp_meet(pipe, stream_reader(pipe->rcvbuf, pipe->rcvbuf_sz));
             break;
         case PID_NONCE:
+            MaskLog(LFLS_ESTBLSH, "accepted nonce %i", pipe->_socket);
             pipe = pp_nonce(pipe, stream_reader(pipe->rcvbuf, pipe->rcvbuf_sz));
             break;
         case PID_NONE:
@@ -1179,6 +1204,8 @@ void lan_engine::pp_hallo( unsigned int IPv4, int back_port, int mastertag, cons
             c->pipe.set_address(IPv4, back_port);
             c->reconnect = 0;
             c->nextactiontime = time_ms();
+
+            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / on hallo from: %i.%i.%i.%i", c->id, c->state, (int)(IPv4&0xff), (int)((IPv4>>8)&0xff), (int)((IPv4>>16)&0xff), (int)((IPv4>>24)&0xff));
         }
     }
 }
@@ -1243,12 +1270,13 @@ tcp_pipe * lan_engine::pp_meet( tcp_pipe * pipe, stream_reader &&r )
 
 tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
 {
-    logm("pp_nonce (rcvd) ==============================================================");
-    log_bytes("my_public_key", my_public_key, SIZE_PUBLIC_KEY);
+    //logm("pp_nonce (rcvd) ==============================================================");
+    //log_bytes("my_public_key", my_public_key, SIZE_PUBLIC_KEY);
 
     if (r.end())
     {
-        logm("pp_nonce no data");
+        MaskLog(LFLS_ESTBLSH, "nonce no data");
+
         tcp_in.accepted.push(pipe);
         return nullptr;
     }
@@ -1256,17 +1284,19 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
     const byte *peer_public_key = r.read(SIZE_PUBLIC_KEY);
     if (!peer_public_key)
     {
-        logm("pp_nonce no peer_public_key");
+        MaskLog(LFLS_ESTBLSH, "nonce no pub key");
+
         tcp_in.accepted.push(pipe);
         return nullptr;
     }
    
-    log_bytes("peer_public_key (rcvd)", peer_public_key, SIZE_PUBLIC_KEY);
-
     byte pubid[SIZE_PUBID];
     make_raw_pub_id(pubid, peer_public_key);
 
     contact_s *c = find_by_rpid(pubid);
+
+    MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / nonce", (c ? c->id : -1), (c ? c->state : -1));
+
     if (c == nullptr || (c->state != contact_s::OFFLINE))
     {
         if (c && c->state == contact_s::BACKCONNECT && 0 > memcmp(c->public_key, my_public_key, SIZE_PUBLIC_KEY))
@@ -1277,7 +1307,7 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
             c->state = contact_s::OFFLINE;
             c->key_sent = false;
 
-            logm("race condition win");
+            MaskLog(LFLS_CLOSE, "c: %i, state: %i / race condition win", c->id, c->state);
 
         } else
         {
@@ -1285,32 +1315,32 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
             // or race condition loose
             // disconnect
 
-            logm("race condition loose");
-
+            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / race condition loose", (c ? c->id : -1), (c ? c->state : -1));
             return pipe;
         }
     }
 
-    logm("concurrent ok");
-    log_auth_key("c auth_key", c->authorized_key);
-    log_bytes("c public_key", c->public_key, SIZE_PUBLIC_KEY);
+    MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / concurrent ok", c->id, c->state);
+
+    //log_auth_key("c auth_key", c->authorized_key);
+    //log_bytes("c public_key", c->public_key, SIZE_PUBLIC_KEY);
 
     const byte *nonce = r.read(crypto_box_NONCEBYTES);
     if (!nonce)
     {
-        logm("no nonce yet");
+        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / no nonce yet", c->id, c->state);
         tcp_in.accepted.push(pipe);
         return nullptr;
     }
 
-    log_bytes("nonce (rcvd)", nonce, crypto_box_NONCEBYTES);
+    //log_bytes("nonce (rcvd)", nonce, crypto_box_NONCEBYTES);
 
     const int cipher_len = SIZE_KEY_NONCE_PART + crypto_box_MACBYTES;
 
     const byte *cipher = r.read(cipher_len);
     if (!cipher)
     {
-        logm("no cipher yet");
+        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / no cipher yet", c->id, c->state);
         tcp_in.accepted.push(pipe);
         return nullptr;
     }
@@ -1320,26 +1350,27 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
 
     if (crypto_box_open_easy(c->authorized_key, cipher, cipher_len, nonce, peer_public_key, my_secret_key) != 0)
     {
-        logm("cipher cannot be decrypted");
+        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / cipher cannot be decrypted", c->id, c->state);
         return pipe;
     }
 
-    log_auth_key( "authkey decrypted", c->authorized_key );
+    //log_auth_key( "authkey decrypted", c->authorized_key );
 
     const byte *rhash = r.read(crypto_generichash_BYTES);
     if (!rhash)
     {
-        logm("no hash yet");
+        MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / no hash yet", c->id, c->state);
+
         tcp_in.accepted.push(pipe);
         return nullptr;
     }
 
-    log_bytes("hash (rcvd)", rhash, crypto_generichash_BYTES);
+    //log_bytes("hash (rcvd)", rhash, crypto_generichash_BYTES);
 
     byte hash[crypto_generichash_BYTES];
     crypto_generichash(hash, sizeof(hash), c->authorized_key, SIZE_KEY, nullptr, 0);
 
-    log_bytes("hash of authkey", hash, crypto_generichash_BYTES);
+    //log_bytes("hash of authkey", hash, crypto_generichash_BYTES);
 
     if ( 0 == memcmp(hash, rhash, crypto_generichash_BYTES) )
     {
@@ -1357,7 +1388,12 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
                 c->client = r.reads();
 
             pg_ready(c->raw_public_id, c->authorized_key);
-            c->pipe.send(packet_buf_encoded, packet_buf_encoded_len);
+            bool send_ready = c->pipe.send(packet_buf_encoded, packet_buf_encoded_len);
+
+            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / send ready: %s", c->id, c->state, (send_ready ? "yes" : "no"));
+        } else
+        {
+            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / fail public key", c->id, c->state);
         }
     } else
     {
@@ -1761,8 +1797,11 @@ void lan_engine::offline()
 
         for (contact_s *c = first->next; c; c = c->next)
         {
-            if (c->pipe.connect())
+            if (c->pipe.connected())
+            {
+                MaskLog(LFLS_CLOSE, "c: %i, state: %i / offline", c->id, c->state);
                 c->pipe.flush_and_close();
+            }
             if (c->state == contact_s::ONLINE || c->state == contact_s::BACKCONNECT)
                 c->state = contact_s::OFFLINE;
             if (c->state == contact_s::INVITE_SEND || c->state == contact_s::MEET)
@@ -1982,6 +2021,7 @@ void lan_engine::contact_s::online_tick(int ct, int nexttime)
             // oops
             waiting_keepalive_answer = false;
             pipe.close();
+            MaskLog(LFLS_CLOSE, "c: %i, state: %i / no keepalive", id, state);
             return;
         }
 
@@ -2074,24 +2114,17 @@ void lan_engine::contact_s::recv()
 
         if (_tcp_recv_begin_ < pid  && pid < _tcp_recv_end_)
         {
-#if LOGGING
-            asptr pidname = pid_name(pid);
-            if (pid != PID_NONE) Log("processing recv: %s", pidname.s);
-#endif
-
             if (_tcp_encrypted_begin_ < pid  && pid < _tcp_encrypted_end_)
             {
-                log_auth_key(pidname.s, message_key());
-
                 if (decrypt(tmpbuf, pipe.rcvbuf, pipe.rcvbuf_sz, message_key()))
                 {
-                    logm("decrypt ok: %s", pidname.s);
+                    //logm("decrypt ok: %s", pidname.s);
 
                     stream_reader r(tmpbuf, pipe.rcvbuf_sz - crypto_secretbox_MACBYTES);
                     if (!r.end()) handle_packet(pid, r);
                 } else
                 {
-                    logm("decrypt fail: %s", pidname.s);
+                    //logm("decrypt fail: %s", pidname.s);
                 }
 
             } else
@@ -2187,6 +2220,8 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
             state = ONLINE;
             data_changed = true;
 
+            MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / accept online", id, state);
+
             next_keepalive_packet = nextactiontime + 5000;
             engine->pg_sync(false, authorized_key);
             pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
@@ -2197,6 +2232,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
         state = REJECTED;
         data_changed = true;
         pipe.close();
+        MaskLog(LFLS_CLOSE, "c: %i, state: %i / reject", id, state);
         break;
     case PID_READY:
         if (const byte *pubid = r.read(SIZE_PUBID))
@@ -2206,6 +2242,9 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                 ASSERT( state == ONLINE || state == ACCEPT || state == BACKCONNECT );
                 data_changed |= state != ONLINE;
                 state = ONLINE;
+
+                MaskLog(LFLS_ESTBLSH, "c: %i, state: %i / ready online", id, state);
+
                 if (data_changed)
                 {
                     nextactiontime = time_ms();
@@ -2721,7 +2760,7 @@ void lan_engine::transmitting_file_s::fresh_file_portion(const file_portion_s *f
         {
             if (requested_chunks < MAX_TRANSFERING_CHUNKS && is_accepted && !is_paused && !is_finished)
             {
-                logm("portion request %llu (%llu)", utag, offset);
+                //logm("portion request %llu (%llu)", utag, offset);
 
                 int request_size = (offset + (unsigned)PORTION_SIZE < fsz) ? PORTION_SIZE : (int)(fsz - offset);
                 if (request_size)
@@ -2851,7 +2890,10 @@ void lan_engine::typing(int id)
 void lan_engine::export_data()
 {
 }
-
+void lan_engine::logging_flags(unsigned int f)
+{
+    g_logging_flags = f;
+}
 
 //unused
 void lan_engine::configurable(const char * /*field*/, const char * /*value*/)

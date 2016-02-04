@@ -368,7 +368,7 @@ bool dialog_entertext_c::showpass_handler(RID, GUIPARAM p)
         case UD_ENTERPASSWORD:
             dm().textfield(ts::wstr_c(), m_params.val, DELEGATE(this, on_edit)).focus(true).passwd(true).setname(CONSTASTR("txt"));
             dm().vspace();
-            dm().checkb(ts::wstr_c(), DELEGATE(this, showpass_handler), false).setmenu(
+            dm().checkb(ts::wstr_c(), DELEGATE(this, showpass_handler), 0).setmenu(
                 menu_c().add(TTT("Show password", 379), 0, MENUHANDLER(), CONSTASTR("1"))
                 );
             break;

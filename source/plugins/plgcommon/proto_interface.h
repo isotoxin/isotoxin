@@ -329,6 +329,7 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     FUNC2( void, ren_groupchat,  int, const char * ) \
     FUNC2( void, join_groupchat, int, int ) \
     FUNC1( void, typing,         int ) \
+    FUNC1( void, logging_flags,  unsigned int ) \
     
 
 struct proto_functions_s

@@ -695,7 +695,7 @@ namespace ts
         wstr_c new_path(path);
         aint lclip = new_path.get_length();
 
-		if (find_files(new_path.set_length(lclip).append(fname), sa, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY)) return true; //-V807
+		if (find_files(new_path.set_length(lclip).append(fname), sa, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY)) return true;
 		if (find_files(new_path.set_length(lclip).append(CONSTWSTR("*.*")), sa, FILE_ATTRIBUTE_DIRECTORY))
 		{
 			for (const auto & dir : sa)
@@ -807,7 +807,7 @@ namespace ts
         if (exts.exts.size())
         {
             for( const extension_s &e : exts.exts )
-                filter.append( e.desc ).append(CONSTWSTR("/*.")).append( e.ext ).append_char('/');
+                filter.append( e.desc ).append_char('/').append( e.ext ).append_char('/');
             filter.append_char('/');
             filter.replace_all('/', 0);
         }
@@ -870,7 +870,7 @@ namespace ts
         if (exts.exts.size())
         {
             for( const extension_s &e : exts.exts )
-                filter.append( e.desc ).append(CONSTWSTR("/*.")).append( e.ext ).append_char('/');
+                filter.append( e.desc ).append_char('/').append( e.ext ).append_char('/');
             filter.append_char('/');
             filter.replace_all('/', 0);
         }
@@ -920,7 +920,7 @@ namespace ts
         if (exts.exts.size())
         {
             for( const extension_s &e : exts.exts )
-                filter.append( e.desc ).append(CONSTWSTR("/*.")).append( e.ext ).append_char('/');
+                filter.append( e.desc ).append_char('/').append( e.ext ).append_char('/');
             filter.append_char('/');
             filter.replace_all('/', 0);
         }

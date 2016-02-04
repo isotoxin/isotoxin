@@ -376,6 +376,7 @@ enum settingsparam_e
     CFG_TALKVOLUME,
     CFG_DSPFLAGS,
     CFG_LANGUAGE,
+    CFG_DEBUG,
 };
 template<> struct gmsg<ISOGM_CHANGED_SETTINGS> : public gmsgbase
 {

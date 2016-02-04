@@ -74,8 +74,6 @@
 #define DEFAULT_AUDIO_BITRATE 32
 #define DEFAULT_VIDEO_BITRATE 3000
 
-extern HMODULE dll_module;
-
 void __stdcall get_info( proto_info_s *info )
 {
     if (info->protocol_name) strncpy_s(info->protocol_name, info->protocol_name_buflen, "tox", _TRUNCATE);
@@ -124,6 +122,7 @@ static byte avahash[TOX_HASH_LENGTH] = { 0 };
 static std::vector<byte> gavatar;
 static int gavatag = 0;
 static bool reconnect = false;
+static bool restart_module = false;
 
 int self_typing_contact = 0;
 int self_typing_time = 0;
@@ -2948,6 +2947,14 @@ void __stdcall stop_call(int id);
 
 void __stdcall tick(int *sleep_time_ms)
 {
+    if (restart_module)
+    {
+        if (tox) tox_kill(tox);
+        tox = nullptr;
+        *sleep_time_ms = -1;
+        return;
+    }
+
     if (!online_flag)
     {
         *sleep_time_ms = 100;
@@ -3012,6 +3019,9 @@ void __stdcall tick(int *sleep_time_ms)
             update_self();
 
         }
+
+        static int reconnect_try = 0;
+
         if (nst == CS_OFFLINE)
         {
             time_t ctime = now();
@@ -3019,8 +3029,17 @@ void __stdcall tick(int *sleep_time_ms)
             {
                 connect();
                 tryconnect = ctime + 10;
+
+                MaskLog( LFLS_TIMEOUT, "Offline, Reconnect %i", reconnect_try );
+                ++reconnect_try;
             }
-        }
+            if (reconnect_try >= 10)
+            {
+                restart_module = true;
+                MaskLog( LFLS_TIMEOUT, "Offline, Restart..." );
+            }
+        } else
+            reconnect_try = 0;
 
         if ((curt - nexttav) > 0)
         {
@@ -4185,6 +4204,11 @@ void __stdcall export_data()
     {
         hf->export_data(nullptr, 0);
     }
+}
+
+void __stdcall logging_flags(unsigned int f)
+{
+    g_logging_flags = f;
 }
 
 

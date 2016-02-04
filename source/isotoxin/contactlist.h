@@ -1,5 +1,7 @@
 #pragma once
 
+//-V:getcontact():807
+
 enum contact_item_role_e
 {
     CIR_LISTITEM,

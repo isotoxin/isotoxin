@@ -1,5 +1,8 @@
 #include "stdafx.h"
 
+unsigned int g_logging_flags = 0;
+HINSTANCE g_module = nullptr;
+
 #define LENGTH(a) (sizeof(a)/sizeof(a[0]))
 
 void LogMessage(const char *fn, const char *caption, const char *msg)
@@ -10,7 +13,7 @@ void LogMessage(const char *fn, const char *caption, const char *msg)
     if (f)
     {
         char module[MAX_PATH];
-        GetModuleFileNameA(NULL, module, LENGTH(module));
+        GetModuleFileNameA(g_module, module, LENGTH(module));
         tm t;
         time_t curtime;
         time(&curtime);
@@ -86,6 +89,41 @@ void Log(const char *s, ...)
     va_end(args);
 
     LogMessage(nullptr ,nullptr, str);
+}
+
+void MaskLog(unsigned mask, const char *s, ...)
+{
+    unsigned effmask = (g_logging_flags & mask);
+    if (0 == effmask) return;
+
+    FILE *f = nullptr;
+    fopen_s(&f, "plghost.log", "ab");
+    if (f)
+    {
+        sstr_t<4050> str;
+
+        str.set_length( GetModuleFileNameA(g_module, str.str(), MAX_PATH) );
+        str.cut( 0, 1 + str.find_last_pos_of(CONSTASTR("\\/")) );
+        str.append_char(' ');
+        str.append_as_uint( timeGetTime() );
+        str.append_char(' ');
+
+        if (0 != (effmask & LFLS_CLOSE))
+            str.append( CONSTASTR("CLOSE: ") );
+
+        if (0 != (effmask & LFLS_ESTBLSH))
+            str.append(CONSTASTR("ESTBLSH: "));
+
+        va_list args;
+        va_start(args, s);
+        int l = vsprintf_s(str.str() + str.get_length(), str.get_capacity() - str.get_length(), s, args);
+        va_end(args);
+        str.set_length( str.get_length() + l );
+        str.append( CONSTASTR("\r\n") );
+
+        fwrite(str.cstr(), str.get_length(), 1, f);
+        fclose(f);
+    }
 }
 
 void LogToFile(const char *fn, const char *s, ...)

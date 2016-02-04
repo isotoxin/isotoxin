@@ -7,14 +7,14 @@ const theme_rect_s *cached_theme_rect_c::operator()( ts::uint32 st ) const
     if (themerect.is_empty())
         return nullptr;
 
-	if (theme_ver != gui->theme().ver()) //-V807
+	if (theme_ver != gui->theme().ver())
 	{
         if (theme_ver>=0)
         {
             for (int i = 0; i < RST_ALL_COMBINATIONS; ++i)
                 rects[i] = nullptr;
         }
-		theme_ver = gui->theme().ver(); //-V807
+		theme_ver = gui->theme().ver();
 
 		rects[0] = gui->theme().get_rect(themerect);
         rects[ RST_HIGHLIGHT ] = gui->theme().get_rect(tmp_str_c(themerect).append(CONSTASTR(".h")));

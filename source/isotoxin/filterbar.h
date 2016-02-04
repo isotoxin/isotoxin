@@ -39,7 +39,7 @@ class gui_filterbar_c : public gui_label_ex_c
         full_search_s(ts::sqlitedb_c *db, gui_filterbar_c *owner, const ts::wstrings_c &flt_) : db(db), flt(flt_), owner(owner)
         {
             for (ts::wstr_c &s : flt)
-                s.set_length();
+                s.clone();
         }
 
         found_stuff_s::FOUND_STUFF_T found_stuff;

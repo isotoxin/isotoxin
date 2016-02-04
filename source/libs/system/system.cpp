@@ -35,7 +35,7 @@ struct evlst_s
 static evlst_s _evs[SEV_MAX] = {0};
 }
 
-system_event_receiver_c::system_event_receiver_c( system_event_e ev )
+system_event_receiver_c::system_event_receiver_c( system_event_e ev ) //-V730
 {
     evlst_s &l = _evs[ev];
     SS_LIST_ADD( this, l._ser_first, l._ser_last, _ser_prev, _ser_next );
@@ -374,10 +374,12 @@ static DWORD WINAPI looper(void *)
     g_sysconf.looper = true;
     while(g_sysconf.is_app_running && !g_sysconf.is_app_need_quit)
     {
-        if ( g_sysconf.is_active || g_sysconf.is_loop_in_background )
-            if (looper_hwnd)
-                PostMessageW( looper_hwnd, WM_LOOPER_TICK, 0, 0 );
-        if (g_sysconf.sleep >= 0) Sleep(g_sysconf.sleep);
+        if (looper_hwnd)
+            PostMessageW( looper_hwnd, WM_LOOPER_TICK, 0, 0 );
+        if (g_sysconf.is_sys_loop)
+            Sleep(100);
+        else if (g_sysconf.sleep >= 0)
+            Sleep(g_sysconf.sleep);
     }
     g_sysconf.looper = false;
     return 0;
@@ -398,6 +400,8 @@ static void system_loop()
         {
             MSG msgm;
             if (PeekMessage( &msgm, nullptr, min(WM_KEYFIRST, WM_MOUSEFIRST), max(WM_KEYLAST, WM_MOUSELAST), PM_REMOVE))
+                msg = msgm;
+            else if (PeekMessage( &msgm, nullptr, WM_PAINT, WM_PAINT, PM_REMOVE))
                 msg = msgm;
         }
 

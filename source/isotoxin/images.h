@@ -103,12 +103,15 @@ public:
 
 };
 
-INLINE image_loader_c &gui_message_item_c::imgloader_get()
+INLINE image_loader_c &gui_message_item_c::imgloader_get(addition_file_data_s **ftb)
 {
     addition_file_data_s *afd = ts::ptr_cast<addition_file_data_s *>(addition.get());
     if (ASSERT(afd))
+    {
+        if (ftb) *ftb = afd;
         return afd->imgloader.get<image_loader_c>();
+    }
     return ts::make_dummy<image_loader_c>();
 }
 
-image_loader_c &imgloader_get();
+

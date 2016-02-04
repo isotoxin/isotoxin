@@ -149,6 +149,9 @@ class active_protocol_c : public ts::safe_object
     bool check_save(RID, GUIPARAM);
     void save_config( const ts::blob_c &cfg );
     void run();
+
+    void push_debug_settings();
+
 public:
     active_protocol_c(int id, const active_protocol_data_s &pd);
     ~active_protocol_c();
