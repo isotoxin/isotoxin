@@ -393,10 +393,13 @@ bool contact_c::b_cancel_call(RID, GUIPARAM par)
 
 bool contact_c::b_reject_call(RID, GUIPARAM par)
 {
-    gui_notice_c *ownitm = (gui_notice_c *)par;
-    RID parent = HOLD(ownitm->getparent())().getparent();
-    gui->repos_children(&HOLD(parent).as<gui_group_c>());
-    TSDEL(ownitm);
+    if (par)
+    {
+        gui_notice_c *ownitm = (gui_notice_c *)par;
+        RID parent = HOLD(ownitm->getparent())().getparent();
+        gui->repos_children(&HOLD(parent).as<gui_group_c>());
+        TSDEL(ownitm);
+    }
 
     if (ringtone(false))
         if (active_protocol_c *ap = prf().ap(getkey().protoid))
@@ -424,6 +427,8 @@ bool contact_c::b_accept(RID, GUIPARAM par)
 
     if (active_protocol_c *ap = prf().ap(getkey().protoid))
         ap->accept(getkey().contactid);
+
+    opts.unmasked().set(F_JUST_ACCEPTED);
 
     get_historian()->fix_history(MTA_FRIEND_REQUEST, MTA_OLD_REQUEST, getkey());
     get_historian()->reselect(0);
@@ -1163,7 +1168,14 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                     play_sound(snd_friend_online, false);
 
                 if (contact.state == CS_OFFLINE)
+                {
                     play_sound(snd_friend_offline, false);
+                    if (c_sub->is_av())
+                    {
+                        c_sub->stop_av();
+                        gmsg<ISOGM_NOTICE>(nullptr, nullptr, NOTICE_KILL_CALL_INPROGRESS).send();
+                    }
+                }
             }
 
             if (contact.state == CS_ONLINE || contact.state == CS_OFFLINE)

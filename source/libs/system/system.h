@@ -142,6 +142,8 @@ struct system_conf_s
 
     DWORD   mainthread;
     int     sleep;
+    DWORD   lasttick;
+
 
     bool    is_exit; // sys_exit
     bool    is_aborting;

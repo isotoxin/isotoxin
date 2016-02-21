@@ -300,12 +300,16 @@ LRESULT CALLBACK sys_def_main_window_proc(HWND hWnd, UINT message, WPARAM wParam
     return app_wndproc(hWnd, message, wParam, lParam);
 }
 
+static bool looper_allow_tick = true;
+
 static LRESULT CALLBACK looper_proc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     if (WM_LOOPER_TICK == message)
     {
         if (!g_sysconf.is_in_render)
             system_event_receiver_c::notify_system_receivers(g_sysconf.is_active ? SEV_LOOP : SEV_IDLE, g_par_def);
+        g_sysconf.lasttick = timeGetTime();
+        looper_allow_tick = true;
         return 0;
     }
 
@@ -374,12 +378,22 @@ static DWORD WINAPI looper(void *)
     g_sysconf.looper = true;
     while(g_sysconf.is_app_running && !g_sysconf.is_app_need_quit)
     {
-        if (looper_hwnd)
-            PostMessageW( looper_hwnd, WM_LOOPER_TICK, 0, 0 );
+        DWORD ct = timeGetTime();
+        int d = (int)(ct - g_sysconf.lasttick);
+
+        int sleep = g_sysconf.sleep;
         if (g_sysconf.is_sys_loop)
-            Sleep(100);
-        else if (g_sysconf.sleep >= 0)
-            Sleep(g_sysconf.sleep);
+            sleep = 100;
+
+        if (looper_hwnd && (d > 1000 || looper_allow_tick))
+        {
+            looper_allow_tick = false;
+            PostMessageW( looper_hwnd, WM_LOOPER_TICK, 0, 0 );
+        } else if (!looper_allow_tick)
+            sleep = 1;
+
+        if (sleep >= 0)
+            Sleep(sleep);
     }
     g_sysconf.looper = false;
     return 0;
@@ -389,6 +403,7 @@ static void system_loop()
 {
     g_sysconf.mainthread = GetCurrentThreadId();
     g_sysconf.is_app_running = true;
+    g_sysconf.lasttick = timeGetTime();
 
     if (!g_sysconf.looper)
         CloseHandle(CreateThread(nullptr, 0, looper, nullptr, 0, nullptr));
@@ -399,11 +414,8 @@ static void system_loop()
         if (msg.message == WM_LOOPER_TICK)
         {
             MSG msgm;
-            if (PeekMessage( &msgm, nullptr, min(WM_KEYFIRST, WM_MOUSEFIRST), max(WM_KEYLAST, WM_MOUSELAST), PM_REMOVE))
-                msg = msgm;
-            else if (PeekMessage( &msgm, nullptr, WM_PAINT, WM_PAINT, PM_REMOVE))
-                msg = msgm;
-        }
+            while (PeekMessage(&msgm, nullptr, WM_LOOPER_TICK, WM_LOOPER_TICK, PM_REMOVE)) ;
+        } 
 
         bool downkey = false;
         bool dispatch = true;

@@ -282,7 +282,7 @@ class application_c : public gui_c, public sound_capture_handler_c
 
     ts::tbuf_t<s3::Format> avformats;
     /*virtual*/ void datahandler(const void *data, int size) override;
-    /*virtual*/ s3::Format *formats(int &count) override;
+    /*virtual*/ const s3::Format *formats(int &count) override;
 
 public:
     static const ts::flags32_s::BITS PEF_RECREATE_CTLS_CL = PEF_FREEBITSTART << 0;
@@ -348,7 +348,9 @@ public:
     unsigned F_READONLY_MODE_WARN : 1;
     unsigned F_MODAL_ENTER_PASSWORD : 1;
     unsigned F_TYPING : 1; // any typing
-
+    unsigned F_CAPTURE_AUDIO_TASK : 1;
+    unsigned F_CAPTURING : 1;
+    unsigned F_SHOW_CONTACTS_IDS : 1;
 
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_EXIT);
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_INIT);
@@ -359,7 +361,6 @@ public:
     GM_RECEIVER( application_c, ISOGM_DELIVERED );
     GM_RECEIVER( application_c, ISOGM_EXPORT_PROTO_DATA );
     
-
     ts::array_inplace_t<av_contact_s,0> m_avcontacts;
 
     int get_avinprogresscount() const;
@@ -370,7 +371,6 @@ public:
     template<typename R> void iterate_avcontacts( const R &r ) const { for( const av_contact_s &avc : m_avcontacts) r(avc); }
     template<typename R> void iterate_avcontacts( const R &r ) { for( av_contact_s &avc : m_avcontacts) r(avc); }
     void stop_all_av();
-
 
     mediasystem_c m_mediasystem;
     ts::task_executor_c m_tasks_executor;
@@ -527,8 +527,46 @@ public:
 
     found_stuff_s *found_items = nullptr;
 
+    class splchk_c
+    {
+        mutable long sync = 0;
+        enum
+        {
+            EMPTY,
+            LOADING,
+            READY,
+        } state = EMPTY;
+        void *busy = nullptr;
+        bool unload_request = false;
+        ts::array_del_t< Hunspell, 0 > spellcheckers;
+    public:
+
+        enum lock_rslt_e
+        {
+            LOCK_OK,
+            LOCK_BUSY,
+            LOCK_EMPTY
+        };
+
+        bool is_enabled() const
+        {
+            spinlock::auto_simple_lock l(sync);
+            return state != EMPTY && !unload_request;
+        }
+
+        void load();
+        void unload();
+        void set_spellcheckers(ts::array_del_t< Hunspell, 0 > &&sa);
+        void check(ts::astrings_c &&checkwords, spellchecker_s *rsltrcvr);
+        lock_rslt_e lock( void *prm );
+        bool unlock( void *prm );
+        bool check_one( const ts::str_c &w, ts::astrings_c &suggestions );
+
+    } spellchecker;
+
 	application_c( const ts::wchar * cmdl );
 	~application_c();
+
 
     void apply_debug_options();
 
@@ -593,13 +631,18 @@ public:
     }
     void select_last_unread_contact();
 
-
     void handle_sound_capture( const void *data, int size );
     void register_capture_handler( sound_capture_handler_c *h );
     void unregister_capture_handler( sound_capture_handler_c *h );
     void start_capture(sound_capture_handler_c *h);
     void stop_capture(sound_capture_handler_c *h);
     void capture_device_changed();
+    void check_capture();
+    bool capturing() const
+    {
+        if (F_CAPTURE_AUDIO_TASK) return false;
+        return F_CAPTURING;
+    }
 
     mediasystem_c &mediasystem() {return m_mediasystem;};
 

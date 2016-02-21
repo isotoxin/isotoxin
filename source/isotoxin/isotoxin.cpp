@@ -22,8 +22,10 @@
 
 #if defined _DEBUG_OPTIMIZED || defined _FINAL
 #pragma comment(lib, "sqlite3.lib")
+#pragma comment(lib, "hunspell.lib")
 #else
 #pragma comment(lib, "sqlite3d.lib")
+#pragma comment(lib, "hunspelld.lib")
 #endif
 
 #pragma comment(lib, "zlib.lib")

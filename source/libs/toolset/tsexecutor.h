@@ -6,26 +6,34 @@ namespace ts
 class task_c
 {
     friend class task_executor_c;
-    int queueflags = 0;
+    spinlock::syncvar<int> queueflags;
     int __pass = 0;
     void setflag( int flagmask )
     {
-        if ( 0 != (queueflags & flagmask) )
+        auto w = queueflags.lock_write();
+        if ( 0 != (w() & flagmask) )
             __debugbreak();
-        queueflags |= flagmask;
+        w() |= flagmask;
     }
     void resetflag(int flagmask)
     {
-        if (0 == (queueflags & flagmask))
+        auto w = queueflags.lock_write();
+        if (0 == (w() & flagmask))
             __debugbreak();
-        RESETFLAG( queueflags, flagmask );
+        RESETFLAG( w(), flagmask );
+    }
+    bool is_flag(int mask) const
+    {
+        return 0 != (queueflags.lock_read()() & mask);
     }
 public:
+    task_c() { queueflags.lock_write()() = 0; }
     virtual ~task_c() {}
 
     static const int R_DONE = -1; // job finished
     static const int R_CANCEL = -2; // job canceled
-    static const int R_RESULT = -3; // call result and iterate again
+    static const int R_RESULT = -3; // call result and iterate again (simultaneously)
+    static const int R_RESULT_EXCLUSIVE = -4; // call result in base thread and iterate strongly after result
 
     int call_iterate()
     {

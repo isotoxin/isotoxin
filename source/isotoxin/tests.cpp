@@ -150,7 +150,7 @@ void test_cairo()
 
 void dotests0()
 {
-    test_cairo();
+    //test_cairo();
 }
 
 void dotests()
@@ -503,6 +503,8 @@ void summon_test_window()
     //SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR, dialog_avasel_params_s(0));
     //SUMMON_DIALOG<dialog_prepareimage_c>(UD_PREPARE_IMAGE, contact_key_s());
     SUMMON_DIALOG<dialog_colors_c>(UD_NOT_UNIQUE);
+
+    //MAKE_ROOT<incoming_call_panel_c>( &contacts().get(1) );
 
 }
 

@@ -238,6 +238,7 @@ public:
 
 
     // not saved
+    static const ts::flags32_s::BITS F_JUST_ACCEPTED = SETBIT(22);
     static const ts::flags32_s::BITS F_LAST_ACTIVITY = SETBIT(23);
     static const ts::flags32_s::BITS F_FULL_SEARCH_RESULT = SETBIT(24);
     static const ts::flags32_s::BITS F_AUDIO_GCHAT = SETBIT(25);

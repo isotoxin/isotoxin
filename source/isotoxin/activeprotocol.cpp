@@ -657,6 +657,9 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
             if (0 != (ch.bits & UIOPT_PROTOICONS) && !prf().get_options().is(UIOPT_PROTOICONS))
                 icons_cache.clear(); // FREE MEMORY
             break;
+        case PP_VIDEO_ENCODING_SETTINGS:
+            apply_encoding_settings();
+            break;
         case CFG_TALKVOLUME:
             syncdata.lock_write()().volume = cfg().vol_talk();
             break;
@@ -878,6 +881,11 @@ void active_protocol_c::stop_and_die(bool wait_worker_end)
     w().flags.set(F_DIP);
     if (ipcp) ipcp->something_happens();
     w.unlock();
+
+    g_app->iterate_avcontacts([&](av_contact_s & avc) {
+        if (avc.ap4video == this)
+            avc.ap4video = nullptr;
+    });
         
     if (wait_worker_end)
     {
@@ -952,20 +960,27 @@ void active_protocol_c::send_video_frame(int cid, const ts::bmpcore_exbody_s &eb
         int fmt;
     };
 
-    int i420sz = eb.info().sz.x * eb.info().sz.y;
+    const ts::imgdesc_s &src_info = eb.info();
+
+    int i420sz = src_info.sz.x * src_info.sz.y;
     i420sz += i420sz / 2;
     i420sz += sizeof(data_header_s) + sizeof(inf_s);
-    
+
     if (data_header_s *dh = (data_header_s *)ipcc->junct.lock_buffer( i420sz ))
     {
         dh->cmd = AQ_VIDEO;
         inf_s *inf = (inf_s *)(dh + 1);
         inf->cid = cid;
-        inf->w = eb.info().sz.x;
-        inf->h = eb.info().sz.y;
+        inf->w = src_info.sz.x;
+        inf->h = src_info.sz.y;
         inf->fmt = VFMT_I420;
 
-        ts::img_helper_rgb2yuv(((ts::uint8 *)(dh + 1)) + sizeof(inf_s), eb.info(), eb(), ts::YFORMAT_I420);
+        ts::uint8 *dst_y = ((ts::uint8 *)(dh + 1)) + sizeof(inf_s);
+        int y_sz = src_info.sz.x * inf->h;
+        ts::uint8 *dst_u = dst_y + y_sz;
+        ts::uint8 *dst_v = dst_u + y_sz / 4;
+        ts::img_helper_ARGB_to_i420(eb(), src_info.pitch, dst_y, src_info.sz.x, dst_u, src_info.sz.x / 2, dst_v, src_info.sz.x / 2, src_info.sz.x, src_info.sz.y);
+
         ipcc->junct.unlock_send_buffer(dh, i420sz);
     }
 }
@@ -992,6 +1007,7 @@ void active_protocol_c::send_audio(int cid, const s3::Format &ifmt, const void *
 
 void active_protocol_c::call(int cid, int seconds)
 {
+    apply_encoding_settings();
     ipcp->send(ipcw(AQ_CALL) << cid << seconds);
 }
 
@@ -1008,6 +1024,16 @@ void active_protocol_c::stop_call(int cid)
 void active_protocol_c::set_stream_options(int cid, int so, const ts::ivec2 &vr)
 {
     ipcp->send(ipcw(AQ_STREAM_OPTIONS) << cid << so << vr.x << vr.y);
+}
+
+void active_protocol_c::apply_encoding_settings()
+{
+    ipcw s(AQ_CONFIGURABLE);
+    s << (int)3;
+    s << CONSTASTR(CFGF_VIDEO_CODEC) << ts::astrmap_c(prf().video_codec()).get(get_tag(), ts::str_c());
+    s << CONSTASTR(CFGF_VIDEO_BITRATE) << ts::amake<int>(prf().video_bitrate());
+    s << CONSTASTR(CFGF_VIDEO_QUALITY) << ts::amake<int>(prf().video_enc_quality());
+    ipcp->send(s);
 }
 
 void active_protocol_c::set_configurable( const configurable_s &c, bool force_send )

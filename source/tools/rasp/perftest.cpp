@@ -38,7 +38,8 @@ struct data4test_s
             case 10:
                 Print("i420 to RGB test 2\n");
                 buf.load_from_disk_file(L"C:\\2\\1\\i420.bin");
-                bmp.create_ARGB(ivec2(1920, 1200));
+
+                bmp.create_ARGB(ivec2(1038, 584));
                 process_f = DELEGATE(this, process_i420_to_rgb_2);
                 process_f();
                 bmp.save_as_png(L"C:\\2\\1\\t10.png");

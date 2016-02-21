@@ -70,6 +70,9 @@ struct proto_info_s
 
     char *icon = nullptr; // svg path value of d attribute in box 100x100
     int   icon_buflen = 0;
+
+    char *vcodecs = nullptr; // video codecs list / separeted; ex: vp8/vp9
+    int   vcodecs_buflen = 0;
 };
 
 struct contact_data_s

@@ -5,6 +5,7 @@ corrections {
 colors {
 	cap=#858186
 	bg=#545358
+	bg_fsvideo=#000000
 	text_def=#ffffff
 	hline=#858186
 	sel=#4f525b
@@ -152,6 +153,7 @@ colors {
 	gen_n=#00a600
 	gen_t=#b1c0a8
 	gen_tr=#a60000
+	gen_ti=#df7f46
 	gen_call=#3eba2e
 	gen_s=#8f958d
 	gen_s_border=#000000
@@ -192,4 +194,5 @@ colors {
 	tooltip_text=#000000
 	sb_bg=#b8b8b8
 	sb_bg_h=#b8b8b8
+	badword=#ff6100
 }

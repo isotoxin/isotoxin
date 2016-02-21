@@ -209,6 +209,7 @@ public:
     void accept(int cid);
     void reject(int cid);
 
+    void apply_encoding_settings(); // should be called before enabling video or during video call (to change current settings)
     void accept_call(int cid);
     void send_video_frame(int cid, const ts::bmpcore_exbody_s &eb);
     void send_audio(int cid, const s3::Format &fmt, const void *data, int size);

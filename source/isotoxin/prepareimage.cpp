@@ -756,41 +756,43 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
                     info_c = tr->color(2);
                 }
 
+                selrectvisible = !animated;
                 if (imgrect)
                 {
                     draw_data_s &dd = getengine().begin_draw();
                     dd.cliprect = viewrect;
                     getengine().draw(offset, image.extbody(imgrect), alpha);
-                    ts::ivec2 o = offset - imgrect.lt;
 
-                    fd.draw(getengine(), croprect + o, tickvalue);
+                    if (selrectvisible)
+                    {
+                        ts::ivec2 o = offset - imgrect.lt;
+                        fd.draw(getengine(), croprect + o, tickvalue);
 
-                    if (croprect.lt.x > 0)
-                    {
-                        // draw dark at left
-                        getengine().draw( ts::irect( o.x, o.y + croprect.lt.y, o.x + croprect.lt.x, o.y + croprect.rb.y ), ts::ARGB(0,0,50,50) );
+                        if (croprect.lt.x > 0)
+                        {
+                            // draw dark at left
+                            getengine().draw(ts::irect(o.x, o.y + croprect.lt.y, o.x + croprect.lt.x, o.y + croprect.rb.y), ts::ARGB(0, 0, 50, 50));
+                        }
+                        int rw = image.info().sz.x - croprect.rb.x - 1;
+                        if (rw > 0)
+                        {
+                            // draw dark at rite
+                            getengine().draw(ts::irect(o.x + croprect.rb.x, o.y + croprect.lt.y, o.x + image.info().sz.x, o.y + croprect.rb.y), ts::ARGB(0, 0, 50, 50));
+                        }
+                        if (croprect.lt.y > 0)
+                        {
+                            // draw dark at top
+                            getengine().draw(ts::irect(o.x, o.y, o.x + image.info().sz.x, o.y + croprect.lt.y), ts::ARGB(0, 0, 50, 50));
+                        }
+                        int rh = image.info().sz.y - croprect.rb.y - 1;
+                        if (rh > 0)
+                        {
+                            // draw dark at bottom
+                            getengine().draw(ts::irect(o.x, o.y + croprect.rb.y, o.x + image.info().sz.x, o.y + image.info().sz.y), ts::ARGB(0, 0, 50, 50));
+                        }
                     }
-                    int rw = image.info().sz.x - croprect.rb.x - 1;
-                    if ( rw > 0 )
-                    {
-                        // draw dark at rite
-                        getengine().draw( ts::irect( o.x + croprect.rb.x, o.y + croprect.lt.y, o.x + image.info().sz.x, o.y + croprect.rb.y ), ts::ARGB(0,0,50,50) );
-                    }
-                    if (croprect.lt.y > 0)
-                    {
-                        // draw dark at top
-                        getengine().draw( ts::irect( o.x, o.y, o.x + image.info().sz.x, o.y + croprect.lt.y ), ts::ARGB(0,0,50,50) );
-                    }
-                    int rh = image.info().sz.y - croprect.rb.y - 1;
-                    if (rh > 0)
-                    {
-                        // draw dark at bottom
-                        getengine().draw(ts::irect(o.x, o.y + croprect.rb.y, o.x + image.info().sz.x, o.y + image.info().sz.y), ts::ARGB(0, 0, 50, 50));
-                    }
-
 
                     getengine().end_draw();
-                    selrectvisible = !animated;
                 }
                 
                 if (saver)

@@ -7,7 +7,20 @@
 #pragma warning(push)
 #pragma warning(disable : 4324) // 'crypto_generichash_blake2b_state' : structure was padded due to __declspec(align())
 #include "sodium.h"
+
+//#pragma warning(disable : 4505)
+#include <vpx/vpx_decoder.h>
+#include <vpx/vpx_encoder.h>
+#include <vpx/vp8dx.h>
+#include <vpx/vp8cx.h>
+#include <vpx/vpx_image.h>
 #pragma warning(pop)
+
+#define VIDEO_CODEC_DECODER_INTERFACE_VP8 (vpx_codec_vp8_dx())
+#define VIDEO_CODEC_DECODER_INTERFACE_VP9 (vpx_codec_vp9_dx())
+#define VIDEO_CODEC_ENCODER_INTERFACE_VP8 (vpx_codec_vp8_cx())
+#define VIDEO_CODEC_ENCODER_INTERFACE_VP9 (vpx_codec_vp9_cx())
+#define MAX_ENCODE_TIME_US (1000000 / 5)
 
 // strange compile bug workaround: error C2365: 'TOX_GROUPCHAT_TYPE_TEXT' : redefinition; previous definition was 'enumerator'
 
@@ -67,12 +80,13 @@
 #include "appver.inl"
 
 #define PACKETID_EXTENSION 174
+#define PACKETID_VIDEO_EX 175
 #define SAVE_VERSION 1
 
 #define GROUP_ID_OFFSET 10000000 // 10M contacts should be enough for everything
 
 #define DEFAULT_AUDIO_BITRATE 32
-#define DEFAULT_VIDEO_BITRATE 3000
+#define DEFAULT_VIDEO_BITRATE 5000
 
 void __stdcall get_info( proto_info_s *info )
 {
@@ -102,6 +116,9 @@ void __stdcall get_info( proto_info_s *info )
 
     info->icon = "m 74.044499,38.828783 c 0,-4.166708 0.06581,-9.385543 -0.02935,-13.551362 -0.0418,-1.794753 -0.238352,-3.62508 -0.663471,-5.366471 C 70.309137,7.460631 58.257256,-0.28224198 45.602382,2.007891 34.399851,4.0347699 26.06021,14.030422 26.06021,25.430393 l 0,13.371709 c -3.678661,-3.2e-4 -7.473489,0 -11.204309,0 -2.466229,0 -4.467316,2.000197 -4.467316,4.467315 l 0,50.583035 c 0,2.466229 2.001087,4.467316 4.467316,4.467316 l 70.661498,0 c 2.468007,0 4.468205,-2.001087 4.468205,-4.467316 l 0,-50.583035 c 0,-2.467118 -2.000198,-4.467315 -4.468205,-4.467315 z m -17.313405,47.37418 -13.140472,0 c -2.065122,0 -3.738031,-1.702258 -3.738031,-3.801176 0.452829,-4.54018 0.52948,-5.74902 1.833885,-7.830921 1.45946,-2.150501 3.42853,-3.548594 5.564801,-4.17738 -2.815752,-1.148179 -4.799051,-3.911458 -4.799051,-7.137211 0,-4.259202 3.450763,-7.709077 7.708187,-7.709077 4.259203,0 7.708188,3.449875 7.708188,7.709077 0,3.307575 -2.084688,6.128663 -5.01339,7.221701 2.074015,0.669697 4.03508,2.057118 5.57903,4.186274 1.608048,2.307856 2.032215,4.874192 2.032215,7.571225 -0.0053,0.05514 0,0.111171 0,0.168091 8.9e-4,2.097139 -1.672019,3.799397 -3.735362,3.799397 M 65.3331,31.049446 c -1.389199,4.100894 -4.019961,7.386234 -6.768121,10.594199 -2.532759,2.638121 -5.259444,5.204412 -7.880726,6.825041 1.583972,-2.735708 2.86111,-5.334453 3.231089,-8.363654 -3.765601,0.891151 -7.316864,0.501606 -10.755176,-1.013884 -6.102871,-2.688572 -9.750186,-8.553981 -9.127625,-15.175356 0.50961,-5.449182 3.605395,-10.490611 8.391106,-13.0271 7.708187,-4.0848867 17.24706,-1.0668343 21.653898,6.200225 2.567617,4.231632 2.810178,9.372258 1.255555,13.960529";
     info->icon_buflen = strlen(info->icon);
+
+    info->vcodecs = "vp8/vp9";
+    info->vcodecs_buflen = 7;
 }
 
 __forceinline int time_ms()
@@ -123,6 +140,9 @@ static std::vector<byte> gavatar;
 static int gavatag = 0;
 static bool reconnect = false;
 static bool restart_module = false;
+static bool use_vp9_codec = false;
+static int video_bitrate = 0;
+static int video_quality = 0;
 
 int self_typing_contact = 0;
 int self_typing_time = 0;
@@ -165,18 +185,26 @@ struct av_sender_state_s
     contact_descriptor_s *first = nullptr;
     contact_descriptor_s *last = nullptr;
 
+    bool video_encoder = false;
     bool video_sender = false;
     bool audio_sender = false;
+    bool video_encoder_heartbeat = false;
+    bool video_sender_heartbeat = false;
+    bool audio_sender_heartbeat = false;
     volatile bool shutdown = false;
 
     bool senders() const
     {
-        return audio_sender || video_sender;
+        return audio_sender || video_sender || video_encoder;
     }
 
     bool allow_run_audio_sender() const
     {
         return !audio_sender && !shutdown;
+    }
+    bool allow_run_video_encoder() const
+    {
+        return !video_encoder && !shutdown;
     }
     bool allow_run_video_sender() const
     {
@@ -1226,6 +1254,7 @@ enum contact_caps_e
     CCC_MSG_CHAIN = 1,  // contacts's client support message chaining
     CCC_MSG_CRTIME = 2, // contacts's client support message create time
     CCC_VIEW_SIZE = 4,  // contacts's client support video view size adjustment
+    CCC_VIDEO_EX = 8,   // contacts's client support vp9 and lossless video
 };
 
 struct contact_descriptor_s
@@ -1248,12 +1277,356 @@ public:
 
     struct call_in_progress_s
     {
+        contact_descriptor_s *desc;
         stream_options_s local_so;
         stream_options_s remote_so;
-        int call_stop_time = 0;
         stream_settings_s local_settings;
+        vpx_codec_ctx_t v_encoder;
+        vpx_codec_ctx_t v_decoder;
+        vpx_codec_enc_cfg_t enc_cfg;
+
+        struct sending_frame_s
+        {
+            union
+            {
+                int dummy_int;
+                byte dummy_byte[sizeof(int)];
+            };
+            int sframe;
+            int soffset;
+
+            int allocated;
+            int flg;
+            int offset;
+            int size;
+            int frame;
+            bool is_done() const { return offset == size; }
+
+        };
+
+
+        long sync_frame = 0;
+        sending_frame_s *current = nullptr;
+        sending_frame_s *next = nullptr;
+
+        int call_stop_time = 0;
+        uint32_t frame_counter = 0;
+
+        int vbitrate = 0;
+        int vquality = -1;
+
+        vpx_codec_dec_cfg_t cfg_dec;
+
+        bool current_busy = false;
         bool calling = false;
         bool started = false;
+        bool video_ex = false;
+        bool decoder = false;
+        bool encoder_vp8 = false;
+        bool decoder_vp8 = false;
+
+        call_in_progress_s(contact_descriptor_s *desc, bool videoex) :desc(desc)
+        {
+            if (videoex)
+            {
+                enc_cfg.g_w = 0;
+                video_ex = true;
+            }
+            vbitrate = video_bitrate;
+            vquality = video_quality;
+            encoder_vp8 = !use_vp9_codec;
+            cfg_dec.threads = 1;
+            cfg_dec.w = 0;
+            cfg_dec.h = 0;
+        }
+
+        ~call_in_progress_s()
+        {
+            if (video_ex)
+            {
+                if (enc_cfg.g_w) vpx_codec_destroy(&v_encoder);
+                if (decoder) vpx_codec_destroy(&v_decoder);
+            }
+            if (current) free(current);
+            if (next) free(next);
+        }
+
+        void isotoxin_video_send_frame(int fid, unsigned int width, unsigned int height, const byte *y, const byte *u, const byte *v)
+        {
+            if (video_quality < 0)
+            {
+                vquality = -1;
+                if (enc_cfg.g_w) vpx_codec_destroy(&v_encoder);
+                if (decoder) vpx_codec_destroy(&v_decoder);
+                enc_cfg.g_w = 0;
+                decoder = false;
+                sstr_t<-128> pstr("-initvdecoder/0/0/vp8");
+                *(byte *)pstr.str() = PACKETID_EXTENSION;
+                tox_friend_send_lossless_packet(tox, fid, (const byte *)pstr.cstr(), pstr.get_length(), nullptr);
+                return;
+            }
+
+            if (enc_cfg.g_w != width || enc_cfg.g_h != height || encoder_vp8 == use_vp9_codec || vbitrate != video_bitrate)
+            {
+                sstr_t<-128> pstr("-initvdecoder/");
+                *(byte *)pstr.str() = PACKETID_EXTENSION;
+                pstr.append_as_uint( width ).append_char('/').append_as_uint( height ).append_char('/');
+                if (use_vp9_codec)
+                    pstr.append( CONSTASTR("vp9") );
+                else
+                    pstr.append(CONSTASTR("vp8"));
+
+                tox_friend_send_lossless_packet(tox, fid, (const byte *)pstr.cstr(), pstr.get_length(), nullptr);
+
+                vbitrate = video_bitrate;
+
+                if (enc_cfg.g_w)
+                {
+                    vpx_codec_destroy(&v_encoder);
+                    if (encoder_vp8 == use_vp9_codec)
+                        goto reinit_cfg;
+                } else
+                {
+                reinit_cfg:
+                    encoder_vp8 = !use_vp9_codec;
+                    if (VPX_CODEC_OK != vpx_codec_enc_config_default(encoder_vp8 ? VIDEO_CODEC_ENCODER_INTERFACE_VP8 : VIDEO_CODEC_ENCODER_INTERFACE_VP9, &enc_cfg, 0))
+                    {
+                        enc_cfg.g_w = 0;
+                        vpx_codec_destroy(&v_decoder);
+                        return;
+                    }
+
+                    enc_cfg.rc_target_bitrate = DEFAULT_VIDEO_BITRATE * 1000;
+                    enc_cfg.g_w = 0;
+                    enc_cfg.g_h = 0;
+                    enc_cfg.g_pass = VPX_RC_ONE_PASS;
+                    /* FIXME If we set error resilience the app will crash due to bug in vp8.
+                    Perhaps vp9 has solved it?*/
+                    //     cfg.g_error_resilient = VPX_ERROR_RESILIENT_DEFAULT | VPX_ERROR_RESILIENT_PARTITIONS;
+                    enc_cfg.g_lag_in_frames = 0;
+                    enc_cfg.kf_min_dist = 0;
+                    enc_cfg.kf_max_dist = 48;
+                    enc_cfg.kf_mode = VPX_KF_AUTO;
+                }
+
+                encoder_vp8 = !use_vp9_codec;
+                enc_cfg.g_w = width;
+                enc_cfg.g_h = height;
+                enc_cfg.rc_target_bitrate = (vbitrate ? vbitrate : DEFAULT_VIDEO_BITRATE) * 1000;
+
+                if (vpx_codec_enc_init(&v_encoder, encoder_vp8 ? VIDEO_CODEC_ENCODER_INTERFACE_VP8 : VIDEO_CODEC_ENCODER_INTERFACE_VP9, &enc_cfg, 0) != VPX_CODEC_OK)
+                {
+                    enc_cfg.g_w = 0;
+                    return;
+                }
+            }
+
+            if (vquality != video_quality)
+            {
+                vquality = video_quality;
+                if (vquality < 0) vquality = 0;
+                if (vquality > 100) vquality = 100;
+                if (vquality == 0)
+                    vpx_codec_control(&v_encoder, VP8E_SET_CPUUSED, 0);
+                else
+                {
+                    int vv = encoder_vp8 ? ((100 - vquality) * 16 / 99) : ((100 - vquality) * 8 / 99);
+                    vpx_codec_control(&v_encoder, VP8E_SET_CPUUSED, vv);
+                }
+            }
+
+            for (;;)
+            {
+                spinlock::auto_simple_lock l(sync_frame);
+
+                if (current_busy)
+                    goto usenext;
+
+                if (nullptr == current || current->is_done())
+                    break;
+                else
+                {
+                usenext:
+
+                    if (nullptr == next)
+                        break;
+                    else if (!next->is_done())
+                        return; // skip frame before encoding to keep quality of video (just lower fps)
+                }
+                break;
+            }
+
+            // encoding and send
+
+            vpx_image_t img = { VPX_IMG_FMT_I420, VPX_CS_UNKNOWN, VPX_CR_STUDIO_RANGE,
+                width, height, 8, width, height, 0, 0, 1, 1,
+                (byte *)y, (byte *)u, (byte *)v, nullptr, (int)width, (int)width / 2, (int)width / 2, (int)width, 12 };
+
+            int vrc = vpx_codec_encode(&v_encoder, &img, frame_counter, 1, 0, /*MAX_ENCODE_TIME_US*/ 0);
+            if (vrc != VPX_CODEC_OK) return;
+
+            vpx_codec_iter_t iter = nullptr;
+            const vpx_codec_cx_pkt_t *pkt;
+
+            while (nullptr != (pkt = vpx_codec_get_cx_data(&v_encoder, &iter)))
+            {
+                if (pkt->kind == VPX_CODEC_CX_FRAME_PKT)
+                    add_frame_to_queue(pkt->data.frame.buf, pkt->data.frame.sz, pkt->data.frame.flags);
+            }
+
+            ++frame_counter;
+        }
+
+        void add_frame_to_queue(const void *framedata, int framesize, int f)
+        {
+            sending_frame_s *sf = nullptr;
+            spinlock::auto_simple_lock l(sync_frame);
+
+            if (current_busy)
+                goto usenext;
+
+            if (nullptr == current )
+            {
+                current = (sending_frame_s *)malloc( sizeof(sending_frame_s) + framesize );
+                current->allocated = framesize;
+                sf = current;
+            } else if ( current->is_done() )
+            {
+                if (current->allocated < framesize)
+                {
+                    current = (sending_frame_s *)realloc(current, sizeof(sending_frame_s) + framesize);
+                    current->allocated = framesize;
+                }
+                sf = current;
+            } else if (current->frame == (int)frame_counter)
+                __debugbreak();
+            else
+            {
+            usenext:
+
+                if (nullptr == next)
+                {
+                    next = (sending_frame_s *)malloc(sizeof(sending_frame_s) + framesize);
+                    next->allocated = framesize;
+                    sf = next;
+                }
+                else
+                {
+                    /* do not skip encoded data
+
+                    if (!next->is_done() && 0 != (next->flg & VPX_FRAME_IS_KEY) && 0 == (f & VPX_FRAME_IS_KEY))
+                        return; // non-key frame can't overwrite key frame
+                        */
+
+                    if (next->allocated < framesize)
+                    {
+                        next = (sending_frame_s *)realloc(next, sizeof(sending_frame_s) + framesize);
+                        next->allocated = framesize;
+                    }
+                    sf = next;
+                }
+            }
+
+            ASSERT(sf && framesize <= sf->allocated );
+
+            sf->frame = frame_counter;
+            sf->flg = f;
+            sf->offset = 0;
+            sf->size = framesize;
+            memcpy( sf + 1, framedata, framesize );
+
+#ifdef _DEBUG
+            static bool xxx = true;
+            if (xxx)
+            {
+                xxx = false;
+                FILE *ff = fopen("1stframe.bin", "wb");
+                fwrite(framedata, framesize, 1, ff);
+                fclose(ff);
+            }
+#endif // _DEBUG
+
+
+            if (VPX_FRAME_IS_FRAGMENT & f)
+                __debugbreak();
+
+            if (VPX_FRAME_IS_INVISIBLE & f)
+                __debugbreak();
+        }
+
+        int current_recv_frame = -1;
+        std::vector<byte> framebody;
+
+        void video_packet( const byte *d, int dsz )
+        {
+            int frnum = ntohl( *(int *)d );
+            int offset = ntohl(*(int *)(d+4));
+            dsz -= 8;
+            d += 8;
+
+            if (frnum == current_recv_frame)
+            {
+                if (offset >= 0 && offset < (int)(framebody.size() - dsz) )
+                    memcpy( framebody.data() + offset, d, dsz );
+
+                return;
+
+            } else if (current_recv_frame >= 0)
+            {
+                decode_frame();
+            }
+
+            current_recv_frame = frnum;
+            if (offset < 0) framebody.resize( -offset );
+            if (dsz <= (int)framebody.size())
+                memcpy(framebody.data(), d, dsz);
+        }
+
+        void decode_frame()
+        {
+#ifdef _DEBUG
+            static bool xxx = true;
+            if (xxx)
+            {
+                xxx = false;
+                FILE *f = fopen( "1stframe.bin", "wb" );
+                fwrite( framebody.data(), framebody.size(), 1, f );
+                fclose(f);
+            }
+#endif // _DEBUG
+
+            if (!decoder)
+            {
+                int rc = vpx_codec_dec_init(&v_decoder, decoder_vp8 ? VIDEO_CODEC_DECODER_INTERFACE_VP8 : VIDEO_CODEC_DECODER_INTERFACE_VP9, &cfg_dec, 0);
+                if (rc != VPX_CODEC_OK) return;
+                decoder = true;
+            }
+
+            if (VPX_CODEC_OK == vpx_codec_decode(&v_decoder, framebody.data(), framebody.size(), nullptr, 0))
+            {
+                vpx_codec_iter_t iter = nullptr;
+                vpx_image_t *dest = vpx_codec_get_frame(&v_decoder, &iter);
+
+                // Play decoded images
+                for (; dest; dest = vpx_codec_get_frame(&v_decoder, &iter))
+                {
+                    media_data_s mdt;
+                    mdt.vfmt.width = (unsigned short)dest->d_w;
+                    mdt.vfmt.height = (unsigned short)dest->d_h;
+                    mdt.vfmt.pitch[0] = (unsigned short)dest->stride[0];
+                    mdt.vfmt.pitch[1] = (unsigned short)dest->stride[1];
+                    mdt.vfmt.pitch[2] = (unsigned short)dest->stride[2];
+                    mdt.vfmt.fmt = VFMT_I420;
+                    mdt.video_frame[0] = dest->planes[0];
+                    mdt.video_frame[1] = dest->planes[1];
+                    mdt.video_frame[2] = dest->planes[2];
+                    hf->av_data(0, desc->get_id(), &mdt);
+
+                    vpx_img_free(dest);
+                }
+            }
+        }
+
     } *cip = nullptr; // if not nullptr, in call list
 
     void prepare_call(int calldurationsec = 0)
@@ -1261,7 +1634,7 @@ public:
         run_senders();
 
         ASSERT(nullptr == cip);
-        cip = new call_in_progress_s;
+        cip = new call_in_progress_s(this, 0 != (ccc_caps & CCC_VIDEO_EX) );
 
         if (calldurationsec)
         {
@@ -1271,6 +1644,7 @@ public:
 
         auto w = callstate.lock_write();
         LIST_ADD(this, w().first, w().last, prev_call, next_call);
+
     }
 
     void stop_call()
@@ -1297,6 +1671,7 @@ public:
             hf->message(MT_CALL_STOP, 0, get_id(), now(), nullptr, 0);
         }
     }
+
 
     int avatar_tag = 0; // tag of contact's avatar
     int avatar_recv_fnn = -1; // receiving file number
@@ -2087,24 +2462,52 @@ static void cb_isotoxin(Tox *, uint32_t fid, const byte *data, size_t len, void 
 {
     if (contact_descriptor_s *desc = find_restore_descriptor(fid))
     {
-        if (PACKETID_EXTENSION == *data && desc->cip)
+        if (desc->cip)
         {
-            token<char> t(asptr((const char *)data + 1, len - 1), '/');
-            if (t && t->equals(CONSTASTR("viewsize")))
+            switch (*data)
             {
-                ++t;
-                int w = t ? t->as_uint() : 0;
-                ++t;
-                int h = t ? t->as_uint() : 0;
-                if (w > 65536) w = 0;
-                if (h > 65536) h = 0;
-
-                if (desc->cip->remote_so.view_w != w || desc->cip->remote_so.view_h != h)
+            case PACKETID_EXTENSION:
                 {
-                    desc->cip->remote_so.view_w = w;
-                    desc->cip->remote_so.view_h = h;
-                    hf->av_stream_options(0, desc->get_id(), &desc->cip->remote_so);
+                    token<char> t(asptr((const char *)data + 1, len - 1), '/');
+                    if (t && t->equals(CONSTASTR("viewsize")))
+                    {
+                        ++t;
+                        int w = t ? t->as_uint() : 0;
+                        ++t;
+                        int h = t ? t->as_uint() : 0;
+                        if (w > 65536) w = 0;
+                        if (h > 65536) h = 0;
+
+                        if (desc->cip->remote_so.view_w != w || desc->cip->remote_so.view_h != h)
+                        {
+                            desc->cip->remote_so.view_w = w;
+                            desc->cip->remote_so.view_h = h;
+                            hf->av_stream_options(0, desc->get_id(), &desc->cip->remote_so);
+                        }
+                    }
+                    if (t && t->equals(CONSTASTR("initvdecoder")))
+                    {
+                        desc->cip->cfg_dec.w = 0;
+                        desc->cip->cfg_dec.h = 0;
+                        if (desc->cip && desc->cip->decoder)
+                        {
+                            vpx_codec_destroy(&desc->cip->v_decoder);
+                            desc->cip->decoder = false;
+                        }
+                        ++t;
+                        desc->cip->cfg_dec.w = t ? t->as_uint() : 0;
+                        ++t;
+                        desc->cip->cfg_dec.h = t ? t->as_uint() : 0;
+                        ++t;
+                        desc->cip->decoder_vp8 = !t || t->equals(CONSTASTR("vp8"));
+                    }
                 }
+                break;
+            case PACKETID_VIDEO_EX:
+                
+                if (0 != (desc->cip->local_so.options & SO_RECEIVING_VIDEO) && 0 != (desc->cip->remote_so.options & SO_SENDING_VIDEO))
+                    desc->cip->video_packet( data + 1, len - 1);
+                break;
             }
         }
     }
@@ -2162,6 +2565,11 @@ static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_
                     {
                         ++ln;
                         desc->bbcodes_supported = *ln;
+                    } else if (ln->equals(CONSTASTR("support_video_ex")))
+                    {
+                        ++ln;
+                        if (ln->as_uint((unsigned)-1) == 1)
+                            desc->ccc_caps |= CCC_VIDEO_EX;
                     }
                 }
 
@@ -2540,6 +2948,9 @@ static void cb_toxav_call_state(ToxAV *av, uint32_t friend_number, uint32_t stat
             toxav_call_control(toxav, desc->get_fid(), 0 == (desc->cip->local_so.options & SO_RECEIVING_VIDEO) ? TOXAV_CALL_CONTROL_HIDE_VIDEO : TOXAV_CALL_CONTROL_SHOW_VIDEO, nullptr);
         }
 
+        if (!ISFLAG(desc->cip->remote_so.options, SO_SENDING_AUDIO) && desc->cip->video_ex)
+            desc->cip->current_recv_frame = -1;
+
         hf->av_stream_options(0, desc->get_id(), &desc->cip->remote_so);
     }
 }
@@ -2597,6 +3008,7 @@ static void audio_sender()
     for( ;; Sleep(sleepms))
     {
         auto w = callstate.lock_write();
+        w().audio_sender_heartbeat = true;
         if (w().shutdown)
         {
             w().audio_sender = false;
@@ -2681,18 +3093,19 @@ static void audio_sender()
     }
 }
 
-static void video_sender()
+static void video_encoder()
 {
-    callstate.lock_write()().video_sender = true;
+    callstate.lock_write()().video_encoder = true;
 
     int sleepms = 100;
     int timeoutcountdown = 50; // 5 sec
     for (;; Sleep(sleepms))
     {
         auto w = callstate.lock_write();
+        w().video_encoder_heartbeat = true;
         if (w().shutdown)
         {
-            w().video_sender = false;
+            w().video_encoder = false;
             return;
         }
         if (nullptr == w().first)
@@ -2700,7 +3113,7 @@ static void video_sender()
             --timeoutcountdown;
             if (timeoutcountdown <= 0)
             {
-                w().video_sender = false;
+                w().video_encoder = false;
                 return;
             }
             sleepms = 100;
@@ -2715,6 +3128,7 @@ static void video_sender()
             if (nullptr == ss.video_data)
                 continue;
 
+            bool video_ex = d->cip->video_ex;
             int fid = d->get_fid();
             const uint8_t *y = (const uint8_t *)ss.video_data;
             ss.video_data = nullptr;
@@ -2723,8 +3137,18 @@ static void video_sender()
             w.unlock(); // no need lock anymore
 
             // encoding here
-            int ysz = (ss.video_w * ss.video_h);
-            toxav_video_send_frame(toxav, fid, (uint16_t)ss.video_w, (uint16_t)ss.video_h, y, y + ysz, y + (ysz + ysz / 4), nullptr);
+            int ysz = ss.video_w * ss.video_h;
+            if (video_ex && d->cip->vquality >= 0)
+            {
+                // isotoxin video ex transfer
+                d->cip->isotoxin_video_send_frame(fid, ss.video_w, ss.video_h, y, y + ysz, y + (ysz + ysz / 4));
+            
+            } else
+            {
+                // toxcore video transfer
+                toxav_video_send_frame(toxav, fid, (uint16_t)ss.video_w, (uint16_t)ss.video_h, y, y + ysz, y + (ysz + ysz / 4), nullptr);
+                d->cip->vquality = video_quality;
+            }
             hf->free_video_data(y);
 
             w = callstate.lock_write();
@@ -2746,12 +3170,117 @@ static void video_sender()
     }
 }
 
+static void video_sender()
+{
+    callstate.lock_write()().video_sender = true;
+
+    int sleepms = 100;
+    int timeoutcountdown = 50; // 5 sec
+    for (;; Sleep(sleepms))
+    {
+        auto w = callstate.lock_write();
+        w().video_sender_heartbeat = true;
+        if (w().shutdown)
+        {
+            w().video_sender = false;
+            return;
+        }
+        if (nullptr == w().first)
+        {
+            --timeoutcountdown;
+            if (timeoutcountdown <= 0)
+            {
+                w().video_sender = false;
+                return;
+            }
+            sleepms = 100;
+            continue;
+        }
+        timeoutcountdown = 50;
+        sleepms = 1;
+        for (contact_descriptor_s *d = w().first; d; d = d->next_call)
+        {
+            stream_settings_s &ss = d->cip->local_settings;
+
+            if (!d->cip->video_ex || nullptr == d->cip->current)
+                continue;
+
+            spinlock::simple_lock(d->cip->sync_frame);
+
+            if (d->cip->current->is_done())
+            {
+                auto *t = d->cip->current;
+                d->cip->current = d->cip->next;
+                d->cip->next = t;
+            }
+
+            if (nullptr == d->cip->current || d->cip->current->is_done())
+            {
+                d->cip->current_busy = false;
+                spinlock::simple_unlock(d->cip->sync_frame);
+                continue;
+            }
+
+            d->cip->current_busy = true;
+            spinlock::simple_unlock(d->cip->sync_frame);
+
+            int fid = d->get_fid();
+
+            ++ss.locked;
+            w.unlock(); // no need lock anymore
+
+            // send video ex data
+
+            contact_descriptor_s::call_in_progress_s::sending_frame_s * f = d->cip->current;
+            f->dummy_byte[sizeof(int) - 1] = PACKETID_VIDEO_EX;
+            f->sframe = htonl( f->frame );
+            f->soffset = htonl( f->offset ? f->offset : (-f->size) );
+            const uint8_t *d1 = f->dummy_byte + (sizeof(int) - 1);
+            const int d1sz = sizeof(int) * 2 + 1;
+            const uint8_t *d2 = ((const uint8_t *)(f+1)) + f->offset;
+            int d2sz = f->size - f->offset;
+            if (d2sz > TOX_MAX_CUSTOM_PACKET_SIZE - d1sz) d2sz = TOX_MAX_CUSTOM_PACKET_SIZE - d1sz;
+
+            if (tox_friend_send_lossless_packet2(tox, fid, d1, d1sz, d2, d2sz))
+                f->offset += d2sz;
+
+            if (f->is_done())
+                d->cip->current_busy = false; // safe to reset this flag without locking due busy means exclusive access
+
+            w = callstate.lock_write();
+            --ss.locked;
+            if (w().shutdown)
+                return;
+
+            bool ok = false;
+            for (contact_descriptor_s *dd = w().first; dd; dd = dd->next_call)
+                if (dd == d)
+                {
+                    ok = true;
+                    break;
+                }
+            if (!ok) break;
+
+        }
+        if (w.is_locked()) w.unlock();
+    }
+}
+
+
 static DWORD WINAPI audio_sender(LPVOID)
 {
     UNSTABLE_CODE_PROLOG
     audio_sender();
     UNSTABLE_CODE_EPILOG
     return 0;
+}
+
+static DWORD WINAPI video_encoder(LPVOID)
+{
+    UNSTABLE_CODE_PROLOG
+        video_encoder();
+    UNSTABLE_CODE_EPILOG
+        return 0;
 }
 
 static DWORD WINAPI video_sender(LPVOID)
@@ -2770,6 +3299,12 @@ static void run_senders()
         for (; !callstate.lock_read()().audio_sender; Sleep(1)); // wait audio sender start
     }
 
+    if (callstate.lock_read()().allow_run_video_encoder())
+    {
+        CloseHandle(CreateThread(nullptr, 0, video_encoder, nullptr, 0, nullptr));
+        for (; !callstate.lock_read()().video_encoder; Sleep(1)); // wait video encoder start
+    }
+
     if (callstate.lock_read()().allow_run_video_sender())
     {
         CloseHandle(CreateThread(nullptr, 0, video_sender, nullptr, 0, nullptr));
@@ -2779,10 +3314,39 @@ static void run_senders()
 
 static void stop_senders()
 {
+    int st = time_ms();
+
+    auto wh = callstate.lock_write();
+    wh().audio_sender_heartbeat = false;
+    wh().video_sender_heartbeat = false;
+    wh().video_encoder_heartbeat = false;
+    wh.unlock();
+
     while (callstate.lock_read()().senders())
     {
         callstate.lock_write()().shutdown = true;
+
         Sleep(1);
+
+        if ((time_ms() - st) > 3000)
+        {
+            // 3 seconds still waiting senders?
+            // something wrong
+            auto w = callstate.lock_write();
+            if (!w().audio_sender_heartbeat)
+                w().audio_sender = false, restart_module = true;
+            w().audio_sender_heartbeat = false;
+
+            if (!w().video_sender_heartbeat)
+                w().video_sender = false, restart_module = true;
+            w().video_sender_heartbeat = false;
+            
+            if (!w().video_encoder_heartbeat)
+                w().video_encoder = false, restart_module = true;
+            w().video_encoder_heartbeat = false;
+
+            st = time_ms();
+        }
     }
 
     callstate.lock_write()().shutdown = false;
@@ -2846,7 +3410,8 @@ static TOX_ERR_NEW prepare()
         "support_bbtags:b,s,u,i\n"
         "support_viewsize:1\n"
         "support_msg_chain:1\n"
-        "support_msg_cr_time:1\n";
+        "support_msg_cr_time:1\n"
+        "support_video_ex:1\n";
 
     tox = tox_new(caps, &options, &errnew);
     if (!tox)
@@ -3899,6 +4464,9 @@ void __stdcall stream_options(int id, const stream_options_s * so)
                             toxav_call_control(toxav, cd->get_fid(), 0 == (cd->cip->local_so.options & SO_RECEIVING_VIDEO) ? TOXAV_CALL_CONTROL_HIDE_VIDEO : TOXAV_CALL_CONTROL_SHOW_VIDEO, nullptr);
                     }
 
+                    if (0 == (cd->cip->local_so.options & SO_RECEIVING_VIDEO) && cd->cip->video_ex)
+                        cd->cip->current_recv_frame = -1;
+
                     if (cd->cip->local_so.view_w < 0 || cd->cip->local_so.view_h < 0)
                     {
                         cd->cip->local_so.view_w = 0;
@@ -3954,6 +4522,23 @@ int __stdcall send_av(int id, const call_info_s * ci)
 
 void __stdcall configurable(const char *field, const char *val)
 {
+    if (0 == strcmp(CFGF_VIDEO_CODEC, field))
+    {
+        use_vp9_codec = (0 == strcmp("vp9", val));
+        return;
+    }
+    if (0 == strcmp(CFGF_VIDEO_BITRATE, field))
+    {
+        video_bitrate = pstr_c(asptr(val)).as_int();
+        return;
+    }
+    if (0 == strcmp(CFGF_VIDEO_QUALITY, field))
+    {
+        video_quality = pstr_c(asptr(val)).as_int();
+        return;
+    }
+
+
     if ( 0 == strcmp(CFGF_PROXY_TYPE, field) )
     {
         int new_proxy_type = pstr_c( asptr(val) ).as_int();

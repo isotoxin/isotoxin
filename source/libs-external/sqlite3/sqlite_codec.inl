@@ -239,7 +239,7 @@ int sqlite3_rekey(sqlite3 *db, const void *zKey, int nKey)
             if (n == nSkip)
                 continue;
 
-            rc = sqlite3PagerGet(pPager, n, &pPage);
+            rc = sqlite3PagerGet(pPager, n, &pPage, 0);
 
             if (!rc)
             {

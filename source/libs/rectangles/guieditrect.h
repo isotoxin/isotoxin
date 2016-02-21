@@ -6,7 +6,7 @@
 class application_c;
 extern application_c *g_app;
 
-#define SEPARATORS L" \n\t:;\"',./?`~!@#$%^&*()-+=\\|{}"
+#define SEPARATORS L" \n\t:;\"',./?`~!@#$%^&*()-+=\\|{}—"
 #define IS_WORDB(c) (c==0||ts::CHARz_find(SEPARATORS,c)>=0)
 
 class gui_textedit_c : public gui_control_c
@@ -32,7 +32,8 @@ class gui_textedit_c : public gui_control_c
                 selection_color     = ts::ARGB(255,255,0),
                 selection_bg_color  = ts::ARGB(100,100,255),
                 outline_color       = 0, //ts::ARGB(0,0,0),
-                placeholder_color   = ts::ARGB(0xa0,0xa0,0xa0);
+                placeholder_color   = ts::ARGB(0xa0,0xa0,0xa0),
+                badword_undeline_color = ts::ARGB(255, 0, 0);
 	const ts::font_desc_c *font = &ts::g_default_text_font;
 	ts::wchar password_char = 0;
 
@@ -165,8 +166,7 @@ private:
         return get_client_area().size();
     }
 
-    bool summoncontextmenu();
-    void redraw(bool redtraw_texture = true);
+    bool summoncontextmenu(int cp);
     void prepare_texture();
     void run_heartbeat();
     bool invert_caret(RID, GUIPARAM);
@@ -174,8 +174,7 @@ private:
     bool kbd_processing_(system_query_e qp, ts::wchar charcode, int scan);
 
 	int text_el_advance(int index) const { if (index >= text.size()) return 0; return !password_char ? text[index].advance((*font)) : (*(*font))[password_char].advance;}
-	bool text_replace(int pos, int num, const ts::wsptr &str, active_element_s **el, int len, bool updateCaretPos = true);
-	bool text_replace(int pos, int num, const ts::wsptr &str, bool updateCaretPos = true);
+	bool text_replace(int pos, int num, const ts::wsptr &str, active_element_s **el, int len, bool update_caret_pos = true);
 	bool text_replace(int cp, const ts::wsptr &str) {return start_sel == -1 ? text_replace(cp, 0, str) : text_replace(ts::tmin(cp, start_sel), ts::tabs(start_sel-cp), str);}
 	bool text_erase(int pos, int num) {return text_replace(pos, num, ts::wstr_c(), nullptr, 0);}
 	bool text_erase(int cp) {return text_erase(ts::tmin(cp, start_sel), ts::tabs(start_sel-cp));}
@@ -234,9 +233,13 @@ public:
 
     typedef fastdelegate::FastDelegate<bool (const ts::wstr_c &)> TEXTCHECKFUNC;
 	TEXTCHECKFUNC check_text_func; // check/update text callback
+    virtual void new_text( int caret_char_pos /* utf8 char pos! */ ) {}
 
-    typedef fastdelegate::FastDelegate< void(menu_c &) > CTXMENUFUNC;
+    typedef fastdelegate::FastDelegate< void(menu_c &, int) > CTXMENUFUNC;
     CTXMENUFUNC ctx_menu_func;
+
+    typedef fastdelegate::FastDelegate< const ts::buf0_c *() > GETBADWORD;
+    GETBADWORD bad_words;
 
     void register_kbd_callback( GUIPARAMHANDLER handler, int scancode, bool ctrl )
     {
@@ -246,6 +249,8 @@ public:
     }
 
     virtual void cb_scrollbar_width(int w) {}
+
+    void redraw(bool redtraw_texture = true);
 
 	bool is_multiline() const {return flags.is(F_MULTILINE);}
     bool is_vsb() const
@@ -274,12 +279,15 @@ public:
     void set_placeholder(GET_TOOLTIP plht);
     void set_placeholder(GET_TOOLTIP plht, ts::TSCOLOR phcolor) { placeholder_color = phcolor; set_placeholder(plht); }
 
-	void set_text(const ts::wstr_c &text, bool move_caret2end = false, bool setup_undo = true);
+    bool text_replace(int pos, int num, const ts::wsptr &str, bool update_caret_pos = true);
+    void set_text(const ts::wstr_c &text, bool move_caret2end = false, bool setup_undo = true);
     ts::wstr_c get_text_and_fix_pos(int *pos0, int *pos1) const;
 	ts::wstr_c get_text() const {return text_substr(0, text.size());}
+    ts::wstr_c get_text_11( ts::wchar rc ) const; // complex text elements as rc character
     ts::str_c get_text_utf8() const {return text_substr_utf8(0, text.size());}
 	void insert_text(const ts::wstr_c &t) {text_replace(get_caret_char_index(), t);} //insert text at current cursor pos
 	void set_color(ts::TSCOLOR c) { caret_color = color = c; redraw(); }
+    void set_badword_color(ts::TSCOLOR c) { badword_undeline_color = c; redraw(); }
 	void set_password_char(ts::wchar pc) { password_char = pc; redraw(); }
 
 	int lines_count() const;
@@ -298,6 +306,7 @@ public:
 	void set_caret_pos(int cp); // set caret pos by index of char of text
 	ts::ivec2 get_char_pos(int pos) const; // returns caret pos (offset and line) of char of text
 	int get_caret_char_index() const { return lines.get(caret_line).x+caret_offset; }
+    int get_caret_char_index(ts::ivec2 p) const; // get caret index by pos
 
 	// clipboard
     void end()

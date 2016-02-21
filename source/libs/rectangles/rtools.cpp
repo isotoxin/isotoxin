@@ -199,3 +199,77 @@ void process_animation_s::render()
 
 }
 
+
+animation_c *animation_c::first = nullptr;
+animation_c *animation_c::last = nullptr;
+uint animation_c::allow_tick = 1;
+animation_c::~animation_c()
+{
+    if (prev || next || first == this)
+        LIST_DEL(this, first, last, prev, next);
+}
+void animation_c::redraw()
+{
+    for (redraw_request_s &r : rr)
+        if (!r.engine.expired())
+            r.engine->redraw(&r.rr);
+    rr.clear();
+}
+
+animation_c * animation_c::do_tick()
+{
+    animation_c *n = next;
+
+    if (rr.size() == 0)
+    {
+        unregister_animation();
+        return n;
+    }
+
+    if (rr.get(rr.size() - 1).engine.expired())
+        rr.remove_fast(rr.size() - 1);
+
+    if (animation_tick())
+        redraw();
+
+    return n;
+}
+
+void animation_c::register_animation(rectengine_root_c *e, const ts::irect &ar)
+{
+    if (!prev && !next && first != this)
+    {
+        LIST_ADD(this, first, last, prev, next);
+        just_registered();
+    }
+
+    redraw_request_s *er = nullptr;
+    for (redraw_request_s &r : rr)
+    {
+        if (r.engine.get() == e)
+        {
+            r.rr.combine(ar);
+            return;
+        }
+        if (r.engine.expired())
+            er = &r;
+    }
+    redraw_request_s &r = er ? *er : rr.add();
+    r.engine = e;
+    r.rr = ar;
+}
+
+void animation_c::unregister_animation()
+{
+    if (prev || next || first == this)
+    {
+        LIST_DEL_CLEAR(this, first, last, prev, next);
+    }
+}
+
+void animation_c::tick()
+{
+    if (!allow_tick) return;
+    for (animation_c *a = first; a; )
+        a = a->do_tick();
+}

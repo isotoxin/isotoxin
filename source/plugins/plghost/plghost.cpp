@@ -636,6 +636,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                     w << info.features;
                     w << info.connection_features;
                     w << asptr( info.icon, info.icon_buflen );
+                    w << asptr( info.vcodecs, info.vcodecs_buflen);
                     ++cnt;
 
                     FreeLibrary(l);
@@ -1033,31 +1034,24 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             MINIDUMP_TYPE dump_type = (MINIDUMP_TYPE)(MiniDumpWithDataSegs | MiniDumpWithHandleData);
 #endif
     
-
             ipcr r(d->get_reader());
-            token<char> lns(r.getastr(), '\n');
-            for (; lns; ++lns)
-            {
-                auto s = lns->get_trimmed();
-                int eqi = s.find_pos('=');
-                if (eqi > 0)
-                {
-                    pstr_c k = s.substr(0, eqi);
-                    pstr_c v = s.substr(eqi + 1);
+            parse_values(r.getastr(), [&](const pstr_c &k, const pstr_c &v) {
 
-                    if (k.equals(CONSTASTR(DEBUG_OPT_FULL_DUMP)))
-                    {
+                if (k.equals(CONSTASTR(DEBUG_OPT_FULL_DUMP)))
+                {
 #if defined _DEBUG || defined _CRASH_HANDLER
-                        if (v.as_int() != 0)
-                            dump_type = (MINIDUMP_TYPE)(MiniDumpWithFullMemory | MiniDumpWithDataSegs | MiniDumpWithHandleData );
+                    if (v.as_int() != 0)
+                        dump_type = (MINIDUMP_TYPE)(MiniDumpWithFullMemory | MiniDumpWithDataSegs | MiniDumpWithHandleData);
 #endif
-                    } else if (k.equals(CONSTASTR(DEBUG_OPT_LOGGING)))
-                    {
-                        g_logging_flags = (unsigned)v.as_int();
-                        if (protolib.functions) protolib.functions->logging_flags(g_logging_flags);
-                    }
                 }
-            }
+                else if (k.equals(CONSTASTR(DEBUG_OPT_LOGGING)))
+                {
+                    g_logging_flags = (unsigned)v.as_int();
+                    if (protolib.functions) protolib.functions->logging_flags(g_logging_flags);
+                }
+
+            });
+
 
 #if defined _DEBUG || defined _CRASH_HANDLER
             exception_operator_c::set_dump_type(dump_type);
@@ -1179,7 +1173,8 @@ static void __stdcall av_data(int gid, int cid, const media_data_s *data)
         case VFMT_XRGB:
             {
                 int xrgb_sz = data->vfmt.width * data->vfmt.height * 4;
-                data_header_s *dh = (data_header_s *)ipcj->lock_buffer(xrgb_sz);
+                int xrgbbufsz = xrgb_sz + sizeof(data_header_s) + sizeof(inf_s);
+                data_header_s *dh = (data_header_s *)ipcj->lock_buffer(xrgbbufsz);
 
                 if (!dh) return;
                 inf_s *d2s = (inf_s *)(dh + 1);
@@ -1207,12 +1202,12 @@ static void __stdcall av_data(int gid, int cid, const media_data_s *data)
                         memcpy(body, dfrom, pitch_to);
                 }
 
-                ipcj->unlock_send_buffer(dh, xrgb_sz);
+                ipcj->unlock_send_buffer(dh, xrgbbufsz);
             }
             break;
         case VFMT_I420:
             {
-                int xrgb_sz = data->vfmt.width * data->vfmt.height * 4;
+                int xrgb_sz = data->vfmt.width * data->vfmt.height * 4 + sizeof( data_header_s ) + sizeof(inf_s);
                 data_header_s *dh = (data_header_s *)ipcj->lock_buffer(xrgb_sz);
                 if (!dh) return;
                 inf_s *d2s = (inf_s *)(dh+1);

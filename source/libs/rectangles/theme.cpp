@@ -281,6 +281,9 @@ void theme_image_s::draw(rectengine_c &eng, const ts::irect& area, ts::uint32 al
 {
     ts::ivec2 p = calc_p(info().sz, area, align);
     eng.draw(p, dbmp->extbody(rect), true);
+
+    if (animated)
+        animated->register_animation(eng.getrect().getroot(), ts::irect::from_lt_and_size(p, rect.size()));
 }
 
 
@@ -566,6 +569,8 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
         {
             irect r = irect(0);
             const bitmap_c *dbmp = nullptr;
+            rsvg_svg_c *asvg = nullptr;
+            ts::ivec2 svgshift;
             if (ts::abp_c *gen = it->get(CONSTASTR("gen")))
             {
                 if (generated_button_data_s *bgenstuff = generated_button_data_s::generate(gen, colsmap, true))
@@ -573,6 +578,7 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
                     bitmap_c &b = prepareimageplace(to_wstr(it.name()).append_char('?'));
                     b = bgenstuff->src;
                     dbmp = &b;
+                    asvg = bgenstuff->get_svg(svgshift);
                     TSDEL(bgenstuff);
                     r = irect(ivec2(0), dbmp->info().sz);
                 }
@@ -593,6 +599,8 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
             theme_image_s &img = images.add(it.name());
             img.dbmp = dbmp;
             img.rect = r;
+            if (asvg)
+                img.set_animated(asvg, svgshift);
             (ts::image_extbody_c &)img = std::move(ts::image_extbody_c(dbmp->body(r.lt), imgdesc_s(r.size(), 32, dbmp->info().pitch)));
             ts::add_image(to_wstr(it.name()), img.body(), img.info(), false /* no need to copy */);
 
@@ -730,4 +738,20 @@ irect theme_rect_s::hollowrect( const rectprops_c &rps ) const	// calc client ar
         r.rb = rps.currentsize() - hollowborder.rb;
     }
 	return r;
+}
+
+
+/*virtual*/ bool theme_image_s::animated_internals_s::animation_tick()
+{
+    if (firsttick)
+        svg->anim_reset(), firsttick = false;
+    else
+        svg->anim_tick();
+
+    owner->fill(0);
+    cairo_matrix_t m;
+    cairo_matrix_init_translate(&m, shift.x, shift.y);
+    svg->render( owner->extbody(), ts::ivec2(0), &m);
+
+    return true;
 }

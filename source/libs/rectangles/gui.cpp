@@ -488,6 +488,7 @@ void gui_c::loop()
         if (sleep < 0 || sleep > 50) sleep = 50;
 
         if (m_5seconds.it_is_time_ones()) app_5second_event();
+        animation_c::tick();
         app_loop_event();
 
         ts::tmp_pointers_t<gmsgbase,1> executing;

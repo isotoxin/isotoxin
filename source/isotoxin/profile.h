@@ -32,6 +32,9 @@ enum messages_options_e : unsigned
     MSGOP_FULL_SEARCH           = SETBIT(8),
     MSGOP_REPLACE_SHORT_SMILEYS = SETBIT(9),
     MSGOP_MAXIMIZE_INLINE_IMG   = SETBIT(10),
+    MSGOP_SPELL_CHECK           = SETBIT(11),
+
+    UIOPT_SHOW_INCOMING_CALL_BAR = SETBIT(15),
 
     UIOPT_SHOW_SEARCH_BAR       = SETBIT(16),
     UIOPT_PROTOICONS            = SETBIT(17),
@@ -47,7 +50,7 @@ enum messages_options_e : unsigned
     OPTOPT_POWER_USER           = SETBIT(31),
 };
 
-#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_TAGFILETR_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | GCHOPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST | MSGOP_MAXIMIZE_INLINE_IMG)
+#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_TAGFILETR_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | GCHOPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST | MSGOP_MAXIMIZE_INLINE_IMG | MSGOP_SPELL_CHECK | UIOPT_SHOW_INCOMING_CALL_BAR)
 
 
 enum dsp_flags_e
@@ -531,11 +534,15 @@ public:
 
     FLOATPAR(fontscale_conv_text, 1.0f);
 
-    TEXTAPAR( unique_profile_tag, "" )
+    TEXTAPAR(unique_profile_tag, "")
 
-    #define TAB(tab) tableview_##tab##_s &get_table_##tab() { return table_##tab; };
+#define TAB(tab) tableview_##tab##_s &get_table_##tab() { return table_##tab; };
     PROFILE_TABLES
-    #undef TAB
+#undef TAB
+
+    INTPAR(video_enc_quality, 0);
+    INTPAR(video_bitrate, 0);
+    TEXTAPAR(video_codec, "");
 
     INTPAR( backup_period, 3600 ); // seconds
     INTPAR( backup_keeptime, 30 ); // days

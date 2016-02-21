@@ -112,18 +112,19 @@ ok:
 	    redraw();
 	    if (update_caret_pos) set_caret_pos(pos + len);
     }
+    new_text( get_caret_char_index() );
 	start_sel = -1;
 	return true;
 }
 
-bool gui_textedit_c::text_replace(int pos, int num, const ts::wsptr &str, bool updateCaretPos)
+bool gui_textedit_c::text_replace(int pos, int num, const ts::wsptr &str, bool update_caret_pos)
 {
 	ts::tmp_pointers_t<active_element_s, 0> elements( str.l );
     if (is_multiline())
     {
         for(int i=0;i<str.l;++i)
             elements.add(active_element_s::fromchar(str.s[i]));
-	    return text_replace(pos, num, str, elements.begin(), elements.size(), updateCaretPos);
+	    return text_replace(pos, num, str, elements.begin(), elements.size(), update_caret_pos);
     } else
     {
         bool nldetected = false;
@@ -136,9 +137,9 @@ bool gui_textedit_c::text_replace(int pos, int num, const ts::wsptr &str, bool u
         {
             ts::wstr_c x;
             ts::pwstr_c(str).extract_non_chars( x, CONSTWSTR("\n") );
-            return text_replace(pos, num, x.as_sptr(), elements.begin(), elements.size(), updateCaretPos);  
+            return text_replace(pos, num, x.as_sptr(), elements.begin(), elements.size(), update_caret_pos);  
         } else
-            return text_replace(pos, num, str, elements.begin(), elements.size(), updateCaretPos);  
+            return text_replace(pos, num, str, elements.begin(), elements.size(), update_caret_pos);  
     }
 }
 
@@ -168,6 +169,18 @@ ts::wstr_c gui_textedit_c::get_text_and_fix_pos(int *pos0, int *pos1) const
     if (!pos1fixed && *pos1 == count)
         *pos1 = r.get_length();
 
+    return r;
+}
+
+ts::wstr_c gui_textedit_c::get_text_11( ts::wchar rc ) const
+{
+    int count = text.size();
+    ts::wstr_c r(count, true);
+    for (int i = 0; i < count; ++i)
+    {
+        const text_element_c &te = text[i];
+        r.append_char(te.is_char() ? te.get_char_unsafe() : rc);
+    }
     return r;
 }
 
@@ -266,6 +279,24 @@ void gui_textedit_c::scroll_to_caret()
 	}
 	flags.set(F_CARET_SHOW);
     redraw(dirty_texture);
+}
+
+int gui_textedit_c::get_caret_char_index(ts::ivec2 p) const
+{
+    if (!font) return 0;
+    p.x += scroll_left - ts::ui_scale(margins_lt.x);
+
+    int line = ts::tmax(0, ts::tmin((p.y - ts::ui_scale(margins_lt.y) + scroll_top()) / (*font)->height, lines.count() - 1));
+    int lineW = 0;
+    int i = 0;
+    for (; i < lines.get(line).delta(); i++)
+    {
+        int charW = text_el_advance(lines.get(line).r0 + i);
+        if (p.x <= lineW + charW / 2) break;
+        lineW += charW;
+    }
+
+    return lines.get(line).x + i;
 }
 
 void gui_textedit_c::set_caret_pos(ts::ivec2 p)
@@ -381,7 +412,7 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 				break;
 			case SSK_C:
 			case SSK_INSERT:
-				res = copy_(cp);;
+				res = copy_(cp);
 				break;
 			case SSK_V:
 				paste_(cp);
@@ -789,6 +820,10 @@ void gui_textedit_c::prepare_texture()
 		}
 #endif
 
+    const ts::buf0_c *badwords = bad_words ? bad_words() : nullptr;
+    ts::tmp_tbuf_t<ts::ivec3> bads;
+    bool prevbad = false;
+
 	// glyphs and selection
 	for (int l = visible_lines.r0; l <= visible_lines.r1; ++l) // lines
 	{
@@ -798,6 +833,21 @@ void gui_textedit_c::prepare_texture()
 		for (int i = lines.get(l).r0; i < lines.get(l).r1; ++i) // chars at current line
 		{
 			text_element_c &el = text.get(i);
+
+            bool is_bad_char = false;
+            if (badwords) // if spellchecker is active
+            {
+                is_bad_char = badwords->get_bit(i);
+                if ((!prevbad && is_bad_char) || (prevbad && bads.last(ts::ivec3(0)).z != pen.y))
+                {
+                    ts::ivec3 &bx = bads.add();
+                    bx.r0 = pen.x;
+                    bx.r1 = pen.x;
+                    bx.z = pen.y;
+                }
+                prevbad = is_bad_char;
+            }
+
 			const ts::wchar *str = nullptr;
             active_element_s *ae = nullptr;
 			int str_len = 0, advoffset = 0;
@@ -863,6 +913,13 @@ void gui_textedit_c::prepare_texture()
 			}
 
 			pen.x += advoffset;
+
+            if (is_bad_char)
+            {
+                ASSERT(bads.count() > 0);
+                bads.get(bads.count() - 1).r1 = pen.x;
+            }
+
 		}
 	}
 
@@ -870,6 +927,32 @@ void gui_textedit_c::prepare_texture()
 	if (outlinedglyphs.count() != 0)
 		ts::text_rect_c::draw_glyphs(texture.body(), w, asize.y, texture.info().pitch, outlinedglyphs.array(), ts::ivec2(0), false);
 	ts::text_rect_c::draw_glyphs(texture.body(), w, asize.y, texture.info().pitch, glyphs.array(), ts::ivec2(0), false);
+
+    if (bads.count() > 0)
+    {
+        static const ts::uint8 addy[] = { 0,0,1,2,2,1 };
+
+        // draw spellchecker underline
+        for( ts::ivec3 &l : bads )
+        {
+            const ts::ivec2 &tsz = texture.info().sz;
+            if (l.r0 >= tsz.x) continue;
+            if (l.z >= tsz.y) continue;
+            if ( l.r1 <= 0 ) continue;
+            if ( l.r0 < 0 ) l.r0 = 0;
+            if ( l.r1 >= tsz.x) l.r1 = tsz.x - 1;
+            if (l.r0 >= l.r1) continue;
+            int miy = tsz.y - l.z - 1;
+            ts::uint8 *dst = texture.body( ts::ivec2( l.r0, l.z ) );
+            for (int i = 0; l.r0 < l.r1; ++l.r0, dst += 4)
+            {
+                int addp = texture.info().pitch * ts::tmin(miy, addy[i]);
+                *(ts::TSCOLOR *)(dst+addp) = badword_undeline_color;
+                ++i;
+                if (i >= ARRAY_SIZE(addy)) i = 0;
+            }
+        }
+    }
 }
 
 void gui_textedit_c::selectword()
@@ -894,6 +977,7 @@ void gui_textedit_c::undo()
     flags.set(F_LINESDIRTY | F_TEXTUREDIRTY);
     set_caret_pos(ls.caret_index);
     _undo.truncate(_undo.size() - 1);
+    new_text( get_caret_char_index() );
     redraw();
 }
 void gui_textedit_c::redo()
@@ -907,6 +991,7 @@ void gui_textedit_c::redo()
     flags.set(F_LINESDIRTY | F_TEXTUREDIRTY);
     set_caret_pos(ls.caret_index);
     _redo.truncate(_redo.size() - 1);
+    new_text( get_caret_char_index() );
     redraw();
 }
 
@@ -942,7 +1027,7 @@ bool gui_textedit_c::ctxclosehandler(RID, GUIPARAM)
     return true;
 }
 
-bool gui_textedit_c::summoncontextmenu()
+bool gui_textedit_c::summoncontextmenu(int cp)
 {
     if (flags.is(F_DISABLE_CARET)) return false;
 
@@ -959,7 +1044,7 @@ bool gui_textedit_c::summoncontextmenu()
 
     if (ctx_menu_func)
     {
-        ctx_menu_func(mnu);
+        ctx_menu_func(mnu, cp);
         if (!mnu.is_empty()) mnu.add_separator();
     }
 
@@ -973,6 +1058,7 @@ bool gui_textedit_c::summoncontextmenu()
     gui_popup_menu_c &pm = gui_popup_menu_c::show(menu_anchor_s(true), mnu);
     pm.set_close_handler( DELEGATE(this, ctxclosehandler) );
     popupmenu = &pm;
+    popupmenu->leech(this);
     return true;
 
 }
@@ -1004,6 +1090,19 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
 
 /*virtual*/ bool gui_textedit_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    if (rid != getrid())
+    {
+        // from submenu
+        if (popupmenu && popupmenu->getrid() == rid)
+        {
+            if (SQ_POPUP_MENU_DIE == qp)
+            {
+                gui->set_focus(getrid());
+            }
+        }
+        return false;
+    }
+
     switch (qp) // wheel must be handled here: default wheel processing will hide wheel event for this rectangle
     {
     case SQ_MOUSE_WHEELUP:
@@ -1092,7 +1191,7 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
     case SQ_MOUSE_RUP:
         if (!gui->mtrack(getrid(), MTT_SBMOVE) && !gui->mtrack(getrid(), MTT_TEXTSELECT))
         {
-            if (summoncontextmenu())
+            if (summoncontextmenu(get_caret_char_index(to_local(data.mouse.screenpos) - get_client_area().lt)))
                 goto default_stuff;
         }
         break;

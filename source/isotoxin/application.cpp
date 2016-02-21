@@ -36,6 +36,218 @@ static bool __toggle_newcon_bar(RID, GUIPARAM)
 
 extern parsed_command_line_s g_commandline;
 
+namespace
+{
+struct load_spellcheckers_s : public ts::task_c
+{
+    ts::array_del_t< Hunspell, 0 > spellcheckers;
+    ts::wstrings_c fns;
+    ts::wstr_c fn;
+    ts::buf0_c aff, dic;
+
+    load_spellcheckers_s():fn( CONSTWSTR("spellcheck/*.aff") )
+    {
+        ts::g_fileop->find(fns, fn, false);
+    }
+
+    /*virtual*/ int iterate(int pass) override
+    {
+        if ( fn.is_empty() ) return R_DONE;
+        if (aff.size() == 0 || dic.size() == 0) return R_RESULT_EXCLUSIVE;
+
+        hunspell_file_s aff_file_data(aff.data(), aff.size());
+        hunspell_file_s dic_file_data(dic.data(), dic.size());
+
+        Hunspell *hspl = TSNEW(Hunspell, aff_file_data, dic_file_data);
+        spellcheckers.add(hspl);
+
+        return fns.size() ? R_RESULT_EXCLUSIVE : R_DONE;
+    }
+    /*virtual*/ void result() override
+    {
+        if (fns.size() == 0)
+        {
+            fn.clear();
+            return;
+        }
+        ts::wstr_c afffn = fns.get_last_remove();
+
+        fn.set_length(11 /* length of "spellcheck/" */).append(afffn);
+        aff.load_from_file(fn);
+        if (0 == aff.size())
+        {
+            fn.clear();
+            return;
+        }
+        fn.set_length(fn.get_length() - 3).append(CONSTWSTR("dic"));
+        dic.load_from_file(fn);
+        if (0 == dic.size())
+            fn.clear();
+
+    }
+
+    /*virtual*/ void done(bool canceled) override
+    {
+        if (!canceled && spellcheckers.size())
+            g_app->spellchecker.set_spellcheckers(std::move(spellcheckers));
+
+        __super::done(canceled);
+    }
+
+};
+struct check_word_task : public ts::task_c
+{
+    ts::astrings_c checkwords;
+    ts::iweak_ptr<spellchecker_s> splchk;
+
+    ts::str_c w;
+    ts::astrings_c suggestions;
+    bool is_valid = false;
+
+    check_word_task()
+    {
+    }
+
+    /*virtual*/ int iterate(int pass) override
+    {
+        auto lr = g_app->spellchecker.lock(this);
+        if (application_c::splchk_c::LOCK_EMPTY == lr) return R_CANCEL;
+        if ( application_c::splchk_c::LOCK_OK == lr )
+        {
+            w = checkwords.get_last_remove();
+            is_valid = g_app->spellchecker.check_one(w, suggestions);
+            if (g_app->spellchecker.unlock(this))
+                return R_CANCEL;
+            return checkwords.size() ? R_RESULT_EXCLUSIVE : R_DONE;
+        }
+
+        return 1;
+    }
+
+    /*virtual*/ void result() override
+    {
+        if (!splchk.expired())
+            splchk->check_result( w, is_valid, std::move(suggestions) );
+    }
+
+    /*virtual*/ void done(bool canceled) override
+    {
+        if (!canceled && !w.is_empty())
+            result();
+
+        __super::done(canceled);
+    }
+
+};
+
+}
+
+bool application_c::splchk_c::check_one( const ts::str_c &w, ts::astrings_c &suggestions )
+{
+    ASSERT( busy );
+
+    suggestions.clear();
+
+    ts::tmp_pointers_t<Hunspell, 2> sugg;
+    for( Hunspell *hspl : spellcheckers )
+    {
+        if (int csr = hspl->spell( w.cstr() ))
+            return true; // good word
+        sugg.add( hspl );
+    }
+
+    for (Hunspell *hspl : sugg)
+    {
+        char ** wlst;
+        int cnt = hspl->suggest(&wlst, w.cstr());
+        for(int i=0;i<cnt;++i)
+            suggestions.add( ts::asptr(wlst[i]) );
+        hspl->free_list(&wlst, cnt);
+    }
+
+    suggestions.kill_dups_and_sort();
+    return false;
+}
+
+application_c::splchk_c::lock_rslt_e application_c::splchk_c::lock(void *prm)
+{
+    spinlock::auto_simple_lock l(sync);
+    if ( busy ) return LOCK_BUSY;
+    if ( EMPTY == state || unload_request ) return LOCK_EMPTY;
+    if ( READY != state ) return LOCK_BUSY;
+
+    busy = prm;
+    return LOCK_OK;
+}
+
+bool application_c::splchk_c::unlock(void *prm)
+{
+    spinlock::auto_simple_lock l(sync);
+    ASSERT( busy == prm );
+    busy = nullptr;
+    return unload_request;
+}
+
+
+void application_c::splchk_c::load()
+{
+    spinlock::auto_simple_lock l(sync);
+    if (EMPTY == state)
+    {
+        state = LOADING;
+        g_app->add_task(TSNEW(load_spellcheckers_s));
+    }
+
+}
+void application_c::splchk_c::unload()
+{
+    spinlock::auto_simple_lock l(sync);
+    if (nullptr != busy || LOADING == state)
+    {
+        unload_request = true;
+        return;
+    }
+    if (READY == state)
+    {
+        spellcheckers.clear();
+        state = EMPTY;
+    }
+}
+void application_c::splchk_c::set_spellcheckers(ts::array_del_t< Hunspell, 0 > &&sa)
+{
+    spinlock::auto_simple_lock l(sync);
+
+    if (nullptr != busy)
+        return;
+
+    if (unload_request)
+    {
+        spellcheckers.clear();
+        unload_request = false;
+        state = EMPTY;
+        return;
+    }
+    
+    spellcheckers = std::move( sa );
+    state = spellcheckers.size() ? READY : EMPTY;
+}
+
+void application_c::splchk_c::check(ts::astrings_c &&checkwords, spellchecker_s *rsltrcvr)
+{
+    spinlock::auto_simple_lock l(sync);
+    if (unload_request || spellcheckers.size() == 0 || LOADING == state)
+    {
+        rsltrcvr->undo_check(checkwords);
+        return;
+    }
+
+    check_word_task *t = TSNEW(check_word_task);
+    t->checkwords = std::move(checkwords);
+    t->splchk = rsltrcvr;
+    g_app->add_task(t);
+}
+
+
 application_c::application_c(const ts::wchar * cmdl)
 {
     F_NEWVERSION = false;
@@ -50,6 +262,9 @@ application_c::application_c(const ts::wchar * cmdl)
     F_READONLY_MODE_WARN = g_commandline.readonlymode; // suppress warn
     F_MODAL_ENTER_PASSWORD = false;
     F_TYPING = false;
+    F_CAPTURE_AUDIO_TASK = false;
+    F_CAPTURING = false;
+    F_SHOW_CONTACTS_IDS = false;
 
     autoupdate_next = now() + 10;
 	g_app = this;
@@ -135,6 +350,8 @@ void application_c::apply_debug_options()
         dump_type = (MINIDUMP_TYPE)(MiniDumpWithDataSegs | MiniDumpWithHandleData);
     ts::exception_operator_c::set_dump_type(dump_type);
 #endif
+
+    F_SHOW_CONTACTS_IDS = d.get(CONSTASTR("contactids")).as_int() != 0;
 }
 
 ts::uint32 application_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
@@ -158,9 +375,9 @@ ts::uint32 application_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&t )
 ts::uint32 application_c::gm_handler(gmsg<GM_UI_EVENT> & e)
 {
     if (UE_MAXIMIZED == e.evt || UE_NORMALIZED == e.evt)
-        picture_animated_c::allow_tick = true;
+        animation_c::allow_tick |= 1;
     else if (UE_MINIMIZED == e.evt)
-        picture_animated_c::allow_tick = false;
+        animation_c::allow_tick &= ~1;
 
     return 0;
 }
@@ -659,7 +876,6 @@ bool application_c::blinking_reason_s::tick()
         F_SETNOTIFYICON = false;
     }
 
-    picture_animated_c::tick();
     m_tasks_executor.tick();
     resend_undelivered_messages();
 
@@ -675,17 +891,15 @@ bool application_c::blinking_reason_s::tick()
 {
     UNSTABLE_CODE_PROLOG
 
-    if (s3::is_capturing())
+    F_CAPTURING = s3::is_capturing();
+    if (F_CAPTURING)
     {
-        struct x
+        auto datacaptureaccept = [](const void *data, int size, void * /*context*/)
         {
-            static void datacaptureaccept(const void *data, int size, void * /*context*/)
-            {
-                g_app->handle_sound_capture(data, size);
-            }
+            g_app->handle_sound_capture(data, size);
         };
 
-        s3::capture_tick(x::datacaptureaccept, nullptr);
+        s3::capture_tick(datacaptureaccept, nullptr);
         sleep_ms = 1;
     }
 
@@ -1301,6 +1515,72 @@ void application_c::unregister_capture_handler(sound_capture_handler_c *h)
         start_capture(nullptr);
     }
 }
+
+namespace
+{
+    struct hardware_sound_capture_switch_s : public ts::task_c
+    {
+        ts::tbuf0_t<s3::Format> fmts;
+        hardware_sound_capture_switch_s(const s3::Format *_fmts, int cnt):fmts(_fmts, cnt) {}
+        hardware_sound_capture_switch_s() {}
+
+        /*virtual*/ int iterate(int pass) override
+        {
+            if (fmts.count())
+            {
+                // start
+                s3::Format fmtw;
+                s3::start_capture(fmtw, fmts.begin(), fmts.count());
+            } else
+            {
+                s3::stop_capture();
+            }
+
+            return R_DONE;
+        }
+
+
+        /*virtual*/ void done(bool canceled) override
+        {
+            if (!canceled && g_app)
+            {
+                g_app->F_CAPTURE_AUDIO_TASK = false;
+                
+                DEFERRED_EXECUTION_BLOCK_BEGIN(0)
+                    g_app->check_capture();
+                DEFERRED_EXECUTION_BLOCK_END(0)
+            }
+
+            __super::done(canceled);
+        }
+
+    };
+}
+
+void application_c::check_capture()
+{
+    if (F_CAPTURE_AUDIO_TASK)
+        return;
+
+    F_CAPTURING = s3::is_capturing();
+
+    if (F_CAPTURING && !m_currentsc)
+    {
+        F_CAPTURE_AUDIO_TASK = true;
+        add_task(TSNEW(hardware_sound_capture_switch_s));
+
+    }  else if (!F_CAPTURING && m_currentsc)
+    {
+        F_CAPTURE_AUDIO_TASK = true;
+        int cntf;
+        const s3::Format *fmts = m_currentsc->formats(cntf);
+        add_task(TSNEW(hardware_sound_capture_switch_s, fmts, cntf));
+
+    } else if (F_CAPTURING && m_currentsc)
+        s3::get_capture_format(m_currentsc->getfmt());
+
+}
+
 void application_c::start_capture(sound_capture_handler_c *h)
 {
     struct checkcaptrue
@@ -1309,15 +1589,7 @@ void application_c::start_capture(sound_capture_handler_c *h)
         checkcaptrue(application_c *app):app(app) {}
         ~checkcaptrue()
         {
-            bool s3cap = s3::is_capturing();
-            if (s3cap && !app->m_currentsc)
-                s3::stop_capture();
-            else if (!s3cap && app->m_currentsc) {
-                int cntf;
-                s3::Format *fmts = app->m_currentsc->formats(cntf);
-                s3::start_capture(app->m_currentsc->getfmt(), fmts, cntf);
-            } else if (s3cap && app->m_currentsc)
-                s3::get_capture_format(app->m_currentsc->getfmt());
+            app->check_capture();
         }
 
     } chk(this);
@@ -1443,6 +1715,16 @@ void application_c::update_ringtone( contact_root_c *rt, bool play_stop_snd )
         (get_avinprogresscount() == 0) ? 
             play_sound(snd_ringtone, true) :
             play_sound(snd_ringtone2, true);
+
+        if (prf().get_options().is(UIOPT_SHOW_INCOMING_CALL_BAR))
+        {
+            contact_c *ccc = nullptr;
+            rt->subiterate([&](contact_c *c) { if (c->is_ringtone()) ccc = c; });
+            if (ccc) {
+                MAKE_ROOT<incoming_call_panel_c> xxx(ccc);
+            }
+        }
+
     } else if (avcount && 0 == get_avringcount())
     {
         stop_sound(snd_ringtone2);
@@ -1525,7 +1807,7 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, bool activate, bo
             ap->send_audio(current_receiver.contactid, capturefmt, data, size);
 }
 
-/*virtual*/ s3::Format *application_c::formats(int &count)
+/*virtual*/ const s3::Format *application_c::formats(int &count)
 {
     avformats.clear();
 
@@ -2639,7 +2921,7 @@ void av_contact_s::set_so_audio(bool inactive_, bool enable_mic, bool enable_spe
 
 void av_contact_s::set_video_res(const ts::ivec2 &vsz)
 {
-    if (ts::tabs(sosz.x-vsz.x) >= 4 || ts::tabs(sosz.y - vsz.y) >= 4)
+    if (ts::tabs(sosz.x-vsz.x) > 64 || ts::tabs(sosz.y - vsz.y) > 64)
     {
         sosz = vsz;
         send_so();

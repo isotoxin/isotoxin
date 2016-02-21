@@ -788,12 +788,12 @@ public:
         return *this;
     }
 
-    str_t<TCHARACTER, CORE> & case_up(ZSTRINGS_SIGNED offset = 0)
+    str_t<TCHARACTER, CORE> & case_up(ZSTRINGS_SIGNED offset0 = 0, ZSTRINGS_SIGNED offset1 = -1)
     {
         if (core.len() == 0) return *this;
         core.change( core.len(), zstrings_internal::mod_preserve<TCHARACTER>( core.len() ) );
-
-        ZSTRINGS_SYSCALL(text_uppercase)(str() + offset, get_length() - offset);
+        if (offset1 < 0) offset1 = get_length();
+        ZSTRINGS_SYSCALL(text_uppercase)(str() + offset0, offset1 - offset0);
         return *this;
     }
 
@@ -1467,6 +1467,18 @@ public:
         return *this;
     }
 
+    str_t & remove_chars_of( const sptr<TCHARACTER> &s )
+    {
+        // TODO : not so fast algorithm
+        for (;;)
+        {
+            ZSTRINGS_SIGNED i = find_pos_of(0, s);
+            if (i < 0) break;
+            cut( i, 1 );
+        }
+        return *this;
+    }
+
     template<class CORE2> str_t<TCHARACTER, CORE> &  insert(const ZSTRINGS_SIGNED idx, const str_t<TCHARACTER, CORE2> &s) { return insert(idx,s.as_sptr()); };
     str_t &  insert(const ZSTRINGS_SIGNED idx, const sptr<TCHARACTER> &s)
     {
@@ -1565,6 +1577,28 @@ public:
         }
         return *this;
     };
+
+    str_t &  replace_all_of(const sptr<TCHARACTER> &of, TCHARACTER c2)
+    {
+        ZSTRINGS_SIGNED len = get_length();
+        if (len == 0) return *this;
+        bool changed = false;
+
+        for (ZSTRINGS_SIGNED i = 0; i < len; ++i)
+        {
+            if (CHARz_findn(of.s, core()[i], of.l) >= 0)
+            {
+                if (!changed)
+                {
+                    core.change(len, zstrings_internal::mod_preserve<TCHARACTER>(len));
+                    changed = true;
+                }
+                str()[i] = c2;
+            }
+        }
+        return *this;
+    };
+
     str_t &  replace(const ZSTRINGS_SIGNED idx, const ZSTRINGS_SIGNED sz, const TCHARACTER * const s)
     {
         return replace(idx,sz,sptr<TCHARACTER>(s));

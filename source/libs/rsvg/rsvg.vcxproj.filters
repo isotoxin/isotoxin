@@ -11,6 +11,9 @@
     <ClCompile Include="rsvg_filter.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="rsvg_animation.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="_precompiled.h" />
@@ -24,6 +27,9 @@
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="rsvg_internals.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="rsvg_animation.h">
       <Filter>src</Filter>
     </ClInclude>
   </ItemGroup>

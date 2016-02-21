@@ -172,6 +172,8 @@ struct generated_button_data_s
 
     bool is_valid() const {return num_states > 0 && src.info().sz >> 0;}
     
+    virtual rsvg_svg_c *get_svg( ts::ivec2 & ) { return nullptr; }
+
     generated_button_data_s(const generated_button_data_s&) UNUSED;
     generated_button_data_s &operator=(const generated_button_data_s&) UNUSED;
 };
@@ -241,6 +243,33 @@ struct theme_image_s : ts::image_extbody_c
 {
     const ts::bitmap_c *dbmp = nullptr;
     ts::irect rect;
+
+    struct animated_internals_s : public animation_c
+    {
+        ts::ivec2 shift;
+        theme_image_s *owner;
+        rsvg_svg_c *svg;
+        bool firsttick = true;
+        animated_internals_s(theme_image_s *owner, rsvg_svg_c *svg, const ts::ivec2 &shift):owner(owner), svg(svg), shift(shift) {}
+        ~animated_internals_s()
+        {
+            if (svg) svg->release();
+        }
+        /*virtual*/ bool animation_tick() override;
+        /*virtual*/ void just_registered() override { firsttick = true; }
+    };
+    UNIQUE_PTR(animated_internals_s) animated;
+
+
+    ~theme_image_s()
+    {
+    }
+
+    void set_animated(rsvg_svg_c *asvg, const ts::ivec2 &shift)
+    {
+        animated.reset( TSNEW(animated_internals_s, this, asvg, shift) );
+    }
+
     void draw( rectengine_c &eng, const ts::ivec2 &p ) const;
     void draw( rectengine_c &eng, const ts::irect& area, ts::uint32 align ) const;
 };

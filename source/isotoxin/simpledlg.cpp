@@ -537,6 +537,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR(" <a href=\"http://g.oswego.edu/dl/html/malloc.html\">dlmalloc</a>") );
     title.append( CONSTWSTR(" <a href=\"https://github.com/yxbh/FastDelegate\">C++11 fastdelegates</a>") );
     title.append( CONSTWSTR(" <a href=\"http://curl.haxx.se/libcurl\">Curl</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://hunspell.github.io\">Hunspell</a>") );
     title.append( CONSTWSTR("</l><br><br>Adapded libs<hr><l><a href=\"https://bitbucket.org/alextretyak/s3\">Simple Sound System</a>") );
     title.append( CONSTWSTR(" <a href=\"https://github.com/jp9000/libdshowcapture\">DirectShow capture lib</a>") );
     title.append( CONSTWSTR(" <a href=\"http://www.codeproject.com/Articles/11132/Walking-the-callstack\">Walking the callstack</a>") );
@@ -549,6 +550,9 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR(" <a href=\"http://www.efgh.com/software/md5.htm\">md5</a>") );
     title.append( CONSTWSTR(" <a href=\"http://dejavu-fonts.org\">DejaVu fonts</a>") );
     title.append( CONSTWSTR(" <a href=\"http://www.kolobok.us\">Copyright<nbsp>©<nbsp>Aiwan.<nbsp>Kolobok<nbsp>Smiles</a>"));
+    title.append( CONSTWSTR(" <a href=\"https://addons.mozilla.org/en-us/firefox/language-tools\">Hunspell dictionaries from Mozilla Add-Ons</a>"));
+
+    
     
     dm().label( title );
 
@@ -639,7 +643,7 @@ ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 }
 /*virtual*/ ts::ivec2 dialog_about_c::get_min_size() const
 {
-    return ts::ivec2(450, 500);
+    return ts::ivec2(450, 510);
 }
 
 /*virtual*/ bool dialog_about_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -650,4 +654,177 @@ ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 }
 
 
+#define ICP_MARGIN_LEFT_RITE 15
+#define ICP_MARGIN_TOP_BOTTOM 10
+#define ICP_BTN_SPACE 10
+#define ICP_ELEMENT_V_SPACE 5
 
+ts::wstr_c incoming_call_text(const ts::str_c &utf8name);
+
+MAKE_ROOT<incoming_call_panel_c>::~MAKE_ROOT()
+{
+    MODIFY(*me).setminsize(me->getrid()).setcenterpos().visible(true);
+}
+
+incoming_call_panel_c::incoming_call_panel_c(MAKE_ROOT<incoming_call_panel_c> &data) :gui_control_c(data)
+{
+    animation_c::allow_tick += 256;
+
+    sender = data.c;
+    video_supported = true;
+    if (active_protocol_c *ap = prf().ap(data.c->getkey().protoid))
+        video_supported = (0 != (ap->get_features() & PF_VIDEO_CALLS));
+
+    buttons[0] = gui->theme().get_button(CONSTASTR("p_accept_call"));
+    buttons[1] = video_supported ? gui->theme().get_button(CONSTASTR("p_accept_call_video")) : nullptr;
+    buttons[2] = gui->theme().get_button(CONSTASTR("p_reject_call"));
+    buttons[3] = gui->theme().get_button(CONSTASTR("p_ignore_call"));
+    for (const button_desc_s *b : buttons)
+    {
+        if (b)
+        {
+            sz.x += b->size.x + ICP_BTN_SPACE;
+            sz.y = ts::tmax(sz.y, b->size.y);
+            ++nbuttons;
+        }
+    }
+
+    sz.x -= ICP_BTN_SPACE;
+
+    aname = data.c->get_name();
+    text_adapt_user_input(aname);
+
+    tsz = gui->textsize( ts::g_default_text_font, incoming_call_text(aname));
+    image = gui->theme().get_image( CONSTASTR("ringtone_anim") );
+}
+
+incoming_call_panel_c::~incoming_call_panel_c()
+{
+    animation_c::allow_tick -= 256;
+}
+
+/*virtual*/ void incoming_call_panel_c::created()
+{
+    set_theme_rect( CONSTASTR("icp"), false );
+    __super::created();
+
+    gui_button_c &b_accept = MAKE_CHILD<gui_button_c>(getrid());
+    b_accept.set_face_getter(BUTTON_FACE(p_accept_call));
+    b_accept.set_handler(DELEGATE(this, b_accept_call), nullptr);
+    MODIFY(b_accept).visible(true);
+
+    if (video_supported)
+    {
+        gui_button_c &b_accept_v = MAKE_CHILD<gui_button_c>(getrid());
+        b_accept_v.set_face_getter(BUTTON_FACE(p_accept_call_video));
+        b_accept_v.set_handler(DELEGATE(this, b_accept_call_video), nullptr);
+        MODIFY(b_accept_v).visible(true);
+    }
+
+    gui_button_c &b_reject = MAKE_CHILD<gui_button_c>(getrid());
+    b_reject.set_face_getter(BUTTON_FACE(p_reject_call));
+    b_reject.set_handler(DELEGATE(this, b_reject_call), this);
+    MODIFY(b_reject).visible(true);
+
+    gui_button_c &b_ignore = MAKE_CHILD<gui_button_c>(getrid());
+    b_ignore.set_face_getter(BUTTON_FACE(p_ignore_call));
+    b_ignore.set_handler(DELEGATE(this, b_ignore_call), this);
+    MODIFY(b_ignore).visible(true);
+
+    int cnt = getengine().children_count();
+    int x = ICP_MARGIN_LEFT_RITE;
+    if (tsz.x > sz.x) x += (tsz.x - sz.x) / 2;
+    int vspc = image ? (ICP_ELEMENT_V_SPACE * 2 + image->info().sz.y) : ICP_ELEMENT_V_SPACE;
+    for (int i = 0; i < cnt; ++i )
+    {
+        const rectengine_c *e = getengine().get_child(i);
+        ts::ivec2 bsz = e->getrect().get_min_size();
+        MODIFY( e->getrid() ).pos( x, (sz.y -bsz.y)/2 + ICP_MARGIN_TOP_BOTTOM + tsz.y + vspc).size(bsz);
+        x += bsz.x + ICP_BTN_SPACE;
+    }
+}
+
+/*virtual*/ ts::ivec2 incoming_call_panel_c::get_min_size() const
+{
+    int vspc = image ? (ICP_ELEMENT_V_SPACE * 2 + image->info().sz.y) : ICP_ELEMENT_V_SPACE;
+    return ts::ivec2(ts::tmax(sz.x, tsz.x) + ICP_MARGIN_LEFT_RITE * 2, sz.y + ICP_MARGIN_TOP_BOTTOM * 2 + tsz.y + vspc);
+}
+
+/*virtual*/ bool incoming_call_panel_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    if (qp == SQ_DRAW && rid == getrid())
+    {
+        __super::sq_evt(qp, rid, data);
+
+        draw_data_s &dd = getengine().begin_draw();
+
+        if (image)
+        {
+            image->draw(getengine(), ts::ivec2((getprops().size().x - image->info().sz.x)/2, ICP_MARGIN_TOP_BOTTOM + tsz.y + ICP_ELEMENT_V_SPACE));
+        }
+
+        dd.offset.x += (getprops().size().x - tsz.x)/2;
+        dd.offset.y += ICP_MARGIN_TOP_BOTTOM;
+        dd.size = tsz;
+
+        text_draw_params_s tdp;
+        ts::TSCOLOR c = get_default_text_color();
+        tdp.forecolor = &c;
+        getengine().draw(incoming_call_text(aname), tdp);
+
+        getengine().end_draw();
+
+        return true;
+    }
+
+    return __super::sq_evt(qp, rid, data);
+}
+
+bool incoming_call_panel_c::b_accept_call_video(RID, GUIPARAM)
+{
+    ts::safe_ptr<incoming_call_panel_c> me(this);
+    sender->b_accept_call_with_video(RID(), nullptr);
+    if (me) TSDEL(this);
+    return true;
+}
+
+bool incoming_call_panel_c::b_accept_call(RID, GUIPARAM)
+{
+    ts::safe_ptr<incoming_call_panel_c> me(this);
+    sender->b_accept_call(RID(), nullptr);
+    if (me) TSDEL(this);
+    return true;
+}
+
+bool incoming_call_panel_c::b_reject_call(RID, GUIPARAM)
+{
+    ts::safe_ptr<incoming_call_panel_c> me( this );
+    sender->b_reject_call(RID(), nullptr);
+    if (me) TSDEL(this);
+    return true;
+}
+
+bool incoming_call_panel_c::b_ignore_call(RID, GUIPARAM)
+{
+    stop_sound(snd_ringtone);
+    stop_sound(snd_ringtone2);
+
+    TSDEL(this);
+    return true;
+}
+
+ts::uint32 incoming_call_panel_c::gm_handler(gmsg<ISOGM_CALL_STOPED> &c)
+{
+    TSDEL(this);
+    return true;
+}
+
+ts::uint32 incoming_call_panel_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
+{
+    if (ue.evt == UE_THEMECHANGED)
+    {
+        image = gui->theme().get_image(CONSTASTR("ringtone_anim"));
+    }
+
+    return 0;
+}

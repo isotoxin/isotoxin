@@ -381,6 +381,8 @@ public:
 INLINE void theme_image_s::draw(rectengine_c &eng, const ts::ivec2 &p) const
 {
     eng.draw(p, dbmp->extbody(rect), true);
+    if (animated)
+        animated->register_animation(eng.getrect().getroot(), ts::irect::from_lt_and_size(p, rect.size()));
 }
 
 INLINE rectengine_root_c *root_by_rid( RID r )

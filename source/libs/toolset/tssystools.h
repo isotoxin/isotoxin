@@ -16,7 +16,7 @@ void	TSCALL sys_beep( sys_beep_e beep );
 void	TSCALL hide_hardware_cursor();
 void	TSCALL show_hardware_cursor();
 
-irect   TSCALL wnd_get_max_size_fs(int x, int y);
+irect   TSCALL wnd_get_max_size_fs(const ts::ivec2 &pt);
 irect   TSCALL wnd_get_max_size(const ts::ivec2& pt);
 
 irect   TSCALL wnd_get_max_size(const irect &rfrom);

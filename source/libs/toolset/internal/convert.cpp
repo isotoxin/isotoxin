@@ -317,9 +317,25 @@ __declspec(naked) void I422ToARGBRow_AVX2(const uint8* y_buf, const uint8* u_buf
 }
 
 
-ANY31(I422ToARGBRow_Any_SSSE3, I422ToARGBRow_SSSE3, 1, 0, 4, 7)
 ANY31(I422ToARGBRow_Any_AVX2, I422ToARGBRow_AVX2, 1, 0, 4, 15)
 
+/*
+void I422ToARGBRow_Any_SSSE3(const byte* y_buf, const byte* u_buf, const byte* v_buf, byte* dst_ptr, int width)
+{
+    SIMD_ALIGNED(byte temp[64 * 4]);
+    memset(temp, 0, 64 * 3);  // for YUY2 and msan
+    int r = width & 7;
+    int n = width & ~7;
+    if (n > 0)
+        I422ToARGBRow_SSSE3(y_buf, u_buf, v_buf, dst_ptr, n);
+
+    memcpy(temp, y_buf + n, r);
+    memcpy(temp + 64, u_buf + (n >> 1), SS(r, 1));
+    memcpy(temp + 128, v_buf + (n >> 1), SS(r, 1));
+    I422ToARGBRow_SSSE3(temp, temp + 64, temp + 128, temp + 192, 8);
+    memcpy(dst_ptr + n * 4, temp + 192, r * 4);
+}
+*/
 
 #define USE_BRANCHLESS 1
 #if USE_BRANCHLESS
@@ -829,16 +845,21 @@ void img_helper_i420_to_ARGB(const uint8* src_y, int src_stride_y, const uint8* 
     typedef void ROWFUNC(const uint8* y_buf, const uint8* u_buf, const uint8* v_buf, uint8* rgb_buf, int width);
 
 
-    auto loopf = [&](ROWFUNC rowfunc)
+    auto loopf = [&](ROWFUNC rowfunc, int w)
     {
+        uint8* dst_argb1 = dst_argb;
+        const uint8* src_y1 = src_y;
+        const uint8* src_u1 = src_u;
+        const uint8* src_v1 = src_v;
+
         for (int y = 0; y < height; ++y)
         {
-            rowfunc(src_y, src_u, src_v, dst_argb, width);
-            dst_argb += dst_stride_argb;
-            src_y += src_stride_y;
+            rowfunc(src_y1, src_u1, src_v1, dst_argb1, w);
+            dst_argb1 += dst_stride_argb;
+            src_y1 += src_stride_y;
             if (y & 1) {
-                src_u += src_stride_u;
-                src_v += src_stride_v;
+                src_u1 += src_stride_u;
+                src_v1 += src_stride_v;
             }
         }
     };
@@ -846,19 +867,33 @@ void img_helper_i420_to_ARGB(const uint8* src_y, int src_stride_y, const uint8* 
     if (CCAPS(CPU_AVX2))
     {
         if (IS_ALIGNED(width, 16))
-            loopf( I422ToARGBRow_AVX2 );
+            loopf( I422ToARGBRow_AVX2, width );
         else
-            loopf( I422ToARGBRow_Any_AVX2 );
+            loopf( I422ToARGBRow_Any_AVX2, width );
         return;
     }
 
+    //if (CCAPS(CPU_SSSE3))
+    //{
+    //    if (IS_ALIGNED(width, 8))
+    //        loopf(I422ToARGBRow_SSSE3, width);
+    //    else
+    //        loopf(I422ToARGBRow_Any_SSSE3, width);
+    //    return;
+    //}
+
     if (CCAPS(CPU_SSSE3))
     {
-        if (IS_ALIGNED(width, 8))
-            loopf(I422ToARGBRow_SSSE3);
-        else
-            loopf(I422ToARGBRow_Any_SSSE3);
-        return;
+        int ost = width & 7;
+        int w = width & ~7;
+        if (w) loopf(I422ToARGBRow_SSSE3, w);
+        if (!ost) return;
+
+        width = ost;
+        dst_argb += w * 4;
+        src_y += w;
+        src_u += w/2;
+        src_v += w/2;
     }
 
     int addy = src_stride_y - width;

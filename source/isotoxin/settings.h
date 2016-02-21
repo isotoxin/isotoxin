@@ -110,6 +110,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     enum ctlmask
     {
         MASK_PROFILE_COMMON         = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_PROFILE_NOTIFICATIONS  = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_CHAT           = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_GCHAT          = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_MSGSNHIST      = SETBIT( NUMGEN_NEXT(ctlm) ),
@@ -120,7 +121,9 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
         MASK_APPLICATION_SETSOUND   = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_APPLICATION_SOUNDS     = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_APPLICATION_VIDEO      = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_ADVANCED_DEBUG         = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_ADVANCED_VIDEOCALLS    = SETBIT( NUMGEN_NEXT(ctlm) ),
+
+        MASK_ADVANCED_DEBUG = SETBIT(NUMGEN_NEXT(ctlm)),
     };
 
     ts::shared_ptr<theme_rect_s> shadow;
@@ -163,12 +166,24 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     }
 
     fmt_converter_s cvtmic;
-    /*virtual*/ s3::Format *formats(int &count) override;
+    /*virtual*/ const s3::Format *formats(int &count) override;
 
     bool signalvolset(RID, GUIPARAM);
     bool talkvolset(RID, GUIPARAM);
     bool micvolset(RID, GUIPARAM);
     bool test_mic(RID, GUIPARAM);
+
+    ts::astrmap_c video_codecs;
+    bool disable_video_ex = false;
+    int encoding_quality = 0;
+    int video_bitrate = 0;
+    bool encoding_quality_set(RID, GUIPARAM);
+    bool advv_handler(RID, GUIPARAM);
+    
+    void videocodecs_tab_selected();
+    menu_c codecctxmenu(const ts::str_c& param, bool activation);
+    void codecselected(const ts::str_c& prm);
+    bool set_bitrate(const ts::wstr_c &);
 
     ts::buf_c testrec;
     s3::Format recfmt;
@@ -260,6 +275,7 @@ private:
 
     bool is_video_tab_selected = false;
     bool is_networks_tab_selected = false;
+    bool is_video_codecs_tab_selected = false;
     bool proto_list_loaded = false;
 
     bool profile_selected = false;
@@ -271,10 +287,13 @@ private:
         BGROUP_COMMON1,
         BGROUP_COMMON2,
         BGROUP_COMMON3,
+        BGROUP_CHAT,
         BGROUP_GCHAT,
         BGROUP_MSGOPTS,
         BGROUP_TYPING,
+        BGROUP_TYPING_NOTIFY,
         BGROUP_HISTORY,
+        BGROUP_CALL_NOTIFY,
 
         BGROUP_count
     };

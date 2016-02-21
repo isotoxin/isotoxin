@@ -221,4 +221,32 @@ struct process_animation_s
 
 };
 
+class rectengine_root_c;
+class animation_c
+{
+    struct redraw_request_s
+    {
+        ts::safe_ptr<rectengine_root_c> engine;
+        ts::irect rr;
+    };
+    ts::array_inplace_t<redraw_request_s, 32> rr;
 
+    animation_c *prev = nullptr;
+    animation_c *next = nullptr;
+
+    static animation_c *first;
+    static animation_c *last;
+    void redraw();
+    animation_c * do_tick();
+protected:
+    virtual ~animation_c();
+    virtual void just_registered() {}
+public:
+    virtual bool animation_tick() = 0;
+    static void tick();
+
+    void register_animation(rectengine_root_c *e, const ts::irect &ar);
+    void unregister_animation();
+
+    static uint allow_tick;
+};

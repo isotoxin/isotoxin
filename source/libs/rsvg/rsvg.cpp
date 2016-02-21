@@ -53,7 +53,7 @@ namespace
     };
 }
 
-#define RENDER_PROLOG render_cleanup_s cc(surf, use_filter ? transform.get() : nullptr, offset); \
+#define RENDER_PROLOG render_cleanup_s cc(surf, use_filter ? get_transform() : nullptr, offset); \
     if (use_filter && filter) { \
         filter->render(this, offset, surf); \
         return; }
@@ -167,14 +167,19 @@ static void _rsvg_cairo_matrix_init_shear (cairo_matrix_t *dst, double theta)
     cairo_matrix_init (dst, 1., 0., tan (theta * M_PI / 180.0), 1., 0., 0);
 }
 
+void rsvg_node_c::set_transform_animation(rsvg_animation_transform_c *ta)
+{
+    if (!transform.get())
+        transform.reset(TSNEW(transform_s));
+    transform.get()->a = ta;
+}
 
 void rsvg_node_c::load_transform(rsvg_load_context_s &ctx, const ts::asptr&src)
 {
     char keyword[32];
     double args[6];
 
-    transform.reset( TSNEW(cairo_matrix_t) );
-    cairo_matrix_init_identity(transform.get());
+    transform.reset( TSNEW(transform_s) );
 
     int idx = 0;
     while (idx < src.l)
@@ -266,7 +271,7 @@ void rsvg_node_c::load_transform(rsvg_load_context_s &ctx, const ts::asptr&src)
 
             cairo_matrix_t affine;
             cairo_matrix_init(&affine, args[0], args[1], args[2], args[3], args[4], args[5]);
-            cairo_matrix_multiply(transform.get(), &affine, transform.get());
+            cairo_matrix_multiply(&transform.get()->m, &affine, &transform.get()->m);
 
         } else if (ts::CHARz_equal(keyword, "translate"))
         {
@@ -279,7 +284,7 @@ void rsvg_node_c::load_transform(rsvg_load_context_s &ctx, const ts::asptr&src)
             }
             cairo_matrix_t affine;
             cairo_matrix_init_translate(&affine, args[0], args[1]);
-            cairo_matrix_multiply(transform.get(), &affine, transform.get());
+            cairo_matrix_multiply(&transform.get()->m, &affine, &transform.get()->m);
         }
         else if (ts::CHARz_equal(keyword, "scale")) {
             if (n_args == 1)
@@ -292,7 +297,7 @@ void rsvg_node_c::load_transform(rsvg_load_context_s &ctx, const ts::asptr&src)
 
             cairo_matrix_t affine;
             cairo_matrix_init_scale(&affine, args[0], args[1]);
-            cairo_matrix_multiply(transform.get(), &affine, transform.get());
+            cairo_matrix_multiply(&transform.get()->m, &affine, &transform.get()->m);
         }
         else if (ts::CHARz_equal(keyword, "rotate"))
         {
@@ -301,18 +306,18 @@ void rsvg_node_c::load_transform(rsvg_load_context_s &ctx, const ts::asptr&src)
             {
 
                 cairo_matrix_init_rotate(&affine, args[0] * M_PI / 180.);
-                cairo_matrix_multiply(transform.get(), &affine, transform.get());
+                cairo_matrix_multiply(&transform.get()->m, &affine, &transform.get()->m);
 
             } else if (n_args == 3)
             {
                 cairo_matrix_init_translate(&affine, args[1], args[2]);
-                cairo_matrix_multiply(transform.get(), &affine, transform.get());
+                cairo_matrix_multiply(&transform.get()->m, &affine, &transform.get()->m);
 
                 cairo_matrix_init_rotate(&affine, args[0] * M_PI / 180.);
-                cairo_matrix_multiply(transform.get(), &affine, transform.get());
+                cairo_matrix_multiply(&transform.get()->m, &affine, &transform.get()->m);
 
                 cairo_matrix_init_translate(&affine, -args[1], -args[2]);
-                cairo_matrix_multiply(transform.get(), &affine, transform.get());
+                cairo_matrix_multiply(&transform.get()->m, &affine, &transform.get()->m);
             } else
             {
                 transform.reset();
@@ -327,7 +332,7 @@ void rsvg_node_c::load_transform(rsvg_load_context_s &ctx, const ts::asptr&src)
             }
             cairo_matrix_t affine;
             _rsvg_cairo_matrix_init_shear(&affine, args[0]);
-            cairo_matrix_multiply(transform.get(), &affine, transform.get());
+            cairo_matrix_multiply(&transform.get()->m, &affine, &transform.get()->m);
         } else if (ts::CHARz_equal(keyword, "skewY"))
         {
             if (n_args != 1)
@@ -340,7 +345,7 @@ void rsvg_node_c::load_transform(rsvg_load_context_s &ctx, const ts::asptr&src)
             /* transpose the affine, given that we know [1] is zero */
             affine.yx = affine.xy;
             affine.xy = 0.;
-            cairo_matrix_multiply(transform.get(), &affine, transform.get());
+            cairo_matrix_multiply(&transform.get()->m, &affine, &transform.get()->m);
 
         } else
         {
@@ -348,6 +353,12 @@ void rsvg_node_c::load_transform(rsvg_load_context_s &ctx, const ts::asptr&src)
             return;
         }
     }
+}
+
+void rsvg_node_c::load_animation(rsvg_load_context_s & ctx, ts::rapidxml::xml_node<char> *n)
+{
+    for (ts::rapidxml::node_iterator<char> ni(n), e; ni != e; ++ni)
+        rsvg_animation_c::build( ctx, this, &*ni );
 }
 
 rsvg_svg_c * rsvg_svg_c::build_from_xml(char * svgxml)
@@ -361,6 +372,7 @@ rsvg_svg_c * rsvg_svg_c::build_from_xml(char * svgxml)
             rsvg_load_context_s ctx;
             rsvg_svg_c *svg = TSNEW(rsvg_svg_c);
             svg->load( ctx, fn );
+            svg->anims = std::move( ctx.allanims );
             return svg;
         }
 
@@ -457,6 +469,26 @@ void rsvg_svg_c::load(rsvg_load_context_s& ctx, ts::rapidxml::xml_node<char> *no
 void rsvg_svg_c::release()
 {
     TSDEL( this );
+}
+
+void rsvg_svg_c::anim_tick()
+{
+    uint ct = timeGetTime();
+    uint t0 = ticktime - zerotime;
+    uint t1 = ct - zerotime;
+
+    for (rsvg_animation_c *a : anims)
+        a->tick( t0, t1 );
+
+    ticktime = ct;
+}
+
+void rsvg_svg_c::anim_reset()
+{
+    zerotime = timeGetTime();
+    ticktime = zerotime;
+    for (rsvg_animation_c *a : anims)
+        a->tick(0,0);
 }
 
 void rsvg_svg_c::render( const ts::bmpcore_exbody_s &pixbuf, const ts::ivec2 &offset, const cairo_matrix_t *matrix )
@@ -1080,6 +1112,8 @@ void rsvg_path_c::parse_path(const ts::asptr &data)
         else if (attrname.equals(CONSTASTR("transform")))
             load_transform(ctx, ai->value());
     }
+
+    load_animation(ctx, node);
 }
 
 /*virtual*/ void rsvg_path_c::render(const ts::ivec2 &offset, rsvg_cairo_surface_c &surf, bool use_filter)

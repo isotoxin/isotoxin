@@ -158,6 +158,7 @@ class vsb_dshow_camera_c : public vsb_c
         ts::pointers_t<vsb_dshow_camera_c, 0> owners;
         volatile vsb_dshow_camera_c *locked = nullptr;
         int frametag = 0;
+        volatile bool owners_changed = false;
 
         core_c(const vsb_descriptor_s &desc);
 
@@ -226,6 +227,7 @@ class vsb_desktop_c : public vsb_c
         int grabtag = 0;
         int next_time;
         bool stop_job = false;
+        volatile bool owners_changed = false;
 
         grab_desktop(const ts::irect &grabrect, int monitor);
         ~grab_desktop();

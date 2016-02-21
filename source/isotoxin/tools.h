@@ -161,6 +161,8 @@ INLINE ts::wstr_c enquote(const ts::wstr_c &x)
 }
 
 bool text_find_inds( const ts::wstr_c &t, ts::tmp_tbuf_t<ts::ivec2> &marks, const ts::wstrings_c &fsplit );
+INLINE ts::pwstr_c text_non_letters() { return ts::pwstr_c(CONSTWSTR("?!:;*&^%$#@()<>[]{}=+.,~|/\r\n\t\\\"—«»„“”0123456789 _")); }
+
 
 typedef ts::sstr_t<4> SLANGID;
 typedef ts::array_inplace_t<SLANGID, 0> SLANGIDS;
@@ -187,7 +189,7 @@ public:
     s3::Format &getfmt() { return capturefmt; }
     bool is_capture() const { return capture; };
     virtual void datahandler(const void *data, int size) = 0;
-    virtual s3::Format *formats(int &count) { count = 0; return nullptr; };
+    virtual const s3::Format *formats(int &count) { count = 0; return nullptr; };
 
     void start_capture();
     void stop_capture();
@@ -370,6 +372,7 @@ enum settingsparam_e
     PP_EMOJISET,
     PP_ACTIVEPROTO_SORT,
     PP_FONTSCALE,
+    PP_VIDEO_ENCODING_SETTINGS,
 
     // config
     CFG_MICVOLUME,
@@ -678,6 +681,7 @@ struct protocol_description_s
     ts::str_c description_t; // utf8
     ts::str_c version; // utf8
     ts::str_c  icon; // svg path d value
+    ts::str_c  videocodecs; // video codecs list / separated, ex: vp8/vp9
     int connection_features = 0;
     int features = 0;
     protocol_description_s() {}

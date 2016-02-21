@@ -23,9 +23,16 @@
 #include "rectangles/rectangles.h"
 
 #pragma push_macro("delete")
+#pragma push_macro("FLAG")
+#pragma push_macro("near")
 #undef delete
+#undef FLAG
+#undef near
 #include "s3/s3.h"
+#include "hunspell/src/hunspell.hxx"
 #pragma pop_macro("delete")
+#pragma pop_macro("FLAG")
+#pragma pop_macro("near")
 
 #define STRTYPE(TCHARACTER) ts::pstr_t<TCHARACTER>
 #define MAKESTRTYPE(TCHARACTER, s, l) STRTYPE(TCHARACTER)( ts::sptr<TCHARACTER>((s),(l)) )
@@ -64,6 +71,7 @@ INLINE ipcr & operator>>(ipcr &r, ts::astrings_c &s)
 // gui
 #include "filterbar.h"
 #include "contactlist.h"
+#include "fullscreenvideo.h"
 #include "conversation.h"
 #include "images.h"
 #include "emoticons.h"

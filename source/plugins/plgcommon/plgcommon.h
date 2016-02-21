@@ -464,6 +464,22 @@ struct ranges_s
 
 };
 
+template< typename F > void parse_values( const asptr &is, const F&f )
+{
+    token<char> lns(is, '\n');
+    for (; lns; ++lns)
+    {
+        auto s = lns->get_trimmed();
+        int eqi = s.find_pos('=');
+        if (eqi > 0)
+        {
+            pstr_c k = s.substr(0, eqi);
+            pstr_c v = s.substr(eqi + 1);
+            f(k,v);
+        }
+    }
+}
+
 template< typename VEC, typename EL > int findIndex(const VEC &vec, const EL & el)
 {
     size_t cnt = vec.size();

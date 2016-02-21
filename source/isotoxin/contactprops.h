@@ -65,7 +65,7 @@ class dialog_contact_props_c : public gui_isodialog_c
 
     void update();
     void fill_list();
-    void tags_menu(menu_c &m);
+    void tags_menu(menu_c &m, int);
     void tags_menu_handler(const ts::str_c&);
 
 protected:

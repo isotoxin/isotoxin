@@ -1315,6 +1315,11 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
     }
 
     g_app->apply_debug_options();
+    if (get_options().is(MSGOP_SPELL_CHECK))
+        g_app->spellchecker.load();
+    else
+        g_app->spellchecker.unload();
+
     return PLR_OK;
 }
 

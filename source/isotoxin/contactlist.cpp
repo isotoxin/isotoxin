@@ -494,7 +494,8 @@ bool gui_contact_item_c::stop_typing(RID, GUIPARAM)
 bool gui_contact_item_c::animate_typing(RID, GUIPARAM)
 {
     update_text();
-    DEFERRED_UNIQUE_CALL(1.0 / 15.0, DELEGATE(this, animate_typing), nullptr);
+    if (flags.is(F_SHOWTYPING))
+        DEFERRED_UNIQUE_CALL(1.0 / 15.0, DELEGATE(this, animate_typing), nullptr);
     return true;
 }
 
@@ -657,10 +658,11 @@ void gui_contact_item_c::update_text()
                     t2.trim();
                     if (!t2.is_empty()) newtext.append(CONSTASTR("<br><l>")).append(t2).append(CONSTASTR("</l>"));
 
-#ifdef _DEBUG
-                    ts::str_c ids; ids.set_as_char('[').append_as_int(contact->getkey().contactid).append(CONSTASTR("] "));
-                    newtext.insert(0, ids);
-#endif
+                    if (g_app->F_SHOW_CONTACTS_IDS)
+                    {
+                        ts::str_c ids; ids.set_as_char('[').append_as_int(contact->getkey().contactid).append(CONSTASTR("] "));
+                        newtext.insert(0, ids);
+                    }
                 }
             }
 

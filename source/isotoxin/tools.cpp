@@ -730,6 +730,16 @@ void text_adapt_user_input(ts::str_c &text)
             int md0 = text.find_pos(i, md.md);
             if (md0 >= 0)
             {
+                if (md0 > 0)
+                {
+                    int sepi = text_non_letters().find_pos(text.get_char(md0-1));
+                    if (sepi < 0 || text_non_letters().get_char(sepi) == md.md.s[0])
+                    {
+                        i = md0 + md.md.l;
+                        continue;
+                    }
+                }
+
                 int inr = in_nochange_range(md0, md.md.l);
                 if (inr >= 0)
                 {
@@ -747,6 +757,15 @@ void text_adapt_user_input(ts::str_c &text)
                     {
                         i = inr;
                         goto search_end_again;
+                    }
+                    if (md1 < text.get_length()-md.md.l)
+                    {
+                        int sepi = text_non_letters().find_pos(text.get_char(md1 + md.md.l));
+                        if (sepi < 0 || text_non_letters().get_char(sepi) == md.md.s[md.md.l-1])
+                        {
+                            i = md1+md.md.l;
+                            goto search_end_again;
+                        }
                     }
 
                     text.replace(md0, md.md.l, md.x);
@@ -1693,6 +1712,7 @@ namespace
                             proto.features = r.get<int>();
                             proto.connection_features = r.get<int>();
                             proto.icon = r.getastr();
+                            proto.videocodecs = r.getastr();
                         }
 
                         result_x = R_DONE;

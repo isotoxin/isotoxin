@@ -157,6 +157,7 @@ void vsb_desktop_c::grab_desktop::add_owner(vsb_desktop_c *owner)
             return;
         }
 
+    owners_changed = true;
     owners.add(owner);
     owner->grabber = this;
     if (owners.size() >= 2)
@@ -179,6 +180,7 @@ void vsb_desktop_c::grab_desktop::remove_owner(vsb_desktop_c *owner)
     {
         if (owners.get(i) == owner)
         {
+            owners_changed = true;
             owners.remove_fast(i);
             owner->grabber = nullptr;
 
@@ -246,6 +248,7 @@ void vsb_desktop_c::grab_desktop::grab(const ts::irect &gr)
             if (c->grabtag == grabtag) continue;
             c->grabtag = grabtag;
             locked = c;
+            owners_changed = false;
             spinlock::simple_unlock(sync);
 
             c->grabcb(grabbuff);
@@ -253,6 +256,7 @@ void vsb_desktop_c::grab_desktop::grab(const ts::irect &gr)
             spinlock::simple_lock(sync);
             locked = nullptr;
             some_processed = true;
+            if (owners_changed) break;
         }
     } while (some_processed);
 
@@ -344,6 +348,7 @@ bool vsb_dshow_camera_c::core_c::add_owner( vsb_dshow_camera_c *owner )
             return initializing;
         }
 
+    owners_changed = true;
     owners.add( owner );
     owner->core = this;
     if (owners.size() >= 2)
@@ -367,6 +372,7 @@ void vsb_dshow_camera_c::core_c::remove_owner( vsb_dshow_camera_c *owner )
     {
         if ( owners.get(i) == owner )
         {
+            owners_changed = true;
             ts::shared_ptr<core_c> refcore = this; // up ref
             owners.remove_fast(i);
             owner->core = nullptr;
@@ -506,6 +512,7 @@ void vsb_dshow_camera_c::core_dshow_c::dshocb(const DShow::VideoConfig &config, 
             if (c->frametag == frametag) continue;
             c->frametag = frametag;
             locked = c;
+            owners_changed = false;
             l.unlock();
 
             ts::bmpcore_exbody_s eb(data + config.cx * 4 * (config.cy - 1), ts::imgdesc_s(ts::ivec2(config.cx, config.cy), 32, ts::int16(-config.cx * 4)));
@@ -514,6 +521,8 @@ void vsb_dshow_camera_c::core_dshow_c::dshocb(const DShow::VideoConfig &config, 
             l.lock(sync);
             locked = nullptr;
             some_processed = true;
+            if (owners_changed)
+                break;
         }
     } while (some_processed);
 

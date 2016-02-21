@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
-VisualStudioVersion = 14.0.23107.0
+VisualStudioVersion = 14.0.24720.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sqlite3", "sqlite3\sqlite3_15.vcxproj", "{0F29ED1A-51C5-4172-B3E4-E907330B73D0}"
 EndProject
@@ -40,6 +40,8 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libqrencode", "libqrencode\libqrencode_15.vcxproj", "{B3A669DA-9147-4C1A-B582-A72108CEADDA}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cairo", "cairo\cairo_15.vcxproj", "{246F3084-604C-41B6-9B3B-281383F5E134}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "hunspell", "hunspell\hunspell_15.vcxproj", "{39C3D6F5-A816-459B-9DA4-5112CDE8F7B8}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -172,6 +174,12 @@ Global
 		{246F3084-604C-41B6-9B3B-281383F5E134}.Release|Win32.ActiveCfg = Release|Win32
 		{246F3084-604C-41B6-9B3B-281383F5E134}.Release|Win32.Build.0 = Release|Win32
 		{246F3084-604C-41B6-9B3B-281383F5E134}.Release|x64.ActiveCfg = Release|Win32
+		{39C3D6F5-A816-459B-9DA4-5112CDE8F7B8}.Debug|Win32.ActiveCfg = Debug|Win32
+		{39C3D6F5-A816-459B-9DA4-5112CDE8F7B8}.Debug|Win32.Build.0 = Debug|Win32
+		{39C3D6F5-A816-459B-9DA4-5112CDE8F7B8}.Debug|x64.ActiveCfg = Debug|Win32
+		{39C3D6F5-A816-459B-9DA4-5112CDE8F7B8}.Release|Win32.ActiveCfg = Release|Win32
+		{39C3D6F5-A816-459B-9DA4-5112CDE8F7B8}.Release|Win32.Build.0 = Release|Win32
+		{39C3D6F5-A816-459B-9DA4-5112CDE8F7B8}.Release|x64.ActiveCfg = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

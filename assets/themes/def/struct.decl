@@ -91,6 +91,15 @@ rects
   {
     colors=##smilesel_edge,##smilesel_bg
   }
+  fullscreen
+  {
+    base=0,0,0,0,##bg_fsvideo
+	colors=##bg_fsvideo
+  }
+
+  icp=base
+  {
+  }
 
   main=base
   {
@@ -162,7 +171,7 @@ rects
     byrect=0,130,19,149
     c=2,2,2,2,##textarea_bg
     clientborder=4,4,4,4
-    //base=2,2,2,2,##textarea_bg //34,34,94,94
+	colors=##badword
   }
   msgarea=sb
   {
@@ -885,6 +894,20 @@ images
     src=back.png,37,227,57,247
   }
 
+  ringtone_anim
+  {
+    gen {
+		svg=`<svg height="128" width="128"><g transform="scale(0.5)">
+				<path fill="##text_def" stroke="none" d="m 49.503906,15.865858 c -6.266158,-0.0058 -12.472634,0.897801 -18.509765,2.789062 -4.906922,2.023353 -12.63254,4.165252 -13.871094,11.144532 -0.204706,3.532657 0.325323,7.453407 2.179687,9.892578 5.439728,0.531817 10.424114,0.17775 15.404297,-1.253907 3.058811,-1.846852 0.505429,-6.510073 2.117188,-8.277343 5.555205,-1.970348 22.805244,-2.256277 26.894531,0.560546 1.534514,2.643271 0.143422,5.377907 1.332031,7.013672 5.43965,2.419843 11.632351,2.635124 16.105469,1.576172 2.315222,-2.972024 2.428498,-6.752018 1.925781,-9.726562 -0.640243,-4.808993 -5.673688,-7.684297 -9.34375,-9.353516 -8.022286,-2.848594 -16.177885,-4.357745 -24.234375,-4.365234 z" >
+					<animateTransform begin="0; a2.end" dur="350ms" type="rotate" from="-10 50 50" to="10 50 50" repeatCount="1" id="a1" />
+					<animateTransform begin="a1.end" dur="350ms" type="rotate" from="10 50 50" to="-10 50 50" repeatCount="1" id="a2" />
+				</path>
+				<path fill="##text_def" stroke="none" d="M 50.058594 31.96875 C 46.59363 31.883273 43.14067 32.518326 41.035156 34.130859 C 37.321197 37.12999 38.53924 38.823122 35.757812 42.570312 C 32.200989 47.362133 24.607951 42.710408 19.658203 47.660156 C 14.001349 53.316963 19.1875 71 19.1875 71 L 81 71 C 81 71 86.186151 53.31701 80.529297 47.660156 C 75.579549 42.710408 67.986512 47.362133 64.429688 42.570312 C 61.64826 38.823121 62.866303 37.12999 59.152344 34.130859 C 57.000523 32.860279 53.523557 32.054227 50.058594 31.96875 z M 50.15625 42.152344 A 11 11 0 0 1 61.15625 53.152344 A 11 11 0 0 1 50.15625 64.152344 A 11 11 0 0 1 39.15625 53.152344 A 11 11 0 0 1 50.15625 42.152344 z " />
+			</g></svg>`
+		add-width=3
+		add-height=3
+    }
+  }
 
 }
 
@@ -1344,6 +1367,88 @@ buttons
     }
   }
 
+  p_accept_call=accept_call
+  {
+    gen 
+    { 
+      svg=`<svg width="128" height="128">
+			<filter id="sh">
+				<feOffset in="SourceAlpha" dx="[shift]" dy="[shift]" />
+				<feGaussianBlur stdDeviation="3"/>
+				<feComponentTransfer>
+					<feFuncA type="linear" slope="0.3"/>
+				</feComponentTransfer>
+				<feBlend in="SourceGraphic" mode="normal" />
+			</filter>
+			<g transform="translate(10 10) scale(0.42)">
+				<path transform="translate(82.5 50) scale([scale])" fill="[color]" filter="url(#sh)" d="m -32.5,-45 a 45,45 0 0 0 -45,45 45,45 0 0 0 45,45 l 65,0 a 45,45 0 0 0 45,-45 45,45 0 0 0 -45,-45 l -65,0 z" />
+				<path fill="##gen_i2" stroke="none" d="m 104.01863,75.653176 c 2.65187,-2.342896 5.05978,-5.480225 5.48513,-8.514578 -3.45393,-4.236016 -7.21506,-7.525412 -11.739098,-10.052254 -3.46546,-0.8705 -4.977318,4.225493 -7.367063,4.326141 C 85.086151,58.856884 72.734445,46.814469 71.853721,41.927641 72.64924,38.976579 75.569012,38.036762 75.892982,36.040876 73.779336,30.475094 69.570927,25.927922 65.668603,23.498512 c -3.740429,0.449852 -6.50471,3.03317 -8.262127,5.485133 -2.962749,3.841672 -1.457451,9.438471 -0.05737,13.219399 6.450417,13.690802 16.19829,24.70281 28.986289,31.453451 4.892459,2.058078 11.856576,6.033304 17.683245,1.996681 z" />
+			</g>
+		</svg>`
+    }
+  }
+  p_accept_call_video=accept_call_video
+  {
+    gen 
+    { 
+      svg=`<svg width="128" height="128">
+			<filter id="sh">
+				<feOffset in="SourceAlpha" dx="[shift]" dy="[shift]" />
+				<feGaussianBlur stdDeviation="3"/>
+				<feComponentTransfer>
+					<feFuncA type="linear" slope="0.3"/>
+				</feComponentTransfer>
+				<feBlend in="SourceGraphic" mode="normal" />
+			</filter>
+			<g transform="translate(10 10) scale(0.42)">
+				<path transform="translate(82.5 50) scale([scale])" fill="[color]" filter="url(#sh)" d="m -32.5,-45 a 45,45 0 0 0 -45,45 45,45 0 0 0 45,45 l 65,0 a 45,45 0 0 0 45,-45 45,45 0 0 0 -45,-45 l -65,0 z" />
+				<path fill="##gen_i2" stroke="none" d="m 110.74154,65.479166 -0.0803,-30.681771 -11.81523,11.959458 0,-8.249 c 0,-2.762 -2.238,-5 -5,-5 l -33,0 c -2.762,0 -5,2.238 -5,5 l 0,23 c 0,2.762 2.238,5 5,5 l 33,0 c 2.762,0 5,-2.238 5,-5 l 0,-7.781 z" />
+			</g>
+		</svg>`
+    }
+  }
+  p_reject_call=reject_call
+  {
+    gen 
+    { 
+      svg=`<svg width="128" height="128">
+			<filter id="sh">
+				<feOffset in="SourceAlpha" dx="[shift]" dy="[shift]" />
+				<feGaussianBlur stdDeviation="3"/>
+				<feComponentTransfer>
+					<feFuncA type="linear" slope="0.3"/>
+				</feComponentTransfer>
+				<feBlend in="SourceGraphic" mode="normal" />
+			</filter>
+			<g transform="translate(10 10) scale(0.42)">
+				<path transform="translate(82.5 50) scale([scale])" fill="[color]" filter="url(#sh)" d="m -32.5,-45 a 45,45 0 0 0 -45,45 45,45 0 0 0 45,45 l 65,0 a 45,45 0 0 0 45,-45 45,45 0 0 0 -45,-45 l -65,0 z" />
+				<path fill="##gen_i2" stroke="none" d="m 49.622252,47.894492 c -0.204706,3.532657 0.326351,7.451694 2.180715,9.890865 5.439728,0.531817 10.423865,0.178818 15.404048,-1.252839 3.058811,-1.846852 0.50625,-6.509393 2.118009,-8.276663 5.555205,-1.970348 22.80347,-2.256289 26.892757,0.560535 1.534514,2.643271 0.145124,5.377849 1.333733,7.013614 5.439646,2.419843 11.631666,2.635248 16.104786,1.576296 2.31522,-2.972024 2.42844,-6.753818 1.92572,-9.728362 -0.64024,-4.808993 -5.67342,-7.682523 -9.34348,-9.351742 C 91.976694,33.262028 77.293869,32.425379 63.494711,36.748261 58.587789,38.771614 50.860803,40.915217 49.622249,47.894496 Z" />
+			</g>
+		</svg>`
+	}
+  }
+  p_ignore_call=reject_call
+  {
+    gen 
+    { 
+      svg=`<svg width="128" height="128">
+			<filter id="sh">
+				<feOffset in="SourceAlpha" dx="[shift]" dy="[shift]" />
+				<feGaussianBlur stdDeviation="3"/>
+				<feComponentTransfer>
+					<feFuncA type="linear" slope="0.3"/>
+				</feComponentTransfer>
+				<feBlend in="SourceGraphic" mode="normal" />
+			</filter>
+			<g transform="translate(10 10) scale(0.42)">
+				<circle transform="translate(50 50) scale([scale])" r="45" fill="[color]" filter="url(#sh)" />
+				<path fill="##gen_i2" stroke="none" d="M 63.396484,19.421772 49.607422,33.9081 41.683594,26.367085 44.533203,23.388569 39.630859,23.242085 34.728516,23.0956 l 0.341796,4.91211 0.34375,4.912109 2.814454,-2.939453 7.93164,7.548828 3.623047,3.447266 3.445313,-3.621094 13.789062,-14.486328 -3.621094,-3.447266 z M 49.503906,43.10146 c -6.266158,-0.0058 -12.472634,0.897801 -18.509765,2.789062 -4.906922,2.023353 -12.63254,4.165252 -13.871094,11.144532 -0.204706,3.532657 0.325323,7.453407 2.179687,9.892578 5.439728,0.531817 10.424114,0.17775 15.404297,-1.253907 3.058811,-1.846852 0.505429,-6.510073 2.117188,-8.277343 5.555205,-1.970348 22.805244,-2.256277 26.894531,0.560546 1.534514,2.643271 0.143422,5.377907 1.332031,7.013672 5.43965,2.419843 11.632351,2.635124 16.105469,1.576172 2.315222,-2.972024 2.428498,-6.752018 1.925781,-9.726562 -0.640243,-4.808993 -5.673688,-7.684297 -9.34375,-9.353516 C 65.715995,44.6181 57.560396,43.108949 49.503906,43.10146 Z" />
+			</g>
+		</svg>`
+      color=##gen_ti
+	}
+  }
+
   mute_mic=accept_call
   {
     gen 
@@ -1490,6 +1595,36 @@ buttons
 				<circle fill="##gen_i2" stroke="none" cx="35" cy="50" r="5"  />
 				<circle fill="##gen_i2" stroke="none" cx="50" cy="50" r="5"  />
 				<circle fill="##gen_i2" stroke="none" cx="65" cy="50" r="5"  />
+			</g>
+		</svg>`
+    }
+  }
+
+  vfs=mute_mic
+  {
+    gen 
+    {
+      svg=`<svg width="64" height="64">
+			<filter id="sh">
+				<feOffset in="SourceAlpha" dx="[shift]" dy="[shift]" />
+				<feGaussianBlur stdDeviation="3"/>
+				<feComponentTransfer>
+					<feFuncA type="linear" slope="0.3"/>
+				</feComponentTransfer>
+				<feBlend in="SourceGraphic" mode="normal" />
+			</filter>
+			<g transform="translate(10 10) scale(0.33)">
+				<circle transform="translate(50 50) scale([scale])" r="45" fill="[color]" filter="url(#sh)" />
+				<g fill="##gen_i2" stroke="none">
+				<rect width="5" height="22" x="23" y="23" />
+				<rect width="5" height="22" x="23" y="52" />
+				<rect width="5" height="22" x="72" y="23" />
+				<rect width="5" height="22" x="72" y="52" />
+				<rect width="22" height="5" x="23" y="23" />
+				<rect width="22" height="5" x="52" y="23" />
+				<rect width="22" height="5" x="23" y="72" />
+				<rect width="22" height="5" x="52" y="72" />
+				</g>
 			</g>
 		</svg>`
     }

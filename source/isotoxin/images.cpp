@@ -7,14 +7,8 @@ void picture_c::draw(rectengine_root_c *e, const ts::ivec2 &pos) const
     e->draw(pos - e->get_current_draw_offset(), dbmp.extbody(r), true);
 }
 
-picture_animated_c *picture_animated_c::first = nullptr;
-picture_animated_c *picture_animated_c::last = nullptr;
-bool picture_animated_c::allow_tick = true;
-
 /*virtual*/ picture_animated_c::~picture_animated_c()
 {
-    if ( prev || next || first == this )
-        LIST_DEL( this, first, last, prev, next );
 }
 
 void picture_animated_c::draw(rectengine_root_c *e, const ts::ivec2 &pos) const
@@ -24,60 +18,17 @@ void picture_animated_c::draw(rectengine_root_c *e, const ts::ivec2 &pos) const
     if (numframes > 1)
     {
         ts::irect cr(pos, pos + framerect().size());
-        for (redraw_request_s &r : rr)
-            if (r.engine.get() == e)
-            {
-                r.rr.combine(cr);
-                return;
-            }
-        redraw_request_s &r = rr.add();
-        r.engine = e;
-        r.rr = cr;
+        const_cast<picture_animated_c *>(this)->register_animation(e, cr);
     }
 }
 
-
-void picture_animated_c::redraw()
-{
-    for (redraw_request_s &r : rr)
-        if (!r.engine.expired())
-            r.engine->redraw(&r.rr);
-    rr.clear();
-}
-
-void picture_animated_c::tick()
-{
-    if (!allow_tick) return; // don't animate inactive
-    ts::Time curt = ts::Time::current();
-    for (picture_animated_c *img = first; img; img = img->next)
-    {
-        if (!ASSERT(img->numframes > 1) || img->rr.size() == 0)
-            continue;
-
-        bool redraw_it = false;
-        if (curt >= img->next_frame_tick)
-        {
-            img->next_frame_tick += img->nextframe();
-            redraw_it = true;
-            if (curt >= img->next_frame_tick)
-                img->next_frame_tick = curt;
-        }
-        if (redraw_it)
-            img->redraw();
-    }
-
-}
 
 bool picture_gif_c::load_only_gif( ts::bitmap_c &first_frame, const ts::blob_c &body )
 {
     gif.load(body.data(), body.size());
     numframes = gif.numframes();
     if (numframes == 0) return false;
-
-    delay = gif.firstframe(first_frame);
-
-    next_frame_tick = ts::Time::current() + delay;
-    tick_it();
+    next_frame_tick = ts::Time::current() + gif.firstframe(first_frame);
     return true;
 }
 
@@ -91,6 +42,21 @@ bool picture_gif_c::load_only_gif( ts::bitmap_c &first_frame, const ts::blob_c &
     frame.copy( frect.lt, bmp.info().sz, bmp.extbody(), ts::ivec2(0) );
 
     return true;
+}
+
+/*virtual*/ bool picture_gif_c::animation_tick()
+{
+    ts::Time curt = ts::Time::current();
+
+    if (curt >= next_frame_tick)
+    {
+        next_frame_tick += nextframe();
+        if (curt >= next_frame_tick)
+            next_frame_tick = curt;
+        return true;
+    }
+
+    return false;
 }
 
 int picture_gif_c::nextframe()
@@ -226,16 +192,13 @@ namespace
             numframes = gif.numframes();
             if (numframes == 0) return false;
 
-            delay = gif.firstframe(bmp);
+            int delay = gif.firstframe(bmp);
             origsz = bmp.info().sz;
 
             frame = std::move(bmp);
             rsz_required = false;
 
             next_frame_tick = ts::Time::current() + delay;
-
-            tick_it();
-
             return true;
         }
         /*virtual*/ int nextframe() override

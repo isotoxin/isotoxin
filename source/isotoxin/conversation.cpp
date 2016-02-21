@@ -657,6 +657,11 @@ bool gui_notice_c::setup_tail(RID, GUIPARAM)
     return true;
 }
 
+ts::wstr_c incoming_call_text( const ts::str_c &utf8name )
+{
+    return TTT("Incoming call from $", 134) / from_utf8(utf8name);
+}
+
 void gui_notice_c::update_text(int dtimesec)
 {
     ts::str_c aname = sender->get_name();
@@ -680,7 +685,7 @@ void gui_notice_c::update_text(int dtimesec)
 
             break;
         case NOTICE_INCOMING_CALL:
-            newtext.append(TTT("Incoming call from $",134) / from_utf8(aname));
+            newtext.append(incoming_call_text(aname));
             break;
         case NOTICE_CALL_INPROGRESS:
             newtext.set(CONSTWSTR("<p=c>")).append( from_utf8(aname) );
@@ -710,44 +715,43 @@ gui_notice_callinprogress_c::gui_notice_callinprogress_c(MAKE_CHILD<gui_notice_c
 
 void gui_notice_callinprogress_c::acquire_display()
 {
-    if (display)
+    if (common.display)
     {
-        display->gid = 0;
-        display->cid = sender ? sender->getkey().contactid : 0;
+        common.display->gid = 0;
+        common.display->cid = sender ? sender->getkey().contactid : 0;
         return;
     }
 
-    display = g_app->current_video_display.get();
-    if (display->notice == nullptr)
+    common.display = g_app->current_video_display.get();
+    if (common.display->notice == nullptr)
     {
-        display->notice = this;
-        display->gid = 0;
-        display->cid = sender ? sender->getkey().contactid : 0;
+        common.display->notice = this;
+        common.display->gid = 0;
+        common.display->cid = sender ? sender->getkey().contactid : 0;
     } else
     {
-        g_app->current_video_display.release(display);
-        display = nullptr;
+        g_app->current_video_display.release(common.display);
+        common.display = nullptr;
     }
 }
 
 gui_notice_callinprogress_c::~gui_notice_callinprogress_c()
 {
-    if (flags.is(F_HIDDEN_CURSOR))
+    if (common.flags.is(common.F_HIDDEN_CURSOR))
         ts::show_hardware_cursor();
 
-    if (display)
+    if (common.display)
     {
-        ASSERT(display->notice == this);
-        display->notice = nullptr;
-        g_app->current_video_display.release(display);
-        display = nullptr;
+        ASSERT(common.display->notice == this);
+        common.display->notice = nullptr;
+        g_app->current_video_display.release(common.display);
+        common.display = nullptr;
     }
     if (gui)
     {
-        gui->delete_event( DELEGATE(this,wait_animation) );
+        gui->delete_event( DELEGATE(this, wait_animation ) );
         gui->delete_event( DELEGATE(this, recalc_vsz) );
         gui->delete_event( DELEGATE(this, show_video_tick) );
-        
     }
 }
 
@@ -756,340 +760,17 @@ gui_notice_callinprogress_c::~gui_notice_callinprogress_c()
     __super::created();
 }
 
-void gui_notice_callinprogress_c::vsb_draw( vsb_c *cam, const ts::ivec2& campos, const ts::ivec2& camsz, bool c )
+const ts::irect *gui_notice_callinprogress_c::vrect()
 {
-    if (!cam || camsz == ts::ivec2(0)) return;
-
-    if (ts::drawable_bitmap_c *b = cam->lockbuf(nullptr))
+    if (common.flags.is(common.F_RECTSOK))
     {
-        if (camsz != b->info().sz)
+        if (common.display && flags.is(F_VIDEO_SHOW))
         {
-            ts::drawable_bitmap_c bstore = std::move(*b);
-            b->create(camsz);
-            if (bstore.info().sz >> ts::ivec2(0))
-                bstore.resize_to(b->extbody(), ts::FILTER_BICUBIC); // bicubic enough
-            else
-                b->fill(ts::ARGB(0, 0, 0));
-        }
-
-        draw_data_s &dd = getengine().begin_draw();
-        ts::irect clr = ts::irect::from_center_and_size( campos, camsz );
-
-        getengine().draw(clr.lt, b->extbody(), false);
-
-        if (shadow)
-        {
-            clr.lt -= shadowsize;
-            clr.rb += shadowsize;
-            clr += dd.offset;
-            evt_data_s d;
-            d.draw_thr.rect.get() = clr;
-            getengine().draw(*shadow, DTHRO_BORDER_RECT, &d);
-        }
-
-
-        getengine().end_draw();
-        cam->unlock(b);
-
-        if (c)
-            flags.clear(F_FULL_CAM_REDRAW);
-        else
-            flags.clear(F_FULL_DISPLAY_REDRAW);
-    }
-}
-
-static ts::ivec2 calc_preview_campos(const ts::irect& camrect, const ts::ivec2& camsz)
-{
-    int shift = prf().camview_pos();
-    if (shift < 0) shift = 0;
-    ts::ivec2 p( camrect.lt );
-
-    auto clamp_left = [&]()
-    {
-        if (p.x < camrect.lt.x)
-            p.x = camrect.lt.x;
-    };
-
-    auto clamp_top = [&]()
-    {
-        if (p.y < camrect.lt.y)
-            p.y = camrect.lt.y;
-    };
-
-    auto clamp_rite = [&]()
-    {
-        if (p.x > camrect.rb.x)
-            p.x = camrect.rb.x;
-    };
-
-    auto clamp_bottom = [&]()
-    {
-        if (p.y > camrect.rb.y)
-            p.y = camrect.rb.y;
-    };
-
-    switch (prf().camview_snap())
-    {
-    case CVS_LEFT_TOP:
-        p = camrect.lt;
-        p.y += shift;
-        clamp_bottom();
-        break;
-
-    case CVS_LEFT_BOTTOM:
-        p = camrect.lb();
-        p.y -= shift;
-        clamp_top();
-        break;
-
-    case CVS_RITE_TOP:
-        p = camrect.rt();
-        p.y += shift;
-        clamp_bottom();
-        break;
-
-    case CVS_RITE_BOTTOM:
-        p = camrect.rb;
-        p.y -= shift;
-        clamp_top();
-        break;
-
-    case CVS_TOP_LEFT:
-        p = camrect.lt;
-        p.x += shift;
-        clamp_rite();
-        break;
-
-    case CVS_TOP_RITE:
-        p = camrect.rt();
-        p.x -= shift;
-        clamp_left();
-        break;
-
-    case CVS_BOTTOM_LEFT:
-        p = camrect.lb();
-        p.x += shift;
-        clamp_rite();
-        break;
-
-    case CVS_BOTTOM_RITE:
-        p = camrect.rb;
-        p.x -= shift;
-        clamp_left();
-        break;
-
-    }
-    return p;
-}
-
-bool gui_notice_callinprogress_c::apply_preview_cam_pos(const ts::ivec2&p)
-{
-    camview_snap_e s = (camview_snap_e)prf().camview_snap();
-    int shift = prf().camview_pos();
-    if (shift < 0) shift = 0;
-
-#define IS_LEFT_AXIS (CVS_LEFT_TOP == s || CVS_LEFT_BOTTOM == s)
-#define IS_RITE_AXIS (CVS_RITE_TOP == s || CVS_RITE_BOTTOM == s)
-
-#define IS_TOP_AXIS (CVS_TOP_LEFT == s || CVS_TOP_RITE == s)
-#define IS_BOTTOM_AXIS (CVS_BOTTOM_LEFT == s || CVS_BOTTOM_RITE == s)
-
-#define AT_TOP (CVS_LEFT_TOP == s || CVS_RITE_TOP == s)
-#define AT_LEFT (CVS_TOP_LEFT == s || CVS_BOTTOM_LEFT == s)
-
-    switch (s)
-    {
-    case CVS_LEFT_TOP:
-    case CVS_RITE_TOP:
-    case CVS_LEFT_BOTTOM:
-    case CVS_RITE_BOTTOM:
-        {
-            // vertical move allowed
-            cam_position.y = p.y;
-            if (cam_position.y < cam_previewposrect.lt.y)
-                cam_position.y = cam_previewposrect.lt.y;
-            if (cam_position.y > cam_previewposrect.rb.y)
-                cam_position.y = cam_previewposrect.rb.y;
-
-            if ( (cam_position.y-cam_previewposrect.lt.y) < (cam_previewposrect.rb.y-cam_position.y) )
-            {
-                // top
-                shift = cam_position.y-cam_previewposrect.lt.y;
-                s = IS_LEFT_AXIS ? CVS_LEFT_TOP : CVS_RITE_TOP;
-            } else
-            {
-                // bottom
-                shift = cam_previewposrect.rb.y-cam_position.y;
-                s = IS_LEFT_AXIS ? CVS_LEFT_BOTTOM : CVS_RITE_BOTTOM;
-            }
-
-            if (shift == 0)
-            {
-                // horizontal move allowed
-                cam_position.x = p.x;
-
-                if (cam_position.x < cam_previewposrect.lt.x)
-                    cam_position.x = cam_previewposrect.lt.x;
-                if (cam_position.x > cam_previewposrect.rb.x)
-                    cam_position.x = cam_previewposrect.rb.x;
-
-                if (cam_position.x == cam_previewposrect.lt.x && IS_LEFT_AXIS)
-                    break; // still at left axis, do nothing
-
-                if (cam_position.x == cam_previewposrect.rb.x && IS_RITE_AXIS)
-                    break; // still at rite axis, do nothing
-
-                if ((cam_position.x - cam_previewposrect.lt.x) < (cam_previewposrect.rb.x - cam_position.x))
-                {
-                    // left
-                    shift = cam_position.x - cam_previewposrect.lt.x;
-                    s = AT_TOP ? CVS_TOP_LEFT : CVS_BOTTOM_LEFT;
-                } else
-                {
-                    // rite
-                    shift = cam_previewposrect.rb.x - cam_position.x;
-                    s = AT_TOP ? CVS_TOP_RITE : CVS_BOTTOM_RITE;
-                }
-
-            }
-        }
-        break;
-    case CVS_TOP_LEFT:
-    case CVS_TOP_RITE:
-    case CVS_BOTTOM_LEFT:
-    case CVS_BOTTOM_RITE:
-        {
-            // horizontal move allowed
-            cam_position.x = p.x;
-            if (cam_position.x < cam_previewposrect.lt.x)
-                cam_position.x = cam_previewposrect.lt.x;
-            if (cam_position.x > cam_previewposrect.rb.x)
-                cam_position.x = cam_previewposrect.rb.x;
-
-            if ((cam_position.x - cam_previewposrect.lt.x) < (cam_previewposrect.rb.x - cam_position.x))
-            {
-                // left
-                shift = cam_position.x - cam_previewposrect.lt.x;
-                s = IS_TOP_AXIS ? CVS_TOP_LEFT : CVS_BOTTOM_LEFT;
-            }
-            else
-            {
-                // rite
-                shift = cam_previewposrect.rb.x - cam_position.x;
-                s = IS_TOP_AXIS ? CVS_TOP_RITE : CVS_BOTTOM_RITE;
-            }
-
-            if (shift == 0)
-            {
-                // vertical move allowed
-                cam_position.y = p.y;
-
-                if (cam_position.y < cam_previewposrect.lt.y)
-                    cam_position.y = cam_previewposrect.lt.y;
-                if (cam_position.y > cam_previewposrect.rb.y)
-                    cam_position.y = cam_previewposrect.rb.y;
-
-                if (cam_position.y == cam_previewposrect.lt.y && IS_TOP_AXIS)
-                    break; // still at top axis, do nothing
-
-                if (cam_position.y == cam_previewposrect.rb.y && IS_BOTTOM_AXIS)
-                    break; // still at bottom axis, do nothing
-
-                if ((cam_position.y - cam_previewposrect.lt.y) < (cam_previewposrect.rb.y - cam_position.y))
-                {
-                    // top
-                    shift = cam_position.y - cam_previewposrect.lt.y;
-                    s = AT_LEFT ? CVS_LEFT_TOP : CVS_RITE_TOP;
-
-                } else
-                {
-                    // bottom
-                    shift = cam_previewposrect.rb.y - cam_position.y;
-                    s = AT_LEFT ? CVS_LEFT_BOTTOM : CVS_RITE_BOTTOM;
-                }
-
-            }
-        }
-        break;
-    }
-
-    bool ch1 = prf().camview_snap( s );
-    bool ch2 = prf().camview_pos( shift );
-    return ch1 || ch2;
-}
-
-int gui_notice_callinprogress_c::preview_cam_cursor_resize( const ts::ivec2 &p ) const
-{
-    int area = 0;
-
-    int allow_area = 0;
-    camview_snap_e s = (camview_snap_e)prf().camview_snap();
-    int shift = prf().camview_pos();
-    if (shift < 0) shift = 0;
-
-    switch (s)
-    {
-    case CVS_LEFT_TOP:
-        allow_area |= AREA_RITE | AREA_BOTTOM;
-        if (shift) allow_area |= AREA_TOP;
-        break;
-    case CVS_LEFT_BOTTOM:
-        allow_area |= AREA_RITE | AREA_TOP;
-        if (shift) allow_area |= AREA_BOTTOM;
-        break;
-    case CVS_TOP_LEFT:
-        allow_area |= AREA_BOTTOM | AREA_RITE;
-        if (shift) allow_area |= AREA_LEFT;
-        break;
-    case CVS_TOP_RITE:
-        allow_area |= AREA_BOTTOM | AREA_LEFT;
-        if (shift) allow_area |= AREA_RITE;
-        break;
-    case CVS_RITE_TOP:
-        allow_area |= AREA_LEFT | AREA_BOTTOM;
-        if (shift) allow_area |= AREA_TOP;
-        break;
-    case CVS_RITE_BOTTOM:
-        allow_area |= AREA_LEFT | AREA_TOP;
-        if (shift) allow_area |= AREA_BOTTOM;
-        break;
-    case CVS_BOTTOM_LEFT:
-        allow_area |= AREA_TOP | AREA_RITE;
-        if (shift) allow_area |= AREA_LEFT;
-        break;
-    case CVS_BOTTOM_RITE:
-        allow_area |= AREA_TOP | AREA_LEFT;
-        if (shift) allow_area |= AREA_RITE;
-        break;
-    }
-
-    if (flags.is(F_RECTSOK))
-    {
-        ts::irect r = ts::irect::from_center_and_size(cam_position, cam_previewsize);
-        r.lt -= 2;
-        r.rb += 2;
-        if ( r.inside(p) )
-        {
-            if ( allow_area & AREA_TOP )
-                if ( (p.y-r.lt.y) <= 4 )
-                    area |= AREA_TOP;
-
-            if (allow_area & AREA_BOTTOM)
-                if ( (r.rb.y - p.y) <= 4)
-                    area |= AREA_BOTTOM;
-
-            if (allow_area & AREA_LEFT)
-                if ((p.x - r.lt.x) <= 4)
-                    area |= AREA_LEFT;
-
-            if (allow_area & AREA_RITE)
-                if ((r.rb.x - p.x) <= 4)
-                    area |= AREA_RITE;
+            vrect_cache = ts::irect::from_center_and_size(common.display_position, common.display_size);
+            return &vrect_cache;
         }
     }
-
-
-    return area;
+    return nullptr;
 }
 
 /*virtual*/ bool gui_notice_callinprogress_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -1097,166 +778,75 @@ int gui_notice_callinprogress_c::preview_cam_cursor_resize( const ts::ivec2 &p )
     switch (qp)
     {
     case SQ_DRAW:
-        if (rid == getrid())
+        if (rid == getrid() && fsvideo.expired())
         {
             __super::sq_evt(qp, rid, data);
 
-            if (flags.is(F_WAITANIM) && !flags.is(F_CAMINITANIM) && !camera)
+            if (flags.is(F_WAITANIM) && !is_cam_init_anim() && !camera)
             {
                 ts::irect r = getprops().szrect();
                 r.lt.y = r.height() - addheight;
-                r.rb.y -= buttons[2]->get_min_size().y + 5;
-                draw_initialization(&getengine(), pa.bmp, r, get_default_text_color(), TTT("Waiting for video...",343));
+                r.rb.y -= common.b_hangup->get_min_size().y + 5;
+                draw_initialization(&getengine(), common.pa.bmp, r, get_default_text_color(), TTT("Waiting for video...",343));
             }
 
-            auto draw_blank_cam = [&]( bool draw_shadow )
+            if (common.flags.is(common.F_RECTSOK))
             {
-                draw_data_s &dd = getengine().begin_draw();
-                ts::irect clr = ts::irect::from_center_and_size(cam_position, cam_previewsize);
-
-                getengine().draw(clr, ts::ARGB(30, 30, 30));
-                getengine().draw(clr.center() - pa.bmp.info().sz / 2, pa.bmp.extbody(), true);
-
-                if (draw_shadow && shadow)
+                if (common.display && flags.is(F_VIDEO_SHOW))
                 {
-                    clr.lt -= shadowsize;
-                    clr.rb += shadowsize;
-                    clr += dd.offset;
-                    evt_data_s d;
-                    d.draw_thr.rect.get() = clr;
-                    getengine().draw(*shadow, DTHRO_BORDER_RECT, &d);
-                }
-                getengine().end_draw();
+                    common.vsb_draw(getengine(), common.display, common.display_position, common.display_size, false, true );
 
-            };
-
-            if (flags.is(F_RECTSOK))
-            {
-                if (display && flags.is(F_VIDEO_SWOW))
-                {
-                    vsb_draw( display, display_position, display_size, false );
-
-                    if (camera && (cam_previewsize >> ts::ivec2(0)))
+                    if (camera && (common.cam_previewsize >> ts::ivec2(0)))
                     {
-                        vsb_draw(camera.get(), cam_position, cam_previewsize, true);
+                        common.vsb_draw(getengine(), camera.get(), common.cam_position, common.cam_previewsize, true, true);
 
-                    } else if (flags.is(F_CAMINITANIM))
+                    } else if (is_cam_init_anim())
                     {
-                        draw_blank_cam(true);
+                        common.draw_blank_cam( getengine(), true );
                     }
 
                 } else
                 {
-                    if (flags.is(F_CAMINITANIM))
-                        draw_blank_cam(true);
+                    if (is_cam_init_anim())
+                        common.draw_blank_cam(getengine(), true);
                     else
                     {
-                        vsb_draw(camera.get(), cam_position, cam_previewsize, true);
+                        common.vsb_draw(getengine(), camera.get(), common.cam_position, common.cam_previewsize, true, true);
                     }
                 }
             }
 
-            ++calc_rect_tag_frame;
+            ++common.calc_rect_tag_frame;
             return true;
         }
         return false;
     case SQ_MOUSE_MOVE_OP:
-        if (!display || !camera)
-        {
-            gui->end_mousetrack(getrid(), MTT_MOVECONTENT);
-            gui->end_mousetrack(getrid(), MTT_APPDEFINED1);
-            break;
-        }
-        if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_MOVECONTENT))
-            if (apply_preview_cam_pos( data.mouse.screenpos() + opd->mpos ))
-                getengine().redraw();
-        if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_APPDEFINED1))
-        {
-            ts::ivec2 osz = opd->rect.rb;
-            ts::ivec2 csz = camera->get_video_size();
-            ts::ivec2 dsz = display->get_desired_size();
-            float xy = (float)csz.y / (float)csz.x;
-
-            if (opd->area & AREA_LEFT)
-                osz.x = opd->rect.rb.x + opd->mpos.x-data.mouse.screenpos().x, osz.y = ts::lround( xy * osz.x );
-            else if (opd->area & AREA_RITE)
-                osz.x = opd->rect.rb.x + data.mouse.screenpos().x-opd->mpos.x, osz.y = ts::lround( xy * osz.x );
-
-            if (opd->area & AREA_TOP)
-                osz.y = opd->rect.rb.y + opd->mpos.y - data.mouse.screenpos().y, osz.x = ts::lround( osz.y / xy );
-            else if (opd->area & AREA_BOTTOM)
-                osz.y = opd->rect.rb.y + data.mouse.screenpos().y - opd->mpos.y, osz.x = ts::lround( osz.y / xy );
-
-            osz.y = ts::lround( xy * osz.x );
-
-            if (pa.bmp.info().sz > osz)
-            {
-                float k1 = (float)pa.bmp.info().sz.x / dsz.x;
-                float k2 = (float)pa.bmp.info().sz.y / dsz.y;
-                float k = ts::tmax(k1, k2);
-                osz.x = ts::lround(k * dsz.x);
-                osz.y = ts::lround(k * dsz.y);
-            }
-
-            int k = osz.x * 100 / dsz.x;
-            if (k > 50) k = 50;
-
-            prf().camview_size(k);
-
-            calc_cam_display_rects();
-
+        if (common.mouse_op( this, getrid(), data.mouse.screenpos()))
             getengine().redraw();
-        }
         break;
     case SQ_MOUSE_LUP:
         gui->end_mousetrack(getrid(), MTT_MOVECONTENT);
         gui->end_mousetrack(getrid(), MTT_APPDEFINED1);
         break;
     case SQ_MOUSE_LDOWN:
-
-        if (int area = preview_cam_cursor_resize( to_local(data.mouse.screenpos()) ) )
-        {
-            mousetrack_data_s &opd = gui->begin_mousetrack( getrid(), MTT_APPDEFINED1 );
-            opd.area = area;
-            opd.mpos = data.mouse.screenpos();
-            opd.rect.rb = cam_previewsize;
-
-        } else if (flags.is(F_OVERPREVIEWCAM))
-        {
-            flags.set( F_MOVEPREVIEWCAM );
-            mousetrack_data_s &opd = gui->begin_mousetrack( getrid(), MTT_MOVECONTENT );
-            opd.mpos = cam_position - data.mouse.screenpos();
-        }
+        common.mouse_down(getrid(), data.mouse.screenpos());
         break;
     case SQ_MOUSE_OUT:
-        {
-            bool prev = flags.is(F_OVERPREVIEWCAM);
-            flags.clear(F_OVERPREVIEWCAM|F_MOVEPREVIEWCAM);
-            if (prev) getengine().redraw();
-        }
+        if (common.mouse_out())
+            getengine().redraw();
         break;
     case SQ_DETECT_AREA:
-        if (nullptr == gui->mtrack(getrid(), MTT_MOVECONTENT))
-        {
-            bool prev = flags.is(F_OVERPREVIEWCAM);
-            if (prev != flags.init(F_OVERPREVIEWCAM, flags.is(F_RECTSOK) && flags.is(F_VIDEO_SWOW) && ts::irect::from_center_and_size(cam_position, cam_previewsize).inside(data.detectarea.pos)))
-                getengine().redraw();
-            
-            data.detectarea.area = preview_cam_cursor_resize( data.detectarea.pos );
-            
-            if (flags.is(F_OVERPREVIEWCAM) && data.detectarea.area == 0)
-                data.detectarea.area = AREA_MOVECURSOR;
-        } else
-            data.detectarea.area = AREA_MOVECURSOR;
-
-        if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_APPDEFINED1))
-            data.detectarea.area = opd->area;
-
+        common.detect_area( getrid(), data, flags.is(F_VIDEO_SHOW));
         break;
     case SQ_RECT_CHANGED:
-        update_btns_positions();
-        if (flags.is(F_VIDEO_SWOW))
+        common.update_btns_positions( flags.is(F_VIDEO_SHOW) ? 10 : 5 );
+        if (const ts::irect *vr = vrect()) common.update_fs_pos(*vr);
+        if (flags.is(F_VIDEO_SHOW))
             DEFERRED_UNIQUE_CALL(0, DELEGATE(this, recalc_vsz), nullptr);
+        break;
+    case SQ_MOUSE_L2CLICK:
+        if (!fsvideo && common.b_fs && flags.is(F_VIDEO_SHOW))
+            b_fs( common.b_fs->getrid(), nullptr );
         break;
     }
 
@@ -1269,7 +859,8 @@ void gui_notice_callinprogress_c::set_height(int addh)
     addheight = addh;
 
     setup_tail();
-    update_btns_positions();
+    common.update_btns_positions(flags.is(F_VIDEO_SHOW) ? 10 : 5);
+    if (const ts::irect *vr = vrect()) common.update_fs_pos(*vr);
 
     HOLD par(getparent());
     gui->repos_children(&par.as<gui_group_c>());
@@ -1324,49 +915,16 @@ void gui_notice_callinprogress_c::setup(contact_c *collocutor_ptr)
     if (active_protocol_c *ap = prf().ap( collocutor_ptr->getkey().protoid ))
         video_supported = (0 != (ap->get_features() & PF_VIDEO_CALLS));
     
-    gui_button_c &b_reject = MAKE_CHILD<gui_button_c>(getrid());
-    buttons[video_supported ? 2 : 1] = &b_reject;
-    b_reject.set_face_getter(BUTTON_FACE(reject_call));
-    b_reject.set_handler(DELEGATE(collocutor_ptr, b_hangup), this);
-
-    gui_button_c &b_mute_mic = MAKE_CHILD<gui_button_c>(getrid());
-    buttons[0] = &b_mute_mic;
-
     av_contact_s &avc = g_app->get_avcontact(historian, av_contact_s::AV_INPROGRESS);
-
-    avc.is_mic_off() ?
-        b_mute_mic.set_face_getter(BUTTON_FACE(unmute_mic)) :
-        b_mute_mic.set_face_getter(BUTTON_FACE(mute_mic));
-
-    b_mute_mic.set_handler(DELEGATE(&avc, b_mic_switch), &b_mute_mic);
-
-    gui_button_c &b_mute_speaker = MAKE_CHILD<gui_button_c>(getrid());
-    buttons[video_supported ? 1 : 2] = &b_mute_speaker;
-
-    avc.is_speaker_off() ?
-        b_mute_speaker.set_face_getter(BUTTON_FACE(unmute_speaker)) :
-        b_mute_speaker.set_face_getter(BUTTON_FACE(mute_speaker));
-
-    b_mute_speaker.set_handler(DELEGATE(&avc, b_speaker_switch), &b_mute_speaker);
+    
+    common.create_buttons( this, getrid(), video_supported );
 
     if (video_supported)
     {
-        gui_button_c &b_cam = MAKE_CHILD<gui_button_c>(getrid());
-        buttons[3] = &b_cam;
-        avc.update_btn_face_camera(b_cam);
-        b_cam.set_handler(DELEGATE(this, b_camera_switch), nullptr);
-
-
-        gui_button_c &b_extra = MAKE_CHILD<gui_button_c>(getrid());
-        buttons[4] = &b_extra;
-        b_extra.set_face_getter(BUTTON_FACE(extra));
-        b_extra.set_handler(DELEGATE(this, b_extra), nullptr);
-
         if (avc.is_camera_on())
         {
-            flags.set(F_CAMINITANIM);
+            set_cam_init_anim();
             DEFERRED_UNIQUE_CALL(0.05, DELEGATE(this, wait_animation), nullptr);
-
             calc_cam_display_rects();
         }
 
@@ -1377,13 +935,6 @@ void gui_notice_callinprogress_c::setup(contact_c *collocutor_ptr)
         }
 
         g_app->add_task( TSNEW(enum_video_devices_s, this) );
-    }
-
-    shadow = gui->theme().get_rect( CONSTASTR("shadow") );
-    if (shadow)
-    {
-        shadowsize.x = shadow->clborder_x() / 2;
-        shadowsize.y = shadow->clborder_y() / 2;
     }
 
     set_corresponding_height();
@@ -1401,51 +952,55 @@ av_contact_s *gui_notice_callinprogress_c::get_avc()
     return g_app->find_avcontact_inprogress(historian);
 }
 
+void gui_notice_callinprogress_c::on_fsvideo_die()
+{
+    if (av_contact_s *avc = get_avc())
+    {
+        avc->is_mic_off() ?
+            common.b_mic_mute->set_face_getter(BUTTON_FACE(unmute_mic)) :
+            common.b_mic_mute->set_face_getter(BUTTON_FACE(mute_mic));
+
+        avc->is_speaker_off() ?
+            common.b_spkr_mute->set_face_getter(BUTTON_FACE(unmute_speaker)) :
+            common.b_spkr_mute->set_face_getter(BUTTON_FACE(mute_speaker));
+    }
+    common.nommovetime = ts::Time::current();
+}
+
 bool gui_notice_callinprogress_c::show_video_tick(RID, GUIPARAM p)
 {
-    if (flags.is( F_VIDEO_SWOW ))
+    if (flags.is( F_VIDEO_SHOW ))
     {
-        ts::ivec2 mp = gui->get_cursor_pos();
-        bool inside = false;
-        if (getprops().screenrect().inside(mp))
-        {
-            if ( mp != mousepos )
-            {
-                nommovetime = ts::Time::current();
-                show_buttons(true);
-            }
-            inside = true;
-        }
-
-        if ( (ts::Time::current() - nommovetime) > 3000 )
-        {
-            show_buttons(false);
-            if (inside)
-                ts::hide_hardware_cursor(), flags.set(F_HIDDEN_CURSOR);
-        }
-
-        if (mp != mousepos && flags.is(F_HIDDEN_CURSOR))
-        {
-            ts::show_hardware_cursor();
-        }
-
-        mousepos = mp;
+        if (fsvideo.expired())
+            common.tick();
+        else
+            common.show_buttons(false), fsvideo->tick();
 
         DEFERRED_UNIQUE_CALL(0.33, DELEGATE(this, show_video_tick), nullptr);
-    }
+
+    } else if (!fsvideo.expired())
+        TSDEL(fsvideo.get());
+
     return 0;
 }
 
 bool gui_notice_callinprogress_c::wait_animation(RID, GUIPARAM p)
 {
-    if (flags.is( F_WAITANIM ) || flags.is( F_CAMINITANIM ))
+    if (flags.is( F_WAITANIM ) || is_cam_init_anim())
     {
-        pa.render();
-        set_corresponding_height();
-        getengine().redraw();
+        if (fsvideo)
+        {
+            fsvideo->wait_anim();
+        }
+        else
+        {
+            common.pa.render();
+            set_corresponding_height();
+            getengine().redraw();
+            if (!common.flags.is(common.F_RECTSOK))
+                calc_cam_display_rects();
+        }
         DEFERRED_UNIQUE_CALL(0.05, DELEGATE(this, wait_animation), nullptr);
-        if (!flags.is(F_RECTSOK))
-            calc_cam_display_rects();
     }
 
     return true;
@@ -1461,7 +1016,7 @@ void gui_notice_callinprogress_c::menu_video(const ts::str_c &p)
             avc->set_recv_video( p.get_char(1) == '1' );
             if (avc->is_receive_video())
             {
-                if (!flags.is(F_VIDEO_SWOW))
+                if (!flags.is(F_VIDEO_SHOW))
                 {
                     flags.set(F_WAITANIM);
                     DEFERRED_UNIQUE_CALL(0.05, DELEGATE(this, wait_animation), nullptr);
@@ -1502,9 +1057,9 @@ void gui_notice_callinprogress_c::menu_video(const ts::str_c &p)
     }
 }
 
-bool gui_notice_callinprogress_c::b_extra(RID, GUIPARAM)
+bool gui_notice_callinprogress_c::b_extra(RID erid, GUIPARAM)
 {
-    if (!buttons[4]) return true; // no button... something wrong, but just ignore it
+    if (!common.b_options) return true; // no button... something wrong, but just ignore it
     if ( av_contact_s *avc = get_avc() )
     {
         menu_c m;
@@ -1514,7 +1069,7 @@ bool gui_notice_callinprogress_c::b_extra(RID, GUIPARAM)
             m.add( TTT("Enable video receive",358), 0, DELEGATE(this, menu_video), CONSTASTR("v1") );
         } else
         {
-            m.add(TTT("Disable video receive",359), flags.is(F_VIDEO_SWOW) ? 0 : MIF_DISABLED, DELEGATE(this, menu_video), CONSTASTR("v0") );
+            m.add(TTT("Disable video receive",359), flags.is(F_VIDEO_SHOW) ? 0 : MIF_DISABLED, DELEGATE(this, menu_video), CONSTASTR("v0") );
         }
 
 
@@ -1531,9 +1086,16 @@ bool gui_notice_callinprogress_c::b_extra(RID, GUIPARAM)
 
         }
         
-        gui_popup_menu_c::show(menu_anchor_s(buttons[4]->getprops().screenrect(), menu_anchor_s::RELPOS_TYPE_TU), m);
+        gui_popup_menu_c::show(menu_anchor_s(HOLD(erid)().getprops().screenrect(), menu_anchor_s::RELPOS_TYPE_TU), m);
     }
 
+    return true;
+}
+
+bool gui_notice_callinprogress_c::b_fs(RID b, GUIPARAM p)
+{
+    common.cur_vres = ts::ivec2(0);
+    fsvideo = MAKE_ROOT< fullscreenvideo_c >( HOLD(b)().getprops().screenrect().center(), this );
     return true;
 }
 
@@ -1542,64 +1104,35 @@ bool gui_notice_callinprogress_c::b_camera_switch(RID, GUIPARAM)
     if (av_contact_s *avc = get_avc())
     {
         avc->camera_switch();
-        avc->update_btn_face_camera( *buttons[3] );
+        avc->update_btn_face_camera( *common.b_cam_swtch );
+        common.nommovetime = ts::Time::current();
+
+        if (fsvideo)
+        {
+            avc->update_btn_face_camera(*fsvideo->common.b_cam_swtch);
+            fsvideo->cam_switch(avc->is_camera_on());
+        }
+
         if (avc->is_camera_on())
         {
-            flags.set(F_CAMINITANIM);
+            set_cam_init_anim();
             DEFERRED_UNIQUE_CALL(0.05, DELEGATE(this, wait_animation), nullptr);
-
             calc_cam_display_rects();
 
         } else
         {
-            flags.clear(F_RECTSOK);
-            flags.clear(F_CAMINITANIM);
-            cam_previewsize = ts::ivec2(0);
+            common.flags.clear(common.F_RECTSOK);
+            clear_cam_init_anim();
+            common.cam_previewsize = ts::ivec2(0);
             camera.reset();
             set_corresponding_height();
-            flags.set(F_FULL_CAM_REDRAW|F_FULL_DISPLAY_REDRAW);
+            common.flags.set(common.F_FULL_CAM_REDRAW| common.F_FULL_DISPLAY_REDRAW);
             avc->currentvsb.id.clear();
             avc->currentvsb.desc.clear();
             getengine().redraw();
         }
     }
     return true;
-}
-
-void gui_notice_callinprogress_c::update_btns_positions()
-{
-    ts::irect clar = get_client_area();
-    if (!clar) return;
-
-    const int bnums = ARRAY_SIZE( buttons );
-
-    int w = 0;
-    int mh = 0;
-    int bn = 0;
-    ts::ivec2 szs[ bnums ];
-    for( int i = 0; i<bnums; ++i )
-    {
-        gui_button_c * b = buttons[i];
-        if (b == nullptr) continue;
-        szs[i] = b->get_min_size();
-        w += szs[i].x;
-        if (szs[i].y > mh) mh = szs[i].y;
-        ++bn;
-    }
-    int space = 5;
-    w += (bn - 1) * space; // spaces between buttons
-
-    int up = flags.is(F_VIDEO_SWOW) ? 10 : 5;
-    up += mh/2;
-    int x = clar.lt.x + (clar.width() - w)/2;
-    for (int i = 0; i < bnums; ++i)
-    {
-        gui_button_c * b = buttons[i];
-        if (b == nullptr) continue;
-        MODIFY(*b).pos(x, clar.rb.y - up - szs[i].y/2 ).size( szs[i] ).visible(true);
-        x += szs[i].x + space;
-    }
-
 }
 
 ts::uint32 gui_notice_callinprogress_c::gm_handler(gmsg<ISOGM_PEER_STREAM_OPTIONS> &so)
@@ -1625,7 +1158,7 @@ ts::uint32 gui_notice_callinprogress_c::gm_handler(gmsg<ISOGM_PEER_STREAM_OPTION
                 avc->remote_so = so.so;
                 avc->remote_sosz = so.videosize;
 
-                if (avc->is_video_show() && !flags.is(F_VIDEO_SWOW))
+                if (avc->is_video_show() && !flags.is(F_VIDEO_SHOW))
                 {
                     flags.set(F_WAITANIM);
                     DEFERRED_UNIQUE_CALL(0.05, DELEGATE(this, wait_animation), nullptr);
@@ -1658,7 +1191,7 @@ ts::uint32 gui_notice_callinprogress_c::gm_handler(gmsg<GM_HEARTBEAT>&)
 
 void gui_notice_callinprogress_c::recalc_video_size(const ts::ivec2 &videosize)
 {
-    ASSERT(display);
+    ASSERT(common.display);
     last_video_size = videosize;
     int needy = flags.is(F_WAITANIM) ? DEFAULT_WAITANIM_HEIGHT : DEFAULT_AUDIOCALL_HEIGHT;
     ts::irect clr = get_client_area();
@@ -1668,10 +1201,10 @@ void gui_notice_callinprogress_c::recalc_video_size(const ts::ivec2 &videosize)
     {
         HOLD par(getparent());
         int maxy = HOLD(par().getparent())().getprops().size().y / 2;
-        if (shadow)
+        if (common.shadow)
         {
-            addhshadow = shadowsize.y * 2;
-            vwidth -= shadowsize.x * 2;
+            addhshadow = common.shadowsize.y * 2;
+            vwidth -= common.shadowsize.x * 2;
             maxy -= addhshadow;
             addhshadow /= 2;
         }
@@ -1693,13 +1226,61 @@ void gui_notice_callinprogress_c::recalc_video_size(const ts::ivec2 &videosize)
 
 
     ts::ivec2 dsz = ts::ivec2(vwidth, needy - addhshadow);
-    display->update_video_size(videosize, dsz);
-    if (dsz != cur_vres)
+    common.display->update_video_size(videosize, dsz);
+    if (dsz != common.cur_vres)
     {
-        cur_vres = dsz;
+        common.cur_vres = dsz;
         if (av_contact_s *avc = get_avc())
-            avc->set_video_res( cur_vres * 2 /* improove quality: vp8 too poor quality */ );
+            avc->set_video_res(common.cur_vres * 2 /* improove quality: vp8 too poor quality */ );
     }
+}
+
+void gui_notice_callinprogress_c::calc_cam_display_rects()
+{
+    common.calc_cam_display_rects(this, flags.is(F_VIDEO_SHOW));
+
+    if (is_cam_init_anim())
+        DEFERRED_UNIQUE_CALL(0.05, DELEGATE(this, wait_animation), nullptr);
+
+    if (!flags.is(F_VIDEO_SHOW))
+    {
+        set_corresponding_height();
+        ts::irect r = getprops().szrect();
+        r.lt.y = r.height() - addheight;
+        r.rb.y -= common.b_hangup->get_min_size().y + 5;
+        if (common.shadow)
+        {
+            r.lt += common.shadowsize;
+            r.rb -= common.shadowsize;
+        }
+        common.cam_position = r.center();
+        if (camera)
+        {
+            common.cam_previewsize = camera->fit_to_size(r.size());
+        }
+        else
+        {
+            common.cam_previewsize = r.size();
+            int x_by_y = 640 * common.cam_previewsize.y / 480;
+            if (x_by_y <= common.cam_previewsize.x)
+            {
+                common.cam_previewsize.x = x_by_y;
+            }
+            else
+            {
+                int y_by_x = 480 * common.cam_previewsize.x / 640;
+                ASSERT(y_by_x <= common.cam_previewsize.y);
+                common.cam_previewsize.y = y_by_x;
+            }
+        }
+    }
+
+    if (common.cam_previewsize >> 0)
+        common.flags.set(common.F_RECTSOK);
+
+    if (const ts::irect *vr = vrect())
+        common.update_fs_pos(*vr);
+
 }
 
 ts::uint32 gui_notice_callinprogress_c::gm_handler(gmsg<ISOGM_CAMERA_TICK> &cc)
@@ -1710,138 +1291,47 @@ ts::uint32 gui_notice_callinprogress_c::gm_handler(gmsg<ISOGM_CAMERA_TICK> &cc)
     {
         if (av_contact_s *avc = get_avc())
             camera.reset( avc->createcam() );
-        flags.set(F_FULL_CAM_REDRAW);
+        common.flags.set(common.F_FULL_CAM_REDRAW);
+        if (fsvideo)
+            fsvideo->common.flags.set(common.F_FULL_CAM_REDRAW);
         return 0;
     }
 
-    flags.clear(F_CAMINITANIM);
+    clear_cam_init_anim();
     
-    ts::ivec2 prevp = cam_position;
-    ts::ivec2 prevs = cam_previewsize;
-    
-    calc_cam_display_rects();
-
-    if (flags.is( F_FULL_CAM_REDRAW ) || prevp != cam_position || prevs != cam_previewsize)
+    if (!fsvideo.expired())
+        fsvideo->camera_tick();
+    else
     {
-        flags.set( F_FULL_CAM_REDRAW );
-        getengine().redraw();
+        ts::ivec2 prevp = common.cam_position;
+        ts::ivec2 prevs = common.cam_previewsize;
 
-    } else {
-        ts::irect clr = ts::irect::from_center_and_size( cam_position, cam_previewsize );
-        getengine().redraw(&clr);
+        calc_cam_display_rects();
+
+        if (common.flags.is(common.F_FULL_CAM_REDRAW) || prevp != common.cam_position || prevs != common.cam_previewsize)
+        {
+            common.flags.set(common.F_FULL_CAM_REDRAW);
+            getengine().redraw();
+
+        }
+        else {
+            ts::irect clr = ts::irect::from_center_and_size(common.cam_position, common.cam_previewsize);
+            getengine().redraw(&clr);
+        }
     }
 
     return 0;
 }
 
-void gui_notice_callinprogress_c::calc_cam_display_rects()
-{
-    if (calc_rect_tag == calc_rect_tag_frame) return;
-    calc_rect_tag = calc_rect_tag_frame;
-
-    flags.clear(F_RECTSOK);
-
-    ts::irect clr = get_client_area();
-
-    auto prepare_cam_draw = [&]()
-    {
-        cam_previewposrect = clr;
-        cam_previewposrect.lt += cam_previewsize / 2;
-        cam_previewposrect.rb -= cam_previewsize;
-        cam_previewposrect.rb += cam_previewsize / 2;
-
-        if (shadow)
-        {
-            cam_previewposrect.lt.y -= shadowsize.y;
-            cam_previewposrect.lt.x += shadowsize.x;
-            cam_previewposrect.rb -= shadowsize;
-        }
-
-        cam_position = calc_preview_campos(cam_previewposrect, cam_previewsize);
-    };
-
-    if (flags.is(F_VIDEO_SWOW))
-    {
-        display_size = display->get_desired_size();
-        if (display_size <= 0)
-            return;
-
-        clr.lt.y = clr.rb.y - display_size.y;
-        display_position = clr.center();
-        display_position.y -= shadowsize.y;
-
-        cam_previewsize = display_size * prf().camview_size() / 100;
-        if (camera)
-        {
-            ts::ivec2 csz = camera->get_video_size();
-            if (csz.x)
-            {
-                float xy = (float)csz.y / (float)csz.x;
-                cam_previewsize.y = ts::lround(xy * cam_previewsize.x);
-            }
-        }
-        if (pa.bmp.info().sz > cam_previewsize)
-        {
-            float k1 = (float)pa.bmp.info().sz.x / display_size.x;
-            float k2 = (float)pa.bmp.info().sz.y / display_size.y;
-            float k = ts::tmax(k1, k2);
-            cam_previewsize.x = ts::lround(k * display_size.x);
-            cam_previewsize.y = ts::lround(k * display_size.y);
-        }
-
-        if (camera)
-            camera->set_desired_size(cam_previewsize);
-
-        if (flags.is(F_CAMINITANIM))
-            DEFERRED_UNIQUE_CALL(0.05, DELEGATE(this, wait_animation), nullptr);
-
-        prepare_cam_draw();
-    }
-    else
-    {
-        set_corresponding_height();
-        ts::irect r = getprops().szrect();
-        r.lt.y = r.height() - addheight;
-        r.rb.y -= buttons[2]->get_min_size().y + 5;
-        if (shadow)
-        {
-            r.lt += shadowsize;
-            r.rb -= shadowsize;
-        }
-        cam_position = r.center();
-        if (camera)
-        {
-            cam_previewsize = camera->fit_to_size(r.size());
-        } else
-        {
-            cam_previewsize = r.size();
-            int x_by_y = 640 * cam_previewsize.y / 480;
-            if (x_by_y <= cam_previewsize.x)
-            {
-                cam_previewsize.x = x_by_y;
-            }
-            else
-            {
-                int y_by_x = 480 * cam_previewsize.x / 640;
-                ASSERT(y_by_x <= cam_previewsize.y);
-                cam_previewsize.y = y_by_x;
-            }
-        }
-    }
-
-    if (cam_previewsize >> 0)
-        flags.set(F_RECTSOK);
-}
-
 void gui_notice_callinprogress_c::set_corresponding_height()
 {
-    if (flags.is(F_VIDEO_SWOW))
+    if (flags.is(F_VIDEO_SHOW))
         return; // dont change height while video show
 
     int reqh = DEFAULT_AUDIOCALL_HEIGHT;
     if (flags.is(F_WAITANIM))
         reqh = DEFAULT_WAITANIM_HEIGHT;
-    if (camera || flags.is(F_CAMINITANIM))
+    if (camera || is_cam_init_anim())
         reqh = DEFAULT_CAMERAONLY_HEIGHT;
 
     if (addheight != reqh)
@@ -1850,17 +1340,20 @@ void gui_notice_callinprogress_c::set_corresponding_height()
 
 void gui_notice_callinprogress_c::video_off()
 {
-    flags.clear(F_VIDEO_SWOW);
+    flags.clear(F_VIDEO_SHOW);
     flags.clear(F_WAITANIM);
     set_corresponding_height();
 
-    if (flags.is(F_HIDDEN_CURSOR))
+    if (common.flags.is(common.F_HIDDEN_CURSOR))
         ts::show_hardware_cursor();
+
+    if (!fsvideo.expired())
+        TSDEL(fsvideo.get());
 }
 
 ts::uint32 gui_notice_callinprogress_c::gm_handler(gmsg<ISOGM_VIDEO_TICK> &sz)
 {
-    if (!flags.is(F_VIDEO_SWOW))
+    if (!flags.is(F_VIDEO_SHOW))
     {
         DEFERRED_UNIQUE_CALL(0.33, DELEGATE(this, show_video_tick), nullptr);
     }
@@ -1874,40 +1367,39 @@ ts::uint32 gui_notice_callinprogress_c::gm_handler(gmsg<ISOGM_VIDEO_TICK> &sz)
         }
     }
 
-    flags.set(F_VIDEO_SWOW);
+    flags.set(F_VIDEO_SHOW);
     flags.clear(F_WAITANIM);
 
     acquire_display();
-    if (display)
+    if (common.display)
     {
-        ts::ivec2 prevp = display_position;
-        ts::ivec2 prevs = display_size;
-
-        recalc_video_size(sz.videosize);
-        calc_cam_display_rects();
-
-        ASSERT(display->notice == this);
-        if (flags.is(F_FULL_DISPLAY_REDRAW) || prevp != display_position || prevs != display_size)
+        if (fsvideo)
+            fsvideo->video_tick(common.display, sz.videosize);
+        else
         {
-            flags.set(F_FULL_DISPLAY_REDRAW);
-            getengine().redraw();
-        } else
-        {
-            ts::irect clr = ts::irect::from_center_and_size(display_position, display_size);
-            getengine().redraw(&clr);
+            ts::ivec2 prevp = common.display_position;
+            ts::ivec2 prevs = common.display_size;
+
+            recalc_video_size(sz.videosize);
+            calc_cam_display_rects();
+
+            ASSERT(common.display->notice == this);
+            if (common.flags.is(common.F_FULL_DISPLAY_REDRAW) || prevp != common.display_position || prevs != common.display_size)
+            {
+                common.flags.set(common.F_FULL_DISPLAY_REDRAW);
+                getengine().redraw();
+            }
+            else
+            {
+                ts::irect clr = ts::irect::from_center_and_size(common.display_position, common.display_size);
+                getengine().redraw(&clr);
+            }
         }
     }
 
 
     return 0;
 }
-
-void gui_notice_callinprogress_c::show_buttons(bool show)
-{
-    for( gui_button_c *b : buttons )
-        if (b) MODIFY(*b).visible(show);
-}
-
 
 MAKE_CHILD<gui_notice_network_c>::~MAKE_CHILD()
 {
@@ -4607,14 +4099,17 @@ gui_messagelist_c::gui_messagelist_c(initial_rect_data_s &data) :gui_vscrollgrou
 }
 gui_messagelist_c::~gui_messagelist_c()
 {
-    g_app->unregister_kbd_callback(DELEGATE(this, pageup));
-    g_app->unregister_kbd_callback(DELEGATE(this, pagedown));
-    g_app->unregister_kbd_callback(DELEGATE(this, totop));
-    g_app->unregister_kbd_callback(DELEGATE(this, tobottom));
-    g_app->unregister_kbd_callback(DELEGATE(this, lineup));
-    g_app->unregister_kbd_callback(DELEGATE(this, linedown));
-    g_app->unregister_kbd_callback(DELEGATE(this, font_size_up));
-    g_app->unregister_kbd_callback(DELEGATE(this, font_size_down));
+    if (g_app)
+    {
+        g_app->unregister_kbd_callback(DELEGATE(this, pageup));
+        g_app->unregister_kbd_callback(DELEGATE(this, pagedown));
+        g_app->unregister_kbd_callback(DELEGATE(this, totop));
+        g_app->unregister_kbd_callback(DELEGATE(this, tobottom));
+        g_app->unregister_kbd_callback(DELEGATE(this, lineup));
+        g_app->unregister_kbd_callback(DELEGATE(this, linedown));
+        g_app->unregister_kbd_callback(DELEGATE(this, font_size_up));
+        g_app->unregister_kbd_callback(DELEGATE(this, font_size_down));
+    }
 
 }
 
@@ -5796,7 +5291,7 @@ bool gui_messagelist_c::filler_s::tick(RID r, GUIPARAM p)
         } else
             TSDEL(lhb);
 
-        if (1 == h->subcount() && h->subget(0)->get_state() == CS_INVITE_RECEIVE)
+        if (1 == h->subcount() && h->subget(0)->get_state() == CS_INVITE_RECEIVE && !h->subget(0)->get_options().unmasked().is(contact_c::F_JUST_ACCEPTED))
         {
             if (!gmsg<ISOGM_NOTICE_PRESENT>( h, h->subget(0), NOTICE_FRIEND_REQUEST_RECV ).send().is(GMRBIT_ACCEPTED))
             {
@@ -5930,8 +5425,84 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     smiles.leech(smile_pos_corrector);
     MODIFY(smiles).visible(true);
 
+    set_badword_color( get_default_text_color(0) );
+
+    bad_words = DELEGATE(this, bad_words_handler);
+    ctx_menu_func = DELEGATE(this, suggestions);
+
     __super::created();
 }
+
+ts::uint32 gui_message_editor_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
+{
+    if (ue.evt == UE_THEMECHANGED)
+    {
+        set_badword_color(get_default_text_color(0));
+        set_color( get_default_text_color() );
+    }
+
+    return 0;
+}
+
+
+/*virtual*/ void gui_message_editor_c::new_text(int caret_char_pos)
+{
+    spellchecker_s::check_text(get_text_11(' '), caret_char_pos);
+}
+
+
+const ts::buf0_c *gui_message_editor_c::bad_words_handler()
+{
+    return spellchecker_s::words.size() ? &badwords : nullptr;
+}
+
+void gui_message_editor_c::suggestions_apply(const ts::str_c &prm)
+{
+    int x = prm.find_pos('|');
+    int i, s;
+    prm.substr(0, x).split(i, s, "/", 0, 0);
+    ts::wstr_c t = from_utf8(prm.substr(x + 1));
+    text_replace(i, s, t);
+}
+
+void gui_message_editor_c::suggestions(menu_c &m, int ci)
+{
+    ts::wstr_c ctext, torig;
+    for (chk_word_s &w : words)
+    {
+        if (!w.badword.is_empty())
+        {
+            if (ctext.is_empty())
+            {
+                ctext = get_text_11(' ');
+                if (ctext.is_empty()) return;
+                torig = ctext;
+            }
+
+            int index = 0;
+            for (;;)
+            {
+                int fndi = ctext.find_pos(index, w.badword);
+                if (fndi >= 0)
+                {
+                    index = fndi + w.badword.get_length();
+                    if (ci >= fndi && ci < index)
+                    {
+                        ts::str_c prm;
+                        prm.append_as_int(fndi).append_char('/').append_as_int(w.badword.get_length()).append_char('|');
+                        int prml = prm.get_length();
+                        for (const ts::str_c &s : w.suggestions)
+                            m.add(from_utf8(s), 0, DELEGATE(this, suggestions_apply), prm.set_length(prml).append(s));
+                        return;
+                    }
+                }
+                else
+                    break;
+            }
+        }
+    }
+}
+
 
 ts::ivec2 calc_smls_position(const ts::irect &buttonrect, const ts::ivec2 &menusize)
 {
@@ -6102,7 +5673,6 @@ bool gui_message_area_c::send_file(RID btn, GUIPARAM)
     gui_popup_menu_c::show(menu_anchor_s(br, menu_anchor_s::RELPOS_TYPE_TU), m);
     return true;
 }
-
 
 void gui_message_area_c::update_buttons()
 {
@@ -6382,4 +5952,130 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&p)
     }
 
     return 0;
+}
+
+void spellchecker_s::check_text(const ts::wsptr &t, int caret)
+{
+    if (!g_app->spellchecker.is_enabled())
+    {
+        words.clear();
+        return;
+    }
+
+    for (chk_word_s &w : words)
+        w.present = false;
+
+    ts::wstr_c sdn(t);
+
+    int left = ts::tmin(caret, t.l);
+    for (; left > 0 && !IS_WORDB(sdn.get_char(left - 1)); --left);
+    badwords.trunc_bits(left);
+    sdn.replace_all_of(text_non_letters(), ' ');
+
+    ts::wstrings_c splt(sdn, ' ' );
+    for (ts::wstr_c &s : splt)
+    {
+        s.trim();
+        if (s.get_length() < 2) s.clear();
+    }
+    splt.kill_empty_fast();
+
+    for (ts::wstr_c &s : splt)
+    {
+        ts::str_c utf8 = to_utf8(s);
+        bool f = false;
+        for (chk_word_s &w : words)
+        {
+            if (w.utf8.equals(utf8))
+            {
+                f = true;
+                w.present = true;
+                break;
+            }
+        }
+        if (!f)
+        {
+            chk_word_s &w = words.add();
+            w.utf8 = utf8;
+        }
+    }
+
+    ts::astrings_c checkwords;
+    for (int i = words.size() - 1; i >= 0; --i)
+    {
+        chk_word_s &w = words.get(i);
+        if (!w.present)
+        {
+            words.remove_fast(i);
+            continue;
+        }
+        if (w.checked || w.check_started) continue;
+        checkwords.add( w.utf8 );
+        w.check_started = true;
+    }
+    if (checkwords.size())
+        g_app->spellchecker.check(std::move(checkwords), this);
+
+    DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, update_bad_words), nullptr);
+}
+
+void spellchecker_s::undo_check(const ts::astrings_c &wordsundo)
+{
+    for (chk_word_s &w : words)
+        if (w.check_started && wordsundo.find(w.utf8.as_sptr()) >= 0)
+            w.check_started = false;
+}
+
+void spellchecker_s::check_result( const ts::str_c &cw, bool is_valid, ts::astrings_c &&suggestions )
+{
+    for (chk_word_s &w : words)
+        if (w.utf8.equals(cw))
+        {
+            w.checked = true;
+            is_valid ? w.badword.clear() : w.badword = from_utf8(cw);
+            w.suggestions = std::move(suggestions);
+            update_bad_words();
+            return;
+        }
+
+}
+
+bool spellchecker_s::update_bad_words(RID, GUIPARAM)
+{
+    badwords.clear();
+    ts::wstr_c text;
+    gui_message_editor_c *msge = static_cast<gui_message_editor_c *>( this );
+    for (chk_word_s &w : words)
+    {
+        if (!w.badword.is_empty())
+        {
+            if (text.is_empty())
+            {
+                text = msge->get_text_11(' ');
+                if (text.is_empty()) return true;
+            }
+
+            int index = 0;
+            for(;;)
+            {
+                int fndi = text.find_pos( index, w.badword );
+                if (fndi == 0 || (fndi > 0 && text_non_letters().find_pos(text.get_char(fndi-1))>=0))
+                {
+                    index = fndi + w.badword.get_length();
+                    if (index == text.get_length() || (index < text.get_length() && text_non_letters().find_pos(text.get_char(index))>=0))
+                    for( int i = index - 1; i >= fndi; --i )
+                        badwords.set_bit( i, true );
+                } else
+                    break;
+            }
+        }
+    }
+    msge->redraw();
+    return true;
+}
+
+spellchecker_s::~spellchecker_s()
+{
+    if (gui)
+        gui->delete_event( DELEGATE(this, update_bad_words) );
 }

@@ -572,6 +572,13 @@ INLINE int CeilPowerOfTwo(int x)
 
 INLINE bool IsPowerOfTwo(const int x)    { return (x & (x - 1)) == 0 && x > 0; }
 
+template<typename T> T LERP(const T&a, const T&b, float t)
+{
+    t = CLAMP(t, 0.0f, 1.0f);
+    return a * (1.0f - t) + t * b;
+}
+
+
 #define ISWAP(a,b) {a^=b^=a^=b;}
 #define LERPFLOAT(a, b, t) ( (a) * (1.0f  - (t) ) + (t) * (b) )
 #define LERPDOUBLE(a, b, t) ( double(a) * (1.0  - double(t) ) + double(t) * double(b) )

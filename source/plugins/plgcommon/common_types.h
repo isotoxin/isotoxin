@@ -164,7 +164,9 @@ enum stream_options_e
 #define CFGF_UDP_ENABLE     "udp_enable"
 #define CFGF_IPv6_ENABLE    "ipv6_enable"
 #define CFGF_SERVER_PORT    "server_port"
-
+#define CFGF_VIDEO_CODEC    "vcodec"
+#define CFGF_VIDEO_BITRATE  "vbitrate"
+#define CFGF_VIDEO_QUALITY  "vquality"
 
 #define CDET_PUBLIC_ID      "pubid"     // id, login, uin, etc...
 #define CDET_PUBLIC_ID_BAD  "badpubid"  // id broken

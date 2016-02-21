@@ -16,45 +16,18 @@ public:
     virtual void draw(rectengine_root_c *e, const ts::ivec2 &pos) const;
 };
 
-class picture_animated_c : public picture_c
+class picture_animated_c : public picture_c, public animation_c
 {
-    struct redraw_request_s
-    {
-        ts::safe_ptr<rectengine_root_c> engine;
-        ts::irect rr;
-    };
-    mutable ts::array_inplace_t<redraw_request_s, 32> rr;
-
-    picture_animated_c *prev = nullptr;
-    picture_animated_c *next = nullptr;
-
-    static picture_animated_c *first;
-    static picture_animated_c *last;
-
-    void redraw();
 
 protected:
     int numframes = 1;
     ts::Time next_frame_tick = ts::Time::current();
-
-    void tick_it()
-    {
-        ASSERT( prev == nullptr && next == nullptr && first != this );
-        if (numframes > 1)
-        {
-            LIST_ADD( this, first, last, prev, next );
-        }
-    }
 
 public:
     /*virtual*/ ~picture_animated_c();
 
     /*virtual*/ bool load(const ts::blob_c &body) = 0;
     /*virtual*/ void draw(rectengine_root_c *e, const ts::ivec2 &pos) const;
-    virtual int nextframe() = 0;
-    static void tick();
-
-    static bool allow_tick;
 
 };
 
@@ -62,12 +35,12 @@ class picture_gif_c : public picture_animated_c
 {
 protected:
     ts::animated_c gif;
-    int delay = 1;
-
+    
 public:
     bool load_only_gif( ts::bitmap_c &first_frame, const ts::blob_c &body );
     /*virtual*/ bool load(const ts::blob_c &body) override;
-    /*virtual*/ int nextframe() override;
+    /*virtual*/ bool animation_tick() override;
+    virtual int nextframe();
 };
 
 class image_loader_c : public autoparam_i

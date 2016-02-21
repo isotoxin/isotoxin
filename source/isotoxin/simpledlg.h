@@ -70,7 +70,7 @@ public:
     static dialog_msgbox_params_s mb_error(const ts::wstr_c &text);
     static dialog_msgbox_params_s mb_qrcode(const ts::wstr_c &text);
 
-    /*virtual*/ ts::ivec2 get_min_size() const { return ts::ivec2(500, height); }
+    /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(500, height); }
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
@@ -150,7 +150,7 @@ public:
 
     /*virtual*/ ts::uint32 caption_buttons() const override { return 0; }
     /*virtual*/ ts::wstr_c get_name() const override { return m_params.title; }
-    /*virtual*/ ts::ivec2 get_min_size() const { return ts::ivec2(500, 190); }
+    /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(500, 190); }
 
     //sqhandler_i
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
@@ -237,19 +237,11 @@ public:
     /*virtual*/ ts::wstr_c get_name() const override { return m_params.title; }
     /*virtual*/ void tabselected(ts::uint32 mask) override;
 
-    /*virtual*/ ts::ivec2 get_min_size() const { return ts::ivec2(400, 300); }
+    /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(400, 300); }
 
     //sqhandler_i
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
-
-
-
-
-
-
-
-
 
 
 class dialog_about_c : public gui_isodialog_c
@@ -275,9 +267,52 @@ public:
     ~dialog_about_c();
 
     /*virtual*/ ts::wstr_c get_name() const override;
-    /*virtual*/ ts::ivec2 get_min_size() const;
+    /*virtual*/ ts::ivec2 get_min_size() const override;
 
     //sqhandler_i
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
+
+class incoming_call_panel_c;
+template<> struct MAKE_ROOT<incoming_call_panel_c> : public _PROOT(incoming_call_panel_c)
+{
+    contact_c *c;
+    MAKE_ROOT(contact_c *c) :_PROOT(incoming_call_panel_c)(), c(c) { init(true); }
+    ~MAKE_ROOT();
+};
+
+class incoming_call_panel_c : public gui_control_c
+{
+    GM_RECEIVER(incoming_call_panel_c, ISOGM_CALL_STOPED);
+    GM_RECEIVER(incoming_call_panel_c, GM_UI_EVENT);
+
+    ts::shared_ptr<contact_c> sender;
+    ts::shared_ptr< button_desc_s > buttons[4];
+    ts::ivec2 sz = ts::ivec2(0);
+    ts::ivec2 tsz = ts::ivec2(0);
+    ts::str_c aname;
+    int nbuttons = 0;
+
+    const theme_image_s *image = nullptr;
+
+    bool video_supported = false;
+
+    bool b_accept_call_video(RID, GUIPARAM);
+    bool b_accept_call(RID, GUIPARAM);
+    bool b_reject_call(RID, GUIPARAM);
+    bool b_ignore_call(RID, GUIPARAM);
+
+protected:
+    /*virtual*/ void created() override;
+
+public:
+    incoming_call_panel_c(MAKE_ROOT<incoming_call_panel_c> &data);
+    ~incoming_call_panel_c();
+
+    /*virtual*/ ts::ivec2 get_min_size() const override;
+
+    //sqhandler_i
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+};
+
 

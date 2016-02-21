@@ -255,6 +255,10 @@ struct gb_circle_s : public generated_button_data_s
 
 struct gb_svg_s : public generated_button_data_s
 {
+    rsvg_svg_c *asvg = nullptr;
+    ts::ivec2 rshift;
+    virtual rsvg_svg_c *get_svg(ts::ivec2 &s) { s = rshift;  rsvg_svg_c *r = asvg; asvg = nullptr; return r; }
+
     gb_svg_s(const ts::abp_c *gen, const colors_map_s &colsmap, const ts::str_c &svgs, bool one_face)
     {
         ts::TSCOLOR col[button_desc_s::numstates];
@@ -409,7 +413,7 @@ struct gb_svg_s : public generated_button_data_s
                         vr.lt.y = vr.rb.y - cbsizei.y;
                     }
                     vr.intersect(ts::irect(0, face_surface.info().sz));
-
+                    rshift = -vr.lt;
                     src.create_ARGB(ts::ivec2(vr.width(), vr.height() * num_states));
                 }
 
@@ -425,7 +429,10 @@ struct gb_svg_s : public generated_button_data_s
 #endif
 
                 src.copy( ts::ivec2(0, vr.height() * i), vr.size(), face_surface.extbody(), vr.lt );
-                n->release();
+                if (n->is_animated())
+                    asvg = n;
+                else
+                    n->release();
             } else
             {
                 src.clear();
@@ -434,6 +441,11 @@ struct gb_svg_s : public generated_button_data_s
         }
 
         //src.premultiply(); // cairo generates already premultiplied images
+    }
+    ~gb_svg_s()
+    {
+        if (asvg)
+            asvg->release();
     }
 };
 

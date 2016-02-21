@@ -113,49 +113,34 @@ public:
 struct av_contact_s;
 class gui_notice_callinprogress_c : public gui_notice_c
 {
+    friend struct common_videocall_stuff_s;
+    friend class fullscreenvideo_c;
+
     GM_RECEIVER(gui_notice_callinprogress_c, ISOGM_VIDEO_TICK);
     GM_RECEIVER(gui_notice_callinprogress_c, ISOGM_CAMERA_TICK);
     GM_RECEIVER(gui_notice_callinprogress_c, ISOGM_PEER_STREAM_OPTIONS);
     GM_RECEIVER(gui_notice_callinprogress_c, GM_HEARTBEAT);
 
     time_t showntime = 0;
-    ts::shared_ptr<theme_rect_s> shadow;
-    vsb_display_c *display = nullptr;
-    ts::ivec2 cur_vres = ts::ivec2(0);
+    ts::safe_ptr< fullscreenvideo_c > fsvideo;
     ts::ivec2 last_video_size;
-    ts::ivec2 shadowsize = ts::ivec2(0);
-    ts::safe_ptr<gui_button_c> buttons[ 5 ];
-    process_animation_s pa;
+    common_videocall_stuff_s common;
     vsb_list_t video_devices;
     UNIQUE_PTR( vsb_c ) camera;
-    ts::ivec2 cam_previewsize = ts::ivec2(0);
-    ts::ivec2 cam_position = ts::ivec2(0);
-    ts::irect cam_previewposrect = ts::irect(0);
 
-    ts::ivec2 display_size = ts::ivec2(0);
-    ts::ivec2 display_position = ts::ivec2(0);
+    ts::irect vrect_cache;
 
-    ts::Time nommovetime = ts::Time::current();
-    ts::ivec2 mousepos = ts::ivec2(0);
-
-    int calc_rect_tag_frame = 0;
-    int calc_rect_tag = -1;
-
-    bool apply_preview_cam_pos(const ts::ivec2&p);
-
-    void update_btns_positions();
     void set_height(int addh);
 
     bool show_video_tick(RID, GUIPARAM p);
     bool wait_animation(RID, GUIPARAM p);
     bool b_extra(RID, GUIPARAM p);
     bool b_camera_switch(RID, GUIPARAM p);
+    bool b_fs(RID, GUIPARAM p);
 
     void menu_video(const ts::str_c &p);
 
     void set_corresponding_height();
-    void calc_cam_display_rects();
-    int preview_cam_cursor_resize(const ts::ivec2 &p) const;
     void video_off();
 
     bool recalc_vsz(RID, GUIPARAM)
@@ -164,23 +149,32 @@ class gui_notice_callinprogress_c : public gui_notice_c
         return true;
     }
 
-    void show_buttons(bool show);
+    const ts::irect *vrect();
 
     static const ts::flags32_s::BITS F_WAITANIM = F_FREEBITSTART_NOTICE << 0;
-    static const ts::flags32_s::BITS F_CAMINITANIM = F_FREEBITSTART_NOTICE << 1;
-    static const ts::flags32_s::BITS F_VIDEO_SWOW = F_FREEBITSTART_NOTICE << 2;
-    static const ts::flags32_s::BITS F_RECTSOK = F_FREEBITSTART_NOTICE << 3;
-    static const ts::flags32_s::BITS F_OVERPREVIEWCAM = F_FREEBITSTART_NOTICE << 4;
-    static const ts::flags32_s::BITS F_MOVEPREVIEWCAM = F_FREEBITSTART_NOTICE << 5;
-    static const ts::flags32_s::BITS F_HIDDEN_CURSOR = F_FREEBITSTART_NOTICE << 6;
-    static const ts::flags32_s::BITS F_FULL_CAM_REDRAW = F_FREEBITSTART_NOTICE << 7;
-    static const ts::flags32_s::BITS F_FULL_DISPLAY_REDRAW = F_FREEBITSTART_NOTICE << 8;
+    static const ts::flags32_s::BITS F_VIDEO_SHOW = F_FREEBITSTART_NOTICE << 1;
     
-
-    void vsb_draw( vsb_c *cam, const ts::ivec2& campos, const ts::ivec2& camsz, bool c );
     void recalc_video_size(const ts::ivec2 &videosize);
     void acquire_display();
-    av_contact_s *get_avc();
+
+    bool is_cam_init_anim() const { return common.flags.is(common.F_CAMINITANIM); }
+    void set_cam_init_anim()
+    {
+        common.flags.set(common.F_CAMINITANIM);
+        if (fsvideo)
+            fsvideo->set_cam_init_anim();
+    }
+    
+    void clear_cam_init_anim()
+    {
+        common.flags.clear(common.F_CAMINITANIM);
+        if (fsvideo)
+            fsvideo->clear_cam_init_anim();
+    }
+
+    void calc_cam_display_rects();
+
+    void on_fsvideo_die();
 
 public:
     gui_notice_callinprogress_c(MAKE_CHILD<gui_notice_callinprogress_c> &data);
@@ -197,6 +191,10 @@ public:
     {
         video_devices = std::move(_video_devices);
     }
+
+    contact_c *collocutor() { return sender; }
+    av_contact_s *get_avc();
+    vsb_c *getcamera() { return camera.get();  }
 };
 
 
@@ -689,13 +687,40 @@ public:
     }
 };
 
-class gui_message_editor_c : public gui_textedit_c
+
+struct spellchecker_s
+{
+    struct chk_word_s
+    {
+        ts::str_c utf8;
+        ts::wstr_c badword; // empty, if valid
+        ts::astrings_c suggestions;
+        bool checked = false;
+        bool check_started = false;
+        bool present = true;
+    };
+
+    ts::array_inplace_t<chk_word_s, 64> words;
+    ts::buf0_c badwords;
+
+    void check_text(const ts::wsptr &t, int caret);
+    void undo_check(const ts::astrings_c &words);
+    void check_result(const ts::str_c &w, bool is_valid, ts::astrings_c &&suggestions);
+    bool update_bad_words(RID r = RID(), GUIPARAM p = nullptr);
+
+    ~spellchecker_s();
+
+    DECLARE_EYELET(spellchecker_s);
+};
+
+class gui_message_editor_c : public gui_textedit_c, public spellchecker_s
 {
     DUMMY(gui_message_editor_c);
 
     GM_RECEIVER(gui_message_editor_c, ISOGM_SEND_MESSAGE);
     GM_RECEIVER(gui_message_editor_c, ISOGM_MESSAGE);
     GM_RECEIVER(gui_message_editor_c, ISOGM_SELECT_CONTACT);
+    GM_RECEIVER(gui_message_editor_c, GM_UI_EVENT);
     
     ts::shared_ptr<contact_root_c> historian;
     struct editstate_s
@@ -713,7 +738,12 @@ class gui_message_editor_c : public gui_textedit_c
     bool on_enter_press_func(RID, GUIPARAM);
     /*virtual*/ void cb_scrollbar_width(int w) override;
 
+    const ts::buf0_c *bad_words_handler();
+    void suggestions(menu_c &m, int index);
+    void suggestions_apply(const ts::str_c &prm);
+
     /*virtual*/ void paste_(int cp) override;
+    /*virtual*/ void new_text( int caret_char_pos );
 
 public:
     gui_message_editor_c(initial_rect_data_s &data) :gui_textedit_c(data) {}
@@ -729,6 +759,7 @@ class gui_message_area_c : public gui_group_c
     static const ts::flags32_s::BITS F_INITIALIZED = FLAGS_FREEBITSTART << 0;
     
     bool change_text_handler(const ts::wstr_c &);
+
 protected:
     /*virtual*/ void children_repos() override;
 public:

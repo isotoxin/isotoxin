@@ -558,7 +558,7 @@ void dialog_contact_props_c::tags_menu_handler(const ts::str_c&h)
     set_edit_value(CONSTASTR("tags"), from_utf8(tags.join(CONSTASTR(", "))) );
 }
 
-void dialog_contact_props_c::tags_menu(menu_c &m)
+void dialog_contact_props_c::tags_menu(menu_c &m, int)
 {
     ts::astrings_c ctags( tags );
     ctags.add(contacts().get_all_tags());

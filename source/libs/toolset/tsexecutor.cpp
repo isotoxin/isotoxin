@@ -7,6 +7,7 @@ namespace ts
     static const int f_finished = 2;
     static const int f_canceled = 4;
     static const int f_result = 8;
+    static const int f_exec_after_result = 16;
 
 task_executor_c::task_executor_c()
 {
@@ -116,13 +117,22 @@ void task_executor_c::work()
             {
                 t->setflag( f_executing );
 
-                if (0 == (t->queueflags & f_result))
+                if (!t->is_flag(f_result))
                 {
                     t->setflag(f_result);
                     results.push(t); // only one result
                 }
 
                 executing.push(t);
+            } else if (r == task_c::R_RESULT_EXCLUSIVE)
+            {
+                if (!t->is_flag(f_result))
+                {
+                    t->setflag(f_exec_after_result | f_result);
+                    results.push(t); // only one result
+                } else
+                    executing.push(t);
+
             } else
             {
                 t->setflag( f_executing );
@@ -183,6 +193,13 @@ void task_executor_c::tick()
         {
             t->resetflag(f_result);
             t->result();
+            if (t->is_flag(f_exec_after_result))
+            {
+                t->resetflag( f_exec_after_result );
+                t->setflag( f_executing );
+                executing.push(t); // next iteration
+                SetEvent(evt);
+            }
         }
 
         while (finished.try_pop(t))

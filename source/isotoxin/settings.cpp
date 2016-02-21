@@ -298,7 +298,7 @@ void dialog_settings_c::set_startopts()
     autostart( 0 != (1 & startopt) ? ts::get_exe_full_name() : ts::wstr_c(), 0 != (2 & startopt) ? CONSTWSTR("minimize") : ts::wsptr() );
 }
 
-/*virtual*/ s3::Format *dialog_settings_c::formats(int &count)
+/*virtual*/ const s3::Format *dialog_settings_c::formats(int &count)
 {
     capturefmt.sampleRate = 48000;
     capturefmt.channels = 1;
@@ -796,6 +796,17 @@ void dialog_settings_c::mod()
         for (bits_edit_s &b : bgroups)
             b.settings = this, b.source = &msgopts_current;
 
+        int video_quality_ = prf().video_enc_quality();
+
+        PREPARE(disable_video_ex, video_quality_ < 0);
+        PREPARE(encoding_quality, video_quality_ < 0  ? 0 : video_quality_);
+        PREPARE(video_bitrate, prf().video_bitrate());
+        auto getcodecs = []()->ts::astrmap_c
+        {
+            ts::astrmap_c d(prf().video_codec());
+            return d;
+        };
+        PREPARE(video_codecs, std::move(getcodecs()));
 
         PREPARE(set_away_on_timer_minutes_value, prf().inactive_time());
         set_away_on_timer_minutes_value_last = set_away_on_timer_minutes_value;
@@ -814,6 +825,8 @@ void dialog_settings_c::mod()
         bgroups[BGROUP_GCHAT].add(GCHOPT_MUTE_MIC_ON_INVITE);
         bgroups[BGROUP_GCHAT].add(GCHOPT_MUTE_SPEAKER_ON_INVITE);
 
+        bgroups[BGROUP_CHAT].add(MSGOP_SPELL_CHECK);
+
         bgroups[BGROUP_MSGOPTS].add(MSGOP_SHOW_DATE);
         bgroups[BGROUP_MSGOPTS].add(MSGOP_SHOW_DATE_SEPARATOR);
         bgroups[BGROUP_MSGOPTS].add(MSGOP_SHOW_PROTOCOL_NAME);
@@ -822,8 +835,11 @@ void dialog_settings_c::mod()
         
 
         bgroups[BGROUP_TYPING].add(MSGOP_SEND_TYPING);
-        bgroups[BGROUP_TYPING].add(UIOPT_SHOW_TYPING_CONTACT);
-        bgroups[BGROUP_TYPING].add(UIOPT_SHOW_TYPING_MSGLIST);
+        
+        bgroups[BGROUP_TYPING_NOTIFY].add(UIOPT_SHOW_TYPING_CONTACT);
+        bgroups[BGROUP_TYPING_NOTIFY].add(UIOPT_SHOW_TYPING_MSGLIST);
+
+        bgroups[BGROUP_CALL_NOTIFY].add(UIOPT_SHOW_INCOMING_CALL_BAR);
 
         bgroups[BGROUP_HISTORY].add(MSGOP_KEEP_HISTORY);
         bgroups[BGROUP_HISTORY].add(MSGOP_LOAD_WHOLE_HISTORY);
@@ -897,6 +913,7 @@ void dialog_settings_c::mod()
     {
         m.add_sub( TTT("Profile",1) )
             .add(TTT("General",32), 0, TABSELMI(MASK_PROFILE_COMMON) )
+            .add(TTT("Notifications",401), 0, TABSELMI(MASK_PROFILE_NOTIFICATIONS))
             .add(TTT("Chat",109), 0, TABSELMI(MASK_PROFILE_CHAT) )
             .add(TTT("Group chat",305), 0, TABSELMI(MASK_PROFILE_GCHAT) )
             .add(TTT("Messages & History",327), 0, TABSELMI(MASK_PROFILE_MSGSNHIST) )
@@ -913,7 +930,8 @@ void dialog_settings_c::mod()
 
     if ( profile_selected && prf().get_options().is(OPTOPT_POWER_USER) )
     m.add_sub(TTT("Advanced",394))
-        .add(TTT("Debug",395), 0, TABSELMI(MASK_ADVANCED_DEBUG));
+        .add(TTT("Video calls",397), 0, TABSELMI(MASK_ADVANCED_VIDEOCALLS))
+        .add(TTT("Debug", 395), 0, TABSELMI(MASK_ADVANCED_DEBUG));
 
     descmaker dm(this);
     dm << MASK_APPLICATION_COMMON; //_________________________________________________________________________________________________//
@@ -1067,6 +1085,19 @@ void dialog_settings_c::mod()
             menu_c().add(TTT("I'm power user. Please, show me advanced settings.",396), 0, MENUHANDLER(), CONSTASTR("1"))
             );
 
+        dm << MASK_PROFILE_NOTIFICATIONS; //____________________________________________________________________________________________________//
+        dm().page_caption(TTT("Notifications settings",402));
+        dm().checkb(TTT("Typing notification", 272), DELEGATE(bgroups + BGROUP_TYPING_NOTIFY, handler), bgroups[BGROUP_TYPING_NOTIFY].current).setmenu(
+            menu_c().add(TTT("Show typing notifications in contacts list", 274), 0, MENUHANDLER(), CONSTASTR("1"))
+            .add(TTT("Show typing notifications in messages", 275), 0, MENUHANDLER(), CONSTASTR("2"))
+            );
+
+        dm().vspace();
+        dm().checkb(ts::wstr_c(), DELEGATE(bgroups + BGROUP_CALL_NOTIFY, handler), bgroups[BGROUP_CALL_NOTIFY].current).setmenu(
+            menu_c().add(TTT("Allow insistent notification of incoming call",403), 0, MENUHANDLER(), CONSTASTR("1"))
+            );
+
+
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
         dm().page_caption(TTT("Chat settings",110));
         int enter_key = ctl2send; if (enter_key == EKO_ENTER_NEW_LINE_DOUBLE_ENTER) enter_key = EKO_ENTER_NEW_LINE;
@@ -1080,10 +1111,12 @@ void dialog_settings_c::mod()
             ).setname(CONSTASTR("dblenter"));
 
         dm().vspace();
-        dm().checkb(TTT("Typing notification",272), DELEGATE(bgroups+BGROUP_TYPING, handler), bgroups[BGROUP_TYPING].current).setmenu(
-            menu_c().add(TTT("Send typing notification",273), 0, MENUHANDLER(), CONSTASTR("1"))
-                    .add(TTT("Show typing notifications in contacts list",274), 0, MENUHANDLER(), CONSTASTR("2"))
-                    .add(TTT("Show typing notifications in messages",275), 0, MENUHANDLER(), CONSTASTR("4"))
+        dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_TYPING, handler), bgroups[BGROUP_TYPING].current).setmenu(
+            menu_c().add(TTT("Send typing notification",273), 0, MENUHANDLER(), CONSTASTR("1")) 
+            );
+
+        dm().checkb(ts::wstr_c(), DELEGATE(bgroups + BGROUP_CHAT, handler), bgroups[BGROUP_CHAT].current).setmenu(
+            menu_c().add(TTT("Enable spell checker",400), 0, MENUHANDLER(), CONSTASTR("1"))
             );
 
         dm << MASK_PROFILE_GCHAT; //____________________________________________________________________________________________________//
@@ -1178,15 +1211,30 @@ void dialog_settings_c::mod()
     int dopts = 0;
     dopts |= debug.get(CONSTASTR(DEBUG_OPT_FULL_DUMP)).as_int() ? 1 : 0;
     dopts |= debug.get(CONSTASTR(DEBUG_OPT_LOGGING)).as_int() ? 2 : 0;
+    dopts |= debug.get(CONSTASTR("contactids")).as_int() ? 4 : 0;
 
     dm().checkb(ts::wstr_c(), DELEGATE(this, debug_handler), dopts).setmenu(
-        menu_c().add(TTT("Create full memory dump on crash",397), 0, MENUHANDLER(), CONSTASTR("1"))
-                .add(TTT("Enable logging",398), 0, MENUHANDLER(), CONSTASTR("2"))
-        ).custom_mask(1);
+        menu_c().add(CONSTWSTR("Create full memory dump on crash"), 0, MENUHANDLER(), CONSTASTR("1"))
+                .add(CONSTWSTR("Enable logging"), 0, MENUHANDLER(), CONSTASTR("2"))
+                .add(CONSTWSTR("Show contacts id's"), 0, MENUHANDLER(), CONSTASTR("4"))
+        );
 
     dm().vspace();
-    dm().textfield(TTT("Addition updates URL",399), to_wstr(debug.get(CONSTASTR("local_upd_url"))), DELEGATE(this, debug_local_upd_url)).custom_mask(1);
+    dm().textfield(CONSTWSTR("Addition updates URL"), to_wstr(debug.get(CONSTASTR("local_upd_url"))), DELEGATE(this, debug_local_upd_url));
 
+    if (profile_selected)
+    {
+        dm << MASK_ADVANCED_VIDEOCALLS;
+        dm().checkb(ts::wstr_c(), DELEGATE(this, advv_handler), disable_video_ex ? 1 : 0).setmenu(
+            menu_c().add(CONSTWSTR("Disable extended video support"), 0, MENUHANDLER(), CONSTASTR("1"))
+            );
+        dm().vspace();
+        dm().hslider(TTT("Video encoding quality (0 - auto)",398), (float)encoding_quality * 0.01f, CONSTWSTR("0/0/1/1"), DELEGATE(this, encoding_quality_set));
+        dm().vspace();
+        dm().textfield(CONSTWSTR("Video bitrate (0 - auto)"), ts::wmake(video_bitrate), DELEGATE(this, debug_local_upd_url));
+        dm().vspace(10);
+        dm().list(TTT("Codecs",404), L"", -100).setname(CONSTASTR("protocodeclist"));
+    }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     gui_vtabsel_c &tab = MAKE_CHILD<gui_vtabsel_c>( getrid(), m );
@@ -1223,6 +1271,11 @@ bool dialog_settings_c::debug_handler(RID, GUIPARAM p)
     else
         debug.set(CONSTASTR(DEBUG_OPT_LOGGING)) = CONSTASTR("-1");
 
+    if (0 == (opts & 4))
+        debug.unset(CONSTASTR("contactids"));
+    else
+        debug.set(CONSTASTR("contactids")) = CONSTASTR("1");
+
     mod();
     return true;
 }
@@ -1237,6 +1290,79 @@ bool dialog_settings_c::startopt_handler( RID, GUIPARAM p )
     return true;
 }
 
+void dialog_settings_c::codecselected(const ts::str_c& prm)
+{
+    ts::str_c tag, codec;
+    prm.split(tag, codec, '/');
+    video_codecs.set(tag) = codec;
+    mod();
+
+    videocodecs_tab_selected();
+}
+
+menu_c dialog_settings_c::codecctxmenu(const ts::str_c& param, bool activation)
+{
+    menu_c m;
+    for (const protocol_description_s &pd : available_prots)
+    {
+        if (pd.tag == param)
+        {
+            ts::token<char> t(pd.videocodecs, '/');
+            ts::str_c cur = video_codecs.get(pd.tag, *t);
+            if (cur.is_empty()) cur = *t;
+
+            for (; t; ++t)
+                m.add(to_wstr(*t), cur.equals(*t) ? MIF_MARKED : 0, DELEGATE(this, codecselected), ts::str_c(pd.tag).append_char('/').append(*t));
+        }
+    }
+    return m;
+}
+
+void dialog_settings_c::videocodecs_tab_selected()
+{
+    if (RID lst = find(CONSTASTR("protocodeclist")))
+    {
+        HOLD(lst).engine().trunc_children(0);
+        for (const protocol_description_s &pd : available_prots)
+        {
+            if (pd.videocodecs.get_length())
+            {
+                ts::token<char> t(pd.videocodecs, '/');
+                ts::str_c cur = video_codecs.get( pd.tag, *t );
+                if (cur.is_empty()) cur = *t;
+
+                MAKE_CHILD<gui_listitem_c>(lst, from_utf8(pd.description_t).append(CONSTWSTR(": ")).append( to_wstr(cur) ), pd.tag) << DELEGATE(this, codecctxmenu);
+            }
+        }
+    }
+}
+
+bool dialog_settings_c::set_bitrate(const ts::wstr_c &t)
+{
+    video_bitrate = t.as_int();
+    if (video_bitrate < 0) video_bitrate = 0;
+    mod();
+    return true;
+}
+
+bool dialog_settings_c::encoding_quality_set(RID srid, GUIPARAM p)
+{
+    gui_hslider_c::param_s *pp = (gui_hslider_c::param_s *)p;
+    encoding_quality = ts::lround( pp->value * 100.0f );
+    if (encoding_quality == 0)
+        pp->custom_value_text.set(TTT("Automatic quality adjust",405));
+    else
+        pp->custom_value_text.set(CONSTWSTR("<l>")).append(TTT("Quality: $",399) / ts::wmake(encoding_quality).append_char('%')).append(CONSTWSTR("</l>"));
+    mod();
+    return true;
+}
+
+bool dialog_settings_c::advv_handler(RID, GUIPARAM p)
+{
+    disable_video_ex = p != nullptr;
+    mod();
+    return true;
+}
 
 bool dialog_settings_c::sndvolhandler( RID srid, GUIPARAM p )
 {
@@ -1389,6 +1515,7 @@ void dialog_settings_c::networks_tab_selected()
     } else
     {
         if (dlg->is_networks_tab_selected) dlg->networks_tab_selected();
+        if (dlg->is_video_codecs_tab_selected) dlg->videocodecs_tab_selected();
         dlg->proto_list_loaded = true;
     }
 }
@@ -1414,7 +1541,6 @@ void dialog_settings_c::networks_tab_selected()
             set_list_emptymessage(CONSTASTR("protoactlist"), loc_text(loc_loading));
             ASSERT( prf().is_loaded() );
             available_prots.load();
-            return;
         }
     }
 
@@ -1481,6 +1607,21 @@ void dialog_settings_c::networks_tab_selected()
     {
         ctlenable(CONSTASTR("applypreset"), selected_preset >= 0);
         DEFERRED_UNIQUE_CALL( 0.01, DELEGATE(this, addlistsound), as_param( snd_count -1 ) );
+    }
+
+    if (mask & MASK_ADVANCED_VIDEOCALLS)
+    {
+        is_video_codecs_tab_selected = true;
+        if (proto_list_loaded)
+        {
+            videocodecs_tab_selected();
+        }
+        else
+        {
+            set_list_emptymessage(CONSTASTR("protocodeclist"), loc_text(loc_loading));
+            ASSERT(prf().is_loaded());
+            available_prots.load();
+        }
     }
 
     setup_video_device();
@@ -1909,6 +2050,12 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
             gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_EMOJISET).send();
         }
         fontchanged = prf().fontscale_conv_text(font_scale);
+
+        bool chvideoencopts = prf().video_enc_quality(disable_video_ex ? -1 : encoding_quality);
+        chvideoencopts |= prf().video_bitrate(video_bitrate);
+        chvideoencopts |= prf().video_codec( video_codecs.to_str() );
+        if (chvideoencopts)
+            gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_VIDEO_ENCODING_SETTINGS).send();
     }
 
     if (is_changed(startopt))
@@ -1989,6 +2136,15 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
     {
         prf().get_table_active_protocol() = std::move(table_active_protocol_underedit);
         prf().changed(true); // save now, due its OK pressed: user can wait
+
+        if (prf().get_options().is(MSGOP_SPELL_CHECK))
+        {
+            if (!g_app->spellchecker.is_enabled()) g_app->spellchecker.load();
+        } else
+        {
+            if (g_app->spellchecker.is_enabled()) g_app->spellchecker.unload();
+        }
+
     }
 
     __super::on_confirm();

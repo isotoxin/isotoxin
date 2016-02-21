@@ -1,9 +1,8 @@
-conf {
-	presetname=Light
-}
+conf {presetname=Light}
 colors {
 	cap=#dddddd
 	bg=#f1f9ee
+	bg_fsvideo=#000000
 	text_def=#000000
 	hline=#d0d0d0
 	sel=#ffff00
@@ -151,6 +150,7 @@ colors {
 	gen_n=#00a600
 	gen_t=#b1c0a8
 	gen_tr=#a60000
+	gen_ti=#e47a39
 	gen_call=#3eba2e
 	gen_s=#ffffff
 	gen_s_border=#8ca6e7
@@ -191,4 +191,5 @@ colors {
 	tooltip_text=#000000
 	sb_bg=#000000
 	sb_bg_h=#000000
+	badword=#ff5c5c
 }

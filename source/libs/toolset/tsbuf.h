@@ -586,6 +586,23 @@ public:
         if (index >= aint(core.size() * 8)) return false;
         return 0 != (core()[index >> 3] & (1 << (index & 7)));
     }
+    void trunc_bits(aint index)
+    {
+        aint sz = core.size();
+        aint isz = (index + 8) >> 3;
+        if (isz >= sz) return;
+        uint8 andbit = uint8(1 << (index & 7)) >> 1;
+        if (!andbit)
+        {
+            set_size(isz - 1, true);
+            return;
+        }
+        set_size(isz, true);
+        while (0 == (andbit & 1)) andbit |= andbit >> 1;
+        if (ASSERT(core.writable()))
+            core()[index >> 3] &= andbit;
+
+    }
     void set_bit(aint index, bool b)
     {
         aint oldsz = core.size();
@@ -769,6 +786,10 @@ public:
     template<typename CORE2> explicit tbuf_t(const buf_t<CORE2> & buf) :buf_t(buf)
     {
         ASSERT( (buf.size() & sizeof(T)) == 0 );
+    }
+    tbuf_t( const T *t, aint cnt ):buf_t(cnt * sizeof(T))
+    {
+        memcpy( data(), t, cnt * sizeof(T) );
     }
 
     aint    byte_size() const { return __super::size(); }; //-V524

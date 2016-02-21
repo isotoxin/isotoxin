@@ -212,14 +212,10 @@ void    TSCALL wnd_fix_rect(irect &r, int minw, int minh)
 
 }
 
-irect    TSCALL wnd_get_max_size_fs(int x, int y)
+irect    TSCALL wnd_get_max_size_fs(const ts::ivec2 &pt)
 {
     MONITORINFO mi;
-    POINT p;
-    p.x = x;
-    p.y = y;
-    HMONITOR m = MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST);
-    if (m)
+    if (HMONITOR m = MonitorFromPoint(ts::ref_cast<POINT>(pt), MONITOR_DEFAULTTONEAREST))
     {
         mi.cbSize = sizeof(MONITORINFO);
         GetMonitorInfo(m, &mi);
@@ -240,11 +236,7 @@ irect    TSCALL wnd_get_max_size_fs(int x, int y)
 irect    TSCALL wnd_get_max_size(const ts::ivec2& pt)
 {
     MONITORINFO mi;
-    POINT p;
-    p.x = pt.x;
-    p.y = pt.y;
-    HMONITOR m = MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST);
-    if (m)
+    if (HMONITOR m = MonitorFromPoint(ts::ref_cast<POINT>(pt), MONITOR_DEFAULTTONEAREST))
     {
         mi.cbSize = sizeof(MONITORINFO);
         GetMonitorInfo(m, &mi);

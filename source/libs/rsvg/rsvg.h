@@ -2,6 +2,9 @@
 
 #include "rsvg_cairo.h"
 #include "rsvg_filter.h"
+#include "rsvg_animation.h"
+
+typedef ts::array_del_t< rsvg_animation_c, 4 > allinims_t;
 
 struct rsvg_stroke_s
 {
@@ -26,10 +29,30 @@ class rsvg_node_c
 protected:
 
     ts::shared_ptr< rsvg_filters_group_c > filter;
-    UNIQUE_PTR( cairo_matrix_t ) transform;
+
+    struct transform_s
+    {
+        cairo_matrix_t m;
+        rsvg_animation_transform_c *a = nullptr;
+        transform_s()
+        {
+            cairo_matrix_init_identity(&m);
+        }
+        const cairo_matrix_t *get_transform() const
+        {
+            return a ? a->get_tansform() : &m;
+        };
+    };
+
+    UNIQUE_PTR(transform_s) transform;
     rsvg_node_c() {}
 
     virtual void load(rsvg_load_context_s &ctx, ts::rapidxml::xml_node<char> *n) = 0;
+
+    const cairo_matrix_t *get_transform() const
+    {
+        return transform.get() ? transform.get()->get_transform() : nullptr;
+    }
 
 public:
     virtual ~rsvg_node_c();
@@ -37,7 +60,9 @@ public:
 
     void load_filter_ref(rsvg_load_context_s &ctx, const ts::asptr&fref);
     void load_transform(rsvg_load_context_s &ctx, const ts::asptr&fref);
+    void load_animation(rsvg_load_context_s &ctx, ts::rapidxml::xml_node<char> *n);
 
+    void set_transform_animation( rsvg_animation_transform_c *ta );
 };
 
 class rsvg_group_c
@@ -53,6 +78,9 @@ public:
 class rsvg_svg_c : public rsvg_node_c, public rsvg_group_c
 {
     ts::ivec2 sz = ts::ivec2(0);
+    allinims_t anims;
+    uint ticktime = 0;
+    uint zerotime = 0;
 public:
     rsvg_svg_c() {}
 
@@ -65,6 +93,13 @@ public:
     const ts::ivec2 &size() const { return sz; }
 
     void release();
+
+
+    void anim_tick();
+    void anim_reset();
+
+    bool is_animated() const { return anims.size() > 0; }
+
 };
 
 class rsvg_g_c : public rsvg_node_c, public rsvg_group_c
