@@ -109,7 +109,7 @@ void __stdcall get_info( proto_info_s *info )
 
     info->priority = 500;
     info->features = PF_AVATARS | PF_OFFLINE_INDICATOR | PF_PURE_NEW | PF_IMPORT | PF_EXPORT | PF_AUDIO_CALLS | PF_VIDEO_CALLS | PF_SEND_FILE | PF_GROUP_CHAT; //PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT;
-    info->connection_features = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_SOCKS5 | CF_IPv6_OPTION | CF_UDP_OPTION | CF_SERVER_OPTION;
+    info->connection_features = CF_PROXY_SUPPORT_HTTPS | CF_PROXY_SUPPORT_SOCKS5 | CF_IPv6_OPTION | CF_UDP_OPTION | CF_SERVER_OPTION;
     info->audio_fmt.sample_rate = 48000;
     info->audio_fmt.channels = 1;
     info->audio_fmt.bits = 16;
@@ -445,7 +445,7 @@ struct message2send_s
     int next_try_time;
     int send_timeout = 0;
     str_c msg;
-    time_t create_time;
+    time_t create_time = 0;
     message2send_s( u64 utag, message_type_e mt, int fid, const asptr &utf8, time_t create_time, int imid = -10000 ):utag(utag), mt(mt), fid(fid), mid(imid), next_try_time(time_ms()), create_time(create_time)
     {
         LIST_ADD( this, first, last, prev, next );
@@ -1957,7 +1957,7 @@ void message2send_s::try_send(int time)
                     mid = 0;
                     return; // not yet
                 }
-                send_create_time = ISFLAG(desc->ccc_caps, CCC_MSG_CRTIME);
+                send_create_time = create_time != 0 && ISFLAG(desc->ccc_caps, CCC_MSG_CRTIME);
                 support_msg_chain = ISFLAG(desc->ccc_caps, CCC_MSG_CHAIN);
             }
 
@@ -3379,7 +3379,7 @@ static TOX_ERR_NEW prepare()
     options.proxy_host = tox_proxy_host.cstr();
     options.proxy_port = 0;
     options.proxy_type = TOX_PROXY_TYPE_NONE;
-    if (tox_proxy_type & CF_PROXY_SUPPORT_HTTP)
+    if (tox_proxy_type & CF_PROXY_SUPPORT_HTTPS)
         options.proxy_type = TOX_PROXY_TYPE_HTTP;
     if (tox_proxy_type & (CF_PROXY_SUPPORT_SOCKS4|CF_PROXY_SUPPORT_SOCKS5))
         options.proxy_type = TOX_PROXY_TYPE_SOCKS5;
@@ -4298,6 +4298,8 @@ void __stdcall del_contact(int id)
     }
 }
 
+message2send_s *gms = nullptr;
+
 void __stdcall send_message(int id, const message_s *msg)
 {
     if (tox)
@@ -4312,7 +4314,7 @@ void __stdcall send_message(int id, const message_s *msg)
             tox_self_set_typing(tox, desc->get_fid(), false, nullptr);
             self_typing_contact = 0;
         }
-        new message2send_s( msg->utag, msg->mt, desc->get_fidgnum(), asptr(msg->message, msg->message_len), msg->crtime ); // not memleak!
+        gms = new message2send_s( msg->utag, msg->mt, desc->get_fidgnum(), asptr(msg->message, msg->message_len), msg->crtime ); // not memleak!
     }
 }
 

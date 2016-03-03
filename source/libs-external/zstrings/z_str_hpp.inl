@@ -898,7 +898,7 @@ public:
         if (n > N) n = N;
         for (ZSTRINGS_SIGNED i = 0; i < n; ++i)
             out[i] = as_byte_hex(index + i * 2);
-        for (ZSTRINGS_SIGNED i = N; i < n; ++i)
+        for (ZSTRINGS_SIGNED i = n; i < N; ++i)
             out[i] = 0;
     }
 

@@ -1546,6 +1546,7 @@ void gui_hgroup_c::children_repos()
 
     // get min max size
     int szt = 0;
+    int minsz = 0;
     for (ts::aint t = 0; t < info.count; ++t)
     {
         rsize &ww = rsizes.add();
@@ -1571,6 +1572,7 @@ void gui_hgroup_c::children_repos()
         ww.szsplit = 0;
         ww.sz = (ts::int16)r.getprops().size()[vecindex];
         szt += ww.sz;
+        minsz += ww.szmin;
     }
 
     if (szt > 0)
@@ -1595,6 +1597,10 @@ void gui_hgroup_c::children_repos()
     int current_size_goal = info.areasize-splitters_sz;
     int current_prop_vsize = 0;
     bool bad_prop_size_detected = false;
+
+    if (minsz > current_size_goal)
+        current_size_goal = minsz;
+
     for (ts::aint t = 0; t < info.count; ++t)
     {
         rsize &ww = rsizes.get(t);
@@ -1631,6 +1637,9 @@ void gui_hgroup_c::children_repos()
     {
         looploop: // uncondition loop to fix limit size
         current_size_goal = info.areasize-splitters_sz;
+        if (minsz > current_size_goal)
+            current_size_goal = minsz;
+
         proposum_working = proposum;
         int polices = 0;
         for (ts::aint t = 0; t < info.count; ++t)
@@ -2060,6 +2069,21 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
             }
         }
         sz.x += cminx;
+    } else
+    {
+        ts::ivec2 cmin(0);
+        int cnt = getengine().children_count();
+        for (int i = 0; i < cnt; ++i)
+        {
+            if (const rectengine_c *e = getengine().get_child(i))
+            {
+                ts::ivec2 misz = e->getrect().get_min_size();
+                int minx = misz.y;
+                if (cmin.x < minx) cmin.x = minx;
+                cmin.y += misz.y;
+            }
+        }
+        sz += cmin;
     }
     return sz;
 }

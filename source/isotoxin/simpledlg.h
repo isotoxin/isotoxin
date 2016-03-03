@@ -86,7 +86,6 @@ public:
 
     virtual void on_create(dialog_pb_c *pb) { }; // progress bar gui created
     virtual void on_close() {}; // progress bar gui is about to close
-    virtual void external_process( float p ) {} // some external process can call this to set current level
 };
 
 struct dialog_pb_params_s

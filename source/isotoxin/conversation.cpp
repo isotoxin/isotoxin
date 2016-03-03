@@ -26,7 +26,10 @@ gui_notice_c::gui_notice_c(MAKE_CHILD<gui_notice_c> &data) :gui_label_ex_c(data)
         case NOTICE_INCOMING_CALL:
             set_theme_rect(CONSTASTR("notice.call"), false);
             break;
-        //case NOTICE_FRIEND_REQUEST_RECV:
+        case NOTICE_WARN_NODICTS:
+            set_theme_rect(CONSTASTR("notice.warning"), false);
+            break;
+            //case NOTICE_FRIEND_REQUEST_RECV:
         default:
             set_theme_rect(CONSTASTR("notice.invite"), false);
             break;
@@ -84,7 +87,18 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NOTICE_PRESENT> & n)
     return 0;
 }
 
-
+static bool unique_notice(notice_e notice)
+{
+    return
+        NOTICE_FRIEND_REQUEST_RECV == notice ||
+        NOTICE_FRIEND_REQUEST_SEND_OR_REJECT == notice ||
+        NOTICE_INCOMING_CALL == notice ||
+        NOTICE_CALL_INPROGRESS == notice ||
+        NOTICE_NEWVERSION == notice ||
+        NOTICE_GROUP_CHAT == notice ||
+        NOTICE_WARN_NODICTS == notice
+        ;
+}
 
 ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
 {
@@ -101,7 +115,7 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
     bool die = false;
     if (n.n == notice)
     {
-        if (NOTICE_FRIEND_REQUEST_RECV == notice || NOTICE_FRIEND_REQUEST_SEND_OR_REJECT == notice || NOTICE_INCOMING_CALL == notice || NOTICE_CALL_INPROGRESS == notice || NOTICE_NEWVERSION == notice || NOTICE_GROUP_CHAT == notice)
+        if (unique_notice(notice))
             die = true;
     }
     if (NOTICE_CALL_INPROGRESS == n.n && (NOTICE_INCOMING_CALL == notice || NOTICE_CALL == notice))
@@ -223,6 +237,14 @@ int gui_notice_c::get_height_by_width(int w) const
     return height;
 }
 
+bool gui_notice_c::b_turn_off_spelling(RID, GUIPARAM)
+{
+    prf().set_options(0, MSGOP_SPELL_CHECK);
+    g_app->F_SHOW_SPELLING_WARN = false;
+    TSDEL(this);
+    return true;
+}
+
 extern ts::static_setup<spinlock::syncvar<autoupdate_params_s>,1000> auparams;
 
 ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
@@ -273,9 +295,11 @@ static ts::wstr_c downloaded_info()
     return info;
 }
 
+bool choose_dicts_load(RID, GUIPARAM); // from settings.cpp
+
 ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_DOWNLOADPROGRESS>&p)
 {
-    if (notice == NOTICE_NEWVERSION)
+    if (notice == NOTICE_NEWVERSION && p.id < 0)
     {
         g_app->download_progress = ts::ivec2(p.downloaded, p.total);
 
@@ -348,6 +372,30 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8)
 
                 addheight = 40;
             }
+            textrect.set_text_only(newtext, false);
+        }
+        break;
+    case NOTICE_WARN_NODICTS:
+        {
+            ts::wstr_c newtext(128, false);
+            newtext.set(CONSTWSTR("<p=c>"));
+            newtext.append(TTT("You have enabled spell check, but no dictionaries have loaded. You should load at least one dictionary or just turn off spell check.",426));
+
+            gui_button_c &b_offspell = MAKE_CHILD<gui_button_c>(getrid());
+            b_offspell.set_text(TTT("Turn off spell check",427));
+            b_offspell.set_face_getter(BUTTON_FACE(button));
+            b_offspell.set_handler(DELEGATE(this, b_turn_off_spelling), nullptr);
+            b_offspell.leech(TSNEW(leech_dock_bottom_center_s, 250, 30, -5, 5, 0, 1));
+            MODIFY(b_offspell).visible(true);
+
+            gui_button_c &b_chooseload = MAKE_CHILD<gui_button_c>(getrid());
+            b_chooseload.set_text(TTT("Choose dictionaries to load",428));
+            b_chooseload.set_face_getter(BUTTON_FACE(button));
+            b_chooseload.set_handler(choose_dicts_load, nullptr);
+            b_chooseload.leech(TSNEW(leech_dock_bottom_center_s, 250, 30, -5, 40, 0, 1));
+            MODIFY(b_chooseload).visible(true);
+
+            addheight = 80;
             textrect.set_text_only(newtext, false);
         }
         break;
@@ -2112,10 +2160,32 @@ void gui_noticelist_c::clear_list(bool hide)
     getengine().redraw();
 }
 
+void gui_noticelist_c::kill_notice(notice_e notc)
+{
+    for (rectengine_c *e : getengine())
+    {
+        if (e)
+        {
+            gui_notice_c *n = ts::ptr_cast<gui_notice_c *>(&e->getrect());
+            if (n->get_notice() == notc)
+            {
+                TSDEL(n);
+                break;
+            }
+        }
+    }
+}
+
 ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
 {
-    if (ch.pass == 0 && ch.sp == PP_ACTIVEPROTO_SORT)
-        resort_children(RID(),nullptr);
+    if (ch.pass == 0)
+    {
+        if (ch.sp == PP_ACTIVEPROTO_SORT)
+            resort_children(RID(), nullptr);
+        else if (ch.sp == PP_PROFILEOPTIONS && 0 != (ch.bits & (MSGOP_SPELL_CHECK)))
+            kill_notice(NOTICE_WARN_NODICTS);
+    }
+
     return 0;
 }
 
@@ -2254,6 +2324,12 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                 not_at_end();
                 gui_notice_c &nn = create_notice(NOTICE_NEWVERSION);
                 nn.setup( cfg().autoupdate_newver() );
+            }
+
+            if (g_app->F_SHOW_SPELLING_WARN)
+            {
+                gui_notice_c &nn = create_notice(NOTICE_WARN_NODICTS);
+                nn.setup(ts::str_c());
             }
 
             ts::tmp_tbuf_t<ts::ivec2> splist;
@@ -3113,7 +3189,7 @@ static void parse_links(ts::str_c &message, bool reset_n)
     if (reset_n) n = 0;
 
     ts::ivec2 linkinds;
-    for(int i = 0; text_find_link(message, i, linkinds) ;)
+    for(int i = 0; text_find_link(message.as_sptr(), i, linkinds) ;)
         i = prepare_link(message, linkinds, n++);
 }
 
@@ -5967,6 +6043,10 @@ void spellchecker_s::check_text(const ts::wsptr &t, int caret)
 
     ts::wstr_c sdn(t);
 
+    ts::ivec2 linkinds;
+    for (int j = 0; text_find_link(sdn.as_sptr(), j, linkinds);)
+        sdn.fill(linkinds.r0, linkinds.r1 - linkinds.r0, ' '), j = linkinds.r1;
+
     int left = ts::tmin(caret, t.l);
     for (; left > 0 && !IS_WORDB(sdn.get_char(left - 1)); --left);
     badwords.trunc_bits(left);
@@ -6045,6 +6125,9 @@ bool spellchecker_s::update_bad_words(RID, GUIPARAM)
     badwords.clear();
     ts::wstr_c text;
     gui_message_editor_c *msge = static_cast<gui_message_editor_c *>( this );
+
+    ts::tmp_tbuf_t<ts::ivec2> forbidden;
+
     for (chk_word_s &w : words)
     {
         if (!w.badword.is_empty())
@@ -6053,20 +6136,37 @@ bool spellchecker_s::update_bad_words(RID, GUIPARAM)
             {
                 text = msge->get_text_11(' ');
                 if (text.is_empty()) return true;
+
+                ts::ivec2 linkinds;
+                for (int j = 0; text_find_link(text.as_sptr(), j, linkinds);)
+                    forbidden.add() = linkinds, j = linkinds.r1;
             }
 
             int index = 0;
             for(;;)
             {
+                bool c = false;
                 int fndi = text.find_pos( index, w.badword );
+                if (fndi < 0) break;
+
+                for(const ts::ivec2 &frange : forbidden)
+                    if (fndi >= frange.r0 && fndi < frange.r1)
+                    {
+                        c = true;
+                        index = frange.r1;
+                        break;
+                    }
+                if (c) continue;
+                
+                index = fndi + w.badword.get_length();
+
                 if (fndi == 0 || (fndi > 0 && text_non_letters().find_pos(text.get_char(fndi-1))>=0))
                 {
-                    index = fndi + w.badword.get_length();
                     if (index == text.get_length() || (index < text.get_length() && text_non_letters().find_pos(text.get_char(index))>=0))
-                    for( int i = index - 1; i >= fndi; --i )
-                        badwords.set_bit( i, true );
-                } else
-                    break;
+                        for( int i = index - 1; i >= fndi; --i )
+                            badwords.set_bit( i, true );
+                }
+                    
             }
         }
     }

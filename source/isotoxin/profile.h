@@ -61,6 +61,14 @@ enum dsp_flags_e
     DSP_SPEAKERS_AGC    = SETBIT(3),
 };
 
+enum use_proxy_for_e
+{
+    USE_PROXY_FOR_AUTOUPDATES = SETBIT(0),
+    USE_PROXY_FOR_LOAD_SPELLING_DICTS = SETBIT(1),
+
+    UPF_CURRENT_MASK = 3 // just | of all bits
+};
+
 struct active_protocol_s : public active_protocol_data_s
 {
     void set(int column, ts::data_value_s& v);
@@ -504,6 +512,8 @@ public:
 
     int min_history_load() { return get_options().is(MSGOP_LOAD_WHOLE_HISTORY) ? INT_MAX : min_history(); }
 
+    ts::wstr_c get_disabled_dicts();
+
     TEXTAPAR( username, "IsotoxinUser" )
     TEXTAPAR( userstatus, "" )
     INTPAR( min_history, 10 )
@@ -524,6 +534,8 @@ public:
     TEXTWPAR(manual_confirm_masks, "*.exe; *.com; *.bat; *.cmd; *.vbs");
     INTPAR(fileconfirm, 0);
 
+    INTPAR(useproxyfor, 0xffff);
+
     INTPAR( camview_size, 25 );
     INTPAR( camview_snap, CVS_RITE_BOTTOM );
     INTPAR( camview_pos, 0 );
@@ -533,6 +545,8 @@ public:
     INTPAR(bitags, (1<<BIT_ALL) );
 
     FLOATPAR(fontscale_conv_text, 1.0f);
+
+    TEXTWPAR(disabled_spellchk, "?");
 
     TEXTAPAR(unique_profile_tag, "")
 

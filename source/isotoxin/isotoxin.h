@@ -5,7 +5,7 @@
 #define APPNAME "Isotoxin"
 #define APPNAME_CAPTION maketag_color<ts::wchar>(GET_THEME_VALUE(appname_color)).append(CONSTWSTR("<b>")).append(CONSTWSTR(APPNAME)).append(CONSTWSTR("</b></color>"))
 
-#define WINDOWS_ONLY // #error
+#define USERAGENT "curl"
 
 #define RESAMPLER_SPEEXFA 1
 #define RESAMPLER_SRC 2

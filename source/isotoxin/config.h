@@ -127,15 +127,17 @@ public:
     void oncloseunreg( ONCLOSE_FUNC f ) { onclose_handlers.find_remove_fast(f); }
     void onclosedie( ONCLOSE_FUNC f ) { if (onclose_handlers.find_remove_fast(f)) onclose_handlers_dead = true; }
 
+    INTPAR(build, 0);
+
     TEXTWPAR(profile, "")
     TEXTAPAR(language, "ru")
     TEXTWPAR(theme, "def")
     INTPAR(collapse_beh, 2)
     INTPAR(autoupdate, 1)
-    INTPAR(autoupdate_proxy, 0)
-    TEXTAPAR(autoupdate_proxy_addr, DEFAULT_PROXY)
     TEXTAPAR(autoupdate_newver, "")
-    
+    INTPAR(proxy, 0)
+    TEXTAPAR(proxy_addr, DEFAULT_PROXY)
+
     TEXTWPAR(device_camera, "")
     TEXTAPAR(device_mic, "")
     TEXTAPAR(device_talk, "")

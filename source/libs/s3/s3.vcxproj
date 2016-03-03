@@ -60,20 +60,20 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external\libogg;$(ProjectDir)..\..\libs-external\libogg\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external\libogg;$(ProjectDir)..\..\libs-external\libogg\include;$(ProjectDir)..\..\libs-external;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external\libogg;$(ProjectDir)..\..\libs-external\libogg\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external\libogg;$(ProjectDir)..\..\libs-external\libogg\include;$(ProjectDir)..\..\libs-external;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external\libogg;$(ProjectDir)..\..\libs-external\libogg\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external\libogg;$(ProjectDir)..\..\libs-external\libogg\include;$(ProjectDir)..\..\libs-external;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>

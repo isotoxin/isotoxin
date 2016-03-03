@@ -424,15 +424,12 @@ namespace ts
 		fill_dirs_and_files( path, files, dirs );
 
         for (const auto & s : files)
-		{
-			SetFileAttributesW(s,FILE_ATTRIBUTE_NORMAL);
-			DeleteFileW(s);
-		}
+            ts::kill_file(s);
 
 		for (const auto & s : dirs)
 		{
-			SetFileAttributesW(s,FILE_ATTRIBUTE_NORMAL);
-			RemoveDirectoryW(s);
+			SetFileAttributesW(s,FILE_ATTRIBUTE_NORMAL); WINDOWS_ONLY
+			RemoveDirectoryW(s); WINDOWS_ONLY
 		}
 	}
 
@@ -1058,4 +1055,14 @@ namespace ts
         return true;
 
     }
+
+
+    bool TSCALL kill_file(const wsptr &path)
+    {
+        WINDOWS_ONLY
+        ts::swstr_t< MAX_PATH + 16 > p(path);
+        SetFileAttributesW(p, FILE_ATTRIBUTE_NORMAL);
+        return DeleteFileW(p) != 0;
+    }
+
 } //namespace ts

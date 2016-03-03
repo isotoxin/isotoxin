@@ -265,6 +265,8 @@ struct theme_image_s : ts::image_extbody_c
     {
     }
 
+    ts::bmpcore_exbody_s extbody() const { return __super::extbody(rect); }
+
     void set_animated(rsvg_svg_c *asvg, const ts::ivec2 &shift)
     {
         animated.reset( TSNEW(animated_internals_s, this, asvg, shift) );

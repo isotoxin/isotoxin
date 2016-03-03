@@ -601,6 +601,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
         contact_c *target = contacts().find( msg.post.receiver );
         if (!target) return 0;
 
+        bool online = true;
 
         for(;;)
         {
@@ -608,17 +609,19 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
                 if (0 != (get_features() & PF_UNAUTHORIZED_CHAT))
                     break;
 
-            if (0 == (get_features() & PF_OFFLINE_MESSAGING))
-                if (target->get_state() != CS_ONLINE)
+            if (target->get_state() != CS_ONLINE)
+            {
+                if (0 == (get_features() & PF_OFFLINE_MESSAGING))
                     return 0;
-
+                online = false;
+            }
             break;
         }
 
         if (typingsendcontact == target->getkey().contactid)
             typingsendcontact = 0;
 
-        ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().contactid << (int)MTA_MESSAGE << msg.post.utag << msg.post.cr_time << msg.post.message_utf8 );
+        ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().contactid << (int)MTA_MESSAGE << msg.post.utag << (online ? 0 : msg.post.cr_time) << msg.post.message_utf8 );
     }
     return 0;
 }

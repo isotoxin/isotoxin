@@ -383,8 +383,6 @@ void text_rect_c::parse_and_render_texture(rectangle_update_s * updr, CUSTOM_TAG
 
 ivec2 text_rect_c::calc_text_size(int maxwidth, CUSTOM_TAG_PARSER ctp) const
 {
-    if (!is_dirty() && (size.x == maxwidth || maxwidth < 0)) return lastdrawsize;
-
     int w = maxwidth; if (w < 0) w = 16384;
     int f = flags & (TO_WRAP_BREAK_WORD | TO_HCENTER | TO_LASTLINEADDH | TO_FORCE_SINGLELINE | TO_END_ELLIPSIS | TO_LINE_END_ELLIPSIS);
     ts::ivec2 sz = parse_text(text, w-ui_scale(margins_lt.x)-ui_scale(margin_right), ctp, nullptr, default_color, (*font), f, 0);

@@ -13,6 +13,12 @@ gui_listitem_c::gui_listitem_c(initial_rect_data_s &data, gui_listitem_params_s 
 {
     if (prms.icon)
         icon = *prms.icon;
+    else if (prms.eb && prms.eb->m_body)
+    {
+        icon.create_ARGB( prms.eb->info().sz );
+        icon.copy( ts::ivec2(0), icon.info().sz, *prms.eb, ts::ivec2(0) );
+    }
+        
 
     if (prms.themerect.is_empty())
         set_theme_rect(CONSTASTR("lstitem"), false);
@@ -29,10 +35,18 @@ gui_listitem_c::gui_listitem_c(initial_rect_data_s &data, gui_listitem_params_s 
         if (icon.info().sz.y > height)
             height = icon.info().sz.y;
     }
+    flags.set(F_MENU_ON_RCLICK);
 }
 
 gui_listitem_c::~gui_listitem_c()
 {
+}
+
+void gui_listitem_c::set_icon(const ts::bmpcore_exbody_s &eb)
+{
+    icon.create_ARGB(eb.info().sz);
+    icon.copy(ts::ivec2(0), icon.info().sz, eb, ts::ivec2(0));
+    if (eb.info().sz.y > height) height = eb.info().sz.y;
 }
 
 /*virtual*/ ts::ivec2 gui_listitem_c::get_min_size() const
@@ -62,10 +76,10 @@ void gui_listitem_c::created()
     {
         if (const theme_rect_s *thr = themerect())
         {
-            return ts::tmax(height, textrect.calc_text_size(width - thr->clborder_x(), custom_tag_parser_delegate()).y) + 4 + thr->clborder_y();
+            return ts::tmax(icon.info().sz.y, textrect.calc_text_size(width - thr->clborder_x(), custom_tag_parser_delegate()).y) + 4 + thr->clborder_y();
         } else
         {
-            return ts::tmax(height, textrect.calc_text_size(width, custom_tag_parser_delegate()).y) + 4;
+            return ts::tmax(icon.info().sz.y, textrect.calc_text_size(width, custom_tag_parser_delegate()).y) + 4;
         }
     }
     return 0;
@@ -76,9 +90,6 @@ void gui_listitem_c::set_text(const ts::wstr_c&t, bool full_height_last_line)
 {
     __super::set_text(t, full_height_last_line);
     int h = get_height_by_width(-INT_MAX);
-
-    if (icon.info().sz.y > h)
-        h = icon.info().sz.y;
 
     if (h != height)
     {
@@ -128,9 +139,14 @@ void gui_listitem_c::set_text(const ts::wstr_c&t, bool full_height_last_line)
     case SQ_MOUSE_OUT:
         MODIFY(getrid()).highlight(!popupmenu.expired());
         return false;
+    case SQ_MOUSE_LUP:
+        if (gm && flags.is(F_MENU_ON_LCLICK))
+            goto mnu;
+        break;
     case SQ_MOUSE_RUP:
-        if (gm)
+        if (gm && flags.is(F_MENU_ON_RCLICK))
         {
+            mnu:
             menu_c m = gm(param, false);
             if (!m.is_empty())
             {
@@ -767,7 +783,7 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
         
     }
     
-    MAKE_CHILD<gui_textfield_c> creator(parent ? parent : getrid(),deftext, chars_limit, multiline, selector != GUIPARAMHANDLER(), create_visible);
+    MAKE_CHILD<gui_textfield_c> creator(parent ? parent : getrid(), deftext, chars_limit, multiline, selector != GUIPARAMHANDLER(), create_visible);
     creator << selector << checker;
     gui_textfield_c &tf = creator;
     creator << ((RID)creator).to_param();
@@ -964,13 +980,16 @@ int gui_dialog_c::radio( const ts::array_wrapper_c<const radio_item_s> & items, 
     return tag;
 }
 
-int gui_dialog_c::check( const ts::array_wrapper_c<const check_item_s> & items, GUIPARAMHANDLER handler, ts::uint32 initial, int tag, bool visible )
+int gui_dialog_c::check( const ts::array_wrapper_c<const check_item_s> & items, GUIPARAMHANDLER handler, ts::uint32 initial, int tag, bool visible, RID parent)
 {
     if (!tag) tag = gui->get_free_tag();
-    //int index = 0;
+
+    RID p = parent ? parent : getrid();
+
     for (const check_item_s &ci : items)
     {
-        gui_button_c &c = MAKE_VISIBLE_CHILD<gui_button_c>(getrid(), visible);
+
+        gui_button_c &c = MAKE_VISIBLE_CHILD<gui_button_c>(p, visible);
         c.set_check(tag);
         c.set_handler(handler, as_param(ci.mask));
         c.set_face_getter(BUTTON_FACE(check));
@@ -1234,13 +1253,21 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
                         return true;
                     }
                 } s;
+
+                RID vg(parent);
+                if (lasthgroup)
+                {
+                    gui_vgroup_c &g = MAKE_VISIBLE_CHILD<gui_vgroup_c>(parent);
+                    vg = g.getrid();
+                }
+
                 s.checkname = d.name;
                 d.items.iterate_items(s,s);
-                int chldcount = getengine().children_count();
-                check( s.cis.array(), DELEGATE(&d, updvalue2), d.text.as_uint(), tag, d.options.is(description_s::o_visible) );
-                int chldcount2 = getengine().children_count();
+                int chldcount = HOLD(vg).engine().children_count();
+                check( s.cis.array(), DELEGATE(&d, updvalue2), d.text.as_uint(), tag, d.options.is(description_s::o_visible), vg );
+                int chldcount2 = HOLD(vg).engine().children_count();
                 for(int i=chldcount; i<chldcount2;++i)
-                    d.setctlptr( &getengine().get_child(i)->getrect() );
+                    d.setctlptr( &HOLD(vg).engine().get_child(i)->getrect() );
             }
             break;
         case description_s::_RADIO:

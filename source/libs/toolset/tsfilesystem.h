@@ -100,6 +100,10 @@ template<class CORE> wstr_c TSCALL fn_join(const str_t<wchar, CORE> &path, const
 	if ( name.s[0] == NATIVE_SLASH || name.s[0] == ENEMY_SLASH ) return wstr_c( path ).append( name );
 	return wstr_c( path ).append_char( NATIVE_SLASH ).append( name );
 }
+INLINE wstr_c fn_join(const wsptr &ipath, const wsptr &name)
+{
+    return fn_join<str_core_part_c<ZSTRINGS_WIDECHAR> >( pwstr_c(ipath), name );
+}
 
 template<class CORE> wstr_c TSCALL fn_join(const str_t<wchar, CORE> &path, const wsptr &path1, const wsptr &name)
 {
@@ -176,6 +180,8 @@ template<class RCV, class STRCORE> bool enum_files(const str_t<wchar, STRCORE> &
 }
 
 bool TSCALL check_write_access(const wsptr &path);
+
+bool TSCALL kill_file(const wsptr &path);
 
 } // namespace ts
 

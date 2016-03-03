@@ -823,7 +823,7 @@ public:
         i.k = k;
         return i.v;
     }
-    S get( const sptr<TCHARACTER>&k, const S&def = S() )
+    S get( const sptr<TCHARACTER>&k, const S&def = S() ) const
     {
         if (const S *s = find(k))
             return *s;

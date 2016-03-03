@@ -77,7 +77,7 @@ struct autoupdate_params_s
 {
     ts::str_c ver;
     ts::wstr_c path;
-    ts::str_c aurl;
+    ts::astrmap_c dbgoptions;
     ts::str_c proxy_addr;
     int proxy_type = 0;
     autoupdate_beh_e autoupdate = AUB_NO;
@@ -351,6 +351,8 @@ public:
     unsigned F_CAPTURE_AUDIO_TASK : 1;
     unsigned F_CAPTURING : 1;
     unsigned F_SHOW_CONTACTS_IDS : 1;
+    unsigned F_SHOW_SPELLING_WARN : 1;
+
 
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_EXIT);
     SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_INIT);
@@ -537,7 +539,15 @@ public:
             READY,
         } state = EMPTY;
         void *busy = nullptr;
-        bool unload_request = false;
+
+        enum
+        {
+            AU_NOTHING,
+            AU_RELOAD,
+            AU_UNLOAD,
+            AU_DIE,
+        } after_unlock = AU_NOTHING;
+
         ts::array_del_t< Hunspell, 0 > spellcheckers;
     public:
 
@@ -545,24 +555,36 @@ public:
         {
             LOCK_OK,
             LOCK_BUSY,
-            LOCK_EMPTY
+            LOCK_EMPTY,
+            LOCK_DIE,
         };
 
         bool is_enabled() const
         {
             spinlock::auto_simple_lock l(sync);
-            return state != EMPTY && !unload_request;
+            return state != EMPTY && AU_UNLOAD != after_unlock && AU_DIE != after_unlock;
         }
 
         void load();
         void unload();
+        void spell_check_work_done();
         void set_spellcheckers(ts::array_del_t< Hunspell, 0 > &&sa);
         void check(ts::astrings_c &&checkwords, spellchecker_s *rsltrcvr);
         lock_rslt_e lock( void *prm );
         bool unlock( void *prm );
         bool check_one( const ts::str_c &w, ts::astrings_c &suggestions );
 
+        bool is_locked( bool set_dip )
+        {
+            spinlock::auto_simple_lock l(sync);
+            if (set_dip) after_unlock = AU_DIE;
+            return busy != nullptr;
+        }
+
     } spellchecker;
+
+    void get_local_spelling_files(ts::wstrings_c &names);
+    void resetup_spelling();
 
 	application_c( const ts::wchar * cmdl );
 	~application_c();
@@ -581,6 +603,7 @@ public:
     bool nonewversion() const {return F_NONEWVERSION;}
 
     static ts::str_c appver();
+    static int appbuild();
     void set_notification_icon();
     bool is_inactive(bool do_incoming_message_stuff);
 

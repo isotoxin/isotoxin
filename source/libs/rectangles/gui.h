@@ -162,6 +162,8 @@ class guirect_watch_c
 public:
     guirect_watch_c( RID r, GUIPARAMHANDLER h, GUIPARAM p = nullptr );
     ~guirect_watch_c();
+
+    explicit operator bool() const { return (bool)watchrid; }
 };
 
 //-V:theme():807
@@ -520,6 +522,7 @@ public:
     void exclusive_input(RID r, bool set = true);
     RID get_exclusive() const { return m_exclusive_input.last( RID() ); }
     bool allow_input(RID r, bool check_click = false) const;
+    bool is_menu(RID r) const;
 
     void dragndrop_lb( guirect_c *r );
     void dragndrop_update( guirect_c *r );

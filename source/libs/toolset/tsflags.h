@@ -2,6 +2,8 @@
 
 #define MAKEMASK( numbits, shiftleft ) (((1U << (numbits))-1)<<(shiftleft))
 
+#define COPYBITS( t, s, m ) t = ((t) & ~(m)) | ((s) & (m))
+
 #define SETBIT(x) ((1U)<<(x))
 #define SETFLAG(f,mask) (f)|=(mask)
 #define RESETFLAG(f,mask) (f)&=~(mask)
@@ -47,13 +49,13 @@ template <typename T, T FMASK = (T)(-1)> struct flags_t
     bool is(T mask) const { return FLAG(__bits, mask & FMASK); };
     flags_t & operator = (const flags_t &from)
     {
-        __bits = (__bits & ~FMASK) | (from.__bits & FMASK);
+        COPYBITS(__bits, from.__bits, FMASK);
         return *this;
     };
 
     flags_t & operator = (const T &dwfrom)
     {
-        __bits = (__bits & ~FMASK) | (dwfrom & FMASK);
+        COPYBITS(__bits, dwfrom, FMASK);
         return *this;
     };
 

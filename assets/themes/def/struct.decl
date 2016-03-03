@@ -140,6 +140,10 @@ rects
   {
     colors=##chessboard0,##chessboard1,##text_info,##seledge0,##seledge1
   }
+  dictlst=main
+  {
+	colors=##text_bad
+  }
 
   simplelst=textfield
   {
@@ -267,6 +271,11 @@ rects
   notice.found=sb
   {
     c=2,2,2,2,##notice_found_bg
+    clientborder=4,4,4,4
+  }
+  notice.warning=sb
+  {
+    c=2,2,2,2,##notice_warning_bg
     clientborder=4,4,4,4
   }
 
@@ -710,6 +719,39 @@ images
   {
     src=back.png,62,479,16s,16s
   }
+
+  dict_dn
+  {
+	gen 
+    { 
+		svg=`<svg height="32" width="32">
+			<path fill="##text_def" stroke="none" transform="translate(5 5) scale(0.25)" d="M 47.496094 25 L 47.496094 55.296875 L 35.939453 43.740234 L 32.404297 47.275391 L 50.082031 64.953125 L 67.759766 47.275391 L 64.222656 43.740234 L 52.496094 55.46875 L 52.496094 25 L 47.496094 25 z M 25 60 L 25 75 L 75 75 L 75 60 L 70.117188 60 L 70.117188 69.759766 L 30.117188 69.759766 L 30.117188 60 L 25 60 z " />
+		</svg>`
+		size=20,20
+	}
+  }
+  dict_la
+  {
+	gen 
+    { 
+		svg=`<svg height="32" width="32">
+			<path fill="##text_def" stroke="none" transform="translate(5 5) scale(0.25)" d="M 25.101562 25.039062 L 25.101562 74.890625 L 74.859375 74.890625 L 74.859375 25.039062 L 25.101562 25.039062 z M 30 30 L 70 30 L 70 70 L 30 70 L 30 30 z M 61.785156 38.267578 L 47.958984 55.875 L 38.859375 47.978516 L 36.6875 51.009766 L 48.128906 60.939453 L 48.179688 60.875 L 48.800781 61.416016 L 64.873047 40.947266 L 61.785156 38.267578 z " />
+		</svg>`
+		size=20,20
+	}
+  }
+  dict_li
+  {
+	gen 
+    { 
+		svg=`<svg height="32" width="32">
+			<path fill="##text_def" stroke="none" transform="translate(5 5) scale(0.25)" d="m 25.101562,25.039062 0,49.851563 49.757813,0 0,-49.851563 z M 30,30 l 40,0 0,40 -40,0 z" />
+		</svg>`
+		size=20,20
+	}
+  }
+
+
 
   uac
   {

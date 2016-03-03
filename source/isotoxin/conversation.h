@@ -12,6 +12,8 @@ enum notice_e
     NOTICE_FILE,
     NOTICE_GROUP_CHAT,
     NOTICE_PREV_NEXT,
+    
+    NOTICE_WARN_NODICTS,
 
     // special
     NOTICE_KILL_CALL_INPROGRESS,
@@ -87,6 +89,8 @@ protected:
     /*virtual*/ int get_height_by_width(int width) const override;
 
     void update_text(int dtimesec = 0);
+
+    bool b_turn_off_spelling(RID, GUIPARAM);
 
 public:
     gui_notice_c() {}
@@ -289,6 +293,7 @@ class gui_noticelist_c : public gui_vscrollgroup_c
     void clear_list(bool hide = true);
     gui_notice_c &create_notice(notice_e n);
     bool resort_children(RID, GUIPARAM);
+    void kill_notice( notice_e n );
 
 public:
     gui_noticelist_c(initial_rect_data_s &data) :gui_vscrollgroup_c(data) {}

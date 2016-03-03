@@ -52,6 +52,7 @@ int proc_grab(const wstrings_c & pars);
 int proc_test(const wstrings_c & pars);
 int proc_rgbi420(const wstrings_c & pars);
 int proc_i420rgb(const wstrings_c & pars);
+int proc_bsdl(const wstrings_c & pars);
 
 int proc_loc_(const wstrings_c & pars)
 {
@@ -99,6 +100,7 @@ struct command_s
     command_s(L"test", L"internal tests, do not use", proc_test),
     command_s(L"rgbi420", L"convert image [file] to i420", proc_rgbi420),
     command_s(L"i420rgb", L"convert image [file] to png", proc_i420rgb),
+    command_s(L"bsdl", L"Build spelling dictionary list of [path] with *.aff and *.dic files", proc_bsdl),
 };
 
 

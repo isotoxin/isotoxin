@@ -104,8 +104,6 @@ public:
 
 class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
 {
-    GM_RECEIVER(dialog_settings_c, ISOGM_NEWVERSION);
-
     NUMGEN_START( ctlm, 0 );
     enum ctlmask
     {
@@ -279,7 +277,6 @@ private:
     bool proto_list_loaded = false;
 
     bool profile_selected = false;
-    bool checking_new_version = false;
 
 
     enum bits_group_e
@@ -349,16 +346,22 @@ private:
     int collapse_beh = 2;
     int oautoupdate = 0;
     int autoupdate = 2;
-    int autoupdate_proxy = 0;
-    ts::str_c autoupdate_proxy_addr;
+
+    int proxy = 0;
+    ts::str_c proxy_addr;
+    int useproxyfor = 0xffff;
+
+
+    bool need2rewarn = false;
+    ts::wstrings_c disabled_spellchk;
+    ts::wstr_c tt_cache;
+    ts::Time tt_next_check = ts::Time::past();
 
     void on_delete_network(const ts::str_c&);
     bool delete_used_network(RID, GUIPARAM);
     void on_delete_network_2(const ts::str_c&);
     bool addeditnethandler(dialog_protosetup_params_s &params);
     bool addnetwork(RID, GUIPARAM);
-
-    bool check_update_now(RID, GUIPARAM);
 
     bool fileconfirm_handler(RID, GUIPARAM);
     bool fileconfirm_auto_masks_handler(const ts::wstr_c &v);
@@ -371,8 +374,9 @@ private:
     bool ctl2send_handler_de( RID, GUIPARAM );
     bool collapse_beh_handler( RID, GUIPARAM );
     bool autoupdate_handler( RID, GUIPARAM );
-    void autoupdate_proxy_handler( const ts::str_c& );
-    bool autoupdate_proxy_addr_handler( const ts::wstr_c & t );
+    void proxy_handler( const ts::str_c& );
+    bool proxy_addr_handler( const ts::wstr_c & t );
+    bool useproxy_handler(RID, GUIPARAM);
     
     const protocol_description_s * describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const;
 
@@ -382,6 +386,10 @@ private:
     bool histopts_handler( RID, GUIPARAM );
     bool away_minutes_handler(const ts::wstr_c &v);
     bool load_history_count_handler(const ts::wstr_c &v);
+
+    bool seldict(RID, GUIPARAM);
+    bool chat_options(RID, GUIPARAM);
+    ts::wstr_c getactivedict();
 
     bool ipchandler( ipcr );
     void contextmenuhandler( const ts::str_c& prm );
@@ -452,6 +460,7 @@ private:
 
     ts::astrmap_c debug;
     bool debug_handler(RID, GUIPARAM p);
+    bool debug_handler2(RID, GUIPARAM p);
     bool debug_local_upd_url(const ts::wstr_c &);
 
 protected:
@@ -471,5 +480,7 @@ public:
 
 
     void set_video_devices( vsb_list_t &&video_devices );
+    void set_disabled_splchklist( const ts::wstrings_c &s, bool need2rewarn );
+    void set_need2rewarn() { need2rewarn = true; }
 };
 

@@ -1,4 +1,5 @@
 #include "isotoxin.h"
+#include "curl/include/curl/curl.h"
 
 //-V:dm:807
 
@@ -19,8 +20,8 @@ static menu_c list_proxy_types(int cur, MENUHANDLER mh, int av = -1)
     menu_c m;
     m.add(TTT("Direct connection",159), cur == 0 ? MIF_MARKED : 0, mh, CONSTASTR("0"));
 
-    if (CF_PROXY_SUPPORT_HTTP & av)
-        m.add(TTT("HTTP proxy",160), cur == 1 ? MIF_MARKED : 0, mh, CONSTASTR("1"));
+    if (CF_PROXY_SUPPORT_HTTPS & av)
+        m.add(TTT("HTTPS proxy",160), cur == 1 ? MIF_MARKED : 0, mh, CONSTASTR("1"));
     if (CF_PROXY_SUPPORT_SOCKS4 & av)
         m.add(TTT("Socks 4 proxy",161), cur == 2 ? MIF_MARKED : 0, mh, CONSTASTR("2"));
     if (CF_PROXY_SUPPORT_SOCKS5 & av)
@@ -40,6 +41,13 @@ static bool __kbd_chop(RID, GUIPARAM)
 {
     return true;
 }
+
+// work with curl
+void set_common_curl_options(CURL *curl);
+size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata);
+size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdata);
+void set_proxy_curl(CURL *curl, int proxy_type, const ts::asptr &proxy_addr);
+int curl_execute_download(CURL *curl, int id);
 
 namespace
 {
@@ -64,6 +72,756 @@ namespace
         }
 
     };
+
+    class dialog_dictionaries_c;
+    struct load_spelling_list_s : public ts::task_c
+    {
+        ts::safe_ptr<dialog_dictionaries_c> dlg;
+        ts::astrings_c dicts;
+        bool failed = false;
+
+        int proxy_type = 0;
+        ts::str_c proxy_addr;
+
+        load_spelling_list_s(dialog_dictionaries_c *dlg) :dlg(dlg)
+        {
+            proxy_type = cfg().proxy();
+            proxy_addr = cfg().proxy_addr();
+        }
+
+        /*virtual*/ int iterate(int pass) override
+        {
+            ts::buf_c d;
+            CURL *curl = curl_easy_init();
+            if (!curl)
+            {
+                failed = true;
+                return R_DONE;
+            }
+
+            int rslt = 0;
+            rslt = curl_easy_setopt(curl, CURLOPT_WRITEDATA, &d);
+            rslt = curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
+            rslt = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+            set_common_curl_options(curl);
+            set_proxy_curl( curl, proxy_type, proxy_addr );
+
+            rslt = curl_easy_setopt(curl, CURLOPT_URL, "http://isotoxin.im/spelling/dictindex.txt");
+            rslt = curl_easy_perform(curl);
+            if (CURLE_OK != rslt)
+                failed = true;
+            else
+                for (ts::token<char> lines(d.cstr(), '\n'); lines; ++lines)
+                {
+                    ts::pstr_c ss = lines->get_trimmed();
+                    if (ss.find_pos('=') != ss.get_length() - 33)
+                    {
+                        failed = true;
+                        break;
+                    }
+                    dicts.add(ss);
+                }
+            
+            curl_easy_cleanup(curl);
+
+            return R_DONE;
+        }
+        /*virtual*/ void done(bool canceled) override;
+    };
+    struct download_dictionary_s : public ts::task_c
+    {
+        ts::safe_ptr<dialog_dictionaries_c> dlg;
+
+        int id;
+        int proxy_type = 0;
+        ts::str_c proxy_addr;
+        ts::str_c url;
+        ts::wstr_c path;
+
+        bool failed = false;
+
+        download_dictionary_s(dialog_dictionaries_c *dlg, const ts::str_c &utf8name, int id) :dlg(dlg), url( CONSTASTR("http://isotoxin.im/spelling/"), utf8name ), id(id)
+        {
+            proxy_type = cfg().proxy();
+            proxy_addr = cfg().proxy_addr();
+            url.append(CONSTASTR(".zip"));
+            path = ts::fn_join(ts::fn_get_path(cfg().get_path()), CONSTWSTR("spelling"));
+        }
+
+        bool extract_dict(const ts::arc_file_s &f)
+        {
+            if (ts::pstr_c(f.fn).ends(CONSTASTR(".aff")) || ts::pstr_c(f.fn).ends(CONSTASTR(".dic")))
+            {
+                ts::wstr_c wfn(ts::fn_join(path, ts::to_wstr(f.fn)));
+                f.get().save_to_file( wfn );
+            }
+
+            return true;
+        }
+
+        /*virtual*/ int iterate(int pass) override
+        {
+            ts::buf_c d;
+            CURL *curl = curl_easy_init();
+            if (!curl)
+            {
+                failed = true;
+                return R_DONE;
+            }
+
+            int rslt = 0;
+            rslt = curl_easy_setopt(curl, CURLOPT_WRITEDATA, &d);
+            rslt = curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
+            rslt = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+            set_common_curl_options(curl);
+            set_proxy_curl(curl, proxy_type, proxy_addr);
+            rslt = curl_easy_setopt(curl, CURLOPT_USERAGENT, USERAGENT);
+            rslt = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+            rslt = curl_easy_setopt(curl, CURLOPT_URL, url.cstr());
+
+            rslt = curl_execute_download(curl, id);
+            if (CURLE_OK != rslt)
+                failed = true;
+            else
+            {
+                ts::make_path(path, 0);
+                ts::zip_open(d.data(), d.size(), DELEGATE(this, extract_dict));
+            }
+            curl_easy_cleanup(curl);
+
+            return R_DONE;
+        }
+        /*virtual*/ void done(bool canceled) override;
+    };
+    struct load_local_spelling_list_s : public ts::task_c
+    {
+        ts::safe_ptr<dialog_dictionaries_c> dlg;
+        ts::wstrings_c fns;
+        ts::buf0_c aff, dic;
+        ts::wstrings_c dar;
+        bool stopjob = false;
+
+        struct dict_rec_s
+        {
+            DUMMY(dict_rec_s);
+            dict_rec_s() {};
+            ts::wstr_c name;
+            ts::wstr_c path;
+            ts::uint8 md5[16];
+        };
+
+        ts::array_inplace_t< dict_rec_s, 16 > dicts;
+
+        load_local_spelling_list_s(dialog_dictionaries_c *dlg);
+
+        /*virtual*/ int iterate(int pass) override
+        {
+            if (stopjob) return R_DONE;
+            if (aff.size() == 0 || dic.size() == 0) return R_RESULT_EXCLUSIVE;
+
+            ts::md5_c md5;
+            md5.update(aff.data(), aff.size());
+            md5.update(dic.data(), dic.size());
+            md5.done( dicts.last().md5 );
+
+            return fns.size() ? R_RESULT_EXCLUSIVE : R_DONE;
+        }
+
+        /*virtual*/ void result() override
+        {
+            for (; fns.size() > 0;)
+            {
+                ts::wstr_c fn(fns.get_last_remove(), CONSTWSTR("aff"));
+
+                aff.load_from_file(fn);
+                if (0 == aff.size())
+                    continue;
+
+                fn.set_length(fn.get_length() - 3).append(CONSTWSTR("dic"));
+                dic.load_from_file(fn);
+                if (dic.size() > 0)
+                {
+                    dict_rec_s &d = dicts.add();
+                    d.name = ts::fn_get_name(fn);
+                    d.path = fn;
+                    break;
+                }
+                aff.clear();
+            }
+            stopjob = aff.size() == 0 || dic.size() == 0;
+        }
+
+        /*virtual*/ void done(bool canceled) override;
+
+    };
+
+
+    template<> struct MAKE_ROOT<dialog_dictionaries_c> : public _PROOT(dialog_dictionaries_c)
+    {
+        dialog_settings_c *setts;
+        ts::wstrings_c dar;
+        MAKE_ROOT(dialog_settings_c *setts, const ts::wstrings_c &dar) : _PROOT(dialog_dictionaries_c)(), setts(setts), dar(dar) { init(false); }
+        ~MAKE_ROOT() {}
+    };
+
+
+    class dialog_dictionaries_c : public gui_isodialog_c
+    {
+        friend struct load_local_spelling_list_s;
+        ts::wstrings_c dar;
+        ts::wstrings_c dicts;
+        ts::safe_ptr<dialog_settings_c> setts;
+        guirect_watch_c watchdog;
+        process_animation_s pa;
+
+        bool need2rewarn = false;
+
+        GM_RECEIVER(dialog_dictionaries_c, ISOGM_DOWNLOADPROGRESS)
+        {
+            for (list_item_s &li : items)
+            {
+                if (li.id == (uint)p.id)
+                {
+                    li.downprocent = p.total ? (p.downloaded * 100 / p.total) : 0;
+
+                    if (RID lst = find("lst"))
+                    {
+                        rectengine_c &lste = HOLD(lst).engine();
+                        int cnt = lste.children_count();
+                        for (int i = 0; i < cnt; ++i)
+                        {
+                            rectengine_c * lie = lste.get_child(i);
+                            gui_listitem_c *gli = ts::ptr_cast<gui_listitem_c *>(&lie->getrect());
+                            if (gli->getparam().as_uint() == li.id)
+                            {
+                                gli->set_text( li.guitext() );
+                                break;
+                            }
+                        }
+                    }
+
+                    break;
+                }
+            }
+
+            return 0;
+        }
+
+        struct list_item_s
+        {
+            mutable ts::bmpcore_exbody_s img;
+
+            uint id;
+            int downprocent = 0;
+            ts::wstr_c name;
+            ts::wstr_c path;
+            ts::uint8 md5_local[16];
+            ts::uint8 md5_remote[16];
+
+            bool local = false;
+            bool remote = false;
+            bool downloading = false;
+            bool active = false;
+
+            list_item_s()
+            {
+                memset( md5_local, 0, sizeof(md5_local) );
+                memset( md5_remote, 0, sizeof(md5_remote) );
+            }
+            bool is_ood() const
+            {
+                return local && remote && !ts::blk_cmp(md5_local, md5_remote, 16);
+            }
+            enum st
+            {
+                BAD_STATUS,
+                LOCAL_UPTODATE_ACTIVE,
+                LOCAL_UPTODATE_INACTIVE,
+                LOCAL_OUTOFDATE_ACTIVE,
+                LOCAL_OUTOFDATE_INACTIVE,
+                REMOTE,
+                DOWNLOADING,
+            };
+            
+            mutable st imgstatus = BAD_STATUS;
+
+            st get_status() const
+            {
+                if (downloading) return DOWNLOADING;
+                if (local) return is_ood() ? (active ? LOCAL_OUTOFDATE_ACTIVE : LOCAL_OUTOFDATE_INACTIVE) : (active ? LOCAL_UPTODATE_ACTIVE : LOCAL_UPTODATE_INACTIVE);
+                return remote ? REMOTE : BAD_STATUS;
+            }
+            ts::wstr_c guitext() const
+            {
+                ts::wstr_c t( name, CONSTWSTR("<br><l>") );
+
+                switch (get_status())
+                {
+                case LOCAL_UPTODATE_ACTIVE:
+                    if (remote)
+                        t.append(TTT("used, up to date",412));
+                    else
+                        t.append(TTT("used",413));
+                    break;
+                case LOCAL_UPTODATE_INACTIVE:
+                    if (remote)
+                        t.append(TTT("not used, up to date",414));
+                    else
+                        t.append(TTT("not used",415));
+                    break;
+                case LOCAL_OUTOFDATE_ACTIVE:
+                    t.append(TTT("used, update available",416));
+                    break;
+                case LOCAL_OUTOFDATE_INACTIVE:
+                    t.append(TTT("not used, update available",417));
+                    break;
+                case REMOTE:
+                    t.append( TTT("available for download",418) );
+                    break;
+                case DOWNLOADING:
+                    t.append(TTT("downloading...",419));
+                    if (downprocent > 0)
+                        t.append_as_uint(downprocent).append_char('%');
+                    break;
+                }
+
+                return t;
+            }
+            const ts::bmpcore_exbody_s &icon() const
+            {
+                st t = get_status();
+
+                if (imgstatus == t)
+                    return img;
+
+                imgstatus = t;
+                switch(t)
+                {
+                case BAD_STATUS:
+                    img = ts::bmpcore_exbody_s();
+                    break;
+                case REMOTE:
+                case DOWNLOADING:
+                    if (const theme_image_s *i = gui->theme().get_image(CONSTASTR("dict_dn")))
+                        img = i->extbody();
+                    break;
+                case LOCAL_UPTODATE_ACTIVE:
+                case LOCAL_OUTOFDATE_ACTIVE:
+                    if (const theme_image_s *i = gui->theme().get_image(CONSTASTR("dict_la")))
+                        img = i->extbody();
+                    break;
+                case LOCAL_UPTODATE_INACTIVE:
+                case LOCAL_OUTOFDATE_INACTIVE:
+                    if (const theme_image_s *i = gui->theme().get_image(CONSTASTR("dict_li")))
+                        img = i->extbody();
+                    break;
+                }
+
+                return img;
+            }
+        };
+        ts::array_inplace_t<list_item_s,16> items;
+
+        bool loading_list = true;
+
+
+    protected:
+
+        void updrect_loadd(const void *rr, int r, const ts::ivec2 &p)
+        {
+            if (1000 == r)
+            {
+                rectengine_root_c *root = getroot();
+                root->draw(p - root->get_current_draw_offset(), pa.bmp.extbody(), true);
+
+            }
+            else
+                updrect_def(rr, r, p);
+        }
+        /*virtual*/ ts::UPDATE_RECTANGLE getrectupdate() override { return DELEGATE(this, updrect_loadd); }
+
+        bool updanim(RID, GUIPARAM)
+        {
+            if (loading_list)
+            {
+                pa.render();
+                DEFERRED_UNIQUE_CALL(0.01, DELEGATE(this, updanim), nullptr);
+            }
+
+            if (RID upd = find(CONSTASTR("upd")))
+                HOLD(upd).engine().redraw();
+            return true;
+        }
+
+        /*virtual*/ void created() override
+        {
+            if (watchdog)
+                gui->exclusive_input(getrid());
+            g_app->add_task( TSNEW(load_spelling_list_s, this) );
+            g_app->add_task( TSNEW(load_local_spelling_list_s, this) );
+
+            set_theme_rect(CONSTASTR("dictlst"), false);
+            __super::created();
+            tabsel(CONSTASTR("1"));
+        }
+        /*virtual*/ void getbutton(bcreate_s &bcr) override
+        {
+            __super::getbutton(bcr);
+        }
+        /*virtual*/ int additions(ts::irect & ) override
+        {
+            descmaker dm(this);
+            dm << 1;
+            dm().list(TTT("List of dictionaries (right click for options)",425), loc_text( loc_loading ), -350).setname(CONSTASTR("lst"));
+
+            dm().vspace();
+            ts::wstr_c updx(CONSTWSTR("<p=c><rect=1000,32,32><p=c>"), TTT("List of spelling dictionaries is being loaded", 409));
+            dm().label(updx).setname("upd");
+            updanim(RID(), nullptr);
+            return 0;
+        }
+        bool seldict(RID, GUIPARAM p)
+        {
+            dar.clear();
+            int xx = as_int(p);
+            for (int x = 1, i = 0; x >= 0; x <<= 1, ++i)
+            {
+                if (i >= dicts.size()) break;
+                if (0 == (x & xx))
+                    dar.add( dicts.get(i) );
+            }
+            dar.sort(true);
+
+            return true;
+        }
+
+        /*virtual*/ void on_confirm() override
+        {
+            if (setts)
+                setts->set_disabled_splchklist(dar, need2rewarn);
+            else if (!watchdog)
+            {
+                prf().disabled_spellchk( dar.join('/') );
+                g_app->resetup_spelling();
+            }
+            need2rewarn = false;
+            __super::on_confirm();
+        }
+
+        bool mustdie(RID, GUIPARAM)
+        {
+            TSDEL(this);
+            return true;
+        }
+
+        void maction(const ts::str_c &prm)
+        {
+            uint id = prm.as_num_part(0, 1);
+            int cnt = items.size();
+            for (int i = 0; i < cnt;++i)
+            {
+                list_item_s &li = items.get(i);
+                if (li.id == id)
+                {
+                    switch (prm.get_char(0))
+                    {
+                    case 'a':
+                        li.active = true;
+                        dar.find_remove_slow(li.name);
+                        break;
+                    case 'd':
+                        li.active = false;
+                        dar.add(li.name);
+                        dar.kill_dups_and_sort(true);
+                        break;
+                    case 'x':
+                        dar.find_remove_slow(li.name);
+                        g_app->add_task(TSNEW(download_dictionary_s, this, to_utf8(li.name), id));
+                        li.downloading = true;
+                        li.downprocent = 0;
+                        need2rewarn = true;
+                        break;
+                    case 'k':
+                        if (!li.path.is_empty())
+                        {
+                            need2rewarn = true;
+                            ts::kill_file(ts::fn_change_ext(li.path, CONSTWSTR("aff")));
+                            ts::kill_file(ts::fn_change_ext(li.path, CONSTWSTR("dic")));
+                            dar.find_remove_slow(li.name);
+                            if (!li.remote)
+                                items.remove_slow(i);
+                            else
+                                li.local = false;
+                            resort();
+                        }
+                        break;
+                    }
+                    break;
+                }
+            }
+            update_list();
+        }
+        menu_c mnu( const ts::str_c &prm, bool on_2click )
+        {
+            menu_c m;
+
+            uint id = prm.as_uint();
+            for (list_item_s &li : items)
+            {
+                if (li.id == id)
+                {
+                    if (li.downloading)
+                        return m;
+
+                    if (on_2click)
+                    {
+                        if (li.local)
+                        {
+                            if (li.active)
+                                maction(CONSTASTR("d") + prm);
+                            else
+                                maction(CONSTASTR("a") + prm);
+                        } else if (li.remote)
+                        {
+                            maction(CONSTASTR("x") + prm);
+                        }
+                        return m;
+                    }
+
+                    if (li.local)
+                    {
+                        if (li.active)
+                            m.add(ts::wstr_c(CONSTWSTR("<b>"), TTT("Deactivate",420)), 0, DELEGATE(this, maction), CONSTASTR("d") + prm);
+                        else
+                            m.add(ts::wstr_c(CONSTWSTR("<b>"), TTT("Activate",421)), 0, DELEGATE(this, maction), CONSTASTR("a") + prm);
+                        if (li.is_ood())
+                            m.add(TTT("Update",422), 0, DELEGATE(this, maction), CONSTASTR("x") + prm);
+                    } else if (li.remote )
+                    {
+                        m.add(ts::wstr_c(CONSTWSTR("<b>"), TTT("Download and activate",423)), 0, DELEGATE(this, maction), CONSTASTR("x") + prm);
+                    }
+
+                    if (li.local)
+                    {
+                        m.add(TTT("Delete",424), 0, DELEGATE(this, maction), CONSTASTR("k") + prm);
+                    }
+
+                    break;
+                }
+            }
+
+            return m;
+        }
+
+        bool updatelist(RID, GUIPARAM)
+        {
+            if (RID lst = find("lst"))
+            {
+                rectengine_c &lste = HOLD(lst).engine();
+                int cnt = lste.children_count();
+                int chi = 0;
+                for (const list_item_s &li : items)
+                {
+                    if (chi < cnt)
+                    {
+                        rectengine_c * lie = lste.get_child(chi);
+                        gui_listitem_c *gli = ts::ptr_cast<gui_listitem_c *>(&lie->getrect());
+                        gli->setparam(ts::amake(li.id));
+                        gli->set_text(li.guitext());
+                        gli->set_icon(li.icon());
+                        ++chi;
+                        continue;
+                    }
+
+                    MAKE_CHILD<gui_listitem_c> l(lst, li.guitext(), ts::amake(li.id)); l << li.icon() << DELEGATE(this, mnu);
+                    //l.get().set_gm( DELEGATE(this, mnu), true, true );
+                }
+
+                if (chi < cnt)
+                    lste.trunc_children(chi);
+
+                gui->repos_children(ts::ptr_cast<gui_vscrollgroup_c *>(&lste.getrect()));
+                if (cnt)
+                    ts::ptr_cast<gui_vscrollgroup_c *>(&lste.getrect())->keep_top_visible(true);
+                else
+                    ts::ptr_cast<gui_vscrollgroup_c *>(&lste.getrect())->scroll_to_begin();
+
+            }
+            return true;
+        }
+
+    public:
+        dialog_dictionaries_c(MAKE_ROOT<dialog_dictionaries_c> &data) :gui_isodialog_c(data), watchdog(data.setts ? data.setts->getrid() : RID(), DELEGATE(this, mustdie), nullptr ), dar(data.dar)
+        {
+            setts = data.setts;
+        }
+        ~dialog_dictionaries_c()
+        {
+            if (gui)
+            {
+                gui->delete_event(DELEGATE(this, updanim));
+                gui->delete_event(DELEGATE(this, updatelist));
+
+                if (need2rewarn)
+                {
+                    if (setts)
+                        setts->set_need2rewarn();
+                    else
+                        g_app->resetup_spelling();
+                }
+            }
+        }
+
+        /*virtual*/ int unique_tag() override { return UD_DICTIONARIES; }
+
+        /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(400, 510); }
+        /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override
+        {
+            return __super::sq_evt(qp, rid, data);
+        }
+
+        void downloaded(uint id)
+        {
+            for (list_item_s &li : items)
+            {
+                if (li.id == id)
+                {
+                    li.downloading = false;
+                    break;
+                }
+            }
+
+            g_app->add_task(TSNEW(load_local_spelling_list_s, this));
+        }
+
+        void resort()
+        {
+            items.sort([](const list_item_s &li1, const list_item_s &li2)->bool {
+
+                if (li1.local && !li2.local)
+                    return true;
+                if (!li1.local && li2.local)
+                    return false;
+                return ts::wstr_c::compare(li1.name, li2.name) < 0;
+            });
+            update_list();
+        }
+
+        uint idpool = 1;
+        void set_item(const ts::wstr_c &name, const ts::wstr_c &path, const ts::uint8 *md5, bool remote, bool act )
+        {
+            bool upd = false;
+
+            auto setup = [&](list_item_s &li)
+            {
+                if (remote)
+                {
+                    memcpy(li.md5_remote, md5, 16);
+                    li.remote = true;
+                } else
+                {
+                    memcpy(li.md5_local, md5, 16);
+                    li.local = true;
+                    li.active = act;
+                    li.path = path;
+                }
+            };
+
+            for(list_item_s &li : items)
+            {
+                if (li.name.equals(name))
+                {
+                    auto old_status = li.get_status();
+                    setup( li );
+                    if (old_status == li.get_status())
+                        return;
+
+                    upd = true;
+                    break;
+                }
+            }
+
+            if (!upd)
+            {
+                list_item_s &li = items.add();
+                li.id = idpool++;
+                li.name = name;
+                setup(li);
+                upd = true;
+            }
+            if (upd)
+                resort();
+        }
+
+        void update_list()
+        {
+            DEFERRED_UNIQUE_CALL(0.1, DELEGATE(this, updatelist), nullptr);
+        }
+
+        void set_list( const ts::astrings_c &lst, bool failed )
+        {
+            loading_list = false;
+
+            if (!failed)
+            {
+                ts::uint8 md5[16];
+                for (const ts::str_c &ln : lst)
+                {
+                    ts::token<char> p(ln, '=');
+                    ts::wstr_c n = ts::from_utf8(*p);
+                    ++p; p->hex2buf<16>(md5);
+                    set_item(n, ts::wstr_c(), md5, true, false);
+                }
+            }
+
+            if (failed)
+            {
+                set_label_text(CONSTASTR("upd"), CONSTWSTR("<p=c>") + colorize(TTT("Unable to load list of available dictionaries. Check your internet access.",303), get_default_text_color(0)));
+            } else
+            {
+                set_label_text(CONSTASTR("upd"), CONSTWSTR("<p=c>") + (TTT("There are $ spelling dictionaries available for download",411) / ts::wmake(lst.size())));
+            }
+
+            gui->repos_children(this);
+        }
+    };
+    /*virtual*/ void load_spelling_list_s::done(bool canceled)
+    {
+        if (!canceled && dlg)
+            dlg->set_list(dicts, failed);
+        __super::done(canceled);
+    }
+    load_local_spelling_list_s::load_local_spelling_list_s(dialog_dictionaries_c *dlg) :dlg(dlg)
+    {
+        dar = dlg->dar;
+        g_app->get_local_spelling_files(fns);
+        stopjob = fns.size() == 0;
+    }
+
+    /*virtual*/ void load_local_spelling_list_s::done(bool canceled)
+    {
+        if (!canceled && dlg)
+        {
+            for(const dict_rec_s& dr : dicts)
+                dlg->set_item(dr.name, dr.path, dr.md5, false, dar.find(dr.name.as_sptr()) < 0 );
+            dlg->resort();
+        }
+        __super::done(canceled);
+    }
+    /*virtual*/ void download_dictionary_s::done(bool canceled)
+    {
+        if (!canceled && dlg)
+            dlg->downloaded(id);
+
+        __super::done(canceled);
+    }
+
+}
+
+bool choose_dicts_load(RID, GUIPARAM)
+{
+    SUMMON_DIALOG<dialog_dictionaries_c>(UD_DICTIONARIES, nullptr, ts::wstrings_c(prf().get_disabled_dicts(),'/'));
+    return true;
 }
 
 
@@ -77,7 +835,6 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
 
     s3::enum_sound_capture_devices(enum_capture_devices, this);
     s3::enum_sound_play_devices(enum_play_devices, this);
-    media.init();
     s3::get_capture_device(&mic_device_stored);
 
     g_app->add_task( TSNEW( enum_video_devices_s, this ) );
@@ -277,6 +1034,9 @@ dialog_settings_c::~dialog_settings_c()
         gui->delete_event(DELEGATE(this, addlistsound));
 
         gui->unregister_kbd_callback( __kbd_chop );
+
+        if (need2rewarn)
+            g_app->resetup_spelling();
     }
 }
 
@@ -413,63 +1173,43 @@ bool dialog_settings_c::autoupdate_handler( RID, GUIPARAM p)
 {
     autoupdate = as_int(p);
 
-    ctlenable(CONSTASTR("proxytype"), autoupdate > 0);
-    ctlenable(CONSTASTR("proxyaddr"), autoupdate > 0 && autoupdate_proxy > 0);
-
     mod();
     return true;
 }
-void dialog_settings_c::autoupdate_proxy_handler(const ts::str_c& p)
+
+bool dialog_settings_c::useproxy_handler(RID, GUIPARAM p)
 {
-    autoupdate_proxy = p.as_int();
-    set_combik_menu(CONSTASTR("proxytype"), list_proxy_types(autoupdate_proxy, DELEGATE(this, autoupdate_proxy_handler)));
+    int useproxy = as_int(p);
+
+    COPYBITS(useproxyfor, useproxy, UPF_CURRENT_MASK);
+
+    ctlenable(CONSTASTR("proxytype"), 0 != (useproxyfor & UPF_CURRENT_MASK));
+    ctlenable(CONSTASTR("proxyaddr"), 0 != (useproxyfor & UPF_CURRENT_MASK) && proxy > 0);
+
+    mod();
+    return true;
+
+}
+
+void dialog_settings_c::proxy_handler(const ts::str_c& p)
+{
+    proxy = p.as_int();
+    set_combik_menu(CONSTASTR("proxytype"), list_proxy_types(proxy, DELEGATE(this, proxy_handler)));
     if (RID r = find(CONSTASTR("proxyaddr")))
     {
-        check_proxy_addr(autoupdate_proxy, r, autoupdate_proxy_addr);
-        r.call_enable(autoupdate > 0 && autoupdate_proxy > 0);
+        check_proxy_addr(proxy, r, proxy_addr);
+        r.call_enable(0 != (useproxyfor & UPF_CURRENT_MASK) && proxy > 0);
     }
     mod();
 }
 
-bool dialog_settings_c::autoupdate_proxy_addr_handler( const ts::wstr_c & t )
+bool dialog_settings_c::proxy_addr_handler( const ts::wstr_c & t )
 {
-    autoupdate_proxy_addr = to_str(t);
+    proxy_addr = to_str(t);
     if (RID r = find(CONSTASTR("proxyaddr")))
-        check_proxy_addr(autoupdate_proxy, r, autoupdate_proxy_addr);
+        check_proxy_addr(proxy, r, proxy_addr);
     mod();
     return true;
-}
-
-bool dialog_settings_c::check_update_now(RID, GUIPARAM)
-{
-    ctlenable(CONSTASTR("checkupdb"), false);
-
-    checking_new_version = true;
-    g_app->b_update_ver(RID(), as_param(AUB_ONLY_CHECK));
-    return true;
-}
-
-ts::uint32 dialog_settings_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
-{
-    ctlenable(CONSTASTR("checkupdb"), true);
-
-    if (!checking_new_version) return 0;
-    checking_new_version = false;
-
-    if (nv.error_num == gmsg<ISOGM_NEWVERSION>::E_NETWORK)
-    {
-        dialog_msgbox_c::mb_error( TTT("No new versions detected. Connection failed.",303) ).summon();
-        return 0;
-    }
-
-    if (nv.ver.is_empty() || nv.error_num != gmsg<ISOGM_NEWVERSION>::E_OK)
-    {
-        dialog_msgbox_c::mb_info( TTT("No new versions detected.",194) ).summon();
-        return 0;
-    }
-
-    dialog_msgbox_c::mb_info(TTT("New version detected: $",196) / ts::to_wstr(nv.ver.as_sptr())).summon();
-    return 0;
 }
 
 bool dialog_settings_c::histopts_handler(RID, GUIPARAM p)
@@ -728,6 +1468,57 @@ bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
     return true;
 }
 
+ts::wstr_c dialog_settings_c::getactivedict()
+{
+    if (tt_next_check < ts::Time::current())
+    {
+        ts::wstrings_c alldicts;
+        g_app->get_local_spelling_files(alldicts);
+        alldicts.kill_dups_and_sort(true);
+        int a = 0;
+        int aa = alldicts.size();
+
+        for( ts::wstr_c &n : alldicts)
+        {
+            n.trunc_length(4);
+            if (disabled_spellchk.find(ts::fn_get_name(n).as_sptr()) < 0)
+                ++a;
+        }
+
+        tt_cache = TTT("Active dictionaries: $ of $", 410) / ts::wmake(a) / ts::wmake(aa);
+        tt_next_check = ts::Time::current() + 5000;
+    }
+
+
+    return tt_cache;
+}
+
+bool dialog_settings_c::chat_options(RID, GUIPARAM p)
+{
+    bgroups[BGROUP_CHAT].handler(RID(), p);
+
+    if (RID b = find(CONSTASTR("seldict")))
+    {
+        ctlenable(CONSTASTR("seldict"), p != nullptr && !dialog_already_present(UD_DICTIONARIES));
+        HOLD(b).as<gui_control_c>().tooltip( DELEGATE(this, getactivedict) );
+    }
+
+    return true;
+}
+
+bool dialog_settings_c::seldict(RID, GUIPARAM)
+{
+    SUMMON_DIALOG<dialog_dictionaries_c>(UD_DICTIONARIES, this, disabled_spellchk);
+    return true;
+}
+
+void dialog_settings_c::set_disabled_splchklist(const ts::wstrings_c &s, bool need2rewarn_)
+{
+    disabled_spellchk = s;
+    need2rewarn = need2rewarn_;
+    mod();
+}
+
 bool dialog_settings_c::scale_font(RID, GUIPARAM p)
 {
     gui_hslider_c::param_s *pp = (gui_hslider_c::param_s *)p;
@@ -867,6 +1658,8 @@ void dialog_settings_c::mod()
             }
 
         PREPARE( smilepack,  prf().emoticons_pack() );
+
+        PREPARE(disabled_spellchk, ts::wstrings_c( prf().get_disabled_dicts(), '/' ));
     }
 
     PREPARE( startopt, detect_startopts() );
@@ -874,8 +1667,14 @@ void dialog_settings_c::mod()
     PREPARE( curlang, cfg().language() );
     PREPARE( autoupdate, cfg().autoupdate() );
     oautoupdate = autoupdate;
-    PREPARE( autoupdate_proxy, cfg().autoupdate_proxy() );
-    PREPARE( autoupdate_proxy_addr, cfg().autoupdate_proxy_addr() );
+    PREPARE( proxy, cfg().proxy() );
+    PREPARE( proxy_addr, cfg().proxy_addr() );
+    
+    if (profile_selected)
+    {
+        PREPARE(useproxyfor, prf().useproxyfor());
+    }
+
     PREPARE( collapse_beh, cfg().collapse_beh() );
     PREPARE( talkdevice, cfg().device_talk() );
     PREPARE( signaldevice, cfg().device_signal() );
@@ -949,11 +1748,17 @@ void dialog_settings_c::mod()
         .add(TTT("Check and notify",157), 0, MENUHANDLER(), CONSTASTR("1"))
         .add(TTT("Check, download and update",158), 0, MENUHANDLER(), CONSTASTR("2"))
         );
-    dm().hgroup(ts::wsptr());
-    dm().combik(HGROUP_MEMBER).setmenu( list_proxy_types(autoupdate_proxy, DELEGATE(this, autoupdate_proxy_handler)) ).setname(CONSTASTR("proxytype"));
-    dm().textfield(HGROUP_MEMBER, ts::to_wstr(autoupdate_proxy_addr), DELEGATE(this, autoupdate_proxy_addr_handler)).setname(CONSTASTR("proxyaddr"));
+
     dm().vspace();
-    dm().button(HGROUP_MEMBER, TTT("Check for update",195), DELEGATE(this, check_update_now) ).height(35).setname(CONSTASTR("checkupdb"));
+    if (profile_selected)
+    {
+        dm().checkb(TTT("Proxy settings", 194), DELEGATE(this, useproxy_handler), useproxyfor).setmenu(
+            menu_c().add(TTT("Use proxy for check and download updates", 195), 0, MENUHANDLER(), ts::amake<int>(USE_PROXY_FOR_AUTOUPDATES))
+            .add(TTT("Use proxy for download spelling dictionaries", 196), 0, MENUHANDLER(), ts::amake<int>(USE_PROXY_FOR_LOAD_SPELLING_DICTS)));
+    }
+    dm().hgroup(ts::wsptr());
+    dm().combik(HGROUP_MEMBER).setmenu(list_proxy_types(proxy, DELEGATE(this, proxy_handler))).setname(CONSTASTR("proxytype"));
+    dm().textfield(HGROUP_MEMBER, ts::to_wstr(proxy_addr), DELEGATE(this, proxy_addr_handler)).setname(CONSTASTR("proxyaddr"));
 
     dm << MASK_APPLICATION_SYSTEM; //_________________________________________________________________________________________________//
 
@@ -1115,8 +1920,13 @@ void dialog_settings_c::mod()
             menu_c().add(TTT("Send typing notification",273), 0, MENUHANDLER(), CONSTASTR("1")) 
             );
 
-        dm().checkb(ts::wstr_c(), DELEGATE(bgroups + BGROUP_CHAT, handler), bgroups[BGROUP_CHAT].current).setmenu(
-            menu_c().add(TTT("Enable spell checker",400), 0, MENUHANDLER(), CONSTASTR("1"))
+        ts::wstr_c seldictctl;
+        dm().button(ts::wstr_c(), TTT("Dictionaries...",408), DELEGATE(this, seldict)).setname(CONSTASTR("seldict")).width(150).height(25).subctl(textrectid++, seldictctl);
+        ts::wstr_c espt(TTT("Enable spell checker", 400), CONSTWSTR(" "));
+        espt.append(seldictctl);
+
+        dm().checkb(ts::wstr_c(), DELEGATE(this, chat_options), bgroups[BGROUP_CHAT].current).setmenu(
+            menu_c().add(espt, 0, MENUHANDLER(), CONSTASTR("1"))
             );
 
         dm << MASK_PROFILE_GCHAT; //____________________________________________________________________________________________________//
@@ -1222,16 +2032,25 @@ void dialog_settings_c::mod()
     dm().vspace();
     dm().textfield(CONSTWSTR("Addition updates URL"), to_wstr(debug.get(CONSTASTR("local_upd_url"))), DELEGATE(this, debug_local_upd_url));
 
+    dopts = 0;
+    dopts |= debug.get(CONSTASTR("ignproxy")).as_int() ? 1 : 0;
+    dopts |= debug.get(CONSTASTR("onlythisurl")).as_int() ? 2 : 0;
+
+    dm().checkb(ts::wstr_c(), DELEGATE(this, debug_handler2), dopts).setmenu(
+        menu_c().add(CONSTWSTR("Ignory proxy settings for this url"), 0, MENUHANDLER(), CONSTASTR("1"))
+        .add(CONSTWSTR("Use only this url"), 0, MENUHANDLER(), CONSTASTR("2"))
+        );
+
     if (profile_selected)
     {
         dm << MASK_ADVANCED_VIDEOCALLS;
         dm().checkb(ts::wstr_c(), DELEGATE(this, advv_handler), disable_video_ex ? 1 : 0).setmenu(
-            menu_c().add(CONSTWSTR("Disable extended video support"), 0, MENUHANDLER(), CONSTASTR("1"))
+            menu_c().add(TTT("Disable extended video support",406), 0, MENUHANDLER(), CONSTASTR("1"))
             );
         dm().vspace();
         dm().hslider(TTT("Video encoding quality (0 - auto)",398), (float)encoding_quality * 0.01f, CONSTWSTR("0/0/1/1"), DELEGATE(this, encoding_quality_set));
         dm().vspace();
-        dm().textfield(CONSTWSTR("Video bitrate (0 - auto)"), ts::wmake(video_bitrate), DELEGATE(this, debug_local_upd_url));
+        dm().textfield(TTT("Video bitrate (0 - auto)",407), ts::wmake(video_bitrate), DELEGATE(this, set_bitrate));
         dm().vspace(10);
         dm().list(TTT("Codecs",404), L"", -100).setname(CONSTASTR("protocodeclist"));
     }
@@ -1279,6 +2098,25 @@ bool dialog_settings_c::debug_handler(RID, GUIPARAM p)
     mod();
     return true;
 }
+
+bool dialog_settings_c::debug_handler2(RID, GUIPARAM p)
+{
+    int opts = as_int(p);
+
+    if (0 == (opts & 1))
+        debug.unset(CONSTASTR("ignproxy"));
+    else
+        debug.set(CONSTASTR("ignproxy")) = CONSTASTR("1");
+
+    if (0 == (opts & 2))
+        debug.unset(CONSTASTR("onlythisurl"));
+    else
+        debug.set(CONSTASTR("onlythisurl")) = CONSTASTR("1");
+
+    mod();
+    return true;
+}
+
 
 bool dialog_settings_c::startopt_handler( RID, GUIPARAM p )
 {
@@ -1548,6 +2386,7 @@ void dialog_settings_c::networks_tab_selected()
     {
         int enter_key = ctl2send; if (enter_key == EKO_ENTER_NEW_LINE_DOUBLE_ENTER) enter_key = EKO_ENTER_NEW_LINE;
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, ctl2send_handler), enter_key);
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, chat_options), bgroups[BGROUP_CHAT].current);
     }
     if (mask & MASK_PROFILE_MSGSNHIST)
     {
@@ -1573,13 +2412,14 @@ void dialog_settings_c::networks_tab_selected()
     if (mask & MASK_APPLICATION_COMMON)
     {
         select_lang(curlang);
-        autoupdate_handler(RID(),as_param(autoupdate));
-        autoupdate_proxy_handler(ts::amake(autoupdate_proxy));
+        
+        useproxy_handler(RID(), as_param(useproxyfor));
+        proxy_handler(ts::amake(proxy));
         if (RID r = find(CONSTASTR("proxyaddr")))
         {
             gui_textfield_c &tf = HOLD(r).as<gui_textfield_c>();
-            tf.set_text( to_wstr(autoupdate_proxy_addr), true );
-            check_proxy_addr(autoupdate_proxy, r, autoupdate_proxy_addr);
+            tf.set_text( to_wstr(proxy_addr), true );
+            check_proxy_addr(proxy, r, proxy_addr);
         }
     }
 
@@ -1904,7 +2744,7 @@ menu_c dialog_settings_c::getcontextmenu( const ts::str_c& param, bool activatio
             contextmenuhandler( ts::str_c(CONSTASTR("props/")).append(*t) );
         else 
         {
-            m.add(ts::wstr_c(CONSTWSTR("<b>")).append(TTT("Properties",60)), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("props/")).append(*t));
+            m.add(ts::wstr_c(CONSTWSTR("<b>"), TTT("Properties",60)), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("props/")).append(*t));
             m.add(TTT("Delete",59), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("del/")).append(*t));
         }
     }
@@ -2056,17 +2896,19 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
         chvideoencopts |= prf().video_codec( video_codecs.to_str() );
         if (chvideoencopts)
             gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_VIDEO_ENCODING_SETTINGS).send();
+
+        prf().useproxyfor( useproxyfor );
     }
 
     if (is_changed(startopt))
         set_startopts();
 
-    if (autoupdate_proxy > 0 && !check_netaddr(autoupdate_proxy_addr))
-        autoupdate_proxy_addr = CONSTASTR(DEFAULT_PROXY);
+    if (proxy > 0 && !check_netaddr(proxy_addr))
+        proxy_addr = CONSTASTR(DEFAULT_PROXY);
 
     cfg().autoupdate(autoupdate);
-    cfg().autoupdate_proxy(autoupdate_proxy);
-    cfg().autoupdate_proxy_addr(autoupdate_proxy_addr);
+    cfg().proxy(proxy);
+    cfg().proxy_addr(proxy_addr);
     if (oautoupdate != autoupdate && autoupdate > 0)
         g_app->autoupdate_next = now() + 10;
 
@@ -2074,7 +2916,7 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
     cfg().collapse_beh(collapse_beh);
     bool sndch = cfg().device_talk(talkdevice);
     sndch |= cfg().device_signal(signaldevice);
-    if (sndch) g_app->mediasystem().init();
+    if (sndch) g_app->mediasystem().deinit();
 
     s3::DEVICE micd = device_from_string(micdevice);
     s3::set_capture_device(&micd);
@@ -2136,15 +2978,8 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
     {
         prf().get_table_active_protocol() = std::move(table_active_protocol_underedit);
         prf().changed(true); // save now, due its OK pressed: user can wait
-
-        if (prf().get_options().is(MSGOP_SPELL_CHECK))
-        {
-            if (!g_app->spellchecker.is_enabled()) g_app->spellchecker.load();
-        } else
-        {
-            if (g_app->spellchecker.is_enabled()) g_app->spellchecker.unload();
-        }
-
+        g_app->resetup_spelling();
+        need2rewarn = false;
     }
 
     __super::on_confirm();
@@ -2798,7 +3633,7 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
         addh += 45;
 
         int pt = 0;
-        if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_HTTP) pt = 1;
+        if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_HTTPS) pt = 1;
         if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_SOCKS4) pt = 2;
         if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_SOCKS5) pt = 3;
         ts::wstr_c pa = to_wstr(params.configurable.proxy.proxy_addr);
@@ -2937,7 +3772,7 @@ void dialog_setup_network_c::set_proxy_type_handler(const ts::str_c& p)
 
     int psel = p.as_int();
     if (psel == 0) params.configurable.proxy.proxy_type = 0;
-    else if (psel == 1) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_HTTP;
+    else if (psel == 1) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_HTTPS;
     else if (psel == 2) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_SOCKS4;
     else if (psel == 3) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_SOCKS5;
 

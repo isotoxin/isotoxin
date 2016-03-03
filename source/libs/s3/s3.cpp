@@ -40,7 +40,7 @@ DWORD WINAPI UpdateThreadProc(LPVOID pData)
 
 	while (WaitForSingleObject(pd.hQuitEvent, 17) != WAIT_OBJECT_0)
 	{
-		AutoCriticalSection acs(pd.critSect);
+        LOCK4WRITE( pd.sync );
 
 		DWORD time = timeGetTime();
 		float dt = (time - prevTime)*(1/1000.f);
@@ -131,12 +131,12 @@ void Player::Shutdown(bool reinit)
 	if (pd.hUpdateThread)
 	{
 		SetEvent(pd.hQuitEvent);
-		if (reinit) LeaveCriticalSection(&pd.critSect); //Shutdown(true) вызывается в местах, обложенных AutoCriticalSection, поэтому выходим из крит. секции, иначе зависнем в дедлоке!
+		if (reinit) spinlock::unlock_write(pd.sync); //Shutdown(true) вызывается в местах, обложенных AutoCriticalSection, поэтому выходим из крит. секции, иначе зависнем в дедлоке!
 		WaitForSingleObject(pd.hUpdateThread, INFINITE);
 		CloseHandle(pd.hQuitEvent);
 		CloseHandle(pd.hUpdateThread);
 		pd.hQuitEvent = pd.hUpdateThread = nullptr;
-		if (reinit) EnterCriticalSection(&pd.critSect);
+		if (reinit) spinlock::lock_write(pd.sync);
 	}
 
 	//Просто autoDeleteSources тут не достаточно, т.к. звуки могут еще играть, а необходимо удалить их в любом случае
@@ -201,5 +201,9 @@ void enum_sound_play_devices(device_enum_callback *lpDSEnumCallback, LPVOID lpCo
     DirectSoundEnumerateW(lpDSEnumCallback,lpContext);
 }
 
+void Update()
+{
+    Source::autoDeleteSources();
+}
 
 }

@@ -564,10 +564,10 @@ LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM w
                 engine->sq_evt(sq, engine->getrid(), d);
             } else if (act)
             {
-                if (RID exl = gui->get_exclusive())
-                {
-                    ts::sys_beep(ts::SBEEP_BADCLICK);
-                }
+                //if (RID exl = gui->get_exclusive())
+                //{
+                //    ts::sys_beep(ts::SBEEP_BADCLICK);
+                //}
             }
         }
 

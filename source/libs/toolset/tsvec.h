@@ -182,7 +182,7 @@ public:
     INLINE const vec_t &operator =(const vec_t &v) { EACH_COMPONENT(i) (&x)[i] = v[i]; return *this; }
 
     //-vector
-    INLINE const vec_t operator-() const { vec_t r; EACH_COMPONENT(i) r[i] = -(&x)[i]; return r; }
+    INLINE const vec_t operator-() const { vec_t re; EACH_COMPONENT(i) re[i] = -(&x)[i]; return re; }
 
     //++vector and --vector
     INLINE const vec_t operator++() { EACH_COMPONENT(i) ++(&x)[i]; return *this; }

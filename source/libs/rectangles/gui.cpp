@@ -623,6 +623,16 @@ void gui_c::exclusive_input(RID r, bool set)
     }
 }
 
+bool gui_c::is_menu(RID r) const
+{
+    if (!r) return false;
+    HOLD hr(r);
+    if (!hr) return false;
+    
+    guirect_c *rct = &hr.engine().getrect().getroot()->getrect();
+    return nullptr != dynamic_cast<gui_popup_menu_c *>(rct);
+}
+
 bool gui_c::allow_input(RID r, bool check_click) const
 {
     if (check_click)
@@ -638,7 +648,7 @@ bool gui_c::allow_input(RID r, bool check_click) const
 
     }
 
-    return sysmodal == 0 && (m_exclusive_input.count() == 0 || (m_exclusive_input.last(RID()) >>= r));
+    return sysmodal == 0 && (m_exclusive_input.count() == 0 || (m_exclusive_input.last(RID()) >>= r) || is_menu(r));
 }
 
 guirect_watch_c::guirect_watch_c(RID r, GUIPARAMHANDLER h, GUIPARAM p):watchrid(r), h(h), p(p)
@@ -1594,7 +1604,7 @@ text_rect_dynamic_c::~text_rect_dynamic_c()
     last_use_time = ts::Time::current();
     if ( curtexture ) return *curtexture;
     flags.set(F_INVALID_TEXTURE);
-    curtexture = gui->acquire_texture( this, lastdrawsize );
+    curtexture = gui->acquire_texture( this, lastdrawsize);
     return *curtexture;
 }
 /*virtual*/ void text_rect_dynamic_c::texture_no_need()

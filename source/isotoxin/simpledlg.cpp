@@ -120,7 +120,6 @@ bool dialog_msgbox_c::copy_text(RID, GUIPARAM)
     __super::created();
     tabsel(CONSTASTR("1"));
 
-    WINDOWS_ONLY
     switch (m_params.etitle) //-V719
     {
         case title_error:
@@ -506,7 +505,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.set( CONSTWSTR("<p=c><b>") );
     title.append( CONSTWSTR("<a href=\"http://isotoxin.im\">Isotoxin</a>") );
     title.append( CONSTWSTR("</b> ") );
-    title.appendcvt( g_app->appver() );
+    title.appendcvt( application_c::appver() );
     title.append( CONSTWSTR("<br>Coding, design and sounds by <a href=\"https://github.com/Rotkaermota\">Rotkaermota</a>") );
     title.append( CONSTWSTR("<br>Isotoxin is open-source freeware, licensed under <a href=\"https://github.com/Rotkaermota/Isotoxin/blob/master/LICENSE\">GPL3</a>") );
     title.append( CONSTWSTR("<br>See version history <a href=\"https://github.com/Rotkaermota/Isotoxin/releases\">here</a>") );
@@ -550,7 +549,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR(" <a href=\"http://www.efgh.com/software/md5.htm\">md5</a>") );
     title.append( CONSTWSTR(" <a href=\"http://dejavu-fonts.org\">DejaVu fonts</a>") );
     title.append( CONSTWSTR(" <a href=\"http://www.kolobok.us\">Copyright<nbsp>©<nbsp>Aiwan.<nbsp>Kolobok<nbsp>Smiles</a>"));
-    title.append( CONSTWSTR(" <a href=\"https://addons.mozilla.org/en-us/firefox/language-tools\">Hunspell dictionaries from Mozilla Add-Ons</a>"));
+    title.append( CONSTWSTR(" <a href=\"https://github.com/titoBouzout/Dictionaries\">Hunspell utf8 dictionaries</a>"));
 
     
     

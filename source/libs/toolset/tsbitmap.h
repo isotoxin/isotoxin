@@ -207,6 +207,7 @@ struct bmpcore_normal_s
 
 struct bmpcore_exbody_s
 {
+    DUMMY(bmpcore_exbody_s);
     const uint8 *m_body;
     imgdesc_s m_info;
 
@@ -367,6 +368,9 @@ public:
         inf.sz = r.size();
         return inf;
     }
+
+    operator const CORE&() const { return core; }
+
     uint8* body() const             { return core(); }
     uint8* body(const ivec2& pos) const { return core() + pos.x * core.info().bytepp() + pos.y * core.info().pitch; }
 

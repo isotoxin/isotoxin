@@ -11,6 +11,7 @@ struct gui_listitem_params_s
     ts::str_c  themerect;
     GETMENU_FUNC gm;
     const ts::bitmap_c *icon = nullptr;
+    const ts::bmpcore_exbody_s *eb = nullptr;
     int addmarginleft_icon = 0;
     int addmarginleft = 3;
 };
@@ -25,6 +26,7 @@ template<> struct MAKE_CHILD<gui_listitem_c> : public _PCHILD(gui_listitem_c), p
     }
     ~MAKE_CHILD();
 
+    MAKE_CHILD &operator<<(const ts::bmpcore_exbody_s &_icon) { eb = &_icon; return *this; }
     MAKE_CHILD &operator<<( const ts::bitmap_c *_icon ) { icon = _icon; return *this; }
     MAKE_CHILD &operator<<( GETMENU_FUNC _gm ) { gm = _gm; return *this; }
     MAKE_CHILD &threct( const ts::asptr&thr ) { themerect = thr; return *this; }
@@ -39,6 +41,9 @@ class gui_listitem_c : public gui_label_ex_c
     ts::bitmap_c icon;
     int height = 0;
     int marginleft_icon;
+
+    static const ts::flags32_s::BITS F_MENU_ON_LCLICK = FLAGS_FREEBITSTART_LABEL << 0;
+    static const ts::flags32_s::BITS F_MENU_ON_RCLICK = FLAGS_FREEBITSTART_LABEL << 1;
 
     GM_RECEIVER( gui_listitem_c, GM_POPUPMENU_DIED );
 public:
@@ -57,8 +62,16 @@ public:
     /*virtual*/ int get_height_by_width(int width) const override;
 
     const ts::str_c  &getparam() const {return param;}
+    void setparam(const ts::str_c &p) { param = p; };
 
-    void set_gm(GETMENU_FUNC gm_) { gm = gm_; }
+    void set_gm(GETMENU_FUNC gm_, bool on_left_click = false, bool on_rite_click = true)
+    {
+        gm = gm_;
+        flags.init( F_MENU_ON_LCLICK, on_left_click );
+        flags.init( F_MENU_ON_RCLICK, on_rite_click );
+    }
+    void set_icon( const ts::bmpcore_exbody_s &eb );
+    void set_icon(const ts::bitmap_c &b) { icon = b; if (b.info().sz.y > height) height = b.info().sz.y; }
 };
 
 class gui_dialog_c : public gui_vscrollgroup_c
@@ -322,7 +335,7 @@ protected:
 
     RID hgroup( const ts::wsptr& desc );
     int radio( const ts::array_wrapper_c<const radio_item_s> & items, GUIPARAMHANDLER handler, GUIPARAM current = nullptr );
-    int check( const ts::array_wrapper_c<const check_item_s> & items, GUIPARAMHANDLER handler, ts::uint32 initial = 0, int tag = 0, bool visible = true );
+    int check( const ts::array_wrapper_c<const check_item_s> & items, GUIPARAMHANDLER handler, ts::uint32 initial = 0, int tag = 0, bool visible = true, RID parent = RID() );
     RID label(const ts::wstr_c &text, bool visible = true, bool is_err = false);
     RID vspace(int height);
     RID panel(int height, GUIPARAMHANDLER drawhandler);

@@ -64,13 +64,15 @@ class Source //базовый класс дл€ источников звука (лучше использовать сразу MSou
 	static int readFunc(char *dest, int size, void *userPtr) {return ((Source*)userPtr)->read(dest, size);}
 	static Source *firstSourceToDelete;
 	Source *nextSourceToDelete;
-	static void autoDeleteSources();
 protected:
     Player *player;
 	const SoundGroup soundGroup;
 	volatile int slotIndex;
 
 public:
+
+    static void autoDeleteSources();
+
 	float pitch;//коэффициент частоты звука
 	float volume;//начальный уровень громкости (можно задать перед началом прогрывани€, мен€ть во врем€ проигрывани€ не рекомендуетс€)
 	void autoDelete();//дл€ созданного по new источника звука можно вызвать эту функцию (только после окончани€ работы с ним), чтобы источник удалилс€ автоматически по окончании проигрывани€
@@ -209,6 +211,7 @@ public:
 
 };
 
+void Update(); // call it at least once per 5 second - it will cleanup autodeleted sources
 
 typedef BOOL __stdcall device_enum_callback(DEVICE *lpGuid, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule, void *lpContext);
 

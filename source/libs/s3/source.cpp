@@ -40,9 +40,9 @@ void Source::play(bool looping, float time)
     player_data_s &pd = *(player_data_s *)&player->data;
 
 	if (pd.pDS == nullptr) return;
-	AutoCriticalSection acs(pd.critSect);
+    LOCK4WRITE(pd.sync);
 
-	autoDeleteSources();//когда будет s3::Update(), можно будет переместить этот вызов туда; главное, чтобы эта функция вызывалась в основном потоке
+	autoDeleteSources();
 
 	if (slotIndex != -1 && time > 0)//в виде исключения разрешено повторное включение проигрывания звука при задании времени time, т.к. в этом случае резкой остановки звука не будет
 	{
@@ -94,7 +94,7 @@ void Source::stop(float time)
 	if (slotIndex == -1) return;//предварительная быстрая, но неточная проверка, которая допустима из расчета, что запись int - атомарная операция, а в параллельном потоке может быть записано только одно значение (-1)
     player_data_s &pd = *(player_data_s *)&player->data;
 	if (pd.pDS == nullptr) return;
-	AutoCriticalSection acs(pd.critSect);
+    LOCK4WRITE(pd.sync);
 	if (slotIndex == -1) {/*ErrorHandler(EL_ERROR, "Sound source is already stopped");*/ return;}
 	pd.soundGroups[soundGroup].slots[slotIndex].stop(time);
 }
@@ -127,9 +127,9 @@ void MSource::play(bool looping, float time)
     player_data_s &pd = *(player_data_s *)&player->data;
 	if (pd.pDS == nullptr) return;
 
-	if (data == nullptr)//данные недоступны (пока)
+	if (data == nullptr) // no data (yet)
 	{
-		if (looping) startPlayOnInit = time;//включим звук, когда будут данные
+		if (looping) startPlayOnInit = time; // start playing on data
 		return;
 	}
 
@@ -211,7 +211,7 @@ void PSource::rewind(bool start)
 bool PSource::prefetchComplete(int size)
 {
     player_data_s &pd = *(player_data_s *)&player->data;
-	AutoCriticalSection acs(pd.critSect);//защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
+    LOCK4WRITE(pd.sync);//защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
 	bool res = false;
 
 	do//цикл нужен только для обработки случая начальной загрузки 2*prefetchBytes байт, т.к. конец файла может быть достигнут на меньшем кол-ве байт
@@ -249,7 +249,7 @@ void PSource::play(float time)
     player_data_s &pd = *(player_data_s *)&player->data;
 
 	if (pd.pDS == nullptr) return;
-	AutoCriticalSection acs(pd.critSect); //защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
+    LOCK4WRITE(pd.sync); //защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
 
 	if (waitingForPrefetchComplete || (actualDataSize[0] == 0 && actualDataSize[1] == 0))
 	{
@@ -264,7 +264,7 @@ bool PSource::update()
 {
     player_data_s &pd = *(player_data_s *)&player->data;
 	if (pd.pDS == nullptr) return false;
-	AutoCriticalSection acs(pd.critSect);//защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
+    LOCK4WRITE(pd.sync);//защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
 
 	if (!active) return slotIndex == -1;
 

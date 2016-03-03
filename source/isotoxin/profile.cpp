@@ -1315,10 +1315,7 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
     }
 
     g_app->apply_debug_options();
-    if (get_options().is(MSGOP_SPELL_CHECK))
-        g_app->spellchecker.load();
-    else
-        g_app->spellchecker.unload();
+    g_app->resetup_spelling();
 
     return PLR_OK;
 }
@@ -1360,34 +1357,18 @@ profile_c::~profile_c()
         CloseHandle(mutex);
 }
 
+int encrypt_process_i = 0, encrypt_process_n = 0;
+
 namespace
 {
     struct encrypt_task_s : public ts::task_c
     {
         ts::sqlitedb_c *db;
-        ts::iweak_ptr<pb_job_c> pb;
         ts::uint8 key[CC_SALT_SIZE + CC_HASH_SIZE];
-        ts::Time prevt = ts::Time::past();
         int errc = 0;
-        int lasti = 0, lastn = 0;
         bool remove_enc = false;
 
-        GM_RECEIVER(encrypt_task_s, ISOGM_ENCRYPT_PROCESS)
-        {
-            if (p.id == this && pb)
-            {
-                float t = 1000;
-                if (p.n > 0)
-                    t = (float)p.i / (float)p.n;
-                else
-                    errc = p.i;
-
-                pb->external_process(t);
-            }
-            return 0;
-        }
-
-        encrypt_task_s(ts::sqlitedb_c *db, pb_job_c *pb, const ts::uint8 *passwdhash):db(db), pb(pb)
+        encrypt_task_s(ts::sqlitedb_c *db, const ts::uint8 *passwdhash):db(db)
         {
             if (passwdhash)
                 memcpy(key + CC_SALT_SIZE, passwdhash, CC_HASH_SIZE);
@@ -1397,25 +1378,8 @@ namespace
 
         void process_callback( int i, int n )
         {
-            if (n)
-            {
-                int delta = ts::Time::current() - prevt;
-                if (delta < 10)
-                {
-                    lasti = i;
-                    lastn = n;
-                    return; // ignore too freq updates
-                }
-                prevt += 10;
-            } else if (lastn > 0)
-            {
-                TSNEW( gmsg<ISOGM_ENCRYPT_PROCESS>, this, lasti, lastn )->send_to_main_thread();
-            }
-
-            lasti = 0;
-            lastn = 0;
-
-            TSNEW( gmsg<ISOGM_ENCRYPT_PROCESS>, this, i, n )->send_to_main_thread();
+            encrypt_process_i = i;
+            encrypt_process_n = n;
         }
 
         /*virtual*/ int iterate(int pass) override
@@ -1447,16 +1411,8 @@ namespace
         ts::safe_ptr<dialog_pb_c> pbd;
         ts::Time starttime;
         float oldv = -1;
-        float newv = 0;
         int errc = 0;
         bool remove_enc = false;
-
-        GM_RECEIVER(encryptor_c, ISOGM_ENCRYPT_PROCESS)
-        {
-            if (p.n == 0)
-                errc = p.i;
-            return 0;
-        }
 
     public:
         encryptor_c(const ts::uint8 *passwhash_):starttime(ts::Time::undefined())
@@ -1477,7 +1433,7 @@ namespace
             tick(RID(), nullptr);
             pbd = pb;
             ts::sqlitedb_c *db = prf().begin_encrypt();
-            g_app->add_task(TSNEW(encrypt_task_s, db, this, remove_enc ? nullptr : passwhash));
+            g_app->add_task(TSNEW(encrypt_task_s, db, remove_enc ? nullptr : passwhash));
         }
 
         /*virtual*/ void on_close() override
@@ -1485,14 +1441,11 @@ namespace
             TSDEL(this);
         }
 
-        /*virtual*/ void external_process(float p) override
-        {
-            newv = p;
-        }
-
         bool tick(RID, GUIPARAM)
         {
             float processtime_t = (float)(ts::Time::current() - starttime) /  ( minimum_encrypt_pb_duration * 1000.0f );
+            float newv = encrypt_process_n ? (float)encrypt_process_i / (float)encrypt_process_n : 1.0f;
+            if (!encrypt_process_n) errc = encrypt_process_i;
 
             float vv = ts::tmin(processtime_t, newv);
             if (vv > 1.0f) vv = 1.0f;
@@ -1507,7 +1460,7 @@ namespace
                 oldv = vv;
             }
 
-            if (processtime_t > 1.0f)
+            if (!encrypt_process_n && oldv > 0)
             {
                 int e = errc;
                 bool enc = !remove_enc;
@@ -1852,4 +1805,13 @@ ts::uint32 profile_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
         create_aps();
     }
     return 0;
+}
+
+ts::wstr_c profile_c::get_disabled_dicts()
+{
+    ts::wstr_c dd = disabled_spellchk();
+    if (!dd.equals(CONSTWSTR("?")))
+        return dd;
+
+    return ts::wstr_c();
 }

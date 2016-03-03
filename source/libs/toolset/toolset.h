@@ -4,6 +4,12 @@
 */
 #pragma once
 
+#ifdef _WIN32
+#define WINDOWS_ONLY
+#else
+#define WINDOWS_ONLY #error
+#endif
+
 #pragma pack (push, 1)
 
 #pragma warning (disable:4100) //  unreferenced formal parameter

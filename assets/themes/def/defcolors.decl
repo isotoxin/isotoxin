@@ -61,6 +61,7 @@ colors {
 	notice_reject_bg=#f5eea9
 	notice_gchat_bg=#e5eea9
 	notice_found_bg=#64a7ff
+	notice_warning_bg=#ffd700
 	menu_item_text=#000000
 	menu_item_text_h=#000000
 	menu_item_text_a=#000000

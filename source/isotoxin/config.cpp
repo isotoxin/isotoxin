@@ -187,6 +187,28 @@ void config_c::load( const ts::wstr_c &path_override )
     if (db)
     {
         db->read_table( CONSTASTR("conf"), get_cfg_reader() );
+
+        int bld = build();
+
+        if (bld < 425)
+        {
+            REMOVE_CODE_REMINDER( 525 );
+
+            ts::db_transaction_c __transaction(db);
+
+            ts::data_pair_s idp;
+            idp.name = CONSTASTR("name");
+            idp.type_ = ts::data_type_e::t_str;
+
+            idp.text = CONSTASTR("proxy");
+            db->update( CONSTASTR("conf"), ts::array_wrapper_c<const ts::data_pair_s>(&idp, 1), CONSTASTR("name=\"autoupdate_proxy\""));
+
+            idp.text = CONSTASTR("proxy_addr");
+            db->update(CONSTASTR("conf"), ts::array_wrapper_c<const ts::data_pair_s>(&idp, 1), CONSTASTR("name=\"autoupdate_proxy_addr\""));
+
+        }
+
+        build(application_c::appbuild());
     }
 }
 

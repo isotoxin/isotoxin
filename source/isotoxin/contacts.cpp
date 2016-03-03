@@ -2135,7 +2135,7 @@ void contact_root_c::export_history(const ts::wsptr &templatename, const ts::wsp
             if (!link.is_empty())
             {
                 ts::ivec2 linkinds;
-                for (int j = 0; text_find_link(text, j, linkinds);)
+                for (int j = 0; text_find_link(text.as_sptr(), j, linkinds);)
                 {
                     ts::str_c lnk = link;
                     lnk.replace_all(CONSTASTR("{LINK}"), text.substr(linkinds.r0, linkinds.r1));

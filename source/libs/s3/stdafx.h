@@ -8,6 +8,10 @@
 #include "../flac/include/flac/stream_decoder.h"
 #include "../libvorbis/include/vorbis/vorbisfile.h"
 
+#define SLASSERT(...) (0, true)
+#define SLERROR(...) (0, true)
+#include "spinlock/spinlock.h"
+
 //Для возможности глобальной перегрузки оператора new в использующих либу проектах
 #include <new>
 void* _cdecl operator new(size_t size);

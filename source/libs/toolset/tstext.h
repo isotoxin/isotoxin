@@ -32,8 +32,8 @@ protected:
 
 public:
 	const font_desc_c *font;
-    ivec2 size;
-    ivec2 lastdrawsize = ivec2(0);
+    ivec2 size = ts::ivec2(0);
+    ivec2 lastdrawsize = ts::ivec2(0);
 	GLYPHS  glyphs_internal;
 
     static const flags32_s::BITS F_DIRTY            = TO_LAST_OPTION << 0;
@@ -47,7 +47,7 @@ public:
 
 public:
 
-    text_rect_c() : font(&g_default_text_font), size(0), lastdrawsize(0) { flags.setup(F_INVALID_SIZE|F_INVALID_TEXTURE|F_INVALID_GLYPHS); }
+    text_rect_c() : font(&g_default_text_font) { flags.setup(F_INVALID_SIZE|F_INVALID_TEXTURE|F_INVALID_GLYPHS); }
 	virtual ~text_rect_c();
     
     void make_dirty( bool dirty_common = true, bool dirty_glyphs = true, bool dirty_size = false )

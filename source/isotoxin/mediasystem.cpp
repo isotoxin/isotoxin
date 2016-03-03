@@ -2,10 +2,23 @@
 
 //-V:cvt:807
 
+mediasystem_c::~mediasystem_c()
+{
+    deinit();
+
+    while( ref > 0 )
+    {
+        s3::Update();
+        Sleep(1);
+    }
+}
+
 void mediasystem_c::init()
 {
     init( cfg().device_talk(), cfg().device_signal() );
+    deinit_time = ts::Time::current() + 60000;
 }
+
 void mediasystem_c::init(const ts::str_c &talkdevice, const ts::str_c &signaldevice)
 {
     SIMPLELOCK( rawplock );
@@ -52,7 +65,57 @@ void mediasystem_c::init(const ts::str_c &talkdevice, const ts::str_c &signaldev
         }
 
     }
+    initialized = true;
+}
 
+void mediasystem_c::deinit()
+{
+    if (!initialized) return;
+
+    SIMPLELOCK(rawplock);
+
+    for (int i = 0; i < MAX_RAW_PLAYERS; ++i)
+        if (vp(i).get_player())
+            vp(i).~voice_player();
+    memset(rawps, 0, sizeof(rawps));
+
+    for (UNIQUE_PTR(loop_play) &ptr : loops) 
+        ptr.reset();
+
+    talks.Shutdown();
+    if (notifs)
+    {
+        notifs->Shutdown();
+        TSDEL(notifs);
+        notifs = nullptr;
+    }
+    initialized = false;
+}
+
+void mediasystem_c::may_be_deinit()
+{
+    if (!initialized) return;
+
+    s3::Update();
+
+    if (ref > 0)
+        return;
+
+    {
+        SIMPLELOCK(rawplock);
+
+        for (int i = 0; i < MAX_RAW_PLAYERS; ++i)
+            if (vp(i).get_player())
+                if (vp(i).isPlaying())
+                    return;
+
+        for (UNIQUE_PTR(loop_play) &ptr : loops)
+            if (ptr && ptr->isPlaying())
+                return;
+    }
+
+    if (ts::Time::current() > deinit_time)
+        deinit();
 }
 
 void mediasystem_c::test_talk(float vol)
@@ -68,22 +131,33 @@ void mediasystem_c::test_signal(float vol)
 
 void mediasystem_c::play(const ts::blob_c &buf, float volume, bool signal_device)
 {
+    if (!initialized)
+        init();
+
+    deinit_time = ts::Time::current() + 60000;
+
     struct once_play : s3::MSource
     {
         ts::blob_c buf;
-        once_play(s3::Player *player, const ts::blob_c &buf, float volume_) : MSource(player, s3::SG_UI), buf(buf)
+        mediasystem_c *owner;
+        once_play(mediasystem_c *owner, s3::Player *player, const ts::blob_c &buf, float volume_) : MSource(player, s3::SG_UI), buf(buf), owner(owner)
         {
             volume = volume_;
             pitch = 1.0f;
             init(buf.data(), buf.size());
             play();
             autoDelete();
+            owner->addref();
+        }
+        ~once_play()
+        {
+            owner->decref();
         }
         /*virtual*/ void die() override { TSDEL(this); }
     };
 
     s3::Player *player = signal_device && notifs ? notifs : &talks;
-    TSNEW(once_play, player, buf, volume); // not memory leak. autodelete
+    TSNEW(once_play, this, player, buf, volume); // not memory leak. autodelete
 
 }
 
@@ -116,6 +190,11 @@ bool mediasystem_c::stop_looped(sound_e snd)
 
 void mediasystem_c::play_looped(sound_e snd, float volume, bool signal_device)
 {
+    if (!initialized)
+        init();
+
+    deinit_time = ts::Time::current() + 60000;
+
     s3::Player *player = signal_device && notifs ? notifs : &talks;
     if (loops[snd] && loops[snd]->get_player() != player)
     {
@@ -285,6 +364,11 @@ void mediasystem_c::voice_volume( const uint64 &key, float vol )
 
 bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const void *data, int size, float vol, int dsp )
 {
+    if (!initialized)
+        init();
+
+    deinit_time = ts::Time::current() + 60000;
+
     SIMPLELOCK( rawplock );
 
     int j = -1, k = -1;

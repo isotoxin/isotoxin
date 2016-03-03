@@ -517,7 +517,7 @@ void emoticons_c::parse( ts::str_c &t, bool to_unicode )
         // forbidden areas == links
 
         ts::ivec2 linkinds;
-        for (int i = 0; text_find_link(t, i, linkinds);)
+        for (int i = 0; text_find_link(t.as_sptr(), i, linkinds);)
         {
             rpl_s &r = rpl.add();
             r.index = linkinds.r0;

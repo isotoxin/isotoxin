@@ -42,17 +42,29 @@ struct load_spellcheckers_s : public ts::task_c
 {
     ts::array_del_t< Hunspell, 0 > spellcheckers;
     ts::wstrings_c fns;
-    ts::wstr_c fn;
     ts::buf0_c aff, dic;
+    bool stopjob = false;
+    bool nofiles = false;
 
-    load_spellcheckers_s():fn( CONSTWSTR("spellcheck/*.aff") )
+    load_spellcheckers_s()
     {
-        ts::g_fileop->find(fns, fn, false);
+        ts::wstrings_c dar;
+        dar.split<ts::wchar>( prf().get_disabled_dicts(), '/' );
+        
+        g_app->get_local_spelling_files(fns);
+        nofiles = fns.size() == 0;
+
+        for(ts::wstr_c &dn : fns )
+            if ( dar.find(ts::fn_get_name(dn).as_sptr()) >= 0 )
+                dn.clear();
+        fns.kill_empty_fast();
+
+        stopjob = fns.size() == 0;
     }
 
     /*virtual*/ int iterate(int pass) override
     {
-        if ( fn.is_empty() ) return R_DONE;
+        if (stopjob) return R_DONE;
         if (aff.size() == 0 || dic.size() == 0) return R_RESULT_EXCLUSIVE;
 
         hunspell_file_s aff_file_data(aff.data(), aff.size());
@@ -65,31 +77,41 @@ struct load_spellcheckers_s : public ts::task_c
     }
     /*virtual*/ void result() override
     {
-        if (fns.size() == 0)
+        for (; fns.size() > 0;)
         {
-            fn.clear();
-            return;
-        }
-        ts::wstr_c afffn = fns.get_last_remove();
+            ts::wstr_c fn(fns.get_last_remove(), CONSTWSTR("aff"));
 
-        fn.set_length(11 /* length of "spellcheck/" */).append(afffn);
-        aff.load_from_file(fn);
-        if (0 == aff.size())
-        {
-            fn.clear();
-            return;
-        }
-        fn.set_length(fn.get_length() - 3).append(CONSTWSTR("dic"));
-        dic.load_from_file(fn);
-        if (0 == dic.size())
-            fn.clear();
+            aff.load_from_file(fn);
+            if (0 == aff.size())
+                continue;
 
+            fn.set_length(fn.get_length() - 3).append(CONSTWSTR("dic"));
+            dic.load_from_file(fn);
+            if (dic.size() > 0)
+                break;
+
+            aff.clear();
+        }
+
+        stopjob = aff.size() == 0 || dic.size() == 0;
     }
 
     /*virtual*/ void done(bool canceled) override
     {
-        if (!canceled && spellcheckers.size())
+        if (!canceled && g_app)
+        {
             g_app->spellchecker.set_spellcheckers(std::move(spellcheckers));
+
+            g_app->F_SHOW_SPELLING_WARN = nofiles;
+            if (nofiles)
+            {
+                gmsg<ISOGM_NOTICE>( &contacts().get_self(), nullptr, NOTICE_WARN_NODICTS ).send();
+            } else
+            {
+                gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS, MSGOP_SPELL_CHECK).send(); // simulate to hide warning
+            }
+
+        }
 
         __super::done(canceled);
     }
@@ -110,8 +132,9 @@ struct check_word_task : public ts::task_c
 
     /*virtual*/ int iterate(int pass) override
     {
+        if (!g_app) return R_CANCEL;
         auto lr = g_app->spellchecker.lock(this);
-        if (application_c::splchk_c::LOCK_EMPTY == lr) return R_CANCEL;
+        if (application_c::splchk_c::LOCK_EMPTY == lr || application_c::splchk_c::LOCK_DIE == lr) return R_CANCEL;
         if ( application_c::splchk_c::LOCK_OK == lr )
         {
             w = checkwords.get_last_remove();
@@ -134,6 +157,9 @@ struct check_word_task : public ts::task_c
     {
         if (!canceled && !w.is_empty())
             result();
+
+        if (g_app)
+            g_app->spellchecker.spell_check_work_done();
 
         __super::done(canceled);
     }
@@ -172,8 +198,9 @@ bool application_c::splchk_c::check_one( const ts::str_c &w, ts::astrings_c &sug
 application_c::splchk_c::lock_rslt_e application_c::splchk_c::lock(void *prm)
 {
     spinlock::auto_simple_lock l(sync);
+    if (after_unlock == AU_DIE) return LOCK_DIE;
     if ( busy ) return LOCK_BUSY;
-    if ( EMPTY == state || unload_request ) return LOCK_EMPTY;
+    if ( EMPTY == state || after_unlock == AU_UNLOAD ) return LOCK_EMPTY;
     if ( READY != state ) return LOCK_BUSY;
 
     busy = prm;
@@ -185,15 +212,25 @@ bool application_c::splchk_c::unlock(void *prm)
     spinlock::auto_simple_lock l(sync);
     ASSERT( busy == prm );
     busy = nullptr;
-    return unload_request;
+    return after_unlock != AU_NOTHING;
 }
 
 
 void application_c::splchk_c::load()
 {
     spinlock::auto_simple_lock l(sync);
-    if (EMPTY == state)
+
+    if (AU_DIE == after_unlock) return;
+
+    if (nullptr != busy || LOADING == state)
     {
+        after_unlock = AU_RELOAD;
+        return;
+    }
+
+    if (EMPTY == state || READY == state)
+    {
+        spellcheckers.clear();
         state = LOADING;
         g_app->add_task(TSNEW(load_spellcheckers_s));
     }
@@ -202,9 +239,12 @@ void application_c::splchk_c::load()
 void application_c::splchk_c::unload()
 {
     spinlock::auto_simple_lock l(sync);
+
+    if (AU_DIE == after_unlock) return;
+
     if (nullptr != busy || LOADING == state)
     {
-        unload_request = true;
+        after_unlock = AU_UNLOAD;
         return;
     }
     if (READY == state)
@@ -213,21 +253,46 @@ void application_c::splchk_c::unload()
         state = EMPTY;
     }
 }
+
+void application_c::splchk_c::spell_check_work_done()
+{
+    if (AU_DIE == after_unlock) return;
+    if (AU_UNLOAD == after_unlock)
+    {
+        spellcheckers.clear();
+        after_unlock = AU_NOTHING;
+        state = EMPTY;
+    } else if (AU_RELOAD == after_unlock)
+    {
+        after_unlock = AU_NOTHING;
+        state = LOADING;
+        g_app->add_task(TSNEW(load_spellcheckers_s));
+    }
+}
+
 void application_c::splchk_c::set_spellcheckers(ts::array_del_t< Hunspell, 0 > &&sa)
 {
     spinlock::auto_simple_lock l(sync);
 
-    if (nullptr != busy)
+    if (nullptr != busy || AU_DIE == after_unlock)
         return;
 
-    if (unload_request)
+    if (AU_UNLOAD == after_unlock)
     {
         spellcheckers.clear();
-        unload_request = false;
+        after_unlock = AU_NOTHING;
         state = EMPTY;
         return;
     }
     
+    if (AU_RELOAD == after_unlock)
+    {
+        after_unlock = AU_NOTHING;
+        state = LOADING;
+        g_app->add_task(TSNEW(load_spellcheckers_s));
+        return;
+    }
+
     spellcheckers = std::move( sa );
     state = spellcheckers.size() ? READY : EMPTY;
 }
@@ -235,7 +300,7 @@ void application_c::splchk_c::set_spellcheckers(ts::array_del_t< Hunspell, 0 > &
 void application_c::splchk_c::check(ts::astrings_c &&checkwords, spellchecker_s *rsltrcvr)
 {
     spinlock::auto_simple_lock l(sync);
-    if (unload_request || spellcheckers.size() == 0 || LOADING == state)
+    if (after_unlock != AU_NOTHING || spellcheckers.size() == 0 || LOADING == state)
     {
         rsltrcvr->undo_check(checkwords);
         return;
@@ -246,6 +311,32 @@ void application_c::splchk_c::check(ts::astrings_c &&checkwords, spellchecker_s 
     t->splchk = rsltrcvr;
     g_app->add_task(t);
 }
+
+void application_c::get_local_spelling_files(ts::wstrings_c &names)
+{
+    names.clear();
+    auto getnames = [&]( const ts::wsptr &path )
+    {
+        ts::g_fileop->find(names, ts::fn_join(path, CONSTWSTR("*.aff")), true);
+    };
+    getnames(ts::fn_join(ts::fn_get_path(cfg().get_path()), CONSTWSTR("spelling")));
+    //getnames( CONSTWSTR("spellcheck") ); // DEPRICATED PATH
+    for (ts::wstr_c &n : names)
+        n.trunc_length(3); // cut .aff extension
+    names.kill_dups_and_sort(true);
+}
+
+void application_c::resetup_spelling()
+{
+    F_SHOW_SPELLING_WARN = false;
+    gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS, MSGOP_SPELL_CHECK).send(); // simulate to hide warning
+
+    if (prf().get_options().is(MSGOP_SPELL_CHECK))
+        spellchecker.load();
+    else
+        spellchecker.unload();
+}
+
 
 
 application_c::application_c(const ts::wchar * cmdl)
@@ -265,6 +356,7 @@ application_c::application_c(const ts::wchar * cmdl)
     F_CAPTURE_AUDIO_TASK = false;
     F_CAPTURING = false;
     F_SHOW_CONTACTS_IDS = false;
+    F_SHOW_SPELLING_WARN = false;
 
     autoupdate_next = now() + 10;
 	g_app = this;
@@ -286,6 +378,9 @@ application_c::application_c(const ts::wchar * cmdl)
 
 application_c::~application_c()
 {
+    while (spellchecker.is_locked(true))
+        Sleep(1);
+
     m_avcontacts.clear(); // remove all av contacts before delete GUI
     unregister_capture_handler(this);
 	g_app = nullptr;
@@ -744,6 +839,7 @@ static DWORD WINAPI autoupdater(LPVOID)
         }
     }
 
+    mediasystem().may_be_deinit();
 }
 
 void application_c::set_status(contact_online_state_e cos_, bool manual)
@@ -1294,7 +1390,6 @@ void application_c::load_profile_and_summon_main_rect(bool minimize)
         sys_exit(1);
         return;
     }
-    mediasystem().init();
 
     s3::DEVICE device = device_from_string( cfg().device_mic() );
     s3::set_capture_device( &device );
@@ -1382,6 +1477,8 @@ bool application_c::is_inactive(bool do_incoming_message_stuff)
 
 bool application_c::b_update_ver(RID, GUIPARAM p)
 {
+    if (!prf().is_loaded()) return true;
+
     if (auto w = auparams().lock_write(true))
     {
         if (w().in_progress) return true;
@@ -1396,11 +1493,18 @@ bool application_c::b_update_ver(RID, GUIPARAM p)
             req = (autoupdate_beh_e)cfg().autoupdate();
 
         w().ver.setcopy(application_c::appver());
-        w().path.setcopy(ts::fn_join(ts::fn_get_path(cfg().get_path()),CONSTWSTR("update\\")));
-        w().proxy_addr.setcopy(cfg().autoupdate_proxy_addr());
-        w().proxy_type = cfg().autoupdate_proxy();
+        w().path.setcopy(ts::fn_join(ts::fn_get_path(cfg().get_path()),CONSTWSTR("update\\"))); WINDOWS_ONLY
+        if ( prf().useproxyfor() & USE_PROXY_FOR_AUTOUPDATES )
+        {
+            w().proxy_addr.setcopy(cfg().proxy_addr());
+            w().proxy_type = cfg().proxy();
+        } else
+        {
+            w().proxy_type = 0;
+        }
         w().autoupdate = req;
-        w().aurl = ts::astrmap_c( cfg().debug() ).get( CONSTASTR("local_upd_url") );
+        w().dbgoptions.clear();
+        w().dbgoptions.parse( cfg().debug() );
         w.unlock();
 
         CloseHandle(CreateThread(nullptr, 0, autoupdater, this, 0, nullptr));
@@ -1475,6 +1579,20 @@ ts::str_c application_c::appver()
     return v.v.trunc_length();
 }
 
+int application_c::appbuild()
+{
+    struct verb
+    {
+        int b;
+        verb() {}
+        verb &operator/(int n) { b = n; return *this; }
+    } v;
+    v / //-V609
+#include "version.inl"
+        ;
+    return v.b;
+}
+
 void application_c::set_notification_icon()
 {
     if (main)
@@ -1521,7 +1639,10 @@ namespace
     struct hardware_sound_capture_switch_s : public ts::task_c
     {
         ts::tbuf0_t<s3::Format> fmts;
-        hardware_sound_capture_switch_s(const s3::Format *_fmts, int cnt):fmts(_fmts, cnt) {}
+        hardware_sound_capture_switch_s(const s3::Format *_fmts, int cnt)
+        {
+            fmts.buf_t::append_buf(_fmts, cnt * sizeof(s3::Format));
+        }
         hardware_sound_capture_switch_s() {}
 
         /*virtual*/ int iterate(int pass) override
@@ -2379,7 +2500,7 @@ void file_transfer_s::kill( file_control_e fctl )
             });
         
             if (!upload && fctl != FIC_DISCONNECT) 
-                DeleteFileW(ts::wstr_c(filename_on_disk.as_sptr().skip(1)).append(CONSTWSTR(".!rcv")));
+                ts::kill_file(ts::wstr_c(filename_on_disk.as_sptr().skip(1)).append(CONSTWSTR(".!rcv")));
         } else if (!upload && fctl == FIC_DONE)
         {
             MoveFileW(filename_on_disk + CONSTWSTR(".!rcv"), filename_on_disk);

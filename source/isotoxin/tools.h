@@ -2,6 +2,8 @@
 
 #include "toolset/toolset.h"
 
+#define REMOVE_CODE_REMINDER(bn) ASSERT( application_c::appbuild() < bn, "Remove code reminder" )
+
 template<typename STR> struct wraptranslate;
 template<> struct wraptranslate<ts::wsptr> : public ts::wsptr
 {
@@ -147,7 +149,7 @@ template<typename SCORE> void text_set_date(ts::str_t<ts::wchar, SCORE> & tstr, 
     tstr.set_length();
 }
 
-bool text_find_link(ts::str_c &message, int from, ts::ivec2 & rslt);
+template <typename TCH> bool text_find_link(const ts::sptr<TCH> &message, int from, ts::ivec2 & rslt);
 
 void text_convert_from_bbcode(ts::str_c &text_utf8);
 void text_convert_to_bbcode(ts::str_c &text_utf8);
@@ -238,7 +240,6 @@ enum isogmsg_e
     ISOGM_VIDEO_TICK,
     ISOGM_CAMERA_TICK,
     ISOGM_PEER_STREAM_OPTIONS,
-    ISOGM_ENCRYPT_PROCESS,
     ISOGM_EXPORT_PROTO_DATA,
 
     ISOGM_COUNT,
@@ -267,17 +268,10 @@ template<> struct gmsg<ISOGM_EXPORT_PROTO_DATA> : public gmsgbase
 
 template<> struct gmsg<ISOGM_DOWNLOADPROGRESS> : public gmsgbase
 {
-    gmsg(int d, int t) :gmsgbase(ISOGM_DOWNLOADPROGRESS), downloaded(d), total(t) {}
+    gmsg(int id, int d, int t) :gmsgbase(ISOGM_DOWNLOADPROGRESS), id(id), downloaded(d), total(t) {}
+    int id; // -1 - downloading new version
     int downloaded;
     int total;
-};
-
-template<> struct gmsg<ISOGM_ENCRYPT_PROCESS> : public gmsgbase
-{
-    gmsg(const void *id, int i, int n) :gmsgbase(ISOGM_ENCRYPT_PROCESS), id(id), i(i), n(n) {}
-    const void *id;
-    int i;
-    int n;
 };
 
 enum profile_table_e;

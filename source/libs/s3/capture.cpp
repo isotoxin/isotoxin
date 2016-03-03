@@ -4,6 +4,8 @@
 namespace s3
 {
 
+static long sync = 0;
+
 MY_GUID(MY_DSDEVID_DefaultVoiceCapture, 0xdef00003, 0x9c6d, 0x47ed, 0xaa, 0xf1, 0x4d, 0xda, 0x8f, 0x2b, 0x5c, 0x03);
 
 static LPDIRECTSOUNDCAPTURE8 pDSCapture = nullptr;
@@ -14,6 +16,8 @@ static int next_offset = 0;
 
 void capture_tick( capture_callback * data_callback, void *context )
 {
+    spinlock::auto_simple_lock l(sync);
+
     if (pDSCaptureBuffer)
     {
         DWORD readp;
@@ -74,19 +78,26 @@ void format_by_index(int index)
 
 void stop_capture()
 {
+    spinlock::auto_simple_lock l(sync);
+
     if (pDSCaptureBuffer)
     {
-        DWORD status = 0;
-        pDSCaptureBuffer->GetStatus(&status);
-        if (0 != (status & DSCBSTATUS_CAPTURING)) pDSCaptureBuffer->Stop();
-        pDSCaptureBuffer->Release();
+        LPDIRECTSOUNDCAPTUREBUFFER b = pDSCaptureBuffer;
         pDSCaptureBuffer = nullptr;
+
+        DWORD status = 0;
+        b->GetStatus(&status);
+        if (0 != (status & DSCBSTATUS_CAPTURING)) b->Stop();
+        b->Release();
     }
     if (pDSCapture) { pDSCapture->Release(); pDSCapture = nullptr; }
 }
 
 bool is_capturing()
 {
+    spinlock::auto_simple_lock l(sync, false);
+    if (!l.is_locked()) return true;
+
     if (pDSCaptureBuffer)
     {
         DWORD status = 0;
@@ -110,6 +121,8 @@ bool get_capture_format(Format & cfmt)
 bool start_capture(Format & cfmt, const Format * tryformats, int try_formats_cnt)
 {
     stop_capture();
+
+    spinlock::auto_simple_lock l(sync);
 
     DEVICE device = (captureguid == DEFAULT_DEVICE) ? MY_DSDEVID_DefaultVoiceCapture : captureguid;
 

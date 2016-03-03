@@ -101,6 +101,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="anti_c99.cpp" />
+    <ClCompile Include="bsdl.cpp" />
     <ClCompile Include="client.cpp" />
     <ClCompile Include="grabnodes.cpp" />
     <ClCompile Include="httpops.cpp" />

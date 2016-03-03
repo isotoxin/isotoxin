@@ -3,16 +3,14 @@
 #pragma warning (disable:4324)
 #include "libsodium/src/libsodium/include/sodium.h"
 
-#define USERAGENT "curl"
-
 extern ts::static_setup<spinlock::syncvar<autoupdate_params_s>,1000> auparams;
 
-static size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata)
+size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata)
 {
     return size * nitems;
 }
 
-static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdata)
+size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdata)
 {
     ts::buf_c *resultad = (ts::buf_c *)userdata;
     resultad->append_buf(ptr, size * nmemb);
@@ -49,7 +47,7 @@ int ver_ok( ts::asptr verss )
     return 0;
 }
 
-auto getss = [&](const ts::asptr &latest, const ts::asptr&t) ->ts::asptr
+auto getss = [](const ts::asptr &latest, const ts::asptr&t) ->ts::asptr
 {
     ts::token<char> ver( latest, '\n' );
     for (;ver; ++ver)
@@ -85,7 +83,7 @@ ts::str_c get_downloaded_ver( ts::buf_c *pak = nullptr )
         ts::wstr_c cfgpath = cfg().get_path();
         if (cfgpath.is_empty()) find_config(cfgpath);
         if (cfgpath.is_empty()) return ts::str_c();
-        w().path.setcopy(ts::fn_join(ts::fn_get_path(cfgpath), CONSTWSTR("update\\")));
+        w().path.setcopy(ts::fn_join(ts::fn_get_path(cfgpath), CONSTWSTR("update\\"))); WINDOWS_ONLY
     }
 
     ts::buf_c bbb;
@@ -108,30 +106,39 @@ namespace
 {
     struct myprogress_s
     {
-        double lastruntime = 0;
+        int lastruntime = GetTickCount();
         CURL *curl;
-        myprogress_s(CURL *c):curl(c) {}
+        int id;
+        myprogress_s(CURL *c, int id):curl(c), id(id) {}
     };
     static int xferinfo(void *p, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
     {
         myprogress_s *myp = (myprogress_s *)p;
-        CURL *curl = myp->curl;
-        double curtime = 0;
+
+        int curtime = GetTickCount();
  
-        curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, &curtime);
- 
-        if((curtime - myp->lastruntime) >= 1)
+        if((curtime - myp->lastruntime) >= 500)
         {
             // every 1000 ms
             myp->lastruntime = curtime;
-            TSNEW(gmsg<ISOGM_DOWNLOADPROGRESS>, (int)dlnow, (int)dltotal)->send_to_main_thread();
+            TSNEW(gmsg<ISOGM_DOWNLOADPROGRESS>, myp->id, (int)dlnow, (int)dltotal)->send_to_main_thread();
         }
 
         return 0;
     }
 }
 
-static void set_common_curl_options(CURL *curl)
+int curl_execute_download(CURL *curl, int id)
+{
+    myprogress_s progress(curl, id);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, xferinfo);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &progress);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
+    return curl_easy_perform(curl);
+}
+
+
+void set_common_curl_options(CURL *curl)
 {
     curl_easy_setopt(curl, CURLOPT_USERAGENT, USERAGENT);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
@@ -203,6 +210,25 @@ static void set_common_curl_options(CURL *curl)
 
 }
 
+void set_proxy_curl( CURL *curl, int proxy_type, const ts::asptr &proxy_addr )
+{
+    if (proxy_type > 0)
+    {
+        ts::token<char> t(proxy_addr, ':');
+        ts::str_c proxya = *t;
+        ++t;
+        ts::str_c proxyp = *t;
+
+        int pt = 0;
+        if (proxy_type == 1) pt = CURLPROXY_HTTP;
+        else if (proxy_type == 2) pt = CURLPROXY_SOCKS4;
+        else if (proxy_type == 3) pt = CURLPROXY_SOCKS5_HOSTNAME;
+
+        curl_easy_setopt(curl, CURLOPT_PROXY, proxya.cstr());
+        curl_easy_setopt(curl, CURLOPT_PROXYPORT, proxyp.as_int());
+        curl_easy_setopt(curl, CURLOPT_PROXYTYPE, pt);
+    }
+}
 
 void autoupdater()
 {
@@ -214,15 +240,26 @@ void autoupdater()
     if (aar().in_updater)
         return;
 
-    if (!aar().aurl.is_empty())
+    ts::str_c lurl = aar().dbgoptions.get(CONSTASTR("local_upd_url"));
+    bool ignore_proxy_aurl = false;
+    bool only_aurl = false;
+    if (!lurl.is_empty())
     {
-        addresses.add(aar().aurl);
-        addresses.last().clone();
+        lurl.clone();
+        addresses.add(lurl);
+        ignore_proxy_aurl = aar().dbgoptions.get(CONSTASTR("ignproxy")).as_uint() != 0;
+        only_aurl = aar().dbgoptions.get(CONSTASTR("onlythisurl")).as_uint() != 0;
+#ifdef _DEBUG
+        ignore_proxy_aurl = true;
+#endif
     }
     aar.unlock();
 
-    addresses.add("https://github.com/Rotkaermota/Isotoxin/wiki/latest");
-    addresses.add("http://isotoxin.im/latest.txt");
+    if (!only_aurl)
+    {
+        addresses.add("https://github.com/Rotkaermota/Isotoxin/wiki/latest");
+        addresses.add("http://isotoxin.im/latest.txt");
+    }
     int addri = 0;
 
     struct curl_s
@@ -275,37 +312,22 @@ next_address:
     rslt = curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
     rslt = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
 
-#ifdef _DEBUG
-    if (addri == 0)
+    if (addri == 0 && !lurl.is_empty())
     {
-        auparams().lock_write()().proxy_type = 0;
+        if (ignore_proxy_aurl)
+            auparams().lock_write()().proxy_type = 0;
     } else
     {
+#ifdef _DEBUG
         auparams().lock_write()().proxy_addr = CONSTASTR("srv:9050");
         auparams().lock_write()().proxy_type = 3;
-    }
 #endif
+    }
 
     set_common_curl_options(curl);
 
     auto r = auparams().lock_read();
-    if (r().proxy_type > 0)
-    {
-        
-        ts::token<char> t(r().proxy_addr, ':');
-        ts::str_c proxya = *t;
-        ++t;
-        ts::str_c proxyp = *t;
-
-        int pt = 0;
-        if (r().proxy_type == 1) pt = CURLPROXY_HTTP;
-        else if (r().proxy_type == 2) pt = CURLPROXY_SOCKS4;
-        else if (r().proxy_type == 3) pt = CURLPROXY_SOCKS5_HOSTNAME;
-
-        rslt = curl_easy_setopt(curl, CURLOPT_PROXY, proxya.cstr());
-        rslt = curl_easy_setopt(curl, CURLOPT_PROXYPORT, proxyp.as_int());
-        rslt = curl_easy_setopt(curl, CURLOPT_PROXYTYPE, pt);
-    }
+    set_proxy_curl( curl, r().proxy_type, r().proxy_addr.as_sptr() );
     r.unlock();
 
     rslt = curl_easy_setopt(curl, CURLOPT_URL, addresses.get(addri).cstr());
@@ -393,17 +415,14 @@ next_address:
     ts::buf_c latest(d);
     d.clear();
     rslt = curl_easy_setopt(curl, CURLOPT_URL, address.cstr());
-    myprogress_s progress(curl);
     rslt = curl_easy_setopt(curl, CURLOPT_USERAGENT, USERAGENT);
-    rslt = curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, xferinfo);
-    rslt = curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &progress);
-    rslt = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
     rslt = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-    rslt = curl_easy_perform(curl);
+
+    curl_execute_download(curl,-1);
 
     if (d.size() > 1000000) // downloaded size mus be greater than 1m bytes
     {
-        TSNEW(gmsg<ISOGM_DOWNLOADPROGRESS>, (int)d.size(), (int)d.size())->send_to_main_thread();
+        TSNEW(gmsg<ISOGM_DOWNLOADPROGRESS>, -1, (int)d.size(), (int)d.size())->send_to_main_thread();
     }
 
     if (!md5ok(d, latests))
@@ -460,7 +479,7 @@ struct updater
             // oops
             for (const ts::wstr_c &mf : moved)
             {
-                DeleteFileW(mf); // delete new file
+                ts::kill_file(mf); // delete new file
                 MoveFileW(ts::fn_join(ff, mf), mf); // return moved one
             }
             return false;

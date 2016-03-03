@@ -159,7 +159,7 @@ inline int64 SLlInterlockedExchange64(volatile int64* lock, int64 newValue)
 
 //////////////////////////////////////////////////////////////////////////
 // reenterable spinlock
-// many readrers, writer wait and block new readers
+// many readers, writer wait and block new readers
 // ACHTUNG! ACHTUNG! [read] then [write] lock in same thread leads to deadlock!!!
 
 #define RWLOCKVALUE			spinlock::int64
@@ -354,6 +354,11 @@ inline void simple_unlock(volatile long &lock)
 struct auto_simple_lock
 {
     long *lockvar;
+    auto_simple_lock(long& _lock, bool) : lockvar(&_lock)
+    {
+        if (!try_simple_lock(*lockvar))
+            lockvar = nullptr;
+    }
     auto_simple_lock(long& _lock) : lockvar(&_lock)
     {
         simple_lock(*lockvar);
@@ -363,6 +368,7 @@ struct auto_simple_lock
         if (lockvar)
             simple_unlock(*lockvar);
     }
+    bool is_locked() const { return lockvar != nullptr; }
     void lock(long& _lock)
     {
         if (lockvar) simple_unlock(*lockvar);

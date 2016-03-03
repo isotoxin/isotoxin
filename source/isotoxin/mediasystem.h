@@ -97,29 +97,27 @@ class mediasystem_c
     char rawps[ MAX_RAW_PLAYERS * sizeof(voice_player) ];
     UNIQUE_PTR( loop_play ) loops[ snd_count ];
 
-    voice_player &vp(int i) { return *(voice_player *)(rawps + i * sizeof(voice_player)); }
-public:
+    int ref = 0;
 
-    void init(const ts::str_c &talkdevice, const ts::str_c &signaldevice);
+    ts::Time deinit_time = ts::Time::current() + 60000;
+    bool initialized = false;
+
+    voice_player &vp(int i) { return *(voice_player *)(rawps + i * sizeof(voice_player)); }
     void init(); // loads params from cfg
+public:
 
     mediasystem_c()
     {
         memset( rawps, 0, sizeof(rawps) );
     }
-    ~mediasystem_c()
-    {
-        for (int i = 0; i < MAX_RAW_PLAYERS; ++i)
-            if (vp(i).get_player())
-                vp(i).~voice_player();
+    ~mediasystem_c();
 
-        talks.Shutdown();
-        if (notifs)
-        {
-            notifs->Shutdown();
-            TSDEL( notifs );
-        }
-    }
+    void addref() { ++ref; }
+    void decref() { --ref; }
+
+    void init(const ts::str_c &talkdevice, const ts::str_c &signaldevice);
+    void deinit();
+    void may_be_deinit();
 
     void test_talk(float vol);
     void test_signal(float vol);

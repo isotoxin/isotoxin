@@ -532,14 +532,15 @@ ipc::ipc_result_e isotoxin_ipc_s::processor_func(void *par, void *data, int data
     return ipc::IPCR_BREAK;
 }
 
-bool text_find_link(ts::str_c &message, int from, ts::ivec2 & rslt)
+template <typename TCH> bool text_find_link(const ts::sptr<TCH> &m, int from, ts::ivec2 & rslt)
 {
-    int i = message.find_pos(from, CONSTASTR("http://"));
-    if (i < 0) i = message.find_pos(from, CONSTASTR("https://"));
-    if (i < 0) i = message.find_pos(from, CONSTASTR("ftp://"));
+    ts::pstr_t<TCH> message(m);
+    int i = message.find_pos(from, CONSTSTR(TCH, "http://"));
+    if (i < 0) i = message.find_pos(from, CONSTSTR(TCH, "https://"));
+    if (i < 0) i = message.find_pos(from, CONSTSTR(TCH, "ftp://"));
     if (i < 0)
     {
-        int j = message.find_pos(from, CONSTASTR("www."));
+        int j = message.find_pos(from, CONSTSTR(TCH, "www."));
         if (j == 0 || (j > 0 && message.get_char(j - 1) == ' '))
             i = j;
     }
@@ -562,6 +563,8 @@ bool text_find_link(ts::str_c &message, int from, ts::ivec2 & rslt)
     return false;
 }
 
+template bool text_find_link<char>(const ts::asptr &message, int from, ts::ivec2 & rslt);
+template bool text_find_link<ts::wchar>(const ts::wsptr &message, int from, ts::ivec2 & rslt);
 
 
 static ts::asptr bb_tags[] = { CONSTASTR("u"), CONSTASTR("i"), CONSTASTR("b"), CONSTASTR("s") };
@@ -695,12 +698,8 @@ void text_adapt_user_input(ts::str_c &text)
     
     ts::tmp_tbuf_t< ts::ivec2 > nochange;
     ts::ivec2 linkinds;
-    for (int i = 0; text_find_link(text, i, linkinds);)
-    {
-        nochange.add() = linkinds;
-        i = linkinds.r1;
-    }
-
+    for (int i = 0; text_find_link(text.as_sptr(), i, linkinds);)
+        nochange.add() = linkinds, i = linkinds.r1;
 
     struct md_s
     {
@@ -1554,7 +1553,7 @@ void autostart(const ts::wstr_c &exepath, const ts::wsptr &cmdpar)
         ts::lnk_s lnkreader(lnk.data(), lnk.size());
         if (lnkreader.read())
             if (my_exe.equals_ignore_case(lnkreader.local_path))
-                DeleteFileW(lnkf);
+                ts::kill_file(lnkf);
     }
 
     ts::wsptr regpaths2check[] =
