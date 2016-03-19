@@ -16,8 +16,8 @@
 #define MEMSPY_SPY_LINE 0                   // zero - spy every line, >0 - spy only allocations with given line
 #define MEMSPY_SPY_NUM 0
 #define MEMSPY_MAX_FREE_UNALLOCATED     (1024*1024)   // in bytes - how many bytes spy keep unfree (useful to detect twice free)
-#define MEMSPY_CORRUPT_CHECK_ZONE_BEGIN 0
-#define MEMSPY_CORRUPT_CHECK_ZONE_END   0
+#define MEMSPY_CORRUPT_CHECK_ZONE_BEGIN 32
+#define MEMSPY_CORRUPT_CHECK_ZONE_END   32
 #define MEMSPY_MEMLEAK_MESSAGEBOX       0
 #define MEMSPY_MEMLEAK_DEBUGOUTPUT      1
 

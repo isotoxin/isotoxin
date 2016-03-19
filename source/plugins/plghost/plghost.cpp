@@ -29,7 +29,7 @@ static void __stdcall av_stream_options(int gid, int cid, const stream_options_s
 static void __stdcall configurable(int n, const char **fields, const char **values);
 static void __stdcall avatar_data(int cid, int tag, const void *avatar_body, int avatar_body_size);
 static void __stdcall incoming_file(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
-static void __stdcall file_portion(u64 utag, u64 offset, const void *portion, int portion_size);
+static bool __stdcall file_portion(u64 utag, u64 offset, const void *portion, int portion_size);
 static void __stdcall file_control(u64 utag, file_control_e fctl);
 static void __stdcall typing(int gid, int cid);
 
@@ -105,64 +105,6 @@ struct protolib_s
     nullptr, // functions
 
 };
-
-struct prebuf_s
-{
-    u64 utag;
-    u64 offset;
-    std::vector<byte, ph_allocator> b;
-    prebuf_s(u64 utag):utag(utag), offset(0xffffffffffffffffull)
-    {
-        b.reserve(65536 + 4096);
-        LIST_ADD(this, first, last, prev, next);
-    }
-    ~prebuf_s()
-    {
-        LIST_DEL(this, first, last, prev, next);
-    }
-
-    static prebuf_s *first;
-    static prebuf_s *last;
-    static long prebuflock;
-    prebuf_s *next;
-    prebuf_s *prev;
-
-    static prebuf_s * getbuf( u64 utag, bool create )
-    {
-        for (prebuf_s *f = first; f; f = f->next)
-        {
-            if (f->utag == utag)
-                return f;
-        }
-        if (!create) return nullptr;
-        prebuf_s *bb = new prebuf_s(utag);
-        return bb;
-    }
-    static void kill(u64 utag)
-    {
-        spinlock::simple_lock(prebuflock);
-        for (prebuf_s *f = first; f; f = f->next)
-        {
-            if (f->utag == utag)
-            {
-                delete f;
-                break;
-            }
-        }
-        spinlock::simple_unlock(prebuflock);
-    }
-    static void killall()
-    {
-        spinlock::simple_lock(prebuflock);
-        while(first)
-            delete first;
-        spinlock::simple_unlock(prebuflock);
-    }
-};
-
-prebuf_s *prebuf_s::first = nullptr;
-prebuf_s *prebuf_s::last = nullptr;
-long prebuf_s::prebuflock = 0;
 
 namespace
 {
@@ -526,8 +468,6 @@ int CALLBACK WinMainProtect(
     ipcw *w;
     while (sendbufs.try_pop(w))
         ipcwbuf.lock_write()().kill(w);
-
-    prebuf_s::killall();
 
     return 0;
 }
@@ -945,21 +885,29 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             } else
                 protolib.functions->file_control(utag, fc);
             if (fc == FIC_BREAK || fc == FIC_REJECT || fc == FIC_DONE)
-                prebuf_s::kill(utag);
+            {
+                //prebuf_s::kill(utag);
+            }
         }
         break;
     case AA_FILE_PORTION:
         if (LIBLOADED())
         {
-            ipcr r(d->get_reader());
-            u64 utag = r.get<u64>();
+            struct fd_s
+            {
+                u64 utag;
+                u64 offset;
+                int sz;
+            };
+
+            fd_s *fd = (fd_s *)(d + 1);
+
             file_portion_s fp;
-            fp.offset = r.get<u64>();
-            fp.data = r.get_data(fp.size);
-
-            protolib.functions->file_portion(utag, &fp);
-
-            //LogToFile("portion.log", "rcv: %llu %i", fp.offset, fp.size);
+            fp.offset = fd->offset;
+            fp.data = fd+1;
+            fp.size = fd->sz;
+            if (protolib.functions->file_portion(fd->utag, &fp))
+                return flags;
         }
         break;
     case AQ_GET_AVATAR_DATA:
@@ -1263,68 +1211,57 @@ static void __stdcall file_control(u64 utag, file_control_e fctl)
     switch(fctl)
     {
     case FIC_DONE:
-        {
-            spinlock::simple_lock(prebuf_s::prebuflock);
-            if (prebuf_s *b = prebuf_s::getbuf(utag, false))
-            {
-                IPCW(HQ_FILE_PORTION) << utag << u64(b->offset - b->b.size()) << data_block_s(b->b.data(), b->b.size());
-                delete b;
-            }
-            spinlock::simple_unlock(prebuf_s::prebuflock);
-        }
-        break;
     case FIC_REJECT:
     case FIC_BREAK:
     case FIC_DISCONNECT:
-        prebuf_s::kill(utag);
         break;
     }
     IPCW(AQ_CONTROL_FILE) << utag << (int)fctl;
 }
 
-static void __stdcall file_portion(u64 utag, u64 offset, const void *portion, int portion_size)
+static bool __stdcall file_portion(u64 utag, u64 offset, const void *portion, int portion_size)
 {
     if (portion == nullptr)
     {
-        IPCW(HQ_QUERY_FILE_PORTION) << utag << offset << portion_size;
-        return;
-    }
-    spinlock::simple_lock(prebuf_s::prebuflock);
-    if (portion_size >= 65536)
-    {
-        prebuf_s *b = prebuf_s::getbuf(utag, false);
-        if (b == nullptr)
+        // 1
+        u64 megaindex = offset >> 20;
+        if (portion_size != 1048576)
         {
-            send_now:
-            spinlock::simple_unlock(prebuf_s::prebuflock);
-            IPCW(HQ_FILE_PORTION) << utag << offset << data_block_s(portion, portion_size);
-            return;
+            Log("Bad portion request size: %i, expected 1048576", portion_size);
+            return false;
         }
+        IPCW(HQ_QUERY_FILE_PORTION) << utag << megaindex;
+        return true;
     }
 
-    prebuf_s *b = prebuf_s::getbuf(utag, true);
-    if (b->offset == 0xffffffffffffffffull)
-        b->offset = offset;
-
-    if (b->offset != offset)
+    if ( portion_size == 0 )
     {
-        IPCW(HQ_FILE_PORTION) << utag << u64(b->offset - b->b.size()) << data_block_s(b->b.data(), b->b.size());
-        b->b.clear();
-        b->offset = 0xffffffffffffffffull;
-        goto send_now;
+        // 3
+        ipcj->unlock_buffer(portion);
+        return true;
     }
 
-    auto offs = b->b.size();
-    b->b.resize(offs + portion_size);
-    memcpy(b->b.data() + offs, portion, portion_size);
-    b->offset += portion_size;
-    if (b->b.size() >= 65536)
+    struct fd_s
     {
-        IPCW(HQ_FILE_PORTION) << utag << u64(b->offset - b->b.size()) << data_block_s(b->b.data(), b->b.size());
-        b->b.clear();
-        b->offset = 0xffffffffffffffffull;
-    }
-    spinlock::simple_unlock(prebuf_s::prebuflock);
+        u64 tag;
+        u64 offset;
+        int size;
+    };
+
+    int bsize = portion_size + sizeof(data_header_s) + sizeof(fd_s);
+
+    data_header_s *dh = (data_header_s *)ipcj->lock_buffer(bsize);
+    if (!dh) return false;
+    dh->cmd = HQ_FILE_PORTION;
+
+    fd_s *d = (fd_s *)(dh + 1);
+    d->tag = utag;
+    d->offset = offset;
+    d->size = portion_size;
+
+    memcpy( d + 1, portion, portion_size);
+    ipcj->unlock_send_buffer( dh, bsize );
+    return true;
 }
 
 static void __stdcall typing(int gid, int cid)

@@ -602,6 +602,12 @@ bool gui_textedit_c::prepare_lines(int startchar)
 	if (!is_multiline()) i=text.size(); else
 	for (;i<text.size();i++)
 	{
+        auto rmargin = [&]() ->int
+        {
+            int curh = (lines.count() + 1) * (*font)->height;
+            return curh >= rb_margin_from ? margins_rb.x : 0;
+        };
+
 		if (text[i]==L'\n') // build new line
 		{
 			lines.add(ts::ivec2(linestart,i));
@@ -611,7 +617,7 @@ bool gui_textedit_c::prepare_lines(int startchar)
 		}
 
 		linew+=text_el_advance(i);
-		if (linew>sz.x-ts::ui_scale(margins_lt.x)-ts::ui_scale(margins_rb.x)-ts::ui_scale(is_vsb() ? sbhelper.sbrect.width() : 0) && /*обязательно проверяем - вдруг это первый символ, т.к. ситуация когда символ не помещается во всей строке не может быть корректно обработана*/i>linestart)
+		if (linew>sz.x-ts::ui_scale(margins_lt.x)-ts::ui_scale(rmargin())-ts::ui_scale(is_vsb() ? sbhelper.sbrect.width() : 0) && /*обязательно проверяем - вдруг это первый символ, т.к. ситуация когда символ не помещается во всей строке не может быть корректно обработана*/i>linestart)
 		{
             //Сразу формировать новую строку нельзя - если окажется, что это единственное слово в строке, то его надо не переносить, а разбивать
             //Поиск последнего разделителя (только пробел, табуляция обрабатывается некорректно!)
@@ -895,7 +901,7 @@ void gui_textedit_c::prepare_texture()
             {
                 ts::ivec2 pos = ts::ivec2(advoffset, ts::ui_scale(baseline_offset)) + pen;
                 ts::glyph_image_s &gi = glyphs.add();
-                ae->setup( pos, gi );
+                ae->setup( ( *font ), pos, gi );
                 advoffset += ae->advance;
             }
 
@@ -942,12 +948,15 @@ void gui_textedit_c::prepare_texture()
             if ( l.r0 < 0 ) l.r0 = 0;
             if ( l.r1 >= tsz.x) l.r1 = tsz.x - 1;
             if (l.r0 >= l.r1) continue;
-            int miy = tsz.y - l.z - 1;
-            ts::uint8 *dst = texture.body( ts::ivec2( l.r0, l.z ) );
-            for (int i = 0; l.r0 < l.r1; ++l.r0, dst += 4)
+            for (int i = 0; l.r0 < l.r1; ++l.r0)
             {
-                int addp = texture.info().pitch * ts::tmin(miy, addy[i]);
-                *(ts::TSCOLOR *)(dst+addp) = badword_undeline_color;
+                ASSERT(l.r0 >= 0 && l.r0 < tsz.x);
+                int y = l.z + addy[i];
+                if (y >= 0 && y < tsz.y)
+                {
+                    ts::uint8 *dst = texture.body(ts::ivec2(l.r0, y));
+                    *(ts::TSCOLOR *)dst = badword_undeline_color;
+                }
                 ++i;
                 if (i >= ARRAY_SIZE(addy)) i = 0;
             }
@@ -1309,7 +1318,7 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
                 dd.alpha = 128;
             }
 
-            root.draw( drawarea.lt, texture.extbody(ts::irect(ts::ivec2(0), drawarea.size() - ts::ivec2(margins_rb.x, 0))), true );
+            root.draw( drawarea.lt, texture.extbody(ts::irect(ts::ivec2(0), drawarea.size() - ts::ivec2( rb_margin_from > 0 ? 0 : margins_rb.x, 0))), true );
             
             if (gray)
                 root.end_draw();

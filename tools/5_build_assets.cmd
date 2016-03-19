@@ -20,6 +20,7 @@ cd ..
 
 xcopy .\loc ..\bin\~assets\loc /s /e /y /i
 xcopy .\themes\def ..\bin\~assets\themes\def /s /e /y /i
+xcopy .\themes\dejavu ..\bin\~assets\themes\dejavu /s /e /y /i
 xcopy .\sounds ..\bin\~assets\sounds /s /e /y /i
 copy .\*.template ..\bin\~assets\
 copy .\*.svg ..\bin\~assets\

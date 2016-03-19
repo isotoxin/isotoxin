@@ -87,6 +87,33 @@ class emoticons_c
         }
     };
 
+    struct emo_tiled_animation_s : public emoticon_s, public picture_animated_c
+    {
+        ts::bitmap_c source;
+        int animperiod = 10;
+
+        emo_tiled_animation_s( int unicode, int animperiod ) :emoticon_s( unicode ), animperiod( animperiod ) {}
+        /*virtual*/ bool load( const ts::blob_c &body ) override;
+
+        /*virtual*/ void draw( rectengine_root_c *e, const ts::ivec2 &pos ) const { picture_animated_c::draw( e, pos ); }
+
+        /*virtual*/ const ts::bitmap_c &curframe( ts::irect &fr ) const override
+        {
+            fr = frect;
+            return source;
+        }
+        /*virtual*/ ts::irect framerect() const override { return frect; }
+        /*virtual*/ ts::bitmap_c &prepare_frame( const ts::ivec2 &sz, ts::irect &fr ) override
+        {
+            FORBIDDEN();
+            __assume( 0 );
+        }
+
+        /*virtual*/ bool animation_tick() override;
+        int nextframe();
+
+    };
+
     ts::array_del_t<emoticon_s, 8> arr;
 
     bool process_pak_file(const ts::arc_file_s &f);
@@ -97,7 +124,8 @@ class emoticons_c
 
 public:
 
-    int maxheight = 0;
+    int emoji_maxheight = 30;
+    int selector_min_width = 200;
 
     template<typename F> void iterate_current_pack( F f )
     {
@@ -120,7 +148,7 @@ public:
     }
 
     ts::str_c load_gif_smile( const ts::wstr_c& fn, const ts::blob_c &body, bool current_pack );
-    ts::str_c load_png_smile( const ts::wstr_c& fn, const ts::blob_c &body, bool current_pack );
+    ts::str_c load_png_smile( const ts::wstr_c& fn, const ts::blob_c &body, bool current_pack, int animperiod );
 
     menu_c get_list_smile_pack( const ts::wstr_c &curpack, MENUHANDLER mh );
 

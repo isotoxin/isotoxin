@@ -42,7 +42,7 @@ struct load_spellcheckers_s : public ts::task_c
 {
     ts::array_del_t< Hunspell, 0 > spellcheckers;
     ts::wstrings_c fns;
-    ts::buf0_c aff, dic;
+    ts::blob_c aff, dic, zip;
     bool stopjob = false;
     bool nofiles = false;
 
@@ -62,10 +62,22 @@ struct load_spellcheckers_s : public ts::task_c
         stopjob = fns.size() == 0;
     }
 
+    bool extract_zip(const ts::arc_file_s &z)
+    {
+        if (ts::pstr_c(z.fn).ends(CONSTASTR(".aff")))
+            aff = z.get();
+        else if (ts::pstr_c(z.fn).ends(CONSTASTR(".dic")))
+            dic = z.get();
+        return true;
+    }
+
     /*virtual*/ int iterate(int pass) override
     {
         if (stopjob) return R_DONE;
-        if (aff.size() == 0 || dic.size() == 0) return R_RESULT_EXCLUSIVE;
+        if ((aff.size() == 0 || dic.size() == 0) && zip.size() == 0) return R_RESULT_EXCLUSIVE;
+
+        if (zip.size())
+            ts::zip_open(zip.data(), zip.size(), DELEGATE(this, extract_zip));
 
         hunspell_file_s aff_file_data(aff.data(), aff.size());
         hunspell_file_s dic_file_data(dic.data(), dic.size());
@@ -75,6 +87,12 @@ struct load_spellcheckers_s : public ts::task_c
 
         return fns.size() ? R_RESULT_EXCLUSIVE : R_DONE;
     }
+    void try_load_zip(ts::wstr_c &fn)
+    {
+        fn.set_length(fn.get_length() - 3).append(CONSTWSTR("zip"));
+        zip.load_from_file(fn);
+    }
+
     /*virtual*/ void result() override
     {
         for (; fns.size() > 0;)
@@ -83,7 +101,11 @@ struct load_spellcheckers_s : public ts::task_c
 
             aff.load_from_file(fn);
             if (0 == aff.size())
+            {
+                try_load_zip(fn);
+                if (zip.size()) break;
                 continue;
+            }
 
             fn.set_length(fn.get_length() - 3).append(CONSTWSTR("dic"));
             dic.load_from_file(fn);
@@ -91,9 +113,11 @@ struct load_spellcheckers_s : public ts::task_c
                 break;
 
             aff.clear();
+            try_load_zip(fn);
+            if (zip.size()) break;
         }
 
-        stopjob = aff.size() == 0 || dic.size() == 0;
+        stopjob = (aff.size() == 0 || dic.size() == 0) && zip.size() == 0;
     }
 
     /*virtual*/ void done(bool canceled) override
@@ -318,6 +342,7 @@ void application_c::get_local_spelling_files(ts::wstrings_c &names)
     auto getnames = [&]( const ts::wsptr &path )
     {
         ts::g_fileop->find(names, ts::fn_join(path, CONSTWSTR("*.aff")), true);
+        ts::g_fileop->find(names, ts::fn_join(path, CONSTWSTR("*.zip")), true);
     };
     getnames(ts::fn_join(ts::fn_get_path(cfg().get_path()), CONSTWSTR("spelling")));
     //getnames( CONSTWSTR("spellcheck") ); // DEPRICATED PATH
@@ -694,6 +719,11 @@ HICON application_c::app_icon(bool for_tray)
         if (fn.begins(CONSTASTR("conv_text")))
         {
             float k = prf().fontscale_conv_text();
+            fprm.size.x = ts::lround(k * fprm.size.x);
+            fprm.size.y = ts::lround(k * fprm.size.y);
+        } else if (fn.begins(CONSTASTR("msg_edit")))
+        {
+            float k = prf().fontscale_msg_edit();
             fprm.size.x = ts::lround(k * fprm.size.x);
             fprm.size.y = ts::lround(k * fprm.size.y);
         }
@@ -1333,6 +1363,10 @@ bool application_c::b_customize(RID r, GUIPARAM param)
         {
             SUMMON_DIALOG<dialog_about_c>(UD_ABOUT);
         }
+        static void m_color_editor(const ts::str_c&)
+        {
+            SUMMON_DIALOG<dialog_colors_c>();
+        }
         static void m_exit(const ts::str_c&)
         {
             sys_exit(0);
@@ -1375,6 +1409,14 @@ bool application_c::b_customize(RID r, GUIPARAM param)
     m.add( TTT("Settings",42), 0, handlers::m_settings );
     m.add_separator();
     m.add( TTT("About",356), 0, handlers::m_about );
+
+    if ( int atb = cfg().allow_tools() )
+    {
+        m.add_separator();
+        if (1 & atb) m.add(TTT("Color editor",431), 0, handlers::m_color_editor);
+
+    }
+
     m.add_separator();
     m.add(loc_text(loc_exit), 0, handlers::m_exit);
     gui_popup_menu_c::show(r.call_get_popup_menu_pos(), m);
@@ -1923,7 +1965,7 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, bool activate, bo
             break;;
     }
 
-    if (!current_receiver.is_empty()) // only one contact receives sound at one time
+    if (!current_receiver.is_empty() && capturefmt.channels) // only one contact receives sound at one time
         if (active_protocol_c *ap = prf().ap(current_receiver.protoid))
             ap->send_audio(current_receiver.contactid, capturefmt, data, size);
 }
@@ -2238,6 +2280,7 @@ void application_c::reload_fonts()
 {
     __super::reload_fonts();
     preloaded_stuff().update_fonts();
+    gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_FONTSCALE).send();
 }
 
 bool application_c::load_theme( const ts::wsptr&thn, bool summon_ch_signal)
@@ -2274,6 +2317,7 @@ void preloaded_stuff_s::update_fonts()
     font_conv_name = &gui->get_font(CONSTASTR("conv_name"));
     font_conv_text = &gui->get_font(CONSTASTR("conv_text"));
     font_conv_time = &gui->get_font(CONSTASTR("conv_time"));
+    font_msg_edit = &gui->get_font(CONSTASTR("msg_edit"));
 }
 
 void preloaded_stuff_s::reload()
@@ -2646,8 +2690,18 @@ query_task_s::~query_task_s()
     }
 
     if (active_protocol_c *ap = prf().ap(protoid))
-        ap->file_portion(utag, cj.offset, b.data(), sz);
+    {
+        while (!ap->file_portion(utag, cj.offset, b.data(), sz))
+        {
+            Sleep(100);
 
+            auto rrr = sync.lock_read();
+            if (rslt_kill == rrr().rslt || !rrr().ftr)
+                return R_CANCEL;
+        }
+    }
+
+    bool rslt = false;
     if (cj.sz)
     {
         auto wftr = sync.lock_write();
@@ -2667,11 +2721,11 @@ query_task_s::~query_task_s()
                 wdata().bytes_per_sec = ts::lround((float)wdata().trsz() / 0.3f);
                 wdata().transfered.clear();
                 wftr().ftr->update_item = true;
+                rslt = true;
             }
         }
 
-        //wdata().offset += cj.sz;
-        wdata().progrez += cj.sz;
+        wdata().progrez = cj.offset;
     }
 
     auto d = sync.lock_write();
@@ -2688,6 +2742,12 @@ query_task_s::~query_task_s()
 
     if (rslt_kill == d().rslt)
         return R_CANCEL;
+
+    if (rslt)
+    {
+        d().rslt = rslt_inprogress;
+        return R_RESULT;
+    }
 
     d().rslt = rslt_idle;
     return pass + 1;
@@ -3064,7 +3124,7 @@ vsb_c *av_contact_s::createcam()
 {
     if (currentvsb.id.is_empty())
         return vsb_c::build();
-    return vsb_c::build(currentvsb);
+    return vsb_c::build(currentvsb, cpar);
 }
 
 void av_contact_s::camera_tick()

@@ -220,7 +220,7 @@ public:
     void file_resume(uint64 utag, uint64 offset);
     void file_control(uint64 utag, file_control_e fctl);
     void send_file(int cid, uint64 utag, const ts::wstr_c &filename, uint64 filesize);
-    void file_portion(uint64 utag, uint64 offset, const void *data, int sz);
+    bool file_portion(uint64 utag, uint64 offset, const void *data, int sz);
 
     void avatar_data_request(int cid);
 

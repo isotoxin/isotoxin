@@ -60,7 +60,7 @@ void dialog_smileselector_c::build_rects(rects_t&a)
 dialog_smileselector_c::dialog_smileselector_c(MAKE_ROOT<dialog_smileselector_c> &data):gui_control_c(data)
 {
     editor = data.editor;
-    sz = ts::ivec2(200);
+    sz = ts::ivec2( emoti().selector_min_width, 200);
 
     build_rects(rects);
 

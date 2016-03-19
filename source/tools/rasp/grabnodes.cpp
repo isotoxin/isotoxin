@@ -62,12 +62,17 @@ int proc_grabnodes(const wstrings_c & pars)
         if (ipv4.is_empty())
             break;
 
-        pstr_c ipv6 = get_tag_inner( roffset, row, CONSTASTR("td") );
+        str_c ipv6 = get_tag_inner( roffset, row, CONSTASTR("td") );
         pstr_c port = get_tag_inner( roffset, row, CONSTASTR("td") );
         pstr_c clid = get_tag_inner( roffset, row, CONSTASTR("td") );
 
-        tmp_str_c s(CONSTASTR("nodes.emplace_back( CONSTASTR(\"<ip>\"), <port>, CONSTASTR(\"<clid>\") );\r\n"));
-        s.replace_all( CONSTASTR("<ip>"), tmp_str_c(ipv4).trim() );
+        ipv6.trim();
+        if (ipv6.equals(CONSTASTR("NONE")) || ipv6.equals(CONSTASTR("-")))
+            ipv6.clear();
+
+        tmp_str_c s(CONSTASTR("nodes.emplace_back( CONSTASTR(\"<ip4>\"), CONSTASTR(\"<ip6>\"), <port>, CONSTASTR(\"<clid>\") );\r\n"));
+        s.replace_all( CONSTASTR("<ip4>"), tmp_str_c(ipv4).trim() );
+        s.replace_all( CONSTASTR("<ip6>"), ipv6 );
         s.replace_all( CONSTASTR("<port>"), tmp_str_c(port).trim() );
         s.replace_all( CONSTASTR("<clid>"), tmp_str_c(clid).trim() );
         outb.append_buf(s.cstr(), s.get_length());

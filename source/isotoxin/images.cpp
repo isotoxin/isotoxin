@@ -188,7 +188,16 @@ namespace
 
         /*virtual*/ bool load(const ts::blob_c &body) override
         {
-            gif.load(body.data(), body.size());
+            if (!gif.load(body.data(), body.size()))
+            {
+                rsz_required = false;
+                next_frame_tick = ts::Time::current();
+                origsz = ts::ivec2(32);
+                frame.create_ARGB(origsz);
+                frame.fill(ts::ARGB(255,0, 255));
+                numframes = 1;
+                return true;
+            }
             numframes = gif.numframes();
             if (numframes == 0) return false;
 
@@ -467,7 +476,7 @@ bool image_loader_c::upd_btnpos(RID r, GUIPARAM p)
     if ( p )
         update_ctl_pos();
     else
-        if ( local_p + ts::ivec2(4) != owner->getprops().pos() )
+        if (owner && local_p + ts::ivec2(4) != owner->getprops().pos() )
             DEFERRED_UNIQUE_CALL(0, DELEGATE(this, upd_btnpos), 1);
     return true;
 }

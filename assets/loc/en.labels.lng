@@ -426,6 +426,11 @@
 426=You have enabled spell check, but no dictionaries have loaded. You should load at least one dictionary or just turn off spell check.
 427=Turn off spell check
 428=Choose dictionaries to load
+429=Message edit font size: $
+430=Default resolution
+431=Color editor
+432=Tools
+433=Color editor
 900=information
 901=warning
 902=error

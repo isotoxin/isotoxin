@@ -548,6 +548,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR(" <a href=\"https://github.com/libyal/liblnk\">liblink</a>") );
     title.append( CONSTWSTR(" <a href=\"http://www.efgh.com/software/md5.htm\">md5</a>") );
     title.append( CONSTWSTR(" <a href=\"http://dejavu-fonts.org\">DejaVu fonts</a>") );
+    title.append( CONSTWSTR(" <a href=\"http://opensans.com\">Open Sans fonts</a>") );
     title.append( CONSTWSTR(" <a href=\"http://www.kolobok.us\">Copyright<nbsp>©<nbsp>Aiwan.<nbsp>Kolobok<nbsp>Smiles</a>"));
     title.append( CONSTWSTR(" <a href=\"https://github.com/titoBouzout/Dictionaries\">Hunspell utf8 dictionaries</a>"));
 
@@ -642,7 +643,7 @@ ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 }
 /*virtual*/ ts::ivec2 dialog_about_c::get_min_size() const
 {
-    return ts::ivec2(450, 510);
+    return ts::ivec2(450, 525);
 }
 
 /*virtual*/ bool dialog_about_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)

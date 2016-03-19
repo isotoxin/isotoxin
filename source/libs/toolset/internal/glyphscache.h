@@ -33,6 +33,7 @@ struct scaled_image_s
 
 struct font_params_s //-V690
 {
+    str_c fontname;
     wstr_c filename; // .ttf
 	ivec2 size;
 	int flags;
@@ -46,6 +47,7 @@ struct font_params_s //-V690
     {
         if (*this != ofp)
         {
+            fontname = ofp.fontname;
             filename = ofp.filename;
             size = ofp.size;
             flags = ofp.flags;
@@ -58,13 +60,13 @@ struct font_params_s //-V690
     }
     bool operator!=(const font_params_s &ofp) const
     {
-        return filename != ofp.filename || size != ofp.size || flags != ofp.flags || additional_line_spacing != ofp.additional_line_spacing
+        return fontname != ofp.fontname || filename != ofp.filename || size != ofp.size || flags != ofp.flags || additional_line_spacing != ofp.additional_line_spacing
             || outline_radius != ofp.outline_radius || outline_shift != ofp.outline_shift; //-V550
     }
 
     bool operator==(const font_params_s &ofp) const
     {
-        return filename == ofp.filename && size == ofp.size && flags == ofp.flags && additional_line_spacing == ofp.additional_line_spacing
+        return fontname == ofp.fontname && filename == ofp.filename && size == ofp.size && flags == ofp.flags && additional_line_spacing == ofp.additional_line_spacing
             && outline_radius == ofp.outline_radius && outline_shift == ofp.outline_shift; //-V550
     }
 

@@ -19,6 +19,7 @@ struct preloaded_stuff_s
     const ts::font_desc_c *font_conv_name = &ts::g_default_text_font;
     const ts::font_desc_c *font_conv_text = &ts::g_default_text_font;
     const ts::font_desc_c *font_conv_time = &ts::g_default_text_font;
+    const ts::font_desc_c *font_msg_edit = &ts::g_default_text_font;
     int contactheight = 55;
     int mecontactheight = 60;
     int minprotowidth = 100;
@@ -224,6 +225,7 @@ struct av_contact_s
     ts::ivec2 remote_sosz = ts::ivec2(0);
     ts::ivec2 prev_video_size = ts::ivec2(0);
     vsb_descriptor_s currentvsb;
+    ts::wstrmap_c cpar;
     UNIQUE_PTR(vsb_c) vsb;
     active_protocol_c *ap4video = nullptr;
     int videocid = 0;

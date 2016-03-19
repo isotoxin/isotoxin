@@ -120,6 +120,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
         MASK_APPLICATION_SOUNDS     = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_APPLICATION_VIDEO      = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_ADVANCED_VIDEOCALLS    = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_ADVANCED_TOOLS         = SETBIT( NUMGEN_NEXT(ctlm) ),
 
         MASK_ADVANCED_DEBUG = SETBIT(NUMGEN_NEXT(ctlm)),
     };
@@ -170,6 +171,9 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     bool talkvolset(RID, GUIPARAM);
     bool micvolset(RID, GUIPARAM);
     bool test_mic(RID, GUIPARAM);
+
+    int tools_bits = false;
+    bool advt_handler(RID, GUIPARAM);
 
     ts::astrmap_c video_codecs;
     bool disable_video_ex = false;
@@ -336,9 +340,10 @@ private:
     ts::wstr_c downloadfolder_images;
     int fileconfirm = 0;
 
-    int fontsz = 1000;
-    float font_scale = 1.0f;
-    bool scale_font(RID, GUIPARAM);
+    int fontsz_conv_text = 1000, fontsz_msg_edit = 1000;
+    float font_scale_conv_text = 1.0f, font_scale_msg_edit = 1.0f;
+    bool scale_font_conv_text(RID, GUIPARAM);
+    bool scale_font_msg_edit(RID, GUIPARAM);
 
     enter_key_options_s ctl2send = EKO_ENTER_NEW_LINE;
     int double_enter = 0;
@@ -446,7 +451,10 @@ private:
     bool drawcamerapanel(RID, GUIPARAM);
     void setup_video_device();
     void select_video_capture_device( const ts::str_c& prm );
+    void select_video_capture_res(const ts::str_c& prm);
     menu_c list_video_capture_devices();
+    menu_c list_video_capture_resolutions();
+    ts::wstr_c fix_camera_res(const ts::wstr_c &r);
     vsb_list_t video_devices;
 
     ts::wstrmap_c camera;

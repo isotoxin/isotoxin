@@ -435,7 +435,7 @@ void dialog_avaselector_c::start_capture(const vsb_descriptor_s &desc)
         compressor = nullptr;
     }
 
-    camera.reset( vsb_c::build(desc) );
+    camera.reset( vsb_c::build(desc, ts::wstrmap_c()) );
     getengine().redraw();
 
     caminit = false;

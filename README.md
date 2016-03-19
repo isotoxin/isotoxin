@@ -26,6 +26,7 @@ Multiprotocol messenger for windows XP and later with tox support
   * Unlimited message length (only Isotoxin to Isotoxin)
   * Emoticons
   * Inline images
+  * Spell checker + Spelling dictionary build-in downloader
 
 ## Screenshots
 

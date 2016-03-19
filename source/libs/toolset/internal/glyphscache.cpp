@@ -52,7 +52,14 @@ glyph_s &font_c::operator[](wchar c)
 
 inline unsigned calc_hash(const font_params_s& fp)
 {
-    return calc_hash(fp.filename.as_sptr()) ^ calc_hash(&fp.size, sizeof(fp.size) + sizeof(fp.flags) + sizeof(fp.additional_line_spacing) + +sizeof(fp.outline_radius) + +sizeof(fp.outline_shift));
+    int sz = sizeof(fp.size) + sizeof(fp.flags) + sizeof(fp.additional_line_spacing) + +sizeof(fp.outline_radius) + +sizeof(fp.outline_shift);
+    int dsz = sz + fp.fontname.get_length() + fp.filename.get_length() * 2;
+    uint8 *d = (uint8 *)_alloca( dsz );
+    memcpy(d, fp.fontname.cstr(), fp.fontname.get_length());
+    memcpy(d + fp.fontname.get_length(), fp.filename.cstr(), fp.filename.get_length() * 2);
+    memcpy(d + fp.fontname.get_length() + fp.filename.get_length() * 2, &fp.size, sz);
+
+    return calc_hash(d, dsz);
 }
 
 str_c font_c::makename_bold()
@@ -288,6 +295,7 @@ font_c &font_c::buildfont(const str_c &fontname, const font_params_s&fprs)
 	}
 
 	font_params_s fp(size, hinting ? 0 : FT_LOAD_NO_HINTING, additional_line_spacing, outline_radius, outline_shift);
+    fp.fontname = fontname;
     fp.filename = fprs.filename;
 	font_c &f = ff.fonts_cache.add(fp, added);
 	if (added)

@@ -157,6 +157,9 @@ enum stream_options_e
     SO_RECEIVING_VIDEO = 8,
 };
 
+#define FILE_TRANSFER_CHUNK 1048576
+#define FILE_TRANSFER_CHUNK_MASK (~1048575ull)
+
 
 // known configurable fields
 #define CFGF_PROXY_TYPE     "proxy_type"

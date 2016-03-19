@@ -1,0 +1,38 @@
+parent=def
+
+conf
+{
+  name=Dejavu
+}
+
+
+fonts
+{
+  // filename,sizex[/sizey],flags,addlinespace,outlineradius,outlineshift
+  // flags: 4096 - disable antialiasing
+
+  default=DejaVuSans.ttf,13,0,0,0.15,0.1
+  default.bold=DejaVuSans-Bold.ttf,13,0,0,0.15,0.1
+  default.light=DejaVuSans-ExtraLight.ttf,13,0,0,0.15,0.1
+  default.italic=DejaVuSans-Oblique.ttf,13,0,0,0.15,0.1
+  default.light.italic=DejaVuSans-Oblique.ttf,13,0,0,0.15,0.1
+  default.bold.italic=DejaVuSans-BoldOblique.ttf,13,0,0,0.15,0.1
+
+  caption=arial.ttf,13,0,0,0.15,0.1
+  caption.bold=arialbd.ttf,13,0,0,0.15,0.1
+  caption.light=arial.ttf,12,0,0,0.15,0.1
+
+  conv_name=DejaVuSans.ttf,12,0,0,0.15,0.1
+  conv_name.bold=DejaVuSans-Bold.ttf,12,0,0,0.15,0.1
+  conv_name.italic=DejaVuSans-Oblique.ttf,12,0,0,0.15,0.1
+  conv_name.bold.italic=DejaVuSans-BoldOblique.ttf,12,0,0,0.15,0.1
+
+  conv_text=DejaVuSans.ttf,12,4096,0,0.15,0.1
+  conv_text.bold=DejaVuSans-Bold.ttf,12,4096,0,0.15,0.1
+  conv_text.italic=DejaVuSans-Oblique.ttf,12,4096,0,0.15,0.1
+  conv_text.bold.italic=DejaVuSans-BoldOblique.ttf,12,4096,0,0.15,0.1
+
+  conv_time=DejaVuSans.ttf,10,4096,0,0.15,0.1
+
+  msg_edit=DejaVuSans.ttf,13,4096,0,0.15,0.1
+}

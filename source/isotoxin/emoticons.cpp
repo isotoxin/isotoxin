@@ -81,17 +81,25 @@ namespace
 
         /*virtual*/ ts::wstr_c to_wstr() const override
         {
+            if ( !e ) return CONSTWSTR("(???)");
             return from_utf8(e->def);
         }
         /*virtual*/ ts::str_c to_utf8() const override
         {
+            if ( !e ) return CONSTASTR( "(???)" );
             return e->unicode ? ts::str_c().append_unicode_as_utf8( e->unicode ) : e->def;
         }
         /*virtual*/ void update_advance(ts::font_c *font) override
         {
         }
-        /*virtual*/ void setup(const ts::ivec2 &pos, ts::glyph_image_s &gi) override
+        /*virtual*/ void setup( ts::font_c *font, const ts::ivec2 &pos, ts::glyph_image_s &gi) override
         {
+            if (!e)
+            {
+                bmp.create_ARGB(ts::ivec2(16));
+                bmp.fill( ts::ARGB(255, 0, 255 ) );
+            }
+
             if (bmp)
             {
                 gi.width = (ts::uint16)bmp.info().sz.x;
@@ -99,18 +107,22 @@ namespace
                 gi.pitch = bmp.info().pitch;
                 gi.pixels = bmp.body();
                 gi.pos.x = (ts::int16)pos.x;
-                gi.pos.y = (ts::int16)(pos.y - bmp.info().sz.y)+2;
+                gi.pos.y = (ts::int16)(pos.y - font->ascender );
             } else
             {
                 ts::irect frrect;
                 const ts::bitmap_c&frame = e->curframe(frrect);
+
+                int a = 0;
+                if ( frrect.height() < font->height )
+                    a = ( font->height - frrect.height() ) / 2;
 
                 gi.width = (ts::uint16)frrect.width();
                 gi.height = (ts::uint16)frrect.height();
                 gi.pitch = frame.info().pitch;
                 gi.pixels = frame.body( frrect.lt );
                 gi.pos.x = (ts::int16)pos.x;
-                gi.pos.y = (ts::int16)(pos.y - frrect.height());
+                gi.pos.y = (ts::int16)(pos.y - font->ascender + a);
             }
             gi.color = 0;
             gi.thickness = 0;
@@ -233,14 +245,14 @@ void emoticons_c::emo_gif_s::adapt_bg(const ts::bitmap_c *bmpx)
     if (!bmp.load_from_file(b.data(), b.size()))
         return false;
 
-    if (bmp.info().sz.y > emoti().maxheight)
+    if (bmp.info().sz.y > emoti().emoji_maxheight)
     {
-        float k = (float)emoti().maxheight / (float)bmp.info().sz.y;
+        float k = (float)emoti().emoji_maxheight / (float)bmp.info().sz.y;
         int neww = ts::lround( k * bmp.info().sz.x );
 
         ispreframe = true;
         preframe = TSNEW(ts::bitmap_c);
-        preframe->create_ARGB( ts::ivec2(neww, emoti().maxheight) );
+        preframe->create_ARGB( ts::ivec2(neww, emoti().emoji_maxheight ) );
 
         bmp.resize_to( preframe->extbody(), ts::FILTER_LANCZOS3 );
         preframe->premultiply();
@@ -257,6 +269,69 @@ void emoticons_c::emo_gif_s::adapt_bg(const ts::bitmap_c *bmpx)
     return true;
 }
 
+/*virtual*/ bool emoticons_c::emo_tiled_animation_s::load( const ts::blob_c &b )
+{
+    if ( !source.load_from_file( b.data(), b.size() ) )
+        return false;
+
+    numframes = source.info().sz.y / source.info().sz.x;
+
+    if ( source.info().sz.x > emoti().emoji_maxheight ) // width of image compared with height - its ok due source is vertical tiled animation of square frames
+    {
+        ts::imgdesc_s sinf( source.info(), ts::ivec2( source.info().sz.x ) );
+        ts::bitmap_c tmp;
+        tmp.create_ARGB( ts::ivec2( emoti().emoji_maxheight, emoti().emoji_maxheight * numframes ) );
+        for ( int i = 0; i < numframes; ++i )
+        {
+            ts::img_helper_resize( tmp.extbody( ts::irect::from_lt_and_size( ts::ivec2( 0, emoti().emoji_maxheight * i ), ts::ivec2( emoti().emoji_maxheight ) ) ),
+                source.body( ts::ivec2(0, source.info().sz.x * i) ),
+                sinf,
+                ts::FILTER_BOX_LANCZOS3
+                );
+        }
+        source = tmp;
+    }
+
+    frect = ts::irect(0, 0, source.info().sz.x , source.info().sz.x /* not error - it's square*/ );
+
+    source.premultiply();
+    ispreframe = true;
+
+    preframe = nullptr;
+
+    return true;
+}
+
+/*virtual*/ bool emoticons_c::emo_tiled_animation_s::animation_tick()
+{
+    ts::Time curt = ts::Time::current();
+
+    if ( curt >= next_frame_tick )
+    {
+        next_frame_tick += nextframe();
+        if ( curt >= next_frame_tick )
+            next_frame_tick = curt;
+        return true;
+    }
+
+    return false;
+}
+
+int emoticons_c::emo_tiled_animation_s::nextframe()
+{
+    frect.lt.y += source.info().sz.x;
+    frect.rb.y += source.info().sz.x;
+    if ( frect.lt.y >= source.info().sz.y )
+    {
+        frect.lt.y = 0;
+        frect.rb.y = source.info().sz.x; // not error - frame is square
+    }
+
+    return animperiod;
+}
+
+
+
 
 namespace
 {
@@ -265,16 +340,21 @@ namespace
         ts::wstr_c curset;
         ts::wstr_c fn;
         ts::blob_c emojiset;
+        ts::astrmap_c emojisettings;
         ts::wstrings_c fns;
         ts::wstrings_c setlist;
 
+        int animperiod = 0;
         bool current_pack = true;
 
         bool build_set_list(const ts::arc_file_s &f)
         {
             ts::str_c fnd(f.fn); fnd.case_down();
-            if (fnd.ends(CONSTASTR(".decl")))
+            if (fnd.ends(CONSTASTR("emoji.decl")))
                 setlist.add(ts::fn_get_path(to_wstr(fnd)));
+            else if ( fnd.ends( CONSTASTR( "settings.decl" ) ) )
+                emojisettings.parse( f.get().cstr() );
+
             return true;
         }
 
@@ -283,15 +363,20 @@ namespace
             ts::str_c fnd(f.fn); fnd.case_down();
             if (!ts::fn_get_path(to_wstr(fnd)).equals(curset))
                 return true;
-            if (fnd.ends(CONSTASTR(".decl")))
-                emojiset = f.get();
-            else if (fnd.ends(CONSTASTR(".gif")))
+            if ( fnd.ends( CONSTASTR( ".decl" ) ) )
+            {
+                if ( fnd.ends( CONSTASTR( "settings.decl" ) ) )
+                    ;
+                else
+                    emojiset = f.get();
+
+            } else if ( fnd.ends( CONSTASTR( ".gif" ) ) )
             {
                 ts::str_c ifn = emoti().load_gif_smile( ts::to_wstr(fnd), f.get(), current_pack );
                 if (!ifn.is_empty()) fns.add( ifn );
             } else if (fnd.ends(CONSTASTR(".png")))
             {
-                ts::str_c ifn = emoti().load_png_smile(ts::to_wstr(fnd), f.get(), current_pack);
+                ts::str_c ifn = emoti().load_png_smile(ts::to_wstr(fnd), f.get(), current_pack, animperiod );
                 if (!ifn.is_empty())
                     fns.add( ifn );
             }
@@ -328,7 +413,7 @@ ts::str_c emoticons_c::load_gif_smile( const ts::wstr_c& fn, const ts::blob_c &b
     return ts::str_c();
 }
 
-ts::str_c emoticons_c::load_png_smile(const ts::wstr_c& fn, const ts::blob_c &body, bool current_pack)
+ts::str_c emoticons_c::load_png_smile(const ts::wstr_c& fn, const ts::blob_c &body, bool current_pack, int animperiod )
 {
     ts::str_c n = to_utf8(ts::fn_get_name(fn));
     int code = getunicode(n);
@@ -336,16 +421,32 @@ ts::str_c emoticons_c::load_png_smile(const ts::wstr_c& fn, const ts::blob_c &bo
         if (e->unicode == code)
             return n;
 
-    emo_static_image_s *img = TSNEW(emo_static_image_s, code);
-    img->current_pack = current_pack;
-    if (img->load(body))
+    if ( animperiod > 0 )
     {
-        img->def = n;
-        arr.add() = img;
-        return n;
+        emo_tiled_animation_s *img = TSNEW( emo_tiled_animation_s, code, animperiod );
+        img->current_pack = current_pack;
+        if ( img->load( body ) )
+        {
+            img->def = n;
+            arr.add() = img;
+            return n;
+        }
+
+        TSDEL( img );
+    } else
+    {
+        emo_static_image_s *img = TSNEW( emo_static_image_s, code );
+        img->current_pack = current_pack;
+        if ( img->load( body ) )
+        {
+            img->def = n;
+            arr.add() = img;
+            return n;
+        }
+
+        TSDEL( img );
     }
 
-    TSDEL(img);
     return ts::str_c();
 
 }
@@ -355,7 +456,27 @@ void emoticons_c::reload()
     if (!prf().is_loaded())
         return;
 
-    maxheight = 0;
+    struct backup_s
+    {
+        smile_element_s *se;
+        int unicode;
+    };
+
+    ts::tmp_array_inplace_t<backup_s, 16> bse;
+    for( emoticon_s *e : arr )
+    {
+        if (e->ee)
+        {
+            backup_s &b = bse.add();
+            b.se = ts::ptr_cast<smile_element_s *>( e->ee );;
+            b.se->e = nullptr;
+            b.unicode = e->unicode;
+            e->ee = nullptr;
+        }
+    }
+
+    emoji_maxheight = 30;
+    selector_min_width = 200;
 
     arr.clear();
     packs.clear();
@@ -408,10 +529,16 @@ void emoticons_c::reload()
     }
 
     ts::wstr_c appear = to_wstr(g_app->theme().conf().get_string(CONSTASTR("appearance")));
-    maxheight = g_app->theme().conf().get_int(CONSTASTR("emomaxheight"));
+    
+    emoji_maxheight = 30;
+    selector_min_width = 200;
+    bool defpack_ = true;
 
     for (const ts::wstr_c &fn : fns)
     {
+        bool defpack = defpack_; defpack_ = false;
+
+        ldr.emojisettings.clear();
         ldr.emojiset.clear();
         ldr.fn = fn;
         ldr.setlist.clear();
@@ -441,10 +568,20 @@ void emoticons_c::reload()
         if (ldr.curset.is_empty())
             continue;
 
+        ldr.animperiod = ldr.emojisettings.get( CONSTASTR( "animated" ), CONSTASTR( "0" ) ).as_int();
+
         ts::zip_open(pak.data(), pak.size(), DELEGATE(&ldr,process_pak_file));
 
         if (ldr.emojiset)
         {
+            if ( defpack )
+            {
+                emoji_maxheight = ldr.emojisettings.get( CONSTASTR( "emoji-max-height" ), CONSTASTR( "30" ) ).as_int();
+                if ( emoji_maxheight < 16 ) emoji_maxheight = 16;
+                selector_min_width = ldr.emojisettings.get( CONSTASTR( "min-width" ), CONSTASTR( "200" ) ).as_int();
+                if ( selector_min_width < 200 ) selector_min_width = 200;
+            }
+
             packs.add(fn);
             // some meta information about smiles
             int index = 0;
@@ -464,7 +601,8 @@ void emoticons_c::reload()
                     {
                         ts::token<char> tkn(s.substr(eqi+1).get_trimmed().as_sptr(), ',');
                         e->def = *tkn;
-                        e->sort_factor = index;
+                        if (defpack)
+                            e->sort_factor = index;
                         for (auto &ss : tkn)
                             insert_match_point(ss.as_sptr(), e);
                         if (e->unicode > 0)
@@ -475,6 +613,7 @@ void emoticons_c::reload()
                 ++index;
             }
             ldr.current_pack = false;
+
         }
     }
 
@@ -485,7 +624,8 @@ void emoticons_c::reload()
     {
         emoticon_s *e = arr.get(i);
         ASSERT(e->ispreframe);
-        ts::ivec2 csz = e->preframe->info().sz;
+
+        ts::ivec2 csz = e->preframe ? e->preframe->info().sz : e->framerect().size();
 
         e->repl.set(CONSTASTR("<rect="));
         e->repl.append_as_int(i);
@@ -497,6 +637,23 @@ void emoticons_c::reload()
     }
 
     generate_full_frame();
+
+    for( backup_s &b : bse )
+    {
+        for ( emoticon_s *e : arr )
+        {
+            if (e->unicode == b.unicode)
+            {
+                ASSERT( e->ee == nullptr );
+                e->ee = b.se;
+                b.se->e = e;
+                b.se = nullptr;
+                break;
+            }
+        }
+        if (b.se)
+            b.se->release();
+    }
 }
 
 void emoticons_c::parse( ts::str_c &t, bool to_unicode )
@@ -665,6 +822,9 @@ void emoticons_c::generate_full_frame()
     for (emoticon_s *e : arr)
     {
         ASSERT(e->ispreframe);
+        if ( nullptr == e->preframe )
+            continue;
+        
         ts::ivec2 csz = e->preframe->info().sz;
 
         bool present = false;
@@ -759,6 +919,9 @@ void emoticons_c::generate_full_frame()
 
     for (emoticon_s *e : arr)
     {
+        if ( nullptr == e->preframe )
+            continue;
+
         ts::bitmap_c *bmp = e->preframe;
         e->ispreframe = false;
         e->frame = &fullframe;

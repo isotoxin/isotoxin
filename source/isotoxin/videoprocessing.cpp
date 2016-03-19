@@ -40,6 +40,27 @@ void enum_video_capture_devices(vsb_list_t &list, bool add_desktop)
         vsb_descriptor_s &d = list.add();
         d.desc.set(vd.name.c_str(), vd.name.length());
         d.id.set(vd.path.c_str(), vd.path.length());
+
+        for (const VideoInfo&vi : vd.caps)
+            if (vi.format == VideoFormat::XRGB)
+                d.resolutions.set( ts::ivec2( vi.maxCX, vi.maxCY ) );
+        
+        d.resolutions.tsort<ts::ivec2>([](const ts::ivec2 *a, const ts::ivec2 *b)->bool {
+            if (*a == *b) return false;
+            if (a->x > b->x) return true;
+            if (a->x < b->x) return false;
+            if (a->y > b->y) return true;
+            if (a->y < b->y) return false;
+            return false;
+        });
+
+        int cnt = d.resolutions.count();
+        for (int i = 1; i < cnt; ++i)
+            if (d.resolutions.get(i).x < 640)
+            {
+                d.resolutions.set_count(i, true);
+                break;
+            }
     }
 
     if (add_desktop)
@@ -50,6 +71,12 @@ void enum_video_capture_devices(vsb_list_t &list, bool add_desktop)
             vsb_descriptor_s &d = list.add();
             d.desc = TTT("Desktop", 350);
             d.id = CONSTWSTR("desktop");
+
+            ts::irect r = ts::monitor_get_max_size_fs(0);
+            d.resolutions.add( r.size() );
+            d.resolutions.add( r.size()/2 );
+            d.resolutions.add( r.size()/4 );
+
         }
         else
         {
@@ -58,6 +85,12 @@ void enum_video_capture_devices(vsb_list_t &list, bool add_desktop)
                 vsb_descriptor_s &d = list.add();
                 d.desc = TTT("Desktop $", 351) / ts::monitor_get_description(m);
                 d.id = CONSTWSTR("desktop/"); d.id.append_as_uint(m);
+
+                ts::irect r = ts::monitor_get_max_size_fs(m);
+                d.resolutions.add(r.size());
+                d.resolutions.add(r.size() / 2);
+                d.resolutions.add(r.size() / 4);
+
             }
         }
     }
@@ -71,21 +104,21 @@ vsb_c *vsb_c::build()
 
     vsb_descriptor_s desc;
     desc.id = *c.find(CONSTWSTR("id"));
-    return build(desc);
+    return build(desc, c);
 }
 
-vsb_c *vsb_c::build( const vsb_descriptor_s &desc )
+vsb_c *vsb_c::build( const vsb_descriptor_s &desc, const ts::wstrmap_c &dpar)
 {
     if (!desc.id.begins(CONSTWSTR("desktop")))
     {
         vsb_dshow_camera_c *cam = TSNEW(vsb_dshow_camera_c);
-        if (cam->init(desc))
+        if (cam->init(desc, dpar))
             return cam;
         TSDEL(cam);
     }
 
     vsb_desktop_c *cam = TSNEW( vsb_desktop_c );
-    if (cam->init(desc))
+    if (cam->init(desc, dpar))
         return cam;
         
     TSDEL(cam);
@@ -274,10 +307,15 @@ void vsb_desktop_c::grabcb(ts::drawable_bitmap_c &gbmp)
     ts::ivec2 dsz;
     if (ts::drawable_bitmap_c *b = lockbuf(&dsz))
     {
-        if (dsz == ts::ivec2(0) || dsz == rect.size())
+        if (dsz == ts::ivec2(0))
+            dsz = rect.size();
+
+        if (dsz.x > maxsize.x && maxsize.x > 0)
+            dsz = maxsize;
+
+        if (dsz == rect.size())
         {
             // just copy
-            dsz.x = rect.width(), dsz.y = rect.height();
             if (b->info().sz != dsz)
                 b->create(dsz, monitor);
 
@@ -296,11 +334,13 @@ void vsb_desktop_c::grabcb(ts::drawable_bitmap_c &gbmp)
 
 }
 
-bool vsb_desktop_c::init(const vsb_descriptor_s &desc)
+bool vsb_desktop_c::init(const vsb_descriptor_s &desc, const ts::wstrmap_c &dpar)
 {
     monitor = 0;
     ts::token<ts::wchar> t( desc.id, '/' ); ++t;
     if (t) monitor = t->as_int();
+
+    maxsize = ts::parsevec2(ts::to_str(dpar.get(CONSTWSTR("res"))), ts::ivec2(0));
 
     rect = ts::monitor_get_max_size_fs(monitor);
     set_video_size(rect.size());
@@ -327,13 +367,13 @@ vsb_dshow_camera_c::core_c::~core_c()
     LIST_DEL( this, first, last, prev, next );
 }
 
-bool vsb_dshow_camera_c::core_c::get(vsb_dshow_camera_c *owner, const vsb_descriptor_s &desc)
+bool vsb_dshow_camera_c::core_c::get(vsb_dshow_camera_c *owner, const vsb_descriptor_s &desc, const ts::wstrmap_c &dpar)
 {
     for( core_c *f = first; f; f = f->next )
         if (f->id.equals(desc.id))
             return f->add_owner( owner );
 
-    core_c *newcore = TSNEW(core_dshow_c, desc);
+    core_c *newcore = TSNEW(core_dshow_c, desc, dpar);
     return newcore->add_owner(owner);
 }
 
@@ -400,13 +440,17 @@ void vsb_dshow_camera_c::core_c::setbusy()
 
 
 
-vsb_dshow_camera_c::core_dshow_c::core_dshow_c(const vsb_descriptor_s &desc_):core_c(desc_), Device(DShow::InitGraph::True)
+vsb_dshow_camera_c::core_dshow_c::core_dshow_c(const vsb_descriptor_s &desc_, const ts::wstrmap_c &dpar):core_c(desc_), Device(DShow::InitGraph::True)
 {
     VideoConfig config;
 
     config.name = desc_.desc;
     config.path = desc_.id;
     config.callback = DELEGATE(this, dshocb);
+    
+    ts::ivec2 sz = ts::parsevec2(to_str(dpar.get(CONSTWSTR("res"))), ts::ivec2(0));
+    config.cx = sz.x;
+    config.cy = sz.y;
 
     run_initializer(config);
 
@@ -436,6 +480,9 @@ void vsb_dshow_camera_c::core_dshow_c::run_initializer(const VideoConfig &config
             //UNFINISHED("remove sleep");
             //Sleep(2000);
             //return R_RESULT;
+
+            config.useDefaultConfig = config.cx == 0 || config.cy == 0;
+            config.format = VideoFormat::XRGB;
 
             camera.SetVideoConfig(&config);
 
@@ -561,9 +608,9 @@ vsb_dshow_camera_c::~vsb_dshow_camera_c()
     stop_lockers();
 }
 
-bool vsb_dshow_camera_c::init(const vsb_descriptor_s &desc_)
+bool vsb_dshow_camera_c::init(const vsb_descriptor_s &desc_, const ts::wstrmap_c &dpar)
 {
-    initializing = core_c::get(this, desc_);
+    initializing = core_c::get(this, desc_, dpar);
     return true;
 }
 

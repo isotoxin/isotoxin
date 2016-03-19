@@ -6,6 +6,7 @@ struct vsb_descriptor_s
 {
     ts::wstr_c id;
     ts::wstr_c desc;
+    ts::tbuf0_t<ts::ivec2> resolutions;
 };
 
 typedef ts::array_inplace_t< vsb_descriptor_s, 0 > vsb_list_t;
@@ -49,7 +50,7 @@ protected:
 public:
     vsb_c() {}
     virtual ~vsb_c() {}
-    static vsb_c *build(const vsb_descriptor_s &desc);
+    static vsb_c *build(const vsb_descriptor_s &desc, const ts::wstrmap_c &dpar);
     static vsb_c *build(); // default video source
 
     bool still_initializing() const {return initializing;}
@@ -174,14 +175,14 @@ class vsb_dshow_camera_c : public vsb_c
         void initialized( const ts::ivec2 &videosize );
         void setbusy();
         
-        static bool get( vsb_dshow_camera_c *owner, const vsb_descriptor_s &desc );
+        static bool get( vsb_dshow_camera_c *owner, const vsb_descriptor_s &desc, const ts::wstrmap_c &dpar);
     };
 
     class core_dshow_c : public core_c, public DShow::Device
     {
         void run_initializer(const DShow::VideoConfig &config);
     public:
-        core_dshow_c(const vsb_descriptor_s &desc);
+        core_dshow_c(const vsb_descriptor_s &desc, const ts::wstrmap_c &dpar);
         virtual ~core_dshow_c();
 
         void dshocb(const DShow::VideoConfig &config, unsigned char *data, size_t size, long long startTime, long long stopTime);
@@ -203,7 +204,7 @@ public:
     vsb_dshow_camera_c() {}
     ~vsb_dshow_camera_c();
 
-    bool init( const vsb_descriptor_s &desc );
+    bool init( const vsb_descriptor_s &desc, const ts::wstrmap_c &dpar);
     // /*virtual*/ bool set_config( video_config_s& cfg ) override;
 
 };
@@ -242,6 +243,7 @@ class vsb_desktop_c : public vsb_c
     } *grabber = nullptr;
 
     ts::irect rect = ts::irect(0);
+    ts::ivec2 maxsize = ts::ivec2(maximum<int>::value);
     int monitor = -1;
     int grabtag = -1;
 
@@ -251,7 +253,7 @@ public:
     vsb_desktop_c() {}
     ~vsb_desktop_c() { if (grabber) grabber->remove_owner(this); }
 
-    bool init(const vsb_descriptor_s &desc);
+    bool init(const vsb_descriptor_s &desc, const ts::wstrmap_c &dpar);
 };
 
 class gui_notice_callinprogress_c;

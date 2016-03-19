@@ -314,13 +314,14 @@ int proc_toxrelay(const ts::wstrings_c & pars)
 
     struct dht_node_s
     {
-        ts::str_c addr;
+        ts::str_c addr4;
+        ts::str_c addr6;
         byte pubid[32];
         int port;
         int used = 0;
         int random = 0;
 
-        dht_node_s(const ts::asptr& addr, int port, const ts::asptr& pubid_) :addr(addr), port(port)
+        dht_node_s(const ts::asptr& addr4, const ts::asptr& addr6, int port, const ts::asptr& pubid_) :addr4(addr4), addr6(addr6), port(port)
         {
             ts::pstr_c(pubid_).hex2buf<32>(pubid);
         }
@@ -332,7 +333,7 @@ int proc_toxrelay(const ts::wstrings_c & pars)
 
     for( const dht_node_s &n : nodes )
     {
-        DHT_bootstrap_from_address(dht, n.addr.cstr(), 1, htons((USHORT)n.port), n.pubid);
+        DHT_bootstrap_from_address(dht, n.addr4.cstr(), 1, htons((USHORT)n.port), n.pubid);
     }
 
     /*

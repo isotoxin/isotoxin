@@ -490,7 +490,7 @@ private:
         virtual void tick(int ct) = 0;
 
         virtual void chunk_received( u64 /*offset*/, const void * /*d*/, int /*dsz*/ ) {}; // incoming
-        virtual void fresh_file_portion(const file_portion_s * /*fp*/) {} // transmitting
+        virtual bool fresh_file_portion(const file_portion_s * /*fp*/) { return false;  } // transmitting
         virtual bool delivered(u64 /*dtg*/) { return false; } // transmitting
 
         u32 cid;    // client id
@@ -507,7 +507,11 @@ private:
 
     struct incoming_file_s : public file_transfer_s
     {
+        u64 nextoffset = 0;
+        int resumein = 0;
+        bool stuck = false;
         bool is_accepted = false;
+
         incoming_file_s(u32 cid_, u64 utag_, u64 fsz_, const asptr &fn);
         ~incoming_file_s() {}
 
@@ -528,25 +532,28 @@ private:
 
     struct transmitting_file_s : public file_transfer_s
     {
-        static const int PORTION_SIZE = 65536;
-        static const int MAX_TRANSFERING_CHUNKS = 16;
-
-        u64 offset = 0;
-
-        struct requested_chunk_s
+        struct ready_chunk_s
         {
             u64 dtg = 0;
             u64 offset = 0;
+            const void *buf = nullptr;
             int size = 0;
-#ifdef _DEBUG
-            int requesttime = 0;
-#endif
-        } rchunks[ MAX_TRANSFERING_CHUNKS ];
 
-        int requested_chunks = 0;
+            bool set(const file_portion_s *fp);
+            void clear();
+
+            ~ready_chunk_s() { clear(); }
+
+        } rch[2];
+
+        void reques_next_block( u64 offset_ );
+        void send_block( contact_s *c );
+
+        bool request = false;
         bool is_accepted = false;
         bool is_paused = false;
         bool is_finished = false;
+        bool last_chunk_delivered = false;
 
         transmitting_file_s(contact_s *to_contact, u64 utag_, u64 fsz_, const asptr &fn);
         ~transmitting_file_s() {}
@@ -557,7 +564,7 @@ private:
         /*virtual*/ void unpause(bool from_self) override;
         /*virtual*/ void tick(int ct) override;
 
-        /*virtual*/ void fresh_file_portion(const file_portion_s *fp) override;
+        /*virtual*/ bool fresh_file_portion(const file_portion_s *fp) override;
         /*virtual*/ bool delivered(u64 dtg) override;
     };
 

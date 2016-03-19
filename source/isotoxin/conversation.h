@@ -726,6 +726,8 @@ class gui_message_editor_c : public gui_textedit_c, public spellchecker_s
     GM_RECEIVER(gui_message_editor_c, ISOGM_MESSAGE);
     GM_RECEIVER(gui_message_editor_c, ISOGM_SELECT_CONTACT);
     GM_RECEIVER(gui_message_editor_c, GM_UI_EVENT);
+    GM_RECEIVER(gui_message_editor_c, ISOGM_CHANGED_SETTINGS);
+    
     
     ts::shared_ptr<contact_root_c> historian;
     struct editstate_s
@@ -754,6 +756,7 @@ public:
     gui_message_editor_c(initial_rect_data_s &data) :gui_textedit_c(data) {}
     /*virtual*/ ~gui_message_editor_c();
     /*virtual*/ void created() override;
+    /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
     contact_root_c *get_historian() { return historian; }
 };
 

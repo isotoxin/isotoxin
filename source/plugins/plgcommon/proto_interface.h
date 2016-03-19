@@ -277,9 +277,10 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     /* 
         there are two cases:
         1. plugin has received file portion and now forward it to Isotoxin: all params are valid
-        2. plugin requests next file portion while it send file: portion == nullptr && portion_size > 0
+        2. plugin requests next file portion while it send file: portion == nullptr && offset multiplies by 1M  && portion_size == 1048576 (1M) even last piece of file is less then 1M
+        3. plugin releases requested buffer. offset - no matter, portion is pointer to buffer, portion_size == 0
     */
-    void(__stdcall *file_portion)(u64 utag, u64 offset, const void *portion, int portion_size);
+    bool(__stdcall *file_portion)(u64 utag, u64 offset, const void *portion, int portion_size);
     
     /*
         control file transfer
@@ -326,7 +327,7 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     FUNC2( void, file_send,      int, const file_send_info_s *) \
     FUNC2( void, file_resume,    u64, u64) \
     FUNC2( void, file_control,   u64, file_control_e) \
-    FUNC2( void, file_portion,   u64, const file_portion_s *) \
+    FUNC2( bool, file_portion,   u64, const file_portion_s *) \
     FUNC1( void, get_avatar,     int ) \
     FUNC2( void, add_groupchat,  const char *, bool ) \
     FUNC2( void, ren_groupchat,  int, const char * ) \

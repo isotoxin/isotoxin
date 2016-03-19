@@ -545,6 +545,7 @@ public:
     INTPAR(bitags, (1<<BIT_ALL) );
 
     FLOATPAR(fontscale_conv_text, 1.0f);
+    FLOATPAR(fontscale_msg_edit, 1.0f);
 
     TEXTWPAR(disabled_spellchk, "?");
 

@@ -67,7 +67,7 @@ public:
         virtual ts::wstr_c to_wstr() const = 0;
         virtual ts::str_c to_utf8() const = 0;
         virtual void update_advance(ts::font_c *f) {};
-        virtual void setup( const ts::ivec2 &pos, ts::glyph_image_s &gi ) = 0;
+        virtual void setup( ts::font_c *font, const ts::ivec2 &pos, ts::glyph_image_s &gi ) = 0;
         virtual active_element_s * clone() const = 0;
         virtual bool equals(active_element_s *) const = 0;
 
@@ -120,7 +120,7 @@ private:
 	ts::tbuf_t<ts::ivec2> lines; // lines of text
 	int start_sel, caret_line, caret_offset, scroll_left;
 	float wheel_scroll_step_size = 50.0f;
-	int caret_width = 2, baseline_offset = 0, chars_limit = 0;
+	int caret_width = 2, baseline_offset = 0, chars_limit = 0, rb_margin_from = 0;
     ts::ivec2 margins_lt = ts::ivec2(0);
     ts::ivec2 margins_rb = ts::ivec2(0);
     ts::irect caretrect = ts::irect(0);
@@ -273,7 +273,7 @@ public:
 	bool is_empty() const {return text.size() == 0;}
     void set_chars_limit( int cl ) { chars_limit = cl; }
     void set_margins_lt( const ts::ivec2 &mlt ) { margins_lt = mlt; }
-    void set_margins_rb( const ts::ivec2 &mrb ) { margins_rb = mrb; }
+    void set_margins_rb(const ts::ivec2 &mrb, int margin_from = 0) { margins_rb = mrb; rb_margin_from = margin_from; }
     const ts::ivec2 &get_margins_lt() const { return margins_lt; }
 
     void set_placeholder(GET_TOOLTIP plht);

@@ -2447,7 +2447,7 @@ template<typename CORE> void bitmap_t<CORE>::sharpen(bitmap_c& outimage, int lv)
 }
 
 bool resize3(const bmpcore_exbody_s &extbody, const uint8 *sou, const imgdesc_s &souinfo, resize_filter_e filt_mode);
-static bool resize3box(const bmpcore_exbody_s &extbody, const uint8 *sou, const imgdesc_s &souinfo, resize_filter_e filt_mode)
+bool img_helper_resize(const bmpcore_exbody_s &extbody, const uint8 *sou, const imgdesc_s &souinfo, resize_filter_e filt_mode)
 {
     if ( filt_mode == FILTER_BOX_LANCZOS3 )
     {
@@ -2456,6 +2456,12 @@ static bool resize3box(const bmpcore_exbody_s &extbody, const uint8 *sou, const 
         ivec2 sz2 = souinfo.sz / 2;
         if ( sz2 >>= extbody.info().sz )
         {
+            if ( sz2 == extbody.info().sz )
+            {
+                img_helper_shrink_2x(extbody(), sou, extbody.info(), souinfo);
+                return true;
+            }
+
             ts::int16 stride = ((sz2.x * 4) + 15) & ~15;
             uint8 * tmp = (uint8 *)MM_ALLOC( stride * sz2.y );
 
@@ -2467,6 +2473,13 @@ static bool resize3box(const bmpcore_exbody_s &extbody, const uint8 *sou, const 
             sz2 = sz2/2;
             for(;sz2 >>= extbody.info().sz;)
             {
+                if (sz2 == extbody.info().sz)
+                {
+                    img_helper_shrink_2x(extbody(), tmp, extbody.info(), souinf);
+                    MM_FREE(tmp);
+                    return true;
+                }
+
                 desinf = imgdesc_s(sz2, 32, stride);
                 img_helper_shrink_2x( tmp, tmp, desinf, souinf );
                 souinf = desinf;
@@ -2486,17 +2499,17 @@ static bool resize3box(const bmpcore_exbody_s &extbody, const uint8 *sou, const 
 template<typename CORE> bool bitmap_t<CORE>::resize_to(bitmap_c& obm, const ivec2 & newsize, resize_filter_e filt_mode) const
 {
     obm.create_ARGB(newsize);
-    return resize3box(obm.extbody(), body(), info(), filt_mode);
+    return img_helper_resize(obm.extbody(), body(), info(), filt_mode);
 }
 
 template<typename CORE> bool bitmap_t<CORE>::resize_to(const bmpcore_exbody_s &extbody_, resize_filter_e filt_mode) const
 {
-    return resize3box(extbody_, body(), info(), filt_mode);
+    return img_helper_resize(extbody_, body(), info(), filt_mode);
 }
 
 template<typename CORE> bool bitmap_t<CORE>::resize_from(const bmpcore_exbody_s &extbody_, resize_filter_e filt_mode) const
 {
-    return resize3box(extbody(), extbody_(), extbody_.info(), filt_mode);
+    return img_helper_resize(extbody(), extbody_(), extbody_.info(), filt_mode);
 }
 
 template<typename CORE> void bitmap_t<CORE>::make_grayscale()

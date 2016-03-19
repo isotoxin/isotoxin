@@ -1303,7 +1303,7 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
 
     emoti().reload();
 
-    if (1.0f != fontscale_conv_text()) //-V550
+    if (1.0f != fontscale_conv_text() || 1.0f != fontscale_msg_edit()) //-V550
     {
         g_app->reload_fonts();
     }

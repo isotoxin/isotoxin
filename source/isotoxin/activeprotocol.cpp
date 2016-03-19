@@ -333,22 +333,35 @@ bool active_protocol_c::cmdhandler(ipcr r)
         {
             gmsg<ISOGM_FILE> *m = TSNEW(gmsg<ISOGM_FILE>);
             m->utag = r.get<uint64>();
-            m->offset = r.get<uint64>();
-            m->filesize = r.get<int>();
+            m->offset = r.get<uint64>() << 20;
+            m->filesize = FILE_TRANSFER_CHUNK;
             m->send_to_main_thread();
         }
         break;
     case HQ_FILE_PORTION:
         {
             gmsg<ISOGM_FILE> *m = TSNEW(gmsg<ISOGM_FILE>);
-            m->utag = r.get<uint64>();
-            m->offset = r.get<uint64>();
-            int dsz;
-            const void *data = r.get_data(dsz);
-            m->data.set_size(dsz);
-            memcpy(m->data.data(), data, dsz);
+
+            ASSERT(r.sz < 0, "HQ_FILE_PORTION must be xchg buffer");
+
+            struct fd_s
+            {
+                uint64 tag;
+                uint64 offset;
+                int size;
+            };
+
+            fd_s *f = (fd_s *)(r.d + sizeof(data_header_s));
+
+            m->utag = f->tag;
+            m->offset = f->offset;
+            m->data.set_size(f->size);
+            memcpy(m->data.data(), f + 1, f->size);
 
             m->send_to_main_thread();
+
+            if (ipcp)
+                ipcp->junct.unlock_buffer(f);
         }
         break;
     case HQ_AVATAR_DATA:
@@ -1102,9 +1115,36 @@ void active_protocol_c::send_file(int cid, uint64 utag, const ts::wstr_c &filena
     ipcp->send(ipcw(AQ_FILE_SEND) << cid << utag << ts::to_utf8(filename) << filesize);
 }
 
-void active_protocol_c::file_portion(uint64 utag, uint64 offset, const void *data, int sz)
+bool active_protocol_c::file_portion(uint64 utag, uint64 offset, const void *data, int sz)
 {
-    ipcp->send(ipcw(AA_FILE_PORTION) << utag << offset << data_block_s(data, sz));
+    if (!ipcp) return false;
+    isotoxin_ipc_s *ipcc = ipcp;
+
+    struct fd_s
+    {
+        uint64 utag;
+        uint64 offset;
+        int sz;
+    };
+
+    int bsz = sz;
+    bsz += sizeof(data_header_s) + sizeof(fd_s);
+
+    if (data_header_s *dh = (data_header_s *)ipcc->junct.lock_buffer(bsz))
+    {
+        dh->cmd = AA_FILE_PORTION;
+        fd_s *d = (fd_s *)(dh + 1);
+        d->utag = utag;
+        d->offset = offset;
+        d->sz = sz;
+
+        memcpy( d + 1, data, sz );
+
+        ipcc->junct.unlock_send_buffer(dh, bsz);
+        return true;
+    }
+
+    return false;
 }
 
 void active_protocol_c::avatar_data_request(int cid)

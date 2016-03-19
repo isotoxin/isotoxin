@@ -1080,6 +1080,7 @@ void gui_notice_callinprogress_c::menu_video(const ts::str_c &p)
         if (av_contact_s *avc = get_avc())
         {
             avc->currentvsb.id.clear();
+            avc->cpar.clear();
             avc->vsb.reset();
             camera.reset();
             if (!avc->is_camera_on())
@@ -1090,10 +1091,19 @@ void gui_notice_callinprogress_c::menu_video(const ts::str_c &p)
         if (av_contact_s *avc = get_avc())
         {
             ts::wstr_c id = from_utf8( p.as_sptr().skip(1) );
+            int ri = id.find_pos('\n');
+            ts::wstr_c res;
+            if (ri > 0)
+            {
+                res = id.substr(ri + 1);
+                id.set_length(ri);
+            }
             for(const vsb_descriptor_s &d : video_devices)
                 if (d.id == id)
                 {
                     avc->currentvsb = d;
+                    avc->cpar.clear();
+                    avc->cpar.set(CONSTWSTR("res")) = res;
                     avc->vsb.reset();
                     camera.reset();
                     if (!avc->is_camera_on())
@@ -1125,12 +1135,29 @@ bool gui_notice_callinprogress_c::b_extra(RID erid, GUIPARAM)
         {
             bool iscamon = avc->is_camera_on();
             vsb_descriptor_s currentvsb = avc->currentvsb;
+            ts::ivec2 res = ts::parsevec2( to_str(avc->cpar.get(CONSTWSTR("res"))), ts::ivec2(0) );
             m.add_separator();
 
             m.add(TTT("Default video source",360), currentvsb.id.is_empty() && iscamon ? MIF_MARKED : 0, DELEGATE(this, menu_video), CONSTASTR("x"));
 
-            for(const vsb_descriptor_s &d : video_devices)
-                m.add(d.desc, currentvsb.id.equals(d.id) && iscamon ? MIF_MARKED : 0, DELEGATE(this, menu_video), CONSTASTR("s") + to_utf8(d.id));
+            for (const vsb_descriptor_s &d : video_devices)
+            {
+                if (d.resolutions.count())
+                {
+                    menu_c sm = m.add_sub(d.desc);
+                    for( const ts::ivec2 &r : d.resolutions )
+                    {
+                        sm.add(ts::wmake(r.x).append(CONSTWSTR(" x ")).append_as_uint(r.y),
+                            currentvsb.id.equals(d.id) && iscamon && res == r ? MIF_MARKED : 0, DELEGATE(this, menu_video), ts::str_c(CONSTASTR("s"), to_utf8(d.id)).append_char('\n').append_as_uint(r.x).append_char(',').append_as_uint(r.y));
+                    }
+
+                } else
+                {
+                    m.add(d.desc, currentvsb.id.equals(d.id) && iscamon ? MIF_MARKED : 0, DELEGATE(this, menu_video), CONSTASTR("s") + to_utf8(d.id));
+                }
+
+
+            }
 
         }
         
@@ -1397,6 +1424,9 @@ void gui_notice_callinprogress_c::video_off()
 
     if (!fsvideo.expired())
         TSDEL(fsvideo.get());
+
+    if ( common.b_fs )
+        MODIFY( *common.b_fs ).visible(false);
 }
 
 ts::uint32 gui_notice_callinprogress_c::gm_handler(gmsg<ISOGM_VIDEO_TICK> &sz)
@@ -5462,6 +5492,9 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
         return 0;
     }
 
+    if ( historian == p.contact )
+        return 0;
+
     bool added;
     auto &x = messages.add_get_item(historian ? historian->getkey() : contact_key_s(), added);
     x.value.text = get_text();
@@ -5489,6 +5522,8 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     register_kbd_callback( DELEGATE( this, show_smile_selector ), SSK_S, true );
     set_multiline(true);
     set_theme_rect(CONSTASTR("entertext"), false);
+
+    set_font( g_app->preloaded_stuff().font_msg_edit );
     defaultthrdraw = DTHRO_BORDER | DTHRO_CENTER;
 
     gui_button_c &smiles = MAKE_CHILD<gui_button_c>(getrid());
@@ -5500,6 +5535,7 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     smile_pos_corrector = TSNEW(leech_dock_bottom_right_s, rb.x, rb.y, 2, 2);
     smiles.leech(smile_pos_corrector);
     MODIFY(smiles).visible(true);
+    set_margins_rb(ts::ivec2(rb.x, 0));
 
     set_badword_color( get_default_text_color(0) );
 
@@ -5509,14 +5545,36 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     __super::created();
 }
 
+/*virtual*/ bool gui_message_editor_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+{
+    if (SQ_RECT_CHANGED == qp)
+    {
+        set_margins_rb(ts::ivec2(rb.x, 0), get_client_area().rb.y - rb.y);
+        redraw();
+    }
+
+    return __super::sq_evt(qp, rid, data);
+}
+
 ts::uint32 gui_message_editor_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
 {
     if (ue.evt == UE_THEMECHANGED)
     {
         set_badword_color(get_default_text_color(0));
         set_color( get_default_text_color() );
+        set_font(g_app->preloaded_stuff().font_msg_edit);
     }
 
+    return 0;
+}
+
+ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
+{
+    if (ch.sp == PP_FONTSCALE)
+    {
+        set_font(g_app->preloaded_stuff().font_msg_edit);
+        redraw();
+    }
     return 0;
 }
 

@@ -296,6 +296,9 @@ bool dialog_colors_c::updatetext(RID, GUIPARAM p)
         }
 
     }
+
+    ts::make_path( ts::fn_get_path(colsfn), 0 );
+
     ts::str_c stor = bp.store();
     ts::buf0_c b; b.append_buf( stor.cstr(), stor.get_length() );
     b.save_to_file( colsfn );

@@ -79,6 +79,7 @@ void TSCALL img_helper_merge_with_alpha(uint8 *des, const uint8 *basesrc, const 
 void TSCALL img_helper_yuv2rgb(uint8 *des, const imgdesc_s &des_info, const uint8 *sou, yuv_fmt_e yuvfmt);
 void TSCALL img_helper_rgb2yuv(uint8 *dst, const imgdesc_s &src_info, const uint8 *sou, yuv_fmt_e yuvfmt);
 void TSCALL img_helper_alpha_blend_pm( uint8 *dst, int dst_pitch, const uint8 *sou, const imgdesc_s &src_info, uint8 alpha, bool guaranteed_premultiplied = true ); // only 32 bpp target and source
+bool TSCALL img_helper_resize( const bmpcore_exbody_s &extbody, const uint8 *sou, const imgdesc_s &souinfo, resize_filter_e filt_mode );
 
 // see convert.cpp
 void TSCALL img_helper_i420_to_ARGB(const uint8* src_y, int src_stride_y, const uint8* src_u, int src_stride_u, const uint8* src_v, int src_stride_v, uint8* dst_argb, int dst_stride_argb, int width, int height);

@@ -31,7 +31,7 @@ dialog_addcontact_c::~dialog_addcontact_c()
 /*virtual*/ ts::ivec2 dialog_addcontact_c::get_min_size() const
 {
     if (!inparam.pubid.is_empty()) return ts::ivec2(510, 310);
-    return ts::ivec2(510, 330);
+    return ts::ivec2(510, 340);
 }
 
 void dialog_addcontact_c::getbutton(bcreate_s &bcr)

@@ -2569,8 +2569,25 @@ lan_engine::incoming_file_s::incoming_file_s(u32 cid_, u64 utag_, u64 fsz_, cons
 {
     if (is_accepted)
     {
-        engine->hf->file_portion( utag, offset, d, dsz );
-        logfn("filetr.log", "chunk_received %llu %llu %u", utag, offset, dsz);
+        if (nextoffset != offset)
+        {
+            pause(true);
+            resumein = time_ms() + 1000;
+            stuck = true;
+            return;
+        }
+
+        if (engine->hf->file_portion( utag, offset, d, dsz ))
+        {
+            nextoffset = offset + dsz;
+            logfn("filetr.log", "chunk_received %llu %llu %u", utag, offset, dsz);
+        } else
+        {
+            logfn("filetr.log", "chunk_received but buffer stuck %llu %llu %u", utag, offset, dsz);
+            pause(true);
+            resumein = time_ms() + 1000;
+            stuck = true;
+        }
     }
 }
 
@@ -2625,12 +2642,19 @@ lan_engine::incoming_file_s::incoming_file_s(u32 cid_, u64 utag_, u64 fsz_, cons
         engine->hf->file_control(utag, FIC_UNPAUSE);
 }
 
-/*virtual*/ void lan_engine::incoming_file_s::tick(int /*ct*/)
+/*virtual*/ void lan_engine::incoming_file_s::tick(int ct)
 {
     if (contact_s *c = engine->find(cid))
     {
         if (c->state == contact_s::ONLINE)
+        {
+            if (stuck && (ct - resumein) > 0)
+            {
+                stuck = false;
+                accepted(nextoffset);
+            }
             return;
+        }
     }
 
     engine->hf->file_control(utag, FIC_DISCONNECT);
@@ -2654,7 +2678,14 @@ lan_engine::transmitting_file_s::transmitting_file_s(contact_s *to_contact, u64 
 
 /*virtual*/ void lan_engine::transmitting_file_s::accepted(u64 offset_)
 {
-    offset = offset_;
+    if ((!request && rch[0].buf == nullptr) || offset_ > 0)
+    {
+        rch[0].clear();
+        rch[1].clear();
+
+        reques_next_block(offset_ & FILE_TRANSFER_CHUNK_MASK);
+    }
+    
     is_accepted = true;
     is_paused = false;
 
@@ -2704,7 +2735,53 @@ lan_engine::transmitting_file_s::transmitting_file_s(contact_s *to_contact, u64 
 
 DELTA_TIME_PROFILER(xxx, 1024);
 
-void lan_engine::transmitting_file_s::fresh_file_portion(const file_portion_s *fp)
+bool lan_engine::transmitting_file_s::ready_chunk_s::set(const file_portion_s *fp)
+{
+    if (nullptr == buf && fp->offset == offset)
+    {
+        buf = fp->data;
+        offset = fp->offset;
+        size = fp->size;
+        dtg = 0;
+        return true;
+    }
+    return false;
+}
+
+void lan_engine::transmitting_file_s::ready_chunk_s::clear()
+{
+    if (buf)
+        engine->hf->file_portion(0, 0, buf, 0); // release buffer
+
+    memset( this, 0, sizeof(*this) );
+}
+
+void lan_engine::transmitting_file_s::reques_next_block(u64 offset_)
+{
+    if (fsz > offset_)
+    {
+        engine->hf->file_portion(utag, offset_, nullptr, FILE_TRANSFER_CHUNK); // request now
+        int i = 0;
+        if (rch[0].buf) ++i;
+        ASSERT(rch[i].buf == nullptr && rch[i].offset == 0);
+        rch[i].offset = offset_;
+    }
+    request = true;
+}
+
+void lan_engine::transmitting_file_s::send_block(contact_s *c)
+{
+    struct
+    {
+        u64 utag;
+        u64 offset_net;
+    } d = { my_htonll(utag), my_htonll(rch[0].offset) };
+
+    ASSERT(rch[0].buf && rch[0].dtg == 0);
+    rch[0].dtg = c->send_block(BT_FILE_CHUNK, 0, &d, sizeof(d), rch[0].buf, rch[0].size);
+}
+
+bool lan_engine::transmitting_file_s::fresh_file_portion(const file_portion_s *fp)
 {
     logfn("filetr.log", "fresh_file_portion fp %llu (%llu)", utag, fp->offset);
 
@@ -2714,39 +2791,55 @@ void lan_engine::transmitting_file_s::fresh_file_portion(const file_portion_s *f
         {
             DELTA_TIME_CHECKPOINT(xxx);
 
-            struct  
-            {
-                u64 utag;
-                u64 offset_net;
-            } d = { my_htonll(utag), my_htonll(fp->offset) };
+            ASSERT( fp->size == FILE_TRANSFER_CHUNK || (fp->offset + fp->size) == fsz );
 
-
-            for (int i = 0; i < requested_chunks; ++i)
+            if ( rch[0].set(fp) )
             {
-                requested_chunk_s &rch = rchunks[i];
-                if (rch.dtg == 0 && rch.offset == fp->offset && rch.size == fp->size)
-                {
-                    rch.dtg = c->send_block(BT_FILE_CHUNK, 0, &d, sizeof(d), fp->data, fp->size);
-                    return;
-                }
+                ASSERT( rch[1].buf == nullptr );
+                send_block( c );
+                reques_next_block(fp->offset + FILE_TRANSFER_CHUNK);
+
+            } else
+            {
+                ASSERT( rch[0].offset + FILE_TRANSFER_CHUNK == fp->offset && rch[1].buf == nullptr );
+                CHECK( rch[1].set(fp) );
             }
 
-            __debugbreak(); // bad
+            return true;
 
         }
     }
+    return false;
 }
 
 /*virtual*/ bool lan_engine::transmitting_file_s::delivered(u64 idtg)
 {
-    for(int i = 0; i<requested_chunks; ++i)
+    if (rch[0].dtg == idtg)
     {
-        if (rchunks[i].dtg == idtg)
+        if (rch[0].offset + rch[0].size == fsz)
+            last_chunk_delivered = true;
+
+        rch[0].clear();
+
+        rch[0] = rch[1];
+        rch[1].buf = nullptr;
+        rch[1].clear();
+
+        if ( rch[0].buf )
         {
-            rchunks[i] = rchunks[--requested_chunks];
-            logfn("filetr.log", "delivered %llu %u", idtg, requested_chunks);
-            return true;
+            if (contact_s *c = engine->find(cid))
+            {
+                if (c->state == contact_s::ONLINE)
+                {
+                    send_block(c);
+                    reques_next_block(rch[0].offset + FILE_TRANSFER_CHUNK);
+                }
+            }
         }
+
+
+        logfn("filetr.log", "delivered %llu", idtg);
+        return true;
     }
 
     return false;
@@ -2758,25 +2851,15 @@ void lan_engine::transmitting_file_s::fresh_file_portion(const file_portion_s *f
     {
         if (c->state == contact_s::ONLINE)
         {
-            if (requested_chunks < MAX_TRANSFERING_CHUNKS && is_accepted && !is_paused && !is_finished)
+            if (is_accepted && !is_paused && !is_finished)
             {
                 //logm("portion request %llu (%llu)", utag, offset);
 
-                int request_size = (offset + (unsigned)PORTION_SIZE < fsz) ? PORTION_SIZE : (int)(fsz - offset);
-                if (request_size)
+                if ( nullptr == rch[0].buf && !request)
                 {
-                    rchunks[requested_chunks].dtg = 0;
-                    rchunks[requested_chunks].offset = offset;
-                    rchunks[requested_chunks].size = request_size;
-#ifdef _DEBUG
-                    rchunks[requested_chunks].requesttime = ct;
-#endif // _DEBUG
-                    ++requested_chunks;
+                    reques_next_block(0);
 
-                    engine->hf->file_portion(utag, offset, nullptr, request_size);
-                    offset += request_size;
-
-                } else if (requested_chunks == 0)
+                } else if (last_chunk_delivered)
                 {
                     // send done
                     finished(true);
@@ -2857,10 +2940,13 @@ void lan_engine::file_control(u64 utag, file_control_e ctl)
         }
 }
 
-void lan_engine::file_portion(u64 utag, const file_portion_s *fp)
+bool lan_engine::file_portion(u64 utag, const file_portion_s *fp)
 {
     if (file_transfer_s *f = find_ftr(utag))
-        f->fresh_file_portion(fp);
+        if (f->fresh_file_portion(fp))
+            return true;
+
+    return false;
 }
 
 void lan_engine::get_avatar(int id)

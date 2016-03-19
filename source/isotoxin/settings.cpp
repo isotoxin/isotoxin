@@ -137,26 +137,17 @@ namespace
         ts::str_c proxy_addr;
         ts::str_c url;
         ts::wstr_c path;
+        ts::wstr_c fname;
 
         bool failed = false;
 
         download_dictionary_s(dialog_dictionaries_c *dlg, const ts::str_c &utf8name, int id) :dlg(dlg), url( CONSTASTR("http://isotoxin.im/spelling/"), utf8name ), id(id)
         {
+            fname = from_utf8(utf8name); fname.append(CONSTWSTR(".zip"));
             proxy_type = cfg().proxy();
             proxy_addr = cfg().proxy_addr();
             url.append(CONSTASTR(".zip"));
             path = ts::fn_join(ts::fn_get_path(cfg().get_path()), CONSTWSTR("spelling"));
-        }
-
-        bool extract_dict(const ts::arc_file_s &f)
-        {
-            if (ts::pstr_c(f.fn).ends(CONSTASTR(".aff")) || ts::pstr_c(f.fn).ends(CONSTASTR(".dic")))
-            {
-                ts::wstr_c wfn(ts::fn_join(path, ts::to_wstr(f.fn)));
-                f.get().save_to_file( wfn );
-            }
-
-            return true;
         }
 
         /*virtual*/ int iterate(int pass) override
@@ -185,7 +176,9 @@ namespace
             else
             {
                 ts::make_path(path, 0);
-                ts::zip_open(d.data(), d.size(), DELEGATE(this, extract_dict));
+
+                ts::wstr_c wfn(ts::fn_join(path, fname));
+                d.save_to_file(wfn);
             }
             curl_easy_cleanup(curl);
 
@@ -197,7 +190,7 @@ namespace
     {
         ts::safe_ptr<dialog_dictionaries_c> dlg;
         ts::wstrings_c fns;
-        ts::buf0_c aff, dic;
+        ts::blob_c aff, dic, zip;
         ts::wstrings_c dar;
         bool stopjob = false;
 
@@ -214,10 +207,22 @@ namespace
 
         load_local_spelling_list_s(dialog_dictionaries_c *dlg);
 
+        bool extract_zip(const ts::arc_file_s &z)
+        {
+            if (ts::pstr_c(z.fn).ends(CONSTASTR(".aff")))
+                aff = z.get();
+            else if (ts::pstr_c(z.fn).ends(CONSTASTR(".dic")))
+                dic = z.get();
+            return true;
+        }
+
         /*virtual*/ int iterate(int pass) override
         {
             if (stopjob) return R_DONE;
-            if (aff.size() == 0 || dic.size() == 0) return R_RESULT_EXCLUSIVE;
+            if ((aff.size() == 0 || dic.size() == 0) && zip.size() == 0) return R_RESULT_EXCLUSIVE;
+
+            if (zip.size())
+                ts::zip_open( zip.data(), zip.size(), DELEGATE(this, extract_zip) );
 
             ts::md5_c md5;
             md5.update(aff.data(), aff.size());
@@ -227,15 +232,32 @@ namespace
             return fns.size() ? R_RESULT_EXCLUSIVE : R_DONE;
         }
 
+        void try_load_zip(ts::wstr_c &fn)
+        {
+            fn.set_length(fn.get_length() - 3).append(CONSTWSTR("zip"));
+            zip.load_from_file(fn);
+            if (zip.size())
+            {
+                dict_rec_s &d = dicts.add();
+                d.name = ts::fn_get_name(fn);
+                d.path = fn;
+            }
+        }
+
         /*virtual*/ void result() override
         {
             for (; fns.size() > 0;)
             {
+                zip.clear();
                 ts::wstr_c fn(fns.get_last_remove(), CONSTWSTR("aff"));
 
                 aff.load_from_file(fn);
                 if (0 == aff.size())
+                {
+                    try_load_zip(fn);
+                    if (zip.size()) break;
                     continue;
+                }
 
                 fn.set_length(fn.get_length() - 3).append(CONSTWSTR("dic"));
                 dic.load_from_file(fn);
@@ -247,8 +269,10 @@ namespace
                     break;
                 }
                 aff.clear();
+                try_load_zip(fn);
+                if (zip.size()) break;
             }
-            stopjob = aff.size() == 0 || dic.size() == 0;
+            stopjob = (aff.size() == 0 || dic.size() == 0) && zip.size() == 0;
         }
 
         /*virtual*/ void done(bool canceled) override;
@@ -547,6 +571,7 @@ namespace
                             need2rewarn = true;
                             ts::kill_file(ts::fn_change_ext(li.path, CONSTWSTR("aff")));
                             ts::kill_file(ts::fn_change_ext(li.path, CONSTWSTR("dic")));
+                            ts::kill_file(ts::fn_change_ext(li.path, CONSTWSTR("zip")));
                             dar.find_remove_slow(li.name);
                             if (!li.remote)
                                 items.remove_slow(i);
@@ -810,8 +835,13 @@ namespace
     }
     /*virtual*/ void download_dictionary_s::done(bool canceled)
     {
-        if (!canceled && dlg)
-            dlg->downloaded(id);
+        if (!canceled)
+        {
+            if (dlg)
+                dlg->downloaded(id);
+            else
+                g_app->resetup_spelling();
+        }
 
         __super::done(canceled);
     }
@@ -841,9 +871,13 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
 
     profile_selected = prf().is_loaded();
 
-    fontsz = 1000;
+    fontsz_conv_text = 1000;
+    fontsz_msg_edit = 1000;
     gui->theme().font_params(CONSTASTR("conv_text"), [&](const ts::font_params_s &fp) {
-        fontsz = ts::tmin(fontsz, fp.size.x, fp.size.y);
+        fontsz_conv_text = ts::tmin(fontsz_conv_text, fp.size.x, fp.size.y);
+    });
+    gui->theme().font_params(CONSTASTR("msg_edit"), [&](const ts::font_params_s &fp) {
+        fontsz_msg_edit = ts::tmin(fontsz_msg_edit, fp.size.x, fp.size.y);
     });
 
     ts::hashmap_t< ts::wstr_c, ts::abp_c > bps;
@@ -1519,17 +1553,31 @@ void dialog_settings_c::set_disabled_splchklist(const ts::wstrings_c &s, bool ne
     mod();
 }
 
-bool dialog_settings_c::scale_font(RID, GUIPARAM p)
+bool dialog_settings_c::scale_font_conv_text(RID, GUIPARAM p)
 {
     gui_hslider_c::param_s *pp = (gui_hslider_c::param_s *)p;
-    font_scale = pp->value;
+    font_scale_conv_text = pp->value;
 
-    int sz = ts::lround( font_scale * fontsz );
+    int sz = ts::lround(font_scale_conv_text * fontsz_conv_text );
 
     pp->custom_value_text = TTT("Message font size: $",346)/ts::wmake(sz);
-    if (sz == fontsz)
+    if (sz != fontsz_conv_text)
         pp->custom_value_text.insert(0,CONSTWSTR("<b>")).append(CONSTWSTR("</b>"));
 
+    mod();
+    return true;
+}
+
+bool dialog_settings_c::scale_font_msg_edit(RID, GUIPARAM p)
+{
+    gui_hslider_c::param_s *pp = (gui_hslider_c::param_s *)p;
+    font_scale_msg_edit = pp->value;
+
+    int sz = ts::lround(font_scale_msg_edit * fontsz_msg_edit);
+
+    pp->custom_value_text = TTT("Message edit font size: $",429) / ts::wmake(sz);
+    if (sz != fontsz_msg_edit)
+        pp->custom_value_text.insert(0, CONSTWSTR("<b>")).append(CONSTWSTR("</b>"));
 
     mod();
     return true;
@@ -1567,6 +1615,14 @@ void dialog_settings_c::mod()
 }
 
 #define PREPARE(var, inits) var = inits; watch(var)
+#define font_size_slider( fontname ) float minscale##fontname = fontsz_##fontname ? (8.0f / fontsz_##fontname) : ts::tmin(0.9f, font_scale_##fontname); \
+                                    float maxscale##fontname = fontsz_##fontname ? (32.0f / fontsz_##fontname) : ts::tmax(1.1f, font_scale_##fontname); \
+                                    ts::wstr_c initstr##fontname(CONSTWSTR("0/")); \
+                                    initstr##fontname.append_as_float(minscale##fontname).append(CONSTWSTR("/0.5/1/1/")).append_as_float(maxscale##fontname); \
+                                    dm().hslider(ts::wstr_c(), font_scale_##fontname, initstr##fontname, DELEGATE(this, scale_font_##fontname))
+
+
+
 
 /*virtual*/ int dialog_settings_c::additions( ts::irect & edges )
 {
@@ -1637,7 +1693,8 @@ void dialog_settings_c::mod()
 
         PREPARE(load_history_count, prf().min_history());
 
-        PREPARE( font_scale, prf().fontscale_conv_text() );
+        PREPARE(font_scale_conv_text, prf().fontscale_conv_text() );
+        PREPARE(font_scale_msg_edit, prf().fontscale_msg_edit());
 
         PREPARE( date_msg_tmpl, prf().date_msg_template() );
         PREPARE( date_sep_tmpl, prf().date_sep_template() );
@@ -1661,6 +1718,8 @@ void dialog_settings_c::mod()
 
         PREPARE(disabled_spellchk, ts::wstrings_c( prf().get_disabled_dicts(), '/' ));
     }
+
+    PREPARE(tools_bits, cfg().allow_tools());
 
     PREPARE( startopt, detect_startopts() );
 
@@ -1730,6 +1789,7 @@ void dialog_settings_c::mod()
     if ( profile_selected && prf().get_options().is(OPTOPT_POWER_USER) )
     m.add_sub(TTT("Advanced",394))
         .add(TTT("Video calls",397), 0, TABSELMI(MASK_ADVANCED_VIDEOCALLS))
+        .add(TTT("Tools",432), 0, TABSELMI(MASK_ADVANCED_TOOLS))
         .add(TTT("Debug", 395), 0, TABSELMI(MASK_ADVANCED_DEBUG));
 
     descmaker dm(this);
@@ -1850,6 +1910,7 @@ void dialog_settings_c::mod()
     dm().page_caption(TTT("Video settings",348));
     dm().vspace(15);
     dm().combik(TTT("Default video source",349)).setmenu(list_video_capture_devices()).setname(CONSTASTR("camera"));
+    dm().combik(ts::wsptr()).setmenu(list_video_capture_resolutions()).setname(CONSTASTR("camerares"));
     dm().vspace();
     dm().panel(PREVIEW_HEIGHT, DELEGATE(this, drawcamerapanel)).setname(CONSTASTR("preview"));
 
@@ -1929,6 +1990,9 @@ void dialog_settings_c::mod()
             menu_c().add(espt, 0, MENUHANDLER(), CONSTASTR("1"))
             );
 
+        dm().vspace();
+        font_size_slider(msg_edit);
+
         dm << MASK_PROFILE_GCHAT; //____________________________________________________________________________________________________//
         dm().page_caption(TTT("Group chat settings",306));
 
@@ -1962,12 +2026,8 @@ void dialog_settings_c::mod()
             .add(TTT("Maximize inline images",391), 0, MENUHANDLER(), CONSTASTR("16"))
             );
 
-        float minscale = fontsz ? (8.0f / fontsz) : ts::tmin(0.9f, font_scale);
-        float maxscale = fontsz ? (20.0f / fontsz) : ts::tmax(1.1f, font_scale);
-        ts::wstr_c initstr(CONSTWSTR("0/"));
-        initstr.append_as_float(minscale).append(CONSTWSTR("/0.5/1/1/")).append_as_float(maxscale);
-
-        dm().hslider(ts::wstr_c(), font_scale, initstr, DELEGATE(this, scale_font));
+        
+        font_size_slider(conv_text);
 
         dm().vspace();
 
@@ -2040,6 +2100,12 @@ void dialog_settings_c::mod()
         menu_c().add(CONSTWSTR("Ignory proxy settings for this url"), 0, MENUHANDLER(), CONSTASTR("1"))
         .add(CONSTWSTR("Use only this url"), 0, MENUHANDLER(), CONSTASTR("2"))
         );
+
+    dm << MASK_ADVANCED_TOOLS;
+    dm().checkb(ts::wstr_c(), DELEGATE(this, advt_handler), tools_bits).setmenu(
+        menu_c().add(TTT("Color editor",433), 0, MENUHANDLER(), CONSTASTR("1"))
+        );
+
 
     if (profile_selected)
     {
@@ -2194,6 +2260,14 @@ bool dialog_settings_c::encoding_quality_set(RID srid, GUIPARAM p)
     mod();
     return true;
 }
+
+bool dialog_settings_c::advt_handler(RID, GUIPARAM p)
+{
+    tools_bits = as_int(p);
+    mod();
+    return true;
+}
+
 
 bool dialog_settings_c::advv_handler(RID, GUIPARAM p)
 {
@@ -2889,7 +2963,7 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
             emoti().reload();
             gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_EMOJISET).send();
         }
-        fontchanged = prf().fontscale_conv_text(font_scale);
+        fontchanged = prf().fontscale_conv_text(font_scale_conv_text) || prf().fontscale_msg_edit(font_scale_msg_edit);
 
         bool chvideoencopts = prf().video_enc_quality(disable_video_ex ? -1 : encoding_quality);
         chvideoencopts |= prf().video_bitrate(video_bitrate);
@@ -2905,6 +2979,8 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
 
     if (proxy > 0 && !check_netaddr(proxy_addr))
         proxy_addr = CONSTASTR(DEFAULT_PROXY);
+
+    cfg().allow_tools(tools_bits);
 
     cfg().autoupdate(autoupdate);
     cfg().proxy(proxy);
@@ -2969,10 +3045,7 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
     }
 
     if (fontchanged)
-    {
         g_app->reload_fonts();
-        gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_FONTSCALE).send();
-    }
 
     if (profile_selected)
     {
@@ -3273,10 +3346,50 @@ bool dialog_settings_c::dspf_handler( RID, GUIPARAM p )
     return true;
 }
 
+ts::wstr_c dialog_settings_c::fix_camera_res(const ts::wstr_c &tr)
+{
+    ts::ivec2 res(0);
+    if (tr.get_length()) tr.split(res.x, res.y, ",");
+
+    ts::wstr_c cid = camera.set(CONSTWSTR("id"));
+    for (const vsb_descriptor_s &vd : video_devices)
+    {
+        if (vd.id == cid)
+        {
+            if (res == ts::ivec2(0) && vd.resolutions.count())
+                res = vd.resolutions.get(0);
+
+            for (const ts::ivec2 &r : vd.resolutions)
+            {
+                if (r == res) return ts::wmake(r.x).append_char(',').append_as_uint(r.y);
+            }
+            if (vd.resolutions.count())
+            {
+                res = vd.resolutions.get(0);
+                return ts::wmake(res.x).append_char(',').append_as_uint(res.y);
+            }
+
+            break;
+        }
+    }
+    return ts::wstr_c();
+}
+
 void dialog_settings_c::select_video_capture_device( const ts::str_c& prm )
 {
     camera.set( CONSTWSTR("id") ) = from_utf8(prm);
+    camera.set(CONSTWSTR("res")) = fix_camera_res(camera.get(CONSTWSTR("res")));
     set_combik_menu(CONSTASTR("camera"), list_video_capture_devices());
+    set_combik_menu(CONSTASTR("camerares"), list_video_capture_resolutions());
+    mod();
+
+    setup_video_device();
+}
+
+void dialog_settings_c::select_video_capture_res(const ts::str_c& prm)
+{
+    camera.set(CONSTWSTR("res")) = fix_camera_res(to_wstr(prm));
+    set_combik_menu(CONSTASTR("camerares"), list_video_capture_resolutions());
     mod();
 
     setup_video_device();
@@ -3300,6 +3413,29 @@ menu_c dialog_settings_c::list_video_capture_devices()
         m.add(vd.desc, f, DELEGATE(this, select_video_capture_device), to_utf8(vd.id));
     }
 
+    return m;
+}
+
+menu_c dialog_settings_c::list_video_capture_resolutions()
+{
+    menu_c m;
+    ts::wstr_c cid = camera.set(CONSTWSTR("id"));
+    ts::wstr_c res = fix_camera_res(camera.set(CONSTWSTR("res")));
+    for (const vsb_descriptor_s &vd : video_devices)
+    {
+        if (vd.id == cid)
+        {
+            for( const ts::ivec2 &r : vd.resolutions )
+            {
+                ts::uint32 f = 0;
+                ts::wstr_c tres; tres.append_as_uint(r.x).append_char(',').append_as_int(r.y);
+                if (tres == res) f = MIF_MARKED;
+                m.add(ts::wmake(r.x).append(CONSTWSTR(" x ")).append_as_uint(r.y), f, DELEGATE(this, select_video_capture_res), to_str(tres));
+            }
+        }
+    }
+    if (m.is_empty())
+        m.add( TTT("Default resolution",430), MIF_MARKED, DELEGATE(this, select_video_capture_res), CONSTASTR(""));
     return m;
 }
 
@@ -3328,6 +3464,7 @@ void dialog_settings_c::set_video_devices( vsb_list_t &&_video_devices )
     }
 
     set_combik_menu(CONSTASTR("camera"), list_video_capture_devices());
+    set_combik_menu(CONSTASTR("camerares"), list_video_capture_resolutions());
     setup_video_device();
    
 }
@@ -3354,12 +3491,14 @@ void dialog_settings_c::setup_video_device()
     } end(this);
 
     ts::wstr_c cid = camera.set( CONSTWSTR("id") );
+    ts::wstrmap_c camdesc( camera );
+    if (cid.begins(CONSTWSTR("desktop"))) camdesc.set( CONSTWSTR("res") ).clear();
     const vsb_descriptor_s *dd = nullptr;
     for (const vsb_descriptor_s &d : video_devices)
     {
         if (d.id == cid)
         {
-            video_device.reset( vsb_c::build(d) );
+            video_device.reset( vsb_c::build(d, camdesc) );
             return;
         }
         if (d.id.equals(CONSTWSTR("desktop")))
@@ -3368,7 +3507,7 @@ void dialog_settings_c::setup_video_device()
     if (dd)
     {
         initializing_animation.restart();
-        video_device.reset(vsb_c::build(*dd));
+        video_device.reset(vsb_c::build(*dd, camdesc));
     }
 }
 
@@ -3429,7 +3568,7 @@ bool dialog_settings_c::drawcamerapanel(RID, GUIPARAM p)
         } else if (ts::drawable_bitmap_c *b = video_device->lockbuf(nullptr))
         {
             ts::ivec2 dsz = video_device->get_desired_size();
-            if (dsz == b->info().sz)
+            if (dsz >>= b->info().sz)
             {
                 e->begin_draw();
                 ts::ivec2 sz = e->getrect().getprops().size();

@@ -262,13 +262,14 @@ enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
 
 struct dht_node_s
 {
-    str_c addr;
+    str_c addr4;
+    str_c addr6;
     byte pubid[32];
     int port;
     int used = 0;
     int random = 0;
 
-    dht_node_s( const asptr& addr, int port, const asptr& pubid_ ):addr(addr), port(port)
+    dht_node_s( const asptr& addr4, const asptr& addr6, int port, const asptr& pubid_ ):addr4(addr4), addr6(addr6), port(port)
     {
         pstr_c(pubid_).hex2buf<32>(pubid);
     }
@@ -692,6 +693,10 @@ struct incoming_file_s : public file_transfer_s
     incoming_file_s *prev;
     incoming_file_s *next;
     
+    u64 chunk_offset = 0;
+    u64 next_recv_offset = 0;
+    std::vector<byte> chunk;
+
     str_c fn;
     TOX_FILE_KIND kind;
 
@@ -719,7 +724,34 @@ struct incoming_file_s : public file_transfer_s
 
     virtual void recv_data( u64 position, const byte *data, size_t datasz )
     {
-        hf->file_portion(utag, position, data, datasz);
+        if (next_recv_offset == 0 && position > 0)
+        {
+            // file resume from position
+            chunk_offset = position;
+        } else if ( position != next_recv_offset )
+        {
+            kill();
+            return;
+        }
+
+        next_recv_offset = position + datasz;
+        u64 newsize = position + datasz - chunk_offset;
+        if (newsize > chunk.size())
+            chunk.resize((u32)newsize);
+        
+        memcpy(chunk.data() + position - chunk_offset, data, datasz);
+
+        if (newsize >= FILE_TRANSFER_CHUNK)
+        {
+            if (hf->file_portion(utag, chunk_offset, chunk.data(), FILE_TRANSFER_CHUNK))
+            {
+                chunk_offset += FILE_TRANSFER_CHUNK;
+                u32 ostsz = chunk.size() - FILE_TRANSFER_CHUNK;
+                memcpy(chunk.data(), chunk.data() + FILE_TRANSFER_CHUNK, ostsz);
+                chunk.resize(ostsz);
+            }
+        }
+
     }
 
     /*virtual*/ void accepted() override
@@ -735,6 +767,12 @@ struct incoming_file_s : public file_transfer_s
     }
     /*virtual*/ void finished() override
     {
+        if (chunk.size())
+        {
+            if (!hf->file_portion(utag, chunk_offset, chunk.data(), chunk.size()))
+                return; // just keep file unfinished
+        }
+
         hf->file_control(utag,FIC_DONE);
         //delete this; do not delete now due FIC_DONE from app
     }
@@ -750,12 +788,11 @@ struct incoming_file_s : public file_transfer_s
 
 struct incoming_avatar_s : public incoming_file_s
 {
-    std::vector<byte> avatar;
     int droptime;
     incoming_avatar_s(u32 fid_, u32 fnn_, u64 fsz_, const asptr &fn) : incoming_file_s( fid_, fnn_, TOX_FILE_KIND_AVATAR, fsz_, fn )
     {
         droptime = time_ms() + 30000;
-        avatar.resize((size_t)fsz_);
+        chunk.resize((size_t)fsz_);
     }
     
     void check_avatar(int ct);
@@ -765,8 +802,8 @@ struct incoming_avatar_s : public incoming_file_s
         droptime = time_ms() + 30000;
 
         u64 newsize = position + datasz;
-        if (newsize <= avatar.size())
-            memcpy(avatar.data() + position, data, datasz);
+        if (newsize <= chunk.size())
+            memcpy(chunk.data() + position, data, datasz);
     }
     /*virtual*/ void finished() override;
 };
@@ -802,15 +839,10 @@ struct transmitting_data_s : public file_transfer_s
     transmitting_data_s *next;
     str_c fn;
 
-    struct req
-    {
-        req() {};
-        req(u64 offset, u32 size):offset(offset), size(size) {}
-        u64 offset;
-        u32 size = 0;
-    };
+    u64 next_offset_send = 0;
+    u64 req_offset = 0;
+    u32 req_max_size = 0;
 
-    fifo_stream_c requests;
 
     bool is_accepted = false;
     bool is_paused = false;
@@ -833,23 +865,25 @@ struct transmitting_data_s : public file_transfer_s
     }
 
     virtual void ontick() = 0;
-    virtual void portion( u64 /*offset*/, const void * /*data*/, int /*size*/ ) {}
-    virtual void try_send_requested_chunk() = 0;
+    virtual bool portion(const file_portion_s * /*portion*/) { return false; }
+    virtual void send_data() = 0;
+    virtual void resume_from(u64 /*offset*/) {};
 
-    req last_req;
-
-    void transmit(const req &r)
+    void core_request(u64 offset, u32 size)
     {
-        if (r.size == 0)
+        if (size == 0)
         {
             finished();
             return;
         }
 
-        ASSERT(last_req.size == 0 || (last_req.offset + last_req.size) == r.offset);
-
-        requests.add_data( &r, sizeof(req) );
-        try_send_requested_chunk();
+        if ( req_offset == 0 && offset > 0 )
+        {
+            // resume from offset
+            resume_from( offset );
+        }
+        req_offset = offset + size;
+        if (size > req_max_size) req_max_size = size;
     }
 
     /*virtual*/ void accepted() override
@@ -884,26 +918,35 @@ struct transmitting_data_s : public file_transfer_s
 
 struct transmitting_file_s : public transmitting_data_s
 {
-    static const int MAX_CHUNKS_REQUESTED = 16;
-
-    fifo_stream_c fifo;
-    u64 fifooffset = 0;
-    u64 end_offset() const { return fifooffset + fifo.available(); }
-
-    struct buf_s
+    struct app_req_s
     {
-        std::vector<byte> buf;
+        const void * buf = nullptr;
         u64 offset = 0;
-        buf_s(u64 offset, const void *data, int size):offset(offset), buf(size)
+        int size = 0;
+        
+        bool set(const file_portion_s *fp)
         {
-            memcpy(buf.data(),data,size);
+            if (nullptr == buf && fp->offset == offset)
+            {
+                buf = fp->data;
+                offset = fp->offset;
+                size = fp->size;
+                return true;
+            }
+            return false;
+        }
+
+
+        void clear()
+        {
+            if (buf)
+                hf->file_portion(0, 0, buf, 0); // release buffer
+
+            memset(this, 0, sizeof(*this));
         }
     };
-
-    std::vector<buf_s> shuffled;
-    u64 requested_offset_end = 0;
-    int requested_chunks = 0;
-
+    app_req_s rch[2];
+    bool request = false;
 
     transmitting_file_s(u32 fid_, u32 fnn_, u64 utag_, const byte * id_, u64 fsz_, const asptr &fn) : transmitting_data_s(fid_, fnn_, utag_, id_, fsz_, fn)
     {
@@ -926,97 +969,173 @@ struct transmitting_file_s : public transmitting_data_s
         hf->file_control(utag, FIC_PAUSE);
     }
 
-    /*virtual*/ void portion(u64 offset, const void *data, int size) override
+    /*virtual*/ void resume_from(u64 offset) override
     {
-        ASSERT(requested_chunks > 0);
-        --requested_chunks;
+        rch[0].clear();
+        rch[1].clear();
 
-        ASSERT((offset+size) <= requested_offset_end);
+        u64 roffs = offset & FILE_TRANSFER_CHUNK_MASK;
+        next_offset_send = offset;
 
-        if (end_offset() == offset)
+        rch[0].offset = roffs;
+        hf->file_portion(utag, roffs, nullptr, FILE_TRANSFER_CHUNK); // request now
+        request = true;
+    };
+
+    /*virtual*/ bool portion(const file_portion_s *fp) override
+    {
+        ASSERT(fp->size == FILE_TRANSFER_CHUNK || (fp->offset + fp->size) == fsz);
+
+        if (rch[0].set(fp))
         {
-            fifo.add_data(data, size);
-        } else
+            ASSERT(rch[1].buf == nullptr);
+            send_data();
+            query_next_chunk();
+
+        }
+        else
         {
-            bool added = false;
-            for (buf_s &b : shuffled)
-            {
-                if (offset == b.offset + b.buf.size())
-                {
-                    added = true;
-                    size_t oo = b.buf.size();
-                    b.buf.resize( b.buf.size() + size );
-                    memcpy( b.buf.data() + oo, data, size );
-                }
-            }
-            if (!added)
-            {
-                shuffled.emplace_back(offset, data, size);
-            }
+            ASSERT(rch[0].offset + FILE_TRANSFER_CHUNK == fp->offset && rch[1].buf == nullptr);
+            CHECK(rch[1].set(fp));
         }
 
-        try_send_requested_chunk();
+        return true;
     }
 
-    void request_portion()
+    void query_next_chunk()
     {
-        if (requested_chunks >= MAX_CHUNKS_REQUESTED) return;
-        
-        size_t avaialble = fifo.available();
-        for (const buf_s &b : shuffled)
-            avaialble += b.buf.size();
-        if (avaialble >= 65536)
+        if (req_max_size == 0)
+            return; // there is no request from toxcore, so do nothing
+
+        if ( !request )
+        {
+            ASSERT(rch[0].offset == 0 && rch[0].buf == nullptr);
+            hf->file_portion(utag, 0, nullptr, FILE_TRANSFER_CHUNK); // request very first chunk now
+            request = true;
+            return;
+        }
+
+        if (rch[1].offset > 0)
             return;
 
-        // always request until end of file 
-        if ( requested_offset_end < fsz )
+        u64 nextr = rch[0].offset + FILE_TRANSFER_CHUNK;
+
+        if (fsz > nextr)
         {
-            if (int rqsz = (int)min(65536, fsz - requested_offset_end))
-            {
-                hf->file_portion(utag, requested_offset_end, nullptr, rqsz);
-                ++requested_chunks;
-                requested_offset_end += rqsz;
-            }
+            hf->file_portion(utag, nextr, nullptr, FILE_TRANSFER_CHUNK); // request now
+            rch[1].offset = nextr;
         }
     }
 
-    void try_send_requested_chunk() override
+    void send_data() override
     {
-        u64 curend = end_offset();
-        for (buf_s &b : shuffled)
+        if (nullptr == rch[0].buf || req_max_size == 0)
         {
-            if (b.offset == curend)
-            {
-                fifo.add_data( b.buf.data(), b.buf.size() );
-                shuffled.erase( shuffled.begin() + ( &b - shuffled.data() ) );
-                break;
-            }
+            query_next_chunk();
+            return;
         }
 
-        if (requests.available())
-        {
-            req r;
-            requests.get_data(0, (byte *)&r, sizeof(req));
+        uint8_t *temp = (uint8_t *)_alloca( req_max_size );
 
-            if (r.offset == fifooffset)
+        for ( ; next_offset_send >= rch[0].offset && next_offset_send < req_offset; )
+        {
+            if ( (next_offset_send + req_max_size) <= (rch[0].offset + rch[0].size) )
             {
-                if (fifo.available() >= r.size)
+                // within pre-chunk block
+                // safely send
+
+                TOX_ERR_FILE_SEND_CHUNK er;
+                tox_file_send_chunk(tox, fid, fnn, next_offset_send, (const uint8_t *)rch[0].buf + (next_offset_send - rch[0].offset), req_max_size, &er);
+                if (TOX_ERR_FILE_SEND_CHUNK_OK != er)
+                    return; // pipe overload. do nothing now
+
+                next_offset_send += req_max_size;
+                continue;
+            }
+            if (next_offset_send == (rch[0].offset + rch[0].size))
+            {
+                // pre-chunk block completely send
+
+                if (rch[1].offset > 0)
                 {
-                    byte *d = (byte *)_alloca(r.size); //-V505
-                    fifo.get_data(0, d, r.size);
+                    // at least next chunk requested
+                    rch[0].clear();
+                    rch[0] = rch[1];
+                    rch[1].buf = nullptr;
+                    rch[1].clear();
+                    query_next_chunk();
 
-                    TOX_ERR_FILE_SEND_CHUNK er;
-                    tox_file_send_chunk(tox, fid, fnn, r.offset, d, r.size, &er);
-                    if (TOX_ERR_FILE_SEND_CHUNK_OK == er)
-                    {
-                        fifo.read_data(nullptr, r.size);
-                        fifooffset += r.size;
-                        requests.read_data(nullptr, sizeof(req));
-                    }
+                } else
+                {
+                    // next chunk not yet requested
+                    // request it now
+
+                    query_next_chunk();
+
+                    rch[0].clear();
+                    rch[0] = rch[1];
+                    rch[1].buf = nullptr;
+                    rch[1].clear();
                 }
+
+                if (nullptr == rch[0].buf)
+                    return;
+
+                continue;
             }
+
+            int chunk0part = (int)((rch[0].offset + rch[0].size) - next_offset_send);
+
+            if ( fsz == (rch[0].offset + rch[0].size))
+            {
+                // last chunk
+
+                ASSERT((next_offset_send + chunk0part) == fsz);
+
+                TOX_ERR_FILE_SEND_CHUNK er;
+                tox_file_send_chunk(tox, fid, fnn, next_offset_send, (const uint8_t *)rch[0].buf + (next_offset_send - rch[0].offset), chunk0part, &er);
+                if (TOX_ERR_FILE_SEND_CHUNK_OK != er)
+                    return; // pipe overload. do nothing now
+
+                next_offset_send += chunk0part;
+                return;
+            }
+
+            // we should send packet with end-of-0 and begin-of-1 chunk
+
+            int chunk1part = (int)((next_offset_send + req_max_size) - (rch[0].offset + rch[0].size));
+            
+            ASSERT(chunk0part > 0 && chunk0part < (int)req_max_size);
+            ASSERT(chunk1part > 0 && chunk1part < (int)req_max_size);
+            ASSERT(u32(chunk0part + chunk1part) == req_max_size);
+            ASSERT( next_offset_send < (rch[0].offset + rch[0].size) && (next_offset_send + req_max_size) >(rch[0].offset + rch[0].size));
+
+            if (nullptr == rch[1].buf)
+            {
+                // chunk 1 not yet ready
+                query_next_chunk();
+                return;
+            }
+
+            if (chunk1part > rch[1].size)
+                chunk1part = rch[1].size;
+
+            memcpy( temp, (const uint8_t *)rch[0].buf + (next_offset_send - rch[0].offset), chunk0part);
+            memcpy( temp + chunk0part, (const uint8_t *)rch[1].buf, chunk1part);
+            
+            TOX_ERR_FILE_SEND_CHUNK er;
+            tox_file_send_chunk(tox, fid, fnn, next_offset_send, temp, chunk0part + chunk1part, &er);
+            if (TOX_ERR_FILE_SEND_CHUNK_OK != er)
+                return; // pipe overload. do nothing now
+            
+            next_offset_send = rch[1].offset + chunk1part;
+
+            rch[0].clear();
+            rch[0] = rch[1];
+            rch[1].buf = nullptr;
+            rch[1].clear();
+            query_next_chunk();
         }
-        request_portion();
     }
 
     /*virtual*/ void ontick() override
@@ -1029,8 +1148,9 @@ struct transmitting_file_s : public transmitting_data_s
             return;
         }
 
-        if (requests.available())
-            try_send_requested_chunk();
+        send_data();
+        if ( next_offset_send == fsz )
+            finished();
     }
 
 
@@ -1061,30 +1181,32 @@ struct transmitting_avatar_s : public transmitting_data_s
                 return;
             }
 
-            if (requests.available())
-                try_send_requested_chunk();
+            send_data();
+
+            if (next_offset_send == fsz)
+                finished();
         }
+
     }
     /*virtual*/ void kill() override;
     /*virtual*/ void finished() override;
 
-    /*virtual*/ void try_send_requested_chunk() override
+    /*virtual*/ void send_data() override
     {
         if (avatag != gavatag) return;
 
-        if (requests.available())
+        if (next_offset_send < req_offset)
         {
-            req r;
-            requests.get_data(0, (byte *)&r, sizeof(req));
+            u32 sb = (u32)(gavatar.size() - next_offset_send);
+            if (sb > req_max_size) sb = req_max_size;
 
-            if (ASSERT((r.offset + r.size) <= gavatar.size()))
-            {
-                TOX_ERR_FILE_SEND_CHUNK er;
-                tox_file_send_chunk(tox, fid, fnn, r.offset, gavatar.data() + r.offset, r.size, &er);
-                if (TOX_ERR_FILE_SEND_CHUNK_OK == er)
-                    requests.read_data(nullptr, sizeof(req));
-            }
+            TOX_ERR_FILE_SEND_CHUNK er;
+            tox_file_send_chunk(tox, fid, fnn, next_offset_send, gavatar.data() + next_offset_send, sb, &er);
+            if (TOX_ERR_FILE_SEND_CHUNK_OK != er)
+                return;
+            next_offset_send += sb;
         }
+        
     }
 };
 
@@ -1895,7 +2017,7 @@ void incoming_avatar_s::check_avatar(int ct)
     if (contact_descriptor_s *desc = find_restore_descriptor(fid))
     {
         byte hash[TOX_HASH_LENGTH];
-        tox_hash(hash,avatar.data(),avatar.size());
+        tox_hash(hash,chunk.data(), chunk.size());
 
         if (0 != memcmp(hash, desc->avatar_hash, TOX_HASH_LENGTH))
         {
@@ -1903,7 +2025,7 @@ void incoming_avatar_s::check_avatar(int ct)
             ++desc->avatar_tag; // new avatar version
         }
 
-        desc->avatar = std::move(avatar);
+        desc->avatar = std::move(chunk);
         SETFLAG(desc->flags, contact_descriptor_s::F_AVARECIVED);
 
         hf->avatar_data(desc->get_id(), desc->avatar_tag, desc->avatar.data(), desc->avatar.size());
@@ -2594,7 +2716,7 @@ static void cb_file_chunk_request(Tox *, uint32_t fid, uint32_t file_number, u64
     for (transmitting_data_s *f = transmitting_data_s::first; f; f = f->next)
         if (f->fid == fid && f->fnn == file_number)
         {
-            f->transmit(transmitting_data_s::req(position, length));
+            f->core_request(position, length);
             break;
         }
 }
@@ -3493,14 +3615,18 @@ static void connect()
     {
         const dht_node_s &node = get_node();
         TOX_ERR_BOOTSTRAP er;
-        tox_bootstrap(tox, node.addr.cstr(), (uint16_t)node.port, node.pubid, &er);
+        tox_bootstrap(tox, node.addr4.cstr(), (uint16_t)node.port, node.pubid, &er);
+        if (options.ipv6_enabled && !node.addr6.is_empty())
+            tox_bootstrap(tox, node.addr6.cstr(), (uint16_t)node.port, node.pubid, &er);
         if (TOX_ERR_BOOTSTRAP_BAD_HOST == er)
         {
             ++n;
             if (n > (int)nodes.size() && i >= (int)nodes.size()) break;
             continue;
         }
-        tox_add_tcp_relay(tox, node.addr.cstr(), (uint16_t)node.port, node.pubid, &er);
+        tox_add_tcp_relay(tox, node.addr4.cstr(), (uint16_t)node.port, node.pubid, &er);
+        if (options.ipv6_enabled && !node.addr6.is_empty())
+            tox_add_tcp_relay(tox, node.addr6.cstr(), (uint16_t)node.port, node.pubid, &er);
     }
 
     
@@ -3673,7 +3799,10 @@ void __stdcall goodbye()
         tox_kill(tox);
         tox = nullptr;
     }
+
+    WSACleanup();
 }
+
 void __stdcall set_name(const char*utf8name)
 {
     if (tox)
@@ -4015,12 +4144,6 @@ void __stdcall init_done()
 
 void __stdcall online()
 {
-    if (!online_flag)
-    {
-        WSADATA wsa;
-        WSAStartup(MAKEWORD(2, 2), &wsa);
-    }
-
     online_flag = true;
 
     if (!tox && buf_tox_config.size())
@@ -4112,8 +4235,6 @@ static void save_current_stuff( savebuffer &b )
 
 void __stdcall offline()
 {
-    bool cleanup = online_flag;
-
     online_flag = false;
     stop_senders();
 
@@ -4150,10 +4271,6 @@ void __stdcall offline()
             update_contact(f);
         }
     }
-
-    if (cleanup)
-        WSACleanup();
-
 }
 
 void __stdcall save_config(void * param)
@@ -4686,14 +4803,13 @@ void __stdcall file_control(u64 utag, file_control_e fctl)
     }
 }
 
-void __stdcall file_portion(u64 utag, const file_portion_s *portion)
+bool __stdcall file_portion(u64 utag, const file_portion_s *portion)
 {
     for (transmitting_data_s *f = transmitting_data_s::first; f; f = f->next)
         if (f->utag == utag)
-        {
-            f->portion( portion->offset, portion->data, portion->size );
-            return;
-        }
+            return f->portion( portion );
+
+    return false;
 }
 
 void __stdcall add_groupchat(const char *groupaname, bool persistent)
@@ -4812,6 +4928,9 @@ proto_functions_s funcs =
 
 proto_functions_s* __stdcall handshake(host_functions_s *hf_)
 {
+    WSADATA wsa;
+    WSAStartup(MAKEWORD(2, 2), &wsa);
+
     srand(time_ms());
 
     hf = hf_;
