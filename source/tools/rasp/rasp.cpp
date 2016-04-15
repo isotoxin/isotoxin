@@ -147,6 +147,12 @@ void Print(const char *format, ...)
     if (PrintCustomHandler) PrintCustomHandler(-1, buf);
 }
 extern "C" { void sodium_init(); }
+
+bool _cdecl ts::app_preinit( const wchar_t *cmdl )
+{
+    return true;
+}
+
 int main(int argc, _TCHAR* argv[])
 {
     sodium_init();
@@ -284,10 +290,7 @@ int proc_grab(const wstrings_c & pars)
     if (gr.size() != grabbuff.info().sz)
         grabbuff.create(gr.size(), monitor);
 
-    HWND hwnd = GetDesktopWindow();
-    HDC desktop_dc = GetDC(hwnd);
-    BitBlt(grabbuff.DC(), 0, 0, grabbuff.info().sz.x, grabbuff.info().sz.y, desktop_dc, gr.lt.x, gr.lt.y, SRCCOPY | CAPTUREBLT);
-    ReleaseDC(hwnd, desktop_dc);
+    grabbuff.grab_screen( gr, ts::ivec2(0) );
 
     buf_c cursorcachedata;
     grabbuff.render_cursor(gr.lt, cursorcachedata);

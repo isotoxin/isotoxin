@@ -3,8 +3,8 @@
 namespace ts
 {
 
-uint TSCALL CRC32(const void * buf, uint len);
-uint TSCALL CRC32_Buf(const void * buf, int len, uint crc = 0xFFFFFFFF);
-FORCEINLINE uint CRC32_End(uint crc) {return ~crc;}
+uint32 TSCALL CRC32(const void * buf, uint len);
+uint32 TSCALL CRC32_Buf(const void * buf, int len, uint32 crc = 0xFFFFFFFF);
+INLINE uint32 CRC32_End(uint32 crc) {return ~crc;}
 
 } // namespace ts

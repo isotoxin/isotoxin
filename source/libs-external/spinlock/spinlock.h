@@ -1,6 +1,6 @@
 /*
     spinlock module
-    (C) 2010-2015 BMV, ROTKAERMOTA (TOX: ED783DA52E91A422A48F984CAC10B6FF62EE928BE616CE41D0715897D7B7F6050B2F04AA02A1)
+    (C) 2010-2016 BMV, ROTKAERMOTA (TOX: ED783DA52E91A422A48F984CAC10B6FF62EE928BE616CE41D0715897D7B7F6050B2F04AA02A1)
 
 */
 #pragma once
@@ -59,7 +59,12 @@ inline void _mm_pause() { usleep(0); }
 
 
 #ifdef _WIN32
-#define pthread_self() GetCurrentThreadId()
+#ifdef _WINDOWS_
+#define INLINE_PTHREAD_SELF
+inline unsigned long pthread_self() { return ::GetCurrentThreadId(); }
+#else
+unsigned long pthread_self();
+#endif
 #pragma intrinsic (_InterlockedExchangeAdd, _InterlockedCompareExchange64)
 #define InterlockedExchangeAdd _InterlockedExchangeAdd
 
@@ -311,7 +316,7 @@ struct auto_lock_read
 
 inline void simple_lock(volatile long &lock)
 {
-    long myv = GetCurrentThreadId();
+    long myv = pthread_self();
     if (lock == myv)
         __debugbreak();
     for (;;)
@@ -329,7 +334,7 @@ inline void simple_lock(volatile long &lock)
 
 inline bool try_simple_lock(volatile long &lock)
 {
-    long myv = GetCurrentThreadId();
+    long myv = pthread_self();
     if (lock == myv)
         __debugbreak();
     long val = _InterlockedCompareExchange(&lock, myv, 0);
@@ -342,7 +347,7 @@ inline bool try_simple_lock(volatile long &lock)
 
 inline void simple_unlock(volatile long &lock)
 {
-    long myv = GetCurrentThreadId();
+    long myv = pthread_self();
     if (lock != myv)
         __debugbreak();
     long val = _InterlockedCompareExchange(&lock, 0, myv);

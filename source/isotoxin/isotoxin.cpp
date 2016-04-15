@@ -1,6 +1,5 @@
 #include "isotoxin.h"
 
-#pragma USELIB(system)
 #pragma USELIB(toolset)
 #pragma USELIB(rectangles)
 #pragma USELIB(ipc)
@@ -41,37 +40,24 @@
 #pragma comment(lib, "Shlwapi.lib")
 #pragma comment(lib, "Ws2_32.lib")
 
-extern "C"
-{
-	void* dlmalloc(size_t);
-	void  dlfree(void*);
-	void* dlrealloc(void*, size_t);
-	void* dlcalloc(size_t, size_t);
-	size_t dlmalloc_usable_size(void*);
-};
-
+#ifdef _WIN32
+#include "toolset/_win32/win32_inc.inl"
 #if defined _FINAL || defined _DEBUG_OPTIMIZED
 #include "crt_nomem/crtfunc.h"
 #endif
 
+// disable VS2015 telemetry (Th you, kidding? Fuck spies.)
+extern "C"
+{
+    void _cdecl __vcrt_initialize_telemetry_provider() {}
+    void _cdecl __telemetry_main_invoke_trigger() {}
+    void _cdecl __telemetry_main_return_trigger() {}
+    void _cdecl __vcrt_uninitialize_telemetry_provider() {}
+};
+#endif
+
 namespace
 {
-    static volatile HANDLE popup_event = nullptr;
-    static DWORD WINAPI multiinstanceblocker(LPVOID)
-    {
-        if (!popup_event) return 0;
-        HANDLE h = popup_event;
-        for(;;)
-        {
-            WaitForSingleObject(h, INFINITE);
-            if (popup_event == nullptr) break;
-            gmsg<ISOGM_APPRISE> *m = TSNEW( gmsg<ISOGM_APPRISE> );
-            m->send_to_main_thread();
-        }
-        CloseHandle(h);
-        return 0;
-    }
-
 
 	class fileop_c : public ts::tsfileop_c
 	{
@@ -117,8 +103,6 @@ namespace
 		virtual ~fileop_c()
 		{
 			TSDEL(deffop);
-            HANDLE h = popup_event; popup_event = nullptr;
-            if (h) SetEvent(h);
 		}
 		/*virtual*/ bool read( const ts::wsptr &fn, ts::buf_wrapper_s &b ) override
 		{
@@ -144,37 +128,20 @@ namespace
 }
 
 #ifndef _FINAL
-void debug_name()
-{
-    ts::CHARz_add_str(g_sysconf.name, L" ");
-    ts::CHARz_add_str(g_sysconf.name, ts::to_wstr(application_c::appver()).cstr());
-    ts::CHARz_add_str<wchar_t>(g_sysconf.name, L" - CRC:");
-    ts::buf_c b;
-    b.load_from_disk_file(ts::get_exe_full_name());
-    int sz;
-    wchar_t bx[32];
-    wchar_t * t = ts::CHARz_make_str_unsigned<ts::wchar, uint>(bx, sz, b.crc());
-    ts::CHARz_add_str<wchar_t>(g_sysconf.name, t);
-}
 void dotests0();
 #endif
 
 #pragma warning (disable : 4505) //: 'check_instance' : unreferenced local function has been removed
 
+static void popup_notify()
+{
+    gmsg<ISOGM_APPRISE> *m = TSNEW( gmsg<ISOGM_APPRISE> );
+    m->send_to_main_thread();
+}
+
 static bool check_instance()
 {
-    popup_event = CreateEventW(nullptr, FALSE, FALSE, L"isotoxin_popup_event");
-    if (!popup_event) return true;
-    if (ERROR_ALREADY_EXISTS == GetLastError())
-    {
-        // second instance
-        SetEvent(popup_event);
-        CloseHandle(popup_event);
-        popup_event = nullptr;
-        return false;
-    }
-    CloseHandle(CreateThread(nullptr, 0, multiinstanceblocker, nullptr, 0, nullptr));
-    return true;
+    return ts::master().sys_one_instance( ts::wstr_c(CONSTWSTR("isotoxin_popup_event")), popup_notify );
 }
 
 parsed_command_line_s g_commandline;
@@ -263,13 +230,10 @@ static bool parsecmdl(const wchar_t *cmdl)
 
     if (processwait)
     {
-        HANDLE h = OpenProcess(SYNCHRONIZE,FALSE,processwait);
-        if (h)
-        {
-            DWORD r = WaitForSingleObject(h, 10000);
-            CloseHandle(h);
-            if (r == WAIT_TIMEOUT ) return false;
-        }
+        ts::process_handle_s ph;
+        if ( ts::master().open_process( processwait, ph ) )
+            if ( !ts::master().wait_process( ph, 10000 ) )
+                return false;
     }
 
     return true;
@@ -278,10 +242,13 @@ static bool parsecmdl(const wchar_t *cmdl)
 bool check_autoupdate();
 extern "C" { void sodium_init(); }
 
-bool _cdecl app_preinit( const wchar_t *cmdl )
+void set_unhandled_exception_filter();
+void set_dump_filename( const ts::wsptr& n );
+
+bool _cdecl ts::app_preinit( const wchar_t *cmdl )
 {
 #if defined _DEBUG || defined _CRASH_HANDLER
-    ts::exception_operator_c::set_unhandled_exception_filter();
+    set_unhandled_exception_filter();
 #endif
 
     sodium_init();
@@ -299,17 +266,28 @@ bool _cdecl app_preinit( const wchar_t *cmdl )
 
 
 #if defined _DEBUG || defined _CRASH_HANDLER
-    ts::exception_operator_c::dump_filename = ts::fn_change_name_ext(ts::get_exe_full_name(), ts::wstr_c(CONSTWSTR(APPNAME)).append_char('.').append(ts::to_wstr(application_c::appver())).as_sptr(), CONSTWSTR("dmp"));
+    set_dump_filename( ts::fn_change_name_ext( ts::get_exe_full_name(), ts::wstr_c( CONSTWSTR( APPNAME ) ).append_char( '.' ).append( ts::to_wstr( application_c::appver() ) ).as_sptr(), CONSTWSTR( "dmp" ) ) );
 #endif
 
 	ts::tsfileop_c::setup<fileop_c>();
 
-	ts::CHARz_copy( g_sysconf.name, CONSTWSTR(APPNAME) .s );
-    
 #ifndef _FINAL
-    debug_name();
     dotests0();
 #endif
+
+    ts::wstrings_c fns;
+    ts::g_fileop->find( fns, CONSTWSTR( "loc/*.lng*.lng" ), false );
+    if (!fns.size() || !ts::is_file_exists( PLGHOSTNAME ))
+    {
+        //bool download = false;
+        //ts::wstr_c path_exe( ts::fn_get_path( ts::get_exe_full_name() ) );
+        //if (ts::check_write_access( path_exe ))
+        //    download = ts::SMBR_YES == ts::sys_mb( L"error", L"Data not found! Do you want to download data now?", ts::SMB_YESNO_ERROR );
+        //else
+            ts::sys_mb( L"error", L"Application data not found. Please re-install application", ts::SMB_OK_ERROR );
+
+        return false;
+    }
 
 	TSNEW(application_c, cmdl); // not a memory leak! see SEV_EXIT handler
 

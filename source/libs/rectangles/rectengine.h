@@ -267,12 +267,46 @@ class rectengine_root_c : public rectengine_c
     DUMMY(rectengine_root_c);
 
     friend struct drawcollector;
-	HWND hwnd;
-	HDC dc;
+
+    struct my_wnd_s : public ts::wnd_callbacks_s
+    {
+        ts::wnd_c::sptr_t wnd;
+
+        rectengine_root_c *owner()
+        {
+            return (rectengine_root_c *)( ( ( char * )this ) - offsetof( rectengine_root_c, syswnd ) );
+        }
+
+        my_wnd_s() {}
+
+        /*virtual*/ bool evt_specialborder( ts::specialborder_s bd[ 4 ] ) override;
+
+        /*virtual*/ void evt_mouse( ts::mouse_event_e me, const ts::ivec2 &clpos /* relative to wnd */, const ts::ivec2 &scrpos ) override;
+        /*virtual*/ void evt_mouse_out() override;
+        /*virtual*/ bool evt_mouse_activate() override;
+
+        /*virtual*/ void evt_notification_icon( ts::notification_icon_action_e a ) override;
+        /*virtual*/ void evt_draw() override;
+
+        /*virtual*/ void evt_refresh_pos( const ts::irect &scr, ts::disposition_e d ) override;
+        /*virtual*/ void evt_focus_changed( ts::wnd_c * ) override;
+
+        /*virtual*/ bool evt_on_file_drop( const ts::wstr_c& fn, const ts::ivec2 &clp ) override;
+
+        /*virtual*/ ts::bitmap_c    app_get_icon( bool for_tray )  override;
+        /*virtual*/ ts::irect       app_get_redraw_rect() override;
+
+        /*virtual*/ void evt_destroy() override {}
+
+        void kill();
+
+    } syswnd;
+
+
     ts::irect redraw_rect;
-    void *borderdata = nullptr;
-	ts::drawable_bitmap_c backbuffer;
     ts::array_inplace_t<draw_data_s, 4> drawdata;
+
+    ts::array_safe_t< guirect_c,1 > afocus;
 
     struct shaker_s
     {
@@ -285,26 +319,8 @@ class rectengine_root_c : public rectengine_c
     ts::flags32_s flags;
     static const ts::flags32_s::BITS F_DIP = SETBIT(0);
     static const ts::flags32_s::BITS F_REDRAW_COLLECTOR = SETBIT(1);
-    static const ts::flags32_s::BITS F_NOTIFY_ICON = SETBIT(2);
     static const ts::flags32_s::BITS F_SYSTEM = SETBIT(3);
     static const ts::flags32_s::BITS F_MANUAL = SETBIT(4);
-
-	static int regclassref;
-	void registerclass();
-	static const ts::wchar *classname() {return L"rectenginewindow";}
-#if defined _DEBUG || defined _CRASH_HANDLER
-    static LRESULT CALLBACK wndhandler_dojob(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam);
-    static LRESULT CALLBACK wndhandler_border_dojob(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
-#endif
-	static LRESULT CALLBACK wndhandler(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam);
-    static LRESULT CALLBACK wndhandler_border(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam);
-
-	static rectengine_root_c * hwnd2engine(HWND hwnd)
-	{
-		return ts::p_cast<rectengine_root_c *>( GetWindowLongPtrW( hwnd, GWLP_USERDATA ) );
-	}
-    void recreate_border();
-	void recreate_back_buffer(const ts::ivec2 &sz, bool exact_size = false);
 
     //sqhandler_i
 	/*virtual*/ bool sq_evt( system_query_e qp, RID rid, evt_data_s &data ) override;
@@ -313,22 +329,16 @@ class rectengine_root_c : public rectengine_c
     void redraw_now();
     bool redraw_required() const { return drawtag != drawntag; }
 
-    bool refresh_frame(RID r = RID(), GUIPARAM p = nullptr);
-    void kill_window();
-    void kill_border();
-
-    void draw_back_buffer();
+    //bool refresh_frame(RID r = RID(), GUIPARAM p = nullptr);
 
     bool is_collapsed() const
     {
-        return IsIconic(hwnd) != 0;
+        return syswnd.wnd && syswnd.wnd->is_collapsed();
     }
 
     bool is_maximized() const
     {
-        RECT r;
-        GetWindowRect(hwnd,&r);
-        return ts::ref_cast<ts::irect>(r) == ts::wnd_get_max_size( getrect().getprops().screenrect() );
+        return syswnd.wnd && syswnd.wnd->is_maximized();
     }
 
     bool shakeme(RID, GUIPARAM);
@@ -344,7 +354,7 @@ public:
 
     int current_drawtag() const {return drawtag;}
 
-    /*virtual*/ bool detect_hover(const ts::ivec2 & screenmousepos) const override { return getrect().getprops().is_visible() && hwnd == WindowFromPoint((POINT &)screenmousepos); };
+    /*virtual*/ bool detect_hover(const ts::ivec2 & screenmousepos) const override { return getrect().getprops().is_visible() && syswnd.wnd && syswnd.wnd->is_hover( screenmousepos ); };
 
     /*virtual*/ void redraw(const ts::irect *invalidate_rect = nullptr) override;
 	/*virtual*/ bool apply(rectprops_c &rpss, const rectprops_c &pss) override;
@@ -358,15 +368,18 @@ public:
 
     const ts::ivec2 &get_current_draw_offset() const { return drawdata.last().offset; }
 
+    void tab_focus( RID r, bool fwd = true ); // on TAB key
+    void register_afocus( guirect_c *r, bool reg );
+    RID active_focus(RID sub);
+
     void shake();
     bool update_foreground();
     void set_system_focus(bool bring_to_front = false);
     void flash();
-    void notification_icon( const ts::wsptr& text );
 
     bool is_foreground() const
     {
-        return GetForegroundWindow() == hwnd;
+        return syswnd.wnd && syswnd.wnd->is_foreground();
     }
 
     void simulate_mousemove(); // just send SQ_MOUSE_MOVE without actual mouse moving

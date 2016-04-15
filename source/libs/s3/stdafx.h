@@ -1,5 +1,7 @@
 #pragma once
 
+#define _ALLOW_RTCc_IN_STL
+
 #define NOMINMAX
 #include <dsound.h>
 #include <math.h>

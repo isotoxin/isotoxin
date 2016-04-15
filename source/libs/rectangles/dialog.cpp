@@ -582,10 +582,7 @@ bool gui_dialog_c::path_selector(RID, GUIPARAM param)
 bool gui_dialog_c::path_explore(RID rid, GUIPARAM param)
 {
     gui_textfield_c &tf = HOLD(RID::from_param(param)).as<gui_textfield_c>();
-    ts::wstr_c curp = tf.get_text();
-
-    ShellExecuteW( NULL, L"open", L"explorer", CONSTWSTR("/select,") + ts::fn_autoquote(ts::fn_get_name_with_ext(curp)), ts::fn_get_path(curp), SW_SHOWDEFAULT );
-
+    ts::master().explore_path( tf.get_text(), false );
     return true;
 }
 
@@ -811,7 +808,7 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
         tf.set_readonly();
         tf.disable_caret();
         tf.arrow_cursor();
-        tf.register_kbd_callback( DELEGATE( &tf, push_selector ), SSK_LB, false );
+        tf.register_kbd_callback( DELEGATE( &tf, push_selector ), ts::SSK_LB, false );
         tf.set_customdata_obj<gui_textfield_c::behav_s>(tf.getrid(), *addition->textfield.menu, addition->textfield.behav_handler.get(), false);
     } else if (role == TFR_CUSTOM_SELECTOR)
     {
@@ -1157,7 +1154,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
     ts::tmp_array_inplace_t<checkset,2> chset;
 
     tabselmask = par.as_uint();
-    RID lasthgroup;
+    RID lasthgroup, focusctl;
     for(description_s &d : descs)
     {
         if (0 == (d.mask & tabselmask)) continue;
@@ -1210,12 +1207,12 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             rctl = panel(d.height_, d.handler);
             break;
         case description_s::_PATH:
-            rctl = textfield(d.text,MAX_PATH, d.options.is(description_s::o_readonly) ? TFR_PATH_VIEWER : TFR_PATH_SELECTOR, d.options.is(description_s::o_readonly) ? nullptr : DELEGATE(&d, updvalue), nullptr, 0, parent);
+            rctl = textfield(d.text, MAX_PATH_LENGTH, d.options.is(description_s::o_readonly) ? TFR_PATH_VIEWER : TFR_PATH_SELECTOR, d.options.is(description_s::o_readonly) ? nullptr : DELEGATE(&d, updvalue), nullptr, 0, parent);
             break;
         case description_s::_FILE: {
             evt_data_s dd;
             dd.wstrparam = d.hint.as_sptr();
-            rctl = textfield(d.text, MAX_PATH, TFR_FILE_SELECTOR, d.options.is(description_s::o_readonly) ? nullptr : DELEGATE(&d, updvalue), &dd, 0, parent);
+            rctl = textfield(d.text, MAX_PATH_LENGTH, TFR_FILE_SELECTOR, d.options.is(description_s::o_readonly) ? nullptr : DELEGATE(&d, updvalue), &dd, 0, parent);
             break; }
         case description_s::_COMBIK:
             if (!d.items.is_empty())
@@ -1305,8 +1302,8 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             rctl = d.make_ctl(this, parent);
             break;
         }
-        if (rctl && d.options.is(description_s::o_focus))
-            gui->set_focus(rctl);
+        if ( rctl && d.options.is( description_s::o_focus ) )
+            focusctl = rctl;
 
         if (rctl)
         {
@@ -1316,6 +1313,10 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
                 ctl_by_name[d.name] = r;
         }
     }
+
+    if (focusctl)
+        gui->set_focus( focusctl );
+
     tabselected(tabselmask);
 }
 
@@ -1326,16 +1327,16 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
     switch (ctl)
     {
     case _TEXT:
-        return dlg->textfield(text, MAX_PATH, options.is(o_readonly) ? TFR_TEXT_FILED_RO : TFR_TEXT_FILED, DELEGATE(this, updvalue), nullptr, height_, parent, options.is(o_visible));
+        return dlg->textfield(text, MAX_PATH_LENGTH, options.is(o_readonly) ? TFR_TEXT_FILED_RO : TFR_TEXT_FILED, DELEGATE(this, updvalue), nullptr, height_, parent, options.is(o_visible));
     case _PASSWD:
-        return dlg->textfield(text, MAX_PATH, TFR_TEXT_FILED_PASSWD, DELEGATE(this, updvalue), nullptr, height_, parent);
+        return dlg->textfield(text, MAX_PATH_LENGTH, TFR_TEXT_FILED_PASSWD, DELEGATE(this, updvalue), nullptr, height_, parent);
     case _SELECTOR:
         {
             evt_data_s dd;
             dd.textfield.menu = &items;
             dd.textfield.behav_handler() = DELEGATE( this, updvalue2 );
 
-            RID rr = dlg->textfield(text, MAX_PATH, TFR_CUSTOM_SELECTOR, nullptr, &dd, 0, parent);
+            RID rr = dlg->textfield(text, MAX_PATH_LENGTH, TFR_CUSTOM_SELECTOR, nullptr, &dd, 0, parent);
 
             if (handler)
             {
@@ -1392,7 +1393,7 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
 
     ts::uint32 allowb = caption_buttons();
     GET_TOOLTIP ttt = nullptr;
-    if (g_sysconf.mainwindow)
+    if ( ts::master().mainwindow)
     {
         RESETFLAG(allowb, SETBIT(CBT_MINIMIZE));
         ttt = (GET_TOOLTIP)[]()->ts::wstr_c { return ts::wstr_c(); };
@@ -1417,6 +1418,12 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
 }
 /*virtual*/ bool gui_dialog_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    if ( qp == SQ_KEYDOWN && data.kbd.scan == ts::SSK_ESC && data.kbd.casw == 0 )
+    {
+        on_close();
+        return true;
+    }
+
     return __super::sq_evt(qp, rid, data);
 }
 

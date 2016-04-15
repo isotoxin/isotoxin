@@ -140,11 +140,7 @@ class active_protocol_c : public ts::safe_object
 
     bool cmdhandler(ipcr r);
     bool tick();
-    static DWORD WINAPI worker(LPVOID);
     void worker();
-#if defined _DEBUG || defined _CRASH_HANDLER
-    void worker_check();
-#endif
     bool check_die(RID, GUIPARAM);
     bool check_save(RID, GUIPARAM);
     void save_config( const ts::blob_c &cfg );
@@ -227,5 +223,7 @@ public:
     void typing(int cid);
     
     void export_data();
+    void reset_data();
+    void change_data( const ts::blob_c &b );
 
 };

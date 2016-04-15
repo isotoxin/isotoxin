@@ -1,8 +1,5 @@
 #include "toolset.h"
-#include <windows.h>
-#include <commdlg.h>
-#include <shlobj.h>
-#include <shlwapi.h>
+#include "internal/platform.h"
 
 namespace ts
 {
@@ -135,6 +132,21 @@ namespace ts
                             {
                                 int pl = CHARz_len(b.cstr());
                                 envstr.replace(ii, ll + 2, wsptr(b, pl));
+                                break;
+                            }
+                            else
+                            {
+                                dprc = iie + 1;
+                                break;
+                            }
+                        }
+                        else if ( name == CONSTWSTR( "SYSTEM" ) )
+                        {
+
+                            if ( SUCCEEDED( SHGetFolderPathW( nullptr, CSIDL_SYSTEM, nullptr, 0, b.str() ) ) )
+                            {
+                                int pl = CHARz_len( b.cstr() );
+                                envstr.replace( ii, ll + 2, wsptr( b, pl ) );
                                 break;
                             }
                             else
@@ -460,6 +472,21 @@ namespace ts
         return true;
 	}
 
+    copy_rslt_e TSCALL copy_file( const wsptr &existingfn, const wsptr &newfn )
+    {
+        if ( 0 == CopyFileW( ts::tmp_wstr_c( existingfn ), ts::tmp_wstr_c( newfn ), false ) )
+        {
+            if ( ERROR_ACCESS_DENIED == GetLastError() )
+                return CRSLT_ACCESS_DENIED;
+            return CRSLT_FAIL;
+        }
+        return CRSLT_OK;
+    }
+    bool TSCALL rename_file( const wsptr &existingfn, const wsptr &newfn )
+    {
+        return MoveFileW( tmp_wstr_c(existingfn), tmp_wstr_c( newfn ) ) != 0;
+    }
+
     template <class TCHARACTER> bool TSCALL parse_text_file(const wsptr &filename, strings_t<TCHARACTER>& text, bool b_from_utf8)
     {
         buf_c buffer;
@@ -692,8 +719,8 @@ namespace ts
         wstr_c new_path(path);
         aint lclip = new_path.get_length();
 
-		if (find_files(new_path.set_length(lclip).append(fname), sa, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY)) return true;
-		if (find_files(new_path.set_length(lclip).append(CONSTWSTR("*.*")), sa, FILE_ATTRIBUTE_DIRECTORY))
+		if (find_files(new_path.set_length(lclip).append(fname), sa, ATTR_ANY, ATTR_DIR )) return true;
+		if (find_files(new_path.set_length(lclip).append(CONSTWSTR("*.*")), sa, ATTR_DIR ))
 		{
 			for (const auto & dir : sa)
 			{
@@ -745,221 +772,6 @@ namespace ts
 		SetCurrentDirectoryW( wd.cstr() );
 	}
 
-	static int CALLBACK BrowseCallbackProc(HWND hWnd, UINT uMsg, LPARAM lParam, LPARAM lpData)
-	{
-		switch (uMsg)
-		{
-		case BFFM_INITIALIZED:
-			if (lpData) SendMessageW(hWnd,BFFM_SETSELECTION,TRUE,lpData);
-			break;
-		}
-		return 0;
-	}
-
-	wstr_c TSCALL  get_save_directory_dialog(const wsptr &root, const wsptr &title, const wsptr &selectpath, bool nonewfolder)
-	{
-		wstr_c buffer;
-		buffer.clear();
-
-		LPMALLOC pMalloc;
-		if (::SHGetMalloc(&pMalloc) == NOERROR)
-		{
-			LPITEMIDLIST idl = root.s ? ILCreateFromPathW(wstr_c(root)) : nullptr;
-
-			BROWSEINFOW bi;
-			ZeroMemory(&bi, sizeof(bi));
-
-            wstr_c title_(title);
-            wstr_c selectpath_(selectpath);
-
-			bi.hwndOwner = g_main_window;
-			bi.pidlRoot  = idl;
-			bi.lpszTitle = title_;
-			bi.lpfn      = BrowseCallbackProc;
-			bi.lParam    = (LPARAM)selectpath_.cstr();
-			bi.ulFlags   = BIF_RETURNONLYFSDIRS | BIF_EDITBOX | BIF_NEWDIALOGSTYLE | (nonewfolder ? BIF_NONEWFOLDERBUTTON : 0);
-			LPITEMIDLIST pidl = ::SHBrowseForFolderW(&bi);
-			if (pidl != nullptr) {
-				buffer.set_length(2048-16);
-				if (::SHGetPathFromIDListW(pidl, buffer.str()))
-				{
-					buffer.set_length(CHARz_len(buffer.cstr()));
-				}
-				else
-				{
-					buffer.clear();            
-				}
-				pMalloc->Free(pidl);
-			}
-			ILFree(idl);
-			pMalloc->Release();
-		}
-
-		return buffer;
-	}
-
-	wstr_c   TSCALL get_save_filename_dialog(const wsptr &iroot, const wsptr &name, extensions_s &exts, const wchar *title)
-	{
-        ts::wstr_c filter;
-        if (exts.exts.size())
-        {
-            for( const extension_s &e : exts.exts )
-                filter.append( e.desc ).append_char('/').append( e.ext ).append_char('/');
-            filter.append_char('/');
-            filter.replace_all('/', 0);
-        }
-
-		wchar cdp[ MAX_PATH + 16 ];
-		GetCurrentDirectoryW(MAX_PATH + 15,cdp);
-
-		OPENFILENAMEW o;
-		memset(&o, 0, sizeof(OPENFILENAMEW));
-
-		wstr_c root(iroot);
-        fix_path(root, FNO_FULLPATH);
-
-		o.lStructSize=sizeof(o);
-		o.hwndOwner=g_main_window;
-		o.hInstance=GetModuleHandle(nullptr);
-
-
-		wstr_c buffer(MAX_PATH + 16,true);
-        buffer.set(name);
-
-		o.lpstrTitle = title;
-		o.lpstrFile = buffer.str();
-		o.nMaxFile=MAX_PATH;
-		o.lpstrDefExt = exts.defext();
-
-		o.lpstrFilter = filter.is_empty() ? nullptr : filter.cstr();
-		o.lpstrInitialDir = root;
-		o.Flags=OFN_PATHMUSTEXIST | OFN_EXPLORER | OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT | OFN_OVERWRITEPROMPT;
-
-		if(!GetSaveFileNameW(&o))
-		{
-			SetCurrentDirectoryW(cdp);
-			return wstr_c();
-		}
-
-        exts.index = o.nFilterIndex - 1;
-		SetCurrentDirectoryW(cdp);
-		buffer.set_length( CHARz_len(buffer.cstr()) );
-
-		return buffer;
-	}
-
-	wstr_c   TSCALL get_load_filename_dialog(const wsptr &iroot, const wsptr &name, extensions_s &exts, const wchar *title)
-	{
-		wchar cdp[ MAX_PATH ];
-		GetCurrentDirectoryW(MAX_PATH,cdp);
-
-		OPENFILENAMEW o;
-		memset(&o, 0, sizeof(OPENFILENAMEW));
-
-        wstr_c root(iroot);
-        fix_path(root, FNO_FULLPATH);
-
-		o.lStructSize=sizeof(o);
-        o.hwndOwner = g_main_window;
-        o.hInstance = GetModuleHandle(nullptr);
-
-		wstr_c filter;
-        if (exts.exts.size())
-        {
-            for( const extension_s &e : exts.exts )
-                filter.append( e.desc ).append_char('/').append( e.ext ).append_char('/');
-            filter.append_char('/');
-            filter.replace_all('/', 0);
-        }
-
-		wstr_c buffer;
-		buffer.set_length(2048);
-		buffer.set(name);
-
-		o.lpstrTitle = title;
-		o.lpstrFile = buffer.str();
-		o.nMaxFile=2048;
-		o.lpstrDefExt = exts.defext();
-
-		o.lpstrFilter = filter;
-		o.lpstrInitialDir = root;
-		o.Flags=OFN_PATHMUSTEXIST | OFN_EXPLORER | OFN_HIDEREADONLY | OFN_FILEMUSTEXIST;
-
-		if(!GetOpenFileNameW(&o))
-		{
-			SetCurrentDirectoryW(cdp);
-			return wstr_c();
-		}
-
-
-		SetCurrentDirectoryW(cdp);
-		buffer.set_length( CHARz_len(buffer.cstr()) );
-		return buffer;
-	}
-
-
-	bool    TSCALL get_load_filename_dialog(wstrings_c &files, const wsptr &iroot, const wsptr& name, ts::extensions_s & exts, const wchar *title)
-	{
-		wchar cdp[ MAX_PATH ];
-		GetCurrentDirectoryW(MAX_PATH,cdp);
-
-		OPENFILENAMEW o;
-		memset(&o, 0, sizeof(OPENFILENAMEW));
-
-        wstr_c root(iroot);
-        fix_path(root, FNO_FULLPATH);
-
-		o.lStructSize=sizeof(o);
-        o.hwndOwner = g_main_window;
-        o.hInstance = GetModuleHandle(nullptr);
-
-		wstr_c filter;
-        if (exts.exts.size())
-        {
-            for( const extension_s &e : exts.exts )
-                filter.append( e.desc ).append_char('/').append( e.ext ).append_char('/');
-            filter.append_char('/');
-            filter.replace_all('/', 0);
-        }
-
-		wstr_c buffer(16384, true);
-		buffer.set(name);
-
-		o.lpstrTitle = title;
-		o.lpstrFile = buffer.str();
-		o.nMaxFile=16384;
-		o.lpstrDefExt = exts.defext();
-
-		o.lpstrFilter = filter.cstr();
-		o.lpstrInitialDir = root.cstr();
-		o.Flags=OFN_PATHMUSTEXIST | OFN_EXPLORER | OFN_HIDEREADONLY | OFN_FILEMUSTEXIST | OFN_ALLOWMULTISELECT;
-		if(!GetOpenFileNameW(&o))
-		{
-			SetCurrentDirectoryW(cdp);
-			return false;
-		}
-
-		SetCurrentDirectoryW(cdp);
-
-		files.clear();
-
-
-		const wchar *zz = buffer.cstr() + o.nFileOffset;
-
-		if ( o.nFileOffset < CHARz_len( buffer.cstr() ) )
-		{
-			files.add( buffer.cstr() );
-			zz += CHARz_len(zz) + 1;
-		}
-
-		for (; *zz ; zz += CHARz_len(zz) + 1 )
-		{
-			files.add( wstr_c(buffer.cstr()).append_char(NATIVE_SLASH).append(zz) );
-		}
-
-		return true;
-	}
-
 	bool    TSCALL dir_present(const wstr_c &path)
 	{
 		WIN32_FIND_DATAW find_data;
@@ -980,7 +792,14 @@ namespace ts
 
 	}
 
-	bool    TSCALL find_files(const wsptr &wildcard, wstrings_c &files, const DWORD dwFileAttributes, const DWORD dwSkipAttributes, bool full_names)
+    DWORD cvta( int a )
+    {
+        if ( a < 0 ) return 0xffffffff;
+        if ( a & ATTR_DIR ) return FILE_ATTRIBUTE_DIRECTORY;
+        return 0;
+    }
+
+	bool    TSCALL find_files(const wsptr &wildcard, wstrings_c &files, int attributes, int skip_attributes, bool full_names)
 	{
 		WIN32_FIND_DATAW find_data;
 		HANDLE           fh = FindFirstFileW(tmp_wstr_c(wildcard), &find_data);
@@ -997,6 +816,9 @@ namespace ts
             }
 
         }
+
+        DWORD dwFileAttributes = cvta( attributes );
+        DWORD dwSkipAttributes = cvta( skip_attributes );
 
 		while (fh != INVALID_HANDLE_VALUE)
 		{
@@ -1064,5 +886,210 @@ namespace ts
         SetFileAttributesW(p, FILE_ATTRIBUTE_NORMAL);
         return DeleteFileW(p) != 0;
     }
+
+#ifdef _WIN32
+
+    ts::wstr_c f_create( const ts::wsptr&fn )
+    {
+        HANDLE f = CreateFileW( tmp_wstr_c(fn), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr );
+        if ( f == INVALID_HANDLE_VALUE )
+        {
+            ts::wstr_c errs( 1024, true );
+            DWORD dw = GetLastError();
+
+            FormatMessageW(
+                /*FORMAT_MESSAGE_ALLOCATE_BUFFER |*/
+                FORMAT_MESSAGE_FROM_SYSTEM |
+                FORMAT_MESSAGE_IGNORE_INSERTS,
+                NULL,
+                dw,
+                MAKELANGID( LANG_NEUTRAL, SUBLANG_DEFAULT ),
+                errs.str(),
+                1023, NULL );
+            errs.set_length();
+            return errs;
+        }
+        CloseHandle( f );
+        return ts::wstr_c();
+    }
+
+    void *f_open( const ts::wsptr&fn )
+    {
+        void *h = CreateFileW( tmp_wstr_c( fn ), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0 );
+        if ( h != INVALID_HANDLE_VALUE )
+            return h;
+        return nullptr;
+    }
+    void *f_recreate( const ts::wsptr&fn )
+    {
+        void *h = CreateFileW( tmp_wstr_c( fn ), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr );
+        if ( h != INVALID_HANDLE_VALUE )
+            return h;
+        return nullptr;
+    }
+
+    void *f_continue( const ts::wsptr&fn )
+    {
+        void * h = CreateFileW( tmp_wstr_c( fn ), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr );
+        if ( h != INVALID_HANDLE_VALUE )
+            return h;
+        return nullptr;
+    }
+
+    bool f_set_pos( void *h, uint64 pos )
+    {
+        LARGE_INTEGER li;
+        li.QuadPart = pos;
+        return INVALID_SET_FILE_POINTER != SetFilePointer( h, li.LowPart, &li.HighPart, FILE_BEGIN );
+    }
+    uint64 f_get_pos( void *h )
+    {
+        LARGE_INTEGER li = {0};
+        li.LowPart = SetFilePointer( h, 0, &li.HighPart, FILE_CURRENT );
+        return li.QuadPart;
+    }
+
+    uint64 f_size( void *h )
+    {
+        LARGE_INTEGER li;
+        li.LowPart = GetFileSize( h, (LPDWORD)&li.HighPart );
+        return li.QuadPart;
+    }
+    uint32 f_read( void *h, void *ptr, uint32 sz )
+    {
+        DWORD r;
+        ReadFile( h, ptr, sz, &r, nullptr );
+        return r;
+    }
+    uint32 f_write( void *h, const void *ptr, uint32 sz )
+    {
+        DWORD w;
+        WriteFile( h, ptr, sz, &w, nullptr );
+        return w ;
+    }
+    void f_close( void *h )
+    {
+        CloseHandle( h );
+    }
+
+    uint64 f_time_last_write( void *h )
+    {
+        FILETIME ft;
+        GetFileTime( h, nullptr, nullptr, &ft );
+        return ref_cast<uint64>(ft);
+    }
+    struct efd_s
+    {
+        WIN32_FIND_DATAW fd;
+        HANDLE h;
+        ts::wstr_c base;
+        ts::wstr_c path;
+        ts::wstr_c wildcard;
+        ts::wstr_c fn;
+        bool ready;
+        bool folder;
+    };
+
+    enum_files_c::enum_files_c( const wstr_c &base, const wstr_c &path, const wstr_c &wildcard )
+    {
+        TS_STATIC_CHECK( sizeof(efd_s) <= sizeof(data), "bad size" );
+        memset( data, 0, sizeof( efd_s ) );
+        efd_s &d = (efd_s &)data;
+
+        TSPLACENEW( &d.base );
+        TSPLACENEW( &d.path );
+        TSPLACENEW( &d.wildcard );
+        TSPLACENEW( &d.fn );
+
+        d.h = FindFirstFileW( fn_join( base, path, wildcard ), &d.fd );
+        if ( d.h == INVALID_HANDLE_VALUE )
+        {
+            d.ready = false;
+            d.folder = false;
+        } else
+        {
+            d.ready = true;
+            d.folder = false;
+            for ( ; d.ready && !prepare_file(); )
+                next_int();
+        }
+
+    }
+    enum_files_c::~enum_files_c()
+    {
+        efd_s &d = (efd_s &)data;
+        d.base.~wstr_c();
+        d.path.~wstr_c();
+        d.wildcard.~wstr_c();
+        d.fn.~wstr_c();
+        FindClose( d.h );
+    }
+    enum_files_c::operator bool() const
+    {
+        efd_s &d = (efd_s &)data;
+        return d.ready;
+    }
+
+    const wstr_c &enum_files_c::operator* () const
+    {
+        efd_s &d = (efd_s &)data;
+        return  d.fn;
+    }
+    const wstr_c *enum_files_c::operator->() const 
+    {
+        efd_s &d = (efd_s &)data;
+        return &d.fn;
+    }
+
+    bool enum_files_c::is_folder() const
+    {
+        const efd_s &d = (const efd_s &)data;
+        return d.folder;
+    }
+
+    bool enum_files_c::prepare_file()
+    {
+        efd_s &d = (efd_s &)data;
+        wstr_c sFileName( d.fd.cFileName );
+
+        if ( d.fd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN )
+            return false;
+
+        if ( d.fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY )
+        {
+            if ( sFileName == CONSTWSTR( "." ) || sFileName == CONSTWSTR( ".." ) )
+                return false;
+
+
+            //if ( !enum_files( base, pred, fn_join( path, sFileName ), wildcard ) ) { FindClose( h ); return false; }
+            d.folder = true;
+        } else
+        {
+            d.folder = false;
+        }
+
+        d.fn = fn_join( d.path, sFileName );
+        return true;
+    }
+
+    void enum_files_c::next_int()
+    {
+        efd_s &d = (efd_s &)data;
+        if ( !d.ready ) return;
+
+        d.ready = FindNextFileW( d.h, &d.fd ) != 0;
+    }
+    void enum_files_c::next()
+    {
+        efd_s &d = (efd_s &)data;
+        if ( !d.ready ) return;
+
+        do  { next_int(); } while ( d.ready && !prepare_file() );
+    }
+#endif
+
+
+
+
 
 } //namespace ts

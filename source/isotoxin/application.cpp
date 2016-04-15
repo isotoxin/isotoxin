@@ -129,7 +129,10 @@ struct load_spellcheckers_s : public ts::task_c
             g_app->F_SHOW_SPELLING_WARN = nofiles;
             if (nofiles)
             {
-                gmsg<ISOGM_NOTICE>( &contacts().get_self(), nullptr, NOTICE_WARN_NODICTS ).send();
+                if ( prf().is_any_active_ap() )
+                {
+                    gmsg<ISOGM_NOTICE>( &contacts().get_self(), nullptr, NOTICE_WARN_NODICTS ).send();
+                }
             } else
             {
                 gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_PROFILEOPTIONS, MSGOP_SPELL_CHECK).send(); // simulate to hide warning
@@ -366,6 +369,14 @@ void application_c::resetup_spelling()
 
 application_c::application_c(const ts::wchar * cmdl)
 {
+    ts::master().on_init = DELEGATE( this, on_init );
+    ts::master().on_exit = DELEGATE( this, on_exit );
+    ts::master().on_loop = DELEGATE( this, on_loop );
+    ts::master().on_mouse = DELEGATE( this, on_mouse );
+    ts::master().on_char = DELEGATE( this, on_char );
+    ts::master().on_keyboard = DELEGATE( this, on_keyboard );
+    
+
     F_NEWVERSION = false;
     F_BLINKING_FLAG = false;
     F_UNREADICON = false;
@@ -382,6 +393,7 @@ application_c::application_c(const ts::wchar * cmdl)
     F_CAPTURING = false;
     F_SHOW_CONTACTS_IDS = false;
     F_SHOW_SPELLING_WARN = false;
+    F_MAINRECTSUMMON = false;
 
     autoupdate_next = now() + 10;
 	g_app = this;
@@ -404,10 +416,18 @@ application_c::application_c(const ts::wchar * cmdl)
 application_c::~application_c()
 {
     while (spellchecker.is_locked(true))
-        Sleep(1);
+        ts::master().sys_sleep(1);
 
     m_avcontacts.clear(); // remove all av contacts before delete GUI
     unregister_capture_handler(this);
+
+    ts::master().on_init.clear();
+    ts::master().on_exit.clear();
+    ts::master().on_loop.clear();
+    ts::master().on_mouse.clear();
+    ts::master().on_char.clear();
+    ts::master().on_keyboard.clear();
+
 	g_app = nullptr;
 }
 
@@ -417,7 +437,7 @@ ts::uint32 application_c::gm_handler(gmsg<ISOGM_EXPORT_PROTO_DATA>&d)
 
     if (!d.buf.size())
     {
-        ts::sys_beep(ts::SBEEP_ERROR);
+        ts::master().sys_beep(ts::SBEEP_ERROR);
         return 0;
     }
 
@@ -456,7 +476,7 @@ ts::uint32 application_c::gm_handler(gmsg<ISOGM_EXPORT_PROTO_DATA>&d)
 
     return 0;
 }
-
+void set_dump_type( bool full );
 void application_c::apply_debug_options()
 {
     ts::astrmap_c d(cfg().debug());
@@ -464,11 +484,7 @@ void application_c::apply_debug_options()
         d.clear();
 
 #if defined _DEBUG || defined _CRASH_HANDLER
-    MINIDUMP_TYPE dump_type = (MINIDUMP_TYPE)(MiniDumpWithFullMemory /*| MiniDumpWithProcessThreadData*/ | MiniDumpWithDataSegs | MiniDumpWithHandleData /*| MiniDumpWithFullMemoryInfo | MiniDumpWithThreadInfo*/);
-    bool full_dump = d.get(CONSTASTR(DEBUG_OPT_FULL_DUMP)).as_int() != 0;
-    if (!full_dump)
-        dump_type = (MINIDUMP_TYPE)(MiniDumpWithDataSegs | MiniDumpWithHandleData);
-    ts::exception_operator_c::set_dump_type(dump_type);
+    set_dump_type( d.get( CONSTASTR( DEBUG_OPT_FULL_DUMP ) ).as_int() != 0 );
 #endif
 
     F_SHOW_CONTACTS_IDS = d.get(CONSTASTR("contactids")).as_int() != 0;
@@ -502,13 +518,50 @@ ts::uint32 application_c::gm_handler(gmsg<GM_UI_EVENT> & e)
     return 0;
 }
 
-
-
-DWORD application_c::handler_SEV_EXIT( const system_event_param_s & p )
+bool application_c::on_keyboard( int scan, bool dn, int casw )
 {
+    bool handled = false;
+    UNSTABLE_CODE_PROLOG
+        handled = __super::handle_keyboard( scan, dn, casw );
+    UNSTABLE_CODE_EPILOG
+    return handled;
+
+}
+
+bool application_c::on_char( wchar_t c )
+{
+    bool handled = false;
+    UNSTABLE_CODE_PROLOG
+        handled = __super::handle_char( c );
+    UNSTABLE_CODE_EPILOG
+    return handled;
+}
+
+void application_c::on_mouse( ts::mouse_event_e me, const ts::ivec2 &, const ts::ivec2 &scrpos )
+{
+    UNSTABLE_CODE_PROLOG
+        __super::handle_mouse(me, scrpos);
+    UNSTABLE_CODE_EPILOG
+}
+
+bool application_c::on_loop()
+{
+    UNSTABLE_CODE_PROLOG
+        __super::sys_loop();
+    UNSTABLE_CODE_EPILOG
+
+    return true;
+}
+
+bool application_c::on_exit()
+{
+    gmsg<ISOGM_ON_EXIT>().send();
     prf().shutdown_aps();
 	TSDEL(this);
-    return 0;
+
+    ASSERT( !ts::master().on_exit );
+
+    return true;
 }
 
 void application_c::load_locale( const SLANGID& lng )
@@ -595,31 +648,162 @@ bool application_c::flash_notification_icon(RID r, GUIPARAM param)
     return true;
 }
 
-HICON application_c::app_icon(bool for_tray)
+ts::bitmap_c application_c::build_icon( int sz, ts::TSCOLOR colorblack )
 {
-    if (!for_tray)
-        return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(IDI_ICON_APP)); 
+    ts::buf_c svgb; svgb.load_from_file( CONSTWSTR( "icon.svg" ) );
+    ts::abp_c gen;
+    ts::str_c svgs( svgb.cstr() );
+    svgs.replace_all( CONSTASTR( "[scale]" ), ts::amake<float>( (float)sz * 0.01f ) );
+    if ( colorblack != 0xff000000 ) svgs.replace_all( CONSTASTR( "#000000" ), make_color(colorblack) );
+    gen.set( CONSTASTR( "svg" ) ).set_value( svgs );
 
-    auto actual_icon_idi = [this]( bool with_message )->int
+    gen.set( CONSTASTR( "color" ) ).set_value( make_color( GET_THEME_VALUE( state_online_color ) ) );
+    gen.set( CONSTASTR( "color-hover" ) ).set_value( make_color( GET_THEME_VALUE( state_away_color ) ) );
+    gen.set( CONSTASTR( "color-press" ) ).set_value( make_color( GET_THEME_VALUE( state_dnd_color ) ) );
+    gen.set( CONSTASTR( "color-disabled" ) ).set_value( make_color( 0 ) );
+    gen.set( CONSTASTR( "size" ) ).set_value( ts::amake( ts::ivec2( sz ) ) );
+    colors_map_s cmap;
+    ts::bitmap_c iconz;
+    if ( generated_button_data_s *g = generated_button_data_s::generate( &gen, cmap, false ) )
     {
-        if (F_OFFLINE_ICON) return with_message ? IDI_ICON_OFFLINE_MSG : IDI_ICON_OFFLINE;
-        switch (contacts().get_self().get_ostate())
-        {
-        case COS_AWAY:
-            return with_message ? IDI_ICON_AWAY_MSG : IDI_ICON_AWAY;
-        case COS_DND:
-            return with_message ? IDI_ICON_DND_MSG : IDI_ICON_DND;
-        }
-        return with_message ? IDI_ICON_ONLINE_MSG : IDI_ICON_ONLINE;
+        iconz = g->src;
+        TSDEL( g );
+    }
+    return iconz;
+}
+
+ts::bitmap_c application_c::app_icon(bool for_tray)
+{
+    auto blinking = [this]( icon_e icon )->icon_e
+    {
+        return F_BLINKING_FLAG ? (icon_e)( icon + 1 ) : icon;
     };
 
-    if (F_UNREADICON)
-        return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE( actual_icon_idi( F_BLINKING_FLAG ) ));
+    auto actual_icon_idi = [&]( bool with_message )->icon_e
+    {
+        if ( F_OFFLINE_ICON ) return with_message ? blinking(ICON_OFFLINE_MSG1) : ICON_OFFLINE;
+        
+        switch ( contacts().get_self().get_ostate() )
+        {
+        case COS_AWAY:
+            return with_message ? blinking(ICON_AWAY_MSG1) : ICON_AWAY;
+        case COS_DND:
+            return with_message ? blinking(ICON_DND_MSG1) : ICON_DND;
+        }
+        return with_message ? blinking(ICON_ONLINE_MSG1) : ICON_ONLINE;
+    };
 
-    if (F_BLINKING_ICON)
-        return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE( F_BLINKING_FLAG ? actual_icon_idi( false ) : IDI_ICON_HOLLOW  ));
+    int numm = 0;
 
-    return LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(actual_icon_idi(false)));
+    auto cit = [&]() ->icon_e
+    {
+        numm = icon_num;
+
+        if ( !for_tray )
+            return ICON_APP;
+
+        if ( F_UNREADICON )
+        {
+            numm = count_unread_blink_reason();
+            return actual_icon_idi( true );
+        }
+
+        if ( F_BLINKING_ICON )
+            return F_BLINKING_FLAG ? actual_icon_idi( false ) : ICON_HOLLOW;
+
+        return actual_icon_idi( false );
+    };
+
+    icon_e icne = cit();
+
+    if ( numm > 99 ) numm = 99;
+
+    if ( numm != icon_num )
+    {
+        icons[ ICON_OFFLINE_MSG1 ].clear();
+        icons[ ICON_OFFLINE_MSG2 ].clear();
+        icons[ ICON_ONLINE_MSG1 ].clear();
+        icons[ ICON_ONLINE_MSG2 ].clear();
+        icons[ ICON_AWAY_MSG1 ].clear();
+        icons[ ICON_AWAY_MSG2 ].clear();
+        icons[ ICON_DND_MSG1 ].clear();
+        icons[ ICON_DND_MSG2 ].clear();
+    }
+
+    if ( icons[ icne ].info().sz >> 0 )
+        return icons[ icne ];
+
+    int index = -1;
+    bool blink = false;
+    bool wmsg = false;
+
+    switch ( icne )
+    {
+    case ICON_APP:
+        {
+            ts::bitmap_c icon = build_icon( 32 );
+            icons[ ICON_APP ].create_ARGB( ts::ivec2( 32 ) );
+            icons[ ICON_APP ].copy( ts::ivec2( 0 ), ts::ivec2( 32 ), icon.extbody(), ts::ivec2( 0 ) );
+            icons[ ICON_APP ].unmultiply();
+            break;
+        }
+    case ICON_HOLLOW:
+        icons[ ICON_HOLLOW ].create_ARGB( ts::ivec2( 16 ) );
+        icons[ ICON_HOLLOW ].fill( 0 );
+        break;
+
+    case ICON_OFFLINE_MSG1:
+        blink = true;
+    case ICON_OFFLINE_MSG2:
+        wmsg = true;
+    case ICON_OFFLINE:
+        index = 3;
+        break;
+
+    case ICON_ONLINE_MSG1:
+        blink = true;
+    case ICON_ONLINE_MSG2:
+        wmsg = true;
+    case ICON_ONLINE:
+        index = 0;
+        break;
+
+    case ICON_AWAY_MSG1:
+        blink = true;
+    case ICON_AWAY_MSG2:
+        wmsg = true;
+    case ICON_AWAY:
+        index = 1;
+        break;
+
+    case ICON_DND_MSG1:
+        blink = true;
+    case ICON_DND_MSG2:
+        wmsg = true;
+    case ICON_DND:
+        index = 2;
+        break;
+    }
+
+    if (index >= 0)
+    {
+        icons[ icne ].create_ARGB( ts::ivec2( 16 ) );
+        ts::bitmap_c icon = build_icon( 32 );
+        icons[ icne ].resize_from( icon.extbody( ts::irect( 0, 32 * index, 32, 32 * index + 32 ) ), ts::FILTER_BOX_LANCZOS3 );
+        icons[ icne ].unmultiply();
+
+        if ( wmsg )
+        {
+            ts::wstr_c t; t.set_as_int(numm);
+
+            //icons[ icne ].fill( ts::ivec2( 5, 0 ), ts::ivec2( 11, 10 ), ts::ARGB( 0, 0, 0 ) );
+            render_pixel_text( icons[ icne ], ts::irect::from_lt_and_size( ts::ivec2( 0, 0 ), ts::ivec2( 16, 11 ) ), t, ts::ARGB( 200, 0, 0 ), blink ? ts::ARGB( 200, 200, 200 ) : ts::ARGB( 255, 255, 255 ) );
+
+            icon_num = numm;
+        }
+
+    }
+    return icons[ icne ];
 };
 
 /*virtual*/ void application_c::app_prepare_text_for_copy(ts::str_c &text)
@@ -702,7 +886,7 @@ HICON application_c::app_icon(bool for_tray)
 }
 /*virtual*/ void application_c::app_b_close(RID mr)
 {
-    if (GetKeyState(VK_CONTROL) >= 0 && cfg().collapse_beh() == 2)
+    if (!ts::master().is_key_pressed(ts::SSK_CTRL) && cfg().collapse_beh() == 2)
         MODIFY(mr).micromize(true);
     else
         __super::app_b_close(mr);
@@ -746,13 +930,6 @@ HICON application_c::app_icon(bool for_tray)
 ts::static_setup<spinlock::syncvar<autoupdate_params_s>,1000> auparams;
 
 void autoupdater();
-static DWORD WINAPI autoupdater(LPVOID)
-{
-    UNSTABLE_CODE_PROLOG
-    autoupdater();
-    UNSTABLE_CODE_EPILOG
-    return 0;
-}
 
 /*virtual*/ void application_c::app_5second_event()
 {
@@ -848,18 +1025,14 @@ static DWORD WINAPI autoupdater(LPVOID)
 
             if (prf().get_options().is(UIOPT_AWAYONSCRSAVER))
             {
-                BOOL scrsvrun = FALSE;
-                SystemParametersInfoW(SPI_GETSCREENSAVERRUNNING, 0, &scrsvrun, 0);
-                if (scrsvrun)
+                if ( ts::master().get_system_info( ts::SINF_SCREENSAVER_RUNNING ) != 0 )
                     cnew = COS_AWAY, F_TYPING = false;
             }
 
             int imins = prf().inactive_time();
             if (imins > 0)
             {
-                LASTINPUTINFO lii = { (UINT)sizeof(LASTINPUTINFO) };
-                GetLastInputInfo(&lii);
-                int cimins = (GetTickCount() - lii.dwTime) / 60000;
+                int cimins = ts::master().get_system_info( ts::SINF_LAST_INPUT ) / 60;
                 if (cimins >= imins)
                     cnew = COS_AWAY, F_TYPING = false;
             }
@@ -1083,11 +1256,11 @@ void application_c::select_last_unread_contact()
     }
 }
 
-/*virtual*/ void application_c::app_notification_icon_action(naction_e act, RID iconowner)
+/*virtual*/ void application_c::app_notification_icon_action( ts::notification_icon_action_e act, RID iconowner)
 {
     HOLD m(iconowner);
 
-    if (act == NIA_L2CLICK)
+    if (act == ts::NIA_L2CLICK)
     {
         if (m().getprops().is_collapsed())
         {
@@ -1102,13 +1275,13 @@ void application_c::select_last_unread_contact()
             }
         } else
             MODIFY(iconowner).micromize(true);
-    } else if (act == NIA_RCLICK)
+    } else if (act == ts::NIA_RCLICK)
     {
         struct handlers
         {
             static void m_exit(const ts::str_c&cks)
             {
-                sys_exit(0);
+                ts::master().sys_exit(0);
             }
         };
 
@@ -1267,8 +1440,11 @@ namespace
 
         ~profile_loader_s()
         {
-            if (gui)
-                gui->delete_event(DELEGATE(this, tick));
+            if ( gui )
+            {
+                gui->delete_event( DELEGATE( this, tick ) );
+                g_app->recheck_no_profile();
+            }
         }
         void die();
     };
@@ -1294,6 +1470,63 @@ namespace
     }
 }
 
+static bool m_newprofile_ok( const ts::wstr_c&prfn, const ts::str_c& )
+{
+    ts::wstr_c pn = prfn;
+    ts::wstr_c storpn( pn );
+    profile_c::path_by_name( pn );
+    if ( ts::is_file_exists( pn ) )
+    {
+        dialog_msgbox_c::mb_error( TTT( "Such profile already exists", 49 ) ).summon();
+        return false;
+    }
+
+    ts::wstr_c errcr = ts::f_create( pn );
+    if ( !errcr.is_empty() )
+    {
+        dialog_msgbox_c::mb_error( TTT( "Can't create profile ($)", 50 ) / errcr ).summon();
+        return true;
+    }
+
+
+    ts::wstr_c profname = cfg().profile();
+    if ( profname.is_empty() )
+    {
+        auto rslt = prf().xload( pn, nullptr );
+        if ( PLR_OK == rslt )
+        {
+            dialog_msgbox_c::mb_info( TTT( "Profile [b]$[/b] has created and set as default.", 48 ) / prfn ).summon();
+            cfg().profile( storpn );
+        }
+        else
+            profile_c::mb_error_load_profile( pn, rslt );
+    }
+    else
+    {
+        dialog_msgbox_c::mb_info( TTT( "Profile with name [b]$[/b] has created. You can switch to it using settings menu.", 51 ) / prfn ).summon();
+    }
+
+    g_app->recheck_no_profile();
+
+    return true;
+}
+
+void _new_profile()
+{
+    ts::wstr_c defprofilename( CONSTWSTR( "%USER%" ) );
+    ts::parse_env( defprofilename );
+    SUMMON_DIALOG<dialog_entertext_c>( UD_PROFILENAME, dialog_entertext_c::params(
+        UD_PROFILENAME,
+        gui_isodialog_c::title( title_profile_name ),
+        TTT( "Enter profile name. It is profile file name. You can create any number of profiles and switch them any time. Detailed settings of current profile are available in settings dialog.", 43 ),
+        defprofilename,
+        ts::str_c(),
+        m_newprofile_ok,
+        nullptr,
+        check_profile_name ) );
+
+}
+
 bool application_c::b_customize(RID r, GUIPARAM param)
 {
     struct handlers
@@ -1302,57 +1535,9 @@ bool application_c::b_customize(RID r, GUIPARAM param)
         {
             SUMMON_DIALOG<dialog_settings_c>(UD_SETTINGS);
         }
-        static bool m_newprofile_ok(const ts::wstr_c&prfn, const ts::str_c&)
-        {
-            ts::wstr_c pn = prfn;
-            ts::wstr_c storpn(pn);
-            profile_c::path_by_name(pn);
-            if (ts::is_file_exists(pn))
-            {
-                dialog_msgbox_c::mb_error( TTT("Such profile already exists",49) ).summon();
-                return false;
-            }
-
-            HANDLE f = CreateFileW( pn, GENERIC_WRITE, FILE_SHARE_READ|FILE_SHARE_WRITE, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr );
-            if (f == INVALID_HANDLE_VALUE)
-            {
-                dialog_msgbox_c::mb_error( TTT("Can't create profile ($)",50) / lasterror() ).summon();
-                return true;
-            }
-            CloseHandle(f);
-            
-
-            ts::wstr_c profname = cfg().profile();
-            if (profname.is_empty())
-            {
-                auto rslt = prf().xload(pn, nullptr);
-                if (PLR_OK == rslt)
-                {
-                    dialog_msgbox_c::mb_info( TTT("Profile [b]$[/b] has created and set as default.",48) / prfn ).summon();
-                    cfg().profile(storpn);
-                } else
-                    profile_c::mb_error_load_profile(pn, rslt);
-            } else
-            {
-                dialog_msgbox_c::mb_info( TTT("Profile with name [b]$[/b] has created. You can switch to it using settings menu.",51) / prfn ).summon();
-            }
-            
-
-            return true;
-        }
         static void m_newprofile(const ts::str_c&)
         {
-            ts::wstr_c defprofilename(CONSTWSTR("%USER%"));
-            ts::parse_env(defprofilename);
-            SUMMON_DIALOG<dialog_entertext_c>(UD_PROFILENAME, dialog_entertext_c::params(
-                                                UD_PROFILENAME,
-                                                gui_isodialog_c::title(title_profile_name),
-                                                TTT("Enter profile name. It is profile file name. You can create any number of profiles and switch them any time. Detailed settings of current profile are available in settings dialog.",43),
-                                                defprofilename,
-                                                ts::str_c(),
-                                                m_newprofile_ok,
-                                                nullptr,
-                                                check_profile_name));
+            _new_profile();
         }
 
         static void m_switchto(const ts::str_c& prfn)
@@ -1369,12 +1554,12 @@ bool application_c::b_customize(RID r, GUIPARAM param)
         }
         static void m_exit(const ts::str_c&)
         {
-            sys_exit(0);
+            ts::master().sys_exit(0);
         }
     };
 
 #ifndef _FINAL
-    if (GetKeyState(VK_SHIFT)<0)
+    if (ts::master().is_key_pressed(ts::SSK_SHIFT))
     {
         void summon_test_window();
         summon_test_window();
@@ -1390,7 +1575,7 @@ bool application_c::b_customize(RID r, GUIPARAM param)
 
     ts::wstr_c profname = cfg().profile();
     ts::wstrings_c prfs;
-    ts::find_files(ts::fn_change_name_ext(cfg().get_path(), CONSTWSTR("*.profile")), prfs, 0xFFFFFFFF);
+    ts::find_files(ts::fn_change_name_ext(cfg().get_path(), CONSTWSTR("*.profile")), prfs, ATTR_ANY );
     for (const ts::wstr_c &fn : prfs)
     {
         ts::wstr_c wfn(fn);
@@ -1424,12 +1609,69 @@ bool application_c::b_customize(RID r, GUIPARAM param)
     return true;
 }
 
+void application_c::recheck_no_profile()
+{
+    if ( !prf().is_loaded() )
+    {
+        gmsg<ISOGM_SUMMON_NOPROFILE_UI>().send();
+    }
+}
+
+namespace
+{
+    struct rowarn
+    {
+        ts::wstr_c profname;
+        bool minimize = false;
+
+        rowarn( const ts::wstr_c &profname, bool minimize ):profname( profname ), minimize( minimize )
+        {
+            redraw_collector_s dch;
+            dialog_msgbox_c::mb_warning( TTT( "Profile and configuration are write protected![br][appname] is in [b]read-only[/b] mode!", 332 ) )
+                .on_ok( DELEGATE(this, conti), ts::asptr() )
+                .on_cancel( DELEGATE( this, exit_now ), ts::asptr() )
+                .bcancel( true, loc_text( loc_exit ) )
+                .bok( TTT( "Continue", 117 ) )
+                .summon();
+
+        }
+        
+
+        void conti( const ts::str_c&p )
+        {
+            g_app->F_READONLY_MODE_WARN = true;
+            ts::master().mainwindow = nullptr;
+
+            bool noprofile = false;
+            if ( !profname.is_empty() )
+                minimize |= profile_loader_s::load( profname, true );
+            else noprofile = true;
+
+            g_app->F_MAINRECTSUMMON = true;
+            g_app->summon_main_rect( minimize );
+            g_app->F_MAINRECTSUMMON = false;
+
+            if ( noprofile )
+                g_app->recheck_no_profile();
+
+            TSDEL( this );
+        }
+        void exit_now( const ts::str_c& )
+        {
+            TSDEL( this );
+            ts::master().mainwindow = nullptr;
+            ts::master().sys_exit( 0 );
+        }
+
+    };
+}
+
 void application_c::load_profile_and_summon_main_rect(bool minimize)
 {
     if (!load_theme(cfg().theme()))
     {
-        MessageBoxW(nullptr, ts::wstr_c(TTT("Default GUI theme not found!",234)), L"error", MB_OK|MB_ICONERROR);
-        sys_exit(1);
+        ts::sys_mb(L"error", ts::wstr_c( TTT( "Default GUI theme not found!", 234 ) ), ts::SMB_OK_ERROR);
+        ts::master().sys_exit(1);
         return;
     }
 
@@ -1450,22 +1692,30 @@ void application_c::load_profile_and_summon_main_rect(bool minimize)
         ts::wstr_c prfsearch(CONSTWSTR("*"));
         profile_c::path_by_name(prfsearch);
         ts::wstrings_c ss;
-        ts::find_files(prfsearch, ss, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY);
+        ts::find_files(prfsearch, ss, ATTR_ANY, ATTR_DIR );
         if (ss.size())
             profname = ts::fn_get_name(ss.get(0).as_sptr());
         cfg().profile(profname);
     }
-    if (!profname.is_empty())
-        minimize |= profile_loader_s::load( profname, true );
 
     if (F_READONLY_MODE)
     {
-        profile_c::mb_warning_readonly( minimize );
+        TSNEW( rowarn, profname, minimize ); // no mem leak
+
     } else
     {
-        summon_main_rect(minimize);
-    }
+        bool noprofile = false;
+        if ( !profname.is_empty() )
+            minimize |= profile_loader_s::load( profname, true );
+        else noprofile = true;
 
+        F_MAINRECTSUMMON = true;
+        summon_main_rect(minimize);
+        F_MAINRECTSUMMON = false;
+
+        if ( noprofile )
+            recheck_no_profile();
+    }
 }
 
 void application_c::summon_main_rect(bool minimize)
@@ -1549,7 +1799,7 @@ bool application_c::b_update_ver(RID, GUIPARAM p)
         w().dbgoptions.parse( cfg().debug() );
         w.unlock();
 
-        CloseHandle(CreateThread(nullptr, 0, autoupdater, this, 0, nullptr));
+        ts::master().sys_start_thread( autoupdater );
 
         if (renotice)
         {
@@ -1563,12 +1813,12 @@ bool application_c::b_update_ver(RID, GUIPARAM p)
 bool application_c::b_restart(RID, GUIPARAM)
 {
     ts::wstr_c n = ts::get_exe_full_name();
-    n.append(CONSTWSTR(" wait ")).append_as_uint( GetCurrentProcessId() );
+    ts::wstr_c p( CONSTWSTR( "wait " ) ); p .append_as_uint( ts::master().process_id() );
 
-    if (ts::start_app(n, nullptr))
+    if (ts::master().start_app(n, p, nullptr, false))
     {
         prf().shutdown_aps();
-        sys_exit(0);
+        ts::master().sys_exit(0);
     }
     
     return true;
@@ -1579,7 +1829,7 @@ bool application_c::b_install(RID, GUIPARAM)
     if (elevate())
     {
         prf().shutdown_aps();
-        sys_exit(0);
+        ts::master().sys_exit(0);
     }
 
     return true;
@@ -1637,23 +1887,16 @@ int application_c::appbuild()
 
 void application_c::set_notification_icon()
 {
-    if (main)
-    {
-        rectengine_root_c *root = HOLD(main)().getroot();
-        if (CHECK(root))
-        {
-            bool sysmenu = gmsg<GM_SYSMENU_PRESENT>().send().is(GMRBIT_ACCEPTED);
-            root->notification_icon(sysmenu ? ts::wsptr() : CONSTWSTR(APPNAME));
-        }
-    }
+    bool sysmenu = gmsg<GM_SYSMENU_PRESENT>().send().is( GMRBIT_ACCEPTED );
+    ts::master().set_notification_icon_text( sysmenu ? ts::wsptr() : CONSTWSTR( APPNAME ) );
 }
 
-DWORD application_c::handler_SEV_INIT(const system_event_param_s & p)
+bool application_c::on_init()
 {
 UNSTABLE_CODE_PROLOG
     set_notification_icon();
 UNSTABLE_CODE_EPILOG
-    return 0;
+    return true;
 }
 
 void application_c::handle_sound_capture(const void *data, int size)
@@ -2054,14 +2297,13 @@ file_transfer_s * application_c::register_file_transfer( const contact_key_s &hi
     {
         // send
         ftr->upload = true;
-        d().handle = CreateFileW(filename, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (d().handle == INVALID_HANDLE_VALUE)
+        d().handle = ts::f_open( filename );
+        if (!d().handle)
         {
-            d().handle = nullptr;
             m_files.remove_fast(m_files.size()-1);
             return nullptr;
         }
-        GetFileSizeEx(d().handle, &ts::ref_cast<LARGE_INTEGER>(ftr->filesize) );
+        ftr->filesize = ts::f_size( d().handle );
 
         if (active_protocol_c *ap = prf().ap(sender.protoid))
             ap->send_file(sender.contactid, utag, ts::fn_get_name_with_ext(ftr->filename), ftr->filesize);
@@ -2376,10 +2618,6 @@ file_transfer_s::file_transfer_s()
 {
     auto d = data.lock_write();
 
-    LARGE_INTEGER freq;
-    QueryPerformanceFrequency(&freq);
-    d().notfreq = 1.0 / (double)freq.QuadPart;
-    QueryPerformanceCounter(&d().prevt);
 }
 
 file_transfer_s::~file_transfer_s()
@@ -2391,8 +2629,8 @@ file_transfer_s::~file_transfer_s()
         w().ftr = nullptr;
     }
 
-    if (HANDLE handle = file_handle())
-        CloseHandle(handle);
+    if (void *handle = file_handle())
+        ts::f_close(handle);
 }
 
 bool file_transfer_s::confirm_required() const
@@ -2512,21 +2750,21 @@ void file_transfer_s::kill( file_control_e fctl )
             ap->file_control(utag, fctl);
     }
 
-    HANDLE handle = file_handle();
+    void *handle = file_handle();
     if (handle && (!upload || fctl != FIC_DONE)) // close before update message item
     {
-        LARGE_INTEGER fsz = {0};
+        uint64 fsz = {0};
         if (!upload)
         {
-            GetFileSizeEx(handle,&fsz);
-            if (fctl == FIC_DONE && (uint64)fsz.QuadPart != filesize)
+            fsz = ts::f_size(handle);
+            if (fctl == FIC_DONE && fsz != filesize)
                 return;
         }
-        CloseHandle(handle);
+        ts::f_close(handle);
         data.lock_write()().handle = nullptr;
         if (filename_on_disk.ends(CONSTWSTR(".!rcv")))
             filename_on_disk.trunc_length(5);
-        if ( (uint64)fsz.QuadPart != filesize || upload)
+        if ( fsz != filesize || upload)
         {
             post_s p;
             p.sender = sender;
@@ -2547,7 +2785,7 @@ void file_transfer_s::kill( file_control_e fctl )
                 ts::kill_file(ts::wstr_c(filename_on_disk.as_sptr().skip(1)).append(CONSTWSTR(".!rcv")));
         } else if (!upload && fctl == FIC_DONE)
         {
-            MoveFileW(filename_on_disk + CONSTWSTR(".!rcv"), filename_on_disk);
+            ts::rename_file(filename_on_disk + CONSTWSTR(".!rcv"), filename_on_disk);
             play_sound( snd_file_received, false );
         }
     }
@@ -2573,54 +2811,6 @@ void file_transfer_s::kill( file_control_e fctl )
     g_app->unregister_file_transfer(utag, fctl == FIC_DISCONNECT);
 }
 
-void file_transfer_s::data_s::tr( uint64 _offset0, uint64 _offset1 )
-{
-    if ( transfered.count() == 0 )
-    {
-        range_s &r = transfered.add();
-        r.offset0 = _offset0;
-        r.offset1 = _offset1;
-        return;
-    }
-
-    int cnt = transfered.count();
-    for(int i=0; i<cnt; ++i)
-    {
-        range_s r = transfered.get(i);
-        
-        if (_offset0 > r.offset1)
-            continue;
-
-        if (_offset1 < r.offset0)
-        {
-            range_s &rr = transfered.insert(i);
-            rr.offset0 = _offset0;
-            rr.offset1 = _offset1;
-            return;
-        }
-        if (_offset1 == r.offset0)
-        {
-            r.offset0 = _offset0;
-            transfered.remove_slow(i);
-            tr(r.offset0, r.offset1);
-            return;
-        }
-        if (_offset0 == r.offset1)
-        {
-            r.offset1 = _offset1;
-            transfered.remove_slow(i);
-            tr(r.offset0, r.offset1);
-            return;
-        }
-
-        return;
-    }
-
-    range_s &rr = transfered.add();
-    rr.offset0 = _offset0;
-    rr.offset1 = _offset1;
-}
-
 query_task_s::query_task_s(file_transfer_s *ftr)
 {
     sync.lock_write()().ftr = ftr;
@@ -2643,7 +2833,7 @@ query_task_s::~query_task_s()
     if (rslt_idle == rr().rslt)
     {
         rr.unlock();
-        Sleep(0);
+        ts::master().sys_sleep(0);
         return pass + 1;
     }
 
@@ -2668,22 +2858,19 @@ query_task_s::~query_task_s()
     rr = sync.lock_read();
     if (!rr().ftr)
         return R_CANCEL;
-    HANDLE handler = rr().ftr->file_handle(); //-V807
+    void *handler = rr().ftr->file_handle(); //-V807
     int protoid = rr().ftr->sender.protoid;
     uint64 utag = rr().ftr->utag;
 
     // always set file pointer
-    LARGE_INTEGER li;
-    li.QuadPart = cj.offset;
-    SetFilePointer(handler, li.LowPart, &li.HighPart, FILE_BEGIN);
+    ts::f_set_pos( handler, cj.offset );
 
-    int sz = (int)ts::tmin<int64>(cj.sz, (int64)(rr().ftr->filesize - cj.offset));
+    uint sz = (uint)ts::tmin<int64>(cj.sz, (int64)(rr().ftr->filesize - cj.offset));
     ts::tmp_buf_c b(sz, true);
 
     rr.unlock();
 
-    DWORD r;
-    if (!ReadFile(handler, b.data(), sz, &r, nullptr))
+    if (sz != ts::f_read(handler, b.data(), sz))
     {
         sync.lock_write()().rslt = rslt_kill;
         return R_DONE;
@@ -2693,7 +2880,7 @@ query_task_s::~query_task_s()
     {
         while (!ap->file_portion(utag, cj.offset, b.data(), sz))
         {
-            Sleep(100);
+            ts::master().sys_sleep(100);
 
             auto rrr = sync.lock_read();
             if (rslt_kill == rrr().rslt || !rrr().ftr)
@@ -2712,14 +2899,24 @@ query_task_s::~query_task_s()
 
         if (wdata().bytes_per_sec >= file_transfer_s::BPSSV_ALLOW_CALC)
         {
-            wdata().tr(cj.offset, cj.offset + cj.sz);
+            wdata().transfered_last_tick += cj.sz;
             wdata().upduitime += wdata().deltatime(true);
 
             if (wdata().upduitime > 0.3f)
             {
                 wdata().upduitime -= 0.3f;
-                wdata().bytes_per_sec = ts::lround((float)wdata().trsz() / 0.3f);
-                wdata().transfered.clear();
+
+                ts::Time curt = ts::Time::current();
+                int delta = curt - wdata().speedcalc;
+
+                if (delta >= 500)
+                {
+                    wdata().bytes_per_sec = (int)((uint64)wdata().transfered_last_tick * 1000 / delta);
+
+                    wdata().speedcalc = curt;
+                    wdata().transfered_last_tick = 0;
+                }
+
                 wftr().ftr->update_item = true;
                 rslt = true;
             }
@@ -2820,8 +3017,8 @@ void file_transfer_s::resume()
 {
     ASSERT(file_handle() == nullptr);
 
-    HANDLE h = CreateFileW(filename_on_disk, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE)
+    void * h = f_continue(filename_on_disk);
+    if (!h)
     {
         kill();
         return;
@@ -2829,12 +3026,11 @@ void file_transfer_s::resume()
     auto wdata = data.lock_write();
     wdata().handle = h;
 
-    LARGE_INTEGER fsz = { 0 };
-    GetFileSizeEx(wdata().handle, &fsz);
-    uint64 offset = fsz.QuadPart > 1024 ? fsz.QuadPart - 1024 : 0;
+    uint64 fsz = ts::f_size(wdata().handle);
+    uint64 offset = fsz > 1024 ? fsz - 1024 : 0;
     wdata().progrez = offset;
-    fsz.QuadPart = offset;
-    SetFilePointer(wdata().handle, fsz.LowPart, &fsz.HighPart, FILE_BEGIN);
+    fsz = offset;
+    ts::f_set_pos(wdata().handle, fsz);
 
     accepted = true;
 
@@ -2851,8 +3047,8 @@ void file_transfer_s::save(uint64 offset_, const ts::buf0_c&bdata)
     {
         play_sound( snd_start_recv_file, false );
 
-        HANDLE h = CreateFileW(filename_on_disk, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (h == INVALID_HANDLE_VALUE)
+        void *h = ts::f_recreate(filename_on_disk);
+        if (!h)
         {
             kill();
             return;
@@ -2869,13 +3065,9 @@ void file_transfer_s::save(uint64 offset_, const ts::buf0_c&bdata)
 
     auto wdata = data.lock_write();
 
-    LARGE_INTEGER li;
-    li.QuadPart = offset_;
-    SetFilePointer(wdata().handle, li.LowPart, &li.HighPart, FILE_BEGIN);
+    ts::f_set_pos(wdata().handle, offset_ );
 
-    DWORD w;
-    WriteFile(wdata().handle, bdata.data(), bdata.size(), &w, nullptr);
-    if ((ts::aint)w != bdata.size())
+    if ((ts::aint)ts::f_write( wdata().handle, bdata.data(), bdata.size() ) != bdata.size())
     {
         kill();
         return;
@@ -2887,14 +3079,25 @@ void file_transfer_s::save(uint64 offset_, const ts::buf0_c&bdata)
     {
         if (wdata().bytes_per_sec >= BPSSV_ALLOW_CALC)
         {
-            wdata().tr( offset_, offset_+ bdata.size() );
+            wdata().transfered_last_tick += bdata.size();
             wdata().upduitime += wdata().deltatime(true);
+            if ( wdata().bytes_per_sec == 0 )
+                wdata().bytes_per_sec = 1;
 
             if (wdata().upduitime > 0.3f)
             {
                 wdata().upduitime -= 0.3f;
-                wdata().bytes_per_sec = ts::lround((float)wdata().trsz() / 0.3f);
-                wdata().transfered.clear();
+
+                ts::Time curt = ts::Time::current();
+                int delta = curt - wdata().speedcalc;
+
+                if ( delta >= 500 )
+                {
+                    wdata().bytes_per_sec = (int)( (uint64)wdata().transfered_last_tick * 1000 / delta );
+                    wdata().speedcalc = curt;
+                    wdata().transfered_last_tick = 0;
+                }
+
                 wdata.unlock();
                 upd_message_item(true);
             }

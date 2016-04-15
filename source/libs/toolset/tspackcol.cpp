@@ -37,8 +37,8 @@ uint  ccollection_c::add_container(const wsptr &name, int prior)
         if (pf->fn().equals(name)) return pf->get_id();
     
     tmp_wstr_c n(name);
-    HANDLE h = CreateFileW(n, GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-    if (h == INVALID_HANDLE_VALUE)
+    void * h = f_open(n);
+    if (!h)
     {
         // pack in pack not supported, sorry
         //if ( !file_exists(n) )
@@ -46,44 +46,19 @@ uint  ccollection_c::add_container(const wsptr &name, int prior)
     }
 
     container_c *pf = nullptr;
-    FILETIME filetime = {0};
     blob_c body;
 
-    if (h != INVALID_HANDLE_VALUE)
-    {
-        ::SetFilePointer(h, 0, nullptr, FILE_BEGIN);
+    body.set_size(64);
+        
+    if (64 != f_read(h, body.data(), body.size()))
+        return 0;
 
-        body.set_size(64);
-        DWORD temp = 0;
-        if (!::ReadFile(h, body.data(), body.size(), &temp, nullptr))
-            return 0;
-
-        GetFileTime(h, nullptr, nullptr, &filetime);
-        CloseHandle(h);
-
-    } else
-    {
-        struct bw : public buf_wrapper_s
-        {
-            blob_c *b;
-            /*virtual*/ void * alloc(aint sz) override
-            {
-                b->set_size(sz, false);
-                return b->data();
-            }
-            
-            bw(blob_c *b):b(b) {}
-        } bbb(&body);
-
-        if (!read(n,bbb))
-            return 0;
-    }
-
+    uint64 filetime = f_time_last_write(h);
+    f_close(h);
 
     for(;;)
     {
         if ( zip_container_c::detect(body)) { pf = TSNEW(zip_container_c, name, prior, m_idpool); break; }
-        //if ( rar_file_c::detect(body)) { pf = TSNEW(rar_file_c, name, prior); break; } // there are no rar file support, sorry
         break;
     }
 
@@ -97,7 +72,7 @@ uint  ccollection_c::add_container(const wsptr &name, int prior)
             int pr = m_containers.get(i)->get_priority();
             if (pr <= prior)
             {
-                if ((pr < prior) || CompareFileTime(&filetime, &m_containers.get(i)->get_time_stamp()) > 0)
+                if ((pr < prior) || filetime > m_containers.get(i)->get_time_stamp())
                 {
                     ins_pos = i;
                     break;

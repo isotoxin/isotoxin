@@ -158,9 +158,10 @@ bool stop_sound( sound_e snd );
 
 INLINE s3::DEVICE device_from_string( const ts::asptr& s )
 {
-    s3::DEVICE device(s3::DEFAULT_DEVICE);
-    if (s.l == sizeof(device) * 2)
-        ts::pstr_c(s).hex2buf<sizeof(device)>((ts::uint8 *)&device);
+    s3::DEVICE device = s3::DEFAULT_DEVICE;
+
+    if (s.l == sizeof( s3::DEVICE ) * 2)
+        ts::pstr_c(s).hex2buf<sizeof( s3::DEVICE )>((ts::uint8 *)&device);
     return device;
 }
 

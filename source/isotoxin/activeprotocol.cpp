@@ -53,7 +53,24 @@ void active_protocol_c::run()
         g_app->stop_all_av();
     r.unlock();
 
-    CloseHandle(CreateThread(nullptr, 0, worker, this, 0, nullptr));
+    ts::master().sys_start_thread( DELEGATE( this, worker ) );
+}
+
+void active_protocol_c::reset_data()
+{
+    auto w = syncdata.lock_write();
+    w().data.config.clear();
+    w().current_state = CR_OK;
+    ipcp->send( ipcw( AQ_SET_CONFIG ) << w().data.config );
+}
+
+void active_protocol_c::change_data( const ts::blob_c &b )
+{
+    auto w = syncdata.lock_write();
+    w().data.config = b;
+    w().data.config.set_size( b.size() ); // copy content due race condition
+    w().current_state = CR_OK;
+    ipcp->send( ipcw( AQ_SET_CONFIG ) << w().data.config );
 }
 
 bool active_protocol_c::cmdhandler(ipcr r)
@@ -87,30 +104,42 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     w().icon.setcopy(r.getastr());
 
                     ipcp->send(ipcw(AQ_SET_CONFIG) << w().data.config);
-                    ipcp->send(ipcw(AQ_SET_NAME) << (w().data.user_name.is_empty() ? prf().username() : w().data.user_name));
-                    ipcp->send(ipcw(AQ_SET_STATUSMSG) << (w().data.user_statusmsg.is_empty() ? prf().userstatus() : w().data.user_statusmsg));
-                    ipcp->send(ipcw(AQ_SET_AVATAR) << w().data.avatar);
-                    if (w().manual_cos != COS_ONLINE)
-                        set_ostate( w().manual_cos );
-
-                    ipcp->send(ipcw(AQ_INIT_DONE));
-                    if (0 != (w().data.options & active_protocol_data_s::O_AUTOCONNECT))
-                    {
-                        ipcp->send(ipcw(AQ_ONLINE));
-                        w().flags.set(F_ONLINE_SWITCH);
-                    }
-
-                    w().flags.set(F_SET_PROTO_OK);
-                    w.unlock();
-
-                    gmsg<ISOGM_PROTO_LOADED> *m = TSNEW( gmsg<ISOGM_PROTO_LOADED>, id );
-                    m->send_to_main_thread();
 
                 } else
                 {
                     return false;
                 }
-            } else if (c == AQ_SET_CONFIG || c == AQ_ONLINE)
+            } else if ( c == AQ_SET_CONFIG )
+            {
+                auto w = syncdata.lock_write();
+
+                ipcp->send( ipcw( AQ_SET_NAME ) << ( w().data.user_name.is_empty() ? prf().username() : w().data.user_name ) );
+                ipcp->send( ipcw( AQ_SET_STATUSMSG ) << ( w().data.user_statusmsg.is_empty() ? prf().userstatus() : w().data.user_statusmsg ) );
+                ipcp->send( ipcw( AQ_SET_AVATAR ) << w().data.avatar );
+                if ( w().manual_cos != COS_ONLINE )
+                    set_ostate( w().manual_cos );
+
+                ipcp->send( ipcw( AQ_INIT_DONE ) );
+                if ( 0 != ( w().data.options & active_protocol_data_s::O_AUTOCONNECT ) )
+                {
+                    ipcp->send( ipcw( AQ_ONLINE ) );
+                    w().flags.set( F_ONLINE_SWITCH );
+                }
+
+                w().flags.set( F_SET_PROTO_OK );
+                w.unlock();
+
+                gmsg<ISOGM_PROTO_LOADED> *m = TSNEW( gmsg<ISOGM_PROTO_LOADED>, id );
+                m->send_to_main_thread();
+                
+                if ( s != CR_OK )
+                {
+
+                    syncdata.lock_write()().current_state = s;
+                    goto we_shoud_broadcast_result;
+                }
+
+            } else if ( c == AQ_ONLINE )
             {
                 if (s != CR_OK)
                 {
@@ -431,15 +460,6 @@ bool active_protocol_c::tick()
 }
 
 void active_protocol_c::worker()
-#if defined _DEBUG || defined _CRASH_HANDLER
-{
-    UNSTABLE_CODE_PROLOG
-    worker_check();
-    UNSTABLE_CODE_EPILOG
-}
-
-void active_protocol_c::worker_check()
-#endif
 {
     ts::str_c ipcname(CONSTASTR("isotoxin_ap_"));
     uint64 utg = ts::uuid();
@@ -472,13 +492,6 @@ void active_protocol_c::worker_check()
     } else
         syncdata.lock_write()().flags.clear(F_WORKER);
     
-}
-
-DWORD WINAPI active_protocol_c::worker(LPVOID ap)
-{
-    ts::tmpalloc_c tmp;
-    ((active_protocol_c *)ap)->worker();
-    return 0;
 }
 
 ts::uint32 active_protocol_c::gm_handler( gmsg<ISOGM_PROFILE_TABLE_SAVED>&p )
@@ -769,7 +782,7 @@ void active_protocol_c::save_config( const ts::blob_c &cfg_ )
                 tableview_backup_protocol_s &backup = prf().get_table_backup_protocol();
                 auto &row = backup.getcreate(0);
                 row.other.time = now();
-                row.other.tick = GetTickCount();
+                row.other.tick = ts::Time::current().raw();
                 row.other.protoid = id;
                 row.other.config = r->other.config;
             }
@@ -841,11 +854,11 @@ void active_protocol_c::save_config(bool wait)
 
     if (wait)
     {
-        Sleep(10);
+        ts::master().sys_sleep(10);
         while( !syncdata.lock_read()().flags.is(F_CONFIG_OK|F_CONFIG_FAIL) )
         {
-            Sleep(10);
-            sys_idle();
+            ts::master().sys_sleep(10);
+            ts::master().sys_idle();
             if (!syncdata.lock_read()().flags.is(F_WORKER))
                 return;
         }
@@ -860,11 +873,20 @@ void active_protocol_c::save_config(bool wait)
 
 ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CMD_RESULT>& r)
 {
-    if (r.cmd == AQ_SAVE_CONFIG)
+    if ( r.networkid == id )
     {
-        // save failed
-        if ( r.rslt == CR_FUNCTION_NOT_FOUND )
-            syncdata.lock_write()().flags.set(F_CONFIG_FAIL);
+        if ( r.cmd == AQ_SAVE_CONFIG )
+        {
+            // save failed
+            if ( r.rslt == CR_FUNCTION_NOT_FOUND )
+                syncdata.lock_write()( ).flags.set( F_CONFIG_FAIL );
+        } else if (r.cmd == AQ_SET_CONFIG)
+        {
+            if ( r.rslt == CR_ENCRYPTED )
+            {
+                dialog_msgbox_c::mb_error( TTT("Encrypted protocol data not supported",446) ).summon();
+            }
+        }
     }
     return 0;
 }
@@ -884,6 +906,9 @@ void active_protocol_c::set_autoconnect( bool v )
             row->changed();
         }
     }
+    if (!v)
+        w().current_state = CR_OK;
+
 }
 
 void active_protocol_c::stop_and_die(bool wait_worker_end)
@@ -910,7 +935,7 @@ void active_protocol_c::stop_and_die(bool wait_worker_end)
         {
             if (ipcp) ipcp->something_happens();
             lr.unlock();
-            Sleep(0);
+            ts::master().sys_sleep(0);
             lr = syncdata.lock_read();
         }
     } else

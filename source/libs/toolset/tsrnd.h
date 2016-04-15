@@ -3,8 +3,6 @@
 //-V:da_seed:112
 //-V:seed:112
 
-#include <Mmsystem.h>
-
 namespace ts
 {
 
@@ -368,49 +366,12 @@ INLINE uint ms_rand() {
     return (da_seed>>0x10)&0x7FFF;
 }
 
-
-// Virtual Pascal == Delphi
-class random_vp_c
-{
-    uint m_seed;
-public:
-    random_vp_c( uint seed = timeGetTime() ):m_seed(seed) {}
-
-    static const uint MAXRND = 0xFFFFFFFF; //-V112
-
-    void mutate_seed( uint in_seed )
-    {
-        mutate( false, get_current() ^ in_seed );
-    }
-
-    void mutate( bool use_timer = true, uint in_seed = 0 )
-    {
-        uint seed = (use_timer ? timeGetTime() : 0) + in_seed;
-        seed = 0x343FD * seed + 0x269EC3;
-        uint s1 = (seed>>0x10)&0xFFFF;
-        seed = 0x343FD * seed + 0x269EC3;
-        uint s2 = (seed>>0x10)&0xFFFF;
-        m_seed =  s1 | s2 << 16;
-    }
-
-    uint get_current(unsigned long long n = MAXRND+1ull) const
-    {
-        return uint(((unsigned long long) m_seed * n) >> 0x20u);
-    }
-    uint get_next(unsigned long long n = MAXRND+1ull)
-    {
-        m_seed = m_seed * 0x08088405u + 1;
-        return get_current(n);
-    }
-
-};
-
-
 class random_modnar_c
 {
 	uint32 m_seed;
 public:
-	random_modnar_c( uint32 seed = timeGetTime() ):m_seed(seed) {}
+    random_modnar_c( uint32 seed ):m_seed(seed) {}
+    random_modnar_c();
 
 	static const uint32 MAXRND = 0xFFFFFFFF; //-V112
 
@@ -424,15 +385,7 @@ public:
         mutate( false, get_current() + hash_func( in_seed ) );
     }
 
-	void mutate( bool use_timer = true, uint32 in_seed = 0 )
-	{
-		uint32 x = (use_timer ? timeGetTime() : 0) + in_seed;
-		const uint32 y = 3363093571U;
-		m_seed = x*y
-			+(x>>16)*(y>>16)
-			+(((x>>(16+1))*((y&0xFFFF)>>1))>>(16-2))
-			+((((x&0xFFFF)>>1)*(y>>(16+1)))>>(16-2)) + 1013904223L;
-	}
+    void mutate( bool use_timer = true, uint32 in_seed = 0 );
 
 	uint32 get_current() const
 	{

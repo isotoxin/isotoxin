@@ -79,8 +79,8 @@ class rsvg_svg_c : public rsvg_node_c, public rsvg_group_c
 {
     ts::ivec2 sz = ts::ivec2(0);
     allinims_t anims;
-    uint ticktime = 0;
-    uint zerotime = 0;
+    ts::Time ticktime = ts::Time::undefined();
+    ts::Time zerotime = ts::Time::undefined();
 public:
     rsvg_svg_c() {}
 

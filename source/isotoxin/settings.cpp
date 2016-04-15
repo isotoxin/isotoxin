@@ -1,4 +1,8 @@
 #include "isotoxin.h"
+
+#define _NTOS_
+#undef ERROR
+
 #include "curl/include/curl/curl.h"
 
 //-V:dm:807
@@ -699,7 +703,7 @@ namespace
 
         /*virtual*/ int unique_tag() override { return UD_DICTIONARIES; }
 
-        /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(400, 510); }
+        /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(400, 515); }
         /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override
         {
             return __super::sq_evt(qp, rid, data);
@@ -1076,20 +1080,20 @@ dialog_settings_c::~dialog_settings_c()
 
 int dialog_settings_c::detect_startopts()
 {
-    ts::str_c cmdline;
-    int is_autostart = detect_autostart(cmdline);
+    ts::wstr_c cmdline;
+    int is_autostart = ts::master().sys_detect_autostart(cmdline);
     int asopts = 0;
-    if (is_autostart & DETECT_AUSTOSTART) asopts |= 1;
-    if (is_autostart & DETECT_READONLY) asopts |= 4;
-    if (cmdline.equals(CONSTASTR("minimize"))) asopts |= 2;
-    if (0 == (is_autostart & DETECT_AUSTOSTART))
+    if (is_autostart & ts::DETECT_AUSTOSTART) asopts |= 1;
+    if (is_autostart & ts::DETECT_READONLY) asopts |= 4;
+    if (cmdline.equals(CONSTWSTR("minimize"))) asopts |= 2;
+    if (0 == (is_autostart & ts::DETECT_AUSTOSTART))
         asopts |= 2; // by default enable minimize
     return asopts;
 }
 
 void dialog_settings_c::set_startopts()
 {
-    autostart( 0 != (1 & startopt) ? ts::get_exe_full_name() : ts::wstr_c(), 0 != (2 & startopt) ? CONSTWSTR("minimize") : ts::wsptr() );
+    ts::master().sys_autostart( CONSTWSTR("Isotoxin"), 0 != (1 & startopt) ? ts::get_exe_full_name() : ts::wstr_c(), 0 != (2 & startopt) ? CONSTWSTR("minimize") : ts::wsptr() );
 }
 
 /*virtual*/ const s3::Format *dialog_settings_c::formats(int &count)
@@ -1155,6 +1159,20 @@ bool dialog_settings_c::downloadfolder_edit_handler(const ts::wstr_c &v)
 bool dialog_settings_c::downloadfolder_images_edit_handler(const ts::wstr_c &v)
 {
     downloadfolder_images = v;
+    mod();
+    return true;
+}
+
+bool dialog_settings_c::tempfolder_sendimg_edit_handler( const ts::wstr_c &v )
+{
+    tempfolder_sendimg = v;
+    mod();
+    return true;
+}
+
+bool dialog_settings_c::tempfolder_handlemsg_edit_handler( const ts::wstr_c &v )
+{
+    tempfolder_handlemsg = v;
     mod();
     return true;
 }
@@ -1688,6 +1706,9 @@ void dialog_settings_c::mod()
 
         bgroups[BGROUP_CALL_NOTIFY].add(UIOPT_SHOW_INCOMING_CALL_BAR);
 
+        bgroups[ BGROUP_INCOMING_NOTIFY ].add( UIOPT_SHOW_INCOMING_MSG_PNL );
+        
+
         bgroups[BGROUP_HISTORY].add(MSGOP_KEEP_HISTORY);
         bgroups[BGROUP_HISTORY].add(MSGOP_LOAD_WHOLE_HISTORY);
 
@@ -1718,6 +1739,9 @@ void dialog_settings_c::mod()
 
         PREPARE(disabled_spellchk, ts::wstrings_c( prf().get_disabled_dicts(), '/' ));
     }
+
+    PREPARE( tempfolder_sendimg, cfg().temp_folder_sendimg() );
+    PREPARE( tempfolder_handlemsg, cfg().temp_folder_handlemsg() );
 
     PREPARE(tools_bits, cfg().allow_tools());
 
@@ -1790,6 +1814,7 @@ void dialog_settings_c::mod()
     m.add_sub(TTT("Advanced",394))
         .add(TTT("Video calls",397), 0, TABSELMI(MASK_ADVANCED_VIDEOCALLS))
         .add(TTT("Tools",432), 0, TABSELMI(MASK_ADVANCED_TOOLS))
+        .add( TTT("Misc",435), 0, TABSELMI( MASK_ADVANCED_MISC ) )
         .add(TTT("Debug", 395), 0, TABSELMI(MASK_ADVANCED_DEBUG));
 
     descmaker dm(this);
@@ -1882,7 +1907,7 @@ void dialog_settings_c::mod()
 
     dm << MASK_APPLICATION_SOUNDS; //______________________________________________________________________________________________//
     dm().page_caption(TTT("Sounds",294));
-    dm().list(TTT("Sounds list",295), L"", -270).setname(CONSTASTR("soundslist"));
+    dm().list(TTT("Sounds list",295), L"", -300).setname(CONSTASTR("soundslist"));
     dm().vspace();
     dm().hgroup(TTT("Presets",298));
     dm().combik(HGROUP_MEMBER).setmenu(get_list_avaialble_sound_presets()).setname(CONSTASTR("availablepresets"));
@@ -1963,6 +1988,10 @@ void dialog_settings_c::mod()
             menu_c().add(TTT("Allow insistent notification of incoming call",403), 0, MENUHANDLER(), CONSTASTR("1"))
             );
 
+        dm().vspace();
+        dm().checkb( ts::wstr_c(), DELEGATE( bgroups + BGROUP_INCOMING_NOTIFY, handler ), bgroups[ BGROUP_INCOMING_NOTIFY ].current ).setmenu(
+            menu_c().add( TTT("Show notification of incoming message",434), 0, MENUHANDLER(), CONSTASTR( "1" ) )
+            );
 
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
         dm().page_caption(TTT("Chat settings",110));
@@ -2105,6 +2134,13 @@ void dialog_settings_c::mod()
     dm().checkb(ts::wstr_c(), DELEGATE(this, advt_handler), tools_bits).setmenu(
         menu_c().add(TTT("Color editor",433), 0, MENUHANDLER(), CONSTASTR("1"))
         );
+
+    dm << MASK_ADVANCED_MISC;
+    dm().path( TTT("Temp folder for sending images",441), tempfolder_sendimg, DELEGATE( this, tempfolder_sendimg_edit_handler ) );
+    dm().vspace();
+    dm().path( TTT("Temp folder for message handler",442), tempfolder_handlemsg, DELEGATE( this, tempfolder_handlemsg_edit_handler ) );
+    dm().vspace();
+
 
 
     if (profile_selected)
@@ -2866,7 +2902,7 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
                     }
 
                     ts::wstr_c infostr( CONSTWSTR("<p=r><font=default><l><color=155,0,0>"), infot );
-                    infostr.append(L" \x2192");
+                    infostr.append( L" <img=right,-1>" );
 
                     cri_s inf;
                     children_repos_info(inf);
@@ -2973,6 +3009,10 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
 
         prf().useproxyfor( useproxyfor );
     }
+
+    cfg().temp_folder_sendimg( tempfolder_sendimg );
+    cfg().temp_folder_handlemsg( tempfolder_handlemsg );
+    
 
     if (is_changed(startopt))
         set_startopts();
@@ -3722,7 +3762,7 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
             ctlenable(CONSTASTR("dialog_button_1"), false);
             return 0;
         }
-        addh += 22;
+        addh += 30;
     }
 
     dm().vspace(15);
@@ -3739,13 +3779,13 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
         dm().checkb(ts::wstr_c(), DELEGATE(this, network_connect), params.connect_at_startup ? 1 : 0).setmenu(
             menu_c().add(TTT("Connect at startup",204), 0, MENUHANDLER(), CONSTASTR("1"))  );
 
-        addh += 22;
+        addh += 30;
     }
 
     if (0 != (params.conn_features & CF_IPv6_OPTION))
     {
         ASSERT(params.configurable.initialized);
-        addh += 22;
+        addh += 30;
         dm().checkb(ts::wstr_c(), DELEGATE(this, network_ipv6), params.configurable.ipv6_enable ? 1 : 0).setmenu(
             menu_c().add(TTT("Allow IPv6",361), 0, MENUHANDLER(), CONSTASTR("1")));
     }
@@ -3753,7 +3793,7 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
     if (0 != (params.conn_features & CF_UDP_OPTION))
     {
         ASSERT(params.configurable.initialized);
-        addh += 22;
+        addh += 30;
         dm().checkb(ts::wstr_c(), DELEGATE(this, network_udp), params.configurable.udp_enable ? 1 : 0).setmenu(
             menu_c().add(TTT("Allow UDP",264), 0, MENUHANDLER(), CONSTASTR("1")));
     }
@@ -3769,7 +3809,7 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
     if (0 != (params.conn_features & CF_PROXY_MASK))
     {
         ASSERT(params.configurable.initialized);
-        addh += 45;
+        addh += 55;
 
         int pt = 0;
         if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_HTTPS) pt = 1;

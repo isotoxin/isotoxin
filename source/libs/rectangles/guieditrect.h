@@ -44,20 +44,20 @@ public:
 
         static active_element_s * fromchar( ts::wchar ch ) // hint! any valid pointers of normally allocated objects has always lower bit 0
         {
-            return (active_element_s*)(((UINT_PTR)ch << 16)|1);
+            return (active_element_s*)(((size_t)ch << 16)|1);
         }
         bool is_char() const
         {
-            return 0 != ((UINT_PTR)this & 1); // hint! lower bit of valid pointer is always 0
+            return 0 != (( size_t )this & 1); // hint! lower bit of valid pointer is always 0
         }
         ts::wchar as_char() const
         {
-            return ((UINT_PTR)this >> 16);
+            return (( size_t )this >> 16);
         }
 
         virtual void release()
         {
-            if (ASSERT(!is_char() && 0 != (UINT_PTR)this))
+            if (ASSERT(!is_char() && 0 != ( size_t )this))
             {
                 TSDEL( this );
             }
@@ -171,7 +171,7 @@ private:
     void run_heartbeat();
     bool invert_caret(RID, GUIPARAM);
 
-    bool kbd_processing_(system_query_e qp, ts::wchar charcode, int scan);
+    bool kbd_processing_(system_query_e qp, ts::wchar charcode, int scan, int casw);
 
 	int text_el_advance(int index) const { if (index >= text.size()) return 0; return !password_char ? text[index].advance((*font)) : (*(*font))[password_char].advance;}
 	bool text_replace(int pos, int num, const ts::wsptr &str, active_element_s **el, int len, bool update_caret_pos = true);
@@ -268,7 +268,7 @@ public:
 	bool is_readonly() const {return flags.is(F_READONLY|F_DISABLED|F_LOCKED);}
     bool is_disabled_caret() const { return flags.is(F_DISABLE_CARET);}
 	void set_readonly(bool ro = true) {flags.init(F_READONLY, ro);}
-    void disable_caret(bool dc = true) {flags.init(F_DISABLE_CARET, dc);}
+    void disable_caret( bool dc = true );
     void arrow_cursor(bool f = true) {flags.init(F_ARROW_CURSOR, f);}
 	bool is_empty() const {return text.size() == 0;}
     void set_chars_limit( int cl ) { chars_limit = cl; }
@@ -339,6 +339,7 @@ public:
 
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+    /*virtual*/ bool accept_focus() const override { return __super::accept_focus() && !flags.is( F_DISABLE_CARET ); }
 
     const ts::font_desc_c &get_font() const { ASSERT(font); return *font; }
 };

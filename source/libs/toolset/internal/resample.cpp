@@ -742,7 +742,7 @@ void VDResamplerSeparableStage::ProcessPoint() {
 	const ptrdiff_t dstpitch = mInfo.mDstPitch;
 
 
-	/*DWORD csr_before =*/ _mm_getcsr();
+	/*uint32 csr_before =*/ _mm_getcsr();
 
 	if (uint32 count = mInfo.mYAxis.dx_precopy) {
 		do {
@@ -778,7 +778,7 @@ void VDResamplerSeparableStage::ProcessPoint() {
 		} while(--count);
 	}
 
-	/*DWORD csr_after=*/ _mm_getcsr();
+	/*uint32 csr_after=*/ _mm_getcsr();
 
 }
 
@@ -1353,7 +1353,7 @@ void VDPixmapResampler::Process(const VDPixmap& dst, double dx1, double dy1, dou
 	if (!mpRoot)
 		return;
 
-	/*DWORD csr_before =*/ _mm_getcsr();
+	/*uint32 csr_before =*/ _mm_getcsr();
 
 	// convert coordinates to fixed point
 	sint32 fdx1 = (sint32)(dx1 * 65536.0);
@@ -1444,65 +1444,63 @@ double _Lanczos3(double x)
 	return 0.0;
 }
 
-BOOL resample(tmp_buf_c &bb, const BYTE * ibuf, LONG iw, LONG ih, BYTE * obuf, LONG ow, LONG oh, double dRadius)
+bool resample(tmp_buf_c &bb, const uint8 * ibuf, long iw, long ih, uint8 * obuf, long ow, long oh, double dRadius)
 {	
 	const int COLOR_COMPONENTS = 4;
 
-	BOOL fSuccess = FALSE;
+	bool fSuccess = false;
 	
-	LONG i, j, n, c;
+	long i, j, n, c;
 	double xScale, yScale;
 
-	/* Alias (pointer to DWORD) for ibuf */
-	DWORD * ib; 
-  /* Alias (pointer to DWORD ) for obuf */
-	DWORD * ob;
+	/* Alias (pointer to uint32) for ibuf */
+	uint32 * ib; 
+  /* Alias (pointer to uint32 ) for obuf */
+	uint32 * ob;
 
 	// Temporary values
-	DWORD val; 
+	uint32 val; 
 	int col; /* This should remain int (a bit tricky stuff) */ 
 
 	double * h_weight; // Weight contribution    [ow][MAX_CONTRIBS]
-	LONG    * h_pixel; // Pixel that contributes [ow][MAX_CONTRIBS]
-	LONG    * h_count; // How many contribution for the pixel [ow]
+	long    * h_pixel; // Pixel that contributes [ow][MAX_CONTRIBS]
+	long    * h_count; // How many contribution for the pixel [ow]
 	double * h_wsum;   // Sum of weights [ow]
 										 
 	double * v_weight; // Weight contribution    [oh][MAX_CONTRIBS]
-	LONG   * v_pixel;  // Pixel that contributes [oh][MAX_CONTRIBS]
-	LONG  * v_count;	 // How many contribution for the pixel [oh]
+	long   * v_pixel;  // Pixel that contributes [oh][MAX_CONTRIBS]
+	long  * v_count;	 // How many contribution for the pixel [oh]
 	double * v_wsum;   // Sum of weights [oh]
 	
-	DWORD * tb;        // Temporary (intermediate buffer)
+	uint32 * tb;        // Temporary (intermediate buffer)
 
 	
 	double intensity[COLOR_COMPONENTS];	// RGBA component intensities
 	
 	double center;				// Center of current sampling 
 	double weight;				// Current wight
-	LONG left;						// Left of current sampling
-	LONG right;						// Right of current sampling
+	long left;						// Left of current sampling
+	long right;						// Right of current sampling
 
 	double * p_weight;		// Temporary pointer
-	LONG   * p_pixel;     // Temporary pointer
+	long   * p_pixel;     // Temporary pointer
 
-	LONG MAX_CONTRIBS;    // Almost-const: max number of contribution for current sampling
+	long MAX_CONTRIBS;    // Almost-const: max number of contribution for current sampling
 	double SCALED_RADIUS;	// Almost-const: scaled radius for downsampling operations
 	double FILTER_FACTOR; // Almost-const: filter factor for downsampling operations
 
 	/* Preliminary (redundant ? ) check */
 	if ( iw < 1 || ih < 1 || ibuf == nullptr || ow <1 || oh<1 || obuf == nullptr)
-	{
-		return FALSE;
-	}
+		return false;
 	
 	/* Aliasing buffers */
-	ib = (DWORD *)ibuf;
-	ob = (DWORD *)obuf;
+	ib = (uint32 *)ibuf;
+	ob = (uint32 *)obuf;
 	
 	if ( ow == iw && oh == ih)
 	{ /* Aame size, no resampling */
-		CopyMemory(ob, ib, iw * ih * sizeof(COLORREF) );
-		return TRUE;
+        memcpy(ob, ib, iw * ih * sizeof( TSCOLOR ) );
+		return true;
 	}
 
 	xScale = ((double)ow / iw);
@@ -1521,7 +1519,7 @@ BOOL resample(tmp_buf_c &bb, const BYTE * ibuf, LONG iw, LONG ih, BYTE * obuf, L
 
 	tb = nullptr;
 	
-	tb = (DWORD * ) bb.use( ow * ih * sizeof( DWORD ) );
+	tb = (uint32 * ) bb.use( ow * ih * sizeof( uint32 ) );
 	
 	if ( ! tb ) goto Cleanup; 
 
@@ -1541,8 +1539,8 @@ BOOL resample(tmp_buf_c &bb, const BYTE * ibuf, LONG iw, LONG ih, BYTE * obuf, L
 
 	/* Pre-allocating all of the needed memory */
 	h_weight = (double *) bb.use(ow * MAX_CONTRIBS * sizeof(double)); /* weights */
-	h_pixel  = (LONG*) bb.use(ow * MAX_CONTRIBS * sizeof(int)); /* the contributing pixels */
-	h_count  = (LONG*) bb.use(ow * sizeof(int)); /* how may contributions for the target pixel */
+	h_pixel  = (long*) bb.use(ow * MAX_CONTRIBS * sizeof(int)); /* the contributing pixels */
+	h_count  = (long*) bb.use(ow * sizeof(int)); /* how may contributions for the target pixel */
 	h_wsum   = (double *)bb.use(ow * sizeof(double)); /* sum of the weights for the target pixel */
 	
 	if ( !( h_weight && h_pixel || h_count || h_wsum) ) goto Cleanup;
@@ -1628,8 +1626,8 @@ BOOL resample(tmp_buf_c &bb, const BYTE * ibuf, LONG iw, LONG ih, BYTE * obuf, L
 
 	/* Pre-calculate filter contributions for a column */
 	v_weight = (double *) bb.use(oh * MAX_CONTRIBS * sizeof(double)); /* Weights */
-	v_pixel  = (LONG*) bb.use(oh * MAX_CONTRIBS * sizeof(int)); /* The contributing pixels */
-	v_count  = (LONG*) bb.use(oh * sizeof(int)); /* How may contributions for the target pixel */
+	v_pixel  = (long*) bb.use(oh * MAX_CONTRIBS * sizeof(int)); /* The contributing pixels */
+	v_count  = (long*) bb.use(oh * sizeof(int)); /* How may contributions for the target pixel */
 	v_wsum   = (double *)bb.use(oh * sizeof(double)); /* Sum of the weights for the target pixel */
 
 	if ( !( v_weight && v_pixel && v_count && v_wsum) ) goto Cleanup;
@@ -1698,7 +1696,7 @@ BOOL resample(tmp_buf_c &bb, const BYTE * ibuf, LONG iw, LONG ih, BYTE * obuf, L
 		}/* i */
 	}/* n */
 
-	fSuccess = TRUE;
+	fSuccess = true;
 
 Cleanup: /* CLEANUP */
 
@@ -1727,7 +1725,7 @@ Cleanup: /* CLEANUP */
         double new_x, new_y;
         long new_xf, new_yf;
         int filter_mode;
-        COLORREF	rgbColor;
+        //COLORREF	rgbColor;
 
         VDPixmapResampler resampler;
 
@@ -1735,7 +1733,7 @@ Cleanup: /* CLEANUP */
         imgdesc_s srcinfo;
 
         const bmpcore_exbody_s& bdst;
-        BYTE* dst;
+        uint8* dst;
         uint dst_h;
         uint dst_w;
         int  dst_pitch;	
@@ -1889,7 +1887,7 @@ Cleanup: /* CLEANUP */
 
             aint MAX_CONTRIBSh  = (int) (2 * SCALED_RADIUSh  + 1);
 
-            aint sz = mfd.dst_w * ih * sizeof( DWORD ) + 
+            aint sz = mfd.dst_w * ih * sizeof( uint32 ) + 
                 +(mfd.dst_w * MAX_CONTRIBS * sizeof(double))
                 +(mfd.dst_w * MAX_CONTRIBS * sizeof(int))
                 +(mfd.dst_w * sizeof(int))

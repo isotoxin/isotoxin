@@ -20,7 +20,7 @@
 
 class config_base_c
 {
-    SIMPLE_SYSTEM_EVENT_RECEIVER(config_base_c, SEV_CLOSE);
+    GM_RECEIVER( config_base_c, ISOGM_ON_EXIT );
 
 protected:
     ts::wstr_c path;
@@ -151,6 +151,10 @@ public:
 
     TEXTAPAR(debug, "")
     INTPAR(allow_tools, 0)
+
+    TEXTWPAR( temp_folder_sendimg, "%TEMP%\\$$$isotoxin\\sendimg\\" )
+    TEXTWPAR( temp_folder_handlemsg, "%TEMP%\\$$$isotoxin\\handlemsg\\" )
+
 
 #define SND(s) TEXTWPAR( snd_##s, #s ".ogg" )
     SOUNDS

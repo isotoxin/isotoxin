@@ -16,7 +16,7 @@ gui_textedit_c::~gui_textedit_c()
 
 bool gui_textedit_c::focus() const
 {
-    return gui->get_active_focus() == getrid() || gui->get_focus() == getrid();
+    return gui->get_focus() == getrid();
 }
 
 void gui_textedit_c::redraw(bool redraw_texture)
@@ -339,14 +339,14 @@ void gui_textedit_c::set_caret_pos(int cp)
 	scroll_to_caret();
 }
 
-bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int scan)
+bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int scan, int casw )
 {
 	bool res = false;
     int cp = 0;
 	if (qp == SQ_KEYDOWN)
 	{
 		cp=get_caret_char_index();
-		bool def=false,key_shift=GetKeyState(VK_SHIFT)<0;
+		bool def=false, key_shift = (casw & ts::casw_shift) != 0;
 
 		if (!key_shift)
 		{
@@ -354,7 +354,7 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 		}
 		else if (start_sel==-1) start_sel=cp;
 
-		if (GetKeyState(VK_CONTROL)<0)
+		if ( ( casw & ts::casw_ctrl ) != 0 )
 		{
             bool do_default = true;
             for (const kbd_press_callback_s &cb : kbdhandlers)
@@ -375,28 +375,28 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 			def=true;
 			switch (scan)
 			{
-            case SSK_RSHIFT:
-			case SSK_LSHIFT:
+            case ts::SSK_RSHIFT:
+			case ts::SSK_LSHIFT:
 				if (start_sel==-1) start_sel=cp;
 				res = true;
 				break;
-			case SSK_A:
+			case ts::SSK_A:
 				selectall();
 				res = true;
 				break;
-            case SSK_W:
+            case ts::SSK_W:
                 selectword();
                 res = true;
                 break;
-            case SSK_Z:
+            case ts::SSK_Z:
                 undo();
                 res = true;
                 break;
-            case SSK_Y:
+            case ts::SSK_Y:
                 redo();
                 res = true;
                 break;
-			case SSK_HOME:
+			case ts::SSK_HOME:
                 if (text.size() == 0) return false;
 				caret_offset = 0;
 				caret_line = 0;
@@ -404,36 +404,36 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 				res = true;
 				def = false;
 				break;
-			case SSK_END:
+			case ts::SSK_END:
                 if (text.size() == 0) return false;
                 end();
 				res = true;
 				def = false;
 				break;
-			case SSK_C:
-			case SSK_INSERT:
+			case ts::SSK_C:
+			case ts::SSK_INSERT:
 				res = copy_(cp);
 				break;
-			case SSK_V:
+			case ts::SSK_V:
 				paste_(cp);
 				res = true;
 				break;
-			case SSK_X:
+			case ts::SSK_X:
 				res = cut_(cp);
 				break;
-			case SSK_LEFT:
+			case ts::SSK_LEFT:
 				for (;cp>0 &&  IS_WORDB(text.get(cp-1).get_char());cp--);
 				for (;cp>0 && !IS_WORDB(text.get(cp-1).get_char());cp--);
 				set_caret_pos(cp);
 				res = true;
 				break;
-			case SSK_RIGHT:
+			case ts::SSK_RIGHT:
 				for (;cp<text.size() && !IS_WORDB(text.get(cp).get_char());cp++);
 				for (;cp<text.size() &&  IS_WORDB(text.get(cp).get_char());cp++);
 				set_caret_pos(cp);
 				res = true;
 				break;
-            case SSK_ENTER:
+            case ts::SSK_ENTER:
                 cp=get_caret_char_index();
                 goto do_enter_key;
 			}
@@ -441,10 +441,10 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 		else
 		{
             if (flags.is(F_DISABLE_CARET)) return false;
-			if (!key_shift && start_sel!=-1 && (scan==SSK_LEFT || scan==SSK_RIGHT)) // special case: Shift not pressed but selection present and left or right key pressed - caret must be moved to start or end of selection before selection be reset
+			if (!key_shift && start_sel!=-1 && (scan== ts::SSK_LEFT || scan== ts::SSK_RIGHT)) // special case: Shift not pressed but selection present and left or right key pressed - caret must be moved to start or end of selection before selection be reset
 			{
-				if (scan==SSK_LEFT) set_caret_pos(min(cp,start_sel));
-				else set_caret_pos(max(cp,start_sel));
+				if (scan== ts::SSK_LEFT) set_caret_pos(ts::tmin(cp,start_sel));
+				else set_caret_pos( ts::tmax(cp,start_sel));
 				res = true;
 			}
 			else
@@ -466,46 +466,42 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
                 if (do_default)
 			    switch (scan)
 			    {
-			    case SSK_SHIFT:
-				    if (start_sel==-1) start_sel=cp;
-				    res = true;
-				    break;
-			    case SSK_LEFT:
+			    case ts::SSK_LEFT:
 				    if (caret_offset>0) caret_offset--;
 				    else if (caret_line>0) caret_offset=lines.get(--caret_line).delta();
 				    scroll_to_caret();
 				    res = true;
 				    break;
-			    case SSK_RIGHT:
+			    case ts::SSK_RIGHT:
 				    if (caret_offset<lines.get(caret_line).delta()) caret_offset++;
 				    else if (caret_line<lines.count()-1) caret_offset=0,caret_line++;
 				    scroll_to_caret();
 				    res = true;
 				    break;
-			    case SSK_UP:
-			    case SSK_DOWN:
+			    case ts::SSK_UP:
+			    case ts::SSK_DOWN:
                     if (text.size() == 0) return false;
-				    set_caret_pos(get_caret_pos()+ts::ivec2(0,(*font)->height*(scan==SSK_UP ? -1 : 1)));
+				    set_caret_pos(get_caret_pos()+ts::ivec2(0,(*font)->height*(scan== ts::SSK_UP ? -1 : 1)));
 				    res = true;
 				    break;
-			    case SSK_HOME:
+			    case ts::SSK_HOME:
                     if (text.size() == 0) return false;
 				    caret_offset=0;
 				    scroll_to_caret();
 				    res = true;
 				    break;
-			    case SSK_END:
+			    case ts::SSK_END:
                     if (text.size() == 0) return false;
 				    caret_offset=lines.get(caret_line).delta();
 				    scroll_to_caret();
 				    res = true;
 				    break;
-			    case SSK_INSERT:
+			    case ts::SSK_INSERT:
 				    if (is_readonly()) def=true; else
 				    if (key_shift) paste_(cp); else def=true;
 				    res = true;
 				    break;
-			    case SSK_DELETE:
+			    case ts::SSK_DELETE:
 				    if (is_readonly()) def=true; else
 				    if (key_shift)
 				    {
@@ -518,7 +514,48 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 				    }
 				    res = true;
 				    break;
-			    default:
+                case ts::SSK_BACKSPACE:
+                    if ( casw == ts::casw_alt )
+                    {
+                        undo();
+                    } else if ( 0 == (casw & ts::casw_shift) )
+                    {
+                        if ( start_sel != -1 )
+                        {
+                            text_erase( cp );
+                        }
+                        else if ( cp > 0 )
+                        {
+                            text_erase( cp - 1, 1 );
+                        }
+                    }
+                    res = true;
+                    break;
+                case ts::SSK_TAB:
+                    if ( casw & ts::casw_shift )
+                    {
+                        getroot()->tab_focus( getrid(), false );
+                    }
+                    else
+                    {
+                        getroot()->tab_focus( getrid() );
+                    }
+                    return false;
+                case ts::SSK_ESC:
+
+                    if ( start_sel < 0 )
+                    {
+                        evt_data_s d;
+                        d.kbd.scan = scan;
+                        d.kbd.charcode = 0;
+                        d.kbd.casw = casw;
+
+                        return HOLD( getparent() )( ).sq_evt( SQ_KEYDOWN, getparent(), d );
+                    }
+
+                    res = true;
+                    break;
+                default:
 				    def=true; // do not clear selection
 				    break;
 			    }
@@ -535,44 +572,8 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 
 		switch (charcode)
 		{
-		case VK_TAB:
-			if (GetKeyState(VK_SHIFT) < 0)
-			{
-                // TODO : jump to previous control
-			} else
-			{
-                 // TODO : jump to next control
-			}
-			return false;
-		case VK_ESCAPE:
-			res = true;
-			break;
-		case VK_BACK:
-            if (GetKeyState(VK_MENU) < 0)
-            {
-                undo();
-                return false;
-            }
-			if (GetKeyState(VK_SHIFT)>=0)
-			{
-				if (start_sel!=-1)
-				{
-					text_erase(cp);
-				}
-				else if (cp > 0)
-				{
-					text_erase(cp-1, 1);
-				}
-			}
-			res = true;
-			break;
-		case VK_RETURN:
+        case '\r':
             do_enter_key:
-			//if (on_enter_press && on_enter_press(getrid(), this))
-   //         {
-   //             gui->set_focus(RID());
-   //             return true;
-   //         }
 			charcode='\n';
             _undo.push(text.array(), get_caret_char_index(), start_sel, CH_ADDSPECIAL );
 
@@ -1007,32 +1008,32 @@ void gui_textedit_c::redo()
 void gui_textedit_c::ctx_menu_cut(const ts::str_c &)
 {
     cut();
-    gui->set_focus( getrid(), true );
+    gui->set_focus( getrid() );
 }
 void gui_textedit_c::ctx_menu_paste(const ts::str_c &)
 {
     paste();
-    gui->set_focus( getrid(), true );
+    gui->set_focus( getrid() );
 }
 void gui_textedit_c::ctx_menu_copy(const ts::str_c &)
 {
     copy();
-    gui->set_focus( getrid(), true );
+    gui->set_focus( getrid() );
 }
 void gui_textedit_c::ctx_menu_del(const ts::str_c &)
 {
     del();
-    gui->set_focus( getrid(), true );
+    gui->set_focus( getrid() );
 }
 void gui_textedit_c::ctx_menu_selall(const ts::str_c &)
 {
-    gui->set_focus( getrid(), true );
+    gui->set_focus( getrid() );
     selectall();
 }
 
 bool gui_textedit_c::ctxclosehandler(RID, GUIPARAM)
 {
-    gui->set_focus( getrid(), true );
+    gui->set_focus( getrid() );
     return true;
 }
 
@@ -1081,6 +1082,8 @@ bool gui_textedit_c::summoncontextmenu(int cp)
 
     color = get_default_text_color();
     caret_color = color;
+
+    getroot()->register_afocus( this, !flags.is( F_DISABLE_CARET ) );
 }
 
 ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
@@ -1149,7 +1152,7 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
                 int ocofs = caret_offset;
                 int ocl = caret_line;
                 set_caret_pos(mplocal - clar.lt);
-                if ((GetAsyncKeyState(VK_SHIFT)  & 0x8000)==0x8000) ; // if Shift pressed, do not reset selection
+                if (ts::master().is_key_pressed(ts::SSK_SHIFT)) ; // if Shift pressed, do not reset selection
                     else start_sel = get_caret_char_index();
                 /*engine_operation_data_s &opd =*/ gui->begin_mousetrack(getrid(), MTT_TEXTSELECT);
                 gui->set_focus(getrid());
@@ -1165,7 +1168,7 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
             bool d = true;
             for (const kbd_press_callback_s &cb : kbdhandlers)
             {
-                if (SSK_LB == cb.scancode)
+                if ( ts::SSK_LB == cb.scancode)
                 {
                     ts::safe_ptr<rectengine_c> e(&getengine());
                     if (cb.handler(getrid(),this))
@@ -1207,7 +1210,7 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
     case SQ_KEYDOWN:
     case SQ_KEYUP:
     case SQ_CHAR:
-        return kbd_processing_(qp, data.kbd.charcode, data.kbd.scan);
+        return kbd_processing_(qp, data.kbd.charcode, data.kbd.scan, data.kbd.casw);
 
     case SQ_MOUSE_OUT:
         if (flags.is(F_SBHL))
@@ -1374,10 +1377,9 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
         if (flags.is(F_IGNOREFOCUSCHANGE)) return true;
         if (data.changed.focus)
         {
+            flags.set( F_CARET_SHOW );
             if (!flags.is(F_HEARTBEAT))
                 run_heartbeat();
-            if (!flags.is(F_DISABLE_CARET))
-                data.changed.is_active_focus = true;
         }
         if (selection_disallowed())
             start_sel = -1;
@@ -1388,11 +1390,17 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
     return false;
 }
 
+void gui_textedit_c::disable_caret( bool dc )
+{
+    flags.init( F_DISABLE_CARET, dc );
+    getroot()->register_afocus( this, accept_focus() );
+}
+
 bool gui_textedit_c::selection_disallowed() const
 {
     if (start_sel < 0) return false;
     if (focus()) return false;
-    if (popupmenu && gui->get_active_focus() == popupmenu->getrid()) return false;
+    if (popupmenu && gui->get_focus() == popupmenu->getrid()) return false;
     return true;
 }
 

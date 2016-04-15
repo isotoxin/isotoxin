@@ -6,6 +6,10 @@
     (static_cast<uint32>(c) << 16) | (static_cast<uint32>(d) << 24))
 #endif
 
+#ifndef MAKEWORD
+#define MAKEWORD(a, b)      ((uint16)(((uint8)(((uint32)(a)) & 0xff)) | ((uint16)((uint8)(((uint32)(b)) & 0xff))) << 8))
+#endif
+
 namespace ts
 {
 

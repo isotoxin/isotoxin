@@ -430,6 +430,7 @@ class gui_message_item_c : public gui_label_ex_c
     static const ts::flags32_s::BITS F_OVERIMAGE            = FLAGS_FREEBITSTART_LABEL << 2; // mouse cursor above image
     static const ts::flags32_s::BITS F_OVERIMAGE_LBDN       = FLAGS_FREEBITSTART_LABEL << 3;
     static const ts::flags32_s::BITS F_FOUND_ITEM           = FLAGS_FREEBITSTART_LABEL << 4;
+    static const ts::flags32_s::BITS F_PASSIVE              = FLAGS_FREEBITSTART_LABEL << 5;
 
     static const int m_left = 10; // recta width and this value should be same
     static const int m_top = 3;
@@ -439,7 +440,7 @@ class gui_message_item_c : public gui_label_ex_c
     
     void ctx_menu_copy(const ts::str_c &)
     {
-        gui->simulate_kbd(SSK_C, gui_c::casw_ctrl);
+        gui->simulate_kbd( ts::SSK_C, ts::casw_ctrl);
     }
     void ctx_menu_golink(const ts::str_c &);
     void ctx_menu_copylink(const ts::str_c &);
@@ -520,6 +521,8 @@ public:
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
+    void set_passive() { flags.set(F_PASSIVE); };
+
     uint64 get_prev_found() const
     {
         ASSERT( flags.is(F_FOUND_ITEM) && addition );
@@ -564,7 +567,7 @@ public:
     void set_no_author( bool f = true ) { bool ona = flags.is(F_NO_AUTHOR); flags.init(F_NO_AUTHOR, f); if (ona != f) flags.set(F_DIRTY_HEIGHT_CACHE); }
 
     void setup_found_item( uint64 prev, uint64 next );
-    void append_text( const post_s &post, bool resize_now = true );
+    void append_text( const post_s &post, bool resize_now = true, bool force_new = false );
     bool delivered(uint64 utag);
     bool with_utag(uint64 utag) const;
     bool remove_utag(uint64 utag);
@@ -582,6 +585,8 @@ public:
 class gui_messagelist_c : public gui_vscrollgroup_c
 {
     DUMMY(gui_messagelist_c);
+    
+    GM_RECEIVER(gui_messagelist_c, ISOGM_SUMMON_NOPROFILE_UI);
     GM_RECEIVER(gui_messagelist_c, ISOGM_DO_POSTEFFECT);
     GM_RECEIVER(gui_messagelist_c, ISOGM_MESSAGE);
     GM_RECEIVER(gui_messagelist_c, ISOGM_SELECT_CONTACT);
@@ -596,9 +601,6 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_messagelist_c, ISOGM_CHANGED_SETTINGS );
     GM_RECEIVER(gui_messagelist_c, GM_UI_EVENT );
     
-
-    SIMPLE_SYSTEM_EVENT_RECEIVER(gui_messagelist_c, SEV_ACTIVE_STATE);
-
     static const ts::flags32_s::BITS F_SEARCH_RESULTS_HERE = F_VSCROLLFREEBITSTART << 0;
     static const ts::flags32_s::BITS F_EMPTY_MODE          = F_VSCROLLFREEBITSTART << 1;
     static const ts::flags32_s::BITS F_IN_REPOS            = F_VSCROLLFREEBITSTART << 2;

@@ -37,10 +37,10 @@ gui_filterbar_c::~gui_filterbar_c()
 
     if (prf().get_options().is(UIOPT_SHOW_SEARCH_BAR))
     {
-        gui_textfield_c &e = (MAKE_CHILD<gui_textfield_c>(getrid(), L"", MAX_PATH, 0, false) << (gui_textedit_c::TEXTCHECKFUNC)DELEGATE(this, update_filter));
+        gui_textfield_c &e = (MAKE_CHILD<gui_textfield_c>(getrid(), L"", MAX_PATH_LENGTH, 0, false) << (gui_textedit_c::TEXTCHECKFUNC)DELEGATE(this, update_filter));
         edit = &e;
         e.set_placeholder(TOOLTIP(TTT("Search", 277)), get_default_text_color(COL_PLACEHOLDER));
-        e.register_kbd_callback(DELEGATE(this, cancel_filter), SSK_ESC, false);
+        e.register_kbd_callback(DELEGATE(this, cancel_filter), ts::SSK_ESC, false);
     }
     if (prf().get_options().is(UIOPT_TAGFILETR_BAR))
     {

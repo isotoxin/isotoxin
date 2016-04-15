@@ -697,12 +697,10 @@ public:
 
     bool save_to_file(const wsptr &name, aint disp = 0, bool check_write = false) const
     {
-        HANDLE f = CreateFileW(tmp_wstr_c(name), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (f != INVALID_HANDLE_VALUE)
+        if (void *f = f_recreate( tmp_wstr_c( name ) ))
         {
-            DWORD w;
-            WriteFile(f, core() + disp, core.size() - disp, &w, nullptr);
-            CloseHandle(f);
+            f_write(f, core() + disp, core.size() - disp);
+            f_close(f);
 
             if (check_write)
                 return check_disk_file( name, data() + disp, size() - disp );
@@ -717,21 +715,19 @@ public:
     {
         set_size(0, false);
 
-        HANDLE hand = CreateFileW(tmp_wstr_c(fn), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-        if (hand != INVALID_HANDLE_VALUE)
+        if ( void * hand = f_open(fn))
         {
-            aint size = GetFileSize(hand, nullptr);
+            aint size = (aint)f_size(hand);
             aint m_size = size; if (text) m_size += 2;
             set_size(m_size, false);
-            DWORD r;
-            ReadFile(hand, core(), size, &r, nullptr);
-            CloseHandle(hand);
+            uint32 r = f_read(hand, core(), size);
+            f_close(hand);
             if (text && ASSERT(core.writable()))
             {
                 core()[size] = 0;
                 core()[size + 1] = 0;
             }
-            return ((aint)r == size);
+            return (aint)r == size;
         }
         return false;
     }
@@ -1000,6 +996,12 @@ public:
         aint osz = size();
         set_size(cnt * sizeof(T), preserve_content);
         set_size(osz, preserve_content);
+    }
+    void remove_last()
+    {
+        aint cnt = count();
+        if ( cnt > 0 )
+            set_count( cnt - 1 );
     }
 
     aint count() const

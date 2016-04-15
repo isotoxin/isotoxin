@@ -24,6 +24,9 @@
 
 // strange compile bug workaround: error C2365: 'TOX_GROUPCHAT_TYPE_TEXT' : redefinition; previous definition was 'enumerator'
 
+#define TOX_ENC_SAVE_MAGIC_NUMBER "toxEsave"
+#define TOX_ENC_SAVE_MAGIC_LENGTH 8
+
 #define TOX_GROUPCHAT_TYPE_TEXT ISOTOXIN_GROUPCHAT_TYPE_TEXT
 #define TOX_GROUPCHAT_TYPE_AV ISOTOXIN_GROUPCHAT_TYPE_AV
 #define TOX_CHAT_CHANGE_PEER_ADD ISOTOXIN_CHAT_CHANGE_PEER_ADD
@@ -127,6 +130,7 @@ __forceinline int time_ms()
 }
 
 static std::vector<byte> buf_tox_config; // saved on offline
+static bool conf_encrypted = false;
 
 static host_functions_s *hf;
 static Tox *tox = nullptr;
@@ -151,7 +155,8 @@ struct other_typing_s
 {
     int fid = 0;
     int time = 0;
-    other_typing_s(int fid, int time):fid(fid), time(time) {}
+    int totaltime = 0;
+    other_typing_s(int fid, int time):fid(fid), time(time), totaltime(time){}
 };
 static std::vector<other_typing_s> other_typing;
 
@@ -3679,6 +3684,16 @@ void __stdcall tick(int *sleep_time_ms)
                 ot.time += 1000;
             }
         }
+        for (int i= other_typing.size() -1;i>=0;--i)
+        {
+            other_typing_s &ot = other_typing[ i ];
+            if ( ( curt - ot.time ) > 60000 )
+            {
+                // moar then minute!
+                other_typing.erase( other_typing.begin() + i );
+                break;
+            }
+        }
 
         message2send_s::tick(curt);
         message_part_s::tick(curt);
@@ -3727,7 +3742,7 @@ void __stdcall tick(int *sleep_time_ms)
             if (reconnect_try >= 10)
             {
                 restart_module = true;
-                MaskLog( LFLS_TIMEOUT, "Offline, Restart..." );
+                MaskLog( LFLS_TIMEOUT, "Offline, Restart... (%u)", GetCurrentProcessId() );
             }
         } else
             reconnect_try = 0;
@@ -3908,6 +3923,8 @@ static cmd_result_e tox_err_to_cmd_result( TOX_ERR_NEW toxerr )
             return CR_NETWORK_ERROR;
         case TOX_ERR_NEW_LOAD_BAD_FORMAT:
             return CR_CORRUPT;
+        case TOX_ERR_NEW_LOAD_ENCRYPTED:
+            return CR_ENCRYPTED;
     }
     return CR_UNKNOWN_ERROR;
 }
@@ -3939,8 +3956,7 @@ void __stdcall set_config(const void*data, int isz)
         TOX_ERR_NEW toxerr = TOX_ERR_NEW_OK;
         ~on_return()
         {
-            if (!tox)
-                hf->operation_result(LOP_SETCONFIG, tox_err_to_cmd_result(toxerr));
+            hf->operation_result(LOP_SETCONFIG, tox_err_to_cmd_result(toxerr));
         }
         void operator=(TOX_ERR_NEW err)
         {
@@ -3948,8 +3964,18 @@ void __stdcall set_config(const void*data, int isz)
         }
     } toxerr;
 
+    conf_encrypted = false;
+
     u64 _now = now();
-    if (isz>8 && (*(uint32_t *)data) == 0 && (*((uint32_t *)data+1)) == 0x15ed1b1f)
+    if ( isz > TOX_ENC_SAVE_MAGIC_LENGTH && !memcmp( TOX_ENC_SAVE_MAGIC_NUMBER, data, TOX_ENC_SAVE_MAGIC_LENGTH ) )
+    {
+        toxerr = TOX_ERR_NEW_LOAD_ENCRYPTED;
+        if ( tox ) tox_kill( tox );
+        tox = nullptr;
+        buf_tox_config.clear();
+        conf_encrypted = true;
+
+    } else if ( isz > 8 && ( *(uint32_t *)data ) == 0 && ( *( (uint32_t *)data + 1 ) ) == 0x15ed1b1f )
     {
         tox_proxy_type = 0;
         memset( &options, 0, sizeof(options) );
@@ -4144,6 +4170,12 @@ void __stdcall init_done()
 
 void __stdcall online()
 {
+    if ( conf_encrypted )
+    {
+        hf->operation_result( LOP_ONLINE, CR_ENCRYPTED );
+        return;
+    }
+
     online_flag = true;
 
     if (!tox && buf_tox_config.size())

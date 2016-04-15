@@ -38,7 +38,7 @@ protected:
     void set_video_size( const ts::ivec2 &videosize ) { video_size = videosize; }
     void stop_lockers()
     {
-        for (;;Sleep(1))
+        for (;;ts::master().sys_sleep(1))
         {
             spinlock::auto_simple_lock l(sync);
             stoping = true;
@@ -226,7 +226,7 @@ class vsb_desktop_c : public vsb_c
         volatile vsb_desktop_c *locked = nullptr;
 
         int grabtag = 0;
-        int next_time;
+        ts::Time next_time;
         bool stop_job = false;
         volatile bool owners_changed = false;
 

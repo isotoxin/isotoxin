@@ -195,6 +195,13 @@ enum auto_accept_audio_call_e
     AAAC_ACCEPT,
 };
 
+enum msg_handler_e
+{
+    MH_NOT,
+    MH_AS_PARAM,
+    MH_VIA_FILE,
+};
+
 enum reselect_options_e
 {
     RSEL_SCROLL_END = 1,
@@ -366,13 +373,14 @@ class contact_root_c : public contact_c // metas and groups
     ts::array_shared_t<contact_c, 0> subcontacts; // valid for meta contact
     ts::array_inplace_t<post_s, 128> history; // valid for meta contact
     ts::str_c comment;
+    ts::wstr_c mhc;
     ts::astrings_c tags;
     ts::buf0_c tags_bits; // rebuilded
 
     time_t readtime = 0; // all messages after readtime considered unread
     keep_contact_history_e keeph = KCH_DEFAULT;
     auto_accept_audio_call_e aaac = AAAC_NOT;
-
+    msg_handler_e mht = MH_NOT;
 
 public:
     ts::safe_ptr<gui_contact_item_c> gui_item;
@@ -571,6 +579,13 @@ public:
 
     auto_accept_audio_call_e get_aaac() const { return aaac; }
     void set_aaac(auto_accept_audio_call_e v) { aaac = v; }
+
+    void execute_message_handler( const ts::str_c &utf8msg );
+    msg_handler_e get_mhtype() const { return mht; }
+    void set_mhtype( msg_handler_e v ) { mht = v; }
+
+    const ts::wstr_c &get_mhcmd() const { return mhc; }
+    void set_mhcmd( const ts::wstr_c &v ) { mhc = v; }
 
     bool keep_history() const;
     int calc_unread() const;

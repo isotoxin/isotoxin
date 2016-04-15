@@ -4,6 +4,8 @@
 */
 #pragma once
 
+#define _ALLOW_RTCc_IN_STL
+
 #pragma warning (push)
 #pragma warning (disable:4820)
 #pragma warning (disable:4100)
@@ -13,7 +15,6 @@
 
 #include <src/cairo.h>
 #include "toolset/toolset.h"
-#include "system/system.h"
 #include "rsvg/rsvg.h"
 
 #define MWHEELPIXELS 20

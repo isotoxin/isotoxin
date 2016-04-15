@@ -73,19 +73,19 @@ static uint crctable[256]={
   0xB40BBE37, 0xC30C8EA1, 0x5A05DF1B, 0x2D02EF8D};
 
 
-uint TSCALL CRC32(const void * buf, uint len)
+uint32 TSCALL CRC32(const void * buf, uint len)
 {
     uint crc=0xFFFFFFFF;
-    for(uint i=0;i<len;i++,buf=((byte *)buf)+1) {
-        crc=(crc << 8) ^ crctable[(*((byte *)buf)) ^ (crc & 0x000000ff) ];
+    for(uint i=0;i<len;i++,buf=((uint8 *)buf)+1) {
+        crc=(crc << 8) ^ crctable[(*((uint8 *)buf)) ^ (crc & 0x000000ff) ];
     }
     return ~crc;
 }
 
-uint TSCALL CRC32_Buf(const void * buf, int len, uint crc)
+uint32 TSCALL CRC32_Buf(const void * buf, int len, uint32 crc)
 {
-    for(int i=0;i<len;i++,buf=((byte *)buf)+1) {
-        crc=(crc << 8) ^ crctable[(*((byte *)buf)) ^ (crc & 0x000000ff) ];
+    for(int i=0;i<len;i++,buf=((uint8 *)buf)+1) {
+        crc=(crc << 8) ^ crctable[(*((uint8 *)buf)) ^ (crc & 0x000000ff) ];
     }
     return crc;
 }

@@ -1660,6 +1660,8 @@ void lan_engine::set_config(const void*data, int isz)
         crypto_box_keypair(my_public_key, my_secret_key);
         first->calculate_pub_id( my_public_key );
     }
+
+    hf->operation_result( LOP_SETCONFIG, CR_OK );
 }
 
 lan_engine::contact_s *contact;

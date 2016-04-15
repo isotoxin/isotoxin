@@ -4,10 +4,31 @@
 
 namespace ts
 {
-extern HWND g_main_window;
 #ifdef _CRASH_HANDLER
 void Log(const char *s, ...);
 #endif
+
+enum smb_e
+{
+    SMB_OK,
+    SMB_OKCANCEL,
+    SMB_YESNOCANCEL,
+    SMB_YESNO,
+    SMB_YESNO_ERROR,
+    SMB_OK_ERROR,
+};
+
+enum smbr_e
+{
+    SMBR_UNKNOWN,
+
+    SMBR_OK,
+    SMBR_YES,
+    SMBR_NO,
+    SMBR_CANCEL,
+};
+smbr_e TSCALL sys_mb( const wchar *caption, const wchar *text, smb_e options );
+
 }
 
 #ifdef _FINAL
@@ -22,22 +43,29 @@ void Log(const char *s, ...);
 #define DMSG(expr, ...) (1,true)
 #define RECURSIVE_ALERT()
 #define LOG(...) (1, false)
+#define BOK(...) (1, false)
+#define CBOK(...) (1, false)
 #else
 
 #ifdef _DEBUG_OPTIMIZED
-#define SMART_DEBUG_BREAK (IsDebuggerPresent() ? __debugbreak(), false : false)
+#define SMART_DEBUG_BREAK (ts::sys_is_debugger_present() ? __debugbreak(), false : false)
 #else
 #define SMART_DEBUG_BREAK __debugbreak() // always break in debug
 #endif
 
+#define BOK( sk ) if ( ts::master().is_key_pressed(sk) ) SMART_DEBUG_BREAK;
+#define CBOK( sk, ... ) if ( ts::master().is_key_pressed(sk) && (__VA_ARGS__) ) SMART_DEBUG_BREAK;
+
 namespace ts 
 {
+
+    bool sys_is_debugger_present();
+
+
 	bool AssertFailed(const char *file, int line, const char *s, ...);
 	INLINE bool AssertFailed(const char *file, int line) {return AssertFailed(file, line, "");}
 
-	extern int (*MessageBoxOverride)(const char *text, const char *notLoggedText, const char *caption, UINT type);
 	void LogMessage(const char *caption, const char *msg);
-	INLINE int LoggedMessageBox(const char *text, const char *caption, UINT type) { LogMessage(caption, text); return MessageBoxOverride(text, "", caption, type); }
 
 	bool Warning(const char *s, ...);
 	void Error(const char *s, ...);
@@ -47,13 +75,10 @@ namespace ts
 
 	class tmcalc_c
 	{
-		LARGE_INTEGER   m_timestamp;
-		const char     *m_tag;
+		uint64 m_timestamp;
+		const char *m_tag;
 	public:
-		tmcalc_c( const char *tag ):m_tag(tag)
-		{
-			QueryPerformanceCounter( &m_timestamp );
-		};
+        tmcalc_c( const char *tag );
 		~tmcalc_c();
 	};
 
@@ -114,7 +139,7 @@ INLINE void _cdecl dmsg(const char *str) {}
 struct delta_time_profiler_s
 {
     double notfreq;
-    LARGE_INTEGER prev;
+    uint64 prev;
     struct entry_s
     {
         int id;

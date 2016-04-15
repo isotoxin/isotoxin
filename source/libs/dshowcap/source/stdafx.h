@@ -1,5 +1,6 @@
 #pragma once
 
+#define _ALLOW_RTCc_IN_STL
 
 #define WIN32_LEAN_AND_MEAN
 #define __STREAMS__

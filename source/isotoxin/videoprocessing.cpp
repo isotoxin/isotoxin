@@ -158,10 +158,9 @@ ts::ivec2 vsb_c::fit_to_size( const ts::ivec2 &sz_ )
 vsb_desktop_c::grab_desktop *vsb_desktop_c::grab_desktop::first = nullptr;
 vsb_desktop_c::grab_desktop *vsb_desktop_c::grab_desktop::last = nullptr;
 
-vsb_desktop_c::grab_desktop::grab_desktop(const ts::irect &grabrect, int monitor):grabrect(grabrect), monitor(monitor)
+vsb_desktop_c::grab_desktop::grab_desktop(const ts::irect &grabrect, int monitor):grabrect(grabrect), monitor(monitor), next_time( ts::Time::current() + ( 1000 / GRAB_DESKTOP_FPS ) )
 {
     LIST_ADD(this, first, last, prev, next);
-    next_time = timeGetTime() + (1000 / GRAB_DESKTOP_FPS);
     g_app->add_task(this);
 }
 vsb_desktop_c::grab_desktop::~grab_desktop()
@@ -204,7 +203,7 @@ void vsb_desktop_c::grab_desktop::remove_owner(vsb_desktop_c *owner)
     while (locked == owner)
     {
         l.unlock();
-        Sleep(1);
+        ts::master().sys_sleep(1);
         l.lock(sync);
     }
 
@@ -234,11 +233,7 @@ void vsb_desktop_c::grab_desktop::grab(const ts::irect &gr)
     if (gr.size() != grabbuff.info().sz)
         grabbuff.create(gr.size(), monitor);
 
-    HWND hwnd = GetDesktopWindow();
-    HDC desktop_dc = GetDC(hwnd);
-    BitBlt(grabbuff.DC(), 0, 0, grabbuff.info().sz.x, grabbuff.info().sz.y, desktop_dc, gr.lt.x, gr.lt.y, SRCCOPY | CAPTUREBLT);
-    ReleaseDC(hwnd, desktop_dc);
-
+    grabbuff.grab_screen( gr, ts::ivec2(0) );
     grabbuff.render_cursor(gr.lt, cursorcachedata);
 
 }
@@ -252,11 +247,11 @@ void vsb_desktop_c::grab_desktop::grab(const ts::irect &gr)
         return R_CANCEL;
     }
 
-    int curt = timeGetTime();
+    ts::Time curt = ts::Time::current();
     if ((curt - next_time) < 0)
     {
         spinlock::simple_unlock(sync);
-        Sleep(1);
+        ts::master().sys_sleep(1);
         return stop_job ? R_CANCEL : 1;
     }
 
@@ -319,7 +314,7 @@ void vsb_desktop_c::grabcb(ts::drawable_bitmap_c &gbmp)
             if (b->info().sz != dsz)
                 b->create(dsz, monitor);
 
-            BitBlt(b->DC(), 0, 0, dsz.x, dsz.y, gbmp.DC(), 0, 0, SRCCOPY);
+            b->copy( ts::ivec2(0), dsz, gbmp.extbody(), ts::ivec2(0) );
         }
         else
         {
@@ -403,7 +398,7 @@ void vsb_dshow_camera_c::core_c::remove_owner( vsb_dshow_camera_c *owner )
     while (locked == owner)
     {
         l.unlock();
-        Sleep(1);
+        ts::master().sys_sleep(1);
         l.lock(sync);
     }
 
@@ -503,7 +498,7 @@ void vsb_dshow_camera_c::core_dshow_c::run_initializer(const VideoConfig &config
             if (!camera.Active())
             {
                 ts::renew(camera, DShow::InitGraph::True);
-                Sleep(1000);
+                ts::master().sys_sleep(1000);
                 return R_RESULT;
             }
 

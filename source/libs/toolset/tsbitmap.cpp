@@ -1,4 +1,5 @@
 #include "toolset.h"
+#include "internal/platform.h"
 #include "qrencode.h"
 
 //-V:bytepp:112
@@ -219,6 +220,7 @@ void TSCALL img_helper_fill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color
 }
 
 uint8 __declspec(align(256)) multbl[256][256]; // Im very surprised, but multiplication table is faster then raw (a * b / 255)
+uint8 __declspec(align(256)) divtbl[256][256];
 
 static const __declspec(align(16)) uint16 min255[16] = { 255, 255, 255, 255, 255, 255, 255, 255 };
 
@@ -237,17 +239,46 @@ __declspec(align(16)) uint8 packcback_2[16] = { 255, 255, 255, 255, 255, 255, 25
 };
 
 
-class setup_multbl
+class setup_tbls
 {
 public:
-    setup_multbl()
+    setup_tbls()
     {
-        for (int i = 0; i < 256; ++i)
-            for (int j = 0; j < 256; ++j)
+        for (int a = 0; a < 256; ++a)
+            for (int c = 0; c < 256; ++c)
             {
-                int k = i * j / 255;
-                multbl[i][j] = (uint8)k;
+                int k = a * c / 255;
+                multbl[ a ][ c ] = (uint8)k;
             }
+
+        for ( int a = 0; a < 256; ++a )
+            for ( int c = 0; c < 256; ++c )
+            {
+                int k = 0;
+
+                if ( a == 255 )
+                    k = c;
+                if ( a == 0)
+                {
+
+                } else if ( c <= a )
+                {
+                    for ( int cc = 255; cc >= 0; --cc)
+                    {
+                        if ( multbl[a][cc] == c )
+                        {
+                            k = cc;
+                            break;
+                        }
+                    }
+                } else
+                {
+                    k = 255;
+                }
+
+                divtbl[ a ][ c ] = (uint8)k;
+            }
+
 
     }
 } setup_multbl_;
@@ -1662,6 +1693,39 @@ template<typename CORE> void bitmap_t<CORE>::fill_alpha(const ivec2 & pdes, cons
         }
     }
 }
+
+template<typename CORE> void bitmap_t<CORE>::unmultiply()
+{
+    if ( info().bytepp() != 4 ) return;
+    before_modify();
+
+    uint8 * des = body();
+    int desnl = info().pitch - info().sz.x*info().bytepp();
+    int desnp = info().bytepp();
+
+    for ( int y = 0; y < info().sz.y; ++y, des += desnl ) {
+        for ( int x = 0; x < info().sz.x; ++x, des += desnp ) {
+            *(TSCOLOR *)des = UNMULTIPLY( *(TSCOLOR *)des );
+        }
+    }
+}
+
+template<typename CORE> void bitmap_t<CORE>::invcolor()
+{
+    if ( info().bytepp() != 4 ) return;
+    before_modify();
+
+    uint8 * des = body();
+    int desnl = info().pitch - info().sz.x*info().bytepp();
+    int desnp = info().bytepp();
+
+    for ( int y = 0; y < info().sz.y; ++y, des += desnl ) {
+        for ( int x = 0; x < info().sz.x; ++x, des += desnp ) {
+            *(TSCOLOR *)des = 0x00ffffff ^ ( *(TSCOLOR *)des );
+        }
+    }
+}
+
 template<typename CORE> void bitmap_t<CORE>::detect_alpha_channel( const bitmap_t<CORE> & bmsou )
 {
     class ADFILTERFILTER
@@ -2814,151 +2878,7 @@ template<typename CORE> img_format_e bitmap_t<CORE>::load_from_file(const wsptr 
 	return if_none;
 }
 
-template<typename CORE> void bitmap_t<CORE>::render_cursor( const ivec2&pos, buf_c &cache )
-{
-    struct data_s
-    {
-        HICON iconcached;
-        ts::ivec2 sz, hotspot;
-    };
-
-    data_s *d = nullptr;
-    if (cache.size() >= sizeof(data_s))
-        d = (data_s *)cache.data();
-
-    CURSORINFO ci = { sizeof(CURSORINFO) };
-
-    auto preparedata = [&](HICON icn, HBITMAP hmask, HBITMAP hcolor)
-    {
-        BITMAP bm;
-        
-        if (0 == GetObject(hmask, sizeof(BITMAP), &bm))
-            return false;
-
-        ts::ivec2 sz( bm.bmWidth, bm.bmHeight );
-        if (!hcolor) sz.y /= 2;
-
-        drawable_bitmap_c dbmp;
-        dbmp.create(ivec2(sz.x, sz.y * 2));
-        dbmp.fill(ivec2(0), sz, ts::ARGB(0, 0, 0));
-        dbmp.fill(ivec2(0, sz.y), sz, ts::ARGB(255, 255, 255));
-        DrawIconEx(dbmp.DC(), 0, 0, icn, sz.x, sz.y, 0, nullptr, DI_NORMAL);
-        DrawIconEx(dbmp.DC(), 0, sz.y, icn, sz.x, sz.y, 0, nullptr, DI_NORMAL);
-
-        dbmp.fill_alpha(255);
-        //dbmp.save_as_png(L"bmp.png");
-
-        cache.set_size(sizeof(data_s) + (4 * sz.x * sz.y));
-        d = (data_s *)cache.data();
-        d->iconcached = ci.hCursor;
-        d->sz = sz;
-
-        TSCOLOR *dst = (TSCOLOR *)(d + 1);
-        TSCOLOR *src1 = (TSCOLOR *)dbmp.body();
-        TSCOLOR *src2 = (TSCOLOR *)( dbmp.body() + dbmp.info().pitch * sz.y );
-        int addsrc = (dbmp.info().pitch - sz.x * 4) / 4;
-
-        for(int y = 0; y < sz.y; ++y, src1 += addsrc, src2 += addsrc)
-        {
-            for(int x=0; x<sz.x; ++x, ++dst, ++src1, ++src2)
-            {
-                auto detectcolor = [](TSCOLOR c1, TSCOLOR c2)->TSCOLOR
-                {
-                    if (c1 == c2) return c1;
-                    if ( c1 == 0xFF000000u && c2 == 0xFFFFFFFFu ) return 0;
-                    if ( c2 == 0xFF000000u && c1 == 0xFFFFFFFFu) return 0x00FFFFFFu; // inversion!
-
-                    // detect premultiplied color
-
-                    int a0 = 255 - RED(c2) + RED(c1);
-                    int a1 = 255 - GREEN(c2) + GREEN(c1);
-                    int a2 = 255 - BLUE(c2) + BLUE(c1);
-                    int a = tmax(a0, a1, a2);
-
-                    return (c1 & 0x00FFFFFFu) | (CLAMP<uint8>(a) << 24);
-                };
-
-                *dst = detectcolor(*src1, *src2);
-            }
-        }
-        return true;
-    };
-
-    ts::ivec2 drawpos;
-    if (GetCursorInfo(&ci) && ci.flags == CURSOR_SHOWING)
-    {
-        if ( d == nullptr || d->iconcached != ci.hCursor )
-        {
-            HICON hicon = CopyIcon(ci.hCursor);
-            ICONINFO ii;
-            if (GetIconInfo(hicon, &ii))
-            {
-                if (!preparedata(hicon, ii.hbmMask, ii.hbmColor))
-                {
-                    if (nullptr == d)
-                    {
-                        if (cache.size() < sizeof(data_s))
-                            cache.set_size(sizeof(data_s));
-                        d = (data_s *)cache.data();
-                        d->iconcached = ci.hCursor;
-                    }
-                    d->sz = ivec2(0); // no render
-                }
-                d->hotspot.x = ii.xHotspot;
-                d->hotspot.y = ii.yHotspot;
-
-                DeleteObject(ii.hbmColor);
-                DeleteObject(ii.hbmMask);
-            }
-            DestroyIcon(hicon);
-        }
-
-        drawpos = ts::ivec2(ci.ptScreenPos.x - d->hotspot.x - pos.x, ci.ptScreenPos.y - d->hotspot.y - pos.y);
-    } else
-    {
-        cache.clear();
-        return;
-    }
-
-    if ( d == nullptr || 0 == d->sz.x )
-        return;
-
-    int yy = d->sz.y;
-    if (drawpos.y + yy < 0 || drawpos.y >= info().sz.y) return; // full over top / full below bottom
-
-    int xx = d->sz.x;
-    if (drawpos.x + xx < 0 || drawpos.x >= info().sz.x) return;
-
-    byte *my_body = body( drawpos );
-    const byte *src_color = (const byte *)(d + 1);
-        
-    if ( drawpos.y < 0 )
-    {
-        my_body -= info().pitch * drawpos.y;
-        src_color -= d->sz.x * 4 * drawpos.y;
-        drawpos.y = 0;
-    }
-    if ( (info().sz.y - drawpos.y) < yy ) yy = (info().sz.y - drawpos.y);
-
-    for (int y = 0; y < yy; ++y, my_body += info().pitch)
-    {
-        TSCOLOR *rslt = (TSCOLOR *)my_body;
-
-        for (int x = 0; x < xx; ++x, ++rslt, src_color += 4)
-        {
-            int drawposx = drawpos.x + x;
-            if (drawposx < 0 || drawposx >= info().sz.x) continue;
-
-            TSCOLOR c = *(TSCOLOR *)src_color;
-            if ( ALPHA(c) )
-                *rslt = ALPHABLEND_PM( *rslt, c );
-            else if (0x00FFFFFFu == c)
-                *rslt = ts::ARGB<auint>( 255-RED(*rslt), 255-GREEN(*rslt), 255-BLUE(*rslt), ALPHA(*rslt) );
-        }
-    }
-}
-
-
+#if 0
 template<typename CORE> bool bitmap_t<CORE>::load_from_HBITMAP(HBITMAP hbmp)
 {
     BITMAP bm;
@@ -3006,10 +2926,6 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_HBITMAP(HBITMAP hbmp)
         ReleaseDC(0, dc);
         return ok;
     }
-
-
-
-
     return true;
 }
 
@@ -3058,7 +2974,7 @@ template<typename CORE> void bitmap_t<CORE>::load_from_HWND(HWND hwnd)
     DeleteObject(memBM);
     DeleteDC(memDC);
 }
-
+#endif
 
 template<typename CORE> void bitmap_t<CORE>::gen_qrcore( int margins, int dotsize, const asptr& utf8string, int bitpp, TSCOLOR fg_color, TSCOLOR bg_color )
 {
@@ -3132,379 +3048,10 @@ template<typename CORE> void bitmap_t<CORE>::gen_qrcore( int margins, int dotsiz
     }
 }
 
-#ifdef _DEBUG
-int dbmpcnt = 0;
-#endif // _DEBUG
 
-void drawable_bitmap_c::clear()
-{
-    if (m_mem_dc)
-    {
-#ifdef _DEBUG
-        --dbmpcnt;
-        DMSG("dbmp " << dbmpcnt);
-#endif // _DEBUG
-        DeleteDC(m_mem_dc); m_mem_dc = nullptr;
-    }
-    if (m_mem_bitmap) { DeleteObject(m_mem_bitmap); m_mem_bitmap = nullptr; }
-    core.m_body = nullptr;
-    memset(&core.m_info, 0, sizeof(imgdesc_s));
-}
-
-
-void    drawable_bitmap_c::create(const ivec2 &sz, int monitor)
-{
-    clear();
-
-#ifdef _DEBUG
-    ++dbmpcnt;
-    DMSG("dbmp " << dbmpcnt);
-    //if (dbmpcnt > 300)
-    //    __debugbreak();
-#endif // _DEBUG
-
-
-    core.m_info.sz = sz;
-    core.m_info.bitpp = 32;
-
-    DEVMODEW devmode;
-    devmode.dmSize = sizeof(DEVMODE);
-
-    if (monitor < 0)
-        EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &devmode);
-    else
-    {
-        struct mdata
-        {
-            DEVMODEW *devm;
-            int mi;
-            static BOOL CALLBACK calcmc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
-            {
-                mdata *m = (mdata *)dwData;
-                if (m->mi == 0)
-                {
-                    MONITORINFOEXW minf;
-                    minf.cbSize = sizeof(MONITORINFOEXW);
-                    GetMonitorInfo(hMonitor, &minf);
-                    EnumDisplaySettingsW(minf.szDevice, ENUM_CURRENT_SETTINGS, m->devm);
-                    return FALSE;
-                }
-                --m->mi;
-                return TRUE;
-            }
-        } mm; mm.mi = monitor; mm.devm = &devmode;
-
-        EnumDisplayMonitors(nullptr, nullptr, mdata::calcmc, (LPARAM)&mm);
-
-    }
-
-    devmode.dmBitsPerPel = 32;
-    devmode.dmPelsWidth = sz.x;
-    devmode.dmPelsHeight = sz.y;
-
-    HDC tdc = CreateDCW(L"DISPLAY", nullptr, nullptr, &devmode);
-
-    m_mem_dc = CreateCompatibleDC(tdc);
-    if (m_mem_dc == 0)
-        DEBUG_BREAK();;
-
-    //m_memBitmap = CreateCompatibleBitmap(tdc, w, h);
-
-    BITMAPV4HEADER bmi;
-
-    int ll = sz.x * 4;
-    core.m_info.pitch = (ll + 3) & (~3);
-
-    ZeroMemory(&bmi, sizeof(bmi));
-    bmi.bV4Size = sizeof(bmi);
-    bmi.bV4Width = sz.x;
-    bmi.bV4Height = -sz.y;
-    bmi.bV4Planes = 1;
-    bmi.bV4BitCount = 32;
-    bmi.bV4V4Compression = BI_RGB;
-    bmi.bV4SizeImage = 0;
-
-    {
-#ifndef _FINAL
-        disable_fp_exceptions_c __x;
-#endif
-        m_mem_bitmap = CreateDIBSection(tdc, (BITMAPINFO *)&bmi, DIB_RGB_COLORS, (void **)&core.m_body, 0, 0);
-
-    }
-    ASSERT(m_mem_bitmap);
-    CHECK(SelectObject(m_mem_dc, m_mem_bitmap));
-    DeleteDC(tdc);
-}
 bool    drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, bool flipy, bool premultiply, bool detect_alpha_pixels)
 {
     return create_from_bitmap(bmp, ivec2(0, 0), bmp.info().sz, flipy, premultiply, detect_alpha_pixels);
-}
-
-bool drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, const ivec2 &p, const ivec2 &sz, bool flipy, bool premultiply, bool detect_alpha_pixels)
-{
-    clear();
-
-#ifdef _DEBUG
-    ++dbmpcnt;
-    DMSG("dbmp " << dbmpcnt);
-#endif // _DEBUG
-
-
-    BITMAPV4HEADER bmi;
-
-    ASSERT((p.x + sz.x) <= bmp.info().sz.x && (p.y + sz.y) <= bmp.info().sz.y);
-
-    ZeroMemory(&bmi, sizeof(bmi));
-    bmi.bV4Size = sizeof(bmi);
-    bmi.bV4Width = sz.x;
-    bmi.bV4Height = flipy ? sz.y : -sz.y;
-    bmi.bV4Planes = 1;
-    bmi.bV4BitCount = bmp.info().bitpp;
-    if (bmp.info().bytepp() >= 3)
-    {
-        bmi.bV4V4Compression = BI_RGB;
-        bmi.bV4SizeImage = 0;
-        bmi.bV4AlphaMask = 0xFF000000;
-    }
-    else
-    {
-        bmi.bV4V4Compression = BI_BITFIELDS;
-        bmi.bV4RedMask = 0x0000f800;
-        bmi.bV4GreenMask = 0x000007e0;
-        bmi.bV4BlueMask = 0x0000001f;
-        bmi.bV4AlphaMask = 0;
-        bmi.bV4SizeImage = sz.x * sz.y * bmp.info().bytepp();
-    }
-
-    //HDC tdc=GetDC(0);
-
-    DEVMODEW devmode;
-    devmode.dmSize = sizeof(DEVMODE);
-
-    EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &devmode);
-
-    devmode.dmBitsPerPel = bmp.info().bitpp;
-    devmode.dmPelsWidth = sz.x;
-    devmode.dmPelsHeight = sz.y;
-
-    HDC tdc = CreateDCW(L"DISPLAY", nullptr, nullptr, &devmode);
-
-    {
-#ifndef _FINAL
-        disable_fp_exceptions_c __x;
-#endif
-
-        m_mem_bitmap = CreateDIBSection(tdc, (BITMAPINFO *)&bmi, DIB_RGB_COLORS, (void **)&core.m_body, 0, 0);
-    }
-
-    bool alphablend = false;
-
-    if (m_mem_bitmap == nullptr) DEBUG_BREAK();;
-
-    //if((bmp->info().bytepp()==3 || bmp->info().bytepp()==4)) bmp->swap_byte(ivec2(0,0),bmp->size(),0,2);
-
-    core.m_info.sz = sz;
-    core.m_info.bitpp = bmp.info().bitpp;
-
-    int ll = sz.x * bmp.info().bytepp();
-    core.m_info.pitch = (ll + 3) & (~3);
-    uint8 * bdes = core(); //+lls*uint32(sz.y-1);
-    const uint8 * bsou = bmp.body() + p.x * bmp.info().bytepp() + bmp.info().pitch * p.y;
-
-    if (premultiply && bmp.info().bytepp() == 4)
-    {
-        for (int y = 0; y < sz.y; ++y)
-        {
-            for (int x = 0; x < sz.x; ++x)
-            {
-                uint32 ocolor;
-                uint32 color = ((uint32 *)bsou)[x];
-                uint8 alpha = ALPHA(color);
-                if (alpha == 255)
-                {
-                    ocolor = color;
-                }
-                else if (alpha == 0)
-                {
-                    ocolor = 0;
-                    alphablend = true;
-                }
-                else
-                {
-
-                    ocolor = multbl[alpha][color & 0xff] |
-                        ((uint)multbl[alpha][(color >> 8) & 0xff] << 8) |
-                        ((uint)multbl[alpha][(color >> 16) & 0xff] << 16) |
-                        (color & 0xff000000);
-
-                    alphablend = true;
-
-                }
-
-                ((uint32 *)bdes)[x] = ocolor;
-            }
-
-            bsou = bsou + bmp.info().pitch;
-            bdes = bdes + info().pitch;
-
-        }
-
-    }
-    else if (detect_alpha_pixels && bmp.info().bytepp() == 4)
-    {
-        for (int y = 0; y < sz.y; ++y)
-        {
-            if (alphablend)
-            {
-                if (info().pitch == bmp.info().pitch && ll == info().pitch)
-                {
-                    memcpy(bdes, bsou, ll * (sz.y - y));
-                }
-                else
-                {
-                    for (; y < sz.y; ++y)
-                    {
-                        memcpy(bdes, bsou, ll);
-                        bsou = bsou + bmp.info().pitch;
-                        bdes = bdes + info().pitch;
-                    }
-                }
-
-                break;
-            }
-
-            for (aint i = 0; i < ll; i += 4)
-            {
-                uint32 color = *(uint32 *)(bsou + i);
-                *(uint32 *)(bdes + i) = color;
-                uint8 alpha = uint8(color >> 24);
-                if (alpha < 255)
-                    alphablend = true;
-            }
-
-            bsou = bsou + bmp.info().pitch;
-            bdes = bdes + info().pitch;
-        }
-
-    }
-    else
-    {
-        if (info().pitch == bmp.info().pitch && ll == info().pitch)
-        {
-            memcpy(bdes, bsou, ll * sz.y);
-        }
-        else
-        {
-            img_helper_copy(bdes, bsou, info(), bmp.info());
-        }
-    }
-
-    //if((bmp->info().bytepp()==3 || bmp->info().bytepp()==4)) bmp->swap_byte(ivec2(0,0),bmp->size(),0,2);
-
-    m_mem_dc = CreateCompatibleDC(tdc);
-    if (m_mem_dc == nullptr) DEBUG_BREAK();;
-    if (SelectObject(m_mem_dc, m_mem_bitmap) == nullptr) DEBUG_BREAK();;
-
-    //ReleaseDC(0,tdc);
-    DeleteDC(tdc);
-
-    return alphablend;
-}
-
-void    drawable_bitmap_c::save_to_bitmap(bitmap_c &bmp, const ivec2 & pos_from_dc)
-{
-    if (!m_mem_dc || !m_mem_bitmap) return;
-
-    struct {
-        struct {
-            BITMAPV4HEADER bmiHeader;
-        } bmi;
-        uint32 pal[256];
-    } b;
-
-    memset(&b, 0, sizeof(BITMAPV4HEADER));
-    b.bmi.bmiHeader.bV4Size = sizeof(BITMAPINFOHEADER);
-    if (GetDIBits(m_mem_dc, m_mem_bitmap, 0, 0, nullptr, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return;
-
-    if (b.bmi.bmiHeader.bV4BitCount == 32 && core())
-    {
-        const uint8 * src = core()+info().pitch* (b.bmi.bmiHeader.bV4Height - 1 - pos_from_dc.y);
-        src += pos_from_dc.x * 4;
-        //bmp->create_RGBA(b.bmi.bmiHeader.bV4Width,b.bmi.bmiHeader.bV4Height);
-        uint8 * dst = bmp.body();
-        int hh = tmin(bmp.info().sz.y, b.bmi.bmiHeader.bV4Height - pos_from_dc.y);
-        auint ll = sizeof(uint32) * tmin(bmp.info().sz.x, b.bmi.bmiHeader.bV4Width - pos_from_dc.x);
-        for (int y = 0; y < hh; y++)
-        {
-            //memcpy(dst,src,ll);
-
-            for (uint i = 0; i < ll; i += 4)
-            {
-                uint32 s = *(uint32 *)(src + i);
-                s |= 0xFF000000;
-                *(uint32 *)(dst + i) = s;
-            }
-
-
-            src -= info().pitch;
-            dst += bmp.info().pitch;
-        }
-    }
-
-}
-
-void drawable_bitmap_c::save_to_bitmap(bitmap_c &bmp, bool save16as32)
-{
-    if (!m_mem_dc || !m_mem_bitmap) return;
-
-
-    struct {
-        struct {
-            BITMAPV4HEADER bmiHeader;
-        } bmi;
-        uint32 pal[256];
-    } b;
-
-    memset(&b, 0, sizeof(BITMAPV4HEADER));
-    b.bmi.bmiHeader.bV4Size = sizeof(BITMAPINFOHEADER);
-    if (GetDIBits(m_mem_dc, m_mem_bitmap, 0, 0, nullptr, (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return;
-
-    if (b.bmi.bmiHeader.bV4BitCount == 32 && core())
-    {
-        uint32 ll = uint32(b.bmi.bmiHeader.bV4Width * 4);
-        const uint8 * src = core()+info().pitch*uint32(b.bmi.bmiHeader.bV4Height - 1);
-        bmp.create_ARGB(ref_cast<ivec2>(b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height));
-        uint8 * dst = bmp.body();
-        for (int y = 0; y < bmp.info().sz.y; y++)
-        {
-            memcpy(dst, src, ll);
-            src -= info().pitch;
-            dst += bmp.info().pitch;
-        }
-        return;
-    }
-
-
-
-    if (b.bmi.bmiHeader.bV4BitCount != 16 && b.bmi.bmiHeader.bV4BitCount != 24 && b.bmi.bmiHeader.bV4BitCount != 32) return;
-
-    if (save16as32 && b.bmi.bmiHeader.bV4BitCount == 16)
-    {
-        b.bmi.bmiHeader.bV4BitCount = 32;
-    }
-
-    if (b.bmi.bmiHeader.bV4BitCount == 16) bmp.create_16(ref_cast<ivec2>(b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height));
-    else if (b.bmi.bmiHeader.bV4BitCount == 24) bmp.create_RGB(ref_cast<ivec2>(b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height));
-    else if (b.bmi.bmiHeader.bV4BitCount == 32) bmp.create_ARGB(ref_cast<ivec2>(b.bmi.bmiHeader.bV4Width, b.bmi.bmiHeader.bV4Height));
-    bmp.fill(0);
-
-    if (GetDIBits(m_mem_dc, m_mem_bitmap, 0, b.bmi.bmiHeader.bV4Height, bmp.body(), (LPBITMAPINFO)&b.bmi, DIB_RGB_COLORS) == 0) return;
-
-    bmp.fill_alpha(255);
-
-    //bmp->flip_y();
-    //if(b.bmi.bmiHeader.bV4BitCount==24 || b.bmi.bmiHeader.bV4BitCount==32) bmp->swap_byte(ivec2(0,0),bmp->size(),0,2);
-
 }
 
 
@@ -3540,51 +3087,164 @@ void bmpcore_exbody_s::draw(const bmpcore_exbody_s &eb, aint xx, aint yy, const 
 }
 
 
-void drawable_bitmap_c::draw(const draw_target_s &dt, aint xx, aint yy, int alpha) const
-{
-    if (dt.eb)
-    {
-        __super::draw((*dt.eb), xx, yy, alpha);
-    
-    } else
-    {
-        if (alpha > 0)
-        {
-            BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, (uint8)alpha, AC_SRC_ALPHA };
-            AlphaBlend(dt.dc, xx, yy, info().sz.x, info().sz.y, m_mem_dc, 0, 0, info().sz.x, info().sz.y, blendPixelFunction);
-        }
-        else if (alpha < 0)
-        {
-            BitBlt(dt.dc, xx, yy, info().sz.x, info().sz.y, m_mem_dc, 0, 0, SRCCOPY);
-        }
-    }
-}
-
-void drawable_bitmap_c::draw(const draw_target_s &dt, aint xx, aint yy, const irect &r, int alpha) const
-{
-    if (dt.eb)
-    {
-        __super::draw( (*dt.eb), xx, yy, r, alpha );
-    }
-    else
-    {
-        if (alpha > 0)
-        {
-            BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, (uint8)alpha, AC_SRC_ALPHA };
-            AlphaBlend(dt.dc, xx, yy, r.width(), r.height(), m_mem_dc, r.lt.x, r.lt.y, r.width(), r.height(), blendPixelFunction);
-        } else if (alpha < 0)
-        {
-            BitBlt(dt.dc, xx, yy, r.width(), r.height(), m_mem_dc, r.lt.x, r.lt.y, SRCCOPY);
-        }
-    }
-}
-
-
 template class bitmap_t<bmpcore_normal_s>;
 template class bitmap_t<bmpcore_exbody_s>;
 
 
+bool	drawable_bitmap_c::ajust( const ivec2 &sz, bool exact_size )
+{
+    ivec2 newbbsz( ( sz.x + 15 ) & ( ~15 ), ( sz.y + 15 ) & ( ~15 ) );
+    ivec2 bbsz = info().sz;
 
+    if ( ( exact_size && newbbsz != bbsz ) || sz > bbsz )
+    {
+        if ( newbbsz.x < bbsz.x ) newbbsz.x = bbsz.x;
+        if ( newbbsz.y < bbsz.y ) newbbsz.y = bbsz.y;
+        create( newbbsz );
+        return true;
+    }
+    return false;
+}
+
+void render_image( const bmpcore_exbody_s &tgt, const bmpcore_exbody_s &image, aint x, aint y, const irect &cliprect, int alpha )
+{
+    irect imgrectnew( 0, image.info().sz );
+    imgrectnew += ivec2( x, y );
+    imgrectnew.intersect( cliprect );
+    if ( !imgrectnew ) return;
+
+    imgrectnew -= ivec2( x, y );
+    x += imgrectnew.lt.x; y += imgrectnew.lt.y;
+
+    image.draw( tgt, x, y, imgrectnew, alpha );
+}
+
+void render_image( const bmpcore_exbody_s &tgt, const bmpcore_exbody_s &image, aint x, aint y, const irect &imgrect, const irect &cliprect, int alpha )
+{
+    irect imgrectnew = imgrect.szrect();
+    imgrectnew += ivec2( x, y );
+    imgrectnew.intersect( cliprect );
+    if ( !imgrectnew ) return;
+
+    imgrectnew -= ivec2( x, y );
+    x += imgrectnew.lt.x; y += imgrectnew.lt.y;
+    imgrectnew += imgrect.lt;
+
+    image.draw( tgt, x, y, imgrectnew, alpha );
+}
+
+void repdraw::draw_h( ts::aint x1, ts::aint x2, ts::aint y, bool tile )
+{
+    if ( rbeg ) render_image( tgt, image, x1, y, *rbeg, cliprect, a_beg ? alpha : -1 );
+
+    if ( tile )
+    {
+        int dx = rrep->width();
+        if ( CHECK( dx ) )
+        {
+            int a = a_rep ? alpha : -1;
+
+            int sx0 = x1 + ( rbeg ? rbeg->width() : 0 );
+            int sx1 = x2 - ( rend ? rend->width() : 0 );
+            int z = sx0 + dx;
+            for ( ; z <= sx1; z += dx )
+                render_image( tgt, image, z - dx, y, *rrep, cliprect, a );
+            z -= dx;
+            if ( z < sx1 )
+                render_image( tgt, image, z, y, ts::irect( *rrep ).setwidth( sx1 - z ), cliprect, a );
+        }
+    }
+    else
+    {
+        ASSERT( false, "stretch" );
+    }
+    if ( rend ) render_image( tgt, image, x2 - rend->width(), y, *rend, cliprect, a_end ? alpha : -1 );
+}
+void repdraw::draw_v( ts::aint x, ts::aint y1, ts::aint y2, bool tile )
+{
+    if ( rbeg ) render_image( tgt, image, x, y1, *rbeg, cliprect, a_beg ? alpha : -1 );
+
+    if ( tile )
+    {
+        int dy = rrep->height();
+        if ( CHECK( dy ) )
+        {
+            int a = a_rep ? alpha : -1;
+
+            int sy0 = y1 + ( rbeg ? rbeg->height() : 0 );
+            int sy1 = y2 - ( rend ? rend->height() : 0 );
+            int z = sy0 + dy;
+            for ( ; z <= sy1; z += dy )
+                render_image( tgt, image, x, z - dy, *rrep, cliprect, a );
+            z -= dy;
+            if ( z < sy1 )
+                render_image( tgt, image, x, z, ts::irect( *rrep ).setheight( sy1 - z ), cliprect, a );
+        }
+    }
+    else
+    {
+        ASSERT( false, "stretch" );
+    }
+
+    if ( rend ) render_image( tgt, image, x, y2 - rend->height(), *rend, cliprect, a_end ? alpha : -1 );
+}
+
+void repdraw::draw_c( ts::aint x1, ts::aint x2, ts::aint y1, ts::aint y2, bool tile )
+{
+    if ( tile )
+    {
+        int a = a_rep ? alpha : -1;
+
+        int dx = rrep->width();
+        int dy = rrep->height();
+        if ( dx == 0 || dy == 0 ) return;
+        int sx0 = x1;
+        int sx1 = x2 - dx;
+        int sy0 = y1;
+        int sy1 = y2 - dy;
+        int x;
+        ts::irect rr; bool rr_initialized = false;
+        int y = sy0;
+        for ( ; y < sy1; y += dy )
+        {
+            for ( x = sx0; x < sx1; x += dx )
+                render_image( tgt, image, x, y, *rrep, cliprect, a );
+
+            if ( !rr_initialized )
+            {
+                if ( x < ( sx1 + dx ) )
+                {
+                    rr = *rrep;
+                    rr.setwidth( sx1 + dx - x );
+                    rr_initialized = true;
+                }
+            }
+
+            if ( rr_initialized )
+                render_image( tgt, image, x, y, rr, cliprect, a );
+        }
+        if ( y < ( sy1 + dy ) )
+        {
+            ts::irect rrb = *rrep;
+            rrb.setheight( sy1 + dy - y );
+            for ( x = sx0; x < sx1; x += dx )
+                render_image( tgt, image, x, y, rrb, cliprect, a );
+            if ( rr_initialized )
+                render_image( tgt, image, x, y, rrb.setwidth( rr.width() ), cliprect, a );
+            else
+                render_image( tgt, image, x, y, rrb.setwidth( sx1 + dx - x ), cliprect, a );
+        }
+    }
+    else
+    {
+        ASSERT( false, "stretch" );
+    }
+}
+
+
+#ifdef _WIN32
+#include "_win32/win32_bitmap.inl"
+#endif
 
 } // namespace ts
 

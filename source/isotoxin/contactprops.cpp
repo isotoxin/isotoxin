@@ -88,6 +88,34 @@ menu_c dialog_contact_props_c::getaacmenu()
     return m;
 }
 
+menu_c dialog_contact_props_c::getmhtmenu()
+{
+    menu_c m;
+    m.add( TTT( "Do not handle", 436 ), ( mh == MH_NOT ) ? MIF_MARKED : 0, DELEGATE( this, msghandler_m ), ts::amake<char>( MH_NOT ) );
+    m.add( TTT( "Run external command and pass message as parameter", 437 ), ( mh == MH_AS_PARAM ) ? MIF_MARKED : 0, DELEGATE( this, msghandler_m ), ts::amake<char>( MH_AS_PARAM ) );
+    m.add( TTT( "Run external command and pass message via file", 438 ), ( mh == MH_VIA_FILE ) ? MIF_MARKED : 0, DELEGATE( this, msghandler_m ), ts::amake<char>( MH_VIA_FILE ) );
+    return m;
+}
+
+void dialog_contact_props_c::msghandler_m( const ts::str_c&v )
+{
+    mh = (msg_handler_e)v.as_uint();
+    set_combik_menu( CONSTASTR( "mht" ), getmhtmenu() );
+
+}
+
+bool dialog_contact_props_c::msghandler_h( const ts::wstr_c & t )
+{
+    msghandler = t;
+    return true;
+}
+
+bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t )
+{
+    msghandler_p = t;
+    return true;
+}
+
 /*virtual*/ int dialog_contact_props_c::additions(ts::irect &edges)
 {
     descmaker dm(this);
@@ -99,6 +127,21 @@ menu_c dialog_contact_props_c::getaacmenu()
         keeph = contactue->get_keeph();
         aaac = contactue->get_aaac();
         tags = contactue->get_tags();
+
+        mh = contactue->get_mhtype();
+
+        ts::wstrings_c h;
+        h.qsplit( contactue->get_mhcmd() );
+
+        if ( h.size() )
+        {
+            msghandler = h.get( 0 );
+            h.remove_slow( 0 );
+            msghandler_p = h.join(' ');
+        }
+        if ( msghandler_p.is_empty() )
+            msghandler_p = CONSTWSTR("<param>");
+
 
         dm << 1;
 
@@ -125,18 +168,43 @@ menu_c dialog_contact_props_c::getaacmenu()
         dm << 4;
         dm().textfieldml(L"", from_utf8(ccomment), DELEGATE(this, comment), 12).focus(true);
 
+        dm << 8;
+
+        dm().label( genmhi() ).setname( CONSTASTR( "mhi" ) );
+        dm().vspace();
+
+        dm().combik( TTT("Message handler",439) ).setmenu( getmhtmenu() ).setname( CONSTASTR( "mht" ) );
+        dm().file( TTT("External command",443), CONSTWSTR(""), msghandler, DELEGATE( this, msghandler_h ) );
+        dm().textfield( TTT("External command param",444), msghandler_p, DELEGATE( this, msghandler_p_h ) );
     }
 
     menu_c m;
     m.add( TTT("Settings",369), 0 , TABSELMI(1) );
     m.add( TTT("Details",370), 0 , TABSELMI(2) );
     m.add( TTT("Comment",371), 0 , TABSELMI(4) );
+    m.add( TTT("Processing",440), 0, TABSELMI( 8 ) );
 
     gui_htabsel_c &tab = MAKE_CHILD<gui_htabsel_c>(getrid(), m);
     edges = ts::irect(0, tab.get_min_size().y, 0, 0);
 
 
     return 1;
+}
+
+ts::wstr_c dialog_contact_props_c::genmhi()
+{
+    ts::wstr_c t( CONSTWSTR("<p=c>") );
+    t.append( TTT("Enter full path to executable. It will be called on every incoming message from this contact. <param> will be replaced with either $ message or filename of just saved message.",445) / ts::wstr_c(CONSTWSTR("<a href=\"https://en.wikipedia.org/wiki/Percent-encoding\">percent-encoding</a>")) );
+    return t;
+}
+
+ts::wstr_c dialog_contact_props_c::buildmh()
+{
+    ts::wstr_c t( msghandler );
+    if ( t.find_pos( ' ' ) >= 0 )
+        t.trim().insert( 0, '\"' ).append_char('\"');
+    t.append_char( ' ' ).append( msghandler_p );
+    return t;
 }
 
 /*virtual*/ bool dialog_contact_props_c::sq_evt(system_query_e qp, RID rid, evt_data_s &d)
@@ -184,6 +252,16 @@ menu_c dialog_contact_props_c::getaacmenu()
             changed = true;
             contactue->set_tags(tags);
             contacts().rebuild_tags_bits();
+        }
+        if ( contactue->get_mhtype() != mh )
+        {
+            changed = true;
+            contactue->set_mhtype( mh );
+        }
+        if ( contactue->get_mhcmd() != buildmh() )
+        {
+            changed = true;
+            contactue->set_mhcmd( buildmh() );
         }
 
         if (changed)

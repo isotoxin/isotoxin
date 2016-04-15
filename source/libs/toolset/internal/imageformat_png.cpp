@@ -3,7 +3,6 @@
 #define PNG_USER_MEM_SUPPORTED
 #define PNG_ZBUF_SIZE   65536
 
-#include <windows.h>
 #include "pnglib/src/png.h"
 #include "pnglib/src/pngstruct.h"
 #include "pnglib/src/pnginfo.h"

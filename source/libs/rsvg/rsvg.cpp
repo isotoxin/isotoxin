@@ -473,7 +473,7 @@ void rsvg_svg_c::release()
 
 void rsvg_svg_c::anim_tick()
 {
-    uint ct = timeGetTime();
+    ts::Time ct = ts::Time::current();
     uint t0 = ticktime - zerotime;
     uint t1 = ct - zerotime;
 
@@ -485,7 +485,7 @@ void rsvg_svg_c::anim_tick()
 
 void rsvg_svg_c::anim_reset()
 {
-    zerotime = timeGetTime();
+    zerotime = ts::Time::current();
     ticktime = zerotime;
     for (rsvg_animation_c *a : anims)
         a->tick(0,0);
@@ -1061,7 +1061,7 @@ namespace
                     /* LEGAL: + - DIGIT->EXPONENT */
                     if (c == '+' || c == '-') {
                         if (got & RSVGN_GOT_EXPONENT_SIGN) {
-                            error = TRUE; /* Two signs: not allowed */
+                            error = true; /* Two signs: not allowed */
                         } else {
                             exponent_sign = c == '+' ? +1 : -1;
                             got |= RSVGN_GOT_EXPONENT_SIGN;

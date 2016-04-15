@@ -56,7 +56,7 @@ spinlock_list_s
         }
 
 #ifdef _WIN32
-        __except (EXCEPTION_EXECUTE_HANDLER){
+        __except (/*EXCEPTION_EXECUTE_HANDLER*/ 1){
             SLERROR("spinlock list get crush");
         }
 #else

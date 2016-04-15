@@ -75,6 +75,7 @@ enum cmd_result_e
     CR_NETWORK_ERROR,
     CR_CORRUPT,
     CR_UNKNOWN_ERROR,
+    CR_ENCRYPTED,
 };
 
 enum file_control_e

@@ -94,6 +94,7 @@ enum ui_event_e
     UE_NORMALIZED,
     UE_MINIMIZED,
     UE_THEMECHANGED,
+    UE_ACTIVATE,
 };
 
 template<> struct gmsg<GM_UI_EVENT> : public gmsgbase
@@ -182,7 +183,6 @@ struct evt_data_s
         {
             ts::make_pod<ts::irect> rect;
             bool focus;
-            bool is_active_focus;
             bool pos_changed;
             bool size_changed;
             bool zindex;
@@ -255,6 +255,7 @@ struct evt_data_s
         struct
         {
             int scan;
+            int casw;
             ts::wchar charcode;
         } kbd;
 
@@ -320,7 +321,6 @@ class rectprops_c // pod
 
     void updatefs()
     {
-        ASSERT(is_maximized());
         m_fsrect = ts::wnd_get_max_size( screenrect(false) );
     }
 
@@ -358,12 +358,12 @@ public:
 
     rectprops_c &zindex(float zi) { m_zindex = zi; return *this; }
     rectprops_c &setminsize( RID r );
-    rectprops_c &sizew(int w) { m_size.x = w; if (is_maximized()) updatefs(); ASSERT(m_size << 40000); return *this; }
-    rectprops_c &sizeh(int h) { m_size.y = h; if (is_maximized()) updatefs(); ASSERT(m_size << 40000); return *this; }
-	rectprops_c &size(int w, int h) { m_size.x = w; m_size.y = h; if (is_maximized()) updatefs(); ASSERT(m_size << 40000); return *this; }
-	rectprops_c &size(const ts::ivec2 &sz) { m_size = sz; if (is_maximized()) updatefs(); ASSERT(m_size << 40000); return *this; }
+    rectprops_c &sizew(int w) { m_size.x = w; updatefs(); ASSERT(m_size << 40000); return *this; }
+    rectprops_c &sizeh(int h) { m_size.y = h; updatefs(); ASSERT(m_size << 40000); return *this; }
+	rectprops_c &size(int w, int h) { m_size.x = w; m_size.y = h; updatefs(); ASSERT(m_size << 40000); return *this; }
+	rectprops_c &size(const ts::ivec2 &sz) { m_size = sz; updatefs(); ASSERT(m_size << 40000); return *this; }
     rectprops_c &setcenterpos() { return pos(ts::wnd_get_center_pos(size())); }
-	rectprops_c &pos(int x, int y) { ts::ivec2 delta( x - m_pos.x, y - m_pos.y ); m_pos.x = x; m_pos.y = y; m_screenpos += delta; if (is_maximized()) updatefs(); return *this; }
+	rectprops_c &pos(int x, int y) { ts::ivec2 delta( x - m_pos.x, y - m_pos.y ); m_pos.x = x; m_pos.y = y; m_screenpos += delta; updatefs(); return *this; }
 	rectprops_c &pos(const ts::ivec2 &p) { return pos(p.x, p.y); }
 	rectprops_c &show() { m_flags.set(F_VISIBLE); return *this; }
 	rectprops_c &hide() { m_flags.clear(F_VISIBLE); return *this; }
@@ -375,10 +375,16 @@ public:
     rectprops_c &maximize(bool m)
     {
         m_flags.init(F_MAXIMIZED, m);
-        if (m) updatefs();
+        updatefs();
         return *this;
     }
-    
+    rectprops_c &maximize( const ts::irect& maxrect )
+    {
+        m_flags.set( F_MAXIMIZED );
+        m_fsrect = ts::wnd_get_max_size( maxrect );
+        return *this;
+    }
+
     rectprops_c &decollapse() { m_flags.clear(F_MINIMIZED|F_MICROMIZED); m_flags.set(F_VISIBLE); return *this; }
     rectprops_c &minimize(bool m) { m_flags.init(F_MINIMIZED, m); return *this; }
     rectprops_c &micromize(bool m) { m_flags.init(F_MICROMIZED, m); return *this; }
@@ -624,7 +630,7 @@ public:
     virtual ts::ivec2 get_max_size() const;
     virtual int       get_height_by_width(int width) const { return 0; /* 0 means not calculated */ } // calculate rect height by given rect width
     virtual size_policy_e size_policy() const {return SP_NORMAL;}
-    virtual bool steal_active_focus_if_root() const {return true;} // default. tooltip should not steal
+    virtual bool accept_focus() const {return true;} // default. tooltip should not steal
     virtual ts::uint32 caption_buttons() const { return SETBIT(CBT_CLOSE) | SETBIT(CBT_MINIMIZE);}
 
     virtual ts::wstr_c get_name() const {return ts::wstr_c(); }
@@ -778,7 +784,7 @@ public:
 
     const ts::str_c &themename() const {return thrcache.get_themerect();}
     virtual void set_theme_rect( const ts::asptr &thrn, bool ajust_defdraw );
-
+    /*virtual*/ bool accept_focus() const override { return is_enabled(); }
 
     void enable(bool f = true) { disable(!f); }
     void disable(bool f = true);
@@ -1091,7 +1097,7 @@ public:
     gui_tooltip_c(MAKE_ROOT<gui_tooltip_c> &data) :gui_label_c(data), ownrect(data.owner) { ASSERT(++ttcount == 1); }
     /*virtual*/ ~gui_tooltip_c();
 
-    /*virtual*/ bool steal_active_focus_if_root() const override {return false;} // default. tooltip should not steal
+    /*virtual*/ bool accept_focus() const override {return false;} // default. tooltip should not steal
     /*virtual*/ ts::ivec2 get_min_size() const override;
 
     /*virtual*/ void created() override;
@@ -1463,8 +1469,6 @@ class gui_textfield_c : public gui_textedit_c
     friend struct MAKE_CHILD<gui_textfield_c>;
     ts::safe_ptr<gui_button_c> selector;
     int height = 0;
-
-    GM_RECEIVER(gui_textfield_c, GM_ROOT_FOCUS);
 
 protected:
 public:

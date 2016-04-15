@@ -119,17 +119,16 @@ struct VDRotate2FilterData
 	RotateRow *rows;
 	int *coeff_tbl;
 
-	BYTE* src;
+	uint8* src;
 	int src_h;
 	int src_w;
 	int src_pitch;	
-	BYTE* dst;
+    uint8* dst;
 	int dst_h;
 	int dst_w;
 	int dst_pitch;	
 
-	COLORREF	rgbColor;
-	HBRUSH		hbrColor;
+	TSCOLOR	rgbColor;
 
 	bool	fExpandBounds;
 };
@@ -301,7 +300,7 @@ static inline Pixel32 bicubic_interp(const Pixel32 *src, PixOffset pitch, unsign
 	return cc(x, table + coy*4);
 }
 
-static Pixel32 ColorRefToPixel32(COLORREF rgb) {
+static Pixel32 ColorRefToPixel32( TSCOLOR rgb) {
 	return (Pixel32)(((rgb>>16)&0xff) | ((rgb<<16)&0xff0000) | (rgb&0xff00));
 }
 

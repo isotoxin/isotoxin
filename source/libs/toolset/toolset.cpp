@@ -1,17 +1,56 @@
 #include "toolset.h"
-#include <stdio.h>
-#include <time.h>
-#include <Iphlpapi.h>
+#include "internal/platform.h"
+#include "spinlock/spinlock.h"
 
 #ifndef _FINAL
-#include <DbgHelp.h>
-#pragma comment(lib, "dbghelp.lib")
-#pragma message("Automatically linking with dbghelp.lib (dbghelp.dll)")
-#endif
-
+namespace spinlock
+{
+    unsigned long pthread_self()
+    {
+        return GetCurrentThreadId();
+    }
+}
+#endif // INLINE_PTHREAD_SELF
 
 namespace ts
 {
+    tmpalloc_c::tmpalloc_c()
+    {
+        threadid = spinlock::pthread_self();
+        ASSERT( core == nullptr );
+        core = this;
+    }
+    tmpalloc_c::~tmpalloc_c()
+    {
+        ASSERT( core == this );
+        core = nullptr;
+    }
+    tmpbuf_s *tmpalloc_c::get()
+    {
+        ASSERT( core, "create tmpalloc_c object at begin of your thread proc" );
+        ASSERT( spinlock::pthread_self() == core->threadid );
+        for ( tmpbuf_s&b : core->bufs )
+        {
+            if ( !b.used )
+            {
+                b.used = true;
+                return &b;
+            }
+        }
+        return TSNEW( tmpbuf_s, true );
+    }
+    void tmpalloc_c::unget( tmpbuf_s * b )
+    {
+        ASSERT( spinlock::pthread_self() == core->threadid );
+        if ( b->extra )
+            TSDEL( b );
+        else
+        {
+            ASSERT( b->used );
+            b->used = false;
+        }
+    }
+
 
 __declspec(thread) tmpalloc_c *tmpalloc_c::core = nullptr;
 
@@ -123,7 +162,7 @@ tmpalloc_c tmpb;
             if (hm && fnmask.s[x+2] == '/')
             {
                 wstrings_c folders;
-                find_files(pwstr_c(fnmask).substr(0, x + 2), folders, FILE_ATTRIBUTE_DIRECTORY);
+                find_files(pwstr_c(fnmask).substr(0, x + 2), folders, ATTR_DIR );
                 for( const wstr_c &f : folders )
                 {
                     if (f.equals(CONSTWSTR(".")) || f.equals(CONSTWSTR(".."))) continue;
@@ -132,7 +171,7 @@ tmpalloc_c tmpb;
             } else if (hm && fnmask.s[x+2] == '*' && x+3 < fnmask.l && fnmask.s[x+3] == '/')
             {
                 wstrings_c folders;
-                find_files(pwstr_c(fnmask).substr(0, x + 2), folders, FILE_ATTRIBUTE_DIRECTORY);
+                find_files(pwstr_c(fnmask).substr(0, x + 2), folders, ATTR_DIR );
                 for (const wstr_c &f : folders)
                 {
                     if (f.equals(CONSTWSTR(".")) || f.equals(CONSTWSTR(".."))) continue;
@@ -141,10 +180,10 @@ tmpalloc_c tmpb;
                 }
 
                 wstr_c curf(fnmask); curf.cut(x, 3);
-                find_files(curf, files, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, full_paths); //-V112
+                find_files(curf, files, ATTR_ANY, ATTR_DIR, full_paths); //-V112
 
             } else
-                find_files(fnmask, files, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, full_paths); //-V112
+                find_files(fnmask, files, ATTR_ANY, ATTR_DIR, full_paths); //-V112
         }
 	};
 

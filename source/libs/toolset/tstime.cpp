@@ -1,7 +1,22 @@
 #include "toolset.h"
+#include "internal/platform.h"
+
 
 namespace ts
 {
+__declspec( thread ) DWORD Time::thread_current_time = 0;
+
+Time Time::current()
+{
+    return Time( thread_current_time ? thread_current_time : timeGetTime() );
+}
+
+Time Time::update_thread_time() // update current thread time and return current time value
+{
+    if ( ( thread_current_time = timeGetTime() ) == 0 ) thread_current_time = 1; // 0 means direct call to timeGetTime(), so set 1
+    return Time( thread_current_time );
+}
+
 
 void    timerprocessor_c::clear()
 {
@@ -151,94 +166,6 @@ void    timerprocessor_c::its_time(timer_subscriber_c *t, void * par)
     }
 }
 
-message_poster_c::~message_poster_c()
-{
-    stop();
-}
-
-DWORD WINAPI message_poster_c::worker(LPVOID lpParameter)
-{
-    message_poster_c *d = (message_poster_c *)lpParameter;
-    d->m_data.lock_write()().working = true;
-
-    for (;;)
-    {
-        auto r = d->m_data.lock_read();
-        if (r().stoping)
-        {
-            break;
-        }
-        if (r().pause)
-        {
-            r.unlock();
-            Sleep(0);
-            continue;
-        }
-        //Beep(1000,10);
-        //Beep(2000,10);
-
-        HWND _w = r().w;
-        int _m = r().msg;
-        WPARAM _wp = r().wp;
-        LPARAM _lp = r().lp;
-
-        r.unlock();
-        d->m_data.lock_write()().pause = true;
-        PostMessageW(_w, _m, _wp, _lp);
-        Sleep(d->m_pausems);
-    }
-
-    d->m_data.lock_write()().working = false;
-
-    return 0;
-}
-
-
-
-void message_poster_c::start(HWND w, int msg, WPARAM wp, LPARAM lp)
-{
-    stop();
-
-    auto wr = m_data.lock_write();
-    wr().w = w;
-    wr().msg = msg;
-    wr().wp = wp;
-    wr().lp = lp;
-    wr().working = false;
-    wr().stoping = false;
-    wr().pause = false;
-    wr.unlock();
-
-    if (HANDLE t = CreateThread(nullptr, 0, worker, this, 0, nullptr))
-    {
-        CloseHandle(t);
-        for (;;)
-        {
-            Sleep(0);
-            if (!m_data.lock_read()().working) continue;
-            break;
-        }
-    }
-
-}
-void message_poster_c::stop()
-{
-    if (!m_data.lock_read()().working) return;
-
-    m_data.lock_write()().stoping = true;
-    for (;;)
-    {
-        Sleep(0);
-        if (m_data.lock_read()().working) continue;
-        break;
-    }
-    m_data.lock_write()().stoping = false;
-}
-
-void message_poster_c::pause(bool p)
-{
-    m_data.lock_write()().pause = p;
-}
 
 namespace
 {
@@ -326,6 +253,47 @@ void frame_time_c::takt()
     m_frametime_f = (float)m_frametime_d;
     prevTime = curTime;
     m_current_frame_num++;
+}
+
+
+int generate_time_string( wchar *s, int capacity, const wstr_c& tmpl, const tm& tt )
+{
+    /*
+        d		Day of the month as digits without leading zeros for single-digit days.
+        dd		Day of the month as digits with leading zeros for single-digit days.
+        ddd		Abbreviated day of the week as specified by a LOCALE_SABBREVDAYNAME* value, for example, "Mon" in English (United States).
+        		Windows Vista and later: If a short version of the day of the week is required, your application should use the LOCALE_SSHORTESTDAYNAME* constants.
+        dddd	Day of the week as specified by a LOCALE_SDAYNAME* value.
+
+
+        M		Month as digits without leading zeros for single-digit months.
+        MM		Month as digits with leading zeros for single-digit months.
+        MMM		Abbreviated month as specified by a LOCALE_SABBREVMONTHNAME* value, for example, "Nov" in English (United States).
+        MMMM	Month as specified by a LOCALE_SMONTHNAME* value, for example, "November" for English (United States), and "Noviembre" for Spanish (Spain).
+
+        y		Year represented only by the last digit.
+        yy		Year represented only by the last two digits. A leading zero is added for single-digit years.
+        yyyy	Year represented by a full four or five digits, depending on the calendar used. Thai Buddhist and Korean calendars have five-digit years.
+                The "yyyy" pattern shows five digits for these two calendars, and four digits for all other supported calendars. Calendars that have single-digit or two-digit years,
+                such as for the Japanese Emperor era, are represented differently. A single-digit year is represented with a leading zero, for example, "03".
+                A two-digit year is represented with two digits, for example, "13". No additional leading zeros are displayed.
+        yyyyy	Behaves identically to "yyyy".
+    */
+
+#ifdef _WIN32
+    SYSTEMTIME st;
+    st.wYear = ( ts::uint16 )( tt.tm_year + 1900 );
+    st.wMonth = ( ts::uint16 )( tt.tm_mon + 1 );
+    st.wDayOfWeek = ( ts::uint16 )tt.tm_wday;
+    st.wDay = ( ts::uint16 )tt.tm_mday;
+    st.wHour = ( ts::uint16 )tt.tm_hour;
+    st.wMinute = ( ts::uint16 )tt.tm_min;
+    st.wSecond = ( ts::uint16 )tt.tm_sec;
+    st.wMilliseconds = 0;
+
+    return GetDateFormatW( LOCALE_USER_DEFAULT, 0, &st, tmpl.cstr(), s, capacity ) - 1;
+#endif // _WIN32
+
 }
 
 } // namespace ts

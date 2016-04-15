@@ -99,6 +99,10 @@ rects
   icp=base
   {
   }
+  imp=base
+  {
+    specialborder=0
+  }
 
   main=base
   {
@@ -641,7 +645,6 @@ images
 		</svg>`
 
 		add-width=0,3
-		add-height=3,0
 	}
 
   }
@@ -654,7 +657,6 @@ images
 		</svg>`
 
 		add-width=0,3
-		add-height=3,0
 	}
   }
   avamask
@@ -750,6 +752,16 @@ images
 	}
   }
 
+  right
+  {
+	gen 
+    { 
+		svg=`<svg height="32" width="32">
+			<path fill="##text_def" stroke="none" transform="translate(5 5) scale(0.25)" d="m 25.015884,52.652085 40.476045,10e-7 -11.556641,11.55664 3.535157,3.535156 17.677734,-17.677733 -17.677733,-17.677736 -3.535157,3.53711 11.728515,11.726563 -40.64792,-10e-7 z" />
+		</svg>`
+		size=20,20
+	}
+  }
 
 
   uac
@@ -859,6 +871,7 @@ images
 //size=40,40
 
 	}
+	center=21,19
   }
   achtung_call
   {
@@ -1814,6 +1827,9 @@ buttons
 			</g>
 		</svg>`
     }
+  }
+  createprofile=addnetwork
+  {
   }
 
   avopen

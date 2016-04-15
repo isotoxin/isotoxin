@@ -40,6 +40,16 @@ class dialog_contact_props_c : public gui_isodialog_c
 
     menu_c gethistorymenu();
     menu_c getaacmenu();
+    menu_c getmhtmenu();
+
+    msg_handler_e mh = MH_NOT;
+    ts::wstr_c msghandler;
+    ts::wstr_c msghandler_p;
+    void msghandler_m( const ts::str_c& );
+    bool msghandler_h( const ts::wstr_c & t );
+    bool msghandler_p_h( const ts::wstr_c & t );
+    ts::wstr_c genmhi();
+    ts::wstr_c buildmh();
 
 
     void add_det(RID lst, contact_c *c);

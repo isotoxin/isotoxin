@@ -4,6 +4,10 @@
 
 #define REMOVE_CODE_REMINDER(bn) ASSERT( application_c::appbuild() < bn, "Remove code reminder" )
 
+#ifdef _WIN32
+#define PLGHOSTNAME CONSTWSTR("plghost.exe")
+#endif
+
 template<typename STR> struct wraptranslate;
 template<> struct wraptranslate<ts::wsptr> : public ts::wsptr
 {
@@ -37,16 +41,6 @@ INLINE const wraptranslate<ts::wsptr> __translation(const ts::wsptr &txt)
 const wraptranslate<ts::wsptr> __translation(const ts::wsptr &txt, int tag);
 
 #define TTT( txt, ... ) __translation(CONSTWSTR(txt),__VA_ARGS__)
-
-ts::wstr_c lasterror();
-
-enum detect_e
-{
-    DETECT_AUSTOSTART = 1,
-    DETECT_READONLY = 2,
-};
-int detect_autostart(ts::str_c &cmdpar);
-void autostart(const ts::wstr_c &exepath, const ts::wsptr &cmdpar);
 
 INLINE time_t now()
 {
@@ -131,22 +125,12 @@ INLINE ts::wstr_c text_seconds(int seconds)
 
 template<typename SCORE> void text_set_date(ts::str_t<ts::wchar, SCORE> & tstr, const ts::wstr_c &fmt, const tm &tt)
 {
-    SYSTEMTIME st;
-    st.wYear = (ts::uint16)(tt.tm_year + 1900);
-    st.wMonth = (ts::uint16)(tt.tm_mon + 1);
-    st.wDayOfWeek = (ts::uint16)tt.tm_wday;
-    st.wDay = (ts::uint16)tt.tm_mday;
-    st.wHour = (ts::uint16)tt.tm_hour;
-    st.wMinute = (ts::uint16)tt.tm_min;
-    st.wSecond = (ts::uint16)tt.tm_sec;
-    st.wMilliseconds = 0;
-
     if (tstr.get_capacity() > 32)
         tstr.set_length(tstr.get_capacity() - 1);
     else
         tstr.set_length(64);
-    GetDateFormatW(LOCALE_USER_DEFAULT, 0, &st, fmt, tstr.str(), tstr.get_capacity() - 1);
-    tstr.set_length();
+    tstr.set_length( ts::generate_time_string(tstr.str(), tstr.get_capacity() - 1, fmt, tt) );
+    
 }
 
 template <typename TCH> bool text_find_link(const ts::sptr<TCH> &message, int from, ts::ivec2 & rslt);
@@ -165,6 +149,7 @@ INLINE ts::wstr_c enquote(const ts::wstr_c &x)
 bool text_find_inds( const ts::wstr_c &t, ts::tmp_tbuf_t<ts::ivec2> &marks, const ts::wstrings_c &fsplit );
 INLINE ts::pwstr_c text_non_letters() { return ts::pwstr_c(CONSTWSTR("?!:;*&^%$#@()<>[]{}=+.,~|/\r\n\t\\\"—«»„“”0123456789 _")); }
 
+void render_pixel_text( ts::bitmap_c&tgt, const ts::irect& r, const ts::wsptr& t, ts::TSCOLOR bgcol, ts::TSCOLOR col );
 
 typedef ts::sstr_t<4> SLANGID;
 typedef ts::array_inplace_t<SLANGID, 0> SLANGIDS;
@@ -200,7 +185,7 @@ public:
 
 struct parsed_command_line_s
 {
-    ts::swstr_t<MAX_PATH + 16> alternative_config_path;
+    ts::swstr_t<MAX_PATH_LENGTH + 16> alternative_config_path;
     bool checkinstance = true;
     bool minimize = false;
     bool readonlymode = false;
@@ -241,6 +226,10 @@ enum isogmsg_e
     ISOGM_CAMERA_TICK,
     ISOGM_PEER_STREAM_OPTIONS,
     ISOGM_EXPORT_PROTO_DATA,
+    ISOGM_UPDATE_MESSAGE_NOTIFICATION,
+    ISOGM_SUMMON_NOPROFILE_UI,
+
+    ISOGM_ON_EXIT,
 
     ISOGM_COUNT,
 };
@@ -258,6 +247,14 @@ template<> struct gmsg<ISOGM_NEWVERSION> : public gmsgbase
     ts::sstr_t<-16> ver;
     error_e error_num = E_OK;
 };
+
+class incoming_msg_panel_c;
+template<> struct gmsg<ISOGM_UPDATE_MESSAGE_NOTIFICATION> : public gmsgbase
+{
+    gmsg() :gmsgbase( ISOGM_UPDATE_MESSAGE_NOTIFICATION ) {}
+    ts::array_safe_t< incoming_msg_panel_c, 1 > panels;
+};
+
 
 template<> struct gmsg<ISOGM_EXPORT_PROTO_DATA> : public gmsgbase
 {
@@ -478,7 +475,7 @@ struct isotoxin_ipc_s
     typedef fastdelegate::FastDelegate< bool( ipcr )  > datahandler_func;
     typedef fastdelegate::FastDelegate< bool () > idlejob_func;
 
-    HANDLE plughost;
+    ts::process_handle_s plughost;
     ipc::ipc_junction_s junct;
     ts::str_c tag;
     int version = 0;

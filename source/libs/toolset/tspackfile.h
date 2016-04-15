@@ -11,19 +11,18 @@ class container_c
 
 protected:
     wstr_c          m_filename;                 // container's file name
-    FILETIME        m_timestamp;
+    uint64          m_timestamp = 0;
     int             m_priority;
 	uint			m_id;
 
 public:
     container_c(const wsptr &name, int priority, uint id) : m_filename(name), m_priority(priority), m_id(id) //-V730
     {
-        memset((void*)&m_timestamp, 0, sizeof(FILETIME));
     };
     virtual ~container_c() {};
 
-    void            set_time_stamp(const FILETIME ft) { m_timestamp = ft; } //-V801
-    const FILETIME &get_time_stamp() const        { return m_timestamp; }
+    void set_time_stamp(uint64 ft) { m_timestamp = ft; }
+    const uint64 get_time_stamp() const { return m_timestamp; }
 
     int get_priority() const {return m_priority;}
 	uint get_id() const {return m_id;}

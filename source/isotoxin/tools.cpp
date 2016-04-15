@@ -6,24 +6,6 @@ const wraptranslate<ts::wsptr> __translation(const ts::wsptr &txt, int tag)
     return wraptranslate<ts::wsptr>(r.l==0 ? txt : r);
 }
 
-ts::wstr_c lasterror()
-{
-    ts::wstr_c errs(1024,true);
-    DWORD dw = GetLastError();
-
-    FormatMessageW(
-        /*FORMAT_MESSAGE_ALLOCATE_BUFFER |*/
-        FORMAT_MESSAGE_FROM_SYSTEM |
-        FORMAT_MESSAGE_IGNORE_INSERTS,
-        NULL,
-        dw,
-        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-        errs.str(),
-        1023, NULL);
-    errs.set_length();
-    return errs;
-}
-
 bool check_profile_name(const ts::wstr_c &t)
 {
     if (t.find_last_pos_of(CONSTWSTR(":/\\?*<>,;|$#@")) >= 0) return false;
@@ -458,8 +440,6 @@ bool leech_at_left_s::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 
 
 
-
-
 isotoxin_ipc_s::isotoxin_ipc_s(const ts::str_c &tag, datahandler_func datahandler):tag(tag), datahandler(datahandler)
 {
     if (!datahandler) return;
@@ -467,7 +447,7 @@ isotoxin_ipc_s::isotoxin_ipc_s(const ts::str_c &tag, datahandler_func datahandle
     if (memba != 0) 
         return;
 
-    if (!ts::start_app(CONSTWSTR("plghost ") + ts::to_wstr(tag), &plughost))
+    if (!ts::master().start_app(PLGHOSTNAME, ts::to_wstr(tag), &plughost, false))
     {
         junct.stop();
         return;
@@ -808,6 +788,96 @@ void text_prepare_for_edit(ts::str_c &text)
 
 }
 
+void render_pixel_text( ts::bitmap_c&tgtb, const ts::irect& r, const ts::wsptr& t, ts::TSCOLOR bgcol, ts::TSCOLOR col )
+{
+    const char *digits =
+        "88888" "88." "88888" "8888" "8..8" "88888" "88888" "8888" "88888" "88888"
+        "8...8" ".8." "....8" "...8" "8..8" "8...." "8...." "...8" "8...8" "8...8"
+        "8...8" ".8." "88888" ".888" "8888" "88888" "88888" "..8." ".888." "88888"
+        "8...8" ".8." "8...." "...8" "...8" "....8" "8...8" ".8.." "8...8" "....8"
+        "88888" "888" "88888" "8888" "...8" "88888" "88888" "8..." "88888" ".8888";
+
+    int widths[ 10 ] = { 5, 3, 5, 4, 4, 5, 5, 4, 5, 5 };
+    int xxx[ 10 ] = {0};
+    int height = 5;
+    int pitch = widths[0];
+
+    ASSERT( r.height() >= ( height + 4) );
+
+
+    auto render_letter = [&]( ts::uint8 *tgt, const char *lsrc, int lwidth )
+    {
+        for ( int y = 0; y < height;++y, tgt += tgtb.info().pitch, lsrc += pitch )
+        {
+            ts::TSCOLOR *tgt0 = ( ts::TSCOLOR *)tgt;
+            const char *s = lsrc;
+            for ( int x = 0; x < lwidth; ++x, ++tgt0, ++s )
+            {
+                if ( *s != '.' )
+                    *tgt0 = col;
+                else
+                    *tgt0 = bgcol;
+            }
+            *tgt0 = bgcol;
+        }
+    };
+
+    for ( int i = 1; i < 10; ++i )
+    {
+        xxx[ i ] = xxx[ i - 1 ] + widths[ i - 1 ];
+        pitch += widths[ i ];
+    }
+
+    int w = 0;
+    for ( int i = 0; i < t.l; ++i)
+    {
+        int c = t.s[ i ] - 48;
+        if ( c < 0 ) c = 0;
+        if ( c > 9 ) c = 9;
+        w += widths[ c ] + 1;
+    }
+
+    ASSERT( r.width() >= (w + 3) );
+
+    int x = r.rb.x - w-1;
+    int y = r.lt.y+2;
+
+    int hlw = x + w + 1;
+    for ( int i = x-2; i < hlw;++i )
+    {
+        bool edge = i == ( x - 2 ) || i == ( hlw - 1 );
+        ts::uint8 *b = tgtb.body( ts::ivec2( i, y - 2 ) );
+
+        if (!edge ) *( ts::TSCOLOR * )b = bgcol;
+        *( ts::TSCOLOR * )( b + tgtb.info().pitch ) = bgcol;
+        *( ts::TSCOLOR * )( b + tgtb.info().pitch * ( height + 2 ) ) = bgcol;
+        if (!edge ) *( ts::TSCOLOR * )( b + tgtb.info().pitch * ( height + 3 ) ) = bgcol;
+    }
+
+    for ( int i = 0; i < t.l; ++i )
+    {
+        int c = t.s[ i ] - 48;
+        if ( c < 0 ) c = 0;
+        if ( c > 9 ) c = 9;
+
+        const char *lsrc = digits + xxx[c];
+
+        render_letter( tgtb.body( ts::ivec2( x, y ) ), lsrc, widths[ c ] );
+        x += widths[ c ] + 1;
+    }
+
+    for ( int i = y; i < y + height; ++i )
+    {
+        ts::uint8 *b = tgtb.body( ts::ivec2( x - 2 - w, i ) );
+
+        *( ts::TSCOLOR * )b = bgcol;
+        *( ts::TSCOLOR * )( b + 4 ) = bgcol;
+        *( ts::TSCOLOR * )( b + (4 * w) + 8 ) = bgcol;
+    }
+
+}
+
+
 extern "C"
 {
     int isotoxin_compare(const unsigned char *row_text, const unsigned char *pattern) // sqlite likeFunc override
@@ -1130,11 +1200,10 @@ SLANGID detect_language()
     ts::g_fileop->find(fns, CONSTWSTR("loc/*.lng*.lng"), false);
 
 
-    ts::wchar x[32];
-    GetLocaleInfoW( NULL, LOCALE_SISO639LANGNAME, x, 32 );
+    ts::wstr_c lng = ts::master().sys_language();
 
     for (const ts::wstr_c &f : fns)
-        if ( f.substr(0, 2).equals( ts::wsptr(x,2) ) ) return SLANGID( ts::to_str(ts::wsptr(x,2)) );
+        if ( f.substr(0, 2).equals( lng ) ) return SLANGID( ts::to_str( lng ) );
 
     return SLANGID("en");
 }
@@ -1375,248 +1444,11 @@ void sound_capture_handler_c::stop_capture()
     g_app->stop_capture(this);
 }
 
-namespace
-{
-    enum enm_reg_e
-    {
-        ER_CONTINUE = 0,
-        ER_BREAK = 1,
-        ER_DELETE_AND_CONTINUE = 2,
-    };
-}
-
-template< typename ENM > void enum_reg( const ts::wsptr &regpath_, ENM e )
-{
-    HKEY okey = HKEY_CURRENT_USER;
-
-    ts::wsptr regpath = regpath_;
-
-    if (regpath.l > 5)
-    {
-        if (ts::pwstr_c(regpath).begins(CONSTWSTR("HKCR\\"))) { okey = HKEY_CLASSES_ROOT; regpath = regpath_.skip(5); }
-        else if (ts::pwstr_c(regpath).begins(CONSTWSTR("HKCU\\"))) { okey = HKEY_CURRENT_USER; regpath = regpath_.skip(5); }
-        else if (ts::pwstr_c(regpath).begins(CONSTWSTR("HKLM\\"))) { okey = HKEY_LOCAL_MACHINE; regpath = regpath_.skip(5); }
-    }
-
-    HKEY k;
-    if (RegOpenKeyExW(okey, ts::tmp_wstr_c(regpath), 0, KEY_READ, &k) != ERROR_SUCCESS) return;
-
-    ts::wstrings_c to_delete;
-
-    DWORD t, len = 1024;
-    ts::wchar buf[1024];
-    for (int index = 0; ERROR_SUCCESS == RegEnumValueW(k, index, buf, &len, nullptr, &t, nullptr, nullptr); ++index, len = 1024)
-        if (REG_SZ == t)
-        {
-            ts::tmp_wstr_c kn(ts::wsptr(buf, len));
-            DWORD lt = REG_BINARY;
-            DWORD sz = 1024;
-            int rz = RegQueryValueExW(k, kn, 0, &lt, (LPBYTE)buf, &sz);
-            if (rz != ERROR_SUCCESS) continue;
-
-            ts::wsptr b(buf, sz/sizeof(ts::wchar)-1);
-
-            enm_reg_e r = e(b);
-            if (r == ER_DELETE_AND_CONTINUE)
-            {
-                to_delete.add(kn);
-                continue;
-            }
-            if (r == ER_CONTINUE) continue;
-
-            break;
-        }
-
-
-    RegCloseKey(k);
-
-    if (to_delete.size())
-    {
-        if (RegOpenKeyExW(okey, ts::tmp_wstr_c(regpath), 0, KEY_READ|KEY_WRITE, &k) != ERROR_SUCCESS) return;
-
-        for (const ts::wstr_c &kns : to_delete)
-            RegDeleteValueW(k, kns);
-
-        RegCloseKey(k);
-    }
-
-}
-
-bool check_reg_writte_access(const ts::wsptr &regpath_)
-{
-    HKEY okey = HKEY_CURRENT_USER;
-
-    ts::wsptr regpath = regpath_;
-
-    if (regpath.l > 5)
-    {
-        if (ts::pwstr_c(regpath).begins(CONSTWSTR("HKCR\\"))) { okey = HKEY_CLASSES_ROOT; regpath = regpath_.skip(5); }
-        else if (ts::pwstr_c(regpath).begins(CONSTWSTR("HKCU\\"))) { okey = HKEY_CURRENT_USER; regpath = regpath_.skip(5); }
-        else if (ts::pwstr_c(regpath).begins(CONSTWSTR("HKLM\\"))) { okey = HKEY_LOCAL_MACHINE; regpath = regpath_.skip(5); }
-    }
-
-    //RegGetKeySecurity() - too complex to use; also it requres Advapi32.lib
-    //now way! just try open key for write
-
-    HKEY k;
-    if (RegOpenKeyExW(okey, ts::tmp_wstr_c(regpath), 0, KEY_WRITE, &k) != ERROR_SUCCESS) return false;
-    RegCloseKey(k);
-    return true;
-
-}
-
-int detect_autostart(ts::str_c &cmdpar)
-{
-    ts::wstrings_c lks;
-    ts::find_files(ts::fn_join(ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%STARTUP%")), FNO_FULLPATH | FNO_PARSENENV), CONSTWSTR("*.lnk")), lks, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, true);
-    ts::find_files(ts::fn_join(ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%COMMONSTARTUP%")), FNO_FULLPATH | FNO_PARSENENV), CONSTWSTR("*.lnk")), lks, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, true);
-
-    ts::wstr_c exepath = ts::get_exe_full_name();
-    ts::fix_path(exepath, FNO_NORMALIZE);
-
-    ts::tmp_buf_c lnk;
-    for(const ts::wstr_c &lnkf : lks)
-    {
-        lnk.load_from_disk_file(lnkf);
-        ts::lnk_s lnkreader( lnk.data(), lnk.size() );
-        if (lnkreader.read())
-        {
-            ts::fix_path(lnkreader.local_path, FNO_NORMALIZE);
-            if (exepath.equals_ignore_case(lnkreader.local_path))
-            {
-                cmdpar = ts::to_str(lnkreader.command_line_arguments);
-
-                if (ts::check_write_access( ts::fn_get_path(lnkf) ))
-                    return DETECT_AUSTOSTART;
-
-                return DETECT_AUSTOSTART | DETECT_READONLY;
-            }
-        }
-    }
-
-    ts::wsptr regpaths2check[] = 
-    {
-        CONSTWSTR("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
-        CONSTWSTR("HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"),
-        CONSTWSTR("HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run"),
-    };
-
-    ts::wstrings_c cmd;
-    for (const ts::wsptr & path : regpaths2check)
-    {
-        int detect_stuff = 0;
-
-        enum_reg(path, [&](const ts::wsptr& regvalue)->enm_reg_e
-        {
-            cmd.qsplit( regvalue );
-            
-            if (cmd.size())
-                ts::fix_path(cmd.get(0), FNO_NORMALIZE);
-
-            if (cmd.size() && exepath.equals_ignore_case(cmd.get(0)))
-            {
-                detect_stuff = DETECT_AUSTOSTART;
-                if (!check_reg_writte_access(path))
-                    detect_stuff |= DETECT_READONLY;
-
-                if (cmd.size() == 2)
-                    cmdpar = ts::to_str(cmd.get(1));
-
-                return ER_BREAK;
-            }
-
-            return ER_CONTINUE;
-        });
-
-        if (detect_stuff) return detect_stuff;
-    }
-
-    return 0;
-}
-void autostart(const ts::wstr_c &exepath, const ts::wsptr &cmdpar)
-{
-    ts::wstr_c my_exe = exepath;
-    if (my_exe.is_empty())
-        my_exe = ts::get_exe_full_name();
-    ts::fix_path(my_exe, FNO_NORMALIZE);
-
-    // 1st of all - delete lnk file
-
-    ts::wstrings_c lks;
-    ts::find_files(ts::fn_join(ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%STARTUP%")), FNO_FULLPATH | FNO_PARSENENV), CONSTWSTR("*.lnk")), lks, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, true);
-    ts::find_files(ts::fn_join(ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%COMMONSTARTUP%")), FNO_FULLPATH | FNO_PARSENENV), CONSTWSTR("*.lnk")), lks, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, true);
-
-    ts::tmp_buf_c lnk;
-    for (const ts::wstr_c &lnkf : lks)
-    {
-        lnk.load_from_disk_file(lnkf);
-        ts::lnk_s lnkreader(lnk.data(), lnk.size());
-        if (lnkreader.read())
-            if (my_exe.equals_ignore_case(lnkreader.local_path))
-                ts::kill_file(lnkf);
-    }
-
-    ts::wsptr regpaths2check[] =
-    {
-        CONSTWSTR("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
-        CONSTWSTR("HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"),
-        CONSTWSTR("HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run"),
-    };
-
-    // delete all reg records
-
-    ts::wstrings_c cmd;
-    for (const ts::wsptr & path : regpaths2check)
-    {
-        enum_reg(path, [&](const ts::wsptr& regvalue)->enm_reg_e
-        {
-            cmd.qsplit(regvalue);
-            if (cmd.size())
-                ts::fix_path(cmd.get(0), FNO_NORMALIZE);
-
-            if (cmd.size() && my_exe.equals_ignore_case(cmd.get(0)))
-                return ER_DELETE_AND_CONTINUE;
-
-            return ER_CONTINUE;
-        });
-    }
-
-    if (!exepath.is_empty())
-    {
-        HKEY k;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, ts::tmp_wstr_c(regpaths2check[0].skip(5)), 0, KEY_WRITE, &k) != ERROR_SUCCESS) return;
-
-        ts::wstr_c path(CONSTWSTR("\"")); path.append(exepath);
-        if (cmdpar.l) path.append(CONSTWSTR("\" ")).append(to_wstr(cmdpar));
-        else path.append_char('\"');
-
-        RegSetValueEx(k, L"Isotoxin", 0, REG_SZ, (const BYTE *)path.cstr(), (path.get_length() + 1) * sizeof(ts::wchar));
-        RegCloseKey(k);
-    }
-
-}
-
 bool elevate()
 {
-    ts::wstr_c prm(CONSTWSTR("wait ")); prm.append_as_uint(GetCurrentProcessId());
+    ts::wstr_c prm(CONSTWSTR("wait ")); prm.append_as_uint(ts::master().process_id());
     ts::wstr_c exe(ts::get_exe_full_name());
-
-    SHELLEXECUTEINFOW shExInfo = { 0 };
-    shExInfo.cbSize = sizeof(shExInfo);
-    shExInfo.fMask = 0;
-    shExInfo.hwnd = 0;
-    shExInfo.lpVerb = L"runas";
-    shExInfo.lpFile = exe;
-    shExInfo.lpParameters = prm;
-    shExInfo.lpDirectory = 0;
-    shExInfo.nShow = SW_NORMAL;
-    shExInfo.hInstApp = 0;
-
-    if (ShellExecuteExW(&shExInfo))
-    {
-        return true;
-    }
-    return false;
+    return ts::master().start_app( exe, prm, nullptr, true );
 }
 
 static void ChuckNorrisCopy(const ts::wstr_c &copyto)
@@ -1624,22 +1456,9 @@ static void ChuckNorrisCopy(const ts::wstr_c &copyto)
     ts::wstr_c prm(CONSTWSTR("installto ")); prm.append(copyto).replace_all(10, ' ', '*');
     ts::wstr_c exe( ts::get_exe_full_name() );
 
-    SHELLEXECUTEINFOW shExInfo = { 0 };
-    shExInfo.cbSize = sizeof(shExInfo);
-    shExInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
-    shExInfo.hwnd = 0;
-    shExInfo.lpVerb = L"runas";
-    shExInfo.lpFile = exe;
-    shExInfo.lpParameters = prm;
-    shExInfo.lpDirectory = 0;
-    shExInfo.nShow = SW_NORMAL;
-    shExInfo.hInstApp = 0;
-
-    if (ShellExecuteExW(&shExInfo))
-    {
-        WaitForSingleObject(shExInfo.hProcess, INFINITE);
-        CloseHandle(shExInfo.hProcess);
-    }
+    ts::process_handle_s ph;
+    if (ts::master().start_app( exe, prm, &ph, true ))
+        ts::master().wait_process( ph, 0 );
 }
 
 void install_to(const ts::wstr_c &path, bool acquire_admin_if_need)
@@ -1655,17 +1474,18 @@ void install_to(const ts::wstr_c &path, bool acquire_admin_if_need)
     ts::wstr_c path_from = ts::fn_get_path( ts::get_exe_full_name() );
 
     ts::wstrings_c files;
-    ts::find_files( ts::fn_join(path_from, CONSTWSTR("*.*")), files, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, true);
+    ts::find_files( ts::fn_join(path_from, CONSTWSTR("*.*")), files, ATTR_ANY, ATTR_DIR, true);
 
     for(const ts::wstr_c &fn2c : files)
     {
-        if (fn2c.ends_ignore_case(CONSTWSTR(".exe")) || fn2c.ends_ignore_case(CONSTWSTR(".dll")) || fn2c.ends_ignore_case(CONSTWSTR(".data")))
-            if (0 == CopyFileW(fn2c, ts::fn_join(path, ts::fn_get_name_with_ext(fn2c)), false))
-            {
-                if (acquire_admin_if_need && ERROR_ACCESS_DENIED == GetLastError())
-                    ChuckNorrisCopy(path);
+        if ( fn2c.ends_ignore_case( CONSTWSTR( ".exe" ) ) || fn2c.ends_ignore_case( CONSTWSTR( ".dll" ) ) || fn2c.ends_ignore_case( CONSTWSTR( ".data" ) ) )
+        {
+            ts::copy_rslt_e cr = copy_file( fn2c, ts::fn_join( path, ts::fn_get_name_with_ext( fn2c ) ) );
+            if ( ts::CRSLT_ACCESS_DENIED == cr && acquire_admin_if_need )
+                ChuckNorrisCopy( path );
+            if ( cr != ts::CRSLT_OK )
                 return;
-            }
+        }
     }
 }
 
@@ -1726,7 +1546,7 @@ namespace
 
         /*virtual*/ int iterate(int pass) override
         {
-            isotoxin_ipc_s ipcj(ts::str_c(CONSTASTR("get_protocols_list_")).append_as_uint(GetCurrentThreadId()), DELEGATE(this, ipchandler));
+            isotoxin_ipc_s ipcj(ts::str_c(CONSTASTR("get_protocols_list_")).append_as_uint(spinlock::pthread_self()), DELEGATE(this, ipchandler));
             ipcj.send(ipcw(AQ_GET_PROTOCOLS_LIST));
             ipcj.wait_loop(nullptr);
             ASSERT(result_x != 1);
@@ -1753,19 +1573,17 @@ void available_protocols_s::load()
 
 db_check_e check_db(const ts::wstr_c &fn, ts::uint8 *salt /* 16 bytes buffer */)
 {
-    HANDLE handle = CreateFileW(fn, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (handle == INVALID_HANDLE_VALUE)
+    void *handle = ts::f_open( fn );
+    if (!handle)
         return DBC_IO_ERROR;
 
-    DWORD r;
-    BOOL rslt = ReadFile(handle, salt, 16, &r, nullptr);
-    CloseHandle(handle);
-    if (!rslt) return DBC_IO_ERROR;
+    uint rslt = ts::f_read(handle, salt, 16);
+    ts::f_close(handle);
 
-    if (r == 0)
+    if ( rslt == 0 )
         return DBC_DB;
 
-    if (r != 16)
+    if ( rslt != 16 )
         return DBC_NOT_DB;
 
     const char * sql3hdr = "SQLite format 3";
@@ -1783,8 +1601,6 @@ db_check_e check_db(const ts::wstr_c &fn, ts::uint8 *salt /* 16 bytes buffer */)
     return DBC_NOT_DB;
 }
 
-
-
 // dlmalloc -----------------
 
 #pragma warning (disable:4559)
@@ -1801,7 +1617,7 @@ static long dlmalloc_spinlock = 0;
 #define PREACTION(M)  (spinlock::simple_lock(dlmalloc_spinlock), 0)
 #define POSTACTION(M) spinlock::simple_unlock(dlmalloc_spinlock)
 
-extern "C"
-{
+#define _NTOS_
+#undef ERROR
+
 #include "dlmalloc/dlmalloc.c"
-}

@@ -1,5 +1,6 @@
 #include "toolset.h"
 #include "textparser.h"
+#include "fourcc.h"
 
 //-V:glyphs:807
 
@@ -651,8 +652,8 @@ struct text_parser_s
 			++t; if (t)
             {
                 mg.image_offset_Y = t->as_int();
-                if (mg.image_offset_Y < 0)
-                    mg.image_offset_Y += (mg.image->height - mg.font->height)/2 + 1;
+                if ( mg.image_offset_Y < 0 )
+                    mg.image_offset_Y = mg.image->height - mg.font->ascender + (mg.font->height - mg.image->height)/2; // ( mg.image->height - mg.font->height ) / 2 + 1;
                 if (mg.image_offset_Y > 0)
                     ++addhtags;
             }
@@ -985,16 +986,16 @@ struct text_parser_s
 							if (charclass[i] == 'x')
 								charclass[i] = '-';//вставляем - перед началом след. слога, а не после, чтобы этот алгоритм был эквивалентен вставке '-' между слогами, иначе в простейших случаях напр. [каталог/sgsgsgs] будет только один перенос вместо двух возможных
 						for (int i=0; i<nn-5; i++)//[g+s+s, s+s+g]
-							if ((DWORD&)(charclass[i]) == MAKEFOURCC('g','s','s','s') && (WORD&)(charclass[i+4]) == MAKEWORD('s','g'))
+							if ((uint32&)(charclass[i]) == MAKEFOURCC('g','s','s','s') && (uint16&)(charclass[i+4]) == MAKEWORD('s','g'))
 								charclass[i+=2] = '-';
 						for (int i=0; i<nn-4; i++)//[g+s+s, s+g], [g+s, s+s+g]
-							if ((DWORD&)(charclass[i]) == MAKEFOURCC('g','s','s','s') && charclass[i+4] == 'g')
+							if ((uint32&)(charclass[i]) == MAKEFOURCC('g','s','s','s') && charclass[i+4] == 'g')
 								charclass[i+1] = '-', charclass[i+=2] = '-';
 						for (int i=0; i<nn-3; i++)//[s+g, s+g], [g+s, s+g], [s+g, g+l]
-							if ((DWORD&)(charclass[i]) == MAKEFOURCC('s','g','s','g')
-							 || (DWORD&)(charclass[i]) == MAKEFOURCC('g','s','s','g')
-							 || (DWORD&)(charclass[i]) == MAKEFOURCC('s','g','g','s')
-							 || (DWORD&)(charclass[i]) == MAKEFOURCC('s','g','g','g'))
+							if ((uint32&)(charclass[i]) == MAKEFOURCC('s','g','s','g')
+							 || (uint32&)(charclass[i]) == MAKEFOURCC('g','s','s','g')
+							 || (uint32&)(charclass[i]) == MAKEFOURCC('s','g','g','s')
+							 || (uint32&)(charclass[i]) == MAKEFOURCC('s','g','g','g'))
 							 charclass[i+=1] = '-';
 
 						int newLineLen = line_width;

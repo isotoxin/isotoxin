@@ -1,5 +1,7 @@
 #pragma once
 
+#define _ALLOW_RTCc_IN_STL
+
 #pragma warning (disable:4091) // 'typedef ' : ignored on left of '' when no variable is declared
 
 #define APPNAME "Isotoxin"

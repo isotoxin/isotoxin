@@ -1,6 +1,5 @@
 #include "toolset.h"
 #include "fourcc.h"
-#include <ddraw.h>
 
 namespace ts
 {
@@ -35,7 +34,7 @@ namespace ts
 #define DDS_CUBEMAP_NEGATIVEZ   0x00008000L
 
 #ifdef _WIN32
-    #pragma pack(push, dds_struct, 1)
+#pragma pack(push, 1)
 #endif
 struct DDSHEAD
 {
@@ -65,7 +64,7 @@ struct DDSHEAD
     uint  TextureStage;
 };
 #ifdef _WIN32
-    #pragma pack(pop, dds_struct)
+#pragma pack(pop)
 #endif
 
 #pragma warning (push)
@@ -76,10 +75,10 @@ struct Color8888
     {
         struct
         {
-            byte b;
-            byte g;
-            byte r;
-            byte a;
+            uint8 b;
+            uint8 g;
+            uint8 r;
+            uint8 a;
         };
         uint32 col;
     };
@@ -229,7 +228,7 @@ bool dds_decompressor_uncompressed_32_s::decompress( img_reader_s &reader, void 
     //int temp_w = dds->Width;
     for (uint y = 0; y < me.dds->Height; ++y)
     {
-        uint32 * next_out = (uint32 *)(((byte *)out) + pitch);
+        uint32 * next_out = (uint32 *)(((uint8 *)out) + pitch);
         for (uint x = 0; x < me.dds->Width; ++x, ++out, ++Temp)
         {
             ReadI = *Temp;
@@ -257,7 +256,7 @@ bool dds_decompressor_dxt1_s::decompress( img_reader_s&r, void * buf, int pitch 
     Color8888   colours[4], *col;
     uint        bitmask;
 
-    const byte     *Temp = (const byte *)(me.dds + 1);
+    const uint8 *Temp = (const uint8 *)(me.dds + 1);
 
     //for (z = 0; z < Depth; z++) { // mip maps ?
     {
@@ -315,7 +314,7 @@ bool dds_decompressor_dxt1_s::decompress( img_reader_s&r, void * buf, int pitch 
                     colours[3].a = 0x00;
                 }
 
-                byte        *out = (byte *)buf;
+                uint8 *out = (uint8 *)buf;
 
                 for (int j = 0, k = 0; j < 4; j++) {
                     for (int i = 0; i < 4; i++, k++) {
@@ -518,8 +517,8 @@ bool dds_decompressor_dxt3_s::decompress(img_reader_s &r, void * buf, int pitch)
 {
     dds_decompressor_dxt3_s &me = ref_cast<dds_decompressor_dxt3_s>(r.data);
 
-    const byte *blocks = (const byte *)(me.dds + 1);
-    byte *rgba = (byte *)buf;
+    const uint8 *blocks = (const uint8 *)(me.dds + 1);
+    uint8 *rgba = (uint8 *)buf;
 
     u8 const* sourceBlock = reinterpret_cast<u8 const*>(blocks);
 
@@ -574,8 +573,8 @@ bool dds_decompressor_dxt5_s::decompress(img_reader_s &r, void * buf, int pitch)
 {
     dds_decompressor_dxt5_s &me = ref_cast<dds_decompressor_dxt5_s>(r.data);
 
-    const byte *blocks = (const byte *)(me.dds + 1);
-    byte *rgba = (byte *)buf;
+    const uint8 *blocks = (const uint8 *)(me.dds + 1);
+    uint8 *rgba = (uint8 *)buf;
 
     u8 const* sourceBlock = reinterpret_cast<u8 const*>(blocks);
 

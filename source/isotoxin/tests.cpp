@@ -99,14 +99,15 @@ void test_ipc()
     isotoxin_ipc_s ipcs(CONSTASTR("testtest"), cmdhandlerx);
     if (ipcs.ipc_ok)
     {
-        int stime = timeGetTime();
+        ts::Time stime = ts::Time::current();
         ts::uint8 data[16384];
         memset(data,1,sizeof(data));
         ipcx = &ipcs; //-V506
         ipcs.send(ipcw(XX_PING) << data_block_s(data,sizeof(data)));
         ipcs.wait_loop(tickx);
 
-        npersec = nnnn * 1000 / (timeGetTime() - stime);
+        ts::Time::update_thread_time();
+        npersec = nnnn * 1000 / ( ts::Time::current() - stime);
         __debugbreak();
     }
 }
@@ -502,9 +503,22 @@ void summon_test_window()
 
     //SUMMON_DIALOG<dialog_avaselector_c>(UD_AVASELECTOR, dialog_avasel_params_s(0));
     //SUMMON_DIALOG<dialog_prepareimage_c>(UD_PREPARE_IMAGE, contact_key_s());
-    SUMMON_DIALOG<dialog_colors_c>(UD_NOT_UNIQUE);
+    //SUMMON_DIALOG<dialog_colors_c>(UD_NOT_UNIQUE);
 
     //MAKE_ROOT<incoming_call_panel_c>( &contacts().get(1) );
+
+    static int n;
+    ++n;
+
+    post_s p;
+    p.recv_time = now() - 2100;
+    p.message_utf8 = ts::to_utf8( L"унделиверед www.microsoft.com\nsdfsddddf :rage:\nsdap sdpf posdf opewpo epor ewpor poewir poewi rpoew rpoqiwepro ifdsapof paosdflk ajflkjewo fk sdjfasdfds\n" );
+    p.message_utf8.append_as_int( n );
+
+    p.utag = ts::uuid();
+
+
+    MAKE_ROOT<incoming_msg_panel_c>( &contacts().get_self(), contacts().get_self().subget(0), p );
 
 }
 

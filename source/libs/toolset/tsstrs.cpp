@@ -1,4 +1,5 @@
 #include "toolset.h"
+#include "internal/platform.h"
 #include "tsstrs.h"
 
 namespace ts

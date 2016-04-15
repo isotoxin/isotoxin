@@ -70,12 +70,10 @@ struct extensions_s
     }
 };
 
-wstr_c   TSCALL get_load_filename_dialog(const wsptr &iroot, const wsptr &name, extensions_s &exts, const wchar *title);
-bool    TSCALL get_load_filename_dialog(wstrings_c &files, const wsptr &iroot, const wsptr& name, ts::extensions_s & exts, const wchar *title);
-wstr_c   TSCALL get_save_directory_dialog(const wsptr &root, const wsptr &title, const wsptr &selectpath = wsptr(), bool nonewfolder = false);
-wstr_c   TSCALL get_save_filename_dialog(const wsptr &iroot, const wsptr &name, extensions_s &exts, const wchar *title);
+#define ATTR_ANY -1
+#define ATTR_DIR SETBIT(0)
 
-bool    TSCALL find_files(const wsptr &wildcard, wstrings_c &files, const DWORD dwFileAttributes, const DWORD dwSkipAttributes = 0, bool full_names = false);
+bool    TSCALL find_files(const wsptr &wildcard, wstrings_c &files, int attributes, int skip_attributes = 0, bool full_names = false);
 
 void TSCALL fn_split( const wsptr &full_name, wstr_c &name, wstr_c &ext );
 template<class CORE> wstr_c	TSCALL fn_join(const str_t<wchar, CORE> &path, const str_t<wchar, CORE> &name)
@@ -154,9 +152,35 @@ inline wstr_c fn_change_name_ext(const wstr_c &full, const wsptr &nameext)
     return wstr_c(wsptr(full.cstr(), i)).append(nameext);
 }
 
+class enum_files_c
+{
+#ifdef _WIN32
+    uint8 data[ 768 ];
+    bool prepare_file();
+    void next_int();
+#endif
+
+
+public:
+
+    enum_files_c( const wstr_c &base, const wstr_c &path, const wstr_c &wildcard );
+    ~enum_files_c();
+    operator bool() const;
+
+    void next();
+
+    void operator++() { next(); }
+    void operator++( int ) { ++( *this ); }
+
+    const wstr_c &operator* () const;
+    const wstr_c *operator->() const;
+
+    bool is_folder() const;
+};
 
 template<class RCV, class STRCORE> bool enum_files(const str_t<wchar, STRCORE> &base, RCV &pred, const str_t<wchar, STRCORE> &path = str_t<wchar, STRCORE>(), const wsptr &wildcard = CONSTWSTR("*.*"))
 {
+    /*
 	WIN32_FIND_DATAW fd;
 	HANDLE h = FindFirstFileW(fn_join<STRCORE>(base,path,wildcard), &fd);
 	if (h == INVALID_HANDLE_VALUE) return true;
@@ -175,13 +199,50 @@ template<class RCV, class STRCORE> bool enum_files(const str_t<wchar, STRCORE> &
 	} while (FindNextFileW(h, &fd));
 
 	FindClose(h);
+    */
+
+    enum_files_c ef( base, path, wildcard );
+    for ( ;ef; ++ef )
+    {
+        if ( ef.is_folder() )
+        {
+            if ( !enum_files( base, pred, *ef, wildcard ) )
+                return false;
+        }
+        else
+            if ( !pred( base, *ef ) ) return true;
+    }
 
 	return true;
 }
 
+
 bool TSCALL check_write_access(const wsptr &path);
 
 bool TSCALL kill_file(const wsptr &path);
+
+enum copy_rslt_e
+{
+    CRSLT_OK,
+    CRSLT_ACCESS_DENIED,
+    CRSLT_FAIL
+};
+copy_rslt_e TSCALL copy_file( const wsptr &existingfn, const wsptr &newfn );
+bool TSCALL rename_file( const wsptr &existingfn, const wsptr &newfn );
+
+
+ts::wstr_c f_create( const ts::wsptr&fn ); // just create 0-size file; returns error string or empty, if ok
+void *f_open( const ts::wsptr&fn ); // open for read
+void *f_recreate( const ts::wsptr&fn ); // create
+void *f_continue( const ts::wsptr&fn ); // open for write
+uint64 f_size( void *h );
+uint32 f_read( void *h, void *ptr, uint32 sz );
+uint32 f_write( void *h, const void *ptr, uint32 sz );
+void f_close( void *h );
+bool f_set_pos( void *h, uint64 pos );
+uint64 f_get_pos( void *h );
+uint64 f_time_last_write( void *h );
+
 
 } // namespace ts
 

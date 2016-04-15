@@ -786,7 +786,7 @@ void gui_notice_callinprogress_c::acquire_display()
 gui_notice_callinprogress_c::~gui_notice_callinprogress_c()
 {
     if (common.flags.is(common.F_HIDDEN_CURSOR))
-        ts::show_hardware_cursor();
+        ts::master().show_hardware_cursor();
 
     if (common.display)
     {
@@ -1420,7 +1420,7 @@ void gui_notice_callinprogress_c::video_off()
     set_corresponding_height();
 
     if (common.flags.is(common.F_HIDDEN_CURSOR))
-        ts::show_hardware_cursor();
+        ts::master().show_hardware_cursor();
 
     if (!fsvideo.expired())
         TSDEL(fsvideo.get());
@@ -1581,6 +1581,9 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
                         case CR_CORRUPT:
                             errs = TTT("Data corrupt",336);
                             break;
+                        case CR_ENCRYPTED:
+                            errs = TTT("Data encrypted (unsupported)",447);
+                            break;
                         default:
                             errs = TTT("Error $",334)/ts::wmake<uint>( curstate );
                             break;
@@ -1629,7 +1632,11 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
     else
         ustatus.insert(0, CONSTWSTR("</l><b>")).append(CONSTWSTR("</b><l>"));
 
-    textrect.set_text_only(make_proto_desc(MPD_UNAME | MPD_USTATUS | MPD_NAME | MPD_MODULE | MPD_ID | MPD_STATE)
+    uint mpd_id = 0;
+    if ( CR_ENCRYPTED != curstate )
+        mpd_id = MPD_ID;
+
+    textrect.set_text_only(make_proto_desc(MPD_UNAME | MPD_USTATUS | MPD_NAME | MPD_MODULE | mpd_id | MPD_STATE)
 
                             .replace_all(CONSTWSTR("{uname}"), uname)
                             .replace_all(CONSTWSTR("{ustatus}"), ustatus)
@@ -1744,32 +1751,70 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
     return __super::get_height_by_width( width - fake_margin.x );
 }
 
-void gui_notice_network_c::ctx_onlink_do(const ts::str_c &cc)
+void gui_notice_network_c::ctx_onlink_do( const ts::str_c &cc )
 {
-    if (cc.equals(CONSTASTR("copy")))
+    if ( cc.equals( CONSTASTR( "copy" ) ) )
     {
-        ts::set_clipboard_text(from_utf8( pubid ));
+        ts::set_clipboard_text( from_utf8( pubid ) );
         flash();
-    } else if (cc.equals(CONSTASTR("qrcode")))
+    }
+    else if ( cc.equals( CONSTASTR( "qrcode" ) ) )
     {
-        dialog_msgbox_c::mb_qrcode(from_utf8(pubid)).summon();
-    } else if (cc.equals(CONSTASTR("on")))
+        dialog_msgbox_c::mb_qrcode( from_utf8( pubid ) ).summon();
+    }
+    else if ( cc.equals( CONSTASTR( "on" ) ) )
     {
-        if (active_protocol_c *ap = prf().ap(networkid))
+        if ( active_protocol_c *ap = prf().ap( networkid ) )
         {
-            ap->set_autoconnect(true);
+            ap->set_autoconnect( true );
             is_autoconnect = true;
-            DEFERRED_UNIQUE_CALL(0, DELEGATE(this, resetup), nullptr);
+            DEFERRED_UNIQUE_CALL( 0, DELEGATE( this, resetup ), nullptr );
         }
-    } else if (cc.equals(CONSTASTR("off")))
+    }
+    else if ( cc.equals( CONSTASTR( "off" ) ) )
     {
-        if (active_protocol_c *ap = prf().ap(networkid))
-            ap->set_autoconnect(false), is_autoconnect = false;
-    } else if (cc.equals(CONSTASTR("export")))
+        if ( active_protocol_c *ap = prf().ap( networkid ) )
+            ap->set_autoconnect( false ), is_autoconnect = false;
+    }
+    else if ( cc.equals( CONSTASTR( "export" ) ) )
     {
-        if (active_protocol_c *ap = prf().ap(networkid))
+        if ( active_protocol_c *ap = prf().ap( networkid ) )
             ap->export_data();
     }
+    else if ( cc.equals( CONSTASTR( "reset" ) ) )
+    {
+        if ( active_protocol_c *ap = prf().ap( networkid ) )
+            ap->reset_data();
+    }
+    else if ( cc.equals( CONSTASTR( "imp" ) ) )
+    {
+        if ( active_protocol_c *ap = prf().ap( networkid ) )
+        {
+            ts::wstr_c iroot( CONSTWSTR( "%APPDATA%" ) );
+            ts::parse_env( iroot );
+
+            if ( dir_present( ts::fn_join( iroot, ts::to_wstr( ap->get_tag() ) ) ) )
+                iroot = ts::fn_join( iroot, ts::to_wstr( ap->get_tag() ) );
+            ts::fix_path( iroot, FNO_APPENDSLASH );
+
+            ts::extension_s ext;
+            ext.desc = gui->app_loclabel( LL_ANY_FILES );
+            ext.desc.append( CONSTWSTR( " (*.*)" ) );
+            ext.ext = CONSTWSTR( "*.*" );
+            ts::extensions_s exts( &ext, 1, 0 );
+
+            ts::wstr_c fn = getroot()->load_filename_dialog( iroot, CONSTWSTR( "" ), exts, loc_text( loc_import_from_file ) );
+
+            if ( !fn.is_empty() && ts::is_file_exists(fn) )
+            {
+                ts::blob_c data;
+                data.load_from_file( fn );
+                ap->change_data( data );
+            }
+        }
+
+    }
+
 }
 
 void gui_notice_network_c::show_link_submenu()
@@ -1792,10 +1837,19 @@ void gui_notice_network_c::show_link_submenu()
 
     } else if (overlink == 1)
     {
-        if (is_autoconnect)
-            mnu.add(TTT("Switch off", 98), 0, DELEGATE(this, ctx_onlink_do), CONSTASTR("off"));
-        else
-            mnu.add(TTT("Connect", 99), (curstate != CR_OK) ? MIF_DISABLED : 0, DELEGATE(this, ctx_onlink_do), CONSTASTR("on"));
+        if ( CR_ENCRYPTED == curstate )
+        {
+            mnu.add( TTT("Reset to default",448), 0, DELEGATE( this, ctx_onlink_do ), CONSTASTR( "reset" ) );
+            mnu.add( TTT("Import again...",449), 0, DELEGATE( this, ctx_onlink_do ), CONSTASTR( "imp" ) );
+        } else
+        {
+            if ( is_autoconnect )
+                mnu.add( TTT( "Switch off", 98 ), 0, DELEGATE( this, ctx_onlink_do ), CONSTASTR( "off" ) );
+            else
+                mnu.add( TTT( "Connect", 99 ), ( curstate != CR_OK ) ? MIF_DISABLED : 0, DELEGATE( this, ctx_onlink_do ), CONSTASTR( "on" ) );
+
+        }
+
     }
 
 
@@ -2356,7 +2410,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                 nn.setup( cfg().autoupdate_newver() );
             }
 
-            if (g_app->F_SHOW_SPELLING_WARN)
+            if (g_app->F_SHOW_SPELLING_WARN && prf().is_any_active_ap())
             {
                 gui_notice_c &nn = create_notice(NOTICE_WARN_NODICTS);
                 nn.setup(ts::str_c());
@@ -2823,6 +2877,10 @@ static gui_messagelist_c *current_draw_list = nullptr;
         }
         return true;
     case SQ_MOUSE_LUP:
+
+        if ( flags.is( F_PASSIVE ) )
+            return HOLD( getparent() )( ).sq_evt( qp, rid, data );
+
         if (!some_selected() && check_overlink(to_local(data.mouse.screenpos)))
         {
             ts::str_c lnk = get_link_under_cursor(to_local(data.mouse.screenpos));
@@ -2838,6 +2896,10 @@ static gui_messagelist_c *current_draw_list = nullptr;
         }
         break;
     case SQ_MOUSE_RUP:
+
+        if ( flags.is( F_PASSIVE ) )
+            return HOLD( getparent() )( ).sq_evt( qp, rid, data );
+
         if (zero_rec.text.is_empty() || subtype != ST_CONVERSATION)
         {
             if (zero_rec.utag == 0)
@@ -2922,6 +2984,10 @@ static gui_messagelist_c *current_draw_list = nullptr;
         break;
     case SQ_MOUSE_RDOWN:
     case SQ_MOUSE_LDOWN:
+
+        if ( flags.is( F_PASSIVE ) )
+            return HOLD( getparent() )( ).sq_evt( qp, rid, data );
+
         if (!popupmenu && !some_selected() && check_overlink(to_local(data.mouse.screenpos)))
             return true;
 
@@ -2951,6 +3017,10 @@ static gui_messagelist_c *current_draw_list = nullptr;
         }
         break;
     case SQ_DETECT_AREA:
+
+        if ( flags.is( F_PASSIVE ) )
+            return HOLD( getparent() )( ).sq_evt( qp, rid, data );
+
         if (popupmenu.expired())
         {
             if (textrect.get_text().find_pos(CONSTWSTR("<cstm=a")) >= 0 && !gui->mtrack(getrid(), MTT_TEXTSELECT) && !some_selected())
@@ -3295,10 +3365,10 @@ void gui_message_item_c::setup_found_item( uint64 prev, uint64 next )
     MODIFY( *this ).highlight(true);
 }
 
-void gui_message_item_c::append_text( const post_s &post, bool resize_now )
+void gui_message_item_c::append_text( const post_s &post, bool resize_now, bool force_new )
 {
 #if JOIN_MESSAGES
-    bool use0rec = (zero_rec.utag == post.utag);
+    bool use0rec = (zero_rec.utag == post.utag) || force_new;
     record &rec = use0rec ? zero_rec : other_records.add();
     if (!use0rec)
     {
@@ -3412,7 +3482,8 @@ void gui_message_item_c::append_text( const post_s &post, bool resize_now )
             rec.text = message;
             rec.undelivered = post.type == MTA_UNDELIVERED_MESSAGE ? get_default_text_color(1) : 0;
 
-            ts::wstr_c newtext(textrect.get_text());
+            ts::wstr_c newtext; 
+            if (!force_new)  newtext = textrect.get_text();
 #if JOIN_MESSAGES
             if (prf().get_options().is(MSGOP_JOIN_MESSAGES))
             {
@@ -3519,7 +3590,7 @@ bool gui_message_item_c::b_explore(RID, GUIPARAM)
     ts::wstr_c fn = from_utf8(zero_rec.text);
     if (ts::is_file_exists(fn))
     {
-        ShellExecuteW(nullptr, L"open", L"explorer", CONSTWSTR("/select,") + ts::fn_autoquote(ts::fn_get_name_with_ext(fn)), ts::fn_get_path(fn), SW_SHOWDEFAULT);
+        ts::master().explore_path(fn, false);
     } else
     {
         ts::wstr_c path = fn_get_path(fn);
@@ -3530,7 +3601,7 @@ bool gui_message_item_c::b_explore(RID, GUIPARAM)
             path.trunc_char(NATIVE_SLASH);
             path = fn_get_path(path);
         }
-        ShellExecuteW(nullptr, L"explore", path, nullptr, nullptr, SW_SHOWDEFAULT);
+        ts::master().explore_path( path, true );
     }
 
     return true;
@@ -3706,7 +3777,7 @@ void gui_message_item_c::updrect(const void *, int r, const ts::ivec2 &p)
             pbar.set_level(ftb.progress, ftb.pbtext);
             ftb.pbar = &pbar;
         }
-        MODIFY(*ftb.pbar).pos(root_to_local(p)).size( ftb.pbsize );
+        MODIFY(*ftb.pbar).pos(root_to_local(p) + ts::ivec2(0,3)).size( ftb.pbsize - ts::ivec2( 0, 3 ) );
         return;
     }
 
@@ -3815,6 +3886,7 @@ const ts::wstr_c &gui_message_item_c::addition_file_data_s::getrectt(gui_message
     }
 
     pbsize.x = miw - clw - 4;
+    pbsize.y += 3;
     rectt.append_as_int(pbsize.x).append_char(',').append_as_int(pbsize.y).append(CONSTWSTR("><br=3>"));
     return rectt;
 }
@@ -3923,8 +3995,14 @@ void gui_message_item_c::update_text(int for_width)
                         ab.pbtext.append(TTT("$ bytes per second",189) / ts::wmake(bps));
                     else if (bps < 1024 * 1024)
                         ab.pbtext.append(TTT("$ kbytes per second",190) / ts::wmake(bps/1024));
-                    else
-                        ab.pbtext.append(TTT("$ Mb per second",191) / ts::wmake(bps/(1024*1024)));
+                    else {
+
+                        int mb = bps / ( 1024 * 1024 );
+                        int ost = bps - mb * ( 1024 * 1024 );
+                        int pt = ost * 10 / ( 1024 * 1024 );
+
+                        ab.pbtext.append( TTT( "$ Mb per second", 191 ) / ts::wmake( mb).append_char('.').append_as_int(pt) );
+                    }
 
                     if (ab.pbar) ab.pbar->set_level(ab.progress, ab.pbtext);
 
@@ -4226,14 +4304,14 @@ gui_messagelist_c::~gui_messagelist_c()
 
 /*virtual*/ void gui_messagelist_c::created()
 {
-    g_app->register_kbd_callback(DELEGATE(this, font_size_up), SSK_PADPLUS, gui_c::casw_ctrl);
-    g_app->register_kbd_callback(DELEGATE(this, font_size_down), SSK_PADMINUS, gui_c::casw_ctrl);
-    g_app->register_kbd_callback( DELEGATE( this, pageup ), SSK_PGUP, 0 );
-    g_app->register_kbd_callback( DELEGATE( this, pagedown ), SSK_PGDN, 0 );
-    g_app->register_kbd_callback( DELEGATE( this, totop ), SSK_HOME, gui_c::casw_ctrl);
-    g_app->register_kbd_callback( DELEGATE( this, tobottom ), SSK_END, gui_c::casw_ctrl);
-    g_app->register_kbd_callback(DELEGATE(this, lineup), SSK_UP, 0);
-    g_app->register_kbd_callback(DELEGATE(this, linedown), SSK_DOWN, 0);
+    g_app->register_kbd_callback(DELEGATE(this, font_size_up), ts::SSK_PADPLUS, ts::casw_ctrl);
+    g_app->register_kbd_callback(DELEGATE(this, font_size_down), ts::SSK_PADMINUS, ts::casw_ctrl);
+    g_app->register_kbd_callback( DELEGATE( this, pageup ), ts::SSK_PGUP, 0 );
+    g_app->register_kbd_callback( DELEGATE( this, pagedown ), ts::SSK_PGDN, 0 );
+    g_app->register_kbd_callback( DELEGATE( this, totop ), ts::SSK_HOME, ts::casw_ctrl);
+    g_app->register_kbd_callback( DELEGATE( this, tobottom ), ts::SSK_END, ts::casw_ctrl);
+    g_app->register_kbd_callback(DELEGATE(this, lineup), ts::SSK_UP, 0);
+    g_app->register_kbd_callback(DELEGATE(this, linedown), ts::SSK_DOWN, 0);
 
     set_theme_rect(CONSTASTR("msglist"), false);
     defaultthrdraw = DTHRO_BASE;
@@ -4734,6 +4812,13 @@ void gui_messagelist_c::clear_list(bool empty_mode)
     }
 }
 
+void _new_profile();
+static bool new_profile( RID, GUIPARAM )
+{
+    _new_profile();
+    return true;
+};
+
 namespace
 {
     class gui_new_proto_c : public gui_label_ex_c
@@ -4815,10 +4900,26 @@ namespace
                 MODIFY(b).visible(true);
                 textrect.set_margins(ts::ivec2(0, minsz.y + 5));
                 addh = minsz.y + 10;
-            } else
+            } else if (!g_app->F_MAINRECTSUMMON)
             {
                 ts::wstr_c lt(CONSTWSTR("<p=c>"), loc_text(loc_please_create_profile));
                 set_text(lt);
+
+                ts::wstrings_c prfs;
+                ts::find_files( ts::fn_change_name_ext( cfg().get_path(), CONSTWSTR( "*.profile" ) ), prfs, ATTR_ANY );
+
+                if ( prfs.size() == 0 )
+                {
+                    gui_button_c &b = MAKE_CHILD<gui_button_c>( getrid() );
+                    b.set_face_getter( BUTTON_FACE( createprofile ) );
+                    b.set_handler( new_profile, this );
+                    ts::ivec2 minsz = b.get_min_size();
+                    b.leech( TSNEW( leech_dock_top_center_s, minsz.x, minsz.y, -5, 5 ) );
+                    MODIFY( b ).visible( true );
+                    textrect.set_margins( ts::ivec2( 0, minsz.y + 5 ) );
+                    addh = minsz.y + 10;
+                }
+
             }
 
         }
@@ -4896,22 +4997,18 @@ void gui_messagelist_c::create_empty_mode_stuff()
     
 }
 
-DWORD gui_messagelist_c::handler_SEV_ACTIVE_STATE(const system_event_param_s & p)
-{
-    if (p.active)
-    {
-        DEFERRED_EXECUTION_BLOCK_BEGIN(0)
-            if (gui_messagelist_c *ml = gui->find_rect<gui_messagelist_c>(param))
-                ml->getengine().redraw();
-        DEFERRED_EXECUTION_BLOCK_END(this)
-    }
-    return 0;
-}
-
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
 {
     if (historian && ue.evt == UE_THEMECHANGED)
         historian->reselect();
+
+    if (ue.evt == UE_ACTIVATE)
+    {
+        DEFERRED_EXECUTION_BLOCK_BEGIN( 0 )
+            if ( gui_messagelist_c *ml = gui->find_rect<gui_messagelist_c>( param ) )
+                ml->getengine().redraw();
+        DEFERRED_EXECUTION_BLOCK_END( this )
+    }
 
     return 0;
 }
@@ -5035,6 +5132,15 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_DO_POSTEFFECT> &f)
             getengine().trunc_children(0);
             create_empty_mode_stuff();
         }
+    }
+    return 0;
+}
+ts::uint32 gui_messagelist_c::gm_handler( gmsg<ISOGM_SUMMON_NOPROFILE_UI> & )
+{
+    if ( flags.is( F_EMPTY_MODE ) )
+    {
+        getengine().trunc_children( 0 );
+        create_empty_mode_stuff();
     }
     return 0;
 }
@@ -5421,7 +5527,7 @@ bool gui_message_editor_c::on_enter_press_func(RID, GUIPARAM param)
     {
         static ts::Time last_enter_pressed = ts::Time::past();
         enter_key_options_s behsend = (enter_key_options_s)prf().ctl_to_send();
-        bool ctrl_or_shift = GetKeyState(VK_CONTROL) < 0 || GetKeyState(VK_SHIFT) < 0;
+        bool ctrl_or_shift = ts::master().is_key_pressed( ts::SSK_CTRL ) || ts::master().is_key_pressed( ts::SSK_SHIFT );
         if (behsend == EKO_ENTER_NEW_LINE_DOUBLE_ENTER)
         {
             ts::Time tpressed = ts::Time::current();
@@ -5517,9 +5623,9 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
 
 /*virtual*/ void gui_message_editor_c::created()
 {
-    register_kbd_callback( DELEGATE( this, on_enter_press_func ), SSK_ENTER, false );
-    register_kbd_callback( DELEGATE( this, on_enter_press_func ), SSK_ENTER, true );
-    register_kbd_callback( DELEGATE( this, show_smile_selector ), SSK_S, true );
+    register_kbd_callback( DELEGATE( this, on_enter_press_func ), ts::SSK_ENTER, false );
+    register_kbd_callback( DELEGATE( this, on_enter_press_func ), ts::SSK_ENTER, true );
+    register_kbd_callback( DELEGATE( this, show_smile_selector ), ts::SSK_S, true );
     set_multiline(true);
     set_theme_rect(CONSTASTR("entertext"), false);
 

@@ -34,7 +34,8 @@ enum messages_options_e : unsigned
     MSGOP_MAXIMIZE_INLINE_IMG   = SETBIT(10),
     MSGOP_SPELL_CHECK           = SETBIT(11),
 
-    UIOPT_SHOW_INCOMING_CALL_BAR = SETBIT(15),
+    UIOPT_SHOW_INCOMING_MSG_PNL = SETBIT(14),
+    UIOPT_SHOW_INCOMING_CALL_BAR = SETBIT( 15 ),
 
     UIOPT_SHOW_SEARCH_BAR       = SETBIT(16),
     UIOPT_PROTOICONS            = SETBIT(17),
@@ -50,7 +51,7 @@ enum messages_options_e : unsigned
     OPTOPT_POWER_USER           = SETBIT(31),
 };
 
-#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_TAGFILETR_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | GCHOPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST | MSGOP_MAXIMIZE_INLINE_IMG | MSGOP_SPELL_CHECK | UIOPT_SHOW_INCOMING_CALL_BAR)
+#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_TAGFILETR_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | GCHOPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST | MSGOP_MAXIMIZE_INLINE_IMG | MSGOP_SPELL_CHECK | UIOPT_SHOW_INCOMING_CALL_BAR|UIOPT_SHOW_INCOMING_MSG_PNL)
 
 
 enum dsp_flags_e
@@ -112,6 +113,7 @@ struct contacts_s
         C_CUSTOMNAME,
         C_COMMENT,
         C_TAGS,
+        C_MESSAGEHANDLER,
         C_AVATAR,
         C_AVATAR_TAG,
 
@@ -120,11 +122,12 @@ struct contacts_s
 
     contact_key_s key;
     int metaid;
-    int options;
+    int options; // 16:17 - keeph, 19:20 - aaac, 21:24 - mht
     ts::str_c name;
     ts::str_c statusmsg;
     ts::str_c customname;
     ts::str_c comment;
+    ts::str_c msghandler;
     ts::astrings_c tags;
     time_t readtime; // time of last seen message
     ts::blob_c avatar;
@@ -133,7 +136,7 @@ struct contacts_s
     void set(int column, ts::data_value_s& v);
     void get(int column, ts::data_pair_s& v);
 
-    static const int columns = C_count; // contact_id, proto_id, meta_id, options, name, statusmsg, readtime, customname, comment, tags, avatar, avatar_tag
+    static const int columns = C_count; // contact_id, proto_id, meta_id, options, name, statusmsg, readtime, customname, comment, tags, msghandler, avatar, avatar_tag
     static ts::asptr get_table_name() { return CONSTASTR("contacts"); }
     static void get_column_desc(int index, ts::column_desc_s&cd);
     static ts::data_type_e get_column_type(int index);
@@ -412,7 +415,6 @@ public:
     bool is_encrypted() const { return profile_flags.is(F_ENCRYPTED); }
     ts::str_c get_keyhash_str() const { ts::str_c h; if (is_encrypted()) h.append_as_hex(keyhash, CC_HASH_SIZE); return h; }
 
-    static void mb_warning_readonly(bool minimize);
     static void mb_error_load_profile(const ts::wsptr & prfn, profile_load_result_e plr, bool modal = false);
 
     bool addeditnethandler(dialog_protosetup_params_s &params);
@@ -564,7 +566,7 @@ public:
 
     INTPAR(max_thumb_height, 80); // hidden
 
-    HANDLE mutex = nullptr;
+    UNIQUE_PTR( ts::global_atom_s ) mutex;
 };
 
 #undef TEXTPAR

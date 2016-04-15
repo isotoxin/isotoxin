@@ -67,7 +67,6 @@
       <PrecompiledHeaderFile>toolset.h</PrecompiledHeaderFile>
     </ClCompile>
     <Lib>
-      <AdditionalDependencies>MSImg32.Lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(GARBAGE)\#libs\vc15\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
@@ -78,7 +77,6 @@
       <PrecompiledHeaderFile>toolset.h</PrecompiledHeaderFile>
     </ClCompile>
     <Lib>
-      <AdditionalDependencies>MSImg32.Lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(GARBAGE)\#libs\vc15\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
@@ -90,7 +88,6 @@
       <PrecompiledHeaderFile>toolset.h</PrecompiledHeaderFile>
     </ClCompile>
     <Lib>
-      <AdditionalDependencies>MSImg32.Lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(GARBAGE)\#libs\vc15\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
@@ -139,14 +136,17 @@
     <ClCompile Include="tssqlite.cpp" />
     <ClCompile Include="tsstrar.cpp" />
     <ClCompile Include="tsstrs.cpp" />
+    <ClCompile Include="tssys.cpp" />
     <ClCompile Include="tssystools.cpp" />
     <ClCompile Include="tstext.cpp" />
     <ClCompile Include="tstime.cpp" />
+    <ClCompile Include="tswnd.cpp" />
     <ClCompile Include="tszip.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="internal\cpu_detector.h" />
     <ClInclude Include="internal\fourcc.h" />
+    <ClInclude Include="internal\platform.h" />
     <ClInclude Include="internal\rapidxml.h" />
     <ClInclude Include="internal\rapidxml_iterators.h" />
     <ClInclude Include="tsexecutor.h" />
@@ -184,10 +184,12 @@
     <ClInclude Include="tssqlite.h" />
     <ClInclude Include="tsstrar.h" />
     <ClInclude Include="tsstrs.h" />
+    <ClInclude Include="tssys.h" />
     <ClInclude Include="tssystools.h" />
     <ClInclude Include="tstext.h" />
     <ClInclude Include="tstime.h" />
     <ClInclude Include="tsvec.h" />
+    <ClInclude Include="tswnd.h" />
     <ClInclude Include="tszip.h" />
   </ItemGroup>
   <ItemGroup>
@@ -257,6 +259,13 @@
 </Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
     </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="_win32\win32_bitmap.inl" />
+    <None Include="_win32\win32_common.inl" />
+    <None Include="_win32\win32_inc.inl" />
+    <None Include="_win32\win32_master.inl" />
+    <None Include="_win32\win32_wnd.inl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

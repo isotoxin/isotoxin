@@ -1,4 +1,5 @@
 #include "toolset.h"
+#include "fourcc.h"
 
 namespace ts
 {
@@ -27,13 +28,28 @@ static bool bmpdatareader(img_reader_s &r, void * buf, int pitch)
 
 }
 
-image_read_func img_reader_s::detect_bmp_format(const void *sourcebuf, int sourcebufsize)
+namespace
 {
+#pragma pack(push, 1)
+    struct BITMAPFILEHEADER
+    {
+        uint16  bfType;
+        uint32  bfSize;
+        uint16  bfReserved1;
+        uint16  bfReserved2;
+        uint32  bfOffBits;
+    };
     struct Header
     {
         BITMAPFILEHEADER fH;
         BITMAPINFOHEADER iH;
-    } *header = (Header*)sourcebuf;
+    };
+#pragma pack(pop)
+}
+
+image_read_func img_reader_s::detect_bmp_format(const void *sourcebuf, int sourcebufsize)
+{
+    Header *header = (Header*)sourcebuf;
 
     if (header->fH.bfType != MAKEWORD('B', 'M')) return nullptr;
     if (header->iH.biCompression != 0) return nullptr;
@@ -89,7 +105,7 @@ bool save_to_bmp_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
         {
             uint8 *sb = sou;
             uint8 *db = (uint8 *)buf.expand(len);
-            BYTE *de = db + len;
+            uint8 *de = db + len;
 
             for (; db < de; db += 3, sb += 3)
             {
@@ -111,7 +127,7 @@ bool save_to_bmp_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
         {
             uint8 *sb = sou;
             uint8 *db = (uint8 *)buf.expand(len);
-            BYTE *de = db + len;
+            uint8 *de = db + len;
 
             for (; db < de; db += 4, sb += 4)
             {

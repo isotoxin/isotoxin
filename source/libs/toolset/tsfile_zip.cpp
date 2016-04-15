@@ -203,6 +203,9 @@ namespace ts
 
             static voidpf ZCALLBACK fopen_file_func(voidpf opaque, const char * filename, int mode)
             {
+                return f_open( ( (zippp *)opaque )->name );
+
+                /*
                 HANDLE file, h;
                 DWORD desiredacces = GENERIC_READ;
                 DWORD createdispos = OPEN_EXISTING;
@@ -226,38 +229,36 @@ namespace ts
                 h = CreateFileW(((zippp *)opaque)->name, desiredacces, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, createdispos, FILE_ATTRIBUTE_NORMAL, nullptr);
                 file = (HANDLE)((aint)h + 1);
                 return file;
-
+                */
             }
 
             static uLong ZCALLBACK fread_file_func(voidpf opaque, voidpf stream, void* buf, uLong size)
             {
-                DWORD r;
-                ReadFile((HANDLE)((aint)stream - 1), buf, (size_t)size, &r, nullptr);
-                return r;
+                return f_read(stream, buf, size);
             }
             static long ZCALLBACK ftell_file_func(voidpf opaque, voidpf stream)
             {
-                return SetFilePointer((HANDLE)((aint)stream - 1), 0, nullptr, FILE_CURRENT);
+                return (long)f_get_pos(stream);
             }
             static long ZCALLBACK fseek_file_func(voidpf opaque, voidpf stream, uLong offset, int origin)
             {
-                DWORD or = FILE_BEGIN;
+                uint64 o = offset;
                 switch (origin)
                 {
                     case ZLIB_FILEFUNC_SEEK_END:
-                        or = FILE_END;
+                        o += f_size(stream);
                         break;
                     case ZLIB_FILEFUNC_SEEK_CUR:
-                        or = FILE_CURRENT;
+                        o += f_get_pos( stream );
                         break;
                 }
 
-                return INVALID_SET_FILE_POINTER == SetFilePointer((HANDLE)((aint)stream - 1), offset, nullptr, or) ? 1 : 0;
+                return f_set_pos( stream, o ) ? 0 : 1;
             }
             static int ZCALLBACK fclose_file_func(voidpf opaque, voidpf stream)
             {
-                if (CloseHandle((HANDLE)((aint)stream - 1))) return 0;
-                return EOF;
+                f_close(stream);
+                return 0;
             }
             static int ZCALLBACK ferror_file_func(voidpf opaque, voidpf stream)
             {
@@ -290,10 +291,10 @@ namespace ts
             return false;
         }
 
-        sstr_t<-512> filename_inzip( MAX_PATH, false );
+        sstr_t<-1032> filename_inzip( 1024, false );
         for (int i=0;i<(int)m_ginf.number_entry;++i)
         {
-            filename_inzip.set_length(MAX_PATH);
+            filename_inzip.set_length( 1024 );
             unz_file_info file_info;
             err = unzGetCurrentFileInfo(m_unz,&file_info,filename_inzip.str(),filename_inzip.get_capacity(),nullptr,0,nullptr,0);
             if (err!=UNZ_OK)

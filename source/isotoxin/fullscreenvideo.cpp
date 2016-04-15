@@ -11,7 +11,7 @@ MAKE_ROOT<fullscreenvideo_c>::~MAKE_ROOT()
     set_theme_rect(CONSTASTR("fullscreen"), false);
     __super::created();
 
-    gui->register_kbd_callback(DELEGATE(this, esc_handler), SSK_ESC, 0);
+    gui->register_kbd_callback(DELEGATE(this, esc_handler), ts::SSK_ESC, 0);
 
     common.create_buttons( owner, getrid(), true );
 }
@@ -33,7 +33,7 @@ fullscreenvideo_c::~fullscreenvideo_c()
 {
     if (owner) owner->on_fsvideo_die();
     if (common.flags.is(common.F_HIDDEN_CURSOR))
-        ts::show_hardware_cursor();
+        ts::master().show_hardware_cursor();
 
     if (gui)
     {
@@ -351,12 +351,12 @@ void common_videocall_stuff_s::tick()
     {
         show_buttons(false);
         if (inside)
-            ts::hide_hardware_cursor(), flags.set(F_HIDDEN_CURSOR);
+            ts::master().hide_hardware_cursor(), flags.set(F_HIDDEN_CURSOR);
     }
 
     if (mp != mousepos && F_HIDDEN_CURSOR)
     {
-        ts::show_hardware_cursor();
+        ts::master().show_hardware_cursor();
     }
 
     mousepos = mp;

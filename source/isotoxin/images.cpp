@@ -1,5 +1,13 @@
 #include "isotoxin.h"
 
+#ifdef _WIN32
+#define _NTOS_
+#pragma push_macro("ERROR")
+#undef ERROR
+#include <winsock2.h> // ntol
+#pragma pop_macro("ERROR")
+#endif // _WIN32
+
 void picture_c::draw(rectengine_root_c *e, const ts::ivec2 &pos) const
 {
     ts::irect r;

@@ -9,7 +9,7 @@ mediasystem_c::~mediasystem_c()
     while( ref > 0 )
     {
         s3::Update();
-        Sleep(1);
+        ts::master().sys_sleep(1);
     }
 }
 

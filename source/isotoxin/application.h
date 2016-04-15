@@ -1,14 +1,12 @@
 #pragma once
 
-#define IDI_ICON_APP IDI_ICON_ONLINE
-
 #define BUTTON_FACE_PRELOADED( face ) (GET_BUTTON_FACE) ([]()->button_desc_s * { return g_app->preloaded_stuff().face; } )
 #define GET_FONT( face ) g_app->preloaded_stuff().face
 #define GET_THEME_VALUE( name ) g_app->preloaded_stuff().name
 
-#define HOTKEY_TOGGLE_SEARCH_BAR SSK_F, gui_c::casw_ctrl
-#define HOTKEY_TOGGLE_TAGFILTER_BAR SSK_T, gui_c::casw_ctrl
-#define HOTKEY_TOGGLE_NEW_CONNECTION_BAR SSK_N, gui_c::casw_ctrl
+#define HOTKEY_TOGGLE_SEARCH_BAR ts::SSK_F, ts::casw_ctrl
+#define HOTKEY_TOGGLE_TAGFILTER_BAR ts::SSK_T, ts::casw_ctrl
+#define HOTKEY_TOGGLE_NEW_CONNECTION_BAR ts::SSK_N, ts::casw_ctrl
 
 //-V:preloaded_stuff():807
 //-V:GET_FONT:807
@@ -139,37 +137,22 @@ struct file_transfer_s : public unfinished_file_transfer_s
     {
         //uint64 offset = 0;
         uint64 progrez = 0;
-        HANDLE handle = nullptr;
-        double notfreq = 1.0;
-        LARGE_INTEGER prevt;
+        void * handle = nullptr;
+        ts::Time prevt = ts::Time::current();
+        ts::Time speedcalc = ts::Time::current();
+        int transfered_last_tick = 0;
         int bytes_per_sec = BPSSV_ALLOW_CALC;
         float upduitime = 0;
 
-        struct range_s
-        {
-            uint64 offset0;
-            uint64 offset1;
-        };
-        ts::tbuf0_t<range_s> transfered;
-        void tr(uint64 _offset0, uint64 _offset1);
-        uint64 trsz() const
-        {
-            uint64 sz = 0;
-            for (const range_s &r : transfered)
-                sz += r.offset1 - r.offset0;
-            return sz;
-        }
-
         float deltatime(bool updateprevt, int addseconds = 0)
         {
-            LARGE_INTEGER cur;
-            QueryPerformanceCounter(&cur);
-            float dt = (float)((double)(cur.QuadPart - prevt.QuadPart) * notfreq);
+            ts::Time cur = ts::Time::current();
+            float dt = (float)((double)(cur - prevt) * (1.0/1000.0));
             if (updateprevt)
             {
                 prevt = cur;
                 if (addseconds)
-                    prevt.QuadPart += (int64)((double)addseconds / notfreq);
+                    prevt += addseconds * 1000;
             }
             return dt;
         }
@@ -178,7 +161,7 @@ struct file_transfer_s : public unfinished_file_transfer_s
 
     spinlock::syncvar<data_s> data;
 
-    HANDLE file_handle() const { return data.lock_read()().handle; }
+    void * file_handle() const { return data.lock_read()().handle; }
     //uint64 get_offset() const { return data.lock_read()().offset; }
 
     bool accepted = false; // prepare_fn called - file receive accepted // used only for receive
@@ -296,8 +279,9 @@ public:
     
     static const ts::flags32_s::BITS PEF_APP = (ts::flags32_s::BITS)(-1) & (~(PEF_FREEBITSTART-1));
     
+    ts::bitmap_c build_icon( int sz, ts::TSCOLOR colorblack = 0xff000000 );
 
-    /*virtual*/ HICON app_icon(bool for_tray) override;
+    /*virtual*/ ts::bitmap_c app_icon(bool for_tray) override;
     /*virtual*/ void app_setup_custom_button(bcreate_s & bcr) override
     {
         if (bcr.tag == CBT_APPCUSTOM)
@@ -319,7 +303,7 @@ public:
 
     /*virtual*/ ts::wsptr app_loclabel(loc_label_e ll);
 
-    /*virtual*/ void app_notification_icon_action(naction_e act, RID iconowner) override;
+    /*virtual*/ void app_notification_icon_action( ts::notification_icon_action_e act, RID iconowner) override;
     /*virtual*/ void app_fix_sleep_value(int &sleep_ms) override;
     /*virtual*/ void app_5second_event() override;
     /*virtual*/ void app_loop_event() override;
@@ -354,10 +338,14 @@ public:
     unsigned F_CAPTURING : 1;
     unsigned F_SHOW_CONTACTS_IDS : 1;
     unsigned F_SHOW_SPELLING_WARN : 1;
+    unsigned F_MAINRECTSUMMON : 1;
 
-
-    SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_EXIT);
-    SIMPLE_SYSTEM_EVENT_RECEIVER (application_c, SEV_INIT);
+    bool on_init();
+    bool on_exit();
+    bool on_loop();
+    void on_mouse( ts::mouse_event_e me, const ts::ivec2 &clpos /* relative to wnd */, const ts::ivec2 &scrpos );
+    bool on_char( wchar_t c );
+    bool on_keyboard( int scan, bool dn, int casw );
 
     GM_RECEIVER( application_c, ISOGM_PROFILE_TABLE_SAVED );
     GM_RECEIVER( application_c, ISOGM_CHANGED_SETTINGS );
@@ -502,6 +490,29 @@ public:
 
     };
 
+    enum icon_e
+    {
+        ICON_APP,
+        ICON_HOLLOW,
+        ICON_OFFLINE,
+        ICON_OFFLINE_MSG1,
+        ICON_OFFLINE_MSG2,
+        ICON_ONLINE,
+        ICON_ONLINE_MSG1,
+        ICON_ONLINE_MSG2,
+        ICON_AWAY,
+        ICON_AWAY_MSG1,
+        ICON_AWAY_MSG2,
+        ICON_DND,
+        ICON_DND_MSG1,
+        ICON_DND_MSG2,
+
+        icons_count
+    };
+
+    ts::bitmap_c icons[ icons_count ];
+    int icon_num = -1;
+
     ts::array_inplace_t<blinking_reason_s,2> m_blink_reasons;
     ts::tbuf_t<contact_key_s> m_locked_recalc_unread;
     
@@ -631,6 +642,7 @@ public:
 
     void summon_main_rect(bool minimize);
     void load_profile_and_summon_main_rect(bool minimize);
+    void recheck_no_profile();
     preloaded_stuff_s &preloaded_stuff() {return m_preloaded_stuff;}
 
     void lock_recalc_unread( const contact_key_s &ck ) { m_locked_recalc_unread.set(ck); };
@@ -653,6 +665,14 @@ public:
             if (br.unread_count > 0)
                 return true;
         return false;
+    }
+    int count_unread_blink_reason() const
+    {
+        int cnt = 0;
+        for ( const blinking_reason_s &br : m_blink_reasons )
+            if ( br.unread_count > 0 )
+                cnt += br.unread_count;
+        return cnt;
     }
     void select_last_unread_contact();
 

@@ -3,7 +3,6 @@
 //-V:glyphs:807
 
 gui_c *gui = nullptr;
-int sysmodal = 0;
 
 gui_c::tempbuf_c::tempbuf_c( double ttl )
 {
@@ -97,7 +96,7 @@ bool gui_c::b_normalize(RID r, GUIPARAM param)
 }
 /*virtual*/ void gui_c::app_b_close(RID)
 {
-    sys_exit(0);
+    ts::master().sys_exit(0);
 }
 
 
@@ -109,8 +108,8 @@ gui_c::gui_c()
     gui = this;
     dirty_hover_data();
 
-    register_kbd_callback(DELEGATE(&m_selcore, copy_hotkey_handler), SSK_C, casw_ctrl);
-    register_kbd_callback(DELEGATE(&m_selcore, copy_hotkey_handler), SSK_INSERT, casw_ctrl);
+    register_kbd_callback(DELEGATE(&m_selcore, copy_hotkey_handler), ts::SSK_C, ts::casw_ctrl);
+    register_kbd_callback(DELEGATE(&m_selcore, copy_hotkey_handler), ts::SSK_INSERT, ts::casw_ctrl);
 
 }
 
@@ -255,7 +254,7 @@ void gui_c::heartbeat()
         }
         ++m_checkindex;
     }
-    if (nullptr == GetFocus())
+    if (nullptr == ts::master().get_focus())
         if (rectengine_root_c *root = root_by_rid( roots().last(RID()) ))
             if (!root->getrect().getprops().is_collapsed())
                 root->set_system_focus();
@@ -359,12 +358,6 @@ void gui_c::heartbeat()
 #endif
 }
 
-DWORD gui_c::handler_SEV_BEFORE_INIT( const system_event_param_s & p )
-{
-	SetClassLong( g_sysconf.mainwindow, GCL_HICON, (LONG)app_icon(false) );
-	return 0;
-}
-
 void gui_c::simulate_kbd(int scancode, ts::uint32 casw)
 {
     ts::uint32 signalkbd = scancode | casw;
@@ -390,38 +383,34 @@ void gui_c::unregister_kbd_callback(GUIPARAMHANDLER handler)
 }
 
 
-ts::uint32 gui_c::keyboard(const system_event_param_s & p)
+bool gui_c::handle_keyboard(int scan, bool dn, int casw)
 {
     redraw_collector_s dch;
 
-    if (RID f = gui->get_active_focus())
+    if (RID f = gui->get_focus())
         if (allow_input(f))
         {
 
             evt_data_s d;
-            d.kbd.scan = p.kbd.scan;
+            d.kbd.scan = scan;
             d.kbd.charcode = 0;
-            if (HOLD(f).engine().sq_evt(p.kbd.down ? SQ_KEYDOWN : SQ_KEYUP, f, d))
-                return SRBIT_ACCEPTED;
+            d.kbd.casw = casw;
+            if (HOLD(f).engine().sq_evt(dn ? SQ_KEYDOWN : SQ_KEYUP, f, d))
+                return true;
         }
 
-    if (p.kbd.down)
-    {
-        ts::uint32 casw = 0;
-        if ( GetKeyState(VK_CONTROL) < 0 ) casw |= casw_ctrl;
-        if ( GetKeyState(VK_MENU) < 0 ) casw |= casw_alt;
-        if ( GetKeyState(VK_SHIFT) < 0 ) casw |= casw_shift;
-        if ( GetKeyState(VK_LWIN) < 0 || GetKeyState(VK_RWIN) < 0 ) casw |= casw_win;
+    if (dn)
+        simulate_kbd( scan, casw );
 
-        simulate_kbd( p.kbd.scan, casw );
-    }
-
-    return 0;
+    return false;
 }
 
-ts::uint32 gui_c::handle_char( ts::wchar c )
+bool gui_c::handle_char( wchar_t c )
 {
-    if (RID f = gui->get_active_focus())
+    if ( c == 8 || c == 9 || c == 27 ) // some codes cannot be handled by wchar
+        return false;
+
+    if (RID f = gui->get_focus())
         if (allow_input(f))
         {
             redraw_collector_s dch;
@@ -429,51 +418,42 @@ ts::uint32 gui_c::handle_char( ts::wchar c )
             evt_data_s d;
             d.kbd.scan = 0;
             d.kbd.charcode = c;
+            d.kbd.casw = 0;
             HOLD(f).engine().sq_evt(SQ_CHAR, f, d);
-            return SRBIT_ACCEPTED;
+            return true;
         }
-    return 0;
+    return false;
 }
 
-ts::uint32 gui_c::mouse(const system_event_param_s & p)
+void gui_c::handle_mouse( ts::mouse_event_e me, const ts::ivec2 &scrpos )
 {
     redraw_collector_s dch;
 
     if (dndproc)
     {
-        if (p.mouse.message == WM_MOUSEMOVE)
-            dndproc->mm( ts::ref_cast<ts::ivec2>( p.mouse.pos ) );
-        else if (p.mouse.message == WM_LBUTTONUP)
+        if (me == ts::MEVT_MOVE)
+            dndproc->mm( ts::ref_cast<ts::ivec2>( scrpos ) );
+        else if (me == ts::MEVT_LUP)
             dndproc->droped();
     }
     
-    if (p.mouse.message == WM_MOUSEWHEEL)
+    if (me == ts::MEVT_WHEELUP || me == ts::MEVT_WHEELDN)
         if (RID f = gui->get_minside())
             if (allow_input(f))
             {
                 evt_data_s d;
-                d.mouse.screenpos = ts::ref_cast<ts::ivec2>( p.mouse.pos );
-
-                int rot = GET_WHEEL_DELTA_WPARAM(p.mouse.wp);
-
-                int rot2 = ts::lround((float)rot / (float)WHEEL_DELTA);
-                if (rot2 == 0) rot2 = ts::isign(rot);
-                if (rot2 > 10) rot2 = 10;
-                if (rot2 < -10) rot2 = -10;
+                d.mouse.screenpos = scrpos;
 
                 rectengine_c &engine = HOLD(f).engine();
-                for (; rot2 > 0; --rot2)
+                if (me == ts::MEVT_WHEELUP)
                     engine.sq_evt(SQ_MOUSE_WHEELUP, engine.getrid(), d);
 
-                for (; rot2 < 0; ++rot2)
+                if ( me == ts::MEVT_WHEELDN )
                     engine.sq_evt(SQ_MOUSE_WHEELDOWN, engine.getrid(), d);
-
-                return SRBIT_ACCEPTED;
             }
-    return 0;
 }
 
-void gui_c::loop()
+void gui_c::sys_loop()
 {
     int sleep = 1;
 
@@ -516,56 +496,7 @@ void gui_c::loop()
 
         app_fix_sleep_value(sleep);
     }
-    g_sysconf.sleep = sleep;
-}
-
-DWORD gui_c::handler_SEV_WCHAR(const system_event_param_s & p)
-{
-    UNSTABLE_CODE_PROLOG
-        return handle_char(p.c);
-    UNSTABLE_CODE_EPILOG
-    return 0;
-}
-
-DWORD gui_c::handler_SEV_KEYBOARD(const system_event_param_s & p)
-{
-    UNSTABLE_CODE_PROLOG
-        return keyboard(p);
-    UNSTABLE_CODE_EPILOG
-    return 0;
-}
-
-DWORD gui_c::handler_SEV_MOUSE(const system_event_param_s & p)
-{
-    UNSTABLE_CODE_PROLOG
-        return mouse(p);
-    UNSTABLE_CODE_EPILOG
-    return 0;
-}
-
-DWORD gui_c::handler_SEV_LOOP(const system_event_param_s &)
-{
-    UNSTABLE_CODE_PROLOG
-        loop();
-    UNSTABLE_CODE_EPILOG
-    return 0;
-}
-DWORD gui_c::handler_SEV_IDLE( const system_event_param_s &)
-{
-    UNSTABLE_CODE_PROLOG
-        loop();
-    UNSTABLE_CODE_EPILOG
-	return 0;
-}
-
-ts::uint32 gui_c::gm_handler(gmsg<GM_ROOT_FOCUS>&p)
-{
-    if (p.pass > 0)
-    {
-        if (p.activefocus) set_focus(p.activefocus);
-        return GMRBIT_ABORT;
-    }
-    return 0;
+    ts::master().sleep = sleep;
 }
 
 ts::uint32 gui_c::gm_handler(gmsg<GM_UI_EVENT>&e)
@@ -610,7 +541,7 @@ void gui_c::exclusive_input(RID r, bool set)
         mouse_lock(RID());
         mouse_outside();
         dirty_hover_data();
-        ReleaseCapture();
+        ts::master().release_capture();
 
     } else
     {
@@ -648,7 +579,7 @@ bool gui_c::allow_input(RID r, bool check_click) const
 
     }
 
-    return sysmodal == 0 && (m_exclusive_input.count() == 0 || (m_exclusive_input.last(RID()) >>= r) || is_menu(r));
+    return !ts::master().is_sys_loop && (m_exclusive_input.count() == 0 || (m_exclusive_input.last(RID()) >>= r) || is_menu(r));
 }
 
 guirect_watch_c::guirect_watch_c(RID r, GUIPARAMHANDLER h, GUIPARAM p):watchrid(r), h(h), p(p)
@@ -665,29 +596,37 @@ guirect_watch_c::~guirect_watch_c()
 }
 
 
-void gui_c::nomorerect(RID rid, bool isroot)
+void gui_c::nomorerect(RID rid )
 {
-    if (isroot) m_roots.find_remove_fast(rid);
+    bool isroot = m_roots.find_remove_fast(rid);
+    if ( isroot ) m_hoverdata.rootfocushistory.find_remove_slow( rid );
     bool dhd = false;
     if (rid == m_hoverdata.active_focus) { m_hoverdata.active_focus = RID(); dhd = true; }
-    if (rid == m_hoverdata.focus) { m_hoverdata.focus = RID(); dhd = true; }
+    if (rid == m_hoverdata.root_focus) { m_hoverdata.root_focus = RID(); m_hoverdata.active_focus = RID(); dhd = true; }
     if (rid == m_hoverdata.locked) { m_hoverdata.locked = RID(); dhd = true; }
     if (rid == m_hoverdata.minside) { m_hoverdata.minside = RID(); dhd = true; }
     if (rid == m_hoverdata.rid) { m_hoverdata.rid = RID(); dhd = true; }
     if (dhd) dirty_hover_data();
     if (isroot)
     {
-        if (m_exclusive_input.find_remove_slow(rid) >= 0)
-            if (RID rooti = m_roots.last(RID()))
+        m_exclusive_input.find_remove_slow( rid );
+
+        if (!get_focus())
+        {
+            if ( RID rooti = m_hoverdata.rootfocushistory.last( RID() ) )
             {
-                ASSERT(allow_input(rooti));
-                if (rectengine_root_c *root = HOLD(rooti)().getroot())
-                {
-                    gui->set_focus(rooti);
-                    root->update_foreground();
-                }
+                m_hoverdata.rootfocushistory.remove_last();
+                if ( allow_input( rooti ) )
+                    if ( rectengine_root_c *root = HOLD( rooti )( ).getroot() )
+                    {
+                        gui->set_focus( rooti );
+                        root->update_foreground();
+                    }
             }
+        }
     }
+    if ( m_hoverdata.root_focus && !m_hoverdata.active_focus )
+        m_hoverdata.active_focus = m_hoverdata.root_focus;
 
     // provide RID's reuse
     //due RID is index, we want to minimize RID grow
@@ -882,42 +821,65 @@ const hover_data_s &gui_c::get_hoverdata( const ts::ivec2 & screenmousepos )
     return m_hoverdata;
 }
 
-void gui_c::set_focus(RID rid, bool force_active_focus)
+void gui_c::set_focus(RID rid)
 {
-    if (m_hoverdata.focus == rid) 
-    {
-        if (force_active_focus) m_hoverdata.active_focus = rid;
-        if (rid)
-        {
-            rectengine_root_c * root = HOLD(rid)().getroot();
-            if (root) root->set_system_focus();
-        }
+    if ( rid && !HOLD( rid )( ).accept_focus() )
         return;
-    }
-    evt_data_s d;
-    d.changed.focus = false;
-    d.changed.is_active_focus = force_active_focus;
-    if (m_hoverdata.focus)
-    {
-        RID old = m_hoverdata.focus;
-        m_hoverdata.focus = RID();
-        HOLD(old).engine().sq_evt(SQ_FOCUS_CHANGED, old, d);
-        if (!rid || !HOLD(rid))
-            return;
-    }
-    d.changed.focus = true;
-    d.changed.is_active_focus = force_active_focus;
-    m_hoverdata.focus = rid;
-    HOLD(rid).engine().sq_evt(SQ_FOCUS_CHANGED, rid, d);
-    if ( d.changed.is_active_focus )
-        m_hoverdata.active_focus = rid;
 
-    if (m_hoverdata.focus)
+    RID oldfocus = get_focus();
+
+    auto set_root_focus = [this]( RID rid )
     {
-        rectengine_root_c * root = HOLD(m_hoverdata.focus)().getroot();
-        root->set_system_focus();
+        m_hoverdata.rootfocushistory.find_remove_slow( rid );
+        if ( m_hoverdata.root_focus != rid )
+        {
+            if ( m_hoverdata.root_focus )
+            {
+                m_hoverdata.rootfocushistory.find_remove_slow( m_hoverdata.root_focus );
+                m_hoverdata.rootfocushistory.add( m_hoverdata.root_focus );
+            }
+        }
+
+        m_hoverdata.root_focus = rid;
+    };
+
+    if (rid)
+    {
+        if ( m_roots.present( rid ) )
+        {
+            set_root_focus( rid );
+            m_hoverdata.active_focus = HOLD( rid )( ).getroot()->active_focus( RID() );
+        }
+        else
+        {
+            rectengine_root_c *root = HOLD( rid )( ).getroot();
+            set_root_focus( root->getrid() );
+            m_hoverdata.active_focus = root->active_focus( rid );
+        }
+        rectengine_root_c * root = HOLD( m_hoverdata.root_focus )( ).getroot();
+        if ( root ) root->set_system_focus();
+    } else
+    {
+        set_root_focus( RID() );
+        m_hoverdata.active_focus = RID();
     }
 
+
+    RID newfocus = get_focus();
+    if (oldfocus != newfocus )
+    {
+        evt_data_s d;
+        d.changed.focus = false;
+        if ( oldfocus )
+        {
+            HOLD( oldfocus ).engine().sq_evt( SQ_FOCUS_CHANGED, oldfocus, d );
+        }
+        d.changed.focus = true;
+        if ( newfocus )
+        {
+            HOLD( newfocus ).engine().sq_evt( SQ_FOCUS_CHANGED, newfocus, d );
+        }
+    }
 }
 
 void gui_c::mouse_lock( RID rid )
@@ -1031,9 +993,7 @@ void gui_c::check_hintzone( const ts::ivec2 & screenmousepos )
 
 ts::ivec2 gui_c::get_cursor_pos() const
 {
-    ts::ivec2 cp;
-    GetCursorPos(&ts::ref_cast<POINT>(cp));
-    return cp;
+    return ts::master().get_cursor_pos();
 }
 
 dragndrop_processor_c::dragndrop_processor_c(guirect_c *dndrect):dndrect(dndrect)

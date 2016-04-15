@@ -278,7 +278,7 @@ void dialog_firstrun_c::go2page(int page_)
 
             radio(ARRAY_WRAPPER(items), DELEGATE(this, handler_0), as_param(choice0));
 
-            selpath = textfield(CONSTWSTR(""), MAX_PATH, TFR_PATH_SELECTOR, DELEGATE(this, path_check_0));
+            selpath = textfield(CONSTWSTR(""), MAX_PATH_LENGTH, TFR_PATH_SELECTOR, DELEGATE(this, path_check_0));
             handler_0(RID(), as_param(choice0));
         }
 
@@ -331,7 +331,7 @@ void dialog_firstrun_c::go2page(int page_)
             .append(header_append));
         vspace(25);
 
-        profile = textfield(profilename, ts::tmax(0, MAX_PATH - copyto.get_length() - 1), TFR_TEXT_FILED, DELEGATE(this, path_check_1));
+        profile = textfield(profilename, ts::tmax(0, MAX_PATH_LENGTH - copyto.get_length() - 1), TFR_TEXT_FILED, DELEGATE(this, path_check_1));
 
         vspace(20);
         infolabel = label(gen_info());
@@ -354,7 +354,7 @@ void dialog_firstrun_c::go2page(int page_)
 
 /*virtual*/ void dialog_firstrun_c::on_close()
 {
-    sys_exit(0);
+    ts::master().sys_exit(0);
 }
 
 void dialog_firstrun_c::getbutton(bcreate_s &bcr)
@@ -429,7 +429,7 @@ void dialog_firstrun_c::getbutton(bcreate_s &bcr)
 static bool check_copy_valid(const ts::wstr_c &copyto, const ts::wstr_c &from)
 {
     ts::wstrings_c files;
-    ts::find_files(ts::fn_join(from, CONSTWSTR("*.*")), files, 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY, true);
+    ts::find_files(ts::fn_join(from, CONSTWSTR("*.*")), files, ATTR_ANY, ATTR_DIR, true);
 
     ts::buf_c b;
     for (const ts::wstr_c &fn2c : files)
@@ -494,7 +494,7 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
 
     cfg().language( deflng );
     if (is_autostart)
-        autostart(exepath, CONSTWSTR("minimize"));
+        ts::master().sys_autostart( CONSTWSTR("Isotoxin"), exepath, CONSTWSTR("minimize"));
 
     if (exit) 
     {
@@ -503,8 +503,8 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
         if (run_another_place)
         {
             ts::wstr_c another_exe = ts::fn_join(copyto, ts::fn_get_name_with_ext(ts::get_exe_full_name()));
-            another_exe.append(CONSTWSTR(" wait ")).append_as_uint(GetCurrentProcessId());
-            ts::start_app(another_exe, nullptr);
+            ts::wstr_c another_exe_par( CONSTWSTR( "wait " ) );  another_exe_par.append_as_uint( ts::master().process_id() );
+            ts::master().start_app(another_exe, another_exe_par, nullptr, false);
         }
 
         on_close();

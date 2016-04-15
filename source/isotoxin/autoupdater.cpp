@@ -1,5 +1,15 @@
 #include "isotoxin.h"
+
+#ifdef _WIN32
+#define _NTOS_
+#pragma push_macro("ERROR")
+#undef ERROR
+//#include <winsock2.h> // ntol
 #include "curl/include/curl/curl.h"
+#pragma pop_macro("ERROR")
+#endif // _WIN32
+
+
 #pragma warning (disable:4324)
 #include "libsodium/src/libsodium/include/sodium.h"
 
@@ -232,8 +242,6 @@ void set_proxy_curl( CURL *curl, int proxy_type, const ts::asptr &proxy_addr )
 
 void autoupdater()
 {
-    ts::tmpalloc_c tmpalloc;
-
     ts::astrings_c addresses;
 
     auto aar = auparams().lock_read();
@@ -524,7 +532,7 @@ bool check_autoupdate()
         if (u.updfail)
             return true; // continue run
     
-        ts::start_app(CONSTWSTR("isotoxin.exe"), nullptr);
+        ts::master().start_app(CONSTWSTR("isotoxin.exe"), ts::wstr_c(), nullptr, false);
 
         return false;
     }

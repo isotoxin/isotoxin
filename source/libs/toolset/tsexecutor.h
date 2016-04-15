@@ -71,11 +71,14 @@ class task_executor_c
 
     spinlock::syncvar< sync_s > sync;
 
-    static DWORD WINAPI worker_proc(LPVOID ap);
+#ifdef _WIN32
+    static unsigned long __stdcall worker_proc(void *ap);
+    void *evt = nullptr;
+#endif // _WIN32
+
     void work();
 
-    HANDLE evt = nullptr;
-    DWORD base_thread_id;
+    uint32 base_thread_id;
     int maximum_workers = 1;
 
     void check_worker();

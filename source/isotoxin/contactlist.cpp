@@ -275,13 +275,13 @@ bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
 
             getengine().trunc_children(2);
 
-            gui_textfield_c &tf = (MAKE_CHILD<gui_textfield_c>(getrid(), from_utf8(eval), MAX_PATH, 0, false) << (gui_textedit_c::TEXTCHECKFUNC)head_stuff_s::_edt);
+            gui_textfield_c &tf = (MAKE_CHILD<gui_textfield_c>(getrid(), from_utf8(eval), MAX_PATH_LENGTH, 0, false) << (gui_textedit_c::TEXTCHECKFUNC)head_stuff_s::_edt);
             hstuff().editor = tf.getrid();
             tf.leech(TSNEW(leech_edit, hstuff().last_head_text_pos.x));
-            gui->set_focus(hstuff().editor, true);
+            gui->set_focus(hstuff().editor);
             tf.end();
-            tf.register_kbd_callback(DELEGATE( this, cancel_edit ), SSK_ESC, false);
-            tf.register_kbd_callback(DELEGATE( this, apply_edit ), SSK_ENTER, false);
+            tf.register_kbd_callback(DELEGATE( this, cancel_edit ), ts::SSK_ESC, false);
+            tf.register_kbd_callback(DELEGATE( this, apply_edit ), ts::SSK_ENTER, false);
 
             gui_button_c &bok = MAKE_CHILD<gui_button_c>(getrid());
             bok.set_face_getter(BUTTON_FACE_PRELOADED(confirmb));
@@ -1089,23 +1089,6 @@ bool gui_contact_item_c::allow_drop() const
                 }
             }
 
-            /*
-            if (contact->is_meta() && flags.is(F_PROTOHIT)) // not group
-            {
-                int isz = GET_THEME_VALUE(protoiconsize);
-                statedd.alpha = 128;
-                ts::ivec2 p(ca.rt());
-                contact->subiterate([&](contact_c *c) {
-                    if (c->is_protohit(false))
-                        if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
-                        {
-                            p.x -= isz;
-                            m_engine->draw( p, ap->get_icon(isz), ts::irect(0,0, isz, isz), true );
-                        }
-                } );
-            }
-            */
-
             m_engine->end_draw();
 
             if (contact)
@@ -1244,7 +1227,8 @@ bool gui_contact_item_c::allow_drop() const
                         ts::ivec2 p = GET_THEME_VALUE(achtung_shift) + noti_draw_area.lb();
                         p.y -= bachtung->info().sz.y;
                         bachtung->draw(*m_engine.get(), p);
-                        dd.offset += p;
+                        ts::irect trect = ts::irect::from_center_and_size( p + bachtung->center, bachtung->info().sz );
+                        dd.offset += trect.lt;
                         dd.size = bachtung->info().sz;
                         tdp.forecolor = &GET_THEME_VALUE(achtung_content_color);
                     }

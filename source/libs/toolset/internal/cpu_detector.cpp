@@ -8,6 +8,7 @@
  *  be found in the AUTHORS file in the root of the source tree.
  */
 #include "toolset.h"
+#include "platform.h"
 #include "cpu_detector.h"
 
 namespace ts

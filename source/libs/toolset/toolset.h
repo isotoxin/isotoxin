@@ -1,8 +1,10 @@
 /*
     toolset
-    (C) 2014-2015 ROTKAERMOTA (TOX: ED783DA52E91A422A48F984CAC10B6FF62EE928BE616CE41D0715897D7B7F6050B2F04AA02A1)
+    (C) 2014-2016 ROTKAERMOTA (TOX: ED783DA52E91A422A48F984CAC10B6FF62EE928BE616CE41D0715897D7B7F6050B2F04AA02A1)
 */
 #pragma once
+
+#define _ALLOW_RTCc_IN_STL
 
 #ifdef _WIN32
 #define WINDOWS_ONLY
@@ -32,8 +34,10 @@
 
 #define DELEGATE(a,method) fastdelegate::MakeDelegate((a), &ts::clean_type<decltype(a)>::type::method)
 
+#ifndef TS_SKIP_FREETYPE
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#endif
 
 #if defined _FINAL || defined _DEBUG_OPTIMIZED
 #ifndef DLMALLOC_USED
@@ -77,7 +81,6 @@ extern "C"
 #endif
 
 #include "memspy/memspy.h"
-
 
 // I know, know... TSNEW is ugly. May be later I'll use global new and delete
 
@@ -178,24 +181,6 @@ template<typename NUM> struct minimum
 
 #pragma warning (push)
 #pragma warning (disable:4820)
-
-#undef STRICT
-#define STRICT
-
-#ifndef _WINSOCK2API_ 
-#include <winsock2.h>
-#endif
-
-#ifndef _WINDOWS_
-
-#define WINVER              0x0500 // 0x0501 - Windows XP and Windows .NET Server
-#define _WIN32_WINNT        0x0500
-#define _WIN32_IE           0x0500 // SHGetFolderPath for Win2k
-#define _RICHEDIT_VER       0x0300
-
-#include <windows.h>
-
-#endif
 
 #include <float.h>
 
@@ -529,7 +514,7 @@ template<class T, class... _Valty> inline void renew(T &obj, _Valty&&... _Val)
 
 template<typename T> class make_pod // This hack is usable for hide constructors or copy operators of some pod type. Never use it for non true pod types...or... sure, you know what you do
 {
-    byte data[sizeof(T)];
+    uint8 data[sizeof(T)];
 public:
     operator T&() { return *(T *)data; }
     T& cget() { memset(data, 0, sizeof(data)); return *(T *)data; }
@@ -555,7 +540,7 @@ public:
 
 template<aint sz> class uninitialized
 {
-    byte data[sz];
+    uint8 data[sz];
     bool initialized = false;
 public:
     template<typename T, class... _Valty> T &initialize(_Valty&&... _Val)
@@ -703,45 +688,13 @@ class tmpalloc_c
     __declspec(thread) static tmpalloc_c *core;
 
     tmpbuf_s bufs[MAX_TEMP_ARRAYS];
-    DWORD threadid;
+    uint32 threadid;
 
 public:
-    tmpalloc_c()
-    {
-        threadid = GetCurrentThreadId();
-        ASSERT(core == nullptr);
-        core = this;
-    }
-    ~tmpalloc_c()
-    {
-        ASSERT(core == this);
-        core = nullptr;
-    }
-    static tmpbuf_s *get()
-    {
-        ASSERT(core, "create tmpalloc_c object at begin of your thread proc");
-        ASSERT(GetCurrentThreadId() == core->threadid);
-        for( tmpbuf_s&b : core->bufs )
-        {
-            if (!b.used)
-            {
-                b.used = true;
-                return &b;
-            }
-        }
-        return TSNEW( tmpbuf_s, true );
-    }
-    static void unget( tmpbuf_s * b )
-    {
-        ASSERT(GetCurrentThreadId() == core->threadid);
-        if (b->extra)
-            TSDEL(b);
-        else
-        {
-            ASSERT(b->used);
-            b->used = false;
-        }
-    }
+    tmpalloc_c();
+    ~tmpalloc_c();
+    static tmpbuf_s *get();
+    static void unget( tmpbuf_s * b );
 };
 
 struct TMP_ALLOCATOR
@@ -849,8 +802,6 @@ public:
         return (c >= &m_buffer) && disp < (count * bsize);
     }
 };
-
-
 
 #define DUMMY_USED_WARNING(b_quiet) if (!b_quiet) WARNING("Dummy used")
 
@@ -1047,6 +998,8 @@ template <typename T> struct dummy
 #include "tssqlite.h"
 #include "tszip.h"
 #include "tsexecutor.h"
+#include "tswnd.h"
+#include "tssys.h"
 
 #pragma pack (pop)
 
@@ -1211,6 +1164,18 @@ struct lnk_s
         return ARGB<auint>(oiR, oiG, oiB, oiA);
     }
 
+    INLINE TSCOLOR UNMULTIPLY( TSCOLOR c )
+    {
+        extern uint8 __declspec( align( 256 ) ) divtbl[ 256 ][ 256 ];
+
+        uint a = ALPHA( c );
+        return divtbl[ a ][ c & 0xff ] |
+            ( (uint)divtbl[ a ][ ( c >> 8 ) & 0xff ] << 8 ) |
+            ( (uint)divtbl[ a ][ ( c >> 16 ) & 0xff ] << 16 ) |
+            ( c & 0xff000000 );
+
+    }
+
     INLINE TSCOLOR MULTIPLY(TSCOLOR c1, TSCOLOR c2)
     {
         extern uint8 __declspec(align(256)) multbl[256][256];
@@ -1311,9 +1276,14 @@ struct lnk_s
 }
 
 #if defined _DEBUG || defined _CRASH_HANDLER
-#include "internal/excpn.h"
+#ifdef _WIN32
+struct _EXCEPTION_POINTERS;
+long __stdcall crash_exception_filter( _EXCEPTION_POINTERS* pExp );
+extern "C" { void * __cdecl _exception_info( void ); }
 #define UNSTABLE_CODE_PROLOG __try {
-#define UNSTABLE_CODE_EPILOG } __except(EXCEPTIONFILTER()){}
+//#define UNSTABLE_CODE_EPILOG } __except(crash_exception_filter(GetExceptionInformation())){}
+#define UNSTABLE_CODE_EPILOG } __except(crash_exception_filter((_EXCEPTION_POINTERS *)_exception_info())){}
+#endif
 #else
 #define UNSTABLE_CODE_PROLOG ;
 #define UNSTABLE_CODE_EPILOG ;

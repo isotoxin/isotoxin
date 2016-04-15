@@ -541,6 +541,7 @@ static void box_blur_line(int box_width, int even_offset, const ts::uint8 *src, 
         {
             /* If even_offset isn't 1 or -1, there's some error. */
             FORBIDDEN();
+            return;
         }
     }
 

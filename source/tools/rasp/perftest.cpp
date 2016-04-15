@@ -259,7 +259,7 @@ struct data4test_s
     void alphablend_sys(int x, int y, uint8 a)
     {
         BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, (uint8)a, AC_SRC_ALPHA };
-        AlphaBlend(tgt.DC(), x, y, alpha.info().sz.x, alpha.info().sz.y, alpha.DC(), 0, 0, alpha.info().sz.x, alpha.info().sz.y, blendPixelFunction);
+        //AlphaBlend(tgt.DC(), x, y, alpha.info().sz.x, alpha.info().sz.y, alpha.DC(), 0, 0, alpha.info().sz.x, alpha.info().sz.y, blendPixelFunction);
     }
 
     void process_alphablend() // 496 // 870

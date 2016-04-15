@@ -23,7 +23,7 @@ template <typename T, typename ALLOCATOR> class DEFAULT_BEHAVIOUR_CLEAR_ONLY : p
 {
 protected:
 
-    typedef decltype(clean_type<UNIT_PTR>::type) CLEAN_OBJTYPE;
+    typedef decltype(clean_type<T>::type) CLEAN_OBJTYPE;
 
     TS_STATIC_CHECK( std::is_pod<T>::value, "T must be pod" );
     static void destructor(T u) {}

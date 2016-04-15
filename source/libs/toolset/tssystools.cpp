@@ -1,43 +1,9 @@
 #include "toolset.h"
+#include "internal/platform.h"
 
 namespace ts
 {
-__declspec(thread) DWORD Time::thread_current_time = 0;
 
-
-void	TSCALL sys_beep( sys_beep_e beep )
-{
-    switch (beep)
-    {
-        case ts::SBEEP_INFO:
-            MessageBeep(MB_ICONINFORMATION);
-            break;
-        case ts::SBEEP_WARNING:
-            MessageBeep(MB_ICONWARNING);
-            break;
-        case ts::SBEEP_ERROR:
-            MessageBeep(MB_ICONERROR);
-            break;
-        case ts::SBEEP_BADCLICK:
-            MessageBeep(0xFFFFFFFF);
-            break;
-    }
-
-}
-
-void	TSCALL hide_hardware_cursor()
-{
-    while (ShowCursor(false) >= 0)
-    {
-    }
-}
-
-void	TSCALL show_hardware_cursor()
-{
-    while (ShowCursor(true) < 0)
-    {
-    }
-}
 
 wstr_c  TSCALL monitor_get_description(int monitor)
 {
@@ -120,30 +86,30 @@ irect   TSCALL monitor_get_max_size_fs(int monitor)
     return mm.rr;
 }
 
-void    TSCALL monitor_get_max_size(RECT *r, int monitor)
+irect    TSCALL monitor_get_max_size(int monitor)
 {
-    *(int *)r = monitor;
     struct m
     {
-        static BOOL CALLBACK calcmrect(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
+        irect rr;
+        int mi;
+        static BOOL CALLBACK calcmrect( HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData )
         {
-            int * mon = (int *)dwData;
-            if (*mon == 0)
+            m * mm = (m *)dwData;
+            if ( mm->mi == 0 )
             {
-                RECT * r = (RECT *)dwData;
-
                 MONITORINFO mi;
-                mi.cbSize = sizeof(MONITORINFO);
-                GetMonitorInfo(hMonitor, &mi);
-                *r = mi.rcWork;
+                mi.cbSize = sizeof( MONITORINFO );
+                GetMonitorInfo( hMonitor, &mi );
+                mm->rr = ref_cast<irect>( mi.rcWork );
 
                 return FALSE;
             }
-            *mon = *mon - 1;
+            --mm->mi;
             return TRUE;
         }
-    };
-    EnumDisplayMonitors(nullptr, nullptr, m::calcmrect, (LPARAM)r);
+    } mm; mm.mi = monitor;
+    EnumDisplayMonitors( nullptr, nullptr, m::calcmrect, (LPARAM)&mm );
+    return mm.rr;
 }
 
 ivec2   TSCALL wnd_get_center_pos( const ts::ivec2& size )
@@ -187,14 +153,13 @@ void    TSCALL wnd_fix_rect(irect &r, int minw, int minh)
 
     for (int i = 0; i < mc; ++i)
     {
-        RECT mr;
-        monitor_get_max_size(&mr, i);
+        irect mr = monitor_get_max_size(i);
         ivec2 csdvig(0, 0);
-        if (r.lt.y < mr.top) csdvig.y += (mr.top - r.lt.y);
-        if ((r.lt.y + 20) > mr.bottom) csdvig.y -= (r.lt.y + 20) - mr.bottom;
+        if (r.lt.y < mr.lt.y) csdvig.y += (mr.lt.y - r.lt.y);
+        if ((r.lt.y + 20) > mr.rb.y) csdvig.y -= (r.lt.y + 20) - mr.rb.y;
 
-        if ((r.lt.x + ww) < (mr.left + 100)) csdvig.x += ((mr.left + 100) - (r.lt.x + ww));
-        if ((r.lt.x) > (mr.right - 50)) csdvig.x -= (r.lt.x - (mr.right - 50));
+        if ((r.lt.x + ww) < (mr.lt.x + 100)) csdvig.x += ((mr.lt.x + 100) - (r.lt.x + ww));
+        if ((r.lt.x) > (mr.rb.x - 50)) csdvig.x -= (r.lt.x - (mr.rb.x - 50));
 
         uint a = csdvig.sqlen();
         uint b = sdvig.sqlen();
@@ -398,25 +363,6 @@ bitmap_c TSCALL get_clipboard_bitmap()
 void TSCALL open_link(const ts::wstr_c &lnk)
 {
     ShellExecuteW(nullptr, L"open", lnk, nullptr, nullptr, SW_SHOWNORMAL);
-}
-
-bool TSCALL start_app( const wsptr &cmdline, HANDLE *hProcess)
-{
-    STARTUPINFOW si = { sizeof(si) };
-    PROCESS_INFORMATION pi = { 0 };
-    if (CreateProcessW(nullptr, tmp_wstr_c(cmdline).str(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi))
-    {
-        if (hProcess)
-        {
-            *hProcess = pi.hProcess;
-        }
-        return true;
-
-    }
-    else
-    {
-        return false;
-    }
 }
 
 bool TSCALL is_admin_mode()

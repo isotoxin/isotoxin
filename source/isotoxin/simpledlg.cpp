@@ -31,10 +31,9 @@ RID dialog_msgbox_params_s::summon()
 dialog_msgbox_c::dialog_msgbox_c(MAKE_ROOT<dialog_msgbox_c> &data) :gui_isodialog_c(data), m_params(data.prms)
 {
     deftitle = m_params.etitle;
-    gui->register_kbd_callback( DELEGATE( this, copy_text ), SSK_C, gui_c::casw_ctrl);
-    gui->register_kbd_callback( DELEGATE( this, on_enter_press_func ), SSK_ENTER, 0);
-    gui->register_kbd_callback( DELEGATE( this, on_enter_press_func ), SSK_PADENTER, 0);
-    gui->register_kbd_callback( DELEGATE( this, on_esc_press_func ), SSK_ESC, 0);
+    gui->register_kbd_callback( DELEGATE( this, copy_text ), ts::SSK_C, ts::casw_ctrl);
+    gui->register_kbd_callback( DELEGATE( this, on_enter_press_func ), ts::SSK_ENTER, 0);
+    gui->register_kbd_callback( DELEGATE( this, on_enter_press_func ), ts::SSK_PADENTER, 0);
 
     if ( m_params.bcancel_ )
     {
@@ -78,7 +77,6 @@ dialog_msgbox_c::~dialog_msgbox_c()
     {
         gui->unregister_kbd_callback(DELEGATE(this, copy_text));
         gui->unregister_kbd_callback(DELEGATE(this, on_enter_press_func));
-        gui->unregister_kbd_callback(DELEGATE(this, on_esc_press_func));
     }
 }
 
@@ -95,13 +93,6 @@ bool dialog_msgbox_c::on_enter_press_func(RID, GUIPARAM)
     on_confirm();
     return true;
 }
-
-bool dialog_msgbox_c::on_esc_press_func(RID, GUIPARAM)
-{
-    on_close();
-    return true;
-}
-
 
 bool dialog_msgbox_c::copy_text(RID, GUIPARAM)
 {
@@ -123,13 +114,13 @@ bool dialog_msgbox_c::copy_text(RID, GUIPARAM)
     switch (m_params.etitle) //-V719
     {
         case title_error:
-            ts::sys_beep( ts::SBEEP_ERROR );
+            ts::master().sys_beep( ts::SBEEP_ERROR );
             break;
         case title_information:
-            ts::sys_beep( ts::SBEEP_INFO );
+            ts::master().sys_beep( ts::SBEEP_INFO );
             break;
         case title_warning:
-            ts::sys_beep( ts::SBEEP_WARNING );
+            ts::master().sys_beep( ts::SBEEP_WARNING );
             break;
     }
 
@@ -408,9 +399,9 @@ bool dialog_entertext_c::on_esc_press_func(RID, GUIPARAM)
     {
         gui_textfield_c &tf = HOLD(pb).as<gui_textfield_c>();
         
-        tf.register_kbd_callback( DELEGATE( this, on_enter_press_func ), SSK_ENTER, false );
-        tf.register_kbd_callback( DELEGATE( this, on_enter_press_func ), SSK_PADENTER, false );
-        tf.register_kbd_callback( DELEGATE( this, on_esc_press_func ), SSK_ESC, false );
+        tf.register_kbd_callback( DELEGATE( this, on_enter_press_func ), ts::SSK_ENTER, false );
+        tf.register_kbd_callback( DELEGATE( this, on_enter_press_func ), ts::SSK_PADENTER, false );
+        tf.register_kbd_callback( DELEGATE( this, on_esc_press_func ), ts::SSK_ESC, false );
     }
 }
 
@@ -816,7 +807,7 @@ bool incoming_call_panel_c::b_ignore_call(RID, GUIPARAM)
 ts::uint32 incoming_call_panel_c::gm_handler(gmsg<ISOGM_CALL_STOPED> &c)
 {
     TSDEL(this);
-    return true;
+    return 0;
 }
 
 ts::uint32 incoming_call_panel_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
@@ -825,6 +816,196 @@ ts::uint32 incoming_call_panel_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
     {
         image = gui->theme().get_image(CONSTASTR("ringtone_anim"));
     }
+
+    return 0;
+}
+
+
+
+
+MAKE_ROOT<incoming_msg_panel_c>::~MAKE_ROOT()
+{
+    ts::irect r = HOLD( g_app->main )( ).getprops().screenrect(false);
+    r = ts::wnd_get_max_size(r);
+
+    me->tgt_y = r.rb.y - 3;
+    MODIFY( *me ).setminsize( me->getrid() ).pos( r.rb - ts::ivec2( me->get_min_size().x, 3 ) ).visible( true );
+}
+
+incoming_msg_panel_c::incoming_msg_panel_c( MAKE_ROOT<incoming_msg_panel_c> &data ) :gui_control_c( data ), hist( data.hist ), sender( data.sender ), post( data.post )
+{
+}
+
+incoming_msg_panel_c::~incoming_msg_panel_c()
+{
+    if ( gui )
+    {
+        dip = true;
+        gmsg<ISOGM_UPDATE_MESSAGE_NOTIFICATION>().send();
+        gui->delete_event( DELEGATE( this, endoflife ) );
+        gui->delete_event( DELEGATE( this, tick ) );
+    }
+}
+
+bool incoming_msg_panel_c::endoflife( RID, GUIPARAM )
+{
+    TSDEL( this );
+    return true;
+}
+
+/*virtual*/ void incoming_msg_panel_c::created()
+{
+    set_theme_rect( CONSTASTR( "imp" ), false );
+    __super::created();
+
+
+    DEFERRED_UNIQUE_CALL( 5.0, DELEGATE( this, endoflife ), 0 );
+    DEFERRED_UNIQUE_CALL( 0.01, DELEGATE( this, tick ), 0 );
+
+    avarect = g_app->preloaded_stuff().icon[ CSEX_UNKNOWN ]->info().sz + ts::ivec2(10);
+
+    msgitm = MAKE_CHILD<gui_message_item_c>( getrid(), hist, sender, CONSTASTR( "other" ), MTA_MESSAGE );
+    msgitm->set_passive();
+    msgitm->append_text( post, false );
+    int h = msgitm->calc_height_by_width( sz.x - avarect.x );
+
+    while(h > sz.y)
+    {
+        int i = post.message_utf8.find_last_pos( ' ' );
+        if (i < 0) break;
+        post.message_utf8.set_length( i ).append( CONSTASTR("...") );
+        msgitm->append_text( post, false, true );
+        h = msgitm->calc_height_by_width( sz.x - avarect.x );
+    }
+    sz.y = h;
+    if ( sz.y < avarect.y )
+        sz.y = avarect.y;
+
+    MODIFY( *msgitm ).pos( avarect.x, 0 ).size( ts::ivec2(sz.x- avarect.x, sz.y) ).show();
+    MODIFY( *this ).size( sz );
+
+    avarect.y = sz.y;
+
+    const button_desc_s *clb = gui->theme().get_button( CONSTASTR("close") );
+
+    gui_button_c &b = MAKE_CHILD<gui_button_c>( msgitm->getrid() );
+    b.set_face_getter( BUTTON_FACE( close ) );
+    b.set_handler( DELEGATE( this, endoflife ), nullptr );
+    b.leech( TSNEW( leech_dock_top_right_s, clb->size.x, clb->size.y, -2, -2 ) );
+    MODIFY( b ).show().size( b.get_min_size() );
+
+    DEFERRED_EXECUTION_BLOCK_BEGIN(0)
+    gmsg<ISOGM_UPDATE_MESSAGE_NOTIFICATION>().send();
+    DEFERRED_EXECUTION_BLOCK_END( 0 )
+
+}
+
+/*virtual*/ ts::ivec2 incoming_msg_panel_c::get_min_size() const
+{
+    return sz;
+}
+
+/*virtual*/ bool incoming_msg_panel_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
+{
+    if ( qp == SQ_DRAW && rid == getrid() )
+    {
+        __super::sq_evt( qp, rid, data );
+
+        m_engine->begin_draw();
+        ts::ivec2 addp = get_client_area().lt;
+
+        contact_root_c *cc = hist;
+        if ( cc->getkey().is_group() )
+            cc = sender->get_historian();
+
+        if ( const avatar_s *ava = cc->get_avatar() )
+        {
+            m_engine->draw( addp + ( avarect - ava->info().sz ) / 2, ava->extbody(), ava->alpha_pixels );
+        } else
+        {
+            const theme_image_s *icon = cc->getkey().is_group() ? g_app->preloaded_stuff().groupchat : g_app->preloaded_stuff().icon[ hist->get_meta_gender() ];
+            icon->draw( *m_engine.get(), addp + ( avarect - icon->info().sz ) / 2 );
+        }
+        m_engine->end_draw();
+
+
+        return true;
+    }
+
+    if ( msgitm && rid == msgitm->getrid() )
+    {
+        switch ( qp )
+        {
+        case SQ_MOUSE_LUP:
+
+            if ( HOLD( g_app->main )( ).getprops().is_collapsed() )
+                MODIFY( g_app->main ).decollapse();
+            else
+                HOLD( g_app->main )().getroot()->set_system_focus(true);
+
+            hist->reselect();
+            DEFERRED_UNIQUE_CALL( 0, DELEGATE( this, endoflife ), 0 );
+            return true;
+
+        case SQ_DETECT_AREA:
+            data.detectarea.area = AREA_HAND;
+            return true;
+        }
+        return true;
+    }
+
+    return __super::sq_evt( qp, rid, data );
+}
+
+bool incoming_msg_panel_c::tick( RID, GUIPARAM )
+{
+    if ( tgt_y != getprops().screenpos().y )
+    {
+        int y = ts::lround( ts::LERP<float>( (float)getprops().screenpos().y, (float)tgt_y, 0.3f ) );
+        if ( y != getprops().screenpos().y )
+        {
+            MODIFY( *this ).pos( getprops().screenpos().x, y );
+        }
+    }
+    DEFERRED_UNIQUE_CALL( 0.01, DELEGATE( this, tick ), 0 );
+    return true;
+}
+
+ts::uint32 incoming_msg_panel_c::gm_handler( gmsg<ISOGM_UPDATE_MESSAGE_NOTIFICATION>&n )
+{
+    if ( dip ) return 0;
+
+    if ( n.pass == 0 )
+    {
+        n.panels.set( this );
+        n.panels.sort( []( incoming_msg_panel_c *p1, incoming_msg_panel_c *p2 ) {
+            return p1->appeartime < p2->appeartime;
+        } );
+        return GMRBIT_CALLAGAIN;
+    } else
+    {
+        ts::irect r = HOLD( g_app->main )( ).getprops().screenrect( false );
+        r = ts::wnd_get_max_size( r );
+
+        int myh = -1;
+        for( incoming_msg_panel_c *p : n.panels )
+        {
+            if ( p && r.inside(p->getprops().screenpos()))
+            {
+                if ( p == this )
+                    myh = 0;
+                if ( myh >= 0 )
+                    myh += p->sz.y + 2;
+            }
+        }
+        tgt_y = r.rb.y + 2 - myh;
+    }
+
+    return 0;
+}
+
+ts::uint32 incoming_msg_panel_c::gm_handler( gmsg<GM_UI_EVENT>&ue )
+{
 
     return 0;
 }

@@ -25,10 +25,13 @@
  **********************************************************************/
 
 #include "toolset.h"
+#include "platform.h"
+
 #if !defined _FINAL || defined _CRASH_HANDLER
-#include "stkwlk.h"
 
 #ifdef _WIN32
+#include "stkwlk.h"
+
 // TODO - move to /src/win
 
 #include <tchar.h>
@@ -1078,5 +1081,7 @@ HMODULE StackWalker::DBGDLL() const
     return(m_sw->m_hDbhHelp);
 }
 
-#endif
+#endif // _WIN32
+
+
 #endif

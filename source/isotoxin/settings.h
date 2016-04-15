@@ -121,6 +121,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
         MASK_APPLICATION_VIDEO      = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_ADVANCED_VIDEOCALLS    = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_ADVANCED_TOOLS         = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_ADVANCED_MISC          = SETBIT( NUMGEN_NEXT( ctlm ) ),
 
         MASK_ADVANCED_DEBUG = SETBIT(NUMGEN_NEXT(ctlm)),
     };
@@ -172,7 +173,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     bool micvolset(RID, GUIPARAM);
     bool test_mic(RID, GUIPARAM);
 
-    int tools_bits = false;
+    int tools_bits = 0;
     bool advt_handler(RID, GUIPARAM);
 
     ts::astrmap_c video_codecs;
@@ -295,6 +296,7 @@ private:
         BGROUP_TYPING_NOTIFY,
         BGROUP_HISTORY,
         BGROUP_CALL_NOTIFY,
+        BGROUP_INCOMING_NOTIFY,
 
         BGROUP_count
     };
@@ -334,6 +336,9 @@ private:
     ts::flags32_s::BITS msgopts_current = 0;
     ts::flags32_s::BITS msgopts_original = 0;
 
+    ts::wstr_c tempfolder_sendimg;
+    ts::wstr_c tempfolder_handlemsg;
+
     ts::wstr_c auto_download_masks;
     ts::wstr_c manual_download_masks;
     ts::wstr_c downloadfolder;
@@ -356,7 +361,6 @@ private:
     ts::str_c proxy_addr;
     int useproxyfor = 0xffff;
 
-
     bool need2rewarn = false;
     ts::wstrings_c disabled_spellchk;
     ts::wstr_c tt_cache;
@@ -367,6 +371,9 @@ private:
     void on_delete_network_2(const ts::str_c&);
     bool addeditnethandler(dialog_protosetup_params_s &params);
     bool addnetwork(RID, GUIPARAM);
+
+    bool tempfolder_sendimg_edit_handler( const ts::wstr_c &v );
+    bool tempfolder_handlemsg_edit_handler( const ts::wstr_c &v );
 
     bool fileconfirm_handler(RID, GUIPARAM);
     bool fileconfirm_auto_masks_handler(const ts::wstr_c &v);
@@ -434,12 +441,12 @@ private:
     bool test_talk_device( RID, GUIPARAM );
     bool test_signal_device( RID, GUIPARAM );
 
-    static BOOL __stdcall enum_capture_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule, void *lpContext);
+    static int __stdcall enum_capture_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule, void *lpContext);
     void enum_capture_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule);
     void select_audio_capture_device( const ts::str_c& prm );
     menu_c list_audio_capture_devices();
 
-    static BOOL __stdcall enum_play_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule, void *lpContext);
+    static int __stdcall enum_play_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule, void *lpContext);
     void enum_play_devices(s3::DEVICE *device, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule);
     menu_c list_talk_devices();
     menu_c list_signal_devices();

@@ -88,15 +88,7 @@ END
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
-IDI_ICON_ONLINE         ICON                    "online.ico"
-IDI_ICON_AWAY           ICON                    "away.ico"
-IDI_ICON_DND            ICON                    "dnd.ico"
-IDI_ICON_ONLINE_MSG     ICON                    "online_msg.ico"
-IDI_ICON_AWAY_MSG       ICON                    "away_msg.ico"
-IDI_ICON_DND_MSG        ICON                    "dnd_msg.ico"
-IDI_ICON_OFFLINE        ICON                    "offline.ico"
-IDI_ICON_OFFLINE_MSG    ICON                    "offline_msg.ico"
-IDI_ICON_HOLLOW         ICON                    "hollow.ico"
+IDI_ICON                ICON                    "isotoxin.ico"
 
 /////////////////////////////////////////////////////////////////////////////
 //

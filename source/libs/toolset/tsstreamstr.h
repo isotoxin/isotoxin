@@ -132,7 +132,7 @@ public:
         return buffer;
     }
 private:
-    void set_hex(char *cc, byte b)
+    void set_hex(char *cc, uint8 b)
     {
         static char table[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
         cc[0] = table[b >> 4];
@@ -179,7 +179,7 @@ public:
     streamstr& operator<<(long n) { begin(); append_num<long,true>(n); return *this; }
     streamstr& operator<<(int64 n) { begin(); append_num<int64,true>(n); return *this; }
 
-    streamstr& operator<<(byte n) { begin(); append_num<uint>(n); return *this; }
+    streamstr& operator<<(uint8 n) { begin(); append_num<uint>(n); return *this; }
     streamstr& operator<<(unsigned short n) { begin(); append_num<uint32>(n); return *this; }
     streamstr& operator<<(uint n) { begin(); append_num<uint32>(n); return *this; }
     streamstr& operator<<(unsigned long n) { begin(); append_num<unsigned long>(n); return *this; }

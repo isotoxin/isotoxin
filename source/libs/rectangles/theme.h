@@ -243,6 +243,7 @@ struct theme_image_s : ts::image_extbody_c
 {
     const ts::bitmap_c *dbmp = nullptr;
     ts::irect rect;
+    ts::ivec2 center; // relative to rect
 
     struct animated_internals_s : public animation_c
     {

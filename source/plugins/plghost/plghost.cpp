@@ -437,6 +437,11 @@ int CALLBACK WinMainProtect(
     _In_  LPSTR lpCmdLine
     )
 {
+    if ( !lpCmdLine[0] )
+    {
+        MessageBoxA( nullptr, "usage: plghost <ipc token>", "", MB_OK );
+        return 0;
+    }
 
     int num_workers = 1; // TODO : set to number of processor cores minus 1 for better performance
 

@@ -75,9 +75,9 @@ dialog_prepareimage_c::dialog_prepareimage_c(MAKE_ROOT<dialog_prepareimage_c> &d
 
     shadow = gui->theme().get_rect(CONSTASTR("shadow"));
 
-    gui->register_kbd_callback( DELEGATE( this, paste_hotkey_handler ), SSK_V, gui_c::casw_ctrl);
-    gui->register_kbd_callback( DELEGATE( this, paste_hotkey_handler ), SSK_INSERT, gui_c::casw_shift);
-    gui->register_kbd_callback( DELEGATE( this, space_key ), SSK_SPACE, 0);
+    gui->register_kbd_callback( DELEGATE( this, paste_hotkey_handler ), ts::SSK_V, ts::casw_ctrl);
+    gui->register_kbd_callback( DELEGATE( this, paste_hotkey_handler ), ts::SSK_INSERT, ts::casw_shift);
+    gui->register_kbd_callback( DELEGATE( this, space_key ), ts::SSK_SPACE, 0);
 
     animation(RID(), nullptr);
 }
@@ -1028,7 +1028,7 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
 
     if (contact_root_c *c = contacts().rfind(ck))
     {
-        ts::wstr_c tmpsave(CONSTWSTR("%TEMP%\\$$$isotoxin\\sendimg\\"));
+        ts::wstr_c tmpsave(cfg().temp_folder_sendimg());
         path_expand_env(tmpsave, ts::wstr_c());
         ts::make_path(tmpsave, 0);
         ts::md5_c md5;

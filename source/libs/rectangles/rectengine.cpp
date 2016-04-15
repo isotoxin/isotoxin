@@ -1,5 +1,4 @@
 #include "rectangles.h"
-#include <windowsx.h>
 
 INLINE bool insidelt(int v, int a, int asz)
 {
@@ -9,157 +8,6 @@ INLINE bool insidelt(int v, int a, int asz)
 INLINE bool insiderb(int v, int a, int asz)
 {
     return v < a && v >= (a - asz);
-}
-
-namespace
-{
-struct border_window_data_s
-{
-    HWND hwnd = nullptr;
-    guirect_c::sptr_t owner;
-    ts::drawable_bitmap_c backbuffer;
-    ts::irect rect;
-    subimage_e si;
-
-    static const ts::wchar *classname_border() { return L"rectengineborder"; }
-
-    border_window_data_s( subimage_e si, guirect_c* own ):si(si), owner(own)
-    {
-    }
-
-    ~border_window_data_s()
-    {
-        if (hwnd) DestroyWindow(hwnd);
-    }
-
-    void cvtrect( ts::irect &sr ) const
-    {
-        const theme_rect_s *thr = owner->themerect();
-        switch (si)
-        {
-            case SI_LEFT:
-                sr.rb.x = sr.lt.x;
-                sr.lt.x -= thr->maxcutborder.lt.x;
-                return;
-            case SI_TOP:
-                sr.lt.x -= thr->maxcutborder.lt.x;
-                sr.rb.x += thr->maxcutborder.rb.x;
-                sr.rb.y = sr.lt.y;
-                sr.lt.y -= thr->maxcutborder.lt.y;
-                return;
-            case SI_RIGHT:
-                sr.lt.x = sr.rb.x;
-                sr.rb.x += thr->maxcutborder.rb.x;
-                return;
-            case SI_BOTTOM:
-                sr.lt.x -= thr->maxcutborder.lt.x;
-                sr.rb.x += thr->maxcutborder.rb.x;
-                sr.lt.y = sr.rb.y;
-                sr.rb.y += thr->maxcutborder.rb.y;
-                return;
-        }
-        FORBIDDEN();
-    }
-
-    ts::irect getrect() const
-    {
-        const rectprops_c &rps = owner->getprops();
-        ts::irect sr = rps.screenrect();
-        cvtrect(sr);
-        return sr;
-    }
-
-    void show(HDWP dwp, bool f)
-    {
-        if (hwnd == nullptr) return;
-        ts::uint32 flgs = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOZORDER;
-        flgs |= SWP_NOCOPYBITS | SWP_NOREDRAW;
-        flgs |= SWP_NOSIZE | SWP_NOMOVE;
-
-        if (f) flgs |= SWP_SHOWWINDOW;
-        else flgs |= SWP_HIDEWINDOW;
-    
-        DeferWindowPos(dwp, hwnd, nullptr, 0, 0, 0, 0, flgs);
-    }
-
-    void update(HDWP dwp, const ts::irect &newr)
-    {
-        if (hwnd == nullptr) return;
-        ts::irect r = newr;
-        cvtrect(r);
-        if (r != rect)
-        {
-            if (r.size() == rect.size())
-            {
-                rect = r;
-                // just move, no need 2 redraw
-                visualize(false);
-
-                ts::uint32 flgs = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOZORDER | SWP_SHOWWINDOW;
-                flgs |= SWP_NOCOPYBITS | SWP_NOREDRAW;
-                flgs |= SWP_NOSIZE /*| SWP_NOMOVE*/;
-
-                
-                DeferWindowPos(dwp, hwnd, nullptr, rect.lt.x, rect.lt.y, 0, 0, flgs);
-
-
-                visualize(false);
-            } else
-            {
-                rect = r;
-                visualize(true);
-
-                ts::uint32 flgs = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOZORDER | SWP_SHOWWINDOW;
-                //if (update_frame) flgs |= SWP_FRAMECHANGED;
-                flgs |= SWP_NOCOPYBITS | SWP_NOREDRAW;
-                
-
-
-                DeferWindowPos(dwp, hwnd, nullptr, rect.lt.x, rect.lt.y, rect.width(), r.height(), flgs);
-                visualize(false);
-            }
-
-        }
-    }
-
-    void create_window(HWND parent)
-    {
-        if (hwnd) return;
-
-        rect = getrect();
-        if (!rect) return;
-
-        ts::uint32 af = WS_POPUP;
-        ts::uint32 exf = WS_EX_LAYERED;
-
-        hwnd = CreateWindowExW(exf, classname_border(), L"", af, rect.lt.x, rect.lt.y, rect.width(), rect.height(), parent, 0, g_sysconf.instance, this);
-        visualize();
-    }
-
-    void recreate_back_buffer()
-    {
-        backbuffer.ajust(rect.size(), false);
-    }
-
-    void draw();
-
-    void visualize(bool need_draw = true)
-    {
-        ShowWindow(hwnd, SW_SHOWNA);
-
-        BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-        POINT ptSrc; ptSrc.x = 0; ptSrc.y = 0; // start point of the copy from dcMemory to dcScreen
-
-        if (need_draw) draw();
-
-        UpdateLayeredWindow(hwnd, /*screen*/nullptr,
-                            (POINT *)&ts::ref_cast<POINT>(rect.lt),
-                            (SIZE *)&ts::ref_cast<SIZE>(rect.size()),
-                            backbuffer.DC(), &ptSrc, 0, &blendPixelFunction, ULW_ALPHA);
-
-    }
-};
-
 }
 
 
@@ -480,512 +328,290 @@ rectengine_c *rectengine_c::get_last_child()
     return false;
 }
 
-
-// WINAPI RECT ENGINE
-
-int rectengine_root_c::regclassref = 0;
-
-LRESULT CALLBACK rectengine_root_c::wndhandler_border(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
-#if defined _DEBUG || defined _CRASH_HANDLER
+/*virtual*/ bool rectengine_root_c::my_wnd_s::evt_specialborder( ts::specialborder_s bd[ 4 ] )
 {
-    UNSTABLE_CODE_PROLOG
-    return wndhandler_border_dojob(hwnd, msg, wparam, lparam);
-    UNSTABLE_CODE_EPILOG
-    return 0;
-}
-
-LRESULT CALLBACK rectengine_root_c::wndhandler_border_dojob(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
-#endif
-{
-    switch (msg)
+    const theme_rect_s *thr = owner()->getrect().themerect();
+    if ( thr && thr->specialborder() && thr->maxcutborder != ts::irect( 0 ) )
     {
-        case WM_CREATE:
-            {
-                CREATESTRUCT *cs = (CREATESTRUCT *)lparam;
-                SetWindowLongPtrW(hwnd, GWLP_USERDATA, PTR_TO_UNSIGNED(cs->lpCreateParams)); //-V221
-                border_window_data_s *d = (border_window_data_s *)cs->lpCreateParams;
-                d->recreate_back_buffer();
-            }
-            return 0;
-        case WM_DESTROY:
-            if (border_window_data_s *d = ts::p_cast<border_window_data_s *>( GetWindowLongPtrW( hwnd, GWLP_USERDATA ) ))
-            {
-                SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-                d->hwnd = nullptr;
-            }
-            return sys_def_main_window_proc(hwnd, msg, wparam, lparam);
-        case WM_PAINT:
-            if (border_window_data_s *d = ts::p_cast<border_window_data_s *>( GetWindowLongPtrW( hwnd, GWLP_USERDATA ) ))
-            {
-                PAINTSTRUCT ps;
-                BeginPaint(hwnd, &ps);
-                d->visualize();
-                EndPaint(hwnd,&ps);
-                return 0;
-            }
-            break;
+        const rectprops_c &rps = owner()->getrect().getprops();
+        ts::irect sr = rps.screenrect();
+
+        // SPB_LEFT:
+        bd[ ts::SPB_LEFT ].img = thr->src;
+        bd[ ts::SPB_LEFT ].s = thr->sis[ SI_LEFT_TOP ];
+        bd[ ts::SPB_LEFT ].r = thr->sis[ SI_LEFT ];
+        bd[ ts::SPB_LEFT ].e = thr->sis[ SI_LEFT_BOTTOM ];
+
+        bd[ ts::SPB_LEFT ].s.rb.x = bd[ ts::SPB_LEFT ].s.lt.x + thr->maxcutborder.lt.x;
+        bd[ ts::SPB_LEFT ].s.lt.y += thr->maxcutborder.lt.y;
+
+        bd[ ts::SPB_LEFT ].r.rb.x = bd[ ts::SPB_LEFT ].r.lt.x + thr->maxcutborder.lt.x;
+        bd[ ts::SPB_LEFT ].e.rb.x = bd[ ts::SPB_LEFT ].e.lt.x + thr->maxcutborder.lt.x;
+        bd[ ts::SPB_LEFT ].e.rb.y -= thr->maxcutborder.rb.y;
+        
+        // SPB_TOP:
+        bd[ ts::SPB_TOP ].img = thr->src;
+        bd[ ts::SPB_TOP ].s = thr->sis[ SI_LEFT_TOP ];
+        bd[ ts::SPB_TOP ].r = thr->sis[ SI_TOP ];
+        bd[ ts::SPB_TOP ].e = thr->sis[ SI_RIGHT_TOP ];
+
+        bd[ ts::SPB_TOP ].r.rb.y = bd[ ts::SPB_TOP ].r.lt.y + thr->maxcutborder.lt.y;
+        bd[ ts::SPB_TOP ].s.rb.y = bd[ ts::SPB_TOP ].s.lt.y + thr->maxcutborder.lt.y;
+        bd[ ts::SPB_TOP ].e.rb.y = bd[ ts::SPB_TOP ].e.lt.y + thr->maxcutborder.lt.y;
+
+        // SPB_RIGHT:
+        bd[ ts::SPB_RIGHT ].img = thr->src;
+        bd[ ts::SPB_RIGHT ].s = thr->sis[ SI_RIGHT_TOP ];
+        bd[ ts::SPB_RIGHT ].r = thr->sis[ SI_RIGHT ];
+        bd[ ts::SPB_RIGHT ].e = thr->sis[ SI_RIGHT_BOTTOM ];
+        
+        bd[ ts::SPB_RIGHT ].r.lt.x = bd[ ts::SPB_RIGHT ].r.rb.x - thr->maxcutborder.rb.x;
+        bd[ ts::SPB_RIGHT ].s.lt.x = bd[ ts::SPB_RIGHT ].s.rb.x - thr->maxcutborder.rb.x;
+        bd[ ts::SPB_RIGHT ].s.lt.y += thr->maxcutborder.lt.y;
+
+        bd[ ts::SPB_RIGHT ].e.lt.x = bd[ ts::SPB_RIGHT ].e.rb.x - thr->maxcutborder.rb.x;
+        bd[ ts::SPB_RIGHT ].e.rb.y -= thr->maxcutborder.rb.y;
+
+        // SPB_BOTTOM:
+        bd[ ts::SPB_BOTTOM ].img = thr->src;
+        bd[ ts::SPB_BOTTOM ].s = thr->sis[ SI_LEFT_BOTTOM ];
+        bd[ ts::SPB_BOTTOM ].r = thr->sis[ SI_BOTTOM ];
+        bd[ ts::SPB_BOTTOM ].e = thr->sis[ SI_RIGHT_BOTTOM ];
+
+        bd[ ts::SPB_BOTTOM ].r.lt.y = bd[ ts::SPB_BOTTOM ].r.rb.y - thr->maxcutborder.rb.y;
+        bd[ ts::SPB_BOTTOM ].s.lt.y = bd[ ts::SPB_BOTTOM ].s.rb.y - thr->maxcutborder.rb.y;
+        bd[ ts::SPB_BOTTOM ].e.lt.y = bd[ ts::SPB_BOTTOM ].e.rb.y - thr->maxcutborder.rb.y;
+
+        return true;
     }
-    return sys_def_main_window_proc(hwnd, msg, wparam, lparam);
+
+
+    return false;
 }
 
-LRESULT CALLBACK rectengine_root_c::wndhandler(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
-#if defined _DEBUG || defined _CRASH_HANDLER
+system_query_e me2sq( ts::mouse_event_e me )
 {
-    UNSTABLE_CODE_PROLOG
-    return wndhandler_dojob(hwnd, msg, wparam, lparam);
-    UNSTABLE_CODE_EPILOG
-    return 0;
-}
-
-LRESULT CALLBACK rectengine_root_c::wndhandler_dojob(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
-#endif
-{
-
-    struct _redraw {
-        rectengine_root_c *engine;
-
-        _redraw(rectengine_root_c *engine_) :engine(engine_) {}
-
-        explicit operator bool() {return engine != nullptr;};
-        rectengine_root_c * operator ->() {return engine;};
-
-    } engine(hwnd2engine(hwnd));
-
-    auto mouse_evt = [&]( system_query_e sq ) -> LRESULT
+    switch ( me )
     {
-        if (engine)
-        {
-            bool act = sq == SQ_MOUSE_LDOWN;
-            if (gui->allow_input(engine->getrid(), act))
-            {
-                evt_data_s d;
-                d.mouse.screenpos = ts::ivec2(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
-                ClientToScreen(hwnd, &ts::ref_cast<POINT>(d.mouse.screenpos));
-                engine->sq_evt(sq, engine->getrid(), d);
-            } else if (act)
-            {
-                //if (RID exl = gui->get_exclusive())
-                //{
-                //    ts::sys_beep(ts::SBEEP_BADCLICK);
-                //}
-            }
-        }
-
-        return 0;
-    };
-
-    redraw_collector_s dch;
-
-	switch(msg)
-	{
-		case WM_CREATE:
-			{
-				CREATESTRUCT *cs = (CREATESTRUCT *)lparam;
-				SetWindowLongPtrW(hwnd, GWLP_USERDATA, PTR_TO_UNSIGNED(cs->lpCreateParams) ); //-V221
-				rectengine_root_c *e = (rectengine_root_c *)cs->lpCreateParams;
-                e->hwnd = hwnd;
-                const rectprops_c &pss = e->getrect().getprops();
-				e->recreate_back_buffer( pss.currentsize() );
-                if (!pss.is_collapsed()) e->recreate_border();
-			}
-			return 0;
-		case WM_DESTROY:
-			if (rectengine_root_c *e = engine.engine)
-            {
-                if (e->flags.is(F_NOTIFY_ICON))
-                {
-                    NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
-                    nd.hWnd = hwnd;
-                    nd.uID = (int)e; //-V205
-                    Shell_NotifyIconW(NIM_DELETE, &nd);
-                    e->flags.clear(F_NOTIFY_ICON);
-                }
-
-                SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0 );
-                e->hwnd = nullptr;
-                TSDEL(e);
-                if (hwnd == ts::g_main_window) ts::g_main_window = nullptr;
-            }
-			return sys_def_main_window_proc(hwnd,msg,wparam,lparam);
-        case WM_USER + 7213:
-            if (engine)
-            {
-                switch (lparam) 
-                {
-                    case WM_LBUTTONDBLCLK:
-                        gui->app_notification_icon_action(NIA_L2CLICK, engine->getrid());
-                        break;
-                    case WM_LBUTTONUP: {
-                        gui->app_notification_icon_action(NIA_LCLICK, engine->getrid());
-                        break;
-                    }
-                    case WM_RBUTTONUP:
-                    case WM_CONTEXTMENU: {
-                        gui->app_notification_icon_action(NIA_RCLICK, engine->getrid());
-                        break;
-                    }
-                }
-            }
-            return 0;
-        case WM_USER + 7214:
-            {
-                NOTIFYICONDATAW *nd = (NOTIFYICONDATAW *)lparam;
-                nd->uTimeout = 0;
-                nd->hIcon = gui->app_icon(true);
-
-                if (engine->flags.is(F_NOTIFY_ICON))
-                {
-                    nd->uFlags = NIF_ICON | NIF_TIP;
-                    Shell_NotifyIconW(NIM_MODIFY, nd);
-
-                } else {
-                    nd->uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
-                    Shell_NotifyIconW(NIM_ADD, nd);
-                    nd->uVersion = NOTIFYICON_VERSION;
-                    Shell_NotifyIconW(NIM_SETVERSION, nd);
-                }
-                engine->flags.set(F_NOTIFY_ICON);
-            }
-            return 0;
-		case WM_PAINT:
-			if (engine && !engine->is_dip())
-			{
-				PAINTSTRUCT ps;
-				engine->dc = BeginPaint(hwnd,&ps);
-                guirect_c &r = engine->getrect();
-				//const rectprops_c &rps = r.getprops();
-                evt_data_s d( evt_data_s::draw_s(engine->drawtag) );
-				//if (!rps.is_alphablend())
-				//{
-    //                engine->sq_evt(SQ_DRAW, r.getrid(), d);
-				//	EndPaint(hwnd,&ps);
-
-				//} else
-				//{
-					engine->sq_evt(SQ_DRAW, r.getrid(), d );
-					EndPaint(hwnd,&ps);
-				//}
-                engine->dc = nullptr;
-				return 0;
-			} else
-            {
-                PAINTSTRUCT ps;
-                BeginPaint(hwnd,&ps);
-                EndPaint(hwnd,&ps);
-            }
-			break;
-        case WM_CAPTURECHANGED:
-            //DMSG("lost capture" << hwnd);
-            gui->mouse_outside();
-            return 0;
-        case WM_CANCELMODE:
-            if (hwnd == GetCapture())
-                ReleaseCapture();
-            return 0;
-        case WM_SETTINGCHANGE:
-            if (engine)
-                if (guirect_c *r = engine->rect())
-                    if (r->getprops().is_maximized())
-                    {
-                        MODIFY(*r).maximize(false);
-                        DEFERRED_EXECUTION_BLOCK_BEGIN(0)
-                            MODIFY(RID::from_param(param)).maximize(true);
-                        DEFERRED_EXECUTION_BLOCK_END(r->getrid());
-                    }
-            return 0;
-
-        case WM_SYSCOMMAND:
-            switch (GET_SC_WPARAM(wparam))
-            {
-            case SC_RESTORE:
-                if (engine)
-                    if (guirect_c *r = engine->rect())
-                        if (!r->inmod())
-                            MODIFY(*r).decollapse();
-                break;
-            }
-            break;
-        case WM_SIZE:
-            //DMSG("wmsize wparam: " << wparam);
-            if (wparam == SIZE_MINIMIZED && engine)
-            {
-                // minimization by system - setup inner flags to avoid restore of window by refresh_frame checker
-                if (guirect_c *r = engine->rect())
-                    if (!r->inmod())
-                        MODIFY(*r).minimize(true);
-            } else if (wparam == SIZE_RESTORED && engine)
-            {
-                // restore by system - setup inner flags to avoid restore of window by refresh_frame checker
-                if (guirect_c *r = engine->rect())
-                    if (!r->inmod())
-                        MODIFY(*r).decollapse();
-            }
-            break;
-        case WM_WINDOWPOSCHANGED:
-            if (engine && !engine->is_dip())
-            {
-                WINDOWPOS *wp = (WINDOWPOS *)lparam;
-                //DMSG("wpch flags: " << wp->flags);
-                const guirect_c &r = engine->getrect();
-                ts::ivec2 p = r.getprops().screenpos();
-                ts::ivec2 s = r.getprops().size();
-                if (p.x != wp->x || p.y != wp->y || s.x != wp->cx || s.y != wp->cy)
-                    engine->refresh_frame();
-            }
-            break; // dont return - we need WM_SIZE to detect minimization
-        case WM_ACTIVATEAPP:
-            if (wparam && engine)
-            {
-                /*
-                if (guirect_c *r = engine->rect())
-                    if (!r->inmod() && r->getprops().is_collapsed())
-                        MODIFY(*r).decollapse();
-                        */
-            }
-            break;
-        case WM_NCACTIVATE:
-            if (wparam == FALSE && engine)
-                if (engine->getrid() >>= gui->get_focus())
-                    gui->set_focus(RID());
-            break;
-        case WM_KILLFOCUS:
-            if (engine)
-                if (engine->getrid() >>= gui->get_focus())
-                    gui->set_focus(RID());
-            break;
-        //case WM_NCPAINT:
-        //    return 0;
-        //case WM_NCCALCSIZE:
-        //    if (wparam)
-        //    {
-        //        return 0;
-        //    } else
-        //    {
-        //        return 0;
-        //    }
-
-		case WM_MOUSEMOVE: return mouse_evt(SQ_MOUSE_MOVE);
-		case WM_LBUTTONDOWN: return mouse_evt(SQ_MOUSE_LDOWN);
-		case WM_LBUTTONUP: return mouse_evt(SQ_MOUSE_LUP);
-		case WM_RBUTTONDOWN: return mouse_evt(SQ_MOUSE_RDOWN);
-		case WM_RBUTTONUP: return mouse_evt(SQ_MOUSE_RUP);
-		case WM_MBUTTONDOWN: return mouse_evt(SQ_MOUSE_MDOWN);
-		case WM_MBUTTONUP: return mouse_evt(SQ_MOUSE_MUP);
-        case WM_LBUTTONDBLCLK: return mouse_evt(SQ_MOUSE_L2CLICK);
-
-
-
-        case WM_MOUSEWHEEL:
-            return 0;
-        case WM_MOUSEACTIVATE:
-            if (!gui->allow_input(engine->getrid(), true))
-            {
-                if ( RID r = gui->get_exclusive() )
-                {
-                    ts::sys_beep(ts::SBEEP_BADCLICK);
-                    if (rectengine_root_c *root = HOLD( r )().getroot())
-                        root->shake();
-                }
-                return MA_NOACTIVATEANDEAT;
-            }
-            return MA_NOACTIVATE;
-        case WM_DROPFILES:
-            {
-                HDROP drp = (HDROP)wparam;
-                POINT p;
-                if (DragQueryPoint(drp, &p))
-                {
-                    ts::wstr_c f;
-                    for(int i = 0;;++i)
-                    {
-                        f.set_length(MAX_PATH);
-                        int l = DragQueryFileW(drp,i,f.str(), MAX_PATH);
-                        if (l<=0) break;
-                        f.set_length(l);
-                        if (gmsg<GM_DROPFILES>(engine ? engine->getrid() : RID(), f, ts::ref_cast<ts::ivec2>(p)).send().is(GMRBIT_ABORT))
-                            break;
-                    }
-                }
-                DragFinish(drp);
-            }
-            return 0;
-	}
-
-	return sys_def_main_window_proc(hwnd,msg,wparam,lparam);
+    case ts::MEVT_MOVE: return SQ_MOUSE_MOVE;
+    case ts::MEVT_LDOWN: return SQ_MOUSE_LDOWN;
+    case ts::MEVT_LUP: return SQ_MOUSE_LUP;
+    case ts::MEVT_L2CLICK: return SQ_MOUSE_L2CLICK;
+    case ts::MEVT_RDOWN: return SQ_MOUSE_RDOWN;
+    case ts::MEVT_RUP: return SQ_MOUSE_RUP;
+    case ts::MEVT_MDOWN: return SQ_MOUSE_MDOWN;
+    case ts::MEVT_MUP: return SQ_MOUSE_MUP;
+    }
+    FORBIDDEN();
+    return SQ_NOP;
 }
 
-rectengine_root_c::rectengine_root_c(bool sys):hwnd(nullptr), dc(nullptr)/*, alphablendfor(nullptr)*/
+/*virtual*/ void rectengine_root_c::my_wnd_s::evt_mouse( ts::mouse_event_e me, const ts::ivec2 &clpos /* relative to wnd */, const ts::ivec2 &scrpos )
+{
+    redraw_collector_s dcl;
+
+    bool act = me == ts::MEVT_LDOWN;
+    if ( gui->allow_input( owner()->getrid(), act ) )
+    {
+        evt_data_s d;
+        d.mouse.screenpos = scrpos;
+        owner()->sq_evt( me2sq(me), owner()->getrid(), d );
+    }
+    else if ( act )
+    {
+        //if (RID exl = gui->get_exclusive())
+        //{
+        //    ts::sys_beep(ts::SBEEP_BADCLICK);
+        //}
+    }
+}
+
+/*virtual*/ void rectengine_root_c::my_wnd_s::evt_mouse_out()
+{
+    gui->mouse_outside();
+}
+
+/*virtual*/ bool rectengine_root_c::my_wnd_s::evt_mouse_activate()
+{
+    if ( !gui->allow_input( owner()->getrid(), true ) )
+    {
+        if ( RID r = gui->get_exclusive() )
+        {
+            ts::master().sys_beep( ts::SBEEP_BADCLICK );
+            if ( rectengine_root_c *root = HOLD( r )( ).getroot() )
+                root->shake();
+        }
+        return false;
+    }
+    return true;
+
+}
+
+/*virtual*/ void rectengine_root_c::my_wnd_s::evt_notification_icon( ts::notification_icon_action_e a )
+{
+    gui->app_notification_icon_action( a, owner()->getrid() );
+}
+
+/*virtual*/ void rectengine_root_c::my_wnd_s::evt_refresh_pos( const ts::irect &scr, ts::disposition_e d )
+{
+    if ( owner()->is_dip() )
+        return;
+
+    if ( guirect_c *r = owner()->rect() )
+    {
+        if ( ts::D_RESTORE == d )
+        {
+            if ( !r->inmod() )
+                MODIFY( *r ).decollapse();
+        } else if ( ts::D_MIN == d )
+        {
+            if ( !r->inmod() )
+                MODIFY( *r ).minimize( true );
+        } else if ( ts::D_MAX == d )
+        {
+            MODIFY( *r ).maximize( scr );
+
+        } else if ( r->getprops().screenrect() != scr )
+        {
+            MODIFY( *r ).pos( scr.lt ).size( scr.size() );
+        }
+    }
+}
+
+/*virtual*/ void rectengine_root_c::my_wnd_s::evt_focus_changed( ts::wnd_c *w )
+{
+    if ( !w )
+    {
+        if ( owner()->getrid() >>= gui->get_focus() )
+            gui->set_focus( RID() );
+    } else
+    {
+        my_wnd_s *wndc = ts::ptr_cast<my_wnd_s *>( w->get_callbacks() );
+
+        RID f = wndc->owner()->getrid();
+        gui->set_focus( f );
+
+        gmsg<GM_UI_EVENT>( UE_ACTIVATE ).send();
+    }
+}
+
+/*virtual*/ bool rectengine_root_c::my_wnd_s::evt_on_file_drop( const ts::wstr_c& fn, const ts::ivec2 &clp )
+{
+    if ( gmsg<GM_DROPFILES>( owner()->getrid(), fn, clp ).send().is( GMRBIT_ABORT ) )
+        return false;
+
+    return true;
+}
+
+/*virtual*/ void rectengine_root_c::my_wnd_s::evt_draw()
+{
+    if ( owner()->is_dip() )
+        return;
+
+    guirect_c &r = owner()->getrect();
+
+    /*
+    if ( force_redraw )
+    {
+        owner()->redraw(); // we need it! see redraw tag
+
+        draw_data_s &dd = owner()->begin_draw();
+        ASSERT( dd.offset == ts::ivec2( 0 ) );
+        dd.size = r.getprops().currentsize();
+
+        ASSERT( dd.cliprect.size() >> dd.size );
+        evt_data_s d = evt_data_s::draw_s( owner()->drawtag );
+        owner()->sq_evt( SQ_DRAW, owner()->getrid(), d );
+        owner()->end_draw();
+
+    } else
+        */
+    {
+        evt_data_s d( evt_data_s::draw_s( owner()->drawtag ) );
+        owner()->sq_evt( SQ_DRAW, r.getrid(), d );
+    }
+
+}
+
+
+/*virtual*/ ts::bitmap_c rectengine_root_c::my_wnd_s::app_get_icon(bool for_tray)
+{
+    return gui->app_icon( for_tray );
+}
+
+/*virtual*/ ts::irect rectengine_root_c::my_wnd_s::app_get_redraw_rect()
+{
+    return owner()->redraw_rect;
+}
+
+void rectengine_root_c::my_wnd_s::kill()
+{
+    TSDEL( wnd );
+}
+
+rectengine_root_c::rectengine_root_c(bool sys)
 {
     redraw_rect = ts::irect( maximum<int>::value, minimum<int>::value );
     flags.init( F_SYSTEM, sys );
     drawntag = drawtag - 1;
-	if (!regclassref)
-	{
-		WNDCLASSW wc;
-		wc.style         = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
-		wc.lpfnWndProc   = wndhandler;
-		wc.cbClsExtra    = 0;
-		wc.cbWndExtra    = 0;
-		wc.hInstance     = g_sysconf.instance;
-		wc.hIcon         = nullptr;
-		wc.hCursor       = nullptr; //LoadCursor( nullptr, IDC_ARROW );
-		wc.hbrBackground = (HBRUSH)(16);
-		wc.lpszMenuName  = nullptr;
-		wc.lpszClassName = classname();
-		RegisterClassW(&wc);
-
-        wc.lpfnWndProc = wndhandler_border;
-        wc.lpszClassName = border_window_data_s::classname_border();
-        RegisterClassW(&wc);
-
-	}
-	++regclassref;
 
 }
 
 rectengine_root_c::~rectengine_root_c() 
 {
-    if (flags.is(F_SYSTEM) && flags.is(F_NOTIFY_ICON))
-    {
-        NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
-        nd.hWnd = hwnd;
-        nd.uID = (int)this; //-V205
-        Shell_NotifyIconW(NIM_SETFOCUS, &nd);
-    }
-
-    flags.set(F_DIP);
-    if (gui) gui->delete_event( DELEGATE(this, refresh_frame) );
-    kill_window();
-
-	--regclassref;
-	if (regclassref <= 0)
-		UnregisterClassW( classname(), g_sysconf.instance );
-}
-
-void rectengine_root_c::recreate_back_buffer(const ts::ivec2 &sz, bool exact_size)
-{
-	backbuffer.ajust(sz, exact_size);
-}
-void rectengine_root_c::recreate_border()
-{
-    const theme_rect_s *thr = getrect().themerect();
-    if (thr && thr->specialborder() && borderdata == nullptr)
-    {
-        borderdata = MM_ALLOC(4 * sizeof(border_window_data_s));
-        border_window_data_s *d = (border_window_data_s *)borderdata;
-        TSPLACENEW(d + 0, SI_TOP, &getrect());
-        TSPLACENEW(d + 1, SI_RIGHT, &getrect());
-        TSPLACENEW(d + 2, SI_BOTTOM, &getrect());
-        TSPLACENEW(d + 3, SI_LEFT, &getrect());
-    }
-
-    if (borderdata && hwnd)
-    {
-        border_window_data_s *d = (border_window_data_s *)borderdata;
-        for(int i=0;i<4;++i)
-            d[i].create_window(hwnd);
-    }
-}
-
-bool rectengine_root_c::refresh_frame(RID, GUIPARAM p)
-{
-    if (p)
-    {
-        if (hwnd && !getrect().getprops().is_collapsed())
-        {
-            RECT r;
-            GetWindowRect(hwnd, &r);
-            if ( ts::ref_cast<ts::irect>(r) != getrect().getprops().screenrect() )
-            {
-                MODIFY(getrect()).visible(false);
-                MODIFY(getrect()).visible(true);
-            }
-        }
-
-    } else
-    {
-        DEFERRED_UNIQUE_CALL( 1.0, DELEGATE(this, refresh_frame), 1 );
-    }
-    return true;
-}
-
-void rectengine_root_c::kill_border()
-{
-    if (borderdata)
-    {
-        border_window_data_s *d = (border_window_data_s *)borderdata;
-        borderdata = nullptr;
-        (d + 0)->~border_window_data_s();
-        (d + 1)->~border_window_data_s();
-        (d + 2)->~border_window_data_s();
-        (d + 3)->~border_window_data_s();
-        MM_FREE(d);
-    }
-}
-
-void rectengine_root_c::kill_window()
-{
-    kill_border();
-
-    if (HWND h = hwnd)
-    {
-        if (flags.is(F_NOTIFY_ICON))
-        {
-            NOTIFYICONDATAW nd = {sizeof(NOTIFYICONDATAW), 0};
-            nd.hWnd = hwnd;
-            nd.uID = (int)this; //-V205
-            Shell_NotifyIconW(NIM_DELETE, &nd);
-            flags.clear(F_NOTIFY_ICON);
-        }
-
-        hwnd = nullptr;
-        SetWindowLongPtrW(h, GWLP_USERDATA, 0);
-        DestroyWindow(h);
-    }
+    flags.set( F_DIP );
+    //if (gui) gui->delete_event( DELEGATE(this, refresh_frame) );
+    syswnd.kill();
 }
 
 /*virtual*/ bool rectengine_root_c::apply(rectprops_c &rpss, const rectprops_c &pss)
 {
-	if (!hwnd && (pss.is_visible() || pss.is_micromized()))
+	if (!syswnd.wnd && (pss.is_visible() || pss.is_micromized()))
 	{
         rpss.change_to(pss, this);
 
-		// create visible window
-		ts::uint32 af = WS_POPUP| /*WS_VISIBLE|*/ WS_SYSMENU|WS_MINIMIZEBOX|WS_MAXIMIZEBOX;
-        if (!pss.is_micromized())
-            af |= WS_VISIBLE;
-		ts::uint32 exf = WS_EX_ACCEPTFILES;;
-        
-        if ( !g_sysconf.mainwindow )
-            exf |= WS_EX_APPWINDOW;
-		
-		if (pss.is_alphablend())
-			exf |= WS_EX_LAYERED;
+        struct shp_s : public ts::wnd_show_params_s
+        {
+            rectengine_root_c *engine;
 
-        //if (pss.is_maximized())
-        //    af |= WS_MAXIMIZE;
+            /*virtual*/ void apply( bool update_frame, bool force_apply_now ) override
+            {
 
-        if (pss.is_minimized() || pss.is_micromized())
-            af |= WS_MINIMIZE;
+            }
 
-        HWND prnt = g_sysconf.mainwindow;
-        if (flags.is(F_SYSTEM))
+        } shp;
+
+        if ( !pss.is_micromized() )
+            shp.visible = true;
+
+        if ( !ts::master().mainwindow )
+            shp.mainwindow = true;
+
+        if ( pss.is_alphablend() )
+            shp.layered = true;
+
+        shp.acceptfiles = true;
+
+        if ( pss.is_minimized() )
+            shp.d = ts::D_MIN;
+
+        if ( pss.is_micromized() )
+            shp.d = ts::D_MICRO;
+
+        shp.parent = ts::master().mainwindow;
+        if ( flags.is( F_SYSTEM ) )
         {
             ASSERT( !pss.is_micromized() );
-            af = WS_POPUP | WS_VISIBLE;
-            exf = WS_EX_TOPMOST|WS_EX_TOOLWINDOW;
-            //prnt = WindowFromPoint(ts::ref_cast<POINT>(gui->get_cursor_pos()));
-            //prnt = FindWindowW(L"Shell_TrayWnd", NULL);
-            prnt = nullptr;
+            shp.parent = nullptr;
+            shp.toolwindow = true;
         }
 
         {
             evt_data_s d;
-            if (getrect().sq_evt(SQ_GET_ROOT_PARENT, getrid(), d))
-            {
-                prnt = ts::ptr_cast<rectengine_root_c *>(&HOLD(d.rect.id).engine())->hwnd;
-            }
+            if ( getrect().sq_evt( SQ_GET_ROOT_PARENT, getrid(), d ) )
+                shp.parent = ts::ptr_cast<rectengine_root_c *>( &HOLD( d.rect.id ).engine() )->syswnd.wnd;
         }
+
 
         //RID prev;
         //for( RID rr : gui->roots() )
@@ -995,26 +621,16 @@ void rectengine_root_c::kill_window()
         //}
         //if (prev) prnt = ts::ptr_cast<rectengine_root_c *>(&HOLD(prev).engine())->hwnd;
 
-        ts::str_c name( to_utf8(getrect().get_name()) );
-        text_remove_tags(name);
 
-        ts::irect sr = rpss.screenrect();
-		hwnd = CreateWindowExW(exf, classname(), from_utf8(name), af, sr.lt.x,sr.lt.y,sr.width(),sr.height(),prnt,0,g_sysconf.instance,this);
+        ts::str_c name = to_utf8( getrect().get_name() );
+        text_remove_tags( name );
+        shp.name = from_utf8( name );
+        shp.rect = rpss.screenrect();
 
-        DMSG("create hwnd: " << hwnd);
+        shp.focus = getrect().accept_focus();
 
-        if ( g_sysconf.mainwindow == nullptr )
-        {
-            g_sysconf.mainwindow = hwnd;
-            ts::g_main_window = hwnd;
-        }
-
-        if (flags.is(F_SYSTEM))
-        {
-            //SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            //SetForegroundWindow(hwnd);
-        } else
-            SetClassLong(hwnd, GCL_HICON, (LONG)gui->app_icon(false));
+        syswnd.wnd = ts::wnd_c::build( &syswnd );
+        syswnd.wnd->show( &shp );
 
         if (pss.is_alphablend())
         {
@@ -1029,219 +645,88 @@ void rectengine_root_c::kill_window()
 
         if (!pss.is_micromized())
         {
-            if (getrid() >> gui->get_focus()); else
-                gui->set_focus(getrid(), getrect().steal_active_focus_if_root()); // root rect stole focus
+            if ( getrect().accept_focus() )
+                gui->set_focus(getrid()); // root rect stole focus
 
-            if (gui->get_active_focus() == getrid())
-                SetFocus(hwnd);
+            if (gui->get_rootfocus() == getrid())
+                syswnd.wnd->set_focus(false);
         }
 
 	} else if (!pss.is_visible())
 	{
 		// window stil invisible => just change parameters
 		rpss.change_to(pss, this);
-        kill_window();
+        syswnd.kill();
 	} else
 	{
 		// change exist window
 
-		bool update_frame = false;
-        bool was_micro = rpss.is_micromized();
-
-		if ( !pss.is_collapsed() && pss.is_alphablend() )
-		{ 
-            LONG oldstate = GetWindowLongW(hwnd,GWL_EXSTYLE);
-            LONG newstate = oldstate | WS_EX_LAYERED;
-            if (oldstate != newstate)
-            {
-                SetWindowLongW(hwnd, GWL_EXSTYLE, newstate);
-                update_frame = true;
-            }
-		}
-		else if ( pss.is_collapsed() || !pss.is_alphablend() )
-		{
-            // due some reasons we should remove WS_EX_LAYERED when rect in minimized state
-
-            LONG oldstate = GetWindowLongW(hwnd,GWL_EXSTYLE);
-            LONG newstate = oldstate & (~WS_EX_LAYERED);
-
-            bool changed = oldstate != newstate;
-            if (changed && pss.is_collapsed())
-                ShowWindow(hwnd,SW_HIDE); // это делаем, чтобы не мелькал черный квадрат непосредственно перед свертыванием окна
-
-			SetWindowLongW(hwnd,GWL_EXSTYLE, newstate );
-			update_frame |= changed;
-		}
-		bool rebuf = false;
-        bool reminimization = pss.is_collapsed() != rpss.is_collapsed();
-        bool remaximization = pss.is_maximized() != rpss.is_maximized();
-        // не меняем координаты окна, если изменяется MAX-MIN статус. иначе SW_MAXIMIZE будет странно работать
-        bool rectchanged = !remaximization && !reminimization && !pss.is_maximized() && !pss.is_collapsed() && pss.screenrect() != rpss.screenrect();
-
-        ts::uint32 flgs = 0;
-
-		if (update_frame || rectchanged)
-		{
-			flgs = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOZORDER | SWP_SHOWWINDOW;
-			if (update_frame) flgs |= SWP_FRAMECHANGED;
-			if (pss.is_alphablend()) flgs |= SWP_NOCOPYBITS | SWP_NOREDRAW;
-            if (!rectchanged) flgs |= SWP_NOSIZE | SWP_NOMOVE;
-            rebuf = true;
-		}
-        if (remaximization || reminimization)
-            rebuf = true;
-
-        if (rebuf)
+        struct shp_s : public ts::wnd_show_params_s
         {
-            update_frame = pss.is_alphablend(); // force draw for alphablend mode
-            recreate_back_buffer(pss.currentsize());
-            if (!pss.is_collapsed() && pss.is_visible()) recreate_border();
-        }
+            rectprops_c &rpss;
+            const rectprops_c &pss;
+            rectengine_root_c *engine;
 
-        if (pss.is_alphablend()) // in alphablend mode we have to draw rect before resize
-        {
-            rpss.change_to(pss, this);
-
-            if (update_frame)
+            /*virtual*/ void apply( bool update_frame, bool force_apply_now ) override
             {
-                redraw(); // we need it! see redraw tag
-                draw_data_s &dd = begin_draw();
-                ASSERT(dd.offset == ts::ivec2(0));
-                dd.size = rpss.currentsize();
-                ASSERT(dd.cliprect.size() >> dd.size);
-                evt_data_s d = evt_data_s::draw_s(drawtag);
-                sq_evt(SQ_DRAW, getrid(), d);
-                end_draw();
-            }
-        }
-
-        if (flgs)
-        {
-            if (borderdata)
-            {
-                border_window_data_s *d = (border_window_data_s *)borderdata;
-                int n = 1; 
-                if (d[0].hwnd) ++n;
-                if (d[1].hwnd) ++n;
-                if (d[2].hwnd) ++n;
-                if (d[3].hwnd) ++n;
-
-                HDWP dwp = BeginDeferWindowPos(n);
-
-                ts::irect sr = pss.screenrect();
-                d[0].update(dwp, sr);
-                d[1].update(dwp, sr);
-                d[2].update(dwp, sr);
-                d[3].update(dwp, sr);
-
-                DeferWindowPos(dwp, hwnd, nullptr, pss.pos().x, pss.pos().y, pss.size().x, pss.size().y, flgs);
-
-                //DMSG( "mwp " << pss.pos() );
-
-                EndDeferWindowPos(dwp);
-
-            } else
-                SetWindowPos(hwnd, nullptr, pss.pos().x, pss.pos().y, pss.size().x, pss.size().y, flgs);
-        }
-        bool cr_brd = false;
-        int scmd = 0;
-        if (remaximization || reminimization)
-        {
-            if (borderdata && remaximization)
-            {
-                border_window_data_s *d = (border_window_data_s *)borderdata;
-                int n = 0;
-                if (d[0].hwnd) ++n;
-                if (d[1].hwnd) ++n;
-                if (d[2].hwnd) ++n;
-                if (d[3].hwnd) ++n;
-
-                HDWP dwp = BeginDeferWindowPos(n);
-
-                d[0].show(dwp, !pss.is_maximized());
-                d[1].show(dwp, !pss.is_maximized());
-                d[2].show(dwp, !pss.is_maximized());
-                d[3].show(dwp, !pss.is_maximized());
-                EndDeferWindowPos(dwp);
-            }
-
-            if (GetCapture() == hwnd) ReleaseCapture();
-            scmd = pss.is_collapsed() ? SW_MINIMIZE : (pss.is_maximized() ? SW_MAXIMIZE : SW_RESTORE);
-            bool curmin = is_collapsed();
-            bool curmax = is_maximized();
-            if (curmin != pss.is_collapsed() || curmax != pss.is_maximized())
-            {
-                ts::irect sr = pss.screenrect();
-                switch (scmd)
+                if ( force_apply_now || !pss.is_alphablend() )
                 {
-                case SW_MAXIMIZE:
-                    MoveWindow(hwnd,sr.lt.x, sr.lt.y, sr.width(), sr.height(), !pss.is_alphablend());
-                    if (was_micro)
+                    rpss.change_to( pss, engine );
+
+                    if ( update_frame )
                     {
-                        ShowWindow(hwnd, SW_SHOWNA);
-                        ShowWindow(hwnd, SW_RESTORE);
-                        set_system_focus(reminimization);
+                        draw_data_s &dd = engine->begin_draw();
+                        ASSERT( dd.offset == ts::ivec2( 0 ) );
+                        dd.size = rpss.currentsize();
+                        ASSERT( dd.cliprect.size() >> dd.size );
+                        evt_data_s d = evt_data_s::draw_s( engine->drawtag );
+                        engine->sq_evt( SQ_DRAW, engine->getrid(), d );
+                        engine->end_draw();
                     }
-                    break;
-                case SW_RESTORE:
-                    MoveWindow(hwnd,sr.lt.x, sr.lt.y, sr.width(), sr.height(), !pss.is_alphablend());
-                    if (was_micro) ShowWindow(hwnd, SW_SHOWNA);
-                    // no break here
-                case SW_MINIMIZE:
-                    ShowWindow(hwnd, scmd);
-                    if (pss.is_collapsed())
-                    {
-                        if (pss.is_micromized())
-                            ShowWindow(hwnd, SW_HIDE);
-                        kill_border();
-                    } else
-                    {
-                        kill_border();
-                        cr_brd = true;
-                        set_system_focus(reminimization);
-                    }
-                    break;
                 }
-                    
-            }
-        }
+                else
+                {
+                    engine->begin_draw();
+                    engine->end_draw();
+                }
 
-        if (!pss.is_alphablend())
+            };
+
+            shp_s( rectprops_c &rpss, const rectprops_c &pss, rectengine_root_c *engine ):rpss(rpss), pss(pss), engine(engine) {}
+
+        } shp( rpss, pss, this );
+
+        shp.d = ts::D_NORMAL;
+
+        if ( pss.is_maximized() )
+            shp.d = ts::D_MAX;
+        if ( pss.is_minimized() )
+            shp.d = ts::D_MIN;
+        if ( pss.is_micromized() )
+            shp.d = ts::D_MICRO;
+
+        shp.layered = pss.is_alphablend();
+        shp.rect = pss.screenrect(false);
+        shp.visible = true;
+
+        syswnd.wnd->show( &shp );
+
+        if ( syswnd.wnd->disposition() != shp.d )
+
+        switch ( shp.d )
         {
-            rpss.change_to(pss, this);
-
-            if (update_frame)
-            {
-                draw_data_s &dd = begin_draw();
-                ASSERT(dd.offset == ts::ivec2(0));
-                dd.size = rpss.currentsize();
-                ASSERT(dd.cliprect.size() >> dd.size);
-                evt_data_s d = evt_data_s::draw_s(drawtag);
-                sq_evt(SQ_DRAW, getrid(), d);
-                end_draw();
-            }
-        } else
-        {
-            begin_draw();
-            end_draw();
-        }
-
-        if (cr_brd)
-            recreate_border(); // rect pos is ok now
-
-        switch (scmd)
-        {
-        case SW_MAXIMIZE:
+        case ts::D_MAX:
             gmsg<GM_UI_EVENT>(UE_MAXIMIZED).send();
-            refresh_frame();
+            //refresh_frame();
             DMSG("maximized");
             break;
-        case SW_RESTORE:
+        case ts::D_NORMAL:
             gmsg<GM_UI_EVENT>(UE_NORMALIZED).send();
-            refresh_frame();
+            //refresh_frame();
             DMSG("restored");
             break;
-        case SW_MINIMIZE:
+        case ts::D_MIN:
+        case ts::D_MICRO:
             gmsg<GM_UI_EVENT>(UE_MINIMIZED).send();
             DMSG("minimized");
             break;
@@ -1260,19 +745,13 @@ void rectengine_root_c::kill_window()
     redraw_rect.combine( invalidate_rect ? *invalidate_rect : getrect().getprops().currentszrect() );
     drawcollector dch( this );
     ++drawtag;
-
-    //if (hwnd && flags.is(F_SYSTEM))
-    //{
-    //    SetWindowPos(hwnd, HWND_TOPMOST, 0,0,0,0, SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
-    //}
-
 }
 
 void rectengine_root_c::redraw_now()
 {
-    if (hwnd == nullptr) return;
+    if (syswnd.wnd == nullptr || rect() == nullptr) return;
 
-    ASSERT(drawdata.size() == 0 && hwnd);
+    ASSERT(drawdata.size() == 0);
     draw_data_s &dd = begin_draw();
 
     ASSERT(dd.offset == ts::ivec2(0));
@@ -1298,268 +777,9 @@ void rectengine_root_c::redraw_now()
 	if (drawdata.size() == 0)
     {
         const rectprops_c &rps = getrect().getprops();
-        if (rps.is_alphablend())
-        {
-            BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-            POINT ptSrc; ptSrc.x = 0; ptSrc.y = 0; // start point of the copy from dcMemory to dcScreen
-
-            //HDC screen = GetDC(NULL);
-            UpdateLayeredWindow(hwnd, /*screen*/nullptr,
-                                (POINT *)&ts::ref_cast<POINT>(rps.screenpos()),
-                                (SIZE *)&ts::ref_cast<SIZE>(rps.currentsize()),
-                                backbuffer.DC(), &ptSrc, 0, &blendPixelFunction, ULW_ALPHA);
-            //ReleaseDC( NULL, screen );
-
-        } else
-            draw_back_buffer();
+        syswnd.wnd->flush_draw( rps.screenrect() );
     }
 }
-
-void rectengine_root_c::draw_back_buffer()
-{
-    if (dc)
-        backbuffer.draw(ts::draw_target_s(dc), 0, 0, getrect().getprops().currentszrect()); // WM_PAINT - draw whole backbuffer
-    else
-    {
-        if (!redraw_rect)
-            redraw_rect = ts::irect(0, getrect().getprops().currentszrect());
-
-        //DMSG( "bb:" << redraw_rect );
-
-        HDC tdc = GetDC(hwnd);
-        backbuffer.draw(ts::draw_target_s(tdc), redraw_rect.lt.x, redraw_rect.lt.y, redraw_rect);
-        ReleaseDC(hwnd, tdc);
-    }
-}
-
-static void draw_image(const ts::bmpcore_exbody_s &tgt, const ts::bmpcore_exbody_s &image, ts::aint x, ts::aint y, const ts::irect &cliprect, int alpha)
-{
-    ts::irect imgrectnew(0, image.info().sz);
-    imgrectnew += ts::ivec2(x, y);
-    imgrectnew.intersect(cliprect);
-    if (!imgrectnew) return;
-
-    imgrectnew -= ts::ivec2(x, y);
-    x += imgrectnew.lt.x; y += imgrectnew.lt.y;
-
-    image.draw(tgt, x, y, imgrectnew, alpha);
-}
-
-static void draw_image( const ts::bmpcore_exbody_s &tgt, const ts::bmpcore_exbody_s &image, ts::aint x, ts::aint y, const ts::irect &imgrect, const ts::irect &cliprect, int alpha )
-{
-    ts::irect imgrectnew = imgrect.szrect();
-    imgrectnew += ts::ivec2(x,y);
-    imgrectnew.intersect(cliprect);
-    if (!imgrectnew) return;
-
-    imgrectnew -= ts::ivec2(x,y);
-    x += imgrectnew.lt.x; y += imgrectnew.lt.y;
-    imgrectnew += imgrect.lt;
-
-    image.draw(tgt, x, y, imgrectnew, alpha);
-}
-
-struct repdraw //-V690
-{
-    const ts::bmpcore_exbody_s &tgt;
-    const ts::bmpcore_exbody_s &image;
-    const ts::irect &cliprect;
-    const ts::irect *rbeg;
-    const ts::irect *rrep;
-    const ts::irect *rend;
-    int alpha;
-    bool a_beg, a_rep, a_end;
-    void operator=(const repdraw &) UNUSED;
-    repdraw(const ts::bmpcore_exbody_s &tgt, const ts::bmpcore_exbody_s &image, const ts::irect &cliprect, int alpha):tgt(tgt), image(image), cliprect(cliprect), alpha(alpha) {}
-    //repdraw(HDC dc, const ts::drawable_bitmap_c &image, const ts::irect &cliprect, int alpha):dc(dc), image(image), cliprect(cliprect), alpha(alpha) {}
-
-    void draw_h( ts::aint x1, ts::aint x2, ts::aint y, bool tile )
-    {
-        if (rbeg) draw_image( tgt, image, x1, y, *rbeg, cliprect, a_beg ? alpha : -1);
-    
-        if (tile)
-        {
-            int dx = rrep->width();
-            if (CHECK(dx))
-            {
-                int a = a_rep ? alpha : -1;
-
-                int sx0 = x1 + (rbeg ? rbeg->width() : 0);
-                int sx1 = x2 - (rend ? rend->width() : 0);
-                int z = sx0 + dx;
-                for (; z <= sx1; z += dx)
-                    draw_image(tgt, image, z - dx, y, *rrep, cliprect, a);
-                z -= dx;
-                if (z < sx1)
-                    draw_image(tgt, image, z, y, ts::irect(*rrep).setwidth(sx1 - z), cliprect, a);
-            }
-        } else
-        {
-            ASSERT(false, "stretch");
-        }
-        if (rend) draw_image( tgt, image, x2 - rend->width(), y, *rend, cliprect, a_end ? alpha : -1);
-    }
-    void draw_v(ts::aint x, ts::aint y1, ts::aint y2, bool tile)
-    {
-        if (rbeg) draw_image(tgt, image, x, y1, *rbeg, cliprect, a_beg ? alpha : -1);
-
-        if (tile)
-        {
-            int dy = rrep->height();
-            if (CHECK(dy))
-            {
-                int a = a_rep ? alpha : -1;
-
-                int sy0 = y1 + (rbeg ? rbeg->height() : 0);
-                int sy1 = y2 - (rend ? rend->height() : 0);
-                int z = sy0 + dy;
-                for (; z <= sy1; z += dy)
-                    draw_image(tgt, image, x, z - dy, *rrep, cliprect, a);
-                z -= dy;
-                if (z < sy1)
-                    draw_image(tgt, image, x, z, ts::irect(*rrep).setheight(sy1 - z), cliprect, a);
-            }
-        }
-        else
-        {
-            ASSERT(false, "stretch");
-        }
-
-        if (rend) draw_image(tgt, image, x, y2 - rend->height(), *rend, cliprect, a_end ? alpha : -1 );
-    }
-
-    void draw_c(ts::aint x1, ts::aint x2, ts::aint y1, ts::aint y2, bool tile)
-    {
-        if (tile)
-        {
-            int a = a_rep ? alpha : -1;
-
-            int dx = rrep->width();
-            int dy = rrep->height();
-            if (dx == 0 || dy == 0) return;
-            int sx0 = x1;
-            int sx1 = x2 - dx;
-            int sy0 = y1;
-            int sy1 = y2 - dy;
-            int x;
-            ts::irect rr; bool rr_initialized = false;
-            int y = sy0;
-            for (; y < sy1; y += dy)
-            {
-                for (x = sx0; x < sx1; x += dx)
-                    draw_image(tgt, image, x, y, *rrep, cliprect, a);
-
-                if (!rr_initialized)
-                {
-                    if (x < (sx1 + dx))
-                    {
-                        rr = *rrep;
-                        rr.setwidth(sx1 + dx - x);
-                        rr_initialized = true;
-                    }
-                }
-
-                if (rr_initialized)
-                    draw_image(tgt, image, x, y, rr, cliprect, a);
-            }
-            if (y < (sy1 + dy))
-            {
-                ts::irect rrb = *rrep;
-                rrb.setheight(sy1 + dy - y);
-                for (x = sx0; x < sx1; x += dx)
-                    draw_image(tgt, image, x, y, rrb, cliprect, a);
-                if (rr_initialized)
-                    draw_image(tgt, image, x, y, rrb.setwidth(rr.width()), cliprect, a);
-                else
-                    draw_image(tgt, image, x, y, rrb.setwidth(sx1 + dx - x), cliprect, a);
-            }
-        } else
-        {
-            ASSERT(false, "stretch");
-        }
-    }
-};
-
-void border_window_data_s::draw()
-{
-    backbuffer.ajust(rect.size(), false);
-    const theme_rect_s *thr = owner->themerect();
-    ts::irect szr = rect.szrect();
-    ts::bmpcore_exbody_s bb = backbuffer.extbody();
-    ts::bmpcore_exbody_s src = thr->src.extbody();
-    repdraw rdraw( bb, src, szr, 255 );
-
-    ts::irect prev, rep, last;
-
-    switch (si)
-    {
-        case SI_LEFT:
-            if (thr->sis[SI_LEFT])
-            {
-                rep = thr->sis[SI_LEFT]; rep.rb.x = rep.lt.x + thr->maxcutborder.lt.x;
-                prev = thr->sis[SI_LEFT_TOP];
-                prev.rb.x = prev.lt.x + thr->maxcutborder.lt.x;
-                prev.lt.y += thr->maxcutborder.lt.y;
-
-                last = thr->sis[SI_LEFT_BOTTOM];
-                last.rb.x = last.lt.x + thr->maxcutborder.lt.x;
-                last.rb.y -= thr->maxcutborder.rb.y;
-
-                rdraw.rbeg = &prev; rdraw.a_beg = false;
-                rdraw.rrep = &rep; rdraw.a_rep = false;
-                rdraw.rend = &last; rdraw.a_end = false;
-                rdraw.draw_v(0, 0, rect.height(), thr->siso[SI_LEFT].tile);
-            }
-
-            break;
-        case SI_TOP:
-            if (thr->sis[SI_TOP])
-            {
-                rep = thr->sis[SI_TOP];  rep.rb.y = rep.lt.y + thr->maxcutborder.lt.y;
-                prev = thr->sis[SI_LEFT_TOP]; prev.rb.y = prev.lt.y + thr->maxcutborder.lt.y;
-                last = thr->sis[SI_RIGHT_TOP]; last.rb.y = last.lt.y + thr->maxcutborder.lt.y;
-
-                rdraw.rbeg = &prev; rdraw.a_beg = false;
-                rdraw.rrep = &rep; rdraw.a_rep = false;
-                rdraw.rend = &last; rdraw.a_end = false;
-                rdraw.draw_h(0, rect.width(), 0, thr->siso[SI_TOP].tile);
-            }
-
-            break;
-        case SI_RIGHT:
-
-            rep = thr->sis[SI_RIGHT]; rep.lt.x = rep.rb.x - thr->maxcutborder.rb.x;
-            prev = thr->sis[SI_RIGHT_TOP];
-            prev.lt.x = prev.rb.x - thr->maxcutborder.rb.x;
-            prev.lt.y += thr->maxcutborder.lt.y;
-
-            last = thr->sis[SI_RIGHT_BOTTOM];
-            last.lt.x = last.rb.x - thr->maxcutborder.rb.x;
-            last.rb.y -= thr->maxcutborder.rb.y;
-
-
-            rdraw.rbeg = &prev; rdraw.a_beg = false;
-            rdraw.rrep = &rep; rdraw.a_rep = false;
-            rdraw.rend = &last; rdraw.a_end = false;
-            rdraw.draw_v(0, 0, rect.height(), thr->siso[SI_RIGHT].tile);
-
-            break;
-        case SI_BOTTOM:
-
-            rep = thr->sis[SI_BOTTOM]; rep.lt.y = rep.rb.y - thr->maxcutborder.rb.y;
-            prev = thr->sis[SI_LEFT_BOTTOM]; prev.lt.y = prev.rb.y - thr->maxcutborder.rb.y;
-            last = thr->sis[SI_RIGHT_BOTTOM]; last.lt.y = last.rb.y - thr->maxcutborder.rb.y;
-
-            rdraw.rbeg = &prev; rdraw.a_beg = false;
-            rdraw.rrep = &rep; rdraw.a_rep = false;
-            rdraw.rend = &last; rdraw.a_end = false;
-            rdraw.draw_h(0, rect.width(), 0, thr->siso[SI_BOTTOM].tile);
-
-            break;
-    }
-
-}
-
 
 /*virtual*/ void rectengine_root_c::draw( const theme_rect_s &thr, ts::uint32 options, evt_data_s *d )
 {
@@ -1569,9 +789,10 @@ void border_window_data_s::draw()
     bool self_draw = dd.engine == this;
     bool use_alphablend = !self_draw; //!flags.is(F_SELF_DRAW);
 
-    ts::bmpcore_exbody_s bb = backbuffer.extbody();
+    ts::bmpcore_exbody_s bb = syswnd.wnd->get_backbuffer();
+    ts::bitmap_t<ts::bmpcore_exbody_s> backbuffer(bb);
     ts::bmpcore_exbody_s src = thr.src.extbody();
-    repdraw rdraw( bb, src, dd.cliprect, dd.alpha );
+    ts::repdraw rdraw( bb, src, dd.cliprect, dd.alpha );
     ts::ivec2 rbpt = dd.offset + dd.size;
 
     ts::irect fillrect;
@@ -1880,7 +1101,7 @@ void border_window_data_s::draw()
         }
         if (options & DTHRO_RIGHT)
         {
-            draw_image( bb, src, rbpt.x - thr.sis[SI_RIGHT].width(), (dd.offset.y + rbpt.y - thr.sis[SI_RIGHT].height())/2, thr.sis[SI_RIGHT], dd.cliprect, use_alphablend && thr.is_alphablend(SI_RIGHT) ? dd.alpha : -1 );
+            render_image( bb, src, rbpt.x - thr.sis[SI_RIGHT].width(), (dd.offset.y + rbpt.y - thr.sis[SI_RIGHT].height())/2, thr.sis[SI_RIGHT], dd.cliprect, use_alphablend && thr.is_alphablend(SI_RIGHT) ? dd.alpha : -1 );
         }
     } else if (options & DTHRO_LT_T_RT)
     {
@@ -2026,7 +1247,7 @@ void border_window_data_s::draw()
     } else
         tr.parse_and_render_texture(nullptr, nullptr);
 
-    ts::bmpcore_exbody_s bb = backbuffer.extbody();
+    ts::bmpcore_exbody_s bb = syswnd.wnd->get_backbuffer();
     ts::bmpcore_exbody_s src = tr.get_texture().extbody();
 
 #ifdef _DEBUG
@@ -2036,7 +1257,7 @@ void border_window_data_s::draw()
     }
 #endif // _DEBUG
 
-    draw_image( bb, src, dd.offset.x, dd.offset.y, ts::irect( ts::ivec2(0), dd.size ), dd.cliprect, dd.alpha );
+    render_image( bb, src, dd.offset.x, dd.offset.y, ts::irect( ts::ivec2(0), dd.size ), dd.cliprect, dd.alpha );
     if (tdp.sz)
         *tdp.sz = gui->tr().lastdrawsize;
     //if (tdp.glyphs)
@@ -2045,6 +1266,8 @@ void border_window_data_s::draw()
 
 /*virtual*/ void rectengine_root_c::draw( const ts::irect & rect, ts::TSCOLOR color, bool clip )
 {
+    ts::bitmap_t<ts::bmpcore_exbody_s> backbuffer( syswnd.wnd->get_backbuffer() );
+
     const draw_data_s &dd = drawdata.last();
     if (clip)
     {
@@ -2068,7 +1291,7 @@ void border_window_data_s::draw()
 /*virtual*/ void rectengine_root_c::draw( const ts::ivec2 & p, const ts::bmpcore_exbody_s &bmp, bool alphablend)
 {
     const draw_data_s &dd = drawdata.last();
-    draw_image( backbuffer.extbody(), bmp, dd.offset.x + p.x, dd.offset.y + p.y, dd.cliprect, alphablend ? dd.alpha : -1 );
+    render_image( syswnd.wnd->get_backbuffer(), bmp, dd.offset.x + p.x, dd.offset.y + p.y, dd.cliprect, alphablend ? dd.alpha : -1 );
 }
 
 void rectengine_root_c::simulate_mousemove()
@@ -2124,21 +1347,21 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
 		{
             gui->check_hintzone(data.mouse.screenpos);
             data.mouse.allowchangecursor = true;
-            HWND h = GetCapture();
+            ts::wnd_c *h = ts::master().get_capture();
             rid = getrid();
 			const hover_data_s &hd = gui->get_hoverdata(data.mouse.screenpos);
             if (hd.rid && !h)
             {
                 if (rectengine_root_c *root = HOLD(hd.rid)().getroot())
                 {
-                    h = root->hwnd;
-                    SetCapture(h);
+                    h = root->syswnd.wnd;
+                    if (h) h->set_capture();
                 }
                 //DMSG("capture" << h);
             }
             if (!hd.rid && h)
             {
-                ReleaseCapture();
+                ts::master().release_capture();
             }
             RID prevmouserid = hd.minside;
             if (hd.rid != prevmouserid)
@@ -2146,8 +1369,8 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                 rectengine_root_c *root = HOLD(hd.rid)().getroot();
                 if (CHECK( root != nullptr ) && hd.rid && root->getrid() != rid)
                 {
-                    h = root->hwnd;
-                    SetCapture(h);
+                    h = root->syswnd.wnd;
+                    if ( h ) h->set_capture();
                     //DMSG("capture" << h);
                 }
 
@@ -2155,25 +1378,25 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                 {
                     if (prevmouserid == rid && !hd.rid)
                     {
-                        ASSERT(h == hwnd);
-                        ReleaseCapture();
+                        ASSERT(h == syswnd.wnd);
+                        ts::master().release_capture();
                     }
                     gui->mouse_outside();
                     if (prevmouserid == rid && !hd.rid) return true; // out of root rect? end of all
                 }
-                if (hd.rid == rid && h != hwnd)
+                if (hd.rid == rid && h != syswnd.wnd)
                 {
-                    h = hwnd;
-                    SetCapture(hwnd);
+                    h = syswnd.wnd;
+                    if ( h ) h->set_capture();
                     //DMSG("capture" << hwnd);
                 }
                 if (hd.rid) gui->mouse_inside(hd.rid);
             }
 
-            if (hd.rid == rid && h != hwnd)
+            if (hd.rid == rid && h != syswnd.wnd )
             {
-                h = hwnd;
-                SetCapture(hwnd);
+                h = syswnd.wnd;
+                if ( h ) h->set_capture();
                 //DMSG("capture" << hwnd);
             }
 
@@ -2186,7 +1409,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                     if (r->getprops().is_maximized())
                     {
                         noresize_nomove = true;
-                        SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+                        ts::master().set_cursor(ts::CURSOR_ARROW);
                     }
                 }
             } else if (hd.rid)
@@ -2196,39 +1419,40 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
             }
             if (data.mouse.allowchangecursor)
             {
-                auto getcs = [&]()-> const ts::wchar *
+                auto getcs = [&]()-> ts::cursor_e
                 {
-                    static const ts::wchar *cursors[] = {
-                        IDC_ARROW,
-                        IDC_SIZEWE,
-                        IDC_SIZEWE,
-                        nullptr,
-                        IDC_SIZENS,
-                        IDC_SIZENWSE,
-                        IDC_SIZENESW,
-                        nullptr,
-                        IDC_SIZENS,
-                        IDC_SIZENESW,
-                        IDC_SIZENWSE,
+                    static ts::cursor_e cursors[] = {
+                        ts::CURSOR_ARROW,
+                        ts::CURSOR_SIZEWE,
+                        ts::CURSOR_SIZEWE,
+                    ts::CURSOR_LAST,
+                        ts::CURSOR_SIZENS,
+                        ts::CURSOR_SIZENWSE,
+                        ts::CURSOR_SIZENESW,
+                    ts::CURSOR_LAST,
+                        ts::CURSOR_SIZENS,
+                        ts::CURSOR_SIZENESW,
+                        ts::CURSOR_SIZENWSE,
                     };
                     if ((hd.area & AREA_RESIZE) && (hd.area & AREA_RESIZE) < LENGTH(cursors))
                     {
-                        if (noresize_nomove && 0 == (hd.area & AREA_FORCECURSOR)) return nullptr;
+                        if (noresize_nomove && 0 == (hd.area & AREA_FORCECURSOR)) return ts::CURSOR_LAST;
                         return cursors[hd.area & AREA_RESIZE];
                     }
                     if (hd.area & (AREA_MOVE))
                     {
-                        if (noresize_nomove && 0 == (hd.area & AREA_FORCECURSOR)) return nullptr;
-                        return IDC_SIZEALL;
+                        if (noresize_nomove && 0 == (hd.area & AREA_FORCECURSOR)) return ts::CURSOR_LAST;
+                        return ts::CURSOR_SIZEALL;
                     }
-                    if (hd.area & AREA_EDITTEXT) return IDC_IBEAM;
-                    if (hd.area & AREA_HAND) return IDC_HAND;
+                    if (hd.area & AREA_EDITTEXT) return ts::CURSOR_IBEAM;
+                    if (hd.area & AREA_HAND) return ts::CURSOR_HAND;
                     
 
-                    return IDC_ARROW;
+                    return ts::CURSOR_ARROW;
                 };
-                if (const ts::wchar * crsr = getcs())
-                    SetCursor(LoadCursorW(nullptr, crsr));
+                ts::cursor_e c = getcs();
+                if (c != ts::CURSOR_LAST )
+                    ts::master().set_cursor(c);
             }
             return false;
 		}
@@ -2282,7 +1506,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
         if (drawntag == data.draw().drawtag)
         {
             if (drawdata.size() == 0)
-                draw_back_buffer();
+                syswnd.wnd->flush_draw(getrect().getprops().screenrect());
             return true;
         }
         drawntag = data.draw().drawtag;
@@ -2315,38 +1539,14 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
 
 void rectengine_root_c::set_system_focus(bool bring_to_front)
 {
-    if (hwnd && hwnd != GetFocus())
-    {
-        DMSG("focus: "<< hwnd);
-        SetFocus(hwnd);
-    }
-    if (bring_to_front)
-    {
-        SetForegroundWindow(hwnd);
-    }
+    if ( syswnd.wnd )
+        syswnd.wnd->set_focus( bring_to_front );
 }
 
 void rectengine_root_c::flash()
 {
-    FlashWindow(hwnd, 0);
-}
-
-
-void rectengine_root_c::notification_icon( const ts::wsptr& text )
-{
-    if (!hwnd) return;
-
-    static NOTIFYICONDATAW nd = { sizeof(NOTIFYICONDATAW), 0 };
-    nd.hWnd = hwnd;
-    nd.uID = (int)this; //-V205
-    nd.uCallbackMessage = WM_USER + 7213;
-    //nd.hIcon = gui->app_icon(true);
-
-    size_t copylen = ts::tmin(sizeof(nd.szTip) - sizeof(ts::wchar), text.l * sizeof(ts::wchar));
-    memcpy(nd.szTip, text.s, copylen);
-    nd.szTip[copylen / sizeof(ts::wchar)] = 0;
-
-    PostMessageW( hwnd, WM_USER + 7214, 0, (LPARAM)&nd );
+    if ( syswnd.wnd )
+        syswnd.wnd->flash();
 }
 
 bool rectengine_root_c::shakeme(RID, GUIPARAM)
@@ -2368,6 +1568,85 @@ bool rectengine_root_c::shakeme(RID, GUIPARAM)
     return true;
 }
 
+void rectengine_root_c::tab_focus( RID r, bool fwd )
+{
+    decltype( afocus ) sfocus( afocus );
+    
+    for ( int i = sfocus.size() - 1; i >= 0; --i )
+        if ( sfocus.get( i ).expired() )
+            sfocus.remove_fast(i);
+
+    if ( sfocus.size() < 2 ) return;
+
+    sfocus.sort( []( const guirect_c *r1, const guirect_c *r2 ) {
+
+        if ( r1 == r2 ) return false;
+        if ( r1->getprops().pos().y == r2->getprops().pos().y )
+            return r1->getprops().pos().x < r2->getprops().pos().x;
+        return r1->getprops().pos().y < r2->getprops().pos().y;
+    } );
+
+    int sel = -1;
+    for ( int i = sfocus.size() - 1; i >= 0; --i )
+    {
+        if ( sfocus.get( i )->getrid() == r )
+        {
+            sel = i;
+            break;
+        }
+    }
+
+    if (sel >= 0)
+    {
+        if ( fwd )
+        {
+            ++sel;
+            if ( sel >= sfocus.size() ) sel = 0;
+        } else
+        {
+            --sel;
+            if ( sel < 0 ) sel = sfocus.size() - 1;
+        }
+
+        gui->set_focus( sfocus.get(sel)->getrid() );
+    }
+}
+
+void rectengine_root_c::register_afocus( guirect_c *r, bool reg )
+{
+    ASSERT( getrect().accept_focus() );
+
+    bool refocus = false;
+    if ( r->getrid() == gui->get_focus() )
+        refocus = true;
+
+    for(int i=afocus.size()-1;i>=0;--i)
+        if ( !afocus.get( i ) || afocus.get( i ) == r )
+            afocus.remove_slow( i );
+    if ( reg ) afocus.add(r);
+    if ( refocus )
+        gui->set_focus( afocus.size() ? afocus.get( afocus.size()-1)->getrid() : RID() );
+}
+
+RID rectengine_root_c::active_focus( RID sub )
+{
+    while ( afocus.size() > 0 && afocus.get( afocus.size() - 1 ).expired() )
+        afocus.remove_slow( afocus.size() - 1 );
+
+    if ( afocus.size() == 0 ) return getrid();
+
+    if ( !sub ) return afocus.get( afocus.size()-1 )->getrid();
+
+    int fi = afocus.find( &HOLD( sub )( ) );
+    if (fi >= 0)
+    {
+        afocus.remove_slow(fi);
+        afocus.add( &HOLD( sub )( ) );
+        return sub;
+    }
+    return active_focus(RID());
+}
+
 void rectengine_root_c::shake()
 {
     shaker_s *sh = TSNEW( shaker_s );
@@ -2378,10 +1657,10 @@ void rectengine_root_c::shake()
 
 bool rectengine_root_c::update_foreground()
 {
-    HWND prev = nullptr;
+    ts::wnd_c * prev = nullptr;
     for( RID rr : gui->roots() )
     {
-        HWND cur = HOLD(rr)().getroot()->hwnd;
+        ts::wnd_c *cur = HOLD(rr)().getroot()->syswnd.wnd;
         if (prev)
         {
             //SetWindowPos(cur, prev, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -2392,79 +1671,28 @@ bool rectengine_root_c::update_foreground()
         }
         prev = cur;
     }
-    SetFocus(prev);
+    if (prev) prev->set_focus( false );
+
     RID oldfocus = gui->get_focus();
-    gmsg<GM_ROOT_FOCUS>(getrid()).send();
+    gui->set_focus( active_focus(RID()) );
     return oldfocus != gui->get_focus();
 }
 
-#ifdef _WIN32
-namespace ts {
-    extern HWND g_main_window;
-};
-#endif
-
 ts::wstr_c   rectengine_root_c::load_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, ts::extensions_s & exts, const ts::wchar *title)
 {
-    /*
-        извините за этот небольшой win32 хак, но
-        если системному окну выбора папки не прописать в качестве владельца текущий диалог,
-        то системное окно начнет вести себя не вполне корректно
-    */
-    HWND ow = ts::g_main_window;
-    ts::g_main_window = hwnd;
-
-    ++sysmodal;
-    g_sysconf.is_sys_loop = sysmodal > 0;
-    ts::wstr_c r = ts::get_load_filename_dialog(iroot, name, exts, title);
-    --sysmodal;
-    g_sysconf.is_sys_loop = sysmodal > 0;
-    ts::g_main_window = ow;
-
-    return r;
+    return syswnd.wnd->get_load_filename_dialog(iroot, name, exts, title);
 }
 bool     rectengine_root_c::load_filename_dialog(ts::wstrings_c &files, const ts::wsptr &iroot, const ts::wsptr& name, ts::extensions_s & exts, const ts::wchar *title)
 {
-    HWND ow = ts::g_main_window;
-    ts::g_main_window = hwnd;
-
-    ++sysmodal;
-    g_sysconf.is_sys_loop = sysmodal > 0;
-    bool r = ts::get_load_filename_dialog(files, iroot, name, exts, title);
-    --sysmodal;
-    g_sysconf.is_sys_loop = sysmodal > 0;
-    ts::g_main_window = ow;
-
-    return r;
+    return syswnd.wnd->get_load_filename_dialog(files, iroot, name, exts, title);
 }
-
 ts::wstr_c  rectengine_root_c::save_directory_dialog(const ts::wsptr &root, const ts::wsptr &title, const ts::wsptr &selectpath, bool nonewfolder)
 {
-    HWND ow = ts::g_main_window;
-    ts::g_main_window = hwnd;
-
-    ++sysmodal;
-    g_sysconf.is_sys_loop = sysmodal > 0;
-    ts::wstr_c r = ts::get_save_directory_dialog(root, title, selectpath, nonewfolder);
-    --sysmodal;
-    g_sysconf.is_sys_loop = sysmodal > 0;
-    ts::g_main_window = ow;
-
-    return r;
+    return syswnd.wnd->get_save_directory_dialog(root, title, selectpath, nonewfolder);
 }
 ts::wstr_c  rectengine_root_c::save_filename_dialog(const ts::wsptr &iroot, const ts::wsptr &name, ts::extensions_s & exts, const ts::wchar *title)
 {
-    HWND ow = ts::g_main_window;
-    ts::g_main_window = hwnd;
-
-    ++sysmodal;
-    g_sysconf.is_sys_loop = sysmodal > 0;
-    ts::wstr_c r = ts::get_save_filename_dialog(iroot, name, exts, title);
-    --sysmodal;
-    g_sysconf.is_sys_loop = sysmodal > 0;
-    ts::g_main_window = ow;
-
-    return r;
+    return syswnd.wnd->get_save_filename_dialog(iroot, name, exts, title);
 }
 
 

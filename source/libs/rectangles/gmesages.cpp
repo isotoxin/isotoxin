@@ -64,7 +64,7 @@ void gm_receiver_c::prepare( int evcnt )
     internals().prepare(evcnt);
 }
 
-DWORD gm_receiver_c::notify_receivers(int ev, gmsgbase &par)
+ts::uint32 gm_receiver_c::notify_receivers(int ev, gmsgbase &par)
 {
     evlst_s &l = internals()(ev);
 
@@ -73,7 +73,7 @@ DWORD gm_receiver_c::notify_receivers(int ev, gmsgbase &par)
 
     for(;ASSERT(par.pass < 100, "100 iterations! vow vow");)
     {
-        DWORD bits = 0;
+        ts::uint32 bits = 0;
         gm_receiver_c *f = l._gmer_first;
         for (; f;)
         {

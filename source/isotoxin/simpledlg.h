@@ -44,9 +44,7 @@ class dialog_msgbox_c : public gui_isodialog_c
     ts::bitmap_c qrbmp;
 
     bool copy_text(RID, GUIPARAM);
-
     bool on_enter_press_func(RID, GUIPARAM);
-    bool on_esc_press_func(RID, GUIPARAM);
 
     void updrect_msgbox(const void *, int r, const ts::ivec2 &p);
 
@@ -314,4 +312,49 @@ public:
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 
+class incoming_msg_panel_c;
+template<> struct MAKE_ROOT<incoming_msg_panel_c> : public _PROOT( incoming_msg_panel_c )
+{
+    post_s post;
+    ts::shared_ptr<contact_root_c> hist;
+    ts::shared_ptr<contact_c> sender;
+    ts::str_c text;
+    MAKE_ROOT( contact_root_c *h, contact_c *s, const post_s &p ) :_PROOT( incoming_msg_panel_c )( ), hist( h ), sender(s), post(p) { init( true ); }
+    ~MAKE_ROOT();
+};
+
+class incoming_msg_panel_c : public gui_control_c
+{
+    GM_RECEIVER( incoming_msg_panel_c, GM_UI_EVENT );
+    GM_RECEIVER( incoming_msg_panel_c, ISOGM_UPDATE_MESSAGE_NOTIFICATION );
+
+    ts::shared_ptr<contact_root_c> hist;
+    ts::shared_ptr<contact_c> sender;
+    post_s post;
+
+    ts::ivec2 sz = ts::ivec2(300,100);
+    ts::ivec2 avarect = ts::ivec2( 60, 60 );
+
+    ts::safe_ptr<gui_message_item_c> msgitm;
+
+    ts::Time appeartime = ts::Time::current();
+
+    bool dip = false;
+
+protected:
+    /*virtual*/ void created() override;
+
+    bool endoflife( RID, GUIPARAM );
+    bool tick( RID, GUIPARAM );
+
+public:
+    int tgt_y = 0;
+    incoming_msg_panel_c( MAKE_ROOT<incoming_msg_panel_c> &data );
+    ~incoming_msg_panel_c();
+
+    /*virtual*/ ts::ivec2 get_min_size() const override;
+
+    //sqhandler_i
+    /*virtual*/ bool sq_evt( system_query_e qp, RID rid, evt_data_s &data ) override;
+};
 

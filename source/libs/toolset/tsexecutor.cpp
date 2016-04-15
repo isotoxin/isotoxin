@@ -1,4 +1,5 @@
 #include "toolset.h"
+#include "internal/platform.h"
 
 namespace ts
 {
@@ -11,7 +12,7 @@ namespace ts
 
 task_executor_c::task_executor_c()
 {
-    base_thread_id = GetCurrentThreadId();
+    base_thread_id = spinlock::pthread_self();
     evt = CreateEvent(nullptr,FALSE,FALSE,nullptr);
     maximum_workers = g_cpu_cores - 1;
     if (maximum_workers < 1) maximum_workers = 1;

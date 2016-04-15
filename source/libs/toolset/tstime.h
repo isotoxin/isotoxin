@@ -4,21 +4,18 @@ namespace ts
 {
 class Time
 {
-    DWORD value;
-    static __declspec(thread) DWORD thread_current_time;
+    uint32 value;
+    static __declspec(thread) uint32 thread_current_time;
 
     Time();
-    explicit Time(DWORD value) : value(value) {}
-    void operator-(DWORD) const; // avoid "t - timeGetTime()"
+    explicit Time( uint32 value) : value(value) {}
+    void operator-( uint32 ) const; // avoid "t - timeGetTime()"
 
 public:
 
-    DWORD raw() const { return value; }
+    uint32 raw() const { return value; }
 
-    static Time current()
-    {
-        return Time(thread_current_time ? thread_current_time : timeGetTime());
-    }
+    static Time current();
     static Time undefined()
     {
         return Time(0);
@@ -27,11 +24,7 @@ public:
     {
         return current() - 500000000;
     }
-    static Time update_thread_time() // update current thread time and return current time value
-    {
-        if ((thread_current_time = timeGetTime()) == 0) thread_current_time = 1; // 0 means direct call to timeGetTime(), so set 1
-        return Time(thread_current_time);
-    }
+    static Time update_thread_time(); // update current thread time and return current time value
 
     Time &operator+=(int delta) { value += delta; return *this; }
     Time operator+(int     delta) const { return Time(value + delta); }
@@ -44,6 +37,7 @@ public:
     bool operator>=(const Time &t) const { return int(value - t.value) >= 0; }
 };
 
+int generate_time_string( wchar *s, int capacity, const wstr_c& tmpl, const tm& t );
 
 class timer_subscriber_c
 {
@@ -129,36 +123,6 @@ public:
         }
     }
 
-};
-
-
-class message_poster_c
-{
-    struct data_s
-    {
-        HWND w;
-        int msg;
-        WPARAM wp;
-        LPARAM lp;
-
-        bool working = false;
-        bool stoping = false;
-        bool pause = false;
-
-        data_s() {} //-V730
-    };
-
-    spinlock::syncvar<data_s> m_data;
-    int m_pausems;
-
-    static DWORD WINAPI worker(LPVOID lpParameter);
-public:
-    message_poster_c(int pausems = 50) : m_pausems(pausems) {}
-    ~message_poster_c();
-
-    void start(HWND w, int msg, WPARAM wp, LPARAM lp);
-    void stop();
-    void pause(bool p);
 };
 
 class frame_time_c

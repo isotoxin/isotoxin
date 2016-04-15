@@ -108,6 +108,9 @@ void theme_rect_s::load_params(abp_c * block, const colors_map_s &colsmap)
         addition = std::move(*addi);
     }
 
+    if ( abp_c *sb = block->get( CONSTASTR( "specialborder" ) ) )
+        flags.init( F_SPECIALBORDER, sb->as_int() != 0 );
+
     if (byrect)
     {
         ts::irect byrectr = parserect( byrect->as_string(), ts::irect(0) );
@@ -599,6 +602,10 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
             theme_image_s &img = images.add(it.name());
             img.dbmp = dbmp;
             img.rect = r;
+            img.center = r.size() / 2;
+            if ( const ts::abp_c *center = it->get( CONSTASTR( "center" ) ) )
+                img.center = ts::parsevec2( center->as_string(), img.center );
+
             if (asvg)
                 img.set_animated(asvg, svgshift);
             (ts::image_extbody_c &)img = std::move(ts::image_extbody_c(dbmp->body(r.lt), imgdesc_s(r.size(), 32, dbmp->info().pitch)));
@@ -676,19 +683,6 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
         gmsg<GM_UI_EVENT>(UE_THEMECHANGED).send();
 	return true;
 }
-
-/*
-void theme_c::add_image( const asptr & tag, bitmap_c &bmp )
-{
-    static int num = 1;
-    bitmap_c &dbmp = bitmaps[wstr_c(CONSTWSTR("???")).append_as_uint(num++)];
-    dbmp = bmp;
-    theme_image_s &img = images.add(tag);
-    img.dbmp = &dbmp;
-    img.rect.lt = ts::ivec2(0);
-    img.rect.rb = dbmp.info().sz;
-}
-*/
 
 irect theme_rect_s::captionrect( const irect &rr, bool maximized ) const
 {

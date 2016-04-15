@@ -243,6 +243,9 @@ void contacts_s::set(int column, ts::data_value_s &v)
         case C_TAGS:
             tags.split<char>( v.text, ',' );
             return;
+        case C_MESSAGEHANDLER:
+            msghandler = v.text;
+            return;
         case C_AVATAR:
             avatar = v.blob;
             return;
@@ -290,6 +293,9 @@ void contacts_s::get(int column, ts::data_pair_s& v)
         case C_TAGS:
             v.text = tags.join(',');
             return;
+        case C_MESSAGEHANDLER:
+            v.text = msghandler;
+            return;
         case C_AVATAR:
             v.blob = avatar;
             return;
@@ -314,6 +320,7 @@ ts::data_type_e contacts_s::get_column_type(int index)
         case C_CUSTOMNAME:
         case C_COMMENT:
         case C_TAGS:
+        case C_MESSAGEHANDLER:
             return ts::data_type_e::t_str;
         case C_READTIME:
             return ts::data_type_e::t_int64;
@@ -358,6 +365,9 @@ void contacts_s::get_column_desc(int index, ts::column_desc_s&cd)
             break;
         case C_TAGS:
             cd.name_ = CONSTASTR("tags");
+            break;
+        case C_MESSAGEHANDLER:
+            cd.name_ = CONSTASTR( "msghandler" );
             break;
         case C_AVATAR:
             cd.name_ = CONSTASTR("avatar");
@@ -1227,11 +1237,7 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
         db = nullptr;
     }
 
-    if (mutex)
-    {
-        CloseHandle(mutex);
-        mutex = nullptr;
-    }
+    mutex.reset();
 
     closed = false;
 
@@ -1270,18 +1276,9 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
     if (utag.is_empty())
         utag.set_as_num<uint64>(ts::uuid()), generated = true;
 
-    mutex = CreateMutexW(nullptr, FALSE, CONSTWSTR("isotoxin_db_") + ts::to_wstr(utag));
+    mutex.reset( ts::master().sys_global_atom( CONSTWSTR( "isotoxin_db_" ) + ts::to_wstr( utag ) ) );
     if (!mutex)
     {
-        db->close();
-        db = nullptr;
-        return PLR_CONNECT_FAILED;
-    }
-
-    if (ERROR_ALREADY_EXISTS == GetLastError())
-    {
-        CloseHandle(mutex);
-        mutex = nullptr;
         db->close();
         db = nullptr;
         return PLR_BUSY;
@@ -1352,9 +1349,6 @@ profile_c::~profile_c()
 {
     if (db)
         shutdown_aps();
-
-    if (mutex)
-        CloseHandle(mutex);
 }
 
 int encrypt_process_i = 0, encrypt_process_n = 0;
@@ -1548,32 +1542,6 @@ void profile_c::encrypt( const ts::uint8 *passwdhash /* 256 bit (CC_HASH_SIZE by
     gui->add_event_t<encrypt_c, const ts::uint8 *>(delay_before_start, passwdhash);
 }
 
-
-void profile_c::mb_warning_readonly(bool minimize)
-{
-    struct s
-    {
-        static void conti(const ts::str_c&p)
-        {
-            g_app->F_READONLY_MODE_WARN = true;
-            g_sysconf.mainwindow = nullptr;
-            g_app->summon_main_rect( p.equals(CONSTASTR("1") ) );
-        }
-        static void exit_now(const ts::str_c&)
-        {
-            g_sysconf.mainwindow = nullptr;
-            sys_exit(0);
-        }
-    };
-    redraw_collector_s dch;
-    dialog_msgbox_c::mb_warning( TTT("Profile and configuration are write protected![br][appname] is in [b]read-only[/b] mode!", 332) )
-        .on_ok(s::conti, minimize ? CONSTASTR("1") : CONSTASTR("0"))
-        .on_cancel(s::exit_now, ts::asptr())
-        .bcancel(true, loc_text(loc_exit))
-        .bok(TTT("Continue",117))
-        .summon();
-}
-
 void profile_c::mb_error_load_profile( const ts::wsptr & prfn, profile_load_result_e plr, bool modal )
 {
     ts::wstr_c text;
@@ -1599,8 +1567,8 @@ void profile_c::mb_error_load_profile( const ts::wsptr & prfn, profile_load_resu
     {
         static void exit_now(const ts::str_c&)
         {
-            g_sysconf.mainwindow = nullptr;
-            sys_exit(10);
+            ts::master().mainwindow = nullptr;
+            ts::master().sys_exit(10);
         }
     };
 
@@ -1720,7 +1688,7 @@ void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, i
 {
     if (profile_flags.is(F_ENCRYPT_PROCESS))
     {
-        Sleep(1);
+        ts::master().sys_sleep(1);
         return false;
     }
 

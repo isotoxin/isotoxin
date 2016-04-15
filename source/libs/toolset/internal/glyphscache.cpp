@@ -1,4 +1,5 @@
 #include "toolset.h"
+#include "platform.h"
 #include "glyphscache.h"
 
 //-V:idata:807
@@ -266,6 +267,9 @@ font_c &font_c::buildfont(const str_c &fontname, const font_params_s&fprs)
 		blob_c buf = g_fileop->load(idta.fonts_dirs, face);
 		while (!buf)
 		{
+
+#ifdef _WIN32
+
             // cant load font?
             // try load it from system dir...
 
@@ -276,6 +280,7 @@ font_c &font_c::buildfont(const str_c &fontname, const font_params_s&fprs)
             sysdir.append(face);
             buf = g_fileop->load(sysdir);
             if (buf) break;
+#endif
 
             ERROR("Font '%s' not found. Check path! Current path is: %s", to_str(face).cstr(), to_str(idta.fonts_dirs.join(CONSTWSTR("\r\n"))).cstr());
 

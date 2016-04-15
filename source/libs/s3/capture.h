@@ -2,7 +2,7 @@
 
 namespace s3
 {
-void enum_sound_capture_devices(device_enum_callback *lpDSEnumCallback, LPVOID lpContext);
+void enum_sound_capture_devices(device_enum_callback *lpDSEnumCallback, void * lpContext);
 void set_capture_device( const DEVICE *dev );
 void get_capture_device( DEVICE *dev );
 

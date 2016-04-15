@@ -8,8 +8,7 @@ namespace ts
 #define TARGA_TRUECOLOR_RLE_IMAGE	10
 #define TARGA_BW_RLE_IMAGE			11
 
-#pragma pack(push)
-#pragma pack(1)
+#pragma pack(push, 1)
     struct TGA_Header
     {
         uint8 IDLength;

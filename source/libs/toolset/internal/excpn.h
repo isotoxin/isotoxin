@@ -31,11 +31,6 @@ public:
         self.dump_type = minidumpType;
     }
 
-    static void set_unhandled_exception_filter()
-    {
-        ::SetUnhandledExceptionFilter(&exception_filter);
-    }
-
     static swstr_t<MAX_PATH> dump_filename;
 };
 

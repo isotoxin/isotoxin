@@ -265,7 +265,7 @@ guirect_c::~guirect_c()
     }
 
     if (g_app)
-        gui->nomorerect(getrid(), !m_parent);
+        gui->nomorerect(getrid());
 
     for (ts::safe_ptr<sqhandler_i> & sh : m_leeches)
         if (sqhandler_i *h = sh)
@@ -447,6 +447,9 @@ void gui_control_c::disable(bool f)
     if (flags.is(F_DISABLED) != f)
     {
         flags.init(F_DISABLED, f);
+
+        getroot()->register_afocus( this, accept_focus() );
+
         getengine().redraw();
     }
 }
@@ -1401,7 +1404,7 @@ void gui_tooltip_c::create(RID owner)
 #ifdef _DEBUG
     static bool disable_tt = false;
     if (disable_tt) return;
-    if ((GetAsyncKeyState(VK_CONTROL)  & 0x8000)==0x8000)
+    if ( ts::master().is_key_pressed( ts::SSK_CTRL ))
     {
         disable_tt = true;
         return;
@@ -2574,7 +2577,6 @@ bool gui_popup_menu_c::check_focus(RID r, GUIPARAM p)
         return true;
     case SQ_FOCUS_CHANGED:
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, check_focus), nullptr);
-        if (data.changed.focus) data.changed.is_active_focus = true;
         return true;
     case SQ_CHILD_CREATED:
         HOLD(data.rect.id)().leech(this);
@@ -2585,7 +2587,7 @@ bool gui_popup_menu_c::check_focus(RID r, GUIPARAM p)
     case SQ_DRAW:
         return is_sb_visible() ? __super::sq_evt(qp,getrid(),data) : gui_control_c::sq_evt(qp,getrid(),data);
     case SQ_KEYDOWN:
-        if (data.kbd.scan == SSK_ESC)
+        if (data.kbd.scan == ts::SSK_ESC)
             gmsg<GM_KILLPOPUPMENU_LEVEL>(menu.lv()).send();
         return true;
     case SQ_GET_ROOT_PARENT:
@@ -2942,17 +2944,6 @@ gui_textfield_c::gui_textfield_c(MAKE_CHILD<gui_textfield_c> &data) :gui_textedi
 
 gui_textfield_c::~gui_textfield_c()
 {
-}
-
-ts::uint32 gui_textfield_c::gm_handler( gmsg<GM_ROOT_FOCUS>&p )
-{
-    if (p.pass == 0 && !is_disabled_caret() && (p.rootrid >>= getrid()))
-    {
-        if (/*!p.activefocus ||*/ getrid() == gui->get_active_focus())
-            p.activefocus = getrid();
-        return GMRBIT_CALLAGAIN;
-    }
-    return 0;
 }
 
 bool gui_textfield_c::push_selector(RID, GUIPARAM)

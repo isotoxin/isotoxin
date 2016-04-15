@@ -168,11 +168,28 @@ struct SoundGroupSlots
 	void initialize(const struct SlotInitParams &sip);
 };
 
-#ifdef WIN32
-typedef GUID DEVICE;
-inline GUID __default_device() /*constexpr*/ { GUID g = {0}; return g; }
-#define DEFAULT_DEVICE __default_device()
+#ifndef GUID_DEFINED
+typedef struct _GUID {
+    unsigned long  Data1;
+    unsigned short Data2;
+    unsigned short Data3;
+    unsigned char  Data4[ 8 ];
+} GUID;
 #endif
+
+struct DEVICE : public GUID
+{
+    DEVICE()
+    {
+        memset( this, 0, sizeof(DEVICE) );
+    }
+
+    bool operator == ( const DEVICE &d ) const
+    {
+        return memcmp( this, &d, sizeof(DEVICE) ) == 0;
+    }
+};
+#define DEFAULT_DEVICE DEVICE()
 
 struct InitParams
 {
@@ -213,9 +230,13 @@ public:
 
 void Update(); // call it at least once per 5 second - it will cleanup autodeleted sources
 
+#ifndef _WINDEF_
+typedef int BOOL;
+#endif
+
 typedef BOOL __stdcall device_enum_callback(DEVICE *lpGuid, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule, void *lpContext);
 
-void enum_sound_play_devices(device_enum_callback *lpDSEnumCallback, LPVOID lpContext);
+void enum_sound_play_devices(device_enum_callback *lpDSEnumCallback, void * lpContext);
 
 }
 

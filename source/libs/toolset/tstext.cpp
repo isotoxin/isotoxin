@@ -5,7 +5,7 @@
 namespace ts
 {
 
-    FORCEINLINE ivec4 TSCOLORtoVec4(TSCOLOR color)
+    INLINE ivec4 TSCOLORtoVec4(TSCOLOR color)
     {
         return ivec4(RED(color), GREEN(color), BLUE(color), ALPHA(color));
     }

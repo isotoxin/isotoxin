@@ -16,13 +16,6 @@ enum loc_label_e
     LL_ANY_FILES,
 };
 
-enum naction_e
-{
-    NIA_LCLICK,
-    NIA_L2CLICK,
-    NIA_RCLICK,
-};
-
 class delay_event_c : public ts::timer_subscriber_c
 {
 protected:
@@ -57,11 +50,14 @@ struct hover_data_s
 {
     RID rid;
     RID locked;
-    RID focus;
+    RID root_focus; // rid of root rect
     RID active_focus; // rect that actually accepts input (buttons, text inputs)
     RID minside; // mouse inside
     ts::uint32 area = 0;
     ts::ivec2 mp;
+
+    ts::tbuf0_t<RID> rootfocushistory;
+
     hover_data_s():mp(maximum<ts::ivec2::TYPE>::value) {}
 };
 
@@ -149,8 +145,6 @@ template<> struct gmsg<GM_DRAGNDROP> : public gmsgbase
     dndaction_e a;
 };
 
-extern int sysmodal;
-
 class guirect_watch_c
 {
     friend class gui_c;
@@ -177,25 +171,10 @@ class gui_c
     template<typename R> friend struct MAKE_CHILD;
     template<typename R> friend struct MAKE_VISIBLE_CHILD;
 
-	SIMPLE_SYSTEM_EVENT_RECEIVER( gui_c, SEV_BEFORE_INIT );
-	SIMPLE_SYSTEM_EVENT_RECEIVER( gui_c, SEV_LOOP );
-	SIMPLE_SYSTEM_EVENT_RECEIVER( gui_c, SEV_IDLE );
-
-    SIMPLE_SYSTEM_EVENT_RECEIVER( gui_c, SEV_KEYBOARD );
-    SIMPLE_SYSTEM_EVENT_RECEIVER( gui_c, SEV_WCHAR );
-    SIMPLE_SYSTEM_EVENT_RECEIVER( gui_c, SEV_MOUSE );
-
-    GM_RECEIVER(gui_c, GM_ROOT_FOCUS);
     GM_RECEIVER(gui_c, GM_UI_EVENT);
 
     guirect_watch_c *first_watch = nullptr;
     guirect_watch_c *last_watch = nullptr;
-
-
-    ts::uint32 handle_char( ts::wchar c );
-    ts::uint32 keyboard(const system_event_param_s & p);
-    ts::uint32 mouse(const system_event_param_s & p);
-    void loop();
 
     ts::safe_ptr<dragndrop_processor_c> dndproc;
     mousetrack_data_s mtrack_;
@@ -329,6 +308,13 @@ protected:
 
     theme_c &get_theme() {return m_theme;}
 
+
+    void sys_loop(); // application must call this
+
+    bool handle_keyboard( int scan, bool dn, int casw );
+    bool handle_char( wchar_t c );
+    void handle_mouse( ts::mouse_event_e me, const ts::ivec2 &scrpos );
+
 public:
 
     ts::TSCOLOR deftextcolor = ts::ARGB(0, 0, 0);
@@ -337,15 +323,10 @@ public:
     ts::TSCOLOR selection_bg_color = ts::ARGB(100, 100, 255);
     ts::TSCOLOR selection_bg_color_blink = ts::ARGB(0, 0, 155);
 
-    static const ts::uint32 casw_ctrl = 1U << 31;
-    static const ts::uint32 casw_alt = 1U << 30;
-    static const ts::uint32 casw_shift = 1U << 29;
-    static const ts::uint32 casw_win = 1U << 28;
-
     virtual ts::wsptr app_loclabel(loc_label_e ll) { return CONSTWSTR("???"); }
     virtual bool app_custom_button_state(int tag, int &shiftleft) { return true; }
     virtual void app_prepare_text_for_copy( ts::str_c &text_utf8 ) {}
-    virtual void app_notification_icon_action(naction_e act, RID iconowner) {}
+    virtual void app_notification_icon_action( ts::notification_icon_action_e act, RID iconowner) {}
 
     virtual void app_fix_sleep_value(int &sleep_ms) {}
     virtual void app_5second_event() {}
@@ -462,7 +443,7 @@ public:
 	const theme_c &theme() const {return m_theme;}
     DEBUGCODE( const theme_c &xtheme(); );
     const ts::tbuf_t<RID>& roots() const {return m_roots;}
-    void nomorerect(RID rootrid, bool isroot);
+    void nomorerect(RID rootrid);
 
     ts::ivec2 textsize( const ts::font_desc_c& font, const ts::wstr_c& text, int width_limit = -1, int flags = 0 );
 
@@ -531,14 +512,14 @@ public:
 
     ts::ivec2 get_cursor_pos() const;
 
-    void set_focus(RID rid, bool force_active_focus = false);
-    RID get_focus() const {return m_hoverdata.focus; }
-    RID get_active_focus() const {return m_hoverdata.active_focus; }
+    void set_focus(RID rid);
+    RID get_rootfocus() const { return m_hoverdata.root_focus; }
+    RID get_focus() const {return m_hoverdata.active_focus; }
     RID get_minside() const {return m_hoverdata.minside; }
 
     selectable_core_s &selcore() { return m_selcore; }
 
-    virtual HICON app_icon(bool for_tray) = 0;   //HICON icon = LoadIcon(g_sysconf.instance, MAKEINTRESOURCE(IDI_ICON));
+    virtual ts::bitmap_c app_icon(bool for_tray) = 0; // NON PREMULTIPLIED!
 
     template<typename R> R * find_rect( GUIPARAM ptr )
     {

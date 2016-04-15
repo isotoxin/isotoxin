@@ -10,7 +10,7 @@
     set_theme_rect(CONSTASTR("smilesel"), false);
     __super::created();
 
-    gui->register_kbd_callback(DELEGATE(this, esc_handler), SSK_ESC, 0);
+    gui->register_kbd_callback(DELEGATE(this, esc_handler), ts::SSK_ESC, 0);
 
 }
 
@@ -209,7 +209,6 @@ bool dialog_smileselector_c::find_undermouse()
         break;
     case SQ_FOCUS_CHANGED:
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, check_focus), nullptr);
-        if (data.changed.focus) data.changed.is_active_focus = true;
         return true;
     }
 

@@ -48,8 +48,24 @@ ts::uint32 mainrect_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
 
 /*virtual*/ ts::wstr_c mainrect_c::get_name() const
 {
-    if (name.is_empty())
-        const_cast<ts::wstr_c &>(name).set(ts::wsptr(g_sysconf.name)).replace_all(CONSTWSTR(APPNAME), APPNAME_CAPTION);
+    if ( name.is_empty() )
+    {
+        ts::wstr_c &n = const_cast<ts::wstr_c &>( name );
+        n.set( APPNAME_CAPTION );
+
+#ifdef _DEBUG
+        n.append_char(' ');
+        n.append( ts::to_wstr( application_c::appver() ) );
+        n.append( CONSTWSTR(" - CRC:") );
+        ts::buf_c b;
+        b.load_from_disk_file( ts::get_exe_full_name() );
+        int sz;
+        wchar_t bx[ 32 ];
+        wchar_t * t = ts::CHARz_make_str_unsigned<ts::wchar, uint>( bx, sz, b.crc() );
+        n.append( ts::wsptr(t) );
+#endif // _DEBUG
+
+    }
     return name;
 }
 
@@ -88,25 +104,7 @@ void mainrect_c::rebuild_icons()
         if (tr->captextadd.x >= 18)
         {
             int sz = tr->captextadd.x - 2;
-
-            ts::buf_c svgb; svgb.load_from_file( CONSTWSTR("icon.svg") );
-            ts::abp_c gen;
-            ts::str_c svgs( svgb.cstr() );
-            svgs.replace_all( CONSTASTR("[scale]"), ts::amake<float>( (float)sz * 0.01f ) );
-            gen.set(CONSTASTR("svg")).set_value( svgs );
-
-            gen.set(CONSTASTR("color")).set_value( make_color( GET_THEME_VALUE(state_online_color) ) );
-            gen.set(CONSTASTR("color-hover")).set_value(make_color( GET_THEME_VALUE(state_away_color) ) );
-            gen.set(CONSTASTR("color-press")).set_value(make_color( GET_THEME_VALUE(state_dnd_color) ) );
-            gen.set(CONSTASTR("color-disabled")).set_value(make_color( 0 ) );
-            gen.set(CONSTASTR("size")).set_value( ts::amake(ts::ivec2(sz)) );
-            colors_map_s cmap;
-            icons.clear();
-            if (generated_button_data_s *g = generated_button_data_s::generate( &gen, cmap, false ))
-            {
-                icons = g->src;
-                TSDEL(g);
-            }
+            icons = g_app->build_icon(sz);
         }
     }
 }

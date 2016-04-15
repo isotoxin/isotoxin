@@ -19,7 +19,7 @@ void config_base_c::close()
     }
 }
 
-DWORD config_base_c::handler_SEV_CLOSE(const system_event_param_s & p)
+ts::uint32 config_base_c::gm_handler(gmsg<ISOGM_ON_EXIT> &)
 {
     close();
     return 0;
@@ -137,11 +137,11 @@ bool find_config(ts::wstr_c &path)
                 } else if (elevate())
                 {
                     path.clear();
-                    sys_exit(0);
+                    ts::master().sys_exit(0);
                     return false;
                 } else
                 {
-                    Sleep(500);
+                    ts::master().sys_sleep(500);
                 }
 
                 return true;
@@ -168,7 +168,7 @@ void config_c::load( const ts::wstr_c &path_override )
         if (!path_override.is_empty())
         {
             ERROR("Config MUST PRESENT");
-            sys_exit(0);
+            ts::master().sys_exit(0);
             return;
         }
         // no config :(

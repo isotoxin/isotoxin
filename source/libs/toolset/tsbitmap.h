@@ -4,8 +4,25 @@
 
 #include "internal/imageformat.h"
 
+
 namespace ts
 {
+#pragma pack(push, 1)
+    struct BITMAPINFOHEADER
+    {
+        uint32     biSize;
+        long       biWidth;
+        long       biHeight;
+        uint16     biPlanes;
+        uint16     biBitCount;
+        uint32     biCompression;
+        uint32     biSizeImage;
+        long       biXPelsPerMeter;
+        long       biYPelsPerMeter;
+        uint32     biClrUsed;
+        uint32     biClrImportant;
+    };
+#pragma pack(pop)
 
 enum image_area_type_e
 {
@@ -48,7 +65,7 @@ struct imgdesc_s
     ivec2 sz;
     int16 pitch; // pitch is signed and can be < 0
     uint8 bitpp;
-    uint8 _dummy;
+    uint8 _dummy = 0;
     imgdesc_s() {}
     imgdesc_s( const imgdesc_s &inf, const ivec2&sz ) :sz(sz), pitch(inf.pitch), bitpp(inf.bitpp) {}
     imgdesc_s( const ivec2&sz, uint8 bitpp):sz(sz), pitch(as_word(((bitpp + 1) >> 3) * sz.x)), bitpp(bitpp) {}
@@ -442,12 +459,14 @@ public:
     bool premultiply();
     bool premultiply( const irect &rect );
     void colorclamp();
+    void unmultiply(); // restore color from premultiplied
 
+    void invcolor();
     void mulcolor(const ivec2 & pdes, const ivec2 & size, TSCOLOR color);
 
     void detect_alpha_channel( const bitmap_t & bmsou ); // me - black background, bmsou - white background
 
-    void render_cursor( const ivec2&pos, buf_c &cache );
+    void render_cursor( const ivec2&pos, buf_c &cache ); // render current cursor to bitmap; PLATFORM SPECIFIC!!!
 
     template <typename FILTER, typename CORE2> void copy_with_filter(bitmap_t<CORE2>& outimage, FILTER &f) const
     {
@@ -652,9 +671,6 @@ public:
         return 0 != (get_area_type() & (ts::IMAGE_AREA_TRANSPARENT | ts::IMAGE_AREA_SEMITRANSPARENT));
     }
     
-    
-    
-
     uint32 hash() const
     {
         uint32 crc = 0xFFFFFFFF; //-V112
@@ -664,8 +680,6 @@ public:
         return CRC32_End(crc);
     }
 
-    bool load_from_HBITMAP(HBITMAP bmp);
-    void load_from_HWND(HWND hwnd);
     bool load_from_BMPHEADER(const BITMAPINFOHEADER * iH, int buflen);
 
 	img_format_e load_from_file(const void * buf, int buflen);
@@ -707,39 +721,21 @@ public:
     image_extbody_c( const uint8 *imgbody, const imgdesc_s &info ): bitmap_t(imgbody, info) {}
 };
 
-struct draw_target_s
-{
-    const bmpcore_exbody_s *eb;
-    HDC dc;
-    explicit draw_target_s( const bmpcore_exbody_s &eb_ ):eb(&eb_), dc(nullptr) {}
-    explicit draw_target_s( HDC dc ):eb(nullptr), dc(dc) {}
-};
-
 class drawable_bitmap_c : public image_extbody_c
 {
     DUMMY(drawable_bitmap_c);
 
-    HBITMAP m_mem_bitmap = nullptr;
-    HDC     m_mem_dc = nullptr;
+#ifdef _WIN32
+    static const int datasize = 16;
+#endif // _WIN32
 
 public:
 
+    uint8 data[ datasize ];
+
     void clear();
 
-    bool	ajust(const ivec2 &sz, bool exact_size)
-    {
-        ivec2 newbbsz((sz.x + 15) & (~15), (sz.y + 15) & (~15));
-        ivec2 bbsz = info().sz;
-
-        if ((exact_size && newbbsz != bbsz) || sz > bbsz)
-        {
-            if(newbbsz.x < bbsz.x) newbbsz.x = bbsz.x;
-            if(newbbsz.y < bbsz.y) newbbsz.y = bbsz.y;
-            create(newbbsz);
-            return true;
-        }
-        return false;
-    }
+    bool	ajust( const ivec2 &sz, bool exact_size );
 
     bool    create_from_bitmap(const bitmap_c &bmp, const ivec2 &p, const ivec2 &sz, bool flipy = false, bool premultiply = false, bool detect_alpha_pixels = false);
     bool    create_from_bitmap(const bitmap_c &bmp, bool flipy = false, bool premultiply = false, bool detect_alpha_pixels = false);
@@ -747,18 +743,9 @@ public:
     void    save_to_bitmap(bitmap_c &bmp, const ivec2 & pos_from_dc);
     void    create(const ivec2 &sz, int monitor = -1);
 
-    HBITMAP bitmap()    const  { return m_mem_bitmap; }
-    HDC     DC()	    const  { return m_mem_dc; }
 
     drawable_bitmap_c(const drawable_bitmap_c &) UNUSED;
-    drawable_bitmap_c(drawable_bitmap_c && ob)
-    {
-        m_mem_bitmap = ob.m_mem_bitmap;
-        m_mem_dc = ob.m_mem_dc;
-        core.m_body = ob.core.m_body;
-        core.m_info = ob.core.m_info;
-        memset(&ob, 0, sizeof(drawable_bitmap_c));
-    }
+    drawable_bitmap_c( drawable_bitmap_c && ob );
 
     drawable_bitmap_c() : image_extbody_c(nullptr, imgdesc_s(ivec2(0), 0)) {}
     explicit drawable_bitmap_c(const ivec2 &sz) : image_extbody_c(nullptr, imgdesc_s(ivec2(0), 0)) { create(sz); }
@@ -766,39 +753,33 @@ public:
 
     ~drawable_bitmap_c() { clear(); }
 
-    drawable_bitmap_c &operator=(drawable_bitmap_c && ob)
-    {
-        SWAP(m_mem_bitmap, ob.m_mem_bitmap);
-        SWAP(m_mem_dc, ob.m_mem_dc);
-        SWAP(core.m_body, ob.core.m_body);
-
-        SWAP(core.m_info.sz, ob.core.m_info.sz);
-        SWAP(core.m_info.pitch, ob.core.m_info.pitch);
-        SWAP(core.m_info.bitpp, ob.core.m_info.bitpp);
-        return *this;
-    }
-
+    drawable_bitmap_c &operator=( drawable_bitmap_c && ob );
     drawable_bitmap_c &operator=(const drawable_bitmap_c & ) UNUSED;
 
-    template <class W> void work(W & w)
-    {
-        if (body() == nullptr) return;
-        BITMAP bmpInfo;
-        GetObject(m_mem_bitmap, sizeof(BITMAP), &bmpInfo);
-
-        for (aint j = 0; j < aint(bmpInfo.bmHeight); ++j)
-        {
-            uint32 *x = (uint32 *)((BYTE *)body() + j * aint(bmpInfo.bmWidthBytes));
-            for (aint i = 0; i < bmpInfo.bmWidth; ++i)
-            {
-                x[i] = w(i, j, x[i]);
-            }
-        }
-    }
-
-    void draw(const draw_target_s &dt, aint xx, aint yy, int alpha = -1 /* -1 means no alphablend used */) const;
-    void draw(const draw_target_s &dt, aint xx, aint yy, const irect &r, int alpha = -1 /* -1 means no alphablend used */ ) const;
+    void grab_screen( const ts::irect &screenr, const ts::ivec2& p_in_bitmap );
 };
+
+void render_image( const bmpcore_exbody_s &tgt, const bmpcore_exbody_s &image, aint x, aint y, const irect &cliprect, int alpha );
+void render_image( const bmpcore_exbody_s &tgt, const bmpcore_exbody_s &image, aint x, aint y, const irect &imgrect, const irect &cliprect, int alpha );
+
+struct repdraw //-V690
+{
+    const ts::bmpcore_exbody_s &tgt;
+    const ts::bmpcore_exbody_s &image;
+    const ts::irect &cliprect;
+    const ts::irect *rbeg;
+    const ts::irect *rrep;
+    const ts::irect *rend;
+    int alpha;
+    bool a_beg, a_rep, a_end;
+    void operator=( const repdraw & ) UNUSED;
+    repdraw( const ts::bmpcore_exbody_s &tgt, const ts::bmpcore_exbody_s &image, const ts::irect &cliprect, int alpha ) :tgt( tgt ), image( image ), cliprect( cliprect ), alpha( alpha ) {}
+
+    void draw_h( ts::aint x1, ts::aint x2, ts::aint y, bool tile );
+    void draw_v( ts::aint x, ts::aint y1, ts::aint y2, bool tile );
+    void draw_c( ts::aint x1, ts::aint x2, ts::aint y1, ts::aint y2, bool tile );
+};
+
 
 
 } // namespace ts

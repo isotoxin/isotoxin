@@ -485,7 +485,7 @@ bool contact_c::b_receive_file(RID, GUIPARAM par)
             TSDEL(ownitm);
         } else
         {
-            MessageBeep(MB_ICONERROR);
+            ts::master().sys_beep(ts::SBEEP_ERROR);
         }
     }
 
@@ -1504,6 +1504,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
             if (CHECK(h))
                 g_app->new_blink_reason(h->getkey()).friend_invite();
         }
+        // no break here
     case MTA_MESSAGE:
         if (MTA_MESSAGE == imsg.mt)
         {
@@ -1511,8 +1512,16 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
             {
                 g_app->new_blink_reason(h->getkey()).up_unread();
                 h->subactivity(sender->getkey());
+
+                if (g_app->is_inactive( false ) && prf().get_options().is( UIOPT_SHOW_INCOMING_MSG_PNL ) )
+                {
+                    MAKE_ROOT<incoming_msg_panel_c>( h, sender, msg.post );
+                }
+
+                h->execute_message_handler( msg.post.message_utf8 );
             }
         }
+        // no break here
     case MTA_ACTION:
         if (g_app->is_inactive(true) || !msg.current)
             play_sound( snd_incoming_message, false );
@@ -2227,6 +2236,96 @@ const avatar_s *contact_root_c::get_avatar() const
     return r;
 }
 
+namespace
+{
+    struct mhrun_s
+    {
+        ts::wstr_c cmd;
+        ts::wstr_c param;
+        ts::wstr_c tmpp;
+        ts::str_c message;
+        int tag;
+        msg_handler_e mht;
+
+        static bool is_unreserved( char c )
+        {
+            if ( c >= 'a' && c <= 'z' ) return true;
+            if ( c >= 'A' && c <= 'Z' ) return true;
+            if ( c >= '0' && c <= '9' ) return true;
+            return c == '-' || c == '_' || c == '.' || c == '~';
+        }
+
+        void yo()
+        {
+            ts::wstr_c fn;
+            if ( MH_AS_PARAM == mht )
+            {
+                // percent encode message
+
+                ts::wstr_c msgencoded;
+                int cnt = message.get_length();
+                for(int i=0;i<cnt;++i)
+                {
+                    char c = message.get_char( i );
+                    if ( is_unreserved( c ) )
+                        msgencoded.append_char( c );
+                    else
+                        msgencoded.append_char( '%' ).append_as_hex( (ts::uint8)c );
+                }
+
+                param.replace_all( CONSTWSTR("<param>"), msgencoded );
+            } else if ( MH_VIA_FILE == mht )
+            {
+                fn = ts::fn_join( tmpp, ts::wmake( now() ).append_char('-').append_as_uint(tag).append(CONSTWSTR(".txt")) );
+                ts::buf_c b;
+                b.append_buf( message.cstr(), message.get_length() );
+                b.save_to_file( fn );
+                if ( fn.find_pos( ' ' ) >= 0 )
+                    fn.insert( 0, '\"' ).append_char( '\"' );
+
+                param.replace_all( CONSTWSTR( "<param>" ), fn );
+            }
+
+            ts::process_handle_s ph;
+            ts::master().start_app( cmd, param, &ph, false );
+            if (ts::master().wait_process( ph, 10000 ))
+            {
+                if (!fn.is_empty())
+                    ts::kill_file(fn);
+            }
+
+
+            TSDEL( this );
+        }
+    };
+}
+
+void contact_root_c::execute_message_handler( const ts::str_c &utf8msg )
+{
+    if ( mht == MH_NOT ) return;
+    if ( mhc.is_empty() ) return;
+
+    mhrun_s *mhr = TSNEW( mhrun_s );
+    mhr->mht = mht;
+    mhr->message.setcopy( utf8msg );
+
+    {
+        
+        ts::wstrings_c s; s.qsplit( mhc );
+        mhr->cmd = s.get( 0 );
+        s.remove_slow( 0 );
+        mhr->param = s.join( ' ' );
+    } // str ref should be decremented now
+
+    mhr->tmpp = cfg().temp_folder_handlemsg();
+    path_expand_env( mhr->tmpp, contactidfolder() );
+    ts::make_path( mhr->tmpp, 0 );
+
+    mhr->tag = gui->get_free_tag();
+
+    ts::master().sys_start_thread( DELEGATE( mhr, yo ) );
+}
+
 bool contact_root_c::keep_history() const
 {
     if (g_app->F_READONLY_MODE && !getkey().is_self()) return false;
@@ -2432,9 +2531,11 @@ void contact_root_c::setup(const contacts_s * c, time_t nowtime)
     set_comment(c->comment);
     set_tags(c->tags);
     set_readtime(ts::tmin(nowtime, c->readtime));
+    set_mhcmd( ts::from_utf8(c->msghandler) );
 
     keeph = (keep_contact_history_e)((c->options >> 16) & 3);
     aaac = (auto_accept_audio_call_e)((c->options >> 19) & 3);
+    mht = (msg_handler_e)( ( c->options >> 21 ) & 15 );
 
     if (getkey().is_group())
         options().unmasked().set(F_PERSISTENT_GCHAT); // if loaded - persistent (non persistent never saved)
@@ -2448,13 +2549,14 @@ bool contact_root_c::save(contacts_s * c) const
         if (!get_options().unmasked().is(F_PERSISTENT_GCHAT)) return false;
 
     c->metaid = 0;
-    c->options = get_options() | (get_keeph() << 16) | (get_aaac() << 19);
+    c->options = get_options() | (get_keeph() << 16) | (get_aaac() << 19) | ( get_mhtype() << 21 );
     c->name = get_name(false);
     c->customname = get_customname();
     c->comment = get_comment();
     c->tags = get_tags();
     c->statusmsg = get_statusmsg(false);
     c->readtime = get_readtime();
+    c->msghandler = ts::to_utf8( get_mhcmd() );
     // avatar data copied not here, see profile_c::set_avatar
 
     return true;

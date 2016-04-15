@@ -9,7 +9,6 @@ enum gmsg_e
     GM_KILL_TOOLTIPS,
     GM_GROUP_SIGNAL,
     GM_DIALOG_PRESENT,
-    GM_ROOT_FOCUS,
     GM_HEARTBEAT, // 1 sec
     GM_UI_EVENT,
     GM_DROPFILES,
@@ -25,7 +24,7 @@ enum gmsg_e
     ~ UNIQIDLINE( ev##clazz )() { unsubscribe(ev); } \
     virtual ts::uint32 event_happens( gmsgbase & __param ) override \
     { \
-        parent *p = (parent *)( ((::byte *)this) - offsetof( parent, UNIQIDLINE( m_##ev ) ) ); \
+        parent *p = (parent *)( ((ts::uint8 *)this) - offsetof( parent, UNIQIDLINE( m_##ev ) ) ); \
         return p->gm_handler( (gmsg<ev> &)__param ); \
     } \
 } UNIQIDLINE( m_##ev ); \
@@ -55,13 +54,6 @@ template<> struct gmsg<GM_TOOLTIP_PRESENT> : public gmsgbase
 {
     gmsg(RID rid) :gmsgbase(GM_TOOLTIP_PRESENT), rid(rid) {}
     RID rid;
-};
-
-template<> struct gmsg<GM_ROOT_FOCUS> : public gmsgbase
-{
-    gmsg(RID rootrid) :gmsgbase(GM_ROOT_FOCUS),rootrid(rootrid) {}
-    RID rootrid;
-    RID activefocus;
 };
 
 template<> struct gmsg<GM_GROUP_SIGNAL> : public gmsgbase

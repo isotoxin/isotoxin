@@ -10,7 +10,7 @@ MY_GUID(MY_DSDEVID_DefaultVoiceCapture, 0xdef00003, 0x9c6d, 0x47ed, 0xaa, 0xf1, 
 
 static LPDIRECTSOUNDCAPTURE8 pDSCapture = nullptr;
 static LPDIRECTSOUNDCAPTUREBUFFER pDSCaptureBuffer = nullptr;
-static DEVICE captureguid( DEFAULT_DEVICE );
+static DEVICE captureguid = DEFAULT_DEVICE;
 static WAVEFORMATEX fmt;
 static int next_offset = 0;
 
@@ -124,7 +124,7 @@ bool start_capture(Format & cfmt, const Format * tryformats, int try_formats_cnt
 
     spinlock::auto_simple_lock l(sync);
 
-    DEVICE device = (captureguid == DEFAULT_DEVICE) ? MY_DSDEVID_DefaultVoiceCapture : captureguid;
+    DEVICE device = (captureguid == DEFAULT_DEVICE) ? (DEVICE &)MY_DSDEVID_DefaultVoiceCapture : captureguid;
 
     if (FAILED(DirectSoundCaptureCreate8(&device, &pDSCapture, nullptr)))
         return false;
@@ -175,7 +175,9 @@ bool start_capture(Format & cfmt, const Format * tryformats, int try_formats_cnt
 
 void enum_sound_capture_devices(device_enum_callback *lpDSEnumCallback, LPVOID lpContext)
 {
-    DirectSoundCaptureEnumerateW(lpDSEnumCallback, lpContext);
+    typedef BOOL __stdcall device_enum_callback_win32( GUID *lpGuid, const wchar_t *lpcstrDescription, const wchar_t *lpcstrModule, void *lpContext );
+
+    DirectSoundCaptureEnumerateW( (device_enum_callback_win32 *)lpDSEnumCallback, lpContext);
 }
 
 void set_capture_device(const DEVICE *device)

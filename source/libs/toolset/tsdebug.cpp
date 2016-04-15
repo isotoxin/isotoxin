@@ -1,14 +1,35 @@
 #include "toolset.h"
+#include "internal/platform.h"
+
 #include <intrin.h>
 #include <stdio.h>
-#include <time.h>
-#include <Ws2tcpip.h>
+
+#ifdef _WIN32
+#if defined _DEBUG || defined _CRASH_HANDLER
+#include "internal/excpn.h"
+#endif
+
+#pragma comment(lib, "dbghelp.lib")
+#pragma message("Automatically linking with dbghelp.lib (dbghelp.dll)")
+
+namespace ts {
+#include "_win32/win32_common.inl"
+}
+#endif
 
 namespace ts {
 
-bool g_warning_inprogress = false, force_all_warnings_show_mb = true;//чтобы во всех тулзах показывались warnings всегда
-int ignoredWarnings;
-HWND g_main_window = nullptr;
+
+#ifndef _FINAL
+tmcalc_c::tmcalc_c( const char *tag ) :m_tag( tag )
+{
+#ifdef _WIN32
+    QueryPerformanceCounter( (LARGE_INTEGER *)&m_timestamp );
+#endif // _WIN32
+};
+#endif // _FINAL
+
+bool g_warning_inprogress = false;
 
 void LogMessage(const char *caption, const char *msg)
 {
@@ -32,16 +53,67 @@ void LogMessage(const char *caption, const char *msg)
 #endif
 }
 
-int MessageBoxDef(const char *text, const char *notLoggedText, const char *caption, UINT type)
+bool sys_is_debugger_present()
 {
-    
-    if (IsDebuggerPresent() && GetWindowThreadProcessId(g_main_window, nullptr) != GetCurrentThreadId())
+    return IsDebuggerPresent() != FALSE;
+}
+
+smbr_e TSCALL sys_mb( const wchar *caption, const wchar *text, smb_e options )
+{
+#ifdef _WIN32
+    if ( master().mainwindow && IsDebuggerPresent() && GetWindowThreadProcessId( wnd2hwnd( master().mainwindow ), nullptr ) != GetCurrentThreadId() )
         __debugbreak();
 
-	return MessageBoxA(g_main_window && GetWindowThreadProcessId(g_main_window, nullptr) == GetCurrentThreadId() ? g_main_window : nullptr, notLoggedText[0] ? tmp_str_c(text).append(notLoggedText).cstr() : text, caption, type|MB_TASKMODAL|MB_TOPMOST);
+    HWND par = master().mainwindow && GetWindowThreadProcessId( wnd2hwnd( master().mainwindow ), nullptr ) == GetCurrentThreadId() ? wnd2hwnd( master().mainwindow ) : nullptr;
+    UINT f = 0;
+
+    switch ( options )
+    {
+    case SMB_OK_ERROR:
+        f |= MB_ICONERROR;
+        // no break here
+    case SMB_OK:
+        f |= MB_OK;
+        break;
+    case SMB_OKCANCEL:
+        f |= MB_OKCANCEL;
+        break;
+    case SMB_YESNOCANCEL:
+        f |= MB_YESNOCANCEL;
+        break;
+    case SMB_YESNO_ERROR:
+        f |= MB_ICONERROR;
+        // no break here
+    case SMB_YESNO:
+        f |= MB_YESNO;
+        break;
+    default:
+        break;
+    }
+
+    int rslt = MessageBoxW( par, text, caption, f | MB_TASKMODAL | MB_TOPMOST );
+    switch ( rslt )
+    {
+    case IDOK:
+        return SMBR_OK;
+    case IDYES:
+        return SMBR_YES;
+    case IDNO:
+        return SMBR_NO;
+    case IDCANCEL:
+        return SMBR_CANCEL;
+    }
+#endif
+
+    return SMBR_UNKNOWN;
 }
-int (*MessageBoxOverride)(const char *text, const char *notLoggedText, const char *caption, UINT type) = &MessageBoxDef;
-inline int LoggedMessageBox(const ts::str_c &text, const char *notLoggedText, const char *caption, UINT type) { LogMessage(caption, text); return MessageBoxOverride(text, notLoggedText, caption, type); }
+
+
+static smbr_e LoggedMessageBox(const ts::str_c &text, const char *notLoggedText, const char *caption, smb_e f )
+{
+    LogMessage(caption, text);
+    return sys_mb( to_wstr(caption), to_wstr(notLoggedText[ 0 ] ? tmp_str_c( text ).append( notLoggedText ) : text), f );
+}
 
 static static_setup< hashmap_t<str_c, bool>, 0 > messages;
 
@@ -71,26 +143,17 @@ bool Warning(const char *s, ...)
 
 	ts::str_c msg = str;
 
-//#ifdef _DEBUG
-//	if (!warningContextStack.empty())
-//	{
-//		msg += "\nCONTEXT: ";
-//		for (int i=0; i<warningContextStack.size(); i++)
-//			(msg += warningContextStack[i]) += '\n';
-//	}
-//#endif
-
 	bool result = false;
 	if (messages().get(msg) == nullptr)
-		switch (LoggedMessageBox(msg, "\n\nShow the same messages?", "Warning", MB_YESNOCANCEL))
-	{
-		case IDCANCEL:
-			result = true;
-			break;
-		case IDNO:
-			messages().add(msg);
-			break;
-	}
+		switch (LoggedMessageBox(msg, "\n\nShow the same messages?", "Warning", SMB_YESNOCANCEL))
+	    {
+		    case SMBR_CANCEL:
+			    result = true;
+			    break;
+            case SMBR_NO:
+			    messages().add(msg);
+			    break;
+	    }
 	g_warning_inprogress = false;
 	return result;
 }
@@ -104,8 +167,7 @@ void Error(const char *s, ...)
 	vsprintf_s(str, LENGTH(str), s, args);
 	va_end(args);
 
-	LogMessage("Error", str);
-	if (MessageBoxDef(str, "", "Error", IsDebuggerPresent() ? MB_OKCANCEL : MB_OK) == IDCANCEL)
+	if ( LoggedMessageBox(str, "", "Error", sys_is_debugger_present() ? SMB_OKCANCEL : SMB_OK) == SMBR_CANCEL)
 		__debugbreak();
 }
 
@@ -122,13 +184,14 @@ bool AssertFailed(const char *file, int line, const char *s, ...)
 }
 
 #ifndef _FINAL
+WINDOWS_ONLY
 tmcalc_c::~tmcalc_c()
 {
 	LARGE_INTEGER   timestamp2;
 	LARGE_INTEGER   frq;
 	QueryPerformanceCounter( &timestamp2 );
 	QueryPerformanceFrequency( &frq );
-	__int64 takts = timestamp2.QuadPart - m_timestamp.QuadPart;
+	__int64 takts = timestamp2.QuadPart - m_timestamp;
 	ts::str_c text( "Takts: " );
 	text.append_as_uint( as_dword(takts) );
 	text.append(", Time: ").append( roundstr<str_c>( 1000.0 * double(takts) / double(frq.QuadPart), 3 ) ).append(" ms");
@@ -234,7 +297,7 @@ delta_time_profiler_s::delta_time_profiler_s(int n) :n(n)
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
     notfreq = 1000.0 / (double)freq.QuadPart;
-    QueryPerformanceCounter(&prev);
+    QueryPerformanceCounter( ( LARGE_INTEGER * ) &prev);
 }
 delta_time_profiler_s::~delta_time_profiler_s()
 {
@@ -246,8 +309,8 @@ void delta_time_profiler_s::operator()(int id)
 
     LARGE_INTEGER cur;
     QueryPerformanceCounter(&cur);
-    entries[index].deltams = (float)((double)(cur.QuadPart - prev.QuadPart) * notfreq);
-    prev = cur;
+    entries[index].deltams = (float)((double)(cur.QuadPart - prev) * notfreq);
+    prev = (uint64 &)cur;
     ++index;
     if (index >= n)
         index = 0;
