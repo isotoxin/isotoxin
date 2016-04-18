@@ -750,6 +750,7 @@ ts::bitmap_c application_c::app_icon(bool for_tray)
     case ICON_HOLLOW:
         icons[ ICON_HOLLOW ].create_ARGB( ts::ivec2( 16 ) );
         icons[ ICON_HOLLOW ].fill( 0 );
+
         break;
 
     case ICON_OFFLINE_MSG1:
@@ -2540,6 +2541,7 @@ bool application_c::load_theme( const ts::wsptr&thn, bool summon_ch_signal)
 
     deftextcolor = ts::parsecolor<char>(theme().conf().get_string(CONSTASTR("deftextcolor")), ts::ARGB(0, 0, 0));
     errtextcolor = ts::parsecolor<char>(theme().conf().get_string(CONSTASTR("errtextcolor")), ts::ARGB(255, 0, 0));
+    imptextcolor = ts::parsecolor<char>( theme().conf().get_string( CONSTASTR( "imptextcolor" ) ), ts::ARGB( 155, 0, 0 ) );
     selection_color = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("selection_color")), ts::ARGB(255, 255, 0) );
     selection_bg_color = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("selection_bg_color")), ts::ARGB(100, 100, 255) );
     selection_bg_color_blink = ts::parsecolor<char>( theme().conf().get_string(CONSTASTR("selection_bg_color_blink")), ts::ARGB(0, 0, 155) );

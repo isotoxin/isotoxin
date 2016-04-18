@@ -22,6 +22,7 @@ colors {
 	text_online=#36c920
 	text_offline=#b9b9b9
 	text_detail=#00bfc0
+	text_imp=#ff8c00
 	text_bad=#ff5d00
 	text_ok=#009000
 	text_info=#ffcd56

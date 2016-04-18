@@ -10,6 +10,9 @@
 #define INTPAR( pn, defv ) int pn() { return get(CONSTASTR(#pn), (int)(defv)); } \
                             bool pn( int un ) { return param( CONSTASTR(#pn), ts::tmp_str_c().set_as_int(un) ); }
 
+#define UINT32PAR( pn, defv ) ts::uint32 pn() { return get(CONSTASTR(#pn), (ts::uint32)(defv)); } \
+                            bool pn( int un ) { return param( CONSTASTR(#pn), ts::tmp_str_c().set_as_uint(un) ); }
+
 #define INT64PAR( pn, defv ) int64 pn() { return get(CONSTASTR(#pn), (int64)(defv)); } \
                             bool pn( int64 un ) { return param( CONSTASTR(#pn), ts::tmp_str_c().set_as_num<int64>(un) ); }
 
@@ -74,7 +77,15 @@ public:
         if (added) { v.set_as_int(def); return def;}
         return v.as_int(def);
     }
-    template<> int64 get(const ts::asptr& pn, const int64&def)
+	template<> ts::uint32 get(const ts::asptr& pn, const ts::uint32&def)
+	{
+		bool added = false;
+		ts::str_c &v = values.add(pn, added);
+		if (added) { v.set_as_uint(def); return def; }
+		uint64 t = v.as_num<int64>(def);
+		return (ts::uint32)( t & 0xffffffff );
+	}
+	template<> int64 get(const ts::asptr& pn, const int64&def)
     {
         bool added = false;
         ts::str_c &v = values.add(pn, added);

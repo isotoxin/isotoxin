@@ -2901,8 +2901,8 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
                         break;
                     }
 
-                    ts::wstr_c infostr( CONSTWSTR("<p=r><font=default><l><color=155,0,0>"), infot );
-                    infostr.append( L" <img=right,-1>" );
+                    ts::wstr_c infostr( CONSTWSTR("<p=r><font=default><l>"), maketag_color<ts::wchar>( gui->imptextcolor ) );
+                    infostr.append( infot ).append( L" <img=right,-1>" );
 
                     cri_s inf;
                     children_repos_info(inf);

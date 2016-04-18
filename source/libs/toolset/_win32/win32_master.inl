@@ -144,7 +144,14 @@ static HBITMAP gen_hbitmap( const bitmap_c& bmp )
     for ( int y = 0; y < h; ++y )
         memcpy( pixels + y * bytes_per_line, bmp.body( ivec2( 0, y ) ), bytes_per_line );
 
-    return bitmap;
+	uint32 *e = (uint32 *)pixels; e += w * h;
+	for (uint32 *c = (uint32 *)pixels; c < e; ++c)
+		if (*c) 
+			return bitmap;
+
+	*(uint32 *)pixels = 0x01808080; // stupid zero bitmap bug
+
+	return bitmap;
 }
 
 static uint32 calc_hash( const bitmap_c &b )

@@ -49,11 +49,7 @@ struct master_internal_stuff_s
 };
 
 class win32_wnd_c;
-inline win32_wnd_c * hwnd2wnd( HWND hwnd )
-{
-    return ts::p_cast<win32_wnd_c *>( GetWindowLongPtrW( hwnd, GWLP_USERDATA ) );
-}
-
+win32_wnd_c * _cdecl hwnd2wnd( HWND hwnd );
 HWND _cdecl wnd2hwnd( const wnd_c * );
 
 struct draw_target_s

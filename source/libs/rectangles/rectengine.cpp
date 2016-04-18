@@ -491,7 +491,8 @@ system_query_e me2sq( ts::mouse_event_e me )
         RID f = wndc->owner()->getrid();
         gui->set_focus( f );
 
-        gmsg<GM_UI_EVENT>( UE_ACTIVATE ).send();
+        if (!gm_receiver_c::in_progress( GM_UI_EVENT ))
+            gmsg<GM_UI_EVENT>( UE_ACTIVATE ).send();
     }
 }
 

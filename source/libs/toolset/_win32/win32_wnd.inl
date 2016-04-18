@@ -15,6 +15,7 @@ namespace
         specialborder_s sb;
         irect rect;
         specborder_e bside;
+        uint32 wid = 0xabcdc00c;
 
         static const wchar *classname_border() { return L"rectengineborder"; }
 
@@ -160,7 +161,7 @@ namespace
 class win32_wnd_c : public wnd_c
 {
     friend HWND wnd2hwnd( const wnd_c * w );
-    static const wchar_t *classname() { return L"rectenginewindow"; }
+    static const wchar_t *classname() { return L"REW013"; }
     static LRESULT CALLBACK wndhandler( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
     {
         safe_ptr<win32_wnd_c> wnd = hwnd2wnd( hwnd );
@@ -187,7 +188,7 @@ class win32_wnd_c : public wnd_c
                 d->wnd->hwnd = hwnd;
                 d->wnd->recreate_back_buffer( d->size );
                 if ( !d->collapsed ) d->wnd->recreate_border();
-                SetWindowLongPtrW( hwnd, GWLP_USERDATA, PTR_TO_UNSIGNED( d->wnd ) ); //-V221
+                SetWindowLongPtrW( hwnd, GWLP_USERDATA, PTR_TO_UNSIGNED( &d->wnd->wid ) ); //-V221
             }
             return 0;
         case WM_DESTROY:
@@ -456,25 +457,35 @@ class win32_wnd_c : public wnd_c
     }
     static LRESULT CALLBACK wndhandler_border( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
     {
+        auto ddd = []( HWND hwnd ) -> border_window_data_s *
+        {
+            uint32 *wid = p_cast<uint32 *>( GetWindowLongPtrW( hwnd, GWLP_USERDATA ) );
+            if ( !wid ) return nullptr;
+            if (ASSERT( *wid == 0xabcdc00c ))
+                return (border_window_data_s *)( ( (uint8 *)wid ) - offsetof( border_window_data_s, wid ) );
+            return nullptr;
+        };
+
+
         switch ( msg )
         {
         case WM_CREATE:
         {
             CREATESTRUCT *cs = (CREATESTRUCT *)lparam;
-            SetWindowLongPtrW( hwnd, GWLP_USERDATA, PTR_TO_UNSIGNED( cs->lpCreateParams ) ); //-V221
             border_window_data_s *d = (border_window_data_s *)cs->lpCreateParams;
+            SetWindowLongPtrW( hwnd, GWLP_USERDATA, PTR_TO_UNSIGNED( &d->wid ) ); //-V221
             d->recreate_back_buffer();
         }
         return 0;
         case WM_DESTROY:
-            if ( border_window_data_s *d = p_cast<border_window_data_s *>( GetWindowLongPtrW( hwnd, GWLP_USERDATA ) ) )
+            if ( border_window_data_s *d = ddd( hwnd ) )
             {
                 SetWindowLongPtrW( hwnd, GWLP_USERDATA, 0 );
                 d->hwnd = nullptr;
             }
             return DefWindowProcW( hwnd, msg, wparam, lparam );
         case WM_PAINT:
-            if ( border_window_data_s *d = p_cast<border_window_data_s *>( GetWindowLongPtrW( hwnd, GWLP_USERDATA ) ) )
+            if ( border_window_data_s *d = ddd( hwnd ) )
             {
                 PAINTSTRUCT ps;
                 BeginPaint( hwnd, &ps );
@@ -593,6 +604,7 @@ class win32_wnd_c : public wnd_c
 
 public:
     irect sbs = irect(0);
+    uint32 wid = 0x0803c00c;
 
     win32_wnd_c( wnd_callbacks_s *cbs ):wnd_c(cbs)
     {
@@ -1282,4 +1294,13 @@ HWND _cdecl wnd2hwnd( const wnd_c * w )
 {
     if ( !w ) return nullptr;
     return ( (const win32_wnd_c *)w )->hwnd;
+}
+
+win32_wnd_c * _cdecl hwnd2wnd( HWND hwnd )
+{
+    uint32 *wid = ts::p_cast<uint32 *>( GetWindowLongPtrW( hwnd, GWLP_USERDATA ) );
+    if ( wid && *wid == 0x0803c00c )
+        return (win32_wnd_c *)(( (uint8 *)wid ) - offsetof( win32_wnd_c, wid ));
+
+    return nullptr;
 }

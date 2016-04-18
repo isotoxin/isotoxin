@@ -395,8 +395,8 @@ class profile_c : public config_base_c
     ts::flags32_s profile_flags;
     ts::flags32_s current_options;
 
-    INTPAR(msgopts, 0)
-    INTPAR(msgopts_edited, 0)
+	UINT32PAR(msgopts, 0)
+	UINT32PAR(msgopts_edited, 0)
 
     void create_aps();
 
@@ -506,10 +506,10 @@ public:
         ts::flags32_s::BITS newbits = mo & mask;
         ts::flags32_s::BITS edited = msgopts_edited();
         edited |= (curmod ^ newbits);
-        msgopts_edited( (int)edited );
+        msgopts_edited( edited );
         cur = (cur & ~mask) | newbits;
         current_options.setup(cur);
-        return msgopts( (int)cur );
+        return msgopts( cur );
     }
 
     int min_history_load() { return get_options().is(MSGOP_LOAD_WHOLE_HISTORY) ? INT_MAX : min_history(); }

@@ -93,6 +93,7 @@ public:
 
     static ts::uint32 notify_receivers(int ev, gmsgbase &par);
     static void prepare( int ev_max );
+    static bool in_progress( int ev );
 
 
     gm_receiver_c(int ev);

@@ -17,6 +17,7 @@ conf
   appnamecolor=##text_appname
   deftextcolor=##text_def
   errtextcolor=##text_bad
+  imptextcolor=##text_imp
 
   common_bg_color=##bg
 

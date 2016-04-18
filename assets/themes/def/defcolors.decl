@@ -19,6 +19,7 @@ colors {
 	text_online=#367320
 	text_offline=#505050
 	text_detail=#000060
+	text_imp=#9b0000
 	text_bad=#900000
 	text_ok=#009000
 	text_info=#000000

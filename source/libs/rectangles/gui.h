@@ -319,6 +319,7 @@ public:
 
     ts::TSCOLOR deftextcolor = ts::ARGB(0, 0, 0);
     ts::TSCOLOR errtextcolor = ts::ARGB(255, 0, 0);
+    ts::TSCOLOR imptextcolor = ts::ARGB( 155, 0, 0 );
     ts::TSCOLOR selection_color = ts::ARGB(255, 255, 0);
     ts::TSCOLOR selection_bg_color = ts::ARGB(100, 100, 255);
     ts::TSCOLOR selection_bg_color_blink = ts::ARGB(0, 0, 155);

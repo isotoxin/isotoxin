@@ -64,6 +64,16 @@ void gm_receiver_c::prepare( int evcnt )
     internals().prepare(evcnt);
 }
 
+bool gm_receiver_c::in_progress( int ev )
+{
+    evlst_s &l = internals()( ev );
+
+    if ( l._curnext )
+        return true;
+
+    return false;
+}
+
 ts::uint32 gm_receiver_c::notify_receivers(int ev, gmsgbase &par)
 {
     evlst_s &l = internals()(ev);
