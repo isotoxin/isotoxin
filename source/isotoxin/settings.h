@@ -333,6 +333,8 @@ private:
     int set_away_on_timer_minutes_value_last = 0;
     int set_away_on_timer_minutes_value = 0;
 
+    int desktop_notification_duration = 5;
+
     ts::flags32_s::BITS msgopts_current = 0;
     ts::flags32_s::BITS msgopts_original = 0;
 
@@ -398,6 +400,9 @@ private:
     bool histopts_handler( RID, GUIPARAM );
     bool away_minutes_handler(const ts::wstr_c &v);
     bool load_history_count_handler(const ts::wstr_c &v);
+
+    bool notification_handler( RID, GUIPARAM );
+    bool desktop_notification_duration_handler( const ts::wstr_c &v );
 
     bool seldict(RID, GUIPARAM);
     bool chat_options(RID, GUIPARAM);

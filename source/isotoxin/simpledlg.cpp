@@ -859,7 +859,7 @@ bool incoming_msg_panel_c::endoflife( RID, GUIPARAM )
     __super::created();
 
 
-    DEFERRED_UNIQUE_CALL( 5.0, DELEGATE( this, endoflife ), 0 );
+    DEFERRED_UNIQUE_CALL( prf().dmn_duration(), DELEGATE( this, endoflife ), 0 );
     DEFERRED_UNIQUE_CALL( 0.01, DELEGATE( this, tick ), 0 );
 
     avarect = g_app->preloaded_stuff().icon[ CSEX_UNKNOWN ]->info().sz + ts::ivec2(10);

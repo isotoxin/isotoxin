@@ -2921,25 +2921,33 @@ lan_engine::file_transfer_s *lan_engine::find_ftr(u64 utag)
 void lan_engine::file_control(u64 utag, file_control_e ctl)
 {
     if(file_transfer_s *f = find_ftr(utag))
+    {
         switch (ctl) //-V719
         {
-            case FIC_ACCEPT:
-                f->accepted(0);
-                break;
-            case FIC_REJECT:
-            case FIC_BREAK:
-                f->kill(true);
-                break;
-            case FIC_DONE:
-                f->finished(true);
-                break;
-            case FIC_PAUSE:
-                f->pause(true);
-                break;
-            case FIC_UNPAUSE:
-                f->unpause(true);
-                break;
+        case FIC_ACCEPT:
+            f->accepted(0);
+            break;
+        case FIC_REJECT:
+        case FIC_BREAK:
+            f->kill(true);
+            break;
+        case FIC_DONE:
+            f->finished(true);
+            break;
+        case FIC_PAUSE:
+            f->pause(true);
+            break;
+        case FIC_UNPAUSE:
+            f->unpause(true);
+            break;
         }
+        return;
+    }
+    if ( FIC_CHECK == ctl )
+    {
+        hf->file_control( utag, FIC_UNKNOWN );
+    }
+
 }
 
 bool lan_engine::file_portion(u64 utag, const file_portion_s *fp)

@@ -437,8 +437,7 @@ bool dialog_prepareimage_c::prepare_working_image( RID, GUIPARAM )
         if (bitmap.info().bytepp() != 4)
         {
             ts::bitmap_c b_temp;
-            b_temp.create_ARGB(bitmap.info().sz);
-            b_temp.copy(ts::ivec2(0), bitmap.info().sz, bitmap.extbody(), ts::ivec2(0));
+            b_temp = bitmap.extbody();
             bitmap = b_temp;
         }
     } else

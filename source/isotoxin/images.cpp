@@ -305,10 +305,7 @@ namespace
 
                 if (w >= bmp.info().sz.x)
                 {
-                    if (frame.info().sz != bmp.info().sz)
-                        frame.create_ARGB(bmp.info().sz);
-
-                    frame.copy(ts::ivec2(0), bmp.info().sz, bmp.extbody(), ts::ivec2(0));
+                    frame = bmp.extbody();
                 }
                 else
                 {
@@ -331,8 +328,8 @@ namespace
 
             if (bmp.info().bytepp() != 4)
             {
-                ts::bitmap_c b4; b4.create_ARGB(bmp.info().sz);
-                b4.copy(ts::ivec2(0), bmp.info().sz, bmp.extbody(), ts::ivec2(0));
+                ts::bitmap_c b4;
+                b4 = bmp.extbody();
                 bmp = b4;
             }
 

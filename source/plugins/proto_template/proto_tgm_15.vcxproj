@@ -15,10 +15,10 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{954B6F05-1838-48C5-B63C-27F10AE0A1F9}</ProjectGuid>
+    <ProjectGuid>{F485E7B4-A87A-4CEF-A50B-D456B60D0713}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>proto_tox</RootNamespace>
-    <ProjectName>proto_tox</ProjectName>
+    <RootNamespace>proto_tgm</RootNamespace>
+    <ProjectName>proto_tgm</ProjectName>
   </PropertyGroup>
   <Import Project="$(SolutionDir)\isotoxin.common.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -40,21 +40,21 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <OutDir>$(ProjectDir)../../../bin/</OutDir>
-    <TargetName>proto.tox</TargetName>
+    <TargetName>proto.tgm</TargetName>
     <CodeAnalysisRuleSet>NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">
     <OutDir>$(ProjectDir)../../../bin/</OutDir>
-    <TargetName>proto.tox</TargetName>
+    <TargetName>proto.tgm</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">
     <OutDir>$(ProjectDir)../../../bin/</OutDir>
-    <TargetName>proto.tox</TargetName>
+    <TargetName>proto.tgm</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external;$(ProjectDir)..\..\libs-external\libvpx;$(ProjectDir)..\..\libs-external/libsodium/src/libsodium/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external;</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
@@ -71,7 +71,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">
     <ClCompile>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external;$(ProjectDir)..\..\libs-external\libvpx;$(ProjectDir)..\..\libs-external/libsodium/src/libsodium/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -86,7 +86,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">
     <ClCompile>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external;$(ProjectDir)..\..\libs-external\libvpx;$(ProjectDir)..\..\libs-external/libsodium/src/libsodium/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -105,7 +105,7 @@
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
     </ClCompile>
-    <ClCompile Include="proto_tox.cpp" />
+    <ClCompile Include="proto_tgm.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">Create</PrecompiledHeader>
@@ -116,7 +116,7 @@
     <None Include="..\proto_export.def" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="proto_tox.rc" />
+    <ResourceCompile Include="proto_tgm.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

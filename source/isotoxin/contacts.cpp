@@ -909,6 +909,7 @@ void contacts_c::kill(const contact_key_s &ck, bool kill_with_history)
                 });
                 if (live == 0)
                 {
+                    killmeta:
                     meta->set_state(CS_ROTTEN);
                     gmsg<ISOGM_V_UPDATE_CONTACT>(meta).send();
                     prf().killcontact(meta->getkey());
@@ -917,9 +918,13 @@ void contacts_c::kill(const contact_key_s &ck, bool kill_with_history)
                     g_app->cancel_file_transfers( meta->getkey() );
                     historian_killed_too = true;
                 }
+            } else
+            {
+                if ( meta->subremove( cc ) ) goto killmeta;
             }
             if (!historian_killed_too)
                 guiitem = nullptr, selself = false; // avoid kill gui item
+
         } else
         {
             ASSERT(cc->getkey().is_group() || cc->get_state() == CS_UNKNOWN);
@@ -956,6 +961,8 @@ contact_root_c *contacts_c::create_new_meta()
     ts::aint index;
     if (CHECK(!arr.find_sorted(index, metac->getkey())))
         arr.insert(index, metac);
+    
+    prf().kill_history(metac->getkey() );
     prf().dirtycontact(metac->getkey());
 
     return metac;
@@ -1424,20 +1431,17 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
         if (file_transfer_s *ft = g_app->find_file_transfer(ifl.utag))
             ft->kill(FIC_NONE);
         break;
-    case FIC_DONE:
-        DMSG("ftdone " << ifl.utag);
-        if (file_transfer_s *ft = g_app->find_file_transfer(ifl.utag))
-            ft->kill( FIC_DONE );
-        break;
     case FIC_PAUSE:
     case FIC_UNPAUSE:
         if (file_transfer_s *ft = g_app->find_file_transfer(ifl.utag))
             ft->pause_by_remote(FIC_PAUSE == ifl.fctl);
         break;
     case FIC_DISCONNECT:
-        DMSG("ftdisc " << ifl.utag);
+    case FIC_UNKNOWN:
+    case FIC_DONE:
+        DMSG("fkill " << ifl.utag << (int)ifl.fctl );
         if (file_transfer_s *ft = g_app->find_file_transfer(ifl.utag))
-            ft->kill(FIC_DISCONNECT);
+            ft->kill( ifl.fctl );
         break;
     }
 
@@ -1732,6 +1736,12 @@ bool contact_root_c::subdel(contact_c *c)
         c->prepare4die(this);
         subcontacts.find_remove_slow(c);
     }
+    return subcontacts.size() == 0;
+}
+bool contact_root_c::subremove( contact_c *c )
+{
+    if ( ASSERT( is_meta() && subpresent( c->getkey() ) ) )
+        subcontacts.find_remove_slow( c );
     return subcontacts.size() == 0;
 }
 void contact_root_c::subdelall()
@@ -2341,7 +2351,7 @@ ts::wstr_c contact_root_c::contactidfolder() const
     return ts::wmake<uint>(getkey().contactid);
 }
 
-void contact_root_c::send_file(const ts::wstr_c &fn)
+void contact_root_c::send_file(ts::wstr_c fn)
 {
     contact_c *cdef = subget_default();
     contact_c *c_file_to = nullptr;

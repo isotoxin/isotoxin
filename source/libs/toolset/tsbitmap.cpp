@@ -1156,6 +1156,15 @@ bool bmpcore_exbody_s::operator==(const bmpcore_exbody_s & bm) const
 }
 
 
+template <typename CORE> bitmap_t<CORE>& bitmap_t<CORE>::operator =( const bmpcore_exbody_s &eb )
+{
+    ASSERT( eb.info().bytepp() >= 3 );
+    if ( info().sz != eb.info().sz || info().bytepp() != 4 )
+        create_ARGB( eb.info().sz );
+    copy( ts::ivec2( 0 ), eb.info().sz, eb, ts::ivec2( 0 ) );
+    return *this;
+}
+
 #pragma warning (push)
 #pragma warning (disable : 4731)
 
@@ -1165,8 +1174,7 @@ template <typename CORE> void bitmap_t<CORE>::convert_24to32(bitmap_c &imgout) c
 
 	if (info().pitch * info().sz.y % 12 != 0) // for small images 1x1 or 2x2
 	{
-		imgout.create_ARGB(info().sz);
-		imgout.copy(ts::ivec2(0),info().sz,extbody(),ts::ivec2(0));
+		imgout = extbody();
 		return;
 	}
 

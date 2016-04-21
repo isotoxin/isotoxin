@@ -1242,7 +1242,7 @@ static bool __stdcall file_portion(u64 utag, u64 offset, const void *portion, in
     if ( portion_size == 0 )
     {
         // 3
-        ipcj->unlock_buffer(portion);
+        if ( ipcj ) ipcj->unlock_buffer(portion);
         return true;
     }
 

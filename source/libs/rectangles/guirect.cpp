@@ -1344,7 +1344,9 @@ bool gui_tooltip_c::check_text(RID r, GUIPARAM param)
             sz = thr->size_by_clientsize(sz + 5, false);
         
         ts::irect maxsz = ts::wnd_get_max_size( ts::irect(cp, cp + sz) );
-        if (cp.x + sz.x >= maxsz.rb.x) cp.x = maxsz.rb.x - sz.x;
+        bool fixx = false;
+        if (cp.x + sz.x >= maxsz.rb.x) cp.x = maxsz.rb.x - sz.x, fixx = true;
+        if ( fixx && cp.y + sz.y >= maxsz.rb.y ) cp.y = cp.y - 27 - sz.y;
         if (cp.y + sz.y >= maxsz.rb.y) cp.y = maxsz.rb.y - sz.y;
         if (cp.x < maxsz.lt.x) cp.x = maxsz.lt.x;
         if (cp.y < maxsz.lt.y) cp.y = maxsz.lt.y;
@@ -2426,6 +2428,14 @@ gui_popup_menu_c::~gui_popup_menu_c()
     }
 }
 
+int gui_popup_menu_c::icon_size()
+{
+    ts::shared_ptr<theme_rect_s> mtr = gui->theme().get_rect( CONSTASTR( "menuitem" ) );
+    if ( !mtr ) return 0;
+
+    return ts::tmin( mtr->sis[ SI_LEFT ].width() - 4, mtr->sis[ SI_LEFT ].height() - 4 );
+}
+
 bool gui_popup_menu_c::update_size(RID, GUIPARAM)
 {
     ts::aint chcnt = getengine().children_count();
@@ -2640,17 +2650,17 @@ gui_popup_menu_c & gui_popup_menu_c::create(const menu_anchor_s& screenpos_, con
 
 bool gui_popup_menu_c::operator()(int, const ts::wsptr& txt)
 {
-    gui_menu_item_c::create(getrid(), txt, 0, MENUHANDLER(), ts::str_c()).separator(true);
+    gui_menu_item_c::create(getrid(), txt).separator(true);
     return true;
 }
 bool gui_popup_menu_c::operator()(int, const ts::wsptr& txt, const menu_c &sm)
 {
-    gui_menu_item_c::create(getrid(), txt, 0, MENUHANDLER(), ts::str_c()).submenu( sm );
+    gui_menu_item_c::create(getrid(), txt).submenu( sm );
     return true;
 }
-bool gui_popup_menu_c::operator()(int, const ts::wsptr& txt, ts::uint32 f, MENUHANDLER handler, const ts::str_c& prm)
+bool gui_popup_menu_c::operator()(int, const menu_item_info_s& inf)
 {
-    gui_menu_item_c::create(getrid(), txt, f, handler, prm);
+    gui_menu_item_c::create(getrid(), inf);
     return true;
 }
 
@@ -2781,6 +2791,7 @@ gui_menu_item_c::~gui_menu_item_c()
         if (rid != getrid()) return false;
         if (ASSERT(m_engine))
         {
+            int lw = icon.info().sz.x;
             if (const theme_rect_s *thr = themerect())
             {
                 ts::uint32 options = DTHRO_LEFT_CENTER;
@@ -2789,6 +2800,7 @@ gui_menu_item_c::~gui_menu_item_c()
                 if (submnu)
                     options |= DTHRO_RIGHT;
                 m_engine->draw(*thr, options);
+                lw = thr->sis[ SI_LEFT ].width();
             }
 
             if (flags.is(F_SEPARATOR))
@@ -2796,9 +2808,18 @@ gui_menu_item_c::~gui_menu_item_c()
             } else
             {
                 draw_data_s &dd = m_engine->begin_draw();
-                if (flags.is(F_DISABLED)) dd.alpha = 128;
+
                 ts::irect ca = get_client_area();
+
+                if (icon.info().sz >> 0)
+                {
+                    int y = ( ca.height() - icon.info().sz.y ) / 2 + ca.lt.y - 1;
+                    m_engine->draw( ts::ivec2((lw - icon.info().sz.x) / 2, y), icon.extbody(), true );
+                }
+
                 dd.size = ca.size();
+
+                if (flags.is(F_DISABLED)) dd.alpha = 128;
                 if (dd.size >> 0)
                 {
                     dd.offset += ca.lt;
@@ -2831,12 +2852,19 @@ gui_menu_item_c::gui_menu_item_c(MAKE_CHILD<gui_menu_item_c> &data) :gui_label_c
 {
     handler = data.handler;
     param = data.prm;
+    icon = data.icon;
 }
 
-gui_menu_item_c & gui_menu_item_c::create(RID owner, const ts::wsptr &text, ts::uint32 flags, MENUHANDLER handler, const ts::str_c &param)
+gui_menu_item_c & gui_menu_item_c::create( RID owner, const ts::wsptr &text )
 {
-    MAKE_CHILD<gui_menu_item_c> maker(owner, text);
-    maker << flags << handler << param;
+    MAKE_CHILD<gui_menu_item_c> maker( owner, text );
+    return maker.get();
+}
+
+gui_menu_item_c & gui_menu_item_c::create(RID owner, const menu_item_info_s &inf)
+{
+    MAKE_CHILD<gui_menu_item_c> maker(owner, inf.txt);
+    maker << inf;
     return maker.get();
 }
 
@@ -3134,10 +3162,10 @@ bool gui_vtabsel_c::operator()(ts::pair_s<RID, int>& cp, const ts::wsptr& txt, c
 
     return true;
 }
-bool gui_vtabsel_c::operator()(ts::pair_s<RID, int>& cp, const ts::wsptr& txt, ts::uint32 /*flags*/, MENUHANDLER handler, const ts::str_c& prm)
+bool gui_vtabsel_c::operator()(ts::pair_s<RID, int>& cp, const menu_item_info_s& inf)
 {
-    MAKE_CHILD<gui_vtabsel_item_c> make(getrid(), txt, cp.second);
-    make << handler << prm << cp.first;
+    MAKE_CHILD<gui_vtabsel_item_c> make(getrid(), inf.txt, cp.second);
+    make << inf.h << inf.prm << cp.first;
     if (cp.first)
         cp.first = make;
     return true;
@@ -3354,10 +3382,10 @@ ts::uint32 gui_htabsel_c::gm_handler(gmsg<GM_HEARTBEAT> &)
 
 bool gui_htabsel_c::operator()(RID, const ts::wsptr& txt) { return true; }
 bool gui_htabsel_c::operator()(RID, const ts::wsptr& txt, const menu_c &sm) { return true; }
-bool gui_htabsel_c::operator()(RID, const ts::wsptr& txt, ts::uint32 /*flags*/, MENUHANDLER handler, const ts::str_c& prm)
+bool gui_htabsel_c::operator()(RID, const menu_item_info_s& inf)
 {
-    MAKE_CHILD<gui_htabsel_item_c> make(getrid(), txt);
-    make << handler << prm;
+    MAKE_CHILD<gui_htabsel_item_c> make(getrid(), inf.txt);
+    make << inf.h << inf.prm;
     return true;
 }
 
@@ -3608,6 +3636,7 @@ void gui_hslider_c::set_level(float level_)
         }
         return true;
     case SQ_MOUSE_LDOWN:
+        if (!flags.is( F_PBMODE ))
         if (const theme_rect_s *th = themerect())
         {
             ts::ivec2 mplocal = to_local(data.mouse.screenpos);
@@ -3638,12 +3667,14 @@ void gui_hslider_c::set_level(float level_)
         }
         return true;
     case SQ_MOUSE_LUP:
+        if ( !flags.is( F_PBMODE ) )
         if (gui->end_mousetrack(getrid(), MTT_MOVESLIDER))
         {
             flags.clear(F_LBDOWN);
         }
         return true;
     case SQ_MOUSE_RUP:
+        if ( !flags.is( F_PBMODE ) )
         if (gm)
         {
             menu_c m = gm( ts::str_c().set_as_float(values.get_linear(pos)), false);
@@ -3656,7 +3687,7 @@ void gui_hslider_c::set_level(float level_)
         }
         return false;
     case SQ_MOUSE_MOVE:
-        
+        if ( !flags.is( F_PBMODE ) )
         if (const theme_rect_s *th = themerect())
         if (mousetrack_data_s *opd = gui->mtrack(getrid(), MTT_MOVESLIDER))
         {

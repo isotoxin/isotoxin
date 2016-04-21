@@ -1186,9 +1186,26 @@ void add_status_items(menu_c &m)
 
     contact_online_state_e ost = contacts().get_self().get_ostate();
 
-    m.add(TTT("Online", 244), COS_ONLINE == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_ONLINE));
-    m.add(TTT("Away", 245), COS_AWAY == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_AWAY));
-    m.add(TTT("Busy", 246), COS_DND == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_DND));
+    ts::bitmap_c i1, i2, i3;
+    int sz = gui_popup_menu_c::icon_size();
+    if ( sz >= 16 )
+    {
+        ts::bitmap_c icons = g_app->build_icon( sz * 2 );
+
+        i1.create_ARGB( ts::ivec2(sz) );
+        i2.create_ARGB( ts::ivec2( sz ) );
+        i3.create_ARGB( ts::ivec2( sz ) );
+
+        sz *= 2;
+
+        int index = 0; i1.resize_from( icons.extbody( ts::irect( 0, sz * index, sz, sz * index + sz ) ), ts::FILTER_BOX_LANCZOS3 );
+        index = 1; i2.resize_from( icons.extbody( ts::irect( 0, sz * index, sz, sz * index + sz ) ), ts::FILTER_BOX_LANCZOS3 );
+        index = 2; i3.resize_from( icons.extbody( ts::irect( 0, sz * index, sz, sz * index + sz ) ), ts::FILTER_BOX_LANCZOS3 );
+    }
+
+    m.add(TTT("Online", 244), COS_ONLINE == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_ONLINE), ( ( sz >= 16 ) ? &i1 : nullptr ) );
+    m.add(TTT("Away", 245), COS_AWAY == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_AWAY), ( ( sz >= 16 ) ? &i2 : nullptr ) );
+    m.add(TTT("Busy", 246), COS_DND == ost ? MIF_MARKED : 0, handlers::m_ost, ts::amake<uint>(COS_DND), ( ( sz >= 16 ) ? &i3 : nullptr ) );
 
 }
 

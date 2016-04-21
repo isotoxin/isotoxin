@@ -1487,6 +1487,28 @@ bool dialog_settings_c::away_minutes_handler(const ts::wstr_c &v)
     return true;
 }
 
+bool dialog_settings_c::notification_handler( RID, GUIPARAM p )
+{
+    bgroups[ BGROUP_INCOMING_NOTIFY ].handler( RID(), p );
+    ctlenable( CONSTASTR( "dndur" ), 0 != ( bgroups[ BGROUP_INCOMING_NOTIFY ].current & 1 ) );
+
+    mod();
+    return true;
+
+}
+
+bool dialog_settings_c::desktop_notification_duration_handler( const ts::wstr_c &v )
+{
+    desktop_notification_duration = v.as_int();
+    int o = desktop_notification_duration;
+    desktop_notification_duration = ts::CLAMP( o, 1, 60 );
+    if ( o != desktop_notification_duration )
+        set_edit_value( CONSTASTR( "dndur" ), ts::wmake( desktop_notification_duration ) );
+    mod();
+    return true;
+}
+
+
 void dialog_settings_c::bits_edit_s::flush()
 {
     for (int i = 0; i < nmasks; ++i)
@@ -1672,6 +1694,8 @@ void dialog_settings_c::mod()
             return d;
         };
         PREPARE(video_codecs, std::move(getcodecs()));
+
+        PREPARE( desktop_notification_duration, prf().dmn_duration() );
 
         PREPARE(set_away_on_timer_minutes_value, prf().inactive_time());
         set_away_on_timer_minutes_value_last = set_away_on_timer_minutes_value;
@@ -1989,8 +2013,12 @@ void dialog_settings_c::mod()
             );
 
         dm().vspace();
-        dm().checkb( ts::wstr_c(), DELEGATE( bgroups + BGROUP_INCOMING_NOTIFY, handler ), bgroups[ BGROUP_INCOMING_NOTIFY ].current ).setmenu(
-            menu_c().add( TTT("Show notification of incoming message",434), 0, MENUHANDLER(), CONSTASTR( "1" ) )
+
+        ctl.clear();
+        dm().textfield( ts::wstr_c(), ts::wmake( desktop_notification_duration ), DELEGATE( this, desktop_notification_duration_handler ) ).setname( CONSTASTR( "dndur" ) ).width( 50 ).subctl( textrectid++, ctl );
+
+        dm().checkb( ts::wstr_c(), DELEGATE( this, notification_handler ), bgroups[ BGROUP_INCOMING_NOTIFY ].current ).setmenu(
+            menu_c().add( TTT("Show desktop notification of incoming message during $ seconds",434) / ctl, 0, MENUHANDLER(), CONSTASTR( "1" ) )
             );
 
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
@@ -2519,6 +2547,11 @@ void dialog_settings_c::networks_tab_selected()
             DEFERRED_UNIQUE_CALL(0.1, DELEGATE(this, encrypt_handler), as_param(enc_val()));
     }
 
+    if (mask & MASK_PROFILE_NOTIFICATIONS)
+    {
+        DEFERRED_UNIQUE_CALL( 0.1, DELEGATE( this, notification_handler ), bgroups[ BGROUP_INCOMING_NOTIFY ].current );
+    }
+
     if (mask & MASK_APPLICATION_COMMON)
     {
         select_lang(curlang);
@@ -2983,6 +3016,7 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
 
         prf().min_history(load_history_count);
         prf().inactive_time( (bgroups[BGROUP_COMMON2].current & 2) ? set_away_on_timer_minutes_value : 0 );
+        prf().dmn_duration( desktop_notification_duration );
 
         msgopts_changed = msgopts_current ^ msgopts_original;
 

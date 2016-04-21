@@ -15,10 +15,8 @@ gui_listitem_c::gui_listitem_c(initial_rect_data_s &data, gui_listitem_params_s 
         icon = *prms.icon;
     else if (prms.eb && prms.eb->m_body)
     {
-        icon.create_ARGB( prms.eb->info().sz );
-        icon.copy( ts::ivec2(0), icon.info().sz, *prms.eb, ts::ivec2(0) );
+        icon = *prms.eb;
     }
-        
 
     if (prms.themerect.is_empty())
         set_theme_rect(CONSTASTR("lstitem"), false);
@@ -44,8 +42,7 @@ gui_listitem_c::~gui_listitem_c()
 
 void gui_listitem_c::set_icon(const ts::bmpcore_exbody_s &eb)
 {
-    icon.create_ARGB(eb.info().sz);
-    icon.copy(ts::ivec2(0), icon.info().sz, eb, ts::ivec2(0));
+    icon = eb;
     if (eb.info().sz.y > height) height = eb.info().sz.y;
 }
 
@@ -221,16 +218,16 @@ namespace
             m.iterate_items(*this, fn);
             return true;
         }
-        bool operator()(ts::str_c& fn, const ts::wstr_c&txt, ts::uint32 &flags, MENUHANDLER h, const ts::str_c&prm)
+        bool operator()(ts::str_c& fn, menu_item_info_s &inf)
         {
             if (found)
             {
-                RESETFLAG(flags, MIF_MARKED);
+                RESETFLAG( inf.flags, MIF_MARKED);
             }
             else
             {
-                found = prm.equals(fn);
-                INITFLAG(flags, MIF_MARKED, found);
+                found = inf.prm.equals(fn);
+                INITFLAG( inf.flags, MIF_MARKED, found);
             }
             return true;
         }
@@ -673,9 +670,9 @@ void gui_dialog_c::set_combik_menu( const ts::asptr& ctl_name, const menu_c& m )
 
             bool operator()(findamarked&, const ts::wsptr&) { return true; } // skip separator
             bool operator()(findamarked&, const ts::wsptr&, const menu_c&) { return true; } // skip submenu
-            bool operator()(findamarked&, const ts::wstr_c&txt, ts::uint32 f, MENUHANDLER h, const ts::str_c&prm)
+            bool operator()(findamarked&, menu_item_info_s &inf)
             {
-                if (f & MIF_MARKED) name = txt;
+                if ( inf.flags & MIF_MARKED) name = inf.txt;
                 return true;
             }
         } s;
@@ -1022,9 +1019,9 @@ RID gui_dialog_c::combik(const menu_c &m, RID parent)
 
         bool operator()(findamarked&, const ts::wsptr&) { return true; } // skip separator
         bool operator()(findamarked&, const ts::wsptr&, const menu_c&) { return true; } // skip submenu
-        bool operator()(findamarked&, const ts::wstr_c&txt, ts::uint32 f, MENUHANDLER h, const ts::str_c&prm)
+        bool operator()(findamarked&, const menu_item_info_s &inf)
         {
-            if (f & MIF_MARKED) name = txt;
+            if ( inf.flags & MIF_MARKED) name = inf.txt;
             return true;
         }
     } s;
@@ -1244,9 +1241,9 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
 
                     bool operator()(getta&, const ts::wsptr&) { return true; } // skip separator
                     bool operator()(getta&, const ts::wsptr&, const menu_c&) { return true; } // skip submenu
-                    bool operator()(getta&g, const ts::wstr_c&txt, ts::uint32 /*flags*/, MENUHANDLER h, const ts::str_c&prm)
+                    bool operator()(getta&g, const menu_item_info_s &inf)
                     {
-                        cis.addnew( txt, prm.as_uint(), g.checkname + prm );
+                        cis.addnew( inf.txt, inf.prm.as_uint(), g.checkname + inf.prm );
                         return true;
                     }
                 } s;
@@ -1277,9 +1274,9 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
 
                     bool operator()(getta&, const ts::wsptr&) { return true; } // skip separator
                     bool operator()(getta&, const ts::wsptr&, const menu_c&) { return true; } // skip submenu
-                    bool operator()(getta&g, const ts::wstr_c&txt, ts::uint32 /*flags*/, MENUHANDLER h, const ts::str_c&prm)
+                    bool operator()(getta&g, const menu_item_info_s &inf)
                     {
-                        ris.addnew(txt, as_param(prm.as_int()), g.radioname + prm);
+                        ris.addnew( inf.txt, as_param( inf.prm.as_int()), g.radioname + inf.prm);
                         return true;
                     }
                 } s;

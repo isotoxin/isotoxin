@@ -522,6 +522,7 @@ public:
     INTPAR( ctl_to_send, EKO_ENTER_NEW_LINE )
     INTPAR( inactive_time, 5 )
     INTPAR( manual_cos, COS_ONLINE )
+    INTPAR( dmn_duration, 5 )
     
     TEXTAPAR( date_msg_template, "d MMMM" )
     TEXTAPAR( date_sep_template, "dddd d MMMM yyyy" )

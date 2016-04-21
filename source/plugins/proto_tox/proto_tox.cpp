@@ -848,6 +848,17 @@ struct transmitting_data_s : public file_transfer_s
     u64 req_offset = 0;
     u32 req_max_size = 0;
 
+#ifdef _DEBUG
+    struct creq_s
+    {
+        u64 offset;
+        u32 size;
+        creq_s( u64 offset, u32 size ):offset(offset), size(size) {}
+    };
+    std::vector<creq_s> allcorereqs;
+    std::vector<creq_s> allappreqs;
+    std::vector<creq_s> allapppor;
+#endif // _DEBUG
 
     bool is_accepted = false;
     bool is_paused = false;
@@ -874,8 +885,12 @@ struct transmitting_data_s : public file_transfer_s
     virtual void send_data() = 0;
     virtual void resume_from(u64 /*offset*/) {};
 
-    void core_request(u64 offset, u32 size)
+    void toxcore_request(u64 offset, u32 size)
     {
+#ifdef _DEBUG
+        allcorereqs.emplace_back( offset, size );
+#endif // _DEBUG
+        
         if (size == 0)
         {
             finished();
@@ -949,6 +964,10 @@ struct transmitting_file_s : public transmitting_data_s
 
             memset(this, 0, sizeof(*this));
         }
+        ~app_req_s()
+        {
+            clear();
+        }
     };
     app_req_s rch[2];
     bool request = false;
@@ -989,6 +1008,10 @@ struct transmitting_file_s : public transmitting_data_s
 
     /*virtual*/ bool portion(const file_portion_s *fp) override
     {
+#ifdef _DEBUG
+        allapppor.emplace_back( fp->offset, time_ms() );
+#endif // _DEBUG
+
         ASSERT(fp->size == FILE_TRANSFER_CHUNK || (fp->offset + fp->size) == fsz);
 
         if (rch[0].set(fp))
@@ -1016,6 +1039,10 @@ struct transmitting_file_s : public transmitting_data_s
         {
             ASSERT(rch[0].offset == 0 && rch[0].buf == nullptr);
             hf->file_portion(utag, 0, nullptr, FILE_TRANSFER_CHUNK); // request very first chunk now
+
+#ifdef _DEBUG
+            allappreqs.emplace_back( 0, time_ms() );
+#endif // _DEBUG
             request = true;
             return;
         }
@@ -1028,6 +1055,10 @@ struct transmitting_file_s : public transmitting_data_s
         if (fsz > nextr)
         {
             hf->file_portion(utag, nextr, nullptr, FILE_TRANSFER_CHUNK); // request now
+#ifdef _DEBUG
+            allappreqs.emplace_back( nextr, time_ms() );
+#endif // _DEBUG
+
             rch[1].offset = nextr;
         }
     }
@@ -2721,7 +2752,7 @@ static void cb_file_chunk_request(Tox *, uint32_t fid, uint32_t file_number, u64
     for (transmitting_data_s *f = transmitting_data_s::first; f; f = f->next)
         if (f->fid == fid && f->fnn == file_number)
         {
-            f->core_request(position, length);
+            f->toxcore_request(position, length);
             break;
         }
 }
@@ -4832,6 +4863,11 @@ void __stdcall file_control(u64 utag, file_control_e fctl)
                 }
                 return;
             }
+
+        if ( FIC_CHECK == fctl )
+        {
+            hf->file_control( utag, FIC_UNKNOWN );
+        }
     }
 }
 

@@ -466,6 +466,7 @@ public:
 	const TCHARACTER * operator()() const {return core ? core->str() : ZSTRINGS_NULL;}
 	ZSTRINGS_SIGNED len() const {return core?core->m_n_size:0;}
 	ZSTRINGS_SIGNED cap() const {return core?core->m_a_size:0;}
+    ZSTRINGS_SIGNED ref() const { return core ? core->m_ref : 0; }
 
 	void clear() // set zero len
 	{
@@ -559,6 +560,7 @@ public:
 	TCHARACTER * operator()() {return _str;}
 	ZSTRINGS_SIGNED len() const {return _len;}
 	ZSTRINGS_SIGNED cap() const {return _cap;}
+    ZSTRINGS_SIGNED ref() const { return -1; }
 
 	void clear() // set zero len
 	{
@@ -606,6 +608,7 @@ public:
     TCHARACTER * operator()() { ZSTRINGS_ASSERT(false, "str_core_part_c is read only"); return ZSTRINGS_NULL; } //-V659
     ZSTRINGS_SIGNED len() const { return buf.l; }
     ZSTRINGS_SIGNED cap() const { return 0; }
+    ZSTRINGS_SIGNED ref() const { return -1; }
 
     void clear() // set zero len
     {
@@ -643,6 +646,7 @@ public:
     typedef TCHARACTER TCHAR;
     typedef CORE TCORE;
 
+    ZSTRINGS_SIGNED ref() const { return core.ref(); }
 
     str_t() {}
     explicit str_t(ZSTRINGS_SIGNED size, bool set0len):core( size ) { if (set0len) set_length(0); }

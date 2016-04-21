@@ -408,6 +408,7 @@ public:
     {
         core = std::move( bmp.core );
     }
+    bitmap_t& operator =( const bmpcore_exbody_s &eb );
 
     bool equals(const bitmap_t & bm) const { return core == bm.core; }
 

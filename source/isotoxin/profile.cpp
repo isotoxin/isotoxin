@@ -660,6 +660,7 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::prepare( t
 template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts::sqlitedb_c *db, bool all, bool notify_saved )
 {
     ts::db_transaction_c __transaction( db );
+    if ( !db ) return false;
 
     ts::tmp_array_inplace_t<ts::data_pair_s, 0> vals( T::columns );
     bool one_done = false;

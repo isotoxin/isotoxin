@@ -1359,6 +1359,8 @@ class gui_popup_menu_c : public gui_vscrollgroup_c
 
 public:
 
+    static int icon_size();
+
     struct click_data_s
     {
         ts::wstr_c itemtext;
@@ -1367,7 +1369,7 @@ public:
 
     bool operator()(int, const ts::wsptr& txt);
     bool operator()(int, const ts::wsptr& txt, const menu_c &sm);
-    bool operator()(int, const ts::wsptr& txt, ts::uint32 flags, MENUHANDLER handler, const ts::str_c& prm);
+    bool operator()(int, const menu_item_info_s& inf);
 
     gui_popup_menu_c(MAKE_ROOT<gui_popup_menu_c> &data) :gui_vscrollgroup_c(data), menu(data.menu), showpoint(data.screenpos), parent_menu(data.parentmenu) { defaultthrdraw = DTHRO_BORDER; flags.init(F_SYSMENU, data.sys); }
     /*virtual*/ ~gui_popup_menu_c();
@@ -1395,11 +1397,17 @@ template<> struct MAKE_CHILD<gui_menu_item_c> : public _PCHILD(gui_menu_item_c)
     ts::str_c  prm;
     MENUHANDLER handler;
     ts::uint32 flags = 0;
+    ts::bitmap_c icon;
     MAKE_CHILD(RID parent_, const ts::wsptr &text):text(text) { parent = parent_; }
     ~MAKE_CHILD();
-    MAKE_CHILD & operator<<(MENUHANDLER m) { handler = m; return *this;}
-    MAKE_CHILD & operator<<(const ts::str_c &p) { prm = p; return *this;}
-    MAKE_CHILD & operator<<(ts::uint32 f) { flags = f; return *this;}
+    MAKE_CHILD & operator<<( const menu_item_info_s &inf )
+    {
+        flags = inf.flags;
+        handler = inf.h;
+        prm = inf.prm;
+        if ( inf.bmp ) icon = *inf.bmp;
+        return *this;
+    }
 };
 
 class gui_menu_item_c : public gui_label_c
@@ -1410,6 +1418,7 @@ class gui_menu_item_c : public gui_label_c
     menu_c submnu;
     MENUHANDLER handler;
     ts::str_c param;
+    ts::bitmap_c icon;
 
     static const ts::flags32_s::BITS F_SEPARATOR = FLAGS_FREEBITSTART_LABEL << 0;
     static const ts::flags32_s::BITS F_MARKED = FLAGS_FREEBITSTART_LABEL << 1;
@@ -1424,6 +1433,7 @@ public:
     /*virtual*/ const theme_rect_s *themerect() const
     {
         ts::uint32 st = flags.is(F_SEPARATOR) ? 0 : get_state();
+        if ( icon.info().sz >> 0 ) RESETFLAG( st, RST_ACTIVE );
         if (submnu_shown) st |= RST_HIGHLIGHT;
         if (flags.is(F_DISABLED)) RESETFLAG( st, RST_HIGHLIGHT );
         return thrcache(st);
@@ -1437,7 +1447,8 @@ public:
     gui_menu_item_c & separator(bool f);
     gui_menu_item_c & submenu(const menu_c &m);
 
-    static gui_menu_item_c & create(RID owner, const ts::wsptr &text, ts::uint32 flags, MENUHANDLER handler, const ts::str_c &param);
+    static gui_menu_item_c & create(RID owner, const ts::wsptr &text);
+    static gui_menu_item_c & create( RID owner, const menu_item_info_s &inf );
 };
 
 
@@ -1523,7 +1534,7 @@ class gui_htabsel_c : public gui_hgroup_c
 public:
     bool operator()(RID, const ts::wsptr& txt);
     bool operator()(RID, const ts::wsptr& txt, const menu_c &sm);
-    bool operator()(RID, const ts::wsptr& txt, ts::uint32 flags, MENUHANDLER handler, const ts::str_c& prm);
+    bool operator()(RID, const menu_item_info_s& inf);
 
     gui_htabsel_c(MAKE_CHILD<gui_htabsel_c> &data) :gui_hgroup_c(data) { menu = data.menu; defaultthrdraw = DTHRO_BORDER | DTHRO_CENTER; }
     /*virtual*/ ~gui_htabsel_c();
@@ -1601,7 +1612,7 @@ class gui_vtabsel_c : public gui_vscrollgroup_c
 public:
     bool operator()(ts::pair_s<RID, int>&, const ts::wsptr& txt);
     bool operator()(ts::pair_s<RID, int>&, const ts::wsptr& txt, const menu_c &sm);
-    bool operator()(ts::pair_s<RID, int>&, const ts::wsptr& txt, ts::uint32 flags, MENUHANDLER handler, const ts::str_c& prm);
+    bool operator()(ts::pair_s<RID, int>&, const menu_item_info_s& inf);
 
     gui_vtabsel_c(MAKE_CHILD<gui_vtabsel_c> &data) :gui_vscrollgroup_c(data), menu(data.menu) { defaultthrdraw = DTHRO_BORDER | DTHRO_CENTER; }
     /*virtual*/ ~gui_vtabsel_c();
@@ -1642,7 +1653,7 @@ public:
     gui_vtabsel_item_c(MAKE_CHILD<gui_vtabsel_item_c> &data) :gui_label_c(data), submnu(data.menu), handler(data.handler), param(data.param), lv(data.lv)
     {
         if (lv > 0)
-            set_text(ts::tmp_wstr_c(lv + data.txt.get_length() + 7, true).set(CONSTWSTR("<l>")).append_chars(ts::tmin(3, lv), '.').append(data.txt).append(CONSTWSTR("</l>")));
+            set_text(ts::tmp_wstr_c(lv + data.txt.get_length() + 7, true).set(CONSTWSTR("<l>")).append_chars(ts::tmin(3, lv), ' ').append(data.txt).append(CONSTWSTR("</l>")));
         else
             set_text(data.txt);
     }

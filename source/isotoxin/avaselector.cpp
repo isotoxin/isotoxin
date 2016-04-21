@@ -160,7 +160,7 @@ static void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp )
     if (bmp.info().bytepp() != 4 || bmp.info().pitch != bmp.info().sz.x * 4)
     {
         b2e.create_ARGB(b2e.info().sz);
-        b2e.copy(ts::ivec2(0), b2e.info().sz, bmp.extbody(), ts::ivec2(0));
+        b2e = bmp.extbody();
     } else
         b2e = bmp;
 
@@ -654,8 +654,7 @@ void dialog_avaselector_c::rebuild_bitmap()
         ts::bitmap_c b;
         if (bitmap.info().bytepp() != 4)
         {
-            b.create_ARGB(bitmap.info().sz);
-            b.copy(ts::ivec2(0), bitmap.info().sz, bitmap.extbody(), ts::ivec2(0));
+            b = bitmap.extbody();
             bitmap = b;
         }
 

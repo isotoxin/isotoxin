@@ -6,10 +6,18 @@ void TSCALL menu_handler_stub(const ts::str_c &)
 }
 
 
-menu_c& menu_c::add( const ts::wstr_c & text, ts::uint32 flags, MENUHANDLER h, const ts::asptr& param )
+menu_c& menu_c::add( const ts::wstr_c & text, ts::uint32 flags, MENUHANDLER h, const ts::asptr& param, ts::bitmap_c *icon )
 {
+    flags = flags & 0x0000ffff;
+
     if (curbp == nullptr) prepare();
     ts::wbp_c &item = curbp->add_block(text);
+
+    if ( icon )
+    {
+        uint index = core->register_bitmap( *icon );
+        flags |= index << 16;
+    }
 
     item.set_value( to_wstr(encode(flags,h,param)) );
     return *this;
@@ -65,11 +73,11 @@ ts::wstr_c menu_c::get_text(int index) const
         getta(int index) :index(index) {}
         bool operator()(getta&, const ts::wsptr&) {return true;} // skip separator
         bool operator()(getta&, const ts::wsptr&, const menu_c&) {return true;} // skip submenu
-        bool operator()(getta&, const ts::wstr_c&txt, ts::uint32 flags, MENUHANDLER h, const ts::str_c&prm)
+        bool operator()(getta&, const menu_item_info_s &inf)
         {
             if (index == 0)
             {
-                t = txt;
+                t = inf.txt;
                 return false;
             }
             --index;

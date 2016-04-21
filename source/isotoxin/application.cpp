@@ -428,6 +428,8 @@ application_c::~application_c()
     ts::master().on_char.clear();
     ts::master().on_keyboard.clear();
 
+    m_files.clear(); // delete all file transfers before g_app set nullptr
+
 	g_app = nullptr;
 }
 
@@ -932,8 +934,15 @@ ts::static_setup<spinlock::syncvar<autoupdate_params_s>,1000> auparams;
 
 void autoupdater();
 
+#ifdef _DEBUG
+tableview_unfinished_file_transfer_s *g_uft = nullptr;
+#endif // _DEBUG
+
 /*virtual*/ void application_c::app_5second_event()
 {
+#ifdef _DEBUG
+    g_uft = &prf().get_table_unfinished_file_transfer();
+#endif // _DEBUG
     prf().check_aps();
 
     enum
@@ -1012,6 +1021,13 @@ void autoupdater();
                 break;
             }
         }
+    }
+
+    for( file_transfer_s *ftr : m_files )
+    {
+        int protoid = ftr->sender.protoid;
+        if ( active_protocol_c *ap = prf().ap( protoid ) )
+            ap->file_control( ftr->utag, FIC_CHECK );
     }
 
     if (prf().manual_cos() == COS_ONLINE)
@@ -1294,7 +1310,13 @@ void application_c::select_last_unread_contact()
                 add_status_items(m);
                 m.add_separator();
             }
-            m.add(loc_text(loc_exit), 0, handlers::m_exit);
+
+            ts::bitmap_c eicon;
+            const theme_image_s *icn = gui->theme().get_image( CONSTASTR("exit_icon") );
+            if (icn)
+                eicon = icn->extbody();
+
+            m.add(loc_text(loc_exit), 0, handlers::m_exit, ts::asptr(), icn ? &eicon : nullptr);
             gui_popup_menu_c::show(menu_anchor_s(true, menu_anchor_s::RELPOS_TYPE_SYS), m, true);
             g_app->set_notification_icon(); // just remove hint
 
@@ -1604,7 +1626,13 @@ bool application_c::b_customize(RID r, GUIPARAM param)
     }
 
     m.add_separator();
-    m.add(loc_text(loc_exit), 0, handlers::m_exit);
+
+    ts::bitmap_c eicon;
+    const theme_image_s *icn = gui->theme().get_image( CONSTASTR( "exit_icon" ) );
+    if ( icn )
+        eicon = icn->extbody();
+
+    m.add( loc_text( loc_exit ), 0, handlers::m_exit, ts::asptr(), icn ? &eicon : nullptr );
     gui_popup_menu_c::show(r.call_get_popup_menu_pos(), m);
 
     return true;
@@ -2275,7 +2303,7 @@ file_transfer_s *application_c::find_file_transfer(uint64 utag)
     return nullptr;
 }
 
-file_transfer_s * application_c::register_file_transfer( const contact_key_s &historian, const contact_key_s &sender, uint64 utag, const ts::wstr_c &filename, uint64 filesize )
+file_transfer_s * application_c::register_file_transfer( const contact_key_s &historian, const contact_key_s &sender, uint64 utag, ts::wstr_c filename /* filename must be passed as value, not ref! */, uint64 filesize )
 {
     if (find_file_transfer(utag)) return nullptr;
 
@@ -2290,6 +2318,7 @@ file_transfer_s * application_c::register_file_transfer( const contact_key_s &hi
     ftr->filename_on_disk = filename;
     ftr->filesize = filesize;
     ftr->utag = utag;
+
     ts::fix_path(ftr->filename, FNO_NORMALIZE);
 
     auto *row = prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.utag == utag; });
@@ -2299,6 +2328,7 @@ file_transfer_s * application_c::register_file_transfer( const contact_key_s &hi
         // send
         ftr->upload = true;
         d().handle = ts::f_open( filename );
+
         if (!d().handle)
         {
             m_files.remove_fast(m_files.size()-1);
@@ -2624,11 +2654,13 @@ file_transfer_s::file_transfer_s()
 
 file_transfer_s::~file_transfer_s()
 {
-    if (query_task)
+    dip = true;
+
+    if ( g_app )
     {
-        auto w = query_task->sync.lock_write();
-        w().rslt = query_task_s::rslt_kill;
-        w().ftr = nullptr;
+        // wait for unlock
+        for ( ; data.lock_write()( ).lock > 0; ts::master().sys_sleep( 1 ) )
+            g_app->m_tasks_executor.tick();
     }
 
     if (void *handle = file_handle())
@@ -2738,6 +2770,12 @@ void file_transfer_s::kill( file_control_e fctl )
 {
     //DMSG("kill " << utag << fctl << filename_on_disk);
 
+    if ( FIC_UNKNOWN == fctl )
+    {
+        g_app->unregister_file_transfer( utag, false );
+        return;
+    }
+
     if (!upload && !accepted && (fctl == FIC_NONE || fctl == FIC_DISCONNECT))
     {
         // kill without accept - just do nothing
@@ -2813,198 +2851,132 @@ void file_transfer_s::kill( file_control_e fctl )
     g_app->unregister_file_transfer(utag, fctl == FIC_DISCONNECT);
 }
 
-query_task_s::query_task_s(file_transfer_s *ftr)
-{
-    sync.lock_write()().ftr = ftr;
-}
 
-query_task_s::~query_task_s()
+/*virtual*/ int file_transfer_s::iterate(int pass)
 {
-    auto w = sync.lock_write();
-    if (w().ftr)
-        w().ftr->query_task = nullptr;
-}
-
-
-/*virtual*/ int query_task_s::iterate(int pass)
-{
-    auto rr = sync.lock_read();
-    if (rslt_kill == rr().rslt || !rr().ftr)
+    if ( dip )
         return R_CANCEL;
 
-    if (rslt_idle == rr().rslt)
-    {
-        rr.unlock();
-        ts::master().sys_sleep(0);
-        return pass + 1;
-    }
+    auto rr = data.lock_read();
 
-    job_s cj = rr().current_job;
+    ASSERT( rr().lock > 0 );
+
+    if (rr().query_job.size() == 0) // job queue is empty - just do nothing
+        return 1;
+
+    job_s cj = rr().query_job.get(0);
     rr.unlock();
 
-    if( cj.sz == 0 || cj.offset == 0xFFFFFFFFFFFFFFFFull )
-    {
-        auto d = sync.lock_write();
-        if (d().jobarray.size())
-        {
-            d().current_job = d().jobarray.get_remove_slow();
-            d().rslt = rslt_inprogress;
-            cj = d().current_job;
-        } else
-        {
-            d().rslt = rslt_idle;
-            return pass + 1;
-        }
-    }
-
-    rr = sync.lock_read();
-    if (!rr().ftr)
-        return R_CANCEL;
-    void *handler = rr().ftr->file_handle(); //-V807
-    int protoid = rr().ftr->sender.protoid;
-    uint64 utag = rr().ftr->utag;
-
-    // always set file pointer
-    ts::f_set_pos( handler, cj.offset );
-
-    uint sz = (uint)ts::tmin<int64>(cj.sz, (int64)(rr().ftr->filesize - cj.offset));
-    ts::tmp_buf_c b(sz, true);
-
-    rr.unlock();
-
-    if (sz != ts::f_read(handler, b.data(), sz))
-    {
-        sync.lock_write()().rslt = rslt_kill;
-        return R_DONE;
-    }
-
-    if (active_protocol_c *ap = prf().ap(protoid))
-    {
-        while (!ap->file_portion(utag, cj.offset, b.data(), sz))
-        {
-            ts::master().sys_sleep(100);
-
-            auto rrr = sync.lock_read();
-            if (rslt_kill == rrr().rslt || !rrr().ftr)
-                return R_CANCEL;
-        }
-    }
+    auto xx = data.lock_write();
+    void *handler = xx().handle;
+    xx.unlock();
 
     bool rslt = false;
-    if (cj.sz)
+
+    if ( handler )
     {
-        auto wftr = sync.lock_write();
-        if (!wftr().ftr)
+        // always set file pointer
+        ts::f_set_pos( handler, cj.offset );
+
+        uint sz = (uint)ts::tmin<int64>( cj.sz, (int64)( filesize - cj.offset ) );
+        ts::tmp_buf_c b( sz, true );
+
+        if ( sz != ts::f_read( handler, b.data(), sz ) )
+        {
+            read_fail = true;
+            return R_CANCEL;
+        }
+
+        if ( active_protocol_c *ap = prf().ap( sender.protoid ) )
+        {
+            while ( !ap->file_portion( utag, cj.offset, b.data(), sz ) )
+            {
+                ts::master().sys_sleep( 100 );
+
+                if ( dip )
+                    return R_CANCEL;
+            }
+        }
+
+        if ( dip )
             return R_CANCEL;
 
-        auto wdata = wftr().ftr->data.lock_write();
+        xx = data.lock_write();
 
-        if (wdata().bytes_per_sec >= file_transfer_s::BPSSV_ALLOW_CALC)
+        if ( xx().bytes_per_sec >= file_transfer_s::BPSSV_ALLOW_CALC )
         {
-            wdata().transfered_last_tick += cj.sz;
-            wdata().upduitime += wdata().deltatime(true);
+            xx().transfered_last_tick += cj.sz;
+            xx().upduitime += xx().deltatime( true );
 
-            if (wdata().upduitime > 0.3f)
+            if ( xx().upduitime > 0.3f )
             {
-                wdata().upduitime -= 0.3f;
+                xx().upduitime -= 0.3f;
 
                 ts::Time curt = ts::Time::current();
-                int delta = curt - wdata().speedcalc;
+                int delta = curt - xx().speedcalc;
 
-                if (delta >= 500)
+                if ( delta >= 500 )
                 {
-                    wdata().bytes_per_sec = (int)((uint64)wdata().transfered_last_tick * 1000 / delta);
+                    xx().bytes_per_sec = (int)( (uint64)xx().transfered_last_tick * 1000 / delta );
 
-                    wdata().speedcalc = curt;
-                    wdata().transfered_last_tick = 0;
+                    xx().speedcalc = curt;
+                    xx().transfered_last_tick = 0;
                 }
 
-                wftr().ftr->update_item = true;
+                update_item = true;
                 rslt = true;
             }
         }
 
-        wdata().progrez = cj.offset;
+        xx().progrez = cj.offset;
+        xx().query_job.remove_slow( 0 );
+        xx.unlock();
+
+
     }
 
-    auto d = sync.lock_write();
-
-    d().current_job.offset = 0xFFFFFFFFFFFFFFFFull;
-    d().current_job.sz = 0;
-
-    if (d().jobarray.size())
-    {
-        d().current_job = d().jobarray.get_remove_slow();
-        d().rslt = rslt_inprogress;
+    if (rslt && !dip)
         return R_RESULT;
-    }
 
-    if (rslt_kill == d().rslt)
-        return R_CANCEL;
-
-    if (rslt)
-    {
-        d().rslt = rslt_inprogress;
-        return R_RESULT;
-    }
-
-    d().rslt = rslt_idle;
-    return pass + 1;
+    return dip ? R_CANCEL : 1;
 
 }
-/*virtual*/ void query_task_s::done(bool canceled)
+/*virtual*/ void file_transfer_s::done(bool canceled)
 {
-    auto w = sync.lock_write();
-    file_transfer_s *ftr = w().ftr;
-
-    if (canceled || ftr == nullptr)
+    if (canceled || dip)
     {
-        __super::done(canceled);
+        --data.lock_write()( ).lock;
         return;
     }
 
-    if (w().rslt == rslt_kill)
+    if ( read_fail )
     {
-        ftr->kill();
-        __super::done(canceled);
+        --data.lock_write()( ).lock;
+        kill();
         return;
     }
 
-    ASSERT( w().rslt == rslt_ok );
-
-    ftr->upd_message_item(false);
-
-    __super::done(canceled);
+    upd_message_item(false);
 }
 
-/*virtual*/ void query_task_s::result()
+/*virtual*/ void file_transfer_s::result()
 {
-    file_transfer_s *ftr = sync.lock_write()().ftr;
-    if (ftr) ftr->upd_message_item(false);
+    upd_message_item(false);
 }
 
 void file_transfer_s::query( uint64 offset_, int sz )
 {
-    if (query_task)
-    {
-        auto d = query_task->sync.lock_write();
-        auto &job = d().jobarray.add();
-        job.offset = offset_;
-        job.sz = sz;
-        ASSERT( d().rslt == query_task_s::rslt_idle || d().rslt == query_task_s::rslt_inprogress );
-        d().rslt = query_task_s::rslt_inprogress;
+    auto ww = data.lock_write();
+    ww().query_job.addnew( offset_, sz );
+
+    if ( ww().lock > 0 )
         return;
-    }
-        
 
     if (file_handle())
     {
-        query_task = TSNEW( query_task_s, this );
-        auto d = query_task->sync.lock_write();
-        d().current_job.offset = offset_;
-        d().current_job.sz = sz;
-        d.unlock();
-        g_app->add_task(query_task);
+        ++ww().lock;
+        ww.unlock();
+        g_app->add_task(this);
     }
 }
 

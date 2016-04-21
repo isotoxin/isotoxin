@@ -825,6 +825,9 @@ bool common_videocall_stuff_s::mouse_op(gui_notice_callinprogress_c *owner, RID 
         ts::ivec2 osz = opd->rect.rb;
         ts::ivec2 csz = camera->get_video_size();
         ts::ivec2 dsz = display->get_desired_size();
+        if ( dsz <= 0 )
+            return false;
+
         float xy = (float)csz.y / (float)csz.x;
 
         if (opd->area & AREA_LEFT)

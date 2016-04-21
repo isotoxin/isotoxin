@@ -85,43 +85,7 @@ struct autoupdate_params_s
     bool downloaded = false;
 };
 
-struct file_transfer_s;
-struct query_task_s : public ts::task_c
-{
-    struct job_s
-    {
-        DUMMY(job_s);
-        uint64 offset = 0xFFFFFFFFFFFFFFFFull;
-        int sz = 0;
-        job_s() {}
-    };
-
-    enum rslt_e
-    {
-        rslt_inprogress,
-        rslt_idle,
-        rslt_kill,
-        rslt_ok,
-    };
-
-    struct sync_s
-    {
-        file_transfer_s *ftr = nullptr;
-        job_s current_job;
-        ts::array_inplace_t<job_s, 1> jobarray;
-        rslt_e rslt = rslt_inprogress;
-    };
-
-    spinlock::syncvar<sync_s> sync;
-
-    query_task_s(file_transfer_s *ftr);
-    ~query_task_s();
-    /*virtual*/ int iterate(int pass) override;
-    /*virtual*/ void done(bool canceled) override;
-    /*virtual*/ void result() override;
-};
-
-struct file_transfer_s : public unfinished_file_transfer_s
+struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
 {
     MOVABLE(true);
 
@@ -130,19 +94,31 @@ struct file_transfer_s : public unfinished_file_transfer_s
     static const int BPSSV_PAUSED_BY_ME = -1;
     static const int BPSSV_ALLOW_CALC = 0;
 
+    struct job_s
+    {
+        DUMMY( job_s );
+        uint64 offset = 0xFFFFFFFFFFFFFFFFull;
+        int sz = 0;
+        job_s( uint64 offset, int sz ) :offset( offset ), sz( sz ) {}
+        job_s() {}
+    };
 
-    query_task_s *query_task = nullptr;
+    /*virtual*/ int iterate( int pass ) override;
+    /*virtual*/ void done( bool canceled ) override;
+    /*virtual*/ void result() override;
 
     struct data_s
     {
         //uint64 offset = 0;
         uint64 progrez = 0;
         void * handle = nullptr;
+        ts::array_inplace_t<job_s, 1> query_job;
         ts::Time prevt = ts::Time::current();
         ts::Time speedcalc = ts::Time::current();
         int transfered_last_tick = 0;
         int bytes_per_sec = BPSSV_ALLOW_CALC;
         float upduitime = 0;
+        int lock = 0;
 
         float deltatime(bool updateprevt, int addseconds = 0)
         {
@@ -166,6 +142,8 @@ struct file_transfer_s : public unfinished_file_transfer_s
 
     bool accepted = false; // prepare_fn called - file receive accepted // used only for receive
     bool update_item = false;
+    bool dip = false;
+    bool read_fail = false;
 
     file_transfer_s();
     ~file_transfer_s();
@@ -184,10 +162,10 @@ struct file_transfer_s : public unfinished_file_transfer_s
     void query( uint64 offset, int sz );
     void pause_by_remote( bool p );
     void pause_by_me( bool p );
-    bool is_active() const 
+    bool is_freeze()
     {
-        auto rdata = data.lock_read();
-        return rdata().bytes_per_sec == BPSSV_WAIT_FOR_ACCEPT || (const_cast<data_s *>(&rdata())->deltatime(false)) < 60; /* last activity in 60 sec */
+        auto wdata = data.lock_write();
+        return ( const_cast<data_s *>( &wdata() )->deltatime( false ) ) > 60; /* last activity in 60 sec */
     }
     bool confirm_required() const;
 };
@@ -707,7 +685,7 @@ public:
     bool present_file_transfer_by_sender(const contact_key_s &sender, bool accept_only_rquest);
     file_transfer_s *find_file_transfer(uint64 utag);
     file_transfer_s *find_file_transfer_by_msgutag(uint64 utag);
-    file_transfer_s *register_file_transfer( const contact_key_s &historian, const contact_key_s &sender, uint64 utag, const ts::wstr_c &filename, uint64 filesize );
+    file_transfer_s *register_file_transfer( const contact_key_s &historian, const contact_key_s &sender, uint64 utag, ts::wstr_c filename, uint64 filesize );
     void unregister_file_transfer(uint64 utag,bool disconnected);
     void cancel_file_transfers( const contact_key_s &historian ); // by historian
 

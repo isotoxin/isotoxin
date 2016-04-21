@@ -11,10 +11,21 @@ enum menu_item_flags_e
     MIF_DISABLED    = SETBIT(1),
 };
 
+struct menu_item_info_s
+{
+    ts::wstr_c  txt;
+    ts::uint32 flags = 0;
+    MENUHANDLER h = MENUHANDLER();
+    ts::str_c prm;
+    const ts::bitmap_c *bmp = nullptr;
+};
+
+
 class menu_c
 {
     struct core_s
     {
+        ts::array_inplace_t<ts::bitmap_c, 0> bmps;
         ts::wbp_c bp;
         int ref;
         core_s():ref(1) {}
@@ -23,6 +34,13 @@ class menu_c
             --ref;
             if (ref == 0) TSDEL(this);
         }
+
+        uint register_bitmap( const ts::bitmap_c&bmp )
+        {
+            bmps.add() = bmp;
+            return bmps.size();
+        }
+
     } *core = nullptr;
 
     ts::wbp_c *curbp = nullptr;
@@ -74,7 +92,7 @@ public:
     explicit operator bool() const {return curbp != nullptr;}
     bool operator >= (const menu_c &om) const {return core == om.core && level <= om.level;} // проверяет, является ли *this родителем om
     int lv() const {return level;}
-    menu_c& add( const ts::wstr_c & text, ts::uint32 flags = 0, MENUHANDLER h = MENUHANDLER(), const ts::asptr& param = CONSTASTR("") );
+    menu_c& add( const ts::wstr_c & text, ts::uint32 flags = 0, MENUHANDLER h = MENUHANDLER(), const ts::asptr& param = CONSTASTR(""), ts::bitmap_c *icon = nullptr );
     menu_c& add_separator();
     menu_c add_path( const ts::wstr_c & path ); // path1/path2/path3
     menu_c add_sub( const ts::wstr_c & text );
@@ -153,11 +171,23 @@ public:
                     need_separator = false;
                 }
                 normal_item = true;
-                MENUHANDLER h;
-                ts::uint32 flags = t->as_uint();
-                ++t; t->decode_base64(&h, sizeof(h));
+
+                menu_item_info_s inf;
+                inf.flags = t->as_uint();
+                uint index = inf.flags >> 16;
+                if ( index > 0 )
+                {
+                    inf.bmp = &core->bmps.get( index - 1 );
+                    inf.flags = 0x0000ffff & inf.flags;
+                }
+
+                ++t; t->decode_base64(&inf.h, sizeof( inf.h ));
                 ++t;
-                if (!f(par, it.name(), flags, h, ts::to_str(*t))) return; // text, handler, text param - menu item
+
+                inf.txt = it.name();
+                inf.prm = ts::to_str( *t );
+
+                if (!f(par, inf)) return; // text, handler, text param - menu item
             }
         }
     }
@@ -213,17 +243,28 @@ public:
                     need_separator = false;
                 }
                 normal_item = true;
-                MENUHANDLER h;
-                ts::uint32 flags = t->as_uint();
-                ++t; t->decode_base64(&h, sizeof(h));
+                
+                menu_item_info_s inf;
+                inf.flags = t->as_uint();
+                uint index = inf.flags >> 16;
+                if ( index > 0 )
+                {
+                    inf.bmp = &core->bmps.get( index - 1 );
+                    inf.flags = 0x0000ffff & inf.flags;
+                }
+
+                ++t; t->decode_base64( &inf.h, sizeof( inf.h ) );
                 ++t;
 
-                ts::uint32 sflags = flags;
+                inf.txt = it.name();
+                inf.prm = ts::to_str( *t );
+
+                ts::uint32 sflags = inf.flags;
                 ts::str_c prm(ts::to_str(*t));
-                bool cont = f(par, it.name(), flags, h, prm); // text, handler, text param - menu item
-                if (sflags != flags)
+                bool cont = f(par, inf); // text, handler, text param - menu item
+                if (sflags != inf.flags)
                 {
-                    it->set_value(to_wstr(encode(flags, h, prm)));
+                    it->set_value(to_wstr(encode(inf.flags | (index<<16), inf.h, inf.prm)));
                 }
 
                 if (!cont) return;

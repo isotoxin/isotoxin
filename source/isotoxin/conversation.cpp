@@ -3610,8 +3610,7 @@ bool gui_message_item_c::b_break(RID btn, GUIPARAM)
 {
     ts::safe_ptr<rectengine_c> e = &HOLD(btn).engine();
 
-    file_transfer_s *ft = g_app->find_file_transfer_by_msgutag(zero_rec.utag);
-    if (ft && ft->is_active())
+    if ( file_transfer_s *ft = g_app->find_file_transfer_by_msgutag( zero_rec.utag ) )
         ft->kill();
 
     if (e) kill_button(e, 1);
@@ -3669,8 +3668,7 @@ bool gui_message_item_c::b_pause_unpause(RID btn, GUIPARAM p)
     b.set_customdata(as_param(r_to));
     repl_button(r, r_to);
 
-    file_transfer_s *ft = g_app->find_file_transfer_by_msgutag(zero_rec.utag);
-    if (ft && ft->is_active())
+    if ( file_transfer_s *ft = g_app->find_file_transfer_by_msgutag( zero_rec.utag ) )
         ft->pause_by_me(r == BTN_PAUSE);
 
     return true;
@@ -3880,13 +3878,12 @@ const ts::wstr_c &gui_message_item_c::addition_file_data_s::getrectt(gui_message
     //                             CTL_PROGRESSBAR
     if (!pbsize.y)
     {
-        pbsize.y = 30;
+        pbsize.y = 33;
         if (const theme_rect_s *thr = g_app->theme().get_rect(CONSTASTR("hslider")))
-            pbsize.y = thr->sis[SI_TOP].height();
+            pbsize.y = thr->sis[SI_TOP].height() + 3;
     }
 
     pbsize.x = miw - clw - 4;
-    pbsize.y += 3;
     rectt.append_as_int(pbsize.x).append_char(',').append_as_int(pbsize.y).append(CONSTWSTR("><br=3>"));
     return rectt;
 }
@@ -3947,7 +3944,7 @@ void gui_message_item_c::update_text(int for_width)
             {
                 if (ftb) TSDEL( ftb->pbar.get() );
                 ft = g_app->find_file_transfer_by_msgutag(zero_rec.utag);
-                if (ft && ft->is_active()) goto transfer_alive;
+                if (ft && !ft->is_freeze() ) goto transfer_alive;
 
                 insert_button( BTN_BREAK, g_app->preloaded_stuff().breakb->size );
                 newtext.append(CONSTWSTR("<img=file,-1>"));
@@ -3964,7 +3961,7 @@ void gui_message_item_c::update_text(int for_width)
                 addition_file_data_s &ab = addition_file_data();
 
                 if (nullptr == ft) ft = g_app->find_file_transfer_by_msgutag(zero_rec.utag);
-                if (ft && ft->is_active())
+                if (ft)
                 {
                     insert_button( BTN_BREAK, g_app->preloaded_stuff().breakb->size );
 
@@ -3991,7 +3988,10 @@ void gui_message_item_c::update_text(int for_width)
                             ab.pbtext.append(TTT("waiting",185));
                         else
                             ab.pbtext.append(TTT("pause",186));
-                    } else if (bps < 1024)
+                    }
+                    else if ( ft->is_freeze() )
+                        ab.pbtext.append( TTT("inactive more then 1 minute",450) );
+                    else if (bps < 1024)
                         ab.pbtext.append(TTT("$ bytes per second",189) / ts::wmake(bps));
                     else if (bps < 1024 * 1024)
                         ab.pbtext.append(TTT("$ kbytes per second",190) / ts::wmake(bps/1024));

@@ -431,7 +431,7 @@
 431=Color editor
 432=Tools
 433=Color editor
-434=Show notification of incoming message
+434=Show desktop notification of incoming message during $ seconds
 435=Misc
 436=Do not handle
 437=Run external command and pass message as parameter
@@ -447,6 +447,7 @@
 447=Data encrypted (unsupported)
 448=Reset to default
 449=Import again...
+450=inactive more then 1 minute
 900=information
 901=warning
 902=error

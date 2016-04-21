@@ -398,7 +398,7 @@ public:
     /*virtual*/ const avatar_s *get_avatar() const override;
 
     ts::wstr_c contactidfolder() const;
-    void send_file(const ts::wstr_c &fn);
+    void send_file(ts::wstr_c fn);
 
     /*virtual*/ void stop_av() override;
     
@@ -433,6 +433,7 @@ public:
     void subadd(contact_c *c);
     void subaddgchat(contact_c *c);
     bool subdel(contact_c *c);
+    bool subremove( contact_c *c );
     void subdelall();
     void subclear() // do not use it!!! this function used only while metacontact creation or cleanup group
     {

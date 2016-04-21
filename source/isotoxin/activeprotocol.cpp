@@ -73,6 +73,17 @@ void active_protocol_c::change_data( const ts::blob_c &b )
     ipcp->send( ipcw( AQ_SET_CONFIG ) << w().data.config );
 }
 
+#ifdef _DEBUG
+struct qfp_s
+{
+    uint64 utag;
+    uint64 offset;
+    uint time;
+};
+ts::array_inplace_t< qfp_s, 1 > g_qfps;
+#endif // _DEBUG
+
+
 bool active_protocol_c::cmdhandler(ipcr r)
 {
     switch(r.header().cmd)
@@ -364,6 +375,15 @@ bool active_protocol_c::cmdhandler(ipcr r)
             m->utag = r.get<uint64>();
             m->offset = r.get<uint64>() << 20;
             m->filesize = FILE_TRANSFER_CHUNK;
+
+#ifdef _DEBUG
+            if ( g_qfps.size() > 50 )
+                g_qfps.remove_slow( 0 );
+            qfp_s &qfp = g_qfps.add();
+            qfp.utag = m->utag;
+            qfp.offset = m->offset;
+            qfp.time = ts::Time::current().raw();
+#endif // _DEBUG
             m->send_to_main_thread();
         }
         break;
@@ -1093,7 +1113,16 @@ void active_protocol_c::set_configurable( const configurable_s &c, bool force_se
     if (!check_netaddr(w().data.configurable.proxy.proxy_addr))
         w().data.configurable.proxy.proxy_addr = CONSTASTR(DEFAULT_PROXY);
 
-    if (force_send || oldc != w().data.configurable)
+    bool cch = oldc != w().data.configurable;
+    if ( cch )
+    {
+        tableview_active_protocol_s &t = prf().get_table_active_protocol();
+        auto *row = t.find<true>( id );
+        row->other.configurable = c;
+        row->changed();
+    }
+
+    if ( force_send || cch )
     {
         if (ipcp)
         {

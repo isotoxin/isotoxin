@@ -764,6 +764,15 @@ images
 	}
   }
 
+  exit_icon
+  {
+	gen 
+    { 
+		svg=`<svg height="32" width="32">
+			<path fill="##text_def" stroke="none" transform="translate(5 5) scale(0.20)" d="m 30,15 0,10 30,0 0,50 -30,0 0,10 40,0 0,-70 z M 15,45 15,55 35,55 35,65 50.13089,50 35,35 35,45 Z" />
+		</svg>`
+	}
+  }
 
   uac
   {
