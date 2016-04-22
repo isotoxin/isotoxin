@@ -11,7 +11,7 @@ cd ..\assets\smiles
 
 for /f %%i in ('"dir * /A:D /B"') do ( 
 cd %%i
-..\..\..\tools\7z a -tzip -r -mx=9 ..\..\..\bin\~assets\smiles\s.zip
+..\..\..\build-win\7z a -tzip -r -mx=9 ..\..\..\bin\~assets\smiles\s.zip
 cd ..
 ren ..\..\bin\~assets\smiles\s.zip %%i.zip
 )
@@ -26,6 +26,6 @@ copy .\*.template ..\bin\~assets\
 copy .\*.svg ..\bin\~assets\
 
 cd ..\bin\~assets
-..\..\tools\7z a -tzip -r -mx=9 ..\isotoxin.data
+..\..\build-win\7z a -tzip -r -mx=9 ..\isotoxin.data
 cd ..
 rd /S /Q ~assets
