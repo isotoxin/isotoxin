@@ -18,6 +18,7 @@ INLINE bool same_sqlite_type( data_type_e t1, data_type_e t2 )
 
 struct column_desc_s
 {
+    MOVABLE( true );
     asptr name_;
     asptr default_;
     data_type_e type_ = data_type_e::t_int;
@@ -45,6 +46,7 @@ struct column_desc_s
 
 struct data_value_s
 {
+    MOVABLE( true );
     str_c text;
     blob_c blob;
     union 
@@ -94,7 +96,7 @@ public:
     
     virtual void rekey( const uint8 *k, SQLITE_ENCRYPT_PROCESS_CALLBACK cb ) = 0; // k must be 48 bytes length (16 salt + 32 password hash, salt will be saved into file as header)
 
-    static sqlitedb_c *sqlitedb_c::connect( const wsptr &fn, const uint8 *k /* 48 bytes; see rekey; can be null - mean unencrypted */, bool readonly ); // will create file if not exist / returns already connected db
+    static sqlitedb_c *connect( const wsptr &fn, const uint8 *k /* 48 bytes; see rekey; can be null - mean unencrypted */, bool readonly ); // will create file if not exist / returns already connected db
 };
 
 class db_transaction_c

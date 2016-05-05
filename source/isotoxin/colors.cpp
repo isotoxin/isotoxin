@@ -141,7 +141,7 @@ void dialog_colors_c::load_preset( const ts::wstr_c &tt )
 
 bool dialog_colors_c::cprev(RID, GUIPARAM)
 {
-    int curci = colorsarr.find(curcolor.as_sptr()) - 1;
+    ts::aint curci = colorsarr.find(curcolor.as_sptr()) - 1;
     if (curci < 0)
         curci = colorsarr.size() - 1;
     curcolor = colorsarr.get(curci);
@@ -152,7 +152,7 @@ bool dialog_colors_c::cprev(RID, GUIPARAM)
 }
 bool dialog_colors_c::cnext(RID, GUIPARAM)
 {
-    int curci = colorsarr.find(curcolor.as_sptr()) + 1;
+    ts::aint curci = colorsarr.find(curcolor.as_sptr()) + 1;
     if (curci >= colorsarr.size())
         curci = 0;
     curcolor = colorsarr.get(curci);

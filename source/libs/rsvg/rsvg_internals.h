@@ -11,6 +11,7 @@ struct rsvg_load_context_s
 
     struct junk_on_end_s
     {
+        MOVABLE( true );
         rsvg_animation_c *a;
         ts::str_c id;
     };

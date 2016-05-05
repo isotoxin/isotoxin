@@ -69,7 +69,6 @@ struct YuvConstants {
     lvec16 kYToRgb;   // 192
 };
 
-
 // Y contribution to R,G,B.  Scale and bias.
 // TODO(fbarchard): Consider moving constants into a common header.
 #define YG 18997 /* round(1.164 * 64 * 256 * 256 / 257) */
@@ -101,6 +100,55 @@ static YuvConstants SIMD_ALIGNED(kYuvConstants) = {
     { YG, YG, YG, YG, YG, YG, YG, YG, YG, YG, YG, YG, YG, YG, YG, YG }
 };
 
+#ifdef MODE64
+void I422ToARGBRow_SSSE3( const byte* y_buf, const byte* u_buf, const byte* v_buf, byte* dst_argb, int width )
+{
+    __m128i xmm0, xmm1, xmm2, xmm3;
+    const __m128i xmm5 = _mm_set1_epi8( -1 );
+    const ptrdiff_t offset = (byte*)v_buf - (byte*)u_buf;
+
+    while ( width > 0 ) {
+        xmm0 = _mm_cvtsi32_si128( *(u32*)u_buf );
+        xmm1 = _mm_cvtsi32_si128( *(u32*)( u_buf + offset ) );
+        xmm0 = _mm_unpacklo_epi8( xmm0, xmm1 );
+        xmm0 = _mm_unpacklo_epi16( xmm0, xmm0 );
+        xmm1 = _mm_loadu_si128( &xmm0 );
+        xmm2 = _mm_loadu_si128( &xmm0 );
+        xmm0 = _mm_maddubs_epi16( xmm0, *( __m128i* )kYuvConstants.kUVToB );
+        xmm1 = _mm_maddubs_epi16( xmm1, *( __m128i* )kYuvConstants.kUVToG );
+        xmm2 = _mm_maddubs_epi16( xmm2, *( __m128i* )kYuvConstants.kUVToR );
+        xmm0 = _mm_sub_epi16( *( __m128i* )kYuvConstants.kUVBiasB, xmm0 );
+        xmm1 = _mm_sub_epi16( *( __m128i* )kYuvConstants.kUVBiasG, xmm1 );
+        xmm2 = _mm_sub_epi16( *( __m128i* )kYuvConstants.kUVBiasR, xmm2 );
+        xmm3 = _mm_loadl_epi64( ( __m128i* )y_buf );
+        xmm3 = _mm_unpacklo_epi8( xmm3, xmm3 );
+        xmm3 = _mm_mulhi_epu16( xmm3, *( __m128i* )kYuvConstants.kYToRgb );
+        xmm0 = _mm_adds_epi16( xmm0, xmm3 );
+        xmm1 = _mm_adds_epi16( xmm1, xmm3 );
+        xmm2 = _mm_adds_epi16( xmm2, xmm3 );
+        xmm0 = _mm_srai_epi16( xmm0, 6 );
+        xmm1 = _mm_srai_epi16( xmm1, 6 );
+        xmm2 = _mm_srai_epi16( xmm2, 6 );
+        xmm0 = _mm_packus_epi16( xmm0, xmm0 );
+        xmm1 = _mm_packus_epi16( xmm1, xmm1 );
+        xmm2 = _mm_packus_epi16( xmm2, xmm2 );
+        xmm0 = _mm_unpacklo_epi8( xmm0, xmm1 );
+        xmm2 = _mm_unpacklo_epi8( xmm2, xmm5 );
+        xmm1 = _mm_loadu_si128( &xmm0 );
+        xmm0 = _mm_unpacklo_epi16( xmm0, xmm2 );
+        xmm1 = _mm_unpackhi_epi16( xmm1, xmm2 );
+
+        _mm_storeu_si128( ( __m128i * )dst_argb, xmm0 );
+        _mm_storeu_si128( ( __m128i * )( dst_argb + 16 ), xmm1 );
+
+        y_buf += 8;
+        u_buf += 4;
+        dst_argb += 32;
+        width -= 8;
+    }
+}
+
+#else
 
 // Read 4 UV from 422, upsample to 8 UV.
 #define READYUV422 __asm {                                                     \
@@ -183,7 +231,6 @@ __declspec(naked) void I422ToARGBRow_SSSE3(const byte* y_buf, const byte* u_buf,
         ret
     }
 }
-
 
 // Read 8 UV from 422, upsample to 16 UV.
 #define READYUV422_AVX2 __asm {                                                \
@@ -271,6 +318,8 @@ __declspec(naked) void I422ToARGBRow_AVX2(const byte* y_buf, const byte* u_buf, 
 
 
 ANY31(I422ToARGBRow_Any_AVX2, I422ToARGBRow_AVX2, 1, 0, 4, 15)
+
+#endif
 
 /*
 void I422ToARGBRow_Any_SSSE3(const byte* y_buf, const byte* u_buf, const byte* v_buf, byte* dst_ptr, int width)
@@ -433,6 +482,7 @@ void img_helper_i420_to_ARGB(const byte* src_y, int src_stride_y, const byte* sr
         }
     };
 
+#ifndef MODE64
     if (cpu_detect::CCAPS(cpu_detect::CPU_AVX2))
     {
         if (IS_ALIGNED(width, 16))
@@ -441,6 +491,7 @@ void img_helper_i420_to_ARGB(const byte* src_y, int src_stride_y, const byte* sr
             loopf(I422ToARGBRow_Any_AVX2, width);
         return;
     }
+#endif // MODE64
 
     //if (cpu_detect::CCAPS(cpu_detect::CPU_SSSE3))
     //{

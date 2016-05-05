@@ -55,11 +55,11 @@ void Slot::startPlay(Player *player, float time)
 	buffer->Play(0, 0, DSBPLAY_LOOPING);
 }
 
-void Slot::read(void *b, int size, bool afterRewind)
+void Slot::read(void *b, s3int size, bool afterRewind)
 {
 	if (silenceSize == -1)
 	{
-		int r = decoder->read(b, size);
+        s3int r = decoder->read(b, size);
         if (r < 0)
         {
             // stop request
@@ -82,7 +82,7 @@ void Slot::read(void *b, int size, bool afterRewind)
 	else
 	{
 		memset(b, format.bitsPerSample == 8 ? 0x80 : 0, size); // fill with silence
-		silenceSize += size;
+		silenceSize += (int)size;
 	}
 }
 

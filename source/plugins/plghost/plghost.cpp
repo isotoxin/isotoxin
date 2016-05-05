@@ -276,7 +276,7 @@ struct IPCW
     {
         if (w)
         {
-            w->add<int>() = v.size();
+            w->add<i32>() = (i32)v.size();
             if (v.size()) w->add(v.data(), v.size());
         }
         return *this;
@@ -285,7 +285,7 @@ struct IPCW
     {
         if (w)
         {
-            w->add<int>() = d.datasize;
+            w->add<i32>() = (i32)d.datasize;
             if (d.datasize) w->add(d.data, d.datasize);
         }
         return *this;
@@ -414,7 +414,7 @@ DWORD WINAPI worker(LPVOID nonzerothread)
 
         while (sendbufs.try_pop(w))
         {
-             ipcj->send(w->data(), w->size());
+             ipcj->send(w->data(), (int)w->size());
              ipcwbuf.lock_write()().kill(w);
         }
 
@@ -447,7 +447,7 @@ int CALLBACK WinMainProtect(
 
     for(int i=0;i<num_workers;++i)
     {
-        CloseHandle(CreateThread(nullptr, 0, worker, (LPVOID)i, 0, nullptr));
+        CloseHandle(CreateThread(nullptr, 0, worker, (LPVOID)(size_t)i, 0, nullptr));
     }
 
     ipc::ipc_junction_s ipcblob;
@@ -559,13 +559,13 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                     get_info_pf f = (get_info_pf)GetProcAddress(l,"get_info");
                     proto_info_s info;
                     info.protocol_name = proto_name.str();
-                    info.protocol_name_buflen = proto_name.get_capacity();
+                    info.protocol_name_buflen = (int)proto_name.get_capacity();
                     info.description = description.str();
-                    info.description_buflen = description.get_capacity();
+                    info.description_buflen = (int)description.get_capacity();
                     info.description_with_tags = description_t.str();
-                    info.description_with_tags_buflen = description_t.get_capacity();
+                    info.description_with_tags_buflen = (int)description_t.get_capacity();
                     info.version = version.str();
-                    info.version_buflen = version.get_capacity();
+                    info.version_buflen = (int)version.get_capacity();
                     f(&info);
 
                     proto_name.set_length( CHARz_nlen(proto_name.cstr(), proto_name.get_capacity()) );
@@ -613,9 +613,9 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                 if (fh != INVALID_HANDLE_VALUE)
                 {
                     pi.description = description.str();
-                    pi.description_buflen = description.get_capacity();
+                    pi.description_buflen = (int)description.get_capacity();
                     pi.description_with_tags = description_t.str();
-                    pi.description_with_tags_buflen = description_t.get_capacity();
+                    pi.description_with_tags_buflen = (int)description_t.get_capacity();
 
                     rst = protolib.load(path, pi);
 #if defined _DEBUG || defined _CRASH_HANDLER
@@ -768,7 +768,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             m.utag = utag;
             m.crtime = crtime;
             m.message = message.cstr();
-            m.message_len = message.get_length();
+            m.message_len = (int)message.get_length();
             protolib.functions->send_message(id, &m);
         }
         break;

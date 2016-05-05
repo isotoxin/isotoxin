@@ -4,7 +4,14 @@
 
 */
 #pragma once
+#if defined(_MSC_VER)
 #include <intrin.h>
+#pragma warning(push)
+#pragma warning(disable:4189) // 'val': local variable is initialized but not referenced
+#endif
+#if defined(__GNUC__)
+#include <x86intrin.h>
+#endif
 
 #ifndef JOINMACRO1
 #define JOINMACRO2(x,y) x##y
@@ -21,57 +28,68 @@
 #endif
 
 #ifndef __LOC__
-#define __LOC__ __FILE__ "("__STR1__(__LINE__)") : "
-#endif
-
-#ifndef SLASSERT
-__pragma(message("SLASSERT undefined"))
-#define SLASSERT(c) (1,true)
-#endif
-
-#ifndef SLERROR
-__pragma(message("SLERROR undefined"))
-#define SLERROR(s, ...) __debugbreak()
+#define __LOC__ __FILE__ "(" __STR1__(__LINE__) ") : "
 #endif
 
 namespace spinlock
 {
 #if defined _WIN32
 typedef __int64 int64;
-#elif defined _LINUX
+#elif defined __linux__
 typedef long long int64;
 #else
 #error "Sorry, can't compile: unknown target system"
 #endif
 
-#ifdef _M_AMD64
-#define long3264			LONG64
-#elif defined (_M_IX86)
-#define long3264			long
-#elif defined (_LINUX)
-// Linux app always 32 bits
-#define long3264			long
-#define __forceinline inline
-inline void _mm_pause() { usleep(0); }
+#if defined (_M_AMD64) || defined (WIN64) || defined (__LP64__)
+typedef __int64 long3264;
 #else
-#error "Sorry, can't compile: unknown target system"
+typedef long long3264;
+#endif
+
+#if defined(_MSC_VER)
+// =========================================== Visual Studio stuff begin ======================================
+#define SLINLINE __forceinline
+#ifndef SLASSERT
+__pragma( message( "SLASSERT undefined" ) )
+#define SLASSERT(c) (1,true)
+#endif
+
+#ifndef SLERROR
+__pragma( message( "SLERROR undefined" ) )
+#define SLERROR(s, ...) __debugbreak()
+#endif
+// =========================================== Visual Studio stuff end ======================================
+#elif defined(__GNUC__)
+// =========================================== GCC stuff begin ======================================
+#define SLINLINE inline
+#ifndef SLASSERT
+#pragma message "SLASSERT undefined"
+#define SLASSERT(c) (1,true)
+#endif
+
+#ifndef SLERROR
+#pragma message "SLERROR undefined"
+#define SLERROR(s, ...) __builtin_trap()
+#endif
+// =========================================== GCC stuff end ======================================
 #endif
 
 
 #ifdef _WIN32
 #ifdef _WINDOWS_
 #define INLINE_PTHREAD_SELF
-inline unsigned long pthread_self() { return ::GetCurrentThreadId(); }
+SLINLINE unsigned long pthread_self() { return ::GetCurrentThreadId(); }
 #else
 unsigned long pthread_self();
 #endif
+
 #pragma intrinsic (_InterlockedExchangeAdd, _InterlockedCompareExchange64)
 #define InterlockedExchangeAdd _InterlockedExchangeAdd
 
 #ifdef _WIN64
-#	pragma intrinsic (_InterlockedExchangeAdd64, _InterlockedDecrement64, _InterlockedCompareExchange128)
+#	pragma intrinsic (_InterlockedExchangeAdd64, _InterlockedCompareExchange128)
 #	define InterlockedExchangeAdd64 _InterlockedExchangeAdd64
-#	define InterlockedDecrement64 _InterlockedDecrement64
 #endif
 
 #endif
@@ -83,7 +101,6 @@ unsigned long pthread_self();
 #define SLxInterlockedCompareExchange64 _InterlockedCompareExchange64
 #define SLxInterlockedAdd _InterlockedExchangeAdd64
 #define SLxInterlockedAdd64 _InterlockedExchangeAdd64
-#define SLxInterlockedExchange64 _InterlockedExchange64
 #define SLxInterlockedAnd64 _InterlockedAnd64
 #elif defined (_M_IX86)
 #define SLxInterlockedCompareExchange _InterlockedCompareExchange
@@ -91,7 +108,6 @@ unsigned long pthread_self();
 #define SLxInterlockedCompareExchange2 _InterlockedCompareExchange64
 #define SLxInterlockedCompareExchange64 _InterlockedCompareExchange64
 #define SLxInterlockedAdd InterlockedExchangeAdd
-#define SLxInterlockedExchange64 SLlInterlockedExchange64
 #define SLxInterlockedAdd64 SLlInterlockedExchangeAdd64
 #define SLxInterlockedAnd64 SLlInterlockedAnd64
 
@@ -131,15 +147,16 @@ inline int64 SLlInterlockedExchange64(volatile int64* lock, int64 newValue)
     }
 }
 
-#elif defined(_LINUX)
+#elif defined(__linux__)
 
-#define SLxInterlockedCompareExchange     __sync_lock_test_and_set
-#define SLxInterlockedCompareExchange32   __sync_lock_test_and_set
-#define SLxInterlockedCompareExchange2    __sync_lock_test_and_set
-#define SLxInterlockedCompareExchange64   __sync_lock_test_and_set
+inline void _mm_pause() { usleep( 0 ); }
+
+#define SLxInterlockedCompareExchange(a,b,c)     __sync_val_compare_and_swap(a,c,b)
+#define SLxInterlockedCompareExchange32(a,b,c)   __sync_val_compare_and_swap(a,c,b)
+#define SLxInterlockedCompareExchange2(a,b,c)    __sync_val_compare_and_swap(a,c,b)
+#define SLxInterlockedCompareExchange64(a,b,c)   __sync_val_compare_and_swap(a,c,b)
 #define SLxInterlockedAdd  __sync_fetch_and_add
 #define SLxInterlockedAdd64 __sync_fetch_and_add
-#define SLxInterlockedExchange64 __sync_lock_test_and_set
 #define SLxInterlockedAnd64 __sync_fetch_and_and
 
 inline int64 SLlInterlockedExchangeAdd64(volatile int64* lock, int64 adding)
@@ -157,6 +174,7 @@ inline int64 SLlInterlockedExchange64(volatile int64* lock, int64 newValue)
     return __sync_lock_test_and_set(lock, newValue);
 }
 
+SLINLINE unsigned long pthread_self() { return ::pthread_self(); }
 
 #else
 #error "Sorry, can't compile: unknown target system"
@@ -190,7 +208,7 @@ inline int64 SLlInterlockedExchange64(volatile int64* lock, int64 newValue)
 #endif
 
 
-__forceinline void lock_write(RWLOCK &lock)
+SLINLINE void lock_write(RWLOCK &lock)
 {
 	RWLOCKVALUE thread = pthread_self();
 	RWLOCKVALUE val = lock;
@@ -222,7 +240,7 @@ __forceinline void lock_write(RWLOCK &lock)
 	}
 }
 
-__forceinline void lock_read(RWLOCK &lock)
+SLINLINE void lock_read(RWLOCK &lock)
 {
 	RWLOCKVALUE thread = pthread_self();
 	RWLOCKVALUE val = lock;
@@ -245,7 +263,7 @@ __forceinline void lock_read(RWLOCK &lock)
 	}
 }
 
-__forceinline bool try_lock_write(RWLOCK &lock)
+SLINLINE bool try_lock_write(RWLOCK &lock)
 {
 	RWLOCKVALUE thread = pthread_self();
 	RWLOCKVALUE val = lock;
@@ -259,7 +277,7 @@ __forceinline bool try_lock_write(RWLOCK &lock)
 	return !val;
 }
 
-__forceinline void unlock_write(RWLOCK &lock)
+SLINLINE void unlock_write(RWLOCK &lock)
 {
 	RWLOCKVALUE tmp = lock;
 
@@ -275,7 +293,7 @@ __forceinline void unlock_write(RWLOCK &lock)
 	SLxInterlockedCompareExchange64(&lock, val, tmp);
 }
 
-__forceinline void unlock_read(RWLOCK &lock)
+SLINLINE void unlock_read(RWLOCK &lock)
 {
 	CHECK_READ_LOCK(lock);
 	SLxInterlockedAdd64(&lock, ~(LOCK_READ_VAL-1));
@@ -312,59 +330,71 @@ struct auto_lock_read
 #define LOCK4WRITE( ll ) spinlock::auto_lock_write UNIQIDLINE(__l4w)( ll )
 #define LOCK4READ( ll ) spinlock::auto_lock_read UNIQIDLINE(__l4r)( ll )
 
-#pragma intrinsic (_InterlockedCompareExchange)
-
-inline void simple_lock(volatile long &lock)
+inline void simple_lock(volatile long3264 &lock)
 {
-    long myv = pthread_self();
+    long3264 myv = pthread_self();
+    #if defined(_MSC_VER) && !defined(_FINAL)
     if (lock == myv)
         __debugbreak();
+    #endif
     for (;;)
     {
-        long val = _InterlockedCompareExchange(&lock, myv, 0);
+        long3264 val = SLxInterlockedCompareExchange(&lock, myv, 0);
         if (val == 0)
             break;
+        #if defined(_MSC_VER) && !defined(_FINAL)
         if (val == myv)
             __debugbreak();
+        #endif
         _mm_pause();
     }
+    #if defined(_MSC_VER) && !defined(_FINAL)
     if (lock != myv)
         __debugbreak();
+    #endif
 }
 
-inline bool try_simple_lock(volatile long &lock)
+inline bool try_simple_lock(volatile long3264 &lock)
 {
-    long myv = pthread_self();
+    long3264 myv = pthread_self();
+    #if defined(_MSC_VER) && !defined(_FINAL)
     if (lock == myv)
         __debugbreak();
-    long val = _InterlockedCompareExchange(&lock, myv, 0);
+    #endif
+    long3264 val = SLxInterlockedCompareExchange(&lock, myv, 0);
     if (val) return false;
+    #if defined(_MSC_VER) && !defined(_FINAL)
     if (lock != myv)
         __debugbreak();
+    #endif
     return true;
 }
 
 
-inline void simple_unlock(volatile long &lock)
+inline void simple_unlock(volatile long3264 &lock)
 {
-    long myv = pthread_self();
+    long3264 myv = pthread_self();
+    #if defined(_MSC_VER) && !defined(_FINAL)
     if (lock != myv)
         __debugbreak();
-    long val = _InterlockedCompareExchange(&lock, 0, myv);
+    #endif
+    long3264 val = SLxInterlockedCompareExchange(&lock, 0, myv);
+    #if defined(_MSC_VER) && !defined(_FINAL)
     if (val != myv)
         __debugbreak();
+    #endif
 }
 
 
 struct auto_simple_lock
 {
-    long *lockvar;
-    auto_simple_lock(long& _lock, bool) : lockvar(&_lock)
+    long3264 *lockvar;
+    auto_simple_lock( long3264& _lock, bool) : lockvar(&_lock)
     {
         if (!try_simple_lock(*lockvar))
             lockvar = nullptr;
     }
-    auto_simple_lock(long& _lock) : lockvar(&_lock)
+    auto_simple_lock( long3264& _lock) : lockvar(&_lock)
     {
         simple_lock(*lockvar);
     }
@@ -374,7 +404,7 @@ struct auto_simple_lock
             simple_unlock(*lockvar);
     }
     bool is_locked() const { return lockvar != nullptr; }
-    void lock(long& _lock)
+    void lock( long3264& _lock)
     {
         if (lockvar) simple_unlock(*lockvar);
         lockvar = &_lock;
@@ -579,7 +609,7 @@ public:
 #undef DEADLOCKCHECK_INIT
 #undef DEADLOCKCHECK
 
-template<typename T> __forceinline bool CAS2(volatile T& dest, T& compare, const T& value)
+template<typename T> SLINLINE bool CAS2(volatile T& dest, T& compare, const T& value)
 {
 #ifdef _M_AMD64
     return(SLxInterlockedCompareExchange2((int64*)&dest, ((int64*)&value)[1], ((int64*)&value)[0], ((int64*)&compare)) ? true : false);
@@ -591,5 +621,8 @@ template<typename T> __forceinline bool CAS2(volatile T& dest, T& compare, const
 #endif
 }
 
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 } // namespace spinlock

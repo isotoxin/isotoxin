@@ -26,7 +26,7 @@ struct dialog_protosetup_params_s
     configurable_s configurable;
     bool connect_at_startup = true;
 
-    static ts::str_c setup_name( const ts::asptr &tag, int n );
+    static ts::str_c setup_name( const ts::asptr &tag, ts::aint n );
 
     dialog_protosetup_params_s() {}
 
@@ -79,7 +79,7 @@ class dialog_setup_network_c : public gui_isodialog_c
     menu_c get_list_avaialble_networks();
 
 protected:
-    /*virtual*/ int unique_tag() { return predie ? UD_NOT_UNIQUE : (params.watch ? UD_PROTOSETUPSETTINGS : UD_PROTOSETUP); }
+    /*virtual*/ int unique_tag() override { return predie ? UD_NOT_UNIQUE : (params.watch ? UD_PROTOSETUPSETTINGS : UD_PROTOSETUP); }
     /*virtual*/ void created() override;
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
     /*virtual*/ int additions(ts::irect & border) override;
@@ -166,7 +166,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     }
 
     fmt_converter_s cvtmic;
-    /*virtual*/ const s3::Format *formats(int &count) override;
+    /*virtual*/ const s3::Format *formats( ts::aint &count) override;
 
     bool signalvolset(RID, GUIPARAM);
     bool talkvolset(RID, GUIPARAM);
@@ -210,6 +210,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
 
     struct sound_preset_s
     {
+        MOVABLE( true );
         ts::wstr_c path;
         ts::wstr_c name;
         ts::abp_c preset;
@@ -419,6 +420,7 @@ private:
 
     struct theme_info_s
     {
+        MOVABLE( true );
         ts::wstr_c folder;
         ts::wstr_c name;
         bool current;
@@ -430,6 +432,7 @@ private:
 
     struct sound_device_s
     {
+        MOVABLE( true );
         s3::DEVICE deviceid;
         ts::wstr_c desc;
     };
@@ -484,7 +487,7 @@ private:
     bool debug_local_upd_url(const ts::wstr_c &);
 
 protected:
-    /*virtual*/ int unique_tag() { return UD_SETTINGS; }
+    /*virtual*/ int unique_tag() override { return UD_SETTINGS; }
     /*virtual*/ void created() override;
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
     /*virtual*/ int additions( ts::irect & border ) override;

@@ -70,6 +70,57 @@ typedef sptr<ZSTRINGS_WIDECHAR> wsptr;
 
 namespace zstrings_internal
 {
+
+template<class STRTYPE, typename NUMTYPE> struct asnum
+{
+    static NUMTYPE cvt ( const sptr<STRTYPE>&s, NUMTYPE def )
+    {
+        if ( s.l == 0 ) return def;
+        NUMTYPE r = 0;
+        if ( !CHARz_to_int<STRTYPE, NUMTYPE>( r, s.s, s.l ) )
+        {
+            ZSTRINGS_NUMCONVERSION_ERROR( def );
+            return def;
+        }
+        return r;
+    }
+
+    static void append( STRTYPE&, NUMTYPE );
+    static void set( STRTYPE&, NUMTYPE );
+};
+template<class STRTYPE> struct asnum<STRTYPE, float>
+{
+    static float cvt ( const sptr<STRTYPE>&s, float def )
+    {
+        if ( s.l == 0 ) return 0.0;
+        double out = 0;
+        if ( !CHARz_to_double( out, s.s, s.l ) )
+        {
+            ZSTRINGS_NUMCONVERSION_ERROR( 0 );
+        }
+        return (float)out;
+    }
+
+    static void append( STRTYPE&, float );
+    static void set( STRTYPE&, float );
+};
+template<class STRTYPE> struct asnum<STRTYPE, double>
+{
+    static double cvt ( const sptr<STRTYPE>&s, double def )
+    {
+        if ( s.l == 0 ) return 0.0;
+        double out = 0;
+        if ( !CHARz_to_double( out, s.s, s.l ) )
+        {
+            ZSTRINGS_NUMCONVERSION_ERROR( 0 );
+        }
+        return out;
+    }
+
+    static void append( STRTYPE&, double );
+    static void set( STRTYPE&, double );
+};
+
 template<typename TCHARACTER> struct mod_nothing
 {
     ZSTRINGS_SIGNED operator()(TCHARACTER * /*news*/, ZSTRINGS_SIGNED newl, TCHARACTER * /*olds*/, ZSTRINGS_SIGNED /*oldl*/) const
@@ -422,8 +473,7 @@ public:
 		change(sp.l, zstrings_internal::mod_copy<TCHARACTER>(sp.s,sp.l));
     }
 
-    template<bool> void set(const str_core_copy_on_demand_c &ocore);
-    template<> void set<false>(const str_core_copy_on_demand_c &ocore)
+    void set_false(const str_core_copy_on_demand_c &ocore)
     {
         ZSTRINGS_SIGNED l = ocore.len();
         if (l == 0)
@@ -445,7 +495,7 @@ public:
         }
         blk_UNIT_copy_fwd<TCHARACTER>(core->str(), ocore(), l);
     }
-    template<> void set<true>(const str_core_copy_on_demand_c &ocore)
+    void set_true(const str_core_copy_on_demand_c &ocore)
     {
         if (core == ocore.core) return;
         if (core) core->ref_dec(this);
@@ -455,7 +505,8 @@ public:
 
 	void operator=(const str_core_copy_on_demand_c &ocore)
 	{
-        set< zstrings_internal::is_struct_empty<ALLOCATOR>::value >( ocore );
+        zstrings_internal::is_struct_empty<ALLOCATOR>::value ?
+            set_true( ocore ) : set_false( ocore );
 	}
 	bool operator==(const str_core_copy_on_demand_c &ocore) const
 	{
@@ -521,14 +572,18 @@ public:
 
 template <typename TCHARACTER, ZSTRINGS_SIGNED _limit> class str_core_static_c
 {
-	#pragma warning(push)
-	#pragma warning(disable:4308) // warning C4308: negative integral constant converted to unsigned type
-	static const ZSTRINGS_SIGNED _cap = (_limit >= 0) ? _limit : ((-_limit-sizeof(ZSTRINGS_SIGNED))/sizeof(TCHARACTER));
-	#pragma warning(pop)
-	TCHARACTER _str[_cap];
-	ZSTRINGS_SIGNED _len;
+    #if defined _MSC_VER
+    #pragma warning(push)
+    #pragma warning(disable:4308) // warning C4308: negative integral constant converted to unsigned type
+    #endif
+    static const ZSTRINGS_SIGNED _cap = (_limit >= 0) ? _limit : ((-_limit-sizeof(ZSTRINGS_SIGNED))/sizeof(TCHARACTER));
+    #if defined _MSC_VER
+    #pragma warning(pop)
+    #endif
+    TCHARACTER _str[_cap];
+    ZSTRINGS_SIGNED _len;
 
-	static ZSTRINGS_SIGNED goodlen( ZSTRINGS_SIGNED l ) { ZSTRINGS_ASSERT(l < _cap); return l < _cap ? l : (_cap-1); }
+    static ZSTRINGS_SIGNED goodlen( ZSTRINGS_SIGNED l ) { ZSTRINGS_ASSERT(l < _cap); return l < _cap ? l : (_cap-1); }
 
 public:
     static const bool cstr_allow = true;
@@ -624,8 +679,10 @@ public:
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
+#if defined _MSC_VER
 #pragma warning ( push )
 #pragma warning (disable: 4127)
+#endif
 template <typename TCHARACTER, class CORE = str_core_copy_on_demand_c<TCHARACTER> > class str_t
 {
 	CORE core;
@@ -805,7 +862,7 @@ public:
     {
         ZSTRINGS_SIGNED cnt = get_length();
         if (cnt <= 1) return *this;
-		core.change(cnt, mod_reverse());
+		core.change(cnt, zstrings_internal::mod_reverse<TCHARACTER>());
         return *this;
     }
 
@@ -825,7 +882,7 @@ public:
     {
         str_t<TCHARACTER, CORE> str;
         if (core.len() == 0) return str;
-        for (ZSTRINGS_UNSIGNED i = 0, cnt = get_length(); i < cnt; ++i)
+        for (ZSTRINGS_SIGNED i = 0, cnt = get_length(); i < cnt; ++i)
         {
             if (CHAR_is_digit( get_char(i) )) str.append_char(get_char(i));
         }
@@ -849,7 +906,7 @@ public:
         static_assert( !CORE2::readonly, "readonly str" );
         str.clear();
         if (core.len() == 0) return;
-        for (ZSTRINGS_UNSIGNED i = 0, cnt = get_length(); i < cnt; ++i)
+        for (ZSTRINGS_SIGNED i = 0, cnt = get_length(); i < cnt; ++i)
             if (CHARz_findn(nonchars.s, get_char(i), nonchars.l) < 0)
                 str.append_char(get_char(i));
     }
@@ -914,17 +971,8 @@ public:
 
 	template<typename NUMTYPE> NUMTYPE as_num(NUMTYPE def = 0, ZSTRINGS_SIGNED skip_chars = 0) const
 	{
-		if (core.len() == 0) return def;
-		NUMTYPE r = 0;
-		if ( !CHARz_to_int<TCHARACTER, NUMTYPE>(r, core() + skip_chars, core.len() - skip_chars) )
-		{
-			ZSTRINGS_NUMCONVERSION_ERROR(def);
-			return def;
-		}
-		return r;
+		return zstrings_internal::asnum< TCHARACTER, NUMTYPE >::cvt( sptr<TCHARACTER>( core() + skip_chars, get_length() - skip_chars ), def );
 	}
-	template<> float as_num<float>(float def, ZSTRINGS_SIGNED skip_chars) const { return as_float(def,skip_chars); }
-	template<> double as_num<double>(double def, ZSTRINGS_SIGNED skip_chars) const { return as_double(def, skip_chars); }
 
     int as_int(int def = 0, ZSTRINGS_SIGNED skip_chars = 0) const { return as_num<int>(def, skip_chars); }
 	unsigned int as_uint(unsigned int def = 0, ZSTRINGS_SIGNED skip_chars = 0) const { return as_num<unsigned int>(def, skip_chars); }
@@ -1194,10 +1242,9 @@ public:
     template<typename TCHARACTER2> ZSTRINGS_SIGNED     find_pos_of(ZSTRINGS_SIGNED index, const sptr<TCHARACTER2> &cc) const
     {
         ZSTRINGS_SIGNED l = get_length();
-        TCHARACTER2 temp;
         while (index<l)
         {
-            temp = (TCHARACTER2)*(core()+index);
+            TCHARACTER2 temp = (TCHARACTER2)*(core()+index);
             if (CHARz_findn<TCHARACTER2>(cc.s,temp,cc.l)>=0) return index;
             ++index;
         }
@@ -1327,15 +1374,6 @@ public:
 		return *this;
     }
 
-    TCHARACTER &operator[](ZSTRINGS_SIGNED idx)
-    {
-        return str()[idx];
-    }
-    TCHARACTER operator[](ZSTRINGS_SIGNED idx) const //-V659
-    {
-        return get_char(idx);
-    }
-
     ZSTRINGS_SIGNED count_chars( TCHARACTER c ) const
     {
         ZSTRINGS_SIGNED cnt = 0;
@@ -1353,7 +1391,7 @@ public:
 		if (idx0 > idx1) return *this;
 		if (idx0 < 0) idx0 = 0;
 		if (idx1 > len) idx1 = len;
-		if (idx0 > 0 || idx1 < len) core.change( idx1 - idx0, mod_crop(idx0, idx1) );
+		if (idx0 > 0 || idx1 < len) core.change( idx1 - idx0, zstrings_internal::mod_crop<TCHARACTER>(idx0, idx1) );
 		return *this;
 
 	}
@@ -1735,13 +1773,13 @@ public:
 
 	template<class CORE2> void substr(str_t<TCHARACTER, CORE2> & str, ZSTRINGS_SIGNED index, const TCHARACTER * separators_chars) const
 	{
-		ZSTRINGS_SIGNED sme=token_offset(index,separators_chars);
-		ZSTRINGS_SIGNED len=token_len(sme,separators_chars);
+		ZSTRINGS_SIGNED sme = token_offset(index,separators_chars);
+		ZSTRINGS_SIGNED len = token_len(sme,separators_chars);
 		str.set(_cstr()+sme,len);
 	}
 	strpart substr(ZSTRINGS_SIGNED index,const TCHARACTER * separators_chars) const
 	{
-		ZSTRINGS_SIGNED sme=token_offset(np,separators_chars);
+		ZSTRINGS_SIGNED sme = token_offset(index,separators_chars);
 		return strpart( sptr<TCHARACTER>(_cstr()+sme, token_len(sme,separators_chars)) );
 	}
 
@@ -1787,8 +1825,8 @@ public:
 			if (CHARz_find<SEPCHARTYPE>(separators_chars, zstrings_internal::cvtchar<SEPCHARTYPE, TCHARACTER>(*c)) >= 0)
 			{
                 ZSTRINGS_SIGNED beglen = ZSTRINGS_SIGNED(c - first);
-                beg.set( sptr(first, beglen) );
-                rem.set( sptr(c + 1, get_length() - beglen - 1) );
+                beg.set( sptr<TCHARACTER>(first, beglen) );
+                rem.set( sptr<TCHARACTER>(c + 1, get_length() - beglen - 1) );
                 return;
             }
         }
@@ -1873,9 +1911,13 @@ public:
     str_t & append_as_double(double n, ZSTRINGS_SIGNED zpz = 8)
     {
         str_t<ZSTRINGS_ANSICHAR, str_core_static_c<ZSTRINGS_ANSICHAR, 64> > tstr(63,false);
-        ZSTRINGS_SIGNED dec,sign;
+        int dec,sign;
         ZSTRINGS_SIGNED count=0;
+        #if defined _MSC_VER
         _fcvt_s(tstr.str(), 63, n, (int)zpz, &dec,&sign);
+        #elif defined __GNUC__
+        fcvt_r(n, (int)zpz, &dec,&sign, tstr.str(), 63);
+        #endif
         if (sign) append_char(TCHARACTER('-'));
         tstr.set_length();
 
@@ -1913,21 +1955,9 @@ public:
 
     template<typename NUMTYPE> str_t & append_as_num(NUMTYPE n)
     {
-        TCHARACTER buf[sizeof(NUMTYPE) * 3];
-
-        if (zstrings_internal::is_signed<NUMTYPE>::value && n<0)
-        {
-            append_char('-');
-			zstrings_internal::invert<NUMTYPE>()(n);
-        }
-
-        ZSTRINGS_SIGNED szbyte;
-        TCHARACTER *tcalced = CHARz_make_str_unsigned( buf, szbyte, n );
-        return append(sptr<TCHARACTER>(tcalced,szbyte/sizeof(TCHARACTER)-1));
+        zstrings_internal::asnum< str_t<TCHARACTER, TCORE>, NUMTYPE >::append( *this, n );
+        return *this;
     }
-
-    template<> str_t & append_as_num<float>(float n) { return append_as_float(n); }
-    template<> str_t & append_as_num<double>(double n) { return append_as_double(n); }
 
     str_t & append_as_int(int n) { return append_as_num<int>(n); }
     str_t & append_as_uint(unsigned int n) { return append_as_num<unsigned int>(n); }
@@ -2053,29 +2083,11 @@ public:
         clear();
         return append_as_double(n);
     }
-#pragma warning(push)
-#pragma warning(disable:4702) // unreachable code
     template<typename NUMTYPE> str_t & set_as_num(NUMTYPE n)
     {
-        TCHARACTER buf[sizeof(NUMTYPE) * 3];
-
-        if (zstrings_internal::is_signed<NUMTYPE>::value && n<0)
-        {
-            set_as_char('-');
-            zstrings_internal::invert<NUMTYPE>()(n);
-
-            ZSTRINGS_SIGNED szbyte;
-            TCHARACTER *tcalced = CHARz_make_str_unsigned( buf, szbyte, n );
-            return append(sptr<TCHARACTER>(tcalced,szbyte/sizeof(TCHARACTER)-1));
-        }
-
-        ZSTRINGS_SIGNED szbyte;
-        TCHARACTER *tcalced = CHARz_make_str_unsigned( buf, szbyte, n );
-        return set(tcalced,szbyte/sizeof(TCHARACTER)-1);
+        zstrings_internal::asnum< str_t<TCHAR, TCORE>, NUMTYPE >::set( *this, n );
+        return *this;
     }
-#pragma warning(pop)
-	template<> str_t & set_as_num<float>(float n) { return set_as_float(n); }
-	template<> str_t & set_as_num<double>(double n) { return set_as_double(n); }
 
 	str_t & set_as_int(int n) {return set_as_num<int>(n);}
 	str_t & set_as_uint(unsigned int n) {return set_as_num<unsigned int>(n);}
@@ -2300,7 +2312,7 @@ public:
 
     static signed char icompare(const sptr<TCHARACTER> &s1, const sptr<TCHARACTER> &s2)
     {
-        return icompare(s1.s,s1.l,s1.s,s1.l);
+        return icompare(s1.s,s1.l,s2.s,s2.l);
     }
     static signed char icompare(const TCHARACTER * s1,ZSTRINGS_SIGNED s1len,const TCHARACTER * s2,ZSTRINGS_SIGNED s2len) // "A","B"=-1  "A","A"=0  "B","A"=1
     {
@@ -2395,6 +2407,74 @@ public:
     const TCHARACTER *end() const { return core() + core.len(); }
 
 };
+
+namespace zstrings_internal
+{
+    template <class STRTYPE, typename NUMTYPE> void asnum<STRTYPE, NUMTYPE>::append( STRTYPE&s, NUMTYPE n )
+    {
+        typedef typename STRTYPE::TCHAR TCHARACTER;
+        TCHARACTER buf[ sizeof( NUMTYPE ) * 3 ];
+
+        if ( is_signed<NUMTYPE>::value && n < 0 )
+        {
+            s.append_char( '-' );
+            invert<NUMTYPE>()( n );
+        }
+
+        ZSTRINGS_SIGNED szbyte;
+        TCHARACTER *tcalced = CHARz_make_str_unsigned( buf, szbyte, n );
+        s.append( sptr<TCHARACTER>( tcalced, szbyte / sizeof( TCHARACTER ) - 1 ) );
+
+    }
+    template <typename STRTYPE> void asnum<STRTYPE, float>::append( STRTYPE&s, float v )
+    {
+        s.append_as_float( v );
+    };
+    template <typename STRTYPE> void asnum<STRTYPE, double>::append( STRTYPE&s, double v )
+    {
+        s.append_as_double( v );
+    }
+
+
+#if defined _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4702) // unreachable code
+#endif
+    template <class STRTYPE, typename NUMTYPE> void asnum<STRTYPE, NUMTYPE>::set( STRTYPE&s, NUMTYPE n )
+    {
+        typedef typename STRTYPE::TCHAR TCHARACTER;
+        TCHARACTER buf[ sizeof( NUMTYPE ) * 3 ];
+
+        if ( is_signed<NUMTYPE>::value && n < 0 )
+        {
+            s.set_as_char( '-' );
+            invert<NUMTYPE>()( n );
+
+            ZSTRINGS_SIGNED szbyte;
+            TCHARACTER *tcalced = CHARz_make_str_unsigned( buf, szbyte, n );
+            s.append( sptr<TCHARACTER>( tcalced, szbyte / sizeof( TCHARACTER ) - 1 ) );
+            return;
+        }
+
+        ZSTRINGS_SIGNED szbyte;
+        TCHARACTER *tcalced = CHARz_make_str_unsigned( buf, szbyte, n );
+        s.set( tcalced, szbyte / sizeof( TCHARACTER ) - 1 );
+    }
+#if defined _MSC_VER
+#pragma warning(pop)
+#endif
+
+    template <typename STRTYPE> void asnum<STRTYPE, float>::set( STRTYPE&s, float v )
+    {
+        s.set_as_float( v );
+    };
+    template <typename STRTYPE> void asnum<STRTYPE, double>::set( STRTYPE&s, double v )
+    {
+        s.set_as_double( v );
+    }
+
+};
+
 
 template<> inline str_t<ZSTRINGS_ANSICHAR> &  str_t<ZSTRINGS_ANSICHAR>::set_as_utf8( const sptr<ZSTRINGS_ANSICHAR> &utf8 )
 {
@@ -2593,7 +2673,6 @@ ZSTRINGS_FORCEINLINE ZSTRINGS_SIGNED skip_utf8_char(const asptr &utf8, ZSTRINGS_
 }
 
 
-
 inline bool CHARz_equal_ignore_case(const ZSTRINGS_WIDECHAR *src1, const ZSTRINGS_WIDECHAR *src2, ZSTRINGS_SIGNED len)
 {
     return ZSTRINGS_SYSCALL(text_iequalsw)(src1,src2,len);
@@ -2612,7 +2691,7 @@ template<typename NUMTYPE> str_c amake( const asptr&prevt, NUMTYPE u ) {return s
 template<typename STRT, typename NUMT> STRT roundstr( NUMT x, ZSTRINGS_SIGNED zp, bool format = true )
 {
 	STRT t;
-	t.set_as_num<NUMT>(x);
+    t.template set_as_num<NUMT>( x );
 	ZSTRINGS_SIGNED index = t.find_pos('.');
 	if (index < 0)
 	{
@@ -2675,28 +2754,40 @@ public:
 		for (; str; ++str)
 			if (*str.s == separator)
 			{
-				tkn.set(sptr<TCHARACTER>(begin, str.s - begin));
+                tkn.set( sptr<TCHARACTER>( begin, (ZSTRINGS_SIGNED)(str.s - begin) ) );
 				++str;
 				return;
 			}
-		tkn.set(sptr<TCHARACTER>(begin, str.s - begin));
+		tkn.set(sptr<TCHARACTER>(begin, (ZSTRINGS_SIGNED)(str.s - begin)));
 	}
 	void operator++(int) {++(*this);}
 };
 
-#ifndef Z_STR_JOINMACRO1
-#define Z_STR_JOINMACRO2(x,y) x##y
-#define Z_STR_JOINMACRO1(x,y) JOINMACRO2(x,y)
+#define ASPTR_MACRO(x,y) ZSTRINGS_NAMESPACE::asptr(x,y)
+
+typedef char ZSTRINGS_ANSICHAR;
+#if defined _MSC_VER
+#define WSPTR_MACRO(x,y) ZSTRINGS_NAMESPACE::wsptr(L##x,y)
+#define CONSTSTR( tc, s ) ZSTRINGS_NAMESPACE::_to_char_or_not_to_char<tc>::get( s, L##s, sizeof(s)-1 )
+#elif defined __GNUC__
+#define WSPTR_MACRO(x,y) ZSTRINGS_NAMESPACE::wsptr(u##x,y)
+#define CONSTSTR( tc, s ) ZSTRINGS_NAMESPACE::_to_char_or_not_to_char<tc>::get( s, u##s, sizeof(s)-1 )
 #endif
 
-template<typename T> ZSTRINGS_FORCEINLINE sptr<T> _to_char_or_not_to_char(const ZSTRINGS_ANSICHAR * sa, const ZSTRINGS_WIDECHAR * sw, int len);
-template<> ZSTRINGS_FORCEINLINE asptr _to_char_or_not_to_char<char>(const ZSTRINGS_ANSICHAR * sa, const ZSTRINGS_WIDECHAR *, ZSTRINGS_SIGNED len) { return asptr(sa, len); }
-template<> ZSTRINGS_FORCEINLINE wsptr _to_char_or_not_to_char<wchar_t>(const ZSTRINGS_ANSICHAR *, const ZSTRINGS_WIDECHAR * sw, ZSTRINGS_SIGNED len) { return wsptr(sw, len); }
-#define CONSTSTR( tc, s ) AUTOSPTR_MACRO<tc>( s, Z_STR_JOINMACRO1(L,s), sizeof(s)-1 )
-#define CONSTASTR( s ) ASPTR_MACRO( s, sizeof(s)-1 )
-#define CONSTWSTR( s ) WSPTR_MACRO( Z_STR_JOINMACRO1(L,s), sizeof(s)-1 )
 
-#define NAMESPACE_MACRO( a, b, c ) a##b##c
-#define ASPTR_MACRO NAMESPACE_MACRO(ZSTRINGS_NAMESPACE,::,asptr)
-#define WSPTR_MACRO NAMESPACE_MACRO(ZSTRINGS_NAMESPACE,::,wsptr)
-#define AUTOSPTR_MACRO NAMESPACE_MACRO(ZSTRINGS_NAMESPACE,::,_to_char_or_not_to_char)
+template<typename T> struct _to_char_or_not_to_char
+{
+};
+template<> struct _to_char_or_not_to_char<ZSTRINGS_ANSICHAR>
+{
+    static asptr get( const ZSTRINGS_ANSICHAR * sa, const ZSTRINGS_WIDECHAR *, ZSTRINGS_SIGNED len ) { return asptr( sa, len ); }
+};
+template<> struct _to_char_or_not_to_char<ZSTRINGS_WIDECHAR>
+{
+    static wsptr get( const ZSTRINGS_ANSICHAR *, const ZSTRINGS_WIDECHAR * sw, ZSTRINGS_SIGNED len ) { return wsptr( sw, len ); }
+};
+
+
+#define CONSTASTR( s ) ASPTR_MACRO( s, sizeof(s)-1 )
+#define CONSTWSTR( s ) WSPTR_MACRO( s, sizeof(s)-1 )
+

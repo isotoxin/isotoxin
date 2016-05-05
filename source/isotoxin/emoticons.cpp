@@ -106,8 +106,8 @@ namespace
                 gi.height = (ts::uint16)bmp.info().sz.y;
                 gi.pitch = bmp.info().pitch;
                 gi.pixels = bmp.body();
-                gi.pos.x = (ts::int16)pos.x;
-                gi.pos.y = (ts::int16)(pos.y - font->ascender );
+                gi.pos().x = (ts::int16)pos.x;
+                gi.pos().y = (ts::int16)(pos.y - font->ascender );
             } else
             {
                 ts::irect frrect;
@@ -121,8 +121,8 @@ namespace
                 gi.height = (ts::uint16)frrect.height();
                 gi.pitch = frame.info().pitch;
                 gi.pixels = frame.body( frrect.lt );
-                gi.pos.x = (ts::int16)pos.x;
-                gi.pos.y = (ts::int16)(pos.y - font->ascender + a);
+                gi.pos().x = (ts::int16)pos.x;
+                gi.pos().y = (ts::int16)(pos.y - font->ascender + a);
             }
             gi.color = 0;
             gi.thickness = 0;
@@ -189,7 +189,7 @@ gui_textedit_c::active_element_s * emoticon_s::get_edit_element(int maxh)
 
 void emoticons_c::emo_gif_s::adapt_bg(const ts::bitmap_c *bmpx)
 {
-    uint c = ts::GRAYSCALE_C(GET_THEME_VALUE(common_bg_color));
+    ts::auint c = ts::GRAYSCALE_C(GET_THEME_VALUE(common_bg_color));
     if (c > 128)
         return; // background is light: assume gif smiles designed for light background, so do nothing now
 
@@ -486,7 +486,7 @@ void emoticons_c::reload()
 
     auto insert_match_point = [this](const ts::asptr &mps, emoticon_s *e)
     {
-        int cnt = matchs.size();
+        ts::aint cnt = matchs.size();
         for (int i = 0; i < cnt; ++i)
         {
             ts::str_c m = matchs.get(i).s;
@@ -515,7 +515,7 @@ void emoticons_c::reload()
     if (!prf().emoticons_pack().is_empty())
     {
         ts::wstr_c pack_name = prf().emoticons_pack();
-        int cnt = fns.size();
+        ts::aint cnt = fns.size();
         for(int i=0;i<cnt;++i)
         {
             if ( fns.get(i).equals(pack_name) )
@@ -593,7 +593,7 @@ void emoticons_c::reload()
 
                 int unicode = s.substr(0,eqi).as_uint();
 
-                int cnt = arr.size();
+                ts::aint cnt = arr.size();
                 for (int i = 0; i < cnt; ++i)
                 {
                     emoticon_s *e = arr.get(i);
@@ -619,7 +619,7 @@ void emoticons_c::reload()
 
     arr.sort( []( const emoticon_s *e1, const emoticon_s *e2 )->bool { return e1->sort_factor < e2->sort_factor; } );
 
-    int cnt = arr.size();
+    ts::aint cnt = arr.size();
     for (int i = 0; i < cnt; ++i)
     {
         emoticon_s *e = arr.get(i);
@@ -741,13 +741,13 @@ void emoticons_c::parse( ts::str_c &t, bool to_unicode )
                 int r1 = i + mp.s.get_length();
                 sf = r1;
 
-                int insi = rpl.count();
+                ts::aint insi = rpl.count();
                 bool fail = false;
                 for( const rpl_s & r : rpl )
                 {
                     if (r0 < r.index)
                     {
-                        int ii = &r - rpl.begin();
+                        ts::aint ii = &r - rpl.begin();
                         if (ii < insi)
                             insi = ii;
                     }
@@ -844,7 +844,7 @@ void emoticons_c::generate_full_frame()
 
     auto find_rect = [&]( const ts::ivec2 &sz )->ts::irect
     {
-        int cnt = rects.count();
+        ts::aint cnt = rects.count();
         for(int i=0;i<cnt;++i)
         {
             ts::irect rc = rects.get(i);
@@ -855,7 +855,7 @@ void emoticons_c::generate_full_frame()
             }
         }
         FORBIDDEN();
-        __assume(0);
+        UNREACHABLE();
     };
 
     static const int max_width = 1024;

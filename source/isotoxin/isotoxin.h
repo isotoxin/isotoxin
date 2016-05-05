@@ -43,12 +43,18 @@
 #undef STRTYPE
 #include "../plugins/plgcommon/common_types.h"
 
-#ifdef _FINAL
-#define USELIB(ln) comment(lib, #ln ".lib")
-#elif defined _DEBUG_OPTIMIZED
-#define USELIB(ln) comment(lib, #ln "do.lib")
+#if defined (_M_AMD64) || defined (WIN64) || defined (__LP64__)
+#define LIBSUFFIX "64.lib"
 #else
-#define USELIB(ln) comment(lib, #ln "d.lib")
+#define LIBSUFFIX ".lib"
+#endif
+
+#ifdef _FINAL
+#define USELIB(ln) comment(lib, #ln LIBSUFFIX)
+#elif defined _DEBUG_OPTIMIZED
+#define USELIB(ln) comment(lib, #ln "do" LIBSUFFIX)
+#else
+#define USELIB(ln) comment(lib, #ln "d" LIBSUFFIX)
 #endif
 
 /*

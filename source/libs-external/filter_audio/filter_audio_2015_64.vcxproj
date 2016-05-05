@@ -1,0 +1,143 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="aec\aec_core.c" />
+    <ClCompile Include="aec\aec_core_sse2.c" />
+    <ClCompile Include="aec\aec_rdft.c" />
+    <ClCompile Include="aec\aec_rdft_sse2.c" />
+    <ClCompile Include="aec\aec_resampler.c" />
+    <ClCompile Include="aec\echo_cancellation.c" />
+    <ClCompile Include="agc\analog_agc.c" />
+    <ClCompile Include="agc\digital_agc.c" />
+    <ClCompile Include="filter_audio.c" />
+    <ClCompile Include="ns\noise_suppression.c" />
+    <ClCompile Include="ns\noise_suppression_x.c" />
+    <ClCompile Include="ns\nsx_core.c" />
+    <ClCompile Include="ns\nsx_core_c.c" />
+    <ClCompile Include="ns\ns_core.c" />
+    <ClCompile Include="other\complex_bit_reverse.c" />
+    <ClCompile Include="other\complex_fft.c" />
+    <ClCompile Include="other\copy_set_operations.c" />
+    <ClCompile Include="other\cross_correlation.c" />
+    <ClCompile Include="other\delay_estimator.c" />
+    <ClCompile Include="other\delay_estimator_wrapper.c" />
+    <ClCompile Include="other\division_operations.c" />
+    <ClCompile Include="other\dot_product_with_scale.c" />
+    <ClCompile Include="other\downsample_fast.c" />
+    <ClCompile Include="other\energy.c" />
+    <ClCompile Include="other\fft4g.c" />
+    <ClCompile Include="other\float_util.c" />
+    <ClCompile Include="other\get_scaling_square.c" />
+    <ClCompile Include="other\high_pass_filter.c" />
+    <ClCompile Include="other\min_max_operations.c" />
+    <ClCompile Include="other\randomization_functions.c" />
+    <ClCompile Include="other\real_fft.c" />
+    <ClCompile Include="other\resample_48khz.c" />
+    <ClCompile Include="other\resample_by_2.c" />
+    <ClCompile Include="other\resample_by_2_internal.c" />
+    <ClCompile Include="other\resample_fractional.c" />
+    <ClCompile Include="other\ring_buffer.c" />
+    <ClCompile Include="other\speex_resampler.c" />
+    <ClCompile Include="other\splitting_filter.c" />
+    <ClCompile Include="other\spl_init.c" />
+    <ClCompile Include="other\spl_sqrt.c" />
+    <ClCompile Include="other\spl_sqrt_floor.c" />
+    <ClCompile Include="other\vector_scaling_operations.c" />
+    <ClCompile Include="vad\vad_core.c" />
+    <ClCompile Include="vad\vad_filterbank.c" />
+    <ClCompile Include="vad\vad_gmm.c" />
+    <ClCompile Include="vad\vad_sp.c" />
+    <ClCompile Include="vad\webrtc_vad.c" />
+    <ClCompile Include="zam\filters.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="aec\aec_common.h" />
+    <ClInclude Include="aec\aec_core.h" />
+    <ClInclude Include="aec\aec_core_internal.h" />
+    <ClInclude Include="aec\aec_rdft.h" />
+    <ClInclude Include="aec\aec_resampler.h" />
+    <ClInclude Include="aec\echo_cancellation_internal.h" />
+    <ClInclude Include="agc\analog_agc.h" />
+    <ClInclude Include="agc\digital_agc.h" />
+    <ClInclude Include="filter_audio.h" />
+    <ClInclude Include="ns\defines.h" />
+    <ClInclude Include="ns\nsx_core.h" />
+    <ClInclude Include="ns\nsx_defines.h" />
+    <ClInclude Include="ns\ns_core.h" />
+    <ClInclude Include="ns\windows_private.h" />
+    <ClInclude Include="other\arch.h" />
+    <ClInclude Include="other\complex_fft_tables.h" />
+    <ClInclude Include="other\delay_estimator.h" />
+    <ClInclude Include="other\delay_estimator_internal.h" />
+    <ClInclude Include="other\delay_estimator_wrapper.h" />
+    <ClInclude Include="other\fft4g.h" />
+    <ClInclude Include="other\real_fft.h" />
+    <ClInclude Include="other\resample_by_2_internal.h" />
+    <ClInclude Include="other\resample_sse.h" />
+    <ClInclude Include="other\ring_buffer.h" />
+    <ClInclude Include="other\signal_processing_library.h" />
+    <ClInclude Include="other\speex_resampler.h" />
+    <ClInclude Include="other\spl_inl.h" />
+    <ClInclude Include="other\stack_alloc.h" />
+    <ClInclude Include="vad\vad_core.h" />
+    <ClInclude Include="vad\vad_filterbank.h" />
+    <ClInclude Include="vad\vad_gmm.h" />
+    <ClInclude Include="vad\vad_sp.h" />
+    <ClInclude Include="zam\filters.h" />
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{E01905DE-B27B-4DA5-831C-5F27344898BC}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>filter_audio</RootNamespace>
+    <ProjectName>filter_audio</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(SolutionDir)\libs.common.2015_64.props" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>.</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

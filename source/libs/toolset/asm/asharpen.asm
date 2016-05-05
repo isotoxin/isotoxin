@@ -219,6 +219,7 @@ colloop:
 ;*********
 
 _asm_sharpen_run_MMX:
+    emms
 	push	ebp
 	push	edi
 	push	esi
@@ -391,6 +392,7 @@ colloop_MMX_entry:
 	pop	edi
 	pop	ebp
 	emms
+	finit
 	ret
 
 	IF 0

@@ -60,6 +60,7 @@ enum buildin_tags_e
 
 struct contact_key_s
 {
+    MOVABLE( true );
     DUMMY(contact_key_s);
 
     int contactid;  // protocol contact id. >0 - contact, <0 - group
@@ -125,6 +126,7 @@ INLINE ts::asptr  calc_message_skin(message_type_app_e mt, const contact_key_s &
 // initialization: [POST_INIT]
 struct post_s
 {
+    MOVABLE( true );
     DUMMY(post_s);
     post_s() {}
 #if _USE_32BIT_TIME_T
@@ -151,8 +153,8 @@ struct avatar_s : public ts::bitmap_c
 {
     int tag = 0;
     bool alpha_pixels = false;
-    avatar_s( const void *body, int size, int tag ) { load(body, size, tag); }
-    void load( const void *body, int size, int tag );
+    avatar_s( const void *body, ts::aint size, int tag ) { load(body, size, tag); }
+    void load( const void *body, ts::aint size, int tag );
 };
 
 template<> struct gmsg<ISOGM_UPDATE_CONTACT> : public gmsgbase
@@ -350,7 +352,7 @@ public:
     bool is_calltone() const { return opts.unmasked().is(F_CALLTONE); }
 
     int avatar_tag() const {return avatar ? avatar->tag : 0; }
-    void set_avatar( const void *body, int size, int tag = 0 )
+    void set_avatar( const void *body, ts::aint size, int tag = 0 )
     {
         if (size == 0)
         {
@@ -420,8 +422,8 @@ public:
             if (c->getkey() == k) return c;
         return nullptr;
     }
-    int subcount() const { return subcontacts.size(); }
-    contact_c * subget(int indx)
+    ts::aint subcount() const { return subcontacts.size(); }
+    contact_c * subget( ts::aint indx)
     {
         return subcontacts.get(indx);
     }
@@ -461,8 +463,8 @@ public:
 
     const post_s * fix_history(message_type_app_e oldt, message_type_app_e newt, const contact_key_s& sender = contact_key_s() /* self - empty - no matter */, time_t update_time = 0 /* 0 - no need update */, const ts::str_c *update_text = nullptr /* null - no need update */);
 
-    const post_s& get_history(int index) const { return history.get(index); }
-    int history_size() const { return history.size(); }
+    const post_s& get_history( ts::aint index) const { return history.get(index); }
+    ts::aint history_size() const { return history.size(); }
 
     time_t nowtime() const
     {
@@ -483,7 +485,7 @@ public:
     }
     post_s& add_history(time_t recv_t, time_t send_t)
     {
-        int cnt = history.size();
+        ts::aint cnt = history.size();
         for (int i = 0; i < cnt; ++i)
         {
             if (recv_t < history.get(i).recv_time)
@@ -501,7 +503,7 @@ public:
     }
 
     //void load_history(); // whole
-    void load_history(int n_last_items);
+    void load_history( ts::aint n_last_items);
     void unload_history()
     {
         history.clear();
@@ -551,7 +553,7 @@ public:
         {
             post_s *x = &add_history(p.recv_time, p.cr_time);
             *x = p;
-            r = x - history.begin();
+            r = (int)(x - history.begin());
         }
 
         return r;
@@ -710,7 +712,7 @@ class contacts_c
     int find_free_meta_id() const;
     void delbykey( const contact_key_s&k )
     {
-        int index;
+        ts::aint index;
         if (arr.find_sorted(index, k))
         {
             contact_c *c = arr.get(index);
@@ -742,26 +744,26 @@ public:
 
     bool present( const contact_key_s&k ) const
     {
-        int index;
+        ts::aint index;
         return arr.find_sorted(index,k);
     }
 
     contact_root_c *rfind(const contact_key_s&k)
     {
-        int index;
+        ts::aint index;
         if (arr.find_sorted(index, k)) return ts::ptr_cast<contact_root_c *>( arr.get(index).get() );
         return nullptr;
     }
 
     contact_c *find( const contact_key_s&k )
     {
-        int index;
+        ts::aint index;
         if (arr.find_sorted(index, k)) return arr.get(index);
         return nullptr;
     }
     const contact_c *find(const contact_key_s&k) const
     {
-        int index;
+        ts::aint index;
         if (arr.find_sorted(index, k)) return arr.get(index);
         return nullptr;
     }
@@ -773,7 +775,7 @@ public:
 
     void update_meta();
 
-    int count() const {return arr.size();}
+    ts::aint count() const {return arr.size();}
     contact_c & get(int index) {return *arr.get(index);};
 
     template <typename R> void iterate_proto_contacts( R r )
@@ -795,20 +797,20 @@ public:
     void dirty_sort() { sorttag = ts::uuid(); };
 
     void contact_activity( const contact_key_s &ck );
-    int contact_activity_power(const contact_key_s &ck) const
+    ts::aint contact_activity_power(const contact_key_s &ck) const
     {
         ASSERT(ck.is_meta() || ck.is_group());
-        int cnt = activity.count();
-        for (int i = 0; i < cnt; ++i)
+        ts::aint cnt = activity.count();
+        for ( ts::aint i = 0; i < cnt; ++i)
             if (activity.get(i) == ck)
                 return i;
         return -1;
     }
 
-    void replace_tags(int i, const ts::str_c &ntn);
+    void replace_tags( int i, const ts::str_c &ntn);
     void rebuild_tags_bits(bool refresh_ui = true);
-    void toggle_tag(int i);
-    bool is_tag_enabled(int i) const { return enabled_tags.get_bit(i); };
+    void toggle_tag( ts::aint i);
+    bool is_tag_enabled( ts::aint i) const { return enabled_tags.get_bit(i); };
 };
 
 extern ts::static_setup<contacts_c> contacts;

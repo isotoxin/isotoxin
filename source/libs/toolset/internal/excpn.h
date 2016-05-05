@@ -8,7 +8,7 @@ typedef BOOL (WINAPI * MINIDUMPWRITEDUMP)(HANDLE, DWORD, HANDLE, MINIDUMP_TYPE, 
 class exception_operator_c : public StackWalker
 {
 private:
-    long lock;
+    spinlock::long3264 lock;
     MINIDUMP_TYPE dump_type;
 	mutable sstr_t<32768> output;
 

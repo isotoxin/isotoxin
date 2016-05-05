@@ -590,21 +590,21 @@ void text_convert_to_bbcode(ts::str_c &text)
 void text_close_bbcode(ts::str_c &text_utf8)
 {
     ts::astrings_c opened;
-    for(int i=text_utf8.find_pos('['); i >= 0 ; i = text_utf8.find_pos(i+1,'[') )
+    for( int i=text_utf8.find_pos('['); i >= 0 ; i = text_utf8.find_pos(i+1,'[') )
     {
         int j = text_utf8.find_pos(i+1,']');
         if (j<0) break;
         ts::pstr_c tag = text_utf8.substr(i + 1, j);
         bool close = false;
         if (tag.get_char(0) == '/') { close = true; tag = tag.substr(1); }
-        for(int k=0;k<ARRAY_SIZE(bb_tags);++k)
+        for( ts::aint k=0;k<ARRAY_SIZE(bb_tags);++k)
         {
             if (tag.equals(bb_tags[k]))
             {
                 if (close)
                 {
                     bool removed = false;
-                    for(int x = opened.size()-1; x >=0; --x)
+                    for( ts::aint x = opened.size()-1; x >=0; --x)
                     {
                         if (opened.get(x).equals(tag))
                         {
@@ -637,7 +637,7 @@ void text_close_bbcode(ts::str_c &text_utf8)
 void text_convert_char_tags(ts::str_c &text)
 {
     auto t = CONSTASTR("<char=");
-    for (int i = text.find_pos(t); i >= 0; i = text.find_pos(i + 1, t))
+    for ( int i = text.find_pos(t); i >= 0; i = text.find_pos(i + 1, t))
     {
         int j = text.find_pos(i+t.l,'>');
         if (j < 0) break;
@@ -704,7 +704,7 @@ void text_adapt_user_input(ts::str_c &text)
 
     auto process_text_md = [&](const md_s &md, ts::str_c &text)
     {
-        for (int i = 0; i < text.get_length();)
+        for ( int i = 0; i < text.get_length();)
         {
             int md0 = text.find_pos(i, md.md);
             if (md0 >= 0)
@@ -906,7 +906,7 @@ bool text_find_inds( const ts::wstr_c &t, ts::tmp_tbuf_t<ts::ivec2> &marks, cons
     {
         for (const ts::wstr_c &f : fsplit)
         {
-            int fl = f.get_length();
+            ts::aint fl = f.get_length();
             if (fl < cc.count())
             {
                 bool fail = false;
@@ -930,7 +930,7 @@ bool text_find_inds( const ts::wstr_c &t, ts::tmp_tbuf_t<ts::ivec2> &marks, cons
 
     bool in_tag = false;
     int l = t.get_length();
-    for (int i = 0; i < l;)
+    for ( int i = 0; i < l;)
     {
         c.set_char(0, t.get_char(i));
         if (in_tag)
@@ -979,11 +979,11 @@ bool text_find_inds( const ts::wstr_c &t, ts::tmp_tbuf_t<ts::ivec2> &marks, cons
         cc.remove_slow(0);
     }
 
-    for(int i=marks.count()-1;i>0;--i)
+    for( ts::aint i=marks.count()-1;i>0;--i)
     {
         const ts::ivec2 &range = marks.get(i);
         ASSERT(range.r1 > range.r0);
-        for (int j = i-1; j >= 0; --j)
+        for ( ts::aint j = i-1; j >= 0; --j)
         {
             ts::ivec2 &range_test = marks.get(j);
             ASSERT(range_test.r1 > range_test.r0);
@@ -1072,10 +1072,10 @@ ts::wstr_c loc_text(loctext_e lt)
     return ts::wstr_c();
 }
 
-ts::wstr_c text_sizebytes(int sz)
+ts::wstr_c text_sizebytes( ts::aint sz)
 {
-    ts::wstr_c n; n.set_as_uint(sz);
-    for (int ix = n.get_length() - 3; ix > 0; ix -= 3)
+    ts::wstr_c n; n.set_as_num(sz);
+    for ( int ix = n.get_length() - 3; ix > 0; ix -= 3)
         n.insert(ix, '`');
 
     return TTT("size: $ bytes", 220) / n;
@@ -1225,6 +1225,20 @@ SLANGID detect_language()
     return SLANGID("en");
 }
 
+namespace
+{
+    struct lang_s
+    {
+        MOVABLE( true );
+        SLANGID langtag;
+        ts::wstr_c name;
+        int operator()( const lang_s &ol ) const
+        {
+            return ts::wstr_c::compare( name, ol.name );
+        }
+    };
+}
+
 menu_c list_langs( SLANGID curlang, MENUHANDLER h )
 {
     menu_c m;
@@ -1235,16 +1249,6 @@ menu_c list_langs( SLANGID curlang, MENUHANDLER h )
 
     ts::g_fileop->find(fns, path.append(CONSTWSTR("*.lng*.lng")), false);
     fns.kill_dups();
-
-    struct lang_s
-    {
-        SLANGID langtag;
-        ts::wstr_c name;
-        int operator()(const lang_s &ol) const
-        {
-            return ts::wstr_c::compare(name, ol.name);
-        }
-    };
 
     ts::tmp_array_inplace_t<lang_s, 1> langs;
 
@@ -1594,7 +1598,7 @@ db_check_e check_db(const ts::wstr_c &fn, ts::uint8 *salt /* 16 bytes buffer */)
     if (!handle)
         return DBC_IO_ERROR;
 
-    uint rslt = ts::f_read(handle, salt, 16);
+    ts::aint rslt = ts::f_read(handle, salt, 16);
     ts::f_close(handle);
 
     if ( rslt == 0 )
@@ -1629,7 +1633,7 @@ db_check_e check_db(const ts::wstr_c &fn, ts::uint8 *salt /* 16 bytes buffer */)
 #define USE_DL_PREFIX
 #define USE_LOCKS 0
 
-static long dlmalloc_spinlock = 0;
+static spinlock::long3264 dlmalloc_spinlock = 0;
 
 #define PREACTION(M)  (spinlock::simple_lock(dlmalloc_spinlock), 0)
 #define POSTACTION(M) spinlock::simple_unlock(dlmalloc_spinlock)

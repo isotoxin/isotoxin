@@ -43,7 +43,7 @@ public:
 	void stop();
 	void stop(float time) {if (time == 0) stop(); else fadeSpeed = -1/time;}
 
-	void read(void *buffer, int size, bool afterRewind = false);
+	void read(void *buffer, s3int size, bool afterRewind = false);
 	void update(Player *player, float dt, bool full);
 };
 

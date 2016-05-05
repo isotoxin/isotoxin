@@ -122,7 +122,7 @@ struct dds_decompressor_dxt5_s : public dds_decompressor_s
     static bool decompress( img_reader_s &r, void * buf, int pitch);
 };
 
-image_read_func img_reader_s::detect_dds_format(const void *sourcebuf, int sourcebufsize)
+image_read_func img_reader_s::detect_dds_format(const void *sourcebuf, aint sourcebufsize)
 {
     const DDSHEAD *dds = (const DDSHEAD *)sourcebuf;
     if (dds->Signature != 0x20534444) return nullptr;
@@ -631,119 +631,5 @@ bool save_to_dds_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
     buf.clear();
     return false;
 }
-
-/*
-
-void save_to_dds_format(buf_c & buf, int compression, int additional_squish_flags)
-{
-    if (info().bytepp() != 3 && info().bytepp() != 4)
-    {
-        DEBUG_BREAK(); //ERROR(L"Unsupported bitpp to convert");
-    }
-
-    int sz = info().sz.x * info().sz.y * info().bytepp();
-	int squishc = squish::kDxt5;
-	if (compression)
-	{
-		switch (compression)
-		{
-		default:
-			sux("wrong DDS compression bitpp, using DXT1");
-		case D3DFMT_DXT1:
-			squishc = squish::kDxt1;
-			break;
-		case D3DFMT_DXT3:
-			squishc = squish::kDxt3;
-			break;
-		case D3DFMT_DXT5:
-			squishc = squish::kDxt5;
-			break;
-		}
-		sz = squish::GetStorageRequirements(info().sz.x, info().sz.y, squishc);
-	}
-
-    buf.clear();
-    uint32 *dds = (uint32 *)buf.expand(sz + sizeof(DDSURFACEDESC2) + sizeof(uint32));
-
-    *dds = 0x20534444; // "DDS "
-
-    DDSURFACEDESC2 * ddsp = (DDSURFACEDESC2 *)(dds + 1);
-    memset(ddsp, 0, sizeof(DDSURFACEDESC2));
-    
-    ddsp->dwSize = sizeof(DDSURFACEDESC2);
-    ddsp->dwWidth = info().sz.x;
-    ddsp->dwHeight = info().sz.y;
-    ddsp->dwFlags = DDSD_PIXELFORMAT | DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS | DDSD_LINEARSIZE;
-
-    ddsp->dwLinearSize = sz;
-    ddsp->ddpfPixelFormat.dwSize = sizeof(DDPIXELFORMAT);
-	ddsp->ddpfPixelFormat.dwFlags = (compression == 0 ? DDPF_RGB : DDPF_FOURCC) | ((info().bytepp() == 4)?DDPF_ALPHAPIXELS:0);
-    ddsp->ddpfPixelFormat.dwRGBBitCount = info().bitpp;
-    ddsp->ddpfPixelFormat.dwRBitMask = 0x00FF0000;
-    ddsp->ddpfPixelFormat.dwGBitMask = 0x0000FF00;
-    ddsp->ddpfPixelFormat.dwBBitMask = 0x000000FF;
-    ddsp->ddpfPixelFormat.dwRGBAlphaBitMask = 0xFF000000;
-	ddsp->ddpfPixelFormat.dwFourCC = compression;
-
-    ddsp->ddsCaps.dwCaps = DDSCAPS_TEXTURE;
-
-    if (info().sz.x < 4)
-    {
-		sux("!-!");
-        int cnt = info().sz.x * info().sz.y;
-        BYTE *des = (BYTE *)(ddsp + 1);
-        const uint8 *sou = body();
-        if (info().bytepp() == 3)
-        {
-            while (cnt-- > 0)
-            {
-                //*des = *(sou + 2);
-                //*(des+1) = *(sou + 1);
-                //*(des+2) = *(sou + 0);
-                *des = *(sou + 0);
-                *(des+1) = *(sou + 1);
-                *(des+2) = *(sou + 2);
-                *(des+3) = 0xFF;
-
-                sou += 3;
-                des += 4;
-            }
-        } else
-        {
-            while (cnt-- > 0)
-            {
-                //*des = *(sou + 2);
-                //*(des+1) = *(sou + 1);
-                //*(des+2) = *(sou + 0);
-                //*(des+3) = *(sou + 3);
-                *des = *(sou + 0);
-                *(des+1) = *(sou + 1);
-                *(des+2) = *(sou + 2);
-                *(des+3) = *(sou + 3);
-
-                sou += 4;
-                des += 4;
-            }
-
-        }
-
-    } else
-    {
-		if (compression == 0)
-			memcpy( ddsp + 1, body(), info().sz.x * info().sz.y * info().bytepp() );
-		else
-		{
-			squish::u8 *buf = (squish::u8*)MM_ALLOC(slmemcat::squish_buff, info().sz.x * info().sz.y * info().bytepp());
-			swap_byte(buf);
-			squish::CompressImage(buf, info().sz.x, info().sz.y, ddsp + 1, squishc | additional_squish_flags);
-			MM_FREE(slmemcat::squish_buff, buf);
-		}
-        //swap_byte( ddsp + 1 );
-
-    }
-    //memcpy(des,sou,sz);
-}
-#pragma warning (pop)
-*/
 
 }

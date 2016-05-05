@@ -5,7 +5,7 @@ namespace ts {
 template <typename TCHARACTER> bp_t<TCHARACTER> &bp_t<TCHARACTER>::add_block(const string_type &name)
 {
 	bool added;
-	hashmap_t<string_type, bp_t<TCHARACTER>*>::litm_s &li = elements.add_get_item(name, added);
+	auto &li = elements.add_get_item(name, added);
 	element_s *e = TSNEW(element_s);
 	li.value = &e->bp;
 	e->name = &li.key;
@@ -80,7 +80,7 @@ template<typename TCHARACTER> static const TCHARACTER *token_end(const TCHARACTE
 template <typename TCHARACTER> bool bp_t<TCHARACTER>::read_bp(const TCHARACTER *&s, const TCHARACTER *end)
 {
 	DEBUGCODE(if (!source_basis) source_basis = s;)
-#define END_CHECK(msg) if (s >= end) {WARNING(str_t<char>("Unexpected eof while " msg "(line: ").append_as_int(get_current_line(s)).append_char(')').cstr()); return nullptr;}
+#define END_CHECK(msg) if (s >= end) {WARNING(str_t<char>("Unexpected eof while " msg "(line: ").append_as_int(get_current_line(s)).append_char(')').cstr()); return false;}
 #define SKIP_SEPARATORS(additional_check) \
 	while (true)\
 	{\
@@ -93,7 +93,7 @@ template <typename TCHARACTER> bool bp_t<TCHARACTER>::read_bp(const TCHARACTER *
 	if ((s = token_start(s, end)) == nullptr) return false;
 	if (preserve_comments && s > start) // keep comments if needed (only top level block)
 	{
-		string_type comment(start, s-start);
+		string_type comment(start, (int)(s-start));
 		if (comment.get_length() >= 2)
 		{
 			if (comment.get_last_char() == TCHARACTER('\n')) comment.trunc_length(); // remove last line
@@ -105,7 +105,7 @@ template <typename TCHARACTER> bool bp_t<TCHARACTER>::read_bp(const TCHARACTER *
 	if (*s == TCHARACTER('}')) {++s; return false;}
 
 	start = s;
-	string_type name(start, token_end(s, end, TCHARACTER('=')) - start);
+	string_type name(start, (int)(token_end(s, end, TCHARACTER('=')) - start));
 	bp_t<TCHARACTER> &bp = add_block(name);
 	DEBUGCODE(bp.source_basis = source_basis;)
 	//skip separators
@@ -128,13 +128,13 @@ template <typename TCHARACTER> bool bp_t<TCHARACTER>::read_bp(const TCHARACTER *
 				{
 					if (s<end-1 && *(s+1)==TCHARACTER('`')) // quoted '`'
 					{
-						v.append(sptr<TCHARACTER>(start, s+1-start));
+						v.append(sptr<TCHARACTER>(start, (int)(s+1-start)));
 						start = s+=2;
 						continue;
 					}
 					else // line end
 					{
-						v.append(sptr<TCHARACTER>(start, s-start));
+						v.append(sptr<TCHARACTER>(start, (int)(s-start)));
 						break;
 					}
 				}
@@ -149,10 +149,10 @@ template <typename TCHARACTER> bool bp_t<TCHARACTER>::read_bp(const TCHARACTER *
 		{
 			start = s;
 			const TCHARACTER *t;
-			bp.set_value(sptr<TCHARACTER>(start, (t=token_end(s, end, TCHARACTER('}'))) - start));
+			bp.set_value(sptr<TCHARACTER>(start, (int)((t=token_end(s, end, TCHARACTER('}'))) - start)));
 			if (preserve_comments) // keep comments if needed
 			{
-				string_type comment(t, (!s?end:s)-t);
+				string_type comment(t, (int)((!s?end:s)-t));
 				if (comment.get_length() >= 2)
 				{
 					if (comment.get_last_char() == TCHARACTER('\n')) comment.trunc_length();
@@ -195,11 +195,11 @@ template <typename TCHARACTER> static void append_value(str_t<TCHARACTER> &s, co
 
 template <typename TCHARACTER> static const str_t<TCHARACTER> store_value(const str_t<TCHARACTER> &value, bool allow_unquoted = true)
 {
-	if (allow_unquoted && value.find_pos_of<char>(0, CONSTASTR(" \t\r\n`{}")) < 0) // any of these symbols mean string must be quoted
+	if (allow_unquoted && value.template find_pos_of<char>(0, CONSTASTR(" \t\r\n`{}")) < 0) // any of these symbols mean string must be quoted
 	{
 		int i = 0;
 		for (; i<value.get_length()-1; i++)
-			if (value[i] == TCHARACTER('/') && (value[i+1] == TCHARACTER('/') || value[i+1] == TCHARACTER('*'))) break;
+			if (value.get_char(i) == TCHARACTER('/') && (value.get_char( i+1 ) == TCHARACTER('/') || value.get_char( i+1 ) == TCHARACTER('*'))) break;
 		if (i >= value.get_length()-1) return value;
 	}
 	str_t<TCHARACTER> r(value);
@@ -215,7 +215,7 @@ template <typename TCHARACTER> const str_t<TCHARACTER> bp_t<TCHARACTER>::store(i
 		one_line = false;
 	else
 	{
-		int totalLen = value.get_length();
+		aint totalLen = value.get_length();
 		for (element_s *e=first_element; e; e=e->next)
 		{
 			if (e->bp.first_element) {one_line = false; break;} // no - there are inner blocks detected
@@ -227,19 +227,44 @@ template <typename TCHARACTER> const str_t<TCHARACTER> bp_t<TCHARACTER>::store(i
 	string_type r;
 	for (element_s *e=first_element; e; e=e->next)
 	{
-		if (*e->name == string_type(TCHARACTER(0))) {r += e->bp.value; continue;} // this is comment
-		if (e->bp.value_not_specified() && !e->bp.first_element) {if (e == last_element) goto c_; continue;} // correct element skip
-		if (!one_line && (level > 0 || e!=first_element)) r.append(CONSTSTR(TCHARACTER,"\r\n")).append_chars(level, '\t');
-		int prev_len = r.get_length();
+		if (e->name->equals(CONSTSTR( TCHARACTER,"=")))
+        {
+            // this is comment
+            r += e->bp.value;
+            continue;
+        } 
+
+		if (e->bp.value_not_specified() && !e->bp.first_element)
+        {
+            // correct element skip
+            if (e == last_element)
+                if ( !one_line && level > 0 )
+                    r.append( CONSTSTR( TCHARACTER, "\r\n" ) ).append_chars( level - 1, '\t' );
+            continue;
+        }
+		if (!one_line && (level > 0 || e!=first_element))
+            r.append(CONSTSTR(TCHARACTER,"\r\n")).append_chars(level, '\t');
+
+		aint prev_len = r.get_length();
 		r.append( *e->name );
-		if (!e->bp.value_not_specified()) append_value( r, store_value(e->bp.value, !one_line || e == last_element) );
+
+		if (!e->bp.value_not_specified())
+            append_value( r, store_value(e->bp.value, !one_line || e == last_element) );
+
 		if (e->bp.first_element)// inner blocks?
 		{
-			if (r.get_length() > prev_len) r.append_char(' '); // to remove space in {a=3}\n {b=6}
+			if (r.get_length() > prev_len)
+                r.append_char(' '); // to remove space in {a=3}\n {b=6}
 			r.append_char('{').append(e->bp.store(level + 1)).append_char('}');
 		}
-		if (e != last_element) {if (one_line) r.append_char(' ');}
-		else {c_: if (!one_line && level > 0) r.append(CONSTSTR(TCHARACTER,"\r\n")).append_chars(level-1, '\t');}
+		if (e != last_element)
+        {
+            if (one_line) r.append_char(' ');
+        } else
+        {
+            if (!one_line && level > 0)
+                r.append(CONSTSTR(TCHARACTER,"\r\n")).append_chars(level-1, '\t');
+        }
 	}
 	return r;
 }

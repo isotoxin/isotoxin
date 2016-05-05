@@ -109,7 +109,7 @@ namespace
             {
                 src->next_input_byte = src->buf;
                 src->bytes_in_buffer = src->buflen;
-                src->curp = src->bytes_in_buffer;
+                src->curp = (uint)src->bytes_in_buffer;
                 return TRUE;
             }
             //return TRUE;
@@ -147,7 +147,7 @@ namespace
         jpgreadbuf tmp;
         int row_stride;
 
-        jpgread_internal_data_s(const void *sourcebuf, int sourcebufsize):tmp(sourcebuf, sourcebufsize)
+        jpgread_internal_data_s(const void *sourcebuf, aint sourcebufsize):tmp(sourcebuf, (int)sourcebufsize)
         {
             cinfo.err = jpeg_std_error(&jerr);
             jerr.error_exit = __error_exit;
@@ -198,7 +198,7 @@ static bool jpgdatareader(img_reader_s &r, void * buf, int pitch)
     return ok;
 }
 
-image_read_func img_reader_s::detect_jpg_format(const void *sourcebuf, int sourcebufsize)
+image_read_func img_reader_s::detect_jpg_format(const void *sourcebuf, aint sourcebufsize)
 {
     uint32 tag = *(uint32 *)sourcebuf;
     if ((tag & 0xFFFFFF) != 16767231)
@@ -263,7 +263,7 @@ bool save_to_jpg_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
 
     jpeg_start_compress(&cinfo, true);
 
-    int row_stride = bmp.info().sz.x * 3, bpp = bmp.info().bytepp();
+    aint row_stride = bmp.info().sz.x * 3, bpp = bmp.info().bytepp();
 
     unsigned char* aTempBuffer = (unsigned char*)_alloca(row_stride);
 

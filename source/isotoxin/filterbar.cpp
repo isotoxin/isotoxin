@@ -262,7 +262,7 @@ void gui_filterbar_c::full_search_result( found_stuff_s::FOUND_STUFF_T &&stuff )
 
 bool gui_filterbar_c::do_contact_check(RID, GUIPARAM p)
 {
-    for (int n = ts::tmax(1, contacts().count() / 10 ); contact_index < contacts().count() && n > 0; --n)
+    for ( ts::aint n = ts::tmax(1, contacts().count() / 10 ); contact_index < contacts().count() && n > 0; --n)
     {
         contact_c &c = contacts().get(contact_index++);
         if (c.is_rootcontact())
@@ -343,9 +343,9 @@ bool gui_filterbar_c::update_filter(const ts::wstr_c & e)
     found_stuff.fsplit.case_down();
 
     // kill dups
-    for(int i = found_stuff.fsplit.size() - 1;i>=0;--i)
+    for( ts::aint i = found_stuff.fsplit.size() - 1;i>=0;--i)
     {
-        for(int j = i-1;j>=0;--j)
+        for( ts::aint j = i-1;j>=0;--j)
             if ( found_stuff.fsplit.get(j).equals( found_stuff.fsplit.get(i) ) )
             {
                 found_stuff.fsplit.remove_fast(i);

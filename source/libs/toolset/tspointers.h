@@ -51,7 +51,6 @@ template <typename T> class safe_ptr // T must be public child of safe_object
 {
     MOVABLE(true);
 	friend class safe_object;
-	template <class T> friend class safe_ptr;
 
 	safe_object::pointer_container_s *pc = nullptr;
 
@@ -173,6 +172,14 @@ public:
     const T *get() const {return object;}
 };
 
+namespace internals
+{
+    template <typename T> struct movable_predefined< shared_ptr< T > >
+    {
+        static const bool value = true;
+    };
+}
+
 class shared_object
 {
 	int ref = 0;
@@ -227,8 +234,7 @@ public:
 template<class OO> struct eyelet_s;
 template<class OO, class OO1 = OO> struct iweak_ptr
 {
-    typedef eyelet_s<OO> eyelet_my;
-	friend struct eyelet_my;
+	friend struct eyelet_s<OO>;
 private:
     MOVABLE(false);
 	iweak_ptr *prev = nullptr;
@@ -358,6 +364,8 @@ template<class OO> struct eyelet_s
 	template<class OO1> void hook_connect( ts::iweak_ptr<obj, OO1> * hook ) { m_eyelet.connect(this, reinterpret_cast<ts::iweak_ptr<obj>*>(hook)); } \
 	template<class OO1> void hook_unconnect( ts::iweak_ptr<obj, OO1> * hook ) { m_eyelet.unconnect(reinterpret_cast<ts::iweak_ptr<obj>*>(hook)); } private:
 
+template<class _Ty> struct clean_type < safe_ptr<_Ty> > { /*remove safe pointer*/ typedef _Ty type; };
+template<class _Ty> struct clean_type < shared_ptr<_Ty> > { /*remove shared pointer*/ typedef _Ty type; };
 
 } // namespace ts
 

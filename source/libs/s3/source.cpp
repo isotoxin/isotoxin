@@ -100,11 +100,11 @@ void Source::stop(float time)
 }
 
 
-int MSource::read(char *dest, int sz)
+s3int MSource::read(char *dest, s3int sz)
 {
-	int r = std::min(sz, size-pos);
+    s3int r = std::min(sz, (s3int)(size-pos));
 	memcpy(dest, data+pos, r);
-	pos += r;
+	pos += (int)r;
 	return r;
 }
 
@@ -164,7 +164,7 @@ void PSource::activate()
 	active = true;
 }
 
-int PSource::read(char *dest, int sz)
+s3int PSource::read(char *dest, s3int sz)
 {
 	if (eof) return 0;
 
@@ -172,11 +172,11 @@ int PSource::read(char *dest, int sz)
 
 	while (sz > 0 && actualDataSize[curBuf] > 0)
 	{
-		int r = std::min(sz, std::min(actualDataSize[curBuf], eofPos[curBuf]) - bufPos);
+        s3int r = std::min(sz, (s3int)std::min(actualDataSize[curBuf], eofPos[curBuf]) - bufPos);
 		memcpy(dest + total, buf[curBuf] + bufPos, r);
-		bufPos += r;
+		bufPos += (int)r;
 		sz -= r;
-		total += r;
+		total += (int)r;
 		if (bufPos == prefetchBytes)
 		{
 			bufPos = 0;
@@ -299,7 +299,7 @@ bool PSource::update()
 }
 
 
-int RawSource::read(char *dest, int sz)
+s3int RawSource::read(char *dest, s3int sz)
 {
 	switch (readStage)
 	{

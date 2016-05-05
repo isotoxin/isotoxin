@@ -13,6 +13,7 @@ class dialog_smileselector_c : public gui_control_c
 {
     struct rectdef_s
     {
+        MOVABLE( true );
         emoticon_s *e;
         ts::ivec2 p;
         rectdef_s( const ts::ivec2 &p, emoticon_s *e ):p(p), e(e) {}

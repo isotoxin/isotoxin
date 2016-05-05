@@ -27,12 +27,12 @@ struct zlo : public zlib_filefunc_def,  public arc_file_s
         aint minsz = tmin(ost, (aint)size);
         memcpy( buf, me->data + me->ptr, minsz);
         me->ptr += minsz;
-        return minsz;
+        return (uLong)minsz;
     }
     static long ZCALLBACK ftell_file_func(voidpf opaque, voidpf stream)
     {
         zlo *me = (zlo *)opaque;
-        return me->ptr;
+        return (long)me->ptr;
     }
     static long ZCALLBACK fseek_file_func(voidpf opaque, voidpf stream, uLong offset, int origin)
     {

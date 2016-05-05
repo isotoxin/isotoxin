@@ -41,7 +41,7 @@ public:
     dialog_colors_c(initial_rect_data_s &data);
     ~dialog_colors_c();
 
-    /*virtual*/ ts::ivec2 get_min_size() const;
+    /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
 

@@ -45,7 +45,7 @@ class dialog_metacontact_c : public gui_isodialog_c
     //bool dndtgt = false;
 
 protected:
-    /*virtual*/ int unique_tag() { return UD_METACONTACT; }
+    /*virtual*/ int unique_tag() override { return UD_METACONTACT; }
     /*virtual*/ void created() override;
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
     /*virtual*/ int additions(ts::irect & border) override;

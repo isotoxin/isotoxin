@@ -4,6 +4,7 @@
 
 struct vsb_descriptor_s
 {
+    MOVABLE( true );
     ts::wstr_c id;
     ts::wstr_c desc;
     ts::tbuf0_t<ts::ivec2> resolutions;
@@ -17,7 +18,7 @@ typedef fastdelegate::FastDelegate< void( const ts::bmpcore_exbody_s &ebm ) > bm
 
 class vsb_c // video streaming buffer
 {
-    long sync = 0;
+    spinlock::long3264 sync = 0;
     ts::drawable_bitmap_c bufs[3]; // tripple buffer
     int last_updated = -1;
     int updating = -1;
@@ -150,7 +151,7 @@ class vsb_dshow_camera_c : public vsb_c
         DECLARE_EYELET( core_c );
 
     protected:
-        long sync = 0;
+        spinlock::long3264 sync = 0;
         ts::wstr_c id;
         static core_c *first;
         static core_c *last;
@@ -213,7 +214,7 @@ class vsb_desktop_c : public vsb_c
 {
     struct grab_desktop : public ts::task_c
     {
-        long sync = 0;
+        spinlock::long3264 sync = 0;
         ts::buf_c cursorcachedata;
         ts::drawable_bitmap_c grabbuff;
         ts::irect grabrect;
@@ -278,7 +279,7 @@ class vsb_display_c : public vsb_c
 
 class vsb_display_ptr_c
 {
-    long sync = 0;
+    spinlock::long3264 sync = 0;
     vsb_display_c *ptr = nullptr;
 public:
 

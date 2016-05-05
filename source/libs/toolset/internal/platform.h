@@ -9,3 +9,7 @@
 #endif
 
 #endif
+
+#ifdef __linux__
+#include "../_nix/nix_inc.inl"
+#endif

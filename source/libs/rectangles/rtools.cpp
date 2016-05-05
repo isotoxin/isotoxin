@@ -128,7 +128,7 @@ ts::str_c text_remove_cstm(const ts::str_c &text_utf8)
 
 void text_remove_tags(ts::str_c &text)
 {
-    for (int i = text.find_pos('<'); i >= 0; i = text.find_pos(i, '<'))
+    for ( int i = text.find_pos('<'); i >= 0; i = text.find_pos(i, '<'))
     {
         int j = text.find_pos(i + 1, '>');
         if (j < 0)

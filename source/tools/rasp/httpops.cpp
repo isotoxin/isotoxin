@@ -9,7 +9,7 @@ struct context_s
 
     void podstava(str_c &s)
     {
-        for(int index=s.find_pos('{'); index >= 0; index = s.find_pos(index+1,'{'))
+        for( int index=s.find_pos('{'); index >= 0; index = s.find_pos(index+1,'{'))
         {
             int i2 = s.find_pos(index+1,'}');
             if (i2 < 0) break;

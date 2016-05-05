@@ -21,7 +21,7 @@ inline unsigned calc_hash(const void *obj, aint len/*, unsigned int seed*/)
 	//MurmurHash2
 	const unsigned m = 0x5bd1e995;//'m' and 'r' are mixing constants generated offline.
 	const int r = 24;             //They're not really 'magic', they just happen to work well.
-	unsigned h = /*seed ^*/ len;  //Initialize the hash to a 'random' value //-V103
+	unsigned h = /*seed ^*/ (unsigned)len;  //Initialize the hash to a 'random' value //-V103
 
 	const unsigned char *data = (unsigned char*)obj;//Mix 4 bytes at a time into the hash
 	unsigned rem = len & 3;
@@ -93,18 +93,17 @@ public:
 
 	struct litm_s
 	{
-		KEYTYPE key;
-		unsigned key_hash;
+        litm_s *next;
+        KEYTYPE key;
 		VALTYPE value;
-
-		litm_s *next;
-	};
+        unsigned key_hash;
+    };
 
 	class iterator
 	{
 		const hashmap_t *hashmap;
-		aint table_index;
 		litm_s *item = nullptr;
+        aint table_index;
 
 	public:
 		iterator(const hashmap_t *hashmap, aint start_index = -1) : hashmap(hashmap), table_index(start_index) {}

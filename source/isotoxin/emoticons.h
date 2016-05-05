@@ -36,6 +36,7 @@ class emoticons_c
 {
     struct match_point_s
     {
+        MOVABLE( true );
         const emoticon_s *e;
         ts::str_c s;
     };
@@ -60,7 +61,7 @@ class emoticons_c
         /*virtual*/ ts::bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &fr) override
         {
             FORBIDDEN();
-            __assume(0);
+            UNREACHABLE();
         }
         /*virtual*/ int nextframe() override { int r = picture_gif_c::nextframe(); adapt_bg(nullptr); return r; }
         void adapt_bg(const ts::bitmap_c *bmpx);
@@ -71,7 +72,7 @@ class emoticons_c
         emo_static_image_s(int unicode):emoticon_s(unicode) {}
         /*virtual*/ bool load(const ts::blob_c &body) override;
 
-        /*virtual*/ void draw(rectengine_root_c *e, const ts::ivec2 &pos) const { picture_c::draw(e,pos); }
+        /*virtual*/ void draw(rectengine_root_c *e, const ts::ivec2 &pos) const override { picture_c::draw(e,pos); }
 
         /*virtual*/ const ts::bitmap_c &curframe(ts::irect &fr) const override
         {
@@ -83,7 +84,7 @@ class emoticons_c
         /*virtual*/ ts::bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &fr) override
         {
             FORBIDDEN();
-            __assume(0);
+            UNREACHABLE();
         }
     };
 
@@ -95,7 +96,7 @@ class emoticons_c
         emo_tiled_animation_s( int unicode, int animperiod ) :emoticon_s( unicode ), animperiod( animperiod ) {}
         /*virtual*/ bool load( const ts::blob_c &body ) override;
 
-        /*virtual*/ void draw( rectengine_root_c *e, const ts::ivec2 &pos ) const { picture_animated_c::draw( e, pos ); }
+        /*virtual*/ void draw( rectengine_root_c *e, const ts::ivec2 &pos ) const override { picture_animated_c::draw( e, pos ); }
 
         /*virtual*/ const ts::bitmap_c &curframe( ts::irect &fr ) const override
         {

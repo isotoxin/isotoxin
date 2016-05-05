@@ -58,6 +58,7 @@ struct configurable_s
 
 struct active_protocol_data_s
 {
+    MOVABLE( true );
     ts::str_c tag;
     ts::str_c name; // utf8
     ts::str_c user_name; // utf8
@@ -114,7 +115,7 @@ class active_protocol_c : public ts::safe_object
     time_t last_backup_time = 0;
 
     fmt_converter_s cvt;
-    long lbsync = 0;
+    spinlock::long3264 lbsync = 0;
     ts::pointers_t<data_header_s,0> locked_bufs;
 
     static const ts::flags32_s::BITS F_DIP                  = SETBIT(0);
@@ -216,7 +217,7 @@ public:
     void file_resume(uint64 utag, uint64 offset);
     void file_control(uint64 utag, file_control_e fctl);
     void send_file(int cid, uint64 utag, const ts::wstr_c &filename, uint64 filesize);
-    bool file_portion(uint64 utag, uint64 offset, const void *data, int sz);
+    bool file_portion(uint64 utag, uint64 offset, const void *data, ts::aint sz);
 
     void avatar_data_request(int cid);
 

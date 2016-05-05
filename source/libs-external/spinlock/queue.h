@@ -82,7 +82,7 @@ public:
 	// insert items of class T in the back of the queue
 	// items of class T must implement a default and copy constructor
 	// Enqueue method
-	__forceinline bool enqueue(const T& t)
+	SLINLINE bool enqueue(const T& t)
 	{
 		// Allocate a new node from the free list
 		node_t* n = get_node(); 
@@ -129,12 +129,12 @@ public:
 		} // endloop
 	}
 
-	__forceinline bool push(const T& t){ return(enqueue(t)); };
+	SLINLINE bool push(const T& t){ return(enqueue(t)); };
 
 	// remove items of class T from the front of the queue
 	// items of class T must implement a default and copy constructor
 	// Dequeue method
-	__forceinline bool dequeue(T &t)
+	SLINLINE bool dequeue(T &t)
 	{
 		pointer_t head;
 		// Keep trying until Dequeue is done
@@ -190,7 +190,7 @@ public:
 
 		} // endloop		
 	}
-	__forceinline bool try_pop(T &t){ return(dequeue(t)); };
+	SLINLINE bool try_pop(T &t){ return(dequeue(t)); };
 }
 #ifdef _LINUX
 __attribute__((aligned(16)))

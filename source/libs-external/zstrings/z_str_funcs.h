@@ -12,7 +12,7 @@ namespace zstrings_internal
 
 	template<typename T, bool sgn = is_signed<T>::value > struct invert
 	{
-		void operator()(T &) {__assume(0);}
+		void operator()(T &) { ZSTRINGS_UNREACHABLE;}
 	};
 	template<typename T> struct invert<T, true>
 	{
@@ -85,10 +85,12 @@ namespace zstrings_internal
         return x;
     }
 
-    template <typename TCHARACTER> static ZSTRINGS_FORCEINLINE ZSTRINGS_UNSIGNED _calc_alloc_size(ZSTRINGS_UNSIGNED L)
+
+    template <typename TCHARACTER> static ZSTRINGS_FORCEINLINE ZSTRINGS_SIGNED _calc_alloc_size(ZSTRINGS_SIGNED L)
     {
         const ZSTRINGS_SIGNED C = sizeof(TCHARACTER);
-        ZSTRINGS_SIGNED N = (zstrings_internal::CeilPowerOfTwo(L*C + sizeof(void *)) + 15) & (~15);
+        const ZSTRINGS_SIGNED Psz = sizeof( void * );
+        ZSTRINGS_SIGNED N = (zstrings_internal::CeilPowerOfTwo(L*C + Psz) + 15) & (~15);
         return N / C;
     }
 
@@ -449,9 +451,11 @@ template <class TCHARACTER, typename I> __inline TCHARACTER * CHARz_make_str_uns
 }
 
 
+#if defined _MSC_VER
 #pragma warning ( push )
 #pragma warning (disable: 4146) // unary minus operator applied to unsigned type, result still unsigned
 #pragma warning (disable: 4127) // conditional expression is constant
+#endif
 /////////////////////////////////////////////////////////////////////////////////////////////////
 //convert string to integer
 template <class TCHARACTER, class NUMTYPE> inline bool CHARz_to_int(NUMTYPE &out,const TCHARACTER * const s, ZSTRINGS_SIGNED slen = -1)
@@ -490,7 +494,7 @@ parse_hex:
             ZSTRINGS_UNSIGNED m = c - 48;
             if (m>10) m = (c | 32) - 87;
             if (m>16) return false;
-            n16 = (n16 << 4) + m;
+            n16 = (NUMTYPE)((n16 << 4) + m);
         } while (slen != i && (c = *(s + i++)) != 0);
         out = (negative&&(zstrings_internal::is_signed<NUMTYPE>::value))?-n16:n16;
         return true;
@@ -633,16 +637,18 @@ template <typename TCHARACTER, typename NUMTYPE> inline NUMTYPE CHARz_to_int_10(
 		n10 = (n10<<3) + (n10<<1) + m;
 		c = *(s + (i++));
 	}
-	//__assume(0);
+    ZSTRINGS_UNREACHABLE;
 }
 
+#if defined _MSC_VER
 #pragma warning ( pop )
+#endif
 
 inline unsigned char_as_hex(ZSTRINGS_SIGNED c)
 {
-	if (unsigned(c - '0') <= 9) return c - '0'; //-V110
-	if (unsigned(c - 'A') < 6) return c + (10 - 'A'); //-V104 //-V110
-	if (ZSTRINGS_ASSERT(unsigned(c - 'a') < 6)) return c + (10 - 'a'); //-V104 //-V110
+	if (unsigned(c - '0') <= 9) return (unsigned)(c - '0'); //-V110
+	if (unsigned(c - 'A') < 6) return (unsigned)(c + (10 - 'A')); //-V104 //-V110
+	if (ZSTRINGS_ASSERT(unsigned(c - 'a') < 6)) return (unsigned)(c + (10 - 'a')); //-V104 //-V110
 	return 0;
 }
 template <typename TCHARACTER> inline void hex_to_data(void *idata, const sptr<TCHARACTER> &hex)

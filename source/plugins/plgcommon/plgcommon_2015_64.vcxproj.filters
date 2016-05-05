@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="plgcommon.h" />
+    <ClInclude Include="strings.h" />
+    <ClInclude Include="plghost_interface.h" />
+    <ClInclude Include="proto_interface.h" />
+    <ClInclude Include="..\..\libs-external\spinlock\list.h">
+      <Filter>spinlock</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libs-external\spinlock\queue.h">
+      <Filter>spinlock</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\libs-external\spinlock\spinlock.h">
+      <Filter>spinlock</Filter>
+    </ClInclude>
+    <ClInclude Include="common_types.h" />
+    <ClInclude Include="md5.h" />
+    <ClInclude Include="..\..\libs-external\boost\boost_some.h" />
+    <ClInclude Include="excpn.h">
+      <Filter>crashhandler</Filter>
+    </ClInclude>
+    <ClInclude Include="stkwlk.h">
+      <Filter>crashhandler</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="stdafx.cpp" />
+    <ClCompile Include="strings.cpp" />
+    <ClCompile Include="plgcommon.cpp" />
+    <ClCompile Include="md5.cpp" />
+    <ClCompile Include="excpn.cpp">
+      <Filter>crashhandler</Filter>
+    </ClCompile>
+    <ClCompile Include="stkwlk.cpp">
+      <Filter>crashhandler</Filter>
+    </ClCompile>
+    <ClCompile Include="imgcvt.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="spinlock">
+      <UniqueIdentifier>{0eddc7cd-7e03-4339-b78c-f6e46607872f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="crashhandler">
+      <UniqueIdentifier>{09c7c1d0-d3ac-4858-ac37-812cb518f65d}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

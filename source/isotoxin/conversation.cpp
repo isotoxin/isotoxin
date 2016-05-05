@@ -3110,7 +3110,7 @@ void gui_message_item_c::init_request( const ts::str_c &pre_utf8 )
     textrect.set_text_only(t,false);
 }
 
-void gui_message_item_c::init_load( int n_load )
+void gui_message_item_c::init_load( ts::aint n_load )
 {
     ASSERT(MTA_SPECIAL == mt);
     subtype = ST_JUST_TEXT;
@@ -3130,7 +3130,7 @@ void gui_message_item_c::init_load( int n_load )
     }
 
     b_load->set_handler(DELEGATE(author.get(), b_load), as_param(n_load));
-    b_load->set_text(TTT("Load $ message(s)",124) / ts::wstr_c().set_as_int(n_load));
+    b_load->set_text(TTT("Load $ message(s)",124) / ts::wstr_c().set_as_num(n_load));
     MODIFY(*b_load).visible(true);
 }
 
@@ -4091,7 +4091,7 @@ void gui_message_item_c::update_text(int for_width)
 
             if (!ftb) ftb = ts::ptr_cast<addition_file_data_s *>(addition.get());
             if (ftb)
-                for (int i =  ftb->btns.size() - 1; i >= 0; --i)
+                for ( ts::aint i =  ftb->btns.size() - 1; i >= 0; --i)
                 {
                     addition_file_data_s::btn_s &b = ftb->btns.get(i);
                     if (!b.used)
@@ -4396,7 +4396,7 @@ static bool same_author( rectengine_c *prev, contact_c *author, const ts::str_c 
     return false;
 }
 
-bool gui_messagelist_c::insert_date_separator( int index, tm &prev_post_time, time_t next_post_time )
+bool gui_messagelist_c::insert_date_separator( ts::aint index, tm &prev_post_time, time_t next_post_time )
 {
     tm tmtm;
     _localtime64_s(&tmtm, &next_post_time);
@@ -4414,9 +4414,9 @@ bool gui_messagelist_c::insert_date_separator( int index, tm &prev_post_time, ti
 
 gui_message_item_c &gui_messagelist_c::insert_message_item(message_type_app_e mt, contact_c *author, const ts::str_c &skin, time_t post_time)
 {
-    int index = 0;
+    ts::aint index = 0;
     rectengine_c *e = nullptr;
-    int cnt = getengine().children_count();
+    ts::aint cnt = getengine().children_count();
     while( index < cnt && nullptr == (e = getengine().get_child(index)))
         ++index;
 
@@ -4484,7 +4484,7 @@ gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, c
         ts::safe_ptr<gui_message_item_c> smi( &mi );
         if (free_index)
         {
-            int i = typing.find( nullptr );
+            ts::aint i = typing.find( nullptr );
             typing.set(i, smi);
         } else
             typing.add(smi);
@@ -4694,7 +4694,7 @@ bool gui_messagelist_c::tobottom(RID, GUIPARAM)
 }
 
 
-void gui_messagelist_c::scroll(int shift)
+void gui_messagelist_c::scroll( ts::aint shift)
 {
     target_offset = shift;
     prevdelta = 1 + ts::lround(0.3f * (target_offset - sbshift()));
@@ -4730,7 +4730,7 @@ void gui_messagelist_c::find_prev_next(uint64 *prevutag, uint64 *nextutag)
     {
         if ( msg->found_item() )
             return msg->get_prev_found();
-        for(int index = getengine().get_child_index(&msg->getengine())-1;index >= 0;--index)
+        for( ts::aint index = getengine().get_child_index(&msg->getengine())-1;index >= 0;--index)
         {
             if (rectengine_c *e = getengine().get_child(index))
             {
@@ -4745,8 +4745,8 @@ void gui_messagelist_c::find_prev_next(uint64 *prevutag, uint64 *nextutag)
     {
         if (msg->found_item())
             return msg->get_next_found();
-        int cnt = getengine().children_count();
-        for (int index = getengine().get_child_index(&msg->getengine()) + 1; index < cnt; ++index)
+        ts::aint cnt = getengine().children_count();
+        for ( ts::aint index = getengine().get_child_index(&msg->getengine()) + 1; index < cnt; ++index)
         {
             if (rectengine_c *e = getengine().get_child(index))
             {
@@ -4950,8 +4950,8 @@ void gui_messagelist_c::repos_empty_mode_stuff()
     int totalh = 0;
 
     ts::tmp_buf_c vbits;
-    int cnt = getengine().children_count();
-    for (int i=0; i<cnt; ++i) vbits.set_bit(i, true);
+    ts::aint cnt = getengine().children_count();
+    for ( ts::aint i=0; i<cnt; ++i) vbits.set_bit(i, true);
 
     for(;;)
     {
@@ -5230,7 +5230,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
 
         int index = 1;
         rectengine_c *e = nullptr;
-        int cnt = getengine().children_count();
+        ts::aint cnt = getengine().children_count();
 
 #ifdef _DEBUG
         ASSERT(cnt > 0);
@@ -5244,7 +5244,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
             ++index;
 
         int load_n = calc_load_history(historian->get_history(0).recv_time);
-        int n = historian->history_size();
+        ts::aint n = historian->history_size();
         if(ASSERT(e))
         {
             gui_message_item_c &mi = *ts::ptr_cast<gui_message_item_c *>(&e->getrect());
@@ -5303,9 +5303,9 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
     if (historian->history_size()) before = historian->get_history(0).recv_time;
 
     int min_hist_size = prf().min_history_load();
-    int cur_hist_size = p.contact->history_size();
+    ts::aint cur_hist_size = p.contact->history_size();
 
-    int needload = min_hist_size - cur_hist_size;
+    ts::aint needload = min_hist_size - cur_hist_size;
     time_t at_least = historian->get_readtime();
     const found_item_s *found_item = nullptr;
     if (historian->is_full_search_result() && g_app->found_items)
@@ -5345,7 +5345,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
 }
 
 
-gui_messagelist_c::filler_s::filler_s(gui_messagelist_c *owner, const found_item_s *found_item, uint64 scrollto_, int options, int loadn):
+gui_messagelist_c::filler_s::filler_s(gui_messagelist_c *owner, const found_item_s *found_item, uint64 scrollto_, int options, ts::aint loadn):
     owner(owner), found_item(found_item), scrollto(scrollto_), options(options), load_n(loadn)
 {
     if ( found_item && found_item->utags.count() )
@@ -5357,7 +5357,7 @@ gui_messagelist_c::filler_s::filler_s(gui_messagelist_c *owner, const found_item
         die();
         return;
     }
-    int cnt = h->history_size();
+    ts::aint cnt = h->history_size();
     if (scrollto)
     {
         for (int i = 0; i < cnt; ++i)
@@ -5425,7 +5425,7 @@ bool gui_messagelist_c::filler_s::tick(RID r, GUIPARAM p)
         return true; // found_item changed. stop filling
     }
 
-    auto additem = [&]( int pindex, bool down )
+    auto additem = [&]( ts::aint pindex, bool down )
     {
         const post_s &p = h->get_history(pindex);
 
@@ -5434,7 +5434,7 @@ bool gui_messagelist_c::filler_s::tick(RID r, GUIPARAM p)
         bool fitm = false;
         if (found_item)
         {
-            int index = found_item->utags.find_index(p.utag);
+            ts::aint index = found_item->utags.find_index(p.utag);
             if (index >= 0)
             {
                 fitm = true;
@@ -5460,11 +5460,11 @@ bool gui_messagelist_c::filler_s::tick(RID r, GUIPARAM p)
     };
 
     // fill down
-    int filldown_cnt = numpertick / 2 + ( ts::tmax(0, numpertick/2 - (fillindex_up + 1)) );
+    ts::aint filldown_cnt = numpertick / 2 + ( ts::tmax(0, numpertick/2 - (fillindex_up + 1)) );
     for( ; filldown_cnt > 0 && fillindex_down < fillindex_down_end; --filldown_cnt, ++fillindex_down )
         additem(fillindex_down, true);
 
-    int fillup_cnt = numpertick / 2 + filldown_cnt;
+    ts::aint fillup_cnt = numpertick / 2 + filldown_cnt;
     for (; fillup_cnt > 0 && fillindex_up >= 0; --fillup_cnt, --fillindex_up)
         additem(fillindex_up, false);
 
@@ -5685,7 +5685,7 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
 }
 
 
-/*virtual*/ void gui_message_editor_c::new_text(int caret_char_pos)
+/*virtual*/ void gui_message_editor_c::new_text( int caret_char_pos)
 {
     spellchecker_s::check_text(get_text_11(' '), caret_char_pos);
 }
@@ -5705,7 +5705,7 @@ void gui_message_editor_c::suggestions_apply(const ts::str_c &prm)
     text_replace(i, s, t);
 }
 
-void gui_message_editor_c::suggestions(menu_c &m, int ci)
+void gui_message_editor_c::suggestions(menu_c &m, ts::aint ci)
 {
     ts::wstr_c ctext, torig;
     for (chk_word_s &w : words)
@@ -6245,7 +6245,7 @@ void spellchecker_s::check_text(const ts::wsptr &t, int caret)
     }
 
     ts::astrings_c checkwords;
-    for (int i = words.size() - 1; i >= 0; --i)
+    for ( ts::aint i = words.size() - 1; i >= 0; --i)
     {
         chk_word_s &w = words.get(i);
         if (!w.present)

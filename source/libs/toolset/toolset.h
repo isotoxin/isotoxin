@@ -14,6 +14,10 @@
 
 #pragma pack (push, 1)
 
+//-V::730 // disable 730 check globally - too unusable
+//-V::UPAR:614
+
+#if defined(_MSC_VER)
 #pragma warning (disable:4100) //  unreferenced formal parameter
 //#pragma warning (disable:4668) // 'MACRONAME' is not defined as a preprocessor macro, replacing with '0' for '#if/#elif'
 #pragma warning (disable:4640) // 'T' : construction of local static object is not thread-safe
@@ -21,34 +25,65 @@
 #pragma warning (disable:4127) // condition expression is constant
 #pragma warning (disable:4201) // nameless struct/union
 #pragma warning (disable:4091) // 'typedef ' : ignored on left of '' when no variable is declared
-//-V::730 // disable 730 check globally - too unusable
 
 #pragma warning (push)
 #pragma warning (disable:4820)
+#endif
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic ignored "-Wreorder"
+#pragma GCC diagnostic ignored "-Wswitch"
+#endif
+
 #include <new>
 #include <type_traits>
-#include <xutility>
 #include <memory>
+#include <float.h>
 #include "fastdelegate/FastDelegate.h"
+#if defined _MSC_VER
 #pragma warning (pop)
+#endif
 
 #define DELEGATE(a,method) fastdelegate::MakeDelegate((a), &ts::clean_type<decltype(a)>::type::method)
 
 #ifndef TS_SKIP_FREETYPE
+#pragma pack(push,1)
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#pragma pack(pop)
 #endif
+
+#if defined _MSC_VER
+#define ALIGN(n) __declspec( align( n ) )
+#define THREADLOCAL __declspec(thread)
+#define TSCALL __cdecl
+#define INLINE __forceinline
+#define UNREACHABLE() __assume(0)
 
 #if defined _FINAL || defined _DEBUG_OPTIMIZED
 #ifndef DLMALLOC_USED
 #define DLMALLOC_USED 1
 #endif
-#else
-#undef DLMALLOC_USED
 #endif
 
-#define TSCALL __cdecl
-#define INLINE __forceinline
+#elif defined __GNUC__
+#define ALIGN(n) __attribute__((aligned(n)))
+#define THREADLOCAL __thread
+#define UNREACHABLE() __builtin_unreachable()
+#define TSCALL // __attribute__((__cdecl__))
+#define INLINE inline //__attribute__((always_inline))
+#undef DLMALLOC_USED
+
+#endif
+
+#if defined (_M_AMD64) || defined (_M_X64) || defined (WIN64) || defined(__LP64__)
+#define MODE64
+#define ARCHBITS 64
+#else
+#define ARCHBITS 32
+#endif
+
+#define UPAR(p) { (p) = (p); }
 
 #if DLMALLOC_USED
 extern "C"
@@ -82,6 +117,16 @@ extern "C"
 
 #include "memspy/memspy.h"
 
+namespace ts
+{
+    template<class _Ty> struct clean_type { typedef _Ty type; };
+    template<class _Ty> struct clean_type < _Ty& > { /*remove reference*/ typedef _Ty type; };
+    template<class _Ty> struct clean_type < const _Ty& > { /*remove reference*/ typedef _Ty type; };
+    template<class _Ty> struct clean_type < _Ty&& > { /* remove rvalue reference */ typedef _Ty type; };
+    template<class _Ty> struct clean_type < _Ty* > { /*remove pointer*/ typedef _Ty type; };
+    template<class _Ty> struct clean_type < const _Ty* > { /*remove pointer*/ typedef _Ty type; };
+}
+
 // I know, know... TSNEW is ugly. May be later I'll use global new and delete
 
 template<typename T> struct TSNEWDEL
@@ -98,9 +143,9 @@ template<typename T> struct TSNEWDEL
 #define DECLARE_DYNAMIC_BEGIN( cn ) friend struct TSNEWDEL<cn>; private:
 #define DECLARE_DYNAMIC_END( inheritance ) inheritance:
 
-#define TSPLACENEW(p, ...) TSNEWDEL< std::remove_reference<decltype(*(p))>::type >::__tsplacenew((p), __VA_ARGS__)
+#define TSPLACENEW(p, ...) TSNEWDEL< typename ts::clean_type<decltype(p) >::type >::__tsplacenew((p), ##__VA_ARGS__)
 #define TSNEW(T, ...) TSNEWDEL<T>::__tsnew(__VA_ARGS__)
-#define TSDEL(p) TSNEWDEL<std::remove_reference<decltype(*(p))>::type>::__tsdel(p)
+#define TSDEL(p) TSNEWDEL<typename ts::clean_type<decltype(p)>::type>::__tsdel(p)
 #define TSDELC(p) do { TSDEL(p); p = nullptr; } while ((1, false))
 
 #define PLEASE_USE_TSDEL =delete
@@ -122,17 +167,35 @@ template<typename T> struct TSNEWDEL
 #define __DMSG__
 #endif
 
+#define ARRAY_SIZE( a ) ( sizeof(a)/sizeof(a[0]) )
+#define LENGTH(a) (sizeof(a)/sizeof(a[0]))
+#define ARRAY_WRAPPER( a ) ts::array_wrapper_c<const std::remove_reference<decltype(a[0])>::type>(a, ARRAY_SIZE(a))
+
+
+#if defined _MSC_VER
+#define NOWARNING(n,...) __pragma(warning(push)) __pragma(warning(disable:n)) __VA_ARGS__ __pragma(warning(pop))
 #define DEBUG_BREAK() __debugbreak()
 #define UNFINISHED(...) __pragma(message(__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__))
 #define STUB(...) __pragma(message(__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__)); WARNING( __LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__ )
 #define STOPSTUB(...) __pragma(message(__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__)); ERROR( __LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__ )
 #define NOP() ASSERT((1,true))
 
-#define ARRAY_SIZE( a ) ( sizeof(a)/sizeof(a[0]) )
-#define LENGTH(a) (sizeof(a)/sizeof(a[0]))
-#define ARRAY_WRAPPER( a ) ts::array_wrapper_c<const std::remove_reference<decltype(a[0])>::type>(a, ARRAY_SIZE(a))
+#define UNSAFE_BLOCK_BEGIN __try {
+#define UNSAFE_BLOCK_END } __except ( EXCEPTION_EXECUTE_HANDLER ) {}
 
-#define NOWARNING(n,...) __pragma(warning(push)) __pragma(warning(disable:n)) __VA_ARGS__ __pragma(warning(pop))
+#elif defined __GNUC__
+#define NOWARNING(n,...) __VA_ARGS__
+#define DEBUG_BREAK() __builtin_trap()
+#define UNFINISHED(...) _Pragma message (__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__)
+#define STUB(...) _Pragma message (__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__); WARNING( __LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__ )
+#define STOPSTUB(...) _Pragma message (__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__); ERROR( __LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__ )
+#define NOP() ASSERT((1,true))
+
+#define UNSAFE_BLOCK_BEGIN try {
+#define UNSAFE_BLOCK_END } catch ( ... ) {}
+
+#endif
+
 
 #ifndef _FINAL
 #define DEBUGCODE(...) __VA_ARGS__
@@ -179,20 +242,11 @@ template<typename NUM> struct minimum
     static const NUM value = is_signed<NUM>::value ? (-maximum<NUM>::value-1) : 0;
 };
 
-#pragma warning (push)
-#pragma warning (disable:4820)
-
-#include <float.h>
-
-#pragma warning (pop)
-
 #define SEC_PER_MIN     60U
 #define SEC_PER_HOUR    (SEC_PER_MIN * 60U)
 #define SEC_PER_DAY     (SEC_PER_HOUR * 24U)
 #define SEC_PER_MONTH   (SEC_PER_DAY * 31U)
 #define SEC_PER_YEAR    (SEC_PER_DAY * 365U)
-
-#define IS_UNICODE_OS() true //(GetVersion()<0x80000000)
 
 /// Swap two varibales
 template<class T> INLINE void SWAP(T& first, T& second) 
@@ -267,7 +321,7 @@ template<class T> INLINE void SWAP(T& first, T& second)
 #define __STR2W__(x) __STR3W__( #x )
 #define __STR1W__(x) __STR2W__(x)
 
-#define __LOC__ __FILE__ "("__STR1__(__LINE__)") : "
+#define __LOC__ __FILE__ "(" __STR1__(__LINE__)") : "
 #define LOCATION_DEFINED
 #endif
 
@@ -292,7 +346,11 @@ typedef unsigned long long	uint64;
 
 namespace ts // some ts types
 {
+    #if defined _MSC_VER
     typedef wchar_t wchar;
+    #elif defined __GNUC__
+    typedef char16_t wchar;
+    #endif
     typedef unsigned long dword;
     typedef unsigned long uint32;
     typedef unsigned char uint8;
@@ -307,6 +365,56 @@ namespace ts // some ts types
 
     typedef size_t auint; // auto uint (32/64 bit)
     typedef ptrdiff_t aint; // auto int (32/64 bit)
+
+    class smart_int
+    {
+        int value;
+    public:
+        smart_int( int v = 0 ):value(v) {}
+        smart_int & operator=( int v ) { value = v; return *this; }
+        operator int() const { return value; }
+
+        smart_int& operator++()
+        {
+            ++value;
+            return *this;
+        }
+
+        smart_int operator++( int )
+        {
+            smart_int tmp = *this;
+            ++value;
+            return tmp;
+        }
+        smart_int& operator--()
+        {
+            --value;
+            return *this;
+        }
+
+        smart_int operator--( int )
+        {
+            smart_int tmp = *this;
+            --value;
+            return tmp;
+        }
+
+        smart_int& operator +=( int v )
+        {
+            value += v;
+            return *this;
+        }
+        smart_int& operator -=( int v )
+        {
+            value -= v;
+            return *this;
+        }
+
+#ifdef MODE64
+        smart_int( aint v ) :value( (int)v ) {}
+        smart_int & operator=( aint v ) { value = (int)v; return *this; }
+#endif // MODE64
+    };
 
     struct TS_DEFAULT_ALLOCATOR
     {
@@ -332,20 +440,89 @@ namespace ts // some ts types
 namespace ts
 {
 
+#if defined _MSC_VER
 #pragma warning (push)
 #pragma warning (disable:4311) //: 'type cast' : pointer truncation from 'const void *' to 'DWORD'
 #pragma warning (disable:4267) //: 'argument' : conversion from 'size_t' to 'DWORD', possible loss of data
 #pragma warning (disable:4312) //: 'type cast' : conversion from 'DWORD' to 'void *' of greater size
+#endif
 template <typename T> INLINE T p_cast( const void * p ) {return (T)p;}
 template <typename P, typename T> INLINE P p_cast( T p ) {return (P)p;}
 template <typename T> INLINE T sz_cast( size_t p ) {return (T)p;}
+#if defined _MSC_VER
 #pragma warning (pop)
+#endif
+
+namespace internals
+{
+    template<typename T, bool ispod> struct is_movable__
+    {
+        static const bool xvalue = true;
+    };
+    template<typename T> struct is_movable__ < T, false >
+    {
+        static const bool xvalue = T::__movable;
+    };
+
+    template <typename T> struct movable_predefined
+    {
+        static const bool value = std::is_pod<T>::value || std::is_pointer<T>::value;
+    };
+    template <typename T, typename D> struct movable_predefined< std::unique_ptr< T, D > >
+    {
+        static const bool value = true;
+    };
+    template <typename T, typename D> struct movable_predefined< str_t< T, D > >
+    {
+        static const bool value = true;
+    };
+
+    template <typename T> struct movable_predefined< fastdelegate::FastDelegate< T > >
+    {
+        static const bool value = true;
+    };
+
+    template<typename T1, typename T2, bool t1_bigger_t2> struct biggest__;
+    template<typename T1, typename T2> struct biggest__<T1, T2, true>
+    {
+        typedef T1 type;
+    };
+    template<typename T1, typename T2> struct biggest__<T1, T2, false>
+    {
+        typedef T2 type;
+    };
+
+    INLINE void set( int &a, int b ) { a = b; }
+    INLINE void set( int16 &a, int16 b ) { a = b; }
+    INLINE void set( uint16 &a, uint16 b ) { a = b; }
+    INLINE void set( float &a, float b ) { a = b; }
+
+    INLINE void set( int16 &a, int b ) { a = (int16)b; }
+#ifdef MODE64
+    INLINE void set( int &a, aint b ) { a = (int)b; }
+#endif // MODE64
+}
+
+template<typename T> struct is_movable
+{
+    static const bool value = internals::is_movable__<T, internals::movable_predefined<T>::value >::xvalue;
+};
+
+#define MOVABLE(b) template<typename TTT, bool ZZZ> friend struct ts::internals::is_movable__; static const bool __movable = (b)
+
+template<typename T1, typename T2> struct biggest
+{
+    typedef typename internals::biggest__<T1, T2, sizeof( T1 ) >= sizeof( T2 )>::type type;
+};
+
 
 template<class _Ty1, class _Ty2> struct pair_s
 {	// store a pair of values
     typedef pair_s<_Ty1, _Ty2> me_type;
     typedef _Ty1 first_type;
     typedef _Ty2 second_type;
+
+    MOVABLE( is_movable<_Ty1>::value && is_movable<_Ty2>::value );
 
     pair_s() : first(_Ty1()), second(_Ty2())
     {	// construct from defaults
@@ -383,8 +560,9 @@ namespace staticnumgen
 #define NUMGEN_PREV( ngn ) (numgen_##ngn##_s::N - __COUNTER__)
 
 INLINE uint8 as_byte(int aa) {return uint8(aa & 0xFF);}
-INLINE uint8 as_byte(uint aa) {return uint8(aa & 0xFF);}
-INLINE uint8 as_byte(dword aa) {return uint8(aa & 0xFF);}
+INLINE uint8 as_byte( uint aa ) { return uint8( aa & 0xFF ); }
+INLINE uint8 as_byte( uint32 aa) {return uint8(aa & 0xFF);}
+INLINE uint8 as_byte( uint64 aa ) { return uint8( aa & 0xFF ); }
 
 INLINE word as_word(int aa) {return word(aa & 0xFFFF);}
 INLINE word as_word(uint aa) {return word(aa & 0xFFFF);}
@@ -428,30 +606,6 @@ protected:
     }
 };
 
-template <int X, int Y, typename ACTION> class hard_loop
-{
-    template <int C> void dodo( ACTION &a )
-    {
-
-        bool cont = a( Y - C - 1 );
-        if (cont)
-        {
-            dodo< C - 1 >(a);
-        }
-    }
-    template <> void dodo<0>( ACTION &a )
-    {
-        a( Y - 1 );
-    }
-
-
-public:
-    hard_loop( ACTION &a )
-    {
-        dodo< Y - X - 1 >( a );
-    }
-};
-
 /*
 // no need in C++11
 
@@ -470,46 +624,10 @@ public:
 };
 */
 
-class disable_fp_exceptions_c
-{
-    unsigned int state_store;
-public:
-    disable_fp_exceptions_c()
-    {
-        _controlfp_s(&state_store,0,0);
-		unsigned int unused;
-        _controlfp_s( &unused, state_store | (EM_OVERFLOW | EM_ZERODIVIDE | EM_DENORMAL |  EM_INVALID),  MCW_EM ); 
-    }
-    ~disable_fp_exceptions_c()
-    {
-        _clearfp();
-		unsigned int unused;
-        _controlfp_s(&unused, state_store, MCW_EM);
-    }
-};
-
-class enable_fp_exceptions_c
-{
-    unsigned int state_store;
-public:
-    enable_fp_exceptions_c()
-    {
-        _clearfp();
-        _controlfp_s(&state_store,0,0);
-		unsigned int unused;
-        _controlfp_s( &unused, state_store & ~(EM_OVERFLOW | EM_ZERODIVIDE | EM_DENORMAL |  EM_INVALID),  MCW_EM ); 
-    }
-    ~enable_fp_exceptions_c()
-    {
-		unsigned int unused;
-        _controlfp_s(&unused, state_store, MCW_EM);
-    }
-};
-
 template<class T, class... _Valty> inline void renew(T &obj, _Valty&&... _Val)
 {
     obj.~T();
-    TSPLACENEW(&obj,std::forward<_Valty>(_Val)...);
+    TSNEWDEL<T>::__tsplacenew(&obj, std::forward<_Valty>(_Val)...);
 }
 
 template<typename T> class make_pod // This hack is usable for hide constructors or copy operators of some pod type. Never use it for non true pod types...or... sure, you know what you do
@@ -533,7 +651,7 @@ template<typename T> class only_destructor : public make_pod<T> // very special 
 public:
     ~only_destructor()
     {
-        get().~T();
+        make_pod<T>::get().~T();
     }
 };
 
@@ -685,7 +803,7 @@ struct tmpbuf_s
 
 class tmpalloc_c
 {
-    __declspec(thread) static tmpalloc_c *core;
+    static THREADLOCAL tmpalloc_c *core;
 
     tmpbuf_s bufs[MAX_TEMP_ARRAYS];
     uint32 threadid;
@@ -828,29 +946,6 @@ template<> INLINE str_c &make_dummy<str_c>(bool quiet) { static str_c t; DUMMY_U
 template<> INLINE wstr_c &make_dummy<wstr_c>(bool quiet) { static wstr_c t; DUMMY_USED_WARNING(quiet); return t; }
 
 
-template<typename T, bool ispod> struct is_movable__;
-template<typename T> struct is_movable__ < T, true >
-{
-    static const bool xvalue = true;
-};
-template<typename T> struct is_movable__ < T, false >
-{
-    __if_exists( T::__movable ) {
-        static const bool xvalue = T::__movable;
-    }
-    __if_not_exists(T::__movable) {
-        static const bool xvalue = true;
-    }
-};
-
-template<typename T> struct is_movable : public is_movable__<T, (std::is_pod<T>::value || std::is_pointer<T>::value)>
-{
-    static const bool value = xvalue;
-};
-
-#define MOVABLE(b) template<typename TTT, bool ZZZ> friend struct is_movable__; static const bool __movable = b
-
-
 template<typename Tout, typename Tin> Tout &ref_cast(Tin & t)
 {
     TS_STATIC_CHECK(sizeof(Tout) <= sizeof(Tin), "ref cast fail");
@@ -887,13 +982,6 @@ template<typename PTRT, typename TF> INLINE PTRT ptr_cast(TF *p) { if (!p) retur
 template<typename PTRT, typename TF> INLINE PTRT ptr_cast(TF *p) { return static_cast<PTRT>(p); }
 
 #endif
-
-template<class _Ty> struct clean_type { typedef _Ty type; };
-template<class _Ty> struct clean_type < _Ty& > { /*remove reference*/ typedef _Ty type; };
-template<class _Ty> struct clean_type < const _Ty& > { /*remove reference*/ typedef _Ty type; };
-template<class _Ty> struct clean_type < _Ty&& > { /* remove rvalue reference */ typedef _Ty type; };
-template<class _Ty> struct clean_type < _Ty* > { /*remove pointer*/ typedef _Ty type; };
-template<class _Ty> struct clean_type < const _Ty* > { /*remove pointer*/ typedef _Ty type; };
 
 template <class T> class array_wrapper_c //array wrapper, which can be initialized by any of the array types
 {
@@ -979,12 +1067,12 @@ template <typename T> struct dummy
 
 #include "tsflags.h"
 #include "tscrc.h"
+#include "tsmath.h"
 #include "tsbuf.h"
 #include "tshash_md5.h"
 #include "tspointers.h"
 #include "tsarray.h"
 #include "tsrnd.h"
-#include "tsmath.h"
 #include "tsstrar.h"
 #include "tshashmap.h"
 #include "tsbitmap.h"
@@ -1097,166 +1185,6 @@ struct lnk_s
 	};
 #define UNIQUE_PTR(ty) std::unique_ptr<ty, ts::ts_delete<ty> >
 
-
-    INLINE uint8 RED(TSCOLOR c) { return as_byte(c >> 16); }
-    INLINE uint8 GREEN(TSCOLOR c) { return as_byte(c >> 8); }
-    INLINE uint8 BLUE(TSCOLOR c) { return as_byte(c); }
-    INLINE uint8 ALPHA(TSCOLOR c) { return as_byte(c >> 24); }
-
-    INLINE uint16 REDx256(TSCOLOR c) { return 0xff00 & (c >> 8); }
-    INLINE uint16 GREENx256(TSCOLOR c) { return 0xff00 & (c); }
-    INLINE uint16 BLUEx256(TSCOLOR c) { return 0xff00 & (c<<8); }
-    INLINE uint16 ALPHAx256(TSCOLOR c) { return 0xff00 & (c>>16); }
-
-	template <typename CCC> INLINE TSCOLOR ARGB(CCC r, CCC g, CCC b, CCC a = 255)
-	{
-		return CLAMP<uint8, CCC>(b) | (CLAMP<uint8, CCC>(g) << 8) | (CLAMP<uint8, CCC>(r) << 16) | (CLAMP<uint8, CCC>(a) << 24);
-	}
-
-    INLINE auint GRAYSCALE_C(TSCOLOR c)
-    {
-        return ts::lround(float(BLUE(c)) * 0.114f + float(GREEN(c)) * 0.587f + float(RED(c)) * 0.299);
-    }
-
-    INLINE TSCOLOR GRAYSCALE(TSCOLOR c)
-    {
-        auint oi = GRAYSCALE_C(c);
-        return ARGB<auint>(oi, oi, oi, ALPHA(c));
-    }
-
-    INLINE bool PREMULTIPLIED(TSCOLOR c)
-    {
-        uint8 a = ALPHA(c);
-        return RED(c) <= a && GREEN(c) <= a && BLUE(c) <= a;
-    }
-
-    INLINE TSCOLOR PREMULTIPLY(TSCOLOR c, float a)
-    {
-        auint oiB = ts::lround(float(BLUE(c)) * a);
-        auint oiG = ts::lround(float(GREEN(c)) * a);
-        auint oiR = ts::lround(float(RED(c)) * a);
-
-        return ARGB<auint>(oiR, oiG, oiB, ALPHA(c));
-    }
-
-    INLINE TSCOLOR PREMULTIPLY(TSCOLOR c)
-    {
-        extern uint8 __declspec(align(256)) multbl[256][256];
-
-        uint a = ALPHA(c);
-        return multbl[a][c & 0xff] |
-            ((uint)multbl[a][(c >> 8) & 0xff] << 8) |
-            ((uint)multbl[a][(c >> 16) & 0xff] << 16) |
-            (c & 0xff000000);
-
-    }
-
-    INLINE TSCOLOR PREMULTIPLY(TSCOLOR c, uint8 aa, double &not_a) // premultiply with addition alpha and return not-alpha
-    {
-        double a = ((double)(ALPHA(c) * aa) * (1.0 / 65025.0));
-        not_a = 1.0 - a;
-
-        auint oiB = ts::lround(float(BLUE(c)) * a);
-        auint oiG = ts::lround(float(GREEN(c)) * a);
-        auint oiR = ts::lround(float(RED(c)) * a);
-        auint oiA = ts::lround(a * 255.0);
-
-        return ARGB<auint>(oiR, oiG, oiB, oiA);
-    }
-
-    INLINE TSCOLOR UNMULTIPLY( TSCOLOR c )
-    {
-        extern uint8 __declspec( align( 256 ) ) divtbl[ 256 ][ 256 ];
-
-        uint a = ALPHA( c );
-        return divtbl[ a ][ c & 0xff ] |
-            ( (uint)divtbl[ a ][ ( c >> 8 ) & 0xff ] << 8 ) |
-            ( (uint)divtbl[ a ][ ( c >> 16 ) & 0xff ] << 16 ) |
-            ( c & 0xff000000 );
-
-    }
-
-    INLINE TSCOLOR MULTIPLY(TSCOLOR c1, TSCOLOR c2)
-    {
-        extern uint8 __declspec(align(256)) multbl[256][256];
-        
-        return multbl[c1 & 0xff][c2 & 0xff] |
-               ((uint)multbl[(c1 >> 8) & 0xff][(c2 >> 8) & 0xff] << 8) |
-               ((uint)multbl[(c1 >> 16) & 0xff][(c2 >> 16) & 0xff] << 16) |
-               ((uint)multbl[(c1 >> 24) & 0xff][(c2 >> 24) & 0xff] << 24);
-
-    }
-
-    INLINE TSCOLOR ALPHABLEND( TSCOLOR target, TSCOLOR source, int constant_alpha = 255 ) // photoshop like Normal mode color blending
-    {
-        uint8 oA = ALPHA(target);
-
-        if (oA == 0)
-        {
-            auint a = ts::lround(double(constant_alpha * ALPHA(source)) * (1.0 / 255.0));
-            return (0x00FFFFFF & source) | (CLAMP<uint8>(a) << 24);
-        }
-
-        uint8 oR = RED(target);
-        uint8 oG = GREEN(target);
-        uint8 oB = BLUE(target);
-
-        uint8 R = RED(source);
-        uint8 G = GREEN(source);
-        uint8 B = BLUE(source);
-
-
-        float A = float(double(constant_alpha * ALPHA(source)) * (1.0 / (255.0 * 255.0)));
-        float nA = 1.0f - A;
-
-        auint oiA = ts::lround(255.0f * A + float(oA) * nA);
-
-        float k = 0;
-        if (oiA) k = 1.0f - (A * 255.0f / (float)oiA);
-
-        auint oiB = ts::lround(float(B) * A + float(oB) * k);
-        auint oiG = ts::lround(float(G) * A + float(oG) * k);
-        auint oiR = ts::lround(float(R) * A + float(oR) * k);
-
-        return ARGB<auint>(oiR, oiG, oiB, oiA);
-    }
-
-    INLINE TSCOLOR ALPHABLEND_PM_NO_CLAMP(TSCOLOR dst, TSCOLOR src) // premultiplied alpha blend
-    {
-        extern uint8 __declspec(align(256)) multbl[256][256];
-
-        uint8 not_a = 255 - ALPHA(src);
-
-        return src + ((multbl[not_a][dst & 0xff]) |
-                (((uint)multbl[not_a][(dst >> 8) & 0xff]) << 8) |
-                (((uint)multbl[not_a][(dst >> 16) & 0xff]) << 16) |
-                (((uint)multbl[not_a][(dst >> 24) & 0xff]) << 24));
-    }
-
-    INLINE TSCOLOR ALPHABLEND_PM(TSCOLOR dst, TSCOLOR src) // premultiplied alpha blend
-    {
-        if (PREMULTIPLIED(src))
-            return ALPHABLEND_PM_NO_CLAMP( dst, src );
-
-        extern uint8 __declspec(align(256)) multbl[256][256];
-
-        uint8 not_a = 255 - ALPHA(src);
-
-        uint B = multbl[not_a][BLUE(dst)] + BLUE(src);
-        uint G = multbl[not_a][GREEN(dst)] + GREEN(src);
-        uint R = multbl[not_a][RED(dst)] + RED(src);
-        uint A = multbl[not_a][ALPHA(dst)] + ALPHA(src);
-
-        return CLAMP<uint8>(B) | (CLAMP<uint8>(G) << 8) | (CLAMP<uint8>(R) << 16) | (A << 24);
-    }
-
-    INLINE TSCOLOR ALPHABLEND_PM(TSCOLOR dst, TSCOLOR src, uint8 calpha) // premultiplied alpha blend with addition constant alpha
-    {
-        if (calpha == 0) return dst;
-        return ALPHABLEND_PM( dst, MULTIPLY(src, ARGB(calpha, calpha, calpha, calpha)) );
-    }
-
-
     template<typename T> const char *shorttypename();
     template<> INLINE const char *shorttypename<short>() {return "s";};
     template<> INLINE const char *shorttypename<int>() {return "i";};
@@ -1300,8 +1228,8 @@ template<typename T> T& SAFE_REF(ts::safe_ptr<T> &t) { return (t) ? (*(t)) : ts:
 template<typename T> const T& SAFE_REF(const ts::safe_ptr<T> &t) { return (t) ? (*(t)) : ts::make_dummy<T>(); }
 template<typename T> T& SAFE_REF(ts::shared_ptr<T> &t) { return (t) ? (*(t)) : ts::make_dummy<T>(); }
 template<typename T> const T& SAFE_REF(const ts::shared_ptr<T> &t) { return (t) ? (*(t)) : ts::make_dummy<T>(); }
-template<typename T1, typename T2> T2& SAFE_REF(ts::iweak_ptr<T1, T2> &t) { return (t) ? (*(t)) : ts::make_dummy<T>(); }
-template<typename T1, typename T2> const T2& SAFE_REF(const ts::iweak_ptr<T1, T2> &t) { return (t) ? (*(t)) : ts::make_dummy<T>(); }
+template<typename T1, typename T2> T2& SAFE_REF(ts::iweak_ptr<T1, T2> &t) { return (t) ? (*(t)) : ts::make_dummy<T2>(); }
+template<typename T1, typename T2> const T2& SAFE_REF(const ts::iweak_ptr<T1, T2> &t) { return (t) ? (*(t)) : ts::make_dummy<T2>(); }
 template<typename T> T& SAFE_REF(std::unique_ptr<T, ts::ts_delete<T> > &t) { return (t) ? (*(t)) : ts::make_dummy<T>(); }
 template<typename T> const T& SAFE_REF(const std::unique_ptr<T, ts::ts_delete<T> > &t) { return (t) ? (*(t)) : ts::make_dummy<T>(); }
 
@@ -1315,7 +1243,6 @@ maximum<T>::value
 make_pod<T> - remove constructor from pod type. don't use for non-po types!
 make_dummy<T>() - returns dummy instance of object. See DUMMY(T)
 initialized<T,def> - use inside structures to create default initialized members
-hard_loop<X,Y,A> - call A(n), where n is [X..Y). X, Y - constants
 aligned<T> - aligned var
 
 SAFE_REF( ptr ) - returns valid reference to object even ptr is nullptr

@@ -6,9 +6,9 @@ if x%libdir%==x set libdir=..\..\source\libs-external
 if exist %libdir%\FastDelegate\FastDelegate.h goto alrd
 
 if exist FastDelegate rd FastDelegate /S /Q
-git clone https://github.com/yxbh/FastDelegate
+git clone https://github.com/yxbh/Cpp-Delegate-Library-Collection fastdelegate
 if not exist %libdir%\fastdelegate md %libdir%\fastdelegate
-move FastDelegate\*.hpp %libdir%\FastDelegate\FastDelegate.h >nul
+move FastDelegate\src\fastdelegate\*.hpp %libdir%\fastdelegate\FastDelegate.h >nul
 rd FastDelegate /S /Q
 
 

@@ -134,7 +134,7 @@ void packetgen::pg_reject()
     encopy();
 }
 
-void packetgen::pg_raw_data(const byte *crypt_packet_key, int bt, const byte *data, int size)
+void packetgen::pg_raw_data(const byte *crypt_packet_key, int bt, const byte *data, aint size)
 {
     push_pid(PID_DATA);
     pushi(randombytes_random()); // just random int
@@ -150,7 +150,7 @@ void packetgen::pg_raw_data(const byte *crypt_packet_key, int bt, const byte *da
     log_auth_key("PID_DATA (raw) encoded", crypt_packet_key);
 }
 
-void packetgen::pg_data(datablock_s *m, const byte *crypt_packet_key, int maxsize)
+void packetgen::pg_data(datablock_s *m, const byte *crypt_packet_key, aint maxsize)
 {
     push_pid(PID_DATA);
     pushi(randombytes_random()); // just random int
@@ -164,7 +164,7 @@ void packetgen::pg_data(datablock_s *m, const byte *crypt_packet_key, int maxsiz
     pushi( m->len );
     //if (flags & 1) pushll( m->create_time );
 
-    int sb = maxsize;
+    aint sb = maxsize;
     if (m->left() < sb) sb = m->left();
 
     ASSERT( maxsize < 65536, "bad max send size" );
@@ -173,7 +173,7 @@ void packetgen::pg_data(datablock_s *m, const byte *crypt_packet_key, int maxsiz
 
     push( m->data() + m->sent, sb );
 
-    m->sent += sb;
+    m->sent += (int)sb;
 
     encode(crypt_packet_key);
 

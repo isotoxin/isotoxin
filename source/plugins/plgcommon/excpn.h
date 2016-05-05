@@ -9,7 +9,7 @@ typedef void(*GET_CALLSTACK_PROC)(str_c&);
 class exception_operator_c : public StackWalker
 {
 private:
-    long lock = 0;
+    spinlock::long3264 lock = 0;
     MINIDUMP_TYPE dump_type;
 	mutable sstr_t<32768> output;
 

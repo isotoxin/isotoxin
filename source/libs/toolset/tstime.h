@@ -4,8 +4,10 @@ namespace ts
 {
 class Time
 {
+    MOVABLE( true );
+
     uint32 value;
-    static __declspec(thread) uint32 thread_current_time;
+    static THREADLOCAL uint32 thread_current_time;
 
     Time();
     explicit Time( uint32 value) : value(value) {}
@@ -118,8 +120,8 @@ public:
         for (int i = 0; i < cnt; ++i)
         {
             timer_subscriber_entry_s *e = m_items.get(i);
-            if (e->hook.object() == NULL) continue;
-            if (!r(e->hook.object(), e->ttl, e->param)) break;
+            if (e->hook.expired()) continue;
+            if (!r(e->hook.get(), e->ttl, e->param)) break;
         }
     }
 
@@ -172,6 +174,29 @@ template<int period_ms> struct time_reducer_s
     }
 
 };
+
+template<int dummynum> INLINE bool __tmbreak( int ms )
+{
+    static Time prevtimestamp = Time::undefined() + dummynum;
+    static bool initialized = false;
+    bool r = false;
+    Time   timestamp = Time::current();
+    if ( initialized )
+    {
+        if ( ( timestamp - prevtimestamp ) < ms )
+        {
+            r = true;
+        }
+        prevtimestamp = timestamp;
+    }
+    else
+    {
+        prevtimestamp = timestamp;
+        initialized = true;
+    }
+    return r;
+};
+
 
 } // namespace ts
 

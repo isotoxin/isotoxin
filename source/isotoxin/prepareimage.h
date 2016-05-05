@@ -108,7 +108,7 @@ class dialog_prepareimage_c : public gui_isodialog_c
     void allow_ok( bool allow );
 
 protected:
-    /*virtual*/ int unique_tag() { return UD_PREPARE_IMAGE; }
+    /*virtual*/ int unique_tag() override { return UD_PREPARE_IMAGE; }
     /*virtual*/ void created() override;
 
     bool open_image(RID, GUIPARAM);

@@ -3,7 +3,7 @@ set getlib=freetype
 echo getting: %getlib%
 set libdir=%1
 if x%libdir%==x set libdir=..\..\source\libs-external
-if exist %libdir%\freetype\include\freetype.h goto alrd
+if exist %libdir%\freetype\include\freetype\freetype.h goto alrd
 
 if exist freetype2 rd freetype2 /S /Q
 git clone http://git.sv.nongnu.org/r/freetype/freetype2.git

@@ -138,7 +138,7 @@ int proc_sign(const ts::wstrings_c & pars)
         Print(FOREGROUND_RED, "proc file not found: %s\n", to_str(proc).cstr()); return 0;
     }
     ts::buf_c b; b.load_from_disk_file(arch);
-    int archlen = b.size();
+    ts::aint archlen = b.size();
     ts::md5_c md5;
     md5.update(b.data(), b.size()); md5.done();
     ts::abp_c bp;
@@ -169,7 +169,7 @@ int proc_sign(const ts::wstrings_c & pars)
     ss.append(path);
 
     ss.append(CONSTASTR("\r\nsize="));
-    ss.append_as_uint(archlen);
+    ss.append_as_num(archlen);
     ss.append(CONSTASTR("\r\nmd5="));
     ss.append_as_hex(md5.result(), 16);
 

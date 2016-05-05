@@ -27,6 +27,7 @@
 #pragma comment(lib, "hunspelld.lib")
 #endif
 
+#pragma comment (lib, "freetype.lib")
 #pragma comment(lib, "zlib.lib")
 #pragma comment(lib, "minizip.lib")
 #pragma comment(lib, "curl.lib")
@@ -91,7 +92,8 @@ namespace
 
 		bool operator()( const ts::wstr_c& base, const ts::wstr_c& fn )
 		{
-			int prior = 0, i0, i1;
+            long i0, i1;
+            int prior = 0;
 			if (fn.find_inds(0, i0, i1, '.', '.'))
 			{
 				prior = fn.substr(i0+1, i1).as_int();
@@ -185,7 +187,7 @@ static bool parsecmdl(const wchar_t *cmdl)
                 conf = false;
                 g_commandline.alternative_config_path.trunc_char('\"');
                 if (g_commandline.alternative_config_path.get_char(0) == '\"')
-                    g_commandline.alternative_config_path.cut(0);
+                    g_commandline.alternative_config_path.cut(0,1);
             }
             continue;
         }

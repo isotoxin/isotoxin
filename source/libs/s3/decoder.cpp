@@ -23,14 +23,14 @@ Decoder::~Decoder()
 	delete oggVorbis;
 }
 
-int Decoder::readCompressed(char *buffer, int size)
+s3int Decoder::readCompressed(char *buffer, s3int size)
 {
-	if (signatureRead)//еще не прочитана сигнатура
+	if (signatureRead) // signature not yet read
 	{
-		if (size > (int)signatureRead) size = signatureRead;
+		if (size > signatureRead) size = signatureRead;
 		memcpy(buffer, (char*)&signature + 4 - signatureRead, size);
-		signatureRead -= size;
-		return size;
+		signatureRead -= (unsigned int)size;
+		return (int)size;
 // 		int n = std::min(size, (int)signatureRead);
 // 		memcpy(buffer, (char*)&signature + 4 - signatureRead, n);
 // 		signatureRead -= n;
@@ -39,7 +39,7 @@ int Decoder::readCompressed(char *buffer, int size)
 //		return (*readFunc)(buffer + n, size, userPtr) + n;
 	}
 
-	return (*readFunc)(buffer, size, userPtr);
+	return (*readFunc)(buffer, (int)size, userPtr);
 }
 
 class Decoder::DecIl//Decoder Internal
@@ -47,13 +47,13 @@ class Decoder::DecIl//Decoder Internal
 public:
 	static size_t OggReadCallback(void *ptr, size_t size, size_t nmemb, void *datasource)
 	{
-		int r = ((Decoder*)datasource)->readCompressed((char*)ptr, size*nmemb);
+        s3int r = ((Decoder*)datasource)->readCompressed((char*)ptr, size*nmemb);
 		return r < 0 ? _set_errno(/*EIO*/5), 0 : r;
 	}
 
 	static FLAC__StreamDecoderReadStatus FlacReadCallback(const FLAC__StreamDecoder* /*decoder*/, FLAC__byte buffer[], size_t *bytes, void *client_data)
 	{
-		int r = ((Decoder*)client_data)->readCompressed((char*)buffer, *bytes);
+        s3int r = ((Decoder*)client_data)->readCompressed((char*)buffer, *bytes);
 		if (r > 0) {*bytes = r; return FLAC__STREAM_DECODER_READ_STATUS_CONTINUE;}
 		if (r == 0) {*bytes = 0; return FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM;}
 		return FLAC__STREAM_DECODER_READ_STATUS_ABORT;
@@ -185,7 +185,7 @@ bool Decoder::init(ReadFunc *readFunc_, void *userPtr_)
 	return true;
 }
 
-int Decoder::read(void *buffer, int size)
+s3int Decoder::read(void *buffer, s3int size)
 {
 	if (size <= 0 || size % sampleSize != 0) return 0;
 
@@ -195,14 +195,14 @@ int Decoder::read(void *buffer, int size)
 		size /= sampleSize;
 		for (short *dest = (short*)buffer;;)
 		{
-			//Сначала копируем остаток буфера (если есть)
-			int n = std::min(size, fbSize), i = fbRead, nn = n + fbRead;
+			//first copy remain of buffer (if exists)
+            s3int n = std::min(size, (s3int)fbSize), i = fbRead, nn = n + fbRead;
 
 			if (format.channels == 1) for (; i<nn; i++) *dest++ = (short)flacbuffer[0][/*fbRead+*/i];//mono
 			else for (; i<nn; i++) *dest++ = (short)flacbuffer[0][i], *dest++ = (short)flacbuffer[1][i];//stereo
 
-			fbRead += n;
-			fbSize -= n;
+			fbRead += (int)n;
+			fbSize -= (int)n;
 			size -= n;
 			if (size == 0) return (char*)dest - (char*)buffer;
 
@@ -214,7 +214,7 @@ int Decoder::read(void *buffer, int size)
 	case TYPE_OGGVORBIS:
 		for (int totalRead=0; totalRead<size;)
 		{
-			int bytesRead = ov_read(oggVorbis, (char*)buffer + totalRead, size - totalRead, 0, 2, 1, NULL);
+			int bytesRead = ov_read(oggVorbis, (char*)buffer + totalRead, (int)(size - totalRead), 0, 2, 1, NULL);
 			if (bytesRead <= 0) return totalRead;
 			totalRead += bytesRead;
 		}
@@ -222,9 +222,9 @@ int Decoder::read(void *buffer, int size)
 
 	case TYPE_WAV:
 		if (size > fbSize) size = fbSize;
-		fbSize -= size;//в fbSize хранится кол-во оставшихся байт
+		fbSize -= (int)size;//в fbSize хранится кол-во оставшихся байт
 	case TYPE_RAW:
-		return (*readFunc)((char*)buffer, size, userPtr);
+		return (*readFunc)((char*)buffer, (int)size, userPtr);
 
 	case TYPE_UNKNOWN:
 	default:

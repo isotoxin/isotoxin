@@ -240,7 +240,7 @@ static void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp )
     temp.clear();
     bitmap2encode.resize_to(b, newsz, ts::FILTER_LANCZOS3);
     encode_lossy_png(temp, b);
-    int sz = temp.size();
+    ts::aint sz = temp.size();
 
     if (sz > maximumsize)
     {
@@ -252,7 +252,7 @@ static void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp )
     }
     else
     {
-        int delta = maximumsize - sz;
+        ts::aint delta = maximumsize - sz;
         if (delta < best)
         {
             best = delta;
@@ -1019,10 +1019,10 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
                     infostr.append_as_uint(avarect.width());
                     infostr.append(CONSTWSTR(" x "));
                     infostr.append_as_uint(avarect.height());
-                    int sz = encoded.size();
+                    ts::aint sz = encoded.size();
                     if (sz > 0 || prevsize > 0)
                     {
-                        auto add_size_str = [](ts::wstr_c &s, int sz)
+                        auto add_size_str = [](ts::wstr_c &s, ts::aint sz)
                         {
                             s.append(CONSTWSTR(" ("));
                             s.append(text_sizebytes(sz));
@@ -1347,11 +1347,11 @@ void framedrawer_s::prepare(ts::TSCOLOR col1, ts::TSCOLOR col2)
 {
     h.create_ARGB(ts::ivec2(128,1));
     for(int i=0;i<128;++i)
-        h.ARGBPixel(i,0,(i&4)?col1:col2);
+        h.set_argb(i,0,(i&4)?col1:col2);
 
     v.create_ARGB(ts::ivec2(1, 128));
     for (int i = 0; i < 128; ++i)
-        v.ARGBPixel(0, i, (i & 4) ? col1 : col2);
+        v.set_argb(0, i, (i & 4) ? col1 : col2);
 }
 
 void framedrawer_s::draw(rectengine_c &e, const ts::irect &r, int tickvalue)

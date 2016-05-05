@@ -1,0 +1,195 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug Optimized|x64">
+      <Configuration>Debug Optimized</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Final|x64">
+      <Configuration>Final</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{DC148EB8-AEA2-4CA3-892D-D0ACB439642E}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>isotoxin</RootNamespace>
+    <ProjectName>isotoxin</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(SolutionDir)\isotoxin.common.2015_64.props" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Final|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Final|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(ProjectDir)..\..\bin/</OutDir>
+    <TargetName>dbg_isotoxin_64</TargetName>
+    <CodeAnalysisRuleSet>NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Final|x64'">
+    <OutDir>$(ProjectDir)..\..\bin/</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|x64'">
+    <OutDir>$(ProjectDir)..\..\bin/</OutDir>
+    <TargetName>do_isotoxin</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeaderFile>isotoxin.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\libs;$(ProjectDir)..\libs-external;$(ProjectDir)..\libs-external\zlib\src;$(ProjectDir)..\libs-external\freetype\include;$(ProjectDir)..\libs-external\cairo;$(ProjectDir)..\libs-external\cairo\pixmap;$(ProjectDir)..\libs-external\hunspell</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\libs;$(GARBAGE)\#libs\vc15_64\Release;$(GARBAGE)\#libs\vc15_64\Debug</AdditionalLibraryDirectories>
+      <IgnoreSpecificDefaultLibraries>libcmt</IgnoreSpecificDefaultLibraries>
+    </Link>
+    <PreBuildEvent>
+      <Command>"$(ProjectDir)..\..\tools\prebuild.cmd"</Command>
+    </PreBuildEvent>
+    <PostBuildEvent>
+      <Command>"$(ProjectDir)..\..\tools\kill_crap.cmd" $(TargetDir)$(TargetName)</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Final|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\libs;$(ProjectDir)..\libs-external;$(ProjectDir)..\libs-external\zlib\src;$(ProjectDir)..\libs-external\freetype\include;$(ProjectDir)..\libs-external\cairo;$(ProjectDir)..\libs-external\cairo\pixmap;$(ProjectDir)..\libs-external\hunspell</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4530</DisableSpecificWarnings>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\libs;$(GARBAGE)\#libs\vc15_64\Release</AdditionalLibraryDirectories>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <FixedBaseAddress>true</FixedBaseAddress>
+    </Link>
+    <PreBuildEvent>
+      <Command>"$(ProjectDir)..\..\tools\prebuild.cmd"</Command>
+    </PreBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\libs;$(ProjectDir)..\libs-external;$(ProjectDir)..\libs-external\zlib\src;$(ProjectDir)..\libs-external\freetype\include;$(ProjectDir)..\libs-external\cairo;$(ProjectDir)..\libs-external\cairo\pixmap;$(ProjectDir)..\libs-external\hunspell</AdditionalIncludeDirectories>
+      <PrecompiledHeaderFile>isotoxin.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\libs;$(GARBAGE)\#libs\vc15_64\Release;$(GARBAGE)\#libs\vc15_64\Debug</AdditionalLibraryDirectories>
+      <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
+    </Link>
+    <PreBuildEvent>
+      <Command>"$(ProjectDir)..\..\tools\prebuild.cmd"</Command>
+    </PreBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="activeprotocol.cpp" />
+    <ClCompile Include="addcontact.cpp" />
+    <ClCompile Include="application.cpp" />
+    <ClCompile Include="autoupdater.cpp" />
+    <ClCompile Include="avaselector.cpp" />
+    <ClCompile Include="colors.cpp" />
+    <ClCompile Include="config.cpp" />
+    <ClCompile Include="contactlist.cpp" />
+    <ClCompile Include="contactprops.cpp" />
+    <ClCompile Include="conversation.cpp" />
+    <ClCompile Include="emoticons.cpp" />
+    <ClCompile Include="filterbar.cpp" />
+    <ClCompile Include="firstrun.cpp" />
+    <ClCompile Include="fullscreenvideo.cpp" />
+    <ClCompile Include="images.cpp" />
+    <ClCompile Include="isodialog.cpp" />
+    <ClCompile Include="isotoxin.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Final|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="mainrect.cpp" />
+    <ClCompile Include="metacontact.cpp" />
+    <ClCompile Include="simpledlg.cpp" />
+    <ClCompile Include="prepareimage.cpp" />
+    <ClCompile Include="profile.cpp" />
+    <ClCompile Include="mediasystem.cpp" />
+    <ClCompile Include="contacts.cpp" />
+    <ClCompile Include="settings.cpp" />
+    <ClCompile Include="smileselector.cpp" />
+    <ClCompile Include="tests.cpp" />
+    <ClCompile Include="todo.cpp" />
+    <ClCompile Include="tools.cpp" />
+    <ClCompile Include="videoprocessing.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="activeprotocol.h" />
+    <ClInclude Include="addcontact.h" />
+    <ClInclude Include="application.h" />
+    <ClInclude Include="avaselector.h" />
+    <ClInclude Include="colors.h" />
+    <ClInclude Include="config.h" />
+    <ClInclude Include="contactprops.h" />
+    <ClInclude Include="contacts.h" />
+    <ClInclude Include="contactlist.h" />
+    <ClInclude Include="conversation.h" />
+    <ClInclude Include="emoticons.h" />
+    <ClInclude Include="filterbar.h" />
+    <ClInclude Include="firstrun.h" />
+    <ClInclude Include="fullscreenvideo.h" />
+    <ClInclude Include="images.h" />
+    <ClInclude Include="isodialog.h" />
+    <ClInclude Include="isotoxin.h" />
+    <ClInclude Include="mainrect.h" />
+    <ClInclude Include="metacontact.h" />
+    <ClInclude Include="simpledlg.h" />
+    <ClInclude Include="prepareimage.h" />
+    <ClInclude Include="profile.h" />
+    <ClInclude Include="mediasystem.h" />
+    <ClInclude Include="smileselector.h" />
+    <ClInclude Include="version.inl" />
+    <ClInclude Include="res\resource.h" />
+    <ClInclude Include="settings.h" />
+    <ClInclude Include="tools.h" />
+    <ClInclude Include="videoprocessing.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="res\appver.inl" />
+    <None Include="signpk.inl" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="res\isotoxin.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\isotoxin.ico" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

@@ -4,9 +4,167 @@
 
 #include "internal/imageformat.h"
 
-
 namespace ts
 {
+
+    INLINE uint8 RED( TSCOLOR c ) { return as_byte( c >> 16 ); }
+    INLINE uint8 GREEN( TSCOLOR c ) { return as_byte( c >> 8 ); }
+    INLINE uint8 BLUE( TSCOLOR c ) { return as_byte( c ); }
+    INLINE uint8 ALPHA( TSCOLOR c ) { return as_byte( c >> 24 ); }
+
+    INLINE uint16 REDx256( TSCOLOR c ) { return 0xff00 & ( c >> 8 ); }
+    INLINE uint16 GREENx256( TSCOLOR c ) { return 0xff00 & ( c ); }
+    INLINE uint16 BLUEx256( TSCOLOR c ) { return 0xff00 & ( c << 8 ); }
+    INLINE uint16 ALPHAx256( TSCOLOR c ) { return 0xff00 & ( c >> 16 ); }
+
+    template <typename CCC> INLINE TSCOLOR ARGB( CCC r, CCC g, CCC b, CCC a = 255 )
+    {
+        return CLAMP<uint8, CCC>( b ) | ( CLAMP<uint8, CCC>( g ) << 8 ) | ( CLAMP<uint8, CCC>( r ) << 16 ) | ( CLAMP<uint8, CCC>( a ) << 24 );
+    }
+
+    INLINE auint GRAYSCALE_C( TSCOLOR c )
+    {
+        return ts::lround( float( BLUE( c ) ) * 0.114f + float( GREEN( c ) ) * 0.587f + float( RED( c ) ) * 0.299 );
+    }
+
+    INLINE TSCOLOR GRAYSCALE( TSCOLOR c )
+    {
+        auint oi = GRAYSCALE_C( c );
+        return ARGB<auint>( oi, oi, oi, ALPHA( c ) );
+    }
+
+    INLINE bool PREMULTIPLIED( TSCOLOR c )
+    {
+        uint8 a = ALPHA( c );
+        return RED( c ) <= a && GREEN( c ) <= a && BLUE( c ) <= a;
+    }
+
+    INLINE TSCOLOR PREMULTIPLY( TSCOLOR c, float a )
+    {
+        auint oiB = ts::lround( float( BLUE( c ) ) * a );
+        auint oiG = ts::lround( float( GREEN( c ) ) * a );
+        auint oiR = ts::lround( float( RED( c ) ) * a );
+
+        return ARGB<auint>( oiR, oiG, oiB, ALPHA( c ) );
+    }
+
+    INLINE TSCOLOR PREMULTIPLY( TSCOLOR c )
+    {
+        extern uint8 ALIGN(256) multbl[ 256 ][ 256 ];
+
+        uint a = ALPHA( c );
+        return multbl[ a ][ c & 0xff ] |
+            ( (uint)multbl[ a ][ ( c >> 8 ) & 0xff ] << 8 ) |
+            ( (uint)multbl[ a ][ ( c >> 16 ) & 0xff ] << 16 ) |
+            ( c & 0xff000000 );
+
+    }
+
+    INLINE TSCOLOR PREMULTIPLY( TSCOLOR c, uint8 aa, double &not_a ) // premultiply with addition alpha and return not-alpha
+    {
+        double a = ( (double)( ALPHA( c ) * aa ) * ( 1.0 / 65025.0 ) );
+        not_a = 1.0 - a;
+
+        auint oiB = ts::lround( float( BLUE( c ) ) * a );
+        auint oiG = ts::lround( float( GREEN( c ) ) * a );
+        auint oiR = ts::lround( float( RED( c ) ) * a );
+        auint oiA = ts::lround( a * 255.0 );
+
+        return ARGB<auint>( oiR, oiG, oiB, oiA );
+    }
+
+    INLINE TSCOLOR UNMULTIPLY( TSCOLOR c )
+    {
+        extern uint8 ALIGN(256) divtbl[ 256 ][ 256 ];
+
+        uint a = ALPHA( c );
+        return divtbl[ a ][ c & 0xff ] |
+            ( (uint)divtbl[ a ][ ( c >> 8 ) & 0xff ] << 8 ) |
+            ( (uint)divtbl[ a ][ ( c >> 16 ) & 0xff ] << 16 ) |
+            ( c & 0xff000000 );
+
+    }
+
+    INLINE TSCOLOR MULTIPLY( TSCOLOR c1, TSCOLOR c2 )
+    {
+        extern uint8 ALIGN(256) multbl[ 256 ][ 256 ];
+
+        return multbl[ c1 & 0xff ][ c2 & 0xff ] |
+            ( (uint)multbl[ ( c1 >> 8 ) & 0xff ][ ( c2 >> 8 ) & 0xff ] << 8 ) |
+            ( (uint)multbl[ ( c1 >> 16 ) & 0xff ][ ( c2 >> 16 ) & 0xff ] << 16 ) |
+            ( (uint)multbl[ ( c1 >> 24 ) & 0xff ][ ( c2 >> 24 ) & 0xff ] << 24 );
+
+    }
+
+    INLINE TSCOLOR ALPHABLEND( TSCOLOR target, TSCOLOR source, int constant_alpha = 255 ) // photoshop like Normal mode color blending
+    {
+        uint8 oA = ALPHA( target );
+
+        if ( oA == 0 )
+        {
+            auint a = ts::lround( double( constant_alpha * ALPHA( source ) ) * ( 1.0 / 255.0 ) );
+            return ( 0x00FFFFFF & source ) | ( CLAMP<uint8>( a ) << 24 );
+        }
+
+        uint8 oR = RED( target );
+        uint8 oG = GREEN( target );
+        uint8 oB = BLUE( target );
+
+        uint8 R = RED( source );
+        uint8 G = GREEN( source );
+        uint8 B = BLUE( source );
+
+
+        float A = float( double( constant_alpha * ALPHA( source ) ) * ( 1.0 / ( 255.0 * 255.0 ) ) );
+        float nA = 1.0f - A;
+
+        auint oiA = ts::lround( 255.0f * A + float( oA ) * nA );
+
+        float k = 0;
+        if ( oiA ) k = 1.0f - ( A * 255.0f / (float)oiA );
+
+        auint oiB = ts::lround( float( B ) * A + float( oB ) * k );
+        auint oiG = ts::lround( float( G ) * A + float( oG ) * k );
+        auint oiR = ts::lround( float( R ) * A + float( oR ) * k );
+
+        return ARGB<auint>( oiR, oiG, oiB, oiA );
+    }
+
+    INLINE TSCOLOR ALPHABLEND_PM_NO_CLAMP( TSCOLOR dst, TSCOLOR src ) // premultiplied alpha blend
+    {
+        extern uint8 ALIGN(256) multbl[ 256 ][ 256 ];
+
+        uint8 not_a = 255 - ALPHA( src );
+
+        return src + ( ( multbl[ not_a ][ dst & 0xff ] ) |
+            ( ( (uint)multbl[ not_a ][ ( dst >> 8 ) & 0xff ] ) << 8 ) |
+            ( ( (uint)multbl[ not_a ][ ( dst >> 16 ) & 0xff ] ) << 16 ) |
+            ( ( (uint)multbl[ not_a ][ ( dst >> 24 ) & 0xff ] ) << 24 ) );
+    }
+
+    INLINE TSCOLOR ALPHABLEND_PM( TSCOLOR dst, TSCOLOR src ) // premultiplied alpha blend
+    {
+        if ( PREMULTIPLIED( src ) )
+            return ALPHABLEND_PM_NO_CLAMP( dst, src );
+
+        extern uint8 ALIGN(256) multbl[ 256 ][ 256 ];
+
+        uint8 not_a = 255 - ALPHA( src );
+
+        uint B = multbl[ not_a ][ BLUE( dst ) ] + BLUE( src );
+        uint G = multbl[ not_a ][ GREEN( dst ) ] + GREEN( src );
+        uint R = multbl[ not_a ][ RED( dst ) ] + RED( src );
+        uint A = multbl[ not_a ][ ALPHA( dst ) ] + ALPHA( src );
+
+        return CLAMP<uint8>( B ) | ( CLAMP<uint8>( G ) << 8 ) | ( CLAMP<uint8>( R ) << 16 ) | ( A << 24 );
+    }
+
+    INLINE TSCOLOR ALPHABLEND_PM( TSCOLOR dst, TSCOLOR src, uint8 calpha ) // premultiplied alpha blend with addition constant alpha
+    {
+        if ( calpha == 0 ) return dst;
+        return ALPHABLEND_PM( dst, MULTIPLY( src, ARGB( calpha, calpha, calpha, calpha ) ) );
+    }
+
 #pragma pack(push, 1)
     struct BITMAPINFOHEADER
     {
@@ -108,6 +266,8 @@ typedef bitmap_t<bmpcore_normal_s> bitmap_c;
 
 struct bmpcore_normal_s
 {
+    MOVABLE( true );
+
     struct core_s
     {
         int         m_ref;
@@ -225,6 +385,7 @@ struct bmpcore_normal_s
 
 struct bmpcore_exbody_s
 {
+    MOVABLE( true );
     DUMMY(bmpcore_exbody_s);
     const uint8 *m_body;
     imgdesc_s m_info;
@@ -278,6 +439,7 @@ struct bmpcore_exbody_s
 };
 template<typename CORE> class bitmap_t
 {
+    MOVABLE( is_movable<CORE>::value );
     DUMMY( bitmap_t );
 
 public:
@@ -411,8 +573,6 @@ public:
     bitmap_t& operator =( const bmpcore_exbody_s &eb );
 
     bool equals(const bitmap_t & bm) const { return core == bm.core; }
-
-    void convert_24to32(bitmap_c &imgout) const;
 
     void convert_from_yuv( const ivec2 & pdes, const ivec2 & size, const uint8 *src, yuv_fmt_e fmt ); // src pitch must be equal to size.x * byte_per_pixrl of current yuv format
     void convert_to_yuv( const ivec2 & pdes, const ivec2 & size, buf_c &b, yuv_fmt_e fmt );
@@ -582,19 +742,6 @@ public:
     bool resize_to(const bmpcore_exbody_s &eb, resize_filter_e filt_mode = FILTER_NONE) const;
     bool resize_from(const bmpcore_exbody_s &eb, resize_filter_e filt_mode = FILTER_NONE) const;
     void shrink_2x_to(const ivec2 &lt_source, const ivec2 &sz_source, const bmpcore_exbody_s &eb_target) const;
-    /*
-	bool resize(bitmap_c& outimage, float scale=2.f, resize_filter_e filt_mode=FILTER_NONE) const;
-	bool rotate(bitmap_c& outimage, float angle_rad, rot_filter_e filt_mode=FILTMODE_POINT, bool expand_dst=true) const;
-	
-	void rotate_90(bitmap_c& outimage, const ivec2 & pdes,const ivec2 & sizesou,const bitmap_t & bmsou,const ivec2 & spsou);
-	void rotate_180(bitmap_c& outimage, const ivec2 & pdes,const ivec2 & sizesou,const bitmap_t & bmsou,const ivec2 & spsou);
-	void rotate_270(bitmap_c& outimage, const ivec2 & pdes,const ivec2 & sizesou,const bitmap_t & bmsou,const ivec2 & spsou);
-    void make_larger(bitmap_c& outimage, int factor) const;
-
-
-    void crop(const ivec2 & lt, const ivec2 &sz);
-    void crop_to_square();
-    */
 
 	void flip_x(const ivec2 & pdes,const ivec2 & size, const bitmap_t & bmsou,const ivec2 & spsou);
 	void flip_y(const ivec2 & pdes,const ivec2 & size, const bitmap_t & bmsou,const ivec2 & spsou);
@@ -605,19 +752,8 @@ public:
     void alpha_blend( const ivec2 &p, const bmpcore_exbody_s & img, const bmpcore_exbody_s & base ); // this - target, result size - base size
 
 	void swap_byte(const ivec2 & pos,const ivec2 & size,int n1,int n2);
-    void swap_byte(void *target) const;
 
-    /*
-	void merge_with_alpha(const ivec2 & pdes,const ivec2 & size, const bitmap_c & bmsou,const ivec2 & spsou);
-	void merge_with_alpha_PM(const ivec2 & pdes,const ivec2 & size, const bitmap_c & bmsou,const ivec2 & spsou); // PM - premultiplied alpha
-
-    void merge_grayscale_with_alpha(const ivec2 & pdes,const ivec2 & size, const bitmap_t * data_src,const ivec2 & data_src_point, const bitmap_t * alpha_src, const ivec2 & alpha_src_point);
-    void merge_grayscale_with_alpha_PM(const ivec2 & pdes,const ivec2 & size, const bitmap_t * data_src,const ivec2 & data_src_point, const bitmap_t * alpha_src, const ivec2 & alpha_src_point);
-    void modulate_grayscale_with_alpha(const ivec2 & pdes,const ivec2 & size, const bitmap_t * alpha_src, const ivec2 & alpha_src_point);
-
-    */
-
-    uint32 ARGB(float x, float y) const // get interpolated ARGB for specified coordinate (0.0 - 1.0)
+    TSCOLOR get_argb_lerp(float x, float y) const // get interpolated ARGB for specified coordinate (0.0 - 1.0)
                                     // 0.0,0.0 - center of left-top pixel
                                     // 1.0,1.0 - center of right-bottom pixel
     {
@@ -628,12 +764,12 @@ public:
         aint y0 = TruncFloat(yf);
         aint y1 = y0 + 1;
 
-        TSCOLOR cl = LERPCOLOR(ARGBPixel(x0, y0), ARGBPixel(x0, y1), yf - y0);
-        TSCOLOR cr = LERPCOLOR(ARGBPixel(x1, y0), ARGBPixel(x1, y1), yf - y0);
+        TSCOLOR cl = LERPCOLOR( get_argb(x0, y0), get_argb(x0, y1), yf - y0);
+        TSCOLOR cr = LERPCOLOR( get_argb(x1, y0), get_argb(x1, y1), yf - y0);
         return LERPCOLOR(cl, cr, xf - x0);
     }
 
-    uint32 ARGBPixel(aint x, aint y) const // get ARGB color of specified pixel
+    TSCOLOR get_argb(aint x, aint y) const // get ARGB color of specified pixel
     {
 
         uint32 c;
@@ -647,12 +783,12 @@ public:
         return c & mask;
     }
 
-	void ARGBPixel(aint x, aint y, TSCOLOR color) // set ARGB color of specified pixel
+	void set_argb(aint x, aint y, TSCOLOR color) // set ARGB color of specified pixel
     {
         before_modify();
 		*(TSCOLOR *)(body() + (y * info().pitch + x * info().bytepp())) = color;
     }
-	void ARGBPixel(aint x, aint y, TSCOLOR color, int alpha) // alpha blend ARGB color of specified pixel (like photoshop Normal mode)
+	void set_argb(aint x, aint y, TSCOLOR color, int alpha) // alpha blend ARGB color of specified pixel (like photoshop Normal mode)
     {
         before_modify();
 		TSCOLOR * c = (TSCOLOR *)(body() + (y * info().pitch + x * info().bytepp()));
@@ -683,7 +819,7 @@ public:
 
     bool load_from_BMPHEADER(const BITMAPINFOHEADER * iH, int buflen);
 
-	img_format_e load_from_file(const void * buf, int buflen);
+	img_format_e load_from_file(const void * buf, aint buflen);
 	img_format_e load_from_file(const buf_c & buf)
     {
         return load_from_file(buf.data(), buf.size());
@@ -728,7 +864,11 @@ class drawable_bitmap_c : public image_extbody_c
 
 #ifdef _WIN32
     static const int datasize = 16;
-#endif // _WIN32
+#elif defined __linux__
+    static const int datasize = 16;
+#else
+    unknown
+#endif
 
 public:
 

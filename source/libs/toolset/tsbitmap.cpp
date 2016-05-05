@@ -188,8 +188,8 @@ bool TSCALL img_helper_premultiply(uint8 *des, const imgdesc_s &des_info)
 
 void TSCALL img_helper_fill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color)
 {
-    int desnl = des_info.pitch - des_info.sz.x*des_info.bytepp();
-    int desnp = des_info.bytepp();
+    aint desnl = des_info.pitch - des_info.sz.x*des_info.bytepp();
+    aint desnp = des_info.bytepp();
 
     switch (des_info.bytepp())
     {
@@ -219,23 +219,19 @@ void TSCALL img_helper_fill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color
     }
 }
 
-uint8 __declspec(align(256)) multbl[256][256]; // Im very surprised, but multiplication table is faster then raw (a * b / 255)
-uint8 __declspec(align(256)) divtbl[256][256];
+uint8 ALIGN(256) multbl[256][256]; // Im very surprised, but multiplication table is faster then raw (a * b / 255)
+uint8 ALIGN(256) divtbl[256][256];
 
-static const __declspec(align(16)) uint16 min255[16] = { 255, 255, 255, 255, 255, 255, 255, 255 };
+static const ALIGN(16) uint16 min255[16] = { 255, 255, 255, 255, 255, 255, 255, 255 };
 
 //alphablend constats
-static const __declspec(align(16)) uint8 preparealphas[16] = { 6, 255, 6, 255, 6, 255, 6, 255, 14, 255, 14, 255, 14, 255, 14, 255 };
-static const __declspec(align(16)) uint16 sub256[16] = { 256, 256, 256, 256, 256, 256, 256, 256 };
-static const __declspec(align(16)) uint8 preparesrcs_1[16] = { 0, 255, 1, 255, 2, 255, 3, 255, 4, 255, 5, 255, 6, 255, 7, 255 };
-static const __declspec(align(16)) uint8 preparesrcs_2[16] = { 8, 255, 9, 255, 10, 255, 11, 255, 12, 255, 13, 255, 14, 255, 15, 255 };
+static const ALIGN(16) uint8 preparealphas[16] = { 6, 255, 6, 255, 6, 255, 6, 255, 14, 255, 14, 255, 14, 255, 14, 255 };
+static const ALIGN(16) uint16 sub256[16] = { 256, 256, 256, 256, 256, 256, 256, 256 };
 
 namespace sse_consts
 {
-__declspec(align(16)) uint8 preparetgtc_1[16] = { 255, 0, 255, 1, 255, 2, 255, 3, 255, 4, 255, 5, 255, 6, 255, 7 };
-__declspec(align(16)) uint8 preparetgtc_2[16] = { 255, 8, 255, 9, 255, 10, 255, 11, 255, 12, 255, 13, 255, 14, 255, 15 };
-__declspec(align(16)) uint8 packcback_1[16] = { 0, 2, 4, 6, 8, 10, 12, 14, 255, 255, 255, 255, 255, 255, 255, 255 };
-__declspec(align(16)) uint8 packcback_2[16] = { 255, 255, 255, 255, 255, 255, 255, 255, 0, 2, 4, 6, 8, 10, 12, 14 };
+ALIGN(16) uint8 preparetgtc_1[16] = { 255, 0, 255, 1, 255, 2, 255, 3, 255, 4, 255, 5, 255, 6, 255, 7 };
+ALIGN(16) uint8 preparetgtc_2[16] = { 255, 8, 255, 9, 255, 10, 255, 11, 255, 12, 255, 13, 255, 14, 255, 15 };
 };
 
 
@@ -283,122 +279,22 @@ public:
     }
 } setup_multbl_;
 
-
-__declspec(naked) void overfill_row_sse(uint8 *dst_argb, int w, const uint16 *ctbl)
+static void overfill_row_sse( uint8 *dst_argb, int w, const uint16 *ctbl )
 {
-    __asm {
-        mov        edx, [esp + 0 + 4]   // dst_argb
-        mov        ecx, [esp + 0 + 8]   // dst_width
-        mov        eax, [esp + 0 + 12]  // ctbl
+    for ( ; w > 0; w -= 8, dst_argb += 32 )
+    {
+        __m128i t4 = _mm_load_si128( ( const __m128i * )sse_consts::preparetgtc_1 );
+        __m128i t5 = _mm_load_si128( ( const __m128i * )sse_consts::preparetgtc_2 );
+        __m128i t6 = _mm_load_si128( ( const __m128i * )ctbl );
+        __m128i t7 = _mm_load_si128( ( const __m128i * )( ctbl + 8 ) );
 
-        movdqa     xmm4, sse_consts::preparetgtc_1
-        movdqa     xmm5, min255
+        __m128i t0 = _mm_lddqu_si128( ( const __m128i * )dst_argb );
+        __m128i t2 = _mm_lddqu_si128( ( const __m128i * )(dst_argb+16) );
 
-        movdqa     xmm6, [eax]          // na
-        movdqa     xmm7, [eax + 16]     // color
-
-    overloop :
-
-        lddqu      xmm0, [edx]          // take 0..3 pixels
-        lddqu      xmm2, [edx + 16]       // take 4..7 pixels
-        movdqa     xmm1, xmm0
-        movdqa     xmm3, xmm2
-        pshufb     xmm0, xmm4
-        pshufb     xmm1, sse_consts::preparetgtc_2
-        pshufb     xmm2, xmm4
-        pshufb     xmm3, sse_consts::preparetgtc_2
-
-        pmulhuw    xmm0, xmm6
-        pmulhuw    xmm1, xmm6
-        pmulhuw    xmm2, xmm6
-        pmulhuw    xmm3, xmm6
-
-        paddw      xmm0, xmm7
-        paddw      xmm1, xmm7
-        paddw      xmm2, xmm7
-        paddw      xmm3, xmm7
-
-        pminsw     xmm0, xmm5
-        pminsw     xmm1, xmm5
-        pminsw     xmm2, xmm5
-        pminsw     xmm3, xmm5
-
-        pshufb     xmm0, sse_consts::packcback_1
-        pshufb     xmm1, sse_consts::packcback_2
-        pshufb     xmm2, sse_consts::packcback_1
-        pshufb     xmm3, sse_consts::packcback_2
-
-        por        xmm0, xmm1
-        por        xmm2, xmm3
-
-        movdqu[edx], xmm0
-        movdqu[edx + 16], xmm2
-
-        lea        edx, [edx + 32]
-
-        sub        ecx, 8               // 8 dst pixels at once
-        jg         overloop
-
-        ret
+        _mm_storeu_si128( ( __m128i * )dst_argb, _mm_packus_epi16( _mm_add_epi16( _mm_mulhi_epu16( _mm_shuffle_epi8( t0, t4 ), t6 ), t7 ), _mm_add_epi16( _mm_mulhi_epu16( _mm_shuffle_epi8( t0, t5 ), t6 ), t7 ) ) );
+        _mm_storeu_si128( ( __m128i * )(dst_argb + 16), _mm_packus_epi16( _mm_add_epi16( _mm_mulhi_epu16( _mm_shuffle_epi8( t2, t4 ), t6 ), t7 ), _mm_add_epi16( _mm_mulhi_epu16( _mm_shuffle_epi8( t2, t5 ), t6 ), t7 ) ) );
     }
 }
-
-__declspec(naked) void overfill_row_sse_no_clamp(uint8 *dst_argb, int w, const uint16 *ctbl )
-{
-    __asm {
-        mov        edx, [esp + 0 + 4]   // dst_argb
-        mov        ecx, [esp + 0 + 8]   // dst_width
-        mov        eax, [esp + 0 + 12]  // ctbl
-
-        movdqa     xmm4, sse_consts::preparetgtc_1
-        movdqa     xmm5, sse_consts::preparetgtc_2
-
-        movdqa     xmm6, [eax]          // na
-        movdqa     xmm7, [eax+16]       // color
-
-    overloop :
-
-        lddqu      xmm0, [edx]          // take 0..3 pixels
-        lddqu      xmm2, [edx+16]       // take 4..7 pixels
-        movdqa     xmm1, xmm0
-        movdqa     xmm3, xmm2
-        pshufb     xmm0, xmm4
-        pshufb     xmm1, xmm5
-        pshufb     xmm2, xmm4
-        pshufb     xmm3, xmm5
-
-        pmulhuw    xmm0, xmm6
-        pmulhuw    xmm1, xmm6
-        pmulhuw    xmm2, xmm6
-        pmulhuw    xmm3, xmm6
-
-        paddw      xmm0, xmm7
-        paddw      xmm1, xmm7
-        paddw      xmm2, xmm7
-        paddw      xmm3, xmm7
-
-        pshufb     xmm0, sse_consts::packcback_1
-        pshufb     xmm1, sse_consts::packcback_2
-        pshufb     xmm2, sse_consts::packcback_1
-        pshufb     xmm3, sse_consts::packcback_2
-
-        por        xmm0, xmm1
-        por        xmm2, xmm3
-
-        movdqu  [edx], xmm0
-        movdqu  [edx+16], xmm2
-
-        lea        edx, [edx + 32]
-
-        sub        ecx, 8               // 8 dst pixels at once
-        jg         overloop
-
-        ret
-
-    }
-}
-
-
 
 void TSCALL img_helper_overfill(uint8 *des, const imgdesc_s &des_info, TSCOLOR color_pm)
 {
@@ -406,7 +302,7 @@ void TSCALL img_helper_overfill(uint8 *des, const imgdesc_s &des_info, TSCOLOR c
     {
     case 3:
         {
-            int desnl = des_info.pitch - des_info.sz.x*des_info.bytepp();
+            aint desnl = des_info.pitch - des_info.sz.x*des_info.bytepp();
             uint not_a = (255 - ALPHA(color_pm)) * 256 / 255;
 
             for (int y = 0; y < des_info.sz.y; y++, des += desnl)
@@ -475,12 +371,11 @@ void TSCALL img_helper_overfill(uint8 *des, const imgdesc_s &des_info, TSCOLOR c
                 }
             };
 
-
             if (CCAPS(CPU_SSSE3))
             {
                 uint16 na = 256 - ALPHA(color_pm);
 
-                __declspec(align(16)) uint16 xtabl[16] =
+                ALIGN(16) uint16 xtabl[16] =
                 {
                     na, na, na, na, na, na, na, na,  // 2 pixels x (1-A)
                     BLUE(color_pm), GREEN(color_pm), RED(color_pm), ALPHA(color_pm), BLUE(color_pm), GREEN(color_pm), RED(color_pm), ALPHA(color_pm) // add color
@@ -495,7 +390,7 @@ void TSCALL img_helper_overfill(uint8 *des, const imgdesc_s &des_info, TSCOLOR c
                     {
                         if (w)
                             for (int y = 0; y < des_info.sz.y; ++y, dst_sse += des_info.pitch)
-                                overfill_row_sse_no_clamp(dst_sse, w, xtabl);
+                                overfill_row_sse(dst_sse, w, xtabl);
 
                         if (int ost = (des_info.sz.x & 7))
                         {
@@ -517,8 +412,6 @@ void TSCALL img_helper_overfill(uint8 *des, const imgdesc_s &des_info, TSCOLOR c
                             overfill_row(des, color_pm, ost);
                     }
                 }
-
-
             }
             else
             {
@@ -559,16 +452,16 @@ void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_i
     {
         uint32 alpha = (sou_info.bytepp() == 3) ? 0xFF000000 : 0;
 
-        for (int y = 0; y < sou_info.sz.y; ++y, des += des_info.pitch, sou += sou_info.pitch)
+        for (aint y = 0; y < sou_info.sz.y; ++y, des += des_info.pitch, sou += sou_info.pitch)
         {
             uint8 *des1 = des;
             const uint8 *sou1 = sou;
-            for (int i = 0; i < (sou_info.sz.x - 1); ++i, sou1 += sou_info.bytepp(), des1 += des_info.bytepp())
+            for (aint i = 0; i < (sou_info.sz.x - 1); ++i, sou1 += sou_info.bytepp(), des1 += des_info.bytepp())
             {
                 uint32 color = *((uint32 *)sou1) | alpha;
                 *((uint32 *)des1) = color;
             }
-            int c = tmin(sou_info.bytepp(), des_info.bytepp());
+            aint c = tmin(sou_info.bytepp(), des_info.bytepp());
             while (c--)
                 *des1++ = *sou1++;
 
@@ -580,7 +473,7 @@ void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_i
 
 }
 
-extern "C" void _cdecl asm_shrink2x(
+extern "C" void TSCALL asm_shrink2x(
 		void *dst,
 		const void *src,
 		unsigned long width,
@@ -588,50 +481,23 @@ extern "C" void _cdecl asm_shrink2x(
 		unsigned long srcpitch,
 		unsigned long dstcorrectpitch);
 
-__declspec(naked) void shrink_row_sse2_16px(const uint8* src_argb, int src_stride_argb, uint8* dst_argb, int dst_width)
+
+static void shrink_row_sse2_8px( const uint8* src_argb, int src_stride_argb, uint8* dst_argb, int dst_width )
 {
-    __asm {
-        push       esi
-        mov        eax, [esp + 4 + 4]   // src_argb
-        mov        esi, [esp + 4 + 8]   // src_stride_argb
-        mov        edx, [esp + 4 + 12]  // dst_argb
-        mov        ecx, [esp + 4 + 16]  // dst_width
+    for( ; dst_width > 0; dst_width -= 4, src_argb += 32, dst_argb += 16 )
+    {
+        __m128i zero = _mm_setzero_si128();
+        __m128i t1 = _mm_shuffle_epi32( _mm_loadu_si128( (const __m128i *)src_argb ), 0xd8 );
+        __m128i t2 = _mm_shuffle_epi32( _mm_loadu_si128( ( const __m128i * )(src_argb + src_stride_argb) ), 0xd8 );
 
-    convertloop :
-        
-        movdqu     xmm0, [eax]          // take 0..3 pixels line 0
-        movdqu     xmm4, [eax + esi]    // take 0..3 pixels line 1
-        pavgb      xmm0, xmm4
-        movdqu     xmm1, [eax + 16]         // 4..7
-        movdqu     xmm4, [eax + esi + 16]   // 4..7
-        pavgb      xmm1, xmm4
-        movdqu     xmm2, [eax + 32]         // 8..11
-        movdqu     xmm4, [eax + esi + 32]   // 8..11
-        pavgb      xmm2, xmm4
-        movdqu     xmm3, [eax + 48]         // 12..15
-        movdqu     xmm4, [eax + esi + 48]   // 12..15
-        pavgb      xmm3, xmm4
+        __m128i ttt1 = _mm_shuffle_epi32( _mm_loadu_si128( ( const __m128i * )(src_argb + 16) ), 0xd8 );
+        __m128i ttt2 = _mm_shuffle_epi32( _mm_loadu_si128( ( const __m128i * )( src_argb + src_stride_argb + 16 ) ), 0xd8 );
 
-        lea        eax, [eax + 64]
-        movdqa     xmm4, xmm0
-        shufps     xmm0, xmm1, 0x88
-        shufps     xmm4, xmm1, 0xdd
-        pavgb      xmm0, xmm4           // now xmm0 contains 4 final pixels
-            
-        movdqa     xmm4, xmm2
-        shufps     xmm2, xmm3, 0x88
-        shufps     xmm4, xmm3, 0xdd
-        pavgb      xmm2, xmm4           // now xmm2 contains next 4 final pixels
-
-        movdqu     [edx], xmm0
-        movdqu     [edx+16], xmm2
-
-        sub        ecx, 8               // 8 dst pixels at once
-        lea        edx, [edx + 32]
-        jg         convertloop
-
-        pop        esi
-        ret
+        _mm_storeu_si128( ( __m128i * )dst_argb,
+            _mm_packus_epi16( _mm_srli_epi16( _mm_adds_epi16( _mm_adds_epi16( _mm_unpacklo_epi8( t1, zero ), _mm_unpackhi_epi8( t1, zero ) ),
+                _mm_adds_epi16( _mm_unpacklo_epi8( t2, zero ), _mm_unpackhi_epi8( t2, zero ) ) ), 2 ),
+                    _mm_srli_epi16( _mm_adds_epi16( _mm_adds_epi16( _mm_unpacklo_epi8( ttt1, zero ), _mm_unpackhi_epi8( ttt1, zero ) ),
+                        _mm_adds_epi16( _mm_unpacklo_epi8( ttt2, zero ), _mm_unpackhi_epi8( ttt2, zero ) ) ), 2 ) ));
     }
 }
 
@@ -694,22 +560,22 @@ void TSCALL img_helper_shrink_2x(uint8 *des, const uint8 *sou, const imgdesc_s &
         break;
     case 4:
 
-        if (CCAPS(CPU_SSE2))
+        if ( CCAPS( CPU_SSE2 ) )
         {
             ASSERT( des != sou || des_info.pitch == sou_info.pitch ); // shrink to source allowed only with same pitch == keep unprocessed pixels unchanged
 
             uint8 *dst_sse = des;
             const uint8 *src_sse = sou;
 
-            int dw = des_info.sz.x & ~7;
-            for( int y = 0; y < des_info.sz.y; ++y, dst_sse += des_info.pitch, src_sse += sou_info.pitch * 2 )
-                shrink_row_sse2_16px( src_sse, sou_info.pitch, dst_sse, dw );
+            int dw = des_info.sz.x & ~3;
+            for ( int y = 0; y < des_info.sz.y; ++y, dst_sse += des_info.pitch, src_sse += sou_info.pitch * 2 )
+                shrink_row_sse2_8px( src_sse, sou_info.pitch, dst_sse, dw );
 
-            if (int ost = (des_info.sz.x & 7))
-                asm_shrink2x(des + dw * 4, sou + dw * 8, ost, des_info.sz.y, sou_info.pitch, des_info.pitch - ost*4);
+            if ( int ost = ( des_info.sz.x & 3 ) )
+                asm_shrink2x( des + dw * 4, sou + dw * 8, ost, des_info.sz.y, sou_info.pitch, des_info.pitch - ost * 4 );
 
         } else
-            asm_shrink2x(des, sou, des_info.sz.x, des_info.sz.y, sou_info.pitch, desnl);
+            asm_shrink2x(des, sou, des_info.sz.x, des_info.sz.y, sou_info.pitch, (int)desnl);
     }
 
 
@@ -740,8 +606,8 @@ void img_helper_merge_with_alpha(uint8 *dst, const uint8 *basesrc, const uint8 *
             uint8 *des = dst;
             const uint8 *desbase = basesrc;
             const uint32 *sou = (uint32 *)src;
-            int bytepp = des_info.bytepp();
-            int byteppbase = base_info.bytepp();
+            aint bytepp = des_info.bytepp();
+            aint byteppbase = base_info.bytepp();
             for (int x = 0; x < des_info.sz.x; x++, des += bytepp, desbase += byteppbase, ++sou)
             {
                 uint32 color = *sou;
@@ -793,8 +659,8 @@ void img_helper_merge_with_alpha(uint8 *dst, const uint8 *basesrc, const uint8 *
                 uint8 *des = dst;
                 const uint8 *desbase = basesrc;
                 const uint32 *sou = (uint32 *)src;
-                int bytepp = des_info.bytepp();
-                int byteppbase = base_info.bytepp();
+                aint bytepp = des_info.bytepp();
+                aint byteppbase = base_info.bytepp();
                 for (int x = 0; x < des_info.sz.x; x++, des += bytepp, desbase += byteppbase, ++sou)
                 {
                     uint32 ocolor = 0;
@@ -841,8 +707,8 @@ void img_helper_merge_with_alpha(uint8 *dst, const uint8 *basesrc, const uint8 *
                 uint8 *des = dst;
                 const uint8 *desbase = basesrc;
                 const uint32 *sou = (uint32 *)src;
-                int bytepp = des_info.bytepp();
-                int byteppbase = base_info.bytepp();
+                aint bytepp = des_info.bytepp();
+                aint byteppbase = base_info.bytepp();
                 for (int x = 0; x < des_info.sz.x; x++, des += bytepp, desbase += byteppbase, ++sou)
                 {
                     uint32 ocolor = 0;
@@ -890,128 +756,44 @@ void img_helper_merge_with_alpha(uint8 *dst, const uint8 *basesrc, const uint8 *
     }
 }
 
-/*
-    alphablend row with addition alpha
-    source pixels must be premultiplied! no clamp provided!
-*/
-__declspec(naked) void alphablend_row_sse_no_clamp_aa(uint8 *dst_argb, const uint8 *src_argb, int w, const uint16 * alpha_mul)
+static void alphablend_row_sse_no_clamp_aa( uint8 *dst_argb, const uint8 *src_argb, int w, const uint16 * alpha_mul )
 {
-    __asm {
-        mov        edx, [esp + 0 + 4]   // dst_argb
-        mov        ecx, [esp + 0 + 12]  // width
-        mov        eax, [esp + 0 + 16]  // alpha mul
-        movdqa     xmm3, [eax]
-        mov        eax, [esp + 0 + 8]   // src_argb
+    for(;w > 0; w -= 4, dst_argb += 16, src_argb += 16)
+    {
+        __m128i pta1 = _mm_load_si128( ( const __m128i * )sse_consts::preparetgtc_1 );
+        __m128i pta2 = _mm_load_si128( ( const __m128i * )sse_consts::preparetgtc_2 );
+        __m128i t3 = _mm_load_si128( ( const __m128i * )alpha_mul );
+        __m128i t4 = _mm_load_si128( ( const __m128i * )sub256 );
+        __m128i prepa = _mm_load_si128( ( const __m128i * )preparealphas );
 
-        movdqa     xmm4, sub256
-
-    alphablendloop :
-
-        lddqu      xmm5, [eax]          // src take 0..3 pixels
-
-        movdqa     xmm6, xmm5
-        pshufb     xmm5, preparesrcs_1
-        pshufb     xmm6, preparesrcs_2
-        pmulhuw    xmm5, xmm3
-
-        movdqa     xmm2, xmm5
-        pshufb     xmm2, preparealphas
-        movdqa     xmm7, xmm4
-        psubw      xmm7, xmm2
-
-        movdqu     xmm0, [edx]
-        movdqa     xmm1, xmm0
-        pshufb     xmm0, sse_consts::preparetgtc_1
-        pmulhuw    xmm0, xmm7
-        paddw      xmm0, xmm5
-        pshufb     xmm0, sse_consts::packcback_1
-
-        lea        eax, [eax + 16]
-
-        pmulhuw    xmm6, xmm3
-
-        movdqa     xmm2, xmm6
-        pshufb     xmm2, preparealphas
-        movdqa     xmm7, xmm4
-        psubw      xmm7, xmm2
-
-        pshufb     xmm1, sse_consts::preparetgtc_2
-        pmulhuw    xmm1, xmm7
-        paddw      xmm1, xmm6
-        pshufb     xmm1, sse_consts::packcback_2
-
-        por        xmm0, xmm1
-
-        movdqu     [edx], xmm0
-
-        lea        edx, [edx + 16]
-
-        sub        ecx, 4               // 4 dst pixels at once
-        jg         alphablendloop
-
-        ret
+        __m128i zero = _mm_setzero_si128();
+        __m128i t5 = _mm_lddqu_si128( ( const __m128i * )src_argb );
+        __m128i tt5 = _mm_mulhi_epu16( _mm_unpacklo_epi8( t5, zero ), t3 );
+        __m128i tt6 = _mm_mulhi_epu16( _mm_unpackhi_epi8( t5, zero ), t3 );
+        __m128i t1 = _mm_lddqu_si128( ( const __m128i * )dst_argb );
+        
+        _mm_storeu_si128( ( __m128i * )dst_argb, _mm_packus_epi16( _mm_add_epi16( _mm_mulhi_epu16( _mm_shuffle_epi8( t1, pta1 ), _mm_sub_epi16( t4, _mm_shuffle_epi8( tt5, prepa ) ) ), tt5 ), _mm_add_epi16( _mm_mulhi_epu16( _mm_shuffle_epi8( t1, pta2 ), _mm_sub_epi16( t4, _mm_shuffle_epi8( tt6, prepa ) ) ), tt6 ) ) );
     }
 }
 
-/*
-    alphablend row
-    source pixels must be premultiplied! no clamp provided!
-*/
-__declspec(naked) void alphablend_row_sse_no_clamp(uint8 *dst_argb, const uint8 *src_argb, int w)
+static void alphablend_row_sse_no_clamp( uint8 *dst_argb, const uint8 *src_argb, int w )
 {
-    __asm {
-        mov        edx, [esp + 0 + 4]   // dst_argb
-        mov        eax, [esp + 0 + 8]   // src_argb
-        mov        ecx, [esp + 0 + 12]  // width
+    for ( ; w > 0; w -= 4, dst_argb += 16, src_argb += 16 )
+    {
+        __m128i pta1 = _mm_load_si128( ( const __m128i * )sse_consts::preparetgtc_1 );
+        __m128i pta2 = _mm_load_si128( ( const __m128i * )sse_consts::preparetgtc_2 );
+        __m128i t4 = _mm_load_si128( ( const __m128i * )sub256 );
+        __m128i t3 = _mm_load_si128( ( const __m128i * )preparealphas );
 
-        movdqa     xmm4, sub256
-        movdqa     xmm3, preparealphas
+        __m128i zero = _mm_setzero_si128();
+        __m128i t5 = _mm_lddqu_si128( ( const __m128i * )src_argb );
+        __m128i tt5 = _mm_unpacklo_epi8( t5, zero );
+        __m128i tt6 = _mm_unpackhi_epi8( t5, zero );
+        __m128i t1 = _mm_lddqu_si128( ( const __m128i * )dst_argb );
 
-    alphablendloop :
-
-        lddqu      xmm5, [eax]          // src take 0..3 pixels
-
-        movdqa     xmm6, xmm5
-        pshufb     xmm5, preparesrcs_1
-        pshufb     xmm6, preparesrcs_2
-
-        movdqa     xmm2, xmm5
-        pshufb     xmm2, xmm3
-        movdqa     xmm7, xmm4
-        psubw      xmm7, xmm2
-
-        movdqu     xmm0, [edx]
-        movdqa     xmm1, xmm0
-        pshufb     xmm0, sse_consts::preparetgtc_1
-        pmulhuw    xmm0, xmm7
-        paddw      xmm0, xmm5
-        pshufb     xmm0, sse_consts::packcback_1
-
-        lea        eax, [eax + 16]
-
-        movdqa     xmm2, xmm6
-        pshufb     xmm2, xmm3
-        movdqa     xmm7, xmm4
-        psubw      xmm7, xmm2
-
-        pshufb     xmm1, sse_consts::preparetgtc_2
-        pmulhuw    xmm1, xmm7
-        paddw      xmm1, xmm6
-        pshufb     xmm1, sse_consts::packcback_2
-
-        por        xmm0, xmm1
-
-        movdqu[edx], xmm0
-
-        lea        edx, [edx + 16]
-
-        sub        ecx, 4               // 4 dst pixels at once
-        jg         alphablendloop
-
-        ret
+        _mm_storeu_si128( ( __m128i * )dst_argb, _mm_packus_epi16( _mm_add_epi16( _mm_mulhi_epu16( _mm_shuffle_epi8( t1, pta1 ), _mm_sub_epi16( t4, _mm_shuffle_epi8( tt5, t3 ) ) ), tt5 ), _mm_add_epi16( _mm_mulhi_epu16( _mm_shuffle_epi8( t1, pta2 ), _mm_sub_epi16( t4, _mm_shuffle_epi8( tt6, t3 ) ) ), tt6 ) ) );
     }
 }
-
 
 void TSCALL img_helper_alpha_blend_pm( uint8 *dst, int dst_pitch, const uint8 *sou, const imgdesc_s &src_info, uint8 alpha, bool guaranteed_premultiplied )
 {
@@ -1055,7 +837,7 @@ void TSCALL img_helper_alpha_blend_pm( uint8 *dst, int dst_pitch, const uint8 *s
         } else
         {
             ts::uint16 am = (uint16)(alpha+1) << 8; // valid due alpha < 255
-            __declspec(align(16)) ts::uint16 amul[8] = { am, am, am, am, am, am, am, am };
+            ALIGN(16) ts::uint16 amul[8] = { am, am, am, am, am, am, am, am };
 
             if (w)
                 for (int y = 0; y < src_info.sz.y; ++y, dst_sse += dst_pitch, src_sse += src_info.pitch)
@@ -1164,72 +946,6 @@ template <typename CORE> bitmap_t<CORE>& bitmap_t<CORE>::operator =( const bmpco
     copy( ts::ivec2( 0 ), eb.info().sz, eb, ts::ivec2( 0 ) );
     return *this;
 }
-
-#pragma warning (push)
-#pragma warning (disable : 4731)
-
-template <typename CORE> void bitmap_t<CORE>::convert_24to32(bitmap_c &imgout) const
-{
-    if (info().bitpp != 24) return;
-
-	if (info().pitch * info().sz.y % 12 != 0) // for small images 1x1 or 2x2
-	{
-		imgout = extbody();
-		return;
-	}
-
-    int cnt = info().pitch * info().sz.y / 12;
-    void *src = body();
-
-    imgout.create( info().sz, 32 );
-
-    void *dst = imgout.body();
-
-    _asm
-    {
-        push ebp
-        mov esi, src;
-        mov edi, dst
-        mov ebp, cnt
-
-loop_1112:
-        mov eax, [esi]
-        mov ebx, [esi + 4]
-        mov ecx, [esi + 8]
-
-        //  R  G  B   R  G  B   R  G  B   R  G  B
-        //  == == ==  == == ==  == == ==  == == ==
-        //  C3 C2 C1  C0 B3 B2  B1 B0 A3  A2 A1 A0
-
-        mov edx, eax
-        or  edx, 0xFF000000
-        mov [edi], edx
-
-        mov ax, bx              // в eax : BxRG
-        rol eax, 8              // в eax : xRGB
-        or  eax, 0xFF000000
-        mov [edi+4], eax
-
-        mov bl, cl              // GBxR
-        ror ebx, 16             // xRGB
-        or  ebx, 0xFF000000
-        mov [edi+8], ebx
-
-        shr ecx, 8              // 
-        or  ecx, 0xFF000000
-        mov [edi+12], ecx
-
-        add esi, 12
-        add edi, 16
-
-        dec ebp
-        jnz loop_1112;
-
-
-        pop ebp
-    }
-}
-#pragma warning (pop)
 
 template<typename CORE> void bitmap_t<CORE>::convert_from_yuv( const ivec2 & pdes, const ivec2 & size, const uint8 *src, yuv_fmt_e fmt )
 {
@@ -1640,7 +1356,7 @@ template<typename CORE> void bitmap_t<CORE>::copy(const ivec2 &pdes, const ivec2
 
     if (bmsou.info().bytepp() == info().bytepp())
     {
-        int len = size.x * info().bytepp();
+        aint len = size.x * info().bytepp();
 	    for(int y=0;y<size.y;y++,des+=info().pitch,sou+=bmsou.info().pitch)
         {
             memcpy(des, sou, len);
@@ -1658,7 +1374,7 @@ template<typename CORE> void bitmap_t<CORE>::copy(const ivec2 &pdes, const ivec2
                 uint32 color = *((uint32 *)sou1) | alpha;
                 *((uint32 *)des1) = color;
             }
-            int c = tmin(bmsou.info().bytepp(), info().bytepp());
+            aint c = tmin(bmsou.info().bytepp(), info().bytepp());
             while (c--)
             {
                 *des1++ = *sou1++;
@@ -1692,8 +1408,8 @@ template<typename CORE> void bitmap_t<CORE>::fill_alpha(const ivec2 & pdes, cons
     before_modify();
 
     uint8 * des = body() + info().bytepp()*pdes.x + info().pitch*pdes.y + 3;
-    int desnl = info().pitch - size.x*info().bytepp();
-    int desnp = info().bytepp();
+    aint desnl = info().pitch - size.x*info().bytepp();
+    aint desnp = info().bytepp();
 
     for (int y = 0; y < size.y; y++, des += desnl) {
         for (int x = 0; x < size.x; x++, des += desnp) {
@@ -1708,8 +1424,8 @@ template<typename CORE> void bitmap_t<CORE>::unmultiply()
     before_modify();
 
     uint8 * des = body();
-    int desnl = info().pitch - info().sz.x*info().bytepp();
-    int desnp = info().bytepp();
+    aint desnl = info().pitch - info().sz.x*info().bytepp();
+    aint desnp = info().bytepp();
 
     for ( int y = 0; y < info().sz.y; ++y, des += desnl ) {
         for ( int x = 0; x < info().sz.x; ++x, des += desnp ) {
@@ -1724,8 +1440,8 @@ template<typename CORE> void bitmap_t<CORE>::invcolor()
     before_modify();
 
     uint8 * des = body();
-    int desnl = info().pitch - info().sz.x*info().bytepp();
-    int desnp = info().bytepp();
+    aint desnl = info().pitch - info().sz.x*info().bytepp();
+    aint desnp = info().bytepp();
 
     for ( int y = 0; y < info().sz.y; ++y, des += desnl ) {
         for ( int x = 0; x < info().sz.x; ++x, des += desnp ) {
@@ -1861,118 +1577,6 @@ template<typename CORE> void bitmap_t<CORE>::mulcolor(const ivec2 & pdes, const 
     img_helper_mulcolor(des, info(irect(0, size)), color);
 }
 
-#if 0
-
-template<typename CORE> void bitmap_t<CORE>::rotate_90(bitmap_c& outimage, const ivec2 & pdes,const ivec2 & sizesou,const ivec2 & spsou)
-{
-	if(spsou.x<0 || spsou.y<0) return;
-	if((spsou.x+sizesou.x)>bmsou.info().sz.x || (spsou.y+sizesou.y)>bmsou.info().sz.y) return;
-
-	if(pdes.x<0 || pdes.y<0) return;
-	if((pdes.x+sizesou.y)>info().sz.x || (pdes.y+sizesou.x)>info().sz.y) return;
-
-	if(bmsou.info().bytepp()!=info().bytepp()) return;
-	if(bmsou.info().bitpp!=info().bitpp) return;
-
-    before_modify();
-
-	uint8 * des=body()+info().bytepp()*pdes.x+info().pitch*pdes.y;
-	int desnl=info().pitch-sizesou.x*info().bytepp();
-	int desnp=info().bytepp();
-
-	const uint8 * sou=bmsou.body()+bmsou.info().bytepp()*spsou.x+bmsou.info().pitch*spsou.y;
-	int soull=bmsou.info().pitch;
-	int sounp=bmsou.info().bytepp();
-
-	sou=sou+(sizesou.x-1)*sounp;
-
-	for(int y=0;y<sizesou.x;y++,des+=desnl,sou=sou-soull*sizesou.y-sounp) {
-		for(int x=0;x<sizesou.y;x++,des+=desnp,sou+=soull) {
-			switch(info().bytepp()) {
-				case 1: *(uint8 *)des=*(uint8 *)sou; break;
-				case 2: *(uint16 *)des=*(uint16 *)sou; break;
-				case 3: *(uint16 *)des=*(uint16 *)sou; *(uint8 *)(des+2)=*(uint8 *)(sou+2); break;
-				case 4: *(uint32 *)des=*(uint32 *)sou;break;
-			}
-		}			
-	}
-}
-
-template<typename CORE> void bitmap_t<CORE>::rotate_180(bitmap_c& outimage, const ivec2 & pdes,const ivec2 & sizesou, const ivec2 & spsou)
-{
-	if(spsou.x<0 || spsou.y<0) return;
-	if((spsou.x+sizesou.x)>bmsou.info().sz.x || (spsou.y+sizesou.y)>bmsou.info().sz.y) return;
-
-	if(pdes.x<0 || pdes.y<0) return;
-	if((pdes.x+sizesou.x)>info().sz.x || (pdes.y+sizesou.y)>info().sz.y) return;
-
-	if(bmsou.info().bytepp()!=info().bytepp()) return;
-	if(bmsou.info().bitpp!=info().bitpp) return;
-
-    before_modify();
-
-	uint8 * des=body()+info().bytepp()*pdes.x+info().pitch*pdes.y;
-	int desnl=info().pitch-sizesou.x*info().bytepp();
-	int desnp=info().bytepp();
-
-	const uint8 * sou=bmsou.body()+bmsou.info().bytepp()*spsou.x+bmsou.info().pitch*spsou.y;
-	int sounl=bmsou.info().pitch-sizesou.x*bmsou.info().bytepp();
-	int soull=bmsou.info().pitch;
-	int sounp=bmsou.info().bytepp();
-
-	sou=sou+(sizesou.x-1)*sounp+(sizesou.y-1)*soull;
-
-	for(int y=0;y<sizesou.y;y++,des+=desnl,sou=sou-sounl) {
-		for(int x=0;x<sizesou.x;x++,des+=desnp,sou-=sounp) {
-			switch(info().bytepp()) {
-				case 1: *(uint8 *)des=*(uint8 *)sou; break;
-				case 2: *(uint16 *)des=*(uint16 *)sou; break;
-				case 3: *(uint16 *)des=*(uint16 *)sou; *(uint8 *)(des+2)=*(uint8 *)(sou+2); break;
-				case 4: *(uint32 *)des=*(uint32 *)sou;break;
-			}
-		}			
-	}
-}
-
-template<typename CORE> void bitmap_t<CORE>::rotate_270(bitmap_c& outimage, const ivec2 & pdes,const ivec2 & sizesou, const ivec2 & spsou)
-{
-	if(spsou.x<0 || spsou.y<0) return;
-	if((spsou.x+sizesou.x)>bmsou.info().sz.x || (spsou.y+sizesou.y)>bmsou.info().sz.y) return;
-
-	if(pdes.x<0 || pdes.y<0) return;
-	if((pdes.x+sizesou.y)>info().sz.x || (pdes.y+sizesou.x)>info().sz.y) return;
-
-	if(bmsou.info().bytepp()!=info().bytepp()) return;
-	if(bmsou.info().bitpp!=info().bitpp) return;
-
-    before_modify();
-
-	uint8 * des=body()+info().bytepp()*pdes.x+info().pitch*pdes.y;
-	int desnl=info().pitch-sizesou.x*info().bytepp();
-	int desnp=info().bytepp();
-
-	const uint8 * sou=bmsou.body()+bmsou.info().bytepp()*spsou.x+bmsou.info().pitch*spsou.y;
-	//int sounl=bmsou.info().pitch-sizesou.x*bmsou.info().bytepp();
-	int soull=bmsou.info().pitch;
-	int sounp=bmsou.info().bytepp();
-
-	sou=sou+(sizesou.y-1)*soull;
-
-
-	for(int y=0;y<sizesou.x;y++,des+=desnl,sou=sou+soull*sizesou.y+sounp) {
-		for(int x=0;x<sizesou.y;x++,des+=desnp,sou-=soull) {
-			switch(info().bytepp()) {
-				case 1: *(uint8 *)des=*(uint8 *)sou; break;
-				case 2: *(uint16 *)des=*(uint16 *)sou; break;
-				case 3: *(uint16 *)des=*(uint16 *)sou; *(uint8 *)(des+2)=*(uint8 *)(sou+2); break;
-				case 4: *(uint32 *)des=*(uint32 *)sou;break;
-			}
-		}			
-	}
-}
-
-#endif
-
 template<typename CORE> void bitmap_t<CORE>::flip_x(const ivec2 & pdes,const ivec2 & size, const bitmap_t<CORE> & bmsou,const ivec2 & spsou)
 {
 	if(spsou.x<0 || spsou.y<0) return;
@@ -1987,12 +1591,12 @@ template<typename CORE> void bitmap_t<CORE>::flip_x(const ivec2 & pdes,const ive
     before_modify(); //TODO: multicore optimizations
 
 	uint8 * des=body()+info().bytepp()*pdes.x+info().pitch*pdes.y;
-	int desnl=info().pitch-size.x*info().bytepp();
-	int desnp=info().bytepp();
+	aint desnl=info().pitch-size.x*info().bytepp();
+	aint desnp=info().bytepp();
 
 	const uint8 * sou=bmsou.body()+bmsou.info().bytepp()*spsou.x+bmsou.info().pitch*spsou.y;
-	int soull=bmsou.info().pitch;
-	int sounp=bmsou.info().bytepp();
+	aint soull=bmsou.info().pitch;
+	aint sounp=bmsou.info().bytepp();
 
 	sou=sou+(size.x-1)*sounp;
 
@@ -2031,7 +1635,7 @@ template<typename CORE> void bitmap_t<CORE>::flip_y()
         }
         while (cnt > 0)
         {
-            BYTE temp = *p0;
+            uint8 temp = *p0;
             *p0 = *p1;
             *p1 = temp;
             ++p0;
@@ -2059,13 +1663,13 @@ template<typename CORE> void bitmap_t<CORE>::flip_y(const ivec2 & pdes,const ive
     before_modify();
 
 	uint8 * des=body()+info().bytepp()*pdes.x+info().pitch*pdes.y;
-	int desnl=info().pitch-size.x*info().bytepp();
-	int desnp=info().bytepp();
+	aint desnl=info().pitch-size.x*info().bytepp();
+	aint desnp=info().bytepp();
 
 	const uint8 * sou=bmsou.body()+bmsou.info().bytepp()*spsou.x+bmsou.info().pitch*spsou.y;
-	int sounl=bmsou.info().pitch-size.x*bmsou.info().bytepp();
-	int soull=bmsou.info().pitch;
-	int sounp=bmsou.info().bytepp();
+	aint sounl=bmsou.info().pitch-size.x*bmsou.info().bytepp();
+	aint soull=bmsou.info().pitch;
+	aint sounp=bmsou.info().bytepp();
 
 	sou=sou+(size.y-1)*soull;
 
@@ -2091,45 +1695,43 @@ template<typename CORE> void bitmap_t<CORE>::flip_y(const ivec2 & pdes,const ive
     before_modify();
 
 	uint8 * des=body()+info().bytepp()*pdes.x+info().pitch*pdes.y;
-	int desnl=info().pitch-size.x*info().bytepp();
-	int desnp=info().bytepp();
+	aint desnl=info().pitch-size.x*info().bytepp();
+	aint desnp=info().bytepp();
 
 	const uint8 * sou=body()+info().bytepp()*pdes.x+info().pitch*pdes.y;
-	int sounl=info().pitch-size.x*info().bytepp();
-	int soull=info().pitch;
-	int sounp=info().bytepp();
+	aint sounl=info().pitch-size.x*info().bytepp();
+	aint soull=info().pitch;
+	aint sounp=info().bytepp();
 
 	sou=sou+(size.y-1)*soull;
-
-	uint32 t;
 
 	for(int y=0;y<(size.y >> 1);y++,des+=desnl,sou=sou+sounl-soull*2) {
 		for(int x=0;x<size.x;x++,des+=desnp,sou+=sounp) {
 			switch(info().bytepp()) {
-				case 1: 
-					t=*(uint8 *)des;
+				case 1:  {
+					uint8 t=*(uint8 *)des;
 					*(uint8 *)des=*(uint8 *)sou; 
-					*(uint8 *)sou=BYTE(t);
-					break;
-				case 2: 
-					t=*(uint16 *)des;
+					*(uint8 *)sou=t; 
+					} break;
+				case 2: {
+                    uint16 t=*(uint16 *)des;
 					*(uint16 *)des=*(uint16 *)sou; 
-					*(uint16 *)sou=uint16(t);
-					break;
-				case 3: 
-					t=*(uint16 *)des;
+					*(uint16 *)sou=t;
+					} break;
+				case 3:  {
+                    uint16 t=*(uint16 *)des;
 					*(uint16 *)des=*(uint16 *)sou; 
-					*(uint16 *)sou=uint16(t);
+					*(uint16 *)sou=t;
 
 					t=*(uint8 *)(des+2);
 					*(uint8 *)(des+2)=*(uint8 *)(sou+2); 
-					*(uint8 *)(sou+2)=BYTE(t);
-					break;
-				case 4: 
-					t=*(uint32 *)des;
+					*(uint8 *)(sou+2)=t & 0xff;
+					} break;
+				case 4: {
+                    uint32 t=*(uint32 *)des;
 					*(uint32 *)des=*(uint32 *)sou;
 					*(uint32 *)sou=t;
-					break;
+					} break;
 			}
 		}			
 	}
@@ -2222,294 +1824,17 @@ template<typename CORE> void bitmap_t<CORE>::swap_byte(const ivec2 & pos,const i
     before_modify();
 
 	uint8 * buf=body()+info().bytepp()*pos.x+info().pitch*pos.y;
-	int bufnl=info().pitch-size.x*info().bytepp();
-	int bufnp=info().bytepp();
-
-	uint8 zn;
+	aint bufnl=info().pitch-size.x*info().bytepp();
+	aint bufnp=info().bytepp();
 
 	for(int y=0;y<size.y;y++,buf+=bufnl) {
 		for(int x=0;x<size.x;x++,buf+=bufnp) {
-			zn=*(buf+n1); *(buf+n1)=*(buf+n2); *(buf+n2)=zn;
+            uint8 zn=*(buf+n1);
+            *(buf+n1)=*(buf+n2);
+            *(buf+n2)=zn;
 		}
 	}
 }
-
-#if 0
-template<typename CORE> void bitmap_t<CORE>::merge_with_alpha(const ivec2 & pdes,const ivec2 & size, const bitmap_c & bmsou,const ivec2 & spsou)
-{
-	if(spsou.x<0 || spsou.y<0) return;
-	if((spsou.x+size.x)>bmsou.info().sz.x || (spsou.y+size.y)>bmsou.info().sz.y) return;
-
-	if(pdes.x<0 || pdes.y<0) return;
-	if((pdes.x+size.x)>info().sz.x || (pdes.y+size.y)>info().sz.y) return;
-
-	if(info().bytepp()!=3 && info().bytepp()!=4) return;
-	if(bmsou.info().bytepp()!=4) return;
-
-    before_modify();
-
-    merge_with_alpha( 
-        body()+info().bytepp()*pdes.x+info().pitch*pdes.y,
-        bmsou.body()+bmsou.info().bytepp()*spsou.x+bmsou.info().pitch*spsou.y,
-        size.x,
-        size.y,
-        info().pitch,
-        info().bytepp(),
-        bmsou.info().pitch
-        );
-}
-
-template<typename CORE> void bitmap_t<CORE>::merge_with_alpha_PM(const ivec2 & pdes,const ivec2 & size, const bitmap_c & bmsou,const ivec2 & spsou)
-{
-
-	if(spsou.x<0 || spsou.y<0) return;
-	if((spsou.x+size.x)>bmsou.info().sz.x || (spsou.y+size.y)>bmsou.info().sz.y) return;
-
-	if(pdes.x<0 || pdes.y<0) return;
-	if((pdes.x+size.x)>info().sz.x || (pdes.y+size.y)>info().sz.y) return;
-
-	if(bmsou.info().bytepp()!=4) return;
-
-    before_modify();
-
-	uint8 * des=body()+info().bytepp()*pdes.x+info().pitch*pdes.y;
-	int desnl=info().pitch-size.x*info().bytepp();
-	int desnp=info().bytepp();
-
-	const uint8 * sou=bmsou.body()+bmsou.info().bytepp()*spsou.x+bmsou.info().pitch*spsou.y;
-	int sounl=bmsou.info().pitch-size.x*bmsou.info().bytepp();
-	int sounp=bmsou.info().bytepp();
-
-
-	for(int y=0;y<size.y;y++,des+=desnl,sou+=sounl)
-    {
-        for(int x=0;x<size.x;x++,des+=desnp,sou+=sounp)
-        {
-			uint32 color=*(uint32 *)sou;
-            uint32 ocolor = *des + (*(des+1) << 8) + (*(des+2) << 16);
-			uint8 alpha = uint8(color>>24);
-            uint8 R = uint8(color>>16);
-            uint8 G = uint8(color>>8);
-            uint8 B = uint8(color);
-
-			uint8 oalpha = uint8(color>>24);
-            uint8 oR = uint8(ocolor>>16);
-            uint8 oG = uint8(ocolor>>8);
-            uint8 oB = uint8(ocolor);
-
-            if (alpha==0) continue;
-			else
-            if(alpha==255)
-            {
-                ocolor = color;
-            } else
-            {
-                float A = alpha / 255.0f;
-
-			    //*des=   uint8((uint32(B)*(uint32(alpha)<<8))>>16)+uint8((uint32(oB)*(uint32(255-alpha)<<8))>>16); // не совсем точная формула =(
-
-                auint oiB = ts::lround(float(B) + float(oB) * (1.0f - A));
-                auint oiG = ts::lround(float(G) + float(oG) * (1.0f - A));
-                auint oiR = ts::lround(float(R) + float(oR) * (1.0f - A));
-
-                auint oiA = ts::lround(float(255-oalpha) * A);
-
-				ocolor = CLAMP<uint8>(oiB) | (CLAMP<uint8>(oiG) << 8) | (CLAMP<uint8>(oiR) << 16) | (CLAMP<uint8>(oiA) << 24);
-
-                
-                /*
-                *des=   uint8((uint32(*sou)*(uint32(alpha)<<8))>>16)
-						    +uint8((uint32(*des)*(uint32(255-alpha)<<8))>>16); // не совсем точная формула =(
-			    sou++; des++;
-			    *des=   uint8((uint32(*sou)*(uint32(alpha)<<8))>>16)
-						    +uint8((uint32(*des)*(uint32(255-alpha)<<8))>>16); // не совсем точная формула =(
-			    sou++; des++;
-
-			    *des+=uint8(((255-*des)*(uint32(alpha)<<8))>>16);
-                */
-            }
-            if (info().bytepp() == 3)
-            {
-                *des = uint8(ocolor);
-                *(des+1) = uint8(ocolor>>8);
-                *(des+2) = uint8(ocolor>>16);
-            } else
-            {
-
-                *(uint32 *)des = ocolor;
-            }
-
-		}			
-	}
-
-}
-
-template<typename CORE> void bitmap_t<CORE>::merge_grayscale_with_alpha(const ivec2 & pdes,const ivec2 & size, const bitmap_t<CORE> * data_src,const ivec2 & data_src_point, const bitmap_t<CORE> * alpha_src, const ivec2 & alpha_src_point)
-{
-    uint8 * dsou = nullptr;
-    int dsounl = 0;
-
-	if(data_src == nullptr)
-    {
-    } else
-    {
-        ASSERT(data_src->info().bitpp == 8);
-	    dsou = data_src->body() + data_src_point.x + data_src->info().pitch*data_src_point.y;
-	    dsounl=data_src->info().pitch-size.x;
-    }
-    ASSERT(alpha_src != nullptr && info().bitpp == 8);
-    if (alpha_src->info().bitpp != 32) return;
-
-    before_modify();
-
-	uint8 * des=body()+info().bytepp()*pdes.x+info().pitch*pdes.y;
-	int desnl=info().pitch-size.x;
-
-	const uint8 * asou=alpha_src->body() + alpha_src_point.x * 4 + alpha_src->info().pitch*alpha_src_point.y + 3;
-	int asounl=alpha_src->info().pitch-size.x*4;
-
-    if (dsou == nullptr)
-    {
-	    for(int y=0;y<size.y;y++,des+=desnl,asou+=asounl)
-        {
-		    for(int x=0;x<size.x;x++,++des, asou+=4)
-            {
-			    uint8 alpha = *asou;
-                uint8 odata;
-
-                if (alpha==0) continue;
-			    else
-                if(alpha==255)
-                {
-                    odata = 0;
-                } else
-                {
-                    odata = uint8(float(255-alpha)*float(*des)*(1.0/255.0));
-                }
-                
-                *des = odata;
-
-		    }			
-	    }
-        return;
-    }
-
-	for(int y=0;y<size.y;y++,des+=desnl,asou+=asounl, dsou+=dsounl)
-    {
-		for(int x=0;x<size.x;x++,++des,++dsou, asou+=4)
-        {
-			uint8 alpha = *asou;
-            uint8 odata;
-
-            if (alpha==0) continue;
-			else
-            if(alpha==255)
-            {
-                odata = *dsou;
-            } else
-            {
-                odata = uint8((float(255-alpha)*float(*des) + float(alpha)*float(*dsou))*(1.0/255.0));
-            }
-            
-            *des = odata;
-
-		}			
-	}
-
-}
-
-template<typename CORE> void bitmap_t<CORE>::merge_grayscale_with_alpha_PM(const ivec2 & pdes,const ivec2 & size, const bitmap_t<CORE> * data_src,const ivec2 & data_src_point, const bitmap_t<CORE> * alpha_src, const ivec2 & alpha_src_point)
-{
-    uint8 * dsou = nullptr;
-    int dsounl = 0;
-
-	if(data_src == nullptr)
-    {
-    } else
-    {
-        ASSERT(data_src->info().bitpp == 8);
-	    dsou = data_src->body() + data_src_point.x + data_src->info().pitch*data_src_point.y;
-	    dsounl=data_src->info().pitch-size.x;
-    }
-    ASSERT(alpha_src != nullptr && info().bitpp == 8);
-    if (alpha_src->info().bitpp != 32) return;
-
-    before_modify();
-
-	uint8 * des=body()+info().bytepp()*pdes.x+info().pitch*pdes.y;
-	int desnl=info().pitch-size.x;
-
-	const uint8 * asou=alpha_src->body() + alpha_src_point.x * 4 + alpha_src->info().pitch*alpha_src_point.y + 3;
-	int asounl=alpha_src->info().pitch-size.x*4;
-
-    if (dsou == nullptr)
-    {
-	    for(int y=0;y<size.y;y++,des+=desnl,asou+=asounl)
-        {
-		    for(int x=0;x<size.x;x++,++des, asou+=4)
-            {
-			    uint8 alpha = *asou;
-                uint8 odata;
-
-                if (alpha==0) continue;
-			    else
-                if(alpha==255)
-                {
-                    odata = 0;
-                } else
-                {
-                    odata = uint8(float(255-alpha)*float(*des)*(1.0/255.0));
-                }
-                
-                *des = odata;
-
-		    }			
-	    }
-        return;
-    }
-
-	for(int y=0;y<size.y;y++,des+=desnl,asou+=asounl, dsou+=dsounl)
-    {
-		for(int x=0;x<size.x;x++,++des,++dsou, asou+=4)
-        {
-            *des = uint8((float(255 - *asou)*float(*des) + 255.0*float(*dsou))*(1.0/255.0));
-		}			
-	}
-
-}
-
-
-template<typename CORE> void bitmap_t<CORE>::modulate_grayscale_with_alpha(const ivec2 & pdes,const ivec2 & size, const bitmap_t<CORE> * alpha_src, const ivec2 & alpha_src_point)
-{
-    ASSERT(alpha_src!=nullptr && info().bitpp == 8);
-
-    if (alpha_src->info().bitpp != 32) return;
-
-    before_modify();
-
-	uint8 * des=body()+info().bytepp()*pdes.x+info().pitch*pdes.y;
-	int desnl=info().pitch-size.x;
-
-	const uint8 * asou=alpha_src->body() + alpha_src_point.x * 4 + alpha_src->info().pitch*alpha_src_point.y + 3;
-	int asounl=alpha_src->info().pitch-size.x*4;
-
-	for(int y=0;y<size.y;y++,des+=desnl,asou+=asounl)
-    {
-		for(int x=0;x<size.x;x++,++des, asou+=4)
-        {
-			uint8 alpha = *asou;
-
-            if (alpha==255) continue;
-			else
-            {
-                *des = uint8((float(alpha)*float(*des))*(1.0/255.0));
-            }
-
-		}			
-	}
-}
-
-#endif
 
 void TSCALL sharpen_run(bitmap_c &obm, const uint8 *sou, const imgdesc_s &souinfo, int lv);
 template<typename CORE> void bitmap_t<CORE>::sharpen(bitmap_c& outimage, int lv) const
@@ -2590,8 +1915,8 @@ template<typename CORE> void bitmap_t<CORE>::make_grayscale()
     before_modify();
 
     uint8 * des=body();
-    int desnl=info().pitch-info().sz.x*info().bytepp();
-    int desnp=info().bytepp();
+    aint desnl=info().pitch-info().sz.x*info().bytepp();
+    aint desnp=info().bytepp();
 
     if(info().bytepp()==3)
     {
@@ -2635,181 +1960,6 @@ template<typename CORE> void bitmap_t<CORE>::make_grayscale()
     }
 }
 
-#pragma warning (push)
-#pragma warning (disable : 4731)
-
-template<typename CORE> void bitmap_t<CORE>::swap_byte(void *target) const
-{
-    // TODO : move this stuff to asm file
-
-    if (info().bytepp() != 3 && info().bytepp() != 4)
-    {
-        DEBUG_BREAK(); //ERROR_S(L"Unsupported bitpp to convert");
-    }
-
-
-    const int szx = info().sz.x;
-    const int szy = info().sz.y;
-    const int bpp = info().bytepp();
-    const uint8 *bo = body();
-
-    _asm
-    {
-        // dest
-        mov     edi, target
-
-        // source
-        //mov     esi, this
-        mov     ecx, szx //[esi + m_Size]
-        mov     ebx, bpp // [esi + info().bytepp()]
-        mov     eax, szy // [esi + m_Size + 4]
-        mul     ecx
-        mov     esi, bo//[esi + m_Data]
-        mov     ecx, eax
-
-        cmp     ebx, 3
-        jz      bpp3
-
-        test    ecx, 3
-        jz      skipmicroloop4
-
-microloop4:
-
-        mov     eax, [esi]
-        mov     ebx, eax
-        and     eax, 0xFF00FF00
-        ror     ebx, 16
-        add     edi, 4
-        and     ebx, 0x00FF00FF
-        add     esi, 4
-        or      eax, ebx
-        mov     [edi - 4], eax
-
-        dec     ecx
-        test    ecx, 3
-        jnz     microloop4
-
-skipmicroloop4:
-        shr     ecx, 2
-        jz      end
-
-loop1:
-        mov     eax, [esi]
-        mov     edx, [esi + 4]
-
-        mov     ebx, eax
-        and     eax, 0xFF00FF00
-        ror     ebx, 16
-        add     edi, 16
-        and     ebx, 0x00FF00FF
-        or      eax, ebx
-        mov     ebx, edx
-        and     edx, 0xFF00FF00
-        ror     ebx, 16
-        add     esi, 16
-        and     ebx, 0x00FF00FF
-        or      edx, ebx
-
-        mov     [edi - 16], eax
-        mov     [edi - 12], edx
-
-        mov     eax, [esi - 8]
-        mov     edx, [esi - 4]
-
-        mov     ebx, eax
-        and     eax, 0xFF00FF00
-        ror     ebx, 16
-        and     ebx, 0x00FF00FF
-        or      eax, ebx
-        mov     ebx, edx
-        and     edx, 0xFF00FF00
-        ror     ebx, 16
-        and     ebx, 0x00FF00FF
-        or      edx, ebx
-
-        mov     [edi - 8], eax
-        mov     [edi - 4], edx
-
-        dec     ecx
-        jnz     loop1
-
-        jmp     end
-bpp3:
-
-        push    ecx
-        shr     ecx, 2
-        jnz     rulezz
-        pop     ecx
-        jmp     microloop3
-rulezz:
-        push    ebp
-loop2:
-        // converts every 4 pixels (3 uint32's)
-
-        mov     eax, [esi]
-        mov     edx, [esi + 4]
-        mov     ebx, eax
-        and     eax, 0x0000FF00     // XXXXG0XX
-        ror     ebx, 16
-        mov     ebp, ebx
-        and     ebx, 0x00FF00FF     // XXR0XXG0
-        or      eax, ebx
-        mov     ebx, edx
-        and     ebx, 0x0000FF00     // XXXXR1XX
-        and     ebp, 0x0000FF00     // XXXXR0XX
-        shl     ebx, 16
-        or      eax, ebx
-        mov     ebx, edx            // store B2
-        mov     [edi], eax
-        and     edx, 0xFF0000FF     // G2XXXXG1
-        shr     ebx, 16
-        or      edx, ebp
-        mov     eax, [esi + 8]
-        and     ebx, 0x000000FF
-        mov     ebp, eax
-        and     eax, 0x00FF0000
-        ror     ebp, 16
-        or      eax, ebx
-        mov     ebx, ebp
-        and     ebp, 0x00FF0000     // XXR2XXXX
-        or      edx, ebp
-        mov     [edi + 4], edx
-        and     ebx, 0xFF00FF00
-        or      eax, ebx
-        mov     [edi + 8], eax
-
-        add     esi, 12
-        add     edi, 12
-
-        dec     ecx
-        jnz     loop2
-
-
-        pop     ebp
-        pop     ecx
-        and     ecx, 3
-        jz      end
-
-microloop3:
-        mov     eax, [esi]
-        mov     ebx, eax
-        and     eax, 0xFF00FF00
-        ror     ebx, 16
-        add     edi, 3
-        and     ebx, 0x00FF00FF
-        add     esi, 3
-        or      eax, ebx
-        mov     [edi - 3], eax
-
-        dec     ecx
-        jnz     microloop3
-
-end:
-
-    };
-
-}
-
 template<typename CORE> bool bitmap_t<CORE>::load_from_BMPHEADER(const BITMAPINFOHEADER * iH, int buflen)
 {
     clear();
@@ -2836,12 +1986,12 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_BMPHEADER(const BITMAPINF
 	return true;
 }
 
-template<typename CORE> img_format_e bitmap_t<CORE>::load_from_file(const void * buf, int buflen)
+template<typename CORE> img_format_e bitmap_t<CORE>::load_from_file(const void * buf, aint buflen)
 {
 	if (buflen < 4) return if_none;
 
-    __try
-    {
+    UNSAFE_BLOCK_BEGIN
+
         img_reader_s reader;
         img_format_e fmt = if_none;
         if (image_read_func r = reader.detect(buf,buflen,fmt))
@@ -2871,10 +2021,7 @@ template<typename CORE> img_format_e bitmap_t<CORE>::load_from_file(const void *
             }
         }
 
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-    }
+    UNSAFE_BLOCK_END
 
     clear();
     return if_none;
@@ -3081,9 +2228,9 @@ void bmpcore_exbody_s::draw(const bmpcore_exbody_s &eb, aint xx, aint yy, const 
     
     ts::ivec2 sz = r.size();
     if (xx + sz.x > eb.info().sz.x)
-        sz.x = eb.info().sz.x - xx;
+        sz.x = (int)(eb.info().sz.x - xx);
     if (yy + sz.y > eb.info().sz.y)
-        sz.x = eb.info().sz.y - yy;
+        sz.x = (int)(eb.info().sz.y - yy);
 
     imgdesc_s sinf(sz, 32, info().pitch);
 
@@ -3152,9 +2299,9 @@ void repdraw::draw_h( ts::aint x1, ts::aint x2, ts::aint y, bool tile )
         {
             int a = a_rep ? alpha : -1;
 
-            int sx0 = x1 + ( rbeg ? rbeg->width() : 0 );
-            int sx1 = x2 - ( rend ? rend->width() : 0 );
-            int z = sx0 + dx;
+            aint sx0 = x1 + ( rbeg ? rbeg->width() : 0 );
+            aint sx1 = x2 - ( rend ? rend->width() : 0 );
+            aint z = sx0 + dx;
             for ( ; z <= sx1; z += dx )
                 render_image( tgt, image, z - dx, y, *rrep, cliprect, a );
             z -= dx;
@@ -3179,9 +2326,9 @@ void repdraw::draw_v( ts::aint x, ts::aint y1, ts::aint y2, bool tile )
         {
             int a = a_rep ? alpha : -1;
 
-            int sy0 = y1 + ( rbeg ? rbeg->height() : 0 );
-            int sy1 = y2 - ( rend ? rend->height() : 0 );
-            int z = sy0 + dy;
+            aint sy0 = y1 + ( rbeg ? rbeg->height() : 0 );
+            aint sy1 = y2 - ( rend ? rend->height() : 0 );
+            aint z = sy0 + dy;
             for ( ; z <= sy1; z += dy )
                 render_image( tgt, image, x, z - dy, *rrep, cliprect, a );
             z -= dy;
@@ -3206,13 +2353,13 @@ void repdraw::draw_c( ts::aint x1, ts::aint x2, ts::aint y1, ts::aint y2, bool t
         int dx = rrep->width();
         int dy = rrep->height();
         if ( dx == 0 || dy == 0 ) return;
-        int sx0 = x1;
-        int sx1 = x2 - dx;
-        int sy0 = y1;
-        int sy1 = y2 - dy;
-        int x;
+        aint sx0 = x1;
+        aint sx1 = x2 - dx;
+        aint sy0 = y1;
+        aint sy1 = y2 - dy;
+        aint x;
         ts::irect rr; bool rr_initialized = false;
-        int y = sy0;
+        aint y = sy0;
         for ( ; y < sy1; y += dy )
         {
             for ( x = sx0; x < sx1; x += dx )

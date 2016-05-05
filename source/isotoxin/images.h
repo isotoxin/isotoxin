@@ -27,7 +27,7 @@ public:
     /*virtual*/ ~picture_animated_c();
 
     /*virtual*/ bool load(const ts::blob_c &body) = 0;
-    /*virtual*/ void draw(rectengine_root_c *e, const ts::ivec2 &pos) const;
+    /*virtual*/ void draw(rectengine_root_c *e, const ts::ivec2 &pos) const override;
 
 };
 

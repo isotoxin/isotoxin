@@ -373,7 +373,7 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
     }
 	wstr_c path(CONSTWSTR("themes/"));
     path.append(ts::wsptr(name.s, dd)).append_char('/');
-	int pl = path.get_length();
+    int pl = path.get_length();
 	abp_c bp;
 	if (!g_fileop->load(path.append(CONSTWSTR("struct.decl")), bp)) return false;
 

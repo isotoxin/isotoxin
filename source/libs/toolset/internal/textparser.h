@@ -34,6 +34,7 @@ namespace ts
 
 struct glyph_image_s
 {
+    MOVABLE( true );
     DUMMY(glyph_image_s);
 
     union
@@ -43,30 +44,30 @@ struct glyph_image_s
             void *zeroptr; // nullptr // same as pixels
             int outline_index; // if -1, then next 3 fields are actual, if 0, this glyph should be skipped, if >0, then rendering order should be changed according value
             int next_dim_glyph;
-            svec2 line_lt;
-            svec2 line_rb;
+            make_pod<svec2> line_lt;
+            make_pod<svec2> line_rb;
         };
         struct
         {
             const uint8 *pixels; // not nullptr
             int charindex;
             TSCOLOR color; //if !0, then pixels points to alpha-image (8 bit per pixel); image should be rendered with color
-                           //if ==0, то pixels points to rgba-premultiplied-image; image should be rendered as is
+                           //if ==0, then pixels points to rgba-premultiplied-image; image should be rendered as is
 
             /*underline*/ float thickness; // if < 0, then underline shouldn't be drawn
 
-	        svec2 pos;
-            /*underline*/ svec2 start_pos; // underline start position
+            make_pod<svec2> pos;
+            /*underline*/ make_pod<svec2> start_pos; // underline start position
 	        uint16 width, height, pitch, /*underline*/ length;
         };
         struct
         {
-            uint8 dummy[32];
+            uint8 dummy[ARCHBITS];
         };
     };
 };
 
-TS_STATIC_CHECK( sizeof(glyph_image_s) == 32, "oops" );
+TS_STATIC_CHECK( sizeof(glyph_image_s) == ARCHBITS, "oops" );
 
 typedef tbuf0_t<glyph_image_s> GLYPHS;
 
@@ -76,6 +77,6 @@ ivec2 parse_text(const wstr_c &text, int max_line_length, CUSTOM_TAG_PARSER ctp,
 
 irect glyphs_bound_rect(const GLYPHS &glyphs);
 int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p, bool strong = false);
-int glyphs_get_charindex(const GLYPHS &glyphs, int glyphindex);
+int glyphs_get_charindex(const GLYPHS &glyphs, aint glyphindex);
 
 } // namespace ts

@@ -97,7 +97,7 @@ namespace
         /*virtual*/ ts::bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &frect) override
         {
             FORBIDDEN();
-            __assume(0);
+            UNREACHABLE();
         }
 
         /*virtual*/ ts::ivec2 framesize_by_width(int w) override
@@ -248,7 +248,7 @@ namespace
         /*virtual*/ ts::bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &frect) override
         {
             FORBIDDEN();
-            __assume(0);
+            UNREACHABLE();
         }
 
         /*virtual*/ ts::ivec2 framesize_by_width(int w) override

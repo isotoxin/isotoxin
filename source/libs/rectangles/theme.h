@@ -293,6 +293,7 @@ class theme_c
 
     struct theme_font_s
     {
+        MOVABLE( true );
         ts::str_c fontname;
         ts::font_params_s fontparam;
         theme_font_s(const ts::str_c &fontname, const ts::font_params_s &fontparam):fontname(fontname), fontparam(fontparam) {}

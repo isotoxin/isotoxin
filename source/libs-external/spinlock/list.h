@@ -6,8 +6,10 @@
 
 #include "spinlock.h"
 
+#if defined _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4324) // : structure was padded due to __declspec(align())
+#endif
 
 namespace spinlock
 {
@@ -28,7 +30,7 @@ spinlock_list_s
 	};
 	volatile pointer_t first;
 
-    __forceinline void add(T* element)
+    SLINLINE void add(T* element)
     {
         if (element)
         {
@@ -81,4 +83,7 @@ __attribute__ (( aligned (16)))
 
 } // namespace spinlock
 
+#if defined _MSC_VER
 #pragma warning(pop)
+#endif
+

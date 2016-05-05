@@ -84,6 +84,7 @@ struct active_protocol_s : public active_protocol_data_s
 
 struct backup_protocol_s
 {
+    MOVABLE( true );
     time_t time;
     int tick;
     int protoid;
@@ -100,6 +101,7 @@ struct backup_protocol_s
 
 struct contacts_s
 {
+    MOVABLE( true );
     enum column_e
     {
         C_ID,
@@ -172,6 +174,7 @@ struct history_s : public post_s
 
 struct unfinished_file_transfer_s
 {
+    MOVABLE( true );
     contact_key_s historian;
     contact_key_s sender;
     uint64 utag = 0;
@@ -202,6 +205,7 @@ template<typename T, profile_table_e tabi> struct tableview_t
     static const profile_table_e tabt = tabi;
     struct row_s
     {
+        MOVABLE( ts::is_movable<T>::value );
         DUMMY(row_s);
         row_s() {}
         int id = 0;
@@ -223,7 +227,7 @@ template<typename T, profile_table_e tabi> struct tableview_t
     {
         // remove s_deleted
         if (cleanup_requred)
-            for(int i=rows.size()-1; i>=0; --i)
+            for( ts::aint i=rows.size()-1; i>=0; --i)
                 if (rows.get(i).st == row_s::s_deleted)
                     rows.remove_slow(i);
         cleanup_requred = false;
@@ -278,7 +282,7 @@ template<typename T, profile_table_e tabi> struct tableview_t
         return nullptr;
     }
 
-    template<bool skip_deleted> row_s *find(int id)
+    template<bool skip_deleted> row_s *find( int id )
     {
         cleanup();
         for (row_s &r : rows)
@@ -476,7 +480,7 @@ public:
     
     void kill_history_item(uint64 utag);
     void kill_history(const contact_key_s&historian);
-    void load_history( const contact_key_s&historian, time_t time, int nload, ts::tmp_tbuf_t<int>& loaded_ids );
+    void load_history( const contact_key_s&historian, time_t time, ts::aint nload, ts::tmp_tbuf_t<int>& loaded_ids );
     void load_history( const contact_key_s&historian ); // load all history items to internal table
     void merge_history( const contact_key_s&base_historian, const contact_key_s&from_historian );
     void detach_history( const contact_key_s&prev_historian, const contact_key_s&new_historian, const contact_key_s&sender );

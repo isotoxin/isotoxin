@@ -1029,7 +1029,7 @@ void StackWalker::OnSymInit(LPCSTR, DWORD, LPCSTR)
 #endif
 }
 
-void StackWalker::OnOutput(LPCSTR szText, int /*len*/)const
+void StackWalker::OnOutput(LPCSTR szText, size_t /*len*/)const
 {
 	printf("%08X %s", (unsigned int)GetCurrentThreadId(), szText);
 
@@ -1067,7 +1067,7 @@ CS=%04X  DS=%04X  SS=%04X  ES=%04X   FS=%04X  GS=%04X\r\n\r\n", thread,
         (LPVOID)pCxt->Rax, (LPVOID)pCxt->Rbx, (LPVOID)pCxt->Rcx, (LPVOID)pCxt->Rdx, (LPVOID)pCxt->Rsi,
         (LPVOID)pCxt->Rdi, (LPVOID)pCxt->R8 , (LPVOID)pCxt->R9 , (LPVOID)pCxt->R10, (LPVOID)pCxt->R11,
         (LPVOID)pCxt->R12, (LPVOID)pCxt->R13, (LPVOID)pCxt->R14, (LPVOID)pCxt->R15, (LPVOID)pCxt->Rip,
-        (LPVOID)pCxt->Rsp, (LPVOID)pCxt->Rbp, (LPVOID)pCxt->EFlags,
+        (LPVOID)pCxt->Rsp, (LPVOID)pCxt->Rbp, (LPVOID)(size_t)pCxt->EFlags,
         pCxt->SegCs,pCxt->SegDs,pCxt->SegSs,
         pCxt->SegEs,pCxt->SegFs,pCxt->SegGs);
 #else

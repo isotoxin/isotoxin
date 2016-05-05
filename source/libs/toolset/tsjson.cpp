@@ -12,9 +12,9 @@ namespace ts
         return (unicode >> 8) | (unicode << 8);
     }
 
-    static aint search_char( char c, asptr s )
+    static int search_char( char c, asptr s )
     {
-        aint i = 0;
+        int i = 0;
         for (; i < s.l; ++i)
         {
             if (CHAR_is_hollow(s.s[i]))
@@ -26,9 +26,9 @@ namespace ts
         return -1;
     }
 
-    static aint skip_hollow( asptr s )
+    static int skip_hollow( asptr s )
     {
-        aint i = 0;
+        int i = 0;
         for (; i < s.l;)
         {
             if (CHAR_is_hollow(s.s[i]))
@@ -41,9 +41,9 @@ namespace ts
         return -1;
     }
 
-    static aint parse_str(asptr s, str_c &str)
+    static int parse_str(asptr s, str_c &str)
     {
-        aint i = 0;
+        int i = 0;
         for (; i < s.l;)
         {
             switch (s.s[i])
@@ -79,10 +79,10 @@ namespace ts
         return i;
     }
 
-    aint json_c::parse( asptr s )
+    int json_c::parse( asptr s )
     {
         elems.clear();
-        aint i = skip_hollow(s);
+        int i = skip_hollow(s);
         if (i >= 0)
         {
             switch (s.s[i])
@@ -133,7 +133,7 @@ namespace ts
                     return 0;
                 case '\"':
                     {
-                        aint i2 = parse_str( s.skip(i+1), str );
+                        int i2 = parse_str( s.skip(i+1), str );
                         if (i2 > 0)
                         {
                             ni = str.as_num<decltype(ni)>(-1);
@@ -152,11 +152,11 @@ namespace ts
         return 0;
     }
 
-    aint json_c::parse_num( bool negative,  asptr s )
+    int json_c::parse_num( bool negative,  asptr s )
     {
         spec = SV_NUMBER;
         ni = 0;
-        aint i = 0;
+        int i = 0;
         for(;i<s.l;)
         {
             if (CHAR_is_digit(s.s[i]))
@@ -203,13 +203,13 @@ namespace ts
         return i;
     }
 
-    aint json_c::parse_obj( asptr s )
+    int json_c::parse_obj( asptr s )
     {
         spec = SV_OBJ;
         n = 0;
         ni = 0;
 
-        aint i = 0;
+        int i = 0;
         
         for(;i < s.l;)
         {
@@ -257,20 +257,20 @@ namespace ts
         return 0;
     }
 
-    aint json_c::parse_arr(asptr s)
+    int json_c::parse_arr(asptr s)
     {
         spec = SV_ARRAY;
         n = 0;
         ni = 0;
 
-        aint i = 0;
+        int i = 0;
 
         for (;i<s.l;)
         {
             elem_s el;
             json_c *njson = TSNEW(json_c);
             el.v.reset(njson);
-            aint i2 = njson->parse(s.skip(i));
+            int i2 = njson->parse(s.skip(i));
             if (i2 > 0)
             {
                 i += i2;

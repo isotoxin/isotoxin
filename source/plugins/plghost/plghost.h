@@ -59,7 +59,7 @@ struct ipcw : public std::vector<byte, ph_allocator>
         return r;
     }
 
-    void add( const void *d, int sz )
+    void add( const void *d, aint sz )
     {
         size_t offset = size();
         resize(offset + sz);

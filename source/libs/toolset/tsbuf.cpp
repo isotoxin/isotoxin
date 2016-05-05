@@ -14,7 +14,7 @@ aint fifo_buf_c::read_data(void *dest, aint size)
     }
     else
     {
-        int szleft = buf[readbuf].size() - readpos;
+        aint szleft = buf[readbuf].size() - readpos;
         memcpy(dest, buf[readbuf].data() + readpos, szleft);
         size -= szleft;
         buf[readbuf].clear(); // this buf fully extracted

@@ -92,18 +92,18 @@ class packetgen
 
     void push( int clamp_chars, const asptr&s )
     {
-        int l = s.l;
+        aint l = s.l;
         if (l > clamp_chars) l = clamp_chars;
         pushus((USHORT)l);
         push(s.s, l);
     }
 
-    void push(const void *data, int size, bool correct_size = true)
+    void push(const void *data, aint size, bool correct_size = true)
     {
         if (ASSERT(packet_buf_len + size <= sizeof(packet_buf)))
         {
             memcpy(packet_buf + packet_buf_len, data, size);
-            packet_buf_len += size;
+            packet_buf_len += (int)size;
 
             if (correct_size) *(USHORT *)(packet_buf + 2) = (USHORT)htons((USHORT)packet_buf_len);
         }
@@ -174,8 +174,8 @@ public:
     
     void pg_nonce(const byte *other_public_key, const byte *auth_key /*nonce + contact key*/ );
 
-    void pg_raw_data(const byte *crypt_packet_key, int bt, const byte *data, int size);
-    void pg_data(datablock_s *m, const byte *crypt_packet_key, int maxsize);
+    void pg_raw_data(const byte *crypt_packet_key, int bt, const byte *data, aint size);
+    void pg_data(datablock_s *m, const byte *crypt_packet_key, aint maxsize);
     void pg_delivered(u64 dtag, const byte *crypt_packet_key);
     void pg_sync(bool resync, const byte *crypt_packet_key);
 };

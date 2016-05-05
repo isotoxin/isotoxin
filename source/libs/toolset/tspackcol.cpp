@@ -65,9 +65,9 @@ uint  ccollection_c::add_container(const wsptr &name, int prior)
     if (pf) 
     {
         pf->set_time_stamp(filetime);
-        int ins_pos = -1;
-        uint cnt = m_containers.size();
-        for(uint i = 0; i < cnt; ++i)
+        aint ins_pos = -1;
+        aint cnt = m_containers.size();
+        for(aint i = 0; i < cnt; ++i)
         {
             int pr = m_containers.get(i)->get_priority();
             if (pr <= prior)
@@ -91,7 +91,7 @@ uint  ccollection_c::add_container(const wsptr &name, int prior)
 
 void    ccollection_c::remove_container(uint container_id)
 {
-	int index;
+	aint index;
 	container_c *P = find(container_id, index);
 	if (CHECK(P))
 		m_containers.remove_slow(index);

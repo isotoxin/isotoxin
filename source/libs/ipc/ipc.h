@@ -36,7 +36,13 @@ namespace ipc
 
     struct ipc_junction_s
     {
-        char buffer[191]; // internal data. ipc_junction_s must be allocated at your application. good news: no any new/malloc/delete/free memory routines called inside lib engine
+#if defined (_M_AMD64) || defined (WIN64) || defined (__LP64__)
+        enum { internal_data_size = 191 * 2 - 37 };
+#else
+        enum { internal_data_size = 191 };
+#endif
+
+        char buffer[ internal_data_size ]; // internal data. ipc_junction_s must be allocated at your application. good news: no any new/malloc/delete/free memory routines called inside lib engine
         bool stop_called;
 
         ipc_junction_s():stop_called(true) {} //-V730 constructor do nothing: all initialization stuff in this->start

@@ -11,7 +11,7 @@ namespace ts
         GifFileType *gif;
         const uint8 *sourcebuf;
         const SavedImage *prevsi;
-        int ibuflen;
+        ts::aint ibuflen;
         int offset;
         int frame;
         int prevdisposal;
@@ -20,10 +20,10 @@ namespace ts
         static int InputFunc(GifFileType *gif, GifByteType *buf, int len)
         {
             gifread_s *me = (gifread_s *)gif->UserData;
-            int readsz = tmin(len, me->ibuflen - me->offset);
+            ts::aint readsz = tmin(len, me->ibuflen - me->offset);
             memcpy( buf, me->sourcebuf + me->offset, readsz );
             me->offset += len;
-            return readsz;
+            return (int)readsz;
         }
         void close()
         {
@@ -88,7 +88,7 @@ namespace ts
 
     }
 
-    image_read_func img_reader_s::detect_gif_format(const void *sourcebuf, int sourcebufsize)
+    image_read_func img_reader_s::detect_gif_format(const void *sourcebuf, aint sourcebufsize)
     {
         uint32 tag = *(uint32 *)sourcebuf;
         if (tag != 944130375) return nullptr;
@@ -96,7 +96,7 @@ namespace ts
         memset(data, 0, sizeof(gifread_s)); //-V512
         gifread_s & br = ref_cast<gifread_s>(data);
         br.sourcebuf = (const uint8 *)sourcebuf;
-        br.ibuflen = sourcebufsize;
+        br.ibuflen = (int)sourcebufsize;
         br.offset = 0;
         int err = 0;
         br.gif = DGifOpen(&br,gifread_s::InputFunc,&err);
@@ -128,7 +128,7 @@ namespace ts
         br.close();
     }
 
-    bool animated_c::load(const void *b, int bsize)
+    bool animated_c::load(const void *b, ts::aint bsize)
     {
         gifread_s & br = ref_cast<gifread_s>(data);
         br.close();

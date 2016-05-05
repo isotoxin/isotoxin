@@ -21,6 +21,10 @@
 #define MEMSPY_MEMLEAK_MESSAGEBOX       0
 #define MEMSPY_MEMLEAK_DEBUGOUTPUT      1
 
+#if defined (_M_AMD64) || defined (WIN64) || defined (__LP64__) || defined(__GNUC__)
+#undef MEMSPY_CALL_STACK
+#define MEMSPY_CALL_STACK 0
+#endif
 
 #if MEMSPY_CALL_STACK
 #pragma comment (lib, "dbghelp.lib")
@@ -82,7 +86,7 @@ void spyunlock()
 struct block_header_s
 {
     const char * fn;
-    size_t size;
+    unsigned int size;
     int line;
     int num;
     block_header_s *prev;
@@ -107,7 +111,7 @@ struct block_header_s
     }
 #endif
 
-    block_header_s *setup( const char *fn_, int line_, size_t sz );
+    block_header_s *setup( const char *fn_, int line_, unsigned int sz );
     static block_header_s *ma( const char *fn, int line, size_t sz );
 
     static block_header_s *mr(const char *fn, int line, void *p, size_t sz);
@@ -191,7 +195,7 @@ static block_header_s *last = nullptr;
 static block_header_s *first_free = nullptr;
 static block_header_s *last_free = nullptr;
 
-block_header_s *block_header_s::setup(const char *fn_, int line_, size_t sz)
+block_header_s *block_header_s::setup(const char *fn_, int line_, unsigned int sz)
 {
     fn = fn_;
     line = line_;
@@ -239,7 +243,7 @@ block_header_s *block_header_s::ma(const char *fn, int line, size_t sz)
 #if MEMSPY_CORRUPT_CHECK_ZONE_END
     memset(p + preblock_size + sizeof(block_header_s) + sz, 0xEE, MEMSPY_CORRUPT_CHECK_ZONE_END);
 #endif
-    return self->setup(fn, line, sz);
+    return self->setup(fn, line, (unsigned int)sz);
 }
 
 block_header_s *block_header_s::mr(const char *fn, int line, void *p, size_t sz)
@@ -264,7 +268,7 @@ block_header_s *block_header_s::mr(const char *fn, int line, void *p, size_t sz)
 #if MEMSPY_CORRUPT_CHECK_ZONE_END
     memset(new_p + preblock_size + sizeof(block_header_s) + sz, 0xEE, MEMSPY_CORRUPT_CHECK_ZONE_END);
 #endif
-    return me->setup(fn, line, sz);
+    return me->setup(fn, line, (unsigned int)sz);
 
 }
 
@@ -305,12 +309,12 @@ void block_header_s::mf(void *p)
 
     if (real_p)
     {
-        void *real_p = ((char *)p)-sizeof(block_header_s)-preblock_size;
+        void *real_p1 = ((char *)p)-sizeof(block_header_s)-preblock_size;
 #ifndef _DEBUG
         size_t my_size = me->size + sizeof(block_header_s) + preblock_size + MEMSPY_CORRUPT_CHECK_ZONE_END;
-        memset(real_p, 0xAA, my_size);
+        memset(real_p1, 0xAA, my_size);
 #endif
-        MEMSPY_SYS_FREE(real_p);
+        MEMSPY_SYS_FREE(real_p1);
     }
 }
 
@@ -369,7 +373,7 @@ bool mspy_getallocated_info( char *buf, int bufsz )
     }
 
     const char *t = "   -================[MEMORY LEAKS]================-\r\n";
-    int tl = strlen(t);
+    int tl = (unsigned int)strlen(t);
 
     if (tl < bufsz)
     {

@@ -1,7 +1,5 @@
 #include "toolset.h"
 
-#pragma comment (lib, "freetype.lib")
-
 namespace ts
 {
 
@@ -37,81 +35,49 @@ __forceinline void write_pixel(TSCOLOR &dst, TSCOLOR src, uint8 aa)
     dst = B | (G << 8) | (R << 16) | (A << 24);
 }
 
+static const ALIGN(16) uint8 prepare_4alphas[16] = { 255, 0, 255, 1, 255, 2, 255, 3, 255, 0, 255, 1, 255, 2, 255, 3 };
+static const ALIGN(16) uint16 add1[8] = { 1, 1, 1, 1, 1, 1, 1, 1 };
+static const ALIGN(16) uint8 invhi[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 255, 0, 255, 0, 255, 0, 255, 0 };
 
-static const __declspec(align(16)) uint8 prepare_4alphas[16] = { 255, 0, 255, 1, 255, 2, 255, 3, 255, 0, 255, 1, 255, 2, 255, 3 };
-static const __declspec(align(16)) uint16 add1[8] = { 1, 1, 1, 1, 1, 1, 1, 1 };
-static const __declspec(align(16)) uint8 invhi[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 255, 0, 255, 0, 255, 0, 255, 0 };
+static const ALIGN(16) uint8 prepare_a1r[16] = { 0, 1, 0, 1, 0, 1, 0, 1, 2, 3, 2, 3, 2, 3, 2, 3 };
+static const ALIGN(16) uint8 prepare_a2r[16] = { 4, 5, 4, 5, 4, 5, 4, 5, 6, 7, 6, 7, 6, 7, 6, 7 };
 
-static const __declspec(align(16)) uint8 prepare_a1r[16] = { 0, 1, 0, 1, 0, 1, 0, 1, 2, 3, 2, 3, 2, 3, 2, 3 };
-static const __declspec(align(16)) uint8 prepare_a2r[16] = { 4, 5, 4, 5, 4, 5, 4, 5, 6, 7, 6, 7, 6, 7, 6, 7 };
-
-static const __declspec(align(16)) uint8 prepare_a1l[16] = { 8, 9, 8, 9, 8, 9, 8, 9, 10, 11, 10, 11, 10, 11, 10, 11 };
-static const __declspec(align(16)) uint8 prepare_a2l[16] = { 12, 13, 12, 13, 12, 13, 12, 13, 14, 15, 14, 15, 14, 15, 14, 15 };
+static const ALIGN(16) uint8 prepare_a1l[16] = { 8, 9, 8, 9, 8, 9, 8, 9, 10, 11, 10, 11, 10, 11, 10, 11 };
+static const ALIGN(16) uint8 prepare_a2l[16] = { 12, 13, 12, 13, 12, 13, 12, 13, 14, 15, 14, 15, 14, 15, 14, 15 };
 
 namespace sse_consts
 {
-extern __declspec(align(16)) uint8 preparetgtc_1[16];
-extern __declspec(align(16)) uint8 preparetgtc_2[16];
-extern __declspec(align(16)) uint8 packcback_1[16];
-extern __declspec(align(16)) uint8 packcback_2[16];
+extern ALIGN(16) uint8 preparetgtc_1[16];
+extern ALIGN(16) uint8 preparetgtc_2[16];
 };
 
-__declspec(naked) void write_row_sse(uint8 *dst_argb, const uint8 *src_argb, int w, const uint16 * color)
+static void write_row_sse( uint8 *dst_argb, const uint8 *src_argb, int w, const uint16 * color )
 {
-    __asm {
-        push       esi
-        mov        edx, [esp + 4 + 4]   // dst_argb
-        mov        esi, [esp + 4 + 8]   // src_argb
-        mov        ecx, [esp + 4 + 12]  // width
-        mov        eax, [esp + 4 + 16]  // color
-        movdqa     xmm6, [eax]
-        movdqa     xmm7, [eax+16]
+    for ( ; w > 0; w -= 4, dst_argb += 16, src_argb += 4 )
+    {
+        __m128i pta1 = _mm_load_si128( ( const __m128i * )sse_consts::preparetgtc_1 );
+        __m128i pta2 = _mm_load_si128( ( const __m128i * )sse_consts::preparetgtc_2 );
+        __m128i t6 = _mm_load_si128( ( const __m128i * )color );
+        __m128i t7 = _mm_load_si128( ( const __m128i * )( color + 8 ) );
+        __m128i t3 = _mm_load_si128( ( const __m128i * )prepare_4alphas );
+        __m128i a1r = _mm_load_si128( ( const __m128i * )prepare_a1r );
+        __m128i a1l = _mm_load_si128( ( const __m128i * )prepare_a1l );
+        __m128i a2r = _mm_load_si128( ( const __m128i * )prepare_a2r );
+        __m128i a2l = _mm_load_si128( ( const __m128i * )prepare_a2l );
+        __m128i tadd1 = _mm_load_si128( ( const __m128i * )add1 );
+        __m128i tinvhi = _mm_load_si128( ( const __m128i * )invhi );
 
-        movdqa     xmm3, prepare_4alphas
+        __m128 t5 = _mm_load_ss( (float *)src_argb );
+        __m128i tt5 = _mm_add_epi16( _mm_xor_si128( _mm_mulhi_epu16( _mm_shuffle_epi8( ( const __m128i & )( t5 ), t3 ), t7 ), tinvhi ), tadd1);
 
-    alphablendloop :
-
-        mov        eax, [esi]           // get 4 source pixels
-        lea        esi, [esi+4]
-        movd       xmm5, eax
-        pshufb     xmm5, xmm3
-        pmulhuw    xmm5, xmm7
-        pxor       xmm5, invhi 
-        paddw      xmm5, add1           // prepared multiplication of source 4 alphas with srccoloralpha; high part - inv(aa * a), low part - (aa * a)
-
-        lddqu      xmm4, [edx]          // take dst 0..3 pixels
-        movdqa     xmm0, xmm4
-        pshufb     xmm0, sse_consts::preparetgtc_1   // two dst pixels to xmm0
-        movdqa     xmm1, xmm5
-        pshufb     xmm1, prepare_a1r
-        pmulhuw    xmm1, xmm6
-        movdqa     xmm2, xmm5
-        pshufb     xmm2, prepare_a1l
-        pmulhuw    xmm0, xmm2
-        paddw      xmm0, xmm1
-        pshufb     xmm0, sse_consts::packcback_1
-
-        pshufb     xmm4, sse_consts::preparetgtc_2
-        movdqa     xmm1, xmm5
-        pshufb     xmm1, prepare_a2r
-        pmulhuw    xmm1, xmm6
-        pshufb     xmm5, prepare_a2l
-        pmulhuw    xmm4, xmm5
-        paddw      xmm4, xmm1
-        pshufb     xmm4, sse_consts::packcback_2
-        por        xmm0, xmm4
-
-        movdqu    [edx], xmm0
-
-        lea        edx, [edx + 16]
-
-        sub        ecx, 4               // 4 dst pixels at once
-        jg         alphablendloop
-
-        pop        esi
-        ret
+        __m128i t4 = _mm_lddqu_si128( ( const __m128i * )dst_argb );
+        
+        _mm_storeu_si128( ( __m128i * )dst_argb,
+            _mm_packus_epi16( _mm_add_epi16( _mm_mulhi_epu16( _mm_shuffle_epi8( t4, pta1 ), _mm_shuffle_epi8( tt5, a1l ) ), _mm_mulhi_epu16( _mm_shuffle_epi8( tt5, a1r ), t6 ) ),
+                _mm_add_epi16( _mm_mulhi_epu16( _mm_shuffle_epi8( t4, pta2 ), _mm_shuffle_epi8( tt5, a2l ) ), _mm_mulhi_epu16( _mm_shuffle_epi8( tt5, a2r ), t6 ) ) ) );
     }
 }
+
 
 void __special_blend(uint8 *dst_argb, int dst_pitch, const uint8 *src_alpha, int src_pitch, int width, int height, TSCOLOR color)
 {
@@ -122,7 +88,7 @@ void __special_blend(uint8 *dst_argb, int dst_pitch, const uint8 *src_alpha, int
         if (w)
         {
             uint16 ap1 = 1 + ALPHA(color);
-            __declspec(align(16)) ts::uint16 precolor[16] =
+            ALIGN(16) ts::uint16 precolor[16] =
             { 
                 BLUEx256(color), GREENx256(color), REDx256(color), (255 << 8), BLUEx256(color), GREENx256(color), REDx256(color), (255 << 8),
                 ap1, ap1, ap1, ap1, ap1, ap1, ap1, ap1
@@ -215,7 +181,7 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
             if ( glyph.pixels == GTYPE_BGCOLOR_MIDDLE )
             {
                 // draw bg
-                ivec2 pos(glyph.pos);  pos += offset; // glyph rendering position
+                ivec2 pos( glyph.pos() );  pos += offset; // glyph rendering position
 
                 ivec2 clipped_size( glyph.width, glyph.height );
                 // clipping
@@ -248,13 +214,13 @@ bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, con
 		int bpp = glyph.color ? 1 : 4; // bytes per pixel
 		int glyphPitch = glyph.pitch;
 		ivec4 glyphColor = TSCOLORtoVec4(glyph.color);
-		ivec2 pos(glyph.pos);  pos += offset; // glyph rendering position
+		ivec2 pos( glyph.pos() );  pos += offset; // glyph rendering position
         ts::TSCOLOR gcol = glyph.color;
 
 		// draw underline
 		if (glyph.thickness > 0)
 		{
-			ivec2 start = pos + ivec2(glyph.start_pos);
+			ivec2 start = pos + ivec2(glyph.start_pos());
 			float thick = (tmax(glyph.thickness, 1.f) - 1)*.5f;
 			int d = lceil(thick);
 			start.y -= d;
@@ -319,7 +285,7 @@ void text_rect_c::update_rectangles( ts::ivec2 &offset, rectangle_update_s * upd
     offset += updr->offset;
     for (const glyph_image_s &gi : glyphs().array())
         if (gi.pixels == (uint8 *)1)
-            updr->updrect(updr->param, gi.pitch, ivec2(gi.pos.x + offset.x, gi.pos.y + offset.y));
+            updr->updrect(updr->param, gi.pitch, ivec2(gi.pos().x + offset.x, gi.pos().y + offset.y));
 }
 
 void text_rect_c::update_rectangles( rectangle_update_s * updr )

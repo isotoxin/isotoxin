@@ -168,13 +168,13 @@ asptr utf8clamp( const asptr &utf8, int maxbytesize )
     return utf8;
 }
 
-void fifo_stream_c::get_data(int offset, byte *dest, int size)
+void fifo_stream_c::get_data(aint offset, byte *dest, aint size)
 {
-    int ost1 = buf[readbuf].size() - readpos;
+    aint ost1 = buf[readbuf].size() - readpos;
 
     if (offset < ost1)
     {
-        int have2copy = min(ost1 - offset, size);
+        aint have2copy = min(ost1 - offset, size);
         memcpy(dest, buf[readbuf].data() + readpos + offset, have2copy);
         size -= have2copy;
         dest += have2copy;
@@ -182,24 +182,24 @@ void fifo_stream_c::get_data(int offset, byte *dest, int size)
     }
     if (size)
     {
-        int offs2 = offset - ost1;
-        if (newdata != readbuf && size <= (int)buf[newdata].size() - offs2)
+        aint offs2 = offset - ost1;
+        if (newdata != readbuf && size <= (aint)buf[newdata].size() - offs2)
             memcpy(dest, buf[newdata].data() + offs2, size);
     }
 }
 
-int fifo_stream_c::read_data(byte *dest, int size)
+aint fifo_stream_c::read_data(byte *dest, aint size)
 {
-    if (size < ((int)buf[readbuf].size() - readpos))
+    if (size < ((aint)buf[readbuf].size() - readpos))
     {
         if (dest) memcpy(dest, buf[readbuf].data() + readpos, size);
-        readpos += size;
+        readpos += (int)size;
         if (newdata == readbuf) newdata ^= 1;
         return size;
     }
     else
     {
-        int szleft = buf[readbuf].size() - readpos;
+        aint szleft = buf[readbuf].size() - readpos;
         if (dest) memcpy(dest, buf[readbuf].data() + readpos, szleft);
         size -= szleft;
         buf[readbuf].clear(); // this buf fully extracted
@@ -240,7 +240,6 @@ namespace cpu_detect
 {
 #if _M_X64
 #if defined(_MSC_VER) && _MSC_VER > 1500
-    void __cpuidex(int CPUInfo[4], int info_type, int ecxvalue);
 #pragma intrinsic(__cpuidex)
 #define cpuid(func, func2, a, b, c, d) do {\
     int regs[4];\
@@ -388,7 +387,7 @@ void delta_time_profiler_s::operator()(int id)
 #define USE_DL_PREFIX
 #define USE_LOCKS 0
 
-static long dlmalloc_spinlock = 0;
+static spinlock::long3264 dlmalloc_spinlock = 0;
 
 #define PREACTION(M)  (spinlock::simple_lock(dlmalloc_spinlock), 0)
 #define POSTACTION(M) spinlock::simple_unlock(dlmalloc_spinlock)

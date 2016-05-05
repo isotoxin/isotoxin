@@ -42,7 +42,7 @@ class mediasystem_c
         {
             volume = volume_;
             pitch = 1.0f;
-            init(buf.data(), buf.size());
+            init(buf.data(), (int)buf.size());
             play(true);
         }
         /*virtual*/ void die() override { TSDEL(this); }
@@ -68,12 +68,12 @@ class mediasystem_c
                 readpos = 0;
                 begining = true;
             }
-            void add_data(const void *d, int s)
+            void add_data(const void *d, ts::aint s)
             {
                 buf[newdata].append_buf(d, s);
             }
-            int read_data(const s3::Format &fmt, char *dest, int size);
-            int available() const { return buf[readbuf].size() - readpos + buf[readbuf ^ 1].size(); }
+            ts::aint read_data(const s3::Format &fmt, char *dest, ts::aint size);
+            ts::aint available() const { return buf[readbuf].size() - readpos + buf[readbuf ^ 1].size(); }
         };
         spinlock::syncvar<protected_data_s> data;
 
@@ -84,8 +84,8 @@ class mediasystem_c
             format.bitsPerSample = 16;
         }
 
-        void add_data(const s3::Format &fmt, float vol, int dsp /* see fmt_converter_s::FO_* bits */, const void *dest, int size);
-        /*virtual*/ int rawRead(char *dest, int size) override;
+        void add_data(const s3::Format &fmt, float vol, int dsp /* see fmt_converter_s::FO_* bits */, const void *dest, ts::aint size);
+        /*virtual*/ s3::s3int rawRead(char *dest, s3::s3int size) override;
 
         void shutdown();
 
@@ -93,7 +93,7 @@ class mediasystem_c
         bool mute = false;
     };
 
-    long rawplock = 0;
+    spinlock::long3264 rawplock = 0;
     char rawps[ MAX_RAW_PLAYERS * sizeof(voice_player) ];
     UNIQUE_PTR( loop_play ) loops[ snd_count ];
 
@@ -138,7 +138,7 @@ public:
     }
     void voice_mute(const uint64 &key, bool mute);
     void voice_volume( const uint64 &key, float vol ); 
-    bool play_voice( const uint64 &key, const s3::Format &fmt, const void *data, int size, float vol, int dsp ); 
+    bool play_voice( const uint64 &key, const s3::Format &fmt, const void *data, ts::aint size, float vol, int dsp );
     void free_voice_channel( const uint64 &key ); 
 };
 
@@ -167,7 +167,7 @@ INLINE s3::DEVICE device_from_string( const ts::asptr& s )
 
 ts::str_c string_from_device(const s3::DEVICE& device);
 
-typedef fastdelegate::FastDelegate<void (const s3::Format &fmt, const void *, int)> accept_sound_func;
+typedef fastdelegate::FastDelegate<void (const s3::Format &fmt, const void *, ts::aint )> accept_sound_func;
 
 struct fmt_converter_s
 {
@@ -192,11 +192,11 @@ struct fmt_converter_s
     float volume = 1.0;
     
 private:
-    void cvt_portion( const s3::Format &ifmt, const void *idata, int isize );
+    void cvt_portion( const s3::Format &ifmt, const void *idata, ts::aint isize );
     ts::flags32_s::BITS active_filter_options = 0;
 public:
     ts::flags32_s filter_options;
 
-    void cvt( const s3::Format &ifmt, const void *idata, int isize );
+    void cvt( const s3::Format &ifmt, const void *idata, ts::aint isize );
 };
 

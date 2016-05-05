@@ -288,7 +288,7 @@ void guirect_c::created()
 
 void guirect_c::leech(sqhandler_i * h)
 {
-    for (int i = m_leeches.size() - 1; i >= 0; --i)
+    for ( ts::aint i = m_leeches.size() - 1; i >= 0; --i)
     {
         sqhandler_i * hs = m_leeches.get(i).get();
         if (hs == h) return; // already subscribed
@@ -305,7 +305,7 @@ void guirect_c::leech(sqhandler_i * h)
 }
 void guirect_c::unleech(sqhandler_i * h)
 {
-    for (int i = m_leeches.size() - 1; i >= 0; --i)
+    for ( ts::aint i = m_leeches.size() - 1; i >= 0; --i)
     {
         // full loop
         sqhandler_i * hs = m_leeches.get(i).get();
@@ -1274,7 +1274,8 @@ void gui_label_simplehtml_c::created()
 /*virtual*/ void gui_label_simplehtml_c::set_text(const ts::wstr_c&text, bool full_height_last_line)
 {
     ts::wstr_c t(text);
-    ts::swstr_t<32> ct( CONSTWSTR("<cstm=b") ); int ctl = ct.get_length();
+    ts::swstr_t<32> ct( CONSTWSTR("<cstm=b") );
+    int ctl = ct.get_length();
     int x = 0;
     for(;(x = t.find_pos(x, CONSTWSTR("<a href=\""))) >= 0;)
     {
@@ -1283,7 +1284,7 @@ void gui_label_simplehtml_c::created()
         if (t.get_char(y+1) != '>') break;
         int z = t.find_pos(y + 1, CONSTWSTR("</a>"));
         if (z < 0) break;
-        ct.set_char(6,'b').set_length(ctl).append_as_uint(links.size()).append_char('>');
+        ct.set_char(6,'b').set_length(ctl).append_as_uint((uint)links.size()).append_char('>');
         links.add( t.substr(x+9,y) );
         t.replace(z,4, ct );
         ct.set_char(6,'a');
@@ -1490,7 +1491,7 @@ void gui_hgroup_c::update_proportions()
     int fsz = 0;
     for (const rsize &x : rsizes) if (x.sz > 0) fsz += x.sz;
     if (fsz == 0) fsz = 1;
-    int cnt = rsizes.count();
+    ts::aint cnt = rsizes.count();
     ASSERT(cnt == proportions.count());
     for (int i = 0; i < cnt; ++i)
         proportions.set(i, ts::tmax(0.0f, (float)((double)cnt * rsizes.get(i).sz / fsz)));
@@ -1813,7 +1814,7 @@ void gui_hgroup_c::children_repos()
     int cminy = 0;
     if (rsizes.count() == getengine().children_count() && ASSERT(0 == __vec_index()))
     {
-        int chcnt = rsizes.count();
+        ts::aint chcnt = rsizes.count();
         for(int i=0;i<chcnt;++i)
         {
             const rsize &szsz = rsizes.get(i);
@@ -1831,7 +1832,7 @@ void gui_hgroup_c::children_repos()
         }
     } else
     {
-        int cnt = getengine().children_count();
+        ts::aint cnt = getengine().children_count();
         for (int i = 0; i < cnt; ++i)
         {
             if (const rectengine_c *e = getengine().get_child(i))
@@ -1851,7 +1852,7 @@ void gui_hgroup_c::children_repos()
     if (rsizes.count() == getengine().children_count() && ASSERT(0 == __vec_index()))
     {
         sz.y = get_min_size().y;
-        int chcnt = rsizes.count();
+        ts::aint chcnt = rsizes.count();
         int maxx = 0;
         for (int i = 0; i < chcnt; ++i)
         {
@@ -1874,7 +1875,7 @@ void gui_hgroup_c::children_repos()
     } else
     {
         sz.y = get_min_size().y;
-        int cnt = getengine().children_count();
+        ts::aint cnt = getengine().children_count();
         for(int i=0;i<cnt;++i)
         {
             if (const rectengine_c *e = getengine().get_child(i))
@@ -1898,9 +1899,9 @@ void gui_hgroup_c::on_die_child(int index)
     if (index >= 0)
         proportions.set(index, -1.0f);
 }
-void gui_hgroup_c::on_change_children(int count)
+void gui_hgroup_c::on_change_children( ts::aint count)
 {
-    for (int n = proportions.count() - count; n >= 0; --n)
+    for ( ts::aint n = proportions.count() - count; n >= 0; --n)
         proportions.find_remove_slow(-1.0f);
 }
 
@@ -1955,7 +1956,7 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
                 {
                     mousetrack_data_s &opd = gui->begin_mousetrack(getrid(), MTT_MOVESPLITTER);
                     opd.mpos = data.mouse.screenpos;
-                    opd.area = t;
+                    opd.area = (ts::uint32)t;
                     opd.rect.lt.r0 = 0;
                 }
                 clar.lt[vecindex] = clar.rb[vecindex];
@@ -2056,7 +2057,7 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
     ts::ivec2 sz = gui_control_c::get_min_size();
     if (rsizes.count() == getengine().children_count() && ASSERT(1 == __vec_index()))
     {
-        int chcnt = rsizes.count();
+        ts::aint chcnt = rsizes.count();
         int cminx = 0;
         for (int i = 0; i < chcnt; ++i)
         {
@@ -2077,7 +2078,7 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
     } else
     {
         ts::ivec2 cmin(0);
-        int cnt = getengine().children_count();
+        ts::aint cnt = getengine().children_count();
         for (int i = 0; i < cnt; ++i)
         {
             if (const rectengine_c *e = getengine().get_child(i))
@@ -2098,7 +2099,7 @@ bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
     ts::ivec2 sz = gui_group_c::get_max_size();
     if (rsizes.count() == getengine().children_count() && ASSERT(1 == __vec_index()))
     {
-        int chcnt = rsizes.count();
+        ts::aint chcnt = rsizes.count();
         int maxy = 0;
         for (int i = 0; i < chcnt; ++i)
         {
@@ -2260,7 +2261,7 @@ void gui_vscrollgroup_c::children_repos()
         if (w < area_width && flags.is(F_HCENTER_SMALL_CTLS))
             addx = (area_width - w) / 2;
 
-        MODIFY( e->getrect() ).pos( info.area.lt.x + addx, info.area.lt.y + y ).size( w, inf.h );
+        MODIFY( e->getrect() ).pos( info.area.lt.x + addx, (int)(info.area.lt.y + y) ).size( w, inf.h );
         drawflags.set_bit(i, true);
         y += inf.h;
     }

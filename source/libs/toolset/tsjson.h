@@ -7,6 +7,7 @@ namespace ts
     {
         struct elem_s
         {
+            MOVABLE( true );
             str_c s;
             UNIQUE_PTR( json_c ) v;
             elem_s & operator=( elem_s &&o)
@@ -39,15 +40,15 @@ namespace ts
             SV_STRING,
         } spec = SV_NULL;
 
-        aint parse_obj( asptr s );
-        aint parse_arr( asptr s );
-        aint parse_num( bool negative,  asptr s );
+        int parse_obj( asptr s );
+        int parse_arr( asptr s );
+        int parse_num( bool negative,  asptr s );
 
     public:
         json_c() {}
         ~json_c() {}
 
-        aint parse( asptr s );
+        int parse( asptr s );
 
         template<typename F> void iterate( const F &f ) const
         {

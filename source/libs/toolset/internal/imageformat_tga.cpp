@@ -121,7 +121,7 @@ namespace ts
 
     }
 
-    image_read_func img_reader_s::detect_tga_format(const void *sourcebuf, int sourcebufsize)
+    image_read_func img_reader_s::detect_tga_format(const void *sourcebuf, aint sourcebufsize)
     {
         if (sourcebufsize < sizeof(TGA_Header)) return nullptr;
 
@@ -141,11 +141,11 @@ namespace ts
         {
             // addition size check
             int64 datasize = (int64)header->Width * (int64)header->Height * (int64)header->Depth / 8;
-            if (datasize < 1 || datasize >(sourcebufsize - sizeof(TGA_Header)))
+            if (datasize < 1 || datasize > (aint)(sourcebufsize - sizeof(TGA_Header)))
                 return nullptr;
         }
 
-        tgar.buflen = sourcebufsize;
+        tgar.buflen = (int)sourcebufsize;
         return tgadatareader;
     }
 

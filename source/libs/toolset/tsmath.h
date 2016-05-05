@@ -3,7 +3,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-#ifdef _M_AMD64
+#ifdef MODE64
 #include <emmintrin.h>
 #else
 #include <xmmintrin.h>
@@ -11,8 +11,6 @@
 
 namespace ts
 {
-	FORWARD_DECLARE_STRING(wchar, wstr_c);
-
 	INLINE const float fastsqrt(const float x)
 	{
 		//	return x * inversesqrt(max(x, limits<float>::min()));//3x times faster than _mm_sqrt_ss with accuracy of 22 bits (but compiler optimize this not so well, and sqrtss works faster)
@@ -49,12 +47,36 @@ namespace ts
 	INLINE double    Pi()                    { return M_PI;          }
 	INLINE double    TwoPi()                 { return M_PI * 2.0f;   }
 
+    INLINE long int lround( float x )
+    {
+        return _mm_cvtss_si32( _mm_load_ss( &x ) ); //assume that current rounding mode is always correct (i.e. round to nearest)
+    }
+
+    INLINE long int lround( double x )
+    {
+#ifdef MODE64
+        return _mm_cvtsd_si32( _mm_load_sd( &x ) );
+#else
+        #if defined _MSC_VER
+        _asm
+        {
+            fld x
+            push eax
+            fistp dword ptr[ esp ]
+            pop eax
+        }
+        #elif defined __GNUC__
+        return ::lround( x );
+        #endif
+#endif
+    }
+
+
     INLINE void sincos(const float angle, float & vsin, float & vcos)
     {
         float cis, sis;
-        // not lame! cool optimisation
-        // for best perfomance function compile flags: /Ogtpy
 
+#if defined (_MSC_VER) && !defined(MODE64)
         _asm
         {
             fld angle
@@ -62,7 +84,12 @@ namespace ts
             fstp cis
             fstp sis
         }
-
+#elif defined (_MSC_VER) && defined(MODE64)
+        sis = sinf(angle);
+        cis = cosf( angle );
+#elif defined __GNUC__
+        ::sincosf( angle, &cis, &sis );
+#endif
         vsin = sis;
         vcos = cis;
     }
@@ -70,9 +97,8 @@ namespace ts
     INLINE void sincos(const float angle, double & vsin, double & vcos)
     {
         double cis, sis;
-        // not lame! cool optimisation
-        // for best perfomance function compile flags: /Ogtpy
 
+#if defined (_MSC_VER) && !defined(MODE64)
         _asm
         {
             fld angle
@@ -80,6 +106,13 @@ namespace ts
             fstp cis
             fstp sis
         }
+#elif defined (_MSC_VER) && defined(MODE64)
+        sis = sin( angle );
+        cis = cos( angle );
+#elif defined __GNUC__
+        ::sincos( angle, &cis, &sis );
+#endif
+
 
         vsin = sis;
         vcos = cis;
@@ -88,9 +121,8 @@ namespace ts
     INLINE void sincos_r(const float angle, const float r, float & vsin, float & vcos)
     {
         float cis, sis;
-        // not lame! cool optimisation
-        // for best perfomance function compile flags: /Ogtpy
 
+#if defined (_MSC_VER) && !defined(MODE64)
         _asm
         {
             fld angle
@@ -100,15 +132,27 @@ namespace ts
             fmul r
             fstp sis
         }
-
         vsin = sis;
         vcos = cis;
+#elif defined (_MSC_VER) && defined(MODE64)
+        UPAR( cis );
+        UPAR( sis );
+        vsin = sinf( angle ) * r;
+        vcos = cosf( angle ) * r;
+#elif defined __GNUC__
+        ::sincosf( angle, &cis, &sis );
+        vsin = sis * r;
+        vcos = cis * r;
+#endif
+
     }
 
 #include "tsvec.h"
 
+#if defined _MSC_VER
 #pragma warning ( push )
 #pragma warning (disable: 4201) // nonstandard extension used : nameless struct/union
+#endif
 	class mat22
 	{
 	public:
@@ -217,7 +261,9 @@ namespace ts
 
 	};
 
+#if defined _MSC_VER
 #pragma warning ( pop )
+#endif
 
     INLINE vec2 operator * (const vec2 &P, const mat22& M)
     {
@@ -242,7 +288,8 @@ namespace ts
 
 	struct irect //-V690
 	{
-		ivec2 lt;
+        MOVABLE( true );
+        ivec2 lt;
 		ivec2 rb;
 
 		irect() {}
@@ -271,8 +318,8 @@ namespace ts
 
 		auto width() const -> decltype(rb.x - lt.x) {return rb.x - lt.x;} 
 		auto height() const -> decltype(rb.y - lt.y) {return rb.y - lt.y;};
-		irect &setheight(int h) {rb.y = lt.y + h; return *this;}
-		irect &setwidth(int w) {rb.x = lt.x + w; return *this;}
+		irect &setheight(aint h) {rb.y = (int)(lt.y + h); return *this;}
+		irect &setwidth(aint w) {rb.x = (int)(lt.x + w); return *this;}
 
 		ivec2 size() const {return ivec2( width(), height() );}
 
@@ -424,26 +471,6 @@ namespace ts
     template<> inline str_c amake(irect r) { return str_c().set_as_int(r.lt.x).append_char(',').append_as_int(r.lt.y).append_char(',').append_as_int(r.rb.x).append_char(',').append_as_int(r.rb.y); }
 
 typedef float   mat44[4][4];
-
-INLINE long int lround(double x)
-{
-#ifdef _M_AMD64
-    return _mm_cvtsd_si32(_mm_load_sd(&x));
-#else
-    _asm
-    {
-        fld x
-            push eax
-            fistp dword ptr[esp]
-            pop eax
-    }
-#endif
-}
-
-INLINE long int lround(float x)
-{
-    return _mm_cvtss_si32(_mm_load_ss(&x));//assume that current rounding mode is always correct (i.e. round to nearest)
-}
 
 namespace internal
 {
@@ -663,8 +690,10 @@ INLINE aint TruncDouble( double x )
     return aint(x);
 }
 
+#if defined _MSC_VER
 #pragma warning (push)
 #pragma warning (disable: 4035)
+#endif
 
 INLINE aint RoundToInt(float x) 
 {
@@ -750,7 +779,9 @@ vec3 TSCALL HSL_to_RGB(const vec3& c);
 vec3 TSCALL RGB_to_HSV(const vec3& rgb);
 vec3 TSCALL HSV_to_RGB(const vec3& c);
 
+#if defined _MSC_VER
 #pragma warning (pop)
+#endif
 
 #define SIN_TABLE_SIZE  256
 #define FTOIBIAS        12582912.f
@@ -845,7 +876,7 @@ INLINE auint isqr(aint x)
 
 template<typename T> INLINE T isign(T x)
 {
-    typedef sztype<sizeof(T)>::type unsignedT;
+    typedef typename sztype<sizeof(T)>::type unsignedT;
 	const unsigned bshift = (sizeof(T) * 8 - 1); //-V103
 	return (T)((x >> bshift) | (unsignedT(-x) >> bshift));
 }
@@ -883,7 +914,7 @@ template < typename T1, typename T2 > INLINE T1 absmax(const T1 & v1, const T2 &
 }
 
 /// Min, 2 arguments
-template < typename T1, typename T2 > INLINE T1 tmin ( const T1 & v1, const T2 & v2 )
+template < typename T1, typename T2 > INLINE typename biggest<T1, T2>::type tmin ( const T1 & v1, const T2 & v2 )
 {
     return ( v1 < v2 ) ? v1 : v2;
 }
@@ -933,7 +964,7 @@ template <typename T, char N> INLINE vec_t<T, N> tmin(const vec_t<T, N> &x, cons
 }
 
 /// Max, 2 arguments
-template < typename T1, typename T2 > INLINE T1 tmax ( const T1 & v1, const T2 & v2 )
+template < typename T1, typename T2 > INLINE typename biggest<T1, T2>::type tmax ( const T1 & v1, const T2 & v2 )
 {
     return ( v1 > v2 ) ? v1 : v2;
 }

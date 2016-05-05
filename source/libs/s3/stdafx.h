@@ -7,7 +7,7 @@
 #include <math.h>
 #include <algorithm>
 #define FLAC__NO_DLL
-#include "../flac/include/flac/stream_decoder.h"
+#include "../libflac/include/flac/stream_decoder.h"
 #include "../libvorbis/include/vorbis/vorbisfile.h"
 
 #define SLASSERT(...) (0, true)

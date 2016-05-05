@@ -4,6 +4,7 @@ struct master_internal_stuff_s
 {
     struct icon_cache_s
     {
+        MOVABLE( true );
         HICON hicon = nullptr;
         uint32 crc = 0;
         int ref = 0;

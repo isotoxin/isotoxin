@@ -1,5 +1,41 @@
 #include "win32_common.inl"
 
+class disable_fp_exceptions_c
+{
+    unsigned int state_store;
+public:
+    disable_fp_exceptions_c()
+    {
+        _controlfp_s( &state_store, 0, 0 );
+        unsigned int unused;
+        _controlfp_s( &unused, state_store | ( EM_OVERFLOW | EM_ZERODIVIDE | EM_DENORMAL | EM_INVALID ), MCW_EM );
+    }
+    ~disable_fp_exceptions_c()
+    {
+        _clearfp();
+        unsigned int unused;
+        _controlfp_s( &unused, state_store, MCW_EM );
+    }
+};
+
+class enable_fp_exceptions_c
+{
+    unsigned int state_store;
+public:
+    enable_fp_exceptions_c()
+    {
+        _clearfp();
+        _controlfp_s( &state_store, 0, 0 );
+        unsigned int unused;
+        _controlfp_s( &unused, state_store & ~( EM_OVERFLOW | EM_ZERODIVIDE | EM_DENORMAL | EM_INVALID ), MCW_EM );
+    }
+    ~enable_fp_exceptions_c()
+    {
+        unsigned int unused;
+        _controlfp_s( &unused, state_store, MCW_EM );
+    }
+};
+
 template<typename CORE> void bitmap_t<CORE>::render_cursor( const ivec2&pos, buf_c &cache )
 {
     struct data_s
@@ -313,7 +349,7 @@ bool drawable_bitmap_c::create_from_bitmap( const bitmap_c &bmp, const ivec2 &p,
         bmi.bV4GreenMask = 0x000007e0;
         bmi.bV4BlueMask = 0x0000001f;
         bmi.bV4AlphaMask = 0;
-        bmi.bV4SizeImage = sz.x * sz.y * bmp.info().bytepp();
+        bmi.bV4SizeImage = (DWORD)(sz.x * sz.y * bmp.info().bytepp());
     }
 
     //HDC tdc=GetDC(0);
@@ -341,12 +377,10 @@ bool drawable_bitmap_c::create_from_bitmap( const bitmap_c &bmp, const ivec2 &p,
 
     if ( d.m_mem_bitmap == nullptr ) DEBUG_BREAK();;
 
-    //if((bmp->info().bytepp()==3 || bmp->info().bytepp()==4)) bmp->swap_byte(ivec2(0,0),bmp->size(),0,2);
-
     core.m_info.sz = sz;
     core.m_info.bitpp = bmp.info().bitpp;
 
-    int ll = sz.x * bmp.info().bytepp();
+    aint ll = sz.x * bmp.info().bytepp();
     core.m_info.pitch = ( ll + 3 ) & ( ~3 );
     uint8 * bdes = core(); //+lls*uint32(sz.y-1);
     const uint8 * bsou = bmp.body() + p.x * bmp.info().bytepp() + bmp.info().pitch * p.y;
@@ -439,13 +473,10 @@ bool drawable_bitmap_c::create_from_bitmap( const bitmap_c &bmp, const ivec2 &p,
         }
     }
 
-    //if((bmp->info().bytepp()==3 || bmp->info().bytepp()==4)) bmp->swap_byte(ivec2(0,0),bmp->size(),0,2);
-
     d.m_mem_dc = CreateCompatibleDC( tdc );
     if ( d.m_mem_dc == nullptr ) DEBUG_BREAK();;
     if ( SelectObject( d.m_mem_dc, d.m_mem_bitmap ) == nullptr ) DEBUG_BREAK();;
 
-    //ReleaseDC(0,tdc);
     DeleteDC( tdc );
 
     return alphablend;
@@ -545,9 +576,6 @@ void drawable_bitmap_c::save_to_bitmap( bitmap_c &bmp, bool save16as32 )
 
     bmp.fill_alpha( 255 );
 
-    //bmp->flip_y();
-    //if(b.bmi.bmiHeader.bV4BitCount==24 || b.bmi.bmiHeader.bV4BitCount==32) bmp->swap_byte(ivec2(0,0),bmp->size(),0,2);
-
 }
 
 
@@ -619,11 +647,11 @@ void drawable_bitmap_draw( drawable_bitmap_c&bmp, const draw_target_s &dt, aint 
         if ( alpha > 0 )
         {
             BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, (uint8)alpha, AC_SRC_ALPHA };
-            AlphaBlend( dt.dc, xx, yy, bmp.info().sz.x, bmp.info().sz.y, d.m_mem_dc, 0, 0, bmp.info().sz.x, bmp.info().sz.y, blendPixelFunction );
+            AlphaBlend( dt.dc, (int)xx, (int)yy, bmp.info().sz.x, bmp.info().sz.y, d.m_mem_dc, 0, 0, bmp.info().sz.x, bmp.info().sz.y, blendPixelFunction );
         }
         else if ( alpha < 0 )
         {
-            BitBlt( dt.dc, xx, yy, bmp.info().sz.x, bmp.info().sz.y, d.m_mem_dc, 0, 0, SRCCOPY );
+            BitBlt( dt.dc, (int)xx, (int)yy, bmp.info().sz.x, bmp.info().sz.y, d.m_mem_dc, 0, 0, SRCCOPY );
         }
     }
 }
@@ -640,11 +668,11 @@ void drawable_bitmap_draw( drawable_bitmap_c&bmp, const draw_target_s &dt, aint 
         if ( alpha > 0 )
         {
             BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, (uint8)alpha, AC_SRC_ALPHA };
-            AlphaBlend( dt.dc, xx, yy, r.width(), r.height(), d.m_mem_dc, r.lt.x, r.lt.y, r.width(), r.height(), blendPixelFunction );
+            AlphaBlend( dt.dc, (int)xx, (int)yy, r.width(), r.height(), d.m_mem_dc, r.lt.x, r.lt.y, r.width(), r.height(), blendPixelFunction );
         }
         else if ( alpha < 0 )
         {
-            BitBlt( dt.dc, xx, yy, r.width(), r.height(), d.m_mem_dc, r.lt.x, r.lt.y, SRCCOPY );
+            BitBlt( dt.dc, (int)xx, (int)yy, r.width(), r.height(), d.m_mem_dc, r.lt.x, r.lt.y, SRCCOPY );
         }
     }
 }

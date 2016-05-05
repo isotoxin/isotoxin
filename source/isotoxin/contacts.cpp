@@ -2,7 +2,7 @@
 
 //-V:opts:807
 
-void avatar_s::load( const void *body, int size, int tag_ )
+void avatar_s::load( const void *body, ts::aint size, int tag_ )
 {
     alpha_pixels = false;
     ts::bitmap_c bmp;
@@ -13,7 +13,7 @@ void avatar_s::load( const void *body, int size, int tag_ )
         if (bmp.info().bytepp() != 4)
         {
             ts::bitmap_c bmp4;
-            bmp.convert_24to32(bmp4);
+            bmp4 = bmp.extbody();
             bmp = bmp4;
         }
         ts::ivec2 asz = parsevec2( gui->theme().conf().get_string(CONSTASTR("avatarsize")), ts::ivec2(32));
@@ -218,16 +218,20 @@ void contact_c::redraw(float delay)
             h->gui_item->redraw(delay);
 }
 
+namespace
+{
+    struct reselect_data_s
+    {
+        MOVABLE( true );
+        contact_key_s hkey;
+        int options;
+        reselect_data_s( const contact_key_s &hkey, int options ) :hkey( hkey ), options( options ) {}
+    };
+}
+
 void contact_c::reselect(int options)
 {
     contact_c *h = get_historian();
-
-    struct reselect_data_s
-    {
-        contact_key_s hkey;
-        int options;
-        reselect_data_s(const contact_key_s &hkey, int options):hkey(hkey), options(options) {}
-    };
 
     if (h)
     {
@@ -570,7 +574,7 @@ contact_c *contacts_c::find_subself(int protoid) const
 void contacts_c::nomore_proto(int id)
 {
     ts::tmp_array_inplace_t<contact_key_s, 16> c2d;
-    for( int i = arr.size() - 1; i>=0 ;--i )
+    for( ts::aint i = arr.size() - 1; i>=0 ;--i )
     {
         contact_c *c = arr.get(i);
         if (c->getkey().protoid == id && ( c->getkey().is_group() || !c->is_meta()))
@@ -671,7 +675,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_LOADED>&msg)
                 return c1->other.metaid < c2->other.metaid;
             return c1->other.key < c2->other.key;
         } );
-        for(int i=notmeta.size() - 2;i>=0;--i)
+        for( ts::aint i=notmeta.size() - 2;i>=0;--i)
         {
             trow *c1 = notmeta.get(i);
             trow *c2 = notmeta.get(i+1);
@@ -1249,7 +1253,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
 
     if (c_gchat && 0 != (contact.mask & CDM_MEMBERS))
     {
-        int wasmembers = c_gchat->subcount();
+        ts::aint wasmembers = c_gchat->subcount();
         c_gchat->subclear();
         for(int cid : contact.members)
             if (contact_c *m = find( contact_key_s(cid, c_gchat->getkey().protoid) ))
@@ -1574,7 +1578,7 @@ void contacts_c::contact_activity( const contact_key_s &ck )
 {
     ASSERT(ck.is_meta() || ck.is_group());
 
-    int cnt = activity.count();
+    ts::aint cnt = activity.count();
     if ( cnt && activity.last(contact_key_s()) == ck )
         return;
 
@@ -1591,15 +1595,15 @@ void contacts_c::contact_activity( const contact_key_s &ck )
     dirty_sort();
 }
 
-void contacts_c::toggle_tag(int i)
+void contacts_c::toggle_tag( ts::aint i)
 {
     enabled_tags.set_bit(i, !enabled_tags.get_bit(i));
     if (!enabled_tags.is_any_bit())
         enabled_tags.clear();
 
     ts::str_c tags;
-    int cnt = all_tags.size();
-    for (int j = 0; j < cnt; ++j)
+    ts::aint cnt = all_tags.size();
+    for ( ts::aint j = 0; j < cnt; ++j)
         if (enabled_tags.get_bit(j))
             tags.append(all_tags.get(j)).append_char(',');
     tags.trunc_length();
@@ -1610,7 +1614,7 @@ void contacts_c::replace_tags(int i, const ts::str_c &ntn)
 {
     iterate_meta_contacts([&](contact_root_c *r)->bool
     {
-        int ti = r->get_tags().find( all_tags.get(i).as_sptr() );
+        ts::aint ti = r->get_tags().find( all_tags.get(i).as_sptr() );
         if (ti >= 0)
         {
             ts::astrings_c tt = r->get_tags();
@@ -1654,7 +1658,7 @@ void contacts_c::rebuild_tags_bits(bool refresh_ui)
 
     for( ts::token<char> t( prf().tags(), ',' ); t; ++t )
     {
-        int bi = all_tags.find(t->as_sptr());
+        ts::aint bi = all_tags.find(t->as_sptr());
         if (bi >= 0) enabled_tags.set_bit(bi, true);
     }
 
@@ -1671,7 +1675,7 @@ void contacts_c::rebuild_tags_bits(bool refresh_ui)
 
 void contact_root_c::toggle_tag(const ts::asptr &t)
 {
-    int i = get_tags().find(t);
+    ts::aint i = get_tags().find(t);
     if ( i>=0 )
         tags.remove_slow(i);
     else
@@ -1688,7 +1692,7 @@ void contact_root_c::rebuild_tags_bits(const ts::astrings_c &allhts)
     tags_bits.clear();
     for( const ts::str_c&ht : tags )
     {
-        int i = allhts.find(ht.as_sptr());
+        ts::aint i = allhts.find(ht.as_sptr());
         if (i >= 0)
             tags_bits.set_bit(i, true);
     }
@@ -1933,7 +1937,7 @@ void contact_root_c::subactivity(const contact_key_s &ck)
 
 void contact_root_c::del_history(uint64 utag)
 {
-    int cnt = history.size();
+    ts::aint cnt = history.size();
     for (int i = 0; i < cnt; ++i)
     {
         if (history.get(i).utag == utag)
@@ -1965,7 +1969,7 @@ int contact_root_c::calc_unread() const
 
     time_t rt = get_readtime();
     int cnt = 0;
-    for (int i = history.size() - 1; i >= 0; --i)
+    for ( ts::aint i = history.size() - 1; i >= 0; --i)
     {
         const post_s &p = history.get(i);
         if (p.recv_time <= rt) break;
@@ -2101,7 +2105,7 @@ void contact_root_c::export_history(const ts::wsptr &templatename, const ts::wsp
 
         tm last_post_time = { 0 };
         contact_c *prev_sender = nullptr;
-        int cnt = hist.size();
+        ts::aint cnt = hist.size();
         for (int i = 0; i < cnt; ++i)
         {
             const post_s *post = hist.get(i);
@@ -2186,7 +2190,7 @@ void contact_root_c::export_history(const ts::wsptr &templatename, const ts::wsp
 //    load_history(not_yet_loaded);
 //}
 
-void contact_root_c::load_history(int n_last_items)
+void contact_root_c::load_history( ts::aint n_last_items)
 {
     ASSERT(get_historian() == this);
 

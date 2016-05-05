@@ -4,7 +4,13 @@
 #define ZSTRINGS_SYSCALL(func) str_wrap_##func
 #define ZSTRINGS_NULL nullptr
 #define ZSTRINGS_CRC32(p,s) 0
+#if defined _MSC_VER
 #define ZSTRINGS_FORCEINLINE __forceinline
+#define ZSTRINGS_UNREACHABLE __assume(0)
+#elif defined __GNUC__
+ZSTRINGS_FORCEINLINE inline
+#define ZSTRINGS_UNREACHABLE __builtin_unreachable()
+#endif
 #define ZSTRINGS_NAMESPACE
 #ifndef _FINAL
 #define ZSTRINGS_DEBUG 1
@@ -23,8 +29,8 @@ typedef char ZSTRINGS_ANSICHAR;
 typedef wchar_t ZSTRINGS_WIDECHAR;
 
 typedef unsigned char ZSTRINGS_BYTE;
-typedef size_t ZSTRINGS_UNSIGNED;
-typedef ptrdiff_t ZSTRINGS_SIGNED;
+typedef size_t ZSTRINGS_UNSIGNED; // 32 or 64 bit
+typedef long ZSTRINGS_SIGNED; // 32 bit enough
 
 template<typename TCHARACTER> struct sptr;
 

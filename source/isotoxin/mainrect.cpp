@@ -59,12 +59,12 @@ ts::uint32 mainrect_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
         n.append( CONSTWSTR(" - CRC:") );
         ts::buf_c b;
         b.load_from_disk_file( ts::get_exe_full_name() );
-        int sz;
+        long sz;
         wchar_t bx[ 32 ];
         wchar_t * t = ts::CHARz_make_str_unsigned<ts::wchar, uint>( bx, sz, b.crc() );
         n.append( ts::wsptr(t) );
 #endif // _DEBUG
-
+        
     }
     return name;
 }

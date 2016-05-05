@@ -53,8 +53,8 @@ glyph_s &font_c::operator[](wchar c)
 
 inline unsigned calc_hash(const font_params_s& fp)
 {
-    int sz = sizeof(fp.size) + sizeof(fp.flags) + sizeof(fp.additional_line_spacing) + +sizeof(fp.outline_radius) + +sizeof(fp.outline_shift);
-    int dsz = sz + fp.fontname.get_length() + fp.filename.get_length() * 2;
+    aint sz = sizeof(fp.size) + sizeof(fp.flags) + sizeof(fp.additional_line_spacing) + +sizeof(fp.outline_radius) + +sizeof(fp.outline_shift);
+    aint dsz = sz + fp.fontname.get_length() + fp.filename.get_length() * 2;
     uint8 *d = (uint8 *)_alloca( dsz );
     memcpy(d, fp.fontname.cstr(), fp.fontname.get_length());
     memcpy(d + fp.fontname.get_length(), fp.filename.cstr(), fp.filename.get_length() * 2);
@@ -292,7 +292,7 @@ font_c &font_c::buildfont(const str_c &fontname, const font_params_s&fprs)
             break; //-V612
 		}
 
-		CHECK(FT_New_Memory_Face( idta.ftlibrary, (FT_Byte*)buf.data(), buf.size(), 0, &ff.face ) == 0);
+		CHECK(FT_New_Memory_Face( idta.ftlibrary, (FT_Byte*)buf.data(), (FT_Long)buf.size(), 0, &ff.face ) == 0);
 		ff.font_file_buffer = buf;
 
 		//some checks
@@ -371,7 +371,7 @@ scaled_image_s *scaled_image_s::load(const wsptr &filename_, const ivec2 &scale)
 				case 24:
                     {
                         bitmap_c tmp;
-                        i.bitmap.convert_24to32(tmp);
+                        tmp = i.bitmap.extbody();
                         i.bitmap = tmp;
                     }
 				case 32:

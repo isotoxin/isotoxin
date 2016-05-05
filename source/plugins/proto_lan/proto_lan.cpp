@@ -30,8 +30,10 @@ void __stdcall get_info(proto_info_s *info)
     info->audio_fmt.channels = AUDIO_CHANNELS;
     info->audio_fmt.bits = AUDIO_BITS;
 
-    info->icon = "M 35 10 L 35 40 L 47.5 40 L 47.5 47.5 L 5 47.5 L 5 52.5 L 22.5 52.5 L 22.5 60 L 10 60 L 10 90 L 40 90 L 40 60 L 27.5 60 L 27.5 52.5 L 72.5 52.5 L 72.5 60 L 60 60 L 60 90 L 90 90 L 90 60 L 77.5 60 L 77.5 52.5 L 95 52.5 L 95 47.5 L 52.5 47.5 L 52.5 40 L 65 40 L 65 10 L 35 10 z ";
-    info->icon_buflen = strlen(info->icon);
+    asptr svgicon( CONSTASTR( "M 35 10 L 35 40 L 47.5 40 L 47.5 47.5 L 5 47.5 L 5 52.5 L 22.5 52.5 L 22.5 60 L 10 60 L 10 90 L 40 90 L 40 60 L 27.5 60 L 27.5 52.5 L 72.5 52.5 L 72.5 60 L 60 60 L 60 90 L 90 90 L 90 60 L 77.5 60 L 77.5 52.5 L 95 52.5 L 95 47.5 L 52.5 47.5 L 52.5 40 L 65 40 L 65 10 L 35 10 z " ) );
+
+    info->icon = svgicon.s;
+    info->icon_buflen = (int)svgicon.l;
 
     info->vcodecs = nullptr;
     info->vcodecs_buflen = 0;

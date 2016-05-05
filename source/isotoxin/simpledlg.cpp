@@ -722,7 +722,7 @@ incoming_call_panel_c::~incoming_call_panel_c()
     b_ignore.set_handler(DELEGATE(this, b_ignore_call), this);
     MODIFY(b_ignore).visible(true);
 
-    int cnt = getengine().children_count();
+    ts::aint cnt = getengine().children_count();
     int x = ICP_MARGIN_LEFT_RITE;
     if (tsz.x > sz.x) x += (tsz.x - sz.x) / 2;
     int vspc = image ? (ICP_ELEMENT_V_SPACE * 2 + image->info().sz.y) : ICP_ELEMENT_V_SPACE;

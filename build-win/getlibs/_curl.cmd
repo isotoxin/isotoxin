@@ -7,6 +7,11 @@ if exist %libdir%\curl\include\curl\curl.h goto alrd
 
 if exist curl rd curl /S /Q
 git clone https://github.com/bagder/curl.git
+
+cd curl
+git checkout "curl-7_48_0"
+cd ..
+
 move curl\include %libdir%\curl >nul
 move curl\lib %libdir%\curl >nul
 copy %libdir%\curl\include\curl\curlbuild.h.dist %libdir%\curl\include\curl\curlbuild.h >nul

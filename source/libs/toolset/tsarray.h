@@ -1,7 +1,9 @@
 #pragma once
 
+#if defined _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4127)
+#endif
 
 namespace ts
 {
@@ -12,10 +14,10 @@ protected:
     typedef typename clean_type<UNIT_PTR>::type CLEAN_OBJTYPE;
 
     static void destructor(UNIT_PTR) {}
-    static void init(UNIT_PTR *u, uint count) {}
+    static void init(UNIT_PTR *u, auint count) {}
     template<typename KEY> static  int  compare( UNIT_PTR u1, KEY key ) { auto &unit = *u1; return unit(key); }
 
-    template<typename TFROM, bool target_initialized, bool moveit> struct copy { copy(UNIT_PTR &to, TFROM from) { to = from; } };
+    template<typename TFROM, bool target_initialized, bool moveit> struct copy { static void c(UNIT_PTR &to, TFROM from) { to = from; } };
 
 };
 
@@ -29,7 +31,7 @@ protected:
     static void destructor(T u) {}
     static void init(T *u, auint count) { blk_fill<T>(u, count); }
 	template<typename KEY> static  int  compare( const T u1, const KEY key ) {	auto &unit = *u1; return unit(key);	}
-    template<typename TFROM, bool target_initialized, bool moveit> struct copy { copy(T &to, TFROM from) { to = from; } };
+    template<typename TFROM, bool target_initialized, bool moveit> struct copy { static void c(T &to, TFROM from) { to = from; } };
 };
 
 template <typename UNIT_PTR, typename ALLOCATOR> class DEFAULT_BEHAVIOUR_DEL : public DEFAULT_BEHAVIOUR<UNIT_PTR, ALLOCATOR>
@@ -41,11 +43,11 @@ protected:
     TS_STATIC_CHECK( std::is_pointer<UNIT_PTR>::value, "UNIT_PTR must be pointer" );
     static void destructor(UNIT_PTR u) { if (u) TSDEL(u); }
     static void init(UNIT_PTR *u, auint count) { blk_fill<UNIT_PTR>(u, count); }
-    template<typename TFROM, bool target_initialized, bool moveit> struct copy { copy(UNIT_PTR &to, TFROM from) { to = from; } };
+    template<typename TFROM, bool target_initialized, bool moveit> struct copy { static void c(UNIT_PTR &to, TFROM from) { to = from; } };
     /*
     template<typename TFROM> struct copy<TFROM, false, false>
     {
-        copy(UNIT_PTR &to, TFROM from)
+        static void c(UNIT_PTR &to, TFROM from)
         {
             ASSERT(false, "bad use of array of pointers");
             to = from;
@@ -53,7 +55,7 @@ protected:
     }
     template<typename TFROM> struct copy<TFROM, true, false>
     {
-        copy(UNIT_PTR &to, TFROM from)
+        static void c(UNIT_PTR &to, TFROM from)
         {
             ASSERT(false, "bad use of array of pointers");
             to = from;
@@ -62,7 +64,7 @@ protected:
     */
     template<typename TFROM> struct copy<TFROM, true, true>
     {
-        copy(UNIT_PTR &to, TFROM from)
+        static void c(UNIT_PTR &to, TFROM from)
         {
             destructor(to);
             to = from;
@@ -79,11 +81,11 @@ protected:
     TS_STATIC_CHECK( std::is_pointer<UNIT_PTR>::value, "UNIT_PTR must be pointer" );
     static void destructor(UNIT_PTR u) { if (u) MM_FREE(u); }
     static void init(UNIT_PTR *u, auint count) { blk_fill<UNIT_PTR>(u, count); }
-    template<typename TFROM, bool target_initialized, bool moveit> struct copy { copy(UNIT_PTR &to, TFROM from) { to = from; } };
+    template<typename TFROM, bool target_initialized, bool moveit> struct copy { static void c(UNIT_PTR &to, TFROM from) { to = from; } };
     /*
     template<typename TFROM> struct copy<TFROM, false, false>
     {
-        copy(UNIT_PTR &to, TFROM from)
+        static void c(UNIT_PTR &to, TFROM from)
         {
             ASSERT(false, "bad use of array of pointers");
             to = from;
@@ -91,7 +93,7 @@ protected:
     }
     template<typename TFROM> struct copy<TFROM, true, false>
     {
-        copy(UNIT_PTR &to, TFROM from)
+        static void c(UNIT_PTR &to, TFROM from)
         {
             ASSERT(false, "bad use of array of pointers");
             to = from;
@@ -100,7 +102,7 @@ protected:
     */
     template<typename TFROM> struct copy<TFROM, true, true>
     {
-        copy(UNIT_PTR &to, TFROM from)
+        static void c(UNIT_PTR &to, TFROM from)
         {
             destructor(to);
             to = from;
@@ -117,12 +119,12 @@ protected:
     static void destructor(UNIT_PTR u) { if (u) u->release(); }
     static void init(UNIT_PTR *u, auint count) { blk_fill<UNIT_PTR>(u, count); }
 
-    template<typename TFROM, bool target_initialized, bool moveit> struct copy { copy(UNIT_PTR &to, TFROM from) { to = from; } };
+    template<typename TFROM, bool target_initialized, bool moveit> struct copy { static void c(UNIT_PTR &to, TFROM from) { to = from; } };
 
     /*
     template<typename TFROM> struct copy<TFROM, false, false>
     {
-        copy(UNIT_PTR &to, TFROM from)
+        static void c(UNIT_PTR &to, TFROM from)
         {
             ASSERT(false, "bad use of array of pointers");
             to = from;
@@ -130,7 +132,7 @@ protected:
     }
     template<typename TFROM> struct copy<TFROM, true, false>
     {
-        copy(UNIT_PTR &to, TFROM from)
+        static void c(UNIT_PTR &to, TFROM from)
         {
             ASSERT(false, "bad use of array of pointers");
             to = from;
@@ -139,7 +141,7 @@ protected:
     */
     template<typename TFROM> struct copy<TFROM, true, true>
     {
-        copy(UNIT_PTR &to, TFROM from)
+        static void c(UNIT_PTR &to, TFROM from)
         {
             destructor(to);
             to = from;
@@ -160,18 +162,18 @@ protected:
 	}
 	template<typename KEY> static int  compare( const inarraytype &u1, const KEY &key ) { return (*u1.get())(key); }
 
-    template<typename TFROM, bool target_initialized, bool moveit> struct copy { copy(inarraytype &to, TFROM from); };
+    template<typename TFROM, bool target_initialized, bool moveit> struct copy {};
 
     template<typename TFROM> struct copy<TFROM, false, false>
     {
-        copy(inarraytype &to, TFROM from)
+        static void c(inarraytype &to, TFROM from)
         {
             TSPLACENEW(&to, from);
         }
     };
     template<typename TFROM> struct copy<TFROM, false, true>
     {
-        copy(inarraytype &to, TFROM from)
+        static void c(inarraytype &to, TFROM from)
         {
             TS_STATIC_CHECK( is_movable<inarraytype>::value, "safe_ptr is not movable :(" );
             memcpy(&to, &from, sizeof(inarraytype));
@@ -179,14 +181,14 @@ protected:
     };
     template<typename TFROM> struct copy<TFROM, true, false>
     {
-        copy(inarraytype &to, TFROM from)
+        static void c(inarraytype &to, TFROM from)
         {
             to = from;
         }
     };
     template<typename TFROM> struct copy<TFROM, true, true>
     {
-        copy(inarraytype &to, TFROM from)
+        static void c(inarraytype &to, TFROM from)
         {
             destructor(to);
             memcpy(&to, &from, sizeof(inarraytype));
@@ -194,7 +196,6 @@ protected:
     };
 
 };
-
 
 template<typename T, typename ALLOCATOR> class DEFAULT_BEHAVIOUR_INPLACE : public ALLOCATOR
 {
@@ -209,60 +210,80 @@ protected:
     }
     template<typename KEY> static int  compare(const T &u1, const KEY &key) { return u1(key); }
     
-    template<typename TFROM, bool target_initialized, bool moveit> struct copy { copy(T &to, TFROM from); };
+    template<typename TFROM, bool target_initialized, bool moveit> struct copy {};
 
     template<typename TFROM> struct copy<TFROM, false, false>
     {
-        copy(T &to, TFROM from)
+        static void c(T &to, TFROM from)
         {
             TSPLACENEW(&to, from);
         }
     };
+
+    template<typename TFROM, bool same, bool movable> struct subcopy1
+    {
+        static void copy( T &to, TFROM from )
+        {
+            TSPLACENEW( &to, from );
+            destructor( from );
+        }
+    };
+
+    template<typename TFROM> struct subcopy1<TFROM, true, false>
+    {
+        static void copy( T &to, TFROM from )
+        {
+            TSPLACENEW( &to, std::move( from ) );
+            destructor( from );
+        }
+    };
+
+    template<typename TFROM> struct subcopy1<TFROM, true, true>
+    {
+        static void copy( T &to, TFROM from )
+        {
+            memcpy( &to, &from, sizeof( T ) );
+        }
+    };
+
     template<typename TFROM> struct copy<TFROM, false, true>
     {
-        template<bool same, bool movable> static void _copy( T &to, TFROM from )
+        static void c(T &to, TFROM from)
         {
-            TSPLACENEW(&to, from);
-            destructor(from);
-        }
-        template<> static void _copy<true, false>( T &to, TFROM from )
-        {
-            TSPLACENEW(&to, std::move(from));
-            destructor(from);
-        }
-        template<> static void _copy<true, true>( T &to, TFROM from )
-        {
-            memcpy(&to, &from, sizeof(T));
-        }
-
-        copy(T &to, TFROM from)
-        {
-            _copy<std::is_same<T, std::remove_reference<TFROM>::type>::value, is_movable<T>::value>(to,from);
+            subcopy1<TFROM, std::is_same<T, typename std::remove_reference<TFROM>::type>::value, is_movable<T>::value>::copy(to,from);
         }
     };
     template<typename TFROM> struct copy<TFROM, true, false>
     {
-        copy(T &to, TFROM from)
+        static void c(T &to, TFROM from)
         {
             to = from;
         }
     };
+
+    template<typename TFROM, bool same, bool movable> struct  subcopy2
+    {
+        static void copy( T &to, TFROM from )
+        {
+            to = std::move( from );
+            destructor( from );
+        }
+    };
+
+    template<typename TFROM> struct subcopy2<TFROM, true, true>
+    {
+        static void copy( T &to, TFROM from )
+        {
+            destructor( to );
+            memcpy( &to, &from, sizeof( T ) );
+        }
+    };
+
     template<typename TFROM> struct copy<TFROM, true, true>
     {
-        template<bool same, bool movable> static void _copy(T &to, TFROM from)
+        static void c(T &to, TFROM from)
         {
-            to = std::move(from);
-            destructor(from);
-        }
-        template<> static void _copy<true, true>(T &to, TFROM from)
-        {
-            destructor(to);
-            memcpy(&to, &from, sizeof(T));
-        }
-
-        copy(T &to, TFROM from)
-        {
-            _copy<std::is_same<T, std::remove_reference<TFROM>::type>::value, is_movable<T>::value>(to, from);
+            subcopy2<TFROM, std::is_same<T, typename std::remove_reference<TFROM>::type>::value, is_movable<T>::value>::copy(to, from);
         }
     };
 
@@ -282,8 +303,33 @@ template <typename T, int SMALLGRANULA = 0, typename BEHAVIOUR = DEFAULT_BEHAVIO
 public:
     typedef typename BEHAVIOUR::CLEAN_OBJTYPE CLEAN_OBJTYPE;
     typedef T OBJTYPE;
+    //typedef typename std::add_const<typename std::add_lvalue_reference<T>::type>::type Tcref;
+    //typedef typename std::add_lvalue_reference<T>::type Tref;
 
 private:
+
+    void copy_over_itm( T& to, const T&from )
+    {
+        typedef typename BEHAVIOUR::template copy<const T&, true, false> copier;
+        copier::c( to, from );
+    }
+    void copy_new_itm( T& to, const T&from )
+    {
+        typedef typename BEHAVIOUR::template copy<const T&, false, false> copier;
+        copier::c( to, from );
+    }
+
+    void move_over_itm( T& to, T&from )
+    {
+        typedef typename BEHAVIOUR::template copy<T&, true, true> copier;
+        copier::c( to, from );
+    }
+    void move_new_itm( T& to, T&from )
+    {
+        typedef typename BEHAVIOUR::template copy<T&, false, true> copier;
+        copier::c( to, from );
+    }
+
 
     T *m_list;
     aint m_count;       // items in list
@@ -311,19 +357,19 @@ private:
 
             if (is_movable<T>::value)
             {
-                m_list = (T *)mra(m_list, sizeof(T)*(m_capacity));
+                m_list = (T *)this->mra(m_list, sizeof(T)*(m_capacity));
                 if (index < m_count)
                     blk_copy_back( m_list + index + count, m_list + index, (m_count-index) * sizeof(T) );
 
             } else {
-                T *new_list = (T *)ma(sizeof(T)*(m_capacity));
-                for (aint i = 0; i < index; ++i)
-                    BEHAVIOUR::copy<T&, false, true>( new_list[i], m_list[i] );
+                T *new_list = (T *)this->ma(sizeof(T)*(m_capacity));
+                for ( aint i = 0; i < index; ++i )
+                    move_new_itm( new_list[ i ], m_list[ i ] ); //BEHAVIOUR::template copy<Tref, false, true>( new_list[i], m_list[i] );
 
                 for (aint i = index; i < m_count; ++i)
-                    BEHAVIOUR::copy<T&, false, true>(new_list[i+count], m_list[i]);
+                    move_new_itm( new_list[ i + count ], m_list[ i ] ); //BEHAVIOUR::template copy<Tref, false, true>(new_list[i+count], m_list[i]);
 
-                mf(m_list);
+                this->mf(m_list);
                 m_list = new_list;
                 oalocated = m_count;
             }
@@ -347,8 +393,8 @@ private:
                     blk_copy_back(m_list + index + count, m_list + index, cntmove * sizeof(T));
             } else
             {
-                for (aint i = m_count-1; i >= index; --i)
-                    BEHAVIOUR::copy<T&, false, true>(m_list[i + count], m_list[i]);
+                for ( aint i = m_count - 1; i >= index; --i )
+                    move_new_itm( m_list[ i + count ], m_list[ i ] ); //BEHAVIOUR::template copy<Tref, false, true>(m_list[i + count], m_list[i]);
             }
             
             // hole in array will be filled anyway -> no need to fill it with debug values
@@ -365,8 +411,8 @@ private:
         }
         else
         {
-            for (aint i = index + count; i < m_count; ++i)
-                BEHAVIOUR::copy<T&, false, true>(m_list[i - count], m_list[i]);
+            for ( aint i = index + count; i < m_count; ++i )
+                move_new_itm( m_list[ i - count ], m_list[ i ] ); //BEHAVIOUR::template copy<Tref, false, true>(m_list[i - count], m_list[i]);
         }
         fill_dbg( m_count - count, count );
         m_count -= count;
@@ -419,7 +465,7 @@ public:
         if (size() == 0) return add();
         aint newcount = size() + 1;
         _upsize(newcount, m_count, 0);
-        BEHAVIOUR::copy<const T&, false,false>( m_list[newcount - 1], m_list[newcount - 2] );
+        copy_new_itm( m_list[ newcount - 1 ], m_list[ newcount - 2 ] ); //BEHAVIOUR::template copy<Tcref, false,false>( m_list[newcount - 1], m_list[newcount - 2] );
         m_count = newcount;
         return m_list[newcount - 1];
     }
@@ -427,9 +473,10 @@ public:
     void    swap_unsafe( aint i0, aint i1 )
     {
         make_pod<T> tmp;
-        BEHAVIOUR::copy<T&,false,true>( tmp, m_list[i0] );
-        BEHAVIOUR::copy<T&,false,true>( m_list[i0], m_list[i1] );
-        BEHAVIOUR::copy<T&,false,true>( m_list[i1], tmp );
+
+        move_new_itm( tmp, m_list[ i0 ] ); //BEHAVIOUR::template copy<Tref,false,true>( tmp, m_list[i0] );
+        move_new_itm( m_list[ i0 ], m_list[ i1 ] ); //BEHAVIOUR::template copy<Tref,false,true>( m_list[i0], m_list[i1] );
+        move_new_itm( m_list[ i1 ], tmp ); //BEHAVIOUR::template copy<Tref,false,true>( m_list[i1], tmp );
     }
 
     void    move_up_unsafe(aint idx)
@@ -466,7 +513,8 @@ public:
     {
         if (idx<m_count)
         {
-            BEHAVIOUR::copy<const T&, true,false>( m_list[idx], d );
+            //BEHAVIOUR::template copy<Tcref, true, false>::c( m_list[idx], d );
+            copy_over_itm( m_list[ idx ], d );
             return;
         }
 
@@ -477,7 +525,7 @@ public:
 
         ASSERT(newcount > m_count);
         
-        BEHAVIOUR::copy<const T&, false,false>( m_list[idx], const_cast<T &>(d) );
+        copy_new_itm( m_list[ idx ], d ); //BEHAVIOUR::copy<Tcref, false,false>::c( m_list[idx], const_cast<T &>(d) );
         BEHAVIOUR::init(m_list + m_count, idx-m_count); // init items between inserted and previous end of array
 
         m_count = newcount;
@@ -504,22 +552,24 @@ public:
 
     template<typename TT>void replace(aint pos, aint num, const TT *arr, aint len)
     {
+        //typedef typename std::add_const<typename std::add_lvalue_reference<TT>::type>::type TTcref;
+        
         if (!ASSERT(pos >= 0 && pos + num <= m_count && len >= 0 && (const void *)arr != (const void *)m_list)) return;
         if (len > num)
         {
             _upsize(m_count - num + len, pos + num, len - num);
 
-            for (aint i = 0; i < num; ++i)
-                BEHAVIOUR::copy<const TT&, true, false>(m_list[pos + i], arr[i]);
+            for ( aint i = 0; i < num; ++i )
+                copy_over_itm( m_list[ pos + i ], arr[ i ] ); //BEHAVIOUR::template copy<TTcref, true, false>(m_list[pos + i], arr[i]);
 
-            for (aint i = num; i < len; ++i)
-                BEHAVIOUR::copy<const TT&, false, false>(m_list[pos + i], arr[i]);
+            for ( aint i = num; i < len; ++i )
+                copy_new_itm( m_list[ pos + i ], arr[ i ] );//BEHAVIOUR::template copy<TTcref, false, false>(m_list[pos + i], arr[i]);
 
 
         } else
         {
-            for (aint i = 0; i < len; ++i)
-                BEHAVIOUR::copy<const TT&, true, false>(m_list[pos + i], arr[i]);
+            for ( aint i = 0; i < len; ++i )
+                copy_over_itm( m_list[ pos + i ], arr[ i ] ); //BEHAVIOUR::template copy<TTcref, true, false>(m_list[pos + i], arr[i]);
 
             if (len < num)
                 remove_some(pos+len, num-len);
@@ -543,7 +593,7 @@ public:
 
         _upsize(m_count+1, idx, 1);
 
-        BEHAVIOUR::copy<const T&, false,false>( m_list[idx], const_cast<T &>(d) );
+        copy_new_itm( m_list[ idx ], d); //BEHAVIOUR::template copy<Tcref, false,false>( m_list[idx], const_cast<T &>(d) );
 
         return idx;
     }
@@ -698,7 +748,7 @@ public:
     void    remove_fast(aint idx) // moves last element to removed one
     {
         ASSERT( idx < size(), "remove_fast: out of range of array" );
-        BEHAVIOUR::copy<T&, true,true>( m_list[idx], m_list[--m_count] );
+        move_over_itm( m_list[ idx ], m_list[ --m_count ] );    //BEHAVIOUR::template copy<Tref, true,true>( m_list[idx], m_list[--m_count] );
         fill_dbg(m_count,1);
     }
     template<typename TT> void    find_remove_fast(const TT &t)
@@ -715,7 +765,7 @@ public:
         if (size() == 0) return make_dummy<T>();
         
         only_destructor<T> r;
-        BEHAVIOUR::copy<T&, false,true>( r, m_list[idx] );
+        move_new_itm( r, m_list[ idx ] );  //BEHAVIOUR::template copy<Tref, false,true>( r, m_list[idx] );
 
         _remove_slow(idx, 1);
         return std::move(r.get());
@@ -726,8 +776,8 @@ public:
         if (size() == 0) return make_dummy<T>();
 
         only_destructor<T> r;
-        BEHAVIOUR::copy<T&, false, true>(r, m_list[idx]);
-        BEHAVIOUR::copy<T&, false, true>(m_list[idx], m_list[--m_count]);
+        move_new_itm( r, m_list[ idx ] ); // BEHAVIOUR::template copy<Tref, false, true>(r, m_list[idx]);
+        move_new_itm( m_list[ idx ], m_list[ --m_count ] ); //BEHAVIOUR::template copy<Tref, false, true>(m_list[idx], m_list[--m_count]);
         fill_dbg(m_count, 1);
         return std::move(r.get());
     }
@@ -737,7 +787,8 @@ public:
         if (size() == 0) return make_dummy<T>();
 
         only_destructor<T> r;
-        BEHAVIOUR::copy<T&, false, true>(r, m_list[m_count-1]);
+        //BEHAVIOUR::template copy<Tref, false, true>(r, m_list[m_count-1]);
+        move_new_itm( r, m_list[ m_count - 1 ] );
 
         --m_count;
         fill_dbg(m_count, 1);
@@ -787,7 +838,7 @@ public:
                 if ( m_capacity != SMALLGRANULA )
                 {
                     mf(m_list);
-                    m_list = (T *)ma(sizeof(T)*SMALLGRANULA);
+                    m_list = (T *)this->ma(sizeof(T)*SMALLGRANULA);
                     m_capacity = SMALLGRANULA;
                     fillcount = m_capacity;
                 }
@@ -796,7 +847,7 @@ public:
                 if ( m_capacity != 2 )
                 {
                     mf(m_list);
-                    m_list = (T *)ma(sizeof(T)*2);
+                    m_list = (T *)this->ma(sizeof(T)*2);
                     m_capacity = 2;
                     fillcount = m_capacity;
                 }
@@ -823,7 +874,7 @@ public:
         //ASSERT(idx < size(), "get: out of range of array"); // compiler crashes
 #ifndef _FINAL
         if (idx < 0 || idx >= size())
-            __debugbreak();
+            DEBUG_BREAK();
 #endif
         return m_list[idx];
     };
@@ -833,6 +884,7 @@ public:
     void    absorb_add( array_c &from )
     {
         aint ns = m_count + from.m_count;
+        aint count = m_count;
 
         _upsize(ns, m_count, 0);
 
@@ -842,8 +894,8 @@ public:
         }
         else
         {
-            for (aint i = 0; i < from.m_count; ++i)
-                BEHAVIOUR::copy<T&, false, true>(m_list[i + m_count], from.m_list[i]);
+            for ( aint i = 0; i < from.m_count; ++i )
+                move_new_itm( m_list[ i + count ], from.m_list[ i ] ); //BEHAVIOUR::template copy<Tref, false, true>(m_list[i + count], from.m_list[i]);
         }
 
         m_count = ns;
@@ -996,7 +1048,7 @@ public:
     {
         m_count = 0;
         m_capacity = a.size();
-        m_list = (T *)ma(sizeof(T)*m_capacity);
+        m_list = (T *)this->ma(sizeof(T)*m_capacity);
         *this = a;
     }
     array_c(array_c &&a)
@@ -1013,20 +1065,22 @@ public:
     {
         m_count = list.size();
         m_capacity = m_count;
-        m_list = (T *)ma(sizeof(T)*m_capacity);
+        m_list = (T *)this->ma(sizeof(T)*m_capacity);
 
         aint i = 0;
-        for(const T &el : list) BEHAVIOUR::copy<const T&, false,false>( m_list[i++], const_cast<T &>(el) );
+        for(const T &el : list)
+            copy_new_itm(m_list[i++], el); //BEHAVIOUR::template copy<Tcref, false,false>( m_list[i++], const_cast<T &>(el) );
     }
 
     array_c( const array_wrapper_c<const T>&wrp )
     {
         m_count = wrp.size();
         m_capacity = m_count;
-        m_list = (T *)ma(sizeof(T)*m_capacity);
+        m_list = (T *)this->ma(sizeof(T)*m_capacity);
 
         aint i = 0;
-        for (const T &el : wrp) BEHAVIOUR::copy<const T&, false, false>(m_list[i++], const_cast<T &>(el));
+        for ( const T &el : wrp )
+            copy_new_itm( m_list[ i++ ], el ); // BEHAVIOUR::template copy<Tcref, false, false>(m_list[i++], const_cast<T &>(el));
     }
 
     array_c( aint capacity = 0 )
@@ -1035,17 +1089,17 @@ public:
         {
             if (SMALLGRANULA > 0)
             {
-                m_list = (T *)ma(sizeof(T)*SMALLGRANULA);
+                m_list = (T *)this->ma(sizeof(T)*SMALLGRANULA);
                 m_capacity = SMALLGRANULA;
             }
             else
             {
-                m_list = (T *)ma(sizeof(T) * 2);
+                m_list = (T *)this->ma(sizeof(T) * 2);
                 m_capacity = 2;
             }
         } else
         {
-            m_list = (T *)ma(sizeof(T) * capacity);
+            m_list = (T *)this->ma(sizeof(T) * capacity);
             m_capacity = capacity;
         }
         m_count = 0;
@@ -1054,8 +1108,8 @@ public:
     ~array_c()
     {
         T *ptr = m_list + m_count - 1;
-        while (ptr>=m_list) { destructor( *ptr ); ptr--; }
-        mf(m_list);
+        while (ptr>=m_list) { this->destructor( *ptr ); ptr--; }
+        this->mf(m_list);
     }
 
     array_wrapper_c<const T> array() const { return array_wrapper_c<const T>( m_list, m_count ); }
@@ -1112,4 +1166,6 @@ template<typename obj, int granula> using tmp_array_inplace_t = array_c < obj, g
 
 } // namespace ts
 
+#if defined _MSC_VER
 #pragma warning(pop)
+#endif

@@ -27,7 +27,7 @@
 #pragma warning (disable:4458) // declaration of 'xxx' hides class member
 
 void VDCPUCleanupExtensions() {
-#ifndef _M_AMD64
+#ifndef MODE64
     if (ts::CCAPS(ts::CPU_SSE))
         __asm sfence
     if (ts::CCAPS(ts::CPU_MMX))
@@ -585,12 +585,12 @@ public:
 		GenerateTable(mFilterBank.begin(), filter);
 	}
 
-	int GetWindowSize() const {return mFilterBank.count() >> 8;}
+	int GetWindowSize() const {return (int)(mFilterBank.count() >> 8);}
 
 	void Process(void *dst0, const void *src0, uint32 w, uint32 u, uint32 dudx) {
 		uint32 *dst = (uint32 *)dst0;
 		const uint32 *src = (const uint32 *)src0;
-		const unsigned ksize = mFilterBank.count() >> 8;
+		const unsigned ksize = (unsigned)(mFilterBank.count() >> 8);
 		const sint32 *filterBase = mFilterBank.begin();
 
 		do {
@@ -634,12 +634,12 @@ public:
 		GenerateTable(mFilterBank.begin(), filter);
 	}
 
-	int GetWindowSize() const {return mFilterBank.count() >> 8;}
+	int GetWindowSize() const {return (int)(mFilterBank.count() >> 8);}
 
 	void Process(void *dst0, const void *const *src0, uint32 w, sint32 phase) {
 		uint32 *dst = (uint32 *)dst0;
 		const uint32 *const *src = (const uint32 *const *)src0;
-		const unsigned ksize = mFilterBank.count() >> 8;
+		const unsigned ksize = (unsigned)(mFilterBank.count() >> 8);
 		const sint32 *filter = &mFilterBank.get(((phase>>8)&0xff) * ksize);
 
 		for(uint32 i=0; i<w; ++i) {
@@ -951,7 +951,7 @@ namespace {
 	};
 }
 
-#ifndef _M_AMD64
+#ifndef MODE64
 	extern "C" void __cdecl vdasm_resize_point32(const ScaleInfo *);
 
 	class VDResamplerSeparablePointRowStageX86 : public IVDResamplerSeparableRowStage {
@@ -978,7 +978,7 @@ namespace {
 //
 ///////////////////////////////////////////////////////////////////////////
 
-#ifndef _M_AMD64
+#ifndef MODE64
 	extern "C" void __cdecl vdasm_resize_point32_MMX(const ScaleInfo *);
 
 	class VDResamplerSeparablePointRowStageMMX : public IVDResamplerSeparableRowStage {
@@ -1092,7 +1092,7 @@ namespace {
 //
 ///////////////////////////////////////////////////////////////////////////
 
-#ifndef _M_AMD64
+#ifndef MODE64
 	extern "C" long _cdecl vdasm_resize_table_col_SSE2(uint32 *out, const uint32 *const*in_table, const int *filter, int filter_width, uint32 w, long frac);
 	extern "C" long _cdecl asm_resize_table_row_SSE2(uint32 *out, const uint32 *in, const int *filter, int filter_width, uint32 w, long accum, long frac);
 	extern "C" void _cdecl asm_resize_ccint_col_SSE2(void *dst, const void *src1, const void *src2, const void *src3, const void *src4, uint32 count, const void *tbl);
@@ -1140,7 +1140,7 @@ namespace {
 //
 ///////////////////////////////////////////////////////////////////////////
 
-#ifdef _M_AMD64
+#ifdef MODE64
 	extern "C" long vdasm_resize_table_col_SSE2(uint32 *out, const uint32 *const*in_table, const int *filter, int filter_width, uint32 w);
 	extern "C" long vdasm_resize_table_row_SSE2(uint32 *out, const uint32 *in, const int *filter, int filter_width, uint32 w, long accum, long frac);
 
@@ -1149,11 +1149,11 @@ namespace {
 		VDResamplerSeparableTableRowStageSSE2(const IVDResamplerFilter& filter)
 			: VDResamplerSeparableTableRowStage(filter)
 		{
-			SwizzleTable(mFilterBank.begin(), mFilterBank.count() >> 1);
+			SwizzleTable(mFilterBank.begin(), (unsigned)(mFilterBank.count() >> 1));
 		}
 
 		void Process(void *dst, const void *src, uint32 w, uint32 u, uint32 dudx) {
-			vdasm_resize_table_row_SSE2((uint32 *)dst, (const uint32 *)src, (const int *)mFilterBank.data(), mFilterBank.count() >> 8, w, u, dudx);
+			vdasm_resize_table_row_SSE2((uint32 *)dst, (const uint32 *)src, (const int *)mFilterBank.data(), (unsigned)(mFilterBank.count() >> 8), w, u, dudx);
 		}
 	};
 
@@ -1162,11 +1162,11 @@ namespace {
 		VDResamplerSeparableTableColStageSSE2(const IVDResamplerFilter& filter)
 			: VDResamplerSeparableTableColStage(filter)
 		{
-			SwizzleTable(mFilterBank.begin(), mFilterBank.count() >> 1);
+			SwizzleTable(mFilterBank.begin(), (unsigned)(mFilterBank.count() >> 1));
 		}
 
 		void Process(void *dst, const void *const *src, uint32 w, sint32 phase) {
-			const unsigned filtSize = mFilterBank.size() >> 8;
+			const unsigned filtSize = (unsigned)(mFilterBank.count() >> 8);
 
 			vdasm_resize_table_col_SSE2((uint32*)dst, (const uint32 *const *)src, (const int *)mFilterBank.data() + filtSize*((phase >> 8) & 0xff), filtSize, w);
 		}
@@ -1253,18 +1253,18 @@ bool VDPixmapResampler::Init(double dw, double dh, int dstformat, double sw, dou
 	IVDResamplerSeparableColStage *pColStage = nullptr;
 
 	if (hfilter == kFilterPoint) {
-#ifndef _M_AMD64
+#ifndef MODE64
 
 		if (CCAPS(CPU_MMX))
 			pRowStage = mStageAllocator.build<VDResamplerSeparablePointRowStageMMX>();
 		else
 			pRowStage = mStageAllocator.build<VDResamplerSeparablePointRowStageX86>();
 #else		
-		pRowStage = new(mStageAllocator) VDResamplerSeparablePointRowStage;
+		pRowStage = mStageAllocator.build<VDResamplerSeparablePointRowStage>();
 #endif
 	} else if (hfilter == kFilterLinear) {
 		if (x_2fc >= 1.0) {
-#ifndef _M_AMD64
+#ifndef MODE64
 
 			if (CCAPS(CPU_MMX))
 				pRowStage = mStageAllocator.build<VDResamplerSeparableLinearRowStageMMX>();
@@ -1274,7 +1274,7 @@ bool VDPixmapResampler::Init(double dw, double dh, int dstformat, double sw, dou
 		} else
 			pRowStage = CreateRowStage(VDResamplerLinearFilter((float)x_2fc));
 	} else if (hfilter == kFilterCubic) {
-#ifndef _M_AMD64
+#ifndef MODE64
 		if (x_2fc >= 1.0 && CCAPS(CPU_MMX))
 			pRowStage = mStageAllocator.build<VDResamplerSeparableCubicRowStageMMX>(mSplineFactor);
 		else
@@ -1285,7 +1285,7 @@ bool VDPixmapResampler::Init(double dw, double dh, int dstformat, double sw, dou
 
 	if (hfilter == kFilterLinear) {
 		if (y_2fc >= 1.0) {
-#ifndef _M_AMD64
+#ifndef MODE64
 			if (CCAPS(CPU_MMX))
 				pColStage = mStageAllocator.build<VDResamplerSeparableLinearColStageMMX>();
 			else
@@ -1294,7 +1294,7 @@ bool VDPixmapResampler::Init(double dw, double dh, int dstformat, double sw, dou
 		} else
 			pColStage = CreateColStage(VDResamplerLinearFilter( (float)y_2fc ));
 	} else if (hfilter == kFilterCubic) {
-#ifndef _M_AMD64
+#ifndef MODE64
 		if (y_2fc >= 1.0 && CCAPS(CPU_MMX)) {
 			if (CCAPS(CPU_SSE2))
 				pColStage = mStageAllocator.build<VDResamplerSeparableCubicColStageSSE2>(mSplineFactor);
@@ -1315,7 +1315,7 @@ bool VDPixmapResampler::Init(double dw, double dh, int dstformat, double sw, dou
 }
 
 IVDResamplerSeparableRowStage *VDPixmapResampler::CreateRowStage(const IVDResamplerFilter& filter) {
-#ifndef _M_AMD64
+#ifndef MODE64
 	if (CCAPS(CPU_SSE2))
 		return mStageAllocator.build<VDResamplerSeparableTableRowStageSSE2>(filter);
 	else if (CCAPS(CPU_MMX))
@@ -1328,7 +1328,7 @@ IVDResamplerSeparableRowStage *VDPixmapResampler::CreateRowStage(const IVDResamp
 }
 
 IVDResamplerSeparableColStage *VDPixmapResampler::CreateColStage(const IVDResamplerFilter& filter) {
-#ifndef _M_AMD64
+#ifndef MODE64
 	if (CCAPS(CPU_SSE2))
 		return mStageAllocator.build<VDResamplerSeparableTableColStageSSE2>(filter);
 	else if (CCAPS(CPU_MMX))

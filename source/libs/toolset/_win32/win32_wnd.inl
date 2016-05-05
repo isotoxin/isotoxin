@@ -198,7 +198,7 @@ class win32_wnd_c : public wnd_c
                 {
                     NOTIFYICONDATAW nd = { sizeof( NOTIFYICONDATAW ), 0 };
                     nd.hWnd = hwnd;
-                    nd.uID = (int)w; //-V205
+                    nd.uID = (int)(size_t)w; //-V205
                     Shell_NotifyIconW( NIM_DELETE, &nd );
                     w->flags.clear( F_NOTIFICATION_ICON );
                 }
@@ -536,7 +536,7 @@ class win32_wnd_c : public wnd_c
         {
             NOTIFYICONDATAW nd = { sizeof( NOTIFYICONDATAW ), 0 };
             nd.hWnd = hwnd;
-            nd.uID = ( int )this; //-V205
+            nd.uID = ( int )( size_t )this; //-V205
             Shell_NotifyIconW( NIM_DELETE, &nd );
             flags.clear( F_NOTIFICATION_ICON );
         }
@@ -952,7 +952,7 @@ public:
         {
             HICON oi = appicon;
             appicon = get_icon( false );
-            SetClassLongPtrW( hwnd, GCL_HICON, (size_t)appicon );
+            SetClassLongPtrW( hwnd, GCLP_HICON, (size_t)appicon );
             if ( oi ) istuff.release_icon( oi );
         }
 

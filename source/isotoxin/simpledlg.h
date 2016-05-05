@@ -50,7 +50,7 @@ class dialog_msgbox_c : public gui_isodialog_c
 
 protected:
 
-    /*virtual*/ ts::UPDATE_RECTANGLE getrectupdate() { return DELEGATE(this, updrect_msgbox); }
+    /*virtual*/ ts::UPDATE_RECTANGLE getrectupdate() override { return DELEGATE(this, updrect_msgbox); }
 
     /*virtual*/ void created() override;
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
@@ -200,7 +200,7 @@ class dialog_entertext_c : public gui_isodialog_c
     dialog_entertext_params_s m_params;
 
 protected:
-    /*virtual*/ int unique_tag() { return m_params.utag; }
+    /*virtual*/ int unique_tag() override { return m_params.utag; }
     /*virtual*/ void created() override;
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
     /*virtual*/ int additions(ts::irect & border) override;
@@ -251,7 +251,7 @@ class dialog_about_c : public gui_isodialog_c
     bool updanim(RID, GUIPARAM);
 
 protected:
-    /*virtual*/ int unique_tag() { return UD_ABOUT; }
+    /*virtual*/ int unique_tag() override { return UD_ABOUT; }
     /*virtual*/ void created() override;
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
     /*virtual*/ int additions(ts::irect & border) override;

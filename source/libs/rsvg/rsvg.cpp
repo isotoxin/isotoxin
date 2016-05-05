@@ -149,7 +149,7 @@ static double g_ascii_strtod( const char *s, const char **endptr )
         ++st;
     *endptr = st;
     double rslt = 0;
-    ts::CHARz_to_double(rslt, s, st - s);
+    ts::CHARz_to_double(rslt, s, (int)(st - s));
     return rslt;
 }
 
@@ -181,7 +181,7 @@ void rsvg_node_c::load_transform(rsvg_load_context_s &ctx, const ts::asptr&src)
 
     transform.reset( TSNEW(transform_s) );
 
-    int idx = 0;
+    ts::aint idx = 0;
     while (idx < src.l)
     {
         /* skip initial whitespace */

@@ -8,6 +8,7 @@ template <typename TCHARACTER, class S_CORE = str_core_copy_on_demand_c<TCHARACT
 {
     typedef str_t<TCHARACTER, S_CORE> strtype;
     typedef strings_t<TCHARACTER, S_CORE> arrtype;
+    typedef array_inplace_t<str_t<TCHARACTER, S_CORE>, 8> super;
 
 public:
 
@@ -56,10 +57,10 @@ public:
     strings_t(const strtype &str, TCHARACTER separator)
     {
         if (str.get_length() == 0)  return;
-        aint i = 0;
+        int i = 0;
         for(;;)
         {
-            aint k = str.find_pos(i,separator);
+            int k = str.find_pos(i,separator);
             if (k < 0)
             {
                 
@@ -74,10 +75,10 @@ public:
     strings_t(const sptr<TCHARACTER> &str, TCHARACTER separator)
     {
         if (str.l == 0)  return;
-        aint i = 0;
+        int i = 0;
         for(;;)
         {
-            aint k = CHARz_findn(str.s+i,separator,str.l-i);
+            int k = CHARz_findn(str.s+i,separator,str.l-i);
             if (k < 0)
             {
                 add( str.skip(i) );
@@ -92,10 +93,10 @@ public:
     {
         if (str.get_length() == 0)  return;
 
-        aint i = 0;
+        int i = 0;
         for(;;)
         {
-            aint k = str.find_pos(i, separator);
+            int k = str.find_pos(i, separator);
             if (k < 0)
             {
 
@@ -111,10 +112,10 @@ public:
     {
         if (str.get_length() == 0)  return;
 
-        aint i = 0;
+        int i = 0;
         for(;;)
         {
-            aint k = str.get_index(i,separator);
+            int k = str.get_index(i,separator);
             if (k < 0)
             {
 
@@ -156,8 +157,8 @@ public:
     {
         clear();
         if (str.l == 0)  return;
-        aint i = 0;
-        aint bg = -1;
+        int i = 0;
+        int bg = -1;
         bool quote = false;
         for(aint l = str.l;l>0;++i,--l)
         {
@@ -204,9 +205,9 @@ public:
     {
         clear();
         if (str.get_length() == 0)  return;
-        aint i = 0;
-        aint bg = -1;
-        aint bra = 0;
+        int i = 0;
+        int bg = -1;
+        int bra = 0;
         for(;;++i)
         {
             TCHARACTER ch = str.get_char(i);
@@ -267,10 +268,10 @@ public:
         clear();
         pstr_t<TCHARACTER2> str( _str );
         if (str.get_length() == 0)  return;
-        aint i = 0;
+        int i = 0;
         for(;;)
         {
-            aint k = str.find_pos(i,separator);
+            int k = str.find_pos(i,separator);
             ASSERT(k < str.get_length());
             if (k < 0)
             {
@@ -290,10 +291,10 @@ public:
         pstr_t<TCHARACTER2> str( _str );
 
         if (str.get_length() == 0)  return;
-        aint i = 0;
+        int i = 0;
         for(;;)
         {
-            aint k = str.get_index(i,separator);
+            int k = str.get_index(i,separator);
             if (k < 0)
             {
                 add(str.substr(i));
@@ -308,10 +309,10 @@ public:
     strtype    join_multi( const TCHARACTER *multi, aint begin = 0, aint end = -1 ) const
     {
         strtype str;
-        const aint sz = (end < 0) ? size() : end;
+        const aint sz = (end < 0) ? super::size() : end;
         for (aint k = begin; k<sz; ++k)
         {
-            str.append( get(k) );
+            str.append( super::get(k) );
             if (k < (sz-1))
             {
                 if (*multi == 0) return str;
@@ -326,10 +327,10 @@ public:
     strtype    join( TCHARACTER separator, aint begin = 0, aint end = -1 ) const
     {
         strtype str;
-        const aint sz = (end < 0) ? size() : end;
+        const aint sz = (end < 0) ? super::size() : end;
         for (aint k = begin; k<sz; ++k)
         {
-            str.append( get(k) );
+            str.append( super::get(k) );
             if (k < (sz-1)) str.append_char( separator );
         }
         return str;
@@ -338,10 +339,10 @@ public:
     strtype    join( const sptr<TCHARACTER> &joincharz ) const
     {
         strtype str;
-        aint sz = size();
+        aint sz = super::size();
         for (aint k = 0; k<sz; ++k)
         {
-            str.append( get(k) );
+            str.append( super::get(k) );
             if (k < (sz-1)) str.append( joincharz );
         }
         return str;
@@ -355,8 +356,8 @@ public:
 
     template<typename CORE2> aint add(const str_t<TCHARACTER, CORE2> &s)
     {
-        aint r = size();
-        __super::add().set(s);
+        aint r = super::size();
+        super::add().set(s);
         return r;
     };
 
@@ -368,82 +369,82 @@ public:
 
     template<typename TCHARACTER2, typename CORE2> aint add(const str_t<TCHARACTER2, CORE2> &s)
     {
-		aint r = size();
-		__super::add().setcvt(s);
+		aint r = super::size();
+		super::add().setcvt(s);
 		return r;
     };
     aint add(const sptr<TCHARACTER> &s, bool casedown = false)
     {
-		strtype &ss = __super::add();
+		strtype &ss = super::add();
 		ss.set(s);
         if ( casedown )
             ss.case_down();
-        return size() - 1;
+        return super::size() - 1;
     };
 
     template<class CORE2> void    insert(aint i, const str_t<CORE2> &s)
     {
-        __super::insert(i).set(s);
+        super::insert(i).set(s);
     }
 
     template<typename TCHARACTER2, class CORE2> void    insert( aint i, const str_t<TCHARACTER2, CORE2> &s)
     {
-        __super::insert(i).setcvt(s);
+        super::insert(i).setcvt(s);
     }
     template<class CORE2> void    set(aint index, const str_t<CORE2> &s)
     {
-        get(index).set(s);
+        super::get(index).set(s);
     }
 
 	template<typename TCHARACTER2, class CORE2> void    set( aint index, const str_t<TCHARACTER2, CORE2> &s )
 	{
-		get(index).setcvt(s);
+		super::get(index).setcvt(s);
 	}
 
     bool operator==( const arrtype &a ) const
     {
-        aint cnt = size();
+        aint cnt = super::size();
         if (a.size() != cnt) return false;
         for (aint i=0;i<cnt;++i)
-            if (!a.get(i).equals(get(i))) return false;
+            if (!a.get(i).equals(super::get(i))) return false;
         return true;
     }
     bool operator!=( const arrtype &a ) const
     {
-        aint cnt = size();
+        aint cnt = super::size();
         if (a.size() != cnt) return true;
         for (aint i=0;i<cnt;++i)
-            if (!a.get(i).equals(get(i))) return true;
+            if (!a.get(i).equals(super::get(i))) return true;
         return false;
     }
 
     strtype & operator[] (aint index)
     {
-        while (index >= size())
+        while (index >= super::size())
 			add();
 
-        return get( index );
+        return super::get( index );
     }
 
     
     aint find_sorted_descending(const TCHARACTER *text) const
     {
         aint index;
-        if (__super::find_sorted( index, text )) return index;
+        if (super::find_sorted( index, text )) return index;
         return -1;
     }
     aint find_sorted_descending(const strtype &text) const
     {
         aint index;
-        if (__super::find_sorted( index, text )) return index;
+        if (super::find_sorted( index, text )) return index;
         return -1;
     }
 
     aint find(const sptr<TCHARACTER> &text) const
     {
-        aint sz = size();
+        aint sz = super::size();
         for (aint k = 0; k<sz; ++k)
-            if (get(k).equals(text))
+            if (super::get(k).equals(text))
                 return k;
         return -1;
     }
@@ -451,9 +452,9 @@ public:
 
     aint find_ignore_case(const sptr<TCHARACTER> &text) const
     {
-        aint sz = size();
+        aint sz = super::size();
         for (aint k = 0; k < sz; ++k)
-            if (get(k).equals_ignore_case(text))
+            if (super::get(k).equals_ignore_case(text))
                 return k;
         return -1;
     }
@@ -473,7 +474,7 @@ public:
     void    copyin(aint i, const arrtype &a)
     {
         aint sz = a.size();
-        expand(i,sz);
+        super::expand(i,sz);
         for (aint k = 0; k<sz; ++k)
         {
             set(i+k, a.get(k));
@@ -482,10 +483,10 @@ public:
 
     void    remove_fast_by(const arrtype &a)
     {
-        aint cnt = size();
+        aint cnt = super::size();
         for (aint i=0;i<cnt;)
         {
-            if (a.find(get(i)) >= 0)
+            if (a.find(super::get(i)) >= 0)
             {
                 remove_fast(i);
                 --cnt;
@@ -498,16 +499,16 @@ public:
 
     void    moveup(aint i)    
     { 
-        if ((i > 0) && (i < size()))
+        if ((i > 0) && (i < super::size()))
         {
-            move_up_unsafe(i);
+            super::move_up_unsafe(i);
         }
     }
     void    movedown(aint i)  
     { 
-        if (i < size()-1)
+        if (i < super::size()-1)
         {
-            move_down_unsafe(i); 
+            super::move_down_unsafe(i); 
         }
     }
 
@@ -537,16 +538,16 @@ public:
     void    remove_slow(const sptr<TCHARACTER> &s)
     {
         aint i = find( s );
-        if (i>=0) delete_slow(i);
+        if (i>=0) super::remove_slow(i);
     }
     void    remove_slow(aint idx)
     {
-        __super::remove_slow(idx);
+        super::remove_slow(idx);
     }
 
     void    remove_fast(aint i)
     {
-        __super::remove_fast(i);
+        super::remove_fast(i);
     }
 
     bool remove_fast(const sptr<TCHARACTER> &s)
@@ -554,7 +555,7 @@ public:
         aint i = find( s );
         if (i>=0)
         {
-            __super::remove_fast(i);
+            super::remove_fast(i);
             return true;
         }
         return false;
@@ -563,12 +564,16 @@ public:
     template <aint N> void geta(strtype ar[N], aint i) const
     {
 #ifndef _FINAL
-        if (i > (size()-N))
+        if (i > (super::size()-N))
         {
+#if defined _MSC_VER
 #pragma warning (push)
 #pragma warning (disable : 4127)
+#endif
             ERROR( tmp_str_c("geta: out of range of string array <").append(join('|')).append(">").cstr() );
+#if defined _MSC_VER
 #pragma warning (pop)
+#endif
 
         }
 #endif
@@ -586,9 +591,9 @@ public:
         if (index < 0)
         {
             add(of);
-            return get(size() - 1).cstr();
+            return get(super::size() - 1).cstr();
         }
-        return get(index).cstr();
+        return super::get(index).cstr();
     }
     template<typename CORE2> const TCHARACTER *get_string_pointer(const str_t<TCHARACTER, CORE2> &of) {return get_string_pointer(of.as_spart());}
 
@@ -598,7 +603,7 @@ public:
         if (index < 0)
         {
             add(of);
-            return size() - 1;
+            return super::size() - 1;
         }
         return index;
     }
@@ -607,9 +612,9 @@ public:
 
     void kill_dups()
     {
-        for(aint i = size() - 1; i > 0; --i)
+        for(aint i = super::size() - 1; i > 0; --i)
             for(aint j = i - 1; j >= 0; --j)
-                if (get(j).equals(get(i)))
+                if (super::get(j).equals(super::get(i)))
                 {
                     remove_fast(i);
                     break;
@@ -620,17 +625,17 @@ public:
     {
         sort(ascending);
 
-        for (aint i = size() - 2; i >= 0; --i)
-            if (get(i).equals(get(i + 1)))
+        for (aint i = super::size() - 2; i >= 0; --i)
+            if (super::get(i).equals(super::get(i + 1)))
                 remove_slow(i);
     }
 
     void kill_empty_fast()
     {
         aint i = 0;
-        for(;i<size();)
+        for(;i<super::size();)
         {
-            if (get(i).is_empty())
+            if (super::get(i).is_empty())
             {
                 remove_fast(i);
                 continue;
@@ -642,9 +647,9 @@ public:
     void kill_empty_slow(aint startindex = 0)
     {
         aint i = startindex;
-        for(;i<size();)
+        for(;i<super::size();)
         {
-            if (get(i).is_empty())
+            if (super::get(i).is_empty())
             {
                 remove_slow(i);
                 continue;
@@ -655,25 +660,25 @@ public:
 
     void clear()
     {
-        __super::clear();
+        super::clear();
     }
 
     void clear(int index)
     {
-        __super::get(index).clear();
+        super::get(index).clear();
     }
 
     void sort( bool ascending )
     {
         if (ascending)
         {
-            __super::sort([](const strtype &u1, const strtype &u2)->bool
+            super::sort([](const strtype &u1, const strtype &u2)->bool
             {
                 return 0 > strtype::compare(u1, u2);
             });
         } else
         {
-            __super::sort([](const strtype &u1, const strtype &u2)->bool
+            super::sort([](const strtype &u1, const strtype &u2)->bool
             {
                 return 0 < strtype::compare(u1, u2);
             });
@@ -682,18 +687,18 @@ public:
 
 	template <typename T> void sort(const T &sorter)
 	{
-		__super::sort(sorter);
+		super::sort(sorter);
 	}
 
     signed char compare( const arrtype &othera ) const
     {
-        aint cnt = tmin( size(), othera.size() );
+        aint cnt = tmin( super::size(), othera.size() );
         for (aint i=0;i<cnt;++i)
         {
-            signed char c = strtype::compare( get(i), othera.get(i) );
+            signed char c = strtype::compare( super::get(i), othera.get(i) );
             if (c != 0) return c;
         }
-        aint c =( size() - othera.size() );
+        aint c =( super::size() - othera.size() );
         if (c < 0) return -1;
         if (c > 0) return 1;
         return 0;
@@ -707,20 +712,20 @@ public:
 
         sort(true);
 
-        for (aint i=size()-2;i>=0;--i)
-            if ( get(i).equals(get(i+1)) )
+        for (aint i=super::size()-2;i>=0;--i)
+            if ( super::get(i).equals(super::get(i+1)) )
                 remove_slow(i);
     }
 
 	arrtype & operator = ( const arrtype &othera )
 	{
-        aint cc = tmin( size(), othera.size() );
+        aint cc = tmin( super::size(), othera.size() );
         for (aint i=0;i<cc;++i)
-            get(i).set( othera.get(i) );
+            super::get(i).set( othera.get(i) );
 
         if ( cc == othera.size() )
         {
-            truncate( cc );
+            super::truncate( cc );
         } else
         {
 
@@ -737,6 +742,7 @@ public:
 
 template <typename S> struct strmap_pair_s
 {
+    MOVABLE( true );
     S k,v;
     typedef typename S::TCHAR TCHARACTER;
     int operator()( const sptr<TCHARACTER> &_k ) const
@@ -760,11 +766,11 @@ template <typename S> struct strmap_pair_s
 template <typename S> class strmap_t : public array_inplace_t < strmap_pair_s< S >, 8 >
 {
     typedef typename S::TCHAR TCHARACTER;
-    typedef array_inplace_t < strmap_pair_s< S >, 8 > TSUPER;
+    typedef array_inplace_t < strmap_pair_s< S >, 8 > super;
 public:
     strmap_t() {}
     explicit strmap_t( const sptr<TCHARACTER>&froms, TCHARACTER eq = '=' ) { parse( froms, eq ); }
-    strmap_t( const strmap_t&m ):array_c(m.size())
+    strmap_t( const strmap_t&m ):super(m.size())
     {
         *this = m;
     }
@@ -774,21 +780,21 @@ public:
     }
     strmap_t &operator=( const strmap_t&m )
     {
-        aint msz = tmin( size(), m.size() );
+        aint msz = tmin( super::size(), m.size() );
         for(aint i=0;i<msz;++i)
-            __super::get(i) = ((TSUPER &)m).get(i);
+            super::get(i) = ((super &)m).get(i);
         if (m.size() > msz)
         {
             aint cnt = m.size();
             for (; msz < cnt; ++msz)
-                add() = ((TSUPER &)m).get(msz);
-        } else if (size() > msz)
-            truncate(msz);
+                super::add() = ((super &)m).get(msz);
+        } else if (super::size() > msz)
+            super::truncate(msz);
         return *this;
     }
     strmap_t &operator=(strmap_t&&m)
     {
-        __super::operator=(std::move(m));
+        super::operator=(std::move(m));
         return *this;
     }
 
@@ -798,28 +804,28 @@ public:
         for (; lns; ++lns)
         {
             auto s = lns->get_trimmed();
-            aint eqi = s.find_pos(eq);
+            int eqi = s.find_pos(eq);
             if (eqi > 0)
                 set( s.substr(0,eqi) ) = s.substr(eqi+1);
         }
     }
     bool unset(const sptr<TCHARACTER>&k)
     {
-        int index;
+        ts::aint index;
         if (find_sorted(index, k))
         {
-            remove_slow(index);
+            super::remove_slow(index);
             return true;
         }
         return false;
     }
     S& set(const sptr<TCHARACTER>&k)
     {
-        int index;
+        ts::aint index;
         if (find_sorted(index, k))
-            return __super::get(index).v;
+            return super::get(index).v;
 
-        auto &i = insert(index);
+        auto &i = super::insert(index);
         i.k = k;
         return i.v;
     }
@@ -832,16 +838,16 @@ public:
 
     const S *find(const sptr<TCHARACTER>&k) const
     {
-        int index;
+        ts::aint index;
         if (find_sorted(index, k))
-            return &__super::get(index).v;
+            return &super::get(index).v;
         return nullptr;
     }
     S *find(const sptr<TCHARACTER>&k)
     {
-        int index;
+        ts::aint index;
         if (find_sorted(index, k))
-            return &__super::get(index).v;
+            return &super::get(index).v;
         return nullptr;
     }
     S to_str( TCHARACTER eq = '=' )
@@ -853,10 +859,10 @@ public:
     }
     bool operator==( const strmap_t&m ) const
     {
-        aint cnt = size();
+        aint cnt = super::size();
         if (cnt != m.size()) return false;
         for(aint i=0;i<cnt;++i)
-            if ( __super::get(i) != ((TSUPER &)m).get(i) ) return false;
+            if ( super::get(i) != ((super &)m).get(i) ) return false;
         return true;
     }
     bool operator!=( const strmap_t&m ) const

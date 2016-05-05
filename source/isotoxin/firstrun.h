@@ -51,7 +51,7 @@ public:
     dialog_firstrun_c(initial_rect_data_s &data);
     ~dialog_firstrun_c();
 
-    /*virtual*/ ts::ivec2 get_min_size() const { return ts::ivec2(510,480); }
+    /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(510,480); }
     
     //sqhandler_i
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;

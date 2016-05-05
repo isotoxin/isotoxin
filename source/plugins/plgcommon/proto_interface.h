@@ -2,6 +2,16 @@
 
 #include "common_types.h"
 
+#ifdef MODE64
+#define PROTOCALL
+#else
+#ifdef _MSC_VER
+#define PROTOCALL __stdcall
+#else
+#error
+#endif
+#endif
+
 #pragma pack(push)
 #pragma pack(1)
 
@@ -68,10 +78,10 @@ struct proto_info_s
 
     audio_format_s audio_fmt; // required audio format for proto plugin (app will convert audio on-the-fly if hardware not support)
 
-    char *icon = nullptr; // svg path value of d attribute in box 100x100
+    const char *icon = nullptr; // svg path value of d attribute in box 100x100
     int   icon_buflen = 0;
 
-    char *vcodecs = nullptr; // video codecs list / separeted; ex: vp8/vp9
+    const char *vcodecs = nullptr; // video codecs list / separeted; ex: vp8/vp9
     int   vcodecs_buflen = 0;
 };
 
@@ -121,9 +131,9 @@ struct contact_data_s
 #endif
 };
 
-#if defined _WIN32
+#if defined(_MSC_VER)
 typedef unsigned __int64 u64;
-#elif defined _LINUX
+#elif defined(__GNUC__)
 typedef unsigned long long u64;
 #else
 #error "Sorry, can't compile: unknown target system"
@@ -193,12 +203,12 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     /*
         async answer
     */
-    void(__stdcall *operation_result)(long_operation_e op, int rslt);
+    void(PROTOCALL *operation_result)(long_operation_e op, int rslt);
     
     /*
         main create/update contact function
     */
-    void(__stdcall *update_contact)(const contact_data_s *);
+    void(PROTOCALL *update_contact)(const contact_data_s *);
 
     /*
         Incoming message!
@@ -208,27 +218,27 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
         sendtime - message send time (sender should send it)
         msgbody_utf8, mlen - message itself
     */
-    void(__stdcall *message)(message_type_e mt, int gid, int cid, u64 sendtime, const char *msgbody_utf8, int mlen);
+    void(PROTOCALL *message)(message_type_e mt, int gid, int cid, u64 sendtime, const char *msgbody_utf8, int mlen);
 
     /*
         plugin MUST call this function to notify Isotoxin that message was delivered to other peer
     */
-    void(__stdcall *delivered)(u64 utag);
+    void(PROTOCALL *delivered)(u64 utag);
 
     /*
         plugin should call this function, to force save
     */
-    void(__stdcall *save)(); // initiate save
+    void(PROTOCALL *save)(); // initiate save
 
     /*
         plugin should call this function only from call of save_config
     */
-    void(__stdcall *on_save)(const void *data, int dlen, void *param);
+    void(PROTOCALL *on_save)(const void *data, int dlen, void *param);
 
     /*
         plugin should call this function only from call of export_data
     */
-    void(__stdcall *export_data)(const void *data, int dlen);
+    void(PROTOCALL *export_data)(const void *data, int dlen);
 
     /*
         plugin should use this func to play audio or show video
@@ -240,24 +250,24 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
         audio system automatically allocates unique audio channel for gid-cid pair
         and releases it when the audio buffer empties
     */
-    void(__stdcall *av_data)(int gid, int cid, const media_data_s *data);
+    void(PROTOCALL *av_data)(int gid, int cid, const media_data_s *data);
 
     /*
         call to free video data, passed to send_av
         if send_av return SEND_AV_KEEP_VIDEO_DATA
     */
-    void(__stdcall *free_video_data)(const void *ptr);
+    void(PROTOCALL *free_video_data)(const void *ptr);
 
     /*
         stream options from peer
     */
-    void(__stdcall *av_stream_options)(int gid, int cid, const stream_options_s *so);
+    void(PROTOCALL *av_stream_options)(int gid, int cid, const stream_options_s *so);
 
     /*
         plugin tells to Isotoxin its current values
         see known configurable fields (eg CFGF_PROXY_TYPE)
     */
-    void(__stdcall *configurable)(int n, const char **fields, const char **values);
+    void(PROTOCALL *configurable)(int n, const char **fields, const char **values);
 
     /*
         plugin sends avatar data on request avatar (get_avatar)
@@ -265,14 +275,14 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
         plugin should increment tag value every time avatar changed
         plugin should store avatar tag into save
     */
-    void(__stdcall *avatar_data)(int cid, int tag, const void *avatar_body, int avatar_body_size);
+    void(PROTOCALL *avatar_data)(int cid, int tag, const void *avatar_body, int avatar_body_size);
 
     /*
         plugin notifies Isotoxin about incoming file
         cid - contact_data_s::id - unique client id
         utag - unique 64-bit file transfer identifier. Plugin can simply generate 64-bit random value
     */
-    void(__stdcall *incoming_file)(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
+    void(PROTOCALL *incoming_file)(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
 
     /* 
         there are two cases:
@@ -280,17 +290,17 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
         2. plugin requests next file portion while it send file: portion == nullptr && offset multiplies by 1M  && portion_size == 1048576 (1M) even last piece of file is less then 1M
         3. plugin releases requested buffer. offset - no matter, portion is pointer to buffer, portion_size == 0
     */
-    bool(__stdcall *file_portion)(u64 utag, u64 offset, const void *portion, int portion_size);
+    bool(PROTOCALL *file_portion)(u64 utag, u64 offset, const void *portion, int portion_size);
     
     /*
         control file transfer
     */
-    void(__stdcall *file_control)(u64 utag, file_control_e fctl);
+    void(PROTOCALL *file_control)(u64 utag, file_control_e fctl);
 
     /*
         plugin should call this function 1 per second for every typing client
     */
-    void(__stdcall *typing)(int gid, int cid);
+    void(PROTOCALL *typing)(int gid, int cid);
 };
 
 /*
@@ -338,9 +348,9 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
 
 struct proto_functions_s
 {
-#define FUNC0( rt, fn ) rt (__stdcall * fn)();
-#define FUNC1( rt, fn, p0 ) rt (__stdcall * fn)(p0);
-#define FUNC2( rt, fn, p0, p1 ) rt (__stdcall * fn)(p0, p1);
+#define FUNC0( rt, fn ) rt (PROTOCALL * fn)();
+#define FUNC1( rt, fn, p0 ) rt (PROTOCALL * fn)(p0);
+#define FUNC2( rt, fn, p0, p1 ) rt (PROTOCALL * fn)(p0, p1);
 PROTO_FUNCTIONS
 #undef FUNC2
 #undef FUNC1
@@ -349,8 +359,8 @@ PROTO_FUNCTIONS
 #pragma pack(pop)
 
 
-typedef void(__stdcall *get_info_pf)(proto_info_s *);
-typedef proto_functions_s * ( __stdcall *handshake_pf)( host_functions_s* );
+typedef void(PROTOCALL *get_info_pf)(proto_info_s *);
+typedef proto_functions_s * ( PROTOCALL *handshake_pf)( host_functions_s* );
 
 
 /* initialization scenario:

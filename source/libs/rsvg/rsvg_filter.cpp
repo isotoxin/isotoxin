@@ -5,6 +5,7 @@
 
 struct rsvg_working_surf_s
 {
+    MOVABLE( true );
     ts::bitmap_c bmp;
     rsvg_working_surf_s(const ts::ivec2&sz)
     {
@@ -30,7 +31,7 @@ static int surface_index(rsvg_load_context_s &ctx, const ts::asptr &s)
     if (ts::pstr_c(s).equals(CONSTASTR("SourceGraphic")))
         return RSVG_FILTER_SOURCE_GRAPHIC;
 
-    return 2 + ctx.targets.get_string_index( s );
+    return 2 + (int)ctx.targets.get_string_index( s );
 }
 
 bool load_filters(rsvg_load_context_s &ctx, ts::rapidxml::xml_node<char>* node)
@@ -60,7 +61,7 @@ bool rsvg_filter_c::fix_source(rsvg_load_context_s &ctx, int &olds, int &news)
     if (source == target)
     {
         olds = source;
-        source = 2 + ctx.targets.get_string_index("#temp");
+        source = 2 + (int)ctx.targets.get_string_index("#temp");
         news = source;
         return true;
     }
@@ -148,13 +149,13 @@ void rsvg_filters_group_c::load(rsvg_load_context_s &ctx, ts::rapidxml::xml_node
 
     // some filters require different source and target surfaces
     // now fix such filters
-    for (int i = filters.size() - 1; i >= 0; --i )
+    for (ts::aint i = filters.size() - 1; i >= 0; --i )
     {
         rsvg_filter_c *f = filters.get(i);
         int olds, news;
         while ( f->fix(ctx, olds, news) )
         {
-            for (int j = i - 1; j >= 0; --j)
+            for ( ts::aint j = i - 1; j >= 0; --j)
             {
                 if ( filters.get(j)->repltarget(olds,news))
                     break;
@@ -162,7 +163,7 @@ void rsvg_filters_group_c::load(rsvg_load_context_s &ctx, ts::rapidxml::xml_node
         }
     }
 
-    numsurfaces += ctx.targets.size();
+    numsurfaces += (int)ctx.targets.size();
 }
 
 void rsvg_filters_group_c::render( rsvg_node_c *node, const ts::ivec2 &pos, rsvg_cairo_surface_c &surf )
@@ -294,7 +295,7 @@ void rsvg_filters_group_c::render( rsvg_node_c *node, const ts::ivec2 &pos, rsvg
 
 namespace ts
 {
-    extern uint8 __declspec(align(256)) multbl[256][256]; // mul table from toolset
+    extern uint8 ALIGN(256) multbl[256][256]; // mul table from toolset
 }
 
 template< typename OP > void do_blend(const ts::bmpcore_exbody_s &in, const ts::bmpcore_exbody_s &in2, const ts::bmpcore_exbody_s &out, const OP &op)
@@ -638,9 +639,9 @@ static void box_blur_line(int box_width, int even_offset, const ts::uint8 *src, 
     }
 }
 
-static void gaussian_blur_line(const double *matrix, int matrix_len, const ts::uint8 *src, ts::uint8 *dest, int len)
+static void gaussian_blur_line(const double *matrix, ts::aint matrix_len, const ts::uint8 *src, ts::uint8 *dest, int len)
 {
-    int matrix_middle = matrix_len / 2;
+    ts::aint matrix_middle = matrix_len / 2;
 
     /* picture smaller than the matrix? */
     if (matrix_len > len)
@@ -689,7 +690,7 @@ static void gaussian_blur_line(const double *matrix, int matrix_len, const ts::u
             /* find scale factor */
             double scale = 0;
 
-            for (int j = matrix_middle - row; j < matrix_len; j++)
+            for ( ts::aint j = matrix_middle - row; j < matrix_len; j++)
                 scale += matrix[j];
 
             scale = 1.0 / scale;
@@ -701,7 +702,7 @@ static void gaussian_blur_line(const double *matrix, int matrix_len, const ts::u
                 double sum = 0;
                 const ts::uint8 *src_p1 = src_p++;
 
-                for (int j = matrix_middle - row; j < matrix_len; ++j)
+                for ( ts::aint j = matrix_middle - row; j < matrix_len; ++j)
                 {
                     sum += matrix[j] * (*src_p1);
                     src_p1 += 4;

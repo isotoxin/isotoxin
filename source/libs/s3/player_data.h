@@ -20,5 +20,5 @@ struct player_data_s
     }
 };
 
-static_assert(sizeof(player_data_s) <= (sizeof(Player) - sizeof(InitParams)), "check data");
+static_assert(sizeof(player_data_s) <= Player::player_data_size, "check data");
 

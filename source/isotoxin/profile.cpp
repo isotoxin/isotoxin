@@ -1014,7 +1014,7 @@ void profile_c::change_history_item(const contact_key_s&historian, const post_s 
     db->update( CONSTASTR("history"), ts::array_wrapper_c<const ts::data_pair_s>(dp,n), whr );
 }
 
-void profile_c::load_history( const contact_key_s&historian, time_t time, int nload, ts::tmp_tbuf_t<int>& loaded_ids )
+void profile_c::load_history( const contact_key_s&historian, time_t time, ts::aint nload, ts::tmp_tbuf_t<int>& loaded_ids )
 {
     table_history.cleanup();
 
@@ -1096,11 +1096,11 @@ void profile_c::load_history( const contact_key_s&historian, time_t time, int nl
 
     ts::tmp_str_c whr( CONSTASTR("historian=") ); whr.append_as_num<int64>( ts::ref_cast<int64>( historian ) );
     whr.append( CONSTASTR(" and mtime<") ).append_as_num<int64>( time );
-    whr.append( CONSTASTR(" order by mtime desc limit ") ).append_as_int( nload );
+    whr.append( CONSTASTR(" order by mtime desc limit ") ).append_as_num( nload );
     
     table_history.read( db, whr );
 
-    for(int idl : loaded_ids)
+    for( int idl : loaded_ids)
     {
         auto * row = table_history.find<true>(idl);
         if (row && fix( row->other ))
@@ -1172,7 +1172,7 @@ void profile_c::merge_history( const contact_key_s&base_historian, const contact
     baseitems.sort([](hitm *p1, hitm *p2)->bool {
         return p1->other.recv_time < p2->other.recv_time;
     });
-    int cnt = baseitems.size();
+    ts::aint cnt = baseitems.size();
     for( int i=1; i<cnt;++i )
     {
         hitm *prevh = baseitems.get(i-1);
@@ -1737,8 +1737,8 @@ void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, i
 void profile_c::check_aps()
 {
     bool createaps = false;
-    int cnt = protocols.size();
-    for(int i=cnt-1;i>=0;--i)
+    ts::aint cnt = protocols.size();
+    for( ts::aint i=cnt-1;i>=0;--i)
     {
         active_protocol_c *ap = protocols.get(i);
         if (nullptr == ap)

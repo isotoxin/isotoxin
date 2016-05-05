@@ -45,7 +45,7 @@ struct HVideoEncoder {
 
 	VideoEncoderConfig             config;
 
-	long                           packetMutex;
+    spinlock::long3264             packetMutex;
 	std::deque<EncodedData>        packets;
 	EncodedData                    curPacket;
 

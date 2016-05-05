@@ -189,7 +189,7 @@ void WINAPI exception_operator_c::show_callstack(HANDLE hThread, const char* nam
 	self.output.clear();
 	self.OnOutput1("\n=====================================================================\n");
 	sstr_t<256> stamp;
-	int len = sprintf_s(stamp.str(), stamp.get_capacity(), "%s [%04X]\n", name, ((unsigned int)hThread));
+	int len = sprintf_s(stamp.str(), stamp.get_capacity(), "%s [%04X]\n", name, ((unsigned int)(size_t)hThread));
 	self.OnOutput(stamp.cstr(), len);
 	self.ShowCallstack(hThread, NULL);
 	self.OnOutput1("=====================================================================");
@@ -219,7 +219,7 @@ exception_operator_c::exception_operator_c()
 
 void exception_operator_c::create_dump(EXCEPTION_POINTERS* pExp/*=NULL*/, bool needExcept/*=true*/)
 {
-    static long lock=0;
+    static spinlock::long3264 lock=0;
 
     static int err;
     static char tmperror[256];

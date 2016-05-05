@@ -200,6 +200,7 @@ namespace
 
         struct dict_rec_s
         {
+            MOVABLE( true );
             DUMMY(dict_rec_s);
             dict_rec_s() {};
             ts::wstr_c name;
@@ -315,7 +316,7 @@ namespace
                     if (RID lst = find("lst"))
                     {
                         rectengine_c &lste = HOLD(lst).engine();
-                        int cnt = lste.children_count();
+                        ts::aint cnt = lste.children_count();
                         for (int i = 0; i < cnt; ++i)
                         {
                             rectengine_c * lie = lste.get_child(i);
@@ -337,6 +338,7 @@ namespace
 
         struct list_item_s
         {
+            MOVABLE( true );
             mutable ts::bmpcore_exbody_s img;
 
             uint id;
@@ -545,7 +547,7 @@ namespace
         void maction(const ts::str_c &prm)
         {
             uint id = prm.as_num_part(0, 1);
-            int cnt = items.size();
+            ts::aint cnt = items.size();
             for (int i = 0; i < cnt;++i)
             {
                 list_item_s &li = items.get(i);
@@ -647,7 +649,7 @@ namespace
             if (RID lst = find("lst"))
             {
                 rectengine_c &lste = HOLD(lst).engine();
-                int cnt = lste.children_count();
+                ts::aint cnt = lste.children_count();
                 int chi = 0;
                 for (const list_item_s &li : items)
                 {
@@ -858,6 +860,15 @@ bool choose_dicts_load(RID, GUIPARAM)
     return true;
 }
 
+namespace
+{
+    struct preset_s
+    {
+        MOVABLE( true );
+        ts::wstr_c fn;
+        ts::wstr_c name;
+    };
+}
 
 dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c(data), mic_test_rec_stop(ts::Time::undefined()), mic_level_refresh(ts::Time::past())
 {
@@ -887,12 +898,6 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
     ts::hashmap_t< ts::wstr_c, ts::abp_c > bps;
     ts::wstrings_c fns, ifns;
     ts::g_fileop->find(fns, CONSTWSTR("themes/*/struct.decl"), true);
-
-    struct preset_s
-    {
-        ts::wstr_c fn;
-        ts::wstr_c name;
-    };
 
     ts::tmp_array_inplace_t<preset_s, 4> tpresets;
 
@@ -1096,7 +1101,7 @@ void dialog_settings_c::set_startopts()
     ts::master().sys_autostart( CONSTWSTR("Isotoxin"), 0 != (1 & startopt) ? ts::get_exe_full_name() : ts::wstr_c(), 0 != (2 & startopt) ? CONSTWSTR("minimize") : ts::wsptr() );
 }
 
-/*virtual*/ const s3::Format *dialog_settings_c::formats(int &count)
+/*virtual*/ const s3::Format *dialog_settings_c::formats(ts::aint &count)
 {
     capturefmt.sampleRate = 48000;
     capturefmt.channels = 1;
@@ -1550,7 +1555,7 @@ ts::wstr_c dialog_settings_c::getactivedict()
         g_app->get_local_spelling_files(alldicts);
         alldicts.kill_dups_and_sort(true);
         int a = 0;
-        int aa = alldicts.size();
+        ts::aint aa = alldicts.size();
 
         for( ts::wstr_c &n : alldicts)
         {
@@ -2394,7 +2399,7 @@ menu_c dialog_settings_c::get_list_avaialble_sound_presets()
     menu_c m;
     m.add(TTT("Choose preset",300), selected_preset < 0 ? MIF_MARKED : 0, DELEGATE(this, soundpresetselected), CONSTASTR("-1"));
     bool sep = false;
-    int cnt = presets.size();
+    ts::aint cnt = presets.size();
     for(int i=0;i<cnt;++i)
     {
         const sound_preset_s &preset = presets.get(i);
@@ -2792,7 +2797,7 @@ bool dialog_settings_c::addeditnethandler(dialog_protosetup_params_s &params)
     return true;
 }
 
-ts::str_c dialog_protosetup_params_s::setup_name( const ts::asptr &tag, int n )
+ts::str_c dialog_protosetup_params_s::setup_name( const ts::asptr &tag, ts::aint n )
 {
     ts::wstr_c name = TTT("Connection $", 63) / ts::to_wstr(tag).append_char(' ').append(ts::wmake(n));
     return to_utf8(name);
@@ -3256,7 +3261,7 @@ void dialog_settings_c::select_signal_device(const ts::str_c& prm)
     mod();
 }
 
-static float find_max(const s3::Format&fmt, const void *idata, int isize)
+static float find_max(const s3::Format&fmt, const void *idata, ts::aint isize)
 {
     if (fmt.bitsPerSample == 8)
     {
@@ -3270,7 +3275,7 @@ static float find_max(const s3::Format&fmt, const void *idata, int isize)
         return (float)m * (float)(1.0/128.0);
     }
     ASSERT(fmt.bitsPerSample == 16);
-    int samples = isize / 2;
+    ts::aint samples = isize / 2;
 
     int m = 0;
     for (int i = 0; i < samples; ++i)
@@ -3292,7 +3297,7 @@ static float find_max(const s3::Format&fmt, const void *idata, int isize)
         {
             ts::buf_c *buf;
             float current_level;
-            void addb(const s3::Format&f, const void *data, int size)
+            void addb(const s3::Format&f, const void *data, ts::aint size)
             {
                 float m = find_max(f, data, size);
                 if (m > current_level) current_level = m;
@@ -3681,7 +3686,7 @@ dialog_setup_network_c::dialog_setup_network_c(MAKE_ROOT<dialog_setup_network_c>
 
         if (const protocol_description_s *p = params.avprotos->find(params.networktag))
         {
-            int n = params.protocols->rows.size() + 1;
+            ts::aint n = params.protocols->rows.size() + 1;
         again:
             for (auto &row : *params.protocols)
             {

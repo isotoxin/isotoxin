@@ -115,7 +115,7 @@ template<typename TCHARACTER>  str_t<TCHARACTER>  time_float_c::initstr() const
     const key_s *keys = get_keys();
 
     str_t<TCHARACTER> r;
-    int cnt = get_keys_count();
+    aint cnt = get_keys_count();
     for (int i=0;i<cnt;++i)
         r.append_as_float(keys[i].time).append_char('/').append_as_float(keys[i].val).append_char('/');
     r.trunc_length();
@@ -132,7 +132,7 @@ template<typename TCHARACTER>  void time_float_c::init( const sptr<TCHARACTER> &
 
     key_s *keys = get_keys( sa.size() / 2 );
 
-    int cnt = sa.size();
+    aint cnt = sa.size();
     for (int i=0;i<cnt;i+=2,++keys)
     {
         keys->time = sa.get(i).as_float();
@@ -146,7 +146,7 @@ template  void time_float_c::init( const wsptr &val );
 float time_float_c::find_t(float v) const
 {
     const key_s *keys = get_keys();
-    int cnt = get_keys_count() - 1;
+    aint cnt = get_keys_count() - 1;
     for(int i=0;i<cnt;++i)
     {
         const key_s &k0 = *(keys + i);
@@ -224,7 +224,7 @@ void time_float_fixed_c::init( const wsptr &val )
 
     key_s *keys = get_keys( sa.size() / 2 );
 
-    int cnt = sa.size();
+    aint cnt = sa.size();
     for (int i=0;i<cnt;i+=2,++keys)
     {
         keys->time = sa.get(i).as_float();
@@ -266,7 +266,7 @@ void time_color_c::init( const wsptr &val )
 
     key_s *keys = get_keys( sa.size() / 4 );
 
-    int cnt = sa.size();
+    aint cnt = sa.size();
     for (int i=0;i<cnt;i+=4,++keys)
     {
         keys->time = sa.get(i).as_float();

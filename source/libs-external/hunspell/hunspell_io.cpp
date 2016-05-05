@@ -1,63 +1,35 @@
 #include "hunspell_io.h"
 
-__inline void    blk_copy_fwd(void *tgt, const void *src, size_t size)
-{
-    unsigned char *btgt = (unsigned char *)tgt;
-    const unsigned char *bsrc = (const unsigned char *)src;
-    while (size)
-    {
-        *btgt++ = *bsrc++;
-        size--;
-    }
-}
-
-__inline int CHARz_nlen(const char *s, int n)
-{
-    int l = -1;
-    do { l++; } while (*(s + l) && l < n);
-    return l;
-}
-
-
-size_t hunspell_file_s::read( void *buffer, size_t s )
-{
-    size_t csz = size - ptr;
-    if (csz > s) csz = s;
-    blk_copy_fwd(buffer, data + ptr, csz);
-    ptr += csz;
-    return csz;
-}
-
 __forceinline bool is_nl( char c )
 {
     return c == '\r' || c == '\n';
 }
 
-char *hunspell_file_s::gets( char *str, int n )
+bool hunspell_file_s::gets( std::string &str )
 {
-    char *tgt = str;
-    const char *src = (const char *)data + ptr;
+    const char *src0 = (const char *)data + ptr;
+    const char *src = src0;
     const char *send = (const char *)data + size;
     if (src == send)
     {
-        *str = 0;
-        return nullptr;
+        str.clear();
+        return false;
     }
-    for( ;n > 1 && src < send; ++tgt, ++src, --n )
+    for( ;src < send; ++src )
     {
-        char c = *src;
-        if (c == '\n' || c == '\r')
+        if ( is_nl ( *src ) )
         {
-            *tgt = 0;
+            str.assign( src0, src - src0 );
+
             ++src;
             for( ;src < send && is_nl(*src); ++src );
             ptr = src - (const char *)data;
-            return str;
+            return true;
         }
-        *tgt = c;
     }
-    *tgt = 0;
+
+    str.assign( src0, src - src0 );
     ptr = src - (const char *)data;
     
-    return str;
+    return true;
 }

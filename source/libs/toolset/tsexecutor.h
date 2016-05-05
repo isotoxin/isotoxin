@@ -12,14 +12,14 @@ class task_c
     {
         auto w = queueflags.lock_write();
         if ( 0 != (w() & flagmask) )
-            __debugbreak();
+            DEBUG_BREAK();
         w() |= flagmask;
     }
     void resetflag(int flagmask)
     {
         auto w = queueflags.lock_write();
         if (0 == (w() & flagmask))
-            __debugbreak();
+            DEBUG_BREAK();
         RESETFLAG( w(), flagmask );
     }
     bool is_flag(int mask) const

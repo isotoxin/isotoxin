@@ -15,14 +15,21 @@ typedef const void * GUIPARAM;
 
 INLINE int as_int(GUIPARAM p)
 {
-    return (int)p; //-V205
+    return (int)(size_t)p; //-V205 //-V221
 }
 
-INLINE GUIPARAM as_param(int v)
+namespace rtoolsinternals
 {
-    return (GUIPARAM)v; //-V204
+    template< typename T > struct asparam
+    {
+        static GUIPARAM cvt( T v )
+        {
+            return (GUIPARAM)(size_t)v;
+        }
+    };
 }
 
+template<typename T> GUIPARAM as_param( T v ) { return rtoolsinternals::asparam<T>::cvt( v ); }
 
 struct menu_anchor_s
 {
@@ -58,6 +65,8 @@ struct menu_anchor_s
 
 class RID
 {
+    MOVABLE( true );
+
     enum rid_e
     {
         EMPTY,
@@ -146,17 +155,17 @@ int calcsbshift( int pos, int viewsize, int datasize );
 struct sbhelper_s
 {
     ts::irect sbrect = ts::irect(0);
-    int datasize = 0;
-    int shift = 0; // zero or negative
+    ts::smart_int datasize;
+    ts::smart_int shift; // zero or negative
 
-    void set_size(int _datasize, int viewsize)
+    void set_size( ts::aint _datasize, int viewsize)
     {
         datasize = _datasize;
         if (shift > 0 || viewsize >= datasize) shift = 0;
         else
         {
             ts::aint vshift_lim = viewsize - datasize;
-            if (shift < vshift_lim) shift = vshift_lim;
+            if (shift < vshift_lim) shift = (int)vshift_lim;
         }
     }
 
@@ -226,6 +235,7 @@ class animation_c
 {
     struct redraw_request_s
     {
+        MOVABLE( true );
         ts::safe_ptr<rectengine_root_c> engine;
         ts::irect rr;
     };

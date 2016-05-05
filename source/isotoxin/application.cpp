@@ -204,18 +204,21 @@ bool application_c::splchk_c::check_one( const ts::str_c &w, ts::astrings_c &sug
     ts::tmp_pointers_t<Hunspell, 2> sugg;
     for( Hunspell *hspl : spellcheckers )
     {
-        if (int csr = hspl->spell( w.cstr() ))
+        if (hspl->spell( w.cstr() ))
             return true; // good word
         sugg.add( hspl );
     }
 
     for (Hunspell *hspl : sugg)
     {
-        char ** wlst;
-        int cnt = hspl->suggest(&wlst, w.cstr());
-        for(int i=0;i<cnt;++i)
-            suggestions.add( ts::asptr(wlst[i]) );
-        hspl->free_list(&wlst, cnt);
+        std::vector< std::string > wlst = hspl->suggest( w.cstr() );
+
+        ts::aint cnt = wlst.size();
+        for ( ts::aint i = 0; i < cnt; ++i )
+        {
+            const std::string &s = wlst[ i ];
+            suggestions.add( ts::asptr( s.c_str(), (int)s.length() ) );
+        }
     }
 
     suggestions.kill_dups_and_sort();
@@ -1172,7 +1175,7 @@ bool application_c::blinking_reason_s::tick()
 /*virtual*/ void application_c::app_loop_event()
 {
     F_NEED_BLINK_ICON = false;
-    for(int i=m_blink_reasons.size()-1;i>=0;--i)
+    for( ts::aint i=m_blink_reasons.size()-1;i>=0;--i)
     {
         blinking_reason_s &br = m_blink_reasons.get(i);
         if (br.tick())
@@ -1953,7 +1956,7 @@ namespace
     struct hardware_sound_capture_switch_s : public ts::task_c
     {
         ts::tbuf0_t<s3::Format> fmts;
-        hardware_sound_capture_switch_s(const s3::Format *_fmts, int cnt)
+        hardware_sound_capture_switch_s(const s3::Format *_fmts, ts::aint cnt)
         {
             fmts.buf_t::append_buf(_fmts, cnt * sizeof(s3::Format));
         }
@@ -1965,7 +1968,7 @@ namespace
             {
                 // start
                 s3::Format fmtw;
-                s3::start_capture(fmtw, fmts.begin(), fmts.count());
+                s3::start_capture(fmtw, fmts.begin(), (int)fmts.count());
             } else
             {
                 s3::stop_capture();
@@ -2007,7 +2010,7 @@ void application_c::check_capture()
     }  else if (!F_CAPTURING && m_currentsc)
     {
         F_CAPTURE_AUDIO_TASK = true;
-        int cntf;
+        ts::aint cntf;
         const s3::Format *fmts = m_currentsc->formats(cntf);
         add_task(TSNEW(hardware_sound_capture_switch_s, fmts, cntf));
 
@@ -2032,7 +2035,7 @@ void application_c::start_capture(sound_capture_handler_c *h)
     if (h == nullptr)
     {
         ASSERT( m_currentsc == nullptr );
-        for(int i=m_scaptures.size()-1;i>=0;--i)
+        for( ts::aint i=m_scaptures.size()-1;i>=0;--i)
         {
             if (m_scaptures.get(i)->is_capture())
             {
@@ -2116,7 +2119,7 @@ av_contact_s & application_c::get_avcontact( contact_root_c *c, av_contact_s::st
 
 void application_c::del_avcontact(contact_root_c *c)
 {
-    for(int i=m_avcontacts.size()-1;i>=0;--i)
+    for( ts::aint i=m_avcontacts.size()-1;i>=0;--i)
     {
         av_contact_s &avc = m_avcontacts.get(i);
         if (avc.c == c)
@@ -2242,7 +2245,7 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, bool activate, bo
             ap->send_audio(current_receiver.contactid, capturefmt, data, size);
 }
 
-/*virtual*/ const s3::Format *application_c::formats(int &count)
+/*virtual*/ const s3::Format *application_c::formats( ts::aint &count )
 {
     avformats.clear();
 
@@ -2362,7 +2365,7 @@ file_transfer_s * application_c::register_file_transfer( const contact_key_s &hi
 
 void application_c::cancel_file_transfers( const contact_key_s &historian )
 {
-    for (int i = m_files.size()-1; i >= 0; --i)
+    for ( ts::aint i = m_files.size()-1; i >= 0; --i)
     {
         file_transfer_s *ftr = m_files.get(i);
         if (ftr->historian == historian)
@@ -2386,7 +2389,7 @@ void application_c::unregister_file_transfer(uint64 utag, bool disconnected)
             if (row->deleted())
                 prf().changed();
 
-    int cnt = m_files.size();
+    ts::aint cnt = m_files.size();
     for (int i=0;i<cnt;++i)
     {
         file_transfer_s *ftr = m_files.get(i);
@@ -2400,13 +2403,13 @@ void application_c::unregister_file_transfer(uint64 utag, bool disconnected)
 
 ts::uint32 application_c::gm_handler(gmsg<ISOGM_DELIVERED>&d)
 {
-    int cntx = m_undelivered.size();
-    for (int j = 0; j < cntx; ++j)
+    ts::aint cntx = m_undelivered.size();
+    for ( ts::aint j = 0; j < cntx; ++j)
     {
         send_queue_s *q = m_undelivered.get(j);
         
-        int cnt = q->queue.size();
-        for (int i = 0; i < cnt; ++i)
+        ts::aint cnt = q->queue.size();
+        for ( ts::aint i = 0; i < cnt; ++i)
         {
             if (q->queue.get(i).utag == d.utag)
             {
@@ -2483,8 +2486,8 @@ void application_c::kill_undelivered( uint64 utag )
 {
     for (send_queue_s *q : m_undelivered)
     {
-        int cnt = q->queue.size();
-        for (int i = 0; i < cnt; ++i)
+        ts::aint cnt = q->queue.size();
+        for ( ts::aint i = 0; i < cnt; ++i)
         {
             const post_s &qp = q->queue.get(i);
             if (qp.utag == utag)
@@ -2518,8 +2521,8 @@ void application_c::undelivered_message( const post_s &p )
     for( send_queue_s *q : m_undelivered )
         if (q->receiver == rcv)
         {
-            int cnt = q->queue.size();
-            for(int i=0;i<cnt;++i)
+            ts::aint cnt = q->queue.size();
+            for( ts::aint i=0;i<cnt;++i)
             {
                 const post_s &qp = q->queue.get(i);
                 if (qp.recv_time > p.recv_time)
@@ -2861,8 +2864,11 @@ void file_transfer_s::kill( file_control_e fctl )
 
     ASSERT( rr().lock > 0 );
 
-    if (rr().query_job.size() == 0) // job queue is empty - just do nothing
+    if ( rr().query_job.size() == 0 ) // job queue is empty - just do nothing
+    {
+        UNFINISHED( "add sleep after N tries" );
         return 1;
+    }
 
     job_s cj = rr().query_job.get(0);
     rr.unlock();
@@ -2878,7 +2884,7 @@ void file_transfer_s::kill( file_control_e fctl )
         // always set file pointer
         ts::f_set_pos( handler, cj.offset );
 
-        uint sz = (uint)ts::tmin<int64>( cj.sz, (int64)( filesize - cj.offset ) );
+        ts::aint sz = ( ts::aint )ts::tmin<int64, int64>( cj.sz, (int64)( filesize - cj.offset ) );
         ts::tmp_buf_c b( sz, true );
 
         if ( sz != ts::f_read( handler, b.data(), sz ) )

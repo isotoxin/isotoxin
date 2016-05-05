@@ -230,7 +230,7 @@ struct datablock_s
     asptr text() const { ASSERT(BT_MESSAGE == bt || BT_ACTION == bt); return asptr(((const char *)(this + 1)) + sizeof(u64), len - sizeof(u64)); }
     const byte *data() const {return (const byte *)(this + 1);}
 
-    static datablock_s *build(block_type_e mt, u64 delivery_tag, const void *data, int datasize, const void *data1 = nullptr, int datasize1 = 0);
+    static datablock_s *build(block_type_e mt, u64 delivery_tag, const void *data, aint datasize, const void *data1 = nullptr, aint datasize1 = 0);
     void die();
 
     int left() const { return len - sent; }
@@ -329,7 +329,7 @@ public:
         void init_audio_encoder();
         void tick(contact_s *, int ct);
         void add_audio( const void *data, int datasize );
-        int encode_audio(byte *dest, int dest_max, const void *uncompressed_frame, int frame_size);
+        int encode_audio(byte *dest, aint dest_max, const void *uncompressed_frame, aint frame_size);
         int prepare_audio4send(int ct); // grabs enc_fifo buffer and put compressed frame to this->compressed buffer
         int decode_audio( const void *data, int datasize ); // pcm decoded audio stored to this->uncompressed
 
@@ -353,7 +353,7 @@ public:
 
         tcp_pipe pipe;
 
-        int id;
+        i32 id;
         int portshift = 0;
         int nextactiontime = 0;
         int call_stop_time = 0;
@@ -375,7 +375,7 @@ public:
         contact_gender_e gender = CSEX_UNKNOWN;
 
         int changed_self = 0;
-        int avatar_tag = 0;
+        i32 avatar_tag = 0;
         byte avatar_hash[16];
 
         int reconnect = 0;
@@ -395,7 +395,7 @@ public:
             u64 create_time_net = my_htonll(create_time);
             send_block(mt, dtag, &create_time_net, sizeof(u64), text.s, text.l);
         }
-        u64 send_block(block_type_e mt, u64 delivery_tag, const void *data = nullptr, int datasize = 0, const void *data1 = nullptr, int datasize1 = 0);
+        u64 send_block(block_type_e mt, u64 delivery_tag, const void *data = nullptr, aint datasize = 0, const void *data1 = nullptr, aint datasize1 = 0);
         bool del_block( u64 delivery_tag );
 
         void to_offline(int ct);
@@ -419,11 +419,11 @@ public:
             cd.id = id;
             cd.mask = CDM_PUBID | CDM_NAME | CDM_STATUSMSG | CDM_STATE | CDM_ONLINE_STATE | CDM_GENDER | CDM_AVATAR_TAG;
             cd.public_id = public_id.cstr();
-            cd.public_id_len = public_id.get_length();
+            cd.public_id_len = (int)public_id.get_length();
             cd.name = name.cstr();
-            cd.name_len = name.get_length();
+            cd.name_len = (int)name.get_length();
             cd.status_message = statusmsg.cstr();
-            cd.status_message_len = statusmsg.get_length();
+            cd.status_message_len = (int)statusmsg.get_length();
             cd.avatar_tag = 0;
             switch (state)
             {
@@ -489,7 +489,7 @@ private:
         virtual void finished(bool /*from_self*/) {}
         virtual void tick(int ct) = 0;
 
-        virtual void chunk_received( u64 /*offset*/, const void * /*d*/, int /*dsz*/ ) {}; // incoming
+        virtual void chunk_received( u64 /*offset*/, const void * /*d*/, aint /*dsz*/ ) {}; // incoming
         virtual bool fresh_file_portion(const file_portion_s * /*fp*/) { return false;  } // transmitting
         virtual bool delivered(u64 /*dtg*/) { return false; } // transmitting
 
@@ -526,7 +526,7 @@ private:
         /*virtual*/ void unpause(bool from_self) override;
         /*virtual*/ void tick(int ct) override;
 
-        /*virtual*/ void chunk_received( u64 offset, const void *d, int dsz ) override;
+        /*virtual*/ void chunk_received( u64 offset, const void *d, aint dsz ) override;
     };
 
 

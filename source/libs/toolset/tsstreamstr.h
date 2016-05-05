@@ -2,8 +2,12 @@
 
 #include <time.h>
 
-//#pragma warning(push)
-//#pragma warning(disable:4127)
+TS_STATIC_CHECK( sizeof( time_t ) == sizeof( uint64 ), "32 bit time_t detected" );
+
+#ifndef _CVTBUFSIZE
+#define _CVTBUFSIZE (309 + 40) // # of digits in max. dp value + slop
+#endif
+
 namespace ts
 {
 
@@ -44,7 +48,7 @@ private:
     streamstr& operator=(streamstr &) UNUSED;
     buftype_t &boof;
 
-    char_t * boof_current(aint size)
+    char_t * boof_current(int size)
     {
         boof.require_capacity( size + boof.get_length() );
 
@@ -112,7 +116,7 @@ public:
 
     template<typename NUM> void append_num( NUM n )
     {
-        boof.append_as_num<NUM>(n);
+        boof.template append_as_num<NUM>(n);
     }
     template<aint SIZE> void append_num_hex( uint64 n )
     {
@@ -207,7 +211,11 @@ public:
     {
         begin();
         tm today;
+        #if defined _MSC_VER
         _localtime64_s(&today, &tim.t);
+        #elif defined __GNUC__
+        localtime_r(&tim.t, &today);
+        #endif
         char_t *cur = prepare_fill(16); if (!cur) return *this;
         strftime(cur, boof_current_size(), "[%Y-%m-%d %H:%M:%S]", &today); boof_update_len(cur);
         return *this;
@@ -221,16 +229,14 @@ public:
     streamstr& operator<<(const T& t) {
 
         begin(); boof.append("[");
-        const byte * data = (const byte *)&t;
+        const uint8 * data = (const uint8 *)&t;
         size_t size = sizeof(T);
         for(size_t i=0;i<size;++i, ++data)
-            append_num_hex<sizeof(byte)>( *data );
+            append_num_hex<sizeof(uint8)>( *data );
         boof.append("]");
         return *this;
     }
 };
-
-#pragma warning(pop)
 
 #define MAKEASTR(strxxx) (ts::streamstr<ts::str_c>() << strxxx).buffer()
 #define MAKEWSTR(strxxx) (ts::streamstr<ts::wstr_c>() << strxxx).buffer()

@@ -43,7 +43,7 @@ void gui_c::delete_event(GUIPARAMHANDLER h)
 {
     auto w = m_events.lock_write();
 
-    for (int index = w().size() - 1; index >= 0; --index)
+    for ( ts::aint index = w().size() - 1; index >= 0; --index)
     {
         delay_event_c *de = ts::ptr_cast<delay_event_c *>(w().get(index).get());
         if ((*de) == h)
@@ -58,7 +58,7 @@ void gui_c::delete_event(GUIPARAMHANDLER h, GUIPARAM prm)
 {
     auto w = m_events.lock_write();
 
-    for (int index = w().size() - 1; index >= 0; --index)
+    for ( ts::aint index = w().size() - 1; index >= 0; --index)
     {
         delay_event_c *de = ts::ptr_cast<delay_event_c *>(w().get(index).get());
         if ((*de) == h && de->par() == prm)
@@ -361,7 +361,7 @@ void gui_c::heartbeat()
 void gui_c::simulate_kbd(int scancode, ts::uint32 casw)
 {
     ts::uint32 signalkbd = scancode | casw;
-    for (int i = m_kbdhandlers.size() - 1; i >= 0; --i) // back order! latest handler handle key first
+    for ( ts::aint i = m_kbdhandlers.size() - 1; i >= 0; --i) // back order! latest handler handle key first
     {
         const kbd_press_callback_s &cb = m_kbdhandlers.get(i);
         if (cb.scancode == signalkbd)
@@ -374,7 +374,7 @@ void gui_c::simulate_kbd(int scancode, ts::uint32 casw)
 
 void gui_c::unregister_kbd_callback(GUIPARAMHANDLER handler)
 {
-    for (int i = m_kbdhandlers.size() - 1; i >= 0; --i)
+    for ( ts::aint i = m_kbdhandlers.size() - 1; i >= 0; --i)
     {
         kbd_press_callback_s &cb = m_kbdhandlers.get(i);
         if (cb.handler == handler)
@@ -924,7 +924,7 @@ void gui_c::mouse_outside(RID rid)
 
 void gui_c::register_hintzone(guirect_c *r)
 {
-    int cnt = m_hint_zone.size();
+    ts::aint cnt = m_hint_zone.size();
     int ff = -1;
     for (int i=0;i<cnt;++i)
     {
@@ -944,7 +944,7 @@ void gui_c::register_hintzone(guirect_c *r)
 
 void gui_c::unregister_hintzone(guirect_c *r)
 {
-    int cnt = m_hint_zone.size();
+    ts::aint cnt = m_hint_zone.size();
     for (int i = 0; i < cnt; ++i)
     {
         if (m_hint_zone.get(i) == r)
@@ -1176,7 +1176,7 @@ bool selectable_core_s::selectword(RID, GUIPARAM p)
         if (chari >= 0 && chari < owner->get_text().get_length())
         {
             int glyphs_start = 0;
-            int glyph_count = glyphs.count();
+            ts::aint glyph_count = glyphs.count();
             if (glyph_count && glyphs.get(0).pixels == nullptr && glyphs.get(0).outline_index > 0)
             {
                 glyphs_start = 1;
@@ -1202,7 +1202,7 @@ void selectable_core_s::select_by_charinds(gui_label_c *label, int char_start_se
 {
     begin(label);
     ts::GLYPHS &glyphs = owner->get_glyphs();
-    int cnt = glyphs.count();
+    ts::aint cnt = glyphs.count();
     int glyphs_start = 0;
     if (cnt && glyphs.get(0).pixels == nullptr && glyphs.get(0).outline_index > 0)
     {
@@ -1329,13 +1329,13 @@ void selectable_core_s::selection_stuff(ts::bitmap_c &texture, const ts::ivec2 &
         const ts::glyph_image_s &gi = glyphs.get(i);
         if (gi.pixels == nullptr && gi.outline_index < 0)
         {
-            y = gi.line_lt.y + 2;
-            h = gi.line_rb.y - y + 3;
+            y = gi.line_lt().y + 2;
+            h = gi.line_rb().y - y + 3;
             break;
         }
     }
 
-    int glyphc = glyphs.count();
+    ts::aint glyphc = glyphs.count();
     if (glyphc && glyphs.get(0).pixels == nullptr && glyphs.get(0).outline_index > 0)
         glyphc = glyphs.get(0).outline_index;
 
@@ -1346,8 +1346,8 @@ void selectable_core_s::selection_stuff(ts::bitmap_c &texture, const ts::ivec2 &
         {
             if (gi.outline_index < 0)
             {
-                y = gi.line_lt.y + 2;
-                h = gi.line_rb.y - y + 3;
+                y = gi.line_lt().y + 2;
+                h = gi.line_rb().y - y + 3;
             }
             continue;
         }
@@ -1357,9 +1357,9 @@ void selectable_core_s::selection_stuff(ts::bitmap_c &texture, const ts::ivec2 &
         {
             ts::glyph_image_s &gi_next = glyphs.get(i + 1);
             if (gi_next.pixels == nullptr || gi_next.charindex < 0) w += 1;
-            else w = gi_next.pos.x - gi.pos.x;
+            else w = gi_next.pos().x - gi.pos().x;
         }
-        texture.fill(ts::ivec2(gi.pos.x, y), ts::ivec2(w, h), selectionBgColor);
+        texture.fill(ts::ivec2(gi.pos().x, y), ts::ivec2(w, h), selectionBgColor);
     }
 }
 
@@ -1392,7 +1392,7 @@ ts::uint32 selectable_core_s::detect_area(const ts::ivec2 &pos)
     if (glyph_under_cursor >= 0)
     {
         const ts::glyph_image_s &gi = glyphs.get(glyph_under_cursor);
-        if (cp.x >(gi.pos.x + gi.width / 2 + 2))
+        if (cp.x >(gi.pos().x + gi.width / 2 + 2))
         {
             // looks like cursor near back of glyph
             ++glyph_under_cursor;

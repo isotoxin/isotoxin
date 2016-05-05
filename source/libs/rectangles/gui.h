@@ -63,9 +63,10 @@ struct hover_data_s
 
 struct bcreate_s
 {
+    MOVABLE( true );
     GET_BUTTON_FACE face;
     GUIPARAMHANDLER handler;
-    int tag;
+    ts::smart_int tag;
     GET_TOOLTIP tooltip;
     ts::wsptr btext;
 };
@@ -241,6 +242,7 @@ private:
 
     struct kbd_press_callback_s
     {
+        MOVABLE( true );
         DUMMY(kbd_press_callback_s);
         kbd_press_callback_s() {}
         GUIPARAMHANDLER handler;
@@ -540,7 +542,7 @@ public:
         }
         else
         {
-            data.id = RID(m_rects.size());
+            data.id = RID((int)m_rects.size());
             auto &sptr = m_rects.add();
             data.me = TSNEW(R, data);
             sptr = data.me;

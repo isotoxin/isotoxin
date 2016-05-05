@@ -9,6 +9,7 @@ template<> struct MAKE_CHILD<gui_filterbar_c> : public _PCHILD(gui_filterbar_c)
 
 struct found_item_s
 {
+    MOVABLE( true );
     time_t mintime = 0;
     contact_key_s historian;
     ts::tbuf_t<uint64> utags;

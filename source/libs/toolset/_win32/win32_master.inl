@@ -4,14 +4,24 @@
 #pragma comment(lib, "Msimg32.lib") // AlphaBlend
 
 
-TS_STATIC_CHECK( sizeof( master_internal_stuff_s ) <= MASTER_CLASS::INTERNAL_STUFF_SIZE, "bad size" );
+TS_STATIC_CHECK( sizeof( master_internal_stuff_s ) <= MASTERCLASS_INTERNAL_STUFF_SIZE, "bad size" );
 
 #define WM_LOOPER_TICK (65534)
 
 #pragma warning (push)
 #pragma warning (disable: 4035)
-__forceinline byte __fastcall lp2key( DWORD lp )
+__forceinline byte __fastcall lp2key( LPARAM lp )
 {
+    // essssssssxxxxxxxxxxxxxxxx
+    //  llllllllhhhhhhhhllllllll
+
+#ifdef MODE64
+    uint64 t = lp;
+    t >>= 16;
+    t = ( t & 0x7f ) | ( ( t >> 1 ) & 0x80 );
+
+    return as_byte( t & 0xff );
+#else
     _asm
     {
         mov eax, lp
@@ -21,6 +31,7 @@ __forceinline byte __fastcall lp2key( DWORD lp )
         rcr al, 1
         //and eax,255
     };
+#endif
 }
 #pragma warning (pop)
 
@@ -165,7 +176,7 @@ static uint32 calc_hash( const bitmap_c &b )
     crc.crc = 0;
     int t = 0;
 
-    auto updcrc = [&]( const uint8 *p, int sz )
+    auto updcrc = [&]( const uint8 *p, aint sz )
     {
         for ( int i = 0; i < sz; ++i, ++p )
         {
@@ -179,7 +190,7 @@ static uint32 calc_hash( const bitmap_c &b )
     updcrc( (const uint8 *)&b.info(), sizeof( imgdesc_s ) );
 
 
-    int bytes_per_line = b.info().sz.x * b.info().bytepp();
+    aint bytes_per_line = b.info().sz.x * b.info().bytepp();
     int h = b.info().sz.y;
     for ( int y = 0; y < h; ++y )
         updcrc( b.body( ivec2( 0, y ) ), bytes_per_line );
@@ -216,7 +227,7 @@ HICON master_internal_stuff_s::get_icon( const bitmap_c &bmp )
     {
         // do some cleanup
         Time curt = Time::current();
-        int cnt = icons.size();
+        aint cnt = icons.size();
 
         int di = -1;
         int maxd = 0;
@@ -544,7 +555,7 @@ static bool check_reg_writte_access( const ts::wsptr &regpath_ )
         if ( cmdpar.l ) path.append( CONSTWSTR( "\" " ) ).append( to_wstr( cmdpar ) );
         else path.append_char( '\"' );
 
-        RegSetValueEx( k, ts::tmp_wstr_c(appname), 0, REG_SZ, (const BYTE *)path.cstr(), ( path.get_length() + 1 ) * sizeof( ts::wchar ) );
+        RegSetValueEx( k, ts::tmp_wstr_c(appname), 0, REG_SZ, (const BYTE *)path.cstr(), (DWORD)(( path.get_length() + 1 ) * sizeof( ts::wchar )) );
         RegCloseKey( k );
     }
 }
@@ -901,7 +912,7 @@ static DWORD WINAPI multiinstanceblocker( LPVOID )
 
     static NOTIFYICONDATAW nd = { sizeof( NOTIFYICONDATAW ), 0 };
     nd.hWnd = wnd2hwnd( mainwindow );
-    nd.uID = ( int )mainwindow.get(); //-V205
+    nd.uID = ( int )(size_t)mainwindow.get(); //-V205
     nd.uCallbackMessage = WM_USER + 7213;
     //nd.hIcon = gui->app_icon(true);
 

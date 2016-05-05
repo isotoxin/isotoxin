@@ -47,7 +47,7 @@ namespace
 #pragma pack(pop)
 }
 
-image_read_func img_reader_s::detect_bmp_format(const void *sourcebuf, int sourcebufsize)
+image_read_func img_reader_s::detect_bmp_format(const void *sourcebuf, aint sourcebufsize)
 {
     Header *header = (Header*)sourcebuf;
 
@@ -58,7 +58,7 @@ image_read_func img_reader_s::detect_bmp_format(const void *sourcebuf, int sourc
     bmpread_s & br = ref_cast<bmpread_s>(data);
 
     br.iH = &header->iH;
-    br.ibuflen = sourcebufsize - sizeof(BITMAPFILEHEADER);
+    br.ibuflen = (int)(sourcebufsize - sizeof(BITMAPFILEHEADER));
 
     size.x = header->iH.biWidth;
     size.y = header->iH.biHeight;
@@ -78,7 +78,7 @@ bool save_to_bmp_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
     if (bmp.info().bytepp() != 1 && bmp.info().bytepp() != 3 && bmp.info().bytepp() != 4) return false;
     if ((bmp.info().bitpp >> 3) != bmp.info().bytepp()) return false;
 
-    int lPitch = ((bmp.info().bytepp()*bmp.info().sz.x - 1) / 4 + 1) * 4;
+    int lPitch = (int)(((bmp.info().bytepp()*bmp.info().sz.x - 1) / 4 + 1) * 4);
 
     bmFileHeader.bfType = 0x4D42;
     bmFileHeader.bfSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + lPitch*bmp.info().sz.y;
@@ -98,7 +98,7 @@ bool save_to_bmp_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
 
     uint8 * sou = bmp() + (bmp.info().sz.y - 1)*bmp.info().pitch;
 
-    int len = bmp.info().bytepp()*bmp.info().sz.x;
+    aint len = bmp.info().bytepp()*bmp.info().sz.x;
     if (bmp.info().bytepp() == 3)
     {
         for (int y = 0; y < bmp.info().sz.y; y++, sou -= bmp.info().pitch)
@@ -116,7 +116,7 @@ bool save_to_bmp_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
 
             if (len < lPitch)
             {
-                int sz = lPitch - len;
+                aint sz = lPitch - len;
                 memset(buf.expand(sz), 0, sz);
             }
         }
@@ -139,7 +139,7 @@ bool save_to_bmp_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
 
             if (len < lPitch)
             {
-                int sz = lPitch - len;
+                aint sz = lPitch - len;
                 memset(buf.expand(sz), 0, sz);
             }
         }
@@ -152,7 +152,7 @@ bool save_to_bmp_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
             buf.append_buf(sou, len);
             if (len < lPitch)
             {
-                int sz = lPitch - len;
+                aint sz = lPitch - len;
                 memset(buf.expand(sz), 0, sz);
             }
         }

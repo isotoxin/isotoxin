@@ -514,7 +514,7 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
     ts::astrings_c vals;
     ts::buf_c qrs;
 
-    auto addl = [&]( const ts::wsptr &fn, const ts::asptr &v, bool empty_as_unknown, bool ee, bool qr, int link_i )
+    auto addl = [&]( const ts::wsptr &fn, const ts::asptr &v, bool empty_as_unknown, bool ee, bool qr, ts::aint link_i )
     {
         if (ee)
             desc.append(CONSTWSTR("<ee>"));
@@ -523,11 +523,11 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
         {
             if (link_i >= 0)
             {
-                desc.append(CONSTWSTR("<cstm=a")).append_as_uint(link_i).append_char('>');
+                desc.append(CONSTWSTR("<cstm=a")).append_as_num(link_i).append_char('>');
                 if (qr) qrs.set_bit(link_i, true);
             }
             desc.append(ts::from_utf8(v));
-            if (link_i >= 0) desc.append(CONSTWSTR("<cstm=b")).append_as_uint(link_i).append_char('>');
+            if (link_i >= 0) desc.append(CONSTWSTR("<cstm=b")).append_as_num(link_i).append_char('>');
 
         } else if (empty_as_unknown)
         {
@@ -624,7 +624,7 @@ void dialog_contact_props_c::fill_list()
 
 void dialog_contact_props_c::tags_menu_handler(const ts::str_c&h)
 {
-    int hi = tags.find(h.as_sptr());
+    ts::aint hi = tags.find(h.as_sptr());
     if (hi >= 0)
     {
         tags.remove_slow(hi);
@@ -636,7 +636,7 @@ void dialog_contact_props_c::tags_menu_handler(const ts::str_c&h)
     set_edit_value(CONSTASTR("tags"), from_utf8(tags.join(CONSTASTR(", "))) );
 }
 
-void dialog_contact_props_c::tags_menu(menu_c &m, int)
+void dialog_contact_props_c::tags_menu(menu_c &m, ts::aint )
 {
     ts::astrings_c ctags( tags );
     ctags.add(contacts().get_all_tags());
@@ -658,7 +658,6 @@ void dialog_contact_props_c::tags_menu(menu_c &m, int)
         fill_list();
 
 }
-
 
 
 

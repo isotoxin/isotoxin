@@ -1,15 +1,29 @@
 #include "stdafx.h"
 
-#ifdef _FINAL
-#define USELIB(ln) comment(lib, #ln ".lib")
-#elif defined _DEBUG_OPTIMIZED
-#define USELIB(ln) comment(lib, #ln "do.lib")
+#if defined (_M_AMD64) || defined (WIN64) || defined (__LP64__)
+#define LIBSUFFIX "64.lib"
 #else
-#define USELIB(ln) comment(lib, #ln "d.lib")
+#define LIBSUFFIX ".lib"
+#endif
+
+#ifdef _FINAL
+#define USELIB(ln) comment(lib, #ln LIBSUFFIX)
+#elif defined _DEBUG_OPTIMIZED
+#define USELIB(ln) comment(lib, #ln "do" LIBSUFFIX)
+#else
+#define USELIB(ln) comment(lib, #ln "d" LIBSUFFIX)
 #endif
 
 #pragma USELIB( toolset )
 #pragma USELIB( memspy )
+#pragma USELIB(rsvg)
+
+#ifdef _DEBUG
+#pragma comment(lib, "freetyped.lib")
+#else
+#pragma comment(lib, "freetype.lib")
+#endif // _DEBUG
+
 
 #pragma comment(lib, "zlib.lib")
 #pragma comment(lib, "minizip.lib")
@@ -18,6 +32,7 @@
 #pragma comment(lib, "toxcore.lib")
 #pragma comment(lib, "libsodium.lib")
 #pragma comment(lib, "libqrencode.lib")
+#pragma comment(lib, "cairo.lib")
 
 #pragma comment(lib, "Winmm.lib")
 #pragma comment(lib, "Shlwapi.lib")
@@ -53,6 +68,7 @@ int proc_test(const wstrings_c & pars);
 int proc_rgbi420(const wstrings_c & pars);
 int proc_i420rgb(const wstrings_c & pars);
 int proc_bsdl(const wstrings_c & pars);
+int proc_rsvg( const wstrings_c & pars );
 
 int proc_loc_(const wstrings_c & pars)
 {
@@ -101,6 +117,7 @@ struct command_s
     command_s(L"rgbi420", L"convert image [file] to i420", proc_rgbi420),
     command_s(L"i420rgb", L"convert image [file] to png", proc_i420rgb),
     command_s(L"bsdl", L"Build spelling dictionary list of [path] with *.aff and *.dic files", proc_bsdl),
+    command_s( L"rsvg", L"Render [svg-file] to png", proc_rsvg ),
 };
 
 
@@ -187,18 +204,22 @@ int main(int argc, _TCHAR* argv[])
 
 int proc_help(const wstrings_c & pars)
 {
-    printf("Isotoxin Rasp (%s)\n", __DATE__);
+#ifdef MODE64
+    printf("Isotoxin Rasp (x64, %s)\n", __DATE__);
+#else
+    printf( "Isotoxin Rasp (%s)\n", __DATE__ );
+#endif
     printf("  Commands:\n");
 
     wstr_c cmn;
     int maxl = 0;
-    int cnt = ARRAY_SIZE(commands);
-    for (int i = 0; i < cnt; ++i)
+    ts::aint cnt = ARRAY_SIZE(commands);
+    for ( ts::aint i = 0; i < cnt; ++i)
     {
         maxl = tmax(maxl, CHARz_len(commands[i].cmd));
     }
 
-    for (int i = 0; i < cnt; ++i)
+    for ( ts::aint i = 0; i < cnt; ++i)
     {
         cmn.fill(maxl + 1, ' ');
         memcpy(cmn.str(), commands[i].cmd, CHARz_len(commands[i].cmd) * sizeof(wchar));
@@ -210,8 +231,8 @@ int proc_help(const wstrings_c & pars)
 
 int proc_show(const wstrings_c & pars)
 {
-    int cnt = pars.size();
-    for(int i=0;i<cnt;++i)
+    ts::aint cnt = pars.size();
+    for( int i=0;i<cnt;++i)
     {
         printf("#%i: [%s]\n", i, to_str(pars.get(i)).cstr());
     }
@@ -248,7 +269,7 @@ int proc_trunc(const wstrings_c & pars)
 int proc_hgver(const wstrings_c & pars)
 {
     ts::wstr_c buf(16385,false);
-    GetEnvironmentVariableW(L"path", buf.str(), buf.get_capacity()-1);
+    GetEnvironmentVariableW(L"path", buf.str(), (int)buf.get_capacity()-1);
     buf.set_length();
     ts::wstrings_c paths(buf,';');
     paths.trim();
@@ -366,7 +387,7 @@ int proc_i420rgb(const wstrings_c & pars)
 #define USE_DL_PREFIX
 #define USE_LOCKS 0
 
-static long dlmalloc_spinlock = 0;
+static spinlock::long3264 dlmalloc_spinlock = 0;
 
 #define PREACTION(M)  (spinlock::simple_lock(dlmalloc_spinlock), 0)
 #define POSTACTION(M) spinlock::simple_unlock(dlmalloc_spinlock)

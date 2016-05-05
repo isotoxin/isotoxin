@@ -34,7 +34,7 @@ class dialog_addcontact_c : public gui_isodialog_c
     ts::wstr_c rtext();
 
 protected:
-    /*virtual*/ int unique_tag() { return UD_ADDCONTACT; }
+    /*virtual*/ int unique_tag() override { return UD_ADDCONTACT; }
     /*virtual*/ void created() override;
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
     /*virtual*/ int additions(ts::irect & border) override;
@@ -65,7 +65,7 @@ class dialog_addgroup_c : public gui_isodialog_c
     bool networks_available = false;
 
 protected:
-    /*virtual*/ int unique_tag() { return UD_ADDGROUP; }
+    /*virtual*/ int unique_tag() override { return UD_ADDGROUP; }
     /*virtual*/ void created() override;
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
     /*virtual*/ int additions(ts::irect & border) override;

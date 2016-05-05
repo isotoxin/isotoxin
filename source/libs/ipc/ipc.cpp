@@ -71,7 +71,7 @@ struct xchg_buffer_header_s
         BST_DEAD,
     };
 
-    long sync;
+    spinlock::long3264 sync;
     int allocated;
     int sendsize;
     DWORD pid; // owner / sender
@@ -107,7 +107,7 @@ _inline void *xchg_buffer_header_s::getptr() const
 
 struct ipc_data_s
 {
-    long sync;
+    spinlock::long3264 sync;
     HANDLE pipe_in; // server
     HANDLE pipe_out; // client
     processor_func *datahandler;
@@ -484,7 +484,7 @@ DWORD WINAPI watchdog(LPVOID p)
 int ipc_junction_s::start( const char *junction_name )
 {
     char buf[MAX_PATH];
-    static_assert( sizeof(ipc_junction_s) >= sizeof(ipc_data_s), "update size of ipc_junction_s" );
+    static_assert( ipc_junction_s::internal_data_size >= sizeof(ipc_data_s), "update size of ipc_junction_s" );
     ipc_data_s &d = (ipc_data_s &)(*this);
 
     bool is_client = false;

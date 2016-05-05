@@ -144,7 +144,7 @@ void mediasystem_c::play(const ts::blob_c &buf, float volume, bool signal_device
         {
             volume = volume_;
             pitch = 1.0f;
-            init(buf.data(), buf.size());
+            init(buf.data(), (int)buf.size());
             play();
             autoDelete();
             owner->addref();
@@ -212,7 +212,7 @@ void mediasystem_c::play_looped(sound_e snd, float volume, bool signal_device)
         loops[snd].reset( TSNEW( loop_play, player, buf, volume * vol ) );
 }
 
-void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int dsp /* see fmt_converter_s::FO_* bits */, const void *d, int dsz)
+void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int dsp /* see fmt_converter_s::FO_* bits */, const void *d, ts::aint dsz)
 {
     auto w = data.lock_write();
 
@@ -248,7 +248,7 @@ void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int
             protected_data_s &pd;
             s(protected_data_s &pd):pd(pd) {}
             void operator=(const s&) UNUSED;
-            void adddata(const s3::Format& fmt, const void *d, int s)
+            void adddata(const s3::Format& fmt, const void *d, ts::aint s)
             {
                 if (s) pd.add_data(d, s);
             }
@@ -276,23 +276,23 @@ void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int
         play();
 }
 
-int mediasystem_c::voice_player::protected_data_s::read_data(const s3::Format &fmt, char *dest, int size)
+ts::aint mediasystem_c::voice_player::protected_data_s::read_data(const s3::Format &fmt, char *dest, ts::aint size)
 {
     if (size < (buf[readbuf].size() - readpos))
     {
         memcpy(dest, buf[readbuf].data() + readpos, size);
-        readpos += size;
+        readpos += (int)size;
         if (newdata == readbuf) newdata ^= 1;
         return size;
     }
     else
     {
-        int szleft = buf[readbuf].size() - readpos;
-        int exist_data_size = szleft + buf[readbuf ^ 1].size();
+        ts::aint szleft = buf[readbuf].size() - readpos;
+        ts::aint exist_data_size = szleft + buf[readbuf ^ 1].size();
         if (exist_data_size < size && begining)
         {
             // silence first, then data, if exist
-            int silence_size = size - exist_data_size;
+            ts::aint silence_size = size - exist_data_size;
             memset(dest, fmt.bitsPerSample == 8 ? 0x80 : 0, silence_size); // fill silence before data
             if (exist_data_size)
                 return silence_size + read_data(fmt, dest + silence_size, exist_data_size);
@@ -316,13 +316,13 @@ int mediasystem_c::voice_player::protected_data_s::read_data(const s3::Format &f
     }
 }
 
-/*virtual*/ int mediasystem_c::voice_player::rawRead(char *dest, int size)
+/*virtual*/ s3::s3int mediasystem_c::voice_player::rawRead(char *dest, s3::s3int size)
 {
     auto w = data.lock_write();
 
     if (!mute && w().available() == 0)
     {
-        w().nodata += size;
+        w().nodata += (int)size;
         if (w().nodata > format.avgBytesPerSec())
             return -1;
     } else
@@ -362,7 +362,7 @@ void mediasystem_c::voice_volume( const uint64 &key, float vol )
 }
 
 
-bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const void *data, int size, float vol, int dsp )
+bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const void *data, ts::aint size, float vol, int dsp )
 {
     if (!initialized)
         init();
@@ -468,7 +468,7 @@ fmt_converter_s::~fmt_converter_s()
 
 }
 
-void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize )
+void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, ts::aint isize )
 {
     if (!ASSERT(acceptor)) return;
 
@@ -495,7 +495,7 @@ void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, int isize 
 
 }
 
-void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int isize)
+void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, ts::aint isize)
 {
     bool volume_changed = volume == 1.0f; // -V550
 
@@ -541,7 +541,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
     int ichnls = ifmt.channels;
     if (ifmt.channels != ofmt.channels && ichnls > 1) // convert to 1 channel before resample (in case input chnls and output chnls are not same)
     {
-        int blocks = isize / (ichnls * 2);
+        ts::aint blocks = isize / (ichnls * 2);
         SETSZ(blocks * 2);
 
         ts::int16 *cvt = (ts::int16 *)GETB();
@@ -598,7 +598,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
 #endif
         }
 
-        int samples_per_chnl = isize / (ichnls * 2);
+        ts::aint samples_per_chnl = isize / (ichnls * 2);
         SETSZ(samples_per_chnl * sizeof(float) * ichnls);
         const ts::int16 *source = (const ts::int16 *)idata;
         for (int ch = 0; ch < ichnls; ++ch)
@@ -627,7 +627,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
         //isize = GETSZ();
         curtarget ^= 1;
 
-        int outsamples_per_chnl = samples_per_chnl * ofmt.sampleRate / ifmt.sampleRate + 256;
+        ts::aint outsamples_per_chnl = samples_per_chnl * ofmt.sampleRate / ifmt.sampleRate + 256;
         SETSZ(outsamples_per_chnl * ichnls * sizeof(float));
 
         uint osamples = 0;
@@ -636,12 +636,12 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
 
         for (int ch = 0; ch < ichnls; ++ch)
         {
-            osamples = outsamples_per_chnl;
+            osamples = (uint)outsamples_per_chnl;
 
             float *indata = (float *)idata + (samples_per_chnl * ch);
             float *odata = ((float *)GETB()) + outsamples_per_chnl * ch;
             
-            unsigned int isamples = samples_per_chnl;
+            uint isamples = (uint)samples_per_chnl;
             speex_resampler_process_float(resampler[ch], 0, indata, &isamples, odata, &osamples);
 
             ASSERT(isamples == (uint)samples_per_chnl);
@@ -693,7 +693,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
 
     if (!volume_changed)
     {
-        int samples = isize / 2;
+        ts::aint samples = isize / 2;
         ts::int16 *odata = (ts::int16 *)idata;
         
         if (idata_orig == idata)
@@ -744,15 +744,15 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
 
     if (filter[0])
     {
-        int samples_per_chnl;
+        ts::aint samples_per_chnl;
         if (tail.size())
         {
-            int oldisize = isize;
-            int full_isize = isize + tail.size();
+            ts::aint oldisize = isize;
+            ts::aint full_isize = isize + tail.size();
             samples_per_chnl = full_isize / (ichnls * 2);
 
             int filter_quant = ofmt.sampleRate / 100;
-            int samples_per_chnl_1 = (samples_per_chnl / filter_quant) * filter_quant;
+            ts::aint samples_per_chnl_1 = (samples_per_chnl / filter_quant) * filter_quant;
             if (samples_per_chnl_1 < samples_per_chnl)
             {
                 if (samples_per_chnl_1 == 0)
@@ -780,7 +780,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
             memcpy( GETB() + tail.size(), idata, isize - tail.size() );
 
             tail.clear();
-            if (int tail_size = full_isize - isize)
+            if ( ts::aint tail_size = full_isize - isize)
                 tail.append_buf( (const char *)idata+(oldisize-tail_size), tail_size );
 
             idata = GETB();
@@ -790,10 +790,10 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
         {
             samples_per_chnl = isize / (ichnls * 2);
             int filter_quant = ofmt.sampleRate / 100;
-            int samples_per_chnl_1 = (samples_per_chnl / filter_quant) * filter_quant;
+            ts::aint samples_per_chnl_1 = (samples_per_chnl / filter_quant) * filter_quant;
             if (samples_per_chnl_1 < samples_per_chnl)
             {
-                int oldisize = isize;
+                ts::aint oldisize = isize;
                 isize = samples_per_chnl_1 * (ichnls * 2);
                 tail.append_buf( (char *)idata + isize, oldisize - isize ); // store tail for next iteration
                 samples_per_chnl = samples_per_chnl_1;
@@ -828,7 +828,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
         for (int ch = 0; ch < ichnls; ++ch)
         {
             ts::int16 *indata = (ts::int16 *)idata + (samples_per_chnl * ch);
-            filter_audio(filter[ch], indata, samples_per_chnl);
+            filter_audio(filter[ch], indata, (int)samples_per_chnl);
         }
 
         if (ichnls > 1)
@@ -866,7 +866,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
 
     if (ichnls != ofmt.channels && ASSERT(ichnls == 1))
     {
-        int samples = isize / 2;
+        ts::aint samples = isize / 2;
         SETSZ(samples * 2 * ofmt.channels);
         ts::int16 *cvt = (ts::int16 *)GETB();
         for (int i = 0; i < samples; ++i)
@@ -885,7 +885,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, int
     {
         // o_O plugin requirement. So strange plugin :)
         // 16 -> 8
-        int samples = isize / 2;
+        ts::aint samples = isize / 2;
         SETSZ(samples);
         ts::uint8 *cvt = GETB();
         for (int i = 0; i < samples; ++i, ++cvt)

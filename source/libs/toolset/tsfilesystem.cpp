@@ -96,7 +96,7 @@ namespace ts
                         }
                         else if (name == CONSTWSTR("USER"))
                         {
-                            DWORD blen = b.get_capacity();
+                            DWORD blen = (DWORD)b.get_capacity();
                             if (GetUserNameW(b.str(), &blen))
                             {
                                 int pl = CHARz_len(b.cstr());
@@ -324,7 +324,7 @@ namespace ts
         if ( FNO_MAKECORRECTNAME & fnoptions )
         {
             wsptr badchars = CONSTWSTR("\\/?*|<>:");
-            int cnt = path.get_length();
+            aint cnt = path.get_length();
             for(int i=0;i<cnt;++i)
                 if ( pwstr_c(badchars).find_pos( path.get_char(i) ) >= 0 )
                     path.set_char(i,'_');
@@ -372,7 +372,7 @@ namespace ts
 		int pfc = path_clone.get_length();
 		if (__ending_slash(path_clone)) --pfc;
 
-		for (int i=dirs.size()-1;i>=0;--i)
+		for (aint i=dirs.size()-1;i>=0;--i)
 		{
             bool rm = false;
             token<wchar> t(skip, ';');
@@ -402,7 +402,7 @@ namespace ts
 			make_path( s, 0 );
 
 		wstr_c t,tt;
-		for (int i=files.size()-1;i>=0;--i)
+		for (aint i=files.size()-1;i>=0;--i)
 		{
             bool rm = false;
             t = files.get(i);
@@ -510,7 +510,7 @@ namespace ts
                     if (*buffer.data16() == 0xFEFF)
                     {
                         // native ucs16, no need swap bytes
-                        text.split(wsptr((const wchar*)(buffer.data() + 2), (buffer.size() - 2) / sizeof(wchar)), (wchar)'\n');
+                        text.split(wsptr((const wchar*)(buffer.data() + 2), (int)((buffer.size() - 2) / sizeof(wchar))), (wchar)'\n');
                         return true;
                     }
                     if (*buffer.data16() == 0xFFFE)
@@ -519,7 +519,7 @@ namespace ts
                         const wchar * endofbuf = (const wchar *)(buffer.data() + buffer.size());
                         for (const wchar *b = (const wchar *)buffer.data16(); b < endofbuf; ++b)
                             SWAP(*(uint8 *)b, *(((uint8 *)b) + 1));
-                        text.split(wsptr((const wchar*)(buffer.data() + 2), (buffer.size() - 2) / sizeof(wchar)), (wchar)'\n');
+                        text.split(wsptr((const wchar*)(buffer.data() + 2), (int)((buffer.size() - 2) / sizeof(wchar))), (wchar)'\n');
                         return true;
                     }
                 }
@@ -636,7 +636,7 @@ namespace ts
 
 	template<typename TCHARACTER> void  TSCALL fn_validizate(str_t<TCHARACTER> &name, const TCHARACTER *ext)
 	{
-		int cnt = name.get_length();
+		aint cnt = name.get_length();
 		bool already_with_ext = false;
 		if (ext && name.ends_ignore_case(ext))
 		{
@@ -645,7 +645,7 @@ namespace ts
 		}
 		for (int i=0;i<cnt;++i)
 		{
-			int ii = CHARz_find( _fromc(ext), name.get_char(i) );
+			aint ii = CHARz_find( _fromc(ext), name.get_char(i) );
 			if (ii >= 0) name.set_char(i, _toc(ext)[ii] );
 			TCHARACTER c = name.get_char(i);
 			if ( (c >= '0' && c <= '9') ||
@@ -717,7 +717,7 @@ namespace ts
 		wstrings_c sa;
 
         wstr_c new_path(path);
-        aint lclip = new_path.get_length();
+        int lclip = new_path.get_length();
 
 		if (find_files(new_path.set_length(lclip).append(fname), sa, ATTR_ANY, ATTR_DIR )) return true;
 		if (find_files(new_path.set_length(lclip).append(CONSTWSTR("*.*")), sa, ATTR_DIR ))
@@ -955,16 +955,16 @@ namespace ts
         li.LowPart = GetFileSize( h, (LPDWORD)&li.HighPart );
         return li.QuadPart;
     }
-    uint32 f_read( void *h, void *ptr, uint32 sz )
+    aint f_read( void *h, void *ptr, aint sz )
     {
         DWORD r;
-        ReadFile( h, ptr, sz, &r, nullptr );
+        ReadFile( h, ptr, (DWORD)sz, &r, nullptr );
         return r;
     }
-    uint32 f_write( void *h, const void *ptr, uint32 sz )
+    aint f_write( void *h, const void *ptr, aint sz )
     {
         DWORD w;
-        WriteFile( h, ptr, sz, &w, nullptr );
+        WriteFile( h, ptr, (DWORD)sz, &w, nullptr );
         return w ;
     }
     void f_close( void *h )

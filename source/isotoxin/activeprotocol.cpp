@@ -1054,7 +1054,7 @@ void active_protocol_c::send_audio(int cid, const s3::Format &ifmt, const void *
     {
         int cid;
         isotoxin_ipc_s *ipcp;
-        void send_audio(const s3::Format& ofmt, const void *data, int size)
+        void send_audio(const s3::Format& ofmt, const void *data, ts::aint size)
         {
             ipcp->send(ipcw(AQ_SEND_AUDIO) << cid << data_block_s(data,size));
         }
@@ -1090,7 +1090,7 @@ void active_protocol_c::set_stream_options(int cid, int so, const ts::ivec2 &vr)
 void active_protocol_c::apply_encoding_settings()
 {
     ipcw s(AQ_CONFIGURABLE);
-    s << (int)3;
+    s << (ts::int32)3;
     s << CONSTASTR(CFGF_VIDEO_CODEC) << ts::astrmap_c(prf().video_codec()).get(get_tag(), ts::str_c());
     s << CONSTASTR(CFGF_VIDEO_BITRATE) << ts::amake<int>(prf().video_bitrate());
     s << CONSTASTR(CFGF_VIDEO_QUALITY) << ts::amake<int>(prf().video_enc_quality());
@@ -1130,7 +1130,7 @@ void active_protocol_c::set_configurable( const configurable_s &c, bool force_se
             w.unlock();
 
             ipcw s(AQ_CONFIGURABLE);
-            s << (int)5;
+            s << (ts::int32)5;
             s << CONSTASTR( CFGF_PROXY_TYPE ) << ts::amake<int>(oldc.proxy.proxy_type);
             s << CONSTASTR( CFGF_PROXY_ADDR ) << oldc.proxy.proxy_addr;
             s << CONSTASTR( CFGF_SERVER_PORT ) << ts::amake<int>(oldc.server_port);
@@ -1169,7 +1169,7 @@ void active_protocol_c::send_file(int cid, uint64 utag, const ts::wstr_c &filena
     ipcp->send(ipcw(AQ_FILE_SEND) << cid << utag << ts::to_utf8(filename) << filesize);
 }
 
-bool active_protocol_c::file_portion(uint64 utag, uint64 offset, const void *data, int sz)
+bool active_protocol_c::file_portion(uint64 utag, uint64 offset, const void *data, ts::aint sz)
 {
     if (!ipcp) return false;
     isotoxin_ipc_s *ipcc = ipcp;
@@ -1178,23 +1178,23 @@ bool active_protocol_c::file_portion(uint64 utag, uint64 offset, const void *dat
     {
         uint64 utag;
         uint64 offset;
-        int sz;
+        ts::int32 sz;
     };
 
-    int bsz = sz;
+    ts::aint bsz = sz;
     bsz += sizeof(data_header_s) + sizeof(fd_s);
 
-    if (data_header_s *dh = (data_header_s *)ipcc->junct.lock_buffer(bsz))
+    if (data_header_s *dh = (data_header_s *)ipcc->junct.lock_buffer((int)bsz))
     {
         dh->cmd = AA_FILE_PORTION;
         fd_s *d = (fd_s *)(dh + 1);
         d->utag = utag;
         d->offset = offset;
-        d->sz = sz;
+        d->sz = (ts::int32)sz;
 
         memcpy( d + 1, data, sz );
 
-        ipcc->junct.unlock_send_buffer(dh, bsz);
+        ipcc->junct.unlock_send_buffer(dh, (int)bsz);
         return true;
     }
 

@@ -56,6 +56,7 @@ class dialog_contact_props_c : public gui_isodialog_c
 
     struct cinfo_s
     {
+        MOVABLE( true );
         ts::shared_ptr<contact_c> c;
         UNIQUE_PTR(ts::bitmap_c) btmp;
         const ts::bitmap_c *bmp = nullptr;
@@ -75,11 +76,11 @@ class dialog_contact_props_c : public gui_isodialog_c
 
     void update();
     void fill_list();
-    void tags_menu(menu_c &m, int);
+    void tags_menu(menu_c &m, ts::aint );
     void tags_menu_handler(const ts::str_c&);
 
 protected:
-    /*virtual*/ int unique_tag() { return UD_CONTACTPROPS; }
+    /*virtual*/ int unique_tag() override { return UD_CONTACTPROPS; }
     /*virtual*/ void created() override;
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
     /*virtual*/ int additions(ts::irect & border) override;

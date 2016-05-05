@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="engine.h" />
+    <ClInclude Include="packetgen.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="proto_lan.cpp" />
+    <ClCompile Include="stdafx.cpp" />
+    <ClCompile Include="engine.cpp" />
+    <ClCompile Include="packetgen.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\proto_export.def" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="proto_lan.rc" />
+  </ItemGroup>
+</Project>

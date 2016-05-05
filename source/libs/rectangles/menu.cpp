@@ -15,7 +15,7 @@ menu_c& menu_c::add( const ts::wstr_c & text, ts::uint32 flags, MENUHANDLER h, c
 
     if ( icon )
     {
-        uint index = core->register_bitmap( *icon );
+        uint index = (uint)core->register_bitmap( *icon );
         flags |= index << 16;
     }
 

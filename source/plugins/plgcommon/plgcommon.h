@@ -14,6 +14,15 @@
 #include <map>
 #include <unordered_map>
 
+#if defined (_M_AMD64) || defined (_M_X64) || defined (WIN64) || defined(__LP64__)
+#define MODE64
+#define ARCHBITS 64
+#define ASMFUNC(f) f##_64
+#else
+#define ARCHBITS 32
+#define ASMFUNC(f) f
+#endif
+
 enum logging_flags_e
 {
     LFLS_CLOSE = 1,
@@ -27,6 +36,8 @@ extern HINSTANCE g_module;
 
 typedef unsigned long u32;
 typedef unsigned char byte;
+typedef ptrdiff_t aint;
+typedef long i32;
 
 #define LIST_ADD(el,first,last,prev,next)       {if((last)!=nullptr) {(last)->next=el;} (el)->prev=(last); (el)->next=0;  last=(el); if(first==0) {first=(el);}}
 #define LIST_DEL(el,first,last,prev,next) \
@@ -50,12 +61,19 @@ extern "C"
 #define SMART_DEBUG_BREAK __debugbreak()
 #endif
 
-#ifdef _FINAL
-#define USELIB(ln) comment(lib, #ln ".lib")
-#elif defined _DEBUG_OPTIMIZED
-#define USELIB(ln) comment(lib, #ln "do.lib")
+#if defined (_M_AMD64) || defined (WIN64) || defined (__LP64__)
+#define LIBSUFFIX "64.lib"
 #else
-#define USELIB(ln) comment(lib, #ln "d.lib")
+#define LIBSUFFIX ".lib"
+#endif
+
+
+#ifdef _FINAL
+#define USELIB(ln) comment(lib, #ln LIBSUFFIX)
+#elif defined _DEBUG_OPTIMIZED
+#define USELIB(ln) comment(lib, #ln "do" LIBSUFFIX)
+#else
+#define USELIB(ln) comment(lib, #ln "d" LIBSUFFIX)
 #endif
 
 __forceinline time_t now()
@@ -159,7 +177,7 @@ wstr_c get_exe_full_name();
 
 inline wstr_c fn_change_name_ext(const wstr_c &full, const wsptr &name, const wsptr &ext)
 {
-    ptrdiff_t i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
+    int i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
     return wstr_c(wsptr(full.cstr(), i)).append(name).append_char('.').append(ext);
 }
 
@@ -172,13 +190,13 @@ template <class T> class shared_ptr
 
     void unconnect()
     {
-        if (object) T::decRef(object);
+        if (object) T::dec_ref(object);
     }
 
     void connect(T *p)
     {
         object = p;
-        if (object) object->addRef();
+        if (object) object->add_ref();
     }
 
 public:
@@ -190,7 +208,7 @@ public:
 
     shared_ptr &operator=(T *p)
     {
-        if (p) p->addRef();
+        if (p) p->add_ref();
         unconnect();
         object = p;
         return *this;
@@ -214,17 +232,17 @@ private:
 
 class shared_object
 {
-    int refCount;
+    int ref_count;
 
     shared_object(const shared_object &);
     void operator=(const shared_object &);
 
 public:
-    shared_object() : refCount(0) {}
+    shared_object() : ref_count(0) {}
 
-    bool isMultiRef() const { return refCount > 1; }
-    void addRef() { refCount++; }
-    template <class T> static void decRef(T *object)
+    bool is_multi_ref() const { return ref_count > 1; }
+    void add_ref() { ref_count++; }
+    template <class T> static void dec_ref(T *object)
     {
         ASSERT(object->refCount > 0);
         if (--object->refCount == 0) delete object;
@@ -295,7 +313,7 @@ struct savebuffer : public std::vector < char >
         resize(offset + sizeof(T));
         return *(T *)(data() + offset);
     }
-    void add(const void *d, int sz)
+    void add(const void *d, aint sz)
     {
         size_t offset = size();
         resize(offset + sz);
@@ -311,8 +329,8 @@ struct savebuffer : public std::vector < char >
 struct bytes
 {
     const void *data;
-    int datasize;
-    bytes(const void *data, int datasize) :data(data), datasize(datasize) {}
+    aint datasize;
+    bytes(const void *data, aint datasize) :data(data), datasize(datasize) {}
 };
 template<typename T> struct serlist
 {
@@ -332,22 +350,22 @@ struct chunk
     }
     ~chunk()
     {
-        *(int *)(b.data() + sizeoffset) = b.size() - sizeoffset;
+        *(i32 *)(b.data() + sizeoffset) = (i32)(b.size() - sizeoffset);
     }
 
-    void *alloc(int sz)
+    void *alloc(aint sz)
     {
-        b.add<int>() = sz;
+        b.add<i32>() = (i32)sz;
         size_t offset = b.size();
         b.resize( offset + sz );
         return b.data() + offset;
     }
 
     void operator <<(byte v) { b.add<byte>() = v; }
-    void operator <<(int v) { b.add<int>() = v; }
+    void operator <<( i32 v) { b.add<i32>() = v; }
     void operator <<(u64 v) { b.add<u64>() = v; }
     void operator <<(const str_c& str) { b.add(str.as_sptr()); }
-    void operator <<(const bytes&byts) { b.add<int>() = byts.datasize; b.add(byts.data, byts.datasize); }
+    void operator <<(const bytes&byts) { b.add<i32>() = (i32)byts.datasize; b.add(byts.data, byts.datasize); }
     template<typename T> void operator <<(const serlist<T>& sl)
     {
         size_t numoffset = b.size();
@@ -381,7 +399,7 @@ public:
         newdata = 0;
     }
 
-    void add_data(const void *d, int s)
+    void add_data(const void *d, aint s)
     {
         auto &b = buf[newdata];
         size_t offset = b.size();
@@ -397,8 +415,8 @@ public:
         ofifo.read_data( b.data() + offset, av );
     }
 
-    void get_data(int offset, byte *dest, int size); // copy data and leave it in buffer
-    int read_data(byte *dest, int size); // dest can be null
+    void get_data(aint offset, byte *dest, aint size); // copy data and leave it in buffer
+    aint read_data(byte *dest, aint size); // dest can be null
     void clear()
     {
         buf[0].clear();
@@ -410,6 +428,7 @@ public:
     size_t available()  const { return buf[readbuf].size() - readpos + buf[readbuf ^ 1].size(); }
 };
 
+/*
 struct ranges_s
 {
     struct range_s
@@ -428,7 +447,7 @@ struct ranges_s
             return;
         }
 
-        int cnt = ranges.size();
+        aint cnt = ranges.size();
         for (int i = 0; i < cnt; ++i)
         {
             range_s r = ranges[i]; // copy
@@ -463,6 +482,7 @@ struct ranges_s
     }
 
 };
+*/
 
 template< typename F > void parse_values( const asptr &is, const F&f )
 {

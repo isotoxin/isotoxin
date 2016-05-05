@@ -214,7 +214,7 @@ public:
 
 	void remove_at_path(const sptr<TCHARACTER> &path)
 	{
-		token<TCHARACTER>::tokentype name;
+		typename token<TCHARACTER>::tokentype name;
 		bp_t *bp = this, *nbp;
 		for (token<TCHARACTER> t(path, TCHARACTER('/')); ; bp = nbp)
 		{
@@ -257,15 +257,19 @@ public:
 	}
 	int get_int(const sptr<TCHARACTER> &name, int def = 0) const {return (int)get_double(name, def);}
 
-	template <class T> void get_value(T &val, const string_type &name, const T &def = T())
+    void get_value( string_type &val, const string_type &name, const string_type &def )
+    {
+        val = get_string( name, def );
+    }
+    template <class T> void get_value( T &val, const string_type &name, const T &def = T() )
 	{	val = (T)get_double(name, def);   }
-	template <> void get_value<string_type>(string_type &val, const string_type &name, const string_type &def)
-	{	val = get_string(name, def);   }
 
-	template <class T> void as_value(T &val, const T &def = T())
+    void as_value( string_type &val, const string_type &def )
+    {
+        val = as_string( def );
+    }
+    template <class T> void as_value( T &val, const T &def = T() )
 	{	val = (T)as_double(def);   }
-	template <> void as_value<string_type>(string_type &val, const string_type &def)
-	{	val = as_string(def);   }
 
 	void set_value(const sptr<TCHARACTER> &val)
 	{

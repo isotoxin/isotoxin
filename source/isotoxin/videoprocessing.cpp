@@ -38,8 +38,8 @@ void enum_video_capture_devices(vsb_list_t &list, bool add_desktop)
     for (const VideoDevice &vd : devices)
     {
         vsb_descriptor_s &d = list.add();
-        d.desc.set(vd.name.c_str(), vd.name.length());
-        d.id.set(vd.path.c_str(), vd.path.length());
+        d.desc.set(vd.name.c_str(), (int)vd.name.length());
+        d.id.set(vd.path.c_str(), (int)vd.path.length());
 
         for (const VideoInfo&vi : vd.caps)
             if (vi.format == VideoFormat::XRGB)
@@ -54,8 +54,8 @@ void enum_video_capture_devices(vsb_list_t &list, bool add_desktop)
             return false;
         });
 
-        int cnt = d.resolutions.count();
-        for (int i = 1; i < cnt; ++i)
+        ts::aint cnt = d.resolutions.count();
+        for ( ts::aint i = 1; i < cnt; ++i)
             if (d.resolutions.get(i).x < 640)
             {
                 d.resolutions.set_count(i, true);
@@ -207,8 +207,8 @@ void vsb_desktop_c::grab_desktop::remove_owner(vsb_desktop_c *owner)
         l.lock(sync);
     }
 
-    int cnt = owners.size();
-    for (int i = 0; i < cnt; ++i)
+    ts::aint cnt = owners.size();
+    for ( ts::aint i = 0; i < cnt; ++i)
     {
         if (owners.get(i) == owner)
         {
@@ -402,8 +402,8 @@ void vsb_dshow_camera_c::core_c::remove_owner( vsb_dshow_camera_c *owner )
         l.lock(sync);
     }
 
-    int cnt = owners.size();
-    for(int i=0;i<cnt;++i)
+    ts::aint cnt = owners.size();
+    for( ts::aint i=0;i<cnt;++i)
     {
         if ( owners.get(i) == owner )
         {

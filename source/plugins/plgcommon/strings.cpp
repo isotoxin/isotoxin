@@ -13,7 +13,7 @@ int    str_wrap_text_ucs2_to_ansi(char *out, ZSTRINGS_SIGNED maxlen, const wsptr
 void   str_wrap_text_ansi_to_ucs2(wchar_t *out, ZSTRINGS_SIGNED maxlen, const asptr &from)
 {
 	if ( (maxlen==0) || (from.l== 0) ) return;
-	int res = MultiByteToWideChar(CP_ACP,0,from.s,from.l,out,maxlen);
+	int res = MultiByteToWideChar(CP_ACP,0,from.s, from.l,out, maxlen);
 	if (res == 0)
 	{
 		//DWORD err = GetLastError();
@@ -32,7 +32,7 @@ void   str_wrap_text_ansi_to_ucs2(wchar_t *out, ZSTRINGS_SIGNED maxlen, const as
 ZSTRINGS_SIGNED    str_wrap_text_utf8_to_ucs2(wchar_t *out, ZSTRINGS_SIGNED maxlen, const asptr &from)
 {
 	if ( (maxlen==0) || (from.l== 0) ) return 0;
-	int res = MultiByteToWideChar(CP_UTF8,0,from.s,from.l,out,maxlen);
+	int res = MultiByteToWideChar(CP_UTF8,0,from.s, from.l,out, maxlen);
 	if (res == 0)
 	{
 		//DWORD err = GetLastError();
@@ -51,17 +51,17 @@ ZSTRINGS_SIGNED    str_wrap_text_utf8_to_ucs2(wchar_t *out, ZSTRINGS_SIGNED maxl
 }
 ZSTRINGS_SIGNED    str_wrap_text_ucs2_to_utf8(char *out, ZSTRINGS_SIGNED maxlen, const wsptr &from)
 {
-	ZSTRINGS_SIGNED l = WideCharToMultiByte(CP_UTF8,0, from.s, from.l, out ,maxlen - 1,nullptr,nullptr);
+	ZSTRINGS_SIGNED l = WideCharToMultiByte(CP_UTF8,0, from.s, from.l, out , maxlen - 1,nullptr,nullptr);
 	out[ l ] = 0;
 	return l;
 }
 bool   str_wrap_text_iequalsw(const wchar_t *s1, const wchar_t *s2, ZSTRINGS_SIGNED len)
 {
-	return CSTR_EQUAL == CompareStringW(LOCALE_USER_DEFAULT,NORM_IGNORECASE,s1,len,s2,len);
+	return CSTR_EQUAL == CompareStringW(LOCALE_USER_DEFAULT,NORM_IGNORECASE,s1, len,s2, len);
 }
 bool   str_wrap_text_iequalsa(const char *s1, const char *s2, ZSTRINGS_SIGNED len)
 {
-	return CSTR_EQUAL == CompareStringA(LOCALE_USER_DEFAULT,NORM_IGNORECASE,s1,len,s2,len);
+	return CSTR_EQUAL == CompareStringA(LOCALE_USER_DEFAULT,NORM_IGNORECASE,s1, len,s2, len);
 }
 
 void  str_wrap_text_lowercase(wchar_t *out, ZSTRINGS_SIGNED maxlen)

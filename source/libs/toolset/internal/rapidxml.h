@@ -475,7 +475,7 @@ namespace rapidxml
             if (source)
                 for (std::size_t i = 0; i < size; ++i)
                     s[i] = source[i];
-            return sptr<Ch>(s,size);
+            return sptr<Ch>(s, (int)size);
         }
 
         const sptr<Ch> &nullstr()
@@ -1345,6 +1345,7 @@ namespace rapidxml
             m_first_attribute = 0;
         }
 
+        /*
         void validate() const
         {
             if (this->xmlns() == 0)
@@ -1371,6 +1372,7 @@ namespace rapidxml
                 }
             }
         }
+        */
 
     private:
 
@@ -1491,6 +1493,7 @@ namespace rapidxml
             memory_pool<Ch>::clear();
         }
 
+        /*
         //! Terminates and/or decodes existing parsed tree,
         //! optionally recursively.
         template<int Flags>
@@ -1530,7 +1533,7 @@ namespace rapidxml
                 }
             }
         }
-
+        */
 
         void validate() const
         {
@@ -1930,7 +1933,7 @@ namespace rapidxml
 
             // Create comment node
             xml_node<Ch> *comment = this->allocate_node(node_comment);
-            comment->value(sptr<Ch>(value, text - value));
+            comment->value(sptr<Ch>(value, (int)(text - value)));
 
             text += 3;     // Skip '-->'
             return comment;
@@ -1985,7 +1988,7 @@ namespace rapidxml
             {
                 // Create a new doctype node
                 xml_node<Ch> *doctype = this->allocate_node(node_doctype);
-                doctype->value(sptr<Ch>(value, text - value));
+                doctype->value(sptr<Ch>(value, (int)(text - value)));
 
                 text += 1;      // skip '>'
                 return doctype;
@@ -2013,7 +2016,7 @@ namespace rapidxml
                 skip<node_name_pred, Flags>(text);
                 if (text == name)
                     RAPIDXML_PARSE_ERROR("expected PI target", text);
-                pi->name(sptr<Ch>(name, text - name));
+                pi->name(sptr<Ch>(name, (int)(text - name)));
 
                 // Skip whitespace between pi target and pi
                 skip<whitespace_pred, Flags>(text);
@@ -2030,7 +2033,7 @@ namespace rapidxml
                 }
 
                 // Set pi value (verbatim, no entity expansion or whitespace normalization)
-                pi->value(sptr<Ch>(value, text - value));
+                pi->value(sptr<Ch>(value, (int)(text - value)));
 
                 text += 2;                          // Skip '?>'
                 return pi;
@@ -2088,14 +2091,14 @@ namespace rapidxml
             if (!(Flags & parse_no_data_nodes))
             {
                 xml_node<Ch> *data = this->allocate_node(node_data);
-                data->value(sptr<Ch>(value, end - value));
+                data->value(sptr<Ch>(value, (int)(end - value)));
                 node->append_node(data);
             }
 
             // Add data to parent node if no data exists yet
             if (!(Flags & parse_no_element_values))
                 if (*node->value().s == Ch('\0'))
-                    node->value(sptr<Ch>(value, end - value));
+                    node->value(sptr<Ch>(value, (int)(end - value)));
 
             // Return character that ends data
             return *text;
@@ -2130,7 +2133,7 @@ namespace rapidxml
 
             // Create new cdata node
             xml_node<Ch> *cdata = this->allocate_node(node_cdata);
-            cdata->value(sptr<Ch>(value, text - value));
+            cdata->value(sptr<Ch>(value, (int)(text - value)));
 
             text += 3;      // Skip ]]>
             return cdata;
@@ -2149,15 +2152,15 @@ namespace rapidxml
             if (text == prefix)
                 RAPIDXML_PARSE_ERROR("expected element name or prefix", text);
             if (*text == Ch(':')) {
-                element->prefix(sptr<Ch>(prefix, text - prefix));
+                element->prefix(sptr<Ch>(prefix, (int)(text - prefix)));
                 ++text;
                 Ch *name = text;
                 skip<node_name_pred, Flags>(text);
                 if (text == name)
                     RAPIDXML_PARSE_ERROR("expected element local name", text);
-                element->name(sptr<Ch>(name, text - name));
+                element->name(sptr<Ch>(name, (int)(text - name)));
             } else {
-                element->name(sptr<Ch>(prefix, text - prefix));
+                element->name(sptr<Ch>(prefix, (int)(text - prefix)));
             }
 
             // Skip whitespace between element name and attributes or >
@@ -2308,7 +2311,7 @@ namespace rapidxml
                             // Skip and validate closing tag name
                             Ch *closing_name = text;
                             skip<node_name_pred, Flags>(text);
-                            if (!internal::compare(node->name(), sptr<Ch>(closing_name, text - closing_name), true))
+                            if (!internal::compare(node->name(), sptr<Ch>(closing_name, (int)(text - closing_name)), true))
                                 RAPIDXML_PARSE_ERROR("invalid closing tag name", text);
                         }
                         else
@@ -2367,7 +2370,7 @@ namespace rapidxml
 
                 // Create new attribute
                 xml_attribute<Ch> *attribute = this->allocate_attribute();
-                attribute->name(sptr<Ch>(name, text - name));
+                attribute->name(sptr<Ch>(name, (int)(text - name)));
                 node->append_attribute(attribute);
 
                 // Skip whitespace after attribute name
@@ -2396,7 +2399,7 @@ namespace rapidxml
                     end = skip_and_expand_character_refs<attribute_value_pred<Ch('"')>, attribute_value_pure_pred<Ch('"')>, AttFlags>(text);
 
                 // Set attribute value
-                attribute->value(sptr<Ch>(value, end - value));
+                attribute->value(sptr<Ch>(value, (int)(end - value)));
 
                 // Make sure that end quote is present
                 if (*text != quote)

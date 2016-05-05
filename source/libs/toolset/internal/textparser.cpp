@@ -78,7 +78,7 @@ namespace
 			    gi.height = (uint16)glyph->height;
                 gi.pitch = (uint16)glyph->width; // 1 byte per pixel for glyphs
 			    gi.pixels = (uint8*)(glyph+1);
-			    gi.pos = svec2((int16)glyph->left, (int16)(-glyph->top));
+			    gi.pos = svec2(glyph->left, -glyph->top);
 			    break;
 		    case IMAGE:
 			    gi.color = 0; // zero color for images - it will be ignored
@@ -86,25 +86,25 @@ namespace
 			    gi.height = (uint16)image->height;
                 gi.pitch = (uint16)image->pitch;
 			    gi.pixels = image->pixels;
-			    gi.pos = svec2(0, (int16)(-image->height+image_offset_Y));
+			    gi.pos = svec2(0, -image->height+image_offset_Y);
 			    break;
             case RECTANGLE:
                 gi.pixels = GTYPE_RECTANGLE;
                 gi.width = (uint16)advance;
                 gi.height = shadow;
                 gi.pitch = ch;
-                gi.pos = svec2(0, (int16)(-shadow+image_offset_Y));
+                gi.pos = svec2(0, -shadow+image_offset_Y);
                 break;
 		    }
 
             gi.charindex = charindex;
 		    //underline
             gi.length = (uint16)(advance + add_underline_len);
-            gi.start_pos = svec2(0, (int16)underline_offset) - gi.pos;
+            gi.start_pos = svec2(0, underline_offset) - gi.pos;
             gi.thickness = font->uline_thickness * underlined;
 
-            gi.pos.x += (int16)pos.x;
-            gi.pos.y += (int16)pos.y;
+            gi.pos().x += (int16)pos.x;
+            gi.pos().y += (int16)pos.y;
 	    }
 
 	    void add_glyph_image(GLYPHS &outlined_glyphs, GLYPHS *glyphs, const ivec2 &pos, int add_underline_len) const
@@ -120,10 +120,10 @@ namespace
                     gi.width = (uint16)glyph->advance+1;
                     gi.height = (uint16)tabs(font->ascender - font->descender);
                     gi.pitch = 0;
-                    gi.pos = svec2((int16)(glyph->left + pos.x-1), (int16)(pos.y-font->ascender));
+                    gi.pos = svec2(glyph->left + pos.x-1, pos.y-font->ascender);
                     gi.charindex = charindex;
                     gi.length = 0;
-                    gi.start_pos = svec2(0, (int16)underline_offset) - gi.pos;
+                    gi.start_pos = svec2(0, underline_offset) - gi.pos;
                     gi.thickness = 0;
                 }
             }
@@ -153,9 +153,9 @@ void glyph_s::get_outlined_glyph(glyph_image_s &gi, font_c *font, const ivec2 &p
 	gi.width  = (uint16)(width  + 2*ir);
 	gi.height = (uint16)(height + 2*ir);
     gi.pitch = (uint16)gi.width;
-	gi.pos = svec2((int16)left, (int16)-top);
-    gi.pos.x += (int16)(pos.x - ir);
-    gi.pos.y += (int16)(pos.y - ir);
+	gi.pos = svec2(left, -top);
+    gi.pos().x += (int16)(pos.x - ir);
+    gi.pos().y += (int16)(pos.y - ir);
 	gi.thickness = 0; // do not generate outline for underline
 
 	if (outlined == nullptr)
@@ -197,6 +197,7 @@ struct text_parser_s
 
 	struct paragraph_s
 	{
+        MOVABLE( true );
         enum a{ALEFT, ARIGHT, AJUSTIFY, ACENTER};
 
 		DUMMY(paragraph_s);
@@ -214,6 +215,7 @@ struct text_parser_s
 	tbuf_t<paragraph_s> paragraphs_stack;
 	struct shadow_pars_s
 	{
+        MOVABLE( true );
 		DUMMY(shadow_pars_s);
 		shadow_pars_s() {}
 		int len; TSCOLOR color;
@@ -300,7 +302,7 @@ struct text_parser_s
         full_height_line = 0;
 	}
 
-	void add_indent(int chari)
+	void add_indent(aint chari)
 	{
 		paragraph_s &paragraph = paragraphs_stack.last();
 		if (paragraph.indention > 0)
@@ -327,7 +329,7 @@ struct text_parser_s
 	void end_line(bool nextLn = true, bool acceptaddhnow = false) // break current line
 	{
 		int H, spaces, W, WR;
-		pen.y += calc_HSW(H, spaces, W, WR, last_line.count());
+		pen.y += calc_HSW(H, spaces, W, WR, (int)last_line.count());
 
 		if (glyphs)
 		{
@@ -336,19 +338,19 @@ struct text_parser_s
 			if (paragraphs_stack.last().align == paragraph_s::ARIGHT) offset.x = cur_max_line_len - W - WR;
 			else if (paragraphs_stack.last().align == paragraph_s::ACENTER) offset.x = (cur_max_line_len - W - WR)/2;
 
-            if (prev_line_dim_glyph_index >= 0) glyphs->get(prev_line_dim_glyph_index).next_dim_glyph = glyphs->count();
-            prev_line_dim_glyph_index = glyphs->count();
+            if (prev_line_dim_glyph_index >= 0) glyphs->get(prev_line_dim_glyph_index).next_dim_glyph = (int)glyphs->count();
+            prev_line_dim_glyph_index = (int)glyphs->count();
             glyph_image_s &gi = glyphs->add();
             gi.pixels = nullptr;
             gi.outline_index = -1;
             gi.next_dim_glyph = -1;
-            gi.line_lt.x = (int16) (offset.x + pen.x);
-            gi.line_lt.y = (int16) (offset.y + pen.y - H);
-            gi.line_rb.x = (int16) (gi.line_lt.x + W);
-            gi.line_rb.y = (int16) (gi.line_lt.y + H);
+            gi.line_lt().x = (int16) (offset.x + pen.x);
+            gi.line_lt().y = (int16) (offset.y + pen.y - H);
+            gi.line_rb().x = (int16) (gi.line_lt().x + W);
+            gi.line_rb().y = (int16) (gi.line_lt().y + H);
 
             int oldpenx = pen.x;
-            for (int i = rite_rite, cnt = last_line.count(); i < cnt; ++i)
+            for (int i = rite_rite, cnt = (int)last_line.count(); i < cnt; ++i)
             {
                 const meta_glyph_s &mg = last_line.get(i);
                 mg.add_glyph_image(outlined_glyphs, glyphs, pen + offset, 0);
@@ -390,7 +392,7 @@ struct text_parser_s
 		first_char_in_paragraph = true;
 	}
 
-	int calc_HSW(int &H, int &spaces, int &W, int &WR, int line_size)
+	int calc_HSW(int &H, int &spaces, int &W, int &WR, aint line_size)
 	{
         ivec2 *curaddhs = addhtags ? (ivec2 *)_alloca(addhtags * sizeof(ivec2)) : nullptr; //-V630
         int curaddhs_n = 0;
@@ -448,12 +450,12 @@ struct text_parser_s
         return addH;
 	}
 
-	meta_glyph_s &add_meta_glyph(meta_glyph_s::mgtype_e type, int chari = -1)
+	meta_glyph_s &add_meta_glyph(meta_glyph_s::mgtype_e type, aint chari = -1)
 	{
 		if (first_char_in_paragraph) first_char_in_paragraph = false, add_indent(chari); // if 1st symbol, add indent
 		meta_glyph_s &mg = last_line.add(); // add metaglyph
         mg.image_offset_Y = 0;
-        mg.charindex = chari;
+        mg.charindex = (int)chari;
 		mg.type = type;
 		mg.font = fonts_stack.last();
 		mg.color = colors_stack.last();
@@ -473,7 +475,7 @@ struct text_parser_s
 		return mg;
 	}
 
-	bool process_tag(const wsptr &tag_, const wsptr &tagbody_, int chari)
+	bool process_tag(const wsptr &tag_, const wsptr &tagbody_, aint chari)
 	{
         pwstr_c tag(tag_);
         pwstr_c tagbody(tagbody_);
@@ -635,8 +637,8 @@ struct text_parser_s
                 gi.pixels = GTYPE_DRAWABLE;
 				gi.color = colors_stack.last();
 				gi.width = gi.height = 0; // zeros - no one lookup to gi.pixels 
-				gi.pos.x = (int16)(pen.x + sideindent);
-                gi.pos.y = (int16)(pen.y + vertindent);
+				gi.pos().x = (int16)(pen.x + sideindent);
+                gi.pos().y = (int16)(pen.y + vertindent);
 				++t; gi.thickness = ui_scale(t && !t->is_empty() ? t->as_float() : 1.75f);
 				gi.length    = (uint16)(cur_max_line_len - 2*sideindent);
 				gi.start_pos  = svec2(0);
@@ -709,8 +711,8 @@ struct text_parser_s
                 gi.pitch = (uint16)si->pitch;
 				gi.pixels = si->pixels;
 				gi.thickness = 0;
-				gi.pos.x = (int16)(&sl == &leftSL ? 0 : max_line_length - si->width);
-                gi.pos.y = (int16)pen.y;
+				gi.pos().x = (int16)(&sl == &leftSL ? 0 : max_line_length - si->width);
+                gi.pos().y = (int16)pen.y;
 			}
 			sl.width  = si->width;
 			sl.bottom = si->height + pen.y;
@@ -724,7 +726,7 @@ struct text_parser_s
         else if (tag == CONSTWSTR("/r"))
         {
             ASSERT( paragraphs_stack.last().rite );
-            rite_rite = last_line.count();
+            rite_rite = (int)last_line.count();
             if (rite_rite == 0)
                 paragraphs_stack.last().rite = false;
         }
@@ -789,7 +791,7 @@ struct text_parser_s
 		return true;
 	}
 
-    void addchar(font_c &font, wchar ch, int chari)
+    void addchar(font_c &font, wchar ch, aint chari)
     {
         meta_glyph_s &mg = add_meta_glyph(ch == L' ' ? meta_glyph_s::SPACE : meta_glyph_s::CHAR, chari);
         mg.glyph = &font[mg.ch = ch];
@@ -797,7 +799,7 @@ struct text_parser_s
         line_width += mg.advance;
         //Kerning processing
         meta_glyph_s *prev;
-        int cnt = last_line.count();
+        aint cnt = last_line.count();
         if (cnt > 1 && (prev = &last_line.get(cnt - 2))->type == meta_glyph_s::CHAR && (cnt-1) != rite_rite)
         {
             int k = font.kerning_ci(prev->glyph->char_index, mg.glyph->char_index);
@@ -808,14 +810,14 @@ struct text_parser_s
 
     void line_ellipsis()
     {
-        int j = last_line.count() - 1;
+        aint j = last_line.count() - 1;
 
         glyph_s &dot_glyph = (*fonts_stack.last())[L'.'];
         line_width += dot_glyph.advance * 3; // advance of ...
 
-        auto setupglyphspecial = [this](meta_glyph_s &mg, int j)
+        auto setupglyphspecial = [this](meta_glyph_s &mg, aint j)
         {
-            for (int i = j; i >= 0; i--)
+            for (aint i = j; i >= 0; i--)
             {
                 const meta_glyph_s& mgf = last_line.get(i);
                 if (mgf.type == meta_glyph_s::CHAR)
@@ -914,7 +916,7 @@ struct text_parser_s
 			// wrap words
 			if (!search_rects && line_width > cur_max_line_len && last_line.count() > 1) // check special case: 1 symbol cannot be inserted to line
 			{
-				int j = last_line.count() - 1, line_size;
+				aint j = last_line.count() - 1, line_size;
 
 				if (FLAG(flags,TO_FORCE_SINGLELINE) || (FLAG(flags,TO_END_ELLIPSIS) && pen.y + fonts_stack.last()->height * 3 / 2 >= boundy))
 				{
@@ -947,11 +949,11 @@ struct text_parser_s
 					while (j >= rite_rite && last_line.get(j).type != meta_glyph_s::SPACE) j--;
 
 					char charclass[30];
-					int start = j+1, n = last_line.count() - start;
+					aint start = j+1, n = last_line.count() - start;
 					if (hyphenation_tag_nesting_level && n < LENGTH(charclass)-3)//нужно смотреть на 3 буквы вперёд, чтобы работали правила gss-ssg и gs-ssg
 					{
 						//Перенос слов по слогам реализован на основе упрощённого алгоритма П.Христова http://sites.google.com/site/foliantapp/project-updates/hyphenation
-						int nn = tmin(n+3, text.l - (cur_text_index-n+1)), i = 0;
+						aint nn = tmin(n+3, text.l - (cur_text_index-n+1)), i = 0;
 
 						while (i<n && wcschr(L"(\"«", last_line.get(i+start).ch)) // skip valid characters before word begin
 							charclass[i++] = 0;
@@ -1003,7 +1005,7 @@ struct text_parser_s
 						newLineLen += hyphenGlyph.advance;
 
 						//Ищем последний перенос
-						for (int i=n-1; i>2; i--)//не разрешаем переносить менее 3-х букв с начала и конца слова
+						for (aint i=n-1; i>2; i--)//не разрешаем переносить менее 3-х букв с начала и конца слова
 							if ((newLineLen -= last_line.get(i+start).advance) <= cur_max_line_len && charclass[i-1] == '-' && i < nn-2)
 							{
 								line_size = start + i;
@@ -1048,17 +1050,17 @@ end:;
                     else if (paragraph.align == paragraph_s::AJUSTIFY) { W = cur_max_line_len - W - WR; lineW = cur_max_line_len - WR; }
 					else if (paragraph.align == paragraph_s::ACENTER) offset.x = (cur_max_line_len - W - WR)/2;
 
-                    if (prev_line_dim_glyph_index >= 0) glyphs->get(prev_line_dim_glyph_index).next_dim_glyph = glyphs->count();
-                    prev_line_dim_glyph_index = glyphs->count();
+                    if (prev_line_dim_glyph_index >= 0) glyphs->get(prev_line_dim_glyph_index).next_dim_glyph = (int)glyphs->count();
+                    prev_line_dim_glyph_index = (int)glyphs->count();
                     glyph_image_s &gi = glyphs->add(); // service glyph with line dimension
 
                     gi.pixels = nullptr;
                     gi.outline_index = -1;
                     gi.next_dim_glyph = -1;
-                    gi.line_lt.x = (int16)(offset.x + pen.x);
-                    gi.line_lt.y = (int16)(offset.y + pen.y - H);
-                    gi.line_rb.x = (int16)(gi.line_lt.x + lineW);
-                    gi.line_rb.y = (int16)(gi.line_lt.y + H);
+                    gi.line_lt().x = (int16)(offset.x + pen.x);
+                    gi.line_lt().y = (int16)(offset.y + pen.y - H);
+                    gi.line_rb().x = (int16)(gi.line_lt().x + lineW);
+                    gi.line_rb().y = (int16)(gi.line_lt().y + H);
 
 					int spaceIndex = 0, offX = 0; // AJUSTIFY
                     int oldpenx = pen.x;
@@ -1124,7 +1126,7 @@ end:;
 		{
             if (ASSERT(glyphs->get(0).pixels == nullptr))
             {
-                glyphs->get(0).outline_index = glyphs->count();
+                glyphs->get(0).outline_index = (int)glyphs->count();
                 glyphs->append_buf(outlined_glyphs);
             }
 		}
@@ -1155,11 +1157,11 @@ irect glyphs_bound_rect(const GLYPHS &glyphs)
         if (gi.pixels == nullptr || gi.charindex < 0)
             continue;
 
-		res.combine( irect(gi.pos, gi.pos+svec2(gi.width, gi.height)) );
+		res.combine( irect(gi.pos(), ts::ivec2( gi.pos() + svec2(gi.width, gi.height))) );
 
 		if (gi.thickness > 0)
 		{
-			ivec2 start( gi.pos + gi.start_pos );
+			ivec2 start( gi.pos() + gi.start_pos() );
 			float thick = (tmax(gi.thickness, 1.f) - 1)*.5f;
 			int d = lceil(thick);
 			start.y -= d;
@@ -1172,7 +1174,7 @@ irect glyphs_bound_rect(const GLYPHS &glyphs)
 
 int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p, bool strong)
 {
-    int cnt = glyphs.count();
+    aint cnt = glyphs.count();
     int glyphs_start = 0;
     if (cnt && glyphs.get(0).pixels == nullptr && glyphs.get(0).outline_index > 0)
     {
@@ -1190,7 +1192,7 @@ int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p, bool strong)
                 continue;
             }
 
-            if ( p.y <= gi.line_rb.y || gi.next_dim_glyph < 0 )
+            if ( p.y <= gi.line_rb().y || gi.next_dim_glyph < 0 )
             {
                 if (gi.next_dim_glyph > 0)
                     cnt = gi.next_dim_glyph;
@@ -1203,7 +1205,7 @@ int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p, bool strong)
                 {
                     const glyph_image_s &gic = glyphs.get(j);
                     if (gic.charindex < 0) continue;
-                    int d = tabs(gic.pos.x + gic.width / 2 - p.x);
+                    int d = tabs(gic.pos().x + gic.width / 2 - p.x);
                     if (d < mind)
                     {
                         mind = d;
@@ -1226,10 +1228,10 @@ int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p, bool strong)
     return -1;
 }
 
-int glyphs_get_charindex(const GLYPHS &glyphs, int glyphindex)
+int glyphs_get_charindex(const GLYPHS &glyphs, aint glyphindex)
 {
     if (glyphindex < 0) return -1;
-    int glyphc = glyphs.count();
+    aint glyphc = glyphs.count();
     if (glyphc && glyphs.get(0).pixels == nullptr && glyphs.get(0).outline_index > 0)
         glyphc =glyphs.get(0).outline_index;
     if (glyphindex < 0) glyphindex = 0;

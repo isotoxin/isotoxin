@@ -103,10 +103,10 @@ protected:
 
     void prepare_children_z_sorted();
 
-    int child_index(RID rid) const
+    ts::aint child_index(RID rid) const
     {
-        int cnt = children.size();
-        for (int i = 0; i < cnt; ++i)
+        ts::aint cnt = children.size();
+        for ( ts::aint i = 0; i < cnt; ++i)
             if (rectengine_c *e = children.get(i))
                 if (e->getrid() == rid) return i;
         return -1;
@@ -133,7 +133,7 @@ public:
     void z_resort_children(); // resort children according to zindex
     bool children_sort( SWAP_TESTER swap_them ); // custom order of children
     void child_move_top( rectengine_c *e ) { child_move_to(0, e); }
-    void child_move_to( int index, rectengine_c *e );
+    void child_move_to( ts::aint index, rectengine_c *e );
     
 
     const guirect_c &getrect() const { ASSERT(this); return SAFE_REF(rect_); } //-V704
@@ -174,25 +174,25 @@ public:
         return screenpos;
     }
    
-    void trunc_children(int index);
+    void trunc_children( ts::aint index);
     void add_child(rectengine_c *re, RID after);
     ts::aint children_count() const { return children.size();}
     rectengine_c *get_child(ts::aint index) {return children.get(index);};
     const rectengine_c *get_child(ts::aint index) const {return children.get(index);};
-    int get_child_index(const rectengine_c *e) const { return children.find(e); }
+    ts::aint get_child_index(const rectengine_c *e) const { return children.find(e); }
     rectengine_c *get_last_child();
     rectengine_c *get_prev_child(const rectengine_c *e)
     {
-        int i = children.find_rev(e);
+        ts::aint i = children.find_rev(e);
         if (i >= 0)
             while (--i >= 0)
                 if (rectengine_c * re = children.get(i))
                     return re;
         return nullptr;
     }
-    rectengine_c *get_next_child( const rectengine_c *e, int *index = nullptr )
+    rectengine_c *get_next_child( const rectengine_c *e, ts::aint *index = nullptr )
     {
-        int i = children.find(e);
+        ts::aint i = children.find(e);
         if (i >= 0)
             while( ++i < children.size() )
                 if ( rectengine_c * re = children.get(i) )
@@ -347,8 +347,8 @@ public:
 	rectengine_root_c(bool sys);
 	~rectengine_root_c();
 
-    /*virtual*/ void manual_move_resize( bool f ) { flags.init(F_MANUAL, f); }
-    /*virtual*/ bool is_manual_move_resize() const { return flags.is(F_MANUAL); }
+    /*virtual*/ void manual_move_resize( bool f ) override { flags.init(F_MANUAL, f); }
+    /*virtual*/ bool is_manual_move_resize() const override { return flags.is(F_MANUAL); }
 
     bool is_dip() const {return flags.is(F_DIP) || nullptr == rect();}
 
@@ -432,6 +432,7 @@ INLINE ts::ivec2 guirect_c::root_to_local(const ts::ivec2 &rootpt) const
 
 struct drawcollector
 {
+    MOVABLE(true);
     drawcollector() : engine(nullptr) {}
     explicit drawcollector(rectengine_root_c *root) :engine(rectengine_root_c::redraw_collector(root)) {}
     ~drawcollector()
@@ -468,12 +469,12 @@ public:
 	rectengine_child_c(guirect_c *parent, RID after);
 	~rectengine_child_c();
 
-    /*virtual*/ void manual_move_resize( bool f )
+    /*virtual*/ void manual_move_resize( bool f ) override
     {
         if (rectengine_root_c *root = getrect().getroot())
             root->manual_move_resize(f);
     }
-    /*virtual*/ bool is_manual_move_resize() const
+    /*virtual*/ bool is_manual_move_resize() const override
     {
         if (rectengine_root_c *root = getrect().getroot())
             return root->is_manual_move_resize();

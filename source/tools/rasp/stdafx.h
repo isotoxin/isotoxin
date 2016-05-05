@@ -12,7 +12,9 @@
 #include <tchar.h>
 #include <conio.h>
 
+#include <src/cairo.h>
 #include "toolset/toolset.h"
+#include "rsvg/rsvg.h"
 #include "rasp.h"
 #include "client.h"
 

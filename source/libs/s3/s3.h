@@ -22,6 +22,11 @@
 
 namespace s3
 {
+#if defined (_M_AMD64) || defined (WIN64) || defined (__LP64__)
+typedef ptrdiff_t s3int;
+#else
+typedef int s3int;
+#endif
 
 struct Format
 {
@@ -61,7 +66,7 @@ class Source //базовый класс для источников звука (лучше использовать сразу MSou
 	friend class Slot;
     friend class Player;
 	Source &operator=(const Source &) = delete;//запрещаем присваивание
-	static int readFunc(char *dest, int size, void *userPtr) {return ((Source*)userPtr)->read(dest, size);}
+	static s3int readFunc(char *dest, s3int size, void *userPtr) {return ((Source*)userPtr)->read(dest, size);}
 	static Source *firstSourceToDelete;
 	Source *nextSourceToDelete;
 protected:
@@ -83,7 +88,7 @@ public:
 	virtual ~Source() {}//*if (slotIndex != -1) */stop();}//останавливать звук нужно всегда в производных классах, т.к. иначе возможен pure virtual call of read(), т.к. заход в крит. секцию внутри stop() будет уже после разрушения производного класса
     virtual void die() { delete this; }
 
-	virtual int read(char *dest, int size) = 0;//нужно прочитать данные в dest буфер и вернуть размер прочитанных данных (0 в случае конца файла, < 0 - в случае ошибки)
+	virtual s3int read(char *dest, s3int size) = 0;//нужно прочитать данные в dest буфер и вернуть размер прочитанных данных (0 в случае конца файла, < 0 - в случае ошибки)
 	virtual void rewind(bool start) {if (!start) ErrorHandler(EL_ERROR, "Can't loop sound since rewind() not implemented");}
 
 //	void canPlayNow();
@@ -102,8 +107,8 @@ class MSource : public Source//базовый класс для пользовательских источников зву
 	const char *data;
 	int size, pos;
 	float startPlayOnInit;
-	/*virtual*/ int read(char *dest, int size);
-	/*virtual*/ void rewind(bool /*start*/) {pos = 0;}
+	/*virtual*/ s3int read(char *dest, s3int size) override;
+	/*virtual*/ void rewind(bool /*start*/) override {pos = 0;}
 
 public:
 	MSource(Player *player, SoundGroup soundGroup) : Source(player, soundGroup), startPlayOnInit(-1) {init();}
@@ -121,8 +126,8 @@ class PSource : public Source//базовый класс для пользовательских источников зву
 	float startPlayOnPrefetchComplete;
 	bool waitingForPrefetchComplete, active, eof,
 		looped;//зацикленность звука с префетчем нужно задавать заранее, т.к. prefetch делается заранее, еще до вызова play()
-	/*virtual*/ int read(char *dest, int size);
-	/*virtual*/ void rewind(bool start);
+	/*virtual*/ s3int read(char *dest, s3int size) override;
+	/*virtual*/ void rewind(bool start) override;
 
 public:
 	PSource(Player *player, SoundGroup soundGroup, bool looped = false, bool activate = false, int prefetchBufferSize = 0, char *extPrefetchBuffer = nullptr);
@@ -140,8 +145,8 @@ public:
 class RawSource : public Source//базовый класс для пользовательских источников звука, данные которых уже распакованы (т.е. представлены в виде RAW-семплов без заголовка)
 {
 	int readStage = 0;
-	/*virtual*/ int read(char *dest, int size);
-	/*virtual*/ void rewind(bool start);
+	/*virtual*/ s3int read(char *dest, s3int size) override;
+	/*virtual*/ void rewind(bool start) override;
 
 public:
 	//Эти параметры нужно заполнить перед началом проигрывания
@@ -152,7 +157,7 @@ public:
 
 	void play(bool looping = false, float time = 0) {Source::play(looping, time);}
 
-	virtual int rawRead(char *dest, int size) = 0;
+	virtual s3int rawRead(char *dest, s3int size) = 0;
 	virtual void rawRewind(bool start) {if (!start) ErrorHandler(EL_ERROR, "Can't loop sound since rawRewind() not implemented");}
 };
 
@@ -208,7 +213,12 @@ static const SlotInitParams defaultSlotsInitParams[SG_COUNT] = {S3_SOUND_GROUPS}
 class Player
 {
 public:
-    unsigned char data[64]; // its public, but you should not modify it - internal data
+#if defined (_M_AMD64) || defined (WIN64) || defined (__LP64__)
+    enum { player_data_size = 128 };
+#else
+    enum { player_data_size = 64 };
+#endif
+    unsigned char data[ player_data_size ]; // its public, but you should not modify it - internal data
     InitParams params;
 
     Player();

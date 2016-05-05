@@ -10,10 +10,10 @@ class ccollection_c
     array_del_t<container_c, 2> m_containers;
 	uint m_idpool;
 
-	container_c *find(uint container_id, int &index)
+	container_c *find(uint container_id, aint &index)
 	{
-		int cnt = m_containers.size();
-		for(int i=0;i<cnt;++i)
+		aint cnt = m_containers.size();
+		for(aint i=0;i<cnt;++i)
 		{
 			container_c *c = m_containers.get(i);
 			if (c->get_id() == container_id)

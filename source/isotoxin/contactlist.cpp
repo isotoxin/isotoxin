@@ -548,7 +548,7 @@ void gui_contact_item_c::update_text()
                 newtext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTASTR(",2>"));
             } else
             {
-                newtext.append(CONSTASTR("<br>(")).append_as_int( contact->subonlinecount() ).append_char('/').append_as_int( contact->subcount() ).append_char(')');
+                newtext.append(CONSTASTR("<br>(")).append_as_int( contact->subonlinecount() ).append_char('/').append_as_num( contact->subcount() ).append_char(')');
                 if (active_protocol_c *ap = prf().ap( contact->getkey().protoid ))
                     newtext.append(CONSTASTR(" <l>")).append(ap->get_name()).append(CONSTASTR("</l>"));
             }
@@ -621,7 +621,7 @@ void gui_contact_item_c::update_text()
                         // Simple linear iteration... not so fast, yeah. 
                         // But I hope number of found items is not so huge
 
-                        int cntitems = 0;
+                        ts::aint cntitems = 0;
                         for (const found_item_s &fi : g_app->found_items->items)
                             if (fi.historian == contact->getkey())
                             {
@@ -1543,7 +1543,7 @@ bool gui_contact_item_c::allow_drop() const
             };
 
             rectengine_c &pareng = HOLD(getparent()).engine();
-            int nchild = pareng.children_count();
+            ts::aint nchild = pareng.children_count();
 
 
             menu_c m;
@@ -1668,8 +1668,8 @@ bool gui_contact_item_c::is_after(gui_contact_item_c &ci)
     if (otherstate > mystate) return true;
     if (otherstate < mystate) return false;
 
-    int cap1 = contacts().contact_activity_power( contact->getkey() );
-    int cap2 = contacts().contact_activity_power( ci.contact->getkey() );
+    ts::aint cap1 = contacts().contact_activity_power( contact->getkey() );
+    ts::aint cap2 = contacts().contact_activity_power( ci.contact->getkey() );
     if (cap2 == cap1)
         return ci.contact->getkey().contactid > contact->getkey().contactid;
     return cap2 > cap1;
@@ -1713,9 +1713,9 @@ void gui_contactlist_c::refresh_array()
 {
     ASSERT(role != CLR_MAIN_LIST && arr != nullptr);
 
-    int count = getengine().children_count();
+    ts::aint count = getengine().children_count();
     int index = 0;
-    for (int i = skipctl; i < count; ++i, ++index)
+    for ( ts::aint i = skipctl; i < count; ++i, ++index)
     {
         rectengine_c *ch = getengine().get_child(i);
         if (ch)
@@ -2037,8 +2037,8 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
     {
         recreate_ctls();
 
-        int count = getengine().children_count();
-        for (int i = skipctl; i < count; ++i)
+        ts::aint count = getengine().children_count();
+        for ( ts::aint i = skipctl; i < count; ++i)
         {
             if (rectengine_c *ch = getengine().get_child(i))
             {
@@ -2078,8 +2078,8 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_DRAGNDROP> &dnda)
     ts::irect rect = gui->dragndrop_objrect();
     int area = rect.area() / 3;
     rectengine_c *yo = nullptr;
-    int count = getengine().children_count();
-    for (int i = skipctl; i < count; ++i)
+    ts::aint count = getengine().children_count();
+    for ( ts::aint i = skipctl; i < count; ++i)
     {
         rectengine_c *ch = getengine().get_child(i);
         if (ch)
@@ -2137,8 +2137,8 @@ ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_V_UPDATE_CONTACT> & c )
         return 0;
     }
 
-    int count = getengine().children_count();
-    for(int i=skipctl;i<count;++i)
+    ts::aint count = getengine().children_count();
+    for( ts::aint i=skipctl;i<count;++i)
     {
         rectengine_c *ch = getengine().get_child(i);
         if (ch)

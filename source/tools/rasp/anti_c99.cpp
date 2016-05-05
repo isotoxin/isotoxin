@@ -135,7 +135,7 @@ bool is_num(const str_c &s)
 bool find_c99(const astrings_c & lines, int &sl, int &el)
 {
     decomment dc;
-    int cnt = lines.size();
+    int cnt = (int)lines.size();
     for (int ln = 0; ln < cnt; ++ln)
     {
         str_c l = dc(lines.get(ln));
@@ -176,7 +176,7 @@ bool find_c99(const astrings_c & lines, int &sl, int &el)
         if (vars < 0)
             continue;
 
-        int bre = -1; int brc = 0;
+        int bre = -1, brc = 0;
         for (int i = brs + 1; i < l.get_length(); ++i)
         {
             if (l.get_char(i) == '[') ++brc;
@@ -275,7 +275,7 @@ bool find_c99(const astrings_c & lines, int &sl, int &el)
 
 bool __find_c99( const astrings_c & lines, int &sl, int &el  )
 {
-    int cnt = lines.size();
+    int cnt = (int)lines.size();
     for(int i=0;i<cnt;++i)
     {
         str_c l = lines.get(i);
@@ -304,7 +304,7 @@ bool __find_c99( const astrings_c & lines, int &sl, int &el  )
 
             sl = ii;
 
-            int braket = 0;
+            aint braket = 0;
             for(int j=i+1;j<cnt;++j)
             {
                 str_c ll = lines.get(j);
@@ -399,7 +399,7 @@ bool fix_c99(astrings_c & lines, int sl, int el)
         }
     }
     if (vars < 0) return false;
-    int bre = -1; int brc = 0;
+    int bre = -1, brc = 0;
     for (int i = brs + 1; i < l.get_length(); ++i)
     {
         if (l.get_char(i) == '[') ++brc;

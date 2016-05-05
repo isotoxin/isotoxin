@@ -69,7 +69,7 @@ static void _png_free(png_structp png_ptr, png_voidp data)
 
 static bool pngdatareader(img_reader_s &r, void * buf, int pitch);
 
-image_read_func img_reader_s::detect_png_format(const void *sourcebuf, int sourcebufsize)
+image_read_func img_reader_s::detect_png_format(const void *sourcebuf, aint sourcebufsize)
 {
     uint32 tag = *(uint32 *)sourcebuf;
     if (tag != 1196314761) return nullptr;

@@ -22,16 +22,15 @@
 /////////////////////////////////////////////////////////////////////
 namespace ts
 {
-
+#ifndef MODE64
 #define USE_ASM
+#endif
 
 #ifdef _MSC_VER
 	#pragma warning(disable: 4799)		// function has no EMMS instruction
 #endif
 
 typedef signed __int64	sint64;
-typedef unsigned		Pixel;
-typedef unsigned		Pixel32;
 typedef unsigned char	Pixel8;
 typedef long			PixCoord;
 typedef	long			PixDim;
@@ -135,9 +134,10 @@ struct VDRotate2FilterData
 
 /////////////////////////////////////////////////////////////////////
 
+#ifdef USE_ASM
 extern "C" void __cdecl asm_rotate_point(
-		Pixel *src,
-		Pixel *dst,
+        uint32 *src,
+        uint32 *dst,
 		long width,
 		long Ufrac,
 		long Vfrac,
@@ -147,8 +147,8 @@ extern "C" void __cdecl asm_rotate_point(
 		long Vstep);
 
 extern "C" void __cdecl asm_rotate_bilinear(
-		Pixel *src,
-		Pixel *dst,
+        uint32 *src,
+        uint32 *dst,
 		long width,
 		long pitch,
 		long Ufrac,
@@ -157,10 +157,11 @@ extern "C" void __cdecl asm_rotate_bilinear(
 		long UVintstepnoV,
 		long Ustep,
 		long Vstep);
+#endif
 
 /////////////////////////////////////////////////////////////////////
 
-static Pixel32 bilinear_interp(Pixel32 c1, Pixel32 c2, Pixel32 c3, Pixel32 c4, unsigned long cox, unsigned long coy) {
+static uint32 bilinear_interp( uint32 c1, uint32 c2, uint32 c3, uint32 c4, unsigned long cox, unsigned long coy) {
 	int co1, co2, co3, co4;
 
 	co4 = (cox * coy) >> 8;
@@ -168,10 +169,10 @@ static Pixel32 bilinear_interp(Pixel32 c1, Pixel32 c2, Pixel32 c3, Pixel32 c4, u
 	co2 = cox - co4;
 	co1 = 0x100 - coy - co2;
 
-	Pixel32 cc1 = (c1 >> 8) & 0x00FF00FF;
-	Pixel32 cc2 = (c2 >> 8) & 0x00FF00FF;
-	Pixel32 cc3 = (c3 >> 8) & 0x00FF00FF;
-	Pixel32 cc4 = (c4 >> 8) & 0x00FF00FF;
+    uint32 cc1 = (c1 >> 8) & 0x00FF00FF;
+    uint32 cc2 = (c2 >> 8) & 0x00FF00FF;
+    uint32 cc3 = (c3 >> 8) & 0x00FF00FF;
+    uint32 cc4 = (c4 >> 8) & 0x00FF00FF;
 
 	return  ((((c1 & 0x00FF00FF)*co1 + (c2 & 0x00FF00FF)*co2 + (c3 & 0x00FF00FF)*co3 + (c4 & 0x00FF00FF)*co4)>>8)&0x00FF00FF)
 			+ (((cc1 * co1) + (cc2 * co2) + (cc3 * co3) + (cc4 * co4)) & 0xFF00FF00);
@@ -182,11 +183,11 @@ static Pixel32 bilinear_interp(Pixel32 c1, Pixel32 c2, Pixel32 c3, Pixel32 c4, u
 #define GRN(x) ((signed long)((x)>> 8)&255)
 #define BLU(x) ((signed long)(x)&255)
 
-static inline Pixel cc(const Pixel *yptr, const int *tbl) {
-	const Pixel y1 = yptr[0];
-	const Pixel y2 = yptr[1];
-	const Pixel y3 = yptr[2];
-	const Pixel y4 = yptr[3];
+static inline uint32 cc(const uint32 *yptr, const int *tbl) {
+	const uint32 y1 = yptr[0];
+	const uint32 y2 = yptr[1];
+	const uint32 y3 = yptr[2];
+	const uint32 y4 = yptr[3];
 	long alpha, red, grn, blu;
 
 	alpha = ALPHA(y1)*tbl[0] + ALPHA(y2)*tbl[1] + ALPHA(y3)*tbl[2] + ALPHA(y4)*tbl[3];
@@ -208,7 +209,7 @@ static inline Pixel cc(const Pixel *yptr, const int *tbl) {
 #undef BLU
 
 #ifdef _M_IX86
-static Pixel32 __declspec(naked) __cdecl cc_MMX(const Pixel32 *src, const int *table) {
+static uint32 __declspec(naked) __cdecl cc_MMX(const uint32 *src, const int *table) {
 
 	static const sint64 x0000200000002000 = 0x0000200000002000i64;
 
@@ -267,46 +268,46 @@ static Pixel32 __declspec(naked) __cdecl cc_MMX(const Pixel32 *src, const int *t
 	}
 }
 
-static inline Pixel32 bicubic_interp_MMX(const Pixel32 *src, PixOffset pitch, unsigned long cox, unsigned long coy, const int *table) {
-	Pixel32 x[4];
+static inline uint32 bicubic_interp_MMX(const uint32 *src, PixOffset pitch, unsigned long cox, unsigned long coy, const int *table) {
+	uint32 x[4];
 
 	cox >>= 24;
 	coy >>= 24;
 
-	src = (Pixel32 *)((char *)src - pitch - 4);
+	src = (uint32 *)((char *)src - pitch - 4);
 
-	x[0] = cc_MMX(src, table+cox*4); src = (Pixel32 *)((char *)src + pitch);
-	x[1] = cc_MMX(src, table+cox*4); src = (Pixel32 *)((char *)src + pitch);
-	x[2] = cc_MMX(src, table+cox*4); src = (Pixel32 *)((char *)src + pitch);
+	x[0] = cc_MMX(src, table+cox*4); src = (uint32 *)((char *)src + pitch);
+	x[1] = cc_MMX(src, table+cox*4); src = (uint32 *)((char *)src + pitch);
+	x[2] = cc_MMX(src, table+cox*4); src = (uint32 *)((char *)src + pitch);
 	x[3] = cc_MMX(src, table+cox*4);
 
 	return cc_MMX(x, table + coy*4);
 }
 #endif
 
-static inline Pixel32 bicubic_interp(const Pixel32 *src, PixOffset pitch, unsigned long cox, unsigned long coy, const int *table) {
-	Pixel32 x[4];
+static inline uint32 bicubic_interp(const uint32 *src, PixOffset pitch, unsigned long cox, unsigned long coy, const int *table) {
+	uint32 x[4];
 
 	cox >>= 24;
 	coy >>= 24;
 
-	src = (Pixel32 *)((char *)src - pitch - 4);
+	src = (uint32 *)((char *)src - pitch - 4);
 
-	x[0] = cc(src, table+cox*4); src = (Pixel32 *)((char *)src + pitch);
-	x[1] = cc(src, table+cox*4); src = (Pixel32 *)((char *)src + pitch);
-	x[2] = cc(src, table+cox*4); src = (Pixel32 *)((char *)src + pitch);
+	x[0] = cc(src, table+cox*4); src = (uint32 *)((char *)src + pitch);
+	x[1] = cc(src, table+cox*4); src = (uint32 *)((char *)src + pitch);
+	x[2] = cc(src, table+cox*4); src = (uint32 *)((char *)src + pitch);
 	x[3] = cc(src, table+cox*4);
 
 	return cc(x, table + coy*4);
 }
 
-static Pixel32 ColorRefToPixel32( TSCOLOR rgb) {
-	return (Pixel32)(((rgb>>16)&0xff) | ((rgb<<16)&0xff0000) | (rgb&0xff00));
+static uint32 ColorRefToPixel32( TSCOLOR rgb) {
+	return (uint32)(((rgb>>16)&0xff) | ((rgb<<16)&0xff0000) | (rgb&0xff00));
 }
 
 static int rotate2_run(VDRotate2FilterData *mfd ) {
 	sint64 xaccum, yaccum;
-	Pixel32 *src, *dst, pixFill;
+	uint32 *src, *dst, pixFill;
 	PixDim w, h;
 	const RotateRow *rr = mfd->rows;
 	const sint64 du = mfd->u_step;
@@ -323,7 +324,7 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 	UVintstepnoV = (long)(du>>32) + (long)(dv>>32)*(mfd->src_pitch>>2);
 	UVintstepV = UVintstepnoV + (mfd->src_pitch>>2);
 
-	dst = (Pixel32* )mfd->dst;
+	dst = (uint32* )mfd->dst;
 	pixFill = ColorRefToPixel32(mfd->rgbColor);
 
 	h = mfd->dst_h;
@@ -345,13 +346,13 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 
 #ifdef USE_ASM
 				asm_rotate_point(
-					(Pixel32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch),
+					(uint32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch),
 					dst,
 					w,
 					(unsigned long)xaccum,
 					(unsigned long)yaccum,
-					UVintstepV,
-					UVintstepnoV,
+					(long)UVintstepV,
+                    (long)UVintstepnoV,
 					Ustep,
 					Vstep);
 
@@ -359,7 +360,7 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 
 #else
 				do {
-					*dst++ = *(Pixel32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch);
+					*dst++ = *(uint32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch);
 
 					xaccum += du;
 					yaccum += dv;
@@ -372,8 +373,8 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 			w = rr->left;
 			if (w) {
 				do {
-					Pixel32 *src = (Pixel32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch);
-					Pixel32 c1, c2, c3, c4;
+					uint32 *src = (uint32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch);
+					uint32 c1, c2, c3, c4;
 
 					int px = (int)(xaccum >> 32);
 					int py = (int)(yaccum >> 32);
@@ -381,28 +382,28 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 					if (px<0 || py<0 || px>=mfd->src_w || py>=mfd->src_h)
 						c1 = pixFill;
 					else
-						c1 = *(Pixel32 *)((char *)src + 0);
+						c1 = *(uint32 *)((char *)src + 0);
 
 					++px;
 
 					if (px<0 || py<0 || px>=mfd->src_w || py>=mfd->src_h)
 						c2 = pixFill;
 					else
-						c2 = *(Pixel32 *)((char *)src + 4);
+						c2 = *(uint32 *)((char *)src + 4);
 
 					++py;
 
 					if (px<0 || py<0 || px>=mfd->src_w || py>=mfd->src_h)
 						c4 = pixFill;
 					else
-						c4 = *(Pixel32 *)((char *)src + 4 + mfd->src_pitch);
+						c4 = *(uint32 *)((char *)src + 4 + mfd->src_pitch);
 
 					--px;
 
 					if (px<0 || py<0 || px>=mfd->src_w || py>=mfd->src_h)
 						c3 = pixFill;
 					else
-						c3 = *(Pixel32 *)((char *)src + 0 + mfd->src_pitch);
+						c3 = *(uint32 *)((char *)src + 0 + mfd->src_pitch);
 
 					*dst++ = bilinear_interp(c1, c2, c3, c4, (unsigned long)xaccum >> 24, (unsigned long)yaccum >> 24);
 
@@ -415,14 +416,14 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 			if (w) {
 #ifdef USE_ASM
 				asm_rotate_bilinear(
-						(Pixel32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch),
+						(uint32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch),
 						dst,
 						w,
 						mfd->src_pitch,
 						(unsigned long)xaccum,
 						(unsigned long)yaccum,
-						UVintstepV,
-						UVintstepnoV,
+                    (long)UVintstepV,
+                    (long)UVintstepnoV,
 						Ustep,
 						Vstep);
 
@@ -431,14 +432,14 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 				dst += w;
 #else
 				do {
-					Pixel32 *src = (Pixel32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch);
-					Pixel32 c1, c2, c3, c4, cY;
+					uint32 *src = (uint32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch);
+					uint32 c1, c2, c3, c4, cY;
 					int co1, co2, co3, co4, cox, coy;
 
-					c1 = *(Pixel32 *)((char *)src + 0);
-					c2 = *(Pixel32 *)((char *)src + 4);
-					c3 = *(Pixel32 *)((char *)src + 0 + mfd->src_pitch);
-					c4 = *(Pixel32 *)((char *)src + 4 + mfd->src_pitch);
+					c1 = *(uint32 *)((char *)src + 0);
+					c2 = *(uint32 *)((char *)src + 4);
+					c3 = *(uint32 *)((char *)src + 0 + mfd->src_pitch);
+					c4 = *(uint32 *)((char *)src + 4 + mfd->src_pitch);
 
 					cox = ((unsigned long)xaccum >> 24);
 					coy = ((unsigned long)yaccum >> 24);
@@ -448,10 +449,10 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 					co2 = cox - co4;
 					co1 = 0x100 - coy - co2;
 
-					Pixel32 cc1 = (c1 >> 8) & 0x00FF00FF;
-					Pixel32 cc2 = (c2 >> 8) & 0x00FF00FF;
-					Pixel32 cc3 = (c3 >> 8) & 0x00FF00FF;
-					Pixel32 cc4 = (c4 >> 8) & 0x00FF00FF;
+					uint32 cc1 = (c1 >> 8) & 0x00FF00FF;
+					uint32 cc2 = (c2 >> 8) & 0x00FF00FF;
+					uint32 cc3 = (c3 >> 8) & 0x00FF00FF;
+					uint32 cc4 = (c4 >> 8) & 0x00FF00FF;
 
 					cY =  ((((c1 & 0x00FF00FF)*co1 + (c2 & 0x00FF00FF)*co2 + (c3 & 0x00FF00FF)*co3 + (c4 & 0x00FF00FF)*co4)>>8)&0x00FF00FF);
 					cY += ((cc1 * co1) + (cc2 * co2) + (cc3 * co3) + (cc4 * co4)) & 0xFF00FF00;
@@ -470,8 +471,8 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 			w = rr->right;
 			if (w) {
 				do {
-					Pixel32 *src = (Pixel32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch);
-					Pixel32 c1, c2, c3, c4;
+					uint32 *src = (uint32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch);
+					uint32 c1, c2, c3, c4;
 
 					int px = (int)(xaccum >> 32);
 					int py = (int)(yaccum >> 32);
@@ -479,28 +480,28 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 					if (px<0 || py<0 || px>=mfd->src_w || py>=mfd->src_h)
 						c1 = pixFill;
 					else
-						c1 = *(Pixel32 *)((char *)src + 0);
+						c1 = *(uint32 *)((char *)src + 0);
 
 					++px;
 
 					if (px<0 || py<0 || px>=mfd->src_w  || py>=mfd->src_h)
 						c2 = pixFill;
 					else
-						c2 = *(Pixel32 *)((char *)src + 4);
+						c2 = *(uint32 *)((char *)src + 4);
 
 					++py;
 
 					if (px<0 || py<0 || px>=mfd->src_w  || py>=mfd->src_h)
 						c4 = pixFill;
 					else
-						c4 = *(Pixel32 *)((char *)src + 4 + mfd->src_pitch);
+						c4 = *(uint32 *)((char *)src + 4 + mfd->src_pitch);
 
 					--px;
 
 					if (px<0 || py<0 || px>=mfd->src_w  || py>=mfd->src_h)
 						c3 = pixFill;
 					else
-						c3 = *(Pixel32 *)((char *)src + 0 + mfd->src_pitch);
+						c3 = *(uint32 *)((char *)src + 0 + mfd->src_pitch);
 
 					*dst++ = bilinear_interp(c1, c2, c3, c4, (unsigned long)xaccum >> 24, (unsigned long)yaccum >> 24);
 
@@ -514,8 +515,8 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 			w = rr->left;
 			if (w) {
 				do {
-					Pixel32 *src = (Pixel32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch);
-					Pixel32 c1, c2, c3, c4;
+					uint32 *src = (uint32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch);
+					uint32 c1, c2, c3, c4;
 
 					int px = (int)(xaccum >> 32);
 					int py = (int)(yaccum >> 32);
@@ -523,28 +524,28 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 					if (px<0 || py<0 || px>=mfd->src_w || py>=mfd->src_h)
 						c1 = pixFill;
 					else
-						c1 = *(Pixel32 *)((char *)src + 0);
+						c1 = *(uint32 *)((char *)src + 0);
 
 					++px;
 
 					if (px<0 || py<0 || px>=mfd->src_w || py>=mfd->src_h)
 						c2 = pixFill;
 					else
-						c2 = *(Pixel32 *)((char *)src + 4);
+						c2 = *(uint32 *)((char *)src + 4);
 
 					++py;
 
 					if (px<0 || py<0 || px>=mfd->src_w || py>=mfd->src_h)
 						c4 = pixFill;
 					else
-						c4 = *(Pixel32 *)((char *)src + 4 + mfd->src_pitch);
+						c4 = *(uint32 *)((char *)src + 4 + mfd->src_pitch);
 
 					--px;
 
 					if (px<0 || py<0 || px>=mfd->src_w || py>=mfd->src_h)
 						c3 = pixFill;
 					else
-						c3 = *(Pixel32 *)((char *)src + 0 + mfd->src_pitch);
+						c3 = *(uint32 *)((char *)src + 0 + mfd->src_pitch);
 
 					*dst++ = bilinear_interp(c1, c2, c3, c4, (unsigned long)xaccum >> 24, (unsigned long)yaccum >> 24);
 
@@ -558,7 +559,7 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 				sint64 xa = xaccum;
 				sint64 ya = yaccum;
 
-				src = (Pixel32*)((char *)mfd->src + (int)(xa>>32)*4 + (int)(ya>>32)*mfd->src_pitch);
+				src = (uint32*)((char *)mfd->src + (int)(xa>>32)*4 + (int)(ya>>32)*mfd->src_pitch);
 
 				xaccum += du * w;
 				yaccum += dv * w;
@@ -594,8 +595,8 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 			w = rr->right;
 			if (w) {
 				do {
-					Pixel32 *src = (Pixel32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch);
-					Pixel32 c1, c2, c3, c4;
+					uint32 *src = (uint32*)((char *)mfd->src + (int)(xaccum>>32)*4 + (int)(yaccum>>32)*mfd->src_pitch);
+					uint32 c1, c2, c3, c4;
 
 					int px = (int)(xaccum >> 32);
 					int py = (int)(yaccum >> 32);
@@ -603,28 +604,28 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 					if (px<0 || py<0 || px>=mfd->src_w || py>=mfd->src_h)
 						c1 = pixFill;
 					else
-						c1 = *(Pixel32 *)((char *)src + 0);
+						c1 = *(uint32 *)((char *)src + 0);
 
 					++px;
 
 					if (px<0 || py<0 || px>=mfd->src_w || py>=mfd->src_h)
 						c2 = pixFill;
 					else
-						c2 = *(Pixel32 *)((char *)src + 4);
+						c2 = *(uint32 *)((char *)src + 4);
 
 					++py;
 
 					if (px<0 || py<0 || px>=mfd->src_w || py>=mfd->src_h)
 						c4 = pixFill;
 					else
-						c4 = *(Pixel32 *)((char *)src + 4 + mfd->src_pitch);
+						c4 = *(uint32 *)((char *)src + 4 + mfd->src_pitch);
 
 					--px;
 
 					if (px<0 || py<0 || px>=mfd->src_w || py>=mfd->src_h)
 						c3 = pixFill;
 					else
-						c3 = *(Pixel32 *)((char *)src + 0 + mfd->src_pitch);
+						c3 = *(uint32 *)((char *)src + 0 + mfd->src_pitch);
 
 					*dst++ = bilinear_interp(c1, c2, c3, c4, (unsigned long)xaccum >> 24, (unsigned long)yaccum >> 24);
 
@@ -640,13 +641,13 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 			*dst++ = pixFill;
 		} while(--w);
 
-//		dst = (Pixel32 *)((char *)dst + mfd->dst.modulo);
+//		dst = (uint32 *)((char *)dst + mfd->dst.modulo);
 
 		++rr;
 
 	} while(--h);
 
-#ifndef _M_AMD64
+#ifdef _M_IX86
 	__asm emms
 #endif
 

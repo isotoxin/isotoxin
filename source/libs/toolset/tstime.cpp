@@ -4,7 +4,7 @@
 
 namespace ts
 {
-__declspec( thread ) DWORD Time::thread_current_time = 0;
+    THREADLOCAL DWORD Time::thread_current_time = 0;
 
 Time Time::current()
 {
@@ -98,7 +98,7 @@ void    timerprocessor_c::add(timer_subscriber_c *t, double ttl, void * par, boo
 
 void    timerprocessor_c::del(timer_subscriber_c *t, void * par)
 {
-    int cnt = m_items.size();
+    aint cnt = m_items.size();
     for (int i = 0; i < cnt; ++i)
     {
         timer_subscriber_entry_s *at = m_items.get(i);
@@ -152,7 +152,7 @@ void    timerprocessor_c::del(timer_subscriber_c *t)
 
 void    timerprocessor_c::its_time(timer_subscriber_c *t, void * par)
 {
-    int cnt = m_items.size();
+    aint cnt = m_items.size();
     for (int i = 0; i < cnt; ++i)
     {
         timer_subscriber_entry_s *at = m_items.get(i);

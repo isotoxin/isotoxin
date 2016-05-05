@@ -17,7 +17,7 @@ rectengine_c::rectengine_c()
 }
 rectengine_c::~rectengine_c() 
 {
-    int cnt = children.size();
+    ts::aint cnt = children.size();
     for(int i=0;i<cnt;++i)
     {
         if (rectengine_c *e = children.get(i))
@@ -108,9 +108,9 @@ bool rectengine_c::children_sort( fastdelegate::FastDelegate< bool (rectengine_c
     return false;
 }
 
-void rectengine_c::child_move_to( int index, rectengine_c *e )
+void rectengine_c::child_move_to( ts::aint index, rectengine_c *e )
 {
-    int i = children.find(e);
+    ts::aint i = children.find(e);
     if (i != index)
     {
         children.set(i, nullptr);
@@ -175,7 +175,7 @@ void rectengine_c::mouse_unlock()
     gui->mouse_lock( RID() );
 }
 
-void rectengine_c::trunc_children(int index)
+void rectengine_c::trunc_children( ts::aint index)
 {
     for (; index < children.size(); ++index)
     {
@@ -190,7 +190,7 @@ void rectengine_c::add_child(rectengine_c *re, RID after)
 {
     if (after)
     {
-        int cnt = children.size();
+        ts::aint cnt = children.size();
         for(int i=0;i<cnt;++i)
         {
             rectengine_c *c = children.get(i);
@@ -209,7 +209,7 @@ void rectengine_c::add_child(rectengine_c *re, RID after)
 
 rectengine_c *rectengine_c::get_last_child()
 {
-    for(int i=children.size() - 1; i>=0; --i)
+    for( ts::aint i=children.size() - 1; i>=0; --i)
         if (rectengine_c *e = children.get(i))
             return e;
     return nullptr;
@@ -315,7 +315,7 @@ rectengine_c *rectengine_c::get_last_child()
         z_resort_children();
         break;
     case SQ_CHILD_DESTROYED:
-        data.rect.index = child_index( data.rect.id );
+        data.rect.index = (int)child_index( data.rect.id );
         if (data.rect.index>=0) children.get(data.rect.index) = nullptr;
         DEFERRED_UNIQUE_CALL(0,DELEGATE(this,cleanup_children),nullptr);
         break;
@@ -1573,7 +1573,7 @@ void rectengine_root_c::tab_focus( RID r, bool fwd )
 {
     decltype( afocus ) sfocus( afocus );
     
-    for ( int i = sfocus.size() - 1; i >= 0; --i )
+    for ( ts::aint i = sfocus.size() - 1; i >= 0; --i )
         if ( sfocus.get( i ).expired() )
             sfocus.remove_fast(i);
 
@@ -1587,8 +1587,8 @@ void rectengine_root_c::tab_focus( RID r, bool fwd )
         return r1->getprops().pos().y < r2->getprops().pos().y;
     } );
 
-    int sel = -1;
-    for ( int i = sfocus.size() - 1; i >= 0; --i )
+    ts::aint sel = -1;
+    for ( ts::aint i = sfocus.size() - 1; i >= 0; --i )
     {
         if ( sfocus.get( i )->getrid() == r )
         {
@@ -1621,7 +1621,7 @@ void rectengine_root_c::register_afocus( guirect_c *r, bool reg )
     if ( r->getrid() == gui->get_focus() )
         refocus = true;
 
-    for(int i=afocus.size()-1;i>=0;--i)
+    for( ts::aint i=afocus.size()-1;i>=0;--i)
         if ( !afocus.get( i ) || afocus.get( i ) == r )
             afocus.remove_slow( i );
     if ( reg ) afocus.add(r);
@@ -1638,7 +1638,7 @@ RID rectengine_root_c::active_focus( RID sub )
 
     if ( !sub ) return afocus.get( afocus.size()-1 )->getrid();
 
-    int fi = afocus.find( &HOLD( sub )( ) );
+    ts::aint fi = afocus.find( &HOLD( sub )( ) );
     if (fi >= 0)
     {
         afocus.remove_slow(fi);

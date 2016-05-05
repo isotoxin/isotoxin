@@ -1,6 +1,10 @@
+
+IFNDEF MODE64
+
 	.586
 ;	.mmx
 	.model	flat
+
 	.code
 
 	public	_asm_shrink2x
@@ -95,4 +99,154 @@ loopx :
 
     ret
 
+ENDIF
+
+IFDEF MODE64
+
+	.code
+
+	public	asm_shrink2x
+	public	coloravg
+
+asm_shrink2x:
+
+	push	r12
+	push	r13
+	push	r14
+	push	r15
+	push	rdi
+	push	rsi
+	push	rbx
+
+reg_src equ rdx
+reg_dst equ rcx
+reg_srcpitch equ r10
+reg_srccpitch equ r15
+reg_dstcpitch equ r11
+reg_width equ r8
+reg_height equ r9
+
+reg_mask1 equ r13
+reg_mask2 equ r14
+
+reg_loop_x equ r12
+
+reg_temp1 equ rax
+reg_temp1d equ eax
+reg_temp2 equ rbx
+reg_temp3 equ rsi
+reg_temp4 equ rdi
+
+	mov reg_mask1, 00FF00FF00FF00FFh
+	mov reg_mask2, 0FF00FF00FF00FF00h
+
+    movsxd reg_srcpitch, dword ptr [rsp+96] ; srcpitch
+    movsxd reg_dstcpitch, dword ptr [rsp+104] ; dstcorrpitch
+
+	lea reg_srccpitch,[reg_width * 8]
+	neg reg_srccpitch
+	lea reg_srccpitch,[reg_srccpitch + reg_srcpitch * 2]
+
+loopy :
+    mov reg_loop_x, reg_width
+loopx :
+
+    mov reg_temp1, [reg_src]
+    mov reg_temp2, reg_temp1
+
+    and reg_temp1, reg_mask1 ;   0FF00FF00FF00FFh
+    and reg_temp2, reg_mask2 ; 0FF00FF00FF00FF00h
+
+    mov reg_temp3, [reg_src + reg_srcpitch]
+    mov reg_temp4, reg_temp3
+    and reg_temp3, reg_mask1
+    and reg_temp4, reg_mask2
+    add reg_temp3, reg_temp1
+    add reg_temp4, reg_temp2 ; need carry flag
+
+	mov reg_temp1, reg_temp3
+	mov reg_temp2, reg_temp4
+
+	rcr reg_temp4, 1
+	shr reg_temp3, 32
+	shr reg_temp4, 31
+
+	lea reg_temp1, [reg_temp1 + reg_temp3] ;add reg_temp1, reg_temp3
+	lea reg_temp2, [reg_temp2 + reg_temp4] ;add reg_temp2, reg_temp4
+
+	shr reg_temp1, 2
+	shr reg_temp2, 2
+
+	and reg_temp1, reg_mask1
+    and reg_temp2, reg_mask2
+    
+	lea reg_temp1, [ reg_temp1 + reg_temp2 ] ;or  reg_temp1, reg_temp2
+
+    mov [reg_dst], reg_temp1d
+
+    lea reg_src, [reg_src + 8]
+    lea reg_dst, [reg_dst + 4]
+
+    dec reg_loop_x
+    jnz loopx
+
+    lea reg_src, [reg_src+reg_srccpitch]
+    lea reg_dst, [reg_dst+reg_dstcpitch]
+
+    dec reg_height
+    jnz loopy
+
+	pop	rbx
+	pop	rsi
+	pop	rdi
+	pop	r15
+	pop	r14
+	pop	r13
+	pop	r12
+
+    ret
+
+coloravg:
+rc1 equ rcx
+rc2 equ rdx
+rc3 equ r8
+rc4 equ r9
+
+rt1 equ rax
+rt2 equ r10
+
+    mov rt1, rc1
+    mov rt2, rc2
+    and rt1, 00FF00FFh
+    and rc1, 0000FF00h
+
+    and rt2, 00FF00FFh
+    and rc2, 0000FF00h
+    add rt1, rt2
+    add rc1, rc2
+
+    mov rc2, rc3
+    and rc2, 00FF00FFh
+    and rc3, 0000FF00h
+    add rt1, rc2
+    add rc1, rc3
+
+    mov rc2, rc4
+    and rc2, 00FF00FFh
+    and rc4, 0000FF00h
+    add rt1, rc2
+    add rc1, rc4
+
+    shr rt1, 2
+    shr rc1, 2
+    and rt1, 00FF00FFh
+    and rc1, 0000FF00h
+    or  rt1, rc1
+    ret
+
+
+ENDIF
+
     end
+
+

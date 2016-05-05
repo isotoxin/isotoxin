@@ -249,7 +249,7 @@ struct evt_data_s
 
         struct
         {
-            int count;
+            ts::aint count;
         } values;
 
         struct
@@ -578,7 +578,7 @@ public:
 	guirect_c(initial_rect_data_s &data);
 	virtual ~guirect_c();
 
-    virtual void update_offset(int offset) {} // called from gui_vscrollgroup_c; offset - value of scrollbar shift, required to make rect top
+    virtual void update_offset( ts::aint offset) {} // called from gui_vscrollgroup_c; offset - value of scrollbar shift, required to make rect top
 
     virtual void update_dndobj(guirect_c *donor) {}
     virtual guirect_c * summon_dndobj(const ts::ivec2 &deltapos) { return nullptr; };
@@ -728,7 +728,7 @@ public:
 
     ts::safe_ptr<gui_popup_menu_c> popupmenu;
 
-    /*virtual*/ const theme_rect_s *themerect() const
+    /*virtual*/ const theme_rect_s *themerect() const override
     {
         return thrcache(get_state());
     }
@@ -918,7 +918,7 @@ class gui_button_c : public gui_control_c
 
         if (ts::pwstr_c(t).begins(CONSTWSTR("<img=")))
         {
-            ts::aint x = ts::pwstr_c(t).find_pos(5,'>');
+            int x = ts::pwstr_c(t).find_pos(5,'>');
             if (ASSERT(x>5))
             {
                 text.set( t.skip(x+1) );
@@ -1115,8 +1115,8 @@ protected:
     struct cri_s
     {
         ts::irect   area = ts::irect(0);
-        int         from = 0;
-        int         count = 0;
+        ts::smart_int from = 0;
+        ts::smart_int count;
         int         areasize = 0;
         bool        update_offset = false;
     };
@@ -1124,7 +1124,7 @@ protected:
     virtual void children_repos_info( cri_s &info ) const;
     virtual void on_add_child(RID id) {} // new child was added and children array was increased
     virtual void on_die_child(int index) {} // child has died, but children array not yet changed
-    virtual void on_change_children(int count) {} // children array has been shrink
+    virtual void on_change_children( ts::aint count) {} // children array has been shrink
     gui_group_c() {}
 public:
     gui_group_c(initial_rect_data_s &data) :gui_control_c(data) {}
@@ -1186,7 +1186,7 @@ protected:
     /*virtual*/ void children_repos() override;
     /*virtual*/ void on_add_child(RID id) override;
     /*virtual*/ void on_die_child(int index) override;
-    /*virtual*/ void on_change_children(int count) override;
+    /*virtual*/ void on_change_children( ts::aint count) override;
     gui_hgroup_c() {}
 public:
     gui_hgroup_c(initial_rect_data_s &data) :gui_group_c(data) { defaultthrdraw = 0; }
@@ -1246,7 +1246,7 @@ class gui_vscrollgroup_c : public gui_group_c // vertical group with vertical sc
     ts::buf0_c drawflags;
     ts::safe_ptr<rectengine_c> scroll_target;
     ts::safe_ptr<rectengine_c> top_visible;
-    int top_visible_offset = 0;
+    ts::smart_int top_visible_offset;
 
     static const ts::flags32_s::BITS F_SBVISIBLE = FLAGS_FREEBITSTART << 0;
     static const ts::flags32_s::BITS F_SBHL = FLAGS_FREEBITSTART << 1;
@@ -1430,7 +1430,7 @@ public:
     gui_menu_item_c(MAKE_CHILD<gui_menu_item_c> &data);
     /*virtual*/ ~gui_menu_item_c();
 
-    /*virtual*/ const theme_rect_s *themerect() const
+    /*virtual*/ const theme_rect_s *themerect() const override
     {
         ts::uint32 st = flags.is(F_SEPARATOR) ? 0 : get_state();
         if ( icon.info().sz >> 0 ) RESETFLAG( st, RST_ACTIVE );

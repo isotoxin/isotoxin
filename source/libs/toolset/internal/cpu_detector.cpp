@@ -15,7 +15,6 @@ namespace ts
 {
 #if _M_X64
 #if defined(_MSC_VER) && _MSC_VER > 1500
-    void __cpuidex(int CPUInfo[4], int info_type, int ecxvalue);
 #pragma intrinsic(__cpuidex)
 #define cpuid(func, func2, a, b, c, d) do {\
     int regs[4];\

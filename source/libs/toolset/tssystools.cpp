@@ -247,38 +247,13 @@ irect   TSCALL wnd_get_max_size_fs(const irect &rfrom)
     return ref_cast<irect>(mi.rcMonitor);
 }
 
-irect   TSCALL wnd_get_max_size(HWND hwnd)
-{
-    //GetWindowRect(hwnd, r);
-    //wnd_get_max_size(r, r);
-    //return;
-
-    MONITORINFO mi;
-    HMONITOR m = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-    if (m)
-    {
-        mi.cbSize = sizeof(MONITORINFO);
-        GetMonitorInfo(m, &mi);
-    }
-    else SystemParametersInfo(SPI_GETWORKAREA, 0, &mi.rcWork, 0);
-
-    return ref_cast<irect>(mi.rcWork);
-}
-
-
-ivec2 TSCALL center_pos_by_window(HWND hwnd)
-{
-    RECT r;
-    GetWindowRect(hwnd, &r);
-    return wnd_get_max_size(ref_cast<irect>(r)).center();
-}
-
 void TSCALL set_clipboard_text(const wsptr &t)
 {
+#ifdef _WIN32
     OpenClipboard(nullptr);
     EmptyClipboard();
 
-    int len = t.l + 1;
+    aint len = t.l + 1;
 
     HANDLE text = GlobalAlloc(GMEM_MOVEABLE, len * sizeof(wchar));
     void *d = GlobalLock(text);
@@ -288,12 +263,17 @@ void TSCALL set_clipboard_text(const wsptr &t)
 
     SetClipboardData(CF_UNICODETEXT, text);
     CloseClipboard();
+#endif
+#if __linux__
+    UNFINISHED("set_clipboard_text");
+#endif
 }
 
 wstr_c TSCALL get_clipboard_text()
 {
     wstr_c res;
 
+#ifdef _WIN32
     if (IsClipboardFormatAvailable(CF_UNICODETEXT) && OpenClipboard(nullptr))
     {
         HGLOBAL hg = GetClipboardData(CF_UNICODETEXT);
@@ -306,6 +286,10 @@ wstr_c TSCALL get_clipboard_text()
         }
         CloseClipboard();
     }
+#endif // _WIN32
+#if __linux__
+    UNFINISHED( "get_clipboard_text" );
+#endif
 
     return res;
 }
@@ -333,6 +317,7 @@ bitmap_c TSCALL get_clipboard_bitmap()
 {
     bitmap_c res;
 
+#ifdef _WIN32
     OpenClipboard(nullptr);
 
     if (IsClipboardFormatAvailable(CF_DIBV5))
@@ -356,6 +341,10 @@ bitmap_c TSCALL get_clipboard_bitmap()
     }
 
     CloseClipboard();
+#endif // _WIN32
+#if __linux__
+    UNFINISHED( "get_clipboard_bitmap" );
+#endif
 
     return res;
 }

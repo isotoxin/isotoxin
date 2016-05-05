@@ -20,8 +20,8 @@
 namespace ts
 {
 
+#ifndef MODE64
 #define USE_ASM
-
 
 extern "C" void _cdecl asm_sharpen_run(
 		void *dst,
@@ -42,6 +42,7 @@ extern "C" void _cdecl asm_sharpen_run_MMX(
 		unsigned long dststride,
 		long a_mult,
 		long b_mult);
+#endif
 
 #define C_TOPOK		(1)
 #define C_BOTTOMOK	(2)
@@ -108,7 +109,8 @@ static unsigned long __fastcall do_conv(const unsigned long *data, long *m, long
 }
 
 #ifndef USE_ASM
-static inline unsigned long do_conv2(unsigned long *data, long *m, long pit) {
+static inline unsigned long do_conv2(const unsigned long *data, long *m, long pit)
+{
 	long rt=0, gt=0, bt=0;
 
 	conv_add2(rt, gt, bt, data[        -1]);
@@ -141,7 +143,7 @@ void TSCALL sharpen_run(bitmap_c &obm, const uint8 *sou, const imgdesc_s &souinf
     unsigned long w,h;
 	const uint32 *src = (const uint32 *)sou;
     uint32 *dst = (uint32 *)obm.body();
-	auint pitch = souinfo.pitch;
+	long pitch = souinfo.pitch;
 
 //    ConvoluteFilterData fd;
 
@@ -160,7 +162,6 @@ void TSCALL sharpen_run(bitmap_c &obm, const uint8 *sou, const imgdesc_s &souinf
 #ifdef USE_ASM
     if (CCAPS(CPU_MMX))
     {
-        _asm emms
 	    asm_sharpen_run_MMX(
 			    dst+1,
 			    src+1,
@@ -170,7 +171,6 @@ void TSCALL sharpen_run(bitmap_c &obm, const uint8 *sou, const imgdesc_s &souinf
 			    obm.info().pitch,
 			    m[0],
 			    m[4]);
-        _asm finit
     } else
     {
 	    asm_sharpen_run(

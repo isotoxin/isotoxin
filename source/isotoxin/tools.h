@@ -19,7 +19,7 @@ template<> struct wraptranslate<ts::wstr_c> : public ts::wstr_c
     wraptranslate( const ts::wstr_c & t ):ts::wstr_c(t) {}
     wraptranslate &operator / (const ts::wsptr&r)
     {
-        ts::aint ins = this->find_pos('$');
+        int ins = this->find_pos('$');
         if (CHECK(ins >=0))
             this->replace(ins,1, r);
         return *this;
@@ -176,7 +176,7 @@ public:
     s3::Format &getfmt() { return capturefmt; }
     bool is_capture() const { return capture; };
     virtual void datahandler(const void *data, int size) = 0;
-    virtual const s3::Format *formats(int &count) { count = 0; return nullptr; };
+    virtual const s3::Format *formats( ts::aint &count) { count = 0; return nullptr; };
 
     void start_capture();
     void stop_capture();
@@ -427,7 +427,7 @@ enum loctext_e
 
 ts::wstr_c loc_text(loctext_e);
 
-ts::wstr_c text_sizebytes( int sz );
+ts::wstr_c text_sizebytes( ts::aint sz );
 ts::wstr_c text_contact_state( ts::TSCOLOR color_online, ts::TSCOLOR color_offline, contact_state_e st, int link = -1 );
 ts::wstr_c text_typing(const ts::wstr_c &prev, ts::wstr_c &workbuf, const ts::wsptr &preffix);
 
@@ -450,8 +450,8 @@ const ts::bitmap_c &prepare_proto_icon( const ts::asptr &prototag, const ts::asp
 struct data_block_s
 {
     const void *data;
-    int datasize;
-    data_block_s(const void *data, int datasize) :data(data), datasize(datasize) {}
+    ts::aint datasize;
+    data_block_s(const void *data, ts::aint datasize) :data(data), datasize(datasize) {}
 };
 
 struct ipcw : public ts::tmp_buf_c
@@ -462,7 +462,7 @@ struct ipcw : public ts::tmp_buf_c
     }
 
     template<typename T> ipcw & operator<<(const T &v) { TS_STATIC_CHECK(std::is_pod<T>::value, "T is not pod"); tappend<T>(v); return *this; }
-    template<> ipcw & operator<<(const data_block_s &d) { tappend<int>(d.datasize); append_buf(d.data,d.datasize); return *this; }
+    template<> ipcw & operator<<(const data_block_s &d) { tappend<uint>((uint)d.datasize); append_buf(d.data,d.datasize); return *this; }
     template<> ipcw & operator<<(const ts::asptr &s) { tappend<unsigned short>((unsigned short)s.l); append_buf(s.s,s.l); return *this; }
     template<> ipcw & operator<<(const ts::wsptr &s) { tappend<unsigned short>((unsigned short)s.l); append_buf(s.s,s.l*sizeof(ts::wchar)); return *this; }
     template<> ipcw & operator<<(const ts::str_c &s) { tappend<unsigned short>((unsigned short)s.get_length()); append_buf(s.cstr(), s.get_length()); return *this; }
@@ -493,7 +493,7 @@ struct isotoxin_ipc_s
     static ipc::ipc_result_e wait_func( void * );
     void send( const ipcw &data )
     {
-        junct.send(data.data(), data.size());
+        junct.send(data.data(), (int)data.size());
     }
 
 };
@@ -667,6 +667,8 @@ struct leech_save_size_s : public autoparam_i
 
 struct protocol_description_s
 {
+    MOVABLE( true );
+
     ts::str_c  tag; // lan, tox
     ts::str_c description; // utf8
     ts::str_c description_t; // utf8

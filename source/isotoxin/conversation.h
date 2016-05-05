@@ -349,12 +349,17 @@ class gui_message_item_c : public gui_label_ex_c
     {
         struct btn_s
         {
+            MOVABLE( true );
             RID rid;
             int r = -1;
             bool used = false;
         };
         ts::array_inplace_t<btn_s, 1>  btns;
+#if defined(MODE64)
+        ts::uninitialized<80 /* sizeof(image_loader_c) */ > imgloader;
+#else
         ts::uninitialized<44 /* sizeof(image_loader_c) */ > imgloader;
+#endif
         ts::shared_ptr<theme_rect_s> shadow;
 
         ts::safe_ptr<gui_hslider_c> pbar;
@@ -371,7 +376,7 @@ class gui_message_item_c : public gui_label_ex_c
     {
         uint64 prev;
         uint64 next;
-        int offset;
+        ts::aint offset;
     };
 
 
@@ -537,13 +542,13 @@ public:
             return pn->next;
         return 0;
     }
-    /*virtual*/ void update_offset(int offset) override
+    /*virtual*/ void update_offset( ts::aint offset) override
     {
         if (flags.is(F_FOUND_ITEM))
             if (addition_prevnext_s *pn = ts::ptr_cast<addition_prevnext_s *>(addition.get()))
                 pn->offset = offset;
     }
-    int get_offset() const
+    ts::aint get_offset() const
     {
         ASSERT(flags.is(F_FOUND_ITEM) && addition);
         if (const addition_prevnext_s *pn = ts::ptr_cast<const addition_prevnext_s *>(addition.get()))
@@ -577,7 +582,7 @@ public:
     bool is_date_separator() const {return MTA_DATE_SEPARATOR == mt;}
     void init_date_separator( const tm &tmtm );
     void init_request( const ts::str_c &message_utf8 );
-    void init_load( int n_load );
+    void init_load( ts::aint n_load );
 
     void refresh_typing();
 };
@@ -612,15 +617,15 @@ class gui_messagelist_c : public gui_vscrollgroup_c
         gui_messagelist_c *owner;
         rectengine_c *scroll_to = nullptr;
         const found_item_s *found_item;
-        int fillindex_up = -1;
-        int fillindex_down = -1;
-        int fillindex_down_end = -1;
+        ts::aint fillindex_up = -1;
+        ts::aint fillindex_down = -1;
+        ts::aint fillindex_down_end = -1;
+        ts::aint load_n = 0;
         int numpertick = 20;
-        int load_n = 0;
         int options = 0;
         bool dont_scroll = false;
-        filler_s(gui_messagelist_c *owner, int n, int loadn):owner(owner), found_item(nullptr), fillindex_up(n-1), fillindex_down(0), fillindex_down_end(0), options(RSEL_INSERT_NEW), load_n(loadn) { tick(); }
-        filler_s(gui_messagelist_c *owner, const found_item_s *found_item, uint64 scrollto, int options, int loadn);
+        filler_s(gui_messagelist_c *owner, ts::aint n, ts::aint loadn):owner(owner), found_item(nullptr), fillindex_up(n-1), fillindex_down(0), fillindex_down_end(0), options(RSEL_INSERT_NEW), load_n(loadn) { tick(); }
+        filler_s(gui_messagelist_c *owner, const found_item_s *found_item, uint64 scrollto, int options, ts::aint loadn);
         ~filler_s();
         bool tick(RID r = RID(), GUIPARAM p = nullptr);
 
@@ -641,14 +646,14 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     void clear_list(bool empty_mode);
     gui_message_item_c &insert_message_item(message_type_app_e mt, contact_c *author, const ts::str_c &skin, time_t post_time = 0);
     gui_message_item_c &get_message_item(message_type_app_e mt, contact_c *author, const ts::str_c &skin, time_t post_time = 0, uint64 replace_post = 0);
-    bool insert_date_separator( int index, tm &prev_post_time, time_t next_post_time );
+    bool insert_date_separator( ts::aint index, tm &prev_post_time, time_t next_post_time );
 
     void create_empty_mode_stuff();
     void repos_empty_mode_stuff();
 
     ts::safe_ptr<gui_button_c> btn_prev;
     ts::safe_ptr<gui_button_c> btn_next;
-    int target_offset = 0;
+    ts::smart_int target_offset;
     int prevdelta = 0;
 
     /*virtual*/ void on_manual_scroll() override;
@@ -657,7 +662,7 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     bool font_size_down(RID, GUIPARAM);
 
     bool scroll_do(RID, GUIPARAM);
-    void scroll(int shift);
+    void scroll( ts::aint shift);
     bool pageup(RID, GUIPARAM);
     bool pagedown(RID, GUIPARAM);
     bool totop(RID, GUIPARAM);
@@ -699,6 +704,7 @@ struct spellchecker_s
 {
     struct chk_word_s
     {
+        MOVABLE( true );
         ts::str_c utf8;
         ts::wstr_c badword; // empty, if valid
         ts::astrings_c suggestions;
@@ -748,11 +754,11 @@ class gui_message_editor_c : public gui_textedit_c, public spellchecker_s
     /*virtual*/ void cb_scrollbar_width(int w) override;
 
     const ts::buf0_c *bad_words_handler();
-    void suggestions(menu_c &m, int index);
+    void suggestions(menu_c &m, ts::aint index);
     void suggestions_apply(const ts::str_c &prm);
 
-    /*virtual*/ void paste_(int cp) override;
-    /*virtual*/ void new_text( int caret_char_pos );
+    /*virtual*/ void paste_( int cp) override;
+    /*virtual*/ void new_text( int caret_char_pos ) override;
 
 public:
     gui_message_editor_c(initial_rect_data_s &data) :gui_textedit_c(data) {}

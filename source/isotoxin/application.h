@@ -96,6 +96,7 @@ struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
 
     struct job_s
     {
+        MOVABLE( true );
         DUMMY( job_s );
         uint64 offset = 0xFFFFFFFFFFFFFFFFull;
         int sz = 0;
@@ -115,7 +116,7 @@ struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
         ts::array_inplace_t<job_s, 1> query_job;
         ts::Time prevt = ts::Time::current();
         ts::Time speedcalc = ts::Time::current();
-        int transfered_last_tick = 0;
+        ts::aint transfered_last_tick = 0;
         int bytes_per_sec = BPSSV_ALLOW_CALC;
         float upduitime = 0;
         int lock = 0;
@@ -172,6 +173,7 @@ struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
 
 struct av_contact_s
 {
+    MOVABLE( true );
     time_t starttime;
     ts::shared_ptr<contact_root_c> c;
     enum state_e
@@ -238,6 +240,13 @@ struct av_contact_s
     vsb_c *createcam();
 };
 
+namespace ts
+{
+    template<> struct is_movable<s3::Format>
+    {
+        static const bool value = true;
+    };
+}
 
 class application_c : public gui_c, public sound_capture_handler_c
 {
@@ -245,7 +254,7 @@ class application_c : public gui_c, public sound_capture_handler_c
 
     ts::tbuf_t<s3::Format> avformats;
     /*virtual*/ void datahandler(const void *data, int size) override;
-    /*virtual*/ const s3::Format *formats(int &count) override;
+    /*virtual*/ const s3::Format *formats( ts::aint &count) override;
 
 public:
     static const ts::flags32_s::BITS PEF_RECREATE_CTLS_CL = PEF_FREEBITSTART << 0;
@@ -279,7 +288,7 @@ public:
 
     /*virtual*/ void app_prepare_text_for_copy(ts::str_c &text_utf8) override;
 
-    /*virtual*/ ts::wsptr app_loclabel(loc_label_e ll);
+    /*virtual*/ ts::wsptr app_loclabel(loc_label_e ll) override;
 
     /*virtual*/ void app_notification_icon_action( ts::notification_icon_action_e act, RID iconowner) override;
     /*virtual*/ void app_fix_sleep_value(int &sleep_ms) override;
@@ -355,6 +364,7 @@ public:
 
     struct blinking_reason_s
     {
+        MOVABLE( true );
         time_t last_update = now();
         contact_key_s historian;
         ts::Time nextblink = ts::Time::undefined();
@@ -411,7 +421,7 @@ public:
         void file_download_request_add( uint64 ftag )
         {
             bool dirty = ftags_progress.find_remove_fast(ftag);
-            int oldc = ftags_request.count();
+            ts::aint oldc = ftags_request.count();
             ftags_request.set(ftag);
             if (dirty || oldc != ftags_request.count())
                 flags.set(F_REDRAW);
@@ -419,7 +429,7 @@ public:
         void file_download_progress_add( uint64 ftag )
         {
             bool dirty = ftags_request.find_remove_fast(ftag);
-            int oldc = ftags_progress.count();
+            ts::aint oldc = ftags_progress.count();
             ftags_progress.set(ftag);
             if (dirty || oldc != ftags_progress.count())
                 flags.set(F_REDRAW);
@@ -522,7 +532,7 @@ public:
 
     class splchk_c
     {
-        mutable long sync = 0;
+        mutable spinlock::long3264 sync = 0;
         enum
         {
             EMPTY,

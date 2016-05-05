@@ -1,0 +1,274 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug Optimized|Win32">
+      <Configuration>Debug Optimized</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Final|Win32">
+      <Configuration>Final</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectName>toolset</ProjectName>
+    <ProjectGuid>{9209A27B-E512-4197-BD76-B6451C3726B2}</ProjectGuid>
+    <RootNamespace>toolset</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+  </PropertyGroup>
+  <Import Project="$(SolutionDir)\isotoxin.common.2015.props" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Final|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Final|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>12.0.30501.0</_ProjectFileVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>$(ProjectDir)..\</OutDir>
+    <TargetName>$(ProjectName)d</TargetName>
+    <CodeAnalysisRuleSet>NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">
+    <OutDir>$(ProjectDir)..\</OutDir>
+    <TargetName>$(ProjectName)do</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">
+    <OutDir>$(ProjectDir)..\</OutDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external\freetype\include;$(ProjectDir)..\..\libs-external\libqrencode\src;$(ProjectDir)..\..\libs-external\zlib\src;$(ProjectDir)..\..\libs-external;$(ProjectDir)..\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_LIB;_TOOLSETLIB;PNG_USER_CONFIG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeaderFile>toolset.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Lib>
+      <AdditionalLibraryDirectories>$(GARBAGE)\#libs\vc15\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external\freetype\include;$(ProjectDir)..\..\libs-external\libqrencode\src;$(ProjectDir)..\..\libs-external\zlib\src;$(ProjectDir)..\..\libs-external;$(ProjectDir)..\;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_LIB;_TOOLSETLIB;PNG_USER_CONFIG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeaderFile>toolset.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Lib>
+      <AdditionalLibraryDirectories>$(GARBAGE)\#libs\vc15\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external\freetype\include;$(ProjectDir)..\..\libs-external\libqrencode\src;$(ProjectDir)..\..\libs-external\zlib\src;$(ProjectDir)..\..\libs-external;$(ProjectDir)..\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_LIB;_TOOLSETLIB;PNG_USER_CONFIG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <PrecompiledHeaderFile>toolset.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Lib>
+      <AdditionalLibraryDirectories>$(GARBAGE)\#libs\vc15\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="internal\convert.cpp" />
+    <ClCompile Include="internal\cpu_detector.cpp" />
+    <ClCompile Include="internal\excpn.cpp" />
+    <ClCompile Include="internal\glyphscache.cpp" />
+    <ClCompile Include="internal\imageformat_bmp.cpp" />
+    <ClCompile Include="internal\imageformat_gif.cpp" />
+    <ClCompile Include="internal\imageformat_jpg.cpp" />
+    <ClCompile Include="internal\imageformat_tga.cpp" />
+    <ClCompile Include="internal\lnkreader.cpp" />
+    <ClCompile Include="internal\stkwlk.cpp" />
+    <ClCompile Include="internal\textparser.cpp" />
+    <ClCompile Include="tsarray.cpp" />
+    <ClCompile Include="tsbitmap.cpp" />
+    <ClCompile Include="toolset.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="internal\imageformat_dds.cpp" />
+    <ClCompile Include="internal\imageformat_png.cpp" />
+    <ClCompile Include="internal\resample.cpp">
+      <AssemblerOutput Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </AssemblerOutput>
+    </ClCompile>
+    <ClCompile Include="internal\rotate.cpp" />
+    <ClCompile Include="internal\sharpen.cpp" />
+    <ClCompile Include="tsbp.cpp" />
+    <ClCompile Include="tsbuf.cpp" />
+    <ClCompile Include="tscrc.cpp" />
+    <ClCompile Include="tsdebug.cpp" />
+    <ClCompile Include="tsexecutor.cpp" />
+    <ClCompile Include="tsfilesystem.cpp" />
+    <ClCompile Include="tsfile_zip.cpp" />
+    <ClCompile Include="tshash_md5.cpp" />
+    <ClCompile Include="tsjson.cpp" />
+    <ClCompile Include="tsmath.cpp" />
+    <ClCompile Include="tspackcol.cpp" />
+    <ClCompile Include="tspackfile.cpp" />
+    <ClCompile Include="tsparse.cpp" />
+    <ClCompile Include="tspointers.cpp" />
+    <ClCompile Include="tsrnd.cpp" />
+    <ClCompile Include="tssqlite.cpp" />
+    <ClCompile Include="tsstrar.cpp" />
+    <ClCompile Include="tsstrs.cpp" />
+    <ClCompile Include="tssys.cpp" />
+    <ClCompile Include="tssystools.cpp" />
+    <ClCompile Include="tstext.cpp" />
+    <ClCompile Include="tstime.cpp" />
+    <ClCompile Include="tswnd.cpp" />
+    <ClCompile Include="tszip.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="internal\cpu_detector.h" />
+    <ClInclude Include="internal\fourcc.h" />
+    <ClInclude Include="internal\platform.h" />
+    <ClInclude Include="internal\rapidxml.h" />
+    <ClInclude Include="internal\rapidxml_iterators.h" />
+    <ClInclude Include="tsexecutor.h" />
+    <ClInclude Include="internal\excpn.h" />
+    <ClInclude Include="internal\glyphscache.h" />
+    <ClInclude Include="internal\imageformat.h" />
+    <ClInclude Include="internal\stkwlk.h" />
+    <ClInclude Include="internal\textparser.h" />
+    <ClInclude Include="tsarray.h" />
+    <ClInclude Include="tsbitmap.h" />
+    <ClInclude Include="toolset.h" />
+    <ClInclude Include="internal\math.h" />
+    <ClInclude Include="internal\pixmap.h" />
+    <ClInclude Include="internal\resample.h" />
+    <ClInclude Include="internal\vdstl.h" />
+    <ClInclude Include="internal\vdtypes.h" />
+    <ClInclude Include="tsbp.h" />
+    <ClInclude Include="tsbuf.h" />
+    <ClInclude Include="tscrc.h" />
+    <ClInclude Include="tsdebug.h" />
+    <ClInclude Include="tshash_md5.h" />
+    <ClInclude Include="tsjson.h" />
+    <ClInclude Include="tsstreamstr.h" />
+    <ClInclude Include="tsfilesystem.h" />
+    <ClInclude Include="tsfile_zip.h" />
+    <ClInclude Include="tsflags.h" />
+    <ClInclude Include="tshashmap.h" />
+    <ClInclude Include="tsmath.h" />
+    <ClInclude Include="tsmlock.h" />
+    <ClInclude Include="tspackcol.h" />
+    <ClInclude Include="tspackfile.h" />
+    <ClInclude Include="tsparse.h" />
+    <ClInclude Include="tspointers.h" />
+    <ClInclude Include="tsrnd.h" />
+    <ClInclude Include="tssqlite.h" />
+    <ClInclude Include="tsstrar.h" />
+    <ClInclude Include="tsstrs.h" />
+    <ClInclude Include="tssys.h" />
+    <ClInclude Include="tssystools.h" />
+    <ClInclude Include="tstext.h" />
+    <ClInclude Include="tstime.h" />
+    <ClInclude Include="tsvec.h" />
+    <ClInclude Include="tswnd.h" />
+    <ClInclude Include="tszip.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="asm\a_resample_mmx.asm">
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">ml /c /Zi /coff /safeseh /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">ml /c /Zi /coff /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">ml /c /Zi /coff /safeseh /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+    </CustomBuild>
+    <CustomBuild Include="asm\a_resize.asm">
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">ml /c /Zi /coff /safeseh /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">ml /c /Zi /coff /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">ml /c /Zi /coff /safeseh /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+    </CustomBuild>
+    <CustomBuild Include="asm\a_rotate.asm">
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">ml /c /Zi /coff /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">ml /c /Zi /coff /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">ml /c /Zi /coff /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+    </CustomBuild>
+    <CustomBuild Include="asm\a_stretchrgb_point.asm">
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">ml /c /Zi /coff /safeseh /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">ml /c /Zi /coff /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">ml /c /Zi /coff /safeseh /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+    </CustomBuild>
+    <CustomBuild Include="asm\asharpen.asm">
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">ml /c /Zi /coff /safeseh /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">ml /c /Zi /coff /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">ml /c /Zi /coff /safeseh /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+    </CustomBuild>
+    <CustomBuild Include="asm\shrink2x.asm">
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">ml /c /Zi /coff /safeseh /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">ml /c /Zi /coff /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">ml /c /Zi /coff /safeseh /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="_win32\win32_bitmap.inl" />
+    <None Include="_win32\win32_common.inl" />
+    <None Include="_win32\win32_inc.inl" />
+    <None Include="_win32\win32_master.inl" />
+    <None Include="_win32\win32_wnd.inl" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />
+  </ImportGroup>
+</Project>

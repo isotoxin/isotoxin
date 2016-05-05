@@ -211,7 +211,7 @@ namespace
 {
     struct dmsg_internals
     {
-        CRITICAL_SECTION     csect; //critical section for dmsg funtion
+        spinlock::long3264   sync = 0;
         WSADATA              wsa;
         SOCKET               sock;
         SOCKADDR_IN          saUdpServ;
@@ -253,17 +253,15 @@ namespace
             saUdpServ.sin_addr.s_addr = inet_addr("127.0.0.1");
             saUdpServ.sin_port = htons((word)debug_port);
 
-            InitializeCriticalSection(&csect);
         }
         ~dmsg_internals()
         {
             closesocket(sock);
             WSACleanup();
-            DeleteCriticalSection(&csect);
         }
-        void    sendstring_udp_datagram(const char *s, int len)
+        void    sendstring_udp_datagram(const asptr &s)
         {
-            sendto(sock, s, len, 0, (SOCKADDR *)&saUdpServ, sizeof(SOCKADDR_IN));
+            sendto(sock, s.s, (int)s.l, 0, (SOCKADDR *)&saUdpServ, sizeof(SOCKADDR_IN));
         }
     };
     static_setup<dmsg_internals, 0> __dmsg__;
@@ -274,19 +272,18 @@ namespace
 
 void _cdecl dmsg(const char *str)
 {
-    EnterCriticalSection(&__dmsg__().csect);
+    spinlock::auto_simple_lock _l(__dmsg__().sync);
 
     int i = 0;
     int d = 0;
     for (i = 0; str[i]; ++i)
         if (str[i] == '\n')
         {
-            __dmsg__().sendstring_udp_datagram(str + d, i-d);
+            __dmsg__().sendstring_udp_datagram(asptr(str + d, i-d));
             d = i + 1;
         }
-    __dmsg__().sendstring_udp_datagram(str + d, CHARz_len(str+d));
+    __dmsg__().sendstring_udp_datagram(asptr(str + d));
 
-    LeaveCriticalSection(&__dmsg__().csect);
 }
 #endif
 

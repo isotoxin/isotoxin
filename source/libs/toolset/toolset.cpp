@@ -2,6 +2,7 @@
 #include "internal/platform.h"
 #include "spinlock/spinlock.h"
 
+#ifdef _WIN32
 #ifndef _FINAL
 namespace spinlock
 {
@@ -10,7 +11,8 @@ namespace spinlock
         return GetCurrentThreadId();
     }
 }
-#endif // INLINE_PTHREAD_SELF
+#endif // _FINAL
+#endif
 
 namespace ts
 {
@@ -52,7 +54,7 @@ namespace ts
     }
 
 
-__declspec(thread) tmpalloc_c *tmpalloc_c::core = nullptr;
+THREADLOCAL tmpalloc_c *tmpalloc_c::core = nullptr;
 
 tmpalloc_c tmpb;
 
@@ -85,8 +87,10 @@ tmpalloc_c tmpb;
 
 	bool tsfileop_c::load(const wsptr &fn, buf_wrapper_s &b, size_t reservebefore, size_t reserveafter)
 	{
+#if defined _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4822) //: 'ts::tsfileop_c::load::bw::bw' : local class member function does not have a body
+#endif
         struct bw : public buf_wrapper_s
         {
             buf_wrapper_s &b;
@@ -102,7 +106,9 @@ tmpalloc_c tmpb;
             bw(const bw&) UNUSED;
             bw &operator=(const bw&) UNUSED;
         } me(b,reservebefore,reserveafter);
+#if defined _MSC_VER
 #pragma warning(pop)
+#endif
 
         return this->read(fn, me);
 	}
@@ -135,29 +141,22 @@ tmpalloc_c tmpb;
 		virtual ~tsfileop_def_c() {}
         /*virtual*/ bool read(const wsptr &fn, buf_wrapper_s &b) override
 		{
-			HANDLE f = CreateFileW( tmp_wstr_c(fn), GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr );
-			if (f == INVALID_HANDLE_VALUE)
-				return false;
-            aint sz = GetFileSize(f, nullptr);
-            void *d = b.alloc(sz);
-            DWORD r;
-            ReadFile(f, d, sz, &r, nullptr);
-            CloseHandle(f);
-            return (aint)r == sz;
+            void *f = f_open(fn);
+			if (!f) return false;
+            aint sz = (aint)f_size(f);
+            return f_read( f, b.alloc( sz ), sz ) == sz;
 		}
 		/*virtual*/ bool size(const wsptr &fn, size_t &sz) override
 		{
-            HANDLE f = CreateFileW(tmp_wstr_c(fn), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-            if (f == INVALID_HANDLE_VALUE)
-                return false;
-            sz = GetFileSize(f, nullptr);
-            CloseHandle(f);
+            void *f = f_open( fn );
+            if (!f) return false;
+            sz = (size_t)f_size(f);
 			return true;;
 		}
 
         /*virtual*/ void find(wstrings_c & files, const wsptr &fnmask, bool full_paths ) override
         {
-            aint x = pwstr_c(fnmask).find_pos(CONSTWSTR("/*"));
+            int x = pwstr_c(fnmask).find_pos(CONSTWSTR("/*"));
             bool hm = x >= 0 && x+2 < fnmask.l;
             if (hm && fnmask.s[x+2] == '/')
             {
@@ -216,7 +215,10 @@ tmpalloc_c tmpb;
 		g_fileop = nullptr;
 	}
 
-
+    bool fileop_load( const wsptr &fn, buf_wrapper_s &b, size_t reservebefore, size_t reserveafter )
+    {
+        return g_fileop->load(fn, b, reservebefore, reserveafter);
+    }
 
     uint64 uuid()
     {
@@ -238,15 +240,18 @@ tmpalloc_c tmpb;
                 };
                 uint8  rslt[16];
             };
-            long lock = 0;
+            spinlock::long3264 lock = 0;
         } internals;
     
-        simple_lock( internals.lock );
+        spinlock::simple_lock( internals.lock );
 
         if ( internals.src.volumesn == 0 )
         {
             // 1st initialization
 
+            buf_c b;
+
+#ifdef _WIN32
             char cn[MAX_COMPUTERNAME_LENGTH + 1];
             DWORD cnSize = LENGTH(cn);
             memset(cn, 0, sizeof(cn));
@@ -259,15 +264,13 @@ tmpalloc_c tmpb;
             memcpy(adapters.tbegin<IP_ADAPTER_INFO>()->Address, cn, 6);//-V512 - mac address length is actually 6 bytes
 
 
-            ULONG sz = adapters.byte_size();
+            ULONG sz = (ULONG)adapters.byte_size();
             while (ERROR_BUFFER_OVERFLOW == GetAdaptersInfo(adapters.tbegin<IP_ADAPTER_INFO>(), &sz))
             {
                 adapters.set_size(sz, false);
                 adapters.tbegin<IP_ADAPTER_INFO>()->Next = nullptr;
                 memcpy(adapters.tbegin<IP_ADAPTER_INFO>()->Address, cn, 6);//-V512
             }
-
-            buf_c b;
 
             const IP_ADAPTER_INFO *infos = adapters.tbegin<IP_ADAPTER_INFO>();
             do
@@ -277,13 +280,66 @@ tmpalloc_c tmpb;
             } while (infos);
 
             GetVolumeInformationA("c:\\", nullptr, 0, &internals.src.volumesn, nullptr, nullptr, nullptr, 0);
+#endif
+#ifdef __linux__
+            bool ok = false;
+ 
+            int s = socket(AF_INET, SOCK_DGRAM, 0);
+            if (s != -1)
+            {
+                struct ifreq ifr;
+                struct ifreq *IFR;
+                struct ifconf ifc;
+                char buf[1024];
+
+                ifc.ifc_len = sizeof(buf);
+                ifc.ifc_buf = buf;
+                ioctl(s, SIOCGIFCONF, &ifc);
+ 
+                IFR = ifc.ifc_req;
+                for (int i = ifc.ifc_len / sizeof(struct ifreq); --i >= 0; IFR++)
+                {
+                    strcpy(ifr.ifr_name, IFR->ifr_name);
+                    if (ioctl(s, SIOCGIFFLAGS, &ifr) == 0)
+                    {
+                        if (! (ifr.ifr_flags & IFF_LOOPBACK))
+                        {
+                            if (ioctl(s, SIOCGIFHWADDR, &ifr) == 0)
+                            {
+                                ok = 1;
+                                break;
+                            }
+                        }
+                    }
+                }
+             
+                shutdown(s, SHUT_RDWR);
+                if (ok)
+                {
+                    b.append_buf(ifr.ifr_hwaddr.sa_data, 6);
+                }
+            }
+            if (!ok)
+            {
+                char buf[6] = {0};
+                b.append_buf(buf, 6);
+            }
+#endif
 
             md5_c md5;
             md5.update(b.data(), b.size());
             md5.done(internals.src.machash);
         }
 
+#ifdef _WIN32
         QueryPerformanceCounter( &ref_cast<LARGE_INTEGER>(internals.src.timestamp) );
+#endif
+#ifdef __linux__
+        timespec tspc;
+        clock_gettime(CLOCK_REALTIME,&tspc);
+        internals.src.timestamp = (((uint64)tspc.tv_sec) << 32) | tspc.tv_nsec;
+#endif
+
         md5_c md5;
     again:
         md5.update(&internals, sizeof(internals.src));
@@ -295,7 +351,7 @@ tmpalloc_c tmpb;
             md5.reset();
             goto again;
         }
-        simple_unlock( internals.lock );
+        spinlock::simple_unlock( internals.lock );
         return r;
     }
 

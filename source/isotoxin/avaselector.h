@@ -40,7 +40,7 @@ class dialog_avaselector_c : public gui_isodialog_c
 
         int sz1 = 16;
         int sz2 = 16;
-        int best = 0;
+        ts::aint best = 0;
         ts::ivec2 bestsz;
 
         compressor_s( dialog_avaselector_c *dlg, ts::bitmap_c bitmap2encode ):dlg(dlg), bitmap2encode(bitmap2encode)
@@ -81,12 +81,12 @@ class dialog_avaselector_c : public gui_isodialog_c
 
     int protoid = 0;
 
+    ts::aint prevsize = 0;
     ts::ivec2 user_offset = ts::ivec2(0);
     float resize_k = 1.0f;
     float click_resize_k;
     ts::uint32 area = 0;
     int tickvalue = 0;
-    int prevsize = 0;
     ts::wstr_c savebtn1, savebtn2;
 
     ts::shared_ptr<theme_rect_s> shadow;
@@ -125,7 +125,7 @@ class dialog_avaselector_c : public gui_isodialog_c
     void draw_process(ts::TSCOLOR col, bool cam, bool cambusy);
 
 protected:
-    /*virtual*/ int unique_tag() { return UD_AVASELECTOR; }
+    /*virtual*/ int unique_tag() override { return UD_AVASELECTOR; }
     /*virtual*/ void created() override;
 
     bool save_image1(RID, GUIPARAM);

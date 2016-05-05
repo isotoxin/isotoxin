@@ -59,17 +59,17 @@ void lan_engine::media_stuff_s::add_audio( const void *data, int datasize )
         enc_fifo.read_data(nullptr, datasize);
 }
 
-int lan_engine::media_stuff_s::encode_audio(byte *dest, int dest_max, const void *uncompressed_frame, int frame_size)
+int lan_engine::media_stuff_s::encode_audio(byte *dest, aint dest_max, const void *uncompressed_frame, aint frame_size)
 {
     if (audio_encoder)
-        return opus_encode(audio_encoder, (opus_int16 *)uncompressed_frame, frame_size, dest, dest_max);
+        return opus_encode(audio_encoder, (opus_int16 *)uncompressed_frame, (int)frame_size, dest, (int)dest_max);
 
     return 0;
 }
 
 int lan_engine::media_stuff_s::prepare_audio4send(int ct)
 {
-    int avsize = enc_fifo.available();
+    aint avsize = enc_fifo.available();
     if (avsize == 0)
     {
         processing = false;
@@ -100,7 +100,7 @@ int lan_engine::media_stuff_s::prepare_audio4send(int ct)
     if ((next_time_send - ct) < 0) next_time_send = ct+sd/2;
 
     if (req_frame_size > (int)uncompressed.size()) uncompressed.resize(req_frame_size);
-    int samples = enc_fifo.read_data(uncompressed.data(), req_frame_size) / audio_format_s(AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS).blockAlign();
+    aint samples = enc_fifo.read_data(uncompressed.data(), req_frame_size) / audio_format_s(AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS).blockAlign();
 
     if (req_frame_size >(int)compressed.size()) compressed.resize(req_frame_size);
     return encode_audio(compressed.data(), req_frame_size, uncompressed.data(), samples);
@@ -233,7 +233,7 @@ void udp_sender::prepare()
     memcpy(adapters.begin()->Address, cn, 6);//-V512 - mac address length is actually 6 bytes
 
 
-    ULONG sz = adapters.size() * sizeof(IP_ADAPTER_INFO);
+    ULONG sz = (ULONG)adapters.size() * sizeof(IP_ADAPTER_INFO);
     while (ERROR_BUFFER_OVERFLOW == GetAdaptersInfo(adapters.data(), &sz))
     {
         adapters.resize((sizeof(IP_ADAPTER_INFO) + sz) / sizeof(IP_ADAPTER_INFO));
@@ -654,7 +654,7 @@ void make_raw_pub_id( byte *raw_pub_id, const byte *pk )
     protect_raw_id(raw_pub_id);
 }
 
-datablock_s *datablock_s::build(block_type_e mt, u64 delivery_tag_, const void *data, int datasize, const void *data1, int datasize1)
+datablock_s *datablock_s::build(block_type_e mt, u64 delivery_tag_, const void *data, aint datasize, const void *data1, aint datasize1)
 {
     datablock_s * m = (datablock_s *)dlmalloc( sizeof(datablock_s) + datasize + datasize1 );
     m->delivery_tag = delivery_tag_;
@@ -662,7 +662,7 @@ datablock_s *datablock_s::build(block_type_e mt, u64 delivery_tag_, const void *
     m->prev = nullptr;
     m->bt = mt;
     m->sent = 0;
-    m->len = datasize + datasize1;
+    m->len = (int)(datasize + datasize1);
     memcpy( m+1, data, datasize );
     if (data1) memcpy( ((byte *)(m+1)) + datasize, data1, datasize1 );
     return m;
@@ -683,7 +683,7 @@ lan_engine::contact_s::~contact_s()
     }
 }
 
-u64 lan_engine::contact_s::send_block(block_type_e bt, u64 delivery_tag, const void *data, int datasize, const void *data1, int datasize1)
+u64 lan_engine::contact_s::send_block(block_type_e bt, u64 delivery_tag, const void *data, aint datasize, const void *data1, aint datasize1)
 {
     if (BT_AUDIO_FRAME == bt)
     {
@@ -1677,7 +1677,7 @@ void operator<<(chunk &chunkm, const lan_engine::contact_s &c)
     chunk(chunkm.b, chunk_contact_public_key) << bytes(c.public_key, SIZE_PUBLIC_KEY);
     chunk(chunkm.b, chunk_contact_name) << c.name;
     chunk(chunkm.b, chunk_contact_statusmsg) << c.statusmsg;
-    chunk(chunkm.b, chunk_contact_state) << (int)c.state;
+    chunk(chunkm.b, chunk_contact_state) << (i32)c.state;
     
 
     if (c.state == lan_engine::contact_s::SEARCH
@@ -1704,7 +1704,7 @@ void operator<<(chunk &chunkm, const lan_engine::contact_s &c)
         chunk(chunkm.b, chunk_contact_sendmessages) << serlist<datablock_s>(c.sendblock_f);
         */
 
-    chunk(chunkm.b, chunk_contact_changedflags) << (int)c.changed_self;
+    chunk(chunkm.b, chunk_contact_changedflags) << (i32)c.changed_self;
 
     for (datablock_s *m = c.sendblock_f; m; )
     {
@@ -1757,7 +1757,7 @@ void lan_engine::save_config(void *param)
         chunk(b, chunk_magic) << (u64)(0x555BADF00D2C0FE6ull + LAN_SAVE_VERSION);
         chunk(b, chunk_secret_key) << bytes(my_secret_key, SIZE_SECRET_KEY);
         chunk(b, chunk_contacts) << serlist<contact_s>(first);
-        hf->on_save(b.data(), b.size(), param);
+        hf->on_save(b.data(), (int)b.size(), param);
     }
 }
 
@@ -2161,7 +2161,7 @@ void lan_engine::contact_s::recv()
         dstr.append(asptr("\",\"" CDET_CLIENT_CAPS "\":[\"" CLCAP_BBCODE_B "\",\"" CLCAP_BBCODE_U "\",\"" CLCAP_BBCODE_I "\",\"" CLCAP_BBCODE_S "\"]}"));
 
         cd.details = dstr.cstr();
-        cd.details_len = dstr.get_length();
+        cd.details_len = (int)dstr.get_length();
 
         engine->hf->update_contact(&cd);
     }
@@ -2204,7 +2204,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                 fill_data(cd);
                 engine->hf->update_contact(&cd);
                 if (sendrq)
-                    engine->hf->message(MT_FRIEND_REQUEST, 0, id, now(), invitemessage.cstr(), invitemessage.get_length());
+                    engine->hf->message(MT_FRIEND_REQUEST, 0, id, now(), invitemessage.cstr(), (int)invitemessage.get_length());
             }
         }
         break;
@@ -2321,7 +2321,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
 
                 if ( BT_FILE_CHUNK == bt )
                 {
-                    logfn("filetr.log", "subblock recv %llu %i %i %i", dtb, sent, len, (int)msgl);
+                    logfn("filetr.log", "subblock recv %llu %i %i %i", dtb, sent, len, msgl);
                 }
 
                 if (dd.rcv_size == dd.buf.size())
@@ -2333,11 +2333,11 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                     switch (bt)
                     {
                         case BT_CHANGED_NAME:
-                            name = asptr((const char *)dd.buf.data(), dd.buf.size());
+                            name = asptr((const char *)dd.buf.data(), (int)dd.buf.size());
                             data_changed = true;
                             break;
                         case BT_CHANGED_STATUSMSG:
-                            statusmsg = asptr((const char *)dd.buf.data(), dd.buf.size());
+                            statusmsg = asptr((const char *)dd.buf.data(), (int)dd.buf.size());
                             data_changed = true;
                             break;
                         case BT_OSTATE:
@@ -2404,7 +2404,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                                     ++avatar_tag; // new avatar version
                                 }
                                 
-                                engine->hf->avatar_data(id, avatar_tag, dd.buf.data(), dd.buf.size());
+                                engine->hf->avatar_data(id, avatar_tag, dd.buf.data(), (int)dd.buf.size());
                             }
                             break;
                         case BT_SENDFILE:
@@ -2413,7 +2413,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                                 const u64 *d = (u64 *)dd.buf.data();
                                 u64 utag = my_ntohll(d[0]);
                                 u64 fsz = my_ntohll(d[1]);
-                                new incoming_file_s(id, utag, fsz, asptr((const char *)dd.buf.data(), dd.buf.size()).skip(16));
+                                new incoming_file_s(id, utag, fsz, asptr((const char *)dd.buf.data(), (int)dd.buf.size()).skip(16));
                             }
                             break;
                         case BT_FILE_BREAK:
@@ -2482,7 +2482,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                             if (bt < __bt_service)
                             {
                                 u64 crtime = my_ntohll(*(u64 *)dd.buf.data());
-                                engine->hf->message((message_type_e)bt, 0, id, crtime, (const char *)dd.buf.data() + sizeof(u64), dd.buf.size() - sizeof(u64));
+                                engine->hf->message((message_type_e)bt, 0, id, crtime, (const char *)dd.buf.data() + sizeof(u64), (int)dd.buf.size() - sizeof(u64));
                             }
                             break;
                     }
@@ -2563,11 +2563,11 @@ lan_engine::incoming_file_s::incoming_file_s(u32 cid_, u64 utag_, u64 fsz_, cons
     fsz = fsz_;
     cid = cid_;
 
-    engine->hf->incoming_file(cid, utag, fsz, fn.s, fn.l);
+    engine->hf->incoming_file(cid, utag, fsz, fn.s, (int)fn.l);
 
 }
 
-/*virtual*/ void lan_engine::incoming_file_s::chunk_received( u64 offset, const void *d, int dsz )
+/*virtual*/ void lan_engine::incoming_file_s::chunk_received( u64 offset, const void *d, aint dsz )
 {
     if (is_accepted)
     {
@@ -2579,7 +2579,7 @@ lan_engine::incoming_file_s::incoming_file_s(u32 cid_, u64 utag_, u64 fsz_, cons
             return;
         }
 
-        if (engine->hf->file_portion( utag, offset, d, dsz ))
+        if (engine->hf->file_portion( utag, offset, d, (int)dsz ))
         {
             nextoffset = offset + dsz;
             logfn("filetr.log", "chunk_received %llu %llu %u", utag, offset, dsz);

@@ -240,11 +240,11 @@ bool gui_dialog_c::description_s::updvalue2(RID r, GUIPARAM p)
     {
         case gui_dialog_c::description_s::_RADIO:
             if (handler) handler(r, p);
-            text.set_as_int((int)p); //-V205
+            text.set_as_int(as_int(p));
             break;
         case gui_dialog_c::description_s::_CHECKBUTTONS:
             if (handler) handler(r, p);
-            text.set_as_uint((ts::uint32)p); //-V205
+            text.set_as_num<size_t>((size_t)p); //-V205
             break;
         case gui_dialog_c::description_s::_HSLIDER:
             {
@@ -1062,7 +1062,7 @@ void gui_dialog_c::removerctl(int r)
     ts::safe_ptr<guirect_c> & ctl = subctls[r];
     if (ctl)
     {
-        int i = getengine().get_child_index(&ctl->getengine());
+        ts::aint i = getengine().get_child_index(&ctl->getengine());
         if (i >= 0 && i <= skipctls) --skipctls;
         TSDEL( ctl.get() );
     }
@@ -1099,8 +1099,8 @@ void gui_dialog_c::updrect_def(const void *rr, int r, const ts::ivec2 &p)
 
 void gui_dialog_c::reset(bool keep_skip)
 {
-    int cnt = getengine().children_count();
-    for(int i=keep_skip ? skipctls : numtopbuttons;i<cnt;++i)
+    ts::aint cnt = getengine().children_count();
+    for( ts::aint i=keep_skip ? skipctls : numtopbuttons;i<cnt;++i)
         TSDEL(getengine().get_child(i));
     getengine().cleanup_children_now();
 
@@ -1138,15 +1138,19 @@ void gui_dialog_c::reset(bool keep_skip)
     border.rb.y += bottom_area_height;
 }
 
-void gui_dialog_c::tabsel(const ts::str_c& par)
+namespace
 {
-    reset(true);
-
     struct checkset
     {
+        MOVABLE( true );
         GUIPARAMHANDLER handler;
         int tag;
     };
+}
+
+void gui_dialog_c::tabsel(const ts::str_c& par)
+{
+    reset(true);
 
     ts::tmp_array_inplace_t<checkset,2> chset;
 
@@ -1257,10 +1261,10 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
 
                 s.checkname = d.name;
                 d.items.iterate_items(s,s);
-                int chldcount = HOLD(vg).engine().children_count();
+                ts::aint chldcount = HOLD(vg).engine().children_count();
                 check( s.cis.array(), DELEGATE(&d, updvalue2), d.text.as_uint(), tag, d.options.is(description_s::o_visible), vg );
-                int chldcount2 = HOLD(vg).engine().children_count();
-                for(int i=chldcount; i<chldcount2;++i)
+                ts::aint chldcount2 = HOLD(vg).engine().children_count();
+                for( ts::aint i=chldcount; i<chldcount2;++i)
                     d.setctlptr( &HOLD(vg).engine().get_child(i)->getrect() );
             }
             break;

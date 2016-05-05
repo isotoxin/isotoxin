@@ -30,14 +30,14 @@ struct img_reader_s
     ivec2 size;
     uint8 bitpp;
 
-    image_read_func detect( const void *d, int datasize, img_format_e &fmt )
+    image_read_func detect( const void *d, aint datasize, img_format_e &fmt )
     {
 #define FMT(fn) if (image_read_func f = detect_##fn##_format(d, datasize)) { fmt = if_##fn; return f; }
         IMGFORMATS
 #undef FMT
         return nullptr;
     }
-#define FMT(fn) image_read_func detect_##fn##_format(const void *data, int datasize);
+#define FMT(fn) image_read_func detect_##fn##_format(const void *data, aint datasize);
     IMGFORMATS
 #undef FMT
 
@@ -80,7 +80,7 @@ public:
     animated_c();
     ~animated_c();
 
-    bool load( const void *b, int bsize ); // returns true, if animated
+    bool load( const void *b, ts::aint bsize ); // returns true, if animated
     int firstframe( bitmap_c &bmp ); // returns ms time of frame. bmp should contain previous frame!
     int nextframe( const bmpcore_exbody_s &bmp );
 

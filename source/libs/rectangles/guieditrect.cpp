@@ -1,6 +1,6 @@
 #include "rectangles.h"
 
-gui_textedit_c::gui_textedit_c(initial_rect_data_s &data) : gui_control_c(data), start_sel(-1), caret_line(0), caret_offset(0), scroll_left(0), under_mouse_active_element(nullptr)
+gui_textedit_c::gui_textedit_c(initial_rect_data_s &data) : gui_control_c(data), start_sel(-1), under_mouse_active_element(nullptr)
 {
     selection_color = gui->selection_color;
     selection_bg_color = gui->selection_bg_color;
@@ -49,7 +49,7 @@ void gui_textedit_c::run_heartbeat()
     }
 }
 
-bool gui_textedit_c::text_replace(int pos, int num, const ts::wsptr &str, active_element_s **el, int len, bool update_caret_pos)
+bool gui_textedit_c::text_replace( int pos, int num, const ts::wsptr &str, active_element_s **el, int len, bool update_caret_pos)
 {
     if (check_text_func && !flags.is(F_CHANGE_HANDLER))
     {
@@ -117,14 +117,14 @@ ok:
 	return true;
 }
 
-bool gui_textedit_c::text_replace(int pos, int num, const ts::wsptr &str, bool update_caret_pos)
+bool gui_textedit_c::text_replace( int pos, int num, const ts::wsptr &str, bool update_caret_pos)
 {
 	ts::tmp_pointers_t<active_element_s, 0> elements( str.l );
     if (is_multiline())
     {
         for(int i=0;i<str.l;++i)
             elements.add(active_element_s::fromchar(str.s[i]));
-	    return text_replace(pos, num, str, elements.begin(), elements.size(), update_caret_pos);
+	    return text_replace(pos, num, str, elements.begin(), (int)elements.size(), update_caret_pos);
     } else
     {
         bool nldetected = false;
@@ -137,15 +137,15 @@ bool gui_textedit_c::text_replace(int pos, int num, const ts::wsptr &str, bool u
         {
             ts::wstr_c x;
             ts::pwstr_c(str).extract_non_chars( x, CONSTWSTR("\n") );
-            return text_replace(pos, num, x.as_sptr(), elements.begin(), elements.size(), update_caret_pos);  
+            return text_replace(pos, num, x.as_sptr(), elements.begin(), (int)elements.size(), update_caret_pos);
         } else
-            return text_replace(pos, num, str, elements.begin(), elements.size(), update_caret_pos);  
+            return text_replace(pos, num, str, elements.begin(), (int)elements.size(), update_caret_pos);
     }
 }
 
-ts::wstr_c gui_textedit_c::get_text_and_fix_pos(int *pos0, int *pos1) const
+ts::wstr_c gui_textedit_c::get_text_and_fix_pos( int *pos0, int *pos1) const
 {
-    int count = text.size();
+    int count = (int)text.size();
     ts::wstr_c r(count, true);
 
     bool pos0fixed = pos0 == nullptr;
@@ -174,7 +174,7 @@ ts::wstr_c gui_textedit_c::get_text_and_fix_pos(int *pos0, int *pos1) const
 
 ts::wstr_c gui_textedit_c::get_text_11( ts::wchar rc ) const
 {
-    int count = text.size();
+    int count = (int)text.size();
     ts::wstr_c r(count, true);
     for (int i = 0; i < count; ++i)
     {
@@ -184,7 +184,7 @@ ts::wstr_c gui_textedit_c::get_text_11( ts::wchar rc ) const
     return r;
 }
 
-ts::wstr_c gui_textedit_c::text_substr(int start, int count) const
+ts::wstr_c gui_textedit_c::text_substr( int start, int count) const
 {
     ts::wstr_c r(count, true);
     for (int i = 0; i < count; ++i)
@@ -195,10 +195,10 @@ ts::wstr_c gui_textedit_c::text_substr(int start, int count) const
     return r;
 }
 
-ts::str_c gui_textedit_c::text_substr_utf8(int start, int count) const
+ts::str_c gui_textedit_c::text_substr_utf8( int start, int count) const
 {
 	ts::str_c r(count, true);
-	for (int i=0; i<count; ++i)
+	for ( ts::aint i=0; i<count; ++i)
 	{
 		const text_element_c &te = text[start+i];
 		if (te.is_char()) r.append_unicode_as_utf8( te.get_char_unsafe() ); else r.append(te.p->to_utf8());
@@ -206,11 +206,11 @@ ts::str_c gui_textedit_c::text_substr_utf8(int start, int count) const
 	return r;
 }
 
-bool gui_textedit_c::cut_(int cp, bool copy2clipboard)
+bool gui_textedit_c::cut_( int cp, bool copy2clipboard)
 {
 	if (start_sel!=-1 && !is_readonly())
 	{
-		int len=ts::tabs(start_sel-cp);
+        int len = ts::tabs(start_sel-cp);
 		cp=ts::tmin(cp,start_sel);
 		if (copy2clipboard)
         {
@@ -224,7 +224,7 @@ bool gui_textedit_c::cut_(int cp, bool copy2clipboard)
     return false;
 }
 
-bool gui_textedit_c::copy_(int cp)
+bool gui_textedit_c::copy_( int cp )
 {
 	if (start_sel!=-1)
     {
@@ -236,7 +236,7 @@ bool gui_textedit_c::copy_(int cp)
 	return false;
 }
 
-void gui_textedit_c::paste_(int cp)
+void gui_textedit_c::paste_( int cp )
 {
 	if (is_readonly()) return;
 
@@ -286,7 +286,7 @@ int gui_textedit_c::get_caret_char_index(ts::ivec2 p) const
     if (!font) return 0;
     p.x += scroll_left - ts::ui_scale(margins_lt.x);
 
-    int line = ts::tmax(0, ts::tmin((p.y - ts::ui_scale(margins_lt.y) + scroll_top()) / (*font)->height, lines.count() - 1));
+    ts::aint line = ts::tmax(0, ts::tmin((p.y - ts::ui_scale(margins_lt.y) + scroll_top()) / (*font)->height, lines.count() - 1));
     int lineW = 0;
     int i = 0;
     for (; i < lines.get(line).delta(); i++)
@@ -303,10 +303,10 @@ void gui_textedit_c::set_caret_pos(ts::ivec2 p)
 {
     if (!font) return;
 	p.x += scroll_left - ts::ui_scale(margins_lt.x);
-	int line=ts::tmax(0,ts::tmin((p.y-ts::ui_scale(margins_lt.y)+scroll_top())/(*font)->height,lines.count()-1));
+	ts::aint line=ts::tmax(0,ts::tmin((p.y-ts::ui_scale(margins_lt.y)+scroll_top())/(*font)->height,lines.count()-1));
 	int lineW=0;
 	int i=0;
-	for (;i<lines.get(line).delta();i++)
+	for (;i<lines.get(line).delta(); ++i)
 	{
 		int charW=text_el_advance(lines.get(line).r0+i);
 
@@ -319,7 +319,7 @@ void gui_textedit_c::set_caret_pos(ts::ivec2 p)
 	scroll_to_caret();
 }
 
-ts::ivec2 gui_textedit_c::get_char_pos(int pos) const
+ts::ivec2 gui_textedit_c::get_char_pos( int pos ) const
 {
     if (flags.is(F_LINESDIRTY))
         const_cast<gui_textedit_c *>(this)->prepare_lines();
@@ -331,7 +331,7 @@ ts::ivec2 gui_textedit_c::get_char_pos(int pos) const
 	return ts::ivec2(pos-lines.get(i).r0, i);
 }
 
-void gui_textedit_c::set_caret_pos(int cp)
+void gui_textedit_c::set_caret_pos( int cp )
 {
 	ts::ivec2 p = get_char_pos(cp);
 	caret_offset=p.x;
@@ -352,7 +352,7 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 		{
 			if (start_sel==cp) start_sel=-1; // if zero-len selection - avoid handle of left/rite key pressed
 		}
-		else if (start_sel==-1) start_sel=cp;
+		else if (start_sel==-1) start_sel = cp;
 
 		if ( ( casw & ts::casw_ctrl ) != 0 )
 		{
@@ -473,8 +473,8 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 				    res = true;
 				    break;
 			    case ts::SSK_RIGHT:
-				    if (caret_offset<lines.get(caret_line).delta()) caret_offset++;
-				    else if (caret_line<lines.count()-1) caret_offset=0,caret_line++;
+				    if (caret_offset<lines.get(caret_line).delta()) ++caret_offset;
+				    else if (caret_line<lines.count()-1) caret_offset=0, ++caret_line;
 				    scroll_to_caret();
 				    res = true;
 				    break;
@@ -597,15 +597,15 @@ bool gui_textedit_c::prepare_lines(int startchar)
     flags.set(F_LINESDIRTY|F_TEXTUREDIRTY);
     ts::ivec2 sz = size();
     if (sz.x <= 0) return false; // not yet resized
-	int linew=0,linestart=startchar;
+    int linew=0,linestart=startchar;
 	if (startchar == 0) lines.clear();
     int i=linestart;
-	if (!is_multiline()) i=text.size(); else
+	if (!is_multiline()) i = (int)text.size(); else
 	for (;i<text.size();i++)
 	{
-        auto rmargin = [&]() ->int
+        auto rmargin = [&]() ->ts::aint
         {
-            int curh = (lines.count() + 1) * (*font)->height;
+            ts::aint curh = (lines.count() + 1) * (*font)->height;
             return curh >= rb_margin_from ? margins_rb.x : 0;
         };
 
@@ -646,7 +646,7 @@ bool gui_textedit_c::prepare_lines(int startchar)
 	under_mouse_active_element = nullptr;
     flags.clear(F_LINESDIRTY);
 
-    sbhelper.set_size( lines.count() * (*font)->height+ ts::ui_scale(margins_lt.y) + ts::ui_scale(margins_rb.y), sz.y );
+    sbhelper.set_size( lines.count() * (*font)->height + ts::ui_scale(margins_lt.y) + ts::ui_scale(margins_rb.y), sz.y );
 
     if (caret_line >= lines.count()) caret_line = lines.count() - 1;
 
@@ -686,7 +686,7 @@ void gui_textedit_c::set_text(const ts::wstr_c &text_, bool move_caret2end, bool
         if (text.size() == text_.get_length())
         {
             const ts::wchar *t = text_.cstr();
-            for (int i = 0, n = text.size(); i < n; ++i)
+            for ( ts::aint i = 0, n = text.size(); i < n; ++i)
                 if (!(text[i] == t[i])) goto notEq;
             return;
         }
@@ -695,8 +695,8 @@ void gui_textedit_c::set_text(const ts::wstr_c &text_, bool move_caret2end, bool
 
 
 	ts::ivec2 prev_caret_pos = get_caret_pos();
-	if (text_replace(0, text.size(), text_, false))
-		if (move_caret2end) set_caret_pos(text.size()); else set_caret_pos(prev_caret_pos);
+	if (text_replace(0, (int)text.size(), text_, false))
+		if (move_caret2end) set_caret_pos( (int)text.size()); else set_caret_pos(prev_caret_pos);
 
     if (setup_undo && !flags.is(F_CHANGE_HANDLER))
     {
@@ -706,19 +706,19 @@ void gui_textedit_c::set_text(const ts::wstr_c &text_, bool move_caret2end, bool
     }
 }
 
-int gui_textedit_c::lines_count() const
+ts::aint gui_textedit_c::lines_count() const
 {
-	int lc = 1;
-	for (int i=0, n=lines.count()-1; i<n; i++)
-		if (text.get(lines.get(i).r1) == L'\n') lc++;
+    ts::aint lc = 1;
+	for ( ts::aint i=0, n=lines.count()-1; i<n; ++ i)
+		if (text.get(lines.get(i).r1) == L'\n') ++lc;
 	return lc;
 }
 
-void gui_textedit_c::remove_lines(int r)
+void gui_textedit_c::remove_lines( ts::aint r)
 {
 	ASSERT(r > 0);
 	int lc = 1;
-	for (int i=0, n=lines.count()-1; i<n; i++)
+	for ( ts::aint i=0, n=lines.count()-1; i<n; i++)
 		if (text.get(lines.get(i).r1) == L'\n' && lc++ == r)
 		{
 			int m = lines.get(i).r1+1;
@@ -755,7 +755,7 @@ void gui_textedit_c::prepare_texture()
         ts::ivec2 pen(ts::ui_scale(margins_lt.x) + 4, (*font)->ascender + ts::ui_scale(margins_lt.y));
 
         int advoffset = 0;
-        int cnt = placeholder_text.get_length();
+        ts::aint cnt = placeholder_text.get_length();
         for(int i=0;i<cnt;++i)
         {
             ts::wchar phc = placeholder_text.get_char(i);
@@ -766,8 +766,8 @@ void gui_textedit_c::prepare_texture()
             gi.pitch = (ts::uint16)glyph.width;
             gi.pixels = (ts::uint8*)(&glyph + 1);
             ts::ivec2 pos = ts::ivec2(advoffset, ts::ui_scale(baseline_offset)) + pen;
-            gi.pos.x = (ts::int16)(glyph.left + pos.x);
-            gi.pos.y = (ts::int16)(-glyph.top + pos.y);
+            gi.pos().x = (ts::int16)(glyph.left + pos.x);
+            gi.pos().y = (ts::int16)(-glyph.top + pos.y);
             gi.color = placeholder_color;
             gi.thickness = 0;
             advoffset += glyph.advance;
@@ -792,7 +792,7 @@ void gui_textedit_c::prepare_texture()
 
 	if (start_sel!=-1 && focus()) // selection has always highest color priority
 	{
-		int cp=get_caret_char_index();
+        ts::aint cp = get_caret_char_index();
 		ts::ivec2 selRange = (ts::ivec2(ts::tmin(start_sel,cp), ts::tmax(start_sel,cp)-1) - lines.get(visible_lines.r0).r0) & ts::ivec2(0, colors.count()-1);
 		for (int i=selRange.r0; i<=selRange.r1; i++)
 		{
@@ -889,8 +889,8 @@ void gui_textedit_c::prepare_texture()
                 gi.pitch = (ts::uint16)glyph.width;
 				gi.pixels = (ts::uint8*)(&glyph+1);
 				ts::ivec2 pos = ts::ivec2(advoffset, ts::ui_scale(baseline_offset)) + pen;
-				gi.pos.x = (ts::int16)(glyph.left + pos.x);
-                gi.pos.y = (ts::int16)(-glyph.top + pos.y);
+				gi.pos().x = (ts::int16)(glyph.left + pos.x);
+                gi.pos().y = (ts::int16)(-glyph.top + pos.y);
 				gi.color = cc;
 				gi.thickness = 0;
 				advoffset += glyph.advance;
@@ -969,8 +969,8 @@ void gui_textedit_c::selectword()
 {
     if (flags.is(F_DISABLE_CARET)) return;
     int left, right = left = get_caret_char_index();
-    for (; left > 0 && !IS_WORDB(text.get(left - 1).get_char()); left--);
-    for (; right < text.size() && !IS_WORDB(text.get(right).get_char()); right++);
+    for (; left > 0 && !IS_WORDB(text.get(left - 1).get_char()); --left);
+    for (; right < text.size() && !IS_WORDB(text.get(right).get_char()); ++right);
     start_sel = left;
     set_caret_pos(right);
     redraw();
@@ -1037,7 +1037,7 @@ bool gui_textedit_c::ctxclosehandler(RID, GUIPARAM)
     return true;
 }
 
-bool gui_textedit_c::summoncontextmenu(int cp)
+bool gui_textedit_c::summoncontextmenu( ts::aint cp)
 {
     if (flags.is(F_DISABLE_CARET)) return false;
 
@@ -1050,7 +1050,7 @@ bool gui_textedit_c::summoncontextmenu(int cp)
     }
     menu_c mnu;
 
-    int ss = sel_size();
+    ts::aint ss = sel_size();
 
     if (ctx_menu_func)
     {
@@ -1148,7 +1148,7 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
                 opd.rect.lt.y -= clar.lt.y;
             } else if (clar.inside(mplocal) && !flags.is(F_DISABLE_CARET))
             {
-                int osel = start_sel;
+                ts::aint osel = start_sel;
                 int ocofs = caret_offset;
                 int ocl = caret_line;
                 set_caret_pos(mplocal - clar.lt);
@@ -1414,7 +1414,7 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_HEARTBEAT> &)
     return 0;
 }
 
-void gui_textedit_c::snapshots_s::push(const ts::array_wrapper_c<const text_element_c> &txt, int caret, int ss, change_e ch)
+void gui_textedit_c::snapshots_s::push(const ts::array_wrapper_c<const text_element_c> &txt, ts::aint caret, ts::aint ss, change_e ch)
 {
     if (0 == size() || CH_REPLACE == ch || CH_ADDSPECIAL == ch)
     {

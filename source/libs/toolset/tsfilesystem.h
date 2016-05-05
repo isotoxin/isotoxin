@@ -54,13 +54,14 @@ bool TSCALL is_file_exists(const wsptr &iroot, const wsptr &fname);
 
 struct extension_s
 {
+    MOVABLE( true );
     ts::wstr_c ext;
     ts::wstr_c desc;
 };
 struct extensions_s
 {
     extensions_s():exts(nullptr, 0) {}
-    extensions_s(const extension_s *e, int cnt, int def = -1):exts(e,cnt), index(def) {}
+    extensions_s(const extension_s *e, ts::aint cnt, int def = -1):exts(e,cnt), index(def) {}
     array_wrapper_c<const extension_s> exts;
     aint index = -1;
     const wchar *defext() const
@@ -116,7 +117,7 @@ template<class CORE> wstr_c TSCALL fn_join(const str_t<wchar, CORE> &path, const
 }
 INLINE wstr_c TSCALL fn_get_name_with_ext(const wsptr &name)
 {
-    aint i = pwstr_c(name).find_last_pos_of(CONSTWSTR("/\\"));
+    int i = pwstr_c(name).find_last_pos_of(CONSTWSTR("/\\"));
 	if (i < 0) i = 0; else ++i;
 	return wstr_c(name.skip(i));
 }
@@ -142,13 +143,13 @@ wstr_c TSCALL fn_change_ext(const wsptr &full, const wsptr &ext);
 
 inline wstr_c fn_change_name_ext(const wstr_c &full, const wsptr &name, const wsptr &ext)
 {
-    aint i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
+    int i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
     return wstr_c(wsptr(full.cstr(), i)).append(name).append_char('.').append(ext);
 }
 
 inline wstr_c fn_change_name_ext(const wstr_c &full, const wsptr &nameext)
 {
-    aint i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
+    int i = full.find_last_pos_of(CONSTWSTR("/\\")) + 1;
     return wstr_c(wsptr(full.cstr(), i)).append(nameext);
 }
 
@@ -229,19 +230,6 @@ enum copy_rslt_e
 };
 copy_rslt_e TSCALL copy_file( const wsptr &existingfn, const wsptr &newfn );
 bool TSCALL rename_file( const wsptr &existingfn, const wsptr &newfn );
-
-
-ts::wstr_c f_create( const ts::wsptr&fn ); // just create 0-size file; returns error string or empty, if ok
-void *f_open( const ts::wsptr&fn ); // open for read
-void *f_recreate( const ts::wsptr&fn ); // create
-void *f_continue( const ts::wsptr&fn ); // open for write
-uint64 f_size( void *h );
-uint32 f_read( void *h, void *ptr, uint32 sz );
-uint32 f_write( void *h, const void *ptr, uint32 sz );
-void f_close( void *h );
-bool f_set_pos( void *h, uint64 pos );
-uint64 f_get_pos( void *h );
-uint64 f_time_last_write( void *h );
 
 
 } // namespace ts

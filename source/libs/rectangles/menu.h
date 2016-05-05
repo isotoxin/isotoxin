@@ -35,7 +35,7 @@ class menu_c
             if (ref == 0) TSDEL(this);
         }
 
-        uint register_bitmap( const ts::bitmap_c&bmp )
+        ts::aint register_bitmap( const ts::bitmap_c&bmp )
         {
             bmps.add() = bmp;
             return bmps.size();

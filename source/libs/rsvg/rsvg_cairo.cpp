@@ -45,7 +45,7 @@ rsvg_cairo_surface_c::~rsvg_cairo_surface_c()
 
 void cairo_paths_c::move_to(double x, double y)
 {
-    last_move_to_index = paths.size();
+    last_move_to_index = (int)paths.size();
     cairo_path_data_t &data = paths.add();
     data.header.type = CAIRO_PATH_MOVE_TO;
     data.header.length = 2;
@@ -239,7 +239,7 @@ void cairo_paths_c::curve_to(double x1, double y1, double x2, double y2, double 
 static void setup_stroke_dash( cairo_t *cr, const rsvg_stroke_s&stroke )
 {
     if (stroke.dasharray.count())
-        cairo_set_dash(cr, stroke.dasharray.begin(), stroke.dasharray.count(), stroke.dash_offset);
+        cairo_set_dash(cr, stroke.dasharray.begin(), (int)stroke.dasharray.count(), stroke.dash_offset);
 }
 
 void cairo_paths_c::render( const rsvg_stroke_and_fill_s &snf, rsvg_cairo_surface_c &surf )
@@ -247,7 +247,7 @@ void cairo_paths_c::render( const rsvg_stroke_and_fill_s &snf, rsvg_cairo_surfac
     cairo_path_t p;
     p.status = CAIRO_STATUS_SUCCESS;
     p.data = paths.begin();
-    p.num_data = paths.size();
+    p.num_data = (int)paths.size();
 
     cairo_new_path(surf.cr());
     cairo_append_path(surf.cr(), &p);
@@ -278,7 +278,7 @@ void cairo_paths_c::render( const rsvg_stroke_s &snf, rsvg_cairo_surface_c &surf
     cairo_path_t p;
     p.status = CAIRO_STATUS_SUCCESS;
     p.data = paths.begin();
-    p.num_data = paths.size();
+    p.num_data = (int)paths.size();
 
     cairo_new_path(surf.cr());
     cairo_append_path(surf.cr(), &p);

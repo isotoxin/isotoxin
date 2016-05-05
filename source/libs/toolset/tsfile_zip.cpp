@@ -43,7 +43,7 @@ namespace ts
         tmp_wstr_c pa( path ), cf;
         ASSERT(pa.find_pos(ENEMY_SLASH) < 0);
         if (pa.get_char(0) == NATIVE_SLASH) pa.cut(0, 1);
-        aint pad = pa.find_pos(NATIVE_SLASH);
+        int pad = pa.find_pos(NATIVE_SLASH);
         if ( pad >= 0 )
         {
             cf = pa.substr(0,pad);
@@ -77,7 +77,7 @@ namespace ts
         tmp_wstr_c pa(path), cf;
         ASSERT(pa.find_pos(ENEMY_SLASH) < 0);
         if (pa.get_char(0) == NATIVE_SLASH) pa.cut(0, 1);
-        aint pad = pa.find_pos(NATIVE_SLASH);
+        int pad = pa.find_pos(NATIVE_SLASH);
         if (pad >= 0)
         {
             cf = pa.substr(0, pad);
@@ -141,7 +141,7 @@ namespace ts
 
         if (unzOpenCurrentFile(unz) == UNZ_OK)
         {
-            aint n = unzReadCurrentFile(unz, b.alloc(m_full_unp_size), m_full_unp_size);
+            aint n = unzReadCurrentFile(unz, b.alloc(m_full_unp_size), (int)m_full_unp_size);
             if (unzCloseCurrentFile(unz) == UNZ_OK && n == m_full_unp_size)
                 return true;
         }
@@ -163,7 +163,7 @@ namespace ts
 
         for (;;)
         {
-            aint ind = CHARz_find<wchar>( path, NATIVE_SLASH );
+            int ind = CHARz_find<wchar>( path, NATIVE_SLASH );
             if ( ind >= 0 )
             {
                 zip_folder_entry_c *f = cur->get_folder(wsptr(path, ind));
@@ -182,8 +182,7 @@ namespace ts
             zip_file_entry_c *fe = cur->add_file( path );
             return fe;
         }
-        __assume(0);
-        //return nullptr;
+        UNREACHABLE();
     }
 
 
@@ -234,7 +233,7 @@ namespace ts
 
             static uLong ZCALLBACK fread_file_func(voidpf opaque, voidpf stream, void* buf, uLong size)
             {
-                return f_read(stream, buf, size);
+                return (uLong)f_read(stream, buf, size);
             }
             static long ZCALLBACK ftell_file_func(voidpf opaque, voidpf stream)
             {
@@ -296,7 +295,7 @@ namespace ts
         {
             filename_inzip.set_length( 1024 );
             unz_file_info file_info;
-            err = unzGetCurrentFileInfo(m_unz,&file_info,filename_inzip.str(),filename_inzip.get_capacity(),nullptr,0,nullptr,0);
+            err = unzGetCurrentFileInfo(m_unz,&file_info,filename_inzip.str(),(uLong)filename_inzip.get_capacity(),nullptr,0,nullptr,0);
             if (err!=UNZ_OK)
             {
                 unzClose(m_unz);
@@ -386,7 +385,7 @@ next:
 
         for (;;)
         {
-            aint ind = CHARz_find<wchar>( path, NATIVE_SLASH );
+            int ind = CHARz_find<wchar>( path, NATIVE_SLASH );
             if ( ind >= 0 )
             {
                 zip_folder_entry_c *f = cur->get_folder(wsptr(path, ind));
@@ -414,8 +413,7 @@ next:
             return false;
         }
 
-        __assume(0);
-        //return false;
+        UNREACHABLE();
     }
 
     bool    zip_container_c::iterate_files(ITERATE_FILES_CALLBACK ef)

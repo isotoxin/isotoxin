@@ -79,7 +79,7 @@ public:
         sql << "SELECT name FROM sqlite_master WHERE type='table'";
 
         sqlite3_stmt *stmt;
-        int erc = sqlite3_prepare_v2(db, sql.buffer(), sql.buffer().get_length(), &stmt, nullptr);
+        int erc = sqlite3_prepare_v2(db, sql.buffer(), (int)sql.buffer().get_length(), &stmt, nullptr);
         if (erc != SQLITE_OK) return false;
         int step = sqlite3_step(stmt);
         sqlite3_finalize(stmt);
@@ -96,7 +96,7 @@ public:
             sql << "PRAGMA table_info(" << tablename << ")";
             
             sqlite3_stmt *stmt;
-            sqlite3_prepare_v2(db, sql.buffer(), sql.buffer().get_length(), &stmt, nullptr);
+            sqlite3_prepare_v2(db, sql.buffer(), (int)sql.buffer().get_length(), &stmt, nullptr);
             int step = sqlite3_step(stmt);
             sqlite3_finalize(stmt);
             return SQLITE_ROW == step;
@@ -270,7 +270,7 @@ public:
             sql << CONSTASTR("select count(rowid) from \'") << tablename << CONSTASTR("\' where ") << where_items;
 
             sqlite3_stmt *stmt;
-            sqlite3_prepare_v2(db, sql.buffer(), sql.buffer().get_length(), &stmt, nullptr);
+            sqlite3_prepare_v2(db, sql.buffer(), (int)sql.buffer().get_length(), &stmt, nullptr);
             int step = sqlite3_step(stmt);
             if (SQLITE_ROW == step)
                 cnt = sqlite3_column_int(stmt, 0);
@@ -287,7 +287,7 @@ public:
         sql << CONSTASTR("select `") << id << CONSTASTR("` from \'") << tablename << CONSTASTR("\' order by `") << id << CONSTASTR("`");
 
         sqlite3_stmt *stmt;
-        sqlite3_prepare_v2(db, sql.buffer(), sql.buffer().get_length(), &stmt, nullptr);
+        sqlite3_prepare_v2(db, sql.buffer(), (int)sql.buffer().get_length(), &stmt, nullptr);
 
         int idcheck = 1;
 
@@ -324,7 +324,7 @@ public:
             sqlite3_stmt *insstmt = nullptr;
             int prepr = sqlite3_prepare_v2(db, sql.buffer(), -1, &insstmt, nullptr);
             if (!CHECK( SQLITE_OK == prepr, "" << sqlite3_extended_errcode(db) )) return 0;
-            int cnt = fields.size();
+            aint cnt = fields.size();
             ASSERT(cnt == sqlite3_bind_parameter_count(insstmt));
             for(int i=1;i<=cnt;++i)
             {
@@ -339,10 +339,10 @@ public:
                         sqlite3_bind_int64(insstmt, i, d.i);
                         break;
                     case data_type_e::t_str:
-                        sqlite3_bind_text(insstmt, i, d.text.cstr(), d.text.get_length(), SQLITE_STATIC);
+                        sqlite3_bind_text(insstmt, i, d.text.cstr(), (int)d.text.get_length(), SQLITE_STATIC);
                         break;
                     case data_type_e::t_blob:
-                        sqlite3_bind_blob(insstmt, i, d.blob.data(), d.blob.size(), SQLITE_STATIC);
+                        sqlite3_bind_blob(insstmt, i, d.blob.data(), (int)d.blob.size(), SQLITE_STATIC);
                         break;
                     default:
                         FORBIDDEN();
@@ -377,25 +377,25 @@ public:
 
             sqlite3_stmt *updstmt = nullptr;
             if (!CHECK(SQLITE_OK == sqlite3_prepare_v2(db, sql.buffer(), -1, &updstmt, nullptr))) return;
-            int cnt = fields.size();
+            aint cnt = fields.size();
             ASSERT(cnt == sqlite3_bind_parameter_count(updstmt));
-            for (int i = 1; i <= cnt; ++i)
+            for (aint i = 1; i <= cnt; ++i)
             {
                 const data_pair_s &d = fields[i - 1];
 
                 switch (d.type_)
                 {
                     case data_type_e::t_int:
-                        sqlite3_bind_int(updstmt, i, (int)d.i);
+                        sqlite3_bind_int(updstmt, (int)i, (int)d.i);
                         break;
                     case data_type_e::t_int64:
-                        sqlite3_bind_int64(updstmt, i, d.i);
+                        sqlite3_bind_int64(updstmt, (int)i, d.i);
                         break;
                     case data_type_e::t_str:
-                        sqlite3_bind_text(updstmt, i, d.text.cstr(), d.text.get_length(), SQLITE_STATIC);
+                        sqlite3_bind_text(updstmt, (int)i, d.text.cstr(), (int)d.text.get_length(), SQLITE_STATIC);
                         break;
                     case data_type_e::t_blob:
-                        sqlite3_bind_blob(updstmt, i, d.blob.data(), d.blob.size(), SQLITE_STATIC);
+                        sqlite3_bind_blob(updstmt, (int)i, d.blob.data(), (int)d.blob.size(), SQLITE_STATIC);
                         break;
                     default:
                         FORBIDDEN();
@@ -495,7 +495,7 @@ public:
                 }
             } columngetter(reader);
 
-            sqlite3_prepare_v2(db, sql.buffer(), sql.buffer().get_length(), &columngetter.stmt, nullptr);
+            sqlite3_prepare_v2(db, sql.buffer(), (int)sql.buffer().get_length(), &columngetter.stmt, nullptr);
 
         }
     }

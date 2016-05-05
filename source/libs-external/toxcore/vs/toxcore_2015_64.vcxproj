@@ -1,0 +1,145 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{002F36E6-8B6E-4AFF-87A0-E19514E1F07A}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>toxcore</RootNamespace>
+    <ProjectName>toxcore</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(SolutionDir)\libs.common.2015_64.props" />
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\toxav\audio.c" />
+    <ClCompile Include="..\toxav\bwcontroller.c" />
+    <ClCompile Include="..\toxav\group.c">
+      <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(IntDir)groupav.obj</ObjectFileName>
+      <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(IntDir)groupav.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\toxav\msi.c" />
+    <ClCompile Include="..\toxav\rtp.c" />
+    <ClCompile Include="..\toxav\toxav.c" />
+    <ClCompile Include="..\toxav\toxav_old.c" />
+    <ClCompile Include="..\toxav\video.c" />
+    <ClCompile Include="..\toxcore\assoc.c" />
+    <ClCompile Include="..\toxcore\crypto_core.c" />
+    <ClCompile Include="..\toxcore\DHT.c" />
+    <ClCompile Include="..\toxcore\friend_connection.c" />
+    <ClCompile Include="..\toxcore\friend_requests.c" />
+    <ClCompile Include="..\toxcore\group.c" />
+    <ClCompile Include="..\toxcore\LAN_discovery.c" />
+    <ClCompile Include="..\toxcore\list.c" />
+    <ClCompile Include="..\toxcore\logger.c" />
+    <ClCompile Include="..\toxcore\Messenger.c" />
+    <ClCompile Include="..\toxcore\network.c" />
+    <ClCompile Include="..\toxcore\net_crypto.c" />
+    <ClCompile Include="..\toxcore\onion.c" />
+    <ClCompile Include="..\toxcore\onion_announce.c" />
+    <ClCompile Include="..\toxcore\onion_client.c" />
+    <ClCompile Include="..\toxcore\ping.c" />
+    <ClCompile Include="..\toxcore\ping_array.c" />
+    <ClCompile Include="..\toxcore\TCP_client.c" />
+    <ClCompile Include="..\toxcore\TCP_connection.c" />
+    <ClCompile Include="..\toxcore\TCP_server.c" />
+    <ClCompile Include="..\toxcore\tox.c" />
+    <ClCompile Include="..\toxcore\util.c" />
+    <ClCompile Include="..\toxdns\toxdns.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\pthread_win32\pthread.h" />
+    <ClInclude Include="..\toxav\audio.h" />
+    <ClInclude Include="..\toxav\bwcontroller.h" />
+    <ClInclude Include="..\toxav\group.h" />
+    <ClInclude Include="..\toxav\msi.h" />
+    <ClInclude Include="..\toxav\rtp.h" />
+    <ClInclude Include="..\toxav\toxav.h" />
+    <ClInclude Include="..\toxav\video.h" />
+    <ClInclude Include="..\toxcore\assoc.h" />
+    <ClInclude Include="..\toxcore\crypto_core.h" />
+    <ClInclude Include="..\toxcore\DHT.h" />
+    <ClInclude Include="..\toxcore\friend_connection.h" />
+    <ClInclude Include="..\toxcore\friend_requests.h" />
+    <ClInclude Include="..\toxcore\group.h" />
+    <ClInclude Include="..\toxcore\LAN_discovery.h" />
+    <ClInclude Include="..\toxcore\list.h" />
+    <ClInclude Include="..\toxcore\logger.h" />
+    <ClInclude Include="..\toxcore\Messenger.h" />
+    <ClInclude Include="..\toxcore\misc_tools.h" />
+    <ClInclude Include="..\toxcore\network.h" />
+    <ClInclude Include="..\toxcore\net_crypto.h" />
+    <ClInclude Include="..\toxcore\onion.h" />
+    <ClInclude Include="..\toxcore\onion_announce.h" />
+    <ClInclude Include="..\toxcore\onion_client.h" />
+    <ClInclude Include="..\toxcore\ping.h" />
+    <ClInclude Include="..\toxcore\ping_array.h" />
+    <ClInclude Include="..\toxcore\TCP_client.h" />
+    <ClInclude Include="..\toxcore\TCP_connection.h" />
+    <ClInclude Include="..\toxcore\TCP_server.h" />
+    <ClInclude Include="..\toxcore\tox.h" />
+    <ClInclude Include="..\toxcore\util.h" />
+    <ClInclude Include="..\toxdns\toxdns.h" />
+    <ClInclude Include="config.h" />
+    <ClInclude Include="unistd.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <TargetName>$(ProjectName)d</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_DEBUG;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\pthread_win32;$(ProjectDir)..\..\libsodium\src\libsodium\include;$(ProjectDir)..\..\libvpx;$(ProjectDir)..\..\opus\include;$(ProjectDir)..\..\;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\pthread_win32;$(ProjectDir)..\..\libsodium\src\libsodium\include;$(ProjectDir)..\..\libvpx;$(ProjectDir)..\..\opus\include;$(ProjectDir)..\..\;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

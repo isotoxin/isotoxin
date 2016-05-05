@@ -82,7 +82,7 @@ class gui_dialog_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_dialog_c, GM_UI_EVENT);
 
     ts::wstr_c captiontext;
-    int numtopbuttons = 0;
+    ts::smart_int numtopbuttons;
     int skipctls = 0;
     ts::uint32 tabselmask = 0;
     ts::irect border = ts::irect(0);
@@ -116,11 +116,12 @@ protected:
 
     struct description_s
     {
+        MOVABLE( true );
         ts::tmp_array_safe_t<guirect_c,0> ctlptrs;
         //guirect_c::sptr_t ctlptr; // can be nullptr (if other tab selected, or parent control not yet created)
         void setctlptr( guirect_c *r )
         {
-            int cnt = ctlptrs.size();
+            ts::aint cnt = ctlptrs.size();
             int j = -1;
             for( int i=0;i<cnt;++i )
             {
@@ -306,6 +307,7 @@ protected:
 
     struct radio_item_s
     {
+        MOVABLE( true );
         ts::wstr_c text;
         GUIPARAM param;
         ts::str_c name;
@@ -314,6 +316,7 @@ protected:
     };
     struct check_item_s
     {
+        MOVABLE( true );
         ts::wstr_c text;
         ts::uint32 mask;
         ts::str_c name;
@@ -371,5 +374,5 @@ public:
 
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
-    /*virtual*/ ts::wstr_c get_name() const { return captiontext; }
+    /*virtual*/ ts::wstr_c get_name() const override { return captiontext; }
 };

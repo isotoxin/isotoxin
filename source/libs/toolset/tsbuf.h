@@ -2,6 +2,20 @@
 
 namespace ts
 {
+    // filesystem
+    ts::wstr_c f_create( const ts::wsptr&fn ); // just create 0-size file; returns error string or empty, if ok
+    void *f_open( const ts::wsptr&fn ); // open for read
+    void *f_recreate( const ts::wsptr&fn ); // create
+    void *f_continue( const ts::wsptr&fn ); // open for write
+    uint64 f_size( void *h );
+    aint f_read( void *h, void *ptr, aint sz );
+    aint f_write( void *h, const void *ptr, aint sz );
+    void f_close( void *h );
+    bool f_set_pos( void *h, uint64 pos );
+    uint64 f_get_pos( void *h );
+    uint64 f_time_last_write( void *h );
+
+    bool fileop_load( const wsptr &fn, buf_wrapper_s &b, size_t reservebefore, size_t reserveafter );
 
 struct bufmod_nothing
 {
@@ -117,16 +131,16 @@ template<aint GRANULA, typename ALLOCATOR> struct BUFFER_RESIZABLE : public ALLO
     BUFFER_RESIZABLE(aint cap):m_data(nullptr), m_size(0), m_capacity(cap)
     {
         if (m_capacity > 0)
-            m_data = (uint8 *)ma( m_capacity );
+            m_data = (uint8 *)this->ma( m_capacity );
         else if (GRANULA > 0)
         {
-            m_data = (uint8 *)ma(GRANULA);
+            m_data = (uint8 *)this->ma(GRANULA);
             m_capacity = GRANULA;
         }
     }
     BUFFER_RESIZABLE( const BUFFER_RESIZABLE &b ):m_data(nullptr), m_size(b.size()), m_capacity(b.size())
     {
-        m_data = (uint8 *)ma( b.size() );
+        m_data = (uint8 *)this->ma( b.size() );
         memcpy(m_data, b(), b.size());
     }
     BUFFER_RESIZABLE(BUFFER_RESIZABLE &&b) :m_data(b.m_data), m_size(b.m_size), m_capacity(b.m_capacity)
@@ -137,7 +151,7 @@ template<aint GRANULA, typename ALLOCATOR> struct BUFFER_RESIZABLE : public ALLO
     }
     ~BUFFER_RESIZABLE()
     {
-        mf(m_data);
+        this->mf(m_data);
     }
 
     uint8   *m_data;
@@ -169,7 +183,7 @@ template<aint GRANULA, typename ALLOCATOR> struct BUFFER_RESIZABLE : public ALLO
         if (newsz > m_capacity)
         {
             m_capacity = newsz + GRANULA;
-            m_data = (uint8 *)mra(m_data, sizeof(uint8)*m_capacity);
+            m_data = (uint8 *)this->mra(m_data, sizeof(uint8)*m_capacity);
         }
     }
 
@@ -202,7 +216,7 @@ template<aint GRANULA, typename ALLOCATOR> struct BUFFER_RESIZABLE_COPY_ON_DEMAN
 
     void build(aint cap)
     {
-        m_core = (core_s *)ma(cap + sizeof(core_s));
+        m_core = (core_s *)this->ma(cap + sizeof(core_s));
         m_core->m_ref = 1;
         m_core->m_size = 0;
         m_core->m_capacity = cap;
@@ -226,7 +240,7 @@ template<aint GRANULA, typename ALLOCATOR> struct BUFFER_RESIZABLE_COPY_ON_DEMAN
     }
     ~BUFFER_RESIZABLE_COPY_ON_DEMAND()
     {
-        if (m_core && m_core->release()) mf(m_core);
+        if (m_core && m_core->release()) this->mf(m_core);
     }
 
     uint8  *operator()() { return m_core ? ((uint8*)(m_core+1)) : nullptr; }
@@ -241,7 +255,7 @@ template<aint GRANULA, typename ALLOCATOR> struct BUFFER_RESIZABLE_COPY_ON_DEMAN
     }
     void operator=(const BUFFER_RESIZABLE_COPY_ON_DEMAND & tb)
     {
-        if (m_core) if (m_core->release()) mf(m_core);
+        if (m_core) if (m_core->release()) this->mf(m_core);
         m_core = tb.m_core;
         if (m_core) ++m_core->m_ref;
     }
@@ -283,7 +297,7 @@ template<aint GRANULA, typename ALLOCATOR> struct BUFFER_RESIZABLE_COPY_ON_DEMAN
         if (newlen > m_core->m_capacity)
         {
             m_core->m_capacity = newlen + GRANULA;
-            m_core = (core_s *)mra(m_core, m_core->m_capacity + sizeof(core_s));
+            m_core = (core_s *)this->mra(m_core, m_core->m_capacity + sizeof(core_s));
         }
 
         aint fixlen = moder((uint8 *)(m_core + 1), newlen, (uint8 *)(m_core + 1), m_core->m_size);
@@ -328,7 +342,7 @@ public:
     INLINE uint32   *data32() { return (uint32 *)core(); }
     INLINE const uint32 *data32() const { return (const uint32 *)core(); }
 
-    const asptr cstr() const { return asptr((const char*)core(), core.size()); }
+    const asptr cstr() const { return asptr((const char*)core(), (int)core.size()); }
 
     bool inside(const void *ptr, aint sz) const
     {
@@ -720,7 +734,7 @@ public:
             aint size = (aint)f_size(hand);
             aint m_size = size; if (text) m_size += 2;
             set_size(m_size, false);
-            uint32 r = f_read(hand, core(), size);
+            aint r = f_read(hand, core(), size);
             f_close(hand);
             if (text && ASSERT(core.writable()))
             {
@@ -736,7 +750,7 @@ public:
     {
         set_size(0, false);
 
-        typedef clean_type<decltype(this)>::type mytype;
+        typedef typename clean_type<decltype(this)>::type mytype;
         struct bw : public buf_wrapper_s
         {
             mytype *b;
@@ -748,7 +762,7 @@ public:
             }
         } me(this);
 
-        return g_fileop->load(fn, me, reservebefore, reserveafter);
+        return fileop_load(fn, me, reservebefore, reserveafter);
     }
 
     bool    load_from_file(const wsptr &fn)
@@ -769,26 +783,31 @@ public:
 
 template <typename T, typename CORE = BUFFER_RESIZABLE<sizeof(T) * 32, TS_DEFAULT_ALLOCATOR> > class tbuf_t : public buf_t< CORE > // only simple types can be used due memcpy
 {
+    MOVABLE( true );
+
     static const size_t tsize = sizeof(T);
     TS_STATIC_CHECK(is_movable<T>::value, "wrong type for tbuf_t! use array_c");
-    aint    size() const { return __super::size(); };
+    
+    typedef buf_t<CORE> super;
+    
+    aint    size() const { return super::size(); };
 public:
 
     typedef T type;
 
-    explicit tbuf_t(aint prealloc_capacity_items = 0) :buf_t(prealloc_capacity_items * sizeof(T))
+    explicit tbuf_t(aint prealloc_capacity_items = 0) :super(prealloc_capacity_items * sizeof(T))
     {
     }
-    template<typename CORE2> explicit tbuf_t(const buf_t<CORE2> & buf) :buf_t(buf)
+    template<typename CORE2> explicit tbuf_t(const buf_t<CORE2> & buf) :super(buf)
     {
         ASSERT( (buf.size() & sizeof(T)) == 0 );
     }
-    tbuf_t( const T *t, aint cnt ):buf_t(cnt * sizeof(T))
+    tbuf_t( const T *t, aint cnt ):super(cnt * sizeof(T))
     {
-        memcpy( data(), t, cnt * sizeof(T) );
+        memcpy( super::data(), t, cnt * sizeof(T) );
     }
 
-    aint    byte_size() const { return __super::size(); }; //-V524
+    aint    byte_size() const { return super::size(); }; //-V524
 
     /*
     tbuf_t(type_buf_c && tb)
@@ -828,34 +847,34 @@ public:
     void set(const T *t, aint count)
     {
         aint sz = sizeof(T) * count;
-        set_size(sz, false);
-        memcpy(data(), t, sz);
+        super::set_size(sz, false);
+        memcpy( super::data(), t, sz);
     }
 
     void set(aint index, const T &t)
     {
-        ASSERT(is_writable()); // TODO: asserted here, use overwrite base method. oops. you have to write it too :)
+        ASSERT( super::is_writable()); // TODO: asserted here, use overwrite base method. oops. you have to write it too :)
         ASSERT(index >= 0 && index < count());
-        tbegin<T>()[index] = t;
+        this->template tbegin<T>()[index] = t;
     }
 
     aint  set(const T &t)
     {
         for (const T&x : *this)
-            if (x == t) return &x - tbegin<T>();
+            if (x == t) return &x - this->template tbegin<T>();
 
-        tappend<T>(t, 1);
-        return tend<T>() - tbegin<T>() - 1;
+        this->template tappend<T>(t, 1);
+        return this->template tend<T>() - this->template tbegin<T>() - 1;
     }
 
     aint  set_replace(const T &t, const T &f)
     {
         for (T&x : *this)
-            if (x == t) return &x - tbegin<T>();
-            else if (x == f) { x = f; return &x - tbegin<T>(); }
+            if (x == t) return &x - this->template tbegin<T>();
+            else if (x == f) { x = f; return &x - this->template tbegin<T>(); }
 
-            tappend<T>(t, 1);
-            return tend<T>() - tbegin<T>() - 1;
+        this->template tappend<T>(t, 1);
+        return this->template tend<T>() - this->template tbegin<T>() - 1;
     }
 
     bool present(const T &t) const
@@ -868,7 +887,7 @@ public:
     aint  find_index(const T &t) const
     {
         for (const T&x : *this)
-            if (x == t) return &x - tbegin<T>();
+            if (x == t) return &x - this->template tbegin<T>();
 
         return -1;
     }
@@ -876,24 +895,24 @@ public:
     template<typename SOME> aint  find_index(const SOME &t) const
     {
         for (const T&x : *this)
-            if (x == t) return &x - tbegin<T>();
+            if (x == t) return &x - this->template tbegin<T>();
 
         return -1;
     }
 
     void insert(aint index, const T &t)
     {
-        T * tt = (T*)expand(index * sizeof(T), sizeof(T));
+        T * tt = (T*)super::expand(index * sizeof(T), sizeof(T));
         *tt = t;
     }
     T &insert(aint index)
     {
-        return *(T*)expand(index * sizeof(T), sizeof(T));
+        return *(T*)super::expand(index * sizeof(T), sizeof(T));
     }
 
     template< typename CORE2 > void insert(aint index, const tbuf_t<T, CORE2> &t)
     {
-        T * tt = (T*)expand(index * sizeof(T), t.size());
+        T * tt = (T*)super::expand(index * sizeof(T), t.size());
         memcpy(tt, t.data(), t.size());
     }
 
@@ -944,7 +963,7 @@ public:
         }
         if (count() == 1)
         {
-            int cmp = comp(get(0), t);
+            aint cmp = comp(get(0), t);
             index = cmp <= 0 ? 0 : 1;
             return cmp == 0;
         }
@@ -982,20 +1001,20 @@ public:
             return false;
         }
 
-        int cmp = comp(get(left), t);
+        aint cmp = comp(get(left), t);
         index = cmp <= 0 ? left : left + 1;
         return cmp == 0;
     }
 
     void set_count(aint cnt, bool preserve_content = true)
     {
-        set_size(cnt * sizeof(T), preserve_content);
+        super::set_size(cnt * sizeof(T), preserve_content);
     }
     void reserve(aint cnt, bool preserve_content = false)
     {
         aint osz = size();
-        set_size(cnt * sizeof(T), preserve_content);
-        set_size(osz, preserve_content);
+        super::set_size(cnt * sizeof(T), preserve_content);
+        super::set_size(osz, preserve_content);
     }
     void remove_last()
     {
@@ -1006,70 +1025,70 @@ public:
 
     aint count() const
     {
-        const T * b1 = tbegin<T>();
-        const T * b2 = tend<T>();
+        const T * b1 = this->template tbegin<T>();
+        const T * b2 = this->template tend<T>();
         return (aint)(b2 - b1);
     }
 
     const T & last(const T &def) const
     {
         if (count() == 0) return def;
-        return tbegin<T>()[count() - 1];
+        return this->template tbegin<T>()[count() - 1];
     }
 
     T & last()
     {
-        ASSERT(is_writable());
+        ASSERT(super::is_writable());
         if (count() == 0) return make_dummy< T >();
-        return tbegin<T>()[count() - 1];
+        return this->template tbegin<T>()[count() - 1];
     }
 
 
     const T & get(aint index) const
     {
         ASSERT(index >= 0 && index < count());
-        return tbegin<T>()[index];
+        return this->template tbegin<T>()[index];
     }
     T & get(aint index) //-V659
     {
-        ASSERT(is_writable());
+        ASSERT(super::is_writable());
         ASSERT(index >= 0 && index < count());
-        return tbegin<T>()[index];
+        return this->template tbegin<T>()[index];
     }
 
     const T * get() const
     {
-        return tbegin<T>();
+        return this->template tbegin<T>();
     }
 
     void add(const T &t)
     {
-        tappend<T>(t, 1);
+        this->template tappend<T>(t, 1);
     }
     template< typename CORE2 > void append_buf(const tbuf_t<T, CORE2> &t)
     {
-        __super::append_buf(t.data(), t.size());
+        super::append_buf(t.data(), t.size());
     }
 
     void clone( aint from, aint to )
     {
         aint sz = sizeof(T) * (to - from);
-        T * t = (T*)expand(sz);
+        T * t = (T*)super::expand(sz);
         memcpy( t, begin() + from, sz );
     }
 
     T & add()
     {
-        return *(T*)expand(sizeof(T));
+        return *(T*)super::expand(sizeof(T));
     }
 
     void swap_unsafe(aint index1, aint index2)
     {
-        ASSERT(is_writable());
+        ASSERT(super::is_writable());
         ASSERT(index1 >= 0 && index1 < count());
         ASSERT(index2 >= 0 && index2 < count());
 
-        T * b = tbegin<T>();
+        T * b = this->template tbegin<T>();
 
         T temp = b[index1];
         b[index1] = b[index2];
@@ -1077,21 +1096,21 @@ public:
 
     }
 
-    T pop() { return tpop<T>(); }
-    void  push(const T &d) {tpush<T>(d);}
+    T pop() { return this->template tpop<T>(); }
+    void  push(const T &d) {this->template tpush<T>(d);}
 
-    bool sort(aint ileft = 0, aint irite = -1) { return tsort<T>(ileft, irite); }
+    bool sort(aint ileft = 0, aint irite = -1) { return this->template tsort<T>(ileft, irite); }
 
     void remove_slow(aint index, aint co = 1)
     {
         ASSERT(index >= 0 && (index + co) <= count());
-        cut( index * sizeof(T), co * sizeof(T) );
+        super::cut( index * sizeof(T), co * sizeof(T) );
     }
 
     void remove_fast(aint index)
     {
         ASSERT(index >= 0 && index < count());
-        cut_tail( sizeof(T), index * sizeof(T) );
+        super::cut_tail( sizeof(T), index * sizeof(T) );
     }
 
     bool find_remove_fast(const T &d)
@@ -1125,11 +1144,11 @@ public:
 
     // begin() end() semantics
 
-    T * begin() { ASSERT(is_writable()); return tbegin<T>(); }
-    const T *begin() const { return tbegin<T>(); } //-V659 //-V524
+    T * begin() { ASSERT(super::is_writable()); return this->template tbegin<T>(); }
+    const T *begin() const { return this->template tbegin<T>(); } //-V659 //-V524
 
-    T *end() { return const_cast<T *>(tend<T>()); }
-    const T *end() const { return tend<T>(); }
+    T *end() { return const_cast<T *>(this->template tend<T>()); }
+    const T *end() const { return this->template tend<T>(); }
 
     // math
     T average() const
@@ -1251,7 +1270,7 @@ namespace internal
     };
 };
 
-template< size_t BITS_PER_ELEMENT, size_t NUM_OF_ELEMENTS, typename TYPEOFRV = sztype< internal::minrvsize<BITS_PER_ELEMENT>::MINIMUMRVSIZE >::type > class packed_buf_c
+template< size_t BITS_PER_ELEMENT, size_t NUM_OF_ELEMENTS, typename TYPEOFRV = typename sztype< internal::minrvsize<BITS_PER_ELEMENT>::MINIMUMRVSIZE >::type > class packed_buf_c
 {
 
     enum
@@ -1261,7 +1280,7 @@ template< size_t BITS_PER_ELEMENT, size_t NUM_OF_ELEMENTS, typename TYPEOFRV = s
         RVSIZE = sizeof(TYPEOFRV),
     };
 
-    //размер массива - максимальный индекс элемента => смещение в байтах + размер возвращаемого значения, чтобы не случилось выхода за границы массива
+    //array size is: maximum element index => byte offset + size of returning value (to avoid out of bound)
     uint8 data[ (((NUM_OF_ELEMENTS-1) * BITS_PER_ELEMENT) >> 3) + sizeof(TYPEOFRV) ];
 public:
     packed_buf_c( bool _clear = true )
@@ -1275,12 +1294,12 @@ public:
     }
 
     /*
-    при вычислении минимального необходимого размера RV, нужно учитывать следующее:
-    1. одним вычитом RV из памяти мы должны гарантированно захватывать все биты элемента
-    2. битовое смещение элемента в общем случае любое
-    3. элементы с размерами 1,2,4 и 8 бит всегда можно вычитать одним байтом, т.к. они никогда не попадают на границы двух байтов в памяти
+    to calc minimum size of RV, we should consider the following:
+    1. one read operation of RV should guarantee that all bits of element were captured
+    2. bit offset of element is any
+    3. elements with 1,2,4 and 8 bits are always can be read by one byte, because they never get to the edge between the two bytes in the memory
 
-    например для 9-битного элемента требуется 2-байтовая вычитка, а для 10-битного - минимум 3-байтная
+    for example, for 9-bit element 2-byte read required; for 10-bit element - minimum 3-byte read required
     */
 
     TS_STATIC_CHECK( RVSIZE >= internal::minrvsize<BITS_PER_ELEMENT>::MINIMUMRVSIZE, "element too large" );
@@ -1293,7 +1312,7 @@ public:
 
         if (!ASSERT(index >= 0 && index < NUM_OF_ELEMENTS)) return TYPEOFRV(0);
         aint disp = (index * BITS_PER_ELEMENT) >> 3;
-        int bitsshift = (index * BITS_PER_ELEMENT) - (disp * 8);
+        aint bitsshift = (index * BITS_PER_ELEMENT) - (disp * 8);
         return (MAKEMASK(BITS_PER_ELEMENT, bitsshift) & (*(TYPEOFRV *)(data+disp))) >> bitsshift;
     }
 
@@ -1301,7 +1320,7 @@ public:
     {
         if (!ASSERT(index >= 0 && index < NUM_OF_ELEMENTS)) return;
         aint disp = (index * BITS_PER_ELEMENT) >> 3;
-        int bitsshift = (index * BITS_PER_ELEMENT) - (disp * 8);
+        aint bitsshift = (index * BITS_PER_ELEMENT) - (disp * 8);
         TYPEOFRV mask = MAKEMASK(BITS_PER_ELEMENT, bitsshift);
         TYPEOFRV vv = *(TYPEOFRV *)(data + disp);
         TYPEOFRV newvv = (vv & (~mask)) | (v << bitsshift);
