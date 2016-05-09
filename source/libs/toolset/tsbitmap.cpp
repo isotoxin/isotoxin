@@ -2266,6 +2266,7 @@ void render_image( const bmpcore_exbody_s &tgt, const bmpcore_exbody_s &image, a
     irect imgrectnew( 0, image.info().sz );
     imgrectnew += ivec2( x, y );
     imgrectnew.intersect( cliprect );
+    imgrectnew.intersect( ts::irect( 0, tgt.info().sz ) );
     if ( !imgrectnew ) return;
 
     imgrectnew -= ivec2( x, y );
@@ -2279,6 +2280,7 @@ void render_image( const bmpcore_exbody_s &tgt, const bmpcore_exbody_s &image, a
     irect imgrectnew = imgrect.szrect();
     imgrectnew += ivec2( x, y );
     imgrectnew.intersect( cliprect );
+    imgrectnew.intersect( ts::irect(0, tgt.info().sz) );
     if ( !imgrectnew ) return;
 
     imgrectnew -= ivec2( x, y );

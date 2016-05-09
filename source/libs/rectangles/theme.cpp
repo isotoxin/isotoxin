@@ -203,7 +203,9 @@ void button_desc_s::load_params(theme_c *th, const abp_c * block, const colors_m
             {
                 ts::str_c x = block->get_string(stnames[i]);
                 rectsf[i] = th->get_rect(x);
-                if (!rectsf[i])
+                if ( rectsf[ i ] )
+                    rects[ i ] = ts::irect( 0 );
+                else
                     rects[i] = parserect(x, ts::irect(0));
                 colors[i] = colsmap.parse(block->get_string(sstr_t<32>(stnames[i], CONSTASTR("textcolor"))), ARGB(0, 0, 0));
             }
@@ -618,6 +620,10 @@ bool theme_c::load( const ts::wsptr &name, FONTPAR fp, bool summon_ch_signal)
     {
         for (auto it = btns->begin(); it; ++it)
         {
+#ifndef _FINAL
+            static sstr_t<-64> bname( it.name() );
+#endif
+
             shared_ptr<button_desc_s> &bd = buttons[it.name()];
             if (bd) continue;
 

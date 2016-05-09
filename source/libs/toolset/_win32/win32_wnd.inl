@@ -157,11 +157,11 @@ namespace
 
 }
 
-
 class win32_wnd_c : public wnd_c
 {
     friend HWND wnd2hwnd( const wnd_c * w );
     static const wchar_t *classname() { return L"REW013"; }
+
     static LRESULT CALLBACK wndhandler( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
     {
         safe_ptr<win32_wnd_c> wnd = hwnd2wnd( hwnd );
@@ -281,14 +281,16 @@ class win32_wnd_c : public wnd_c
                 ReleaseCapture();
             return 0;
         case WM_SETTINGCHANGE:
-            if ( wnd && !wnd->flags.is( F_RECT_UPDATING ) )
+            if ( wnd && !wnd->flags.is( F_RECT_UPDATING ) && SPI_SETWORKAREA == wparam )
             {
                 irect cr = wnd->get_normal_rect();
-                bool is_max = wnd->is_maximized();
-                ASSERT( !is_max || wnd->maxmon >= 0 );
-                wnd->cbs->evt_refresh_pos( is_max ? monitor_get_max_size(wnd->maxmon) : cr, is_max ? D_MAX : wnd->dp );
+                bool is_max = wnd->maxmon >= 0;
+                if (is_max) cr = monitor_get_max_size( wnd->maxmon ), wnd->flags.set( F_MAX_CHANGE );
+                wnd->maxmon = -1; // reset to force buffers recreate
+                wnd->cbs->evt_refresh_pos( cr, is_max ? D_MAX : wnd->dp );
                 wnd->kill_border();
-                wnd->recreate_border();
+                if ( wnd->maxmon < 0) wnd->recreate_border();
+                wnd->flags.clear( F_MAX_CHANGE );
             }
             return 0;
 
@@ -301,6 +303,8 @@ class win32_wnd_c : public wnd_c
                     wnd->cbs->evt_refresh_pos( wnd->normal_rect, D_RESTORE );
                     wnd->kill_border();
                     wnd->recreate_border();
+                    for ( win32_wnd_c * c : wnd->children )
+                        if ( c ) c->set_focus( true );
                 }
                 break;
             }
@@ -322,6 +326,10 @@ class win32_wnd_c : public wnd_c
             {
                 // restore by system - setup inner flags to avoid restore of window by refresh_frame checker
                 wnd->cbs->evt_refresh_pos( wnd->normal_rect, D_RESTORE );
+            } else if ( wparam == SIZE_MAXIMIZED && wnd )
+            {
+                irect mr = wnd_get_max_size( wnd->normal_rect );
+                wnd->cbs->evt_refresh_pos( mr, D_MAX );
             }
             break;
         case WM_WINDOWPOSCHANGED:
@@ -521,6 +529,18 @@ class win32_wnd_c : public wnd_c
             border_window_data_s *d = (border_window_data_s *)borderdata;
             for ( int i = 0; i < 4; ++i )
                 d[ i ].create_window( hwnd );
+            if ( dp == D_NORMAL )
+            {
+                HDWP dwp = BeginDeferWindowPos( 4 );
+
+                d[ 0 ].update( dwp, normal_rect );
+                d[ 1 ].update( dwp, normal_rect );
+                d[ 2 ].update( dwp, normal_rect );
+                d[ 3 ].update( dwp, normal_rect );
+
+                EndDeferWindowPos( dwp );
+
+            }
         }
     }
     void recreate_back_buffer( const ivec2 &sz, bool exact_size = false )
@@ -591,6 +611,9 @@ class win32_wnd_c : public wnd_c
 
     static const flags32_s::BITS F_NOTIFICATION_ICON = FREEBITS << 0;
     static const flags32_s::BITS F_RECT_UPDATING = FREEBITS << 1;
+    static const flags32_s::BITS F_MAX_CHANGE = FREEBITS << 2;
+
+    array_safe_t< win32_wnd_c, 1 > children;
 
     HWND hwnd = nullptr;
     HDC dc = nullptr;
@@ -602,9 +625,21 @@ class win32_wnd_c : public wnd_c
     int maxmon = -1;
     //int evtstart = 0;
 
+    void add_child( win32_wnd_c *c )
+    {
+        for ( aint i = children.size() - 1; i >= 0; --i )
+        {
+            if ( children.get( i ).expired() )
+                children.remove_fast( i );
+            else if ( c == children.get( i ) )
+                return;
+        }
+        children.add( c );
+    }
+
 public:
-    irect sbs = irect(0);
     uint32 wid = 0x0803c00c;
+    irect sbs = irect(0);
 
     win32_wnd_c( wnd_callbacks_s *cbs ):wnd_c(cbs)
     {
@@ -770,9 +805,9 @@ public:
             bool rebuf = false;
             bool reminimization = shp->collapsed() != ( odp == D_MIN || odp == D_MICRO );
             bool remaximization = shp->d != odp && (shp->d == D_MAX || odp == D_MAX);
-            // не меняем координаты окна, если изменяется MAX-MIN статус. иначе SW_MAXIMIZE будет странно работать
-            
             bool rectchanged = !remaximization && !reminimization && shp->d != D_MAX && !shp->collapsed() && shp->rect != get_normal_rect();
+            if ( flags.is( F_MAX_CHANGE ) )
+                remaximization = true, rectchanged = true;
 
             uint32 flgs = 0;
 
@@ -791,14 +826,12 @@ public:
             {
                 update_frame = shp->layered; // force draw for alphablend mode
                 recreate_back_buffer( shp->d == D_MAX ? fssz.size() : shp->rect.size() );
-                if ( !shp->collapsed() && shp->visible )
+                if ( !shp->collapsed() && shp->visible && shp->d != D_MAX )
                     recreate_border();
             }
 
             if ( shp->layered ) // in alphablend mode we have to draw rect before resize
-            {
                 shp->apply( update_frame, true );
-            }
 
             if ( flgs )
             {
@@ -835,7 +868,7 @@ public:
             int scmd = 0;
             if ( remaximization || reminimization )
             {
-                if ( borderdata && remaximization )
+                if ( borderdata )
                 {
                     border_window_data_s *d = (border_window_data_s *)borderdata;
                     int n = 0;
@@ -856,9 +889,13 @@ public:
                 if ( GetCapture() == hwnd ) ReleaseCapture();
                 scmd = shp->collapsed() ? SW_MINIMIZE : ( shp->d == D_MAX ? SW_MAXIMIZE : SW_RESTORE );
                 bool curmin = is_collapsed();
-                bool curmax = is_maximized();
-                if ( curmin != shp->collapsed() || curmax != ( shp->d == D_MAX ) )
+                bool curmax = maxmon >= 0 && is_maximized();
+                if ( curmin != shp->collapsed() || shp->collapsed() && borderdata != nullptr || curmax != ( shp->d == D_MAX ) )
                 {
+                    // always reset maximize state
+                    if (0 != (WS_MAXIMIZE & GetWindowLongW( hwnd, GWL_STYLE )) )
+                        ShowWindow( hwnd, SW_RESTORE );
+
                     irect sr = shp->rect;
                     switch ( scmd )
                     {
@@ -933,13 +970,20 @@ public:
         normal_rect = irect( 100, 100, 600, 400 );
         if ( shp ) normal_rect = shp->rect;
 
+        ts::irect wrect = normal_rect;
+        if ( shp && shp->d == D_MAX )
+            maxmon = get_max_sz( ref_cast<irect>( shp->rect ), wrect );
+
         master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
         creation_data_s cd;
         cd.wnd = this;
-        cd.size = normal_rect.size();
+        cd.size = wrect.size();
         cd.collapsed = ( af & WS_MINIMIZE ) != 0;
 
-        hwnd = CreateWindowExW( exf, classname(), shp ? shp->name.cstr() : nullptr, af, normal_rect.lt.x, normal_rect.lt.y, normal_rect.width(), normal_rect.height(), prnt, 0, istuff.inst, &cd );
+        hwnd = CreateWindowExW( exf, classname(), shp ? shp->name.cstr() : nullptr, af, wrect.lt.x, wrect.lt.y, wrect.width(), wrect.height(), prnt, 0, istuff.inst, &cd );
+
+        if ( win32_wnd_c *p = hwnd2wnd( prnt ) )
+            p->add_child( this );
 
         if ( !shp || shp->visible )
         {
@@ -948,7 +992,7 @@ public:
 
         if ( shp ) dp = shp->d;
 
-        if ( 0 == ( exf & WS_EX_TOOLWINDOW ) )
+        if ( 0 != ( exf & WS_EX_APPWINDOW ) )
         {
             HICON oi = appicon;
             appicon = get_icon( false );

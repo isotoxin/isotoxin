@@ -6,7 +6,11 @@
 
 #ifdef _WIN32
 #define PLGHOSTNAME CONSTWSTR("plghost.exe")
+#endif // _WIN32
+#ifdef __linux__
+#define PLGHOSTNAME CONSTWSTR("plghost")
 #endif
+
 
 template<typename STR> struct wraptranslate;
 template<> struct wraptranslate<ts::wsptr> : public ts::wsptr
@@ -158,7 +162,7 @@ SLANGID detect_language();
 menu_c list_langs( SLANGID curlng, MENUHANDLER h );
 
 bool new_version();
-bool new_version( const ts::asptr &current, const ts::asptr &newver );
+bool new_version( const ts::asptr &current, const ts::asptr &newver, bool same_version = false );
 
 bool file_mask_match( const ts::wsptr &filename, const ts::wsptr &masks );
 
@@ -239,13 +243,19 @@ template<> struct gmsg<ISOGM_NEWVERSION> : public gmsgbase
     enum error_e
     {
         E_OK,
+        E_OK_FORCE,
         E_NETWORK,
         E_DISK,
     };
 
-    gmsg(ts::asptr ver, error_e en) :gmsgbase(ISOGM_NEWVERSION), ver(ver), error_num(en) {}
+    gmsg( ts::asptr ver, error_e en, bool version64 ) :gmsgbase(ISOGM_NEWVERSION), ver(ver), error_num(en), version64( version64 ){}
     ts::sstr_t<-16> ver;
     error_e error_num = E_OK;
+    bool version64 = false;
+    bool is_ok() const
+    {
+        return E_OK == error_num || E_OK_FORCE == error_num;
+    }
 };
 
 class incoming_msg_panel_c;

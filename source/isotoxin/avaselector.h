@@ -38,6 +38,7 @@ class dialog_avaselector_c : public gui_isodialog_c
         ts::blob_c      encoded_fit_16kb;
         ts::blob_c      temp;
 
+        int pass = 0;
         int sz1 = 16;
         int sz2 = 16;
         ts::aint best = 0;
@@ -47,7 +48,7 @@ class dialog_avaselector_c : public gui_isodialog_c
         {
         }
 
-        /*virtual*/ int iterate(int pass) override;
+        /*virtual*/ int iterate() override;
         /*virtual*/ void done(bool canceled) override;
     } *compressor = nullptr;
 

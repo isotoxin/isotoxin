@@ -83,6 +83,9 @@ struct autoupdate_params_s
     bool in_updater = false;
     bool in_progress = false;
     bool downloaded = false;
+#ifndef MODE64
+    bool disable64 = false;
+#endif // MODE64
 };
 
 struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
@@ -104,7 +107,7 @@ struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
         job_s() {}
     };
 
-    /*virtual*/ int iterate( int pass ) override;
+    /*virtual*/ int iterate() override;
     /*virtual*/ void done( bool canceled ) override;
     /*virtual*/ void result() override;
 
@@ -137,14 +140,16 @@ struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
     };
 
     spinlock::syncvar<data_s> data;
+    int queueemptycounter = 0;
 
     void * file_handle() const { return data.lock_read()().handle; }
     //uint64 get_offset() const { return data.lock_read()().offset; }
 
+    bool dip = false;
     bool accepted = false; // prepare_fn called - file receive accepted // used only for receive
     bool update_item = false;
-    bool dip = false;
     bool read_fail = false;
+    bool done_transfer = false;
 
     file_transfer_s();
     ~file_transfer_s();

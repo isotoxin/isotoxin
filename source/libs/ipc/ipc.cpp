@@ -83,7 +83,8 @@ struct xchg_buffer_header_s
     bool isptr(const void *ptr) const
     {
         char *pstart = (char *)this;
-        return ptr >= pstart && ptr < ((char *)getptr()+allocated);
+        ptrdiff_t a = allocated; //-V101
+        return ptr >= pstart && ptr < ((char *)getptr()+a);
     }
 
 };
@@ -140,7 +141,7 @@ struct ipc_data_s
             __debugbreak();
 #endif // _DEBUG
         xchg_buffers[index].reset();
-        memcpy( xchg_buffers + index, xchg_buffers + index + 1, (--xchg_buffers_count - index) * sizeof(xchg_buffers[0]) );
+        memcpy( xchg_buffers + index, xchg_buffers + index + 1, (ptrdiff_t)(--xchg_buffers_count - index) * sizeof(xchg_buffers[0]) );
     }
 
 
@@ -211,7 +212,7 @@ struct ipc_data_s
             if ( xchg_buffers[i].ptr->allocated > newexchb->ptr->allocated )
             {
                 // insert here
-                memmove( xchg_buffers + i + 1, xchg_buffers + i, (xchg_buffers_count - i) * sizeof(xchg_buffers[0]) );
+                memmove( xchg_buffers + i + 1, xchg_buffers + i, (ptrdiff_t)(xchg_buffers_count - i) * sizeof(xchg_buffers[0]) );
                 xchg_buffers[i] = *newexchb;
                 ++xchg_buffers_count;
                 return;
@@ -333,7 +334,7 @@ struct ipc_data_s
                 bb.mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, 0, XCHG_BUF_HDR_SIZE + buf.allocated, buf.bufname);
                 if (!bb.mapping)
                     OOPS;
-                bb.ptr = (xchg_buffer_header_s *)MapViewOfFile(bb.mapping, FILE_MAP_WRITE, 0, 0, XCHG_BUF_HDR_SIZE + buf.allocated);
+                bb.ptr = (xchg_buffer_header_s *)MapViewOfFile(bb.mapping, FILE_MAP_WRITE, 0, 0, (ptrdiff_t)(XCHG_BUF_HDR_SIZE + buf.allocated));
                 if (!bb.ptr)
                 {
                     CloseHandle(bb.mapping);
@@ -379,17 +380,17 @@ struct ipc_data_s
             return true;
         case DATATYPE_DATA_128k:
             {
-                int trdatasize = (d.datasize - sizeof(data_s));
+                int trdatasize = (d.datasize - (int)sizeof(data_s));
                 if (trdatasize > BIG_DATA_SIZE)
                     OOPS;
 
-                void *dd = _alloca(trdatasize);
+                void *dd = _alloca((size_t)trdatasize);
                 int rsz = trdatasize;
                 for( char *t = (char *)dd; rsz > 0; )
                 {
                     ReadFile(pipe_in, t, rsz, &r, nullptr);
                     rsz -= (int)r;
-                    t += r;
+                    t += (ptrdiff_t)r;
                     if ( rsz < 0 )
                         OOPS;
                 }
@@ -400,7 +401,7 @@ struct ipc_data_s
             return true;
         case DATATYPE_DATA_BIG:
             {
-                int trdatasize = (d.datasize - sizeof(data_s));
+                int trdatasize = (d.datasize - (int)sizeof(data_s));
                 ipc::ipc_result_e rslt = datahandler(par_data, nullptr, trdatasize);
                 if (IPCR_BREAK == rslt)
                     OOPS;

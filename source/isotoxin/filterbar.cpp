@@ -556,7 +556,7 @@ bool gui_filterbar_c::full_search_s::reader(int row, ts::SQLITE_DATAGETTER getta
     return true;
 }
 
-/*virtual*/ int gui_filterbar_c::full_search_s::iterate(int pass)
+/*virtual*/ int gui_filterbar_c::full_search_s::iterate()
 {
     // mtype 0 == MTA_MESSAGE
     // mtype 107 == MTA_UNDELIVERED_MESSAGE

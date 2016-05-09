@@ -6,7 +6,7 @@ if x%libdir%==x set libdir=..\..\source\libs-external
 if exist %libdir%\hunspell\src\hunspell.h goto alrd
 
 if exist hunspell rd  /S /Q
-git clone https://github.com/hunspell/hunspell
+git clone https://github.com/isotoxin/hunspell
 
 md %libdir%\hunspell\src
 

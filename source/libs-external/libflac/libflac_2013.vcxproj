@@ -106,24 +106,6 @@
       <DisableSpecificWarnings>4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
   </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <ClCompile>
-      <AdditionalOptions>/D "_USE_MATH_DEFINES" %(AdditionalOptions)</AdditionalOptions>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
-      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
-      <OmitFramePointers>true</OmitFramePointers>
-      <WholeProgramOptimization>true</WholeProgramOptimization>
-      <AdditionalIncludeDirectories>.\include;src\libflac\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>NDEBUG;_LIB;FLAC__HAS_OGG;FLAC__CPU_X86_64;FLAC__HAS_X86INTRIN;FLAC__ALIGN_MALLOC_DATA;VERSION="1.3.1";FLAC__NO_DLL;FLaC__INLINE=_inline;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <BufferSecurityCheck>false</BufferSecurityCheck>
-      <WarningLevel>Level3</WarningLevel>
-      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <CompileAs>Default</CompileAs>
-      <DisableSpecificWarnings>4267;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <FloatingPointModel>Fast</FloatingPointModel>
-    </ClCompile>
-  </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="include\FLAC\all.h" />
     <ClInclude Include="include\FLAC\assert.h" />
@@ -156,6 +138,7 @@
     <ClInclude Include="src/libflac/include\protected\stream_encoder.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\libFLAC\windows_unicode_filenames.c" />
     <ClCompile Include="src\share\win_utf8_io\win_utf8_io.c" />
     <ClCompile Include="src\libflac\bitmath.c" />
     <ClCompile Include="src\libflac\bitreader.c" />

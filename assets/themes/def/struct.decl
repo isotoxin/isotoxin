@@ -142,7 +142,7 @@ rects
   }
   prepimg=main
   {
-    colors=##chessboard0,##chessboard1,##text_info,##seledge0,##seledge1
+    colors=##chessboard0,##chessboard1,##text_info,##seledge0,##seledge1,##text_info_bg
   }
   dictlst=main
   {

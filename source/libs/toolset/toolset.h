@@ -60,6 +60,7 @@
 #define INLINE __forceinline
 #define UNREACHABLE() __assume(0)
 
+#define DLMALLOC_USED 1
 #if defined _FINAL || defined _DEBUG_OPTIMIZED
 #ifndef DLMALLOC_USED
 #define DLMALLOC_USED 1

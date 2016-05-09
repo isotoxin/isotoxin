@@ -42,8 +42,7 @@ void enum_video_capture_devices(vsb_list_t &list, bool add_desktop)
         d.id.set(vd.path.c_str(), (int)vd.path.length());
 
         for (const VideoInfo&vi : vd.caps)
-            if (vi.format == VideoFormat::XRGB)
-                d.resolutions.set( ts::ivec2( vi.maxCX, vi.maxCY ) );
+            d.resolutions.set( ts::ivec2( vi.maxCX, vi.maxCY ) );
         
         d.resolutions.tsort<ts::ivec2>([](const ts::ivec2 *a, const ts::ivec2 *b)->bool {
             if (*a == *b) return false;
@@ -238,7 +237,7 @@ void vsb_desktop_c::grab_desktop::grab(const ts::irect &gr)
 
 }
 
-/*virtual*/ int vsb_desktop_c::grab_desktop::iterate(int pass)
+/*virtual*/ int vsb_desktop_c::grab_desktop::iterate()
 {
     spinlock::simple_lock(sync);
     if (stop_job)
@@ -252,7 +251,7 @@ void vsb_desktop_c::grab_desktop::grab(const ts::irect &gr)
     {
         spinlock::simple_unlock(sync);
         ts::master().sys_sleep(1);
-        return stop_job ? R_CANCEL : 1;
+        return stop_job ? R_CANCEL : 0;
     }
 
     ts::irect gr = grabrect;
@@ -294,7 +293,7 @@ void vsb_desktop_c::grab_desktop::grab(const ts::irect &gr)
         next_time = curt; // tooooo slooooooow grabbing :(
 
     spinlock::simple_unlock(sync);
-    return stop_job ? R_CANCEL : 1;
+    return stop_job ? R_CANCEL : 0;
 }
 
 void vsb_desktop_c::grabcb(ts::drawable_bitmap_c &gbmp)
@@ -467,7 +466,7 @@ void vsb_dshow_camera_c::core_dshow_c::run_initializer(const VideoConfig &config
 
         init_camera(const VideoConfig &config, core_c *camcore) :camcore(camcore), config(config), camera(DShow::InitGraph::True) {}
 
-        /*virtual*/ int iterate(int pass) override
+        /*virtual*/ int iterate() override
         {
             if (stop_job)
                 return R_CANCEL;
@@ -476,18 +475,19 @@ void vsb_dshow_camera_c::core_dshow_c::run_initializer(const VideoConfig &config
             //Sleep(2000);
             //return R_RESULT;
 
+            ts::ivec2 reqres( config.cx, config.cy );
             config.useDefaultConfig = config.cx == 0 || config.cy == 0;
             config.format = VideoFormat::XRGB;
-
+            config.frameInterval = 0;
             camera.SetVideoConfig(&config);
 
-            if (VideoFormat::XRGB != config.format)
+            if ( !config.useDefaultConfig && VideoFormat::XRGB != config.format)
             {
+                config.frameInterval = 0;
                 config.useDefaultConfig = false;
                 config.format = VideoFormat::XRGB;
                 camera.SetVideoConfig(&config);
             }
-
 
             if (camera.Valid())
             {
@@ -637,7 +637,7 @@ video_frame_decoder_c::~video_frame_decoder_c()
 
 };
 
-/*virtual*/ int video_frame_decoder_c::iterate(int pass)
+/*virtual*/ int video_frame_decoder_c::iterate()
 {
     if (nullptr == f || nullptr == display->notice) return R_CANCEL;
     if ( display->get_desired_size() == ts::ivec2(0) ) return R_CANCEL;

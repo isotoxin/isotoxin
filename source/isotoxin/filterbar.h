@@ -56,7 +56,7 @@ class gui_filterbar_c : public gui_label_ex_c
 
         bool reader(int row, ts::SQLITE_DATAGETTER getta);
 
-        /*virtual*/ int iterate(int pass) override;
+        /*virtual*/ int iterate() override;
         /*virtual*/ void done(bool canceled) override;
     };
 

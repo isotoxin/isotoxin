@@ -7,4 +7,4 @@ if exist %libdir%\libsodium rd %libdir%\libsodium /S /Q
 if exist %libdir%\libvpx rd %libdir%\libvpx /S /Q
 if exist %libdir%\toxcore rd %libdir%\toxcore /S /Q
 
-call 1_get_libs.cmd
+call 1-get-libs.cmd

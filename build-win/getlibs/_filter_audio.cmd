@@ -6,7 +6,7 @@ if x%libdir%==x set libdir=..\..\source\libs-external
 if exist %libdir%\filter_audio\filter_audio.h goto alrd
 
 if exist filter_audio rd filter_audio /S /Q
-git clone https://github.com/Rotkaermota/filter_audio
+git clone https://github.com/isotoxin/filter_audio
 
 rd filter_audio\.git /S /Q
 xcopy filter_audio %libdir%\filter_audio /s /e /y /i

@@ -579,7 +579,7 @@ bool gui_dialog_c::path_selector(RID, GUIPARAM param)
 bool gui_dialog_c::path_explore(RID rid, GUIPARAM param)
 {
     gui_textfield_c &tf = HOLD(RID::from_param(param)).as<gui_textfield_c>();
-    ts::master().explore_path( tf.get_text(), false );
+    ts::explore_path( tf.get_text(), false );
     return true;
 }
 

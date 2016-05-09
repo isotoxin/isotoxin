@@ -87,6 +87,7 @@
     <ClInclude Include="src/libflac/include\protected\stream_encoder.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\libFLAC\windows_unicode_filenames.c" />
     <ClCompile Include="src\share\win_utf8_io\win_utf8_io.c" />
     <ClCompile Include="src\libflac\bitmath.c" />
     <ClCompile Include="src\libflac\bitreader.c" />

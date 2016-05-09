@@ -235,7 +235,7 @@ class vsb_desktop_c : public vsb_c
         ~grab_desktop();
 
         void grab(const ts::irect &gr);
-        /*virtual*/ int iterate(int pass) override;
+        /*virtual*/ int iterate() override;
 
         void add_owner(vsb_desktop_c *owner);
         void remove_owner(vsb_desktop_c *owner);
@@ -341,7 +341,7 @@ class video_frame_decoder_c : public ts::task_c
     incoming_video_frame_s *f;
     vsb_display_c *display = nullptr;
 
-    /*virtual*/ int iterate(int pass) override;
+    /*virtual*/ int iterate() override;
     /*virtual*/ void done(bool canceled) override;
     /*virtual*/ void result() override;
 public:

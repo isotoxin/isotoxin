@@ -197,6 +197,9 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     int dsp_flags = 0;
     bool dspf_handler( RID, GUIPARAM );
 
+    int misc_flags = 0;
+    bool miscf_handler( RID, GUIPARAM );
+
     s3::DEVICE mic_device_stored;
     bool mic_device_changed = false;
     bool mic_test_rec = false;

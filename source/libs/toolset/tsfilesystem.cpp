@@ -1089,7 +1089,37 @@ namespace ts
 #endif
 
 
+    bool TSCALL is_64bit_os()
+    {
+#ifdef MODE64
+        return true;
+#else
+#ifdef _WIN32
+        BOOL bIsWow64 = FALSE;
 
+        //IsWow64Process is not available on all supported versions of Windows.
+        //Use GetModuleHandle to get a handle to the DLL that contains the function
+        //and GetProcAddress to get a pointer to the function if available.
+
+        typedef BOOL ( WINAPI *LPFN_ISWOW64PROCESS ) ( HANDLE, PBOOL );
+        LPFN_ISWOW64PROCESS fnIsWow64Process = (LPFN_ISWOW64PROCESS)GetProcAddress( GetModuleHandleW( L"kernel32" ), "IsWow64Process" );
+
+        if ( nullptr != fnIsWow64Process )
+        {
+            if ( !fnIsWow64Process( GetCurrentProcess(), &bIsWow64 ) )
+            {
+                return false;
+            }
+        }
+        return bIsWow64 != FALSE;
+#endif
+#ifdef __linux__
+        UNFINISHED( "check 32 or 64 bit linux" );
+        return false;
+#endif
+#endif
+
+    }
 
 
 } //namespace ts

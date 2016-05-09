@@ -6,7 +6,7 @@ if x%libdir%==x set libdir=..\..\source\libs-external
 if exist %libdir%\toxcore\toxcore\tox.h goto alrd
 
 if exist toxcore-vs rd toxcore-vs /S /Q
-git clone https://github.com/Rotkaermota/toxcore-vs
+git clone https://github.com/isotoxin/toxcore-vs
 
 if exist %libdir%\opus rd %libdir%\opus /S /Q
 move /Y toxcore-vs\opus %libdir% >nul

@@ -11,16 +11,16 @@ struct evlst_s
 
 struct evt_internals_s
 {
-#ifdef _DEBUG
+#ifndef _FINAL
     int evs_count = 0;
-#endif // _DEBUG
+#endif // _FINAL
     evlst_s *evs = nullptr;
 
     ~evt_internals_s()
     {
-#ifdef _DEBUG
+#ifndef _FINAL
         evs_count = -1;
-#endif // _DEBUG
+#endif // _FINAL
         if (evs)
         {
             MM_FREE(evs);
@@ -33,9 +33,9 @@ struct evt_internals_s
         int sz = evcnt * sizeof(evlst_s);
         evs = (evlst_s *)MM_ALLOC(sz);
         memset(evs, 0, sz);
-#ifdef _DEBUG
+#ifndef _FINAL
         evs_count = evcnt;
-#endif // _DEBUG
+#endif // _FINAL
     }
     evlst_s & operator()(int ev)
     {

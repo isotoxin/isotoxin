@@ -62,7 +62,7 @@ namespace
         
         enum_video_devices_s( dialog_settings_c *dlg ):dlg(dlg) {}
 
-        /*virtual*/ int iterate(int pass) override
+        /*virtual*/ int iterate() override
         {
             enum_video_capture_devices(video_devices, true);
             return R_DONE;
@@ -93,7 +93,7 @@ namespace
             proxy_addr = cfg().proxy_addr();
         }
 
-        /*virtual*/ int iterate(int pass) override
+        /*virtual*/ int iterate() override
         {
             ts::buf_c d;
             CURL *curl = curl_easy_init();
@@ -154,7 +154,7 @@ namespace
             path = ts::fn_join(ts::fn_get_path(cfg().get_path()), CONSTWSTR("spelling"));
         }
 
-        /*virtual*/ int iterate(int pass) override
+        /*virtual*/ int iterate() override
         {
             ts::buf_c d;
             CURL *curl = curl_easy_init();
@@ -221,7 +221,7 @@ namespace
             return true;
         }
 
-        /*virtual*/ int iterate(int pass) override
+        /*virtual*/ int iterate() override
         {
             if (stopjob) return R_DONE;
             if ((aff.size() == 0 || dic.size() == 0) && zip.size() == 0) return R_RESULT_EXCLUSIVE;
@@ -1806,6 +1806,7 @@ void dialog_settings_c::mod()
 
     PREPARE( dsp_flags, cfg().dsp_flags() );
 
+
 #define SND(s) PREPARE( sndfn[snd_##s], cfg().snd_##s() ); PREPARE( sndvol[snd_##s], cfg().snd_vol_##s() );
     SOUNDS
 #undef SND
@@ -1816,6 +1817,7 @@ void dialog_settings_c::mod()
         return d;
     };
     PREPARE(debug, std::move(getdebug()));
+    PREPARE( misc_flags, cfg().misc_flags() );
 
     int textrectid = 0;
 
@@ -2174,6 +2176,9 @@ void dialog_settings_c::mod()
     dm().path( TTT("Temp folder for message handler",442), tempfolder_handlemsg, DELEGATE( this, tempfolder_handlemsg_edit_handler ) );
     dm().vspace();
 
+    dm().checkb( ts::wstr_c(), DELEGATE( this, miscf_handler ), misc_flags ).setmenu(
+        menu_c().add( TTT("Disable autoupdate to 64 bit version",452), 0, MENUHANDLER(), ts::amake<int>( MISCF_DISABLE64 ) )
+    );
 
 
     if (profile_selected)
@@ -2248,6 +2253,13 @@ bool dialog_settings_c::debug_handler2(RID, GUIPARAM p)
     else
         debug.set(CONSTASTR("onlythisurl")) = CONSTASTR("1");
 
+    mod();
+    return true;
+}
+
+bool dialog_settings_c::miscf_handler( RID, GUIPARAM p )
+{
+    misc_flags = as_int( p );
     mod();
     return true;
 }
@@ -3099,6 +3111,9 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
     if (cfg().dsp_flags(dsp_flags))
         gmsg<ISOGM_CHANGED_SETTINGS>(0, CFG_DSPFLAGS).send();
 
+    cfg().misc_flags( misc_flags );
+    
+
 #define SND(s) cfg().snd_##s(sndfn[snd_##s]); cfg().snd_vol_##s(sndvol[snd_##s]);
     SOUNDS
 #undef SND
@@ -3499,7 +3514,7 @@ menu_c dialog_settings_c::list_video_capture_resolutions()
 {
     menu_c m;
     ts::wstr_c cid = camera.set(CONSTWSTR("id"));
-    ts::wstr_c res = fix_camera_res(camera.set(CONSTWSTR("res")));
+    ts::str_c res = to_str(fix_camera_res(camera.set(CONSTWSTR("res"))));
     for (const vsb_descriptor_s &vd : video_devices)
     {
         if (vd.id == cid)
@@ -3507,9 +3522,9 @@ menu_c dialog_settings_c::list_video_capture_resolutions()
             for( const ts::ivec2 &r : vd.resolutions )
             {
                 ts::uint32 f = 0;
-                ts::wstr_c tres; tres.append_as_uint(r.x).append_char(',').append_as_int(r.y);
+                ts::str_c tres; tres.append_as_uint(r.x).append_char(',').append_as_uint(r.y);
                 if (tres == res) f = MIF_MARKED;
-                m.add(ts::wmake(r.x).append(CONSTWSTR(" x ")).append_as_uint(r.y), f, DELEGATE(this, select_video_capture_res), to_str(tres));
+                m.add(ts::wmake(r.x).append(CONSTWSTR(" x ")).append_as_uint(r.y), f, DELEGATE(this, select_video_capture_res), tres);
             }
         }
     }

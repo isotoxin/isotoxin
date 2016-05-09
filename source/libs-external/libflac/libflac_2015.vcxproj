@@ -32,13 +32,6 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup>
-    <_ProjectFileVersion>12.0.30501.0</_ProjectFileVersion>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <OutDir>$(GARBAGE)\#libs\vc15\$(Configuration)\</OutDir>
-    <IntDir>$(GARBAGE)\#garbage\vc15\$(ProjectName)\$(Configuration)\</IntDir>
-  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -94,6 +87,7 @@
     <ClInclude Include="src/libflac/include\protected\stream_encoder.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\libFLAC\windows_unicode_filenames.c" />
     <ClCompile Include="src\share\win_utf8_io\win_utf8_io.c" />
     <ClCompile Include="src\libflac\bitmath.c" />
     <ClCompile Include="src\libflac\bitreader.c" />

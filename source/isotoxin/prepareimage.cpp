@@ -1,7 +1,7 @@
 #include "isotoxin.h"
 
 
-/*virtual*/ int dialog_prepareimage_c::saver_s::iterate(int pass)
+/*virtual*/ int dialog_prepareimage_c::saver_s::iterate()
 {
     if (!dlg || bitmap2save.info().sz < ts::ivec2(1) ) return R_CANCEL;
 
@@ -46,7 +46,7 @@ namespace
 
         enum_video_devices_s(dialog_prepareimage_c *dlg) :dlg(dlg) {}
 
-        /*virtual*/ int iterate(int pass) override
+        /*virtual*/ int iterate() override
         {
             enum_video_capture_devices(video_devices, true);
             return R_DONE;
@@ -214,6 +214,22 @@ void dialog_prepareimage_c::set_video_devices(vsb_list_t &&_video_devices)
     ctlenable( CONSTASTR("startc"), video_devices.size() > 0 );
 }
 
+void dialog_prepareimage_c::start_capture_menu_sel_res( const ts::str_c& prm )
+{
+    ts::wstr_c id = from_utf8( prm );
+    int t = id.find_pos( '|' );
+    ts::wstr_c res = id.substr( 0, t );
+    id.cut( 0, t + 1 );
+    for ( const vsb_descriptor_s &vd : video_devices )
+    {
+        if ( vd.id == id )
+        {
+            start_capture( vd, res );
+            return;
+        }
+    }
+}
+
 void dialog_prepareimage_c::start_capture_menu_sel(const ts::str_c& prm)
 {
     ts::wstr_c id = from_utf8(prm);
@@ -221,13 +237,13 @@ void dialog_prepareimage_c::start_capture_menu_sel(const ts::str_c& prm)
     {
         if (vd.id == id)
         {
-            start_capture(vd);
+            start_capture( vd, ts::wstr_c());
             return;
         }
     }
 }
 
-void dialog_prepareimage_c::start_capture(const vsb_descriptor_s &desc)
+void dialog_prepareimage_c::start_capture(const vsb_descriptor_s &desc, const ts::wstr_c &res)
 {
     loaded_image.clear();
     loaded_img_format = ts::if_none;
@@ -240,7 +256,13 @@ void dialog_prepareimage_c::start_capture(const vsb_descriptor_s &desc)
         saver = nullptr;
     }
 
-    camera.reset( vsb_c::build(desc, ts::wstrmap_c()) );
+    camera.reset();
+
+    ts::wstrmap_c pars;
+    if ( !res.is_empty() )
+        pars.set( CONSTWSTR("res") ) = res;
+    camera.reset( vsb_c::build(desc, pars) );
+    show_cam_resolution = SCR_YES_WAIT;
     getengine().redraw();
 
     camst = CAMST_NONE;
@@ -250,10 +272,24 @@ void dialog_prepareimage_c::start_capture(const vsb_descriptor_s &desc)
 
 bool dialog_prepareimage_c::start_capture_menu(RID, GUIPARAM)
 {
+    auto fillreso = [this]( const ts::tbuf0_t<ts::ivec2>&resolutions, menu_c&m, const ts::str_c &id )
+    {
+        for ( const ts::ivec2 &r : resolutions )
+        {
+            ts::str_c tres;
+            tres.append_as_uint( r.x ).append_char( ',' ).append_as_uint( r.y ).append_char( '|' ).append( id );
+            m.add( ts::wmake( r.x ).append( CONSTWSTR( " x " ) ).append_as_uint( r.y ), 0, DELEGATE( this, start_capture_menu_sel_res ), tres );
+        }
+
+    };
+
     if (video_devices.size() == 1)
     {
-        start_capture( video_devices.get(0) );
-        return true;
+        if ( video_devices.get( 0 ).resolutions.count() <= 1 )
+        {
+            start_capture( video_devices.get( 0 ), ts::wstr_c() );
+            return true;
+        }
     }
 
     if (RID b = find(CONSTASTR("startc")))
@@ -261,9 +297,19 @@ bool dialog_prepareimage_c::start_capture_menu(RID, GUIPARAM)
         ts::irect br = HOLD(b)().getprops().screenrect();
         menu_c m;
 
-        for (const vsb_descriptor_s &vd : video_devices)
+        if ( video_devices.size() == 1 )
         {
-            m.add(vd.desc, 0, DELEGATE(this, start_capture_menu_sel), to_utf8(vd.id));
+            fillreso( video_devices.get( 0 ).resolutions, m, to_utf8( video_devices.get( 0 ).id ) );
+
+        } else for (const vsb_descriptor_s &vd : video_devices)
+        {
+            if ( vd.id.begins(CONSTWSTR("desktop")) || vd.resolutions.count() <= 1 )
+                m.add(vd.desc, 0, DELEGATE(this, start_capture_menu_sel), to_utf8(vd.id));
+            else
+            {
+                menu_c mm = m.add_sub( vd.desc );
+                fillreso( vd.resolutions, mm, to_utf8( vd.id ) );
+            }
         }
 
         gui_popup_menu_c::show(menu_anchor_s(br, menu_anchor_s::RELPOS_TYPE_BD), m);
@@ -733,7 +779,43 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
                         camera->unlock(b);
                     }
                 }
-                if (!camdraw)
+                if (camdraw)
+                {
+                    if ( SCR_YES_WAIT == show_cam_resolution )
+                    {
+                        show_cam_res_deadline = ts::Time::current() + 5000;
+                        show_cam_resolution = SCR_YES_COUNTDOWN;
+                    }
+                    if ( SCR_YES_COUNTDOWN == show_cam_resolution )
+                    {
+                        if ( ts::Time::current() > show_cam_res_deadline )
+                            show_cam_resolution = SCR_NO;
+
+                        ts::TSCOLOR info_c = ts::ARGB( 255, 255, 255 );
+                        ts::TSCOLOR info_c_bg = ts::ARGB( 0, 0, 0 );
+                        if ( const theme_rect_s *tr = themerect() )
+                            info_c = tr->color( 2 ), info_c_bg = tr->color( 5 );
+                        
+                        ts::ivec2 camres = camera->get_video_size();
+                        ts::wstr_c cres; cres.append_as_uint( camres.x ).append( CONSTWSTR(" x ") ).append_as_uint( camres.y );
+                        ts::wstr_c t = TTT("Capture resolution is: $",451) / cres;
+                        ts::ivec2 tsz = gui->textsize( ts::g_default_text_font, t );
+                        ts::ivec2 tpos = ( viewrect.size() - tsz ) / 2;
+
+                        draw_data_s &dd = getengine().begin_draw();
+
+                        getengine().draw( ts::irect( viewrect.lt + tpos - ts::ivec2(10), viewrect.lt + tpos + tsz + ts::ivec2(10) ), info_c_bg );
+
+                        text_draw_params_s tdp;
+                        tdp.forecolor = &info_c;
+                        dd.offset = viewrect.lt + tpos;
+                        dd.size = tsz;
+                        getengine().draw( t, tdp );
+                        getengine().end_draw();
+
+                    }
+                    
+                } else
                 {
                     ts::TSCOLOR info_c = ts::ARGB(0, 0, 0);
                     if (const theme_rect_s *tr = themerect())

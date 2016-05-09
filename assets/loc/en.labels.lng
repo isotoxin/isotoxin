@@ -448,6 +448,8 @@
 448=Reset to default
 449=Import again...
 450=inactive more then 1 minute
+451=Capture resolution is: $
+452=Disable autoupdate to 64 bit version
 900=information
 901=warning
 902=error

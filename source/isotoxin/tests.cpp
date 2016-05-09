@@ -490,7 +490,7 @@ bool zero_version = false;
 void summon_test_window()
 {
     //cfg().autoupdate_next( now() + 2 );
-    //cfg().autoupdate_newver(CONSTASTR("0.0.0"));
+    //cfg().autoupdate_newver(CONSTASTR("0.0.0"), false);
     //zero_version = true;
     //gmsg<ISOGM_NEWVERSION> *m = TSNEW(gmsg<ISOGM_NEWVERSION>, CONSTASTR("0.1.225"));
     //m->send_to_main_thread();

@@ -13,6 +13,14 @@
 #pragma warning (disable:4324)
 #include "libsodium/src/libsodium/include/sodium.h"
 
+#ifdef MODE64
+#define UPDATE64 true
+#define PROP(a) CONSTASTR(a "-64")
+#else
+#define UPDATE64 (update64 ? ts::is_64bit_os() : false)
+#define PROP(a) ts::str_c( CONSTASTR(a) ).append( update64 ? CONSTASTR("-64") : CONSTASTR("") )
+#endif
+
 extern ts::static_setup<spinlock::syncvar<autoupdate_params_s>,1000> auparams;
 
 size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata)
@@ -71,11 +79,11 @@ auto getss = [](const ts::asptr &latest, const ts::asptr&t) ->ts::asptr
     return ts::asptr();
 };
 
-bool md5ok(ts::buf_c &b, const ts::asptr &latest)
+bool md5ok(ts::buf_c &b, const ts::asptr &latest, bool update64 )
 {
-    ts::str_c md5s = getss(latest, CONSTASTR("md5"));
+    ts::str_c md5s = getss(latest, PROP("md5"));
     if (md5s.get_length() != 32) return false;
-    if (ts::pstr_c(getss(latest, CONSTASTR("size"))).as_int() != b.size()) return false;
+    if (ts::pstr_c(getss(latest, PROP("size"))).as_int() != b.size()) return false;
     ts::md5_c md5;
     md5.update(b.data(), b.size()); md5.done();
     for (int i = 0; i < 16; ++i)
@@ -84,32 +92,66 @@ bool md5ok(ts::buf_c &b, const ts::asptr &latest)
     return true;
 }
 
-bool find_config(ts::wstr_c &path);
-ts::str_c get_downloaded_ver( ts::buf_c *pak = nullptr )
+namespace
 {
+    struct dnver_s
+    {
+        ts::str_c ver;      // if empty - not downloaded
+        ts::wstr_c fn32;    // if non-empty, then 32-bit version present and ok
+        ts::wstr_c fn64;    // if non-empty, then 64-bit version present and ok
+
+        bool check( bool update64 )
+        {
+            return update64 ? !fn64.is_empty() : !fn32.is_empty();
+        }
+    };
+}
+
+bool find_config(ts::wstr_c &path);
+void get_downloaded_ver( dnver_s &dnver )
+{
+    dnver.ver.clear();
+
     if ( auparams().lock_read()().path.is_empty() )
     {
         auto w = auparams().lock_write();
         ts::wstr_c cfgpath = cfg().get_path();
         if (cfgpath.is_empty()) find_config(cfgpath);
-        if (cfgpath.is_empty()) return ts::str_c();
+        if ( cfgpath.is_empty() ) return;
         w().path.setcopy(ts::fn_join(ts::fn_get_path(cfgpath), CONSTWSTR("update\\"))); WINDOWS_ONLY
     }
 
     ts::buf_c bbb;
-    if (pak == nullptr) pak = &bbb;
-    pak->load_from_disk_file(ts::fn_join( auparams().lock_read()().path, CONSTWSTR("latest.txt") ));
-    if (pak->size() > 0)
+    bbb.load_from_disk_file(ts::fn_join( auparams().lock_read()().path, CONSTWSTR("latest.txt") ));
+    if ( bbb.size() > 0 )
     {
-        int signi = ver_ok(pak->cstr());
-        if (!signi) return ts::str_c();
-        ts::str_c latest(pak->cstr().part(signi));
+        int signi = ver_ok(bbb.cstr());
+        if (!signi) return;
+        ts::str_c latest(bbb.cstr().part(signi));
+
         ts::wstr_c wurl(from_utf8( getss(latest,CONSTASTR("url")) ));
-        pak->load_from_disk_file(ts::fn_join(auparams().lock_read()().path, ts::fn_get_name_with_ext(wurl)));
-        if (md5ok(*pak,latest))
-            return getss(latest,CONSTASTR("ver"));
+        ts::wstr_c fn = ts::fn_join( auparams().lock_read()( ).path, ts::fn_get_name_with_ext( wurl ) );
+        bbb.load_from_disk_file( fn );
+        if ( md5ok( bbb, latest, false ) )
+        {
+            dnver.ver = getss( latest, CONSTASTR( "ver" ) );
+            dnver.fn32 = fn;
+        }
+
+        wurl = from_utf8( getss( latest, CONSTASTR( "url-64" ) ) );
+        if ( !wurl.is_empty() )
+        {
+            fn = ts::fn_join( auparams().lock_read()( ).path, ts::fn_get_name_with_ext( wurl ) );
+            bbb.load_from_disk_file( fn );
+            if ( md5ok( bbb, latest, true ) )
+            {
+                if ( dnver.ver.is_empty() )
+                    dnver.ver = getss( latest, CONSTASTR( "ver" ) );
+                dnver.fn64 = fn;
+            }
+        }
+
     }
-    return ts::str_c();
 }
 
 namespace
@@ -248,6 +290,13 @@ void autoupdater()
     if (aar().in_updater)
         return;
 
+#ifdef MODE64
+    bool update64 = true;
+#else
+    bool update64 = !aar().disable64;
+    update64 = UPDATE64;
+#endif // MODE64
+
     ts::str_c lurl = aar().dbgoptions.get(CONSTASTR("local_upd_url"));
     bool ignore_proxy_aurl = false;
     bool only_aurl = false;
@@ -265,7 +314,7 @@ void autoupdater()
 
     if (!only_aurl)
     {
-        addresses.add("https://github.com/Rotkaermota/Isotoxin/wiki/latest");
+        addresses.add("https://github.com/isotoxin/isotoxin/wiki/latest");
         addresses.add("http://isotoxin.im/latest.txt");
     }
     int addri = 0;
@@ -275,6 +324,7 @@ void autoupdater()
         CURL *curl;
         ts::str_c newver;
         gmsg<ISOGM_NEWVERSION>::error_e error_num = gmsg<ISOGM_NEWVERSION>::E_OK;
+        bool new64 = false;
         bool send_newver = false;
         curl_s()
         {
@@ -292,7 +342,7 @@ void autoupdater()
             w.unlock();
 
             if (send_newver)
-                TSNEW(gmsg<ISOGM_NEWVERSION>, newver, error_num)->send_to_main_thread();
+                TSNEW( gmsg<ISOGM_NEWVERSION>, newver, error_num, new64 )->send_to_main_thread();
         }
         operator CURL *() {return curl;}
     } curl;
@@ -383,17 +433,25 @@ next_address:
             addresses.get_string_index(t->as_sptr());
     }
 
+    bool same64 = false;
+    curl.new64 = true;
+#ifndef MODE64
+    same64 = UPDATE64 && getss( latests, CONSTASTR( "url-64" ) ).l > 0;
+    curl.new64 = same64;
+#endif
+
     r = auparams().lock_read();
-    if (!new_version( r().ver, getss(latests, CONSTASTR("ver")) ))
+    if (!new_version( r().ver, getss(latests, CONSTASTR("ver")), same64 ))
     {
         ++addri;
         goto next_address;
     }
 
     bool downloaded = false;
-    ts::str_c dver = get_downloaded_ver();
+    dnver_s dnver;
+    get_downloaded_ver( dnver );
     ts::str_c aver = getss(latests, CONSTASTR("ver"));
-    if (dver == aver)
+    if (dnver.ver == aver && dnver.check( update64 ))
         downloaded = true;
 
     if (downloaded || r().autoupdate == AUB_ONLY_CHECK)
@@ -409,7 +467,7 @@ next_address:
     }
     r.unlock();
 
-    ts::str_c aurl( getss(latests, CONSTASTR("url")) );
+    ts::str_c aurl( getss(latests, PROP("url")) );
     ts::wstr_c pakname = ts::fn_get_name_with_ext(from_utf8(aurl));
     ts::str_c address = addresses.get(addri);
     if (aurl.get_char(0) == '/')
@@ -433,7 +491,7 @@ next_address:
         TSNEW(gmsg<ISOGM_DOWNLOADPROGRESS>, -1, (int)d.size(), (int)d.size())->send_to_main_thread();
     }
 
-    if (!md5ok(d, latests))
+    if (!md5ok(d, latests, update64))
     {
         ++addri;
         goto next_address;
@@ -503,24 +561,58 @@ struct updater
 
 bool check_autoupdate()
 {
-    ts::buf_c pak;
-    ts::str_c dver = get_downloaded_ver(&pak);
-    if (dver.is_empty()) return true;
+    bool is_64 = false;
+    bool update64 = false;
+
+#ifdef MODE64
+    is_64 = true;
+    update64 = true;
+#else
+    update64 = true;
+    update64 = UPDATE64;
+#endif // MODE64
+
+    dnver_s dnver;
+    get_downloaded_ver( dnver );
+    if (dnver.ver.is_empty()) return true;
 
     ts::wstr_c path_exe(ts::fn_get_path(ts::get_exe_full_name()));
+    ts::wstr_c fn = is_64 ? dnver.fn64 : ( update64 && !dnver.fn64.is_empty() ? dnver.fn64 : dnver.fn32 );
 
-    if (application_c::appver() == dver)
+    if (application_c::appver() == dnver.ver)
     {
-        ts::wstr_c ff(auparams().lock_read()().path);
-        if (dir_present(ff))
-            del_dir(ff);
+        if ( !is_64 && update64 && dnver.check( true ) ) // there are 64 bit version downloaded with same version as current 32 bit version and current OS is 64 bit
+        {
+            fn = dnver.fn64;
+            goto do_update;
+        }
 
-        ff = ts::fn_join(path_exe, CONSTWSTR("old"));
-        if (dir_present(ff) && check_write_access(ff))
-            del_dir(ff);
+        if ( ( is_64 && dnver.check( true ) ) ||
+             (!is_64 && dnver.check( false )) 
+            )
+        {
+            // just cleanup
 
-    } else if (new_version(application_c::appver(), dver))
+            ts::wstr_c ff( auparams().lock_read()( ).path );
+            if ( dir_present( ff ) )
+                del_dir( ff );
+
+            ff = ts::fn_join( path_exe, CONSTWSTR( "old" ) );
+            if ( dir_present( ff ) && check_write_access( ff ) )
+                del_dir( ff );
+
+            return true;
+        }
+
+    } else if (new_version(application_c::appver(), dnver.ver ))
     {
+    do_update:
+
+        ts::buf_c pak;
+        pak.load_from_disk_file(fn);
+        if ( pak.size() < 1024 )
+            return true;
+
         if (!check_write_access(path_exe))
             return true; // can't write to exe folder - do nothing
 
@@ -532,7 +624,7 @@ bool check_autoupdate()
         if (u.updfail)
             return true; // continue run
     
-        ts::master().start_app(CONSTWSTR("isotoxin.exe"), ts::wstr_c(), nullptr, false);
+        ts::master().start_app(CONSTWSTR("isotoxin"), ts::wstr_c(), nullptr, false);
 
         return false;
     }

@@ -57,6 +57,9 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|x64'">
     <OutDir>$(ProjectDir)../../../bin/</OutDir>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Final|x64'">
+    <OutDir>$(ProjectDir)../../../bin/</OutDir>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <PreprocessorDefinitions>_WINDOWS;_HOST;%(PreprocessorDefinitions)</PreprocessorDefinitions>

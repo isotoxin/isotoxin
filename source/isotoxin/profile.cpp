@@ -1377,7 +1377,7 @@ namespace
             encrypt_process_n = n;
         }
 
-        /*virtual*/ int iterate(int pass) override
+        /*virtual*/ int iterate() override
         {
             if (remove_enc)
             {

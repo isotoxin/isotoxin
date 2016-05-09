@@ -231,6 +231,7 @@ enum copy_rslt_e
 copy_rslt_e TSCALL copy_file( const wsptr &existingfn, const wsptr &newfn );
 bool TSCALL rename_file( const wsptr &existingfn, const wsptr &newfn );
 
+bool TSCALL is_64bit_os();
 
 } // namespace ts
 

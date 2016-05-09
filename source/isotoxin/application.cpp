@@ -71,7 +71,7 @@ struct load_spellcheckers_s : public ts::task_c
         return true;
     }
 
-    /*virtual*/ int iterate(int pass) override
+    /*virtual*/ int iterate() override
     {
         if (stopjob) return R_DONE;
         if ((aff.size() == 0 || dic.size() == 0) && zip.size() == 0) return R_RESULT_EXCLUSIVE;
@@ -157,7 +157,7 @@ struct check_word_task : public ts::task_c
     {
     }
 
-    /*virtual*/ int iterate(int pass) override
+    /*virtual*/ int iterate() override
     {
         if (!g_app) return R_CANCEL;
         auto lr = g_app->spellchecker.lock(this);
@@ -171,7 +171,7 @@ struct check_word_task : public ts::task_c
             return checkwords.size() ? R_RESULT_EXCLUSIVE : R_DONE;
         }
 
-        return 1;
+        return 10;
     }
 
     /*virtual*/ void result() override
@@ -985,8 +985,12 @@ tableview_unfinished_file_transfer_s *g_uft = nullptr;
         }
         if (!nonewversion())
         {
-            if (!newversion() && new_version())
-                gmsg<ISOGM_NEWVERSION>(cfg().autoupdate_newver(), gmsg<ISOGM_NEWVERSION>::E_OK).send();
+            if ( !newversion() && new_version() )
+            {
+                bool new64 = false;
+                ts::str_c newv = cfg().autoupdate_newver( new64 );
+                gmsg<ISOGM_NEWVERSION>( newv, gmsg<ISOGM_NEWVERSION>::E_OK_FORCE, new64 ).send();
+            }
             nonewversion(true);
         }
     }
@@ -1754,6 +1758,7 @@ void application_c::summon_main_rect(bool minimize)
 {
     ts::ivec2 sz = cfg().get<ts::ivec2>(CONSTASTR("main_rect_size"), ts::ivec2(800, 600));
     ts::irect mr = ts::irect::from_lt_and_size(cfg().get<ts::ivec2>(CONSTASTR("main_rect_pos"), ts::wnd_get_center_pos(sz)), sz);
+    bool maximize = cfg().get<int>( CONSTASTR( "main_rect_fs" ), 0 ) != 0;
 
     redraw_collector_s dch;
     main = MAKE_ROOT<mainrect_c>( mr );
@@ -1770,11 +1775,12 @@ void application_c::summon_main_rect(bool minimize)
             .micromize(true);
     } else
     {
-        MODIFY(main)
-            .size(mr.size())
-            .pos(mr.lt)
+        MODIFY( main )
+            .size( mr.size() )
+            .pos( mr.lt )
             .allow_move_resize()
-            .show();
+            .show()
+            .maximize( maximize );
     }
 }
 
@@ -1829,6 +1835,10 @@ bool application_c::b_update_ver(RID, GUIPARAM p)
         w().autoupdate = req;
         w().dbgoptions.clear();
         w().dbgoptions.parse( cfg().debug() );
+#ifndef MODE64
+        w().disable64 = (cfg().misc_flags() & MISCF_DISABLE64) != 0;
+#endif // MODE64
+
         w.unlock();
 
         ts::master().sys_start_thread( autoupdater );
@@ -1836,7 +1846,7 @@ bool application_c::b_update_ver(RID, GUIPARAM p)
         if (renotice)
         {
             download_progress = ts::ivec2(0);
-            gmsg<ISOGM_NOTICE>(&contacts().get_self(), nullptr, NOTICE_NEWVERSION, cfg().autoupdate_newver().as_sptr()).send();
+            gmsg<ISOGM_NOTICE>(&contacts().get_self(), nullptr, NOTICE_NEWVERSION, cfg().autoupdate_newver()).send();
         }
     }
     return true;
@@ -1962,7 +1972,7 @@ namespace
         }
         hardware_sound_capture_switch_s() {}
 
-        /*virtual*/ int iterate(int pass) override
+        /*virtual*/ int iterate() override
         {
             if (fmts.count())
             {
@@ -2849,13 +2859,14 @@ void file_transfer_s::kill( file_control_e fctl )
             }
             return false;
         });
-
+        done_transfer = true;
+        upd_message_item(true);
     }
     g_app->unregister_file_transfer(utag, fctl == FIC_DISCONNECT);
 }
 
 
-/*virtual*/ int file_transfer_s::iterate(int pass)
+/*virtual*/ int file_transfer_s::iterate()
 {
     if ( dip )
         return R_CANCEL;
@@ -2866,9 +2877,12 @@ void file_transfer_s::kill( file_control_e fctl )
 
     if ( rr().query_job.size() == 0 ) // job queue is empty - just do nothing
     {
-        UNFINISHED( "add sleep after N tries" );
-        return 1;
+        ++queueemptycounter;
+        if ( queueemptycounter > 10 )
+            return 10;
+        return 0;
     }
+    queueemptycounter = 0;
 
     job_s cj = rr().query_job.get(0);
     rr.unlock();
@@ -2944,7 +2958,7 @@ void file_transfer_s::kill( file_control_e fctl )
     if (rslt && !dip)
         return R_RESULT;
 
-    return dip ? R_CANCEL : 1;
+    return dip ? R_CANCEL : 0;
 
 }
 /*virtual*/ void file_transfer_s::done(bool canceled)

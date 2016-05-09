@@ -25,7 +25,7 @@ class dialog_prepareimage_c : public gui_isodialog_c
         {
         }
 
-        /*virtual*/ int iterate(int pass) override;
+        /*virtual*/ int iterate() override;
         /*virtual*/ void done(bool canceled) override;
     } *saver = nullptr;
 
@@ -39,6 +39,13 @@ class dialog_prepareimage_c : public gui_isodialog_c
 
     process_animation_s pa;
     UNIQUE_PTR(vsb_c) camera;
+    ts::Time show_cam_res_deadline = ts::Time::undefined();
+    enum 
+    {
+        SCR_NO,
+        SCR_YES_WAIT,
+        SCR_YES_COUNTDOWN,
+    } show_cam_resolution = SCR_NO;
 
     framedrawer_s fd;
     ts::animated_c anm;
@@ -101,7 +108,8 @@ class dialog_prepareimage_c : public gui_isodialog_c
     vsb_list_t video_devices;
     bool start_capture_menu(RID, GUIPARAM);
     void start_capture_menu_sel(const ts::str_c& prm);
-    void start_capture(const vsb_descriptor_s &desc);
+    void start_capture_menu_sel_res( const ts::str_c& prm );
+    void start_capture(const vsb_descriptor_s &desc, const ts::wstr_c &res );
 
     void draw_process(ts::TSCOLOR col, bool cam, bool cambusy);
 

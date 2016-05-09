@@ -359,7 +359,7 @@ namespace
 
             loading_s( const ts::wsptr &fn, pictures_cache_c *cache ):filename(fn), cache(cache) {}
 
-            /*virtual*/ int iterate(int pass) override
+            /*virtual*/ int iterate() override
             {
                 ts::blob_c b;
                 b.load_from_disk_file(filename);

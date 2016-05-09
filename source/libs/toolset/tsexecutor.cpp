@@ -9,6 +9,7 @@ namespace ts
     static const int f_canceled = 4;
     static const int f_result = 8;
     static const int f_exec_after_result = 16;
+    static const int f_sleeping = 32;
 
 task_executor_c::task_executor_c()
 {
@@ -68,6 +69,11 @@ task_executor_c::~task_executor_c()
         t->resetflag(f_canceled);
         t->done(true);
     }
+    while ( sleeping.try_pop( t ) )
+    {
+        t->resetflag( f_sleeping );
+        t->done( true );
+    }
 
     CloseHandle(evt);
 }
@@ -76,12 +82,16 @@ DWORD WINAPI task_executor_c::worker_proc(LPVOID ap)
 {
     tmpalloc_c tmp;
 
+#ifdef _WIN32
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+#endif // _WIN32
 
     ((task_executor_c *)ap)->work();
 
+#ifdef _WIN32
     CoUninitialize();
-
+#endif // _WIN32
+    
     return 0;
 }
 
@@ -103,8 +113,11 @@ void task_executor_c::work()
 
             timeout = false;
             int r = t->call_iterate();
-
-            if (r == task_c::R_DONE)
+            if (r > 0)
+            {
+                t->setflag( f_sleeping );
+                sleeping.push(t);
+            } else if (r == task_c::R_DONE)
             {
                 t->setflag( f_finished );
                 finished.push(t);
@@ -216,9 +229,50 @@ void task_executor_c::tick()
             t->done(true);
             ++finished_tasks;
         }
+
+        tmp_pointers_t<task_c, 1> sltasks;
+        int curtime = timeGetTime();
+        while ( sleeping.try_pop( t ) )
+        {
+            t->resetflag( f_sleeping );
+            if (curtime >= t->__wake_up_time)
+            {
+                t->setflag( f_executing );
+                executing.push( t ); // next iteration
+                SetEvent( evt );
+            } else
+            {
+                sltasks.add( t );
+            }
+        }
+        for( task_c *x : sltasks )
+        {
+            x->setflag( f_sleeping );
+            sleeping.push(x);
+        }
+        if ( sync.lock_read()().reexec() )
+        {
+            while ( executing.try_pop( t ) )
+            {
+                t->resetflag( f_executing );
+                add( t );
+                break;
+            }
+        }
     }
 
     sync.lock_write()().tasks -= finished_tasks;
+}
+
+void task_c::setup_wakeup( int t )
+{
+#ifdef _WIN32
+    __wake_up_time = timeGetTime() + t;
+#endif // _WIN32
+#ifdef __linux__
+    __wake_up_time = syst ?;
+#endif
+
 }
 
 

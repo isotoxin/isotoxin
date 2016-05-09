@@ -25,6 +25,7 @@ bitmap_c TSCALL get_clipboard_bitmap();
 void TSCALL set_clipboard_bitmap(const bitmap_c &bmp);
 
 void TSCALL open_link(const ts::wstr_c &lnk);
+void TSCALL explore_path( const wsptr &path, bool path_only );
 
 
 bool TSCALL is_admin_mode();

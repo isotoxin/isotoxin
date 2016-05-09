@@ -1320,7 +1320,7 @@ ts::wstr_c make_proto_desc( int mask )
 }
 
 
-bool new_version(const ts::asptr &current, const ts::asptr &newver)
+bool new_version( const ts::asptr &current, const ts::asptr &newver, bool same_version )
 {
     if (current.l == 0)
         return newver.l > 0;
@@ -1334,12 +1334,17 @@ bool new_version(const ts::asptr &current, const ts::asptr &newver)
         if (ncver < nlver) return true;
         if (lver) ++lver;
     }
-    return false;
+    return same_version;
 }
 
 bool new_version()
 {
-    return new_version( application_c::appver(), cfg().autoupdate_newver() );
+    bool new64 = false;
+    ts::str_c newvv = cfg().autoupdate_newver( new64 );
+#ifdef MODE64
+    new64 = false;
+#endif // MODE64
+    return new_version( application_c::appver(), newvv, new64 );
 }
 
 const ts::bitmap_c &prepare_proto_icon( const ts::asptr &prototag, const ts::asptr &icond, int imgsize, icon_type_e icot )
@@ -1565,7 +1570,7 @@ namespace
         }
 
 
-        /*virtual*/ int iterate(int pass) override
+        /*virtual*/ int iterate() override
         {
             isotoxin_ipc_s ipcj(ts::str_c(CONSTASTR("get_protocols_list_")).append_as_uint(spinlock::pthread_self()), DELEGATE(this, ipchandler));
             ipcj.send(ipcw(AQ_GET_PROTOCOLS_LIST));
@@ -1624,10 +1629,12 @@ db_check_e check_db(const ts::wstr_c &fn, ts::uint8 *salt /* 16 bytes buffer */)
 
 // dlmalloc -----------------
 
+#ifdef _MSC_VER
 #pragma warning (disable:4559)
 #pragma warning (disable:4127)
 #pragma warning (disable:4057)
 #pragma warning (disable:4702)
+#endif // _MSC_VEW
 
 #define MALLOC_ALIGNMENT ((size_t)16U)
 #define USE_DL_PREFIX

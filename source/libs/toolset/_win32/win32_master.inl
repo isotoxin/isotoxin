@@ -956,10 +956,16 @@ process_handle_s::~process_handle_s()
         PROCESS_INFORMATION pi = { 0 };
         wstr_c cmd;
         tmp_wstr_c prm( exe );
+
+        bool batch = exe.ends_ignore_case( CONSTWSTR( ".cmd" ) ) || exe.ends_ignore_case( CONSTWSTR( ".bat" ) );
+
+        if ( !batch && !prm.ends_ignore_case( CONSTWSTR( ".exe" ) ) )
+            prm.append( CONSTWSTR( ".exe" ) );
+
         if ( prm.find_pos( ' ' ) >= 0 )
             prm.insert( 0, '\"' ).append_char( '\"' );
-        
-        if ( exe.ends_ignore_case( CONSTWSTR( ".cmd" ) ) || exe.ends_ignore_case( CONSTWSTR( ".bat" ) ) )
+
+        if ( batch )
         {
             cmd = CONSTWSTR( "%SYSTEM%\\cmd.exe" );
             parse_env( cmd );
@@ -1004,14 +1010,6 @@ process_handle_s::~process_handle_s()
         }
         return false;
     }
-}
-
-/*virtual*/ void sys_master_win32_c::explore_path( const wsptr &path, bool path_only )
-{
-    if ( path_only )
-        ShellExecuteW( nullptr, L"explore", ts::tmp_wstr_c(path), nullptr, nullptr, SW_SHOWDEFAULT );
-    else
-        ShellExecuteW( nullptr, L"open", L"explorer", CONSTWSTR( "/select," ) + ts::fn_autoquote( ts::fn_get_name_with_ext( path ) ), ts::fn_get_path( path ), SW_SHOWDEFAULT );
 }
 
 /*virtual*/ bool sys_master_win32_c::wait_process( process_handle_s &phandle, int timeoutms )

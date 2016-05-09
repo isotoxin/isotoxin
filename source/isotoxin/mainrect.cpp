@@ -134,6 +134,7 @@ void mainrect_c::onclosesave()
     cfg().param(CONSTASTR("main_rect_pos"), ts::amake<ts::ivec2>(rrect.lt));
     cfg().param(CONSTASTR("main_rect_size"), ts::amake<ts::ivec2>(rrect.size()));
     cfg().param(CONSTASTR("main_rect_monitor"), ts::amake<ts::irect>(mrect));
+    cfg().param( CONSTASTR( "main_rect_fs" ), getprops().is_maximized() ? "1" : "0" );
 }
 
 bool mainrect_c::saverectpos(RID,GUIPARAM)

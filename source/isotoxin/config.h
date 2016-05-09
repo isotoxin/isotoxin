@@ -120,6 +120,11 @@ public:
 
 typedef fastdelegate::FastDelegate<void()> ONCLOSE_FUNC;
 
+enum cfg_misc_flags_e
+{
+    MISCF_DISABLE64 = 1,
+};
+
 class config_c : public config_base_c
 {
     ts::tbuf_t<ONCLOSE_FUNC> onclose_handlers;
@@ -145,7 +150,27 @@ public:
     TEXTWPAR(theme, "def")
     INTPAR(collapse_beh, 2)
     INTPAR(autoupdate, 1)
-    TEXTAPAR(autoupdate_newver, "")
+    //TEXTAPAR(autoupdate_newver, "")
+
+    void autoupdate_newver( const ts::asptr&ver, bool bits64 )
+    {
+        if (bits64)
+            param( CONSTASTR("autoupdate_newver"), ts::str_c(ver).append(CONSTASTR("/64")) );
+        else
+            param( CONSTASTR( "autoupdate_newver" ), ver );
+    }
+    ts::str_c autoupdate_newver( bool &bits64 )
+    {
+        ts::str_c v = get( CONSTASTR( "autoupdate_newver" ), CONSTASTR("0") );
+        bits64 = v.ends( CONSTASTR( "/64" ) );
+        if ( bits64 ) v.trunc_length(3);
+        return v;
+    }
+    ts::str_c autoupdate_newver()
+    {
+        return get( CONSTASTR( "autoupdate_newver" ), CONSTASTR( "0" ) );
+    }
+
     INTPAR(proxy, 0)
     TEXTAPAR(proxy_addr, DEFAULT_PROXY)
 
@@ -162,6 +187,7 @@ public:
 
     TEXTAPAR(debug, "")
     INTPAR(allow_tools, 0)
+    INTPAR( misc_flags, 0 )
 
     TEXTWPAR( temp_folder_sendimg, "%TEMP%\\$$$isotoxin\\sendimg\\" )
     TEXTWPAR( temp_folder_handlemsg, "%TEMP%\\$$$isotoxin\\handlemsg\\" )

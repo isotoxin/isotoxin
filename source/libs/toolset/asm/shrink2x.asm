@@ -106,7 +106,6 @@ IFDEF MODE64
 	.code
 
 	public	asm_shrink2x
-	public	coloravg
 
 asm_shrink2x:
 
@@ -205,45 +204,6 @@ loopx :
 	pop	r12
 
     ret
-
-coloravg:
-rc1 equ rcx
-rc2 equ rdx
-rc3 equ r8
-rc4 equ r9
-
-rt1 equ rax
-rt2 equ r10
-
-    mov rt1, rc1
-    mov rt2, rc2
-    and rt1, 00FF00FFh
-    and rc1, 0000FF00h
-
-    and rt2, 00FF00FFh
-    and rc2, 0000FF00h
-    add rt1, rt2
-    add rc1, rc2
-
-    mov rc2, rc3
-    and rc2, 00FF00FFh
-    and rc3, 0000FF00h
-    add rt1, rc2
-    add rc1, rc3
-
-    mov rc2, rc4
-    and rc2, 00FF00FFh
-    and rc4, 0000FF00h
-    add rt1, rc2
-    add rc1, rc4
-
-    shr rt1, 2
-    shr rc1, 2
-    and rt1, 00FF00FFh
-    and rc1, 0000FF00h
-    or  rt1, rc1
-    ret
-
 
 ENDIF
 

@@ -1191,14 +1191,15 @@ static INLINE uint8 RGB_V(TSCOLOR c)
     return (uint8)((RED(c) * 28770 - GREEN(c) * 24117 - BLUE(c) * 4653 + 8388608) >> 16);
 }
 
+TSCOLOR INLINE coloravg( TSCOLOR c1, TSCOLOR c2, TSCOLOR c3, TSCOLOR c4 ) // calculate average color of four input colors, ignoring alpha channel
+{
 #ifdef MODE64
-// see shrink2x.asm
-extern "C" uint32 coloravg( uint32 c1, uint32 c2, uint32 c3, uint32 c4 );
+    return ( ( ( ( c1 & 0x00ff00ff ) + ( c2 & 0x00ff00ff ) + ( c3 & 0x00ff00ff ) + ( c4 & 0x00ff00ff ) ) & ( 0x00ff00ff << 2 ) ) |
+        ( ( ( c1 & 0x00ff00 ) + ( c2 & 0x00ff00 ) + ( c3 & 0x00ff00 ) + ( c4 & 0x00ff00 ) ) & ( 0x00ff00 << 2 ) ) ) >> 2;
 #else
 
-TSCOLOR INLINE coloravg(TSCOLOR c1, TSCOLOR c2, TSCOLOR c3, TSCOLOR c4)
-{
-    //return ARGB<uint8>((RED(c1) + RED(c2) + RED(c3) + RED(c4)) / 4, (GREEN(c1) + GREEN(c2) + GREEN(c3) + GREEN(c4)) / 4, (BLUE(c1) + BLUE(c2) + BLUE(c3) + BLUE(c4)) / 4);
+    // in 32 bit mode following asm-code still faster, then implementation above (msvc 2015)
+
     _asm
     {
         mov eax, c1
@@ -1227,15 +1228,14 @@ TSCOLOR INLINE coloravg(TSCOLOR c1, TSCOLOR c2, TSCOLOR c3, TSCOLOR c4)
         add eax, ecx
         add ebx, edx
 
-        shr eax, 2
-        shr ebx, 2
-        and eax, 0x00FF00FF
-        and ebx, 0x0000FF00
+        and eax, 0x00FF00FF * 4
+        and ebx, 0x0000FF00 * 4
         or  eax, ebx
+        shr eax, 2
 
     }
-}
 #endif
+}
 
 // Convert ARGB to I420.
 void img_helper_ARGB_to_i420(const uint8* src_argb, int src_stride_argb, uint8* dst_y, int dst_stride_y, uint8* dst_u, int dst_stride_u, uint8* dst_v, int dst_stride_v, int width, int height)

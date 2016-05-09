@@ -469,7 +469,11 @@ system_query_e me2sq( ts::mouse_event_e me )
                 MODIFY( *r ).minimize( true );
         } else if ( ts::D_MAX == d )
         {
-            MODIFY( *r ).maximize( scr );
+            if ( !r->inmod() )
+                MODIFY( *r ).maximize( scr );
+
+            drawcollector dch( owner() );
+            owner()->redraw();
 
         } else if ( r->getprops().screenrect() != scr )
         {
@@ -599,6 +603,9 @@ rectengine_root_c::~rectengine_root_c()
         if ( pss.is_micromized() )
             shp.d = ts::D_MICRO;
 
+        if ( pss.is_maximized() && shp.d == ts::D_NORMAL )
+            shp.d = ts::D_MAX;
+
         shp.parent = ts::master().mainwindow;
         if ( flags.is( F_SYSTEM ) )
         {
@@ -626,7 +633,7 @@ rectengine_root_c::~rectengine_root_c()
         ts::str_c name = to_utf8( getrect().get_name() );
         text_remove_tags( name );
         shp.name = from_utf8( name );
-        shp.rect = rpss.screenrect();
+        shp.rect = rpss.screenrect(false);
 
         shp.focus = getrect().accept_focus();
 
@@ -709,10 +716,10 @@ rectengine_root_c::~rectengine_root_c()
         shp.layered = pss.is_alphablend();
         shp.rect = pss.screenrect(false);
         shp.visible = true;
-
+        ts::disposition_e odp = syswnd.wnd->disposition();
         syswnd.wnd->show( &shp );
 
-        if ( syswnd.wnd->disposition() != shp.d )
+        if ( odp != shp.d )
 
         switch ( shp.d )
         {

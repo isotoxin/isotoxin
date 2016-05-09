@@ -18,7 +18,7 @@ static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdat
 int proc_upd(const ts::wstrings_c & pars)
 {
     int autoupdate_proxy = 0;
-    ts::str_c address( "https://github.com/Rotkaermota/Isotoxin/releases/download/0.2.371/isotoxin.0.2.371.zip" );
+    ts::str_c address( "https://github.com/isotoxin/isotoxin/releases/download/0.2.371/isotoxin.0.2.371.zip" );
     ts::str_c proxy( "srv:9050" );
 
     CURL *curl = curl_easy_init();
@@ -141,6 +141,13 @@ int proc_sign(const ts::wstrings_c & pars)
     ts::aint archlen = b.size();
     ts::md5_c md5;
     md5.update(b.data(), b.size()); md5.done();
+
+    ts::wstr_c arch64 = fn_change_ext( arch, CONSTWSTR( "amd64.zip" ) );
+    ts::buf_c b64; b64.load_from_disk_file( arch64 );
+    ts::aint archlen64 = b64.size();
+    ts::md5_c md5_64;
+    md5_64.update( b64.data(), b64.size() ); md5_64.done();
+
     ts::abp_c bp;
     b.load_from_disk_file(proc);
     bp.load(b.cstr());
@@ -157,21 +164,23 @@ int proc_sign(const ts::wstrings_c & pars)
 
     ts::str_c ss(CONSTASTR("ver="));
     ss.append( ver );
-    ss.append(CONSTASTR("\r\nurl="));
 
     ts::str_c path = bp.get_string(CONSTASTR("path"));
     path.replace_all(CONSTASTR("%ver%"), ver);
     path.replace_all(CONSTASTR("%https%"), CONSTASTR("https://"));
     path.replace_all(CONSTASTR("%http%"), CONSTASTR("http://"));
+    ts::str_c path64 = path;
     path.appendcvt(ts::fn_get_name_with_ext(arch));
+    path64.appendcvt( ts::fn_get_name_with_ext( arch64 ) );
 
+    ss.append( CONSTASTR( "\r\nurl=" ) ).append(path);
+    ss.append( CONSTASTR( "\r\nurl-64=" ) ).append( path64 );
 
-    ss.append(path);
+    ss.append(CONSTASTR("\r\nsize=")).append_as_num(archlen);
+    ss.append( CONSTASTR( "\r\nsize-64=" ) ).append_as_num( archlen64 );
 
-    ss.append(CONSTASTR("\r\nsize="));
-    ss.append_as_num(archlen);
-    ss.append(CONSTASTR("\r\nmd5="));
-    ss.append_as_hex(md5.result(), 16);
+    ss.append(CONSTASTR("\r\nmd5=")).append_as_hex(md5.result(), 16);
+    ss.append( CONSTASTR( "\r\nmd5-64=" ) ).append_as_hex( md5_64.result(), 16 );
 
     unsigned char pk[crypto_sign_PUBLICKEYBYTES];
     unsigned char sk[crypto_sign_SECRETKEYBYTES];

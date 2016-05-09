@@ -324,9 +324,19 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8)
         {
             ts::wstr_c newtext(1024,false);
             newtext.set(CONSTWSTR("<p=c>"));
-            newtext.append(TTT("New version available: $",163) / from_utf8(itext_utf8));
+
+            ts::wstr_c ver = from_utf8( itext_utf8 );
+            if ( itext_utf8.ends( CONSTASTR( "/64" ) ) )
+                ver.trunc_length( 3 ).append( CONSTWSTR(" (64 bit)") );
+
+            newtext.append(TTT("New version available: $",163) / ver);
             newtext.append(CONSTWSTR("<br>"));
             newtext.append(TTT("Current version: $",164) / ts::to_wstr(application_c::appver()));
+#ifdef MODE64
+            newtext.append( CONSTWSTR( " (64 bit)" ) );
+#else
+            newtext.append( CONSTWSTR( " (32 bit)" ) );
+#endif
 
             if ( auparams().lock_read()().in_progress )
             {
@@ -926,7 +936,7 @@ namespace
 
         enum_video_devices_s(gui_notice_callinprogress_c *notice) :notice(notice) {}
 
-        /*virtual*/ int iterate(int pass) override
+        /*virtual*/ int iterate() override
         {
             enum_video_capture_devices(video_devices, true);
             return R_DONE;
@@ -3590,7 +3600,7 @@ bool gui_message_item_c::b_explore(RID, GUIPARAM)
     ts::wstr_c fn = from_utf8(zero_rec.text);
     if (ts::is_file_exists(fn))
     {
-        ts::master().explore_path(fn, false);
+        ts::explore_path(fn, false);
     } else
     {
         ts::wstr_c path = fn_get_path(fn);
@@ -3601,7 +3611,7 @@ bool gui_message_item_c::b_explore(RID, GUIPARAM)
             path.trunc_char(NATIVE_SLASH);
             path = fn_get_path(path);
         }
-        ts::master().explore_path( path, true );
+        ts::explore_path( path, true );
     }
 
     return true;
@@ -3961,7 +3971,7 @@ void gui_message_item_c::update_text(int for_width)
                 addition_file_data_s &ab = addition_file_data();
 
                 if (nullptr == ft) ft = g_app->find_file_transfer_by_msgutag(zero_rec.utag);
-                if (ft)
+                if (ft && !ft->done_transfer)
                 {
                     insert_button( BTN_BREAK, g_app->preloaded_stuff().breakb->size );
 
@@ -6259,6 +6269,9 @@ void spellchecker_s::check_text(const ts::wsptr &t, int caret)
     }
     if (checkwords.size())
         g_app->spellchecker.check(std::move(checkwords), this);
+
+    gui_message_editor_c *msge = static_cast<gui_message_editor_c *>( this );
+    msge->redraw();
 
     DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, update_bad_words), nullptr);
 }

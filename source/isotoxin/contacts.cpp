@@ -1290,13 +1290,21 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
 
 ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 {
-    if (nv.ver.is_empty() || nv.error_num != gmsg<ISOGM_NEWVERSION>::E_OK) return 0; // notification about no new version
-    if ( new_version( cfg().autoupdate_newver(), nv.ver ) )
-        cfg().autoupdate_newver( nv.ver );
+    if (nv.ver.is_empty() || !nv.is_ok()) return 0; // notification about no new version
+    bool cur64 = false;
+    ts::str_c newver = cfg().autoupdate_newver( cur64 );
+    if ( new_version( newver, nv.ver, nv.version64 && !cur64 ) )
+        cfg().autoupdate_newver( nv.ver, nv.version64 );
+    else if (nv.error_num != gmsg<ISOGM_NEWVERSION>::E_OK_FORCE)
+        return 0;
     g_app->newversion( new_version() );
     self->redraw();
     if ( g_app->newversion() )
-        gmsg<ISOGM_NOTICE>( self, nullptr, NOTICE_NEWVERSION, nv.ver.as_sptr()).send();
+    {
+        ts::str_c nvs( nv.ver );
+        if ( nv.version64 ) nvs.append( CONSTASTR("/64") );
+        gmsg<ISOGM_NOTICE>( self, nullptr, NOTICE_NEWVERSION, nvs ).send();
+    }
 
     play_sound( snd_new_version, false );
     g_app->new_blink_reason( contact_key_s() ).new_version();

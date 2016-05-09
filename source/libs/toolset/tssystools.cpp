@@ -354,6 +354,15 @@ void TSCALL open_link(const ts::wstr_c &lnk)
     ShellExecuteW(nullptr, L"open", lnk, nullptr, nullptr, SW_SHOWNORMAL);
 }
 
+void TSCALL explore_path( const wsptr &path, bool path_only )
+{
+    if ( path_only )
+        ShellExecuteW( nullptr, L"explore", ts::tmp_wstr_c( path ), nullptr, nullptr, SW_SHOWDEFAULT );
+    else
+        ShellExecuteW( nullptr, L"open", L"explorer", CONSTWSTR( "/select," ) + ts::fn_autoquote( ts::fn_get_name_with_ext( path ) ), ts::fn_get_path( path ), SW_SHOWDEFAULT );
+}
+
+
 bool TSCALL is_admin_mode()
 {
     // http://www.codeproject.com/Articles/320748/Haephrati-Elevating-during-runtime

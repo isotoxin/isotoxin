@@ -187,7 +187,7 @@ static void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp )
     buf = pngshka.outbuf;
 }
 
-/*virtual*/ int dialog_avaselector_c::compressor_s::iterate(int pass)
+/*virtual*/ int dialog_avaselector_c::compressor_s::iterate()
 {
     if (!dlg || bitmap2encode.info().sz < ts::ivec2(1) ) return R_CANCEL;
 
@@ -206,7 +206,8 @@ static void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp )
 
         sz1 = 16;
         sz2 = ts::tmin(bitmap2encode.info().sz.x, bitmap2encode.info().sz.y);
-        return 1;
+        pass = 1;
+        return 0;
     }
 
     ts::bitmap_c b;
@@ -247,7 +248,8 @@ static void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp )
         if (szc != sz1 && szc != sz2)
         {
             sz2 = szc;
-            return 1; // next try
+            pass = 1;
+            return 0; // next try
         }
     }
     else
@@ -260,11 +262,13 @@ static void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp )
             if (szc != sz1 && szc != sz2)
             {
                 sz1 = szc;
-                return 1; // try next
+                pass = 1;
+                return 0; // try next
             }
         }
     }
-    return 2; // use best
+    pass = 2;
+    return 0; // use best
 
 }
 /*virtual*/ void dialog_avaselector_c::compressor_s::done(bool canceled)
@@ -284,7 +288,7 @@ namespace
 
         enum_video_devices_s(dialog_avaselector_c *dlg) :dlg(dlg) {}
 
-        /*virtual*/ int iterate(int pass) override
+        /*virtual*/ int iterate() override
         {
             enum_video_capture_devices(video_devices, false);
             return R_DONE;

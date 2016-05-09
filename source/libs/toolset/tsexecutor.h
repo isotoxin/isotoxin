@@ -7,7 +7,7 @@ class task_c
 {
     friend class task_executor_c;
     spinlock::syncvar<int> queueflags;
-    int __pass = 0;
+    int __wake_up_time = 0;
     void setflag( int flagmask )
     {
         auto w = queueflags.lock_write();
@@ -26,6 +26,9 @@ class task_c
     {
         return 0 != (queueflags.lock_read()() & mask);
     }
+
+    void setup_wakeup( int t );
+
 public:
     task_c() { queueflags.lock_write()() = 0; }
     virtual ~task_c() {}
@@ -37,11 +40,13 @@ public:
 
     int call_iterate()
     {
-        __pass = iterate( __pass );
-        return __pass;
+        int r = iterate();
+        if ( r > 0 )
+            setup_wakeup(r);
+        return r;
     }
 
-    virtual int iterate(int pass) { return R_DONE; }; // can be called from any thread
+    virtual int iterate() { return R_DONE; }; // can be called from any thread
     virtual void done(bool canceled) { TSDEL(this); } // called only from base thread. task should kill self
     virtual void result() {} // called only from base thread
 
@@ -56,6 +61,7 @@ class task_executor_c
     };
 
     spinlock::spinlock_queue_s<task_c *, slallocator> executing;
+    spinlock::spinlock_queue_s<task_c *, slallocator> sleeping;
     spinlock::spinlock_queue_s<task_c *, slallocator> finished;
     spinlock::spinlock_queue_s<task_c *, slallocator> canceled;
     spinlock::spinlock_queue_s<task_c *, slallocator> results;
@@ -67,6 +73,11 @@ class task_executor_c
         bool worker_must = false;
         bool worker_started = false;
         bool worker_should_stop = false;
+
+        bool reexec() const
+        {
+            return workers == 0 && tasks > 0 && !worker_started;
+        }
     };
 
     spinlock::syncvar< sync_s > sync;

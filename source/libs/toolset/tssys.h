@@ -109,7 +109,6 @@ public:
 
     virtual void set_notification_icon_text( const wsptr& text ) = 0;
 
-    virtual void explore_path( const wsptr &path, bool path_only ) = 0;
     virtual bool start_app( const wstr_c &exe, const wstr_c& prms, process_handle_s *process_handle, bool elevate ) = 0;
 
     virtual uint32 process_id() = 0;
@@ -172,7 +171,6 @@ public:
 
     /*virtual*/ void set_notification_icon_text( const wsptr& text ) override;
 
-    /*virtual*/ void explore_path( const wsptr &path, bool path_only ) override;
     /*virtual*/ bool start_app( const wstr_c &exe, const wstr_c& prms, process_handle_s *process_handle, bool elevate ) override;
     /*virtual*/ uint32 process_id() override;
     /*virtual*/ bool open_process( uint32 processid, process_handle_s &phandle ) override;

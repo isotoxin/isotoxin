@@ -497,9 +497,14 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR("<a href=\"http://isotoxin.im\">Isotoxin</a>") );
     title.append( CONSTWSTR("</b> ") );
     title.appendcvt( application_c::appver() );
-    title.append( CONSTWSTR("<br>Coding, design and sounds by <a href=\"https://github.com/Rotkaermota\">Rotkaermota</a>") );
-    title.append( CONSTWSTR("<br>Isotoxin is open-source freeware, licensed under <a href=\"https://github.com/Rotkaermota/Isotoxin/blob/master/LICENSE\">GPL3</a>") );
-    title.append( CONSTWSTR("<br>See version history <a href=\"https://github.com/Rotkaermota/Isotoxin/releases\">here</a>") );
+#ifdef MODE64
+    title.append( CONSTWSTR( " (64 bit)" ) );
+#else
+    title.append( CONSTWSTR( " (32 bit)" ) );
+#endif
+    title.append( CONSTWSTR("<br>Coding, design and sounds by <a href=\"https://github.com/isotoxin\">Rotkaermota</a>") );
+    title.append( CONSTWSTR("<br>Isotoxin is open-source freeware, licensed under <a href=\"https://github.com/isotoxin/isotoxin/blob/master/LICENSE\">GPL3</a>") );
+    title.append( CONSTWSTR("<br>See version history <a href=\"https://github.com/isotoxin/isotoxin/releases\">here</a>") );
 
     dm().label( title );
 
@@ -513,7 +518,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR(" <a href=\"https://www.opus-codec.org\">Opus audio codec</a>") );
     title.append( CONSTWSTR(" <a href=\"http://vorbis.com\">Ogg Vorbis audio codec</a>"));
     title.append( CONSTWSTR(" <a href=\"https://xiph.org/flac/\">Flac audio codec</a>"));
-    title.append( CONSTWSTR(" <a href=\"https://github.com/Rotkaermota/filter_audio\">Irungentoo's filter_audio fork</a>"));
+    title.append( CONSTWSTR(" <a href=\"https://github.com/isotoxin/filter_audio\">Irungentoo's filter_audio fork</a>"));
     title.append( CONSTWSTR(" <a href=\"http://webmproject.org\">VP8 video codec</a>") );
     title.append( CONSTWSTR(" <a href=\"http://libsodium.org\">Sodium crypto library</a>") );
     title.append( CONSTWSTR(" <a href=\"http://freetype.org\">Free Type font render library</a>") );
@@ -525,7 +530,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR(" <a href=\"http://fukuchi.org/works/qrencode\">libqrencode</a>") );
     title.append( CONSTWSTR(" <a href=\"http://cairographics.org\">Cairo Graphics</a>") );
     title.append( CONSTWSTR(" <a href=\"http://g.oswego.edu/dl/html/malloc.html\">dlmalloc</a>") );
-    title.append( CONSTWSTR(" <a href=\"https://github.com/yxbh/FastDelegate\">C++11 fastdelegates</a>") );
+    title.append( CONSTWSTR(" <a href=\"https://github.com/yxbh/Cpp-Delegate-Library-Collection/tree/master/src/FastDelegate\">C++11 fastdelegates</a>") );
     title.append( CONSTWSTR(" <a href=\"http://curl.haxx.se/libcurl\">Curl</a>") );
     title.append( CONSTWSTR(" <a href=\"http://hunspell.github.io\">Hunspell</a>") );
     title.append( CONSTWSTR("</l><br><br>Adapded libs<hr><l><a href=\"https://bitbucket.org/alextretyak/s3\">Simple Sound System</a>") );
@@ -838,10 +843,11 @@ incoming_msg_panel_c::incoming_msg_panel_c( MAKE_ROOT<incoming_msg_panel_c> &dat
 
 incoming_msg_panel_c::~incoming_msg_panel_c()
 {
+    dip = true;
+    if (g_app)
+        gmsg<ISOGM_UPDATE_MESSAGE_NOTIFICATION>().send();
     if ( gui )
     {
-        dip = true;
-        gmsg<ISOGM_UPDATE_MESSAGE_NOTIFICATION>().send();
         gui->delete_event( DELEGATE( this, endoflife ) );
         gui->delete_event( DELEGATE( this, tick ) );
     }

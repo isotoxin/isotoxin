@@ -26,6 +26,7 @@ colors {
 	text_bad=#ff5d00
 	text_ok=#009000
 	text_info=#ffcd56
+	text_info_bg=#3f3e22bb
 	msg_mine_text=#a2ffa6
 	msg_mine_name=#49e24e
 	msg_mine_time=#709def
