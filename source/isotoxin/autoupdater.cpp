@@ -511,6 +511,7 @@ next_address:
     }
 
     auparams().lock_write()().downloaded = true;
+    curl.error_num = gmsg<ISOGM_NEWVERSION>::E_OK_FORCE;
     curl.newver = aver;
     curl.send_newver = true;
 }

@@ -617,7 +617,7 @@ ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
         return 0;
     }
 
-    if (nv.ver.is_empty() || nv.error_num != gmsg<ISOGM_NEWVERSION>::E_OK)
+    if (nv.ver.is_empty() || !nv.is_ok())
     {
         set_label_text( CONSTASTR("upd"), ts::wstr_c(CONSTWSTR("<p=c>")) + maketag_color<ts::wchar>(get_default_text_color(0)) + TTT("Update not found",355) );
         if (RID no = find(CONSTASTR("upd")))

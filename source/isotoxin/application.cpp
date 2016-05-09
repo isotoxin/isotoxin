@@ -381,6 +381,7 @@ application_c::application_c(const ts::wchar * cmdl)
     
 
     F_NEWVERSION = false;
+    F_NONEWVERSION = false;
     F_BLINKING_FLAG = false;
     F_UNREADICON = false;
     F_NEED_BLINK_ICON = false;

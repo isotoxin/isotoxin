@@ -249,7 +249,7 @@ extern ts::static_setup<spinlock::syncvar<autoupdate_params_s>,1000> auparams;
 
 ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 {
-    if (notice == NOTICE_NEWVERSION && nv.error_num != gmsg<ISOGM_NEWVERSION>::E_OK)
+    if (notice == NOTICE_NEWVERSION && !nv.is_ok())
     {
         g_app->download_progress = ts::ivec2(0);
         ts::wstr_c ot = textrect.get_text();
