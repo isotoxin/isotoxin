@@ -481,7 +481,7 @@ void vsb_dshow_camera_c::core_dshow_c::run_initializer(const VideoConfig &config
             config.frameInterval = 0;
             camera.SetVideoConfig(&config);
 
-            if ( !config.useDefaultConfig && VideoFormat::XRGB != config.format)
+            if ( VideoFormat::XRGB != config.format)
             {
                 config.frameInterval = 0;
                 config.useDefaultConfig = false;
