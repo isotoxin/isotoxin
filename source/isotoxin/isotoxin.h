@@ -31,6 +31,7 @@
 #undef FLAG
 #undef near
 #include "s3/s3.h"
+#include "hunspell/hunspell_io.h"
 #include "hunspell/src/hunspell.hxx"
 #pragma pop_macro("delete")
 #pragma pop_macro("FLAG")

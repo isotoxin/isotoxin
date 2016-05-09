@@ -1,5 +1,8 @@
 #pragma once
 
+#define HUNSPELL_STATIC
+#define LIBHUNSPELL_DLL_EXPORTED
+
 #define _CSTDIO_
 #define _FILEMGR_HXX_
 
