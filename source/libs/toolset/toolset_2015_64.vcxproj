@@ -205,17 +205,6 @@
 </Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Final|x64'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
     </CustomBuild>
-    <CustomBuild Include="asm\shrink2x.asm">
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|x64'">ml64 /c /DMODE64 /DMASM /Zi /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
-</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|x64'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">ml64 /c /DMODE64 /DMASM /Zi /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
-</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Final|x64'">ml64 /c /DMODE64 /DMASM /Zi /nologo /Fo"$(IntDir)%(Filename).obj" %(FullPath)
-</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Final|x64'">$(IntDir)%(Filename).obj;%(Outputs)</Outputs>
-    </CustomBuild>
   </ItemGroup>
   <ItemGroup>
     <None Include="_win32\win32_bitmap.inl" />

@@ -307,9 +307,6 @@
     <CustomBuild Include="asm\a64_resample.asm">
       <Filter>src\internal\asm</Filter>
     </CustomBuild>
-    <CustomBuild Include="asm\shrink2x.asm">
-      <Filter>src\internal\asm</Filter>
-    </CustomBuild>
   </ItemGroup>
   <ItemGroup>
     <None Include="_win32\win32_common.inl">

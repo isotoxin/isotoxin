@@ -857,7 +857,7 @@ ts::bitmap_c application_c::app_icon(bool for_tray)
     text.replace_all(CONSTASTR("\n"), CONSTASTR("\r\n"));
 }
 
-/*virtual*/ ts::wsptr application_c::app_loclabel(loc_label_e ll)
+/*virtual*/ ts::wstr_c application_c::app_loclabel(loc_label_e ll)
 {
     switch (ll)
     {

@@ -38,85 +38,86 @@ class gui_textedit_c : public gui_control_c
 	ts::wchar password_char = 0;
 
 public:
-	struct active_element_s
-	{
-		int advance = 0;
-
-        static active_element_s * fromchar( ts::wchar ch ) // hint! any valid pointers of normally allocated objects has always lower bit 0
-        {
-            return (active_element_s*)(((size_t)ch << 16)|1);
-        }
-        bool is_char() const
-        {
-            return 0 != (( size_t )this & 1); // hint! lower bit of valid pointer is always 0
-        }
-        ts::wchar as_char() const
-        {
-            return (ts::wchar)(( size_t )this >> 16);
-        }
-
-        virtual void release()
-        {
-            if (ASSERT(!is_char() && 0 != ( size_t )this))
-            {
-                TSDEL( this );
-            }
-        }
+    struct active_element_s : public ts::shared_object
+    {
+        int advance = 0;
 
         virtual bool hand_cursor() const {return false;}
         virtual ts::wstr_c to_wstr() const = 0;
         virtual ts::str_c to_utf8() const = 0;
         virtual void update_advance(ts::font_c *f) {};
         virtual void setup( ts::font_c *font, const ts::ivec2 &pos, ts::glyph_image_s &gi ) = 0;
-        virtual active_element_s * clone() const = 0;
-        virtual bool equals(active_element_s *) const = 0;
+        virtual bool equals(const active_element_s *) const = 0;
 
         active_element_s() {}
         virtual ~active_element_s() {}
 	};
+
 private:
 
 	class text_element_c
 	{
         MOVABLE( true );
 
-	public:
-		active_element_s *p;
+        ts::shared_ptr<active_element_s> p;
+        ts::wchar ch = 0;
+    public:
 
-        text_element_c(const text_element_c &o)
+        bool is_char() const
         {
-            p = o.p->is_char() ? o.p : o.p->clone();
+            return p == nullptr;
         }
-        void operator=(const text_element_c &o)
+        ts::wchar as_char() const
         {
-            if (!p->is_char()) p->release();
-            p = o.p->is_char() ? o.p : o.p->clone();
+            ASSERT( p == nullptr );
+            return ch;
+        }
+        ts::wstr_c to_wstr() const
+        {
+            if ( CHECK( p ) )
+                return p->to_wstr();
+            return ts::wstr_c();
+        }
+        ts::str_c to_utf8() const
+        {
+            if ( CHECK( p ) )
+                return p->to_utf8();
+            return ts::str_c();
+        }
+        active_element_s *get_ae() const
+        {
+            return p;
         }
 
-		text_element_c(active_element_s *p) : p(p) {}//absorb constructor
-		explicit text_element_c(ts::wchar ch) {p = active_element_s::fromchar(ch);}
-		~text_element_c() {if (!p->is_char()) p->release();}
-
-        void operator=(active_element_s *_p)
+        text_element_c() {}
+        text_element_c(const text_element_c &o):p(o.p), ch(o.ch)
         {
-            if (!p->is_char()) p->release();
-            p = _p;
         }
+        text_element_c &operator=(const text_element_c &o)
+        {
+            p = o.p;
+            ch = o.ch;
+            return *this;
+        }
+
+        explicit text_element_c(active_element_s *p) : p(p) {}
+        explicit text_element_c( ts::wchar ch_ ) { ch = ch_; }
+		~text_element_c() {}
 
         bool operator==(const text_element_c&o) const
         {
-            if (p->is_char() && o.p->is_char()) return p->as_char() == o.p->as_char();
-            if (!p->is_char() && !o.p->is_char()) return p->equals(o.p);
+            if (is_char() && o.is_char()) return as_char() == o.as_char();
+            if (!is_char() && !o.is_char()) return p->equals(o.p);
             return false;
         }
-		bool operator==(ts::wchar ch) const {return p->is_char() && p->as_char() == ch;}
+		bool operator==(ts::wchar ch_ ) const {return is_char() && as_char() == ch_;}
 
-		ts::wchar get_char_unsafe() const {return p->as_char();}
-		bool     is_char() const {return p->is_char();}
-		ts::wchar get_char() const {return p->is_char() ? p->as_char() : 0;}
-		int advance(ts::font_c *f) const {return p->is_char() ? (*f)[p->as_char()].advance : p->advance;}
-		void update_advance(ts::font_c *f) {if (!p->is_char()) p->update_advance(f);}
+		int advance(ts::font_c *f) const {return is_char() ? (*f)[as_char()].advance : p->advance;}
+		void update_advance(ts::font_c *f) {if (!is_char()) p->update_advance(f);}
 	};
+
+    bool text_replace( int pos, int num, const ts::wsptr &str, text_element_c *el, int len, bool update_caret_pos = true );
+
 	ts::array_inplace_t<text_element_c,512> text; // text
 	ts::tbuf_t<ts::ivec2> lines; // lines of text
     ts::smart_int start_sel, caret_line, caret_offset, scroll_left;
@@ -176,7 +177,6 @@ private:
     bool kbd_processing_(system_query_e qp, ts::wchar charcode, int scan, int casw);
 
 	int text_el_advance( int index) const { if (index >= text.size()) return 0; return !password_char ? text[index].advance((*font)) : (*(*font))[password_char].advance;}
-	bool text_replace(int pos, int num, const ts::wsptr &str, active_element_s **el, int len, bool update_caret_pos = true);
 	bool text_replace( int cp, const ts::wsptr &str) {return start_sel == -1 ? text_replace(cp, 0, str) : text_replace(ts::tmin(cp, start_sel), ts::tabs(start_sel-cp), str);}
 	bool text_erase( int pos, int num) {return text_replace(pos, num, ts::wstr_c(), nullptr, 0);}
 	bool text_erase( int cp) {return text_erase(ts::tmin(cp, start_sel), ts::tabs(start_sel-cp));}

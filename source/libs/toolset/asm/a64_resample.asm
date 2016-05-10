@@ -84,9 +84,13 @@ vdasm_resize_table_row_SSE2:
 	push r14
 	push r15
 
-	VDSAVEXMM128	6, 15
+	sub rsp, 32+8 ; +8 - align
+	movdqa	oword ptr [rsp], xmm6
+	movdqa	oword ptr [rsp+16], xmm7
 
-parms equ rsp+64
+	;VDSAVEXMM128	6, 15
+
+parms equ rsp+64+32+8
 
 	mov			r10d, dword ptr [parms+40]
 	shl			r10, 2
@@ -264,7 +268,10 @@ coeffloop_even_pairs:
 	jnz			pixelloop_even_pairs
 
 xit1:
-	VDRESTOREXMM128	6, 15
+	;VDRESTOREXMM128	6, 15
+	movdqa	xmm6, oword ptr [rsp]
+	movdqa	xmm7, oword ptr [rsp+16]
+	add rsp, 32+8
 
 	pop r15
 	pop r14
@@ -390,9 +397,13 @@ vdasm_resize_table_col_SSE2:
 	push r14
 	push r15
 
-	VDSAVEXMM128	6, 15
+	;VDSAVEXMM128	6, 15
+	sub rsp, 32+8
+	movdqa	oword ptr [rsp], xmm6
+	movdqa	oword ptr [rsp+16], xmm7
 
-	parms equ rsp+64
+
+	parms equ rsp+64+32+8
 
 	mov			r10d, [parms+40]			;r10d = w
 
@@ -448,8 +459,10 @@ coeffloop:
 	jne			pixelloop
 
 xit2:
-	VDRESTOREXMM128	6, 15
-	;VDRESTORE	rbx, rsi, rdi, rbp, r12, r13, r14, r15
+	;VDRESTOREXMM128	6, 15
+	movdqa	xmm6, oword ptr [rsp]
+	movdqa	xmm7, oword ptr [rsp+16]
+	add rsp, 32+8
 
 	pop r15
 	pop r14

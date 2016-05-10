@@ -1442,7 +1442,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                         ts::CURSOR_SIZENESW,
                         ts::CURSOR_SIZENWSE,
                     };
-                    if ((hd.area & AREA_RESIZE) && (hd.area & AREA_RESIZE) < LENGTH(cursors))
+                    if ((hd.area & AREA_RESIZE) && (hd.area & AREA_RESIZE) < ARRAY_SIZE(cursors))
                     {
                         if (noresize_nomove && 0 == (hd.area & AREA_FORCECURSOR)) return ts::CURSOR_LAST;
                         return cursors[hd.area & AREA_RESIZE];

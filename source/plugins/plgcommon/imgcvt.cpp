@@ -103,43 +103,36 @@ static YuvConstants SIMD_ALIGNED(kYuvConstants) = {
 #ifdef MODE64
 void I422ToARGBRow_SSSE3( const byte* y_buf, const byte* u_buf, const byte* v_buf, byte* dst_argb, int width )
 {
-    __m128i xmm0, xmm1, xmm2, xmm3;
     const __m128i xmm5 = _mm_set1_epi8( -1 );
     const ptrdiff_t offset = (byte*)v_buf - (byte*)u_buf;
 
     while ( width > 0 ) {
-        xmm0 = _mm_cvtsi32_si128( *(u32*)u_buf );
-        xmm1 = _mm_cvtsi32_si128( *(u32*)( u_buf + offset ) );
-        xmm0 = _mm_unpacklo_epi8( xmm0, xmm1 );
-        xmm0 = _mm_unpacklo_epi16( xmm0, xmm0 );
-        xmm1 = _mm_loadu_si128( &xmm0 );
-        xmm2 = _mm_loadu_si128( &xmm0 );
-        xmm0 = _mm_maddubs_epi16( xmm0, *( __m128i* )kYuvConstants.kUVToB );
-        xmm1 = _mm_maddubs_epi16( xmm1, *( __m128i* )kYuvConstants.kUVToG );
-        xmm2 = _mm_maddubs_epi16( xmm2, *( __m128i* )kYuvConstants.kUVToR );
-        xmm0 = _mm_sub_epi16( *( __m128i* )kYuvConstants.kUVBiasB, xmm0 );
-        xmm1 = _mm_sub_epi16( *( __m128i* )kYuvConstants.kUVBiasG, xmm1 );
-        xmm2 = _mm_sub_epi16( *( __m128i* )kYuvConstants.kUVBiasR, xmm2 );
-        xmm3 = _mm_loadl_epi64( ( __m128i* )y_buf );
-        xmm3 = _mm_unpacklo_epi8( xmm3, xmm3 );
-        xmm3 = _mm_mulhi_epu16( xmm3, *( __m128i* )kYuvConstants.kYToRgb );
-        xmm0 = _mm_adds_epi16( xmm0, xmm3 );
-        xmm1 = _mm_adds_epi16( xmm1, xmm3 );
-        xmm2 = _mm_adds_epi16( xmm2, xmm3 );
-        xmm0 = _mm_srai_epi16( xmm0, 6 );
-        xmm1 = _mm_srai_epi16( xmm1, 6 );
-        xmm2 = _mm_srai_epi16( xmm2, 6 );
-        xmm0 = _mm_packus_epi16( xmm0, xmm0 );
-        xmm1 = _mm_packus_epi16( xmm1, xmm1 );
-        xmm2 = _mm_packus_epi16( xmm2, xmm2 );
-        xmm0 = _mm_unpacklo_epi8( xmm0, xmm1 );
-        xmm2 = _mm_unpacklo_epi8( xmm2, xmm5 );
-        xmm1 = _mm_loadu_si128( &xmm0 );
-        xmm0 = _mm_unpacklo_epi16( xmm0, xmm2 );
-        xmm1 = _mm_unpackhi_epi16( xmm1, xmm2 );
 
-        _mm_storeu_si128( ( __m128i * )dst_argb, xmm0 );
-        _mm_storeu_si128( ( __m128i * )( dst_argb + 16 ), xmm1 );
+        __m128i kYToRgb = _mm_load_si128( ( const __m128i * )kYuvConstants.kYToRgb );
+        __m128i kUVBiasB = _mm_load_si128( ( const __m128i * )kYuvConstants.kUVBiasB );
+        __m128i kUVBiasG = _mm_load_si128( ( const __m128i * )kYuvConstants.kUVBiasG );
+        __m128i kUVBiasR = _mm_load_si128( ( const __m128i * )kYuvConstants.kUVBiasR );
+
+        __m128i kUVToB = _mm_load_si128( ( const __m128i * )kYuvConstants.kUVToB );
+        __m128i kUVToG = _mm_load_si128( ( const __m128i * )kYuvConstants.kUVToG );
+        __m128i kUVToR = _mm_load_si128( ( const __m128i * )kYuvConstants.kUVToR );
+
+
+        __m128i unp = _mm_unpacklo_epi8( _mm_cvtsi32_si128( *(u32*)u_buf ), _mm_cvtsi32_si128( *(u32*)( u_buf + offset ) ) );
+        __m128i unpx = _mm_unpacklo_epi16( unp, unp );
+        
+        __m128i xx3 = _mm_loadl_epi64( ( __m128i* )y_buf );
+        __m128i xx4 = _mm_mulhi_epu16( _mm_unpacklo_epi8( xx3, xx3 ), kYToRgb );
+
+        __m128i x0 = _mm_srai_epi16( _mm_adds_epi16( _mm_sub_epi16( kUVBiasB, _mm_maddubs_epi16( unpx, kUVToB ) ), xx4 ), 6 );
+        __m128i x1 = _mm_srai_epi16( _mm_adds_epi16( _mm_sub_epi16( kUVBiasG, _mm_maddubs_epi16( unpx, kUVToG ) ), xx4 ), 6 );
+        __m128i x2 = _mm_srai_epi16( _mm_adds_epi16( _mm_sub_epi16( kUVBiasR, _mm_maddubs_epi16( unpx, kUVToR ) ), xx4 ), 6 );
+
+        __m128i t1 = _mm_unpacklo_epi8( _mm_packus_epi16( x0, x0 ), _mm_packus_epi16( x1, x1 ) );
+        __m128i t2 = _mm_unpacklo_epi8( _mm_packus_epi16( x2, x2 ), xmm5 );
+
+        _mm_storeu_si128( ( __m128i * )dst_argb, _mm_unpacklo_epi16( t1, t2 ) );
+        _mm_storeu_si128( ( __m128i * )( dst_argb + 16 ), _mm_unpackhi_epi16( t1, t2 ) );
 
         y_buf += 8;
         u_buf += 4;

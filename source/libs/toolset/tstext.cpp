@@ -67,8 +67,7 @@ static void write_row_sse( uint8 *dst_argb, const uint8 *src_argb, int w, const 
         __m128i tadd1 = _mm_load_si128( ( const __m128i * )add1 );
         __m128i tinvhi = _mm_load_si128( ( const __m128i * )invhi );
 
-        __m128 t5 = _mm_load_ss( (float *)src_argb );
-        __m128i tt5 = _mm_add_epi16( _mm_xor_si128( _mm_mulhi_epu16( _mm_shuffle_epi8( ( const __m128i & )( t5 ), t3 ), t7 ), tinvhi ), tadd1);
+        __m128i tt5 = _mm_add_epi16( _mm_xor_si128( _mm_mulhi_epu16( _mm_shuffle_epi8( _mm_cvtsi32_si128( *(uint32 *)src_argb ), t3 ), t7 ), tinvhi ), tadd1);
 
         __m128i t4 = _mm_lddqu_si128( ( const __m128i * )dst_argb );
         

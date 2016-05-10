@@ -308,14 +308,14 @@ public:
 
 private:
 
-    void copy_over_itm( T& to, const T&from )
+    template<typename TT> void copy_over_itm( T& to, const TT&from )
     {
-        typedef typename BEHAVIOUR::template copy<const T&, true, false> copier;
+        typedef typename BEHAVIOUR::template copy<const TT&, true, false> copier;
         copier::c( to, from );
     }
-    void copy_new_itm( T& to, const T&from )
+    template<typename TT> void copy_new_itm( T& to, const TT&from )
     {
-        typedef typename BEHAVIOUR::template copy<const T&, false, false> copier;
+        typedef typename BEHAVIOUR::template copy<const TT&, false, false> copier;
         copier::c( to, from );
     }
 
@@ -514,7 +514,7 @@ public:
         if (idx<m_count)
         {
             //BEHAVIOUR::template copy<Tcref, true, false>::c( m_list[idx], d );
-            copy_over_itm( m_list[ idx ], d );
+            copy_over_itm<T>( m_list[ idx ], d );
             return;
         }
 
@@ -560,16 +560,16 @@ public:
             _upsize(m_count - num + len, pos + num, len - num);
 
             for ( aint i = 0; i < num; ++i )
-                copy_over_itm( m_list[ pos + i ], arr[ i ] ); //BEHAVIOUR::template copy<TTcref, true, false>(m_list[pos + i], arr[i]);
+                copy_over_itm<TT>( m_list[ pos + i ], arr[ i ] ); //BEHAVIOUR::template copy<TTcref, true, false>(m_list[pos + i], arr[i]);
 
             for ( aint i = num; i < len; ++i )
-                copy_new_itm( m_list[ pos + i ], arr[ i ] );//BEHAVIOUR::template copy<TTcref, false, false>(m_list[pos + i], arr[i]);
+                copy_new_itm<TT>( m_list[ pos + i ], arr[ i ] );//BEHAVIOUR::template copy<TTcref, false, false>(m_list[pos + i], arr[i]);
 
 
         } else
         {
             for ( aint i = 0; i < len; ++i )
-                copy_over_itm( m_list[ pos + i ], arr[ i ] ); //BEHAVIOUR::template copy<TTcref, true, false>(m_list[pos + i], arr[i]);
+                copy_over_itm<TT>( m_list[ pos + i ], arr[ i ] ); //BEHAVIOUR::template copy<TTcref, true, false>(m_list[pos + i], arr[i]);
 
             if (len < num)
                 remove_some(pos+len, num-len);
@@ -593,7 +593,7 @@ public:
 
         _upsize(m_count+1, idx, 1);
 
-        copy_new_itm( m_list[ idx ], d); //BEHAVIOUR::template copy<Tcref, false,false>( m_list[idx], const_cast<T &>(d) );
+        copy_new_itm<T>( m_list[ idx ], d); //BEHAVIOUR::template copy<Tcref, false,false>( m_list[idx], const_cast<T &>(d) );
 
         return idx;
     }
@@ -1069,7 +1069,7 @@ public:
 
         aint i = 0;
         for(const T &el : list)
-            copy_new_itm(m_list[i++], el); //BEHAVIOUR::template copy<Tcref, false,false>( m_list[i++], const_cast<T &>(el) );
+            copy_new_itm<T>(m_list[i++], el); //BEHAVIOUR::template copy<Tcref, false,false>( m_list[i++], const_cast<T &>(el) );
     }
 
     array_c( const array_wrapper_c<const T>&wrp )
@@ -1080,7 +1080,7 @@ public:
 
         aint i = 0;
         for ( const T &el : wrp )
-            copy_new_itm( m_list[ i++ ], el ); // BEHAVIOUR::template copy<Tcref, false, false>(m_list[i++], const_cast<T &>(el));
+            copy_new_itm<T>( m_list[ i++ ], el ); // BEHAVIOUR::template copy<Tcref, false, false>(m_list[i++], const_cast<T &>(el));
     }
 
     array_c( aint capacity = 0 )

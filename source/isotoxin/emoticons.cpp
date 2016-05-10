@@ -9,11 +9,9 @@ namespace
     {
         const emoticon_s *e;
         ts::bitmap_c bmp;
-        mutable int ref = 1;
 
         smile_element_s &operator=(const smile_element_s &se) UNUSED;
         smile_element_s(const smile_element_s &se) UNUSED;
-
         smile_element_s(const emoticon_s *e, int maxh):e(e)
         {
             ts::irect frect = e->framerect();
@@ -71,12 +69,8 @@ namespace
                 }
             }
         }
-        /*virtual*/ void release() override
+        ~smile_element_s()
         {
-            --ref;
-            ASSERT(ref >= 0);
-            if (ref == 0)
-                __super::release();
         }
 
         /*virtual*/ ts::wstr_c to_wstr() const override
@@ -127,16 +121,11 @@ namespace
             gi.color = 0;
             gi.thickness = 0;
         }
-        /*virtual*/ active_element_s * clone() const override
-        {
-            ++ref;
-            return const_cast<smile_element_s *>(this);
-        }
-        /*virtual*/ bool equals(active_element_s *se) const override
+        /*virtual*/ bool equals(const active_element_s *se) const override
         {
             if (se == this)
                 return true;
-            smile_element_s *ses = dynamic_cast<smile_element_s *>(se);
+            const smile_element_s *ses = dynamic_cast<const smile_element_s *>(se);
             return ses && ses->e == e;
         }
     };
@@ -150,12 +139,12 @@ bool emoticon_s::load( const ts::wsptr &fn )
 
 /*virtual*/ emoticon_s::~emoticon_s() 
 {
-    if (ee)
+    if ( ee )
     {
-        smile_element_s *se = ts::ptr_cast<smile_element_s *>(ee);
+        smile_element_s *se = ts::ptr_cast<smile_element_s *>( ee.get() );
         se->e = nullptr;
         se->advance = 0;
-        ee->release();
+        ee = nullptr;
     }
     if (ispreframe)
         TSDEL(preframe);
@@ -163,16 +152,10 @@ bool emoticon_s::load( const ts::wsptr &fn )
 
 gui_textedit_c::active_element_s * emoticon_s::get_edit_element(int maxh)
 {
-    if (ee)
-    {
-        smile_element_s *se = ts::ptr_cast<smile_element_s *>(ee);
-        ++se->ref;
-        return se;
-    }
-    smile_element_s *se = TSNEW( smile_element_s, this, maxh );
-    ++se->ref;
-    ee = se;
-    return se;
+    if (!ee)
+        ee = TSNEW( smile_element_s, this, maxh );
+
+    return ee;
 }
 
 /*virtual*/ bool emoticons_c::emo_gif_s::load(const ts::blob_c &body)
@@ -451,16 +434,21 @@ ts::str_c emoticons_c::load_png_smile(const ts::wstr_c& fn, const ts::blob_c &bo
 
 }
 
+namespace
+{
+    struct backup_s
+    {
+        MOVABLE( true );
+        ts::shared_ptr<smile_element_s> se;
+        int unicode;
+    };
+
+}
+
 void emoticons_c::reload()
 {
     if (!prf().is_loaded())
         return;
-
-    struct backup_s
-    {
-        smile_element_s *se;
-        int unicode;
-    };
 
     ts::tmp_array_inplace_t<backup_s, 16> bse;
     for( emoticon_s *e : arr )
@@ -468,7 +456,7 @@ void emoticons_c::reload()
         if (e->ee)
         {
             backup_s &b = bse.add();
-            b.se = ts::ptr_cast<smile_element_s *>( e->ee );;
+            b.se = ts::ptr_cast<smile_element_s *>( e->ee.get() );;
             b.se->e = nullptr;
             b.unicode = e->unicode;
             e->ee = nullptr;
@@ -651,8 +639,6 @@ void emoticons_c::reload()
                 break;
             }
         }
-        if (b.se)
-            b.se->release();
     }
 }
 

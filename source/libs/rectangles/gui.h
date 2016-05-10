@@ -326,7 +326,7 @@ public:
     ts::TSCOLOR selection_bg_color = ts::ARGB(100, 100, 255);
     ts::TSCOLOR selection_bg_color_blink = ts::ARGB(0, 0, 155);
 
-    virtual ts::wsptr app_loclabel(loc_label_e ll) { return CONSTWSTR("???"); }
+    virtual ts::wstr_c app_loclabel(loc_label_e ll) { return CONSTWSTR("???"); }
     virtual bool app_custom_button_state(int tag, int &shiftleft) { return true; }
     virtual void app_prepare_text_for_copy( ts::str_c &text_utf8 ) {}
     virtual void app_notification_icon_action( ts::notification_icon_action_e act, RID iconowner) {}

@@ -48,9 +48,9 @@ private:
     streamstr& operator=(streamstr &) UNUSED;
     buftype_t &boof;
 
-    char_t * boof_current(int size)
+    char_t * boof_current(aint size)
     {
-        boof.require_capacity( size + boof.get_length() );
+        boof.require_capacity( (int)size + boof.get_length() );
 
         ZSTRINGS_ASSERT(size + boof.get_length() <= boof.get_capacity(), "Bad arguments");
         if (size + boof.get_length() > boof.get_capacity()) return nullptr;

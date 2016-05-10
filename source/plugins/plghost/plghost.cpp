@@ -488,7 +488,12 @@ int CALLBACK WinMain(
 #if defined _DEBUG || defined _CRASH_HANDLER
 #include "appver.inl"
     exception_operator_c::set_unhandled_exception_filter();
-    exception_operator_c::dump_filename = fn_change_name_ext(get_exe_full_name(), wstr_c(CONSTWSTR("plghost")).append_char('.').appendcvt(SS(APPVERD)).as_sptr(), CONSTWSTR("dmp"));
+    exception_operator_c::dump_filename = fn_change_name_ext(get_exe_full_name(), wstr_c(CONSTWSTR("plghost")).append_char('.').appendcvt(SS(APPVERD)).as_sptr(), 
+#ifdef MODE64
+        CONSTWSTR( "x64.dmp" ) );
+#else
+        CONSTWSTR( "dmp" ) );
+#endif // MODE64                   
 #endif
 
     UNSTABLE_CODE_PROLOG
@@ -621,7 +626,12 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
 #if defined _DEBUG || defined _CRASH_HANDLER
                     if (CR_OK == rst)
                     {
-                        exception_operator_c::dump_filename.replace_all(CONSTWSTR(".dmp"), wstr_c(CONSTWSTR(".")).appendcvt(proto).append(CONSTWSTR(".dmp")));
+                        exception_operator_c::dump_filename.replace_all(CONSTWSTR(".dmp"), wstr_c(CONSTWSTR(".")).appendcvt(proto)
+#ifdef MODE64
+                            .append( CONSTWSTR( ".x64.dmp" ) ) );
+#else
+                            .append(CONSTWSTR(".dmp")));
+#endif // MODE64                   
                     }
 #endif
                     description.set_length(CHARz_nlen(description.cstr(), description.get_capacity()));

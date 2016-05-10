@@ -473,6 +473,23 @@ void TSCALL img_helper_copy(uint8 *des, const uint8 *sou, const imgdesc_s &des_i
 
 }
 
+#ifdef MODE64
+// Assume any cpu with amd64 arch supports sse2, so sse2 intrinsics is good idea
+static void TSCALL asm_shrink2x( uint8 *dst, const uint8 *src, long width, long height, aint srcpitch, aint dstcorrectpitch )
+{
+    aint srccpitch = srcpitch * 2 - width * 8;
+    for( aint y = 0; y<height; ++y, src += srccpitch, dst += dstcorrectpitch )
+    {
+        for ( aint x = 0; x < width; ++x, src += 8, dst += 4 )
+        {
+            __m128i zero = _mm_setzero_si128();
+            __m128i pix = _mm_add_epi16( _mm_unpacklo_epi8( _mm_cvtsi64_si128( *(__int64 *)src ), zero ), _mm_unpacklo_epi8( _mm_cvtsi64_si128( *(__int64 *)( src + srcpitch ) ), zero ) );
+            __m128 h2l = _mm_movehl_ps( ( __m128 & )zero, ( __m128 & )pix );
+            *(TSCOLOR *)dst = _mm_cvtsi128_si32( _mm_packus_epi16( _mm_srli_epi16 ( _mm_add_epi16( ( const __m128i & )h2l, pix ), 2 ), zero ) );
+        }
+    }
+}
+#else
 extern "C" void TSCALL asm_shrink2x(
 		void *dst,
 		const void *src,
@@ -480,6 +497,7 @@ extern "C" void TSCALL asm_shrink2x(
 		unsigned long height,
 		unsigned long srcpitch,
 		unsigned long dstcorrectpitch);
+#endif
 
 
 static void shrink_row_sse2_8px( const uint8* src_argb, int src_stride_argb, uint8* dst_argb, int dst_width )
@@ -877,13 +895,15 @@ void    bmpcore_normal_s::before_modify(bitmap_c *me)
 
     bitmap_c b( *me );
 
-    if (b.info().bitpp == 8) me->create_grayscale(b.info().sz);
-    else if (b.info().bitpp == 15) me->create_15(b.info().sz);
-    else if (b.info().bitpp == 16) me->create_16(b.info().sz);
-    else if (b.info().bitpp == 24) me->create_RGB(b.info().sz);
-    if (b.info().bitpp == 32) me->create_ARGB(b.info().sz);
+    const imgdesc_s &__inf = b.info();
 
-    me->copy(ivec2(0), b.info().sz, b.extbody(), ivec2(0));
+    if (__inf.bitpp == 8) me->create_grayscale(__inf.sz);
+    else if (__inf.bitpp == 15) me->create_15(__inf.sz);
+    else if (__inf.bitpp == 16) me->create_16(__inf.sz);
+    else if (__inf.bitpp == 24) me->create_RGB(__inf.sz);
+    if (__inf.bitpp == 32) me->create_ARGB(__inf.sz);
+
+    me->copy(ivec2(0), __inf.sz, b.extbody(), ivec2(0));
 }
 
 bool bmpcore_normal_s::operator==(const bmpcore_normal_s & bm) const
@@ -940,10 +960,11 @@ bool bmpcore_exbody_s::operator==(const bmpcore_exbody_s & bm) const
 
 template <typename CORE> bitmap_t<CORE>& bitmap_t<CORE>::operator =( const bmpcore_exbody_s &eb )
 {
-    ASSERT( eb.info().bytepp() >= 3 );
-    if ( info().sz != eb.info().sz || info().bytepp() != 4 )
-        create_ARGB( eb.info().sz );
-    copy( ts::ivec2( 0 ), eb.info().sz, eb, ts::ivec2( 0 ) );
+    const imgdesc_s& __inf = eb.info();
+    ASSERT( __inf.bytepp() >= 3 );
+    if ( info().sz != __inf.sz || info().bytepp() != 4 )
+        create_ARGB( __inf.sz );
+    copy( ts::ivec2( 0 ), __inf.sz, eb, ts::ivec2( 0 ) );
     return *this;
 }
 
@@ -980,12 +1001,13 @@ template<typename CORE> void bitmap_t<CORE>::convert_to_yuv( const ivec2 & pdes,
 
 template<typename CORE> void bitmap_t<CORE>::shrink_2x_to(const ivec2 &lt_source, const ivec2 &sz_source, const bmpcore_exbody_s &eb_target) const
 {
-    if(info().bytepp()==2 || (sz_source /2) != eb_target.info().sz || info().bytepp() != eb_target.info().bytepp()) return;
+    const imgdesc_s &__inf = eb_target.info();
+    if(info().bytepp()==2 || (sz_source /2) != __inf.sz || info().bytepp() != __inf.bytepp()) return;
 
     uint8 *dst = eb_target();
     const uint8 *src = body(lt_source);
 
-    img_helper_shrink_2x(dst, src, eb_target.info(), info( irect(0, sz_source) ));
+    img_helper_shrink_2x(dst, src, __inf, info( irect(0, sz_source) ));
 }
 
 
@@ -1519,7 +1541,8 @@ template<typename CORE> void bitmap_t<CORE>::fill(const ivec2 & pdes,const ivec2
     if (!(size >> 0)) return;
 
     before_modify();
-    img_helper_fill( body()+info().bytepp()*pdes.x+info().pitch*pdes.y, imgdesc_s(info(), size), color );
+    const imgdesc_s &__inf = info();
+    img_helper_fill( body()+ __inf.bytepp()*pdes.x+ __inf.pitch*pdes.y, imgdesc_s( __inf, size), color );
 }
 
 template<typename CORE> void bitmap_t<CORE>::overfill(const ivec2 & pdes,const ivec2 & size, TSCOLOR color)
@@ -2212,32 +2235,35 @@ bool    drawable_bitmap_c::create_from_bitmap(const bitmap_c &bmp, bool flipy, b
 
 void bmpcore_exbody_s::draw(const bmpcore_exbody_s &eb, aint xx, aint yy, int alpha) const
 {
-    ASSERT(xx + info().sz.x <= eb.info().sz.x);
-    ASSERT(yy + info().sz.y <= eb.info().sz.y);
+    const imgdesc_s& __inf = eb.info();
+
+    ASSERT(xx + info().sz.x <= __inf.sz.x);
+    ASSERT(yy + info().sz.y <= __inf.sz.y);
 
     if (alpha > 0)
-        img_helper_alpha_blend_pm(eb(ivec2(xx, yy)), eb.info().pitch, (*this)(), info(), (uint8)alpha);
+        img_helper_alpha_blend_pm(eb(ivec2(xx, yy)), __inf.pitch, (*this)(), info(), (uint8)alpha);
     else
-        img_helper_copy(eb(ivec2(xx, yy)), (*this)(), eb.info().chsize(info().sz), info());
+        img_helper_copy(eb(ivec2(xx, yy)), (*this)(), __inf.chsize(info().sz), info());
 
 }
 
 void bmpcore_exbody_s::draw(const bmpcore_exbody_s &eb, aint xx, aint yy, const irect &r, int alpha) const
 {
     const uint8 *src = (*this)(r.lt);
+    const imgdesc_s& __inf = eb.info();
     
     ts::ivec2 sz = r.size();
-    if (xx + sz.x > eb.info().sz.x)
-        sz.x = (int)(eb.info().sz.x - xx);
-    if (yy + sz.y > eb.info().sz.y)
-        sz.x = (int)(eb.info().sz.y - yy);
+    if (xx + sz.x > __inf.sz.x)
+        sz.x = (int)( __inf.sz.x - xx);
+    if (yy + sz.y > __inf.sz.y)
+        sz.x = (int)( __inf.sz.y - yy);
 
     imgdesc_s sinf(sz, 32, info().pitch);
 
     if (alpha > 0)
-        img_helper_alpha_blend_pm(eb(ivec2(xx, yy)), eb.info().pitch, src, sinf, (uint8)alpha);
+        img_helper_alpha_blend_pm(eb(ivec2(xx, yy)), __inf.pitch, src, sinf, (uint8)alpha);
     else
-        img_helper_copy(eb(ivec2(xx, yy)), src, eb.info().chsize(sinf.sz), sinf);
+        img_helper_copy(eb(ivec2(xx, yy)), src, __inf.chsize(sinf.sz), sinf);
 
 }
 

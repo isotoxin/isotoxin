@@ -329,7 +329,7 @@ struct text_parser_s
 	void end_line(bool nextLn = true, bool acceptaddhnow = false) // break current line
 	{
 		int H, spaces, W, WR;
-		pen.y += calc_HSW(H, spaces, W, WR, (int)last_line.count());
+		pen.y += calc_HSW(H, spaces, W, WR, last_line.count());
 
 		if (glyphs)
 		{
@@ -950,7 +950,7 @@ struct text_parser_s
 
 					char charclass[30];
 					aint start = j+1, n = last_line.count() - start;
-					if (hyphenation_tag_nesting_level && n < LENGTH(charclass)-3)//нужно смотреть на 3 буквы вперёд, чтобы работали правила gss-ssg и gs-ssg
+					if (hyphenation_tag_nesting_level && n < ARRAY_SIZE(charclass)-3)//нужно смотреть на 3 буквы вперёд, чтобы работали правила gss-ssg и gs-ssg
 					{
 						//Перенос слов по слогам реализован на основе упрощённого алгоритма П.Христова http://sites.google.com/site/foliantapp/project-updates/hyphenation
 						aint nn = tmin(n+3, text.l - (cur_text_index-n+1)), i = 0;

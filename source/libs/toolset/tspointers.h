@@ -191,7 +191,7 @@ public:
 	shared_object() {}
 
     bool is_multi_ref() const {return ref > 1;}
-	void add_ref() {ref++;}
+	void add_ref() { ++ref; }
 	template <class T> static void dec_ref(T *object)
 	{
 		ASSERT(object->ref > 0);

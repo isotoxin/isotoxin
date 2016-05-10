@@ -28,7 +28,7 @@ struct emoticon_s
     virtual const ts::bitmap_c &curframe(ts::irect &frect) const = 0;
     virtual ts::irect framerect() const = 0;
 
-    gui_textedit_c::active_element_s * ee = nullptr;
+    ts::shared_ptr<gui_textedit_c::active_element_s> ee;
     gui_textedit_c::active_element_s * get_edit_element(int maxh);
 };
 

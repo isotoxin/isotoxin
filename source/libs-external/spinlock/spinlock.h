@@ -263,6 +263,25 @@ SLINLINE void lock_read(RWLOCK &lock)
 	}
 }
 
+SLINLINE bool try_lock_read( RWLOCK &lock )
+{
+    RWLOCKVALUE thread = pthread_self();
+    RWLOCKVALUE val = lock;
+    if ( ( val & LOCK_THREAD_MASK ) == thread )
+    {
+        SLxInterlockedAdd64( &lock, LOCK_READ_VAL );
+        return true;
+    }
+
+    DEADLOCKCHECK_INIT();
+
+    RWLOCKVALUE tmp = val & LOCK_READ_MASK;
+    val = tmp + LOCK_READ_VAL;
+    val = SLxInterlockedCompareExchange64( &lock, val, tmp );
+    return val == tmp; // only readers
+}
+
+
 SLINLINE bool try_lock_write(RWLOCK &lock)
 {
 	RWLOCKVALUE thread = pthread_self();

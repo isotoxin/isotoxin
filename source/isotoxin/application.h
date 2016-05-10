@@ -293,7 +293,7 @@ public:
 
     /*virtual*/ void app_prepare_text_for_copy(ts::str_c &text_utf8) override;
 
-    /*virtual*/ ts::wsptr app_loclabel(loc_label_e ll) override;
+    /*virtual*/ ts::wstr_c app_loclabel(loc_label_e ll) override;
 
     /*virtual*/ void app_notification_icon_action( ts::notification_icon_action_e act, RID iconowner) override;
     /*virtual*/ void app_fix_sleep_value(int &sleep_ms) override;

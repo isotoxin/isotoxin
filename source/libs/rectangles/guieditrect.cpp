@@ -49,7 +49,7 @@ void gui_textedit_c::run_heartbeat()
     }
 }
 
-bool gui_textedit_c::text_replace( int pos, int num, const ts::wsptr &str, active_element_s **el, int len, bool update_caret_pos)
+bool gui_textedit_c::text_replace( int pos, int num, const ts::wsptr &str, text_element_c *el, int len, bool update_caret_pos)
 {
     if (check_text_func && !flags.is(F_CHANGE_HANDLER))
     {
@@ -119,18 +119,19 @@ ok:
 
 bool gui_textedit_c::text_replace( int pos, int num, const ts::wsptr &str, bool update_caret_pos)
 {
-	ts::tmp_pointers_t<active_element_s, 0> elements( str.l );
+	ts::tmp_array_inplace_t<text_element_c, 0> elements( str.l );
+
     if (is_multiline())
     {
         for(int i=0;i<str.l;++i)
-            elements.add(active_element_s::fromchar(str.s[i]));
+            elements.add( text_element_c(str.s[i]));
 	    return text_replace(pos, num, str, elements.begin(), (int)elements.size(), update_caret_pos);
     } else
     {
         bool nldetected = false;
         for (int i = 0; i < str.l; ++i)
             if (str.s[i] != '\n')
-                elements.add(active_element_s::fromchar(str.s[i]));
+                elements.add( text_element_c(str.s[i]));
             else
                 nldetected = true;
         if (nldetected)
@@ -160,7 +161,7 @@ ts::wstr_c gui_textedit_c::get_text_and_fix_pos( int *pos0, int *pos1) const
             *pos1 = r.get_length(), pos1fixed = true;
 
         const text_element_c &te = text[i];
-        if (te.is_char()) r.append_char(te.get_char_unsafe()); else r.append(te.p->to_wstr());
+        if (te.is_char()) r.append_char(te.as_char()); else r.append(te.to_wstr());
     }
 
     if (!pos0fixed && *pos0 == count)
@@ -179,7 +180,7 @@ ts::wstr_c gui_textedit_c::get_text_11( ts::wchar rc ) const
     for (int i = 0; i < count; ++i)
     {
         const text_element_c &te = text[i];
-        r.append_char(te.is_char() ? te.get_char_unsafe() : rc);
+        r.append_char(te.is_char() ? te.as_char() : rc);
     }
     return r;
 }
@@ -190,7 +191,7 @@ ts::wstr_c gui_textedit_c::text_substr( int start, int count) const
     for (int i = 0; i < count; ++i)
     {
         const text_element_c &te = text[start + i];
-        if (te.is_char()) r.append_char(te.get_char_unsafe()); else r.append(te.p->to_wstr());
+        if (te.is_char()) r.append_char(te.as_char()); else r.append(te.to_wstr());
     }
     return r;
 }
@@ -201,7 +202,7 @@ ts::str_c gui_textedit_c::text_substr_utf8( int start, int count) const
 	for ( ts::aint i=0; i<count; ++i)
 	{
 		const text_element_c &te = text[start+i];
-		if (te.is_char()) r.append_unicode_as_utf8( te.get_char_unsafe() ); else r.append(te.p->to_utf8());
+		if (te.is_char()) r.append_unicode_as_utf8( te.as_char() ); else r.append(te.to_utf8());
 	}
 	return r;
 }
@@ -247,7 +248,8 @@ void gui_textedit_c::paste_( int cp )
 
 void gui_textedit_c::insert_active_element(active_element_s *ae, int cp)
 {
-	if (!text_replace(cp, 0, ae->to_wstr(), &ae, 1)) ae->release();
+    text_element_c te(ae);
+    text_replace( cp, 0, ae->to_wstr(), &te, 1 );
 }
 
 ts::ivec2 gui_textedit_c::get_caret_pos() const
@@ -422,14 +424,14 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 				res = cut_(cp);
 				break;
 			case ts::SSK_LEFT:
-				for (;cp>0 &&  IS_WORDB(text.get(cp-1).get_char());cp--);
-				for (;cp>0 && !IS_WORDB(text.get(cp-1).get_char());cp--);
+				for (;cp>0 &&  IS_WORDB(text.get(cp-1).as_char());cp--);
+				for (;cp>0 && !IS_WORDB(text.get(cp-1).as_char());cp--);
 				set_caret_pos(cp);
 				res = true;
 				break;
 			case ts::SSK_RIGHT:
-				for (;cp<text.size() && !IS_WORDB(text.get(cp).get_char());cp++);
-				for (;cp<text.size() &&  IS_WORDB(text.get(cp).get_char());cp++);
+				for (;cp<text.size() && !IS_WORDB(text.get(cp).as_char());cp++);
+				for (;cp<text.size() &&  IS_WORDB(text.get(cp).as_char());cp++);
 				set_caret_pos(cp);
 				res = true;
 				break;
@@ -858,23 +860,24 @@ void gui_textedit_c::prepare_texture()
 			const ts::wchar *str = nullptr;
             active_element_s *ae = nullptr;
 			int str_len = 0, advoffset = 0;
+            ts::wchar dummychar;
 			ts::TSCOLOR cc = (current_color == 0 ? colors.get(i-firstvischar).first : current_color);
 			if (!password_char)
 				if (el.is_char())
-					str = (ts::wchar*)&el.p + 1, str_len = 1;
+					str = &dummychar, dummychar = el.as_char(), str_len = 1;
 				else
 				{
-                    ae = el.p;
+                    ae = el.get_ae();
 #if 0
                     // TODO : color of active element
-					if (el.p->str.is_empty() && el.p->user_data_size == 0) // special element to change current color
+					if (ae->str.is_empty() && ae->user_data_size == 0) // special element to change current color
 					{
-						current_color = el.p->color;
+						current_color = ae->color;
 						continue;
 					}
-					str = el.p->str;
-					str_len = el.p->str.get_length();
-					if (el.p->color/*if == 0, then color of text_element_c not set*/) cc = el.p->color;
+					str = ae->str;
+					str_len = ae->str.get_length();
+					if (ae->color/*if == 0, then color of text_element_c not set*/) cc = ae->color;
 #endif
 				}
 			else
@@ -969,8 +972,8 @@ void gui_textedit_c::selectword()
 {
     if (flags.is(F_DISABLE_CARET)) return;
     int left, right = left = get_caret_char_index();
-    for (; left > 0 && !IS_WORDB(text.get(left - 1).get_char()); --left);
-    for (; right < text.size() && !IS_WORDB(text.get(right).get_char()); ++right);
+    for (; left > 0 && !IS_WORDB(text.get(left - 1).as_char()); --left);
+    for (; right < text.size() && !IS_WORDB(text.get(right).as_char()); ++right);
     start_sel = left;
     set_caret_pos(right);
     redraw();
@@ -1247,7 +1250,7 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
                     {
                         if (!text[i].is_char())
                         {
-                            under_mouse_active_element = text[i].p;
+                            under_mouse_active_element = text[i].get_ae();
                             under_mouse_active_element_pos = ts::ivec2(x + ts::ui_scale(margins_lt.x), l * (*font)->height + ts::ui_scale(margins_lt.y));
                             if (under_mouse_active_element->hand_cursor()) flags.set(F_HANDCURSOR);
                         }

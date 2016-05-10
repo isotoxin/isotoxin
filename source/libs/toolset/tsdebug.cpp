@@ -39,7 +39,7 @@ void LogMessage(const char *caption, const char *msg)
 	if (f)
 	{
 		char module[MAX_PATH];
-		GetModuleFileNameA(NULL, module, LENGTH(module));
+		GetModuleFileNameA(NULL, module, ARRAY_SIZE(module));
 		tm t;
 		time_t curtime;
 		time(&curtime);
@@ -123,7 +123,7 @@ void Log(const char *s, ...)
 
     va_list args;
     va_start(args, s);
-    vsprintf_s(str, LENGTH(str), s, args);
+    vsprintf_s(str, ARRAY_SIZE(str), s, args);
     va_end(args);
 
     LogMessage(nullptr, str);
@@ -138,7 +138,7 @@ bool Warning(const char *s, ...)
 
 	va_list args;
 	va_start(args, s);
-	vsprintf_s(str, LENGTH(str), s, args);
+	vsprintf_s(str, ARRAY_SIZE(str), s, args);
 	va_end(args);
 
 	ts::str_c msg = str;
@@ -164,7 +164,7 @@ void Error(const char *s, ...)
 
 	va_list args;
 	va_start(args, s);
-	vsprintf_s(str, LENGTH(str), s, args);
+	vsprintf_s(str, ARRAY_SIZE(str), s, args);
 	va_end(args);
 
 	if ( LoggedMessageBox(str, "", "Error", sys_is_debugger_present() ? SMB_OKCANCEL : SMB_OK) == SMBR_CANCEL)
@@ -177,7 +177,7 @@ bool AssertFailed(const char *file, int line, const char *s, ...)
 
 	va_list args;
 	va_start(args, s);
-	vsprintf_s(str, LENGTH(str), s, args);
+	vsprintf_s(str, ARRAY_SIZE(str), s, args);
 	va_end(args);
 
 	return Warning("Assert failed at %s (%i)\n%s", file, line, str);

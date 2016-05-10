@@ -9,7 +9,7 @@ namespace ts
 
 font_c::~font_c()
 {
-	for (int i=0; i<LENGTH(glyphs); i++)
+	for (int i=0; i<ARRAY_SIZE(glyphs); i++)
 		if (glyphs[i])
 		{
 			if (glyphs[i]->outlined) MM_FREE(glyphs[i]->outlined);

@@ -253,7 +253,7 @@ tmpalloc_c tmpb;
 
 #ifdef _WIN32
             char cn[MAX_COMPUTERNAME_LENGTH + 1];
-            DWORD cnSize = LENGTH(cn);
+            DWORD cnSize = ARRAY_SIZE(cn);
             memset(cn, 0, sizeof(cn));
             GetComputerNameA(cn, &cnSize);
 

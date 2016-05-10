@@ -168,8 +168,8 @@ template<typename T> struct TSNEWDEL
 #define __DMSG__
 #endif
 
-#define ARRAY_SIZE( a ) ( sizeof(a)/sizeof(a[0]) )
-#define LENGTH(a) (sizeof(a)/sizeof(a[0]))
+template <typename T, size_t N> char( &__ARRAYSIZEHELPER( T( &array )[ N ] ) )[ N ];
+#define ARRAY_SIZE( a ) (sizeof(__ARRAYSIZEHELPER(a)))
 #define ARRAY_WRAPPER( a ) ts::array_wrapper_c<const std::remove_reference<decltype(a[0])>::type>(a, ARRAY_SIZE(a))
 
 

@@ -268,7 +268,14 @@ bool _cdecl ts::app_preinit( const wchar_t *cmdl )
 
 
 #if defined _DEBUG || defined _CRASH_HANDLER
-    set_dump_filename( ts::fn_change_name_ext( ts::get_exe_full_name(), ts::wstr_c( CONSTWSTR( APPNAME ) ).append_char( '.' ).append( ts::to_wstr( application_c::appver() ) ).as_sptr(), CONSTWSTR( "dmp" ) ) );
+    set_dump_filename( ts::fn_change_name_ext( ts::get_exe_full_name(), ts::wstr_c( CONSTWSTR( APPNAME ) ).append_char( '.' ).append( ts::to_wstr( application_c::appver() ) ).as_sptr(), 
+
+#ifdef MODE64
+        CONSTWSTR( "x64.dmp" ) ) );
+#else
+        CONSTWSTR( "dmp" ) ) );
+#endif // MODE64                   
+
 #endif
 
 	ts::tsfileop_c::setup<fileop_c>();

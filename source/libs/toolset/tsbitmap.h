@@ -1,7 +1,5 @@
 #pragma once
 
-//-V:info:807 
-
 #include "internal/imageformat.h"
 
 namespace ts
@@ -640,30 +638,33 @@ public:
 
         FMATRIX mat;
 
-        int szy = info().sz.y;
-        for(int y=0;y<szy;y++,des+=outimage.info().pitch,sou+=info().pitch)
+        const imgdesc_s& __inf = info();
+        const imgdesc_s& __inf_o = outimage.info();
+
+        int szy = __inf.sz.y;
+        for(int y=0;y<szy;y++,des+= __inf_o.pitch,sou+=info().pitch)
         {
             bool up = y == 0;
             bool down = y == info().sz.y - 1;
 
             uint8 * des1 = des;
             const uint8 * sou1 = sou;
-            for (int x = 0; x<info().sz.x; ++x, sou1 += info().bytepp(), des1 += outimage.info().bytepp())
+            for (int x = 0; x<info().sz.x; ++x, sou1 += __inf.bytepp(), des1 += __inf_o.bytepp())
             {
                 bool left = x == 0;
                 bool rite = x == info().sz.x - 1;
 
-                mat[0][0] = (left || up) ? nullptr : (sou1 - info().pitch - info().bytepp());
+                mat[0][0] = (left || up) ? nullptr : (sou1 - __inf.pitch - __inf.bytepp());
                 mat[1][0] = (up) ? nullptr : (sou1 - info().pitch);
-                mat[2][0] = (rite || up) ? nullptr : (sou1 - info().pitch + info().bytepp());
+                mat[2][0] = (rite || up) ? nullptr : (sou1 - __inf.pitch + __inf.bytepp());
 
-                mat[0][1] = (left) ? nullptr : (sou1 - info().bytepp());
+                mat[0][1] = (left) ? nullptr : (sou1 - __inf.bytepp());
                 mat[1][1] = sou1;
-                mat[2][1] = (rite) ? nullptr : (sou1 + info().bytepp());
+                mat[2][1] = (rite) ? nullptr : (sou1 + __inf.bytepp());
 
-                mat[0][2] = (left || down) ? nullptr : (sou1 + info().pitch - info().bytepp());
+                mat[0][2] = (left || down) ? nullptr : (sou1 + __inf.pitch - __inf.bytepp());
                 mat[1][2] = (down) ? nullptr : (sou1 + info().pitch);
-                mat[2][2] = (rite || down) ? nullptr : (sou1 + info().pitch + info().bytepp());
+                mat[2][2] = (rite || down) ? nullptr : (sou1 + __inf.pitch + __inf.bytepp());
 
                 f.point( des1, mat );
             }
@@ -678,17 +679,19 @@ public:
 
         before_modify();
 
-        uint8 * bu = body() + info().bytepp()*pdes.x + info().pitch*pdes.y;
-        aint desnl = info().pitch - size.x*info().bytepp();
-        aint desnp = info().bytepp();
+        const imgdesc_s& __inf = info();
+
+        uint8 * bu = body() + __inf.bytepp()*pdes.x + __inf.pitch*pdes.y;
+        aint desnl = __inf.pitch - size.x*info().bytepp();
+        aint desnp = __inf.bytepp();
 
         FMATRIX mat;
 
         bool blef = pdes.x == 0;
         bool btop = pdes.y == 0;
 
-        bool brit = info().sz.x == (size.x + pdes.x);
-        bool bbot = info().sz.y == (size.y + pdes.y);
+        bool brit = __inf.sz.x == (size.x + pdes.x);
+        bool bbot = __inf.sz.y == (size.y + pdes.y);
 
 		for(aint y=0;y<size.y;y++,bu+=desnl)
         {
@@ -700,17 +703,17 @@ public:
                 bool left = blef && x == 0;
                 bool rite = brit && x == info().sz.x - 1;
 
-                mat[0][0] = (left || up) ? nullptr : (bu - info().pitch - info().bytepp());
+                mat[0][0] = (left || up) ? nullptr : (bu - __inf.pitch - __inf.bytepp());
                 mat[1][0] = (up) ? nullptr : (bu - info().pitch);
-                mat[2][0] = (rite || up) ? nullptr : (bu - info().pitch + info().bytepp());
+                mat[2][0] = (rite || up) ? nullptr : (bu - __inf.pitch + __inf.bytepp());
 
-                mat[0][1] = (left) ? nullptr : (bu - info().bytepp());
+                mat[0][1] = (left) ? nullptr : (bu - __inf.bytepp());
                 mat[1][1] = bu;
-                mat[2][1] = (rite) ? nullptr : (bu + info().bytepp());
+                mat[2][1] = (rite) ? nullptr : (bu + __inf.bytepp());
 
-                mat[0][2] = (left || down) ? nullptr : (bu + info().pitch - info().bytepp());
+                mat[0][2] = (left || down) ? nullptr : (bu + __inf.pitch - __inf.bytepp());
                 mat[1][2] = (down) ? nullptr : (bu + info().pitch);
-                mat[2][2] = (rite || down) ? nullptr : (bu + info().pitch + info().bytepp());
+                mat[2][2] = (rite || down) ? nullptr : (bu + __inf.pitch + __inf.bytepp());
 
                 f(bu, mat);
             }
