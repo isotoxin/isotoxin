@@ -144,13 +144,16 @@ tmpalloc_c tmpb;
             void *f = f_open(fn);
 			if (!f) return false;
             aint sz = (aint)f_size(f);
-            return f_read( f, b.alloc( sz ), sz ) == sz;
+            bool rslt = f_read( f, b.alloc( sz ), sz ) == sz;
+            f_close(f);
+            return rslt;
 		}
 		/*virtual*/ bool size(const wsptr &fn, size_t &sz) override
 		{
             void *f = f_open( fn );
             if (!f) return false;
             sz = (size_t)f_size(f);
+            f_close( f );
 			return true;;
 		}
 

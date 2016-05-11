@@ -24,7 +24,7 @@ inline bool f_assert(const char *f, int line, bool expr) { if (expr) return true
 #define ZSTRINGS_DEBUG 0
 #define ZSTRINGS_ASSERT(...) (1, true)
 #endif
-#define ZSTRINGS_NUMCONVERSION_ERROR(def) if (!def) ZSTRINGS_ASSERT(false, "num conversion error")
+#define ZSTRINGS_NUMCONVERSION_ERROR(def) //if (!def) ZSTRINGS_ASSERT(false, "num conversion error")
 #define ZSTRINGS_DEFAULT_STATIC_SIZE 1024 // 1024 bytes - default static string in-memory size
 //#define ZSTRINGS_VEC3(t) vec_t<t,3>
 

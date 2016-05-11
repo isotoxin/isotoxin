@@ -96,7 +96,8 @@ template<class STRTYPE> struct asnum<STRTYPE, float>
         double out = 0;
         if ( !CHARz_to_double( out, s.s, s.l ) )
         {
-            ZSTRINGS_NUMCONVERSION_ERROR( 0 );
+            ZSTRINGS_NUMCONVERSION_ERROR( def );
+            return def;
         }
         return (float)out;
     }
@@ -112,7 +113,8 @@ template<class STRTYPE> struct asnum<STRTYPE, double>
         double out = 0;
         if ( !CHARz_to_double( out, s.s, s.l ) )
         {
-            ZSTRINGS_NUMCONVERSION_ERROR( 0 );
+            ZSTRINGS_NUMCONVERSION_ERROR( def );
+            return def;
         }
         return out;
     }

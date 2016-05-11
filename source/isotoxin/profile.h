@@ -423,6 +423,9 @@ public:
 
     bool addeditnethandler(dialog_protosetup_params_s &params);
 
+    void flush_contacts();
+    bool flush_tables();
+
     void check_aps();
     void shutdown_aps();
     template<typename APR> void iterate_aps( APR apr ) const

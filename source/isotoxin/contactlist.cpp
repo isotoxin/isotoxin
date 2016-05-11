@@ -1340,11 +1340,13 @@ bool gui_contact_item_c::allow_drop() const
                     ts::shared_ptr<contact_c> c = contacts().find(ck);
                     if (c && c->getmeta())
                     {
+                        ts::db_transaction_c __transaction( prf().get_db() );
+
                         contact_root_c *historian = c->get_historian();
                         prf().load_history(historian->getkey()); // load whole history into memory table
                         historian->unload_history(); // clear history cache in contact
                         contact_root_c *detached_meta = contacts().create_new_meta();
-                        historian->subdel(c);
+                        historian->subremove(c);
                         detached_meta->subadd(c);
                         if (historian->gui_item) historian->gui_item->update_text();
                         prf().dirtycontact( c->getkey() );
@@ -1356,6 +1358,8 @@ bool gui_contact_item_c::allow_drop() const
                         upd.state = c->get_state();
                         upd.send();
                         historian->reselect();
+                        prf().flush_contacts();
+                        while ( prf().flush_tables() );
                     }
                 }
 

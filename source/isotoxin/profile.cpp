@@ -1685,6 +1685,54 @@ void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, i
     dirtycontact(ck);
 }
 
+void profile_c::flush_contacts()
+{
+    for ( const contact_key_s &ck : dirtycontacts )
+    {
+        const contact_c * c = contacts().find( ck );
+        auto *row = table_contacts.find<false>( [&]( const contacts_s &k )->bool { return k.key == ck; } );
+        if ( c && !c->get_options().unmasked().is( contact_c::F_DIP ) )
+        {
+            if ( !row )
+            {
+                row = &table_contacts.getcreate( 0 );
+                row->other.key = ck;
+                row->other.avatar_tag = 0;
+            }
+            else
+            {
+                if ( row->is_deleted() )
+                    continue;
+
+                row->changed();
+            }
+            if ( !c->save( &row->other ) )
+                row->deleted();
+        } else if (row)
+        {
+            row->deleted();
+        }
+    }
+    dirtycontacts.clear();
+
+}
+
+bool profile_c::flush_tables()
+{
+    ts::db_transaction_c __transaction( db );
+
+#define TAB(tab) if (table_##tab.flush(db, false)) return true;
+    PROFILE_TABLES
+#undef TAB
+
+    if ( db )
+    {
+        time_t oldbackuptime = now() - backup_keeptime() * 86400;
+        db->delrows( backup_protocol_s::get_table_name(), ts::tmp_str_c( CONSTASTR( "time<" ) ).append_as_num<int64>( oldbackuptime ) );
+    }
+    return false;
+}
+
 /*virtual*/ bool profile_c::save()
 {
     if (profile_flags.is(F_ENCRYPT_PROCESS))
@@ -1695,41 +1743,8 @@ void profile_c::set_avatar( const contact_key_s&ck, const ts::blob_c &avadata, i
 
     if (__super::save()) return true;
 
-    for(const contact_key_s &ck : dirtycontacts)
-    {
-        const contact_c * c = contacts().find(ck);
-        if (c && !c->get_options().unmasked().is(contact_c::F_DIP))
-        {
-            auto *row = table_contacts.find<false>( [&](const contacts_s &k)->bool { return k.key == ck; } );
-            if (!row)
-            {
-                row = &table_contacts.getcreate(0);
-                row->other.key = ck;
-                row->other.avatar_tag = 0;
-            } else
-            {
-                if (row->is_deleted())
-                    continue;
-
-                row->changed();
-            }
-            if (!c->save( &row->other ))
-                row->deleted();
-        }
-    }
-    dirtycontacts.clear();
-
-    ts::db_transaction_c __transaction( db );
-
-#define TAB(tab) if (table_##tab.flush(db, false)) return true;
-    PROFILE_TABLES
-#undef TAB
-
-    if (db)
-    {
-        time_t oldbackuptime = now() - backup_keeptime() * 86400;
-        db->delrows(backup_protocol_s::get_table_name(), ts::tmp_str_c(CONSTASTR("time<")).append_as_num<int64>(oldbackuptime));
-    }
+    flush_contacts();
+    if ( flush_tables() ) return true;
 
     return false;
 }
