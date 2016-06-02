@@ -3,7 +3,7 @@
 enum message_type_app_e : unsigned
 {
     MTA_MESSAGE = MT_MESSAGE,
-    MTA_ACTION = MT_ACTION,
+    MTA_SYSTEM_MESSAGE = MT_SYSTEM_MESSAGE,
     MTA_FRIEND_REQUEST = MT_FRIEND_REQUEST,
     MTA_INCOMING_CALL = MT_INCOMING_CALL,
     MTA_CALL_STOP = MT_CALL_STOP,
@@ -153,6 +153,7 @@ struct avatar_s : public ts::bitmap_c
 {
     int tag = 0;
     bool alpha_pixels = false;
+    avatar_s() {}
     avatar_s( const void *body, ts::aint size, int tag ) { load(body, size, tag); }
     void load( const void *body, ts::aint size, int tag );
 };
@@ -190,6 +191,18 @@ enum keep_contact_history_e
     KCH_NEVER_KEEP,
 };
 
+enum incoming_message_beh_e
+{
+    IMB_DEFAULT,
+    IMB_DESKTOP_NOTIFICATION = 1,
+    IMB_INTRUSIVE_BEHAVIOUR = 2,
+    IMB_ALL = 3,
+    IMB_SUPPRESS = 4,
+
+    IMB_DONT_NOTIFY = IMB_ALL | IMB_SUPPRESS,
+    IMB_SUPPRESS_INTRUSIVE_BEHAVIOUR = IMB_INTRUSIVE_BEHAVIOUR | IMB_SUPPRESS,
+};
+
 enum auto_accept_audio_call_e
 {
     AAAC_NOT,
@@ -208,6 +221,7 @@ enum reselect_options_e
 {
     RSEL_SCROLL_END = 1,
     RSEL_INSERT_NEW = 2,
+    RSEL_CHECK_CURRENT = 4,
 };
 
 //-V:options():807
@@ -244,9 +258,12 @@ public:
     static const ts::flags32_s::BITS F_DEFALUT      = SETBIT(0);
     static const ts::flags32_s::BITS F_AVA_DEFAULT  = SETBIT(1);
     static const ts::flags32_s::BITS F_UNKNOWN      = SETBIT(2);
+    static const ts::flags32_s::BITS F_ALLOW_INVITE = SETBIT(3); // only valid for unknown contacts
+    static const ts::flags32_s::BITS F_SYSTEM_USER  = SETBIT(4);
 
 
     // not saved
+    static const ts::flags32_s::BITS F_JUST_REJECTED = SETBIT(21);
     static const ts::flags32_s::BITS F_JUST_ACCEPTED = SETBIT(22);
     static const ts::flags32_s::BITS F_LAST_ACTIVITY = SETBIT(23);
     static const ts::flags32_s::BITS F_FULL_SEARCH_RESULT = SETBIT(24);
@@ -282,6 +299,8 @@ public:
 
     bool is_meta() const { return key.is_meta() && getmeta() == nullptr; }; // meta, but not group
     bool is_rootcontact() const { return !opts.is(F_UNKNOWN) && (is_meta() || getkey().is_group() || getkey().is_self()); } // root contact - in contact list
+
+    bool is_rejected() const { return CS_REJECTED == get_state() || get_options().unmasked().is( F_JUST_REJECTED ); };
 
     const Options &get_options() const {return opts;}
     Options &options() {return opts;}
@@ -351,8 +370,9 @@ public:
     bool is_av() const { return opts.unmasked().is(F_AV_INPROGRESS) || (getkey().is_group() && opts.unmasked().is(F_AUDIO_GCHAT)); }
     bool is_calltone() const { return opts.unmasked().is(F_CALLTONE); }
 
+    void rebuild_system_user_avatar( active_protocol_c *ap );
     int avatar_tag() const {return avatar ? avatar->tag : 0; }
-    void set_avatar( const void *body, ts::aint size, int tag = 0 )
+    void set_avatar( const void *body, ts::aint size, int tag )
     {
         if (size == 0)
         {
@@ -383,6 +403,7 @@ class contact_root_c : public contact_c // metas and groups
     keep_contact_history_e keeph = KCH_DEFAULT;
     auto_accept_audio_call_e aaac = AAAC_NOT;
     msg_handler_e mht = MH_NOT;
+    int imnb = 0; // incoming message notification behavior
 
 public:
     ts::safe_ptr<gui_contact_item_c> gui_item;
@@ -447,6 +468,11 @@ public:
         for (contact_c *c : subcontacts)
             itr(c);
     }
+    template<typename ITR> void subiterate( ITR itr ) const
+    {
+        for ( const contact_c *c : subcontacts )
+            itr( c );
+    }
 
     int subonlinecount() const
     {
@@ -457,6 +483,13 @@ public:
         return online_count;
     }
 
+    bool fully_unknown() const
+    {
+        if ( subcontacts.size() == 0 ) return false;
+        for ( contact_c *c : subcontacts )
+            if ( c->get_state() != CS_UNKNOWN ) return false;
+        return true;
+    }
 
     time_t get_readtime() const { return readtime; }
     void set_readtime(time_t t) { readtime = t; }
@@ -583,6 +616,9 @@ public:
     auto_accept_audio_call_e get_aaac() const { return aaac; }
     void set_aaac(auto_accept_audio_call_e v) { aaac = v; }
 
+    int get_imnb() const { return imnb; }
+    void set_imnb( int v ) { imnb = v; }
+
     void execute_message_handler( const ts::str_c &utf8msg );
     msg_handler_e get_mhtype() const { return mht; }
     void set_mhtype( msg_handler_e v ) { mht = v; }
@@ -608,7 +644,7 @@ contact_root_c *get_historian(contact_c *sender, contact_c * receiver);
 
 template<> struct gmsg<ISOGM_V_UPDATE_CONTACT> : public gmsgbase
 {
-    gmsg(contact_c *c) :gmsgbase(ISOGM_V_UPDATE_CONTACT),contact(c) { ASSERT(c->get_state() != CS_UNKNOWN); }
+    gmsg(contact_c *c) :gmsgbase(ISOGM_V_UPDATE_CONTACT),contact(c) { }
     ts::shared_ptr<contact_c> contact;
 };
 
@@ -627,7 +663,7 @@ template<> struct gmsg<ISOGM_FILE> : public gmsgbase
 {
     gmsg() :gmsgbase(ISOGM_FILE) {}
     contact_key_s sender;
-    uint64 utag = 0;
+    uint64 i_utag = 0; // incoming utag
     uint64 filesize = 0;
     uint64 offset = 0;
     ts::wstr_c filename;
@@ -701,8 +737,6 @@ class contacts_c
     GM_RECEIVER(contacts_c, ISOGM_AVATAR);
     GM_RECEIVER(contacts_c, GM_UI_EVENT);
     
-    uint64 sorttag;
-
     ts::tbuf_t<contact_key_s> activity; // last active historian at end of array
     ts::array_shared_t<contact_c, 8> arr;
     ts::shared_ptr<contact_root_c> self;
@@ -725,6 +759,7 @@ class contacts_c
     ts::astrings_c all_tags;
     ts::buf0_c enabled_tags;
 
+    int sorttag = 0;
 
 public:
 
@@ -793,8 +828,8 @@ public:
 
     void unload(); // called before profile switch
 
-    uint64 sort_tag() const { return sorttag; }
-    void dirty_sort() { sorttag = ts::uuid(); };
+    int sort_tag() const { return sorttag; }
+    void dirty_sort() { ++sorttag; };
 
     void contact_activity( const contact_key_s &ck );
     ts::aint contact_activity_power(const contact_key_s &ck) const

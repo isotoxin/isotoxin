@@ -29,6 +29,16 @@ struct proxy_settings_s
 
 struct configurable_s
 {
+    // db fields
+    // loaded from db
+    // no need to wait these fields from protocol
+    ts::str_c login;
+private:
+    ts::str_c password;
+public:
+
+    // protocol fields
+    // protocol will handle these fields itself
     proxy_settings_s proxy;
     int server_port = 0;
     bool ipv6_enable = true;
@@ -37,7 +47,8 @@ struct configurable_s
 
     bool operator != (const configurable_s &o) const
     {
-        return initialized != o.initialized || proxy != o.proxy || server_port != o.server_port || ipv6_enable != o.ipv6_enable || udp_enable != o.udp_enable;
+        return initialized != o.initialized || proxy != o.proxy || server_port != o.server_port || ipv6_enable != o.ipv6_enable || udp_enable != o.udp_enable ||
+            login != o.login | password != o.password;
     }
     configurable_s() {}
     configurable_s(const configurable_s &c)
@@ -46,6 +57,10 @@ struct configurable_s
     }
     configurable_s &operator=(const configurable_s &c)
     {
+        // always copy db fields
+        login = c.login;
+        password = c.password;
+
         if (!c.initialized) return *this;
         proxy = c.proxy;
         server_port = c.server_port;
@@ -54,6 +69,12 @@ struct configurable_s
         initialized = true;
         return *this;
     }
+
+    ts::str_c get_password_encoded() const { return password; }
+    void set_password( const ts::asptr&p );
+    void set_password_as_is( const ts::asptr&p ) { password = p; }
+    ts::str_c get_password_decoded() const;
+
 };
 
 struct active_protocol_data_s
@@ -73,23 +94,38 @@ struct active_protocol_data_s
 
     enum options_e
     {
-        O_AUTOCONNECT   = SETBIT(0),
+        O_AUTOCONNECT   = SETBIT( 0 ),
         //O_SUSPENDED     = SETBIT(1),
+        O_CONFIG_NATIVE = SETBIT( 2 ),
     };
-
 };
 
 struct sync_data_s
 {
     active_protocol_data_s data;
-    ts::str_c description; // utf8
-    ts::str_c description_t; // utf8
-    ts::str_c icon;
+    ts::astrings_c strings;
     ts::flags32_s flags;
     float volume = 1.0f;
     int dsp_flags = 0;
     contact_online_state_e manual_cos = COS_ONLINE;
     cmd_result_e current_state;
+
+    const ts::str_c &getstr( info_string_e s ) const
+    {
+        if ( s < strings.size() )
+            return strings.get( s );
+        return ts::make_dummy<ts::str_c>(true);
+    }
+};
+
+struct avatar_restrictions_s
+{
+    int maxsize = 16384;
+    int minwh = 0;
+    int maxwh = 0;
+    ts::flags32_s options;
+
+    static const ts::flags32_s::BITS O_ALLOW_ANIMATED_GIF = 1;
 };
 
 class active_protocol_c : public ts::safe_object
@@ -103,8 +139,10 @@ class active_protocol_c : public ts::safe_object
     
     int id;
     int priority = 0;
+    int indicator = 0;
     int features = 0;
     int conn_features = 0;
+    avatar_restrictions_s arest;
     s3::Format audio_fmt;
     isotoxin_ipc_s * volatile ipcp = nullptr;
     spinlock::syncvar< sync_data_s > syncdata;
@@ -144,10 +182,15 @@ class active_protocol_c : public ts::safe_object
     void worker();
     bool check_die(RID, GUIPARAM);
     bool check_save(RID, GUIPARAM);
-    void save_config( const ts::blob_c &cfg );
+    void save_config( const ts::blob_c &cfg, bool native_config );
     void run();
 
     void push_debug_settings();
+
+    void setup_audio_fmt( ts::str_c& s );
+    void setup_avatar_restrictions( ts::str_c& s );
+
+    ts::blob_c fit_ava( const ts::blob_c&ava ) const;
 
 public:
     active_protocol_c(int id, const active_protocol_data_s &pd);
@@ -157,13 +200,21 @@ public:
 
     void unlock_video_frame( incoming_video_frame_s *f );
 
-    const ts::str_c &get_desc() const {return syncdata.lock_read()().description;};
-    const ts::str_c &get_desc_t() const {return syncdata.lock_read()().description_t;};
+    const ts::str_c &get_infostr(info_string_e s) const {return syncdata.lock_read()().getstr(s);};
     const ts::str_c &get_name() const {return syncdata.lock_read()().data.name;};
     const ts::str_c &get_tag() const { return syncdata.lock_read()().data.tag; };
     int get_features() const {return features; }
     int get_conn_features() const { return conn_features; }
     int get_priority() const {return priority; }
+    int get_indicator_lv() const { return indicator; }
+    protocol_description_s proto_desc() const
+    {
+        protocol_description_s d;
+        d.connection_features = conn_features;
+        d.features = features;
+        d.strings = syncdata.lock_read()( ).strings;
+        return d;
+    }
 
     const ts::str_c &get_uname() const {return syncdata.lock_read()().data.user_name;};
     const ts::str_c &get_ustatusmsg() const {return syncdata.lock_read()().data.user_statusmsg;};
@@ -175,13 +226,20 @@ public:
 
     const ts::bitmap_c &get_icon(int sz, icon_type_e icot);
 
-    void set_current_online(bool oflg) { syncdata.lock_write()().flags.init(F_CURRENT_ONLINE, oflg); }
+    bool set_current_online(bool oflg)
+    {
+        auto w = syncdata.lock_write();
+        bool ofv = w().flags.is( F_CURRENT_ONLINE );
+        w().flags.init( F_CURRENT_ONLINE, oflg );
+        return ofv != oflg;
+    }
     bool is_current_online() const { return syncdata.lock_read()().flags.is(F_CURRENT_ONLINE); }
     cmd_result_e get_current_state() const { return syncdata.lock_read()().current_state; }
 
     int sort_factor() const { return syncdata.lock_read()().data.sort_factor; }
     void set_sortfactor(int sf);
 
+    ts::blob_c gen_system_user_avatar();
     void set_avatar(contact_c *); // self avatar to self contact
     void set_avatar( const ts::blob_c &ava ); // avatar for this protocol
     void set_ostate(contact_online_state_e _cos);
@@ -202,6 +260,7 @@ public:
     void add_group_chat( const ts::str_c &groupname, bool persistent );
     void resend_request( int cid, const ts::str_c &msg_utf8 );
     void add_contact( const ts::str_c& pub_id, const ts::str_c &msg_utf8 );
+    void add_contact( const ts::str_c& pub_id ); // without authorization
     void del_contact(int cid);
     void accept(int cid);
     void reject(int cid);
@@ -212,9 +271,9 @@ public:
     void send_audio(int cid, const s3::Format &fmt, const void *data, int size);
     void call(int cid, int seconds);
     void stop_call(int cid);
-    void set_stream_options(int cid, int so, const ts::ivec2 &vr); // tell to proto/other peer about recomended video resolution (if I see video in 320x240, why you send 640x480?)
+    void set_stream_options(int cid, int so, const ts::ivec2 &vr); // tell to proto/other peer about recommended video resolution (if I see video in 320x240, why you send 640x480?)
 
-    void file_resume(uint64 utag, uint64 offset);
+    void file_accept( uint64 utag, uint64 offset);
     void file_control(uint64 utag, file_control_e fctl);
     void send_file(int cid, uint64 utag, const ts::wstr_c &filename, uint64 filesize);
     bool file_portion(uint64 utag, uint64 offset, const void *data, ts::aint sz);
@@ -225,6 +284,6 @@ public:
     
     void export_data();
     void reset_data();
-    void change_data( const ts::blob_c &b );
+    void change_data( const ts::blob_c &b, bool is_native );
 
 };

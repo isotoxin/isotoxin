@@ -14,15 +14,14 @@ struct dialog_protosetup_params_s
     CONFIRM_PROTOSETUP confirm;
 
     // edit
-    ts::str_c proto_desc; // set only for edit new connections
+    protocol_description_s proto_desc; // set only for edit new connections
     int protoid = 0;
-    int features = 0;
-    int conn_features = 0;
 
     ts::str_c uname; // utf8
     ts::str_c ustatus; // utf8
     ts::str_c networkname; // utf8
     ts::wstr_c importcfg; // filename
+
     configurable_s configurable;
     bool connect_at_startup = true;
 
@@ -38,11 +37,12 @@ struct dialog_protosetup_params_s
     dialog_protosetup_params_s(CONFIRM_PROTOSETUP confirm) : confirm(confirm) {}
     dialog_protosetup_params_s(int protoid);
 
-
     //dialog_protosetup_params_s(int protoid, const ts::str_c &uname,
     //                           const ts::str_c &ustatus,
     //                           const ts::str_c &networkname
     //                           ) : protoid(protoid), uname(uname), ustatus(ustatus), networkname(networkname) {}
+
+    void to( active_protocol_data_s &d ) const;
 };
 
 class dialog_setup_network_c;
@@ -60,10 +60,13 @@ class dialog_setup_network_c : public gui_isodialog_c
     dialog_protosetup_params_s params;
     int addh = 0;
     bool predie = false;
+    bool password_changed = false;
 
     bool uname_edit(const ts::wstr_c &t);
     bool ustatus_edit(const ts::wstr_c &t);
     bool netname_edit(const ts::wstr_c &t);
+    bool login_edit( const ts::wstr_c &t );
+    bool password_edit( const ts::wstr_c &t );
 
     bool network_importfile(const ts::wstr_c & t);
     bool network_serverport(const ts::wstr_c & t);
@@ -301,6 +304,7 @@ private:
         BGROUP_HISTORY,
         BGROUP_CALL_NOTIFY,
         BGROUP_INCOMING_NOTIFY,
+        BGROUP_SOUNDS_NOTIFY,
 
         BGROUP_count
     };
@@ -501,7 +505,7 @@ public:
     ~dialog_settings_c();
 
     /*virtual*/ ts::wstr_c get_name() const override;
-    /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(830, 520); }
+    /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
 

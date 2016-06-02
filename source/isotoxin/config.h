@@ -40,6 +40,75 @@ protected:
 
     ts::SQLITE_TABLEREADER get_cfg_reader() { return DELEGATE( this, cfg_reader ); }
 
+    template< typename T > struct cvts;
+    template<> struct cvts<int>
+    {
+        static int cvt( bool init, ts::str_c& s, int def )
+        {
+            if ( init ) { s.set_as_int( def ); return def; }
+            return s.as_int( def );
+        }
+    };
+    template<> struct cvts<ts::uint32>
+    {
+        static int cvt( bool init, ts::str_c& s, ts::uint32 def )
+        {
+            if ( init ) { s.set_as_uint( def ); return def; }
+            uint64 t = s.as_num<int64>( def );
+            return ( ts::uint32 )( t & 0xffffffff );
+        }
+    };
+    template<> struct cvts<int64>
+    {
+        static int64 cvt( bool init, ts::str_c& s, const int64&def )
+        {
+            if ( init ) { s.set_as_num( def ); return def; }
+            return s.as_num<int64>( def );
+        }
+    };
+    template<> struct cvts<uint64>
+    {
+        static uint64 cvt( bool init, ts::str_c& s, const uint64&def )
+        {
+            if ( init ) { s.set_as_num( def ); return def; }
+            return s.get_char(0) == '-' ? (uint64)s.as_num<int64>( def ) : s.as_num<uint64>( def );
+        }
+    };
+    template<> struct cvts<float>
+    {
+        static float cvt( bool init, ts::str_c& s, float def )
+        {
+            if ( init ) { s.set_as_float( def ); return def; }
+            return s.as_float( def );
+        }
+    };
+    template<> struct cvts<ts::ivec2>
+    {
+        static ts::ivec2 cvt( bool init, ts::str_c& s, const ts::ivec2&def )
+        {
+            if ( init ) { s.set_as_int( def.x ).append_char( ',' ).append_as_int( def.y ); return def; }
+            ts::token<char> t( s, ',' );
+            ts::ivec2 r;
+            r.x = t ? t->as_int( def.x ) : def.x;
+            ++t; r.y = t ? t->as_int( def.y ) : def.y;
+            return r;
+        }
+    };
+    template<> struct cvts<ts::irect>
+    {
+        static ts::irect cvt( bool init, ts::str_c& s, const ts::irect&def )
+        {
+            if ( init ) { s.set_as_int( def.lt.x ).append_char( ',' ).append_as_int( def.lt.y ).append_char( ',' ).append_as_int( def.rb.x ).append_char( ',' ).append_as_int( def.rb.y ); return def; }
+            ts::token<char> t( s, ',' );
+            ts::irect r;
+            r.lt.x = t ? t->as_int( def.lt.x ) : def.lt.x;
+            ++t; r.lt.y = t ? t->as_int( def.lt.y ) : def.lt.y;
+            ++t; r.rb.x = t ? t->as_int( def.rb.x ) : def.rb.x;
+            ++t; r.rb.y = t ? t->as_int( def.rb.y ) : def.rb.y;
+            return r;
+        }
+    };
+
 public:
     config_base_c() {}
     ~config_base_c();
@@ -62,60 +131,13 @@ public:
         if (added) v = def;
         return v;
     }
-    template<typename T> T get(const ts::asptr& pn, const T&def);
-    template<> float get(const ts::asptr& pn, const float&def)
+    template<typename T> T get(const ts::asptr& pn, const T&def)
     {
         bool added = false;
-        ts::str_c &v = values.add(pn, added);
-        if (added) { v.set_as_float(def); return def; }
-        return v.as_float(def);
+        ts::str_c &v = values.add( pn, added );
+        return cvts<T>::cvt(added,v,def);
     }
-    template<> int get(const ts::asptr& pn, const int&def)
-    {
-        bool added = false;
-        ts::str_c &v = values.add(pn, added);
-        if (added) { v.set_as_int(def); return def;}
-        return v.as_int(def);
-    }
-	template<> ts::uint32 get(const ts::asptr& pn, const ts::uint32&def)
-	{
-		bool added = false;
-		ts::str_c &v = values.add(pn, added);
-		if (added) { v.set_as_uint(def); return def; }
-		uint64 t = v.as_num<int64>(def);
-		return (ts::uint32)( t & 0xffffffff );
-	}
-	template<> int64 get(const ts::asptr& pn, const int64&def)
-    {
-        bool added = false;
-        ts::str_c &v = values.add(pn, added);
-        if (added) { v.set_as_num<int64>(def); return def; }
-        return v.as_num<int64>(def);
-    }
-    template<> ts::ivec2 get(const ts::asptr& pn, const ts::ivec2&def)
-    {
-        bool added = false;
-        ts::str_c &v = values.add(pn, added);
-        if (added) { v.set_as_int(def.x).append_char(',').append_as_int(def.y); return def; }
-        ts::token<char> t( v, ',' );
-        ts::ivec2 r;
-        r.x = t ? t->as_int(def.x) : def.x;
-        ++t; r.y = t ? t->as_int(def.y) : def.y;
-        return r;
-    }
-    template<> ts::irect get(const ts::asptr& pn, const ts::irect&def)
-    {
-        bool added = false;
-        ts::str_c &v = values.add(pn, added);
-        if (added) { v.set_as_int(def.lt.x).append_char(',').append_as_int(def.lt.y).append_char(',').append_as_int(def.rb.x).append_char(',').append_as_int(def.rb.y); return def; }
-        ts::token<char> t(v, ',');
-        ts::irect r;
-        r.lt.x = t ? t->as_int(def.lt.x) : def.lt.x;
-        ++t; r.lt.y = t ? t->as_int(def.lt.y) : def.lt.y;
-        ++t; r.rb.x = t ? t->as_int(def.rb.x) : def.rb.x;
-        ++t; r.rb.y = t ? t->as_int(def.rb.y) : def.rb.y;
-        return r;
-    }
+
 };
 
 typedef fastdelegate::FastDelegate<void()> ONCLOSE_FUNC;
@@ -123,6 +145,7 @@ typedef fastdelegate::FastDelegate<void()> ONCLOSE_FUNC;
 enum cfg_misc_flags_e
 {
     MISCF_DISABLE64 = 1,
+    MISCF_DISABLEBORDER = 2,
 };
 
 class config_c : public config_base_c

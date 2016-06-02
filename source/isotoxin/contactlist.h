@@ -202,7 +202,7 @@ class gui_contactlist_c : public gui_vscrollgroup_c
 
     static const ts::flags32_s::BITS F_NO_LEECH_CHILDREN = F_VSCROLLFREEBITSTART << 0;
 
-    uint64 sort_tag = 0;
+    int sort_tag = 0;
     contact_list_role_e role = CLR_MAIN_LIST;
 
     int skip_top_pixels = 70;

@@ -6,7 +6,7 @@
 
 // typical scenario : AQ -> plghost, HA -> application
 
-#define PLGHOST_IPC_PROTOCOL_VERSION 12
+#define PLGHOST_IPC_PROTOCOL_VERSION 14
 
 enum commands_e
 {
@@ -28,7 +28,6 @@ enum commands_e
     AQ_OSTATE,
 
     HA_CONFIGURABLE,    // some configurable parameters from plugin to application
-    AQ_CONFIGURABLE,
 
     HQ_SAVE,
     AQ_SAVE_CONFIG,
@@ -64,7 +63,8 @@ enum commands_e
 
     AQ_FILE_SEND,           // application initiate file send
     HQ_INCOMING_FILE,       // remote peer initiate send file
-    AQ_CONTROL_FILE,        // accept / reject / break transfer
+    AQ_CONTROL_FILE,        // reject / break transfer
+    AQ_ACCEPT_FILE,
     HQ_FILE_PORTION,        // remote peer's file portion received
     HQ_QUERY_FILE_PORTION,
     AA_FILE_PORTION,        // application provides file portion

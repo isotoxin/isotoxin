@@ -20,11 +20,10 @@ struct hunspell_file_s
 
     const unsigned char *data;
     size_t size;
-    size_t ptr = 0;
     hunspell_file_s( const unsigned char *data, size_t size ) :data( data ), size( size ) {}
     operator const char *( ) { return ( const char * )this; }
 
-    bool gets( std::string&, char breakchar = 0 );
+    bool gets( size_t&ptr, std::string&, char breakchar = 0 );
 };
 
 namespace std
@@ -58,6 +57,7 @@ namespace std
     {
     public:
         hunspell_file_s f;
+        size_t ptr = 0;
         basic_stringstream( const string &s ) :f( (const unsigned char *)s.c_str(), s.length() )
         {
         }
@@ -65,7 +65,7 @@ namespace std
 
     inline bool getline( stringstream& strem, string &s, char breakchar )
     {
-        return strem.f.gets(s, breakchar);
+        return strem.f.gets( strem.ptr, s, breakchar);
     }
 }
 
@@ -75,20 +75,14 @@ class FileMgr
     FileMgr& operator=( const FileMgr& );
 
     hunspell_file_s *f;
+    size_t ptr = 0;
+    std::string temp;
 public:
     FileMgr( const char* filename, const char* key = NULL ) { f = (hunspell_file_s *)filename; }
     ~FileMgr() {}
 
-    bool getline( std::string&s ) { return f->gets( s ); }
+    bool getline( std::string&s ) { return f->gets( ptr, s ); }
+    char* getline() { if (!getline( temp )) return nullptr; return (char *)temp.data(); }
     int getlinenum() { return -1; }
 };
-
-
-#if defined _FILEMGR_HXX_
-__forceinline hunspell_file_s *hunspell_file_s_open(const char* path, const char*)
-{
-    return (hunspell_file_s *)path;
-}
-#define myfopen hunspell_file_s_open
-#endif
 

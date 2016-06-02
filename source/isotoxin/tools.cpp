@@ -877,6 +877,40 @@ void render_pixel_text( ts::bitmap_c&tgtb, const ts::irect& r, const ts::wsptr& 
 
 }
 
+void gen_identicon( ts::bitmap_c&tgt, const unsigned char *random_bytes )
+{
+    static const int dotsize = 10;
+    static const int szsz = 5;
+    static const int brd = 10;
+    static const int shsh = 3;
+    static const int szsz2 = ( szsz + 1 ) / 2;
+
+    bool matrix[ szsz ][ szsz ];
+    uint64 bits = *(uint64 *)random_bytes;
+    for ( int x = 0; x < szsz2; ++x )
+        for ( int y = 0; y < szsz; ++y, bits >>= 1 )
+            matrix[ x ][ y ] = ( bits & 1 ) != 0;
+    for ( int x = szsz2; x < szsz; ++x )
+        for ( int y = 0; y < szsz; ++y )
+            matrix[ x ][ y ] = matrix[ szsz - 1 - x ][ y ];
+
+    tgt.create_ARGB( ts::ivec2( dotsize * szsz + brd * 2 ) );
+    tgt.fill( 0 );
+    ts::TSCOLOR col = 0xff808080 | *( ts::uint32 * )( random_bytes + 8 );
+
+    for ( int x = 0; x < szsz; ++x )
+        for ( int y = 0; y < szsz; ++y )
+            if ( matrix[ x ][ y ] )
+                tgt.fill( ts::ivec2( shsh + brd + x * dotsize, shsh + brd + y * dotsize ), ts::ivec2( dotsize ), 0x8f000000 );
+
+    rsvg_filter_gaussian_c::do_filter( tgt, ts::vec2( 1.0f, 3.0f ) );
+
+    for ( int x = 0; x < szsz; ++x )
+        for ( int y = 0; y < szsz; ++y )
+            if ( matrix[ x ][ y ] )
+                tgt.fill( ts::ivec2( brd + x * dotsize, brd + y * dotsize ), ts::ivec2( dotsize ), col );
+
+}
 
 extern "C"
 {
@@ -1015,6 +1049,8 @@ ts::wstr_c loc_text(loctext_e lt)
             return TTT("Start [appname] with system", 310);
         case loc_please_create_profile:
             return TTT("Please, first create or load profile", 144);
+        case loc_please_authorize:
+            return TTT( "Please, add me to your contact list", 73 );
         case loc_yes:
             return TTT("yes",315);
         case loc_no:
@@ -1063,8 +1099,6 @@ ts::wstr_c loc_text(loctext_e lt)
             return TTT("Connection name", 102);
         case loc_module:
             return TTT("Module", 105);
-        case loc_id:
-            return TTT("ID", 103);
         case loc_state:
             return TTT("State", 104);
 
@@ -1101,32 +1135,15 @@ ts::wstr_c text_contact_state(ts::TSCOLOR color_online, ts::TSCOLOR color_offlin
 
 ts::wstr_c text_typing(const ts::wstr_c &prev, ts::wstr_c &workbuf, const ts::wsptr &preffix)
 {
-    ts::wstr_c tt(TTT("Typing", 271));
-    ts::wstr_c ttc = prev;
 
-    ts::wsptr rectb = CONSTWSTR("_");
+    ts::wstr_c tt( preffix, workbuf );
+    if ( tt.get_length() > (4 + preffix.l) ) tt.set_length( 4 + preffix.l );
+    tt.append( CONSTWSTR( "<img=typing>" ) );
+    workbuf.append_char( '.' );
+    if ( workbuf.get_length() > 10 )
+        workbuf.clear();
+    return tt;
 
-    if (workbuf.is_empty())
-    {
-        ttc.clear();
-        workbuf.set(CONSTWSTR("__  __  __  __"));
-    }
-
-
-    if (ttc.is_empty()) ttc.set(preffix).append(rectb);
-    else
-    {
-        if (ttc.get_length() - preffix.l - rectb.l < tt.get_length())
-        {
-            ttc.set(preffix).append(tt.substr(0, ttc.get_length() - preffix.l - rectb.l + 1)).append(rectb);
-        }
-        else
-        {
-            ttc.trunc_length(rectb.l).append_char(workbuf.get_last_char()).append(rectb.skip(1));
-            workbuf.trunc_length();
-        }
-    }
-    return ttc;
 }
 
 void draw_initialization(rectengine_c *e, ts::bitmap_c &pab, const ts::irect&viewrect, ts::TSCOLOR tcol, const ts::wsptr &additiontext)
@@ -1305,14 +1322,14 @@ menu_c list_langs( SLANGID curlang, MENUHANDLER h )
     return m;
 }
 
-ts::wstr_c make_proto_desc( int mask )
+ts::wstr_c make_proto_desc( const ts::wstr_c&idname, int mask )
 {
     ts::wstr_c r(1024,true);
     if (0 != (mask & MPD_UNAME))    r.append(TTT("Your name",259)).append(CONSTWSTR(": <l>{uname}</l><br>"));
     if (0 != (mask & MPD_USTATUS))  r.append(TTT("Your status",260)).append(CONSTWSTR(": <l>{ustatus}</l><br>"));
     if (0 != (mask & MPD_NAME))     r.append(loc_text(loc_connection_name)).append(CONSTWSTR(": <l>{name}</l><br>"));
     if (0 != (mask & MPD_MODULE))   r.append(loc_text(loc_module)).append(CONSTWSTR(": <l>{module}</l><br>"));
-    if (0 != (mask & MPD_ID))       r.append(loc_text(loc_id)).append(CONSTWSTR(": <l>{id}</l><br>"));
+    if (0 != (mask & MPD_ID))       r.append( idname ).append(CONSTWSTR(": <l>{id}</l><br>"));
     if (0 != (mask & MPD_STATE))    r.append(loc_text(loc_state)).append(CONSTWSTR(": <l>{state}</l><br>"));
 
     if (r.ends(CONSTWSTR("<br>"))) r.trunc_length(4);
@@ -1352,7 +1369,7 @@ const ts::bitmap_c &prepare_proto_icon( const ts::asptr &prototag, const ts::asp
     ts::wstr_c iname(CONSTWSTR("proto?"), ts::to_wstr(prototag));
     iname.append_as_int(imgsize).append_char('?').append_as_int(icot);
 
-    ts::TSCOLOR c = 0;
+    ts::TSCOLOR c = 0, fillc = 0;
     switch (icot)
     {
     case IT_NORMAL:
@@ -1364,7 +1381,13 @@ const ts::bitmap_c &prepare_proto_icon( const ts::asptr &prototag, const ts::asp
     case IT_DND:
         c = GET_THEME_VALUE(state_dnd_color); break;
     case IT_OFFLINE:
-        c = ts::GRAYSCALE(GET_THEME_VALUE(state_online_color)); break;
+        c = ts::GRAYSCALE( GET_THEME_VALUE( state_online_color ) ); break;
+    case IT_UNKNOWN:
+        c = g_app->deftextcolor; break;
+        break;
+    case IT_WHITE:
+        c = ts::ARGB(255,255,255); break;
+        break;
     }
 
     if (icond.l)
@@ -1382,7 +1405,7 @@ const ts::bitmap_c &prepare_proto_icon( const ts::asptr &prototag, const ts::asp
         svg.replace_all(CONSTASTR("[svg]"), icond);
         
         bmp.create_ARGB(ts::ivec2(imgsize));
-        bmp.fill(0);
+        bmp.fill( fillc );
 
         if (rsvg_svg_c *svgg = rsvg_svg_c::build_from_xml( svg.str() ))
         {
@@ -1549,15 +1572,14 @@ namespace
                         while (--n >= 0)
                         {
                             protocol_description_s &proto = available_prots.add();
-                            r.getwstr(); // dll name / unused
-                            proto.tag = r.getastr();
-                            proto.description = r.getastr();
-                            proto.description_t = r.getastr();
-                            proto.version = r.getastr();
                             proto.features = r.get<int>();
                             proto.connection_features = r.get<int>();
-                            proto.icon = r.getastr();
-                            proto.videocodecs = r.getastr();
+
+                            int numstrings = r.get<int>();
+                            proto.strings.clear();
+                            for ( ; numstrings > 0; --numstrings )
+                                proto.strings.add( r.getastr() );
+
                         }
 
                         result_x = R_DONE;

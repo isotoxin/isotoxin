@@ -11,6 +11,16 @@
 #define TCP_PORT 0x7ee7
 #define TCP_RANGE 10
 
+template<typename checker> u64 random64( const checker &ch )
+{
+    u64 v;
+    do
+    {
+        randombytes_buf( &v, sizeof( v ) );
+    } while ( v == 0 || ch(v) );
+    return v;
+}
+
 lan_engine::media_stuff_s::~media_stuff_s()
 {
     if (audio_encoder)
@@ -220,9 +230,8 @@ void udp_sender::close()
 
 void udp_sender::prepare()
 {
-#define LENGTH(a) (sizeof(a)/sizeof(a[0]))
     char cn[MAX_COMPUTERNAME_LENGTH + 1];
-    DWORD cnSize = LENGTH(cn);
+    DWORD cnSize = ARRAY_SIZE(cn);
     memset(cn, 0, sizeof(cn));
     GetComputerNameA(cn, &cnSize);
 
@@ -697,9 +706,9 @@ u64 lan_engine::contact_s::send_block(block_type_e bt, u64 delivery_tag, const v
         return 0;
     }
 
-    if (delivery_tag == 0) do {
-        randombytes_buf(&delivery_tag, sizeof(delivery_tag));
-    } while (delivery_tag == 0 || engine->delivery.find(delivery_tag) != engine->delivery.end());
+    if (delivery_tag == 0)
+        delivery_tag = random64( []( u64 t )->bool { return engine->delivery.find( t ) != engine->delivery.end(); } );
+
     engine->delivery[delivery_tag].reset();
 
     u64 temp;
@@ -1504,10 +1513,16 @@ void lan_engine::set_avatar(const void*data, int isz)
 
 void lan_engine::set_config(const void*data, int isz)
 {
+    if ( isz < 4 ) return;
+    config_accessor_s ca( data, isz );
+
+    if ( !ca.native_data && !ca.protocol_data )
+        return;
+
     bool loaded = false;
     set_cfg_called = true;
 
-    loader ldr(data,isz);
+    loader ldr(ca.protocol_data,ca.protocol_data_len);
 
     if (int sz = ldr(chunk_secret_key))
     {
@@ -1530,7 +1545,7 @@ void lan_engine::set_config(const void*data, int isz)
 
                 loader lc(l.chunkdata(), contact_size);
                 if (lc(chunk_contact_id))
-                    c = addnew( lc.get_int() );
+                    c = addnew( lc.get_i32() );
                 if (c)
                 {
                     if (int pksz = lc(chunk_contact_public_key))
@@ -1552,7 +1567,7 @@ void lan_engine::set_config(const void*data, int isz)
                         c->statusmsg = lc.get_astr();
 
                     if (lc(chunk_contact_state))
-                        c->state = (decltype(c->state))lc.get_int();
+                        c->state = (decltype(c->state))lc.get_i32();
 
                     if (c->state == contact_s::SEARCH && c->id == 0)
                         c->state = contact_s::OFFLINE;
@@ -1633,10 +1648,10 @@ void lan_engine::set_config(const void*data, int isz)
                     */
 
                     if (lc(chunk_contact_changedflags))
-                        c->changed_self = lc.get_int();
+                        c->changed_self = lc.get_i32();
 
                     if (lc(chunk_contact_avatar_tag))
-                        c->avatar_tag = lc.get_int();
+                        c->avatar_tag = lc.get_i32();
 
                     if (c->avatar_tag != 0)
                     {
@@ -1902,11 +1917,8 @@ void lan_engine::del(contact_s *c)
 
 void lan_engine::send_message(int id, const message_s *msg)
 {
-    if (MT_MESSAGE == msg->mt || MT_ACTION == msg->mt)
-    {
-        if (contact_s *c = find(id))
-            c->send_message((block_type_e)msg->mt, msg->crtime, asptr(msg->message, msg->message_len), msg->utag);
-    }
+    if (contact_s *c = find(id))
+        c->send_message( msg->crtime, asptr(msg->message, msg->message_len), msg->utag);
 }
 
 void lan_engine::del_message( u64 utag )
@@ -2077,7 +2089,7 @@ void lan_engine::contact_s::online_tick(int ct, int nexttime)
     if (media) media->tick( this, ct );
 
     datablock_s *m = sendblock_f;
-    while (m && m->sent >= m->len) m = m->next;
+    while (m && m->sent > m->len) m = m->next;
     if (m)
     {
         bool is_auth = false;
@@ -2149,16 +2161,16 @@ void lan_engine::contact_s::recv()
         fill_data(cd);
 
         cd.mask |= CDM_DETAILS;
-        str_c dstr( asptr("{\"" CDET_PUBLIC_ID "\":\""));
+        str_c dstr( CONSTASTR("{\"" CDET_PUBLIC_ID "\":\""));
         dstr.append( public_id );
 
-        dstr.append(asptr("\",\"" CDET_CLIENT "\":\""));
+        dstr.append( CONSTASTR("\",\"" CDET_CLIENT "\":\""));
         if (client.is_empty())
             dstr.append(CONSTASTR("isotoxin/0.?.???"));
         else
             dstr.append(client);
 
-        dstr.append(asptr("\",\"" CDET_CLIENT_CAPS "\":[\"" CLCAP_BBCODE_B "\",\"" CLCAP_BBCODE_U "\",\"" CLCAP_BBCODE_I "\",\"" CLCAP_BBCODE_S "\"]}"));
+        dstr.append( CONSTASTR("\",\"" CDET_CLIENT_CAPS "\":[\"" CLCAP_BBCODE_B "\",\"" CLCAP_BBCODE_U "\",\"" CLCAP_BBCODE_I "\",\"" CLCAP_BBCODE_S "\"]}"));
 
         cd.details = dstr.cstr();
         cd.details_len = (int)dstr.get_length();
@@ -2309,7 +2321,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
             if (dtb && sent >= 0 && len >= 0 && (sent + msgl <= len) && msg)
             {
                 std::unique_ptr<delivery_data_s> & ddp = engine->delivery[ dtb ];
-                if (ddp.get() == nullptr) ddp.reset( new delivery_data_s );
+                if (ddp.get() == nullptr) ddp = std::make_unique<delivery_data_s>();
                 delivery_data_s &dd = *ddp;
                 if ( dd.buf.size() == 0 || sent == 0 )
                 {
@@ -2411,17 +2423,17 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                             if (dd.buf.size() > 16)
                             {
                                 const u64 *d = (u64 *)dd.buf.data();
-                                u64 utag = my_ntohll(d[0]);
+                                u64 sid = my_ntohll(d[0]);
                                 u64 fsz = my_ntohll(d[1]);
-                                new incoming_file_s(id, utag, fsz, asptr((const char *)dd.buf.data(), (int)dd.buf.size()).skip(16));
+                                new incoming_file_s(id, sid, fsz, asptr((const char *)dd.buf.data(), (int)dd.buf.size()).skip(16));
                             }
                             break;
                         case BT_FILE_BREAK:
                             if (dd.buf.size() == sizeof(u64))
                             {
                                 const u64 *d = (u64 *)dd.buf.data();
-                                u64 utag = my_ntohll(d[0]);
-                                if(file_transfer_s *f = engine->find_ftr(utag))
+                                u64 sid = my_ntohll(d[0]);
+                                if(file_transfer_s *f = engine->find_ftr_by_sid(sid))
                                     f->kill(false);
                             }
                             break;
@@ -2429,9 +2441,9 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                             if (dd.buf.size() == sizeof(u64) * 2)
                             {
                                 const u64 *d = (u64 *)dd.buf.data();
-                                u64 utag = my_ntohll(d[0]);
+                                u64 sid = my_ntohll(d[0]);
                                 u64 offset = my_ntohll(d[1]);
-                                if (file_transfer_s *f = engine->find_ftr(utag))
+                                if (file_transfer_s *f = engine->find_ftr_by_sid(sid))
                                     f->accepted(offset);
                             }
                             break;
@@ -2439,39 +2451,39 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                             logfn("filetr.log", "BT_FILE_DONE buffsize %u", dd.buf.size());
                             if (dd.buf.size() == sizeof(u64))
                             {
-                                u64 utag = my_ntohll(*(u64 *)dd.buf.data());
+                                u64 sid = my_ntohll(*(u64 *)dd.buf.data());
 
-                                logfn("filetr.log", "BT_FILE_CHUNK done %llu", utag);
+                                logfn("filetr.log", "BT_FILE_CHUNK done %llu", sid);
 
-                                if (file_transfer_s *f = engine->find_ftr(utag))
+                                if (file_transfer_s *f = engine->find_ftr_by_sid(sid))
                                     f->finished(false);
                             }
                             break;
                         case BT_FILE_PAUSE:
                             if (dd.buf.size() == sizeof(u64))
                             {
-                                u64 utag = my_ntohll(*(u64 *)dd.buf.data());
-                                if (file_transfer_s *f = engine->find_ftr(utag))
+                                u64 sid = my_ntohll(*(u64 *)dd.buf.data());
+                                if (file_transfer_s *f = engine->find_ftr_by_sid(sid))
                                     f->pause(false);
                             }
                             break;
                         case BT_FILE_UNPAUSE:
                             if (dd.buf.size() == sizeof(u64))
                             {
-                                u64 utag = my_ntohll(*(u64 *)dd.buf.data());
-                                if (file_transfer_s *f = engine->find_ftr(utag))
+                                u64 sid = my_ntohll(*(u64 *)dd.buf.data());
+                                if (file_transfer_s *f = engine->find_ftr_by_sid(sid))
                                     f->unpause(false);
                             }
                             break;
                         case BT_FILE_CHUNK:
                             {
                                 const u64 *d = (u64 *)dd.buf.data();
-                                u64 utag = my_ntohll(d[0]);
+                                u64 sid = my_ntohll(d[0]);
                                 u64 offset = my_ntohll(d[1]);
 
-                                logfn("filetr.log", "BT_FILE_CHUNK %llu %llu", utag, offset);
+                                logfn("filetr.log", "BT_FILE_CHUNK %llu %llu", sid, offset);
 
-                                if (file_transfer_s *f = engine->find_ftr(utag))
+                                if (file_transfer_s *f = engine->find_ftr_by_sid(sid))
                                     f->chunk_received(offset, d + 2, dd.buf.size() - sizeof(u64) * 2);
                             }
                             break;
@@ -2548,8 +2560,8 @@ void lan_engine::file_transfer_s::kill(bool from_self)
     {
         if (contact_s *c = engine->find(cid))
         {
-            u64 utagnet = my_htonll(utag);
-            c->send_block(BT_FILE_BREAK, 0, &utagnet, sizeof(utagnet));
+            u64 sidnet = my_htonll(sid);
+            c->send_block(BT_FILE_BREAK, 0, &sidnet, sizeof( sidnet ));
         }
     }
     else
@@ -2559,7 +2571,8 @@ void lan_engine::file_transfer_s::kill(bool from_self)
 
 lan_engine::incoming_file_s::incoming_file_s(u32 cid_, u64 utag_, u64 fsz_, const asptr &fn) :file_transfer_s(fn)
 {
-    utag = utag_;
+    utag = engine->genfutag();
+    sid = utag_;
     fsz = fsz_;
     cid = cid_;
 
@@ -2599,9 +2612,9 @@ lan_engine::incoming_file_s::incoming_file_s(u32 cid_, u64 utag_, u64 fsz_, cons
     {
         struct
         {
-            u64 utagnet;
+            u64 sidnet;
             u64 offsetnet;
-        } d = { my_htonll(utag), my_htonll(offset) };
+        } d = { my_htonll(sid), my_htonll(offset) };
         c->send_block(BT_FILE_ACCEPT, 0, &d, sizeof(d));
         is_accepted = true;
     }
@@ -2622,8 +2635,8 @@ lan_engine::incoming_file_s::incoming_file_s(u32 cid_, u64 utag_, u64 fsz_, cons
     {
         if (contact_s *c = engine->find(cid))
         {
-            u64 utagnet = my_htonll(utag);
-            c->send_block(BT_FILE_PAUSE, 0, &utagnet, sizeof(utagnet));
+            u64 sidnet = my_htonll(sid);
+            c->send_block(BT_FILE_PAUSE, 0, &sidnet, sizeof( sidnet ));
         }
     }
     else
@@ -2636,8 +2649,8 @@ lan_engine::incoming_file_s::incoming_file_s(u32 cid_, u64 utag_, u64 fsz_, cons
     {
         if (contact_s *c = engine->find(cid))
         {
-            u64 utagnet = my_htonll(utag);
-            c->send_block(BT_FILE_UNPAUSE, 0, &utagnet, sizeof(utagnet));
+            u64 sidnet = my_htonll(sid);
+            c->send_block(BT_FILE_UNPAUSE, 0, &sidnet, sizeof( sidnet ));
         }
     }
     else
@@ -2668,12 +2681,13 @@ lan_engine::transmitting_file_s::transmitting_file_s(contact_s *to_contact, u64 
     fsz = fsz_;
     cid = to_contact->id;
     utag = utag_;
+    sid = engine->gensid();
 
     struct
     {
-        u64 utag;
+        u64 sid;
         u64 fsz;
-    } d = { my_htonll(utag), my_htonll(fsz) };
+    } d = { my_htonll( sid ), my_htonll(fsz) };
     to_contact->send_block(BT_SENDFILE, 0, &d, sizeof(d), fn.s, fn.l);
 }
 
@@ -2699,8 +2713,8 @@ lan_engine::transmitting_file_s::transmitting_file_s(contact_s *to_contact, u64 
 
     if (contact_s *c = engine->find(cid))
     {
-        u64 utagnet = my_htonll(utag);
-        c->send_block(BT_FILE_DONE, 0, &utagnet, sizeof(utagnet));
+        u64 sidnet = my_htonll(sid);
+        c->send_block(BT_FILE_DONE, 0, &sidnet, sizeof( sidnet ));
     }
 
     engine->hf->file_control(utag, FIC_DONE);
@@ -2775,9 +2789,9 @@ void lan_engine::transmitting_file_s::send_block(contact_s *c)
 {
     struct
     {
-        u64 utag;
+        u64 sid;
         u64 offset_net;
-    } d = { my_htonll(utag), my_htonll(rch[0].offset) };
+    } d = { my_htonll(sid), my_htonll(rch[0].offset) };
 
     ASSERT(rch[0].buf && rch[0].dtg == 0);
     rch[0].dtg = c->send_block(BT_FILE_CHUNK, 0, &d, sizeof(d), rch[0].buf, rch[0].size);
@@ -2904,29 +2918,75 @@ void lan_engine::file_send(int id, const file_send_info_s *finfo)
         hf->file_control(finfo->utag, FIC_DISCONNECT); // put it to send queue: assume transfer broken
 }
 
-void lan_engine::file_resume(u64 utag, u64 offset)
+void lan_engine::file_accept(u64 utag, u64 offset)
 {
-    if (file_transfer_s *ft = find_ftr(utag))
+    if ( incoming_file_s *ft = find_incoming_ftr( utag ) )
         ft->accepted( offset );
 }
 
-lan_engine::file_transfer_s *lan_engine::find_ftr(u64 utag)
+lan_engine::incoming_file_s *lan_engine::find_incoming_ftr(u64 utag)
 {
     for(file_transfer_s *f = first_ftr; f; f = f->next)
-        if (f->utag == utag)
-            return f;
+        if ( f->utag == utag )
+            if ( incoming_file_s *i = dynamic_cast<incoming_file_s *>(f) )
+                return i;
+
     return nullptr;
+}
+
+lan_engine::transmitting_file_s *lan_engine::find_transmitting_ftr( u64 utag )
+{
+    for ( file_transfer_s *f = first_ftr; f; f = f->next )
+        if ( f->utag == utag )
+            if ( transmitting_file_s *t = dynamic_cast<transmitting_file_s *>( f ) )
+                return t;
+
+    return nullptr;
+}
+
+lan_engine::file_transfer_s *lan_engine::find_ftr_by_sid( u64 sid )
+{
+    for ( file_transfer_s *f = first_ftr; f; f = f->next )
+        if ( f->sid == sid )
+            return f;
+
+    return nullptr;
+}
+
+u64 lan_engine::gensid()
+{
+    return random64( [this]( u64 t )->bool {
+
+        for ( file_transfer_s *f = first_ftr; f; f = f->next )
+            if ( f->sid == t )
+                return true;
+        return false;
+    } );
+}
+
+u64 lan_engine::genfutag()
+{
+    return random64( [this]( u64 t )->bool {
+
+        for ( file_transfer_s *f = first_ftr; f; f = f->next )
+            if ( f->utag == t )
+                return true;
+        return false;
+    } );
 }
 
 void lan_engine::file_control(u64 utag, file_control_e ctl)
 {
-    if(file_transfer_s *f = find_ftr(utag))
+    file_transfer_s *f = find_incoming_ftr( utag );
+    if (!f) f = find_transmitting_ftr( utag );
+
+    if(f)
     {
         switch (ctl) //-V719
         {
-        case FIC_ACCEPT:
-            f->accepted(0);
-            break;
+        //case FIC_ACCEPT:
+        //    f->accepted( 0 );
+        //    break;
         case FIC_REJECT:
         case FIC_BREAK:
             f->kill(true);
@@ -2952,7 +3012,7 @@ void lan_engine::file_control(u64 utag, file_control_e ctl)
 
 bool lan_engine::file_portion(u64 utag, const file_portion_s *fp)
 {
-    if (file_transfer_s *f = find_ftr(utag))
+    if (transmitting_file_s *f = find_transmitting_ftr(utag))
         if (f->fresh_file_portion(fp))
             return true;
 
@@ -2989,9 +3049,4 @@ void lan_engine::export_data()
 void lan_engine::logging_flags(unsigned int f)
 {
     g_logging_flags = f;
-}
-
-//unused
-void lan_engine::configurable(const char * /*field*/, const char * /*value*/)
-{
 }

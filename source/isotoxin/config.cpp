@@ -209,6 +209,8 @@ void config_c::load( const ts::wstr_c &path_override )
         }
 
         build(application_c::appbuild());
+
+        gui->disable_special_border( ( misc_flags() & MISCF_DISABLEBORDER ) != 0 );
     }
 }
 

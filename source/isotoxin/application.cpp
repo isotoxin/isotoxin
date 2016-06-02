@@ -165,7 +165,11 @@ struct check_word_task : public ts::task_c
         if ( application_c::splchk_c::LOCK_OK == lr )
         {
             w = checkwords.get_last_remove();
+            is_valid = false;
+            UNSAFE_BLOCK_BEGIN
             is_valid = g_app->spellchecker.check_one(w, suggestions);
+            UNSAFE_BLOCK_END
+
             if (g_app->spellchecker.unlock(this))
                 return R_CANCEL;
             return checkwords.size() ? R_RESULT_EXCLUSIVE : R_DONE;
@@ -211,6 +215,7 @@ bool application_c::splchk_c::check_one( const ts::str_c &w, ts::astrings_c &sug
 
     for (Hunspell *hspl : sugg)
     {
+        // hunspell 1.4.x
         std::vector< std::string > wlst = hspl->suggest( w.cstr() );
 
         ts::aint cnt = wlst.size();
@@ -219,6 +224,14 @@ bool application_c::splchk_c::check_one( const ts::str_c &w, ts::astrings_c &sug
             const std::string &s = wlst[ i ];
             suggestions.add( ts::asptr( s.c_str(), (int)s.length() ) );
         }
+
+        /*
+        char ** wlst;
+        int cnt = hspl->suggest( &wlst, w.cstr() );
+        for ( int i = 0; i < cnt; ++i )
+            suggestions.add( ts::asptr( wlst[ i ] ) );
+        hspl->free_list( &wlst, cnt );
+        */
     }
 
     suggestions.kill_dups_and_sort();
@@ -456,7 +469,7 @@ ts::uint32 application_c::gm_handler(gmsg<ISOGM_EXPORT_PROTO_DATA>&d)
     if (fromdir.is_empty())
         fromdir = ts::fn_get_path(ts::get_exe_full_name());
 
-    ts::wstr_c title(TTT("Export protocol data: $",393) / to_wstr(ap->get_desc()));
+    ts::wstr_c title(TTT("Export protocol data: $",393) / from_utf8(ap->get_infostr(IS_PROTO_DESCRIPTION)));
 
     ts::extension_s e[1];
     e[0].desc = CONSTWSTR("(*.*)");
@@ -813,6 +826,36 @@ ts::bitmap_c application_c::app_icon(bool for_tray)
     return icons[ icne ];
 };
 
+const avatar_s * application_c::gen_identicon_avatar( const ts::str_c &pubid )
+{
+    if ( pubid.is_empty() )
+        return nullptr;
+
+    bool added = false;
+    auto&ava = identicons.add_get_item(pubid,added);
+
+    if ( added )
+    {
+        ts::md5_c md5;
+        md5.update( pubid.cstr(), pubid.get_length() );
+        md5.done();
+        gen_identicon( ava.value, md5.result() );
+
+        ts::ivec2 asz = parsevec2( gui->theme().conf().get_string( CONSTASTR( "avatarsize" ) ), ts::ivec2( 32 ) );
+        if ( asz != ava.value.info().sz )
+        {
+            ts::bitmap_c b;
+            b.create_ARGB( asz );
+            b.resize_from( ava.value.extbody(), ts::FILTER_BOX_LANCZOS3 );
+            (ts::bitmap_c &)ava.value = b;
+        }
+
+        ava.value.alpha_pixels = true;
+    }
+        
+    return &ava.value;
+}
+
 /*virtual*/ void application_c::app_prepare_text_for_copy(ts::str_c &text)
 {
     int rr = text.find_pos(CONSTASTR("<r>"));
@@ -942,6 +985,36 @@ void autoupdater();
 tableview_unfinished_file_transfer_s *g_uft = nullptr;
 #endif // _DEBUG
 
+bool application_c::update_state()
+{
+    bool ooi = F_OFFLINE_ICON;
+    enum
+    {
+        OST_UNKNOWN,
+        OST_OFFLINE,
+        OST_ONLINE,
+    } st = OST_UNKNOWN;
+
+    bool onlflg = false;
+    int indicator = 0;
+    prf().iterate_aps( [&]( const active_protocol_c &ap ) {
+
+        if ( ap.get_indicator_lv() == indicator )
+        {
+            onlflg |= ap.is_current_online();
+        }
+        else if ( ap.get_indicator_lv() > indicator )
+        {
+            indicator = ap.get_indicator_lv();
+            onlflg = ap.is_current_online();
+        }
+    } );
+    st = onlflg ? OST_ONLINE : OST_OFFLINE;
+
+    F_OFFLINE_ICON = OST_ONLINE != st;
+    return ooi != (bool)F_OFFLINE_ICON;
+}
+
 /*virtual*/ void application_c::app_5second_event()
 {
 #ifdef _DEBUG
@@ -949,27 +1022,8 @@ tableview_unfinished_file_transfer_s *g_uft = nullptr;
 #endif // _DEBUG
     prf().check_aps();
 
-    enum
-    {
-        OST_UNKNOWN,
-        OST_OFFLINE,
-        OST_ONLINE,
-    } st = OST_UNKNOWN;
-    
-    prf().iterate_aps([&](const active_protocol_c &ap) {
-        
-        if ( 0 != (ap.get_features() & PF_OFFLINE_INDICATOR) )
-        {
-            bool onlflg = ap.is_current_online();
-            st = onlflg ? OST_ONLINE : OST_OFFLINE;
-        } else if (st == OST_UNKNOWN)
-        {
-            bool onlflg = ap.is_current_online();
-            st = onlflg ? OST_ONLINE : OST_OFFLINE;
-        }
-    });
+    update_state();
 
-    F_OFFLINE_ICON = OST_ONLINE != st;
     F_SETNOTIFYICON = true; // once per 5 seconds do icon refresh
 
     if ( F_ALLOW_AUTOUPDATE && cfg().autoupdate() > 0 )
@@ -1035,7 +1089,7 @@ tableview_unfinished_file_transfer_s *g_uft = nullptr;
     {
         int protoid = ftr->sender.protoid;
         if ( active_protocol_c *ap = prf().ap( protoid ) )
-            ap->file_control( ftr->utag, FIC_CHECK );
+            ap->file_control( ftr->i_utag, FIC_CHECK );
     }
 
     if (prf().manual_cos() == COS_ONLINE)
@@ -1239,6 +1293,39 @@ bool application_c::blinking_reason_s::tick()
     UNSTABLE_CODE_EPILOG
         
 }
+
+bool application_c::reselect_p( RID, GUIPARAM )
+{
+    if ( contact_root_c *c = contacts().rfind( reselect_data.hkey ) )
+    {
+        if ( 0 != ( reselect_data.options & RSEL_CHECK_CURRENT ) )
+        {
+            if ( c->getkey().is_self() && !active_contact_item.expired() )
+                return true;
+
+            if ( !c->getkey().is_self() && c->gui_item != active_contact_item )
+                return true;
+        }
+
+        gmsg<ISOGM_SELECT_CONTACT>( c, reselect_data.options ).send();
+    }
+
+    return true;
+}
+
+void application_c::reselect( contact_root_c *historian, int options, double delay )
+{
+    ts::Time summontime = ts::Time::current() + ts::lround( delay * 1000.0 );
+    reselect_data.eventtime = ts::tmax( reselect_data.eventtime, summontime );
+    if ( reselect_data.eventtime > summontime )
+        delay = (double)( reselect_data.eventtime - summontime ) * ( 1.0 / 1000.0 );
+    reselect_data.hkey = historian->getkey();
+    reselect_data.options = options;
+    if ( delay > 0 )
+        reselect_data.options |= RSEL_CHECK_CURRENT;
+    DEFERRED_UNIQUE_CALL( delay, DELEGATE(this, reselect_p ), 0 );
+}
+
 
 void application_c::select_last_unread_contact()
 {
@@ -1800,9 +1887,8 @@ bool application_c::is_inactive(bool do_incoming_message_stuff)
     }
     
     if (inactive && do_incoming_message_stuff)
-    {
         root->flash();
-    }
+
     return inactive;
 }
 
@@ -2301,6 +2387,14 @@ bool application_c::present_file_transfer_by_sender(const contact_key_s &sender,
     return false;
 }
 
+file_transfer_s *application_c::find_file_transfer_by_iutag( uint64 i_utag )
+{
+    for ( file_transfer_s *ftr : m_files )
+        if ( ftr->i_utag == i_utag )
+            return ftr;
+    return nullptr;
+}
+
 file_transfer_s *application_c::find_file_transfer_by_msgutag(uint64 utag)
 {
     for (file_transfer_s *ftr : m_files)
@@ -2319,7 +2413,15 @@ file_transfer_s *application_c::find_file_transfer(uint64 utag)
 
 file_transfer_s * application_c::register_file_transfer( const contact_key_s &historian, const contact_key_s &sender, uint64 utag, ts::wstr_c filename /* filename must be passed as value, not ref! */, uint64 filesize )
 {
-    if (find_file_transfer(utag)) return nullptr;
+    if (utag && find_file_transfer(utag)) return nullptr;
+
+    if ( utag == 0 )
+    {
+        utag = prf().getuid();
+        while ( nullptr != prf().get_table_unfinished_file_transfer().find<true>( [&]( const unfinished_file_transfer_s &uftr )->bool { return uftr.utag == utag; } ) )
+            ++utag;
+    }
+
 
     file_transfer_s *ftr = TSNEW( file_transfer_s );
     m_files.add( ftr );
@@ -2332,6 +2434,7 @@ file_transfer_s * application_c::register_file_transfer( const contact_key_s &hi
     ftr->filename_on_disk = filename;
     ftr->filesize = filesize;
     ftr->utag = utag;
+    ftr->i_utag = 0;
 
     ts::fix_path(ftr->filename, FNO_NORMALIZE);
 
@@ -2340,6 +2443,7 @@ file_transfer_s * application_c::register_file_transfer( const contact_key_s &hi
     if (filesize == 0)
     {
         // send
+        ftr->i_utag = utag;
         ftr->upload = true;
         d().handle = ts::f_open( filename );
 
@@ -2351,7 +2455,7 @@ file_transfer_s * application_c::register_file_transfer( const contact_key_s &hi
         ftr->filesize = ts::f_size( d().handle );
 
         if (active_protocol_c *ap = prf().ap(sender.protoid))
-            ap->send_file(sender.contactid, utag, ts::fn_get_name_with_ext(ftr->filename), ftr->filesize);
+            ap->send_file(sender.contactid, ftr->i_utag, ts::fn_get_name_with_ext(ftr->filename), ftr->filesize);
 
         d().bytes_per_sec = file_transfer_s::BPSSV_WAIT_FOR_ACCEPT;
         if (row == nullptr) ftr->upd_message_item(true);
@@ -2707,7 +2811,7 @@ bool file_transfer_s::auto_confirm()
     prepare_fn(ts::fn_join(downf, filename), false);
 
     if (active_protocol_c *ap = prf().ap(sender.protoid))
-        ap->file_control(utag, FIC_ACCEPT);
+        ap->file_accept(i_utag, 0);
 
     return true;
 }
@@ -2767,13 +2871,13 @@ void file_transfer_s::pause_by_me(bool p)
 
     if (p)
     {
-        ap->file_control(utag, FIC_PAUSE);
+        ap->file_control( i_utag, FIC_PAUSE);
         data.lock_write()().bytes_per_sec = BPSSV_PAUSED_BY_ME;
         upd_message_item(true);
     }
     else
     {
-        ap->file_control(utag, FIC_UNPAUSE);
+        ap->file_control( i_utag, FIC_UNPAUSE);
         auto wdata = data.lock_write();
         wdata().deltatime(true);
         wdata().bytes_per_sec = BPSSV_ALLOW_CALC;
@@ -2801,7 +2905,7 @@ void file_transfer_s::kill( file_control_e fctl )
     if (fctl != FIC_NONE)
     {
         if (active_protocol_c *ap = prf().ap(sender.protoid))
-            ap->file_control(utag, fctl);
+            ap->file_control( i_utag, fctl);
     }
 
     void *handle = file_handle();
@@ -2910,7 +3014,7 @@ void file_transfer_s::kill( file_control_e fctl )
 
         if ( active_protocol_c *ap = prf().ap( sender.protoid ) )
         {
-            while ( !ap->file_portion( utag, cj.offset, b.data(), sz ) )
+            while ( !ap->file_portion( i_utag, cj.offset, b.data(), sz ) )
             {
                 ts::master().sys_sleep( 100 );
 
@@ -3030,7 +3134,7 @@ void file_transfer_s::resume()
     accepted = true;
 
     if (active_protocol_c *ap = prf().ap(sender.protoid))
-        ap->file_resume( utag, offset );
+        ap->file_accept( i_utag, offset );
 
 }
 

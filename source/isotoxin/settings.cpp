@@ -110,7 +110,7 @@ namespace
             set_common_curl_options(curl);
             set_proxy_curl( curl, proxy_type, proxy_addr );
 
-            rslt = curl_easy_setopt(curl, CURLOPT_URL, "http://isotoxin.im/spelling/dictindex.txt");
+            rslt = curl_easy_setopt(curl, CURLOPT_URL, HOME_SITE "/spelling/dictindex.txt");
             rslt = curl_easy_perform(curl);
             if (CURLE_OK != rslt)
                 failed = true;
@@ -145,7 +145,7 @@ namespace
 
         bool failed = false;
 
-        download_dictionary_s(dialog_dictionaries_c *dlg, const ts::str_c &utf8name, int id) :dlg(dlg), url( CONSTASTR("http://isotoxin.im/spelling/"), utf8name ), id(id)
+        download_dictionary_s(dialog_dictionaries_c *dlg, const ts::str_c &utf8name, int id) :dlg(dlg), url( CONSTASTR( HOME_SITE "/spelling/"), utf8name ), id(id)
         {
             fname = from_utf8(utf8name); fname.append(CONSTWSTR(".zip"));
             proxy_type = cfg().proxy();
@@ -1115,6 +1115,12 @@ void dialog_settings_c::set_startopts()
     return __super::get_name().append(CONSTWSTR(" / ")).append(gui_dialog_c::get_name());
 }
 
+/*virtual*/ ts::ivec2 dialog_settings_c::get_min_size() const
+{
+    return ts::ivec2( 850, 520 );
+}
+
+
 /*virtual*/ void dialog_settings_c::created()
 {
     set_theme_rect(CONSTASTR("main"), false);
@@ -1495,7 +1501,7 @@ bool dialog_settings_c::away_minutes_handler(const ts::wstr_c &v)
 bool dialog_settings_c::notification_handler( RID, GUIPARAM p )
 {
     bgroups[ BGROUP_INCOMING_NOTIFY ].handler( RID(), p );
-    ctlenable( CONSTASTR( "dndur" ), 0 != ( bgroups[ BGROUP_INCOMING_NOTIFY ].current & 1 ) );
+    ctlenable( CONSTASTR( "dndur" ), 0 != ( bgroups[ BGROUP_INCOMING_NOTIFY ].current & 2 ) );
 
     mod();
     return true;
@@ -1707,8 +1713,9 @@ void dialog_settings_c::mod()
 
         bgroups[BGROUP_COMMON1].add(UIOPT_SHOW_SEARCH_BAR);
         bgroups[BGROUP_COMMON1].add(UIOPT_TAGFILETR_BAR);
-        bgroups[BGROUP_COMMON1].add(UIOPT_PROTOICONS);
         bgroups[BGROUP_COMMON1].add(UIOPT_SHOW_NEWCONN_BAR);
+        bgroups[BGROUP_COMMON1].add(UIOPT_PROTOICONS);
+        bgroups[BGROUP_COMMON1].add( UIOPT_GEN_IDENTICONS );
 
         bgroups[BGROUP_COMMON2].add(UIOPT_AWAYONSCRSAVER);
         bgroups[BGROUP_COMMON2].add(0, set_away_on_timer_minutes_value > 0);
@@ -1735,7 +1742,11 @@ void dialog_settings_c::mod()
 
         bgroups[BGROUP_CALL_NOTIFY].add(UIOPT_SHOW_INCOMING_CALL_BAR);
 
+        bgroups[ BGROUP_INCOMING_NOTIFY ].add( UIOPT_INTRUSIVE_BEHAVIOUR );
         bgroups[ BGROUP_INCOMING_NOTIFY ].add( UIOPT_SHOW_INCOMING_MSG_PNL );
+        
+        bgroups[ BGROUP_SOUNDS_NOTIFY ].add( SNDOPT_MUTE_ON_AWAY );
+        bgroups[ BGROUP_SOUNDS_NOTIFY ].add( SNDOPT_MUTE_ON_DND );
         
 
         bgroups[BGROUP_HISTORY].add(MSGOP_KEEP_HISTORY);
@@ -1983,9 +1994,10 @@ void dialog_settings_c::mod()
         dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_COMMON1, handler), bgroups[BGROUP_COMMON1].current).setmenu(
                 menu_c().add(TTT("Show search bar ($)",341) / CONSTWSTR("Ctrl+F"), 0, MENUHANDLER(), CONSTASTR("1"))
                         .add(TTT("Show tags filter bar ($)",65) / CONSTWSTR("Ctrl+T"), 0, MENUHANDLER(), CONSTASTR("2"))
-                        .add(TTT("Protocol icons as contact state indicator",296), 0, MENUHANDLER(), CONSTASTR("4"))
-                        .add(TTT("Show [i]join network[/i] button ($)",344)/ CONSTWSTR("Ctrl+N"), 0, MENUHANDLER(), CONSTASTR("8"))
-            );
+                        .add(TTT("Show [i]join network[/i] button ($)",344)/ CONSTWSTR("Ctrl+N"), 0, MENUHANDLER(), CONSTASTR("4"))
+                        .add( TTT( "Protocol icons as contact state indicator", 296 ), 0, MENUHANDLER(), CONSTASTR( "8" ) )
+                        .add( TTT("Generate identicons for contacts without avatar",469), 0, MENUHANDLER(), CONSTASTR( "16" ) )
+        );
 
 
         dm().vspace();
@@ -2019,14 +2031,22 @@ void dialog_settings_c::mod()
             menu_c().add(TTT("Allow insistent notification of incoming call",403), 0, MENUHANDLER(), CONSTASTR("1"))
             );
 
+        
+
         dm().vspace();
 
         ctl.clear();
         dm().textfield( ts::wstr_c(), ts::wmake( desktop_notification_duration ), DELEGATE( this, desktop_notification_duration_handler ) ).setname( CONSTASTR( "dndur" ) ).width( 50 ).subctl( textrectid++, ctl );
 
         dm().checkb( ts::wstr_c(), DELEGATE( this, notification_handler ), bgroups[ BGROUP_INCOMING_NOTIFY ].current ).setmenu(
-            menu_c().add( TTT("Show desktop notification of incoming message during $ seconds",434) / ctl, 0, MENUHANDLER(), CONSTASTR( "1" ) )
+            menu_c().add( TTT("Allow intrusive behaviour on incoming message (bring window to foreground)",459), 0, MENUHANDLER(), CONSTASTR( "1" ) )
+                    .add( TTT("Show desktop notification of incoming message during $ seconds",434) / ctl, 0, MENUHANDLER(), CONSTASTR( "2" ) )
             );
+
+        dm().checkb( ts::wstr_c(), DELEGATE( bgroups + BGROUP_SOUNDS_NOTIFY, handler), bgroups[ BGROUP_SOUNDS_NOTIFY ].current ).setmenu(
+            menu_c().add( TTT("Mute all sound notifications if [b]Away[/b] status",467), 0, MENUHANDLER(), CONSTASTR( "1" ) )
+            .add( TTT("Mute all sound notifications if [b]Busy[/b] status",468), 0, MENUHANDLER(), CONSTASTR( "2" ) )
+        );
 
         dm << MASK_PROFILE_CHAT; //____________________________________________________________________________________________________//
         dm().page_caption(TTT("Chat settings",110));
@@ -2177,7 +2197,8 @@ void dialog_settings_c::mod()
     dm().vspace();
 
     dm().checkb( ts::wstr_c(), DELEGATE( this, miscf_handler ), misc_flags ).setmenu(
-        menu_c().add( TTT("Disable autoupdate to 64 bit version",452), 0, MENUHANDLER(), ts::amake<int>( MISCF_DISABLE64 ) )
+        menu_c().add( TTT( "Disable autoupdate to 64 bit version", 452 ), 0, MENUHANDLER(), ts::amake<int>( MISCF_DISABLE64 ) )
+        .add( TTT("Disable window border",458), 0, MENUHANDLER(), ts::amake<int>( MISCF_DISABLEBORDER ) )
     );
 
 
@@ -2290,14 +2311,14 @@ menu_c dialog_settings_c::codecctxmenu(const ts::str_c& param, bool activation)
     menu_c m;
     for (const protocol_description_s &pd : available_prots)
     {
-        if (pd.tag == param)
+        if (pd.getstr(IS_PROTO_TAG) == param)
         {
-            ts::token<char> t(pd.videocodecs, '/');
-            ts::str_c cur = video_codecs.get(pd.tag, *t);
+            ts::token<char> t(pd.getstr( IS_VIDEO_CODECS ), '/');
+            ts::str_c cur = video_codecs.get(pd.getstr( IS_PROTO_TAG ), *t);
             if (cur.is_empty()) cur = *t;
 
             for (; t; ++t)
-                m.add(to_wstr(*t), cur.equals(*t) ? MIF_MARKED : 0, DELEGATE(this, codecselected), ts::str_c(pd.tag).append_char('/').append(*t));
+                m.add(to_wstr(*t), cur.equals(*t) ? MIF_MARKED : 0, DELEGATE(this, codecselected), ts::str_c( pd.getstr( IS_PROTO_TAG ) ).append_char('/').append(*t));
         }
     }
     return m;
@@ -2310,13 +2331,13 @@ void dialog_settings_c::videocodecs_tab_selected()
         HOLD(lst).engine().trunc_children(0);
         for (const protocol_description_s &pd : available_prots)
         {
-            if (pd.videocodecs.get_length())
+            if (pd.getstr( IS_VIDEO_CODECS ).get_length())
             {
-                ts::token<char> t(pd.videocodecs, '/');
-                ts::str_c cur = video_codecs.get( pd.tag, *t );
+                ts::token<char> t(pd.getstr( IS_VIDEO_CODECS ), '/');
+                ts::str_c cur = video_codecs.get( pd.getstr( IS_PROTO_TAG ), *t );
                 if (cur.is_empty()) cur = *t;
 
-                MAKE_CHILD<gui_listitem_c>(lst, from_utf8(pd.description_t).append(CONSTWSTR(": ")).append( to_wstr(cur) ), pd.tag) << DELEGATE(this, codecctxmenu);
+                MAKE_CHILD<gui_listitem_c>(lst, from_utf8(pd.getstr( IS_PROTO_DESCRIPTION_WITH_TAG ) ).append(CONSTWSTR(": ")).append( to_wstr(cur) ), pd.getstr( IS_PROTO_TAG ) ) << DELEGATE(this, codecctxmenu);
             }
         }
     }
@@ -2470,6 +2491,7 @@ menu_c dialog_settings_c::get_sounds_menu()
 
 const protocol_description_s * dialog_settings_c::describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const
 {
+    ts::wstr_c idname( CONSTWSTR( "ID" ) );
     const protocol_description_s *p = available_prots.find(tag);
     if (p == nullptr)
     {
@@ -2483,8 +2505,10 @@ const protocol_description_s * dialog_settings_c::describe_network(ts::wstr_c&de
 
         desc.replace_all(CONSTWSTR("{name}"), from_utf8(name));
         desc.replace_all(CONSTWSTR("{id}"), pubid);
-        desc.replace_all(CONSTWSTR("{module}"), from_utf8(p->description));
+        desc.replace_all(CONSTWSTR("{module}"), from_utf8(p->getstr( IS_PROTO_DESCRIPTION ) ));
+        idname = p->idname();
     }
+    desc.replace_all( CONSTWSTR( "<id>" ), idname );
     return p;
 }
 
@@ -2760,9 +2784,7 @@ bool dialog_settings_c::addeditnethandler(dialog_protosetup_params_s &params)
     {
         auto &r = table_active_protocol_underedit.getcreate(0);
         id = r.id;
-        r.other.tag = params.networktag;
-        if (!params.importcfg.is_empty())
-            r.other.config.load_from_disk_file( params.importcfg );
+        params.to(r.other);
         apd = &r.other;
     } else
     {
@@ -2796,7 +2818,7 @@ bool dialog_settings_c::addeditnethandler(dialog_protosetup_params_s &params)
                     ++t;
                     if (t->as_int() == params.protoid)
                     {
-                        ts::wstr_c desc = make_proto_desc(MPD_NAME | MPD_MODULE | MPD_ID);
+                        ts::wstr_c desc = make_proto_desc(CONSTWSTR("<id>"), MPD_NAME | MPD_MODULE | MPD_ID);
                         describe_network(desc, apd->name, apd->tag, params.protoid);
                         li->set_text(desc);
                         break;
@@ -2831,12 +2853,12 @@ bool dialog_settings_c::addnetwork(RID, GUIPARAM)
 
 void dialog_settings_c::add_active_proto( RID lst, int id, const active_protocol_data_s &apdata )
 {
-    ts::wstr_c desc = make_proto_desc( MPD_NAME | MPD_MODULE | MPD_ID );
+    ts::wstr_c desc = make_proto_desc( CONSTWSTR("<id>"), MPD_NAME | MPD_MODULE | MPD_ID );
     const protocol_description_s *p = describe_network(desc, apdata.name, apdata.tag, id);
 
     ts::str_c par(CONSTASTR("2/")); par.append(apdata.tag).append_char('/').append_as_int(id);
 
-    const ts::bitmap_c *icon = p ? &prepare_proto_icon(apdata.tag, p->icon.as_sptr(), PROTO_ICON_SIZE, IT_NORMAL) : nullptr;
+    const ts::bitmap_c *icon = p ? &prepare_proto_icon(apdata.tag, p->getstr( IS_PROTO_ICON ).as_sptr(), PROTO_ICON_SIZE, IT_NORMAL) : nullptr;
 
     MAKE_CHILD<gui_listitem_c>(lst, desc, par) << DELEGATE(this, getcontextmenu) << (const ts::bitmap_c *)icon;
 }
@@ -2875,11 +2897,9 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
             if (CHECK(p))
             {
                 dialog_protosetup_params_s prms(DELEGATE(this, addeditnethandler));
-                prms.proto_desc = p->description_t;
+                prms.proto_desc = *p;
                 prms.networktag = row->other.tag;
                 prms.networkname = row->other.name;
-                prms.features = p->features;
-                prms.conn_features = p->connection_features;
                 prms.uname = row->other.user_name;
                 prms.ustatus = row->other.user_statusmsg;
                 prms.protoid = row->id;
@@ -3112,6 +3132,7 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
         gmsg<ISOGM_CHANGED_SETTINGS>(0, CFG_DSPFLAGS).send();
 
     cfg().misc_flags( misc_flags );
+    gui->disable_special_border( ( misc_flags & MISCF_DISABLEBORDER ) != 0 );
     
 
 #define SND(s) cfg().snd_##s(sndfn[snd_##s]); cfg().snd_vol_##s(sndvol[snd_##s]);
@@ -3745,10 +3766,7 @@ void dialog_setup_network_c::available_network_selected(const ts::str_c&tag)
     params.networktag = tag;
     if (!tag.is_empty())
         if (const protocol_description_s *p = params.avprotos->find(params.networktag))
-        {
-            params.features = p->features;
-            params.conn_features = p->connection_features;
-        }
+            params.proto_desc = *p;
 
     predie = true;
     SUMMON_DIALOG<dialog_setup_network_c>(UD_PROTOSETUPSETTINGS, params);
@@ -3767,7 +3785,7 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
         {
             if (!sep) m.add_separator();
             sep = true;
-            m.add(from_utf8(proto.description), params.networktag.equals(proto.tag) ? MIF_MARKED : 0, DELEGATE(this, available_network_selected), proto.tag);
+            m.add(from_utf8(proto.getstr( IS_PROTO_DESCRIPTION ) ), params.networktag.equals(proto.getstr( IS_PROTO_TAG ) ) ? MIF_MARKED : 0, DELEGATE(this, available_network_selected), proto.getstr( IS_PROTO_TAG ) );
         }
     }
 
@@ -3788,12 +3806,12 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
     bool addheader = true;
     if (params.protoid < 0)
     {
-        hdr.append(from_utf8(params.proto_desc));
+        hdr.append(from_utf8(params.proto_desc.getstr(IS_PROTO_DESCRIPTION_WITH_TAG)));
         newnet = false;
 
     } else if (params.protoid)
         if (active_protocol_c *ap = prf().ap(params.protoid))
-            hdr.append(from_utf8(ap->get_desc_t())), newnet = false;
+            hdr.append(from_utf8(ap->get_infostr(IS_PROTO_DESCRIPTION_WITH_TAG))), newnet = false;
 
     if (newnet)
     {
@@ -3828,6 +3846,16 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
     dm().vspace();
     addh += 100;
 
+    if ( 0 != ( params.proto_desc.features & PF_NEW_REQUIRES_LOGIN ) )
+    {
+        dm().textfield( params.proto_desc.idname(), from_utf8( params.configurable.login ), DELEGATE( this, login_edit ) ).setname( CONSTASTR( "loginedit" ) );
+        dm().vspace();
+        dm().textfield( TTT("Password",103), from_utf8( password_changed ? params.configurable.get_password_decoded() : ts::str_c() ), DELEGATE( this, password_edit ) ).passwd(true).setname( CONSTASTR( "passedit" ) );
+        dm().vspace();
+        addh += 100;
+        ctlenable( CONSTASTR( "dialog_button_1" ), !params.configurable.login.is_empty() );
+    }
+
     if ( params.confirm )
     {
         dm().checkb(ts::wstr_c(), DELEGATE(this, network_connect), params.connect_at_startup ? 1 : 0).setmenu(
@@ -3836,7 +3864,7 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
         addh += 30;
     }
 
-    if (0 != (params.conn_features & CF_IPv6_OPTION))
+    if (0 != (params.proto_desc.connection_features & CF_IPv6_OPTION))
     {
         ASSERT(params.configurable.initialized);
         addh += 30;
@@ -3844,7 +3872,7 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
             menu_c().add(TTT("Allow IPv6",361), 0, MENUHANDLER(), CONSTASTR("1")));
     }
 
-    if (0 != (params.conn_features & CF_UDP_OPTION))
+    if (0 != (params.proto_desc.connection_features & CF_UDP_OPTION))
     {
         ASSERT(params.configurable.initialized);
         addh += 30;
@@ -3852,7 +3880,7 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
             menu_c().add(TTT("Allow UDP",264), 0, MENUHANDLER(), CONSTASTR("1")));
     }
 
-    if (0 != (params.conn_features & CF_SERVER_OPTION))
+    if (0 != (params.proto_desc.connection_features & CF_SERVER_OPTION))
     {
         ASSERT(params.configurable.initialized);
         dm().vspace(5);
@@ -3860,7 +3888,7 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
         dm().textfield(TTT("Server port. If 0, the server is disabled.",265), ts::wmake<int>(params.configurable.server_port), DELEGATE(this, network_serverport));
     }
 
-    if (0 != (params.conn_features & CF_PROXY_MASK))
+    if (0 != (params.proto_desc.connection_features & CF_PROXY_MASK))
     {
         ASSERT(params.configurable.initialized);
         addh += 55;
@@ -3874,11 +3902,11 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
         dm().vspace(5);
 
         dm().hgroup(TTT("Connection settings",169));
-        dm().combik(HGROUP_MEMBER).setmenu(list_proxy_types(pt, DELEGATE(this, set_proxy_type_handler), params.conn_features & CF_PROXY_MASK)).setname(CONSTASTR("protoproxytype"));
+        dm().combik(HGROUP_MEMBER).setmenu(list_proxy_types(pt, DELEGATE(this, set_proxy_type_handler), params.proto_desc.connection_features & CF_PROXY_MASK)).setname(CONSTASTR("protoproxytype"));
         dm().textfield(HGROUP_MEMBER, ts::to_wstr(params.configurable.proxy.proxy_addr), DELEGATE(this, set_proxy_addr_handler)).setname(CONSTASTR("protoproxyaddr"));
     }
 
-    if (params.protoid == 0 && 0 != (params.features & PF_IMPORT))
+    if (params.protoid == 0 && 0 != (params.proto_desc.features & PF_IMPORT))
     {
         dm().vspace(5);
         addh += 45;
@@ -3911,6 +3939,27 @@ bool dialog_setup_network_c::ustatus_edit(const ts::wstr_c &t)
 bool dialog_setup_network_c::netname_edit(const ts::wstr_c &t)
 {
     params.networkname = to_utf8(t);
+    return true;
+}
+
+bool dialog_setup_network_c::login_edit( const ts::wstr_c &t )
+{
+    params.configurable.login = to_utf8( t );
+    ctlenable( CONSTASTR("dialog_button_1"), !params.configurable.login.is_empty() );
+
+    if ( RID r = find( CONSTASTR( "loginedit" ) ) )
+    {
+        gui_textfield_c &tf = HOLD( r ).as<gui_textfield_c>();
+        tf.badvalue( params.configurable.login.is_empty() );
+    }
+
+    return true;
+}
+
+bool dialog_setup_network_c::password_edit( const ts::wstr_c &t )
+{
+    params.configurable.set_password( to_utf8( t ) );
+    password_changed = true;
     return true;
 }
 
@@ -4009,7 +4058,7 @@ void dialog_setup_network_c::set_proxy_type_handler(const ts::str_c& p)
     else if (psel == 2) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_SOCKS4;
     else if (psel == 3) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_SOCKS5;
 
-    set_combik_menu(CONSTASTR("protoproxytype"), list_proxy_types(psel, DELEGATE(this, set_proxy_type_handler), params.conn_features & CF_PROXY_MASK));
+    set_combik_menu(CONSTASTR("protoproxytype"), list_proxy_types(psel, DELEGATE(this, set_proxy_type_handler), params.proto_desc.connection_features & CF_PROXY_MASK));
     if (RID r = find(CONSTASTR("protoproxyaddr")))
     {
         check_proxy_addr(params.configurable.proxy.proxy_type, r, params.configurable.proxy.proxy_addr);
@@ -4034,6 +4083,15 @@ bool dialog_setup_network_c::set_proxy_addr_handler(const ts::wstr_c & t)
         check_proxy_addr(params.configurable.proxy.proxy_type, r, params.configurable.proxy.proxy_addr);
         r.call_enable(params.configurable.proxy.proxy_type != 0);
     }
+    if ( RID r = find( CONSTASTR( "loginedit" ) ) )
+    {
+        gui_textfield_c &tf = HOLD( r ).as<gui_textfield_c>();
+        tf.badvalue( params.configurable.login.is_empty() );
+    }
+    //if ( RID r = find( CONSTASTR( "passedit" ) ) )
+    //{
+        //gui_textfield_c &tf = HOLD( r ).as<gui_textfield_c>();
+    //}
 }
 
 
@@ -4045,13 +4103,20 @@ dialog_protosetup_params_s::dialog_protosetup_params_s(int protoid) : protoid(pr
 {
     if (active_protocol_c *ap = prf().ap(protoid))
     {
-        features = ap->get_features();
-        conn_features = ap->get_conn_features();
+        proto_desc = ap->proto_desc();
         configurable = ap->get_configurable();
         if (configurable.proxy.proxy_addr.is_empty())
             configurable.proxy.proxy_addr = CONSTASTR(DEFAULT_PROXY);
     }
 }
 
+void dialog_protosetup_params_s::to( active_protocol_data_s &d ) const
+{
+    d.tag = networktag;
+    RESETFLAG( d.options, active_protocol_data_s::O_CONFIG_NATIVE );
+    if ( !importcfg.is_empty() )
+        if ( d.config.load_from_disk_file( importcfg ) )
+            d.options |= active_protocol_data_s::O_CONFIG_NATIVE;
+}
 
 

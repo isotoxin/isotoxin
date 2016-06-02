@@ -65,6 +65,8 @@ public:
     rsvg_filter_gaussian_c(int sourcesrfc) :rsvg_filter_c(sourcesrfc) {}
     /*virtual*/ void load(rsvg_load_context_s &ctx, ts::rapidxml::xml_node<char>* node) override;
     /*virtual*/ void apply(rsvg_working_surf_s * surfs, const cairo_matrix_t *m) const override;
+
+    static void do_filter( ts::bitmap_c& bmp, const ts::vec2 &sd );
 };
 
 class rsvg_filter_ctransfer_c : public rsvg_filter_c

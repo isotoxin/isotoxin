@@ -65,6 +65,8 @@ class gui_notice_c : public gui_label_ex_c
 {
     DUMMY(gui_notice_c);
 
+    bool close_reject_notice( RID, GUIPARAM );
+
 protected:
     ts::shared_ptr<contact_root_c> historian;
     ts::shared_ptr<contact_c> sender;

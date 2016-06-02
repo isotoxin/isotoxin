@@ -33,6 +33,12 @@ static bool __stdcall file_portion(u64 utag, u64 offset, const void *portion, in
 static void __stdcall file_control(u64 utag, file_control_e fctl);
 static void __stdcall typing(int gid, int cid);
 
+static void fix_pf( proto_info_s &pi )
+{
+    if ( pi.features & PF_UNAUTHORIZED_CONTACT )
+        pi.features |= PF_UNAUTHORIZED_CHAT;
+}
+
 struct protolib_s
 {
     host_functions_s hostfunctions;
@@ -44,12 +50,13 @@ struct protolib_s
         protolib = LoadLibraryW(protolibname);
         if (protolib)
         {
-            get_info_pf gi = (get_info_pf)GetProcAddress(protolib,"get_info");
+            getinfo_pf gi = (getinfo_pf)GetProcAddress(protolib,"api_getinfo");
             if (!gi) return CR_FUNCTION_NOT_FOUND;
 
             gi(&pi);
+            fix_pf( pi );
 
-            handshake_pf handshake = (handshake_pf)GetProcAddress(protolib, "handshake");
+            handshake_pf handshake = (handshake_pf)GetProcAddress(protolib, "api_handshake");
             if (handshake)
             {
                 functions = handshake( &hostfunctions );
@@ -547,7 +554,6 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             auto cnt = w.w->reserve<int>();
 
             wstr_c path = mypath();
-            sstr_c proto_name, description, description_t, version;
             int truncp = path.find_last_pos_of(CONSTWSTR("/\\"));
             if (truncp>0)
             {
@@ -561,36 +567,27 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                 {
                     path.set_length(truncp+1).append( find_data.cFileName );
                     HMODULE l = LoadLibraryW(path);
-                    get_info_pf f = (get_info_pf)GetProcAddress(l,"get_info");
-                    proto_info_s info;
-                    info.protocol_name = proto_name.str();
-                    info.protocol_name_buflen = (int)proto_name.get_capacity();
-                    info.description = description.str();
-                    info.description_buflen = (int)description.get_capacity();
-                    info.description_with_tags = description_t.str();
-                    info.description_with_tags_buflen = (int)description_t.get_capacity();
-                    info.version = version.str();
-                    info.version_buflen = (int)version.get_capacity();
-                    f(&info);
+                    if ( getinfo_pf f = (getinfo_pf)GetProcAddress( l, "api_getinfo" ) )
+                    {
 
-                    proto_name.set_length( CHARz_nlen(proto_name.cstr(), proto_name.get_capacity()) );
-                    description.set_length( CHARz_nlen(description.cstr(), description.get_capacity()) );
-                    description_t.set_length( CHARz_nlen(description_t.cstr(), description_t.get_capacity()) );
-                    version.set_length( CHARz_nlen(version.cstr(), version.get_capacity()) );
+                        proto_info_s info;
+                        f( &info );
+                        fix_pf( info );
 
-                    w << path.as_sptr();
-                    w << proto_name.as_sptr();
-                    w << description.as_sptr();
-                    w << description_t.as_sptr();
-                    w << version.as_sptr();
-                    w << info.features;
-                    w << info.connection_features;
-                    w << asptr( info.icon, info.icon_buflen );
-                    w << asptr( info.vcodecs, info.vcodecs_buflen);
-                    ++cnt;
+                        int numofstrings = 0;
+                        for ( ; info.strings && info.strings[ numofstrings ]; ) ++numofstrings;
 
-                    FreeLibrary(l);
+                        w << info.features;
+                        w << info.connection_features;
 
+                        w << numofstrings;
+                        for ( int i = 0; i < numofstrings; ++i )
+                            w << asptr( info.strings[ i ] );
+
+                        ++cnt;
+                    }
+
+                    FreeLibrary( l );
                     if (!FindNextFileW(fh, &find_data)) break;
                 }
 
@@ -603,7 +600,6 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             ipcr r(d->get_reader());
             tmp_str_c proto = r.getastr();
             tmp_wstr_c path = mypath();
-            sstr_c description, description_t;
             proto_info_s pi;
 
             int truncp = path.find_last_pos_of(CONSTWSTR("/\\"));
@@ -617,11 +613,6 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
 
                 if (fh != INVALID_HANDLE_VALUE)
                 {
-                    pi.description = description.str();
-                    pi.description_buflen = (int)description.get_capacity();
-                    pi.description_with_tags = description_t.str();
-                    pi.description_with_tags_buflen = (int)description_t.get_capacity();
-
                     rst = protolib.load(path, pi);
 #if defined _DEBUG || defined _CRASH_HANDLER
                     if (CR_OK == rst)
@@ -634,19 +625,19 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
 #endif // MODE64                   
                     }
 #endif
-                    description.set_length(CHARz_nlen(description.cstr(), description.get_capacity()));
-                    description_t.set_length(CHARz_nlen(description_t.cstr(), description_t.get_capacity()));
-
                     FindClose(fh);
                 }
             }
-            IPCW(HA_CMD_STATUS) << (int)AQ_SET_PROTO << (int)rst << pi.priority << pi.features << pi.connection_features << description.as_sptr() << description_t.as_sptr()
-                << pi.audio_fmt.sample_rate
-                << pi.audio_fmt.channels
-                << pi.audio_fmt.bits
-                << asptr(pi.icon, pi.icon_buflen)
-                ;
 
+            int numofstrings = 0;
+            for ( ; pi.strings && pi.strings[ numofstrings ]; ) ++numofstrings;
+
+            IPCW status( HA_CMD_STATUS );
+                status
+                << (int)AQ_SET_PROTO << (int)rst << pi.priority << pi.indicator << pi.features << pi.connection_features << numofstrings;
+
+                for ( int i = 0; i < numofstrings; ++i )
+                    status << asptr( pi.strings[ i ] );
         }
         break;
     case AQ_SET_NAME:
@@ -741,17 +732,29 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         {
             ipcr r(d->get_reader());
             int rslt = 0;
-            if (r.get<char>())
+            switch ( r.get<char>() )
             {
-                // resend
-                int cid = r.get<int>();
-                tmp_str_c invitemsg = r.getastr();
-                rslt = protolib.functions->resend_request(cid, invitemsg);
-            } else
-            {
-                tmp_str_c publicid = r.getastr();
-                tmp_str_c invitemsg = r.getastr();
-                rslt = protolib.functions->add_contact(publicid, invitemsg);
+            case 0:
+                {
+                    tmp_str_c publicid = r.getastr();
+                    tmp_str_c invitemsg = r.getastr();
+                    rslt = protolib.functions->add_contact( publicid, invitemsg );
+                }
+                break;
+            case 1:
+                {
+                    // resend
+                    int cid = r.get<int>();
+                    tmp_str_c invitemsg = r.getastr();
+                    rslt = protolib.functions->resend_request( cid, invitemsg );
+                }
+                break;
+            case 2:
+                {
+                    tmp_str_c publicid = r.getastr();
+                    rslt = protolib.functions->add_contact( publicid, nullptr );
+                }
+                break;
             }
             IPCW(HA_CMD_STATUS) << (int)AQ_ADD_CONTACT << rslt;
         }
@@ -769,16 +772,14 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         {
             ipcr r(d->get_reader());
             int id = r.get<int>();
-            int mt = r.get<int>();
             u64 utag = r.get<u64>();
             u64 crtime = r.get<u64>();
             str_c message = r.getastr();
             message_s m;
-            m.mt = (message_type_e)mt;
             m.utag = utag;
             m.crtime = crtime;
             m.message = message.cstr();
-            m.message_len = (int)message.get_length();
+            m.message_len = message.get_length();
             protolib.functions->send_message(id, &m);
         }
         break;
@@ -863,19 +864,6 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             protolib.functions->call(id, &cinf);
         }
         break;
-    case AQ_CONFIGURABLE:
-        if (LIBLOADED())
-        {
-            ipcr r(d->get_reader());
-            int n = r.get<int>();
-            for(int i=0;i<n;++i)
-            {
-                str_c f = r.getastr();
-                str_c v = r.getastr();
-                protolib.functions->configurable(f, v);
-            }
-        }
-        break;
     case AQ_FILE_SEND:
         if (LIBLOADED())
         {
@@ -888,15 +876,24 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             protolib.functions->file_send(id, &fi);
         }
         break;
+    case AQ_ACCEPT_FILE:
+        if ( LIBLOADED() )
+        {
+            ipcr r( d->get_reader() );
+            u64 utag = r.get<u64>();
+            u64 offset = r.get<u64>();
+            protolib.functions->file_accept( utag, offset );
+        }
+        break;
     case AQ_CONTROL_FILE:
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
             u64 utag = r.get<u64>();
-            file_control_e fc = (file_control_e)r.get<int>();
+            file_control_e fc = (file_control_e)r.get<i32>();
             if (FIC_ACCEPT == fc)
             {
-                protolib.functions->file_resume(utag, r.get<u64>());
+                ERROR( "use accept file" );
             } else
                 protolib.functions->file_control(utag, fc);
             if (fc == FIC_BREAK || fc == FIC_REJECT || fc == FIC_DONE)

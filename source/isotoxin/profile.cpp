@@ -32,6 +32,12 @@ void active_protocol_s::set(int column, ts::data_value_s &v)
         case 8:
             sort_factor = (int)v.i;
             return;
+        case 9:
+            configurable.login = v.text;
+            return;
+        case 10:
+            configurable.set_password_as_is( v.text );
+            return;
     }
 }
 
@@ -67,6 +73,12 @@ void active_protocol_s::get(int column, ts::data_pair_s& v)
         case 8:
             v.i = sort_factor;
             return;
+        case 9:
+            v.text = configurable.login;
+            return;
+        case 10:
+            v.text = configurable.get_password_encoded();
+            return;
     }
 }
 
@@ -78,6 +90,8 @@ ts::data_type_e active_protocol_s::get_column_type(int index)
         case 2:
         case 3:
         case 4:
+        case 9:
+        case 10:
             return ts::data_type_e::t_str;
         case 5:
         case 7:
@@ -119,6 +133,12 @@ void active_protocol_s::get_column_desc(int index, ts::column_desc_s&cd)
             break;
         case 8:
             cd.name_ = CONSTASTR("sortfactor");
+            break;
+        case 9:
+            cd.name_ = CONSTASTR( "login" );
+            break;
+        case 10:
+            cd.name_ = CONSTASTR( "password" );
             break;
         default:
             FORBIDDEN();
@@ -883,15 +903,17 @@ ts::uint32 profile_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 
 uint64 profile_c::uniq_history_item_tag()
 {
-    uint64 utag = ts::uuid();
+    uint64 utag = prf().getuid();
 
     while(db)
     {
+        REMOVE_CODE_REMINDER( 564 ); // always unique, no need 2 check it anymore
+
         ts::tmp_str_c whr(CONSTASTR("utag=")); whr.append_as_num<int64>(utag);
         if (0 == db->count(CONSTASTR("history"), whr))
             break;
 
-        utag = ts::uuid();
+        utag = prf().getuid();
     }
     
     return utag;
@@ -1196,6 +1218,7 @@ void profile_c::flush_history_now()
 
 int  profile_c::calc_history( const contact_key_s&historian, bool ignore_invites )
 {
+    if ( !db ) return 0;
     ts::tmp_str_c whr( CONSTASTR("historian=") ); whr.append_as_num<int64>( ts::ref_cast<int64>( historian ) );
     if (ignore_invites) whr.append( CONSTASTR(" and mtype<>2 and mtype<>103") ); // MTA_FRIEND_REQUEST MTA_OLD_REQUEST
     return db->count( CONSTASTR("history"), whr );
@@ -1203,6 +1226,7 @@ int  profile_c::calc_history( const contact_key_s&historian, bool ignore_invites
 
 int  profile_c::calc_history_before( const contact_key_s&historian, time_t time )
 {
+    if ( !db ) return 0;
     ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num<int64>(ts::ref_cast<int64>(historian));
     whr.append( CONSTASTR(" and mtime<") ).append_as_num<int64>( time );
     return db->count(CONSTASTR("history"), whr);
@@ -1275,7 +1299,7 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
     ts::str_c utag = unique_profile_tag();
     bool generated = false;
     if (utag.is_empty())
-        utag.set_as_num<uint64>(ts::uuid()), generated = true;
+        utag.set_as_num<uint64>( random64() ), generated = true;
 
     mutex.reset( ts::master().sys_global_atom( CONSTWSTR( "isotoxin_db_" ) + ts::to_wstr( utag ) ) );
     if (!mutex)
@@ -1290,6 +1314,26 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
     #define TAB(tab) if (load_on_start<tab##_s>::value) table_##tab.read( db );
     PROFILE_TABLES
     #undef TAB
+
+    uuid = get<uint64>( CONSTASTR( "uuid" ), 0 );
+
+    if ( uuid == 0 )
+    {
+        REMOVE_CODE_REMINDER( 564 );
+
+        ++uuid;
+        decltype( table_history ) tmphist;
+        
+        ts::tmp_str_c whr;
+        tmphist.read( db, whr );
+        for ( auto &row : tmphist )
+            row.other.utag = uuid++, row.changed();
+
+        tmphist.flush(db,true,false);
+
+        param( CONSTASTR( "uuid" ), ts::tmp_str_c().set_as_num<uint64>( uuid ) );
+    }
+
 
     load_undelivered();
 
@@ -1350,6 +1394,15 @@ profile_c::~profile_c()
 {
     if (db)
         shutdown_aps();
+}
+
+uint64 profile_c::getuid( uint cnt )
+{
+    ASSERT( uuid > 0 );
+    uint64 r = uuid;
+    uuid += cnt;
+    param( CONSTASTR("uuid"), ts::tmp_str_c().set_as_num<uint64>( uuid ) );
+    return r;
 }
 
 int encrypt_process_i = 0, encrypt_process_n = 0;
@@ -1588,9 +1641,7 @@ bool profile_c::addeditnethandler(dialog_protosetup_params_s &params)
     {
         auto &r = get_table_active_protocol().getcreate(0);
         id = r.id;
-        r.other.tag = params.networktag;
-        if (!params.importcfg.is_empty())
-            r.other.config.load_from_disk_file(params.importcfg);
+        params.to( r.other );
         apd = &r.other;
     }
     else

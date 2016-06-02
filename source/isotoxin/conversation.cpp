@@ -56,7 +56,7 @@ gui_notice_c::~gui_notice_c()
 
 ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
 {
-    if (notice == NOTICE_FILE && utag == ifl.utag && (ifl.fctl == FIC_BREAK || ifl.fctl == FIC_DISCONNECT))
+    if (notice == NOTICE_FILE && utag == ifl.i_utag && (ifl.fctl == FIC_BREAK || ifl.fctl == FIC_DISCONNECT))
     {
         RID par = getparent();
         TSDEL(this);
@@ -436,7 +436,7 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8, contact_c *sender_, uint64
                 newtext.append(TTT("Restore key confirm",198));
             } else
             {
-                newtext.append(TTT("Unknown contact request",74));
+                newtext.append(TTT("Authorization request",74));
                 newtext.append(CONSTWSTR("<hr=7,2,1>"));
 
                 ts::str_c n = itext_utf8;
@@ -513,6 +513,18 @@ void gui_notice_c::setup(const ts::str_c &itext_utf8, contact_c *sender_, uint64
     setup_tail();
 }
 
+bool gui_notice_c::close_reject_notice( RID, GUIPARAM )
+{
+    HOLD par(getparent());
+    sender->options().unmasked().clear( contact_c::F_JUST_REJECTED );
+    TSDEL( this );
+
+    gui->repos_children( &par.as<gui_group_c>() );
+    gui->repos_children( &HOLD( par().getparent() ).as<gui_group_c>() );
+
+    return true;
+}
+
 void gui_notice_c::setup(contact_c *sender_)
 {
     historian = sender_->get_historian();
@@ -541,6 +553,17 @@ void gui_notice_c::setup(contact_c *sender_)
             MODIFY(b_kill).visible(true);
 
             addheight = 40;
+
+            if ( sender->get_state() == CS_UNKNOWN && sender->get_options().unmasked().is( contact_c::F_JUST_REJECTED ) )
+            {
+                // allow close this notice without any actions
+                gui_button_c &bc = MAKE_CHILD<gui_button_c>( getrid() );
+                bc.set_face_getter( BUTTON_FACE_PRELOADED( cancelb ) );
+                bc.set_handler( DELEGATE( this, close_reject_notice ), nullptr );
+                ts::ivec2 sz = g_app->preloaded_stuff().cancelb->size;
+                bc.leech( TSNEW( leech_dock_top_right_s, sz.x, sz.y, 3, 3 ) );
+                MODIFY( bc ).visible( true );
+            }
 
         }
         break;
@@ -609,32 +632,38 @@ void gui_notice_c::setup(contact_c *sender_)
         {
             ts::wstr_c txt(CONSTWSTR("<p=c>"));
             ASSERT( historian->getkey().is_group() );
-            historian->subiterate([&](contact_c *m) 
+            int cnt = 0;
+            auto addstateiconandname = [&]( contact_c *m )
             {
-                switch (m->get_state())
+                switch ( m->get_state() )
                 {
-                    case CS_OFFLINE:
-                        txt.append(CONSTWSTR("<img=gch_offline,-1>"));
-                        break;
-                    case CS_ONLINE:
-                        txt.append(CONSTWSTR("<img=gch_online,-1>"));
-                        break;
-                    default:
-                        txt.append( CONSTWSTR("<img=gch_unknown,-1>") );
+                case CS_OFFLINE:
+                    txt.append( CONSTWSTR( "<img=gch_offline,-1><nbsp>" ) );
+                    break;
+                case CS_ONLINE:
+                    txt.append( CONSTWSTR( "<img=gch_online,-1><nbsp>" ) );
+                    break;
+                default:
+                    txt.append( CONSTWSTR( "<img=gch_unknown,-1><nbsp>" ) );
                     break;
                 }
-
                 ts::str_c n( m->get_name() );
-                text_adapt_user_input(n);
-                txt.append( from_utf8(n) ).append(CONSTWSTR(", "));
-            } );
+                text_adapt_user_input( n );
+                txt.append( from_utf8( n ) ).append( CONSTWSTR( ", " ) );
+                ++cnt;
+            };
+
+            if ( contact_c *me = contacts().find_subself( historian->getkey().protoid ) )
+                addstateiconandname(me);
+
+            historian->subiterate( addstateiconandname );
 
             getengine().trunc_children(0);
 
-            if (txt.ends( CONSTWSTR(", ") ))
+            if (cnt)
                 txt.trunc_length(2);
-            else
-                txt.append(TTT("Nobody in group chat (except you)", 257));
+            if(cnt == 1)
+                txt.append( CONSTWSTR("<br>") ).append(TTT("Nobody in group chat (except you)", 257));
             textrect.set_text_only(txt, false);
             textrect.change_option(ts::TO_LASTLINEADDH, ts::TO_LASTLINEADDH);
 
@@ -735,10 +764,10 @@ void gui_notice_c::update_text(int dtimesec)
             newtext.append(CONSTWSTR("<b>"));
             newtext.append(from_utf8(sender->get_pubid_desc()));
             newtext.append(CONSTWSTR("</b><br>"));
-            if (sender->get_state() == CS_REJECTED)
-                newtext.append(TTT("Your request was rejected. You can send request again.",80));
+            if (sender->is_rejected())
+                newtext.append(TTT("Your request was declined. You can send request again.",80));
             else if (sender->get_state() == CS_INVITE_SEND)
-                newtext.append(TTT("Request sent. You can repeat request.",89));
+                newtext.append(TTT("Authorization request has been sent. You can repeat request.",89));
             hr = false;
 
             break;
@@ -1542,7 +1571,8 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
     getengine().trunc_children(0); // just kill all buttons
 
     pubid = pubid_;
-    ts::wstr_c sost, plugdesc, uname, ustatus, netname;
+    
+    ts::wstr_c sost, plugdesc, uname, ustatus, netname, idname( CONSTWSTR("ID") );
     curstate = CR_OK;
     is_autoconnect = false;
     prf().iterate_aps([&](const active_protocol_c &ap) {
@@ -1552,9 +1582,12 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
             {
                 curstate = ap.get_current_state();
                 networkid = ap.getid();
-                plugdesc = from_utf8(ap.get_desc());
+                plugdesc = from_utf8(ap.get_infostr(IS_PROTO_DESCRIPTION));
                 netname = from_utf8(ap.get_name());
                 is_autoconnect = ap.is_autoconnect();
+                ts::wstr_c id = from_utf8( ap.get_infostr(IS_IDNAME) );
+                if ( !id.is_empty() )
+                    idname = id;
 
                 sost.clear();
 
@@ -1593,6 +1626,9 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
                             break;
                         case CR_ENCRYPTED:
                             errs = TTT("Data encrypted (unsupported)",447);
+                            break;
+                        case CR_AUTHENTICATIONFAILED:
+                            errs = TTT("Authentication failed",379);
                             break;
                         default:
                             errs = TTT("Error $",334)/ts::wmake<uint>( curstate );
@@ -1643,10 +1679,10 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
         ustatus.insert(0, CONSTWSTR("</l><b>")).append(CONSTWSTR("</b><l>"));
 
     uint mpd_id = 0;
-    if ( CR_ENCRYPTED != curstate )
+    if ( CR_ENCRYPTED != curstate && !pubid.equals( CONSTASTR( "?" ) ) )
         mpd_id = MPD_ID;
 
-    textrect.set_text_only(make_proto_desc(MPD_UNAME | MPD_USTATUS | MPD_NAME | MPD_MODULE | mpd_id | MPD_STATE)
+    textrect.set_text_only(make_proto_desc( idname, MPD_UNAME | MPD_USTATUS | MPD_NAME | MPD_MODULE | mpd_id | MPD_STATE)
 
                             .replace_all(CONSTWSTR("{uname}"), uname)
                             .replace_all(CONSTWSTR("{ustatus}"), ustatus)
@@ -1819,7 +1855,7 @@ void gui_notice_network_c::ctx_onlink_do( const ts::str_c &cc )
             {
                 ts::blob_c data;
                 data.load_from_file( fn );
-                ap->change_data( data );
+                ap->change_data( data, true );
             }
         }
 
@@ -2285,14 +2321,8 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
 
 ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED> &)
 {
-    if (g_app->active_contact_item.expired())
-    {
-        // just update self, if self-contactitem selected
-        DEFERRED_EXECUTION_BLOCK_BEGIN(0.4)
-            if (g_app->active_contact_item.expired())
-                gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self(), 0).send();
-        DEFERRED_EXECUTION_BLOCK_END(0)
-    }
+    if (g_app->active_contact_item.expired()) // just update self, if self-contactitem selected
+        g_app->reselect( &contacts().get_self(), 0, 0.4 );
     return 0;
 }
 
@@ -2301,13 +2331,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &p)
     if (owner == nullptr) return 0;
 
     if (owner->getkey().is_self())
-    {
-        // just update self, if self-contactitem selected
-        DEFERRED_EXECUTION_BLOCK_BEGIN(0.4)
-            if (g_app->active_contact_item.expired())
-                gmsg<ISOGM_SELECT_CONTACT>(&contacts().get_self(), 0).send();
-        DEFERRED_EXECUTION_BLOCK_END(0)
-    }
+        g_app->reselect( &contacts().get_self(), 0, 0.4 );
 
     contact_c *sender = nullptr;
     if (p.contact->is_rootcontact())
@@ -2352,7 +2376,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &p)
                 if (n.get_notice() == NOTICE_FRIEND_REQUEST_SEND_OR_REJECT)
                 {
                     nrej = &n;
-                    if (sender->get_state() != CS_REJECTED && sender->get_state() != CS_INVITE_SEND)
+                    if (sender->get_state() != CS_INVITE_SEND && !sender->is_rejected() )
                     {
                         TSDEL(e);
                         return 0;
@@ -2360,7 +2384,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &p)
                 }
             }
         }
-        if ((sender->get_state() == CS_REJECTED || sender->get_state() == CS_INVITE_SEND))
+        if ( sender->get_state() == CS_INVITE_SEND || sender->is_rejected() )
         {
             if (nrej == nullptr)
                 nrej = &create_notice(NOTICE_FRIEND_REQUEST_SEND_OR_REJECT);
@@ -2441,7 +2465,6 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
             {
                 //if (0 != (row.other.options & active_protocol_data_s::O_SUSPENDED))
                 //    continue;
-
                 ts::str_c pubid = contacts().find_pubid(s.x);
                 if (!pubid.is_empty())
                 {
@@ -2472,13 +2495,13 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                 if (sender)
                 {
                     gui_notice_c &n = create_notice(NOTICE_FILE);
-                    n.setup(to_utf8(ftr.filename), sender, ftr.utag);
+                    n.setup(to_utf8(ftr.filename), sender, ftr.i_utag);
                 }
             });
 
             if (!owner->getkey().is_group())
                 owner->subiterate([this](contact_c *c) {
-                    if (c->get_state() == CS_REJECTED || c->get_state() == CS_INVITE_SEND)
+                    if (c->get_state() == CS_INVITE_SEND || c->is_rejected())
                     {
                         gui_notice_c &n = create_notice(NOTICE_FRIEND_REQUEST_SEND_OR_REJECT);
                         n.setup(c);
@@ -3226,7 +3249,7 @@ bool gui_message_item_c::kill_self(RID, GUIPARAM)
 bool gui_message_item_c::animate_typing(RID, GUIPARAM)
 {
     update_text();
-    DEFERRED_UNIQUE_CALL( 1.0/15.0, DELEGATE(this, animate_typing), nullptr );
+    DEFERRED_UNIQUE_CALL( 1.0/5.0, DELEGATE(this, animate_typing), nullptr );
     return true;
 }
 
@@ -3987,8 +4010,12 @@ void gui_message_item_c::update_text(int for_width)
                     ab.pbtext.set(CONSTWSTR("<b>")).append_as_uint( prgrs ).append(CONSTWSTR("</b>%, "));
                     ab.progress = (float)prgrs * (float)(1.0/100);
                     
-                    if (bps >= file_transfer_s::BPSSV_ALLOW_CALC)
-                        insert_button( BTN_PAUSE, g_app->preloaded_stuff().pauseb->size );
+                    if ( bps >= file_transfer_s::BPSSV_ALLOW_CALC )
+                    {
+                        if ( active_protocol_c *ap = prf().ap( ft->sender.protoid ) )
+                            if ( 0 != (ap->get_features() & PF_PAUSE_FILE) )
+                                insert_button( BTN_PAUSE, g_app->preloaded_stuff().pauseb->size );
+                    }
 
                     if (bps < file_transfer_s::BPSSV_ALLOW_CALC)
                     {

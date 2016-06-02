@@ -31,6 +31,11 @@ namespace ts
         return ARGB<auint>( oi, oi, oi, ALPHA( c ) );
     }
 
+    INLINE TSCOLOR REPLACE_ALPHA( TSCOLOR c, uint8 a )
+    {
+        return (c & 0x00ffffff) | ((TSCOLOR)a << 24);
+    }
+
     INLINE bool PREMULTIPLIED( TSCOLOR c )
     {
         uint8 a = ALPHA( c );

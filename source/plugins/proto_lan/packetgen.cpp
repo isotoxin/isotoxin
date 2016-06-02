@@ -178,6 +178,9 @@ void packetgen::pg_data(datablock_s *m, const byte *crypt_packet_key, aint maxsi
     encode(crypt_packet_key);
 
     log_auth_key("PID_DATA encoded", crypt_packet_key);
+
+    if ( m->sent == m->len )
+        ++m->sent;
 }
 
 void packetgen::pg_delivered(u64 dtag, const byte *crypt_packet_key)

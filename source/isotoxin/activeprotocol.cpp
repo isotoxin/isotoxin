@@ -3,6 +3,120 @@
 //-V:w:807
 //-V:flags:807
 
+#define ACTUAL_USER_NAME( d ) ( (d).data.user_name.is_empty() ? prf().username() : (d).data.user_name )
+#define ACTUAL_STATUS_MSG( d ) ( (d).data.user_statusmsg.is_empty() ? prf().userstatus() : (d).data.user_statusmsg )
+
+void crypto_zero( ts::uint8 *buf, int bufsize );
+void get_unique_machine_id( ts::uint8 *buf, int bufsize );
+ts::str_c encode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& s );
+ts::str_c decode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& s );
+
+void configurable_s::set_password( const ts::asptr&p )
+{
+    ts::uint8 encpass[ 32 ];
+    get_unique_machine_id( encpass, 32 );
+    password = encode_string_base64( encpass, p );
+    crypto_zero( encpass, sizeof(encpass) );
+}
+ts::str_c configurable_s::get_password_decoded() const
+{
+    ts::uint8 encpass[ 32 ];
+    get_unique_machine_id( encpass, 32 );
+    ts::str_c r = decode_string_base64( encpass, password );
+    crypto_zero( encpass, sizeof( encpass ) );
+    return r;
+}
+
+
+struct config_maker_s : public ipcw
+{
+    config_maker_s() : ipcw( AQ_SET_CONFIG )
+    {
+        *this << ( ts::int32 )sizeof( ts::int32 ); // sizeof data
+        flags_offset = size();
+        *this << ( ts::uint32 )0; // flags
+    }
+    ts::aint flags_offset;
+    ts::aint params_offset = -1;
+    bool proto_stuff = false;
+
+    ts::uint32 & flags()
+    {
+        return *( ts::uint32 * )( data() + flags_offset );
+    }
+
+    config_maker_s & par( const ts::asptr&field, const ts::asptr&value )
+    {
+        ASSERT( !proto_stuff );
+
+        if (0 == (flags() & CFL_PARAMS) )
+        {
+            flags() = flags() | CFL_PARAMS;
+            *this << ( ts::int32 )0;
+            params_offset = size();
+        }
+
+        ASSERT( params_offset == flags_offset + (ts::aint)sizeof( ts::int32 ) * 2 );
+        append_s( field );
+        tappend<char>( '=' );
+        append_s( value );
+        tappend<char>( '\n' );
+        *( ts::uint32 * )( data() + flags_offset + sizeof( ts::int32 ) ) = ( ts::int32 )( size() - params_offset );
+        *( ts::uint32 * )( data() + flags_offset - sizeof( ts::int32 ) ) = ( ts::int32 )( size() - flags_offset );
+
+        return *this;
+    }
+
+    config_maker_s & conf( const ts::blob_c&proto_cfg, bool is_native )
+    {
+        ASSERT( !proto_stuff );
+
+        if ( is_native )
+            flags() = flags() | CFL_NATIVE_DATA;
+
+        params_offset = -1;
+
+        append_buf( proto_cfg.data(), proto_cfg.size() );
+        proto_stuff = true;
+
+        *( ts::uint32 * )( data() + flags_offset - sizeof( ts::int32 ) ) = ( ts::int32 )( size() - flags_offset );
+
+        return *this;
+    }
+
+    config_maker_s & configurable( const configurable_s &c, int features, int conn_features )
+    {
+        if ( 0 != ( conn_features & CF_PROXY_MASK ) )
+        {
+            par( CONSTASTR( CFGF_PROXY_TYPE ), ts::amake<int>( c.proxy.proxy_type ) );
+            par( CONSTASTR( CFGF_PROXY_ADDR ), c.proxy.proxy_addr );
+        }
+
+        if ( 0 != ( conn_features & CF_SERVER_OPTION ) )
+        {
+            par( CONSTASTR( CFGF_SERVER_PORT ), ts::amake<int>( c.server_port ) );
+        }
+
+        if ( 0 != ( conn_features & CF_IPv6_OPTION ) )
+        {
+            par( CONSTASTR( CFGF_IPv6_ENABLE ), ( c.ipv6_enable ? CONSTASTR( "1" ) : CONSTASTR( "0" ) ) );
+        }
+        if ( 0 != ( conn_features & CF_UDP_OPTION ) )
+        {
+            par( CONSTASTR( CFGF_UDP_ENABLE ), ( c.udp_enable ? CONSTASTR( "1" ) : CONSTASTR( "0" ) ) );
+        }
+
+        if ( 0 != ( features & PF_NEW_REQUIRES_LOGIN ) )
+        {
+            par( CONSTASTR( CFGF_LOGIN ), c.login );
+            par( CONSTASTR( CFGF_PASSWORD ), c.get_password_decoded() );
+        }
+
+        return *this;
+    }
+};
+
+
 active_protocol_c::active_protocol_c(int id, const active_protocol_data_s &pd):id(id), lastconfig(ts::Time::past())
 {
     int dspflags = cfg().dsp_flags();
@@ -61,16 +175,26 @@ void active_protocol_c::reset_data()
     auto w = syncdata.lock_write();
     w().data.config.clear();
     w().current_state = CR_OK;
-    ipcp->send( ipcw( AQ_SET_CONFIG ) << w().data.config );
+
+    config_maker_s c;
+    c.configurable( w().data.configurable, get_features(), get_conn_features() );
+    c.conf( w().data.config, false );
+
+    ipcp->send( c );
 }
 
-void active_protocol_c::change_data( const ts::blob_c &b )
+void active_protocol_c::change_data( const ts::blob_c &b, bool is_native )
 {
     auto w = syncdata.lock_write();
     w().data.config = b;
     w().data.config.set_size( b.size() ); // copy content due race condition
     w().current_state = CR_OK;
-    ipcp->send( ipcw( AQ_SET_CONFIG ) << w().data.config );
+
+    config_maker_s c;
+    c.configurable( w().data.configurable, get_features(), get_conn_features() );
+    c.conf( w().data.config, is_native );
+
+    ipcp->send( c );
 }
 
 #ifdef _DEBUG
@@ -83,6 +207,45 @@ struct qfp_s
 ts::array_inplace_t< qfp_s, 1 > g_qfps;
 #endif // _DEBUG
 
+void active_protocol_c::setup_audio_fmt( ts::str_c& s )
+{
+    audio_fmt.sampleRate = 48000;
+    audio_fmt.channels = 1;
+    audio_fmt.bitsPerSample = 16;
+    if (!s.is_empty())
+    {
+        ts::parse_values( s, [&]( const ts::pstr_c&k, const ts::pstr_c&v ) {
+            if ( k.equals( CONSTASTR( "sr" ) ) ) audio_fmt.sampleRate = v.as_uint();
+            else if ( k.equals( CONSTASTR( "ch" ) ) ) audio_fmt.channels = (short)v.as_uint();
+            else if ( k.equals( CONSTASTR( "bps" ) ) ) audio_fmt.bitsPerSample = (short)v.as_uint();
+        } );
+        s = ts::str_c();
+    }
+}
+
+void active_protocol_c::setup_avatar_restrictions( ts::str_c& s )
+{
+    ts::renew( arest );
+
+    UNFINISHED( "gif means animated gif supported" );
+
+    if ( !s.is_empty() )
+    {
+        ts::parse_values( s, [&]( const ts::pstr_c&k, const ts::pstr_c&v ) {
+            if ( k.equals( CONSTASTR( "f" ) ) )
+            {
+                // gif means animated gif supported
+
+            } else if ( k.equals( CONSTASTR( "s" ) ) )
+                arest.maxsize = v.as_uint();
+            else if ( k.equals( CONSTASTR( "a" ) ) )
+                arest.minwh = v.as_uint();
+            else if ( k.equals( CONSTASTR( "b" ) ) )
+                arest.maxwh = v.as_uint();
+        } );
+        s = ts::str_c();
+    }
+}
 
 bool active_protocol_c::cmdhandler(ipcr r)
 {
@@ -98,23 +261,29 @@ bool active_protocol_c::cmdhandler(ipcr r)
                 if (s == CR_OK)
                 {
                     priority = r.get<int>();
+                    indicator = r.get<int>();
                     features = r.get<int>();
                     conn_features = r.get<int>();
-                    auto desc = r.getastr();
-                    auto desc_t = r.getastr();
-                    audio_fmt.sampleRate = r.get<int>();
-                    audio_fmt.channels = r.get<short>();
-                    audio_fmt.bitsPerSample = r.get<short>();
+
+                    int numstrings = r.get<int>();
 
                     auto w = syncdata.lock_write();
                     
                     w().current_state = CR_OK;
-                    w().description.set_as_utf8(desc);
-                    w().description_t.set_as_utf8(desc_t);
 
-                    w().icon.setcopy(r.getastr());
+                    w().strings.clear();
+                    for(;numstrings > 0; --numstrings )
+                        w().strings.add(r.getastr());
 
-                    ipcp->send(ipcw(AQ_SET_CONFIG) << w().data.config);
+                    ts::str_c emptystring;
+                    setup_audio_fmt( w().strings.size() > IS_AUDIO_FMT ? w().strings.get( IS_AUDIO_FMT ) : emptystring );
+                    setup_avatar_restrictions( w().strings.size() > IS_AVATAR_RESTRICTIOS ? w().strings.get( IS_AVATAR_RESTRICTIOS ) : emptystring );
+
+                    config_maker_s cm;
+                    cm.configurable( w().data.configurable, get_features(), get_conn_features() );
+                    cm.conf( w().data.config, 0 != (w().data.options & active_protocol_data_s::O_CONFIG_NATIVE) );
+
+                    ipcp->send( cm );
 
                 } else
                 {
@@ -124,14 +293,14 @@ bool active_protocol_c::cmdhandler(ipcr r)
             {
                 auto w = syncdata.lock_write();
 
-                ipcp->send( ipcw( AQ_SET_NAME ) << ( w().data.user_name.is_empty() ? prf().username() : w().data.user_name ) );
-                ipcp->send( ipcw( AQ_SET_STATUSMSG ) << ( w().data.user_statusmsg.is_empty() ? prf().userstatus() : w().data.user_statusmsg ) );
-                ipcp->send( ipcw( AQ_SET_AVATAR ) << w().data.avatar );
+                ipcp->send( ipcw( AQ_SET_NAME ) << ACTUAL_USER_NAME( w() ) );
+                ipcp->send( ipcw( AQ_SET_STATUSMSG ) << ACTUAL_STATUS_MSG( w() ) );
+                ipcp->send( ipcw( AQ_SET_AVATAR ) << fit_ava(w().data.avatar) );
                 if ( w().manual_cos != COS_ONLINE )
                     set_ostate( w().manual_cos );
 
                 ipcp->send( ipcw( AQ_INIT_DONE ) );
-                if ( 0 != ( w().data.options & active_protocol_data_s::O_AUTOCONNECT ) )
+                if ( CR_OK == s &&  0 != ( w().data.options & active_protocol_data_s::O_AUTOCONNECT ) )
                 {
                     ipcp->send( ipcw( AQ_ONLINE ) );
                     w().flags.set( F_ONLINE_SWITCH );
@@ -145,7 +314,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
                 
                 if ( s != CR_OK )
                 {
-
+                    indicator = 0;
                     syncdata.lock_write()().current_state = s;
                     goto we_shoud_broadcast_result;
                 }
@@ -154,6 +323,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
             {
                 if (s != CR_OK)
                 {
+                    indicator = 0;
                     syncdata.lock_write()().current_state = s;
                     goto we_shoud_broadcast_result;
                 }
@@ -238,6 +408,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     auto w = syncdata.lock_write();
                     w().data.config.clear();
                     w().data.config.append_buf(d, sz);
+                    RESETFLAG( w().data.options, active_protocol_data_s::O_CONFIG_NATIVE ); // assume config from proto is never native
 
                     w().flags.set(F_CONFIG_OK|F_CONFIG_UPDATED);
                     lastconfig = ts::Time::current();
@@ -280,7 +451,6 @@ bool active_protocol_c::cmdhandler(ipcr r)
                     w().data.configurable.initialized = true;
                 }
             }
-
         }
         break;
     case HQ_AUDIO:
@@ -350,7 +520,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
     case AQ_CONTROL_FILE:
         {
             gmsg<ISOGM_FILE> *m = TSNEW(gmsg<ISOGM_FILE>);
-            m->utag = r.get<uint64>();
+            m->i_utag = r.get<uint64>();
             m->fctl = (file_control_e)r.get<int>();
             m->send_to_main_thread();
 
@@ -361,7 +531,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
             gmsg<ISOGM_FILE> *m = TSNEW(gmsg<ISOGM_FILE>);
             m->sender.protoid = id;
             m->sender.contactid = r.get<int>();
-            m->utag = r.get<uint64>();
+            m->i_utag = r.get<uint64>();
             m->filesize = r.get<uint64>();
             m->filename.set_as_utf8(r.getastr());
 
@@ -372,7 +542,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
     case HQ_QUERY_FILE_PORTION:
         {
             gmsg<ISOGM_FILE> *m = TSNEW(gmsg<ISOGM_FILE>);
-            m->utag = r.get<uint64>();
+            m->i_utag = r.get<uint64>();
             m->offset = r.get<uint64>() << 20;
             m->filesize = FILE_TRANSFER_CHUNK;
 
@@ -380,7 +550,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
             if ( g_qfps.size() > 50 )
                 g_qfps.remove_slow( 0 );
             qfp_s &qfp = g_qfps.add();
-            qfp.utag = m->utag;
+            qfp.utag = m->i_utag;
             qfp.offset = m->offset;
             qfp.time = ts::Time::current().raw();
 #endif // _DEBUG
@@ -402,7 +572,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
 
             fd_s *f = (fd_s *)(r.d + sizeof(data_header_s));
 
-            m->utag = f->tag;
+            m->i_utag = f->tag;
             m->offset = f->offset;
             m->data.set_size(f->size);
             memcpy(m->data.data(), f + 1, f->size);
@@ -482,7 +652,7 @@ bool active_protocol_c::tick()
 void active_protocol_c::worker()
 {
     ts::str_c ipcname(CONSTASTR("isotoxin_ap_"));
-    uint64 utg = ts::uuid();
+    uint64 utg = random64();
     ipcname.append_as_hex(&utg, sizeof(utg)).append_char('_');
 
     auto ww = syncdata.lock_write();
@@ -579,7 +749,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
             else if (sss().flags.clearr(F_CONFIG_UPDATED))
             {
                 if (sss().flags.is(F_CONFIG_OK))
-                    save_config(sss().data.config);
+                    save_config(sss().data.config, 0 != (sss().data.options & active_protocol_data_s::O_CONFIG_NATIVE));
             }
         }
     }
@@ -647,11 +817,14 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
         contact_c *target = contacts().find( msg.post.receiver );
         if (!target) return 0;
 
+        if ( !is_current_online() )
+            return 0; // protocol is offline, so there is no way to send message now
+
         bool online = true;
 
         for(;;)
         {
-            if (CS_INVITE_RECEIVE == target->get_state() || CS_INVITE_SEND == target->get_state())
+            if (CS_INVITE_RECEIVE == target->get_state() || CS_INVITE_SEND == target->get_state() || CS_UNKNOWN == target->get_state() )
                 if (0 != (get_features() & PF_UNAUTHORIZED_CHAT))
                     break;
 
@@ -667,7 +840,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
         if (typingsendcontact == target->getkey().contactid)
             typingsendcontact = 0;
 
-        ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().contactid << (int)MTA_MESSAGE << msg.post.utag << (online ? 0 : msg.post.cr_time) << msg.post.message_utf8 );
+        ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().contactid << msg.post.utag << (online ? 0 : msg.post.cr_time) << msg.post.message_utf8 );
     }
     return 0;
 }
@@ -680,19 +853,20 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
         {
         case PP_USERNAME:
             if (ch.protoid == id)
-            {
                 syncdata.lock_write()().data.user_name = ch.s;
-                ipcp->send(ipcw(AQ_SET_NAME) << ch.s);
-            } else if (syncdata.lock_read()().data.user_name.is_empty())
-                ipcp->send(ipcw(AQ_SET_NAME) << ch.s);
+            {
+                auto r = syncdata.lock_read();
+                ipcp->send( ipcw( AQ_SET_NAME ) << ACTUAL_USER_NAME( r() ) );
+            }
             return GMRBIT_CALLAGAIN;
         case PP_USERSTATUSMSG:
             if (ch.protoid == id)
-            {
                 syncdata.lock_write()().data.user_statusmsg = ch.s;
-                ipcp->send(ipcw(AQ_SET_STATUSMSG) << ch.s);
-            } else if (syncdata.lock_read()().data.user_statusmsg.is_empty())
-                ipcp->send(ipcw(AQ_SET_STATUSMSG) << ch.s);
+
+            {
+                auto r = syncdata.lock_read();
+                ipcp->send( ipcw( AQ_SET_STATUSMSG ) << ACTUAL_STATUS_MSG( r() ) );
+            }
             return GMRBIT_CALLAGAIN;
         case PP_NETWORKNAME:
             if (ch.protoid == id)
@@ -747,7 +921,7 @@ const ts::bitmap_c &active_protocol_c::get_icon(int sz, icon_type_e icot)
 
     auto r = syncdata.lock_read();
 
-    const ts::bitmap_c *icon = &prepare_proto_icon( r().data.tag, r().icon, sz, icot );
+    const ts::bitmap_c *icon = &prepare_proto_icon( r().data.tag, r().getstr(IS_PROTO_ICON), sz, icot );
     icon_s &ic = icons_cache.add();
     ic.bmp = icon;
     ic.icot = icot;
@@ -783,12 +957,12 @@ bool active_protocol_c::check_save(RID, GUIPARAM)
     else
     {
         ttt().flags.clear(F_CONFIG_UPDATED);
-        save_config( ttt().data.config );
+        save_config( ttt().data.config, 0 != (ttt().data.options & active_protocol_data_s::O_CONFIG_NATIVE) );
     }
     return true;
 }
 
-void active_protocol_c::save_config( const ts::blob_c &cfg_ )
+void active_protocol_c::save_config( const ts::blob_c &cfg_, bool native_config )
 {
     tableview_active_protocol_s &t = prf().get_table_active_protocol();
     if (auto *r = t.find<true>(id))
@@ -810,6 +984,7 @@ void active_protocol_c::save_config( const ts::blob_c &cfg_ )
 
         r->other.config = cfg_;
         r->other.config.set_size(cfg_.size()); // copy content
+        INITFLAG( r->other.options, active_protocol_data_s::O_CONFIG_NATIVE, native_config );
         r->changed();
         prf().changed();
     }
@@ -821,11 +996,98 @@ void active_protocol_c::set_sortfactor(int sf)
     g_app->F_PROTOSORTCHANGED = true;
 }
 
+void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp );
+
+ts::blob_c active_protocol_c::gen_system_user_avatar()
+{
+
+    ts::blob_c b;
+    b.load_from_text_file( CONSTWSTR( "proto-avatar.svg" ) );
+    ts::str_c xmls( b.cstr() );
+    xmls.replace_all( CONSTASTR("[proto]"), get_infostr(IS_PROTO_ICON) );
+
+    ts::TSCOLOR c = GET_THEME_VALUE( state_online_color );
+    if ( !is_current_online() )
+        c = ts::GRAYSCALE( c );
+    xmls.replace_all( CONSTASTR( "[color]" ), make_color(c) );
+    xmls.replace_all( CONSTASTR( "[color-bg]" ), make_color( GET_THEME_VALUE( common_bg_color ) ) );
+
+    ts::bitmap_c ava;
+    if ( rsvg_svg_c *svgg = rsvg_svg_c::build_from_xml( xmls.str() ) )
+    {
+        ts::bitmap_c bmp;
+        bmp.create_ARGB( svgg->size() );
+        svgg->render( bmp.extbody() );
+        TSDEL( svgg );
+
+        ts::irect vr = bmp.calc_visible_rect();
+        if ( vr.lt.x ) --vr.lt.x;
+        if ( vr.lt.y ) --vr.lt.y;
+        if ( vr.rb.x < bmp.info().sz.x ) ++vr.rb.x;
+        if ( vr.rb.y < bmp.info().sz.y ) ++vr.rb.y;
+        ava = bmp.extbody( vr );
+    }
+    encode_lossy_png( b, ava );
+    return b;
+}
 
 void active_protocol_c::set_avatar(contact_c *c)
 {
     auto r = syncdata.lock_read();
     c->set_avatar(r().data.avatar.data(),r().data.avatar.size(),1);
+}
+
+ts::blob_c active_protocol_c::fit_ava( const ts::blob_c&ava ) const
+{
+    if ( ava.size() == 0 || arest.minwh == 0 && arest.maxwh == 0 && ava.size() <= arest.maxsize )
+        return ava;
+
+    ts::bitmap_c bmp;
+    /*ts::img_format_e fmt =*/ bmp.load_from_file( ava );
+
+    if ( bmp.info().bytepp() != 4 )
+    {
+        ts::bitmap_c b_temp;
+        b_temp = bmp.extbody();
+        bmp = b_temp;
+    }
+
+    if ( bmp.info().sz < ts::ivec2( arest.minwh ) )
+    {
+        ts::ivec2 nsz( arest.minwh );
+        ts::bitmap_c upbmp;
+        upbmp.create_ARGB( nsz );
+        upbmp.resize_from( bmp.extbody(), ts::FILTER_LANCZOS3 );
+        ts::blob_c b;
+        encode_lossy_png( b, upbmp );
+        return b;
+    }
+
+    ts::blob_c b; ts::ivec2 nsz( bmp.info().sz );
+
+    if ( bmp.info().sz > ts::ivec2( arest.maxwh ) )
+    {
+        nsz = ts::ivec2( arest.maxwh );
+        ts::bitmap_c upbmp;
+        upbmp.create_ARGB( nsz );
+        upbmp.resize_from( bmp.extbody(), ts::FILTER_BOX_LANCZOS3 );
+        encode_lossy_png( b, upbmp );
+    } else
+        b = ava;
+
+    while ( b.size() > arest.maxsize )
+    {
+        nsz  -= 8;
+        if ( nsz.x <= arest.minwh || nsz.y < arest.minwh )
+            return ts::blob_c();
+
+        ts::bitmap_c upbmp;
+        upbmp.create_ARGB( nsz );
+        upbmp.resize_from( bmp.extbody(), ts::FILTER_BOX_LANCZOS3 );
+        encode_lossy_png( b, upbmp );
+    }
+
+    return b;
 }
 
 void active_protocol_c::set_avatar( const ts::blob_c &ava )
@@ -843,7 +1105,7 @@ void active_protocol_c::set_avatar( const ts::blob_c &ava )
         prf().changed();
     }
 
-    ipcp->send(ipcw(AQ_SET_AVATAR) << ava);
+    ipcp->send(ipcw(AQ_SET_AVATAR) << fit_ava(ava));
 
     if (contact_c *c = contacts().find_subself(getid()))
         c->set_avatar(ava.data(), ava.size(), 1);
@@ -977,6 +1239,11 @@ void active_protocol_c::add_contact( const ts::str_c& pub_id, const ts::str_c &m
     ipcp->send( ipcw(AQ_ADD_CONTACT) << (char)0 << pub_id << msg_utf8 );
 }
 
+void active_protocol_c::add_contact( const ts::str_c& pub_id )
+{
+    ipcp->send( ipcw( AQ_ADD_CONTACT ) << (char)2 << pub_id );
+}
+
 void active_protocol_c::add_group_chat( const ts::str_c &groupname, bool persistent )
 {
     ipcp->send( ipcw(AQ_ADD_GROUPCHAT) << groupname << (persistent ? 1 : 0) );
@@ -1089,12 +1356,13 @@ void active_protocol_c::set_stream_options(int cid, int so, const ts::ivec2 &vr)
 
 void active_protocol_c::apply_encoding_settings()
 {
-    ipcw s(AQ_CONFIGURABLE);
-    s << (ts::int32)3;
-    s << CONSTASTR(CFGF_VIDEO_CODEC) << ts::astrmap_c(prf().video_codec()).get(get_tag(), ts::str_c());
-    s << CONSTASTR(CFGF_VIDEO_BITRATE) << ts::amake<int>(prf().video_bitrate());
-    s << CONSTASTR(CFGF_VIDEO_QUALITY) << ts::amake<int>(prf().video_enc_quality());
-    ipcp->send(s);
+    config_maker_s cm;
+
+    cm.par( CONSTASTR( CFGF_VIDEO_CODEC ), ts::astrmap_c( prf().video_codec() ).get( get_tag(), ts::str_c() ) )
+        .par( CONSTASTR( CFGF_VIDEO_BITRATE ), ts::amake<int>( prf().video_bitrate() ) )
+        .par( CONSTASTR( CFGF_VIDEO_QUALITY ), ts::amake<int>( prf().video_enc_quality() ) );
+
+    ipcp->send( cm );
 }
 
 void active_protocol_c::set_configurable( const configurable_s &c, bool force_send )
@@ -1129,15 +1397,10 @@ void active_protocol_c::set_configurable( const configurable_s &c, bool force_se
             oldc = w().data.configurable;
             w.unlock();
 
-            ipcw s(AQ_CONFIGURABLE);
-            s << (ts::int32)5;
-            s << CONSTASTR( CFGF_PROXY_TYPE ) << ts::amake<int>(oldc.proxy.proxy_type);
-            s << CONSTASTR( CFGF_PROXY_ADDR ) << oldc.proxy.proxy_addr;
-            s << CONSTASTR( CFGF_SERVER_PORT ) << ts::amake<int>(oldc.server_port);
-            s << CONSTASTR( CFGF_IPv6_ENABLE ) << (oldc.ipv6_enable ? CONSTASTR("1") : CONSTASTR("0"));
-            s << CONSTASTR( CFGF_UDP_ENABLE ) << (oldc.udp_enable ? CONSTASTR("1") : CONSTASTR("0"));
+            config_maker_s cm;
+            cm.configurable( oldc, get_features(), get_conn_features() );
+            ipcp->send( cm );
 
-            ipcp->send(s);
             // do not save config now
             // protocol will initiate save procedure itself
 
@@ -1154,14 +1417,14 @@ void active_protocol_c::set_configurable( const configurable_s &c, bool force_se
 
 }
 
-void active_protocol_c::file_resume(uint64 utag, uint64 offset)
+void active_protocol_c::file_accept(uint64 utag, uint64 offset)
 {
-    ipcp->send(ipcw(AQ_CONTROL_FILE) << utag << ((int)FIC_ACCEPT) << offset);
+    ipcp->send(ipcw( AQ_ACCEPT_FILE ) << utag << offset);
 }
 
 void active_protocol_c::file_control(uint64 utag, file_control_e fctl)
 {
-    ipcp->send(ipcw(AQ_CONTROL_FILE) << utag << ((int)fctl) << (uint64)0);
+    ipcp->send(ipcw(AQ_CONTROL_FILE) << utag << ((ts::int32)fctl));
 }
 
 void active_protocol_c::send_file(int cid, uint64 utag, const ts::wstr_c &filename, uint64 filesize)

@@ -97,6 +97,8 @@ struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
     static const int BPSSV_PAUSED_BY_ME = -1;
     static const int BPSSV_ALLOW_CALC = 0;
 
+    uint64 i_utag = 0; // protocol's internal tag
+
     struct job_s
     {
         MOVABLE( true );
@@ -253,6 +255,8 @@ namespace ts
     };
 }
 
+uint64 random64();
+
 class application_c : public gui_c, public sound_capture_handler_c
 {
     bool b_customize(RID r, GUIPARAM param);
@@ -304,8 +308,6 @@ public:
     /*virtual*/ void app_path_expand_env(ts::wstr_c &path) override;
     /*virtual*/ void do_post_effect() override;
     /*virtual*/ void app_font_par(const ts::str_c&, ts::font_params_s&fprm) override;
-
-
 
     ///////////// application_c itself
 
@@ -468,6 +470,7 @@ public:
             last_update = now();
             ++unread_count;
             flags.set(F_REDRAW);
+            flags.clear( F_RECALC_UNREAD );
             g_app->F_SETNOTIFYICON = true;
         }
 
@@ -521,10 +524,20 @@ public:
 
     ts::array_del_t<send_queue_s, 1> m_undelivered;
 
+    struct reselect_data_s
+    {
+        contact_key_s hkey;
+        ts::Time eventtime = ts::Time::current();
+        int options = 0;
+    } reselect_data;
+
+    ts::hashmap_t< ts::str_c, avatar_s > identicons;
+
 public:
     bool b_send_message(RID r, GUIPARAM param);
     bool flash_notification_icon(RID r = RID(), GUIPARAM param = nullptr);
     bool flashingicon() const {return F_UNREADICON;};
+    bool update_state();
 public:
 
     ts::safe_ptr<gui_contact_item_c> active_contact_item;
@@ -595,6 +608,7 @@ public:
 	application_c( const ts::wchar * cmdl );
 	~application_c();
 
+    const avatar_s * gen_identicon_avatar( const ts::str_c &pubid );
 
     void apply_debug_options();
 
@@ -669,6 +683,9 @@ public:
     }
     void select_last_unread_contact();
 
+    bool reselect_p( RID, GUIPARAM );
+    void reselect( contact_root_c *historian, int options, double delay = 0.0 );
+
     void handle_sound_capture( const void *data, int size );
     void register_capture_handler( sound_capture_handler_c *h );
     void unregister_capture_handler( sound_capture_handler_c *h );
@@ -698,7 +715,8 @@ public:
     }
     bool present_file_transfer_by_historian(const contact_key_s &historian);
     bool present_file_transfer_by_sender(const contact_key_s &sender, bool accept_only_rquest);
-    file_transfer_s *find_file_transfer(uint64 utag);
+    file_transfer_s *find_file_transfer( uint64 utag );
+    file_transfer_s *find_file_transfer_by_iutag(uint64 i_utag);
     file_transfer_s *find_file_transfer_by_msgutag(uint64 utag);
     file_transfer_s *register_file_transfer( const contact_key_s &historian, const contact_key_s &sender, uint64 utag, ts::wstr_c filename, uint64 filesize );
     void unregister_file_transfer(uint64 utag,bool disconnected);

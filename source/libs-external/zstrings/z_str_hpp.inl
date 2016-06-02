@@ -2206,14 +2206,27 @@ public:
 
     }
 
-    void decode_base64( void *data, ZSTRINGS_SIGNED datasize, ZSTRINGS_SIGNED from = 0, ZSTRINGS_SIGNED ilen = -1 ) const
+    ZSTRINGS_SIGNED base64_len( ZSTRINGS_SIGNED from = 0, ZSTRINGS_SIGNED ilen = -1 ) const
+    {
+        sptr<TCHARACTER> s;
+        s.s = core() + from;
+        s.l = ilen < 0 ? ( get_length() - from ) : ilen;
+        ZSTRINGS_SIGNED msz = 0;
+        if ( s.l > 0 && s.s[ s.l - 1 ] == '=' ) ++msz;
+        if ( s.l > 1 && s.s[ s.l - 2 ] == '=' ) ++msz;
+        ZSTRINGS_ASSERT( 0 == ( s.l & 3 ) );
+        return s.l / 4 * 3 - msz;
+    }
+    ZSTRINGS_SIGNED decode_base64( void *data, ZSTRINGS_SIGNED datasize, ZSTRINGS_SIGNED from = 0, ZSTRINGS_SIGNED ilen = -1 ) const
     {
         ZSTRINGS_BYTE *d = (ZSTRINGS_BYTE *)data;
         sptr<TCHARACTER> s;
         s.s = core() + from;
         s.l = ilen < 0 ? (get_length() - from) : ilen;
+        ZSTRINGS_SIGNED bszlen = base64_len( from, ilen );
         static const ZSTRINGS_ANSICHAR cd64[] = "|$$$}rstuvwxyz{$$$$$$$>?@ABCDEFGHIJKLMNOPQRSTUVW$$$$$$XYZ[\\]^_`abcdefghijklmnopq";
         ZSTRINGS_BYTE inb[4]; //-V112
+        if( datasize > bszlen ) datasize = bszlen;
         for (;s && datasize;)
         {
             ZSTRINGS_SIGNED len, i;
@@ -2248,6 +2261,7 @@ public:
                 if (datasize) { *d = (ZSTRINGS_BYTE)((((inb[2] << 6) & 0xc0) | inb[3])&0xFF); ++d; --datasize; }
             }
         }
+        return (ZSTRINGS_SIGNED)(d - (ZSTRINGS_BYTE *)data);
     }
 
     str_t & encode_pointer( const void * p ) // encode format: 'A' + 4 bit
@@ -2764,6 +2778,22 @@ public:
 	}
 	void operator++(int) {++(*this);}
 };
+
+template< typename F > void parse_values( const asptr &is, const F&f )
+{
+    token<char> lns( is, '\n' );
+    for ( ; lns; ++lns )
+    {
+        auto s = lns->get_trimmed();
+        ZSTRINGS_SIGNED eqi = s.find_pos( '=' );
+        if ( eqi > 0 )
+        {
+            pstr_c k = s.substr( 0, eqi );
+            pstr_c v = s.substr( eqi + 1 );
+            f( k, v );
+        }
+    }
+}
 
 #define ASPTR_MACRO(x,y) ZSTRINGS_NAMESPACE::asptr(x,y)
 

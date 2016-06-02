@@ -16,11 +16,6 @@
 
 #include <memory>
 
-__forceinline int time_ms()
-{
-    return (int)timeGetTime();
-}
-
 struct socket_s
 {
     SOCKET _socket = INVALID_SOCKET;
@@ -181,7 +176,7 @@ struct tcp_listner : public socket_s
 enum block_type_e // hard order!!!
 {
     BT_MESSAGE = MT_MESSAGE,
-    BT_ACTION = MT_ACTION,
+    __UNUSED_BT_ACTION, // = MT_ACTION,
 
     __bt_service,
     __bt_no_save_begin = 100,
@@ -226,14 +221,14 @@ struct datablock_s
     int len;
     int sent;
 
-    u64 create_time() const { ASSERT(BT_MESSAGE == bt || BT_ACTION == bt); return *(u64 *)(this + 1); }
-    asptr text() const { ASSERT(BT_MESSAGE == bt || BT_ACTION == bt); return asptr(((const char *)(this + 1)) + sizeof(u64), len - sizeof(u64)); }
+    u64 create_time() const { ASSERT(BT_MESSAGE == bt); return *(u64 *)(this + 1); }
+    asptr text() const { ASSERT(BT_MESSAGE == bt); return asptr(((const char *)(this + 1)) + sizeof(u64), len - sizeof(u64)); }
     const byte *data() const {return (const byte *)(this + 1);}
 
     static datablock_s *build(block_type_e mt, u64 delivery_tag, const void *data, aint datasize, const void *data1 = nullptr, aint datasize1 = 0);
     void die();
 
-    int left() const { return len - sent; }
+    int left() const { return max( 0, len - sent ); }
 
 };
 #pragma pack(pop)
@@ -390,10 +385,10 @@ public:
         datablock_s *sendblock_f = nullptr;
         datablock_s *sendblock_l = nullptr;
 
-        void send_message( block_type_e mt, u64 create_time, const asptr &text, u64 dtag)
+        void send_message( u64 create_time, const asptr &text, u64 dtag)
         {
             u64 create_time_net = my_htonll(create_time);
-            send_block(mt, dtag, &create_time_net, sizeof(u64), text.s, text.l);
+            send_block(BT_MESSAGE, dtag, &create_time_net, sizeof(u64), text.s, text.l);
         }
         u64 send_block(block_type_e mt, u64 delivery_tag, const void *data = nullptr, aint datasize = 0, const void *data1 = nullptr, aint datasize1 = 0);
         bool del_block( u64 delivery_tag );
@@ -490,12 +485,12 @@ private:
         virtual void tick(int ct) = 0;
 
         virtual void chunk_received( u64 /*offset*/, const void * /*d*/, aint /*dsz*/ ) {}; // incoming
-        virtual bool fresh_file_portion(const file_portion_s * /*fp*/) { return false;  } // transmitting
         virtual bool delivered(u64 /*dtg*/) { return false; } // transmitting
 
         u32 cid;    // client id
         u64 fsz;    // filesize
         u64 utag;   // unique tag
+        u64 sid;    // stream id
         str_c fn;   // filename
     };
 
@@ -503,7 +498,6 @@ private:
     file_transfer_s *last_ftr = nullptr;
 
     void tick_ftr(int ct);
-    file_transfer_s *find_ftr(u64 utag);
 
     struct incoming_file_s : public file_transfer_s
     {
@@ -564,10 +558,15 @@ private:
         /*virtual*/ void unpause(bool from_self) override;
         /*virtual*/ void tick(int ct) override;
 
-        /*virtual*/ bool fresh_file_portion(const file_portion_s *fp) override;
+        bool fresh_file_portion(const file_portion_s *fp);
         /*virtual*/ bool delivered(u64 dtg) override;
     };
 
+    incoming_file_s *find_incoming_ftr( u64 utag );
+    transmitting_file_s *find_transmitting_ftr( u64 utag );
+    file_transfer_s *find_ftr_by_sid( u64 sid );
+    u64 gensid();
+    u64 genfutag();
 
 private:
     contact_s *first = nullptr; // first points to zero contact - self

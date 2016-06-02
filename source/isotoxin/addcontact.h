@@ -30,8 +30,12 @@ class dialog_addcontact_c : public gui_isodialog_c
 
     dialog_addcontact_params_s inparam;
     bool networks_available = false;
+    bool send_authorization_request = true;
 
     ts::wstr_c rtext();
+    ts::wstr_c idname() const;
+
+    void show_err( cmd_result_e r );
 
 protected:
     /*virtual*/ int unique_tag() override { return UD_ADDCONTACT; }
@@ -39,13 +43,15 @@ protected:
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
     /*virtual*/ int additions(ts::irect & border) override;
     /*virtual*/ void on_confirm() override;
-    
+    /*virtual*/ void tabselected( ts::uint32 /*mask*/ );
+
     menu_c networks();
     bool hidectl(RID,GUIPARAM);
 
     bool public_id_handler( const ts::wstr_c & );
     bool invite_message_handler( const ts::wstr_c & );
     void network_selected( const ts::str_c & );
+    bool authorization_handler( RID, GUIPARAM );
 public:
     dialog_addcontact_c(MAKE_ROOT<dialog_addcontact_c> &data);
     ~dialog_addcontact_c();

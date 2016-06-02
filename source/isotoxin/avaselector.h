@@ -117,6 +117,7 @@ class dialog_avaselector_c : public gui_isodialog_c
 
     bool space_key(RID, GUIPARAM);
     bool paste_hotkey_handler(RID, GUIPARAM);
+    bool generate_identicon( RID, GUIPARAM );
 
     vsb_list_t video_devices;
     bool start_capture_menu(RID, GUIPARAM);

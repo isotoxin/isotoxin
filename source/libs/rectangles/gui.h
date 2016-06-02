@@ -212,6 +212,7 @@ class gui_c
     static const ts::flags32_s::BITS F_DIRTY_HOVER_DATA = SETBIT(1);
     static const ts::flags32_s::BITS F_DO_MOUSEMOUVE = SETBIT(2);
     static const ts::flags32_s::BITS F_PROCESSING_REPOS = SETBIT(3);
+    static const ts::flags32_s::BITS F_DISABLESPECIALBORDER = SETBIT(4);
 
     int m_tagpool = 1;
     text_rect_dynamic_c m_textrect; // temp usage
@@ -342,6 +343,9 @@ public:
 
     gui_c();
 	~gui_c();
+
+    void disable_special_border(bool v) { m_flags.init( F_DISABLESPECIALBORDER, v ); }
+    bool is_disabled_special_border() const { return m_flags.is( F_DISABLESPECIALBORDER ); }
 
     ts::bitmap_c * acquire_texture( text_rect_dynamic_c *requester, const ts::ivec2 &size );
     void release_texture( ts::bitmap_c * t );

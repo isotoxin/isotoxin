@@ -117,36 +117,24 @@ protected:
     struct description_s
     {
         MOVABLE( true );
-        ts::tmp_array_safe_t<guirect_c,0> ctlptrs;
-        //guirect_c::sptr_t ctlptr; // can be nullptr (if other tab selected, or parent control not yet created)
-        void setctlptr( guirect_c *r )
+
+        struct ctlptr_s
         {
-            ts::aint cnt = ctlptrs.size();
-            int j = -1;
-            for( int i=0;i<cnt;++i )
-            {
-                guirect_c::sptr_t &ptr = ctlptrs.get(i);
-                if (ptr.get() == r)
-                {
-                    if (j >= 0)
-                        ctlptrs.remove_fast(j);
-                    return;
-                }
-                if (ptr.expired())
-                {
-                    j = i;
-                    continue;
-                }
-            }
-            if (j < 0)
-                ctlptrs.add() = r;
-            else
-                ctlptrs.get(j) = r;
-        }
+            MOVABLE( true );
+            ts::safe_ptr<guirect_c> ptr;
+            int what = -1; // -1 - desc; 0 - base ctrl
+            ctlptr_s() {}
+            ctlptr_s( guirect_c *r, int what ):ptr(r), what(what) {}
+        };
+
+        ts::array_inplace_t<ctlptr_s,0> ctlptrs;
+        ts::wstr_c build_desc_text() const;
+        void changedesc( const ts::wstr_c& desc_ );
+        void setctlptr( guirect_c *r, int what );
         bool present( RID r ) const
         {
-            for( const guirect_c *rr : ctlptrs )
-                if (rr && rr->getrid() == r) return true;
+            for( const ctlptr_s &rr : ctlptrs )
+                if (!rr.ptr.expired() && rr.ptr->getrid() == r) return true;
             return false;
         }
 
@@ -304,6 +292,7 @@ protected:
     bool path_explore(RID, GUIPARAM prm);
     bool combo_drop(RID, GUIPARAM prm);
     bool custom_menu(RID, GUIPARAM prm);
+    bool passw_hide_show( RID, GUIPARAM prm );
 
     struct radio_item_s
     {
@@ -355,6 +344,7 @@ protected:
 
     void ctlshow( ts::uint32 cmask, bool vis );
     void ctlenable( const ts::asptr&name, bool enblflg );
+    void ctldesc( const ts::asptr&name, ts::wstr_c desc );
 
     void set_check_value( const ts::asptr&name, bool v );
 

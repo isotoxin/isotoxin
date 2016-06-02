@@ -1,0 +1,6 @@
+<svg width="256" height="256">
+<g transform="translate(50 50) scale(0.9)">
+<circle stroke="[color]" stroke-width="5" cx="50" cy="50" r="67" fill="none"></circle>
+<path stroke="none" fill="[color]" d="[proto]" />
+</g>
+</svg>

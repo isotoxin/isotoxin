@@ -91,47 +91,7 @@
 #define DEFAULT_AUDIO_BITRATE 32
 #define DEFAULT_VIDEO_BITRATE 5000
 
-void __stdcall get_info( proto_info_s *info )
-{
-    if (info->protocol_name) strncpy_s(info->protocol_name, info->protocol_name_buflen, "tox", _TRUNCATE);
-    if (info->description) strncpy_s(info->description, info->description_buflen, "Tox protocol", _TRUNCATE);
-    if (info->description_with_tags) strncpy_s(info->description_with_tags, info->description_with_tags_buflen, "<b>Tox</b> protocol", _TRUNCATE);
-    if (info->version)
-    {
-        sstr_t<1024> vers( "plugin: " SS(PLUGINVER) ", toxcore: " ); 
-
-        vers.append_as_uint(TOX_VERSION_MAJOR);
-        vers.append_char('.');
-        vers.append_as_uint(TOX_VERSION_MINOR);
-        vers.append_char('.');
-        vers.append_as_uint(TOX_VERSION_PATCH);
-        vers.append_char(')');
-
-        strncpy_s(info->version, info->version_buflen, vers, _TRUNCATE);
-    }
-
-    info->priority = 500;
-    info->features = PF_AVATARS | PF_OFFLINE_INDICATOR | PF_PURE_NEW | PF_IMPORT | PF_EXPORT | PF_AUDIO_CALLS | PF_VIDEO_CALLS | PF_SEND_FILE | PF_GROUP_CHAT; //PF_INVITE_NAME | PF_UNAUTHORIZED_CHAT;
-    info->connection_features = CF_PROXY_SUPPORT_HTTPS | CF_PROXY_SUPPORT_SOCKS5 | CF_IPv6_OPTION | CF_UDP_OPTION | CF_SERVER_OPTION;
-    info->audio_fmt.sample_rate = 48000;
-    info->audio_fmt.channels = 1;
-    info->audio_fmt.bits = 16;
-
-    asptr svgicon( CONSTASTR("m 74.044499,38.828783 c 0,-4.166708 0.06581,-9.385543 -0.02935,-13.551362 -0.0418,-1.794753 -0.238352,-3.62508 -0.663471,-5.366471 C 70.309137,7.460631 58.257256,-0.28224198 45.602382,2.007891 34.399851,4.0347699 26.06021,14.030422 26.06021,25.430393 l 0,13.371709 c -3.678661,-3.2e-4 -7.473489,0 -11.204309,0 -2.466229,0 -4.467316,2.000197 -4.467316,4.467315 l 0,50.583035 c 0,2.466229 2.001087,4.467316 4.467316,4.467316 l 70.661498,0 c 2.468007,0 4.468205,-2.001087 4.468205,-4.467316 l 0,-50.583035 c 0,-2.467118 -2.000198,-4.467315 -4.468205,-4.467315 z m -17.313405,47.37418 -13.140472,0 c -2.065122,0 -3.738031,-1.702258 -3.738031,-3.801176 0.452829,-4.54018 0.52948,-5.74902 1.833885,-7.830921 1.45946,-2.150501 3.42853,-3.548594 5.564801,-4.17738 -2.815752,-1.148179 -4.799051,-3.911458 -4.799051,-7.137211 0,-4.259202 3.450763,-7.709077 7.708187,-7.709077 4.259203,0 7.708188,3.449875 7.708188,7.709077 0,3.307575 -2.084688,6.128663 -5.01339,7.221701 2.074015,0.669697 4.03508,2.057118 5.57903,4.186274 1.608048,2.307856 2.032215,4.874192 2.032215,7.571225 -0.0053,0.05514 0,0.111171 0,0.168091 8.9e-4,2.097139 -1.672019,3.799397 -3.735362,3.799397 M 65.3331,31.049446 c -1.389199,4.100894 -4.019961,7.386234 -6.768121,10.594199 -2.532759,2.638121 -5.259444,5.204412 -7.880726,6.825041 1.583972,-2.735708 2.86111,-5.334453 3.231089,-8.363654 -3.765601,0.891151 -7.316864,0.501606 -10.755176,-1.013884 -6.102871,-2.688572 -9.750186,-8.553981 -9.127625,-15.175356 0.50961,-5.449182 3.605395,-10.490611 8.391106,-13.0271 7.708187,-4.0848867 17.24706,-1.0668343 21.653898,6.200225 2.567617,4.231632 2.810178,9.372258 1.255555,13.960529") );
-
-    info->icon = svgicon.s;
-    info->icon_buflen = (int)svgicon.l;
-
-    info->vcodecs = "vp8/vp9";
-    info->vcodecs_buflen = 7;
-}
-
-__forceinline int time_ms()
-{
-    return (int)timeGetTime();
-}
-
-static std::vector<byte> buf_tox_config; // saved on offline
+static std::vector<byte> buf_tox_config; // saved on offline; PURE TOX-SAVE DATA, aka native data
 static bool conf_encrypted = false;
 
 static host_functions_s *hf;
@@ -147,6 +107,7 @@ static int gavatag = 0;
 static bool reconnect = false;
 static bool restart_module = false;
 static bool use_vp9_codec = false;
+static bool proxy_settings_ok = false;
 static int video_bitrate = 0;
 static int video_quality = 0;
 
@@ -161,6 +122,17 @@ struct other_typing_s
     other_typing_s(int fid, int time):fid(fid), time(time), totaltime(time){}
 };
 static std::vector<other_typing_s> other_typing;
+
+template<typename checker> u64 random64( const checker &ch )
+{
+    u64 v;
+    do
+    {
+        randombytes_buf( &v, sizeof( v ) );
+    } while ( v == 0 || ch( v ) );
+    return v;
+}
+
 
 static void set_proxy_addr(const asptr& addr)
 {
@@ -254,7 +226,7 @@ enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
     chunk_msgs_receiving = 20,
     chunk_msg_receiving,
     chunk_msg_receiving_cid,
-    chunk_msg_receiving_type,
+    __unused__chunk_msg_receiving_type,
     chunk_msg_receiving_body,
     chunk_msg_receiving_createtime,
 
@@ -447,14 +419,13 @@ struct message2send_s
     message2send_s *next;
 
     u64 utag;
-    message_type_e mt;
     int fid;
     int mid;
     int next_try_time;
     int send_timeout = 0;
     str_c msg;
     time_t create_time = 0;
-    message2send_s( u64 utag, message_type_e mt, int fid, const asptr &utf8, time_t create_time, int imid = -10000 ):utag(utag), mt(mt), fid(fid), mid(imid), next_try_time(time_ms()), create_time(create_time)
+    message2send_s( u64 utag, int fid, const asptr &utf8, time_t create_time, int imid = -10000 ):utag(utag), fid(fid), mid(imid), next_try_time(time_ms()), create_time(create_time)
     {
         LIST_ADD( this, first, last, prev, next );
 
@@ -485,7 +456,7 @@ struct message2send_s
             }
 
             {
-                if ((utf8.l - e - timepreffix) > 0) new message2send_s(utag, mt, fid, utf8.skip(e - timepreffix), create_time, -1); // not memory leak
+                if ((utf8.l - e - timepreffix) > 0) new message2send_s(utag, fid, utf8.skip(e - timepreffix), create_time, -1); // not memory leak
                 msg.set_length(e).append(CONSTASTR("\1\1")); // double tabs indicates that it is multi-part message
             }
         }
@@ -597,12 +568,11 @@ struct message_part_s
     message_part_s *prev;
     message_part_s *next;
     u64 create_time;
-    message_type_e mt;
     i32 cid;
     str_c msgb;
     int send2host_time = 0;
 
-    message_part_s(message_type_e mt, int cid, u64 create_time_, const asptr &msgbody, bool asap):mt(mt), cid(cid), create_time(create_time_)
+    message_part_s(int cid, u64 create_time_, const asptr &msgbody, bool asap): cid(cid), create_time(create_time_)
     {
         LIST_ADD(this, first, last, prev, next);
         send2host_time = time_ms() + (asap ? 0 : 5000);
@@ -615,7 +585,7 @@ struct message_part_s
 
     static asptr extract_create_time( u64 &t, const asptr &msgbody, int cid );
 
-    static void msg(message_type_e mt, int cid, u64 create_time, const char *msgbody, int len)
+    static void msg(int cid, u64 create_time, const char *msgbody, int len)
     {
         if ( len > TOX_MAX_MESSAGE_LENGTH/2 && msgbody[len-1] == '\1' && msgbody[len-2] == '\1' )
         {
@@ -631,7 +601,7 @@ struct message_part_s
                     return;
                 }
             }
-            new message_part_s(mt,cid, create_time, asptr(msgbody, len-2), false); // not memory leak
+            new message_part_s(cid, create_time, asptr(msgbody, len-2), false); // not memory leak
             hf->save();
         
         } else
@@ -643,14 +613,14 @@ struct message_part_s
                     // looks like last part of multi-part message
                     // concatenate and send it to host
                     x->msgb.append_char(' ').append(asptr(msgbody, len));
-                    hf->message(x->mt, 0, x->cid, x->create_time, x->msgb.cstr(), (int)x->msgb.get_length());
+                    hf->message(MT_MESSAGE, 0, x->cid, x->create_time, x->msgb.cstr(), (int)x->msgb.get_length());
                     delete x;
                     hf->save();
                     return;
                 }
             }
             asptr m = extract_create_time(create_time, asptr(msgbody, len), cid);
-            hf->message(mt, 0, cid, create_time, m.s, (int)m.l);
+            hf->message(MT_MESSAGE, 0, cid, create_time, m.s, (int)m.l);
         }
     }
 
@@ -660,7 +630,7 @@ struct message_part_s
         {
             if ( (ct - x->send2host_time) > 0 )
             {
-                hf->message(x->mt, 0, x->cid, x->create_time, x->msgb.cstr(), (int)x->msgb.get_length());
+                hf->message(MT_MESSAGE, 0, x->cid, x->create_time, x->msgb.cstr(), (int)x->msgb.get_length());
                 delete x;
                 hf->save();
                 break;
@@ -692,7 +662,7 @@ struct file_transfer_s
 
 };
 
-static void make_uniq_utag( u64 &utag );
+static u64 gen_file_utag();
 struct incoming_file_s : public file_transfer_s
 {
     static incoming_file_s *first;
@@ -713,13 +683,8 @@ struct incoming_file_s : public file_transfer_s
         fid = fid_;
         fnn = fnn_;
 
-        if (TOX_FILE_KIND_AVATAR != kind && tox_file_get_file_id(tox,fid,fnn,fileid,nullptr))
-        {
-            utag = *(const u64 *)fileid; // only 8 bytes of fileid used. isotoxin plugins api requires only 8 bytes unique
-        } else
-            randombytes_buf(&utag, sizeof(u64));
-        
-        make_uniq_utag(utag); // requirement to unique is only utag unique across current file transfers
+        tox_file_get_file_id( tox, fid, fnn, fileid, nullptr );
+        utag = gen_file_utag();
 
         LIST_ADD(this, first, last, prev, next);
     }
@@ -905,7 +870,7 @@ struct transmitting_data_s : public file_transfer_s
             resume_from( offset );
         }
         req_offset = offset + size;
-        if (size > req_max_size) req_max_size = (u32)size;
+        if (size > (aint)req_max_size) req_max_size = (u32)size;
     }
 
     /*virtual*/ void accepted() override
@@ -1198,7 +1163,7 @@ struct transmitting_avatar_s : public transmitting_data_s
 {
     int avatag = -1;
 
-    transmitting_avatar_s(u32 fid_, u32 fnn_, u64 utag_, const asptr &fn) : transmitting_data_s(fid_, fnn_, utag_, avahash, gavatar.size(), fn)
+    transmitting_avatar_s(u32 fid_, u32 fnn_, const asptr &fn) : transmitting_data_s(fid_, fnn_, gen_file_utag(), avahash, gavatar.size(), fn)
     {
         avatag = gavatag;
     }
@@ -1380,23 +1345,20 @@ struct discoverer_s
 discoverer_s *discoverer_s::first = nullptr;
 discoverer_s *discoverer_s::last = nullptr;
 
-static void make_uniq_utag( u64 &utag )
+static u64 gen_file_utag()
 {
-    again_check:
-    for (transmitting_data_s *f = transmitting_data_s::first; f; f = f->next)
-        if (f->utag == utag)
-        {
-            // almost impossible
-            // probability of this code execution less then probability of finding a billion dollars on the street
-            ++utag;
-            goto again_check;
-        }
-    for (incoming_file_s *f = incoming_file_s::first; f; f = f->next)
-        if (f->utag == utag)
-        {
-            ++utag;
-            goto again_check;
-        }
+    return random64( []( u64 t ) {
+    
+        for ( transmitting_data_s *f = transmitting_data_s::first; f; f = f->next )
+            if ( f->utag == t )
+                return true;
+
+        for ( incoming_file_s *f = incoming_file_s::first; f; f = f->next )
+            if ( f->utag == t )
+                return true;
+
+        return false;
+    });
 }
 
 enum idgen_e
@@ -1916,23 +1878,23 @@ public:
 
             str_c idstr = get_details_pubid(iid ? iid : idbytes);
             if (idstr.ends(CONSTASTR("????????????")))
-                tmps.set(asptr("{\"" CDET_PUBLIC_ID_BAD "\":\""));
+                tmps.set(CONSTASTR("{\"" CDET_PUBLIC_ID_BAD "\":\""));
             else
-                tmps.set(asptr("{\"" CDET_PUBLIC_ID "\":\""));
+                tmps.set( CONSTASTR("{\"" CDET_PUBLIC_ID "\":\""));
             tmps.append(idstr);
 
             if ( !dnsname.is_empty() )
             {
-                tmps.append(asptr("\",\"" CDET_DNSNAME "\":"));
+                tmps.append( CONSTASTR("\",\"" CDET_DNSNAME "\":"));
                 tmps.append(dnsname);
             }
 
-            tmps.append(asptr("\",\"" CDET_CLIENT_CAPS "\":["));
+            tmps.append( CONSTASTR("\",\"" CDET_CLIENT_CAPS "\":["));
 
             for (token<char> bbsupported(bbcodes_supported, ','); bbsupported; ++bbsupported)
                 tmps.append(CONSTASTR("\"bb")).append(*bbsupported).append(CONSTASTR("\","));
 
-            tmps.append(asptr("\"tox\"],\"" CDET_CLIENT "\":\""));
+            tmps.append( CONSTASTR("\"tox\"],\"" CDET_CLIENT "\":\""));
             tmps.append(clientname);
             tmps.append(CONSTASTR("\"}"));
 
@@ -2000,10 +1962,6 @@ public:
 
         str_c fnc; fnc.append_as_hex( avahash, TOX_HASH_LENGTH ).append(CONSTASTR(".png"));
 
-        u64 utag;
-        randombytes_buf(&utag, sizeof(u64));
-        make_uniq_utag( utag );
-
         TOX_ERR_FILE_SEND er = TOX_ERR_FILE_SEND_NULL;
         uint32_t tr = tox_file_send(tox, get_fid(), TOX_FILE_KIND_AVATAR, gavatar.size(), avahash, (const byte *)fnc.cstr(), (uint16_t)fnc.get_length(), &er);
         if (er != TOX_ERR_FILE_SEND_OK)
@@ -2011,7 +1969,7 @@ public:
 
         SETFLAG(flags, F_AVASEND);
 
-        new transmitting_avatar_s(get_fid(), tr, utag, fnc); // not memleak
+        new transmitting_avatar_s(get_fid(), tr, fnc); // not memleak
 
     }
 
@@ -2140,10 +2098,7 @@ void message2send_s::try_send(int time)
 
         } else
         {
-            if (mt == MT_MESSAGE)
-                mid = tox_friend_send_message(tox, fid, TOX_MESSAGE_TYPE_NORMAL, (const byte *)m.s, m.l, nullptr);
-            if (mt == MT_ACTION)
-                mid = tox_friend_send_message(tox, fid, TOX_MESSAGE_TYPE_ACTION, (const byte *)m.s, m.l, nullptr);
+            mid = tox_friend_send_message(tox, fid, TOX_MESSAGE_TYPE_NORMAL, (const byte *)m.s, m.l, nullptr);
         }
         if (mid) send_timeout = time + 60000;
         next_try_time = time + 1000;
@@ -2438,7 +2393,7 @@ static int find_tox_unknown_contact(const byte *id, const asptr &name)
 
     if (name.l)
     {
-        contact_data_s cdata(desc->get_id(), CDM_NAME | CDM_STATE);
+        contact_data_s cdata(desc->get_id(), CDM_NAME | CDM_STATE | CDF_GCHAT_MEMBER );
         cdata.name = name.s;
         cdata.name_len = (int)name.l;
         cdata.state = CS_UNKNOWN;
@@ -2513,7 +2468,12 @@ static void cb_friend_message(Tox *, uint32_t fid, TOX_MESSAGE_TYPE type, const 
             }
         }
 
-        message_part_s::msg(TOX_MESSAGE_TYPE_NORMAL == type ? MT_MESSAGE : MT_ACTION, desc->get_id(), 0, (const char *)message, (int)length);
+        if ( TOX_MESSAGE_TYPE_NORMAL == type )
+            message_part_s::msg(desc->get_id(), 0, (const char *)message, (int)length);
+        else
+        {
+            // TODO
+        }
     }
 }
 
@@ -3013,7 +2973,12 @@ static void gchat_message( int gnum, int peernum, const char * message, int leng
         if (contact_descriptor_s *desc = find_restore_descriptor(fid))
             cid = desc->get_id();
 
-        hf->message(is_message ? MT_MESSAGE : MT_ACTION, gdesc->get_id(), cid, now(), message, length);
+        if ( is_message )
+            hf->message(MT_MESSAGE, gdesc->get_id(), cid, now(), message, length);
+        else
+        {
+            // TODO: MT_ACTION
+        }
     }
 }
 
@@ -3516,6 +3481,7 @@ static void stop_senders()
 
 static TOX_ERR_NEW prepare()
 {
+    reconnect = false;
     if (tox) tox_kill(tox);
 
     if (options.ipv6_enabled)
@@ -3981,17 +3947,86 @@ static void send_configurable()
     svalues[4].set_as_int(options.tcp_port);
     const char * values[] = { svalues[0].cstr(), svalues[1].cstr(), svalues[2].cstr(), svalues[3].cstr(), svalues[4].cstr() };
 
-    #define LENGTH(a) (sizeof(a)/sizeof(a[0]))
-
-    static_assert( LENGTH(fields) == LENGTH(values) && LENGTH(values) == LENGTH(svalues), "check len" );
+    static_assert( ARRAY_SIZE(fields) == ARRAY_SIZE(values) && ARRAY_SIZE(values) == ARRAY_SIZE(svalues), "check len" );
 
     hf->configurable(5, fields, values);
 }
 
-
-
-void __stdcall set_config(const void*data, int isz)
+static void apply_par( const pstr_c &field, const pstr_c &val )
 {
+    if ( field.equals( CONSTASTR( CFGF_VIDEO_CODEC ) ) )
+    {
+        use_vp9_codec = val.equals( CONSTASTR("vp9") );
+        return;
+    }
+    if ( field.equals( CONSTASTR( CFGF_VIDEO_BITRATE ) ) )
+    {
+        video_bitrate = val.as_int();
+        return;
+    }
+    if ( field.equals( CONSTASTR( CFGF_VIDEO_QUALITY ) ) )
+    {
+        video_quality = val.as_int();
+        return;
+    }
+
+    if ( field.equals( CONSTASTR( CFGF_PROXY_TYPE ) ) )
+    {
+        int new_proxy_type = val.as_int();
+        if ( new_proxy_type != tox_proxy_type )
+            tox_proxy_type = new_proxy_type, reconnect = true;
+        proxy_settings_ok = true;
+        return;
+    }
+    if ( field.equals( CONSTASTR( CFGF_PROXY_ADDR ) ) )
+    {
+        str_c paddr( tox_proxy_host ); paddr.append_char( ':' ).append_as_uint( tox_proxy_port );
+        if ( !paddr.equals( val ) )
+        {
+            set_proxy_addr( val );
+            reconnect = true;
+        }
+        proxy_settings_ok = true;
+        return;
+    }
+    if ( field.equals( CONSTASTR( CFGF_SERVER_PORT ) ) )
+    {
+        int new_server_port = val.as_int();
+        if ( new_server_port != options.tcp_port )
+            options.tcp_port = (uint16_t)new_server_port, reconnect = true;
+        return;
+    }
+
+    if ( field.equals( CONSTASTR( CFGF_IPv6_ENABLE ) ) )
+    {
+        bool ipv6 = val.as_int() != 0;
+        if ( ipv6 != options.ipv6_enabled )
+            options.ipv6_enabled = ipv6, reconnect = true;
+        return;
+    }
+
+    if ( field.equals( CONSTASTR( CFGF_UDP_ENABLE ) ) )
+    {
+        bool udp = val.as_int() != 0;
+        if ( udp != options.udp_enabled )
+            options.udp_enabled = udp, reconnect = true;
+        return;
+    }
+}
+
+
+void __stdcall set_config(const void*idata, int iisz)
+{
+    proxy_settings_ok = false;
+    if ( iisz < 4 ) return;
+    config_accessor_s ca( idata, iisz );
+
+    if ( ca.params.l )
+        parse_values( ca.params, apply_par ); // parse params
+
+    if ( !ca.native_data && !ca.protocol_data )
+        return;
+
     struct on_return
     {
         TOX_ERR_NEW toxerr = TOX_ERR_NEW_OK;
@@ -4008,7 +4043,7 @@ void __stdcall set_config(const void*data, int isz)
     conf_encrypted = false;
 
     u64 _now = now();
-    if ( isz > TOX_ENC_SAVE_MAGIC_LENGTH && !memcmp( TOX_ENC_SAVE_MAGIC_NUMBER, data, TOX_ENC_SAVE_MAGIC_LENGTH ) )
+    if ( ca.native_data && ca.native_data_len > TOX_ENC_SAVE_MAGIC_LENGTH && !memcmp( TOX_ENC_SAVE_MAGIC_NUMBER, ca.native_data, TOX_ENC_SAVE_MAGIC_LENGTH ) )
     {
         toxerr = TOX_ERR_NEW_LOAD_ENCRYPTED;
         if ( tox ) tox_kill( tox );
@@ -4016,35 +4051,42 @@ void __stdcall set_config(const void*data, int isz)
         buf_tox_config.clear();
         conf_encrypted = true;
 
-    } else if ( isz > 8 && ( *(uint32_t *)data ) == 0 && ( *( (uint32_t *)data + 1 ) ) == 0x15ed1b1f )
+    } else if ( ca.native_data && ca.native_data_len > 8 && ( *(uint32_t *)ca.native_data ) == 0 && ( *( (uint32_t *)ca.native_data + 1 ) ) == 0x15ed1b1f )
     {
-        tox_proxy_type = 0;
-        memset( &options, 0, sizeof(options) );
-        options.udp_enabled = true;
+        if ( !proxy_settings_ok )
+        {
+            tox_proxy_type = 0;
+            memset( &options, 0, sizeof( options ) );
+            options.udp_enabled = true;
+        }
 
-        buf_tox_config.resize(isz);
-        memcpy( buf_tox_config.data(), data, isz );
+        buf_tox_config.resize( ca.native_data_len );
+        memcpy( buf_tox_config.data(), ca.native_data, ca.native_data_len );
 
         // raw tox_save
         toxerr = prepare();
 
-    } else if (isz>4 && (*(uint32_t *)data) != 0)
+    } else if (ca.protocol_data_len>4 && (*(uint32_t *)ca.protocol_data ) != 0)
     {
-        loader ldr(data,isz);
+        loader ldr( ca.protocol_data, ca.protocol_data_len );
 
-        tox_proxy_type = 0;
-        memset( &options, 0, sizeof(options) );
+        if ( !proxy_settings_ok )
+        {
+            tox_proxy_type = 0;
+            memset( &options, 0, sizeof( options ) );
+            options.udp_enabled = true;
+        }
 
         if (ldr(chunk_proxy_type))
-            tox_proxy_type = ldr.get_int();
+            tox_proxy_type = ldr.get_i32();
         if (ldr(chunk_proxy_address))
             set_proxy_addr(ldr.get_astr());
         if (ldr(chunk_server_port))
-            options.tcp_port = (uint16_t)ldr.get_int();
+            options.tcp_port = (uint16_t)ldr.get_i32();
         if (ldr(chunk_use_ipv6))
-            options.ipv6_enabled = ldr.get_int() != 0;
+            options.ipv6_enabled = ldr.get_i32() != 0;
         if (ldr(chunk_use_udp))
-            options.udp_enabled = ldr.get_int() != 0;
+            options.udp_enabled = ldr.get_i32() != 0;
         if (int sz = ldr(chunk_toxid))
         {
             loader l(ldr.chunkdata(), sz);
@@ -4091,15 +4133,15 @@ void __stdcall set_config(const void*data, int isz)
                     bool fid_ok = false;
 
                     if (lc(chunk_descriptor_id))
-                        id = lc.get_int();
+                        id = lc.get_i32();
                     if (lc(chunk_descriptor_pubid))
                         desc->pubid = lc.get_astr();
                     if (lc(chunk_descriptor_dnsname))
                         desc->dnsname = lc.get_astr();
                     if (lc(chunk_descriptor_state))
-                        desc->state = (contact_state_e)lc.get_int();
+                        desc->state = (contact_state_e)lc.get_i32();
                     if (lc(chunk_descriptor_avatartag))
-                        desc->avatar_tag = lc.get_int();
+                        desc->avatar_tag = lc.get_i32();
 
                     if (desc->avatar_tag != 0)
                     {
@@ -4161,11 +4203,10 @@ void __stdcall set_config(const void*data, int isz)
 
                     u64 create_time = _now;
                     int cid = 0;
-                    message_type_e mt(MT_MESSAGE);
                     if (lc(chunk_msg_receiving_cid))
-                        cid = lc.get_int();
-                    if (lc(chunk_msg_receiving_type))
-                        mt = (message_type_e)lc.get_byte();
+                        cid = lc.get_i32();
+                    //if (lc(chunk_msg_receiving_type))
+                    //    mt = (message_type_e)lc.get_byte();
                     if (lc(chunk_msg_receiving_createtime))
                         create_time = lc.get_u64();
                     if (cid)
@@ -4174,7 +4215,7 @@ void __stdcall set_config(const void*data, int isz)
                             loader mbl(lc.chunkdata(), bsz);
                             int dsz;
                             if (const void *mb = mbl.get_data(dsz))
-                                new message_part_s(mt, cid, create_time, asptr((const char *)mb, dsz), true);
+                                new message_part_s(cid, create_time, asptr((const char *)mb, dsz), true);
                         }
                 }
         }
@@ -4274,7 +4315,7 @@ void operator<<(chunk &chunkm, const message_part_s &m)
     chunk mm(chunkm.b, chunk_msg_receiving);
 
     chunk(chunkm.b, chunk_msg_receiving_cid) << m.cid;
-    chunk(chunkm.b, chunk_msg_receiving_type) << (byte)m.mt;
+    //chunk(chunkm.b, chunk_msg_receiving_type) << (byte)m.mt;
     chunk(chunkm.b, chunk_msg_receiving_createtime) << (u64)m.create_time;
     chunk(chunkm.b, chunk_msg_receiving_body) << bytes(m.msgb.cstr(), m.msgb.get_length());
 }
@@ -4467,7 +4508,7 @@ void __stdcall del_contact(int id)
                             desc->state = CS_UNKNOWN;
                             desc->set_fid( -id, true ); // fid of unknown contacts is -id
 
-                            contact_data_s cdata(desc->get_id(), CDM_STATE);
+                            contact_data_s cdata(desc->get_id(), CDM_STATE | CDF_GCHAT_MEMBER );
                             cdata.state = CS_UNKNOWN;
                             hf->update_contact(&cdata);
                             hf->save();
@@ -4504,7 +4545,7 @@ void __stdcall send_message(int id, const message_s *msg)
             tox_self_set_typing(tox, desc->get_fid(), false, nullptr);
             self_typing_contact = 0;
         }
-        gms = new message2send_s( msg->utag, msg->mt, desc->get_fidgnum(), asptr(msg->message, msg->message_len), msg->crtime ); // not memleak!
+        gms = new message2send_s( msg->utag, desc->get_fidgnum(), asptr(msg->message, msg->message_len), msg->crtime ); // not memleak!
     }
 }
 
@@ -4712,68 +4753,6 @@ int __stdcall send_av(int id, const call_info_s * ci)
     return SEND_AV_OK;
 }
 
-void __stdcall configurable(const char *field, const char *val)
-{
-    if (0 == strcmp(CFGF_VIDEO_CODEC, field))
-    {
-        use_vp9_codec = (0 == strcmp("vp9", val));
-        return;
-    }
-    if (0 == strcmp(CFGF_VIDEO_BITRATE, field))
-    {
-        video_bitrate = pstr_c(asptr(val)).as_int();
-        return;
-    }
-    if (0 == strcmp(CFGF_VIDEO_QUALITY, field))
-    {
-        video_quality = pstr_c(asptr(val)).as_int();
-        return;
-    }
-
-
-    if ( 0 == strcmp(CFGF_PROXY_TYPE, field) )
-    {
-        int new_proxy_type = pstr_c( asptr(val) ).as_int();
-        if (new_proxy_type != tox_proxy_type)
-            tox_proxy_type = new_proxy_type, reconnect = true;
-        return;
-    }
-    if (0 == strcmp(CFGF_PROXY_ADDR, field))
-    {
-        asptr pa(val);
-        str_c paddr(tox_proxy_host); paddr.append_char(':').append_as_uint(tox_proxy_port);
-        if (!paddr.equals(pa))
-        {
-            set_proxy_addr(pa);
-            reconnect = true;
-        }
-        return;
-    }
-    if (0 == strcmp(CFGF_SERVER_PORT, field))
-    {
-        int new_server_port = pstr_c(asptr(val)).as_int();
-        if (new_server_port != options.tcp_port)
-            options.tcp_port = (uint16_t)new_server_port, reconnect = true;
-        return;
-    }
-
-    if (0 == strcmp(CFGF_IPv6_ENABLE, field))
-    {
-        bool ipv6 = pstr_c(asptr(val)).as_int() != 0;
-        if (ipv6 != options.ipv6_enabled)
-            options.ipv6_enabled = ipv6, reconnect = true;
-        return;
-    }
-
-    if (0 == strcmp(CFGF_UDP_ENABLE, field))
-    {
-        bool udp = pstr_c(asptr(val)).as_int() != 0;
-        if (udp != options.udp_enabled)
-            options.udp_enabled = udp, reconnect = true;
-        return;
-    }
-}
-
 void __stdcall file_send(int cid, const file_send_info_s *finfo)
 {
     for (incoming_file_s *f = incoming_file_s::first; f; f = f->next)
@@ -4798,8 +4777,17 @@ void __stdcall file_send(int cid, const file_send_info_s *finfo)
                 fn = fnc.as_sptr();
             }
 
-            byte fileid[TOX_FILE_ID_LENGTH] = {0,0,0,0,0,0,0,0,'i','s','o','t','o','x','i','n'}; // not so random, yeah. toxcore requirement to provide same file id across client restarts
-            *(u64 *)fileid = finfo->utag; // utag will be same every send
+            static_assert( crypto_hash_sha256_BYTES == TOX_FILE_ID_LENGTH, "hash!" );
+
+            byte fileid[ TOX_FILE_ID_LENGTH ];
+
+            str_c temp( asptr(finfo->filename, finfo->filename_len) );
+            temp.append_char('-');
+            temp.append_as_num( finfo->utag );
+            temp.append_char( '-' );
+            temp.append_as_num( finfo->filesize );
+
+            crypto_hash_sha256( fileid, (const unsigned char *)temp.cstr(), temp.get_length() );
 
             TOX_ERR_FILE_SEND er = TOX_ERR_FILE_SEND_NULL;
             uint32_t tr = tox_file_send(tox, cd->get_fid(), TOX_FILE_KIND_DATA, finfo->filesize, fileid, (const byte *)fn.s, (uint16_t)fn.l, &er);
@@ -4814,7 +4802,7 @@ void __stdcall file_send(int cid, const file_send_info_s *finfo)
 
 }
 
-void __stdcall file_resume(u64 utag, u64 offset)
+void __stdcall file_accept(u64 utag, u64 offset)
 {
     for (incoming_file_s *f = incoming_file_s::first; f; f = f->next)
         if (f->utag == utag)
@@ -4965,8 +4953,9 @@ void __stdcall typing(int cid)
             {
                 self_typing_contact = cid;
                 if (tox) tox_self_set_typing(tox, cd->get_fid(), true, nullptr);
-            }
-            self_typing_time = time_ms() + 1500;
+                self_typing_time = time_ms() + 1500;
+            } else if ( self_typing_contact == cid )
+                self_typing_time = time_ms() + 1500;
         }
 }
 
@@ -5004,7 +4993,7 @@ proto_functions_s funcs =
 #undef FUNC0
 };
 
-proto_functions_s* __stdcall handshake(host_functions_s *hf_)
+proto_functions_s* __stdcall api_handshake(host_functions_s *hf_)
 {
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
@@ -5037,3 +5026,38 @@ proto_functions_s* __stdcall handshake(host_functions_s *hf_)
     return &funcs;
 }
 
+void __stdcall api_getinfo( proto_info_s *info )
+{
+    static sstr_t<1024> vers( "plugin: " SS( PLUGINVER ) ", toxcore: " );
+
+    vers.append_as_uint( TOX_VERSION_MAJOR );
+    vers.append_char( '.' );
+    vers.append_as_uint( TOX_VERSION_MINOR );
+    vers.append_char( '.' );
+    vers.append_as_uint( TOX_VERSION_PATCH );
+    vers.append_char( ')' );
+#define NL "\n"
+    static const char *strings[ _is_count_ ] =
+    {
+        "tox",
+        "Tox protocol",
+        "<b>Tox</b> protocol",
+        vers.cstr(),
+        HOME_SITE,
+        "",
+        "m 74.044499,38.828783 c 0,-4.166708 0.06581,-9.385543 -0.02935,-13.551362 -0.0418,-1.794753 -0.238352,-3.62508 -0.663471,-5.366471 C 70.309137,7.460631 58.257256,-0.28224198 45.602382,2.007891 34.399851,4.0347699 26.06021,14.030422 26.06021,25.430393 l 0,13.371709 c -3.678661,-3.2e-4 -7.473489,0 -11.204309,0 -2.466229,0 -4.467316,2.000197 -4.467316,4.467315 l 0,50.583035 c 0,2.466229 2.001087,4.467316 4.467316,4.467316 l 70.661498,0 c 2.468007,0 4.468205,-2.001087 4.468205,-4.467316 l 0,-50.583035 c 0,-2.467118 -2.000198,-4.467315 -4.468205,-4.467315 z m -17.313405,47.37418 -13.140472,0 c -2.065122,0 -3.738031,-1.702258 -3.738031,-3.801176 0.452829,-4.54018 0.52948,-5.74902 1.833885,-7.830921 1.45946,-2.150501 3.42853,-3.548594 5.564801,-4.17738 -2.815752,-1.148179 -4.799051,-3.911458 -4.799051,-7.137211 0,-4.259202 3.450763,-7.709077 7.708187,-7.709077 4.259203,0 7.708188,3.449875 7.708188,7.709077 0,3.307575 -2.084688,6.128663 -5.01339,7.221701 2.074015,0.669697 4.03508,2.057118 5.57903,4.186274 1.608048,2.307856 2.032215,4.874192 2.032215,7.571225 -0.0053,0.05514 0,0.111171 0,0.168091 8.9e-4,2.097139 -1.672019,3.799397 -3.735362,3.799397 M 65.3331,31.049446 c -1.389199,4.100894 -4.019961,7.386234 -6.768121,10.594199 -2.532759,2.638121 -5.259444,5.204412 -7.880726,6.825041 1.583972,-2.735708 2.86111,-5.334453 3.231089,-8.363654 -3.765601,0.891151 -7.316864,0.501606 -10.755176,-1.013884 -6.102871,-2.688572 -9.750186,-8.553981 -9.127625,-15.175356 0.50961,-5.449182 3.605395,-10.490611 8.391106,-13.0271 7.708187,-4.0848867 17.24706,-1.0668343 21.653898,6.200225 2.567617,4.231632 2.810178,9.372258 1.255555,13.960529",
+        "sr=48000" NL "ch=1" NL "bps=16",
+        "",
+        "vp8/vp9",
+        "ToxID",
+        "f=png",
+        nullptr
+    };
+    
+    info->strings = strings;
+
+    info->priority = 500;
+    info->indicator = 500;
+    info->features = PF_AVATARS | PF_PURE_NEW | PF_IMPORT | PF_EXPORT | PF_AUDIO_CALLS | PF_VIDEO_CALLS | PF_SEND_FILE | PF_PAUSE_FILE | PF_GROUP_CHAT; //PF_AUTH_NICKNAME | PF_UNAUTHORIZED_CHAT;
+    info->connection_features = CF_PROXY_SUPPORT_HTTPS | CF_PROXY_SUPPORT_SOCKS5 | CF_IPv6_OPTION | CF_UDP_OPTION | CF_SERVER_OPTION;
+}

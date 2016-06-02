@@ -7,6 +7,9 @@
 //#include <winsock2.h> // ntol
 #include "curl/include/curl/curl.h"
 #pragma pop_macro("ERROR")
+#include <WinSock2.h>
+#include <windows.h>
+#include <Iphlpapi.h>
 #endif // _WIN32
 
 
@@ -315,7 +318,7 @@ void autoupdater()
     if (!only_aurl)
     {
         addresses.add("https://github.com/isotoxin/isotoxin/wiki/latest");
-        addresses.add("http://isotoxin.im/latest.txt");
+        addresses.add( HOME_SITE "/latest.txt");
     }
     int addri = 0;
 
@@ -676,7 +679,87 @@ void gen_passwdhash(ts::uint8 *passwhash, const ts::wstr_c &passwd)
     crypto_generichash( passwhash, CC_HASH_SIZE, (const ts::uint8 *)p.cstr(), p.get_length() * 2, nullptr, 0 );
 }
 
+void crypto_zero( ts::uint8 *buf, int bufsize )
+{
+    sodium_memzero( buf, bufsize );
+}
 
+void get_unique_machine_id( ts::uint8 *buf, int bufsize )
+{
+    ts::tmp_buf_c b;
+    b.append_s( "machine-salt" );
+    char *cn = (char *)b.expand( MAX_COMPUTERNAME_LENGTH + 1 );
+    DWORD cnSize = MAX_COMPUTERNAME_LENGTH;
+    GetComputerNameA( cn, &cnSize );
+    b.set_size( b.size() + cnSize - ( MAX_COMPUTERNAME_LENGTH + 1 ) );
 
+    ts::tmp_tbuf_t<IP_ADAPTER_INFO> adapters;
+    adapters.set_size( sizeof( IP_ADAPTER_INFO ) + 64 );
+    adapters.tbegin<IP_ADAPTER_INFO>()->Next = nullptr; //-V807
 
+    ULONG sz = (ULONG)adapters.byte_size();
+    while ( ERROR_BUFFER_OVERFLOW == GetAdaptersInfo( adapters.tbegin<IP_ADAPTER_INFO>(), &sz ) )
+    {
+        adapters.set_size( sz, false );
+        adapters.tbegin<IP_ADAPTER_INFO>()->Next = nullptr;
+    }
 
+    const IP_ADAPTER_INFO *infos = adapters.tbegin<IP_ADAPTER_INFO>();
+    do
+    {
+        b.append_buf( infos->Address, 6 );
+        infos = infos->Next;
+    } while ( infos );
+
+    ts::uint32 &volumesn =* ( ts::uint32 *)b.expand(sizeof( ts::uint32 ));
+    GetVolumeInformationA( "c:\\", nullptr, 0, &volumesn, nullptr, nullptr, nullptr, 0 );
+
+    crypto_generichash( buf, bufsize, b.data(), b.size(), nullptr, 0 );
+    sodium_memzero( b.data(), b.size() );
+}
+
+ts::str_c encode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& s )
+{
+    ts::tmp_buf_c b;
+    b.append_s(s);
+    b.append_s( ts::str_c(CONSTASTR("/")).append_as_num(s.l).append_char('=').as_sptr() );
+    while ( b.size() < 64 ) b.tappend<ts::uint8>( '=' );
+    ts::uint8 *nonce = b.expand( crypto_stream_chacha20_NONCEBYTES );
+    memset( nonce, 1, crypto_stream_chacha20_NONCEBYTES );
+    TS_STATIC_CHECK( 32 == crypto_stream_chacha20_KEYBYTES, "cha cha key" );
+    crypto_stream_chacha20_xor( b.data(), b.data(), b.size() - crypto_stream_chacha20_NONCEBYTES, nonce, key );
+    ts::str_c r; r.encode_base64( b.data(), b.size() - crypto_stream_chacha20_NONCEBYTES );
+    sodium_memzero( b.data(), b.size() );
+    return r;
+}
+
+ts::str_c decode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& s )
+{
+    if ( s.l == 0 ) return ts::str_c();
+    ts::tmp_buf_c b;
+    b.set_size( s.l * 2, false );
+    memset( b.data(), 0, s.l * 2 );
+    int sz = ts::pstr_c( s ).decode_base64( b.data(), (int)b.size() );
+    b.set_size( sz );
+
+    ts::uint8 *nonce = b.expand( crypto_stream_chacha20_NONCEBYTES );
+    memset( nonce, 1, crypto_stream_chacha20_NONCEBYTES );
+    TS_STATIC_CHECK( 32 == crypto_stream_chacha20_KEYBYTES, "cha cha key" );
+    crypto_stream_chacha20_xor( b.data(), b.data(), b.size() - crypto_stream_chacha20_NONCEBYTES, nonce, key );
+
+    --sz;
+    for ( ; sz > 0 && b.data()[ sz ] == '='; --sz );
+    int n = sz;
+    for ( ; sz > 0 && b.data()[ sz ] != '/'; --sz );
+    int psz = ts::pstr_c( ts::asptr( (const char *)b.data() + sz + 1, n - sz ) ).as_uint();
+    ts::str_c r( (const char *)b.data(), psz );
+    sodium_memzero( b.data(), b.size() );
+    return r;
+}
+
+uint64 random64()
+{
+    uint64 v;
+    randombytes_buf( &v, sizeof(v) );
+    return v;
+}

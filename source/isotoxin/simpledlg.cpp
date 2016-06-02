@@ -335,14 +335,6 @@ ts::uint32 dialog_entertext_c::gm_handler(gmsg<ISOGM_APPRISE> &)
     return 0;
 }
 
-bool dialog_entertext_c::showpass_handler(RID, GUIPARAM p)
-{
-    if (RID txt = find(CONSTASTR("txt")))
-        HOLD(txt).as<gui_textedit_c>().set_password_char(p ? 0 : '*');
-
-    return true;
-}
-
 
 /*virtual*/ int dialog_entertext_c::additions(ts::irect &)
 {
@@ -357,10 +349,6 @@ bool dialog_entertext_c::showpass_handler(RID, GUIPARAM p)
     {
         case UD_ENTERPASSWORD:
             dm().textfield(ts::wstr_c(), m_params.val, DELEGATE(this, on_edit)).focus(true).passwd(true).setname(CONSTASTR("txt"));
-            dm().vspace();
-            dm().checkb(ts::wstr_c(), DELEGATE(this, showpass_handler), 0).setmenu(
-                menu_c().add(TTT("Show password", 379), 0, MENUHANDLER(), CONSTASTR("1"))
-                );
             break;
         case UD_NEWTAG:
             dm().textfieldml(ts::wstr_c(), m_params.val, DELEGATE(this, on_edit), 3).focus(true).setname(CONSTASTR("txt"));
@@ -494,7 +482,11 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
 
     ts::wstr_c title(256,true);
     title.set( CONSTWSTR("<p=c><b>") );
-    title.append( CONSTWSTR("<a href=\"http://isotoxin.im\">Isotoxin</a>") );
+#if _MSC_VER <= 1800
+	title.append(ts::wsptr(L"<a href=\"" JOINMACRO1( L, HOME_SITE ) L"\">Isotoxin</a>"));
+#else
+	title.append( CONSTWSTR("<a href=\"" HOME_SITE "\">Isotoxin</a>") );
+#endif
     title.append( CONSTWSTR("</b> ") );
     title.appendcvt( application_c::appver() );
 #ifdef MODE64
@@ -515,6 +507,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     dm().vspace(5);
 
     title.set( CONSTWSTR("<p=c>Used libs<hr><l><a href=\"https://github.com/irungentoo/toxcore/\">Tox core</a>") );
+    title.append( CONSTWSTR( " <a href=\"https://camaya.net/gloox\">gloox XMPP engine</a>" ) );
     title.append( CONSTWSTR(" <a href=\"https://www.opus-codec.org\">Opus audio codec</a>") );
     title.append( CONSTWSTR(" <a href=\"http://vorbis.com\">Ogg Vorbis audio codec</a>"));
     title.append( CONSTWSTR(" <a href=\"https://xiph.org/flac/\">Flac audio codec</a>"));
@@ -924,12 +917,20 @@ bool incoming_msg_panel_c::endoflife( RID, GUIPARAM )
         if ( cc->getkey().is_group() )
             cc = sender->get_historian();
 
-        if ( const avatar_s *ava = cc->get_avatar() )
+        if (cc)
         {
-            m_engine->draw( addp + ( avarect - ava->info().sz ) / 2, ava->extbody(), ava->alpha_pixels );
+            if ( const avatar_s *ava = cc->get_avatar() )
+            {
+                m_engine->draw( addp + ( avarect - ava->info().sz ) / 2, ava->extbody(), ava->alpha_pixels );
+            }
+            else
+            {
+                const theme_image_s *icon = cc->getkey().is_group() ? g_app->preloaded_stuff().groupchat : g_app->preloaded_stuff().icon[ hist->get_meta_gender() ];
+                icon->draw( *m_engine.get(), addp + ( avarect - icon->info().sz ) / 2 );
+            }
         } else
         {
-            const theme_image_s *icon = cc->getkey().is_group() ? g_app->preloaded_stuff().groupchat : g_app->preloaded_stuff().icon[ hist->get_meta_gender() ];
+            const theme_image_s *icon = g_app->preloaded_stuff().icon[ hist->get_meta_gender() ];
             icon->draw( *m_engine.get(), addp + ( avarect - icon->info().sz ) / 2 );
         }
         m_engine->end_draw();

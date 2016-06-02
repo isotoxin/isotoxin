@@ -153,7 +153,7 @@ INLINE ts::asptr soundname( sound_e s )
     return sounds[s];
 }
 
-void play_sound( sound_e snd, bool looped );
+void play_sound( sound_e snd, bool looped, bool forced = false );
 bool stop_sound( sound_e snd );
 
 INLINE s3::DEVICE device_from_string( const ts::asptr& s )

@@ -68,10 +68,18 @@ void dialog_contact_props_c::aaac_settings( const ts::str_c& v )
     set_combik_menu(CONSTASTR("aaac"), getaacmenu());
 }
 
+void dialog_contact_props_c::imb_settings( const ts::str_c&v )
+{
+    imb = v.as_uint();
+    set_combik_menu( CONSTASTR( "imn" ), imnmenu() );
+}
+
+#define USE_GLOBAL_SETTING TTT("Use global setting",226)
+
 menu_c dialog_contact_props_c::gethistorymenu()
 {
     menu_c m;
-    m.add( TTT("Use global setting",226), (keeph == KCH_DEFAULT) ? MIF_MARKED : 0, DELEGATE(this, history_settings), ts::amake<char>(KCH_DEFAULT) );
+    m.add( USE_GLOBAL_SETTING, (keeph == KCH_DEFAULT) ? MIF_MARKED : 0, DELEGATE(this, history_settings), ts::amake<char>(KCH_DEFAULT) );
     m.add( TTT("Always save",227), (keeph == KCH_ALWAYS_KEEP) ? MIF_MARKED : 0, DELEGATE(this, history_settings), ts::amake<char>(KCH_ALWAYS_KEEP) );
     m.add( TTT("Never save",228), (keeph == KCH_NEVER_KEEP) ? MIF_MARKED : 0, DELEGATE(this, history_settings), ts::amake<char>(KCH_NEVER_KEEP) );
 
@@ -94,6 +102,18 @@ menu_c dialog_contact_props_c::getmhtmenu()
     m.add( TTT( "Do not handle", 436 ), ( mh == MH_NOT ) ? MIF_MARKED : 0, DELEGATE( this, msghandler_m ), ts::amake<char>( MH_NOT ) );
     m.add( TTT( "Run external command and pass message as parameter", 437 ), ( mh == MH_AS_PARAM ) ? MIF_MARKED : 0, DELEGATE( this, msghandler_m ), ts::amake<char>( MH_AS_PARAM ) );
     m.add( TTT( "Run external command and pass message via file", 438 ), ( mh == MH_VIA_FILE ) ? MIF_MARKED : 0, DELEGATE( this, msghandler_m ), ts::amake<char>( MH_VIA_FILE ) );
+    return m;
+}
+
+menu_c dialog_contact_props_c::imnmenu()
+{
+    menu_c m;
+    m.add( USE_GLOBAL_SETTING, ( imb == IMB_DEFAULT ) ? MIF_MARKED : 0, DELEGATE( this, imb_settings ), ts::amake<char>( IMB_DEFAULT ) );
+    m.add( TTT("Don't notify",460), ( imb == IMB_DONT_NOTIFY ) ? MIF_MARKED : 0, DELEGATE( this, imb_settings ), ts::amake<char>( IMB_DONT_NOTIFY ) );
+    m.add( TTT("Suppress only intrusive behaviour",461), ( imb == IMB_SUPPRESS_INTRUSIVE_BEHAVIOUR ) ? MIF_MARKED : 0, DELEGATE( this, imb_settings ), ts::amake<char>( IMB_SUPPRESS_INTRUSIVE_BEHAVIOUR ) );
+    m.add( TTT("Forced desktop notification and intrusive behaviour",462), ( imb == IMB_ALL ) ? MIF_MARKED : 0, DELEGATE( this, imb_settings ), ts::amake<char>( IMB_ALL ) );
+    m.add( TTT("Forced only desktop notification",463), ( imb == IMB_DESKTOP_NOTIFICATION ) ? MIF_MARKED : 0, DELEGATE( this, imb_settings ), ts::amake<char>( IMB_DESKTOP_NOTIFICATION ) );
+    m.add( TTT("Forced only intrusive behaviour",464), ( imb == IMB_INTRUSIVE_BEHAVIOUR ) ? MIF_MARKED : 0, DELEGATE( this, imb_settings ), ts::amake<char>( IMB_INTRUSIVE_BEHAVIOUR ) );
     return m;
 }
 
@@ -126,6 +146,7 @@ bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t )
         ccomment = contactue->get_comment();
         keeph = contactue->get_keeph();
         aaac = contactue->get_aaac();
+        imb = contactue->get_imnb();
         tags = contactue->get_tags();
 
         mh = contactue->get_mhtype();
@@ -176,10 +197,17 @@ bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t )
         dm().combik( TTT("Message handler",439) ).setmenu( getmhtmenu() ).setname( CONSTASTR( "mht" ) );
         dm().file( TTT("External command",443), CONSTWSTR(""), msghandler, DELEGATE( this, msghandler_h ) );
         dm().textfield( TTT("External command param",444), msghandler_p, DELEGATE( this, msghandler_p_h ) );
+
+        dm << 16;
+
+        dm().combik( TTT("On incoming message",465) ).setmenu( imnmenu() ).setname( CONSTASTR( "imn" ) );
+        dm().vspace();
+
     }
 
     menu_c m;
     m.add( TTT("Settings",369), 0 , TABSELMI(1) );
+    m.add( TTT("Notification",466), 0, TABSELMI( 16 ) );
     m.add( TTT("Details",370), 0 , TABSELMI(2) );
     m.add( TTT("Comment",371), 0 , TABSELMI(4) );
     m.add( TTT("Processing",440), 0, TABSELMI( 8 ) );
@@ -246,6 +274,11 @@ ts::wstr_c dialog_contact_props_c::buildmh()
         {
             changed = true;
             contactue->set_aaac(aaac);
+        }
+        if ( contactue->get_imnb() != imb )
+        {
+            changed = true;
+            contactue->set_imnb( imb );
         }
         if (contactue->get_tags() != tags)
         {
@@ -514,6 +547,8 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
     ts::astrings_c vals;
     ts::buf_c qrs;
 
+    active_protocol_c *ap = prf().ap( c->getkey().protoid );
+
     auto addl = [&]( const ts::wsptr &fn, const ts::asptr &v, bool empty_as_unknown, bool ee, bool qr, ts::aint link_i )
     {
         if (ee)
@@ -537,7 +572,7 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
 
     };
 
-    auto extractpubids = [](ts::astrings_c &pubids, const ts::json_c &ids)
+    auto extractitems = [](ts::astrings_c &pubids, const ts::json_c &ids)
     {
         if (ids.is_string())
         {
@@ -550,46 +585,50 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
         }
     };
 
-    ts::str_c temp( c->get_name() );
-    text_adapt_user_input( temp );
-    addl( TTT("User name",364), temp, false, false, false, vals.add(temp) );
+    if ( !c->get_options().is(contact_c::F_SYSTEM_USER) )
+    {
+        ts::str_c temp( c->get_name() );
+        text_adapt_user_input( temp );
+        addl( TTT( "User name", 364 ), temp, false, false, false, vals.add( temp ) );
 
-    temp = c->get_statusmsg();
-    text_adapt_user_input(temp);
-    addl(TTT("User status",365), temp, false, false, false, vals.add(temp) );
+        temp = c->get_statusmsg();
+        text_adapt_user_input( temp );
+        addl( TTT( "User status", 365 ), temp, false, false, false, vals.add( temp ) );
+    }
 
     //desc.insert(desc.get_length()-1, CONSTWSTR("=3"));
 
-    bool something = false;
     inf.cldets.iterate([&](const ts::str_c &dname, const ts::json_c &v) {
 
         if (dname.equals(CONSTASTR(CDET_CLIENT)))
         {
-            something = true;
-            addl( TTT("Client",366), v.as_string(), true, false, false, vals.add(v.as_string()));
+            ts::astrings_c lst;
+            extractitems( lst, v );
+            for ( const ts::str_c &idx : lst )
+                addl( TTT( "Client", 366 ), idx, true, false, false, vals.add( idx ) );
         } else if (dname.equals(CONSTASTR(CDET_PUBLIC_ID)))
         {
-            ts::astrings_c pubids;
-            extractpubids(pubids, v);
-            for(const ts::str_c &idx : pubids)
-                addl( loc_text(loc_id), idx, true, true, true, vals.add(idx));
+            ts::astrings_c lst;
+            extractitems( lst, v);
+            for( const ts::str_c &idx : lst )
+                addl( CONSTWSTR("<id>"), idx, true, true, true, vals.add(idx));
         } else if (dname.equals(CONSTASTR(CDET_PUBLIC_ID_BAD)))
         {
-            ts::astrings_c pubids;
-            extractpubids(pubids, v);
-            for (const ts::str_c &idx : pubids)
-                addl(loc_text(loc_id), maketag_color<char>(get_default_text_color(3)) + idx + CONSTASTR("</color>"), true, true, true, vals.add(idx));
+            ts::astrings_c lst;
+            extractitems( lst, v);
+            for  ( const ts::str_c &idx : lst )
+                addl( CONSTWSTR( "<id>" ), maketag_color<char>(get_default_text_color(3)) + idx + CONSTASTR("</color>"), true, true, true, vals.add(idx));
         } else if (dname.equals(CONSTASTR(CDET_DNSNAME)))
         {
-            ts::astrings_c pubids;
-            extractpubids(pubids, v);
-            for (const ts::str_c &idx : pubids)
+            ts::astrings_c lst;
+            extractitems( lst, v );
+            for ( const ts::str_c &idx : lst )
                 addl(TTT("DNS name",367), idx, true, true, true, vals.add(idx));
         } else if (dname.equals(CONSTASTR(CDET_EMAIL)))
         {
-            ts::astrings_c pubids;
-            extractpubids(pubids, v);
-            for (const ts::str_c &idx : pubids)
+            ts::astrings_c lst;
+            extractitems( lst, v );
+            for ( const ts::str_c &idx : lst )
                 addl(TTT("Email",368), idx, true, true, true, vals.add(idx));
         }
 
@@ -598,12 +637,21 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
     //if (something)
         //desc.insert(desc.get_length()-1, CONSTWSTR("=3"));
 
-    if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
+    ts::wstr_c id( CONSTWSTR( "ID" ) );
+    if (ap)
     {
+        ts::wstr_c id_ = from_utf8( ap->get_infostr( IS_IDNAME ) );
+        if ( !id_.is_empty() )
+            id = id_;
+
         addl(loc_text(loc_connection_name), ap->get_name(), false, false, false, vals.add(ap->get_name()));
-        addl(loc_text(loc_module), ap->get_desc_t(), false, false, false, vals.add(ap->get_desc_t()));
+        addl(loc_text(loc_module), ap->get_infostr( IS_PROTO_DESCRIPTION_WITH_TAG ), false, false, false, vals.add(ap->get_infostr(IS_PROTO_DESCRIPTION_WITH_TAG)));
     }
-    addl(loc_text(loc_state), to_utf8(text_contact_state(get_default_text_color(0), get_default_text_color(1), c->get_state())), true, false, false, -1);
+
+    if ( !c->get_options().is( contact_c::F_SYSTEM_USER ) )
+        addl(loc_text(loc_state), to_utf8(text_contact_state(get_default_text_color(0), get_default_text_color(1), c->get_state())), true, false, false, -1);
+
+    desc.replace_all( CONSTWSTR( "<id>" ), id );
 
     MAKE_CHILD<customel::gui_lli_c>(std::move(vals), std::move(qrs), lst, desc, par) << (const ts::bitmap_c *)(inf.bmp);
 }

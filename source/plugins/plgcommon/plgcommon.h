@@ -83,6 +83,11 @@ __forceinline time_t now()
     return t;
 }
 
+__forceinline int time_ms()
+{
+    return (int)timeGetTime();
+}
+
 
 bool AssertFailed(const char *file, int line, const char *s, ...);
 inline bool AssertFailed(const char *file, int line) {return AssertFailed(file, line, "");}
@@ -117,6 +122,8 @@ void LogToFile(const char *fn, const char *s, ...);
 #define SLASSERT ASSERT
 #define SLERROR ERROR
 
+template <typename T, size_t N> char( &__ARRAYSIZEHELPER( T( &array )[ N ] ) )[ N ];
+#define ARRAY_SIZE( a ) (sizeof(__ARRAYSIZEHELPER(a)))
 
 #include "md5.h"
 #include "spinlock/queue.h"
@@ -294,7 +301,7 @@ struct loader
 
     const byte *chunkdata() const { return d + current_chunk; }
     int get_byte() const { return current_chunk_data_size >= 1 ? (*(byte *)chunkdata()) : 0; }
-    int get_int() const { return current_chunk_data_size >= sizeof(int) ? (*(int *)chunkdata()) : 0; }
+    i32 get_i32() const { return current_chunk_data_size >= sizeof( i32 ) ? (*(i32 *)chunkdata()) : 0; }
     u64 get_u64() const { return current_chunk_data_size >= sizeof(u64) ? (*(u64 *)chunkdata()) : 0; }
     asptr get_astr() const
     {
@@ -337,6 +344,13 @@ template<typename T> struct serlist
     T *first;
     serlist(T *first) :first(first) {}
 };
+
+template<typename T> struct servec
+{
+    std::vector<T> &vec;
+    servec( std::vector<T> &vec ) :vec( vec ) {}
+};
+
 struct chunk
 {
     savebuffer &b;
@@ -369,7 +383,7 @@ struct chunk
     template<typename T> void operator <<(const serlist<T>& sl)
     {
         size_t numoffset = b.size();
-        b.add<int>();
+        b.add<i32>();
         int n = 0;
         for (T *el = sl.first; el; el = el->next)
         {
@@ -378,7 +392,21 @@ struct chunk
             if (b.size() > preoffset)
                 ++n;
         }
-        *(int *)(b.data() + numoffset) = n;
+        *(i32 *)(b.data() + numoffset) = n;
+    }
+    template<typename T> void operator <<( const servec<T>& sv )
+    {
+        size_t numoffset = b.size();
+        b.add<i32>();
+        int n = 0;
+        for ( const T&t : sv.vec )
+        {
+            size_t preoffset = b.size();
+            *this << t;
+            if ( b.size() > preoffset )
+                ++n;
+        }
+        *(i32 *)( b.data() + numoffset ) = n;
     }
 };
 
@@ -484,21 +512,53 @@ struct ranges_s
 };
 */
 
-template< typename F > void parse_values( const asptr &is, const F&f )
+_inline str_c json_value( const asptr&val ) // replace \, \"
 {
-    token<char> lns(is, '\n');
-    for (; lns; ++lns)
+    str_c v( val );
+    v.replace_all( CONSTASTR("\\"), CONSTASTR( "\\\\" ) );
+    v.replace_all( CONSTASTR( "\"" ), CONSTASTR( "\\\"" ) );
+    v.replace_all( CONSTASTR( "\n" ), CONSTASTR( "\\\n" ) );
+    v.replace_all( CONSTASTR( "\r" ), CONSTASTR( "\\\r" ) );
+    v.replace_all( CONSTASTR( "\t" ), CONSTASTR( "\\\t" ) );
+    v.replace_all( CONSTASTR( "\b" ), CONSTASTR( "\\\b" ) );
+    v.replace_all( CONSTASTR( "\f" ), CONSTASTR( "\\\f" ) );
+    return v;
+}
+
+struct config_accessor_s
+{
+    asptr params;
+    const byte *native_data = nullptr;
+    const byte *protocol_data = nullptr;
+    int native_data_len = 0;
+    int protocol_data_len = 0;
+
+    config_accessor_s( const void * d, int sz )
     {
-        auto s = lns->get_trimmed();
-        int eqi = s.find_pos('=');
-        if (eqi > 0)
+        const byte *dd = (const byte *)d;
+        u32 flags = *(u32 *)d;
+
+        dd += sizeof( u32 );
+        sz -= sizeof( u32 );
+
+        if ( CFL_PARAMS & flags )
         {
-            pstr_c k = s.substr(0, eqi);
-            pstr_c v = s.substr(eqi + 1);
-            f(k,v);
+            params.s = (const char *)dd + sizeof( i32 );
+            params.l = *(i32 *)dd;
+            dd += sizeof( i32 ) + params.l;
+            sz -= sizeof( i32 ) + params.l;
+        }
+        if ( CFL_NATIVE_DATA & flags )
+        {
+            native_data = sz ? dd : nullptr;
+            native_data_len = sz;
+        } else
+        {
+            protocol_data = sz ? dd : nullptr;
+            protocol_data_len = sz;
         }
     }
-}
+};
 
 template< typename VEC, typename EL > int findIndex(const VEC &vec, const EL & el)
 {

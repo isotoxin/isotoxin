@@ -517,18 +517,21 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 				    res = true;
 				    break;
                 case ts::SSK_BACKSPACE:
-                    if ( casw == ts::casw_alt )
+                    if ( is_readonly() ) def = true; else
                     {
-                        undo();
-                    } else if ( 0 == (casw & ts::casw_shift) )
-                    {
-                        if ( start_sel != -1 )
+                        if ( casw == ts::casw_alt )
                         {
-                            text_erase( cp );
-                        }
-                        else if ( cp > 0 )
+                            undo();
+                        } else if ( 0 == (casw & ts::casw_shift) )
                         {
-                            text_erase( cp - 1, 1 );
+                            if ( start_sel != -1 )
+                            {
+                                text_erase( cp );
+                            }
+                            else if ( cp > 0 )
+                            {
+                                text_erase( cp - 1, 1 );
+                            }
                         }
                     }
                     res = true;

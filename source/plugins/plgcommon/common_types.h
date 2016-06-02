@@ -2,24 +2,53 @@
 
 #include "boost/boost_some.h"
 
+#define HOME_SITE "http://isotoxin.im"
+
 enum proto_features_e
 {
     PF_AVATARS                  = (1 << 0),     // plugin support avatars
-    PF_INVITE_NAME              = (1 << 1),     // invite send name
+    PF_AUTH_NICKNAME            = (1 << 1),     // protocol support nickname in authorization request
     PF_UNAUTHORIZED_CHAT        = (1 << 2),     // allow chat with non-friend
-    PF_AUDIO_CALLS              = (1 << 3),     // audio calls supported
-    PF_VIDEO_CALLS              = (1 << 4),     // video calls supported
-    PF_SEND_FILE                = (1 << 5),     // send (and recv, of course) files supported
-    PF_GROUP_SEND_FILE          = (1 << 6),     // send (and recv, of course) files to/from group chat supported
-    PF_GROUP_CHAT               = (1 << 7),     // group chats supported
-    PF_GROUP_CHAT_PERSISTENT    = (1 << 8),     // persistent group chats supported
-    PF_PURE_NEW                 = (1 << 9),     // protocol support pure new
-    PF_NEW_REQUIRES_LOGIN       = (1 << 10),    // protocol support new with custom login/pass data
-    PF_LOGIN                    = (1 << 11),    // protocol support login/pass
-    PF_IMPORT                   = (1 << 12),    // protocol support creation with import; configuration import (set_config will receive imported file as is)
-    PF_OFFLINE_MESSAGING        = (1 << 13),    // protocol supports real offline messaging (not faux offline messaging)
-    PF_OFFLINE_INDICATOR        = (1 << 14),    // protocol's state used as online/offline indicator of application
-    PF_EXPORT                   = (1 << 15),    // protocol supports export
+    PF_UNAUTHORIZED_CONTACT     = (1 << 3),     // allow add unauthorized contact
+    PF_AUDIO_CALLS              = (1 << 4),     // audio calls supported
+    PF_VIDEO_CALLS              = (1 << 5),     // video calls supported
+    PF_SEND_FILE                = (1 << 6),     // send (and recv, of course) files supported
+    PF_PAUSE_FILE               = (1 << 7),     // pause file transferring supported
+    PF_RESUME_FILE              = (1 << 8),     // resume file transferring supported
+    PF_GROUP_SEND_FILE          = (1 << 9),     // send (and recv, of course) files to/from group chat supported
+    PF_GROUP_CHAT               = (1 << 10),     // group chats supported
+    PF_GROUP_CHAT_PERSISTENT    = (1 << 11),    // persistent group chats supported
+    PF_PURE_NEW                 = (1 << 12),    // protocol support pure new
+    PF_NEW_REQUIRES_LOGIN       = (1 << 13),    // user will be prompted for pubid and password on new connections
+    PF_ALLOW_REGISTER           = (1 << 14),    // protocol support login/pass
+    PF_IMPORT                   = (1 << 15),    // protocol support creation with import; configuration import (set_config will receive imported file as is)
+    PF_OFFLINE_MESSAGING        = (1 << 16),    // protocol supports real offline messaging (not faux offline messaging)
+    
+    
+    PF_EXPORT                   = (1 << 31),    // protocol supports export
+};
+
+enum info_string_e // hard order
+{
+    IS_PROTO_TAG,
+    IS_PROTO_DESCRIPTION,
+    IS_PROTO_DESCRIPTION_WITH_TAG,
+    IS_PROTO_VERSION,
+    IS_PROTO_URL,
+    IS_PROTO_AUTHOR,
+
+    IS_PROTO_ICON,
+    
+    IS_AUDIO_FMT, // required audio format for proto plugin (app will convert audio on-the-fly if hardware not support)
+    IS_AUDIO_CODECS, // unused
+    IS_VIDEO_CODECS,
+
+    IS_IDNAME,
+
+    IS_AVATAR_RESTRICTIOS,
+
+    IS_LAST, // always set to nullptr
+    _is_count_
 };
 
 enum connection_features_e
@@ -51,6 +80,9 @@ enum cd_mask_e
 
     CDF_PERSISTENT_GCHAT = 1 << 30,
     CDF_AUDIO_GCHAT      = 1 << 29,
+    CDF_GCHAT_MEMBER     = 1 << 28, // for unknown contacts
+    CDF_ALLOW_INVITE     = 1 << 27, // set if unknown contact available for friend invite
+    CDF_SYSTEM_USER      = 1 << 26,
 };
 
 enum groupchat_permission_e
@@ -76,6 +108,7 @@ enum cmd_result_e
     CR_CORRUPT,
     CR_UNKNOWN_ERROR,
     CR_ENCRYPTED,
+    CR_AUTHENTICATIONFAILED,
 };
 
 enum file_control_e
@@ -95,7 +128,7 @@ enum file_control_e
 enum message_type_e : unsigned // hard order
 {
     MT_MESSAGE,
-    MT_ACTION,
+    MT_SYSTEM_MESSAGE,
     MT_FRIEND_REQUEST,
     MT_INCOMING_CALL,
     MT_CALL_STOP,
@@ -115,7 +148,7 @@ enum contact_state_e : unsigned // hard order
     CS_OFFLINE,
     CS_ROTTEN,
     CS_WAIT,
-    CS_UNKNOWN,         // unknown groupchat member
+    CS_UNKNOWN,         // unknown (non-authorized)
 
     contact_state_check,
     contact_state_bits = 1 + (::boost::static_log2<(contact_state_check - 1)>::value)
@@ -160,20 +193,35 @@ enum stream_options_e
     SO_RECEIVING_VIDEO = 8,
 };
 
+
+enum config_flags_e
+{
+    CFL_PARAMS = 1 << 0,
+    CFL_NATIVE_DATA = 1 << 1,
+};
+
+
 #define FILE_TRANSFER_CHUNK 1048576
 #define FILE_TRANSFER_CHUNK_MASK (~1048575ull)
 
 
-// known configurable fields
+// known configurable fields, handled by app
+// app stores values of these field in db
+#define CFGF_LOGIN          "login"
+#define CFGF_PASSWORD       "password"
+#define CFGF_VIDEO_CODEC    "vcodec"
+#define CFGF_VIDEO_BITRATE  "vbitrate"
+#define CFGF_VIDEO_QUALITY  "vquality"
+
+// known configurable fields, handled by protocol
+// app will wait values of these fields from protocol
 #define CFGF_PROXY_TYPE     "proxy_type"
 #define CFGF_PROXY_ADDR     "proxy_addr"
 #define CFGF_UDP_ENABLE     "udp_enable"
 #define CFGF_IPv6_ENABLE    "ipv6_enable"
 #define CFGF_SERVER_PORT    "server_port"
-#define CFGF_VIDEO_CODEC    "vcodec"
-#define CFGF_VIDEO_BITRATE  "vbitrate"
-#define CFGF_VIDEO_QUALITY  "vquality"
 
+// contact details
 #define CDET_PUBLIC_ID      "pubid"     // id, login, uin, etc...
 #define CDET_PUBLIC_ID_BAD  "badpubid"  // id broken
 #define CDET_EMAIL          "email"     // email
@@ -181,7 +229,12 @@ enum stream_options_e
 #define CDET_CLIENT         "client"    // client name and version. eg: isotoxin/0.3.393
 #define CDET_CLIENT_CAPS    "clcaps"    // client caps - caps keywords. eg: 
 
+// system message fields
+#define SMF_SUBJECT         "subj"
+#define SMF_TEXT            "text"
+#define SMF_DESCRIPTION     "desc"
 
+// clients caps
 #define CLCAP_BBCODE_B      "bbb"
 #define CLCAP_BBCODE_U      "bbu"
 #define CLCAP_BBCODE_S      "bbs"

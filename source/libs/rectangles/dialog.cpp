@@ -234,6 +234,53 @@ namespace
     };
 }
 
+ts::wstr_c gui_dialog_c::description_s::build_desc_text() const
+{
+    return CONSTWSTR( "<l>" ) + desc + CONSTWSTR( "</l>" );
+}
+
+void gui_dialog_c::description_s::changedesc( const ts::wstr_c& desc_ )
+{
+    desc = desc_;
+    for ( ctlptr_s &rr : ctlptrs )
+    {
+        if (rr.what == -1)
+        {
+            if (rr.ptr)
+            {
+                gui_label_simplehtml_c *label = ts::ptr_cast<gui_label_simplehtml_c *>( rr.ptr.get() );
+                label->set_text( build_desc_text(), false );
+            }
+            break;
+        }
+    }
+}
+
+void gui_dialog_c::description_s::setctlptr( guirect_c *r, int what )
+{
+    ts::aint cnt = ctlptrs.size();
+    int j = -1;
+    for ( int i = 0; i < cnt; ++i )
+    {
+        ctlptr_s &ptr = ctlptrs.get( i );
+        if ( ptr.ptr.get() == r )
+        {
+            if ( j >= 0 )
+                ctlptrs.remove_fast( j );
+            return;
+        }
+        if ( ptr.ptr.expired() )
+        {
+            j = i;
+            continue;
+        }
+    }
+    if ( j < 0 )
+        ctlptrs.add() = ctlptr_s( r, what );
+    else
+        ctlptrs.get( j ) = ctlptr_s( r, what );
+}
+
 bool gui_dialog_c::description_s::updvalue2(RID r, GUIPARAM p)
 {
     switch (ctl)
@@ -598,6 +645,25 @@ bool gui_dialog_c::combo_drop(RID rid, GUIPARAM param)
     return true;
 }
 
+namespace
+{
+    struct passhideshow_s
+    {
+        bool showpass = false;
+    };
+}
+
+bool gui_dialog_c::passw_hide_show( RID b, GUIPARAM param )
+{
+    gui_textfield_c &tf = HOLD( RID::from_param( param ) ).as<gui_textfield_c>();
+    if ( tf.is_disabled() ) return true;
+    passhideshow_s &pshow = tf.get_customdata_obj<passhideshow_s>();
+    pshow.showpass = !pshow.showpass;
+    HOLD( b ).as<gui_button_c>().set_face_getter( pshow.showpass ? BUTTON_FACE( showpass ) : BUTTON_FACE( hidepass ) );
+    tf.set_password_char( pshow.showpass ? 0 : '*' );
+    return true;
+}
+
 bool gui_dialog_c::custom_menu(RID rid, GUIPARAM param)
 {
     gui_textfield_c &tf = HOLD(RID::from_param(param)).as<gui_textfield_c>();
@@ -757,7 +823,6 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
     {
     case TFR_TEXT_FILED:
     case TFR_TEXT_FILED_RO:
-    case TFR_TEXT_FILED_PASSWD:
         break;
     case TFR_PATH_SELECTOR:
         selector = DELEGATE( this, path_selector );
@@ -774,7 +839,10 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
     case TFR_FILE_SELECTOR:
         selector = DELEGATE(this, file_selector);
         break;
-        
+    case TFR_TEXT_FILED_PASSWD:
+        selector = DELEGATE( this, passw_hide_show );
+        break;
+
     }
     
     MAKE_CHILD<gui_textfield_c> creator(parent ? parent : getrid(), deftext, chars_limit, multiline, selector != GUIPARAMHANDLER(), create_visible);
@@ -819,6 +887,9 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
 
     } else if (role == TFR_TEXT_FILED_PASSWD)
     {
+        creator.selectorface = BUTTON_FACE( hidepass );
+        tf.set_customdata_obj<passhideshow_s>();
+
         tf.selectall();
         tf.set_password_char('*');
     }
@@ -933,8 +1004,8 @@ void gui_dialog_c::ctlshow( ts::uint32 cmask, bool vis )
         if ( 0 != (d.c_mask & cmask) )
         {
             d.options.init( description_s::o_visible, vis );
-            for ( guirect_c *r : d.ctlptrs )
-                if (r) MODIFY( *r ).visible(vis);
+            for ( description_s::ctlptr_s &r : d.ctlptrs )
+                if (r.ptr) MODIFY( *r.ptr ).visible(vis);
         }
     }
 }
@@ -943,6 +1014,13 @@ void gui_dialog_c::ctlenable( const ts::asptr&name, bool enblflg )
 {
     if (RID ctl = find(name))
         ctl.call_enable(enblflg);
+}
+
+void gui_dialog_c::ctldesc( const ts::asptr&name, ts::wstr_c desc )
+{
+    for ( description_s &d : descs )
+        if ( d.name.equals( name ) )
+            d.changedesc( desc );
 }
 
 RID gui_dialog_c::list(int height, const ts::wstr_c & emptymessage)
@@ -1087,7 +1165,7 @@ void gui_dialog_c::updrect_def(const void *rr, int r, const ts::ivec2 &p)
                     ctl->getengine().__spec_set_outofbound(false);
                 }
                 d.height_ = h;
-                d.setctlptr( ctl );
+                d.setctlptr( ctl, 0 );
                 if (!d.name.is_empty()) setctlname(d.name, *ctl);
                 return;
             }
@@ -1166,8 +1244,8 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             parent = lasthgroup;
         } else if (!d.desc.is_empty())
         {
-            RID lblr = label( CONSTWSTR("<l>") + d.desc + CONSTWSTR("</l>"), d.options.is(description_s::o_visible) );
-            d.setctlptr( &HOLD(lblr)() );
+            RID lblr = label( d.build_desc_text(), d.options.is(description_s::o_visible) );
+            d.setctlptr( &HOLD(lblr)(), -1 );
         }
         RID rctl;
         switch (d.ctl)
@@ -1264,8 +1342,9 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
                 ts::aint chldcount = HOLD(vg).engine().children_count();
                 check( s.cis.array(), DELEGATE(&d, updvalue2), d.text.as_uint(), tag, d.options.is(description_s::o_visible), vg );
                 ts::aint chldcount2 = HOLD(vg).engine().children_count();
+                int index = 0;
                 for( ts::aint i=chldcount; i<chldcount2;++i)
-                    d.setctlptr( &HOLD(vg).engine().get_child(i)->getrect() );
+                    d.setctlptr( &HOLD(vg).engine().get_child(i)->getrect(), index++ );
             }
             break;
         case description_s::_RADIO:
@@ -1309,7 +1388,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
         if (rctl)
         {
             guirect_c *r = &HOLD(rctl)();
-            d.setctlptr( r );
+            d.setctlptr( r, 0 );
             if (!d.name.is_empty())
                 ctl_by_name[d.name] = r;
         }

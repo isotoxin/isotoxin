@@ -154,7 +154,7 @@ namespace
     }
 }
 
-static void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp )
+void encode_lossy_png( ts::blob_c &buf, const ts::bitmap_c &bmp )
 {
     ts::bitmap_c b2e;
     if (bmp.info().bytepp() != 4 || bmp.info().pitch != bmp.info().sz.x * 4)
@@ -360,6 +360,7 @@ dialog_avaselector_c::~dialog_avaselector_c()
     ts::wstr_c openimgbuttonface(CONSTWSTR("open"));
     ts::wstr_c pasteimgbuttonface(CONSTWSTR("paste"));
     ts::wstr_c startcamera(CONSTWSTR("capture"));
+    ts::wstr_c generate( CONSTWSTR( "generate" ) );
 
     ts::ivec2 szopen(200, 25);
     if (const button_desc_s *avopen = gui->theme().get_button(CONSTASTR("avopen")))
@@ -373,11 +374,16 @@ dialog_avaselector_c::~dialog_avaselector_c()
     if (const button_desc_s *avcapture = gui->theme().get_button(CONSTASTR("avcapture")))
         szcapture = avcapture->size, startcamera = CONSTWSTR("face=avcapture");
 
+    ts::ivec2 szgen( 200, 25 );
+    if ( const button_desc_s *avgen = gui->theme().get_button( CONSTASTR( "avgen" ) ) )
+        szgen = avgen->size, generate = CONSTWSTR( "face=avgen" );
+
     dm().button(ts::wstr_c(), openimgbuttonface, DELEGATE(this, open_image)).width(szopen.x).height(szopen.y).subctl(0,ctlopen).sethint( loc_text(loc_loadimagefromfile) );
     dm().button(ts::wstr_c(), pasteimgbuttonface, DELEGATE(this, paste_hotkey_handler)).width(szpaste.x).height(szpaste.y).subctl(1, ctlpaste).sethint(loc_text(loc_pasteimagefromclipboard));
     dm().button(ts::wstr_c(), startcamera, DELEGATE(this, start_capture_menu)).width(szcapture.x).height(szcapture.y).setname(CONSTASTR("startc")).subctl(2,ctlcam).sethint( loc_text(loc_capturecamera) );
-    dm().button(ts::wstr_c(), b ? L"face=save" : L"save", DELEGATE(this, save_image1)).width(bsz.x).height(bsz.y).subctl(3,savebtn1);
-    dm().button(ts::wstr_c(), b ? L"face=save" : L"save", DELEGATE(this, save_image2)).width(bsz.x).height(bsz.y).subctl(4,savebtn2);
+    dm().button( ts::wstr_c(), generate, DELEGATE( this, generate_identicon ) ).width( szgen.x ).height( szgen.y ).subctl( 3, ctlcam ).sethint( TTT("Generate random identicon",470) );
+    dm().button(ts::wstr_c(), b ? L"face=save" : L"save", DELEGATE(this, save_image1)).width(bsz.x).height(bsz.y).subctl(4,savebtn1);
+    dm().button(ts::wstr_c(), b ? L"face=save" : L"save", DELEGATE(this, save_image2)).width(bsz.x).height(bsz.y).subctl(5,savebtn2);
 
     l.append(ctlopen).append(CONSTWSTR("<nbsp>"));
     l.append(ctlpaste).append(CONSTWSTR("<nbsp>"));
@@ -479,6 +485,22 @@ ts::uint32 dialog_avaselector_c::gm_handler(gmsg<GM_DROPFILES> &p)
         return GMRBIT_ABORT;
     }
     return 0;
+}
+
+bool dialog_avaselector_c::generate_identicon( RID, GUIPARAM )
+{
+    animated = false;
+
+    ts::md5_c md5;
+    ts::str_c somerandomstuff;
+    somerandomstuff.append_as_num( ts::Time::current().raw() );
+    somerandomstuff.append_as_num( random64() );
+    md5.update( somerandomstuff.cstr(), somerandomstuff.get_length() );
+    md5.done();
+    gen_identicon( bitmap, md5.result() );
+    newimage();
+
+    return true;
 }
 
 bool dialog_avaselector_c::paste_hotkey_handler(RID, GUIPARAM)

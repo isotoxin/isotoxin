@@ -330,6 +330,9 @@ rectengine_c *rectengine_c::get_last_child()
 
 /*virtual*/ bool rectengine_root_c::my_wnd_s::evt_specialborder( ts::specialborder_s bd[ 4 ] )
 {
+    if ( gui->is_disabled_special_border() )
+        return false;
+
     const theme_rect_s *thr = owner()->getrect().themerect();
     if ( thr && thr->specialborder() && thr->maxcutborder != ts::irect( 0 ) )
     {

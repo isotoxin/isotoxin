@@ -7,6 +7,7 @@ struct rsvg_working_surf_s
 {
     MOVABLE( true );
     ts::bitmap_c bmp;
+    rsvg_working_surf_s( const ts::bitmap_c &bmp ):bmp( bmp ) {}
     rsvg_working_surf_s(const ts::ivec2&sz)
     {
         bmp.create_ARGB(sz);
@@ -779,7 +780,16 @@ static void put_column(const ts::uint8 *column_data, ts::uint8 *dest_data, int d
 }
 
 
-
+void rsvg_filter_gaussian_c::do_filter( ts::bitmap_c& bmp, const ts::vec2 &sd )
+{
+    rsvg_filter_gaussian_c f(0);
+    f.sd = sd;
+    f.target = 0;
+    rsvg_working_surf_s w(bmp);
+    cairo_matrix_t m;
+    cairo_matrix_init_identity( &m );
+    f.apply(&w, &m);
+}
 
 /*virtual*/ void rsvg_filter_gaussian_c::apply(rsvg_working_surf_s * surfs, const cairo_matrix_t *m) const
 {

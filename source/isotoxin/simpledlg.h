@@ -212,7 +212,6 @@ protected:
     bool on_enter_press_func(RID, GUIPARAM);
     bool on_esc_press_func(RID, GUIPARAM);
 
-    bool showpass_handler(RID, GUIPARAM p);
     bool watchdog(RID, GUIPARAM p);
 public:
     dialog_entertext_c(MAKE_ROOT<dialog_entertext_c> &data);

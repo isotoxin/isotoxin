@@ -6,7 +6,7 @@ __forceinline bool is_nl( char c, char breakchar )
     return c == '\r' || c == '\n';
 }
 
-bool hunspell_file_s::gets( std::string &str, char breakchar )
+bool hunspell_file_s::gets( size_t&ptr, std::string &str, char breakchar )
 {
     const char *src0 = (const char *)data + ptr;
     const char *src = src0;

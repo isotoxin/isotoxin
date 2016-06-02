@@ -173,9 +173,9 @@ void dotests()
     //bmp.convert_from_yuv( ts::ivec2(0), bmp.info().sz, yuv.data(), ts::YFORMAT_I420 );
     //bmp.save_as_png( L"out.png" );
 
-    //uint64 u1 = ts::uuid();
-    //uint64 u2 = ts::uuid();
-    //uint64 u3 = ts::uuid();
+    //uint64 u1 = prf().getuid();
+    //uint64 u2 = prf().getuid();
+    //uint64 u3 = prf().getuid();
 
     // test packed_buf_c
 
@@ -369,7 +369,7 @@ protected:
 
             p.recv_time = now() - 2500;
             p.message_utf8 = ts::asptr("234234");
-            p.utag = ts::uuid();
+            p.utag = prf().getuid();
             l.append_text(p);
         }
 
@@ -378,7 +378,7 @@ protected:
             p.recv_time = now() - 2100;
             //p.type = MTA_UNDELIVERED_MESSAGE;
             p.message_utf8 = ts::to_utf8(L"унделиверед www.microsoft.com\nsdfsddddf *LOL*");
-            p.utag = ts::uuid();
+            p.utag = prf().getuid();
             l.append_text(p);
         }
 
@@ -386,7 +386,7 @@ protected:
             gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
             p.recv_time = now() - 4;
             p.message_utf8 = ts::to_utf8(L"http://www.microsoft.com/sdfsdf");
-            p.utag = ts::uuid();
+            p.utag = prf().getuid();
             l.append_text(p);
         }
 
@@ -394,7 +394,7 @@ protected:
             gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
             p.recv_time = now() - 3;
             p.message_utf8 = ts::to_utf8(L"ttp://www.microsoft.com/sdfsdf");
-            p.utag = ts::uuid();
+            p.utag = prf().getuid();
             l.append_text(p);
         }
 
@@ -402,7 +402,7 @@ protected:
             gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
             p.recv_time = now() - 2;
             p.message_utf8 = ts::to_utf8(L"http://www.microsoft.com/sdfsdf");
-            p.utag = ts::uuid();
+            p.utag = prf().getuid();
             l.append_text(p);
         }
     }
@@ -515,7 +515,7 @@ void summon_test_window()
     p.message_utf8 = ts::to_utf8( L"унделиверед www.microsoft.com\nsdfsddddf :rage:\nsdap sdpf posdf opewpo epor ewpor poewir poewi rpoew rpoqiwepro ifdsapof paosdflk ajflkjewo fk sdjfasdfds\n" );
     p.message_utf8.append_as_int( n );
 
-    p.utag = ts::uuid();
+    p.utag = prf().getuid();
 
 
     MAKE_ROOT<incoming_msg_panel_c>( &contacts().get_self(), contacts().get_self().subget(0), p );

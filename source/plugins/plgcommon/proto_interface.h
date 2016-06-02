@@ -60,29 +60,13 @@ struct media_data_s
 
 struct proto_info_s
 {
-    char *protocol_name = nullptr;
-    int   protocol_name_buflen = 0;
-
-    char *description = nullptr;
-    int   description_buflen = 0;
-
-    char *description_with_tags = nullptr;
-    int   description_with_tags_buflen = 0;
-
-    char *version = nullptr;
-    int   version_buflen = 0;
+    const char **strings = nullptr;
 
     int   priority = 0; // bigger -> higher (automatic select default subcontact of metacontact)
+    int   indicator = 0; // online indicator level
     int   features = 0;
     int   connection_features = 0;
 
-    audio_format_s audio_fmt; // required audio format for proto plugin (app will convert audio on-the-fly if hardware not support)
-
-    const char *icon = nullptr; // svg path value of d attribute in box 100x100
-    int   icon_buflen = 0;
-
-    const char *vcodecs = nullptr; // video codecs list / separeted; ex: vp8/vp9
-    int   vcodecs_buflen = 0;
 };
 
 struct contact_data_s
@@ -100,7 +84,7 @@ struct contact_data_s
     int id;
 
     int mask; // valid fields
-    const char *public_id;
+    const char *public_id; // set to "?" to tell to gui that pub id is unknown; empty value means not yet initialized
     int public_id_len;
     const char *name; // utf8
     int name_len;
@@ -145,7 +129,6 @@ struct message_s
     u64             crtime;         // message creation time_t
     const char *    message;
     int             message_len;
-    message_type_e  mt;
 };
 
 struct call_info_s
@@ -333,9 +316,8 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     FUNC1( void, accept_call,    int ) \
     FUNC2( int,  send_av,        int, const call_info_s * ) \
     FUNC2( void, stream_options, int, const stream_options_s * ) \
-    FUNC2( void, configurable,   const char *, const char *) \
     FUNC2( void, file_send,      int, const file_send_info_s *) \
-    FUNC2( void, file_resume,    u64, u64) \
+    FUNC2( void, file_accept,    u64, u64) \
     FUNC2( void, file_control,   u64, file_control_e) \
     FUNC2( bool, file_portion,   u64, const file_portion_s *) \
     FUNC1( void, get_avatar,     int ) \
@@ -359,13 +341,13 @@ PROTO_FUNCTIONS
 #pragma pack(pop)
 
 
-typedef void(PROTOCALL *get_info_pf)(proto_info_s *);
+typedef void(PROTOCALL *getinfo_pf)(proto_info_s *);
 typedef proto_functions_s * ( PROTOCALL *handshake_pf)( host_functions_s* );
 
 
 /* initialization scenario:
  1. library loaded by host
- 2. handshake(...) called by host - library should init all necessary internal structures to work with protocol
+ 2. api_handshake(...) called by host - library should init all necessary internal structures to work with protocol
  3. set_config(...) called by host. it can be zero size - it means new default settings
  4. set_name(...) and set_statusmsg(...) called by host - not need call update_contact
  5. init_done() called.  ACHTUNG! at this point library MUST call update_contact with 0 (zero) id - it means self user. also other contacts (apparently loaded) must be provided
@@ -374,4 +356,9 @@ typedef proto_functions_s * ( PROTOCALL *handshake_pf)( host_functions_s* );
  
  
  x. idle work.....
+*/
+
+/*
+add_contact:
+if second parameter is nullptr, no authorization request should be sent
 */

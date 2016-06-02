@@ -34,8 +34,11 @@ enum messages_options_e : unsigned
     MSGOP_MAXIMIZE_INLINE_IMG   = SETBIT(10),
     MSGOP_SPELL_CHECK           = SETBIT(11),
 
+    UIOPT_GEN_IDENTICONS        = SETBIT(12),
+
+    UIOPT_INTRUSIVE_BEHAVIOUR   = SETBIT(13),
     UIOPT_SHOW_INCOMING_MSG_PNL = SETBIT(14),
-    UIOPT_SHOW_INCOMING_CALL_BAR = SETBIT( 15 ),
+    UIOPT_SHOW_INCOMING_CALL_BAR = SETBIT(15),
 
     UIOPT_SHOW_SEARCH_BAR       = SETBIT(16),
     UIOPT_PROTOICONS            = SETBIT(17),
@@ -48,10 +51,13 @@ enum messages_options_e : unsigned
     GCHOPT_MUTE_MIC_ON_INVITE   = SETBIT(24),
     GCHOPT_MUTE_SPEAKER_ON_INVITE = SETBIT(25),
 
+    SNDOPT_MUTE_ON_AWAY         = SETBIT( 26 ),
+    SNDOPT_MUTE_ON_DND          = SETBIT( 27 ),
+
     OPTOPT_POWER_USER           = SETBIT(31),
 };
 
-#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_TAGFILETR_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | GCHOPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST | MSGOP_MAXIMIZE_INLINE_IMG | MSGOP_SPELL_CHECK | UIOPT_SHOW_INCOMING_CALL_BAR|UIOPT_SHOW_INCOMING_MSG_PNL)
+#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_TAGFILETR_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | GCHOPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST | MSGOP_MAXIMIZE_INLINE_IMG | MSGOP_SPELL_CHECK | UIOPT_SHOW_INCOMING_CALL_BAR|UIOPT_SHOW_INCOMING_MSG_PNL|SNDOPT_MUTE_ON_DND|UIOPT_GEN_IDENTICONS)
 
 
 enum dsp_flags_e
@@ -76,7 +82,7 @@ struct active_protocol_s : public active_protocol_data_s
     void get(int column, ts::data_pair_s& v);
 
     static const int maxid = 65000;
-    static const int columns = 1 + 8; // tag, name, uname, ustatus, conf, options, avatar, sortfactor
+    static const int columns = 1 + 10; // tag, name, uname, ustatus, conf, options, avatar, sortfactor, login, password
     static ts::asptr get_table_name() {return CONSTASTR("protocols");}
     static void get_column_desc(int index, ts::column_desc_s&cd);
     static ts::data_type_e get_column_type(int index);
@@ -406,10 +412,14 @@ class profile_c : public config_base_c
 
     ts::uint8 keyhash[CC_HASH_SIZE]; // 256 bit hash
 
+    uint64 uuid = 0; // zero - freezed; cant be used
+
 public:
 
     profile_c() {}
     ~profile_c();
+
+    uint64 getuid( uint cnt = 1 );
 
     ts::sqlitedb_c *begin_encrypt();
     void encrypt_done(const ts::uint8 *newpasshash);

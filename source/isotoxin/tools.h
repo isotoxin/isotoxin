@@ -63,7 +63,7 @@ enum mpd_e
     MPD_STATE = SETBIT(5),
 };
 
-ts::wstr_c make_proto_desc(int mask);
+ts::wstr_c make_proto_desc(const ts::wstr_c&idname, int mask);
 
 template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_mark(ts::TSCOLOR c)
 {
@@ -154,6 +154,7 @@ bool text_find_inds( const ts::wstr_c &t, ts::tmp_tbuf_t<ts::ivec2> &marks, cons
 INLINE ts::pwstr_c text_non_letters() { return ts::pwstr_c(CONSTWSTR("?!:;*&^%$#@()<>[]{}=+.,~|/\r\n\t\\\"—«»„“”0123456789 _")); }
 
 void render_pixel_text( ts::bitmap_c&tgt, const ts::irect& r, const ts::wsptr& t, ts::TSCOLOR bgcol, ts::TSCOLOR col );
+void gen_identicon( ts::bitmap_c&tgt, const unsigned char *random_bytes /* at least 16 bytes, md5 will be ok */ );
 
 typedef ts::sstr_t<4> SLANGID;
 typedef ts::array_inplace_t<SLANGID, 0> SLANGIDS;
@@ -407,6 +408,7 @@ enum loctext_e
     loc_connection_failed,
     loc_autostart,
     loc_please_create_profile,
+    loc_please_authorize,
     loc_yes,
     loc_no,
     loc_exit,
@@ -431,7 +433,6 @@ enum loctext_e
 
     loc_connection_name,
     loc_module,
-    loc_id,
     loc_state,
 };
 
@@ -453,6 +454,8 @@ enum icon_type_e
     IT_OFFLINE,
     IT_AWAY,
     IT_DND,
+    IT_UNKNOWN,
+    IT_WHITE,
 };
 
 const ts::bitmap_c &prepare_proto_icon( const ts::asptr &prototag, const ts::asptr &icond, int imgsize, icon_type_e icot );
@@ -478,6 +481,7 @@ struct ipcw : public ts::tmp_buf_c
     template<> ipcw & operator<<(const ts::str_c &s) { tappend<unsigned short>((unsigned short)s.get_length()); append_buf(s.cstr(), s.get_length()); return *this; }
     template<> ipcw & operator<<(const ts::wstr_c &s) { tappend<unsigned short>((unsigned short)s.get_length()); append_buf(s.cstr(), s.get_length()*sizeof(ts::wchar)); return *this; }
     template<> ipcw & operator<<(const ts::blob_c &b) { tappend<int>((int)b.size()); append_buf(b); return *this; }
+    template<> ipcw & operator<<( const ts::tmp_buf_c &b ) { tappend<int>( (int)b.size() ); append_buf( b ); return *this; }
 };
 
 struct isotoxin_ipc_s
@@ -679,17 +683,34 @@ struct protocol_description_s
 {
     MOVABLE( true );
 
-    ts::str_c  tag; // lan, tox
-    ts::str_c description; // utf8
-    ts::str_c description_t; // utf8
-    ts::str_c version; // utf8
-    ts::str_c  icon; // svg path d value
-    ts::str_c  videocodecs; // video codecs list / separated, ex: vp8/vp9
+    ts::astrings_c strings;
     int connection_features = 0;
     int features = 0;
     protocol_description_s() {}
-    protocol_description_s(const protocol_description_s&) UNUSED;
-    protocol_description_s &operator=(const protocol_description_s&) UNUSED;
+    protocol_description_s( const protocol_description_s& o ) :strings( o.strings ), connection_features( o.connection_features ), features( o.features ) {}
+    protocol_description_s &operator=(const protocol_description_s& o)
+    {
+        strings = o.strings;
+        connection_features = o.connection_features;
+        features = o.features;
+        return *this;
+    }
+
+    const ts::str_c &getstr( info_string_e s ) const
+    {
+        if ( s < strings.size() )
+            return strings.get( s );
+        return ts::make_dummy<ts::str_c>( true );
+    }
+
+    ts::wstr_c idname() const
+    {
+        ts::wstr_c n( from_utf8( getstr(IS_IDNAME) ) );
+        if ( n.is_empty() )
+            n = CONSTWSTR( "ID" );
+        return n;
+    }
+
 };
 
 struct available_protocols_s : public ts::array_inplace_t<protocol_description_s,0>
@@ -700,7 +721,7 @@ public:
     const protocol_description_s *find(const ts::str_c& tag) const
     {
         for (const protocol_description_s& p : *this)
-            if (p.tag == tag)
+            if (p.getstr(IS_PROTO_TAG) == tag)
                 return &p;
         return nullptr;
     }

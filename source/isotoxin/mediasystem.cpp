@@ -419,8 +419,16 @@ void mediasystem_c::free_voice_channel( const uint64 &key )
 
 
 
-void play_sound( sound_e sss, bool looped )
+void play_sound( sound_e sss, bool looped, bool forced )
 {
+    if ( !forced )
+    {
+        if ( contacts().get_self().get_ostate() == COS_AWAY && prf().get_options().is( SNDOPT_MUTE_ON_AWAY ) )
+            return;
+        if ( contacts().get_self().get_ostate() == COS_DND && prf().get_options().is( SNDOPT_MUTE_ON_DND ) )
+            return;
+    }
+
     if (looped)
     {
         g_app->mediasystem().play_looped(sss, 1.0);

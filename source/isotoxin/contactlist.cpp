@@ -23,6 +23,7 @@ gui_contact_item_c::gui_contact_item_c(MAKE_CHILD<gui_contact_item_c> &data) :gu
         {
             tooltip( DELEGATE(this,tt) );
             contact->gui_item = this;
+            protohit();
             if (CIR_ME != role) g_app->new_blink_reason( contact->getkey() ).recalc_unread();
         }
 }
@@ -495,7 +496,7 @@ bool gui_contact_item_c::animate_typing(RID, GUIPARAM)
 {
     update_text();
     if (flags.is(F_SHOWTYPING))
-        DEFERRED_UNIQUE_CALL(1.0 / 15.0, DELEGATE(this, animate_typing), nullptr);
+        DEFERRED_UNIQUE_CALL(1.0 / 5.0, DELEGATE(this, animate_typing), nullptr);
     return true;
 }
 
@@ -518,6 +519,11 @@ void gui_contact_item_c::update_text()
                 ts::ivec2 sz = g_app->preloaded_stuff().editb->size;
                 newtext.append( CONSTASTR(" <rect=0,") );
                 newtext.append_as_uint( sz.x ).append_char(',').append_as_uint( -sz.y ).append(CONSTASTR(",2><br><l>"));
+
+                if ( t2.is_empty() )
+                    t2.set( maketag_color<char>( get_default_text_color( COLOR_PROTO_TEXT_OFFLINE ) ) )
+                    .append( to_utf8( TTT("no status message",457) ) ).append(CONSTASTR("</color>"));
+
                 newtext.append(t2).append(CONSTASTR(" <rect=1,"));
                 newtext.append_as_uint( sz.x ).append_char(',').append_as_uint( -sz.y ).append(CONSTASTR(",2></l>"));
             } else
@@ -548,7 +554,7 @@ void gui_contact_item_c::update_text()
                 newtext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTASTR(",2>"));
             } else
             {
-                newtext.append(CONSTASTR("<br>(")).append_as_int( contact->subonlinecount() ).append_char('/').append_as_num( contact->subcount() ).append_char(')');
+                newtext.append(CONSTASTR("<br>(")).append_as_int( contact->subonlinecount() + 1 ).append_char('/').append_as_num( contact->subcount() + 1 ).append_char(')');
                 if (active_protocol_c *ap = prf().ap( contact->getkey().protoid ))
                     newtext.append(CONSTASTR(" <l>")).append(ap->get_name()).append(CONSTASTR("</l>"));
             }
@@ -583,7 +589,7 @@ void gui_contact_item_c::update_text()
                 if (newtext.is_empty()) newtext = contact->get_name();
                 text_adapt_user_input(newtext);
                 if (!newtext.is_empty()) newtext.append(CONSTASTR("<br>"));
-                newtext.append( colorize(to_utf8(TTT("Request sent",88)).as_sptr(), get_default_text_color(COLOR_TEXT_SPECIAL)) );
+                newtext.append( colorize(to_utf8(TTT("Authorization request has been sent",88)).as_sptr(), get_default_text_color(COLOR_TEXT_SPECIAL)) );
             }
             else {
                 newtext = contact->get_customname();
@@ -917,6 +923,9 @@ bool gui_contact_item_c::allow_drag() const
 
 bool gui_contact_item_c::allow_drop() const
 {
+    if ( contact->get_options().is( contact_c::F_SYSTEM_USER ) )
+        return false;
+
     int failcount = 0;
     contact->subiterate([&](contact_c *c) {
         if (c->get_state() == CS_INVITE_SEND) ++failcount;
@@ -1014,37 +1023,43 @@ bool gui_contact_item_c::allow_drop() const
 
             m_engine->begin_draw();
             
-            if (!force_state_icon && prf().get_options().is(UIOPT_PROTOICONS))
-                state_icon = nullptr;
-
-            // draw state
-            if (( force_state_icon || (flags.is(F_PROTOHIT) && st != CS_ROTTEN)) && state_icon)
+            if ( !contact->get_options().is( contact_c::F_SYSTEM_USER ) )
             {
-                state_icon->draw( *m_engine.get(), ca + ts::ivec2(shiftstateicon.x, shiftstateicon.y), ALGN_RIGHT | ALGN_BOTTOM );
+                if ( !force_state_icon && ( prf().get_options().is( UIOPT_PROTOICONS ) || contact->fully_unknown() ) )
+                    state_icon = nullptr;
 
-            } else if (contact->is_meta() && flags.is(F_PROTOHIT)) // not group
-            {
-                // draw proto icons
-                int isz = GET_THEME_VALUE(protoiconsize);
-                ts::ivec2 p(ca.rb.x,ca.rb.y-isz);
-                contact->subiterate([&](contact_c *c) {
-                    if (c->is_protohit(false))
-                        if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
-                        {
-                            p.x -= isz;
+                // draw state
+                if ( ( force_state_icon || ( flags.is( F_PROTOHIT ) && st != CS_ROTTEN ) ) && state_icon )
+                {
+                    state_icon->draw( *m_engine.get(), ca + ts::ivec2( shiftstateicon.x, shiftstateicon.y ), ALGN_RIGHT | ALGN_BOTTOM );
 
-                            icon_type_e icot = IT_OFFLINE;
-                            if (c->get_state() == CS_ONLINE)
+                }
+                else if ( contact->is_meta() && flags.is( F_PROTOHIT ) ) // not group
+                {
+                    // draw proto icons
+                    int isz = GET_THEME_VALUE( protoiconsize );
+                    ts::ivec2 p( ca.rb.x, ca.rb.y - isz );
+                    contact->subiterate( [&]( contact_c *c ) {
+                        if ( c->is_protohit( false ) )
+                            if ( active_protocol_c *ap = prf().ap( c->getkey().protoid ) )
                             {
-                                contact_online_state_e ost1 = c->get_ostate();
-                                if (COS_AWAY == ost1) icot = IT_AWAY;
-                                else if (COS_DND == ost1) icot = IT_DND;
-                                else icot = IT_ONLINE;
-                            }
+                                p.x -= isz;
 
-                            m_engine->draw(p, ap->get_icon(isz, icot).extbody(), true);
-                        }
-                });
+                                icon_type_e icot = IT_OFFLINE;
+                                if ( c->get_state() == CS_ONLINE )
+                                {
+                                    contact_online_state_e ost1 = c->get_ostate();
+                                    if ( COS_AWAY == ost1 ) icot = IT_AWAY;
+                                    else if ( COS_DND == ost1 ) icot = IT_DND;
+                                    else icot = IT_ONLINE;
+                                }
+                                else if ( c->get_state() == CS_UNKNOWN )
+                                    icot = IT_UNKNOWN;
+
+                                m_engine->draw( p, ap->get_icon( isz, icot ).extbody(), true );
+                            }
+                    } );
+                }
             }
 
             if (contact->is_av() && !contact->is_full_search_result() && CIR_CONVERSATION_HEAD != role)
@@ -1334,6 +1349,15 @@ bool gui_contact_item_c::allow_drop() const
                         dialog_msgbox_c::mb_warning(txt).bcancel().on_ok(m_delete_doit, cks).summon();
                     }
                 }
+                static void m_invite( const ts::str_c&cks )
+                {
+                    contact_key_s ck( cks );
+                    contact_c * c = contacts().find( ck );
+                    if ( c )
+                    {
+                        SUMMON_DIALOG<dialog_addcontact_c>( UD_ADDCONTACT, dialog_addcontact_params_s( gui_isodialog_c::title( title_new_contact ), c->get_pubid(), ck ) );
+                    }
+                }
                 static void m_metacontact_detach(const ts::str_c&cks)
                 {
                     contact_key_s ck(cks);
@@ -1473,6 +1497,14 @@ bool gui_contact_item_c::allow_drop() const
             if (!dialog_already_present(UD_CONTACTPROPS))
             {
                 menu_c m;
+
+                contact->subiterate( [&]( const contact_c *c ) {
+                    if (c->get_options().is(contact_c::F_ALLOW_INVITE) && c->get_state() == CS_UNKNOWN)
+                    {
+                        m.add( TTT("Send authorization request: $",453) / ts::wstr_c(CONSTWSTR("<b>"), ts::from_utf8(c->get_pubid_desc())).append(CONSTWSTR("</b>")), 0, handlers::m_invite, c->getkey().as_str() );
+                    }
+                } );
+
                 if (contact->is_meta() && contact->subcount() > 1)
                 {
                     menu_c mc = m.add_sub(TTT("Metacontact",145));
@@ -2032,6 +2064,22 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
         if (PP_PROFILEOPTIONS == ch.sp && (ch.bits & (UIOPT_TAGFILETR_BAR|UIOPT_SHOW_SEARCH_BAR)))
             recreate_ctls(true);
 
+    if ( ch.pass == 0 && PP_NETWORKNAME == ch.sp )
+    {
+        contacts().iterate_proto_contacts( [&]( contact_c *c )->bool {
+
+            if ( c->get_options().is( contact_c::F_SYSTEM_USER ) && c->getkey().protoid == ch.protoid )
+            {
+                c->set_name( ch.s );
+                if ( c->get_historian()->gui_item )
+                    c->get_historian()->gui_item->update_text();
+            }
+
+            return true;
+        } );
+    }
+
+
     return 0;
 }
 
@@ -2170,9 +2218,8 @@ ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_V_UPDATE_CONTACT> & c )
         }
     }
 
-    if (role == CLR_MAIN_LIST && c.contact->get_state() != CS_UNKNOWN)
+    if (role == CLR_MAIN_LIST)
     {
-        ASSERT( c.contact->get_historian()->get_state() != CS_UNKNOWN );
         MAKE_CHILD<gui_contact_item_c> mc(getrid(), c.contact->get_historian());
         if (filter)
             mc.is_visible = filter->check_one(mc.contact);

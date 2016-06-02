@@ -182,7 +182,7 @@ template <typename T, size_t N> char( &__ARRAYSIZEHELPER( T( &array )[ N ] ) )[ 
 #define NOP() ASSERT((1,true))
 
 #define UNSAFE_BLOCK_BEGIN __try {
-#define UNSAFE_BLOCK_END } __except ( EXCEPTION_EXECUTE_HANDLER ) {}
+#define UNSAFE_BLOCK_END } __except ( -1 ) {}
 
 #elif defined __GNUC__
 #define NOWARNING(n,...) __VA_ARGS__
@@ -1160,11 +1160,6 @@ struct lnk_s
     wstr_c working_directory;
     wstr_c command_line_arguments;
 };
-
-
-
-    uint64 uuid(); // uniq 64-bit generator
-
 
 	template<class _Ty> struct ts_delete
 	{	// default deleter for unique_ptr
