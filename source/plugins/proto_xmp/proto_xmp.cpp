@@ -29,6 +29,8 @@
 #include <gloox/bytestreamdatahandler.h>
 #include <gloox/bytestream.h>
 #include <gloox/error.h>
+#include <gloox/softwareversion.h>
+#include <gloox/socks5bytestream.h>
 #include "memory"
 
 #pragma warning(push)
@@ -223,6 +225,8 @@ class xmpp :
         std::vector<byte> chunk;
 
         str_c fn;
+
+        bool fin = false;
 
         incoming_file_s( const gloox::JID &jid, i32 cid_, const std::string &fileid_, u64 fsz_, const asptr &fn );
         ~incoming_file_s();
@@ -524,17 +528,21 @@ class xmpp :
         mses( contact_descriptor_s *owner, gloox::ClientBase *clb, const gloox::JID& jid ) :owner( owner ), gloox::MessageSession( clb, jid ) {}
         virtual ~mses()
         {
-            if ( owner ) owner->session = nullptr;
+            if ( owner )
+            {
+                for( contact_descriptor_s::resource_s &r : owner->resources )
+                    if (r.session == this)
+                        r.session = nullptr;
+            }
         }
     };
 
-    struct contact_descriptor_s : public gloox::DiscoHandler, public gloox::VCardHandler
+    struct contact_descriptor_s : public gloox::DiscoHandler, public gloox::VCardHandler, public gloox::IqHandler
     {
         contact_descriptor_s *next = nullptr;
         contact_descriptor_s *prev = nullptr;
 
         gloox::JID jid;
-        mses* session = nullptr;
         std::vector<u64> waiting_receipt;
 
         byte gavatar_hash[16]; // md5 hash of avatar
@@ -543,8 +551,11 @@ class xmpp :
 
         struct resource_s
         {
+            mses* session = nullptr;
             str_c resname;
-            str_c clname;
+            str_c cl_url;
+            str_c cl_name_ver;
+            str_c os;
             int id = 0;
             int features = 0;
             int priority = 0;
@@ -587,8 +598,9 @@ class xmpp :
         }
         ~contact_descriptor_s()
         {
-            if ( session )
-                session->owner = nullptr;
+            for ( resource_s &r : resources )
+                if ( r.session )
+                    r.session->owner = nullptr;
         }
 
         void on_offline();
@@ -634,6 +646,7 @@ class xmpp :
                     break;
                 }
             }
+            changed |= CDM_DETAILS;
             details_sent = false;
         }
         resource_s & getcreateres( const asptr &rname, int pr )
@@ -642,11 +655,13 @@ class xmpp :
             {
                 if ( it->resname.equals( rname ) )
                 {
-                    it->priority = pr;
+                    if (pr >= 0)
+                        it->priority = pr;
                     return *it;
                 }
             }
-            resources.push_back( resource_s(rname, residpool++, pr) );
+            resources.push_back( resource_s(rname, residpool++, pr >= 0 ? pr : 0) );
+            changed |= CDM_DETAILS;
             details_sent = false;
             return resources.back();
         }
@@ -671,8 +686,17 @@ class xmpp :
 
                 tmps.append( CONSTASTR( "\",\"" CDET_CLIENT "\":[" ) );
                 for ( auto&r : resources )
-                    tmps.append( CONSTASTR( "\"" ) ).append( r.clname ).append( CONSTASTR( "\"," ) );
-                tmps.trunc_length().append( CONSTASTR( "]}" ) );
+                {
+                    tmps.append( CONSTASTR( "\"" ) ).append( json_value(r.cl_name_ver) )
+                        .append( CONSTASTR( " (" ) ).append( json_value(r.cl_url)).append(CONSTASTR(")"));
+                    if ( !r.os.is_empty() )
+                        tmps.append( CONSTASTR( " (" ) ).append( json_value( r.os ) ).append( CONSTASTR( ")" ) );
+                    tmps.append( CONSTASTR( "\"," ) );
+                }
+                tmps.trunc_length().append( CONSTASTR( "]" ) );
+
+
+                tmps.append( CONSTASTR( "}" ) );
 
                 cd.mask |= CDM_DETAILS;
                 cd.details = tmps.cstr();
@@ -788,11 +812,14 @@ class xmpp :
 
         void prepare_session( xmpp * me )
         {
-            if ( !session )
-            {
-                session = new mses( this, me->j.get(), jid );
-                session->registerMessageHandler( me );
-            }
+            for ( resource_s &r : resources )
+                if ( !r.session )
+                {
+                    gloox::JID rjid( jid );
+                    rjid.setResource( std::string(r.resname.cstr(),r.resname.get_length()) );
+                    r.session = new mses( this, me->j.get(), rjid );
+                    r.session->registerMessageHandler( me );
+                }
         }
 
         void chat_state( xmpp * me, gloox::ChatStateType chst )
@@ -801,9 +828,12 @@ class xmpp :
             if ( chstlast != chst )
             {
                 chstlast = chst;
-                gloox::StanzaExtensionList lst;
-                lst.push_back( new gloox::ChatState( chst ) );
-                session->send( gloox::EmptyString, gloox::EmptyString, lst );
+                for ( resource_s &r : resources )
+                {
+                    gloox::StanzaExtensionList lst;
+                    lst.push_back( new gloox::ChatState( chst ) );
+                    r.session->send( gloox::EmptyString, gloox::EmptyString, lst );
+                }
             }
         }
 
@@ -811,18 +841,26 @@ class xmpp :
         {
             prepare_session( me );
 
-            if ( is_feature( FE_XEP_0184 ) )
+            bool need_recp = false;
+            for ( resource_s &r : resources )
             {
-                waiting_receipt.push_back( msg->utag );
-                sstr_t<-32> id; id.set_as_num( msg->utag );
-                gloox::StanzaExtensionList lst;
-                lst.push_back( new gloox::Receipt( gloox::Receipt::Request ) );
-                session->send( std::string( msg->message, msg->message_len ), std::string( id.cstr(), id.get_length() ), lst );
-            } else
-            {
-                session->send( std::string( msg->message, msg->message_len ) );
-                me->hf->delivered( msg->utag );
+                if ( need_recp && 0 != ( r.features & FE_XEP_0184 ) )
+                {
+                    waiting_receipt.push_back( msg->utag );
+                    sstr_t<-32> id; id.set_as_num( msg->utag );
+                    gloox::StanzaExtensionList lst;
+                    lst.push_back( new gloox::Receipt( gloox::Receipt::Request ) );
+                    r.session->send( std::string( msg->message, msg->message_len ), std::string( id.cstr(), id.get_length() ), lst );
+                    need_recp = false;
+                }
+                else
+                {
+                    r.session->send( std::string( msg->message, msg->message_len ) );
+                }
             }
+
+            if ( !need_recp )
+                me->hf->delivered( msg->utag );
         }
 
         /*virtual*/ void handleDiscoInfo( const gloox::JID& from, const gloox::Disco::Info& info, int context ) override;
@@ -838,6 +876,8 @@ class xmpp :
         {
         }
 
+        /*virtual*/ bool handleIq( const gloox::IQ& iq ) override { return false; }
+        /*virtual*/ void handleIqID( const gloox::IQ& iq, int context ) override;
 
     };
     contact_descriptor_s *first = nullptr; // first points to zero contact - self
@@ -932,6 +972,7 @@ class xmpp :
     bool set_cfg_called = false;
     bool reconnect = false;
     bool dirty_vcard = true;
+    bool auth_failed = false;
 
     enum chunks_e // HADR ORDER!!!!!!!!
     {
@@ -1051,7 +1092,7 @@ class xmpp :
     }
 
 
-    /*virtual*/ void handleMessage( const gloox::Message& stanza, gloox::MessageSession*  ) override
+    /*virtual*/ void handleMessage( const gloox::Message& stanza, gloox::MessageSession*ses  ) override
     {
         const gloox::Nickname *nn = stanza.findExtension<gloox::Nickname>( gloox::ExtNickname );
 
@@ -1169,7 +1210,7 @@ class xmpp :
             {
                 gloox::StanzaExtensionList lst;
                 lst.push_back( new gloox::Receipt( gloox::Receipt::Received, stanza.id() ) );
-                cd.session->send( gloox::EmptyString, j->getID(), lst );
+                ses->send( gloox::EmptyString, j->getID(), lst );
             }
         }
     }
@@ -1256,10 +1297,15 @@ class xmpp :
                 if ( const gloox::Capabilities* caps = presence.capabilities() )
                 {
                     std::string n( caps->node() + '#' + caps->ver() );
-                    res.clname = xsptr( n );
+                    res.cl_url = xsptr( caps->node() );
+                    if ( res.cl_url.ends( CONSTASTR( "/caps" ) ) )
+                        res.cl_url.trunc_length(5);
                     nodefeatures_s &f = getcreatef( xsptr(n) );
                     res.features = f.features;
+                    
+#ifndef _DEBUG
                     if ( 0 == ( f.features & FE_INIT ) )
+#endif // _DEBUG
                         j->disco()->getDiscoInfo( presence.from(), n, cd, res.id );
                 }
                 if ( const gloox::Nickname *nn = presence.findExtension<gloox::Nickname>( gloox::ExtNickname ) )
@@ -1276,6 +1322,23 @@ class xmpp :
                 }
 
                 cm->fetchVCard( cd->jid, cd );
+
+                {
+                    gloox::Tag* t = new gloox::Tag( "iq" );
+                    t->addAttribute( "from", j->jid().full() );
+                    t->addAttribute( "to", presence.from().full() );
+                    std::string id = j->getID();
+                    t->addAttribute( "id", id );
+                    t->addAttribute( gloox::TYPE, "get" );
+                    gloox::Tag* q = new gloox::Tag( "query" );
+                    q->setXmlns( gloox::XMLNS_VERSION );
+                    t->addChild( q );
+
+                    j->add_iq_handler( id, cd, 4 );
+
+                    j->send( t );
+                }
+
 
                 if (cd->changed)
                     update_contact( cd );
@@ -1394,10 +1457,16 @@ class xmpp :
                 f->bs = bs;
                 bs->registerBytestreamDataHandler( f );
 
+                setup_proxy(bs);
+
                 if ( bs->connect() )
                     f->accepted();
                 else
+                {
+                    f->bs = bs;
                     fm->dispose( bs );
+                    f->kill();
+                }
                 break;
             }
         for ( incoming_file_s *f = if_first; f; f = f->next )
@@ -1406,8 +1475,14 @@ class xmpp :
                 f->bs = bs;
                 bs->registerBytestreamDataHandler( f );
                 
+                setup_proxy( bs );
+
                 if ( !bs->connect() )
+                {
+                    f->bs = nullptr;
                     fm->dispose( bs );
+                    f->kill();
+                }
                 break;
             }
 
@@ -1417,6 +1492,22 @@ class xmpp :
         return gloox::EmptyString;
     }
 
+    void setup_proxy( gloox::Bytestream *bs )
+    {
+        if (gloox::SOCKS5Bytestream *s = dynamic_cast<gloox::SOCKS5Bytestream *>( bs ))
+        {
+            if ( proxy_type & CF_PROXY_SUPPORT_HTTPS )
+            {
+                //gloox::ConnectionTCPClient *tcp = new gloox::ConnectionTCPClient( j->logInstance(), std::string( proxy.host.cstr(), proxy.host.get_length() ), proxy.port );
+                //s->setConnectionImpl( new gloox::ConnectionHTTPProxy( j.get(), tcp, j->logInstance(), j->server(), j->port() ) );
+
+            } else if ( proxy_type & ( CF_PROXY_SUPPORT_SOCKS4 | CF_PROXY_SUPPORT_SOCKS5 ) )
+            {
+                //gloox::ConnectionTCPClient *tcp = new gloox::ConnectionTCPClient( j->logInstance(), std::string( proxy.host.cstr(), proxy.host.get_length() ), proxy.port );
+                //s->setConnectionImpl( new gloox::ConnectionSOCKS5Proxy( j.get(), tcp, j->logInstance(), j->server(), j->port() ) );
+            }
+        }
+    }
 
     contact_descriptor_s &getcreate_descriptor( const gloox::JID& jid, bool update_if_new )
     {
@@ -1625,6 +1716,7 @@ void xmpp::incoming_file_s::recv_data( const byte *data, size_t datasz )
     }
 
     cl.hf->file_control( utag, FIC_DONE );
+    fin = true;
 
     //die(); do not delete now due FIC_DONE from app
 }
@@ -1825,6 +1917,22 @@ void xmpp::contact_descriptor_s::fix_bad_subscription_state( bool cancel_subscri
         cl.hf->avatar_data( cid, gavatar_tag, gavatar.data(), gavatar.size() ), getavatar = false;
 }
 
+/*virtual*/ void xmpp::contact_descriptor_s::handleIqID( const gloox::IQ& iq, int context )
+{
+    if ( 4 == context )
+    {
+        if ( const gloox::SoftwareVersion *sv = iq.findExtension<gloox::SoftwareVersion>( gloox::ExtVersion ) )
+        {
+            resource_s &r = getcreateres( xsptr( iq.from().resource() ), -1 );
+            r.cl_name_ver.set( xsptr( sv->name() ) ).append_char( '/' ).append( xsptr( sv->version() ) );
+            r.os = xsptr( sv->os() );
+            details_sent = false;
+            changed |= CDM_DETAILS;
+            cl.update_contact( this );
+        }
+    }
+}
+
 
 /*virtual*/ void xmpp::contact_descriptor_s::handleDiscoInfo( const gloox::JID& from, const gloox::Disco::Info& info, int context )
 {
@@ -1833,6 +1941,12 @@ void xmpp::contact_descriptor_s::fix_bad_subscription_state( bool cancel_subscri
     SETUPFLAG( f, FE_XEP_0084, info.hasFeature( XMLNS_AVATARS ) );
     SETUPFLAG( f, FE_XEP_0085, info.hasFeature( gloox::XMLNS_CHAT_STATES ) );
     SETUPFLAG( f, FE_XEP_0065, info.hasFeature( gloox::XMLNS_BYTESTREAMS ) );
+
+#ifdef _DEBUG
+    Log("features of: %s", from.full().c_str());
+    for( const auto &s : info.features() )
+        Log( " - %s", s.c_str() );
+#endif
     
     for ( resource_s &r : resources )
         if ( r.id == context )
@@ -2016,7 +2130,7 @@ void xmpp::tick(int *sleep_time_ms)
 
         if ( is_cid_online )
         {
-            if ( f->bs )
+            if ( f->bs && !f->fin )
                 if ( gloox::ConnNotConnected == f->bs->recv( 1000 ) )
                     is_cid_online = false;
         }
@@ -2025,7 +2139,7 @@ void xmpp::tick(int *sleep_time_ms)
         {
             // peer disconnected - transfer break
             hf->file_control( f->utag, FIC_DISCONNECT );
-            delete f;
+            f->die();
         }
 
         f = ff;
@@ -2038,6 +2152,11 @@ void xmpp::tick(int *sleep_time_ms)
         f = ff;
     }
 
+    if ( auth_failed )
+    {
+        hf->operation_result( LOP_ONLINE, CR_AUTHENTICATIONFAILED );
+        offline();
+    }
 
     *sleep_time_ms = 20;
 }
@@ -2070,9 +2189,12 @@ void xmpp::set_name(const char*utf8name)
                 if ( cd->st == CS_ONLINE )
                 {
                     cd->prepare_session(this);
-                    gloox::StanzaExtensionList lst;
-                    lst.push_back( new gloox::Nickname( std::string( utf8name ) ) );
-                    cd->session->send( gloox::EmptyString, j->getID(), lst );
+                    for ( const auto& r : cd->resources )
+                    {
+                        gloox::StanzaExtensionList lst;
+                        lst.push_back( new gloox::Nickname( std::string( utf8name ) ) );
+                        r.session->send( gloox::EmptyString, j->getID(), lst );
+                    }
                 }
         }
         dirty_vcard = true;
@@ -2168,6 +2290,10 @@ void xmpp::set_config(const void*data, int isz)
 {
     std::string cfg_password;
     gloox::JID cfg_jid;
+
+    bool login_present = false;
+    bool password_present = false;
+
     if ( first )
         cfg_jid = first->jid, cfg_password = j->password();
     bool proxy_settings_ok = false;
@@ -2193,9 +2319,10 @@ void xmpp::set_config(const void*data, int isz)
         d->addFeature( gloox::XMLNS_NICKNAME );
         d->addFeature( gloox::XMLNS_CHAT_STATES );
         d->addFeature( gloox::XMLNS_BYTESTREAMS );
+        d->addFeature( gloox::XMLNS_IBB );
         //d->addFeature( XMLNS_AVATARS );
 
-        d->setVersion( HOME_SITE, SS( PLUGINVER ) );
+        d->setVersion( "isotoxin", SS( PLUGINVER ) );
 
         gloox::Capabilities *caps = new gloox::Capabilities( d );
         caps->setNode( HOME_SITE );
@@ -2218,12 +2345,14 @@ void xmpp::set_config(const void*data, int isz)
             cfg_jid.setJID( std::string( val.as_sptr().s, val.get_length() ) );
             if ( o != cfg_jid )
                 reconnect = true;
+            login_present = true;
             return;
         }
         if ( field.equals( CONSTASTR( CFGF_PASSWORD ) ) )
         {
             if ( !val.equals( xsptr( cfg_password ) ) )
                 cfg_password = std::string( val.as_sptr().s, val.get_length() ), reconnect = true;;
+            password_present = true;
             return;
         }
         if ( field.equals( CONSTASTR( CFGF_PROXY_TYPE ) ) )
@@ -2254,6 +2383,8 @@ void xmpp::set_config(const void*data, int isz)
     if ( ca.params.l )
         parse_values( ca.params, parsev ); // parse params
 
+    auth_failed = login_present && !password_present;
+
     if ( reconnect )
     {
         if ( first )
@@ -2263,8 +2394,9 @@ void xmpp::set_config(const void*data, int isz)
             {
                 first->jid = cfg_jid;
                 first->changed |= CDM_PUBID;
-                prepare_j();
             }
+            if (j->jid() != cfg_jid)
+                prepare_j();
             update_contact( nullptr );
         }
     }
@@ -2387,7 +2519,7 @@ void xmpp::set_config(const void*data, int isz)
 
     prepare_j();
     send_configurable();
-    hf->operation_result( LOP_SETCONFIG, cfg_jid.full().empty() ? CR_AUTHENTICATIONFAILED : CR_OK );
+    hf->operation_result( LOP_SETCONFIG, cfg_jid.full().empty() || auth_failed ? CR_AUTHENTICATIONFAILED : CR_OK );
 }
 void xmpp::init_done()
 {
@@ -2569,7 +2701,7 @@ void xmpp::file_send(int cid, const file_send_info_s *finfo)
 
         gloox::JID jid = cd->jid;
 
-        int pr = 0;
+        int pr = -10000;
         for ( const auto& r : cd->resources )
         {
             if ( pr < r.priority )
@@ -2579,7 +2711,7 @@ void xmpp::file_send(int cid, const file_send_info_s *finfo)
             }
         }
 
-        std::string sid = fm->requestFT( jid, fn, (long)finfo->filesize );
+        std::string sid = fm->requestFT( jid, fn, (long)finfo->filesize, gloox::EmptyString, gloox::EmptyString, gloox::EmptyString, gloox::EmptyString, gloox::SIProfileFT::FTTypeS5B | gloox::SIProfileFT::FTTypeIBB );
         if (sid.empty())
         {
             hf->file_control( finfo->utag, FIC_DISCONNECT ); // put it to send queue: assume transfer broken
@@ -2613,7 +2745,7 @@ void xmpp::file_control(u64 utag, file_control_e fctl)
                 break;
             case FIC_BREAK:
                 if (f->bs) fm->cancel( f->bs );
-                delete f;
+                f->die();
                 break;
             }
             return;
@@ -2635,13 +2767,11 @@ void xmpp::file_control(u64 utag, file_control_e fctl)
                 break;
             case FIC_REJECT:
             case FIC_BREAK:
-                //tox_file_control( tox, f->fid, f->fnn, TOX_FILE_CONTROL_CANCEL, nullptr );
-                fm->declineFT( cd->jid, f->fileid, gloox::SIManager::RequestRejected );
-                delete f;
+                fm->declineFT( f->jid, f->fileid, gloox::SIManager::RequestRejected );
+                f->die();
                 break;
             case FIC_DONE:
-                //tox_file_send_chunk( tox, f->fid, f->fnn, 0, nullptr, 0, nullptr );
-                delete f;
+                f->die();
                 break;
             }
             return;

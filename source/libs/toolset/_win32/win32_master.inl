@@ -6,36 +6,9 @@
 
 TS_STATIC_CHECK( sizeof( master_internal_stuff_s ) <= MASTERCLASS_INTERNAL_STUFF_SIZE, "bad size" );
 
-#define WM_LOOPER_TICK (65534)
+#define WM_LOOPER_TICK (WM_USER + 1111)
 
-#pragma warning (push)
-#pragma warning (disable: 4035)
-__forceinline byte __fastcall lp2key( LPARAM lp )
-{
-    // essssssssxxxxxxxxxxxxxxxx
-    //  llllllllhhhhhhhhllllllll
-
-#ifdef MODE64
-    uint64 t = lp;
-    t >>= 16;
-    t = ( t & 0x7f ) | ( ( t >> 1 ) & 0x80 );
-
-    return as_byte( t & 0xff );
-#else
-    _asm
-    {
-        mov eax, lp
-        shr eax, 15
-        shr ah, 1
-        shr ah, 1
-        rcr al, 1
-        //and eax,255
-    };
-#endif
-}
-#pragma warning (pop)
-
-
+/*
 static LRESULT CALLBACK looper_proc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam )
 {
     if ( WM_LOOPER_TICK == message )
@@ -53,6 +26,7 @@ static LRESULT CALLBACK looper_proc( HWND hWnd, UINT message, WPARAM wParam, LPA
 
     return DefWindowProcW( hWnd, message, wParam, lParam );
 }
+*/
 
 static DWORD WINAPI looper( void * )
 {
@@ -65,19 +39,31 @@ static DWORD WINAPI looper( void * )
     {
         DWORD ct = timeGetTime();
         int d = (int)( ct - istuff.lasttick );
-        istuff.lasttick = ct;
 
         int sleep = master().sleep;
         if ( master().is_sys_loop )
             sleep = 100;
 
-        if ( istuff.looper_hwnd && ( d > 1000 || istuff.looper_allow_tick ) )
+        if ( master().is_sys_loop )
         {
+            istuff.cnttick = 0;
+            istuff.looper_allow_tick = true;
+            istuff.lasttick = ct;
+            Sleep( 100 );
+            continue;
+        }
+
+        if ( master().mainwindow && ( d > 100 || istuff.looper_allow_tick ) )
+        {
+            DWORD mainthreadid = GetWindowThreadProcessId( wnd2hwnd( master().mainwindow ), nullptr );
+
             istuff.looper_allow_tick = false;
-            ++istuff.cnttick;
-            PostMessageW( istuff.looper_hwnd, WM_LOOPER_TICK, 0, 0 );
-            if ( istuff.cnttick > 100 )
-                __debugbreak();
+            if ( istuff.cnttick < 10 )
+            {
+                ++istuff.cnttick;
+                istuff.lasttick = ct;
+                PostThreadMessageW( mainthreadid, WM_LOOPER_TICK, 0, 0 );
+            }
         }
         else if ( !istuff.looper_allow_tick )
             sleep = 1;
@@ -668,32 +654,39 @@ static DWORD WINAPI multiinstanceblocker( LPVOID )
                 while ( PeekMessage( &msgm, nullptr, WM_LOOPER_TICK, WM_LOOPER_TICK, PM_REMOVE ) )
                     --istuff.cnttick;
             }
+
+            if ( master().on_loop )
+                master().on_loop();
+
+            istuff.lasttick = timeGetTime();
+            istuff.looper_allow_tick = true;
+            continue;
         }
 
         bool downkey = false;
         bool dispatch = true;
 
-        if ( istuff.looper_hwnd == nullptr )
-        {
-            WNDCLASSEXW wcex;
+        //if ( istuff.looper_hwnd == nullptr )
+        //{
+        //    WNDCLASSEXW wcex;
 
-            wcex.cbSize = sizeof( wcex );
-            wcex.style = 0;
-            wcex.lpfnWndProc = (WNDPROC)looper_proc;
-            wcex.cbClsExtra = 0;
-            wcex.cbWndExtra = 0;
-            wcex.hInstance = istuff.inst;
-            wcex.hIcon = nullptr;
-            wcex.hCursor = nullptr;
-            wcex.hbrBackground = nullptr;
-            wcex.lpszMenuName = nullptr;
-            wcex.lpszClassName = L"aoi202309fasdo234";
-            wcex.hIconSm = nullptr;
+        //    wcex.cbSize = sizeof( wcex );
+        //    wcex.style = 0;
+        //    wcex.lpfnWndProc = (WNDPROC)looper_proc;
+        //    wcex.cbClsExtra = 0;
+        //    wcex.cbWndExtra = 0;
+        //    wcex.hInstance = istuff.inst;
+        //    wcex.hIcon = nullptr;
+        //    wcex.hCursor = nullptr;
+        //    wcex.hbrBackground = nullptr;
+        //    wcex.lpszMenuName = nullptr;
+        //    wcex.lpszClassName = L"aoi202309fasdo234";
+        //    wcex.hIconSm = nullptr;
 
-            RegisterClassExW( &wcex );
+        //    RegisterClassExW( &wcex );
 
-            istuff.looper_hwnd = CreateWindowW( L"aoi202309fasdo234", nullptr, 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, istuff.inst, nullptr );
-        }
+        //    istuff.looper_hwnd = CreateWindowW( L"aoi202309fasdo234", nullptr, 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, istuff.inst, nullptr );
+        //}
 
         int xmsg = msg.message;
         switch ( xmsg )
@@ -778,7 +771,9 @@ static DWORD WINAPI multiinstanceblocker( LPVOID )
             downkey = true;
         case WM_KEYUP:
         case WM_SYSKEYUP:
+            //++istuff.kbdh;
             TranslateMessage( &msg );
+            //--istuff.kbdh;
             if ( master().on_keyboard )
             {
                 if ( msg.wParam == VK_SNAPSHOT )
@@ -846,14 +841,20 @@ static DWORD WINAPI multiinstanceblocker( LPVOID )
 
         }
 
-        if ( dispatch ) DispatchMessageW( &msg );
+        if ( dispatch )
+        {
+            //++istuff.kbdh;
+            DispatchMessageW( &msg );
+            //--istuff.kbdh;
+        }
+
     }
 
-    if ( istuff.looper_hwnd )
-    {
-        DestroyWindow( istuff.looper_hwnd );
-        istuff.looper_hwnd = nullptr;
-    }
+    //if ( istuff.looper_hwnd )
+    //{
+    //    DestroyWindow( istuff.looper_hwnd );
+    //    istuff.looper_hwnd = nullptr;
+    //}
 
 }
 
@@ -1086,6 +1087,7 @@ process_handle_s::~process_handle_s()
         IDC_SIZENESW,
         IDC_IBEAM,
         IDC_HAND,
+        IDC_CROSS,
     };
 
     if ( ct < 0 || ct >= CURSOR_LAST )

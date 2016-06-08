@@ -8,6 +8,16 @@ struct vsb_descriptor_s
     ts::wstr_c id;
     ts::wstr_c desc;
     ts::tbuf0_t<ts::ivec2> resolutions;
+    bool is_desktop_area() const
+    {
+        if ( id.begins(CONSTWSTR("desktop/")) )
+        {
+            // desktop/0/200/200/800/600
+            //         m x0  y0  x1  y1
+            return id.count_chars('/') == 5;
+        }
+        return false;
+    }
 };
 
 typedef ts::array_inplace_t< vsb_descriptor_s, 0 > vsb_list_t;

@@ -69,6 +69,7 @@ int proc_rgbi420(const wstrings_c & pars);
 int proc_i420rgb(const wstrings_c & pars);
 int proc_bsdl(const wstrings_c & pars);
 int proc_rsvg( const wstrings_c & pars );
+int proc_fxml( const wstrings_c & pars );
 
 int proc_loc_(const wstrings_c & pars)
 {
@@ -103,6 +104,7 @@ struct command_s
     command_s(L"changeloc", L"Change Locale [path-to-source] [path-to-locale] [locale default en]", proc_lochange_),
     command_s(L"trunc", L"Truncate [file] at [offset-from-begining]", proc_trunc),
     command_s(L"antic99", L"Remove C99 dependence [c-file]", proc_antic99),
+    command_s( L"fxml", L"format [xml-file]", proc_fxml ),
     command_s(L"nodes", L"Grab nodes list from https://wiki.tox.chat/users/nodes", proc_grabnodes),
     command_s(L"http", L"Do some http ops", proc_http),
     command_s(L"toxrelay", L"Just run TOX relay", proc_toxrelay),

@@ -410,4 +410,35 @@ Cleanup:
     return fIsRunAsAdmin != FALSE;
 }
 
+str_c gen_machine_unique_string()
+{
+    str_c rs;
+#ifdef _WIN32
+
+    HKEY k;
+    if ( RegOpenKeyExW( HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Cryptography", 0, KEY_READ, &k ) == ERROR_SUCCESS )
+    {
+        DWORD lt = REG_SZ;
+        DWORD sz = 1024;
+        ts::wchar buf[ 1024 ];
+        int rz = RegQueryValueExW( k, L"MachineGuid", 0, &lt, (LPBYTE)buf, &sz );
+        if ( rz == ERROR_SUCCESS )
+        {
+            ts::wsptr b( buf, sz / sizeof( ts::wchar ) - 1 );
+            rs.set( to_str(b) );
+        }
+    }
+
+    RegCloseKey( k );
+
+    ts::uint32 volumesn = 0;
+    GetVolumeInformationA( "c:\\", nullptr, 0, &volumesn, nullptr, nullptr, nullptr, 0 );
+
+    rs.append_char( '-' ).append_as_uint( volumesn );
+
+#endif
+
+    return rs;
+}
+
 }

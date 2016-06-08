@@ -51,7 +51,9 @@ struct wnd_show_params_s
     wnd_c *parent = nullptr;
     wstr_c name;
     irect rect = irect(0);
+    float opacity = 1.0f;
     disposition_e d = D_NORMAL;
+
 
     bool collapsed() const
     {
@@ -128,7 +130,9 @@ public:
     virtual void set_focus( bool bring_to_front ) = 0;
     virtual void flash() = 0;
     virtual void set_capture() = 0;
-    
+
+    virtual void make_hole( const ts::irect &holerect ) = 0;
+
     virtual bmpcore_exbody_s get_backbuffer() = 0;
     virtual void flush_draw( const irect &r ) = 0;
 

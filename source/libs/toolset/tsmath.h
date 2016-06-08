@@ -393,6 +393,12 @@ namespace ts
             return *this;
 		}
 
+        irect & normalize()
+        {
+            if ( lt.x > rb.x ) SWAP( lt.x, rb.x );
+            if ( lt.y > rb.y ) SWAP( lt.y, rb.y );
+            return *this;
+        }
         
         bool intersected(const irect &i) const;
         int intersect_area(const irect &i) const;

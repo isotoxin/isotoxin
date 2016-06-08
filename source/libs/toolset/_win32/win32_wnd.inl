@@ -165,6 +165,7 @@ class win32_wnd_c : public wnd_c
     static LRESULT CALLBACK wndhandler( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
     {
         safe_ptr<win32_wnd_c> wnd = hwnd2wnd( hwnd );
+        bool downkey = false;
 
         auto mouse_evt = [&]( mouse_event_e e ) -> LRESULT
         {
@@ -455,6 +456,27 @@ class win32_wnd_c : public wnd_c
             return 1;
         case WM_SYSCHAR:
             return 0;
+            /*
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+            downkey = true;
+        case WM_KEYUP:
+        case WM_SYSKEYUP:
+            if ( ((master_internal_stuff_s *)&master().internal_stuff)->kbdh == 0 )
+            {
+                int casw = 0;
+                if ( downkey )
+                {
+                    if ( GetKeyState( VK_CONTROL ) < 0 ) casw |= casw_ctrl;
+                    if ( GetKeyState( VK_MENU ) < 0 ) casw |= casw_alt;
+                    if ( GetKeyState( VK_SHIFT ) < 0 ) casw |= casw_shift;
+                    if ( GetKeyState( VK_LWIN ) < 0 || GetKeyState( VK_RWIN ) < 0 ) casw |= casw_win;
+                }
+
+                master().on_keyboard( lp2key( lparam ), downkey, casw );
+            }
+            return 0;
+            */
 
         default:
             ;
@@ -623,7 +645,26 @@ class win32_wnd_c : public wnd_c
     drawable_bitmap_c backbuffer;
     irect normal_rect = irect(0);
     int maxmon = -1;
-    //int evtstart = 0;
+    
+    int l_alpha = 255; // 0..255
+
+    void apply_layered_attributes()
+    {
+        LONG oldstate = GetWindowLongW( hwnd, GWL_EXSTYLE );
+        LONG newstate = oldstate;
+
+        uint8 a = (uint8)l_alpha;
+
+        if ( a < 255 || flags.is( F_LAYERED ) )
+            newstate |= WS_EX_LAYERED;
+        if ( a == 255 && !flags.is( F_LAYERED ) )
+            newstate &= ~WS_EX_LAYERED;
+
+        if ( oldstate != newstate )
+            SetWindowLongW( hwnd, GWL_EXSTYLE, newstate );
+
+            SetLayeredWindowAttributes( hwnd, 0, a, LWA_ALPHA );
+    }
 
     void add_child( win32_wnd_c *c )
     {
@@ -762,6 +803,33 @@ public:
         return fm < 0 ? fmdst : fm;
     }
 
+    virtual void make_hole( const ts::irect &holerect ) override
+    {
+        if (holerect)
+        {
+            RECT rr;
+            GetWindowRect( hwnd, &rr );
+
+            HRGN r0 = CreateRectRgn( 0, 0, 0, 0 );
+            HRGN r1 = CreateRectRgn(0,0,rr.right-rr.left, rr.bottom-rr.top);
+            HRGN r2 = CreateRectRgn( holerect.lt.x, holerect.lt.y, holerect.rb.x, holerect.rb.y );
+            CombineRgn(r0, r1, r2, RGN_XOR);
+            DeleteObject( r1 );
+            DeleteObject( r2 );
+
+            SetWindowRgn( hwnd, r0, TRUE );
+        } else
+        {
+            SetWindowRgn( hwnd, nullptr, TRUE );
+        }
+    }
+
+    void opacity( float v )
+    {
+        l_alpha = CLAMP<uint8>( ts::lround( v * 255.0f ) );
+        apply_layered_attributes();
+    }
+
     /*virtual*/ void vshow( wnd_show_params_s *shp ) override
     {
         if ( hwnd )
@@ -774,7 +842,7 @@ public:
             bool update_frame = false;
             disposition_e odp = dp;
 
-            if ( !shp->collapsed() && shp->layered )
+            if ( !shp->collapsed() && (shp->layered || shp->opacity < 1.0f) )
             {
                 LONG oldstate = GetWindowLongW( hwnd, GWL_EXSTYLE );
                 LONG newstate = oldstate | WS_EX_LAYERED;
@@ -936,6 +1004,7 @@ public:
                 }
             }
 
+            opacity( shp->opacity );
 
             if ( cr_brd )
                 recreate_border(); // rect pos is ok now
@@ -954,7 +1023,7 @@ public:
         if ( shp && shp->mainwindow )
             exf |= WS_EX_APPWINDOW;
 
-        if ( shp && shp->layered )
+        if ( shp && (shp->layered || shp->opacity < 1.0f) )
             exf |= WS_EX_LAYERED;
 
         if ( shp && shp->collapsed() )
@@ -1003,7 +1072,10 @@ public:
         DMSG( "create hwnd: " << hwnd );
 
         if ( shp )
+        {
+            opacity( shp->opacity );
             shp->apply( true, false );
+        }
 
         //if ( exf & WS_EX_ACCEPTFILES )
         //    DragAcceptFiles( hwnd, TRUE );
@@ -1065,17 +1137,32 @@ public:
 
     struct modal_use_s
     {
+        static VOID CALLBACK TimerProc(
+            _In_ HWND     hwnd,
+            _In_ UINT     uMsg,
+            _In_ UINT_PTR idEvent,
+            _In_ DWORD    dwTime
+        )
+        {
+            if ( master().on_loop )
+                master().on_loop();
+        }
+
         modal_use_s()
         {
             master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
             ++istuff.sysmodal;
             master().is_sys_loop = istuff.sysmodal > 0;
+            if ( istuff.sysmodal == 1)
+                istuff.timerid = SetTimer( nullptr, 0, 1, TimerProc );
         }
         ~modal_use_s()
         {
             master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
             --istuff.sysmodal;
             master().is_sys_loop = istuff.sysmodal > 0;
+            if ( istuff.sysmodal == 0 )
+                KillTimer( nullptr, istuff.timerid );
         }
     };
 

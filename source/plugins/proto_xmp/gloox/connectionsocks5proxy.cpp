@@ -312,7 +312,7 @@ namespace gloox
       pos += m_server.length();
     }
     int nport = htons( port );
-    d[pos++] = static_cast<char>( nport );
+    d[pos++] = static_cast<char>( nport & 0xff );
     d[pos++] = static_cast<char>( nport >> 8 );
 
     std::string message = "Requesting socks5 proxy connection to " + server + ":"

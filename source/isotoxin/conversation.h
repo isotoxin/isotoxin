@@ -126,6 +126,7 @@ class gui_notice_callinprogress_c : public gui_notice_c
     GM_RECEIVER(gui_notice_callinprogress_c, ISOGM_CAMERA_TICK);
     GM_RECEIVER(gui_notice_callinprogress_c, ISOGM_PEER_STREAM_OPTIONS);
     GM_RECEIVER(gui_notice_callinprogress_c, GM_HEARTBEAT);
+    GM_RECEIVER(gui_notice_callinprogress_c, ISOGM_GRABDESKTOPEVENT );
 
     time_t showntime = 0;
     ts::safe_ptr< fullscreenvideo_c > fsvideo;

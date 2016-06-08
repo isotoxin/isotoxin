@@ -142,3 +142,45 @@ public:
     void set_video_devices(vsb_list_t &&_video_devices);
 
 };
+
+
+class desktopgrab_c;
+template<> struct MAKE_ROOT<desktopgrab_c> : public _PROOT( desktopgrab_c )
+{
+    ts::irect r;
+    contact_key_s k;
+    int monitor;
+    bool av_call;
+    MAKE_ROOT( const ts::irect &r, const contact_key_s &k, int monitor, bool av_call ) :_PROOT( desktopgrab_c )( ), r( r ), k(k), monitor(monitor), av_call( av_call ) { init( true ); }
+    ~MAKE_ROOT();
+};
+
+class desktopgrab_c : public gui_control_c
+{
+    GM_RECEIVER( desktopgrab_c, ISOGM_GRABDESKTOPEVENT );
+    bool esc_handler( RID, GUIPARAM );
+
+    ts::irect orr = ts::irect(0);
+    ts::irect hole = ts::irect( 0 );
+
+    int monitor = 0;
+    int tickvalue = 0;
+    framedrawer_s fd;
+    contact_key_s k;
+
+    bool av_call;
+
+    bool ticktick( RID, GUIPARAM );
+protected:
+    /*virtual*/ void created() override;
+
+public:
+    desktopgrab_c( MAKE_ROOT<desktopgrab_c> &data );
+    ~desktopgrab_c();
+
+    /*virtual*/ ts::wstr_c get_name() const override { return ts::wstr_c(); }
+    /*virtual*/ bool sq_evt( system_query_e qp, RID rid, evt_data_s &data ) override;
+
+    static void run( const contact_key_s &k, bool av_call );
+
+};

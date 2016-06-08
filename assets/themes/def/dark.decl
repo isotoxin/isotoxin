@@ -198,4 +198,5 @@ colors {
 	sb_bg=#b8b8b8
 	sb_bg_h=#b8b8b8
 	badword=#ff6100
+	grabcolor=#0000ff
 }

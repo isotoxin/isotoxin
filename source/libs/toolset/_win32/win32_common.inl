@@ -38,8 +38,9 @@ struct master_internal_stuff_s
 
     sys_master_c::_HANDLER_T popup_notify = nullptr;
     volatile HANDLE popup_event = nullptr;
-    HWND looper_hwnd = nullptr;
+    //HWND looper_hwnd = nullptr;
     HINSTANCE inst = nullptr;
+    UINT_PTR timerid = 0;
     DWORD lasttick = 0;
     int regclassref = 0;
     int sysmodal = 0;
@@ -60,3 +61,30 @@ struct draw_target_s
     explicit draw_target_s( const bmpcore_exbody_s &eb_ ) :eb( &eb_ ), dc( nullptr ) {}
     explicit draw_target_s( HDC dc ) :eb( nullptr ), dc( dc ) {}
 };
+
+#pragma warning (push)
+#pragma warning (disable: 4035)
+__forceinline byte __fastcall lp2key( LPARAM lp )
+{
+    // essssssssxxxxxxxxxxxxxxxx
+    //  llllllllhhhhhhhhllllllll
+
+#ifdef MODE64
+    uint64 t = lp;
+    t >>= 16;
+    t = ( t & 0x7f ) | ( ( t >> 1 ) & 0x80 );
+
+    return as_byte( t & 0xff );
+#else
+    _asm
+    {
+        mov eax, lp
+        shr eax, 15
+        shr ah, 1
+        shr ah, 1
+        rcr al, 1
+        //and eax,255
+    };
+#endif
+}
+#pragma warning (pop)

@@ -687,32 +687,10 @@ void crypto_zero( ts::uint8 *buf, int bufsize )
 void get_unique_machine_id( ts::uint8 *buf, int bufsize )
 {
     ts::tmp_buf_c b;
-    b.append_s( "machine-salt" );
-    char *cn = (char *)b.expand( MAX_COMPUTERNAME_LENGTH + 1 );
-    DWORD cnSize = MAX_COMPUTERNAME_LENGTH;
-    GetComputerNameA( cn, &cnSize );
-    b.set_size( b.size() + cnSize - ( MAX_COMPUTERNAME_LENGTH + 1 ) );
-
-    ts::tmp_tbuf_t<IP_ADAPTER_INFO> adapters;
-    adapters.set_size( sizeof( IP_ADAPTER_INFO ) + 64 );
-    adapters.tbegin<IP_ADAPTER_INFO>()->Next = nullptr; //-V807
-
-    ULONG sz = (ULONG)adapters.byte_size();
-    while ( ERROR_BUFFER_OVERFLOW == GetAdaptersInfo( adapters.tbegin<IP_ADAPTER_INFO>(), &sz ) )
-    {
-        adapters.set_size( sz, false );
-        adapters.tbegin<IP_ADAPTER_INFO>()->Next = nullptr;
-    }
-
-    const IP_ADAPTER_INFO *infos = adapters.tbegin<IP_ADAPTER_INFO>();
-    do
-    {
-        b.append_buf( infos->Address, 6 );
-        infos = infos->Next;
-    } while ( infos );
-
-    ts::uint32 &volumesn =* ( ts::uint32 *)b.expand(sizeof( ts::uint32 ));
-    GetVolumeInformationA( "c:\\", nullptr, 0, &volumesn, nullptr, nullptr, nullptr, 0 );
+    b.append_s( "kfnghtyeizakf" ); // salt
+    b.append_s( ts::gen_machine_unique_string() );
+    b.tappend<char>('-');
+    b.append_s( prf().unique_profile_tag() );
 
     crypto_generichash( buf, bufsize, b.data(), b.size(), nullptr, 0 );
     sodium_memzero( b.data(), b.size() );
@@ -733,9 +711,9 @@ ts::str_c encode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& 
     return r;
 }
 
-ts::str_c decode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& s )
+bool decode_string_base64( ts::str_c& rslt, ts::uint8 *key /* 32 bytes */, const ts::asptr& s )
 {
-    if ( s.l == 0 ) return ts::str_c();
+    if ( s.l == 0 ) return true;
     ts::tmp_buf_c b;
     b.set_size( s.l * 2, false );
     memset( b.data(), 0, s.l * 2 );
@@ -747,14 +725,24 @@ ts::str_c decode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& 
     TS_STATIC_CHECK( 32 == crypto_stream_chacha20_KEYBYTES, "cha cha key" );
     crypto_stream_chacha20_xor( b.data(), b.data(), b.size() - crypto_stream_chacha20_NONCEBYTES, nonce, key );
 
+    bool eqf = false;
     --sz;
-    for ( ; sz > 0 && b.data()[ sz ] == '='; --sz );
+    for ( ; sz > 0 && b.data()[ sz ] == '='; --sz ) eqf = true;
+    if ( !eqf )
+        return false; // at least one '=' at end of string
+
     int n = sz;
     for ( ; sz > 0 && b.data()[ sz ] != '/'; --sz );
+    if ( b.data()[ sz ] != '/' )
+        return false;
+
     int psz = ts::pstr_c( ts::asptr( (const char *)b.data() + sz + 1, n - sz ) ).as_uint();
-    ts::str_c r( (const char *)b.data(), psz );
+    if ( psz != sz )
+        return false;
+
+    rslt.set( (const char *)b.data(), psz );
     sodium_memzero( b.data(), b.size() );
-    return r;
+    return true;
 }
 
 uint64 random64()

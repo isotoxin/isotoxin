@@ -609,6 +609,8 @@ rectengine_root_c::~rectengine_root_c()
         if ( pss.is_maximized() && shp.d == ts::D_NORMAL )
             shp.d = ts::D_MAX;
 
+        shp.opacity = pss.opacity();
+
         shp.parent = ts::master().mainwindow;
         if ( flags.is( F_SYSTEM ) )
         {
@@ -719,6 +721,7 @@ rectengine_root_c::~rectengine_root_c()
         shp.layered = pss.is_alphablend();
         shp.rect = pss.screenrect(false);
         shp.visible = true;
+        shp.opacity = pss.opacity();
         ts::disposition_e odp = syswnd.wnd->disposition();
         syswnd.wnd->show( &shp );
 
@@ -1457,6 +1460,7 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
                     }
                     if (hd.area & AREA_EDITTEXT) return ts::CURSOR_IBEAM;
                     if (hd.area & AREA_HAND) return ts::CURSOR_HAND;
+                    if ( hd.area & AREA_CROSS ) return ts::CURSOR_CROSS;
                     
 
                     return ts::CURSOR_ARROW;
@@ -1577,6 +1581,12 @@ bool rectengine_root_c::shakeme(RID, GUIPARAM)
         MODIFY( getrect() ).pos(p);
     }
     return true;
+}
+
+void rectengine_root_c::make_hole( const ts::irect &holerect )
+{
+    if ( syswnd.wnd )
+        syswnd.wnd->make_hole(holerect);
 }
 
 void rectengine_root_c::tab_focus( RID r, bool fwd )

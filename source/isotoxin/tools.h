@@ -233,6 +233,7 @@ enum isogmsg_e
     ISOGM_EXPORT_PROTO_DATA,
     ISOGM_UPDATE_MESSAGE_NOTIFICATION,
     ISOGM_SUMMON_NOPROFILE_UI,
+    ISOGM_GRABDESKTOPEVENT,
 
     ISOGM_ON_EXIT,
 
@@ -265,7 +266,6 @@ template<> struct gmsg<ISOGM_UPDATE_MESSAGE_NOTIFICATION> : public gmsgbase
     gmsg() :gmsgbase( ISOGM_UPDATE_MESSAGE_NOTIFICATION ) {}
     ts::array_safe_t< incoming_msg_panel_c, 1 > panels;
 };
-
 
 template<> struct gmsg<ISOGM_EXPORT_PROTO_DATA> : public gmsgbase
 {

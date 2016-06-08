@@ -29,4 +29,7 @@ void TSCALL explore_path( const wsptr &path, bool path_only );
 
 
 bool TSCALL is_admin_mode();
+
+str_c gen_machine_unique_string();
+
 }

@@ -160,12 +160,13 @@ struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
 
     int progress(int &bytes_per_sec) const;
     void upd_message_item(bool force);
+    static void upd_message_item( unfinished_file_transfer_s &uft );
 
 
     void upload_accepted();
     void resume();
     void prepare_fn( const ts::wstr_c &path_with_fn, bool overwrite );
-    void kill( file_control_e fctl = FIC_BREAK );
+    void kill( file_control_e fctl = FIC_BREAK, unfinished_file_transfer_s *uft = nullptr );
     void save( uint64 offset, const ts::buf0_c&data );
     void query( uint64 offset, int sz );
     void pause_by_remote( bool p );
@@ -346,6 +347,7 @@ public:
     GM_RECEIVER( application_c, GM_UI_EVENT );
     GM_RECEIVER( application_c, ISOGM_DELIVERED );
     GM_RECEIVER( application_c, ISOGM_EXPORT_PROTO_DATA );
+    GM_RECEIVER( application_c, ISOGM_GRABDESKTOPEVENT );
     
     ts::array_inplace_t<av_contact_s,0> m_avcontacts;
 

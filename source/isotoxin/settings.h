@@ -61,6 +61,7 @@ class dialog_setup_network_c : public gui_isodialog_c
     int addh = 0;
     bool predie = false;
     bool password_changed = false;
+    bool password_ok = false;
 
     bool uname_edit(const ts::wstr_c &t);
     bool ustatus_edit(const ts::wstr_c &t);

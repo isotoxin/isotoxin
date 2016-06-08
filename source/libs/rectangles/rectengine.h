@@ -72,6 +72,7 @@ enum area_e
     AREA_CAPTION_NOMOVE = 32,
     AREA_EDITTEXT = 64,
     AREA_HAND = 128,
+    AREA_CROSS = 256,
 
     AREA_NORESIZE = 65536,
     AREA_NOMOVE = 65536 * 2,
@@ -314,7 +315,7 @@ class rectengine_root_c : public rectengine_c
         int countdown = 5;
     };
     UNIQUE_PTR( shaker_s ) shaker;
-
+    
     int drawtag = 0;
     ts::flags32_s flags;
     static const ts::flags32_s::BITS F_DIP = SETBIT(0);
@@ -376,6 +377,8 @@ public:
     bool update_foreground();
     void set_system_focus(bool bring_to_front = false);
     void flash();
+
+    void make_hole( const ts::irect &holerect );
 
     bool is_foreground() const
     {

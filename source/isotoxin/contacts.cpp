@@ -1514,8 +1514,12 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_FILE>&ifl)
     case FIC_UNKNOWN:
     case FIC_DONE:
         DMSG("fkill " << ifl.i_utag << (int)ifl.fctl );
-        if (file_transfer_s *ft = g_app->find_file_transfer_by_iutag(ifl.i_utag))
-            ft->kill( ifl.fctl );
+        if ( file_transfer_s *ft = g_app->find_file_transfer_by_iutag( ifl.i_utag ) )
+        {
+            unfinished_file_transfer_s uft;
+            ft->kill( ifl.fctl, &uft );
+            file_transfer_s::upd_message_item(uft);
+        }
         break;
     }
 

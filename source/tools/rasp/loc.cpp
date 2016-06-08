@@ -455,3 +455,84 @@ int proc_unix2dos(const wstrings_c & pars)
 
     return 0;
 }
+
+
+int proc_fxml( const wstrings_c & pars )
+{
+    if ( pars.size() < 2 ) return 0;
+    wstr_c xmlf = pars.get( 1 );
+
+    buf_c b; b.load_from_disk_file( xmlf );
+
+    if ( b.size() == 0 )
+    {
+        Print( FOREGROUND_RED, "no xml defined" );
+        return 0;
+    }
+
+    int tab = 0;
+    str_c s( b.cstr() );
+    str_c o;
+
+    bool intag = false;
+    bool closetag = false;
+    for( int i=0;i<s.get_length();++i )
+    {
+        char c = s.get_char( i );
+        char c2 = s.cstr()[i+1];
+        if ( intag )
+        {
+            if ( c == '<' ) break;
+            if ( c == '/' && c2 == '>' )
+            {
+                if ( closetag )
+                    break;
+
+                intag = false;
+                o.append( CONSTASTR( "/>\r\n" ) );
+                ++i;
+                continue;
+            }
+            if ( c == '>' )
+            {
+                o.append( CONSTASTR( ">\r\n" ) );
+                intag = false;
+                if (!closetag)
+                    tab += 2;
+                continue;
+            }
+
+            o.append_char( c );
+
+        } else
+        {
+            if ( c == '<' && c2 == '/' )
+            {
+                closetag = true;
+                if (tab == 0)
+                    break;
+                tab -= 2;
+
+                o.append_chars( tab, ' ' );
+                o.append( CONSTASTR( "</" ) );
+                intag = true;
+                ++i;
+                continue;
+            }
+            if ( c == '<' )
+            {
+                closetag = false;
+                o.append_chars(tab, ' ');
+                o.append_char( c );
+                intag = true;
+            }
+        }
+
+    }
+
+    b.clear();
+    b.append_s( o );
+    b.save_to_file( xmlf + CONSTWSTR(".f") );
+
+    return 0;
+}

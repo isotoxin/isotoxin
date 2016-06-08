@@ -600,10 +600,11 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
 
     inf.cldets.iterate([&](const ts::str_c &dname, const ts::json_c &v) {
 
-        if (dname.equals(CONSTASTR(CDET_CLIENT)))
+        if ( dname.equals( CONSTASTR( CDET_CLIENT ) ) )
         {
             ts::astrings_c lst;
             extractitems( lst, v );
+            lst.kill_dups_and_sort();
             for ( const ts::str_c &idx : lst )
                 addl( TTT( "Client", 366 ), idx, true, false, false, vals.add( idx ) );
         } else if (dname.equals(CONSTASTR(CDET_PUBLIC_ID)))

@@ -183,6 +183,16 @@ template<> struct gmsg<ISOGM_PEER_STREAM_OPTIONS> : public gmsgbase
     ts::ivec2 videosize;
 };
 
+template<> struct gmsg<ISOGM_GRABDESKTOPEVENT> : public gmsgbase
+{
+    contact_key_s k;
+    ts::irect r;
+    int monitor = -1;
+    bool av_call = false;
+    gmsg( const ts::irect &r, const contact_key_s &k, int monitor, bool av_call ) :gmsgbase( ISOGM_GRABDESKTOPEVENT ), r( r ), k( k ), monitor(monitor), av_call( av_call ) {}
+    gmsg() :gmsgbase( ISOGM_GRABDESKTOPEVENT ), r( 0 ) {}
+};
+
 
 enum keep_contact_history_e
 {

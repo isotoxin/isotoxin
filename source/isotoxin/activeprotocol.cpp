@@ -9,7 +9,7 @@
 void crypto_zero( ts::uint8 *buf, int bufsize );
 void get_unique_machine_id( ts::uint8 *buf, int bufsize );
 ts::str_c encode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& s );
-ts::str_c decode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& s );
+bool decode_string_base64( ts::str_c& rslt, ts::uint8 *key /* 32 bytes */, const ts::asptr& s );
 
 void configurable_s::set_password( const ts::asptr&p )
 {
@@ -18,11 +18,11 @@ void configurable_s::set_password( const ts::asptr&p )
     password = encode_string_base64( encpass, p );
     crypto_zero( encpass, sizeof(encpass) );
 }
-ts::str_c configurable_s::get_password_decoded() const
+bool configurable_s::get_password_decoded( ts::str_c& rslt ) const
 {
     ts::uint8 encpass[ 32 ];
     get_unique_machine_id( encpass, 32 );
-    ts::str_c r = decode_string_base64( encpass, password );
+    bool r = decode_string_base64( rslt, encpass, password );
     crypto_zero( encpass, sizeof( encpass ) );
     return r;
 }
@@ -109,7 +109,10 @@ struct config_maker_s : public ipcw
         if ( 0 != ( features & PF_NEW_REQUIRES_LOGIN ) )
         {
             par( CONSTASTR( CFGF_LOGIN ), c.login );
-            par( CONSTASTR( CFGF_PASSWORD ), c.get_password_decoded() );
+
+            ts::str_c pwd;
+            if (c.get_password_decoded( pwd ))
+                par( CONSTASTR( CFGF_PASSWORD ), pwd );
         }
 
         return *this;
@@ -1405,7 +1408,7 @@ void active_protocol_c::set_configurable( const configurable_s &c, bool force_se
             // protocol will initiate save procedure itself
 
             w = syncdata.lock_write();
-            if (w().current_state == CR_NETWORK_ERROR)
+            if ( w().current_state == CR_NETWORK_ERROR || w().current_state == CR_AUTHENTICATIONFAILED )
             {
                 w().current_state = CR_OK; // set to ok now. if error still exist, state will be set back to CR_NETWORK_ERROR by protocol
                 w().flags.set(F_ONLINE_SWITCH);

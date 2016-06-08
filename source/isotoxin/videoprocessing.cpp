@@ -333,10 +333,23 @@ bool vsb_desktop_c::init(const vsb_descriptor_s &desc, const ts::wstrmap_c &dpar
     monitor = 0;
     ts::token<ts::wchar> t( desc.id, '/' ); ++t;
     if (t) monitor = t->as_int();
+    ts::irect da( 0 );
+    ++t; if ( t ) da.lt.x = t->as_int();
+    ++t; if ( t ) da.lt.y = t->as_int();
+    ++t; if ( t ) da.rb.x = t->as_int();
+    ++t; if ( t ) da.rb.y = t->as_int();
+
+    ts::ivec2 dasz = da.size();
+    if ( dasz.x & 3 || dasz.y & 3 )
+    {
+        dasz.x &= ~3;
+        dasz.y &= ~3;
+        da = ts::irect::from_center_and_size( da.center(), dasz );
+    }
 
     maxsize = ts::parsevec2(ts::to_str(dpar.get(CONSTWSTR("res"))), ts::ivec2(0));
 
-    rect = ts::monitor_get_max_size_fs(monitor);
+    rect = da ? da : ts::monitor_get_max_size_fs(monitor);
     set_video_size(rect.size());
 
     grab_desktop::get( this, rect, monitor );

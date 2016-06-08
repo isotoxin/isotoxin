@@ -42,6 +42,7 @@ enum cursor_e
     CURSOR_SIZENESW,
     CURSOR_IBEAM,
     CURSOR_HAND,
+    CURSOR_CROSS,
 
     CURSOR_LAST,
 };

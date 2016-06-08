@@ -4282,6 +4282,13 @@ void __stdcall online()
 
 void operator<<(chunk &chunkm, const contact_descriptor_s &desc)
 {
+    if ( !desc.is_fid_ok() )
+        return;
+    if ( desc.is_group() )
+        return;
+    if ( desc.state == CS_UNKNOWN )
+        return; // tox protocol does not support unknown contacts... and no persistent groups supported too
+
     chunk mm(chunkm.b, chunk_descriptor);
 
     chunk(chunkm.b, chunk_descriptor_id) << desc.get_id();

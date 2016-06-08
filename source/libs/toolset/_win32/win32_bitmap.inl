@@ -162,20 +162,28 @@ template<typename CORE> void bitmap_t<CORE>::render_cursor( const ivec2&pos, buf
     {
         my_body -= info().pitch * drawpos.y;
         src_color -= d->sz.x * 4 * drawpos.y;
+        yy += drawpos.y;
         drawpos.y = 0;
     }
     if ( ( info().sz.y - drawpos.y ) < yy ) yy = ( info().sz.y - drawpos.y );
 
-    for ( int y = 0; y < yy; ++y, my_body += info().pitch )
+    if ( drawpos.x < 0 )
+    {
+        my_body -= info().bytepp() * drawpos.x;
+        src_color -= 4 * drawpos.x;
+        xx += drawpos.x;
+        drawpos.x = 0;
+    }
+    if ( ( info().sz.x - drawpos.x ) < xx ) xx = ( info().sz.x - drawpos.x );
+
+    for ( int y = 0; y < yy; ++y, my_body += info().pitch, src_color += d->sz.x * 4 )
     {
         TSCOLOR *rslt = (TSCOLOR *)my_body;
+        const TSCOLOR *src = (TSCOLOR *)src_color;
 
-        for ( int x = 0; x < xx; ++x, ++rslt, src_color += 4 )
+        for ( int x = 0; x < xx; ++x, ++rslt, ++src )
         {
-            int drawposx = drawpos.x + x;
-            if ( drawposx < 0 || drawposx >= info().sz.x ) continue;
-
-            TSCOLOR c = *(TSCOLOR *)src_color;
+            TSCOLOR c = *src;
             if ( ALPHA( c ) )
                 *rslt = ALPHABLEND_PM( *rslt, c );
             else if ( 0x00FFFFFFu == c )

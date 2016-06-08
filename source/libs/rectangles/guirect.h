@@ -296,6 +296,7 @@ class rectprops_c // pod
 	ts::ivec2 m_size;
     ts::irect m_fsrect; // full screen rect (in maximized mode)
     float     m_zindex;
+    float     m_opacity;
 	ts::flags32_s m_flags;
 
     NUMGEN_START(propbits, 0);
@@ -329,6 +330,7 @@ public:
 	rectprops_c()
 	{
 		memset( this, 0, sizeof(rectprops_c) );
+        m_opacity = 1.0f;
 	}
 
 	bool is_visible() const {return m_flags.is(F_VISIBLE); }
@@ -346,6 +348,7 @@ public:
 
     bool out_of_bound() const {return m_flags.is(F_OUT_OF_BOUND); }
 
+    float opacity() const { return m_opacity; }
     float zindex() const {return m_zindex;}
 	const ts::ivec2 &pos() const {return m_pos;}
 	const ts::ivec2 &size() const {return m_size;}
@@ -356,6 +359,7 @@ public:
     ts::irect currentszrect() const { return ts::irect(ts::ivec2(0), currentsize() ); } // just size
     const ts::ivec2 &screenpos() const {return is_maximized() ? m_fsrect.lt : m_screenpos;}
 
+    rectprops_c &opacity( float opa ) { m_opacity = opa; return *this; }
     rectprops_c &zindex(float zi) { m_zindex = zi; return *this; }
     rectprops_c &setminsize( RID r );
     rectprops_c &sizew(int w) { m_size.x = w; updatefs(); ASSERT(m_size << 40000); return *this; }

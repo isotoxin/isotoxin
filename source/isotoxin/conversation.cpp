@@ -1126,6 +1126,10 @@ void gui_notice_callinprogress_c::menu_video(const ts::str_c &p)
                 b_camera_switch(RID(),nullptr);
         }
         break;
+    case 'a':
+        if ( av_contact_s *avc = get_avc() )
+            desktopgrab_c::run( avc->c->getkey(), true );
+        break;
     case 's':
         if (av_contact_s *avc = get_avc())
         {
@@ -1178,6 +1182,7 @@ bool gui_notice_callinprogress_c::b_extra(RID erid, GUIPARAM)
             m.add_separator();
 
             m.add(TTT("Default video source",360), currentvsb.id.is_empty() && iscamon ? MIF_MARKED : 0, DELEGATE(this, menu_video), CONSTASTR("x"));
+            m.add( TTT("Desktop area",472), currentvsb.is_desktop_area() && iscamon ? MIF_MARKED : 0, DELEGATE( this, menu_video ), CONSTASTR( "a" ) );
 
             for (const vsb_descriptor_s &d : video_devices)
             {
@@ -1247,6 +1252,27 @@ bool gui_notice_callinprogress_c::b_camera_switch(RID, GUIPARAM)
         }
     }
     return true;
+}
+
+ts::uint32 gui_notice_callinprogress_c::gm_handler( gmsg<ISOGM_GRABDESKTOPEVENT> &g )
+{
+    if ( !g.av_call )
+        return 0;
+    if ( g.pass == 0 )
+        return GMRBIT_CALLAGAIN;
+
+    if ( g.r && g.monitor >= 0 )
+    {
+        if ( av_contact_s *avc = get_avc() )
+            if ( avc->c->getkey() == g.k )
+            {
+                camera.reset();
+                if ( !avc->is_camera_on() )
+                    b_camera_switch( RID(), nullptr );
+            }
+    }
+
+    return 0;
 }
 
 ts::uint32 gui_notice_callinprogress_c::gm_handler(gmsg<ISOGM_PEER_STREAM_OPTIONS> &so)
@@ -5916,6 +5942,15 @@ void gui_message_area_c::send_file_item(const ts::str_c& prm)
             SUMMON_DIALOG<dialog_prepareimage_c>(UD_PREPARE_IMAGE, h->getkey());
         return;
     }
+    if ( prm.equals( CONSTASTR( "d" ) ) )
+    {
+        if ( contact_root_c *h = message_editor->get_historian() )
+        {
+            MODIFY( g_app->main ).micromize( true );
+            desktopgrab_c::run( h->getkey(), false );
+        }
+        return;
+    }
 
     ts::wstrings_c files;
     ts::wstr_c fromdir = prf().last_filedir();
@@ -5945,8 +5980,9 @@ bool gui_message_area_c::send_file(RID btn, GUIPARAM)
 {
     ts::irect br = HOLD(btn)().getprops().screenrect();
     menu_c m;
-    m.add(TTT("Send image",375), 0, DELEGATE(this, send_file_item), CONSTASTR("i"));
-    m.add(TTT("Send file",376), 0, DELEGATE(this, send_file_item), CONSTASTR("f"));
+    m.add( TTT( "Send image", 375 ), 0, DELEGATE( this, send_file_item ), CONSTASTR( "i" ) );
+    m.add( TTT("Send desktop area",471), 0, DELEGATE( this, send_file_item ), CONSTASTR( "d" ) );
+    m.add( TTT( "Send file", 376 ), 0, DELEGATE( this, send_file_item ), CONSTASTR( "f" ) );
     gui_popup_menu_c::show(menu_anchor_s(br, menu_anchor_s::RELPOS_TYPE_TU), m);
     return true;
 }

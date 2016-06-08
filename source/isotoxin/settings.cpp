@@ -3751,7 +3751,7 @@ bool dialog_setup_network_c::lost_contact(RID, GUIPARAM p)
 
 /*virtual*/ void dialog_setup_network_c::created()
 {
-    set_theme_rect(CONSTASTR("main"), false);
+    set_theme_rect(CONSTASTR("setupnetw"), false);
     __super::created();
     tabsel(CONSTASTR("1"));
 }
@@ -3850,7 +3850,11 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
     {
         dm().textfield( params.proto_desc.idname(), from_utf8( params.configurable.login ), DELEGATE( this, login_edit ) ).setname( CONSTASTR( "loginedit" ) );
         dm().vspace();
-        dm().textfield( TTT("Password",103), from_utf8( password_changed ? params.configurable.get_password_decoded() : ts::str_c() ), DELEGATE( this, password_edit ) ).passwd(true).setname( CONSTASTR( "passedit" ) );
+
+        ts::str_c pwd;
+        password_ok = params.configurable.get_password_decoded(pwd);
+
+        dm().textfield( TTT("Password",103), from_utf8( password_changed ? pwd : ts::str_c() ), DELEGATE( this, password_edit ) ).passwd(true).setname( CONSTASTR( "passedit" ) );
         dm().vspace();
         addh += 100;
         ctlenable( CONSTASTR( "dialog_button_1" ), !params.configurable.login.is_empty() );
@@ -3960,6 +3964,14 @@ bool dialog_setup_network_c::password_edit( const ts::wstr_c &t )
 {
     params.configurable.set_password( to_utf8( t ) );
     password_changed = true;
+    password_ok = true;
+
+    if ( RID r = find( CONSTASTR( "passedit" ) ) )
+    {
+        gui_textfield_c &tf = HOLD( r ).as<gui_textfield_c>();
+        tf.badvalue( false );
+    }
+
     return true;
 }
 
@@ -4088,10 +4100,15 @@ bool dialog_setup_network_c::set_proxy_addr_handler(const ts::wstr_c & t)
         gui_textfield_c &tf = HOLD( r ).as<gui_textfield_c>();
         tf.badvalue( params.configurable.login.is_empty() );
     }
-    //if ( RID r = find( CONSTASTR( "passedit" ) ) )
-    //{
-        //gui_textfield_c &tf = HOLD( r ).as<gui_textfield_c>();
-    //}
+    if ( RID r = find( CONSTASTR( "passedit" ) ) )
+    {
+        gui_textfield_c &tf = HOLD( r ).as<gui_textfield_c>();
+        tf.badvalue( !password_ok );
+        if ( !password_ok )
+            tf.set_placeholder( TOOLTIP( TTT("Enter password again",473) ), get_default_text_color( 0 ) );
+        else if ( !password_changed && !params.configurable.get_password_encoded().is_empty() )
+            tf.set_placeholder( TOOLTIP( TTT("Unchanged",474) ), get_default_text_color( 0 ) );
+    }
 }
 
 

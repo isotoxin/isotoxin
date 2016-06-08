@@ -73,7 +73,7 @@ public:
     ts::str_c get_password_encoded() const { return password; }
     void set_password( const ts::asptr&p );
     void set_password_as_is( const ts::asptr&p ) { password = p; }
-    ts::str_c get_password_decoded() const;
+    bool get_password_decoded( ts::str_c& rslt ) const;
 
 };
 

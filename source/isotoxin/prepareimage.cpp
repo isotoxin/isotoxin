@@ -849,27 +849,29 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
                         ts::ivec2 o = offset - imgrect.lt;
                         fd.draw(getengine(), croprect + o, tickvalue);
 
+                        ts::TSCOLOR ooscolor = ts::ARGB( 0, 0, 50, 50 );
+
                         if (croprect.lt.x > 0)
                         {
                             // draw dark at left
-                            getengine().draw(ts::irect(o.x, o.y + croprect.lt.y, o.x + croprect.lt.x, o.y + croprect.rb.y), ts::ARGB(0, 0, 50, 50));
+                            getengine().draw(ts::irect(o.x, o.y + croprect.lt.y, o.x + croprect.lt.x, o.y + croprect.rb.y), ooscolor);
                         }
                         int rw = image.info().sz.x - croprect.rb.x - 1;
                         if (rw > 0)
                         {
                             // draw dark at rite
-                            getengine().draw(ts::irect(o.x + croprect.rb.x, o.y + croprect.lt.y, o.x + image.info().sz.x, o.y + croprect.rb.y), ts::ARGB(0, 0, 50, 50));
+                            getengine().draw(ts::irect(o.x + croprect.rb.x, o.y + croprect.lt.y, o.x + image.info().sz.x, o.y + croprect.rb.y), ooscolor );
                         }
                         if (croprect.lt.y > 0)
                         {
                             // draw dark at top
-                            getengine().draw(ts::irect(o.x, o.y, o.x + image.info().sz.x, o.y + croprect.lt.y), ts::ARGB(0, 0, 50, 50));
+                            getengine().draw(ts::irect(o.x, o.y, o.x + image.info().sz.x, o.y + croprect.lt.y), ooscolor );
                         }
                         int rh = image.info().sz.y - croprect.rb.y - 1;
                         if (rh > 0)
                         {
                             // draw dark at bottom
-                            getengine().draw(ts::irect(o.x, o.y + croprect.rb.y, o.x + image.info().sz.x, o.y + image.info().sz.y), ts::ARGB(0, 0, 50, 50));
+                            getengine().draw(ts::irect(o.x, o.y + croprect.rb.y, o.x + image.info().sz.x, o.y + image.info().sz.y), ooscolor );
                         }
                     }
 
@@ -1136,4 +1138,149 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
 }
 
 
+MAKE_ROOT<desktopgrab_c>::~MAKE_ROOT()
+{
+    MODIFY( *me ).pos( r.lt ).size( r.size() ).opacity( 0.1960784314f ).visible( true );
+}
 
+desktopgrab_c::desktopgrab_c( MAKE_ROOT<desktopgrab_c> &data ) :gui_control_c( data ), k( data.k ), monitor(data.monitor), av_call( data.av_call )
+{
+}
+
+desktopgrab_c::~desktopgrab_c() 
+{
+    if ( gui )
+    {
+        gui->delete_event( DELEGATE(this, ticktick) );
+        gui->unregister_kbd_callback( DELEGATE( this, esc_handler ) );
+    }
+}
+
+/*virtual*/ void desktopgrab_c::created()
+{
+    set_theme_rect( CONSTASTR( "desktopgrab" ), false );
+    __super::created();
+
+    fd.prepare( ts::ARGB(0,0,0), ts::ARGB( 255, 255, 255 ) );
+
+    gui->register_kbd_callback( DELEGATE( this, esc_handler ), ts::SSK_ESC, 0 );
+
+}
+
+ts::uint32 desktopgrab_c::gm_handler( gmsg<ISOGM_GRABDESKTOPEVENT>& )
+{
+    TSDEL( this );
+    return 0;
+}
+
+bool desktopgrab_c::esc_handler( RID, GUIPARAM )
+{
+    gmsg<ISOGM_GRABDESKTOPEVENT>().send();
+    return true;
+}
+
+/*virtual*/ bool desktopgrab_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
+{
+    if ( rid != getrid() ) return false;
+
+    switch ( qp )
+    {
+    case SQ_DRAW:
+        __super::sq_evt( qp, rid, data );
+
+        {
+            getengine().begin_draw();
+            getengine().draw( get_client_area(), get_default_text_color( 0 ) );
+
+            if ( mousetrack_data_s *opd = gui->mtrack( getrid(), MTT_APPDEFINED1 ) )
+            {
+                ts::irect sr = to_local( opd->rect );
+                fd.draw(getengine(), sr, tickvalue);
+                sr.lt += 1;
+                sr.rb -= 1;
+                if ( hole != sr )
+                    getroot()->make_hole( sr ), hole = sr;
+            }
+
+            getengine().end_draw();
+        }
+        return true;
+    case SQ_MOUSE_LDOWN:
+        {
+            mousetrack_data_s &opd = gui->begin_mousetrack( getrid(), MTT_APPDEFINED1 );
+            opd.area = 0;
+            opd.mpos = data.mouse.screenpos();
+            opd.rect = ts::irect( opd.mpos, opd.mpos );
+            ticktick(RID(),nullptr);
+        }
+
+        break;
+    case SQ_MOUSE_OUT:
+        break;
+    case SQ_DETECT_AREA:
+        data.detectarea.area = AREA_CROSS;
+        return true;
+
+    case SQ_MOUSE_MOVE:
+        break;
+    case SQ_MOUSE_LUP:
+        if ( mousetrack_data_s *opd = gui->mtrack( getrid(), MTT_APPDEFINED1 ) )
+        {
+            ts::irect r = opd->rect;
+            gui->end_mousetrack( getrid(), MTT_APPDEFINED1 );
+            gmsg<ISOGM_GRABDESKTOPEVENT>( r, k, monitor, av_call ).send();
+            return true;
+        }
+        break;
+    case SQ_MOUSE_MOVE_OP:
+        if ( mousetrack_data_s *opd = gui->mtrack( getrid(), MTT_APPDEFINED1 ) )
+        {
+            opd->rect = ts::irect( opd->mpos, data.mouse.screenpos() );
+            opd->rect.normalize();
+            opd->rect.intersect( getprops().screenrect() );
+
+            ts::irect ir = to_local(opd->rect);
+            ir.lt -= 5;
+            ir.rb += 5;
+
+            ts::irect neworr = ir;
+            ir.combine( orr );
+            orr = neworr;
+
+            getengine().redraw( &ir );
+        }
+        break;
+    case SQ_RECT_CHANGED:
+        break;
+    case SQ_MOUSE_L2CLICK:
+        esc_handler(RID(), nullptr);
+        return true;
+    }
+
+    return __super::sq_evt( qp, rid, data );
+}
+
+bool desktopgrab_c::ticktick( RID, GUIPARAM )
+{
+    ++tickvalue;
+    if ( mousetrack_data_s *opd = gui->mtrack( getrid(), MTT_APPDEFINED1 ) )
+    {
+        DEFERRED_UNIQUE_CALL( 0.05, DELEGATE( this, ticktick ), nullptr );
+
+        ts::irect ir = to_local( opd->rect );
+        ir.lt -= ts::ivec2( 5 );
+        ir.rb += ts::ivec2( 5 );
+
+        getengine().redraw( &ir );
+    }
+    return true;
+}
+
+void desktopgrab_c::run( const contact_key_s &k, bool av_call )
+{
+    int mc = ts::monitor_count();
+    for ( int i = 0; i < mc; ++i )
+    {
+        MAKE_ROOT<desktopgrab_c> g( ts::monitor_get_max_size_fs( i ), k, i, av_call );
+    }
+}

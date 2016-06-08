@@ -97,6 +97,12 @@ rects
 	colors=##bg_fsvideo
   }
 
+  desktopgrab
+  {
+    base=0,0,0,0,##grabcolor
+	colors=##grabcolor
+  }
+
   icp=base
   {
   }
@@ -127,6 +133,10 @@ rects
   {
     src=back.png
     colors=##text_link
+  }
+  setupnetw=main
+  {
+    colors=##text_placeholder
   }
   cprops=main
   {
