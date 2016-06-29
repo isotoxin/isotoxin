@@ -1892,6 +1892,11 @@ void lan_engine::set_config(const void*data, int isz)
             use_vquality = val.as_int();
             return;
         }
+        if ( field.equals( CONSTASTR( CFGF_SETPROTO ) ) )
+        {
+            setproto = val.as_int() != 0;
+            return;
+        }
     };
 
     if ( ca.params.l )
