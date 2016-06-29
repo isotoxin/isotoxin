@@ -4,7 +4,7 @@
 
 namespace ts
 {
-    THREADLOCAL DWORD Time::thread_current_time = 0;
+    THREADLOCAL uint32 Time::thread_current_time = 0;
 
 Time Time::current()
 {
@@ -169,7 +169,7 @@ void    timerprocessor_c::its_time(timer_subscriber_c *t, void * par)
 
 namespace
 {
-template <class T> __forceinline const T sign(const T &x) { return x > 0 ? T(1) : (x < 0 ? T(-1) : 0); }
+template <class T> INLINE const T sign(const T &x) { return x > 0 ? T(1) : (x < 0 ? T(-1) : 0); }
 
 template <int M> class valfilter
 {
@@ -190,7 +190,7 @@ public:
 
         //		divergence += indt - outdt;//считаем величину расхождения
 
-        double correction = min(outdt * p, fabs(divergence)) * sign(divergence);//считаем на сколько нужно скорректировать фильтрованный dt, чтобы за большой промежуток времени суммы реальных и фильтрованных dt не сильно отличались
+        double correction = tmin(outdt * p, fabs(divergence)) * sign(divergence);//считаем на сколько нужно скорректировать фильтрованный dt, чтобы за большой промежуток времени суммы реальных и фильтрованных dt не сильно отличались
         dt[current] += correction;//обновляем массив, чтобы потом среднее dt считалось с учетом коррекции - так divergence будет скорее сокращаться
         outdt += correction / M;//пересчитываем среднее ..
         divergence -= correction / M;//.. и величину расхождения на основе обновленного в массиве значения dt[current]
@@ -202,27 +202,17 @@ public:
 
 static double invFreq;
 
-inline double TimeDeltaToSec(UINT64 delta)
+INLINE double TimeDeltaToSec(uint64 delta)
 {
     return (double)delta * invFreq;
 }
 
 
-INLINE UINT64 GetTime()
+INLINE uint64 GetTime()
 {
     LARGE_INTEGER s;
     QueryPerformanceCounter(&s);
     return s.QuadPart;
-}
-
-template<class T, class T1, class T2>
-inline T clamp(const T& x, const T1& xmin, const T2& xmax)
-{
-    if (x < xmin)
-        return xmin;
-    if (x > xmax)
-        return xmax;
-    return x;
 }
 
 }
@@ -240,11 +230,11 @@ frame_time_c::frame_time_c()
 
 void frame_time_c::takt()
 {
-    static UINT64 prevTime = GetTime();
-    UINT64 curTime = GetTime();
+    static uint64 prevTime = GetTime();
+    uint64 curTime = GetTime();
     static valfilter<4> dtf; // 12 выбрано как НОК 2,3 и 4 - провалы fps с такими периодами будут полностью погашены фильтром; также при p = 0.1, от любого скачка fps останется лишь 0.1/12*100%
     double ft = TimeDeltaToSec(curTime - prevTime);
-    if (m_fixed_frame_time == 0) m_frametime_d = dtf(clamp(ft, 0.00000001, .25));
+    if (m_fixed_frame_time == 0) m_frametime_d = dtf(CLAMP(ft, 0.00000001, .25));
     else
     {
         while (ft < m_fixed_frame_time) ft = TimeDeltaToSec((curTime = GetTime()) - prevTime);

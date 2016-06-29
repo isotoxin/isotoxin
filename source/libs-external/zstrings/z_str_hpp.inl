@@ -2688,7 +2688,6 @@ ZSTRINGS_FORCEINLINE ZSTRINGS_SIGNED skip_utf8_char(const asptr &utf8, ZSTRINGS_
     return i + 6;
 }
 
-
 inline bool CHARz_equal_ignore_case(const ZSTRINGS_WIDECHAR *src1, const ZSTRINGS_WIDECHAR *src2, ZSTRINGS_SIGNED len)
 {
     return ZSTRINGS_SYSCALL(text_iequalsw)(src1,src2,len);

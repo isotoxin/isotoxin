@@ -27,6 +27,7 @@ void TSCALL set_clipboard_bitmap(const bitmap_c &bmp);
 void TSCALL open_link(const ts::wstr_c &lnk);
 void TSCALL explore_path( const wsptr &path, bool path_only );
 
+ivec2 TSCALL get_cursor_pos();
 
 bool TSCALL is_admin_mode();
 

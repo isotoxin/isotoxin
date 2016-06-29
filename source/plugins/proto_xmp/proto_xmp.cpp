@@ -1540,6 +1540,12 @@ class xmpp :
         self.public_id_len = cd->jid.full().length();
         self.name = cd->name.cstr();
         self.name_len = cd->name.get_length();
+
+        if (cd->changed & CDM_NAME)
+        {
+            Log( "changed name for %i to <%s>", cd->cid, cd->name.cstr() );
+        }
+
         self.status_message = cd->statusmsg.cstr();
         self.status_message_len = cd->statusmsg.get_length();
         self.state = cd->st;
@@ -2181,6 +2187,8 @@ void xmpp::set_name(const char*utf8name)
         first->name.set( asptr(utf8name) );
         j->addPresenceExtension( new gloox::Nickname( std::string(utf8name) ) );
         
+        if (cm) cm->storeVCard( build_vcard(), this );
+
         if ( first->st == CS_ONLINE )
         {
             j->send( j->presence() );
@@ -2197,7 +2205,6 @@ void xmpp::set_name(const char*utf8name)
                     }
                 }
         }
-        dirty_vcard = true;
     }
 }
 
@@ -2207,7 +2214,10 @@ void xmpp::set_statusmsg(const char*utf8status)
     {
         ASSERT( j );
         first->statusmsg.set( asptr( utf8status ) );
-        j->presence().addStatus( utf8status );
+        if ( first->statusmsg.is_empty() )
+            j->presence().resetStatus();
+        else
+            j->presence().addStatus( std::string( first->statusmsg.cstr(), first->statusmsg.get_length() ) );
         if ( first->st == CS_ONLINE )
             j->send( j->presence() );
     }
@@ -2328,7 +2338,10 @@ void xmpp::set_config(const void*data, int isz)
         caps->setNode( HOME_SITE );
         j->addPresenceExtension( caps );
         j->addPresenceExtension( new gloox::Nickname( std::string( first->name.cstr() ) ) );
-        j->presence().addStatus( first->name.cstr() );
+        if ( first->statusmsg.is_empty() )
+            j->presence().resetStatus();
+        else
+            j->presence().addStatus( std::string( first->statusmsg.cstr(), first->statusmsg.get_length() ) );
 
         cm = std::make_unique<gloox::VCardManager>( j.get() );
         cm->storeVCard( build_vcard(), this );

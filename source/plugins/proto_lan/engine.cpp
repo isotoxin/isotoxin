@@ -5,11 +5,19 @@
 #define AUDIO_SAMPLEDURATION_MAX 60
 #define AUDIO_SAMPLEDURATION_MIN 20
 
+#define DEFAULT_VIDEO_BITRATE 5000
+
 #define BROADCAST_PORT 0x8ee8
 #define BROADCAST_RANGE 10
 
 #define TCP_PORT 0x7ee7
 #define TCP_RANGE 10
+
+#define VIDEO_CODEC_DECODER_INTERFACE_VP8 (vpx_codec_vp8_dx())
+#define VIDEO_CODEC_ENCODER_INTERFACE_VP8 (vpx_codec_vp8_cx())
+#define VIDEO_CODEC_DECODER_INTERFACE_VP9 (vpx_codec_vp9_dx())
+#define VIDEO_CODEC_ENCODER_INTERFACE_VP9 (vpx_codec_vp9_cx())
+#define MAX_ENCODE_TIME_US (1000000 / 5)
 
 template<typename checker> u64 random64( const checker &ch )
 {
@@ -21,13 +29,254 @@ template<typename checker> u64 random64( const checker &ch )
     return v;
 }
 
+namespace
+{
+    struct av_sender_state_s
+    {
+        // list of call-in-progress descriptos
+        lan_engine::media_stuff_s *first = nullptr;
+        lan_engine::media_stuff_s *last = nullptr;
+
+        bool video_encoder = false;
+        bool video_encoder_heartbeat = false;
+        volatile bool shutdown = false;
+
+        bool senders() const
+        {
+            return video_encoder;
+        }
+
+        bool allow_run_video_encoder() const
+        {
+            return !video_encoder && !shutdown;
+        }
+    };
+}
+
+static spinlock::syncvar<av_sender_state_s> callstate;
+
+lan_engine::media_stuff_s::media_stuff_s( contact_s *owner ) :owner( owner )
+{
+    enc_cfg.g_h = 0;
+    enc_cfg.g_w = 0;
+    cfg_dec.threads = 1;
+    cfg_dec.w = 0;
+    cfg_dec.h = 0;
+
+    auto w = callstate.lock_write();
+    LIST_ADD( this, w().first, w().last, prev, next );
+}
+
 lan_engine::media_stuff_s::~media_stuff_s()
 {
+    auto w = callstate.lock_write();
+    LIST_DEL( this, w().first, w().last, prev, next );
+
+    while ( locked > 0 ) // waiting unlock
+    {
+        w.unlock();
+        Sleep( 1 );
+        w = callstate.lock_write();
+    }
+    w.unlock();
+
     if (audio_encoder)
         opus_encoder_destroy(audio_encoder);
 
     if (audio_decoder)
         opus_decoder_destroy(audio_decoder);
+
+    if ( video_data )
+        engine->hf->free_video_data( video_data );
+
+    if ( enc_cfg.g_w ) vpx_codec_destroy( &v_encoder );
+    if ( decoder ) vpx_codec_destroy( &v_decoder );
+
+    if ( nblock )
+        nblock->die();
+}
+
+void lan_engine::media_stuff_s::encode_video_and_send( const byte *y, const byte *u, const byte *v )
+{
+    if ( engine->use_vquality < 0 )
+    {
+        vquality = -1;
+        if ( enc_cfg.g_w ) vpx_codec_destroy( &v_encoder );
+        if ( decoder ) vpx_codec_destroy( &v_decoder );
+        enc_cfg.g_w = 0;
+        decoder = false;
+
+        i32 vals[ 3 ] = { 0 };
+        vals[ 2 ] = (i32)htonl( (u_long)vc_vp8 );
+        owner->send_block( BT_INITDECODER, 0, &vals, sizeof(vals) );
+
+        if ( nblock )
+        {
+            nblock->die();
+            nblock = nullptr;
+        }
+
+        return;
+    }
+
+    if ( enc_cfg.g_w != video_w || enc_cfg.g_h != video_h || vcodec != engine->use_vcodec || vbitrate != engine->use_vbitrate )
+    {
+        sblock = 0;
+        if ( nblock )
+        {
+            nblock->die();
+            nblock = nullptr;
+        }
+
+        i32 vals[ 3 ];
+        vals[ 0 ] = htonl( video_w );
+        vals[ 1 ] = htonl( video_h );
+        vals[ 2 ] = htonl( engine->use_vcodec );
+        owner->send_block( BT_INITDECODER, 0, &vals, sizeof( vals ) );
+
+        vcodec = engine->use_vcodec;
+        vbitrate = engine->use_vbitrate;
+
+        if ( enc_cfg.g_w )
+        {
+            vpx_codec_destroy( &v_encoder );
+            if ( vcodec != engine->use_vcodec )
+                goto reinit_cfg;
+        } else
+        {
+        reinit_cfg:
+            vcodec = engine->use_vcodec;
+
+            if ( VPX_CODEC_OK != vpx_codec_enc_config_default( vcodec == vc_vp8 ? VIDEO_CODEC_ENCODER_INTERFACE_VP8 : VIDEO_CODEC_ENCODER_INTERFACE_VP9, &enc_cfg, 0 ) )
+            {
+                enc_cfg.g_w = 0;
+                vpx_codec_destroy( &v_decoder );
+                return;
+            }
+
+            enc_cfg.rc_target_bitrate = DEFAULT_VIDEO_BITRATE * 1000;
+            enc_cfg.g_w = 0;
+            enc_cfg.g_h = 0;
+            enc_cfg.g_pass = VPX_RC_ONE_PASS;
+            /* FIXME If we set error resilience the app will crash due to bug in vp8.
+            Perhaps vp9 has solved it?*/
+            //     cfg.g_error_resilient = VPX_ERROR_RESILIENT_DEFAULT | VPX_ERROR_RESILIENT_PARTITIONS;
+            enc_cfg.g_lag_in_frames = 0;
+            enc_cfg.kf_min_dist = 0;
+            enc_cfg.kf_max_dist = 48;
+            enc_cfg.kf_mode = VPX_KF_AUTO;
+        }
+
+        vcodec = engine->use_vcodec;
+        enc_cfg.g_w = video_w;
+        enc_cfg.g_h = video_h;
+        enc_cfg.rc_target_bitrate = ( vbitrate ? vbitrate : DEFAULT_VIDEO_BITRATE ) * 1000;
+
+        if ( vpx_codec_enc_init( &v_encoder, vcodec == vc_vp8 ? VIDEO_CODEC_ENCODER_INTERFACE_VP8 : VIDEO_CODEC_ENCODER_INTERFACE_VP9, &enc_cfg, 0 ) != VPX_CODEC_OK )
+        {
+            enc_cfg.g_w = 0;
+            return;
+        }
+    }
+
+    if ( vquality != engine->use_vquality )
+    {
+        vquality = engine->use_vquality;
+        if ( vquality < 0 ) vquality = 0;
+        if ( vquality > 100 ) vquality = 100;
+        if ( vquality == 0 )
+            vpx_codec_control( &v_encoder, VP8E_SET_CPUUSED, 0 );
+        else
+        {
+            int vv = vcodec == vc_vp8 ? ( ( 100 - vquality ) * 16 / 99 ) : ( ( 100 - vquality ) * 8 / 99 );
+            vpx_codec_control( &v_encoder, VP8E_SET_CPUUSED, vv );
+        }
+    }
+
+    for ( auto r = engine->delivery.lock_read(); sblock;)
+    {
+        if ( r().find( sblock ) == r().end() )
+        {
+            if ( nblock )
+            {
+                sblock = owner->send_block( nblock );
+                nblock = nullptr;
+                break;
+            }
+            else
+                sblock = 0;
+        }
+
+        break;
+    }
+
+    if ( nblock )
+        return; // skip frame before encoding to keep quality of video (just lower fps)
+
+    // encoding and send
+
+    vpx_image_t img = { VPX_IMG_FMT_I420, VPX_CS_UNKNOWN, VPX_CR_STUDIO_RANGE,
+        video_w, video_h, 8, video_w, video_h, 0, 0, 1, 1,
+        (byte *)y, (byte *)u, (byte *)v, nullptr, (int)video_w, (int)video_w / 2, (int)video_w / 2, (int)video_w, 12 };
+
+    int vrc = vpx_codec_encode( &v_encoder, &img, frame_counter, 1, 0, /*MAX_ENCODE_TIME_US*/ 0 );
+    if ( vrc != VPX_CODEC_OK ) return;
+
+    vpx_codec_iter_t iter = nullptr;
+    const vpx_codec_cx_pkt_t *pkt;
+
+    while ( nullptr != ( pkt = vpx_codec_get_cx_data( &v_encoder, &iter ) ) )
+    {
+        if ( pkt->kind == VPX_CODEC_CX_FRAME_PKT )
+        {
+            //add_frame_to_queue( pkt->data.frame.buf, pkt->data.frame.sz, pkt->data.frame.flags );
+
+            u_long fc = htonl( frame_counter );
+
+            if ( !sblock )
+                sblock = owner->send_block( BT_VIDEO_FRAME, 0, &fc, sizeof( fc ), pkt->data.frame.buf, pkt->data.frame.sz );
+            else
+                nblock = owner->build_block( BT_VIDEO_FRAME, 0, &fc, sizeof( fc ), pkt->data.frame.buf, pkt->data.frame.sz );
+        }
+    }
+
+    ++frame_counter;
+}
+
+
+void lan_engine::media_stuff_s::video_frame( int framen, const byte *frame_data, int framesize )
+{
+    if ( !decoder )
+    {
+        int rc = vpx_codec_dec_init( &v_decoder, vdecodec == vc_vp8 ? VIDEO_CODEC_DECODER_INTERFACE_VP8 : VIDEO_CODEC_DECODER_INTERFACE_VP9, &cfg_dec, 0 );
+        if ( rc != VPX_CODEC_OK ) return;
+        decoder = true;
+    }
+
+    if ( VPX_CODEC_OK == vpx_codec_decode( &v_decoder, frame_data, framesize, nullptr, 0 ) )
+    {
+        vpx_codec_iter_t iter = nullptr;
+        vpx_image_t *dest = vpx_codec_get_frame( &v_decoder, &iter );
+
+        // Play decoded images
+        for ( ; dest; dest = vpx_codec_get_frame( &v_decoder, &iter ) )
+        {
+            media_data_s mdt;
+            mdt.vfmt.width = (unsigned short)dest->d_w;
+            mdt.vfmt.height = (unsigned short)dest->d_h;
+            mdt.vfmt.pitch[ 0 ] = (unsigned short)dest->stride[ 0 ];
+            mdt.vfmt.pitch[ 1 ] = (unsigned short)dest->stride[ 1 ];
+            mdt.vfmt.pitch[ 2 ] = (unsigned short)dest->stride[ 2 ];
+            mdt.vfmt.fmt = VFMT_I420;
+            mdt.video_frame[ 0 ] = dest->planes[ 0 ];
+            mdt.video_frame[ 1 ] = dest->planes[ 1 ];
+            mdt.video_frame[ 2 ] = dest->planes[ 2 ];
+            engine->hf->av_data( 0, owner->id, &mdt );
+
+            vpx_img_free( dest );
+        }
+    }
+
 }
 
 void lan_engine::media_stuff_s::init_audio_encoder()
@@ -681,15 +930,101 @@ void datablock_s::die()
     dlfree(this);
 }
 
+void lan_engine::video_encoder()
+{
+    callstate.lock_write()( ).video_encoder = true;
+
+    int sleepms = 100;
+    int timeoutcountdown = 50; // 5 sec
+    for ( ;; Sleep( sleepms ) )
+    {
+        auto w = callstate.lock_write();
+        w().video_encoder_heartbeat = true;
+        if ( w().shutdown )
+        {
+            w().video_encoder = false;
+            return;
+        }
+        if ( nullptr == w().first )
+        {
+            --timeoutcountdown;
+            if ( timeoutcountdown <= 0 )
+            {
+                w().video_encoder = false;
+                return;
+            }
+            sleepms = 100;
+            continue;
+        }
+        timeoutcountdown = 50;
+        sleepms = 1;
+        for ( lan_engine::media_stuff_s *d = w().first; d; d = d->next )
+        {
+            if ( nullptr == d->video_data )
+                continue;
+
+            const uint8_t *y = (const uint8_t *)d->video_data;
+            d->video_data = nullptr;
+
+            ++d->locked;
+            w.unlock(); // no need lock anymore
+
+                        // encoding here
+            int ysz = d->video_w * d->video_h;
+                
+            d->encode_video_and_send( y, y + ysz, y + ( ysz + ysz / 4 ) );
+            engine->hf->free_video_data( y );
+
+            w = callstate.lock_write();
+            --d->locked;
+            if ( w().shutdown )
+                return;
+
+            bool ok = false;
+            for ( media_stuff_s *dd = w().first; dd; dd = dd->next )
+                if ( dd == d )
+                {
+                    ok = true;
+                    break;
+                }
+            if ( !ok ) break;
+
+        }
+        if ( w.is_locked() ) w.unlock();
+    }
+}
+
+
 lan_engine::contact_s::~contact_s()
 {
     delete media;
-    for(;sendblock_f;)
+    sendblocks.lock_write()().reset();
+}
+
+datablock_s *lan_engine::contact_s::build_block( block_type_e bt, u64 delivery_tag, const void *data, aint datasize, const void *data1, aint datasize1 )
+{
+    if ( delivery_tag == 0 )
     {
-        datablock_s *m = sendblock_f;
-        LIST_DEL(m,sendblock_f,sendblock_l,prev,next);
-        m->die();
+        auto r = engine->delivery.lock_read();
+        delivery_tag = random64( [&]( u64 t )->bool { return r().find( t ) != r().end(); } );
     }
+
+    engine->delivery.lock_write()( )[ delivery_tag ].reset();
+
+    u64 temp;
+    if ( data == nullptr )
+    {
+        randombytes_buf( &temp, sizeof( temp ) );
+        data = &temp;
+        datasize = sizeof( temp );
+    }
+
+    if ( BT_FILE_CHUNK == bt )
+    {
+        logfn( "filetr.log", "send_block %llu %i", delivery_tag, datasize );
+    }
+
+    return datablock_s::build( bt, delivery_tag, data, datasize, data1, datasize1 );
 }
 
 u64 lan_engine::contact_s::send_block(block_type_e bt, u64 delivery_tag, const void *data, aint datasize, const void *data1, aint datasize1)
@@ -706,47 +1041,21 @@ u64 lan_engine::contact_s::send_block(block_type_e bt, u64 delivery_tag, const v
         return 0;
     }
 
-    if (delivery_tag == 0)
-        delivery_tag = random64( []( u64 t )->bool { return engine->delivery.find( t ) != engine->delivery.end(); } );
+    return send_block( build_block(bt, delivery_tag, data, datasize, data1, datasize1) );
+}
 
-    engine->delivery[delivery_tag].reset();
-
-    u64 temp;
-    if (data == nullptr)
-    {
-        randombytes_buf(&temp, sizeof(temp));
-        data = &temp;
-        datasize = sizeof(temp);
-    }
-
-    if (BT_FILE_CHUNK == bt)
-    {
-        logfn("filetr.log", "send_block %llu %i", delivery_tag, datasize);
-    }
-
-    datablock_s *m = datablock_s::build(bt, delivery_tag, data, datasize, data1, datasize1);
-    LIST_ADD(m,sendblock_f,sendblock_l,prev,next);
-    if (state == ONLINE)
+u64 lan_engine::contact_s::send_block( datablock_s *b )
+{
+    sendblocks.lock_write()( ).add( b );
+    if ( state == ONLINE )
         nextactiontime = time_ms();
 
-    return delivery_tag;
+    return b->delivery_tag;
 }
 
 bool lan_engine::contact_s::del_block( u64 utag )
 {
-    for (datablock_s *m = sendblock_f; m; m = m->next)
-    {
-        if (m->delivery_tag == utag)
-        {
-            if (m->sent == 0)
-            {
-                LIST_DEL(m, sendblock_f, sendblock_l, prev, next);
-                m->die();
-            }
-            return true;
-        }
-    }
-    return false;
+    return sendblocks.lock_write()( ).del( utag );
 }
 
 void lan_engine::contact_s::calculate_pub_id( const byte *pk )
@@ -804,6 +1113,12 @@ lan_engine::~lan_engine()
 
 void lan_engine::tick(int *sleep_time_ms)
 {
+    if ( fatal_error )
+    {
+        *sleep_time_ms = -1;
+        return;
+    }
+
     if (first->state != contact_s::ONLINE || listen_port < 0) 
     {
         *sleep_time_ms = 100;
@@ -1173,6 +1488,11 @@ void lan_engine::tick(int *sleep_time_ms)
 
     if (fatal_error)
         *sleep_time_ms = -1;
+
+    time_t t = now();
+    if ( ( t - last_activity ) > 3600 )
+        fatal_error = true;
+
 }
 
 void lan_engine::pp_search( unsigned int IPv4, int back_port, const byte *trapped_contact_public_key, const byte *seeking_raw_public_id )
@@ -1416,8 +1736,42 @@ tcp_pipe *lan_engine::pp_nonce(tcp_pipe * pipe, stream_reader &&r)
     return pipe;
 }
 
+void lan_engine::stop_encoder()
+{
+    int st = time_ms();
+
+    auto wh = callstate.lock_write();
+    wh().video_encoder_heartbeat = false;
+    wh.unlock();
+
+    while ( callstate.lock_read()( ).senders() )
+    {
+        callstate.lock_write()( ).shutdown = true;
+
+        Sleep( 1 );
+
+        if ( ( time_ms() - st ) > 3000 )
+        {
+            // 3 seconds still waiting senders?
+            // something wrong
+            auto w = callstate.lock_write();
+
+            if ( !w().video_encoder_heartbeat )
+                w().video_encoder = false, fatal_error = true;
+            w().video_encoder_heartbeat = false;
+
+            st = time_ms();
+        }
+    }
+
+    callstate.lock_write()( ).shutdown = false;
+
+}
+
+
 void lan_engine::goodbye()
 {
+    stop_encoder();
     set_cfg_called = false;
     delete this;
     engine = nullptr;
@@ -1516,7 +1870,34 @@ void lan_engine::set_config(const void*data, int isz)
     if ( isz < 4 ) return;
     config_accessor_s ca( data, isz );
 
-    if ( !ca.native_data && !ca.protocol_data )
+    bool setproto = false;
+
+    auto parsev = [&] ( const pstr_c &field, const pstr_c &val )
+    {
+        if ( field.equals( CONSTASTR( CFGF_VIDEO_CODEC ) ) )
+        {
+            if ( val.equals( CONSTASTR( "vp8" ) ) )
+                use_vcodec = vc_vp8;
+            if ( val.equals( CONSTASTR( "vp9" ) ) )
+                use_vcodec = vc_vp9;
+            return;
+        }
+        if ( field.equals( CONSTASTR( CFGF_VIDEO_BITRATE ) ) )
+        {
+            use_vbitrate = val.as_int();
+            return;
+        }
+        if ( field.equals( CONSTASTR( CFGF_VIDEO_QUALITY ) ) )
+        {
+            use_vquality = val.as_int();
+            return;
+        }
+    };
+
+    if ( ca.params.l )
+        parse_values( ca.params, parsev ); // parse params
+
+    if ( !setproto && !ca.native_data && !ca.protocol_data )
         return;
 
     bool loaded = false;
@@ -1721,15 +2102,17 @@ void operator<<(chunk &chunkm, const lan_engine::contact_s &c)
 
     chunk(chunkm.b, chunk_contact_changedflags) << (i32)c.changed_self;
 
-    for (datablock_s *m = c.sendblock_f; m; )
+    auto sbs = const_cast<lan_engine::contact_s &>(c).sendblocks.lock_write();
+    for (datablock_s *m = sbs().sendblock_f; m; )
     {
         datablock_s *x = m; m = m->next;
         if (x->bt > __bt_no_need_ater_save_begin && x->bt < __bt_no_need_ater_save_end)
         {
-            LIST_DEL(x, contact->sendblock_f, contact->sendblock_l, prev, next);
+            LIST_DEL(x, sbs().sendblock_f, sbs().sendblock_l, prev, next);
             x->die();
         }
     }
+    sbs.unlock();
 
     chunk(chunkm.b, chunk_contact_avatar_tag) << c.avatar_tag;
     if (c.avatar_tag != 0)
@@ -1804,6 +2187,8 @@ void lan_engine::online()
 
 void lan_engine::offline()
 {
+    stop_encoder();
+
     if (first->state == contact_s::ONLINE)
     {
         first->state = contact_s::OFFLINE;
@@ -1985,17 +2370,66 @@ void lan_engine::accept_call(int id)
         }
 }
 
-void lan_engine::stream_options(int id, const stream_options_s *so)
+void lan_engine::stream_options( int id, const stream_options_s *so )
 {
+    if ( contact_s *c = find( id ) )
+        if ( c->state == contact_s::ONLINE )
+        {
+            if ( c->media == nullptr ) c->media = new media_stuff_s(c);
+
+            if ( c->media->local_so.options != so->options || so->view_w != c->media->local_so.view_w || so->view_h != c->media->local_so.view_h )
+            {
+                c->media->local_so.options = so->options;
+                c->media->local_so.view_w = so->view_w;
+                c->media->local_so.view_h = so->view_h;
+
+                stream_options_s so2s;
+                so2s.options = htonl( so->options );
+                so2s.view_w = htonl( so->view_w );
+                so2s.view_h = htonl( so->view_h );
+
+                c->send_block( BT_STREAM_OPTIONS, 0, &so2s, sizeof( so2s ) );
+
+                //if ( 0 == ( c->media->local_so.options & SO_RECEIVING_VIDEO ) )
+                //    c->media->current_recv_frame = -1;
+
+                if ( c->media->local_so.view_w < 0 || c->media->local_so.view_h < 0 )
+                {
+                    c->media->local_so.view_w = 0;
+                    c->media->local_so.view_h = 0;
+                }
+            }
+        }
 }
 
 int lan_engine::send_av(int id, const call_info_s * ci)
 {
+    contact_s *c = nullptr;
     if ( ci->audio_data )
     {
-        if (contact_s *c = find(id))
-            if (c->state == contact_s::ONLINE && contact_s::IN_PROGRESS == c->call_status && c->media)
-                c->media->add_audio( ci->audio_data, ci->audio_data_size );
+        c = find( id );
+        if ( !c ) return SEND_AV_OK;
+
+        if (c->state == contact_s::ONLINE && contact_s::IN_PROGRESS == c->call_status && c->media)
+            c->media->add_audio( ci->audio_data, ci->audio_data_size );
+    }
+    if ( ci->video_data && ci->fmt == VFMT_I420 )
+    {
+        if (!c)
+            c = find( id );
+        if ( !c || !c->media ) return SEND_AV_OK;
+
+        if ( 0 != ( c->media->remote_so.options & SO_RECEIVING_VIDEO ) )
+        {
+            if ( c->media->video_data )
+                engine->hf->free_video_data( c->media->video_data );
+
+            c->media->video_w = ci->w;
+            c->media->video_h = ci->h;
+            c->media->video_data = ci->video_data;
+            return SEND_AV_KEEP_VIDEO_DATA;
+        }
+
     }
 
     return SEND_AV_OK;
@@ -2088,7 +2522,8 @@ void lan_engine::contact_s::online_tick(int ct, int nexttime)
 
     if (media) media->tick( this, ct );
 
-    datablock_s *m = sendblock_f;
+    auto sbs = sendblocks.lock_write();
+    datablock_s *m = sbs().sendblock_f;
     while (m && m->sent > m->len) m = m->next;
     if (m)
     {
@@ -2109,10 +2544,25 @@ void lan_engine::contact_s::online_tick(int ct, int nexttime)
     if (!asap) nextactiontime += nexttime;
 }
 
+static DWORD WINAPI video_encoder_thread( LPVOID )
+{
+    UNSTABLE_CODE_PROLOG
+    lan_engine::get()->video_encoder();
+    UNSTABLE_CODE_EPILOG
+    return 0;
+}
+
 void lan_engine::contact_s::start_media()
 {
     call_status = contact_s::IN_PROGRESS;
-    if (media == nullptr) media = new media_stuff_s();
+    if (media == nullptr) media = new media_stuff_s(this);
+
+    if ( callstate.lock_read()( ).allow_run_video_encoder() )
+    {
+        CloseHandle( CreateThread( nullptr, 0, video_encoder_thread, nullptr, 0, nullptr ) );
+        for ( ; !callstate.lock_read()( ).video_encoder; Sleep( 1 ) ); // wait video encoder start
+    }
+
 }
 
 
@@ -2320,24 +2770,33 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
 
             if (dtb && sent >= 0 && len >= 0 && (sent + msgl <= len) && msg)
             {
-                std::unique_ptr<delivery_data_s> & ddp = engine->delivery[ dtb ];
+                auto ddlock = engine->delivery.lock_write();
+                std::unique_ptr<delivery_data_s> & ddp = ddlock()[ dtb ];
                 if (ddp.get() == nullptr) ddp = std::make_unique<delivery_data_s>();
-                delivery_data_s &dd = *ddp;
-                if ( dd.buf.size() == 0 || sent == 0 )
+                delivery_data_s &dd1 = *ddp;
+                if ( dd1.buf.size() == 0 || sent == 0 )
                 {
-                    dd.buf.resize(len);
-                    dd.rcv_size = 0;
+                    dd1.buf.resize(len);
+                    dd1.rcv_size = 0;
                 }
-                dd.rcv_size += msgl;
-                memcpy( dd.buf.data() + sent, msg, msgl );
+                dd1.rcv_size += msgl;
+                memcpy( dd1.buf.data() + sent, msg, msgl );
 
                 if ( BT_FILE_CHUNK == bt )
                 {
                     logfn("filetr.log", "subblock recv %llu %i %i %i", dtb, sent, len, msgl);
                 }
 
-                if (dd.rcv_size == dd.buf.size())
+                if (dd1.rcv_size == dd1.buf.size())
                 {
+                    std::unique_ptr<delivery_data_s> u = std::move( ddp );
+                    delivery_data_s &dd = *u;
+                    
+                    ddlock().erase( dtb );
+                    ddlock.unlock();
+
+                    engine->last_activity = now();
+
                     // delivered full message
                     engine->pg_delivered( dtb, message_key() );
                     pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
@@ -2383,6 +2842,41 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                                 engine->hf->message(MT_CALL_ACCEPTED, 0, id, now(), nullptr, 0);
                                 start_media();
                             }
+                            break;
+                        case BT_STREAM_OPTIONS:
+                            if ( dd.buf.size() == sizeof(stream_options_s) )
+                            {
+                                if ( media == nullptr )
+                                    media = new media_stuff_s( this );
+                                const stream_options_s *sos = (stream_options_s *)dd.buf.data();
+                                media->remote_so.options = ntohl(sos->options);
+                                media->remote_so.view_w = ntohl( sos->view_w );
+                                media->remote_so.view_h = ntohl( sos->view_h );
+
+                                engine->hf->av_stream_options( 0, id, &media->remote_so );
+                            }
+                            break;
+                        case BT_INITDECODER:
+                            if ( dd.buf.size() == sizeof( i32 ) * 3 )
+                            {
+                                if ( media )
+                                {
+                                    if ( media->decoder )
+                                    {
+                                        vpx_codec_destroy( &media->v_decoder );
+                                        media->decoder = false;
+                                    }
+                                    media->cfg_dec.w = ntohl( *(i32 *)dd.buf.data() );
+                                    media->cfg_dec.h = ntohl( *( ( (i32 *)dd.buf.data() ) + 1 ) );
+                                    media->vdecodec = (video_codec_e)ntohl( *( ( (i32 *)dd.buf.data() ) + 2 ) );
+                                }
+                            }
+                            break;
+                        case BT_VIDEO_FRAME:
+                            if (media)
+                                if ( 0 != ( media->local_so.options & SO_RECEIVING_VIDEO ) && 0 != ( media->remote_so.options & SO_SENDING_VIDEO ) )
+                                    media->video_frame( ntohl( *(i32 *)dd.buf.data() ), dd.buf.data() + sizeof(i32), dd.buf.size() - sizeof( i32 ) );
+
                             break;
                         case BT_AUDIO_FRAME:
                             break;
@@ -2498,35 +2992,41 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                             }
                             break;
                     }
-                    engine->delivery.erase( dtb );
                 }
             }
 
         }
         break;
     case PID_DELIVERED:
-        if (u64 dtb = r.readll(0))
-            for(datablock_s *m = sendblock_f; m; m=m->next)
-                if (m->delivery_tag == dtb)
+        if ( u64 dtb = r.readll( 0 ) )
+        {
+            auto sbs = sendblocks.lock_write();
+            u64 n = 0;
+            for ( datablock_s *m = sbs().sendblock_f; m; m = m->next )
+                if ( m->delivery_tag == dtb )
                 {
-                    if (m->bt < __bt_service)
-                        engine->hf->delivered(m->delivery_tag);
-                
+                    if ( m->bt < __bt_service )
+                        n = m->delivery_tag;
 
-                    if (m->bt == BT_FILE_CHUNK)
+                    if ( m->bt == BT_FILE_CHUNK )
                     {
-                        logfn("filetr.log", "PID_DELIVERED %llu", m->delivery_tag);
+                        logfn( "filetr.log", "PID_DELIVERED %llu", m->delivery_tag );
 
-                        for (file_transfer_s *f = engine->first_ftr; f; f = f->next)
-                            if (f->delivered(m->delivery_tag))
+                        for ( file_transfer_s *f = engine->first_ftr; f; f = f->next )
+                            if ( f->delivered( m->delivery_tag ) )
                                 break;
                     }
 
-                    engine->delivery.erase( dtb );
-                    LIST_DEL(m,sendblock_f,sendblock_l,prev,next);
+                    LIST_DEL( m, sbs().sendblock_f, sbs().sendblock_l, prev, next );
                     m->die();
+                    sbs.unlock();
+
+                    engine->delivery.lock_write()() .erase( dtb );
                     break;
                 }
+            if (n)
+                engine->hf->delivered( n );
+        }
         break;
     case PID_KEEPALIVE:
         {

@@ -127,14 +127,11 @@ INLINE wstr_c TSCALL fn_get_name_with_ext(const wsptr &name)
 //}
 
 template<typename TCHARACTER> str_t<TCHARACTER>  TSCALL fn_autoquote(const str_t<TCHARACTER> &name);
-wstr_c TSCALL fn_get_next_name(const wsptr &fullname, bool check = true);
 wstr_c TSCALL fn_get_name(const wsptr &name);
 wstr_c TSCALL fn_get_ext(const wsptr &name);
 wstr_c TSCALL fn_get_path(const wstr_c &name); // with ending slash
 
-bool TSCALL fn_mask_match( const wsptr &fn, const wsptr &mask );
-
-template<typename TCHARACTER> void  TSCALL fn_validizate(str_t<TCHARACTER> &name, const TCHARACTER *ext); // ext must be with dot ('.')
+template<typename TCHARACTER> bool TSCALL fn_mask_match( const sptr<TCHARACTER> &fn, const sptr<TCHARACTER> &mask );
 
 template <class TCHARACTER> bool TSCALL parse_text_file(const wsptr &filename, strings_t<TCHARACTER>& text, bool from_utf8 = false);
 
@@ -181,27 +178,6 @@ public:
 
 template<class RCV, class STRCORE> bool enum_files(const str_t<wchar, STRCORE> &base, RCV &pred, const str_t<wchar, STRCORE> &path = str_t<wchar, STRCORE>(), const wsptr &wildcard = CONSTWSTR("*.*"))
 {
-    /*
-	WIN32_FIND_DATAW fd;
-	HANDLE h = FindFirstFileW(fn_join<STRCORE>(base,path,wildcard), &fd);
-	if (h == INVALID_HANDLE_VALUE) return true;
-
-	do
-	{
-		str_t<wchar, STRCORE> sFileName(fd.cFileName);
-		if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN))
-			if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-			{
-				if (sFileName == CONSTWSTR(".") || sFileName == CONSTWSTR("..")) continue;
-				if (!enum_files(base, pred, fn_join(path,sFileName), wildcard)) {FindClose(h); return false;}
-			}
-			else
-				if (!pred(base, fn_join(path,sFileName))) return true;
-	} while (FindNextFileW(h, &fd));
-
-	FindClose(h);
-    */
-
     enum_files_c ef( base, path, wildcard );
     for ( ;ef; ++ef )
     {

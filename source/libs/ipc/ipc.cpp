@@ -49,7 +49,7 @@ struct new_xchg_buffer_s
     int datasize = sizeof(new_xchg_buffer_s);
     int datatype = DATATYPE_NEW_BUFFER;
     int allocated;
-    char bufname[MAX_PATH];
+    char bufname[ MAX_PATH ];
 
     new_xchg_buffer_s() {}; //-V730
     new_xchg_buffer_s(int alc):allocated(alc) {} //-V730
@@ -484,7 +484,7 @@ DWORD WINAPI watchdog(LPVOID p)
 
 int ipc_junction_s::start( const char *junction_name )
 {
-    char buf[MAX_PATH];
+    char buf[ MAX_PATH ];
     static_assert( ipc_junction_s::internal_data_size >= sizeof(ipc_data_s), "update size of ipc_junction_s" );
     ipc_data_s &d = (ipc_data_s &)(*this);
 

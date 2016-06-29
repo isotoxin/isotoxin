@@ -10,6 +10,8 @@
 
 #endif
 
-#ifdef __linux__
+#ifdef _NIX
 #include "../_nix/nix_inc.inl"
+#include "win32emu/win32emu.h"
 #endif
+

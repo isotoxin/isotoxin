@@ -13,7 +13,7 @@
 
 namespace ts
 {
-#if _M_X64
+#ifdef MODE64
 #if defined(_MSC_VER) && _MSC_VER > 1500
 #pragma intrinsic(__cpuidex)
 #define cpuid(func, func2, a, b, c, d) do {\
@@ -113,10 +113,16 @@ uint32 detect_cpu_caps()
 }
 int detect_cpu_cores()
 {
+#ifdef _WIN32
     SYSTEM_INFO sysinfo;
     GetSystemInfo(&sysinfo);
 
     return sysinfo.dwNumberOfProcessors;
+#elif defined __linux__
+    return sysconf( _SC_NPROCESSORS_ONLN );
+#else
+    --- error: copy code from http://stackoverflow.com/questions/150355/programmatically-find-the-number-of-cores-on-a-machine
+#endif
 }
 }
 

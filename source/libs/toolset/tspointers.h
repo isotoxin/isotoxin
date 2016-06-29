@@ -201,7 +201,7 @@ public:
 
 
 /*
-	not most stupid pointer (аналог std::auto_ptr)
+	not most stupid pointer (analogue std::auto_ptr)
 */
 template <typename PTR> class auto_ptr
 {

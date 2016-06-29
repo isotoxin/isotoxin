@@ -1,11 +1,18 @@
 #include <malloc.h>
+#ifdef __linux__
+#include <alloca.h>
+#define _alloca alloca
+#endif // __linux__
 
-ZSTRINGS_SIGNED  text_utf8_to_ansi(ZSTRINGS_ANSICHAR *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_ANSICHAR> &from)
+#ifdef _WIN32
+ZSTRINGS_SIGNED  text_utf8_to_ansi( ZSTRINGS_ANSICHAR *out, ZSTRINGS_SIGNED maxlen, const sptr<ZSTRINGS_ANSICHAR> &from )
 {
-    ZSTRINGS_WIDECHAR *buffer = (ZSTRINGS_WIDECHAR *)_alloca( (maxlen + 1) * sizeof(ZSTRINGS_WIDECHAR) );
-    ZSTRINGS_SIGNED l = ZSTRINGS_SYSCALL(text_utf8_to_ucs2)( buffer, maxlen, from );
-    return ZSTRINGS_SYSCALL(text_ucs2_to_ansi)( out, maxlen, wsptr(buffer, l) );
+    ZSTRINGS_WIDECHAR *buffer = (ZSTRINGS_WIDECHAR *)_alloca( ( maxlen + 1 ) * sizeof( ZSTRINGS_WIDECHAR ) );
+    ZSTRINGS_SIGNED l = ZSTRINGS_SYSCALL( text_utf8_to_ucs2 )( buffer, maxlen, from );
+    return ZSTRINGS_SYSCALL( text_ucs2_to_ansi )( out, maxlen, wsptr( buffer, l ) );
 }
+#endif
+
 
 ///////////////////////////////////////////////////////////////////////////////
 

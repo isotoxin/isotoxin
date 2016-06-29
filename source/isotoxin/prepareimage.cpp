@@ -68,7 +68,7 @@ dialog_prepareimage_c::dialog_prepareimage_c(MAKE_ROOT<dialog_prepareimage_c> &d
     deftitle = title_prepare_image;
     bitmap = data.bitmap;
 
-    ts::irect msz = ts::wnd_get_max_size( gui->get_cursor_pos() );
+    ts::irect msz = ts::wnd_get_max_size( ts::get_cursor_pos() );
     wsz = ts::tmin( msz.size() * 80 / 100, ts::ivec2(800,600) );
 
     g_app->add_task(TSNEW(enum_video_devices_s, this));

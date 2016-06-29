@@ -23,6 +23,10 @@
 #define ASMFUNC(f) f
 #endif
 
+#if defined __linux__
+#define _NIX
+#endif
+
 enum logging_flags_e
 {
     LFLS_CLOSE = 1,

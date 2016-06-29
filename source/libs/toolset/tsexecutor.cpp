@@ -78,23 +78,6 @@ task_executor_c::~task_executor_c()
     CloseHandle(evt);
 }
 
-DWORD WINAPI task_executor_c::worker_proc(LPVOID ap)
-{
-    tmpalloc_c tmp;
-
-#ifdef _WIN32
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-#endif // _WIN32
-
-    ((task_executor_c *)ap)->work();
-
-#ifdef _WIN32
-    CoUninitialize();
-#endif // _WIN32
-    
-    return 0;
-}
-
 void task_executor_c::work()
 {
     auto w = sync.lock_write();
@@ -113,6 +96,10 @@ void task_executor_c::work()
 
             timeout = false;
             int r = t->call_iterate();
+
+            if ( sync.lock_read()( ).worker_should_stop && r != task_c::R_DONE )
+                r = task_c::R_CANCEL;
+
             if (r > 0)
             {
                 t->setflag( f_sleeping );
@@ -169,7 +156,7 @@ void task_executor_c::check_worker()
     if (w().worker_must && w().workers < tmin(maximum_workers,w().tasks) && !w().worker_started)
     {
         w().worker_started = true;
-        CloseHandle(CreateThread(nullptr, 0, worker_proc, this, 0, nullptr));
+        master().sys_start_thread( DELEGATE( this, work ) );
     }
     w().worker_must = false;
 }
@@ -201,7 +188,7 @@ void task_executor_c::tick()
 
     int finished_tasks = 0;
 
-    if ( GetCurrentThreadId() == base_thread_id )
+    if ( spinlock::pthread_self() == base_thread_id )
     {
         while (results.try_pop(t))
         {
@@ -266,13 +253,7 @@ void task_executor_c::tick()
 
 void task_c::setup_wakeup( int t )
 {
-#ifdef _WIN32
     __wake_up_time = timeGetTime() + t;
-#endif // _WIN32
-#ifdef __linux__
-    __wake_up_time = syst ?;
-#endif
-
 }
 
 

@@ -273,8 +273,8 @@ font_c &font_c::buildfont(const str_c &fontname, const font_params_s&fprs)
             // cant load font?
             // try load it from system dir...
 
-            swstr_t<MAX_PATH+32> sysdir(MAX_PATH,false);
-            GetWindowsDirectoryW(sysdir.str(), MAX_PATH); sysdir.set_length();
+            swstr_t<MAX_PATH_LENGTH +32> sysdir( MAX_PATH_LENGTH,false);
+            GetWindowsDirectoryW(sysdir.str(), MAX_PATH_LENGTH ); sysdir.set_length();
             if (sysdir.get_last_char() != '\\') sysdir.append_char('\\');
             sysdir.append(CONSTWSTR("fonts\\"));
             sysdir.append(face);
@@ -428,7 +428,7 @@ font_c *font_desc_c::get_font() const
 		const_cast<font_desc_c*>(this)->update();
     if(!CHECK(font))
     {
-        if (this == &g_default_text_font) __debugbreak();
+        if (this == &g_default_text_font) DEBUG_BREAK();
         return g_default_text_font.get_font();
     }
 	return font;

@@ -165,7 +165,7 @@ class win32_wnd_c : public wnd_c
     static LRESULT CALLBACK wndhandler( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
     {
         safe_ptr<win32_wnd_c> wnd = hwnd2wnd( hwnd );
-        bool downkey = false;
+        //bool downkey = false;
 
         auto mouse_evt = [&]( mouse_event_e e ) -> LRESULT
         {
@@ -199,7 +199,7 @@ class win32_wnd_c : public wnd_c
                 {
                     NOTIFYICONDATAW nd = { sizeof( NOTIFYICONDATAW ), 0 };
                     nd.hWnd = hwnd;
-                    nd.uID = (int)(size_t)w; //-V205
+                    nd.uID = (int) (0xffffffff & (size_t)w); //-V205
                     Shell_NotifyIconW( NIM_DELETE, &nd );
                     w->flags.clear( F_NOTIFICATION_ICON );
                 }
@@ -433,8 +433,8 @@ class win32_wnd_c : public wnd_c
                     wstr_c f;
                     for ( int i = 0;; ++i )
                     {
-                        f.set_length( MAX_PATH );
-                        int l = DragQueryFileW( drp, i, f.str(), MAX_PATH );
+                        f.set_length( MAX_PATH_LENGTH );
+                        int l = DragQueryFileW( drp, i, f.str(), MAX_PATH_LENGTH );
                         if ( l <= 0 ) break;
                         f.set_length( l );
                         if ( !wnd || !wnd->cbs->evt_on_file_drop( f, ref_cast<ivec2>( p ) ) )
@@ -1170,8 +1170,8 @@ public:
     {
         modal_use_s muse;
 
-        wchar cdp[ MAX_PATH ];
-        GetCurrentDirectoryW( MAX_PATH, cdp );
+        wchar cdp[ MAX_PATH_LENGTH ];
+        GetCurrentDirectoryW( MAX_PATH_LENGTH, cdp );
 
         OPENFILENAMEW o;
         memset( &o, 0, sizeof( OPENFILENAMEW ) );
@@ -1221,8 +1221,8 @@ public:
     {
         modal_use_s muse;
 
-        wchar cdp[ MAX_PATH ];
-        GetCurrentDirectoryW( MAX_PATH, cdp );
+        wchar cdp[ MAX_PATH_LENGTH ];
+        GetCurrentDirectoryW( MAX_PATH_LENGTH, cdp );
 
         OPENFILENAMEW o;
         memset( &o, 0, sizeof( OPENFILENAMEW ) );
@@ -1347,8 +1347,8 @@ public:
             filter.replace_all( '/', 0 );
         }
 
-        wchar cdp[ MAX_PATH + 16 ];
-        GetCurrentDirectoryW( MAX_PATH + 15, cdp );
+        wchar cdp[ MAX_PATH_LENGTH + 16 ];
+        GetCurrentDirectoryW( MAX_PATH_LENGTH + 15, cdp );
 
         OPENFILENAMEW o;
         memset( &o, 0, sizeof( OPENFILENAMEW ) );
@@ -1360,12 +1360,12 @@ public:
         o.hwndOwner = hwnd;
         o.hInstance = GetModuleHandle( nullptr );
 
-        wstr_c buffer( MAX_PATH + 16, true );
+        wstr_c buffer( MAX_PATH_LENGTH + 16, true );
         buffer.set( name );
 
         o.lpstrTitle = title;
         o.lpstrFile = buffer.str();
-        o.nMaxFile = MAX_PATH;
+        o.nMaxFile = MAX_PATH_LENGTH;
         o.lpstrDefExt = exts.defext();
 
         o.lpstrFilter = filter.is_empty() ? nullptr : filter.cstr();

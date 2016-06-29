@@ -1,7 +1,6 @@
 #include "toolset.h"
 #include "internal/platform.h"
 
-#include <intrin.h>
 #include <stdio.h>
 
 #ifdef _WIN32
@@ -55,7 +54,31 @@ void LogMessage(const char *caption, const char *msg)
 
 bool sys_is_debugger_present()
 {
+#ifdef _WIN32
     return IsDebuggerPresent() != FALSE;
+#elif __linux__
+    char buf[1024];
+    int debugger_present = 0;
+
+    int status_fd = open("/proc/self/status", O_RDONLY);
+    if (status_fd == -1)
+        return 0;
+
+    ssize_t num_read = read(status_fd, buf, sizeof(buf));
+
+    if (num_read > 0)
+    {
+        static const char TracerPid[] = "TracerPid:";
+        char *tracer_pid;
+
+        buf[num_read] = 0;
+        tracer_pid    = strstr(buf, TracerPid);
+        if (tracer_pid)
+            debugger_present = !!atoi(tracer_pid + sizeof(TracerPid) - 1);
+    }
+
+    return debugger_present != 0;
+#endif
 }
 
 smbr_e TSCALL sys_mb( const wchar *caption, const wchar *text, smb_e options )
@@ -109,10 +132,10 @@ smbr_e TSCALL sys_mb( const wchar *caption, const wchar *text, smb_e options )
 }
 
 
-static smbr_e LoggedMessageBox(const ts::str_c &text, const char *notLoggedText, const char *caption, smb_e f )
+static smbr_e LoggedMessageBox(const str_c &text, const char *notLoggedText, const char *caption, smb_e f )
 {
     LogMessage(caption, text);
-    return sys_mb( to_wstr(caption), to_wstr(notLoggedText[ 0 ] ? tmp_str_c( text ).append( notLoggedText ) : text), f );
+    return sys_mb( to_wstr(caption), to_wstr(notLoggedText[ 0 ] ? str_c( text ).append( notLoggedText ) : text), f );
 }
 
 static static_setup< hashmap_t<str_c, bool>, 0 > messages;
@@ -123,7 +146,7 @@ void Log(const char *s, ...)
 
     va_list args;
     va_start(args, s);
-    vsprintf_s(str, ARRAY_SIZE(str), s, args);
+    vsnprintf( str, ARRAY_SIZE( str ), s, args );
     va_end(args);
 
     LogMessage(nullptr, str);
@@ -138,7 +161,7 @@ bool Warning(const char *s, ...)
 
 	va_list args;
 	va_start(args, s);
-	vsprintf_s(str, ARRAY_SIZE(str), s, args);
+    vsnprintf(str, ARRAY_SIZE(str), s, args);
 	va_end(args);
 
 	ts::str_c msg = str;
@@ -164,11 +187,11 @@ void Error(const char *s, ...)
 
 	va_list args;
 	va_start(args, s);
-	vsprintf_s(str, ARRAY_SIZE(str), s, args);
+    vsnprintf(str, ARRAY_SIZE(str), s, args);
 	va_end(args);
 
 	if ( LoggedMessageBox(str, "", "Error", sys_is_debugger_present() ? SMB_OKCANCEL : SMB_OK) == SMBR_CANCEL)
-		__debugbreak();
+		DEBUG_BREAK();
 }
 
 bool AssertFailed(const char *file, int line, const char *s, ...)
@@ -177,16 +200,16 @@ bool AssertFailed(const char *file, int line, const char *s, ...)
 
 	va_list args;
 	va_start(args, s);
-	vsprintf_s(str, ARRAY_SIZE(str), s, args);
+    vsnprintf(str, ARRAY_SIZE(str), s, args);
 	va_end(args);
 
 	return Warning("Assert failed at %s (%i)\n%s", file, line, str);
 }
 
 #ifndef _FINAL
-WINDOWS_ONLY
 tmcalc_c::~tmcalc_c()
 {
+#ifdef _WIN32
 	LARGE_INTEGER   timestamp2;
 	LARGE_INTEGER   frq;
 	QueryPerformanceCounter( &timestamp2 );
@@ -197,6 +220,7 @@ tmcalc_c::~tmcalc_c()
 	text.append(", Time: ").append( roundstr<str_c>( 1000.0 * double(takts) / double(frq.QuadPart), 3 ) ).append(" ms");
 	//LogMessage(m_tag, text);
     DMSG("tm: " << m_tag << text);
+#endif
 }
 #endif //_FINAL
 

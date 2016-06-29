@@ -82,10 +82,7 @@ class task_executor_c
 
     spinlock::syncvar< sync_s > sync;
 
-#ifdef _WIN32
-    static unsigned long __stdcall worker_proc(void *ap);
     void *evt = nullptr;
-#endif // _WIN32
 
     void work();
 
@@ -97,6 +94,8 @@ class task_executor_c
 public:
     task_executor_c();
     ~task_executor_c();
+
+    uint32 base_tid() const { return base_thread_id; }
 
     void add( task_c *task ); // can be called from any thread
     void tick(); // can be called from any thread, but will do nothing, if called from non-base thread

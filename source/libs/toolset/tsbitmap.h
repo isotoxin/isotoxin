@@ -22,7 +22,7 @@ namespace ts
 
     INLINE auint GRAYSCALE_C( TSCOLOR c )
     {
-        return ts::lround( float( BLUE( c ) ) * 0.114f + float( GREEN( c ) ) * 0.587f + float( RED( c ) ) * 0.299 );
+        return ts::lround( float( BLUE( c ) ) * 0.0722f + float( GREEN( c ) ) * 0.7152f + float( RED( c ) ) * 0.2126f );
     }
 
     INLINE TSCOLOR GRAYSCALE( TSCOLOR c )

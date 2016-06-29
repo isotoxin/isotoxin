@@ -333,6 +333,8 @@ public:
         m_opacity = 1.0f;
 	}
 
+    bool is_visible_and_nonzero_size() const { return is_visible() && (size() >> 0); }
+
 	bool is_visible() const {return m_flags.is(F_VISIBLE); }
     bool is_highlighted() const {return m_flags.is(F_HIGHLIGHT); }
     bool is_active() const {return m_flags.is(F_ACTIVE); }
@@ -1532,6 +1534,7 @@ class gui_htabsel_c : public gui_hgroup_c
     GM_RECEIVER( gui_htabsel_c, GM_UI_EVENT );
 
     menu_c menu;
+    RID selectitem;
     RID activeitem;
     int height = 32;
 

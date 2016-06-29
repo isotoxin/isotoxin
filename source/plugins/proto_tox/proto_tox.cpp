@@ -1666,6 +1666,19 @@ public:
                 fwrite(framedata, framesize, 1, ff);
                 fclose(ff);
             }
+
+            md5_c md5;
+            md5.update( framedata, framesize );
+            md5.done();
+            str_c s(CONSTASTR("send frame: "));
+            s.append_as_int( sf->frame );
+            s.append_char( ' ' );
+            s.append_as_int( framesize );
+            s.append_char( ' ' );
+            s.append_as_hex( md5.result(), 16 );
+
+            Log( "%s", s.cstr() );
+
 #endif // _DEBUG
 
 
@@ -1688,7 +1701,7 @@ public:
 
             if (frnum == current_recv_frame)
             {
-                if (offset >= 0 && offset < (int)(framebody.size() - dsz) )
+                if (offset >= 0 && offset <= (int)(framebody.size() - dsz) )
                     memcpy( framebody.data() + offset, d, dsz );
 
                 return;
@@ -1715,6 +1728,19 @@ public:
                 fwrite( framebody.data(), framebody.size(), 1, f );
                 fclose(f);
             }
+
+            md5_c md5;
+            md5.update( framebody.data(), framebody.size() );
+            md5.done();
+            str_c s( CONSTASTR( "recv frame: " ) );
+            s.append_as_int( current_recv_frame );
+            s.append_char( ' ' );
+            s.append_as_int( framebody.size() );
+            s.append_char( ' ' );
+            s.append_as_hex( md5.result(), 16 );
+
+            Log( "%s", s.cstr() );
+
 #endif // _DEBUG
 
             if (!decoder)
@@ -2607,19 +2633,22 @@ static void cb_isotoxin(Tox *, uint32_t fid, const byte *data, size_t len, void 
                     }
                     if (t && t->equals(CONSTASTR("initvdecoder")))
                     {
-                        desc->cip->cfg_dec.w = 0;
-                        desc->cip->cfg_dec.h = 0;
-                        if (desc->cip && desc->cip->decoder)
+                        if (desc->cip)
                         {
-                            vpx_codec_destroy(&desc->cip->v_decoder);
-                            desc->cip->decoder = false;
+                            desc->cip->cfg_dec.w = 0;
+                            desc->cip->cfg_dec.h = 0;
+                            if ( desc->cip->decoder )
+                            {
+                                vpx_codec_destroy( &desc->cip->v_decoder );
+                                desc->cip->decoder = false;
+                            }
+                            ++t;
+                            desc->cip->cfg_dec.w = t ? t->as_uint() : 0;
+                            ++t;
+                            desc->cip->cfg_dec.h = t ? t->as_uint() : 0;
+                            ++t;
+                            desc->cip->decoder_vp8 = !t || t->equals( CONSTASTR( "vp8" ) );
                         }
-                        ++t;
-                        desc->cip->cfg_dec.w = t ? t->as_uint() : 0;
-                        ++t;
-                        desc->cip->cfg_dec.h = t ? t->as_uint() : 0;
-                        ++t;
-                        desc->cip->decoder_vp8 = !t || t->equals(CONSTASTR("vp8"));
                     }
                 }
                 break;
@@ -3504,7 +3533,7 @@ static TOX_ERR_NEW prepare()
             }
         }
 #endif
-#ifdef __linux__
+#ifdef _NIX
         allow_ipv6 = true;
 #endif
         options.ipv6_enabled = allow_ipv6 ? 1 : 0;
@@ -3952,6 +3981,7 @@ static void send_configurable()
     hf->configurable(5, fields, values);
 }
 
+static bool setproto = false;
 static void apply_par( const pstr_c &field, const pstr_c &val )
 {
     if ( field.equals( CONSTASTR( CFGF_VIDEO_CODEC ) ) )
@@ -4012,6 +4042,11 @@ static void apply_par( const pstr_c &field, const pstr_c &val )
             options.udp_enabled = udp, reconnect = true;
         return;
     }
+    if ( field.equals( CONSTASTR( CFGF_SETPROTO ) ) )
+    {
+        setproto = val.as_int() != 0;
+        return;
+    }
 }
 
 
@@ -4021,10 +4056,11 @@ void __stdcall set_config(const void*idata, int iisz)
     if ( iisz < 4 ) return;
     config_accessor_s ca( idata, iisz );
 
+    setproto = false;
     if ( ca.params.l )
         parse_values( ca.params, apply_par ); // parse params
 
-    if ( !ca.native_data && !ca.protocol_data )
+    if ( !setproto && !ca.native_data && !ca.protocol_data )
         return;
 
     struct on_return

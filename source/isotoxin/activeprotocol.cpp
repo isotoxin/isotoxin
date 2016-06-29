@@ -284,6 +284,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
 
                     config_maker_s cm;
                     cm.configurable( w().data.configurable, get_features(), get_conn_features() );
+                    cm.par( CONSTASTR( CFGF_SETPROTO ), CONSTASTR("1") );
                     cm.conf( w().data.config, 0 != (w().data.options & active_protocol_data_s::O_CONFIG_NATIVE) );
 
                     ipcp->send( cm );

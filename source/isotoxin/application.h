@@ -704,6 +704,7 @@ public:
     mediasystem_c &mediasystem() {return m_mediasystem;};
 
     void add_task( ts::task_c *t ) { m_tasks_executor.add(t); }
+    ts::uint32 base_tid() const { return  m_tasks_executor.base_tid(); }
 
     void update_ringtone( contact_root_c *rt, bool play_stop_snd = true );
     av_contact_s * update_av( contact_root_c *avmc, bool activate, bool camera = false );

@@ -31,7 +31,7 @@ public:
         self.dump_type = minidumpType;
     }
 
-    static swstr_t<MAX_PATH> dump_filename;
+    static swstr_t<MAX_PATH_LENGTH> dump_filename;
 };
 
 #define EXCEPTIONFILTER() ts::exception_operator_c::exception_filter(GetExceptionInformation())

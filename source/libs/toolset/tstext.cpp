@@ -9,7 +9,7 @@ namespace ts
     }
 
 
-inline void writePixelBlended(TSCOLOR &dst, const ivec4 &srcColor)
+INLINE void writePixelBlended(TSCOLOR &dst, const ivec4 &srcColor)
 {
 	ivec4 dstColor(TSCOLORtoVec4(dst));
 	dstColor.rgb() = srcColor.rgb()*srcColor.a + dstColor.rgb()*(256-srcColor.a);
@@ -17,12 +17,12 @@ inline void writePixelBlended(TSCOLOR &dst, const ivec4 &srcColor)
 	dst = ((dstColor.r & 0xFF00) << 8) | (dstColor.g & 0xFF00) | (dstColor.b >> 8) | ((dstColor.a & 0xFF00) << 16);
 }
 
-__forceinline void write_pixel(TSCOLOR &dst, TSCOLOR src, uint8 aa)
+INLINE void write_pixel(TSCOLOR &dst, TSCOLOR src, uint8 aa)
 {
     if (aa == 0) return;
     TSCOLOR c = dst;
 
-    extern uint8 __declspec(align(256)) multbl[256][256];
+    extern uint8 ALIGN(256) multbl[256][256];
 
     uint8 a = multbl[aa][ ALPHA(src) ];
     uint16 not_a = 255 - a;

@@ -574,7 +574,7 @@ rectengine_root_c::~rectengine_root_c()
 
 /*virtual*/ bool rectengine_root_c::apply(rectprops_c &rpss, const rectprops_c &pss)
 {
-	if (!syswnd.wnd && (pss.is_visible() || pss.is_micromized()))
+	if (!syswnd.wnd && (pss.is_visible_and_nonzero_size() || pss.is_micromized()))
 	{
         rpss.change_to(pss, this);
 
@@ -665,7 +665,7 @@ rectengine_root_c::~rectengine_root_c()
                 syswnd.wnd->set_focus(false);
         }
 
-	} else if (!pss.is_visible())
+	} else if (!pss.is_visible_and_nonzero_size())
 	{
 		// window stil invisible => just change parameters
 		rpss.change_to(pss, this);
@@ -1313,7 +1313,7 @@ void rectengine_root_c::simulate_mousemove()
     if (gui->allow_input(getrid()))
     {
         evt_data_s d;
-		d.mouse.screenpos = gui->get_cursor_pos();
+		d.mouse.screenpos = ts::get_cursor_pos();
 		sq_evt( SQ_MOUSE_MOVE, getrid(), d );
     }
 }

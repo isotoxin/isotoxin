@@ -172,7 +172,7 @@ public:
         EACH_COMPONENT(i) (&(super::x))[i] = v[i];
     }
     //vec
-    template<typename T1, typename T2> INLINE vec_t( const T1 &x_, const T2 &y_ ) { internals::vecsetter<N,T, internals::vectype<T1>::type, internals::vectype<T2>::type>( this, x_, y_ ); }
+    template<typename T1, typename T2> INLINE vec_t( const T1 &x_, const T2 &y_ ) { internals::vecsetter<N,T, typename internals::vectype<T1>::type, typename internals::vectype<T2>::type>( this, x_, y_ ); }
 
     //vec3
     INLINE vec_t(const T x_, const T y_, const T z_)  { super::x = x_;   super::y = y_;   super::z = z_;   TS_STATIC_CHECK(N == 3, "vec3 expected"); }

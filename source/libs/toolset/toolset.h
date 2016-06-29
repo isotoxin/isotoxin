@@ -9,7 +9,7 @@
 #ifdef _WIN32
 #define WINDOWS_ONLY
 #else
-#define WINDOWS_ONLY #error
+#define WINDOWS_ONLY __error
 #endif
 
 #pragma pack (push, 1)
@@ -82,6 +82,10 @@
 #define ARCHBITS 64
 #else
 #define ARCHBITS 32
+#endif
+
+#if defined __linux__
+#define _NIX
 #endif
 
 #define UPAR(p) { (p) = (p); }
@@ -187,9 +191,10 @@ template <typename T, size_t N> char( &__ARRAYSIZEHELPER( T( &array )[ N ] ) )[ 
 #elif defined __GNUC__
 #define NOWARNING(n,...) __VA_ARGS__
 #define DEBUG_BREAK() __builtin_trap()
-#define UNFINISHED(...) _Pragma message (__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__)
-#define STUB(...) _Pragma message (__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__); WARNING( __LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__ )
-#define STOPSTUB(...) _Pragma message (__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__); ERROR( __LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__ )
+#define DO_PRAGMA(x) _Pragma (#x)
+#define UNFINISHED(s) DO_PRAGMA(message (__LOC__ "unfinished function: " __FUNCTION__ ": " s))
+#define STUB(...) _Pragma(message (__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__); WARNING( __LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__ ))
+#define STOPSTUB(...) _Pragma(message (__LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__); ERROR( __LOC__ "unfinished function: " __FUNCTION__ ": " __VA_ARGS__ ))
 #define NOP() ASSERT((1,true))
 
 #define UNSAFE_BLOCK_BEGIN try {

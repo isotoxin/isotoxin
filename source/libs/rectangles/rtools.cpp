@@ -4,7 +4,7 @@ menu_anchor_s::menu_anchor_s(bool setup_by_mousepos, relpos_e rp):rect(0), relpo
 {
     if (setup_by_mousepos && gui)
     {
-        rect.lt = gui->get_cursor_pos();
+        rect.lt = ts::get_cursor_pos();
         rect.rb = rect.lt;
     }
 }

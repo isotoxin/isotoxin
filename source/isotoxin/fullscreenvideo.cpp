@@ -69,6 +69,17 @@ fullscreenvideo_c::~fullscreenvideo_c()
                 getengine().draw(r, get_default_text_color(0));
                 getengine().end_draw();
             }
+			int dh = r.height() - common.display_size.y;
+			if (dh > 0)
+			{
+				// fill left and rite areas
+				getengine().begin_draw();
+				ts::irect rt = r; rt.rb.y = rt.lt.y + dh / 2 + 1;
+				getengine().draw(rt, get_default_text_color(0));
+				r.lt.y = r.rb.y - dh / 2 - 1;
+				getengine().draw(r, get_default_text_color(0));
+				getengine().end_draw();
+			}
 
             common.vsb_draw(getengine(), common.display, common.display_position, common.display_size, false, false);
 
@@ -334,7 +345,7 @@ void common_videocall_stuff_s::create_buttons( gui_notice_callinprogress_c *owne
 
 void common_videocall_stuff_s::tick()
 {
-    ts::ivec2 mp = gui->get_cursor_pos();
+    ts::ivec2 mp = ts::get_cursor_pos();
     bool inside = false;
 
     if (HOLD(b_hangup->getparent())().getprops().screenrect().inside(mp))
@@ -770,10 +781,15 @@ void common_videocall_stuff_s::calc_cam_display_rects(gui_notice_callinprogress_
         if (display_size <= 0)
             return;
 
-        clr.lt.y = clr.rb.y - display_size.y;
-        display_position = clr.center();
-        if (!flags.is(F_FS))
-            display_position.y -= shadowsize.y;
+		if (flags.is(F_FS))
+		{
+			display_position = clr.center();
+		} else
+		{
+			clr.lt.y = clr.rb.y - display_size.y;
+			display_position = clr.center();
+			display_position.y -= shadowsize.y;
+		}
 
         cam_previewsize = display_size * prf().camview_size() / 100;
         if (owner->getcamera())

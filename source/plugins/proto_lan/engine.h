@@ -14,6 +14,12 @@
 #define OPUS_EXPORT
 #include <opus.h>
 
+#include <vpx/vpx_decoder.h>
+#include <vpx/vpx_encoder.h>
+#include <vpx/vp8dx.h>
+#include <vpx/vp8cx.h>
+#include <vpx/vpx_image.h>
+
 #include <memory>
 
 struct socket_s
@@ -205,6 +211,9 @@ enum block_type_e // hard order!!!
     BT_FILE_DONE,
     BT_FILE_CHUNK,
     BT_TYPING,
+    BT_STREAM_OPTIONS,
+    BT_INITDECODER,
+    BT_VIDEO_FRAME,
 
     __bt_no_save_end,
 
@@ -233,6 +242,12 @@ struct datablock_s
 };
 #pragma pack(pop)
 
+enum video_codec_e
+{
+    vc_vp8,
+    vc_vp9,
+};
+
 class lan_engine : public packetgen
 {
     friend struct chunk;
@@ -241,6 +256,8 @@ class lan_engine : public packetgen
     udp_sender  broadcast_seek;
     tcp_listner tcp_in;
     host_functions_s *hf;
+
+    time_t last_activity = now();
 
     std::vector<byte> avatar;
     bool avatar_set = false;
@@ -252,6 +269,7 @@ class lan_engine : public packetgen
     int listen_port = -1;
 
     int changed_some = 0;
+
 
     struct stream_reader
     {
@@ -308,18 +326,52 @@ class lan_engine : public packetgen
         int last() const { return maxlen - offset; }
     };
 
+    void stop_encoder();
 public:
+
+    static void video_encoder();
+    video_codec_e use_vcodec = vc_vp8;
+    int use_vquality = 0;
+    int use_vbitrate = 0;
 
     struct contact_s;
     struct media_stuff_s
     {
+        contact_s *owner;
+        media_stuff_s *prev = nullptr;
+        media_stuff_s *next = nullptr;
+
+        spinlock::long3264 sync_frame = 0;
+        u64 sblock = 0;
+        datablock_s *nblock = nullptr;
+
+        const void *video_data = nullptr;
         OpusDecoder *audio_decoder = nullptr;
         OpusEncoder *audio_encoder = nullptr;
         fifo_stream_c enc_fifo;
         std::vector<byte> uncompressed;
         std::vector<byte> compressed;
+
+        stream_options_s local_so;
+        stream_options_s remote_so;
+        vpx_codec_ctx_t v_encoder;
+        vpx_codec_ctx_t v_decoder;
+        vpx_codec_enc_cfg_t enc_cfg;
+        vpx_codec_dec_cfg_t cfg_dec;
+
+        int locked = 0; // locked in encoder
+
+        video_codec_e vcodec = vc_vp8;
+        video_codec_e vdecodec = vc_vp8;
+        int vbitrate = 0;
+        int vquality = -1;
+        uint32_t video_w = 0;
+        uint32_t video_h = 0;
+        uint32_t frame_counter = 0;
+
         int next_time_send = 0;
         bool processing = false;
+        bool decoder = false;
 
         void init_audio_encoder();
         void tick(contact_s *, int ct);
@@ -328,6 +380,10 @@ public:
         int prepare_audio4send(int ct); // grabs enc_fifo buffer and put compressed frame to this->compressed buffer
         int decode_audio( const void *data, int datasize ); // pcm decoded audio stored to this->uncompressed
 
+        void encode_video_and_send( const byte *y, const byte *u, const byte *v );
+        void video_frame( int framen, const byte *frame_data, int framesize );
+
+        media_stuff_s( contact_s *owner );
         ~media_stuff_s();
     };
 
@@ -337,7 +393,10 @@ public:
         std::vector<byte> buf;
     };
 
-    std::unordered_map< u64, std::unique_ptr<delivery_data_s> > delivery;
+    typedef std::unordered_map< u64, std::unique_ptr<delivery_data_s> > delivery_map_t;
+
+    spinlock::syncvar< delivery_map_t > delivery;
+
 
     struct contact_s
     {
@@ -382,15 +441,54 @@ public:
         enum { CALL_OFF, OUT_CALL, IN_CALL, IN_PROGRESS } call_status = CALL_OFF;
         enum { SEARCH, MEET, TRAPPED, INVITE_SEND, INVITE_RECV, REJECTED, ACCEPT, ACCEPT_RESTORE_CONNECT, REJECT, ONLINE, OFFLINE, BACKCONNECT, ROTTEN, ALMOST_ROTTEN } state = SEARCH;
 
-        datablock_s *sendblock_f = nullptr;
-        datablock_s *sendblock_l = nullptr;
+        struct dblist_s
+        {
+            datablock_s *sendblock_f = nullptr;
+            datablock_s *sendblock_l = nullptr;
+
+            void add( datablock_s *m )
+            {
+                LIST_ADD( m, sendblock_f, sendblock_l, prev, next );
+            }
+
+            void reset()
+            {
+                for ( ; sendblock_f;)
+                {
+                    datablock_s *m = sendblock_f;
+                    LIST_DEL( m, sendblock_f, sendblock_l, prev, next );
+                    m->die();
+                }
+            }
+            bool del( u64 utag )
+            {
+
+                for ( datablock_s *m = sendblock_f; m; m = m->next )
+                {
+                    if ( m->delivery_tag == utag )
+                    {
+                        if ( m->sent == 0 )
+                        {
+                            LIST_DEL( m, sendblock_f, sendblock_l, prev, next );
+                            m->die();
+                        }
+                        return true;
+                    }
+                }
+                return false;
+
+            }
+        };
+        spinlock::syncvar< dblist_s > sendblocks;
 
         void send_message( u64 create_time, const asptr &text, u64 dtag)
         {
             u64 create_time_net = my_htonll(create_time);
             send_block(BT_MESSAGE, dtag, &create_time_net, sizeof(u64), text.s, text.l);
         }
-        u64 send_block(block_type_e mt, u64 delivery_tag, const void *data = nullptr, aint datasize = 0, const void *data1 = nullptr, aint datasize1 = 0);
+        datablock_s *build_block( block_type_e bt, u64 delivery_tag, const void *data = nullptr, aint datasize = 0, const void *data1 = nullptr, aint datasize1 = 0 );
+        u64 send_block(block_type_e bt, u64 delivery_tag, const void *data = nullptr, aint datasize = 0, const void *data1 = nullptr, aint datasize1 = 0);
+        u64 send_block( datablock_s *b );
         bool del_block( u64 delivery_tag );
 
         void to_offline(int ct);

@@ -831,7 +831,7 @@ gui_notice_callinprogress_c::~gui_notice_callinprogress_c()
     {
         ASSERT(common.display->notice == this);
         common.display->notice = nullptr;
-        g_app->current_video_display.release(common.display);
+        if (g_app) g_app->current_video_display.release(common.display);
         common.display = nullptr;
     }
     if (gui)
@@ -1029,7 +1029,7 @@ void gui_notice_callinprogress_c::setup(contact_c *collocutor_ptr)
 
 av_contact_s *gui_notice_callinprogress_c::get_avc()
 {
-    if (!sender) return nullptr;
+    if (!sender || !g_app) return nullptr;
     if (sender->getkey().is_group())
     {
         ASSERT( sender == historian );
@@ -1366,13 +1366,16 @@ void gui_notice_callinprogress_c::recalc_video_size(const ts::ivec2 &videosize)
 
 
     ts::ivec2 dsz = ts::ivec2(vwidth, needy - addhshadow);
-    common.display->update_video_size(videosize, dsz);
-    if (dsz != common.cur_vres)
-    {
-        common.cur_vres = dsz;
-        if (av_contact_s *avc = get_avc())
-            avc->set_video_res(common.cur_vres * 2 /* improove quality: vp8 too poor quality */ );
-    }
+	if (dsz >> 0)
+	{
+		common.display->update_video_size(videosize, dsz);
+		if (dsz != common.cur_vres)
+		{
+			common.cur_vres = dsz;
+			if (av_contact_s *avc = get_avc())
+				avc->set_video_res(common.cur_vres * 2 /* improove quality: vp8 too poor quality */);
+		}
+	}
 }
 
 void gui_notice_callinprogress_c::calc_cam_display_rects()
@@ -6278,60 +6281,69 @@ void spellchecker_s::check_text(const ts::wsptr &t, int caret)
     for (chk_word_s &w : words)
         w.present = false;
 
-    ts::wstr_c sdn(t);
-
-    ts::ivec2 linkinds;
-    for (int j = 0; text_find_link(sdn.as_sptr(), j, linkinds);)
-        sdn.fill(linkinds.r0, linkinds.r1 - linkinds.r0, ' '), j = linkinds.r1;
-
-    int left = ts::tmin(caret, t.l);
-    for (; left > 0 && !IS_WORDB(sdn.get_char(left - 1)); --left);
-    badwords.trunc_bits(left);
-    sdn.replace_all_of(text_non_letters(), ' ');
-
-    ts::wstrings_c splt(sdn, ' ' );
-    for (ts::wstr_c &s : splt)
     {
-        s.trim();
-        if (s.get_length() < 2) s.clear();
-    }
-    splt.kill_empty_fast();
+        ts::wstr_c sdn( t );
 
-    for (ts::wstr_c &s : splt)
-    {
-        ts::str_c utf8 = to_utf8(s);
-        bool f = false;
-        for (chk_word_s &w : words)
+        ts::ivec2 linkinds;
+        for (int j = 0; text_find_link(sdn.as_sptr(), j, linkinds);)
+            sdn.fill(linkinds.r0, linkinds.r1 - linkinds.r0, ' '), j = linkinds.r1;
+
+        int left = ts::tmin(caret, t.l);
+        for (; left > 0 && !IS_WORDB(sdn.get_char(left - 1)); --left);
+        badwords.trunc_bits(left);
+        sdn.replace_all_of(text_non_letters(), ' ');
+
+        ts::wstrings_c splt(sdn, ' ' );
+        for (ts::wstr_c &s : splt)
         {
-            if (w.utf8.equals(utf8))
+            s.trim();
+            if (s.get_length() < 2) s.clear();
+        }
+        splt.kill_empty_fast();
+
+        for (const ts::wstr_c &s : splt)
+        {
+            ts::str_c utf8 = to_utf8(s);
+            bool f = false;
+            for (chk_word_s &w : words)
             {
-                f = true;
-                w.present = true;
-                break;
+                if (w.utf8.equals(utf8))
+                {
+                    f = true;
+                    w.present = true;
+                    break;
+                }
+            }
+            if (!f)
+            {
+                chk_word_s &w = words.add();
+                w.utf8 = utf8;
             }
         }
-        if (!f)
-        {
-            chk_word_s &w = words.add();
-            w.utf8 = utf8;
-        }
     }
 
-    ts::astrings_c checkwords;
-    for ( ts::aint i = words.size() - 1; i >= 0; --i)
     {
-        chk_word_s &w = words.get(i);
-        if (!w.present)
+        ts::astrings_c checkwords;
+        for ( ts::aint i = words.size() - 1; i >= 0; --i )
         {
-            words.remove_fast(i);
-            continue;
+            chk_word_s &w = words.get( i );
+            if ( !w.present )
+            {
+                words.remove_fast( i );
+                continue;
+            }
+            if ( w.checked || w.check_started ) continue;
+            checkwords.add( w.utf8 );
+            w.check_started = true;
         }
-        if (w.checked || w.check_started) continue;
-        checkwords.add( w.utf8 );
-        w.check_started = true;
+        if ( checkwords.size() )
+        {
+            for ( ts::str_c &s : checkwords )
+                s.clone();
+
+            g_app->spellchecker.check( std::move( checkwords ), this );
+        }
     }
-    if (checkwords.size())
-        g_app->spellchecker.check(std::move(checkwords), this);
 
     gui_message_editor_c *msge = static_cast<gui_message_editor_c *>( this );
     msge->redraw();

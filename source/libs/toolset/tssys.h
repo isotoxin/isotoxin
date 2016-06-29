@@ -119,21 +119,21 @@ public:
     virtual void hide_hardware_cursor() = 0;
     virtual void show_hardware_cursor() = 0;
     virtual void set_cursor( cursor_e ct ) = 0;
-    virtual ivec2 get_cursor_pos() = 0;
 
     virtual int get_system_info( sysinf_e ) = 0;
 
     virtual bool is_key_pressed( key_scan_e ) = 0;
 };
 
+#define MAX_PATH_LENGTH 4096
+
 #ifdef _WIN32
-#define MAX_PATH_LENGTH 260
 #define MASTERCLASS_INTERNAL_STUFF_SIZE (ARCHBITS * 2)
 class sys_master_win32_c : public sys_master_c
 #define MASTER_CLASS sys_master_win32_c
 #endif
 
-#ifdef __linux__
+#ifdef _NIX
 #define MASTERCLASS_INTERNAL_STUFF_SIZE 64
 class sys_master_nix_c : public sys_master_c
 #define MASTER_CLASS sys_master_nix_c
@@ -180,7 +180,6 @@ public:
     /*virtual*/ void hide_hardware_cursor() override;
     /*virtual*/ void show_hardware_cursor() override;
     /*virtual*/ void set_cursor( cursor_e ct ) override;
-    /*virtual*/ ivec2 get_cursor_pos() override;
 
     /*virtual*/ int get_system_info( sysinf_e ) override;
     /*virtual*/ bool is_key_pressed( key_scan_e ) override;

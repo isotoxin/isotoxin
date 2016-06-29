@@ -1,23 +1,5 @@
 #include "toolset.h"
 
-
-extern "C"
-{
-void * __fastcall arc_mem_alloc( unsigned int size )
-{
-    return MM_ALLOC( size );
-}
-
-void * __fastcall arc_mem_realloc( void * p, unsigned int size )
-{
-    return MM_RESIZE( p, size );
-}
-void __fastcall arc_mem_free( void * p )
-{
-    MM_FREE( p );
-}
-};
-
 namespace ts 
 {
 
@@ -223,7 +205,7 @@ void ccollection_c::find_by_mask(wstrings_c & files, const ts::wsptr &fnmask, bo
         }
         bool filer( const wsptr & path, const wsptr & fn, container_c * )
         {
-            if (allfiles || fn_mask_match(fn, m))
+            if (allfiles || fn_mask_match<wchar>(fn, m))
             {
                 if (fullpaths)
                     files.add( fn_join(ts::tmp_wstr_c(path),fn) );

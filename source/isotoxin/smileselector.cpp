@@ -97,7 +97,7 @@ bool dialog_smileselector_c::find_undermouse()
 {
     const rectdef_s *pum = undermouse;
     undermouse = nullptr;
-    ts::ivec2 mp = to_local(gui->get_cursor_pos()) - get_client_area().lt;
+    ts::ivec2 mp = to_local( ts::get_cursor_pos()) - get_client_area().lt;
     mp.y -= sb.shift;
     for (rectdef_s &rd : rects)
     {

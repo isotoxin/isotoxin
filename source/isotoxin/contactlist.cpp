@@ -1324,6 +1324,13 @@ bool gui_contact_item_c::allow_drop() const
             flags.clear(F_LBDN);
         }
         return false;
+    case SQ_MOUSE_L2CLICK:
+        if ( CIR_LISTITEM == role && !contact->getkey().is_self() )
+        {
+            contact_key_s ck( contact->getkey() );
+            SUMMON_DIALOG<dialog_contact_props_c>( UD_CONTACTPROPS, dialog_contactprops_params_s( ck, true ) );
+        }
+        return false;
     case SQ_MOUSE_RUP:
         if (CIR_LISTITEM == role && !contact->getkey().is_self())
         {
@@ -1601,7 +1608,7 @@ bool gui_contact_item_c::allow_drop() const
             ts::irect ca = get_client_area();
             ca.rb.x -= contact_item_rite_margin();
             ca.lt.x = ca.rb.x - curpww;
-            if (ca.inside(to_local(gui->get_cursor_pos())))
+            if (ca.inside(to_local( ts::get_cursor_pos())))
             {
                 menu_c m;
 

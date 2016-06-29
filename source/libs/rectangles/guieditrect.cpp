@@ -740,7 +740,12 @@ void gui_textedit_c::remove_lines( ts::aint r)
 
 void gui_textedit_c::prepare_texture()
 {
-    if (flags.is(F_LINESDIRTY)) prepare_lines();
+    if ( flags.is( F_LINESDIRTY ) )
+    {
+        int pos = get_caret_char_index();
+        prepare_lines();
+        set_caret_pos(pos);
+    }
 	flags.clear(F_TEXTUREDIRTY);
 
     ts::ivec2 asize = size();

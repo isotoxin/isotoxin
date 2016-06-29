@@ -205,6 +205,8 @@ enum config_flags_e
 #define FILE_TRANSFER_CHUNK_MASK (~1048575ull)
 
 
+#define CFGF_SETPROTO       "setproto" // value is 1, when configuration set on set_proto result (initial call)
+
 // known configurable fields, handled by app
 // app stores values of these field in db
 #define CFGF_LOGIN          "login"

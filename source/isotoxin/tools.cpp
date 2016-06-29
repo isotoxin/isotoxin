@@ -1467,7 +1467,7 @@ bool file_mask_match( const ts::wsptr &filename, const ts::wsptr &masks )
             ++fnm;
             --fnm.l;
         }
-        if (ts::fn_mask_match(fn, fnm)) return true;
+        if (ts::fn_mask_match<ts::wchar>(fn, fnm)) return true;
     }
 
     return false;

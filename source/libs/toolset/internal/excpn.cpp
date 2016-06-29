@@ -11,7 +11,7 @@
 namespace ts
 {
 exception_operator_c exception_operator_c::self;
-swstr_t<MAX_PATH> exception_operator_c::dump_filename;
+swstr_t<MAX_PATH_LENGTH> exception_operator_c::dump_filename;
 
 char* strerror_r(int errnum, char *buf, size_t n)
 {
@@ -236,9 +236,9 @@ void exception_operator_c::create_dump(EXCEPTION_POINTERS* pExp/*=NULL*/, bool n
     {
         if (dump_filename.is_empty())
         {
-            swstr_t<MAX_PATH + 32> exename(MAX_PATH, false);
-            exename.set_length(MAX_PATH);
-            GetModuleFileNameW(nullptr, exename.str(), MAX_PATH);
+            swstr_t<MAX_PATH_LENGTH + 32> exename( MAX_PATH_LENGTH, false);
+            exename.set_length( MAX_PATH_LENGTH );
+            GetModuleFileNameW(nullptr, exename.str(), MAX_PATH_LENGTH );
             exename.set_length();
             int namei = exename.find_last_pos_of(CONSTWSTR("/\\"));
             int doti = exename.find_last_pos('.');

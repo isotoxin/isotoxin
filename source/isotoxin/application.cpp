@@ -180,17 +180,24 @@ struct check_word_task : public ts::task_c
 
     /*virtual*/ void result() override
     {
+        ASSERT( spinlock::pthread_self() ==  g_app->base_tid() );
+
         if (!splchk.expired())
             splchk->check_result( w, is_valid, std::move(suggestions) );
     }
 
     /*virtual*/ void done(bool canceled) override
     {
-        if (!canceled && !w.is_empty())
-            result();
-
         if (g_app)
+        {
+            ASSERT( spinlock::pthread_self() == g_app->base_tid() );
+
+            if ( !canceled && !w.is_empty() )
+                result();
+
             g_app->spellchecker.spell_check_work_done();
+        }
+
 
         __super::done(canceled);
     }

@@ -517,8 +517,6 @@ public:
     ts::irect dragndrop_objrect();
     guirect_c *dragndrop_underproc() { return dndproc.expired() ? nullptr : dndproc->underproc(); }
 
-    ts::ivec2 get_cursor_pos() const;
-
     void set_focus(RID rid);
     RID get_rootfocus() const { return m_hoverdata.root_focus; }
     RID get_focus() const {return m_hoverdata.active_focus; }

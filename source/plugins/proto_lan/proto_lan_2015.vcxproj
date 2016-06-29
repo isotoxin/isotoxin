@@ -63,7 +63,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external;$(ProjectDir)..\..\libs;$(ProjectDir)..\..\libs-external/libsodium/src/libsodium/include;$(ProjectDir)..\..\libs-external/opus/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external;$(ProjectDir)..\..\libs;$(ProjectDir)..\..\libs-external/libsodium/src/libsodium/include;$(ProjectDir)..\..\libs-external/opus/include;$(ProjectDir)..\..\libs-external\libvpx</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
@@ -80,7 +80,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Final|Win32'">
     <ClCompile>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external;$(ProjectDir)..\..\libs;$(ProjectDir)..\..\libs-external/libsodium/src/libsodium/include;$(ProjectDir)..\..\libs-external/opus/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external;$(ProjectDir)..\..\libs;$(ProjectDir)..\..\libs-external/libsodium/src/libsodium/include;$(ProjectDir)..\..\libs-external/opus/include;$(ProjectDir)..\..\libs-external\libvpx</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -95,7 +95,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug Optimized|Win32'">
     <ClCompile>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external;$(ProjectDir)..\..\libs;$(ProjectDir)..\..\libs-external/libsodium/src/libsodium/include;$(ProjectDir)..\..\libs-external/opus/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\libs-external;$(ProjectDir)..\..\libs;$(ProjectDir)..\..\libs-external/libsodium/src/libsodium/include;$(ProjectDir)..\..\libs-external/opus/include;$(ProjectDir)..\..\libs-external\libvpx</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

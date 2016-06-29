@@ -707,7 +707,7 @@ struct spellchecker_s
 {
     struct chk_word_s
     {
-        MOVABLE( true );
+        MOVABLE( false );
         ts::str_c utf8;
         ts::wstr_c badword; // empty, if valid
         ts::astrings_c suggestions;

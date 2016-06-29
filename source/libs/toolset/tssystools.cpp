@@ -1,12 +1,17 @@
 #include "toolset.h"
 #include "internal/platform.h"
 
+#ifdef _NIX
+#include "_nix/nix_common.inl"
+#endif // _NIX
+
 namespace ts
 {
 
 
 wstr_c  TSCALL monitor_get_description(int monitor)
 {
+#ifdef _WIN32
     struct mdata
     {
         int mi, mio;
@@ -45,10 +50,16 @@ wstr_c  TSCALL monitor_get_description(int monitor)
 
     EnumDisplayMonitors(nullptr, nullptr, mdata::calcmc, (LPARAM)&mm);
     return mm.desc;
+#endif
+#ifdef _NIX
+    Display *X11 = XOpenDisplay(nullptr);
+    DEBUG_BREAK();
+#endif
 }
 
 int     TSCALL monitor_count()
 {
+#ifdef _WIN32
     struct m
     {
         static BOOL CALLBACK calcmc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
@@ -62,10 +73,15 @@ int     TSCALL monitor_count()
     int cnt = 0;
     EnumDisplayMonitors(nullptr, nullptr, m::calcmc, (LPARAM)&cnt);
     return cnt;
+#endif
+#ifdef _NIX
+    DEBUG_BREAK();
+#endif
 }
 
 irect   TSCALL monitor_get_max_size_fs(int monitor)
 {
+#ifdef _WIN32
     struct m
     {
         irect rr;
@@ -84,10 +100,15 @@ irect   TSCALL monitor_get_max_size_fs(int monitor)
     } mm; mm.mi = monitor;
     EnumDisplayMonitors(nullptr, nullptr, m::calcmrect_fs, (LPARAM)&mm);
     return mm.rr;
+#endif
+#ifdef _NIX
+    DEBUG_BREAK();
+#endif
 }
 
 irect    TSCALL monitor_get_max_size(int monitor)
 {
+#ifdef _WIN32
     struct m
     {
         irect rr;
@@ -110,13 +131,27 @@ irect    TSCALL monitor_get_max_size(int monitor)
     } mm; mm.mi = monitor;
     EnumDisplayMonitors( nullptr, nullptr, m::calcmrect, (LPARAM)&mm );
     return mm.rr;
+#endif
+#ifdef _NIX
+#endif
 }
+
+ivec2 TSCALL get_cursor_pos()
+{
+#ifdef _WIN32
+    ts::ivec2 cp;
+    GetCursorPos( &ts::ref_cast<POINT>( cp ) );
+    return cp;
+#endif // _WIN32
+#ifdef _NIX
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
+#endif
+}
+
 
 ivec2   TSCALL wnd_get_center_pos( const ts::ivec2& size )
 {
-    ivec2 cp;
-    GetCursorPos(&ref_cast<POINT>(cp));
-    irect r = wnd_get_max_size(cp);
+    irect r = wnd_get_max_size( get_cursor_pos() );
     return r.center() - size/2;
 }
 
@@ -131,23 +166,23 @@ void    TSCALL wnd_fix_rect(irect &r, int minw, int minh)
 
     ivec2 sdvig(65535, 65535);
 
-    RECT min;
-    min.left = 1000000;
-    min.right = -1000000;
-    min.top = 1000000;
-    min.bottom = -1000000;
+    ts::irect rmin;
+    rmin.lt.x = 1000000;
+    rmin.rb.x = -1000000;
+    rmin.lt.y = 1000000;
+    rmin.rb.y = -1000000;
     
     for (int i = 0; i<mc; ++i)
     {
         irect mr = monitor_get_max_size_fs(i);
-        if (mr.lt.x < min.left) min.left = mr.lt.x;
-        if (mr.rb.x > min.right) min.right = mr.rb.x;
-        if (mr.lt.y < min.top) min.top = mr.lt.y;
-        if (mr.rb.y > min.bottom) min.bottom = mr.rb.y;
+        if (mr.lt.x < rmin.lt.x) rmin.lt.x = mr.lt.x;
+        if (mr.rb.x > rmin.rb.x ) rmin.rb.x = mr.rb.x;
+        if (mr.lt.y < rmin.lt.y ) rmin.lt.y = mr.lt.y;
+        if (mr.rb.y > rmin.rb.y ) rmin.rb.y = mr.rb.y;
     }
 
-    int maxw = min.right - min.left;
-    int maxh = min.bottom - min.top;
+    int maxw = rmin.width();
+    int maxh = rmin.height();
     if (ww > maxw) ww = maxw;
     if (hh > maxh) hh = maxh;
 
@@ -179,6 +214,7 @@ void    TSCALL wnd_fix_rect(irect &r, int minw, int minh)
 
 irect    TSCALL wnd_get_max_size_fs(const ts::ivec2 &pt)
 {
+#ifdef _WIN32
     MONITORINFO mi;
     if (HMONITOR m = MonitorFromPoint(ts::ref_cast<POINT>(pt), MONITOR_DEFAULTTONEAREST))
     {
@@ -195,11 +231,17 @@ irect    TSCALL wnd_get_max_size_fs(const ts::ivec2 &pt)
     }
 
     return ref_cast<irect>(mi.rcMonitor);
+#endif // _WIN32
+#ifdef _NIX
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
+    DEBUG_BREAK();
+#endif
 }
 
 
 irect    TSCALL wnd_get_max_size(const ts::ivec2& pt)
 {
+#ifdef _WIN32
     MONITORINFO mi;
     if (HMONITOR m = MonitorFromPoint(ts::ref_cast<POINT>(pt), MONITOR_DEFAULTTONEAREST))
     {
@@ -209,11 +251,17 @@ irect    TSCALL wnd_get_max_size(const ts::ivec2& pt)
     else SystemParametersInfo(SPI_GETWORKAREA, 0, &mi.rcWork, 0);
 
     return ref_cast<irect>(mi.rcWork);
+#endif // _WIN32
+#ifdef _NIX
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
+    DEBUG_BREAK();
+#endif
 }
 
 
 irect    TSCALL wnd_get_max_size(const irect &rfrom)
 {
+#ifdef _WIN32
     MONITORINFO mi;
     HMONITOR m = MonitorFromRect(&ref_cast<RECT>(rfrom), MONITOR_DEFAULTTONEAREST);
     if (m)
@@ -224,10 +272,16 @@ irect    TSCALL wnd_get_max_size(const irect &rfrom)
     else SystemParametersInfo(SPI_GETWORKAREA, 0, &mi.rcWork, 0);
 
     return ref_cast<irect>(mi.rcWork);
+#endif // _WIN32
+#ifdef _NIX
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
+    DEBUG_BREAK();
+#endif
 }
 
 irect   TSCALL wnd_get_max_size_fs(const irect &rfrom)
 {
+#ifdef _WIN32
     MONITORINFO mi;
     HMONITOR m = MonitorFromRect(&ref_cast<RECT>(rfrom), MONITOR_DEFAULTTONEAREST);
     if (m)
@@ -245,6 +299,11 @@ irect   TSCALL wnd_get_max_size_fs(const irect &rfrom)
     }
 
     return ref_cast<irect>(mi.rcMonitor);
+#endif // _WIN32
+#ifdef _NIX
+    master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
+    DEBUG_BREAK();
+#endif
 }
 
 void TSCALL set_clipboard_text(const wsptr &t)
@@ -264,8 +323,9 @@ void TSCALL set_clipboard_text(const wsptr &t)
     SetClipboardData(CF_UNICODETEXT, text);
     CloseClipboard();
 #endif
-#if __linux__
+#ifdef _NIX
     UNFINISHED("set_clipboard_text");
+    DEBUG_BREAK();
 #endif
 }
 
@@ -287,8 +347,9 @@ wstr_c TSCALL get_clipboard_text()
         CloseClipboard();
     }
 #endif // _WIN32
-#if __linux__
+#ifdef _NIX
     UNFINISHED( "get_clipboard_text" );
+    DEBUG_BREAK();
 #endif
 
     return res;
@@ -342,8 +403,9 @@ bitmap_c TSCALL get_clipboard_bitmap()
 
     CloseClipboard();
 #endif // _WIN32
-#if __linux__
+#ifdef _NIX
     UNFINISHED( "get_clipboard_bitmap" );
+    DEBUG_BREAK();
 #endif
 
     return res;
@@ -351,20 +413,31 @@ bitmap_c TSCALL get_clipboard_bitmap()
 
 void TSCALL open_link(const ts::wstr_c &lnk)
 {
+#ifdef _WIN32
     ShellExecuteW(nullptr, L"open", lnk, nullptr, nullptr, SW_SHOWNORMAL);
+#endif // _WIN32
+#ifdef _NIX
+    DEBUG_BREAK();
+#endif
 }
 
 void TSCALL explore_path( const wsptr &path, bool path_only )
 {
+#ifdef _WIN32
     if ( path_only )
         ShellExecuteW( nullptr, L"explore", ts::tmp_wstr_c( path ), nullptr, nullptr, SW_SHOWDEFAULT );
     else
         ShellExecuteW( nullptr, L"open", L"explorer", CONSTWSTR( "/select," ) + ts::fn_autoquote( ts::fn_get_name_with_ext( path ) ), ts::fn_get_path( path ), SW_SHOWDEFAULT );
+#endif // _WIN32
+#ifdef _NIX
+    DEBUG_BREAK();
+#endif
 }
 
 
 bool TSCALL is_admin_mode()
 {
+#ifdef _WIN32
     // http://www.codeproject.com/Articles/320748/Haephrati-Elevating-during-runtime
 
     BOOL fIsRunAsAdmin = FALSE;
@@ -406,8 +479,12 @@ Cleanup:
     {
         return false;
     }
-
     return fIsRunAsAdmin != FALSE;
+#endif // _WIN32
+#ifdef _NIX
+    DEBUG_BREAK();
+#endif
+
 }
 
 str_c gen_machine_unique_string()
@@ -416,20 +493,20 @@ str_c gen_machine_unique_string()
 #ifdef _WIN32
 
     HKEY k;
-    if ( RegOpenKeyExW( HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Cryptography", 0, KEY_READ, &k ) == ERROR_SUCCESS )
+    if ( RegOpenKeyExW( HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Cryptography", 0, KEY_READ| KEY_WOW64_64KEY, &k ) == ERROR_SUCCESS )
     {
-        DWORD lt = REG_SZ;
-        DWORD sz = 1024;
         ts::wchar buf[ 1024 ];
-        int rz = RegQueryValueExW( k, L"MachineGuid", 0, &lt, (LPBYTE)buf, &sz );
+        DWORD sz = sizeof( buf );
+
+        int rz = RegQueryValueExW( k, L"MachineGuid", nullptr, nullptr, (LPBYTE)buf, &sz );
         if ( rz == ERROR_SUCCESS )
         {
             ts::wsptr b( buf, sz / sizeof( ts::wchar ) - 1 );
             rs.set( to_str(b) );
         }
+        RegCloseKey( k );
     }
 
-    RegCloseKey( k );
 
     ts::uint32 volumesn = 0;
     GetVolumeInformationA( "c:\\", nullptr, 0, &volumesn, nullptr, nullptr, nullptr, 0 );
@@ -437,6 +514,11 @@ str_c gen_machine_unique_string()
     rs.append_char( '-' ).append_as_uint( volumesn );
 
 #endif
+
+#ifdef _NIX
+    DEBUG_BREAK();
+#endif
+
 
     return rs;
 }

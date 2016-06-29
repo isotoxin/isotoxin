@@ -23,7 +23,7 @@ License: BSD
 #define WRITEWORD(p, v) *(uint32*)(p) = v
 #define IS_ALIGNED(p, a) (!((uintptr_t)(p) & ((a) - 1)))
 
-#define SIMD_ALIGNED(var) __declspec(align(16)) var
+#define SIMD_ALIGNED(var) ALIGN(16) var
 
 // Subsampled source needs to be increase by 1 of not even.
 #define SS(width, shift) (((width) + (1 << (shift)) - 1) >> (shift))
@@ -84,9 +84,9 @@ License: BSD
 
 namespace ts
 {
-typedef __declspec(align(16)) uint8 uvec8[16];
-typedef __declspec(align(16)) int8 vec8[16];
-typedef __declspec(align(32)) int32 lvec32[8];
+typedef ALIGN(16) uint8 uvec8[16];
+typedef ALIGN(16) int8 vec8[16];
+typedef ALIGN(32) int32 lvec32[8];
 
 
 // Shuffle table for converting BGRA to ARGB.
@@ -104,8 +104,8 @@ static uvec8 kShuffleMaskRGBAToARGB = {
     1u, 2u, 3u, 0u, 5u, 6u, 7u, 4u, 9u, 10u, 11u, 8u, 13u, 14u, 15u, 12u
 };
 
-typedef __declspec(align(32)) int8 lvec8[32];
-typedef __declspec(align(32)) int16 lvec16[16];
+typedef ALIGN(32) int8 lvec8[32];
+typedef ALIGN(32) int16 lvec16[16];
 
 struct YuvConstants {
   lvec8 kUVToB;     // 0

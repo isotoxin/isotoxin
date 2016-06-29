@@ -3,6 +3,7 @@
 
 dialog_contact_props_c::dialog_contact_props_c(MAKE_ROOT<dialog_contact_props_c> &data) :gui_isodialog_c(data)
 {
+    open_details_tab = data.prms.details_tab;
     deftitle = title_contact_properties;
     contactue = contacts().rfind(data.prms.key);
     update();
@@ -22,7 +23,10 @@ dialog_contact_props_c::~dialog_contact_props_c()
 {
     set_theme_rect(CONSTASTR("cprops"), false);
     __super::created();
-    tabsel(CONSTASTR("1"));
+    if (open_details_tab)
+        tabsel( CONSTASTR( "2" ) );
+    else
+        tabsel(CONSTASTR("1"));
 
 }
 
@@ -208,7 +212,7 @@ bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t )
     menu_c m;
     m.add( TTT("Settings",369), 0 , TABSELMI(1) );
     m.add( TTT("Notification",466), 0, TABSELMI( 16 ) );
-    m.add( TTT("Details",370), 0 , TABSELMI(2) );
+    m.add( TTT("Details",370), open_details_tab ? MIF_MARKED : 0, TABSELMI(2) );
     m.add( TTT("Comment",371), 0 , TABSELMI(4) );
     m.add( TTT("Processing",440), 0, TABSELMI( 8 ) );
 

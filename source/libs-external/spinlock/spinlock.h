@@ -42,7 +42,7 @@ typedef long long int64;
 #endif
 
 #if defined (_M_AMD64) || defined (WIN64) || defined (__LP64__)
-typedef __int64 long3264;
+typedef int64 long3264;
 #else
 typedef long long3264;
 #endif
@@ -510,7 +510,7 @@ template <typename VARTYPE> class syncvar
         write_c(const write_c &r);
     public:
         write_c(): var(nullptr), host(nullptr), locked(false) {}
-        write_c( const write_c &&r ): var(r.var), host(r.host), locked(r.locked)
+        write_c( write_c &&r ): var(r.var), host(r.host), locked(r.locked)
         {
             r.locked = false;
         }

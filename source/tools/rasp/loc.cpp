@@ -476,6 +476,7 @@ int proc_fxml( const wstrings_c & pars )
 
     bool intag = false;
     bool closetag = false;
+    bool data = false;
     for( int i=0;i<s.get_length();++i )
     {
         char c = s.get_char( i );
@@ -508,6 +509,12 @@ int proc_fxml( const wstrings_c & pars )
         {
             if ( c == '<' && c2 == '/' )
             {
+                if (data)
+                {
+                    o.append( CONSTASTR( "\r\n" ) );
+                }
+
+                data = false;
                 closetag = true;
                 if (tab == 0)
                     break;
@@ -521,11 +528,25 @@ int proc_fxml( const wstrings_c & pars )
             }
             if ( c == '<' )
             {
+                if ( data )
+                {
+                    o.append( CONSTASTR( "\r\n" ) );
+                }
+
+                data = false;
                 closetag = false;
                 o.append_chars(tab, ' ');
                 o.append_char( c );
                 intag = true;
+                continue;
             }
+
+            if (!data )
+            {
+                o.append_chars( tab, ' ' );
+                data = true;
+            }
+            o.append_char(c);
         }
 
     }

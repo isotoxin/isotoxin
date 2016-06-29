@@ -1316,7 +1316,7 @@ gui_tooltip_c::~gui_tooltip_c()
 
 bool gui_tooltip_c::check_text(RID r, GUIPARAM param)
 {
-    ts::ivec2 cp = gui->get_cursor_pos();
+    ts::ivec2 cp = ts::get_cursor_pos();
     if (!gui->active_hintzone())
     {
         if (gui->get_hoverdata(cp).rid != ownrect)
@@ -3297,8 +3297,18 @@ MAKE_CHILD<gui_htabsel_c>::~MAKE_CHILD()
         {
             if (c)
             {
-                MODIFY(c->getrid()).active(true);
-                break;
+                if ( selectitem )
+                {
+                    if ( selectitem == c->getrid() )
+                    {
+                        MODIFY( c->getrid() ).active( true );
+                        break;
+                    }
+                } else
+                {
+                    MODIFY( c->getrid() ).active( true );
+                    break;
+                }
             }
         }
 
@@ -3327,6 +3337,15 @@ ts::uint32 gui_htabsel_c::gm_handler(gmsg<GM_HEARTBEAT> &)
 {
     if (!activeitem)
     {
+        if ( selectitem )
+        {
+            activeitem = selectitem;
+            for ( rectengine_c *c : getengine() )
+                if ( c ) MODIFY( c->getrid() ).active( c->getrid() == selectitem );
+            selectitem = RID();
+            return 0;
+        }
+
         for (rectengine_c *c : getengine())
         {
             if (c && c->getrect().getprops().is_active())
@@ -3387,6 +3406,8 @@ bool gui_htabsel_c::operator()(RID, const menu_item_info_s& inf)
 {
     MAKE_CHILD<gui_htabsel_item_c> make(getrid(), inf.txt);
     make << inf.h << inf.prm;
+    if ( inf.flags & MIF_MARKED )
+        selectitem = make;
     return true;
 }
 

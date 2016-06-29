@@ -1,4 +1,7 @@
 #include "toolset.h"
+#ifndef SQLITE_HAS_CODEC
+#define SQLITE_HAS_CODEC 1
+#endif
 #include "sqlite3/sqlite3.h"
 
 namespace ts
@@ -218,7 +221,7 @@ public:
                     if (!pstr_c(CONSTASTR("integer")).equals(asptr(datatype))) recreate = true;
                     break;
                 case data_type_e::t_float:
-                    __debugbreak();
+                    DEBUG_BREAK();
                     break;
                 case data_type_e::t_str:
                     if (!pstr_c(CONSTASTR("text")).equals(asptr(datatype))) recreate = true;

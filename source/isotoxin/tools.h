@@ -7,7 +7,7 @@
 #ifdef _WIN32
 #define PLGHOSTNAME CONSTWSTR("plghost.exe")
 #endif // _WIN32
-#ifdef __linux__
+#ifdef _NIX
 #define PLGHOSTNAME CONSTWSTR("plghost")
 #endif
 

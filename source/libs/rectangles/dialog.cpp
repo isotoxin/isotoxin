@@ -102,7 +102,7 @@ void gui_listitem_c::set_text(const ts::wstr_c&t, bool full_height_last_line)
         if (popupmenu && popupmenu->getrid() == rid)
         {
             //if (SQ_POPUP_MENU_DIE == qp)
-            //    MODIFY(*this).highlight( gui->get_hoverdata( gui->get_cursor_pos() ).minside == getrid() );
+            //    MODIFY(*this).highlight( gui->get_hoverdata( ts::get_cursor_pos() ).minside == getrid() );
             return false;
         }
 

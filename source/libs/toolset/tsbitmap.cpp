@@ -483,7 +483,7 @@ static void TSCALL asm_shrink2x( uint8 *dst, const uint8 *src, long width, long 
         for ( aint x = 0; x < width; ++x, src += 8, dst += 4 )
         {
             __m128i zero = _mm_setzero_si128();
-            __m128i pix = _mm_add_epi16( _mm_unpacklo_epi8( _mm_cvtsi64_si128( *(__int64 *)src ), zero ), _mm_unpacklo_epi8( _mm_cvtsi64_si128( *(__int64 *)( src + srcpitch ) ), zero ) );
+            __m128i pix = _mm_add_epi16( _mm_unpacklo_epi8( _mm_cvtsi64_si128( *(int64 *)src ), zero ), _mm_unpacklo_epi8( _mm_cvtsi64_si128( *(int64 *)( src + srcpitch ) ), zero ) );
             __m128 h2l = _mm_movehl_ps( ( __m128 & )zero, ( __m128 & )pix );
             *(TSCOLOR *)dst = _mm_cvtsi128_si32( _mm_packus_epi16( _mm_srli_epi16 ( _mm_add_epi16( ( const __m128i & )h2l, pix ), 2 ), zero ) );
         }

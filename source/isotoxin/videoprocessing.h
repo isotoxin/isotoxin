@@ -79,6 +79,7 @@ public:
     const ts::ivec2 &get_desired_size() const {return desired_size;} // call only from base thread
     void set_desired_size( const ts::ivec2 &sz )
     {
+		ASSERT(sz >> 0);
         spinlock::auto_simple_lock l(sync);
         desired_size = sz;
     }

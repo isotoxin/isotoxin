@@ -1,6 +1,167 @@
 #include "toolset.h"
 #include "internal/platform.h"
 
+namespace
+{
+    enum sp_e
+    {
+        SPTH_PERSONAL,
+        SPTH_APPDATA,
+        SPTH_TEMP,
+        SPTH_USENAME,
+        SPTH_BIN,
+#ifdef _WIN32
+        SPTH_SYSTEM,
+        SPTH_STARTUP_MENU,
+        SPTH_STARTUP_MENU_COMMON,
+#endif // _WIN32
+    };
+
+    struct p2e
+    {
+        const ts::wsptr p;
+        sp_e e;
+    } paths[] = {
+        { CONSTWSTR( "PERSONAL" ), SPTH_PERSONAL },
+        { CONSTWSTR( "APPDATA" ), SPTH_APPDATA },
+        { CONSTWSTR( "TEMP" ), SPTH_TEMP },
+        { CONSTWSTR( "PROGRAMS" ), SPTH_BIN },
+        { CONSTWSTR( "USER" ), SPTH_USENAME },
+#ifdef _WIN32
+        { CONSTWSTR( "SYSTEM" ), SPTH_SYSTEM },
+        { CONSTWSTR( "STARTUP" ), SPTH_STARTUP_MENU },
+        { CONSTWSTR( "COMMONSTARTUP" ), SPTH_STARTUP_MENU_COMMON },
+#endif // _WIN32
+        
+    };
+
+    int get_system_path( ts::wchar *path, sp_e spth )
+    {
+        switch ( spth )
+        {
+#ifdef _WIN32
+        case SPTH_PERSONAL:
+            if (SUCCEEDED( SHGetFolderPathW( nullptr, CSIDL_PERSONAL | CSIDL_FLAG_CREATE, nullptr, 0, path ) ))
+                return ts::CHARz_len( path );
+            return 0;
+
+        case SPTH_APPDATA:
+            if (SUCCEEDED( SHGetFolderPathW( nullptr, CSIDL_APPDATA | CSIDL_FLAG_CREATE, nullptr, 0, path ) ))
+                return ts::CHARz_len( path );
+            return 0;
+        case SPTH_TEMP:
+            if ( int pl = GetTempPathW( MAX_PATH_LENGTH, path ) )
+            {
+                if ( path[ pl - 1 ] == '\\' ) --pl;
+                return pl;
+            }
+            return 0;
+        case SPTH_BIN:
+            if ( SUCCEEDED( SHGetFolderPathW( nullptr, CSIDL_PROGRAM_FILES | CSIDL_FLAG_CREATE, nullptr, 0, path ) ) )
+                return ts::CHARz_len( path );
+            return 0;
+        case SPTH_USENAME:
+            {
+                DWORD blen = MAX_PATH_LENGTH;
+                if ( GetUserNameW( path, &blen ) )
+                    return ts::CHARz_len( path );
+            }
+            return 0;
+        case SPTH_SYSTEM:
+            if ( SUCCEEDED( SHGetFolderPathW( nullptr, CSIDL_SYSTEM | CSIDL_FLAG_CREATE, nullptr, 0, path ) ) )
+                return ts::CHARz_len( path );
+            return 0;
+        case SPTH_STARTUP_MENU:
+            if ( SUCCEEDED( SHGetFolderPathW( nullptr, CSIDL_STARTUP | CSIDL_FLAG_CREATE, nullptr, 0, path ) ) )
+                return ts::CHARz_len( path );
+            return 0;
+        case SPTH_STARTUP_MENU_COMMON:
+            if ( SUCCEEDED( SHGetFolderPathW( nullptr, CSIDL_COMMON_STARTUP | CSIDL_FLAG_CREATE, nullptr, 0, path ) ) )
+                return ts::CHARz_len( path );
+            return 0;
+#endif // _WIN32
+
+#ifdef _NIX
+        case SPTH_PERSONAL:
+            {
+                const char *homedir;
+                if ((homedir = getenv("HOME")) == nullptr)
+                    homedir = getpwuid(getuid())->pw_dir;
+                if (homedir)
+                {
+                    ts::wstr_c whd = ts::from_utf8( homedir );
+                    memcpy( path, whd.cstr(), sizeof(ts::wchar) * (whd.get_length() + 1) );
+                    whd.trunc_char('/');
+                    return whd.get_length();
+                }
+                *path = '~';
+                *(path + 1) = 0;
+                return 1;
+            }
+            return 0;
+
+        case SPTH_APPDATA:
+            {
+                int l = get_system_path( path, SPTH_PERSONAL );
+                memcpy( path + l, L"/.config", 18 );
+                return l + 8;
+            }
+        case SPTH_TEMP:
+            {
+                const char *tmpdir;
+                if ((tmpdir = getenv("TMPDIR")) == nullptr)
+                    tmpdir = P_tmpdir;
+                if (tmpdir)
+                {
+                    ts::wstr_c td = ts::from_utf8( tmpdir );
+                    memcpy( path, td.cstr(), sizeof(ts::wchar) * (td.get_length() + 1) );
+                    td.trunc_char('/');
+                    return td.get_length();
+                }
+                memcpy( path, L"/tmp", 10 );
+                return 4;
+            }
+        case SPTH_BIN:
+            memcpy( path, L"/opt", 10 );
+            return 4;
+        case SPTH_USENAME:
+        {
+            char username[MAX_PATH_LENGTH];
+            if (0 == getlogin_r(username, MAX_PATH_LENGTH-1))
+            {
+                ts::wstr_c un = ts::from_utf8( username );
+                memcpy( path, un.cstr(), sizeof(ts::wchar) * (un.get_length() + 1) );
+                return un.get_length();
+            }
+            if ( const char *n = getpwuid(getuid())->pw_name )
+            {
+                ts::wstr_c un = ts::from_utf8( n );
+                memcpy( path, un.cstr(), sizeof(ts::wchar) * (un.get_length() + 1) );
+                return un.get_length();
+            }
+        }
+        return 0;
+
+#endif // __linux__
+        }
+
+        return 0;
+    }
+}
+
+#ifdef _NIX
+static int GetEnvironmentVariableW(const ts::wsptr &name, ts::wchar *buf, int bufl)
+{
+    if ( const char *vv = getenv( ts::to_utf8(name) ) )
+    {
+        ts::wstr_c vvw = ts::from_utf8( vv );
+        memcpy( buf, vvw.cstr(), sizeof(ts::wchar) * ts::tmin(bufl,vvw.get_length() + 1));
+        return vvw.get_length();
+    }
+    return 0;
+}
+#endif
+
 namespace ts
 {
     INLINE bool __ending_slash(const wsptr &path)
@@ -28,138 +189,36 @@ namespace ts
                 {
                     if ((iie - ii) > 1)
                     {
-                        swstr_t<MAX_PATH + 1> b, name;
+                        swstr_t<MAX_PATH_LENGTH + 1> b, name;
                         int ll = iie - ii - 1;
-                        if (ll >= MAX_PATH)
+                        if (ll >= MAX_PATH_LENGTH )
                         {
                             dprc = iie + 1;
                             break;
                         }
                         name.set(envstr.cstr() + ii + 1, ll);
 
-                        if (name == CONSTWSTR("PERSONAL"))
+                        bool rpl_ok = false;
+                        for( const auto & pk : paths )
                         {
-                            if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PERSONAL | CSIDL_FLAG_CREATE, nullptr, 0, b.str())))
+                            if (name.equals(pk.p))
                             {
-                                int pl = CHARz_len(b.cstr());
-                                envstr.replace(ii, ll + 2, wsptr(b, pl));
+                                if ( int pl = get_system_path( b.str(), pk.e ) )
+                                {
+                                    envstr.replace( ii, ll + 2, wsptr( b, pl ) );
+                                } else
+                                {
+                                    dprc = iie + 1;
+                                }
+                                rpl_ok = true;
                                 break;
                             }
-                            else
-                            {
-                                dprc = iie + 1;
-                                break;
-                            }
+                        }
 
-                        }
-                        else if (name == CONSTWSTR("APPDATA"))
+                        if (!rpl_ok )
                         {
-                            if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA | CSIDL_FLAG_CREATE, nullptr, 0, b.str())))
-                            {
-                                int pl = CHARz_len(b.cstr());
-                                envstr.replace(ii, ll + 2, wsptr(b, pl));
-                                break;
-                            }
-                            else
-                            {
-                                dprc = iie + 1;
-                                break;
-                            }
-                        }
-                        else if (name == CONSTWSTR("TEMP"))
-                        {
-                            if (DWORD pl =GetTempPathW(MAX_PATH, b.str()))
-                            {
-                                if (b.cstr()[pl - 1] == '\\') --pl;
-                                envstr.replace(ii, ll + 2, wsptr(b, pl));
-                                break;
-                            }
-                            else
-                            {
-                                dprc = iie + 1;
-                                break;
-                            }
-                        }
-                        else if (name == CONSTWSTR("PROGRAMS"))
-                        {
-                            if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PROGRAM_FILES | CSIDL_FLAG_CREATE, nullptr, 0, b.str())))
-                            {
-                                int pl = CHARz_len(b.cstr());
-                                envstr.replace(ii, ll + 2, wsptr(b, pl));
-                                break;
-                            }
-                            else
-                            {
-                                dprc = iie + 1;
-                                break;
-                            }
-                        }
-                        else if (name == CONSTWSTR("USER"))
-                        {
-                            DWORD blen = (DWORD)b.get_capacity();
-                            if (GetUserNameW(b.str(), &blen))
-                            {
-                                int pl = CHARz_len(b.cstr());
-                                envstr.replace(ii, ll + 2, wsptr(b, pl));
-                                break;
-                            }
-                            else
-                            {
-                                dprc = iie + 1;
-                                break;
-                            }
-
-                        }
-                        else if (name == CONSTWSTR("STARTUP"))
-                        {
-
-                            if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_STARTUP | CSIDL_FLAG_CREATE, nullptr, 0, b.str())))
-                            {
-                                int pl = CHARz_len(b.cstr());
-                                envstr.replace(ii, ll + 2, wsptr(b, pl));
-                                break;
-                            }
-                            else
-                            {
-                                dprc = iie + 1;
-                                break;
-                            }
-                        }
-                        else if (name == CONSTWSTR("COMMONSTARTUP"))
-                        {
-
-                            if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_COMMON_STARTUP | CSIDL_FLAG_CREATE, nullptr, 0, b.str())))
-                            {
-                                int pl = CHARz_len(b.cstr());
-                                envstr.replace(ii, ll + 2, wsptr(b, pl));
-                                break;
-                            }
-                            else
-                            {
-                                dprc = iie + 1;
-                                break;
-                            }
-                        }
-                        else if ( name == CONSTWSTR( "SYSTEM" ) )
-                        {
-
-                            if ( SUCCEEDED( SHGetFolderPathW( nullptr, CSIDL_SYSTEM, nullptr, 0, b.str() ) ) )
-                            {
-                                int pl = CHARz_len( b.cstr() );
-                                envstr.replace( ii, ll + 2, wsptr( b, pl ) );
-                                break;
-                            }
-                            else
-                            {
-                                dprc = iie + 1;
-                                break;
-                            }
-                        }
-                        else
-                        {
-
-                            int pl = GetEnvironmentVariableW(name, b.str(), MAX_PATH);
-                            if (pl && pl < MAX_PATH)
+                            int pl = GetEnvironmentVariableW(name, b.str(), MAX_PATH_LENGTH );
+                            if (pl && pl < MAX_PATH_LENGTH )
                             {
                                 envstr.replace(ii, ll + 2, wsptr(b, pl));
                                 break;
@@ -192,6 +251,7 @@ namespace ts
 
 	void  __build_full_path(wstr_c &path)
 	{
+#ifdef _WIN32
         swstr_t<8> disk;
 
 		if (path.get_length() > 1 && (path.get_char(1) == ':'))
@@ -202,16 +262,16 @@ namespace ts
 
 		if (!__is_slash(path.get_char(0)))
 		{
-			swstr_t<2048> buf;
+			swstr_t<MAX_PATH_LENGTH> buf;
 			if ( disk.is_empty() )
 			{
-				DWORD len = GetCurrentDirectoryW(2048-8, buf.str());
+				DWORD len = GetCurrentDirectoryW(MAX_PATH_LENGTH-8, buf.str());
 				buf.set_length(len);
                 __append_slash_if_not(buf);
 				path.insert(0,buf);
 			} else
 			{
-				DWORD len =GetFullPathNameW( disk, 2048-8, buf.str(), nullptr );
+				DWORD len = GetFullPathNameW( disk, MAX_PATH_LENGTH-8, buf.str(), nullptr );
 				buf.set_length(len);
                 __append_slash_if_not(buf);
 				path.insert(0,buf);
@@ -219,6 +279,19 @@ namespace ts
 
 		} else
 			path.insert(0,disk);
+#endif // _WIN32
+#ifdef _NIX
+        if ( !__is_slash( path.get_char( 0 ) ) )
+        {
+            char wd[ PATH_MAX ];
+            if ( const char *d = getwd( wd ) )
+            {
+                ts::wstr_c dd = ts::from_utf8( d );
+                __append_slash_if_not( dd );
+                path.insert( 0, dd );
+            }
+        }
+#endif //_NIX
 	}
 
     void __remove_crap(wstr_c &path)
@@ -334,6 +407,7 @@ namespace ts
 
 	void TSCALL fill_dirs_and_files( const wstr_c &path, wstrings_c &files, wstrings_c &dirs )
 	{
+#ifdef _WIN32
 		wstr_c wildcard(fn_join( path, wsptr(CONSTWSTR("*.*")) ));
 		WIN32_FIND_DATAW fff;
 
@@ -357,6 +431,34 @@ namespace ts
 		}
 		FindClose( h );
 		dirs.add( path );
+#endif // _WIN32
+#ifdef _NIX
+    DIR *dir;
+    class dirent *ent;
+    class stat st;
+
+    dir = opendir(to_utf8(path));
+    if (nullptr == dir)
+    {
+        dirs.add(path);
+        return;
+    }
+        
+    while ((ent = readdir(dir)) != nullptr)
+    {
+        pstr_c sFileName(asptr( ent->d_name ));
+        bool is_dir = (st.st_mode & S_IFDIR) != 0;
+        if (is_dir)
+        {
+            if (sFileName == CONSTASTR(".") || sFileName == CONSTASTR("..") ) continue;
+            fill_dirs_and_files( fn_join( path, from_utf8(sFileName) ), files, dirs );
+        } else
+        {
+            files.add( fn_join( path, from_utf8(sFileName) ) );
+        }
+    }
+    closedir(dir);
+#endif //_NIX
 	}
 
 	void    TSCALL copy_dir(const wstr_c &path_from, const wstr_c &path_clone, const wsptr& skip)
@@ -422,7 +524,7 @@ namespace ts
 			t = files.get(i);
 			tt = t;
 			tt.replace( 0, pfl, wsptr(path_clone.cstr(), pfc) );
-			CopyFileW( t, tt, false );
+            copy_file( t, tt );
 		}
 
 
@@ -440,8 +542,13 @@ namespace ts
 
 		for (const auto & s : dirs)
 		{
-			SetFileAttributesW(s,FILE_ATTRIBUTE_NORMAL); WINDOWS_ONLY
-			RemoveDirectoryW(s); WINDOWS_ONLY
+#ifdef _WIN32
+			SetFileAttributesW(s,FILE_ATTRIBUTE_NORMAL);
+			RemoveDirectoryW(s);
+#endif // _WIN32
+#ifdef _NIX
+            rmdir( to_utf8(s) );
+#endif //_NIX
 		}
 	}
 
@@ -456,7 +563,8 @@ namespace ts
 		for (int i=ipath.begins(CONSTWSTR("\\\\")) ? (path.set(CONSTWSTR("\\\\")).append(sa.get(2)).append_char(NATIVE_SLASH), 3) : 0; i<sa.size(); ++i)
 		{
 			path.append(sa.get(i));
-			if (i == 0)
+#ifdef _WIN32
+            if ( i == 0 )
 			{
 				ASSERT( path.get_last_char() == ':' );
 				path.append_char(NATIVE_SLASH);
@@ -466,6 +574,18 @@ namespace ts
 			if (!PathFileExistsW(path.cstr()))
 				if (0 == CreateDirectoryW(path.cstr(), nullptr)) 
                     return false;
+#endif // _WIN32
+#ifdef _NIX
+            ts::sstr_t< PATH_MAX > p = to_utf8( path );
+            struct stat st = {0};
+            if ( stat( p, &st ) == 0 && (st.st_mode & S_IFDIR) != 0 )
+            {
+
+            } else
+            {
+                mkdir( p, 0777 );
+            }
+#endif //_NIX
 
             path.append_char(NATIVE_SLASH);
 		}
@@ -474,17 +594,60 @@ namespace ts
 
     copy_rslt_e TSCALL copy_file( const wsptr &existingfn, const wsptr &newfn )
     {
+#ifdef _WIN32
         if ( 0 == CopyFileW( ts::tmp_wstr_c( existingfn ), ts::tmp_wstr_c( newfn ), false ) )
         {
             if ( ERROR_ACCESS_DENIED == GetLastError() )
                 return CRSLT_ACCESS_DENIED;
             return CRSLT_FAIL;
         }
+#endif // _WIN32
+
+#ifdef _NIX
+
+        int source = open( to_utf8( existingfn ), O_RDONLY, 0 );
+        if (source == -1)
+        {
+            return CRSLT_FAIL;
+        }
+
+        struct stat stat_source;
+        if ( -1 == fstat( source, &stat_source ))
+        {
+            close( source );
+
+            if (EACCES == errno)
+                return CRSLT_ACCESS_DENIED;
+            return CRSLT_FAIL;
+        }
+
+        int dest = open( to_utf8( newfn ), O_WRONLY | O_CREAT /*| O_TRUNC/**/, (stat_source.st_mode & 0777) );
+        if (dest == -1)
+        {
+            close( source );
+
+            if (EACCES == errno)
+                return CRSLT_ACCESS_DENIED;
+            return CRSLT_FAIL;
+        }
+
+        sendfile( dest, source, 0, stat_source.st_size );
+
+        close( source );
+        close( dest );
+
+#endif //_NIX
+
         return CRSLT_OK;
     }
     bool TSCALL rename_file( const wsptr &existingfn, const wsptr &newfn )
     {
+#ifdef _WIN32
         return MoveFileW( tmp_wstr_c(existingfn), tmp_wstr_c( newfn ) ) != 0;
+#endif // _WIN32
+#ifdef _NIX
+        return 0 == rename( to_utf8(existingfn), to_utf8(newfn) );
+#endif //_NIX
     }
 
     template <class TCHARACTER> bool TSCALL parse_text_file(const wsptr &filename, strings_t<TCHARACTER>& text, bool b_from_utf8)
@@ -499,7 +662,7 @@ namespace ts
                 {
                     if (*buffer.data() == 0xEF && buffer.data()[1] == 0xBB && buffer.data()[2] == 0xBF) // utf8 BOM
                     {
-                        text.split<wchar>(from_utf8(buffer.cstr().skip(3)), '\n');
+                        text.template split<wchar>(from_utf8(buffer.cstr().skip(3)), '\n');
                         return true;
                     }
                 }
@@ -525,9 +688,9 @@ namespace ts
                 }
 
                 if (b_from_utf8)
-                    text.split<wchar>( from_utf8(buffer.cstr()), '\n' );
+                    text.template split<wchar>( from_utf8(buffer.cstr()), '\n' );
                 else
-                    text.split<char>(buffer.cstr(), '\n');
+                    text.template split<char>(buffer.cstr(), '\n');
                 return true;
             }
         }
@@ -550,32 +713,6 @@ namespace ts
 			name.set(wsptr(full_name.s + i, j - i));
 			ext.set(full_name.skip(j + 1));
 		}
-	}
-
-	wstr_c  TSCALL fn_get_next_name(const wsptr &fullname, bool check)
-	{
-		if (check)
-		{
-			wstr_c n = fn_get_next_name(fullname,false);
-
-			WIN32_FIND_DATAW fd;
-
-			for(;;)
-			{
-				HANDLE h = FindFirstFileW(to_wstr(n),&fd);
-				if ( INVALID_HANDLE_VALUE == h ) return n;
-				FindClose(h);
-				n = fn_get_next_name(n,false);
-			}
-		}
-
-		wstr_c name = fn_get_name(fullname);
-		int index = name.get_length() - 1;
-		for (; index >= 0 && CHAR_is_digit(name.get_char(index)) ;--index);
-		uint nn = name.substr(++index).as_uint() + 1;
-		name.replace(index,name.get_length()-index, wstr_c().set_as_uint(nn));
-		return fn_change_name(fullname,name);
-
 	}
 
 	template<typename TCHARACTER> str_t<TCHARACTER>  TSCALL fn_autoquote(const str_t<TCHARACTER> &name)
@@ -614,55 +751,6 @@ namespace ts
 		return wstr_c(name.cstr(), i + 1);
 	}
 
-#define FROMCS "‡·‚„‰Â∏ÊÁËÈÍÎÏÌÓÔÒÚÛÙıˆ˜¯˘˙˚¸˝˛ˇ¿¡¬√ƒ≈®∆«»… ÀÃÕŒœ–—“”‘’÷◊ÿŸ⁄€‹›ﬁﬂ"; ///\\.,;!@#$%^&*()[]|`~{}-=<>\"\'"
-#define   TOCS "abvgdeezziyklmnoprstufhccssyyyeuaABVGDEEZZIYKLMNOPRSTUFHCCSSYYYEUA"; //_______________________________"
-
-	static INLINE wchar *_fromc( const wchar * )
-	{
-		return JOINMACRO1( L, FROMCS );
-	}
-	static INLINE wchar *_toc( const wchar * )
-	{
-		return JOINMACRO1( L, TOCS );
-	}
-	static INLINE char *_fromc( const char * )
-	{
-		return FROMCS;
-	}
-	static INLINE char *_toc( const char * )
-	{
-		return TOCS;
-	}
-
-	template<typename TCHARACTER> void  TSCALL fn_validizate(str_t<TCHARACTER> &name, const TCHARACTER *ext)
-	{
-		aint cnt = name.get_length();
-		bool already_with_ext = false;
-		if (ext && name.ends_ignore_case(ext))
-		{
-			already_with_ext = true;
-			cnt -= CHARz_len(ext);
-		}
-		for (int i=0;i<cnt;++i)
-		{
-			aint ii = CHARz_find( _fromc(ext), name.get_char(i) );
-			if (ii >= 0) name.set_char(i, _toc(ext)[ii] );
-			TCHARACTER c = name.get_char(i);
-			if ( (c >= '0' && c <= '9') ||
-				(c >= 'a' && c <= 'z') ||
-				(c >= 'A' && c <= 'Z') || c == '_' ) ; else
-			{
-				name.set_char(i, '_');
-			}
-		}
-		if (ext && !already_with_ext)
-		{
-			name.append(ext);
-		}
-	}
-	template void  TSCALL fn_validizate(str_t<wchar> &name, const wchar *ext); // with ending slash
-	template void  TSCALL fn_validizate(str_t<char> &name, const char *ext); // with ending slash
-
 	wstr_c TSCALL fn_change_name(const wsptr &full_, const wsptr &name)
 	{
         pwstr_c full(full_);
@@ -682,17 +770,17 @@ namespace ts
 		return wstr_c(full_.part(j)).append_char('.').append(ext);
 	}
 
-    bool TSCALL fn_mask_match( const wsptr &fn, const wsptr &mask )
+    template<typename TCHARACTER> bool TSCALL fn_mask_match( const sptr<TCHARACTER> &fn, const sptr<TCHARACTER> &mask )
     {
-        if (pwstr_c(mask).equals(CONSTWSTR("*.*")) || pwstr_c(mask).equals(CONSTWSTR("*")))
+        if ( pstr_t<TCHARACTER>(mask).equals(CONSTSTR( TCHARACTER, "*.*")) || pstr_t<TCHARACTER>(mask).equals( CONSTSTR( TCHARACTER, "*")))
             return true;
 
         int index = 0;
-        token<wchar> mp(mask, '*');
+        token<TCHARACTER> mp(mask, '*');
         bool left = true;
         for(;mp;++mp)
         {
-            int i = mp->get_length() == 0 ? index : pwstr_c(fn).find_pos_t(index, *mp);
+            int i = mp->get_length() == 0 ? index : pstr_t<TCHARACTER>(fn).find_pos_t(index, *mp);
             if (i < 0) return false;
             if (left && i != 0) return false;
             left = false;
@@ -701,10 +789,19 @@ namespace ts
 
         return index == fn.l;
     }
+    template bool  TSCALL fn_mask_match<char>( const asptr &fn, const asptr &mask );
+    template bool  TSCALL fn_mask_match<wchar>( const wsptr &fn, const wsptr &mask );
+
 
     bool TSCALL is_file_exists(const wsptr &fname)
     {
+#ifdef _WIN32
         return INVALID_FILE_ATTRIBUTES != GetFileAttributesW(tmp_wstr_c(fname));
+#endif // _WIN32
+#ifdef _NIX
+        struct stat st = { 0 };
+        return 0 == stat( to_utf8( fname ), &st ) && (st.st_mode & S_IFREG) != 0;
+#endif //_NIX
     }
 
 	bool    TSCALL is_file_exists(const wsptr &iroot, const wsptr &fname)
@@ -735,9 +832,17 @@ namespace ts
 	wstr_c  TSCALL get_exe_full_name()
 	{
 		wstr_c wd;
-		wd.set_length(2048 - 8);
-		int len = GetModuleFileNameW(nullptr, wd.str(), 2048 - 8);
-		wd.set_length( len );
+#ifdef _WIN32
+        wd.set_length( MAX_PATH_LENGTH - 8 );
+        int len = GetModuleFileNameW( nullptr, wd.str(), MAX_PATH_LENGTH - 8 );
+        wd.set_length( len );
+#endif // _WIN32
+#ifdef _NIX
+        char tmp[ PATH_MAX ];
+        int len = readlink( "/proc/self/exe", tmp, PATH_MAX-1 );
+        if ( len == -1 ) { ts::wstr_c(); }
+        wd = from_utf8( asptr(tmp,len) );
+#endif //_NIX
 
 		if (wd.get_char(0) == '\"')
 		{
@@ -756,7 +861,7 @@ namespace ts
 	{
 		wd = get_exe_full_name();
 
-		int idx = wd.find_last_pos_of(L"/\\");
+		int idx = wd.find_last_pos_of(CONSTWSTR("/\\"));
 		if (idx < 0)
 		{
 			//while(true) Sleep(0);
@@ -769,11 +874,17 @@ namespace ts
 		}
 
 		wd.set_length(idx + 1);
+#ifdef _WIN32
 		SetCurrentDirectoryW( wd.cstr() );
+#endif // _WIN32
+#ifdef _NIX
+        chdir( to_utf8( wd ) );
+#endif //_NIX
 	}
 
 	bool    TSCALL dir_present(const wstr_c &path)
 	{
+#ifdef _WIN32
 		WIN32_FIND_DATAW find_data;
 		wstr_c p(path);
 
@@ -789,22 +900,21 @@ namespace ts
 		FindClose( fh );
 
 		return (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+#endif // _WIN32
+#ifdef _NIX
+        struct stat st = { 0 };
+        return 0 == stat( to_utf8( path ), &st ) && (st.st_mode & S_IFDIR) != 0;
+#endif //_NIX
 
 	}
 
-    DWORD cvta( int a )
-    {
-        if ( a < 0 ) return 0xffffffff;
-        if ( a & ATTR_DIR ) return FILE_ATTRIBUTE_DIRECTORY;
-        return 0;
-    }
-
 	bool    TSCALL find_files(const wsptr &wildcard, wstrings_c &files, int attributes, int skip_attributes, bool full_names)
 	{
+        bool             bResult = false;
+#ifdef _WIN32
 		WIN32_FIND_DATAW find_data;
 		HANDLE           fh = FindFirstFileW(tmp_wstr_c(wildcard), &find_data);
-		bool             bResult = false;
-        swstr_t<MAX_PATH> path;
+        swstr_t<MAX_PATH_LENGTH> path;
         int pl = 0;
         if (full_names)
         {
@@ -816,6 +926,13 @@ namespace ts
             }
 
         }
+
+        auto cvta = []( int a ) ->DWORD
+        {
+            if ( a < 0 ) return 0xffffffff;
+            if ( a & ATTR_DIR ) return FILE_ATTRIBUTE_DIRECTORY;
+            return 0;
+        };
 
         DWORD dwFileAttributes = cvta( attributes );
         DWORD dwSkipAttributes = cvta( skip_attributes );
@@ -838,7 +955,66 @@ namespace ts
 
 		if (fh != INVALID_HANDLE_VALUE) FindClose( fh );
 
-		return bResult;
+#endif // _WIN32
+#ifdef _NIX
+
+        auto cvta = []( int a ) ->mode_t
+        {
+            if ( a < 0 ) return S_IFDIR | S_IFREG;
+            if ( a & ATTR_DIR ) return S_IFREG;
+            return 0;
+        };
+
+        DIR *dir;
+        class dirent *ent;
+        class stat st;
+
+        str_c path = to_utf8( wildcard );
+        int i = path.find_last_pos( '/' );
+        str_c mask;
+        if ( i >= 0 )
+        {
+            mask = path.substr( i + 1 );
+            path.set_length(i);
+        }
+        else
+        {
+            mask = path;
+            path.clear();
+        }
+        int pl = path.get_length();
+
+
+        dir = opendir(path);
+        if ( nullptr == dir )
+            return false;
+
+        mode_t a = cvta( attributes );
+        mode_t sa = cvta( skip_attributes );
+
+        while ( ( ent = readdir( dir ) ) != nullptr )
+        {
+            if ( st.st_mode & sa )
+                continue;
+
+            pstr_c sFileName( asptr( ent->d_name ) );
+            if ( st.st_mode & a )
+            {
+                if (fn_mask_match<char>( sFileName, mask ))
+                {
+                    bResult = true;
+                    if ( full_names )
+                        files.add( path.set_length( pl ).append( sFileName ) );
+                    else
+                        files.add( sFileName );
+
+                }
+            }
+        }
+        closedir( dir );
+
+#endif //_NIX
+        return bResult;
 	};
 
     bool TSCALL check_write_access(const wsptr &ipath)
@@ -854,6 +1030,7 @@ namespace ts
         {
             ts::wstr_c prevpath = path;
             path.append(sa.get(i));
+#ifdef _WIN32
             if (i == 0)
             {
                 ASSERT(path.get_last_char() == ':');
@@ -862,6 +1039,15 @@ namespace ts
             }
 
             if (!PathFileExistsW(path))
+#endif // _WIN32
+#ifdef _NIX
+            ts::sstr_t< PATH_MAX > p = to_utf8( path );
+            struct stat st = {0};
+            if ( stat( p, &st ) == 0 && (st.st_mode & S_IFDIR) != 0 )
+            {
+
+            } else
+#endif //_NIX
             {
                 path = prevpath;
                 break;
@@ -870,21 +1056,31 @@ namespace ts
             path.append_char(NATIVE_SLASH);
         }
 
+#ifdef _WIN32
         HANDLE h = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
         if (INVALID_HANDLE_VALUE == h)
             return false;
         CloseHandle(h);
         return true;
 
+#endif // _WIN32
+#ifdef _NIX
+        return 0 == access(to_utf8( path ).cstr(), W_OK);
+#endif //_NIX
     }
 
 
     bool TSCALL kill_file(const wsptr &path)
     {
-        WINDOWS_ONLY
-        ts::swstr_t< MAX_PATH + 16 > p(path);
+#ifdef _WIN32
+        ts::swstr_t< MAX_PATH_LENGTH + 16 > p(path);
         SetFileAttributesW(p, FILE_ATTRIBUTE_NORMAL);
         return DeleteFileW(p) != 0;
+#endif // _WIN32
+#ifdef _NIX
+        return 0 == unlink( to_utf8(path) );
+#endif //_NIX
+
     }
 
 #ifdef _WIN32
@@ -1088,6 +1284,56 @@ namespace ts
     }
 #endif
 
+#ifdef _NIX
+    ts::wstr_c f_create( const ts::wsptr&fn )
+    {
+        DEBUG_BREAK();
+    }
+    void *f_open( const ts::wsptr&fn )
+    {
+        DEBUG_BREAK();
+    }
+    void *f_recreate( const ts::wsptr&fn )
+    {
+        DEBUG_BREAK();
+    }
+    void *f_continue( const ts::wsptr&fn )
+    {
+        DEBUG_BREAK();
+    }
+    uint64 f_size( void *h )
+    {
+        DEBUG_BREAK();
+    }
+    aint f_read( void *h, void *ptr, aint sz )
+    {
+        DEBUG_BREAK();
+    }
+    aint f_write( void *h, const void *ptr, aint sz )
+    {
+        DEBUG_BREAK();
+    }
+    void f_close( void *h )
+    {
+        DEBUG_BREAK();
+    }
+    bool f_set_pos( void *h, uint64 pos )
+    {
+        DEBUG_BREAK();
+    }
+    uint64 f_get_pos( void *h )
+    {
+        DEBUG_BREAK();
+
+    }
+    uint64 f_time_last_write( void *h )
+    {
+        DEBUG_BREAK();
+    }
+
+
+#endif // _NIX
+
 
     bool TSCALL is_64bit_os()
     {
@@ -1113,8 +1359,9 @@ namespace ts
         }
         return bIsWow64 != FALSE;
 #endif
-#ifdef __linux__
+#ifdef _NIX
         UNFINISHED( "check 32 or 64 bit linux" );
+        DEBUG_BREAK();
         return false;
 #endif
 #endif

@@ -837,7 +837,7 @@ public:
             {
                 if ( m_capacity != SMALLGRANULA )
                 {
-                    mf(m_list);
+                    this->mf(m_list);
                     m_list = (T *)this->ma(sizeof(T)*SMALLGRANULA);
                     m_capacity = SMALLGRANULA;
                     fillcount = m_capacity;
@@ -846,7 +846,7 @@ public:
             {
                 if ( m_capacity != 2 )
                 {
-                    mf(m_list);
+                    this->mf(m_list);
                     m_list = (T *)this->ma(sizeof(T)*2);
                     m_capacity = 2;
                     fillcount = m_capacity;

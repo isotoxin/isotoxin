@@ -3,9 +3,10 @@
 struct dialog_contactprops_params_s
 {
     contact_key_s key;
+    bool details_tab = false;
 
     dialog_contactprops_params_s() {}
-    dialog_contactprops_params_s(const contact_key_s &key) :key(key)  {}
+    dialog_contactprops_params_s(const contact_key_s &key, bool details_tab = false) :key(key), details_tab( details_tab ) {}
 };
 
 class dialog_contact_props_c;
@@ -82,6 +83,8 @@ class dialog_contact_props_c : public gui_isodialog_c
     void fill_list();
     void tags_menu(menu_c &m, ts::aint );
     void tags_menu_handler(const ts::str_c&);
+
+    bool open_details_tab = false;
 
 protected:
     /*virtual*/ int unique_tag() override { return UD_CONTACTPROPS; }

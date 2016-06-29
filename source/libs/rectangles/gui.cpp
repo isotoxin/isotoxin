@@ -485,7 +485,7 @@ void gui_c::sys_loop()
 
         if (m_flags.is(F_DO_MOUSEMOUVE))
         {
-            const hover_data_s &d = get_hoverdata(get_cursor_pos());
+            const hover_data_s &d = get_hoverdata(ts::get_cursor_pos());
             if (d.rid)
             {
                 rectengine_root_c *rr = HOLD(d.rid)().getroot();
@@ -899,7 +899,7 @@ void gui_c::mouse_inside(RID rid)
     HOLD r( rid );
 
     evt_data_s d;
-    d.mouse.screenpos = get_cursor_pos();
+    d.mouse.screenpos = ts::get_cursor_pos();
 
     m_hoverdata.minside = rid;
 
@@ -916,7 +916,7 @@ void gui_c::mouse_outside(RID rid)
     HOLD r(m_hoverdata.minside);
 
     evt_data_s d;
-    d.mouse.screenpos = get_cursor_pos();
+    d.mouse.screenpos = ts::get_cursor_pos();
 
     m_hoverdata.minside = RID();
     r.engine().sq_evt(SQ_MOUSE_OUT, r().getrid(), d);
@@ -939,7 +939,7 @@ void gui_c::register_hintzone(guirect_c *r)
         m_hint_zone.set(ff, r);
 
     if (!m_active_hint_zone)
-        check_hintzone( get_cursor_pos() );
+        check_hintzone( ts::get_cursor_pos() );
 }
 
 void gui_c::unregister_hintzone(guirect_c *r)
@@ -956,7 +956,7 @@ void gui_c::unregister_hintzone(guirect_c *r)
     if (r == m_active_hint_zone)
     {
         m_active_hint_zone = nullptr;
-        check_hintzone( get_cursor_pos() );
+        check_hintzone( ts::get_cursor_pos() );
     }
 }
 
@@ -991,14 +991,9 @@ void gui_c::check_hintzone( const ts::ivec2 & screenmousepos )
     if (RID cr = get_hoverdata(screenmousepos).rid) gui_tooltip_c::create(cr);
 }
 
-ts::ivec2 gui_c::get_cursor_pos() const
-{
-    return ts::master().get_cursor_pos();
-}
-
 dragndrop_processor_c::dragndrop_processor_c(guirect_c *dndrect):dndrect(dndrect)
 {
-    clickpos = gui->get_cursor_pos();
+    clickpos = ts::get_cursor_pos();
     clickpos_rel = dndrect->to_local(clickpos);
 }
 dragndrop_processor_c::~dragndrop_processor_c()

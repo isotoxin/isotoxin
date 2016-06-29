@@ -225,3 +225,7 @@ tmpalloc_c tmpb;
 
 
 } // namespace ts
+
+#ifdef _NIX
+#include "win32emu/win32emu.inl"
+#endif

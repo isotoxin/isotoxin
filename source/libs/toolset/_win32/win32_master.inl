@@ -303,8 +303,14 @@ namespace
 static DWORD WINAPI thread_stub( void *p )
 {
     ts::tmpalloc_c tmp;
+
+    CoInitializeEx( nullptr, COINIT_MULTITHREADED );
+
     thread_param_s *tp = (thread_param_s *)p;
     tp->run();
+
+    CoUninitialize();
+
     return 0;
 }
 
@@ -357,9 +363,8 @@ template< typename ENM > void enum_reg( const ts::wsptr &regpath_, ENM e )
         if ( REG_SZ == t )
         {
             ts::tmp_wstr_c kn( ts::wsptr( buf, len ) );
-            DWORD lt = REG_BINARY;
-            DWORD sz = 1024;
-            int rz = RegQueryValueExW( k, kn, 0, &lt, (LPBYTE)buf, &sz );
+            DWORD sz = sizeof( buf );
+            int rz = RegQueryValueExW( k, kn, nullptr, nullptr, (LPBYTE)buf, &sz );
             if ( rz != ERROR_SUCCESS ) continue;
 
             ts::wsptr b( buf, sz / sizeof( ts::wchar ) - 1 );
@@ -913,7 +918,7 @@ static DWORD WINAPI multiinstanceblocker( LPVOID )
 
     static NOTIFYICONDATAW nd = { sizeof( NOTIFYICONDATAW ), 0 };
     nd.hWnd = wnd2hwnd( mainwindow );
-    nd.uID = ( int )(size_t)mainwindow.get(); //-V205
+    nd.uID = ( int ) (0xffffffff & (size_t)mainwindow.get()); //-V205
     nd.uCallbackMessage = WM_USER + 7213;
     //nd.hIcon = gui->app_icon(true);
 
@@ -1094,13 +1099,6 @@ process_handle_s::~process_handle_s()
         ct = CURSOR_ARROW;
         
     SetCursor( LoadCursorW( nullptr, cursors[ct] ) );
-}
-
-/*virtual*/ ivec2 sys_master_win32_c::get_cursor_pos()
-{
-    ts::ivec2 cp;
-    GetCursorPos( &ts::ref_cast<POINT>( cp ) );
-    return cp;
 }
 
 /*virtual*/ int sys_master_win32_c::get_system_info( sysinf_e si )
