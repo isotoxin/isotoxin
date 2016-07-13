@@ -44,7 +44,7 @@ void enum_video_capture_devices(vsb_list_t &list, bool add_desktop)
         for (const VideoInfo&vi : vd.caps)
             d.resolutions.set( ts::ivec2( vi.maxCX, vi.maxCY ) );
         
-        d.resolutions.tsort<ts::ivec2>([](const ts::ivec2 *a, const ts::ivec2 *b)->bool {
+        d.resolutions.q_sort<ts::ivec2>([](const ts::ivec2 *a, const ts::ivec2 *b)->bool {
             if (*a == *b) return false;
             if (a->x > b->x) return true;
             if (a->x < b->x) return false;

@@ -51,6 +51,7 @@ enum rtitle_e
     title_qr_code,
     title_newtags,
     title_rentag,
+    title_avatar,
 };
 
 

@@ -738,6 +738,12 @@ public:
         return *this;
 	}
 
+    arrtype & operator = ( arrtype &&othera )
+    {
+        ( ( super & )*this ) = std::move( (super &&)othera );
+        return *this;
+    }
+
 };
 
 template <typename S> struct strmap_pair_s

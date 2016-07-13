@@ -40,19 +40,19 @@ void dialog_contact_props_c::getbutton(bcreate_s &bcr)
     __super::getbutton(bcr);
 }
 
-bool dialog_contact_props_c::custom_name( const ts::wstr_c & cn )
+bool dialog_contact_props_c::custom_name( const ts::wstr_c & cn, bool )
 {
     customname = to_utf8(cn);
     return true;
 }
 
-bool dialog_contact_props_c::comment( const ts::wstr_c &c )
+bool dialog_contact_props_c::comment( const ts::wstr_c &c, bool )
 {
     ccomment = to_utf8(c);
     return true;
 }
 
-bool dialog_contact_props_c::tags_handler(const ts::wstr_c &ht)
+bool dialog_contact_props_c::tags_handler(const ts::wstr_c &ht, bool )
 {
     tags.split<char>( to_utf8(ht), ',' );
     tags.trim();
@@ -128,13 +128,13 @@ void dialog_contact_props_c::msghandler_m( const ts::str_c&v )
 
 }
 
-bool dialog_contact_props_c::msghandler_h( const ts::wstr_c & t )
+bool dialog_contact_props_c::msghandler_h( const ts::wstr_c & t, bool )
 {
     msghandler = t;
     return true;
 }
 
-bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t )
+bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t, bool )
 {
     msghandler_p = t;
     return true;

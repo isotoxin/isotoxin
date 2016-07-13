@@ -63,19 +63,19 @@ class dialog_setup_network_c : public gui_isodialog_c
     bool password_changed = false;
     bool password_ok = false;
 
-    bool uname_edit(const ts::wstr_c &t);
-    bool ustatus_edit(const ts::wstr_c &t);
-    bool netname_edit(const ts::wstr_c &t);
-    bool login_edit( const ts::wstr_c &t );
-    bool password_edit( const ts::wstr_c &t );
+    bool uname_edit(const ts::wstr_c &t, bool );
+    bool ustatus_edit(const ts::wstr_c &t, bool );
+    bool netname_edit(const ts::wstr_c &t, bool );
+    bool login_edit( const ts::wstr_c &t, bool );
+    bool password_edit( const ts::wstr_c &t, bool );
 
-    bool network_importfile(const ts::wstr_c & t);
-    bool network_serverport(const ts::wstr_c & t);
+    bool network_importfile(const ts::wstr_c & t, bool );
+    bool network_serverport(const ts::wstr_c & t, bool );
     bool network_ipv6(RID, GUIPARAM p);
     bool network_udp(RID, GUIPARAM p);
     bool network_connect(RID, GUIPARAM p);
     void set_proxy_type_handler(const ts::str_c&);
-    bool set_proxy_addr_handler(const ts::wstr_c & t);
+    bool set_proxy_addr_handler(const ts::wstr_c & t, bool );
 
     bool lost_contact(RID, GUIPARAM p);
 
@@ -112,6 +112,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     enum ctlmask
     {
         MASK_PROFILE_COMMON         = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_PROFILE_CLIST          = SETBIT( NUMGEN_NEXT( ctlm ) ),
         MASK_PROFILE_NOTIFICATIONS  = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_CHAT           = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_GCHAT          = SETBIT( NUMGEN_NEXT(ctlm) ),
@@ -190,13 +191,16 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     void videocodecs_tab_selected();
     menu_c codecctxmenu(const ts::str_c& param, bool activation);
     void codecselected(const ts::str_c& prm);
-    bool set_bitrate(const ts::wstr_c &);
+    bool set_bitrate(const ts::wstr_c &, bool );
 
     ts::buf_c testrec;
     s3::Format recfmt;
     float current_mic_level = -1;
     float talk_vol = 1.0f;
     float signal_vol = 1.0f;
+
+    bool mute_all_sounds = false;
+    bool mute_handler( RID, GUIPARAM );
 
     int dsp_flags = 0;
     bool dspf_handler( RID, GUIPARAM );
@@ -297,6 +301,7 @@ private:
         BGROUP_COMMON1,
         BGROUP_COMMON2,
         BGROUP_COMMON3,
+        BGROUP_CLIST,
         BGROUP_CHAT,
         BGROUP_GCHAT,
         BGROUP_MSGOPTS,
@@ -383,22 +388,22 @@ private:
     bool addeditnethandler(dialog_protosetup_params_s &params);
     bool addnetwork(RID, GUIPARAM);
 
-    bool tempfolder_sendimg_edit_handler( const ts::wstr_c &v );
-    bool tempfolder_handlemsg_edit_handler( const ts::wstr_c &v );
+    bool tempfolder_sendimg_edit_handler( const ts::wstr_c &v, bool );
+    bool tempfolder_handlemsg_edit_handler( const ts::wstr_c &v, bool );
 
     bool fileconfirm_handler(RID, GUIPARAM);
-    bool fileconfirm_auto_masks_handler(const ts::wstr_c &v);
-    bool fileconfirm_manual_masks_handler(const ts::wstr_c &v);
-    bool downloadfolder_edit_handler(const ts::wstr_c &v);
-    bool downloadfolder_images_edit_handler(const ts::wstr_c &v);
-    bool date_msg_tmpl_edit_handler(const ts::wstr_c &v);
-    bool date_sep_tmpl_edit_handler(const ts::wstr_c &v);
+    bool fileconfirm_auto_masks_handler(const ts::wstr_c &v, bool );
+    bool fileconfirm_manual_masks_handler(const ts::wstr_c &v, bool );
+    bool downloadfolder_edit_handler(const ts::wstr_c &v, bool );
+    bool downloadfolder_images_edit_handler(const ts::wstr_c &v, bool );
+    bool date_msg_tmpl_edit_handler(const ts::wstr_c &v, bool );
+    bool date_sep_tmpl_edit_handler(const ts::wstr_c &v, bool);
     bool ctl2send_handler( RID, GUIPARAM );
     bool ctl2send_handler_de( RID, GUIPARAM );
     bool collapse_beh_handler( RID, GUIPARAM );
     bool autoupdate_handler( RID, GUIPARAM );
     void proxy_handler( const ts::str_c& );
-    bool proxy_addr_handler( const ts::wstr_c & t );
+    bool proxy_addr_handler( const ts::wstr_c & t, bool );
     bool useproxy_handler(RID, GUIPARAM);
     
     const protocol_description_s * describe_network(ts::wstr_c&desc, const ts::str_c& name, const ts::str_c& tag, int id) const;
@@ -407,11 +412,11 @@ private:
     bool msgopts_handler( RID, GUIPARAM );
     bool commonopts_handler( RID, GUIPARAM );
     bool histopts_handler( RID, GUIPARAM );
-    bool away_minutes_handler(const ts::wstr_c &v);
-    bool load_history_count_handler(const ts::wstr_c &v);
+    bool away_minutes_handler(const ts::wstr_c &v, bool );
+    bool load_history_count_handler(const ts::wstr_c &v, bool );
 
     bool notification_handler( RID, GUIPARAM );
-    bool desktop_notification_duration_handler( const ts::wstr_c &v );
+    bool desktop_notification_duration_handler( const ts::wstr_c &v, bool );
 
     bool seldict(RID, GUIPARAM);
     bool chat_options(RID, GUIPARAM);
@@ -477,7 +482,7 @@ private:
     void select_video_capture_res(const ts::str_c& prm);
     menu_c list_video_capture_devices();
     menu_c list_video_capture_resolutions();
-    ts::wstr_c fix_camera_res(const ts::wstr_c &r);
+    ts::wstr_c fix_camera_res(const ts::wstr_c &r );
     vsb_list_t video_devices;
 
     ts::wstrmap_c camera;
@@ -492,7 +497,7 @@ private:
     ts::astrmap_c debug;
     bool debug_handler(RID, GUIPARAM p);
     bool debug_handler2(RID, GUIPARAM p);
-    bool debug_local_upd_url(const ts::wstr_c &);
+    bool debug_local_upd_url(const ts::wstr_c &, bool );
 
 protected:
     /*virtual*/ int unique_tag() override { return UD_SETTINGS; }

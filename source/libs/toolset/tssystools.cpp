@@ -411,8 +411,12 @@ bitmap_c TSCALL get_clipboard_bitmap()
     return res;
 }
 
-void TSCALL open_link(const ts::wstr_c &lnk)
+void TSCALL open_link(const ts::wstr_c &lnk0)
 {
+    ts::wstr_c lnk( lnk0 );
+    if ( lnk.find_pos( CONSTWSTR( "://" ) ) < 0 && lnk.find_pos( '@' ) >= 0 )
+        lnk.insert( 0, CONSTWSTR( "mailto:" ) );
+
 #ifdef _WIN32
     ShellExecuteW(nullptr, L"open", lnk, nullptr, nullptr, SW_SHOWNORMAL);
 #endif // _WIN32

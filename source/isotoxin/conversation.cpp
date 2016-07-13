@@ -2488,7 +2488,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                 ap.y = row.other.sort_factor;
             }
 
-            splist.tsort<ts::ivec2>( []( const ts::ivec2 *s1, const ts::ivec2 *s2 ) { return s1->y < s2->y; } );
+            splist.q_sort<ts::ivec2>( []( const ts::ivec2 *s1, const ts::ivec2 *s2 ) { return s1->y < s2->y; } );
 
             for(const ts::ivec2 &s : splist)
             {
@@ -5679,9 +5679,15 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
         t = val->value.text;
         cp = val->value.cp;
     }
+    TEXTCHECKFUNC och = check_text_func;
+    check_text_func = nullptr; // avoid checking
+
     set_text(t);
     if (cp >= 0) set_caret_pos(cp);
-    if (check_text_func) check_text_func(t);
+
+    check_text_func = och;
+    if (check_text_func) 
+        check_text_func(t, false /* no change */);
 
     return 0;
 }
@@ -5896,21 +5902,24 @@ gui_message_area_c::~gui_message_area_c()
     return sz;
 }
 
-bool gui_message_area_c::change_text_handler(const ts::wstr_c &t)
+bool gui_message_area_c::change_text_handler(const ts::wstr_c &t, bool changed)
 {
     if (t.get_length() > 4096)
         return false; // limit size
 
     send_button->disable( t.is_empty() );
 
-    if (contact_root_c * contact = message_editor->get_historian())
-        if (!contact->getkey().is_self())
-        {
-            contact_c *tgt = contact->subget_for_send();
-            if (tgt && tgt->get_state() == CS_ONLINE)
-                if (active_protocol_c *ap = prf().ap(tgt->getkey().protoid))
-                    ap->typing( t.is_empty() ? 0 : tgt->getkey().contactid );
-        }
+    if ( changed )
+    {
+        if ( contact_root_c * contact = message_editor->get_historian() )
+            if ( !contact->getkey().is_self() )
+            {
+                contact_c *tgt = contact->subget_for_send();
+                if ( tgt && tgt->get_state() == CS_ONLINE )
+                    if ( active_protocol_c *ap = prf().ap( tgt->getkey().protoid ) )
+                        ap->typing( t.is_empty() ? 0 : tgt->getkey().contactid );
+            }
+    }
 
     return true;
 }
@@ -6073,7 +6082,9 @@ void gui_conversation_c::created()
 {
     leech(TSNEW(leech_save_proportions_s, CONSTASTR("msg_splitter"), CONSTASTR("4255,0,30709,5035")));
 
-    caption = MAKE_CHILD<gui_contact_item_c>(getrid(), &contacts().get_self()) << CIR_CONVERSATION_HEAD;
+    MAKE_CHILD<gui_contact_item_c> c( getrid(), &contacts().get_self() );
+    c << CIR_CONVERSATION_HEAD;
+    caption = c;
     noticelist = MAKE_CHILD<gui_noticelist_c>( getrid() );
     msglist = MAKE_VISIBLE_CHILD<gui_messagelist_c>( getrid() );
     messagearea = MAKE_CHILD<gui_message_area_c>( getrid() );
@@ -6261,8 +6272,11 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_PROFILE_TABLE_SAVED>&p)
 {
     if (p.tabi == pt_active_protocol)
     {
-        if (caption->contacted()) caption->getcontact().reselect();
-        caption->update_text();
+        if ( caption )
+        {
+            if ( caption->contacted() ) caption->getcontact().reselect();
+            caption->update_text();
+        }
         g_app->update_buttons_head();
         g_app->hide_show_messageeditor();
     }

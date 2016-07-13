@@ -9,9 +9,12 @@ enum contact_item_role_e
     CIR_CONVERSATION_HEAD,
     CIR_METACREATE,
     CIR_DNDOBJ,
+    CIR_SEPARATOR,
 };
 
 class gui_contact_item_c;
+class gui_contact_separator_c;
+
 template<> struct MAKE_CHILD<gui_contact_item_c> : public _PCHILD(gui_contact_item_c)
 {
     contact_item_role_e role = CIR_LISTITEM;
@@ -28,7 +31,23 @@ template<> struct MAKE_ROOT<gui_contact_item_c> : public _PROOT(gui_contact_item
     ~MAKE_ROOT() {}
 };
 
-class gui_contact_item_c : public gui_label_c
+class gui_clist_base_c : public gui_label_c
+{
+protected:
+    contact_item_role_e role = CIR_LISTITEM;
+public:
+    gui_clist_base_c() {}
+    gui_clist_base_c( initial_rect_data_s &data, contact_item_role_e role ) :gui_label_c( data ), role(role) {}
+
+    contact_item_role_e getrole() const { return role; }
+    virtual int proto_sort_factor() const = 0;
+
+    gui_contact_item_c *as_item();
+    const gui_contact_item_c *as_item() const;
+    gui_contact_separator_c *as_separator();
+};
+
+class gui_contact_item_c : public gui_clist_base_c
 {
     enum colors_e
     {
@@ -42,7 +61,6 @@ class gui_contact_item_c : public gui_label_c
 
     DUMMY(gui_contact_item_c);
     ts::shared_ptr<contact_root_c> contact;
-    contact_item_role_e role = CIR_LISTITEM;
     GM_RECEIVER( gui_contact_item_c, ISOGM_SELECT_CONTACT );
     
     ts::wstr_c typing_buf;
@@ -146,8 +164,6 @@ public:
     bool cancel_edit( RID r = RID(), GUIPARAM p = nullptr);
     bool apply_edit( RID r = RID(), GUIPARAM p = nullptr);
 
-    contact_item_role_e getrole() const {return role;}
-
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ ts::ivec2 get_max_size() const override;
     /*virtual*/ void created() override;
@@ -164,11 +180,62 @@ public:
     bool contacted() const {return contact != nullptr;}
     void update_text();
 
-    bool is_after(gui_contact_item_c &ci); // sort comparsion
-
+    bool is_after(gui_contact_item_c &ci); // sort comparison
+    /*virtual*/ int proto_sort_factor() const override;
+    bool same_prots(const gui_contact_item_c &itm) const;
 
     void redraw(float delay);
 };
+
+template<> struct MAKE_CHILD<gui_contact_separator_c> : public _PCHILD( gui_contact_separator_c )
+{
+    ts::wstr_c text;
+    const contact_root_c *cc = nullptr;
+    bool is_visible = true;
+    MAKE_CHILD( RID parent_, const ts::wstr_c &text, bool is_visible = true ) :text( text ), is_visible( is_visible ) { parent = parent_; }
+    MAKE_CHILD( RID parent_, const contact_root_c *cc, bool is_visible = true ) :cc( cc ), is_visible( is_visible ) { parent = parent_; }
+    ~MAKE_CHILD();
+};
+
+class gui_contact_separator_c : public gui_clist_base_c
+{
+    DUMMY( gui_contact_separator_c );
+
+    //static const ts::flags32_s::BITS  F_PROTOHIT = FLAGS_FREEBITSTART_LABEL << 0;
+
+    ts::tbuf_t<int> prots;
+    int sf = 0;
+
+public:
+    gui_contact_separator_c( MAKE_CHILD<gui_contact_separator_c> &data );
+    /*virtual*/ ~gui_contact_separator_c();
+
+    void set_prots_from_contact( const contact_root_c *cc );
+    bool is_prots_same_as_contact( const contact_root_c *cc ) const;
+    void update_text();
+
+    ///*virtual*/ int get_height_by_width( int width ) const override;
+    ///*virtual*/ ts::ivec2 get_min_size() const override;
+    ///*virtual*/ ts::ivec2 get_max_size() const override;
+    /*virtual*/ void created() override;
+    /*virtual*/ bool sq_evt( system_query_e qp, RID rid, evt_data_s &data ) override;
+
+    /*virtual*/ int proto_sort_factor() const override;
+};
+
+INLINE gui_contact_item_c *gui_clist_base_c::as_item()
+{
+    return role != CIR_SEPARATOR ? ts::ptr_cast<gui_contact_item_c *>( this ) : nullptr;
+}
+INLINE const gui_contact_item_c *gui_clist_base_c::as_item() const
+{
+    return role != CIR_SEPARATOR ? ts::ptr_cast<const gui_contact_item_c *>( this ) : nullptr;
+}
+INLINE gui_contact_separator_c *gui_clist_base_c::as_separator()
+{
+    return role == CIR_SEPARATOR ? ts::ptr_cast<gui_contact_separator_c *>( this ) : nullptr;
+}
+
 
 enum contact_list_role_e
 {
@@ -231,6 +298,8 @@ public:
 
     void array_mode( ts::array_inplace_t<contact_key_s, 2> & arr );
     void refresh_array();
+    void fix_sep_visibility();
+    void clearlist();
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ size_policy_e size_policy() const override {return SP_KEEP;}

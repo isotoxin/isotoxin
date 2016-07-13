@@ -648,7 +648,7 @@ void gui_c::nomorerect(RID rid )
 
 void gui_c::resort_roots()
 {
-    if (m_roots.sort())
+    if (m_roots.qsort())
     {
         // надо установить родителей в соответствие zindex
         // этот способ работает в windows, т.к. родитель всегда отображается под потомком

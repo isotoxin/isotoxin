@@ -35,7 +35,7 @@ protected:
     void color_selected();
     void load_preset( const ts::wstr_c &p );
     ts::wstr_c curcolastext() const;
-    bool colastext(const ts::wstr_c &);
+    bool colastext(const ts::wstr_c &, bool );
 
 public:
     dialog_colors_c(initial_rect_data_s &data);

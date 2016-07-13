@@ -207,6 +207,7 @@ public:
     FLOATPAR( vol_signal, 1.0f )
 
     INTPAR(dsp_flags, 0)
+    INTPAR( sounds_flags, 0 )
 
     TEXTAPAR(debug, "")
     INTPAR(allow_tools, 0)

@@ -10,8 +10,8 @@ class dialog_firstrun_c : public gui_isodialog_c
     bool handler_0( RID, GUIPARAM );
     bool handler_1( RID, GUIPARAM );
     bool handler_2( RID, GUIPARAM );
-    bool path_check_0( const ts::wstr_c & t );
-    bool path_check_1( const ts::wstr_c & t );
+    bool path_check_0( const ts::wstr_c & t, bool );
+    bool path_check_1( const ts::wstr_c & t, bool );
     void select_lang( const ts::str_c& prm );
     int page = 0;
     RID selpath;

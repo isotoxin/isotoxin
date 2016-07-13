@@ -241,16 +241,14 @@ template <class U> ZSTRINGS_FORCEINLINE void    blk_fill(void *tgt, ZSTRINGS_UNS
     }
 }
 
-ZSTRINGS_FORCEINLINE bool blk_equal(const void *tgt, const void *src, ZSTRINGS_UNSIGNED size)
+template <class U> ZSTRINGS_FORCEINLINE bool blk_equal(const U *tgt, const U *src, ZSTRINGS_UNSIGNED cnt)
 {
     //not optimized!!!
 
-    const ZSTRINGS_BYTE    *btgt = (const ZSTRINGS_BYTE *)tgt;
-    const ZSTRINGS_BYTE    *bsrc = (const ZSTRINGS_BYTE *)src;
-    while(size)
+    while(cnt)
     {
-        if (*btgt++ !=  *bsrc++) return false;
-        size--;
+        if (*tgt++ != *src++) return false;
+        cnt--;
     }
     return true;
 }

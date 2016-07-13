@@ -86,7 +86,7 @@ public:
     virtual bool is_table_exist( const asptr& tablename ) = 0;
     virtual void create_table( const asptr& tablename, array_wrapper_c<const column_desc_s> columns, bool norowid ) = 0;
     virtual int  update_table_struct( const asptr& tablename, array_wrapper_c<const column_desc_s> columns, bool norowid ) = 0; // create or add/remove/update columns
-    virtual void read_table( const asptr& tablename, SQLITE_TABLEREADER reader, const asptr& where_items = asptr() ) = 0;
+    virtual bool read_table( const asptr& tablename, SQLITE_TABLEREADER reader, const asptr& where_items = asptr() ) = 0;
     virtual int  insert( const asptr& tablename, array_wrapper_c<const data_pair_s> fields ) = 0;
     virtual void delrow( const asptr& tablename, int id ) = 0;
     virtual void delrows(const asptr& tablename, const asptr& where_items) = 0;

@@ -445,6 +445,12 @@ public:
             if (c->getkey() == k) return true;
         return false;
     }
+    bool subpresent( int protoid ) const
+    {
+        for ( contact_c *c : subcontacts )
+            if ( c->getkey().protoid == protoid ) return true;
+        return false;
+    }
     contact_c * subgetadd(const contact_key_s&k);
     contact_c * subget_proto(int protoid);
     contact_c * subget(const contact_key_s&k)

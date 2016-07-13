@@ -130,11 +130,11 @@ public:
 
     typedef fastdelegate::FastDelegate< bool (rectengine_c *, rectengine_c *) > SWAP_TESTER;
 
-    void cleanup_children_now();
+    void cleanup_children_now( ts::aint skipctl = 0 );
     void z_resort_children(); // resort children according to zindex
     bool children_sort( SWAP_TESTER swap_them ); // custom order of children
     void child_move_top( rectengine_c *e ) { child_move_to(0, e); }
-    void child_move_to( ts::aint index, rectengine_c *e );
+    void child_move_to( ts::aint index, rectengine_c *e, ts::aint skipctl = 0 );
     
 
     const guirect_c &getrect() const { ASSERT(this); return SAFE_REF(rect_); } //-V704
@@ -203,6 +203,15 @@ public:
                 }
         if (index) *index = children.size();
         return nullptr;
+    }
+
+    ts::aint get_next_child_index( ts::aint index = 0 )
+    {
+        if ( index < 0 ) return -1;
+        for ( ;index < children.size(); ++index )
+            if ( rectengine_c * re = children.get( index ) )
+                    return index;
+        return -1;
     }
 
     RID getrid() const { return rid_; }

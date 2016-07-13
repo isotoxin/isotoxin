@@ -25,13 +25,13 @@ class dialog_contact_props_c : public gui_isodialog_c
     ts::shared_ptr<contact_root_c> contactue;
 
     ts::str_c customname; // utf8
-    bool custom_name( const ts::wstr_c & );
+    bool custom_name( const ts::wstr_c &, bool );
 
     ts::str_c ccomment; // utf8
-    bool comment( const ts::wstr_c & );
+    bool comment( const ts::wstr_c &, bool );
 
     ts::astrings_c tags;
-    bool tags_handler(const ts::wstr_c &);
+    bool tags_handler(const ts::wstr_c &, bool );
 
     int imb = 0;
     keep_contact_history_e keeph = KCH_DEFAULT;
@@ -51,8 +51,8 @@ class dialog_contact_props_c : public gui_isodialog_c
     ts::wstr_c msghandler;
     ts::wstr_c msghandler_p;
     void msghandler_m( const ts::str_c& );
-    bool msghandler_h( const ts::wstr_c & t );
-    bool msghandler_p_h( const ts::wstr_c & t );
+    bool msghandler_h( const ts::wstr_c & t, bool );
+    bool msghandler_p_h( const ts::wstr_c & t, bool );
     ts::wstr_c genmhi();
     ts::wstr_c buildmh();
 

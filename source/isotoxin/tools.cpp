@@ -6,7 +6,7 @@ const wraptranslate<ts::wsptr> __translation(const ts::wsptr &txt, int tag)
     return wraptranslate<ts::wsptr>(r.l==0 ? txt : r);
 }
 
-bool check_profile_name(const ts::wstr_c &t)
+bool check_profile_name(const ts::wstr_c &t, bool )
 {
     if (t.find_last_pos_of(CONSTWSTR(":/\\?*<>,;|$#@")) >= 0) return false;
     return true;
@@ -512,21 +512,95 @@ ipc::ipc_result_e isotoxin_ipc_s::processor_func(void *par, void *data, int data
     return ipc::IPCR_BREAK;
 }
 
+template <typename TCH> int fmail( const ts::sptr<TCH> &m, int from, int &e )
+{
+    e = -1;
+    ts::pstr_t<TCH> message( m );
+    int i = message.find_pos( from, '@' );
+    if ( i < 0 ) return -1;
+    int j = i - 1;
+    for ( ; j >= from; j-- )
+    {
+        TCH c = message.get_char( j );
+        if ( ts::CHAR_is_digit( c ) ) continue;
+        if ( ts::CHAR_is_letter( c ) ) continue;
+        if ( ts::CHARz_find<ts::wchar>( L".!#$%&'*+-/=?^_`{|}~", c ) >= 0 ) continue;
+        if ( c == ' ' )
+        {
+            ++j;
+            break;
+        }
+    try_next:
+        i = message.find_pos( i + 1, '@' );
+        if ( i < 0 )
+            return -1;
+        j = i;
+    }
+    if ( j < from )
+        ++j;
+    if ( j == i || message.get_char( j ) == '.' || message.get_char( i - 1 ) == '.' || message.substr( j, i ).find_pos( CONSTSTR( TCH, ".." ) ) >= 0 )
+        goto try_next;
+
+    int k = i + 1;
+    if ( k >= m.l )
+        return -1;
+    for ( ; k < m.l; ++k )
+    {
+        TCH c = message.get_char( k );
+        if ( ts::CHAR_is_digit( c ) ) continue;
+        if ( ts::CHAR_is_letter( c ) ) continue;
+        if ( c == '-' || c == '.' ) continue;
+        if ( ts::CHARz_find<ts::wchar>( L" \\<>\r\n\t", c ) >= 0 ) break;
+        goto try_next;
+    }
+    if ( message.get_char( i+1 ) == '-' || message.get_char( k - 1 ) == '-' || message.substr( i+1, k ).find_pos( CONSTSTR( TCH, ".." ) ) >= 0 )
+        goto try_next;
+
+    e = k;
+    return j;
+}
+
+template <typename TCH> int fpref( const ts::sptr<TCH> &m, const ts::sptr<TCH> &p, int from, int curi, bool needspace = false )
+{
+    ts::pstr_t<TCH> message( m );
+    int i = message.find_pos( from, p );
+
+    while (needspace && i >= 0)
+    {
+        if ( i > 0 && message.get_char( i - 1 ) != ' ' )
+        {
+            i = message.find_pos( i + 1, p );
+        } else
+            break;
+    }
+
+    if ( curi < 0 )
+        return i;
+    if ( i >= 0 && i < curi )
+        return i;
+    return curi;
+}
+
 template <typename TCH> bool text_find_link(const ts::sptr<TCH> &m, int from, ts::ivec2 & rslt)
 {
     ts::pstr_t<TCH> message(m);
-    int i = message.find_pos(from, CONSTSTR(TCH, "http://"));
-    if (i < 0) i = message.find_pos(from, CONSTSTR(TCH, "https://"));
-    if (i < 0) i = message.find_pos(from, CONSTSTR(TCH, "ftp://"));
-    if (i < 0)
-    {
-        int j = message.find_pos(from, CONSTSTR(TCH, "www."));
-        if (j == 0 || (j > 0 && message.get_char(j - 1) == ' '))
-            i = j;
-    }
+    int ie;
+    int mi, i = fmail( m, from, ie );
+    mi = i;
+    i = fpref(m, CONSTSTR( TCH, "http://" ), from, i);
+    i = fpref(m, CONSTSTR(TCH, "https://"), from, i);
+    i = fpref( m, CONSTSTR( TCH, "ftp://" ), from, i );
+    i = fpref( m, CONSTSTR( TCH, "www." ), from, i, true );
 
     if (i >= 0)
     {
+        if ( i == mi )
+        {
+            rslt.r0 = mi;
+            rslt.r1 = ie;
+            return true;
+        }
+
         int cnt = message.get_length();
         int j = i;
         for (; j < cnt; ++j)
@@ -1034,7 +1108,7 @@ bool text_find_inds( const ts::wstr_c &t, ts::tmp_tbuf_t<ts::ivec2> &marks, cons
         }
     }
 
-    marks.tsort<ts::ivec2>( []( const ts::ivec2 *s1, const ts::ivec2 *s2 ) { return s1->x > s2->x; } );
+    marks.q_sort<ts::ivec2>( []( const ts::ivec2 *s1, const ts::ivec2 *s2 ) { return s1->x > s2->x; } );
 
     return marks.count() > 0;
 }

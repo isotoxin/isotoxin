@@ -186,7 +186,8 @@ void config_c::load( const ts::wstr_c &path_override )
 
     if (db)
     {
-        db->read_table( CONSTASTR("conf"), get_cfg_reader() );
+        if ( !db->read_table( CONSTASTR( "conf" ), get_cfg_reader() ) )
+            prepare_conf_table( db );
 
         int bld = build();
 

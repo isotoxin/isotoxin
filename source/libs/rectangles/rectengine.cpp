@@ -48,10 +48,10 @@ rectengine_c::~rectengine_c()
     }
 }
 
-void rectengine_c::cleanup_children_now()
+void rectengine_c::cleanup_children_now( ts::aint skipctl )
 {
     ts::aint oldchsz = children.size();
-    for (ts::aint i = children.size() - 1; i >= 0; --i)
+    for (ts::aint i = children.size() - 1; i >= skipctl; --i)
         if (children.get(i).expired()) children.remove_slow(i);
     if (oldchsz != children.size())
     {
@@ -108,7 +108,7 @@ bool rectengine_c::children_sort( fastdelegate::FastDelegate< bool (rectengine_c
     return false;
 }
 
-void rectengine_c::child_move_to( ts::aint index, rectengine_c *e )
+void rectengine_c::child_move_to( ts::aint index, rectengine_c *e, ts::aint skipctl )
 {
     ts::aint i = children.find(e);
     if (i != index)
@@ -119,7 +119,7 @@ void rectengine_c::child_move_to( ts::aint index, rectengine_c *e )
         else
             children.set(index, e);
 
-        cleanup_children_now();
+        cleanup_children_now(skipctl);
         gui->dirty_hover_data();
         redraw();
     }

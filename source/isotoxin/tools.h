@@ -394,7 +394,7 @@ template<> struct gmsg<ISOGM_CHANGED_SETTINGS> : public gmsgbase
 };
 //
 
-bool check_profile_name(const ts::wstr_c &);
+bool check_profile_name(const ts::wstr_c &, bool );
 
 bool check_netaddr( const ts::asptr & );
 

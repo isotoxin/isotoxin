@@ -23,9 +23,7 @@ enum messages_options_e : unsigned
     MSGOP_SHOW_DATE_SEPARATOR   = SETBIT(1),
     MSGOP_SHOW_PROTOCOL_NAME    = SETBIT(2),
     MSGOP_KEEP_HISTORY          = SETBIT(3),
-#if JOIN_MESSAGES
-    MSGOP_JOIN_MESSAGES         = SETBIT(4), // hidden option
-#endif
+    CLOPT_GROUP_CONTACTS_PROTO  = SETBIT(4),
     MSGOP_SEND_TYPING           = SETBIT(5),
     UIOPT_TAGFILETR_BAR         = SETBIT(6),
     MSGOP_LOAD_WHOLE_HISTORY    = SETBIT(7),
@@ -502,6 +500,8 @@ public:
     void flush_history_now();
     void load_undelivered();
     contact_root_c *find_corresponding_historian(const contact_key_s &subcontact, ts::array_wrapper_c<contact_root_c * const> possible_historians);
+
+    ts::bitmap_c load_avatar( const contact_key_s& ck );
 
     uint64 uniq_history_item_tag();
 

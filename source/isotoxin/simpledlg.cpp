@@ -22,6 +22,14 @@ dialog_msgbox_params_s dialog_msgbox_c::mb_qrcode(const ts::wstr_c &text)
     return dialog_msgbox_params_s(title_qr_code, qr);
 }
 
+dialog_msgbox_params_s dialog_msgbox_c::mb_avatar( const ts::wstr_c &text, const ts::bitmap_c &ibmp )
+{
+    ts::wstr_c t( CONSTWSTR( "<ee>" ), text );
+    t.append( CONSTWSTR( "<br=5><rect=17," ) );
+    t.append_as_int( ibmp.info().sz.x ).append_char( ',' ).append_as_int( ibmp.info().sz.y ).append( CONSTWSTR( ">" ) );
+    return dialog_msgbox_params_s( title_avatar, t, ibmp );
+}
+
 RID dialog_msgbox_params_s::summon()
 {
     return SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, *this);
@@ -60,11 +68,11 @@ dialog_msgbox_c::dialog_msgbox_c(MAKE_ROOT<dialog_msgbox_c> &data) :gui_isodialo
         int qrie = m_params.desc.find_pos(CONSTWSTR("</qr>"));
         if (qrie > qri)
         {
-            qrbmp.gen_qrcore(10,5,ts::to_utf8(m_params.desc.substr( qri + 4, qrie )),32, ts::ARGB(0,0,0), ts::ARGB(0,0,0,0));
+            m_params.bmp.gen_qrcore(10,5,ts::to_utf8(m_params.desc.substr( qri + 4, qrie )),32, ts::ARGB(0,0,0), ts::ARGB(0,0,0,0));
             ts::wstr_c r( CONSTWSTR("<rect=17,") );
-            r.append_as_int( qrbmp.info().sz.x );
+            r.append_as_int( m_params.bmp.info().sz.x );
             r.append_char(',');
-            r.append_as_int( qrbmp.info().sz.y );
+            r.append_as_int( m_params.bmp.info().sz.y );
             r.append_char('>');
             m_params.desc.replace( qri, qrie + 5 - qri, r );
         }
@@ -84,7 +92,7 @@ void dialog_msgbox_c::updrect_msgbox(const void *, int r, const ts::ivec2 &p)
 {
     if (r == 17)
     {
-        getengine().draw(p - getroot()->get_current_draw_offset(), qrbmp.extbody(), true);
+        getengine().draw(p - getroot()->get_current_draw_offset(), m_params.bmp.extbody(), true);
     }
 }
 
@@ -361,10 +369,10 @@ ts::uint32 dialog_entertext_c::gm_handler(gmsg<ISOGM_APPRISE> &)
     return 0;
 }
 
-bool dialog_entertext_c::on_edit(const ts::wstr_c &t)
+bool dialog_entertext_c::on_edit(const ts::wstr_c &t, bool ch)
 {
     m_params.val = t;
-    ctlenable( CONSTASTR("dialog_button_1"), m_params.checker(t) );
+    ctlenable( CONSTASTR("dialog_button_1"), m_params.checker(t, ch) );
     return true;
 }
 

@@ -57,6 +57,9 @@ static DWORD WINAPI looper( void * )
         {
             DWORD mainthreadid = GetWindowThreadProcessId( wnd2hwnd( master().mainwindow ), nullptr );
 
+            if ( d > 1000 )
+                istuff.cnttick = 0;
+
             istuff.looper_allow_tick = false;
             if ( istuff.cnttick < 10 )
             {

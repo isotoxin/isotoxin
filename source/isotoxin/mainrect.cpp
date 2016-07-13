@@ -86,7 +86,7 @@ ts::uint32 mainrect_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
     };
 
     RID hg = uiroot(m_rid);
-    RID cl = MAKE_CHILD<gui_contactlist_c>(hg);
+    g_app->contactlist = &MAKE_CHILD<gui_contactlist_c>(hg).get();
     RID chat = MAKE_CHILD<gui_conversation_c>(hg);
     hg.call_restore_signal();
 

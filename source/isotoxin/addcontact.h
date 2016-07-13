@@ -48,8 +48,8 @@ protected:
     menu_c networks();
     bool hidectl(RID,GUIPARAM);
 
-    bool public_id_handler( const ts::wstr_c & );
-    bool invite_message_handler( const ts::wstr_c & );
+    bool public_id_handler( const ts::wstr_c &, bool );
+    bool invite_message_handler( const ts::wstr_c &, bool );
     void network_selected( const ts::str_c & );
     bool authorization_handler( RID, GUIPARAM );
 public:
@@ -84,7 +84,7 @@ protected:
     bool hidectl(RID,GUIPARAM);
     void showerror(int id);
 
-    bool groupname_handler(const ts::wstr_c &);
+    bool groupname_handler(const ts::wstr_c &, bool );
     void network_selected(const ts::str_c &);
 public:
     dialog_addgroup_c(initial_rect_data_s &data);

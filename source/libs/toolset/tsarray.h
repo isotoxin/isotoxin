@@ -1107,9 +1107,13 @@ public:
     }
     ~array_c()
     {
-        T *ptr = m_list + m_count - 1;
-        while (ptr>=m_list) { this->destructor( *ptr ); ptr--; }
-        this->mf(m_list);
+        if (m_count)
+        {
+            T *ptr = m_list + m_count - 1;
+            while ( ptr >= m_list ) { this->destructor( *ptr ); ptr--; }
+        }
+        if (m_list)
+            this->mf(m_list);
     }
 
     array_wrapper_c<const T> array() const { return array_wrapper_c<const T>( m_list, m_count ); }

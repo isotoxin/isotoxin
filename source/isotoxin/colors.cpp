@@ -211,7 +211,7 @@ void dialog_colors_c::color_selected()
     return 0;
 }
 
-bool dialog_colors_c::colastext(const ts::wstr_c &c)
+bool dialog_colors_c::colastext(const ts::wstr_c &c, bool )
 {
     ts::wstr_c cc(c);
     if (cc.get_char(0) != '#') cc.insert(0,'#');

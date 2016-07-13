@@ -1147,54 +1147,54 @@ bool dialog_settings_c::fileconfirm_handler(RID, GUIPARAM p)
     mod();
     return true;
 }
-bool dialog_settings_c::fileconfirm_auto_masks_handler(const ts::wstr_c &v)
+bool dialog_settings_c::fileconfirm_auto_masks_handler(const ts::wstr_c &v, bool )
 {
     auto_download_masks = v;
     mod();
     return true;
 }
-bool dialog_settings_c::fileconfirm_manual_masks_handler(const ts::wstr_c &v)
+bool dialog_settings_c::fileconfirm_manual_masks_handler(const ts::wstr_c &v, bool )
 {
     manual_download_masks = v;
     mod();
     return true;
 }
 
-bool dialog_settings_c::downloadfolder_edit_handler(const ts::wstr_c &v)
+bool dialog_settings_c::downloadfolder_edit_handler(const ts::wstr_c &v, bool )
 {
     downloadfolder = v;
     mod();
     return true;
 }
 
-bool dialog_settings_c::downloadfolder_images_edit_handler(const ts::wstr_c &v)
+bool dialog_settings_c::downloadfolder_images_edit_handler(const ts::wstr_c &v, bool )
 {
     downloadfolder_images = v;
     mod();
     return true;
 }
 
-bool dialog_settings_c::tempfolder_sendimg_edit_handler( const ts::wstr_c &v )
+bool dialog_settings_c::tempfolder_sendimg_edit_handler( const ts::wstr_c &v, bool )
 {
     tempfolder_sendimg = v;
     mod();
     return true;
 }
 
-bool dialog_settings_c::tempfolder_handlemsg_edit_handler( const ts::wstr_c &v )
+bool dialog_settings_c::tempfolder_handlemsg_edit_handler( const ts::wstr_c &v, bool )
 {
     tempfolder_handlemsg = v;
     mod();
     return true;
 }
 
-bool dialog_settings_c::date_msg_tmpl_edit_handler(const ts::wstr_c &v)
+bool dialog_settings_c::date_msg_tmpl_edit_handler(const ts::wstr_c &v, bool )
 {
     date_msg_tmpl = to_utf8(v);
     mod();
     return true;
 }
-bool dialog_settings_c::date_sep_tmpl_edit_handler(const ts::wstr_c &v)
+bool dialog_settings_c::date_sep_tmpl_edit_handler(const ts::wstr_c &v, bool )
 {
     date_sep_tmpl = to_utf8(v);
     mod();
@@ -1266,7 +1266,7 @@ void dialog_settings_c::proxy_handler(const ts::str_c& p)
     mod();
 }
 
-bool dialog_settings_c::proxy_addr_handler( const ts::wstr_c & t )
+bool dialog_settings_c::proxy_addr_handler( const ts::wstr_c & t, bool )
 {
     proxy_addr = to_str(t);
     if (RID r = find(CONSTASTR("proxyaddr")))
@@ -1296,7 +1296,7 @@ bool dialog_settings_c::histopts_handler(RID, GUIPARAM p)
 }
 
 
-bool dialog_settings_c::load_history_count_handler(const ts::wstr_c &v)
+bool dialog_settings_c::load_history_count_handler(const ts::wstr_c &v, bool )
 {
     load_history_count = v.as_int();
     if (load_history_count < 10)
@@ -1486,7 +1486,7 @@ bool dialog_settings_c::commonopts_handler( RID, GUIPARAM p )
     return true;
 }
 
-bool dialog_settings_c::away_minutes_handler(const ts::wstr_c &v)
+bool dialog_settings_c::away_minutes_handler(const ts::wstr_c &v, bool )
 {
     set_away_on_timer_minutes_value = v.as_int();
     int o = set_away_on_timer_minutes_value;
@@ -1508,7 +1508,7 @@ bool dialog_settings_c::notification_handler( RID, GUIPARAM p )
 
 }
 
-bool dialog_settings_c::desktop_notification_duration_handler( const ts::wstr_c &v )
+bool dialog_settings_c::desktop_notification_duration_handler( const ts::wstr_c &v, bool )
 {
     desktop_notification_duration = v.as_int();
     int o = desktop_notification_duration;
@@ -1711,11 +1711,13 @@ void dialog_settings_c::mod()
         PREPARE(set_away_on_timer_minutes_value, prf().inactive_time());
         set_away_on_timer_minutes_value_last = set_away_on_timer_minutes_value;
 
-        bgroups[BGROUP_COMMON1].add(UIOPT_SHOW_SEARCH_BAR);
-        bgroups[BGROUP_COMMON1].add(UIOPT_TAGFILETR_BAR);
         bgroups[BGROUP_COMMON1].add(UIOPT_SHOW_NEWCONN_BAR);
-        bgroups[BGROUP_COMMON1].add(UIOPT_PROTOICONS);
-        bgroups[BGROUP_COMMON1].add( UIOPT_GEN_IDENTICONS );
+
+        bgroups[ BGROUP_CLIST ].add( UIOPT_SHOW_SEARCH_BAR );
+        bgroups[ BGROUP_CLIST ].add( UIOPT_TAGFILETR_BAR );
+        bgroups[ BGROUP_CLIST ].add( UIOPT_PROTOICONS );
+        bgroups[ BGROUP_CLIST ].add( UIOPT_GEN_IDENTICONS );
+        bgroups[ BGROUP_CLIST ].add( CLOPT_GROUP_CONTACTS_PROTO );
 
         bgroups[BGROUP_COMMON2].add(UIOPT_AWAYONSCRSAVER);
         bgroups[BGROUP_COMMON2].add(0, set_away_on_timer_minutes_value > 0);
@@ -1747,7 +1749,6 @@ void dialog_settings_c::mod()
         
         bgroups[ BGROUP_SOUNDS_NOTIFY ].add( SNDOPT_MUTE_ON_AWAY );
         bgroups[ BGROUP_SOUNDS_NOTIFY ].add( SNDOPT_MUTE_ON_DND );
-        
 
         bgroups[BGROUP_HISTORY].add(MSGOP_KEEP_HISTORY);
         bgroups[BGROUP_HISTORY].add(MSGOP_LOAD_WHOLE_HISTORY);
@@ -1817,6 +1818,7 @@ void dialog_settings_c::mod()
 
     PREPARE( dsp_flags, cfg().dsp_flags() );
 
+    PREPARE( mute_all_sounds, cfg().sounds_flags() != 0 );
 
 #define SND(s) PREPARE( sndfn[snd_##s], cfg().snd_##s() ); PREPARE( sndvol[snd_##s], cfg().snd_vol_##s() );
     SOUNDS
@@ -1837,6 +1839,7 @@ void dialog_settings_c::mod()
     {
         m.add_sub( TTT("Profile",1) )
             .add(TTT("General",32), 0, TABSELMI(MASK_PROFILE_COMMON) )
+            .add( TTT("Contact list",476), 0, TABSELMI( MASK_PROFILE_CLIST ) )
             .add(TTT("Notifications",401), 0, TABSELMI(MASK_PROFILE_NOTIFICATIONS))
             .add(TTT("Chat",109), 0, TABSELMI(MASK_PROFILE_CHAT) )
             .add(TTT("Group chat",305), 0, TABSELMI(MASK_PROFILE_GCHAT) )
@@ -1954,6 +1957,9 @@ void dialog_settings_c::mod()
     dm().hgroup(TTT("Presets",298));
     dm().combik(HGROUP_MEMBER).setmenu(get_list_avaialble_sound_presets()).setname(CONSTASTR("availablepresets"));
     dm().button(HGROUP_MEMBER, TTT("Apply preset",299), DELEGATE(this, applysoundpreset)).width(250).height(25).setname(CONSTASTR("applypreset"));
+    dm().vspace();
+    dm().checkb( ts::wsptr(), DELEGATE( this, mute_handler ), mute_all_sounds ? 1 : 0 ).setmenu(
+        menu_c().add( TTT("Mute all sounds",475), 0, MENUHANDLER(), CONSTASTR("1") ) );
 
     ts::ivec2 bsz(20);
     if (const button_desc_s *bdesc = gui->theme().get_button(CONSTASTR("play")))
@@ -1992,11 +1998,7 @@ void dialog_settings_c::mod()
         
         dm().vspace();
         dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_COMMON1, handler), bgroups[BGROUP_COMMON1].current).setmenu(
-                menu_c().add(TTT("Show search bar ($)",341) / CONSTWSTR("Ctrl+F"), 0, MENUHANDLER(), CONSTASTR("1"))
-                        .add(TTT("Show tags filter bar ($)",65) / CONSTWSTR("Ctrl+T"), 0, MENUHANDLER(), CONSTASTR("2"))
-                        .add(TTT("Show [i]join network[/i] button ($)",344)/ CONSTWSTR("Ctrl+N"), 0, MENUHANDLER(), CONSTASTR("4"))
-                        .add( TTT( "Protocol icons as contact state indicator", 296 ), 0, MENUHANDLER(), CONSTASTR( "8" ) )
-                        .add( TTT("Generate identicons for contacts without avatar",469), 0, MENUHANDLER(), CONSTASTR( "16" ) )
+            menu_c().add(TTT("Show [i]join network[/i] button ($)",344)/ CONSTWSTR("Ctrl+N"), 0, MENUHANDLER(), CONSTASTR("1"))
         );
 
 
@@ -2018,6 +2020,17 @@ void dialog_settings_c::mod()
         dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_COMMON3, handler), bgroups[BGROUP_COMMON3].current).setmenu(
             menu_c().add(TTT("I'm power user. Please, show me advanced settings.",396), 0, MENUHANDLER(), CONSTASTR("1"))
             );
+
+        dm << MASK_PROFILE_CLIST; //____________________________________________________________________________________________________//
+        dm().page_caption( TTT("Contact list settings",477) );
+
+        dm().checkb( ts::wstr_c(), DELEGATE( bgroups + BGROUP_CLIST, handler ), bgroups[ BGROUP_CLIST ].current ).setmenu(
+            menu_c().add( TTT( "Show search bar ($)", 341 ) / CONSTWSTR( "Ctrl+F" ), 0, MENUHANDLER(), CONSTASTR( "1" ) )
+            .add( TTT( "Show tags filter bar ($)", 65 ) / CONSTWSTR( "Ctrl+T" ), 0, MENUHANDLER(), CONSTASTR( "2" ) )
+            .add( TTT( "Protocol icons as contact state indicator", 296 ), 0, MENUHANDLER(), CONSTASTR( "4" ) )
+            .add( TTT( "Generate identicons for contacts without avatar", 469 ), 0, MENUHANDLER(), CONSTASTR( "8" ) )
+            .add( TTT("Group contacts by protocol",478), 0, MENUHANDLER(), CONSTASTR( "16" ) )
+        );
 
         dm << MASK_PROFILE_NOTIFICATIONS; //____________________________________________________________________________________________________//
         dm().page_caption(TTT("Notifications settings",402));
@@ -2226,7 +2239,7 @@ void dialog_settings_c::mod()
     return 1;
 }
 
-bool dialog_settings_c::debug_local_upd_url(const ts::wstr_c &v)
+bool dialog_settings_c::debug_local_upd_url(const ts::wstr_c &v, bool )
 {
     if (v.is_empty())
         debug.unset(CONSTASTR("local_upd_url"));
@@ -2343,7 +2356,7 @@ void dialog_settings_c::videocodecs_tab_selected()
     }
 }
 
-bool dialog_settings_c::set_bitrate(const ts::wstr_c &t)
+bool dialog_settings_c::set_bitrate(const ts::wstr_c &t, bool )
 {
     video_bitrate = t.as_int();
     if (video_bitrate < 0) video_bitrate = 0;
@@ -2426,6 +2439,14 @@ bool dialog_settings_c::sndselhandler( RID srid, GUIPARAM p )
 
     return true;
 }
+
+bool dialog_settings_c::mute_handler( RID, GUIPARAM p )
+{
+    mute_all_sounds = p != nullptr;
+    mod();
+    return true;
+}
+
 
 menu_c dialog_settings_c::get_list_avaialble_sound_presets()
 {
@@ -3131,6 +3152,9 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
     if (cfg().dsp_flags(dsp_flags))
         gmsg<ISOGM_CHANGED_SETTINGS>(0, CFG_DSPFLAGS).send();
 
+    cfg().sounds_flags( mute_all_sounds ? 1 : 0 );
+        //gmsg<ISOGM_CHANGED_SETTINGS>( 0, CFG_DSPFLAGS ).send();
+
     cfg().misc_flags( misc_flags );
     gui->disable_special_border( ( misc_flags & MISCF_DISABLEBORDER ) != 0 );
     
@@ -3461,7 +3485,7 @@ bool dialog_settings_c::dspf_handler( RID, GUIPARAM p )
     return true;
 }
 
-ts::wstr_c dialog_settings_c::fix_camera_res(const ts::wstr_c &tr)
+ts::wstr_c dialog_settings_c::fix_camera_res(const ts::wstr_c &tr )
 {
     ts::ivec2 res(0);
     if (tr.get_length()) tr.split(res.x, res.y, ",");
@@ -3928,25 +3952,25 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
     return 0;
 }
 
-bool dialog_setup_network_c::uname_edit(const ts::wstr_c &t)
+bool dialog_setup_network_c::uname_edit(const ts::wstr_c &t, bool )
 {
     params.uname = to_utf8(t);
     return true;
 }
 
-bool dialog_setup_network_c::ustatus_edit(const ts::wstr_c &t)
+bool dialog_setup_network_c::ustatus_edit(const ts::wstr_c &t, bool )
 {
     params.ustatus = to_utf8(t);
     return true;
 }
 
-bool dialog_setup_network_c::netname_edit(const ts::wstr_c &t)
+bool dialog_setup_network_c::netname_edit(const ts::wstr_c &t, bool )
 {
     params.networkname = to_utf8(t);
     return true;
 }
 
-bool dialog_setup_network_c::login_edit( const ts::wstr_c &t )
+bool dialog_setup_network_c::login_edit( const ts::wstr_c &t, bool )
 {
     params.configurable.login = to_utf8( t );
     ctlenable( CONSTASTR("dialog_button_1"), !params.configurable.login.is_empty() );
@@ -3960,7 +3984,7 @@ bool dialog_setup_network_c::login_edit( const ts::wstr_c &t )
     return true;
 }
 
-bool dialog_setup_network_c::password_edit( const ts::wstr_c &t )
+bool dialog_setup_network_c::password_edit( const ts::wstr_c &t, bool )
 {
     params.configurable.set_password( to_utf8( t ) );
     password_changed = true;
@@ -4025,13 +4049,13 @@ bool dialog_setup_network_c::password_edit( const ts::wstr_c &t )
     return ts::ivec2(400, 200 + addh);
 }
 
-bool dialog_setup_network_c::network_importfile(const ts::wstr_c & t)
+bool dialog_setup_network_c::network_importfile(const ts::wstr_c & t, bool )
 {
     params.importcfg = t;
     return true;
 }
 
-bool dialog_setup_network_c::network_serverport(const ts::wstr_c & t)
+bool dialog_setup_network_c::network_serverport(const ts::wstr_c & t, bool )
 {
     params.configurable.initialized = true;
     params.configurable.server_port = t.as_int();
@@ -4078,7 +4102,7 @@ void dialog_setup_network_c::set_proxy_type_handler(const ts::str_c& p)
     }
 }
 
-bool dialog_setup_network_c::set_proxy_addr_handler(const ts::wstr_c & t)
+bool dialog_setup_network_c::set_proxy_addr_handler(const ts::wstr_c & t, bool )
 {
     params.configurable.initialized = true;
     params.configurable.proxy.proxy_addr = to_str(t);

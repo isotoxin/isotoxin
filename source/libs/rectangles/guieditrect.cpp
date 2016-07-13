@@ -57,11 +57,12 @@ bool gui_textedit_c::text_replace( int pos, int num, const ts::wsptr &str, text_
 
         int pos0 = pos, pos1 = pos + num;
         placeholder_text = get_text_and_fix_pos(&pos0, &pos1);
+        ts::wstr_c old = placeholder_text;
         placeholder_text.replace(pos0, pos1 - pos0, str);
 
         flags.clear(F_CHANGED_DURING_CHANGE_HANDLER);
         AUTOCLEAR(flags, F_CHANGE_HANDLER);
-        if (!check_text_func(placeholder_text))
+        if (!check_text_func(placeholder_text, !old.equals( placeholder_text )))
         {
             placeholder_text = placeholder_text_backup;
             return false;
@@ -992,8 +993,10 @@ void gui_textedit_c::undo()
     if (_undo.size() == 0) return;
     _redo.push(text.array(), get_caret_char_index(), start_sel, CH_REPLACE);
     snapshot_s &ls = _undo.last();
+    ts::wstr_c oldt = get_text();
     text.replace(0, text.size(), ls.text.begin(), ls.text.size() );
-    if (check_text_func) check_text_func(get_text());
+    ts::wstr_c newt = get_text();
+    if (check_text_func) check_text_func(newt, !oldt.equals(newt));
     start_sel = ls.selindex;
     flags.set(F_LINESDIRTY | F_TEXTUREDIRTY);
     set_caret_pos(ls.caret_index);
@@ -1006,8 +1009,10 @@ void gui_textedit_c::redo()
     if (_redo.size() == 0) return;
     _undo.push(text.array(), get_caret_char_index(), start_sel, CH_REPLACE);
     snapshot_s &ls = _redo.last();
+    ts::wstr_c oldt = get_text();
     text.replace(0, text.size(), ls.text.begin(), ls.text.size());
-    if (check_text_func) check_text_func(get_text());
+    ts::wstr_c newt = get_text();
+    if (check_text_func) check_text_func( newt, !oldt.equals( newt ) );
     start_sel = ls.selindex;
     flags.set(F_LINESDIRTY | F_TEXTUREDIRTY);
     set_caret_pos(ls.caret_index);

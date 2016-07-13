@@ -189,8 +189,8 @@ struct sbhelper_s
 };
 
 
-bool check_always_ok(const ts::wstr_c &);
-bool check_always_ok_except_empty(const ts::wstr_c &);
+bool check_always_ok(const ts::wstr_c &, bool);
+bool check_always_ok_except_empty(const ts::wstr_c &, bool);
 
 void text_remove_tags(ts::str_c &text_utf8);
 ts::str_c text_remove_cstm(const ts::str_c &text_utf8);

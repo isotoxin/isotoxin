@@ -421,6 +421,9 @@ void mediasystem_c::free_voice_channel( const uint64 &key )
 
 void play_sound( sound_e sss, bool looped, bool forced )
 {
+    if ( cfg().sounds_flags() )
+        return;
+
     if ( !forced )
     {
         if ( contacts().get_self().get_ostate() == COS_AWAY && prf().get_options().is( SNDOPT_MUTE_ON_AWAY ) )

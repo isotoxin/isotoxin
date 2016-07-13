@@ -183,11 +183,11 @@ protected:
 
         DEBUGCODE(bool initialization = true;) // protection flag - [this] can be changed while [initialization] == true due resize of array realloc.
 
-        bool updvalue( const ts::wstr_c &t )
+        bool updvalue( const ts::wstr_c &t, bool changed )
         {
             ASSERT( _TEXT == ctl || _PASSWD == ctl || _PATH == ctl || _FILE == ctl );
             options.clear( o_changed );
-            if (textchecker && textchecker(t))
+            if (textchecker && textchecker(t, changed ))
             {
                 if (!options.is( o_changed ))
                     text = t;

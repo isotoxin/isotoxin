@@ -472,6 +472,11 @@
 472=Desktop area
 473=Enter password again
 474=Unchanged
+475=Mute all sounds
+476=Contact list
+477=Contact list settings
+478=Group contacts by protocol
+479=Full size avatar of $
 900=information
 901=warning
 902=error
@@ -494,6 +499,7 @@
 919=QR code
 920=New contact tag(s)
 921=Rename tag
+922=Avatar
 1000=Incoming message
 1001=Incoming file
 1002=File receiving started

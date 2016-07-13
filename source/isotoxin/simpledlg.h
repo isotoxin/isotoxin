@@ -10,6 +10,7 @@ struct dialog_msgbox_params_s
     ts::str_c on_ok_par;
     MENUHANDLER on_cancel_h;
     ts::str_c on_cancel_par;
+    ts::bitmap_c bmp;
     bool bcancel_ = false;
     bool bok_ = true;
 
@@ -18,6 +19,9 @@ struct dialog_msgbox_params_s
     dialog_msgbox_params_s(rtitle_e tt,
                            const ts::wstr_c &desc
                            ) :etitle(tt), desc(desc)  {}
+    dialog_msgbox_params_s( rtitle_e tt,
+                            const ts::wstr_c &desc, const ts::bitmap_c &ibmp
+                            ) :etitle( tt ), desc( desc ), bmp( ibmp ) {}
 
     dialog_msgbox_params_s& bok(const ts::wsptr &t) {ok_button_text = t; return *this;}
     dialog_msgbox_params_s& bcancel(bool f=true, const ts::wsptr &t = ts::wsptr()) {bcancel_ = f; cancel_button_text = t; return *this;}
@@ -41,7 +45,6 @@ class dialog_msgbox_c : public gui_isodialog_c
     dialog_msgbox_params_s m_params;
     ts::array_inplace_t<bcreate_s, 0> m_buttons;
     int height = 190;
-    ts::bitmap_c qrbmp;
 
     bool copy_text(RID, GUIPARAM);
     bool on_enter_press_func(RID, GUIPARAM);
@@ -67,6 +70,7 @@ public:
     static dialog_msgbox_params_s mb_warning(const ts::wstr_c &text);
     static dialog_msgbox_params_s mb_error(const ts::wstr_c &text);
     static dialog_msgbox_params_s mb_qrcode(const ts::wstr_c &text);
+    static dialog_msgbox_params_s mb_avatar( const ts::wstr_c &text, const ts::bitmap_c &bmp );
 
     /*virtual*/ ts::ivec2 get_min_size() const override { return ts::ivec2(500, height); }
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
@@ -205,7 +209,7 @@ protected:
     /*virtual*/ void getbutton(bcreate_s &bcr) override;
     /*virtual*/ int additions(ts::irect & border) override;
 
-    bool on_edit(const ts::wstr_c &);
+    bool on_edit(const ts::wstr_c &, bool);
     /*virtual*/ void on_confirm() override;
     /*virtual*/ void on_close() override;
 

@@ -499,7 +499,7 @@ public:
     // sort
 
     /// quick-sort the array.
-    template < typename T, typename F > bool tsort(const F &comp, aint ileft = 0, aint irite = -1)
+    template < typename T, typename F > bool q_sort(const F &comp, aint ileft = 0, aint irite = -1)
     {
         TS_STATIC_CHECK(is_movable<T>::value, "movable type expected!");
         
@@ -586,9 +586,9 @@ public:
         return sorted;
     }
 
-    template<typename T> bool tsort(aint ileft = 0, aint irite = -1)
+    template<typename T> bool q_sort(aint ileft = 0, aint irite = -1)
     {
-        return tsort<T>([](const T * x1, const T * x2)->bool { return (*x1) < (*x2); }, ileft, irite);
+        return q_sort<T>([](const T * x1, const T * x2)->bool { return (*x1) < (*x2); }, ileft, irite);
     }
 
 
@@ -1099,7 +1099,7 @@ public:
     T pop() { return this->template tpop<T>(); }
     void  push(const T &d) {this->template tpush<T>(d);}
 
-    bool sort(aint ileft = 0, aint irite = -1) { return this->template tsort<T>(ileft, irite); }
+    bool qsort(aint ileft = 0, aint irite = -1) { return this->template q_sort<T>(ileft, irite); }
 
     void remove_slow(aint index, aint co = 1)
     {

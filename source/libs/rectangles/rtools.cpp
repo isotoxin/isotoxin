@@ -140,12 +140,12 @@ void text_remove_tags(ts::str_c &text)
     }
 }
 
-bool check_always_ok(const ts::wstr_c &)
+bool check_always_ok(const ts::wstr_c &, bool)
 {
     return true;
 }
 
-bool check_always_ok_except_empty(const ts::wstr_c &t)
+bool check_always_ok_except_empty(const ts::wstr_c &t, bool)
 {
     return !t.is_empty();
 }

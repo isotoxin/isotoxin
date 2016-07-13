@@ -1575,6 +1575,7 @@ namespace
                 contacts().update_meta();
                 contacts().get_self().reselect();
                 g_app->recreate_ctls(true, true);
+                if ( g_app->contactlist ) g_app->contactlist->clearlist();
 
                 if (decollapse)
                     TSNEW(gmsg<ISOGM_APPRISE>)->send_to_main_thread();

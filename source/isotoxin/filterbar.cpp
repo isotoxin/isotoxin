@@ -315,6 +315,7 @@ void gui_filterbar_c::apply_full_text_search_result()
     if (active)
     {
         gui_contactlist_c &cl = HOLD(getparent()).as<gui_contactlist_c>();
+        cl.fix_sep_visibility();
         cl.scroll_to_child(active, false);
     }
 
@@ -331,10 +332,10 @@ void gui_filterbar_c::refresh_list()
 
     tagschanged = true;
 
-    update_filter(t);
+    update_filter(t, true);
 }
 
-bool gui_filterbar_c::update_filter(const ts::wstr_c & e)
+bool gui_filterbar_c::update_filter(const ts::wstr_c & e, bool)
 {
     ts::wstrings_c ospl( found_stuff.fsplit );
     found_stuff.fsplit.split<ts::wchar>(e, ' ');

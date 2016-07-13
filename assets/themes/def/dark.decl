@@ -95,10 +95,13 @@ colors {
 	htab_item_text_h=#ffa200
 	htab_item_text_ah=#ff7100
 	c_bgo=#6b6f7c
+	s_bgo=#4c3f3f
 	c_text_dnd=#ffffff
 	c_dndtgt_bg=#0b3b46
 	c_dndtgt_text=#d8fff8
 	c_bg=#545358
+	s_bg=#3f3f3f
+	s_text=#00ff68
 	c_text=#e5dad4
 	c_text_spec=#ff9a00
 	c_text_typing=#a0b99d

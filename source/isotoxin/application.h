@@ -312,6 +312,7 @@ public:
 
     ///////////// application_c itself
 
+    ts::safe_ptr<gui_contactlist_c> contactlist;
     RID main;
 
     unsigned F_INITIALIZATION : 1;
@@ -736,6 +737,7 @@ public:
         if (cl) m_post_effect.set(PEF_RECREATE_CTLS_CL); 
         if (m) m_post_effect.set(PEF_RECREATE_CTLS_MSG);
     };
+
     void update_buttons_head() { m_post_effect.set(PEF_UPDATE_BUTTONS_HEAD); };
     void update_buttons_msg() { m_post_effect.set(PEF_UPDATE_BUTTONS_MSG); };
     void hide_show_messageeditor() { m_post_effect.set(PEF_SHOW_HIDE_EDITOR); };

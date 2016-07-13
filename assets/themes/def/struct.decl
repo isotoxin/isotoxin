@@ -495,6 +495,12 @@ rects
      deftextcolor=##me_text_ah
   }
 
+  cseparator
+  {
+    c=0,0,0,1,##s_bg,##s_bgo
+    clientborder=2,2,2,2
+    deftextcolor=##s_text
+  }
 
   contacts=sb
   {

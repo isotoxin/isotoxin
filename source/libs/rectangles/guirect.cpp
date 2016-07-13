@@ -103,17 +103,20 @@ void RID::call_lbclick(const ts::ivec2 &relpos) const
             RID r = s->second;
             HOLD ctl(r);
             evt_data_s d;
-            d.mouse.screenpos = ctl().getprops().screenpos() + s->first;
-            d.mouse.allowchangecursor = false;
-
-            const hover_data_s &hd = gui->get_hoverdata( d.mouse.screenpos );
-            gui->dirty_hover_data();
-
-            if (hd.rid)
+            if (ctl)
             {
-                HOLD x(hd.rid);
-                x().sq_evt(SQ_MOUSE_LDOWN, hd.rid, d);
-                x().sq_evt(SQ_MOUSE_LUP, hd.rid, d);
+                d.mouse.screenpos = ctl().getprops().screenpos() + s->first;
+                d.mouse.allowchangecursor = false;
+
+                const hover_data_s &hd = gui->get_hoverdata( d.mouse.screenpos );
+                gui->dirty_hover_data();
+
+                if ( hd.rid )
+                {
+                    HOLD x( hd.rid );
+                    x().sq_evt( SQ_MOUSE_LDOWN, hd.rid, d );
+                    x().sq_evt( SQ_MOUSE_LUP, hd.rid, d );
+                }
             }
         }
 

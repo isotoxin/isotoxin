@@ -158,16 +158,16 @@ bool dialog_firstrun_c::handler_0( RID, GUIPARAM p )
     return true;
 }
 
-bool dialog_firstrun_c::path_check_0( const ts::wstr_c & t )
+bool dialog_firstrun_c::path_check_0( const ts::wstr_c & t, bool )
 {
     copyto = t;
     pathselected = t;
     updinfo();
     return true;
 }
-bool dialog_firstrun_c::path_check_1( const ts::wstr_c & t )
+bool dialog_firstrun_c::path_check_1( const ts::wstr_c & t, bool ch )
 {
-    if (!check_profile_name(t)) return false;
+    if (!check_profile_name(t, ch)) return false;
     profilename = t;
     updinfo();
     return true;

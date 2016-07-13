@@ -1250,6 +1250,38 @@ int  profile_c::calc_history_between( const contact_key_s&historian, time_t time
     return db->count(CONSTASTR("history"), whr);
 }
 
+ts::bitmap_c profile_c::load_avatar( const contact_key_s& ck )
+{
+    if ( !db ) return ts::bitmap_c();
+
+    struct rdr
+    {
+        ts::blob_c avablob;
+        bool dr( int row, ts::SQLITE_DATAGETTER dg )
+        {
+            ts::data_value_s dv;
+            dg( contacts_s::C_AVATAR, dv );
+            avablob = dv.blob;
+            return true;
+        }
+    } r;
+
+
+    ts::tmp_str_c whr( CONSTASTR( "contact_id=" ) );
+    whr.append_as_num<int>( ck.contactid ).append( CONSTASTR( " and proto_id=" ) ).append_as_num<int>( ck.protoid );
+    db->read_table( CONSTASTR( "contacts" ), DELEGATE( &r, dr ), whr );
+
+    ts::bitmap_c bmp;
+    if ( r.avablob )
+        if ( bmp.load_from_file( r.avablob ) && bmp.info().bytepp() != 4)
+        {
+            ts::bitmap_c bmp4;
+            bmp4 = bmp.extbody();
+            bmp = bmp4;
+        }
+    bmp.premultiply();
+    return bmp;
+}
 
 profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k)
 {

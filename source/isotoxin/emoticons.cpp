@@ -824,7 +824,7 @@ void emoticons_c::generate_full_frame()
             sizes.add() = ts::ivec3( csz, 1 );
     }
 
-    sizes.tsort<ts::ivec3>( []( const ts::ivec3 *s1, const ts::ivec3 *s2 ) { return s1->z == s2->z ? (s1->y > s2->y) : (s1->z > s2->z); } );
+    sizes.q_sort<ts::ivec3>( []( const ts::ivec3 *s1, const ts::ivec3 *s2 ) { return s1->z == s2->z ? (s1->y > s2->y) : (s1->z > s2->z); } );
     
     ts::tmp_tbuf_t<ts::irect> rects;
 

@@ -440,7 +440,7 @@ public:
     }
 
 
-    /*virtual*/ void read_table( const asptr& tablename, SQLITE_TABLEREADER reader, const asptr& where_items ) override
+    /*virtual*/ bool read_table( const asptr& tablename, SQLITE_TABLEREADER reader, const asptr& where_items ) override
     {
         if (ASSERT(db))
         {
@@ -498,9 +498,9 @@ public:
                 }
             } columngetter(reader);
 
-            sqlite3_prepare_v2(db, sql.buffer(), (int)sql.buffer().get_length(), &columngetter.stmt, nullptr);
-
+            return SQLITE_OK == sqlite3_prepare_v2( db, sql.buffer(), (int)sql.buffer().get_length(), &columngetter.stmt, nullptr );
         }
+        return false;
     }
 
     /*virtual*/ void rekey(const uint8 *k, SQLITE_ENCRYPT_PROCESS_CALLBACK cb) override

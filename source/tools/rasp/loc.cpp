@@ -214,7 +214,7 @@ int proc_loc(const wstrings_c & pars)
     //b.detect();
     //lngbp.load(b.as_str<wchar>());
 
-    used_tags.sort();
+    used_tags.qsort();
 
     auto getfreetag = [&]()->int {
         static int lastchecktag = 0;

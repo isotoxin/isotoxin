@@ -234,7 +234,7 @@ public:
         font = &safe_font(f);
     }
 
-    typedef fastdelegate::FastDelegate<bool (const ts::wstr_c &)> TEXTCHECKFUNC;
+    typedef fastdelegate::FastDelegate<bool (const ts::wstr_c &, bool changed)> TEXTCHECKFUNC;
 	TEXTCHECKFUNC check_text_func; // check/update text callback
     virtual void new_text( int caret_char_pos /* utf8 char pos! */ ) {}
 

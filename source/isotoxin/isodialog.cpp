@@ -69,6 +69,7 @@ ts::wstr_c gui_isodialog_c::title( rtitle_e lbl )
     case title_qr_code:                     return MAKE_TITLE(TTT("QR code",919));
     case title_newtags:                     return MAKE_TITLE(TTT("New contact tag(s)",920));
     case title_rentag:                      return MAKE_TITLE(TTT("Rename tag",921));
+    case title_avatar:                      return MAKE_TITLE( TTT( "Avatar", 922 ) );
     }
 
     return APPNAME_CAPTION;

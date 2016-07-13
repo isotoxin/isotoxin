@@ -211,13 +211,13 @@ bool dialog_addcontact_c::authorization_handler( RID, GUIPARAM p )
     return true;
 }
 
-bool dialog_addcontact_c::invite_message_handler(const ts::wstr_c &m)
+bool dialog_addcontact_c::invite_message_handler(const ts::wstr_c &m, bool )
 {
     invitemessage = to_utf8(m);
     return true;
 }
 
-bool dialog_addcontact_c::public_id_handler( const ts::wstr_c &pid )
+bool dialog_addcontact_c::public_id_handler( const ts::wstr_c &pid, bool )
 {
     publicid = to_utf8(pid);
     return true;
@@ -403,7 +403,7 @@ void dialog_addgroup_c::update_lifetime()
     return 0;
 }
 
-bool dialog_addgroup_c::groupname_handler(const ts::wstr_c &m)
+bool dialog_addgroup_c::groupname_handler(const ts::wstr_c &m, bool )
 {
     groupname = to_utf8(m);
     return true;
