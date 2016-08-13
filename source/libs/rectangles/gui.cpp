@@ -254,7 +254,7 @@ void gui_c::heartbeat()
         }
         ++m_checkindex;
     }
-    if (nullptr == ts::master().get_focus())
+    if (nullptr == ts::master().get_focus() && ts::master().is_active)
         if (rectengine_root_c *root = root_by_rid( roots().last(RID()) ))
             if (!root->getrect().getprops().is_collapsed())
                 root->set_system_focus();
@@ -595,6 +595,29 @@ guirect_watch_c::~guirect_watch_c()
         LIST_DEL( this, gui->first_watch, gui->last_watch, prev, next );
 }
 
+void gui_c::restore_focus( RID rid )
+{
+    bool dhd = false;
+    if ( rid == m_hoverdata.active_focus ) { m_hoverdata.active_focus = RID(); dhd = true; }
+    if ( rid == m_hoverdata.root_focus ) { m_hoverdata.root_focus = RID(); m_hoverdata.active_focus = RID(); dhd = true; }
+    if ( dhd ) dirty_hover_data();
+    m_hoverdata.rootfocushistory.find_remove_slow( rid );
+
+    if ( !get_focus() )
+    {
+
+        if ( RID rooti = m_hoverdata.rootfocushistory.last( RID() ) )
+        {
+            m_hoverdata.rootfocushistory.remove_last();
+            if ( allow_input( rooti ) )
+                if ( rectengine_root_c *root = HOLD( rooti )( ).getroot() )
+                {
+                    gui->set_focus( rooti );
+                    root->update_foreground();
+                }
+        }
+    }
+}
 
 void gui_c::nomorerect(RID rid )
 {
@@ -608,23 +631,8 @@ void gui_c::nomorerect(RID rid )
     if (rid == m_hoverdata.rid) { m_hoverdata.rid = RID(); dhd = true; }
     if (dhd) dirty_hover_data();
     if (isroot)
-    {
         m_exclusive_input.find_remove_slow( rid );
 
-        if (!get_focus())
-        {
-            if ( RID rooti = m_hoverdata.rootfocushistory.last( RID() ) )
-            {
-                m_hoverdata.rootfocushistory.remove_last();
-                if ( allow_input( rooti ) )
-                    if ( rectengine_root_c *root = HOLD( rooti )( ).getroot() )
-                    {
-                        gui->set_focus( rooti );
-                        root->update_foreground();
-                    }
-            }
-        }
-    }
     if ( m_hoverdata.root_focus && !m_hoverdata.active_focus )
         m_hoverdata.active_focus = m_hoverdata.root_focus;
 
@@ -747,7 +755,7 @@ public:
 };
 }
 
-void gui_c::make_app_buttons(RID rootappwindow, ts::uint32 allowed_buttons, GET_TOOLTIP closebhint)
+void gui_c::make_app_buttons(RID rootappwindow, ts::uint32 allowed_buttons, bcreate_s *closeb, bcreate_s *minb )
 {
     bcreate_s buttons[] = { 
         {BUTTON_FACE(close), DELEGATE( this, b_close ), CBT_CLOSE, DELEGATE( this, tt_close ) },
@@ -755,7 +763,16 @@ void gui_c::make_app_buttons(RID rootappwindow, ts::uint32 allowed_buttons, GET_
         {BUTTON_FACE(normalize), DELEGATE( this, b_normalize ), CBT_NORMALIZE, DELEGATE( this, tt_normalize ) },
         {BUTTON_FACE(minimize), DELEGATE( this, b_minimize ), CBT_MINIMIZE, DELEGATE( this, tt_minimize ) },
     };
-    if (closebhint) buttons[0].tooltip = closebhint;
+    if ( closeb )
+    {
+        if ( closeb->tooltip ) buttons[ CBT_CLOSE ].tooltip = closeb->tooltip;
+        if ( closeb->handler ) buttons[ CBT_CLOSE ].handler = closeb->handler;
+    }
+    if ( minb )
+    {
+        if ( minb->tooltip ) buttons[ CBT_MINIMIZE ].tooltip = minb->tooltip;
+        if ( minb->handler ) buttons[ CBT_MINIMIZE ].handler = minb->handler;
+    }
     auto setupcustom = [this](bcreate_s &bcr, int tag) -> bcreate_s * {
 
         ASSERT(tag >= CBT_APPCUSTOM);

@@ -477,6 +477,13 @@
 477=Contact list settings
 478=Group contacts by protocol
 479=Full size avatar of $
+480=Multiple windows
+481=Close
+482=There are call with $[br]What do you want to do with this call?
+483=Break
+484=Dont't break
+485=Greeting
+486=Greeting will be sent every time contact appears online, but only once per $ minutes
 900=information
 901=warning
 902=error

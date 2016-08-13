@@ -72,6 +72,8 @@ enum system_query_e
     SQ_CHILD_DESTROYED,     // child array item now nullptr, but size not yet changed
     SQ_CHILD_ARRAY_COUNT,   // child array size changed -> evt_data_s::values.count
 
+    SQ_CLOSE,
+
 #ifdef _DEBUG
     SQ_TEST_00
 #endif
@@ -100,7 +102,9 @@ enum ui_event_e
 template<> struct gmsg<GM_UI_EVENT> : public gmsgbase
 {
     gmsg(ui_event_e evt) :gmsgbase(GM_UI_EVENT), evt(evt) {}
+    gmsg( ui_event_e evt, RID r ) :gmsgbase( GM_UI_EVENT ), evt( evt ), arid(r) {}
     ui_event_e evt;
+    RID arid;
 };
 
 namespace ts {
@@ -444,6 +448,14 @@ public:
     virtual ~autoparam_i();
 };
 
+enum rect_sys_e
+{
+    RS_NORMAL = 0,
+    RS_TOOL = 1,
+    RS_TASKBAR = 2,
+    RS_INACTIVE = 4
+};
+
 namespace newrectkitchen
 {
 
@@ -484,7 +496,7 @@ template<typename R> struct MAKE_ROOT< newrectkitchen::rectwrapper<R> > : public
     operator RID() const { return id; }
     operator R&() { ASSERT(me); return *me; }
     operator ts::safe_ptr<R>() { ASSERT(me); return ts::safe_ptr<R>(me); }
-    void init(bool sys);
+    void init(rect_sys_e sys);
     void operator=(const MAKE_ROOT&) UNUSED;
     MAKE_ROOT(const MAKE_ROOT&) UNUSED;
 };
@@ -562,9 +574,10 @@ class guirect_c : public sqhandler_i
 
 
 #ifndef _FINAL
-    bool m_test_00 = false; // проверка на прохождение SQ_TEST_00 по базовым классам guirect_c
+    bool m_test_00 = false; // check for pass SQ_TEST_00 through base classes guirect_c
 public:
-    bool m_test_01 = false; // проверка вызова created из потомков
+    bool m_test_01 = false; // check for call "created" from inheritors
+
     void prepare_test_00();
 #endif
 
@@ -584,6 +597,8 @@ public:
 	guirect_c(initial_rect_data_s &data);
 	virtual ~guirect_c();
 
+    virtual ts::bitmap_c get_icon( bool for_tray );
+
     virtual void update_offset( ts::aint offset) {} // called from gui_vscrollgroup_c; offset - value of scrollbar shift, required to make rect top
 
     virtual void update_dndobj(guirect_c *donor) {}
@@ -592,19 +607,19 @@ public:
     const ts::wstr_c tooltip() const {return m_tooltip ? m_tooltip() : ts::wstr_c();}
     void tooltip(GET_TOOLTIP gtt)  {m_tooltip = gtt;}
 
-    ts::ivec2 to_screen(const ts::ivec2 &p) const // convers p to screen space
+    ts::ivec2 to_screen(const ts::ivec2 &p) const // converts p to screen space
     {
         return getprops().screenpos() + p;
     }
-    ts::ivec2 to_local(const ts::ivec2 &screenpos) const // convers screenpos to local space
+    ts::ivec2 to_local(const ts::ivec2 &screenpos) const // converts screenpos to local space
     {
         return screenpos - getprops().screenpos();
     }
-    ts::irect to_screen(const ts::irect &r) const // convers r to screen space
+    ts::irect to_screen(const ts::irect &r) const // converts r to screen space
     {
         return r + getprops().screenpos();
     }
-    ts::irect to_local(const ts::irect &screenrect) const // convers screenpos to local space
+    ts::irect to_local(const ts::irect &screenrect) const // converts screenpos to local space
     {
         return screenrect - getprops().screenpos();
     }
@@ -676,7 +691,7 @@ public:
 
     // special function. only internal mechanics should use them
 
-    ts::ivec2 __spec_to_screen_calc(const ts::ivec2 &p) const // convers p to screen space (slow)
+    ts::ivec2 __spec_to_screen_calc(const ts::ivec2 &p) const // converts p to screen space (slow)
     {
         ts::ivec2 r = getprops().pos() + p;
         return (m_parent == RID()) ? r : HOLD(m_parent)().__spec_to_screen_calc(r);
@@ -1080,7 +1095,7 @@ class gui_tooltip_c;
 template<> struct MAKE_ROOT<gui_tooltip_c> : public _PROOT(gui_tooltip_c)
 {
     RID owner;
-    MAKE_ROOT(RID owner):_PROOT(gui_tooltip_c)(), owner(owner) { init(false); }
+    MAKE_ROOT(RID owner):_PROOT(gui_tooltip_c)(), owner(owner) { init( RS_INACTIVE ); }
 };
 
 class gui_tooltip_c : public gui_label_c
@@ -1329,8 +1344,8 @@ template<> struct MAKE_ROOT<gui_popup_menu_c> : public _PROOT(gui_popup_menu_c)
     menu_anchor_s screenpos;
     menu_c menu;
     RID parentmenu;
-    bool sys;
-    MAKE_ROOT(const menu_anchor_s& screenpos, const menu_c &menu, bool sys, RID parentmenu) : _PROOT(gui_popup_menu_c)(), screenpos(screenpos), menu(menu), parentmenu(parentmenu), sys(sys) { init(sys); }
+    bool toolr;
+    MAKE_ROOT(const menu_anchor_s& screenpos, const menu_c &menu, bool toolr, RID parentmenu) : _PROOT(gui_popup_menu_c)(), screenpos(screenpos), menu(menu), parentmenu(parentmenu), toolr( toolr ) { init( toolr ? (rect_sys_e)(RS_TOOL|RS_INACTIVE)  : RS_INACTIVE ); }
     ~MAKE_ROOT();
 };
 
@@ -1377,7 +1392,7 @@ public:
     bool operator()(int, const ts::wsptr& txt, const menu_c &sm);
     bool operator()(int, const menu_item_info_s& inf);
 
-    gui_popup_menu_c(MAKE_ROOT<gui_popup_menu_c> &data) :gui_vscrollgroup_c(data), menu(data.menu), showpoint(data.screenpos), parent_menu(data.parentmenu) { defaultthrdraw = DTHRO_BORDER; flags.init(F_SYSMENU, data.sys); }
+    gui_popup_menu_c(MAKE_ROOT<gui_popup_menu_c> &data) :gui_vscrollgroup_c(data), menu(data.menu), showpoint(data.screenpos), parent_menu(data.parentmenu) { defaultthrdraw = DTHRO_BORDER; flags.init( F_SYSMENU, data.toolr ); }
     /*virtual*/ ~gui_popup_menu_c();
 
     /*virtual*/ void created() override;

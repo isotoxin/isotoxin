@@ -40,6 +40,8 @@ protected:
 
     ts::SQLITE_TABLEREADER get_cfg_reader() { return DELEGATE( this, cfg_reader ); }
 
+public:
+
     template< typename T > struct cvts;
     template<> struct cvts<int>
     {
@@ -109,7 +111,6 @@ protected:
         }
     };
 
-public:
     config_base_c() {}
     ~config_base_c();
 
@@ -146,6 +147,7 @@ enum cfg_misc_flags_e
 {
     MISCF_DISABLE64 = 1,
     MISCF_DISABLEBORDER = 2,
+    MISCF_SPLIT_UI = 4,
 };
 
 class config_c : public config_base_c
@@ -216,6 +218,7 @@ public:
     TEXTWPAR( temp_folder_sendimg, "%TEMP%\\$$$isotoxin\\sendimg\\" )
     TEXTWPAR( temp_folder_handlemsg, "%TEMP%\\$$$isotoxin\\handlemsg\\" )
 
+    TEXTAPAR( convs, "" )
 
 #define SND(s) TEXTWPAR( snd_##s, #s ".ogg" )
     SOUNDS

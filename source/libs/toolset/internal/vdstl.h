@@ -86,18 +86,6 @@ public:
 		return *this;
 	}
 
-	vdlist_iterator operator++(int) {
-		iterator tmp(*this);
-		mp = mp->mListNodeNext;
-		return tmp;
-	}
-
-	vdlist_iterator operator--(int) {
-		iterator tmp(*this);
-		mp = mp->mListNodePrev;
-		return tmp;
-	}
-
 	vdlist_node *mp;
 };
 

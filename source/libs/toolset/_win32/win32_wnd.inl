@@ -314,9 +314,11 @@ class win32_wnd_c : public wnd_c
             //DMSG("wmsize wparam: " << wparam);
             if ( wparam == SIZE_MINIMIZED && wnd )
             {
-                if ( wnd && master().is_active )
+                master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
+
+                if ( wnd )
                 {
-                    master().is_active = false;
+                    master().is_active = istuff.actwnd( wnd, false );
                     wnd->cbs->evt_focus_changed( nullptr );
                 }
 
@@ -363,23 +365,23 @@ class win32_wnd_c : public wnd_c
                 //p.sz.cy = HIWORD( lParam );
             }
             break;
+        case WM_NCCALCSIZE:
+            return 0;
         case WM_NCACTIVATE:
             if ( wnd )
             {
+                master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
 
                 if ( wparam == FALSE )
                 {
-                    if ( master().is_active )
-                    {
-                        master().is_active = false;
-                        wnd->cbs->evt_focus_changed( nullptr );
-                    }
-                } else if ( !master().is_active )
-                {
-                    master().is_active = true;
-                    //wnd->cbs->evt_focus_changed( wnd );
-                }
+                    master().is_active = istuff.actwnd( wnd, false );
+                    wnd->cbs->evt_focus_changed( nullptr );
 
+                } else
+                {
+                    master().is_active = istuff.actwnd( wnd, true );
+                    wnd->cbs->evt_focus_changed( wnd );
+                }
             }
             return TRUE;
         case WM_KILLFOCUS:
@@ -388,9 +390,10 @@ class win32_wnd_c : public wnd_c
             break;
         case WM_SETFOCUS:
 
-            if ( !master().is_active )
+            if ( wnd )
             {
-                master().is_active = true;
+                master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
+                master().is_active = istuff.actwnd( wnd, true );
                 wnd->cbs->evt_focus_changed( wnd );
             }
             break;
@@ -445,11 +448,18 @@ class win32_wnd_c : public wnd_c
             }
             return 0;
         case WM_CLOSE:
+            if ( wnd )
             {
-                // TODO : ask main window about close
-                master().is_app_need_quit = true;
-                PostQuitMessage(0);
+                if ( wnd->cbs->evt_close() )
+                    return 0;
             }
+
+            if ( wnd == master().mainwindow )
+            {
+                master().is_app_need_quit = true;
+                PostQuitMessage( 0 );
+            }
+
             break;
 
         case WM_ERASEBKGND:
@@ -799,7 +809,6 @@ public:
                 }
             }
         }
-
         return fm < 0 ? fmdst : fm;
     }
 
@@ -828,6 +837,23 @@ public:
     {
         l_alpha = CLAMP<uint8>( ts::lround( v * 255.0f ) );
         apply_layered_attributes();
+    }
+
+    /*virtual*/ void update_icon()
+    {
+        LONG exf = GetWindowLongW( hwnd, GWL_EXSTYLE );
+
+        if ( 0 != ( exf & WS_EX_APPWINDOW ) )
+        {
+            master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
+
+            HICON oi = appicon;
+            appicon = get_icon( false );
+            SendMessageW( hwnd, WM_SETICON, ICON_SMALL, (LPARAM)appicon );
+            SendMessageW( hwnd, WM_SETICON, ICON_BIG, (LPARAM)appicon );
+            if ( oi ) istuff.release_icon( oi );
+        }
+
     }
 
     /*virtual*/ void vshow( wnd_show_params_s *shp ) override
@@ -977,6 +1003,7 @@ public:
                             ShowWindow( hwnd, SW_RESTORE );
                             set_focus( reminimization );
                         }
+
                         break;
                     case SW_RESTORE:
                         maxmon = -1;
@@ -1020,8 +1047,11 @@ public:
         uint32 af = WS_POPUP | /*WS_VISIBLE|*/ WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
         uint32 exf = (shp && shp->acceptfiles) ? WS_EX_ACCEPTFILES : 0;
 
-        if ( shp && shp->mainwindow )
-            exf |= WS_EX_APPWINDOW;
+        if ( shp && shp->taskbar )
+        {
+            af &= ~WS_POPUP;
+            exf |= WS_EX_APPWINDOW | WS_OVERLAPPED;
+        }
 
         if ( shp && (shp->layered || shp->opacity < 1.0f) )
             exf |= WS_EX_LAYERED;
@@ -1065,7 +1095,8 @@ public:
         {
             HICON oi = appicon;
             appicon = get_icon( false );
-            SetClassLongPtrW( hwnd, GCLP_HICON, (size_t)appicon );
+            SendMessageW( hwnd, WM_SETICON, ICON_SMALL, (LPARAM)appicon );
+            SendMessageW( hwnd, WM_SETICON, ICON_BIG, (LPARAM)appicon );
             if ( oi ) istuff.release_icon( oi );
         }
 
@@ -1076,9 +1107,6 @@ public:
             opacity( shp->opacity );
             shp->apply( true, false );
         }
-
-        //if ( exf & WS_EX_ACCEPTFILES )
-        //    DragAcceptFiles( hwnd, TRUE );
     }
 
     /*virtual*/ void try_close() override

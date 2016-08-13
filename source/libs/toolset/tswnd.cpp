@@ -8,6 +8,9 @@ wnd_c::~wnd_c()
 {
     cbs->evt_destroy();
     
+    if ( this == master().activewindow )
+        master().activewindow = nullptr;
+
     if ( this == master().mainwindow )
         master().mainwindow = nullptr;
 
@@ -19,6 +22,9 @@ void wnd_c::show( wnd_show_params_s *shp )
 
     if ( master().mainwindow == nullptr && shp && shp->mainwindow )
         master().mainwindow = this;
+
+    if ( shp && shp->taskbar )
+        master().activewindow = this;
 
     flags.init( F_LAYERED, shp && shp->layered );
 }

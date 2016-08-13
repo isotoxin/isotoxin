@@ -128,8 +128,11 @@ ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
 
 ts::uint32 gui_notice_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &c)
 {
-    if (NOTICE_GROUP_CHAT == notice && c.contact->getkey().is_group() && historian == c.contact)
+    if ( NOTICE_GROUP_CHAT == notice && c.contact->getkey().is_group() && historian == c.contact )
+    {
         setup( c.contact );
+        gui->repos_children( &HOLD( getparent() ).as<gui_group_c>() );
+    }
 
     return 0;
 }
@@ -802,24 +805,27 @@ gui_notice_callinprogress_c::gui_notice_callinprogress_c(MAKE_CHILD<gui_notice_c
 
 void gui_notice_callinprogress_c::acquire_display()
 {
+    if ( !sender )
+        return;
+    
+    int ap = sender->getkey().protoid;
+    int cid = sender->getkey().contactid;
+
     if (common.display)
     {
-        common.display->gid = 0;
-        common.display->cid = sender ? sender->getkey().contactid : 0;
+        ASSERT( common.display->ap == ap );
+        ASSERT( common.display->gid == 0 );
+        ASSERT( common.display->cid == cid );
+
+        if ( common.display->notice == nullptr )
+            common.display->notice = this;
+
         return;
     }
 
-    common.display = g_app->current_video_display.get();
+    common.display = g_app->video_displays.get( ap, 0, cid );
     if (common.display->notice == nullptr)
-    {
         common.display->notice = this;
-        common.display->gid = 0;
-        common.display->cid = sender ? sender->getkey().contactid : 0;
-    } else
-    {
-        g_app->current_video_display.release(common.display);
-        common.display = nullptr;
-    }
 }
 
 gui_notice_callinprogress_c::~gui_notice_callinprogress_c()
@@ -831,7 +837,7 @@ gui_notice_callinprogress_c::~gui_notice_callinprogress_c()
     {
         ASSERT(common.display->notice == this);
         common.display->notice = nullptr;
-        if (g_app) g_app->current_video_display.release(common.display);
+        if (g_app) g_app->video_displays.release(common.display);
         common.display = nullptr;
     }
     if (gui)
@@ -876,12 +882,17 @@ const ts::irect *gui_notice_callinprogress_c::vrect()
                 r.rb.y -= common.b_hangup->get_min_size().y + 5;
                 draw_initialization(&getengine(), common.pa.bmp, r, get_default_text_color(), TTT("Waiting for video...",343));
             }
+            
+            bool tlm = false;
 
             if (common.flags.is(common.F_RECTSOK))
             {
                 if (common.display && flags.is(F_VIDEO_SHOW))
                 {
                     common.vsb_draw(getengine(), common.display, common.display_position, common.display_size, false, true );
+
+                    if ( active_protocol_c *ap = prf().ap( sender->getkey().protoid ) )
+                        ap->draw_telemtry( getengine(), sender->getkey().contactid, ts::irect::from_center_and_size( common.display_position, common.display_size ), SETBIT( TLM_AUDIO_SEND_BYTES ) | SETBIT( TLM_AUDIO_RECV_BYTES ) | SETBIT( TLM_VIDEO_SEND_BYTES ) | SETBIT( TLM_VIDEO_RECV_BYTES ) ), tlm = true;;
 
                     if (camera && (common.cam_previewsize >> ts::ivec2(0)))
                     {
@@ -2229,6 +2240,15 @@ gui_noticelist_c::~gui_noticelist_c()
 {
     int h = 0;
     int w = width_for_children();
+    if ( w == 0 )
+    {
+        HOLD p( getparent() );
+        w = p().getprops().size().x;
+        if ( const theme_rect_s *th = p().themerect() )
+            w -= th->clborder_x();
+        if ( const theme_rect_s *th = themerect() )
+            w -= th->clborder_x();
+    }
     for (rectengine_c *e : getengine())
         if (e) { h = ts::tmax(h, e->getrect().get_height_by_width(w)); }
 
@@ -2237,7 +2257,7 @@ gui_noticelist_c::~gui_noticelist_c()
 /*virtual*/ ts::ivec2 gui_noticelist_c::get_max_size() const
 {
     ts::ivec2 sz = __super::get_max_size();
-    if (!owner || owner->getkey().is_self())
+    if (!historian || historian->getkey().is_self())
     {
         sz.y = 0;
         int w = width_for_children();
@@ -2355,44 +2375,69 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED> &)
     return 0;
 }
 
+ts::uint32 gui_noticelist_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &c )
+{
+    if ( c.conversation && c.conversation != getparent() )
+        return 0;
+
+    if ( g_app->F_SPLIT_UI )
+        historian = c.contact;
+
+    return 0;
+}
+
+void gui_noticelist_c::on_rotten_contact()
+{
+    clear_list();
+    historian = nullptr;
+
+    if ( g_app->F_SPLIT_UI )
+    {
+        desktop_rect_c *dr = ts::ptr_cast<desktop_rect_c *>( &getroot()->getrect() );
+        dr->close_req();
+    }
+}
+
 ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &p)
 {
-    if (owner == nullptr) return 0;
+    if ( historian == nullptr ) return 0;
 
-    if (owner->getkey().is_self())
+    if ( g_app->F_SPLIT_UI )
+        if ( historian != p.contact->get_historian() )
+            return 0;
+
+    if ( historian->getkey().is_self() )
         g_app->reselect( &contacts().get_self(), 0, 0.4 );
 
     contact_c *sender = nullptr;
     if (p.contact->is_rootcontact())
     {
-        if (owner != p.contact) return 0;
+        if ( historian != p.contact ) return 0;
 
         if (p.contact->get_state() == CS_ROTTEN)
         {
-            clear_list();
-            owner = nullptr;
+            on_rotten_contact();
             return 0;
         }
 
-        owner->subiterate( [&](contact_c *c) {
+        historian->subiterate( [&](contact_c *c) {
             if (c->get_state() == CS_REJECTED)
             {
                 sender = c;
             }
         } );
 
-    } else if (owner->subpresent(p.contact->getkey()))
+    } else if ( historian->subpresent(p.contact->getkey()) )
     {
         sender = p.contact;
     }
 
-    if (sender && !owner->getkey().is_group())
+    if (sender && !historian->getkey().is_group())
     {
         if (sender->get_state() == CS_ROTTEN)
         {
             ASSERT(sender->getmeta() && sender->getmeta()->subcount() == 1);
-            clear_list();
-            owner = nullptr;
+            on_rotten_contact();
             return 0;
         }
 
@@ -2459,12 +2504,18 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
     if (NOTICE_KILL_CALL_INPROGRESS == n.n)
         return 0;
 
+    if ( g_app->F_SPLIT_UI )
+    {
+        if ( !historian || historian != n.owner )
+            return 0;
+    }
+
     if (NOTICE_NETWORK == n.n)
     {
         clear_list(false);
-        owner = n.owner;
+        historian = n.owner;
 
-        if (owner->getkey().is_self())
+        if ( historian->getkey().is_self())
         {
             if (g_app->newversion())
             {
@@ -2505,7 +2556,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
             }
         } else
         {
-            owner->subiterate([this](contact_c *c) {
+            historian->subiterate([this](contact_c *c) {
                 if (c->is_calltone())
                 {
                     gui_notice_c &n = create_notice(NOTICE_CALL);
@@ -2518,7 +2569,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                 }
             });
 
-            g_app->enum_file_transfers_by_historian(owner->getkey(), [this](file_transfer_s &ftr) {
+            g_app->enum_file_transfers_by_historian( historian->getkey(), [this](file_transfer_s &ftr) {
                 if (ftr.upload || ftr.accepted) return;
                 contact_c *sender = contacts().find(ftr.sender);
                 if (sender)
@@ -2528,8 +2579,8 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                 }
             });
 
-            if (!owner->getkey().is_group())
-                owner->subiterate([this](contact_c *c) {
+            if (!historian->getkey().is_group())
+                historian->subiterate([this](contact_c *c) {
                     if (c->get_state() == CS_INVITE_SEND || c->is_rejected())
                     {
                         gui_notice_c &n = create_notice(NOTICE_FRIEND_REQUEST_SEND_OR_REJECT);
@@ -2537,10 +2588,10 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
                     }
                 });
 
-            if (owner->is_full_search_result())
+            if ( historian->is_full_search_result())
             {
                 gui_notice_c &ntc = create_notice(NOTICE_PREV_NEXT);
-                ntc.setup(owner);
+                ntc.setup( historian );
             }
         }
 
@@ -2549,7 +2600,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
         return 0;
     }
 
-    if (owner == n.owner)
+    if ( historian == n.owner )
     {
         if (NOTICE_CALL_INPROGRESS == n.n)
         {
@@ -2562,10 +2613,8 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
             n.just_created = &nn;
             nn.setup(n.text, n.sender, n.utag);
             if (n.sender == nullptr || n.utag)
-            {
                 getengine().child_move_top(&nn.getengine());
-                refresh();
-            }
+            refresh();
         }
     }
     
@@ -5271,8 +5320,21 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
     return 0;
 }
 
-ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
+ts::uint32 gui_messagelist_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> &p )
 {
+    if ( g_app->F_SPLIT_UI )
+        if ( p.contact != historian )
+            return 0;
+
+    gmsg<ISOGM_INIT_CONVERSATION> ic( p.contact, p.options, RID() );
+    return gm_handler( ic );
+}
+
+ts::uint32 gui_messagelist_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &p )
+{
+    if ( p.conversation && p.conversation != getparent() )
+        return 0;
+
     auto calc_load_history = [this]( time_t before ) ->int
     {
         int load_n = 0;
@@ -5656,6 +5718,19 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_MESSAGE> & msg) // clear 
 
 ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
 {
+    if ( g_app->F_SPLIT_UI )
+        if ( p.contact != historian )
+            return 0;
+
+    gmsg<ISOGM_INIT_CONVERSATION> ic( p.contact, p.options, RID() );
+    return gm_handler( ic );
+}
+
+ts::uint32 gui_message_editor_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &p )
+{
+    if ( p.conversation && p.conversation != HOLD(getparent())().getparent() )
+        return 0;
+
     if ( !p.contact )
     {
         historian = nullptr;
@@ -5904,7 +5979,7 @@ gui_message_area_c::~gui_message_area_c()
 
 bool gui_message_area_c::change_text_handler(const ts::wstr_c &t, bool changed)
 {
-    if (t.get_length() > 4096)
+    if (t.get_length() > 8192)
         return false; // limit size
 
     send_button->disable( t.is_empty() );
@@ -6076,14 +6151,13 @@ gui_conversation_c::~gui_conversation_c()
 
 ts::ivec2 gui_conversation_c::get_min_size() const
 {
-    return ts::ivec2(300,200);
+    return MIN_CONV_SIZE;
 }
 void gui_conversation_c::created()
 {
     leech(TSNEW(leech_save_proportions_s, CONSTASTR("msg_splitter"), CONSTASTR("4255,0,30709,5035")));
 
-    MAKE_CHILD<gui_contact_item_c> c( getrid(), &contacts().get_self() );
-    c << CIR_CONVERSATION_HEAD;
+    MAKE_CHILD<gui_conversation_header_c> c( getrid(), &contacts().get_self() );
     caption = c;
     noticelist = MAKE_CHILD<gui_noticelist_c>( getrid() );
     msglist = MAKE_VISIBLE_CHILD<gui_messagelist_c>( getrid() );
@@ -6200,8 +6274,23 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CALL_STOPED> &c)
     return 0;
 }
 
-ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> &c )
+ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> &p )
 {
+    if ( g_app->F_SPLIT_UI )
+    {
+        if ( p.contact != caption->getcontact_ptr() )
+            return 0;
+    }
+
+    gmsg<ISOGM_INIT_CONVERSATION> ic( p.contact, p.options, RID() );
+    return gm_handler( ic );
+}
+
+ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &c )
+{
+    if ( c.conversation && c.conversation != getrid() )
+        return 0;
+
     if (!c.contact)
     {
         caption->resetcontact();
@@ -6214,11 +6303,13 @@ ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> &c )
     if (c.contact->is_av())
     {
         static_cast<sound_capture_handler_c *>(g_app)->start_capture();
-        g_app->iterate_avcontacts([&](av_contact_s & avc){
-            if (avc.state != av_contact_s::AV_INPROGRESS)
-                return;
-            avc.set_inactive(avc.c != c.contact);
-        });
+
+        if ( !g_app->F_SPLIT_UI )
+            g_app->iterate_avcontacts([&](av_contact_s & avc){
+                if (avc.state != av_contact_s::AV_INPROGRESS)
+                    return;
+                avc.set_inactive(avc.c != c.contact);
+            });
     }
 
     g_app->hide_show_messageeditor();

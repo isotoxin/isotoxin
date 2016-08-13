@@ -4,6 +4,14 @@
 
 #define HOME_SITE "http://isotoxin.im"
 
+#if defined(_MSC_VER)
+typedef unsigned __int64 u64;
+#elif defined(__GNUC__)
+typedef unsigned long long u64;
+#else
+#error "Sorry, can't compile: unknown target system"
+#endif
+
 enum proto_features_e
 {
     PF_AVATARS                  = (1 << 0),     // plugin support avatars
@@ -193,6 +201,24 @@ enum stream_options_e
     SO_RECEIVING_VIDEO = 8,
 };
 
+enum telemetry_e
+{
+    TLM_AUDIO_SEND_BYTES,
+    TLM_AUDIO_RECV_BYTES,
+    TLM_VIDEO_SEND_BYTES,
+    TLM_VIDEO_RECV_BYTES,
+    TLM_FILE_SEND_BYTES,
+    TLM_FILE_RECV_BYTES,
+
+    TLM_COUNT,
+};
+
+struct tlm_data_s
+{
+    u64 uid;
+    u64 sz;
+};
+
 
 enum config_flags_e
 {
@@ -245,3 +271,4 @@ enum config_flags_e
 
 #define DEBUG_OPT_FULL_DUMP "full_dump"
 #define DEBUG_OPT_LOGGING   "logging"
+#define DEBUG_OPT_TELEMETRY "tlm"

@@ -19,6 +19,8 @@ enum notice_e
     NOTICE_KILL_CALL_INPROGRESS,
 };
 
+#define MIN_CONV_SIZE ts::ivec2(300,200)
+
 class gui_notice_c;
 template<> struct gmsg<ISOGM_NOTICE> : public gmsgbase
 {
@@ -204,27 +206,6 @@ public:
     vsb_c *getcamera() { return camera.get();  }
 };
 
-
-
-namespace rbtn
-{
-    enum
-    {
-        EB_NAME,
-        EB_STATUS,
-        EB_NNAME,
-
-        EB_MAX
-    };
-    struct ebutton_s
-    {
-        RID brid;
-        ts::ivec2 p;
-        bool updated = false;
-    };
-};
-
-
 class gui_notice_network_c : public gui_notice_c
 {
     GM_RECEIVER(gui_notice_network_c, ISOGM_PROFILE_TABLE_SAVED);
@@ -290,13 +271,16 @@ class gui_noticelist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_noticelist_c, ISOGM_NOTICE);
     GM_RECEIVER(gui_noticelist_c, GM_UI_EVENT);
     GM_RECEIVER(gui_noticelist_c, ISOGM_CHANGED_SETTINGS);
+    GM_RECEIVER(gui_noticelist_c, ISOGM_INIT_CONVERSATION);
 
-    ts::shared_ptr<contact_root_c> owner;
+    ts::shared_ptr<contact_root_c> historian;
 
     void clear_list(bool hide = true);
     gui_notice_c &create_notice(notice_e n);
     bool resort_children(RID, GUIPARAM);
     void kill_notice( notice_e n );
+
+    void on_rotten_contact();
 
 public:
     gui_noticelist_c(initial_rect_data_s &data) :gui_vscrollgroup_c(data) {}
@@ -309,7 +293,7 @@ public:
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
     /*virtual*/ void children_repos() override;
 
-    contact_c *get_owner() {return owner;}
+    contact_c *get_owner() {return historian;}
 
     void refresh();
 };
@@ -598,6 +582,7 @@ class gui_messagelist_c : public gui_vscrollgroup_c
     GM_RECEIVER(gui_messagelist_c, ISOGM_DO_POSTEFFECT);
     GM_RECEIVER(gui_messagelist_c, ISOGM_MESSAGE);
     GM_RECEIVER(gui_messagelist_c, ISOGM_SELECT_CONTACT);
+    GM_RECEIVER(gui_messagelist_c, ISOGM_INIT_CONVERSATION);
     GM_RECEIVER(gui_messagelist_c, ISOGM_V_UPDATE_CONTACT);
     GM_RECEIVER(gui_messagelist_c, ISOGM_SUMMON_POST);
     GM_RECEIVER(gui_messagelist_c, ISOGM_DELIVERED);
@@ -736,6 +721,7 @@ class gui_message_editor_c : public gui_textedit_c, public spellchecker_s
     GM_RECEIVER(gui_message_editor_c, ISOGM_SEND_MESSAGE);
     GM_RECEIVER(gui_message_editor_c, ISOGM_MESSAGE);
     GM_RECEIVER(gui_message_editor_c, ISOGM_SELECT_CONTACT);
+    GM_RECEIVER(gui_message_editor_c, ISOGM_INIT_CONVERSATION);
     GM_RECEIVER(gui_message_editor_c, GM_UI_EVENT);
     GM_RECEIVER(gui_message_editor_c, ISOGM_CHANGED_SETTINGS);
     
@@ -814,6 +800,7 @@ class gui_conversation_c : public gui_vgroup_c
 
     GM_RECEIVER(gui_conversation_c, ISOGM_V_UPDATE_CONTACT);
     GM_RECEIVER(gui_conversation_c, ISOGM_SELECT_CONTACT);
+    GM_RECEIVER(gui_conversation_c, ISOGM_INIT_CONVERSATION);
     GM_RECEIVER(gui_conversation_c, ISOGM_CHANGED_SETTINGS);
     GM_RECEIVER(gui_conversation_c, ISOGM_CALL_STOPED);
     GM_RECEIVER(gui_conversation_c, ISOGM_PROFILE_TABLE_SAVED);
@@ -821,7 +808,7 @@ class gui_conversation_c : public gui_vgroup_c
     GM_RECEIVER(gui_conversation_c, GM_DRAGNDROP );
 
 
-    ts::safe_ptr<gui_contact_item_c> caption;
+    ts::safe_ptr<gui_conversation_header_c> caption;
     ts::safe_ptr<gui_messagelist_c> msglist;
     ts::safe_ptr<gui_noticelist_c> noticelist;
     ts::safe_ptr<gui_message_area_c> messagearea;
@@ -840,6 +827,10 @@ public:
     const gui_messagelist_c &get_msglist() const {return *msglist;}
     gui_messagelist_c &get_msglist() { return *msglist; }
     void always_show_editor(bool f = true) { flags.init(F_ALWAYS_SHOW_EDITOR, f); hide_show_messageeditor(); }
+    void set_focus()
+    {
+        gui->set_focus(message_editor);
+    }
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ void created() override;

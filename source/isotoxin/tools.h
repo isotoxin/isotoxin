@@ -209,6 +209,7 @@ enum isogmsg_e
     ISOGM_UPDATE_CONTACT,           // new or update contact - signal from protocol
     ISOGM_V_UPDATE_CONTACT,         // visual update (add to list, or update caption)
     ISOGM_SELECT_CONTACT,           // nullptr means total contacts unload
+    ISOGM_INIT_CONVERSATION,        // in split mode
     ISOGM_CMD_RESULT,
     ISOGM_PROTO_LOADED,
     ISOGM_INCOMING_MESSAGE,
@@ -409,6 +410,7 @@ enum loctext_e
     loc_autostart,
     loc_please_create_profile,
     loc_please_authorize,
+    loc_minimize,
     loc_yes,
     loc_no,
     loc_exit,

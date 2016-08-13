@@ -30,7 +30,6 @@ namespace ts
 	#pragma warning(disable: 4799)		// function has no EMMS instruction
 #endif
 
-typedef signed __int64	sint64;
 typedef unsigned char	Pixel8;
 typedef long			PixCoord;
 typedef	long			PixDim;
@@ -101,7 +100,7 @@ namespace {
 
 struct RotateRow {
 	int leftzero, left, right, rightzero;
-	sint64 xaccum_left, yaccum_left;
+	int64 xaccum_left, yaccum_left;
 };
 }
 
@@ -112,8 +111,8 @@ struct VDRotate2FilterData
 
 	// working variables
 
-	sint64	u_step;
-	sint64	v_step;
+	int64	u_step;
+	int64	v_step;
 
 	RotateRow *rows;
 	int *coeff_tbl;
@@ -211,7 +210,7 @@ static inline uint32 cc(const uint32 *yptr, const int *tbl) {
 #ifdef _M_IX86
 static uint32 __declspec(naked) __cdecl cc_MMX(const uint32 *src, const int *table) {
 
-	static const sint64 x0000200000002000 = 0x0000200000002000i64;
+	static const int64 x0000200000002000 = 0x0000200000002000i64;
 
 	//	[esp + 4]	src
 	//	[esp + 8]	table
@@ -306,12 +305,12 @@ static uint32 ColorRefToPixel32( TSCOLOR rgb) {
 }
 
 static int rotate2_run(VDRotate2FilterData *mfd ) {
-	sint64 xaccum, yaccum;
+	int64 xaccum, yaccum;
 	uint32 *src, *dst, pixFill;
 	PixDim w, h;
 	const RotateRow *rr = mfd->rows;
-	const sint64 du = mfd->u_step;
-	const sint64 dv = mfd->v_step;
+	const int64 du = mfd->u_step;
+	const int64 dv = mfd->v_step;
 
 	unsigned long Ustep, Vstep;
 	ptrdiff_t UVintstepV, UVintstepnoV;
@@ -556,8 +555,8 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 
 			w = mfd->dst_w - (rr->leftzero + rr->left + rr->right + rr->rightzero);
 			if (w) {
-				sint64 xa = xaccum;
-				sint64 ya = yaccum;
+				int64 xa = xaccum;
+				int64 ya = yaccum;
 
 				src = (uint32*)((char *)mfd->src + (int)(xa>>32)*4 + (int)(ya>>32)*mfd->src_pitch);
 
@@ -568,8 +567,8 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
 				do {
 					*dst++ = bicubic_interp_MMX(src, mfd->src_pitch, (unsigned long)xa, (unsigned long)ya, mfd->coeff_tbl);
 
-					xa = (sint64)(unsigned long)xa + Ustep;
-					ya = (sint64)(unsigned long)ya + Vstep;
+					xa = (int64)(unsigned long)xa + Ustep;
+					ya = (int64)(unsigned long)ya + Vstep;
 
 					src += (xa>>32) + (ya>>32 ? UVintstepV : UVintstepnoV);
 
@@ -580,8 +579,8 @@ static int rotate2_run(VDRotate2FilterData *mfd ) {
                 do {
                     *dst++ = bicubic_interp(src, mfd->src_pitch, (unsigned long)xa, (unsigned long)ya, mfd->coeff_tbl);
 
-                    xa = (sint64)(unsigned long)xa + Ustep;
-                    ya = (sint64)(unsigned long)ya + Vstep;
+                    xa = (int64)(unsigned long)xa + Ustep;
+                    ya = (int64)(unsigned long)ya + Vstep;
 
                     src += (xa>>32) + (ya>>32 ? UVintstepV : UVintstepnoV);
 
@@ -691,10 +690,10 @@ static int rotate2_start(VDRotate2FilterData *mfd) {
 	double ang = mfd->angle * (3.14159265358979323846 / 2147483648.0);
 	double ustep = cos(ang);
 	double vstep = -sin(ang);
-	sint64 du, dv;
+	int64 du, dv;
 
-	mfd->u_step = du = (sint64)floor(ustep*4294967296.0 + 0.5);
-	mfd->v_step = dv = (sint64)floor(vstep*4294967296.0 + 0.5);
+	mfd->u_step = du = (int64)floor(ustep*4294967296.0 + 0.5);
+	mfd->v_step = dv = (int64)floor(vstep*4294967296.0 + 0.5);
 
     mfd->rows = (RotateRow *)MM_ALLOC(sizeof(RotateRow)* mfd->dst_h);
     if (mfd->rows == NULL) return 1;
@@ -702,17 +701,17 @@ static int rotate2_start(VDRotate2FilterData *mfd) {
 	// It's time for Mr.Bonehead!!
 
 	int x0, x1, x2, x3, y;
-	sint64 xaccum, yaccum;
-	sint64 xaccum_low, yaccum_low, xaccum_high, yaccum_high, xaccum_base, yaccum_base;
-	sint64 xaccum_low2 = 0, yaccum_low2 = 0, xaccum_high2 = 0, yaccum_high2 = 0;
+	int64 xaccum, yaccum;
+	int64 xaccum_low, yaccum_low, xaccum_high, yaccum_high, xaccum_base, yaccum_base;
+	int64 xaccum_low2 = 0, yaccum_low2 = 0, xaccum_high2 = 0, yaccum_high2 = 0;
 	RotateRow *rr = mfd->rows;
 
 	// Compute allowable source bounds.
 
-	xaccum_base = xaccum_low = -0x80000000i64*mfd->src_w;
-	yaccum_base = yaccum_low = -0x80000000i64*mfd->src_h;
-	xaccum_high = 0x80000000i64*mfd->src_w;
-	yaccum_high = 0x80000000i64*mfd->src_h;
+	xaccum_base = xaccum_low = -0x80000000LL*mfd->src_w;
+	yaccum_base = yaccum_low = -0x80000000LL*mfd->src_h;
+	xaccum_high = 0x80000000LL*mfd->src_w;
+	yaccum_high = 0x80000000LL*mfd->src_h;
 
 	// Compute accumulators for top-left destination position.
 
@@ -731,30 +730,30 @@ static int rotate2_start(VDRotate2FilterData *mfd) {
 	case FILTMODE_BILINEAR:
 		xaccum_low2 = xaccum_low;
 		yaccum_low2 = yaccum_low;
-		xaccum_high2 = xaccum_high - 0x100000000i64;
-		yaccum_high2 = yaccum_high - 0x100000000i64;
-		xaccum_low -= 0x100000000i64;
-		yaccum_low -= 0x100000000i64;
+		xaccum_high2 = xaccum_high - 0x100000000LL;
+		yaccum_high2 = yaccum_high - 0x100000000LL;
+		xaccum_low -= 0x100000000LL;
+		yaccum_low -= 0x100000000LL;
 
-		xaccum -= 0x80000000i64;
-		yaccum -= 0x80000000i64;
+		xaccum -= 0x80000000LL;
+		yaccum -= 0x80000000LL;
 		break;
 
 	case FILTMODE_BICUBIC:
-		xaccum_low2  = xaccum_low  + 0x100000000i64;
-		yaccum_low2  = yaccum_low  + 0x100000000i64;
-		xaccum_high2 = xaccum_high - 0x200000000i64;
-		yaccum_high2 = yaccum_high - 0x200000000i64;
-		xaccum_low -= 0x100000000i64;
-		yaccum_low -= 0x100000000i64;
+		xaccum_low2  = xaccum_low  + 0x100000000LL;
+		yaccum_low2  = yaccum_low  + 0x100000000LL;
+		xaccum_high2 = xaccum_high - 0x200000000LL;
+		yaccum_high2 = yaccum_high - 0x200000000LL;
+		xaccum_low -= 0x100000000LL;
+		yaccum_low -= 0x100000000LL;
 
-		xaccum -= 0x80000000i64;
-		yaccum -= 0x80000000i64;
+		xaccum -= 0x80000000LL;
+		yaccum -= 0x80000000LL;
 		break;
 	}
 
 	for(y=0; y<mfd->dst_h; y++) {
-		sint64 xa, ya;
+		int64 xa, ya;
 
 		xa = xaccum;
 		ya = yaccum;

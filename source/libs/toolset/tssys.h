@@ -83,6 +83,7 @@ public:
     _HANDLER_K on_keyboard;
 
     wnd_c::sptr_t mainwindow;
+    wnd_c::sptr_t activewindow;
 
     int sleep = 0;
     bool is_active = false;

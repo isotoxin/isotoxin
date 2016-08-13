@@ -9,7 +9,6 @@ typedef unsigned short	uint16;
 typedef signed char		sint8;
 typedef unsigned char	uint8;
 typedef signed int		sint32;
-typedef signed __int64	sint64;
 typedef unsigned		Pixel;
 typedef unsigned long	Pixel32;
 typedef unsigned char	Pixel8;
@@ -18,7 +17,6 @@ typedef	long			PixDim;
 
 typedef	ptrdiff_t		PixOffset;
 
-typedef sint64			int64;
 typedef sint32			int32;
 typedef sint16			int16;
 typedef sint8			int8;

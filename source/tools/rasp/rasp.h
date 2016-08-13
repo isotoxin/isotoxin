@@ -1,10 +1,14 @@
 #pragma once
 
+#ifdef _WIN32
 extern HANDLE hConsoleOutput;
 extern CONSOLE_SCREEN_BUFFER_INFO csbi;
-extern void(*PrintCustomHandler)(int color, const ts::asptr&);
+#else
+#define FOREGROUND_RED 1
+#define FOREGROUND_GREEN 2
+#endif // _WIN32
 
-void Print(WORD color, const char *format, ...);
+void Print(int color, const char *format, ...);
 void Print(const char *format, ...);
 
 

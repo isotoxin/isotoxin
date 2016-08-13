@@ -289,6 +289,11 @@ void guirect_c::created()
     DEBUGCODE( m_test_01 = true; )
 }
 
+/*virtual*/ ts::bitmap_c guirect_c::get_icon( bool for_tray )
+{
+    return gui->app_icon( for_tray );
+}
+
 void guirect_c::leech(sqhandler_i * h)
 {
     for ( ts::aint i = m_leeches.size() - 1; i >= 0; --i)
@@ -2170,10 +2175,14 @@ void gui_vscrollgroup_c::children_repos()
         rectengine_c * e = getengine().get_child(i+info.from);
         if (e == nullptr) { inf.h = 0; continue; }
         const guirect_c &r = e->getrect();
-        int h = r.get_height_by_width( info.area.width()-sbwidth );
+        int h = 0;
         ts::ivec2 maxsz = r.get_max_size();
-        if (h == 0)
-            h = r.getprops().is_visible() ? ts::CLAMP(height_need, r.get_min_size().y, maxsz.y) : 0;
+        if ( r.getprops().is_visible() )
+        {
+            h = r.get_height_by_width( info.area.width() - sbwidth );
+            if ( h == 0 )
+                h = ts::CLAMP( height_need, r.get_min_size().y, maxsz.y );
+        }
         e->__spec_set_outofbound(true);
 
         inf.h = h;

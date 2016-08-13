@@ -5,7 +5,7 @@ template<> struct MAKE_ROOT<fullscreenvideo_c> : public _PROOT(fullscreenvideo_c
 {
     ts::ivec2 frompt;
     gui_notice_callinprogress_c *owner;
-    MAKE_ROOT(const ts::ivec2 &frompt, gui_notice_callinprogress_c *owner) :_PROOT(fullscreenvideo_c)(), frompt(frompt), owner(owner) { init(false); }
+    MAKE_ROOT(const ts::ivec2 &frompt, gui_notice_callinprogress_c *owner) :_PROOT(fullscreenvideo_c)(), frompt(frompt), owner(owner) { init(RS_NORMAL); }
     ~MAKE_ROOT();
 };
 

@@ -32,6 +32,10 @@ struct master_internal_stuff_s
         icon_cache_s &operator = ( const icon_cache_s& ) UNUSED;
     };
 
+    array_safe_t< wnd_c, 2 > activewnds;
+    bool actwnd( wnd_c *w, bool a );
+    bool isactwnd( wnd_c *w );
+
     array_inplace_t< icon_cache_s, 4 > icons;
     HICON get_icon( const bitmap_c &bmp );
     void release_icon( HICON icn );

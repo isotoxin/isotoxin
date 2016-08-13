@@ -271,8 +271,7 @@ public:
 class gui_notice_callinprogress_c;
 class vsb_display_c : public vsb_c
 {
-    friend class vsb_display_ptr_c;
-    int ref = 1;
+    friend class vsb_displays_pool_c;
 
     DECLARE_DYNAMIC_BEGIN(vsb_display_c)
     vsb_display_c() {}
@@ -280,7 +279,8 @@ class vsb_display_c : public vsb_c
     DECLARE_DYNAMIC_END(public)
 
     gui_notice_callinprogress_c* notice = nullptr; // pure pointer due it will be checked with nullptr in other thread
-    int gid = 0, cid = 0;
+    int ref = 1;
+    int ap = 0,  gid = 0, cid = 0;
 
     void addref() {++ref;}
     void release();
@@ -288,49 +288,65 @@ class vsb_display_c : public vsb_c
     void update_video_size( const ts::ivec2 &videosize, const ts::ivec2 &viewportsize );
 };
 
-class vsb_display_ptr_c
+class vsb_displays_pool_c
 {
     spinlock::long3264 sync = 0;
-    vsb_display_c *ptr = nullptr;
+    ts::pointers_t<vsb_display_c,0> ptrs;
 public:
 
-    ~vsb_display_ptr_c()
+    ~vsb_displays_pool_c()
     {
         reset();
     }
-    vsb_display_c *get()
+    vsb_display_c *get( int ap, int gid, int cid )
     {
         spinlock::auto_simple_lock l(sync);
-        if (ptr)
+        for ( vsb_display_c *d : ptrs )
         {
-            ptr->addref();
-            return ptr;
+            if ( d->ap == ap && d->gid == gid && d->cid == cid )
+            {
+                d->addref();
+                return d;
+            }
         }
-        ptr = TSNEW(vsb_display_c);
-        ptr->addref();
-        return ptr;
+        vsb_display_c *d = TSNEW(vsb_display_c);
+        d->ap = ap;
+        d->gid = gid;
+        d->cid = cid;
+        d->addref();
+        ptrs.add( d );
+        return d;
     }
 
     void release( vsb_display_c * p )
     {
         spinlock::auto_simple_lock l(sync);
-        if (p == ptr)
-        {
-            ASSERT(p->ref > 1);
-            --p->ref;
 
-        } else
-            p->release();
+        for ( int i = 0, c = ptrs.size(); i<c; ++i )
+        {
+            vsb_display_c *d = ptrs.get(i);
+            if ( d == p )
+            {
+                ASSERT( p->ref > 1 );
+                if ( --p->ref == 0 )
+                {
+                    ptrs.remove_fast( i );
+                    p->ref = 1;
+                    p->release();
+                }
+                return;
+            }
+        }
+
+        p->release();
     }
 
     void reset()
     {
         spinlock::auto_simple_lock l(sync);
-        if (ptr)
-        {
-            ptr->release();
-            ptr = nullptr;
-        }
+        for ( vsb_display_c *d : ptrs )
+            d->release();
+        ptrs.clear();
     }
 };
 

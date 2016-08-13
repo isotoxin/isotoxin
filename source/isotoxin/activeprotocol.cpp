@@ -622,9 +622,54 @@ bool active_protocol_c::cmdhandler(ipcr r)
             m->send_to_main_thread();
         }
         break;
+    case HQ_TELEMETRY:
+        {
+            int tlmi = r.get<int>();
+            if ( tlmi >= 0 && tlmi < TLM_COUNT)
+            {
+                int sz = 0;
+                const tlm_data_s *d = (const tlm_data_s *)r.get_data(sz);
+                if ( sz == sizeof( tlm_data_s ) )
+                    tlms[tlmi].newdata( d );
+            }
+        }
+        break;
     }
 
     return true;
+}
+
+void active_protocol_c::tlm_statistic_s::newdata( const tlm_data_s *d, bool full )
+{
+    if ( full )
+    {
+        newdata( d, false );
+        for ( tlm_statistic_s * i = next; i; i = i->next )
+            if ( i->uid == d->uid )
+            {
+                i->newdata( d, false );
+                return;
+            }
+        tlm_statistic_s *ns = TSNEW( tlm_statistic_s );
+        ns->uid = d->uid;
+        ns->newdata( d, false );
+        ns->next = next;
+
+        next = ns; // final action due multithreaded
+    } else
+    {
+        ts::Time c = ts::Time::current();
+        accum += d->sz;
+        accumcur += d->sz;
+        int dt = ( c - last_update );
+        if ( dt >= 1000 )
+        {
+            float clmp = 1000.0f / dt;
+            accumps = (uint64)(accumcur * clmp);
+            accumcur = 0;
+            last_update = c;
+        }
+    }
 }
 
 void active_protocol_c::unlock_video_frame( incoming_video_frame_s *f )
@@ -844,7 +889,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
         if (typingsendcontact == target->getkey().contactid)
             typingsendcontact = 0;
 
-        ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().contactid << msg.post.utag << (online ? 0 : msg.post.cr_time) << msg.post.message_utf8 );
+        ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().contactid << msg.post.utag << ((online && !msg.resend) ? 0 : msg.post.cr_time) << msg.post.message_utf8 );
     }
     return 0;
 }
@@ -1499,3 +1544,95 @@ void active_protocol_c::export_data()
 {
     ipcp->send( ipcw(AQ_EXPORT_DATA) );
 }
+
+
+
+
+
+
+
+
+
+void active_protocol_c::draw_telemtry( rectengine_c&e, const uint64& uid, const ts::irect& r, ts::uint32 tlmmask )
+{
+    const ts::wsptr tlmss[] =
+    {
+        // no need to localize these text due it just debug
+        CONSTWSTR( "Audio data send: " ),
+        CONSTWSTR( "Audio data recv: " ),
+        CONSTWSTR( "Video data send: " ),
+        CONSTWSTR( "Video data recv: " ),
+        CONSTWSTR( "File data send: " ),
+        CONSTWSTR( "File data recv: " ),
+    };
+
+    ts::wstr_c text;
+
+    auto appendsz = [&]( uint64 sz )
+    {
+        if ( sz < 1024 )
+        {
+            text.append_as_num( sz ).append( CONSTWSTR( " bytes" ) );
+            return;
+        }
+        if ( sz < 1024 * 1024 )
+        {
+            uint64 kb = sz / ( 1024 );
+            uint64 ost = sz - kb * ( 1024 );
+            uint64 pt = ost * 10 / ( 1024 );
+
+            text.append_as_num( kb ).append_char( '.' ).append_as_num( pt ).append( CONSTWSTR( " kbytes" ) );
+            return;
+        }
+
+        uint64 mb = sz / ( 1024 * 1024 );
+        uint64 ost = sz - mb * ( 1024 * 1024 );
+        uint64 pt = ost * 10 / ( 1024 * 1024 );
+
+        text.append_as_num( mb ).append_char( '.' ).append_as_num( pt ).append( CONSTWSTR( " Mbytes" ) );;
+    };
+
+    ts::Time c = ts::Time::current();
+    for( int i=0;i<TLM_COUNT;++i )
+    {
+        int delta = ( c - tlms[ i ].last_update );
+        if ( delta > 10000 )
+            continue;
+
+        for ( tlm_statistic_s * s = tlms[i].next; s; s = s->next )
+            if ( s->uid == uid )
+            {
+                if ( !text.is_empty() ) text.append( CONSTWSTR( "<br>" ) );
+                text.append( tlmss[i] );
+                appendsz( s->accumps );
+                text.append( CONSTWSTR( " per sec, " ) );
+                appendsz( s->accum );
+                text.append( CONSTWSTR(" total") );
+                if ( delta > 1500 )
+                {
+                    text.append( CONSTWSTR( ", no data " ) );
+                    text.append_as_int( delta / 1000 );
+                    text.append( CONSTWSTR( " sec" ) );
+                }
+            }
+    }
+
+    if (!text.is_empty())
+    {
+        ts::irect rr(r.lt, r.lt + gui->textsize( ts::g_default_text_font, text ));
+        rr.intersect(r);
+        draw_data_s &d = e.begin_draw();
+
+        d.offset += rr.lt;
+        d.size = rr.size();
+
+        text_draw_params_s tdp;
+        ts::TSCOLOR col( ts::ARGB(0,255,0) );
+        tdp.forecolor = &col;
+        e.draw( text, tdp );
+
+        e.end_draw();
+
+    }
+}
+

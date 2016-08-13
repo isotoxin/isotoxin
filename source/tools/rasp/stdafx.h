@@ -5,12 +5,15 @@
 
 #pragma once
 
+#ifdef _WIN32
 #include <winsock2.h>
+#include <tchar.h>
+#include <conio.h>
+#endif
+
 #include <malloc.h>
 #include <locale.h>
 #include <stdio.h>
-#include <tchar.h>
-#include <conio.h>
 
 #include <src/cairo.h>
 #include "toolset/toolset.h"

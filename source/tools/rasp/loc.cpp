@@ -77,8 +77,8 @@ svovasearch:
     if ( tttp >= 0 )
     {
         workindex = tttp + 7;
-        const wchar * chch = L">.#_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        if (tttp > 0 && CHARz_find(chch, ll.get_char(tttp-1)) >= 0) goto svovasearch;
+        const wchar_t * chch = L">.#_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        if (tttp > 0 && CHARz_find<wchar_t>(chch, ll.get_char(tttp-1)) >= 0) goto svovasearch;
         if (ll.get_length() <= tttp+3 || (ll.get_char(tttp+3) != ' ' && ll.get_char(tttp+3) != '(')) goto svovasearch;
         int skoba = ll.skip(tttp + 3);
         if (skoba >= ll.get_length()) return false;

@@ -451,10 +451,11 @@ public:
     DEBUGCODE( const theme_c &xtheme(); );
     const ts::tbuf_t<RID>& roots() const {return m_roots;}
     void nomorerect(RID rootrid);
+    void restore_focus( RID rid ); // rid must be just removed root rid (called from root destructor)
 
     ts::ivec2 textsize( const ts::font_desc_c& font, const ts::wstr_c& text, int width_limit = -1, int flags = 0 );
 
-    void make_app_buttons(RID rootappwindow, ts::uint32 allowed_buttons = 0xFFFFFFFF, GET_TOOLTIP closebhint = nullptr);
+    void make_app_buttons(RID rootappwindow, ts::uint32 allowed_buttons = 0xFFFFFFFF, bcreate_s *closeb = nullptr, bcreate_s *minb = nullptr);
 
     int get_free_tag() {return m_tagpool++;}
 
@@ -614,11 +615,11 @@ INLINE const ts::font_desc_c &gui_button_c::get_font() const
 
 template<typename R> MAKE_ROOT<R>::MAKE_ROOT()
 {
-    engine = TSNEW(rectengine_root_c, false);
+    engine = TSNEW(rectengine_root_c, RS_NORMAL );
     gui->allocate_dcoll() = (rectengine_root_c *)engine;
     gui->newrect<newrectkitchen::rectwrapper<R>::type>( *this );
 }
-template<typename R> void MAKE_ROOT< newrectkitchen::rectwrapper<R> >::init( bool sys )
+template<typename R> void MAKE_ROOT< newrectkitchen::rectwrapper<R> >::init( rect_sys_e sys )
 {
     if (me) return;
     engine = TSNEW(rectengine_root_c, sys);

@@ -14,8 +14,8 @@ class dialog_addcontact_c;
 template<> struct MAKE_ROOT<dialog_addcontact_c> : public _PROOT(dialog_addcontact_c)
 {
     dialog_addcontact_params_s prms;
-    MAKE_ROOT() : _PROOT(dialog_addcontact_c)() { init(false); }
-    MAKE_ROOT(const dialog_addcontact_params_s &prms) :_PROOT(dialog_addcontact_c)(), prms(prms) { init(false); }
+    MAKE_ROOT() : _PROOT(dialog_addcontact_c)() { init( RS_NORMAL ); }
+    MAKE_ROOT(const dialog_addcontact_params_s &prms) :_PROOT(dialog_addcontact_c)(), prms(prms) { init( RS_NORMAL ); }
     ~MAKE_ROOT() {}
 };
 
@@ -31,11 +31,17 @@ class dialog_addcontact_c : public gui_isodialog_c
     dialog_addcontact_params_s inparam;
     bool networks_available = false;
     bool send_authorization_request = true;
+    bool resolve_process = false;
 
     ts::wstr_c rtext();
     ts::wstr_c idname() const;
 
     void show_err( cmd_result_e r );
+    process_animation_s pa;
+    void draw_resolve_process();
+    void start_reslove_process();
+    bool resolve_anm( RID, GUIPARAM );
+    ts::ivec2 anmpos();
 
 protected:
     /*virtual*/ int unique_tag() override { return UD_ADDCONTACT; }

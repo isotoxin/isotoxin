@@ -257,6 +257,9 @@ void contacts_s::set(int column, ts::data_value_s &v)
         case C_CUSTOMNAME:
             customname = v.text;
             return;
+        case C_GREETING:
+            greeting = v.text;
+            return;
         case C_COMMENT:
             comment = v.text;
             return;
@@ -307,6 +310,9 @@ void contacts_s::get(int column, ts::data_pair_s& v)
         case C_CUSTOMNAME:
             v.text = customname;
             return;
+        case C_GREETING:
+            v.text = greeting;
+            return;
         case C_COMMENT:
             v.text = comment;
             return;
@@ -338,6 +344,7 @@ ts::data_type_e contacts_s::get_column_type(int index)
         case C_NAME:
         case C_STATUSMSG:
         case C_CUSTOMNAME:
+        case C_GREETING:
         case C_COMMENT:
         case C_TAGS:
         case C_MESSAGEHANDLER:
@@ -379,6 +386,9 @@ void contacts_s::get_column_desc(int index, ts::column_desc_s&cd)
             break;
         case C_CUSTOMNAME:
             cd.name_ = CONSTASTR("customname");
+            break;
+        case C_GREETING:
+            cd.name_ = CONSTASTR( "greeting" );
             break;
         case C_COMMENT:
             cd.name_ = CONSTASTR("comment");
@@ -1653,6 +1663,7 @@ void profile_c::mb_error_load_profile( const ts::wsptr & prfn, profile_load_resu
     {
         static void exit_now(const ts::str_c&)
         {
+            ts::master().activewindow = nullptr;
             ts::master().mainwindow = nullptr;
             ts::master().sys_exit(10);
         }

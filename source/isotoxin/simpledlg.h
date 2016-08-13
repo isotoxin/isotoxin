@@ -6,13 +6,17 @@ struct dialog_msgbox_params_s
     ts::wstr_c desc;
     ts::wstr_c ok_button_text;
     ts::wstr_c cancel_button_text;
+    ts::wstr_c custom_button_text;
     MENUHANDLER on_ok_h;
     ts::str_c on_ok_par;
     MENUHANDLER on_cancel_h;
     ts::str_c on_cancel_par;
+    MENUHANDLER on_custom_h;
+    ts::str_c on_custom_par;
     ts::bitmap_c bmp;
     bool bcancel_ = false;
     bool bok_ = true;
+    bool bcustom_ = false;
 
     dialog_msgbox_params_s() {}
     
@@ -25,8 +29,10 @@ struct dialog_msgbox_params_s
 
     dialog_msgbox_params_s& bok(const ts::wsptr &t) {ok_button_text = t; return *this;}
     dialog_msgbox_params_s& bcancel(bool f=true, const ts::wsptr &t = ts::wsptr()) {bcancel_ = f; cancel_button_text = t; return *this;}
+    dialog_msgbox_params_s& bcustom( bool f = true, const ts::wsptr &t = ts::wsptr() ) { bcustom_ = f; custom_button_text = t; return *this; }
     dialog_msgbox_params_s& on_ok(MENUHANDLER mh, const ts::str_c &par) {on_ok_h = mh; on_ok_par = par; return *this;}
     dialog_msgbox_params_s& on_cancel(MENUHANDLER mh, const ts::str_c &par) {on_cancel_h = mh; on_cancel_par = par; return *this;}
+    dialog_msgbox_params_s& on_custom( MENUHANDLER mh, const ts::str_c &par ) { on_custom_h = mh; on_custom_par = par; return *this; }
 
     RID summon();
 };
@@ -35,7 +41,7 @@ class dialog_msgbox_c;
 template<> struct MAKE_ROOT<dialog_msgbox_c> : public _PROOT(dialog_msgbox_c)
 {
     dialog_msgbox_params_s prms;
-    MAKE_ROOT(const dialog_msgbox_params_s &prms) : _PROOT(dialog_msgbox_c)(), prms(prms) { init(false); }
+    MAKE_ROOT(const dialog_msgbox_params_s &prms) : _PROOT(dialog_msgbox_c)(), prms(prms) { init( RS_NORMAL ); }
     ~MAKE_ROOT() {}
 };
 
@@ -62,6 +68,7 @@ protected:
     bool on_edit(const ts::wstr_c &);
     /*virtual*/ void on_confirm() override;
     /*virtual*/ void on_close() override;
+    bool on_custom(RID, GUIPARAM);
 public:
     dialog_msgbox_c(MAKE_ROOT<dialog_msgbox_c> &data);
     ~dialog_msgbox_c();
@@ -119,7 +126,7 @@ struct dialog_pb_params_s
 template<> struct MAKE_ROOT<dialog_pb_c> : public _PROOT(dialog_pb_c)
 {
     dialog_pb_params_s prms;
-    MAKE_ROOT(const dialog_pb_params_s &prms) : _PROOT(dialog_pb_c)(), prms(prms) { init(false); }
+    MAKE_ROOT(const dialog_pb_params_s &prms) : _PROOT(dialog_pb_c)(), prms(prms) { init( RS_NORMAL ); }
     ~MAKE_ROOT() {}
 };
 
@@ -191,7 +198,7 @@ class dialog_entertext_c;
 template<> struct MAKE_ROOT<dialog_entertext_c> : public _PROOT(dialog_entertext_c)
 {
     dialog_entertext_params_s prms;
-    MAKE_ROOT(const dialog_entertext_params_s &prms) :_PROOT(dialog_entertext_c)(), prms(prms) { init(false); }
+    MAKE_ROOT(const dialog_entertext_params_s &prms) :_PROOT(dialog_entertext_c)(), prms(prms) { init( RS_NORMAL ); }
     ~MAKE_ROOT() {}
 };
 
@@ -277,7 +284,7 @@ class incoming_call_panel_c;
 template<> struct MAKE_ROOT<incoming_call_panel_c> : public _PROOT(incoming_call_panel_c)
 {
     contact_c *c;
-    MAKE_ROOT(contact_c *c) :_PROOT(incoming_call_panel_c)(), c(c) { init(true); }
+    MAKE_ROOT(contact_c *c) :_PROOT(incoming_call_panel_c)(), c(c) { init(RS_TOOL); }
     ~MAKE_ROOT();
 };
 
@@ -322,7 +329,7 @@ template<> struct MAKE_ROOT<incoming_msg_panel_c> : public _PROOT( incoming_msg_
     ts::shared_ptr<contact_root_c> hist;
     ts::shared_ptr<contact_c> sender;
     ts::str_c text;
-    MAKE_ROOT( contact_root_c *h, contact_c *s, const post_s &p ) :_PROOT( incoming_msg_panel_c )( ), hist( h ), sender(s), post(p) { init( true ); }
+    MAKE_ROOT( contact_root_c *h, contact_c *s, const post_s &p ) :_PROOT( incoming_msg_panel_c )( ), hist( h ), sender(s), post(p) { init( RS_TOOL ); }
     ~MAKE_ROOT();
 };
 

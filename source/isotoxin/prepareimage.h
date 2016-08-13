@@ -5,8 +5,8 @@ template<> struct MAKE_ROOT<dialog_prepareimage_c> : public _PROOT(dialog_prepar
 {
     contact_key_s ck;
     ts::bitmap_c bitmap;
-    MAKE_ROOT(const contact_key_s &ck) : _PROOT(dialog_prepareimage_c)(), ck(ck)  { init(false); }
-    MAKE_ROOT(const contact_key_s &ck, const ts::bitmap_c &bitmap) : _PROOT(dialog_prepareimage_c)(), ck(ck), bitmap(bitmap)  { init(false); }
+    MAKE_ROOT(const contact_key_s &ck) : _PROOT(dialog_prepareimage_c)(), ck(ck)  { init( RS_NORMAL ); }
+    MAKE_ROOT(const contact_key_s &ck, const ts::bitmap_c &bitmap) : _PROOT(dialog_prepareimage_c)(), ck(ck), bitmap(bitmap)  { init( RS_NORMAL ); }
     ~MAKE_ROOT() {}
 };
 
@@ -151,7 +151,7 @@ template<> struct MAKE_ROOT<desktopgrab_c> : public _PROOT( desktopgrab_c )
     contact_key_s k;
     int monitor;
     bool av_call;
-    MAKE_ROOT( const ts::irect &r, const contact_key_s &k, int monitor, bool av_call ) :_PROOT( desktopgrab_c )( ), r( r ), k(k), monitor(monitor), av_call( av_call ) { init( true ); }
+    MAKE_ROOT( const ts::irect &r, const contact_key_s &k, int monitor, bool av_call ) :_PROOT( desktopgrab_c )( ), r( r ), k(k), monitor(monitor), av_call( av_call ) { init( RS_TOOL ); }
     ~MAKE_ROOT();
 };
 

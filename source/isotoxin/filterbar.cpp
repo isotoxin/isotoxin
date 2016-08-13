@@ -276,9 +276,7 @@ bool gui_filterbar_c::do_contact_check(RID, GUIPARAM p)
             }
 
             if (cr->gui_item)
-            {
-                MODIFY(*cr->gui_item).visible(check_one(cr));
-            }
+                cr->gui_item->vis_filter(check_one(cr));
         }
     }
 
@@ -308,7 +306,7 @@ void gui_filterbar_c::apply_full_text_search_result()
             if (c->gui_item)
             {
                 c->gui_item->update_text();
-                MODIFY(*c->gui_item).show();
+                c->gui_item->vis_filter(true);
             }
         }
 

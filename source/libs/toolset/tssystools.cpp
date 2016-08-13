@@ -106,6 +106,31 @@ irect   TSCALL monitor_get_max_size_fs(int monitor)
 #endif
 }
 
+irect fix_by_taskbar(irect r)
+{
+    if ( HWND taskbar = FindWindowW( L"Shell_TrayWnd", nullptr ) )
+    {
+        ts::irect tbr;
+        GetWindowRect( taskbar, &ref_cast<RECT>( tbr ) );
+        tbr.intersect( r );
+        if ( tbr && (tbr.width() <= 4 || tbr.height() <= 4) )
+        {
+            if ( r.width() != tbr.width() )
+            {
+                if ( r.rb.x > tbr.lt.x ) r.rb.x = tbr.lt.x;
+                else if ( r.lt.x < tbr.rb.x ) r.lt.x = tbr.rb.x;
+
+            }
+            else if ( r.height() != tbr.height() )
+            {
+                if ( r.rb.y > tbr.lt.y ) r.rb.y = tbr.lt.y;
+                else if ( r.lt.y < tbr.rb.y ) r.lt.y = tbr.rb.y;
+            }
+        }
+    }
+    return r;
+}
+
 irect    TSCALL monitor_get_max_size(int monitor)
 {
 #ifdef _WIN32
@@ -130,7 +155,7 @@ irect    TSCALL monitor_get_max_size(int monitor)
         }
     } mm; mm.mi = monitor;
     EnumDisplayMonitors( nullptr, nullptr, m::calcmrect, (LPARAM)&mm );
-    return mm.rr;
+    return fix_by_taskbar(mm.rr);
 #endif
 #ifdef _NIX
 #endif
@@ -250,7 +275,7 @@ irect    TSCALL wnd_get_max_size(const ts::ivec2& pt)
     }
     else SystemParametersInfo(SPI_GETWORKAREA, 0, &mi.rcWork, 0);
 
-    return ref_cast<irect>(mi.rcWork);
+    return fix_by_taskbar(ref_cast<irect>(mi.rcWork));
 #endif // _WIN32
 #ifdef _NIX
     master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;
@@ -271,7 +296,7 @@ irect    TSCALL wnd_get_max_size(const irect &rfrom)
     }
     else SystemParametersInfo(SPI_GETWORKAREA, 0, &mi.rcWork, 0);
 
-    return ref_cast<irect>(mi.rcWork);
+    return fix_by_taskbar(ref_cast<irect>(mi.rcWork));
 #endif // _WIN32
 #ifdef _NIX
     master_internal_stuff_s &istuff = *(master_internal_stuff_s *)&master().internal_stuff;

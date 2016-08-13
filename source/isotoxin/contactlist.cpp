@@ -11,13 +11,23 @@ MAKE_CHILD<gui_contact_item_c>::~MAKE_CHILD()
     MODIFY(get()).visible(is_visible);
 }
 
+MAKE_CHILD<gui_conversation_header_c>::~MAKE_CHILD()
+{
+    ASSERT( parent );
+    get().update_text();
+    MODIFY( get() ).show();
+}
+
+
 gui_contact_item_c::gui_contact_item_c(MAKE_ROOT<gui_contact_item_c> &data) :gui_clist_base_c(data, CIR_DNDOBJ), contact(data.contact)
 {
+    flags.set(F_VIS_FILTER|F_VIS_GROUP);
     ASSERT(!contact || contact->is_rootcontact());
 }
 
 gui_contact_item_c::gui_contact_item_c(MAKE_CHILD<gui_contact_item_c> &data) : gui_clist_base_c(data, data.role), contact(data.contact)
 {
+    flags.set( F_VIS_FILTER | F_VIS_GROUP );
     if (contact && (CIR_LISTITEM == role || CIR_ME == role))
         if (ASSERT(contact->is_rootcontact()))
         {
@@ -28,11 +38,15 @@ gui_contact_item_c::gui_contact_item_c(MAKE_CHILD<gui_contact_item_c> &data) : g
         }
 }
 
+gui_contact_item_c::gui_contact_item_c( MAKE_CHILD<gui_conversation_header_c> &data ) : gui_clist_base_c( data, CIR_CONVERSATION_HEAD ), contact( data.contact )
+{
+    flags.set( F_VIS_FILTER | F_VIS_GROUP );
+}
+
 gui_contact_item_c::~gui_contact_item_c()
 {
     if (gui)
     {
-        gui->delete_event(DELEGATE(this, update_buttons));
         gui->delete_event(DELEGATE(this, redraw_now));
         gui->delete_event(DELEGATE(this, stop_typing));
         gui->delete_event(DELEGATE(this, animate_typing));
@@ -71,27 +85,6 @@ ts::wstr_c gui_contact_item_c::tt()
 
 namespace
 {
-
-struct head_stuff_s
-{
-    ts::ivec2 last_head_text_pos;
-    rbtn::ebutton_s updr[rbtn::EB_MAX];
-    RID editor;
-    RID bconfirm;
-    RID bcancel;
-    ts::str_c curedit; // utf8
-    ts::safe_ptr<gui_button_c> call_button;
-
-    static bool _edt(const ts::wstr_c & e, bool );
-};
-
-ts::static_setup<head_stuff_s,1000> hstuff;
-
-bool head_stuff_s::_edt(const ts::wstr_c & e, bool )
-{
-    hstuff().curedit = to_utf8(e);
-    return true;
-}
 
 struct leech_edit : public autoparam_i
 {
@@ -148,213 +141,6 @@ struct leech_edit : public autoparam_i
 
 }
 
-bool gui_contact_item_c::apply_edit( RID r, GUIPARAM p)
-{
-    //text_adapt_user_input(hstuff().curedit);
-    if ( flags.is(F_EDITNAME) )
-    {
-        flags.clear(F_EDITNAME);
-        if (contact->getkey().is_self())
-        {
-            if (!hstuff().curedit.is_empty())
-            {
-                if (prf().username(hstuff().curedit))
-                    gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_USERNAME, hstuff().curedit).send();
-            }
-            update_text();
-
-        } else if (contact->getkey().is_group())
-        {
-            if (active_protocol_c *ap = prf().ap(contact->getkey().protoid))
-                ap->rename_group_chat(contact->getkey().contactid, hstuff().curedit);
-
-        } else if (contact->get_customname() != hstuff().curedit)
-        {
-            contact->set_customname(hstuff().curedit);
-            prf().dirtycontact(contact->getkey());
-            flags.set(F_SKIPUPDATE);
-            gmsg<ISOGM_V_UPDATE_CONTACT>(contact).send();
-            flags.clear(F_SKIPUPDATE);
-            update_text();
-        }
-
-    }
-    if (flags.is(F_EDITSTATUS))
-    {
-        flags.clear(F_EDITSTATUS);
-        if (contact->getkey().is_self())
-        {
-            if (prf().userstatus(hstuff().curedit))
-                gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_USERSTATUSMSG, hstuff().curedit).send();
-        }
-        update_text();
-    }
-    g_app->update_buttons_head();
-    return true;
-}
-
-bool gui_contact_item_c::cancel_edit( RID, GUIPARAM)
-{
-    flags.clear(F_EDITNAME|F_EDITSTATUS);
-    g_app->update_buttons_head();
-    return true;
-}
-
-bool gui_contact_item_c::update_buttons( RID r, GUIPARAM p )
-{
-    ASSERT( CIR_CONVERSATION_HEAD == role );
-
-    if (p)
-    {
-        // just update pos of edit buttons
-        bool redr = false;
-        bool noedt = !flags.is(F_EDITNAME|F_EDITSTATUS);
-        for (rbtn::ebutton_s &b : hstuff().updr)
-            if (b.updated)
-            {
-                MODIFY bbm(b.brid);
-                redr |= bbm.pos() != b.p;
-                bbm.pos(b.p).setminsize(b.brid).visible(noedt);
-            }
-
-        if (redr)
-            getengine().redraw();
-
-        if (noedt && hstuff().editor)
-        {
-        } else
-            return true;
-    }
-
-    if ( getrid() == r )
-    {
-        for(rbtn::ebutton_s &b : hstuff().updr)
-            if (b.brid)
-            {
-                b.updated = false;
-                MODIFY(b.brid).visible(false);
-            }
-    }
-
-    if (!hstuff().updr[rbtn::EB_NAME].brid)
-    {
-        gui_button_c &b = MAKE_CHILD<gui_button_c>(getrid());
-        b.set_face_getter(BUTTON_FACE_PRELOADED(editb));
-        b.set_handler(DELEGATE(this, edit0), nullptr);
-        hstuff().updr[rbtn::EB_NAME].brid = b.getrid();
-    }
-
-    if (!hstuff().updr[rbtn::EB_STATUS].brid)
-    {
-        gui_button_c &b = MAKE_CHILD<gui_button_c>(getrid());
-        b.set_face_getter(BUTTON_FACE_PRELOADED(editb));
-        b.set_handler(DELEGATE(this, edit1), nullptr);
-        hstuff().updr[rbtn::EB_STATUS].brid = b.getrid();
-    }
-
-    if (flags.is(F_EDITNAME|F_EDITSTATUS))
-    {
-        ts::str_c eval;
-        if (contact->getkey().is_self())
-        {
-            if (flags.is(F_EDITNAME))
-                eval = prf().username();
-            else
-                eval = prf().userstatus();
-        } else
-        {
-            eval = contact->get_customname();
-            if (eval.is_empty())
-                eval = contact->get_name();
-        }
-        text_prepare_for_edit(eval);
-        if (hstuff().editor)
-        {
-        } else
-        {
-            hstuff().curedit.clear();
-
-            getengine().trunc_children(2);
-
-            gui_textfield_c &tf = (MAKE_CHILD<gui_textfield_c>(getrid(), from_utf8(eval), MAX_PATH_LENGTH, 0, false) << (gui_textedit_c::TEXTCHECKFUNC)head_stuff_s::_edt);
-            hstuff().editor = tf.getrid();
-            tf.leech(TSNEW(leech_edit, hstuff().last_head_text_pos.x));
-            gui->set_focus(hstuff().editor);
-            tf.end();
-            tf.register_kbd_callback(DELEGATE( this, cancel_edit ), ts::SSK_ESC, false);
-            tf.register_kbd_callback(DELEGATE( this, apply_edit ), ts::SSK_ENTER, false);
-
-            gui_button_c &bok = MAKE_CHILD<gui_button_c>(getrid());
-            bok.set_face_getter(BUTTON_FACE_PRELOADED(confirmb));
-            bok.set_handler(DELEGATE(this, apply_edit), nullptr);
-            bok.leech(TSNEW(leech_at_right, &tf, 5));
-            hstuff().bconfirm = bok.getrid();
-
-            gui_button_c &bc = MAKE_CHILD<gui_button_c>(getrid());
-            bc.set_face_getter(BUTTON_FACE_PRELOADED(cancelb));
-            bc.set_handler(DELEGATE(this, cancel_edit), nullptr);
-            bc.leech(TSNEW(leech_at_right, &bok, 5));
-            hstuff().bcancel = bc.getrid();
-
-        }
-
-    } else
-    {
-        getengine().trunc_children(2);
-        hstuff().editor = RID();
-        hstuff().bconfirm = RID();
-        hstuff().bcancel = RID();
-
-    }
-
-    flags.clear(F_CALLBUTTON);
-
-    if (contact && !contact->getkey().is_self() && !contact->getkey().is_group())
-    {
-        int features = 0;
-        int features_online = 0;
-        bool now_disabled = false;
-        contact->subiterate([&](contact_c *c) {
-            if (active_protocol_c *ap = prf().ap(c->getkey().protoid)) 
-            {
-                int f = ap->get_features();
-                features |= f;
-                if (c->get_state() == CS_ONLINE) features_online |= f;
-                if (c->is_av() || c->is_ringtone() || c->is_calltone()) now_disabled = true;
-            }
-        });
-
-        gui_button_c &b_call = MAKE_CHILD<gui_button_c>(getrid());
-        hstuff().call_button = &b_call;
-        b_call.set_face_getter(BUTTON_FACE_PRELOADED(callb));
-        b_call.tooltip(TOOLTIP(TTT("Call",140)));
-
-        b_call.set_handler(DELEGATE(this, audio_call), nullptr);
-        ts::ivec2 minsz = b_call.get_min_size();
-        b_call.leech(TSNEW(leech_dock_right_center_s, minsz.x, minsz.y, 2, -1, 0, 1));
-        MODIFY(b_call).visible(true);
-        if (now_disabled)
-        {
-            b_call.disable();
-            b_call.tooltip(GET_TOOLTIP());
-        } else if (0 == (features & PF_AUDIO_CALLS))
-        {
-            b_call.disable();
-            b_call.tooltip(TOOLTIP(TTT("Call not supported",141)));
-        } else if (0 == (features_online & PF_AUDIO_CALLS))
-        {
-            b_call.disable();
-            b_call.tooltip(TOOLTIP(TTT("Contact offline",143)));
-        }
-
-        flags.set(F_CALLBUTTON);
-    }
-
-    g_app->update_buttons_msg();
-
-    return true;
-}
-
 void gui_contact_item_c::created()
 {
     switch (role)
@@ -397,33 +183,6 @@ void gui_contact_item_c::created()
     }
 }
 
-bool gui_contact_item_c::audio_call(RID btn, GUIPARAM)
-{
-    if (contact)
-    {
-        contact_c *cdef = contact->subget_default();
-        contact_c *c_call = nullptr;
-
-        contact->subiterate([&](contact_c *c) {
-            active_protocol_c *ap = prf().ap(c->getkey().protoid);
-            if (ap && 0 != (PF_AUDIO_CALLS & ap->get_features()))
-            {
-                if (c_call == nullptr || (cdef == c && c->get_state() == CS_ONLINE))
-                    c_call = c;
-                if (c->get_state() == CS_ONLINE && c_call != c && c_call->get_state() != CS_ONLINE)
-                    c_call = c;
-            }
-        });
-
-        if (c_call)
-        {
-            c_call->b_call(RID(), nullptr);
-            btn.call_enable(false);
-        }
-
-    }
-    return true;
-}
 
 ts::uint32 gui_contact_item_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> & c )
 {
@@ -465,17 +224,12 @@ ts::uint32 gui_contact_item_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> & c )
     return 0;
 }
 
-void gui_contact_item_c::setcontact(contact_root_c *c)
+bool gui_contact_item_c::setcontact(contact_root_c *c)
 {
     bool changed = contact != c;
     contact = c;
     update_text(); 
-
-    if ( CIR_CONVERSATION_HEAD == role )
-    {
-        if (changed) cancel_edit();
-        g_app->update_buttons_head();
-    }
+    return changed;
 }
 
 void gui_contact_item_c::typing()
@@ -502,9 +256,6 @@ bool gui_contact_item_c::animate_typing(RID, GUIPARAM)
 
 void gui_contact_item_c::update_text()
 {
-    if (CIR_CONVERSATION_HEAD == role)
-        protocols(true)->clear();
-
     ts::str_c newtext;
     if (contact)
     {
@@ -682,40 +433,8 @@ void gui_contact_item_c::update_text()
     }
     textrect.set_text_only(from_utf8(newtext), false);
 
-    if (CIR_CONVERSATION_HEAD == role && textrect.is_dirty())
-    {
-        for (rbtn::ebutton_s &b : hstuff().updr)
-            b.updated = false;
-        update_buttons(getrid());
-    }
     getengine().redraw();
 
-}
-
-bool gui_contact_item_c::edit0(RID, GUIPARAM p)
-{
-    flags.set(F_EDITNAME);
-    update_buttons(getrid());
-    return true;
-}
-bool gui_contact_item_c::edit1(RID, GUIPARAM)
-{
-    flags.set(F_EDITSTATUS);
-    update_buttons(getrid());
-    return true;
-}
-
-
-void gui_contact_item_c::updrect(const void *, int r, const ts::ivec2 &p)
-{
-    if (r >= rbtn::EB_MAX) return;
-
-    if (prf().is_loaded())
-    {
-        hstuff().updr[r].p = root_to_local(p);
-        hstuff().updr[r].updated = true;
-        DEFERRED_UNIQUE_CALL( 0, DELEGATE(this, update_buttons), 1 );
-    }
 }
 
 /*virtual*/ void gui_contact_item_c::update_dndobj(guirect_c *donor)
@@ -785,124 +504,9 @@ void gui_contact_item_c::protohit()
 
 }
 
-void gui_contact_item_c::clearprotocols()
+int gui_contact_item_c::contact_item_rite_margin() const
 {
-    if (CIR_CONVERSATION_HEAD == role)
-    {
-        protocols(true)->clear();
-        getengine().redraw();
-    }
-}
-
-void gui_contact_item_c::protocols_s::update()
-{
-    str.clear();
-
-    if (!owner)
-        return;
-
-    contact_root_c *cc = owner->contact;
-    if (!cc)
-        return;
-
-    const contact_c *def = !cc->getkey().is_self() ? cc->subget_default() : nullptr;
-
-    struct preproto_s
-    {
-        contact_c *c;
-        tableview_t<active_protocol_s,pt_active_protocol>::row_s *row;
-        int sindex;
-    };
-    ts::tmp_tbuf_t<preproto_s> splist;
-
-    cc->subiterate([&](contact_c *c) {
-        if (auto *row = prf().get_table_active_protocol().find<true>(c->getkey().protoid))
-        {
-            preproto_s &ap = splist.add();
-            ap.c = c;
-            ap.row = row;
-            ap.sindex = 0;
-        }
-    });
-
-    splist.q_sort<preproto_s>([](preproto_s *s1, preproto_s *s2)->bool
-    {
-        if (s1->row->other.sort_factor == s2->row->other.sort_factor)
-            return s1->c->getkey().contactid < s2->c->getkey().contactid;
-        return s1->row->other.sort_factor < s2->row->other.sort_factor;
-    });
-
-    int maxheight = owner->getprops().size().y;
-    if (const theme_rect_s *thr = owner->themerect())
-        maxheight -= thr->clborder_y();
-
-    str.set(CONSTWSTR("<p=r>"));
-
-    for (preproto_s &s : splist)
-    {
-        s.sindex = str.get_length();
-
-        if (s.c->get_state() == CS_ONLINE)
-        {
-            str.append(CONSTWSTR("<nl><shadow>")).append(maketag_color<ts::wchar>(owner->get_default_text_color(COLOR_PROTO_TEXT_ONLINE)));
-            if (def == s.c) str.append(CONSTWSTR(" <u>")); else str.append_char(' ');
-            str.append(from_utf8(s.row->other.name));
-            if (def == s.c) str.append(CONSTWSTR("</u>"));
-            str.append(CONSTWSTR("</color></shadow> "));
-        }
-        else
-        {
-            str.append(CONSTWSTR("<nl>")).append(maketag_color<ts::wchar>(owner->get_default_text_color(COLOR_PROTO_TEXT_OFFLINE)));
-            if (def == s.c) str.append(CONSTWSTR(" <u>")); else str.append_char(' ');
-            str.append(from_utf8(s.row->other.name));
-            if (def == s.c) str.append(CONSTWSTR("</u>"));
-            str.append(CONSTWSTR("</color> "));
-        }
-
-    }
-
-    for(;splist.count();)
-    {
-        size = gui->textsize( ts::g_default_text_font, str );
-        if (size.y <= maxheight)
-            break;
-
-        int ii = splist.get( splist.count() - 1 ).sindex;
-        splist.remove_fast( splist.count() - 1 );
-        str.set_length(ii);
-    }
-
-    dirty = false;
-}
-
-void gui_contact_item_c::generate_protocols()
-{
-    if (CIR_CONVERSATION_HEAD != role) return;
-    if (!contact || contact->getkey().is_group()) return;
-
-    protocols(true)->update();
-}
-
-void gui_contact_item_c::draw_online_state_text(draw_data_s &dd)
-{
-    if (const protocols_s *p = protocols())
-    {
-        if (!p->str.is_empty())
-        {
-            text_draw_params_s tdp;
-
-            ts::flags32_s f; f.setup(ts::TO_VCENTER|ts::TO_LINE_END_ELLIPSIS);
-            tdp.textoptions = &f;
-
-            getengine().draw(p->str, tdp);
-        }
-    }
-}
-
-int gui_contact_item_c::contact_item_rite_margin()
-{
-    if (!flags.is(F_CALLBUTTON)) return 5;
-    return g_app->preloaded_stuff().callb->size.x + 15;
+    return 5;
 }
 
 bool gui_contact_item_c::allow_drag() const
@@ -1118,12 +722,12 @@ bool gui_contact_item_c::allow_drop() const
                 //bool draw_btn = true;
                 if ( CIR_CONVERSATION_HEAD == role )
                 {
+                    gui_conversation_header_c *ch = ts::ptr_cast<gui_conversation_header_c *>( this );
+
                     ritem = contact_item_rite_margin();
                     if ( draw_proto )
                     {
-                        if ( nullptr == protocols() || protocols()->dirty )
-                            generate_protocols();
-                        curpww = protocols()->size.x;
+                        curpww = ch->prepare_protocols();
                         ritem += curpww;
                     }
 
@@ -1190,48 +794,40 @@ bool gui_contact_item_c::allow_drop() const
 
                 ts::irect noti_draw_area = ca;
 
-                if ( !flags.is( F_EDITNAME | F_EDITSTATUS ) )
+                gui_conversation_header_c *ch = CIR_CONVERSATION_HEAD == role ? ts::ptr_cast<gui_conversation_header_c *>( this ) : nullptr;
+
+                if ( ch == nullptr || !ch->edit_mode() )
                 {
                     ca.lt += ts::ivec2( x_offset + 5, 2 );
                     ca.rb.x -= 5;
                     if ( CIR_CONVERSATION_HEAD == role )
                     {
                         ca.rb.x -= ritem;
-
                         if ( !draw_proto )
                             ca.rb.x += curpww;
-#if 0
-                        if ( hstuff().call_button )
-                        {
-                            if ( !draw_btn )
-                            {
-                                MODIFY( *hstuff().call_button ).visible( false );
-                                ca.rb.x += g_app->buttons().callb->size.x;
-                            }
-                            else
-                                MODIFY( *hstuff().call_button ).visible( true );
-                        }
-#endif
                     }
                     draw_data_s &dd = m_engine->begin_draw();
                     dd.size = ca.size();
                     if ( dd.size >> 0 )
                     {
-                        if ( CIR_CONVERSATION_HEAD == role )
-                            hstuff().last_head_text_pos = ca.lt;
+                        if ( ch )
+                        {
+                            ch->last_head_text_pos = ca.lt;
+                            tdp.rectupdate = DELEGATE( ch, updrect );
+                        }
+
                         dd.offset += ca.lt;
                         int oldxo = dd.offset.x;
                         ts::flags32_s f; f.setup( ts::TO_VCENTER | ts::TO_LINE_END_ELLIPSIS );
                         tdp.textoptions = &f; //-V506
                         tdp.forecolor = nullptr;
-                        tdp.rectupdate = DELEGATE( this, updrect );
                         draw( dd, tdp );
 
-                        if ( CIR_CONVERSATION_HEAD == role && draw_proto )
+                        if ( ch && draw_proto )
                         {
                             dd.offset.x = oldxo + dd.size.x + 5;
                             dd.size.x = curpww;
-                            draw_online_state_text( dd );
+                            ch->draw_online_state_text( dd );
                         }
                     }
                     m_engine->end_draw();
@@ -1239,22 +835,29 @@ bool gui_contact_item_c::allow_drop() const
                 if ( achtung )
                 {
                     draw_data_s &dd = m_engine->begin_draw();
-                    if ( const theme_image_s *bachtung = g_app->preloaded_stuff().achtung_bg )
-                    {
-                        ts::ivec2 p = GET_THEME_VALUE( achtung_shift ) + noti_draw_area.lb();
-                        p.y -= bachtung->info().sz.y;
-                        bachtung->draw( *m_engine.get(), p );
-                        ts::irect trect = ts::irect::from_center_and_size( p + bachtung->center, bachtung->info().sz );
-                        dd.offset += trect.lt;
-                        dd.size = bachtung->info().sz;
-                        tdp.forecolor = &GET_THEME_VALUE( achtung_content_color );
-                    }
 
-                    if ( !achtung->get_blinking() )
-                        dd.alpha = 128;
+                    auto draw_bg = [&]()
+                    {
+                        if ( const theme_image_s *bachtung = g_app->preloaded_stuff().achtung_bg )
+                        {
+                            ts::ivec2 p = GET_THEME_VALUE( achtung_shift ) + noti_draw_area.lb();
+                            p.y -= bachtung->info().sz.y;
+                            bachtung->draw( *m_engine.get(), p );
+                            ts::irect trect = ts::irect::from_center_and_size( p + bachtung->center, bachtung->info().sz );
+                            dd.offset += trect.lt;
+                            dd.size = bachtung->info().sz;
+                            tdp.forecolor = &GET_THEME_VALUE( achtung_content_color );
+                        }
+
+                        if ( !achtung->get_blinking() )
+                            dd.alpha = 128;
+                    };
+
 
                     if ( CS_INVITE_RECEIVE != st && achtung->is_file_download() || achtung->flags.is( application_c::blinking_reason_s::F_RINGTONE ) )
                     {
+                        draw_bg();
+
                         const theme_image_s *img = nullptr;
                         if ( achtung->flags.is( application_c::blinking_reason_s::F_RINGTONE ) )
                             img = gui->theme().get_image( CONSTASTR( "achtung_call" ) );
@@ -1266,6 +869,8 @@ bool gui_contact_item_c::allow_drop() const
                     }
                     else if ( CS_INVITE_RECEIVE == st || achtung->unread_count > 0 || achtung->flags.is( application_c::blinking_reason_s::F_NEW_VERSION | application_c::blinking_reason_s::F_INVITE_FRIEND ) )
                     {
+                        draw_bg();
+
                         ts::flags32_s f; f.setup( ts::TO_VCENTER | ts::TO_HCENTER );
                         tdp.textoptions = &f; //-V506
 
@@ -1331,8 +936,15 @@ bool gui_contact_item_c::allow_drop() const
     case SQ_MOUSE_L2CLICK:
         if ( CIR_LISTITEM == role && !contact->getkey().is_self() )
         {
-            contact_key_s ck( contact->getkey() );
-            SUMMON_DIALOG<dialog_contact_props_c>( UD_CONTACTPROPS, dialog_contactprops_params_s( ck, true ) );
+            if ( g_app->F_SPLIT_UI )
+            {
+                HOLD( g_app->main ).as<mainrect_c>().create_new_conv( contact );
+
+            } else if ( !contact->getkey().is_group() )
+            {
+                contact_key_s ck( contact->getkey() );
+                SUMMON_DIALOG<dialog_contact_props_c>( UD_CONTACTPROPS, dialog_contactprops_params_s( ck, true ) );
+            }
         }
         return false;
     case SQ_MOUSE_MUP:
@@ -1635,83 +1247,13 @@ bool gui_contact_item_c::allow_drop() const
             gui_popup_menu_c::show(menu_anchor_s(true), m);
         } else if (CIR_CONVERSATION_HEAD == role && !contact->getkey().is_self())
         {
-            int curpww = GET_THEME_VALUE(minprotowidth);
-            if ( protocols() ) curpww = protocols()->size.x;
-
-            ts::irect ca = get_client_area();
-            ca.rb.x -= contact_item_rite_margin();
-            ca.lt.x = ca.rb.x - curpww;
-            if (ca.inside(to_local( ts::get_cursor_pos())))
-            {
-                menu_c m;
-
-                struct preproto_s
-                {
-                    contact_c *c;
-                    tableview_t<active_protocol_s, pt_active_protocol>::row_s *row;
-                };
-                ts::tmp_tbuf_t<preproto_s> splist;
-
-                contact->subiterate([&](contact_c *c) {
-                    if (auto *row = prf().get_table_active_protocol().find<true>(c->getkey().protoid))
-                    {
-                        preproto_s &ap = splist.add();
-                        ap.c = c;
-                        ap.row = row;
-                    }
-                });
-
-                splist.q_sort<preproto_s>([](preproto_s *s1, preproto_s *s2)->bool
-                {
-                    if (s1->row->other.sort_factor == s2->row->other.sort_factor)
-                        return s1->c->getkey().contactid < s2->c->getkey().contactid;
-                    return s1->row->other.sort_factor < s2->row->other.sort_factor;
-                });
-
-                const contact_c *def = contact->subget_default();
-                for (const preproto_s &s : splist)
-                {
-                    m.add(from_utf8(s.row->other.name), def == s.c ? MIF_MARKED : 0, DELEGATE(this,set_default_proto), s.c->getkey().as_str());
-                }
-
-                gui_popup_menu_c::show(menu_anchor_s(true), m);
-            }
+            ts::ptr_cast<gui_conversation_header_c *>( this )->on_rite_click();
         }
         return false;
 
     }
 
     return __super::sq_evt(qp,rid,data);
-}
-
-void gui_contact_item_c::set_default_proto(const ts::str_c&cks)
-{
-    contact_key_s ck(cks);
-    bool regen_prots = false;
-    contact->subiterate([&](contact_c *c) {
-        if (ck == c->getkey())
-        {
-            if ( !c->get_options().is(contact_c::F_DEFALUT) )
-            {
-                c->options().set(contact_c::F_DEFALUT);
-                prf().dirtycontact(c->getkey());
-                regen_prots = true;
-                
-            }
-        } else
-        {
-            if (c->get_options().is(contact_c::F_DEFALUT))
-            {
-                c->options().clear(contact_c::F_DEFALUT);
-                prf().dirtycontact(c->getkey());
-                regen_prots = true;
-            }
-        }
-    } );
-
-    if (regen_prots)
-        generate_protocols();
-    getengine().redraw();
 }
 
 INLINE int statev(contact_state_e v)
@@ -1736,6 +1278,15 @@ INLINE int statev(contact_state_e v)
 
 /*virtual*/ int gui_contact_item_c::proto_sort_factor() const
 {
+    if ( contact->getkey().is_group() )
+    {
+        if ( active_protocol_c *ap = prf().ap( contact->getkey().protoid ) )
+        {
+            return ap->sort_factor();
+        }
+        return 0;
+    }
+
     int sf = 0;
     int m = 1;
     contact->subiterate( [&]( const contact_c *c ) {
@@ -1798,6 +1349,516 @@ void gui_contact_item_c::redraw(float delay)
 {
     DEFERRED_CALL( delay, DELEGATE(this, redraw_now), nullptr );
 }
+
+
+
+
+
+
+
+
+
+gui_conversation_header_c::~gui_conversation_header_c()
+{
+    if ( gui )
+    {
+        gui->delete_event( DELEGATE( this, update_buttons ) );
+    }
+}
+
+bool gui_conversation_header_c::setcontact( contact_root_c *c )
+{
+    bool changed = gui_contact_item_c::setcontact( c );
+    if ( changed )
+        cancel_edit();
+    g_app->update_buttons_head();
+    return changed;
+}
+
+/*virtual*/ void gui_conversation_header_c::update_text()
+{
+    hstuff_clear();
+    gui_contact_item_c::update_text();
+
+    if ( textrect.is_dirty() )
+    {
+        for ( rbtn::ebutton_s &b : updr )
+            b.updated = false;
+        update_buttons( getrid() );
+    }
+}
+
+bool gui_conversation_header_c::edit0( RID, GUIPARAM p )
+{
+    flags.set( F_EDITNAME );
+    update_buttons( getrid() );
+    return true;
+}
+bool gui_conversation_header_c::edit1( RID, GUIPARAM )
+{
+    flags.set( F_EDITSTATUS );
+    update_buttons( getrid() );
+    return true;
+}
+
+void gui_conversation_header_c::hstuff_update()
+{
+    str.clear();
+
+    contact_root_c *cc = contact;
+    if ( !cc )
+        return;
+
+    const contact_c *def = !cc->getkey().is_self() ? cc->subget_default() : nullptr;
+
+    struct preproto_s
+    {
+        contact_c *c;
+        tableview_t<active_protocol_s, pt_active_protocol>::row_s *row;
+        int sindex;
+    };
+    ts::tmp_tbuf_t<preproto_s> splist;
+
+    cc->subiterate( [&]( contact_c *c ) {
+        if ( auto *row = prf().get_table_active_protocol().find<true>( c->getkey().protoid ) )
+        {
+            preproto_s &ap = splist.add();
+            ap.c = c;
+            ap.row = row;
+            ap.sindex = 0;
+        }
+    } );
+
+    splist.q_sort<preproto_s>( []( preproto_s *s1, preproto_s *s2 )->bool
+    {
+        if ( s1->row->other.sort_factor == s2->row->other.sort_factor )
+            return s1->c->getkey().contactid < s2->c->getkey().contactid;
+        return s1->row->other.sort_factor < s2->row->other.sort_factor;
+    } );
+
+    int maxheight = getprops().size().y;
+    if ( const theme_rect_s *thr = themerect() )
+        maxheight -= thr->clborder_y();
+
+    str.set( CONSTWSTR( "<p=r>" ) );
+
+    for ( preproto_s &s : splist )
+    {
+        s.sindex = str.get_length();
+
+        if ( s.c->get_state() == CS_ONLINE )
+        {
+            str.append( CONSTWSTR( "<nl><shadow>" ) ).append( maketag_color<ts::wchar>( get_default_text_color( COLOR_PROTO_TEXT_ONLINE ) ) );
+            if ( def == s.c ) str.append( CONSTWSTR( " <u>" ) ); else str.append_char( ' ' );
+            str.append( from_utf8( s.row->other.name ) );
+            if ( def == s.c ) str.append( CONSTWSTR( "</u>" ) );
+            str.append( CONSTWSTR( "</color></shadow> " ) );
+        }
+        else
+        {
+            str.append( CONSTWSTR( "<nl>" ) ).append( maketag_color<ts::wchar>( get_default_text_color( COLOR_PROTO_TEXT_OFFLINE ) ) );
+            if ( def == s.c ) str.append( CONSTWSTR( " <u>" ) ); else str.append_char( ' ' );
+            str.append( from_utf8( s.row->other.name ) );
+            if ( def == s.c ) str.append( CONSTWSTR( "</u>" ) );
+            str.append( CONSTWSTR( "</color> " ) );
+        }
+    }
+
+    for ( ; splist.count();)
+    {
+        size = gui->textsize( ts::g_default_text_font, str );
+        if ( size.y <= maxheight )
+            break;
+
+        int ii = splist.get( splist.count() - 1 ).sindex;
+        splist.remove_fast( splist.count() - 1 );
+        str.set_length( ii );
+    }
+
+    flags.clear(F_DIRTY);
+}
+
+void gui_conversation_header_c::generate_protocols()
+{
+    if ( CIR_CONVERSATION_HEAD != role ) return;
+    if ( !contact || contact->getkey().is_group() ) return;
+
+    hstuff_update();
+}
+
+void gui_conversation_header_c::clearprotocols()
+{
+    hstuff_clear();
+    getengine().redraw();
+}
+
+int gui_conversation_header_c::contact_item_rite_margin() const
+{
+    if ( flags.is( F_CALLBUTTON ) )
+        return g_app->preloaded_stuff().callb->size.x + 15;
+
+    return gui_contact_item_c::contact_item_rite_margin();
+}
+
+int gui_conversation_header_c::prepare_protocols()
+{
+    if ( flags.is(F_DIRTY) )
+        generate_protocols();
+    return size.x;
+}
+
+void gui_conversation_header_c::set_default_proto( const ts::str_c&cks )
+{
+    contact_key_s ck( cks );
+    bool regen_prots = false;
+    contact->subiterate( [&]( contact_c *c ) {
+        if ( ck == c->getkey() )
+        {
+            if ( !c->get_options().is( contact_c::F_DEFALUT ) )
+            {
+                c->options().set( contact_c::F_DEFALUT );
+                prf().dirtycontact( c->getkey() );
+                regen_prots = true;
+
+            }
+        }
+        else
+        {
+            if ( c->get_options().is( contact_c::F_DEFALUT ) )
+            {
+                c->options().clear( contact_c::F_DEFALUT );
+                prf().dirtycontact( c->getkey() );
+                regen_prots = true;
+            }
+        }
+    } );
+
+    if ( regen_prots )
+        generate_protocols();
+    getengine().redraw();
+}
+
+void gui_conversation_header_c::on_rite_click()
+{
+    int curpww = size.x;
+
+    ts::irect ca = get_client_area();
+    ca.rb.x -= contact_item_rite_margin();
+    ca.lt.x = ca.rb.x - curpww;
+    if ( ca.inside( to_local( ts::get_cursor_pos() ) ) )
+    {
+        menu_c m;
+
+        struct preproto_s
+        {
+            contact_c *c;
+            tableview_t<active_protocol_s, pt_active_protocol>::row_s *row;
+        };
+        ts::tmp_tbuf_t<preproto_s> splist;
+
+        contact->subiterate( [&]( contact_c *c ) {
+            if ( auto *row = prf().get_table_active_protocol().find<true>( c->getkey().protoid ) )
+            {
+                preproto_s &ap = splist.add();
+                ap.c = c;
+                ap.row = row;
+            }
+        } );
+
+        splist.q_sort<preproto_s>( []( preproto_s *s1, preproto_s *s2 )->bool
+        {
+            if ( s1->row->other.sort_factor == s2->row->other.sort_factor )
+                return s1->c->getkey().contactid < s2->c->getkey().contactid;
+            return s1->row->other.sort_factor < s2->row->other.sort_factor;
+        } );
+
+        const contact_c *def = contact->subget_default();
+        for ( const preproto_s &s : splist )
+        {
+            m.add( from_utf8( s.row->other.name ), def == s.c ? MIF_MARKED : 0, DELEGATE( this, set_default_proto ), s.c->getkey().as_str() );
+        }
+
+        gui_popup_menu_c::show( menu_anchor_s( true ), m );
+    }
+
+}
+
+void gui_conversation_header_c::draw_online_state_text( draw_data_s &dd )
+{
+    if ( !str.is_empty() )
+    {
+        text_draw_params_s tdp;
+
+        ts::flags32_s f; f.setup( ts::TO_VCENTER | ts::TO_LINE_END_ELLIPSIS );
+        tdp.textoptions = &f;
+
+        getengine().draw( str, tdp );
+    }
+}
+
+
+void gui_conversation_header_c::updrect( const void *, int r, const ts::ivec2 &p )
+{
+    if ( r >= rbtn::EB_MAX ) return;
+
+    if ( prf().is_loaded() )
+    {
+        updr[ r ].p = root_to_local( p );
+        updr[ r ].updated = true;
+        DEFERRED_UNIQUE_CALL( 0, DELEGATE( this, update_buttons ), 1 );
+    }
+}
+
+
+bool gui_conversation_header_c::audio_call( RID btn, GUIPARAM )
+{
+    if ( contact )
+    {
+        contact_c *cdef = contact->subget_default();
+        contact_c *c_call = nullptr;
+
+        contact->subiterate( [&]( contact_c *c ) {
+            active_protocol_c *ap = prf().ap( c->getkey().protoid );
+            if ( ap && 0 != ( PF_AUDIO_CALLS & ap->get_features() ) )
+            {
+                if ( c_call == nullptr || ( cdef == c && c->get_state() == CS_ONLINE ) )
+                    c_call = c;
+                if ( c->get_state() == CS_ONLINE && c_call != c && c_call->get_state() != CS_ONLINE )
+                    c_call = c;
+            }
+        } );
+
+        if ( c_call )
+        {
+            c_call->b_call( RID(), nullptr );
+            btn.call_enable( false );
+        }
+
+    }
+    return true;
+}
+
+bool gui_conversation_header_c::apply_edit( RID r, GUIPARAM p )
+{
+    //text_adapt_user_input(hstuff().curedit);
+    if ( flags.is( F_EDITNAME ) )
+    {
+        flags.clear( F_EDITNAME );
+        if ( contact->getkey().is_self() )
+        {
+            if ( !curedit.is_empty() )
+            {
+                if ( prf().username( curedit ) )
+                    gmsg<ISOGM_CHANGED_SETTINGS>( 0, PP_USERNAME, curedit ).send();
+            }
+            update_text();
+
+        }
+        else if ( contact->getkey().is_group() )
+        {
+            if ( active_protocol_c *ap = prf().ap( contact->getkey().protoid ) )
+                ap->rename_group_chat( contact->getkey().contactid, curedit );
+
+        }
+        else if ( contact->get_customname() != curedit )
+        {
+            contact->set_customname( curedit );
+            prf().dirtycontact( contact->getkey() );
+            flags.set( F_SKIPUPDATE );
+            gmsg<ISOGM_V_UPDATE_CONTACT>( contact ).send();
+            flags.clear( F_SKIPUPDATE );
+            update_text();
+        }
+
+    }
+    if ( flags.is( F_EDITSTATUS ) )
+    {
+        flags.clear( F_EDITSTATUS );
+        if ( contact->getkey().is_self() )
+        {
+            if ( prf().userstatus( curedit ) )
+                gmsg<ISOGM_CHANGED_SETTINGS>( 0, PP_USERSTATUSMSG, curedit ).send();
+        }
+        update_text();
+    }
+    g_app->update_buttons_head();
+    return true;
+}
+
+bool gui_conversation_header_c::cancel_edit( RID, GUIPARAM )
+{
+    flags.clear( F_EDITNAME | F_EDITSTATUS );
+    g_app->update_buttons_head();
+    return true;
+}
+
+bool gui_conversation_header_c::update_buttons( RID r, GUIPARAM p )
+{
+    ASSERT( CIR_CONVERSATION_HEAD == role );
+
+    if ( p )
+    {
+        // just update pos of edit buttons
+        bool redr = false;
+        bool noedt = !flags.is( F_EDITNAME | F_EDITSTATUS );
+        for ( rbtn::ebutton_s &b : updr )
+            if ( b.updated )
+            {
+                MODIFY bbm( b.brid );
+                redr |= bbm.pos() != b.p;
+                bbm.pos( b.p ).setminsize( b.brid ).visible( noedt );
+            }
+
+        if ( redr )
+            getengine().redraw();
+
+        if ( noedt && editor )
+        {
+        }
+        else
+            return true;
+    }
+
+    if ( getrid() == r )
+    {
+        for ( rbtn::ebutton_s &b : updr )
+            if ( b.brid )
+            {
+                b.updated = false;
+                MODIFY( b.brid ).visible( false );
+            }
+    }
+
+    if ( !updr[ rbtn::EB_NAME ].brid )
+    {
+        gui_button_c &b = MAKE_CHILD<gui_button_c>( getrid() );
+        b.set_face_getter( BUTTON_FACE_PRELOADED( editb ) );
+        b.set_handler( DELEGATE( this, edit0 ), nullptr );
+        updr[ rbtn::EB_NAME ].brid = b.getrid();
+    }
+
+    if ( !updr[ rbtn::EB_STATUS ].brid )
+    {
+        gui_button_c &b = MAKE_CHILD<gui_button_c>( getrid() );
+        b.set_face_getter( BUTTON_FACE_PRELOADED( editb ) );
+        b.set_handler( DELEGATE( this, edit1 ), nullptr );
+        updr[ rbtn::EB_STATUS ].brid = b.getrid();
+    }
+
+    if ( flags.is( F_EDITNAME | F_EDITSTATUS ) )
+    {
+        ts::str_c eval;
+        if ( contact->getkey().is_self() )
+        {
+            if ( flags.is( F_EDITNAME ) )
+                eval = prf().username();
+            else
+                eval = prf().userstatus();
+        }
+        else
+        {
+            eval = contact->get_customname();
+            if ( eval.is_empty() )
+                eval = contact->get_name();
+        }
+        text_prepare_for_edit( eval );
+        if ( editor )
+        {
+        } else
+        {
+            curedit.clear();
+
+            getengine().trunc_children( 2 );
+
+            gui_textfield_c &tf = ( MAKE_CHILD<gui_textfield_c>( getrid(), from_utf8( eval ), MAX_PATH_LENGTH, 0, false ) << DELEGATE( this, _edt ) );
+            editor = tf.getrid();
+            tf.leech( TSNEW( leech_edit, last_head_text_pos.x ) );
+            gui->set_focus( editor );
+            tf.end();
+            tf.register_kbd_callback( DELEGATE( this, cancel_edit ), ts::SSK_ESC, false );
+            tf.register_kbd_callback( DELEGATE( this, apply_edit ), ts::SSK_ENTER, false );
+
+            gui_button_c &bok = MAKE_CHILD<gui_button_c>( getrid() );
+            bok.set_face_getter( BUTTON_FACE_PRELOADED( confirmb ) );
+            bok.set_handler( DELEGATE( this, apply_edit ), nullptr );
+            bok.leech( TSNEW( leech_at_right, &tf, 5 ) );
+            bconfirm = bok.getrid();
+
+            gui_button_c &bc = MAKE_CHILD<gui_button_c>( getrid() );
+            bc.set_face_getter( BUTTON_FACE_PRELOADED( cancelb ) );
+            bc.set_handler( DELEGATE( this, cancel_edit ), nullptr );
+            bc.leech( TSNEW( leech_at_right, &bok, 5 ) );
+            bcancel = bc.getrid();
+
+        }
+
+    }
+    else
+    {
+        getengine().trunc_children( 2 );
+        editor = RID();
+        bconfirm = RID();
+        bcancel = RID();
+
+    }
+
+    flags.clear( F_CALLBUTTON );
+
+    if ( contact && !contact->getkey().is_self() && !contact->getkey().is_group() )
+    {
+        int features = 0;
+        int features_online = 0;
+        bool now_disabled = false;
+        contact->subiterate( [&]( contact_c *c ) {
+            if ( active_protocol_c *ap = prf().ap( c->getkey().protoid ) )
+            {
+                int f = ap->get_features();
+                features |= f;
+                if ( c->get_state() == CS_ONLINE ) features_online |= f;
+                if ( c->is_av() || c->is_ringtone() || c->is_calltone() ) now_disabled = true;
+            }
+        } );
+
+        gui_button_c &b_call = MAKE_CHILD<gui_button_c>( getrid() );
+        call_button = &b_call;
+        b_call.set_face_getter( BUTTON_FACE_PRELOADED( callb ) );
+        b_call.tooltip( TOOLTIP( TTT( "Call", 140 ) ) );
+
+        b_call.set_handler( DELEGATE( this, audio_call ), nullptr );
+        ts::ivec2 minsz = b_call.get_min_size();
+        b_call.leech( TSNEW( leech_dock_right_center_s, minsz.x, minsz.y, 2, -1, 0, 1 ) );
+        MODIFY( b_call ).visible( true );
+        if ( now_disabled )
+        {
+            b_call.disable();
+            b_call.tooltip( GET_TOOLTIP() );
+        }
+        else if ( 0 == ( features & PF_AUDIO_CALLS ) )
+        {
+            b_call.disable();
+            b_call.tooltip( TOOLTIP( TTT( "Call not supported", 141 ) ) );
+        }
+        else if ( 0 == ( features_online & PF_AUDIO_CALLS ) )
+        {
+            b_call.disable();
+            b_call.tooltip( TOOLTIP( TTT( "Contact offline", 143 ) ) );
+        }
+
+        flags.set( F_CALLBUTTON );
+    }
+
+    g_app->update_buttons_msg();
+
+    return true;
+}
+
+
+
+
+
+
+
+
 
 
 MAKE_CHILD<gui_contact_separator_c>::~MAKE_CHILD()
@@ -1900,6 +1961,8 @@ bool gui_contact_separator_c::is_prots_same_as_contact( const contact_root_c *cc
     set_theme_rect( CONSTASTR( "cseparator" ), false );
     defaultthrdraw = DTHRO_BORDER | DTHRO_CENTER;
     set_autoheight();
+    if ( const theme_image_s *img = gui->theme().get_image( CONSTASTR( "gcollapsed" ) ) )
+        textrect.set_margins( ts::ivec2( img->info().sz.x, 0 ) );
     gui_control_c::created();
 }
 
@@ -1923,7 +1986,18 @@ bool gui_contact_separator_c::is_prots_same_as_contact( const contact_root_c *cc
 
     switch ( qp )
     {
+    case SQ_MOUSE_LDOWN:
+        {
+            flags.invert( F_COLLAPSED );
+            getengine().redraw();
+            gui_contactlist_c & cl = HOLD( getparent() ).as<gui_contactlist_c>();
+            cl.fix_c_visibility();
+            cl.scroll_to_child(&getengine(), false);
+
+        }
+        break;
     case SQ_DRAW:
+
         //if ( !prf().is_loaded() )
         //    return gui_control_c::sq_evt( qp, rid, data );
 
@@ -1945,8 +2019,16 @@ bool gui_contact_separator_c::is_prots_same_as_contact( const contact_root_c *cc
         //    m_engine->end_draw();
 
         //}
-        return __super::sq_evt( qp, rid, data );
-        //return true;
+        __super::sq_evt( qp, rid, data );
+
+        if ( const theme_image_s *i = gui->theme().get_image( flags.is(F_COLLAPSED) ? CONSTASTR( "gcollapsed" ) : CONSTASTR( "gexpanded" ) ) )
+        {
+            /*draw_data_s &dd =*/ m_engine->begin_draw();
+            i->draw( getengine(), ts::ivec2( 0, ( getprops().size().y - i->info().sz.y ) / 2 ) );
+            m_engine->end_draw();
+        }
+
+        return true;
     }
 
     return __super::sq_evt( qp, rid, data );
@@ -1983,37 +2065,57 @@ void gui_contactlist_c::clearlist()
     getengine().trunc_children( skipctl );
 }
 
+void gui_contactlist_c::fix_c_visibility()
+{
+    bool vis = true;
+    for ( ts::aint v = getengine().get_next_child_index( skipctl ); v >= 0; v = getengine().get_next_child_index( v + 1 ) )
+    {
+        gui_clist_base_c *clb = ts::ptr_cast<gui_clist_base_c *>( &getengine().get_child( v )->getrect() );
+        if ( gui_contact_separator_c *sep = clb->as_separator() )
+            vis = !sep->is_collapsed();
+        else if ( gui_contact_item_c *itm = clb->as_item() )
+            itm->vis_group( vis );
+    }
+}
+
 void gui_contactlist_c::fix_sep_visibility()
 {
     gui_contact_separator_c *checksep = nullptr;
+    bool vis_filter = false;
+
     for( ts::aint v = getengine().get_next_child_index(skipctl); v >= 0; v = getengine().get_next_child_index(v+1) )
     {
         gui_clist_base_c *clb = ts::ptr_cast<gui_clist_base_c *>( &getengine().get_child( v )->getrect() );
         if ( checksep == nullptr )
         {
             checksep = clb->as_separator();
+            vis_filter = false;
             continue;
         }
 
         if (gui_contact_separator_c *nextsep = clb->as_separator())
         {
-            MODIFY( *checksep ).visible( false );
+            MODIFY( *checksep ).visible( vis_filter );
+            //checksep->no_collapsed();
             checksep = nextsep;
+            vis_filter = false;
+
         } else if ( gui_contact_item_c *itm = clb->as_item() )
         {
+            vis_filter |= itm->is_vis_filter();
+
             if ( !itm->getprops().is_visible() )
                 continue;
 
-            bool v = checksep->is_prots_same_as_contact( &itm->getcontact() );
-            MODIFY( *checksep ).visible( v );
-            if ( v )
-                checksep->update_text();
+            MODIFY( *checksep ).visible( true );
+            checksep->update_text();
             checksep = nullptr;
         }        
     }
     if (checksep)
     {
-        MODIFY( *checksep ).visible( false );
+        MODIFY( *checksep ).visible( vis_filter );
+        //checksep->no_collapsed();
     }
 }
 
@@ -2482,14 +2584,14 @@ bool gui_contactlist_c::refresh_list(RID, GUIPARAM)
 
 ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_V_UPDATE_CONTACT> & c )
 {
-    if (c.contact->get_historian()->getkey().is_self())
-    {
-        if (self && self->contacted())
-            if (ASSERT(c.contact == &self->getcontact() || c.contact->getmeta() == &self->getcontact()))
-                self->update_text();
-    
-        return 0;
-    }
+    if ( contact_root_c *h = c.contact->get_historian() )
+        if (h->getkey().is_self())
+        {
+            if (self && self->contacted())
+                if (ASSERT(c.contact == &self->getcontact() || c.contact->getmeta() == &self->getcontact()))
+                    self->update_text();
+            return 0;
+        }
 
     auto find_sep = [this]( contact_root_c *cc ) ->int
     {
@@ -2682,9 +2784,17 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
             }
         }
         
-        for ( int i = 0, c = ss.sp.size(); i < c; ++i )
-            ss.addh( ss.sp.get(i) ) = (((uint64)ss.sp.get( i )->proto_sort_factor()) << 32) | (i+1);
+        bool group = prf().get_options().is( CLOPT_GROUP_CONTACTS_PROTO );
 
+        for ( int i = 0, c = ss.sp.size(); i < c; ++i )
+        {
+            uint64 v = i + 1;
+
+            if ( group )
+                v |= ( ( (uint64)ss.sp.get( i )->proto_sort_factor() ) << 32 );
+
+            ss.addh( ss.sp.get( i ) ) = v;
+        }
 
 
         if (getengine().children_sort( DELEGATE( &ss, swap_them ) ))

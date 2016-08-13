@@ -54,7 +54,7 @@ void VDMemset32(void *dst, ts::uint32 value, size_t count) {
 
 sint32 scale32x32_fp16(sint32 x, sint32 y) 
 {
-	return (sint32)(((sint64)x * y + 0x8000) >> 16);
+	return (sint32)(((int64)x * y + 0x8000) >> 16);
 }
 
 
@@ -998,7 +998,7 @@ namespace {
 		}
 	};
 
-	extern "C" void _cdecl vdasm_resize_interp_row_run_MMX(void *dst, const void *src, uint32 width, sint64 xaccum, sint64 x_inc);
+	extern "C" void _cdecl vdasm_resize_interp_row_run_MMX(void *dst, const void *src, uint32 width, int64 xaccum, int64 x_inc);
 	extern "C" void _cdecl vdasm_resize_interp_col_run_MMX(void *dst, const void *src1, const void *src2, uint32 width, uint32 yaccum);
 	extern "C" void _cdecl vdasm_resize_ccint_row_MMX(void *dst, const void *src, uint32 count, uint32 xaccum, sint32 xinc, const void *tbl);
 	extern "C" void _cdecl vdasm_resize_ccint_col_MMX(void *dst, const void *src1, const void *src2, const void *src3, const void *src4, uint32 count, const void *tbl);
@@ -1009,7 +1009,7 @@ namespace {
 	public:
 		int GetWindowSize() const {return 2;}
 		void Process(void *dst0, const void *src0, uint32 w, uint32 u, uint32 dudx) {
-			vdasm_resize_interp_row_run_MMX(dst0, src0, w, (sint64)u << 16, (sint64)dudx << 16);
+			vdasm_resize_interp_row_run_MMX(dst0, src0, w, (int64)u << 16, (int64)dudx << 16);
 		}
 	};
 

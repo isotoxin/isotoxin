@@ -405,6 +405,7 @@ class contact_root_c : public contact_c // metas and groups
     ts::array_shared_t<contact_c, 0> subcontacts; // valid for meta contact
     ts::array_inplace_t<post_s, 128> history; // valid for meta contact
     ts::str_c comment;
+    ts::str_c greeting; // utf8 greeting; send as message on contact online
     ts::wstr_c mhc;
     ts::astrings_c tags;
     ts::buf0_c tags_bits; // rebuilded
@@ -618,6 +619,61 @@ public:
     void set_comment(const ts::str_c &c_) { comment = c_; }
     const ts::str_c &get_comment() const { return comment; }
 
+    void set_greeting( const ts::asptr &g_ )
+    {
+        time_t lastg = get_greeting_last();
+        int per = get_greeting_period();
+        greeting.set_as_num(lastg).append_char('\1').append_as_int(per).append_char( '\2' ).append( g_ );
+    }
+    void set_greeting_last( time_t lastg )
+    {
+        int per = get_greeting_period();
+        ts::str_c g = get_greeting();
+        greeting.set_as_num( lastg ).append_char( '\1' ).append_as_int( per ).append_char( '\2' ).append( g );
+    }
+    void set_greeting_period( int per )
+    {
+        time_t lastg = get_greeting_last();
+        ts::str_c g = get_greeting();
+        greeting.set_as_num( lastg ).append_char( '\1' ).append_as_int( per ).append_char( '\2' ).append( g );
+    }
+
+    const ts::pstr_c get_greeting() const { return greeting.substr( greeting.find_pos('\2') + 1 ); }
+    time_t get_greeting_last() const
+    {
+        int i = greeting.find_pos( '\1' );
+        if ( i > 0 )
+            return greeting.substr( 0, i ).as_num<time_t>();
+        return 0;
+    }
+    int get_greeting_period() const // seconds
+    {
+        int i = greeting.find_pos( '\1' );
+        if ( i > 0 )
+        {
+            int j = greeting.find_pos( '\2' );
+            if (j>i)
+                return greeting.substr( i+1, j ).as_int();
+        }
+        return 60;
+    }
+    time_t get_greeting_allow_time() const
+    {
+        int i = greeting.find_pos( '\1' );
+        if ( i > 0 )
+        {
+            time_t l = greeting.substr( 0, i ).as_num<time_t>();
+            int j = greeting.find_pos( '\2' );
+            if ( j > i )
+            {
+                int s = greeting.substr( i + 1, j ).as_int();
+                return l + s;
+            }
+            return l + 60;
+        }
+        return 0;
+    }
+
     ts::str_c compile_pubid() const;
     ts::str_c compile_name() const;
     ts::str_c compile_statusmsg() const;
@@ -647,6 +703,8 @@ public:
 
     bool is_full_search_result() const { return opts.unmasked().is(F_FULL_SEARCH_RESULT); }
     void full_search_result(bool f) { opts.unmasked().init(F_FULL_SEARCH_RESULT, f); }
+
+    bool is_active() const;
 };
 
 INLINE ts::str_c contact_c::get_name(bool metacompile) const { return (name.is_empty() && is_meta() && metacompile) ? get_historian()->compile_name() : name; };
@@ -705,6 +763,14 @@ template<> struct gmsg<ISOGM_SELECT_CONTACT> : public gmsgbase
 {
     gmsg(contact_root_c *c, int options) :gmsgbase(ISOGM_SELECT_CONTACT), contact(c), options(options) {}
     ts::shared_ptr<contact_root_c> contact;
+    int options;
+};
+
+template<> struct gmsg<ISOGM_INIT_CONVERSATION> : public gmsgbase
+{
+    gmsg( contact_root_c *c, int options, RID crid ) :gmsgbase( ISOGM_INIT_CONVERSATION ), contact( c ), options( options ), conversation(crid) {}
+    ts::shared_ptr<contact_root_c> contact;
+    RID conversation;
     int options;
 };
 

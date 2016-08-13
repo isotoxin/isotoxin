@@ -187,6 +187,47 @@ static uint32 calc_hash( const bitmap_c &b )
     return crc.crc;
 }
 
+bool master_internal_stuff_s::isactwnd( wnd_c *w )
+{
+    for ( wnd_c *aw : activewnds )
+        if ( aw == w )
+            return true;
+    return false;
+}
+
+bool master_internal_stuff_s::actwnd( wnd_c *w, bool a )
+{
+    if (a)
+    {
+        int freei = -1;
+        int cnt = activewnds.size();
+        for ( int i = 0; i < cnt; ++i )
+        {
+            wnd_c *aw = activewnds.get(i);
+            if ( aw == w )
+                return true;
+            if ( !aw && freei < 0 )
+                freei = i;
+        }
+        if ( freei >= 0 )
+            activewnds.get( freei ) = w;
+        else
+            activewnds.add() = w;
+
+        return true;
+    }
+
+    for ( int i = activewnds.size()-1; i >= 0; --i )
+    {
+        wnd_c *aw = activewnds.get( i );
+        if (!aw || aw == w )
+        {
+            activewnds.remove_fast( i );
+        }
+    }
+    return activewnds.size() != 0;
+}
+
 void master_internal_stuff_s::release_icon( HICON icn )
 {
     for ( icon_cache_s &ic : icons )

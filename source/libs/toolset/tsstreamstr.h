@@ -198,7 +198,7 @@ public:
     streamstr& operator<<(const char* s) { begin(s ? s[0] : 0); boof.append(s ? s : "(null)"); return *this; }
     //debuglog& operator<<(const std::string& s) { begin(s.c_str()[0]); boof.append(s.c_str(), (uint)s.length()); return *this; }
     streamstr& operator<<(const asptr& s) { begin(s.s[0]); boof.append(s); return *this; }
-    template<typename TCHARACTER, typename CORE> streamstr& operator<<(const str_t<TCHARACTER, CORE>& s) { begin((char)s.get_char(0)); boof.appendcvt(s); return *this; }
+    template<typename TCHARACTER, typename CORE> streamstr& operator<<(const str_t<TCHARACTER, CORE>& s) { begin((char)(s.get_char(0) & 0xff)); boof.appendcvt(s); return *this; }
 
     streamstr& operator<<(const streamstr_text &tim)
     {

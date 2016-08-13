@@ -96,10 +96,8 @@
 
 #ifndef VD_STANDARD_TYPES_DECLARED
 	#if defined(_MSC_VER)
-		typedef signed __int64		sint64;
 		typedef unsigned __int64	uint64;
 	#elif defined(__GNUC__)
-		typedef signed long long	sint64;
 		typedef unsigned long long	uint64;
 	#endif
 	typedef signed int			sint32;
@@ -109,13 +107,12 @@
 	typedef signed char			sint8;
 	typedef unsigned char		uint8;
 
-	typedef sint64				int64;
 	typedef sint32				int32;
 	typedef sint16				int16;
 	typedef sint8				int8;
 
 	#ifdef _M_AMD64
-		typedef sint64 sintptr;
+		typedef int64 sintptr;
 		typedef uint64 uintptr;
 	#else
 		#if _MSC_VER >= 1310

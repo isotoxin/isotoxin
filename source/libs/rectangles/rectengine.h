@@ -307,6 +307,7 @@ class rectengine_root_c : public rectengine_c
         /*virtual*/ ts::irect       app_get_redraw_rect() override;
 
         /*virtual*/ void evt_destroy() override {}
+        /*virtual*/ bool evt_close() override;
 
         void kill();
 
@@ -329,8 +330,10 @@ class rectengine_root_c : public rectengine_c
     ts::flags32_s flags;
     static const ts::flags32_s::BITS F_DIP = SETBIT(0);
     static const ts::flags32_s::BITS F_REDRAW_COLLECTOR = SETBIT(1);
-    static const ts::flags32_s::BITS F_SYSTEM = SETBIT(3);
-    static const ts::flags32_s::BITS F_MANUAL = SETBIT(4);
+    static const ts::flags32_s::BITS F_MANUAL = SETBIT(2);
+    static const ts::flags32_s::BITS F_TOOLRECT = SETBIT( 3 );
+    static const ts::flags32_s::BITS F_TASKBAR = SETBIT( 4 );
+    static const ts::flags32_s::BITS F_INACTIVE = SETBIT( 5 );
 
     //sqhandler_i
 	/*virtual*/ bool sq_evt( system_query_e qp, RID rid, evt_data_s &data ) override;
@@ -354,8 +357,13 @@ class rectengine_root_c : public rectengine_c
     bool shakeme(RID, GUIPARAM);
 
 public:
-	rectengine_root_c(bool sys);
+	rectengine_root_c(rect_sys_e sys);
 	~rectengine_root_c();
+
+    ts::bitmap_c    get_icon( bool for_tray )
+    {
+        return getrect().get_icon( for_tray );
+    }
 
     /*virtual*/ void manual_move_resize( bool f ) override { flags.init(F_MANUAL, f); }
     /*virtual*/ bool is_manual_move_resize() const override { return flags.is(F_MANUAL); }
@@ -382,6 +390,7 @@ public:
     void register_afocus( guirect_c *r, bool reg );
     RID active_focus(RID sub);
 
+    void update_icon();
     void shake();
     bool update_foreground();
     void set_system_focus(bool bring_to_front = false);

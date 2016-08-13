@@ -117,6 +117,7 @@ struct contacts_s
         C_STATUSMSG,
         C_READTIME,
         C_CUSTOMNAME,
+        C_GREETING,
         C_COMMENT,
         C_TAGS,
         C_MESSAGEHANDLER,
@@ -133,6 +134,7 @@ struct contacts_s
     ts::str_c statusmsg;
     ts::str_c customname;
     ts::str_c comment;
+    ts::str_c greeting;
     ts::str_c msghandler;
     ts::astrings_c tags;
     time_t readtime; // time of last seen message
@@ -142,7 +144,7 @@ struct contacts_s
     void set(int column, ts::data_value_s& v);
     void get(int column, ts::data_pair_s& v);
 
-    static const int columns = C_count; // contact_id, proto_id, meta_id, options, name, statusmsg, readtime, customname, comment, tags, msghandler, avatar, avatar_tag
+    static const int columns = C_count; // contact_id, proto_id, meta_id, options, name, statusmsg, readtime, customname, greeting, comment, tags, msghandler, avatar, avatar_tag
     static ts::asptr get_table_name() { return CONSTASTR("contacts"); }
     static void get_column_desc(int index, ts::column_desc_s&cd);
     static ts::data_type_e get_column_type(int index);

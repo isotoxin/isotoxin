@@ -319,7 +319,22 @@ rectengine_c *rectengine_c::get_last_child()
         if (data.rect.index>=0) children.get(data.rect.index) = nullptr;
         DEFERRED_UNIQUE_CALL(0,DELEGATE(this,cleanup_children),nullptr);
         break;
-	}
+    case SQ_FOCUS_CHANGED:
+        if ( guirect_c *r = rect() )
+        {
+            bool handled = false;
+            if ( r->getrid() == rid )
+                handled = r->sq_evt( qp, rid, data );
+
+            if ( rectengine_root_c *root = r->getroot() )
+                if ( root != this )
+                    handled |= root->getrect().sq_evt( qp, rid, data );
+
+            return handled;
+        }
+        
+        return false;
+    }
 
     if (guirect_c *r = rect())
         if (ASSERT(r->getrid() == rid))
@@ -493,13 +508,19 @@ system_query_e me2sq( ts::mouse_event_e me )
             gui->set_focus( RID() );
     } else
     {
-        my_wnd_s *wndc = ts::ptr_cast<my_wnd_s *>( w->get_callbacks() );
+        if ( w->is_infocuschangehandler() )
+            return;
 
+        w->set_infocuschangehandler( true );
+
+        my_wnd_s *wndc = ts::ptr_cast<my_wnd_s *>( w->get_callbacks() );
         RID f = wndc->owner()->getrid();
         gui->set_focus( f );
 
         if (!gm_receiver_c::in_progress( GM_UI_EVENT ))
-            gmsg<GM_UI_EVENT>( UE_ACTIVATE ).send();
+            gmsg<GM_UI_EVENT>( UE_ACTIVATE, f ).send();
+
+        w->set_infocuschangehandler( false );
     }
 }
 
@@ -544,7 +565,7 @@ system_query_e me2sq( ts::mouse_event_e me )
 
 /*virtual*/ ts::bitmap_c rectengine_root_c::my_wnd_s::app_get_icon(bool for_tray)
 {
-    return gui->app_icon( for_tray );
+    return owner()->get_icon( for_tray );
 }
 
 /*virtual*/ ts::irect rectengine_root_c::my_wnd_s::app_get_redraw_rect()
@@ -557,10 +578,18 @@ void rectengine_root_c::my_wnd_s::kill()
     TSDEL( wnd );
 }
 
-rectengine_root_c::rectengine_root_c(bool sys)
+/*virtual*/ bool rectengine_root_c::my_wnd_s::evt_close()
+{
+    evt_data_s d;
+    return owner()->sq_evt( SQ_CLOSE, owner()->getrid(), d );
+}
+
+rectengine_root_c::rectengine_root_c( rect_sys_e sys)
 {
     redraw_rect = ts::irect( maximum<int>::value, minimum<int>::value );
-    flags.init( F_SYSTEM, sys );
+    flags.init( F_TOOLRECT, 0 != (sys & RS_TOOL) );
+    flags.init( F_TASKBAR, 0 != ( sys & RS_TASKBAR) );
+    flags.init( F_INACTIVE, 0 != ( sys & RS_INACTIVE) );
     drawntag = drawtag - 1;
 
 }
@@ -570,6 +599,9 @@ rectengine_root_c::~rectengine_root_c()
     flags.set( F_DIP );
     //if (gui) gui->delete_event( DELEGATE(this, refresh_frame) );
     syswnd.kill();
+
+    if (!flags.is(F_TASKBAR) && !flags.is( F_INACTIVE ) && gui)
+        gui->restore_focus( getrid() );
 }
 
 /*virtual*/ bool rectengine_root_c::apply(rectprops_c &rpss, const rectprops_c &pss)
@@ -593,7 +625,7 @@ rectengine_root_c::~rectengine_root_c()
             shp.visible = true;
 
         if ( !ts::master().mainwindow )
-            shp.mainwindow = true;
+            shp.mainwindow = true, shp.taskbar = true;
 
         if ( pss.is_alphablend() )
             shp.layered = true;
@@ -611,12 +643,20 @@ rectengine_root_c::~rectengine_root_c()
 
         shp.opacity = pss.opacity();
 
-        shp.parent = ts::master().mainwindow;
-        if ( flags.is( F_SYSTEM ) )
+        shp.parent = ts::master().activewindow;
+        if (!shp.parent) ts::master().mainwindow;
+
+        if ( flags.is( F_TOOLRECT ) )
         {
             ASSERT( !pss.is_micromized() );
             shp.parent = nullptr;
             shp.toolwindow = true;
+        }
+        if ( flags.is( F_TASKBAR ) )
+        {
+            ASSERT( !pss.is_micromized() );
+            shp.parent = nullptr;
+            shp.taskbar = true;
         }
 
         {
@@ -1555,7 +1595,11 @@ bool rectengine_root_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
 void rectengine_root_c::set_system_focus(bool bring_to_front)
 {
     if ( syswnd.wnd )
+    {
         syswnd.wnd->set_focus( bring_to_front );
+        if ( !flags.is(F_INACTIVE) )
+            ts::master().activewindow = syswnd.wnd;
+    }
 }
 
 void rectengine_root_c::flash()
@@ -1676,12 +1720,19 @@ void rectengine_root_c::shake()
     DEFERRED_UNIQUE_CALL( 0.03, DELEGATE(this, shakeme), nullptr );
 }
 
+void rectengine_root_c::update_icon()
+{
+    if ( syswnd.wnd )
+        syswnd.wnd->update_icon();
+}
+
 bool rectengine_root_c::update_foreground()
 {
     ts::wnd_c * prev = nullptr;
     for( RID rr : gui->roots() )
     {
-        ts::wnd_c *cur = HOLD(rr)().getroot()->syswnd.wnd;
+        HOLD hrr( rr );
+        ts::wnd_c *cur = hrr ? hrr().getroot()->syswnd.wnd : nullptr;
         if (prev)
         {
             //SetWindowPos(cur, prev, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);

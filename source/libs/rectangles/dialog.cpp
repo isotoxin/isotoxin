@@ -1472,21 +1472,19 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
     defaultthrdraw = DTHRO_BORDER | DTHRO_BASE | /*DTHRO_CENTER_HOLE |*/ DTHRO_CAPTION | DTHRO_CAPTION_TEXT;
 
     ts::uint32 allowb = caption_buttons();
-    GET_TOOLTIP ttt = nullptr;
-    if ( ts::master().mainwindow)
+
+    bcreate_s clb;
+
+    clb.tag = 0;
+    getbutton( clb );
+
+    if ( ts::master().mainwindow )
     {
         RESETFLAG(allowb, SETBIT(CBT_MINIMIZE));
-        ttt = (GET_TOOLTIP)[]()->ts::wstr_c { return ts::wstr_c(); };
+        clb.tooltip = (GET_TOOLTIP)[]()->ts::wstr_c { return ts::wstr_c(); };
     }
-    gui->make_app_buttons(getrid(), allowb, ttt);
 
-    if (0 < getengine().children_count())
-    {
-        bcreate_s bcr;
-        bcr.tag = 0;
-        getbutton(bcr);
-        if (bcr.face) getengine().get_child(0)->getrid().call_setup_button(bcr);
-    }
+    gui->make_app_buttons(getrid(), allowb, &clb);
 
     numtopbuttons = getengine().children_count();
 

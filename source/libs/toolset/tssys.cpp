@@ -13,6 +13,7 @@ namespace ts
 
         is_shutdown = true;
         mainwindow = nullptr;
+        activewindow = nullptr;
 
         if ( on_exit )
             on_exit();

@@ -61,7 +61,7 @@ void inline conv_add2(long& rt, long& gt, long& bt, unsigned long dv) {
 	rt += 0xFF & (dv>>16);
 }
 
-static unsigned long __fastcall do_conv(const unsigned long *data, long *m, long sflags, long pit) {
+static unsigned long do_conv(const unsigned long *data, long *m, long sflags, long pit) {
 	long rt=0, gt=0, bt=0;
 
 	if (sflags & C_TOPOK) {

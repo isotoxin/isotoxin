@@ -625,6 +625,27 @@ rects
 
 images
 {
+  gcollapsed
+  {
+	gen
+	{
+		svg=`<svg height="32" width="32">
+			<path fill="##text_def" stroke="none" transform="translate(5 5) scale(0.25)" d="M 40,25 40,75 65,50 Z" />
+		</svg>`
+		size=20,20
+	}
+  }
+  gexpanded
+  {
+	gen
+	{
+		svg=`<svg height="32" width="32">
+			<path fill="##text_def" stroke="none" transform="translate(5 5) scale(0.25)" d="M 25,40 50,65 75,40 Z" />
+		</svg>`
+		size=20,20
+	}
+  }
+
 
   bmin
   {

@@ -84,10 +84,14 @@ bool sys_is_debugger_present()
 smbr_e TSCALL sys_mb( const wchar *caption, const wchar *text, smb_e options )
 {
 #ifdef _WIN32
-    if ( master().mainwindow && IsDebuggerPresent() && GetWindowThreadProcessId( wnd2hwnd( master().mainwindow ), nullptr ) != GetCurrentThreadId() )
+
+    ts::wnd_c *tbw = master().activewindow;
+    if ( !tbw ) tbw = master().mainwindow;
+
+    if ( tbw && IsDebuggerPresent() && GetWindowThreadProcessId( wnd2hwnd( tbw ), nullptr ) != GetCurrentThreadId() )
         __debugbreak();
 
-    HWND par = master().mainwindow && GetWindowThreadProcessId( wnd2hwnd( master().mainwindow ), nullptr ) == GetCurrentThreadId() ? wnd2hwnd( master().mainwindow ) : nullptr;
+    HWND par = tbw && GetWindowThreadProcessId( wnd2hwnd( tbw ), nullptr ) == GetCurrentThreadId() ? wnd2hwnd( tbw ) : nullptr;
     UINT f = 0;
 
     switch ( options )

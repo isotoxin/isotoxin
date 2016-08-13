@@ -1,6 +1,7 @@
 #include "toolset.h"
 #include "textparser.h"
 #include "fourcc.h"
+#include "platform.h"
 
 //-V:glyphs:807
 
@@ -15,7 +16,7 @@ template<typename VECCTYPE, int VECLEN, typename TCHARACTER> vec_t<VECCTYPE, VEC
     vec_t<VECCTYPE, VECLEN> r(0);
     int index = 0;
     for (token<TCHARACTER> t(s, TCHARACTER(',')); t && index < VECLEN; ++t, ++index)
-        r[index] = t->as_num<VECCTYPE>();
+        r[index] = t->template as_num<VECCTYPE>();
     return r;
 }
 
@@ -145,7 +146,7 @@ namespace
 
 void glyph_s::get_outlined_glyph(glyph_image_s &gi, font_c *font, const ivec2 &pos, TSCOLOR outline_color)
 {
-	float invr = tmin(tmax(font->font_params.size)*font->font_params.outline_radius, 6.f); // max outline size limited to 6 pixels to avoid distance field artefacts
+	float invr = tmin(tmax<int,2>(font->font_params.size)*font->font_params.outline_radius, 6.f); // max outline size limited to 6 pixels to avoid distance field artefacts
 	invr = tmax(invr, 1.1f); // <= 1 size is not correct for outline generatation algorithm
 	int ir = (int)invr;
     gi.charindex = -1;
@@ -939,10 +940,15 @@ struct text_parser_s
                     search_rects = true;
                     continue;
 
-                } else
-				{
-					if (FLAG(flags,TO_WRAP_BREAK_WORD)) goto inlineBreak;
+                } else if ( FLAG( flags, TO_WRAP_BREAK_WORD ) )
+                {
+                    line_size = last_line.count() - 1; // limit len of string by current symbol (not including)
+                    was_inword_break = true;
 
+                } else
+                {
+					
+                    
 					//—разу формировать новую строку нельз€ - если окажетс€, что это единственное слово в строке, то его надо не переносить, а разбивать
 					//ѕоиск последнего разделител€ (только пробел)
 					//≈сли пробел стоит в начале строки, а сама строка состоит из одного слова, то слово всЄ равно переноситс€ на другую строку - это нормально
@@ -950,7 +956,12 @@ struct text_parser_s
 
 					char charclass[30];
 					aint start = j+1, n = last_line.count() - start;
-					if (hyphenation_tag_nesting_level && n < ARRAY_SIZE(charclass)-3)//нужно смотреть на 3 буквы вперЄд, чтобы работали правила gss-ssg и gs-ssg
+                    
+                    
+                    // TODO : make hyphenation compatible with gcc
+
+#ifdef _MSC_VER
+                    if ( hyphenation_tag_nesting_level && n < ARRAY_SIZE( charclass ) - 3 )//нужно смотреть на 3 буквы вперЄд, чтобы работали правила gss-ssg и gs-ssg
 					{
 						//ѕеренос слов по слогам реализован на основе упрощЄнного алгоритма ѕ.’ристова http://sites.google.com/site/foliantapp/project-updates/hyphenation
 						aint nn = tmin(n+3, text.l - (cur_text_index-n+1)), i = 0;
@@ -1000,29 +1011,32 @@ struct text_parser_s
 							 || (uint32&)(charclass[i]) == MAKEFOURCC('s','g','g','g'))
 							 charclass[i+=1] = '-';
 
-						int newLineLen = line_width;
-						glyph_s &hyphenGlyph = (*fonts_stack.last())[L'-'];
-						newLineLen += hyphenGlyph.advance;
+                        {
+                            int newLineLen = line_width;
+                            glyph_s &hyphenGlyph = ( *fonts_stack.last() )[ L'-' ];
+                            newLineLen += hyphenGlyph.advance;
 
-						//»щем последний перенос
-						for (aint i=n-1; i>2; i--)//не разрешаем переносить менее 3-х букв с начала и конца слова
-							if ((newLineLen -= last_line.get(i+start).advance) <= cur_max_line_len && charclass[i-1] == '-' && i < nn-2)
-							{
-								line_size = start + i;
-								line_width = newLineLen;
-								if (last_line.get(i + start - 1).ch != '-')
-								{
-									line_size++;
-									meta_glyph_s mg = add_meta_glyph(meta_glyph_s::CHAR, cur_text_index);
-									mg.glyph = &hyphenGlyph;
-									mg.advance = mg.glyph->advance;
-									last_line.pop();
-									last_line.insert(start + i, mg);
-								}
-								goto end;
-							}
+                            //»щем последний перенос
+                            for ( aint i = n - 1; i > 2; i-- )//не разрешаем переносить менее 3-х букв с начала и конца слова
+                                if ( ( newLineLen -= last_line.get( i + start ).advance ) <= cur_max_line_len && charclass[ i - 1 ] == '-' && i < nn - 2 )
+                                {
+                                    line_size = start + i;
+                                    line_width = newLineLen;
+                                    if ( last_line.get( i + start - 1 ).ch != '-' )
+                                    {
+                                        line_size++;
+                                        meta_glyph_s mg = add_meta_glyph( meta_glyph_s::CHAR, cur_text_index );
+                                        mg.glyph = &hyphenGlyph;
+                                        mg.advance = mg.glyph->advance;
+                                        last_line.pop();
+                                        last_line.insert( start + i, mg );
+                                    }
+                                    goto end;
+                                }
+                        }
 skipHyphenate:;
-					}
+                    }
+#endif
 
 					if (j >= rite_rite) // space found - word is not single => generate new line
 					{
@@ -1031,12 +1045,11 @@ skipHyphenate:;
 					}
 					else // “акже формируем новую строку, но уже не по последнему пробелу, а по части слова, вмещающегос€ в строку
 					{
-inlineBreak:
-						line_size = last_line.count()-1;//длину строки ограничиваем до текущего символа (невключительно)
+						line_size = last_line.count()-1; // limit len of string by current symbol (not including)
 						was_inword_break = true;
 					}
 end:;
-				}
+                }
 
 				int H, spaces, W, WR;
                 pen.y += calc_HSW(H, spaces, W, WR, line_size); // calculate line height and spaces count

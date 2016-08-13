@@ -340,10 +340,21 @@ void contact_c::accept_call(auto_accept_audio_call_e aa, bool video)
 
 bool contact_c::b_hangup(RID, GUIPARAM par)
 {
-    gui_notice_c *ownitm = (gui_notice_c *)par;
-    RID parent = HOLD(ownitm->getparent())().getparent();
-    gui->repos_children(&HOLD(parent).as<gui_group_c>());
-    TSDEL(ownitm);
+    if ( is_meta() )
+    {
+        ts::ptr_cast<contact_root_c *>( this )->subiterate( [](contact_c *c) {
+            if ( c->is_av() )
+                c->b_hangup( RID(), nullptr );
+        } );
+        return true;
+    }
+
+    if (gui_notice_c *ownitm = (gui_notice_c *)par)
+    {
+        RID parent = HOLD( ownitm->getparent() )( ).getparent();
+        gui->repos_children( &HOLD( parent ).as<gui_group_c>() );
+        TSDEL( ownitm );
+    }
 
     if (active_protocol_c *ap = prf().ap(getkey().protoid))
         ap->stop_call(getkey().contactid);
@@ -1211,6 +1222,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
     if (0 != (contact.mask & CDM_STATE) && c_sub)
     {
         c_sub->protohit(true);
+        bool metaoffline = c_sub->get_state() != CS_UNKNOWN && c_sub->get_historian()->get_meta_state() == CS_OFFLINE;
         contact_state_e oldst = c_sub->get_state();
         c_sub->set_state( contact.state );
 
@@ -1221,8 +1233,38 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                 contact_activity(c_sub->get_historian()->getkey());
 
                 if ( oldst == CS_OFFLINE || oldst == CS_UNKNOWN )
-                    if (contact.state == CS_ONLINE)
-                        play_sound(snd_friend_online, false);
+                    if ( contact.state == CS_ONLINE )
+                    {
+                        play_sound( snd_friend_online, false );
+                        contact_root_c *hst = c_sub->get_historian();
+                        if ( metaoffline && !hst->get_greeting().is_empty() && hst->get_greeting_allow_time() < now()  )
+                        {
+                            DEFERRED_EXECUTION_BLOCK_BEGIN( 0 )
+                                
+                                contact_c *c_sub = (contact_c *)param;
+                                contact_root_c *hst = c_sub->get_historian();
+                                time_t n = now();
+                                hst->set_greeting_last( n );
+                                prf().dirtycontact( hst->getkey() );
+                                ++n;
+                                if ( hst->get_readtime() < n )
+                                    hst->set_readtime( n );
+                                gmsg<ISOGM_MESSAGE> msg( &contacts().get_self(), c_sub, MTA_UNDELIVERED_MESSAGE );
+
+                                msg.post.message_utf8 = c_sub->get_historian()->get_greeting();
+                                msg.post.message_utf8.trim();
+                                if ( !msg.post.message_utf8.is_empty() )
+                                {
+                                    emoti().parse( msg.post.message_utf8, true );
+                                    msg.post.message_utf8.trim_right( CONSTASTR( "\r\n" ) );
+                                
+                                    if ( !msg.post.message_utf8.is_empty() )
+                                        msg.send();
+                                }
+
+                            DEFERRED_EXECUTION_BLOCK_END(c_sub);
+                        }
+                    }
 
                 if ( oldst == CS_ONLINE )
                     if (contact.state == CS_OFFLINE || contact.state == CS_UNKNOWN)
@@ -1649,7 +1691,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
                 g_app->new_blink_reason(h->getkey()).up_unread();
                 h->subactivity(sender->getkey());
 
-                if (g_app->is_inactive( false ) )
+                if (g_app->is_inactive( false, h->getkey() ) )
                 {
                     bool show_desktop_notify = prf().get_options().is( UIOPT_SHOW_INCOMING_MSG_PNL );
                     bool intrusive_behaviour = prf().get_options().is( UIOPT_INTRUSIVE_BEHAVIOUR );
@@ -1681,11 +1723,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
 
                     if ( intrusive_behaviour )
                     {
-                        if ( HOLD( g_app->main )( ).getprops().is_collapsed() )
-                            MODIFY( g_app->main ).decollapse();
-                        else
-                            HOLD( g_app->main )( ).getroot()->set_system_focus( true );
-                        g_app->select_last_unread_contact();
+                        g_app->bring2front( nullptr );
                     }
 
                 }
@@ -1693,7 +1731,7 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
                 h->execute_message_handler( msg.post.message_utf8 );
             }
         }
-        if (g_app->is_inactive(true) || !msg.current)
+        if (g_app->is_inactive( true, h->getkey() ) || !msg.current)
             play_sound( snd_incoming_message, false );
         else if (msg.current)
             play_sound(snd_incoming_message2, false);
@@ -2139,6 +2177,29 @@ int contact_root_c::calc_unread() const
             ++cnt;
     }
     return cnt;
+}
+
+bool contact_root_c::is_active() const
+{
+    if ( g_app->F_SPLIT_UI )
+    {
+        rectengine_root_c *root = nullptr;
+
+        if ( RID hconv = HOLD( g_app->main ).as<mainrect_c>().find_conv_rid( getkey() ) )
+            root = HOLD( hconv )( ).getroot();
+        else
+            return false;
+        if ( !CHECK( root ) ) return false;
+
+        if ( root->getrect().getprops().is_collapsed() )
+            return false;
+        if ( !root->is_foreground() )
+            return false;
+
+        return true;
+    }
+
+    return gui_item && gui_item->getprops().is_active();
 }
 
 void contact_root_c::export_history(const ts::wsptr &templatename, const ts::wsptr &fname)
@@ -2701,6 +2762,7 @@ void contact_root_c::setup(const contacts_s * c, time_t nowtime)
     __super::setup( c, nowtime );
 
     set_comment(c->comment);
+    greeting = c->greeting;
     set_tags(c->tags);
     set_readtime(ts::tmin(nowtime, c->readtime));
     set_mhcmd( ts::from_utf8(c->msghandler) );
@@ -2726,6 +2788,7 @@ bool contact_root_c::save(contacts_s * c) const
     c->name = get_name(false);
     c->customname = get_customname();
     c->comment = get_comment();
+    c->greeting = greeting;
     c->tags = get_tags();
     c->statusmsg = get_statusmsg(false);
     c->readtime = get_readtime();

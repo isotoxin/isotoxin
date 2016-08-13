@@ -32,6 +32,7 @@ static void __stdcall incoming_file(int cid, u64 utag, u64 filesize, const char 
 static bool __stdcall file_portion(u64 utag, u64 offset, const void *portion, int portion_size);
 static void __stdcall file_control(u64 utag, file_control_e fctl);
 static void __stdcall typing(int gid, int cid);
+static void __stdcall telemetry( telemetry_e k, const void *data, int datasize );
 
 static void fix_pf( proto_info_s &pi )
 {
@@ -61,6 +62,7 @@ struct protolib_s
             {
                 functions = handshake( &hostfunctions );
                 functions->logging_flags(g_logging_flags);
+                functions->telemetry_flags( g_telemetry_flags );
 
             } else
             {
@@ -107,6 +109,7 @@ struct protolib_s
         file_portion,
         file_control,
         typing,
+        telemetry,
     },
     nullptr, // protolib
     nullptr, // functions
@@ -989,6 +992,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
     case AQ_DEBUG_SETTINGS:
         {
             g_logging_flags = 0;
+            g_telemetry_flags = 0;
             if (protolib.functions) protolib.functions->logging_flags(0);
 #if defined _DEBUG || defined _CRASH_HANDLER
             MINIDUMP_TYPE dump_type = (MINIDUMP_TYPE)(MiniDumpWithDataSegs | MiniDumpWithHandleData);
@@ -1007,10 +1011,15 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                 else if (k.equals(CONSTASTR(DEBUG_OPT_LOGGING)))
                 {
                     g_logging_flags = (unsigned)v.as_int();
-                    if (protolib.functions) protolib.functions->logging_flags(g_logging_flags);
                 }
-
+                else if ( k.equals(CONSTASTR(DEBUG_OPT_TELEMETRY)))
+                {
+                    g_telemetry_flags = (unsigned)v.as_int();
+                }
             });
+
+            if ( protolib.functions ) protolib.functions->logging_flags( g_logging_flags );
+            if ( protolib.functions ) protolib.functions->telemetry_flags( g_telemetry_flags );
 
 
 #if defined _DEBUG || defined _CRASH_HANDLER
@@ -1279,4 +1288,9 @@ static bool __stdcall file_portion(u64 utag, u64 offset, const void *portion, in
 static void __stdcall typing(int gid, int cid)
 {
     IPCW(HQ_TYPING) << gid << cid;
+}
+
+static void __stdcall telemetry( telemetry_e k, const void *data, int datasize )
+{
+    IPCW( HQ_TELEMETRY ) << (int)k << data_block_s(data, datasize);
 }

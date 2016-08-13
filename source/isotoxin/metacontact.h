@@ -28,8 +28,8 @@ class dialog_metacontact_c;
 template<> struct MAKE_ROOT<dialog_metacontact_c> : public _PROOT(dialog_metacontact_c)
 {
     dialog_metacontact_params_s prms;
-    MAKE_ROOT() :_PROOT(dialog_metacontact_c)() { init(false); }
-    MAKE_ROOT(const dialog_metacontact_params_s &prms) :_PROOT(dialog_metacontact_c)(), prms(prms) { init(false); }
+    MAKE_ROOT() :_PROOT(dialog_metacontact_c)() { init( RS_NORMAL ); }
+    MAKE_ROOT(const dialog_metacontact_params_s &prms) :_PROOT(dialog_metacontact_c)(), prms(prms) { init( RS_NORMAL ); }
     ~MAKE_ROOT() {}
 };
 

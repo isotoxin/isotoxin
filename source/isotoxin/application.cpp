@@ -418,6 +418,7 @@ application_c::application_c(const ts::wchar * cmdl)
     F_SHOW_CONTACTS_IDS = false;
     F_SHOW_SPELLING_WARN = false;
     F_MAINRECTSUMMON = false;
+    F_SPLIT_UI = false;
 
     autoupdate_next = now() + 10;
 	g_app = this;
@@ -984,7 +985,7 @@ const avatar_s * application_c::gen_identicon_avatar( const ts::str_c &pubid )
         case LL_ABTT_MINIMIZE:
             if (cfg().collapse_beh() == 1)
                 return TTT("Minimize to notification area",123);
-            return TTT("Minimize",6);
+            return loc_text( loc_minimize );
         case LL_ANY_FILES:
             return loc_text( loc_anyfiles );
     }
@@ -1227,7 +1228,7 @@ application_c::blinking_reason_s &application_c::new_blink_reason(const contact_
 
 void application_c::update_blink_reason(const contact_key_s &historian_key)
 {
-    if (g_app->is_inactive(false))
+    if ( g_app->is_inactive( false, historian_key ) )
         return;
 
     if (blinking_reason_s *flr = g_app->find_blink_reason(historian_key, true))
@@ -1245,7 +1246,7 @@ void application_c::blinking_reason_s::do_recalc_unread_now()
             if (!invite) friend_invite(false);
         }
 
-        if (flags.is(F_RECALC_UNREAD) || (hi->gui_item && hi->gui_item->getprops().is_active()))
+        if (flags.is(F_RECALC_UNREAD) || hi->is_active())
         {
             if (is_file_download_process() || is_file_download_request())
             {
@@ -1390,46 +1391,67 @@ void application_c::reselect( contact_root_c *historian, int options, double del
     DEFERRED_UNIQUE_CALL( delay, DELEGATE(this, reselect_p ), 0 );
 }
 
-
-void application_c::select_last_unread_contact()
+void application_c::bring2front( contact_root_c *historian )
 {
-    time_t latest = 0;
-    contact_key_s historian;
-    for (blinking_reason_s &br : m_blink_reasons)
+    if ( !historian )
     {
-        if (br.notification_icon_need_blink())
+        time_t latest = 0;
+        contact_key_s khistorian;
+        for ( blinking_reason_s &br : m_blink_reasons )
         {
-            if (br.last_update > latest)
+            if ( br.notification_icon_need_blink() )
             {
-                latest = br.last_update;
-                historian = br.historian;
+                if ( br.last_update > latest )
+                {
+                    latest = br.last_update;
+                    khistorian = br.historian;
+                }
+            }
+        }
+        if ( latest )
+        {
+            if ( contact_root_c *h = contacts().rfind( khistorian ) )
+                historian = h;
+        }
+        else
+        {
+            if ( active_contact_item )
+            {
+                gui_contactlist_c &cl = HOLD( active_contact_item->getparent() ).as<gui_contactlist_c>();
+                cl.scroll_to_child( &active_contact_item->getengine(), false );
+            }
+            else if ( gui_contact_item_c *active = contacts().get_self().gui_item )
+            {
+                gui_contactlist_c &cl = HOLD( active->getparent() ).as<gui_contactlist_c>();
+                cl.scroll_to_begin();
             }
         }
     }
-    if (latest)
-    {
-        if (contact_root_c *h = contacts().rfind(historian))
-        {
-            if (h->gui_item)
-            {
-                gui_contactlist_c &cl = HOLD(h->gui_item->getparent()).as<gui_contactlist_c>();
-                cl.scroll_to_child(&h->gui_item->getengine(), false);
-            }
 
-            h->reselect();
-        }
-    } else
+    RID r2popup(main);
+    if ( historian )
     {
-        if (active_contact_item)
+        if ( historian->gui_item )
         {
-            gui_contactlist_c &cl = HOLD(active_contact_item->getparent()).as<gui_contactlist_c>();
-            cl.scroll_to_child(&active_contact_item->getengine(), false);
-        } else if (gui_contact_item_c *active = contacts().get_self().gui_item)
+            gui_contactlist_c &cl = HOLD( historian->gui_item->getparent() ).as<gui_contactlist_c>();
+            cl.scroll_to_child( &historian->gui_item->getengine(), false );
+        }
+
+        if ( g_app->F_SPLIT_UI )
         {
-            gui_contactlist_c &cl = HOLD(active->getparent()).as<gui_contactlist_c>();
-            cl.scroll_to_begin();
+            r2popup = HOLD( main ).as<mainrect_c>().find_conv_rid( historian->getkey() );
+            if ( !r2popup )
+                r2popup = HOLD( main ).as<mainrect_c>().create_new_conv( historian );
         }
     }
+
+    if ( HOLD( r2popup )( ).getprops().is_collapsed() )
+        MODIFY( r2popup ).decollapse();
+    else
+        HOLD( r2popup )( ).getroot()->set_system_focus( true );
+
+    if ( historian ) historian->reselect();
+
 }
 
 /*virtual*/ void application_c::app_notification_icon_action( ts::notification_icon_action_e act, RID iconowner)
@@ -1446,8 +1468,7 @@ void application_c::select_last_unread_contact()
 
             } else
             {
-                MODIFY(iconowner).decollapse();
-                select_last_unread_contact();
+                bring2front( nullptr );
             }
         } else
             MODIFY(iconowner).micromize(true);
@@ -1710,6 +1731,15 @@ void _new_profile()
 
 }
 
+void application_c::apply_ui_mode( bool split_ui )
+{
+    int v = cfg().misc_flags();
+    INITFLAG( v, MISCF_SPLIT_UI, split_ui );
+    g_app->F_SPLIT_UI = split_ui;
+    if (cfg().misc_flags( v ))
+        HOLD( main ).as<mainrect_c>().apply_ui_mode( split_ui );
+}
+
 bool application_c::b_customize(RID r, GUIPARAM param)
 {
     struct handlers
@@ -1718,6 +1748,12 @@ bool application_c::b_customize(RID r, GUIPARAM param)
         {
             SUMMON_DIALOG<dialog_settings_c>(UD_SETTINGS);
         }
+
+        static void m_splitui( const ts::str_c& )
+        {
+            g_app->apply_ui_mode( !g_app->F_SPLIT_UI );
+        }
+
         static void m_newprofile(const ts::str_c&)
         {
             _new_profile();
@@ -1775,6 +1811,11 @@ bool application_c::b_customize(RID r, GUIPARAM param)
 
 
     m.add( TTT("Settings",42), 0, handlers::m_settings );
+    int f = g_app->F_SPLIT_UI ? MIF_MARKED : 0;
+    if ( HOLD( main )( ).getprops().is_maximized() )
+        f |= MIF_DISABLED;
+    m.add( TTT("Multiple windows",480), f, handlers::m_splitui );
+
     m.add_separator();
     m.add( TTT("About",356), 0, handlers::m_about );
 
@@ -1829,6 +1870,7 @@ namespace
         void conti( const ts::str_c&p )
         {
             g_app->F_READONLY_MODE_WARN = true;
+            ts::master().activewindow = nullptr;
             ts::master().mainwindow = nullptr;
 
             bool noprofile = false;
@@ -1848,6 +1890,7 @@ namespace
         void exit_now( const ts::str_c& )
         {
             TSDEL( this );
+            ts::master().activewindow = nullptr;
             ts::master().mainwindow = nullptr;
             ts::master().sys_exit( 0 );
         }
@@ -1937,10 +1980,22 @@ void application_c::summon_main_rect(bool minimize)
     }
 }
 
-bool application_c::is_inactive(bool do_incoming_message_stuff)
+bool application_c::is_inactive( bool do_incoming_message_stuff, const contact_key_s &ck )
 {
-    rectengine_root_c *root = HOLD(main)().getroot();
-    if (!CHECK(root)) return false;
+    rectengine_root_c *root = nullptr;
+
+    if ( g_app->F_SPLIT_UI )
+    {
+        if ( RID hconv = HOLD( main ).as<mainrect_c>().find_conv_rid( ck ) )
+            root = HOLD( hconv )( ).getroot();
+        else
+            return true;
+    } else
+    {
+        root = HOLD( main )( ).getroot();
+    }
+
+    if (!CHECK(root)) return true;
     bool inactive = false;
     for(;;)
     {
@@ -2361,12 +2416,6 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, bool activate, bo
         static_cast<sound_capture_handler_c*>(this)->start_capture();
     else if (0 == get_avinprogresscount() && was_avip)
         static_cast<sound_capture_handler_c*>(this)->stop_capture();
-
-    if (activate)
-        for (av_contact_s &avc : m_avcontacts)
-            if (av_contact_s::AV_INPROGRESS == avc.state)
-                avc.set_inactive(avc.c != avmc);
-
 
     if (active_contact_item && active_contact_item->contacted())
         if (avmc == &active_contact_item->getcontact())
@@ -3331,9 +3380,12 @@ av_contact_s::av_contact_s(contact_root_c *c, state_e st) :c(c), state(st)
 
 bool av_contact_s::ohandler( gmsg<ISOGM_PEER_STREAM_OPTIONS> &rso )
 {
-    remote_so = rso.so;
-    remote_sosz = rso.videosize;
-    dirty_cam_size = true;
+    if (c->subpresent( rso.ck ))
+    {
+        remote_so = rso.so;
+        remote_sosz = rso.videosize;
+        dirty_cam_size = true;
+    }
     return false;
 }
 
@@ -3519,6 +3571,7 @@ void av_contact_s::camera_tick()
     }
 
     ts::ivec2 dsz = vsb->get_video_size();
+    if ( dsz == ts::ivec2( 0 ) ) return;
     if (dirty_cam_size || dsz != prev_video_size)
     {
         prev_video_size = dsz;

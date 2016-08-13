@@ -55,7 +55,9 @@ int proc_lochange(const wstrings_c & pars);
 int proc_trunc(const wstrings_c & pars);
 int proc_antic99(const wstrings_c & pars);
 int proc_grabnodes(const wstrings_c & pars);
+#ifdef _WIN32
 int proc_toxrelay(const wstrings_c & pars);
+#endif
 int proc_http(const wstrings_c & pars);
 int proc_hgver(const wstrings_c & pars);
 int proc_upd(const wstrings_c & pars);
@@ -107,7 +109,9 @@ struct command_s
     command_s( L"fxml", L"format [xml-file]", proc_fxml ),
     command_s(L"nodes", L"Grab nodes list from https://wiki.tox.chat/users/nodes", proc_grabnodes),
     command_s(L"http", L"Do some http ops", proc_http),
+#ifdef _WIN32
     command_s(L"toxrelay", L"Just run TOX relay", proc_toxrelay),
+#endif
     command_s(L"hgver", L"Prints current hg revision", proc_hgver),
     //command_s(L"upd", L"Load isotoxin update", proc_upd),
     command_s(L"sign", L"Sign archive", proc_sign),
@@ -123,9 +127,9 @@ struct command_s
 };
 
 
+#ifdef _WIN32
 HANDLE hConsoleOutput;
 CONSOLE_SCREEN_BUFFER_INFO csbi;
-void(*PrintCustomHandler)(int color, const asptr& s) = nullptr;
 
 class SetConsoleColor
 {
@@ -143,17 +147,21 @@ public:
         SetConsoleTextAttribute(hConsoleOutput, csbi.wAttributes);
     }
 };
+#endif // _WIN32
 
-void Print(WORD color, const char *format, ...)
+void Print(int color, const char *format, ...)
 {
-    SetConsoleColor cc(color | FOREGROUND_INTENSITY);
+#ifdef _WIN32
+    SetConsoleColor cc((WORD)color | FOREGROUND_INTENSITY);
+#endif // _WIN32
     sstr_c buf;
     va_list arglist;
     va_start(arglist, format);
     vsprintf_s(buf.str(), buf.get_capacity(), format, arglist);
+#ifdef _WIN32
     CharToOemA(buf.str(),buf.str());
+#endif // _WIN32
     printf("%s",buf.cstr());
-    if (PrintCustomHandler) PrintCustomHandler(color, buf);
 }
 
 void Print(const char *format, ...)
@@ -163,7 +171,6 @@ void Print(const char *format, ...)
     va_start(arglist, format);
     vsprintf_s(buf.str(), buf.get_capacity(), format, arglist);
     printf("%s", buf.cstr());
-    if (PrintCustomHandler) PrintCustomHandler(-1, buf);
 }
 extern "C" { void sodium_init(); }
 
@@ -176,10 +183,7 @@ int main(int argc, _TCHAR* argv[])
 {
     sodium_init();
 	GetConsoleScreenBufferInfo(hConsoleOutput = GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-	/*SetConsoleOutputCP(1251);/*/
     setlocale(LC_ALL, ".1251");
-    //setlocale(LC_ALL, ".866");
-    //SetConsoleOutputCP влияет на все последующие команды в той же сессии cmd
 
     wchar_t *cmdlb = GetCommandLineW();
     wstrings_c ql; ql.qsplit( cmdlb );

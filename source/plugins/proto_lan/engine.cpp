@@ -1038,6 +1038,13 @@ u64 lan_engine::contact_s::send_block(block_type_e bt, u64 delivery_tag, const v
 
         engine->pg_raw_data(k, bt, (const byte *)data, datasize);
         pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
+
+        if ( IS_TLM( TLM_AUDIO_SEND_BYTES ) )
+        {
+            tlm_data_s d1 = { id, datasize + datasize1 };
+            engine->hf->telemetry( TLM_AUDIO_SEND_BYTES, &d1, sizeof( d1 ) );
+        }
+
         return 0;
     }
 
@@ -1046,6 +1053,24 @@ u64 lan_engine::contact_s::send_block(block_type_e bt, u64 delivery_tag, const v
 
 u64 lan_engine::contact_s::send_block( datablock_s *b )
 {
+    switch ( b->bt )
+    {
+    case BT_AUDIO_FRAME:
+        if ( IS_TLM(TLM_AUDIO_SEND_BYTES) )
+        {
+            tlm_data_s d1 = { id, b->len };
+            engine->hf->telemetry( TLM_AUDIO_SEND_BYTES, &d1, sizeof( d1 ) );
+        }
+        break;
+    case BT_VIDEO_FRAME:
+        if ( IS_TLM(TLM_VIDEO_SEND_BYTES) )
+        {
+            tlm_data_s d1 = { id, b->len };
+            engine->hf->telemetry( TLM_VIDEO_SEND_BYTES, &d1, sizeof( d1 ) );
+        }
+        break;
+    }
+
     sendblocks.lock_write()( ).add( b );
     if ( state == ONLINE )
         nextactiontime = time_ms();
@@ -2388,12 +2413,15 @@ void lan_engine::stream_options( int id, const stream_options_s *so )
                 c->media->local_so.view_w = so->view_w;
                 c->media->local_so.view_h = so->view_h;
 
-                stream_options_s so2s;
-                so2s.options = htonl( so->options );
-                so2s.view_w = htonl( so->view_w );
-                so2s.view_h = htonl( so->view_h );
+                if ( c->call_status == contact_s::IN_PROGRESS )
+                {
+                    stream_options_s so2s;
+                    so2s.options = htonl( so->options );
+                    so2s.view_w = htonl( so->view_w );
+                    so2s.view_h = htonl( so->view_h );
 
-                c->send_block( BT_STREAM_OPTIONS, 0, &so2s, sizeof( so2s ) );
+                    c->send_block( BT_STREAM_OPTIONS, 0, &so2s, sizeof( so2s ) );
+                }
 
                 //if ( 0 == ( c->media->local_so.options & SO_RECEIVING_VIDEO ) )
                 //    c->media->current_recv_frame = -1;
@@ -2561,6 +2589,13 @@ void lan_engine::contact_s::start_media()
 {
     call_status = contact_s::IN_PROGRESS;
     if (media == nullptr) media = new media_stuff_s(this);
+
+    stream_options_s so2s;
+    so2s.options = htonl( media->local_so.options );
+    so2s.view_w = htonl( media->local_so.view_w );
+    so2s.view_h = htonl( media->local_so.view_h );
+
+    send_block( BT_STREAM_OPTIONS, 0, &so2s, sizeof( so2s ) );
 
     if ( callstate.lock_read()( ).allow_run_video_encoder() )
     {
@@ -2759,6 +2794,12 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                     }
                 }
 
+                if ( IS_TLM( TLM_AUDIO_RECV_BYTES ) )
+                {
+                    tlm_data_s d1 = { id, flen };
+                    engine->hf->telemetry( TLM_AUDIO_RECV_BYTES, &d1, sizeof( d1 ) );
+                }
+
                 break;
             }
 
@@ -2882,6 +2923,12 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                                 if ( 0 != ( media->local_so.options & SO_RECEIVING_VIDEO ) && 0 != ( media->remote_so.options & SO_SENDING_VIDEO ) )
                                     media->video_frame( ntohl( *(i32 *)dd.buf.data() ), dd.buf.data() + sizeof(i32), dd.buf.size() - sizeof( i32 ) );
 
+                            if ( IS_TLM( TLM_VIDEO_RECV_BYTES ) )
+                            {
+                                tlm_data_s d1 = { id, dd.buf.size() };
+                                engine->hf->telemetry( TLM_VIDEO_RECV_BYTES, &d1, sizeof( d1 ) );
+                            }
+
                             break;
                         case BT_AUDIO_FRAME:
                             break;
@@ -2982,8 +3029,17 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
 
                                 logfn("filetr.log", "BT_FILE_CHUNK %llu %llu", sid, offset);
 
-                                if (file_transfer_s *f = engine->find_ftr_by_sid(sid))
-                                    f->chunk_received(offset, d + 2, dd.buf.size() - sizeof(u64) * 2);
+                                if ( file_transfer_s *f = engine->find_ftr_by_sid( sid ) )
+                                {
+                                    f->chunk_received( offset, d + 2, dd.buf.size() - sizeof( u64 ) * 2 );
+
+                                    if ( IS_TLM( TLM_FILE_RECV_BYTES ) )
+                                    {
+                                        tlm_data_s d2 = { f->utag, dd.buf.size() };
+                                        engine->hf->telemetry( TLM_FILE_RECV_BYTES, &d2, sizeof( d2 ) );
+                                    }
+
+                                }
                             }
                             break;
                         case BT_TYPING:
@@ -3300,6 +3356,12 @@ void lan_engine::transmitting_file_s::send_block(contact_s *c)
 
     ASSERT(rch[0].buf && rch[0].dtg == 0);
     rch[0].dtg = c->send_block(BT_FILE_CHUNK, 0, &d, sizeof(d), rch[0].buf, rch[0].size);
+
+    if ( IS_TLM( TLM_FILE_SEND_BYTES ) )
+    {
+        tlm_data_s d2 = { utag, rch[ 0 ].size };
+        engine->hf->telemetry( TLM_FILE_SEND_BYTES, &d2, sizeof( d2 ) );
+    }
 }
 
 bool lan_engine::transmitting_file_s::fresh_file_portion(const file_portion_s *fp)
@@ -3554,4 +3616,8 @@ void lan_engine::export_data()
 void lan_engine::logging_flags(unsigned int f)
 {
     g_logging_flags = f;
+}
+void lan_engine::telemetry_flags( unsigned int f )
+{
+    g_telemetry_flags = f;
 }

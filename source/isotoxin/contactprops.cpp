@@ -52,6 +52,18 @@ bool dialog_contact_props_c::comment( const ts::wstr_c &c, bool )
     return true;
 }
 
+bool dialog_contact_props_c::greeting( const ts::wstr_c &c, bool )
+{
+    cgreeting = to_utf8( c );
+    return true;
+}
+
+bool dialog_contact_props_c::greeting_per( const ts::wstr_c &p, bool )
+{
+    cgreeting_per = p.as_int() * 60;
+    return true;
+}
+
 bool dialog_contact_props_c::tags_handler(const ts::wstr_c &ht, bool )
 {
     tags.split<char>( to_utf8(ht), ',' );
@@ -148,6 +160,8 @@ bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t, bool )
     {
         customname = contactue->get_customname();
         ccomment = contactue->get_comment();
+        cgreeting = contactue->get_greeting();
+        cgreeting_per = contactue->get_greeting_period();
         keeph = contactue->get_keeph();
         aaac = contactue->get_aaac();
         imb = contactue->get_imnb();
@@ -207,14 +221,24 @@ bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t, bool )
         dm().combik( TTT("On incoming message",465) ).setmenu( imnmenu() ).setname( CONSTASTR( "imn" ) );
         dm().vspace();
 
+        dm << 32;
+
+        ts::wstr_c ctl;
+        dm().textfield( ts::wstr_c(), ts::wmake( cgreeting_per/60 ), DELEGATE( this, greeting_per ) ).setname( CONSTASTR( "gper" ) ).width( 50 ).subctl( 1, ctl );
+        dm().label( TTT("Greeting will be sent every time contact appears online, but only once per $ minutes",486) / ctl );
+
+        dm().vspace();
+        dm().textfieldml( L"", from_utf8( cgreeting ), DELEGATE( this, greeting ), 10 ).focus( true );
+
     }
 
     menu_c m;
     m.add( TTT("Settings",369), 0 , TABSELMI(1) );
     m.add( TTT("Notification",466), 0, TABSELMI( 16 ) );
     m.add( TTT("Details",370), open_details_tab ? MIF_MARKED : 0, TABSELMI(2) );
-    m.add( TTT("Comment",371), 0 , TABSELMI(4) );
     m.add( TTT("Processing",440), 0, TABSELMI( 8 ) );
+    m.add( TTT("Greeting",485), 0, TABSELMI( 32 ) );
+    m.add( TTT( "Comment", 371 ), 0, TABSELMI( 4 ) );
 
     gui_htabsel_c &tab = MAKE_CHILD<gui_htabsel_c>(getrid(), m);
     edges = ts::irect(0, tab.get_min_size().y, 0, 0);
@@ -263,6 +287,16 @@ ts::wstr_c dialog_contact_props_c::buildmh()
         {
             changed = true;
             contactue->set_customname(customname);
+        }
+        if ( contactue->get_greeting() != cgreeting )
+        {
+            changed = true;
+            contactue->set_greeting( cgreeting );
+        }
+        if ( contactue->get_greeting_period() != cgreeting_per )
+        {
+            changed = true;
+            contactue->set_greeting_period( cgreeting_per );
         }
         if (contactue->get_comment() != ccomment)
         {

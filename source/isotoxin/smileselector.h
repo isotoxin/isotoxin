@@ -5,7 +5,7 @@ template<> struct MAKE_ROOT<dialog_smileselector_c> : public _PROOT(dialog_smile
 {
     ts::irect smilebuttonrect;
     RID editor;
-    MAKE_ROOT(const ts::irect &smilebuttonrect, RID editor) :_PROOT(dialog_smileselector_c)(), smilebuttonrect(smilebuttonrect), editor(editor) { init(false); }
+    MAKE_ROOT(const ts::irect &smilebuttonrect, RID editor) :_PROOT(dialog_smileselector_c)(), smilebuttonrect(smilebuttonrect), editor(editor) { init( RS_NORMAL ); }
     ~MAKE_ROOT() {}
 };
 

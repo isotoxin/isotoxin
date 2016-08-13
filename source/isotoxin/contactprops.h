@@ -13,8 +13,8 @@ class dialog_contact_props_c;
 template<> struct MAKE_ROOT<dialog_contact_props_c> : public _PROOT(dialog_contact_props_c)
 {
     dialog_contactprops_params_s prms;
-    MAKE_ROOT() :_PROOT(dialog_contact_props_c)() { init(false); }
-    MAKE_ROOT(const dialog_contactprops_params_s &prms) :_PROOT(dialog_contact_props_c)(), prms(prms) { init(false); }
+    MAKE_ROOT() :_PROOT(dialog_contact_props_c)() { init( RS_NORMAL ); }
+    MAKE_ROOT(const dialog_contactprops_params_s &prms) :_PROOT(dialog_contact_props_c)(), prms(prms) { init( RS_NORMAL ); }
     ~MAKE_ROOT() {}
 };
 
@@ -29,6 +29,12 @@ class dialog_contact_props_c : public gui_isodialog_c
 
     ts::str_c ccomment; // utf8
     bool comment( const ts::wstr_c &, bool );
+
+    ts::str_c cgreeting; // utf8
+    int cgreeting_per = 60;
+
+    bool greeting( const ts::wstr_c &, bool );
+    bool greeting_per( const ts::wstr_c &, bool );
 
     ts::astrings_c tags;
     bool tags_handler(const ts::wstr_c &, bool );

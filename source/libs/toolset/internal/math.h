@@ -36,7 +36,7 @@
 
 int VDRoundToInt(double x);
 long VDRoundToLong(double x);
-sint64 VDRoundToInt64(double x);
+int64 VDRoundToInt64(double x);
 
 inline sint32 VDRoundToIntFast(float x) {
 	union {

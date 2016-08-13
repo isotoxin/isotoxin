@@ -1,4 +1,5 @@
 #include "toolset.h"
+#include "platform.h"
 
 #define PNG_USER_MEM_SUPPORTED
 #define PNG_ZBUF_SIZE   65536
@@ -141,20 +142,20 @@ static bool pngdatareader(img_reader_s &r, void * buf, int pitch)
 	png_bytep * row_pointers=nullptr;
 
     aint rolinesize = png_get_rowbytes(data.png_ptr, data.info_ptr);
-    if (rolinesize > pitch) goto eggog;
+    if (rolinesize <= pitch)
+    {
+        row_pointers = (png_bytep *)_alloca( r.size.y * sizeof( png_bytep ) );
+        uint8 * tbuf = (uint8 *)buf;
+        for ( int i = 0; i < r.size.y; ++i, tbuf += pitch )
+            row_pointers[ i ] = tbuf;
 
-	row_pointers=(png_bytep *)_alloca( r.size.y*sizeof(png_bytep) );
-    uint8 * tbuf = (uint8 *)buf;
-	for(int i=0;i<r.size.y;++i,tbuf+=pitch)
-        row_pointers[i]=tbuf;
+        png_read_image( data.png_ptr, row_pointers );
+        png_read_end( data.png_ptr, data.info_ptr );
 
-	png_read_image(data.png_ptr, row_pointers);
-	png_read_end(data.png_ptr, data.info_ptr);
+        if ( data.png_ptr != nullptr ) png_destroy_read_struct( &( data.png_ptr ), &( data.info_ptr ), ( png_infopp )nullptr );
+        return true;
+    }
 
-    if(data.png_ptr!=nullptr) png_destroy_read_struct(&(data.png_ptr),&(data.info_ptr), (png_infopp)nullptr);
-    return true;
-
-eggog:
 	if(data.png_ptr!=nullptr) png_destroy_read_struct(&(data.png_ptr),&(data.info_ptr), (png_infopp)nullptr);
 	return false;
 }
@@ -166,6 +167,7 @@ bool save_to_png_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
 
     data.error = false;
 
+    png_infop info_ptr = nullptr;
     png_structp png_ptr = png_create_write_struct_2(
         PNG_LIBPNG_VER_STRING,
         (void *)&data,
@@ -180,7 +182,7 @@ bool save_to_png_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
 
     png_set_bgr( png_ptr );
 
-    png_infop info_ptr = png_create_info_struct(png_ptr);
+    info_ptr = png_create_info_struct(png_ptr);
 	if (info_ptr == nullptr) goto eggog;
 
 	data.buf = &buf;
@@ -194,7 +196,14 @@ bool save_to_png_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
     case 3: type = PNG_COLOR_TYPE_RGB; break;
     case 4: type = PNG_COLOR_TYPE_RGB_ALPHA; break;
     default:
-        goto eggog;
+    eggog:
+        buf.clear();
+        if ( png_ptr )
+        {
+            png_destroy_info_struct( png_ptr, &info_ptr );
+            png_destroy_write_struct( &png_ptr, ( png_infopp )nullptr );
+        }
+        return false;
     }
 
 	png_set_compression_level(png_ptr, Z_BEST_COMPRESSION);
@@ -217,15 +226,6 @@ bool save_to_png_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
         png_destroy_write_struct(&png_ptr, (png_infopp)nullptr);
     }
     return true;
-
-eggog:
-    buf.clear();
-	if(png_ptr)
-    {
-        png_destroy_info_struct( png_ptr, &info_ptr );
-        png_destroy_write_struct(&png_ptr, (png_infopp)nullptr);
-    }
-	return false;
 }
 
 } // namespace ts

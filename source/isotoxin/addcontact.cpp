@@ -8,8 +8,11 @@ dialog_addcontact_c::dialog_addcontact_c(MAKE_ROOT<dialog_addcontact_c> &data) :
 
 dialog_addcontact_c::~dialog_addcontact_c()
 {
-    if (gui)
-        gui->delete_event( DELEGATE(this, hidectl) );
+    if ( gui )
+    {
+        gui->delete_event( DELEGATE( this, hidectl ) );
+        gui->delete_event( DELEGATE( this, resolve_anm ) );
+    }
 }
 
 /*virtual*/ ts::wstr_c dialog_addcontact_c::get_name() const
@@ -189,11 +192,52 @@ void dialog_addcontact_c::show_err( cmd_result_e r )
             gui_label_simplehtml_c &ctl = HOLD( errr ).as<gui_label_simplehtml_c>();
             ctl.set_text( errt, true );
             MODIFY( errr ).visible( true );
-            DEFERRED_UNIQUE_CALL( 1.0, DELEGATE( this, hidectl ), errr );
+            DEFERRED_UNIQUE_CALL( 3.0, DELEGATE( this, hidectl ), nullptr );
         }
     }
+}
+
+bool dialog_addcontact_c::resolve_anm(RID, GUIPARAM)
+{
+    if ( resolve_process )
+    {
+        DEFERRED_UNIQUE_CALL( 0.01, DELEGATE( this, resolve_anm ), nullptr );
+    }
+
+    ts::irect ir = ts::irect::from_lt_and_size( anmpos(), pa.bmp.info().sz );
+    getengine().redraw( &ir );
+
+    return true;
+}
+
+void dialog_addcontact_c::start_reslove_process()
+{
+    if ( resolve_process ) return;
+    resolve_process = true;
+    resolve_anm( RID(), nullptr );
+    hidectl( RID(), nullptr );
+}
+
+ts::ivec2 dialog_addcontact_c::anmpos()
+{
+    int y = getprops().size().y - pa.bmp.info().sz.y;
+    if ( RID m = find( CONSTASTR( "msg" ) ) )
+        y = HOLD( m )( ).getprops().rect().rb.y + 5;
+
+    ts::ivec2 p( (getprops().size().x - pa.bmp.info().sz.x) / 2, y );
+    return p;
+}
+
+void dialog_addcontact_c::draw_resolve_process()
+{
+    pa.render();
+
+    /*draw_data_s &dd =*/ getengine().begin_draw();
+    getengine().draw( anmpos(), pa.bmp.extbody(), true );
+    getengine().end_draw();
 
 }
+
 
 /*virtual*/ void dialog_addcontact_c::tabselected( ts::uint32 /*mask*/ )
 {
@@ -225,6 +269,13 @@ bool dialog_addcontact_c::public_id_handler( const ts::wstr_c &pid, bool )
 
 /*virtual*/ bool dialog_addcontact_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    if ( resolve_process && qp == SQ_DRAW && rid == getrid() )
+    {
+        __super::sq_evt( qp, rid, data );
+        draw_resolve_process();
+        return true;
+    }
+
     if (__super::sq_evt(qp, rid, data)) return true;
 
     //switch (qp)
@@ -255,7 +306,8 @@ bool dialog_addcontact_c::public_id_handler( const ts::wstr_c &pid, bool )
 
 bool dialog_addcontact_c::hidectl(RID,GUIPARAM p)
 {
-    MODIFY(RID::from_param(p)).visible(false);
+    if ( RID errr = find( CONSTASTR( "err" ) ) )
+        MODIFY(errr).visible(false);
     return true;
 }
 
@@ -263,13 +315,19 @@ ts::uint32 dialog_addcontact_c::gm_handler( gmsg<ISOGM_CMD_RESULT>& r)
 {
     if (r.cmd == AQ_ADD_CONTACT)
     {
-        if (r.rslt == CR_OPERATION_IN_PROGRESS) return 0; // TODO : show progress animation
+        if ( r.rslt == CR_OPERATION_IN_PROGRESS )
+        {
+            start_reslove_process();
+            return 0;
+        }
         if (r.rslt == CR_OK)
         {
             __super::on_confirm();
 
         } else
         {
+            resolve_process = false;
+            resolve_anm(RID(), nullptr);
             show_err( r.rslt );
         }
     }

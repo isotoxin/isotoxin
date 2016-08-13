@@ -83,6 +83,9 @@ fullscreenvideo_c::~fullscreenvideo_c()
 
             common.vsb_draw(getengine(), common.display, common.display_position, common.display_size, false, false);
 
+            if ( active_protocol_c *ap = prf().ap( owner->sender->getkey().protoid ) )
+                ap->draw_telemtry( getengine(), owner->sender->getkey().contactid, ts::irect::from_center_and_size( common.display_position, common.display_size ), SETBIT( TLM_AUDIO_SEND_BYTES ) | SETBIT( TLM_AUDIO_RECV_BYTES ) | SETBIT( TLM_VIDEO_SEND_BYTES ) | SETBIT( TLM_VIDEO_RECV_BYTES ) );
+
         } else
         {
             getengine().begin_draw();

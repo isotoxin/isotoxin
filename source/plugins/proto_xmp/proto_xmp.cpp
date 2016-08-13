@@ -2843,6 +2843,9 @@ void xmpp::export_data()
 void xmpp::logging_flags(unsigned int f)
 {
 }
+void xmpp::telemetry_flags( unsigned int f )
+{
+}
 
 #define FUNC0( rt, fn ) rt __stdcall static_##fn() { return cl.fn(); }
 #define FUNC1( rt, fn, p0 ) rt __stdcall static_##fn(p0 pp0) { return cl.fn(pp0); }

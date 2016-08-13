@@ -32,6 +32,7 @@ dialog_msgbox_params_s dialog_msgbox_c::mb_avatar( const ts::wstr_c &text, const
 
 RID dialog_msgbox_params_s::summon()
 {
+    redraw_collector_s dch;
     return SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, *this);
 }
 
@@ -60,6 +61,17 @@ dialog_msgbox_c::dialog_msgbox_c(MAKE_ROOT<dialog_msgbox_c> &data) :gui_isodialo
         bcr.tag = m_buttons.size() - 1;
         if (!m_params.ok_button_text.is_empty())
             bcr.btext = m_params.ok_button_text;
+    }
+    if ( m_params.bcustom_ )
+    {
+        bcreate_s &bcr = m_buttons.add();
+        bcr.tag = 2;
+        __super::getbutton( bcr );
+        bcr.tag = m_buttons.size() - 1;
+        if ( !m_params.custom_button_text.is_empty() )
+            bcr.btext = m_params.custom_button_text;
+        bcr.handler = DELEGATE( this, on_custom );
+        bcr.face = BUTTON_FACE( button );
     }
 
     int qri = m_params.desc.find_pos(CONSTWSTR("<qr>"));
@@ -197,6 +209,13 @@ void dialog_msgbox_c::getbutton(bcreate_s &bcr)
 {
     if (m_params.on_cancel_h) m_params.on_cancel_h(m_params.on_cancel_par);
     __super::on_close();
+}
+
+bool dialog_msgbox_c::on_custom( RID, GUIPARAM )
+{
+    m_params.on_custom_h( m_params.on_custom_par );
+    __super::on_close();
+    return true;
 }
 
 
@@ -540,7 +559,7 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR(" <a href=\"https://sqlite.org\">SQLite</a>") );
     title.append( CONSTWSTR("</l><br><br>Other sources and assets used<hr><l><a href=\"http://virtualdub.sourceforge.net/\">VirtualDub</a>") );
     title.append( CONSTWSTR(" <a href=\"https://github.com/sarbian/libsquish\">libsquish</a>") );
-    title.append( CONSTWSTR(" <a href=\"http://code.google.com/p/libyuv\">libuv</a>") );
+    title.append( CONSTWSTR(" <a href=\"https://chromium.googlesource.com/libyuv/libyuv/\">libyuv</a>") );
     title.append( CONSTWSTR(" <a href=\"https://github.com/GNOME/librsvg\">librsvg</a>") );
     title.append( CONSTWSTR(" <a href=\"https://github.com/libyal/liblnk\">liblink</a>") );
     title.append( CONSTWSTR(" <a href=\"http://www.efgh.com/software/md5.htm\">md5</a>") );
@@ -953,12 +972,7 @@ bool incoming_msg_panel_c::endoflife( RID, GUIPARAM )
         {
         case SQ_MOUSE_LUP:
 
-            if ( HOLD( g_app->main )( ).getprops().is_collapsed() )
-                MODIFY( g_app->main ).decollapse();
-            else
-                HOLD( g_app->main )().getroot()->set_system_focus(true);
-
-            hist->reselect();
+            g_app->bring2front( hist );
             DEFERRED_UNIQUE_CALL( 0, DELEGATE( this, endoflife ), 0 );
             return true;
 

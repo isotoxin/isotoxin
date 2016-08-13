@@ -63,6 +63,7 @@ struct wnd_show_params_s
     bool visible = false;
     bool focus = true;
     bool mainwindow = false;
+    bool taskbar = false;
     bool toolwindow = false;
     bool layered = false;
     bool acceptfiles = false;
@@ -96,6 +97,7 @@ struct wnd_callbacks_s
     virtual irect       app_get_redraw_rect() { return irect( maximum<int>::value, minimum<int>::value ); }
 
     virtual void evt_destroy() {}
+    virtual bool evt_close() { return false; /* return true if need to postpone close */ }
 };
 
 class wnd_c : public safe_object
@@ -105,14 +107,18 @@ protected:
     wnd_callbacks_s *cbs = nullptr;
     flags32_s flags;
     static const flags32_s::BITS F_LAYERED = SETBIT( 0 );
+    static const flags32_s::BITS F_INFOCUSCHANGEHANDLER = SETBIT( 1 );
     
-    static const flags32_s::BITS FREEBITS = SETBIT( 1 );
+    static const flags32_s::BITS FREEBITS = SETBIT( 2 );
 
     disposition_e dp = D_UNKNOWN;
 
     virtual void vshow( wnd_show_params_s *shp ) = 0;
 
 public:
+
+    bool is_infocuschangehandler() const { return flags.is(F_INFOCUSCHANGEHANDLER); }
+    void set_infocuschangehandler( bool f ) { flags.init( F_INFOCUSCHANGEHANDLER, f ); }
 
     typedef safe_ptr<wnd_c> sptr_t;
 
@@ -121,6 +127,8 @@ public:
 
     disposition_e disposition() const { return dp; }
     void show( wnd_show_params_s *shp );
+    
+    virtual void update_icon() = 0;
 
     virtual bool is_collapsed() const = 0;
     virtual bool is_maximized() const = 0;

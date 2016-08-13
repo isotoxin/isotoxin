@@ -1,12 +1,13 @@
 #include "toolset.h"
+#include "platform.h"
 
 #pragma pack (push)
 #pragma pack (16)
 extern "C" {
 #define XMD_H
 #undef FAR
-#include "jpeg\src\jpeglib.h"
-#include "jpeg\src\jerror.h"
+#include "jpeg/src/jpeglib.h"
+#include "jpeg/src/jerror.h"
 #undef XMD_H
 }
 #pragma pack (pop)

@@ -115,14 +115,6 @@ struct contact_data_s
 #endif
 };
 
-#if defined(_MSC_VER)
-typedef unsigned __int64 u64;
-#elif defined(__GNUC__)
-typedef unsigned long long u64;
-#else
-#error "Sorry, can't compile: unknown target system"
-#endif
-
 struct message_s
 {
     u64             utag;           // unique tag
@@ -284,6 +276,12 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
         plugin should call this function 1 per second for every typing client
     */
     void(PROTOCALL *typing)(int gid, int cid);
+
+    /*
+        plugin can call this func to inform gui
+        see DEBUG_OPT_TELEMETRY
+    */
+    void( PROTOCALL *telemetry )( telemetry_e k, const void *data, int datasize );
 };
 
 /*
@@ -326,6 +324,7 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     FUNC2( void, join_groupchat, int, int ) \
     FUNC1( void, typing,         int ) \
     FUNC1( void, logging_flags,  unsigned int ) \
+    FUNC1( void, telemetry_flags,  unsigned int ) \
     
 
 struct proto_functions_s

@@ -169,6 +169,26 @@ class active_protocol_c : public ts::safe_object
     static const ts::flags32_s::BITS F_CURRENT_ONLINE       = SETBIT(10);
     static const ts::flags32_s::BITS F_WORKER_STOPED        = SETBIT(11);
 
+    struct tlm_statistic_s
+    {
+        uint64 uid = 0;
+        uint64 accum = 0;
+        uint64 accumps = 0; // per second
+        uint64 accumcur = 0;
+        ts::Time last_update = ts::Time::past();
+        int updatecnt = 0;
+
+        tlm_statistic_s * next = nullptr;
+
+        ~tlm_statistic_s()
+        {
+            TSDEL( next );
+        }
+        void newdata( const tlm_data_s *d, bool full = true );
+    };
+
+    tlm_statistic_s tlms[ TLM_COUNT ];
+
     struct icon_s
     {
         const ts::bitmap_c *bmp;
@@ -286,4 +306,6 @@ public:
     void reset_data();
     void change_data( const ts::blob_c &b, bool is_native );
 
+
+    void draw_telemtry( rectengine_c&e, const uint64& uid, const ts::irect& r, ts::uint32 tlmmask );
 };

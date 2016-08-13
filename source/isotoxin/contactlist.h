@@ -27,8 +27,17 @@ template<> struct MAKE_CHILD<gui_contact_item_c> : public _PCHILD(gui_contact_it
 template<> struct MAKE_ROOT<gui_contact_item_c> : public _PROOT(gui_contact_item_c)
 {
     contact_root_c *contact;
-    MAKE_ROOT(contact_root_c *c) : _PROOT(gui_contact_item_c)(), contact(c) { init(false); }
+    MAKE_ROOT(contact_root_c *c) : _PROOT(gui_contact_item_c)(), contact(c) { init( RS_INACTIVE ); }
     ~MAKE_ROOT() {}
+};
+
+
+class gui_conversation_header_c;
+template<> struct MAKE_CHILD<gui_conversation_header_c> : public _PCHILD( gui_conversation_header_c )
+{
+    contact_root_c *contact;
+    MAKE_CHILD( RID parent_, contact_root_c *c ) :contact( c ) { parent = parent_; }
+    ~MAKE_CHILD();
 };
 
 class gui_clist_base_c : public gui_label_c
@@ -47,8 +56,55 @@ public:
     gui_contact_separator_c *as_separator();
 };
 
+namespace rbtn
+{
+    enum
+    {
+        EB_NAME,
+        EB_STATUS,
+        EB_NNAME,
+
+        EB_MAX
+    };
+    struct ebutton_s
+    {
+        RID brid;
+        ts::ivec2 p;
+        bool updated = false;
+    };
+};
+
+
 class gui_contact_item_c : public gui_clist_base_c
 {
+    DUMMY(gui_contact_item_c);
+    GM_RECEIVER( gui_contact_item_c, ISOGM_SELECT_CONTACT );
+    
+    ts::wstr_c typing_buf;
+    bool stop_typing(RID, GUIPARAM);
+    bool animate_typing(RID, GUIPARAM);
+
+    ts::svec2 shiftstateicon;
+
+    friend class contact_c;
+    friend class contacts_c;
+
+    bool redraw_now(RID, GUIPARAM);
+
+    static const ts::flags32_s::BITS  F_PROTOHIT = FLAGS_FREEBITSTART_LABEL << 0;
+    static const ts::flags32_s::BITS  F_NOPROTOHIT = FLAGS_FREEBITSTART_LABEL << 1;
+    static const ts::flags32_s::BITS  F_LBDN = FLAGS_FREEBITSTART_LABEL << 2;
+    static const ts::flags32_s::BITS  F_DNDDRAW = FLAGS_FREEBITSTART_LABEL << 3;
+    static const ts::flags32_s::BITS  F_SHOWTYPING = FLAGS_FREEBITSTART_LABEL << 4;
+
+    static const ts::flags32_s::BITS  F_VIS_FILTER = FLAGS_FREEBITSTART_LABEL << 5;
+    static const ts::flags32_s::BITS  F_VIS_GROUP = FLAGS_FREEBITSTART_LABEL << 6;
+
+protected:
+    static const ts::flags32_s::BITS  FLAGS_FREEBITSTART_CITM = FLAGS_FREEBITSTART_LABEL << 7;
+
+    ts::shared_ptr<contact_root_c> contact;
+
     enum colors_e
     {
         COLOR_TEXT_SPECIAL,
@@ -59,75 +115,23 @@ class gui_contact_item_c : public gui_clist_base_c
         COLOR_PROTO_TEXT_OFFLINE,
     };
 
-    DUMMY(gui_contact_item_c);
-    ts::shared_ptr<contact_root_c> contact;
-    GM_RECEIVER( gui_contact_item_c, ISOGM_SELECT_CONTACT );
-    
-    ts::wstr_c typing_buf;
-    bool stop_typing(RID, GUIPARAM);
-    bool animate_typing(RID, GUIPARAM);
-
-    ts::svec2 shiftstateicon;
-
-    struct protocols_s
-    {
-        ts::safe_ptr<gui_contact_item_c> owner;
-        ts::wstr_c str;
-        ts::ivec2 size = ts::ivec2(0);
-        bool dirty = true;
-        protocols_s(gui_contact_item_c *itm):owner(itm) {}
-        void update();
-        void clear() { dirty = true; str.clear(); }
-    };
-
-    const protocols_s *protocols() const
-    {
-        ASSERT( CIR_CONVERSATION_HEAD == role );
-        return (const protocols_s *)get_customdata();
-    }
-    protocols_s *protocols( bool create )
-    {
-        ASSERT(CIR_CONVERSATION_HEAD == role);
-        if (!get_customdata() && create)
-            set_customdata_obj<protocols_s>(this);
-        return (protocols_s *)get_customdata();
-    }
-
-    static const ts::flags32_s::BITS  F_PROTOHIT    = FLAGS_FREEBITSTART_LABEL << 0;
-    static const ts::flags32_s::BITS  F_NOPROTOHIT  = FLAGS_FREEBITSTART_LABEL << 1;
-    static const ts::flags32_s::BITS  F_EDITNAME    = FLAGS_FREEBITSTART_LABEL << 2;
-    static const ts::flags32_s::BITS  F_EDITSTATUS  = FLAGS_FREEBITSTART_LABEL << 3;
-    static const ts::flags32_s::BITS  F_SKIPUPDATE  = FLAGS_FREEBITSTART_LABEL << 4;
-    static const ts::flags32_s::BITS  F_LBDN        = FLAGS_FREEBITSTART_LABEL << 5;
-    static const ts::flags32_s::BITS  F_DNDDRAW     = FLAGS_FREEBITSTART_LABEL << 6;
-    static const ts::flags32_s::BITS  F_CALLBUTTON  = FLAGS_FREEBITSTART_LABEL << 7;
-    static const ts::flags32_s::BITS  F_SHOWTYPING  = FLAGS_FREEBITSTART_LABEL << 8;
-
-    friend class contact_c;
-    friend class contacts_c;
-
-    void set_default_proto(const ts::str_c&ost);
-
-    bool redraw_now(RID, GUIPARAM);
-    bool audio_call(RID, GUIPARAM);
-
-    bool edit0(RID, GUIPARAM);
-    bool edit1(RID, GUIPARAM);
-    void updrect(const void *, int r, const ts::ivec2 &);
-
-    void generate_protocols();
-    void draw_online_state_text(draw_data_s &dd);
-
 public:
     gui_contact_item_c(MAKE_ROOT<gui_contact_item_c> &data);
     gui_contact_item_c(MAKE_CHILD<gui_contact_item_c> &data);
+    gui_contact_item_c( MAKE_CHILD<gui_conversation_header_c> &data );
     /*virtual*/ ~gui_contact_item_c();
+
+    void vis_filter( bool f ) { flags.init( F_VIS_FILTER, f ); MODIFY( *this ).visible( flags.is(F_VIS_FILTER) && flags.is(F_VIS_GROUP) ); }
+    void vis_group( bool f ) { flags.init( F_VIS_GROUP, f ); MODIFY( *this ).visible( flags.is( F_VIS_FILTER ) && flags.is( F_VIS_GROUP ) ); }
+
+    bool is_vis_filter() const { return flags.is( F_VIS_FILTER ); }
+    bool is_vis_group() const { return flags.is( F_VIS_GROUP ); }
 
     ts::wstr_c tt();
 
     void typing();
 
-    int contact_item_rite_margin();
+    virtual int contact_item_rite_margin() const;
 
     bool allow_drag() const;
     bool allow_drop() const;
@@ -158,27 +162,19 @@ public:
         return 2;
     }
 
-    void clearprotocols();
     void protohit();
-    bool update_buttons( RID r = RID(), GUIPARAM p = nullptr );
-    bool cancel_edit( RID r = RID(), GUIPARAM p = nullptr);
-    bool apply_edit( RID r = RID(), GUIPARAM p = nullptr);
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ ts::ivec2 get_max_size() const override;
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
-    void resetcontact()
-    {
-        if (flags.is(F_SKIPUPDATE)) return;
-        contact = nullptr; update_text();
-    }
-    void setcontact(contact_root_c *c);
+    virtual bool setcontact(contact_root_c *c);
     contact_root_c &getcontact() {return SAFE_REF(contact.get());}
     const contact_root_c &getcontact() const {return SAFE_REF(contact.get());}
+    const contact_root_c *getcontact_ptr() const { return contact.get(); }
     bool contacted() const {return contact != nullptr;}
-    void update_text();
+    virtual void update_text();
 
     bool is_after(gui_contact_item_c &ci); // sort comparison
     /*virtual*/ int proto_sort_factor() const override;
@@ -186,6 +182,77 @@ public:
 
     void redraw(float delay);
 };
+
+class gui_conversation_header_c : public gui_contact_item_c
+{
+    friend class gui_contact_item_c;
+
+    static const ts::flags32_s::BITS  F_EDITNAME = FLAGS_FREEBITSTART_CITM << 0;
+    static const ts::flags32_s::BITS  F_EDITSTATUS = FLAGS_FREEBITSTART_CITM << 1;
+    static const ts::flags32_s::BITS  F_CALLBUTTON = FLAGS_FREEBITSTART_CITM << 2;
+    static const ts::flags32_s::BITS  F_SKIPUPDATE = FLAGS_FREEBITSTART_CITM << 3;
+    static const ts::flags32_s::BITS  F_DIRTY = FLAGS_FREEBITSTART_CITM << 4;
+
+    void set_default_proto( const ts::str_c&ost );
+
+    bool audio_call( RID, GUIPARAM );
+    bool cancel_edit( RID r = RID(), GUIPARAM p = nullptr );
+    bool apply_edit( RID r = RID(), GUIPARAM p = nullptr );
+
+    bool edit0( RID, GUIPARAM );
+    bool edit1( RID, GUIPARAM );
+    void updrect( const void *, int r, const ts::ivec2 & );
+
+    ts::wstr_c str;
+    ts::ivec2 size = ts::ivec2( 0 );
+    void hstuff_update();
+    void hstuff_clear() { flags.set(F_DIRTY); str.clear(); }
+
+    ts::ivec2 last_head_text_pos;
+    rbtn::ebutton_s updr[ rbtn::EB_MAX ];
+    RID editor;
+    RID bconfirm;
+    RID bcancel;
+    ts::str_c curedit; // utf8
+    ts::safe_ptr<gui_button_c> call_button;
+
+    bool _edt( const ts::wstr_c & e, bool )
+    {
+        curedit = to_utf8( e );
+        return true;
+    }
+
+public:
+
+    gui_conversation_header_c( MAKE_CHILD<gui_conversation_header_c> &data ):gui_contact_item_c( data ) {}
+    ~gui_conversation_header_c();
+
+    bool update_buttons( RID r = RID(), GUIPARAM p = nullptr );
+
+    void resetcontact()
+    {
+        if ( flags.is( F_SKIPUPDATE ) ) return;
+        contact = nullptr;
+        update_text();
+    }
+
+    /*virtual*/ int contact_item_rite_margin() const override;
+    int prepare_protocols();
+
+    void draw_online_state_text( draw_data_s &dd );
+    void generate_protocols();
+    void clearprotocols();
+    /*virtual*/ bool setcontact( contact_root_c *c ) override;
+    /*virtual*/ void update_text() override;
+
+    void on_rite_click();
+
+    bool edit_mode() const
+    {
+        return flags.is( F_EDITNAME | F_EDITSTATUS );
+    }
+};
+
 
 template<> struct MAKE_CHILD<gui_contact_separator_c> : public _PCHILD( gui_contact_separator_c )
 {
@@ -201,7 +268,7 @@ class gui_contact_separator_c : public gui_clist_base_c
 {
     DUMMY( gui_contact_separator_c );
 
-    //static const ts::flags32_s::BITS  F_PROTOHIT = FLAGS_FREEBITSTART_LABEL << 0;
+    static const ts::flags32_s::BITS  F_COLLAPSED = FLAGS_FREEBITSTART_LABEL << 0;
 
     ts::tbuf_t<int> prots;
     int sf = 0;
@@ -221,6 +288,8 @@ public:
     /*virtual*/ bool sq_evt( system_query_e qp, RID rid, evt_data_s &data ) override;
 
     /*virtual*/ int proto_sort_factor() const override;
+    bool is_collapsed() const { return flags.is( F_COLLAPSED ); }
+    void no_collapsed() { flags.clear( F_COLLAPSED ); }
 };
 
 INLINE gui_contact_item_c *gui_clist_base_c::as_item()
@@ -299,6 +368,7 @@ public:
     void array_mode( ts::array_inplace_t<contact_key_s, 2> & arr );
     void refresh_array();
     void fix_sep_visibility();
+    void fix_c_visibility();
     void clearlist();
 
     /*virtual*/ ts::ivec2 get_min_size() const override;

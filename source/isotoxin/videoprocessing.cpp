@@ -626,8 +626,8 @@ video_frame_decoder_c::video_frame_decoder_c(active_protocol_c *ap, incoming_vid
 {
     videosize = f->sz;
 
-    display = g_app->current_video_display.get();
-    if (nullptr == display->notice || display->gid != f->gid || display->cid != f->cid)
+    display = g_app->video_displays.get( ap->getid(), f->gid, f->cid );
+    if (nullptr == display->notice)
     {
         ap->unlock_video_frame(f);
         f = nullptr;
@@ -643,7 +643,7 @@ video_frame_decoder_c::~video_frame_decoder_c()
     if (display)
     {
         if (g_app)
-            g_app->current_video_display.release(display);
+            g_app->video_displays.release(display);
         else
             display->release();
     }

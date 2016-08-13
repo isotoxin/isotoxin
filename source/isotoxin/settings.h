@@ -49,7 +49,7 @@ class dialog_setup_network_c;
 template<> struct MAKE_ROOT<dialog_setup_network_c> : public _PROOT(dialog_setup_network_c)
 {
     dialog_protosetup_params_s prms;
-    MAKE_ROOT(const dialog_protosetup_params_s &prms) :_PROOT(dialog_setup_network_c)(), prms(prms) { init(false); }
+    MAKE_ROOT(const dialog_protosetup_params_s &prms) :_PROOT(dialog_setup_network_c)(), prms(prms) { init( RS_NORMAL ); }
     ~MAKE_ROOT() {}
 };
 
@@ -206,6 +206,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     bool dspf_handler( RID, GUIPARAM );
 
     int misc_flags = 0;
+    int misc_flags_store = 0;
     bool miscf_handler( RID, GUIPARAM );
 
     s3::DEVICE mic_device_stored;

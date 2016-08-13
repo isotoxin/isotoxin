@@ -289,7 +289,7 @@ namespace
     {
         dialog_settings_c *setts;
         ts::wstrings_c dar;
-        MAKE_ROOT(dialog_settings_c *setts, const ts::wstrings_c &dar) : _PROOT(dialog_dictionaries_c)(), setts(setts), dar(dar) { init(false); }
+        MAKE_ROOT(dialog_settings_c *setts, const ts::wstrings_c &dar) : _PROOT(dialog_dictionaries_c)(), setts(setts), dar(dar) { init( RS_NORMAL ); }
         ~MAKE_ROOT() {}
     };
 
@@ -1831,6 +1831,7 @@ void dialog_settings_c::mod()
     };
     PREPARE(debug, std::move(getdebug()));
     PREPARE( misc_flags, cfg().misc_flags() );
+    misc_flags_store = misc_flags;
 
     int textrectid = 0;
 
@@ -2179,10 +2180,12 @@ void dialog_settings_c::mod()
     dopts |= debug.get(CONSTASTR(DEBUG_OPT_FULL_DUMP)).as_int() ? 1 : 0;
     dopts |= debug.get(CONSTASTR(DEBUG_OPT_LOGGING)).as_int() ? 2 : 0;
     dopts |= debug.get(CONSTASTR("contactids")).as_int() ? 4 : 0;
+    dopts |= debug.get(CONSTASTR(DEBUG_OPT_TELEMETRY)).as_int() ? 8 : 0;
 
     dm().checkb(ts::wstr_c(), DELEGATE(this, debug_handler), dopts).setmenu(
         menu_c().add(CONSTWSTR("Create full memory dump on crash"), 0, MENUHANDLER(), CONSTASTR("1"))
                 .add(CONSTWSTR("Enable logging"), 0, MENUHANDLER(), CONSTASTR("2"))
+                .add( CONSTWSTR("Enable telemetry"), 0, MENUHANDLER(), CONSTASTR( "8" ))
                 .add(CONSTWSTR("Show contacts id's"), 0, MENUHANDLER(), CONSTASTR("4"))
         );
 
@@ -2268,6 +2271,11 @@ bool dialog_settings_c::debug_handler(RID, GUIPARAM p)
         debug.unset(CONSTASTR("contactids"));
     else
         debug.set(CONSTASTR("contactids")) = CONSTASTR("1");
+
+    if ( 0 == ( opts & 8 ) )
+        debug.unset( CONSTASTR( DEBUG_OPT_TELEMETRY ) );
+    else
+        debug.set( CONSTASTR( DEBUG_OPT_TELEMETRY ) ) = CONSTASTR( "-1" );
 
     mod();
     return true;
@@ -3155,6 +3163,7 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
     cfg().sounds_flags( mute_all_sounds ? 1 : 0 );
         //gmsg<ISOGM_CHANGED_SETTINGS>( 0, CFG_DSPFLAGS ).send();
 
+    misc_flags = ( misc_flags & 3 ) | ( misc_flags_store & ~3 );
     cfg().misc_flags( misc_flags );
     gui->disable_special_border( ( misc_flags & MISCF_DISABLEBORDER ) != 0 );
     

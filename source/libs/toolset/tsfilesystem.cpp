@@ -183,9 +183,9 @@ namespace ts
             if (ii < 0) break;
             ii += dprc;
             int iie = ii + 1;
-            for (;;)
+            for (; iie < envstr.get_length() ;)
             {
-                if (envstr.get_char(iie) == '%')
+                if ( envstr.get_char(iie) == '%')
                 {
                     if ((iie - ii) > 1)
                     {

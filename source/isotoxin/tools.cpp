@@ -591,6 +591,9 @@ template <typename TCH> bool text_find_link(const ts::sptr<TCH> &m, int from, ts
     i = fpref(m, CONSTSTR(TCH, "https://"), from, i);
     i = fpref( m, CONSTSTR( TCH, "ftp://" ), from, i );
     i = fpref( m, CONSTSTR( TCH, "www." ), from, i, true );
+    i = fpref( m, CONSTSTR( TCH, "magnet:?" ), from, i );
+    i = fpref( m, CONSTSTR( TCH, "dchub://" ), from, i );
+    i = fpref( m, CONSTSTR( TCH, "nmdcs://" ), from, i );
 
     if (i >= 0)
     {
@@ -1125,6 +1128,8 @@ ts::wstr_c loc_text(loctext_e lt)
             return TTT("Please, first create or load profile", 144);
         case loc_please_authorize:
             return TTT( "Please, add me to your contact list", 73 );
+        case loc_minimize:
+            return TTT( "Minimize", 6 );
         case loc_yes:
             return TTT("yes",315);
         case loc_no:

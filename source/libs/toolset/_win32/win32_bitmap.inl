@@ -201,13 +201,6 @@ namespace
     };
 }
 
-//HBITMAP bitmap()    const { return m_mem_bitmap; }
-//HDC     DC()	    const { return m_mem_dc; }
-
-#ifdef _DEBUG
-int dbmpcnt = 0;
-#endif // _DEBUG
-
 HDC get_dbmp_dc( drawable_bitmap_c&dbmp )
 {
     drawable_bitmap_internal_s &d = ref_cast<drawable_bitmap_internal_s>( dbmp.data );
@@ -220,10 +213,6 @@ void drawable_bitmap_c::clear()
 
     if ( d.m_mem_dc )
     {
-#ifdef _DEBUG
-        --dbmpcnt;
-        DMSG( "dbmp " << dbmpcnt );
-#endif // _DEBUG
         DeleteDC( d.m_mem_dc );
         d.m_mem_dc = nullptr;
     }
@@ -241,14 +230,6 @@ void    drawable_bitmap_c::create( const ivec2 &sz, int monitor )
     clear();
 
     drawable_bitmap_internal_s &d = ref_cast<drawable_bitmap_internal_s>( data );
-
-#ifdef _DEBUG
-    ++dbmpcnt;
-    DMSG( "dbmp " << dbmpcnt );
-    //if (dbmpcnt > 300)
-    //    __debugbreak();
-#endif // _DEBUG
-
 
     core.m_info.sz = sz;
     core.m_info.bitpp = 32;
@@ -327,12 +308,6 @@ bool drawable_bitmap_c::create_from_bitmap( const bitmap_c &bmp, const ivec2 &p,
     clear();
 
     drawable_bitmap_internal_s &d = ref_cast<drawable_bitmap_internal_s>( data );
-
-#ifdef _DEBUG
-    ++dbmpcnt;
-    DMSG( "dbmp " << dbmpcnt );
-#endif // _DEBUG
-
 
     BITMAPV4HEADER bmi;
 

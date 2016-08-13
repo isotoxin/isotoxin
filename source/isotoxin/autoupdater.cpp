@@ -269,18 +269,15 @@ void set_proxy_curl( CURL *curl, int proxy_type, const ts::asptr &proxy_addr )
 {
     if (proxy_type > 0)
     {
-        ts::token<char> t(proxy_addr, ':');
-        ts::str_c proxya = *t;
-        ++t;
-        ts::str_c proxyp = *t;
+        ts::str_c proxya = proxy_addr;
 
         int pt = 0;
         if (proxy_type == 1) pt = CURLPROXY_HTTP;
-        else if (proxy_type == 2) pt = CURLPROXY_SOCKS4;
-        else if (proxy_type == 3) pt = CURLPROXY_SOCKS5_HOSTNAME;
+        else if (proxy_type == 2 ) pt = CURLPROXY_SOCKS4;
+        else if (proxy_type == 3 ) pt = CURLPROXY_SOCKS5_HOSTNAME;
 
         curl_easy_setopt(curl, CURLOPT_PROXY, proxya.cstr());
-        curl_easy_setopt(curl, CURLOPT_PROXYPORT, proxyp.as_int());
+        //curl_easy_setopt(curl, CURLOPT_PROXYPORT, port);
         curl_easy_setopt(curl, CURLOPT_PROXYTYPE, pt);
     }
 }

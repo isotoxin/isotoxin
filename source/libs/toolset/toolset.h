@@ -153,10 +153,14 @@ template<typename T> struct TSNEWDEL
 #define TSDEL(p) TSNEWDEL<typename ts::clean_type<decltype(p)>::type>::__tsdel(p)
 #define TSDELC(p) do { TSDEL(p); p = nullptr; } while ((1, false))
 
+#if defined(_MSC_VER)
 #define PLEASE_USE_TSDEL =delete
 #define UNUSED delete
 #define delete PLEASE_USE_TSDEL
 #define new PLEASE_USE_TSNEW
+#elif defined(__GNUC__)
+#define UNUSED =delete
+#endif
 
 // final config
 #ifdef _FINAL

@@ -315,6 +315,8 @@ public:
     ts::safe_ptr<gui_contactlist_c> contactlist;
     RID main;
 
+    void apply_ui_mode( bool split_ui );
+
     unsigned F_INITIALIZATION : 1;
     unsigned F_NEWVERSION : 1;
     unsigned F_NONEWVERSION : 1;
@@ -335,6 +337,8 @@ public:
     unsigned F_SHOW_CONTACTS_IDS : 1;
     unsigned F_SHOW_SPELLING_WARN : 1;
     unsigned F_MAINRECTSUMMON : 1;
+    unsigned F_SPLIT_UI : 1;
+
 
     bool on_init();
     bool on_exit();
@@ -544,7 +548,7 @@ public:
 public:
 
     ts::safe_ptr<gui_contact_item_c> active_contact_item;
-    vsb_display_ptr_c current_video_display;
+    vsb_displays_pool_c video_displays;
 
     time_t autoupdate_next;
     ts::ivec2 download_progress = ts::ivec2(0);
@@ -628,7 +632,7 @@ public:
     static ts::str_c appver();
     static int appbuild();
     void set_notification_icon();
-    bool is_inactive(bool do_incoming_message_stuff);
+    bool is_inactive(bool do_incoming_message_stuff, const contact_key_s &ck);
 
     void reload_fonts();
     bool load_theme( const ts::wsptr&thn, bool summon_ch_signal = true);
@@ -684,10 +688,9 @@ public:
                 cnt += br.unread_count;
         return cnt;
     }
-    void select_last_unread_contact();
-
     bool reselect_p( RID, GUIPARAM );
     void reselect( contact_root_c *historian, int options, double delay = 0.0 );
+    void bring2front( contact_root_c *historian );
 
     void handle_sound_capture( const void *data, int size );
     void register_capture_handler( sound_capture_handler_c *h );

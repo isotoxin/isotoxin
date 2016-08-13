@@ -23,44 +23,50 @@ struct data4test_s
 
     fastdelegate::FastDelegate<void ()> process_f = []() {};
 
+#ifdef _WIN32
+#define RSLTPATH "C:\\2\\1\\"
+#elif defined _NIX
+#define RSLTPATH "/tmp/"
+#endif
+
     data4test_s(int test, uint8 av):test(test), alpha_v(av)
     {
         switch (test)
         {
             case 0:
                 Print("i420 to RGB test\n");
-                buf.load_from_disk_file(L"C:\\2\\1\\i420.bin");
+                buf.load_from_disk_file(CONSTWSTR(RSLTPATH "i420.bin"));
                 bmp.create_ARGB(ivec2(1920, 1200));
                 process_f = DELEGATE( this, process_i420_to_rgb );
                 process_f();
-                bmp.save_as_png(L"C:\\2\\1\\t00.png");
+                bmp.save_as_png(CONSTWSTR(RSLTPATH "t00.png"));
                 break;
             case 10:
                 Print("i420 to RGB test 2\n");
-                buf.load_from_disk_file(L"C:\\2\\1\\i420.bin");
+                buf.load_from_disk_file(CONSTWSTR(RSLTPATH "i420.bin"));
 
                 bmp.create_ARGB(ivec2(1038, 584));
                 process_f = DELEGATE(this, process_i420_to_rgb_2);
                 process_f();
-                bmp.save_as_png(L"C:\\2\\1\\t10.png");
+                bmp.save_as_png(CONSTWSTR(RSLTPATH "t10.png"));
                 break;
             case 1:
                 Print("RGB to i420 test\n");
-                bmp.load_from_file(L"C:\\2\\1\\test0.png");
+                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
                 process_f = DELEGATE( this, process_rgb_to_i420 );
                 process_f();
-                buf.save_to_file(L"C:\\2\\1\\i420_1.bin");
+                buf.save_to_file(CONSTWSTR(RSLTPATH "i420_1.bin"));
                 break;
             case 11:
                 Print("RGB to i420 opt test\n");
-                bmp.load_from_file(L"C:\\2\\1\\test0.png");
+                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
                 {
                     int sz = bmp.info().sz.x * bmp.info().sz.y;
                     buf.set_size( sz + sz/2 );
                 }
                 process_f = DELEGATE(this, process_rgb_to_i420_opt);
                 process_f();
-                buf.save_to_file(L"C:\\2\\1\\i420_2.bin");
+                buf.save_to_file(CONSTWSTR(RSLTPATH "i420_2.bin"));
                 break;
             case 2:
                 Print("direct lanczos resample test\n");
