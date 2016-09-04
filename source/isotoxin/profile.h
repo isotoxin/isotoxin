@@ -491,7 +491,8 @@ public:
     int  calc_history_after( const contact_key_s&historian, time_t time, bool only_messages );
     int  calc_history_between( const contact_key_s&historian, time_t time1, time_t time2 );
     
-    void kill_history_item(uint64 utag);
+    void unload_history( const contact_key_s&historian );
+    void kill_history_item( uint64 utag );
     void kill_history(const contact_key_s&historian);
     void load_history( const contact_key_s&historian, time_t time, ts::aint nload, ts::tmp_tbuf_t<int>& loaded_ids );
     void load_history( const contact_key_s&historian ); // load all history items to internal table

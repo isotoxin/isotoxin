@@ -175,6 +175,8 @@ public:
 
     /*virtual*/ int update_table_struct(const asptr& tablename, array_wrapper_c<const column_desc_s> columns, bool norowid) override
     {
+        MEMT( MEMT_SQLITE );
+
         if (!is_table_exist(tablename))
         {
             if (readonly) return -1;
@@ -551,6 +553,8 @@ public:
 
     sqlitedb_c *get( const wsptr &fn, const uint8 *passhash, bool readonly )
     {
+        MEMT( MEMT_SQLITE );
+
         ts::wstr_c fnn(fn);
         ts::fix_path(fnn, FNO_LOWERCASEAUTO | FNO_NORMALIZE);
         UNIQUE_PTR(sqlite3_c) *recruit = nullptr;

@@ -237,7 +237,7 @@ void contacts_s::set(int column, ts::data_value_s &v)
             key.contactid = (int)v.i;
             return;
         case C_PROTO_ID:
-            key.protoid = (int)v.i;
+            key.protoid = (ts::uint16)v.i;
             return;
         case C_META_ID:
             metaid = (int)v.i;
@@ -424,13 +424,13 @@ void history_s::set(int column, ts::data_value_s &v)
             cr_time = v.i;
             return;
         case C_HISTORIAN:
-            historian = ts::ref_cast<contact_key_s>(v.i);
+            historian = contact_key_s::buildfromdbvalue(v.i);
             return;
         case C_SENDER:
-            sender = ts::ref_cast<contact_key_s>(v.i);
+            sender = contact_key_s::buildfromdbvalue(v.i);
             return;
         case C_RECEIVER:
-            receiver = ts::ref_cast<contact_key_s>(v.i);
+            receiver = contact_key_s::buildfromdbvalue(v.i);
             return;
         case C_TYPE_AND_OPTIONS:
             type = v.i & (SETBIT(type_size_bits)-1);
@@ -460,13 +460,13 @@ void history_s::get(int column, ts::data_pair_s& v)
             v.i = cr_time;
             return;
         case C_HISTORIAN:
-            v.i = ts::ref_cast<int64>(historian);
+            v.i = historian.dbvalue();
             return;
         case C_SENDER:
-            v.i = ts::ref_cast<int64>( sender );
+            v.i = sender.dbvalue();
             return;
         case C_RECEIVER:
-            v.i = ts::ref_cast<int64>( receiver );
+            v.i = receiver.dbvalue();
             return;
         case C_TYPE_AND_OPTIONS:
             v.i = type;
@@ -545,10 +545,10 @@ void unfinished_file_transfer_s::set(int column, ts::data_value_s &v)
     switch (column)
     {
         case 1:
-            historian = ts::ref_cast<contact_key_s>(v.i);
+            historian = contact_key_s::buildfromdbvalue(v.i);
             return;
         case 2:
-            sender = ts::ref_cast<contact_key_s>(v.i);
+            sender = contact_key_s::buildfromdbvalue(v.i);
             return;
         case 3:
             filename.set_as_utf8(v.text);
@@ -580,10 +580,10 @@ void unfinished_file_transfer_s::get(int column, ts::data_pair_s& v)
     switch (column)
     {
         case 1:
-            v.i = ts::ref_cast<int64>(historian);
+            v.i = historian.dbvalue();
             return;
         case 2:
-            v.i = ts::ref_cast<int64>(sender);
+            v.i = sender.dbvalue();
             return;
         case 3:
             v.text = to_utf8(filename);
@@ -689,8 +689,10 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::prepare( t
 
 template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts::sqlitedb_c *db, bool all, bool notify_saved )
 {
-    ts::db_transaction_c __transaction( db );
     if ( !db ) return false;
+    ts::db_transaction_c __transaction( db );
+
+    MEMT( MEMT_SQLITE );
 
     ts::tmp_array_inplace_t<ts::data_pair_s, 0> vals( T::columns );
     bool one_done = false;
@@ -838,7 +840,7 @@ ts::wstr_c& profile_c::path_by_name(ts::wstr_c &profname)
 
 ts::uint32 profile_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // record history
 {
-    if (msg.resend) return 0;
+    if (msg.resend || msg.info) return 0;
     if (msg.pass != 0) return 0;
     bool second_pass_requred = msg.post.recv_time == 1;
     contact_root_c *historian = msg.get_historian();
@@ -962,12 +964,23 @@ void profile_c::kill_history(const contact_key_s&historian)
         changed();
 
     // apply modification to db now due not all history items loaded
-    ts::tmp_str_c whr( CONSTASTR("historian=") ); whr.append_as_num<int64>( ts::ref_cast<int64>( historian ) );
+    ts::tmp_str_c whr( CONSTASTR("historian=") ); whr.append_as_num( historian.dbvalue() );
     db->delrows( CONSTASTR("history"), whr );
+}
+
+void profile_c::unload_history( const contact_key_s&historian )
+{
+    for ( ts::aint i = table_history.rows.size()-1; i>=0; --i )
+    {
+        if ( table_history.rows.get(i).other.historian == historian )
+            table_history.rows.remove_slow( i );
+    }
 }
 
 bool profile_c::change_history_item(uint64 utag, contact_key_s & historian)
 {
+    ts::db_transaction_c __transaction( db );
+
     bool ok = false;
     table_history.cleanup();
     table_history.find<true>([&](history_s &h) ->bool
@@ -998,6 +1011,9 @@ bool profile_c::change_history_item(uint64 utag, contact_key_s & historian)
 void profile_c::change_history_item(const contact_key_s&historian, const post_s &post, ts::uint32 change_what)
 {
     if (!change_what) return;
+
+    ts::db_transaction_c __transaction( db );
+
     table_history.cleanup();
     table_history.find<true>([&](history_s &h) ->bool
     {
@@ -1011,9 +1027,9 @@ void profile_c::change_history_item(const contact_key_s&historian, const post_s 
         return false;
     });
 
-    ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num<int64>(ts::ref_cast<int64>(historian));
+    ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num(historian.dbvalue());
     whr.append( CONSTASTR(" and utag=") ).append_as_num<int64>(ts::ref_cast<int64>(post.utag));
-    whr.append( CONSTASTR(" and sender=") ).append_as_num<int64>(ts::ref_cast<int64>(post.sender));
+    whr.append( CONSTASTR(" and sender=") ).append_as_num(post.sender.dbvalue());
 
     ts::data_pair_s dp[4]; int n = 0;
     if (0 != (change_what & HITM_MT))
@@ -1048,6 +1064,8 @@ void profile_c::change_history_item(const contact_key_s&historian, const post_s 
 
 void profile_c::load_history( const contact_key_s&historian, time_t time, ts::aint nload, ts::tmp_tbuf_t<int>& loaded_ids )
 {
+    MEMT( MEMT_PROFILE_HISTORY );
+
     table_history.cleanup();
 
     auto fix = []( post_s &p )->bool
@@ -1064,9 +1082,11 @@ void profile_c::load_history( const contact_key_s&historian, time_t time, ts::ai
     {
         time = now();
         time_t ct = time;
-        ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num<int64>(ts::ref_cast<int64>(historian));
+        ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num(historian.dbvalue());
         whr.append(CONSTASTR(" and mtime>=")).append_as_num<int64>( time );
         table_history.read(db, whr);
+
+        ts::db_transaction_c __transaction( db );
 
         for (auto &row : table_history.rows)
         {
@@ -1126,7 +1146,7 @@ void profile_c::load_history( const contact_key_s&historian, time_t time, ts::ai
 
     table_history.read_ids = &loaded_ids;
 
-    ts::tmp_str_c whr( CONSTASTR("historian=") ); whr.append_as_num<int64>( ts::ref_cast<int64>( historian ) );
+    ts::tmp_str_c whr( CONSTASTR("historian=") ); whr.append_as_num( historian.dbvalue() );
     whr.append( CONSTASTR(" and mtime<") ).append_as_num<int64>( time );
     whr.append( CONSTASTR(" order by mtime desc limit ") ).append_as_num( nload );
     
@@ -1153,7 +1173,7 @@ void profile_c::load_history( const contact_key_s&historian, time_t time, ts::ai
 
 void profile_c::load_history( const contact_key_s&historian )
 {
-    ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num<int64>(ts::ref_cast<int64>(historian));
+    ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num(historian.dbvalue());
     table_history.read( db, whr );
 }
 
@@ -1229,7 +1249,7 @@ void profile_c::flush_history_now()
 int  profile_c::calc_history( const contact_key_s&historian, bool ignore_invites )
 {
     if ( !db ) return 0;
-    ts::tmp_str_c whr( CONSTASTR("historian=") ); whr.append_as_num<int64>( ts::ref_cast<int64>( historian ) );
+    ts::tmp_str_c whr( CONSTASTR("historian=") ); whr.append_as_num( historian.dbvalue() );
     if (ignore_invites) whr.append( CONSTASTR(" and mtype<>2 and mtype<>103") ); // MTA_FRIEND_REQUEST MTA_OLD_REQUEST
     return db->count( CONSTASTR("history"), whr );
 }
@@ -1237,7 +1257,7 @@ int  profile_c::calc_history( const contact_key_s&historian, bool ignore_invites
 int  profile_c::calc_history_before( const contact_key_s&historian, time_t time )
 {
     if ( !db ) return 0;
-    ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num<int64>(ts::ref_cast<int64>(historian));
+    ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num(historian.dbvalue());
     whr.append( CONSTASTR(" and mtime<") ).append_as_num<int64>( time );
     return db->count(CONSTASTR("history"), whr);
 }
@@ -1245,7 +1265,7 @@ int  profile_c::calc_history_before( const contact_key_s&historian, time_t time 
 int  profile_c::calc_history_after(const contact_key_s&historian, time_t time, bool only_messages)
 {
     if (!db) return 0;
-    ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num<int64>(ts::ref_cast<int64>(historian));
+    ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num(historian.dbvalue());
     if (only_messages) whr.append( CONSTASTR(" and mtype==0") );
     whr.append(CONSTASTR(" and mtime>=")).append_as_num<int64>(time);
     return db->count(CONSTASTR("history"), whr);
@@ -1254,7 +1274,7 @@ int  profile_c::calc_history_after(const contact_key_s&historian, time_t time, b
 int  profile_c::calc_history_between( const contact_key_s&historian, time_t time1, time_t time2 )
 {
     if (!db) return 0;
-    ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num<int64>(ts::ref_cast<int64>(historian));
+    ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num(historian.dbvalue());
     whr.append(CONSTASTR(" and mtime>=")).append_as_num<int64>(time1);
     whr.append(CONSTASTR(" and mtime<")).append_as_num<int64>(time2);
     return db->count(CONSTASTR("history"), whr);
@@ -1295,6 +1315,8 @@ ts::bitmap_c profile_c::load_avatar( const contact_key_s& ck )
 
 profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k)
 {
+    MEMT( MEMT_PROFILE_COMMON );
+
     AUTOCLEAR( profile_flags, F_LOADING );
 
     if (db)
@@ -1336,7 +1358,10 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
 
     }
 
-    db->read_table( CONSTASTR("conf"), get_cfg_reader() );
+    {
+        MEMT( MEMT_PROFILE_CONF );
+        db->read_table( CONSTASTR( "conf" ), get_cfg_reader() );
+    }
 
     ts::str_c utag = unique_profile_tag();
     bool generated = false;
@@ -1353,7 +1378,7 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
     if (generated)
         unique_profile_tag( utag );
     
-    #define TAB(tab) if (load_on_start<tab##_s>::value) table_##tab.read( db );
+    #define TAB(tab) if (load_on_start<tab##_s>::value) { MEMT( MEMT_PROFILE_##tab ); table_##tab.read( db ); }
     PROFILE_TABLES
     #undef TAB
 
@@ -1418,8 +1443,8 @@ void profile_c::load_undelivered()
 
 contact_root_c *profile_c::find_corresponding_historian(const contact_key_s &subcontact, ts::array_wrapper_c<contact_root_c * const> possible_historians) //-V813
 {
-    ts::tmp_str_c whr(CONSTASTR("sender=")); whr.append_as_num<int64>(ts::ref_cast<int64>(subcontact));
-    whr.append(CONSTASTR(" or receiver=")).append_as_num<int64>(ts::ref_cast<int64>(subcontact));
+    ts::tmp_str_c whr(CONSTASTR("sender=")); whr.append_as_num(subcontact.dbvalue());
+    whr.append(CONSTASTR(" or receiver=")).append_as_num(subcontact.dbvalue());
 
     tableview_history_s table;
     table.read(db, whr);
@@ -1831,9 +1856,11 @@ bool profile_c::flush_tables()
 {
     if (profile_flags.is(F_ENCRYPT_PROCESS))
     {
-        ts::master().sys_sleep(1);
+        ts::sys_sleep(1);
         return false;
     }
+
+    MEMT( MEMT_PROFILE_COMMON );
 
     if (__super::save()) return true;
 

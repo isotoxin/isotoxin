@@ -20,6 +20,7 @@
 #define MEMSPY_CORRUPT_CHECK_ZONE_END   32
 #define MEMSPY_MEMLEAK_MESSAGEBOX       0
 #define MEMSPY_MEMLEAK_DEBUGOUTPUT      1
+#define MEMSPY_BREAK_ON_UNKNOWN_ALLOC   0
 
 #if defined (_M_AMD64) || defined (WIN64) || defined (__LP64__) || defined(__GNUC__)
 #undef MEMSPY_CALL_STACK
@@ -89,6 +90,7 @@ struct block_header_s
     unsigned int size;
     int line;
     int num;
+    int typ;
     block_header_s *prev;
     block_header_s *next;
 #if MEMSPY_CALL_STACK
@@ -111,10 +113,10 @@ struct block_header_s
     }
 #endif
 
-    block_header_s *setup( const char *fn_, int line_, unsigned int sz );
-    static block_header_s *ma( const char *fn, int line, size_t sz );
+    block_header_s *setup( const char *fn_, int line_, int typ, unsigned int sz );
+    static block_header_s *ma( const char *fn, int line, int typ, size_t sz );
 
-    static block_header_s *mr(const char *fn, int line, void *p, size_t sz);
+    static block_header_s *mr(const char *fn, int line, int typ, void *p, size_t sz);
     static void mf(void *p);
     static size_t ms(void *p)
     {
@@ -195,11 +197,16 @@ static block_header_s *last = nullptr;
 static block_header_s *first_free = nullptr;
 static block_header_s *last_free = nullptr;
 
-block_header_s *block_header_s::setup(const char *fn_, int line_, unsigned int sz)
+block_header_s *block_header_s::setup(const char *fn_, int line_, int typ_, unsigned int sz)
 {
     fn = fn_;
     line = line_;
     size = sz;
+    typ = typ_;
+#if MEMSPY_BREAK_ON_UNKNOWN_ALLOC
+    if ( typ == 0 )
+        __debugbreak();
+#endif
 
     spylock();
 #if MEMSPY_SPY_SIZE && MEMSPY_SPY_LINE
@@ -233,7 +240,7 @@ block_header_s *block_header_s::setup(const char *fn_, int line_, unsigned int s
     return this;
 }
 
-block_header_s *block_header_s::ma(const char *fn, int line, size_t sz)
+block_header_s *block_header_s::ma(const char *fn, int line, int typ, size_t sz)
 {
     size_t real_alloc_size = sz + sizeof(block_header_s) + preblock_size + MEMSPY_CORRUPT_CHECK_ZONE_END;
     char *p = (char *)MEMSPY_SYS_ALLOC(real_alloc_size);
@@ -243,12 +250,12 @@ block_header_s *block_header_s::ma(const char *fn, int line, size_t sz)
 #if MEMSPY_CORRUPT_CHECK_ZONE_END
     memset(p + preblock_size + sizeof(block_header_s) + sz, 0xEE, MEMSPY_CORRUPT_CHECK_ZONE_END);
 #endif
-    return self->setup(fn, line, (unsigned int)sz);
+    return self->setup(fn, line, typ, (unsigned int)sz);
 }
 
-block_header_s *block_header_s::mr(const char *fn, int line, void *p, size_t sz)
+block_header_s *block_header_s::mr(const char *fn, int line, int typ, void *p, size_t sz)
 {
-    if (p == nullptr) return ma(fn,line,sz);
+    if (p == nullptr) return ma(fn,line,typ,sz);
 
     block_header_s *me = (block_header_s *)((char *)p-sizeof(block_header_s));
     spylock();
@@ -268,7 +275,7 @@ block_header_s *block_header_s::mr(const char *fn, int line, void *p, size_t sz)
 #if MEMSPY_CORRUPT_CHECK_ZONE_END
     memset(new_p + preblock_size + sizeof(block_header_s) + sz, 0xEE, MEMSPY_CORRUPT_CHECK_ZONE_END);
 #endif
-    return me->setup(fn, line, (unsigned int)sz);
+    return me->setup(fn, line, typ, (unsigned int)sz);
 
 }
 
@@ -326,21 +333,21 @@ void reset_allocnum()
 }
 
 
-void *mspy_malloc(const char *fn, int line, size_t sz)
+void *mspy_malloc(const char *fn, int line, int typ, size_t sz)
 {
 #if MEMSPY_DISABLE
     return MEMSPY_SYS_ALLOC(sz);
 #else
-    return block_header_s::ma(fn, line, sz)->usable_space();
+    return block_header_s::ma(fn, line, typ, sz)->usable_space();
 #endif
 }
 
-void *mspy_realloc(const char *fn, int line, void *p, size_t sz)
+void *mspy_realloc(const char *fn, int line, int typ, void *p, size_t sz)
 {
 #if MEMSPY_DISABLE
     return MEMSPY_SYS_RESIZE(p, sz);
 #else
-    return block_header_s::mr(fn, line, p, sz)->usable_space();
+    return block_header_s::mr(fn, line, typ, p, sz)->usable_space();
 #endif
 }
 
@@ -360,6 +367,47 @@ size_t mspy_size(void *p)
 #else
     return block_header_s::ms(p);
 #endif
+}
+
+bool mspy_getallocated_info( memcb *cb, void *prm )
+{
+    int curl = 0;
+    spylock();
+    if ( first == nullptr )
+    {
+        spyunlock();
+        return false;
+    }
+
+    int i = 0;
+
+    for(;;)
+    {
+        int n = 0;
+        for ( block_header_s *b = first; b; b = b->next )
+        {
+            if ( i == n )
+            {
+                int typ = b->typ;
+                int num = b->num;
+                size_t sz = b->size;
+                spyunlock();
+                cb( typ, num, sz, prm );
+                spylock();
+                ++i;
+                n = -1;
+                break;
+            }
+            ++n;
+        }
+        if (i>=n && n >= 0)
+            break;
+    }
+
+    spyunlock();
+
+    return true;
+
 }
 
 bool mspy_getallocated_info( char *buf, int bufsz )

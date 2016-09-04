@@ -49,7 +49,7 @@ protected:
     void set_video_size( const ts::ivec2 &videosize ) { video_size = videosize; }
     void stop_lockers()
     {
-        for (;;ts::master().sys_sleep(1))
+        for (;;ts::sys_sleep(1))
         {
             spinlock::auto_simple_lock l(sync);
             stoping = true;
@@ -278,9 +278,9 @@ class vsb_display_c : public vsb_c
     ~vsb_display_c() {}
     DECLARE_DYNAMIC_END(public)
 
+    contact_key_s avkey;
     gui_notice_callinprogress_c* notice = nullptr; // pure pointer due it will be checked with nullptr in other thread
     int ref = 1;
-    int ap = 0,  gid = 0, cid = 0;
 
     void addref() {++ref;}
     void release();
@@ -298,21 +298,19 @@ public:
     {
         reset();
     }
-    vsb_display_c *get( int ap, int gid, int cid )
+    vsb_display_c *get( const contact_key_s &avkey )
     {
-        spinlock::auto_simple_lock l(sync);
+        SIMPLELOCK(sync);
         for ( vsb_display_c *d : ptrs )
         {
-            if ( d->ap == ap && d->gid == gid && d->cid == cid )
+            if ( d->avkey == avkey )
             {
                 d->addref();
                 return d;
             }
         }
         vsb_display_c *d = TSNEW(vsb_display_c);
-        d->ap = ap;
-        d->gid = gid;
-        d->cid = cid;
+        d->avkey = avkey;
         d->addref();
         ptrs.add( d );
         return d;
@@ -322,7 +320,7 @@ public:
     {
         spinlock::auto_simple_lock l(sync);
 
-        for ( int i = 0, c = ptrs.size(); i<c; ++i )
+        for ( ts::aint i = 0, c = ptrs.size(); i<c; ++i )
         {
             vsb_display_c *d = ptrs.get(i);
             if ( d == p )
@@ -356,9 +354,13 @@ struct incoming_video_frame_s // XRGB always
 {
     int gid, cid;
     ts::ivec2 sz;
+    uint64 msmonotonic;
+    uint64 padding;
 
     ts::uint8 *data() {  return (ts::uint8 *)(this + 1);}
 };
+
+static_assert( sizeof( incoming_video_frame_s ) == VIDEO_FRAME_HEADER_SIZE, "size!" );
 
 class active_protocol_c;
 class video_frame_decoder_c : public ts::task_c

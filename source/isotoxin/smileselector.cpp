@@ -112,6 +112,8 @@ bool dialog_smileselector_c::find_undermouse()
 
 /*virtual*/ bool dialog_smileselector_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    MEMT( MEMT_SMILEUI );
+
     switch (qp)
     {
     case SQ_DRAW:

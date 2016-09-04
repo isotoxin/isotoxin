@@ -39,19 +39,18 @@
 
 #pragma USELIB("plgcommon")
 
-#pragma comment(lib, "libsodium.lib")
+#pragma comment(lib, "shared.lib")
 #pragma comment(lib, "Dnsapi.lib")
 #pragma comment(lib, "Winmm.lib")
 //#pragma comment(lib, "Msacm32.lib")
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "Iphlpapi.lib")
-#pragma comment(lib, "zlib.lib")
 
 #if defined _FINAL || defined _DEBUG_OPTIMIZED
 #include "crt_nomem/crtfunc.h"
 #endif
 
-#include "appver.inl"
+#include "../appver.inl"
 
 #define XMPP_SAVE_VERSION 1
 #define FEATURE_VERSION 2
@@ -1118,7 +1117,7 @@ class xmpp :
 
             token<char> dt( tstamp, '-' );
 
-            tm tt = {0};
+            tm tt = {};
             tt.tm_year = dt->as_int() - 1900; ++dt;
             tt.tm_mon = dt->as_int() - 1; ++dt;
             tt.tm_mday = dt->as_int(); ++dt;

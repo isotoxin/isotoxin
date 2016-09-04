@@ -54,6 +54,7 @@ typedef union
 
 static_assert( sizeof(evt_t) == sizeof(void *), "size" );
 
+#if defined _SYS_EVENTFD_H
 inline void *CreateEvent(void *, w32e_bool bManualReset, w32e_bool bInitialState, void *)
 {
     evt_t t;
@@ -64,6 +65,7 @@ inline void *CreateEvent(void *, w32e_bool bManualReset, w32e_bool bInitialState
     t.manualreset = bManualReset != FALSE;
     return t.evt;
 }
+#endif
 
 inline void SetEvent( void *evt )
 {

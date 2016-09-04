@@ -202,7 +202,7 @@ void vsb_desktop_c::grab_desktop::remove_owner(vsb_desktop_c *owner)
     while (locked == owner)
     {
         l.unlock();
-        ts::master().sys_sleep(1);
+        ts::sys_sleep(1);
         l.lock(sync);
     }
 
@@ -250,7 +250,7 @@ void vsb_desktop_c::grab_desktop::grab(const ts::irect &gr)
     if ((curt - next_time) < 0)
     {
         spinlock::simple_unlock(sync);
-        ts::master().sys_sleep(1);
+        ts::sys_sleep(1);
         return stop_job ? R_CANCEL : 0;
     }
 
@@ -410,7 +410,7 @@ void vsb_dshow_camera_c::core_c::remove_owner( vsb_dshow_camera_c *owner )
     while (locked == owner)
     {
         l.unlock();
-        ts::master().sys_sleep(1);
+        ts::sys_sleep(1);
         l.lock(sync);
     }
 
@@ -511,7 +511,7 @@ void vsb_dshow_camera_c::core_dshow_c::run_initializer(const VideoConfig &config
             if (!camera.Active())
             {
                 ts::renew(camera, DShow::InitGraph::True);
-                ts::master().sys_sleep(1000);
+                ts::sys_sleep(1000);
                 return R_RESULT;
             }
 
@@ -626,7 +626,7 @@ video_frame_decoder_c::video_frame_decoder_c(active_protocol_c *ap, incoming_vid
 {
     videosize = f->sz;
 
-    display = g_app->video_displays.get( ap->getid(), f->gid, f->cid );
+    display = g_app->video_displays.get( contact_key_s( f->gid, f->cid, ap->getid() ) );
     if (nullptr == display->notice)
     {
         ap->unlock_video_frame(f);

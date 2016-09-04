@@ -2,9 +2,7 @@
 
 #pragma USELIB("plgcommon")
 
-#pragma comment(lib, "libsodium.lib")
-#pragma comment(lib, "opus.lib")
-#pragma comment(lib, "libvpx.lib")
+#pragma comment(lib, "shared.lib")
 
 #pragma comment(lib, "Winmm.lib")
 #pragma comment(lib, "Msacm32.lib")
@@ -15,7 +13,7 @@
 #include "crt_nomem/crtfunc.h"
 #endif
 
-#include "appver.inl"
+#include "../appver.inl"
 
 #define FUNC0( rt, fn ) rt __stdcall fn() { return lan_engine::get()->fn(); }
 #define FUNC1( rt, fn, p0 ) rt __stdcall fn(p0 pp0) { return lan_engine::get()->fn(pp0); }

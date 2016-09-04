@@ -339,6 +339,18 @@ namespace
         }
     };
 
+#define _SWAP_LONG(l)                \
+            ( ( ((l) >> 24) & 0x000000FFL ) |       \
+              ( ((l) >>  8) & 0x0000FF00L ) |       \
+              ( ((l) <<  8) & 0x00FF0000L ) |       \
+              ( ((l) << 24) & 0xFF000000L ) )
+
+#if LITTLEENDIAN
+    long INLINE htonl( long l ) {
+        return _SWAP_LONG( l );
+    }
+#endif
+
     class pictures_cache_c
     {
         struct pic_cached_s

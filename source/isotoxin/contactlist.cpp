@@ -186,6 +186,8 @@ void gui_contact_item_c::created()
 
 ts::uint32 gui_contact_item_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> & c )
 {
+    MEMT( MEMT_CONTACT_ITEM );
+
     switch (role)
     {
     case CIR_LISTITEM:
@@ -256,10 +258,12 @@ bool gui_contact_item_c::animate_typing(RID, GUIPARAM)
 
 void gui_contact_item_c::update_text()
 {
+    MEMT( MEMT_CONTACT_ITEM_TEXT );
+
     ts::str_c newtext;
     if (contact)
     {
-        if (contact->getkey().is_self())
+        if (contact->getkey().is_self)
         {
             newtext = prf().username();
             text_adapt_user_input(newtext);
@@ -545,6 +549,8 @@ bool gui_contact_item_c::allow_drop() const
 
 /*virtual*/ bool gui_contact_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    MEMT( MEMT_CONTACT_ITEM );
+
     if (rid != getrid())
     {
         // from submenu
@@ -669,7 +675,7 @@ bool gui_contact_item_c::allow_drop() const
 
             if ( contact->is_av() && !contact->is_full_search_result() && CIR_CONVERSATION_HEAD != role )
             {
-                if ( const av_contact_s *avc = g_app->find_avcontact_inprogress( contact ) )
+                if ( const av_contact_s *avc = g_app->avcontacts().find_inprogress( contact->getkey().avkey() ) )
                 {
                     const theme_image_s *img_voicecall = contact->getkey().is_group() ? nullptr : gui->theme().get_image( CONSTASTR( "voicecall" ) );
                     const theme_image_s *img_micoff = gui->theme().get_image( CONSTASTR( "micoff" ) );
@@ -717,7 +723,7 @@ bool gui_contact_item_c::allow_drop() const
 
                 const application_c::blinking_reason_s * achtung = nullptr;
                 int ritem = 0, curpww = 0;
-                bool draw_ava = !contact->getkey().is_self();
+                bool draw_ava = !contact->getkey().is_self;
                 bool draw_proto = !contact->getkey().is_group();
                 //bool draw_btn = true;
                 if ( CIR_CONVERSATION_HEAD == role )
@@ -798,6 +804,8 @@ bool gui_contact_item_c::allow_drop() const
 
                 if ( ch == nullptr || !ch->edit_mode() )
                 {
+                    MEMT( MEMT_CONTACT_ITEM_1 );
+
                     ca.lt += ts::ivec2( x_offset + 5, 2 );
                     ca.rb.x -= 5;
                     if ( CIR_CONVERSATION_HEAD == role )
@@ -934,7 +942,7 @@ bool gui_contact_item_c::allow_drop() const
         }
         return false;
     case SQ_MOUSE_L2CLICK:
-        if ( CIR_LISTITEM == role && !contact->getkey().is_self() )
+        if ( CIR_LISTITEM == role && !contact->getkey().is_self )
         {
             if ( g_app->F_SPLIT_UI )
             {
@@ -948,7 +956,7 @@ bool gui_contact_item_c::allow_drop() const
         }
         return false;
     case SQ_MOUSE_MUP:
-        if ( CIR_LISTITEM == role && !contact->getkey().is_self() && contact->get_avatar() )
+        if ( CIR_LISTITEM == role && !contact->getkey().is_self && contact->get_avatar() )
         {
             contact_key_s ck;
             bool fdone = false;
@@ -977,7 +985,7 @@ bool gui_contact_item_c::allow_drop() const
         }
         return false;
     case SQ_MOUSE_RUP:
-        if (CIR_LISTITEM == role && !contact->getkey().is_self())
+        if (CIR_LISTITEM == role && !contact->getkey().is_self)
         {
             struct handlers
             {
@@ -1245,7 +1253,7 @@ bool gui_contact_item_c::allow_drop() const
             menu_c m;
             add_status_items( m );
             gui_popup_menu_c::show(menu_anchor_s(true), m);
-        } else if (CIR_CONVERSATION_HEAD == role && !contact->getkey().is_self())
+        } else if (CIR_CONVERSATION_HEAD == role && !contact->getkey().is_self)
         {
             ts::ptr_cast<gui_conversation_header_c *>( this )->on_rite_click();
         }
@@ -1281,9 +1289,7 @@ INLINE int statev(contact_state_e v)
     if ( contact->getkey().is_group() )
     {
         if ( active_protocol_c *ap = prf().ap( contact->getkey().protoid ) )
-        {
             return ap->sort_factor();
-        }
         return 0;
     }
 
@@ -1409,7 +1415,7 @@ void gui_conversation_header_c::hstuff_update()
     if ( !cc )
         return;
 
-    const contact_c *def = !cc->getkey().is_self() ? cc->subget_default() : nullptr;
+    const contact_c *def = !cc->getkey().is_self ? cc->subget_default() : nullptr;
 
     struct preproto_s
     {
@@ -1420,7 +1426,7 @@ void gui_conversation_header_c::hstuff_update()
     ts::tmp_tbuf_t<preproto_s> splist;
 
     cc->subiterate( [&]( contact_c *c ) {
-        if ( auto *row = prf().get_table_active_protocol().find<true>( c->getkey().protoid ) )
+        if ( auto *row = prf().get_table_active_protocol().find<true>( (int)c->getkey().protoid ) )
         {
             preproto_s &ap = splist.add();
             ap.c = c;
@@ -1502,6 +1508,8 @@ int gui_conversation_header_c::contact_item_rite_margin() const
 
 int gui_conversation_header_c::prepare_protocols()
 {
+    MEMT( MEMT_CONVERSATION_HEADER );
+
     if ( flags.is(F_DIRTY) )
         generate_protocols();
     return size.x;
@@ -1557,7 +1565,7 @@ void gui_conversation_header_c::on_rite_click()
         ts::tmp_tbuf_t<preproto_s> splist;
 
         contact->subiterate( [&]( contact_c *c ) {
-            if ( auto *row = prf().get_table_active_protocol().find<true>( c->getkey().protoid ) )
+            if ( auto *row = prf().get_table_active_protocol().find<true>( (int)c->getkey().protoid ) )
             {
                 preproto_s &ap = splist.add();
                 ap.c = c;
@@ -1644,7 +1652,7 @@ bool gui_conversation_header_c::apply_edit( RID r, GUIPARAM p )
     if ( flags.is( F_EDITNAME ) )
     {
         flags.clear( F_EDITNAME );
-        if ( contact->getkey().is_self() )
+        if ( contact->getkey().is_self )
         {
             if ( !curedit.is_empty() )
             {
@@ -1657,10 +1665,9 @@ bool gui_conversation_header_c::apply_edit( RID r, GUIPARAM p )
         else if ( contact->getkey().is_group() )
         {
             if ( active_protocol_c *ap = prf().ap( contact->getkey().protoid ) )
-                ap->rename_group_chat( contact->getkey().contactid, curedit );
+                ap->rename_group_chat( contact->getkey().gidcid(), curedit );
 
-        }
-        else if ( contact->get_customname() != curedit )
+        } else if ( contact->get_customname() != curedit )
         {
             contact->set_customname( curedit );
             prf().dirtycontact( contact->getkey() );
@@ -1674,7 +1681,7 @@ bool gui_conversation_header_c::apply_edit( RID r, GUIPARAM p )
     if ( flags.is( F_EDITSTATUS ) )
     {
         flags.clear( F_EDITSTATUS );
-        if ( contact->getkey().is_self() )
+        if ( contact->getkey().is_self )
         {
             if ( prf().userstatus( curedit ) )
                 gmsg<ISOGM_CHANGED_SETTINGS>( 0, PP_USERSTATUSMSG, curedit ).send();
@@ -1695,6 +1702,8 @@ bool gui_conversation_header_c::cancel_edit( RID, GUIPARAM )
 bool gui_conversation_header_c::update_buttons( RID r, GUIPARAM p )
 {
     ASSERT( CIR_CONVERSATION_HEAD == role );
+
+    MEMT( MEMT_CONVERSATION );
 
     if ( p )
     {
@@ -1748,7 +1757,7 @@ bool gui_conversation_header_c::update_buttons( RID r, GUIPARAM p )
     if ( flags.is( F_EDITNAME | F_EDITSTATUS ) )
     {
         ts::str_c eval;
-        if ( contact->getkey().is_self() )
+        if ( contact->getkey().is_self )
         {
             if ( flags.is( F_EDITNAME ) )
                 eval = prf().username();
@@ -1804,7 +1813,7 @@ bool gui_conversation_header_c::update_buttons( RID r, GUIPARAM p )
 
     flags.clear( F_CALLBUTTON );
 
-    if ( contact && !contact->getkey().is_self() && !contact->getkey().is_group() )
+    if ( contact && !contact->getkey().is_self && !contact->getkey().is_group() )
     {
         int features = 0;
         int features_online = 0;
@@ -1897,6 +1906,8 @@ void gui_contact_separator_c::set_prots_from_contact( const contact_root_c *cc )
 
 void gui_contact_separator_c::update_text()
 {
+    MEMT( MEMT_CSEPARATOR );
+
     sf = 0;
     int m = 1;
     ts::wstr_c t;
@@ -1973,6 +1984,8 @@ bool gui_contact_separator_c::is_prots_same_as_contact( const contact_root_c *cc
 
 /*virtual*/ bool gui_contact_separator_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
 {
+    MEMT( MEMT_CSEPARATOR );
+
     if ( rid != getrid() )
     {
         // from submenu
@@ -2194,6 +2207,8 @@ void gui_contactlist_c::refresh_array()
 
 void gui_contactlist_c::recreate_ctls(bool focus_filter)
 {
+    MEMT( MEMT_CONTACTLIST );
+
     if (filter)
     {
         TSDEL(filter);
@@ -2472,7 +2487,7 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
     {
         contacts().iterate_proto_contacts( [&]( contact_c *c )->bool {
 
-            if ( c->get_options().is( contact_c::F_SYSTEM_USER ) && c->getkey().protoid == ch.protoid )
+            if ( c->get_options().is( contact_c::F_SYSTEM_USER ) && c->getkey().protoid == (unsigned)ch.protoid )
             {
                 c->set_name( ch.s );
                 if ( c->get_historian()->gui_item )
@@ -2576,6 +2591,8 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_DRAGNDROP> &dnda)
 
 bool gui_contactlist_c::refresh_list(RID, GUIPARAM)
 {
+    MEMT( MEMT_CONTACTLIST );
+
     if (filter)
         filter->refresh_list();
 
@@ -2584,8 +2601,10 @@ bool gui_contactlist_c::refresh_list(RID, GUIPARAM)
 
 ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_V_UPDATE_CONTACT> & c )
 {
+    MEMT( MEMT_CONTACT_ITEM );
+
     if ( contact_root_c *h = c.contact->get_historian() )
-        if (h->getkey().is_self())
+        if (h->getkey().is_self)
         {
             if (self && self->contacted())
                 if (ASSERT(c.contact == &self->getcontact() || c.contact->getmeta() == &self->getcontact()))
@@ -2593,9 +2612,9 @@ ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_V_UPDATE_CONTACT> & c )
             return 0;
         }
 
-    auto find_sep = [this]( contact_root_c *cc ) ->int
+    auto find_sep = [this]( contact_root_c *cc ) ->ts::aint
     {
-        for ( int i = skipctl, cnt = getengine().children_count(); i < cnt; ++i )
+        for ( ts::aint i = skipctl, cnt = getengine().children_count(); i < cnt; ++i )
         {
             if (rectengine_c *ch = getengine().get_child( i ))
             {
@@ -2654,7 +2673,7 @@ ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_V_UPDATE_CONTACT> & c )
 
     if (role == CLR_MAIN_LIST)
     {
-        int insindex = -1;
+        ts::aint insindex = -1;
 
         contact_root_c *cc = c.contact->get_historian();
 
@@ -2689,6 +2708,8 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<ISOGM_DO_POSTEFFECT> &f)
 
 ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
 {
+    MEMT( MEMT_CONTACTLIST );
+
     if (contacts().sort_tag() != sort_tag && role == CLR_MAIN_LIST && gui->dragndrop_underproc() == nullptr)
     {
         struct sss
@@ -2786,7 +2807,7 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
         
         bool group = prf().get_options().is( CLOPT_GROUP_CONTACTS_PROTO );
 
-        for ( int i = 0, c = ss.sp.size(); i < c; ++i )
+        for ( ts::aint i = 0, c = ss.sp.size(); i < c; ++i )
         {
             uint64 v = i + 1;
 

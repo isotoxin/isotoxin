@@ -76,6 +76,8 @@ struct load_spellcheckers_s : public ts::task_c
         if (stopjob) return R_DONE;
         if ((aff.size() == 0 || dic.size() == 0) && zip.size() == 0) return R_RESULT_EXCLUSIVE;
 
+        MEMT( MEMT_SPELLCHK );
+
         if (zip.size())
             ts::zip_open(zip.data(), zip.size(), DELEGATE(this, extract_zip));
 
@@ -95,6 +97,8 @@ struct load_spellcheckers_s : public ts::task_c
 
     /*virtual*/ void result() override
     {
+        MEMT( MEMT_SPELLCHK );
+
         for (; fns.size() > 0;)
         {
             ts::wstr_c fn(fns.get_last_remove(), CONSTWSTR("aff"));
@@ -441,7 +445,7 @@ application_c::application_c(const ts::wchar * cmdl)
 application_c::~application_c()
 {
     while (spellchecker.is_locked(true))
-        ts::master().sys_sleep(1);
+        ts::sys_sleep(1);
 
     m_avcontacts.clear(); // remove all av contacts before delete GUI
     unregister_capture_handler(this);
@@ -464,17 +468,14 @@ ts::uint32 application_c::gm_handler( gmsg<ISOGM_GRABDESKTOPEVENT>&g )
     {
         if ( g.r && g.monitor >= 0 && g.pass == 0 )
         {
-            for ( av_contact_s &avc : m_avcontacts )
-                if ( avc.c->getkey() == g.k )
-                {
-                    avc.currentvsb.id.set( CONSTWSTR( "desktop/" ) ).append_as_uint( g.monitor ).append_char('/');
-                    avc.currentvsb.id.append_as_int( g.r.lt.x ).append_char( '/' ).append_as_int( g.r.lt.y ).append_char( '/' );
-                    avc.currentvsb.id.append_as_int( g.r.rb.x ).append_char( '/' ).append_as_int( g.r.rb.y );
-                    avc.cpar.clear();
-                    avc.vsb.reset();
-
-                    break;
-                }
+            if ( av_contact_s *avc = g_app->avcontacts().find_inprogress(g.k) )
+            {
+                avc->currentvsb.id.set( CONSTWSTR( "desktop/" ) ).append_as_uint( g.monitor ).append_char('/');
+                avc->currentvsb.id.append_as_int( g.r.lt.x ).append_char( '/' ).append_as_int( g.r.lt.y ).append_char( '/' );
+                avc->currentvsb.id.append_as_int( g.r.rb.x ).append_char( '/' ).append_as_int( g.r.rb.y );
+                avc->cpar.clear();
+                avc->vsb.reset();
+            }
         }
 
         return 0;
@@ -487,7 +488,7 @@ ts::uint32 application_c::gm_handler( gmsg<ISOGM_GRABDESKTOPEVENT>&g )
     {
         // grab and send to g.k
 
-        if ( contact_root_c *c = contacts().rfind( g.k ) )
+        if ( contact_root_c *c = g.k.find_root_contact() )
         {
             ts::drawable_bitmap_c grabbuff;
             grabbuff.create( g.r.size(), g.monitor );
@@ -758,6 +759,8 @@ ts::bitmap_c application_c::build_icon( int sz, ts::TSCOLOR colorblack )
 
 ts::bitmap_c application_c::app_icon(bool for_tray)
 {
+    MEMT( MEMT_BMP_ICONS );
+
     auto blinking = [this]( icon_e icon )->icon_e
     {
         return F_BLINKING_FLAG ? (icon_e)( icon + 1 ) : icon;
@@ -1091,6 +1094,8 @@ bool application_c::update_state()
 
     F_SETNOTIFYICON = true; // once per 5 seconds do icon refresh
 
+    MEMT( MEMT_TEMP );
+
     if ( F_ALLOW_AUTOUPDATE && cfg().autoupdate() > 0 )
     {
         if (now() > autoupdate_next)
@@ -1152,8 +1157,7 @@ bool application_c::update_state()
 
     for( file_transfer_s *ftr : m_files )
     {
-        int protoid = ftr->sender.protoid;
-        if ( active_protocol_c *ap = prf().ap( protoid ) )
+        if ( active_protocol_c *ap = prf().ap( ftr->sender.protoid ) )
             ap->file_control( ftr->i_utag, FIC_CHECK );
     }
 
@@ -1187,6 +1191,7 @@ bool application_c::update_state()
     }
 
     mediasystem().may_be_deinit();
+    contacts().cleanup();
 }
 
 void application_c::set_status(contact_online_state_e cos_, bool manual)
@@ -1346,14 +1351,8 @@ bool application_c::blinking_reason_s::tick()
         sleep_ms = 1;
     }
 
-    for( av_contact_s &avc : m_avcontacts )
-    {
-        if ( avc.is_camera_on() )
-        {
-            avc.camera_tick();
-            sleep_ms = 1;
-        }
-    }
+    if (avcontacts().camera_tick())
+        sleep_ms = 1;
 
     UNSTABLE_CODE_EPILOG
         
@@ -1365,10 +1364,10 @@ bool application_c::reselect_p( RID, GUIPARAM )
     {
         if ( 0 != ( reselect_data.options & RSEL_CHECK_CURRENT ) )
         {
-            if ( c->getkey().is_self() && !active_contact_item.expired() )
+            if ( c->getkey().is_self && !active_contact_item.expired() )
                 return true;
 
-            if ( !c->getkey().is_self() && c->gui_item != active_contact_item )
+            if ( !c->getkey().is_self && c->gui_item != active_contact_item )
                 return true;
         }
 
@@ -1567,6 +1566,8 @@ namespace
 
                 contacts().unload();
                 {
+                    MEMT( MEMT_PROFILE_COMMON );
+
                     auto rslt = prf().xload(wpn, STAGE_LOAD_WITH_PASSWORD == st ? k : nullptr);
                     if (PLR_OK == rslt)
                     {
@@ -1742,6 +1743,8 @@ void application_c::apply_ui_mode( bool split_ui )
 
 bool application_c::b_customize(RID r, GUIPARAM param)
 {
+    MEMT( MEMT_CUSTOMIZE );
+
     struct handlers
     {
         static void m_settings(const ts::str_c&)
@@ -2091,6 +2094,8 @@ extern bool zero_version;
 
 ts::str_c application_c::appver()
 {
+    MEMT( MEMT_STR_APPVER );
+
 #ifdef _DEBUG
     if (zero_version) return ts::str_c(CONSTASTR("0.0.0"));
 
@@ -2294,80 +2299,18 @@ void application_c::capture_device_changed()
     }        
 }
 
-int application_c::get_avinprogresscount() const
-{
-    int cnt = 0;
-    for (const av_contact_s &avc : m_avcontacts)
-        if (av_contact_s::AV_INPROGRESS == avc.state)
-            ++cnt;
-    return cnt;
-}
-
-int application_c::get_avringcount() const
-{
-    int cnt = 0;
-    for (const av_contact_s &avc : m_avcontacts)
-        if (av_contact_s::AV_RINGING == avc.state)
-            ++cnt;
-    return cnt;
-}
-
-av_contact_s * application_c::find_avcontact_inprogress( contact_root_c *c )
-{
-    for (av_contact_s &avc : m_avcontacts)
-        if (avc.c == c && av_contact_s::AV_INPROGRESS == avc.state)
-            return &avc;
-    return nullptr;
-}
-
-av_contact_s & application_c::get_avcontact( contact_root_c *c, av_contact_s::state_e st )
-{
-    for( av_contact_s &avc : m_avcontacts)
-        if (avc.c == c)
-        {
-            if (av_contact_s::AV_NONE != st)
-                avc.state = st;
-            return avc;
-        }
-    av_contact_s &avc = m_avcontacts.addnew(c, st);
-    avc.send_so(); // update stream options now
-    return avc;
-}
-
-void application_c::del_avcontact(contact_root_c *c)
-{
-    for( ts::aint i=m_avcontacts.size()-1;i>=0;--i)
-    {
-        av_contact_s &avc = m_avcontacts.get(i);
-        if (avc.c == c)
-            m_avcontacts.remove_fast(i);
-    }
-}
-
-void application_c::stop_all_av()
-{
-    gmsg<ISOGM_NOTICE>(nullptr, nullptr, NOTICE_KILL_CALL_INPROGRESS).send();
-
-    while (m_avcontacts.size())
-    {
-        av_contact_s &avc = m_avcontacts.get(0);
-        avc.c->stop_av();
-    }
-
-}
-
 void application_c::update_ringtone( contact_root_c *rt, bool play_stop_snd )
 {
-    int avcount = get_avringcount();
+    int avcount = avcontacts().get_avringcount();
     if (rt->is_ringtone())
-        get_avcontact(rt, av_contact_s::AV_RINGING);
+        avcontacts().get( rt->getkey().ringkey(), av_contact_s::AV_RINGING );
     else
-        del_avcontact(rt);
+        avcontacts().del( rt );
 
 
-    if (0 == avcount && get_avringcount())
+    if (0 == avcount && avcontacts().get_avringcount())
     {
-        (get_avinprogresscount() == 0) ? 
+        ( avcontacts().get_avinprogresscount() == 0) ?
             play_sound(snd_ringtone, true) :
             play_sound(snd_ringtone2, true);
 
@@ -2380,7 +2323,7 @@ void application_c::update_ringtone( contact_root_c *rt, bool play_stop_snd )
             }
         }
 
-    } else if (avcount && 0 == get_avringcount())
+    } else if (avcount && 0 == avcontacts().get_avringcount())
     {
         stop_sound(snd_ringtone2);
         if (stop_sound(snd_ringtone) && play_stop_snd)
@@ -2394,11 +2337,11 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, bool activate, bo
 
     av_contact_s *r = nullptr;
 
-    int was_avip = get_avinprogresscount();
+    int was_avip = avcontacts().get_avinprogresscount();
     
     if (activate)
     {
-        av_contact_s &avc = get_avcontact(avmc, av_contact_s::AV_INPROGRESS);
+        av_contact_s &avc = avcontacts().get(avmc->getkey().avkey(), av_contact_s::AV_INPROGRESS);
         avc.camera(camera);
 
         if (!avmc->getkey().is_group())
@@ -2409,12 +2352,12 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, bool activate, bo
         r = &avc;
 
     } else
-        del_avcontact(avmc);
+        avcontacts().del(avmc);
 
 
-    if (0 == was_avip && get_avinprogresscount())
+    if (0 == was_avip && avcontacts().get_avinprogresscount())
         static_cast<sound_capture_handler_c*>(this)->start_capture();
-    else if (0 == get_avinprogresscount() && was_avip)
+    else if (0 == avcontacts().get_avinprogresscount() && was_avip)
         static_cast<sound_capture_handler_c*>(this)->stop_capture();
 
     if (active_contact_item && active_contact_item->contacted())
@@ -2426,44 +2369,53 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, bool activate, bo
 
 /*virtual*/ void application_c::datahandler(const void *data, int size)
 {
-    contact_key_s current_receiver;
+    static int ticktag = 0;
+    ++ticktag;
 
-    for (const av_contact_s &avc : m_avcontacts)
+    av_contact_s *avc2sendaudio = nullptr;
+
+    avcontacts().iterate([&]( av_contact_s &avc )
     {
         if (av_contact_s::AV_INPROGRESS != avc.state)
-            continue;
+            return;
+
+        avc.call_tick();
+
+        if ( avc2sendaudio )
+            return;
 
         if (avc.is_mic_off())
-            continue;;
+            return;
 
         if (avc.c->getkey().is_group())
         {
-            current_receiver = avc.c->getkey();
-            break;
+            avc2sendaudio = &avc;
+            return;
         }
 
         avc.c->subiterate([&](contact_c *sc) {
             if (sc->is_av())
-                current_receiver = sc->getkey();
+                avc2sendaudio = &avc;
         });
 
-        if (!current_receiver.is_empty())
-            break;;
-    }
+    } );
 
-    if (!current_receiver.is_empty() && capturefmt.channels) // only one contact receives sound at one time
-        if (active_protocol_c *ap = prf().ap(current_receiver.protoid))
-            ap->send_audio(current_receiver.contactid, capturefmt, data, size);
+    if (avc2sendaudio && capturefmt.channels)
+    {
+        bool continue_use = avc2sendaudio->ticktag == ticktag - 1;
+        avc2sendaudio->ticktag = ticktag;
+        avc2sendaudio->send_audio( capturefmt, data, size, !continue_use );
+    }
 }
 
 /*virtual*/ const s3::Format *application_c::formats( ts::aint &count )
 {
     avformats.clear();
 
-    for (const av_contact_s &avc : m_avcontacts)
+    avcontacts().iterate( [&]( av_contact_s &avc )
     {
-        if (av_contact_s::AV_INPROGRESS != avc.state)
-            continue;
+        if ( av_contact_s::AV_INPROGRESS != avc.state )
+            return;
 
         if (avc.c->getkey().is_group())
         {
@@ -2477,7 +2429,7 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, bool activate, bo
                     avformats.set(ap->defaudio());
         });
 
-    }
+    } );
 
     count = avformats.count();
     return count ? avformats.begin() : nullptr;
@@ -2891,7 +2843,7 @@ file_transfer_s::~file_transfer_s()
     if ( g_app )
     {
         // wait for unlock
-        for ( ; data.lock_write()( ).lock > 0; ts::master().sys_sleep( 1 ) )
+        for ( ; data.lock_write()( ).lock > 0; ts::sys_sleep( 1 ) )
             g_app->m_tasks_executor.tick();
     }
 
@@ -3049,7 +3001,7 @@ void file_transfer_s::kill( file_control_e fctl, unfinished_file_transfer_s *uft
     void *handle = file_handle();
     if (handle && (!upload || fctl != FIC_DONE)) // close before update message item
     {
-        uint64 fsz = {0};
+        uint64 fsz = 0;
         if (!upload)
         {
             fsz = ts::f_size(handle);
@@ -3140,7 +3092,7 @@ void file_transfer_s::kill( file_control_e fctl, unfinished_file_transfer_s *uft
         {
             while ( !ap->file_portion( i_utag, cj.offset, b.data(), sz ) )
             {
-                ts::master().sys_sleep( 100 );
+                ts::sys_sleep( 100 );
 
                 if ( dip )
                     return R_CANCEL;
@@ -3369,245 +3321,3 @@ void file_transfer_s::upd_message_item(bool force)
     }
 }
 
-av_contact_s::av_contact_s(contact_root_c *c, state_e st) :c(c), state(st)
-{
-    inactive = false;
-    dirty_cam_size = true;
-    if (st == AV_INPROGRESS)
-        options_handler.reset( TSNEW( OPTIONS_HANDLER, DELEGATE(this, ohandler) ) );
-    starttime = now();
-}
-
-bool av_contact_s::ohandler( gmsg<ISOGM_PEER_STREAM_OPTIONS> &rso )
-{
-    if (c->subpresent( rso.ck ))
-    {
-        remote_so = rso.so;
-        remote_sosz = rso.videosize;
-        dirty_cam_size = true;
-    }
-    return false;
-}
-
-void av_contact_s::update_btn_face_camera(gui_button_c &btn)
-{
-    is_camera_on() ?
-        btn.set_face_getter(BUTTON_FACE(on_camera)) :
-    btn.set_face_getter(BUTTON_FACE(off_camera));
-}
-
-bool av_contact_s::b_mic_switch(RID, GUIPARAM p)
-{
-    mic_switch();
-    is_mic_off() ?
-        ((gui_button_c *)p)->set_face_getter(BUTTON_FACE(unmute_mic)) :
-        ((gui_button_c *)p)->set_face_getter(BUTTON_FACE(mute_mic));
-    return true;
-}
-
-bool av_contact_s::b_speaker_switch(RID, GUIPARAM p)
-{
-    speaker_switch();
-    is_speaker_off() ?
-        ((gui_button_c *)p)->set_face_getter(BUTTON_FACE(unmute_speaker)) :
-        ((gui_button_c *)p)->set_face_getter(BUTTON_FACE(mute_speaker));
-    return true;
-}
-
-void av_contact_s::mic_off()
-{
-    int oso = cur_so();
-    RESETFLAG(so, SO_SENDING_AUDIO);
-    if (cur_so() != oso)
-    {
-        send_so();
-        c->redraw();
-    }
-}
-
-void av_contact_s::camera_switch()
-{
-    int oso = cur_so();
-    INVERTFLAG(so, SO_SENDING_VIDEO);
-    if (cur_so() != oso)
-    {
-        if (!is_camera_on())
-            vsb.reset();
-
-        send_so();
-        c->redraw();
-    }
-}
-
-void av_contact_s::mic_switch()
-{
-    int oso = cur_so();
-    INVERTFLAG( so, SO_SENDING_AUDIO );
-    if (cur_so() != oso)
-    {
-        send_so();
-        c->redraw();
-    }
-}
-
-void av_contact_s::update_speaker()
-{
-    if (c->getkey().is_group())
-    {
-        g_app->mediasystem().voice_mute([this](uint64 id)->bool {
-
-            contact_key_s &ck = ts::ref_cast<contact_key_s>(id);
-            return (c->getkey().protoid | (c->getkey().contactid << 16)) == ck.protoid;
-
-        }, is_speaker_off());
-    }
-    else
-        c->subiterate([this](contact_c *cc) {
-        if (cc->is_av())
-            g_app->mediasystem().voice_mute(ts::ref_cast<uint64>(cc->getkey()), is_speaker_off());
-    });
-
-}
-
-void av_contact_s::speaker_switch()
-{
-    int oso = cur_so();
-    INVERTFLAG(so, SO_RECEIVING_AUDIO);
-
-    if (cur_so() != oso)
-    {
-        update_speaker();
-        send_so();
-        c->redraw();
-    }
-}
-
-void av_contact_s::camera( bool on )
-{
-    int oso = cur_so();
-    INITFLAG( so, SO_SENDING_VIDEO, on );
-
-    if (cur_so() != oso)
-    {
-        send_so();
-        c->redraw();
-    }
-}
-
-void av_contact_s::set_recv_video(bool allow_recv)
-{
-    int oso = cur_so();
-    INITFLAG( so, SO_RECEIVING_VIDEO, allow_recv );
-
-    if (cur_so() != oso)
-    {
-        send_so();
-        c->redraw();
-    }
-}
-
-void av_contact_s::set_inactive(bool inactive_)
-{
-    int oso = cur_so();
-    inactive = inactive_;
-
-    if ( cur_so() != oso )
-    {
-        update_speaker();
-        send_so();
-        c->redraw();
-    }
-}
-
-void av_contact_s::set_so_audio(bool inactive_, bool enable_mic, bool enable_speaker)
-{
-    int oso = cur_so();
-    inactive = inactive_;
-
-    INITFLAG( so, SO_SENDING_AUDIO, enable_mic );
-    INITFLAG( so, SO_RECEIVING_AUDIO, enable_speaker );
-
-    if (cur_so() != oso)
-    {
-        update_speaker();
-        send_so();
-        c->redraw();
-    }
-}
-
-void av_contact_s::set_video_res(const ts::ivec2 &vsz)
-{
-    if (ts::tabs(sosz.x-vsz.x) > 64 || ts::tabs(sosz.y - vsz.y) > 64)
-    {
-        sosz = vsz;
-        send_so();
-    }
-}
-
-void av_contact_s::send_so()
-{
-    c->subiterate([this](contact_c *cc) {
-        if (cc->is_av())
-        {
-            if (active_protocol_c *ap = prf().ap(cc->getkey().protoid))
-                ap->set_stream_options(cc->getkey().contactid, cur_so(), sosz);
-        }
-    });
-}
-
-vsb_c *av_contact_s::createcam()
-{
-    if (currentvsb.id.is_empty())
-        return vsb_c::build();
-    return vsb_c::build(currentvsb, cpar);
-}
-
-void av_contact_s::camera_tick()
-{
-    if (!vsb)
-    {
-        vsb.reset( createcam() );
-        vsb->set_bmp_ready_handler( DELEGATE(this, on_frame_ready) );
-    }
-
-    ts::ivec2 dsz = vsb->get_video_size();
-    if ( dsz == ts::ivec2( 0 ) ) return;
-    if (dirty_cam_size || dsz != prev_video_size)
-    {
-        prev_video_size = dsz;
-        if (remote_sosz.x == 0 || (remote_sosz >>= dsz))
-        {
-            vsb->set_desired_size(dsz);
-        }
-        else
-        {
-            dsz = vsb->fit_to_size(remote_sosz);
-        }
-        dirty_cam_size = false;
-    }
-
-    if (vsb->updated())
-    {
-        gmsg<ISOGM_CAMERA_TICK>(c).send();
-
-        ap4video = nullptr;
-        videocid = 0;
-        c->subiterate([&](contact_c *cc) {
-            if (nullptr == ap4video && cc->is_av())
-            {
-                videocid = cc->getkey().contactid;
-                ap4video = prf().ap(cc->getkey().protoid);
-            }
-        });
-    }
-
-}
-
-void av_contact_s::on_frame_ready( const ts::bmpcore_exbody_s &ebm )
-{
-    if (0 == (remote_so & SO_RECEIVING_VIDEO))
-        return;
-
-    if (ap4video)
-        ap4video->send_video_frame(videocid, ebm);
-}

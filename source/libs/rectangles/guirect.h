@@ -273,13 +273,32 @@ class text_rect_dynamic_c : public ts::text_rect_c
 {
     friend class gui_c;
     DECLARE_EYELET(text_rect_dynamic_c);
-    ts::Time last_use_time = ts::Time::past();
-    ts::bitmap_c * curtexture = nullptr;
+
+    ts::pointers_t< const ts::bitmap_c, 0 > curtextures;
+
+    int ok_size( const ts::ivec2& minsz )
+    {
+        int fullh = 0;
+        int n = 1;
+        for ( const ts::bitmap_c * t : curtextures )
+        {
+            if ( t->info().sz.x < minsz.x )
+                return 0;
+            fullh += t->info().sz.y;
+            if ( fullh >= minsz.y )
+                return n;
+            ++n;
+        }
+        return 0;
+    }
+
 public:
     text_rect_dynamic_c();
     /*virtual*/ ~text_rect_dynamic_c();
-    /*virtual*/ ts::bitmap_c &texture() override;
-    /*virtual*/ void texture_no_need() override;
+    /*virtual*/ int prepare_textures( const ts::ivec2 &minsz ) override;
+    /*virtual*/ int get_textures( const ts::bitmap_c **tarr ) override;
+    /*virtual*/ void textures_no_need() override;
+    void nomoretextures();
 };
 
 
@@ -453,7 +472,8 @@ enum rect_sys_e
     RS_NORMAL = 0,
     RS_TOOL = 1,
     RS_TASKBAR = 2,
-    RS_INACTIVE = 4
+    RS_INACTIVE = 4,
+    RS_MAINPARENT = 8,
 };
 
 namespace newrectkitchen
@@ -808,7 +828,7 @@ public:
     /*virtual*/ bool accept_focus() const override { return is_enabled(); }
 
     void enable(bool f = true) { disable(!f); }
-    void disable(bool f = true);
+    virtual void disable(bool f = true);
     bool is_enabled() const {return !flags.is(F_DISABLED);};
     bool is_disabled() const {return flags.is(F_DISABLED);};
 

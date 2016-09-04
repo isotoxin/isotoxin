@@ -6,7 +6,7 @@
 
 // typical scenario : AQ -> plghost, HA -> application
 
-#define PLGHOST_IPC_PROTOCOL_VERSION 15
+#define PLGHOST_IPC_PROTOCOL_VERSION 16
 
 enum commands_e
 {

@@ -235,6 +235,7 @@ public:
     virtual void draw( const ts::ivec2 & p, const ts::bmpcore_exbody_s &bmp, bool alphablend) {}; // draw image
     virtual void draw( const ts::irect & rect, ts::TSCOLOR color, bool clip = true) {}; // draw rectangle
 
+    void draw_textrect( ts::text_rect_c & tr, const ts::ivec2 &clampsize );
 
     auto begin() -> decltype(children)::OBJTYPE * { return children.begin(); }
     auto begin() const -> const decltype(children)::OBJTYPE * { return children.begin(); }
@@ -334,6 +335,7 @@ class rectengine_root_c : public rectengine_c
     static const ts::flags32_s::BITS F_TOOLRECT = SETBIT( 3 );
     static const ts::flags32_s::BITS F_TASKBAR = SETBIT( 4 );
     static const ts::flags32_s::BITS F_INACTIVE = SETBIT( 5 );
+    static const ts::flags32_s::BITS F_MAINPARENT = SETBIT( 6 );
 
     //sqhandler_i
 	/*virtual*/ bool sq_evt( system_query_e qp, RID rid, evt_data_s &data ) override;

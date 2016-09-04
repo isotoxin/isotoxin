@@ -31,7 +31,7 @@ struct evt_internals_s
     {
         ASSERT(evs_count == 0);
         int sz = evcnt * sizeof(evlst_s);
-        evs = (evlst_s *)MM_ALLOC(sz);
+        evs = (evlst_s *)MM_ALLOC_T(MEMT_GMES, sz);
         memset(evs, 0, sz);
 #ifndef _FINAL
         evs_count = evcnt;

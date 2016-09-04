@@ -1,5 +1,5 @@
 #include "stdafx.h"
-#include "appver.inl"
+#include "../appver.inl"
 
 //#if LOGGING
 //#define logm Log

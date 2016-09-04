@@ -105,8 +105,6 @@ struct sync_data_s
     active_protocol_data_s data;
     ts::astrings_c strings;
     ts::flags32_s flags;
-    float volume = 1.0f;
-    int dsp_flags = 0;
     contact_online_state_e manual_cos = COS_ONLINE;
     cmd_result_e current_state;
 
@@ -152,7 +150,6 @@ class active_protocol_c : public ts::safe_object
 
     time_t last_backup_time = 0;
 
-    fmt_converter_s cvt;
     spinlock::long3264 lbsync = 0;
     ts::pointers_t<data_header_s,0> locked_bufs;
 
@@ -188,6 +185,11 @@ class active_protocol_c : public ts::safe_object
     };
 
     tlm_statistic_s tlms[ TLM_COUNT ];
+
+#ifdef _DEBUG
+    uint64 amsmonotonic = 0;
+    uint64 vmsmonotonic = 0;
+#endif
 
     struct icon_s
     {
@@ -287,8 +289,8 @@ public:
 
     void apply_encoding_settings(); // should be called before enabling video or during video call (to change current settings)
     void accept_call(int cid);
-    void send_video_frame(int cid, const ts::bmpcore_exbody_s &eb);
-    void send_audio(int cid, const s3::Format &fmt, const void *data, int size);
+    void send_video_frame(int cid, const ts::bmpcore_exbody_s &eb, uint64 timestamp );
+    void send_audio(int cid, const void *data, int size, uint64 timestamp );
     void call(int cid, int seconds);
     void stop_call(int cid);
     void set_stream_options(int cid, int so, const ts::ivec2 &vr); // tell to proto/other peer about recommended video resolution (if I see video in 320x240, why you send 640x480?)

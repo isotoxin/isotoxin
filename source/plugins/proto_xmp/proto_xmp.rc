@@ -1,6 +1,6 @@
 // Microsoft Visual C++ generated resource script.
 //
-#include "appver.inl"
+#include "../appver.inl"
 
 #define APSTUDIO_READONLY_SYMBOLS
 /////////////////////////////////////////////////////////////////////////////
@@ -40,10 +40,10 @@ BEGIN
         BLOCK "040004b0"
         BEGIN
             VALUE "CompanyName", "Rotkaermota"
-            VALUE "FileDescription", "Isotoxin mtproto (Telegram) protocol"
+            VALUE "FileDescription", "Isotoxin XMPP (Jabber) protocol"
             VALUE "FileVersion", SS(PLUGINVER)
             VALUE "InternalName", "proto_xmp.dll"
-            VALUE "LegalCopyright", "Copyright (C) 2015 Rotkaermota"
+            VALUE "LegalCopyright", "Copyright (C) 2016 Rotkaermota"
             VALUE "OriginalFilename", "proto_xmp.dll"
             VALUE "ProductName", "Isotoxin"
             VALUE "ProductVersion", SS(PLUGINVER)

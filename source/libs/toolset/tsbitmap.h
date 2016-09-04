@@ -273,18 +273,25 @@ struct bmpcore_normal_s
 
     struct core_s
     {
-        int         m_ref;
+#ifdef _DEBUG
+        int m_tail_size = 0;
+        int m_padding[3];
+#endif
+        int         m_ref = 1;
         imgdesc_s    m_info;
 
         core_s(aint sz)
         {
-            m_ref = 1;
             m_info.sz.x = 0;
             m_info.sz.y = 0;
             m_info.pitch = 0;
             m_info.bitpp = 0;
 
             memset(this + 1, 0, sz);
+
+#ifdef _DEBUG
+            m_tail_size = (int)sz;
+#endif // _DEBUG
         }
 
 
@@ -307,7 +314,11 @@ struct bmpcore_normal_s
         {
             if (m_ref == 1)
             {
-                return (core_s *)MM_RESIZE(this, bodysz + sizeof(core_s));
+                core_s * c = (core_s *)MM_RESIZE(this, bodysz + sizeof(core_s));
+#ifdef _DEBUG
+                c->m_tail_size = (int)bodysz;
+#endif // _DEBUG
+                return c;
             }
             else
             {
@@ -327,7 +338,8 @@ struct bmpcore_normal_s
             return n;
         }
     } *m_core;
-    TS_STATIC_CHECK(sizeof(core_s) == 16, "sizeof(core_s) must be 16");
+
+    TS_STATIC_CHECK(sizeof(core_s) == 16 || sizeof( core_s ) == 32, "sizeof(core_s) must be 16 or 32");
 
     explicit bmpcore_normal_s( const bmpcore_normal_s&oth ):m_core(oth.m_core)
     {
@@ -382,6 +394,14 @@ struct bmpcore_normal_s
     {
         SWAP(m_core, ocore.m_core);
         return *this;
+    }
+
+    bool changeable() const { return m_core != nullptr && m_core->m_ref == 1; }
+    void change_size( const ivec2 &sz )
+    {
+        ASSERT( m_core->m_tail_size >= sz.x * sz.y * m_core->m_info.bytepp() );
+        m_core->m_info.set_size(sz);
+        m_core->m_info.pitch = (ts::int16)(sz.x * m_core->m_info.bytepp());
     }
 };
 
@@ -439,7 +459,15 @@ struct bmpcore_exbody_s
     void draw(const bmpcore_exbody_s &eb, aint xx, aint yy, int alpha = -1 /* -1 means no alphablend used */) const;
     void draw(const bmpcore_exbody_s &eb, aint xx, aint yy, const irect &r, int alpha = -1 /* -1 means no alphablend used */) const;
 
+    bool changeable() const { return true; }
+    void change_size( const ivec2 &sz )
+    {
+        m_info.set_size( sz );
+        m_info.pitch = (ts::int16)(sz.x * m_info.bytepp());
+    }
+
 };
+
 template<typename CORE> class bitmap_t
 {
     MOVABLE( is_movable<CORE>::value );
@@ -591,6 +619,12 @@ public:
 	bitmap_t &create_15(const ivec2 &sz) { core.create(imgdesc_s(sz, 15)); return *this; }
 	bitmap_t &create_RGB(const ivec2 &sz)  { core.create(imgdesc_s(sz, 24)); return *this; }
 	bitmap_t &create_ARGB(const ivec2 &sz)  { core.create(imgdesc_s(sz, 32)); return *this; } //-V112
+
+    void change_size( const ivec2 &sz ) // danger! hack! hack! be sure allocated size is enough and ref count is 1
+    {
+        ASSERT( core.changeable() );
+        core.change_size( sz );
+    }
 
     bool	ajust_ARGB(const ivec2 &sz, bool exact_size)
     {
@@ -818,11 +852,11 @@ public:
     
     uint32 hash() const
     {
-        uint32 crc = 0xFFFFFFFF; //-V112
+        uint32 crc = adler32(0,nullptr,0); //-V112
         const uint8 *s = body();
         for(int y=0;y<info().sz.y;++y, s+=info().pitch)
-            crc = CRC32_Buf(s, info().pitch, crc);
-        return CRC32_End(crc);
+            crc = adler32(crc, s, info().pitch);
+        return crc;
     }
 
     bool load_from_BMPHEADER(const BITMAPINFOHEADER * iH, int buflen);

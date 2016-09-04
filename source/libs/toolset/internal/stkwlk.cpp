@@ -160,13 +160,13 @@ public:
     // SymSetOptions
     symOptions = this->pSSO(symOptions);
 
-    char buf[StackWalker::STACKWALK_MAX_NAMELEN] = {0};
+    char buf[StackWalker::STACKWALK_MAX_NAMELEN] = {};
     if (this->pSGSP != nullptr)
     {
       if (this->pSGSP(m_hProcess, buf, StackWalker::STACKWALK_MAX_NAMELEN) == FALSE)
         this->m_parent->OnDbgHelpErr("SymGetSearchPath", GetLastError(), 0);
     }
-    char szUserName[1024] = {0};
+    char szUserName[1024] = {};
     DWORD dwSize = 1024;
     GetUserNameA(szUserName, &dwSize);
     this->m_parent->OnSymInit(buf, symOptions, szUserName);
@@ -599,7 +599,7 @@ StackWalker::StackWalker(DWORD dwProcessId, HANDLE hProcess)
   this->m_options = OptionsAll;
   this->m_modulesLoaded = FALSE;
   this->m_hProcess = hProcess;
-  this->m_sw = TSNEW(StackWalkerInternal, this, this->m_hProcess);
+  this->m_sw = TSNEW_T( MEMT_STACKWLK, StackWalkerInternal, this, this->m_hProcess);
   this->m_dwProcessId = dwProcessId;
   this->m_szSymPath = nullptr;
 }
@@ -608,7 +608,7 @@ StackWalker::StackWalker(int options, LPCSTR szSymPath, DWORD dwProcessId, HANDL
   this->m_options = options;
   this->m_modulesLoaded = FALSE;
   this->m_hProcess = hProcess;
-  this->m_sw = TSNEW(StackWalkerInternal, this, this->m_hProcess);
+  this->m_sw = TSNEW_T(MEMT_STACKWLK, StackWalkerInternal, this, this->m_hProcess);
   this->m_dwProcessId = dwProcessId;
   if (szSymPath != nullptr)
   {
@@ -631,6 +631,8 @@ StackWalker::~StackWalker()
 
 BOOL StackWalker::LoadModules()
 {
+    MEMT( MEMT_STACKWLK );
+
   if (this->m_sw == nullptr)
   {
     SetLastError(ERROR_DLL_INIT_FAILED);
@@ -644,7 +646,7 @@ BOOL StackWalker::LoadModules()
   if ( (this->m_options & SymBuildPath) != 0)
   {
     const size_t nSymPathLen = 4096;
-    szSymPath = (char*) malloc(nSymPathLen);
+    szSymPath = (char*) MM_ALLOC(nSymPathLen);
     if (szSymPath == nullptr)
     {
       SetLastError(ERROR_NOT_ENOUGH_MEMORY);
@@ -729,7 +731,7 @@ BOOL StackWalker::LoadModules()
 
   // First Init the whole stuff...
   BOOL bRet = this->m_sw->Init(szSymPath);
-  if (szSymPath != nullptr) free(szSymPath); szSymPath = nullptr;
+  if (szSymPath != nullptr) MM_FREE(szSymPath); szSymPath = nullptr;
   if (bRet == FALSE)
   {
     this->OnDbgHelpErr("Error while initializing dbghelp.dll", 0, 0);

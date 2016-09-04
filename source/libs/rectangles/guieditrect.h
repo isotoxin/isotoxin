@@ -3,9 +3,6 @@
 */
 #pragma once
 
-class application_c;
-extern application_c *g_app;
-
 #define SEPARATORS L" \n\t:;\"',./?`~!@#$%^&*()-+=\\|{}—"
 #define IS_WORDB(c) (c==0||ts::CHARz_find(SEPARATORS,c)>=0)
 
@@ -345,4 +342,7 @@ public:
     /*virtual*/ bool accept_focus() const override { return __super::accept_focus() && !flags.is( F_DISABLE_CARET ); }
 
     const ts::font_desc_c &get_font() const { ASSERT(font); return *font; }
+
+    /*virtual*/ void disable( bool f = true ) override;
+
 };

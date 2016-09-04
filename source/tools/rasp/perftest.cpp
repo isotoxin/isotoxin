@@ -21,12 +21,15 @@ struct data4test_s
     //TSCOLOR ccc = ts::PREMULTIPLY(ts::ARGB(0,255,105,23));
     TSCOLOR ccc = ts::ARGB(0,255,105,23);
 
-    fastdelegate::FastDelegate<void ()> process_f = []() {};
+    static void do_nothing() {}
+
+    fastdelegate::FastDelegate<void ()> process_f = do_nothing;
 
 #ifdef _WIN32
 #define RSLTPATH "C:\\2\\1\\"
 #elif defined _NIX
 #define RSLTPATH "/tmp/"
+#include "win32emu/win32emu.h"
 #endif
 
     data4test_s(int test, uint8 av):test(test), alpha_v(av)
@@ -70,15 +73,15 @@ struct data4test_s
                 break;
             case 2:
                 Print("direct lanczos resample test\n");
-                bmp.load_from_file(L"C:\\2\\1\\test0.png");
+                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
                 bmpt.create_ARGB( ivec2(target_x, target_y) );
                 process_f = DELEGATE(this, process_lanczos);
                 process_f();
-                bmpt.save_as_png(L"C:\\2\\1\\lanczos.png");
+                bmpt.save_as_png(CONSTWSTR(RSLTPATH "lanczos.png"));
                 break;
             case 3:
                 Print("indirect lanczos resample test\n");
-                bmp.load_from_file(L"C:\\2\\1\\test0.png");
+                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
                 {
                     int *x = (int *)&bmp.info().sz.x;
                     *x = *x - 2;
@@ -87,54 +90,54 @@ struct data4test_s
                 bmpt.create_ARGB(ivec2(target_x, target_y));
                 process_f = DELEGATE(this, process_lanczos2);
                 process_f();
-                bmpt.save_as_png(L"C:\\2\\1\\lanczos2.png");
+                bmpt.save_as_png(CONSTWSTR(RSLTPATH "lanczos2.png"));
                 break;
             case 4:
                 Print("direct bicubic resample test\n");
-                bmp.load_from_file(L"C:\\2\\1\\test0.png");
+                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
                 bmpt.create_ARGB(ivec2(target_x, target_y));
                 process_f = DELEGATE(this, process_bicubic);
                 process_f();
-                bmpt.save_as_png(L"C:\\2\\1\\lanczos3.png");
+                bmpt.save_as_png(CONSTWSTR(RSLTPATH "lanczos3.png"));
                 break;
             case 5:
                 Print("shrink 2x x86 asm\n");
-                bmp.load_from_file(L"C:\\2\\1\\test0.png");
+                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
                 bmpt.create_ARGB(bmp.info().sz/2);
                 process_f = DELEGATE(this, process_shrink2x86);
                 process_f();
-                bmpt.save_as_png(L"C:\\2\\1\\shrink2x.png");
+                bmpt.save_as_png(CONSTWSTR(RSLTPATH "shrink2x.png"));
                 break;
             case 6:
                 Print("overfill test\n");
-                bmp.load_from_file(L"C:\\2\\1\\test0.png");
+                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
                 process_f = DELEGATE(this, process_overfill);
                 process_f();
-                bmp.save_as_png(L"C:\\2\\1\\overfill.png");
+                bmp.save_as_png(CONSTWSTR(RSLTPATH "overfill.png"));
                 break;
             case 7:
             case 17:
                 test == 7 ? Print("my AlphaBlend test\n") : Print("system AlphaBlend test\n");
 
                 //bmpt.load_from_file(L"C:\\2\\1\\alpha555.png");
-                bmpt.load_from_file(L"C:\\2\\1\\alpha_full.png");
-                bmp.load_from_file(L"C:\\2\\1\\test0.png");
+                bmpt.load_from_file(CONSTWSTR(RSLTPATH "alpha_full.png"));
+                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
 
                 tgt.create_from_bitmap(bmp);
                 alpha.create_from_bitmap(bmpt,false,true);
 
                 process_f = test == 7 ? DELEGATE(this, process_alphablend) : DELEGATE(this, process_alphablend_sys);
                 process_f();
-                tgt.save_as_png(L"C:\\2\\1\\alphablend.png");
+                tgt.save_as_png(CONSTWSTR(RSLTPATH "alphablend.png"));
                 break;
             case 8:
                 Print("draw text test\n");
 
-                bmp.load_from_file(L"C:\\2\\1\\test0.png");
+                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
 
                 {
                     font_params_s fp;
-                    fp.filename = L"arial.ttf";
+                    fp.filename.set( CONSTWSTR("arial.ttf"));
                     fp.size = ts::ivec2(25);
                     ts::add_font("default", fp);
 
@@ -143,17 +146,17 @@ struct data4test_s
                     txt.set_font( &fd );
                     ts::g_default_text_font = fd;
                     
-                    ts::wstr_c t( L"fmiweifisfjweiriji sdf iweoi fio weoiriof sodf oiweoit fs doifwf sdf owieowei fsd foiwe fseoifweoiweifsdfsd f sdoiwe fos d " );
+                    ts::wstr_c t( CONSTWSTR("fmiweifisfjweiriji sdf iweoi fio weoiriof sodf oiweoit fs doifwf sdf owieowei fsd foiwe fseoifweoiweifsdfsd f sdoiwe fos d " ));
                     ts::wstr_c t2(t);
 
                     for (int i=0;i<100;++i) t.append(t2);
                     
-                    t.insert(0, L"<font=default><color=22,255,23>" );
+                    t.insert(0, CONSTWSTR("<font=default><color=22,255,23>") );
 
                     txt.set_text(t, nullptr, false);
                     txt.parse_and_render_texture(nullptr, nullptr, false);
                     txt.render_texture(nullptr, DELEGATE(this, clrbt));
-                    txt.get_texture().save_as_png(L"C:\\2\\1\\dtext.png");
+                    txt.make_bitmap().save_as_png(CONSTWSTR(RSLTPATH "dtext.png"));
 
 
                 //txt.parse_and_render_texture( );
@@ -187,7 +190,7 @@ struct data4test_s
                 mint = delta;
             total += delta;
             Print("work time: %i (%i) min:%i\n", delta, int(total / cnt), mint);
-            Sleep(1);
+            ts::sys_sleep(1);
             if (delta > 10000)
                 break;
         }
@@ -264,8 +267,10 @@ struct data4test_s
 
     void alphablend_sys(int x, int y, uint8 a)
     {
+        #ifdef _WIN32
         BLENDFUNCTION blendPixelFunction = { AC_SRC_OVER, 0, (uint8)a, AC_SRC_ALPHA };
         //AlphaBlend(tgt.DC(), x, y, alpha.info().sz.x, alpha.info().sz.y, alpha.DC(), 0, 0, alpha.info().sz.x, alpha.info().sz.y, blendPixelFunction);
+        #endif
     }
 
     void process_alphablend() // 496 // 870
@@ -294,9 +299,9 @@ struct data4test_s
         //alphablend(500, 428, 126);
     }
 
-    void clrbt( ts::bitmap_c &b, const ts::ivec2 &sz )
+    void clrbt( ts::bitmap_c &b, int y, const ts::ivec2 &sz )
     {
-        b.copy( ts::ivec2(0), sz, bmp.extbody(), ts::ivec2(0) );
+        b.copy( ts::ivec2(0), sz, bmp.extbody(ts::irect(0,y,sz.x,y+sz.y)), ts::ivec2(0) );
     }
 
     void process_drawtext() // 1544 // 967
@@ -310,7 +315,7 @@ int proc_test(const wstrings_c & pars)
 {
     TSCOLOR c = ARGB<int>(-1,-2,-3,0);
     if (c != 0)
-        __debugbreak();
+        DEBUG_BREAK();
 
     int test = 0;
     if (pars.size() > 1) test = pars.get(1).as_int();

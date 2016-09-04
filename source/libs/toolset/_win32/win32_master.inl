@@ -360,7 +360,7 @@ static DWORD WINAPI thread_stub( void *p )
 
 /*virtual*/ void sys_master_win32_c::sys_start_thread( _HANDLER_T thr )
 {
-    thread_param_s * tp = TSNEW( thread_param_s );
+    thread_param_s * tp = TSNEW_T( MEMT_MASTER, thread_param_s );
     tp->tp = thr;
 
     CloseHandle( CreateThread( nullptr, 0, thread_stub, tp, 0, nullptr ) );
@@ -931,11 +931,6 @@ static DWORD WINAPI multiinstanceblocker( LPVOID )
     }
 }
 
-/*virtual*/ void sys_master_win32_c::sys_sleep( int ms )
-{
-    Sleep( ms );
-}
-
 /*virtual*/ wnd_c *sys_master_win32_c::get_focus()
 {
     HWND fhwnd = GetFocus();
@@ -1003,7 +998,7 @@ process_handle_s::~process_handle_s()
     if (!elevate)
     {
         STARTUPINFOW si = { sizeof( si ) };
-        PROCESS_INFORMATION pi = { 0 };
+        PROCESS_INFORMATION pi = {};
         wstr_c cmd;
         tmp_wstr_c prm( exe );
 
@@ -1040,7 +1035,7 @@ process_handle_s::~process_handle_s()
     {
         wstr_c path = fn_get_path( fn_fix_path ( exe, FNO_NORMALIZE | FNO_FULLPATH | FNO_REMOVECRAP ) );
 
-        SHELLEXECUTEINFOW shExInfo = { 0 };
+        SHELLEXECUTEINFOW shExInfo = {};
         shExInfo.cbSize = sizeof( shExInfo );
         shExInfo.fMask = process_handle ? SEE_MASK_NOCLOSEPROCESS : 0;
         shExInfo.hwnd = 0;

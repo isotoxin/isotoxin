@@ -43,6 +43,8 @@ void config_base_c::prepare_conf_table( ts::sqlitedb_c *db )
 }
 bool config_base_c::save_dirty(RID, GUIPARAM save_all_now)
 {
+    MEMT( MEMT_CONFIG );
+
     ts::db_transaction_c __transaction(db);
 
     bool some_data_still_not_saved = save();
@@ -141,7 +143,7 @@ bool find_config(ts::wstr_c &path)
                     return false;
                 } else
                 {
-                    ts::master().sys_sleep(500);
+                    ts::sys_sleep(500);
                 }
 
                 return true;

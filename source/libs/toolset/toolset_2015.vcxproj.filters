@@ -22,11 +22,11 @@
     <Filter Include="src\math">
       <UniqueIdentifier>{6dd785c4-14a1-4192-8215-4dc7b60921b3}</UniqueIdentifier>
     </Filter>
-    <Filter Include="src\arc">
-      <UniqueIdentifier>{8b416ec1-858c-4f0d-be8e-2b4f8e0e9cb9}</UniqueIdentifier>
-    </Filter>
     <Filter Include="src\internal\win32">
       <UniqueIdentifier>{a5030bac-ec8d-440c-9cb4-d0245fbf5ab8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\arch">
+      <UniqueIdentifier>{8b416ec1-858c-4f0d-be8e-2b4f8e0e9cb9}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -64,9 +64,6 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="tsstrar.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="tscrc.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="tsfilesystem.cpp">
@@ -109,7 +106,7 @@
       <Filter>src\internal</Filter>
     </ClCompile>
     <ClCompile Include="tszip.cpp">
-      <Filter>src\arc</Filter>
+      <Filter>src\arch</Filter>
     </ClCompile>
     <ClCompile Include="tsfile_zip.cpp">
       <Filter>src\files\packages</Filter>
@@ -209,9 +206,6 @@
     <ClInclude Include="tsstrar.h">
       <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="tscrc.h">
-      <Filter>src</Filter>
-    </ClInclude>
     <ClInclude Include="tsfilesystem.h">
       <Filter>src\files</Filter>
     </ClInclude>
@@ -261,7 +255,7 @@
       <Filter>src\internal</Filter>
     </ClInclude>
     <ClInclude Include="tszip.h">
-      <Filter>src\arc</Filter>
+      <Filter>src\arch</Filter>
     </ClInclude>
     <ClInclude Include="tsfile_zip.h">
       <Filter>src\files\packages</Filter>

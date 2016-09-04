@@ -9,7 +9,7 @@ mediasystem_c::~mediasystem_c()
     while( ref > 0 )
     {
         s3::Update();
-        ts::master().sys_sleep(1);
+        ts::sys_sleep(1);
     }
 }
 
@@ -212,14 +212,21 @@ void mediasystem_c::play_looped(sound_e snd, float volume, bool signal_device)
         loops[snd].reset( TSNEW( loop_play, player, buf, volume * vol ) );
 }
 
-void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int dsp /* see fmt_converter_s::FO_* bits */, const void *d, ts::aint dsz)
+void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int dsp /* see fmt_converter_s::FO_* bits */, const void *d, ts::aint dsz, int clampms)
 {
     auto w = data.lock_write();
 
     if (fmt != format)
     {
         if (isPlaying()) stop();
+        w().clear();
         format = fmt;
+    } else
+    {
+        ts::aint clampbytes = format.avgBytesPerMSecs( clampms );
+        ts::aint a = w().available();
+        if ( a > clampbytes )
+            w().remove_data(a-clampms);
     }
 
     bool filter = false;
@@ -270,10 +277,42 @@ void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int
     }
     w.unlock();
 
-
-
     if (!isPlaying())
         play();
+}
+
+void mediasystem_c::voice_player::protected_data_s::remove_data( ts::aint size )
+{
+    if ( size < ( buf[ readbuf ].size() - readpos ) )
+    {
+        readpos += (int)size;
+        if ( newdata == readbuf ) newdata ^= 1;
+    } else
+    {
+        ts::aint szleft = buf[ readbuf ].size() - readpos;
+        ts::aint exist_data_size = szleft + buf[ readbuf ^ 1 ].size();
+        if ( exist_data_size < size && begining )
+        {
+            if ( exist_data_size )
+                remove_data( exist_data_size );
+            return;
+        }
+        begining = false;
+        size -= szleft;
+        buf[ readbuf ].clear(); // this buffer fully extracted
+        newdata = readbuf; // now it will be used for new data
+        readbuf ^= 1; readpos = 0; // and read-buffer is second one
+        if ( size )
+        {
+            if ( buf[ readbuf ].size() ) // there are some data in buffer - get it
+            {
+                remove_data( size );
+                return;
+            }
+            newdata = readbuf = 0; // both buffers are empty - do job as from begining
+            begining = true; // as begining - new data after silence
+        }
+    }
 }
 
 ts::aint mediasystem_c::voice_player::protected_data_s::read_data(const s3::Format &fmt, char *dest, ts::aint size)
@@ -362,7 +401,7 @@ void mediasystem_c::voice_volume( const uint64 &key, float vol )
 }
 
 
-bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const void *data, ts::aint size, float vol, int dsp )
+bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const void *data, ts::aint size, float vol, int dsp, int clampms )
 {
     if (!initialized)
         init();
@@ -379,7 +418,7 @@ bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const 
             if (vp(i).mute)
                 return true;
         namana:
-            vp(i).add_data(fmt, vol, dsp, data, size);
+            vp(i).add_data(fmt, vol, dsp, data, size, clampms );
             return true;
         } else 
         {
@@ -464,19 +503,31 @@ ts::str_c string_from_device(const s3::DEVICE& device)
 
 fmt_converter_s::fmt_converter_s()
 {
-    memset(filter, 0, sizeof(filter));
-    memset(resampler, 0, sizeof(resampler));
 }
+
 fmt_converter_s::~fmt_converter_s()
 {
+    clear();
+}
+
+void fmt_converter_s::clear()
+{
 #if _RESAMPLER == RESAMPLER_SPEEXFA
-    for (SpeexResamplerState *s : resampler)
-        if (s) speex_resampler_destroy(s);
+    for ( SpeexResamplerState *s : resampler )
+        if ( s ) speex_resampler_destroy( s );
 #elif _RESAMPLER == RESAMPLER_SRC
-    for (SRC_STATE *s : resampler)
-        if (s) src_delete(s);
+    for ( SRC_STATE *s : resampler )
+        if ( s ) src_delete( s );
 #endif
 
+    for ( Filter_Audio *f : filter )
+        if (f) kill_filter_audio(f);
+
+    memset( resampler, 0, sizeof( resampler ) );
+    memset( filter, 0, sizeof( filter ) );
+
+    active_filter_options = 0;
+    tail.clear();
 }
 
 void fmt_converter_s::cvt( const s3::Format &ifmt, const void *idata, ts::aint isize )
@@ -515,7 +566,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, ts:
     //ts::uint8 *b[2];
     //b[0] = b_temp;
     //b[1] = b_temp + bszmax;
-    //int bsz[2] = { 0, 0 };
+    //int bsz[2] = {};
 
     ts::tmp_buf_c b[2];
 
@@ -659,7 +710,7 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, ts:
         }
 
 #elif _RESAMPLER == RESAMPLER_SRC
-        SRC_DATA	src_data = { 0 };
+        SRC_DATA	src_data = {};
         src_data.end_of_input = 0;
         src_data.src_ratio = (double)ofmt.sampleRate / (double)ifmt.sampleRate;
         for (int ch = 0; ch < ichnls; ++ch)
@@ -917,3 +968,26 @@ void fmt_converter_s::cvt_portion(const s3::Format &ifmt, const void *idata, ts:
 #if _RESAMPLER == RESAMPLER_SILK
 #elif _RESAMPLER == RESAMPLER_SRC
 #endif
+
+
+avmuxer_c::avmuxer_c( uint64 key ) : key( key )
+{
+}
+
+avmuxer_c::~avmuxer_c()
+{
+    SIMPLELOCK( sync );
+}
+
+void avmuxer_c::add_audio( uint64 timestamp, const s3::Format &fmt, const void *data, ts::aint size, active_protocol_c *ctx )
+{
+    audio = true;
+    if ( !video )
+    {
+        //ctx->play_audio( key, fmt, data, size );
+        return;
+    }
+
+    SIMPLELOCK( sync );
+
+}

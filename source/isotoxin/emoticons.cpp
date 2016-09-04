@@ -723,6 +723,23 @@ void emoticons_c::parse( ts::str_c &t, bool to_unicode )
             int i = t.find_pos( sf, mp.s );
             if (i >= 0)
             {
+                if ( mp.s.get_length() == 2 )
+                {
+                    // special hardcode
+                    // 2 char length smiles must be space-separated from other text
+                    if (i > 0 && t.get_char(i-1) != ' ')
+                    {
+                        sf += 2;
+                        continue;
+                    }
+                    if ( i+2 < t.get_length() && t.get_char( i+2 ) != ' ' )
+                    {
+                        sf += 2;
+                        continue;
+                    }
+                }
+
+
                 int r0 = i;
                 int r1 = i + mp.s.get_length();
                 sf = r1;

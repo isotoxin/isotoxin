@@ -102,7 +102,6 @@ public:
     virtual global_atom_s *sys_global_atom( const wstr_c &n ) = 0;
     virtual bool sys_one_instance( const wstr_c &n, _HANDLER_T notify_cb ) = 0;
 
-    virtual void sys_sleep(int ms) = 0;
     virtual void sys_beep( sys_beep_e beep ) = 0;
 
     virtual wnd_c *get_focus() = 0;
@@ -164,7 +163,6 @@ public:
     /*virtual*/ global_atom_s *sys_global_atom( const wstr_c &n ) override;
     /*virtual*/ bool sys_one_instance( const wstr_c &n, _HANDLER_T notify_cb ) override;
 
-    /*virtual*/ void sys_sleep( int ms ) override;
     /*virtual*/ void sys_beep( sys_beep_e beep ) override;
 
     /*virtual*/ wnd_c *get_focus() override;

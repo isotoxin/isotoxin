@@ -49,7 +49,7 @@ class dialog_setup_network_c;
 template<> struct MAKE_ROOT<dialog_setup_network_c> : public _PROOT(dialog_setup_network_c)
 {
     dialog_protosetup_params_s prms;
-    MAKE_ROOT(const dialog_protosetup_params_s &prms) :_PROOT(dialog_setup_network_c)(), prms(prms) { init( RS_NORMAL ); }
+    MAKE_ROOT(const dialog_protosetup_params_s &prms) :_PROOT(dialog_setup_network_c)(), prms(prms) { init( rect_sys_e(RS_NORMAL|RS_MAINPARENT) ); }
     ~MAKE_ROOT() {}
 };
 

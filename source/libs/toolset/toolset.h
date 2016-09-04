@@ -111,11 +111,15 @@ extern "C"
 #ifdef _FINAL
 #define MM_ALLOC(sz) dlmalloc(sz)
 #define MM_RESIZE(ptr,sz) dlrealloc(ptr,sz)
+#define MM_ALLOC_T(t, sz) dlmalloc(sz)
+#define MM_RESIZE_T(t, ptr,sz) dlrealloc(ptr,sz)
 #define MM_FREE(ptr) dlfree(ptr)
 #define MM_SIZE(ptr) dlmalloc_usable_size(ptr)
 #else
-#define MM_ALLOC(sz) mspy_malloc(__FILE__, __LINE__, sz)
-#define MM_RESIZE(ptr,sz) mspy_realloc(__FILE__, __LINE__, ptr,sz)
+#define MM_ALLOC(sz) mspy_malloc(__FILE__, __LINE__, g_current_memt, sz)
+#define MM_RESIZE(ptr,sz) mspy_realloc(__FILE__, __LINE__, g_current_memt, ptr,sz)
+#define MM_ALLOC_T(t, sz) mspy_malloc(__FILE__, __LINE__, t, sz)
+#define MM_RESIZE_T(t, ptr,sz) mspy_realloc(__FILE__, __LINE__, t, ptr,sz)
 #define MM_FREE(ptr) mspy_free(ptr)
 #define MM_SIZE(ptr) mspy_size(ptr)
 #endif
@@ -139,6 +143,9 @@ template<typename T> struct TSNEWDEL
     template<class... _Valty> static T* __tsnew( _Valty&&... _Val )
         { T * t = (T *)MM_ALLOC(sizeof(T)); new(t)T(std::forward<_Valty>(_Val)...); return t; }
 
+    template<class... _Valty> static T* __tsnew_t( int typ, _Valty&&... _Val )
+        { T * t = (T *)MM_ALLOC_T( typ, sizeof( T ) ); new( t )T( std::forward<_Valty>( _Val )... ); return t; }
+
     template<class... _Valty> static void __tsplacenew(T* t, _Valty&&... _Val)
         { new(t)T(std::forward<_Valty>(_Val)...); }
 
@@ -148,8 +155,46 @@ template<typename T> struct TSNEWDEL
 #define DECLARE_DYNAMIC_BEGIN( cn ) friend struct TSNEWDEL<cn>; private:
 #define DECLARE_DYNAMIC_END( inheritance ) inheritance:
 
+enum mem_e
+{
+    MEMT_UNKNOWN,
+    MEMT_TEMP,
+    MEMT_FILEOP,
+    MEMT_STACKWLK,
+    MEMT_SOBJS,
+    MEMT_MASTER,
+    MEMT_STR_WD,
+    MEMT_SQLITE,
+    MEMT_EXECUTOR,
+    //MEMT_TIMEPROCESSOR,
+
+    MEMT_LAST
+};
+
+#ifdef _DEBUG
+extern int THREADLOCAL g_current_memt;
+struct memory_type_setup
+{
+    int oldmemt;
+    memory_type_setup(int newmemt)
+    {
+        oldmemt = g_current_memt;
+        g_current_memt = newmemt;
+    }
+    ~memory_type_setup()
+    {
+        g_current_memt = oldmemt;
+    }
+};
+#define MEMT(memt) memory_type_setup __memtxxx( memt )
+#else
+#define g_current_memt 0
+#define MEMT(memt)
+#endif // _DEBUG
+
 #define TSPLACENEW(p, ...) TSNEWDEL< typename ts::clean_type<decltype(p) >::type >::__tsplacenew((p), ##__VA_ARGS__)
 #define TSNEW(T, ...) TSNEWDEL<T>::__tsnew(__VA_ARGS__)
+#define TSNEW_T(typ, T, ...) TSNEWDEL<T>::__tsnew_t(typ, __VA_ARGS__)
 #define TSDEL(p) TSNEWDEL<typename ts::clean_type<decltype(p)>::type>::__tsdel(p)
 #define TSDELC(p) do { TSDEL(p); p = nullptr; } while ((1, false))
 
@@ -269,12 +314,22 @@ template<class T> INLINE void SWAP(T& first, T& second)
 #define BINSWAPDWORD( x ) (*(DWORD *)(&(x)))
 #define BINSWAP(first, second) { BINSWAPDWORD(first) ^= BINSWAPDWORD(second); BINSWAPDWORD(second) ^= BINSWAPDWORD(first); BINSWAPDWORD(first) ^= BINSWAPDWORD(second); }
 #ifndef LIST_ADD
-#define LIST_ADD(el,first,last,prev,next)       {if((last)!=nullptr) {(last)->next=el;} (el)->prev=(last); (el)->next=0;  last=(el); if(first==0) {first=(el);}}
+#define LIST_ADD(el,first,last,prev,next)       {if((last)!=nullptr) {(last)->next=el;} (el)->prev=(last); (el)->next=nullptr;  last=(el); if(first==nullptr) {first=(el);}}
 #define LIST_DEL(el,first,last,prev,next) \
     {if((el)->prev!=0) (el)->prev->next=el->next;\
         if((el)->next!=0) (el)->next->prev=(el)->prev;\
         if((last)==(el)) last=(el)->prev;\
     if((first)==(el)) (first)=(el)->next;}
+
+#define LIST_INSERT(el,first,last,prev,next)  \
+{ \
+    (el)->prev = nullptr; \
+    (el)->next = (first); \
+    if (first) { (first)->prev = (el); } \
+    first=(el); \
+    if (!(last)) { last = (el); } \
+}
+
 
 #define LIST_INSERT_AFTER(after,el,first,last,prev,next)    \
 {                                                           \
@@ -430,7 +485,7 @@ namespace ts // some ts types
     {
         INLINE void * TSCALL  ma(auint sz)
         {
-            return MM_ALLOC(sz);
+            return MM_ALLOC_T( g_current_memt, sz);
         }
         INLINE void   TSCALL  mf(void *ptr)
         {
@@ -438,7 +493,7 @@ namespace ts // some ts types
         }
         INLINE void * TSCALL  mra(void *ptr, auint sz)
         {
-            return MM_RESIZE(ptr, sz);
+            return MM_RESIZE_T( g_current_memt, ptr, sz);
         }
     };
 
@@ -715,6 +770,9 @@ struct sobase
     static void init_all()
     {
         if (initializing) return;
+
+        MEMT( MEMT_SOBJS );
+
         ASSERT(!initialized);
         initializing = true;
         for(sobase *obj = first; obj; obj = obj->next) obj->init();
@@ -875,62 +933,6 @@ template<size_t sz> struct enough
     typedef typename sztype<sz2sz>::type type;
 };
 
-template<aint bsize, aint count> class struct_pool_t
-{
-    uint8 m_buffer[count * bsize];
-    aint  m_current_count = 0;
-    aint  m_free_count = 0;
-    typedef typename enough<count>::type fbindex;
-    fbindex m_free_buffer[count];
-
-public:
-
-    struct_pool_t() {}
-
-    void *    alloc()
-    {
-        void * ptr = try_alloc();
-        if (ptr != nullptr) return ptr;
-        return MM_ALLOC(bsize);
-    }
-
-    void *    try_alloc()
-    {
-        if (m_free_count > 0)
-        {
-            aint disp = bsize * m_free_buffer[--m_free_count];
-            return (void*)(m_buffer + disp);
-        }
-        if (m_current_count < count)
-        {
-            aint disp = (bsize * m_current_count++);
-            return (void*)(m_buffer + disp);
-        }
-        return nullptr;
-    }
-
-    void    dealloc(void * c)
-    {
-        aint disp = ((uint8 *)c) - m_buffer;
-
-        if ((c >= &m_buffer) && disp < (count * bsize))
-        {
-            fbindex fi = (fbindex)(disp/bsize);
-            if (ASSERT( (disp == bsize * fi) && m_free_count < count ))
-                m_free_buffer[m_free_count++] = fi;
-        }
-        else
-        {
-            MM_FREE(c);
-        }
-    }
-    bool     yours(void *c) const
-    {
-        aint disp = ((uint8 *)c) - m_buffer;
-        return (c >= &m_buffer) && disp < (count * bsize);
-    }
-};
-
 #define DUMMY_USED_WARNING(b_quiet) if (!b_quiet) WARNING("Dummy used")
 
 template<typename T, bool isptr> struct dummy_maker;
@@ -1076,7 +1078,6 @@ template <typename T> struct dummy
 #define FORWARD_DECLARE_STRING(c, s) template <typename TCHARACTER, typename ALC> class str_core_copy_on_demand_c; template <typename TCHARACTER, class CORE > class str_t; typedef str_t<c, str_core_copy_on_demand_c<c, ZSTRINGS_ALLOCATOR>> s;
 
 #include "tsflags.h"
-#include "tscrc.h"
 #include "tsmath.h"
 #include "tsbuf.h"
 #include "tshash_md5.h"
@@ -1137,6 +1138,7 @@ public:
 
     template<typename T> static void setup()
     {
+        MEMT( MEMT_FILEOP );
         tsfileop_c *nfop = TSNEW(T, &g_fileop);
         killop();
         g_fileop = nfop;

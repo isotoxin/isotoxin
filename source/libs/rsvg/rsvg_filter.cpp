@@ -508,7 +508,7 @@ static void box_blur_line(int box_width, int even_offset, const ts::uint8 *src, 
     int  output;        /* This marks the center of the kernel                    */
     int  trail;         /* This marks the pixel BEHIND the last 1 in the
                            kernel; it's the pixel to remove from the accumulator. */
-    int  ac[4] = {0};   /* Accumulator for each channel                           */
+    int  ac[4] = {};   /* Accumulator for each channel                           */
 
 
     /* The algorithm differs for even and odd-sized kernels.

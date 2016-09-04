@@ -238,14 +238,14 @@ int proc_toxrelay(const ts::wstrings_c & pars)
     IP ip;
     ip_init(&ip, enable_ipv6);
 
-    Networking_Core *net = new_networking(ip, port);
+    Networking_Core *net = new_networking(nullptr, ip, port);
 
     if (net == NULL) {
         if (enable_ipv6 && enable_ipv4_fallback) {
             Print(FOREGROUND_BLUE, "Couldn't initialize IPv6 networking. Falling back to using IPv4.\n");
             enable_ipv6 = 0;
             ip_init(&ip, enable_ipv6);
-            net = new_networking(ip, port);
+            net = new_networking(nullptr, ip, port);
 
             if (net == NULL) {
                 Print(FOREGROUND_BLUE, "Couldn't fallback to IPv4. Exiting.\n");
@@ -258,7 +258,7 @@ int proc_toxrelay(const ts::wstrings_c & pars)
     }
 
 
-    DHT *dht = new_DHT(net);
+    DHT *dht = new_DHT(nullptr,net);
 
     if (dht == NULL) {
         Print(FOREGROUND_RED, "Couldn't initialize Tox DHT instance. Exiting.\n");
@@ -371,7 +371,7 @@ int proc_toxrelay(const ts::wstrings_c & pars)
             do_TCP_server(tcp_server);
         }
 
-        networking_poll(dht->net);
+        networking_poll(dht->net, nullptr);
 
         if (waiting_for_dht_connection && DHT_isconnected(dht)) {
             Print(FOREGROUND_BLUE, "Connected to other bootstrap node successfully.\n");

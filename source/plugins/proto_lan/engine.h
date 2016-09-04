@@ -345,6 +345,9 @@ public:
         u64 sblock = 0;
         datablock_s *nblock = nullptr;
 
+        u64 v_msmonotonic = 0; // current video frame
+        u64 a_msmonotonic = 0; // at begining of fifo buffer
+        u64 a_msmonotonic_compressed = 0;
         const void *video_data = nullptr;
         OpusDecoder *audio_decoder = nullptr;
         OpusEncoder *audio_encoder = nullptr;
@@ -375,13 +378,13 @@ public:
 
         void init_audio_encoder();
         void tick(contact_s *, int ct);
-        void add_audio( const void *data, int datasize );
+        void add_audio( u64 msmonotonic, const void *data, int datasize );
         int encode_audio(byte *dest, aint dest_max, const void *uncompressed_frame, aint frame_size);
         int prepare_audio4send(int ct); // grabs enc_fifo buffer and put compressed frame to this->compressed buffer
         int decode_audio( const void *data, int datasize ); // pcm decoded audio stored to this->uncompressed
 
-        void encode_video_and_send( const byte *y, const byte *u, const byte *v );
-        void video_frame( int framen, const byte *frame_data, int framesize );
+        void encode_video_and_send( u64 msmonotonic, const byte *y, const byte *u, const byte *v );
+        void video_frame( u64 msmonotonic, int framen, const byte *frame_data, int framesize );
 
         media_stuff_s( contact_s *owner );
         ~media_stuff_s();
@@ -430,7 +433,7 @@ public:
 
         int changed_self = 0;
         i32 avatar_tag = 0;
-        byte avatar_hash[16];
+        byte avatar_hash[ 16 ] = {};
 
         int reconnect = 0;
        
@@ -557,7 +560,6 @@ public:
         contact_s(int id):id(id)
         {
             nextactiontime = time_ms() - 10000000;
-            memset(avatar_hash, 0, sizeof(avatar_hash));
         }
         ~contact_s();
 

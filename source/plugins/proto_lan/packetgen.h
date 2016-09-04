@@ -12,7 +12,7 @@
     if you know correct true PUBLIC ID of your friend, nobody can mimic your friend's contact
 */
 
-#define LAN_PROTOCOL_VERSION 3 // only clients with same version can interact
+#define LAN_PROTOCOL_VERSION 4 // only clients with same version can interact
 #define LAN_SAVE_VERSION 1
 
 #define SIZE_PACKET_HEADER 4

@@ -119,7 +119,27 @@ void __special_blend(uint8 *dst_argb, int dst_pitch, const uint8 *src_alpha, int
 }
 
 
+bitmap_c text_rect_c::make_bitmap()
+{
+    ASSERT( !flags.is( F_INVALID_TEXTURE | F_INVALID_GLYPHS ) );
+    int n = prepare_textures( size );
+    const bitmap_c **tarr = (const bitmap_c **)_alloca( sizeof( bitmap_c * ) * n );
+    get_textures(tarr);
 
+    ts::bitmap_c bmp;
+    bmp.create_ARGB( size );
+
+    int y = 0;
+    for( int i=0;i<n;++i )
+    {
+        const bitmap_c *b = tarr[ i ];
+        ASSERT( b->info().sz.x >= size.x );
+        int h = tmin( size.y - y, b->info().sz.y );
+        bmp.copy( ts::ivec2( 0, y ), ivec2( size.x, h ), b->extbody(), ivec2(0) );
+        y += h;
+    }
+    return bmp;
+};
 
 bool text_rect_c::draw_glyphs(uint8 *dst_, int width, int height, int pitch, const array_wrapper_c<const glyph_image_s> &glyphs, const ivec2 &offset, bool prior_clear)
 {
@@ -296,32 +316,71 @@ void text_rect_c::update_rectangles( rectangle_update_s * updr )
 
 void text_rect_c::render_texture(rectangle_update_s * updr)
 {
-    if (glyphs().count() == 0) { texture_no_need(); return; }
+    if (glyphs().count() == 0) { textures_no_need(); return; }
     CHECK(!flags.is(F_INVALID_SIZE|F_INVALID_GLYPHS));
 	if (!CHECK(size.x > 0 && size.y > 0)) return;
-    texture().ajust_ARGB(size,false);
+    int n = prepare_textures( size );
+    const bitmap_c **tarr = (const bitmap_c **)_alloca( sizeof( bitmap_c * ) * n );
+    get_textures( tarr );
     flags.clear(F_DIRTY|F_INVALID_TEXTURE);
     ivec2 toffset = get_offset();
-	if (draw_glyphs((uint8*)texture().body(), size.x, size.y, texture().info().pitch, glyphs().array(), toffset) && updr)
-        update_rectangles(toffset, updr);
+    ivec2 woffset( toffset );
+
+    int addh = 0;
+    bool updrf = false;
+    for ( int i=0;i<n;++i )
+    {
+        bitmap_c *t = const_cast<bitmap_c *>(tarr[ i ]);
+        ASSERT( t->info().sz.x >= size.x );
+        int ih = t->info().sz.y;
+        int h = tmin( size.y - addh, ih );
+        updrf |= draw_glyphs( (uint8*)t->body(), size.x, h, t->info().pitch, glyphs().array(), woffset );
+        woffset.y -= ih;
+        addh += ih;
+    }
+
+    if ( updrf && updr )
+        update_rectangles( toffset, updr );
 }
 
-void text_rect_c::render_texture( rectangle_update_s * updr, fastdelegate::FastDelegate< void (bitmap_c&, const ivec2 &size) > clearp )
+void text_rect_c::render_texture( rectangle_update_s * updr, fastdelegate::FastDelegate< void (bitmap_c&, int y, const ivec2 &size) > clearp )
 {
-    if (glyphs().count() == 0) return texture_no_need();
+    if (glyphs().count() == 0) return textures_no_need();
     CHECK(!flags.is(F_INVALID_SIZE|F_INVALID_GLYPHS));
     if (!CHECK(size.x > 0 && size.y > 0)) return;
-    texture().ajust_ARGB(size, false);
+    int n = prepare_textures( size );
+    const bitmap_c **tarr = (const bitmap_c **)_alloca( sizeof( bitmap_c * ) * n );
+    get_textures( tarr );
     flags.clear(F_DIRTY|F_INVALID_TEXTURE);
-    clearp(texture(), size);
     ivec2 toffset = get_offset();
-    if (draw_glyphs((uint8*)texture().body(), size.x, size.y, texture().info().pitch, glyphs().array(), toffset, false) && updr)
-        update_rectangles(toffset, updr);
+    ivec2 woffset( toffset );
+
+    int addh = 0;
+    bool updrf = false;
+    for ( int i = 0; i < n; ++i )
+    {
+        bitmap_c *t = const_cast<bitmap_c *>( tarr[ i ] );
+        ASSERT( t->info().sz.x >= size.x );
+        int ih = t->info().sz.y;
+        int h = tmin( size.y - addh, ih );
+
+        clearp( *t, addh, ivec2(size.x, h) );
+
+        updrf |= draw_glyphs( (uint8*)t->body(), size.x, h, t->info().pitch, glyphs().array(), woffset, false );
+        woffset.y -= ih;
+        addh += ih;
+    }
+
+    if ( updrf && updr )
+        update_rectangles( toffset, updr );
 }
 
 bool text_rect_c::set_text(const wstr_c &text_, CUSTOM_TAG_PARSER ctp, bool do_parse_and_render_texture)
 {
-    bool dirty = flags.is(F_INVALID_SIZE) || texture().ajust_ARGB(size,false) || flags.is(F_DIRTY);
+    if ( size >> ivec2(0) )
+        prepare_textures( size );
+
+    bool dirty = flags.is(F_INVALID_SIZE) || flags.is( F_INVALID_TEXTURE ) || flags.is(F_DIRTY);
 
 	if (dirty || !text.equals(text_))
 	{

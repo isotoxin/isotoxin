@@ -49,7 +49,7 @@ public:
 
 inline WAVEFORMATEX BuildWaveFormat(int channels, int sampleRate, int bitsPerSample)
 {
-	WAVEFORMATEX wf = {0};
+	WAVEFORMATEX wf = {};
 	wf.wFormatTag = WAVE_FORMAT_PCM;
 	wf.nChannels = (WORD)channels;
 	wf.nSamplesPerSec = sampleRate;

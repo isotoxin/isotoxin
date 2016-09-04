@@ -522,6 +522,8 @@ void dialog_about_c::getbutton(bcreate_s &bcr)
     title.append( CONSTWSTR( " (32 bit)" ) );
 #endif
     title.append( CONSTWSTR("<br>Coding, design and sounds by <a href=\"https://github.com/isotoxin\">Rotkaermota</a>") );
+    title.append( CONSTWSTR( "<br>Swedish translation by \x00c5ke Engelbrektson" ) );
+    
     title.append( CONSTWSTR("<br>Isotoxin is open-source freeware, licensed under <a href=\"https://github.com/isotoxin/isotoxin/blob/master/LICENSE\">GPL3</a>") );
     title.append( CONSTWSTR("<br>See version history <a href=\"https://github.com/isotoxin/isotoxin/releases\">here</a>") );
 
@@ -655,15 +657,19 @@ ts::uint32 dialog_about_c::gm_handler(gmsg<ISOGM_NEWVERSION>&nv)
 
 /*virtual*/ ts::wstr_c dialog_about_c::get_name() const
 {
+    MEMT( MEMT_GUI_COMMON );
+
     return APPNAME_CAPTION;
 }
 /*virtual*/ ts::ivec2 dialog_about_c::get_min_size() const
 {
-    return ts::ivec2(450, 525);
+    return ts::ivec2(450, 540);
 }
 
 /*virtual*/ bool dialog_about_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    MEMT( MEMT_GUI_COMMON );
+
     if (__super::sq_evt(qp, rid, data)) return true;
 
     return false;

@@ -577,7 +577,7 @@ namespace ts
 #endif // _WIN32
 #ifdef _NIX
             ts::sstr_t< PATH_MAX > p = to_utf8( path );
-            struct stat st = {0};
+            struct stat st = {};
             if ( stat( p, &st ) == 0 && (st.st_mode & S_IFDIR) != 0 )
             {
 
@@ -799,7 +799,7 @@ namespace ts
         return INVALID_FILE_ATTRIBUTES != GetFileAttributesW(tmp_wstr_c(fname));
 #endif // _WIN32
 #ifdef _NIX
-        struct stat st = { 0 };
+        struct stat st = {};
         return 0 == stat( to_utf8( fname ), &st ) && (st.st_mode & S_IFREG) != 0;
 #endif //_NIX
     }
@@ -831,6 +831,7 @@ namespace ts
 
 	wstr_c  TSCALL get_exe_full_name()
 	{
+        MEMT( MEMT_STR_WD );
 		wstr_c wd;
 #ifdef _WIN32
         wd.set_length( MAX_PATH_LENGTH - 8 );
@@ -902,7 +903,7 @@ namespace ts
 		return (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 #endif // _WIN32
 #ifdef _NIX
-        struct stat st = { 0 };
+        struct stat st = {};
         return 0 == stat( to_utf8( path ), &st ) && (st.st_mode & S_IFDIR) != 0;
 #endif //_NIX
 
@@ -1042,7 +1043,7 @@ namespace ts
 #endif // _WIN32
 #ifdef _NIX
             ts::sstr_t< PATH_MAX > p = to_utf8( path );
-            struct stat st = {0};
+            struct stat st = {};
             if ( stat( p, &st ) == 0 && (st.st_mode & S_IFDIR) != 0 )
             {
 
@@ -1140,7 +1141,7 @@ namespace ts
     }
     uint64 f_get_pos( void *h )
     {
-        LARGE_INTEGER li = {0};
+        LARGE_INTEGER li = {};
         li.LowPart = SetFilePointer( h, 0, &li.HighPart, FILE_CURRENT );
         return li.QuadPart;
     }

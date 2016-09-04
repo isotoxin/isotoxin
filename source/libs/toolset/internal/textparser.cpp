@@ -1153,6 +1153,7 @@ end:;
 ivec2 parse_text(const wstr_c &text, int max_line_length, CUSTOM_TAG_PARSER ctp, GLYPHS *glyphs, TSCOLOR default_color, font_c *default_font, uint32 flags, int boundy)
 {
 	if (!ASSERT(default_font)) return ivec2(0);
+
 	static text_parser_s text_parser;
     text_parser.setup(text, tabs(max_line_length), ctp, glyphs, default_color, default_font, flags, boundy);
 	ivec2 r = text_parser.parse();

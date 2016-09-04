@@ -29,10 +29,11 @@ struct audio_format_s
         return channels != f.channels || bits != f.bits || sample_rate != f.sample_rate;
     }
 
-    int blockAlign() const { return channels * (bits / 8); }
-    int avgBytesPerSec() const { return blockAlign() * sample_rate; }
-    int avgBytesPerMSecs(int ms) const { return blockAlign() * sample_rate * ms / 1000; }
-
+    int sampleSize() const { return channels * (bits / 8); }
+    int avgBytesPerSec() const { return sampleSize() * sample_rate; }
+    int avgBytesPerMSecs(int ms) const { return sampleSize() * (sample_rate * ms / 1000); }
+    int bytesToMSec( int bytes ) const { return bytes * 1000 / ( sampleSize() * sample_rate ); }
+    int samplesToMSec( int samples ) const { return samples * 1000 / sample_rate; }
 };
 
 struct video_format_s
@@ -50,6 +51,9 @@ struct media_data_s
     int audio_framesize = 0;
 
     const void *video_frame[3]; // 3 planes
+
+    u64 msmonotonic = 0; // >0 means milliseconds from beginning of call (gui will try to syncronize audio and video)
+
     media_data_s()
     {
         video_frame[0] = nullptr;
@@ -137,6 +141,8 @@ struct call_info_s
     int w = 0;
     int h = 0;
     video_fmt_e fmt = VFMT_NONE;
+
+    u64 ms_monotonic; // monotonic milliseconds from beginning of call
 };
 
 struct stream_options_s
@@ -235,6 +241,10 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
 
     /*
         stream options from peer
+
+        gid - negative (groupchat id) when groupchat message received, 0 - normal message
+        cid - unique contact id (known and unknown contacts), see contact_data_s::id
+
     */
     void(PROTOCALL *av_stream_options)(int gid, int cid, const stream_options_s *so);
 
@@ -274,6 +284,10 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
 
     /*
         plugin should call this function 1 per second for every typing client
+
+        gid - negative (groupchat id) when groupchat message received, 0 - normal message
+        cid - unique contact id (known and unknown contacts), see contact_data_s::id
+
     */
     void(PROTOCALL *typing)(int gid, int cid);
 

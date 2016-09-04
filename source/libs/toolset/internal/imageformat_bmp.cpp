@@ -72,8 +72,8 @@ bool save_to_bmp_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
 {
     buf.clear();
 
-    BITMAPFILEHEADER bmFileHeader = { 0 };
-    BITMAPINFOHEADER bmInfoHeader;
+    BITMAPFILEHEADER bmFileHeader = {};
+    BITMAPINFOHEADER bmInfoHeader = {};
 
     if (bmp.info().bytepp() != 1 && bmp.info().bytepp() != 3 && bmp.info().bytepp() != 4) return false;
     if ((bmp.info().bitpp >> 3) != bmp.info().bytepp()) return false;
@@ -86,7 +86,6 @@ bool save_to_bmp_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
 
     buf.append_buf(&bmFileHeader, sizeof(BITMAPFILEHEADER));
 
-    memset(&bmInfoHeader, 0, sizeof(BITMAPINFOHEADER));
     bmInfoHeader.biSize = sizeof(BITMAPINFOHEADER);
     bmInfoHeader.biWidth = bmp.info().sz.x;
     bmInfoHeader.biHeight = bmp.info().sz.y;

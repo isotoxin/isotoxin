@@ -4,6 +4,92 @@
 
 ////////////////////////// gui_notice_c
 
+
+#ifdef _DEBUG
+bool special_command( contact_root_c *h, contact_c *r, ts::str_c utf8t )
+{
+    if ( utf8t.begins(CONSTASTR("/fill")) )
+    {
+        ts::buf_c b;
+        b.load_from_disk_file( from_utf8( utf8t.substr( 6 ) ) );
+        ts::wstr_c alltw = from_utf8( b.cstr() );
+        int backsecs = alltw.get_length() / 1000;
+        backsecs *= 3600;
+        time_t pt = now() - backsecs;
+        auto &ht = prf().get_table_history();
+
+        int ii = 1000;
+        while( ii <= alltw.get_length() )
+        {
+            auto &row = ht.getcreate( 0 );
+            row.other.cr_time = pt;
+            row.other.recv_time = pt;
+            row.other.type = MT_MESSAGE;
+            row.other.options = 0;
+            row.other.utag = prf().getuid();
+            row.other.message_utf8 = to_utf8( alltw.substr(ii-1000,ii) );
+            row.other.sender = r->getkey();
+            row.other.receiver = contact_key_s();
+            row.other.historian = h->getkey();
+
+
+            pt += 1000;
+
+            auto &row2 = ht.getcreate( 0 );
+            row2.other.cr_time = pt;
+            row2.other.recv_time = pt;
+            row2.other.type = MT_MESSAGE;
+            row2.other.options = 0;
+            row2.other.utag = prf().getuid();
+            row2.other.message_utf8 = row.other.message_utf8;
+            row2.other.receiver = r->getkey();
+            row2.other.sender = contact_key_s();
+            row2.other.historian = h->getkey();
+
+
+            pt += 2555;
+            ii += 1000;
+
+        }
+
+        prf().flush_tables();
+        return true;
+    }
+
+    if ( utf8t.begins( CONSTASTR( "/mem" ) ) )
+    {
+        struct memstat_s
+        {
+            size_t szs[ MEMT_count ] = {};
+            int nums[ MEMT_count ] = {};
+
+            static void memcb( int typ, int num, size_t size, void *prm )
+            {
+                memstat_s *mst = (memstat_s *)prm;
+                mst->szs[ typ ] += size;
+                mst->nums[ typ ] += 1;
+            }
+
+        } mst;
+
+        mspy_getallocated_info( memstat_s::memcb, &mst );
+
+        ts::str_c s;
+        for( int i=0;i<MEMT_count;++i )
+        {
+            s.append_as_int( i ).append( CONSTASTR( " (" ) ).append_as_num( mst.nums[ i ] ).append( CONSTASTR(") ") ).append_as_num( mst.szs[i] ).append(CONSTASTR("\n"));
+        }
+
+        h->add_message( s );
+
+        return true;
+    }
+
+    return false;
+}
+#endif
+
+
 MAKE_CHILD<gui_notice_c>::~MAKE_CHILD()
 {
     MODIFY(get()).visible(true);
@@ -674,7 +760,7 @@ void gui_notice_c::setup(contact_c *sender_)
             {
                 gui_button_c &b_mute_mic = MAKE_CHILD<gui_button_c>(getrid());
 
-                av_contact_s &avc = g_app->get_avcontact( historian, av_contact_s::AV_INPROGRESS );
+                av_contact_s &avc = g_app->avcontacts().get( historian->getkey().avkey(), av_contact_s::AV_INPROGRESS );
 
                 avc.is_mic_off() ?
                     b_mute_mic.set_face_getter(BUTTON_FACE(unmute_mic)) :
@@ -808,14 +894,14 @@ void gui_notice_callinprogress_c::acquire_display()
     if ( !sender )
         return;
     
-    int ap = sender->getkey().protoid;
-    int cid = sender->getkey().contactid;
+    uint ap = sender->getkey().protoid;
+    uint cid = sender->getkey().contactid;
 
     if (common.display)
     {
-        ASSERT( common.display->ap == ap );
-        ASSERT( common.display->gid == 0 );
-        ASSERT( common.display->cid == cid );
+        ASSERT( common.display->avkey.protoid == ap );
+        ASSERT( common.display->avkey.gid == 0 );
+        ASSERT( common.display->avkey.contactid == cid );
 
         if ( common.display->notice == nullptr )
             common.display->notice = this;
@@ -823,7 +909,7 @@ void gui_notice_callinprogress_c::acquire_display()
         return;
     }
 
-    common.display = g_app->video_displays.get( ap, 0, cid );
+    common.display = g_app->video_displays.get( contact_key_s( 0, cid, ap ) );
     if (common.display->notice == nullptr)
         common.display->notice = this;
 }
@@ -1013,7 +1099,8 @@ void gui_notice_callinprogress_c::setup(contact_c *collocutor_ptr)
     if (active_protocol_c *ap = prf().ap( collocutor_ptr->getkey().protoid ))
         video_supported = (0 != (ap->get_features() & PF_VIDEO_CALLS));
     
-    av_contact_s &avc = g_app->get_avcontact(historian, av_contact_s::AV_INPROGRESS);
+    av_contact_s &avc = g_app->avcontacts().get(historian->getkey().avkey(), av_contact_s::AV_INPROGRESS);
+    avcp = &avc;
     
     common.create_buttons( this, getrid(), video_supported );
 
@@ -1036,18 +1123,6 @@ void gui_notice_callinprogress_c::setup(contact_c *collocutor_ptr)
     }
 
     set_corresponding_height();
-}
-
-av_contact_s *gui_notice_callinprogress_c::get_avc()
-{
-    if (!sender || !g_app) return nullptr;
-    if (sender->getkey().is_group())
-    {
-        ASSERT( sender == historian );
-        return g_app->find_avcontact_inprogress(historian);
-    }
-    if (!historian) return nullptr;
-    return g_app->find_avcontact_inprogress(historian);
 }
 
 void gui_notice_callinprogress_c::on_fsvideo_die()
@@ -1139,7 +1214,7 @@ void gui_notice_callinprogress_c::menu_video(const ts::str_c &p)
         break;
     case 'a':
         if ( av_contact_s *avc = get_avc() )
-            desktopgrab_c::run( avc->c->getkey(), true );
+            desktopgrab_c::run( avc->avkey, true );
         break;
     case 's':
         if (av_contact_s *avc = get_avc())
@@ -1275,7 +1350,7 @@ ts::uint32 gui_notice_callinprogress_c::gm_handler( gmsg<ISOGM_GRABDESKTOPEVENT>
     if ( g.r && g.monitor >= 0 )
     {
         if ( av_contact_s *avc = get_avc() )
-            if ( avc->c->getkey() == g.k )
+            if ( avc->avkey == g.k )
             {
                 camera.reset();
                 if ( !avc->is_camera_on() )
@@ -1288,32 +1363,26 @@ ts::uint32 gui_notice_callinprogress_c::gm_handler( gmsg<ISOGM_GRABDESKTOPEVENT>
 
 ts::uint32 gui_notice_callinprogress_c::gm_handler(gmsg<ISOGM_PEER_STREAM_OPTIONS> &so)
 {
-    if (so.ck == sender->getkey())
+    if (avcp && so.avkey == avcp->avkey)
     {
         if ( 0 == (so.so & SO_SENDING_VIDEO) )
         {
             // remote peer turns video off
 
-            if (av_contact_s *avc = get_avc())
-            {
-                avc->remote_so = so.so;
-                avc->remote_sosz = so.videosize;
-            }
+            avcp->remote_so = so.so;
+            avcp->remote_sosz = so.videosize;
 
             video_off();
 
         } else
         {
-            if (av_contact_s *avc = get_avc())
-            {
-                avc->remote_so = so.so;
-                avc->remote_sosz = so.videosize;
+            avcp->remote_so = so.so;
+            avcp->remote_sosz = so.videosize;
 
-                if (avc->is_video_show() && !flags.is(F_VIDEO_SHOW))
-                {
-                    flags.set(F_WAITANIM);
-                    DEFERRED_UNIQUE_CALL(0.05, DELEGATE(this, wait_animation), nullptr);
-                }
+            if (avcp->is_video_show() && !flags.is(F_VIDEO_SHOW))
+            {
+                flags.set(F_WAITANIM);
+                DEFERRED_UNIQUE_CALL(0.05, DELEGATE(this, wait_animation), nullptr);
             }
         }
     }
@@ -1608,6 +1677,8 @@ gui_notice_network_c::~gui_notice_network_c()
 
 void gui_notice_network_c::setup(const ts::str_c &pubid_)
 {
+    MEMT( MEMT_NOTICE_NETWORK );
+
     getengine().trunc_children(0); // just kill all buttons
 
     pubid = pubid_;
@@ -1685,7 +1756,7 @@ void gui_notice_network_c::setup(const ts::str_c &pubid_)
                     int online = 0, all = 0;
                     contacts().iterate_proto_contacts([&](contact_c *c) {
 
-                        if (c->getkey().protoid == ap.getid())
+                        if (c->getkey().protoid == (unsigned)ap.getid())
                         {
                             ++all;
                             if (c->get_state() == CS_ONLINE) ++online;
@@ -1783,7 +1854,7 @@ bool gui_notice_network_c::resetup(RID, GUIPARAM)
 
 ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT>&c)
 {
-    refresh |= c.contact->getkey().protoid == networkid;
+    refresh |= c.contact->getkey().protoid == (unsigned)networkid;
     return 0;
 }
 
@@ -1833,6 +1904,8 @@ ts::uint32 gui_notice_network_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 
 /*virtual*/ int gui_notice_network_c::get_height_by_width(int width) const
 {
+    MEMT( MEMT_NOTICE_NETWORK );
+
     if (width == -INT_MAX) return __super::get_height_by_width(width);
     return __super::get_height_by_width( width - fake_margin.x );
 }
@@ -2010,6 +2083,8 @@ int gui_notice_network_c::sortfactor() const
 
 /*virtual*/ bool gui_notice_network_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    MEMT( MEMT_NOTICE_NETWORK );
+
     if (rid != getrid())
     {
         // from submenu
@@ -2257,7 +2332,7 @@ gui_noticelist_c::~gui_noticelist_c()
 /*virtual*/ ts::ivec2 gui_noticelist_c::get_max_size() const
 {
     ts::ivec2 sz = __super::get_max_size();
-    if (!historian || historian->getkey().is_self())
+    if (!historian || historian->getkey().is_self)
     {
         sz.y = 0;
         int w = width_for_children();
@@ -2406,7 +2481,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &p)
         if ( historian != p.contact->get_historian() )
             return 0;
 
-    if ( historian->getkey().is_self() )
+    if ( historian->getkey().is_self )
         g_app->reselect( &contacts().get_self(), 0, 0.4 );
 
     contact_c *sender = nullptr;
@@ -2515,7 +2590,7 @@ ts::uint32 gui_noticelist_c::gm_handler(gmsg<ISOGM_NOTICE> & n)
         clear_list(false);
         historian = n.owner;
 
-        if ( historian->getkey().is_self())
+        if ( historian->getkey().is_self )
         {
             if (g_app->newversion())
             {
@@ -2778,6 +2853,8 @@ static gui_messagelist_c *current_draw_list = nullptr;
 
 /*virtual*/ bool gui_message_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    MEMT( MEMT_MESSAGE_ITEM );
+
     if (rid != getrid())
     {
         if (SQ_MOUSE_WHEELDOWN == qp || SQ_MOUSE_WHEELUP == qp)
@@ -4001,6 +4078,8 @@ const ts::wstr_c &gui_message_item_c::addition_file_data_s::getrectt(gui_message
 
 void gui_message_item_c::update_text(int for_width)
 {
+    MEMT( MEMT_MESSAGE_ITEM );
+
     bool is_send = false;
     switch (subtype)
     {
@@ -4394,8 +4473,8 @@ update_size_mode:
 
 gui_messagelist_c::gui_messagelist_c(initial_rect_data_s &data) :gui_vscrollgroup_c(data) 
 {
-    memset(&last_post_time, 0, sizeof(last_post_time));
 }
+
 gui_messagelist_c::~gui_messagelist_c()
 {
     if (g_app)
@@ -4513,6 +4592,8 @@ static bool same_author( rectengine_c *prev, contact_c *author, const ts::str_c 
 
 bool gui_messagelist_c::insert_date_separator( ts::aint index, tm &prev_post_time, time_t next_post_time )
 {
+    MEMT( MEMT_MESSAGE_ITEM );
+
     tm tmtm;
     _localtime64_s(&tmtm, &next_post_time);
     if (tmtm.tm_year != prev_post_time.tm_year || tmtm.tm_mon != prev_post_time.tm_mon || tmtm.tm_mday != prev_post_time.tm_mday)
@@ -4527,7 +4608,7 @@ bool gui_messagelist_c::insert_date_separator( ts::aint index, tm &prev_post_tim
     return false;
 }
 
-gui_message_item_c &gui_messagelist_c::insert_message_item(message_type_app_e mt, contact_c *author, const ts::str_c &skin, time_t post_time)
+gui_message_item_c &gui_messagelist_c::insert_message_item(message_type_app_e mt, contact_c *author, const ts::asptr &skin, time_t post_time)
 {
     ts::aint index = 0;
     rectengine_c *e = nullptr;
@@ -4561,13 +4642,15 @@ gui_message_item_c &gui_messagelist_c::insert_message_item(message_type_app_e mt
         }
     }
 
+    MEMT( MEMT_MESSAGE_ITEM_1 );
+
     gui_message_item_c &r = MAKE_CHILD<gui_message_item_c>(getrid(), historian, author, skin, mt);
     getengine().child_move_to(index, &r.getengine());
     keep_top_visible();
     return r;
 }
 
-gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, contact_c *author, const ts::str_c &skin, time_t post_time, uint64 replace_post)
+gui_message_item_c &gui_messagelist_c::get_message_item(message_type_app_e mt, contact_c *author, const ts::asptr &skin, time_t post_time, uint64 replace_post)
 {
     ASSERT(MTA_FRIEND_REQUEST != mt);
 
@@ -4682,7 +4765,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_MESSAGE> &p) // show message
     }
 
     p.current = true;
-    bool at_and = p.post.sender.is_self() || is_at_end();
+    bool at_and = p.post.sender.is_self || is_at_end();
 
     gmsg<ISOGM_SUMMON_POST>( p.post, nullptr ).send();
 
@@ -4980,6 +5063,8 @@ namespace
 
         bool _new_connection(RID, GUIPARAM)
         {
+            MEMT( MEMT_NEWPROTOUI );
+
             if (!prf().is_loaded())
             {
                 dialog_msgbox_c::mb_error( loc_text(loc_please_create_profile) ).summon();
@@ -5041,6 +5126,8 @@ namespace
 
         /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data)
         {
+            MEMT( MEMT_NEWPROTOUI );
+
             if (qp == SQ_DRAW && rid == getrid())
             {
                 __super::sq_evt(qp, rid, data);
@@ -5107,9 +5194,10 @@ void gui_messagelist_c::repos_empty_mode_stuff()
 
 void gui_messagelist_c::create_empty_mode_stuff()
 {
+    MEMT( MEMT_MESSAGELIST_1 );
+
     gui_new_proto_c &lbl = MAKE_VISIBLE_CHILD<gui_new_proto_c>(getrid());
     lbl.header();
-    
 }
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<GM_UI_EVENT> &ue)
@@ -5183,13 +5271,14 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
         }
 
         g_app->update_blink_reason(historian->getkey());
+        historian->history_touch();
     }
     return 0;
 }
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<GM_DROPFILES> &p)
 {
-    if (historian && !historian->getkey().is_self() && p.root == getrootrid())
+    if (historian && !historian->getkey().is_self && p.root == getrootrid())
     {
         historian->send_file(p.fn);
     }
@@ -5223,12 +5312,12 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_PROTO_LOADED> &p)
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS> &ch)
 {
-    if (ch.sp == PP_PROFILEOPTIONS && historian && historian->getkey().is_self())
+    if (ch.sp == PP_PROFILEOPTIONS && historian && historian->getkey().is_self)
     {
         if (0 != (ch.bits & UIOPT_SHOW_NEWCONN_BAR) || 0 != (ch.bits & MSGOP_MAXIMIZE_INLINE_IMG))
             historian->reselect(0);
 
-    } else if (ch.sp == PP_FONTSCALE && historian && !historian->getkey().is_self())
+    } else if (ch.sp == PP_FONTSCALE && historian && !historian->getkey().is_self)
         historian->reselect(0);
     else if (ch.sp == CFG_LANGUAGE && flags.is(F_EMPTY_MODE) && prf().get_options().is(UIOPT_SHOW_NEWCONN_BAR))
     {
@@ -5265,11 +5354,8 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_TYPING> &p)
 {
     if (prf().get_options().is(UIOPT_SHOW_TYPING_MSGLIST) && historian)
     {
-        int gid = p.contact.protoid >> 16;
-        int cgid = historian->getkey().is_group() ? historian->getkey().contactid : 0;
-        if ( gid == cgid )
-            if (contact_c *tc = historian->subget(p.contact))
-                get_message_item(MTA_TYPING, tc, CONSTASTR("other"));
+        if (contact_c *tc = historian->subget(p.contact))
+            get_message_item(MTA_TYPING, tc, CONSTASTR("other"));
     }
 
     return 0;
@@ -5277,6 +5363,8 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_TYPING> &p)
 
 ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
 {
+    //MEMT( MEMT_MESSAGELIST_2 );
+
     contact_c *sender = contacts().find(p.post.sender);
     if (!sender) return 0;
     contact_c *receiver = contacts().find(p.post.receiver);
@@ -5300,7 +5388,7 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
         default:
         {
             contact_c *cs = sender;
-            if (cs->getkey().is_self() && receiver->getkey().protoid)
+            if (cs->getkey().is_self && receiver->getkey().protoid)
                 cs = contacts().find_subself(receiver->getkey().protoid);
 
             gui_message_item_c &mi = p.down ? 
@@ -5310,6 +5398,8 @@ ts::uint32 gui_messagelist_c::gm_handler(gmsg<ISOGM_SUMMON_POST> &p)
 
             if (p.found_item)
                 mi.setup_found_item(p.prev_found, p.next_found);
+
+            MEMT( MEMT_MESSAGE_ITEM_2 );
 
             mi.append_text(p.post, false);
             if (p.replace_post && p.post.mt() != MTA_RECV_FILE && p.post.mt() != MTA_SEND_FILE)
@@ -5326,6 +5416,8 @@ ts::uint32 gui_messagelist_c::gm_handler( gmsg<ISOGM_SELECT_CONTACT> &p )
         if ( p.contact != historian )
             return 0;
 
+    MEMT( MEMT_MESSAGELIST_3 );
+
     gmsg<ISOGM_INIT_CONVERSATION> ic( p.contact, p.options, RID() );
     return gm_handler( ic );
 }
@@ -5338,7 +5430,7 @@ ts::uint32 gui_messagelist_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &p )
     auto calc_load_history = [this]( time_t before ) ->int
     {
         int load_n = 0;
-        if (!historian->getkey().is_self())
+        if (!historian->getkey().is_self)
         {
             int not_yet_loaded = prf().calc_history_before(historian->getkey(), before);
             int needload = ts::tmax(10, prf().min_history_load());
@@ -5393,7 +5485,7 @@ ts::uint32 gui_messagelist_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &p )
         return 0;
     }
 
-    bool self_selected = p.contact && p.contact->getkey().is_self();
+    bool self_selected = p.contact && p.contact->getkey().is_self;
 
     memset( &last_post_time, 0, sizeof(last_post_time) );
 
@@ -5676,7 +5768,12 @@ bool gui_message_editor_c::on_enter_press_func(RID, GUIPARAM param)
     if (historian == nullptr) return true;
     contact_c *receiver = historian->subget_for_send(); // get default subcontact for message
     if (receiver == nullptr) return true;
-    
+
+#ifdef _DEBUG
+    if ( special_command( historian, receiver, get_text_utf8() ) )
+        return true;
+#endif
+
     gmsg<ISOGM_MESSAGE> msg(&contacts().get_self(), receiver, MTA_UNDELIVERED_MESSAGE );
 
     msg.post.message_utf8 = get_text_utf8();
@@ -5699,13 +5796,14 @@ bool gui_message_editor_c::clear_text(RID, GUIPARAM)
 
 ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SEND_MESSAGE> &p)
 {
+    MEMT( MEMT_MESSAGE_EDIT );
     return on_enter_press_func(RID(), nullptr) ? GMRBIT_ACCEPTED : 0;
 }
 
 ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_MESSAGE> & msg) // clear message editor
 {
     if (msg.resend) return 0;
-    if ( msg.pass == 0 && msg.sender->getkey().is_self() )
+    if ( msg.pass == 0 && msg.sender->getkey().is_self )
     {
         DEFERRED_CALL( 0, DELEGATE(this,clear_text), nullptr );
         messages.remove(historian->getkey());
@@ -5718,6 +5816,8 @@ ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_MESSAGE> & msg) // clear 
 
 ts::uint32 gui_message_editor_c::gm_handler(gmsg<ISOGM_SELECT_CONTACT> &p)
 {
+    MEMT( MEMT_MESSAGE_EDIT );
+
     if ( g_app->F_SPLIT_UI )
         if ( p.contact != historian )
             return 0;
@@ -5800,6 +5900,8 @@ ts::uint32 gui_message_editor_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &p )
 
 /*virtual*/ bool gui_message_editor_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    MEMT( MEMT_MESSAGE_EDIT );
+
     if (SQ_RECT_CHANGED == qp)
     {
         set_margins_rb(ts::ivec2(rb.x, 0), get_client_area().rb.y - rb.y);
@@ -5912,6 +6014,8 @@ ts::ivec2 calc_smls_position(const ts::irect &buttonrect, const ts::ivec2 &menus
 
 bool gui_message_editor_c::show_smile_selector(RID, GUIPARAM)
 {
+    MEMT( MEMT_SMILEUI );
+
     ts::irect smilebuttonrect = getengine().get_child(0)->getrect().getprops().screenrect();
 
     RID r = MAKE_ROOT<dialog_smileselector_c>(smilebuttonrect, getrid());
@@ -5987,7 +6091,7 @@ bool gui_message_area_c::change_text_handler(const ts::wstr_c &t, bool changed)
     if ( changed )
     {
         if ( contact_root_c * contact = message_editor->get_historian() )
-            if ( !contact->getkey().is_self() )
+            if ( !contact->getkey().is_self )
             {
                 contact_c *tgt = contact->subget_for_send();
                 if ( tgt && tgt->get_state() == CS_ONLINE )
@@ -6034,7 +6138,7 @@ void gui_message_area_c::send_file_item(const ts::str_c& prm)
         if ( contact_root_c *h = message_editor->get_historian() )
         {
             MODIFY( g_app->main ).micromize( true );
-            desktopgrab_c::run( h->getkey(), false );
+            desktopgrab_c::run( h->getkey().avkey(), false );
         }
         return;
     }
@@ -6177,7 +6281,7 @@ void gui_conversation_c::created()
 bool gui_conversation_c::hide_show_messageeditor(RID, GUIPARAM)
 {
     bool show = flags.is(F_ALWAYS_SHOW_EDITOR);
-    if (caption->contacted() && !caption->getcontact().getkey().is_self())
+    if (caption->contacted() && !caption->getcontact().getkey().is_self)
     {
         if ( caption->getcontact().getkey().is_group() )
             show = true;
@@ -6194,6 +6298,7 @@ bool gui_conversation_c::hide_show_messageeditor(RID, GUIPARAM)
 
 bool gui_conversation_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    MEMT( MEMT_CONVERSATION );
     return __super::sq_evt(qp,rid,data);
 }
 
@@ -6226,6 +6331,8 @@ ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &c)
 
 ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_DO_POSTEFFECT> &f)
 {
+    MEMT( MEMT_CONVERSATION );
+
     if (f.bits & application_c::PEF_UPDATE_BUTTONS_MSG)
         messagearea->update_buttons();
 
@@ -6305,7 +6412,7 @@ ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &c )
         static_cast<sound_capture_handler_c *>(g_app)->start_capture();
 
         if ( !g_app->F_SPLIT_UI )
-            g_app->iterate_avcontacts([&](av_contact_s & avc){
+            g_app->avcontacts().iterate([&](av_contact_s & avc){
                 if (avc.state != av_contact_s::AV_INPROGRESS)
                     return;
                 avc.set_inactive(avc.c != c.contact);
@@ -6326,7 +6433,7 @@ ts::uint32 gui_conversation_c::gm_handler( gmsg<ISOGM_INIT_CONVERSATION> &c )
 
 ts::uint32 gui_conversation_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
 {
-    if (ch.pass > 0 && caption->contacted() && caption->getcontact().getkey().is_self())
+    if (ch.pass > 0 && caption->contacted() && caption->getcontact().getkey().is_self)
     {
         switch (ch.sp)
         {
@@ -6465,6 +6572,8 @@ void spellchecker_s::undo_check(const ts::astrings_c &wordsundo)
 
 void spellchecker_s::check_result( const ts::str_c &cw, bool is_valid, ts::astrings_c &&suggestions )
 {
+    MEMT( MEMT_SPELLCHK );
+
     for (chk_word_s &w : words)
         if (w.utf8.equals(cw))
         {
@@ -6479,6 +6588,8 @@ void spellchecker_s::check_result( const ts::str_c &cw, bool is_valid, ts::astri
 
 bool spellchecker_s::update_bad_words(RID, GUIPARAM)
 {
+    MEMT( MEMT_SPELLCHK );
+
     badwords.clear();
     ts::wstr_c text;
     gui_message_editor_c *msge = static_cast<gui_message_editor_c *>( this );

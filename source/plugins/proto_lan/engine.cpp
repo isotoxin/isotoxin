@@ -96,7 +96,20 @@ lan_engine::media_stuff_s::~media_stuff_s()
         nblock->die();
 }
 
-void lan_engine::media_stuff_s::encode_video_and_send( const byte *y, const byte *u, const byte *v )
+namespace
+{
+#pragma pack(push,1)
+    struct framehead_s
+    {
+        u64 msmonotonic;
+        u_long frame;
+    };
+#pragma pack(pop)
+    static_assert( sizeof( framehead_s ) == 12, "size!" );
+}
+
+
+void lan_engine::media_stuff_s::encode_video_and_send( u64 msmonotonic, const byte *y, const byte *u, const byte *v )
 {
     if ( engine->use_vquality < 0 )
     {
@@ -106,7 +119,7 @@ void lan_engine::media_stuff_s::encode_video_and_send( const byte *y, const byte
         enc_cfg.g_w = 0;
         decoder = false;
 
-        i32 vals[ 3 ] = { 0 };
+        i32 vals[ 3 ] = {};
         vals[ 2 ] = (i32)htonl( (u_long)vc_vp8 );
         owner->send_block( BT_INITDECODER, 0, &vals, sizeof(vals) );
 
@@ -231,12 +244,14 @@ void lan_engine::media_stuff_s::encode_video_and_send( const byte *y, const byte
         {
             //add_frame_to_queue( pkt->data.frame.buf, pkt->data.frame.sz, pkt->data.frame.flags );
 
-            u_long fc = htonl( frame_counter );
+            framehead_s fh;
+            fh.frame = htonl( frame_counter );
+            fh.msmonotonic = my_htonll( msmonotonic );
 
             if ( !sblock )
-                sblock = owner->send_block( BT_VIDEO_FRAME, 0, &fc, sizeof( fc ), pkt->data.frame.buf, pkt->data.frame.sz );
+                sblock = owner->send_block( BT_VIDEO_FRAME, 0, &fh, sizeof( fh ), pkt->data.frame.buf, pkt->data.frame.sz );
             else
-                nblock = owner->build_block( BT_VIDEO_FRAME, 0, &fc, sizeof( fc ), pkt->data.frame.buf, pkt->data.frame.sz );
+                nblock = owner->build_block( BT_VIDEO_FRAME, 0, &fh, sizeof( fh ), pkt->data.frame.buf, pkt->data.frame.sz );
         }
     }
 
@@ -244,7 +259,7 @@ void lan_engine::media_stuff_s::encode_video_and_send( const byte *y, const byte
 }
 
 
-void lan_engine::media_stuff_s::video_frame( int framen, const byte *frame_data, int framesize )
+void lan_engine::media_stuff_s::video_frame( u64 msmonotonic, int framen, const byte *frame_data, int framesize )
 {
     if ( !decoder )
     {
@@ -271,6 +286,7 @@ void lan_engine::media_stuff_s::video_frame( int framen, const byte *frame_data,
             mdt.video_frame[ 0 ] = dest->planes[ 0 ];
             mdt.video_frame[ 1 ] = dest->planes[ 1 ];
             mdt.video_frame[ 2 ] = dest->planes[ 2 ];
+            mdt.msmonotonic = msmonotonic;
             engine->hf->av_data( 0, owner->id, &mdt );
 
             vpx_img_free( dest );
@@ -304,7 +320,7 @@ void lan_engine::media_stuff_s::init_audio_encoder()
 
 }
 
-void lan_engine::media_stuff_s::add_audio( const void *data, int datasize )
+void lan_engine::media_stuff_s::add_audio( u64 msmonotonic, const void *data, int datasize )
 {
     if (audio_encoder == nullptr)
     {
@@ -312,10 +328,19 @@ void lan_engine::media_stuff_s::add_audio( const void *data, int datasize )
         init_audio_encoder();
     }
 
+    if ( msmonotonic )
+        a_msmonotonic = msmonotonic - audio_format_s( AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS ).bytesToMSec( enc_fifo.available() );
+
     enc_fifo.add_data(data, datasize);
 
-    if ((int)enc_fifo.available() > audio_format_s(AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS).avgBytesPerSec())
-        enc_fifo.read_data(nullptr, datasize);
+    if ( (int)enc_fifo.available() > audio_format_s( AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS ).avgBytesPerSec() )
+    {
+        // remove some overbuffer data
+
+        enc_fifo.read_data( nullptr, datasize );
+        if ( a_msmonotonic )
+            a_msmonotonic += audio_format_s( AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS ).bytesToMSec( datasize );
+    }
 }
 
 int lan_engine::media_stuff_s::encode_audio(byte *dest, aint dest_max, const void *uncompressed_frame, aint frame_size)
@@ -359,9 +384,16 @@ int lan_engine::media_stuff_s::prepare_audio4send(int ct)
     if ((next_time_send - ct) < 0) next_time_send = ct+sd/2;
 
     if (req_frame_size > (int)uncompressed.size()) uncompressed.resize(req_frame_size);
-    aint samples = enc_fifo.read_data(uncompressed.data(), req_frame_size) / audio_format_s(AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS).blockAlign();
+    aint samples = enc_fifo.read_data(uncompressed.data(), req_frame_size) / audio_format_s( AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS ).sampleSize();
 
     if (req_frame_size >(int)compressed.size()) compressed.resize(req_frame_size);
+
+    if ( a_msmonotonic )
+    {
+        a_msmonotonic_compressed = a_msmonotonic;
+        a_msmonotonic += audio_format_s( AUDIO_SAMPLERATE, AUDIO_CHANNELS, AUDIO_BITS ).samplesToMSec( samples );
+    }
+
     return encode_audio(compressed.data(), req_frame_size, uncompressed.data(), samples);
 }
 
@@ -392,8 +424,11 @@ void lan_engine::media_stuff_s::tick(contact_s *c, int ct)
 {
     engine->media_data_transfer = true;
     int sz = prepare_audio4send(ct);
-    if (sz > 0)
-        c->send_block(BT_AUDIO_FRAME, 0, compressed.data(), sz);
+    if ( sz > 0 )
+    {
+        u64 timelabel = my_htonll( a_msmonotonic_compressed );
+        c->send_block( BT_AUDIO_FRAME, 0, &timelabel, sizeof( timelabel ), compressed.data(), sz );
+    }
 }
 
 
@@ -963,8 +998,10 @@ void lan_engine::video_encoder()
             if ( nullptr == d->video_data )
                 continue;
 
+            u64 timelabel = d->v_msmonotonic;
             const uint8_t *y = (const uint8_t *)d->video_data;
             d->video_data = nullptr;
+            d->v_msmonotonic = 0;
 
             ++d->locked;
             w.unlock(); // no need lock anymore
@@ -972,7 +1009,7 @@ void lan_engine::video_encoder()
                         // encoding here
             int ysz = d->video_w * d->video_h;
                 
-            d->encode_video_and_send( y, y + ysz, y + ( ysz + ysz / 4 ) );
+            d->encode_video_and_send( timelabel, y, y + ysz, y + ( ysz + ysz / 4 ) );
             engine->hf->free_video_data( y );
 
             w = callstate.lock_write();
@@ -1036,7 +1073,11 @@ u64 lan_engine::contact_s::send_block(block_type_e bt, u64 delivery_tag, const v
         bool is_auth = false;
         const byte *k = message_key(&is_auth);
 
-        engine->pg_raw_data(k, bt, (const byte *)data, datasize);
+        byte *sb = (byte *)_alloca( datasize + datasize1 );
+        memcpy( sb, data, datasize );
+        if (data1) memcpy( sb + datasize, data1, datasize1 );
+
+        engine->pg_raw_data(k, bt, (const byte *)sb, datasize + datasize1);
         pipe.send(engine->packet_buf_encoded, engine->packet_buf_encoded_len);
 
         if ( IS_TLM( TLM_AUDIO_SEND_BYTES ) )
@@ -2444,7 +2485,7 @@ int lan_engine::send_av(int id, const call_info_s * ci)
         if ( !c ) return SEND_AV_OK;
 
         if (c->state == contact_s::ONLINE && contact_s::IN_PROGRESS == c->call_status && c->media)
-            c->media->add_audio( ci->audio_data, ci->audio_data_size );
+            c->media->add_audio( ci->ms_monotonic, ci->audio_data, ci->audio_data_size );
     }
     if ( ci->video_data && ci->fmt == VFMT_I420 )
     {
@@ -2460,6 +2501,8 @@ int lan_engine::send_av(int id, const call_info_s * ci)
             c->media->video_w = ci->w;
             c->media->video_h = ci->h;
             c->media->video_data = ci->video_data;
+            c->media->v_msmonotonic = ci->ms_monotonic;
+
             return SEND_AV_KEEP_VIDEO_DATA;
         }
 
@@ -2777,6 +2820,9 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
             {
                 USHORT flen = r.readus();
                 const byte *frame = r.read(flen);
+                u64 timelabel = my_ntohll( *(u64 *)frame );
+                frame += sizeof( timelabel );
+                flen -= sizeof( timelabel );
 
                 if (IN_PROGRESS == call_status && media)
                 {
@@ -2790,6 +2836,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                         mdt.afmt.bits = AUDIO_BITS;
                         mdt.audio_frame = media->uncompressed.data();
                         mdt.audio_framesize = sz;
+                        mdt.msmonotonic = timelabel;
                         engine->hf->av_data(0, id, &mdt);
                     }
                 }
@@ -2921,7 +2968,10 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                         case BT_VIDEO_FRAME:
                             if (media)
                                 if ( 0 != ( media->local_so.options & SO_RECEIVING_VIDEO ) && 0 != ( media->remote_so.options & SO_SENDING_VIDEO ) )
-                                    media->video_frame( ntohl( *(i32 *)dd.buf.data() ), dd.buf.data() + sizeof(i32), dd.buf.size() - sizeof( i32 ) );
+                                {
+                                    const framehead_s *fh = (const framehead_s *)dd.buf.data();
+                                    media->video_frame( my_ntohll( fh->msmonotonic ), ntohl( fh->frame ), dd.buf.data() + sizeof( framehead_s ), dd.buf.size() - sizeof( framehead_s ) );
+                                }
 
                             if ( IS_TLM( TLM_VIDEO_RECV_BYTES ) )
                             {

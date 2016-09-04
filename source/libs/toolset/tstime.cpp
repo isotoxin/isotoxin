@@ -20,7 +20,23 @@ Time Time::update_thread_time() // update current thread time and return current
 
 void    timerprocessor_c::clear()
 {
-    while(m_items.size()) makefree( m_items.get_last_remove() );
+    for ( timer_subscriber_entry_s *itm : m_items )
+        m_pool.dealloc( itm );
+    m_items.clear();
+
+}
+
+void timerprocessor_c::cleanup()
+{
+    for ( aint i=m_items.size()-1;i>=0;--i )
+    {
+        timer_subscriber_entry_s *e = m_items.get( i );
+        if ( e->hook.expired() )
+        {
+            m_pool.dealloc( e );
+            m_items.remove_slow(i);
+        }
+    }
 }
 
 void    timerprocessor_c::do_all()
@@ -39,9 +55,10 @@ void    timerprocessor_c::do_all()
 
 float    timerprocessor_c::takt(double dt)
 {
+    //MEMT( MEMT_TIMEPROCESSOR );
     //RECURSIVE_ALERT(); recursive calls allowed. sys_idle can be called from timeup
 
-    tmp_array_del_t<timer_subscriber_entry_s, 32> processing;
+    tmp_pointers_t<timer_subscriber_entry_s, GRANULA> processing;
 
     float nexttime = -1;
     aint cnt = m_items.size();
@@ -53,7 +70,8 @@ float    timerprocessor_c::takt(double dt)
             e->ttl -= dt;
             if (e->ttl < 0)
             {
-                processing.add(m_items.get_remove_fast(i));
+                processing.add(e);
+                m_items.remove_fast( i );
                 --cnt;
                 continue;
             } else
@@ -73,25 +91,18 @@ float    timerprocessor_c::takt(double dt)
         if (t) t->timeup(par);
     }
 
-    for (int i = 0; i < m_items.size();)
-    {
-        timer_subscriber_entry_s * e = m_items.get(i);
-        if (e->hook.expired())
-        {
-            makefree( m_items.get_remove_fast(i) );
-            continue;
-        }
-        ++i;
-    }
+    cleanup();
 
-    while (processing.size()) makefree(processing.get_last_remove());
+    for ( timer_subscriber_entry_s *e : processing )
+        m_pool.dealloc(e);
+
     return nexttime;
 }
 
 void    timerprocessor_c::add(timer_subscriber_c *t, double ttl, void * par, bool delete_same)
 {
     if (delete_same) del(t, par);
-    timer_subscriber_entry_s *e = getfree(t, ttl, par);
+    timer_subscriber_entry_s *e = m_pool.alloc(t, ttl, par);
     m_items.add(e);
     t->added();
 }
@@ -104,7 +115,8 @@ void    timerprocessor_c::del(timer_subscriber_c *t, void * par)
         timer_subscriber_entry_s *at = m_items.get(i);
         if (at->param == par && t == at->hook.get())
         {
-            makefree(m_items.get_remove_fast(i));
+            m_pool.dealloc(at);
+            m_items.remove_fast( i );
             return;
         }
     }
@@ -139,14 +151,14 @@ bool    timerprocessor_c::remain(timer_subscriber_c *t, void * par, double& ttl)
 
 void    timerprocessor_c::del(timer_subscriber_c *t)
 {
-    for (aint i = 0; i < m_items.size();)
+    for ( aint i = m_items.size() - 1; i >= 0; --i )
     {
-        if (t == m_items.get(i)->hook.get())
+        timer_subscriber_entry_s *at = m_items.get( i );
+        if (t == at->hook.get())
         {
-            makefree( m_items.get_remove_fast(i) );
-            continue;
+            m_pool.dealloc( at );
+            m_items.remove_slow(i);
         }
-        ++i;
     }
 }
 
@@ -160,7 +172,8 @@ void    timerprocessor_c::its_time(timer_subscriber_c *t, void * par)
         {
             if (at->hook)
                 at->hook->timeup(par);
-            makefree( m_items.get_remove_fast(i) );
+            m_pool.dealloc( at );
+            m_items.remove_fast( i );
             return;
         }
     }

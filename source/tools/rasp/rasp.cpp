@@ -93,11 +93,11 @@ int proc_lochange_(const wstrings_c & pars)
 
 struct command_s
 {
-    const wchar *cmd;
-    const wchar *help;
+    const wchar_t *cmd;
+    const wchar_t *help;
     cmdproc proc;
 
-    command_s(const wchar *_c, const wchar *_h, cmdproc _p) :cmd(_c), help(_h), proc(_p) {}
+    command_s(const wchar_t *_c, const wchar_t *_h, cmdproc _p) :cmd(_c), help(_h), proc(_p) {}
 } commands[] =
 {
     command_s(L"help", L"Show this help", proc_help),
@@ -157,10 +157,13 @@ void Print(int color, const char *format, ...)
     sstr_c buf;
     va_list arglist;
     va_start(arglist, format);
-    vsprintf_s(buf.str(), buf.get_capacity(), format, arglist);
 #ifdef _WIN32
+    vsprintf_s(buf.str(), buf.get_capacity(), format, arglist);
     CharToOemA(buf.str(),buf.str());
 #endif // _WIN32
+#ifdef _NIX
+    vsnprintf(buf.str(), buf.get_capacity(), format, arglist);
+#endif
     printf("%s",buf.cstr());
 }
 
@@ -169,12 +172,17 @@ void Print(const char *format, ...)
     va_list arglist;
     sstr_c buf;
     va_start(arglist, format);
+#ifdef _WIN32
     vsprintf_s(buf.str(), buf.get_capacity(), format, arglist);
+#endif
+#ifdef _NIX
+    vsnprintf(buf.str(), buf.get_capacity(), format, arglist);
+#endif
     printf("%s", buf.cstr());
 }
 extern "C" { void sodium_init(); }
 
-bool _cdecl ts::app_preinit( const wchar_t *cmdl )
+bool ts::app_preinit( const wchar_t *cmdl )
 {
     return true;
 }
@@ -182,8 +190,12 @@ bool _cdecl ts::app_preinit( const wchar_t *cmdl )
 int main(int argc, _TCHAR* argv[])
 {
     sodium_init();
+#ifdef _WIN32
 	GetConsoleScreenBufferInfo(hConsoleOutput = GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
     setlocale(LC_ALL, ".1251");
+#endif
+
+    MEMT( MEMT_LAST + 1 );
 
     wchar_t *cmdlb = GetCommandLineW();
     wstrings_c ql; ql.qsplit( cmdlb );

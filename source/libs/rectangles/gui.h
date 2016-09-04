@@ -102,7 +102,7 @@ struct selectable_core_s
     bool try_begin( gui_label_c *label );
     bool sure_selected();
     bool some_selected() const { return owner && char_start_sel >= 0 && char_end_sel >= 0 && char_start_sel != char_end_sel; }
-    void selection_stuff(ts::bitmap_c &bmp, const ts::ivec2 &size);
+    void selection_stuff(ts::bitmap_c &bmp, int y, const ts::ivec2 &size);
     void clear_selection();
     void track();
     void endtrack();
@@ -253,13 +253,14 @@ private:
     ts::array_inplace_t<kbd_press_callback_s, 1> m_kbdhandlers;
 
 
-    struct texture_s
+    struct texture_s : public ts::bitmap_c
     {
         ts::iweak_ptr<text_rect_dynamic_c> owner;
-        ts::bitmap_c texture;
+        ts::Time lastusetime = ts::Time::past();
+        int pixels_capacity = 0;
     };
-    ts::array_del_t<texture_s, 32> m_textures;
-
+    ts::array_del_t<texture_s, 10> m_textures; // FREE MEMORY
+    int m_textures_check_index = 0;
 
 
     RID get_free_rid();
@@ -287,14 +288,17 @@ private:
     ts::frame_time_c m_frametime;
     ts::time_reducer_s<1000> m_1second;
     ts::time_reducer_s<5000> m_5seconds;
-    ts::struct_pool_t<sizeof(delay_event_c), 128> m_evpool;
+    ts::struct_buf_t<delay_event_c, 32> m_evpool;
 
     ts::str_c m_deffont_name;
     ts::hashmap_t<ts::str_c, ts::font_desc_c> m_fonts;
 
     struct slallocator
     {
-        static void *ma(size_t sz) { return MM_ALLOC(sz); }
+        static void *ma(size_t sz)
+        {
+            return MM_ALLOC(sz);
+        }
         static void mf(void *ptr) { MM_FREE(ptr); }
     };
 
@@ -327,6 +331,11 @@ public:
     ts::TSCOLOR selection_bg_color = ts::ARGB(100, 100, 255);
     ts::TSCOLOR selection_bg_color_blink = ts::ARGB(0, 0, 155);
 
+    static void update_texture_time( const ts::bitmap_c *b, ts::Time ct )
+    {
+        static_cast<texture_s *>( const_cast<ts::bitmap_c *>( b ) )->lastusetime = ct;
+    }
+
     virtual ts::wstr_c app_loclabel(loc_label_e ll) { return CONSTWSTR("???"); }
     virtual bool app_custom_button_state(int tag, int &shiftleft) { return true; }
     virtual void app_prepare_text_for_copy( ts::str_c &text_utf8 ) {}
@@ -347,8 +356,9 @@ public:
     void disable_special_border(bool v) { m_flags.init( F_DISABLESPECIALBORDER, v ); }
     bool is_disabled_special_border() const { return m_flags.is( F_DISABLESPECIALBORDER ); }
 
-    ts::bitmap_c * acquire_texture( text_rect_dynamic_c *requester, const ts::ivec2 &size );
-    void release_texture( ts::bitmap_c * t );
+    const ts::bitmap_c * acquire_texture( text_rect_dynamic_c *requester, ts::ivec2 size );
+    void release_textures( text_rect_dynamic_c *requester );
+    void release_texture( const ts::bitmap_c *requester );
 
     void reload_fonts();
     bool load_theme( const ts::wsptr&thn, bool summon_ch_signal = true );
@@ -408,30 +418,37 @@ public:
         m_msgs.push(m);
     }
 
+    private:
+        template<typename T, typename PRM, typename POOLT, bool samesize> struct aaa;
+        template<typename T, typename PRM, typename POOLT> struct aaa<T,PRM,POOLT,true>
+        {
+            static T * a( POOLT&pool, PRM param ) {
+                return pool.template alloc_t<T>( param );
+            }
+            static void d( POOLT&pool, T *t ) {
+                pool.template dealloc_t<T>(t);
+            }
+        };
+        template<typename T, typename PRM, typename POOLT> struct aaa<T, PRM, POOLT, false>
+        {
+            static T * a( POOLT&, PRM param ) {
+                return TSNEW( T, param );
+            }
+            static void d( POOLT&pool, T *t ) {
+                TSDEL( t );
+            }
+        };
+    public:
+
     template<typename EVT, typename PRM> EVT  &add_event_t(double t, PRM param)
     {
-        EVT *dc;
-        if (sizeof(EVT) == sizeof(delay_event_c))
-        {
-            dc = (EVT *)m_evpool.alloc();
-            TSPLACENEW(dc, param);
-        }
-        else
-        {
-            dc = TSNEW(EVT, param);
-        }
+        EVT *dc = aaa<EVT, PRM, decltype( m_evpool ), sizeof( EVT ) == sizeof( delay_event_c )>::a( m_evpool, param );
         add_event(dc, t);
         return *dc;
     }
     template<typename EVT> void  delete_event(EVT *e)
     {
-        if (sizeof(EVT) == sizeof(delay_event_c))
-        {
-            e->~EVT();
-            m_evpool.dealloc(e);
-        }
-        else
-            TSDEL(e);
+        aaa<EVT, int, decltype( m_evpool ), sizeof( EVT ) == sizeof( delay_event_c )>::d( m_evpool, e );
     }
     void delete_event(GUIPARAMHANDLER h);
     void delete_event(GUIPARAMHANDLER h, GUIPARAM prm);
@@ -615,10 +632,11 @@ INLINE const ts::font_desc_c &gui_button_c::get_font() const
 
 template<typename R> MAKE_ROOT<R>::MAKE_ROOT()
 {
-    engine = TSNEW(rectengine_root_c, RS_NORMAL );
+    engine = TSNEW( rectengine_root_c, RS_NORMAL );
     gui->allocate_dcoll() = (rectengine_root_c *)engine;
     gui->newrect<newrectkitchen::rectwrapper<R>::type>( *this );
 }
+
 template<typename R> void MAKE_ROOT< newrectkitchen::rectwrapper<R> >::init( rect_sys_e sys )
 {
     if (me) return;

@@ -37,8 +37,11 @@ spinlock_queue_s
 
 	struct node_t 
 	{
-		pointer_t next;
-		node_t* StackNextFree;
+        union
+        {
+            pointer_t next;
+            node_t* stack_next_free;
+        };
 		T value;
 		node_t(){} //-V730
 	};
@@ -63,6 +66,12 @@ spinlock_queue_s
 	}
 
 public:	
+
+    enum
+    {
+        ABLOCK_SIZE = sizeof( node_t )
+    };
+
 	spinlock_queue_s()
 	{
 		node_t* n = get_node();

@@ -136,6 +136,7 @@ class gui_notice_callinprogress_c : public gui_notice_c
     common_videocall_stuff_s common;
     vsb_list_t video_devices;
     UNIQUE_PTR( vsb_c ) camera;
+    ts::iweak_ptr<av_contact_s> avcp;
 
     ts::irect vrect_cache;
 
@@ -202,7 +203,10 @@ public:
     }
 
     contact_c *collocutor() { return sender; }
-    av_contact_s *get_avc();
+    av_contact_s *get_avc()
+    {
+        return avcp.get();
+    }
     vsb_c *getcamera() { return camera.get();  }
 };
 
@@ -627,13 +631,13 @@ class gui_messagelist_c : public gui_vscrollgroup_c
 
 
     time_t last_seen_post_time = 0;
-    tm last_post_time;
+    tm last_post_time = {};
     ts::shared_ptr<contact_root_c> historian;
     ts::array_safe_t< gui_message_item_c, 1 > typing;
 
     void clear_list(bool empty_mode);
-    gui_message_item_c &insert_message_item(message_type_app_e mt, contact_c *author, const ts::str_c &skin, time_t post_time = 0);
-    gui_message_item_c &get_message_item(message_type_app_e mt, contact_c *author, const ts::str_c &skin, time_t post_time = 0, uint64 replace_post = 0);
+    gui_message_item_c &insert_message_item(message_type_app_e mt, contact_c *author, const ts::asptr &skin, time_t post_time = 0);
+    gui_message_item_c &get_message_item(message_type_app_e mt, contact_c *author, const ts::asptr &skin, time_t post_time = 0, uint64 replace_post = 0);
     bool insert_date_separator( ts::aint index, tm &prev_post_time, time_t next_post_time );
 
     void create_empty_mode_stuff();

@@ -27,3 +27,21 @@
 #include "rectengine.h"
 #include "gui.h"
 #include "dialog.h"
+
+enum mem_type_rectangles_e
+{
+    MEMT_GMES = MEMT_LAST + 1,
+    MEMT_GUI_COMMON,
+    MEMT_EVTSYSTEM,
+    MEMT_TEXTRECT,
+    MEMT_TOOLTIP,
+    MEMT_TEXTFIELD,
+    MEMT_CHREPOS,
+    MEMT_CHSORT,
+    //MEMT_REDRAW,
+    MEMT_SETFOCUS,
+    MEMT_DYNAMIC_TEXTURE,
+    MEMT_MENU,
+
+    MEMT_RECTANGLES_LAST
+};

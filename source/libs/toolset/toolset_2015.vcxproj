@@ -120,7 +120,6 @@
     <ClCompile Include="internal\sharpen.cpp" />
     <ClCompile Include="tsbp.cpp" />
     <ClCompile Include="tsbuf.cpp" />
-    <ClCompile Include="tscrc.cpp" />
     <ClCompile Include="tsdebug.cpp" />
     <ClCompile Include="tsexecutor.cpp" />
     <ClCompile Include="tsfilesystem.cpp" />
@@ -165,7 +164,6 @@
     <ClInclude Include="internal\vdtypes.h" />
     <ClInclude Include="tsbp.h" />
     <ClInclude Include="tsbuf.h" />
-    <ClInclude Include="tscrc.h" />
     <ClInclude Include="tsdebug.h" />
     <ClInclude Include="tshash_md5.h" />
     <ClInclude Include="tsjson.h" />

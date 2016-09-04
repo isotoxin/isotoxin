@@ -50,6 +50,7 @@
     <ClCompile Include="..\toxcore\TCP_connection.c" />
     <ClCompile Include="..\toxcore\TCP_server.c" />
     <ClCompile Include="..\toxcore\tox.c" />
+    <ClCompile Include="..\toxcore\tox_group.c" />
     <ClCompile Include="..\toxcore\util.c" />
     <ClCompile Include="..\toxdns\toxdns.c" />
   </ItemGroup>
@@ -84,6 +85,7 @@
     <ClInclude Include="..\toxcore\TCP_connection.h" />
     <ClInclude Include="..\toxcore\TCP_server.h" />
     <ClInclude Include="..\toxcore\tox.h" />
+    <ClInclude Include="..\toxcore\tox_group.h" />
     <ClInclude Include="..\toxcore\util.h" />
     <ClInclude Include="..\toxdns\toxdns.h" />
     <ClInclude Include="config.h" />

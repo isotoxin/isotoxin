@@ -87,6 +87,8 @@ void task_executor_c::work()
 
     for (;!sync.lock_read()().worker_should_stop;)
     {
+        MEMT( MEMT_EXECUTOR );
+
         bool timeout = WAIT_TIMEOUT == WaitForSingleObject(evt, 5000);
 
         task_c *t;

@@ -1,0 +1,78 @@
+EXPORTS
+
+	set_common_curl_options
+
+	;curl
+	curl_easy_init
+	curl_easy_setopt
+	curl_easy_perform
+	curl_easy_cleanup
+
+	;libsodium
+	sodium_init
+	crypto_shorthash
+	crypto_generichash
+	crypto_hash_sha256
+	crypto_hash_sha512
+	crypto_sign_verify_detached
+	crypto_stream_chacha20_xor
+	randombytes_buf
+	randombytes_uniform
+	randombytes_random
+	randombytes
+	sodium_memzero
+	sodium_memcmp
+	crypto_box_keypair
+	crypto_box_easy
+	crypto_box_open_easy
+	crypto_secretbox_open_easy
+	crypto_secretbox_easy
+	crypto_box_beforenm
+	crypto_box_afternm
+	crypto_box_open_afternm
+	crypto_verify_32
+	crypto_scalarmult_curve25519_base
+
+	;zlib
+	deflate
+	deflateEnd
+	inflate
+	inflateEnd
+	deflateInit_
+	deflateInit2_
+	inflateInit_
+	inflateInit2_
+	inflateReset
+	deflateReset
+	adler32
+	crc32
+
+	;opus
+	opus_strerror
+	opus_encoder_create
+	opus_encode
+	opus_encoder_destroy
+	opus_encoder_ctl
+	opus_decoder_create
+	opus_decode
+	opus_decoder_destroy
+	opus_packet_get_nb_channels
+	opus_decoder_get_nb_samples
+
+	;libvpx
+	vpx_codec_err_to_string
+	vpx_img_free
+	vpx_codec_destroy
+	vpx_codec_control_
+	vpx_codec_dec_init_ver
+	vpx_codec_enc_init_ver
+	vpx_codec_decode
+	vpx_codec_encode
+	vpx_codec_enc_config_default
+	vpx_codec_enc_config_set
+	vpx_codec_get_cx_data
+	vpx_codec_get_frame
+	vpx_codec_vp8_dx
+	vpx_codec_vp9_dx
+	vpx_codec_vp8_cx
+	vpx_codec_vp9_cx

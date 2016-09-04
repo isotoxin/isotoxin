@@ -419,6 +419,9 @@ bool gui_filterbar_c::update_filter(const ts::wstr_c & e, bool)
 
 /*virtual*/ bool gui_filterbar_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    MEMT( MEMT_FILTERBAR );
+
+
     switch(qp)
     {
     case SQ_RECT_CHANGED:

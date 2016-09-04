@@ -2,6 +2,8 @@
 
 namespace ts
 {
+void TSCALL sys_sleep( int ms );
+
 
 irect   TSCALL wnd_get_max_size_fs(const ts::ivec2 &pt);
 irect   TSCALL wnd_get_max_size(const ts::ivec2& pt);

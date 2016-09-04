@@ -122,8 +122,6 @@ struct config_maker_s : public ipcw
 
 active_protocol_c::active_protocol_c(int id, const active_protocol_data_s &pd):id(id), lastconfig(ts::Time::past())
 {
-    int dspflags = cfg().dsp_flags();
-
     auto w = syncdata.lock_write();
     w().data = pd;
     w().data.config.set_size(pd.config.size()); // copy content due race condition
@@ -138,13 +136,7 @@ active_protocol_c::active_protocol_c(int id, const active_protocol_data_s &pd):i
     }
     g_app->F_PROTOSORTCHANGED = true;
 
-    w().volume = cfg().vol_talk();
-    w().dsp_flags = dspflags;
     w().manual_cos = (contact_online_state_e)prf().manual_cos();
-
-    cvt.volume = cfg().vol_mic();
-    cvt.filter_options.init(fmt_converter_s::FO_NOISE_REDUCTION, FLAG(dspflags, DSP_MIC_NOISE));
-    cvt.filter_options.init(fmt_converter_s::FO_GAINER, FLAG(dspflags, DSP_MIC_AGC));
 
 }
 
@@ -167,7 +159,7 @@ void active_protocol_c::run()
     auto r = syncdata.lock_read();
     if (r().flags.is(F_WORKER)) return;
     if (r().flags.is(F_WORKER_STOPED))
-        g_app->stop_all_av();
+        g_app->avcontacts().stop_all_av();
     r.unlock();
 
     ts::master().sys_start_thread( DELEGATE( this, worker ) );
@@ -199,16 +191,6 @@ void active_protocol_c::change_data( const ts::blob_c &b, bool is_native )
 
     ipcp->send( c );
 }
-
-#ifdef _DEBUG
-struct qfp_s
-{
-    uint64 utag;
-    uint64 offset;
-    uint time;
-};
-ts::array_inplace_t< qfp_s, 1 > g_qfps;
-#endif // _DEBUG
 
 void active_protocol_c::setup_audio_fmt( ts::str_c& s )
 {
@@ -344,8 +326,9 @@ bool active_protocol_c::cmdhandler(ipcr r)
     case HQ_UPDATE_CONTACT:
         {
             gmsg<ISOGM_UPDATE_CONTACT> *m = TSNEW( gmsg<ISOGM_UPDATE_CONTACT> );
-            m->key.protoid = id;
-            m->key.contactid = r.get<int>();
+
+
+            m->key = contact_key_s( r.get<int>(), id );
             m->mask = r.get<int>();
             m->pubid = r.getastr();
             m->name = r.getastr();
@@ -377,10 +360,9 @@ bool active_protocol_c::cmdhandler(ipcr r)
     case HQ_MESSAGE:
         {
             gmsg<ISOGM_INCOMING_MESSAGE> *m = TSNEW(gmsg<ISOGM_INCOMING_MESSAGE>);
-            m->groupchat.contactid = r.get<int>();
-            m->groupchat.protoid = m->groupchat.contactid ? id : 0;
-            m->sender.protoid = id;
-            m->sender.contactid = r.get<int>();
+            int gid = r.get<int>();
+            int cid = r.get<int>();
+            m->sender = contact_key_s( gid, cid, id );
             m->mt = (message_type_app_e)r.get<int>();
             m->create_time = r.get<uint64>();
             m->msgutf8 = r.getastr();
@@ -460,53 +442,31 @@ bool active_protocol_c::cmdhandler(ipcr r)
     case HQ_AUDIO:
         {
             int gid = r.get<int>();
-            contact_key_s ck;
-            ck.protoid = id | (gid << 16); // assume 65536 unique groups max
-            ck.contactid = r.get<int>();
+            int cid = r.get<int>();
             s3::Format fmt;
             fmt.sampleRate = r.get<int>();
             fmt.channels = r.get<short>();
             fmt.bitsPerSample = r.get<short>();
             int dsz;
             const void *data = r.get_data(dsz);
+            uint64 msmonotonic = r.get<uint64>();
+#ifdef _DEBUG
+            amsmonotonic = msmonotonic;
+#endif // _DEBUG
 
-            auto rd = syncdata.lock_read();
-            float vol = rd().volume;
-            int dsp_flags = rd().dsp_flags;
-            rd.unlock();
-
-            int dspf = 0;
-            if (0 != (dsp_flags & DSP_SPEAKERS_NOISE)) dspf |= fmt_converter_s::FO_NOISE_REDUCTION;
-            if (0 != (dsp_flags & DSP_SPEAKERS_AGC)) dspf |= fmt_converter_s::FO_GAINER;
-
-            g_app->mediasystem().play_voice(ts::ref_cast<uint64>(ck), fmt, data, dsz, vol, dspf);
-
-            /*
-            ts::Time t = ts::Time::current();
-            static int cntc = 0;
-            static ts::Time prevt = t;
-            if ((t-prevt) >= 0)
-            {
-                prevt += 1000;
-                DMSG("ccnt: " << cntc);
-                cntc = 0;
-        }
-            ++cntc;
-            */
-
+            if (av_contact_s *avc = g_app->avcontacts().find_inprogress( contact_key_s(gid, cid, id) ))
+                avc->add_audio( msmonotonic, fmt, data, dsz );
         }
         break;
     case HQ_STREAM_OPTIONS:
         {
             int gid = r.get<int>();
-            contact_key_s ck;
-            ck.protoid = id | (gid << 16); // assume 65536 unique groups max
-            ck.contactid = r.get<int>();
+            int cid = r.get<int>();
             int so = r.get<int>();
             ts::ivec2 sosz;
             sosz.x = r.get<int>();
             sosz.y = r.get<int>();
-            gmsg<ISOGM_PEER_STREAM_OPTIONS> *m = TSNEW(gmsg<ISOGM_PEER_STREAM_OPTIONS>, ck, so, sosz);
+            gmsg<ISOGM_PEER_STREAM_OPTIONS> *m = TSNEW(gmsg<ISOGM_PEER_STREAM_OPTIONS>, contact_key_s(gid, cid, id), so, sosz);
             m->send_to_main_thread();
 
         }
@@ -518,6 +478,9 @@ bool active_protocol_c::cmdhandler(ipcr r)
             locked_bufs.add((data_header_s *)r.d);
             l.unlock();
             incoming_video_frame_s *f = (incoming_video_frame_s *)(r.d + sizeof(data_header_s));
+#ifdef _DEBUG
+            vmsmonotonic = f->msmonotonic;
+#endif // _DEBUG
             TSNEW( video_frame_decoder_c, this, f ); // not memory leak!
         }
         break;
@@ -533,8 +496,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
     case HQ_INCOMING_FILE:
         {
             gmsg<ISOGM_FILE> *m = TSNEW(gmsg<ISOGM_FILE>);
-            m->sender.protoid = id;
-            m->sender.contactid = r.get<int>();
+            m->sender = contact_key_s( r.get<int>(), id );
             m->i_utag = r.get<uint64>();
             m->filesize = r.get<uint64>();
             m->filename.set_as_utf8(r.getastr());
@@ -550,14 +512,6 @@ bool active_protocol_c::cmdhandler(ipcr r)
             m->offset = r.get<uint64>() << 20;
             m->filesize = FILE_TRANSFER_CHUNK;
 
-#ifdef _DEBUG
-            if ( g_qfps.size() > 50 )
-                g_qfps.remove_slow( 0 );
-            qfp_s &qfp = g_qfps.add();
-            qfp.utag = m->i_utag;
-            qfp.offset = m->offset;
-            qfp.time = ts::Time::current().raw();
-#endif // _DEBUG
             m->send_to_main_thread();
         }
         break;
@@ -590,8 +544,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
     case HQ_AVATAR_DATA:
         {
             gmsg<ISOGM_AVATAR> *m = TSNEW(gmsg<ISOGM_AVATAR>);
-            m->contact.protoid = id;
-            m->contact.contactid = r.get<int>();
+            m->contact = contact_key_s( r.get<int>(), id );
             m->tag = r.get<int>();
             int dsz;
             const void *data = r.get_data(dsz);
@@ -616,9 +569,8 @@ bool active_protocol_c::cmdhandler(ipcr r)
         {
             gmsg<ISOGM_TYPING> *m = TSNEW(gmsg<ISOGM_TYPING>);
             int gid = r.get<int>();
-            contact_key_s ck;
-            m->contact.protoid = id | (gid << 16); // assume 65536 unique groups max
-            m->contact.contactid = r.get<int>();
+            int cid = r.get<int>();
+            m->contact = contact_key_s( gid, cid, id );
             m->send_to_main_thread();
         }
         break;
@@ -700,6 +652,8 @@ bool active_protocol_c::tick()
 
 void active_protocol_c::worker()
 {
+    MEMT( MEMT_AP );
+
     ts::str_c ipcname(CONSTASTR("isotoxin_ap_"));
     uint64 utg = random64();
     ipcname.append_as_hex(&utg, sizeof(utg)).append_char('_');
@@ -858,9 +812,10 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
 
 ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send message to other peer
 {
-    if (msg.pass == 0 && msg.post.sender.is_self()) // handle only self-to-other messages
+    if ( msg.info ) return 0;
+    if (msg.pass == 0 && msg.post.sender.is_self) // handle only self-to-other messages
     {
-        if (msg.post.receiver.protoid != id)
+        if (msg.post.receiver.protoid != (unsigned)id)
             return 0;
 
         contact_c *target = contacts().find( msg.post.receiver );
@@ -886,10 +841,10 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
             break;
         }
 
-        if (typingsendcontact == target->getkey().contactid)
+        if (typingsendcontact == target->getkey().gidcid())
             typingsendcontact = 0;
 
-        ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().contactid << msg.post.utag << ((online && !msg.resend) ? 0 : msg.post.cr_time) << msg.post.message_utf8 );
+        ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().gidcid() << msg.post.utag << ((online && !msg.resend) ? 0 : msg.post.cr_time) << msg.post.message_utf8 );
     }
     return 0;
 }
@@ -932,20 +887,6 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
         case PP_VIDEO_ENCODING_SETTINGS:
             apply_encoding_settings();
             break;
-        case CFG_TALKVOLUME:
-            syncdata.lock_write()().volume = cfg().vol_talk();
-            break;
-        case CFG_MICVOLUME:
-            cvt.volume = cfg().vol_mic();
-            break;
-        case CFG_DSPFLAGS:
-            {
-                int flags = cfg().dsp_flags();
-                cvt.filter_options.init( fmt_converter_s::FO_NOISE_REDUCTION, FLAG(flags, DSP_MIC_NOISE) );
-                cvt.filter_options.init( fmt_converter_s::FO_GAINER, FLAG(flags, DSP_MIC_AGC) );
-                syncdata.lock_write()().dsp_flags = flags;
-            }
-            break;
         case CFG_DEBUG:
             push_debug_settings();
             break;
@@ -964,6 +905,8 @@ void active_protocol_c::push_debug_settings()
 
 const ts::bitmap_c &active_protocol_c::get_icon(int sz, icon_type_e icot)
 {
+    MEMT( MEMT_AP_ICON );
+
     for(const icon_s &icon : icons_cache)
         if (icon.icot == icot && icon.bmp->info().sz.x == sz)
             return *icon.bmp;
@@ -1169,6 +1112,9 @@ void active_protocol_c::set_ostate(contact_online_state_e _cos)
 void active_protocol_c::save_config(bool wait)
 {
     if (!ipcp) return;
+
+    MEMT( MEMT_AP );
+
     ts::Time t = ts::Time::current();
 
     auto w = syncdata.lock_write();
@@ -1185,10 +1131,10 @@ void active_protocol_c::save_config(bool wait)
 
     if (wait)
     {
-        ts::master().sys_sleep(10);
+        ts::sys_sleep(10);
         while( !syncdata.lock_read()().flags.is(F_CONFIG_OK|F_CONFIG_FAIL) )
         {
-            ts::master().sys_sleep(10);
+            ts::sys_sleep(10);
             ts::master().sys_idle();
             if (!syncdata.lock_read()().flags.is(F_WORKER))
                 return;
@@ -1254,9 +1200,9 @@ void active_protocol_c::stop_and_die(bool wait_worker_end)
     if (ipcp) ipcp->something_happens();
     w.unlock();
 
-    g_app->iterate_avcontacts([&](av_contact_s & avc) {
-        if (avc.ap4video == this)
-            avc.ap4video = nullptr;
+    g_app->avcontacts().iterate([&](av_contact_s &avc) {
+        if (avc.ap == this)
+            avc.ap = nullptr;
     });
         
     if (wait_worker_end)
@@ -1266,7 +1212,7 @@ void active_protocol_c::stop_and_die(bool wait_worker_end)
         {
             if (ipcp) ipcp->something_happens();
             lr.unlock();
-            ts::master().sys_sleep(0);
+            ts::sys_sleep(0);
             lr = syncdata.lock_read();
         }
     } else
@@ -1324,7 +1270,7 @@ void active_protocol_c::accept_call(int cid)
     ipcp->send(ipcw(AQ_ACCEPT_CALL) << cid);
 }
 
-void active_protocol_c::send_video_frame(int cid, const ts::bmpcore_exbody_s &eb)
+void active_protocol_c::send_video_frame(int cid, const ts::bmpcore_exbody_s &eb, uint64 msmonotonic )
 {
     if (!ipcp) return;
     isotoxin_ipc_s *ipcc = ipcp;
@@ -1335,7 +1281,10 @@ void active_protocol_c::send_video_frame(int cid, const ts::bmpcore_exbody_s &eb
         int w;
         int h;
         int fmt;
+        uint64 msmonotonic;
+        uint64 padding;
     };
+    static_assert( sizeof( inf_s ) == VIDEO_FRAME_HEADER_SIZE, "size!" );
 
     const ts::imgdesc_s &src_info = eb.info();
 
@@ -1351,6 +1300,7 @@ void active_protocol_c::send_video_frame(int cid, const ts::bmpcore_exbody_s &eb
         inf->w = src_info.sz.x;
         inf->h = src_info.sz.y;
         inf->fmt = VFMT_I420;
+        inf->msmonotonic = msmonotonic;
 
         ts::uint8 *dst_y = ((ts::uint8 *)(dh + 1)) + sizeof(inf_s);
         int y_sz = src_info.sz.x * inf->h;
@@ -1362,24 +1312,10 @@ void active_protocol_c::send_video_frame(int cid, const ts::bmpcore_exbody_s &eb
     }
 }
 
-void active_protocol_c::send_audio(int cid, const s3::Format &ifmt, const void *data, int size)
+void active_protocol_c::send_audio(int cid, const void *data, int size, uint64 timestamp)
 {
     if (!ipcp) return;
-
-    struct s
-    {
-        int cid;
-        isotoxin_ipc_s *ipcp;
-        void send_audio(const s3::Format& ofmt, const void *data, ts::aint size)
-        {
-            ipcp->send(ipcw(AQ_SEND_AUDIO) << cid << data_block_s(data,size));
-        }
-    } ss = { cid, ipcp };
-    
-    cvt.ofmt = audio_fmt;
-    cvt.acceptor = DELEGATE( &ss, send_audio );
-    cvt.cvt(ifmt, data, size );
-
+    ipcp->send( ipcw( AQ_SEND_AUDIO ) << cid << data_block_s( data, size ) << timestamp );
 }
 
 void active_protocol_c::call(int cid, int seconds)
@@ -1390,11 +1326,6 @@ void active_protocol_c::call(int cid, int seconds)
 
 void active_protocol_c::stop_call(int cid)
 {
-    contact_key_s ck;
-    ck.protoid = id;
-    ck.contactid = cid;
-    g_app->mediasystem().free_voice_channel(ts::ref_cast<uint64>(ck));
-
     ipcp->send(ipcw(AQ_STOP_CALL) << cid);
 }
 
@@ -1616,6 +1547,19 @@ void active_protocol_c::draw_telemtry( rectengine_c&e, const uint64& uid, const 
                 }
             }
     }
+
+#ifdef _DEBUG
+    if ( amsmonotonic )
+    {
+        if ( !text.is_empty() ) text.append( CONSTWSTR( "<br>" ) );
+        text.append( CONSTWSTR( "audio ms: " ) ).append_as_num( amsmonotonic );
+    }
+    if ( vmsmonotonic )
+    {
+        if ( !text.is_empty() ) text.append( CONSTWSTR( "<br>" ) );
+        text.append( CONSTWSTR( "video ms: " ) ).append_as_num( vmsmonotonic );
+    }
+#endif // _DEBUG
 
     if (!text.is_empty())
     {

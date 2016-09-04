@@ -72,6 +72,7 @@ class mediasystem_c
             {
                 buf[newdata].append_buf(d, s);
             }
+            void remove_data( ts::aint size );
             ts::aint read_data(const s3::Format &fmt, char *dest, ts::aint size);
             ts::aint available() const { return buf[readbuf].size() - readpos + buf[readbuf ^ 1].size(); }
         };
@@ -84,7 +85,7 @@ class mediasystem_c
             format.bitsPerSample = 16;
         }
 
-        void add_data(const s3::Format &fmt, float vol, int dsp /* see fmt_converter_s::FO_* bits */, const void *dest, ts::aint size);
+        void add_data(const s3::Format &fmt, float vol, int dsp /* see fmt_converter_s::FO_* bits */, const void *dest, ts::aint size, int clampms);
         /*virtual*/ s3::s3int rawRead(char *dest, s3::s3int size) override;
 
         void shutdown();
@@ -94,7 +95,7 @@ class mediasystem_c
     };
 
     spinlock::long3264 rawplock = 0;
-    char rawps[ MAX_RAW_PLAYERS * sizeof(voice_player) ];
+    char rawps[ MAX_RAW_PLAYERS * sizeof( voice_player ) ] = {};
     UNIQUE_PTR( loop_play ) loops[ snd_count ];
 
     int ref = 0;
@@ -108,7 +109,6 @@ public:
 
     mediasystem_c()
     {
-        memset( rawps, 0, sizeof(rawps) );
     }
     ~mediasystem_c();
 
@@ -138,7 +138,7 @@ public:
     }
     void voice_mute(const uint64 &key, bool mute);
     void voice_volume( const uint64 &key, float vol ); 
-    bool play_voice( const uint64 &key, const s3::Format &fmt, const void *data, ts::aint size, float vol, int dsp );
+    bool play_voice( const uint64 &key, const s3::Format &fmt, const void *data, ts::aint size, float vol, int dsp, int clampms = 1000 );
     void free_voice_channel( const uint64 &key ); 
 };
 
@@ -172,12 +172,12 @@ typedef fastdelegate::FastDelegate<void (const s3::Format &fmt, const void *, ts
 struct fmt_converter_s
 {
 #if _RESAMPLER == RESAMPLER_SPEEXFA
-    SpeexResamplerState *resampler[2];
+    SpeexResamplerState *resampler[ 2 ] = {};
 #elif _RESAMPLER == RESAMPLER_SRC
-    SRC_STATE *resampler[2];
+    SRC_STATE *resampler[ 2 ] = {};
 #endif
 
-    Filter_Audio *filter[2];
+    Filter_Audio *filter[ 2 ] = {};
     ts::buf_c tail; // used for filter ( it handles only (SampleRate/100)*n samples at once )
 
     static const ts::flags32_s::BITS FO_NOISE_REDUCTION = 1;
@@ -198,5 +198,26 @@ public:
     ts::flags32_s filter_options;
 
     void cvt( const s3::Format &ifmt, const void *idata, ts::aint isize );
+
+    void clear();
+};
+
+class active_protocol_c;
+class avmuxer_c
+{
+    spinlock::long3264 sync = 0;
+    uint64 key;
+    ts::Time lastuse = ts::Time::current();
+    bool audio = false;
+    bool video = false;
+
+public:
+    avmuxer_c( uint64 key );
+    ~avmuxer_c();
+
+    ts::Time lastusetime() const { return lastuse; }
+    uint64 getkey() const { return key; }
+
+    void add_audio( uint64 timestamp, const s3::Format &fmt, const void *data, ts::aint size, active_protocol_c *ctx );
 };
 

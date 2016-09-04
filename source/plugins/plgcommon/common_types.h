@@ -230,6 +230,7 @@ enum config_flags_e
 #define FILE_TRANSFER_CHUNK 1048576
 #define FILE_TRANSFER_CHUNK_MASK (~1048575ull)
 
+#define VIDEO_FRAME_HEADER_SIZE 32
 
 #define CFGF_SETPROTO       "setproto" // value is 1, when configuration set on set_proto result (initial call)
 

@@ -30,6 +30,8 @@ void    delay_event_c::die()
 
 void    gui_c::add_event(delay_event_c *de, double t)
 {
+    MEMT( MEMT_EVTSYSTEM );
+
     m_events.lock_write()().add(de);
     m_timer_processor.add(de, t, nullptr);
 }
@@ -50,6 +52,7 @@ void gui_c::delete_event(GUIPARAMHANDLER h)
         {
             w().remove_fast(index); //<< this will kill hook
             de->die(); // and now we kill delay_event itself
+            m_timer_processor.cleanup();
         }
     }
 }
@@ -86,6 +89,7 @@ bool gui_c::b_minimize(RID r, GUIPARAM param)
 }
 bool gui_c::b_normalize(RID r, GUIPARAM param)
 {
+    MEMT( MEMT_GUI_COMMON );
     MODIFY(RID::from_param(param)).decollapse().maximize(false);
     return true;
 }
@@ -140,6 +144,17 @@ gui_c::~gui_c()
     while( m_msgs.try_pop(m) )
         TSDEL(m);
 
+    auto w = m_events.lock_write();
+
+    for ( ts::aint index = w().size() - 1; index >= 0; --index )
+    {
+        delay_event_c *de = ts::ptr_cast<delay_event_c *>( w().get( index ).get() );
+        w().remove_fast( index ); //<< this will kill hook
+        de->die(); // and now we kill delay_event itself
+    }
+    w.unlock();
+    m_timer_processor.clear();
+
     gui = nullptr;
 }
 
@@ -173,6 +188,8 @@ const ts::font_desc_c & gui_c::get_font(const ts::asptr &fontname)
 
 void gui_c::process_children_repos()
 {
+    MEMT( MEMT_CHREPOS );
+
     ts::tmp_pointers_t<gui_group_c, 8> g2p;
 
     for (gui_group_c *gg : m_children_repos)
@@ -258,6 +275,21 @@ void gui_c::heartbeat()
         if (rectengine_root_c *root = root_by_rid( roots().last(RID()) ))
             if (!root->getrect().getprops().is_collapsed())
                 root->set_system_focus();
+
+    if ( m_textures_check_index > m_textures.size() )
+        m_textures_check_index = 0;
+    if ( m_textures_check_index < m_textures.size() )
+    {
+        texture_s *tt = m_textures.get( m_textures_check_index );
+        if ( ( ts::Time::current() - tt->lastusetime ) > 5000 ) // old texture! release it!
+        {
+            if ( tt->owner )
+                tt->owner->textures_no_need();
+            tt->clear();
+            tt->pixels_capacity = 0;
+        }
+    }
+    ++m_textures_check_index;
 
     gmsg<GM_HEARTBEAT>().send();
 
@@ -511,6 +543,8 @@ ts::uint32 gui_c::gm_handler(gmsg<GM_UI_EVENT>&e)
 
 ts::ivec2 gui_c::textsize( const ts::font_desc_c& font, const ts::wstr_c& text, int width_limit, int flags )
 {
+    MEMT( MEMT_TEXTRECT );
+
     return m_textrect.calc_text_size(font,text,width_limit < 0 ? 16384 : width_limit, flags, nullptr);
 }
 
@@ -840,8 +874,15 @@ const hover_data_s &gui_c::get_hoverdata( const ts::ivec2 & screenmousepos )
 
 void gui_c::set_focus(RID rid)
 {
-    if ( rid && !HOLD( rid )( ).accept_focus() )
-        return;
+    if ( rid )
+    {
+        HOLD hr( rid );
+        if (hr && !hr( ).accept_focus() )
+            return;
+        if ( !hr ) rid = RID();
+    }
+
+    MEMT( MEMT_SETFOCUS );
 
     RID oldfocus = get_focus();
 
@@ -889,7 +930,9 @@ void gui_c::set_focus(RID rid)
         d.changed.focus = false;
         if ( oldfocus )
         {
-            HOLD( oldfocus ).engine().sq_evt( SQ_FOCUS_CHANGED, oldfocus, d );
+            HOLD of( oldfocus );
+            if (of)
+                of.engine().sq_evt( SQ_FOCUS_CHANGED, oldfocus, d );
         }
         d.changed.focus = true;
         if ( newfocus )
@@ -1083,6 +1126,8 @@ void gui_c::dragndrop_update( guirect_c *r )
 
 void gui_c::dragndrop_lb( guirect_c *r )
 {
+    MEMT( MEMT_GUI_COMMON );
+
     if (dndproc) TSDEL(dndproc);
     dndproc = TSNEW(dragndrop_processor_c, r);
 }
@@ -1315,7 +1360,7 @@ void selectable_core_s::endtrack()
     }
 }
 
-void selectable_core_s::selection_stuff(ts::bitmap_c &texture, const ts::ivec2 &size)
+void selectable_core_s::selection_stuff(ts::bitmap_c &texture, int yshift, const ts::ivec2 &size)
 {
     texture.fill(ts::ivec2(0), size, 0);
 
@@ -1371,7 +1416,15 @@ void selectable_core_s::selection_stuff(ts::bitmap_c &texture, const ts::ivec2 &
             if (gi_next.pixels == nullptr || gi_next.charindex < 0) w += 1;
             else w = gi_next.pos().x - gi.pos().x;
         }
-        texture.fill(ts::ivec2(gi.pos().x, y), ts::ivec2(w, h), selectionBgColor);
+
+        int yy = y - yshift;
+        if ( yy >= size.y )
+            break;
+
+        if ( yy + h < 0 )
+            continue;
+
+        texture.fill(ts::ivec2(gi.pos().x, y-yshift), ts::ivec2(w, h), selectionBgColor);
     }
 }
 
@@ -1435,28 +1488,37 @@ void selectable_core_s::track()
     //DMSG("h" << glyph_under_cursor <<glyph_start_sel << glyph_end_sel << char_start_sel << char_end_sel );
 }
 
-static bool is_better_size( const ts::ivec2 &need_size, const ts::ivec2 &current_size, const ts::ivec2 &new_size )
+static bool is_better_size( int needpixels, int current_area, int new_area )
 {
-    if (need_size == new_size)
-        return need_size != current_size;
-
-    if ((need_size > current_size) && (new_size >>= need_size))
+    if ( current_area < needpixels && new_area >= needpixels )
         return true;
 
-    int current_area = current_size.x * current_size.y;
-    int new_area = new_size.x * new_size.y;
+    if ( current_area >= needpixels && new_area < needpixels )
+        return false;
 
-    if ((need_size >>= current_size) && (need_size >>= new_size) && new_area < current_area)
-        return true;
-
-    return false;
+    return ts::tabs( needpixels - current_area ) > ts::tabs( needpixels - new_area );
 }
 
-ts::bitmap_c * gui_c::acquire_texture(text_rect_dynamic_c *requester, const ts::ivec2 &size)
+const ts::bitmap_c * gui_c::acquire_texture(text_rect_dynamic_c *requester, ts::ivec2 size)
 {
+    MEMT( MEMT_DYNAMIC_TEXTURE );
+
     texture_s *candidate = nullptr;
 
     static const int max_pool_size = 50;
+    static const int max_height_of_one_texture = 512;
+    static const int max_pixels_capacity = 1024 * 1024; // limit 1M data
+
+    if ( size.y > max_height_of_one_texture )
+        size.t = max_height_of_one_texture;
+
+    int needpixels = size.x * size.y * 4;
+    ASSERT( needpixels > 0 );
+    if ( needpixels > max_pixels_capacity )
+    {
+        needpixels = max_pixels_capacity;
+        size.y = max_pixels_capacity / 4 / size.x;
+    }
 
     if (m_textures.size() < max_pool_size)
     {
@@ -1464,7 +1526,7 @@ ts::bitmap_c * gui_c::acquire_texture(text_rect_dynamic_c *requester, const ts::
         {
             if (tt->owner.expired())
             {
-                if ( candidate == nullptr || is_better_size( size, candidate->texture.info().sz, tt->texture.info().sz ) )
+                if ( candidate == nullptr || is_better_size( needpixels, candidate->pixels_capacity, tt->pixels_capacity ) )
                     candidate = tt;
             }
         }
@@ -1475,7 +1537,7 @@ ts::bitmap_c * gui_c::acquire_texture(text_rect_dynamic_c *requester, const ts::
 
         auto better_time = [&](texture_s *newtt) ->bool
         {
-            int d = ( curt - newtt->owner->last_use_time );
+            int d = ( curt - newtt->lastusetime );
             return (d - max_use_delta) > 5000; // assume better time is > 5 seconds
         };
 
@@ -1487,14 +1549,14 @@ ts::bitmap_c * gui_c::acquire_texture(text_rect_dynamic_c *requester, const ts::
             {
                 if (candidate == nullptr ||
                     !candidate->owner.expired() ||
-                    is_better_size(size, candidate->texture.info().sz, tt->texture.info().sz) )
+                    is_better_size( needpixels, candidate->pixels_capacity, tt->pixels_capacity ) )
                 {
                     candidate = tt;
                     max_use_delta = -INT_MAX;
                 }
-            } else
+            } else if ( requester != tt->owner )
             {
-                if ( (curt - tt->owner->last_use_time) < 5000 )
+                if ( (curt - tt->lastusetime) < 5000 )
                 {
                     postponed.add(tt); // last use was early 5 sec ago
                     continue; // skip it for now
@@ -1503,10 +1565,10 @@ ts::bitmap_c * gui_c::acquire_texture(text_rect_dynamic_c *requester, const ts::
                 if (candidate && candidate->owner.expired())
                     continue;
 
-                if (candidate == nullptr || is_better_size(size, candidate->texture.info().sz, tt->texture.info().sz) || better_time(tt))
+                if (candidate == nullptr || is_better_size(size, candidate->pixels_capacity, tt->pixels_capacity ) || better_time(tt))
                 {
                     candidate = tt;
-                    max_use_delta = curt - tt->owner->last_use_time;
+                    max_use_delta = curt - tt->lastusetime;
                 }
             }
         }
@@ -1516,10 +1578,10 @@ ts::bitmap_c * gui_c::acquire_texture(text_rect_dynamic_c *requester, const ts::
             {
                 ASSERT(!tt->owner.expired());
 
-                if (candidate == nullptr || is_better_size(size, candidate->texture.info().sz, tt->texture.info().sz) || better_time(tt))
+                if (candidate == nullptr || is_better_size(size, candidate->pixels_capacity, tt->pixels_capacity ) || better_time(tt))
                 {
                     candidate = tt;
-                    max_use_delta = curt - tt->owner->last_use_time;
+                    max_use_delta = curt - tt->lastusetime;
                 }
             }
         }
@@ -1533,29 +1595,47 @@ ts::bitmap_c * gui_c::acquire_texture(text_rect_dynamic_c *requester, const ts::
 
     } else if (!candidate->owner.expired())
     {
-        candidate->owner->curtexture = nullptr;
-        candidate->owner.unconnect();
+        candidate->owner->nomoretextures();
+        text_rect_dynamic_c *dt = candidate->owner;
+        for ( texture_s *tt : m_textures )
+        {
+            if ( tt->owner.get() == dt )
+                tt->owner.unconnect();
+        }
     }
 
     candidate->owner = requester;
 
-    return &candidate->texture;
+    if ( candidate->pixels_capacity < needpixels )
+    {
+        candidate->create_ARGB( size );
+        candidate->pixels_capacity = candidate->info().sz.y * candidate->info().pitch;
+    } else
+    {
+        candidate->change_size( size );
+    }
+
+    return candidate;
 }
 
-void gui_c::release_texture(ts::bitmap_c * t)
+void gui_c::release_texture( const ts::bitmap_c *bmp )
+{
+    for ( texture_s *tt : m_textures )
+    {
+        if ( tt == bmp )
+        {
+            tt->owner.unconnect();
+            return;
+        }
+    }
+}
+
+void gui_c::release_textures( text_rect_dynamic_c *requester )
 {
     for(texture_s *tt :m_textures)
     {
-        if (&tt->texture == t)
-        {
-            if (tt->owner)
-            {
-                tt->owner->curtexture = nullptr;
-                tt->owner.unconnect();
-                tt->texture.clear();
-            }
-            break;
-        }
+        if (tt->owner.get() == requester)
+            tt->owner.unconnect();
     }
 }
 
@@ -1567,22 +1647,58 @@ text_rect_dynamic_c::text_rect_dynamic_c()
 
 text_rect_dynamic_c::~text_rect_dynamic_c()
 {
-    if (curtexture && gui)
-        gui->release_texture(curtexture);
+    if ( gui )
+        gui->release_textures( this );
+    curtextures.clear();
 }
 
-/*virtual*/ ts::bitmap_c &text_rect_dynamic_c::texture()
+/*virtual*/ int text_rect_dynamic_c::prepare_textures( const ts::ivec2 &minsz )
 {
-    last_use_time = ts::Time::current();
-    if ( curtexture ) return *curtexture;
+    if ( int n = ok_size( minsz ) )
+    {
+        for ( ;n < curtextures.size(); )
+        {
+            ts::aint trnk = curtextures.size() - 1;
+            gui->release_texture( curtextures.get( trnk ) );
+            curtextures.truncate( trnk );
+        }
+
+        ts::Time curt = ts::Time::current();
+        for ( const ts::bitmap_c *t : curtextures )
+            gui_c::update_texture_time( t, curt );
+
+        return n;
+    }
+
     flags.set(F_INVALID_TEXTURE);
-    curtexture = gui->acquire_texture( this, lastdrawsize);
-    return *curtexture;
+
+    gui->release_textures( this );
+    curtextures.clear();
+
+    for( int rqh = minsz.y; rqh > 0; )
+    {
+        const ts::bitmap_c *t = gui->acquire_texture( this, ts::ivec2(minsz.x, rqh) );
+        curtextures.add(t);
+        rqh -= t->info().sz.y;
+    }
+    return (int)curtextures.size();
 }
-/*virtual*/ void text_rect_dynamic_c::texture_no_need()
+
+/*virtual*/ int text_rect_dynamic_c::get_textures( const ts::bitmap_c **tarr )
 {
-    last_use_time = ts::Time::past();
-    if (curtexture)
-        gui->release_texture( curtexture );
-    ASSERT(curtexture == nullptr);
+    if (tarr)
+        memcpy( tarr, curtextures.begin(), curtextures.size() * sizeof( ts::bitmap_c * ) );
+    return (int)curtextures.size();
+}
+
+
+/*virtual*/ void text_rect_dynamic_c::textures_no_need()
+{
+    gui->release_textures( this );
+    curtextures.clear();
+}
+
+void text_rect_dynamic_c::nomoretextures()
+{
+    curtextures.clear();
 }

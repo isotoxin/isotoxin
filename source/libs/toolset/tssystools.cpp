@@ -8,6 +8,17 @@
 namespace ts
 {
 
+void TSCALL sys_sleep( int ms )
+{
+#ifdef _WIN32
+    Sleep( ms );
+#endif
+#ifdef _NIX
+    usleep( ms * 1000 );
+#endif
+}
+
+
 
 wstr_c  TSCALL monitor_get_description(int monitor)
 {
@@ -108,6 +119,7 @@ irect   TSCALL monitor_get_max_size_fs(int monitor)
 
 irect fix_by_taskbar(irect r)
 {
+#ifdef _WIN32
     if ( HWND taskbar = FindWindowW( L"Shell_TrayWnd", nullptr ) )
     {
         ts::irect tbr;
@@ -128,6 +140,7 @@ irect fix_by_taskbar(irect r)
             }
         }
     }
+#endif
     return r;
 }
 

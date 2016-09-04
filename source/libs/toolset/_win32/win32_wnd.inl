@@ -1201,8 +1201,7 @@ public:
         wchar cdp[ MAX_PATH_LENGTH ];
         GetCurrentDirectoryW( MAX_PATH_LENGTH, cdp );
 
-        OPENFILENAMEW o;
-        memset( &o, 0, sizeof( OPENFILENAMEW ) );
+        OPENFILENAMEW o = {};
 
         wstr_c root( iroot );
         fix_path( root, FNO_FULLPATH );
@@ -1252,8 +1251,7 @@ public:
         wchar cdp[ MAX_PATH_LENGTH ];
         GetCurrentDirectoryW( MAX_PATH_LENGTH, cdp );
 
-        OPENFILENAMEW o;
-        memset( &o, 0, sizeof( OPENFILENAMEW ) );
+        OPENFILENAMEW o = {};
 
         wstr_c root( iroot );
         fix_path( root, FNO_FULLPATH );
@@ -1378,8 +1376,7 @@ public:
         wchar cdp[ MAX_PATH_LENGTH + 16 ];
         GetCurrentDirectoryW( MAX_PATH_LENGTH + 15, cdp );
 
-        OPENFILENAMEW o;
-        memset( &o, 0, sizeof( OPENFILENAMEW ) );
+        OPENFILENAMEW o = {};
 
         wstr_c root( iroot );
         fix_path( root, FNO_FULLPATH );

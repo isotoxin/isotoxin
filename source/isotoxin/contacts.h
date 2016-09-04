@@ -63,23 +63,67 @@ struct contact_key_s
     MOVABLE( true );
     DUMMY(contact_key_s);
 
-    int contactid;  // protocol contact id. >0 - contact, <0 - group
-    int protoid;    // 0 - metacontact. all visible contacts are metacontacts with history and conversation / >0 - protocol contact
+    unsigned contactid : 24;      // contact id (0 - group itself)
+    unsigned is_self : 1;
+    unsigned reserved : 7;  // unused
+    unsigned gid : 16;      // negative group id ( all group id's are negative, so gid is inversed group id )
+    unsigned protoid : 16;       // 0 - metacontact. all visible contacts are metacontacts with history and conversation / >0 - protocol contact
 
     explicit contact_key_s( const ts::asptr&s )
     {
-        ts::ref_cast<int64>(*this) = ts::pstr_c(s).as_num<int64>();
+        ts::ref_cast<uint64>(*this) = ts::pstr_c(s).as_num<uint64>();
     }
-    explicit contact_key_s(int contactid = 0, int protoid = 0):contactid(contactid), protoid(protoid) {}
+    explicit contact_key_s( const ts::str_c&s )
+    {
+        ts::ref_cast<uint64>( *this ) = s.as_num<uint64>();
+    }
+    contact_key_s( const contact_key_s&ck ) { ts::ref_cast<uint64>( *this ) = ts::ref_cast<uint64>( ck ); }
+    explicit contact_key_s( int cid_ ) :contactid( cid_ ), is_self( 0 ), reserved( 0 ), gid( 0 ), protoid( 0 ) {} // meta
+    contact_key_s( int cid_, int ap_ ) :contactid( cid_ ), is_self( 0 ), reserved( 0 ), gid( 0 ), protoid( ( ts::uint16 )ap_ )
+    {
+        if ( cid_ < 0 )
+            contactid = 0, gid = ( ts::uint16 )( -cid_ );
+        else if ( cid_ == 0 && ap_ != 0 )
+            is_self = 1;
+    }
+    contact_key_s( int gid_, int cid_, int ap_ ) :contactid( cid_ ), is_self(0), reserved(0), gid( ( ts::uint16 )( -gid_ ) ), protoid( ( ts::uint16 )ap_ ) { ASSERT( gid_ <= 0 ); }
+    explicit contact_key_s( bool self = false )
+    {
+        ts::ref_cast<uint64>( *this ) = 0;
+        if ( self )
+            is_self = 1;
+    }
+
+    int gidcid() const
+    {
+        return gid ? -(int)gid : contactid;
+    }
+
+    contact_key_s group_key() const
+    {
+        ASSERT( gid > 0 );
+        return contact_key_s( -(int)gid, 0, protoid );
+    }
 
     bool is_meta() const {return protoid == 0 && contactid > 0;}
-    bool is_group() const {return contactid < 0 && protoid > 0;}
-    bool is_self() const {return ts::ref_cast<int64>(*this) == 0; }
-    bool is_empty() const {return ts::ref_cast<int64>(*this) == 0; } //-V524
+    bool is_group() const {return contactid == 0 && protoid > 0 && gid > 0;}
+    bool is_group_contact() const { return contactid > 0 && protoid > 0 && gid > 0; }
+    bool is_empty() const {return ts::ref_cast<uint64>(*this) == 0; }
 
-    bool operator<(const contact_key_s&oc) const { return ts::ref_cast<int64>(*this) < ts::ref_cast<int64>(oc); }
-    bool operator==(const contact_key_s&oc) const { return ts::ref_cast<int64>(*this) == ts::ref_cast<int64>(oc); }
-    bool operator!=(const contact_key_s&oc) const { return ts::ref_cast<int64>(*this) != ts::ref_cast<int64>(oc); }
+    operator uint64() const { return ts::ref_cast<uint64>( *this ); }
+
+    static contact_key_s buildfromdbvalue( int64 v )
+    {
+        contact_key_s k( v & 0xffffffff, v >> 32 );
+        if ( k.is_empty() )
+            k.is_self = true;
+        return k;
+    }
+    int64 dbvalue() const { return (((int64)protoid) << 32) | contactid; }
+
+    bool operator<(const contact_key_s&oc) const { return ts::ref_cast<uint64>(*this) < ts::ref_cast<uint64>(oc); }
+    bool operator==(const contact_key_s&oc) const { return ts::ref_cast<uint64>(*this) == ts::ref_cast<uint64>(oc); }
+    bool operator!=(const contact_key_s&oc) const { return ts::ref_cast<uint64>(*this) != ts::ref_cast<uint64>(oc); }
     int operator()(const contact_key_s&oc) const 
     { 
         return (int)ts::isign( ts::ref_cast<int64>(oc) - ts::ref_cast<int64>(*this) );
@@ -88,10 +132,16 @@ struct contact_key_s
     ts::str_c as_str() const
     {
         ts::str_c s;
-        s.set_as_num<int64>( ts::ref_cast<int64>(*this) );
+        s.set_as_num<uint64>( ts::ref_cast<uint64>(*this) );
         return s;
     }
+
+    contact_key_s avkey() const;
+    contact_key_s ringkey() const;
+    contact_root_c *find_root_contact() const;
 };
+
+TS_STATIC_CHECK( sizeof( contact_key_s ) == sizeof(uint64), "keysize!" );
 
 template<typename STRTYPE> INLINE ts::streamstr<STRTYPE> & operator<<(ts::streamstr<STRTYPE> &dl, const contact_key_s &k)
 {
@@ -106,7 +156,7 @@ template<typename STRTYPE> INLINE ts::streamstr<STRTYPE> & operator<<(ts::stream
 
 INLINE unsigned calc_hash(const contact_key_s &ck)
 {
-    return ts::calc_hash(ck.contactid) ^ ts::hash_func(ts::calc_hash(ck.protoid));
+    return ts::calc_hash( ((uint64)ck) & 0xffffffff ) ^ ts::hash_func(ts::calc_hash( ((uint64)ck ) >> 32 ));
 }
 
 INLINE ts::asptr  calc_message_skin(message_type_app_e mt, const contact_key_s &sender)
@@ -119,7 +169,7 @@ INLINE ts::asptr  calc_message_skin(message_type_app_e mt, const contact_key_s &
         return CONSTASTR("filerecv");
     if (MTA_SEND_FILE == mt)
         return CONSTASTR("filesend");
-    bool by_self = sender.is_self();
+    bool by_self = sender.is_self;
     return by_self ? CONSTASTR("mine") : CONSTASTR("other");
 }
 
@@ -177,10 +227,10 @@ template<> struct gmsg<ISOGM_UPDATE_CONTACT> : public gmsgbase
 
 template<> struct gmsg<ISOGM_PEER_STREAM_OPTIONS> : public gmsgbase
 {
-    gmsg(const contact_key_s &ck, int so, const ts::ivec2 &sz) :gmsgbase(ISOGM_PEER_STREAM_OPTIONS), ck(ck), so(so), videosize(sz) {}
-    contact_key_s ck;
-    int so;
+    gmsg( contact_key_s avkey, int so, const ts::ivec2 &sz) :gmsgbase(ISOGM_PEER_STREAM_OPTIONS), avkey( avkey ), so(so), videosize(sz) {}
+    contact_key_s avkey;
     ts::ivec2 videosize;
+    int so;
 };
 
 template<> struct gmsg<ISOGM_GRABDESKTOPEVENT> : public gmsgbase
@@ -308,7 +358,7 @@ public:
     void protohit(bool f);
 
     bool is_meta() const { return key.is_meta() && getmeta() == nullptr; }; // meta, but not group
-    bool is_rootcontact() const { return !opts.is(F_UNKNOWN) && (is_meta() || getkey().is_group() || getkey().is_self()); } // root contact - in contact list
+    bool is_rootcontact() const { return !opts.is(F_UNKNOWN) && (is_meta() || getkey().is_group() || (getkey().protoid == 0 && getkey().is_self)); } // root contact - in contact list
 
     bool is_rejected() const { return CS_REJECTED == get_state() || get_options().unmasked().is( F_JUST_REJECTED ); };
 
@@ -415,6 +465,7 @@ class contact_root_c : public contact_c // metas and groups
     auto_accept_audio_call_e aaac = AAAC_NOT;
     msg_handler_e mht = MH_NOT;
     int imnb = 0; // incoming message notification behavior
+    ts::Time last_history_touch = ts::Time::past();
 
 public:
     ts::safe_ptr<gui_contact_item_c> gui_item;
@@ -449,7 +500,7 @@ public:
     bool subpresent( int protoid ) const
     {
         for ( contact_c *c : subcontacts )
-            if ( c->getkey().protoid == protoid ) return true;
+            if ( c->getkey().protoid == (unsigned)protoid ) return true;
         return false;
     }
     contact_c * subgetadd(const contact_key_s&k);
@@ -526,8 +577,12 @@ public:
 
     void del_history(uint64 utag);
 
+    void add_message( const ts::str_c& utf8msg ); // add system message to conversation (don't update history)
+
     post_s& add_history()
     {
+        history_touch();
+
         post_s &p = history.add();
         p.recv_time = nowtime();
         p.cr_time = p.recv_time;
@@ -535,6 +590,8 @@ public:
     }
     post_s& add_history(time_t recv_t, time_t send_t)
     {
+        history_touch();
+
         ts::aint cnt = history.size();
         for (int i = 0; i < cnt; ++i)
         {
@@ -552,7 +609,15 @@ public:
         return p;
     }
 
-    //void load_history(); // whole
+    void history_touch()
+    {
+        last_history_touch = ts::Time::current();
+    }
+    bool is_ancient_history()
+    {
+        return (ts::Time::current() - last_history_touch) > 10000; // assume 10 seconds is ancient enough
+    }
+
     void load_history( ts::aint n_last_items);
     void unload_history()
     {
@@ -563,6 +628,8 @@ public:
 
     const post_s *find_post_by_utag(uint64 utg) const
     {
+        const_cast<contact_root_c *>(this)->history_touch();
+
         for (const post_s &p : history)
             if (p.utag == utg)
                 return &p;
@@ -571,16 +638,20 @@ public:
 
     template<typename F> void iterate_history(F f) const
     {
+        const_cast<contact_root_c *>( this )->history_touch();
+
         for (const post_s &p : history)
             if (f(p)) return;
     }
     template<typename F> void iterate_history(F f)
     {
+        history_touch();
         for (post_s &p : history)
             if (f(p)) return;
     }
     template<typename F> int iterate_history_changetime(F f) // return last iterated post index
     {
+        history_touch();
         int r = -1;
         ts::tmp_array_inplace_t<post_s, 4> temp;
         for (int i = 0; i < history.size();)
@@ -726,7 +797,6 @@ template<> struct gmsg<ISOGM_V_UPDATE_CONTACT> : public gmsgbase
 template<> struct gmsg<ISOGM_INCOMING_MESSAGE> : public gmsgbase
 {
     gmsg() :gmsgbase(ISOGM_INCOMING_MESSAGE) {}
-    contact_key_s groupchat;
     contact_key_s sender;
     time_t create_time;
     message_type_app_e mt;
@@ -798,6 +868,7 @@ template<> struct gmsg<ISOGM_MESSAGE> : public gmsgbase
     contact_c *receiver = nullptr;
     bool current = false;
     bool resend = false;
+    bool info = false;
 
     contact_root_c *get_historian()
     {
@@ -842,6 +913,7 @@ class contacts_c
     ts::buf0_c enabled_tags;
 
     int sorttag = 0;
+    int cleanup_index = 0;
 
 public:
 
@@ -928,6 +1000,8 @@ public:
     void rebuild_tags_bits(bool refresh_ui = true);
     void toggle_tag( ts::aint i);
     bool is_tag_enabled( ts::aint i) const { return enabled_tags.get_bit(i); };
+
+    void cleanup(); // tries to free some memory; can be rarely called (once per 5 seconds)
 };
 
 extern ts::static_setup<contacts_c> contacts;

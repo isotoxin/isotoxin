@@ -496,7 +496,7 @@ int CALLBACK WinMain(
 {
     g_module = hInstance;
 #if defined _DEBUG || defined _CRASH_HANDLER
-#include "appver.inl"
+#include "../appver.inl"
     exception_operator_c::set_unhandled_exception_filter();
     exception_operator_c::dump_filename = fn_change_name_ext(get_exe_full_name(), wstr_c(CONSTWSTR("plghost")).append_char('.').appendcvt(SS(APPVERD)).as_sptr(), 
 #ifdef MODE64
@@ -842,6 +842,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             int id = r.get<int>();
             call_info_s cinf;
             cinf.audio_data = r.get_data(cinf.audio_data_size);
+            cinf.ms_monotonic = r.get<u64>();
             protolib.functions->send_av(id, &cinf);
         }
         break;
@@ -965,7 +966,10 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
                 int w;
                 int h;
                 int fmt;
+                u64 msmonotonic;
+                u64 padding;
             };
+            static_assert( sizeof( inf_s ) == VIDEO_FRAME_HEADER_SIZE, "size!" );
 
             inf_s *inf = (inf_s *)(d + 1);
             call_info_s ci;
@@ -973,6 +977,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             ci.w = inf->w;
             ci.h = inf->h;
             ci.fmt = (video_fmt_e)inf->fmt;
+            ci.ms_monotonic = inf->msmonotonic;
 
             int r = protolib.functions->send_av(inf->cid, &ci);
             if (r == SEND_AV_KEEP_VIDEO_DATA)
@@ -1077,7 +1082,7 @@ static void __stdcall update_contact(const contact_data_s *cd)
 static void __stdcall message(message_type_e mt, int gid, int cid, u64 create_time, const char *msgbody_utf8, int mlen)
 {
     static u64 last_createtime = 0;
-    static byte lastmessage_md5[16] = { 0 };
+    static byte lastmessage_md5[16] = {};
     if (mt == MT_MESSAGE && (create_time - last_createtime) < 60)
     {
         md5_c md5;
@@ -1124,7 +1129,7 @@ static void __stdcall av_data(int gid, int cid, const media_data_s *data)
     {
         IPCW(HQ_AUDIO) << gid << cid
             << data->afmt.sample_rate << data->afmt.channels << data->afmt.bits
-            << data_block_s(data->audio_frame, data->audio_framesize);
+            << data_block_s(data->audio_frame, data->audio_framesize) << data->msmonotonic;
     }
 
     struct inf_s
@@ -1133,7 +1138,11 @@ static void __stdcall av_data(int gid, int cid, const media_data_s *data)
         int cid;
         int w;
         int h;
+        u64 msmonotonic;
+        u64 padding;
     };
+
+    static_assert( sizeof(inf_s) == VIDEO_FRAME_HEADER_SIZE, "size!" );
 
     if (data->vfmt.fmt != VFMT_NONE)
     {
@@ -1153,6 +1162,7 @@ static void __stdcall av_data(int gid, int cid, const media_data_s *data)
                 d2s->cid = cid;
                 d2s->w = data->vfmt.width;
                 d2s->h = data->vfmt.height;
+                d2s->msmonotonic = data->msmonotonic;
 
                 byte *body = (byte *)(d2s + 1);
 
@@ -1186,6 +1196,7 @@ static void __stdcall av_data(int gid, int cid, const media_data_s *data)
                 d2s->cid = cid;
                 d2s->w = data->vfmt.width;
                 d2s->h = data->vfmt.height;
+                d2s->msmonotonic = data->msmonotonic;
 
                 byte *body = (byte *)(d2s + 1);
 

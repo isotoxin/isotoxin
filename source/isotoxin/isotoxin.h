@@ -70,9 +70,10 @@ INLINE ipcr & operator>>(ipcr &r, ts::astrings_c &s)
 
 #include "tools.h"
 #include "mediasystem.h"
-#include "videoprocessing.h"
 
 #include "contacts.h"
+#include "videoprocessing.h"
+
 #include "config.h"
 #include "activeprotocol.h"
 #include "profile.h"
@@ -96,7 +97,52 @@ INLINE ipcr & operator>>(ipcr &r, ts::astrings_c &s)
 #include "smileselector.h"
 #include "prepareimage.h"
 #include "colors.h"
+#include "avcontact.h"
 
 #include "res/resource.h"
 #include "application.h"
 
+
+enum mem_types_app_e
+{
+    MEMT_AUTOUPDATER = MEMT_RECTANGLES_LAST + 1,
+    MEMT_STR_APPVER,
+    MEMT_APP_COMMON,
+    MEMT_BMP_ICONS,
+    MEMT_CONVERSATION,
+    MEMT_MESSAGE_EDIT,
+    MEMT_MESSAGELIST_1,
+    MEMT_MESSAGELIST_2,
+    MEMT_MESSAGELIST_3,
+    MEMT_MESSAGE_ITEM_1,
+    MEMT_MESSAGE_ITEM_2,
+    MEMT_MESSAGE_ITEM,
+    MEMT_CONTACTLIST,
+    MEMT_CONTACT_ITEM,
+    MEMT_CONTACT_ITEM_TEXT,
+    MEMT_CONTACT_ITEM_1,
+    MEMT_CONVERSATION_HEADER,
+    MEMT_CSEPARATOR,
+    MEMT_NOTICE_NETWORK,
+    MEMT_SPELLCHK,
+    MEMT_PROFILE_COMMON,
+    MEMT_PROFILE_CONF,
+    MEMT_PROFILE_HISTORY,
+
+#define TAB(tab) MEMT_PROFILE_##tab,
+    PROFILE_TABLES
+#undef TAB
+
+    MEMT_CONTACTS,
+    MEMT_AP,
+    MEMT_AP_ICON,
+    MEMT_MAINRECT,
+    MEMT_NEWPROTOUI,
+    MEMT_SMILEUI,
+    MEMT_FILTERBAR,
+    MEMT_CUSTOMIZE,
+    MEMT_AVATARS,
+    MEMT_CONFIG,
+
+    MEMT_count
+};

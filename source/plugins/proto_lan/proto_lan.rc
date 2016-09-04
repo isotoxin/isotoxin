@@ -1,6 +1,6 @@
 // Microsoft Visual C++ generated resource script.
 //
-#include "appver.inl"
+#include "../appver.inl"
 
 #define APSTUDIO_READONLY_SYMBOLS
 /////////////////////////////////////////////////////////////////////////////

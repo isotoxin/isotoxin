@@ -262,7 +262,7 @@ struct gb_svg_s : public generated_button_data_s
     gb_svg_s(const ts::abp_c *gen, const colors_map_s &colsmap, const ts::str_c &svgs, bool one_face)
     {
         ts::TSCOLOR col[button_desc_s::numstates];
-        float shift[button_desc_s::numstates] = { 0 };
+        float shift[button_desc_s::numstates] = {};
         ts::str_c ins[button_desc_s::numstates];
 
         col[button_desc_s::NORMAL] = colsmap.parse(gen->get_string(CONSTASTR("color")), ts::ARGB(255, 255, 255));

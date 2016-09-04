@@ -43,9 +43,11 @@ struct Format
         return channels != f.channels || bitsPerSample != f.bitsPerSample || sampleRate != f.sampleRate;
     }
 
-    int blockAlign() const { return channels * (bitsPerSample / 8); }
-    int avgBytesPerSec() const { return blockAlign() * sampleRate; }
-    int avgBytesPerMSecs(int ms) const { return blockAlign() * sampleRate * ms / 1000; }
+    int sampleSize() const { return channels * (bitsPerSample / 8); }
+    int avgBytesPerSec() const { return sampleSize() * sampleRate; }
+    int avgBytesPerMSecs(int ms) const { return sampleSize() * (sampleRate * ms / 1000); }
+    int bytesToMSec( int bytes ) const { return bytes * 1000 / ( sampleSize() * sampleRate ); }
+    int samplesToMSec( int samples ) const { return samples * 1000 / sampleRate; }
 
 };
 

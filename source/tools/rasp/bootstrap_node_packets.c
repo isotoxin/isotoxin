@@ -36,7 +36,7 @@ static uint16_t bootstrap_motd_length;
  */
 
 //typedef int (*packet_handler_callback)(void *object, IP_Port ip_port, const uint8_t *data, uint16_t len);
-static int handle_info_request(void *object, IP_Port source, const uint8_t *packet, uint16_t length)
+static int handle_info_request(void *object, IP_Port source, const uint8_t *packet, uint16_t length, void *)
 {
     if (length != INFO_REQUEST_PACKET_LENGTH)
         return 1;

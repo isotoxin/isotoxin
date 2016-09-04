@@ -14,6 +14,10 @@ namespace spinlock
 #endif // _FINAL
 #endif
 
+#ifdef _DEBUG
+int THREADLOCAL g_current_memt = 0;
+#endif // _DEBUG
+
 namespace ts
 {
     tmpalloc_c::tmpalloc_c()
@@ -201,7 +205,7 @@ tmpalloc_c tmpb;
 	{
 		fileop_init()
 		{
-			g_fileop = TSNEW( tsfileop_def_c );
+			g_fileop = TSNEW_T( MEMT_FILEOP, tsfileop_def_c );
 		}
 		~fileop_init()
 		{

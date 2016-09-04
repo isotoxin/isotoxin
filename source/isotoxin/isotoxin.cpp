@@ -27,11 +27,10 @@
 #pragma comment(lib, "hunspelld.lib")
 #endif
 
+#pragma comment (lib, "shared.lib")
+
 #pragma comment (lib, "freetype.lib")
-#pragma comment(lib, "zlib.lib")
 #pragma comment(lib, "minizip.lib")
-#pragma comment(lib, "curl.lib")
-#pragma comment(lib, "libsodium.lib")
 #pragma comment(lib, "libqrencode.lib")
 #pragma comment(lib, "cairo.lib")
 
@@ -39,7 +38,6 @@
 #pragma comment(lib, "Msacm32.lib")
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "Shlwapi.lib")
-#pragma comment(lib, "Ws2_32.lib")
 
 #ifdef _WIN32
 #include "toolset/_win32/win32_inc.inl"
@@ -268,13 +266,16 @@ bool _cdecl ts::app_preinit( const wchar_t *cmdl )
 
 
 #if defined _DEBUG || defined _CRASH_HANDLER
-    set_dump_filename( ts::fn_change_name_ext( ts::get_exe_full_name(), ts::wstr_c( CONSTWSTR( APPNAME ) ).append_char( '.' ).append( ts::to_wstr( application_c::appver() ) ).as_sptr(), 
+    {
+        MEMT( MEMT_TEMP );
+        set_dump_filename( ts::fn_change_name_ext( ts::get_exe_full_name(), ts::wstr_c( CONSTWSTR( APPNAME ) ).append_char( '.' ).append( ts::to_wstr( application_c::appver() ) ).as_sptr(),
 
 #ifdef MODE64
         CONSTWSTR( "x64.dmp" ) ) );
 #else
         CONSTWSTR( "dmp" ) ) );
 #endif // MODE64                   
+    }
 
 #endif
 
@@ -283,6 +284,8 @@ bool _cdecl ts::app_preinit( const wchar_t *cmdl )
 #ifndef _FINAL
     dotests0();
 #endif
+
+    MEMT( MEMT_APP_COMMON );
 
     ts::wstrings_c fns;
     ts::g_fileop->find( fns, CONSTWSTR( "loc/*.lng*.lng" ), false );

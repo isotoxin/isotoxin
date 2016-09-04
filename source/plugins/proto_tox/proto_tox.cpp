@@ -9,6 +9,7 @@
 #include "sodium.h"
 
 #include "curl/include/curl/curl.h"
+#include "../../shared/shared.h"
 
 //#pragma warning(disable : 4505)
 #include <vpx/vpx_decoder.h>
@@ -28,15 +29,6 @@
 
 #define TOX_ENC_SAVE_MAGIC_NUMBER "toxEsave"
 #define TOX_ENC_SAVE_MAGIC_LENGTH 8
-
-#define TOX_GROUPCHAT_TYPE_TEXT ISOTOXIN_GROUPCHAT_TYPE_TEXT
-#define TOX_GROUPCHAT_TYPE_AV ISOTOXIN_GROUPCHAT_TYPE_AV
-#define TOX_CHAT_CHANGE_PEER_ADD ISOTOXIN_CHAT_CHANGE_PEER_ADD
-#define TOX_CHAT_CHANGE_PEER_DEL ISOTOXIN_CHAT_CHANGE_PEER_DEL
-#define TOX_CHAT_CHANGE_PEER_NAME ISOTOXIN_CHAT_CHANGE_PEER_NAME
-#define TOX_CHAT_CHANGE ISOTOXIN_CHAT_CHANGE
-
-#include "toxcore/toxcore/tox_old.h"
 
 #define PACKET_ID_ONLINE 24
 #define PACKET_ID_OFFLINE 25
@@ -61,9 +53,7 @@
 
 #pragma USELIB("plgcommon")
 
-#pragma comment(lib, "libsodium.lib")
-#pragma comment(lib, "opus.lib")
-#pragma comment(lib, "libvpx.lib")
+#pragma comment(lib, "shared.lib")
 
 #if defined _DEBUG_OPTIMIZED || defined _FINAL
 #pragma comment(lib, "toxcore.lib")
@@ -77,13 +67,12 @@
 #pragma comment(lib, "Msacm32.lib")
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "Iphlpapi.lib")
-#pragma comment(lib, "curl.lib")
 
 #if defined _FINAL || defined _DEBUG_OPTIMIZED
 #include "crt_nomem/crtfunc.h"
 #endif
 
-#include "appver.inl"
+#include "../appver.inl"
 
 #define PACKETID_EXTENSION 174
 #define PACKETID_VIDEO_EX 175
@@ -104,7 +93,7 @@ static Tox_Options options;
 static sstr_t<256> tox_proxy_host;
 static uint16_t tox_proxy_port;
 static i32 tox_proxy_type = 0;
-static byte avahash[TOX_HASH_LENGTH] = { 0 };
+static byte avahash[TOX_HASH_LENGTH] = {};
 static std::vector<byte> gavatar;
 static int gavatag = 0;
 static bool reconnect = false;
@@ -141,77 +130,6 @@ void set_proxy_curl( CURL *curl )
         curl_easy_setopt( curl, CURLOPT_PROXYPORT, tox_proxy_port );
         curl_easy_setopt( curl, CURLOPT_PROXYTYPE, pt );
     }
-}
-
-void set_common_curl_options( CURL *curl )
-{
-    curl_easy_setopt( curl, CURLOPT_USERAGENT, "curl" );
-    curl_easy_setopt( curl, CURLOPT_FOLLOWLOCATION, 1 );
-
-    curl_easy_setopt( curl, CURLOPT_PROXY, nullptr );
-    curl_easy_setopt( curl, CURLOPT_MAXREDIRS, 50 );
-    curl_easy_setopt( curl, CURLOPT_TCP_KEEPALIVE, 1 );
-    curl_easy_setopt( curl, CURLOPT_USERAGENT, "curl" );
-
-    curl_easy_setopt( curl, CURLOPT_NOPROGRESS, 0 );
-    curl_easy_setopt( curl, CURLOPT_HEADER, 0 );
-    curl_easy_setopt( curl, CURLOPT_PROXY, nullptr );
-    curl_easy_setopt( curl, CURLOPT_PROXYUSERPWD, nullptr );
-    curl_easy_setopt( curl, CURLOPT_USERPWD, nullptr );
-    curl_easy_setopt( curl, CURLOPT_KEYPASSWD, nullptr );
-    curl_easy_setopt( curl, CURLOPT_RANGE, nullptr );
-    curl_easy_setopt( curl, CURLOPT_HTTPPROXYTUNNEL, 0 );
-    curl_easy_setopt( curl, CURLOPT_NOPROXY, nullptr );
-    curl_easy_setopt( curl, CURLOPT_FAILONERROR, 0 );
-    curl_easy_setopt( curl, CURLOPT_UPLOAD, 0 );
-    curl_easy_setopt( curl, CURLOPT_DIRLISTONLY, 0 );
-    curl_easy_setopt( curl, CURLOPT_APPEND, 0 );
-    curl_easy_setopt( curl, CURLOPT_NETRC, CURL_NETRC_IGNORED );
-    curl_easy_setopt( curl, CURLOPT_TRANSFERTEXT, 0 );
-
-    //char errorbuffer[CURL_ERROR_SIZE];
-    //curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errorbuffer);
-    curl_easy_setopt( curl, CURLOPT_TIMEOUT_MS, 0ull );
-    curl_easy_setopt( curl, CURLOPT_UNRESTRICTED_AUTH, 0 );
-    curl_easy_setopt( curl, CURLOPT_REFERER, nullptr );
-    curl_easy_setopt( curl, CURLOPT_AUTOREFERER, 0 );
-    curl_easy_setopt( curl, CURLOPT_HTTPHEADER, nullptr );
-    curl_easy_setopt( curl, CURLOPT_POSTREDIR, 0 );
-    curl_easy_setopt( curl, CURLOPT_FTPPORT, 0 );
-    curl_easy_setopt( curl, CURLOPT_LOW_SPEED_LIMIT, 0 );
-    curl_easy_setopt( curl, CURLOPT_LOW_SPEED_TIME, 0 );
-    curl_easy_setopt( curl, CURLOPT_MAX_SEND_SPEED_LARGE, 0ull );
-    curl_easy_setopt( curl, CURLOPT_MAX_RECV_SPEED_LARGE, 0ull );
-    curl_easy_setopt( curl, CURLOPT_RESUME_FROM_LARGE, 0ull );
-    curl_easy_setopt( curl, CURLOPT_SSLCERT, nullptr );
-    curl_easy_setopt( curl, CURLOPT_SSLCERTTYPE, nullptr );
-    curl_easy_setopt( curl, CURLOPT_SSLKEY, nullptr );
-    curl_easy_setopt( curl, CURLOPT_SSLKEYTYPE, nullptr );
-    curl_easy_setopt( curl, CURLOPT_SSL_VERIFYPEER, 0 );
-    curl_easy_setopt( curl, CURLOPT_SSL_VERIFYHOST, 0 );
-    curl_easy_setopt( curl, CURLOPT_SSLVERSION, 0 );
-    curl_easy_setopt( curl, CURLOPT_CRLF, 0 );
-    curl_easy_setopt( curl, CURLOPT_QUOTE, nullptr );
-    curl_easy_setopt( curl, CURLOPT_POSTQUOTE, nullptr );
-    curl_easy_setopt( curl, CURLOPT_PREQUOTE, nullptr );
-    curl_easy_setopt( curl, CURLOPT_COOKIESESSION, 0 );
-    curl_easy_setopt( curl, CURLOPT_TIMECONDITION, 0 );
-    curl_easy_setopt( curl, CURLOPT_TIMEVALUE, 0 );
-    curl_easy_setopt( curl, CURLOPT_CUSTOMREQUEST, nullptr );
-    //curl_easy_setopt(curl, CURLOPT_STDERR, stdout);
-    curl_easy_setopt( curl, CURLOPT_INTERFACE, nullptr );
-    curl_easy_setopt( curl, CURLOPT_KRBLEVEL, nullptr );
-    curl_easy_setopt( curl, CURLOPT_TELNETOPTIONS, nullptr );
-    curl_easy_setopt( curl, CURLOPT_RANDOM_FILE, nullptr );
-    curl_easy_setopt( curl, CURLOPT_EGDSOCKET, nullptr );
-    curl_easy_setopt( curl, CURLOPT_CONNECTTIMEOUT_MS, 0 );
-    curl_easy_setopt( curl, CURLOPT_FTP_CREATE_MISSING_DIRS, 0 );
-    curl_easy_setopt( curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_WHATEVER );
-    curl_easy_setopt( curl, CURLOPT_FTP_ACCOUNT, nullptr );
-    curl_easy_setopt( curl, CURLOPT_IGNORE_CONTENT_LENGTH, 0 );
-    curl_easy_setopt( curl, CURLOPT_FTP_SKIP_PASV_IP, 0 );
-    curl_easy_setopt( curl, CURLOPT_FTP_FILEMETHOD, 0 );
-    curl_easy_setopt( curl, CURLOPT_FTP_ALTERNATIVE_TO_USER, nullptr );
 }
 
 template<typename checker> u64 random64( const checker &ch )
@@ -1376,7 +1294,7 @@ struct discoverer_s
         return true;
     }
 
-    static size_t header_callback( char *buffer, size_t size, size_t nitems, void *userdata )
+    static size_t header_callback( char * /*buffer*/, size_t size, size_t nitems, void * /*userdata*/ )
     {
         return size * nitems;
     }
@@ -2003,7 +1921,7 @@ public:
     int avatar_recv_fnn = -1; // receiving file number
     int avatag_self = -1; // tag of self avatar, if not equal to gavatag, then should be transfered (gavatag increased every time self avatar changed)
     std::vector<byte> avatar; // contact's avatar itself
-    byte avatar_hash[TOX_HASH_LENGTH];
+    byte avatar_hash[ TOX_HASH_LENGTH ] = {};
 
     contact_state_e state = CS_ROTTEN;
     str_c pubid;
@@ -2069,7 +1987,7 @@ public:
     {
         if (!ISFLAG(flags, F_DETAILS_SENT))
         {
-            byte idbytes[TOX_PUBLIC_KEY_SIZE] = {0};
+            byte idbytes[TOX_PUBLIC_KEY_SIZE] = {};
             if (!iid)
             {
                 if (is_fid_ok() && get_fid() >= 0)
@@ -2311,7 +2229,6 @@ void message2send_s::try_send(int time)
 
 contact_descriptor_s::contact_descriptor_s(idgen_e init_new_id, int fid_) :pubid(TOX_ADDRESS_SIZE * 2, true), fid( fid_ )
 {
-    memset(avatar_hash, 0, sizeof(avatar_hash));
     LIST_ADD(this, first_desc, last_desc, prev, next);
 
     if (init_new_id)
@@ -2952,7 +2869,7 @@ static void cb_tox_file_recv(Tox *, uint32_t fid, uint32_t filenumber, uint32_t 
 
             } else
             {
-                byte hash[TOX_HASH_LENGTH] = {0};
+                byte hash[TOX_HASH_LENGTH] = {};
                 if (!tox_file_get_file_id(tox,fid,filenumber,hash,nullptr) || 0 == memcmp(hash, desc->avatar_hash, TOX_HASH_LENGTH))
                 {
                     // same avatar - cancel avatar transfer
@@ -3386,7 +3303,7 @@ static void audio_sender()
             if ((ss.next_time_send - ct) < 0) ss.next_time_send = ct + audio_frame_duration/2;
 
             if (req_frame_size >(int)prebuffer.size()) prebuffer.resize(req_frame_size);
-            aint samples = ss.fifo.read_data(prebuffer.data(), req_frame_size) / fmt.blockAlign();
+            aint samples = ss.fifo.read_data(prebuffer.data(), req_frame_size) / fmt.sampleSize();
             int remote_so = d->cip->remote_so.options;
 
             if (0 == (remote_so & SO_RECEIVING_AUDIO))
@@ -3765,12 +3682,12 @@ static TOX_ERR_NEW prepare()
     tox_callback_friend_lossless_packet(tox, cb_isotoxin, nullptr);
 
     tox_callback_friend_request(tox, cb_friend_request, nullptr);
-    tox_callback_friend_message(tox, cb_friend_message, nullptr);
-    tox_callback_friend_name(tox, cb_name_change, nullptr);
-    tox_callback_friend_status_message(tox, cb_status_message, nullptr);
-    tox_callback_friend_status(tox, cb_friend_status, nullptr);
-    tox_callback_friend_typing(tox, cb_friend_typing, nullptr);
-    tox_callback_friend_read_receipt(tox, cb_read_receipt, nullptr);
+    tox_callback_friend_message(tox, cb_friend_message);
+    tox_callback_friend_name(tox, cb_name_change);
+    tox_callback_friend_status_message(tox, cb_status_message);
+    tox_callback_friend_status(tox, cb_friend_status);
+    tox_callback_friend_typing(tox, cb_friend_typing);
+    tox_callback_friend_read_receipt(tox, cb_read_receipt);
     tox_callback_friend_connection_status(tox, cb_connection_status, nullptr);
 
     tox_callback_group_invite(tox, cb_group_invite, nullptr);
@@ -3919,7 +3836,7 @@ void __stdcall tick(int *sleep_time_ms)
         if ((curt - nextt) > 0)
         {
             //DWORD xxx = time_ms();
-            tox_iterate(tox);
+            tox_iterate(tox, nullptr);
             //DWORD yyy = time_ms();
             //DWORD zzz = yyy - xxx;
             nextt = curt + tox_iteration_interval(tox);

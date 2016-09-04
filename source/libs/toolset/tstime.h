@@ -62,11 +62,11 @@ struct timer_subscriber_entry_s
 {
     MOVABLE(false);
 
-    void *                      param;
-    double                      ttl;
-    iweak_ptr<timer_subscriber_c>  hook;
+    double ttl;
+    iweak_ptr<timer_subscriber_c> hook;
+    void * param;
 
-    timer_subscriber_entry_s(timer_subscriber_c *s, double _ttl, void *p) :hook(s), ttl(_ttl), param(p) {}
+    timer_subscriber_entry_s(timer_subscriber_c *s, double _ttl, void *p ) :hook(s), ttl(_ttl), param(p) {}
     ~timer_subscriber_entry_s()
     {
         if (hook)
@@ -76,32 +76,25 @@ struct timer_subscriber_entry_s
 
 class timerprocessor_c
 {
+    MOVABLE( false );
 
-    array_del_t<timer_subscriber_entry_s, 32> m_items;
-    array_del_t<timer_subscriber_entry_s, 32> m_items_free;
-
-    timer_subscriber_entry_s *getfree( timer_subscriber_c *s, double _ttl, void *p )
+    enum
     {
-        if (m_items_free.size())
-        {
-            timer_subscriber_entry_s * itm = m_items_free.get_last_remove();
-            itm->param = p;
-            itm->ttl = _ttl;
-            itm->hook = s;
-            return itm;
-        }
-        return TSNEW( timer_subscriber_entry_s, s, _ttl, p );
-    }
+        GRANULA = 16
+    };
 
-    void makefree( timer_subscriber_entry_s *itm )
-    {
-        m_items_free.add(itm);
-    }
+    pointers_t<timer_subscriber_entry_s, GRANULA> m_items;
+    struct_buf_t<timer_subscriber_entry_s, GRANULA> m_pool;
 
 public:
 
     timerprocessor_c() {}
-    ~timerprocessor_c() {}
+    ~timerprocessor_c()
+    {
+        clear();
+    }
+
+    void cleanup();
 
     float   takt(double dt); // return next time event
     void    add(timer_subscriber_c *t, double ttl, void * par, bool delete_same = true);

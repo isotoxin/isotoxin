@@ -1,5 +1,7 @@
 #pragma once
 
+#include "zlib/src/zlib.h"
+
 namespace ts
 {
     // filesystem
@@ -359,7 +361,7 @@ public:
 
     uint32    crc() const
     {
-        return CRC32(core(), core.size());
+        return crc32( crc32(0,nullptr,0), core(), (uint)core.size());
     }
 
 
@@ -1153,7 +1155,7 @@ public:
     // math
     T average() const
     {
-        T sum = { 0 };
+        T sum = {};
         if (count() == 0) return sum;
         for (const T & t : *this)
             sum += t;
@@ -1161,7 +1163,7 @@ public:
     }
     T sum() const
     {
-        T sum = { 0 };
+        T sum = {};
         for (const T & t : *this)
             sum += t;
         return sum;
@@ -1253,6 +1255,133 @@ public:
         }
     }
 
+};
+
+template< typename T, aint GRANULA > class struct_buf_t
+{
+    MOVABLE( false );
+
+    struct sset_s;
+    struct free_item_s
+    {
+        ts::make_pod<T> dummy;
+
+        union
+        {
+            free_item_s * next;
+            sset_s *owner;
+        };
+    };
+
+    struct sset_s
+    {
+        sset_s * prev = nullptr;
+        sset_s * next = nullptr;
+
+        free_item_s items[ GRANULA ];
+        free_item_s * free_items_list;
+        int free_items_count = ARRAY_SIZE( items );
+
+        sset_s()
+        {
+            for ( int i = 0; i < ( ARRAY_SIZE( items ) - 1 ); ++i )
+            {
+                items[ i ].next = items + i + 1;
+            }
+            items[ ARRAY_SIZE( items ) - 1 ].next = nullptr;
+            free_items_list = items;
+        }
+        ~sset_s()
+        {
+            ASSERT( free_items_count == ARRAY_SIZE( items ) );
+        }
+
+        template<class TT, class... _Valty> TT * acquire( _Valty&&... _Val )
+        {
+            if ( free_items_list )
+            {
+                free_item_s *fi = free_items_list;
+                free_items_list = free_items_list->next;
+                TT *t = (TT *)&fi->dummy;
+                fi->owner = this;
+                TSPLACENEW( t, std::forward<_Valty>( _Val )... );
+                --free_items_count;
+                return t;
+            }
+            return nullptr;
+        }
+        bool addtofreelist( free_item_s * fi )
+        {
+            fi->next = free_items_list;
+            free_items_list = fi;
+            ++free_items_count;
+            return free_items_count == ARRAY_SIZE( items );
+        }
+    };
+
+    sset_s * set_first;
+    sset_s * set_last;
+public:
+    struct_buf_t()
+    {
+        set_first = TSNEW(sset_s);
+        set_last = set_first;
+    }
+    ~struct_buf_t()
+    {
+        ASSERT( set_first == set_last && set_last && set_last->next == nullptr );
+        TSDEL( set_first );
+    }
+
+    template<typename TT, class... _Valty> TT *alloc_t( _Valty&&... _Val )
+    {
+        TS_STATIC_CHECK( sizeof( TT ) == sizeof(T), "check size" );
+        ASSERT( set_first );
+
+        if ( TT * t = set_first->acquire<TT>( std::forward<_Valty>( _Val )... ) )
+        {
+            if ( set_first->free_items_count == 0 )
+            {
+                sset_s *x = set_first;
+                // put full sset to end of list
+                LIST_DEL( x, set_first, set_last, prev, next );
+                LIST_ADD( x, set_first, set_last, prev, next );
+            }
+            return t;
+        }
+
+        sset_s *x = TSNEW( sset_s );
+        LIST_INSERT( x, set_first, set_last, prev, next ); // insert into begining of list
+        return x->acquire<TT>( std::forward<_Valty>( _Val )... );
+    }
+    template<class... _Valty> T *alloc( _Valty&&... _Val )
+    {
+        return alloc_t<T>( std::forward<_Valty>( _Val )... );
+    }
+
+    template <typename TT> void dealloc_t( TT *itm )
+    {
+        sset_s *x = ((free_item_s *)itm)->owner;
+        itm->~TT();
+        if ( x->addtofreelist( (free_item_s *)itm ) )
+        {
+            // fully empty
+            if ( set_first != set_last ) // don't kill last
+            {
+                LIST_DEL( x, set_first, set_last, prev, next );
+                TSDEL( x );
+            }
+        }
+        else
+        {
+            LIST_DEL( x, set_first, set_last, prev, next );
+            LIST_INSERT( x, set_first, set_last, prev, next ); // insert into begining of list due it has free items
+        }
+    }
+    void dealloc( T *itm )
+    {
+        dealloc_t<T>( itm );
+    }
 };
 
 

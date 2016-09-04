@@ -56,12 +56,14 @@ Source: "..\~inno\plghost.exe"; DestDir: "{app}"; Flags: ignoreversion 32bit    
 Source: "..\~inno\proto.lan.dll"; DestDir: "{app}"; Flags: ignoreversion 32bit          ; Check: not Is64BitInstallMode
 Source: "..\~inno\proto.tox.dll"; DestDir: "{app}"; Flags: ignoreversion 32bit          ; Check: not Is64BitInstallMode
 Source: "..\~inno\proto.xmp.dll"; DestDir: "{app}"; Flags: ignoreversion 32bit          ; Check: not Is64BitInstallMode
+Source: "..\~inno\shared.dll"; DestDir: "{app}"; Flags: ignoreversion 32bit          ; Check: not Is64BitInstallMode
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 Source: "..\~inno\64\isotoxin.exe"; DestDir: "{app}"; Flags: ignoreversion 64bit        ; Check: Is64BitInstallMode
 Source: "..\~inno\64\plghost.exe"; DestDir: "{app}"; Flags: ignoreversion 64bit         ; Check: Is64BitInstallMode
 Source: "..\~inno\64\proto.lan.dll"; DestDir: "{app}"; Flags: ignoreversion 64bit       ; Check: Is64BitInstallMode
 Source: "..\~inno\64\proto.tox.dll"; DestDir: "{app}"; Flags: ignoreversion 64bit       ; Check: Is64BitInstallMode
 Source: "..\~inno\64\proto.xmp.dll"; DestDir: "{app}"; Flags: ignoreversion 64bit       ; Check: Is64BitInstallMode
+Source: "..\~inno\64\shared.dll"; DestDir: "{app}"; Flags: ignoreversion 64bit       ; Check: Is64BitInstallMode
 
 Source: "C:\_dev\isotoxin\~inno\isotoxin.data"; DestDir: "{app}"; Flags: ignoreversion; AfterInstall: PrepareConfig()
 

@@ -1114,6 +1114,11 @@ ts::uint32 gui_textedit_c::gm_handler(gmsg<GM_UI_EVENT>&ue)
     return 0;
 }
 
+/*virtual*/ void gui_textedit_c::disable( bool f )
+{
+    __super::disable( f );
+    getroot()->register_afocus( this, accept_focus() );
+}
 
 
 /*virtual*/ bool gui_textedit_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)

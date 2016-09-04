@@ -3,11 +3,19 @@
 namespace ts
 {
 
-static_setup< struct_pool_t<safe_object::POINTER_CONTAINER_SIZE, 1024> > pool;
+    namespace
+    {
+        struct dummy_struct_s
+        {
+            uint8 b[ safe_object::POINTER_CONTAINER_SIZE ];
+        };
+    }
+
+static_setup< struct_buf_t<dummy_struct_s, 128> > pool;
 
 safe_object::pointer_container_s *safe_object::pointer_container_s::create(safe_object *p)
 {
-    safe_object::pointer_container_s *pc = (safe_object::pointer_container_s *)pool().alloc();
+    safe_object::pointer_container_s *pc = pool().alloc_t<safe_object::pointer_container_s>();
     pc->pointer = p;
     pc->ref = 1;
     return pc;
@@ -15,7 +23,7 @@ safe_object::pointer_container_s *safe_object::pointer_container_s::create(safe_
 
 void safe_object::pointer_container_s::die()
 {
-    pool().dealloc(this);
+    pool().dealloc_t<safe_object::pointer_container_s>(this);
 }
 
 } // namespace ts

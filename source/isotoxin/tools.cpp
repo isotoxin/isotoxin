@@ -666,6 +666,8 @@ void text_convert_to_bbcode(ts::str_c &text)
 
 void text_close_bbcode(ts::str_c &text_utf8)
 {
+    MEMT( MEMT_TEMP );
+
     ts::astrings_c opened;
     for( int i=text_utf8.find_pos('['); i >= 0 ; i = text_utf8.find_pos(i+1,'[') )
     {
@@ -875,7 +877,7 @@ void render_pixel_text( ts::bitmap_c&tgtb, const ts::irect& r, const ts::wsptr& 
         "88888" "888" "88888" "8888" "...8" "88888" "88888" "8..." "88888" ".8888";
 
     int widths[ 10 ] = { 5, 3, 5, 4, 4, 5, 5, 4, 5, 5 };
-    int xxx[ 10 ] = {0};
+    int xxx[ 10 ] = {};
     int height = 5;
     int pitch = widths[0];
 
@@ -1514,8 +1516,7 @@ const ts::bitmap_c &prepare_proto_icon( const ts::asptr &prototag, const ts::asp
     tr.set_size(tr.lastdrawsize);
     tr.parse_and_render_texture(nullptr, nullptr, true);
 
-    bmp.create_ARGB(tr.size);
-    bmp.copy(ts::ivec2(0), tr.size, tr.get_texture().extbody(), ts::ivec2(0));
+    bmp = tr.make_bitmap();
 
     if (bmp.info().sz != ts::ivec2(imgsize))
     {

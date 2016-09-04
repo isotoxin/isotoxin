@@ -27,8 +27,8 @@ protected:
     int margin_right = 0; // offset of text in texture
     int text_height;
 
-    virtual bitmap_c &texture() = 0;
-    virtual void texture_no_need() = 0;
+    virtual int prepare_textures( const ts::ivec2 &minsz) = 0;
+    virtual void textures_no_need() = 0;
 
 public:
 	const font_desc_c *font;
@@ -50,6 +50,8 @@ public:
     text_rect_c() : font(&g_default_text_font) { flags.setup(F_INVALID_SIZE|F_INVALID_TEXTURE|F_INVALID_GLYPHS); }
 	virtual ~text_rect_c();
     
+    virtual int get_textures( const bitmap_c **tarr ) = 0;
+
     void make_dirty( bool dirty_common = true, bool dirty_glyphs = true, bool dirty_size = false )
     {
         if (dirty_common) flags.set(F_DIRTY);
@@ -106,7 +108,7 @@ public:
         return false;
     }
 	void parse_and_render_texture( rectangle_update_s * updr, CUSTOM_TAG_PARSER ctp, bool do_render = true );
-    void render_texture( rectangle_update_s * updr, fastdelegate::FastDelegate< void (bitmap_c&, const ivec2 &size) > clearp ); // custom clear
+    void render_texture( rectangle_update_s * updr, fastdelegate::FastDelegate< void (bitmap_c&, int y, const ivec2 &size) > clearp ); // custom clear
     void render_texture( rectangle_update_s * updr );
     void update_rectangles( rectangle_update_s * updr );
 
@@ -114,12 +116,12 @@ public:
     ivec2 calc_text_size(const font_desc_c& font, const wstr_c&text, int maxwidth, uint flags, CUSTOM_TAG_PARSER ctp) const;
 
 	int  get_scroll_top() const {return scroll_top;}
-    ts::ivec2 get_offset() const
+    ivec2 get_offset() const
     {
         return ivec2(ui_scale(margins_lt.x), ui_scale(margins_lt.y) - scroll_top + (flags.is(TO_VCENTER) ? (size.y - text_height) / 2 : 0));
     }
 
-    bitmap_c &get_texture() { ASSERT(!flags.is(F_INVALID_TEXTURE|F_INVALID_GLYPHS)); return texture();};
+    bitmap_c make_bitmap();
 
 	//render glyphs to RGBA buffer with full alpha-blending
 	//offset can be used for scrolling or margins
@@ -129,13 +131,36 @@ public:
 class text_rect_static_c : public text_rect_c
 {
     bitmap_c t;
-    /*virtual*/ bitmap_c &texture() override
+    int pixels_capacity = 0;
+    /*virtual*/ int prepare_textures( const ts::ivec2 &minsz ) override
     {
-        return t;
+        if ( t.info().sz >>= minsz )
+            return 1;
+
+        flags.set( F_INVALID_TEXTURE );
+
+        int needpixels = minsz.x * minsz.y * 4;
+        if ( needpixels <= pixels_capacity )
+        {
+            t.change_size( minsz );
+        }
+
+        t.create_ARGB( minsz );
+        pixels_capacity = t.info().sz.y * t.info().pitch;
+        return 1;
     }
-    /*virtual*/ void texture_no_need() override
+
+    /*virtual*/ int get_textures( const bitmap_c **tarr ) override
+    {
+        if (tarr)
+            tarr[ 0 ] = &t;
+        return 1;
+    }
+
+    /*virtual*/ void textures_no_need() override
     {
         renew(t);
+        pixels_capacity = 0;
     }
 public:
 };

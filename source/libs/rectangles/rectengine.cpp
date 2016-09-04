@@ -84,6 +84,8 @@ void rectengine_c::prepare_children_z_sorted()
 {
     if (children_z_sorted.size() != children.size())
     {
+        MEMT( MEMT_CHSORT );
+
         // start resorting
         children_z_sorted.clear();
         for(rectengine_c *e : children)
@@ -343,6 +345,22 @@ rectengine_c *rectengine_c::get_last_child()
     return false;
 }
 
+void rectengine_c::draw_textrect( ts::text_rect_c & tr, const ts::ivec2 &clampsize )
+{
+    int n = tr.get_textures( nullptr );
+    const ts::bitmap_c **tarr = ( const ts::bitmap_c ** )_alloca( sizeof( ts::bitmap_c * ) * n );
+    tr.get_textures( tarr );
+    int addh = 0;
+    for ( int i = 0; i < n; ++i )
+    {
+        ASSERT( clampsize.x <= tarr[ i ]->info().sz.x );
+        int h = ts::tmin( clampsize.y - addh, tarr[ i ]->info().sz.y );
+        this->draw( ts::ivec2( 0, addh ), tarr[ i ]->extbody( ts::irect( ts::ivec2( 0 ), ts::ivec2( clampsize.x, h ) ) ), true );
+        addh += h;
+    }
+}
+
+
 /*virtual*/ bool rectengine_root_c::my_wnd_s::evt_specialborder( ts::specialborder_s bd[ 4 ] )
 {
     if ( gui->is_disabled_special_border() )
@@ -590,6 +608,7 @@ rectengine_root_c::rectengine_root_c( rect_sys_e sys)
     flags.init( F_TOOLRECT, 0 != (sys & RS_TOOL) );
     flags.init( F_TASKBAR, 0 != ( sys & RS_TASKBAR) );
     flags.init( F_INACTIVE, 0 != ( sys & RS_INACTIVE) );
+    flags.init( F_MAINPARENT, 0 != ( sys & RS_MAINPARENT ) );
     drawntag = drawtag - 1;
 
 }
@@ -644,7 +663,7 @@ rectengine_root_c::~rectengine_root_c()
         shp.opacity = pss.opacity();
 
         shp.parent = ts::master().activewindow;
-        if (!shp.parent) ts::master().mainwindow;
+        if (!shp.parent || flags.is( F_MAINPARENT ) ) shp.parent = ts::master().mainwindow;
 
         if ( flags.is( F_TOOLRECT ) )
         {
@@ -804,6 +823,8 @@ rectengine_root_c::~rectengine_root_c()
 void rectengine_root_c::redraw_now()
 {
     if (syswnd.wnd == nullptr || rect() == nullptr) return;
+
+    //MEMT( MEMT_REDRAW );
 
     ASSERT(drawdata.size() == 0);
     draw_data_s &dd = begin_draw();
@@ -1302,20 +1323,31 @@ void rectengine_root_c::redraw_now()
         tr.parse_and_render_texture(nullptr, nullptr);
 
     ts::bmpcore_exbody_s bb = syswnd.wnd->get_backbuffer();
-    ts::bmpcore_exbody_s src = tr.get_texture().extbody();
+    //ts::bmpcore_exbody_s src = tr.get_texture().extbody();
 
 #ifdef _DEBUG
     if (tdp.textoptions && tdp.textoptions->is(ts::TO_SAVETOFILE))
     {
-        tr.get_texture().save_as_png(L"text.png");
+        tr.make_bitmap().save_as_png(L"text.png");
     }
 #endif // _DEBUG
 
-    render_image( bb, src, dd.offset.x, dd.offset.y, ts::irect( ts::ivec2(0), dd.size ), dd.cliprect, dd.alpha );
+    int n = tr.get_textures(nullptr);
+    const ts::bitmap_c **tarr = (const ts::bitmap_c **)_alloca( sizeof( ts::bitmap_c * ) * n );
+    tr.get_textures( tarr );
+    int addh = 0;
+    for(int i=0;i<n;++i)
+    {
+        int h = ts::tmin( dd.size.y - addh, tarr[ i ]->info().sz.y );
+        render_image( bb, tarr[i]->extbody(), dd.offset.x, dd.offset.y + addh, ts::irect( 0, 0, dd.size.x, h ), dd.cliprect, dd.alpha );
+        addh += h;
+    }
+
+    //render_image( bb, src, dd.offset.x, dd.offset.y, ts::irect( ts::ivec2(0), dd.size ), dd.cliprect, dd.alpha );
+
+
     if (tdp.sz)
         *tdp.sz = gui->tr().lastdrawsize;
-    //if (tdp.glyphs)
-        //tr.use_external_glyphs( nullptr );
 }
 
 /*virtual*/ void rectengine_root_c::draw( const ts::irect & rect, ts::TSCOLOR color, bool clip )

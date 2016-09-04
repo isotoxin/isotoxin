@@ -77,7 +77,7 @@ namespace
 
         bool close_me_chk( RID, GUIPARAM )
         {
-            if ( !contact->getkey().is_group() && g_app->find_avcontact_inprogress( contact ) != nullptr )
+            if ( !contact->getkey().is_group() && g_app->avcontacts().find_inprogress( contact->getkey().avkey() ) != nullptr )
             {
                 ts::str_c nn = contact->get_name();
                 text_convert_from_bbcode( nn );
@@ -102,7 +102,7 @@ namespace
         }
         bool min_me( RID, GUIPARAM )
         {
-            g_app->iterate_avcontacts( [this]( av_contact_s & avc ) {
+            g_app->avcontacts().iterate( [this]( av_contact_s & avc ) {
                 if ( avc.state != av_contact_s::AV_INPROGRESS )
                     return;
                 if ( contact == avc.c ) avc.set_inactive( true );
@@ -119,7 +119,7 @@ namespace
 
         /*virtual*/ void on_activate() override
         {
-            g_app->iterate_avcontacts( [this]( av_contact_s & avc ) {
+            g_app->avcontacts().iterate( [this]( av_contact_s & avc ) {
                 if ( avc.state != av_contact_s::AV_INPROGRESS )
                     return;
                 if ( contact == avc.c ) avc.set_inactive( false );
@@ -162,7 +162,7 @@ namespace
             DEFERRED_EXECUTION_BLOCK_BEGIN( 0 )
 
                 const conv_host_c *me = (const conv_host_c *)param;
-                gmsg<ISOGM_INIT_CONVERSATION>( me->contact, 0, me->conv->getrid() ).send();
+                gmsg<ISOGM_INIT_CONVERSATION>( me->contact, RSEL_SCROLL_END, me->conv->getrid() ).send();
                 g_app->update_buttons_msg();
 
             DEFERRED_EXECUTION_BLOCK_END( this )
@@ -221,6 +221,7 @@ namespace
                 case COS_DND:
                     return IT_DND;
                 }
+                return IT_OFFLINE;
             }
 
         } icontag;
@@ -243,7 +244,7 @@ namespace
                 {
                     itag.cs = csfix( c->get_state() );
                     itag.cso = c->get_ostate();
-                    itag.id = (ts::int16)c->getkey().protoid;
+                    itag.id = c->getkey().protoid;
                     emptyitag = false;
                 } else
                 {
@@ -251,13 +252,13 @@ namespace
                     {
                         itag.cs = CS_ONLINE;
                         itag.cso = c->get_ostate();
-                        itag.id = ( ts::int16 )c->getkey().protoid;
+                        itag.id = c->getkey().protoid;
                     } else if ( csfix(c->get_state()) == itag.cs )
                     {
                         if ( c->get_ostate() < itag.cso )
                         {
                             itag.cso = c->get_ostate();
-                            itag.id = ( ts::int16 )c->getkey().protoid;
+                            itag.id = c->getkey().protoid;
                         }
                     }
                 }
@@ -333,7 +334,14 @@ namespace
             {
                 if ( qp == SQ_FOCUS_CHANGED && rid != conv->getrid() && data.changed.focus )
                 {
-                    conv->set_focus();
+                    if ( rid && HOLD(rid)().accept_focus() && gui->get_focus() )
+                    {
+
+                    } else
+                    {
+                        conv->set_focus();
+                    }
+
                     return true;
                 }
                 return false;
@@ -485,7 +493,7 @@ RID mainrect_c::create_new_conv( contact_root_c *c )
 
     ts::irect defconvc = ts::parserect( coords, ts::irect( 0, 0, 300, 300 ) );
 
-    for ( int i = convs.size() - 1; i >= 0; --i )
+    for ( ts::aint i = convs.size() - 1; i >= 0; --i )
         if ( convs.get( i ).expired() )
             convs.remove_fast( i );
 
@@ -538,7 +546,7 @@ void mainrect_c::apply_ui_mode( bool split_ui )
             cfg().param( CONSTASTR( "main_defconv" ), ts::amake<ts::irect>( defconvc ) );
 
             if ( contact_root_c *r = mainconv->get_selected_contact() )
-                if ( !r->getkey().is_self() )
+                if ( !r->getkey().is_self )
                     create_new_conv( r );
         }
 
@@ -616,6 +624,7 @@ void mainrect_c::rebuild_icons()
 
 void mainrect_c::onclosesave()
 {
+    MEMT( MEMT_MAINRECT );
     cfg().param(CONSTASTR("main_rect_pos"), ts::amake<ts::ivec2>(rrect.lt));
     cfg().param(CONSTASTR("main_rect_size"), ts::amake<ts::ivec2>(rrect.size()));
     cfg().param(CONSTASTR("main_rect_monitor"), ts::amake<ts::irect>(mrect));
@@ -630,6 +639,8 @@ bool mainrect_c::saverectpos(RID,GUIPARAM)
 
 /*virtual*/ bool mainrect_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    MEMT( MEMT_MAINRECT );
+
     if (qp == SQ_RECT_CHANGED)
     {
         cfg().onclosereg( DELEGATE(this, onclosesave) );

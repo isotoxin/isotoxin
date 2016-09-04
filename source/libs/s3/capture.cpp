@@ -147,7 +147,7 @@ bool start_capture(Format & cfmt, const Format * tryformats, int try_formats_cnt
             fmt.nSamplesPerSec = tf.sampleRate;
             fmt.wBitsPerSample = tf.bitsPerSample;
             fmt.nAvgBytesPerSec = tf.avgBytesPerSec();
-            fmt.nBlockAlign = (WORD)tf.blockAlign();
+            fmt.nBlockAlign = (WORD)tf.sampleSize();
         } else
         {
             format_by_index(i - try_formats_cnt);

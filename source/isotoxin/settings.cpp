@@ -345,8 +345,8 @@ namespace
             int downprocent = 0;
             ts::wstr_c name;
             ts::wstr_c path;
-            ts::uint8 md5_local[16];
-            ts::uint8 md5_remote[16];
+            ts::uint8 md5_local[ 16 ] = {};
+            ts::uint8 md5_remote[ 16 ] = {};
 
             bool local = false;
             bool remote = false;
@@ -355,8 +355,6 @@ namespace
 
             list_item_s()
             {
-                memset( md5_local, 0, sizeof(md5_local) );
-                memset( md5_remote, 0, sizeof(md5_remote) );
             }
             bool is_ood() const
             {
@@ -1112,6 +1110,7 @@ void dialog_settings_c::set_startopts()
 
 /*virtual*/ ts::wstr_c dialog_settings_c::get_name() const
 {
+    MEMT( MEMT_GUI_COMMON );
     return __super::get_name().append(CONSTWSTR(" / ")).append(gui_dialog_c::get_name());
 }
 
@@ -2977,6 +2976,7 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
 
 /*virtual*/ bool dialog_settings_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    MEMT( MEMT_GUI_COMMON );
     switch (qp)
     {
     case SQ_DRAW:

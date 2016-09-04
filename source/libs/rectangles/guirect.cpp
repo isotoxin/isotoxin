@@ -255,6 +255,11 @@ guirect_c::guirect_c(initial_rect_data_s &data):m_rid(data.id), m_parent(data.pa
 
 guirect_c::~guirect_c() 
 {
+    if ( gui )
+    {
+        if ( getroot() ) getroot()->register_afocus( this, false );
+    }
+
     make_all_ponters_expired();
 
     if (m_engine) m_engine->rect_ = nullptr;
@@ -267,7 +272,7 @@ guirect_c::~guirect_c()
         h.engine().sq_evt(SQ_CHILD_DESTROYED, m_parent, d);
     }
 
-    if (g_app)
+    if ( gui )
         gui->nomorerect(getrid());
 
     for (ts::safe_ptr<sqhandler_i> & sh : m_leeches)
@@ -455,9 +460,6 @@ void gui_control_c::disable(bool f)
     if (flags.is(F_DISABLED) != f)
     {
         flags.init(F_DISABLED, f);
-
-        getroot()->register_afocus( this, accept_focus() );
-
         getengine().redraw();
     }
 }
@@ -898,7 +900,7 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
     } else
         return;
 
-    textrect.texture();
+    textrect.prepare_textures( dd.size );
 
     if (textrect.is_invalid_size()) textrect.set_size(dd.size);
     if (tdp.font) textrect.set_font(tdp.font);
@@ -958,7 +960,8 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
         }
     }
 
-    m_engine->draw(ts::ivec2(0), textrect.get_texture().extbody(ts::irect(ts::ivec2(0), tmin(dd.size, textrect.size))), true);
+    m_engine->draw_textrect( textrect, tmin( dd.size, textrect.size ) );
+
     if (do_updr && tdp.rectupdate)
     {
         ts::rectangle_update_s updr;
@@ -1324,6 +1327,8 @@ gui_tooltip_c::~gui_tooltip_c()
 
 bool gui_tooltip_c::check_text(RID r, GUIPARAM param)
 {
+    MEMT( MEMT_TOOLTIP );
+
     ts::ivec2 cp = ts::get_cursor_pos();
     if (!gui->active_hintzone())
     {
@@ -1383,6 +1388,8 @@ ts::ivec2 gui_tooltip_c::get_min_size() const
 }
 /*virtual*/ bool gui_tooltip_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    MEMT( MEMT_TOOLTIP );
+
     if (rid == ownrect)
     {
         switch (qp)
@@ -1412,6 +1419,8 @@ ts::ivec2 gui_tooltip_c::get_min_size() const
 
 void gui_tooltip_c::create(RID owner)
 {
+    MEMT( MEMT_TOOLTIP );
+
 #ifdef _DEBUG
     static bool disable_tt = false;
     if (disable_tt) return;
@@ -1938,6 +1947,8 @@ void gui_hgroup_c::allow_move_splitter(bool b)
 
 bool gui_hgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    MEMT( MEMT_GUI_COMMON );
+
     if (rid != getrid())
     {
         ASSERT(getrid() >> rid); // child?
@@ -2451,6 +2462,8 @@ int gui_popup_menu_c::icon_size()
 
 bool gui_popup_menu_c::update_size(RID, GUIPARAM)
 {
+    MEMT( MEMT_MENU );
+
     ts::aint chcnt = getengine().children_count();
     if (!chcnt) return false;
     ts::aint asz = sizeof(int) * chcnt;
@@ -2721,7 +2734,7 @@ ts::uint32 gui_popup_menu_c::gm_handler(gmsg<GM_CHECK_ALLOW_CLICK> &p)
 
 gui_menu_item_c::~gui_menu_item_c()
 {
-    if (g_app)
+    if ( gui )
     {
         gui->delete_event(DELEGATE(this, open_submenu));
     }
@@ -2729,6 +2742,8 @@ gui_menu_item_c::~gui_menu_item_c()
 
 /*virtual*/ ts::ivec2 gui_menu_item_c::get_min_size() const
 {
+    MEMT( MEMT_MENU );
+
     if (const theme_rect_s *thr = themerect())
     {
         if (flags.is(F_SEPARATOR))
@@ -2746,6 +2761,8 @@ gui_menu_item_c::~gui_menu_item_c()
 
 /*virtual*/ bool gui_menu_item_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    MEMT( MEMT_MENU );
+
     if (submnu_shown && submnu_shown->getrid() == rid)
     {
         if (qp == SQ_POPUP_MENU_DIE)
@@ -3035,6 +3052,8 @@ void gui_textfield_c::badvalue( bool b )
 
 /*virtual*/ bool gui_textfield_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
+    MEMT( MEMT_TEXTFIELD );
+
     if (qp == SQ_RECT_CHANGED && selector)
     {
         ts::irect clar = get_client_area();

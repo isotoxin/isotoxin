@@ -37,7 +37,7 @@ spinlock_list_s
             pointer_t old_val(first);
             for (;;)
             {
-                element->StackNextFree = old_val.ptr;
+                element->stack_next_free = old_val.ptr;
                 if (CAS2(first, old_val, pointer_t(element, old_val.count + 1))) break; // success - exit loop
             }
         }
@@ -49,7 +49,7 @@ spinlock_list_s
             pointer_t old_val(first);
             while (old_val.ptr)
             {
-                T* next = old_val.ptr->StackNextFree;
+                T* next = old_val.ptr->stack_next_free;
                 if (CAS2(first, old_val, pointer_t(next, old_val.count + 1)))
                 {
                     return(old_val.ptr); // success - exit loop
