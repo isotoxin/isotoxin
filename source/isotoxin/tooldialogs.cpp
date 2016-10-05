@@ -335,3 +335,109 @@ bool dialog_colors_c::updatetext(RID, GUIPARAM p)
 
     return __super::sq_evt(qp, rid, data);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+dialog_cmdlinegenerator_c::dialog_cmdlinegenerator_c( initial_rect_data_s &data ) :gui_isodialog_c( data )
+{
+}
+
+dialog_cmdlinegenerator_c::~dialog_cmdlinegenerator_c()
+{
+}
+
+
+/*virtual*/ void dialog_cmdlinegenerator_c::created()
+{
+    set_theme_rect( CONSTASTR( "main" ), false );
+    __super::created();
+    tabsel( CONSTASTR( "1" ) );
+}
+/*virtual*/ void dialog_cmdlinegenerator_c::getbutton( bcreate_s &bcr )
+{
+    if ( bcr.tag > 0 )
+        return;
+
+    bcr.tag = 1;
+    __super::getbutton( bcr );
+}
+
+bool dialog_cmdlinegenerator_c::passt( const ts::wstr_c &p, bool )
+{
+    password = p;
+    ts::wstr_c ep = enc();
+    set_edit_value( CONSTASTR("ep"), ep );
+
+    ts::wstr_c t( ts::get_exe_full_name(), CONSTWSTR( " profile " ) );
+    t.append( ts::fn_get_name( prf().get_path() ) ).append( CONSTWSTR( " password " ) ).append( ep ); //.append( CONSTWSTR( "</l>" ) );
+    set_edit_value( CONSTASTR( "cmdl" ), t );
+
+    return true;
+}
+
+/*virtual*/ void dialog_cmdlinegenerator_c::tabselected( ts::uint32 /*mask*/ )
+{
+    passt(ts::wstr_c(), false);
+}
+
+/*virtual*/ int dialog_cmdlinegenerator_c::additions( ts::irect & )
+{
+    descmaker dm( this );
+    dm << 1;
+
+    dm().page_header( TTT("Command line generator for encrypted profiles. You can use this command line to run [appname] with specified profile and password.[br][b]IMPORTANT!!![/b][br]Password will be encrypted by machine-specific key and will be valid only for current computer.",490) );
+
+    dm().textfield( ts::wstr_c(TTT("Password to encrypt",491)), L"", DELEGATE( this, passt ) ).passwd(true);
+
+    dm().vspace();
+    dm().rotext( TTT( "Current profile", 492 ), ts::fn_get_name( prf().get_path() ) );
+    dm().rotext( TTT( "Encrypted password", 493 ), L"" ).setname( CONSTASTR("ep") );
+    dm().rotext( TTT( "Command line", 494 ), L"" ).setname( CONSTASTR( "cmdl" ) );
+
+    return 0;
+}
+
+void crypto_zero( ts::uint8 *buf, int bufsize );
+void get_unique_machine_id( ts::uint8 *buf, int bufsize, const char *salt, bool use_profile_uniqid );
+ts::str_c encode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& s );
+
+ts::wstr_c dialog_cmdlinegenerator_c::enc() const
+{
+
+    ts::uint8 encpass[ 32 ];
+    get_unique_machine_id( encpass, 32, SALT_CMDLINEPROFILE, false );
+    ts::str_c ep = encode_string_base64( encpass, ts::to_utf8(password) );
+    crypto_zero( encpass, sizeof( encpass ) );
+
+    return ts::from_utf8(ep);
+}
+
+/*virtual*/ ts::ivec2 dialog_cmdlinegenerator_c::get_min_size() const
+{
+    return ts::ivec2( 540, 400 );
+}
+
+/*virtual*/ bool dialog_cmdlinegenerator_c::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
+{
+    if ( qp == SQ_DRAW && rid == getrid() )
+    {
+        __super::sq_evt( qp, rid, data );
+        return true;
+    }
+
+    return __super::sq_evt( qp, rid, data );
+}

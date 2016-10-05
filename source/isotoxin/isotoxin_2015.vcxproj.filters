@@ -105,14 +105,14 @@
     <ClCompile Include="simpledlg.cpp">
       <Filter>src\gui</Filter>
     </ClCompile>
-    <ClCompile Include="colors.cpp">
-      <Filter>src\gui</Filter>
-    </ClCompile>
     <ClCompile Include="fullscreenvideo.cpp">
       <Filter>src\gui</Filter>
     </ClCompile>
     <ClCompile Include="avcontact.cpp">
       <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tooldialogs.cpp">
+      <Filter>src\gui</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -197,14 +197,14 @@
     <ClInclude Include="simpledlg.h">
       <Filter>src\gui</Filter>
     </ClInclude>
-    <ClInclude Include="colors.h">
-      <Filter>src\gui</Filter>
-    </ClInclude>
     <ClInclude Include="fullscreenvideo.h">
       <Filter>src\gui</Filter>
     </ClInclude>
     <ClInclude Include="avcontact.h">
       <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="tooldialogs.h">
+      <Filter>src\gui</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -3,6 +3,9 @@
 */
 #pragma once
 
+struct FT_FaceRec_;
+typedef FT_FaceRec_*  FT_Face;
+
 namespace ts
 {
 
@@ -73,8 +76,6 @@ struct font_params_s //-V690
 
     void setup(const asptr &sparams); // returns font filename
 };
-
-typedef struct FT_FaceRec_*  FT_Face;
 
 class font_c // "parametrized" font
 {

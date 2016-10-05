@@ -88,7 +88,7 @@ namespace ts
 
     }
 
-    image_read_func img_reader_s::detect_gif_format(const void *sourcebuf, aint sourcebufsize)
+    image_read_func img_reader_s::detect_gif_format(const void *sourcebuf, aint sourcebufsize, const ivec2& limitsize )
     {
         uint32 tag = *(uint32 *)sourcebuf;
         if (tag != 944130375) return nullptr;
@@ -105,6 +105,13 @@ namespace ts
         size.y = br.gif->SHeight;
         bitpp = 32; // always read GIFs as 32bpp
 
+        if ( limitsize >> 0 )
+        {
+            if ( size > limitsize )
+            {
+                return nullptr; // just not supported
+            }
+        }
         return gifdatareader;
     }
 
@@ -155,6 +162,13 @@ namespace ts
         const gifread_s & br = ref_cast<const gifread_s>(data);
         return br.gif->ImageCount;
     }
+
+    size_t animated_c::size() const
+    {
+        const gifread_s & br = ref_cast<const gifread_s>( data );
+        return br.ibuflen;
+    }
+
     int animated_c::firstframe(bitmap_c &bmp)
     {
         gifread_s & br = ref_cast<gifread_s>(data);

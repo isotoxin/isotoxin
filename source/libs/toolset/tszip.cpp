@@ -1,5 +1,6 @@
 #include "toolset.h"
 #include "zlib/src/contrib/minizip/unzip.h"
+#include "zlib/src/contrib/minizip/zip.h"
 
 namespace ts
 {
@@ -141,6 +142,135 @@ bool zip_open( const void *data, aint datasize, ARC_FILE_HANDLER h )
     zlo z(data,datasize);
     if (!z) return false;
     return z.iterate(h);
+}
+
+namespace
+{
+    struct zip_data_s : public zlib_filefunc64_def
+    {
+        blob_c zip;
+        zipFile zf;
+
+        uint64 ptr = 0;
+        uint64 granula = 4096;
+
+
+        static voidpf ZCALLBACK fopen_file_func( voidpf, const void* , int )
+        {
+            return (voidpf)1; //-V566
+        }
+
+        static uLong ZCALLBACK fwrite_file_func( voidpf opaque, voidpf stream, const void* buf, uLong size )
+        {
+            zip_data_s *me = (zip_data_s *)opaque;
+            uint64 newsize = me->ptr + size;
+            if ( newsize > me->zip.size() )
+            {
+                if ( me->zip.capacity() < newsize )
+                    me->zip.set_size( (aint)(newsize + me->granula), true );
+                me->zip.set_size( (aint)newsize, true );
+            }
+
+            memcpy( me->zip.data() + me->ptr, buf, size );
+
+            me->ptr += size;
+            return size;
+        }
+
+        static uLong ZCALLBACK fread_file_func( voidpf opaque, voidpf stream, void* buf, uLong size )
+        {
+            zip_data_s *me = (zip_data_s *)opaque;
+            uint64 ost = me->zip.size() - me->ptr;
+            uint64 minsz = tmin( ost, size );
+            memcpy( buf, me->zip.data() + me->ptr, (size_t)minsz );
+            me->ptr += minsz;
+            return (uLong)minsz;
+        }
+        static ZPOS64_T ZCALLBACK ftell_file_func( voidpf opaque, voidpf stream )
+        {
+            zip_data_s *me = (zip_data_s *)opaque;
+            return (long)me->ptr;
+        }
+        static long ZCALLBACK fseek_file_func( voidpf opaque, voidpf stream, ZPOS64_T offset, int origin )
+        {
+            zip_data_s *me = (zip_data_s *)opaque;
+            switch ( origin )
+            {
+            case ZLIB_FILEFUNC_SEEK_END:
+                me->ptr = me->zip.size() + offset;
+                break;
+            case ZLIB_FILEFUNC_SEEK_CUR:
+                me->ptr += offset;
+                break;
+            default:
+                me->ptr = offset;
+                break;
+            }
+
+            return 0;
+        }
+        static int ZCALLBACK fclose_file_func( voidpf opaque, voidpf stream )
+        {
+            return EOF;
+        }
+        static int ZCALLBACK ferror_file_func( voidpf opaque, voidpf stream )
+        {
+            return 0;
+        }
+
+        zip_data_s()
+        {
+            zopen64_file = fopen_file_func;
+            zread_file = fread_file_func;
+            zwrite_file = fwrite_file_func;
+            ztell64_file = ftell_file_func;
+            zseek64_file = fseek_file_func;
+            zclose_file = fclose_file_func;
+            zerror_file = ferror_file_func;
+            opaque = this;
+
+            zf = zipOpen2_64( "", 0, nullptr, this );
+        }
+
+        ~zip_data_s()
+        {
+            zipClose(zf, nullptr);
+        }
+    };
+
+}
+
+zip_c::zip_c()
+{
+    TS_STATIC_CHECK( sizeof( zip_data_s ) <= sizeof( internaldata ), "zzz" );
+
+    zip_data_s &zf = ref_cast<zip_data_s>( internaldata );
+    TSPLACENEW( &zf );
+}
+
+zip_c::~zip_c()
+{
+    zip_data_s &zf = ref_cast<zip_data_s>( internaldata );
+    zf.~zip_data_s();
+
+}
+
+
+void zip_c::addfile( const asptr&fn, const void *data, aint datasize, int compresslevel )
+{
+    zip_data_s &zf = ref_cast<zip_data_s>( internaldata );
+    
+    zf.granula = datasize / 4;
+    if ( zf.granula < 4096 ) zf.granula = 4096;
+    zipOpenNewFileInZip2_64( zf.zf, str_c(fn).cstr(), nullptr, nullptr, 0, nullptr, 0, nullptr, Z_DEFLATED, compresslevel, 0, 0 );
+    zipWriteInFileInZip( zf.zf, data, datasize );
+    zipCloseFileInZip( zf.zf );
+}
+
+blob_c zip_c::getblob() const
+{
+    const zip_data_s &zf = ref_cast<const zip_data_s>( internaldata );
+    return zf.zip;
 }
 
 }

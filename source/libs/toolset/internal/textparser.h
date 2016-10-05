@@ -76,6 +76,8 @@ typedef fastdelegate::FastDelegate<bool (wstr_c &, const wsptr &)> CUSTOM_TAG_PA
 ivec2 parse_text(const wstr_c &text, int max_line_length, CUSTOM_TAG_PARSER ctp, GLYPHS *glyphs = nullptr, TSCOLOR default_color = ARGB(0,0,0), font_c *default_font = g_default_text_font, uint32 flags = 0, int boundy = 0);
 
 irect glyphs_bound_rect(const GLYPHS &glyphs);
+int glyphs_first_glyph( const GLYPHS &glyphs );
+int glyphs_last_glyph( const GLYPHS &glyphs );
 int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p, bool strong = false);
 int glyphs_get_charindex(const GLYPHS &glyphs, aint glyphindex);
 

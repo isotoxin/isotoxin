@@ -270,7 +270,7 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     void(PROTOCALL *incoming_file)(int cid, u64 utag, u64 filesize, const char *filename_utf8, int filenamelen);
 
     /* 
-        there are two cases:
+        there are three cases:
         1. plugin has received file portion and now forward it to Isotoxin: all params are valid
         2. plugin requests next file portion while it send file: portion == nullptr && offset multiplies by 1M  && portion_size == 1048576 (1M) even last piece of file is less then 1M
         3. plugin releases requested buffer. offset - no matter, portion is pointer to buffer, portion_size == 0

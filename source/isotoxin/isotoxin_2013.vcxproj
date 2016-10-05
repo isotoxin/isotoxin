@@ -120,7 +120,6 @@
     <ClCompile Include="autoupdater.cpp" />
     <ClCompile Include="avaselector.cpp" />
     <ClCompile Include="avcontact.cpp" />
-    <ClCompile Include="colors.cpp" />
     <ClCompile Include="config.cpp" />
     <ClCompile Include="contactlist.cpp" />
     <ClCompile Include="contactprops.cpp" />
@@ -147,6 +146,7 @@
     <ClCompile Include="smileselector.cpp" />
     <ClCompile Include="tests.cpp" />
     <ClCompile Include="todo.cpp" />
+    <ClCompile Include="tooldialogs.cpp" />
     <ClCompile Include="tools.cpp" />
     <ClCompile Include="videoprocessing.cpp" />
   </ItemGroup>
@@ -156,7 +156,6 @@
     <ClInclude Include="application.h" />
     <ClInclude Include="avaselector.h" />
     <ClInclude Include="avcontact.h" />
-    <ClInclude Include="colors.h" />
     <ClInclude Include="config.h" />
     <ClInclude Include="contactprops.h" />
     <ClInclude Include="contacts.h" />
@@ -176,6 +175,7 @@
     <ClInclude Include="profile.h" />
     <ClInclude Include="mediasystem.h" />
     <ClInclude Include="smileselector.h" />
+    <ClInclude Include="tooldialogs.h" />
     <ClInclude Include="version.inl" />
     <ClInclude Include="res\resource.h" />
     <ClInclude Include="settings.h" />

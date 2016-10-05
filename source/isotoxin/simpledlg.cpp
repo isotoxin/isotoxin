@@ -896,20 +896,23 @@ bool incoming_msg_panel_c::endoflife( RID, GUIPARAM )
 
     avarect = g_app->preloaded_stuff().icon[ CSEX_UNKNOWN ]->info().sz + ts::ivec2(10);
 
-    msgitm = MAKE_CHILD<gui_message_item_c>( getrid(), hist, sender, CONSTASTR( "other" ), MTA_MESSAGE );
-    msgitm->set_passive();
-    msgitm->append_text( post, false );
-    int h = msgitm->calc_height_by_width( sz.x - avarect.x );
+    msgitm = MAKE_CHILD<gui_message_item_c>( getrid(), hist, sender, CONSTASTR( "other" ), MTA_MESSAGE, true );
+    msgitm->setup_text( post );
+    ts::aint h = msgitm->calc_height_by_width( sz.x - avarect.x );
 
+    ts::str_c m( post.message_utf8->cstr() );
+    int cutl = m.get_length();
     while(h > sz.y)
     {
-        int i = post.message_utf8.find_last_pos( ' ' );
+        int i = m.substr(0,cutl).find_last_pos_of( CONSTASTR( " \n.-/;," ) );
         if (i < 0) break;
-        post.message_utf8.set_length( i ).append( CONSTASTR("...") );
-        msgitm->append_text( post, false, true );
+        cutl = i;
+        m.set_length( i ).append( CONSTASTR("...") );
+        post.set_message_text(m);
+        msgitm->setup_text( post );
         h = msgitm->calc_height_by_width( sz.x - avarect.x );
     }
-    sz.y = h;
+    sz.y = static_cast<int>(h);
     if ( sz.y < avarect.y )
         sz.y = avarect.y;
 

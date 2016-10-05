@@ -307,13 +307,16 @@ void gui_contact_item_c::update_text()
                 ts::ivec2 sz = g_app->preloaded_stuff().editb->size;
                 newtext.append(CONSTASTR(" <rect=0,"));
                 newtext.append_as_uint(sz.x).append_char(',').append_as_int(-sz.y).append(CONSTASTR(",2>"));
-            } else
+            } else if (!contact->getkey().rotten_group)
             {
                 newtext.append(CONSTASTR("<br>(")).append_as_int( contact->subonlinecount() + 1 ).append_char('/').append_as_num( contact->subcount() + 1 ).append_char(')');
                 if (active_protocol_c *ap = prf().ap( contact->getkey().protoid ))
                     newtext.append(CONSTASTR(" <l>")).append(ap->get_name()).append(CONSTASTR("</l>"));
             }
-            if (!contact->get_options().unmasked().is(contact_c::F_PERSISTENT_GCHAT))
+
+            if ( contact->getkey().rotten_group )
+            {
+            } else if (!contact->get_options().unmasked().is(contact_c::F_PERSISTENT_GCHAT))
                 newtext.append(CONSTASTR("<br>")).append(to_utf8(TTT("temporary group chat",256)));
 
         } else if (contact->is_meta())
@@ -1002,8 +1005,12 @@ bool gui_contact_item_c::allow_drop() const
                     {
                         ts::wstr_c txt;
                         if ( c->getkey().is_group() )
-                            txt = TTT("Leave group chat?[br]$",258) / from_utf8(c->get_description());
-                        else
+                        {
+                            if ( c->getkey().rotten_group )
+                                txt = TTT("Inactive group chat will be deleted:[br]$",502) / from_utf8( c->get_description() );
+                            else
+                                txt = TTT( "Leave group chat?[br]$", 258 ) / from_utf8( c->get_description() );
+                        }  else
                             txt = TTT("Contact will be deleted:[br]$",84) / from_utf8(c->get_description());
                         
                         dialog_msgbox_c::mb_warning(txt).bcancel().on_ok(m_delete_doit, cks).summon();
@@ -1035,7 +1042,7 @@ bool gui_contact_item_c::allow_drop() const
                         if (historian->gui_item) historian->gui_item->update_text();
                         prf().dirtycontact( c->getkey() );
                         prf().detach_history( historian->getkey(), detached_meta->getkey(), c->getkey() );
-                        gmsg<ISOGM_V_UPDATE_CONTACT>( c ).send();
+                        gmsg<ISOGM_V_UPDATE_CONTACT>( c, true ).send();
                         gmsg<ISOGM_UPDATE_CONTACT> upd;
                         upd.key = c->getkey();
                         upd.mask = CDM_STATE;
@@ -1179,9 +1186,10 @@ bool gui_contact_item_c::allow_drop() const
 
                 }
 
-                if (contact->getkey().is_group())
-                    m.add(TTT("Leave group chat",304),0,handlers::m_delete,contact->getkey().as_str());
-                else
+                if ( contact->getkey().is_group() && !contact->getkey().rotten_group )
+                {
+                    m.add( TTT( "Leave group chat", 304 ), 0, handlers::m_delete, contact->getkey().as_str() );
+                }  else
                     m.add(TTT("Delete",85),0,handlers::m_delete,contact->getkey().as_str());
 
                 if (!contact->getkey().is_group())
@@ -1258,7 +1266,14 @@ bool gui_contact_item_c::allow_drop() const
             ts::ptr_cast<gui_conversation_header_c *>( this )->on_rite_click();
         }
         return false;
-
+#ifdef _DEBUG
+    case SQ_DEBUG_CHANGED_SOME:
+        if ( CIR_ME == role )
+        {
+            BOK( ts::SSK_F10 );
+        }
+        break;
+#endif // _DEBUG
     }
 
     return __super::sq_evt(qp,rid,data);
@@ -1288,6 +1303,9 @@ INLINE int statev(contact_state_e v)
 {
     if ( contact->getkey().is_group() )
     {
+        if ( contact->getkey().rotten_group )
+            return INT_MAX;
+
         if ( active_protocol_c *ap = prf().ap( contact->getkey().protoid ) )
             return ap->sort_factor();
         return 0;
@@ -1329,7 +1347,7 @@ bool gui_contact_item_c::same_prots( const gui_contact_item_c &itm ) const
 
 bool gui_contact_item_c::is_after(gui_contact_item_c &ci)
 {
-    if (contact->getkey() == ci.contact->getkey())
+    if (!contact || !ci.contact || contact->getkey() == ci.contact->getkey())
         return false; // same not swap
 
     int mystate = statev(contact->get_meta_state()) + sort_power();
@@ -1389,7 +1407,7 @@ bool gui_conversation_header_c::setcontact( contact_root_c *c )
     if ( textrect.is_dirty() )
     {
         for ( rbtn::ebutton_s &b : updr )
-            b.updated = false;
+            b.updated = false, b.dirty = true;
         update_buttons( getrid() );
     }
 }
@@ -1611,9 +1629,13 @@ void gui_conversation_header_c::updrect( const void *, int r, const ts::ivec2 &p
 
     if ( prf().is_loaded() )
     {
-        updr[ r ].p = root_to_local( p );
-        updr[ r ].updated = true;
-        DEFERRED_UNIQUE_CALL( 0, DELEGATE( this, update_buttons ), 1 );
+        ts::ivec2 newp = root_to_local( p );
+        if ( updr[ r ].dirty || newp != updr[ r ].p )
+        {
+            updr[ r ].p = newp;
+            updr[ r ].updated = true;
+            DEFERRED_UNIQUE_CALL( 0, DELEGATE( this, update_buttons ), 1 );
+        }
     }
 }
 
@@ -1672,7 +1694,7 @@ bool gui_conversation_header_c::apply_edit( RID r, GUIPARAM p )
             contact->set_customname( curedit );
             prf().dirtycontact( contact->getkey() );
             flags.set( F_SKIPUPDATE );
-            gmsg<ISOGM_V_UPDATE_CONTACT>( contact ).send();
+            gmsg<ISOGM_V_UPDATE_CONTACT>( contact, true ).send();
             flags.clear( F_SKIPUPDATE );
             update_text();
         }
@@ -1716,6 +1738,7 @@ bool gui_conversation_header_c::update_buttons( RID r, GUIPARAM p )
                 MODIFY bbm( b.brid );
                 redr |= bbm.pos() != b.p;
                 bbm.pos( b.p ).setminsize( b.brid ).visible( noedt );
+                b.dirty = false;
             }
 
         if ( redr )
@@ -1734,6 +1757,7 @@ bool gui_conversation_header_c::update_buttons( RID r, GUIPARAM p )
             if ( b.brid )
             {
                 b.updated = false;
+                b.dirty = true;
                 MODIFY( b.brid ).visible( false );
             }
     }
@@ -1778,6 +1802,8 @@ bool gui_conversation_header_c::update_buttons( RID r, GUIPARAM p )
             curedit.clear();
 
             getengine().trunc_children( 2 );
+            for ( rbtn::ebutton_s &b : updr )
+                b.dirty = true;
 
             gui_textfield_c &tf = ( MAKE_CHILD<gui_textfield_c>( getrid(), from_utf8( eval ), MAX_PATH_LENGTH, 0, false ) << DELEGATE( this, _edt ) );
             editor = tf.getrid();
@@ -1786,6 +1812,7 @@ bool gui_conversation_header_c::update_buttons( RID r, GUIPARAM p )
             tf.end();
             tf.register_kbd_callback( DELEGATE( this, cancel_edit ), ts::SSK_ESC, false );
             tf.register_kbd_callback( DELEGATE( this, apply_edit ), ts::SSK_ENTER, false );
+            tf.register_kbd_callback( DELEGATE( this, apply_edit ), ts::SSK_PADENTER, false );
 
             gui_button_c &bok = MAKE_CHILD<gui_button_c>( getrid() );
             bok.set_face_getter( BUTTON_FACE_PRELOADED( confirmb ) );
@@ -1896,10 +1923,18 @@ void gui_contact_separator_c::set_prots_from_contact( const contact_root_c *cc )
 {
     prots.clear();
 
-    cc->subiterate( [this]( const contact_c *c ) {
-        ts::tbuf_t<int>::default_comparator dc;
-        prots.insert_sorted_uniq( c->getkey().protoid, dc );
-    } );
+    if ( cc->getkey().is_group() )
+    {
+        if ( !cc->getkey().rotten_group )
+            prots.add( cc->getkey().protoid );
+
+    } else
+    {
+        cc->subiterate( [this]( const contact_c *c ) {
+            ts::tbuf_t<int>::default_comparator dc;
+            prots.insert_sorted_uniq( c->getkey().protoid, dc );
+        } );
+    }
 
     update_text();
 }
@@ -1908,18 +1943,27 @@ void gui_contact_separator_c::update_text()
 {
     MEMT( MEMT_CSEPARATOR );
 
-    sf = 0;
-    int m = 1;
     ts::wstr_c t;
-    for ( int id : prots )
-        if ( active_protocol_c *ap = prf().ap( id ) )
-        {
-            if ( !t.is_empty() ) t.append( CONSTWSTR(" + ") );
-            t.append( ts::from_utf8( ap->get_name() ) );
 
-            sf += m * ap->sort_factor();
-            m *= 128;
-        }
+    if ( prots.count() == 0 )
+    {
+        t = TTT("Inactive items",500);
+        sf = INT_MAX;
+    } else
+    {
+        sf = 0;
+        int m = 1;
+        for ( int id : prots )
+            if ( active_protocol_c *ap = prf().ap( id ) )
+            {
+                if ( !t.is_empty() ) t.append( CONSTWSTR( " + " ) );
+                t.append( ts::from_utf8( ap->get_name() ) );
+
+                sf += m * ap->sort_factor();
+                m *= 128;
+            }
+    }
+
     set_text( t );
     set_vcenter();
     textrect.set_options( ts::TO_VCENTER );
@@ -1927,45 +1971,25 @@ void gui_contact_separator_c::update_text()
 
 bool gui_contact_separator_c::is_prots_same_as_contact( const contact_root_c *cc ) const
 {
+    if ( cc->getkey().rotten_group )
+        return prots.count() == 0;
+
     ts::tmp_tbuf_t<int> tprots;
 
-    cc->subiterate( [&]( const contact_c *c ) {
-        ts::tbuf_t<int>::default_comparator dc;
-        tprots.insert_sorted_uniq( c->getkey().protoid, dc );
-    } );
+    if ( cc->getkey().is_group() )
+    {
+        tprots.add( cc->getkey().protoid );
+    } else
+    {
+        cc->subiterate( [&]( const contact_c *c ) {
+            ts::tbuf_t<int>::default_comparator dc;
+            tprots.insert_sorted_uniq( c->getkey().protoid, dc );
+        } );
+    }
 
     return prots.count() == tprots.count() && ts::blk_equal( prots.begin(), tprots.begin(), prots.count() );
 
 }
-
-///*virtual*/ int gui_contact_separator_c::get_height_by_width( int width ) const
-//{
-//    ts::ivec2 sz( 3 );
-//    const theme_rect_s *thr = themerect();
-//    if ( !textrect.get_text().is_empty() )
-//    {
-//        sz = textrect.calc_text_size( width - 10 - ( thr ? thr->clborder_x() : 0 ), custom_tag_parser_delegate() );
-//        sz.y += 3;
-//    }
-//
-//    if ( thr ) sz.y += thr->clborder_y();
-//
-//    return sz.y;
-//}
-//
-///*virtual*/ ts::ivec2 gui_contact_separator_c::get_min_size() const
-//{
-//    ts::ivec2 m = __super::get_min_size();
-//    m.y = get_height_by_width( getprops().size().x );
-//    return m;
-//}
-//
-///*virtual*/ ts::ivec2 gui_contact_separator_c::get_max_size() const
-//{
-//    ts::ivec2 m = __super::get_max_size();
-//    m.y = get_min_size().y;
-//    return m;
-//}
 
 /*virtual*/ void gui_contact_separator_c::created()
 {
@@ -2005,7 +2029,7 @@ bool gui_contact_separator_c::is_prots_same_as_contact( const contact_root_c *cc
             getengine().redraw();
             gui_contactlist_c & cl = HOLD( getparent() ).as<gui_contactlist_c>();
             cl.fix_c_visibility();
-            cl.scroll_to_child(&getengine(), false);
+            cl.scroll_to_child(&getengine(), ST_ANY_POS);
 
         }
         break;
@@ -2336,7 +2360,7 @@ bool gui_contactlist_c::on_filter_deactivate(RID, GUIPARAM)
         active = get_first_contact_item();
 
 
-    contacts().iterate_meta_contacts([](contact_root_c *c)->bool{
+    contacts().iterate_root_contacts([](contact_root_c *c)->bool{
     
         bool redraw = false;
         if (c->is_full_search_result())
@@ -2359,7 +2383,7 @@ bool gui_contactlist_c::on_filter_deactivate(RID, GUIPARAM)
     fix_sep_visibility();
 
     if (active)
-        scroll_to_child(active, false);
+        scroll_to_child(active, ST_ANY_POS);
 
     gmsg<ISOGM_REFRESH_SEARCH_RESULT>().send();
 
@@ -2589,12 +2613,12 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_DRAGNDROP> &dnda)
     return yo ? GMRBIT_ACCEPTED : 0;
 }
 
-bool gui_contactlist_c::refresh_list(RID, GUIPARAM)
+bool gui_contactlist_c::refresh_list(RID, GUIPARAM p)
 {
     MEMT( MEMT_CONTACTLIST );
 
     if (filter)
-        filter->refresh_list();
+        filter->refresh_list( p != nullptr );
 
     return true;
 }
@@ -2642,6 +2666,8 @@ ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_V_UPDATE_CONTACT> & c )
             gui_clist_base_c *clb = ts::ptr_cast<gui_clist_base_c *>(&ch->getrect());
             if (gui_contact_item_c *ci = clb->as_item())
             {
+                if (!ci->contacted())
+                    continue;
                 bool same = c.contact == &ci->getcontact();
                 if ( same && c.contact->get_state() == CS_ROTTEN )
                 {
@@ -2662,7 +2688,7 @@ ts::uint32 gui_contactlist_c::gm_handler( gmsg<ISOGM_V_UPDATE_CONTACT> & c )
                             getengine().child_move_to(i, &sep.get().getengine(), skipctl );
                         }
 
-                        if ( filter )
+                        if ( filter && c.refilter )
                             DEFERRED_UNIQUE_CALL( 0.1, DELEGATE( this, refresh_list ), nullptr );
                         return 0;
                     }
@@ -2821,10 +2847,11 @@ ts::uint32 gui_contactlist_c::gm_handler(gmsg<GM_HEARTBEAT> &)
         if (getengine().children_sort( DELEGATE( &ss, swap_them ) ))
         {
             if (g_app->active_contact_item)
-                scroll_to_child(&g_app->active_contact_item->getengine(), false);
+                scroll_to_child(&g_app->active_contact_item->getengine(), ST_ANY_POS);
 
             gui->repos_children(this);
         }
+        fix_sep_visibility();
         sort_tag = contacts().sort_tag();
     }
     return 0;

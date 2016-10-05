@@ -584,9 +584,11 @@ drawable_bitmap_c &drawable_bitmap_c::operator=( drawable_bitmap_c && ob )
     SWAP( d.m_mem_dc, obd.m_mem_dc );
     SWAP( core.m_body, ob.core.m_body );
 
-    SWAP( core.m_info.sz, ob.core.m_info.sz );
-    SWAP( core.m_info.pitch, ob.core.m_info.pitch );
-    SWAP( core.m_info.bitpp, ob.core.m_info.bitpp );
+    uint8 tmp[ sizeof( core.m_info ) ];
+    memcpy( tmp, &core.m_info, sizeof( core.m_info ) );
+    memcpy( &core.m_info, &ob.core.m_info, sizeof( core.m_info ) );
+    memcpy( &ob.core.m_info, tmp, sizeof( core.m_info ) );
+
     return *this;
 }
 

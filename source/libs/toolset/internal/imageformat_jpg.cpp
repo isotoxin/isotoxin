@@ -147,6 +147,7 @@ namespace
         jpeg_error_mgr jerr;
         jpgreadbuf tmp;
         int row_stride;
+        int shrinkx;
 
         jpgread_internal_data_s(const void *sourcebuf, aint sourcebufsize):tmp(sourcebuf, (int)sourcebufsize)
         {
@@ -176,30 +177,40 @@ static bool jpgdatareader(img_reader_s &r, void * buf, int pitch)
     JSAMPARRAY aTempBuffer = (*d.cinfo.mem->alloc_sarray)
         ((j_common_ptr)&d.cinfo, JPOOL_IMAGE, d.row_stride, 1);
 
-    for (int y = 0; y < r.size.y; y++)
-    {
-        jpeg_read_scanlines(&d.cinfo, aTempBuffer, 1);
-        if (d.tmp.fail) break;
+    shrink_on_read_c sor( ivec2( (int)d.cinfo.output_width, (int)d.cinfo.output_height ), d.shrinkx );
 
-        uint8* src = aTempBuffer[0];
-        uint8* dest = (uint8*)buf + pitch*y;
+    sor.do_job( buf, pitch, 3, [&]( int y, uint8 *row ) {
 
-        for (int x = r.size.x; x > 0; x--, src += d.cinfo.output_components)
+        if ( r.progress && r.progress( y, d.cinfo.output_height ) )
         {
-            *dest++ = src[2];
-            *dest++ = src[1];
-            *dest++ = src[0];
-            *dest++ = 0xFF;
+            d.tmp.fail = true;
+            return true;
         }
 
-    }
+        jpeg_read_scanlines( &d.cinfo, aTempBuffer, 1 );
+        if ( d.tmp.fail ) return true;
+
+        uint8* src = aTempBuffer[ 0 ];
+
+        for ( int x = d.cinfo.output_width; x > 0; x--, src += d.cinfo.output_components )
+        {
+            *row++ = src[ 2 ];
+            *row++ = src[ 1 ];
+            *row++ = src[ 0 ];
+        }
+        return false;
+
+    } );
+
+    if ( r.progress )
+        r.progress( d.cinfo.output_height, d.cinfo.output_height );
 
     bool ok = !d.tmp.fail;
     d.~jpgread_internal_data_s();
     return ok;
 }
 
-image_read_func img_reader_s::detect_jpg_format(const void *sourcebuf, aint sourcebufsize)
+image_read_func img_reader_s::detect_jpg_format(const void *sourcebuf, aint sourcebufsize, const ivec2& limitsize )
 {
     uint32 tag = *(uint32 *)sourcebuf;
     if ((tag & 0xFFFFFF) != 16767231)
@@ -230,7 +241,26 @@ image_read_func img_reader_s::detect_jpg_format(const void *sourcebuf, aint sour
 
     size.x = d.cinfo.output_width;
     size.y = d.cinfo.output_height;
-    bitpp = 32;
+    bitpp = 24;
+
+    d.shrinkx = 0;
+
+    if ( limitsize >> 0 )
+    {
+        while ( size > limitsize )
+        {
+            size.x >>= 1;
+            size.y >>= 1;
+            ++d.shrinkx;
+        }
+    }
+
+    if ( size >> 0 );
+    else
+    {
+        d.~jpgread_internal_data_s();
+        return nullptr;
+    }
 
     return jpgdatareader;
 }

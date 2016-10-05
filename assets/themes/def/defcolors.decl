@@ -35,6 +35,11 @@ colors {
 	msg_other_time=#709def
 	msg_other_bg=#f5eef9
 	msg_other_bg_found=#ffe0f0
+	msg_pm_text=#000000
+	msg_pm_name=#43404a
+	msg_pm_time=#7077da
+	msg_pm_bg=#d8e6ff
+	msg_pm_bg_found=#abc6ff
 	msg_invite_bg=#a5eea9
 	load_bg=#9acaf9
 	date_sep_bg=#cccccf
@@ -176,9 +181,9 @@ colors {
 	gen_achtung_stroke=#000000
 	gen_achtung_fill1=#ffffff
 	gen_achtung_fill2=#ff9703
-	gen_gch_online=#46ff00
+	gen_gch_online=#349131
 	gen_gch_offline=#46ff00
-	gen_gch_unknown=#828282
+	gen_gch_unknown=#898e88
 	gen_inv=#000000
 	ctl_normal=#000000
 	ctl_hover=#42830f

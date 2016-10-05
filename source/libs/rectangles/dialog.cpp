@@ -422,6 +422,15 @@ gui_dialog_c::description_s& gui_dialog_c::description_s::file(const ts::wsptr &
     return *this;
 }
 
+gui_dialog_c::description_s& gui_dialog_c::description_s::rotext( const ts::wsptr &desc_, const ts::wsptr &val )
+{
+    ctl = _ROTEXT;
+    desc = desc_;
+    text = val;
+    textchecker = gui_textedit_c::TEXTCHECKFUNC();
+    return *this;
+}
+
 gui_dialog_c::description_s& gui_dialog_c::description_s::textfield( const ts::wsptr &desc_, const ts::wsptr &val, gui_textedit_c::TEXTCHECKFUNC checker )
 {
     ctl = _TEXT;
@@ -653,6 +662,15 @@ namespace
     };
 }
 
+bool gui_dialog_c::copy_text( RID, GUIPARAM param )
+{
+    gui_textfield_c &tf = HOLD( RID::from_param( param ) ).as<gui_textfield_c>();
+    gui->set_focus( tf.getrid() );
+    tf.selectall();
+    tf.copy();
+    return true;
+}
+
 bool gui_dialog_c::passw_hide_show( RID b, GUIPARAM param )
 {
     gui_textfield_c &tf = HOLD( RID::from_param( param ) ).as<gui_textfield_c>();
@@ -768,7 +786,7 @@ void gui_dialog_c::set_edit_value( const ts::asptr& ctl_name, const ts::wstr_c& 
     }
     for (description_s &d : descs)
     {
-        if ((d.ctl == description_s::_TEXT || d.ctl == description_s::_PASSWD || d.ctl == description_s::_SELECTOR) && d.name == ctl_name)
+        if ((d.ctl == description_s::_TEXT || d.ctl == description_s::_PASSWD || d.ctl == description_s::_SELECTOR || d.ctl == description_s::_ROTEXT) && d.name == ctl_name)
         {
             d.text = t;
             d.options.set(description_s::o_changed);
@@ -822,7 +840,9 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
     switch (role)
     {
     case TFR_TEXT_FILED:
+        break;
     case TFR_TEXT_FILED_RO:
+        selector = DELEGATE( this, copy_text );
         break;
     case TFR_PATH_SELECTOR:
         selector = DELEGATE( this, path_selector );
@@ -852,6 +872,8 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
 
     if (role == TFR_TEXT_FILED_RO)
     {
+        creator.selectorface = BUTTON_FACE( ecopy );
+
         ts::TSCOLOR c = ts::ARGB(0, 0, 0);
         if (const theme_rect_s *thr = tf.themerect()) c = thr->deftextcolor;
         tf.set_color(c);
@@ -1375,6 +1397,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             }
             break;
         case description_s::_TEXT:
+        case description_s::_ROTEXT:
         case description_s::_PASSWD:
         case description_s::_BUTTON:
         case description_s::_HSLIDER:
@@ -1408,6 +1431,8 @@ RID gui_dialog_c::description_s::make_ctl(gui_dialog_c *dlg, RID parent)
     {
     case _TEXT:
         return dlg->textfield(text, MAX_PATH_LENGTH, options.is(o_readonly) ? TFR_TEXT_FILED_RO : TFR_TEXT_FILED, DELEGATE(this, updvalue), nullptr, height_, parent, options.is(o_visible));
+    case _ROTEXT:
+        return dlg->textfield( text, MAX_PATH_LENGTH, TFR_TEXT_FILED_RO, nullptr, nullptr, height_, parent );
     case _PASSWD:
         return dlg->textfield(text, MAX_PATH_LENGTH, TFR_TEXT_FILED_PASSWD, DELEGATE(this, updvalue), nullptr, height_, parent);
     case _SELECTOR:

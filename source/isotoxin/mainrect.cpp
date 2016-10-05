@@ -84,7 +84,7 @@ namespace
 
                 dialog_msgbox_c::mb_warning( TTT( "There are call with $[br]What do you want to do with this call?", 482 ) / from_utf8( nn ) ).bcancel()
                     .bcustom( true, TTT( "Break", 483 ) )
-                    .bok( TTT( "Dont't break", 484 ) )
+                    .bok( TTT( "Don't break", 484 ) )
                     .on_ok( DELEGATE( this, custom_close ), CONSTASTR( "1" ) ).on_custom( DELEGATE( this, custom_close ), CONSTASTR( "0" ) ).summon();
             } else
             {
@@ -371,6 +371,7 @@ namespace
             case SQ_CLOSE:
                 {
                     DEFERRED_UNIQUE_CALL( 0, DELEGATE( this, close_me_chk ), nullptr );
+                    data.allowclose = false;
                 }
                 return true;
             }
@@ -679,7 +680,11 @@ bool mainrect_c::saverectpos(RID,GUIPARAM)
             getengine().end_draw();
         }
 		break;
-	}
+    case SQ_CLOSE:
+        if ( gmsg<GM_UI_EVENT>( UE_CLOSE ).send().is( GMRBIT_ABORT ) )
+            data.allowclose = false;
+        return true;
+    }
 
     return false;
 }

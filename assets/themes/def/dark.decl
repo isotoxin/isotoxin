@@ -38,6 +38,11 @@ colors {
 	msg_other_time=#709def
 	msg_other_bg=#545358
 	msg_other_bg_found=#545358
+	msg_pm_text=#ffbf00
+	msg_pm_name=#ff9500
+	msg_pm_time=#709def
+	msg_pm_bg=#353e3c
+	msg_pm_bg_found=#545358
 	msg_invite_bg=#132e25
 	load_bg=#545358
 	date_sep_bg=#746d6b

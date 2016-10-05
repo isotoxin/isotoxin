@@ -24,7 +24,7 @@ gui_isodialog_c::~gui_isodialog_c()
         bcr.btext = TTT("Cancel",9);
         bcr.handler = DELEGATE(this, b_close);
         break;
-    case 1: // close/cancel
+    case 1: // ok
         bcr.face = BUTTON_FACE(button);
         bcr.btext = TTT("Ok",10);
         bcr.handler = DELEGATE(this, b_confirm);

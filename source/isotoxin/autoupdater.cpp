@@ -613,13 +613,16 @@ void crypto_zero( ts::uint8 *buf, int bufsize )
     sodium_memzero( buf, bufsize );
 }
 
-void get_unique_machine_id( ts::uint8 *buf, int bufsize )
+void get_unique_machine_id( ts::uint8 *buf, int bufsize, const char *salt, bool use_profile_uniqid )
 {
     ts::tmp_buf_c b;
-    b.append_s( "kfnghtyeizakf" ); // salt
+    b.append_s( salt ); // salt
     b.append_s( ts::gen_machine_unique_string() );
-    b.tappend<char>('-');
-    b.append_s( prf().unique_profile_tag() );
+    if ( use_profile_uniqid )
+    {
+        b.tappend<char>( '-' );
+        b.append_s( prf().unique_profile_tag() );
+    }
 
     crypto_generichash( buf, bufsize, b.data(), b.size(), nullptr, 0 );
     sodium_memzero( b.data(), b.size() );
@@ -630,7 +633,7 @@ ts::str_c encode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& 
     ts::tmp_buf_c b;
     b.append_s(s);
     b.append_s( ts::str_c(CONSTASTR("/")).append_as_num(s.l).append_char('=').as_sptr() );
-    while ( b.size() < 64 ) b.tappend<ts::uint8>( '=' );
+    //while ( b.size() < 64 ) b.tappend<ts::uint8>( '=' );
     ts::uint8 *nonce = b.expand( crypto_stream_chacha20_NONCEBYTES );
     memset( nonce, 1, crypto_stream_chacha20_NONCEBYTES );
     TS_STATIC_CHECK( 32 == crypto_stream_chacha20_KEYBYTES, "cha cha key" );

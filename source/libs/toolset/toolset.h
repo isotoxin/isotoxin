@@ -46,13 +46,6 @@
 
 #define DELEGATE(a,method) fastdelegate::MakeDelegate((a), &ts::clean_type<decltype(a)>::type::method)
 
-#ifndef TS_SKIP_FREETYPE
-#pragma pack(push,1)
-#include <ft2build.h>
-#include FT_FREETYPE_H
-#pragma pack(pop)
-#endif
-
 #if defined _MSC_VER
 #define ALIGN(n) __declspec( align( n ) )
 #define THREADLOCAL __declspec(thread)
@@ -1208,6 +1201,76 @@ struct lnk_s
         }
         return dl << "]";
     }
+
+
+    // some strings stuff on shared pointers
+
+    struct dynamic_allocator_s : public shared_object
+    {
+        dynamic_allocator_s() {}
+        virtual ~dynamic_allocator_s() {}
+
+        virtual void *balloc( size_t sz )
+        {
+            return MM_ALLOC( sz );
+        }
+        virtual void bfree( void *p )
+        {
+            return MM_FREE( p );
+        }
+    };
+
+    template<typename TCHARACTER> class refstring_t
+    {
+        shared_ptr<dynamic_allocator_s> a;
+        ZSTRINGS_SIGNED ref = 0;
+        ZSTRINGS_SIGNED len;
+
+        ~refstring_t() {}
+        DECLARE_DYNAMIC_BEGIN( refstring_t )
+        refstring_t( ZSTRINGS_SIGNED len, dynamic_allocator_s *a ) :len( len ), a( a ) {}
+        DECLARE_DYNAMIC_END( public )
+
+        void add_ref() { ++ref; }
+        static void dec_ref( refstring_t<TCHARACTER> *object )
+        {
+            ASSERT( object->ref > 0 );
+            if ( --object->ref == 0 )
+            {
+                shared_ptr<dynamic_allocator_s> a( object->a );
+                object->~refstring_t();
+                a->bfree( object );
+            }
+        }
+
+
+        static refstring_t *build( const sptr<TCHARACTER>&s, dynamic_allocator_s *a )
+        {
+            refstring_t<TCHARACTER> *ns = ( refstring_t<TCHARACTER> * )a->balloc( s.l + sizeof( TCHARACTER ) + sizeof( refstring_t<TCHARACTER> ) );
+            TSPLACENEW( ns, s.l, a );
+            TCHARACTER *tgts = (TCHARACTER *)( ns + 1 );
+            memcpy( tgts, s.s, s.l * sizeof( TCHARACTER ) );
+            tgts[ s.l ] = 0;
+            return ns;
+        }
+
+        sptr<TCHARACTER> cstr() const
+        {
+            return sptr<TCHARACTER>( (const TCHARACTER *)( this + 1 ), len );
+        }
+        bool is_empty() const
+        {
+            return len == 0;
+        }
+
+        void setchar( ZSTRINGS_SIGNED index, TCHARACTER c )
+        {
+            ASSERT( index < len );
+            ( (TCHARACTER *)( this + 1 ) )[ index ] = c;
+        }
+        ZSTRINGS_SIGNED getlen() const { return len; }
+    };
+
 }
 
 #if defined _DEBUG || defined _CRASH_HANDLER

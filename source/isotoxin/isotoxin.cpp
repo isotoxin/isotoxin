@@ -144,7 +144,7 @@ static bool check_instance()
     return ts::master().sys_one_instance( ts::wstr_c(CONSTWSTR("isotoxin_popup_event")), popup_notify );
 }
 
-parsed_command_line_s g_commandline;
+ts::static_setup< parsed_command_line_s, 1000 > g_commandline;
 
 static bool parsecmdl(const wchar_t *cmdl)
 {
@@ -155,6 +155,8 @@ static bool parsecmdl(const wchar_t *cmdl)
     bool wait_cmd = false;
     bool installto = false;
     bool conf = false;
+    bool profilename = false;
+    bool profilepass = false;
     uint processwait = 0;
     for (; cmds; ++cmds)
     {
@@ -178,15 +180,56 @@ static bool parsecmdl(const wchar_t *cmdl)
 
         if (conf)
         {
-            if (!g_commandline.alternative_config_path.is_empty()) g_commandline.alternative_config_path.append_char(' ');
-            g_commandline.alternative_config_path.append(*cmds);
-            if ( g_commandline.alternative_config_path.get_char(0) != '\"' || g_commandline.alternative_config_path.get_last_char() == '\"' )
+            parsed_command_line_s & gcmdl = g_commandline();
+
+            if ( !gcmdl.alternative_config_path )
+                gcmdl.alternative_config_path.reset( TSNEW( ts::wstr_c, *cmds ) );
+            else
+            {
+                if ( !gcmdl.alternative_config_path->is_empty() )
+                    gcmdl.alternative_config_path->append_char( ' ' );
+                gcmdl.alternative_config_path->append( *cmds );
+            }
+
+            if ( gcmdl.alternative_config_path->get_char(0) != '\"' || gcmdl.alternative_config_path->get_last_char() == '\"' )
             {
                 conf = false;
-                g_commandline.alternative_config_path.trunc_char('\"');
-                if (g_commandline.alternative_config_path.get_char(0) == '\"')
-                    g_commandline.alternative_config_path.cut(0,1);
+                gcmdl.alternative_config_path->trunc_char('\"');
+                if ( gcmdl.alternative_config_path->get_char(0) == '\"')
+                    gcmdl.alternative_config_path->cut(0,1);
             }
+            continue;
+        }
+
+        if ( profilename )
+        {
+            profilename = false;
+            parsed_command_line_s & gcmdl = g_commandline();
+
+            if ( !gcmdl.profilename )
+                gcmdl.profilename.reset( TSNEW( ts::wstr_c, *cmds ) );
+            else
+                gcmdl.profilename->set( *cmds );
+
+            gcmdl.profilename->trunc_char( '\"' );
+            if ( gcmdl.profilename->get_char( 0 ) == '\"' )
+                gcmdl.profilename->cut( 0, 1 );
+            continue;
+        }
+
+        if ( profilepass )
+        {
+            profilepass = false;
+            parsed_command_line_s & gcmdl = g_commandline();
+
+            if ( !gcmdl.profilepass )
+                gcmdl.profilepass.reset( TSNEW( ts::wstr_c, *cmds ) );
+            else
+                gcmdl.profilepass->set( *cmds );
+
+            gcmdl.profilepass->trunc_char( '\"' );
+            if ( gcmdl.profilepass->get_char( 0 ) == '\"' )
+                gcmdl.profilepass->cut( 0, 1 );
             continue;
         }
 
@@ -198,19 +241,19 @@ static bool parsecmdl(const wchar_t *cmdl)
 
         if (cmds->equals(CONSTWSTR("multi")))
         {
-            g_commandline.checkinstance = false;
+            g_commandline().checkinstance = false;
             continue;
         }
 
         if (cmds->equals(CONSTWSTR("minimize")))
         {
-            g_commandline.minimize = true;
+            g_commandline().minimize = true;
             continue;
         }
 
         if (cmds->equals(CONSTWSTR("readonly")))
         {
-            g_commandline.readonlymode = true;
+            g_commandline().readonlymode = true;
             continue;
         }
 
@@ -223,6 +266,18 @@ static bool parsecmdl(const wchar_t *cmdl)
         if (cmds->equals(CONSTWSTR("config")))
         {
             conf = true;
+            continue;
+        }
+
+        if ( cmds->equals( CONSTWSTR( "profile" ) ) )
+        {
+            profilename = true;
+            continue;
+        }
+
+        if ( cmds->equals( CONSTWSTR( "password" ) ) )
+        {
+            profilepass = true;
             continue;
         }
 
@@ -260,7 +315,7 @@ bool _cdecl ts::app_preinit( const wchar_t *cmdl )
         return false;
 
 #ifdef _FINAL
-    if (g_commandline.checkinstance)
+    if (g_commandline().checkinstance)
         if (!check_instance()) return false;
 #endif // _FINAL
 

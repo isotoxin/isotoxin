@@ -683,6 +683,8 @@ struct incoming_file_s : public file_transfer_s
     u64 next_recv_offset = 0;
     std::vector<byte> chunk;
 
+    int last_time_portion_flush = time_ms();
+
     str_c fn;
     TOX_FILE_KIND kind;
 
@@ -722,14 +724,24 @@ struct incoming_file_s : public file_transfer_s
         
         memcpy(chunk.data() + position - chunk_offset, data, datasz);
 
-        if (newsize >= FILE_TRANSFER_CHUNK)
+        if (newsize >= FILE_TRANSFER_CHUNK )
         {
-            if (hf->file_portion(utag, chunk_offset, chunk.data(), FILE_TRANSFER_CHUNK))
+        portion_anyway_flush:
+            int portion_size = min( FILE_TRANSFER_CHUNK, chunk.size() );
+            if (hf->file_portion(utag, chunk_offset, chunk.data(), portion_size ))
             {
-                chunk_offset += FILE_TRANSFER_CHUNK;
-                aint ostsz = chunk.size() - FILE_TRANSFER_CHUNK;
-                memcpy(chunk.data(), chunk.data() + FILE_TRANSFER_CHUNK, ostsz);
+                chunk_offset += portion_size;
+                aint ostsz = chunk.size() - portion_size;
+                memcpy(chunk.data(), chunk.data() + portion_size, ostsz);
                 chunk.resize(ostsz);
+            }
+        } else
+        {
+            int current_time = time_ms();
+            if ( ( current_time - last_time_portion_flush ) >= 1000 && chunk.size() )
+            {
+                last_time_portion_flush = current_time;
+                goto portion_anyway_flush;
             }
         }
 
@@ -1981,6 +1993,15 @@ public:
                 break;
             }
         }
+
+        if ( is_group() )
+        {
+            bool persistent = false;
+            if (!persistent)
+            {
+                state = CS_ROTTEN;
+            }
+        }
     }
 
     void prepare_details( str_c &tmps, const uint8_t *iid, contact_data_s &cd ) const
@@ -2079,6 +2100,7 @@ public:
     void send_avatar()
     {
         if (!is_online()) return;
+        if ( state == CS_UNKNOWN ) return;
         if (ISFLAG(flags, F_AVASEND)) return;
         if (avatag_self == gavatag) return;
 
@@ -2830,6 +2852,8 @@ static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_
         desc->prepare_details(details_json_string, nullptr, cd);
 
         hf->update_contact(&cd);
+        if ( accepted )
+            hf->save();
     }
 }
 
@@ -3771,6 +3795,7 @@ static void connect()
 void __stdcall offline();
 void __stdcall online();
 void __stdcall stop_call(int id);
+void do_on_offline_stuff();
 
 void __stdcall tick(int *sleep_time_ms)
 {
@@ -3846,18 +3871,23 @@ void __stdcall tick(int *sleep_time_ms)
             if (0 != memcmp(id, lastmypubid, TOX_ADDRESS_SIZE))
                 forceupdateself = true;
         }
-        contact_state_e nst = tox_self_get_connection_status(tox) != TOX_CONNECTION_NONE ? CS_ONLINE : CS_OFFLINE;
+        bool on_offline = false;
+        contact_state_e nst = tox_self_get_connection_status( tox ) != TOX_CONNECTION_NONE ? CS_ONLINE : CS_OFFLINE;
         if (forceupdateself || nst != self_state)
         {
-            if (nst == CS_OFFLINE && self_state != CS_OFFLINE)
-                tryconnect = now() + 10;
+            if ( nst == CS_OFFLINE && self_state != CS_OFFLINE )
+                tryconnect = now() + 10, on_offline = true;
 
             self_state = nst;
-            update_self();
 
+            if ( !on_offline ) // dont do update self on offline due do_on_offline_stuff will be called later
+                update_self();
         }
 
         static int reconnect_try = 0;
+
+        if ( on_offline )
+            do_on_offline_stuff();
 
         if (nst == CS_OFFLINE)
         {
@@ -4485,9 +4515,15 @@ static void save_current_stuff( savebuffer &b )
     chunk(b, chunk_msgs_receiving) << serlist<message_part_s>(message_part_s::first);
 }
 
+
 void __stdcall offline()
 {
     online_flag = false;
+    do_on_offline_stuff();
+}
+
+void do_on_offline_stuff()
+{
     stop_senders();
 
     if (tox)
@@ -4517,7 +4553,7 @@ void __stdcall offline()
 
         for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
         {
-            if ( f->state == CS_INVITE_RECEIVE || f->state == CS_INVITE_SEND ) continue;
+            if ( f->state == CS_INVITE_RECEIVE || f->state == CS_INVITE_SEND || f->state == CS_UNKNOWN ) continue;
             f->on_offline();
             if (!tox) f->set_fid(-1, false);
             update_contact(f);
@@ -4658,11 +4694,13 @@ void __stdcall del_contact(int id)
 
             tox_friend_delete(tox, desc->get_fid(), nullptr);
             desc->die();
+            hf->save();
         } else
         {
             ASSERT( desc->is_group() );
             tox_del_groupchat(tox, desc->get_gnum());
             desc->die();
+            hf->save();
         }
     }
 }

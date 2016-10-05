@@ -31,21 +31,23 @@ namespace ts
         TGA_Header *header;
         const uint8 *pixels;
         int buflen;
+        int shrinkx;
     };
 
     static bool tgadatareader(img_reader_s &r, void * buf, int pitch)
     {
         tgaread_s & tgar = ref_cast<tgaread_s>(r.data);
 
+        bool instant_stop = false;
         int tgapitch = tgar.header->Depth / 8 * tgar.header->Width;
         uint8 *tdata;
         int inc;
-        if (tgar.header->ImageDescriptor & 0x20)//top-down orientation
+        if (tgar.header->ImageDescriptor & 0x20) //top-down orientation
         {
             tdata = (uint8 *)buf;
             inc = pitch;
         }
-        else//bottom-up orientation
+        else //bottom-up orientation
         {
             tdata = (uint8 *)buf + (r.size.y - 1)*pitch;
             inc = -pitch;
@@ -54,74 +56,86 @@ namespace ts
         {
             int data_length = tgar.buflen - sizeof(TGA_Header);
             const uint8 *pixels_end = tgar.pixels + data_length;
-            int y = 0;
 
             TSCOLOR color = 0xFF000000;
             uint8 depth_bytes = tgar.header->Depth / 8;
-            int bbx = 0;
-            int bbxlim = r.size.x * depth_bytes;
-            while (tgar.pixels < pixels_end)
-            {
-                uint8 rle_var = *tgar.pixels++;
-                if (rle_var > 127)
+
+            shrink_on_read_c sor( ivec2( (int)tgar.header->Width, (int)tgar.header->Height ), tgar.shrinkx );
+            sor.do_job( tdata, inc, depth_bytes, [&]( int y, uint8 *row ) {
+
+                if ( r.progress && r.progress( y, tgar.header->Height ) )
                 {
-                    int repeat_count = rle_var - 127;
-                    memcpy(&color, tgar.pixels, depth_bytes);
-                    tgar.pixels += depth_bytes;
-                    ASSERT(tgar.pixels <= pixels_end);
+                    instant_stop = true;
+                    return true;
+                }
 
-                    while (repeat_count--)
+                uint8 *row_end = row + tgar.header->Width * depth_bytes;
+
+                while ( tgar.pixels < pixels_end )
+                {
+                    uint8 rle_var = *tgar.pixels++;
+                    if ( rle_var > 127 )
                     {
-                        memcpy(tdata + bbx, &color, depth_bytes);
-                        bbx += depth_bytes;
+                        int repeat_count = rle_var - 127;
+                        memcpy( &color, tgar.pixels, depth_bytes );
+                        tgar.pixels += depth_bytes;
+                        ASSERT( tgar.pixels <= pixels_end );
+
+                        while ( repeat_count-- )
+                        {
+                            memcpy( row, &color, depth_bytes );
+                            row += depth_bytes;
+                        }
+                        ASSERT( row <= row_end );
+                        if ( row >= row_end )
+                            return false;
                     }
-                    ASSERT(bbx <= bbxlim);
-                    if (bbx >= bbxlim)
-                    {
-                        tdata += inc;
-                        bbx = 0;
-                        ++y;
-                        if (y == r.size.y)
-                            break;
+                    else {
+                        int series_size = ( rle_var + 1 ) * depth_bytes;
+                        ASSERT( row + series_size <= row_end );
+                        memcpy( row, tgar.pixels, series_size );
+                        tgar.pixels += series_size; ASSERT( tgar.pixels <= pixels_end );
+                        row += series_size;
+
+                        if ( row >= row_end )
+                            return false;
                     }
                 }
-                else {
-                    int series_size = (rle_var + 1) * depth_bytes;
-                    ASSERT(bbx + series_size <= bbxlim);
-                    memcpy(tdata + bbx, tgar.pixels, series_size);
-                    tgar.pixels += series_size; ASSERT(tgar.pixels <= pixels_end);
-                    bbx += series_size;
-
-                    if (bbx >= bbxlim)
-                    {
-                        tdata += inc;
-                        bbx = 0;
-                        ++y;
-                        if (y == r.size.y)
-                            break;
-                    }
-                }
-            }
+                return false;
+            } );
         }
         else
         {
-            if (tgapitch == pitch && inc > 0)
+            if (tgapitch == pitch && inc > 0 && tgar.shrinkx == 0)
             {
                 memcpy(tdata, tgar.pixels, tgapitch * r.size.y);
-            }
-            else
+
+            } else
             {
-                for (int y = r.size.y; y > 0; tdata += inc, tgar.pixels += tgapitch, y--)
-                    memcpy(tdata, tgar.pixels, pitch);
+                int szrow = tgar.header->Width * r.bitpp / 8;
+                shrink_on_read_c sor( ivec2( (int)tgar.header->Width, (int)tgar.header->Height ), tgar.shrinkx );
+                sor.do_job( tdata, inc, r.bitpp/8, [&]( int y, uint8 *row ) {
+
+                    if ( r.progress && r.progress( y, tgar.header->Height ) )
+                    {
+                        instant_stop = true;
+                        return true;
+                    }
+
+                    memcpy( row, tgar.pixels, szrow );
+                    tgar.pixels += tgapitch;
+                    return false;
+                } );
             }
         }
 
-        return true;
+        if ( r.progress )
+            r.progress( tgar.header->Height, tgar.header->Height );
 
-
+        return !instant_stop;
     }
 
-    image_read_func img_reader_s::detect_tga_format(const void *sourcebuf, aint sourcebufsize)
+    image_read_func img_reader_s::detect_tga_format(const void *sourcebuf, aint sourcebufsize, const ivec2& limitsize )
     {
         if (sourcebufsize < sizeof(TGA_Header)) return nullptr;
 
@@ -144,6 +158,22 @@ namespace ts
             if (datasize < 1 || datasize > (aint)(sourcebufsize - sizeof(TGA_Header)))
                 return nullptr;
         }
+
+        tgar.shrinkx = 0;
+
+        if ( limitsize >> 0 )
+        {
+            while ( size > limitsize )
+            {
+                size.x >>= 1;
+                size.y >>= 1;
+                ++tgar.shrinkx;
+            }
+        }
+
+        if ( size >> 0 );
+            else return nullptr;
+
 
         tgar.buflen = (int)sourcebufsize;
         return tgadatareader;

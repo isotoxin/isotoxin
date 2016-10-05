@@ -205,6 +205,30 @@ public:
         return nullptr;
     }
 
+    ts::ivec2 get_prvnext_index( const rectengine_c *e )
+    {
+        ts::ivec2 r( -1 );
+        ts::aint i = children.find( e );
+        if ( i >= 0 )
+        {
+            ts::aint j = i;
+            while ( ++i < children.size() )
+                if ( rectengine_c * re = children.get( i ) )
+                {
+                    r.r1 = static_cast<int>( i );
+                    break;
+                }
+
+            while ( --j >= 0 )
+                if ( rectengine_c * re = children.get( j ) )
+                {
+                    r.r0 = static_cast<int>( j );
+                    break;
+                }
+        }
+        return r;
+    }
+
     ts::aint get_next_child_index( ts::aint index = 0 )
     {
         if ( index < 0 ) return -1;
@@ -465,6 +489,15 @@ struct drawcollector
             if (engine->redraw_required())
                 engine->redraw_now();
             engine->flags.clear(rectengine_root_c::F_REDRAW_COLLECTOR);
+        }
+    }
+
+    void no_draw()
+    {
+        if ( engine )
+        {
+            engine->flags.clear( rectengine_root_c::F_REDRAW_COLLECTOR );
+            engine = nullptr;
         }
     }
 

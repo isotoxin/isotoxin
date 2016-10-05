@@ -47,7 +47,7 @@ namespace
 #pragma pack(pop)
 }
 
-image_read_func img_reader_s::detect_bmp_format(const void *sourcebuf, aint sourcebufsize)
+image_read_func img_reader_s::detect_bmp_format(const void *sourcebuf, aint sourcebufsize, const ivec2& limitsize)
 {
     Header *header = (Header*)sourcebuf;
 
@@ -63,6 +63,15 @@ image_read_func img_reader_s::detect_bmp_format(const void *sourcebuf, aint sour
     size.x = header->iH.biWidth;
     size.y = header->iH.biHeight;
     bitpp = (uint8)header->iH.biBitCount;
+
+    if ( limitsize >> 0 )
+    {
+        if ( size > limitsize )
+        {
+            return nullptr; // just not supported
+        }
+    }
+
 
     return bmpdatareader;
 }

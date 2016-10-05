@@ -148,6 +148,7 @@ enum cfg_misc_flags_e
     MISCF_DISABLE64 = 1,
     MISCF_DISABLEBORDER = 2,
     MISCF_SPLIT_UI = 4,
+    MISCF_DONT_BACKUP_PROFILE = 8,
 };
 
 class config_c : public config_base_c
@@ -217,6 +218,8 @@ public:
 
     TEXTWPAR( temp_folder_sendimg, "%TEMP%\\$$$isotoxin\\sendimg\\" )
     TEXTWPAR( temp_folder_handlemsg, "%TEMP%\\$$$isotoxin\\handlemsg\\" )
+    
+    TEXTWPAR( folder_backup, "%TEMP%\\$$$isotoxin\\backup\\" )
 
     TEXTAPAR( convs, "" )
 

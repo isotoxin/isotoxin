@@ -2009,7 +2009,7 @@ template<typename CORE> bool bitmap_t<CORE>::load_from_BMPHEADER(const BITMAPINF
 	return true;
 }
 
-template<typename CORE> img_format_e bitmap_t<CORE>::load_from_file(const void * buf, aint buflen)
+template<typename CORE> img_format_e bitmap_t<CORE>::load_from_file( const void * buf, aint buflen, const ivec2 &limitsize, IMG_LOADING_PROGRESS progress )
 {
 	if (buflen < 4) return if_none;
 
@@ -2017,8 +2017,9 @@ template<typename CORE> img_format_e bitmap_t<CORE>::load_from_file(const void *
 
         img_reader_s reader;
         img_format_e fmt = if_none;
-        if (image_read_func r = reader.detect(buf,buflen,fmt))
+        if (image_read_func r = reader.detect(buf,buflen,fmt,limitsize))
         {
+            reader.progress = progress;
             switch (reader.bitpp)
             {
             case 8:

@@ -727,15 +727,19 @@ public:
         return false;
     }
 
-    bool    load_from_disk_file(const wsptr &fn, bool text = false)
+    bool    load_from_disk_file(const wsptr &fn, bool text = false, uint64 limit_size = (uint64)-1)
     {
         set_size(0, false);
 
         if ( void * hand = f_open(fn))
         {
-            aint size = (aint)f_size(hand);
-            aint m_size = size; if (text) m_size += 2;
-            set_size(m_size, false);
+            uint64 size = f_size(hand);
+            if (size > limit_size)
+            {
+                f_close( hand );
+                return false;
+            }
+            set_size(text ? (size+2) : size, false);
             aint r = f_read(hand, core(), size);
             f_close(hand);
             if (text && ASSERT(core.writable()))
@@ -743,7 +747,7 @@ public:
                 core()[size] = 0;
                 core()[size + 1] = 0;
             }
-            return (aint)r == size;
+            return r == (aint)size;
         }
         return false;
     }

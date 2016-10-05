@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
-VisualStudioVersion = 12.0.31101.0
+VisualStudioVersion = 12.0.40629.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "isotoxin", "isotoxin\isotoxin_2013.vcxproj", "{DC148EB8-AEA2-4CA3-892D-D0ACB439642E}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -15,6 +15,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "isotoxin", "isotoxin\isotox
 		{01DD796D-046A-45ED-B5B8-1ACE90A08F71} = {01DD796D-046A-45ED-B5B8-1ACE90A08F71}
 		{9209A27B-E512-4197-BD76-B6451C3726B2} = {9209A27B-E512-4197-BD76-B6451C3726B2}
 		{86C11A7D-171E-4C85-8A7E-00522AC778AB} = {86C11A7D-171E-4C85-8A7E-00522AC778AB}
+		{72CB3188-254C-4866-ABF0-15DE785DD067} = {72CB3188-254C-4866-ABF0-15DE785DD067}
 		{62EFD590-07D2-4079-8E94-DD61CC65C57E} = {62EFD590-07D2-4079-8E94-DD61CC65C57E}
 		{4C8589AD-973D-4331-8433-BBE50534B282} = {4C8589AD-973D-4331-8433-BBE50534B282}
 	EndProjectSection
@@ -47,11 +48,13 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "proto_lan", "plugins\proto_lan\proto_lan_2013.vcxproj", "{31805D3B-0783-48E8-99FA-04F8B3C65CE3}"
 	ProjectSection(ProjectDependencies) = postProject
 		{412A8E3C-78F5-4FF1-9CA7-A19605BC3FF6} = {412A8E3C-78F5-4FF1-9CA7-A19605BC3FF6}
+		{72CB3188-254C-4866-ABF0-15DE785DD067} = {72CB3188-254C-4866-ABF0-15DE785DD067}
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "proto_tox", "plugins\proto_tox\proto_tox_2013.vcxproj", "{954B6F05-1838-48C5-B63C-27F10AE0A1F9}"
 	ProjectSection(ProjectDependencies) = postProject
 		{412A8E3C-78F5-4FF1-9CA7-A19605BC3FF6} = {412A8E3C-78F5-4FF1-9CA7-A19605BC3FF6}
+		{72CB3188-254C-4866-ABF0-15DE785DD067} = {72CB3188-254C-4866-ABF0-15DE785DD067}
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "plgcommon", "plugins\plgcommon\plgcommon_2013.vcxproj", "{412A8E3C-78F5-4FF1-9CA7-A19605BC3FF6}"
@@ -67,7 +70,10 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "proto_xmp", "plugins\proto_xmp\proto_xmp_2013.vcxproj", "{62EFD590-07D2-4079-8E94-DD61CC65C57E}"
 	ProjectSection(ProjectDependencies) = postProject
 		{412A8E3C-78F5-4FF1-9CA7-A19605BC3FF6} = {412A8E3C-78F5-4FF1-9CA7-A19605BC3FF6}
+		{72CB3188-254C-4866-ABF0-15DE785DD067} = {72CB3188-254C-4866-ABF0-15DE785DD067}
 	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "shared", "shared\shared_2013.vcxproj", "{72CB3188-254C-4866-ABF0-15DE785DD067}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -160,6 +166,12 @@ Global
 		{62EFD590-07D2-4079-8E94-DD61CC65C57E}.Debug|Win32.Build.0 = Debug|Win32
 		{62EFD590-07D2-4079-8E94-DD61CC65C57E}.Final|Win32.ActiveCfg = Final|Win32
 		{62EFD590-07D2-4079-8E94-DD61CC65C57E}.Final|Win32.Build.0 = Final|Win32
+		{72CB3188-254C-4866-ABF0-15DE785DD067}.Debug Optimized|Win32.ActiveCfg = Debug Optimized|Win32
+		{72CB3188-254C-4866-ABF0-15DE785DD067}.Debug Optimized|Win32.Build.0 = Debug Optimized|Win32
+		{72CB3188-254C-4866-ABF0-15DE785DD067}.Debug|Win32.ActiveCfg = Debug|Win32
+		{72CB3188-254C-4866-ABF0-15DE785DD067}.Debug|Win32.Build.0 = Debug|Win32
+		{72CB3188-254C-4866-ABF0-15DE785DD067}.Final|Win32.ActiveCfg = Final|Win32
+		{72CB3188-254C-4866-ABF0-15DE785DD067}.Final|Win32.Build.0 = Final|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -46,7 +46,16 @@ int proc_bsdl(const wstrings_c & pars)
             md5.update( dic.data(), dic.size() );
             md5.done();
 
-            lst.add( fn_get_name(f).append(CONSTWSTR("=")).append_as_hex(md5.result(), 16) );
+            ts::wstr_c fnold = fn_get_name( f );
+            ts::wstr_c fn( fnold );
+
+            if ( fn.equals( CONSTWSTR( "la" ) ) )
+                fn.set( CONSTWSTR("Latin") );
+
+            if ( !fn.equals( fnold ) )
+                rename_file( fnold + CONSTWSTR(".zip"), fn + CONSTWSTR( ".zip" ) );
+
+            lst.add( fn.append(CONSTWSTR("=")).append_as_hex(md5.result(), 16) );
         }
     }
 

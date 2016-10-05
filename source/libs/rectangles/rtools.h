@@ -114,6 +114,12 @@ public:
     void        call_enable(bool enableflg) const;
 };
 
+INLINE unsigned calc_hash( RID r )
+{
+    return r.index();
+}
+
+
 typedef fastdelegate::FastDelegate<bool(RID, GUIPARAM)> GUIPARAMHANDLER;
 
 INLINE GUIPARAM as_param(GUIPARAM v)
@@ -227,6 +233,15 @@ struct process_animation_s
     ~process_animation_s();
     void render();
     void restart();
+
+    void operator=( process_animation_s&&opa )
+    {
+        bmp = std::move( opa.bmp );
+        svg = std::move( opa.svg );
+        angle = opa.angle;
+        devia = opa.devia;
+        nexttime = opa.nexttime;
+    }
 
 };
 

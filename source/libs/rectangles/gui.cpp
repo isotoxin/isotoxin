@@ -32,6 +32,8 @@ void    gui_c::add_event(delay_event_c *de, double t)
 {
     MEMT( MEMT_EVTSYSTEM );
 
+    ASSERT( basetid == spinlock::pthread_self() );
+
     m_events.lock_write()().add(de);
     m_timer_processor.add(de, t, nullptr);
 }
@@ -43,6 +45,9 @@ void    gui_c::delete_event(delay_event_c *de)
 
 void gui_c::delete_event(GUIPARAMHANDLER h)
 {
+    ASSERT( basetid == spinlock::pthread_self() );
+
+    bool cleanup = false;
     auto w = m_events.lock_write();
 
     for ( ts::aint index = w().size() - 1; index >= 0; --index)
@@ -52,13 +57,19 @@ void gui_c::delete_event(GUIPARAMHANDLER h)
         {
             w().remove_fast(index); //<< this will kill hook
             de->die(); // and now we kill delay_event itself
-            m_timer_processor.cleanup();
+            cleanup = true;
         }
     }
+    w.unlock();
+    if ( cleanup )
+        m_timer_processor.cleanup();
 }
 
 void gui_c::delete_event(GUIPARAMHANDLER h, GUIPARAM prm)
 {
+    ASSERT( basetid == spinlock::pthread_self() );
+
+    bool cleanup = false;
     auto w = m_events.lock_write();
 
     for ( ts::aint index = w().size() - 1; index >= 0; --index)
@@ -68,8 +79,12 @@ void gui_c::delete_event(GUIPARAMHANDLER h, GUIPARAM prm)
         {
             w().remove_fast(index); //<< this will kill hook
             de->die(); // and now we kill delay_event itself
+            cleanup = true;
         }
     }
+    w.unlock();
+    if ( cleanup )
+        m_timer_processor.cleanup();
 }
 
 bool gui_c::b_close(RID r, GUIPARAM param)
@@ -106,14 +121,15 @@ bool gui_c::b_normalize(RID r, GUIPARAM param)
 
 gui_c::gui_c()
 {
+#ifdef _DEBUG
+    basetid = spinlock::pthread_self();
+#endif // _DEBUG
+
     ts::Time::update_thread_time();
 
     m_deffont_name = CONSTASTR("default");
     gui = this;
     dirty_hover_data();
-
-    register_kbd_callback(DELEGATE(&m_selcore, copy_hotkey_handler), ts::SSK_C, ts::casw_ctrl);
-    register_kbd_callback(DELEGATE(&m_selcore, copy_hotkey_handler), ts::SSK_INSERT, ts::casw_ctrl);
 
 }
 
@@ -198,10 +214,19 @@ void gui_c::process_children_repos()
 
     AUTOCLEAR( m_flags, F_PROCESSING_REPOS );
 
-    for (gui_group_c *gg : g2p)
+    for ( ts::aint i=0; i<g2p.size(); ++i )
     {
+        gui_group_c *gg = g2p.get( i );
+        m_repos_inprogress = gg;
         gg->children_repos();
         gg->getengine().redraw();
+        m_repos_inprogress = nullptr;
+        if ( m_children_repos.size() )
+        {
+            for ( gui_group_c *g : m_children_repos )
+                if ( g ) g2p.add( g );
+            m_children_repos.clear();
+        }
     }
 
     ASSERT( m_children_repos.size() == 0 );
@@ -662,10 +687,13 @@ void gui_c::nomorerect(RID rid )
     if (rid == m_hoverdata.root_focus) { m_hoverdata.root_focus = RID(); m_hoverdata.active_focus = RID(); dhd = true; }
     if (rid == m_hoverdata.locked) { m_hoverdata.locked = RID(); dhd = true; }
     if (rid == m_hoverdata.minside) { m_hoverdata.minside = RID(); dhd = true; }
+    if ( rid == m_hoverdata.mrealinside ) { m_hoverdata.mrealinside = RID(); dhd = true; }
     if (rid == m_hoverdata.rid) { m_hoverdata.rid = RID(); dhd = true; }
     if (dhd) dirty_hover_data();
     if (isroot)
         m_exclusive_input.find_remove_slow( rid );
+
+    m_selcores.remove(rid);
 
     if ( m_hoverdata.root_focus && !m_hoverdata.active_focus )
         m_hoverdata.active_focus = m_hoverdata.root_focus;
@@ -701,11 +729,21 @@ void gui_c::resort_roots()
     }
 }
 
+void gui_c::no_repos_children( gui_group_c *g )
+{
+    m_children_repos.find_remove_fast(g);
+    if ( m_children_repos.size() == 0 )
+        m_post_effect.clear( PEF_CHILDREN_REPOS );
+}
+
 void gui_c::repos_children(gui_group_c *g)
 {
     if (m_flags.is(F_PROCESSING_REPOS))
     {
-        g->children_repos();
+        if ( m_repos_inprogress != g )
+            g->children_repos();
+        else
+            m_children_repos.add(g);
         return;
     }
 
@@ -715,6 +753,28 @@ void gui_c::repos_children(gui_group_c *g)
             return;
 
     m_children_repos.add(g);
+}
+
+void gui_c::prepare_redraw_collector()
+{
+    ++m_dcolls_ref;
+    if ( m_dcolls_ref == 1 )
+    {
+        m_post_effect.clear();
+        if ( m_children_repos.size() ) m_post_effect.set( PEF_CHILDREN_REPOS );
+        for ( RID r : m_roots )
+            m_dcolls.add() = HOLD( r )( ).getroot();
+    }
+}
+void gui_c::flush_redraw_collector()
+{
+    if ( m_post_effect.__bits && m_dcolls_ref == 1 )
+        do_post_effect();
+
+    --m_dcolls_ref;
+    ASSERT( m_dcolls_ref >= 0 );
+    if ( m_dcolls_ref == 0 )
+        m_dcolls.clear();
 }
 
 
@@ -841,28 +901,38 @@ void gui_c::make_app_buttons(RID rootappwindow, ts::uint32 allowed_buttons, bcre
 
 const hover_data_s &gui_c::get_hoverdata( const ts::ivec2 & screenmousepos )
 {
+    bool need_update_hover_data = m_flags.is( F_DIRTY_HOVER_DATA ) || screenmousepos != m_hoverdata.mp;
+
+    auto gethover = [&]() ->RID
+    {
+        for ( RID rrid : m_roots )
+            if ( allow_input( rrid ) )
+                if ( guirect_c *rr = m_rects.get( rrid.index() ) )
+                    if ( rr->getengine().detect_hover( screenmousepos ) )
+                        return rr->getengine().find_child_by_point( screenmousepos );
+        return RID();
+    };
+
     if (m_hoverdata.locked)
     {
         m_hoverdata.rid = m_hoverdata.locked;
         HOLD r(m_hoverdata.rid);
         m_hoverdata.area = r().getengine().detect_area(r().to_local(screenmousepos));
+        if ( need_update_hover_data )
+            m_hoverdata.mrealinside = gethover();
         m_flags.clear(F_DIRTY_HOVER_DATA);
         return m_hoverdata;
     }
 
-    if (!m_flags.is(F_DIRTY_HOVER_DATA) && screenmousepos == m_hoverdata.mp) return m_hoverdata;
+    if ( !need_update_hover_data ) return m_hoverdata;
+
+    RID ridhover = gethover();
     m_hoverdata.rid = RID();
     m_hoverdata.area = 0;
     m_hoverdata.mp = screenmousepos;
-    
-    for(RID rrid : m_roots)
-        if (allow_input(rrid))
-            if (guirect_c *rr = m_rects.get(rrid.index()))
-                if (rr->getengine().detect_hover(screenmousepos))
-                {
-                    m_hoverdata.rid = rr->getengine().find_child_by_point(screenmousepos);
-                    break;
-                }
+    m_hoverdata.mrealinside = ridhover;
+    m_hoverdata.rid = ridhover;
+
     if (m_hoverdata.rid)
     {
         HOLD r(m_hoverdata.rid);
@@ -981,6 +1051,54 @@ void gui_c::mouse_outside(RID rid)
     m_hoverdata.minside = RID();
     r.engine().sq_evt(SQ_MOUSE_OUT, r().getrid(), d);
 }
+
+void gui_c::crop_selcore( RID rid )
+{
+    if ( auto *csc = m_selcores.find( rid ) )
+    {
+        UNIQUE_PTR( selectable_core_s ) tmp = std::move( csc->value );
+        m_selcores.clear();
+        if ( tmp )
+            m_selcores.add( rid ) = std::move( tmp );
+    } else
+        m_selcores.clear();
+}
+
+void gui_c::del_selcore( RID rid )
+{
+    m_selcores.remove(rid);
+}
+
+selectable_core_s *gui_c::try_activate_selcore( gui_label_c *lbl )
+{
+    selectable_core_s *s = nullptr;
+
+    if ( m_selcores.is_empty() )
+        s = &activate_selcore( lbl, false );
+    else
+        s = get_selcore( lbl->getrid() );
+
+    if ( s && s->try_begin( lbl ) )
+        return s;
+
+    return nullptr;
+}
+
+selectable_core_s &gui_c::activate_selcore( gui_label_c *lbl, bool reset_all )
+{
+    if ( reset_all )
+        m_selcores.clear();
+
+    bool added = false;
+    auto &scp = m_selcores.add_get_item( lbl->getrid(), added );
+    if ( added )
+        scp.value.reset( TSNEW( selectable_core_s ) );
+
+    scp.value->begin( lbl );
+
+    return *scp.value;
+}
+
 
 void gui_c::register_hintzone(guirect_c *r)
 {
@@ -1141,14 +1259,25 @@ ts::irect gui_c::dragndrop_objrect()
 
 selectable_core_s::selectable_core_s()
 {
+    gui->register_kbd_callback( DELEGATE( this, copy_hotkey_handler ), ts::SSK_C, ts::casw_ctrl );
+    gui->register_kbd_callback( DELEGATE( this, copy_hotkey_handler ), ts::SSK_INSERT, ts::casw_ctrl );
 }
 
 selectable_core_s::~selectable_core_s()
 {
-    // no need unregister handlers due selectable_core_s is part of gui_c
+    if ( prev )
+        prev->next = next;
+    if ( next )
+        next->prev = prev;
 
-    //gui->delete_event( DELEGATE(this,flash) );
-    //gui->unregister_kbd_callback( DELEGATE(this, copy_hotkey_handler) );
+    clear_selection();
+
+    if (gui)
+    {
+        gui->delete_event( DELEGATE( this, flash ) );
+        gui->delete_event( DELEGATE( this, selectword ) );
+        gui->unregister_kbd_callback( DELEGATE( this, copy_hotkey_handler ) );
+    }
 }
 
 bool selectable_core_s::flash(RID, GUIPARAM p)
@@ -1192,12 +1321,47 @@ ts::wstr_c selectable_core_s::get_selected_text()
     return ts::wstr_c();
 }
 
+ts::wstr_c selectable_core_s::get_selected_text_part_header()
+{
+    return owner->get_selected_text_part_header( prev ? prev->owner : nullptr );
+}
+
+void selectable_core_s::get_all_selected_labels( ts::tmp_pointers_t< gui_label_c, 0 >& ptrs )
+{
+    ptrs.clear();
+    selectable_core_s *a = this;
+    for ( ; a->prev; ) a = a->prev;
+    for ( ; a; a = a->next )
+        if ( a->some_selected() && a->owner )
+            ptrs.add( a->owner );
+}
+
+ts::wstr_c selectable_core_s::get_all_selected_text( bool flash, bool insert_hdr_0 )
+{
+    selectable_core_s *a = this;
+    for ( ; a->prev; ) a = a->prev;
+
+    ts::wstr_c t;
+
+    for ( ; a; a = a->next )
+        if ( a->some_selected() )
+        {
+            if ( !t.is_empty() || insert_hdr_0 )
+                t.append( a->get_selected_text_part_header() );
+            t.append( a->get_selected_text() );
+            if ( flash ) a->flash();
+        }
+
+    return t;
+}
+
 bool selectable_core_s::copy_hotkey_handler(RID, GUIPARAM)
 {
-    if (some_selected())
+    ts::wstr_c t( get_all_selected_text(true) );
+
+    if (!t.is_empty())
     {
-        ts::set_clipboard_text(get_selected_text());
-        flash();
+        ts::set_clipboard_text(t);
         return true;
     }
     return false;
@@ -1214,6 +1378,50 @@ ts::wchar selectable_core_s::ggetchar( int glyphindex )
     if (chari >= 0 && chari < owner->get_text().get_length())
         return owner->get_text().get_char(chari);
     return 0;
+}
+
+void selectable_core_s::begin_from_start()
+{
+    glyph_under_cursor = -1;
+    ts::GLYPHS &glyphs = owner->get_glyphs();
+
+    glyph_start_sel = ts::glyphs_first_glyph( glyphs );
+    glyph_end_sel = glyph_start_sel;
+
+    char_start_sel = ts::glyphs_get_charindex( glyphs, glyph_start_sel );
+    char_end_sel = ts::glyphs_get_charindex( glyphs, glyph_end_sel );
+    dirty = true;
+    owner->getengine().redraw();
+
+}
+void selectable_core_s::begin_from_end()
+{
+    glyph_under_cursor = -1;
+    ts::GLYPHS &glyphs = owner->get_glyphs();
+
+    glyph_start_sel = ts::glyphs_last_glyph( glyphs );
+    glyph_end_sel = glyph_start_sel;
+
+    char_start_sel = ts::glyphs_get_charindex( glyphs, glyph_start_sel );
+    char_end_sel = ts::glyphs_get_charindex( glyphs, glyph_end_sel );
+    dirty = true;
+    owner->getengine().redraw();
+
+}
+
+
+void selectable_core_s::select_all()
+{
+    glyph_under_cursor = -1;
+    ts::GLYPHS &glyphs = owner->get_glyphs();
+
+    glyph_start_sel = ts::glyphs_first_glyph(glyphs);
+    glyph_end_sel = ts::glyphs_last_glyph( glyphs );
+
+    char_start_sel = ts::glyphs_get_charindex( glyphs, glyph_start_sel );
+    char_end_sel = ts::glyphs_get_charindex( glyphs, glyph_end_sel );
+    dirty = true;
+    owner->getengine().redraw();
 }
 
 bool selectable_core_s::selectword(RID, GUIPARAM p)
@@ -1353,10 +1561,16 @@ bool selectable_core_s::sure_selected()
 
 void selectable_core_s::endtrack()
 {
-    if (glyph_start_sel > glyph_end_sel)
+    selectable_core_s *a = this;
+    for ( ; a->prev; ) a = a->prev;
+
+    for ( ; a; a = a->next )
     {
-        SWAP(glyph_start_sel, glyph_end_sel);
-        SWAP(char_start_sel, char_end_sel);
+        if ( a->glyph_start_sel > a->glyph_end_sel )
+        {
+            SWAP( a->glyph_start_sel, a->glyph_end_sel );
+            SWAP( a->char_start_sel, a->char_end_sel );
+        }
     }
 }
 
@@ -1469,7 +1683,7 @@ ts::uint32 selectable_core_s::detect_area(const ts::ivec2 &pos)
     return 0;
 }
 
-void selectable_core_s::track()
+void selectable_core_s::track( bool self_only )
 {
     if (glyph_under_cursor != glyph_end_sel)
     {
@@ -1485,7 +1699,181 @@ void selectable_core_s::track()
         }
     }
 
+    if ( self_only ) return;
+
+    if ( gui->get_mrealinside() == gui->get_hover() )
+    {
+        gui->crop_selcore( owner->getrid() );
+    } else
+    {
+        ts::tmp_pointers_t< gui_label_c, 64 > search_up;
+        ts::tmp_pointers_t< gui_label_c, 64 > search_dn;
+
+        if ( gui_vscrollgroup_c *parent = dynamic_cast<gui_vscrollgroup_c *>( &HOLD( owner->getparent() )( ) ) )
+        {
+            ts::aint mei = parent->getengine().get_child_index( &owner->getengine() );
+            ts::aint cnt = parent->getengine().children_count();
+            bool still_search_up = true;
+            bool still_search_dn = true;
+            for ( ts::aint d = 1; still_search_up || still_search_dn; ++d )
+            {
+                if ( still_search_up )
+                {
+                    ts::aint index = mei - d;
+                    if ( index < 0 )
+                    {
+                        still_search_up = false;
+                        search_up.clear();
+
+                    }
+                    else
+                    {
+                        gui_label_c * l = dynamic_cast<gui_label_c *>( &parent->getengine().get_child( index )->getrect() );
+                        if ( l && l->is_selectable() )
+                        {
+                            search_up.add( l );
+                            if ( l->getrid() == gui->get_mrealinside() )
+                            {
+                                search_dn.clear();
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if ( still_search_dn )
+                {
+                    ts::aint index = mei + d;
+                    if ( index >= cnt )
+                    {
+                        still_search_dn = false;
+                        search_dn.clear();
+
+                    }
+                    else
+                    {
+                        gui_label_c * l = dynamic_cast<gui_label_c *>( &parent->getengine().get_child( index )->getrect() );
+                        if ( l && l->is_selectable() )
+                        {
+                            search_dn.add( l );
+                            if ( l->getrid() == gui->get_mrealinside() )
+                            {
+                                search_up.clear();
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // dn
+            if ( ts::aint scnt = search_dn.size() )
+            {
+                ts::GLYPHS &glyphs = owner->get_glyphs();
+                glyph_end_sel = glyphs_last_glyph( glyphs );
+                char_end_sel = ts::glyphs_get_charindex( glyphs, glyph_end_sel );
+                dirty = true;
+
+                selectable_core_s *scprev = this;
+
+                for( ts::aint i = 0; i<scnt -1;++i )
+                {
+                    selectable_core_s &scn = gui->activate_selcore( search_dn.get(i), false );
+                    if ( scn.prev != scprev )
+                    {
+                        ASSERT( scprev->next == nullptr );
+                        scprev->next = &scn;
+                        scn.prev = scprev;
+                    } else
+                    {
+                        ASSERT( scn.prev == scprev && scprev->next == &scn );
+                    }
+                    scn.select_all();
+                    scprev = &scn;
+                }
+                selectable_core_s &sclast = gui->activate_selcore( search_dn.last(), false );
+                if ( sclast.prev != scprev )
+                {
+                    ASSERT( scprev->next == nullptr );
+                    scprev->next = &sclast;
+                    sclast.prev = scprev;
+
+                } else
+                {
+                    ASSERT( sclast.prev == scprev && scprev->next == &sclast );
+                    search_up.clear();
+                    for( selectable_core_s *clearnext = sclast.next; clearnext; clearnext = clearnext->next )
+                        search_up.add( clearnext->owner );
+
+                    for ( gui_label_c *l : search_up )
+                        gui->del_selcore( l->getrid() );
+
+                    search_up.clear();
+                }
+                sclast.begin_from_start();
+                sclast.detect_area( sclast.owner->to_local( ts::get_cursor_pos() ) );
+                sclast.track( true );
+
+            }
+
+            if ( ts::aint scnt = search_up.size() )
+            {
+                ts::GLYPHS &glyphs = owner->get_glyphs();
+                glyph_end_sel = glyphs_first_glyph( glyphs );
+                char_end_sel = ts::glyphs_get_charindex( glyphs, glyph_end_sel );
+                dirty = true;
+
+                selectable_core_s *scprev = this;
+
+                for ( ts::aint i = 0; i < scnt - 1; ++i )
+                {
+                    selectable_core_s &scn = gui->activate_selcore( search_up.get( i ), false );
+                    if ( scn.next != scprev )
+                    {
+                        ASSERT( scprev->prev == nullptr );
+                        scprev->prev = &scn;
+                        scn.next = scprev;
+                    }
+                    else
+                    {
+                        ASSERT( scn.next == scprev && scprev->prev == &scn );
+                    }
+                    scn.select_all();
+                    scprev = &scn;
+                }
+                selectable_core_s &sclast = gui->activate_selcore( search_up.last(), false );
+                if ( sclast.next != scprev )
+                {
+                    ASSERT( scprev->prev == nullptr );
+                    scprev->prev = &sclast;
+                    sclast.next = scprev;
+
+                }
+                else
+                {
+                    ASSERT( sclast.next == scprev && scprev->prev == &sclast );
+                    search_dn.clear();
+                    for ( selectable_core_s *clearprev = sclast.prev; clearprev; clearprev = clearprev->prev )
+                        search_dn.add( clearprev->owner );
+
+                    for ( gui_label_c *l : search_dn )
+                        gui->del_selcore( l->getrid() );
+
+                    search_dn.clear();
+                }
+                sclast.begin_from_end();
+                sclast.detect_area( sclast.owner->to_local( ts::get_cursor_pos() ) );
+                sclast.track( true );
+
+            }
+
+
+        }
+
+    }
+
     //DMSG("h" << glyph_under_cursor <<glyph_start_sel << glyph_end_sel << char_start_sel << char_end_sel );
+    //DMSG( "seltrack" << gui->get_mrealinside() << gui->get_hover() );
 }
 
 static bool is_better_size( int needpixels, int current_area, int new_area )

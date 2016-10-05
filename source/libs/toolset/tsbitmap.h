@@ -224,12 +224,11 @@ enum yuv_fmt_e
 struct imgdesc_s
 {
     ivec2 sz;
-    int16 pitch; // pitch is signed and can be < 0
-    uint8 bitpp;
-    uint8 _dummy = 0;
+    signed pitch : 24; // pitch is signed and can be < 0
+    unsigned bitpp : 8;
     imgdesc_s() {}
     imgdesc_s( const imgdesc_s &inf, const ivec2&sz ) :sz(sz), pitch(inf.pitch), bitpp(inf.bitpp) {}
-    imgdesc_s( const ivec2&sz, uint8 bitpp):sz(sz), pitch(as_word(((bitpp + 1) >> 3) * sz.x)), bitpp(bitpp) {}
+    imgdesc_s( const ivec2&sz, uint8 bitpp):sz(sz), pitch(((bitpp + 1) >> 3) * sz.x), bitpp(bitpp) {}
     imgdesc_s( const ivec2&sz, uint8 bitpp, int16 pitch ):sz(sz), pitch(pitch), bitpp(bitpp) { ASSERT(tabs(pitch)>=(sz.x*bytepp())); }
 
     aint bytepp() const { return (bitpp + 1) >> 3; };
@@ -242,6 +241,8 @@ struct imgdesc_s
 
     imgdesc_s chsize( const ivec2 &szz ) const {return imgdesc_s(szz, bitpp, pitch); }
 };
+
+TS_STATIC_CHECK( sizeof( imgdesc_s ) == 12, "!" );
 
 template<> INLINE imgdesc_s &make_dummy<imgdesc_s>(bool quiet) { static imgdesc_s t(ts::ivec2(0),0,0); DUMMY_USED_WARNING(quiet); return t; }
 
@@ -861,14 +862,14 @@ public:
 
     bool load_from_BMPHEADER(const BITMAPINFOHEADER * iH, int buflen);
 
-	img_format_e load_from_file(const void * buf, aint buflen);
-	img_format_e load_from_file(const buf_c & buf)
+	img_format_e load_from_file(const void * buf, aint buflen, const ivec2 &limitsize = ivec2(0), IMG_LOADING_PROGRESS progress = IMG_LOADING_PROGRESS());
+	img_format_e load_from_file(const buf_c & buf, const ivec2 &limitsize = ivec2( 0 ) )
     {
-        return load_from_file(buf.data(), buf.size());
+        return load_from_file(buf.data(), buf.size(), limitsize);
     }
-    img_format_e load_from_file(const blob_c & buf)
+    img_format_e load_from_file(const blob_c & buf, const ivec2 &limitsize = ivec2( 0 ) )
     {
-        return load_from_file(buf.data(), buf.size());
+        return load_from_file(buf.data(), buf.size(), limitsize);
     }
 
 	img_format_e load_from_file(const wsptr &filename);

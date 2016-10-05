@@ -2,6 +2,13 @@
 
 //-V:opts:807
 
+
+void post_s::set_message_text( const ts::asptr&m )
+{
+    message_utf8 = ts::refstring_t<char>::build( m, g_app->global_allocator );
+}
+
+
 void avatar_s::load( const void *body, ts::aint size, int tag_ )
 {
     alpha_pixels = false;
@@ -474,14 +481,6 @@ bool contact_c::b_kill(RID, GUIPARAM)
     return true;
 }
 
-bool contact_c::b_load(RID, GUIPARAM n)
-{
-    int n_load = as_int(n);
-    get_historian()->load_history(n_load);
-    get_historian()->reselect(RSEL_INSERT_NEW);
-    return true;
-}
-
 bool contact_c::b_receive_file(RID, GUIPARAM par)
 {
     gui_notice_c *ownitm = (gui_notice_c *)par;
@@ -576,6 +575,19 @@ contact_c *contacts_c::find_subself(int protoid) const
     return self->subget( contact_key_s(0, protoid) );
 }
 
+ts::wstr_c contacts_c::calc_self_name( int protoid ) const
+{
+    if ( contact_c *me = contacts().find_subself( protoid ) )
+    {
+        ts::str_c n( me->get_name() );
+        text_adapt_user_input( n );
+        text_remove_tags( n );
+        return from_utf8( n );
+    }
+
+    return ts::wstr_c();
+}
+
 void contacts_c::nomore_proto(int id)
 {
     ts::tmp_array_inplace_t<contact_key_s, 16> c2d;
@@ -606,6 +618,13 @@ bool contacts_c::present_protoid(int id) const
         if (!c->is_meta() && c->getkey().protoid == (unsigned)id)
             return true;
     return false;
+}
+
+int contacts_c::find_free_rotten_id() const
+{
+    int id = 1;
+    for ( ; present( contact_key_s( id, CS_ROTTEN ) ); ++id );
+    return id;
 }
 
 int contacts_c::find_free_meta_id() const
@@ -852,7 +871,7 @@ void contacts_c::update_meta()
 {
     for (contact_c *c : arr)
         if (c->is_rootcontact() && !c->getkey().is_self)
-            gmsg<ISOGM_V_UPDATE_CONTACT>(c).send();
+            gmsg<ISOGM_V_UPDATE_CONTACT>(c, true).send();
 }
 
 bool contacts_c::is_groupchat_member( const contact_key_s &ck )
@@ -863,6 +882,7 @@ bool contacts_c::is_groupchat_member( const contact_key_s &ck )
         {
             c->redraw(1.0f);
             yep = true;
+            gmsg<ISOGM_V_UPDATE_CONTACT>( c, false ).send();
         }
     return yep;
 }
@@ -875,19 +895,34 @@ void contacts_c::kill(const contact_key_s &ck, bool kill_with_history)
     ts::safe_ptr<gui_contact_item_c> guiitem = cc->get_historian()->gui_item;
     bool selself = !guiitem.expired() && g_app->active_contact_item.get() == guiitem.get();
 
+    if ( cc->getkey().rotten_group )
+    {
+        if ( guiitem )
+            TSDEL( guiitem );
+
+        ts::aint index;
+        if ( arr.find_sorted( index, cc->getkey() ) )
+            arr.remove_slow( index );
+
+        if ( selself )
+            contacts().get_self().reselect();
+
+        dirty_sort();
+        return;
+    }
+
     cc->stop_av();
 
     if (cc->get_state() != CS_UNKNOWN)
     {
         cc->set_state(CS_ROTTEN);
-        gmsg<ISOGM_V_UPDATE_CONTACT>(cc).send(); // delete ui element
+        gmsg<ISOGM_V_UPDATE_CONTACT>(cc, true).send(); // delete ui element
     }
 
     bool killcc = false;
     if ( cc->is_meta() && !cc->getkey().is_group() )
     {
         contact_root_c *ccc = ts::ptr_cast<contact_root_c *>(cc);
-
         ccc->subiterate([this](contact_c *c) {
 
             if (active_protocol_c *ap = prf().ap(c->getkey().protoid))
@@ -920,7 +955,7 @@ void contacts_c::kill(const contact_key_s &ck, bool kill_with_history)
                 {
                     killmeta:
                     meta->set_state(CS_ROTTEN);
-                    gmsg<ISOGM_V_UPDATE_CONTACT>(meta).send();
+                    gmsg<ISOGM_V_UPDATE_CONTACT>(meta, true).send();
                     prf().killcontact(meta->getkey());
                     prf().kill_history(meta->getkey());
                     delbykey(meta->getkey());
@@ -1017,11 +1052,14 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_AVATAR> &ava)
 
         c->set_avatar( ava.data.data(), ava.data.size(), ava.tag );
 
-        ts::wstr_c downf = prf().download_folder_images();
-        path_expand_env(downf, c->get_historian()->contactidfolder());
-        ts::make_path(downf, 0);
-        if (ava.data.size() && ts::dir_present(downf))
-            ava.data.save_to_file( ts::fn_join(downf,CONSTWSTR("avatar_")).append_as_uint(ava.tag).append(CONSTWSTR(".png")) );
+        if ( prf().misc_flags() & PMISCF_SAVEAVATARS )
+        {
+            ts::wstr_c downf = prf().download_folder_images();
+            path_expand_env( downf, c->get_historian()->contactidfolder() );
+            ts::make_path( downf, 0 );
+            if ( ava.data.size() && ts::dir_present( downf ) )
+                ava.data.save_to_file( ts::fn_join( downf, CONSTWSTR( "avatar_" ) ).append_as_uint( ava.tag ).append( CONSTWSTR( ".png" ) ) );
+        }
     }
 
     prf().set_avatar( ava.contact, ava.data, ava.tag );
@@ -1038,6 +1076,26 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
     int serious_change = 0;
     if (contact.state == CS_ROTTEN && 0 != (contact.mask & CDM_STATE))
     {
+        if ( contact.key.is_group() )
+            if ( contact_root_c *g = contacts().rfind( contact.key ) )
+            {
+                ts::shared_ptr<contact_root_c> keepgroup( g );
+                g->set_state( CS_OFFLINE );
+                ts::aint index;
+                arr.find_sorted( index, contact.key );
+                arr.remove_slow( index );
+                g->change_key_rotten( find_free_rotten_id() );
+                if ( CHECK( !arr.find_sorted( index, g->getkey() ) ) )
+                    arr.insert( index, g );
+                g->subclear();
+                g->options().unmasked().clear( contact_c::F_AUDIO_GCHAT );
+                dirty_sort();
+                
+                gmsg<ISOGM_V_UPDATE_CONTACT>( g, false ).send();
+
+                return 0;
+            }
+
         kill(contact.key);
         return 0;
     }
@@ -1045,6 +1103,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
     contact_c *c_sub = nullptr;
     contact_root_c *c_gchat = nullptr;
     bool is_self = false;
+    bool refilter = false;
 
     if (contact.key.is_self)
     {
@@ -1089,8 +1148,8 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                 c_gchat = TSNEW(contact_root_c, contact.key);
                 c_gchat->options().unmasked().init( contact_c::F_PERSISTENT_GCHAT, 0 != (contact.mask & CDF_PERSISTENT_GCHAT) );
                 c_gchat->options().unmasked().init( contact_c::F_AUDIO_GCHAT, 0 != (contact.mask & CDF_AUDIO_GCHAT) );
-                if (0 != (contact.mask & CDM_NAME) && !contact.name.is_empty())
-                    c_gchat->set_name(contact.name);
+                if ( 0 != ( contact.mask & CDM_NAME ) && !contact.name.is_empty() )
+                    c_gchat->set_name( contact.name );
                 else
                 {
                     c_gchat->set_name( CONSTASTR("Groupchat #") + ts::amake<int>( calc_groupchats_amount() ) );
@@ -1104,6 +1163,8 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                 if (audio)
                     c_gchat->av(true, false);
 
+                refilter = true;
+
             } else if (contact.state == CS_UNKNOWN)
             {
                 c_sub = TSNEW(contact_c, contact.key);
@@ -1116,6 +1177,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                     // we should create meta
                     contact_root_c *h = create_new_meta();
                     h->subadd( c_sub );
+                    refilter = true;
                 }
                 if ( 0 != ( contact.mask & CDF_ALLOW_INVITE ) )
                     c_sub->options().set( contact_c::F_ALLOW_INVITE );
@@ -1134,6 +1196,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
 
                 // serious change - new contact added. proto data must be saved
                 serious_change = c_sub->getkey().protoid;
+                refilter = true;
             }
 
 
@@ -1206,6 +1269,7 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
             ASSERT(c_gchat->getkey().is_group());
             c_gchat->set_name(contact.name);
         }
+        refilter = true;
     }
 
     if (0 != (contact.mask & CDM_STATUSMSG) && c_sub)
@@ -1232,13 +1296,17 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
         {
             if (!is_self)
             {
-                contact_activity(c_sub->get_historian()->getkey());
+                if ( contact_root_c *h = c_sub->get_historian() )
+                    contact_activity(h->getkey());
 
                 if ( oldst == CS_OFFLINE || oldst == CS_UNKNOWN )
                     if ( contact.state == CS_ONLINE )
                     {
                         play_sound( snd_friend_online, false );
                         contact_root_c *hst = c_sub->get_historian();
+
+                        g_app->reset_undelivered_resend_cooldown( hst->getkey() );
+
                         if ( metaoffline && !hst->get_greeting().is_empty() && hst->get_greeting_allow_time() < now()  )
                         {
                             DEFERRED_EXECUTION_BLOCK_BEGIN( 0 )
@@ -1253,15 +1321,19 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
                                     hst->set_readtime( n );
                                 gmsg<ISOGM_MESSAGE> msg( &contacts().get_self(), c_sub, MTA_UNDELIVERED_MESSAGE );
 
-                                msg.post.message_utf8 = c_sub->get_historian()->get_greeting();
-                                msg.post.message_utf8.trim();
-                                if ( !msg.post.message_utf8.is_empty() )
+                                ts::str_c gs = c_sub->get_historian()->get_greeting();
+                                gs.trim();
+
+                                if ( !gs.is_empty() )
                                 {
-                                    emoti().parse( msg.post.message_utf8, true );
-                                    msg.post.message_utf8.trim_right( CONSTASTR( "\r\n" ) );
+                                    emoti().parse( gs, true );
+                                    gs.trim_right( CONSTASTR( "\r\n" ) );
                                 
-                                    if ( !msg.post.message_utf8.is_empty() )
+                                    if ( !gs.is_empty() )
+                                    {
+                                        msg.post.message_utf8 = ts::refstring_t<char>::build( gs, g_app->global_allocator );
                                         msg.send();
+                                    }
                                 }
 
                             DEFERRED_EXECUTION_BLOCK_END(c_sub);
@@ -1373,12 +1445,12 @@ ts::uint32 contacts_c::gm_handler( gmsg<ISOGM_UPDATE_CONTACT>&contact )
     {
         prf().dirtycontact(c_sub->getkey());
         if (c_sub->get_state() != CS_UNKNOWN || ( 0 == ( contact.mask & CDF_GCHAT_MEMBER ) ) )
-            gmsg<ISOGM_V_UPDATE_CONTACT>(c_sub).send();
+            gmsg<ISOGM_V_UPDATE_CONTACT>(c_sub, refilter).send();
     }
     if (c_gchat)
     {
         prf().dirtycontact(c_gchat->getkey());
-        gmsg<ISOGM_V_UPDATE_CONTACT>(c_gchat).send();
+        gmsg<ISOGM_V_UPDATE_CONTACT>(c_gchat, refilter).send();
     }
 
 
@@ -1614,6 +1686,8 @@ static void format_system_message( ts::str_c& sysmsg )
     sysmsg.trim();
 }
 
+void parse_links( ts::str_c &message, bool reset_n );
+
 ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
 {
     contact_c *sender = find( contact_key_s( imsg.sender.contactid, imsg.sender.protoid ) );
@@ -1669,13 +1743,16 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
 
     gmsg<ISOGM_MESSAGE> msg(sender, imsg.sender.is_group_contact() ? contacts().find( imsg.sender.group_key() ) : &get_self(), imsg.mt);
     msg.post.cr_time = imsg.create_time;
-    msg.post.message_utf8 = imsg.msgutf8;
-    msg.post.message_utf8.trim();
+    ts::str_c m = imsg.msgutf8;
+    m.trim();
+    msg.post.set_message_text( m );
     msg.send();
 
     contact_root_c *h = msg.get_historian();
-    if (CHECK(h))
-        contact_activity(h->getkey());
+    if ( CHECK( h ) )
+        contact_activity( h->getkey() );
+
+    bool force_notify = false;
 
     switch (imsg.mt)
     {
@@ -1690,6 +1767,21 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
         {
             if (CHECK(h))
             {
+                if ( h->getkey().is_group() )
+                {
+                    ts::wstr_c my_name = contacts().calc_self_name( h->getkey().protoid );
+                    if ( !my_name.is_empty() )
+                    {
+                        ts::str_c message( msg.post.message_utf8->cstr() );
+                        text_adapt_user_input( message );
+                        parse_links( message, true );
+                        emoti().parse( message );
+
+                        if ( from_utf8( message ).find_pos( my_name ) >= 0 )
+                            force_notify = true;
+                    }
+                }
+
                 g_app->new_blink_reason(h->getkey()).up_unread();
                 h->subactivity(sender->getkey());
 
@@ -1702,10 +1794,10 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
                     {
                         if ( imnb & IMB_SUPPRESS )
                         {
-                            if ( imnb & IMB_DESKTOP_NOTIFICATION )
+                            if ( (imnb & IMB_DESKTOP_NOTIFICATION) && !force_notify )
                                 show_desktop_notify = false;
 
-                            if ( imnb & IMB_INTRUSIVE_BEHAVIOUR )
+                            if ( (imnb & IMB_INTRUSIVE_BEHAVIOUR) && !force_notify )
                                 intrusive_behaviour = false;
 
                         } else
@@ -1718,25 +1810,29 @@ ts::uint32 contacts_c::gm_handler(gmsg<ISOGM_INCOMING_MESSAGE>&imsg)
                         }
                     }
 
-
-
                     if ( show_desktop_notify )
                         MAKE_ROOT<incoming_msg_panel_c>( h, sender, msg.post );
 
                     if ( intrusive_behaviour )
-                    {
                         g_app->bring2front( nullptr );
-                    }
-
                 }
 
-                h->execute_message_handler( msg.post.message_utf8 );
+                h->execute_message_handler( m );
             }
         }
-        if (g_app->is_inactive( true, h->getkey() ) || !msg.current)
-            play_sound( snd_incoming_message, false );
-        else if (msg.current)
-            play_sound(snd_incoming_message2, false);
+
+        if ( h->get_imnb() == IMB_DONT_NOTIFY && !force_notify )
+        {
+            g_app->is_inactive( true, h->getkey() );
+
+        } else
+        {
+            if ( g_app->is_inactive( true, h->getkey() ) || !msg.current )
+                play_sound( snd_incoming_message, false );
+            else if ( msg.current )
+                play_sound( snd_incoming_message2, false );
+        }
+
         break;
     case MTA_INCOMING_CALL:
         if (historian->get_aaac())
@@ -1816,7 +1912,7 @@ void contacts_c::toggle_tag( ts::aint i)
 
 void contacts_c::replace_tags(int i, const ts::str_c &ntn)
 {
-    iterate_meta_contacts([&](contact_root_c *r)->bool
+    iterate_root_contacts([&](contact_root_c *r)->bool
     {
         ts::aint ti = r->get_tags().find( all_tags.get(i).as_sptr() );
         if (ti >= 0)
@@ -1848,7 +1944,7 @@ void contacts_c::rebuild_tags_bits(bool refresh_ui)
 {
     all_tags.clear();
     ts::tmp_pointers_t<contact_root_c, 0> roots;
-    iterate_meta_contacts([&](contact_root_c *r)->bool
+    iterate_root_contacts([&](contact_root_c *r)->bool
     {
         roots.add(r);
         all_tags.add( r->get_tags() );
@@ -2171,6 +2267,16 @@ void contact_root_c::subactivity(const contact_key_s &ck)
         c->options().unmasked().init(contact_c::F_LAST_ACTIVITY, c->getkey() == ck);
 }
 
+bool contact_root_c::b_load( RID, GUIPARAM n )
+{
+    int n_load = as_int( n );
+    load_history( n_load );
+    reselect( RSEL_INSERT_NEW );
+    return true;
+}
+
+
+
 void contact_root_c::del_history(uint64 utag)
 {
     history_touch();
@@ -2178,9 +2284,11 @@ void contact_root_c::del_history(uint64 utag)
     ts::aint cnt = history.size();
     for (int i = 0; i < cnt; ++i)
     {
-        if (history.get(i).utag == utag)
+        post_s *p = history.get( i );
+        if (p->utag == utag)
         {
             history.remove_slow(i);
+            posts.dealloc(p);
             break;
         }
     }
@@ -2188,17 +2296,19 @@ void contact_root_c::del_history(uint64 utag)
 }
 
 
+#if 0
 void contact_root_c::make_time_unique(time_t &t) const
 {
-    if (history.size() == 0 || t < history.get(0).recv_time)
+    if (history.size() == 0 || t < history.get(0)->recv_time)
         prf().load_history(getkey()); // load whole history to correct uniquzate t
 
-    for (const post_s &p : history)
-        if (p.recv_time == t)
+    for (const post_s *p : history)
+        if (p->recv_time == t)
             ++t;
-        else if (p.recv_time > t)
+        else if (p->recv_time > t)
             break;
 }
+#endif // 0
 
 int contact_root_c::calc_unread() const
 {
@@ -2209,9 +2319,9 @@ int contact_root_c::calc_unread() const
     int cnt = 0;
     for ( ts::aint i = history.size() - 1; i >= 0; --i)
     {
-        const post_s &p = history.get(i);
-        if (p.recv_time <= rt) break;
-        if (p.mt() == MTA_MESSAGE)
+        const post_s *p = history.get(i);
+        if (p->recv_time <= rt) break;
+        if (p->mt() == MTA_MESSAGE)
             ++cnt;
     }
     return cnt;
@@ -2416,7 +2526,7 @@ void contact_root_c::export_history(const ts::wsptr &templatename, const ts::wsp
                     tname = CONSTASTR("?");
             }
 
-            text = post->message_utf8;
+            text = post->message_utf8->cstr();
             text.replace_all(CONSTASTR("\n"), linebreak);
             if (!link.is_empty())
             {
@@ -2453,7 +2563,22 @@ void contact_root_c::export_history(const ts::wsptr &templatename, const ts::wsp
 //    load_history(not_yet_loaded);
 //}
 
-void contact_root_c::load_history( ts::aint n_last_items)
+void contact_root_c::change_key_rotten( int rottencid )
+{
+    contact_key_s nkey = contact_key_s( rottencid, CS_ROTTEN );
+
+    for( post_s *p : history ) // fix history sender/receiver keys
+    {
+        if ( p->sender == key )
+            p->sender = nkey;
+        if ( p->receiver == key )
+            p->receiver = nkey;
+    }
+
+    key = nkey;
+}
+
+void contact_root_c::load_history( ts::aint n_last_items )
 {
     MEMT( MEMT_PROFILE_HISTORY );
 
@@ -2461,8 +2586,52 @@ void contact_root_c::load_history( ts::aint n_last_items)
 
     ASSERT(get_historian() == this);
 
+    if ( n_last_items < 0 )
+    {
+        if ( !options().unmasked().is( F_HISTORY_NEED_LOAD ) )
+            return;
+
+        // WHOLE! WHOLE HISTORY!!!
+        prf().flush_history_now();
+        prf().unload_history( getkey() );
+        unload_history();
+
+        // do not use profile history table view to for whole history
+
+        struct crallocator : public ts::dynamic_allocator_s
+        {
+            ts::block_buf_c< 512 * 1024 > texts;
+            virtual void *balloc( size_t sz )
+            {
+                return texts.alloc( (uint)sz );
+            }
+            virtual void bfree( void *p )
+            {
+            }
+        };
+
+        struct loader
+        {
+            contact_root_c *me;
+            ts::shared_ptr<crallocator> a = TSNEW( crallocator );
+            static post_s *alcpost( const ts::asptr&t, void *prm )
+            {
+                loader *ldr = (loader *)prm;
+                post_s *p = ldr->me->add_history_unsafe();
+                p->message_utf8 = ts::refstring_t<char>::build( t, ldr->a );
+                return p;
+            }
+        } l;
+
+        l.me = this;
+
+        prf().load_history( getkey(), loader::alcpost, &l );
+        options().unmasked().clear( F_HISTORY_NEED_LOAD );
+        return;
+    }
+    options().unmasked().clear( F_HISTORY_NEED_LOAD );
     time_t before = 0;
-    if (history.size()) before = history.get(0).recv_time;
+    if (history.size()) before = history.get(0)->recv_time;
     ts::tmp_tbuf_t<int> ids;
     prf().load_history(getkey(), before, n_last_items, ids);
 
@@ -2475,21 +2644,24 @@ void contact_root_c::load_history( ts::aint n_last_items)
             {
                 if (nullptr == prf().get_table_unfinished_file_transfer().find<true>([&](const unfinished_file_transfer_s &uftr)->bool { return uftr.msgitem_utag == row->other.utag; }))
                 {
-                    if (row->other.message_utf8.get_char(0) == '?')
+                    if (row->other.message_utf8->cstr().s[ 0 ] == '?')
                     {
-                        row->other.message_utf8.set_char(0, '*');
+                        row->other.message_utf8->setchar( 0, '*' );
                         row->changed();
                         prf().changed();
                     }
                 }
                 else
                 {
-                    if (row->other.message_utf8.get_char(0) != '?')
+                    if (row->other.message_utf8->cstr().s[ 0 ] != '?')
                     {
-                        if (row->other.message_utf8.get_char(0) == '*')
-                            row->other.message_utf8.set_char(0, '?');
+                        if (row->other.message_utf8->cstr().s[ 0 ] == '*')
+                            row->other.message_utf8->setchar(0, '?');
                         else
-                            row->other.message_utf8.insert(0, '?');
+                        {
+                            ts::str_c m( CONSTASTR("?"), row->other.message_utf8->cstr() );
+                            row->other.set_message_text(m);
+                        }
                         row->changed();
                         prf().changed();
                     }
@@ -2583,14 +2755,14 @@ namespace
     };
 }
 
-void contact_root_c::execute_message_handler( const ts::str_c &utf8msg )
+void contact_root_c::execute_message_handler( const ts::asptr &utf8msg )
 {
     if ( mht == MH_NOT ) return;
     if ( mhc.is_empty() ) return;
 
     mhrun_s *mhr = TSNEW( mhrun_s );
     mhr->mht = mht;
-    mhr->message.setcopy( utf8msg );
+    mhr->message.set( utf8msg );
 
     {
         
@@ -2778,12 +2950,12 @@ const post_s * contact_root_c::fix_history(message_type_app_e oldt, message_type
 {
     const post_s * r = nullptr;
     ts::tmp_tbuf_t<uint64> updated;
-    int ri = iterate_history_changetime([&](post_s &p)
+    ts::aint ri = iterate_history_changetime([&](post_s &p)
     {
         if (oldt == p.type && (sender.is_empty() || p.sender == sender))
         {
             p.type = newt;
-            if (update_text) p.message_utf8 = *update_text;
+            if (update_text) p.set_message_text( *update_text );
             updated.add(p.utag);
             if (update_time)
             {
@@ -2793,7 +2965,7 @@ const post_s * contact_root_c::fix_history(message_type_app_e oldt, message_type
         }
         return true;
     });
-    if (ri >= 0) r = &history.get(ri);
+    if (ri >= 0) r = history.get(ri);
     for (uint64 utag : updated)
     {
         const post_s *p = find_post_by_utag(utag);
@@ -2810,7 +2982,7 @@ void contact_root_c::add_message( const ts::str_c& utf8msg )
     msg.post.recv_time = now();
     msg.post.cr_time = msg.post.recv_time;
     msg.post.utag = prf().getuid();
-    msg.post.message_utf8 = utf8msg;
+    msg.post.set_message_text( utf8msg );
     msg.info = true;
     msg.send();
 
@@ -2833,6 +3005,8 @@ void contact_root_c::setup(const contacts_s * c, time_t nowtime)
 
     if (getkey().is_group())
         options().unmasked().set(F_PERSISTENT_GCHAT); // if loaded - persistent (non persistent never saved)
+
+    options().unmasked().set( F_HISTORY_NEED_LOAD );
 
     ASSERT(!options().is(F_UNKNOWN));
 }

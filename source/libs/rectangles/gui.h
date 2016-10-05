@@ -53,6 +53,7 @@ struct hover_data_s
     RID root_focus; // rid of root rect
     RID active_focus; // rect that actually accepts input (buttons, text inputs)
     RID minside; // mouse inside
+    RID mrealinside; // real mouse inside (even mouse capture, this is actual RID of mouse)
     ts::uint32 area = 0;
     ts::ivec2 mp;
 
@@ -73,6 +74,9 @@ struct bcreate_s
 
 struct selectable_core_s
 {
+    selectable_core_s *prev = nullptr;
+    selectable_core_s *next = nullptr;
+
     ts::safe_ptr<gui_label_c> owner;
     ts::ivec2 glyphs_pos = ts::ivec2(0);
     int glyph_under_cursor = -1;
@@ -91,6 +95,9 @@ struct selectable_core_s
     bool flash(RID r = RID(), GUIPARAM p = as_param(4));
     void flash_and_clear_selection() { flash(RID(), as_param(100)); }
     bool selectword(RID, GUIPARAM);
+    void select_all();
+    void begin_from_start();
+    void begin_from_end();
 
     selectable_core_s();
     ~selectable_core_s();
@@ -104,11 +111,14 @@ struct selectable_core_s
     bool some_selected() const { return owner && char_start_sel >= 0 && char_end_sel >= 0 && char_start_sel != char_end_sel; }
     void selection_stuff(ts::bitmap_c &bmp, int y, const ts::ivec2 &size);
     void clear_selection();
-    void track();
+    void track(bool self_only = false);
     void endtrack();
     ts::uint32 detect_area(const ts::ivec2 &pos);
 
+    void get_all_selected_labels( ts::tmp_pointers_t< gui_label_c, 0 >& ptrs );
+    ts::wstr_c get_all_selected_text(bool flash, bool insert_hdr_0 = false);
     ts::wstr_c get_selected_text();
+    ts::wstr_c get_selected_text_part_header();
 
 };
 
@@ -161,6 +171,13 @@ public:
     explicit operator bool() const { return (bool)watchrid; }
 };
 
+class redraw_locker_c : public ts::safe_object
+{
+public:
+    ~redraw_locker_c() {}
+    virtual bool redraw_locked() = 0;
+};
+
 //-V:theme():807
 
 class gui_c
@@ -206,6 +223,10 @@ class gui_c
     void *lock_temp_buf(int tag);
     void kill_temp_buf(int tag);
 
+#ifdef _DEBUG
+    ts::uint32 basetid = 0;
+#endif
+
     ts::flags32_s m_flags;
 
 	static const ts::flags32_s::BITS F_INITIALIZATION   = SETBIT(0);
@@ -219,7 +240,7 @@ class gui_c
 	theme_c m_theme;
     hover_data_s m_hoverdata;
 	
-    selectable_core_s m_selcore;
+    ts::hashmap_t< RID, UNIQUE_PTR( selectable_core_s ) > m_selcores;
 
     ts::tbuf_t<RID> m_exclusive_input;
 
@@ -230,6 +251,7 @@ class gui_c
     typedef ts::pair_s<ts::Time,RID> free_rid;
 	ts::tbuf_t< free_rid > m_emptyids;
 
+    gui_group_c *m_repos_inprogress = nullptr;
     ts::array_safe_t<gui_group_c, 4> m_children_repos;
 
     ts::array_inplace_t<drawcollector, 4> m_dcolls;
@@ -370,27 +392,9 @@ public:
 
     bool repos_in_progress() const { return m_flags.is(F_PROCESSING_REPOS); }
     void repos_children( gui_group_c *g );
-    void prepare_redraw_collector()
-    {
-        ++m_dcolls_ref;
-        if (m_dcolls_ref == 1)
-        {
-            m_post_effect.clear();
-            if (m_children_repos.size()) m_post_effect.set(PEF_CHILDREN_REPOS);
-            for (RID r : m_roots)
-                m_dcolls.add() = HOLD(r)().getroot();
-        }
-    }
-    void flush_redraw_collector()
-    {
-        if (m_post_effect.__bits && m_dcolls_ref == 1)
-            do_post_effect();
-
-        --m_dcolls_ref;
-        ASSERT(m_dcolls_ref >= 0);
-        if (m_dcolls_ref == 0)
-            m_dcolls.clear();
-    }
+    void no_repos_children( gui_group_c *g );
+    void prepare_redraw_collector();
+    void flush_redraw_collector();
 
     drawcollector& allocate_dcoll()
     {
@@ -539,8 +543,20 @@ public:
     RID get_rootfocus() const { return m_hoverdata.root_focus; }
     RID get_focus() const {return m_hoverdata.active_focus; }
     RID get_minside() const {return m_hoverdata.minside; }
+    RID get_mrealinside() const { return m_hoverdata.mrealinside; }
+    RID get_hover() const { return m_hoverdata.rid; }
 
-    selectable_core_s &selcore() { return m_selcore; }
+    void crop_selcore( RID rid );
+    void del_selcore( RID rid );
+
+    selectable_core_s *get_selcore( RID rid )
+    {
+        auto *x = m_selcores.find( rid );
+        return x ? x->value.get() : nullptr;
+    }
+
+    selectable_core_s *try_activate_selcore( gui_label_c *lbl );
+    selectable_core_s &activate_selcore( gui_label_c *lbl, bool reset_all );
 
     virtual ts::bitmap_c app_icon(bool for_tray) = 0; // NON PREMULTIPLIED!
 

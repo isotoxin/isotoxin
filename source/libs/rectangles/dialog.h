@@ -161,6 +161,7 @@ protected:
             _PATH,
             _FILE,
             _TEXT,
+            _ROTEXT,
             _PASSWD,
             _SELECTOR,
             _COMBIK,
@@ -241,6 +242,7 @@ protected:
         description_s& selector( const ts::wsptr &desc, const ts::wsptr &t, GUIPARAMHANDLER behaviourhandler = nullptr );
         description_s& path( const ts::wsptr &desc, const ts::wsptr &path, gui_textedit_c::TEXTCHECKFUNC checker = gui_textedit_c::TEXTCHECKFUNC() );
         description_s& file( const ts::wsptr &desc, const ts::wsptr &iroot, const ts::wsptr &fn, gui_textedit_c::TEXTCHECKFUNC checker = gui_textedit_c::TEXTCHECKFUNC() );
+        description_s& rotext( const ts::wsptr &desc, const ts::wsptr &val );
         description_s& textfield( const ts::wsptr &desc, const ts::wsptr &val, gui_textedit_c::TEXTCHECKFUNC checker);
         description_s& textfieldml( const ts::wsptr &desc, const ts::wsptr &val, gui_textedit_c::TEXTCHECKFUNC checker, int lines = 3); // multiline
         description_s& combik( const ts::wsptr &desc);
@@ -293,6 +295,7 @@ protected:
     bool combo_drop(RID, GUIPARAM prm);
     bool custom_menu(RID, GUIPARAM prm);
     bool passw_hide_show( RID, GUIPARAM prm );
+    bool copy_text( RID, GUIPARAM prm );
 
     struct radio_item_s
     {

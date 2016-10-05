@@ -96,7 +96,7 @@ INLINE ipcr & operator>>(ipcr &r, ts::astrings_c &s)
 #include "avaselector.h"
 #include "smileselector.h"
 #include "prepareimage.h"
-#include "colors.h"
+#include "tooldialogs.h"
 #include "avcontact.h"
 
 #include "res/resource.h"

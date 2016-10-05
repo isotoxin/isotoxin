@@ -22,6 +22,7 @@ struct read_png_data_internal_s
     size_t          srcsize;
 	size_t          offset;
     int             bytepp;
+    int             shrinkx;
 
     bool    error;
     bool    warning;
@@ -70,7 +71,7 @@ static void _png_free(png_structp png_ptr, png_voidp data)
 
 static bool pngdatareader(img_reader_s &r, void * buf, int pitch);
 
-image_read_func img_reader_s::detect_png_format(const void *sourcebuf, aint sourcebufsize)
+image_read_func img_reader_s::detect_png_format(const void *sourcebuf, aint sourcebufsize, const ivec2& limitsize )
 {
     uint32 tag = *(uint32 *)sourcebuf;
     if (tag != 1196314761) return nullptr;
@@ -130,7 +131,22 @@ image_read_func img_reader_s::detect_png_format(const void *sourcebuf, aint sour
     size.y = idata.info_ptr->height;
     idata.bytepp = bitpp / 8;
 
-    return pngdatareader;
+    if ( limitsize >> 0 )
+    {
+        if ( idata.info_ptr->interlace_type != PNG_INTERLACE_NONE && ( size > limitsize ) )
+            goto eggog; // just do not support interlaced super big images
+
+        while ( size > limitsize )
+        {
+            size.x >>= 1;
+            size.y >>= 1;
+            ++idata.shrinkx;
+        }
+    }
+
+    if (size >> 0)
+        return pngdatareader;
+
 eggog:
     if (idata.png_ptr != nullptr) png_destroy_read_struct(&(idata.png_ptr), &(idata.info_ptr), (png_infopp)nullptr);
     return nullptr;
@@ -139,25 +155,56 @@ eggog:
 static bool pngdatareader(img_reader_s &r, void * buf, int pitch)
 {
 	read_png_data_internal_s &data = ref_cast<read_png_data_internal_s>(r.data);
-	png_bytep * row_pointers=nullptr;
 
-    aint rolinesize = png_get_rowbytes(data.png_ptr, data.info_ptr);
-    if (rolinesize <= pitch)
+    ASSERT( pitch >= r.size.x * r.bitpp/8 );
+
+    bool instant_stop = false;
+
+    if ( data.info_ptr->interlace_type != PNG_INTERLACE_NONE )
     {
-        row_pointers = (png_bytep *)_alloca( r.size.y * sizeof( png_bytep ) );
-        uint8 * tbuf = (uint8 *)buf;
-        for ( int i = 0; i < r.size.y; ++i, tbuf += pitch )
-            row_pointers[ i ] = tbuf;
+        aint rolinesize = png_get_rowbytes( data.png_ptr, data.info_ptr ) >> data.shrinkx;
+        if ( rolinesize <= pitch )
+        {
+            png_bytep * row_pointers = nullptr;
+            uint8 * tbuf = (uint8 *)buf;
+            row_pointers = (png_bytep *)_alloca( r.size.y * sizeof( png_bytep ) );
+            for ( int i = 0; i < r.size.y; ++i, tbuf += pitch )
+                row_pointers[ i ] = tbuf;
+            png_read_image( data.png_ptr, row_pointers );
+            png_read_end( data.png_ptr, data.info_ptr );
 
-        png_read_image( data.png_ptr, row_pointers );
-        png_read_end( data.png_ptr, data.info_ptr );
+            if ( data.png_ptr != nullptr ) png_destroy_read_struct( &( data.png_ptr ), &( data.info_ptr ), ( png_infopp )nullptr );
+            return true;
+        }
+
+        if ( r.progress )
+            r.progress( data.info_ptr->height, data.info_ptr->height );
 
         if ( data.png_ptr != nullptr ) png_destroy_read_struct( &( data.png_ptr ), &( data.info_ptr ), ( png_infopp )nullptr );
         return true;
+
+    } else
+    {
+        shrink_on_read_c sor( ivec2( (int)data.info_ptr->width, (int)data.info_ptr->height ), data.shrinkx );
+        sor.do_job( buf, pitch, data.bytepp, [&]( int y, uint8 *row ) {
+
+            if ( r.progress && r.progress( y, data.info_ptr->height ) )
+            {
+                instant_stop = true;
+                return true;
+            }
+
+            png_read_row( data.png_ptr, row, nullptr );
+            return false;
+        } );
+        png_read_end( data.png_ptr, data.info_ptr );
     }
 
-	if(data.png_ptr!=nullptr) png_destroy_read_struct(&(data.png_ptr),&(data.info_ptr), (png_infopp)nullptr);
-	return false;
+    if ( r.progress )
+        r.progress( data.info_ptr->height, data.info_ptr->height );
+
+    if ( data.png_ptr != nullptr ) png_destroy_read_struct( &( data.png_ptr ), &( data.info_ptr ), ( png_infopp )nullptr );
+    return !instant_stop;
 }
 
 bool save_to_png_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)

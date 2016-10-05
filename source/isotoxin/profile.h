@@ -15,9 +15,7 @@ PROFILE_TABLES
 #undef TAB
     pt_count };
 
-#define JOIN_MESSAGES 0
-
-enum messages_options_e : unsigned
+enum profile_options_e : unsigned
 {
     MSGOP_SHOW_DATE             = SETBIT(0),
     MSGOP_SHOW_DATE_SEPARATOR   = SETBIT(1),
@@ -46,17 +44,23 @@ enum messages_options_e : unsigned
     UIOPT_SHOW_TYPING_MSGLIST   = SETBIT(21),
     UIOPT_KEEPAWAY              = SETBIT(22),
 
+    MSGOP_SHOW_INLINE_IMG       = SETBIT(23),
+
     GCHOPT_MUTE_MIC_ON_INVITE   = SETBIT(24),
     GCHOPT_MUTE_SPEAKER_ON_INVITE = SETBIT(25),
 
-    SNDOPT_MUTE_ON_AWAY         = SETBIT( 26 ),
-    SNDOPT_MUTE_ON_DND          = SETBIT( 27 ),
+    SNDOPT_MUTE_ON_AWAY         = SETBIT(26),
+    SNDOPT_MUTE_ON_DND          = SETBIT(27),
 
     OPTOPT_POWER_USER           = SETBIT(31),
 };
 
-#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_TAGFILETR_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | GCHOPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST | MSGOP_MAXIMIZE_INLINE_IMG | MSGOP_SPELL_CHECK | UIOPT_SHOW_INCOMING_CALL_BAR|UIOPT_SHOW_INCOMING_MSG_PNL|SNDOPT_MUTE_ON_DND|UIOPT_GEN_IDENTICONS)
+#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_TAGFILETR_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | GCHOPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST | MSGOP_MAXIMIZE_INLINE_IMG | MSGOP_SPELL_CHECK | UIOPT_SHOW_INCOMING_CALL_BAR|UIOPT_SHOW_INCOMING_MSG_PNL|SNDOPT_MUTE_ON_DND|UIOPT_GEN_IDENTICONS|MSGOP_SHOW_INLINE_IMG)
 
+enum profile_misc_flags_e
+{
+    PMISCF_SAVEAVATARS = 1,
+};
 
 enum dsp_flags_e
 {
@@ -178,6 +182,8 @@ struct history_s : public post_s
     static ts::data_type_e get_column_type(int index);
 };
 
+typedef post_s * allocpost( const ts::asptr&t, void *prm );
+
 struct unfinished_file_transfer_s
 {
     MOVABLE( true );
@@ -275,7 +281,7 @@ template<typename T, profile_table_e tabi> struct tableview_t
     {
         cleanup();
         for (row_s &r : rows)
-            if (!skip_deleted || r.st != row_s::s_delete)
+            if ( ( !skip_deleted || r.st != row_s::s_delete ) && r.st != row_s::s_deleted )
                 if (f(r.other)) return &r;
         return nullptr;
     }
@@ -292,7 +298,7 @@ template<typename T, profile_table_e tabi> struct tableview_t
     {
         cleanup();
         for (row_s &r : rows)
-            if (!skip_deleted || r.st != row_s::s_delete)
+            if ( ( !skip_deleted || r.st != row_s::s_delete ) && r.st != row_s::s_deleted )
                 if (r.id == id) return &r;
         return nullptr;
     }
@@ -494,6 +500,11 @@ public:
     void unload_history( const contact_key_s&historian );
     void kill_history_item( uint64 utag );
     void kill_history(const contact_key_s&historian);
+
+    void load_history( const contact_key_s&historian, allocpost *cb, void *prm ); // just callback, no table
+
+    void kill_message( uint64 msgutag );
+
     void load_history( const contact_key_s&historian, time_t time, ts::aint nload, ts::tmp_tbuf_t<int>& loaded_ids );
     void load_history( const contact_key_s&historian ); // load all history items to internal table
     void merge_history( const contact_key_s&base_historian, const contact_key_s&from_historian );
@@ -532,13 +543,14 @@ public:
         return msgopts( cur );
     }
 
-    int min_history_load() { return get_options().is(MSGOP_LOAD_WHOLE_HISTORY) ? INT_MAX : min_history(); }
+    int min_history_load(bool for_button) { return get_options().is(MSGOP_LOAD_WHOLE_HISTORY) ? -1 : ( for_button ? add_history() : min_history() ); }
 
     ts::wstr_c get_disabled_dicts();
 
     TEXTAPAR( username, "IsotoxinUser" )
     TEXTAPAR( userstatus, "" )
     INTPAR( min_history, 10 )
+    INTPAR( add_history, 100 )
     INTPAR( ctl_to_send, EKO_ENTER_NEW_LINE )
     INTPAR( inactive_time, 5 )
     INTPAR( manual_cos, COS_ONLINE )
@@ -556,6 +568,8 @@ public:
     TEXTWPAR(auto_confirm_masks, "*.png; *.jpg; *.gif; *.avi; *.mp4; *.mkv");
     TEXTWPAR(manual_confirm_masks, "*.exe; *.com; *.bat; *.cmd; *.vbs");
     INTPAR(fileconfirm, 0);
+
+    INTPAR( misc_flags, 0 );
 
     INTPAR(useproxyfor, 0xffff);
 
@@ -588,6 +602,11 @@ public:
     INTPAR(max_thumb_height, 80); // hidden
 
     UNIQUE_PTR( ts::global_atom_s ) mutex;
+
+
+#ifdef _DEBUG
+    void test();
+#endif // _DEBUG
 };
 
 #undef TEXTPAR

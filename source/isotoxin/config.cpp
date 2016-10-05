@@ -96,12 +96,12 @@ void config_base_c::changed(bool save_all_now)
     DEFERRED_UNIQUE_CALL(1.0, DELEGATE(this, save_dirty), save_all_now ? 1 : 0);
 }
 
-extern parsed_command_line_s g_commandline;
+extern ts::static_setup< parsed_command_line_s, 1000 > g_commandline;
 bool find_config(ts::wstr_c &path)
 {
     bool local_write_protected = false;
     ts::wstr_c exepath = ts::get_exe_full_name();
-    if (g_commandline.alternative_config_path.is_empty())
+    if (!g_commandline().alternative_config_path || g_commandline().alternative_config_path->is_empty() )
     {
         if (ts::check_write_access(ts::fn_get_path(exepath)))
         {
@@ -120,7 +120,7 @@ bool find_config(ts::wstr_c &path)
 
         path = ts::fn_fix_path(ts::wstr_c(CONSTWSTR("%APPDATA%\\Isotoxin\\config.db")), FNO_FULLPATH | FNO_PARSENENV);
     } else
-        path = ts::fn_fix_path(ts::fn_join(g_commandline.alternative_config_path, CONSTWSTR("config.db")), FNO_FULLPATH | FNO_PARSENENV);
+        path = ts::fn_fix_path(ts::fn_join(*g_commandline().alternative_config_path, CONSTWSTR("config.db")), FNO_FULLPATH | FNO_PARSENENV);
 
     bool prsnt = ts::is_file_exists(path);
     if (!prsnt)
@@ -213,9 +213,10 @@ void config_c::load( const ts::wstr_c &path_override )
 
         build(application_c::appbuild());
 
-        gui->disable_special_border( ( misc_flags() & MISCF_DISABLEBORDER ) != 0 );
-        g_app->F_SPLIT_UI = 0 != ( cfg().misc_flags() & MISCF_SPLIT_UI );
-
+        int mf = misc_flags();
+        gui->disable_special_border( ( mf & MISCF_DISABLEBORDER ) != 0 );
+        g_app->F_SPLIT_UI = 0 != ( mf & MISCF_SPLIT_UI );
+        g_app->F_BACKUP_PROFILE = 0 == ( mf & MISCF_DONT_BACKUP_PROFILE );
     }
 }
 

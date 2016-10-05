@@ -504,7 +504,7 @@ namespace
 
             dm().vspace();
             ts::wstr_c updx(CONSTWSTR("<p=c><rect=1000,32,32><p=c>"), TTT("List of spelling dictionaries is being loaded", 409));
-            dm().label(updx).setname("upd");
+            dm().label(updx).setname(CONSTASTR("upd"));
             updanim(RID(), nullptr);
             return 0;
         }
@@ -1284,7 +1284,9 @@ bool dialog_settings_c::histopts_handler(RID, GUIPARAM p)
     if (ip < 0)
     {
         INITFLAG(hist_opts, 2, ip == -1);
-        ctlenable(CONSTASTR("loadcount"), ip == -2);
+        ctlenable( CONSTASTR( "loadcount" ), ip == -2 );
+        ctlenable( CONSTASTR( "loadcounta" ), ip == -2 );
+        
     } else
         hist_opts = (ip & ~2) | (hist_opts & 2);
 
@@ -1302,6 +1304,18 @@ bool dialog_settings_c::load_history_count_handler(const ts::wstr_c &v, bool )
     {
         load_history_count = 10;
         set_edit_value(CONSTASTR("loadcount"), CONSTWSTR("10"));
+    }
+    mod();
+    return true;
+}
+
+bool dialog_settings_c::load_history_count_a_handler( const ts::wstr_c &v, bool )
+{
+    load_history_count_addition = v.as_int();
+    if ( load_history_count_addition < 10 )
+    {
+        load_history_count_addition = 10;
+        set_edit_value( CONSTASTR( "loadcounta" ), CONSTWSTR( "10" ) );
     }
     mod();
     return true;
@@ -1406,7 +1420,6 @@ bool dialog_settings_c::password_not_entered_to_decrypt(RID, GUIPARAM p)
 
     return true;
 }
-
 
 bool dialog_settings_c::encrypt_handler( RID, GUIPARAM pp )
 {
@@ -1548,6 +1561,8 @@ bool dialog_settings_c::msgopts_handler( RID, GUIPARAM p )
 
     ctlenable(CONSTASTR("date_msg_tmpl"), 0 != (msgopts_current & MSGOP_SHOW_DATE));
     ctlenable(CONSTASTR("date_sep_tmpl"), 0 != (msgopts_current & MSGOP_SHOW_DATE_SEPARATOR));
+
+    ctlenable( CONSTASTR( "msgopts32" ), 0 != ( msgopts_current & MSGOP_SHOW_INLINE_IMG ) );
 
     return true;
 }
@@ -1733,8 +1748,9 @@ void dialog_settings_c::mod()
         bgroups[BGROUP_MSGOPTS].add(MSGOP_SHOW_DATE_SEPARATOR);
         bgroups[BGROUP_MSGOPTS].add(MSGOP_SHOW_PROTOCOL_NAME);
         bgroups[BGROUP_MSGOPTS].add(MSGOP_REPLACE_SHORT_SMILEYS);
+        bgroups[BGROUP_MSGOPTS].add(MSGOP_SHOW_INLINE_IMG);
         bgroups[BGROUP_MSGOPTS].add(MSGOP_MAXIMIZE_INLINE_IMG);
-        
+
 
         bgroups[BGROUP_TYPING].add(MSGOP_SEND_TYPING);
         
@@ -1753,6 +1769,7 @@ void dialog_settings_c::mod()
         bgroups[BGROUP_HISTORY].add(MSGOP_LOAD_WHOLE_HISTORY);
 
         PREPARE(load_history_count, prf().min_history());
+        PREPARE( load_history_count_addition, prf().add_history() );
 
         PREPARE(font_scale_conv_text, prf().fontscale_conv_text() );
         PREPARE(font_scale_msg_edit, prf().fontscale_msg_edit());
@@ -1778,6 +1795,8 @@ void dialog_settings_c::mod()
         PREPARE( smilepack,  prf().emoticons_pack() );
 
         PREPARE(disabled_spellchk, ts::wstrings_c( prf().get_disabled_dicts(), '/' ));
+
+        PREPARE( pmisc_flags, prf().misc_flags() );
     }
 
     PREPARE( tempfolder_sendimg, cfg().temp_folder_sendimg() );
@@ -1786,6 +1805,11 @@ void dialog_settings_c::mod()
     PREPARE(tools_bits, cfg().allow_tools());
 
     PREPARE( startopt, detect_startopts() );
+    
+    int bo = cfg().misc_flags();
+    bo = ( MISCF_DONT_BACKUP_PROFILE & bo ) ? 0 : 1;
+    PREPARE( backupopt, bo );
+    PREPARE( backuppath, cfg().folder_backup() );
 
     PREPARE( curlang, cfg().language() );
     PREPARE( autoupdate, cfg().autoupdate() );
@@ -1904,6 +1928,13 @@ void dialog_settings_c::mod()
     if (!profname.is_empty()) profile_c::path_by_name(profname);
 
     dm().path( TTT("Current profile path",37), ts::to_wstr(profname) ).readonly(true);
+
+    dm().vspace();
+    dm().checkb( TTT("Profile backup",495), DELEGATE( this, backupopt_handler ), backupopt ).setmenu(
+        menu_c().add( TTT("Create backup on start",496), 0, MENUHANDLER(), CONSTASTR( "1" ) )
+    );
+    dm().path( TTT("Backup path",497), backuppath, DELEGATE( this, backuppath_handler ) );
+
     dm().vspace();
     dm().radio(TTT("Minimize to notification area",118), DELEGATE(this, collapse_beh_handler), collapse_beh).setmenu(
         menu_c()
@@ -1948,7 +1979,7 @@ void dialog_settings_c::mod()
     dm().vspace();
     dm().hslider(L"", signal_vol, CONSTWSTR("0/0/1/1"), DELEGATE(this, signalvolset));
     dm().vspace(10);
-    dm().label(L"").setname("soundhint");
+    dm().label(L"").setname( CONSTASTR( "soundhint" ) );
 
     dm << MASK_APPLICATION_SOUNDS; //______________________________________________________________________________________________//
     dm().page_caption(TTT("Sounds",294));
@@ -1993,7 +2024,7 @@ void dialog_settings_c::mod()
         dm().page_caption( TTT("General profile settings",38) );
         
         dm().checkb(ts::wstr_c(), DELEGATE(this, encrypt_handler), enc_val()).setname(CONSTASTR("encrypt")).setmenu(
-            menu_c().add(TTT("Encrypted profile",52), 0, MENUHANDLER(), CONSTASTR("1"))
+            menu_c().add( TTT( "Encrypted profile", 52 ), 0, MENUHANDLER(), CONSTASTR("1"))
             );
         
         dm().vspace();
@@ -2120,8 +2151,9 @@ void dialog_settings_c::mod()
             .add(t_showdatesep, 0, MENUHANDLER(), CONSTASTR("2"))
             .add(TTT("Show protocol name", 173), 0, MENUHANDLER(), CONSTASTR("4"))
             .add(TTT("Replace short smileys to emoticons",373), 0, MENUHANDLER(), CONSTASTR("8"))
-            .add(TTT("Maximize inline images",391), 0, MENUHANDLER(), CONSTASTR("16"))
-            );
+            .add(TTT("Show inline images",487), 0, MENUHANDLER(), CONSTASTR( "16" ))
+            .add(TTT("Maximize inline images",391), 0, MENUHANDLER(), CONSTASTR("32"))
+            ).setname(CONSTASTR("msgopts"));
 
         
         font_size_slider(conv_text);
@@ -2134,7 +2166,9 @@ void dialog_settings_c::mod()
 
         ctl.clear();
         dm().textfield(ts::wstr_c(), ts::wmake(load_history_count), DELEGATE(this, load_history_count_handler)).setname(CONSTASTR("loadcount")).width(50).subctl(textrectid++, ctl);
-        ts::wstr_c t_loadcount = TTT("...load $ messages",330) / ctl;
+        ts::wstr_c ctl2;
+        dm().textfield( ts::wstr_c(), ts::wmake( load_history_count_addition ), DELEGATE( this, load_history_count_a_handler ) ).setname( CONSTASTR( "loadcounta" ) ).width( 50 ).subctl( textrectid++, ctl2 );
+        ts::wstr_c t_loadcount = TTT("...load $ messages (also load $ messages by button)",330) / ctl / ctl2;
         if (t_loadcount.find_pos(ctl) < 0) t_loadcount.append_char(' ').append(ctl);
 
         dm().vspace();
@@ -2203,6 +2237,7 @@ void dialog_settings_c::mod()
     dm << MASK_ADVANCED_TOOLS;
     dm().checkb(ts::wstr_c(), DELEGATE(this, advt_handler), tools_bits).setmenu(
         menu_c().add(TTT("Color editor",433), 0, MENUHANDLER(), CONSTASTR("1"))
+            .add( TTT("Command line generator",489), 0, MENUHANDLER(), CONSTASTR( "2" ) )
         );
 
     dm << MASK_ADVANCED_MISC;
@@ -2216,6 +2251,9 @@ void dialog_settings_c::mod()
         .add( TTT("Disable window border",458), 0, MENUHANDLER(), ts::amake<int>( MISCF_DISABLEBORDER ) )
     );
 
+    dm().checkb( ts::wstr_c(), DELEGATE( this, pmiscf_handler ), pmisc_flags ).setmenu(
+        menu_c().add( TTT("Save avatar images",498), 0, MENUHANDLER(), ts::amake<int>( PMISCF_SAVEAVATARS ) )
+    );
 
     if (profile_selected)
     {
@@ -2305,6 +2343,13 @@ bool dialog_settings_c::miscf_handler( RID, GUIPARAM p )
     return true;
 }
 
+bool dialog_settings_c::pmiscf_handler( RID, GUIPARAM p )
+{
+    pmisc_flags = as_int( p );
+    mod();
+    return true;
+}
+
 
 bool dialog_settings_c::startopt_handler( RID, GUIPARAM p )
 {
@@ -2315,6 +2360,21 @@ bool dialog_settings_c::startopt_handler( RID, GUIPARAM p )
     mod();
     return true;
 }
+
+bool dialog_settings_c::backupopt_handler( RID, GUIPARAM p )
+{
+    backupopt = as_int( p );
+    mod();
+    return true;
+}
+
+bool dialog_settings_c::backuppath_handler( const ts::wstr_c &p, bool )
+{
+    backuppath = p;
+    mod();
+    return true;
+}
+
 
 void dialog_settings_c::codecselected(const ts::str_c& prm)
 {
@@ -2597,7 +2657,7 @@ void dialog_settings_c::networks_tab_selected()
     }
     if (mask & MASK_PROFILE_MSGSNHIST)
     {
-        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, msgopts_handler), msgopts_current);
+        DEFERRED_UNIQUE_CALL(0, DELEGATE(this, msgopts_handler), bgroups[ BGROUP_MSGOPTS ].current );
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, histopts_handler), (bgroups[BGROUP_HISTORY].current & 2) ? -1 : -2);
     }
 
@@ -3081,6 +3141,7 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
         ch1 |= prf().date_sep_template(date_sep_tmpl);
 
         prf().min_history(load_history_count);
+        prf().add_history( load_history_count_addition );
         prf().inactive_time( (bgroups[BGROUP_COMMON2].current & 2) ? set_away_on_timer_minutes_value : 0 );
         prf().dmn_duration( desktop_notification_duration );
 
@@ -3108,11 +3169,14 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
             gmsg<ISOGM_CHANGED_SETTINGS>(0, PP_VIDEO_ENCODING_SETTINGS).send();
 
         prf().useproxyfor( useproxyfor );
+        prf().misc_flags( pmisc_flags );
+
     }
 
     cfg().temp_folder_sendimg( tempfolder_sendimg );
     cfg().temp_folder_handlemsg( tempfolder_handlemsg );
     
+    cfg().folder_backup( backuppath );
 
     if (is_changed(startopt))
         set_startopts();
@@ -3164,6 +3228,7 @@ bool dialog_settings_c::save_and_close(RID, GUIPARAM)
         //gmsg<ISOGM_CHANGED_SETTINGS>( 0, CFG_DSPFLAGS ).send();
 
     misc_flags = ( misc_flags & 3 ) | ( misc_flags_store & ~3 );
+    INITFLAG( misc_flags, MISCF_DONT_BACKUP_PROFILE, 0 == (backupopt & 1) );
     cfg().misc_flags( misc_flags );
     gui->disable_special_border( ( misc_flags & MISCF_DISABLEBORDER ) != 0 );
     

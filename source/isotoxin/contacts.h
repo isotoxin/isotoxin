@@ -10,9 +10,10 @@ enum message_type_app_e : unsigned
     MTA_CALL_ACCEPTED__ = MT_CALL_ACCEPTED,
 
     // not saved to db
-    MTA_SPECIAL,
+    MTA_HISTORY_LOAD_BUTTON,
     MTA_DATE_SEPARATOR,
     MTA_TYPING,
+    MTA_SUPERMESSAGE,
 
     message_type_app_values = 99,
     // saved to db
@@ -65,7 +66,8 @@ struct contact_key_s
 
     unsigned contactid : 24;      // contact id (0 - group itself)
     unsigned is_self : 1;
-    unsigned reserved : 7;  // unused
+    unsigned rotten_group : 1;
+    unsigned reserved : 6;  // unused
     unsigned gid : 16;      // negative group id ( all group id's are negative, so gid is inversed group id )
     unsigned protoid : 16;       // 0 - metacontact. all visible contacts are metacontacts with history and conversation / >0 - protocol contact
 
@@ -78,20 +80,24 @@ struct contact_key_s
         ts::ref_cast<uint64>( *this ) = s.as_num<uint64>();
     }
     contact_key_s( const contact_key_s&ck ) { ts::ref_cast<uint64>( *this ) = ts::ref_cast<uint64>( ck ); }
-    explicit contact_key_s( int cid_ ) :contactid( cid_ ), is_self( 0 ), reserved( 0 ), gid( 0 ), protoid( 0 ) {} // meta
-    contact_key_s( int cid_, int ap_ ) :contactid( cid_ ), is_self( 0 ), reserved( 0 ), gid( 0 ), protoid( ( ts::uint16 )ap_ )
+    explicit contact_key_s( int cid_ ) :contactid( cid_ ), is_self( 0 ), rotten_group( 0 ), reserved( 0 ), gid( 0 ), protoid( 0 ) {} // meta
+    contact_key_s( int cid_, int ap_ ) :contactid( cid_ ), is_self( 0 ), rotten_group( 0 ), reserved( 0 ), gid( 0 ), protoid( ( ts::uint16 )ap_ )
     {
         if ( cid_ < 0 )
             contactid = 0, gid = ( ts::uint16 )( -cid_ );
         else if ( cid_ == 0 && ap_ != 0 )
             is_self = 1;
     }
-    contact_key_s( int gid_, int cid_, int ap_ ) :contactid( cid_ ), is_self(0), reserved(0), gid( ( ts::uint16 )( -gid_ ) ), protoid( ( ts::uint16 )ap_ ) { ASSERT( gid_ <= 0 ); }
+    contact_key_s( int gid_, int cid_, int ap_ ) :contactid( cid_ ), is_self(0), rotten_group( 0 ), reserved(0), gid( ( ts::uint16 )( -gid_ ) ), protoid( ( ts::uint16 )ap_ ) { ASSERT( gid_ <= 0 ); }
     explicit contact_key_s( bool self = false )
     {
         ts::ref_cast<uint64>( *this ) = 0;
         if ( self )
             is_self = 1;
+    }
+    contact_key_s( int cid_, contact_state_e cs ) :contactid( cid_ ), is_self( 0 ), rotten_group( 1 ), reserved( 0 ), gid( 0 ), protoid( 0 ) // rotten group
+    {
+        ASSERT( CS_ROTTEN == cs );
     }
 
     int gidcid() const
@@ -105,8 +111,8 @@ struct contact_key_s
         return contact_key_s( -(int)gid, 0, protoid );
     }
 
-    bool is_meta() const {return protoid == 0 && contactid > 0;}
-    bool is_group() const {return contactid == 0 && protoid > 0 && gid > 0;}
+    bool is_meta() const {return (protoid == 0 && contactid > 0) && !rotten_group;}
+    bool is_group() const {return (contactid == 0 && protoid > 0 && gid > 0) || rotten_group != 0;}
     bool is_group_contact() const { return contactid > 0 && protoid > 0 && gid > 0; }
     bool is_empty() const {return ts::ref_cast<uint64>(*this) == 0; }
 
@@ -189,14 +195,22 @@ struct post_s
     uint64 utag;
     time_t recv_time = 0;
     time_t cr_time = 0;
-    ts::str_c message_utf8;
+    ts::shared_ptr< ts::refstring_t<char> > message_utf8;
     contact_key_s sender;
     contact_key_s receiver;
     unsigned type : type_size_bits;
     unsigned options : options_size_bits;
 
+    void set_message_text( const ts::asptr&m );
     const time_t &get_crtime() const { return cr_time != 0 ? cr_time : recv_time; }
     message_type_app_e mt() const {return (message_type_app_e)type;}
+
+    void set_type_and_options( int64 dbval ) // db value
+    {
+        type = dbval & ( SETBIT( type_size_bits ) - 1 );
+        options = ( dbval >> 16 ) & ( SETBIT( options_size_bits ) - 1 );
+    }
+
 };
 
 struct avatar_s : public ts::bitmap_c
@@ -323,6 +337,7 @@ public:
 
 
     // not saved
+    static const ts::flags32_s::BITS F_HISTORY_NEED_LOAD = SETBIT(20);
     static const ts::flags32_s::BITS F_JUST_REJECTED = SETBIT(21);
     static const ts::flags32_s::BITS F_JUST_ACCEPTED = SETBIT(22);
     static const ts::flags32_s::BITS F_LAST_ACTIVITY = SETBIT(23);
@@ -408,7 +423,6 @@ public:
     bool b_reject(RID, GUIPARAM);
     bool b_resend(RID, GUIPARAM);
     bool b_kill(RID, GUIPARAM);
-    bool b_load(RID, GUIPARAM);
     bool b_accept_call_with_video(RID, GUIPARAM);
     bool b_accept_call(RID, GUIPARAM);
     bool b_reject_call(RID, GUIPARAM);
@@ -453,12 +467,14 @@ class contact_root_c : public contact_c // metas and groups
 {
     DUMMY(contact_root_c);
     ts::array_shared_t<contact_c, 0> subcontacts; // valid for meta contact
-    ts::array_inplace_t<post_s, 128> history; // valid for meta contact
+
+    ts::pointers_t<post_s, 128> history;
+    ts::struct_buf_t< post_s, 128 > posts;
     ts::str_c comment;
     ts::str_c greeting; // utf8 greeting; send as message on contact online
     ts::wstr_c mhc;
     ts::astrings_c tags;
-    ts::buf0_c tags_bits; // rebuilded
+    ts::buf0_c tags_bits; // rebuilt
 
     time_t readtime = 0; // all messages after readtime considered unread
     keep_contact_history_e keeph = KCH_DEFAULT;
@@ -472,7 +488,9 @@ public:
 
     contact_root_c() {} // dummy
     contact_root_c( const contact_key_s &key ):contact_c(key) {}
-    ~contact_root_c() {}
+    ~contact_root_c() { unload_history(); }
+
+    void change_key_rotten( int rottencid );
 
     /*virtual*/ void setup(const contacts_s * c, time_t nowtime) override;
     /*virtual*/ bool save(contacts_s * c) const override;
@@ -491,16 +509,20 @@ public:
     /*virtual*/ void av(bool f, bool video) override;
     /*virtual*/ bool calltone(bool f = true, bool call_accepted = false) override;
 
+    bool hasproto(int apid) const
+    {
+        if ( key.is_group() )
+            return !key.rotten_group && key.protoid == (unsigned)apid;
+
+        for ( contact_c *c : subcontacts )
+            if ( c->getkey().protoid == (unsigned)apid ) return true;
+        return false;
+    }
+
     bool subpresent(const contact_key_s&k) const
     {
         for (contact_c *c : subcontacts)
             if (c->getkey() == k) return true;
-        return false;
-    }
-    bool subpresent( int protoid ) const
-    {
-        for ( contact_c *c : subcontacts )
-            if ( c->getkey().protoid == (unsigned)protoid ) return true;
         return false;
     }
     contact_c * subgetadd(const contact_key_s&k);
@@ -564,49 +586,66 @@ public:
 
     const post_s * fix_history(message_type_app_e oldt, message_type_app_e newt, const contact_key_s& sender = contact_key_s() /* self - empty - no matter */, time_t update_time = 0 /* 0 - no need update */, const ts::str_c *update_text = nullptr /* null - no need update */);
 
-    const post_s& get_history( ts::aint index) const { return history.get(index); }
+    const post_s& get_history( ts::aint index) const { return *history.get(index); }
     ts::aint history_size() const { return history.size(); }
 
     time_t nowtime() const
     {
         time_t time = now();
-        if (history.size() && history.last().recv_time >= time) time = history.last().recv_time + 1;
+        if (history.size() && history.last()->recv_time >= time) time = history.last()->recv_time + 1;
         return time;
     }
-    void make_time_unique(time_t &t) const;
 
-    void del_history(uint64 utag);
+#if 0
+    void make_time_unique(time_t &t) const;
+#endif
 
     void add_message( const ts::str_c& utf8msg ); // add system message to conversation (don't update history)
+
+    bool b_load( RID, GUIPARAM );
+    
+    void del_history( uint64 utag );
+
+    post_s* add_history_unsafe()
+    {
+        post_s *p = posts.alloc();
+        history.add( p );
+        return p;
+    }
 
     post_s& add_history()
     {
         history_touch();
 
-        post_s &p = history.add();
-        p.recv_time = nowtime();
-        p.cr_time = p.recv_time;
-        return p;
+        post_s *p = posts.alloc();
+        history.add( p );
+        p->recv_time = nowtime();
+        p->cr_time = p->recv_time;
+        return *p;
     }
-    post_s& add_history(time_t recv_t, time_t send_t)
+    post_s& add_history(time_t recv_t, time_t send_t, ts::aint *index = nullptr)
     {
         history_touch();
 
         ts::aint cnt = history.size();
         for (int i = 0; i < cnt; ++i)
         {
-            if (recv_t < history.get(i).recv_time)
+            if (recv_t < history.get(i)->recv_time)
             {
-                post_s &p = history.insert(i);
-                p.recv_time = recv_t;
-                p.cr_time = send_t;
-                return p;
+                post_s *p = posts.alloc();
+                history.insert(i, p);
+                p->recv_time = recv_t;
+                p->cr_time = send_t;
+                if ( index ) *index = i;
+                return *p;
             }
         }
-        post_s &p = history.add();
-        p.recv_time = recv_t;
-        p.cr_time = send_t;
-        return p;
+        post_s *p = posts.alloc();
+        if ( index ) *index = history.size();
+        history.add(p);
+        p->recv_time = recv_t;
+        p->cr_time = send_t;
+        return *p;
     }
 
     void history_touch()
@@ -615,24 +654,55 @@ public:
     }
     bool is_ancient_history()
     {
+        if ( !keep_history() )
+            return false;
         return (ts::Time::current() - last_history_touch) > 10000; // assume 10 seconds is ancient enough
     }
 
     void load_history( ts::aint n_last_items);
     void unload_history()
     {
+        for ( post_s *p : history )
+            posts.dealloc( p );
         history.clear();
+        opts.unmasked().set( F_HISTORY_NEED_LOAD );
     }
 
     void export_history(const ts::wsptr &templatename, const ts::wsptr &fname);
+
+    ts::aint find_post_index( const post_s *p ) const
+    {
+        for ( ts::aint i = 0, c = history.size(); i < c; ++i )
+            if ( p == history.get( i ) )
+                return i;
+        return -1;
+    }
+    ts::aint find_post_index( uint64 utg ) const
+    {
+        for ( ts::aint i = 0, c = history.size(); i < c; ++i )
+            if ( utg == history.get( i )->utag )
+                return i;
+        return -1;
+    }
 
     const post_s *find_post_by_utag(uint64 utg) const
     {
         const_cast<contact_root_c *>(this)->history_touch();
 
-        for (const post_s &p : history)
-            if (p.utag == utg)
-                return &p;
+        for (const post_s *p : history)
+            if (p->utag == utg)
+                return p;
+        return nullptr;
+    }
+
+    const post_s *find_post_by_utag( uint64 utg, const ts::ivec2& inrange ) const
+    {
+        for ( int i = inrange.r0; i <= inrange.r1; ++i )
+        {
+            const post_s *p = history.get(i);
+            if ( p->utag == utg )
+                return p;
+        }
         return nullptr;
     }
 
@@ -640,30 +710,31 @@ public:
     {
         const_cast<contact_root_c *>( this )->history_touch();
 
-        for (const post_s &p : history)
-            if (f(p)) return;
+        for (const post_s *p : history)
+            if (f(*p)) return;
     }
     template<typename F> void iterate_history(F f)
     {
         history_touch();
-        for (post_s &p : history)
-            if (f(p)) return;
+        for (post_s *p : history)
+            if (f(*p)) return;
     }
-    template<typename F> int iterate_history_changetime(F f) // return last iterated post index
+    template<typename F> ts::aint iterate_history_changetime(F f) // return last iterated post index
     {
         history_touch();
-        int r = -1;
+        ts::aint r = -1;
         ts::tmp_array_inplace_t<post_s, 4> temp;
-        for (int i = 0; i < history.size();)
+        for ( ts::aint i = 0; i < history.size();)
         {
             r = i;
-            post_s &p = history.get(i);
+            post_s &p = *history.get(i);
             time_t t = p.recv_time;
             bool cont = f(p);
             if (t != p.recv_time)
             {
                 temp.add(p);
                 history.remove_slow(i);
+                posts.dealloc( &p );
                 if (!cont) break;
                 continue;
             }
@@ -672,9 +743,8 @@ public:
         }
         for (post_s &p : temp)
         {
-            post_s *x = &add_history(p.recv_time, p.cr_time);
-            *x = p;
-            r = (int)(x - history.begin());
+            post_s &x = add_history(p.recv_time, p.cr_time, &r);
+            x = p;
         }
 
         return r;
@@ -762,7 +832,7 @@ public:
     int get_imnb() const { return imnb; }
     void set_imnb( int v ) { imnb = v; }
 
-    void execute_message_handler( const ts::str_c &utf8msg );
+    void execute_message_handler( const ts::asptr &utf8msg );
     msg_handler_e get_mhtype() const { return mht; }
     void set_mhtype( msg_handler_e v ) { mht = v; }
 
@@ -789,8 +859,9 @@ contact_root_c *get_historian(contact_c *sender, contact_c * receiver);
 
 template<> struct gmsg<ISOGM_V_UPDATE_CONTACT> : public gmsgbase
 {
-    gmsg(contact_c *c) :gmsgbase(ISOGM_V_UPDATE_CONTACT),contact(c) { }
+    gmsg(contact_c *c, bool refilter) :gmsgbase(ISOGM_V_UPDATE_CONTACT),contact(c), refilter( refilter ) { }
     ts::shared_ptr<contact_c> contact;
+    bool refilter;
 };
 
 
@@ -896,6 +967,7 @@ class contacts_c
 
     bool is_groupchat_member( const contact_key_s &ck );
 
+    int find_free_rotten_id() const;
     int find_free_meta_id() const;
     void delbykey( const contact_key_s&k )
     {
@@ -925,6 +997,8 @@ public:
 
     ts::str_c find_pubid(int protoid) const;
     contact_c *find_subself(int protoid) const;
+
+    ts::wstr_c calc_self_name( int protoid ) const;
 
     contact_root_c *create_new_meta();
 
@@ -973,10 +1047,10 @@ public:
             if (!c->is_meta())
                 if (!r(c)) break;
     }
-    template <typename R> void iterate_meta_contacts(R r)
+    template <typename R> void iterate_root_contacts(R r)
     {
         for (contact_c *c : arr)
-            if (c->is_meta())
+            if (c->is_rootcontact())
                 if (!r( ts::ptr_cast<contact_root_c *>(c) )) break;
     }
 

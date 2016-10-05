@@ -6,11 +6,12 @@ public:
     picture_c() {}
     virtual ~picture_c() {}
 
-    virtual bool load(const ts::blob_c &body) = 0;
+    virtual bool load(const ts::blob_c &body, ts::IMG_LOADING_PROGRESS progress) = 0;
     virtual ts::ivec2 framesize_by_width(int w) { return ts::ivec2(0); };
     virtual void fit_to_width(int w) {}
     virtual const ts::bitmap_c &curframe(ts::irect &frect) const  = 0;
     virtual ts::irect framerect() const = 0;
+    virtual size_t size() const = 0;
     virtual ts::bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &frect)  = 0;
 
     virtual void draw(rectengine_root_c *e, const ts::ivec2 &pos) const;
@@ -26,7 +27,7 @@ protected:
 public:
     /*virtual*/ ~picture_animated_c();
 
-    /*virtual*/ bool load(const ts::blob_c &body) = 0;
+    ///*virtual*/ bool load( const ts::blob_c &body, ts::IMG_LOADING_PROGRESS progress ) = 0;
     /*virtual*/ void draw(rectengine_root_c *e, const ts::ivec2 &pos) const override;
 
 };
@@ -38,9 +39,10 @@ protected:
     
 public:
     bool load_only_gif( ts::bitmap_c &first_frame, const ts::blob_c &body );
-    /*virtual*/ bool load(const ts::blob_c &body) override;
+    /*virtual*/ bool load( const ts::blob_c &body, ts::IMG_LOADING_PROGRESS progress ) override;
     /*virtual*/ bool animation_tick() override;
     virtual int nextframe();
+    /*virtual*/ size_t size() const override;
 };
 
 class image_loader_c : public autoparam_i
@@ -50,6 +52,7 @@ class image_loader_c : public autoparam_i
     ts::safe_ptr<gui_message_item_c> item;
     ts::wstr_c filename;
     picture_c *pic = nullptr;
+    ts::Time last_draw = ts::Time::past();
 
 public:
     ts::safe_ptr<gui_button_c> explorebtn;
@@ -61,6 +64,13 @@ public:
     image_loader_c(gui_message_item_c *itm, const ts::wstr_c &filename);
     ~image_loader_c();
 
+    int get_loading_progress();
+
+    ts::Time get_last_draw_time() const { return last_draw; }
+    void on_draw(); // load picture, if not yet
+
+    void not_loaded();
+    void unloaded();
     bool signal_loaded(RID, GUIPARAM);
     picture_c *get_picture() { return pic; }
     const picture_c *get_picture() const { return pic; }
@@ -86,5 +96,7 @@ INLINE image_loader_c &gui_message_item_c::imgloader_get(addition_file_data_s **
     }
     return ts::make_dummy<image_loader_c>();
 }
+
+void cleanup_images_cache();
 
 

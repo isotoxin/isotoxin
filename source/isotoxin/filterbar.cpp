@@ -50,7 +50,7 @@ gui_filterbar_c::~gui_filterbar_c()
     search_in_messages = prf().is_loaded() && prf().get_options().is(MSGOP_FULL_SEARCH);
 
     if (!is_all())
-        refresh_list();
+        refresh_list(true);
 
     __super::created();
 }
@@ -105,7 +105,7 @@ void gui_filterbar_c::do_tag_click(int lnk)
         lnk -= BIT_count;
         contacts().toggle_tag(lnk);
     }
-    refresh_list();
+    refresh_list(true);
     textrect.make_dirty();
     getengine().redraw();
 }
@@ -249,13 +249,87 @@ bool gui_filterbar_c::option_handler(RID, GUIPARAM p)
     if (prf().is_loaded())
         prf().set_options( search_in_messages ? MSGOP_FULL_SEARCH : 0, MSGOP_FULL_SEARCH );
     found_stuff.fsplit.clear();
-    refresh_list();
+    refresh_list(false);
     return true;
 }
+
+extern "C"
+{
+    int isotoxin_compare( const unsigned char *row_text, int row_text_len, const unsigned char *pattern );
+};
 
 void gui_filterbar_c::full_search_result( found_stuff_s::FOUND_STUFF_T &&stuff )
 {
     found_stuff.items = std::move( stuff );
+
+    // try find in no-keep historians
+
+    compare_context_s cc;
+    cc.fsplit = found_stuff.fsplit;
+    ts::str_c ccs;
+    ccs.append_char('%');
+    ccs.encode_pointer( &cc );
+
+    auto get_post_time = []( const post_s *post )
+    {
+        return post ? post->recv_time : 0;
+    };
+
+    contacts().iterate_root_contacts( [&]( contact_root_c *r )->bool
+    {
+        if (!r->keep_history())
+        {
+            found_item_s *hitm = nullptr;
+
+            time_t prevtime = 0;
+            bool need_resort = false;
+
+            r->iterate_history( [&]( post_s &p )->bool {
+
+                if (isotoxin_compare( (const unsigned char *)p.message_utf8->cstr().s, p.message_utf8->getlen(), (const unsigned char *)ccs.cstr() ))
+                {
+                    if (!hitm)
+                        for ( found_item_s &itm : found_stuff.items )
+                            if ( itm.historian == r->getkey() )
+                            {
+                                hitm = &itm;
+                                prevtime = itm.utags.count() ? get_post_time(r->find_post_by_utag( itm.utags.get( itm.utags.count() - 1 ) )) : 0;
+                            }
+
+                    if ( !hitm )
+                    {
+                        hitm = &found_stuff.items.add();
+                        hitm->historian = r->getkey();
+                    }
+
+                    if ( hitm->mintime == 0 )
+                        hitm->mintime = p.recv_time;
+
+                    if ( hitm->utags.find_index( p.utag ) < 0 )
+                        hitm->utags.add( p.utag );
+
+                    if ( prevtime > p.recv_time )
+                        need_resort = true;
+
+                    prevtime = p.recv_time;
+                }
+                return false;
+            } );
+
+            if (need_resort && hitm)
+            {
+                hitm->utags.q_sort<uint64>( [&]( const uint64 *a, const uint64 *b )->bool
+                {
+                    if ( *a == *b )
+                        return false;
+                    return get_post_time( r->find_post_by_utag( *a ) ) < get_post_time( r->find_post_by_utag( *b ) );
+                } );
+            }
+
+        }
+        return true;
+    } );
+
     if (contact_index >= contacts().count())
         apply_full_text_search_result();
 }
@@ -265,7 +339,7 @@ bool gui_filterbar_c::do_contact_check(RID, GUIPARAM p)
     for ( ts::aint n = ts::tmax(1, contacts().count() / 10 ); contact_index < contacts().count() && n > 0; --n)
     {
         contact_c &c = contacts().get(contact_index++);
-        if (c.is_rootcontact())
+        if (c.is_rootcontact() && !c.getkey().is_self)
         {
             contact_root_c *cr = ts::ptr_cast<contact_root_c *>(&c);
 
@@ -275,8 +349,11 @@ bool gui_filterbar_c::do_contact_check(RID, GUIPARAM p)
                 if (cr->gui_item) cr->gui_item->update_text();
             }
 
-            if (cr->gui_item)
-                cr->gui_item->vis_filter(check_one(cr));
+            if ( cr->gui_item )
+            {
+                ASSERT( cr->gui_item->getrole() != CIR_ME );
+                cr->gui_item->vis_filter( check_one( cr ) );
+            }
         }
     }
 
@@ -285,7 +362,7 @@ bool gui_filterbar_c::do_contact_check(RID, GUIPARAM p)
         if (active)
         {
             gui_contactlist_c &cl = HOLD(getparent()).as<gui_contactlist_c>();
-            cl.scroll_to_child(active, false);
+            cl.scroll_to_child( active, ST_ANY_POS );
         }
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, do_contact_check), 0);
     }
@@ -314,7 +391,7 @@ void gui_filterbar_c::apply_full_text_search_result()
     {
         gui_contactlist_c &cl = HOLD(getparent()).as<gui_contactlist_c>();
         cl.fix_sep_visibility();
-        cl.scroll_to_child(active, false);
+        cl.scroll_to_child(active, ST_ANY_POS);
     }
 
     gmsg<ISOGM_REFRESH_SEARCH_RESULT>().send();
@@ -322,13 +399,13 @@ void gui_filterbar_c::apply_full_text_search_result()
 
 }
 
-void gui_filterbar_c::refresh_list()
+void gui_filterbar_c::refresh_list( bool tags_ch )
 {
     ts::wstr_c t;
     if (edit)
         t = edit->get_text();
 
-    tagschanged = true;
+    tagschanged |= tags_ch;
 
     update_filter(t, true);
 }
@@ -358,8 +435,10 @@ bool gui_filterbar_c::update_filter(const ts::wstr_c & e, bool)
     if (!tagschanged && found_stuff.fsplit == ospl)
         return true;
 
+    process_animation_s *oldpa = nullptr;
     if (current_search)
     {
+        oldpa = &current_search->pa;
         current_search->no_need = true;
         current_search = nullptr;
     }
@@ -374,11 +453,15 @@ bool gui_filterbar_c::update_filter(const ts::wstr_c & e, bool)
         return true;
     }
 
+    bool refresh_height = false;
     if (search_in_messages && found_stuff.fsplit.size())
     {
-        current_search = TSNEW( full_search_s, prf().get_db(), this, found_stuff.fsplit );
+        current_search = TSNEW( full_search_s, this, found_stuff.fsplit );
+        if ( oldpa )
+            current_search->pa = std::move( *oldpa );
         found_stuff.items.clear();
         g_app->add_task( current_search );
+        refresh_height = true;
     } else
         found_stuff.items.clear();
 
@@ -392,9 +475,25 @@ bool gui_filterbar_c::update_filter(const ts::wstr_c & e, bool)
     }
 
     tagschanged = false;
-    contact_index = 1;
+    contact_index = 0;
     do_contact_check(RID(),nullptr);
+    if ( refresh_height )
+        HOLD( getparent() ).as<gui_contactlist_c>().update_filter_pos();
     return true;
+}
+
+void gui_filterbar_c::redraw_anm()
+{
+    if ( current_search )
+    {
+        const theme_rect_s *thr = themerect();
+        int y = getprops().size().y - current_search->pa.bmp.info().sz.y - 5;
+        if ( thr )
+            y -= thr->clborder_y()/2;
+        int w = current_search->pa.bmp.info().sz.x;
+        ts::irect r = ts::irect::from_lt_and_size( ts::ivec2((getprops().size().x-w)/2, y), current_search->pa.bmp.info().sz );
+        getengine().redraw( &r );
+    }
 }
 
 /*virtual*/ int gui_filterbar_c::get_height_by_width(int width) const
@@ -414,7 +513,7 @@ bool gui_filterbar_c::update_filter(const ts::wstr_c & e, bool)
     if (option1)
         sz.y += option1->get_min_size().y;
 
-    return sz.y;
+    return sz.y + ( current_search ? current_search->pa.bmp.info().sz.y + 10 : 0 );
 }
 
 /*virtual*/ bool gui_filterbar_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -473,6 +572,8 @@ bool gui_filterbar_c::update_filter(const ts::wstr_c & e, bool)
     case SQ_DRAW:
         if (rid == getrid())
         {
+            gui_control_c::sq_evt( qp, rid, data );
+
             if (prf().get_options().is(UIOPT_TAGFILETR_BAR))
             {
                 ts::irect ca = get_client_area();
@@ -493,9 +594,18 @@ bool gui_filterbar_c::update_filter(const ts::wstr_c & e, bool)
                 getengine().end_draw();
 
             }
-
-            return gui_control_c::sq_evt(qp,rid,data);
-
+            if ( current_search )
+            {
+                /*draw_data_s &dd =*/ getengine().begin_draw();
+                const theme_rect_s *thr = themerect();
+                int y = getprops().size().y - current_search->pa.bmp.info().sz.y - 5;
+                if ( thr )
+                    y -= thr->clborder_y() / 2;
+                int w = current_search->pa.bmp.info().sz.x;
+                getengine().draw( ts::ivec2( ( getprops().size().x - w ) / 2, y ), current_search->pa.bmp.extbody(), true );
+                getengine().end_draw();
+            }
+            return true;
         }
         break;
     }
@@ -524,6 +634,33 @@ ts::uint32 gui_filterbar_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
     return 0;
 }
 
+gui_filterbar_c::full_search_s::full_search_s( gui_filterbar_c *owner, const ts::wstrings_c &flt_ ) : db( db ), owner( owner )
+{
+    db = prf().get_db();
+
+    for ( const ts::wstr_c &s : flt_ )
+        cc.fsplit.add( s.as_sptr() );
+
+    DEFERRED_UNIQUE_CALL( 0.05, DELEGATE(this, anm), 0 );
+}
+
+gui_filterbar_c::full_search_s::~full_search_s()
+{
+    if ( gui )
+        gui->delete_event( DELEGATE( this, anm ) );
+}
+
+bool gui_filterbar_c::full_search_s::anm( RID, GUIPARAM )
+{
+    if ( !no_need && owner )
+    {
+        pa.render();
+        owner->redraw_anm();
+        DEFERRED_UNIQUE_CALL( 0.05, DELEGATE( this, anm ), nullptr );
+    }
+    return true;
+}
+
 
 bool gui_filterbar_c::full_search_s::reader(int row, ts::SQLITE_DATAGETTER getta)
 {
@@ -531,6 +668,7 @@ bool gui_filterbar_c::full_search_s::reader(int row, ts::SQLITE_DATAGETTER getta
         return false;
 
     ts::data_value_s v;
+
     if (CHECK(ts::data_type_e::t_int == getta(history_s::C_ID, v))) // always id
     {
         if (CHECK(ts::data_type_e::t_int == getta(history_s::C_HISTORIAN, v)))
@@ -563,19 +701,23 @@ bool gui_filterbar_c::full_search_s::reader(int row, ts::SQLITE_DATAGETTER getta
     // mtype 0 == MTA_MESSAGE
     // mtype 107 == MTA_UNDELIVERED_MESSAGE
 
-    ts::str_c where(CONSTASTR("(mtype == 0 or mtype == 107) and msg like \"%"));
-    where.encode_pointer(&flt).append(CONSTASTR("\" order by mtime") );
+    cc.wstr.set_size( 4096 ); // most messages have smaller size
 
+    ts::str_c where(CONSTASTR("(mtype == 0 or mtype == 107) and msg like \"%" ) );
+    where.encode_pointer( &cc ).append( CONSTASTR( "\" order by mtime" ) );
     db->read_table(CONSTASTR("history"), DELEGATE(this, reader), where);
-
     return R_DONE;
 }
 /*virtual*/ void gui_filterbar_c::full_search_s::done(bool canceled)
 {
     if (!no_need && owner)
         owner->full_search_result( std::move(found_stuff) );
-    if (owner && owner->current_search == this)
+
+    if ( owner && owner->current_search == this )
+    {
         owner->current_search = nullptr;
+        HOLD( owner->getparent() ).as<gui_contactlist_c>().update_filter_pos();
+    }
         
     __super::done(canceled);
 }

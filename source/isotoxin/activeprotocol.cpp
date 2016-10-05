@@ -7,21 +7,21 @@
 #define ACTUAL_STATUS_MSG( d ) ( (d).data.user_statusmsg.is_empty() ? prf().userstatus() : (d).data.user_statusmsg )
 
 void crypto_zero( ts::uint8 *buf, int bufsize );
-void get_unique_machine_id( ts::uint8 *buf, int bufsize );
+void get_unique_machine_id( ts::uint8 *buf, int bufsize, const char *salt, bool use_profile_uniqid );
 ts::str_c encode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& s );
 bool decode_string_base64( ts::str_c& rslt, ts::uint8 *key /* 32 bytes */, const ts::asptr& s );
 
 void configurable_s::set_password( const ts::asptr&p )
 {
     ts::uint8 encpass[ 32 ];
-    get_unique_machine_id( encpass, 32 );
+    get_unique_machine_id( encpass, 32, SALT_PROTOPASS, true );
     password = encode_string_base64( encpass, p );
     crypto_zero( encpass, sizeof(encpass) );
 }
 bool configurable_s::get_password_decoded( ts::str_c& rslt ) const
 {
     ts::uint8 encpass[ 32 ];
-    get_unique_machine_id( encpass, 32 );
+    get_unique_machine_id( encpass, 32, SALT_PROTOPASS, true );
     bool r = decode_string_base64( rslt, encpass, password );
     crypto_zero( encpass, sizeof( encpass ) );
     return r;
@@ -813,6 +813,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<GM_HEARTBEAT>&)
 ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send message to other peer
 {
     if ( msg.info ) return 0;
+
     if (msg.pass == 0 && msg.post.sender.is_self) // handle only self-to-other messages
     {
         if (msg.post.receiver.protoid != (unsigned)id)
@@ -823,6 +824,9 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
 
         if ( !is_current_online() )
             return 0; // protocol is offline, so there is no way to send message now
+
+        if ( !msg.resend && g_app->present_undelivered_messages( target->get_historian()->getkey(), msg.post.utag ) )
+            return 0; // do not send message now, if there are undelivered messages for this historian
 
         bool online = true;
 
@@ -844,7 +848,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
         if (typingsendcontact == target->getkey().gidcid())
             typingsendcontact = 0;
 
-        ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().gidcid() << msg.post.utag << ((online && !msg.resend) ? 0 : msg.post.cr_time) << msg.post.message_utf8 );
+        ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().gidcid() << msg.post.utag << ((online && !msg.resend) ? 0 : msg.post.cr_time) << msg.post.message_utf8->cstr() );
     }
     return 0;
 }

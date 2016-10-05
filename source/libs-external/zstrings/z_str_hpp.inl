@@ -85,7 +85,7 @@ template<class STRTYPE, typename NUMTYPE> struct asnum
         return r;
     }
 
-    static void append( STRTYPE&, NUMTYPE );
+    static void append( STRTYPE&, NUMTYPE, ZSTRINGS_SIGNED );
     static void set( STRTYPE&, NUMTYPE );
 };
 template<class STRTYPE> struct asnum<STRTYPE, float>
@@ -102,7 +102,7 @@ template<class STRTYPE> struct asnum<STRTYPE, float>
         return (float)out;
     }
 
-    static void append( STRTYPE&, float );
+    static void append( STRTYPE&, float, ZSTRINGS_SIGNED );
     static void set( STRTYPE&, float );
 };
 template<class STRTYPE> struct asnum<STRTYPE, double>
@@ -119,7 +119,7 @@ template<class STRTYPE> struct asnum<STRTYPE, double>
         return out;
     }
 
-    static void append( STRTYPE&, double );
+    static void append( STRTYPE&, double, ZSTRINGS_SIGNED );
     static void set( STRTYPE&, double );
 };
 
@@ -1955,14 +1955,14 @@ public:
         return *this;
     }
 
-    template<typename NUMTYPE> str_t & append_as_num(NUMTYPE n)
+    template<typename NUMTYPE> str_t & append_as_num(NUMTYPE n, ZSTRINGS_SIGNED minimum_digits = 0 )
     {
-        zstrings_internal::asnum< str_t<TCHARACTER, TCORE>, NUMTYPE >::append( *this, n );
+        zstrings_internal::asnum< str_t<TCHARACTER, TCORE>, NUMTYPE >::append( *this, n, minimum_digits );
         return *this;
     }
 
-    str_t & append_as_int(int n) { return append_as_num<int>(n); }
-    str_t & append_as_uint(unsigned int n) { return append_as_num<unsigned int>(n); }
+    str_t & append_as_int(int n, ZSTRINGS_SIGNED minimum_digits = 0 ) { return append_as_num<int>(n, minimum_digits ); }
+    str_t & append_as_uint(unsigned int n, ZSTRINGS_SIGNED minimum_digits = 0) { return append_as_num<unsigned int>(n, minimum_digits); }
 
     str_t & append(TCHARACTER sep, sptr<TCHARACTER> s)
     {
@@ -2229,8 +2229,8 @@ public:
         if( datasize > bszlen ) datasize = bszlen;
         for (;s && datasize;)
         {
-            ZSTRINGS_SIGNED len, i;
-            for (len = 0, i = 0; i < sizeof(inb)/sizeof(ZSTRINGS_BYTE) && (s); ++i) 
+            bool inbb = false;
+            for ( ZSTRINGS_SIGNED i = 0; i < sizeof(inb)/sizeof(ZSTRINGS_BYTE) && (s); ++i)
             {
                 ZSTRINGS_BYTE v = 0;
                 while ((s) && v == 0)
@@ -2242,23 +2242,14 @@ public:
                         v = (ZSTRINGS_BYTE)((v == '$') ? 0 : v - 61);
                     }
                 }
-                if (s)
-                {
-                    len++;
-                    if (v)
-                    {
-                        inb[i] = (ZSTRINGS_BYTE)(v - 1);
-                    }
-                }
-                else {
-                    inb[i] = 0;
-                }
+                if (v)
+                    inb[i] = (ZSTRINGS_BYTE)(v - 1), inbb = true;
             }
-            if (len)
+            if (inbb)
             {
-                if (datasize) { *d = (ZSTRINGS_BYTE)((inb[0] << 2 | inb[1] >> 4)&0xFF); ++d; --datasize; }
-                if (datasize) { *d = (ZSTRINGS_BYTE)((inb[1] << 4 | inb[2] >> 2)&0xFF); ++d; --datasize; }
-                if (datasize) { *d = (ZSTRINGS_BYTE)((((inb[2] << 6) & 0xc0) | inb[3])&0xFF); ++d; --datasize; }
+                if ( datasize ) { *d = (ZSTRINGS_BYTE)( ( inb[ 0 ] << 2 | inb[ 1 ] >> 4 ) & 0xFF ); ++d; --datasize; }
+                if ( datasize ) { *d = (ZSTRINGS_BYTE)( ( inb[ 1 ] << 4 | inb[ 2 ] >> 2 ) & 0xFF ); ++d; --datasize; }
+                if ( datasize ) { *d = (ZSTRINGS_BYTE)( ( ( ( inb[ 2 ] << 6 ) & 0xc0 ) | inb[ 3 ] ) & 0xFF ); ++d; --datasize; }
             }
         }
         return (ZSTRINGS_SIGNED)(d - (ZSTRINGS_BYTE *)data);
@@ -2426,7 +2417,7 @@ public:
 
 namespace zstrings_internal
 {
-    template <class STRTYPE, typename NUMTYPE> void asnum<STRTYPE, NUMTYPE>::append( STRTYPE&s, NUMTYPE n )
+    template <class STRTYPE, typename NUMTYPE> void asnum<STRTYPE, NUMTYPE>::append( STRTYPE&s, NUMTYPE n, ZSTRINGS_SIGNED minimum_digits )
     {
         typedef typename STRTYPE::TCHAR TCHARACTER;
         TCHARACTER buf[ sizeof( NUMTYPE ) * 3 ];
@@ -2439,14 +2430,17 @@ namespace zstrings_internal
 
         ZSTRINGS_SIGNED szbyte;
         TCHARACTER *tcalced = CHARz_make_str_unsigned( buf, szbyte, n );
-        s.append( sptr<TCHARACTER>( tcalced, szbyte / sizeof( TCHARACTER ) - 1 ) );
+        ZSTRINGS_SIGNED digits = szbyte / sizeof( TCHARACTER ) - 1;
+        if ( digits < minimum_digits )
+            s.append_chars( minimum_digits - digits, '0' );
+        s.append( sptr<TCHARACTER>( tcalced, digits ) );
 
     }
-    template <typename STRTYPE> void asnum<STRTYPE, float>::append( STRTYPE&s, float v )
+    template <typename STRTYPE> void asnum<STRTYPE, float>::append( STRTYPE&s, float v, ZSTRINGS_SIGNED minimum_digits )
     {
         s.append_as_float( v );
     };
-    template <typename STRTYPE> void asnum<STRTYPE, double>::append( STRTYPE&s, double v )
+    template <typename STRTYPE> void asnum<STRTYPE, double>::append( STRTYPE&s, double v, ZSTRINGS_SIGNED minimum_digits )
     {
         s.append_as_double( v );
     }
@@ -2719,10 +2713,7 @@ template<typename STRT, typename NUMT> STRT roundstr( NUMT x, ZSTRINGS_SIGNED zp
 	{
 		ZSTRINGS_SIGNED ost = t.get_length() - index - 1;
 		if (ost > zp) t.set_length( index + zp + 1 );
-		if (zp == 0)
-		{
-			t.trunc_length();
-		}
+		if (zp == 0) t.trunc_length();
 	}
 
 	return t;

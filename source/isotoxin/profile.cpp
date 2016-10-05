@@ -433,11 +433,10 @@ void history_s::set(int column, ts::data_value_s &v)
             receiver = contact_key_s::buildfromdbvalue(v.i);
             return;
         case C_TYPE_AND_OPTIONS:
-            type = v.i & (SETBIT(type_size_bits)-1);
-            options = (v.i >> 16) & (SETBIT(options_size_bits)-1);
+            set_type_and_options( v.i );
             return;
         case C_MSG:
-            message_utf8 = v.text;
+            set_message_text( v.text );
             return;
         case C_UTAG:
             utag = v.i;
@@ -473,7 +472,10 @@ void history_s::get(int column, ts::data_pair_s& v)
             v.i |= ((int64)options) << 16;
             return;
         case C_MSG:
-            v.text = message_utf8;
+            if ( message_utf8 )
+                v.text = message_utf8->cstr();
+            else
+                v.text.clear();
             return;
         case C_UTAG:
             v.i = utag;
@@ -690,21 +692,23 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::prepare( t
 template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts::sqlitedb_c *db, bool all, bool notify_saved )
 {
     if ( !db ) return false;
+
     ts::db_transaction_c __transaction( db );
 
     MEMT( MEMT_SQLITE );
 
     ts::tmp_array_inplace_t<ts::data_pair_s, 0> vals( T::columns );
-    bool one_done = false;
+    const int n_per_call = 10;
+    int n_done = 0;
     bool some_action = false;
     for(row_s &r: rows)
     {
         switch (r.st)
         {
             case row_s::s_new:
-                if (one_done) return true;
+                if ( n_done >= n_per_call ) return true;
             case row_s::s_changed:
-                if (one_done) return true;
+                if ( n_done >= n_per_call ) return true;
                 if (ASSERT(r.id != 0))
                 {
                     vals.clear();
@@ -743,15 +747,17 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts:
                     }
                     r.id = newid;
                     r.st = row_s::s_unchanged;
-                    one_done = !all;
+                    if ( !all )
+                        ++n_done;
                 }
                 continue;
             case row_s::s_delete:
-                if (one_done) return true;
+                if ( n_done >= n_per_call ) return true;
                 some_action = true;
                 db->delrow(T::get_table_name(), r.id);
                 r.st = row_s::s_deleted;
-                one_done = !all;
+                if ( !all )
+                    ++n_done;
                 cleanup_requred = true;
                 continue;
 
@@ -759,7 +765,6 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts:
     }
 
     __transaction.end();
-
     if (notify_saved && some_action) gmsg<ISOGM_PROFILE_TABLE_SAVED>( tabi ).send();
     return false;
 }
@@ -1011,7 +1016,6 @@ bool profile_c::change_history_item(uint64 utag, contact_key_s & historian)
 void profile_c::change_history_item(const contact_key_s&historian, const post_s &post, ts::uint32 change_what)
 {
     if (!change_what) return;
-
     ts::db_transaction_c __transaction( db );
 
     table_history.cleanup();
@@ -1055,11 +1059,73 @@ void profile_c::change_history_item(const contact_key_s&historian, const post_s 
     {
         dp[n].name = CONSTASTR("msg");
         dp[n].type_ = ts::data_type_e::t_str;
-        dp[n].text = post.message_utf8;
+        dp[n].text = post.message_utf8->cstr();
         ++n;
     }
     ASSERT(n<=ARRAY_SIZE(dp));
     db->update( CONSTASTR("history"), ts::array_wrapper_c<const ts::data_pair_s>(dp,n), whr );
+}
+
+void profile_c::kill_message( uint64 msgutag )
+{
+    if ( !db ) return;
+    ts::db_transaction_c __transaction( db );
+
+    ts::tmp_str_c whr( CONSTASTR( "utag=" ) ); whr.append_as_num( msgutag );
+    db->delrows( history_s::get_table_name(), whr );
+
+}
+
+void profile_c::load_history( const contact_key_s&historian, allocpost *cb, void *prm )
+{
+    ts::tmp_str_c whr( CONSTASTR( "historian=" ) ); whr.append_as_num( historian.dbvalue() );
+    whr.append( CONSTASTR( " order by mtime" ) );
+
+    struct rht
+    {
+        allocpost *cb;
+        void *prm;
+        ts::data_value_s dv;
+
+        bool dr( int row, ts::SQLITE_DATAGETTER dg )
+        {
+            dg( history_s::C_MSG, dv );
+
+            post_s *p = cb( dv.text, prm );
+
+            dg( history_s::C_RECV_TIME, dv );
+            p->recv_time = dv.i;
+
+            dg( history_s::C_CR_TIME, dv );
+            p->cr_time = dv.i;
+
+            //dg( history_s::C_HISTORIAN, dv );
+            //p->historian = contact_key_s::buildfromdbvalue( dv.i );
+
+            dg( history_s::C_SENDER, dv );
+            p->sender = contact_key_s::buildfromdbvalue( dv.i );
+
+            dg( history_s::C_RECEIVER, dv );
+            p->receiver = contact_key_s::buildfromdbvalue( dv.i );
+
+            dg( history_s::C_TYPE_AND_OPTIONS, dv );
+            p->set_type_and_options( dv.i );
+
+            dg( history_s::C_UTAG, dv );
+            p->utag = dv.i;
+
+            TS_STATIC_CHECK( history_s::C_count == 9, "new fields?" );
+
+            return true;
+        }
+
+    } r;
+
+    r.cb = cb;
+    r.prm = prm;
+
+    db->read_table( history_s::get_table_name(), DELEGATE( &r, dr ), whr );
+
 }
 
 void profile_c::load_history( const contact_key_s&historian, time_t time, ts::aint nload, ts::tmp_tbuf_t<int>& loaded_ids )
@@ -1334,10 +1400,35 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
     PROFILE_TABLES
 #undef TAB
 
+    path = pfn;
+
+    if ( g_app->F_BACKUP_PROFILE )
+    {
+        g_app->F_BACKUP_PROFILE = false;
+        ts::buf_c p; p.load_from_disk_file( path );
+        ts::zip_c zip;
+
+        zip.addfile( ts::to_utf8( ts::fn_get_name_with_ext( path ) ), p.data(), p.size() );
+
+        tm tt;
+        time_t time = now();
+        _localtime64_s( &tt, &time );
+
+        ts::wstr_c tstr( cfg().folder_backup() );
+        path_expand_env( tstr, ts::wstr_c(CONSTWSTR("0")) );
+        ts::fix_path( tstr, FNO_APPENDSLASH| FNO_SIMPLIFY );
+        ts::make_path( tstr, 0 );
+        
+        tstr.append( ts::fn_get_name( path ) ).append_char(' ');
+        tstr.append_as_uint( tt.tm_year + 1900 ).append_char('-').append_as_uint( tt.tm_mon + 1, 2 ).append_char( '-' ).append_as_uint( tt.tm_mday, 2 );
+        tstr.append_char( ' ' ).append_as_uint( tt.tm_hour, 2 ).append_char( '-' ).append_as_uint( tt.tm_min, 2 ).append_char( '-' ).append_as_uint( tt.tm_sec, 2 );
+        tstr.append( CONSTWSTR(".zip") );
+        zip.getblob().save_to_file( tstr );
+    }
+
     profile_flags.clear();
     values.clear();
     dirty.clear();
-    path = pfn;
     db = ts::sqlitedb_c::connect(path, k, g_app->F_READONLY_MODE);
     if (!db)
         return PLR_CONNECT_FAILED;
@@ -1920,3 +2011,10 @@ ts::wstr_c profile_c::get_disabled_dicts()
 
     return ts::wstr_c();
 }
+
+#ifdef _DEBUG
+void profile_c::test()
+{
+    DMSG( "test1" << calc_history( contact_key_s(4) ) );
+}
+#endif // _DEBUG

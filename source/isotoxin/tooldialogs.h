@@ -46,3 +46,26 @@ public:
 };
 
 
+class dialog_cmdlinegenerator_c : public gui_isodialog_c
+{
+    ts::wstr_c password;
+
+protected:
+
+    /*virtual*/ void created() override;
+    /*virtual*/ void getbutton( bcreate_s &bcr ) override;
+    /*virtual*/ int additions( ts::irect & border ) override;
+
+    bool passt( const ts::wstr_c &, bool );
+    ts::wstr_c enc() const;
+
+public:
+    dialog_cmdlinegenerator_c( initial_rect_data_s &data );
+    ~dialog_cmdlinegenerator_c();
+
+    /*virtual*/ ts::ivec2 get_min_size() const override;
+    /*virtual*/ bool sq_evt( system_query_e qp, RID rid, evt_data_s &data ) override;
+    /*virtual*/ void tabselected( ts::uint32 /*mask*/ );
+};
+
+

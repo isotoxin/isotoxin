@@ -75,6 +75,7 @@ enum system_query_e
     SQ_CLOSE,
 
 #ifdef _DEBUG
+    SQ_DEBUG_CHANGED_SOME,
     SQ_TEST_00
 #endif
 };
@@ -92,6 +93,7 @@ enum caption_button_tag_e
 
 enum ui_event_e
 {
+    UE_CLOSE,
     UE_MAXIMIZED,
     UE_NORMALIZED,
     UE_MINIMIZED,
@@ -199,6 +201,7 @@ struct evt_data_s
         bcreate_s *btn;
         ts::make_pod<ts::asptr> strparam;
         ts::make_pod<ts::wsptr> wstrparam;
+        bool allowclose;
 
         struct
         {
@@ -222,6 +225,7 @@ struct evt_data_s
             ts::make_pod<RID> id;
             int index;
             bool is_visible;
+            bool resort; // for SQ_CHILD_CREATED, true by default
         } rect;
 
         struct
@@ -389,7 +393,7 @@ public:
     rectprops_c &setminsize( RID r );
     rectprops_c &sizew(int w) { m_size.x = w; updatefs(); ASSERT(m_size << 40000); return *this; }
     rectprops_c &sizeh(int h) { m_size.y = h; updatefs(); ASSERT(m_size << 40000); return *this; }
-	rectprops_c &size(int w, int h) { m_size.x = w; m_size.y = h; updatefs(); ASSERT(m_size << 40000); return *this; }
+	rectprops_c &size(int w, int h) { m_size.x = w; m_size.y = h; updatefs(); /*ASSERT(m_size << 40000);*/ return *this; }
 	rectprops_c &size(const ts::ivec2 &sz) { m_size = sz; updatefs(); ASSERT(m_size << 40000); return *this; }
     rectprops_c &setcenterpos() { return pos(ts::wnd_get_center_pos(size())); }
 	rectprops_c &pos(int x, int y) { ts::ivec2 delta( x - m_pos.x, y - m_pos.y ); m_pos.x = x; m_pos.y = y; m_screenpos += delta; updatefs(); return *this; }
@@ -618,8 +622,6 @@ public:
 	virtual ~guirect_c();
 
     virtual ts::bitmap_c get_icon( bool for_tray );
-
-    virtual void update_offset( ts::aint offset) {} // called from gui_vscrollgroup_c; offset - value of scrollbar shift, required to make rect top
 
     virtual void update_dndobj(guirect_c *donor) {}
     virtual guirect_c * summon_dndobj(const ts::ivec2 &deltapos) { return nullptr; };
@@ -1051,6 +1053,7 @@ public:
     void set_autoheight(bool f = true) { flags.init(FLAGS_AUTO_HEIGHT, f); }
     void set_defcolor(ts::TSCOLOR col) { textrect.set_def_color(col); }
     void set_selectable( bool f = true );
+    bool is_selectable() const { return flags.is( FLAGS_SELECTABLE ); }
 
     ts::GLYPHS &get_glyphs() { return textrect.glyphs(); }
     const ts::GLYPHS &get_glyphs() const { return textrect.glyphs(); }
@@ -1060,6 +1063,10 @@ public:
     /*virtual*/ ts::ivec2 get_max_size() const override;
 
     const ts::wstr_c &get_text() const {return textrect.get_text();};
+    virtual ts::wstr_c get_selected_text_part_header( gui_label_c *prevlabel ) const
+    {
+        return ts::wstr_c( CONSTWSTR("\r\n") );
+    }
 
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 };
@@ -1159,7 +1166,6 @@ protected:
         ts::smart_int from = 0;
         ts::smart_int count;
         int         areasize = 0;
-        bool        update_offset = false;
     };
 
     virtual void children_repos_info( cri_s &info ) const;
@@ -1279,6 +1285,13 @@ public:
     /*virtual*/ ts::ivec2 get_max_size() const override;
 };
 
+enum scroll_to_e
+{
+    ST_MAX_TOP,
+    ST_KEEP_CURRENT,
+    ST_ANY_POS
+};
+
 class gui_vscrollgroup_c : public gui_group_c // vertical group with vertical scrollbar
 {
     DUMMY(gui_vscrollgroup_c);
@@ -1289,17 +1302,29 @@ class gui_vscrollgroup_c : public gui_group_c // vertical group with vertical sc
     ts::safe_ptr<rectengine_c> top_visible;
     ts::smart_int top_visible_offset;
 
+
     static const ts::flags32_s::BITS F_SBVISIBLE = FLAGS_FREEBITSTART << 0;
     static const ts::flags32_s::BITS F_SBHL = FLAGS_FREEBITSTART << 1;
 protected:
     static const ts::flags32_s::BITS F_SCROLL_TO_END = FLAGS_FREEBITSTART << 2;
     static const ts::flags32_s::BITS F_SCROLL_TO_MAX_TOP = FLAGS_FREEBITSTART << 3;
-    static const ts::flags32_s::BITS F_SB_OVER_ITEMS = FLAGS_FREEBITSTART << 4;
-    static const ts::flags32_s::BITS F_HCENTER_SMALL_CTLS = FLAGS_FREEBITSTART << 5;
-    static const ts::flags32_s::BITS F_KEEP_TOP_VISIBLE = FLAGS_FREEBITSTART << 6;
-    static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 7;
+    static const ts::flags32_s::BITS F_SCROLL_TO_KEEP_POS = FLAGS_FREEBITSTART << 4;
+    static const ts::flags32_s::BITS F_SB_OVER_ITEMS = FLAGS_FREEBITSTART << 5;
+    static const ts::flags32_s::BITS F_HCENTER_SMALL_CTLS = FLAGS_FREEBITSTART << 6;
+    static const ts::flags32_s::BITS F_KEEP_TOP_VISIBLE = FLAGS_FREEBITSTART << 7;
+    static const ts::flags32_s::BITS F_VSCROLLFREEBITSTART = FLAGS_FREEBITSTART << 8;
 
-    virtual void on_manual_scroll() { scroll_target = nullptr; flags.clear(F_SCROLL_TO_END); flags.clear(F_KEEP_TOP_VISIBLE); }; // called on scroll initiated by user (mouse wheel or scrollbar)
+    ts::smart_int visible_from;
+    ts::smart_int visible_to;
+
+    virtual void on_manual_scroll()
+    {
+        scroll_target = nullptr;
+        flags.clear( F_SCROLL_TO_END );
+        flags.clear( F_KEEP_TOP_VISIBLE );
+        flags.clear( F_SCROLL_TO_KEEP_POS );
+    }; // called on scroll initiated by user (mouse wheel or scrollbar)
+
     /*virtual*/ void children_repos() override;
     /*virtual*/ void on_add_child(RID id) override;
     gui_vscrollgroup_c() {}
@@ -1331,6 +1356,7 @@ public:
 
     void keep_top_visible(bool force = false)
     {
+        flags.clear( F_SCROLL_TO_KEEP_POS );
         if (force)
         {
             scroll_target = nullptr;
@@ -1340,9 +1366,9 @@ public:
             flags.set(F_KEEP_TOP_VISIBLE);
     }
 
-    void scroll_to_begin();
-    void scroll_to_end();
-    void scroll_to_child( rectengine_c *reng, bool maxtop );
+    void scroll_to_begin( bool repos_now = true );
+    void scroll_to_end( bool repos_now = true );
+    void scroll_to_child( rectengine_c *reng, scroll_to_e stt, bool repos_now = true );
     rectengine_c *get_top_visible(int *offset)
     {
         if (offset) *offset = top_visible_offset;

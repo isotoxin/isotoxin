@@ -40,7 +40,7 @@ bool picture_gif_c::load_only_gif( ts::bitmap_c &first_frame, const ts::blob_c &
     return true;
 }
 
-/*virtual*/ bool picture_gif_c::load(const ts::blob_c &body)
+/*virtual*/ bool picture_gif_c::load (const ts::blob_c &body, ts::IMG_LOADING_PROGRESS /*progress*/ )
 {
     ts::bitmap_c bmp;
     if (!load_only_gif(bmp, body)) return false;
@@ -75,6 +75,13 @@ int picture_gif_c::nextframe()
     return gif.nextframe(frame.extbody(frect));
 }
 
+size_t picture_gif_c::size() const
+{
+    return gif.size();
+}
+
+static void decrease_size( size_t sz );
+
 namespace
 {
     struct gif_thumb_s : public picture_gif_c
@@ -93,6 +100,10 @@ namespace
         /*virtual*/ ts::irect framerect() const override
         {
             return ts::irect(0,frame.info().sz);
+        }
+        /*virtual*/ size_t size() const override
+        {
+            return picture_gif_c::size();
         }
         /*virtual*/ ts::bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &frect) override
         {
@@ -194,7 +205,7 @@ namespace
             frame_dirty = false;
         }
 
-        /*virtual*/ bool load(const ts::blob_c &body) override
+        /*virtual*/ bool load( const ts::blob_c &body, ts::IMG_LOADING_PROGRESS /*progress*/ ) override
         {
             if (!gif.load(body.data(), body.size()))
             {
@@ -236,6 +247,10 @@ namespace
         ts::bitmap_c frame;
         ts::bitmap_c bmp;
 
+        /*virtual*/ ~static_thumb_s()
+        {
+        }
+
         /*virtual*/ const ts::bitmap_c &curframe(ts::irect &frect) const override
         {
             frect = ts::irect(0, frame.info().sz);
@@ -244,6 +259,10 @@ namespace
         /*virtual*/ ts::irect framerect() const override
         {
             return ts::irect(0, frame.info().sz);
+        }
+        /*virtual*/ size_t size() const override
+        {
+            return bmp.info().sz.x * bmp.info().sz.y * bmp.info().bytepp();
         }
         /*virtual*/ ts::bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &frect) override
         {
@@ -321,9 +340,9 @@ namespace
             frame.premultiply();
         }
 
-        /*virtual*/ bool load(const ts::blob_c &b) override
+        /*virtual*/ bool load( const ts::blob_c &b, ts::IMG_LOADING_PROGRESS progress ) override
         {
-            if (!bmp.load_from_file(b.data(), b.size()))
+            if (!bmp.load_from_file(b.data(), b.size(), ts::ivec2(1024), progress))
                 return false;
 
             if (bmp.info().bytepp() != 4)
@@ -351,30 +370,76 @@ namespace
     }
 #endif
 
+
     class pictures_cache_c
     {
+        struct loading_s;
+
         struct pic_cached_s
         {
+            DECLARE_EYELET( pic_cached_s );
+        public:
             UNIQUE_PTR( picture_c ) pic;
+            ts::iweak_ptr<loading_s> loader;
             image_loader_c *first = nullptr;
             image_loader_c *last = nullptr;
+            ts::aint size = 0;
+            ~pic_cached_s()
+            {
+                if (size > 0)
+                    decrease_size( size );
+
+                if ( loader )
+                    noneed_loader( loader );
+            }
         };
 
+        static void noneed_loader( loading_s *l );
+
         ts::hashmap_t< ts::wstr_c, pic_cached_s > stuff;
+        size_t size = 0;
+
+        void check()
+        {
+#ifdef _DEBUG
+
+            for( auto it = stuff.begin(); it; ++it )
+            {
+                pic_cached_s &pc = it.value();
+                for ( image_loader_c *imgl = pc.first; imgl; imgl = imgl->next )
+                {
+                    ASSERT( it.key().equals( imgl->get_fn() ) );
+                }
+            }
+
+#endif // _DEBUG
+        }
 
         struct loading_s : public ts::task_c
         {
+            DECLARE_EYELET( loading_s );
+        public:
+
             loading_s() {}
             ts::wstr_c filename;
             UNIQUE_PTR(picture_c) pic;
             pictures_cache_c *cache;
+            ts::aint progress = 0;
+            bool no_need = false;
 
             loading_s( const ts::wsptr &fn, pictures_cache_c *cache ):filename(fn), cache(cache) {}
+
+            bool loading( int row, int rows )
+            {
+                if (rows)
+                    progress = row * 100 / rows;
+                return no_need;
+            }
 
             /*virtual*/ int iterate() override
             {
                 ts::blob_c b;
-                b.load_from_disk_file(filename);
+                b.load_from_disk_file(filename,false,10*1024*1024);
                 if (b.size() > 8)
                 {
                     ts::uint32 sign = htonl(*(ts::uint32 *)b.data());
@@ -383,23 +448,51 @@ namespace
                     else
                         pic.reset( TSNEW(static_thumb_s) );
 
-                    pic->load(b);
+                    if ( !pic->load( b, DELEGATE(this, loading) ) )
+                        pic.reset();
                 }
 
-                return R_DONE;
+                return no_need ? R_CANCEL : R_DONE;
             }
             /*virtual*/ void done(bool canceled) override
             {
-                if (pic && !canceled)
+                bool n = false;
+                if (pic && !canceled && !no_need)
                 {
                     if (auto *x = cache->stuff.find(filename))
                     {
                         pic_cached_s &pc = x->value;
                         pc.pic = std::move(pic);
+                        
+                        if (pc.size > 0)
+                            cache->size -= pc.size;
+
+                        pc.size = pc.pic->size();
+                        cache->size += pc.size;
+
+                        ASSERT( pc.loader.get() == this );
+                        pc.loader = nullptr;
+
                         for (image_loader_c *imgl = pc.first; imgl; imgl = imgl->next)
                             imgl->signal_loaded(RID(), pc.pic.get());
+
+                        n = true;
                     }
                 }
+
+                if (!n && !no_need)
+                    if ( auto *x = cache->stuff.find( filename ) )
+                    {
+                        pic_cached_s &pc = x->value;
+                        ASSERT( pc.loader.get() == this );
+                        pc.loader = nullptr;
+                        ts::iweak_ptr<pic_cached_s> pcguard = &pc;
+                        for ( image_loader_c *imgl = pc.first; imgl; imgl = imgl->next )
+                        {
+                            imgl->not_loaded();
+                            if ( pcguard.expired() ) break;
+                        }
+                    }
 
                 __super::done(canceled);
             }
@@ -409,17 +502,84 @@ namespace
         ~pictures_cache_c()
         {
         }
+
+        void decrease_cache_size(size_t sz)
+        {
+            ASSERT( size >= sz );
+            size -= sz;
+        }
+
+        void cleanup()
+        {
+            if (size > 10000000) // FREE MEMORY
+            {
+                ts::Time oldest = ts::Time::current();
+                ts::wstr_c fn;
+
+                for( auto itr = stuff.begin(); itr; ++itr )
+                {
+                    ts::Time newest = ts::Time::past();
+                    for ( image_loader_c *imgl = itr->first; imgl; imgl = imgl->next )
+                    {
+                        if ( imgl->get_last_draw_time() > newest )
+                            newest = imgl->get_last_draw_time();
+                    }
+                    if ( newest < oldest )
+                    {
+                        oldest = newest;
+                        fn = itr.key();
+                    }
+                }
+
+                if ( !fn.is_empty() )
+                {
+                    pic_cached_s &pc = stuff.find( fn )->value;
+                    ts::iweak_ptr<pic_cached_s> pcguard = &pc;
+                    for ( ;pcguard && pc.first; )
+                        pc.first->unloaded();
+                    ASSERT( nullptr == stuff.find( fn ) );
+
+                    check();
+                }
+            }
+        }
+        
+        picture_c *try_get( image_loader_c *by, const ts::wstr_c &filename )
+        {
+            if (auto *f = stuff.find( filename ))
+                if ( f->value.pic )
+                {
+                    pic_cached_s &pc = f->value;
+                    if ( by->prev == nullptr && by->next == nullptr && pc.first != by )
+                        LIST_ADD( by, pc.first, pc.last, prev, next );
+
+                    check();
+
+                    return pc.pic.get();
+                }
+            return nullptr;
+        }
+
         picture_c *get(image_loader_c *by, const ts::wstr_c &filename)
         {
             pic_cached_s &pc = stuff[filename];
 
-            LIST_ADD(by, pc.first, pc.last, prev, next);
+            if ( by->prev == nullptr && by->next == nullptr && pc.first != by )
+                LIST_ADD(by, pc.first, pc.last, prev, next);
+
+            check();
 
             if (pc.pic)
                 return pc.pic.get();
 
-            if (by == pc.first)
-                load( filename );
+            ASSERT( pc.size <= 0 );
+
+            if ( pc.loader == nullptr )
+            {
+                loading_s *l = TSNEW( loading_s, filename.as_sptr(), this );
+                pc.loader = l;
+                g_app->add_task( l );
+            }
 
             return nullptr;
         }
@@ -431,28 +591,46 @@ namespace
                 for (image_loader_c *y = x->value.first; y; y = y->next)
                     if ( y == ldr )
                     {
-                        LIST_DEL( ldr, x->value.first, x->value.last, prev, next );
+                        LIST_DEL_CLEAR( ldr, x->value.first, x->value.last, prev, next );
                         if (nullptr == x->value.first)
                             stuff.remove(filename);
+
+                        check();
+
                         break;
                     }
             }
         }
 
-        void load(const ts::wstr_c &filename)
+        ts::aint loading_progress( const ts::wstr_c &filename )
         {
-            loading_s *l = TSNEW( loading_s, filename.as_sptr(), this );
-            g_app->add_task(l);
+            if ( auto *x = stuff.find( filename ) )
+            {
+                if ( x->value.loader )
+                    return x->value.loader->progress;
+
+            }
+            return 0;
         }
 
     };
+
+    void pictures_cache_c::noneed_loader( loading_s *l )
+    {
+        l->no_need = true;
+    }
 }
 
 static ts::static_setup<pictures_cache_c,1000> cache;
 
+static void decrease_size( size_t sz )
+{
+    cache().decrease_cache_size( sz );
+}
+
 image_loader_c::image_loader_c(gui_message_item_c *itm, const ts::wstr_c &filename):item(itm), filename(filename)
 {
-    pic = cache().get(this, filename);
+    pic = cache().try_get(this, filename);
     if (pic)
         DEFERRED_CALL( 0, DELEGATE(this, signal_loaded), pic );
 }
@@ -468,15 +646,63 @@ image_loader_c::~image_loader_c()
     }
 }
 
+void image_loader_c::on_draw()
+{
+    if ( !pic )
+    {
+        pic = cache().get( this, filename );
+
+        if ( pic )
+            DEFERRED_CALL( 0, DELEGATE( this, signal_loaded ), pic );
+    }
+    last_draw = ts::Time::current();
+}
+
+void image_loader_c::not_loaded()
+{
+    if ( gui_message_item_c *itm = item )
+    {
+        itm->image_not_loaded();
+        itm->update_text();
+        gui->repos_children( &HOLD( itm->getparent() ).as<gui_group_c>() );
+    }
+    if ( explorebtn.expired() )
+        TSDEL( explorebtn.get() );
+}
+
+void image_loader_c::unloaded()
+{
+    if ( gui_message_item_c *itm = item )
+    {
+        itm->image_unloaded();
+        
+        itm->disable_image_loading(true);
+            itm->update_text(); // it will try to run image loader. That is why disable_image_loading used
+        itm->disable_image_loading(false);
+
+        gui->repos_children( &HOLD( itm->getparent() ).as<gui_group_c>() );
+    }
+    if ( explorebtn.expired() )
+        TSDEL( explorebtn.get() );
+}
+
 bool image_loader_c::signal_loaded(RID, GUIPARAM p)
 {
     pic = (picture_c *)p;
-    if (item)
+    if ( CHECK( item ) && g_app )
     {
         item->update_text();
         gui->repos_children( &HOLD(item->getparent()).as<gui_group_c>() );
     }
     return true;
+}
+
+int image_loader_c::get_loading_progress()
+{
+    if ( pic )
+        return 100;
+
+    return (int)cache().loading_progress( filename );
 }
 
 bool image_loader_c::is_image_fn( const ts::asptr &fn_utf8 )
@@ -531,3 +757,9 @@ void image_loader_c::update_ctl_pos()
 
     return false;
 }
+
+void cleanup_images_cache()
+{
+    cache().cleanup();
+}
+

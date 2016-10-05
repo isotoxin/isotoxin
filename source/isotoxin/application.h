@@ -272,6 +272,7 @@ public:
     unsigned F_SHOW_SPELLING_WARN : 1;
     unsigned F_MAINRECTSUMMON : 1;
     unsigned F_SPLIT_UI : 1;
+    unsigned F_BACKUP_PROFILE : 1;
 
 
     bool on_init();
@@ -280,6 +281,8 @@ public:
     void on_mouse( ts::mouse_event_e me, const ts::ivec2 &clpos /* relative to wnd */, const ts::ivec2 &scrpos );
     bool on_char( wchar_t c );
     bool on_keyboard( int scan, bool dn, int casw );
+
+    bool handle_keyboard( int scan, bool dn, int casw );
 
     GM_RECEIVER( application_c, ISOGM_PROFILE_TABLE_SAVED );
     GM_RECEIVER( application_c, ISOGM_CHANGED_SETTINGS );
@@ -471,6 +474,8 @@ public:
     bool update_state();
 public:
 
+    ts::shared_ptr<ts::dynamic_allocator_s> global_allocator;
+
     ts::safe_ptr<gui_contact_item_c> active_contact_item;
     vsb_displays_pool_c video_displays;
 
@@ -654,6 +659,8 @@ public:
     void unregister_file_transfer(uint64 utag,bool disconnected);
     void cancel_file_transfers( const contact_key_s &historian ); // by historian
 
+    bool present_undelivered_messages( const contact_key_s& rcv, uint64 except_utag ) const;
+    void reset_undelivered_resend_cooldown( const contact_key_s& rcv );
     void resend_undelivered_messages( const contact_key_s& rcv = contact_key_s() );
     void undelivered_message( const post_s &p );
     void kill_undelivered( uint64 utag );

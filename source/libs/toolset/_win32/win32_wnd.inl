@@ -397,7 +397,9 @@ class win32_wnd_c : public wnd_c
                 wnd->cbs->evt_focus_changed( wnd );
             }
             break;
-            
+        case WM_NCHITTEST:
+            return HTCLIENT;
+
             //case WM_NCPAINT:
         //    return 0;
         //case WM_NCCALCSIZE:

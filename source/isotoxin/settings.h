@@ -209,6 +209,9 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     int misc_flags_store = 0;
     bool miscf_handler( RID, GUIPARAM );
 
+    int pmisc_flags = 0;
+    bool pmiscf_handler( RID, GUIPARAM );
+
     s3::DEVICE mic_device_stored;
     bool mic_device_changed = false;
     bool mic_test_rec = false;
@@ -252,6 +255,12 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
     bool startopt_handler( RID, GUIPARAM );
     int detect_startopts();
     void set_startopts();
+
+    int backupopt = 0;
+    ts::wstr_c backuppath;
+    bool backupopt_handler( RID, GUIPARAM );
+    bool backuppath_handler( const ts::wstr_c &, bool );
+    
     
     ts::uint8 passwhash[32];
     ts::safe_ptr<rectengine_c> epdlg;
@@ -345,6 +354,7 @@ private:
 
     
     int load_history_count = 0;
+    int load_history_count_addition = 0;
     int set_away_on_timer_minutes_value_last = 0;
     int set_away_on_timer_minutes_value = 0;
 
@@ -415,6 +425,7 @@ private:
     bool histopts_handler( RID, GUIPARAM );
     bool away_minutes_handler(const ts::wstr_c &v, bool );
     bool load_history_count_handler(const ts::wstr_c &v, bool );
+    bool load_history_count_a_handler( const ts::wstr_c &v, bool );
 
     bool notification_handler( RID, GUIPARAM );
     bool desktop_notification_duration_handler( const ts::wstr_c &v, bool );

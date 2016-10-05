@@ -2,7 +2,7 @@
 
 struct emoticon_s
 {
-    emoticon_s( int unicode ):unicode(unicode == 1 ? 0 : unicode) {}
+    emoticon_s( int unicode ) :unicode( unicode == 1 ? 0 : unicode ) {}
     virtual ~emoticon_s();
 
     ts::str_c def; // utf8
@@ -15,11 +15,7 @@ struct emoticon_s
     bool current_pack = false;
     bool ispreframe = false;
 
-    union 
-    {
-        ts::bitmap_c *frame;
-        ts::bitmap_c *preframe;
-    };
+    ts::bitmap_c *frame = nullptr;
 
     bool load(const ts::wsptr &fn);
     virtual bool load(const ts::blob_c &body) = 0;
@@ -47,7 +43,11 @@ class emoticons_c
     struct emo_gif_s : public emoticon_s, public picture_gif_c
     {
         emo_gif_s(int unicode):emoticon_s(unicode) {}
-        /*virtual*/ bool load(const ts::blob_c &body) override;
+        /*virtual*/ bool load(const ts::blob_c &body, ts::IMG_LOADING_PROGRESS progress) override;
+        /*virtual*/ bool load( const ts::blob_c &body ) override
+        {
+            return load( body, ts::IMG_LOADING_PROGRESS() );
+        }
         
         /*virtual*/ void draw(rectengine_root_c *e, const ts::ivec2 &pos) const { picture_gif_c::draw(e,pos); }
 
@@ -70,7 +70,11 @@ class emoticons_c
     struct emo_static_image_s : public emoticon_s, public picture_c
     {
         emo_static_image_s(int unicode):emoticon_s(unicode) {}
-        /*virtual*/ bool load(const ts::blob_c &body) override;
+        /*virtual*/ bool load(const ts::blob_c &body, ts::IMG_LOADING_PROGRESS progress) override;
+        /*virtual*/ bool load( const ts::blob_c &body ) override
+        {
+            return load( body, ts::IMG_LOADING_PROGRESS() );
+        }
 
         /*virtual*/ void draw(rectengine_root_c *e, const ts::ivec2 &pos) const override { picture_c::draw(e,pos); }
 
@@ -81,6 +85,7 @@ class emoticons_c
             return *frame;
         }
         /*virtual*/ ts::irect framerect() const override { return frect; }
+        /*virtual*/ size_t size() const override { return (ispreframe && frame) ? frame->info().sz.x * frame->info().sz.y * frame->info().bytepp() : 0; }
         /*virtual*/ ts::bitmap_c &prepare_frame(const ts::ivec2 &sz, ts::irect &fr) override
         {
             FORBIDDEN();
@@ -94,7 +99,11 @@ class emoticons_c
         int animperiod = 10;
 
         emo_tiled_animation_s( int unicode, int animperiod ) :emoticon_s( unicode ), animperiod( animperiod ) {}
-        /*virtual*/ bool load( const ts::blob_c &body ) override;
+        /*virtual*/ bool load( const ts::blob_c &body, ts::IMG_LOADING_PROGRESS progress ) override;
+        /*virtual*/ bool load( const ts::blob_c &body ) override
+        {
+            return load( body, ts::IMG_LOADING_PROGRESS() );
+        }
 
         /*virtual*/ void draw( rectengine_root_c *e, const ts::ivec2 &pos ) const override { picture_animated_c::draw( e, pos ); }
 
@@ -104,6 +113,7 @@ class emoticons_c
             return source;
         }
         /*virtual*/ ts::irect framerect() const override { return frect; }
+        /*virtual*/ size_t size() const override { return source.info().sz.x * source.info().sz.y * source.info().bytepp(); }
         /*virtual*/ ts::bitmap_c &prepare_frame( const ts::ivec2 &sz, ts::irect &fr ) override
         {
             FORBIDDEN();

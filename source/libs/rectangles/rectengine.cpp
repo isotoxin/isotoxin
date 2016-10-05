@@ -113,7 +113,7 @@ bool rectengine_c::children_sort( fastdelegate::FastDelegate< bool (rectengine_c
 void rectengine_c::child_move_to( ts::aint index, rectengine_c *e, ts::aint skipctl )
 {
     ts::aint i = children.find(e);
-    if (i != index)
+    if (i != index && ASSERT(i >= 0))
     {
         children.set(i, nullptr);
         if (children.get(index))
@@ -314,8 +314,17 @@ rectengine_c *rectengine_c::get_last_child()
     case SQ_MOUSE_L2CLICK:
         return false;
     case SQ_CHILD_CREATED:
-        z_resort_children();
-        break;
+        if ( guirect_c *r = rect() )
+        {
+            bool ok = false;
+            if ( ASSERT( r->getrid() == rid ) )
+                ok = r->sq_evt( qp, rid, data );
+
+            if (data.rect.resort)
+                z_resort_children();
+            return ok;
+        }
+        return false;
     case SQ_CHILD_DESTROYED:
         data.rect.index = (int)child_index( data.rect.id );
         if (data.rect.index>=0) children.get(data.rect.index) = nullptr;
@@ -464,6 +473,7 @@ system_query_e me2sq( ts::mouse_event_e me )
 
 /*virtual*/ void rectengine_root_c::my_wnd_s::evt_mouse_out()
 {
+    redraw_collector_s dcl;
     gui->mouse_outside();
 }
 
@@ -520,6 +530,8 @@ system_query_e me2sq( ts::mouse_event_e me )
 
 /*virtual*/ void rectengine_root_c::my_wnd_s::evt_focus_changed( ts::wnd_c *w )
 {
+    redraw_collector_s dch;
+
     if ( !w )
     {
         if ( owner()->getrid() >>= gui->get_focus() )
@@ -599,7 +611,9 @@ void rectengine_root_c::my_wnd_s::kill()
 /*virtual*/ bool rectengine_root_c::my_wnd_s::evt_close()
 {
     evt_data_s d;
-    return owner()->sq_evt( SQ_CLOSE, owner()->getrid(), d );
+    d.allowclose = true;
+    owner()->sq_evt( SQ_CLOSE, owner()->getrid(), d );
+    return !d.allowclose;
 }
 
 rectengine_root_c::rectengine_root_c( rect_sys_e sys)

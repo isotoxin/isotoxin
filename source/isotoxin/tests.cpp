@@ -368,42 +368,42 @@ protected:
             //l.mark_found();
 
             p.recv_time = now() - 2500;
-            p.message_utf8 = ts::asptr("234234");
+            p.set_message_text( ts::asptr("234234") );
             p.utag = prf().getuid();
-            l.append_text(p);
+            l.setup_text(p);
         }
 
         {
             gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
             p.recv_time = now() - 2100;
             //p.type = MTA_UNDELIVERED_MESSAGE;
-            p.message_utf8 = ts::to_utf8(L"унделиверед www.microsoft.com\nsdfsddddf *LOL*");
+            p.set_message_text( ts::to_utf8(L"унделиверед www.microsoft.com\nsdfsddddf *LOL*") );
             p.utag = prf().getuid();
-            l.append_text(p);
+            l.setup_text(p);
         }
 
         {
             gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
             p.recv_time = now() - 4;
-            p.message_utf8 = ts::to_utf8(L"http://www.microsoft.com/sdfsdf");
+            p.set_message_text( ts::to_utf8(L"http://www.microsoft.com/sdfsdf") );
             p.utag = prf().getuid();
-            l.append_text(p);
+            l.setup_text(p);
         }
 
         {
             gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
             p.recv_time = now() - 3;
-            p.message_utf8 = ts::to_utf8(L"ttp://www.microsoft.com/sdfsdf");
+            p.set_message_text( ts::to_utf8(L"ttp://www.microsoft.com/sdfsdf") );
             p.utag = prf().getuid();
-            l.append_text(p);
+            l.setup_text(p);
         }
 
         {
             gui_message_item_c &l = MAKE_CHILD<gui_message_item_c>(msglist, h, c, CONSTASTR("mine"), MTA_MESSAGE);
             p.recv_time = now() - 2;
-            p.message_utf8 = ts::to_utf8(L"http://www.microsoft.com/sdfsdf");
+            p.set_message_text( ts::to_utf8(L"http://www.microsoft.com/sdfsdf") );
             p.utag = prf().getuid();
-            l.append_text(p);
+            l.setup_text(p);
         }
     }
 
@@ -507,18 +507,26 @@ void summon_test_window()
 
     //MAKE_ROOT<incoming_call_panel_c>( &contacts().get(1) );
 
-    static int n;
-    ++n;
-
-    post_s p;
-    p.recv_time = now() - 2100;
-    p.message_utf8 = ts::to_utf8( L"унделиверед www.microsoft.com\nsdfsddddf :rage:\nsdap sdpf posdf opewpo epor ewpor poewir poewi rpoew rpoqiwepro ifdsapof paosdflk ajflkjewo fk sdjfasdfds\n" );
-    p.message_utf8.append_as_int( n );
-
-    p.utag = prf().getuid();
 
 
-    MAKE_ROOT<incoming_msg_panel_c>( &contacts().get_self(), contacts().get_self().subget(0), p );
+
+    //static int n;
+    //++n;
+
+    //post_s p;
+    //p.recv_time = now() - 2100;
+    //p.set_message_text(
+    //    ts::to_utf8( L"унделиверед www.microsoft.com\nsdfsddddf :rage:\nsdap sdpf posdf opewpo epor ewpor poewir poewi rpoew rpoqiwepro ifdsapof paosdflk ajflkjewo fk sdjfasdfds\n" )
+    //    .append_as_int( n )
+    //);
+
+    //p.utag = prf().getuid();
+
+
+    //MAKE_ROOT<incoming_msg_panel_c>( &contacts().get_self(), contacts().get_self().subget(0), p );
+
+
+    prf().test();
 
 }
 

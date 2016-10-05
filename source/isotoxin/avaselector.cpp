@@ -888,8 +888,8 @@ void dialog_avaselector_c::do_scale(float sf)
 
 void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
 {
-    removerctl(3);
     removerctl(4);
+    removerctl(5);
 
     pa.render();
 

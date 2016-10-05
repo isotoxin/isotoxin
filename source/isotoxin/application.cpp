@@ -34,7 +34,7 @@ static bool __toggle_newcon_bar(RID, GUIPARAM)
     return true;
 }
 
-extern parsed_command_line_s g_commandline;
+extern ts::static_setup< parsed_command_line_s, 1000 > g_commandline;
 
 namespace
 {
@@ -184,10 +184,13 @@ struct check_word_task : public ts::task_c
 
     /*virtual*/ void result() override
     {
-        ASSERT( spinlock::pthread_self() ==  g_app->base_tid() );
+        if ( g_app )
+        {
+            ASSERT( spinlock::pthread_self() == g_app->base_tid() );
 
-        if (!splchk.expired())
-            splchk->check_result( w, is_valid, std::move(suggestions) );
+            if ( !splchk.expired() )
+                splchk->check_result( w, is_valid, std::move( suggestions ) );
+        }
     }
 
     /*virtual*/ void done(bool canceled) override
@@ -396,6 +399,8 @@ void application_c::resetup_spelling()
 
 application_c::application_c(const ts::wchar * cmdl)
 {
+    global_allocator = TSNEW( ts::dynamic_allocator_s );
+
     ts::master().on_init = DELEGATE( this, on_init );
     ts::master().on_exit = DELEGATE( this, on_exit );
     ts::master().on_loop = DELEGATE( this, on_loop );
@@ -413,8 +418,8 @@ application_c::application_c(const ts::wchar * cmdl)
     F_SETNOTIFYICON = false;
     F_OFFLINE_ICON = true;
     F_ALLOW_AUTOUPDATE = false;
-    F_READONLY_MODE = g_commandline.readonlymode;
-    F_READONLY_MODE_WARN = g_commandline.readonlymode; // suppress warn
+    F_READONLY_MODE = g_commandline().readonlymode;
+    F_READONLY_MODE_WARN = g_commandline().readonlymode; // suppress warn
     F_MODAL_ENTER_PASSWORD = false;
     F_TYPING = false;
     F_CAPTURE_AUDIO_TASK = false;
@@ -423,12 +428,13 @@ application_c::application_c(const ts::wchar * cmdl)
     F_SHOW_SPELLING_WARN = false;
     F_MAINRECTSUMMON = false;
     F_SPLIT_UI = false;
+    F_BACKUP_PROFILE = false;
 
     autoupdate_next = now() + 10;
 	g_app = this;
     cfg().load();
     if (cfg().is_loaded())
-        load_profile_and_summon_main_rect(g_commandline.minimize);
+        load_profile_and_summon_main_rect(g_commandline().minimize);
 
 #ifndef _FINAL
     dotests();
@@ -603,11 +609,35 @@ ts::uint32 application_c::gm_handler(gmsg<GM_UI_EVENT> & e)
     return 0;
 }
 
+bool application_c::handle_keyboard( int scan, bool dn, int casw )
+{
+    if ( casw == ts::casw_win && dn )
+    {
+        switch( scan )
+        {
+        case ts::SSK_LEFT:
+            __debugbreak();
+            return true;
+        //case ts::SSK_UP:
+        //    MODIFY( main ).maximize( true );
+        //    return true;
+        //case ts::SSK_DOWN:
+        //    if ( HOLD(main)().getprops().is_maximized() )
+        //        MODIFY( main ).maximize( false );
+        //    else
+        //        MODIFY( main ).minimize( true );
+        //    return true;
+        }
+    }
+
+    return __super::handle_keyboard( scan, dn, casw );
+}
+
 bool application_c::on_keyboard( int scan, bool dn, int casw )
 {
     bool handled = false;
     UNSTABLE_CODE_PROLOG
-        handled = __super::handle_keyboard( scan, dn, casw );
+        handled = handle_keyboard( scan, dn, casw );
     UNSTABLE_CODE_EPILOG
     return handled;
 
@@ -1192,6 +1222,7 @@ bool application_c::update_state()
 
     mediasystem().may_be_deinit();
     contacts().cleanup();
+    cleanup_images_cache();
 }
 
 void application_c::set_status(contact_online_state_e cos_, bool manual)
@@ -1417,7 +1448,7 @@ void application_c::bring2front( contact_root_c *historian )
             if ( active_contact_item )
             {
                 gui_contactlist_c &cl = HOLD( active_contact_item->getparent() ).as<gui_contactlist_c>();
-                cl.scroll_to_child( &active_contact_item->getengine(), false );
+                cl.scroll_to_child( &active_contact_item->getengine(), ST_ANY_POS );
             }
             else if ( gui_contact_item_c *active = contacts().get_self().gui_item )
             {
@@ -1433,7 +1464,7 @@ void application_c::bring2front( contact_root_c *historian )
         if ( historian->gui_item )
         {
             gui_contactlist_c &cl = HOLD( historian->gui_item->getparent() ).as<gui_contactlist_c>();
-            cl.scroll_to_child( &historian->gui_item->getengine(), false );
+            cl.scroll_to_child( &historian->gui_item->getengine(), ST_ANY_POS );
         }
 
         if ( g_app->F_SPLIT_UI )
@@ -1503,6 +1534,10 @@ void application_c::bring2front( contact_root_c *historian )
     }
 }
 
+void crypto_zero( ts::uint8 *buf, int bufsize );
+void get_unique_machine_id( ts::uint8 *buf, int bufsize, const char *salt, bool use_profile_uniqid );
+bool decode_string_base64( ts::str_c& rslt, ts::uint8 *key /* 32 bytes */, const ts::asptr& s );
+
 namespace
 {
     struct profile_loader_s
@@ -1519,6 +1554,7 @@ namespace
             STAGE_ENTER_PASSWORD,
             STAGE_CLEANUP_UI,
             STAGE_LOAD_WITH_PASSWORD,
+            STAGE_DO_NOTHING,
         } st = STAGE_CHECK_DB;
         db_check_e chk = DBC_IO_ERROR;
         bool modal;
@@ -1607,6 +1643,21 @@ namespace
 
             case STAGE_ENTER_PASSWORD:
 
+                if ( g_commandline().profilepass )
+                {
+                    ts::uint8 encpass[ 32 ];
+                    ts::str_c passwd;
+                    get_unique_machine_id( encpass, 32, SALT_CMDLINEPROFILE, false );
+                    if ( decode_string_base64( passwd, encpass, ts::to_utf8( *g_commandline().profilepass ) ) )
+                    {
+                        g_commandline().profilepass.reset();
+                        crypto_zero( encpass, sizeof( encpass ) );
+                        password_entered( ts::from_utf8( passwd ), ts::str_c() );
+                        return true;
+                    }
+                    g_commandline().profilepass.reset();
+                }
+
                 g_app->F_MODAL_ENTER_PASSWORD = modal;
                 SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, dialog_entertext_c::params(
                     UD_ENTERPASSWORD,
@@ -1628,16 +1679,16 @@ namespace
             st = STAGE_LOAD_WITH_PASSWORD;
             gen_passwdhash( k + CC_SALT_SIZE, passwd );
             tick_it();
-            decollapse = !g_commandline.minimize;
+            decollapse = !g_commandline().minimize;
             g_app->F_MODAL_ENTER_PASSWORD = false;
             return true;
         }
 
         bool password_not_entered(RID, GUIPARAM)
         {
-            st = STAGE_CLEANUP_UI;
+            st = prf().is_loaded() ? STAGE_DO_NOTHING : STAGE_CLEANUP_UI;
             tick_it();
-            decollapse = !g_commandline.minimize;
+            decollapse = !g_commandline().minimize;
             g_app->F_MODAL_ENTER_PASSWORD = false;
             return true;
         }
@@ -1774,6 +1825,10 @@ bool application_c::b_customize(RID r, GUIPARAM param)
         {
             SUMMON_DIALOG<dialog_colors_c>();
         }
+        static void m_command_line_generator( const ts::str_c& )
+        {
+            SUMMON_DIALOG<dialog_cmdlinegenerator_c>();
+        }
         static void m_exit(const ts::str_c&)
         {
             ts::master().sys_exit(0);
@@ -1825,8 +1880,8 @@ bool application_c::b_customize(RID r, GUIPARAM param)
     if ( int atb = cfg().allow_tools() )
     {
         m.add_separator();
-        if (1 & atb) m.add(TTT("Color editor",431), 0, handlers::m_color_editor);
-
+        if ( 1 & atb ) m.add( TTT( "Color editor", 431 ), 0, handlers::m_color_editor );
+        if ( 2 & atb ) m.add( TTT("Command line generator",488), 0, handlers::m_command_line_generator );
     }
 
     m.add_separator();
@@ -1913,7 +1968,9 @@ void application_c::load_profile_and_summon_main_rect(bool minimize)
     s3::DEVICE device = device_from_string( cfg().device_mic() );
     s3::set_capture_device( &device );
 
-    ts::wstr_c profname = cfg().profile();
+    ts::wstr_c profname = g_commandline().profilename ? *g_commandline().profilename : cfg().profile();
+    g_commandline().profilename.reset();
+
     auto checkprofilenotexist = [&]()->bool
     {
         if (profname.is_empty()) return true;
@@ -2610,6 +2667,34 @@ ts::uint32 application_c::gm_handler(gmsg<ISOGM_DELIVERED>&d)
     return 0;
 }
 
+bool application_c::present_undelivered_messages( const contact_key_s& rcv, uint64 except_utag ) const
+{
+    for ( send_queue_s *q : m_undelivered )
+        if ( rcv == q->receiver )
+        {
+            for ( const post_s &p : q->queue )
+            {
+                if ( p.utag == except_utag )
+                    return q->queue.size() > 1;
+            }
+            return q->queue.size() > 0;
+        }
+    return false;
+}
+
+void application_c::reset_undelivered_resend_cooldown( const contact_key_s& rcv )
+{
+    ts::Time t = ts::Time::current() - 7000;
+    for ( send_queue_s *q : m_undelivered )
+    {
+        if ( rcv == q->receiver )
+        {
+            q->last_try_send_time = t;
+            break;
+        }
+    }
+}
+
 void application_c::resend_undelivered_messages( const contact_key_s& rcv )
 {
     for (int qi=0;qi<m_undelivered.size();)
@@ -2624,7 +2709,7 @@ void application_c::resend_undelivered_messages( const contact_key_s& rcv )
 
         if ((q->receiver == rcv || rcv.is_empty()))
         {
-            while ( !rcv.is_empty() || (ts::Time::current() - q->last_try_send_time) > 60000 /* try 2 resend every 1 minute */ )
+            while ( !rcv.is_empty() || (ts::Time::current() - q->last_try_send_time) > 6999 /* try 2 resend every 7 seconds */ )
             {
                 q->last_try_send_time = ts::Time::current();
                 contact_root_c *receiver = contacts().rfind( q->receiver );
@@ -2985,13 +3070,13 @@ void file_transfer_s::kill( file_control_e fctl, unfinished_file_transfer_s *uft
     {
         post_s p;
         p.sender = sender;
-        p.message_utf8 = to_utf8( filename_on_disk );
+        p.message_utf8 = ts::refstring_t<char>::build( to_utf8( filename_on_disk ), g_app->global_allocator );
         p.utag = msgitem_utag;
         prf().change_history_item( historian, p, HITM_MESSAGE );
         if ( contact_root_c * h = contacts().rfind( historian ) ) h->iterate_history( [this]( post_s &p )->bool {
             if ( p.utag == msgitem_utag )
             {
-                p.message_utf8 = to_utf8( filename_on_disk );
+                p.message_utf8 = ts::refstring_t<char>::build( to_utf8( filename_on_disk ), g_app->global_allocator );
                 return true;
             }
             return false;
@@ -3285,9 +3370,12 @@ void file_transfer_s::upd_message_item( unfinished_file_transfer_s &uft )
 {
     post_s p;
     p.type = uft.upload ? MTA_SEND_FILE : MTA_RECV_FILE;
-    p.message_utf8 = to_utf8( uft.filename_on_disk );
-    if ( p.message_utf8.ends( CONSTASTR( ".!rcv" ) ) )
-        p.message_utf8.trunc_length( 5 );
+    
+    ts::str_c m = to_utf8( uft.filename_on_disk );
+    if ( m.ends( CONSTASTR( ".!rcv" ) ) )
+        m.trunc_length( 5 );
+
+    p.message_utf8 = ts::refstring_t<char>::build( m, g_app->global_allocator );
 
     p.utag = uft.msgitem_utag;
     p.sender = uft.sender;
@@ -3312,9 +3400,13 @@ void file_transfer_s::upd_message_item(bool force)
     {
         gmsg<ISOGM_MESSAGE> msg(c, &contacts().get_self(), upload ? MTA_SEND_FILE : MTA_RECV_FILE);
         msg.post.cr_time = now();
-        msg.post.message_utf8 = to_utf8(filename_on_disk);
-        if (msg.post.message_utf8.ends(CONSTASTR(".!rcv")))
-            msg.post.message_utf8.trunc_length(5);
+        
+        ts::str_c m = to_utf8(filename_on_disk);
+        if (m.ends(CONSTASTR(".!rcv")))
+            m.trunc_length(5);
+
+        msg.post.message_utf8 = ts::refstring_t<char>::build( m, g_app->global_allocator );
+
         msg.post.utag = prf().uniq_history_item_tag();
         msgitem_utag = msg.post.utag;
         msg.send();

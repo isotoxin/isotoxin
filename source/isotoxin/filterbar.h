@@ -33,15 +33,15 @@ class gui_filterbar_c : public gui_label_ex_c
     {
         ts::safe_ptr<gui_filterbar_c> owner;
         ts::sqlitedb_c *db = nullptr;
-        ts::wstrings_c flt;
+        compare_context_s cc;
+        process_animation_s pa;
         bool no_need = false;
 
         full_search_s() {}
-        full_search_s(ts::sqlitedb_c *db, gui_filterbar_c *owner, const ts::wstrings_c &flt_) : db(db), flt(flt_), owner(owner)
-        {
-            for (ts::wstr_c &s : flt)
-                s.clone();
-        }
+        full_search_s( gui_filterbar_c *owner, const ts::wstrings_c &flt_ );
+        ~full_search_s();
+
+        bool anm( RID, GUIPARAM );
 
         found_stuff_s::FOUND_STUFF_T found_stuff;
         found_item_s &add( const contact_key_s &historian )
@@ -101,11 +101,13 @@ public:
     /*virtual*/ int get_height_by_width(int width) const override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
+    void redraw_anm();
+
     void full_search_result( found_stuff_s::FOUND_STUFF_T &&stuff );
 
     void focus_edit();
 
-    void refresh_list();
+    void refresh_list( bool tags_ch );
 
     bool is_tag_all() const
     {

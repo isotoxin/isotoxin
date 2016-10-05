@@ -32,56 +32,63 @@ struct data4test_s
 #include "win32emu/win32emu.h"
 #endif
 
+#if defined _MSC_VER && _MSC_VER <= 1800
+#define P(fn) ts::wsptr( JOINMACRO1( L, RSLTPATH ) JOINMACRO1( L, fn ) )
+#else
+#define P(fn) CONSTWSTR(RSLTPATH fn)
+#endif
+
+
     data4test_s(int test, uint8 av):test(test), alpha_v(av)
     {
         switch (test)
         {
             case 0:
                 Print("i420 to RGB test\n");
-                buf.load_from_disk_file(CONSTWSTR(RSLTPATH "i420.bin"));
+                buf.load_from_disk_file(P("i420.bin"));
                 bmp.create_ARGB(ivec2(1920, 1200));
                 process_f = DELEGATE( this, process_i420_to_rgb );
                 process_f();
-                bmp.save_as_png(CONSTWSTR(RSLTPATH "t00.png"));
+                bmp.save_as_png(P("t00.png"));
                 break;
             case 10:
                 Print("i420 to RGB test 2\n");
-                buf.load_from_disk_file(CONSTWSTR(RSLTPATH "i420.bin"));
+                buf.load_from_disk_file(P("i420.bin"));
 
                 bmp.create_ARGB(ivec2(1038, 584));
                 process_f = DELEGATE(this, process_i420_to_rgb_2);
                 process_f();
-                bmp.save_as_png(CONSTWSTR(RSLTPATH "t10.png"));
+                bmp.save_as_png(P("t10.png"));
                 break;
             case 1:
                 Print("RGB to i420 test\n");
-                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
+                bmp.load_from_file(P("test0.png"));
                 process_f = DELEGATE( this, process_rgb_to_i420 );
                 process_f();
-                buf.save_to_file(CONSTWSTR(RSLTPATH "i420_1.bin"));
+                buf.save_to_file(P("i420_1.bin"));
                 break;
             case 11:
                 Print("RGB to i420 opt test\n");
-                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
+                bmp.load_from_file(P("test0.png"));
                 {
                     int sz = bmp.info().sz.x * bmp.info().sz.y;
                     buf.set_size( sz + sz/2 );
                 }
                 process_f = DELEGATE(this, process_rgb_to_i420_opt);
                 process_f();
-                buf.save_to_file(CONSTWSTR(RSLTPATH "i420_2.bin"));
+                buf.save_to_file(P("i420_2.bin"));
                 break;
             case 2:
                 Print("direct lanczos resample test\n");
-                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
+                bmp.load_from_file(P("test0.png"));
                 bmpt.create_ARGB( ivec2(target_x, target_y) );
                 process_f = DELEGATE(this, process_lanczos);
                 process_f();
-                bmpt.save_as_png(CONSTWSTR(RSLTPATH "lanczos.png"));
+                bmpt.save_as_png(P("lanczos.png"));
                 break;
             case 3:
                 Print("indirect lanczos resample test\n");
-                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
+                bmp.load_from_file(P("test0.png"));
                 {
                     int *x = (int *)&bmp.info().sz.x;
                     *x = *x - 2;
@@ -90,50 +97,50 @@ struct data4test_s
                 bmpt.create_ARGB(ivec2(target_x, target_y));
                 process_f = DELEGATE(this, process_lanczos2);
                 process_f();
-                bmpt.save_as_png(CONSTWSTR(RSLTPATH "lanczos2.png"));
+                bmpt.save_as_png(P("lanczos2.png"));
                 break;
             case 4:
                 Print("direct bicubic resample test\n");
-                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
+                bmp.load_from_file(P("test0.png"));
                 bmpt.create_ARGB(ivec2(target_x, target_y));
                 process_f = DELEGATE(this, process_bicubic);
                 process_f();
-                bmpt.save_as_png(CONSTWSTR(RSLTPATH "lanczos3.png"));
+                bmpt.save_as_png(P("lanczos3.png"));
                 break;
             case 5:
                 Print("shrink 2x x86 asm\n");
-                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
+                bmp.load_from_file(P("test0.png"));
                 bmpt.create_ARGB(bmp.info().sz/2);
                 process_f = DELEGATE(this, process_shrink2x86);
                 process_f();
-                bmpt.save_as_png(CONSTWSTR(RSLTPATH "shrink2x.png"));
+                bmpt.save_as_png(P("shrink2x.png"));
                 break;
             case 6:
                 Print("overfill test\n");
-                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
+                bmp.load_from_file(P("test0.png"));
                 process_f = DELEGATE(this, process_overfill);
                 process_f();
-                bmp.save_as_png(CONSTWSTR(RSLTPATH "overfill.png"));
+                bmp.save_as_png(P("overfill.png"));
                 break;
             case 7:
             case 17:
                 test == 7 ? Print("my AlphaBlend test\n") : Print("system AlphaBlend test\n");
 
                 //bmpt.load_from_file(L"C:\\2\\1\\alpha555.png");
-                bmpt.load_from_file(CONSTWSTR(RSLTPATH "alpha_full.png"));
-                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
+                bmpt.load_from_file(P("alpha_full.png"));
+                bmp.load_from_file(P("test0.png"));
 
                 tgt.create_from_bitmap(bmp);
                 alpha.create_from_bitmap(bmpt,false,true);
 
                 process_f = test == 7 ? DELEGATE(this, process_alphablend) : DELEGATE(this, process_alphablend_sys);
                 process_f();
-                tgt.save_as_png(CONSTWSTR(RSLTPATH "alphablend.png"));
+                tgt.save_as_png(P("alphablend.png"));
                 break;
             case 8:
                 Print("draw text test\n");
 
-                bmp.load_from_file(CONSTWSTR(RSLTPATH "test0.png"));
+                bmp.load_from_file(P("test0.png"));
 
                 {
                     font_params_s fp;
@@ -156,7 +163,7 @@ struct data4test_s
                     txt.set_text(t, nullptr, false);
                     txt.parse_and_render_texture(nullptr, nullptr, false);
                     txt.render_texture(nullptr, DELEGATE(this, clrbt));
-                    txt.make_bitmap().save_as_png(CONSTWSTR(RSLTPATH "dtext.png"));
+                    txt.make_bitmap().save_as_png(P("dtext.png"));
 
 
                 //txt.parse_and_render_texture( );

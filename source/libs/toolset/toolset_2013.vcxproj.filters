@@ -66,9 +66,6 @@
     <ClCompile Include="tsstrar.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="tscrc.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="tsfilesystem.cpp">
       <Filter>src\files</Filter>
     </ClCompile>
@@ -207,9 +204,6 @@
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="tsstrar.h">
-      <Filter>src</Filter>
-    </ClInclude>
-    <ClInclude Include="tscrc.h">
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="tsfilesystem.h">

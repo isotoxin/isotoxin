@@ -449,7 +449,7 @@ void dialog_prepareimage_c::load_image(const ts::wstr_c &fn)
     if (loaded_image.size())
     {
         ts::bitmap_c newb;
-        if (ts::img_format_e fmt = newb.load_from_file(loaded_image))
+        if (ts::img_format_e fmt = newb.load_from_file(loaded_image, ts::ivec2(5192,3894)))
         {
             loaded_img_format = fmt;
             saved_image = loaded_image;

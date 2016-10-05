@@ -2,6 +2,15 @@
 #include "platform.h"
 #include "glyphscache.h"
 
+#ifndef TS_SKIP_FREETYPE
+#pragma pack(push,1)
+#include <ft2build.h>
+#include FT_FREETYPE_H
+#pragma pack(pop)
+#include <freetype/ftmodapi.h>
+#include <freetype/ftttdrv.h>
+#endif
+
 //-V:idata:807
 
 namespace ts
@@ -22,7 +31,7 @@ glyph_s &font_c::operator[](wchar c)
 	if (glyphs[c]) return *glyphs[c];
 
 	FT_Set_Pixel_Sizes( face, font_params.size.x, font_params.size.y );
-	CHECK(FT_Load_Char( face, c, font_params.flags | FT_LOAD_RENDER ) == 0);
+	CHECK(FT_Load_Char( face, c, font_params.flags | FT_LOAD_RENDER /*| FT_LOAD_TARGET_LCD*/ ) == 0);
 
 	FT_Bitmap &b = face->glyph->bitmap;
 
@@ -152,6 +161,10 @@ namespace
         {
             //FreeType
             FT_Init_FreeType(&ftlibrary);
+
+            FT_UInt     interpreter_version = TT_INTERPRETER_VERSION_40;
+            FT_Property_Set( ftlibrary, "truetype", "interpreter-version", &interpreter_version );
+
         }
         ~internal_data_s()
         {

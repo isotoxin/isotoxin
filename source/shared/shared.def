@@ -46,6 +46,7 @@ EXPORTS
 	deflateReset
 	adler32
 	crc32
+	get_crc_table
 
 	;opus
 	opus_strerror

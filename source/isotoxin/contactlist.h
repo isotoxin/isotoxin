@@ -69,8 +69,9 @@ namespace rbtn
     struct ebutton_s
     {
         RID brid;
-        ts::ivec2 p;
+        ts::ivec2 p = ts::ivec2(0);
         bool updated = false;
+        bool dirty = true;
     };
 };
 
@@ -121,8 +122,8 @@ public:
     gui_contact_item_c( MAKE_CHILD<gui_conversation_header_c> &data );
     /*virtual*/ ~gui_contact_item_c();
 
-    void vis_filter( bool f ) { flags.init( F_VIS_FILTER, f ); MODIFY( *this ).visible( flags.is(F_VIS_FILTER) && flags.is(F_VIS_GROUP) ); }
-    void vis_group( bool f ) { flags.init( F_VIS_GROUP, f ); MODIFY( *this ).visible( flags.is( F_VIS_FILTER ) && flags.is( F_VIS_GROUP ) ); }
+    void vis_filter( bool f ) { ASSERT( CIR_ME != role ); flags.init( F_VIS_FILTER, f ); MODIFY( *this ).visible( flags.is( F_VIS_FILTER ) && flags.is( F_VIS_GROUP ) ); }
+    void vis_group( bool f ) { ASSERT( CIR_ME != role ); flags.init( F_VIS_GROUP, f ); MODIFY( *this ).visible( flags.is( F_VIS_FILTER ) && flags.is( F_VIS_GROUP ) ); }
 
     bool is_vis_filter() const { return flags.is( F_VIS_FILTER ); }
     bool is_vis_group() const { return flags.is( F_VIS_GROUP ); }
@@ -147,6 +148,9 @@ public:
     {
         if (!contact)
             return -100;
+
+        if ( contact->getkey().rotten_group )
+            return -200;
 
         if (contact->getkey().is_group())
             return contact->subonlinecount() + 2;

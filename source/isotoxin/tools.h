@@ -85,6 +85,13 @@ template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_color( ts::TSCOLOR c
     s.append_char('>');
     return s;
 }
+INLINE void settag_color( ts::wstr_c&s, ts::TSCOLOR c )
+{
+    s.set( CONSTWSTR( "<color=#" ) );
+    s.append_as_hex( ts::RED( c ) ).append_as_hex( ts::GREEN( c ) ).append_as_hex( ts::BLUE( c ) );
+    if ( ts::ALPHA( c ) != 255 ) s.append_as_hex( ts::ALPHA( c ) );
+    s.append_char( '>' );
+}
 
 template<typename TCHARACTER> ts::str_t<TCHARACTER> colorize( const ts::sptr<TCHARACTER> &t, ts::TSCOLOR c)
 {
@@ -190,10 +197,17 @@ public:
 
 struct parsed_command_line_s
 {
-    ts::swstr_t<MAX_PATH_LENGTH + 16> alternative_config_path;
+    UNIQUE_PTR( ts::wstr_c ) alternative_config_path;
+    UNIQUE_PTR( ts::wstr_c ) profilename;
+    UNIQUE_PTR( ts::wstr_c ) profilepass;
+
     bool checkinstance = true;
     bool minimize = false;
     bool readonlymode = false;
+
+    ~parsed_command_line_s()
+    {
+    }
 };
 
 
@@ -323,7 +337,7 @@ class contact_c;
 class contact_root_c;
 template<> struct gmsg<ISOGM_SUMMON_POST> : public gmsgbase
 {
-    gmsg(const post_s &post, contact_root_c *historian) :gmsgbase(ISOGM_SUMMON_POST), post(post), historian(historian), replace_post(false)
+    gmsg(const post_s &post, contact_root_c *historian, ts::aint post_index) :gmsgbase(ISOGM_SUMMON_POST), post(post), historian(historian), replace_post(false), post_index( post_index )
     {
     }
     gmsg(const post_s &post, bool replace_post) :gmsgbase(ISOGM_SUMMON_POST), post(post), replace_post(replace_post)
@@ -335,6 +349,8 @@ template<> struct gmsg<ISOGM_SUMMON_POST> : public gmsgbase
     
     uint64 prev_found = 0;
     uint64 next_found = 0;
+
+    ts::aint post_index = -1;
 
     bool replace_post = false;
     bool found_item = false;
@@ -744,6 +760,12 @@ public:
 
 };
 
+struct compare_context_s
+{
+    ts::wstrings_c fsplit;
+    ts::buf0_c wstr;
+};
+
 enum crypto_constants_e
 {
     CC_SALT_SIZE = 16,
@@ -763,4 +785,5 @@ db_check_e check_db(const ts::wstr_c &fn, ts::uint8 *salt /* CC_SALT_SIZE bytes 
 void gen_salt( ts::uint8 *buf, int blen );
 void gen_passwdhash(ts::uint8 *passwhash, const ts::wstr_c &passwd);
 
-
+#define SALT_PROTOPASS "kfnghtyeizakf"
+#define SALT_CMDLINEPROFILE "odlfkjwq23dz"

@@ -1186,6 +1186,43 @@ irect glyphs_bound_rect(const GLYPHS &glyphs)
 	return res;
 }
 
+int glyphs_first_glyph( const GLYPHS &glyphs )
+{
+    aint cnt = glyphs.count();
+    int glyphs_start = 0;
+    if ( cnt && glyphs.get( 0 ).pixels == nullptr && glyphs.get( 0 ).outline_index > 0 )
+    {
+        glyphs_start = 1;
+        cnt = glyphs.get( 0 ).outline_index;
+    }
+    for ( int i = glyphs_start; i < cnt;)
+    {
+        const glyph_image_s &gi = glyphs.get( i );
+        if ( gi.pixels == nullptr )
+        {
+            if ( gi.outline_index == 0 )
+            {
+                ++i;
+                continue;
+            }
+            return i;
+        }
+    }
+    return -1;
+}
+
+int glyphs_last_glyph( const GLYPHS &glyphs )
+{
+    aint cnt = glyphs.count();
+    int glyphs_start = 0;
+    if ( cnt && glyphs.get( 0 ).pixels == nullptr && glyphs.get( 0 ).outline_index > 0 )
+    {
+        glyphs_start = 1;
+        cnt = glyphs.get( 0 ).outline_index;
+    }
+    return cnt;
+}
+
 int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p, bool strong)
 {
     aint cnt = glyphs.count();

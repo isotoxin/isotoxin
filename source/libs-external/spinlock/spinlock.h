@@ -102,6 +102,8 @@ unsigned long pthread_self();
 #define SLxInterlockedAdd _InterlockedExchangeAdd64
 #define SLxInterlockedAdd64 _InterlockedExchangeAdd64
 #define SLxInterlockedAnd64 _InterlockedAnd64
+#define SLxInterlockedIncrement _InterlockedIncrement64
+#define SLxInterlockedDecrement _InterlockedDecrement64
 #elif defined (_M_IX86)
 #define SLxInterlockedCompareExchange _InterlockedCompareExchange
 #define SLxInterlockedCompareExchange32 _InterlockedCompareExchange
@@ -110,6 +112,8 @@ unsigned long pthread_self();
 #define SLxInterlockedAdd InterlockedExchangeAdd
 #define SLxInterlockedAdd64 SLlInterlockedExchangeAdd64
 #define SLxInterlockedAnd64 SLlInterlockedAnd64
+#define SLxInterlockedIncrement _InterlockedIncrement
+#define SLxInterlockedDecrement _InterlockedDecrement
 
 inline int64 SLlInterlockedExchangeAdd64(volatile int64* lock, int64 adding)
 {
@@ -158,6 +162,8 @@ inline void _mm_pause() { usleep( 0 ); }
 #define SLxInterlockedAdd  __sync_fetch_and_add
 #define SLxInterlockedAdd64 __sync_fetch_and_add
 #define SLxInterlockedAnd64 __sync_fetch_and_and
+#define SLxInterlockedIncrement(a) __sync_fetch_and_add(a,1)
+#define SLxInterlockedDecrement(a) __sync_fetch_and_sub(a,1)
 
 inline int64 SLlInterlockedExchangeAdd64(volatile int64* lock, int64 adding)
 {
@@ -440,6 +446,16 @@ struct auto_simple_lock
 };
 
 #define SIMPLELOCK( ll ) spinlock::auto_simple_lock UNIQIDLINE(__slock)( ll )
+
+inline void increment( volatile long3264 &lock )
+{
+    SLxInterlockedIncrement( &lock );
+}
+
+inline void decrement( volatile long3264 &lock )
+{
+    SLxInterlockedDecrement( &lock );
+}
 
 //////////////////////////////////////////////////////////////////////////
 

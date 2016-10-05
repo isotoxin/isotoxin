@@ -39,11 +39,13 @@ spinlock_queue_s
 	{
         union
         {
-            pointer_t next;
+            char data[sizeof(pointer_t)];
             node_t* stack_next_free;
         };
 		T value;
-		node_t(){} //-V730
+        node_t(){ data = {} }
+
+        pointer_t& next() { return *(pointer_t*)data; }
 	};
 
 	volatile pointer_t Head;
@@ -55,8 +57,8 @@ spinlock_queue_s
 		if (!result) result=(node_t*)A::ma(sizeof(node_t));
 		if (result)
 		{
-			result->next.count=0;
-			result->next.ptr=nullptr;
+			result->next().count=0;
+			result->next().ptr=nullptr;
 		}
 		return(result);
  	}
@@ -109,9 +111,9 @@ public:
 			bool nNullTail = (nullptr==tail.ptr); 
 			// Read next ptr and count fields together
 			pointer_t next( // ptr 
-				(nNullTail)? nullptr : tail.ptr->next.ptr,
+				(nNullTail)? nullptr : tail.ptr->next().ptr,
 				// count
-				(nNullTail)? 0 : tail.ptr->next.count
+				(nNullTail)? 0 : tail.ptr->next().count
 				) ;
 
 			// Are tail and next consistent?
@@ -120,7 +122,7 @@ public:
 				if(nullptr == next.ptr) // Was Tail pointing to the last node?
 				{
 					// Try to link node at the end of the linked list										
-					if(CAS2( tail.ptr->next, next, pointer_t(n,next.count+1) ) )
+					if(CAS2( tail.ptr->next(), next, pointer_t(n,next.count+1) ) )
 					{
 						return true;
 					} // endif
@@ -161,7 +163,7 @@ public:
 			}
 
 			// Read Head.ptr->next
-			pointer_t next(head.ptr->next);
+			pointer_t next(head.ptr->next());
 
 			// Are head, tail, and next consistent
 			if(head.count == Head.count && head.ptr == Head.ptr)

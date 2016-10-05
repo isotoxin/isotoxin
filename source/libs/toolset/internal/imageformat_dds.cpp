@@ -122,10 +122,19 @@ struct dds_decompressor_dxt5_s : public dds_decompressor_s
     static bool decompress( img_reader_s &r, void * buf, int pitch);
 };
 
-image_read_func img_reader_s::detect_dds_format(const void *sourcebuf, aint sourcebufsize)
+image_read_func img_reader_s::detect_dds_format(const void *sourcebuf, aint sourcebufsize, const ivec2& limitsize )
 {
     const DDSHEAD *dds = (const DDSHEAD *)sourcebuf;
     if (dds->Signature != 0x20534444) return nullptr;
+
+    if ( limitsize >> 0 )
+    {
+        if ( ivec2( (int)dds->Width, (int)dds->Height ) > limitsize )
+        {
+            return nullptr; // just not supported
+        }
+    }
+
 
     if (dds->Flags2 & DDS_FOURCC)
     {

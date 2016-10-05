@@ -220,6 +220,10 @@ bool rectprops_c::change_to(const rectprops_c &p, rectengine_c *engine)
     if (evtd.changed.pos_changed || evtd.changed.size_changed || vis_changed)
         gui->dirty_hover_data();
 
+#ifdef _DEBUG
+    engine->getrect().sq_evt(SQ_DEBUG_CHANGED_SOME, engine->getrid(), evtd); 
+#endif // _DEBUG
+
     return is_visible() && (ac_changed || hl_changed || vis_changed || evtd.changed.size_changed);
 }
 
@@ -289,6 +293,7 @@ void guirect_c::created()
     {
         evt_data_s d;
         d.rect.id = getrid();
+        d.rect.resort = true;
         HOLD(m_parent).engine().sq_evt(SQ_CHILD_CREATED, m_parent, d);
     }
     DEBUGCODE( m_test_01 = true; )
@@ -870,11 +875,10 @@ void gui_label_c::draw()
         ts::irect ca = get_client_area();
         draw_data_s &dd = getengine().begin_draw();
 
-        if (flags.is(FLAGS_SELECTABLE) && gui->selcore().owner == this)
-        {
-            selectable_core_s &selcore = gui->selcore();
-            selcore.glyphs_pos = ca.lt;
-        }
+        
+        if ( selectable_core_s *selcore = flags.is( FLAGS_SELECTABLE ) ? gui->get_selcore( getrid() ) : nullptr )
+            selcore->glyphs_pos = ca.lt;
+
         dd.offset += ca.lt;
         dd.size = ca.size();
 
@@ -908,17 +912,16 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
     if (tdp.forecolor) textrect.set_def_color(*tdp.forecolor);
     bool do_updr = true;
 
-    selectable_core_s &selcore = gui->selcore();
-    if (flags.is(FLAGS_SELECTABLE) && selcore.owner == this)
+    if ( selectable_core_s *selcore = flags.is( FLAGS_SELECTABLE ) ? gui->get_selcore( getrid() ) : nullptr )
     {
-        if (selcore.some_selected())
+        if (selcore->some_selected())
             flags.set(FLAGS_SELECTION);
 
-        if (gui->selcore().is_dirty() || textrect.is_dirty() || textrect.is_invalid_texture())
+        if (selcore->is_dirty() || textrect.is_dirty() || textrect.is_invalid_texture())
         {
             do_updr = false;
             textrect.parse_and_render_texture(nullptr, custom_tag_parser_delegate(), false); // it changes glyphs array
-            bool still_selected = selcore.sure_selected();
+            bool still_selected = selcore->sure_selected();
 
             if (tdp.rectupdate)
             {
@@ -927,14 +930,14 @@ void gui_label_c::draw( draw_data_s &dd, const text_draw_params_s &tdp )
                 updr.offset = dd.offset;
                 updr.param = getrid().to_param();
                 if (still_selected)
-                    textrect.render_texture(&updr, DELEGATE(&selcore, selection_stuff));
+                    textrect.render_texture(&updr, DELEGATE(selcore, selection_stuff));
                 else
                     textrect.render_texture(&updr);
             }
             else
             {
                 if (still_selected)
-                    textrect.render_texture(nullptr, DELEGATE(&selcore, selection_stuff));
+                    textrect.render_texture(nullptr, DELEGATE(selcore, selection_stuff));
                 else
                     textrect.render_texture(nullptr);
             }
@@ -1035,7 +1038,8 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
             ts::ivec2 mplocal = to_local(data.mouse.screenpos);
             ts::irect clar = get_client_area();
             if (clar.inside(mplocal))
-                gui->selcore().selectword(RID(),nullptr);
+                if ( selectable_core_s *selcore = gui->get_selcore(getrid()) )
+                    selcore->selectword(RID(),nullptr);
         }
         break;
     case SQ_MOUSE_LDOWN:
@@ -1045,7 +1049,7 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
             ts::irect clar = get_client_area();
             if (clar.inside(mplocal))
             {
-                gui->selcore().begin( this );
+                gui->activate_selcore( this, true );
 
                 gui->begin_mousetrack(getrid(), MTT_TEXTSELECT);
                 gui->set_focus(getrid());
@@ -1056,18 +1060,19 @@ void gui_label_c::set_font(const ts::font_desc_c *f)
         break;
     case SQ_MOUSE_LUP:
         if (gui->end_mousetrack(getrid(), MTT_TEXTSELECT))
-            gui->selcore().endtrack();
+            if (selectable_core_s *selcore = gui->get_selcore(getrid()))
+                selcore->endtrack();
         break;
     case SQ_MOUSE_MOVE_OP:
         if (gui->mtrack(getrid(), MTT_TEXTSELECT))
-            if (flags.is(FLAGS_SELECTABLE) && gui->selcore().owner == this)
-                gui->selcore().track();
+            if ( selectable_core_s *selcore = flags.is( FLAGS_SELECTABLE ) ? gui->get_selcore( getrid() ) : nullptr )
+                selcore->track();
         break;
     case SQ_DETECT_AREA:
         if (data.detectarea.area == 0 && flags.is(FLAGS_SELECTABLE))
         {
-            if (gui->selcore().try_begin(this))
-                data.detectarea.area = gui->selcore().detect_area(data.detectarea.pos);
+            if ( selectable_core_s *selcore = gui->try_activate_selcore( this ))
+                data.detectarea.area = selcore->detect_area(data.detectarea.pos);
             else data.detectarea.area = AREA_EDITTEXT;
         }
         return true;
@@ -2162,6 +2167,10 @@ void gui_vscrollgroup_c::children_repos()
         sbhelper.shift = minimum<int>::value;
     else if (flags.is(F_KEEP_TOP_VISIBLE))
         scroll_target = top_visible;
+    else if ( flags.is( F_SCROLL_TO_KEEP_POS ) )
+    {
+        ASSERT(scroll_target);
+    }
     int scroll_top_keep = top_visible_offset;
 
     int height_need = info.area.height() / info.count;
@@ -2207,7 +2216,6 @@ void gui_vscrollgroup_c::children_repos()
     }
 
     drawflags.set_size((info.count + 7) >> 3);
-    drawflags.fill(0);
 
     flags.init( F_SBVISIBLE, vheight > info.area.height() );
 
@@ -2238,7 +2246,13 @@ void gui_vscrollgroup_c::children_repos()
         }
     }
     int area_width = info.area.width() - sbwidth;
+
+    repeat_move_stuff:
+    drawflags.fill( 0 );
+
     top_visible = nullptr;
+    visible_from = -1;
+    visible_to = -1;
     for( ts::aint i = 0, y = sbhelper.shift; i < info.count; ++i )
     {
         ctl_info_s &inf = infs.get(i);
@@ -2249,15 +2263,6 @@ void gui_vscrollgroup_c::children_repos()
         crect.intersect(info.area);
         if (!crect)
         {
-            if (info.update_offset)
-            {
-                rectengine_c *e = getengine().get_child(i+info.from);
-                e->getrect().update_offset(-(y-sbhelper.shift));
-
-                y += inf.h;
-                continue;
-            }
-
             if (y < 0)
             {
                 y += inf.h;
@@ -2266,10 +2271,10 @@ void gui_vscrollgroup_c::children_repos()
 
             break;
         }
-        rectengine_c *e = getengine().get_child(i+info.from);
-
-        if (info.update_offset)
-            e->getrect().update_offset(-(y-sbhelper.shift));
+        visible_to = i + info.from;
+        if ( visible_from < 0 )
+            visible_from = visible_to;
+        rectengine_c *e = getengine().get_child( visible_to );
 
         if (top_visible.expired())
         {
@@ -2284,7 +2289,29 @@ void gui_vscrollgroup_c::children_repos()
         if (w < area_width && flags.is(F_HCENTER_SMALL_CTLS))
             addx = (area_width - w) / 2;
 
-        MODIFY( e->getrect() ).pos( info.area.lt.x + addx, (int)(info.area.lt.y + y) ).size( w, inf.h );
+        int new_y = static_cast<int>( info.area.lt.y + y );
+
+        if (flags.is( F_SCROLL_TO_KEEP_POS ) && e == scroll_target &&  e->getrect().getprops().pos().y != new_y)
+        {
+            sbhelper.shift = sbhelper.shift - new_y + e->getrect().getprops().pos().y;
+            int minshift = ts::tmin( 0, info.area.height() - vheight );
+            if ( sbhelper.shift < minshift )
+                sbhelper.shift = minshift;
+            else
+                goto repeat_move_stuff;
+        }
+
+        //if (!flags.is( F_SCROLL_TO_KEEP_POS ) )
+        //{
+        //    BOK(ts::SSK_F10);
+        //}
+
+        if ( inf.h > 1000 )
+        {
+            BOK( ts::SSK_F11 );
+        }
+
+        MODIFY( e->getrect() ).pos( info.area.lt.x + addx, new_y ).size( w, inf.h );
         drawflags.set_bit(i, true);
         y += inf.h;
     }
@@ -2300,26 +2327,29 @@ void gui_vscrollgroup_c::on_add_child(RID id)
     HOLD(id)().leech(this); // no we'll got all queries of child! MU HA HA HA
 }
 
-void gui_vscrollgroup_c::scroll_to_begin()
+void gui_vscrollgroup_c::scroll_to_begin( bool repos_now )
 {
     on_manual_scroll();
     sbhelper.shift = 0;
-    gui->repos_children(this);
+    flags.clear( F_SCROLL_TO_KEEP_POS );
+    if ( repos_now ) gui->repos_children(this);
 }
 
-void gui_vscrollgroup_c::scroll_to_end()
+void gui_vscrollgroup_c::scroll_to_end( bool repos_now )
 {
     on_manual_scroll();
     flags.set(F_SCROLL_TO_END);
-    gui->repos_children(this);
+    flags.clear( F_SCROLL_TO_KEEP_POS );
+    if ( repos_now ) gui->repos_children(this);
 }
 
-void gui_vscrollgroup_c::scroll_to_child(rectengine_c *reng, bool maxtop)
+void gui_vscrollgroup_c::scroll_to_child(rectengine_c *reng, scroll_to_e stt, bool repos_now)
 {
     on_manual_scroll();
-    flags.init(F_SCROLL_TO_MAX_TOP, maxtop);
+    flags.init( F_SCROLL_TO_MAX_TOP, stt == ST_MAX_TOP );
+    flags.init( F_SCROLL_TO_KEEP_POS, stt == ST_KEEP_CURRENT );
     scroll_target = reng;
-    gui->repos_children(this);
+    if ( repos_now ) gui->repos_children(this);
 }
 
 bool gui_vscrollgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)

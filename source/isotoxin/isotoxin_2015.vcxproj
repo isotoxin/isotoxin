@@ -119,7 +119,7 @@
     <ClCompile Include="autoupdater.cpp" />
     <ClCompile Include="avaselector.cpp" />
     <ClCompile Include="avcontact.cpp" />
-    <ClCompile Include="colors.cpp" />
+    <ClCompile Include="tooldialogs.cpp" />
     <ClCompile Include="config.cpp" />
     <ClCompile Include="contactlist.cpp" />
     <ClCompile Include="contactprops.cpp" />
@@ -155,7 +155,7 @@
     <ClInclude Include="application.h" />
     <ClInclude Include="avaselector.h" />
     <ClInclude Include="avcontact.h" />
-    <ClInclude Include="colors.h" />
+    <ClInclude Include="tooldialogs.h" />
     <ClInclude Include="config.h" />
     <ClInclude Include="contactprops.h" />
     <ClInclude Include="contacts.h" />

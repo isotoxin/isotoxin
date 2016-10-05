@@ -147,7 +147,7 @@ bool emoticon_s::load( const ts::wsptr &fn )
         ee = nullptr;
     }
     if (ispreframe)
-        TSDEL(preframe);
+        TSDEL( frame );
 }
 
 gui_textedit_c::active_element_s * emoticon_s::get_edit_element(int maxh)
@@ -158,13 +158,13 @@ gui_textedit_c::active_element_s * emoticon_s::get_edit_element(int maxh)
     return ee;
 }
 
-/*virtual*/ bool emoticons_c::emo_gif_s::load(const ts::blob_c &body)
+/*virtual*/ bool emoticons_c::emo_gif_s::load(const ts::blob_c &body, ts::IMG_LOADING_PROGRESS /*progress*/ )
 {
     ispreframe = true;
-    preframe = TSNEW( ts::bitmap_c );
-    if (load_only_gif(*preframe, body))
+    frame = TSNEW( ts::bitmap_c );
+    if (load_only_gif(*frame, body))
     {
-        adapt_bg(preframe);
+        adapt_bg( frame );
         return true;
     }
     return false;
@@ -222,7 +222,7 @@ void emoticons_c::emo_gif_s::adapt_bg(const ts::bitmap_c *bmpx)
 
 }
 
-/*virtual*/ bool emoticons_c::emo_static_image_s::load(const ts::blob_c &b)
+/*virtual*/ bool emoticons_c::emo_static_image_s::load(const ts::blob_c &b, ts::IMG_LOADING_PROGRESS /*progress*/ )
 {
     ts::bitmap_c bmp;
     if (!bmp.load_from_file(b.data(), b.size()))
@@ -234,25 +234,25 @@ void emoticons_c::emo_gif_s::adapt_bg(const ts::bitmap_c *bmpx)
         int neww = ts::lround( k * bmp.info().sz.x );
 
         ispreframe = true;
-        preframe = TSNEW(ts::bitmap_c);
-        preframe->create_ARGB( ts::ivec2(neww, emoti().emoji_maxheight ) );
+        frame = TSNEW(ts::bitmap_c);
+        frame->create_ARGB( ts::ivec2(neww, emoti().emoji_maxheight ) );
 
-        bmp.resize_to( preframe->extbody(), ts::FILTER_LANCZOS3 );
-        preframe->premultiply();
+        bmp.resize_to( frame->extbody(), ts::FILTER_LANCZOS3 );
+        frame->premultiply();
 
     } else
     {
         bmp.premultiply();
         ispreframe = true;
-        preframe = TSNEW(ts::bitmap_c);
-        *preframe = bmp;
+        frame = TSNEW(ts::bitmap_c);
+        *frame = bmp;
     }
 
 
     return true;
 }
 
-/*virtual*/ bool emoticons_c::emo_tiled_animation_s::load( const ts::blob_c &b )
+/*virtual*/ bool emoticons_c::emo_tiled_animation_s::load( const ts::blob_c &b, ts::IMG_LOADING_PROGRESS /*progress*/ )
 {
     if ( !source.load_from_file( b.data(), b.size() ) )
         return false;
@@ -279,8 +279,7 @@ void emoticons_c::emo_gif_s::adapt_bg(const ts::bitmap_c *bmpx)
 
     source.premultiply();
     ispreframe = true;
-
-    preframe = nullptr;
+    frame = nullptr;
 
     return true;
 }
@@ -613,7 +612,7 @@ void emoticons_c::reload()
         emoticon_s *e = arr.get(i);
         ASSERT(e->ispreframe);
 
-        ts::ivec2 csz = e->preframe ? e->preframe->info().sz : e->framerect().size();
+        ts::ivec2 csz = e->frame ? e->frame->info().sz : e->framerect().size();
 
         e->repl.set(CONSTASTR("<rect="));
         e->repl.append_as_int(i);
@@ -825,10 +824,10 @@ void emoticons_c::generate_full_frame()
     for (emoticon_s *e : arr)
     {
         ASSERT(e->ispreframe);
-        if ( nullptr == e->preframe )
+        if ( nullptr == e->frame )
             continue;
         
-        ts::ivec2 csz = e->preframe->info().sz;
+        ts::ivec2 csz = e->frame->info().sz;
 
         bool present = false;
         for( ts::ivec3 &s : sizes )
@@ -922,10 +921,10 @@ void emoticons_c::generate_full_frame()
 
     for (emoticon_s *e : arr)
     {
-        if ( nullptr == e->preframe )
+        if ( nullptr == e->frame )
             continue;
 
-        ts::bitmap_c *bmp = e->preframe;
+        ts::bitmap_c *bmp = e->frame;
         e->ispreframe = false;
         e->frame = &fullframe;
         e->frect = find_rect(bmp->info().sz);

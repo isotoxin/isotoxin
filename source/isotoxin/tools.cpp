@@ -594,6 +594,7 @@ template <typename TCH> bool text_find_link(const ts::sptr<TCH> &m, int from, ts
     i = fpref( m, CONSTSTR( TCH, "magnet:?" ), from, i );
     i = fpref( m, CONSTSTR( TCH, "dchub://" ), from, i );
     i = fpref( m, CONSTSTR( TCH, "nmdcs://" ), from, i );
+    i = fpref( m, CONSTSTR( TCH, "retroshare://" ), from, i );
 
     if (i >= 0)
     {
@@ -993,15 +994,21 @@ void gen_identicon( ts::bitmap_c&tgt, const unsigned char *random_bytes )
 
 extern "C"
 {
-    int isotoxin_compare(const unsigned char *row_text, const unsigned char *pattern) // sqlite likeFunc override
+    int isotoxin_compare(const unsigned char *row_text, int row_text_len, const unsigned char *pattern) // sqlite likeFunc override
     {
-        const ts::wstrings_c &fsplit = *(const ts::wstrings_c *)ts::pstr_c( ts::asptr((const char *)pattern+1,2 * sizeof(void *)) ).decode_pointer();
+        compare_context_s &cc = *(compare_context_s *)ts::pstr_c( ts::asptr((const char *)pattern+1,2 * sizeof(void *)) ).decode_pointer();
 
-        ts::wstr_c rowtext( ts::from_utf8( ts::asptr((const char *)row_text) ) );
-        rowtext.case_down();
+        int newsz = row_text_len * sizeof( ts::wchar );
+        if ( cc.wstr.size() < newsz )
+            cc.wstr.set_size( newsz, false );
 
-        for(const ts::wstr_c &s : fsplit)
-            if (rowtext.find_pos( s ) < 0)
+        ts::ZSTRINGS_SIGNED clen = ts::str_wrap_text_utf8_to_ucs2( (ts::wchar *)cc.wstr.data(), row_text_len, ts::asptr( (const char *)row_text, row_text_len ) );
+        ts::str_wrap_text_lowercase( ( ts::wchar * )cc.wstr.data(), clen );
+
+        ts::pwstr_c p( ts::wsptr( ( const ts::wchar * )cc.wstr.data(), clen ) );
+
+        for(const ts::wstr_c &s : cc.fsplit)
+            if (p.find_pos( s ) < 0)
                 return 0;
         
         return 1;
