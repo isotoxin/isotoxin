@@ -131,7 +131,6 @@ void LogToFile(const char *fn, const char *s, ...);
 template <typename T, size_t N> char( &__ARRAYSIZEHELPER( T( &array )[ N ] ) )[ N ];
 #define ARRAY_SIZE( a ) (sizeof(__ARRAYSIZEHELPER(a)))
 
-#include "md5.h"
 #include "spinlock/queue.h"
 #include "strings.h"
 
@@ -272,7 +271,7 @@ struct loader
     int current_chunk_data_size = 0;
     loader(const void *dd, int sz) :d((const byte *)dd), sz(sz) {}
 
-    int operator()(byte chunkid)
+    int operator()(byte chunkid, bool seek = true)
     {
         int store_offset = offset;
         for (; offset < sz;)
@@ -284,7 +283,10 @@ struct loader
                 offset += 1 + chunksz;
                 current_chunk_data_size = chunksz - 4;
                 return current_chunk_data_size;
-            }
+            } else
+                if (!seek)
+                    return 0;
+
             int skipbytes = *(int *)(d + ptrdiff_t(offset) + 1);
             offset += 1 + skipbytes;
         }
@@ -339,6 +341,26 @@ struct savebuffer : public std::vector < char >
     }
 
 };
+
+extern "C" {
+    int crypto_generichash( unsigned char *out, size_t outlen,
+        const unsigned char *in, unsigned long long inlen,
+        const unsigned char *key, size_t keylen );
+};
+
+template <int hashsize> struct blake2b
+{
+    byte hash[hashsize];
+    template<typename A> explicit blake2b( const std::vector<char, A> &buf )
+    {
+        crypto_generichash(hash, hashsize, (const unsigned char *)buf.data(), buf.size(), nullptr, 0);
+    }
+    blake2b( const void *buf, size_t len )
+    {
+        crypto_generichash( hash, hashsize, (const unsigned char *)buf, len, nullptr, 0 );
+    }
+};
+
 struct bytes
 {
     const void *data;

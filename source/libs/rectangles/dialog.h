@@ -338,6 +338,8 @@ protected:
     RID list(int height, const ts::wstr_c & emptymessage);
     RID combik( const menu_c &m, RID parent = RID() );
 
+    gui_button_c &lbutton( GUIPARAMHANDLER handler );
+
     /*virtual*/ void children_repos_info(cri_s &info) const override;
     virtual void getbutton(bcreate_s &bcr) {};
     virtual int additions( ts::irect & b ) { b = ts::irect(0); return 0; };

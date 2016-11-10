@@ -829,6 +829,21 @@ namespace ts
 		return false;
 	}
 
+    uint64 TSCALL get_free_space( const wstr_c &path )
+    {
+#ifdef _WIN32
+        ULARGE_INTEGER space = {};
+        GetDiskFreeSpaceExW( path, &space, nullptr, nullptr );
+        return space.QuadPart;
+#endif // _WIN32
+#ifdef _NIX
+        statvfs sfs;
+        if (statvfs( to_utf8(path), &sfs ) != -1)
+            return (unsigned long long)sfs.f_bsize * sfs.f_bfree;
+        return 0;
+#endif //_NIX
+    }
+
 	wstr_c  TSCALL get_exe_full_name()
 	{
         MEMT( MEMT_STR_WD );
@@ -1115,13 +1130,24 @@ namespace ts
         void *h = CreateFileW( tmp_wstr_c( fn ), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0 );
         if ( h != INVALID_HANDLE_VALUE )
             return h;
+
         return nullptr;
     }
     void *f_recreate( const ts::wsptr&fn )
     {
-        void *h = CreateFileW( tmp_wstr_c( fn ), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr );
+        tmp_wstr_c f( fn );
+        void *h = CreateFileW( f, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr );
         if ( h != INVALID_HANDLE_VALUE )
             return h;
+
+        ts::wstr_c name = fn_get_name_with_ext( f );
+        fix_path( name, FNO_MAKECORRECTNAME );
+        fn_change_name_ext( f, name );
+
+        h = CreateFileW( f, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr );
+        if (h != INVALID_HANDLE_VALUE)
+            return h;
+
         return nullptr;
     }
 
@@ -1155,14 +1181,20 @@ namespace ts
     aint f_read( void *h, void *ptr, aint sz )
     {
         DWORD r;
-        ReadFile( h, ptr, (DWORD)sz, &r, nullptr );
+        ReadFile( h, ptr, static_cast<DWORD>(sz), &r, nullptr );
         return r;
     }
     aint f_write( void *h, const void *ptr, aint sz )
     {
         DWORD w;
-        WriteFile( h, ptr, (DWORD)sz, &w, nullptr );
-        return w ;
+        if (FALSE == WriteFile( h, ptr, static_cast<DWORD>(sz), &w, nullptr ))
+        {
+            HRESULT ler = GetLastError();
+            if (ERROR_DISK_FULL == ler)
+                return FE_WRITE_NO_SPACE;
+            return FE_WRITE_GENERAL;
+        }
+        return w;
     }
     void f_close( void *h )
     {

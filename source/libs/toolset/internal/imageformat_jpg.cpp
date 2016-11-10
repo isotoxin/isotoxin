@@ -126,7 +126,7 @@ namespace
                 src->next_input_byte = src->fakeend;
                 src->bytes_in_buffer = 2;
             }
-            //__debugbreak();
+            //DEBUG_BREAK();
         }
         static void tsjpg_term_source(j_decompress_ptr cinfo)
         {

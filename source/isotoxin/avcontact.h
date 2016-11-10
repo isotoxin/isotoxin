@@ -5,14 +5,9 @@ struct av_contact_s
     DECLARE_EYELET( av_contact_s );
 
     GM_RECEIVER( av_contact_s, ISOGM_CHANGED_SETTINGS );
-    GM_RECEIVER( av_contact_s, ISOGM_PEER_STREAM_OPTIONS );
 
 public:
 
-    time_t starttime;
-    uint64 mstime = 1; // monotonic milliseconds from beginning of call
-    ts::shared_ptr<contact_root_c> c;
-    contact_key_s avkey;
     enum state_e
     {
         AV_NONE,
@@ -20,28 +15,46 @@ public:
         AV_INPROGRESS,
     };
 
-    fmt_converter_s cvt;
+    struct ccore_s : public ts::shared_object // self settings, common core per all av contacts in conference 
+    {
+        time_t starttime;
+        uint64 mstime = 1; // monotonic milliseconds from beginning of call
+        ts::shared_ptr<contact_root_c> c;
+        active_protocol_c *ap = nullptr;
+        ts::Time prevtick = ts::Time::undefined();
+        int ticktag = 0;
 
-    int ticktag = -1;
+        fmt_converter_s cvt;
+
+        vsb_descriptor_s currentvsb;
+        ts::wstrmap_c cpar;
+        UNIQUE_PTR( vsb_c ) vsb;
+
+        int mic_dsp_flags = 0;
+        int so = SO_SENDING_AUDIO | SO_RECEIVING_AUDIO | SO_RECEIVING_VIDEO; // default stream options
+        ts::ivec2 sosz = ts::ivec2( 0 );
+        ts::ivec2 prev_video_size = ts::ivec2( 0 );
+
+        unsigned state : 4;
+        unsigned inactive : 1; // true - selected other av contact
+        unsigned dirty_cam_size : 1;
+
+        int cur_so() const { return inactive ? ( so & ~( SO_SENDING_AUDIO | SO_RECEIVING_AUDIO | SO_RECEIVING_VIDEO ) ) : so; }
+        ccore_s( contact_root_c *c, state_e st ):c(c), state(st) {}
+
+    };
+    ts::shared_ptr<ccore_s> core;
+
+    ts::shared_ptr<contact_c> sub;
+    uint64 avkey = 0;
+
+    int tag;
     float volume = 1.0f;
-    int dsp_flags = 0;
-
-    int so = SO_SENDING_AUDIO | SO_RECEIVING_AUDIO | SO_RECEIVING_VIDEO; // default stream options
+    int speaker_dsp_flags = 0;
     int remote_so = 0;
-    ts::ivec2 sosz = ts::ivec2( 0 );
     ts::ivec2 remote_sosz = ts::ivec2( 0 );
-    ts::ivec2 prev_video_size = ts::ivec2( 0 );
-    vsb_descriptor_s currentvsb;
-    ts::wstrmap_c cpar;
-    UNIQUE_PTR( vsb_c ) vsb;
-    active_protocol_c *ap = nullptr;
-    ts::Time prevtick = ts::Time::undefined();
 
-    unsigned state : 4;
-    unsigned inactive : 1; // true - selected other av contact
-    unsigned dirty_cam_size : 1;
-
-    av_contact_s( const contact_key_s &avk, state_e st );
+    av_contact_s( contact_root_c *c, contact_c *sub, state_e st );
     ~av_contact_s();
 
     void call_tick();
@@ -73,11 +86,11 @@ public:
 
     void camera_switch();
     void mic_off();
-    void mic_switch();
-    void speaker_switch();
+    void mic_switch(bool enable);
+    void speaker_switch(bool enable);
     void set_video_res( const ts::ivec2 &vsz );
     void send_so();
-    int cur_so() const { return inactive ? ( so & ~( SO_SENDING_AUDIO | SO_RECEIVING_AUDIO | SO_RECEIVING_VIDEO ) ) : so; }
+    int cur_so() const { return core->cur_so(); }
 
     vsb_c *createcam();
 
@@ -90,21 +103,53 @@ public:
 
 class av_contacts_c
 {
+    GM_RECEIVER( av_contacts_c, ISOGM_PEER_STREAM_OPTIONS );
+
     spinlock::long3264 sync = 0;
     ts::array_del_t< av_contact_s, 0 > m_contacts;
 
+    struct so_s
+    {
+        ts::ivec2 videosize;
+        int so;
+    };
+
+    ts::hashmap_t< uint64, so_s > m_preso;
+
+    struct ind_s
+    {
+        uint64 avk;
+        int cooldown;
+        int indicator;
+    };
+    spinlock::syncvar< ts::tbuf0_t< ind_s > > m_indicators;
+    bool clean_started = false;
+
+    bool clean_indicators(RID, GUIPARAM);
+
 public:
+
+    ~av_contacts_c();
+
+    void set_indicator( uint64 avk, int iv );
+    int get_indicator( uint64 avk );
+
 
     int get_avinprogresscount() const;
     int get_avringcount() const;
-    av_contact_s & get( const contact_key_s &avk, av_contact_s::state_e st );
-    av_contact_s * find_inprogress( const contact_key_s &avk );
+    av_contact_s & get( uint64 avkey, av_contact_s::state_e st );
+    av_contact_s * find_inprogress( uint64 avk );
+    av_contact_s * find_inprogress_any( contact_root_c *c );
+    bool is_any_inprogress( contact_root_c *cr );
+    void set_tag( contact_root_c *cr, int tag );
     void del( contact_root_c *c ); // del by root
+    void del( int tag ); // del by tag
+    void del( active_protocol_c *ap ); // del by ap
     template<typename R> void iterate( const R &r ) const { for ( const av_contact_s *avc : m_contacts ) r( *avc ); }
     template<typename R> void iterate( const R &r ) { for ( av_contact_s *avc : m_contacts ) r( *avc ); }
     void stop_all_av();
     void clear();
 
-    bool camera_tick();
+    bool tick();
 };
 

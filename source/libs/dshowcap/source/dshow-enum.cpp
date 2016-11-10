@@ -122,7 +122,7 @@ static bool Get_FORMAT_VideoInfo_Data(VideoInfo &info,
 }
 
 #ifdef AUDIO_CAPTURE
-static void Get_FORMAT_WaveFormatEx_Data(AudioInfo &info,
+static bool Get_FORMAT_WaveFormatEx_Data(AudioInfo &info,
 		const AM_MEDIA_TYPE &mt, const BYTE *data)
 {
 	const AUDIO_STREAM_CONFIG_CAPS *ascc;
@@ -130,6 +130,9 @@ static void Get_FORMAT_WaveFormatEx_Data(AudioInfo &info,
 
 	ascc = reinterpret_cast<const AUDIO_STREAM_CONFIG_CAPS*>(data);
 	wfex = reinterpret_cast<const WAVEFORMATEX*>(mt.pbFormat);
+	if (!wfex || !ascc) {
+		return false;
+	}
 
 	switch (wfex->wBitsPerSample) {
 	case 16: info.format = AudioFormat::Wave16bit; break;
@@ -142,6 +145,7 @@ static void Get_FORMAT_WaveFormatEx_Data(AudioInfo &info,
 	info.minSampleRate         = ascc->MinimumSampleFrequency;
 	info.maxSampleRate         = ascc->MaximumSampleFrequency;
 	info.sampleRateGranularity = ascc->SampleFrequencyGranularity;
+	return true;
 }
 #endif
 
@@ -297,10 +301,12 @@ static bool ClosestAudioMTCallback(ClosestAudioData &data,
 {
 	AudioInfo info = {};
 
-	if (mt.formattype == FORMAT_WaveFormatEx)
-		Get_FORMAT_WaveFormatEx_Data(info, mt, capData);
-	else
+	if (mt.formattype == FORMAT_WaveFormatEx) {
+		if (!Get_FORMAT_WaveFormatEx_Data(info, mt, capData))
+			return false;
+	} else {
 		return true;
+	}
 
 	MediaType    copiedMT = mt;
 	WAVEFORMATEX *wfex    = (WAVEFORMATEX*)copiedMT->pbFormat;

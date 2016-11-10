@@ -149,11 +149,12 @@ public:
         if (!contact)
             return -100;
 
-        if ( contact->getkey().rotten_group )
-            return -200;
-
-        if (contact->getkey().is_group())
-            return contact->subonlinecount() + 2;
+        if ( contact->getkey().is_conference() )
+        {
+            if ( contact->get_state() == CS_OFFLINE )
+                return -200;
+            return contact->subonlinecount() + 3;
+        }
 
         if (!is_protohit())
         {
@@ -193,9 +194,8 @@ class gui_conversation_header_c : public gui_contact_item_c
 
     static const ts::flags32_s::BITS  F_EDITNAME = FLAGS_FREEBITSTART_CITM << 0;
     static const ts::flags32_s::BITS  F_EDITSTATUS = FLAGS_FREEBITSTART_CITM << 1;
-    static const ts::flags32_s::BITS  F_CALLBUTTON = FLAGS_FREEBITSTART_CITM << 2;
-    static const ts::flags32_s::BITS  F_SKIPUPDATE = FLAGS_FREEBITSTART_CITM << 3;
-    static const ts::flags32_s::BITS  F_DIRTY = FLAGS_FREEBITSTART_CITM << 4;
+    static const ts::flags32_s::BITS  F_SKIPUPDATE = FLAGS_FREEBITSTART_CITM << 2;
+    static const ts::flags32_s::BITS  F_DIRTY = FLAGS_FREEBITSTART_CITM << 3;
 
     void set_default_proto( const ts::str_c&ost );
 
@@ -219,12 +219,17 @@ class gui_conversation_header_c : public gui_contact_item_c
     RID bcancel;
     ts::str_c curedit; // utf8
     ts::safe_ptr<gui_button_c> call_button;
+    ts::safe_ptr<gui_button_c> b1;
+    ts::safe_ptr<gui_button_c> b2;
+    ts::safe_ptr<gui_button_c> b3;
 
     bool _edt( const ts::wstr_c & e, bool )
     {
         curedit = to_utf8( e );
         return true;
     }
+
+    bool b_noti_switch( RID, GUIPARAM p );
 
 public:
 
@@ -274,8 +279,14 @@ class gui_contact_separator_c : public gui_clist_base_c
 
     static const ts::flags32_s::BITS  F_COLLAPSED = FLAGS_FREEBITSTART_LABEL << 0;
 
-    ts::tbuf_t<int> prots;
-    int sf = 0;
+    ts::tbuf0_t<ts::uint16> prots;
+
+    system_query_e clicka = SQ_NOP;
+
+    bool on_collapse_or_expand( RID, GUIPARAM );
+
+    void moveup( const ts::str_c& );
+    void movedn( const ts::str_c& );
 
 public:
     gui_contact_separator_c( MAKE_CHILD<gui_contact_separator_c> &data );
@@ -362,6 +373,7 @@ class gui_contactlist_c : public gui_vscrollgroup_c
     bool filter_proc(system_query_e qp, evt_data_s &data);
 
     /*virtual*/ void children_repos_info(cri_s &info) const override;
+    /*virtual*/ bool test_under_point( const guirect_c &r, const ts::ivec2& screenpos ) const override;
 
     bool refresh_list(RID, GUIPARAM);
 

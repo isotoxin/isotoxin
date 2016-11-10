@@ -14,8 +14,8 @@ class dialog_addcontact_c;
 template<> struct MAKE_ROOT<dialog_addcontact_c> : public _PROOT(dialog_addcontact_c)
 {
     dialog_addcontact_params_s prms;
-    MAKE_ROOT() : _PROOT(dialog_addcontact_c)() { init( RS_NORMAL ); }
-    MAKE_ROOT(const dialog_addcontact_params_s &prms) :_PROOT(dialog_addcontact_c)(), prms(prms) { init( RS_NORMAL ); }
+    MAKE_ROOT() : _PROOT(dialog_addcontact_c)() { init( (rect_sys_e)(RS_NORMAL | RS_MAINPARENT) ); }
+    MAKE_ROOT(bool, const dialog_addcontact_params_s &prms) :_PROOT(dialog_addcontact_c)(), prms(prms) { init( (rect_sys_e)(RS_NORMAL | RS_MAINPARENT) ); }
     ~MAKE_ROOT() {}
 };
 
@@ -69,11 +69,12 @@ public:
 
 
 
-class dialog_addgroup_c : public gui_isodialog_c
+class dialog_addconference_c : public gui_isodialog_c
 {
     int apid = 0;
-    ts::str_c groupname; // utf8
-    bool persistent = true;
+    ts::str_c confaname; // utf8
+    ts::str_c o;
+    ts::astrings_c oset;
     bool networks_available = false;
 
 protected:
@@ -83,18 +84,18 @@ protected:
     /*virtual*/ int additions(ts::irect & border) override;
     /*virtual*/ void on_confirm() override;
     
-    bool chatlifetime(RID, GUIPARAM);
-    void update_lifetime();
+    bool chatoptions(RID, GUIPARAM);
+    void update_options();
 
     menu_c networks();
     bool hidectl(RID,GUIPARAM);
     void showerror(int id);
 
-    bool groupname_handler(const ts::wstr_c &, bool );
+    bool confaname_handler(const ts::wstr_c &, bool );
     void network_selected(const ts::str_c &);
 public:
-    dialog_addgroup_c(initial_rect_data_s &data);
-    ~dialog_addgroup_c();
+    dialog_addconference_c(initial_rect_data_s &data);
+    ~dialog_addconference_c();
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;

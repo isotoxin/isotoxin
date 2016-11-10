@@ -3,6 +3,8 @@
 
 #define PROFILE_TABLES \
     TAB( active_protocol ) \
+    TAB( conference ) \
+    TAB( conference_member ) \
     TAB( contacts ) \
     TAB( history ) \
     TAB( unfinished_file_transfer ) \
@@ -46,8 +48,8 @@ enum profile_options_e : unsigned
 
     MSGOP_SHOW_INLINE_IMG       = SETBIT(23),
 
-    GCHOPT_MUTE_MIC_ON_INVITE   = SETBIT(24),
-    GCHOPT_MUTE_SPEAKER_ON_INVITE = SETBIT(25),
+    COPT_MUTE_MIC_ON_INVITE     = SETBIT(24),
+    COPT_MUTE_SPEAKER_ON_INVITE = SETBIT(25),
 
     SNDOPT_MUTE_ON_AWAY         = SETBIT(26),
     SNDOPT_MUTE_ON_DND          = SETBIT(27),
@@ -55,7 +57,7 @@ enum profile_options_e : unsigned
     OPTOPT_POWER_USER           = SETBIT(31),
 };
 
-#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_TAGFILETR_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | GCHOPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST | MSGOP_MAXIMIZE_INLINE_IMG | MSGOP_SPELL_CHECK | UIOPT_SHOW_INCOMING_CALL_BAR|UIOPT_SHOW_INCOMING_MSG_PNL|SNDOPT_MUTE_ON_DND|UIOPT_GEN_IDENTICONS|MSGOP_SHOW_INLINE_IMG)
+#define DEFAULT_MSG_OPTIONS (MSGOP_SHOW_DATE_SEPARATOR|MSGOP_SHOW_PROTOCOL_NAME|MSGOP_KEEP_HISTORY|MSGOP_SEND_TYPING|MSGOP_FULL_SEARCH|UIOPT_SHOW_SEARCH_BAR|UIOPT_TAGFILETR_BAR|UIOPT_AWAYONSCRSAVER | UIOPT_SHOW_NEWCONN_BAR | COPT_MUTE_MIC_ON_INVITE | UIOPT_SHOW_TYPING_CONTACT | UIOPT_SHOW_TYPING_MSGLIST | MSGOP_MAXIMIZE_INLINE_IMG | MSGOP_SPELL_CHECK | UIOPT_SHOW_INCOMING_CALL_BAR|UIOPT_SHOW_INCOMING_MSG_PNL|SNDOPT_MUTE_ON_DND|UIOPT_GEN_IDENTICONS|MSGOP_SHOW_INLINE_IMG)
 
 enum profile_misc_flags_e
 {
@@ -64,10 +66,13 @@ enum profile_misc_flags_e
 
 enum dsp_flags_e
 {
-    DSP_MIC_NOISE       = SETBIT(0),
-    DSP_MIC_AGC         = SETBIT(1),
-    DSP_SPEAKERS_NOISE  = SETBIT(2),
-    DSP_SPEAKERS_AGC    = SETBIT(3),
+    DSP_MIC_NOISE = SETBIT( 0 ),
+    DSP_MIC_AGC = SETBIT( 1 ),
+    DSP_SPEAKERS_NOISE = SETBIT( 2 ),
+    DSP_SPEAKERS_AGC = SETBIT( 3 ),
+
+    DSP_MIC = DSP_MIC_NOISE | DSP_MIC_AGC,
+    DSP_SPEAKER = DSP_SPEAKERS_NOISE | DSP_SPEAKERS_AGC
 };
 
 enum use_proxy_for_e
@@ -205,11 +210,96 @@ struct unfinished_file_transfer_s
     static ts::data_type_e get_column_type(int index);
 };
 
+struct conference_s
+{
+    MOVABLE( true );
+
+    enum column_e
+    {
+        C_PUBID = 1,
+        C_NAME,
+        C_ID,
+        C_APID,
+        C_READTIME,
+        C_FLAGS,
+        C_COMMENT,
+        C_TAGS,
+        C_KEYWORDS,
+
+        C_count
+    };
+
+    ts::shared_ptr< contact_root_c > confa;
+    UNIQUE_PTR( text_match_c ) textmatchkeywords;
+
+    time_t readtime = 0;
+    ts::str_c pubid;
+    ts::str_c name;
+    ts::str_c comment;
+    ts::wstr_c keywords;
+    contact_key_s proto_key;
+    ts::astrings_c tags;
+    ts::flags32_s flags;
+    int id = 0;
+
+    static const ts::flags32_s::BITS F_SUPPRESS_NOTIFICATIONS = SETBIT(0);
+    static const ts::flags32_s::BITS F_MIC_ENABLED = SETBIT(1);
+    static const ts::flags32_s::BITS F_SPEAKER_ENABLED = SETBIT(2);
+    static const ts::flags32_s::BITS F_COLLAPSED = SETBIT(3);
+
+    void set( int column, ts::data_value_s& v );
+    void get( int column, ts::data_pair_s& v );
+
+    static const int columns = C_count; // pubid, name, id, apid, readtime, flags, comment
+    static ts::asptr get_table_name() { return CONSTASTR( "conferences" ); }
+    static void get_column_desc( int index, ts::column_desc_s&cd );
+    static ts::data_type_e get_column_type( int index );
+
+    contact_key_s history_key() const
+    {
+        return contact_key_s( TCT_CONFERENCE, id, proto_key.protoid );
+    }
+    bool update_name();
+    bool update_comment();
+    bool update_readtime();
+    bool update_tags();
+    bool update_keeph();
+    bool change_flag( ts::flags32_s::BITS mask, bool val );
+
+    void change_keywords( const ts::wstr_c& newkeywords );
+    bool is_hl_message( const ts::wsptr &message, const ts::wsptr &my_name ) const;
+};
+
+
+struct conference_member_s
+{
+    MOVABLE( true );
+
+    ts::shared_ptr< contact_c > memba;
+
+    ts::str_c pubid;
+    ts::str_c name;
+    contact_key_s proto_key;
+    int id;
+
+    void set( int column, ts::data_value_s& v );
+    void get( int column, ts::data_pair_s& v );
+
+    static const int columns = 1 + 4; // pubid, name, id, apid
+    static ts::asptr get_table_name() { return CONSTASTR( "confa_members" ); }
+    static void get_column_desc( int index, ts::column_desc_s&cd );
+    static ts::data_type_e get_column_type( int index );
+
+    contact_key_s history_key() const
+    {
+        return contact_key_s( TCT_UNKNOWN_MEMBER, id, proto_key.protoid );
+    }
+    bool update_name();
+};
 
 template<typename T> struct load_on_start { static const bool value = true; };
 template<> struct load_on_start<history_s> { static const bool value = false; };
 template<> struct load_on_start<backup_protocol_s> { static const bool value = false; };
-
 
 template<typename T, profile_table_e tabi> struct tableview_t
 {
@@ -221,13 +311,27 @@ template<typename T, profile_table_e tabi> struct tableview_t
         DUMMY(row_s);
         row_s() {}
         int id = 0;
-        enum { s_unchanged, s_changed, s_new, s_delete, s_deleted } st = s_new;
+        enum { s_unchanged, s_changed, s_new, s_delete, s_deleted, s_temp } st = s_new;
         T other;
 
         bool present() const { return st == s_unchanged || st == s_changed || st == s_new; }
         void changed() { st = s_changed; };
-        bool deleted() { if (st == s_deleted) return false; if (st == s_new) { st = s_deleted; return false; }  bool c = st != s_delete; st = s_delete; return c; };
+        bool deleted()
+        {
+            if (st == s_deleted) 
+                return false;
+
+            if (st == s_new || st == s_temp)
+            {
+                st = s_deleted;
+                return false;
+            }
+            bool c = st != s_delete;
+            st = s_delete; return c;
+        };
         bool is_deleted() const {return st == s_delete || st == s_deleted;}
+        void temp() { st = s_temp; }
+        bool is_temp() const { return st == s_temp; }
     };
     ts::tmp_tbuf_t<int> *read_ids = nullptr;
     ts::array_inplace_t<row_s, 0> rows;
@@ -340,11 +444,16 @@ template<typename T, profile_table_e tabi> struct tableview_t
 PROFILE_TABLES
 #undef TAB
 
+#define TAB(tab) INLINE tableview_##tab##_s::row_s & row_by_type( tab##_s * t ) { return *(tableview_##tab##_s::row_s *)(((ts::uint8 *)t) - offsetof( tableview_##tab##_s::row_s, other )); }
+PROFILE_TABLES
+#undef TAB
+
 enum hitsory_item_field_e
 {
     HITM_MT = SETBIT(0),
     HITM_TIME = SETBIT(1),
     HITM_MESSAGE = SETBIT(2),
+    HITM_SENDER = SETBIT(3),
 };
 
 enum enter_key_options_s
@@ -390,6 +499,7 @@ class profile_c : public config_base_c
 
     ts::array_safe_t< active_protocol_c, 0 > protocols;
     ts::tbuf_t< contact_key_s > dirtycontacts;
+    ts::tbuf0_t<ts::uint16> protogroupsortdata;
 
     /*virtual*/ void onclose() override;
     /*virtual*/ bool save() override;
@@ -407,6 +517,7 @@ class profile_c : public config_base_c
     static const ts::flags32_s::BITS F_CLOSING = SETBIT(2);
     static const ts::flags32_s::BITS F_ENCRYPTED = SETBIT(3);
     static const ts::flags32_s::BITS F_ENCRYPT_PROCESS = SETBIT(4);
+    static const ts::flags32_s::BITS F_LOADED_TABLES = SETBIT(5);
 
     ts::flags32_s profile_flags;
     ts::flags32_s current_options;
@@ -419,6 +530,11 @@ class profile_c : public config_base_c
     ts::uint8 keyhash[CC_HASH_SIZE]; // 256 bit hash
 
     uint64 uuid = 0; // zero - freezed; cant be used
+    uint num_locked_uids = 0;
+
+    void load_protosort();
+    void save_protosort();
+
 
 public:
 
@@ -438,6 +554,99 @@ public:
     static void mb_error_load_profile(const ts::wsptr & prfn, profile_load_result_e plr, bool modal = false);
 
     bool addeditnethandler(dialog_protosetup_params_s &params);
+
+
+    bool delete_conference( int id );
+
+    /// find conference by pubid
+    conference_s * find_conference( const ts::asptr &pubid, ts::uint16 apid )
+    {
+        ASSERT( profile_flags.is( F_LOADED_TABLES ) );
+        
+        if ( pubid.l == 0 )
+            return nullptr;
+
+        get_table_conference().cleanup();
+
+        for ( auto &c : get_table_conference() )
+            if (c.other.proto_key.protoid == apid && c.other.pubid == pubid )
+                return &c.other;
+        return nullptr;
+    }
+
+    /// find conference by protocol key
+    conference_s * find_conference( const contact_key_s &ck )
+    {
+        ASSERT( profile_flags.is( F_LOADED_TABLES ) );
+        ASSERT( ck.is_conference() && ck.temp_type == TCT_NONE );
+
+        get_table_conference().cleanup();
+
+        for ( auto &c : get_table_conference() )
+            if ( c.other.proto_key == ck )
+                return &c.other;
+        return nullptr;
+    }
+
+    conference_s * find_conference_by_id( int id )
+    {
+        ASSERT( profile_flags.is( F_LOADED_TABLES ) );
+
+        get_table_conference().cleanup();
+
+        for ( auto &c : get_table_conference() )
+            if ( c.other.id == id )
+                return &c.other;
+        return nullptr;
+    }
+
+    conference_s * add_conference( const ts::str_c &pubid, const contact_key_s &protocol_key );
+
+    conference_member_s * find_conference_member( const contact_key_s &member_protokey )
+    {
+        ASSERT( profile_flags.is( F_LOADED_TABLES ) );
+        ASSERT( member_protokey.gid == 0 && member_protokey.temp_type == TCT_NONE ); // abstract conference member has no conference id (gid)
+
+        get_table_conference_member().cleanup();
+
+        for ( auto &cm : get_table_conference_member() )
+            if ( cm.other.proto_key == member_protokey )
+                return &cm.other;
+
+        return nullptr;
+    }
+
+    conference_member_s * find_conference_member( const ts::asptr &pubid, ts::uint16 apid )
+    {
+        ASSERT( profile_flags.is( F_LOADED_TABLES ) );
+
+        get_table_conference_member().cleanup();
+
+        for ( auto &cm : get_table_conference_member() )
+            if (cm.other.proto_key.protoid == apid && cm.other.pubid == pubid )
+                return &cm.other;
+
+        return nullptr;
+    }
+
+    conference_member_s * find_conference_member_by_id( int id )
+    {
+        ASSERT( profile_flags.is( F_LOADED_TABLES ) );
+
+        get_table_conference_member().cleanup();
+
+        for ( auto &cm : get_table_conference_member() )
+            if ( cm.other.id == id )
+                return &cm.other;
+
+        return nullptr;
+    }
+
+    bool delete_conference_member( int id );
+    conference_member_s * add_conference_member( const ts::str_c &pubid, const contact_key_s &proto_key );
+    void make_contact_unknown_member( contact_c * c );
+    void make_contact_known( contact_c * c, const contact_key_s& proto_key );
+    bool is_conference_member( const contact_key_s &ck );
 
     void flush_contacts();
     bool flush_tables();
@@ -484,7 +693,11 @@ public:
     ts::blob_c get_avatar( const contact_key_s&k ) const;
     void set_avatar( const contact_key_s&k, const ts::blob_c &avadata, int tag );
 
-    void dirtycontact( const contact_key_s&k ) { dirtycontacts.set(k); changed(); }
+    void dirtycontact( const contact_key_s&k )
+    {
+        ASSERT( k.temp_type == TCT_NONE && !k.is_self );
+        dirtycontacts.set(k); changed();
+    }
     void killcontact( const contact_key_s&k );
     void purifycontact( const contact_key_s&k );
     bool isfreecontact( const contact_key_s&k ) const;
@@ -493,6 +706,7 @@ public:
 
     void record_history( const contact_key_s&historian, const post_s &history_item );
     int  calc_history( const contact_key_s&historian, bool ignore_invites = true );
+    int  calc_history( const contact_key_s&historian, const contact_key_s&sender );
     int  calc_history_before( const contact_key_s&historian, time_t time );
     int  calc_history_after( const contact_key_s&historian, time_t time, bool only_messages );
     int  calc_history_between( const contact_key_s&historian, time_t time1, time_t time2 );
@@ -511,6 +725,7 @@ public:
     void detach_history( const contact_key_s&prev_historian, const contact_key_s&new_historian, const contact_key_s&sender );
     void change_history_item(const contact_key_s&historian, const post_s &post, ts::uint32 change_what);
     bool change_history_item(uint64 utag, contact_key_s & historian); // find item by tag and change type form MTA_UNDELIVERED_MESSAGE to MTA_MESSAGE, then return historian (if loaded)
+    void change_history_items( const contact_key_s &historian, const contact_key_s &old_sender, const contact_key_s &new_sender );
     void flush_history_now();
     void load_undelivered();
     contact_root_c *find_corresponding_historian(const contact_key_s &subcontact, ts::array_wrapper_c<contact_root_c * const> possible_historians);
@@ -546,6 +761,10 @@ public:
     int min_history_load(bool for_button) { return get_options().is(MSGOP_LOAD_WHOLE_HISTORY) ? -1 : ( for_button ? add_history() : min_history() ); }
 
     ts::wstr_c get_disabled_dicts();
+
+    ts::aint protogroupsort( const ts::uint16 * set_of_prots, ts::aint cnt );
+    bool protogroupsort_up( const ts::uint16 * set_of_prots, ts::aint cnt, bool test );
+    bool protogroupsort_dn( const ts::uint16 * set_of_prots, ts::aint cnt, bool test );
 
     TEXTAPAR( username, "IsotoxinUser" )
     TEXTAPAR( userstatus, "" )
@@ -588,7 +807,7 @@ public:
 
     TEXTAPAR(unique_profile_tag, "")
 
-#define TAB(tab) tableview_##tab##_s &get_table_##tab() { return table_##tab; };
+#define TAB(tab) tableview_##tab##_s &get_table_##tab() { return table_##tab; }; const tableview_##tab##_s &get_table_##tab() const { return table_##tab; };
     PROFILE_TABLES
 #undef TAB
 
@@ -600,6 +819,8 @@ public:
     INTPAR( backup_keeptime, 30 ); // days
 
     INTPAR(max_thumb_height, 80); // hidden
+
+    TEXTAPAR( protosort, "" );
 
     UNIQUE_PTR( ts::global_atom_s ) mutex;
 

@@ -644,7 +644,7 @@ public:
     static const bool readonly = true;
 
     str_core_part_c() {}
-    str_core_part_c(ZSTRINGS_SIGNED size) { ZSTRINGS_ASSERT(false, "str_core_part_c cannot be created"); }
+    str_core_part_c(ZSTRINGS_SIGNED /*size*/) { ZSTRINGS_ASSERT(false, "str_core_part_c cannot be created"); }
     str_core_part_c(const str_core_part_c &ocore) { buf = ocore.buf; }
     str_core_part_c(const sptr<TCHARACTER> &sp):buf( sp ) {}
 
@@ -726,6 +726,13 @@ public:
         blk_UNIT_copy_fwd<TCHARACTER>(core() + s1.l, s2.s, s2.l);
     };
 
+    str_t( const sptr<TCHARACTER> &s1, const sptr<TCHARACTER> &s2, const sptr<TCHARACTER> &s3 ) :core( s1.l + s2.l + s3.l )
+    {
+        blk_UNIT_copy_fwd<TCHARACTER>( core(), s1.s, s1.l );
+        blk_UNIT_copy_fwd<TCHARACTER>( core() + s1.l, s2.s, s2.l );
+        blk_UNIT_copy_fwd<TCHARACTER>( core() + s1.l + s2.l, s3.s, s3.l );
+    };
+
     str_t(const TCHARACTER * const s, const ZSTRINGS_SIGNED l):core( l )
     {
         blk_UNIT_copy_fwd<TCHARACTER>(core(),s,l);
@@ -745,6 +752,16 @@ public:
     template<class CORE2> str_t(const str_t<TCHARACTER, CORE2> &s):core( s.get_length() ) { xset<false>( *this, s ); }
 
     ~str_t() {}
+
+    ZSTRINGS_SIGNED intersects_ignore_case( const sptr<TCHARACTER> &s ) const
+    {
+        if (core.len() == 0) return s.l == 0 ? 0 : -1;
+        ZSTRINGS_SIGNED l = core.len(); if (l > s.l) l = s.l;
+        for(;l>0;--l)
+            if (ends_ignore_case( s.part( l ) ))
+                return core.len() - l;
+        return -1;
+    }
 
     template<class CORE2> bool begins_ignore_case(str_t<TCHARACTER, CORE2> & s) const
     {
@@ -1673,14 +1690,28 @@ public:
 
     }
 
-    str_t<TCHARACTER, CORE> &  cut(const TCHARACTER *charset)
+    str_t<TCHARACTER, CORE> &  cut( const sptr<TCHARACTER> &charset)
     {
         for (ZSTRINGS_SIGNED i=get_length()-1;i>=0;--i)
         {
-            if ( CHARz_find(charset, get_char(i)) >= 0 ) cut( i, 1 );
+            if ( CHARz_findn(charset.s, get_char(i), charset.l) >= 0 ) cut( i, 1 );
         }
         return *this;
     }
+
+    str_t<TCHARACTER, CORE> &  kill_chars( const ZSTRINGS_SIGNED idx, const sptr<TCHARACTER> &charset )
+    {
+        ZSTRINGS_SIGNED l = get_length();
+        ZSTRINGS_SIGNED i = idx;
+        for (; i < l; ++i)
+            if (CHARz_findn( charset.s, get_char( i ), charset.l ) < 0)
+                break;
+        i -= idx;
+        if (i > 0)
+            return cut(idx, i);
+        return *this;
+    }
+    
 
     template<class CORE2> str_t<TCHARACTER, CORE> &  prefixate(const str_t<TCHARACTER, CORE2> &s)
     {

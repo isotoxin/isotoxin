@@ -156,6 +156,9 @@
     <ClCompile Include="tswnd.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="tsregex.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="internal\math.h">
@@ -295,6 +298,9 @@
     </ClInclude>
     <ClInclude Include="internal\platform.h">
       <Filter>src\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="tsregex.h">
+      <Filter>src</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

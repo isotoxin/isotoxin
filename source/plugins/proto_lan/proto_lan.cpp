@@ -65,6 +65,7 @@ void __stdcall api_getinfo( proto_info_s *info )
         "vp8/vp9",
         "ID",
         "f=png",
+        "",
         nullptr
     };
 

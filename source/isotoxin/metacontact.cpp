@@ -137,7 +137,7 @@ ts::uint32 dialog_metacontact_c::gm_handler( gmsg<ISOGM_METACREATE> & mca )
 {
     if (clist.size() < 2)
     {
-        dialog_msgbox_c::mb_error( TTT("Metacontact - union of two or more contacts. The current list contains less then two contacts and to create metacontact this amount is not enough.",150) ).summon();
+        dialog_msgbox_c::mb_error( TTT("Metacontact - union of two or more contacts. The current list contains less then two contacts and to create metacontact this amount is not enough.",150) ).summon(false);
         return;
     }
 

@@ -400,8 +400,8 @@ class win32_wnd_c : public wnd_c
         case WM_NCHITTEST:
             return HTCLIENT;
 
-            //case WM_NCPAINT:
-        //    return 0;
+        case WM_NCPAINT:
+            return 0;
         //case WM_NCCALCSIZE:
         //    if (wparam)
         //    {

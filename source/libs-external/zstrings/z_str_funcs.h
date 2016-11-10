@@ -1,5 +1,5 @@
 /*
-    (C) 2010-2015 ROTKAERMOTA
+    (C) 2010-2016 ROTKAERMOTA
 */
 #pragma once
 
@@ -9,6 +9,20 @@ namespace zstrings_internal
 	{
 		static const bool value = (((T)-1) < 0);
 	};
+
+    template<typename T, bool s = is_signed<T>::value, bool too_huge = (sizeof( T ) > sizeof( size_t )) > struct as_native_1
+    {
+        typedef T type;
+    };
+    template<typename T> struct as_native_1<T, false, false> { typedef size_t type; };
+    template<typename T> struct as_native_1<T, true, false> { typedef ptrdiff_t type; };
+
+    template<typename T> struct as_native
+    {
+        typedef typename as_native_1<T>::type type;
+    };
+
+    typedef ptrdiff_t zint;
 
 	template<typename T, bool sgn = is_signed<T>::value > struct invert
 	{
@@ -386,7 +400,8 @@ template <typename TCHARACTER> __inline bool CHARz_to_double(double &out1,const 
 	double zn = 0.0;
 	if (slen < 0) slen = zstrings_internal::maximum<ZSTRINGS_SIGNED>::value;
 
-	ZSTRINGS_SIGNED i = 0;
+    zstrings_internal::zint i = 0;
+
 	bool negative = false;
 	if (*s == '-') { negative = true; ++i; }
 
@@ -435,7 +450,7 @@ template <typename TCHARACTER> __inline bool CHARz_to_double(double &out1,const 
 
 template <class TCHARACTER, typename I> __inline TCHARACTER * CHARz_make_str_unsigned(TCHARACTER *buf, ZSTRINGS_SIGNED &szbyte, I i)
 {
-	ZSTRINGS_SIGNED idx = (sizeof(I) * 3-1);
+    zstrings_internal::zint idx = (sizeof(I) * 3-1);
 	buf[idx--] = 0;
 	while (i >= 10)
 	{
@@ -444,7 +459,7 @@ template <class TCHARACTER, typename I> __inline TCHARACTER * CHARz_make_str_uns
 		i = d;
 	}
 	buf[idx] = (TCHARACTER)((TCHARACTER)i + 48);
-	szbyte = ((sizeof(I) * 3) - idx) * sizeof(TCHARACTER);
+	szbyte = static_cast<ZSTRINGS_SIGNED>(((sizeof(I) * 3) - idx) * sizeof(TCHARACTER));
 	return buf + idx;
 }
 
@@ -456,10 +471,13 @@ template <class TCHARACTER, typename I> __inline TCHARACTER * CHARz_make_str_uns
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////////////
 //convert string to integer
-template <class TCHARACTER, class NUMTYPE> inline bool CHARz_to_int(NUMTYPE &out,const TCHARACTER * const s, ZSTRINGS_SIGNED slen = -1)
+template <class TCHARACTER, class NUMTYPE_IN> inline bool CHARz_to_int( NUMTYPE_IN &out,const TCHARACTER * const s, ZSTRINGS_SIGNED slen = -1)
 {
     bool negative;
-    ZSTRINGS_SIGNED i;
+    zstrings_internal::zint i;
+
+    typedef zstrings_internal::as_native<NUMTYPE_IN>::type NUMTYPE;
+
     NUMTYPE n2 = 0;
     NUMTYPE n8 = 0;
     NUMTYPE n10 = 0;
@@ -467,7 +485,7 @@ template <class TCHARACTER, class NUMTYPE> inline bool CHARz_to_int(NUMTYPE &out
     TCHARACTER    c;
 
 
-    if (zstrings_internal::is_signed<NUMTYPE>::value)
+    if (zstrings_internal::is_signed<NUMTYPE_IN>::value)
     {
         if (*s == '-') {negative = true; i = 1; } else {negative = false; i = 0;}
     } else 
@@ -489,12 +507,12 @@ parse_hex:
         i++;
         do
         {
-            ZSTRINGS_UNSIGNED m = c - 48;
+            size_t m = c - 48;
             if (m>10) m = (c | 32) - 87;
             if (m>16) return false;
-            n16 = (NUMTYPE)((n16 << 4) + m);
+            n16 = static_cast<NUMTYPE>( (n16 << 4) + m );
         } while (slen != i && (c = *(s + i++)) != 0);
-        out = (negative&&(zstrings_internal::is_signed<NUMTYPE>::value))?-n16:n16;
+        out = static_cast<NUMTYPE_IN>( (negative&&(zstrings_internal::is_signed<NUMTYPE_IN>::value))?-n16:n16 );
         return true;
     }
    
@@ -513,17 +531,17 @@ parse_hex:
                 TCHARACTER cc = (TCHARACTER)(c|32);
                 if (cc == 'b')
                 {
-                    out = (negative&&(zstrings_internal::is_signed<NUMTYPE>::value))?-n2:n2;
+                    out = static_cast<NUMTYPE_IN>( (negative&&(zstrings_internal::is_signed<NUMTYPE_IN>::value))?-n2:n2 );
                     return true;
                 } else
                 if (cc == 'h')
                 {
-                    out = (negative&&(zstrings_internal::is_signed<NUMTYPE>::value))?-n16:n16;
+                    out = static_cast<NUMTYPE_IN>( (negative&&(zstrings_internal::is_signed<NUMTYPE_IN>::value))?-n16:n16 );
                     return true;
                 } else
                 if (cc == 'o')
                 {
-                    out = (negative&&(zstrings_internal::is_signed<NUMTYPE>::value))?-n8:n8;
+                    out = static_cast<NUMTYPE_IN>( (negative&&(zstrings_internal::is_signed<NUMTYPE_IN>::value))?-n8:n8 );
                     return true;
                 }
             }
@@ -538,12 +556,12 @@ parse_hex:
                         TCHARACTER cc = (TCHARACTER)(c|32);
                         if (cc == 'h')
                         {
-                            out = (negative&&(zstrings_internal::is_signed<NUMTYPE>::value))?-n16:n16;
+                            out = static_cast<NUMTYPE_IN>( (negative&&(zstrings_internal::is_signed<NUMTYPE_IN>::value))?-n16:n16 );
                             return true;
                         } else
                         if (cc == 'o')
                         {
-                            out = (negative&&(zstrings_internal::is_signed<NUMTYPE>::value))?-n8:n8;
+                            out = static_cast<NUMTYPE_IN>( (negative&&(zstrings_internal::is_signed<NUMTYPE_IN>::value))?-n8:n8 );
                             return true;
                         }
                     }
@@ -558,7 +576,7 @@ parse_hex:
                                 TCHARACTER cc = (TCHARACTER)(c|32);
                                 if (cc == 'h')
                                 {
-                                    out = (negative&&(zstrings_internal::is_signed<NUMTYPE>::value))?-n16:n16;
+                                    out = static_cast<NUMTYPE_IN>( (negative&&(zstrings_internal::is_signed<NUMTYPE_IN>::value))?-n16:n16 );
                                     return true;
                                 }
                             }
@@ -573,51 +591,54 @@ parse_hex:
                                         TCHARACTER cc = (TCHARACTER)(c|32);
                                         if (cc == 'h')
                                         {
-                                            out = (negative&&(zstrings_internal::is_signed<NUMTYPE>::value))?-n16:n16;
+                                            out = static_cast<NUMTYPE_IN>( (negative&&(zstrings_internal::is_signed<NUMTYPE_IN>::value))?-n16:n16 );
                                             return true;
                                         }
                                     }
                                     return false;
                                 }
-                                n16 = (n16 << 4) + m16;
+                                n16 = static_cast<NUMTYPE>( (n16 << 4) + m16 );
                             } while(slen != i && (c = *(s + i++))!=0);
                             return false;
                         }
-                        n10 = (n10<<3) + (n10<<1) + m10;
-                        n16 = (n16 << 4) + m10;
+                        n10 = static_cast<NUMTYPE>( (n10<<3) + (n10<<1) + m10 );
+                        n16 = static_cast<NUMTYPE>( (n16 << 4) + m10 );
 
                     } while(slen != i && (c = *(s + i++))!=0);
-                    out = (negative&&(zstrings_internal::is_signed<NUMTYPE>::value))?-n10:n10;
+                    out = static_cast<NUMTYPE_IN>( (negative&&(zstrings_internal::is_signed<NUMTYPE_IN>::value))?-n10:n10 );
                     return true;
                 }
-                n8 = (n8 << 3) + m8;
-                n10 = (n10<<3) + (n10<<1) + m8;
-                n16 = (n16 << 4) + m8;
+                n8 = static_cast<NUMTYPE>( (n8 << 3) + m8 );
+                n10 = static_cast<NUMTYPE>( (n10<<3) + (n10<<1) + m8 );
+                n16 = static_cast<NUMTYPE>( (n16 << 4) + m8 );
             } while(slen != i && (c = *(s + i++))!=0);
-            out = (negative&&(zstrings_internal::is_signed<NUMTYPE>::value))?-n10:n10;
+            out = static_cast<NUMTYPE_IN>( (negative&&(zstrings_internal::is_signed<NUMTYPE_IN>::value))?-n10:n10 );
             return true;
         }
-        n2 = (n2 << 1) + m2;
-        n8 = (n8 << 3) + m2;
-        n10 = (n10<<3) + (n10<<1) + m2;
-        n16 = (n16 << 4) + m2;
+        n2 = static_cast<NUMTYPE>( (n2 << 1) + m2 );
+        n8 = static_cast<NUMTYPE>( (n8 << 3) + m2 );
+        n10 = static_cast<NUMTYPE>( (n10<<3) + (n10<<1) + m2 );
+        n16 = static_cast<NUMTYPE>( (n16 << 4) + m2 );
     } while(slen != i && (c = *(s + i++))!=0);
 
-    out = (negative&&(zstrings_internal::is_signed<NUMTYPE>::value))?-n10:n10;
+    out = static_cast<NUMTYPE_IN>( (negative&&(zstrings_internal::is_signed<NUMTYPE_IN>::value))?-n10:n10 );
     return true;
 }
-template <typename TCHARACTER, typename NUMTYPE> inline NUMTYPE CHARz_to_int_10(const TCHARACTER * const s, NUMTYPE def, ZSTRINGS_SIGNED slen = -1)
+
+template <typename TCHARACTER, typename NUMTYPE_IN> inline NUMTYPE_IN CHARz_to_int_10(const TCHARACTER * const s, NUMTYPE_IN def, ZSTRINGS_SIGNED slen = -1)
 {
+    typedef zstrings_internal::as_native<NUMTYPE_IN>::type NUMTYPE;
+
 	NUMTYPE n10 = 0;
 	TCHARACTER    c;
 	bool negative = false;
 
 	if (slen < 0) slen = zstrings_internal::maximum<ZSTRINGS_SIGNED>::value;
 
-	ZSTRINGS_SIGNED i = 0;
+    zstrings_internal::zint i = 0;
 
 	if ((c = *s)==0 || slen == 0) return def;
-	if (zstrings_internal::is_signed<NUMTYPE>::value && c=='-')
+	if (zstrings_internal::is_signed<NUMTYPE_IN>::value && c=='-')
 	{
 		negative = true;
 		c = *(s + (++i));
@@ -627,10 +648,10 @@ template <typename TCHARACTER, typename NUMTYPE> inline NUMTYPE CHARz_to_int_10(
 
 	for(;;)
 	{
-		unsigned m = c - 48;
+		size_t m = c - 48;
 		if (m>=10 || i > slen)
 		{
-			return (i == 1 || (negative && i==2)) ? def : ((zstrings_internal::is_signed<NUMTYPE>::value&&negative) ? -n10 : n10);
+			return static_cast<NUMTYPE_IN>((i == 1 || (negative && i==2)) ? def : ((zstrings_internal::is_signed<NUMTYPE_IN>::value&&negative) ? -n10 : n10));
 		}
 		n10 = (n10<<3) + (n10<<1) + m;
 		c = *(s + (i++));

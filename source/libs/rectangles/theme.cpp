@@ -67,7 +67,7 @@ void theme_rect_s::load_params(abp_c * block, const colors_map_s &colsmap)
 {
 #ifdef _DEBUG
     if (block->get_int(CONSTASTR("break")))
-        __debugbreak();
+        DEBUG_BREAK();
 #endif // _DEBUG
 
     static const char *sins[SI_count] = { "lt", "rt", "lb", "rb", "l", "t", "r", "b", "c", "base",

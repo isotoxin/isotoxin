@@ -98,6 +98,7 @@ struct wnd_callbacks_s
 
     virtual void evt_destroy() {}
     virtual bool evt_close() { return false; /* return true if need to postpone close */ }
+    virtual void evt_on_exit() {}
 };
 
 class wnd_c : public safe_object

@@ -51,7 +51,7 @@ protected:
     {
         for (;;ts::sys_sleep(1))
         {
-            spinlock::auto_simple_lock l(sync);
+            SIMPLELOCK(sync);
             stoping = true;
             if (updating >= 0) continue;
             if (reading >= 0) continue;
@@ -68,7 +68,7 @@ public:
     bool is_busy() const {return busy;}
     bool updated()
     {
-        spinlock::auto_simple_lock l(sync);
+        SIMPLELOCK(sync);
         return last_updated >= 0;
     }
 
@@ -80,14 +80,14 @@ public:
     void set_desired_size( const ts::ivec2 &sz )
     {
 		ASSERT(sz >> 0);
-        spinlock::auto_simple_lock l(sync);
+        SIMPLELOCK(sync);
         desired_size = sz;
     }
     ts::ivec2 fit_to_size( const ts::ivec2 &sz );
 
     ts::drawable_bitmap_c * lockbuf( ts::ivec2 *desired_size_ )
     {
-        spinlock::auto_simple_lock l(sync);
+        SIMPLELOCK(sync);
         if (stoping) return nullptr;
         if (desired_size_)
         {
@@ -106,7 +106,7 @@ public:
 
 #ifdef _DEBUG
             if (last_read < 0)
-                __debugbreak();
+                DEBUG_BREAK();
 #endif // _DEBUG
             updating = last_read;
             last_read = -1;
@@ -117,7 +117,7 @@ public:
         {
 #ifdef _DEBUG
             if (reading >= 0)
-                __debugbreak();
+                DEBUG_BREAK();
 #endif // _DEBUG
 
             if (last_updated >= 0)
@@ -136,7 +136,7 @@ public:
     }
     void unlock(ts::drawable_bitmap_c *b)
     {
-        spinlock::auto_simple_lock l(sync);
+        SIMPLELOCK(sync);
         for (int i = 0; i < 3; ++i)
         {
             if (b == bufs+i)
@@ -146,11 +146,11 @@ public:
                 else if (reading == i)
                     reading = -1, last_read = i;
                 else
-                    __debugbreak();
+                    DEBUG_BREAK();
                 return;
             }
         }
-        __debugbreak();
+        DEBUG_BREAK();
     }
 
 };
@@ -318,7 +318,7 @@ public:
 
     void release( vsb_display_c * p )
     {
-        spinlock::auto_simple_lock l(sync);
+        SIMPLELOCK(sync);
 
         for ( ts::aint i = 0, c = ptrs.size(); i<c; ++i )
         {
@@ -341,7 +341,7 @@ public:
 
     void reset()
     {
-        spinlock::auto_simple_lock l(sync);
+        SIMPLELOCK(sync);
         for ( vsb_display_c *d : ptrs )
             d->release();
         ptrs.clear();

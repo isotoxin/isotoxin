@@ -2,6 +2,8 @@
 
 //-V:cvt:807
 
+#define DEINIT_TIME 120000
+
 mediasystem_c::~mediasystem_c()
 {
     deinit();
@@ -13,83 +15,145 @@ mediasystem_c::~mediasystem_c()
     }
 }
 
-void mediasystem_c::init()
+void mediasystem_c::init( play_event_s &&ev )
 {
-    init( cfg().device_talk(), cfg().device_signal() );
-    deinit_time = ts::Time::current() + 60000;
+    init( cfg().device_talk(), cfg().device_signal(), std::move(ev) );
+    deinit_time = ts::Time::current() + DEINIT_TIME;
 }
 
-void mediasystem_c::init(const ts::str_c &talkdevice, const ts::str_c &signaldevice)
+void mediasystem_c::shutdown()
 {
+    ASSERT( initializing == nullptr );
+
     SIMPLELOCK( rawplock );
 
     for (int i = 0; i < MAX_RAW_PLAYERS; ++i)
-        if (vp(i).get_player())
-            vp(i).~voice_player();
+        if (vp( i ).get_player())
+            vp( i ).~voice_player();
+    memset( rawps, 0, sizeof( rawps ) );
 
-    for( UNIQUE_PTR(loop_play) &ptr : loops ) ptr.reset();
-
-    talks.Shutdown();
-    talks.params.device = device_from_string(talkdevice);
-    if (!talks.Initialize() && !talkdevice.is_empty())
-    {
-        talks.params.device = s3::DEFAULT_DEVICE;
-        talks.Initialize();
-    }
-
-    for (int i = 0; i < MAX_RAW_PLAYERS; ++i)
-        TSPLACENEW( &vp(i), &talks );
-
-    if (signaldevice.is_empty())
-    {
-        if (notifs)
-        {
-            notifs->Shutdown();
-            TSDEL(notifs);
-            notifs = nullptr;
-        }
-    }
-    else
-    {
-        if (notifs)
-            notifs->Shutdown();
-        else
-            notifs = TSNEW( s3::Player );
-
-        notifs->params.device = device_from_string(signaldevice);
-
-        if (!notifs->Initialize())
-        {
-            TSDEL(notifs);
-            notifs = nullptr;
-        }
-
-    }
-    initialized = true;
-}
-
-void mediasystem_c::deinit()
-{
-    if (!initialized) return;
-
-    SIMPLELOCK(rawplock);
-
-    for (int i = 0; i < MAX_RAW_PLAYERS; ++i)
-        if (vp(i).get_player())
-            vp(i).~voice_player();
-    memset(rawps, 0, sizeof(rawps));
-
-    for (UNIQUE_PTR(loop_play) &ptr : loops) 
-        ptr.reset();
+    for (UNIQUE_PTR( loop_play ) &ptr : loops) ptr.reset();
 
     talks.Shutdown();
     if (notifs)
     {
         notifs->Shutdown();
-        TSDEL(notifs);
+        TSDEL( notifs );
         notifs = nullptr;
     }
     initialized = false;
+}
+
+namespace
+{
+    struct sound_init_task_s : public ts::task_c
+    {
+        ts::str_c talkdevice;
+        ts::str_c signaldevice;
+
+        s3::Player talks;
+        s3::Player *notifs = nullptr;
+
+        play_event_s ev;
+        mediasystem_c *msys;
+
+        sound_init_task_s( mediasystem_c *msys, const ts::str_c &talkdevice, const ts::str_c &signaldevice, play_event_s && ev_ ):msys( msys ), talkdevice( talkdevice ), signaldevice( signaldevice )
+        {
+            ev = std::move( ev_ );
+        }
+
+        /*virtual*/ int iterate() override
+        {
+
+            talks.params.device = device_from_string( talkdevice );
+            if (!talks.Initialize() && !talkdevice.is_empty())
+            {
+                talks.params.device = s3::DEFAULT_DEVICE;
+                talks.Initialize();
+            }
+
+            if (!signaldevice.is_empty())
+            {
+                notifs = TSNEW( s3::Player );
+                notifs->params.device = device_from_string( signaldevice );
+
+                if (!notifs->Initialize())
+                {
+                    TSDEL( notifs );
+                    notifs = nullptr;
+                }
+            }
+
+            return R_DONE;
+        }
+        /*virtual*/ void done( bool canceled ) override
+        {
+            if (msys && msys->get_initializing_object() == this)
+            {
+                notifs = msys->set_players( std::move(talks), notifs );
+
+                talks.Shutdown();
+                if (notifs)
+                    notifs->Shutdown();
+
+                if (ev.snd != snd_count)
+                    msys->play_looped( ev.snd, ev.vol, ev.signal_device );
+                else if (ev.buf)
+                    msys->play( ev.buf, ev.vol, ev.signal_device );
+
+            } else
+            {
+                talks.Shutdown();
+                if (notifs)
+                    notifs->Shutdown();
+            }
+       
+            __super::done( canceled );
+        }
+
+    };
+}
+
+s3::Player *mediasystem_c::set_players( s3::Player &&talks_, s3::Player *notifs_ )
+{
+    s3::Player * on = notifs;
+    talks = std::move(talks_);
+    notifs = notifs_;
+
+    for (int i = 0; i < MAX_RAW_PLAYERS; ++i)
+        TSPLACENEW( &vp( i ), &talks );
+
+    initialized = true;
+    initializing = nullptr;
+
+    return on;
+}
+
+void mediasystem_c::init(const ts::str_c &talkdevice, const ts::str_c &signaldevice, play_event_s &&ev)
+{
+    if (initializing)
+        return;
+
+    shutdown();
+    
+    sound_init_task_s *task = TSNEW( sound_init_task_s, this, talkdevice, signaldevice, std::move(ev) );
+    g_app->add_task( task );
+    initializing = task;
+}
+
+void mediasystem_c::deinit()
+{
+    if (!initialized)
+    {
+        if (initializing)
+        {
+            ((sound_init_task_s *)initializing)->msys = nullptr;
+            initializing = nullptr;
+        }
+        return;
+    }
+
+    shutdown();
 }
 
 void mediasystem_c::may_be_deinit()
@@ -132,9 +196,13 @@ void mediasystem_c::test_signal(float vol)
 void mediasystem_c::play(const ts::blob_c &buf, float volume, bool signal_device)
 {
     if (!initialized)
-        init();
+    {
+        if (!initializing)
+            init( play_event_s( buf, volume, signal_device ) );
+        return;
+    }
 
-    deinit_time = ts::Time::current() + 60000;
+    deinit_time = ts::Time::current() + DEINIT_TIME;
 
     struct once_play : s3::MSource
     {
@@ -191,9 +259,13 @@ bool mediasystem_c::stop_looped(sound_e snd)
 void mediasystem_c::play_looped(sound_e snd, float volume, bool signal_device)
 {
     if (!initialized)
-        init();
+    {
+        if (!initializing)
+            init( play_event_s(snd, volume, signal_device) );
+        return;
+    }
 
-    deinit_time = ts::Time::current() + 60000;
+    deinit_time = ts::Time::current() + DEINIT_TIME;
 
     s3::Player *player = signal_device && notifs ? notifs : &talks;
     if (loops[snd] && loops[snd]->get_player() != player)
@@ -221,12 +293,6 @@ void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int
         if (isPlaying()) stop();
         w().clear();
         format = fmt;
-    } else
-    {
-        ts::aint clampbytes = format.avgBytesPerMSecs( clampms );
-        ts::aint a = w().available();
-        if ( a > clampbytes )
-            w().remove_data(a-clampms);
     }
 
     bool filter = false;
@@ -275,6 +341,12 @@ void mediasystem_c::voice_player::add_data(const s3::Format &fmt, float vol, int
         w().add_data(d, dsz);
 
     }
+
+    ts::aint clampbytes = format.avgBytesPerMSecs( clampms );
+    ts::aint a = w().available();
+    if (a > clampbytes)
+        w().remove_data( a - clampms );
+
     w.unlock();
 
     if (!isPlaying())
@@ -331,8 +403,8 @@ ts::aint mediasystem_c::voice_player::protected_data_s::read_data(const s3::Form
         if (exist_data_size < size && begining)
         {
             // silence first, then data, if exist
-            ts::aint silence_size = size - exist_data_size;
-            memset(dest, fmt.bitsPerSample == 8 ? 0x80 : 0, silence_size); // fill silence before data
+            ts::aint silence_size = 0; // size - exist_data_size;
+            //memset(dest, fmt.bitsPerSample == 8 ? 0x80 : 0, silence_size); // fill silence before data
             if (exist_data_size)
                 return silence_size + read_data(fmt, dest + silence_size, exist_data_size);
             return silence_size;
@@ -404,9 +476,13 @@ void mediasystem_c::voice_volume( const uint64 &key, float vol )
 bool mediasystem_c::play_voice( const uint64 &key, const s3::Format &fmt, const void *data, ts::aint size, float vol, int dsp, int clampms )
 {
     if (!initialized)
-        init();
+    {
+        if (!initializing)
+            init( play_event_s() );
+        return false;
+    }
 
-    deinit_time = ts::Time::current() + 60000;
+    deinit_time = ts::Time::current() + DEINIT_TIME;
 
     SIMPLELOCK( rawplock );
 
@@ -991,3 +1067,32 @@ void avmuxer_c::add_audio( uint64 timestamp, const s3::Format &fmt, const void *
     SIMPLELOCK( sync );
 
 }
+
+float find_max_sample( const s3::Format&fmt, const void *idata, ts::aint isize )
+{
+    if (fmt.bitsPerSample == 8)
+    {
+        int m = 0;
+        for (int i = 0; i < isize; ++i)
+        {
+            ts::uint8 sample8 = ((ts::uint8 *)idata)[i];
+            int t = ts::tabs( (int)sample8 - 128 );
+            if (t > m) m = t;
+        }
+        return (float)m * (float)(1.0 / 128.0);
+    }
+    ASSERT( fmt.bitsPerSample == 16 );
+    ts::aint samples = isize / 2;
+
+    int m = 0;
+    for (int i = 0; i < samples; ++i)
+    {
+        int samplex = ((ts::int16 *)idata)[i];
+        int t = ts::tabs( samplex );
+        if (t > m) m = t;
+    }
+
+    return (float)m * (float)(1.0 / 32767.0);
+}
+
+

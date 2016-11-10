@@ -1,5 +1,10 @@
 #include "stdafx.h"
 
+#pragma warning (push)
+#pragma warning (disable:4324)
+#include "libsodium/src/libsodium/include/sodium.h"
+#pragma warning (pop)
+
 using namespace ts;
 
 static void savelines(const asptr&fn, const wstrings_c & lines)
@@ -40,11 +45,12 @@ int proc_bsdl(const wstrings_c & pars)
 
             Print(FOREGROUND_GREEN, "processing %s...\n", to_str(fn_get_name(f)).cstr());
 
-            
-            md5_c md5;
-            md5.update( aff.data(), aff.size() );
-            md5.update( dic.data(), dic.size() );
-            md5.done();
+            uint8 hash[crypto_generichash_BYTES_MIN];
+            crypto_generichash_state st;
+            crypto_generichash_init( &st, nullptr, 0, sizeof( hash ) );
+            crypto_generichash_update( &st, aff.data(), aff.size() );
+            crypto_generichash_update( &st, dic.data(), dic.size() );
+            crypto_generichash_final( &st, hash, sizeof(hash) );
 
             ts::wstr_c fnold = fn_get_name( f );
             ts::wstr_c fn( fnold );
@@ -55,7 +61,7 @@ int proc_bsdl(const wstrings_c & pars)
             if ( !fn.equals( fnold ) )
                 rename_file( fnold + CONSTWSTR(".zip"), fn + CONSTWSTR( ".zip" ) );
 
-            lst.add( fn.append(CONSTWSTR("=")).append_as_hex(md5.result(), 16) );
+            lst.add( fn.append(CONSTWSTR("=")).append_as_hex( hash, sizeof( hash ) ) );
         }
     }
 

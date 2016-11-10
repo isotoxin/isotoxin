@@ -16,7 +16,6 @@
       <Filter>spinlock</Filter>
     </ClInclude>
     <ClInclude Include="common_types.h" />
-    <ClInclude Include="md5.h" />
     <ClInclude Include="..\..\libs-external\boost\boost_some.h" />
     <ClInclude Include="excpn.h">
       <Filter>crashhandler</Filter>
@@ -29,7 +28,6 @@
     <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="strings.cpp" />
     <ClCompile Include="plgcommon.cpp" />
-    <ClCompile Include="md5.cpp" />
     <ClCompile Include="excpn.cpp">
       <Filter>crashhandler</Filter>
     </ClCompile>

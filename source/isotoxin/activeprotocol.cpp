@@ -6,11 +6,6 @@
 #define ACTUAL_USER_NAME( d ) ( (d).data.user_name.is_empty() ? prf().username() : (d).data.user_name )
 #define ACTUAL_STATUS_MSG( d ) ( (d).data.user_statusmsg.is_empty() ? prf().userstatus() : (d).data.user_statusmsg )
 
-void crypto_zero( ts::uint8 *buf, int bufsize );
-void get_unique_machine_id( ts::uint8 *buf, int bufsize, const char *salt, bool use_profile_uniqid );
-ts::str_c encode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& s );
-bool decode_string_base64( ts::str_c& rslt, ts::uint8 *key /* 32 bytes */, const ts::asptr& s );
-
 void configurable_s::set_password( const ts::asptr&p )
 {
     ts::uint8 encpass[ 32 ];
@@ -337,17 +332,16 @@ bool active_protocol_c::cmdhandler(ipcr r)
             m->state = (contact_state_e)r.get<int>();
             m->ostate = (contact_online_state_e)r.get<int>();
             m->gender = (contact_gender_e)r.get<int>();
+            m->grants = r.get<int>();
 
-            /*int grants =*/ r.get<int>();
-
-            if (0 != (m->mask & CDM_MEMBERS)) // groupchat members
+            if (0 != (m->mask & CDM_MEMBERS)) // conference members
             {
-                ASSERT( m->key.is_group() );
+                ASSERT( m->key.is_conference() );
 
                 int cnt = r.get<int>();
-                m->members.reserve(cnt);
+                m->members.set_count(cnt);
                 for(int i=0;i<cnt;++i)
-                    m->members.add( r.get<int>() );
+                    m->members.set( i, r.get<int>() );
             }
 
             if (0 != (m->mask & CDM_DETAILS))
@@ -384,12 +378,12 @@ bool active_protocol_c::cmdhandler(ipcr r)
             int sz;
             if (const void *d = r.get_data(sz))
             {
-                ts::md5_c md5;
-                md5.update(d,sz);
-                md5.done();
 
-                const void *md5r = r.read_data(16);
-                if (md5r && 0 == memcmp(md5r, md5.result(), 16))
+                ts::uint8 hash[BLAKE2B_HASH_SIZE_SMALL];
+                BLAKE2B( hash, d, sz );
+
+                const void *hashr = r.read_data( BLAKE2B_HASH_SIZE_SMALL );
+                if (hashr && 0 == memcmp( hashr, hash, sizeof( hash ) ))
                 {
                     auto w = syncdata.lock_write();
                     w().data.config.clear();
@@ -454,7 +448,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
             amsmonotonic = msmonotonic;
 #endif // _DEBUG
 
-            if (av_contact_s *avc = g_app->avcontacts().find_inprogress( contact_key_s(gid, cid, id) ))
+            if (av_contact_s *avc = g_app->avcontacts().find_inprogress( contact_key_s() | contact_key_s(gid, cid, id) ))
                 avc->add_audio( msmonotonic, fmt, data, dsz );
         }
         break;
@@ -466,7 +460,7 @@ bool active_protocol_c::cmdhandler(ipcr r)
             ts::ivec2 sosz;
             sosz.x = r.get<int>();
             sosz.y = r.get<int>();
-            gmsg<ISOGM_PEER_STREAM_OPTIONS> *m = TSNEW(gmsg<ISOGM_PEER_STREAM_OPTIONS>, contact_key_s(gid, cid, id), so, sosz);
+            gmsg<ISOGM_PEER_STREAM_OPTIONS> *m = TSNEW(gmsg<ISOGM_PEER_STREAM_OPTIONS>, (contact_key_s() | contact_key_s(gid, cid, id)), so, sosz);
             m->send_to_main_thread();
 
         }
@@ -500,6 +494,8 @@ bool active_protocol_c::cmdhandler(ipcr r)
             m->i_utag = r.get<uint64>();
             m->filesize = r.get<uint64>();
             m->filename.set_as_utf8(r.getastr());
+
+            fix_path( m->filename, FNO_MAKECORRECTNAME );
 
             m->send_to_main_thread();
 
@@ -631,7 +627,7 @@ void active_protocol_c::unlock_video_frame( incoming_video_frame_s *f )
         void *dh = ((char *)f) - sizeof(data_header_s);
         ipcp->junct.unlock_buffer(dh);
 
-        spinlock::auto_simple_lock l(lbsync);
+        SIMPLELOCK(lbsync);
         locked_bufs.find_remove_fast((data_header_s *)dh);
     }
 }
@@ -678,7 +674,9 @@ void active_protocol_c::worker()
         w().flags.set(F_WORKER_STOPED);
         w.unlock();
 
-        spinlock::auto_simple_lock l(lbsync);
+        TSNEW( gmsg<ISOGM_PROTO_CRASHED>, id )->send_to_main_thread();
+
+        SIMPLELOCK(lbsync);
         for(data_header_s *dh : locked_bufs)
             ipcs.junct.unlock_buffer(dh);
 
@@ -845,12 +843,16 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // send messag
             break;
         }
 
-        if (typingsendcontact == target->getkey().gidcid())
-            typingsendcontact = 0;
-
+        typingsendcontact = 0;
         ipcp->send( ipcw(AQ_MESSAGE ) << target->getkey().gidcid() << msg.post.utag << ((online && !msg.resend) ? 0 : msg.post.cr_time) << msg.post.message_utf8->cstr() );
     }
     return 0;
+}
+
+ts::str_c active_protocol_c::get_actual_username() const
+{
+    auto r = syncdata.lock_read();
+    return ACTUAL_USER_NAME( r() );
 }
 
 ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
@@ -1165,7 +1167,7 @@ ts::uint32 active_protocol_c::gm_handler(gmsg<ISOGM_CMD_RESULT>& r)
         {
             if ( r.rslt == CR_ENCRYPTED )
             {
-                dialog_msgbox_c::mb_error( TTT("Encrypted protocol data not supported",446) ).summon();
+                dialog_msgbox_c::mb_error( TTT("Encrypted protocol data not supported",446) ).summon(true);
             }
         }
     }
@@ -1204,10 +1206,7 @@ void active_protocol_c::stop_and_die(bool wait_worker_end)
     if (ipcp) ipcp->something_happens();
     w.unlock();
 
-    g_app->avcontacts().iterate([&](av_contact_s &avc) {
-        if (avc.ap == this)
-            avc.ap = nullptr;
-    });
+    g_app->avcontacts().del( this );
         
     if (wait_worker_end)
     {
@@ -1223,9 +1222,12 @@ void active_protocol_c::stop_and_die(bool wait_worker_end)
         DEFERRED_UNIQUE_CALL( 0, DELEGATE(this,check_die), nullptr );
 }
 
-void active_protocol_c::del_contact(int cid)
+void active_protocol_c::del_contact( const contact_key_s &ck )
 {
-    ipcp->send( ipcw(AQ_DEL_CONTACT) << cid );
+    ASSERT( ck.protoid == (unsigned)id );
+    ASSERT( ck.temp_type != TCT_UNKNOWN_MEMBER );
+
+    ipcp->send( ipcw(AQ_DEL_CONTACT) << ck.gidcid() );
 }
 
 void active_protocol_c::resend_request( int cid, const ts::str_c &msg_utf8 )
@@ -1243,19 +1245,35 @@ void active_protocol_c::add_contact( const ts::str_c& pub_id )
     ipcp->send( ipcw( AQ_ADD_CONTACT ) << (char)2 << pub_id );
 }
 
-void active_protocol_c::add_group_chat( const ts::str_c &groupname, bool persistent )
+void active_protocol_c::create_conference( const ts::str_c &conferencename, const ts::str_c &o )
 {
-    ipcp->send( ipcw(AQ_ADD_GROUPCHAT) << groupname << (persistent ? 1 : 0) );
+    ipcp->send( ipcw(AQ_CREATE_CONFERENCE) << conferencename << o );
 }
 
-void active_protocol_c::rename_group_chat(int gid, const ts::str_c &groupname)
+void active_protocol_c::del_conference( const ts::str_c &confa_id )
 {
-    ipcp->send(ipcw(AQ_REN_GROUPCHAT) << gid << groupname);
+    ipcp->send( ipcw( AQ_DEL_CONFERENCE ) << confa_id );
 }
 
-void active_protocol_c::join_group_chat(int gid, int cid)
+void active_protocol_c::enter_conference( const ts::str_c &confa_id )
 {
-    ipcp->send(ipcw(AQ_JOIN_GROUPCHAT) << gid << cid);
+    ipcp->send( ipcw( AQ_ENTER_CONFERENCE ) << confa_id );
+}
+
+void active_protocol_c::leave_conference( int gid, bool keep_leave )
+{
+    ipcp->send( ipcw( AQ_LEAVE_CONFERENCE ) << gid << (keep_leave ? 1 : 0) );
+}
+
+
+void active_protocol_c::rename_conference(int gid, const ts::str_c &conferencename)
+{
+    ipcp->send(ipcw(AQ_REN_CONFERENCE) << gid << conferencename);
+}
+
+void active_protocol_c::join_conference(int gid, int cid)
+{
+    ipcp->send(ipcw(AQ_JOIN_CONFERENCE) << gid << cid);
 }
 
 
@@ -1458,21 +1476,25 @@ void active_protocol_c::del_message(uint64 utag)
     ipcp->send(ipcw(AQ_DEL_MESSAGE) << utag);
 }
 
-void active_protocol_c::typing(int cid)
+void active_protocol_c::typing( const contact_key_s &ck )
 {
-    g_app->F_TYPING = true;
+    ASSERT( ck.temp_type != TCT_UNKNOWN_MEMBER );
 
-    if ( !prf().get_options().is(MSGOP_SEND_TYPING) )
-        return;
-
-    if (cid)
+    if (!prf().get_options().is( MSGOP_SEND_TYPING ) || ck.is_empty())
     {
-        if (!typingsendcontact)
-            ipcp->send(ipcw(AQ_TYPING) << cid);
-        typingsendcontact = cid;
-        typingtime = ts::Time::current() + 5000;
-    } else
+        g_app->F_TYPING = false;
         typingsendcontact = 0;
+        return;
+    }
+
+    ASSERT( ck.protoid == (unsigned)id );
+
+    g_app->F_TYPING = true;
+    int gidcid = ck.gidcid();
+    if (typingsendcontact != gidcid)
+        ipcp->send(ipcw(AQ_TYPING) << gidcid);
+    typingsendcontact = gidcid;
+    typingtime = ts::Time::current() + 5000;
 }
 
 void active_protocol_c::export_data()

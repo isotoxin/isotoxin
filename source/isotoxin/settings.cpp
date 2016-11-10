@@ -145,9 +145,8 @@ namespace
 
         bool failed = false;
 
-        download_dictionary_s(dialog_dictionaries_c *dlg, const ts::str_c &utf8name, int id) :dlg(dlg), url( CONSTASTR( HOME_SITE "/spelling/"), utf8name ), id(id)
+        download_dictionary_s(dialog_dictionaries_c *dlg, const ts::str_c &utf8name, int id) :dlg(dlg), url( CONSTASTR( HOME_SITE "/spelling/"), utf8name ), id(id), fname( from_utf8( utf8name ), CONSTWSTR( ".zip" ) )
         {
-            fname = from_utf8(utf8name); fname.append(CONSTWSTR(".zip"));
             proxy_type = cfg().proxy();
             proxy_addr = cfg().proxy_addr();
             url.append(CONSTASTR(".zip"));
@@ -205,7 +204,7 @@ namespace
             dict_rec_s() {};
             ts::wstr_c name;
             ts::wstr_c path;
-            ts::uint8 md5[16];
+            ts::uint8 hash[BLAKE2B_HASH_SIZE_SMALL];
         };
 
         ts::array_inplace_t< dict_rec_s, 16 > dicts;
@@ -229,10 +228,7 @@ namespace
             if (zip.size())
                 ts::zip_open( zip.data(), zip.size(), DELEGATE(this, extract_zip) );
 
-            ts::md5_c md5;
-            md5.update(aff.data(), aff.size());
-            md5.update(dic.data(), dic.size());
-            md5.done( dicts.last().md5 );
+            BLAKE2B( dicts.last().hash, aff.data(), aff.size(), dic.data(), dic.size() );
 
             return fns.size() ? R_RESULT_EXCLUSIVE : R_DONE;
         }
@@ -289,7 +285,7 @@ namespace
     {
         dialog_settings_c *setts;
         ts::wstrings_c dar;
-        MAKE_ROOT(dialog_settings_c *setts, const ts::wstrings_c &dar) : _PROOT(dialog_dictionaries_c)(), setts(setts), dar(dar) { init( RS_NORMAL ); }
+        MAKE_ROOT(bool mainparent, dialog_settings_c *setts, const ts::wstrings_c &dar) : _PROOT(dialog_dictionaries_c)(), setts(setts), dar(dar) { init( rect_sys_e( RS_NORMAL | (mainparent ? RS_MAINPARENT : 0) ) ); }
         ~MAKE_ROOT() {}
     };
 
@@ -345,8 +341,8 @@ namespace
             int downprocent = 0;
             ts::wstr_c name;
             ts::wstr_c path;
-            ts::uint8 md5_local[ 16 ] = {};
-            ts::uint8 md5_remote[ 16 ] = {};
+            ts::uint8 hash_local[BLAKE2B_HASH_SIZE_SMALL] = {};
+            ts::uint8 hash_remote[BLAKE2B_HASH_SIZE_SMALL] = {};
 
             bool local = false;
             bool remote = false;
@@ -358,7 +354,7 @@ namespace
             }
             bool is_ood() const
             {
-                return local && remote && !ts::blk_cmp(md5_local, md5_remote, 16);
+                return local && remote && !ts::blk_cmp( hash_local, hash_remote, BLAKE2B_HASH_SIZE_SMALL );
             }
             enum st
             {
@@ -737,7 +733,7 @@ namespace
         }
 
         uint idpool = 1;
-        void set_item(const ts::wstr_c &name, const ts::wstr_c &path, const ts::uint8 *md5, bool remote, bool act )
+        void set_item(const ts::wstr_c &name, const ts::wstr_c &path, const ts::uint8 *hash, bool remote, bool act )
         {
             bool upd = false;
 
@@ -745,11 +741,11 @@ namespace
             {
                 if (remote)
                 {
-                    memcpy(li.md5_remote, md5, 16);
+                    memcpy(li.hash_remote, hash, BLAKE2B_HASH_SIZE_SMALL );
                     li.remote = true;
                 } else
                 {
-                    memcpy(li.md5_local, md5, 16);
+                    memcpy(li.hash_local, hash, BLAKE2B_HASH_SIZE_SMALL );
                     li.local = true;
                     li.active = act;
                     li.path = path;
@@ -793,13 +789,13 @@ namespace
 
             if (!failed)
             {
-                ts::uint8 md5[16];
+                ts::uint8 hash[BLAKE2B_HASH_SIZE_SMALL];
                 for (const ts::str_c &ln : lst)
                 {
                     ts::token<char> p(ln, '=');
                     ts::wstr_c n = ts::from_utf8(*p);
-                    ++p; p->hex2buf<16>(md5);
-                    set_item(n, ts::wstr_c(), md5, true, false);
+                    ++p; p->hex2buf<16>( hash );
+                    set_item(n, ts::wstr_c(), hash, true, false);
                 }
             }
 
@@ -832,7 +828,7 @@ namespace
         if (!canceled && dlg)
         {
             for(const dict_rec_s& dr : dicts)
-                dlg->set_item(dr.name, dr.path, dr.md5, false, dar.find(dr.name.as_sptr()) < 0 );
+                dlg->set_item(dr.name, dr.path, dr.hash, false, dar.find(dr.name) < 0 );
             dlg->resort();
         }
         __super::done(canceled);
@@ -854,7 +850,7 @@ namespace
 
 bool choose_dicts_load(RID, GUIPARAM)
 {
-    SUMMON_DIALOG<dialog_dictionaries_c>(UD_DICTIONARIES, nullptr, ts::wstrings_c(prf().get_disabled_dicts(),'/'));
+    SUMMON_DIALOG<dialog_dictionaries_c>(UD_DICTIONARIES, true, nullptr, ts::wstrings_c(prf().get_disabled_dicts(),'/'));
     return true;
 }
 
@@ -912,9 +908,7 @@ dialog_settings_c::dialog_settings_c(initial_rect_data_s &data) :gui_isodialog_c
     {
         tpresets.clear();
 
-        ts::wstr_c path(CONSTWSTR("themes/"), thn);
-        path.append(CONSTWSTR("/*.decl"));
-
+        ts::wstr_c path(CONSTWSTR("themes/"), thn, CONSTWSTR( "/*.decl" ) );
         ts::g_fileop->find(ifns, path, true);
 
         for(;;)
@@ -1073,6 +1067,8 @@ dialog_settings_c::~dialog_settings_c()
         gui->delete_event(DELEGATE(this, password_not_entered));
         gui->delete_event(DELEGATE(this, save_and_close));
         gui->delete_event(DELEGATE(this, addlistsound));
+        gui->delete_event(DELEGATE(this, chat_options));
+        
 
         gui->unregister_kbd_callback( __kbd_chop );
 
@@ -1365,7 +1361,7 @@ bool dialog_settings_c::re_password_entered(const ts::wstr_c &passwd, const ts::
     re_password.append_as_hex(passwhash_re, CC_HASH_SIZE);
     if (!re_password.equals(encrypted_profile_password))
     {
-        dialog_msgbox_c::mb_warning( ts::wstr_c(TTT("You must enter same password, that was entered on checkbox set.",380)).append(CONSTWSTR("<br>")).append(forgot()) ).summon();
+        dialog_msgbox_c::mb_warning( ts::wstr_c(TTT("You must enter same password, that was entered on checkbox set.",380),CONSTWSTR("<br>"),forgot()) ).summon(false);
         return true;
     }
 
@@ -1376,7 +1372,7 @@ bool dialog_settings_c::re_password_entered(const ts::wstr_c &passwd, const ts::
 }
 bool dialog_settings_c::re_password_not_entered(RID, GUIPARAM)
 {
-    dialog_msgbox_c::mb_info( forgot() ).summon();
+    dialog_msgbox_c::mb_info( forgot() ).summon(false);
     return true;
 }
 
@@ -1397,7 +1393,7 @@ bool dialog_settings_c::password_entered_to_decrypt(const ts::wstr_c &passwd, co
         mod();
     } else
     {
-        dialog_msgbox_c::mb_error(TTT("Incorrect password! You have to enter correct current password to remove encryption. Sorry.", 8)).summon();
+        dialog_msgbox_c::mb_error(TTT("Incorrect password! You have to enter correct current password to remove encryption. Sorry.", 8)).summon( false );
         password_not_entered_to_decrypt(RID(), nullptr);
     }
 
@@ -1438,7 +1434,7 @@ bool dialog_settings_c::encrypt_handler( RID, GUIPARAM pp )
 
         if (was_encrypted_profile)
         {
-            RID epr = SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, dialog_entertext_c::params(
+            RID epr = SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, false, dialog_entertext_c::params(
                 UD_ENTERPASSWORD,
                 gui_isodialog_c::title(title_enter_password),
                 TTT("Please enter current password to remove encryption",31),
@@ -1464,7 +1460,7 @@ bool dialog_settings_c::encrypt_handler( RID, GUIPARAM pp )
     } else if (!prevep)
     {
         TSDEL( epdlg.get() );
-        RID epr = SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, dialog_entertext_c::params(
+        RID epr = SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, false, dialog_entertext_c::params(
             UD_ENTERPASSWORD,
             gui_isodialog_c::title(title_enter_password),
             TTT("ATTENTION! Your profile is about to be encrypted with password. The only one way to open password-encrypted profile - enter correct password. If you forget password, you will lose your profile!",383),
@@ -1580,7 +1576,7 @@ ts::wstr_c dialog_settings_c::getactivedict()
         for( ts::wstr_c &n : alldicts)
         {
             n.trunc_length(4);
-            if (disabled_spellchk.find(ts::fn_get_name(n).as_sptr()) < 0)
+            if (disabled_spellchk.find(ts::fn_get_name(n)) < 0)
                 ++a;
         }
 
@@ -1607,7 +1603,7 @@ bool dialog_settings_c::chat_options(RID, GUIPARAM p)
 
 bool dialog_settings_c::seldict(RID, GUIPARAM)
 {
-    SUMMON_DIALOG<dialog_dictionaries_c>(UD_DICTIONARIES, this, disabled_spellchk);
+    SUMMON_DIALOG<dialog_dictionaries_c>(UD_DICTIONARIES, false, this, disabled_spellchk);
     return true;
 }
 
@@ -1739,8 +1735,8 @@ void dialog_settings_c::mod()
 
         bgroups[BGROUP_COMMON3].add(OPTOPT_POWER_USER);
 
-        bgroups[BGROUP_GCHAT].add(GCHOPT_MUTE_MIC_ON_INVITE);
-        bgroups[BGROUP_GCHAT].add(GCHOPT_MUTE_SPEAKER_ON_INVITE);
+        bgroups[BGROUP_CONFERENCE].add(COPT_MUTE_MIC_ON_INVITE);
+        bgroups[BGROUP_CONFERENCE].add(COPT_MUTE_SPEAKER_ON_INVITE);
 
         bgroups[BGROUP_CHAT].add(MSGOP_SPELL_CHECK);
 
@@ -1866,7 +1862,7 @@ void dialog_settings_c::mod()
             .add( TTT("Contact list",476), 0, TABSELMI( MASK_PROFILE_CLIST ) )
             .add(TTT("Notifications",401), 0, TABSELMI(MASK_PROFILE_NOTIFICATIONS))
             .add(TTT("Chat",109), 0, TABSELMI(MASK_PROFILE_CHAT) )
-            .add(TTT("Group chat",305), 0, TABSELMI(MASK_PROFILE_GCHAT) )
+            .add(TTT("Conference",305), 0, TABSELMI(MASK_PROFILE_CONFERENCE) )
             .add(TTT("Messages & History",327), 0, TABSELMI(MASK_PROFILE_MSGSNHIST) )
             .add(TTT("File receive",236), 0, TABSELMI(MASK_PROFILE_FILES) )
             .add(loc_text(loc_networks), 0, TABSELMI(MASK_PROFILE_NETWORKS) );
@@ -2121,12 +2117,12 @@ void dialog_settings_c::mod()
         dm().vspace();
         font_size_slider(msg_edit);
 
-        dm << MASK_PROFILE_GCHAT; //____________________________________________________________________________________________________//
-        dm().page_caption(TTT("Group chat settings",306));
+        dm << MASK_PROFILE_CONFERENCE; //____________________________________________________________________________________________________//
+        dm().page_caption(TTT("Conference settings",306));
 
-        dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_GCHAT, handler), bgroups[BGROUP_GCHAT].current).setmenu(
-            menu_c().add(TTT("Mute microphone on audio group chat invite",307), 0, MENUHANDLER(), CONSTASTR("1"))
-                    .add(TTT("Mute speakers on audio group chat invite",308), 0, MENUHANDLER(), CONSTASTR("2"))
+        dm().checkb(ts::wstr_c(), DELEGATE(bgroups+BGROUP_CONFERENCE, handler), bgroups[BGROUP_CONFERENCE].current).setmenu(
+            menu_c().add(TTT("Mute microphone on audio conference invite",307), 0, MENUHANDLER(), CONSTASTR("1"))
+                    .add(TTT("Mute speakers on audio conference invite",308), 0, MENUHANDLER(), CONSTASTR("2"))
             );
 
         dm << MASK_PROFILE_MSGSNHIST; //____________________________________________________________________________________________________//
@@ -2214,12 +2210,14 @@ void dialog_settings_c::mod()
     dopts |= debug.get(CONSTASTR(DEBUG_OPT_LOGGING)).as_int() ? 2 : 0;
     dopts |= debug.get(CONSTASTR("contactids")).as_int() ? 4 : 0;
     dopts |= debug.get(CONSTASTR(DEBUG_OPT_TELEMETRY)).as_int() ? 8 : 0;
+    dopts |= debug.get( CONSTASTR( "lostcontacts" ) ).as_int() ? 16 : 0;
 
     dm().checkb(ts::wstr_c(), DELEGATE(this, debug_handler), dopts).setmenu(
         menu_c().add(CONSTWSTR("Create full memory dump on crash"), 0, MENUHANDLER(), CONSTASTR("1"))
                 .add(CONSTWSTR("Enable logging"), 0, MENUHANDLER(), CONSTASTR("2"))
                 .add( CONSTWSTR("Enable telemetry"), 0, MENUHANDLER(), CONSTASTR( "8" ))
                 .add(CONSTWSTR("Show contacts id's"), 0, MENUHANDLER(), CONSTASTR("4"))
+                .add( CONSTWSTR("Show lost contacts"), 0, MENUHANDLER(), CONSTASTR( "16" ) )
         );
 
     dm().vspace();
@@ -2313,6 +2311,11 @@ bool dialog_settings_c::debug_handler(RID, GUIPARAM p)
         debug.unset( CONSTASTR( DEBUG_OPT_TELEMETRY ) );
     else
         debug.set( CONSTASTR( DEBUG_OPT_TELEMETRY ) ) = CONSTASTR( "-1" );
+
+    if ( 0 == ( opts & 16 ) )
+        debug.unset( CONSTASTR( "lostcontacts" ) );
+    else
+        debug.set( CONSTASTR( "lostcontacts" ) ) = CONSTASTR( "1" );
 
     mod();
     return true;
@@ -2834,7 +2837,7 @@ bool dialog_settings_c::delete_used_network(RID, GUIPARAM param)
         dialog_msgbox_c::mb_warning( TTT("Connection [b]$[/b] in use! All contacts of this connection will be deleted. History of these contacts will be deleted too. Are you still sure?",267) / from_utf8(row->other.name) )
             .on_ok(DELEGATE(this, on_delete_network_2), ts::amake<int>(as_int(param)))
             .bcancel()
-            .summon();
+            .summon( false );
     }
     return true;
 }
@@ -2921,7 +2924,7 @@ bool dialog_settings_c::addeditnethandler(dialog_protosetup_params_s &params)
 
 ts::str_c dialog_protosetup_params_s::setup_name( const ts::asptr &tag, ts::aint n )
 {
-    ts::wstr_c name = TTT("Connection $", 63) / ts::to_wstr(tag).append_char(' ').append(ts::wmake(n));
+    ts::wstr_c name( TTT("Connection $", 63) / ts::to_wstr(tag), CONSTWSTR(" "), ts::wmake(n));
     return to_utf8(name);
 }
 
@@ -2934,7 +2937,7 @@ bool dialog_settings_c::addnetwork(RID, GUIPARAM)
     prms.configurable.initialized = true;
     prms.connect_at_startup = true;
     prms.watch = getrid();
-    SUMMON_DIALOG<dialog_setup_network_c>(UD_PROTOSETUPSETTINGS, prms);
+    SUMMON_DIALOG<dialog_setup_network_c>(UD_PROTOSETUPSETTINGS, false, prms);
 
     return true;
 }
@@ -2944,7 +2947,7 @@ void dialog_settings_c::add_active_proto( RID lst, int id, const active_protocol
     ts::wstr_c desc = make_proto_desc( CONSTWSTR("<id>"), MPD_NAME | MPD_MODULE | MPD_ID );
     const protocol_description_s *p = describe_network(desc, apdata.name, apdata.tag, id);
 
-    ts::str_c par(CONSTASTR("2/")); par.append(apdata.tag).append_char('/').append_as_int(id);
+    ts::str_c par( CONSTASTR( "2/" ), apdata.tag, CONSTASTR( "/" ) ); par .append_as_int( id );
 
     const ts::bitmap_c *icon = p ? &prepare_proto_icon(apdata.tag, p->getstr( IS_PROTO_ICON ).as_sptr(), PROTO_ICON_SIZE, IT_NORMAL) : nullptr;
 
@@ -2970,7 +2973,7 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
                 dialog_msgbox_c::mb_warning( TTT("Connection [b]$[/b] will be deleted![br]Are you sure?",266) / from_utf8(row->other.name) )
                     .on_ok(DELEGATE(this, on_delete_network), *t)
                     .bcancel()
-                    .summon();
+                    .summon( false );
             }
         }
 
@@ -2993,7 +2996,7 @@ void dialog_settings_c::contextmenuhandler( const ts::str_c& param )
                 prms.protoid = row->id;
                 prms.configurable = row->other.configurable;
                 prms.connect_at_startup = 0 != (row->other.options & active_protocol_data_s::O_AUTOCONNECT);
-                SUMMON_DIALOG<dialog_setup_network_c>(UD_PROTOSETUPSETTINGS, prms);
+                SUMMON_DIALOG<dialog_setup_network_c>(UD_PROTOSETUPSETTINGS, false, prms);
             }
         }
 
@@ -3009,11 +3012,11 @@ menu_c dialog_settings_c::getcontextmenu( const ts::str_c& param, bool activatio
         ++t;
         ++t;
         if (activation)
-            contextmenuhandler( ts::str_c(CONSTASTR("props/")).append(*t) );
+            contextmenuhandler( ts::str_c(CONSTASTR("props/"),*t) );
         else 
         {
-            m.add(ts::wstr_c(CONSTWSTR("<b>"), TTT("Properties",60)), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("props/")).append(*t));
-            m.add(TTT("Delete",59), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("del/")).append(*t));
+            m.add(ts::wstr_c(CONSTWSTR("<b>"), TTT("Properties",60)), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("props/"),*t));
+            m.add(TTT("Delete",59), 0, DELEGATE(this, contextmenuhandler), ts::str_c(CONSTASTR("del/"),*t));
         }
     }
 
@@ -3098,7 +3101,7 @@ void dialog_settings_c::select_lang( const ts::str_c& prm )
         {
             // reenter password
 
-            RID epr = SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, dialog_entertext_c::params(
+            RID epr = SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, false, dialog_entertext_c::params(
                 UD_ENTERPASSWORD,
                 gui_isodialog_c::title(title_reenter_password),
                 TTT("Please re-enter password to confirm encrypt",387),
@@ -3381,7 +3384,7 @@ bool dialog_settings_c::test_signal_device(RID, GUIPARAM)
 void dialog_settings_c::select_talk_device(const ts::str_c& prm)
 {
     talkdevice = prm;
-    media.init( talkdevice, signaldevice );
+    media.init( talkdevice, signaldevice, play_event_s() );
 
     set_combik_menu(CONSTASTR("talk"), list_talk_devices());
     mod();
@@ -3389,37 +3392,10 @@ void dialog_settings_c::select_talk_device(const ts::str_c& prm)
 void dialog_settings_c::select_signal_device(const ts::str_c& prm)
 {
     signaldevice = prm;
-    media.init(talkdevice, signaldevice);
+    media.init(talkdevice, signaldevice, play_event_s() );
 
     set_combik_menu(CONSTASTR("signal"), list_signal_devices());
     mod();
-}
-
-static float find_max(const s3::Format&fmt, const void *idata, ts::aint isize)
-{
-    if (fmt.bitsPerSample == 8)
-    {
-        int m = 0;
-        for (int i = 0; i < isize; ++i)
-        {
-            ts::uint8 sample8 = ((ts::uint8 *)idata)[i];
-            int t = ts::tabs((int)sample8 - 128);
-            if (t > m) m = t;
-        }
-        return (float)m * (float)(1.0/128.0);
-    }
-    ASSERT(fmt.bitsPerSample == 16);
-    ts::aint samples = isize / 2;
-
-    int m = 0;
-    for (int i = 0; i < samples; ++i)
-    {
-        int samplex = ((ts::int16 *)idata)[i];
-        int t = ts::tabs(samplex);
-        if (t > m) m = t;
-    }
-
-    return (float)m * (float)(1.0/32767.0);
 }
 
 /*virtual*/ void dialog_settings_c::datahandler( const void *data, int size )
@@ -3433,7 +3409,7 @@ static float find_max(const s3::Format&fmt, const void *idata, ts::aint isize)
             float current_level;
             void addb(const s3::Format&f, const void *data, ts::aint size)
             {
-                float m = find_max(f, data, size);
+                float m = find_max_sample(f, data, size);
                 if (m > current_level) current_level = m;
                 buf->append_buf(data, size);
             }
@@ -3472,7 +3448,7 @@ static float find_max(const s3::Format&fmt, const void *idata, ts::aint isize)
     }
 
     if (!mic_level_detected)
-        current_mic_level = ts::tmax( current_mic_level, ts::CLAMP( find_max(capturefmt, data, size) * cvtmic.volume, 0, 1 ) );
+        current_mic_level = ts::tmax( current_mic_level, ts::CLAMP( find_max_sample(capturefmt, data, size) * cvtmic.volume, 0, 1 ) );
 
     if ((ts::Time::current() - mic_level_refresh) > 0)
     {
@@ -3867,7 +3843,7 @@ void dialog_setup_network_c::available_network_selected(const ts::str_c&tag)
             params.proto_desc = *p;
 
     predie = true;
-    SUMMON_DIALOG<dialog_setup_network_c>(UD_PROTOSETUPSETTINGS, params);
+    SUMMON_DIALOG<dialog_setup_network_c>(UD_PROTOSETUPSETTINGS, false, params);
     TSDEL( this );
 }
 

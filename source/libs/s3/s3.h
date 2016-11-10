@@ -223,8 +223,14 @@ public:
     unsigned char data[ player_data_size ]; // its public, but you should not modify it - internal data
     InitParams params;
 
+    Player( const Player& ) = delete;
+    Player( Player && ) = delete;
+
     Player();
     ~Player();
+
+    void run_thread();
+    void operator=( Player &&p );
 
     bool Initialize(const SlotInitParams slotsIP[] = defaultSlotsInitParams, const int sgCount = SG_COUNT);
     void Shutdown(bool reinit = false /*internal use only!!! NEVER! NEVER call this method with true argument!*/ );

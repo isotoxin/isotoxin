@@ -12,7 +12,7 @@ class dialog_avaselector_c;
 template<> struct MAKE_ROOT<dialog_avaselector_c> : public _PROOT(dialog_avaselector_c)
 {
     dialog_avasel_params_s prms;
-    MAKE_ROOT(const dialog_avasel_params_s &prms) : _PROOT(dialog_avaselector_c)(), prms(prms) { init( RS_NORMAL ); }
+    MAKE_ROOT(bool, const dialog_avasel_params_s &prms) : _PROOT(dialog_avaselector_c)(), prms(prms) { init( (rect_sys_e)(RS_NORMAL | RS_MAINPARENT) ); }
     ~MAKE_ROOT() {}
 };
 

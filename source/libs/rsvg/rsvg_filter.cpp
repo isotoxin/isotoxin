@@ -62,7 +62,7 @@ bool rsvg_filter_c::fix_source(rsvg_load_context_s &ctx, int &olds, int &news)
     if (source == target)
     {
         olds = source;
-        source = 2 + (int)ctx.targets.get_string_index("#temp");
+        source = 2 + (int)ctx.targets.get_string_index(CONSTASTR("#temp"));
         news = source;
         return true;
     }

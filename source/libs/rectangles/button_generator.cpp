@@ -347,7 +347,7 @@ struct gb_svg_s : public generated_button_data_s
                 {
 #ifdef _DEBUG
                     if (gen->get_int(CONSTASTR("break")))
-                        __debugbreak();
+                        DEBUG_BREAK();
                     if (const ts::abp_c *f = gen->get(CONSTASTR("save")))
                         face_surface.save_as_png( to_wstr(f->as_string()) );
 #endif // _DEBUG

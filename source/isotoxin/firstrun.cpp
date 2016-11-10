@@ -62,8 +62,7 @@ ts::wstr_c dialog_firstrun_c::gen_info() const
         ts::wstr_c t;
         if (!ot.is_empty()) t.append(ot).append(CONSTWSTR("<br>"));
         t.append(CONSTWSTR("<b><p=c>"));
-        t.append(maketag_color<ts::wchar>(ts::ARGB(10,10,0)));
-        t.append( TTT("Install path protected; permissions elevation will be performed",319) );
+        appendtag_color(t, ts::ARGB(10,10,0)).append( TTT("Install path protected; permissions elevation will be performed",319) );
 
         return t;
     };
@@ -236,7 +235,7 @@ void dialog_firstrun_c::go2page(int page_)
 
         vspace(25);
 
-        label( ts::wstr_c(CONSTWSTR("<l>")).append(TTT("Language",114)).append(CONSTWSTR("</l>")) );
+        label( ts::wstr_c(CONSTWSTR("<l>"), TTT("Language",114), CONSTWSTR("</l>")) );
         combik( list_langs(deflng, DELEGATE(this, select_lang)) );
 
         vspace(5);
@@ -248,7 +247,7 @@ void dialog_firstrun_c::go2page(int page_)
                 radio_item_s(TTT("Manual setup",26), as_param(2))
             };
 
-            label( ts::wstr_c(CONSTWSTR("<l>")).append(TTT("Choice",115)).append(CONSTWSTR("</l>")) );
+            label( ts::wstr_c(CONSTWSTR("<l>"), TTT("Choice",115), CONSTWSTR("</l>")) );
             radio(ARRAY_WRAPPER(items), DELEGATE(this, noob_or_father), as_param(mode));
 
             if (!check_write_access(path_by_choice(PCH_HERE)))
@@ -442,10 +441,14 @@ static bool check_copy_valid(const ts::wstr_c &copyto, const ts::wstr_c &from)
             b.load_from_disk_file(other_fn);
             if (b.size() == 0)
                 return false;
-            ts::md5_c h1( b );
+
+            ts::uint8 hash1[BLAKE2B_HASH_SIZE], hash2[BLAKE2B_HASH_SIZE];
+            BLAKE2B( hash1, b.data(), b.size() );
+
             b.load_from_disk_file(fn2c);
-            ts::md5_c h2( b );
-            if (h1 != h2)
+            BLAKE2B( hash2, b.data(), b.size() );
+
+            if (memcmp(hash1, hash2, sizeof(hash1)))
                 return false;
         }
     }
@@ -467,7 +470,7 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
         install_to( copyto, true );
         if ( !check_copy_valid(copyto, curd) )
         {
-            dialog_msgbox_c::mb_error( TTT("Sorry, copy to $ failed.",312) / enquote(copyto) ).summon();
+            dialog_msgbox_c::mb_error( TTT("Sorry, copy to $ failed.",312) / enquote(copyto) ).summon( true );
             return true;
         }
         exit = true;

@@ -583,6 +583,46 @@ public:
     }
 };
 
+class buttons_pos_left : public autoparam_i
+{
+    int h;
+public:
+    buttons_pos_left(int h):h(h)
+    {
+    }
+    virtual bool sq_evt( system_query_e qp, RID rid, evt_data_s &data ) override
+    {
+        bool pc = qp == SQ_PARENT_RECT_CHANGED;
+        bool c = qp == SQ_RECT_CHANGED;
+        if (!pc && !c) return false;
+
+        ASSERT( owner );
+        HOLD parent( owner->getparent() );
+
+        ts::irect clar = parent().get_client_area();
+
+        ts::ivec2 minsz = owner->get_min_size();
+        minsz.x += 20;
+        minsz.y = h;
+
+        if (pc && owner->getrid() == rid) // query for owner
+        {
+            MODIFY( *owner ).pos( clar.lt.x + 10, clar.rb.y - minsz.y - 5 ).size( minsz );
+        }
+
+        return false;
+    }
+};
+
+}
+
+gui_button_c &gui_dialog_c::lbutton( GUIPARAMHANDLER handler )
+{
+    gui_button_c &b = MAKE_VISIBLE_CHILD<gui_button_c>( getrid() );
+    b.leech( TSNEW( buttons_pos_left, getengine().get_child( skipctls-1 )->getrect().getprops().size().y ) ); // assume skipctls-1 children is button
+    b.set_handler( handler, getrid().to_param() );
+
+    return b;
 }
 
 bool gui_dialog_c::file_selector(RID, GUIPARAM param)
@@ -676,8 +716,7 @@ bool gui_dialog_c::passw_hide_show( RID b, GUIPARAM param )
     gui_textfield_c &tf = HOLD( RID::from_param( param ) ).as<gui_textfield_c>();
     if ( tf.is_disabled() ) return true;
     passhideshow_s &pshow = tf.get_customdata_obj<passhideshow_s>();
-    pshow.showpass = !pshow.showpass;
-    HOLD( b ).as<gui_button_c>().set_face_getter( pshow.showpass ? BUTTON_FACE( showpass ) : BUTTON_FACE( hidepass ) );
+    pshow.showpass = !HOLD( b ).as<gui_button_c>().is_second_face();
     tf.set_password_char( pshow.showpass ? 0 : '*' );
     return true;
 }
@@ -910,6 +949,7 @@ RID gui_dialog_c::textfield( const ts::wsptr &deftext, int chars_limit, tfrole_e
     } else if (role == TFR_TEXT_FILED_PASSWD)
     {
         creator.selectorface = BUTTON_FACE( hidepass );
+        creator.selectorface2 = BUTTON_FACE( showpass );
         tf.set_customdata_obj<passhideshow_s>();
 
         tf.selectall();
@@ -1089,6 +1129,8 @@ int gui_dialog_c::check( const ts::array_wrapper_c<const check_item_s> & items, 
         c.set_face_getter(BUTTON_FACE(check));
         c.set_text(ci.text);
         c.set_updaterect(getrectupdate());
+
+        MODIFY(c).zindex(1.0f);
 
         if (!ci.name.is_empty())
             ctl_by_name[ci.name] = &c;
@@ -1284,7 +1326,7 @@ void gui_dialog_c::tabsel(const ts::str_c& par)
             }
             break;
         case description_s::_HEADER:
-            rctl = label(ts::wstr_c(header_prepend,d.text).append(header_append), true);
+            rctl = label(ts::wstr_c(header_prepend,d.text, header_append), true);
             break;
         case description_s::_HGROUP:
             {

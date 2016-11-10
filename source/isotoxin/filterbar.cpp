@@ -156,12 +156,12 @@ void gui_filterbar_c::ctx_rename_tag(const ts::str_c &tis)
 {
     int ti = tis.as_int();
 
-    ts::wstr_c hint = TTT("Rename tag $", 218) / ts::wstr_c(CONSTWSTR("<b>")).append(tagname(ti)).append(CONSTWSTR("</b>"));
+    ts::wstr_c hint = TTT("Rename tag $", 218) / ts::wstr_c(CONSTWSTR("<b>"),tagname(ti),CONSTWSTR("</b>"));
     if (ti < BIT_count)
         hint.append(CONSTWSTR("<br>")).append( TTT("Empty - set default",249) );
 
 
-    SUMMON_DIALOG<dialog_entertext_c>(UD_RENTAG, dialog_entertext_c::params(
+    SUMMON_DIALOG<dialog_entertext_c>(UD_RENTAG, true, dialog_entertext_c::params(
         UD_RENTAG,
         gui_isodialog_c::title(title_rentag),
         hint,
@@ -210,6 +210,8 @@ void gui_filterbar_c::fill_tags()
 
 bool gui_filterbar_c::cancel_filter(RID, GUIPARAM)
 {
+    if (edit->is_empty())
+        return false;
     edit->set_text(ts::wstr_c());
     return true;
 }
@@ -673,7 +675,7 @@ bool gui_filterbar_c::full_search_s::reader(int row, ts::SQLITE_DATAGETTER getta
     {
         if (CHECK(ts::data_type_e::t_int == getta(history_s::C_HISTORIAN, v)))
         {
-            found_item_s &itm = add( ts::ref_cast<contact_key_s>(v.i) );
+            found_item_s &itm = add( contact_key_s::buildfromdbvalue(v.i, true) );
 
             getta(history_s::C_UTAG, v);
             if (ASSERT( itm.utags.find_index((uint64)v.i) < 0 ))
@@ -699,11 +701,15 @@ bool gui_filterbar_c::full_search_s::reader(int row, ts::SQLITE_DATAGETTER getta
 /*virtual*/ int gui_filterbar_c::full_search_s::iterate()
 {
     // mtype 0 == MTA_MESSAGE
+    // mtype 1 == MTA_SYSTEM_MESSAGE
     // mtype 107 == MTA_UNDELIVERED_MESSAGE
+    // mtype 110 == MTA_HIGHLIGHT_MESSAGE
+
+    // see is_message_mt()
 
     cc.wstr.set_size( 4096 ); // most messages have smaller size
 
-    ts::str_c where(CONSTASTR("(mtype == 0 or mtype == 107) and msg like \"%" ) );
+    ts::str_c where(CONSTASTR("(mtype == 0 or mtype == 1 or mtype == 107 or mtype == 110) and msg like \"%" ) );
     where.encode_pointer( &cc ).append( CONSTASTR( "\" order by mtime" ) );
     db->read_table(CONSTASTR("history"), DELEGATE(this, reader), where);
     return R_DONE;

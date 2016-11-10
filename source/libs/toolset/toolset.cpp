@@ -172,7 +172,7 @@ tmpalloc_c tmpb;
                 for( const wstr_c &f : folders )
                 {
                     if (f.equals(CONSTWSTR(".")) || f.equals(CONSTWSTR(".."))) continue;
-                    find( files, ts::wstr_c(pwstr_c(fnmask).substr(0, x + 1)).append(f).append(pwstr_c(fnmask).substr(x+2)), full_paths);
+                    find( files, ts::wstr_c(pwstr_c(fnmask).substr(0, x + 1),f,pwstr_c(fnmask).substr(x+2)), full_paths);
                 }
             } else if (hm && fnmask.s[x+2] == '*' && x+3 < fnmask.l && fnmask.s[x+3] == '/')
             {

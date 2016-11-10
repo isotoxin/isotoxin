@@ -3,6 +3,8 @@
 #pragma USELIB("ipc")
 #pragma USELIB("plgcommon")
 
+#pragma comment(lib, "shared.lib")
+
 #pragma comment(lib, "Winmm.lib")
 #pragma comment(lib, "Msacm32.lib")
 #pragma comment(lib, "Shlwapi.lib")
@@ -12,6 +14,11 @@
 #if defined _FINAL || defined _DEBUG_OPTIMIZED
 #include "crt_nomem/crtfunc.h"
 #endif
+
+#pragma warning (push)
+#pragma warning (disable:4324)
+#include "libsodium/src/libsodium/include/sodium.h"
+#pragma warning (pop)
 
 ipc::ipc_junction_s *ipcj = nullptr;
 static bool panica = false;
@@ -279,32 +286,35 @@ struct IPCW
         if (w) sendbufs.push(w);
     }
 
-    template<typename T> IPCW & operator<<(const T &v) { if (w) w->add<T>() = v; return *this; }
-    template<> IPCW & operator<<(const asptr &s) { if (w) w->add(s); return *this; }
-    template<> IPCW & operator<<(const wsptr &s) { if (w) w->add(s); return *this; }
-    template<> IPCW & operator<<(const std::vector<char, ph_allocator> &v)
+    template<typename T> struct put2buf { static void put( ipcw *w, const T &v ) { w->add<T>() = v; } };
+    template<> struct put2buf<asptr> { static void put( ipcw *w, const asptr &s ) { w->add(s); } };
+    template<> struct put2buf<wsptr> { static void put( ipcw *w, const wsptr &s ) { w->add(s); } };
+    template<> struct put2buf< std::vector<char, ph_allocator> >
     {
-        if (w)
+        static void put( ipcw *w, const std::vector<char, ph_allocator> &v )
         {
             w->add<i32>() = (i32)v.size();
-            if (v.size()) w->add(v.data(), v.size());
+            if (v.size()) w->add( v.data(), v.size() );
         }
-        return *this;
-    }
-    template<> IPCW & operator<<(const data_block_s &d)
+    };
+    template<> struct put2buf<data_block_s>
     {
-        if (w)
+        static void put( ipcw *w, const data_block_s &d)
         {
             w->add<i32>() = (i32)d.datasize;
-            if (d.datasize) w->add(d.data, d.datasize);
+            if (d.datasize) w->add( d.data, d.datasize );
         }
-        return *this;
-    }
-    template<> IPCW & operator<<(const md5_c &md5)
+    };
+
+    template<size_t hashsize> struct put2buf< blake2b<hashsize> >
     {
-        if (w) w->add(md5.result(),16);
-        return *this;
-    }
+        static void put( ipcw *w, const blake2b<hashsize> &b )
+        {
+            w->add( b.hash, hashsize );
+        }
+    };
+
+    template<typename T> IPCW & operator<<(const T &v) { if (w) put2buf<T>::put(w,v); return *this; }
 
 };
 
@@ -703,31 +713,56 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             protolib.functions->set_ostate(ost);
         }
         break;
-    case AQ_JOIN_GROUPCHAT:
+    case AQ_JOIN_CONFERENCE:
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
             int gid = r.get<int>();
             int cid = r.get<int>();
-            protolib.functions->join_groupchat(gid, cid);
+            protolib.functions->join_conference(gid, cid);
         }
         break;
-    case AQ_REN_GROUPCHAT:
+    case AQ_REN_CONFERENCE:
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
             int gid = r.get<int>();
             tmp_str_c gchname = r.getastr();
-            protolib.functions->ren_groupchat(gid, gchname);
+            protolib.functions->ren_conference(gid, gchname);
         }
         break;
-    case AQ_ADD_GROUPCHAT:
+    case AQ_CREATE_CONFERENCE:
         if (LIBLOADED())
         {
             ipcr r(d->get_reader());
-            tmp_str_c gchname = r.getastr();
-            bool persistent = r.get<int>() != 0;
-            protolib.functions->add_groupchat(gchname, persistent);
+            tmp_str_c confaname = r.getastr();
+            tmp_str_c confao = r.getastr();
+            protolib.functions->create_conference( confaname, confao );
+        }
+        break;
+    case AQ_DEL_CONFERENCE:
+        if (LIBLOADED())
+        {
+            ipcr r( d->get_reader() );
+            tmp_str_c confaid = r.getastr();
+            protolib.functions->del_conference( confaid );
+        }
+        break;
+    case AQ_ENTER_CONFERENCE:
+        if ( LIBLOADED() )
+        {
+            ipcr r( d->get_reader() );
+            tmp_str_c confaid = r.getastr();
+            protolib.functions->enter_conference( confaid );
+        }
+        break;
+    case AQ_LEAVE_CONFERENCE:
+        if ( LIBLOADED() )
+        {
+            ipcr r( d->get_reader() );
+            int gid = r.get<int>();
+            int options = r.get<int>();
+            protolib.functions->leave_conference( gid, options );
         }
         break;
     case AQ_ADD_CONTACT:
@@ -799,7 +834,7 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
         {
             std::vector<char, ph_allocator> cfg;
             protolib.functions->save_config(&cfg);
-            if (cfg.size()) IPCW(HA_CONFIG) << cfg << md5_c(cfg);
+            if (cfg.size()) IPCW(HA_CONFIG) << cfg << blake2b<crypto_generichash_BYTES_MIN>(cfg);
             else IPCW(HA_CMD_STATUS) << (int)AQ_SAVE_CONFIG << (int)CR_FUNCTION_NOT_FOUND;
         }
         break;
@@ -1060,12 +1095,27 @@ static void __stdcall operation_result(long_operation_e op, int rslt)
 
 static void __stdcall update_contact(const contact_data_s *cd)
 {
+#ifdef _DEBUG
+    if ( cd->id < 0 )
+    {
+        if ((cd->mask & CDM_PUBID) == 0)
+            __debugbreak();
+        if ((cd->mask & CDM_SPECIAL_BITS) == 0)
+            __debugbreak();
+
+        if (pstr_c(asptr(cd->public_id,cd->public_id_len)).begins("CC3B0"))
+            if ( 0 == (cd->mask & CDF_AUDIO_CONFERENCE) && cd->state == CS_ONLINE )
+                __debugbreak();
+
+    }
+#endif // _DEBUG
+
     IPCW ucs(HQ_UPDATE_CONTACT);
     ucs << cd->id << cd->mask
-        << (cd->id >= 0 && (0 != (cd->mask & CDM_PUBID)) ? asptr(cd->public_id, cd->public_id_len) : asptr("",0))
+        << ((0 != (cd->mask & CDM_PUBID)) ? asptr(cd->public_id, cd->public_id_len) : asptr("",0))
         << ((0 != (cd->mask & CDM_NAME)) ? asptr(cd->name, cd->name_len) : asptr("",0))
         << ((0 != (cd->mask & CDM_STATUSMSG)) ? asptr(cd->status_message, cd->status_message_len) : asptr("",0))
-        << cd->avatar_tag << (int)cd->state << (int)cd->ostate << (int)cd->gender << cd->groupchat_permissions;
+        << cd->avatar_tag << static_cast<int>(cd->state) << static_cast<int>(cd->ostate) << static_cast<int>(cd->gender) << cd->conference_permissions;
     
     if ( 0 != (cd->mask & CDM_MEMBERS) )
     {
@@ -1082,17 +1132,15 @@ static void __stdcall update_contact(const contact_data_s *cd)
 static void __stdcall message(message_type_e mt, int gid, int cid, u64 create_time, const char *msgbody_utf8, int mlen)
 {
     static u64 last_createtime = 0;
-    static byte lastmessage_md5[16] = {};
-    if (mt == MT_MESSAGE && (create_time - last_createtime) < 60)
+    static byte lastmessage_blake2b[crypto_generichash_BYTES] = {};
+    if (mt == MT_MESSAGE && (last_createtime == 0 || (create_time - last_createtime) < 60))
     {
-        md5_c md5;
-        md5.update(msgbody_utf8, mlen);
-        md5.done();
-        if (0 == memcmp(lastmessage_md5, md5.result(), 16)) return; // double
-        memcpy(lastmessage_md5, md5.result(), 16);
+        blake2b<sizeof( lastmessage_blake2b )> b( msgbody_utf8, mlen );
+        if (0 == memcmp( lastmessage_blake2b, b.hash, sizeof( lastmessage_blake2b ) )) return; // double
+        memcpy( lastmessage_blake2b, b.hash, sizeof( lastmessage_blake2b ) );
     }
     last_createtime = create_time;
-    IPCW(HQ_MESSAGE) << gid << cid << ((int)mt) << create_time << asptr(msgbody_utf8, mlen);
+    IPCW(HQ_MESSAGE) << gid << cid << static_cast<int>(mt) << create_time << asptr(msgbody_utf8, mlen);
 }
 
 static void __stdcall save()

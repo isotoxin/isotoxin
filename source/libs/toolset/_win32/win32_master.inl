@@ -200,7 +200,7 @@ bool master_internal_stuff_s::actwnd( wnd_c *w, bool a )
     if (a)
     {
         int freei = -1;
-        int cnt = activewnds.size();
+        aint cnt = activewnds.size();
         for ( int i = 0; i < cnt; ++i )
         {
             wnd_c *aw = activewnds.get(i);
@@ -217,7 +217,7 @@ bool master_internal_stuff_s::actwnd( wnd_c *w, bool a )
         return true;
     }
 
-    for ( int i = activewnds.size()-1; i >= 0; --i )
+    for ( aint i = activewnds.size()-1; i >= 0; --i )
     {
         wnd_c *aw = activewnds.get( i );
         if (!aw || aw == w )
@@ -586,7 +586,7 @@ static bool check_reg_writte_access( const ts::wsptr &regpath_ )
         HKEY k;
         if ( RegOpenKeyExW( HKEY_CURRENT_USER, ts::tmp_wstr_c( regpaths2check[ 0 ].skip( 5 ) ), 0, KEY_WRITE, &k ) != ERROR_SUCCESS ) return;
 
-        ts::wstr_c path( CONSTWSTR( "\"" ) ); path.append( exepath );
+        ts::wstr_c path( CONSTWSTR( "\"" ), exepath );
         if ( cmdpar.l ) path.append( CONSTWSTR( "\" " ) ).append( to_wstr( cmdpar ) );
         else path.append_char( '\"' );
 
@@ -843,7 +843,7 @@ static DWORD WINAPI multiinstanceblocker( LPVOID )
                 }
                 else if ( downkey && msg.wParam == VK_F4 && ( GetAsyncKeyState( VK_MENU ) & 0x8000 ) == 0x8000 )
                 {
-                    sys_exit(0);
+                    PostMessageW(msg.hwnd, WM_CLOSE, 0, 0);
                     dispatch = false;
 
 #if 0
@@ -922,13 +922,10 @@ static DWORD WINAPI multiinstanceblocker( LPVOID )
 }
 /*virtual*/ void sys_master_win32_c::sys_exit( int iErrCode )
 {
-    if ( mainwindow )
-        mainwindow->try_close();
-    else
-    {
-        is_app_need_quit = true;
-        PostQuitMessage( iErrCode );
-    }
+    if (master().mainwindow)
+        master().mainwindow->get_callbacks()->evt_on_exit();
+    is_app_need_quit = true;
+    PostQuitMessage( iErrCode );
 }
 
 /*virtual*/ wnd_c *sys_master_win32_c::get_focus()
@@ -1025,6 +1022,8 @@ process_handle_s::~process_handle_s()
         {
             if ( process_handle )
                 ( (phi_s*)process_handle )->processhandle = pi.hProcess;
+            else CloseHandle( pi.hProcess );
+            CloseHandle(pi.hThread);
             return true;
 
         } else

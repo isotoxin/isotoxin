@@ -103,6 +103,15 @@ public:
         return curbp == nullptr || curbp->is_empty();
     }
 
+    int count() const
+    {
+        if (is_empty()) return 0;
+        int cnt = 0;
+        for (auto it = curbp->begin(); it; ++it)
+            ++cnt;
+        return cnt;
+    }
+
     ts::wstr_c get_text(int index) const;
 
     menu_c &operator=(const menu_c&m)

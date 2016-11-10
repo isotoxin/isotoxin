@@ -23,9 +23,9 @@ enum proto_features_e
     PF_SEND_FILE                = (1 << 6),     // send (and recv, of course) files supported
     PF_PAUSE_FILE               = (1 << 7),     // pause file transferring supported
     PF_RESUME_FILE              = (1 << 8),     // resume file transferring supported
-    PF_GROUP_SEND_FILE          = (1 << 9),     // send (and recv, of course) files to/from group chat supported
-    PF_GROUP_CHAT               = (1 << 10),     // group chats supported
-    PF_GROUP_CHAT_PERSISTENT    = (1 << 11),    // persistent group chats supported
+    PF_CONFERENCE_SEND_FILE     = (1 << 9),     // send (and recv, of course) files to/from conference supported
+    PF_CONFERENCE               = (1 << 10),    // conference supported
+    PF_CONFERENCE_ENTER_LEAVE   = (1 << 11),    // allow enter/leave conferences
     PF_PURE_NEW                 = (1 << 12),    // protocol support pure new
     PF_NEW_REQUIRES_LOGIN       = (1 << 13),    // user will be prompted for pubid and password on new connections
     PF_ALLOW_REGISTER           = (1 << 14),    // protocol support login/pass
@@ -54,6 +54,8 @@ enum info_string_e // hard order
     IS_IDNAME,
 
     IS_AVATAR_RESTRICTIOS,
+
+    IS_CONFERENCE_OPTIONS,
 
     IS_LAST, // always set to nullptr
     _is_count_
@@ -85,20 +87,21 @@ enum cd_mask_e
     CDM_MEMBERS         = 1 << 7,
     CDM_PERMISSIONS     = 1 << 8,
     CDM_DETAILS         = 1 << 9,
+    CDM_SPECIAL_BITS    = 1 << 10, // CDF_AUDIO_CONFERENCE
 
-    CDF_PERSISTENT_GCHAT = 1 << 30,
-    CDF_AUDIO_GCHAT      = 1 << 29,
-    CDF_GCHAT_MEMBER     = 1 << 28, // for unknown contacts
-    CDF_ALLOW_INVITE     = 1 << 27, // set if unknown contact available for friend invite
-    CDF_SYSTEM_USER      = 1 << 26,
+    //                          = 1 << 30,
+    CDF_AUDIO_CONFERENCE        = 1 << 29,
+    CDF_CONFERENCE_MEMBER       = 1 << 28, // for unknown contacts
+    CDF_ALLOW_INVITE            = 1 << 27, // set if unknown contact available for friend invite
+    CDF_SYSTEM_USER             = 1 << 26,
 };
 
-enum groupchat_permission_e
+enum conference_permission_e
 {
-    GCP_CHANGE_NAME     = 1 << 0,
-    GCP_DELETE_GCHAT    = 1 << 1,
-    GCP_ADD_CONTACT     = 1 << 2,
-    GCP_KICK_CONTACT    = 1 << 3,
+    CP_CHANGE_NAME     = 1 << 0,
+    CP_DELETE_GCHAT    = 1 << 1,
+    CP_ADD_CONTACT     = 1 << 2,
+    CP_KICK_CONTACT    = 1 << 3,
 };
 
 enum cmd_result_e
@@ -250,7 +253,11 @@ enum config_flags_e
 #define CFGF_IPv6_ENABLE    "ipv6_enable"
 #define CFGF_SERVER_PORT    "server_port"
 
+// conference options
+#define CONFA_OPT_TYPE      "type"
+
 // contact details
+#define CDET_PUBLIC_UNIQUE_ID "uniqid"
 #define CDET_PUBLIC_ID      "pubid"     // id, login, uin, etc...
 #define CDET_PUBLIC_ID_BAD  "badpubid"  // id broken
 #define CDET_EMAIL          "email"     // email

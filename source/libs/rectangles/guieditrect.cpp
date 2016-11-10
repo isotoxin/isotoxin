@@ -592,7 +592,15 @@ bool gui_textedit_c::kbd_processing_(system_query_e qp, ts::wchar charcode, int 
 			res = true;
 			break;
 		}
-	}
+	} else if (qp == SQ_KEYUP)
+    {
+        evt_data_s d;
+        d.kbd.scan = scan;
+        d.kbd.charcode = 0;
+        d.kbd.casw = casw;
+
+        return HOLD( getparent() )().sq_evt( SQ_KEYUP, getparent(), d );
+    }
 
 	if (res) redraw();
 	return res;

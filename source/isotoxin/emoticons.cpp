@@ -538,7 +538,7 @@ void emoticons_c::reload()
         else if ( prf().emoticons_pack().equals(ts::fn_get_name(fn)) )
         {
             ts::wstr_c setname = prf().emoticons_set();
-            if ( !setname.is_empty() && ldr.setlist.find(setname.as_sptr()) < 0 )
+            if ( !setname.is_empty() && ldr.setlist.find(setname) < 0 )
                 prf().emoticons_set(CONSTWSTR(""));
             ldr.curset = setname;
         }

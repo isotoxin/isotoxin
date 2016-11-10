@@ -40,20 +40,24 @@ DWORD WINAPI UpdateThreadProc(LPVOID pData)
 
 	while (WaitForSingleObject(pd.hQuitEvent, 17) != WAIT_OBJECT_0)
 	{
-        LOCK4WRITE( pd.sync );
+        if (spinlock::try_simple_lock( pd.sync1 ))
+        {
+            DWORD time = timeGetTime();
+            float dt = (time - prevTime)*(1 / 1000.f);
 
-		DWORD time = timeGetTime();
-		float dt = (time - prevTime)*(1/1000.f);
+            for (int g = 0; g < pd.sgCount; g++)
+            {
+                Slot *slots = pd.soundGroups[g].slots;
+                for (int i = 0, n = pd.soundGroups[g].active; i < n; i++) slots[i].update( player, dt, false );
+            }
 
-		for (int g=0; g<pd.sgCount; g++)
-		{
-			Slot *slots = pd.soundGroups[g].slots;
-			for (int i=0, n=pd.soundGroups[g].active; i<n; i++) slots[i].update(player, dt, false);
-		}
+            /*if (dsListener) */pd.dsListener->CommitDeferredSettings();
 
-		/*if (dsListener) */pd.dsListener->CommitDeferredSettings();
+            prevTime = time;
 
-		prevTime = time;
+            spinlock::simple_unlock( pd.sync1 );
+        }
+
 	}
 
 	return 0;
@@ -77,19 +81,40 @@ SoundGroupSlots *Player::getSoundGroups()
     return pd.soundGroups;
 }
 
+void Player::run_thread()
+{
+    player_data_s &pd = *(player_data_s *)&data;
+    if (pd.hQuitEvent && !pd.hUpdateThread)
+    {
+        pd.hUpdateThread = CreateThread( nullptr, 0, &UpdateThreadProc, this, 0, nullptr );
+        SetThreadPriority( pd.hUpdateThread, THREAD_PRIORITY_HIGHEST );
+    }
+}
+
+void Player::operator=( Player &&p )
+{
+    player_data_s &pdmy = *(player_data_s *)&data;
+    player_data_s &pdother = *(player_data_s *)&p.data;
+
+    pdmy = std::move( pdother );
+    
+    run_thread();
+    p.run_thread();
+}
+
 bool Player::Initialize(const SlotInitParams slotsIP[], const int sgCount_)
 {
     player_data_s &pd = *(player_data_s *)&data;
 
-	//Инициализация Direct Sound
+	// Direct Sound initialization
     if (FAILED(DirectSoundCreate8(params.device == DEFAULT_DEVICE ? nullptr : &params.device, &pd.pDS, nullptr))) { Shutdown(); return false; }
 
-	//Cоздаем скрытое окно..
+	// create hidden window
 	if (params.hwnd == nullptr)
 	{
 		WNDCLASSW wc = {0, DefWindowProc, 0, 0, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"s3hwndclass"};
 		RegisterClassW(&wc);
-		pd.hwnd = CreateWindowW(wc.lpszClassName, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, wc.hInstance, nullptr);
+		pd.hwnd = CreateWindowW(wc.lpszClassName, NULL, WS_POPUP, 0, 0, 0, 0, HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
 	}
 
 	//.. для того, чтобы установить Cooperative Level
@@ -107,7 +132,7 @@ bool Player::Initialize(const SlotInitParams slotsIP[], const int sgCount_)
 	}
 	else {Shutdown(); return false;}
 
-	//Инициализация внутренних частей s3
+	// init internals of s3
 	if (pd.soundGroups == nullptr)
 	{
 		pd.sgCount = sgCount_;
@@ -118,11 +143,11 @@ bool Player::Initialize(const SlotInitParams slotsIP[], const int sgCount_)
 	}
 
 	pd.hQuitEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-	pd.hUpdateThread = CreateThread(nullptr, 0, &UpdateThreadProc, this, 0, nullptr);
-	SetThreadPriority(pd.hUpdateThread, THREAD_PRIORITY_HIGHEST);
+    run_thread();
 
 	return true;
 }
+
 
 void Player::Shutdown(bool reinit)
 {
@@ -131,12 +156,12 @@ void Player::Shutdown(bool reinit)
 	if (pd.hUpdateThread)
 	{
 		SetEvent(pd.hQuitEvent);
-		if (reinit) spinlock::unlock_write(pd.sync); //Shutdown(true) вызывается в местах, обложенных AutoCriticalSection, поэтому выходим из крит. секции, иначе зависнем в дедлоке!
+		if (reinit) spinlock::simple_unlock(pd.sync1); //Shutdown(true) вызывается в местах, обложенных AutoCriticalSection, поэтому выходим из крит. секции, иначе зависнем в дедлоке!
 		WaitForSingleObject(pd.hUpdateThread, INFINITE);
 		CloseHandle(pd.hQuitEvent);
 		CloseHandle(pd.hUpdateThread);
 		pd.hQuitEvent = pd.hUpdateThread = nullptr;
-		if (reinit) spinlock::lock_write(pd.sync);
+		if (reinit) spinlock::simple_lock(pd.sync1);
 	}
 
 	//Просто autoDeleteSources тут не достаточно, т.к. звуки могут еще играть, а необходимо удалить их в любом случае

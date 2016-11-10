@@ -40,6 +40,9 @@ colors {
 	msg_pm_time=#7077da
 	msg_pm_bg=#d8e6ff
 	msg_pm_bg_found=#abc6ff
+	msg_mine_quote=#435624
+	msg_other_quote=#6e3100
+	msg_pm_quote=#002973
 	msg_invite_bg=#a5eea9
 	load_bg=#9acaf9
 	date_sep_bg=#cccccf
@@ -66,7 +69,9 @@ colors {
 	notice_call_bg=#d6dbe9
 	notice_call_text=#445255
 	notice_reject_bg=#f5eea9
-	notice_gchat_bg=#e5eea9
+	notice_gchat_bg=#b0cacb
+	notice_confa_new=#00a400
+	notice_confa_rotten=#ff0000
 	notice_found_bg=#64a7ff
 	notice_warning_bg=#ffd700
 	menu_item_text=#000000
@@ -134,7 +139,7 @@ colors {
 	head_text=#d8fff8
 	head_online=#00ff00
 	head_offline=#2f3d2f
-	filter_text=#080f08
+	filter_text=#aaaaaa
 	filter_inactive=#aaaaaa
 	filter_inactive_h=#aaaaca
 	filter_active=#005f00
@@ -181,9 +186,9 @@ colors {
 	gen_achtung_stroke=#000000
 	gen_achtung_fill1=#ffffff
 	gen_achtung_fill2=#ff9703
-	gen_gch_online=#349131
-	gen_gch_offline=#46ff00
-	gen_gch_unknown=#898e88
+	gen_gch_online=#00a400
+	gen_gch_offline=#00a400
+	gen_gch_unknown=#006077
 	gen_inv=#000000
 	ctl_normal=#000000
 	ctl_hover=#42830f

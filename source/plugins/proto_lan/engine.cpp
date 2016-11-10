@@ -259,7 +259,7 @@ void lan_engine::media_stuff_s::encode_video_and_send( u64 msmonotonic, const by
 }
 
 
-void lan_engine::media_stuff_s::video_frame( u64 msmonotonic, int framen, const byte *frame_data, int framesize )
+void lan_engine::media_stuff_s::video_frame( u64 msmonotonic, int /*framen*/, const byte *frame_data, int framesize )
 {
     if ( !decoder )
     {
@@ -454,7 +454,7 @@ asptr pid_name(packet_id_e pid)
     return CONSTASTR("pid unknown");
 }
 
-void log_auth_key( const char *what, const byte *key )
+void log_auth_key( const char * /*what*/, const byte * /*key*/ )
 {
     /*
     str_c nonce_part; nonce_part.append_as_hex(key, SIZE_KEY_NONCE_PART);
@@ -463,7 +463,7 @@ void log_auth_key( const char *what, const byte *key )
     */
 }
 
-void log_bytes( const char *what, const byte *b, int sz )
+void log_bytes( const char * /*what*/, const byte * /*b*/, int /*sz*/ )
 {
     /*
     str_c bs; bs.append_as_hex(b, sz);
@@ -493,7 +493,7 @@ void socket_s::flush_and_close()
 {
     if (_socket != INVALID_SOCKET)
     {
-        int errm = shutdown(_socket, SD_SEND);
+        /*int errm =*/ shutdown(_socket, SD_SEND);
         MaskLog( LFLS_CLOSE, "shutdown %i", _socket );
         closesocket(_socket);
         _socket = INVALID_SOCKET;
@@ -1082,7 +1082,7 @@ u64 lan_engine::contact_s::send_block(block_type_e bt, u64 delivery_tag, const v
 
         if ( IS_TLM( TLM_AUDIO_SEND_BYTES ) )
         {
-            tlm_data_s d1 = { id, datasize + datasize1 };
+            tlm_data_s d1 = { static_cast<u64>(id), static_cast<u64>( datasize + datasize1 ) };
             engine->hf->telemetry( TLM_AUDIO_SEND_BYTES, &d1, sizeof( d1 ) );
         }
 
@@ -1099,14 +1099,14 @@ u64 lan_engine::contact_s::send_block( datablock_s *b )
     case BT_AUDIO_FRAME:
         if ( IS_TLM(TLM_AUDIO_SEND_BYTES) )
         {
-            tlm_data_s d1 = { id, b->len };
+            tlm_data_s d1 = { static_cast<u64>( id ), static_cast<u64>( b->len ) };
             engine->hf->telemetry( TLM_AUDIO_SEND_BYTES, &d1, sizeof( d1 ) );
         }
         break;
     case BT_VIDEO_FRAME:
         if ( IS_TLM(TLM_VIDEO_SEND_BYTES) )
         {
-            tlm_data_s d1 = { id, b->len };
+            tlm_data_s d1 = { static_cast<u64>( id ), static_cast<u64>( b->len ) };
             engine->hf->telemetry( TLM_VIDEO_SEND_BYTES, &d1, sizeof( d1 ) );
         }
         break;
@@ -1898,32 +1898,30 @@ enum chunks_e // HADR ORDER!!!!!!!!
 
 void lan_engine::set_avatar(const void*data, int isz)
 {
-    md5_c md5;
+    byte hash[AVATAR_HASH_SIZE];
     bool avachange = ((int)avatar.size() != isz);
     if (!avachange)
     {
         if (isz)
         {
-            md5.update(data, isz);
-            md5.done();
-            if (0 != memcmp(first->avatar_hash, md5.result(), 16))
+            crypto_generichash( hash, sizeof( hash ), (const byte *)data, isz, nullptr, 0 );
+            if (0 != memcmp(first->avatar_hash, hash, sizeof( hash ) ))
                 avachange = true;
         }
     } else if (isz)
     {
-        md5.update(data, isz);
-        md5.done();
+        crypto_generichash( hash, sizeof( hash ), (const byte *)data, isz, nullptr, 0 );
     }
     if (avachange)
     {
         if (isz)
         {
-            memcpy(first->avatar_hash,md5.result(), 16);
+            memcpy( first->avatar_hash, hash, sizeof( hash ) );
             avatar.resize(isz);
             memcpy(avatar.data(), data, isz);
         } else
         {
-            memset(first->avatar_hash, 0, 16);
+            memset(first->avatar_hash, 0, AVATAR_HASH_SIZE );
             avatar.clear();
         }
         changed_some |= CDM_AVATAR_TAG;
@@ -2843,7 +2841,7 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
 
                 if ( IS_TLM( TLM_AUDIO_RECV_BYTES ) )
                 {
-                    tlm_data_s d1 = { id, flen };
+                    tlm_data_s d1 = { static_cast<u64>( id ), static_cast<u64>( flen ) };
                     engine->hf->telemetry( TLM_AUDIO_RECV_BYTES, &d1, sizeof( d1 ) );
                 }
 
@@ -2970,12 +2968,12 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                                 if ( 0 != ( media->local_so.options & SO_RECEIVING_VIDEO ) && 0 != ( media->remote_so.options & SO_SENDING_VIDEO ) )
                                 {
                                     const framehead_s *fh = (const framehead_s *)dd.buf.data();
-                                    media->video_frame( my_ntohll( fh->msmonotonic ), ntohl( fh->frame ), dd.buf.data() + sizeof( framehead_s ), dd.buf.size() - sizeof( framehead_s ) );
+                                    media->video_frame( my_ntohll( fh->msmonotonic ), ntohl( fh->frame ), dd.buf.data() + sizeof( framehead_s ), static_cast<int>( dd.buf.size() - sizeof( framehead_s ) ) );
                                 }
 
                             if ( IS_TLM( TLM_VIDEO_RECV_BYTES ) )
                             {
-                                tlm_data_s d1 = { id, dd.buf.size() };
+                                tlm_data_s d1 = { static_cast<u64>( id ), dd.buf.size() };
                                 engine->hf->telemetry( TLM_VIDEO_RECV_BYTES, &d1, sizeof( d1 ) );
                             }
 
@@ -2986,9 +2984,9 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                             send_block(BT_AVATARDATA, 0, engine->avatar.data(), engine->avatar.size());
                             break;
                         case BT_AVATARHASH:
-                            if (dd.buf.size() == 16 && 0!=memcmp(avatar_hash,dd.buf.data(), 16))
+                            if (dd.buf.size() == AVATAR_HASH_SIZE && 0!=memcmp(avatar_hash,dd.buf.data(), AVATAR_HASH_SIZE ))
                             {
-                                memcpy(avatar_hash, dd.buf.data(), 16);
+                                memcpy(avatar_hash, dd.buf.data(), AVATAR_HASH_SIZE );
                                 if (0 == *(int *)avatar_hash && 0 == *(int *)(avatar_hash+4) && 0 == *(int *)(avatar_hash+8) && 0 == *(int *)(avatar_hash+12))
                                     avatar_tag = 0;
                                 else
@@ -3002,13 +3000,12 @@ void lan_engine::contact_s::handle_packet( packet_id_e pid, stream_reader &r )
                             break;
                         case BT_AVATARDATA:
                             {
-                                md5_c md5;
-                                md5.update(dd.buf.data(), dd.buf.size());
-                                md5.done();
+                                byte hash[AVATAR_HASH_SIZE];
+                                crypto_generichash( hash, sizeof( hash ), (const byte *)dd.buf.data(), dd.buf.size(), nullptr, 0 );
 
-                                if (0 != memcmp(md5.result(), avatar_hash, 16))
+                                if (0 != memcmp( hash, avatar_hash, sizeof( hash ) ))
                                 {
-                                    memcpy(avatar_hash, md5.result(), 16);
+                                    memcpy(avatar_hash, avatar_hash, sizeof( hash ) );
                                     ++avatar_tag; // new avatar version
                                 }
                                 
@@ -3409,7 +3406,7 @@ void lan_engine::transmitting_file_s::send_block(contact_s *c)
 
     if ( IS_TLM( TLM_FILE_SEND_BYTES ) )
     {
-        tlm_data_s d2 = { utag, rch[ 0 ].size };
+        tlm_data_s d2 = { utag, static_cast<u64>( rch[ 0 ].size ) };
         engine->hf->telemetry( TLM_FILE_SEND_BYTES, &d2, sizeof( d2 ) );
     }
 }
@@ -3478,7 +3475,7 @@ bool lan_engine::transmitting_file_s::fresh_file_portion(const file_portion_s *f
     return false;
 }
 
-/*virtual*/ void lan_engine::transmitting_file_s::tick(int ct)
+/*virtual*/ void lan_engine::transmitting_file_s::tick(int /*ct*/)
 {
     if (contact_s *c = engine->find(cid))
     {
@@ -3642,15 +3639,24 @@ void lan_engine::get_avatar(int id)
         c->send_block(BT_GETAVATAR, 0);
 }
 
-void lan_engine::add_groupchat(const char *groupaname, bool persistent)
+void lan_engine::create_conference(const char * /*confaname*/, const char * /*options*/)
 {
 }
 
-void lan_engine::ren_groupchat(int gid, const char *groupaname)
+void lan_engine::ren_conference(int /*gid*/, const char * /*confaname*/)
 {
 }
 
-void lan_engine::join_groupchat( int gid, int cid )
+void lan_engine::join_conference( int /*gid*/, int /*cid*/ )
+{
+}
+void lan_engine::del_conference( const char * /*conference_id*/ )
+{
+}
+void lan_engine::enter_conference( const char * /*conference_id*/ )
+{
+}
+void lan_engine::leave_conference( int /*gid*/, int /*keepleave*/ )
 {
 }
 

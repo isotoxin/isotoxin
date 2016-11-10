@@ -30,6 +30,22 @@ enum sound_e
 
 struct fmt_converter_s;
 
+struct play_event_s
+{
+    ts::blob_c buf;
+    sound_e snd = snd_count;
+    float vol = 0;
+    bool signal_device = false;
+
+    play_event_s() {}
+    play_event_s( ts::blob_c buf, float vol, bool signal_device ) :buf( buf ), vol( vol ), signal_device( signal_device )
+    {
+    }
+    play_event_s( sound_e snd, float vol, bool signal_device ) :snd( snd ), vol( vol ), signal_device( signal_device )
+    {
+    }
+};
+
 class mediasystem_c
 {
     s3::Player talks;
@@ -101,10 +117,12 @@ class mediasystem_c
     int ref = 0;
 
     ts::Time deinit_time = ts::Time::current() + 60000;
-    bool initialized = false;
+    volatile bool initialized = false;
+    volatile void *initializing = nullptr;
 
     voice_player &vp(int i) { return *(voice_player *)(rawps + i * sizeof(voice_player)); }
-    void init(); // loads params from cfg
+    void init( play_event_s &&evt ); // loads params from cfg
+    void shutdown();
 public:
 
     mediasystem_c()
@@ -115,9 +133,12 @@ public:
     void addref() { ++ref; }
     void decref() { --ref; }
 
-    void init(const ts::str_c &talkdevice, const ts::str_c &signaldevice);
+    void init(const ts::str_c &talkdevice, const ts::str_c &signaldevice, play_event_s &&ev );
     void deinit();
     void may_be_deinit();
+
+    volatile void *get_initializing_object() { return initializing; }
+    s3::Player *set_players( s3::Player &&talks, s3::Player *notifs );
 
     void test_talk(float vol);
     void test_signal(float vol);
@@ -221,3 +242,4 @@ public:
     void add_audio( uint64 timestamp, const s3::Format &fmt, const void *data, ts::aint size, active_protocol_c *ctx );
 };
 
+float find_max_sample( const s3::Format&fmt, const void *idata, ts::aint isize );

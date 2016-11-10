@@ -22,11 +22,11 @@
     <Filter Include="src\math">
       <UniqueIdentifier>{6dd785c4-14a1-4192-8215-4dc7b60921b3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="src\arc">
+      <UniqueIdentifier>{8b416ec1-858c-4f0d-be8e-2b4f8e0e9cb9}</UniqueIdentifier>
+    </Filter>
     <Filter Include="src\internal\win32">
       <UniqueIdentifier>{a5030bac-ec8d-440c-9cb4-d0245fbf5ab8}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="src\arch">
-      <UniqueIdentifier>{8b416ec1-858c-4f0d-be8e-2b4f8e0e9cb9}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -106,7 +106,7 @@
       <Filter>src\internal</Filter>
     </ClCompile>
     <ClCompile Include="tszip.cpp">
-      <Filter>src\arch</Filter>
+      <Filter>src\arc</Filter>
     </ClCompile>
     <ClCompile Include="tsfile_zip.cpp">
       <Filter>src\files\packages</Filter>
@@ -154,6 +154,9 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="tswnd.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="tsregex.cpp">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>
@@ -255,7 +258,7 @@
       <Filter>src\internal</Filter>
     </ClInclude>
     <ClInclude Include="tszip.h">
-      <Filter>src\arch</Filter>
+      <Filter>src\arc</Filter>
     </ClInclude>
     <ClInclude Include="tsfile_zip.h">
       <Filter>src\files\packages</Filter>
@@ -295,6 +298,9 @@
     </ClInclude>
     <ClInclude Include="internal\platform.h">
       <Filter>src\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="tsregex.h">
+      <Filter>src</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

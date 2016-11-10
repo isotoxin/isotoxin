@@ -6,7 +6,7 @@
 
 // typical scenario : AQ -> plghost, HA -> application
 
-#define PLGHOST_IPC_PROTOCOL_VERSION 16
+#define PLGHOST_IPC_PROTOCOL_VERSION 17
 
 enum commands_e
 {
@@ -33,9 +33,13 @@ enum commands_e
     AQ_SAVE_CONFIG,
     HA_CONFIG,
 
-    AQ_REN_GROUPCHAT,
-    AQ_ADD_GROUPCHAT,
-    AQ_JOIN_GROUPCHAT,
+    AQ_REN_CONFERENCE,
+    AQ_CREATE_CONFERENCE,
+    AQ_JOIN_CONFERENCE, // send invite to contact
+    AQ_DEL_CONFERENCE,
+    
+    AQ_ENTER_CONFERENCE, // try enter self to conference by conference id
+    AQ_LEAVE_CONFERENCE, // just leave conference, don't delete
 
     AQ_ADD_CONTACT,
     AQ_DEL_CONTACT,

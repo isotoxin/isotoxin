@@ -151,6 +151,13 @@ enum cfg_misc_flags_e
     MISCF_DONT_BACKUP_PROFILE = 8,
 };
 
+enum collapse_beh_e
+{
+    CBEH_DONT,
+    CBEH_BY_MIN_BUTTON,
+    CBEH_BY_CLOSE_BUTTON,
+};
+
 class config_c : public config_base_c
 {
     ts::tbuf_t<ONCLOSE_FUNC> onclose_handlers;
@@ -174,14 +181,14 @@ public:
     TEXTWPAR(profile, "")
     TEXTAPAR(language, "ru")
     TEXTWPAR(theme, "def")
-    INTPAR(collapse_beh, 2)
+    INTPAR(collapse_beh, CBEH_BY_CLOSE_BUTTON)
     INTPAR(autoupdate, 1)
     //TEXTAPAR(autoupdate_newver, "")
 
     void autoupdate_newver( const ts::asptr&ver, bool bits64 )
     {
         if (bits64)
-            param( CONSTASTR("autoupdate_newver"), ts::str_c(ver).append(CONSTASTR("/64")) );
+            param( CONSTASTR("autoupdate_newver"), ts::str_c(ver, CONSTASTR("/64")) );
         else
             param( CONSTASTR( "autoupdate_newver" ), ver );
     }

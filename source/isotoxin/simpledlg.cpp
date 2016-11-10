@@ -18,22 +18,21 @@ dialog_msgbox_params_s dialog_msgbox_c::mb_error(const ts::wstr_c &text)
 }
 dialog_msgbox_params_s dialog_msgbox_c::mb_qrcode(const ts::wstr_c &text)
 {
-    ts::wstr_c qr(CONSTWSTR("<ee>"), text); qr.append(CONSTWSTR("<br><qr>")).append(text).append(CONSTWSTR("</qr>"));
+    ts::wstr_c qr( CONSTWSTR( "<ee>" ), text, CONSTWSTR( "<br><qr>" ) ); qr.append( text ).append( CONSTWSTR( "</qr>" ) );
     return dialog_msgbox_params_s(title_qr_code, qr);
 }
 
 dialog_msgbox_params_s dialog_msgbox_c::mb_avatar( const ts::wstr_c &text, const ts::bitmap_c &ibmp )
 {
-    ts::wstr_c t( CONSTWSTR( "<ee>" ), text );
-    t.append( CONSTWSTR( "<br=5><rect=17," ) );
+    ts::wstr_c t( CONSTWSTR( "<ee>" ), text, CONSTWSTR( "<br=5><rect=17," ) );
     t.append_as_int( ibmp.info().sz.x ).append_char( ',' ).append_as_int( ibmp.info().sz.y ).append( CONSTWSTR( ">" ) );
     return dialog_msgbox_params_s( title_avatar, t, ibmp );
 }
 
-RID dialog_msgbox_params_s::summon()
+RID dialog_msgbox_params_s::summon(bool mainparent)
 {
     redraw_collector_s dch;
-    return SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, *this);
+    return SUMMON_DIALOG<dialog_msgbox_c>(UD_NOT_UNIQUE, mainparent, *this);
 }
 
 
@@ -148,8 +147,13 @@ bool dialog_msgbox_c::copy_text(RID, GUIPARAM)
     int y = 55; // sorry about this ugly constant
     if (const theme_rect_s *thr = themerect())
         y += thr->clborder_y();
+
     if (tsz.y > height-y)
         height = tsz.y+y;
+
+    int m = m_params.menu.count();
+    if (m > 2)
+        height += (m-2) * 20;
 
 }
 
@@ -160,6 +164,25 @@ void dialog_msgbox_c::getbutton(bcreate_s &bcr)
     bcr = m_buttons.get(bcr.tag);
 }
 
+bool dialog_msgbox_c::checkboxes( RID, GUIPARAM v )
+{
+    cbv = static_cast<ts::uint32>((size_t)v);
+    return true;
+}
+
+bool dialog_msgbox_c::checkboxes1( RID b, GUIPARAM v )
+{
+    cbv ^= 1;
+
+    if (cbv)
+        HOLD(b).as<gui_button_c>().set_image( CONSTASTR( "check1" ) );
+    else
+        HOLD(b).as<gui_button_c>().set_image( CONSTASTR( "check0" ) );
+
+
+    return true;
+}
+
 /*virtual*/ int dialog_msgbox_c::additions(ts::irect &)
 {
 
@@ -167,6 +190,47 @@ void dialog_msgbox_c::getbutton(bcreate_s &bcr)
     dm << 1;
 
     dm().label(CONSTWSTR("<p=c>") + m_params.desc).setname(CONSTASTR("label"));
+
+    if (!m_params.menu.is_empty())
+    {
+        struct buildinitial
+        {
+            ts::uint32 v = 0;
+            int n = 0;
+            ts::wstr_c text1;
+
+            bool operator()( buildinitial&, const ts::wsptr& ) { return true; } // skip separator
+            bool operator()( buildinitial&, const ts::wsptr&, const menu_c& ) { return true; } // skip submenu
+            bool operator()( buildinitial&, menu_item_info_s &inf )
+            {
+                if (text1.is_empty())
+                    text1 = inf.txt;
+
+                if (inf.flags & MIF_MARKED)
+                    v |= inf.prm.as_uint();
+                ++n;
+                return true;
+            }
+        } s;
+
+        m_params.menu.iterate_items(s,s);
+        cbv = s.v;
+        if (s.n == 1)
+        {
+            gui_button_c &b = lbutton( DELEGATE( this, checkboxes ) );
+
+            b.set_check( gui->get_free_tag() );
+            b.set_face_getter( BUTTON_FACE( check ) );
+            b.set_text( s.text1 );
+            if (s.v) b.mark();
+
+            return 1;
+        } else
+        {
+            center_text = false;
+            dm().checkb( ts::wsptr(), DELEGATE( this, checkboxes ), s.v ).setmenu( m_params.menu );
+        }
+    }
 
     return 0;
 }
@@ -188,7 +252,7 @@ void dialog_msgbox_c::getbutton(bcreate_s &bcr)
 
             gui_label_c &l = rlbl.as<gui_label_c>();
             l.set_autoheight(false);
-            l.set_vcenter();
+            if (center_text) l.set_vcenter();
 
             MODIFY(lbl).pos( viewrect.lt ).size(viewrect.size());
         }
@@ -201,7 +265,13 @@ void dialog_msgbox_c::getbutton(bcreate_s &bcr)
 
 /*virtual*/ void dialog_msgbox_c::on_confirm()
 {
-    if (m_params.on_ok_h) m_params.on_ok_h(m_params.on_ok_par);
+    if (m_params.on_ok_h)
+    {
+        if (cbv)
+            m_params.on_ok_h( ts::amake( cbv ).append_char( '/' ).append( m_params.on_ok_par ) );
+        else
+            m_params.on_ok_h( m_params.on_ok_par );
+    }
     __super::on_confirm();
 }
 
@@ -950,7 +1020,7 @@ bool incoming_msg_panel_c::endoflife( RID, GUIPARAM )
         ts::ivec2 addp = get_client_area().lt;
 
         contact_root_c *cc = hist;
-        if ( cc->getkey().is_group() )
+        if ( cc->getkey().is_conference() )
             cc = sender->get_historian();
 
         if (cc)
@@ -961,7 +1031,7 @@ bool incoming_msg_panel_c::endoflife( RID, GUIPARAM )
             }
             else
             {
-                const theme_image_s *icon = cc->getkey().is_group() ? g_app->preloaded_stuff().groupchat : g_app->preloaded_stuff().icon[ hist->get_meta_gender() ];
+                const theme_image_s *icon = cc->getkey().is_conference() ? g_app->preloaded_stuff().conference : g_app->preloaded_stuff().icon[ hist->get_meta_gender() ];
                 icon->draw( *m_engine.get(), addp + ( avarect - icon->info().sz ) / 2 );
             }
         } else

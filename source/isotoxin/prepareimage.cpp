@@ -1,6 +1,5 @@
 #include "isotoxin.h"
 
-
 /*virtual*/ int dialog_prepareimage_c::saver_s::iterate()
 {
     if (!dlg || bitmap2save.info().sz < ts::ivec2(1) ) return R_CANCEL;
@@ -927,7 +926,7 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
 
                 draw_data_s&dd = getengine().begin_draw();
 
-                ts::wstr_c t(CONSTWSTR("<l>"),  loc_text(loc_dropimagehere)); t.append(CONSTWSTR("</l>"));
+                ts::wstr_c t(CONSTWSTR("<l>"),  loc_text(loc_dropimagehere), CONSTWSTR("</l>"));
                 ts::ivec2 tsz = gui->textsize(ts::g_default_text_font, t);
                 ts::ivec2 tpos = (viewrect.size() - tsz) / 2;
 
@@ -1114,9 +1113,11 @@ void dialog_prepareimage_c::getbutton(bcreate_s &bcr)
         ts::wstr_c tmpsave(cfg().temp_folder_sendimg());
         path_expand_env(tmpsave, ts::wstr_c());
         ts::make_path(tmpsave, 0);
-        ts::md5_c md5;
-        md5.update(saved_image.data(), saved_image.size());
-        tmpsave.append_as_hex(md5.result(), 16);
+
+        ts::uint8 hash[BLAKE2B_HASH_SIZE_SMALL];
+        BLAKE2B( hash, saved_image.data(), saved_image.size() );
+        tmpsave.append_as_hex( hash, sizeof( hash ) );
+
         switch (saved_img_format)
         {
         case ts::if_png:
@@ -1143,7 +1144,7 @@ MAKE_ROOT<desktopgrab_c>::~MAKE_ROOT()
     MODIFY( *me ).pos( r.lt ).size( r.size() ).opacity( 0.1960784314f ).visible( true );
 }
 
-desktopgrab_c::desktopgrab_c( MAKE_ROOT<desktopgrab_c> &data ) :gui_control_c( data ), k( data.k ), monitor(data.monitor), av_call( data.av_call )
+desktopgrab_c::desktopgrab_c( MAKE_ROOT<desktopgrab_c> &data ) :gui_control_c( data ), avk( data.avk ), monitor(data.monitor), av_call( data.av_call )
 {
 }
 
@@ -1228,7 +1229,7 @@ bool desktopgrab_c::esc_handler( RID, GUIPARAM )
         {
             ts::irect r = opd->rect;
             gui->end_mousetrack( getrid(), MTT_APPDEFINED1 );
-            gmsg<ISOGM_GRABDESKTOPEVENT>( r, k, monitor, av_call ).send();
+            gmsg<ISOGM_GRABDESKTOPEVENT>( r, avk, monitor, av_call ).send();
             return true;
         }
         break;
@@ -1276,11 +1277,11 @@ bool desktopgrab_c::ticktick( RID, GUIPARAM )
     return true;
 }
 
-void desktopgrab_c::run( const contact_key_s &k, bool av_call )
+void desktopgrab_c::run( uint64 avkey, bool av_call )
 {
     int mc = ts::monitor_count();
     for ( int i = 0; i < mc; ++i )
     {
-        MAKE_ROOT<desktopgrab_c> g( ts::monitor_get_max_size_fs( i ), k, i, av_call );
+        MAKE_ROOT<desktopgrab_c> g( ts::monitor_get_max_size_fs( i ), avkey, i, av_call );
     }
 }

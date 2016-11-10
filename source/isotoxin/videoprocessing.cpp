@@ -179,7 +179,7 @@ void vsb_desktop_c::grab_desktop::get(vsb_desktop_c *owner, const ts::irect &gra
 
 void vsb_desktop_c::grab_desktop::add_owner(vsb_desktop_c *owner)
 {
-    spinlock::auto_simple_lock l(sync);
+    SIMPLELOCK(sync);
 
     for (vsb_desktop_c *ptr : owners)
         if (ptr == owner)
@@ -386,7 +386,7 @@ bool vsb_dshow_camera_c::core_c::get(vsb_dshow_camera_c *owner, const vsb_descri
 
 bool vsb_dshow_camera_c::core_c::add_owner( vsb_dshow_camera_c *owner )
 {
-    spinlock::auto_simple_lock l(sync);
+    SIMPLELOCK(sync);
 
     for( vsb_dshow_camera_c *ptr : owners )
         if (ptr == owner)
@@ -431,7 +431,7 @@ void vsb_dshow_camera_c::core_c::remove_owner( vsb_dshow_camera_c *owner )
 
 void vsb_dshow_camera_c::core_c::initialized( const ts::ivec2 &videosize )
 {
-    spinlock::auto_simple_lock l(sync);
+    SIMPLELOCK(sync);
     busy = false;
     for (vsb_dshow_camera_c * c : owners)
         c->initialized(videosize);
@@ -439,7 +439,7 @@ void vsb_dshow_camera_c::core_c::initialized( const ts::ivec2 &videosize )
 
 void vsb_dshow_camera_c::core_c::setbusy()
 {
-    spinlock::auto_simple_lock l(sync);
+    SIMPLELOCK(sync);
     busy = false;
     for (vsb_dshow_camera_c * c : owners)
         c->busy = true;

@@ -52,6 +52,8 @@ bool    TSCALL dir_present(const wstr_c &path);
 bool TSCALL is_file_exists(const wsptr &fname);
 bool TSCALL is_file_exists(const wsptr &iroot, const wsptr &fname);
 
+uint64 TSCALL get_free_space( const wstr_c &path );
+
 struct extension_s
 {
     MOVABLE( true );

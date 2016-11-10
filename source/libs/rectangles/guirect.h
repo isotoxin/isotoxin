@@ -73,6 +73,7 @@ enum system_query_e
     SQ_CHILD_ARRAY_COUNT,   // child array size changed -> evt_data_s::values.count
 
     SQ_CLOSE,
+    SQ_EXIT,
 
 #ifdef _DEBUG
     SQ_DEBUG_CHANGED_SOME,
@@ -319,7 +320,7 @@ class rectengine_c;
 class rectprops_c // pod
 {
 	ts::ivec2 m_pos; // left-top corner position in parent coordiantes
-    ts::ivec2 m_screenpos; // left-top corner position in screen coordiantes
+    mutable ts::ivec2 m_screenpos; // left-top corner position in screen coordiantes
 	ts::ivec2 m_size;
     ts::irect m_fsrect; // full screen rect (in maximized mode)
     float     m_zindex;
@@ -341,6 +342,8 @@ class rectprops_c // pod
     DECLAREBIT( F_ALLOW_MOVE ); // allow move by mouse
 
     DECLAREBIT( F_OUT_OF_BOUND ); // set by gui system
+    DECLAREBIT( F_RECALC_SCREENPOS ); // set by gui system
+    DECLAREBIT( F_RECT_MEMBER ); // set by gui system
 
 #undef DECLAREBIT
 
@@ -352,13 +355,19 @@ class rectprops_c // pod
         m_fsrect = ts::wnd_get_max_size( screenrect(false) );
     }
 
+    guirect_c * owner() const;
+
 public:
 
-	rectprops_c()
+	explicit rectprops_c( bool rectmember = false )
 	{
 		memset( this, 0, sizeof(rectprops_c) );
         m_opacity = 1.0f;
+        m_flags.init( F_RECT_MEMBER, rectmember );
 	}
+
+    void need_recalc_screenpos() { m_flags.set( F_RECALC_SCREENPOS ); }
+    const rectprops_c &update_screenpos() const;
 
     bool is_visible_and_nonzero_size() const { return is_visible() && (size() >> 0); }
 
@@ -383,10 +392,20 @@ public:
 	const ts::ivec2 &size() const {return m_size;}
     const ts::ivec2 currentsize() const {return is_maximized() ? m_fsrect.size() : m_size;}
 	ts::irect rect() const {return ts::irect(m_pos, m_pos + m_size);}
-    ts::irect screenrect(bool maxmask = true) const { return (is_maximized()&&maxmask) ? m_fsrect : ts::irect(m_screenpos, m_screenpos + m_size); }
+    ts::irect screenrect(bool maxmask = true) const
+    {
+        if( m_flags.is( F_RECALC_SCREENPOS ) )
+            update_screenpos();
+        return (is_maximized()&&maxmask) ? m_fsrect : ts::irect(m_screenpos, m_screenpos + m_size);
+    }
 	ts::irect szrect() const { return ts::irect(ts::ivec2(0), m_size); } // just size
     ts::irect currentszrect() const { return ts::irect(ts::ivec2(0), currentsize() ); } // just size
-    const ts::ivec2 &screenpos() const {return is_maximized() ? m_fsrect.lt : m_screenpos;}
+    const ts::ivec2 &screenpos() const
+    {
+        if (m_flags.is( F_RECALC_SCREENPOS ))
+            update_screenpos();
+        return is_maximized() ? m_fsrect.lt : m_screenpos;
+    }
 
     rectprops_c &opacity( float opa ) { m_opacity = opa; return *this; }
     rectprops_c &zindex(float zi) { m_zindex = zi; return *this; }
@@ -396,7 +415,21 @@ public:
 	rectprops_c &size(int w, int h) { m_size.x = w; m_size.y = h; updatefs(); /*ASSERT(m_size << 40000);*/ return *this; }
 	rectprops_c &size(const ts::ivec2 &sz) { m_size = sz; updatefs(); ASSERT(m_size << 40000); return *this; }
     rectprops_c &setcenterpos() { return pos(ts::wnd_get_center_pos(size())); }
-	rectprops_c &pos(int x, int y) { ts::ivec2 delta( x - m_pos.x, y - m_pos.y ); m_pos.x = x; m_pos.y = y; m_screenpos += delta; updatefs(); return *this; }
+	rectprops_c &pos(int x, int y)
+    {
+        if (m_flags.is(F_RECALC_SCREENPOS))
+        {
+            m_pos.x = x; m_pos.y = y;
+            update_screenpos();
+        } else
+        {
+            ts::ivec2 delta( x - m_pos.x, y - m_pos.y );
+            m_pos.x = x; m_pos.y = y;
+            m_screenpos += delta;
+        }
+        updatefs();
+        return *this;
+    }
 	rectprops_c &pos(const ts::ivec2 &p) { return pos(p.x, p.y); }
 	rectprops_c &show() { m_flags.set(F_VISIBLE); return *this; }
 	rectprops_c &hide() { m_flags.clear(F_VISIBLE); return *this; }
@@ -424,8 +457,8 @@ public:
 	
     rectprops_c &allow_move_resize(bool _move = true, bool _resize = true) { m_flags.init(F_ALLOW_MOVE, _move); m_flags.init(F_ALLOW_RESIZE, _resize); return *this; }
 
-    bool change_to(const rectprops_c &p, rectengine_c *engine);
-    void change_to(const rectprops_c &p) { memcpy( this, &p, sizeof(rectprops_c) ); /* rectprops_c is pod by design */ }
+    bool change_to(const rectprops_c &p);
+    void set(const rectprops_c &p) { memcpy( this, &p, sizeof(rectprops_c) ); /* rectprops_c is pod by design */ }
 
     // special function
     void __spec_movescreenpos(const ts::ivec2 &delta) { m_screenpos += delta; }
@@ -584,6 +617,7 @@ class rectengine_root_c;
 class guirect_c : public sqhandler_i
 {
     friend class MODIFY;
+    friend class rectprops_c;
 
 	DUMMY( guirect_c );
 	rectprops_c m_props; // never! never change this struct directly! its private
@@ -612,7 +646,7 @@ protected:
     RID m_parent;
     ts::safe_ptr<rectengine_root_c> m_root;
     GET_TOOLTIP m_tooltip;
-    guirect_c() {}
+    guirect_c():m_props( true ) {}
 
 public:
 
@@ -625,6 +659,12 @@ public:
 
     virtual void update_dndobj(guirect_c *donor) {}
     virtual guirect_c * summon_dndobj(const ts::ivec2 &deltapos) { return nullptr; };
+
+    virtual bool test_under_point( const guirect_c &r, const ts::ivec2& screenpos ) const
+    {
+        ASSERT( r.getparent() == getrid() );
+        return r.getprops().screenrect().inside( screenpos ); // simple in-rect check
+    }
 
     const ts::wstr_c tooltip() const {return m_tooltip ? m_tooltip() : ts::wstr_c();}
     void tooltip(GET_TOOLTIP gtt)  {m_tooltip = gtt;}
@@ -648,6 +688,8 @@ public:
     ts::irect local_to_root(const ts::irect &localr) const;
     ts::ivec2 local_to_root(const ts::ivec2 &localpt) const;
     ts::ivec2 root_to_local(const ts::ivec2 &rootpt) const;
+
+    void need_recalc_screenpos();
 
     virtual void created(); // fully created - notify parent
 
@@ -708,9 +750,6 @@ public:
     // sqhandler_i
 	/*virtual*/ bool sq_evt( system_query_e qp, RID _rid, evt_data_s &data ) override;
 
-
-
-
     // special function. only internal mechanics should use them
 
     ts::ivec2 __spec_to_screen_calc(const ts::ivec2 &p) const // converts p to screen space (slow)
@@ -723,6 +762,13 @@ public:
     void __spec_set_zindex(float zindex) {m_props.__spec_set_zindex(zindex);}
     void __spec_set_outofbound(bool f) { m_props.__spec_set_outofbound(f); }
 };
+
+INLINE guirect_c * rectprops_c::owner() const
+{
+    if (CHECK( m_flags.is( F_RECT_MEMBER ) ))
+        return (guirect_c *)(((char *)this) - offsetof( guirect_c, m_props ));
+    return nullptr;
+}
 
 template<> struct gmsg<GM_CHECK_ALLOW_CLICK> : public gmsgbase
 {
@@ -930,6 +976,7 @@ class gui_button_c : public gui_control_c
     static const ts::flags32_s::BITS F_CONSTANT_SIZE_Y      = FLAGS_FREEBITSTART << 7;
     static const ts::flags32_s::BITS F_DISABLED_USE_ALPHA   = FLAGS_FREEBITSTART << 8;
     static const ts::flags32_s::BITS F_HOVER                = FLAGS_FREEBITSTART << 9;
+    static const ts::flags32_s::BITS F_SECOND_FACE          = FLAGS_FREEBITSTART << 10;
 
     typedef gm_redirect_s<GM_GROUP_SIGNAL> GROUPHANDLER;
     UNIQUE_PTR( GROUPHANDLER ) grouphandler;
@@ -944,7 +991,7 @@ class gui_button_c : public gui_control_c
     GUIPARAMHANDLER handler;
     GUIPARAM param = nullptr;
 
-    GET_BUTTON_FACE face_getter;
+    GET_BUTTON_FACE face_getter[2];
 
     bool group_handler(gmsg<GM_GROUP_SIGNAL> & signal);
     bool default_handler(RID r, GUIPARAM param);
@@ -953,25 +1000,9 @@ class gui_button_c : public gui_control_c
     int get_ctl_width();
 
     void set_face(button_desc_s *bdesc);
+    void set_text_internal( const ts::wsptr&t );
 
-    void set_text_internal(const ts::wsptr&t)
-    {
-        text.clear();
-        image.clear();
-
-        if (ts::pwstr_c(t).begins(CONSTWSTR("<img=")))
-        {
-            int x = ts::pwstr_c(t).find_pos(5,'>');
-            if (ASSERT(x>5))
-            {
-                text.set( t.skip(x+1) );
-                image = ts::to_str( ts::pwstr_c(t).substr(5,x) );
-            }
-        } else
-            text.set(t);
-
-        flags.clear(F_TEXTSIZEACTUAL);
-    }
+    void apply_face();
 
 public:
     gui_button_c(initial_rect_data_s &data):gui_control_c(data) { handler = DELEGATE(this, default_handler); }
@@ -999,11 +1030,28 @@ public:
 
     const ts::font_desc_c &get_font() const;
 
-    void set_face_getter( GET_BUTTON_FACE _face_getter ) { face_getter = _face_getter; if (face_getter) set_face( face_getter() ); }; // be careful!!! face_getter will be called every time theme changed! make sure object life time is enough
+    void set_face_getter( GET_BUTTON_FACE _face_getter0, GET_BUTTON_FACE _face_getter1 = GET_BUTTON_FACE(), bool use_second_face = false ) // be careful!!! face_getter will be called every time theme changed! make sure object life time is enough
+    {
+        face_getter[0] = _face_getter0;
+        face_getter[1] = _face_getter1;
+        flags.init( F_SECOND_FACE, use_second_face );
+        apply_face();
+    }
+
+    void use_face( bool second )
+    {
+        flags.init( F_SECOND_FACE, second );
+        apply_face();
+    }
 
     void set_handler( GUIPARAMHANDLER _handler, GUIPARAM _param ) { handler = _handler; param = _param; }
     void set_text( const ts::wsptr&t ) { set_text_internal(t); }
     void set_text( const ts::wsptr&t, int &minw ) { set_text_internal(t); minw = get_ctl_width(); }
+    void set_image( const ts::asptr&imagename )
+    {
+        image = imagename;
+        flags.clear( F_TEXTSIZEACTUAL );
+    }
 
     void set_limit_max_size( bool f = true ) { flags.init(F_LIMIT_MAX_SIZE,f); }
     void set_constant_size( const ts::ivec2 &sz ) { ASSERT(!flags.is(F_CHECKBUTTON|F_RADIOBUTTON)); flags.set(F_CONSTANT_SIZE_X|F_CONSTANT_SIZE_Y); textsize = sz; }
@@ -1011,6 +1059,7 @@ public:
     void set_constant_height( int h ) { ASSERT(!flags.is(F_CHECKBUTTON|F_RADIOBUTTON)); flags.set(F_CONSTANT_SIZE_Y); textsize.y = h; }
 
     void push(); // do all stuff like button was pushed
+    bool is_second_face() const { return flags.is( F_SECOND_FACE ); }
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
     /*virtual*/ ts::ivec2 get_max_size() const override;
@@ -1530,6 +1579,7 @@ template<> struct MAKE_CHILD<gui_textfield_c> : public _PCHILD(gui_textfield_c)
     ts::wstr_c text;
     int chars_limit;
     GET_BUTTON_FACE selectorface;
+    GET_BUTTON_FACE selectorface2;
     int multiline;
     bool selector;
     bool create_visible;

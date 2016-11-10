@@ -130,6 +130,7 @@
     <ClCompile Include="tspackfile.cpp" />
     <ClCompile Include="tsparse.cpp" />
     <ClCompile Include="tspointers.cpp" />
+    <ClCompile Include="tsregex.cpp" />
     <ClCompile Include="tsrnd.cpp" />
     <ClCompile Include="tssqlite.cpp" />
     <ClCompile Include="tsstrar.cpp" />
@@ -166,6 +167,7 @@
     <ClInclude Include="tsdebug.h" />
     <ClInclude Include="tshash_md5.h" />
     <ClInclude Include="tsjson.h" />
+    <ClInclude Include="tsregex.h" />
     <ClInclude Include="tsstreamstr.h" />
     <ClInclude Include="tsfilesystem.h" />
     <ClInclude Include="tsfile_zip.h" />

@@ -34,7 +34,7 @@ struct preloaded_stuff_s
     ts::TSCOLOR state_dnd_color = ts::ARGB(255, 0, 0);
 
     const theme_image_s* icon[contact_gender_count];
-    const theme_image_s* groupchat = nullptr;
+    const theme_image_s* conference = nullptr;
     const theme_image_s* nokeeph = nullptr;
     const theme_image_s* achtung_bg = nullptr;
     const theme_image_s* invite_send = nullptr;
@@ -99,6 +99,9 @@ struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
 
     uint64 i_utag = 0; // protocol's internal tag
 
+    uint64 write_buffer_offset = 0;
+    ts::buf0_c write_buffer;
+
     struct job_s
     {
         MOVABLE( true );
@@ -158,16 +161,15 @@ struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
 
     bool auto_confirm();
 
-    int progress(int &bytes_per_sec) const;
+    int progress( int &bytes_per_sec, uint64 &cursz ) const;
     void upd_message_item(bool force);
     static void upd_message_item( unfinished_file_transfer_s &uft );
-
 
     void upload_accepted();
     void resume();
     void prepare_fn( const ts::wstr_c &path_with_fn, bool overwrite );
     void kill( file_control_e fctl = FIC_BREAK, unfinished_file_transfer_s *uft = nullptr );
-    void save( uint64 offset, const ts::buf0_c&data );
+    void save( uint64 offset, ts::buf0_c&data );
     void query( uint64 offset, int sz );
     void pause_by_remote( bool p );
     void pause_by_me( bool p );
@@ -177,6 +179,8 @@ struct file_transfer_s : public unfinished_file_transfer_s, public ts::task_c
         return ( const_cast<data_s *>( &wdata() )->deltatime( false ) ) > 60; /* last activity in 60 sec */
     }
     bool confirm_required() const;
+
+    ts::str_c text_for_notice() const;
 };
 
 namespace ts
@@ -251,6 +255,8 @@ public:
 
     void apply_ui_mode( bool split_ui );
 
+    volatile bool F_INDICATOR_CHANGED = false; // whole byte due it modified from non-main thread
+
     unsigned F_INITIALIZATION : 1;
     unsigned F_NEWVERSION : 1;
     unsigned F_NONEWVERSION : 1;
@@ -269,6 +275,7 @@ public:
     unsigned F_CAPTURE_AUDIO_TASK : 1;
     unsigned F_CAPTURING : 1;
     unsigned F_SHOW_CONTACTS_IDS : 1;
+    unsigned F_SHOW_LOST_CONTACTS : 1;
     unsigned F_SHOW_SPELLING_WARN : 1;
     unsigned F_MAINRECTSUMMON : 1;
     unsigned F_SPLIT_UI : 1;
@@ -465,7 +472,7 @@ public:
         int options = 0;
     } reselect_data;
 
-    ts::hashmap_t< ts::str_c, avatar_s > identicons;
+    ts::hashmap_t< ts::str_c, avatar_s > m_identicons;
 
 public:
     bool b_send_message(RID r, GUIPARAM param);
@@ -516,7 +523,7 @@ public:
 
         bool is_enabled() const
         {
-            spinlock::auto_simple_lock l(sync);
+            SIMPLELOCK(sync);
             return state != EMPTY && AU_UNLOAD != after_unlock && AU_DIE != after_unlock;
         }
 
@@ -531,7 +538,7 @@ public:
 
         bool is_locked( bool set_dip )
         {
-            spinlock::auto_simple_lock l(sync);
+            SIMPLELOCK(sync);
             if (set_dip) after_unlock = AU_DIE;
             return busy != nullptr;
         }
@@ -640,9 +647,8 @@ public:
     void add_task( ts::task_c *t ) { m_tasks_executor.add(t); }
     ts::uint32 base_tid() const { return  m_tasks_executor.base_tid(); }
 
-    void update_ringtone( contact_root_c *rt, bool play_stop_snd = true );
-    av_contact_s * update_av( contact_root_c *avmc, bool activate, bool camera = false );
-
+    void update_ringtone( contact_root_c *rt, contact_c *sub, bool play_stop_snd = true );
+    av_contact_s * update_av( contact_root_c *avmc, contact_c *sub, bool activate, bool camera = false );
 
     template<typename R> void enum_file_transfers_by_historian( const contact_key_s &historian, R r )
     {
@@ -662,7 +668,7 @@ public:
     bool present_undelivered_messages( const contact_key_s& rcv, uint64 except_utag ) const;
     void reset_undelivered_resend_cooldown( const contact_key_s& rcv );
     void resend_undelivered_messages( const contact_key_s& rcv = contact_key_s() );
-    void undelivered_message( const post_s &p );
+    void undelivered_message( const contact_key_s &historian_key, const post_s &p );
     void kill_undelivered( uint64 utag );
 
     void set_status(contact_online_state_e cos_, bool manual);

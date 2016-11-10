@@ -54,7 +54,7 @@ ts::wstr_c gui_isodialog_c::title( rtitle_e lbl )
     case title_settings:                    return MAKE_TITLE(TTT("Settings",904));
     case title_new_contact:                 return MAKE_TITLE(TTT("New contact",905));
     case title_repeat_request:              return MAKE_TITLE(TTT("Repeat request",906));
-    case title_new_groupchat:               return MAKE_TITLE(TTT("New group chat",907));
+    case title_new_conference:              return MAKE_TITLE(TTT("New conference",907));
     case title_avatar_creation_tool:        return MAKE_TITLE(TTT("Avatar creation tool",908));
     case title_contact_properties:          return MAKE_TITLE(TTT("Contact properties",909));
     case title_new_meta_contact:            return MAKE_TITLE(TTT("New metacontact",910));
@@ -69,7 +69,8 @@ ts::wstr_c gui_isodialog_c::title( rtitle_e lbl )
     case title_qr_code:                     return MAKE_TITLE(TTT("QR code",919));
     case title_newtags:                     return MAKE_TITLE(TTT("New contact tag(s)",920));
     case title_rentag:                      return MAKE_TITLE(TTT("Rename tag",921));
-    case title_avatar:                      return MAKE_TITLE( TTT( "Avatar", 922 ) );
+    case title_avatar:                      return MAKE_TITLE(TTT("Avatar",922));
+    case title_conference_properties:       return MAKE_TITLE(TTT("Conference properties",923));
     }
 
     return APPNAME_CAPTION;

@@ -55,7 +55,7 @@ struct load_spellcheckers_s : public ts::task_c
         nofiles = fns.size() == 0;
 
         for(ts::wstr_c &dn : fns )
-            if ( dar.find(ts::fn_get_name(dn).as_sptr()) >= 0 )
+            if ( dar.find(ts::fn_get_name(dn)) >= 0 )
                 dn.clear();
         fns.kill_empty_fast();
 
@@ -254,7 +254,8 @@ bool application_c::splchk_c::check_one( const ts::str_c &w, ts::astrings_c &sug
 
 application_c::splchk_c::lock_rslt_e application_c::splchk_c::lock(void *prm)
 {
-    spinlock::auto_simple_lock l(sync);
+    SIMPLELOCK(sync);
+
     if (after_unlock == AU_DIE) return LOCK_DIE;
     if ( busy ) return LOCK_BUSY;
     if ( EMPTY == state || after_unlock == AU_UNLOAD ) return LOCK_EMPTY;
@@ -266,7 +267,8 @@ application_c::splchk_c::lock_rslt_e application_c::splchk_c::lock(void *prm)
 
 bool application_c::splchk_c::unlock(void *prm)
 {
-    spinlock::auto_simple_lock l(sync);
+    SIMPLELOCK(sync);
+
     ASSERT( busy == prm );
     busy = nullptr;
     return after_unlock != AU_NOTHING;
@@ -275,7 +277,7 @@ bool application_c::splchk_c::unlock(void *prm)
 
 void application_c::splchk_c::load()
 {
-    spinlock::auto_simple_lock l(sync);
+    SIMPLELOCK(sync);
 
     if (AU_DIE == after_unlock) return;
 
@@ -295,7 +297,7 @@ void application_c::splchk_c::load()
 }
 void application_c::splchk_c::unload()
 {
-    spinlock::auto_simple_lock l(sync);
+    SIMPLELOCK(sync);
 
     if (AU_DIE == after_unlock) return;
 
@@ -329,7 +331,7 @@ void application_c::splchk_c::spell_check_work_done()
 
 void application_c::splchk_c::set_spellcheckers(ts::array_del_t< Hunspell, 0 > &&sa)
 {
-    spinlock::auto_simple_lock l(sync);
+    SIMPLELOCK(sync);
 
     if (nullptr != busy || AU_DIE == after_unlock)
         return;
@@ -356,7 +358,7 @@ void application_c::splchk_c::set_spellcheckers(ts::array_del_t< Hunspell, 0 > &
 
 void application_c::splchk_c::check(ts::astrings_c &&checkwords, spellchecker_s *rsltrcvr)
 {
-    spinlock::auto_simple_lock l(sync);
+    SIMPLELOCK(sync);
     if (after_unlock != AU_NOTHING || spellcheckers.size() == 0 || LOADING == state)
     {
         rsltrcvr->undo_check(checkwords);
@@ -474,13 +476,13 @@ ts::uint32 application_c::gm_handler( gmsg<ISOGM_GRABDESKTOPEVENT>&g )
     {
         if ( g.r && g.monitor >= 0 && g.pass == 0 )
         {
-            if ( av_contact_s *avc = g_app->avcontacts().find_inprogress(g.k) )
+            if ( av_contact_s *avc = g_app->avcontacts().find_inprogress(g.avk) )
             {
-                avc->currentvsb.id.set( CONSTWSTR( "desktop/" ) ).append_as_uint( g.monitor ).append_char('/');
-                avc->currentvsb.id.append_as_int( g.r.lt.x ).append_char( '/' ).append_as_int( g.r.lt.y ).append_char( '/' );
-                avc->currentvsb.id.append_as_int( g.r.rb.x ).append_char( '/' ).append_as_int( g.r.rb.y );
-                avc->cpar.clear();
-                avc->vsb.reset();
+                avc->core->currentvsb.id.set( CONSTWSTR( "desktop/" ) ).append_as_uint( g.monitor ).append_char('/');
+                avc->core->currentvsb.id.append_as_int( g.r.lt.x ).append_char( '/' ).append_as_int( g.r.lt.y ).append_char( '/' );
+                avc->core->currentvsb.id.append_as_int( g.r.rb.x ).append_char( '/' ).append_as_int( g.r.rb.y );
+                avc->core->cpar.clear();
+                avc->core->vsb.reset();
             }
         }
 
@@ -494,7 +496,7 @@ ts::uint32 application_c::gm_handler( gmsg<ISOGM_GRABDESKTOPEVENT>&g )
     {
         // grab and send to g.k
 
-        if ( contact_root_c *c = g.k.find_root_contact() )
+        if ( contact_root_c *c = contact_key_s(g.avk).find_root_contact() )
         {
             ts::drawable_bitmap_c grabbuff;
             grabbuff.create( g.r.size(), g.monitor );
@@ -506,9 +508,9 @@ ts::uint32 application_c::gm_handler( gmsg<ISOGM_GRABDESKTOPEVENT>&g )
             ts::wstr_c tmpsave( cfg().temp_folder_sendimg() );
             path_expand_env( tmpsave, ts::wstr_c() );
             ts::make_path( tmpsave, 0 );
-            ts::md5_c md5;
-            md5.update( saved_image.data(), saved_image.size() );
-            tmpsave.append_as_hex( md5.result(), 16 );
+            ts::uint8 hash[ BLAKE2B_HASH_SIZE_SMALL ];
+            BLAKE2B( hash, saved_image.data(), saved_image.size() );
+            tmpsave.append_as_hex( hash, sizeof( hash ) );
             tmpsave.append( CONSTWSTR( ".png" ) );
 
             saved_image.save_to_file( tmpsave );
@@ -579,6 +581,7 @@ void application_c::apply_debug_options()
 #endif
 
     F_SHOW_CONTACTS_IDS = d.get(CONSTASTR("contactids")).as_int() != 0;
+    F_SHOW_LOST_CONTACTS = d.get( CONSTASTR( "lostcontacts" ) ).as_int() != 0;
 }
 
 ts::uint32 application_c::gm_handler(gmsg<ISOGM_CHANGED_SETTINGS>&ch)
@@ -613,11 +616,11 @@ bool application_c::handle_keyboard( int scan, bool dn, int casw )
 {
     if ( casw == ts::casw_win && dn )
     {
-        switch( scan )
-        {
-        case ts::SSK_LEFT:
-            __debugbreak();
-            return true;
+        //switch( scan )
+        //{
+        //case ts::SSK_LEFT:
+        //    DEBUG_BREAK();
+        //    return true;
         //case ts::SSK_UP:
         //    MODIFY( main ).maximize( true );
         //    return true;
@@ -627,10 +630,21 @@ bool application_c::handle_keyboard( int scan, bool dn, int casw )
         //    else
         //        MODIFY( main ).minimize( true );
         //    return true;
-        }
+        //}
     }
 
-    return __super::handle_keyboard( scan, dn, casw );
+    if (!__super::handle_keyboard( scan, dn, casw ))
+    {
+        if ( scan == ts::SSK_ESC &&  casw == 0 && dn )
+        {
+            if (cfg().collapse_beh() == CBEH_DONT)
+                MODIFY( main ).minimize( true );
+            else
+                MODIFY( main ).micromize( true );
+            return true;
+        }
+    }
+    return false;
 }
 
 bool application_c::on_keyboard( int scan, bool dn, int casw )
@@ -930,14 +944,13 @@ const avatar_s * application_c::gen_identicon_avatar( const ts::str_c &pubid )
         return nullptr;
 
     bool added = false;
-    auto&ava = identicons.add_get_item(pubid,added);
+    auto&ava = m_identicons.add_get_item(pubid,added);
 
     if ( added )
     {
-        ts::md5_c md5;
-        md5.update( pubid.cstr(), pubid.get_length() );
-        md5.done();
-        gen_identicon( ava.value, md5.result() );
+        ts::uint8 hash[BLAKE2B_HASH_SIZE_SMALL];
+        BLAKE2B( hash, pubid.cstr(), pubid.get_length() );
+        gen_identicon( ava.value, hash );
 
         ts::ivec2 asz = parsevec2( gui->theme().conf().get_string( CONSTASTR( "avatarsize" ) ), ts::ivec2( 32 ) );
         if ( asz != ava.value.info().sz )
@@ -1008,7 +1021,7 @@ const avatar_s * application_c::gen_identicon_avatar( const ts::str_c &pubid )
         case LL_CTXMENU_DELETE: return TTT("Delete",95);
         case LL_CTXMENU_SELALL: return TTT("Select all",96);
         case LL_ABTT_CLOSE:
-            if (cfg().collapse_beh() == 2)
+            if (cfg().collapse_beh() == CBEH_BY_CLOSE_BUTTON)
             {
                 return TTT("Minimize to notification area[br](Hold Ctrl key to exit)",122);
             }
@@ -1016,7 +1029,7 @@ const avatar_s * application_c::gen_identicon_avatar( const ts::str_c &pubid )
         case LL_ABTT_MAXIMIZE: return TTT("Expand",4);
         case LL_ABTT_NORMALIZE: return TTT("Normal size",5);
         case LL_ABTT_MINIMIZE:
-            if (cfg().collapse_beh() == 1)
+            if (cfg().collapse_beh() == CBEH_BY_MIN_BUTTON)
                 return TTT("Minimize to notification area",123);
             return loc_text( loc_minimize );
         case LL_ANY_FILES:
@@ -1027,17 +1040,19 @@ const avatar_s * application_c::gen_identicon_avatar( const ts::str_c &pubid )
 
 /*virtual*/ void application_c::app_b_minimize(RID mr)
 {
-    if (cfg().collapse_beh() == 1)
+    if (cfg().collapse_beh() == CBEH_BY_MIN_BUTTON)
         MODIFY(mr).micromize(true);
     else
         __super::app_b_minimize(mr);
 }
 /*virtual*/ void application_c::app_b_close(RID mr)
 {
-    if (!ts::master().is_key_pressed(ts::SSK_CTRL) && cfg().collapse_beh() == 2)
+    if (!ts::master().is_key_pressed(ts::SSK_CTRL) && cfg().collapse_beh() == CBEH_BY_CLOSE_BUTTON)
         MODIFY(mr).micromize(true);
     else
-        __super::app_b_close(mr);
+    {
+        __super::app_b_close( mr );
+    }
 }
 /*virtual*/ void application_c::app_path_expand_env(ts::wstr_c &path)
 {
@@ -1382,7 +1397,7 @@ bool application_c::blinking_reason_s::tick()
         sleep_ms = 1;
     }
 
-    if (avcontacts().camera_tick())
+    if (avcontacts().tick())
         sleep_ms = 1;
 
     UNSTABLE_CODE_EPILOG
@@ -1584,7 +1599,7 @@ namespace
                     }
                     if (DBC_NOT_DB == chk)
                     {
-                        dialog_msgbox_c::mb_error(TTT("File [b]$[/b] is not profile", 389) / wpn).summon();
+                        dialog_msgbox_c::mb_error(TTT("File [b]$[/b] is not profile", 389) / wpn).summon(true);
                         die();
                         return true;
                     }
@@ -1630,7 +1645,7 @@ namespace
                 // no break here
             case STAGE_CLEANUP_UI:
 
-                contacts().update_meta();
+                //contacts().update_meta();
                 contacts().get_self().reselect();
                 g_app->recreate_ctls(true, true);
                 if ( g_app->contactlist ) g_app->contactlist->clearlist();
@@ -1659,7 +1674,7 @@ namespace
                 }
 
                 g_app->F_MODAL_ENTER_PASSWORD = modal;
-                SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, dialog_entertext_c::params(
+                SUMMON_DIALOG<dialog_entertext_c>(UD_ENTERPASSWORD, true, dialog_entertext_c::params(
                     UD_ENTERPASSWORD,
                     gui_isodialog_c::title(title_enter_password),
                     TTT("Profile [b]$[/b] is encrypted.[br]You have to enter password to load encrypted profile.",390) / storwpn,
@@ -1733,14 +1748,14 @@ static bool m_newprofile_ok( const ts::wstr_c&prfn, const ts::str_c& )
     profile_c::path_by_name( pn );
     if ( ts::is_file_exists( pn ) )
     {
-        dialog_msgbox_c::mb_error( TTT( "Such profile already exists", 49 ) ).summon();
+        dialog_msgbox_c::mb_error( TTT( "Such profile already exists", 49 ) ).summon( true );
         return false;
     }
 
     ts::wstr_c errcr = ts::f_create( pn );
     if ( !errcr.is_empty() )
     {
-        dialog_msgbox_c::mb_error( TTT( "Can't create profile ($)", 50 ) / errcr ).summon();
+        dialog_msgbox_c::mb_error( TTT( "Can't create profile ($)", 50 ) / errcr ).summon( true );
         return true;
     }
 
@@ -1751,7 +1766,7 @@ static bool m_newprofile_ok( const ts::wstr_c&prfn, const ts::str_c& )
         auto rslt = prf().xload( pn, nullptr );
         if ( PLR_OK == rslt )
         {
-            dialog_msgbox_c::mb_info( TTT( "Profile [b]$[/b] has created and set as default.", 48 ) / prfn ).summon();
+            dialog_msgbox_c::mb_info( TTT( "Profile [b]$[/b] has created and set as default.", 48 ) / prfn ).summon( true );
             cfg().profile( storpn );
         }
         else
@@ -1759,7 +1774,7 @@ static bool m_newprofile_ok( const ts::wstr_c&prfn, const ts::str_c& )
     }
     else
     {
-        dialog_msgbox_c::mb_info( TTT( "Profile with name [b]$[/b] has created. You can switch to it using settings menu.", 51 ) / prfn ).summon();
+        dialog_msgbox_c::mb_info( TTT( "Profile with name [b]$[/b] has created. You can switch to it using settings menu.", 51 ) / prfn ).summon( true );
     }
 
     g_app->recheck_no_profile();
@@ -1771,7 +1786,7 @@ void _new_profile()
 {
     ts::wstr_c defprofilename( CONSTWSTR( "%USER%" ) );
     ts::parse_env( defprofilename );
-    SUMMON_DIALOG<dialog_entertext_c>( UD_PROFILENAME, dialog_entertext_c::params(
+    SUMMON_DIALOG<dialog_entertext_c>( UD_PROFILENAME, true, dialog_entertext_c::params(
         UD_PROFILENAME,
         gui_isodialog_c::title( title_profile_name ),
         TTT( "Enter profile name. It is profile file name. You can create any number of profiles and switch them any time. Detailed settings of current profile are available in settings dialog.", 43 ),
@@ -1919,8 +1934,8 @@ namespace
                 .on_ok( DELEGATE(this, conti), ts::asptr() )
                 .on_cancel( DELEGATE( this, exit_now ), ts::asptr() )
                 .bcancel( true, loc_text( loc_exit ) )
-                .bok( TTT( "Continue", 117 ) )
-                .summon();
+                .bok( loc_text( loc_continue ) )
+                .summon( true );
 
         }
         
@@ -2356,11 +2371,11 @@ void application_c::capture_device_changed()
     }        
 }
 
-void application_c::update_ringtone( contact_root_c *rt, bool play_stop_snd )
+void application_c::update_ringtone( contact_root_c *rt, contact_c *sub, bool play_stop_snd )
 {
     int avcount = avcontacts().get_avringcount();
-    if (rt->is_ringtone())
-        avcontacts().get( rt->getkey().ringkey(), av_contact_s::AV_RINGING );
+    if (rt->is_ringtone() && ASSERT(sub))
+        avcontacts().get( rt->getkey() | sub->getkey(), av_contact_s::AV_RINGING );
     else
         avcontacts().del( rt );
 
@@ -2388,9 +2403,9 @@ void application_c::update_ringtone( contact_root_c *rt, bool play_stop_snd )
     }
 }
 
-av_contact_s * application_c::update_av( contact_root_c *avmc, bool activate, bool camera )
+av_contact_s * application_c::update_av( contact_root_c *avmc, contact_c *sub, bool activate, bool camera )
 {
-    ASSERT(avmc->is_meta() || avmc->getkey().is_group());
+    ASSERT(avmc->is_meta() || avmc->getkey().is_conference());
 
     av_contact_s *r = nullptr;
 
@@ -2398,10 +2413,11 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, bool activate, bo
     
     if (activate)
     {
-        av_contact_s &avc = avcontacts().get(avmc->getkey().avkey(), av_contact_s::AV_INPROGRESS);
+        av_contact_s &avc = avcontacts().get( avmc->getkey() | sub->getkey(), av_contact_s::AV_INPROGRESS);
+        avc.tag = gui->get_free_tag();
         avc.camera(camera);
 
-        if (!avmc->getkey().is_group())
+        if (!avmc->getkey().is_conference())
             avmc->subiterate([&](contact_c *c) {
                 if (c->is_av())
                     gmsg<ISOGM_NOTICE>(avmc, c, NOTICE_CALL_INPROGRESS).send();
@@ -2433,7 +2449,7 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, bool activate, bo
 
     avcontacts().iterate([&]( av_contact_s &avc )
     {
-        if (av_contact_s::AV_INPROGRESS != avc.state)
+        if (av_contact_s::AV_INPROGRESS != avc.core->state)
             return;
 
         avc.call_tick();
@@ -2444,13 +2460,13 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, bool activate, bo
         if (avc.is_mic_off())
             return;
 
-        if (avc.c->getkey().is_group())
+        if (avc.core->c->getkey().is_conference())
         {
             avc2sendaudio = &avc;
             return;
         }
 
-        avc.c->subiterate([&](contact_c *sc) {
+        avc.core->c->subiterate([&](contact_c *sc) {
             if (sc->is_av())
                 avc2sendaudio = &avc;
         });
@@ -2459,8 +2475,8 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, bool activate, bo
 
     if (avc2sendaudio && capturefmt.channels)
     {
-        bool continue_use = avc2sendaudio->ticktag == ticktag - 1;
-        avc2sendaudio->ticktag = ticktag;
+        bool continue_use = avc2sendaudio->core->ticktag == ticktag - 1;
+        avc2sendaudio->core->ticktag = ticktag;
         avc2sendaudio->send_audio( capturefmt, data, size, !continue_use );
     }
 }
@@ -2471,15 +2487,15 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, bool activate, bo
 
     avcontacts().iterate( [&]( av_contact_s &avc )
     {
-        if ( av_contact_s::AV_INPROGRESS != avc.state )
+        if ( av_contact_s::AV_INPROGRESS != avc.core->state )
             return;
 
-        if (avc.c->getkey().is_group())
+        if (avc.core->c->getkey().is_conference())
         {
-            if (active_protocol_c *ap = prf().ap(avc.c->getkey().protoid))
+            if (active_protocol_c *ap = prf().ap(avc.core->c->getkey().protoid))
                 avformats.set(ap->defaudio());
         }
-        else avc.c->subiterate([this](contact_c *sc)
+        else avc.core->c->subiterate([this](contact_c *sc)
         {
             if (sc->is_av())
                 if (active_protocol_c *ap = prf().ap(sc->getkey().protoid))
@@ -2684,7 +2700,7 @@ bool application_c::present_undelivered_messages( const contact_key_s& rcv, uint
 
 void application_c::reset_undelivered_resend_cooldown( const contact_key_s& rcv )
 {
-    ts::Time t = ts::Time::current() - 7000;
+    ts::Time t = ts::Time::current() - 20000;
     for ( send_queue_s *q : m_undelivered )
     {
         if ( rcv == q->receiver )
@@ -2709,7 +2725,7 @@ void application_c::resend_undelivered_messages( const contact_key_s& rcv )
 
         if ((q->receiver == rcv || rcv.is_empty()))
         {
-            while ( !rcv.is_empty() || (ts::Time::current() - q->last_try_send_time) > 6999 /* try 2 resend every 7 seconds */ )
+            while ( !rcv.is_empty() || (ts::Time::current() - q->last_try_send_time) > 19999 /* try 2 resend every 20 seconds */ )
             {
                 q->last_try_send_time = ts::Time::current();
                 contact_root_c *receiver = contacts().rfind( q->receiver );
@@ -2728,12 +2744,12 @@ void application_c::resend_undelivered_messages( const contact_key_s& rcv )
                     break;
                 }
 
-                gmsg<ISOGM_MESSAGE> msg(&contacts().get_self(), tgt, MTA_UNDELIVERED_MESSAGE);
+                const post_s& post = q->queue.get( 0 );
 
-                const post_s& post = q->queue.get(0);
+                gmsg<ISOGM_MESSAGE> msg(&contacts().get_self(), tgt, MTA_UNDELIVERED_MESSAGE, post.utag);
+
                 msg.post.recv_time = post.recv_time;
                 msg.post.cr_time = post.cr_time;
-                msg.post.utag = post.utag;
                 msg.post.message_utf8 = post.message_utf8;
                 msg.resend = true;
                 msg.send();
@@ -2765,24 +2781,14 @@ void application_c::kill_undelivered( uint64 utag )
     }
 }
 
-void application_c::undelivered_message( const post_s &p )
+void application_c::undelivered_message( const contact_key_s &historian_key, const post_s &p )
 {
-    contact_c *c = contacts().find(p.receiver);
-    if (!c) return;
-
     for( const send_queue_s *q : m_undelivered )
         for( const post_s &pp : q->queue )
             if (pp.utag == p.utag)
                 return;
 
-    contact_key_s rcv = p.receiver;
-
-    if (!c->is_meta())
-    {
-        c = c->getmeta();
-        if (c)
-            rcv = c->getkey();
-    }
+    contact_key_s rcv = historian_key;
 
     for( send_queue_s *q : m_undelivered )
         if (q->receiver == rcv)
@@ -2812,9 +2818,10 @@ void application_c::undelivered_message( const post_s &p )
     send_queue_s *q = TSNEW( send_queue_s );
     m_undelivered.add( q );
     q->receiver = rcv;
-    post_s &insp = q->queue.add();
-    insp = p;
-    insp.receiver = rcv;
+    post_s& pp = q->queue.add();
+    pp = p;
+    if ( TCT_CONFERENCE == rcv.temp_type )
+        pp.receiver = rcv;
 
 }
 
@@ -2888,7 +2895,7 @@ void preloaded_stuff_s::reload()
     icon[CSEX_MALE] = th.get_image(CONSTASTR("male"));
     icon[CSEX_FEMALE] = th.get_image(CONSTASTR("female"));
 
-    groupchat = th.get_image(CONSTASTR("groupchat"));
+    conference = th.get_image(CONSTASTR("conference"));
     nokeeph = th.get_image(CONSTASTR("nokeeph"));
     achtung_bg = th.get_image(CONSTASTR("achtung_bg"));
     invite_send = th.get_image(CONSTASTR("invite_send"));
@@ -2959,6 +2966,10 @@ bool file_transfer_s::auto_confirm()
     if (!ts::dir_present(downf))
         return false;
 
+    uint64 freesz = ts::get_free_space( downf );
+    if (freesz < filesize)
+        return false;
+
     prepare_fn(ts::fn_join(downf, filename), false);
 
     if (active_protocol_c *ap = prf().ap(sender.protoid))
@@ -2992,11 +3003,12 @@ void file_transfer_s::prepare_fn( const ts::wstr_c &path_with_fn, bool overwrite
     }
 }
 
-int file_transfer_s::progress(int &bps) const
+int file_transfer_s::progress(int &bps, uint64 &cursz) const
 {
     auto rdata = data.lock_read();
+    cursz = rdata().progrez;
     bps = rdata().bytes_per_sec;
-    int prc = (int)(rdata().progrez * 100 / filesize);
+    int prc = (int)(cursz * 100 / filesize);
     if (prc > 100) prc = 100;
     return prc;
 }
@@ -3103,7 +3115,7 @@ void file_transfer_s::kill( file_control_e fctl, unfinished_file_transfer_s *uft
             update_history();
         
             if (!upload && fctl != FIC_DISCONNECT) 
-                ts::kill_file(ts::wstr_c(filename_on_disk.as_sptr().skip(1)).append(CONSTWSTR(".!rcv")));
+                ts::kill_file(ts::wstr_c(filename_on_disk.as_sptr().skip(1),CONSTWSTR(".!rcv")));
         } else if (!upload && fctl == FIC_DONE)
         {
             ts::rename_file(filename_on_disk + CONSTWSTR(".!rcv"), filename_on_disk);
@@ -3299,7 +3311,7 @@ void file_transfer_s::resume()
 
 }
 
-void file_transfer_s::save(uint64 offset_, const ts::buf0_c&bdata)
+void file_transfer_s::save(uint64 offset_, ts::buf0_c&bdata)
 {
     if (!accepted) return;
 
@@ -3323,23 +3335,42 @@ void file_transfer_s::save(uint64 offset_, const ts::buf0_c&bdata)
         return;
     }
 
+    if (write_buffer.size() == 0)
+        write_buffer = std::move( bdata ), write_buffer_offset = offset_;
+    else
+    {
+        if ( offset_ != ( write_buffer_offset + write_buffer.size()) )
+        {
+            kill();
+            return;
+        }
+        write_buffer.append_buf( bdata );
+    }
+
+
     auto wdata = data.lock_write();
 
-    ts::f_set_pos(wdata().handle, offset_ );
+    ts::f_set_pos(wdata().handle, write_buffer_offset );
 
-    if ((ts::aint)ts::f_write( wdata().handle, bdata.data(), bdata.size() ) != bdata.size())
+    ts::aint wrslt = ts::f_write( wdata().handle, write_buffer.data(), write_buffer.size() );
+    if (wrslt == ts::FE_WRITE_NO_SPACE)
+    {
+        pause_by_me( true );
+        return;
+    }
+    if (wrslt != write_buffer.size())
     {
         kill();
         return;
     }
 
-    wdata().progrez += bdata.size();
+    wdata().progrez += write_buffer.size();
 
-    if (bdata.size())
+    if (write_buffer.size())
     {
         if (wdata().bytes_per_sec >= BPSSV_ALLOW_CALC)
         {
-            wdata().transfered_last_tick += bdata.size();
+            wdata().transfered_last_tick += write_buffer.size();
             wdata().upduitime += wdata().deltatime(true);
             if ( wdata().bytes_per_sec == 0 )
                 wdata().bytes_per_sec = 1;
@@ -3364,6 +3395,8 @@ void file_transfer_s::save(uint64 offset_, const ts::buf0_c&bdata)
         }
     }
 
+    write_buffer.clear();
+
 }
 
 void file_transfer_s::upd_message_item( unfinished_file_transfer_s &uft )
@@ -3380,6 +3413,7 @@ void file_transfer_s::upd_message_item( unfinished_file_transfer_s &uft )
     p.utag = uft.msgitem_utag;
     p.sender = uft.sender;
     p.receiver = contacts().get_self().getkey();
+    p.recv_time = now();
     gmsg<ISOGM_SUMMON_POST>( p, true ).send();
 
     if ( !uft.upload )
@@ -3398,7 +3432,7 @@ void file_transfer_s::upd_message_item(bool force)
 
     } else if (contact_c *c = contacts().find(sender))
     {
-        gmsg<ISOGM_MESSAGE> msg(c, &contacts().get_self(), upload ? MTA_SEND_FILE : MTA_RECV_FILE);
+        gmsg<ISOGM_MESSAGE> msg(c, &contacts().get_self(), upload ? MTA_SEND_FILE : MTA_RECV_FILE, 0);
         msg.post.cr_time = now();
         
         ts::str_c m = to_utf8(filename_on_disk);
@@ -3407,9 +3441,13 @@ void file_transfer_s::upd_message_item(bool force)
 
         msg.post.message_utf8 = ts::refstring_t<char>::build( m, g_app->global_allocator );
 
-        msg.post.utag = prf().uniq_history_item_tag();
         msgitem_utag = msg.post.utag;
         msg.send();
     }
 }
 
+ts::str_c file_transfer_s::text_for_notice() const
+{
+    TS_STATIC_CHECK( sizeof( filesize ) == 8, "!" );
+    return to_utf8( filename ).append_char( '\1' ).append_as_hex( &filesize, 8 );
+}

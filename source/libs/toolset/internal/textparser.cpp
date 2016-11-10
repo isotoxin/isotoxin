@@ -202,13 +202,41 @@ struct text_parser_s
         enum a{ALEFT, ARIGHT, AJUSTIFY, ACENTER};
 
 		DUMMY(paragraph_s);
-		paragraph_s():indention(0), line_spacing(0), align(ALEFT), rite(false) {}
-		signed indention : 16;
-		signed line_spacing : 16; // addition line distance in pixels
-		unsigned align : 8;
+		paragraph_s():indention(0), line_spacing(0), align(ALEFT), rite(false), full_indent(0) {}
+		signed indention : 10;
+        unsigned full_indent : 6; // vline width
+        signed line_spacing : 8; // addition line distance in pixels
+		unsigned align : 4;
         unsigned rite : 1;
 	};
-    static_assert( sizeof(paragraph_s) == 8, "!" );
+    static_assert( sizeof(paragraph_s) == 4, "!" );
+
+    struct vline_glyph_s : public glyph_s
+    {
+        static vline_glyph_s *build(int w, int h)
+        {
+            aint npix = w * h;
+            vline_glyph_s *g = (vline_glyph_s *)MM_ALLOC( sizeof( vline_glyph_s ) + npix );
+            g->advance = w + 1;
+            g->top = h - 5;
+            g->left = 0;
+            g->width = w;
+            g->height = h;
+            g->char_index = -1;
+
+            uint8 *pixels = (uint8 *)(g + 1);
+            for (; npix > 0; --npix, ++pixels)
+                *pixels = 120;
+
+            return g;
+        }
+        void release()
+        {
+            MM_FREE( this );
+        }
+    };
+
+    array_release_t<vline_glyph_s, 0> vlines;
 
     tbuf_t<ivec2> addhs;
 	tbuf_t<TSCOLOR> colors_stack;
@@ -229,12 +257,13 @@ struct text_parser_s
 	int line_width, last_line_descender;
 	ivec2 pen;
 	tbuf_t<meta_glyph_s> last_line; // metaglyphs of last line
+    TSCOLOR full_indent_color;
 	int cur_max_line_len;
     int prev_line_dim_glyph_index;
 	struct side_text_limit // wrapping text, only one image per side supported
 	{
 		int width, bottom;
-	} leftSL, rightSL; // wrapping edges for left and right image (used for imgl and imgr)
+	} leftSL, rightSL; // wrapping edges for left and right image (used for imgl and imgr or rl and rr)
 	int maxW; // max width of line (return value)
 
     int rite_rite = 0; // index in glyph array for block <r></r> - align to right
@@ -243,6 +272,18 @@ struct text_parser_s
 
     bool first_char_in_paragraph, was_inword_break, current_line_end_ellipsis, current_line_with_rects;
     bool search_rects;
+
+    glyph_s *get_vline_glyph(uint8 width)
+    {
+        int desired_height = fonts_stack.last()->height;
+        for (vline_glyph_s * v : vlines)
+            if (v->height == desired_height && v->width == width)
+                return v;
+
+        vline_glyph_s *v = vline_glyph_s::build( width, desired_height );
+        vlines.add(v);
+        return v;
+    }
 
     text_parser_s() {}
 
@@ -303,22 +344,40 @@ struct text_parser_s
         full_height_line = 0;
 	}
 
-	void add_indent(aint chari)
+	void add_indent(bool insert_as_1st)
 	{
 		paragraph_s &paragraph = paragraphs_stack.last();
 		if (paragraph.indention > 0)
 		{
-			meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::CHAR, chari); // CHAR, not SPACE!
-			mg.underlined = 0; // zero underline - special value to do not draw underline under indent
-			mg.glyph = &(*fonts_stack.last())[L' '];
-			mg.advance = paragraph.indention;
-			line_width += mg.advance;
+			meta_glyph_s *mg = &add_meta_glyph(meta_glyph_s::CHAR); // CHAR, not SPACE!
+
+            if (insert_as_1st)
+            {
+                meta_glyph_s x = *mg;
+                last_line.set_count( last_line.count() - 1 );
+                last_line.insert( 0, x );
+                mg = last_line.begin();
+            }
+
+			mg->underlined = 0; // zero underline - special value to do not draw underline under indent
+            
+            if (paragraph.full_indent)
+            {
+                mg->color = full_indent_color;
+                mg->glyph = get_vline_glyph( paragraph.full_indent );
+            } else
+            {
+                mg->glyph = &(*fonts_stack.last())[L' '];
+            }
+			mg->advance = paragraph.indention;
+			line_width += mg->advance;
 		}
 	}
 
 	void next_line(int H = INT_MAX) // moves "pen" to next line
 	{
-		if (H != INT_MAX) pen.y += H + paragraphs_stack.last().line_spacing + fonts_stack.last()->font_params.additional_line_spacing;
+        paragraph_s &para = paragraphs_stack.last();
+		if (H != INT_MAX) pen.y += H + para.line_spacing + fonts_stack.last()->font_params.additional_line_spacing;
 		cur_max_line_len = max_line_length;
 		if (pen.y <  leftSL.bottom) cur_max_line_len -= (pen.x = leftSL.width); else pen.x = 0;
 		if (pen.y < rightSL.bottom) cur_max_line_len -= rightSL.width;
@@ -403,11 +462,11 @@ struct text_parser_s
 		last_line_descender = full_height_line;
         full_height_line = 0;
         int addH = 0;
-		for (int j = 0; j < line_size; j++)
+		for (aint j = 0; j < line_size; j++)
 		{
 			meta_glyph_s &mg = last_line.get(j);
 			H = tmax(H, pen.y ? mg.font->height : mg.font->ascender);
-			last_line_descender = tmin(last_line_descender, mg.calch(), mg.font->underline_add_y-(int)lceil(mg.font->uline_thickness*.5f));
+			last_line_descender = tmin(last_line_descender, mg.calch(), mg.font->underline_add_y-static_cast<int>(lceil(mg.font->uline_thickness*.5f)));
 			if		(mg.type == meta_glyph_s::SPACE) spaces++;
             else if (mg.type == meta_glyph_s::IMAGE) // images can increase line height
             {
@@ -453,10 +512,10 @@ struct text_parser_s
 
 	meta_glyph_s &add_meta_glyph(meta_glyph_s::mgtype_e type, aint chari = -1)
 	{
-		if (first_char_in_paragraph) first_char_in_paragraph = false, add_indent(chari); // if 1st symbol, add indent
+		if (first_char_in_paragraph) first_char_in_paragraph = false, add_indent(false); // if 1st symbol, add indent
 		meta_glyph_s &mg = last_line.add(); // add metaglyph
         mg.image_offset_Y = 0;
-        mg.charindex = (int)chari;
+        mg.charindex = static_cast<int>(chari);
 		mg.type = type;
 		mg.font = fonts_stack.last();
 		mg.color = colors_stack.last();
@@ -552,6 +611,12 @@ struct text_parser_s
 				if (!t->is_empty()) pargph.indention = ui_scale(t->as_int());
                 ++t;
 				if (t && !t->is_empty()) pargph.line_spacing = ui_scale(t->as_int());
+                ++t;
+                if (t && !t->is_empty()) pargph.full_indent = static_cast<uint8>( t->as_int() );
+
+                if (pargph.full_indent)
+                    full_indent_color = colors_stack.last();
+
 			}
 			paragraphs_stack.add(pargph);
 			//addIndent();
@@ -691,34 +756,6 @@ struct text_parser_s
         {
             if (CHECK(marker_stack.count() > 1)) marker_stack.pop();
         }
-		else if (tag == CONSTWSTR("imgl") || tag == CONSTWSTR("imgr"))
-		{
-			side_text_limit &sl = tag == CONSTWSTR("imgl") ? leftSL : rightSL;
-
-            if (search_rects)
-                line_ellipsis();
-
-			if (last_line.count() > 0) end_line();
-			if (pen.y < sl.bottom) pen.y = sl.bottom;
-
-			// add wrapped image
-			scaled_image_s *si = scaled_image_s::load(tagbody, ivec2(ui_scale(100)));
-			if (glyphs)
-			{
-				glyph_image_s &gi = glyphs->add();
-				gi.color = 0;
-				gi.width  = (uint16)si->width;
-				gi.height = (uint16)si->height;
-                gi.pitch = (uint16)si->pitch;
-				gi.pixels = si->pixels;
-				gi.thickness = 0;
-				gi.pos().x = (int16)(&sl == &leftSL ? 0 : max_line_length - si->width);
-                gi.pos().y = (int16)pen.y;
-			}
-			sl.width  = si->width;
-			sl.bottom = si->height + pen.y;
-			next_line();
-		}
         else if (tag == CONSTWSTR("r"))
         {
             ASSERT( last_line.count() == 0 );
@@ -756,11 +793,11 @@ struct text_parser_s
         {
             current_line_end_ellipsis = true;
         }
-        else if (tag == CONSTWSTR("rect"))
+        else if (tag == CONSTWSTR( "rect" ))
         {
             current_line_with_rects = true;
-            meta_glyph_s &mg = add_meta_glyph(meta_glyph_s::RECTANGLE, chari);
-            token<wchar> t(tagbody, L',');
+            meta_glyph_s &mg = add_meta_glyph( meta_glyph_s::RECTANGLE, chari );
+            token<wchar> t( tagbody, L',' );
             mg.ch = (wchar)t->as_int();
             ++t; mg.advance = t ? t->as_int() : 0;
             ++t; mg.shadow = t ? (short)t->as_int() : 0;
@@ -777,12 +814,60 @@ struct text_parser_s
                 ++addhtags;
             mg.image = nullptr;
             line_width += mg.advance;
-        } else if (tag == CONSTWSTR("fullheight"))
+        }
+        else if (tag == CONSTWSTR( "imgl" ) || tag == CONSTWSTR( "imgr" ))
+        {
+            side_text_limit &sl = tag.get_last_char() == 'l' ? leftSL : rightSL;
+
+            if (search_rects)
+                line_ellipsis();
+
+            if (last_line.count() > 0) end_line();
+            if (pen.y < sl.bottom) pen.y = sl.bottom;
+
+            // add wrapped image
+            scaled_image_s *si = scaled_image_s::load( tagbody, ivec2( ui_scale( 100 ) ) );
+            if (glyphs)
+            {
+                glyph_image_s &gi = glyphs->add();
+                gi.color = 0;
+                gi.width = (uint16)si->width;
+                gi.height = (uint16)si->height;
+                gi.pitch = (uint16)si->pitch;
+                gi.pixels = si->pixels;
+                gi.thickness = 0;
+                gi.pos().x = (int16)(&sl == &leftSL ? 0 : max_line_length - si->width);
+                gi.pos().y = (int16)pen.y;
+            }
+            sl.width = si->width;
+            sl.bottom = si->height + pen.y;
+            next_line();
+        }
+        else if (tag == CONSTWSTR( "rl" ) || tag == CONSTWSTR( "rr" ))
+        {
+            side_text_limit &sl = tag.get_last_char() == 'l' ? leftSL : rightSL;
+
+            if (search_rects)
+                line_ellipsis();
+
+            if (last_line.count() > 0) end_line();
+            if (pen.y < sl.bottom) pen.y = sl.bottom;
+
+            token<wchar> t( tagbody, L',' );
+            sl.width = t->as_int();
+            ++t; sl.bottom = t ? t->as_int() : 0;
+
+            //sl.width = si->width;
+            //sl.bottom = si->height + pen.y;
+            sl.bottom += pen.y;
+            next_line();
+        }
+        else if (tag == CONSTWSTR("fullheight"))
         {
             font_c *f = fonts_stack.last();
             glyph_s &g = (*f)['_'];
             int h = g.top - g.height;
-            full_height_line = tmin(last_line_descender, h, f->underline_add_y-(int)lceil(f->uline_thickness*.5f));
+            full_height_line = tmin(last_line_descender, h, f->underline_add_y-static_cast<int>(lceil(f->uline_thickness*.5f)));
 
         } else if (tag == CONSTWSTR(".")) // <.> always ignored
 			;
@@ -1016,8 +1101,8 @@ struct text_parser_s
                             glyph_s &hyphenGlyph = ( *fonts_stack.last() )[ L'-' ];
                             newLineLen += hyphenGlyph.advance;
 
-                            //Ищем последний перенос
-                            for ( aint i = n - 1; i > 2; i-- )//не разрешаем переносить менее 3-х букв с начала и конца слова
+                            //seek last hyphen
+                            for ( aint i = n - 1; i > 2; i-- ) //do not allow hyphenate less then 3 chars from begin or end of word
                                 if ( ( newLineLen -= last_line.get( i + start ).advance ) <= cur_max_line_len && charclass[ i - 1 ] == '-' && i < nn - 2 )
                                 {
                                     line_size = start + i;
@@ -1122,6 +1207,10 @@ end:;
 
 				// go next line
 				last_line.remove_slow(0, line_size);
+
+                if (paragraphs_stack.last().full_indent)
+                    add_indent(true);
+
 				next_line(H);
 				for (j=0; j<last_line.count(); j++) line_width += last_line.get(j).advance;
 			}
@@ -1220,7 +1309,7 @@ int glyphs_last_glyph( const GLYPHS &glyphs )
         glyphs_start = 1;
         cnt = glyphs.get( 0 ).outline_index;
     }
-    return cnt;
+    return static_cast<int>(cnt);
 }
 
 int glyphs_nearest_glyph(const GLYPHS &glyphs, const ivec2 &p, bool strong)

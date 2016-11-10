@@ -617,18 +617,18 @@ namespace staticnumgen
 #define NUMGEN_NEXT( ngn ) (__COUNTER__-numgen_##ngn##_s::N)
 #define NUMGEN_PREV( ngn ) (numgen_##ngn##_s::N - __COUNTER__)
 
-INLINE uint8 as_byte(int aa) {return uint8(aa & 0xFF);}
-INLINE uint8 as_byte( uint aa ) { return uint8( aa & 0xFF ); }
-INLINE uint8 as_byte( uint32 aa) {return uint8(aa & 0xFF);}
-INLINE uint8 as_byte( uint64 aa ) { return uint8( aa & 0xFF ); }
+INLINE uint8 as_byte(int aa) {return static_cast<uint8>(aa & 0xFF);}
+INLINE uint8 as_byte( uint aa ) { return static_cast<uint8>( aa & 0xFF ); }
+INLINE uint8 as_byte( uint32 aa) {return static_cast<uint8>(aa & 0xFF);}
+INLINE uint8 as_byte( uint64 aa ) { return static_cast<uint8>( aa & 0xFF ); }
 
-INLINE word as_word(int aa) {return word(aa & 0xFFFF);}
-INLINE word as_word(uint aa) {return word(aa & 0xFFFF);}
-INLINE word as_word(uint32 aa) {return word(aa & 0xFFFF);}
-INLINE word as_word(uint64 aa) {return word(aa & 0xFFFF);}
-//INLINE word as_word(dword aa) {return word(aa & 0xFFFF);}
+INLINE word as_word(int aa) {return static_cast<word>(aa & 0xFFFF);}
+INLINE word as_word(uint aa) {return static_cast<word>(aa & 0xFFFF);}
+INLINE word as_word(uint32 aa) {return static_cast<word>(aa & 0xFFFF);}
+INLINE word as_word(uint64 aa) {return static_cast<word>(aa & 0xFFFF);}
+//INLINE word as_word(dword aa) {return static_cast<word>(aa & 0xFFFF);}
 
-INLINE dword as_dword(uint64 aa) {return dword(aa & 0xFFFFFFFF);} //-V112
+INLINE dword as_dword(uint64 aa) {return static_cast<dword>(aa & 0xFFFFFFFF);}
 
 
 template <typename T, aint factor = sizeof(T)>
@@ -878,6 +878,8 @@ public:
 
 struct TMP_ALLOCATOR
 {
+    MOVABLE( true );
+
     tmpbuf_s *curbuf;
 
     TMP_ALLOCATOR():curbuf( tmpalloc_c::get() )
@@ -1078,6 +1080,7 @@ template <typename T> struct dummy
 #include "tsarray.h"
 #include "tsrnd.h"
 #include "tsstrar.h"
+#include "tsregex.h"
 #include "tshashmap.h"
 #include "tsbitmap.h"
 #include "tspackcol.h"

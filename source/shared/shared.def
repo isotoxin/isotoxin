@@ -12,6 +12,9 @@ EXPORTS
 	sodium_init
 	crypto_shorthash
 	crypto_generichash
+	crypto_generichash_init
+	crypto_generichash_update
+	crypto_generichash_final
 	crypto_hash_sha256
 	crypto_hash_sha512
 	crypto_sign_verify_detached

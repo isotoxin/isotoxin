@@ -77,7 +77,7 @@ namespace
 
         bool close_me_chk( RID, GUIPARAM )
         {
-            if ( !contact->getkey().is_group() && g_app->avcontacts().find_inprogress( contact->getkey().avkey() ) != nullptr )
+            if ( !contact->getkey().is_conference() && g_app->avcontacts().is_any_inprogress( contact ) )
             {
                 ts::str_c nn = contact->get_name();
                 text_convert_from_bbcode( nn );
@@ -85,7 +85,7 @@ namespace
                 dialog_msgbox_c::mb_warning( TTT( "There are call with $[br]What do you want to do with this call?", 482 ) / from_utf8( nn ) ).bcancel()
                     .bcustom( true, TTT( "Break", 483 ) )
                     .bok( TTT( "Don't break", 484 ) )
-                    .on_ok( DELEGATE( this, custom_close ), CONSTASTR( "1" ) ).on_custom( DELEGATE( this, custom_close ), CONSTASTR( "0" ) ).summon();
+                    .on_ok( DELEGATE( this, custom_close ), CONSTASTR( "1" ) ).on_custom( DELEGATE( this, custom_close ), CONSTASTR( "0" ) ).summon( true );
             } else
             {
                 close_me(RID(), nullptr);
@@ -103,9 +103,9 @@ namespace
         bool min_me( RID, GUIPARAM )
         {
             g_app->avcontacts().iterate( [this]( av_contact_s & avc ) {
-                if ( avc.state != av_contact_s::AV_INPROGRESS )
+                if ( avc.core->state != av_contact_s::AV_INPROGRESS )
                     return;
-                if ( contact == avc.c ) avc.set_inactive( true );
+                if ( contact == avc.core->c ) avc.set_inactive( true );
             } );
 
             MODIFY( getrid() ).minimize( true );
@@ -119,11 +119,12 @@ namespace
 
         /*virtual*/ void on_activate() override
         {
-            g_app->avcontacts().iterate( [this]( av_contact_s & avc ) {
-                if ( avc.state != av_contact_s::AV_INPROGRESS )
-                    return;
-                if ( contact == avc.c ) avc.set_inactive( false );
-            } );
+            if (g_app)
+                g_app->avcontacts().iterate( [this]( av_contact_s & avc ) {
+                    if ( avc.core->state != av_contact_s::AV_INPROGRESS )
+                        return;
+                    if ( contact == avc.core->c ) avc.set_inactive( false );
+                } );
         }
 
         /*virtual*/ ts::wstr_c get_name() const override
@@ -554,7 +555,7 @@ void mainrect_c::apply_ui_mode( bool split_ui )
         TSDEL( hg );
         g_app->contactlist = &MAKE_CHILD<gui_contactlist_c>( getrid() ).get();
         g_app->contactlist->leech( TSNEW( leech_fill_parent_s ) );
-        contacts().update_meta();
+        contacts().update_roots();
 
         if (neww)
         {
@@ -595,6 +596,8 @@ void mainrect_c::apply_ui_mode( bool split_ui )
         hg = uiroot( m_rid );
         g_app->contactlist = &MAKE_CHILD<gui_contactlist_c>( hg->getrid() ).get();
         mainconv = &MAKE_CHILD<gui_conversation_c>( hg->getrid() ).get();
+
+        contacts().update_roots();
 
         if ( restore_size )
         {
@@ -681,10 +684,26 @@ bool mainrect_c::saverectpos(RID,GUIPARAM)
         }
 		break;
     case SQ_CLOSE:
+
+        if (cfg().collapse_beh() == CBEH_BY_CLOSE_BUTTON)
+        {
+            MODIFY( *this ).micromize( true );
+            data.allowclose = false;
+            return true;
+        }
+
         if ( gmsg<GM_UI_EVENT>( UE_CLOSE ).send().is( GMRBIT_ABORT ) )
             data.allowclose = false;
         return true;
+    case SQ_EXIT:
+        for (guirect_c *ch : convs)
+            if (ch)
+                TSDEL( ch );
+        convs.clear();
+        return true;
+
     }
 
     return false;
 }
+

@@ -10,6 +10,7 @@ namespace ts
 
 template <typename UNIT_PTR, typename ALLOCATOR> class DEFAULT_BEHAVIOUR : public ALLOCATOR
 {
+    MOVABLE( is_movable<ALLOCATOR>::value );
 protected:
     typedef typename clean_type<UNIT_PTR>::type CLEAN_OBJTYPE;
 
@@ -23,6 +24,7 @@ protected:
 
 template <typename T, typename ALLOCATOR> class DEFAULT_BEHAVIOUR_CLEAR_ONLY : public ALLOCATOR
 {
+    MOVABLE( is_movable<ALLOCATOR>::value );
 protected:
 
     typedef decltype(clean_type<T>::type) CLEAN_OBJTYPE;
@@ -299,6 +301,8 @@ template <typename T, int SMALLGRANULA = 0, typename BEHAVIOUR = DEFAULT_BEHAVIO
 #else
     void fill_dbg(auint i, auint n) { blk_fill<uint8>(m_list + i, n * sizeof(T), 0xcd); }
 #endif
+
+    MOVABLE( is_movable<BEHAVIOUR>::value );
 
 public:
     typedef typename BEHAVIOUR::CLEAN_OBJTYPE CLEAN_OBJTYPE;

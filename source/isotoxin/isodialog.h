@@ -36,7 +36,7 @@ enum rtitle_e
     title_settings,
     title_new_contact,
     title_repeat_request,
-    title_new_groupchat,
+    title_new_conference,
     title_avatar_creation_tool,
     title_contact_properties,
     title_new_meta_contact,
@@ -52,6 +52,7 @@ enum rtitle_e
     title_newtags,
     title_rentag,
     title_avatar,
+    title_conference_properties,
 };
 
 
@@ -77,11 +78,11 @@ public:
 
 };
 
-template<typename DLGT, class... _Valty> RID SUMMON_DIALOG(unique_dialog_e udtag, _Valty&&... _Val)
+template<typename DLGT, class... _Valty> RID SUMMON_DIALOG(unique_dialog_e udtag, bool mainparent, _Valty&&... _Val)
 {
     if (udtag && dialog_already_present(udtag)) return RID();
 
-    RID r = MAKE_ROOT<DLGT>(std::forward<_Valty>(_Val)...);
+    RID r = MAKE_ROOT<DLGT>( mainparent, std::forward<_Valty>(_Val)... );
     {
         MODIFY(r)
             .setminsize(r)

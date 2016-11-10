@@ -141,7 +141,7 @@ void dialog_colors_c::load_preset( const ts::wstr_c &tt )
 
 bool dialog_colors_c::cprev(RID, GUIPARAM)
 {
-    ts::aint curci = colorsarr.find(curcolor.as_sptr()) - 1;
+    ts::aint curci = colorsarr.find(curcolor) - 1;
     if (curci < 0)
         curci = colorsarr.size() - 1;
     curcolor = colorsarr.get(curci);
@@ -152,7 +152,7 @@ bool dialog_colors_c::cprev(RID, GUIPARAM)
 }
 bool dialog_colors_c::cnext(RID, GUIPARAM)
 {
-    ts::aint curci = colorsarr.find(curcolor.as_sptr()) + 1;
+    ts::aint curci = colorsarr.find(curcolor) + 1;
     if (curci >= colorsarr.size())
         curci = 0;
     curcolor = colorsarr.get(curci);
@@ -411,13 +411,8 @@ bool dialog_cmdlinegenerator_c::passt( const ts::wstr_c &p, bool )
     return 0;
 }
 
-void crypto_zero( ts::uint8 *buf, int bufsize );
-void get_unique_machine_id( ts::uint8 *buf, int bufsize, const char *salt, bool use_profile_uniqid );
-ts::str_c encode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& s );
-
 ts::wstr_c dialog_cmdlinegenerator_c::enc() const
 {
-
     ts::uint8 encpass[ 32 ];
     get_unique_machine_id( encpass, 32, SALT_CMDLINEPROFILE, false );
     ts::str_c ep = encode_string_base64( encpass, ts::to_utf8(password) );

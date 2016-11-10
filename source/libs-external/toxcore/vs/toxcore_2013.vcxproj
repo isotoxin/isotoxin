@@ -20,16 +20,13 @@
   <ItemGroup>
     <ClCompile Include="..\toxav\audio.c" />
     <ClCompile Include="..\toxav\bwcontroller.c" />
-    <ClCompile Include="..\toxav\group.c">
-      <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)groupav.obj</ObjectFileName>
-      <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)groupav.obj</ObjectFileName>
-    </ClCompile>
+    <ClCompile Include="..\toxav\groupav.c" />
     <ClCompile Include="..\toxav\msi.c" />
+    <ClCompile Include="..\toxav\ring_buffer.c" />
     <ClCompile Include="..\toxav\rtp.c" />
     <ClCompile Include="..\toxav\toxav.c" />
     <ClCompile Include="..\toxav\toxav_old.c" />
     <ClCompile Include="..\toxav\video.c" />
-    <ClCompile Include="..\toxcore\assoc.c" />
     <ClCompile Include="..\toxcore\crypto_core.c" />
     <ClCompile Include="..\toxcore\DHT.c" />
     <ClCompile Include="..\toxcore\friend_connection.c" />
@@ -50,7 +47,6 @@
     <ClCompile Include="..\toxcore\TCP_connection.c" />
     <ClCompile Include="..\toxcore\TCP_server.c" />
     <ClCompile Include="..\toxcore\tox.c" />
-    <ClCompile Include="..\toxcore\tox_group.c" />
     <ClCompile Include="..\toxcore\util.c" />
     <ClCompile Include="..\toxdns\toxdns.c" />
   </ItemGroup>
@@ -58,12 +54,12 @@
     <ClInclude Include="..\..\pthread_win32\pthread.h" />
     <ClInclude Include="..\toxav\audio.h" />
     <ClInclude Include="..\toxav\bwcontroller.h" />
-    <ClInclude Include="..\toxav\group.h" />
+    <ClInclude Include="..\toxav\groupav.h" />
     <ClInclude Include="..\toxav\msi.h" />
+    <ClInclude Include="..\toxav\ring_buffer.h" />
     <ClInclude Include="..\toxav\rtp.h" />
     <ClInclude Include="..\toxav\toxav.h" />
     <ClInclude Include="..\toxav\video.h" />
-    <ClInclude Include="..\toxcore\assoc.h" />
     <ClInclude Include="..\toxcore\crypto_core.h" />
     <ClInclude Include="..\toxcore\DHT.h" />
     <ClInclude Include="..\toxcore\friend_connection.h" />
@@ -85,7 +81,6 @@
     <ClInclude Include="..\toxcore\TCP_connection.h" />
     <ClInclude Include="..\toxcore\TCP_server.h" />
     <ClInclude Include="..\toxcore\tox.h" />
-    <ClInclude Include="..\toxcore\tox_group.h" />
     <ClInclude Include="..\toxcore\util.h" />
     <ClInclude Include="..\toxdns\toxdns.h" />
     <ClInclude Include="config.h" />

@@ -6,6 +6,8 @@ dialog_contact_props_c::dialog_contact_props_c(MAKE_ROOT<dialog_contact_props_c>
     open_details_tab = data.prms.details_tab;
     deftitle = title_contact_properties;
     contactue = contacts().rfind(data.prms.key);
+    if (contactue->getkey().is_conference())
+        deftitle = title_conference_properties;
     update();
 }
 
@@ -69,6 +71,17 @@ bool dialog_contact_props_c::tags_handler(const ts::wstr_c &ht, bool )
     tags.split<char>( to_utf8(ht), ',' );
     tags.trim();
     tags.sort(true);
+    return true;
+}
+
+bool dialog_contact_props_c::regexp_handler( const ts::wstr_c &s, bool )
+{
+    regexp = s;
+    return true;
+}
+bool dialog_contact_props_c::keywords_handler( const ts::wstr_c &s, bool )
+{
+    keywords = s;
     return true;
 }
 
@@ -158,7 +171,7 @@ bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t, bool )
 
     if (contactue)
     {
-        customname = contactue->get_customname();
+        customname = contactue->getkey().is_conference() ? contactue->get_name() : contactue->get_customname();
         ccomment = contactue->get_comment();
         cgreeting = contactue->get_greeting();
         cgreeting_per = contactue->get_greeting_period();
@@ -171,6 +184,16 @@ bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t, bool )
 
         ts::wstrings_c h;
         h.qsplit( contactue->get_mhcmd() );
+
+        if (conference_s *c = contactue->find_conference())
+        {
+            int i = c->keywords.find_pos( '\1' );
+            if (i >= 0)
+            {
+                regexp = c->keywords.substr( 0, i );
+                keywords = c->keywords.substr( i + 1 );
+            }                
+        }
 
         if ( h.size() )
         {
@@ -189,20 +212,43 @@ bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t, bool )
 
         dm().page_caption(from_utf8(n));
 
-        dm().textfield(TTT("Custom name",229), from_utf8(customname), DELEGATE(this, custom_name))
-            .focus(true);
+        if ( contactue->getkey().is_conference() )
+        {
+            ts::wstr_c ttt = TTT("Conference name",506);
+            if (contactue->get_conference_permissions() & CP_CHANGE_NAME)
+                dm().textfield( ttt, from_utf8( customname ), DELEGATE( this, custom_name ) );
+            else
+                dm().rotext( ttt, from_utf8( customname ) );
+
+            dm().vspace();
+            dm().rotext( TTT("Conference ID",507), from_utf8( contactue->get_pubid() ) );
+        } else
+        {
+            dm().textfield( TTT( "Custom name", 229 ), from_utf8( customname ), DELEGATE( this, custom_name ) )
+                .focus( true );
+        }
+
         dm().vspace();
 
         dm().combik(TTT("Message history",230)).setmenu(gethistorymenu()).setname(CONSTASTR("history"));
         dm().vspace();
 
-        dm().combik(TTT("Auto accept audio calls",288)).setmenu(getaacmenu()).setname(CONSTASTR("aaac"));
-        dm().vspace();
+        if (!contactue->getkey().is_conference())
+        {
+            dm().combik( TTT( "Auto accept audio calls", 288 ) ).setmenu( getaacmenu() ).setname( CONSTASTR( "aaac" ) );
+            dm().vspace();
+        }
 
         dm().textfieldml(TTT("Tags (comma-separated list of phrases/words)", 53), from_utf8(tags.join(CONSTASTR(", "))), DELEGATE(this, tags_handler), 3).focus(true).setname(CONSTASTR("tags"));
 
         dm << 2;
-        dm().list(L"", L"", -250).setname(CONSTASTR("list"));
+        if (contactue->getkey().is_conference())
+        {
+            dm().list( L"", L"", -250 ).setname( CONSTASTR( "det" ) );
+        } else
+        {
+            dm().list( L"", L"", -250 ).setname( CONSTASTR( "list" ) );
+        }
 
         dm << 4;
         dm().textfieldml(L"", from_utf8(ccomment), DELEGATE(this, comment), 12).focus(true);
@@ -230,14 +276,39 @@ bool dialog_contact_props_c::msghandler_p_h( const ts::wstr_c & t, bool )
         dm().vspace();
         dm().textfieldml( L"", from_utf8( cgreeting ), DELEGATE( this, greeting ), 10 ).focus( true );
 
+        if (contactue->getkey().is_conference())
+        {
+            dm << 64;
+            dm().list( L"", L"", -250 ).setname( CONSTASTR( "list" ) );
+
+            dm << 128;
+            dm().label( TTT("Regular expression (egrep syntax)",511) );
+            dm().textfieldml( L"", regexp, DELEGATE( this, regexp_handler ), 5 ).focus( true );
+
+            dm().label( TTT("Keywords (comma separated phrases/words per line; each line represents a separate rule)",512) );
+            dm().textfieldml( L"", keywords, DELEGATE( this, keywords_handler ), 5 );
+        }
     }
 
     menu_c m;
     m.add( TTT("Settings",369), 0 , TABSELMI(1) );
-    m.add( TTT("Notification",466), 0, TABSELMI( 16 ) );
-    m.add( TTT("Details",370), open_details_tab ? MIF_MARKED : 0, TABSELMI(2) );
-    m.add( TTT("Processing",440), 0, TABSELMI( 8 ) );
-    m.add( TTT("Greeting",485), 0, TABSELMI( 32 ) );
+    
+    if (!contactue->getkey().is_conference())
+    {
+        m.add( TTT( "Notification", 466 ), 0, TABSELMI( 16 ) );
+    } else
+        m.add( TTT("Members",508),  0, TABSELMI( 64 ) );
+
+    m.add( TTT( "Details", 370 ), open_details_tab ? MIF_MARKED : 0, TABSELMI( 2 ) );
+
+    if (!contactue->getkey().is_conference())
+    {
+        m.add( TTT( "Processing", 440 ), 0, TABSELMI( 8 ) );
+        m.add( TTT( "Greeting", 485 ), 0, TABSELMI( 32 ) );
+    } else
+    {
+        m.add( TTT("Keywords",513), 0, TABSELMI( 128 ) );
+    }
     m.add( TTT( "Comment", 371 ), 0, TABSELMI( 4 ) );
 
     gui_htabsel_c &tab = MAKE_CHILD<gui_htabsel_c>(getrid(), m);
@@ -283,21 +354,60 @@ ts::wstr_c dialog_contact_props_c::buildmh()
     if (contactue && contacts().find(contactue->getkey()) != nullptr)
     {
         bool changed = false;
-        if (contactue->get_customname() != customname)
+
+        if (contactue->getkey().is_conference())
         {
-            changed = true;
-            contactue->set_customname(customname);
-        }
-        if ( contactue->get_greeting() != cgreeting )
+            if (contactue->get_name() != customname && (contactue->get_conference_permissions() & CP_CHANGE_NAME) != 0)
+            {
+                changed = true;
+                contactue->set_name( customname );
+            }
+
+            if (conference_s *c = contactue->find_conference())
+            {
+                ts::wstr_c newkeywors( regexp, CONSTWSTR( "\1" ), keywords );
+                c->change_keywords( newkeywors );
+            }
+
+        } else
         {
-            changed = true;
-            contactue->set_greeting( cgreeting );
+            if (contactue->get_customname() != customname)
+            {
+                changed = true;
+                contactue->set_customname( customname );
+            }
+            if (contactue->get_greeting() != cgreeting)
+            {
+                changed = true;
+                contactue->set_greeting( cgreeting );
+            }
+            if (contactue->get_greeting_period() != cgreeting_per)
+            {
+                changed = true;
+                contactue->set_greeting_period( cgreeting_per );
+            }
+            if (contactue->get_aaac() != aaac)
+            {
+                changed = true;
+                contactue->set_aaac( aaac );
+            }
+            if (contactue->get_imnb() != imb)
+            {
+                changed = true;
+                contactue->set_imnb( imb );
+            }
+            if (contactue->get_mhtype() != mh)
+            {
+                changed = true;
+                contactue->set_mhtype( mh );
+            }
+            if (contactue->get_mhcmd() != buildmh())
+            {
+                changed = true;
+                contactue->set_mhcmd( buildmh() );
+            }
         }
-        if ( contactue->get_greeting_period() != cgreeting_per )
-        {
-            changed = true;
-            contactue->set_greeting_period( cgreeting_per );
-        }
+
         if (contactue->get_comment() != ccomment)
         {
             changed = true;
@@ -308,36 +418,27 @@ ts::wstr_c dialog_contact_props_c::buildmh()
             changed = true;
             contactue->set_keeph(keeph);
         }
-        if (contactue->get_aaac() != aaac)
-        {
-            changed = true;
-            contactue->set_aaac(aaac);
-        }
-        if ( contactue->get_imnb() != imb )
-        {
-            changed = true;
-            contactue->set_imnb( imb );
-        }
         if (contactue->get_tags() != tags)
         {
             changed = true;
             contactue->set_tags(tags);
             contacts().rebuild_tags_bits();
         }
-        if ( contactue->get_mhtype() != mh )
-        {
-            changed = true;
-            contactue->set_mhtype( mh );
-        }
-        if ( contactue->get_mhcmd() != buildmh() )
-        {
-            changed = true;
-            contactue->set_mhcmd( buildmh() );
-        }
 
         if (changed)
         {
-            prf().dirtycontact(contactue->getkey());
+            if (contactue->getkey().is_conference())
+            {
+                conference_s *c = contactue->find_conference();
+                c->update_comment();
+                c->update_tags();
+                c->update_keeph();
+                if (c->update_name())
+                    if (active_protocol_c *ap = prf().ap( contactue->getkey().protoid ))
+                        ap->rename_conference( contactue->getkey().gidcid(), c->name );
+
+            } else
+                prf().dirtycontact(contactue->getkey());
             contactue->reselect();
         }
     }
@@ -348,41 +449,50 @@ ts::wstr_c dialog_contact_props_c::buildmh()
 
 void dialog_contact_props_c::update()
 {
-    if (contactue) contactue->subiterate([&](contact_c *c)
+    if (contactue)
     {
-        ts::str_c par;
-
-        cinfo_s &inf = getinfo(c);
-
-        if (const avatar_s *ava = c->get_avatar())
+        if (contactue->getkey().is_conference())
         {
-            inf.bmp = ava;
-        }
-        else
-        {
-            if (!inf.btmp)
-                inf.btmp.reset( TSNEW(ts::bitmap_c) );
-
-            const theme_image_s *icon = g_app->preloaded_stuff().icon[c->get_gender()];
-            inf.bmp = inf.btmp.get();
-            ts::irect rect = icon->rect;
-
-            if (inf.btmp->info().sz != rect.size())
-                inf.btmp->create_ARGB( rect.size() );
-
-            inf.btmp->copy( ts::ivec2(0), rect.size(), icon->dbmp->extbody(), rect.lt );
-
-
+            cinfo_s &inf = getinfo( contactue );
+            inf.cldets.parse( contactue->get_details() );
         }
 
-        inf.cldets.parse(c->get_details());
-    });
+        contactue->subiterate( [&]( contact_c *c )
+        {
+            ts::str_c par;
+
+            cinfo_s &inf = getinfo( c );
+
+            if (const avatar_s *ava = c->get_avatar())
+            {
+                inf.bmp = ava;
+            }
+            else
+            {
+                if (!inf.btmp)
+                    inf.btmp.reset( TSNEW( ts::bitmap_c ) );
+
+                const theme_image_s *icon = g_app->preloaded_stuff().icon[c->get_gender()];
+                inf.bmp = inf.btmp.get();
+                ts::irect rect = icon->rect;
+
+                if (inf.btmp->info().sz != rect.size())
+                    inf.btmp->create_ARGB( rect.size() );
+
+                inf.btmp->copy( ts::ivec2( 0 ), rect.size(), icon->dbmp->extbody(), rect.lt );
+
+
+            }
+
+            inf.cldets.parse( c->get_details() );
+        } );
+    }
 }
 
 
 ts::uint32 dialog_contact_props_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &c)
 {
-    if (contactue && contactue->subpresent(c.contact->getkey()))
+    if (contactue && contactue->subpresent(c.contact->getkey()) || c.contact == contactue)
     {
         update();
         fill_list();
@@ -462,7 +572,7 @@ namespace customel
                 if (popupmenu || flashing > 0)
                 {
                     r = maketag_mark<ts::wchar>(0 != (flashing & 1) ? gui->selection_bg_color_blink : gui->selection_bg_color);
-                    r.append(maketag_color<ts::wchar>(gui->selection_color));
+                    appendtag_color(r, gui->selection_color);
                 }
                 return;
             }
@@ -496,7 +606,7 @@ namespace customel
 
         void ctx_qrcode(const ts::str_c &cc)
         {
-            dialog_msgbox_c::mb_qrcode(from_utf8(cc)).summon();
+            dialog_msgbox_c::mb_qrcode(from_utf8(cc)).summon(true);
         }
 
         /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data)
@@ -591,7 +701,7 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
     {
         if (ee)
             desc.append(CONSTWSTR("<ee>"));
-        desc.append(maketag_color<ts::wchar>(get_default_text_color(2))).append(fn).append(CONSTWSTR("</color>: "));
+        appendtag_color( desc, get_default_text_color( 2 ) ).append( fn ).append( CONSTWSTR( ":</color> " ) );
         if (v.l > 0)
         {
             if (link_i >= 0)
@@ -623,15 +733,18 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
         }
     };
 
-    if ( !c->get_options().is(contact_c::F_SYSTEM_USER) )
+    if ( !c->get_options().is(contact_c::F_SYSTEM_USER) && !c->getkey().is_conference() )
     {
         ts::str_c temp( c->get_name() );
         text_adapt_user_input( temp );
         addl( TTT( "User name", 364 ), temp, false, false, false, vals.add( temp ) );
 
-        temp = c->get_statusmsg();
-        text_adapt_user_input( temp );
-        addl( TTT( "User status", 365 ), temp, false, false, false, vals.add( temp ) );
+        if (!c->get_statusmsg().is_empty() || c->get_state() != CS_UNKNOWN) // don't show empty status message for unknown contacts
+        {
+            temp = c->get_statusmsg();
+            text_adapt_user_input( temp );
+            addl( TTT( "User status message", 365 ), temp, false, false, false, vals.add( temp ) );
+        }
     }
 
     //desc.insert(desc.get_length()-1, CONSTWSTR("=3"));
@@ -651,6 +764,12 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
             extractitems( lst, v);
             for( const ts::str_c &idx : lst )
                 addl( CONSTWSTR("<id>"), idx, true, true, true, vals.add(idx));
+        } else if (dname.equals( CONSTASTR( CDET_PUBLIC_UNIQUE_ID ) ))
+        {
+            ts::astrings_c lst;
+            extractitems( lst, v );
+            for (const ts::str_c &idx : lst)
+                addl( TTT("Unique ID",509), idx, true, true, true, vals.add( idx ) );
         } else if (dname.equals(CONSTASTR(CDET_PUBLIC_ID_BAD)))
         {
             ts::astrings_c lst;
@@ -683,12 +802,22 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
         if ( !id_.is_empty() )
             id = id_;
 
-        addl(loc_text(loc_connection_name), ap->get_name(), false, false, false, vals.add(ap->get_name()));
-        addl(loc_text(loc_module), ap->get_infostr( IS_PROTO_DESCRIPTION_WITH_TAG ), false, false, false, vals.add(ap->get_infostr(IS_PROTO_DESCRIPTION_WITH_TAG)));
+        if (!contactue->getkey().is_conference() || contactue == c)
+        {
+            addl( loc_text( loc_connection_name ), ap->get_name(), false, false, false, vals.add( ap->get_name() ) );
+            addl( loc_text( loc_module ), ap->get_infostr( IS_PROTO_DESCRIPTION_WITH_TAG ), false, false, false, vals.add( ap->get_infostr( IS_PROTO_DESCRIPTION_WITH_TAG ) ) );
+        }
     }
 
-    if ( !c->get_options().is( contact_c::F_SYSTEM_USER ) )
-        addl(loc_text(loc_state), to_utf8(text_contact_state(get_default_text_color(0), get_default_text_color(1), c->get_state())), true, false, false, -1);
+    if (!c->get_options().is( contact_c::F_SYSTEM_USER ))
+    {
+        if ( c->getkey().is_conference() && c->get_state() == CS_OFFLINE )
+        {
+            addl( loc_text( loc_state ), to_utf8( text_contact_state( get_default_text_color( 0 ), get_default_text_color( 1 ), CS_ROTTEN ) ), true, false, false, -1 );
+
+        } else
+            addl( loc_text( loc_state ), to_utf8( text_contact_state( get_default_text_color( 0 ), get_default_text_color( 1 ), c->get_state() ) ), true, false, false, -1 );
+    }
 
     desc.replace_all( CONSTWSTR( "<id>" ), id );
 
@@ -698,20 +827,31 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
 void dialog_contact_props_c::fill_list()
 {
     if (contactue)
-        if (RID lst = find(CONSTASTR("list")))
+    {
+        if (RID lst = find( CONSTASTR( "list" ) ))
         {
-            HOLD(lst).engine().trunc_children(0);
+            HOLD( lst ).engine().trunc_children( 0 );
 
-            contactue->subiterate([&](contact_c *c) {
-                add_det(lst, c);
-            });
+            contactue->subiterate( [&]( contact_c *c ) {
+                add_det( lst, c );
+            } );
 
         }
+
+        if (contactue->getkey().is_conference())
+        {
+            if (RID lst = find( CONSTASTR( "det" ) ))
+            {
+                HOLD( lst ).engine().trunc_children( 0 );
+                add_det( lst, contactue );
+            }
+        }
+    }
 }
 
 void dialog_contact_props_c::tags_menu_handler(const ts::str_c&h)
 {
-    ts::aint hi = tags.find(h.as_sptr());
+    ts::aint hi = tags.find(h);
     if (hi >= 0)
     {
         tags.remove_slow(hi);
@@ -731,7 +871,7 @@ void dialog_contact_props_c::tags_menu(menu_c &m, ts::aint )
 
     for (const ts::str_c &h : ctags)
     {
-        m.add( ts::from_utf8(h), tags.find(h.as_sptr()) >= 0 ? MIF_MARKED : 0, DELEGATE(this, tags_menu_handler), h );
+        m.add( ts::from_utf8(h), tags.find(h) >= 0 ? MIF_MARKED : 0, DELEGATE(this, tags_menu_handler), h );
     }
 }
 
@@ -741,7 +881,7 @@ void dialog_contact_props_c::tags_menu(menu_c &m, ts::aint )
         if (RID e = find(CONSTASTR("tags")))
             HOLD(e).as<gui_textedit_c>().ctx_menu_func = DELEGATE(this, tags_menu);
 
-    if (mask & 2)
+    if (mask & (2|64))
         fill_list();
 
 }

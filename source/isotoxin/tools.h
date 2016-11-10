@@ -85,12 +85,21 @@ template<typename TCHARACTER> ts::str_t<TCHARACTER> maketag_color( ts::TSCOLOR c
     s.append_char('>');
     return s;
 }
-INLINE void settag_color( ts::wstr_c&s, ts::TSCOLOR c )
+INLINE ts::wstr_c& settag_color( ts::wstr_c&s, ts::TSCOLOR c )
 {
     s.set( CONSTWSTR( "<color=#" ) );
     s.append_as_hex( ts::RED( c ) ).append_as_hex( ts::GREEN( c ) ).append_as_hex( ts::BLUE( c ) );
     if ( ts::ALPHA( c ) != 255 ) s.append_as_hex( ts::ALPHA( c ) );
     s.append_char( '>' );
+    return s;
+}
+INLINE ts::wstr_c& appendtag_color( ts::wstr_c&s, ts::TSCOLOR c )
+{
+    s.append( CONSTWSTR( "<color=#" ) );
+    s.append_as_hex( ts::RED( c ) ).append_as_hex( ts::GREEN( c ) ).append_as_hex( ts::BLUE( c ) );
+    if ( ts::ALPHA( c ) != 255 ) s.append_as_hex( ts::ALPHA( c ) );
+    s.append_char( '>' );
+    return s;
 }
 
 template<typename TCHARACTER> ts::str_t<TCHARACTER> colorize( const ts::sptr<TCHARACTER> &t, ts::TSCOLOR c)
@@ -154,7 +163,7 @@ void text_adapt_user_input(ts::str_c &text_utf8); // before print
 void text_prepare_for_edit(ts::str_c &text_utf8);
 INLINE ts::wstr_c enquote(const ts::wstr_c &x)
 {
-    return ts::wstr_c(CONSTWSTR("\""), x).append(CONSTWSTR("\""));
+    return ts::wstr_c(CONSTWSTR("\""), x, CONSTWSTR("\""));
 }
 
 bool text_find_inds( const ts::wstr_c &t, ts::tmp_tbuf_t<ts::ivec2> &marks, const ts::wstrings_c &fsplit );
@@ -226,6 +235,7 @@ enum isogmsg_e
     ISOGM_INIT_CONVERSATION,        // in split mode
     ISOGM_CMD_RESULT,
     ISOGM_PROTO_LOADED,
+    ISOGM_PROTO_CRASHED,
     ISOGM_INCOMING_MESSAGE,
     ISOGM_DELIVERED,
     ISOGM_FILE,
@@ -332,6 +342,14 @@ template<> struct gmsg<ISOGM_PROTO_LOADED> : public gmsgbase
     int id;
 };
 
+template<> struct gmsg<ISOGM_PROTO_CRASHED> : public gmsgbase
+{
+    gmsg( int id ) :gmsgbase( ISOGM_PROTO_CRASHED ), id( id )
+    {
+    }
+    int id;
+};
+
 struct post_s;
 class contact_c;
 class contact_root_c;
@@ -430,6 +448,7 @@ enum loctext_e
     loc_yes,
     loc_no,
     loc_exit,
+    loc_continue,
     loc_network,
     loc_nonetwork,
     loc_networks,
@@ -448,6 +467,8 @@ enum loctext_e
     loc_pasteimagefromclipboard,
     loc_capturecamera,
     loc_qrcode,
+    loc_moveup,
+    loc_movedn,
 
     loc_connection_name,
     loc_module,
@@ -456,9 +477,18 @@ enum loctext_e
 
 ts::wstr_c loc_text(loctext_e);
 
-ts::wstr_c text_sizebytes( ts::aint sz );
+ts::wstr_c text_sizebytes( uint64 sz, bool numbers_only = false );
 ts::wstr_c text_contact_state( ts::TSCOLOR color_online, ts::TSCOLOR color_offline, contact_state_e st, int link = -1 );
 ts::wstr_c text_typing(const ts::wstr_c &prev, ts::wstr_c &workbuf, const ts::wsptr &preffix);
+
+class text_match_c
+{
+public:
+    virtual ~text_match_c() {}
+    static text_match_c *build_from_template( const ts::wsptr& t );
+    virtual bool match( const ts::wsptr& t ) const = 0;
+};
+
 
 void draw_initialization( rectengine_c *e, ts::bitmap_c &pab, const ts::irect&viewrect, ts::TSCOLOR tcol, const ts::wsptr &additiontext );
 void draw_chessboard(rectengine_c &e, const ts::irect & r, ts::TSCOLOR c1, ts::TSCOLOR c2);
@@ -601,6 +631,20 @@ struct leech_dock_right_center_s : public autoparam_i
     void update_ctl_pos();
     /*virtual*/ bool i_leeched( guirect_c &to ) override { if (__super::i_leeched(to)) { update_ctl_pos(); return true;} return false; };
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
+};
+
+struct leech_dock_left_center_s : public autoparam_i
+{
+    int width;
+    int height;
+    int x_space;
+    int y_space;
+    int index;
+    int num;
+    leech_dock_left_center_s( int width, int height, int x_space = 0, int y_space = 0, int index = 0, int num = 1 ) :width( width ), height( height ), x_space( x_space ), y_space( y_space ), index( index ), num( num ) {}
+    void update_ctl_pos();
+    /*virtual*/ bool i_leeched( guirect_c &to ) override { if (__super::i_leeched( to )) { update_ctl_pos(); return true; } return false; };
+    /*virtual*/ bool sq_evt( system_query_e qp, RID rid, evt_data_s &data ) override;
 };
 
 struct leech_dock_bottom_right_s : public autoparam_i
@@ -787,3 +831,27 @@ void gen_passwdhash(ts::uint8 *passwhash, const ts::wstr_c &passwd);
 
 #define SALT_PROTOPASS "kfnghtyeizakf"
 #define SALT_CMDLINEPROFILE "odlfkjwq23dz"
+
+void crypto_zero( ts::uint8 *buf, int bufsize );
+void get_unique_machine_id( ts::uint8 *buf, int bufsize, const char *salt, bool use_profile_uniqid );
+ts::str_c encode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& s );
+bool decode_string_base64( ts::str_c& rslt, ts::uint8 *key /* 32 bytes */, const ts::asptr& s );
+
+extern "C"
+{
+    int crypto_generichash( unsigned char *out, size_t outlen,
+        const unsigned char *in, unsigned long long inlen,
+        const unsigned char *key, size_t keylen );
+};
+
+#define BLAKE2B_HASH_SIZE_SMALL 16
+#define BLAKE2B_HASH_SIZE 32
+
+template<ts::aint hashsize> void blake2b( ts::uint8 *hash, const void *inbytes, ts::aint insize )
+{
+    crypto_generichash( hash, hashsize, (const unsigned char *)inbytes, insize, nullptr, 0 );
+}
+
+template<ts::aint hashsize> void blake2b( ts::uint8 *hash, const void *inbytes1, ts::aint insize1, const void *inbytes2, ts::aint insize2 );
+
+#define BLAKE2B(h,d,s, ...) blake2b< ARRAY_SIZE(h) >(h, d, s, __VA_ARGS__)

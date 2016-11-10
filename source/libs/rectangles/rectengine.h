@@ -151,7 +151,7 @@ public:
             if (c)
             {
                 const rectprops_c &rps = c->getrect().getprops();
-                if (rps.is_visible() && !rps.out_of_bound() && rps.screenrect().inside(screenpos))
+                if (rps.is_visible() && !rps.out_of_bound() && getrect().test_under_point(c->getrect(), screenpos))
                 {
                     rr = c->find_child_by_point(screenpos);
                     break;
@@ -250,7 +250,7 @@ public:
     void mouse_unlock();
 
     virtual void redraw(const ts::irect *invalidate_rect=nullptr) {}
-	virtual bool apply(rectprops_c &rpss, const rectprops_c &pss) { return rpss.change_to(pss, this); }
+	virtual bool apply(rectprops_c &rpss, const rectprops_c &pss) { return rpss.change_to(pss); }
 
 	virtual draw_data_s & begin_draw() { return ts::make_dummy<draw_data_s>(); }
 	virtual void end_draw() {}
@@ -333,6 +333,7 @@ class rectengine_root_c : public rectengine_c
 
         /*virtual*/ void evt_destroy() override {}
         /*virtual*/ bool evt_close() override;
+        /*virtual*/ void evt_on_exit() override;
 
         void kill();
 

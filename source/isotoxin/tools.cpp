@@ -1,5 +1,10 @@
 #include "isotoxin.h"
 
+#pragma warning (push)
+#pragma warning (disable:4324)
+#include "libsodium/src/libsodium/include/sodium.h"
+#pragma warning (pop)
+
 const wraptranslate<ts::wsptr> __translation(const ts::wsptr &txt, int tag)
 {
     const ts::wsptr r = g_app->label(tag);
@@ -261,6 +266,50 @@ void leech_dock_right_center_s::update_ctl_pos()
         ts::ivec2 szmax = HOLD(owner->getparent())().get_max_size();
         r().calc_min_max_by_client_area(szmin, szmax);
         fixrect(data.rectchg.rect, szmin, szmax, data.rectchg.area);
+        return false;
+    }
+
+    if (qp == SQ_PARENT_RECT_CHANGED)
+    {
+        update_ctl_pos();
+        return false;
+    }
+
+    return false;
+}
+
+void leech_dock_left_center_s::update_ctl_pos()
+{
+    HOLD r( owner->getparent() );
+    ts::irect cr = r().get_client_area();
+    int yspace = y_space;
+    if (yspace < 0)
+    {
+        int rqh = (height * num) + (-yspace * (num + 1));
+        yspace = (cr.height() - rqh) / 2;
+    }
+    cr.lt.y += yspace;
+    cr.lt.x += x_space;
+    cr.rb.y -= yspace;
+
+    float fy = (float)(cr.height() - (height * num)) / (float)(num + 1);
+    int y = ts::lround( fy + (height + fy) * index );
+
+    MODIFY( *owner ).pos( cr.lt.x, cr.lt.y + y ).size( width, height );
+}
+
+/*virtual*/ bool leech_dock_left_center_s::sq_evt( system_query_e qp, RID rid, evt_data_s &data )
+{
+    if (!ASSERT( owner )) return false;
+    if (owner->getrid() != rid) return false;
+
+    if (qp == SQ_PARENT_RECT_CHANGING)
+    {
+        HOLD r( owner->getparent() );
+        ts::ivec2 szmin( width + x_space, height * num + y_space * 2 );
+        ts::ivec2 szmax = HOLD( owner->getparent() )().get_max_size();
+        r().calc_min_max_by_client_area( szmin, szmax );
+        fixrect( data.rectchg.rect, szmin, szmax, data.rectchg.area );
         return false;
     }
 
@@ -605,12 +654,21 @@ template <typename TCH> bool text_find_link(const ts::sptr<TCH> &m, int from, ts
             return true;
         }
 
+        ts::wchar in_quote = 0;
+        if (i > 0)
+        {
+            if (m.s[i-1] == '\"')
+                in_quote = '\"';
+            else if (m.s[i-1] == '\'')
+                in_quote = '\'';
+        }
+
         int cnt = message.get_length();
         int j = i;
         for (; j < cnt; ++j)
         {
             ts::wchar c = message.get_char(j);
-            if (ts::CHARz_find(L" \\<>\r\n\t", c) >= 0) break;
+            if (ts::CHARz_find(L" \\<>\r\n\t!", c) >= 0 || in_quote == c) break;
         }
 
         rslt.r0 = i;
@@ -698,7 +756,7 @@ void text_close_bbcode(ts::str_c &text_utf8)
                     {
                         // odd closing tag
                         //text.cut(i,j-i+1);
-                        text_utf8.insert(0,ts::str_c(CONSTASTR("[")).append(tag).append_char(']'));
+                        text_utf8.insert(0,ts::str_c(CONSTASTR("["),tag, CONSTASTR("]")));
                         i = j + tag.get_length() + 2;
                     }
 
@@ -1145,6 +1203,8 @@ ts::wstr_c loc_text(loctext_e lt)
             return TTT("no",316);
         case loc_exit:
             return TTT("Exit",3);
+        case loc_continue:
+            return TTT("Continue",117);
         case loc_network:
             return TTT("Network",66);
         case loc_nonetwork:
@@ -1183,6 +1243,12 @@ ts::wstr_c loc_text(loctext_e lt)
         case loc_qrcode:
             return TTT("QR code", 44);
 
+        case loc_moveup:
+            return TTT( "Move up", 77 );
+        case loc_movedn:
+            return TTT( "Move down", 78 );
+
+
         case loc_connection_name:
             return TTT("Connection name", 102);
         case loc_module:
@@ -1194,11 +1260,14 @@ ts::wstr_c loc_text(loctext_e lt)
     return ts::wstr_c();
 }
 
-ts::wstr_c text_sizebytes( ts::aint sz)
+ts::wstr_c text_sizebytes( uint64 sz, bool numbers_only )
 {
     ts::wstr_c n; n.set_as_num(sz);
     for ( int ix = n.get_length() - 3; ix > 0; ix -= 3)
-        n.insert(ix, '`');
+        n.insert(ix, ' ');
+
+    if (numbers_only)
+        return n;
 
     return TTT("size: $ bytes", 220) / n;
 }
@@ -1213,10 +1282,21 @@ ts::wstr_c text_contact_state(ts::TSCOLOR color_online, ts::TSCOLOR color_offlin
         ins1.set_char(6,'b');
     }
 
-    if (CS_ONLINE == st)
-        sost.set(CONSTWSTR("<b>")).append(maketag_color<ts::wchar>(color_online)).append(ins0).append(TTT("Online", 100)).append(ins1).append(CONSTWSTR("</color></b>"));
-    else if (CS_OFFLINE == st)
-        sost.set(CONSTWSTR("<l>")).append(maketag_color<ts::wchar>(color_offline)).append(ins0).append(TTT("Offline", 101)).append(ins1).append(CONSTWSTR("</color></l>"));
+    if ( CS_ONLINE == st )
+    {
+        sost.set( CONSTWSTR( "<b>" ) );
+        appendtag_color( sost, color_online ).append( ins0 ).append( TTT( "Online", 100 ) ).append( ins1 ).append( CONSTWSTR( "</color></b>" ) );
+    }
+    else if ( CS_OFFLINE == st )
+    {
+        sost.set( CONSTWSTR( "<l>" ) );
+        appendtag_color( sost, color_offline ).append( ins0 ).append( TTT( "Offline", 101 ) ).append( ins1 ).append( CONSTWSTR( "</color></l>" ) );
+    }
+    else if (CS_ROTTEN == st)
+    {
+        sost.set( CONSTWSTR( "<l>" ) );
+        appendtag_color( sost, color_offline ).append( ins0 ).append( TTT("Inactive",510) ).append( ins1 ).append( CONSTWSTR( "</color></l>" ) );
+    }
 
     return sost;
 }
@@ -1233,6 +1313,96 @@ ts::wstr_c text_typing(const ts::wstr_c &prev, ts::wstr_c &workbuf, const ts::ws
     return tt;
 
 }
+
+namespace
+{
+    class text_match_regex_c : public text_match_c
+    {
+        ts::regex_c r;
+    public:
+        text_match_regex_c( const ts::wsptr& t ):r(t)
+        {
+        }
+
+        /*virtual*/ bool match( const ts::wsptr& t ) const override
+        {
+            return r.present( t );
+        }
+    };
+    class text_match_keywords_c : public text_match_c
+    {
+        ts::array_inplace_t< ts::wstrings_c, 0 > arr;
+
+    public:
+        text_match_keywords_c( const ts::wsptr& t )
+        {
+            for( ts::token<ts::wchar> lines(t, '\n'); lines; ++lines )
+            {
+                ts::wstrings_c &a = arr.add();
+                for (ts::token<ts::wchar> words( *lines, ',' ); words; ++words)
+                    a.add( words->get_trimmed() );
+            }
+            for (ts::aint i = arr.size() - 1; i >= 0; --i)
+                if (arr.get( i ).size() == 0)
+                    arr.remove_fast( i );
+        }
+
+        /*virtual*/ bool match( const ts::wsptr& t ) const override
+        {
+            for( const ts::wstrings_c &s : arr )
+            {
+                bool all_match = true;
+                for( const ts::wstr_c& keyword : s )
+                {
+                    if ( ts::pwstr_c(t).find_pos( keyword ) < 0 )
+                    {
+                        all_match = false;
+                        break;
+                    }
+                }
+                if (all_match) return true;
+            }
+
+            return false;
+        }
+    };
+    class text_match_regex_or_keywords_c : public text_match_keywords_c
+    {
+        ts::regex_c r;
+    public:
+        text_match_regex_or_keywords_c( const ts::wsptr& rs, const ts::wsptr& ks ) :r( rs ), text_match_keywords_c(ks)
+        {
+        }
+
+        /*virtual*/ bool match( const ts::wsptr& t ) const override
+        {
+            return text_match_keywords_c::match( t ) || r.present(t);
+        }
+    };
+
+}
+
+text_match_c *text_match_c::build_from_template( const ts::wsptr& t )
+{
+    ts::pwstr_c s( t );
+    int i = s.find_pos( '\1' );
+    if (i < 0)
+        return nullptr;
+
+    ts::pwstr_c regext( s.substr( 0, i ) );
+    ts::pwstr_c keywords( s.substr( i + 1 ) );
+
+    if (regext.get_length() > 0)
+    {
+        if (keywords.get_length() > 0)
+            return TSNEW( text_match_regex_or_keywords_c, regext, keywords );
+
+        return TSNEW( text_match_regex_c, regext );
+    }
+
+    return TSNEW( text_match_keywords_c, keywords );
+}
+
 
 void draw_initialization(rectengine_c *e, ts::bitmap_c &pab, const ts::irect&viewrect, ts::TSCOLOR tcol, const ts::wsptr &additiontext)
 {
@@ -1589,7 +1759,7 @@ bool elevate()
 
 static void ChuckNorrisCopy(const ts::wstr_c &copyto)
 {
-    ts::wstr_c prm(CONSTWSTR("installto ")); prm.append(copyto).replace_all(10, ' ', '*');
+    ts::wstr_c prm( CONSTWSTR( "installto " ), copyto ); prm.replace_all( 10, ' ', '*' );
     ts::wstr_c exe( ts::get_exe_full_name() );
 
     ts::process_handle_s ph;
@@ -1735,6 +1905,135 @@ db_check_e check_db(const ts::wstr_c &fn, ts::uint8 *salt /* 16 bytes buffer */)
 
     return DBC_NOT_DB;
 }
+
+
+void gen_salt( ts::uint8 *buf, int blen )
+{
+    randombytes_buf( buf, blen );
+    ts::uint8 x = 0;
+    for (int i = 0; i < blen; ++i)
+    {
+        x ^= buf[i];
+    }
+    x = (255 - buf[0]) ^ x;
+    buf[1 + randombytes_uniform( blen - 1 )] ^= x;
+
+    // salt has feature: xor(all salt bytes) == not(first salt byte)
+
+#ifdef _DEBUG
+    x = 0;
+    for (int i = 0; i < blen; ++i)
+    {
+        x ^= buf[i];
+    }
+    ASSERT( x == (255 - buf[0]) );
+#endif // _DEBUG
+}
+
+void gen_passwdhash( ts::uint8 *passwhash, const ts::wstr_c &passwd )
+{
+    // this is my public key
+    // it used as static application salt for password hashing
+    // it can be any random sequence, but it should never been changed, due password encrypted profiles became a noise
+    ts::uint8 pk[] = {
+        0x6B, 0xBE, 0x62, 0xE2, 0x3C, 0x2A, 0x94, 0x86, 0xCC, 0x59, 0x7D, 0xE2, 0x17, 0x08, 0x47, 0xA7, 0xC0, 0x64, 0xDB, 0x20, 0xFE, 0x63, 0x4E, 0xEA, 0x98, 0x8D, 0x3D, 0xFD, 0x6C, 0xCA, 0x9D, 0x4F
+    };
+
+    ts::wstr_c p; p.append_as_hex( pk, sizeof( pk ) ).append( passwd );
+
+    crypto_generichash( passwhash, CC_HASH_SIZE, (const ts::uint8 *)p.cstr(), p.get_length() * 2, nullptr, 0 );
+}
+
+void crypto_zero( ts::uint8 *buf, int bufsize )
+{
+    sodium_memzero( buf, bufsize );
+}
+
+void get_unique_machine_id( ts::uint8 *buf, int bufsize, const char *salt, bool use_profile_uniqid )
+{
+    ts::tmp_buf_c b;
+    b.append_s( salt ); // salt
+    b.append_s( ts::gen_machine_unique_string() );
+    if (use_profile_uniqid)
+    {
+        b.tappend<char>( '-' );
+        b.append_s( prf().unique_profile_tag() );
+    }
+
+    crypto_generichash( buf, bufsize, b.data(), b.size(), nullptr, 0 );
+    sodium_memzero( b.data(), b.size() );
+}
+
+ts::str_c encode_string_base64( ts::uint8 *key /* 32 bytes */, const ts::asptr& s )
+{
+    ts::tmp_buf_c b;
+    b.append_s( s );
+    b.append_s( ts::str_c( CONSTASTR( "/" ) ).append_as_num( s.l ).append_char( '=' ).as_sptr() );
+    //while ( b.size() < 64 ) b.tappend<ts::uint8>( '=' );
+    ts::uint8 *nonce = b.expand( crypto_stream_chacha20_NONCEBYTES );
+    memset( nonce, 1, crypto_stream_chacha20_NONCEBYTES );
+    TS_STATIC_CHECK( 32 == crypto_stream_chacha20_KEYBYTES, "cha cha key" );
+    crypto_stream_chacha20_xor( b.data(), b.data(), b.size() - crypto_stream_chacha20_NONCEBYTES, nonce, key );
+    ts::str_c r; r.encode_base64( b.data(), b.size() - crypto_stream_chacha20_NONCEBYTES );
+    sodium_memzero( b.data(), b.size() );
+    return r;
+}
+
+bool decode_string_base64( ts::str_c& rslt, ts::uint8 *key /* 32 bytes */, const ts::asptr& s )
+{
+    if (s.l == 0) return true;
+    ts::tmp_buf_c b;
+    b.set_size( s.l * 2, false );
+    memset( b.data(), 0, s.l * 2 );
+    int sz = ts::pstr_c( s ).decode_base64( b.data(), (int)b.size() );
+    b.set_size( sz );
+
+    ts::uint8 *nonce = b.expand( crypto_stream_chacha20_NONCEBYTES );
+    memset( nonce, 1, crypto_stream_chacha20_NONCEBYTES );
+    TS_STATIC_CHECK( 32 == crypto_stream_chacha20_KEYBYTES, "cha cha key" );
+    crypto_stream_chacha20_xor( b.data(), b.data(), b.size() - crypto_stream_chacha20_NONCEBYTES, nonce, key );
+
+    bool eqf = false;
+    --sz;
+    for (; sz > 0 && b.data()[sz] == '='; --sz) eqf = true;
+    if (!eqf)
+        return false; // at least one '=' at end of string
+
+    int n = sz;
+    for (; sz > 0 && b.data()[sz] != '/'; --sz);
+    if (b.data()[sz] != '/')
+        return false;
+
+    int psz = ts::pstr_c( ts::asptr( (const char *)b.data() + sz + 1, n - sz ) ).as_uint();
+    if (psz != sz)
+        return false;
+
+    rslt.set( (const char *)b.data(), psz );
+    sodium_memzero( b.data(), b.size() );
+    return true;
+}
+
+uint64 random64()
+{
+    uint64 v;
+    randombytes_buf( &v, sizeof( v ) );
+    return v;
+}
+
+template<ts::aint hashsize> void blake2b( ts::uint8 *hash, const void *inbytes1, ts::aint insize1, const void *inbytes2, ts::aint insize2 )
+{
+    crypto_generichash_state st;
+    crypto_generichash_init( &st, nullptr, 0, hashsize );
+    crypto_generichash_update( &st, (const unsigned char *)inbytes1, insize1 );
+    crypto_generichash_update( &st, (const unsigned char *)inbytes2, insize2 );
+    crypto_generichash_final( &st, hash, hashsize );
+}
+
+template void blake2b<BLAKE2B_HASH_SIZE_SMALL>( ts::uint8 *hash, const void *inbytes1, ts::aint insize1, const void *inbytes2, ts::aint insize2 );
+template void blake2b<BLAKE2B_HASH_SIZE>( ts::uint8 *hash, const void *inbytes1, ts::aint insize1, const void *inbytes2, ts::aint insize2 );
+
+TS_STATIC_CHECK( crypto_generichash_BYTES_MIN == BLAKE2B_HASH_SIZE_SMALL, "16" );
+TS_STATIC_CHECK( crypto_generichash_BYTES == BLAKE2B_HASH_SIZE, "32" );
 
 // dlmalloc -----------------
 

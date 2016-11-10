@@ -544,7 +544,7 @@ class xmpp :
         gloox::JID jid;
         std::vector<u64> waiting_receipt;
 
-        byte gavatar_hash[16]; // md5 hash of avatar
+        byte gavatar_hash[crypto_generichash_BYTES_MIN]; // md5 hash of avatar
         std::string gavatar; // use string to keep binary data...
         int gavatar_tag = 0;
 
@@ -1893,16 +1893,14 @@ void xmpp::contact_descriptor_s::fix_bad_subscription_state( bool cancel_subscri
         changed |= CDM_NAME;
     const gloox::VCard::Photo& phi = vcard->photo();
 
-    byte avahash[ 16 ];
+    byte avahash[crypto_generichash_BYTES_MIN];
     if ( phi.binval.length() )
     {
         gavatar = phi.binval;
-        md5_c md5;
-        md5.update( phi.binval.data(), phi.binval.length() );
-        md5.done( avahash );
-        if ( 0 != memcmp( avahash, gavatar_hash, 16 ) )
+        crypto_generichash( avahash, crypto_generichash_BYTES_MIN, (const byte *)phi.binval.data(), phi.binval.length(), nullptr, 0 );
+        if ( 0 != memcmp( avahash, gavatar_hash, sizeof( gavatar_hash ) ) )
         {
-            memcpy( gavatar_hash, avahash, 16 );
+            memcpy( gavatar_hash, avahash, sizeof( gavatar_hash ) );
             ++gavatar_tag;
         }
     }
@@ -2278,15 +2276,12 @@ void xmpp::set_avatar(const void*data, int isz)
 
     } else
     {
-        byte newavahash[ 16 ];
+        byte newavahash[crypto_generichash_BYTES_MIN];
+        crypto_generichash( newavahash, sizeof( newavahash ), (const byte *)data, isz, nullptr, 0 );
 
-        md5_c md5;
-        md5.update( data, isz );
-        md5.done( newavahash );
-
-        if ( 0 != memcmp( newavahash, first->gavatar_hash, 16 ) )
+        if ( 0 != memcmp( newavahash, first->gavatar_hash, sizeof( newavahash ) ) )
         {
-            memcpy( first->gavatar_hash, newavahash, 16 );
+            memcpy( first->gavatar_hash, newavahash, sizeof( newavahash ) );
             first->gavatar = std::string( (const char *)data, isz );
             dirty_vcard = true;
         }
@@ -2804,13 +2799,22 @@ bool xmpp::file_portion(u64 utag, const file_portion_s *portion)
     return false;
 }
 
-void xmpp::add_groupchat(const char *groupaname, bool persistent)
+void xmpp::create_conference(const char *groupaname, const char *options )
 {
 }
-void xmpp::ren_groupchat(int gid, const char *groupaname)
+void xmpp::ren_conference(int gid, const char *groupaname)
 {
 }
-void xmpp::join_groupchat(int gid, int cid)
+void xmpp::join_conference(int gid, int cid)
+{
+}
+void xmpp::del_conference( const char *conference_id )
+{
+}
+void xmpp::enter_conference( const char *conference_id )
+{
+}
+void xmpp::leave_conference( int gid, int keep_leave )
 {
 }
 void xmpp::typing( int cid )
@@ -2894,6 +2898,7 @@ void __stdcall api_getinfo( proto_info_s *info )
         "",
         "JID",
         "f=png,jpg,gif" NL "s=8192" NL "a=32" NL "b=96",
+        "",
         nullptr
     };
 

@@ -13,7 +13,7 @@ class safe_object
 	struct pointer_container_s
 	{
 		safe_object *pointer;
-		int ref;
+		aint ref;
         static pointer_container_s *create(safe_object *p);
         void die();
 	} *__pc = nullptr;

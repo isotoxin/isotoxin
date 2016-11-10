@@ -309,20 +309,14 @@ void common_videocall_stuff_s::create_buttons( gui_notice_callinprogress_c *owne
     gui_button_c &b_mute_mic = MAKE_CHILD<gui_button_c>(parent);
     b_mic_mute = &b_mute_mic;
 
-    avc.is_mic_off() ?
-        b_mute_mic.set_face_getter(BUTTON_FACE(unmute_mic)) :
-        b_mute_mic.set_face_getter(BUTTON_FACE(mute_mic));
-
-    b_mute_mic.set_handler(DELEGATE(&avc, b_mic_switch), &b_mute_mic);
+    b_mute_mic.set_face_getter( BUTTON_FACE( mute_mic ), BUTTON_FACE( unmute_mic ), avc.is_mic_off() );
+    b_mute_mic.set_handler(DELEGATE(&avc, b_mic_switch), nullptr);
 
     gui_button_c &b_mute_speaker = MAKE_CHILD<gui_button_c>(parent);
     b_spkr_mute = &b_mute_speaker;
 
-    avc.is_speaker_off() ?
-        b_mute_speaker.set_face_getter(BUTTON_FACE(unmute_speaker)) :
-        b_mute_speaker.set_face_getter(BUTTON_FACE(mute_speaker));
-
-    b_mute_speaker.set_handler(DELEGATE(&avc, b_speaker_switch), &b_mute_speaker);
+    b_mute_speaker.set_face_getter( BUTTON_FACE( mute_speaker ), BUTTON_FACE( unmute_speaker ), avc.is_speaker_off() );
+    b_mute_speaker.set_handler(DELEGATE(&avc, b_speaker_switch), nullptr);
 
     if (video_supported)
     {

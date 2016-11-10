@@ -11,7 +11,7 @@
 #include "curl/include/curl/curl.h"
 #include "../../shared/shared.h"
 
-//#pragma warning(disable : 4505)
+#pragma warning(disable : 4505) // unreferenced local function has been removed
 #include <vpx/vpx_decoder.h>
 #include <vpx/vpx_encoder.h>
 #include <vpx/vp8dx.h>
@@ -24,8 +24,6 @@
 #define VIDEO_CODEC_ENCODER_INTERFACE_VP8 (vpx_codec_vp8_cx())
 #define VIDEO_CODEC_ENCODER_INTERFACE_VP9 (vpx_codec_vp9_cx())
 #define MAX_ENCODE_TIME_US (1000000 / 5)
-
-// strange compile bug workaround: error C2365: 'TOX_GROUPCHAT_TYPE_TEXT' : redefinition; previous definition was 'enumerator'
 
 #define TOX_ENC_SAVE_MAGIC_NUMBER "toxEsave"
 #define TOX_ENC_SAVE_MAGIC_LENGTH 8
@@ -78,10 +76,226 @@
 #define PACKETID_VIDEO_EX 175
 #define SAVE_VERSION 1
 
-#define GROUP_ID_OFFSET 10000000 // 10M contacts should be enough for everything
+#define CONFERENCE_ID_OFFSET 10000000 // 10M contacts should be enough for everything
 
 #define DEFAULT_AUDIO_BITRATE 32
 #define DEFAULT_VIDEO_BITRATE 5000
+
+template< size_t A, size_t B, size_t C = B > struct max_t
+{
+    static const size_t value = A > B ? (A > C ? A : C) : (B > C ? B : C);
+};
+
+struct public_key_s
+{
+    byte key[TOX_PUBLIC_KEY_SIZE] = {};
+    bool operator==( const public_key_s & k )
+    {
+        return !memcmp( key, k.key, TOX_PUBLIC_KEY_SIZE );
+    }
+};
+
+struct conference_id_s
+{
+    byte id[TOX_CONFERENCE_UID_SIZE] = {};
+    bool operator==( const conference_id_s & c )
+    {
+        return !memcmp( id, c.id, TOX_CONFERENCE_UID_SIZE );
+    }
+};
+
+class tox_address_c
+{
+    byte id[ max_t<TOX_PUBLIC_KEY_SIZE, TOX_CONFERENCE_UID_SIZE, TOX_ADDRESS_SIZE>::value ] = {};
+    uint16_t type = TAT_EMPTY;
+
+public:
+    enum type_e
+    {
+        TAT_EMPTY,
+        TAT_FULL_ADDRESS,
+        TAT_PUBLIC_KEY,
+        TAT_CONFERENCE_ID,
+    };
+
+    void clear()
+    {
+        memset(id, 0, sizeof(id));
+        type = TAT_EMPTY;
+    }
+
+    const byte *get( type_e t ) const
+    {
+        switch (t)
+        {
+        case TAT_FULL_ADDRESS:
+            if (type == TAT_FULL_ADDRESS)
+                return id;
+            break;
+        case TAT_PUBLIC_KEY:
+            if (type == TAT_FULL_ADDRESS || type == TAT_PUBLIC_KEY)
+                return id;
+            break;
+        case TAT_CONFERENCE_ID:
+            if (type == TAT_CONFERENCE_ID)
+                return id;
+            break;
+        }
+        return nullptr;
+    }
+
+    static bool type_compatible(type_e t1, type_e t2)
+    {
+        switch (t1)
+        {
+        case TAT_FULL_ADDRESS:
+        case TAT_PUBLIC_KEY:
+            return t2 == TAT_PUBLIC_KEY || t2 == TAT_FULL_ADDRESS;
+        case TAT_CONFERENCE_ID:
+            return TAT_CONFERENCE_ID == t2;
+        }
+        return false;
+    }
+
+    bool compatible( type_e t ) const
+    {
+        return type_compatible( (type_e)type, t );
+    }
+
+    static size_t compare_len( type_e t )
+    {
+        switch (t)
+        {
+        case TAT_FULL_ADDRESS:
+        case TAT_PUBLIC_KEY:
+            return TOX_PUBLIC_KEY_SIZE;
+        case TAT_CONFERENCE_ID:
+            return TOX_CONFERENCE_UID_SIZE;
+        }
+        return 0;
+    }
+    static size_t len( type_e t )
+    {
+        switch (t)
+        {
+        case TAT_FULL_ADDRESS:
+            return TOX_ADDRESS_SIZE;
+        case TAT_PUBLIC_KEY:
+            return TOX_PUBLIC_KEY_SIZE;
+        case TAT_CONFERENCE_ID:
+            return TOX_CONFERENCE_UID_SIZE;
+        }
+        return 0;
+    }
+
+    void setup_self_address();
+    void setup_public_key( int fid );
+    void setup( const void *id_, type_e t )
+    {
+        type = static_cast<uint16_t>(t);
+        memcpy( id, id_, len(t) );
+    }
+    void setup( const asptr&s )
+    {
+        if (s.l == 64)
+        {
+            type = static_cast<uint16_t>(TAT_PUBLIC_KEY);
+            pstr_c( s ).hex2buf<TOX_PUBLIC_KEY_SIZE>( id );
+        }
+        if (s.l == 76)
+        {
+            type = static_cast<uint16_t>(TAT_FULL_ADDRESS);
+            pstr_c( s ).hex2buf<TOX_ADDRESS_SIZE>( id );
+        }
+    }
+
+    void operator=( const public_key_s&a )
+    {
+        type = TAT_PUBLIC_KEY;
+        memcpy( id, a.key, TOX_PUBLIC_KEY_SIZE );
+    }
+    void operator=( const conference_id_s&a )
+    {
+        type = TAT_CONFERENCE_ID;
+        memcpy( id, a.id, TOX_CONFERENCE_UID_SIZE );
+    }
+
+    bool operator==(const tox_address_c&a) const
+    {
+        return type_compatible((type_e)type, (type_e)a.type) && !memcmp( id, a.id, compare_len( (type_e)type ) );
+    }
+    bool operator!=( const tox_address_c&a ) const
+    {
+        return !(*this == a);
+    }
+
+    bool operator==( const public_key_s&a ) const
+    {
+        return ( TAT_FULL_ADDRESS == type || TAT_PUBLIC_KEY == type ) && !memcmp( id, a.key, TOX_PUBLIC_KEY_SIZE );
+    }
+    bool operator==( const conference_id_s&a ) const
+    {
+        return (TAT_CONFERENCE_ID == type) && !memcmp( id, a.id, TOX_CONFERENCE_UID_SIZE );
+    }
+
+    const conference_id_s& as_conference_id() const
+    {
+        static conference_id_s dummy;
+        if (TAT_CONFERENCE_ID==type)
+            return *(conference_id_s *)id;
+        return dummy;
+    }
+    const public_key_s& as_public_key() const
+    {
+        static public_key_s dummy;
+        if (type == TAT_FULL_ADDRESS || type == TAT_PUBLIC_KEY)
+            return *(public_key_s *)id;
+        return dummy;
+    }
+
+    bytes as_bytes() const
+    {
+        return bytes(id, len((type_e)type));
+    }
+
+    str_c raw_str() const
+    {
+        str_c s;
+        s.append_as_hex( id, static_cast<int>(len( (type_e)type )) );
+        return s;
+    }
+
+
+    template<typename S> int as_str( S &s, type_e check ) const
+    {
+        s.clear();
+        switch (check)
+        {
+        case TAT_FULL_ADDRESS:
+            if (type == TAT_FULL_ADDRESS)
+            {
+                s.append_as_hex( id, TOX_ADDRESS_SIZE );
+                return s.get_length();
+            }
+            break;
+        case TAT_PUBLIC_KEY:
+            if (type == TAT_FULL_ADDRESS || type == TAT_PUBLIC_KEY)
+            {
+                s.append_as_hex( id, TOX_PUBLIC_KEY_SIZE );
+                return s.get_length();
+            }
+            break;
+        case TAT_CONFERENCE_ID:
+            if (type == TAT_CONFERENCE_ID)
+            {
+                s.append_as_hex( id, TOX_CONFERENCE_UID_SIZE );
+                return s.get_length();
+            }
+            break;
+        }
+        return 0;
+    }
+};
 
 static std::vector<byte> buf_tox_config; // saved on offline; PURE TOX-SAVE DATA, aka native data
 static bool conf_encrypted = false;
@@ -105,6 +319,19 @@ static int video_quality = 0;
 
 int self_typing_contact = 0;
 int self_typing_time = 0;
+
+void tox_address_c::setup_self_address()
+{
+    tox_self_get_address( tox, id );
+    type = TAT_FULL_ADDRESS;
+}
+
+void tox_address_c::setup_public_key( int fid )
+{
+    type = TAT_EMPTY;
+    if (tox_friend_get_public_key( tox, fid, id, nullptr ))
+        type = TAT_PUBLIC_KEY;
+}
 
 struct other_typing_s
 {
@@ -169,7 +396,7 @@ struct stream_settings_s : public audio_format_s
 struct contact_descriptor_s;
 struct av_sender_state_s
 {
-    // list of call-in-progress descriptos
+    // list of call-in-progress descriptors
     contact_descriptor_s *first = nullptr;
     contact_descriptor_s *last = nullptr;
 
@@ -211,26 +438,12 @@ enum chunks_e // HARD ORDER!!! DO NOT MODIFY EXIST VALUES!!!
     chunk_descriptor,
     chunk_descriptor_id,
     chunk_magic,
-    chunk_descriptor_pubid,
+    chunk_descriptor_pubid, // DEPRICATED, remove 05.2017
     chunk_descriptor_state,
     chunk_descriptor_avatartag,
     chunk_descriptor_avatarhash,
     chunk_descriptor_dnsname,
-
-    /*
-
-        no more need to save undelivered messages by protocol, due gui saves them itself
-
-
-    chunk_msgs_sending = 10,
-    chunk_msg_sending,
-    chunk_msg_sending_fid,
-    chunk_msg_sending_type,
-    chunk_msg_sending_utag,
-    chunk_msg_sending_body,
-    chunk_msg_sending_mid,
-    chunk_msg_sending_createtime,
-    */
+    chunk_descriptor_address,
 
     chunk_msgs_receiving = 20,
     chunk_msg_receiving,
@@ -432,8 +645,9 @@ struct message2send_s
     int mid;
     int next_try_time;
     int send_timeout = 0;
-    str_c msg;
+    str_c msg, sentmsg;
     time_t create_time = 0;
+
     message2send_s( u64 utag, int fid, const asptr &utf8, time_t create_time, int imid = -10000 ):utag(utag), fid(fid), mid(imid), next_try_time(time_ms()), create_time(create_time)
     {
         LIST_ADD( this, first, last, prev, next );
@@ -477,19 +691,8 @@ struct message2send_s
 
     void try_send(int time);
 
-    static void read(int fid, int receipt)
+    static void read( u64 dtag )
     {
-        u64 dtag = 0;
-        for (message2send_s *x = first; x; x = x->next)
-        {
-            if (x->fid == fid && receipt == x->mid)
-            {
-                dtag = x->utag;
-                delete x; // no need anymore
-                break;
-            }
-        }
-
         if (dtag)
         {
             for (message2send_s *x = first; x; x = x->next)
@@ -506,7 +709,39 @@ struct message2send_s
         }
 
         if (dtag)
-            hf->delivered(dtag);
+            hf->delivered( dtag );
+    }
+
+
+    static void read( const asptr &m )
+    {
+        u64 dtag = 0;
+        for (message2send_s *x = first; x; x = x->next)
+        {
+            if (x->mid == 777777777 && m == x->sentmsg)
+            {
+                dtag = x->utag;
+                delete x; // no need anymore
+                break;
+            }
+        }
+        read( dtag );
+    }
+
+    static void read(int fid, int receipt)
+    {
+        u64 dtag = 0;
+        for (message2send_s *x = first; x; x = x->next)
+        {
+            if (x->fid == fid && receipt == x->mid)
+            {
+                dtag = x->utag;
+                delete x; // no need anymore
+                break;
+            }
+        }
+
+        read( dtag );
     }
 
     static void tick(int ct)
@@ -547,19 +782,6 @@ struct message2send_s
                     }
                 }
 
-                break;
-            }
-        }
-
-        
-        // toxcore not yet support groupchat delivery notification
-        // simulate it
-
-        for (message2send_s *x = first; x; x = x->next)
-        {
-            if (x->fid >= GROUP_ID_OFFSET && x->mid == 777)
-            {
-                message2send_s::read( x->fid, 777 );
                 break;
             }
         }
@@ -622,14 +844,14 @@ struct message_part_s
                     // looks like last part of multi-part message
                     // concatenate and send it to host
                     x->msgb.append_char(' ').append(asptr(msgbody, len));
-                    hf->message(MT_MESSAGE, 0, x->cid, x->create_time, x->msgb.cstr(), (int)x->msgb.get_length());
+                    hf->message(MT_MESSAGE, 0, x->cid, x->create_time, x->msgb.cstr(), x->msgb.get_length());
                     delete x;
                     hf->save();
                     return;
                 }
             }
             asptr m = extract_create_time(create_time, asptr(msgbody, len), cid);
-            hf->message(MT_MESSAGE, 0, cid, create_time, m.s, (int)m.l);
+            hf->message(MT_MESSAGE, 0, cid, create_time, m.s, m.l);
         }
     }
 
@@ -639,7 +861,7 @@ struct message_part_s
         {
             if ( (ct - x->send2host_time) > 0 )
             {
-                hf->message(MT_MESSAGE, 0, x->cid, x->create_time, x->msgb.cstr(), (int)x->msgb.get_length());
+                hf->message(MT_MESSAGE, 0, x->cid, x->create_time, x->msgb.cstr(), x->msgb.get_length());
                 delete x;
                 hf->save();
                 break;
@@ -727,7 +949,7 @@ struct incoming_file_s : public file_transfer_s
         if (newsize >= FILE_TRANSFER_CHUNK )
         {
         portion_anyway_flush:
-            int portion_size = min( FILE_TRANSFER_CHUNK, chunk.size() );
+            int portion_size = static_cast<int>( min( FILE_TRANSFER_CHUNK, chunk.size() ) );
             if (hf->file_portion(utag, chunk_offset, chunk.data(), portion_size ))
             {
                 chunk_offset += portion_size;
@@ -1237,7 +1459,7 @@ struct transmitting_avatar_s : public transmitting_data_s
 transmitting_data_s *transmitting_data_s::first = nullptr;
 transmitting_data_s *transmitting_data_s::last = nullptr;
 
-static int send_request(const char *dnsname, const char*public_id, const char* invite_message_utf8, bool resend);
+static int send_request(const char *dnsname, const tox_address_c &toxaddr, const char* invite_message_utf8, bool resend);
 
 struct discoverer_s
 {
@@ -1252,7 +1474,7 @@ struct discoverer_s
     struct syncdata_s
     {
         str_c ids;
-        str_c pubid;
+        tox_address_c pubid;
 
         bool waiting_thread_start = true;
         bool thread_in_progress = false;
@@ -1293,12 +1515,12 @@ struct discoverer_s
         if (r().thread_in_progress || r().waiting_thread_start)
             return false;
 
-        if (r().pubid.is_empty())
+        if (!r().pubid.compatible(tox_address_c::TAT_PUBLIC_KEY))
         {
             hf->operation_result(LOP_ADDCONTACT, CR_INVALID_PUB_ID);
         } else
         {
-            int rslt = send_request(r().ids, r().pubid,invmsg,false);
+            int rslt = send_request(r().ids, r().pubid, invmsg, false);
             hf->operation_result(LOP_ADDCONTACT, rslt);
         }
         r.unlock(); // unlock now to avoid deadlock
@@ -1344,7 +1566,7 @@ struct discoverer_s
 
         curl_easy_cleanup( curl );
 
-        return str_c( asptr( (const char *)d.data(), d.size() ) );
+        return str_c( asptr( (const char *)d.data(), static_cast<int>(d.size()) ) );
     }
 
     str_c try_resolve_via_https_api( const str_c&addr )
@@ -1398,7 +1620,7 @@ struct discoverer_s
         str_c pubid = try_resolve_via_https_api( ids );
         if (!pubid.is_empty())
         {
-            sync.lock_write()( ).pubid.setcopy( pubid );
+            sync.lock_write()( ).pubid.setup( pubid );
         }
         else
         {
@@ -1414,7 +1636,7 @@ struct discoverer_s
                 if ( servname.equals( pin.addr ) )
                 {
                     str_c s = pin.query3( ids );
-                    sync.lock_write()( ).pubid.setcopy( s );
+                    sync.lock_write()( ).pubid.setup( s );
                     pinfound = true;
                     break;
                 }
@@ -1427,7 +1649,7 @@ struct discoverer_s
                 if ( !pinnedservs.back().key_ok )
                     pinnedservs.erase( --pinnedservs.end() ); // kick non tox3 servers from list
 
-                sync.lock_write()( ).pubid.setcopy( s );
+                sync.lock_write()( ).pubid.setup( s );
             }
         }
 
@@ -1473,7 +1695,7 @@ enum idgen_e
 {
     SKIP_ID_GEN,
     ID_CONTACT,
-    ID_GROUP,
+    ID_CONFERENCE,
     ID_UNKNOWN,
 };
 
@@ -1481,10 +1703,26 @@ static void run_senders();
 
 enum contact_caps_e
 {
-    CCC_MSG_CHAIN = 1,  // contacts's client support message chaining
-    CCC_MSG_CRTIME = 2, // contacts's client support message create time
-    CCC_VIEW_SIZE = 4,  // contacts's client support video view size adjustment
-    CCC_VIDEO_EX = 8,   // contacts's client support vp9 and lossless video
+    CCC_MSG_CHAIN = 1,  // contact's client support message chaining
+    CCC_MSG_CRTIME = 2, // contact's client support message create time
+    CCC_VIEW_SIZE = 4,  // contact's client support video view size adjustment
+    CCC_VIDEO_EX = 8,   // contact's client support vp9 and lossless video
+};
+
+struct conference_member_try_join_s
+{
+    public_key_s key;
+    int gnum = 0;
+    int next_try_time = time_ms() + 1000;
+    int offline_skip = 0;
+    bool is_online = false;
+    int choose_me_coef() const
+    {
+        return max( offline_skip, gnum );
+    }
+    conference_member_try_join_s( const public_key_s &key, int initial_gnum = 0 ): key(key), gnum( initial_gnum )
+    {
+    }
 };
 
 struct contact_descriptor_s
@@ -1497,8 +1735,6 @@ struct contact_descriptor_s
 
     contact_descriptor_s *next_call = nullptr;
     contact_descriptor_s *prev_call = nullptr;
-
-    uint8_t nospam[6];
 
 private:
     i32 id = 0;
@@ -1577,8 +1813,8 @@ public:
                 if (enc_cfg.g_w) vpx_codec_destroy(&v_encoder);
                 if (decoder) vpx_codec_destroy(&v_decoder);
             }
-            if (current) free(current);
-            if (next) free(next);
+            if (current) dlfree(current);
+            if (next) dlfree(next);
         }
 
         void isotoxin_video_send_frame(int fid, unsigned int width, unsigned int height, const byte *y, const byte *u, const byte *v)
@@ -1667,7 +1903,7 @@ public:
 
             for (;;)
             {
-                spinlock::auto_simple_lock l(sync_frame);
+                SIMPLELOCK(sync_frame);
 
                 if (current_busy)
                     goto usenext;
@@ -1710,25 +1946,25 @@ public:
         void add_frame_to_queue(const void *framedata, aint framesize, int f)
         {
             sending_frame_s *sf = nullptr;
-            spinlock::auto_simple_lock l(sync_frame);
+            SIMPLELOCK(sync_frame);
 
             if (current_busy)
                 goto usenext;
 
             if (nullptr == current )
             {
-                current = (sending_frame_s *)malloc( sizeof(sending_frame_s) + framesize );
-                current->allocated = (int)framesize;
+                current = (sending_frame_s *)dlmalloc( sizeof(sending_frame_s) + framesize );
+                current->allocated = static_cast<int>(framesize);
                 sf = current;
             } else if ( current->is_done() )
             {
                 if (current->allocated < framesize)
                 {
-                    current = (sending_frame_s *)realloc(current, sizeof(sending_frame_s) + framesize);
-                    current->allocated = (int)framesize;
+                    current = (sending_frame_s *)dlrealloc(current, sizeof(sending_frame_s) + framesize);
+                    current->allocated = static_cast<int>( framesize );
                 }
                 sf = current;
-            } else if (current->frame == (int)frame_counter)
+            } else if (current->frame == static_cast<int>( frame_counter ))
                 __debugbreak();
             else
             {
@@ -1736,8 +1972,8 @@ public:
 
                 if (nullptr == next)
                 {
-                    next = (sending_frame_s *)malloc(sizeof(sending_frame_s) + framesize);
-                    next->allocated = (int)framesize;
+                    next = (sending_frame_s *)dlmalloc(sizeof(sending_frame_s) + framesize);
+                    next->allocated = static_cast<int>( framesize );
                     sf = next;
                 }
                 else
@@ -1750,7 +1986,7 @@ public:
 
                     if (next->allocated < framesize)
                     {
-                        next = (sending_frame_s *)realloc(next, sizeof(sending_frame_s) + framesize);
+                        next = (sending_frame_s *)dlrealloc(next, sizeof(sending_frame_s) + framesize);
                         next->allocated = (int)framesize;
                     }
                     sf = next;
@@ -1775,15 +2011,14 @@ public:
                 fclose(ff);
             }
 
-            md5_c md5;
-            md5.update( framedata, framesize );
-            md5.done();
+            byte hash[crypto_generichash_BYTES_MIN];
+            crypto_generichash( hash, sizeof( hash ), (const byte *)framedata, framesize, nullptr, 0 );
             str_c s(CONSTASTR("send frame: "));
             s.append_as_int( sf->frame );
             s.append_char( ' ' );
-            s.append_as_int( framesize );
+            s.append_as_num( framesize );
             s.append_char( ' ' );
-            s.append_as_hex( md5.result(), 16 );
+            s.append_as_hex( hash, sizeof( hash ) );
 
             Log( "%s", s.cstr() );
 
@@ -1837,15 +2072,14 @@ public:
                 fclose(f);
             }
 
-            md5_c md5;
-            md5.update( framebody.data(), framebody.size() );
-            md5.done();
+            byte hash[crypto_generichash_BYTES_MIN];
+            crypto_generichash( hash, sizeof( hash ), framebody.data(), framebody.size(), nullptr, 0 );
             str_c s( CONSTASTR( "recv frame: " ) );
             s.append_as_int( current_recv_frame );
             s.append_char( ' ' );
-            s.append_as_int( framebody.size() );
+            s.append_as_num( framebody.size() );
             s.append_char( ' ' );
-            s.append_as_hex( md5.result(), 16 );
+            s.append_as_hex( hash, sizeof( hash ) );
 
             Log( "%s", s.cstr() );
 
@@ -1924,7 +2158,8 @@ public:
             cip = nullptr;
             w.unlock();
 
-            hf->message(MT_CALL_STOP, 0, get_id(), now(), nullptr, 0);
+            if (!is_conference())
+                hf->message(MT_CALL_STOP, 0, get_id(), now(), nullptr, 0);
         }
     }
 
@@ -1936,14 +2171,13 @@ public:
     byte avatar_hash[ TOX_HASH_LENGTH ] = {};
 
     contact_state_e state = CS_ROTTEN;
-    str_c pubid;
+    tox_address_c address;
 
     static const int F_IS_ONLINE = 1;
     static const int F_AVASEND = 2;
     static const int F_AVARECIVED = 4;
     static const int F_FIDVALID = 8;
     static const int F_DETAILS_SENT = 16;
-    static const int F_NOSPAM_PRESENT = 32;
 
     int flags = 0;
     int ccc_caps = 0;
@@ -1958,12 +2192,27 @@ public:
         LIST_DEL(this, first_desc, last_desc, prev, next);
         ASSERT(cip == nullptr);
     }
-    static int find_free_id(bool group);
-    static contact_descriptor_s *find( const asptr &pubid )
+    static int find_free_id(bool conference);
+    static contact_descriptor_s *find( const tox_address_c &addr )
     {
-        pstr_c fff; fff.set(pubid.part(TOX_PUBLIC_KEY_SIZE * 2));
         for(contact_descriptor_s *f = first_desc; f; f = f->next)
-            if (f->pubid.substr(0, TOX_PUBLIC_KEY_SIZE * 2) == fff)
+            if (f->address == addr)
+                return f;
+
+        return nullptr;
+    }
+    static contact_descriptor_s *find( const public_key_s &pk )
+    {
+        for (contact_descriptor_s *f = first_desc; f; f = f->next)
+            if (f->address == pk)
+                return f;
+
+        return nullptr;
+    }
+    static contact_descriptor_s *find( const conference_id_s &gid )
+    {
+        for (contact_descriptor_s *f = first_desc; f; f = f->next)
+            if (f->address == gid)
                 return f;
 
         return nullptr;
@@ -1994,56 +2243,49 @@ public:
             }
         }
 
-        if ( is_group() )
+        if ( is_conference() )
         {
-            bool persistent = false;
-            if (!persistent)
-            {
-                state = CS_ROTTEN;
-            }
+            state = CS_OFFLINE;
+            stop_call();
         }
     }
 
-    void prepare_details( str_c &tmps, const uint8_t *iid, contact_data_s &cd ) const
+    void prepare_details( str_c &tmps, contact_data_s &cd ) const
     {
         if (!ISFLAG(flags, F_DETAILS_SENT))
         {
-            byte idbytes[TOX_PUBLIC_KEY_SIZE] = {};
-            if (!iid)
+            if (is_conference())
             {
-                if (is_fid_ok() && get_fid() >= 0)
-                {
-                    TOX_ERR_FRIEND_GET_PUBLIC_KEY e;
-                    tox_friend_get_public_key(tox, get_fid(), idbytes, &e);
-                    if (TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK != e) memset(idbytes, 0, sizeof(idbytes));
-                }
-            }
+                str_c idstr = get_details_pubid();
+                tmps.set( CONSTASTR( "{\"" CDET_PUBLIC_UNIQUE_ID "\":\"" ) );
+                tmps.append( idstr ).append_char( '\"' );
 
-            str_c idstr = get_details_pubid(iid ? iid : idbytes);
-            if (idstr.ends(CONSTASTR("????????????")))
-                tmps.set(CONSTASTR("{\"" CDET_PUBLIC_ID_BAD "\":\""));
-            else
-                tmps.set( CONSTASTR("{\"" CDET_PUBLIC_ID "\":\""));
-            tmps.append(idstr);
+            } else
+            {
+                str_c idstr = get_details_pubid();
+                if (idstr.ends( CONSTASTR( "????????????" ) ))
+                    tmps.set( CONSTASTR( "{\"" CDET_PUBLIC_ID_BAD "\":\"" ) );
+                else
+                    tmps.set( CONSTASTR( "{\"" CDET_PUBLIC_ID "\":\"" ) );
+                tmps.append( idstr ).append_char( '\"' );
+            }
 
             if ( !dnsname.is_empty() )
-            {
-                tmps.append( CONSTASTR("\",\"" CDET_DNSNAME "\":"));
-                tmps.append(dnsname);
-            }
+                tmps.append( CONSTASTR(",\"" CDET_DNSNAME "\":\"")).append(dnsname).append_char( '\"' );
 
-            tmps.append( CONSTASTR("\",\"" CDET_CLIENT_CAPS "\":["));
-
+            tmps.append( CONSTASTR(",\"" CDET_CLIENT_CAPS "\":["));
             for (token<char> bbsupported(bbcodes_supported, ','); bbsupported; ++bbsupported)
                 tmps.append(CONSTASTR("\"bb")).append(*bbsupported).append(CONSTASTR("\","));
+            tmps.append( CONSTASTR( "\"tox\"]" ) );
 
-            tmps.append( CONSTASTR("\"tox\"],\"" CDET_CLIENT "\":\""));
-            tmps.append(clientname);
-            tmps.append(CONSTASTR("\"}"));
+            if (!is_conference())
+                tmps.append( CONSTASTR( ",\"" CDET_CLIENT "\":\"" ) ).append( clientname ).append_char( '\"' );
+
+            tmps.append_char( '}' );
 
             cd.mask |= CDM_DETAILS;
             cd.details = tmps.cstr();
-            cd.details_len = (int)tmps.get_length();
+            cd.details_len = tmps.get_length();
 
             contact_descriptor_s *desc = const_cast<contact_descriptor_s *>(this);
             SETFLAG(desc->flags, F_DETAILS_SENT);
@@ -2051,32 +2293,36 @@ public:
 
     }
 
-    str_c get_details_pubid( const uint8_t *pubkey ) const
+    str_c get_details_pubid() const
     {
         str_c s;
-        s.append_as_hex(pubkey, TOX_PUBLIC_KEY_SIZE);
-        if (ISFLAG(flags, F_NOSPAM_PRESENT))
+        if ( is_conference() )
         {
-            s.append_as_hex(nospam, 6);
+            if (const byte *bid = address.get( tox_address_c::TAT_CONFERENCE_ID ))
+            {
+                s.append_as_hex( bid, TOX_CONFERENCE_UID_SIZE );
+
+                byte hash[crypto_shorthash_KEYBYTES];
+                crypto_shorthash( hash, bid, TOX_CONFERENCE_UID_SIZE, (const byte *)"tox-chat" /* 8 bytes hash key */ );
+
+                s.append_char( cip ? '+' : '-' );
+                s.append_as_hex( hash, 4 );
+            }
             return s;
         }
-        
-        str_c p(pubid);
-        p.case_up();
 
-        if ( p.begins(s) && p.get_length() > s.get_length() )
-            return p;
-        
-        s.append(CONSTASTR("????????????"));
+        if (const byte *bid = address.get( tox_address_c::TAT_FULL_ADDRESS ))
+            s.append_as_hex( bid, TOX_ADDRESS_SIZE);
+        else if (const byte *bid1 = address.get( tox_address_c::TAT_PUBLIC_KEY ))
+            s.append_as_hex( bid1, TOX_PUBLIC_KEY_SIZE ).append(CONSTASTR("????????????"));
         return s;
-   
     }
 
     bool is_fid_ok() const { return ISFLAG(flags, F_FIDVALID); }
     int get_fidgnum() const { ASSERT(is_fid_ok()); return fid; }
-    int get_fid() const { ASSERT(is_fid_ok()); return fid < GROUP_ID_OFFSET ? fid : -1;};
-    int get_gnum() const { ASSERT(is_fid_ok()); return fid >= GROUP_ID_OFFSET ? (fid - GROUP_ID_OFFSET) : -1;};
-    bool is_group() const { ASSERT(is_fid_ok()); return fid >= GROUP_ID_OFFSET; }
+    int get_fid() const { ASSERT(is_fid_ok()); return fid < CONFERENCE_ID_OFFSET ? fid : -1;};
+    int get_gnum() const { ASSERT(is_fid_ok()); return fid >= CONFERENCE_ID_OFFSET ? (fid - CONFERENCE_ID_OFFSET) : -1;};
+    bool is_conference() const { ASSERT(is_fid_ok()); return fid >= CONFERENCE_ID_OFFSET; }
 
 
     i32 get_id() const {return id;};
@@ -2122,12 +2368,25 @@ public:
         if (avatar_recv_fnn < 0)
         {
             if (ISFLAG(flags, F_AVARECIVED))
-                hf->avatar_data(get_id(),avatar_tag,avatar.data(), (int)avatar.size());
+                hf->avatar_data(get_id(),avatar_tag,avatar.data(), static_cast<int>(avatar.size()));
             return;
         }
         tox_file_control(tox,get_fid(),avatar_recv_fnn, TOX_FILE_CONTROL_RESUME, nullptr);
     }
 
+    void set_conference_id();
+    void setup_members_and_send( contact_data_s &cdata );
+    bool is_audio_conference() const
+    {
+        if (!is_conference() || !is_fid_ok()) return false;
+        bool av = TOX_CONFERENCE_TYPE_AV == tox_conference_get_type(tox, get_gnum(), nullptr);
+        if (nullptr == cip && av)
+        {
+            const_cast<contact_descriptor_s *>(this)->prepare_call();
+            cip->remote_so.options |= SO_RECEIVING_AUDIO | SO_SENDING_AUDIO;
+        }
+        return av;
+    }
 };
 
 contact_descriptor_s *contact_descriptor_s::first_desc = nullptr;
@@ -2138,6 +2397,22 @@ static std::unordered_map<int, contact_descriptor_s*> fid2desc;
 
 static contact_descriptor_s * find_descriptor(int cid);
 static contact_descriptor_s * find_restore_descriptor(int fid);
+
+static void cb_conference_invite( Tox *, uint32_t fid, TOX_CONFERENCE_TYPE t, const uint8_t * data, size_t length, void * );
+
+void contact_descriptor_s::set_conference_id()
+{
+    id = find_free_id( true );
+    id2desc[ id ] = this;
+}
+
+void delete_all_descs()
+{
+    id2desc.clear();
+    fid2desc.clear();
+    for ( ; contact_descriptor_s::first_desc;)
+        contact_descriptor_s::first_desc->die();
+}
 
 void incoming_avatar_s::check_avatar(int ct)
 {
@@ -2211,7 +2486,7 @@ void message2send_s::try_send(int time)
     {
         bool send_create_time = false;
         bool support_msg_chain = false;
-        if (fid < GROUP_ID_OFFSET)
+        if (fid < CONFERENCE_ID_OFFSET)
             if (contact_descriptor_s *desc = find_restore_descriptor(fid))
             {
                 if (!desc->is_online())
@@ -2234,34 +2509,37 @@ void message2send_s::try_send(int time)
             m = m.trim(2);
 
         mid = 0;
-        if (fid >= GROUP_ID_OFFSET)
+        if (fid >= CONFERENCE_ID_OFFSET)
         {
-            // to group
-            if (tox_group_message_send(tox, fid - GROUP_ID_OFFSET, (const byte *)m.s, (uint16_t)m.l) == 0)
-                mid = 777;
+            // to conference
+            if (tox_conference_send_message( tox, fid - CONFERENCE_ID_OFFSET, TOX_MESSAGE_TYPE_NORMAL, (const byte *)m.s, m.l, nullptr ))
+            {
+                sentmsg = m;
+                mid = 777777777;
+            }
 
         } else
         {
             mid = tox_friend_send_message(tox, fid, TOX_MESSAGE_TYPE_NORMAL, (const byte *)m.s, m.l, nullptr);
         }
         if (mid) send_timeout = time + 60000;
-        next_try_time = time + 1000;
+        next_try_time = time + 20000;
     }
 }
 
-contact_descriptor_s::contact_descriptor_s(idgen_e init_new_id, int fid_) :pubid(TOX_ADDRESS_SIZE * 2, true), fid( fid_ )
+contact_descriptor_s::contact_descriptor_s(idgen_e init_new_id, int fid_) :fid( fid_ )
 {
     LIST_ADD(this, first_desc, last_desc, prev, next);
 
     if (init_new_id)
     {
-        id = contact_descriptor_s::find_free_id(init_new_id == ID_GROUP);
+        id = contact_descriptor_s::find_free_id(init_new_id == ID_CONFERENCE);
         id2desc[id] = this;
         if (ID_UNKNOWN == init_new_id)
             fid = -id; // just make fid negative and unique
 
 
-        SETUPFLAG( flags, F_FIDVALID, (init_new_id == ID_CONTACT && fid >= 0) || (init_new_id == ID_GROUP && fid >= GROUP_ID_OFFSET) || (init_new_id == ID_UNKNOWN && fid < 0) );
+        SETUPFLAG( flags, F_FIDVALID, (init_new_id == ID_CONTACT && fid >= 0) || (init_new_id == ID_CONFERENCE && fid >= CONFERENCE_ID_OFFSET) || (init_new_id == ID_UNKNOWN && fid < 0) );
         if (ISFLAG( flags, F_FIDVALID))
             fid2desc[fid] = this;
     }
@@ -2275,7 +2553,7 @@ void contact_descriptor_s::die()
         LIST_DEL(this, w().first, w().last, prev_call, next_call);
         delete cip;
         cip = nullptr;
-        if (tox && !is_group())
+        if (tox && !is_conference())
             toxav_call_control(toxav, get_fid(), TOXAV_CALL_CONTROL_CANCEL, nullptr);
     }
 
@@ -2286,9 +2564,9 @@ void contact_descriptor_s::die()
     delete this;
 }
 
-int contact_descriptor_s::find_free_id( bool group )
+int contact_descriptor_s::find_free_id( bool conference )
 {
-    if (group)
+    if ( conference )
     {
         int id = -1;
         for (; id2desc.find(id) != id2desc.end(); --id);
@@ -2332,26 +2610,23 @@ void contact_descriptor_s::set_id(i32 id_)
 
 static bool online_flag = false;
 contact_state_e self_state; // cleared in handshake
-byte lastmypubid[TOX_ADDRESS_SIZE]; // cleared in handshake
+tox_address_c lastmypubid; // cleared in handshake
 
 void update_self()
 {
     if (tox)
-        tox_self_get_address(tox,lastmypubid);
+        lastmypubid.setup_self_address();
     
-    str_c pubid(TOX_ADDRESS_SIZE * 2, true);
-    pubid.append_as_hex(lastmypubid,TOX_ADDRESS_SIZE);
-
     int m = 0;
 
-    str_c name( tox ? (int)tox_self_get_name_size(tox) : 0, false );
+    str_c name( tox ? static_cast<int>(tox_self_get_name_size(tox)) : 0, false );
     if (tox)
     {
         tox_self_get_name(tox,(byte*)name.str());
         m |= CDM_NAME;
     }
 
-    str_c statusmsg(tox ? (int)tox_self_get_status_message_size(tox) : 0, false);
+    str_c statusmsg(tox ? static_cast<int>(tox_self_get_status_message_size(tox)) : 0, false);
     if (tox)
     {
         tox_self_get_status_message(tox, (byte*)statusmsg.str());
@@ -2359,10 +2634,14 @@ void update_self()
     }
 
     contact_data_s self( 0, CDM_PUBID | CDM_STATE | CDM_ONLINE_STATE | CDM_GENDER | CDM_AVATAR_TAG | m );
+
+    //ADDRESS
+    sstr_t<TOX_ADDRESS_SIZE * 2 + 16> pubid;
+    self.public_id_len = lastmypubid.as_str( pubid, tox_address_c::TAT_FULL_ADDRESS );
     self.public_id = pubid.cstr();
-    self.public_id_len = (int)pubid.get_length();
+
     self.name = name.cstr();
-    self.name_len = (int)name.get_length();
+    self.name_len = name.get_length();
     self.status_message = statusmsg.cstr();
     self.status_message_len = (int)statusmsg.get_length();
     self.state = online_flag ? self_state : CS_OFFLINE;
@@ -2372,6 +2651,9 @@ void update_self()
 
 static void update_contact( const contact_descriptor_s *desc )
 {
+    if ( desc->state == contact_state_check )
+        return;
+
     if (tox)
     {
         contact_data_s cd( desc->get_id(), CDM_PUBID | CDM_STATE | CDM_ONLINE_STATE | CDM_AVATAR_TAG );
@@ -2380,23 +2662,18 @@ static void update_contact( const contact_descriptor_s *desc )
         TOX_USER_STATUS st = desc->is_fid_ok() ? tox_friend_get_status(tox, desc->get_fid(), &err) : (TOX_USER_STATUS)(-1);
         if (err != TOX_ERR_FRIEND_QUERY_OK) st = (TOX_USER_STATUS)(-1);
 
-        byte id[TOX_PUBLIC_KEY_SIZE];
-        sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
-        if (desc->is_fid_ok() && desc->get_fid() >= 0)
+        sstr_t<max_t<TOX_PUBLIC_KEY_SIZE, TOX_CONFERENCE_UID_SIZE>::value * 2 + 16> pubid;
+
+        if (desc->is_conference())
         {
-            TOX_ERR_FRIEND_GET_PUBLIC_KEY e;
-            tox_friend_get_public_key(tox, desc->get_fid(), id, &e);
-            if (TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK != e) memset(id,0,sizeof(id));
-            pubid.append_as_hex(id, TOX_PUBLIC_KEY_SIZE);
-            ASSERT(pubid.beginof(desc->pubid));
-        } else
-        {
-            pubid.append( asptr( desc->pubid.cstr(), TOX_PUBLIC_KEY_SIZE * 2 ) );
-            desc->pubid.hex2buf<TOX_PUBLIC_KEY_SIZE>(id);
+            cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
+            cd.mask |= CDM_SPECIAL_BITS;
+            SETUPFLAG( cd.mask, CDF_AUDIO_CONFERENCE, desc->is_audio_conference() );
         }
+        else
+            cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
 
         cd.public_id = pubid.cstr();
-        cd.public_id_len = pubid.get_length();
 
         cd.avatar_tag = desc->avatar_tag;
 
@@ -2405,7 +2682,7 @@ static void update_contact( const contact_descriptor_s *desc )
         if (st >= (TOX_USER_STATUS)0)
         {
             TOX_ERR_FRIEND_QUERY er;
-            name.set_length((int)tox_friend_get_name_size(tox, desc->get_fid(), &er));
+            name.set_length(static_cast<int>(tox_friend_get_name_size(tox, desc->get_fid(), &er)));
             tox_friend_get_name(tox, desc->get_fid(), (byte*)name.str(), &er);
             cd.name = name.cstr();
             cd.name_len = name.get_length();
@@ -2421,11 +2698,6 @@ static void update_contact( const contact_descriptor_s *desc )
         if (st < (TOX_USER_STATUS)0 || desc->state != CS_OFFLINE)
         {
             cd.state = desc->state;
-            if ( cd.state == CS_INVITE_SEND )
-            {
-                cd.public_id = desc->pubid.cstr();
-                cd.public_id_len = (int)desc->pubid.get_length();
-            }
             st = TOX_USER_STATUS_NONE;
 
         } else
@@ -2447,7 +2719,8 @@ static void update_contact( const contact_descriptor_s *desc )
         }
 
         str_c details_json_string;
-        desc->prepare_details(details_json_string, id, cd);
+        desc->prepare_details(details_json_string, cd);
+
         hf->update_contact(&cd);
     } else
     {
@@ -2491,24 +2764,24 @@ static contact_descriptor_s * find_restore_descriptor(int fid)
     if (it != fid2desc.end())
         return it->second;
 
-    if (fid >= GROUP_ID_OFFSET)
+    if (fid >= CONFERENCE_ID_OFFSET)
         return nullptr;
 
     if (!tox || !tox_friend_exists(tox,fid)) return nullptr;
 
     contact_descriptor_s *desc = new contact_descriptor_s(ID_CONTACT, fid);
 
-    byte id[TOX_PUBLIC_KEY_SIZE];
-    tox_friend_get_public_key(tox, fid, id, nullptr);
-
-    desc->pubid.append_as_hex(id, TOX_PUBLIC_KEY_SIZE);
+    desc->address.setup_public_key(fid);
     desc->state = CS_OFFLINE;
 
-    ASSERT( contact_descriptor_s::find(desc->pubid) == desc ); // check that such pubid is single
+    ASSERT( contact_descriptor_s::find(desc->address) == desc ); // check that such pubid is single
 
     contact_data_s cd( desc->get_id(), CDM_PUBID | CDM_STATE );
-    cd.public_id = desc->pubid.cstr();
-    cd.public_id_len = (int)desc->pubid.get_length();
+    
+    sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
+    cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
+    cd.public_id = pubid.cstr();
+
     cd.state = CS_OFFLINE;
     hf->update_contact(&cd);
 
@@ -2521,53 +2794,49 @@ static void update_init_contact(int fid)
     if (desc) update_contact(desc);
 }
 
-static int find_tox_unknown_contact(const byte *id, const asptr &name)
+static int find_tox_unknown_contact(const public_key_s &id, const asptr &name)
 {
-    str_c pubid;
-    pubid.append_as_hex(id, TOX_PUBLIC_KEY_SIZE);
-    contact_descriptor_s *desc = contact_descriptor_s::find(pubid);
+    contact_descriptor_s *desc = contact_descriptor_s::find(id);
+
     if (desc == nullptr)
     {
         ASSERT(name.l);
         desc = new contact_descriptor_s(ID_UNKNOWN);
         desc->state = CS_UNKNOWN;
-        desc->pubid = pubid;
+        desc->address = id;
     }
 
     if (name.l)
     {
-        contact_data_s cdata(desc->get_id(), CDM_NAME | CDM_STATE | CDF_GCHAT_MEMBER );
+        contact_data_s cdata(desc->get_id(), CDM_NAME | CDM_STATE | CDF_CONFERENCE_MEMBER | CDM_PUBID );
         cdata.name = name.s;
-        cdata.name_len = (int)name.l;
+        cdata.name_len = name.l;
+        sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
+        cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
+        cdata.public_id = pubid.cstr();
         cdata.state = CS_UNKNOWN;
+
+        str_c details_json_string;
+        desc->prepare_details( details_json_string, cdata );
+
         hf->update_contact(&cdata);
     }
     
     return desc->get_fidgnum();
 }
 
-static int find_tox_fid(const byte *id)
+static int find_tox_fid(const public_key_s &id)
 {
-    u32 r = tox_friend_by_public_key(tox, id, nullptr);
-    if (r == UINT32_MAX) return -1;
-    return r;
-
-    /*
-    byte pubkey[TOX_PUBLIC_KEY_SIZE];
-    TOX_ERR_FRIEND_GET_PUBLIC_KEY err;
-    if (!ASSERT(tox)) return -1;
-    int n = tox_self_get_friend_list_size(tox);
-    for(int i=0;i<n;++i)
+    u32 r = tox_friend_by_public_key(tox, id.key, nullptr);
+    if ( r == UINT32_MAX )
     {
-        if (tox_friend_exists(tox,i))
-        {
-            tox_friend_get_public_key(tox,i,pubkey,&err);
-            if (0 == memcmp(pubkey,id,TOX_PUBLIC_KEY_SIZE))
-                return i;
-        }
+        if ( contact_descriptor_s *desc = contact_descriptor_s::find( id ) )
+            if (desc->is_fid_ok())
+                return desc->get_fid();
+
+        return -1;
     }
-    return -1;
-    */
+    return r;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2576,25 +2845,28 @@ static int find_tox_fid(const byte *id)
 
 static void cb_friend_request(Tox *, const byte *id, const byte *msg, size_t length, void *)
 {
-    str_c pubid;
-    pubid.append_as_hex(id,TOX_PUBLIC_KEY_SIZE);
-    contact_descriptor_s *desc = contact_descriptor_s::find(pubid);
+    const public_key_s &pk = *(const public_key_s *)id;
+    contact_descriptor_s *desc = contact_descriptor_s::find(pk);
     if (!desc) desc = new contact_descriptor_s( ID_CONTACT );
-    desc->pubid = pubid;
+    desc->address = pk;
     desc->state = CS_INVITE_RECEIVE;
 
-    int fid = find_tox_fid(id);
+    int fid = find_tox_fid(pk);
     desc->set_fid( fid, fid >= 0 );
 
     contact_data_s cd( desc->get_id(), CDM_PUBID | CDM_STATE );
-    cd.public_id = desc->pubid.cstr();
-    cd.public_id_len = TOX_PUBLIC_KEY_SIZE * 2;
+
+    //PUBKEY
+    sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
+    cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
+    cd.public_id = pubid.cstr();
+
     cd.state = desc->state;
     hf->update_contact(&cd);
 
     time_t create_time = now();
 
-    hf->message(MT_FRIEND_REQUEST, 0, desc->get_id(), create_time, (const char *)msg, (int)length);
+    hf->message(MT_FRIEND_REQUEST, 0, desc->get_id(), create_time, (const char *)msg, static_cast<int>(length));
     hf->save();
 }
 
@@ -2612,7 +2884,7 @@ static void cb_friend_message(Tox *, uint32_t fid, TOX_MESSAGE_TYPE type, const 
         }
 
         if ( TOX_MESSAGE_TYPE_NORMAL == type )
-            message_part_s::msg(desc->get_id(), 0, (const char *)message, (int)length);
+            message_part_s::msg(desc->get_id(), 0, (const char *)message, static_cast<int>(length));
         else
         {
             // TODO
@@ -2672,7 +2944,7 @@ static void cb_read_receipt(Tox *, uint32_t fid, uint32_t message_id, void *)
 
 static asptr bb_tags[] = { CONSTASTR("u"), CONSTASTR("i"), CONSTASTR("b"), CONSTASTR("s") };
 
-static uint32_t cb_isotoxin_special(Tox *, uint32_t fid, uint8_t *packet, uint32_t len, uint32_t /*max_len*/, void * /*user_data*/)
+static uint32_t cb_isotoxin_special(Tox *, uint32_t fid, uint8_t *packet, uint32_t len, uint32_t /*max_len*/)
 {
     switch (packet[0])
     {
@@ -2790,14 +3062,19 @@ static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_
         cd.state = (TOX_CONNECTION_NONE != connection_status) ? CS_ONLINE : CS_OFFLINE;
         SETUPFLAG(desc->flags, contact_descriptor_s::F_IS_ONLINE, CS_ONLINE == cd.state );
 
+        sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
         if (accepted)
         {
             cd.mask |= CDM_PUBID;
-            cd.public_id = desc->pubid.cstr();
-            cd.public_id_len = TOX_PUBLIC_KEY_SIZE * 2;
+
+            //PUBKEY
+            cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
+            cd.public_id = pubid.cstr();
+
+            UNSETFLAG( desc->flags, contact_descriptor_s::F_DETAILS_SENT );
         }
 
-        if (!prev_online && desc->is_online())
+        if (!prev_online && desc->is_online() || accepted)
         {
             if (const char * clidcaps = (const char *)tox_friend_get_client_caps(tox, fid))
             {
@@ -2849,7 +3126,7 @@ static void cb_connection_status(Tox *, uint32_t fid, TOX_CONNECTION connection_
         }
 
         str_c details_json_string;
-        desc->prepare_details(details_json_string, nullptr, cd);
+        desc->prepare_details(details_json_string, cd);
 
         hf->update_contact(&cd);
         if ( accepted )
@@ -2994,38 +3271,54 @@ static void cb_friend_typing(Tox *, uint32_t fid, bool is_typing, void * /*userd
         other_typing.emplace_back( fid, time_ms() );
 }
 
-static void setup_members_and_send(contact_data_s &cdata, int gnum) // cdata.members is undefined after call this function
+void contact_descriptor_s::setup_members_and_send(contact_data_s &cdata)
 {
-    cdata.members_count = tox_group_number_peers(tox, gnum);
-    cdata.members = (int *)_alloca(cdata.members_count * sizeof(int));
+    TOX_ERR_CONFERENCE_PEER_QUERY e;
+    cdata.members_count = tox_conference_peer_count(tox, get_gnum(), &e);
+    
+    if ( e != TOX_ERR_CONFERENCE_PEER_QUERY_OK )
+        cdata.members_count = 0;
+
+    cdata.members = (int *)_alloca( cdata.members_count * sizeof( int ) );
+
     int mm = 0;
+    str_c name;
     for (int m = 0; m < cdata.members_count; ++m)
     {
-        uint8_t pubkey[TOX_PUBLIC_KEY_SIZE];
-        tox_group_peer_pubkey(tox, gnum, m, pubkey);
-        if (0 == memcmp(lastmypubid, pubkey, TOX_PUBLIC_KEY_SIZE))
+        TOX_ERR_CONFERENCE_PEER_QUERY pq;
+        public_key_s member_pubkey;
+        tox_conference_peer_get_public_key(tox, get_gnum(), m, member_pubkey.key, &pq);
+        if (pq != TOX_ERR_CONFERENCE_PEER_QUERY_OK)
+            continue;
+
+        if (lastmypubid == member_pubkey)
             continue; // do not put self to members list
 
-        sstr_t<TOX_MAX_NAME_LENGTH + 16> name;
-        int nl = tox_group_peername(tox, gnum, m, (uint8_t *)name.str());
-        if (nl < 0) name.clear(); else name.set_length(nl);
+        cdata.mask |= CDM_STATE;
+        cdata.state = CS_ONLINE;
+        state = CS_ONLINE;
+
+        size_t nsz = tox_conference_peer_get_name_size( tox, get_gnum(), m, nullptr );
+        name.set_length( static_cast<int>( nsz ), false );
+        if (!tox_conference_peer_get_name( tox, get_gnum(), m, (uint8_t *)name.str(), nullptr ) )
+            name.clear();
 
         int cid = 0;
-        int fid = find_tox_fid(pubkey);
+        int mfid = find_tox_fid( member_pubkey );
+        bool disablenamesend = false;
+        if ( mfid < 0 ) // negative means not found
+            mfid = find_tox_unknown_contact( member_pubkey, name ), disablenamesend = true;
 
-        if (fid < 0) // negative means not found
-            fid = find_tox_unknown_contact(pubkey, name);
-
-        if (contact_descriptor_s *desc = find_restore_descriptor(fid))
+        if (contact_descriptor_s *desc = find_restore_descriptor( mfid ))
         {
             cid = desc->get_id();
-            if (CS_INVITE_RECEIVE == desc->state || CS_INVITE_SEND == desc->state)
+            if ((CS_UNKNOWN == desc->state && !disablenamesend) || CS_INVITE_RECEIVE == desc->state || CS_INVITE_SEND == desc->state)
             {
                 // wow, we know name of invited friend!
 
                 contact_data_s cd(cid, CDM_NAME);
                 cd.name = name.cstr();
-                cd.name_len = (int)name.get_length();
+                cd.name_len = name.get_length();
                 hf->update_contact(&cd);
             }
         }
@@ -3035,20 +3328,30 @@ static void setup_members_and_send(contact_data_s &cdata, int gnum) // cdata.mem
 
         cdata.members[mm++] = cid;
     }
+
     cdata.members_count = mm;
+    cdata.mask |= CDM_PUBID | CDM_SPECIAL_BITS;
+
+    //CONFAID
+    sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
+    cdata.public_id_len = address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
+    cdata.public_id = pubid.cstr();
+
+    cdata.public_id = pubid.cstr();
+    cdata.public_id_len = TOX_CONFERENCE_UID_SIZE * 2;
+    SETUPFLAG( cdata.mask, CDF_AUDIO_CONFERENCE, is_audio_conference() );
 
     hf->update_contact(&cdata);
-
 }
 
-static void callback_av_group_audio(void *, int gnum, int peernum, const int16_t *pcm, unsigned int samples, uint8_t channels, unsigned int sample_rate, void * /*userdata*/)
+static void callback_av_conference_audio(void *, int gnum, int peernum, const int16_t *pcm, unsigned int samples, uint8_t channels, unsigned int sample_rate, void * /*userdata*/)
 {
-    uint8_t pubkey[TOX_PUBLIC_KEY_SIZE];
-    tox_group_peer_pubkey(tox, gnum, peernum, pubkey);
-    if (0 == memcmp(lastmypubid, pubkey, TOX_PUBLIC_KEY_SIZE))
+    public_key_s pubkey;
+    tox_conference_peer_get_public_key(tox, gnum, peernum, pubkey.key, nullptr);
+    if (lastmypubid == pubkey)
         return; // ignore self message
 
-    if (contact_descriptor_s *gdesc = find_restore_descriptor(gnum + GROUP_ID_OFFSET))
+    if (contact_descriptor_s *gdesc = find_restore_descriptor(gnum + CONFERENCE_ID_OFFSET))
     {
         int cid = 0;
         int fid = find_tox_fid(pubkey);
@@ -3069,49 +3372,90 @@ static void callback_av_group_audio(void *, int gnum, int peernum, const int16_t
     }
 }
 
-static void cb_group_invite(Tox *, int fid, byte t, const byte * data, uint16_t length, void *)
+static void cb_conference_invite(Tox *, uint32_t fid, TOX_CONFERENCE_TYPE t, const uint8_t * data, size_t length, void * )
 {
-    bool persistent = false;
+    int gnum = -1;
+    if ( TOX_CONFERENCE_TYPE_TEXT == t )
+    {
+        TOX_ERR_CONFERENCE_JOIN jr;
+        gnum = tox_conference_join( tox, fid, data, length, &jr );
+        if ( jr != TOX_ERR_CONFERENCE_JOIN_OK )
+            gnum = -1;
 
-    int gnum = t == TOX_GROUPCHAT_TYPE_TEXT ? tox_join_groupchat(tox, fid, data, length) : toxav_join_av_groupchat(tox, fid, data, length, callback_av_group_audio, nullptr);
+    } else
+    {
+        gnum = toxav_join_av_groupchat( tox, fid, data, static_cast<uint16_t>( length ), callback_av_conference_audio, nullptr );
+    }
     if (gnum >= 0)
     {
-        sstr_t<TOX_MAX_NAME_LENGTH + 16> gn;
-        int l = tox_group_get_title(tox, gnum, (uint8_t *)gn.str(), (int)gn.get_capacity() );
-        if (l < 0) gn.clear(); else gn.set_length(l);
-
-        contact_descriptor_s *desc = new contact_descriptor_s(ID_GROUP, gnum + GROUP_ID_OFFSET);
-        desc->state = CS_ONLINE; // groups always online
-
-        unsigned int am = 0;
-        if (t != TOX_GROUPCHAT_TYPE_TEXT)
+        str_c gn;
+        TOX_ERR_CONFERENCE_TITLE gte;
+        size_t l = tox_conference_get_title_size( tox, gnum, &gte );
+        if ( gte == TOX_ERR_CONFERENCE_TITLE_OK && l )
         {
-            am = CDF_AUDIO_GCHAT;
+            gn.set_length( static_cast<int>( l ) );
+            tox_conference_get_title( tox, gnum, (uint8_t *)gn.str(), nullptr );
+        }
+
+        conference_id_s gid;
+        CHECK(tox_conference_get_uid( tox, gnum, gid.id ));
+
+        contact_descriptor_s *desc = nullptr;
+        for ( contact_descriptor_s *d = contact_descriptor_s::first_desc; d; d = d->next )
+        {
+            if ( d->address == gid )
+            {
+                d->set_fid( gnum + CONFERENCE_ID_OFFSET, true );
+                desc = d;
+                if ( desc->cip )
+                    desc->stop_call();
+                break;
+            }
+        }
+
+        if ( !desc )
+        {
+            desc = new contact_descriptor_s( ID_CONFERENCE, gnum + CONFERENCE_ID_OFFSET );
+            desc->address = gid;
+            desc->state = CS_OFFLINE;
+        }
+
+        if ( t == TOX_CONFERENCE_TYPE_AV )
+        {
             desc->prepare_call();
             desc->cip->remote_so.options |= SO_RECEIVING_AUDIO | SO_SENDING_AUDIO;
         }
 
-        contact_data_s cdata(desc->get_id(), CDM_STATE | CDM_NAME | CDM_MEMBERS | CDM_PERMISSIONS | am | (persistent ? CDF_PERSISTENT_GCHAT : 0));
-        cdata.state = CS_ONLINE;
+        contact_data_s cdata(desc->get_id(), CDM_PUBID | CDM_STATE | CDM_NAME | CDM_MEMBERS | CDM_PERMISSIONS );
+        if ( desc->state != CS_ONLINE )
+            cdata.state = CS_OFFLINE;
         cdata.name = gn.cstr();
-        cdata.name_len = (int)gn.get_length();
-        cdata.groupchat_permissions = -1;
+        cdata.name_len = gn.get_length();
+        cdata.conference_permissions = -1;
 
-        setup_members_and_send(cdata, gnum);
+        str_c details_json_string;
+        desc->prepare_details( details_json_string, cdata );
 
-        if (t != TOX_GROUPCHAT_TYPE_TEXT)
-            hf->av_stream_options(0, desc->get_id(), &desc->cip->remote_so);
+        desc->setup_members_and_send(cdata);
+
+        if (t == TOX_CONFERENCE_TYPE_AV )
+            hf->av_stream_options( desc->get_id(), 0, &desc->cip->remote_so );
     }
 }
 
-static void gchat_message( int gnum, int peernum, const char * message, int length, bool is_message )
+static void conference_message( int gnum, int peernum, const char * message, int length, bool is_message )
 {
-    uint8_t pubkey[TOX_PUBLIC_KEY_SIZE];
-    tox_group_peer_pubkey(tox, gnum, peernum, pubkey);
-    if (0 == memcmp(lastmypubid, pubkey, TOX_PUBLIC_KEY_SIZE))
-        return; // ignore self message
+    public_key_s pubkey;
+    tox_conference_peer_get_public_key(tox, gnum, peernum, pubkey.key, nullptr);
 
-    if (contact_descriptor_s *gdesc = find_restore_descriptor(gnum + GROUP_ID_OFFSET))
+    if (lastmypubid == pubkey)
+    {
+        // confirm delivery
+        message2send_s::read( asptr( message, length ) );
+        return;
+    }
+
+    if (contact_descriptor_s *gdesc = find_restore_descriptor(gnum + CONFERENCE_ID_OFFSET))
     {
         int cid = 0;
         int fid = find_tox_fid(pubkey);
@@ -3130,38 +3474,40 @@ static void gchat_message( int gnum, int peernum, const char * message, int leng
     }
 }
 
-static void cb_group_message(Tox *, int gnum, int peernum, const byte * message, uint16_t length, void *)
+static void cb_conference_message(Tox *, uint32_t gnum, uint32_t peernum, TOX_MESSAGE_TYPE t, const uint8_t * message, size_t length, void *)
 {
-    gchat_message( gnum, peernum, (const char *)message, length, true );
+    conference_message( gnum, peernum, (const char *)message, static_cast<int>( length ), t == TOX_MESSAGE_TYPE_NORMAL );
 }
 
-static void cb_group_action(Tox *, int gnum, int peernum, const byte * message, uint16_t length, void *)
-{
-    gchat_message( gnum, peernum, (const char *)message, length, false );
-}
-
-static void cb_group_namelist_change(Tox *, int gnum, int /*pid*/, byte /*change*/, void *)
+static void cb_conference_namelist_change(Tox *, uint32_t gnum, uint32_t /*pid*/, TOX_CONFERENCE_STATE_CHANGE /*change*/, void *)
 {
     // any change - rebuild members list
-    
-    if (contact_descriptor_s *desc = find_restore_descriptor(gnum + GROUP_ID_OFFSET))
+    if (contact_descriptor_s *desc = find_restore_descriptor(gnum + CONFERENCE_ID_OFFSET))
     {
         contact_data_s cdata(desc->get_id(), CDM_MEMBERS);
-        setup_members_and_send(cdata, gnum);
+        desc->setup_members_and_send(cdata);
     }
 }
 
-static void cb_group_title(Tox *, int gnum, int /*pid*/, const byte * title, byte length, void *)
+static void cb_conference_title(Tox *, uint32_t gnum, uint32_t /*pid*/, const uint8_t * title, size_t length, void *)
 {
-    if (contact_descriptor_s *desc = find_restore_descriptor(gnum + GROUP_ID_OFFSET))
+    if (contact_descriptor_s *desc = find_restore_descriptor(gnum + CONFERENCE_ID_OFFSET))
     {
-        str_c gn( (const char *)title, length );
+        str_c gn( (const char *)title, static_cast<int>( length ) );
 
-        contact_data_s cdata(desc->get_id(), CDM_NAME);
+        contact_data_s cdata(desc->get_id(), CDM_NAME | CDM_PUBID | CDM_SPECIAL_BITS);
         cdata.name = gn.cstr();
-        cdata.name_len = (int)gn.get_length();
+        cdata.name_len = gn.get_length();
+
+        //CONFAID
+        sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
+        cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
+        cdata.public_id = pubid.cstr();
+
+        SETUPFLAG( cdata.mask, CDF_AUDIO_CONFERENCE, desc->is_audio_conference() );
 
         hf->update_contact( &cdata );
+        hf->save();
     }
 }
 
@@ -3169,7 +3515,7 @@ static void cb_group_title(Tox *, int gnum, int /*pid*/, const byte * title, byt
 ///// Tox AV callbacks /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static void cb_toxav_incoming_call(ToxAV *av, uint32_t friend_number, bool /*audio_enabled*/, bool video_enabled, void * /*user_data*/)
+static void cb_toxav_incoming_call(ToxAV *av, uint32_t friend_number, bool audio_enabled, bool video_enabled, void * /*user_data*/)
 {
     if (av != toxav) return;
     if (contact_descriptor_s *desc = find_restore_descriptor(friend_number))
@@ -3181,6 +3527,10 @@ static void cb_toxav_incoming_call(ToxAV *av, uint32_t friend_number, bool /*aud
         }
 
         desc->prepare_call();
+
+        SETFLAG( desc->cip->remote_so.options, SO_RECEIVING_AUDIO | SO_RECEIVING_VIDEO );
+        SETUPFLAG( desc->cip->remote_so.options, SO_SENDING_AUDIO, audio_enabled );
+        SETUPFLAG( desc->cip->remote_so.options, SO_SENDING_VIDEO, video_enabled );
 
         if (video_enabled)
             hf->message(MT_INCOMING_CALL, 0, desc->get_id(), now(), "video", 5);
@@ -3218,7 +3568,7 @@ static void cb_toxav_call_state(ToxAV *av, uint32_t friend_number, uint32_t stat
 
             // WORKAROUND
             // signal to other peer that we always accept video, even audio call
-            toxav_call_control(toxav, desc->get_fid(), 0 == (desc->cip->local_so.options & SO_RECEIVING_VIDEO) ? TOXAV_CALL_CONTROL_HIDE_VIDEO : TOXAV_CALL_CONTROL_SHOW_VIDEO, nullptr);
+            //toxav_call_control(toxav, desc->get_fid(), 0 == (desc->cip->local_so.options & SO_RECEIVING_VIDEO) ? TOXAV_CALL_CONTROL_HIDE_VIDEO : TOXAV_CALL_CONTROL_SHOW_VIDEO, nullptr);
         }
 
         if (!ISFLAG(desc->cip->remote_so.options, SO_SENDING_AUDIO) && desc->cip->video_ex)
@@ -3688,42 +4038,41 @@ static TOX_ERR_NEW prepare()
 
     TOX_ERR_NEW errnew;
 
-    const char *caps = "client:isotoxin/" SS(PLUGINVER) "\n"
+    options.client_capabilities = "client:isotoxin/" SS(PLUGINVER) "\n"
         "support_bbtags:b,s,u,i\n"
         "support_viewsize:1\n"
         "support_msg_chain:1\n"
         "support_msg_cr_time:1\n"
         "support_video_ex:1\n";
 
-    tox = tox_new(caps, &options, &errnew);
+    tox = tox_new(&options, &errnew);
     if (!tox)
         return errnew;
 
     buf_tox_config.clear();
 
-    tox_callback_cryptpacket_before_send(tox, cb_isotoxin_special, nullptr);
+    tox_callback_cryptpacket_before_send(tox, cb_isotoxin_special);
 
-    tox_callback_friend_lossless_packet(tox, cb_isotoxin, nullptr);
+    tox_callback_friend_lossless_packet(tox, cb_isotoxin);
 
-    tox_callback_friend_request(tox, cb_friend_request, nullptr);
+    tox_callback_friend_request(tox, cb_friend_request);
     tox_callback_friend_message(tox, cb_friend_message);
     tox_callback_friend_name(tox, cb_name_change);
     tox_callback_friend_status_message(tox, cb_status_message);
     tox_callback_friend_status(tox, cb_friend_status);
     tox_callback_friend_typing(tox, cb_friend_typing);
     tox_callback_friend_read_receipt(tox, cb_read_receipt);
-    tox_callback_friend_connection_status(tox, cb_connection_status, nullptr);
+    tox_callback_friend_connection_status(tox, cb_connection_status);
 
-    tox_callback_group_invite(tox, cb_group_invite, nullptr);
-    tox_callback_group_message(tox, cb_group_message, nullptr);
-    tox_callback_group_action(tox, cb_group_action, nullptr);
-    tox_callback_group_namelist_change(tox, cb_group_namelist_change, nullptr);
-    tox_callback_group_title(tox, cb_group_title, nullptr);
+    tox_callback_conference_invite(tox, cb_conference_invite);
+    tox_callback_conference_message(tox, cb_conference_message);
+    tox_callback_conference_namelist_change(tox, cb_conference_namelist_change);
+    tox_callback_conference_title(tox, cb_conference_title);
 
-    tox_callback_file_recv_control(tox, cb_file_recv_control, nullptr);
-    tox_callback_file_chunk_request(tox, cb_file_chunk_request, nullptr);
-    tox_callback_file_recv(tox, cb_tox_file_recv, nullptr);
-    tox_callback_file_recv_chunk(tox, cb_tox_file_recv_chunk, nullptr);
+    tox_callback_file_recv_control(tox, cb_file_recv_control);
+    tox_callback_file_chunk_request(tox, cb_file_chunk_request);
+    tox_callback_file_recv(tox, cb_tox_file_recv);
+    tox_callback_file_recv_chunk(tox, cb_tox_file_recv_chunk);
 
 
     toxav = toxav_new( tox, nullptr );
@@ -3807,17 +4156,22 @@ void __stdcall tick(int *sleep_time_ms)
         return;
     }
 
+    int curt = time_ms();
+    static int nextt = curt;
+    static int nexttav = curt;
+    static time_t tryconnect = now() + 60;
+
     if (!online_flag)
     {
+        nextt = curt - 10000;
+        nexttav = curt - 10000;
+        tryconnect = now() - 60;
+
         *sleep_time_ms = 100;
         self_typing_contact = 0;
         return;
     }
     *sleep_time_ms = 1;
-    int curt = time_ms();
-    static int nextt = curt;
-    static int nexttav = curt;
-    static time_t tryconnect = now() + 60;
     if (tox)
     {
         // self typing
@@ -3866,9 +4220,9 @@ void __stdcall tick(int *sleep_time_ms)
             //DWORD zzz = yyy - xxx;
             nextt = curt + tox_iteration_interval(tox);
 
-            byte id[TOX_ADDRESS_SIZE];
-            tox_self_get_address(tox,id);
-            if (0 != memcmp(id, lastmypubid, TOX_ADDRESS_SIZE))
+
+            tox_address_c temp; temp.setup_self_address();
+            if (lastmypubid != temp)
                 forceupdateself = true;
         }
         bool on_offline = false;
@@ -3927,6 +4281,7 @@ void __stdcall tick(int *sleep_time_ms)
                     }
                 }
             }
+            r.unlock();
         }
 
         int nextticktime = min( nexttav - curt, nextt - curt );
@@ -3945,10 +4300,7 @@ void __stdcall tick(int *sleep_time_ms)
 
 void __stdcall goodbye()
 {
-    id2desc.clear();
-    fid2desc.clear();
-    for(;contact_descriptor_s::first_desc;)
-        contact_descriptor_s::first_desc->die();
+    delete_all_descs();
 
     while(message2send_s::first)
         delete message2send_s::first;
@@ -4252,9 +4604,9 @@ void __stdcall set_config(const void*idata, int iisz)
         {
             loader l(ldr.chunkdata(), sz);
             int dsz;
-            if (const void *toxid = l.get_data(dsz))
+            if (const void *toxid = l.get_data( dsz ))
                 if (TOX_ADDRESS_SIZE == dsz)
-                    memcpy( lastmypubid, toxid, TOX_ADDRESS_SIZE);
+                    lastmypubid.setup( toxid, tox_address_c::TAT_FULL_ADDRESS );
         }
 
         if (int sz = ldr(chunk_tox_data))
@@ -4277,17 +4629,12 @@ void __stdcall set_config(const void*idata, int iisz)
 
         if (int sz = ldr(chunk_descriptors))
         {
-            id2desc.clear();
-            fid2desc.clear();
-            for (; contact_descriptor_s::first_desc;)
-                contact_descriptor_s::first_desc->die();
-
+            delete_all_descs();
 
             loader l(ldr.chunkdata(), sz);
             for (int cnt = l.read_list_size(); cnt > 0; --cnt)
                 if (int descriptor_size = l(chunk_descriptor))
                 {
-                    contact_descriptor_s *desc = new contact_descriptor_s( SKIP_ID_GEN );
                     loader lc(l.chunkdata(), descriptor_size);
 
                     int id = 0, fid = -1;
@@ -4295,8 +4642,27 @@ void __stdcall set_config(const void*idata, int iisz)
 
                     if (lc(chunk_descriptor_id))
                         id = lc.get_i32();
-                    if (lc(chunk_descriptor_pubid))
-                        desc->pubid = lc.get_astr();
+                    
+                    if ( id < 0 )
+                        continue;
+
+                    contact_descriptor_s *desc = new contact_descriptor_s( SKIP_ID_GEN );
+
+                    if (int asz = lc( chunk_descriptor_address, false ))
+                    {
+                        loader al( lc.chunkdata(), asz );
+                        int dsz;
+                        if (const void *toxid = al.get_data( dsz ))
+                        {
+                            if (TOX_ADDRESS_SIZE == dsz)
+                                desc->address.setup( toxid, tox_address_c::TAT_FULL_ADDRESS );
+                            else if (TOX_PUBLIC_KEY_SIZE == dsz)
+                                desc->address.setup( toxid, tox_address_c::TAT_PUBLIC_KEY );
+                        }
+
+                    } else if (lc( chunk_descriptor_pubid ))
+                        desc->address.setup( lc.get_astr() );
+
                     if (lc(chunk_descriptor_dnsname))
                         desc->dnsname = lc.get_astr();
                     if (lc(chunk_descriptor_state))
@@ -4321,9 +4687,8 @@ void __stdcall set_config(const void*idata, int iisz)
                     {
                         if (tox)
                         {
-                            byte buf[TOX_PUBLIC_KEY_SIZE];
-                            desc->pubid.hex2buf<TOX_PUBLIC_KEY_SIZE>(buf);
-                            fid = find_tox_fid(buf);
+                            const public_key_s &pk = desc->address.as_public_key();
+                            fid = find_tox_fid(pk);
 
                             if (fid >= 0)
                             {
@@ -4400,8 +4765,8 @@ void __stdcall init_done()
         aint cnt = tox_self_get_friend_list_size(tox);
         for(aint i=0;i<cnt;++i)
         {
-            if (tox_friend_exists(tox,(int)i))
-                update_init_contact( (int)i);
+            if (tox_friend_exists(tox, static_cast<int>(i) ))
+                update_init_contact( static_cast<int>(i) );
         }
         for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
         {
@@ -4430,9 +4795,9 @@ void __stdcall online()
 
         for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
         {
-            byte buf[TOX_PUBLIC_KEY_SIZE];
-            f->pubid.hex2buf<TOX_PUBLIC_KEY_SIZE>(buf);
-            int fid = find_tox_fid(buf);
+            if (f->is_conference())
+                continue;
+            int fid = find_tox_fid( f->address.as_public_key() );
             if (fid >= 0)
                 f->set_fid(fid, true);
         }
@@ -4443,17 +4808,14 @@ void __stdcall online()
 
 void operator<<(chunk &chunkm, const contact_descriptor_s &desc)
 {
-    if ( !desc.is_fid_ok() )
-        return;
-    if ( desc.is_group() )
-        return;
-    if ( desc.state == CS_UNKNOWN )
-        return; // tox protocol does not support unknown contacts... and no persistent groups supported too
+    if ( !desc.is_fid_ok() || desc.state == contact_state_check || desc.state == CS_UNKNOWN || desc.state == CS_ROTTEN || desc.is_conference() )
+        return; // tox protocol does not support unknown contacts... and no persistent conferences supported too
 
-    chunk mm(chunkm.b, chunk_descriptor);
+    chunk mm( chunkm.b, chunk_descriptor );
 
     chunk(chunkm.b, chunk_descriptor_id) << desc.get_id();
-    chunk(chunkm.b, chunk_descriptor_pubid) << desc.pubid;
+    chunk(chunkm.b, chunk_descriptor_address ) << desc.address.as_bytes();
+    chunk(chunkm.b, chunk_descriptor_pubid) << desc.address.raw_str(); // KEEP SAVING PUBID FOR FORWARD COMPATIBILITY
     chunk(chunkm.b, chunk_descriptor_dnsname) << desc.dnsname;
     chunk(chunkm.b, chunk_descriptor_state) << (i32)desc.state;
     chunk(chunkm.b, chunk_descriptor_avatartag) << desc.avatar_tag;
@@ -4496,7 +4858,7 @@ static void save_current_stuff( savebuffer &b )
     chunk(b, chunk_server_port) << (i32)options.tcp_port;
     chunk(b, chunk_use_ipv6) << (i32)(options.ipv6_enabled ? 1 : 0);
     chunk(b, chunk_use_udp) << (i32)(options.udp_enabled ? 1 : 0);
-    chunk(b, chunk_toxid) << bytes(lastmypubid, TOX_ADDRESS_SIZE);
+    chunk(b, chunk_toxid) << lastmypubid.as_bytes();
 
     if (tox)
     {
@@ -4571,24 +4933,19 @@ void __stdcall save_config(void * param)
     }
 }
 
-static int send_request(const char *dnsname, const char *public_id, const char *invite_message_utf8, bool resend)
+static int send_request(const char *dnsname, const tox_address_c &toxaddr, const char *invite_message_utf8, bool resend)
 {
     if (tox)
     {
-        byte toxaddr[TOX_ADDRESS_SIZE];
-
-        pstr_c s; s.set( asptr(public_id, TOX_ADDRESS_SIZE * 2) );
-        s.hex2buf<TOX_ADDRESS_SIZE>(toxaddr);
-
         if (resend) // before resend we have to delete contact in Tox system, otherwise we will get an error TOX_FAERR_ALREADYSENT
-            if (contact_descriptor_s *desc = contact_descriptor_s::find(asptr(public_id, TOX_PUBLIC_KEY_SIZE * 2)))
+            if (contact_descriptor_s *desc = contact_descriptor_s::find(toxaddr.as_public_key()))
                 tox_friend_delete(tox, desc->get_fid(), nullptr);
 
         str_c invmsg = utf8clamp(invite_message_utf8, TOX_MAX_FRIEND_REQUEST_LENGTH);
         if (invmsg.get_length() == 0) invmsg = CONSTASTR("?");
 
         TOX_ERR_FRIEND_ADD er = TOX_ERR_FRIEND_ADD_NULL;
-        int fid = tox_friend_add(tox, toxaddr, (const byte *)invmsg.cstr(),invmsg.get_length(), &er);
+        int fid = tox_friend_add(tox, toxaddr.get(tox_address_c::TAT_FULL_ADDRESS), (const byte *)invmsg.cstr(), invmsg.get_length(), &er);
         switch (er) //-V719
         {
             case TOX_ERR_FRIEND_ADD_ALREADY_SENT:
@@ -4601,16 +4958,22 @@ static int send_request(const char *dnsname, const char *public_id, const char *
                 return CR_MEMORY_ERROR;
         }
 
-        contact_descriptor_s *desc = contact_descriptor_s::find( asptr(public_id, TOX_PUBLIC_KEY_SIZE * 2) );
+        contact_descriptor_s *desc = contact_descriptor_s::find( toxaddr.as_public_key() );
         if (desc) desc->set_fid(fid, fid >= 0);
         else desc = new contact_descriptor_s( ID_CONTACT, fid );
+        memset( desc->avatar_hash, 0, sizeof( desc->avatar_hash ) );
+        desc->avatar_tag = 0;
         desc->dnsname = dnsname;
-        desc->pubid = s;
+        desc->address = toxaddr;
         desc->state = CS_INVITE_SEND;
 
         contact_data_s cdata( desc->get_id(), CDM_PUBID | CDM_STATE );
-        cdata.public_id = desc->pubid.cstr();
-        cdata.public_id_len = (int)desc->pubid.get_length();
+
+        //PUBID
+        sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
+        cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
+        cdata.public_id = pubid.cstr();
+
         cdata.state = CS_INVITE_SEND;
         hf->update_contact(&cdata);
 
@@ -4625,18 +4988,73 @@ int __stdcall resend_request(int id, const char* invite_message_utf8)
     {
         auto it = id2desc.find(id);
         if (it == id2desc.end()) return CR_FUNCTION_NOT_FOUND;
-        contact_descriptor_s *cd = it->second;
-        return send_request(cd->dnsname, cd->pubid, invite_message_utf8, true);
+        contact_descriptor_s *desc = it->second;
+        return send_request( desc->dnsname, desc->address, invite_message_utf8, true);
     }
     return CR_FUNCTION_NOT_FOUND;
+}
+
+static void add_conference( TOX_CONFERENCE_TYPE t, const conference_id_s &id, const char *name )
+{
+    cb_conference_invite( tox, UINT32_MAX, t, id.id, TOX_CONFERENCE_UID_SIZE, nullptr );
+    if (contact_descriptor_s *desc = contact_descriptor_s::find( id ))
+    {
+        int nlen = 0;
+        if (name)
+        {
+            nlen = CHARz_len( name );
+            tox_conference_set_title( tox, desc->get_gnum(), (const byte *)name, nlen, nullptr );
+        }
+
+        desc->state = CS_ONLINE;
+
+        contact_data_s cdata( desc->get_id(), CDM_PUBID | CDM_STATE | (name ? CDM_NAME : 0) | CDM_SPECIAL_BITS );
+        cdata.state = CS_ONLINE;
+        cdata.name = name;
+        cdata.name_len = nlen;
+        //CONFAID
+        sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
+        cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
+        cdata.public_id = pubid.cstr();
+        SETUPFLAG( cdata.mask, CDF_AUDIO_CONFERENCE, desc->is_audio_conference() );
+
+        hf->update_contact( &cdata );
+
+    }
+
 }
 
 
 int __stdcall add_contact(const char* public_id, const char* invite_message_utf8)
 {
-    pstr_c s = asptr(public_id);
-    if (s.get_length() == (TOX_ADDRESS_SIZE * 2) && s.contain_chars(CONSTASTR("0123456789abcdefABCDEF")))
-        return send_request("", public_id, invite_message_utf8, false);
+    pstr_c s = asptr( public_id );
+    if (s.get_length() == TOX_CONFERENCE_UID_SIZE * 2 + 1 + 8 && (s.get_char( TOX_CONFERENCE_UID_SIZE * 2 ) == '-' || s.get_char( TOX_CONFERENCE_UID_SIZE * 2 ) == '+'))
+    {
+        conference_id_s confaid;
+        byte hash_check[4];
+        s.hex2buf<TOX_CONFERENCE_UID_SIZE>( confaid.id );
+        s.hex2buf<4>( hash_check, TOX_CONFERENCE_UID_SIZE * 2 + 1 );
+
+        byte hash[crypto_shorthash_KEYBYTES];
+        crypto_shorthash( hash, confaid.id, TOX_CONFERENCE_UID_SIZE, (const byte *)"tox-chat" /* 8 bytes hash key */ );
+        if ( !memcmp( hash, hash_check, 4 ) )
+        {
+            // yo! conference!
+            // use invite_message_utf8 as name
+
+            TOX_CONFERENCE_TYPE t = s.get_char( TOX_CONFERENCE_UID_SIZE * 2 ) == '-' ? TOX_CONFERENCE_TYPE_TEXT : TOX_CONFERENCE_TYPE_AV;
+            add_conference(t, confaid, invite_message_utf8);
+            return CR_OK;
+        }
+    }
+
+    if (s.get_length() == (TOX_ADDRESS_SIZE * 2) && s.contain_chars( CONSTASTR( "0123456789abcdefABCDEF" ) ))
+    {
+        tox_address_c toxaddr;
+        toxaddr.setup( asptr( public_id, TOX_ADDRESS_SIZE * 2) );
+
+        return send_request( "", toxaddr, invite_message_utf8, false );
+    }
 
     if (s.find_pos('@') > 0)
     {
@@ -4649,44 +5067,42 @@ int __stdcall add_contact(const char* public_id, const char* invite_message_utf8
 
 void __stdcall del_contact(int id)
 {
-    if (tox)
+    if (tox && id != 0)
     {
         auto it = id2desc.find(id);
         if (it == id2desc.end()) return;
         contact_descriptor_s *desc = it->second;
-        if (id > 0)
+        if (!desc->is_fid_ok())
         {
-            int chatscount = tox_count_chatlist(tox);
+            desc->die();
+            hf->save();
+            return;
+        }
+        if (!desc->is_conference())
+        {
+            std::vector< contact_descriptor_s * > confas;
+            size_t chatscount = tox_conference_get_chatlist_size(tox);
             if (chatscount)
             {
-                uint8_t buf[ TOX_PUBLIC_KEY_SIZE ];
-                uint8_t pubkey[TOX_PUBLIC_KEY_SIZE];
-                int32_t *chats = (int *)_alloca( sizeof(int32_t) * chatscount );
-                desc->pubid.hex2buf<TOX_PUBLIC_KEY_SIZE>(buf);
-                tox_get_chatlist(tox, chats, chatscount);
+                public_key_s mkey;
+                uint32_t *chats = (uint32_t *)_alloca( sizeof( uint32_t ) * chatscount );
+                tox_conference_get_chatlist(tox, chats);
                 for(int i=0;i<chatscount;++i)
                 {
                     int gnum = chats[i];
-                    int peers = tox_group_number_peers(tox, gnum);
+                    int peers = tox_conference_peer_count(tox, gnum, nullptr);
                     for(int p = 0; p < peers; ++p)
                     {
-                        tox_group_peer_pubkey(tox, gnum, p, pubkey );
-                        if (0 == memcmp(buf, pubkey, sizeof(buf)))
+                        tox_conference_peer_get_public_key( tox, gnum, p, mkey.key, nullptr );
+                        if (desc->address == mkey)
                         {
-                            // in da groupchat
-                            // no kill
-                            // just change to unknown state
+                            auto itc = fid2desc.find( gnum + CONFERENCE_ID_OFFSET );
+                            if ( itc != fid2desc.end() )
+                            {
+                                confas.push_back( itc->second );
+                                break;
+                            }
 
-                            tox_friend_delete(tox, desc->get_fid(), nullptr);
-
-                            desc->state = CS_UNKNOWN;
-                            desc->set_fid( -id, true ); // fid of unknown contacts is -id
-
-                            contact_data_s cdata(desc->get_id(), CDM_STATE | CDF_GCHAT_MEMBER );
-                            cdata.state = CS_UNKNOWN;
-                            hf->update_contact(&cdata);
-                            hf->save();
-                            return;
                         }
                     }
                 }
@@ -4695,12 +5111,16 @@ void __stdcall del_contact(int id)
             tox_friend_delete(tox, desc->get_fid(), nullptr);
             desc->die();
             hf->save();
+
+            for( contact_descriptor_s *confa : confas )
+            {
+                contact_data_s cdata( confa->get_id(), CDM_MEMBERS );
+                confa->setup_members_and_send( cdata );
+            }
         } else
         {
-            ASSERT( desc->is_group() );
-            tox_del_groupchat(tox, desc->get_gnum());
+            tox_conference_delete( tox, desc->get_gnum(), nullptr );
             desc->die();
-            hf->save();
         }
     }
 }
@@ -4746,13 +5166,10 @@ void __stdcall accept(int id)
         if (it == id2desc.end()) return;
         contact_descriptor_s *desc = it->second;
         
-        if (desc->pubid.get_length() >= TOX_PUBLIC_KEY_SIZE * 2 && !desc->is_fid_ok())
+        if (desc->address.compatible(tox_address_c::TAT_PUBLIC_KEY) && !desc->is_fid_ok())
         {
-            byte buf[TOX_PUBLIC_KEY_SIZE];
-            desc->pubid.hex2buf<TOX_PUBLIC_KEY_SIZE>(buf);
-
             TOX_ERR_FRIEND_ADD er;
-            int fid = tox_friend_add_norequest(tox, buf, &er);
+            int fid = tox_friend_add_norequest(tox, desc->address.as_public_key().key, &er);
             if (TOX_ERR_FRIEND_ADD_OK != er)
                 return;
             desc->set_fid(fid, fid >= 0);
@@ -4823,17 +5240,20 @@ void __stdcall accept_call(int id)
     {
         auto it = id2desc.find(id);
         if (it == id2desc.end()) return;
-        contact_descriptor_s *cd = it->second;
+        contact_descriptor_s *desc = it->second;
 
-        if (nullptr == cd->cip)
+        if (nullptr == desc->cip)
             return; // not call
 
-        // cd->cip->local_so is initialized before accept
+        // desc->cip->local_so is initialized before accept
 
-        cd->cip->started = toxav_answer(toxav, cd->get_fid(),
-            0 != (cd->cip->local_so.options & SO_SENDING_AUDIO) ? DEFAULT_AUDIO_BITRATE : 0,
-            0 != (cd->cip->local_so.options & SO_SENDING_VIDEO) ? DEFAULT_VIDEO_BITRATE : 0, nullptr);
+        desc->cip->started = toxav_answer(toxav, desc->get_fid(),
+            0 != ( desc->cip->local_so.options & SO_SENDING_AUDIO) ? DEFAULT_AUDIO_BITRATE : 0,
+            0 != ( desc->cip->local_so.options & SO_SENDING_VIDEO) ? DEFAULT_VIDEO_BITRATE : 0, nullptr);
 
+        // desc->cip->remote_so is initialized on incoming call callback
+
+        hf->av_stream_options( 0, desc->get_id(), &desc->cip->remote_so );
     }
 }
 
@@ -5054,48 +5474,148 @@ bool __stdcall file_portion(u64 utag, const file_portion_s *portion)
     return false;
 }
 
-void __stdcall add_groupchat(const char *groupaname, bool persistent)
+void __stdcall del_conference( const char *conference_id )
 {
-    if (persistent) return; // tox not yet supported persistent groups
+    conference_id_s id;
+    pstr_c( asptr( conference_id ) ).hex2buf<TOX_CONFERENCE_UID_SIZE>( id.id );
+
+    if (contact_descriptor_s *desc = contact_descriptor_s::find( id ))
+    {
+        tox_conference_delete( tox, desc->get_gnum(), nullptr );
+        desc->die();
+    } else
+    {
+        uint32_t cid = tox_conference_by_uid( tox, id.id, NULL );
+        if (cid != UINT32_MAX)
+            tox_conference_delete( tox, cid, nullptr );
+    }
+
+    hf->save();
+}
+
+void __stdcall enter_conference( const char *conference_id )
+{
+    conference_id_s id;
+    pstr_c( asptr(conference_id) ).hex2buf<TOX_CONFERENCE_UID_SIZE>( id.id );
+
+    uint32_t cid = tox_conference_by_uid( tox, id.id, NULL );
+    if (cid != UINT32_MAX)
+    {
+        tox_conference_enter( tox, cid, nullptr );
+        add_conference( tox_conference_get_type( tox, cid, nullptr ), id, nullptr );
+        hf->save();
+    } else
+    {
+        // just restore as text confa
+        add_conference( TOX_CONFERENCE_TYPE_TEXT, id, nullptr );
+    }
+}
+
+void __stdcall leave_conference( int gid, int keep_leave )
+{
+    auto it = id2desc.find( gid );
+    if ( it == id2desc.end() ) return;
+    contact_descriptor_s *desc = it->second;
+    if ( desc->is_conference() )
+    {
+        tox_conference_leave( tox, desc->get_gnum(), keep_leave & 1, nullptr );
+
+        contact_data_s cdata( desc->get_id(), CDM_STATE | CDM_MEMBERS | CDM_PUBID | CDM_SPECIAL_BITS );
+        cdata.state = CS_OFFLINE;
+        cdata.members_count = 0;
+
+        //CONFAID
+        sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
+        cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
+        cdata.public_id = pubid.cstr();
+
+        hf->update_contact( &cdata );
+
+        desc->die();
+        hf->save();
+    }
+}
+
+void __stdcall create_conference(const char *conferencename, const char *o)
+{
+    bool audio_conference = false;
+    parse_values( asptr( o ), [&]( const pstr_c &field, const pstr_c &val ) {
+        if ( field.equals( CONSTASTR( CONFA_OPT_TYPE ) ) )
+            audio_conference = val.equals( CONSTASTR( "a" ) );
+    } );
 
     if (tox)
     {
-        int gnum = toxav_add_av_groupchat(tox, callback_av_group_audio, nullptr);
+        int gnum = -1;
+        if ( audio_conference)
+            gnum = toxav_add_av_groupchat( tox, callback_av_conference_audio, nullptr );
+        else
+        {
+            TOX_ERR_CONFERENCE_NEW err;
+            uint32_t g = tox_conference_new( tox, &err );
+            if ( err == TOX_ERR_CONFERENCE_NEW_OK )
+                gnum = static_cast<int>( g );
+        }
+
         if (gnum >= 0)
         {
-            asptr gn = utf8clamp(groupaname, TOX_MAX_NAME_LENGTH);
-            tox_group_set_title(tox, gnum, (const uint8_t *)gn.s, (uint8_t)gn.l);
+            asptr gn = utf8clamp(conferencename, TOX_MAX_NAME_LENGTH);
+            tox_conference_set_title(tox, gnum, (const uint8_t *)gn.s, gn.l, nullptr);
 
-            contact_descriptor_s *desc = new contact_descriptor_s(ID_GROUP, gnum + GROUP_ID_OFFSET);
-            desc->state = CS_ONLINE; // groups always online
+            contact_descriptor_s *desc = new contact_descriptor_s(ID_CONFERENCE, gnum + CONFERENCE_ID_OFFSET);
+            desc->state = CS_ONLINE; // conferences are always online
 
-            contact_data_s cdata( desc->get_id(), CDM_STATE | CDM_NAME | CDF_AUDIO_GCHAT | (persistent ? CDF_PERSISTENT_GCHAT : 0) );
+            conference_id_s gid;
+            tox_conference_get_uid( tox, gnum, gid.id );
+
+            desc->address = gid;
+
+            uint32_t am = 0;
+            if ( audio_conference )
+                am = CDF_AUDIO_CONFERENCE, desc->prepare_call();
+
+            contact_data_s cdata( desc->get_id(), CDM_PUBID | CDM_STATE | CDM_NAME | CDM_SPECIAL_BITS | CDM_PERMISSIONS | am );
             cdata.state = CS_ONLINE;
             cdata.name = gn.s;
-            cdata.name_len = (int)gn.l;
+            cdata.name_len = gn.l;
+            //CONFAID
+            sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
+            cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
+            cdata.public_id = pubid.cstr();
+
+            cdata.conference_permissions = -1;
+
+            str_c details_json_string;
+            desc->prepare_details( details_json_string, cdata );
+
             hf->update_contact(&cdata);
         }
     }
 }
 
-void __stdcall ren_groupchat(int gid, const char *groupaname)
+void __stdcall ren_conference(int gid, const char *conferencename)
 {
     if (tox && gid < 0)
     {
         auto it = id2desc.find(gid);
         if (it == id2desc.end()) return;
         contact_descriptor_s *desc = it->second;
-        asptr gn = utf8clamp(groupaname, TOX_MAX_NAME_LENGTH);
-        tox_group_set_title(tox, desc->get_gnum(), (const uint8_t *)gn.s, (uint8_t)gn.l);
+        asptr gn = utf8clamp(conferencename, TOX_MAX_NAME_LENGTH);
+        tox_conference_set_title(tox, desc->get_gnum(), (const uint8_t *)gn.s, gn.l, nullptr);
 
-        contact_data_s cdata(desc->get_id(), CDM_NAME);
+        contact_data_s cdata(desc->get_id(), CDM_NAME | CDM_PUBID | CDM_SPECIAL_BITS);
         cdata.name = gn.s;
-        cdata.name_len = (int)gn.l;
+        cdata.name_len = gn.l;
+        //CONFAID
+        sstr_t<TOX_CONFERENCE_UID_SIZE * 2 + 16> pubid;
+        cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
+        cdata.public_id = pubid.cstr();
+        SETUPFLAG( cdata.mask, CDF_AUDIO_CONFERENCE, desc->is_audio_conference() );
         hf->update_contact(&cdata);
     }
 }
 
-void __stdcall join_groupchat(int gid, int cid)
+void __stdcall join_conference(int gid, int cid)
 {
     if (tox && gid < 0 && cid > 0)
     {
@@ -5108,9 +5628,9 @@ void __stdcall join_groupchat(int gid, int cid)
         contact_descriptor_s *gcd = git->second;
         contact_descriptor_s *ccd = cit->second;
 
-        if (!ccd->is_online()) return; // persistent groups not yet supported
+        if (!ccd->is_online()) return; // persistent conferences not yet supported
 
-        tox_invite_friend(tox, ccd->get_fid(), gcd->get_gnum());
+        tox_conference_invite(tox, ccd->get_fid(), gcd->get_gnum(), nullptr);
     }
 }
 
@@ -5118,7 +5638,7 @@ void __stdcall typing(int cid)
 {
     if (cid < 0)
     {
-        // oops. toxcore does not support group typing notification... :(
+        // oops. toxcore does not support conference typing notification... :(
         return;
     }
 
@@ -5184,7 +5704,7 @@ proto_functions_s* __stdcall api_handshake(host_functions_s *hf_)
     hf = hf_;
 
     self_state = CS_OFFLINE;
-    memset(lastmypubid, 0, TOX_ADDRESS_SIZE);
+    lastmypubid.clear();
 
     memset( &options, 0, sizeof(options) );
     options.udp_enabled = true;
@@ -5232,6 +5752,7 @@ void __stdcall api_getinfo( proto_info_s *info )
         "vp8/vp9",
         "ToxID",
         "f=png",
+        CONFA_OPT_TYPE "=t/a",
         nullptr
     };
     
@@ -5239,6 +5760,6 @@ void __stdcall api_getinfo( proto_info_s *info )
 
     info->priority = 500;
     info->indicator = 500;
-    info->features = PF_AVATARS | PF_PURE_NEW | PF_IMPORT | PF_EXPORT | PF_AUDIO_CALLS | PF_VIDEO_CALLS | PF_SEND_FILE | PF_PAUSE_FILE | PF_GROUP_CHAT; //PF_AUTH_NICKNAME | PF_UNAUTHORIZED_CHAT;
+    info->features = PF_AVATARS | PF_PURE_NEW | PF_IMPORT | PF_EXPORT | PF_AUDIO_CALLS | PF_VIDEO_CALLS | PF_SEND_FILE | PF_PAUSE_FILE | PF_CONFERENCE | PF_CONFERENCE_ENTER_LEAVE; //PF_AUTH_NICKNAME | PF_UNAUTHORIZED_CHAT;
     info->connection_features = CF_PROXY_SUPPORT_HTTPS | CF_PROXY_SUPPORT_SOCKS5 | CF_IPv6_OPTION | CF_UDP_OPTION | CF_SERVER_OPTION;
 }

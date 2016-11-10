@@ -205,7 +205,7 @@ rects
   {
     clientborder=4,4,4,4
     c=2,2,2,2,##msg_mine_bg
-    colors=##msg_mine_name,##msg_mine_text_und,##msg_mine_time,##text_link
+    colors=##msg_mine_name,##msg_mine_text_und,##msg_mine_time,##text_link,##msg_mine_quote
 	deftextcolor=##msg_mine_text
   }
   message.mine.h=message.mine
@@ -216,7 +216,7 @@ rects
   {
     clientborder=4,4,4,4
     c=2,2,2,2,##msg_other_bg
-    colors=##msg_other_name,#000000,##msg_other_time,##text_link
+    colors=##msg_other_name,#000000,##msg_other_time,##text_link,##msg_other_quote
 	deftextcolor=##msg_other_text
   }
   message.other.h=message.other
@@ -227,7 +227,7 @@ rects
   {
     clientborder=4,4,4,4
     c=2,2,2,2,##msg_pm_bg
-    colors=##msg_pm_name,#000000,##msg_pm_time,##text_link
+    colors=##msg_pm_name,#000000,##msg_pm_time,##text_link,##msg_pm_quote
 	deftextcolor=##msg_pm_text
   }
   message.pm.h=message.pm
@@ -288,10 +288,11 @@ rects
     c=2,2,2,2,##notice_reject_bg
     clientborder=4,4,4,4
   }
-  notice.gchat=sb
+  notice.confa=sb
   {
     c=2,2,2,2,##notice_gchat_bg
     clientborder=4,4,4,4
+    colors=##notice_confa_new,##notice_confa_rotten
   }
   notice.found=sb
   {
@@ -636,27 +637,6 @@ rects
 
 images
 {
-  gcollapsed
-  {
-	gen
-	{
-		svg=`<svg height="32" width="32">
-			<path fill="##text_def" stroke="none" transform="translate(5 5) scale(0.25)" d="M 40,25 40,75 65,50 Z" />
-		</svg>`
-		size=20,20
-	}
-  }
-  gexpanded
-  {
-	gen
-	{
-		svg=`<svg height="32" width="32">
-			<path fill="##text_def" stroke="none" transform="translate(5 5) scale(0.25)" d="M 25,40 50,65 75,40 Z" />
-		</svg>`
-		size=20,20
-	}
-  }
-
 
   bmin
   {
@@ -723,6 +703,7 @@ images
 		svg=`<svg height="32" width="32">
 			<rect fill="##gen_gch_online" stroke="none" transform="scale(0.3)" x="30" y="30" width="40" height="40" />
 		</svg>`
+		size=14,14
 	}
   }
   gch_offline
@@ -742,6 +723,40 @@ images
 		svg=`<svg height="32" width="32">
 			<rect fill="##gen_gch_unknown" stroke="##gen_gch_online" stroke-width="5" transform="scale(0.3)" x="30" y="30" width="40" height="40" />
 		</svg>`
+		size=14,14
+	}
+  }
+  gch_snd0
+  {
+	gen 
+    { 
+		svg=`<svg height="32" width="32">
+			<path fill="##text_def" transform="scale(0.3)" d="m 47.432585,31.582426 c -0.826195,0 -1.388981,0.576848 -2.115735,1.338074 l -6.347203,6.563939 -4.231469,0 c -1.163654,0 -2.115735,1.185303 -2.115735,2.634005 l 0,15.804026 c 0,1.448702 0.952081,2.634004 2.115735,2.634004 l 4.231469,0 6.347203,6.563938 c 0.727812,0.762545 1.28954,1.338075 2.115735,1.338075 1.289539,0 2.115734,-1.29593 2.115734,-2.634005 l 0,-31.608052 c 0,-1.338074 -0.826195,-2.634004 -2.115734,-2.634004 z" />
+		</svg>`
+		size=14,14
+		center=15,15
+	}
+  }
+  gch_snd1
+  {
+	gen 
+    { 
+		svg=`<svg height="32" width="32">
+			<path fill="##text_def" transform="scale(0.3)" d="m 47.432585,31.582426 c -0.826195,0 -1.388981,0.576848 -2.115735,1.338074 l -6.347203,6.563939 -4.231469,0 c -1.163654,0 -2.115735,1.185303 -2.115735,2.634005 l 0,15.804026 c 0,1.448702 0.952081,2.634004 2.115735,2.634004 l 4.231469,0 6.347203,6.563938 c 0.727812,0.762545 1.28954,1.338075 2.115735,1.338075 1.289539,0 2.115734,-1.29593 2.115734,-2.634005 l 0,-31.608052 c 0,-1.338074 -0.826195,-2.634004 -2.115734,-2.634004 z m 6.347203,5.268009 c -1.322334,0 -2.115734,1.378901 -2.115734,2.634004 0,1.872777 2.115734,3.662583 2.115734,10.536018 0,6.873435 -2.115734,8.663239 -2.115734,10.536017 0,1.255103 0.7934,2.634004 2.115734,2.634004 1.074793,0 1.719034,-0.7204 2.412995,-2.634004 1.300119,-3.583562 1.818474,-7.016987 1.818474,-10.536017 0,-3.51903 -0.518355,-6.952455 -1.818474,-10.536018 -0.693961,-1.913604 -1.338202,-2.634004 -2.412995,-2.634004 z" />
+		</svg>`
+		size=14,14
+		center=15,15
+	}
+  }
+  gch_snd2
+  {
+	gen 
+    { 
+		svg=`<svg height="32" width="32">
+			<path fill="##text_def" transform="scale(0.3)" d="m 47.432585,31.582426 c -0.826195,0 -1.388981,0.576848 -2.115735,1.338074 l -6.347203,6.563939 -4.231469,0 c -1.163654,0 -2.115735,1.185303 -2.115735,2.634005 l 0,15.804026 c 0,1.448702 0.952081,2.634004 2.115735,2.634004 l 4.231469,0 6.347203,6.563938 c 0.727812,0.762545 1.28954,1.338075 2.115735,1.338075 1.289539,0 2.115734,-1.29593 2.115734,-2.634005 l 0,-31.608052 c 0,-1.338074 -0.826195,-2.634004 -2.115734,-2.634004 z m 6.347203,5.268009 c -1.322334,0 -2.115734,1.378901 -2.115734,2.634004 0,1.872777 2.115734,3.662583 2.115734,10.536018 0,6.873435 -2.115734,8.663239 -2.115734,10.536017 0,1.255103 0.7934,2.634004 2.115734,2.634004 1.074793,0 1.719034,-0.7204 2.412995,-2.634004 1.300119,-3.583562 1.818474,-7.016987 1.818474,-10.536017 0,-3.51903 -0.518355,-6.952455 -1.818474,-10.536018 -0.693961,-1.913604 -1.338202,-2.634004 -2.412995,-2.634004 z m 9.675253,-2.634005 c -0.886493,-2.33241 -1.724324,-2.634004 -2.468004,-2.634004 -1.256746,0 -2.115734,1.317003 -2.115734,2.634004 0,2.202028 3.371422,5.967338 3.371422,15.804027 0,9.836689 -3.372481,13.601998 -3.372481,15.804025 0,1.317003 0.860047,2.634005 2.115735,2.634005 0.74368,0 1.581511,-0.301593 2.468005,-2.634005 0.971121,-2.551032 3.02021,-7.696561 3.02021,-15.804025 0,-8.107466 -2.049089,-13.251676 -3.019153,-15.804027 z" />
+		</svg>`
+		size=14,14
+		center=15,15
 	}
   }
 
@@ -876,7 +891,7 @@ images
 	}
   }
 
-  groupchat
+  conference
   {
 	gen 
     { 
@@ -1033,6 +1048,50 @@ images
 
     }
 
+  }
+
+  check0
+  {
+    gen 
+    { 
+      svg=`<svg width="64" height="64">
+			<filter id="sh">
+				<feOffset in="SourceAlpha" dx="8" dy="8" />
+				<feGaussianBlur stdDeviation="2"/>
+				<feComponentTransfer>
+					<feFuncA type="linear" slope="0.3"/>
+				</feComponentTransfer>
+				<feBlend in="SourceGraphic" mode="normal" />
+			</filter>
+			<g transform="translate(10 10) scale(0.28)">
+				<rect fill="none" stroke="##ctl_normal" stroke-width="5" width="50" height="50" x="25" y="25" filter="url(#sh)" />
+			</g>
+		</svg>`
+
+		center=0,24 // 24 = 10 + 50*0.28
+    }
+  }
+  check1
+  {
+    gen 
+    { 
+      svg=`<svg width="64" height="64">
+			<filter id="sh">
+				<feOffset in="SourceAlpha" dx="8" dy="8" />
+				<feGaussianBlur stdDeviation="2"/>
+				<feComponentTransfer>
+					<feFuncA type="linear" slope="0.3"/>
+				</feComponentTransfer>
+				<feBlend in="SourceGraphic" mode="normal" />
+			</filter>
+			<g transform="translate(10 10) scale(0.28)">
+				<rect fill="none" stroke="##ctl_normal" stroke-width="5" width="50" height="50" x="25" y="25" filter="url(#sh)" />
+				<polyline stroke="##ctl_el" stroke-width="8" points="30,45 45,60 80,25" />
+			</g>
+		</svg>`
+
+		center=0,24 // 24 = 10 + 50*0.28
+    }
   }
 
 }
@@ -1322,7 +1381,7 @@ buttons
 				</feComponentTransfer>
 				<feBlend in="SourceGraphic" mode="normal" />
 			</filter>
-			<g transform="translate(10 10) scale(0.34)">
+			<g transform="translate(10 10) scale(0.28)">
 				<rect fill="none" stroke="[color]" stroke-width="5" width="50" height="50" x="25" y="25" filter="url(#sh)" />
 				[insert]
 			</g>
@@ -1334,7 +1393,7 @@ buttons
 		color-hover=##ctl_normal
 		color-press=##ctl_normal
 		color-disabled=##ctl_normal
-		center=0,27 // 27 = 10 + 50*0.34
+		center=0,24 // 24 = 10 + 50*0.28
     }
 
 	presstextcolor=##ctl_normal
@@ -1355,17 +1414,49 @@ buttons
 				</feComponentTransfer>
 				<feBlend in="SourceGraphic" mode="normal" />
 			</filter>
-			<g transform="translate(10 10) scale(0.34)" ><g filter="url(#sh)" >
+			<g transform="translate(10 10) scale(0.28)" ><g filter="url(#sh)" >
 				<circle fill="none" stroke="[color]" stroke-width="5" cx="50" cy="50" r="25" />
 				[insert]
 			</g></g>
 		</svg>`
 
 	  insert-press=`<circle fill="##ctl_el" stroke="none" cx="50" cy="50" r="5" />`
-	  center=0,34
+	  center=0,30
 	}
 
   }
+
+  gcollapsed
+  {
+	gen
+	{
+		svg=`<svg height="32" width="32">
+			<path fill="[color]" stroke="none" transform="translate(5 5) scale(0.25)" d="M 40,25 40,75 65,50 Z" />
+		</svg>`
+		size=20,20
+		color=##ctl_normal
+		color-hover=##ctl_hover
+		color-press=##ctl_press
+	}
+  }
+  gexpanded
+  {
+
+    gen 
+    { 
+		svg=`<svg height="32" width="32">
+			<path fill="[color]" stroke="none" transform="translate(5 5) scale(0.25)" d="M 25,40 50,65 75,40 Z" />
+		</svg>`
+		size=20,20
+
+		//##text_def
+		color=##ctl_normal
+		color-hover=##ctl_hover
+		color-press=##ctl_press
+	}
+
+  }
+
   selector
   {
     gen 
@@ -1444,7 +1535,7 @@ buttons
 	  center=28,28 // 28 = 10 + 50*0.36 - calc bound box with this center
     }
   }
-  addgroup=addcontact
+  addconf=addcontact
   {
     gen
     { 

@@ -1,5 +1,10 @@
 #include "stdafx.h"
 
+#pragma warning (push)
+#pragma warning (disable:4324)
+#include "libsodium/src/libsodium/include/sodium.h"
+#pragma warning (pop)
+
 unsigned int g_logging_flags = 0;
 unsigned int g_telemetry_flags = 0;
 HINSTANCE g_module = nullptr;

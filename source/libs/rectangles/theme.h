@@ -231,7 +231,7 @@ struct button_desc_s : ts::shared_object
         static int idpool = 0;
         id = idpool++;
         //if (id == 2)
-        //    __debugbreak();
+        //    DEBUG_BREAK();
 #endif
     }
     DECLARE_DYNAMIC_END(public)

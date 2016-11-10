@@ -164,9 +164,9 @@ namespace
         {
             zip_data_s *me = (zip_data_s *)opaque;
             uint64 newsize = me->ptr + size;
-            if ( newsize > me->zip.size() )
+            if ( newsize > static_cast<uint64>(me->zip.size()) )
             {
-                if ( me->zip.capacity() < newsize )
+                if ( static_cast<uint64>(me->zip.capacity()) < newsize )
                     me->zip.set_size( (aint)(newsize + me->granula), true );
                 me->zip.set_size( (aint)newsize, true );
             }
@@ -263,7 +263,7 @@ void zip_c::addfile( const asptr&fn, const void *data, aint datasize, int compre
     zf.granula = datasize / 4;
     if ( zf.granula < 4096 ) zf.granula = 4096;
     zipOpenNewFileInZip2_64( zf.zf, str_c(fn).cstr(), nullptr, nullptr, 0, nullptr, 0, nullptr, Z_DEFLATED, compresslevel, 0, 0 );
-    zipWriteInFileInZip( zf.zf, data, datasize );
+    zipWriteInFileInZip( zf.zf, data, static_cast<unsigned int>(datasize) );
     zipCloseFileInZip( zf.zf );
 }
 

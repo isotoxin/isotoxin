@@ -10,6 +10,8 @@ template <typename TCHARACTER, class S_CORE = str_core_copy_on_demand_c<TCHARACT
     typedef strings_t<TCHARACTER, S_CORE> arrtype;
     typedef array_inplace_t<str_t<TCHARACTER, S_CORE>, 8> super;
 
+    MOVABLE( is_movable<super>::value );
+
 public:
 
     strings_t() {};
@@ -448,7 +450,8 @@ public:
                 return k;
         return -1;
     }
-    template<typename CORE2> aint find(const str_t<TCHARACTER, CORE2> &text) const { return find(text.as_spart()); }
+    aint find( const strtype &text ) const { return find( text.as_sptr() ); }
+    template<typename CORE2> aint find(const str_t<TCHARACTER, CORE2> &text) const { return find(text.as_sptr()); }
 
     aint find_ignore_case(const sptr<TCHARACTER> &text) const
     {
@@ -459,7 +462,7 @@ public:
         return -1;
     }
 
-    template<typename CORE2> int     find_ignore_case(const str_t<TCHARACTER, CORE2> &text) const { return find_ignore_case(text.as_spart()); }
+    template<typename CORE2> aint find_ignore_case(const str_t<TCHARACTER, CORE2> &text) const { return find_ignore_case(text.as_sptr()); }
 
     bool    present_any_of(const arrtype &a) const
     {
@@ -607,8 +610,17 @@ public:
         }
         return index;
     }
-
-    template<typename CORE2> int get_string_index(const str_t<TCHARACTER, CORE2> &of) {return get_string_index(of.as_spart());}
+    aint get_string_index( const strtype &of )
+    {
+        aint index = find( of );
+        if (index < 0)
+        {
+            add( of );
+            return super::size() - 1;
+        }
+        return index;
+    }
+    template<typename CORE2> aint get_string_index(const str_t<TCHARACTER, CORE2> &of) {return get_string_index(of.as_spart());}
 
     void kill_dups()
     {

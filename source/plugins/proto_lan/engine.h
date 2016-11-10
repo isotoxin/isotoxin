@@ -248,6 +248,8 @@ enum video_codec_e
     vc_vp9,
 };
 
+#define AVATAR_HASH_SIZE crypto_generichash_BYTES_MIN
+
 class lan_engine : public packetgen
 {
     friend struct chunk;
@@ -433,7 +435,7 @@ public:
 
         int changed_self = 0;
         i32 avatar_tag = 0;
-        byte avatar_hash[ 16 ] = {};
+        byte avatar_hash[AVATAR_HASH_SIZE] = {};
 
         int reconnect = 0;
        

@@ -5,6 +5,13 @@
 namespace ts
 {
     // filesystem
+
+    enum f_error_e
+    {
+        FE_WRITE_GENERAL = -1,
+        FE_WRITE_NO_SPACE = -2,
+    };
+
     ts::wstr_c f_create( const ts::wsptr&fn ); // just create 0-size file; returns error string or empty, if ok
     void *f_open( const ts::wsptr&fn ); // open for read
     void *f_recreate( const ts::wsptr&fn ); // create
@@ -179,7 +186,6 @@ template<aint GRANULA, typename ALLOCATOR> struct BUFFER_RESIZABLE : public ALLO
         m_size = tb.size();
     }
 
-
     void fitcapacity(aint newsz)
     {
         if (newsz > m_capacity)
@@ -304,6 +310,66 @@ template<aint GRANULA, typename ALLOCATOR> struct BUFFER_RESIZABLE_COPY_ON_DEMAN
 
         aint fixlen = moder((uint8 *)(m_core + 1), newlen, (uint8 *)(m_core + 1), m_core->m_size);
         m_core->m_size = fixlen;
+    }
+};
+
+template<typename ALLOCATOR> struct BUFFER_SIZE_ONLY : public ALLOCATOR
+{
+    BUFFER_SIZE_ONLY( aint cap ) :m_data( nullptr ), m_size( 0 )
+    {
+    }
+    BUFFER_SIZE_ONLY( const BUFFER_SIZE_ONLY &b ) :m_data( nullptr ), m_size( b.size() )
+    {
+        m_data = ( uint8 * )this->ma( b.size() );
+        memcpy( m_data, b(), b.size() );
+    }
+    BUFFER_SIZE_ONLY( BUFFER_SIZE_ONLY &&b ) :m_data( b.m_data ), m_size( b.m_size )
+    {
+        b.m_data = nullptr;
+        b.m_size = 0;
+    }
+    ~BUFFER_SIZE_ONLY()
+    {
+        this->mf( m_data );
+    }
+
+    uint8   *m_data;
+    aint     m_size;        //bytes
+
+    uint8  *operator()() { return m_data; }
+    const uint8  *operator()() const { return m_data; }
+    aint    size() const { return m_size; };
+    aint    cap() const { return m_size; };
+    bool writable() const { return true; }
+
+    void operator=( BUFFER_SIZE_ONLY && tb )
+    {
+        SWAP( m_data, tb.m_data );
+        SWAP( m_size, tb.m_size );
+    }
+    void operator=( const BUFFER_SIZE_ONLY & tb )
+    {
+        m_data = ( uint8 * )this->mra( m_data, sizeof( uint8 )*tb.size() );
+        memcpy( m_data, tb.m_data, tb.size() );
+        m_size = tb.size();
+    }
+
+    void clear()
+    {
+        m_size = 0; // nothing special
+    }
+
+    template<typename MODER> void change( aint newlen, const MODER &moder )
+    {
+        aint oldsz = m_size;
+        if ( newlen > m_size )
+        {
+            m_size = newlen;
+            m_data = ( uint8 * )this->mra( m_data, sizeof( uint8 )*m_size );
+        }
+
+        aint fixlen = moder( m_data, newlen, m_data, oldsz );
+        m_size = fixlen;
     }
 };
 
@@ -739,8 +805,8 @@ public:
                 f_close( hand );
                 return false;
             }
-            set_size(text ? (size+2) : size, false);
-            aint r = f_read(hand, core(), size);
+            set_size(static_cast<aint>(text ? (size+2) : size), false);
+            aint r = f_read(hand, core(), static_cast<aint>(size));
             f_close(hand);
             if (text && ASSERT(core.writable()))
             {
@@ -890,11 +956,26 @@ public:
         return false;
     }
 
-    aint  find_index(const T &t) const
+    aint find_offset( const T *block, aint bcnt ) const
     {
-        for (const T&x : *this)
-            if (x == t) return &x - this->template tbegin<T>();
+        if (bcnt == 0) return -1;
+        if (bcnt == 1) return find_index(block[0]);
+        const T &t = block[bcnt - 1];
+        for (aint from = bcnt-1;;)
+        {
+            aint i = find_index( t, from );
+            if (i < 0) return -1;
+            if (!memcmp( block, begin() + i - (bcnt-1), sizeof( T ) * bcnt - 1 ))
+                return i - (bcnt - 1);
+            ++from;
+        }
+    }
 
+    aint  find_index(const T &t, aint from = 0) const
+    {
+        const T * pt = begin() + from;
+        for (aint cnt = count(); from < cnt; ++from, ++pt)
+            if (t == *pt) return from;
         return -1;
     }
 
@@ -1073,7 +1154,7 @@ public:
     }
     template< typename CORE2 > void append_buf(const tbuf_t<T, CORE2> &t)
     {
-        super::append_buf(t.data(), t.size());
+        super::append_buf(t.data(), t.byte_size());
     }
 
     void clone( aint from, aint to )
@@ -1118,7 +1199,6 @@ public:
         ASSERT(index >= 0 && index < count());
         super::cut_tail( sizeof(T), index * sizeof(T) );
     }
-
     bool find_remove_fast(const T &d)
     {
         aint i = find_index(d);
@@ -1175,13 +1255,13 @@ public:
 };
 
 
-typedef buf_t< BUFFER_RESIZABLE<0, TS_DEFAULT_ALLOCATOR> > buf0_c;
+typedef buf_t< BUFFER_SIZE_ONLY<TS_DEFAULT_ALLOCATOR> > buf0_c;
 typedef buf_t< BUFFER_RESIZABLE<1024, TS_DEFAULT_ALLOCATOR> > buf_c;
 
 typedef buf_t< BUFFER_RESIZABLE<1024, TMP_ALLOCATOR> > tmp_buf_c;
 
-template<typename T> using tbuf0_t = tbuf_t< T, BUFFER_RESIZABLE<0, TS_DEFAULT_ALLOCATOR> >;
-template<typename T> using tmp_tbuf_t = tbuf_t< T, BUFFER_RESIZABLE<0, TMP_ALLOCATOR> >;
+template<typename T> using tbuf0_t = tbuf_t< T, BUFFER_SIZE_ONLY<TS_DEFAULT_ALLOCATOR> >;
+template<typename T> using tmp_tbuf_t = tbuf_t< T, BUFFER_SIZE_ONLY<TMP_ALLOCATOR> >;
 
 typedef buf_t< BUFFER_RESIZABLE_COPY_ON_DEMAND<0, TS_DEFAULT_ALLOCATOR> > blob_c;
 

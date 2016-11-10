@@ -175,16 +175,22 @@ namespace ts
 
         if (br.colors == nullptr)
         {
-            ColorMapObject *cm = br.gif->SColorMap;
-
-            br.colors = (TSCOLOR *)MM_ALLOC( sizeof(TSCOLOR) * 256 );
-            for (int i = 0; i < cm->ColorCount; ++i)
+            br.colors = (TSCOLOR *)MM_ALLOC( sizeof( TSCOLOR ) * 256 );
+            if (ColorMapObject *cm = br.gif->SColorMap)
             {
-                GifColorType &c = cm->Colors[i];
-                br.colors[i] = ARGB(c.Red, c.Green, c.Blue);
+                int maxcolors = cm->ColorCount; if (maxcolors > 256) maxcolors = 256;
+                for (int i = 0; i < maxcolors; ++i)
+                {
+                    GifColorType &c = cm->Colors[i];
+                    br.colors[i] = ARGB( c.Red, c.Green, c.Blue );
+                }
+                for (int i = maxcolors; i < 256; ++i)
+                    br.colors[i] = 0;
+            } else
+            {
+                for (uint i = 0; i < 256; ++i)
+                    br.colors[i] = ARGB( i, i, i );
             }
-            for (int i = cm->ColorCount; i < 256; ++i)
-                br.colors[i] = 0;
         }
 
         if (bmp.info().sz.x != br.gif->SWidth || bmp.info().sz.y != br.gif->SHeight)

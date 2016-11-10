@@ -40,7 +40,7 @@ void Source::play(bool looping, float time)
     player_data_s &pd = *(player_data_s *)&player->data;
 
 	if (pd.pDS == nullptr) return;
-    LOCK4WRITE(pd.sync);
+    SIMPLELOCK(pd.sync1);
 
 	autoDeleteSources();
 
@@ -57,7 +57,7 @@ void Source::play(bool looping, float time)
 
 	int found = -1;
 	SoundGroupSlots &sg = pd.soundGroups[soundGroup];
-	for (int i=0; i<sg.active; i++)//смотрим, не освободился ли активный слот
+	for (int i=0; i<sg.active; i++) // is active slot free?
 	{
 		if (sg.slots[i].source == nullptr)
 		{
@@ -66,14 +66,14 @@ void Source::play(bool looping, float time)
 		}
 	}
 
-	if (found != -1)//слот свободен, но формат не совпадает - нужно пересоздать буфер
+	if (found != -1) // slot is free, but format mismatch - need to recreate buffer
 	{
 		sg.slots[found].releaseBuffer();
 	}
-	else//свободных слотов нет
+	else // no free slots
 	{
 		if (sg.active == sg.max) {ErrorHandler(EL_WARNING, "Not enought slots to play sound"); return;}
-		found = sg.active++;//add new slot
+		found = sg.active++; // add new slot
 	}
 
 	if (!sg.slots[found].createBuffer(player, pd.gdecoder->format, sg.is3d)) return;
@@ -94,7 +94,7 @@ void Source::stop(float time)
 	if (slotIndex == -1 || player == nullptr) return;//предварительная быстрая, но неточная проверка, которая допустима из расчета, что запись int - атомарная операция, а в параллельном потоке может быть записано только одно значение (-1)
     player_data_s &pd = *(player_data_s *)&player->data;
 	if (pd.pDS == nullptr) return;
-    LOCK4WRITE(pd.sync);
+    SIMPLELOCK(pd.sync1);
 	if (slotIndex == -1) {/*ErrorHandler(EL_ERROR, "Sound source is already stopped");*/ return;}
 	pd.soundGroups[soundGroup].slots[slotIndex].stop(time);
 }
@@ -211,7 +211,7 @@ void PSource::rewind(bool start)
 bool PSource::prefetchComplete(int size)
 {
     player_data_s &pd = *(player_data_s *)&player->data;
-    LOCK4WRITE(pd.sync);//защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
+    SIMPLELOCK(pd.sync1);//защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
 	bool res = false;
 
 	do//цикл нужен только для обработки случая начальной загрузки 2*prefetchBytes байт, т.к. конец файла может быть достигнут на меньшем кол-ве байт
@@ -249,13 +249,15 @@ void PSource::play(float time)
     player_data_s &pd = *(player_data_s *)&player->data;
 
 	if (pd.pDS == nullptr) return;
-    LOCK4WRITE(pd.sync); //защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
+    spinlock::auto_simple_lock asl(pd.sync1); //защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
 
 	if (waitingForPrefetchComplete || (actualDataSize[0] == 0 && actualDataSize[1] == 0))
 	{
 		startPlayOnPrefetchComplete = time;
 		return;
 	}
+
+    asl.unlock();
 
 	Source::play(looped, time);
 }
@@ -264,7 +266,7 @@ bool PSource::update()
 {
     player_data_s &pd = *(player_data_s *)&player->data;
 	if (pd.pDS == nullptr) return false;
-    LOCK4WRITE(pd.sync);//защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
+    spinlock::auto_simple_lock asl(pd.sync1);//защищаем доступ к actualDataSize из read(), которая вызывается в параллельном потоке
 
 	if (!active) return slotIndex == -1;
 
@@ -290,6 +292,7 @@ bool PSource::update()
 
 		if (startPlayOnPrefetchComplete >= 0 && actualDataSize[0] > 0)//начинаем играть как только появились данные
 		{
+            asl.unlock();
 			Source::play(looped, startPlayOnPrefetchComplete);
 			startPlayOnPrefetchComplete = -1;
 		}

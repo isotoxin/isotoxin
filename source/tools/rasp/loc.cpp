@@ -373,7 +373,7 @@ int proc_dos2unix(const wstrings_c & pars)
     {
         bool ok = false;
         for (const wstr_c & e : exts)
-            if (f.ends(ts::wstr_c(CONSTWSTR(".")).append(e)) || fn_get_name_with_ext(f).equals(e))
+            if (f.ends( ts::wstr_c(CONSTWSTR("."),e).as_sptr() ) || fn_get_name_with_ext(f).equals(e))
             {
                 ok = true;
                 break;
@@ -425,7 +425,7 @@ int proc_unix2dos(const wstrings_c & pars)
     {
         bool ok = false;
         for (const wstr_c & e : exts)
-            if (f.ends(ts::wstr_c(CONSTWSTR(".")).append(e)) || fn_get_name_with_ext(f).equals(e))
+            if (f.ends( ts::wstr_c(CONSTWSTR("."),e).as_sptr() ) || fn_get_name_with_ext(f).equals(e))
             {
                 ok = true;
                 break;

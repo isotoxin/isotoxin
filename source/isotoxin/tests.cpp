@@ -108,7 +108,7 @@ void test_ipc()
 
         ts::Time::update_thread_time();
         npersec = nnnn * 1000 / ( ts::Time::current() - stime);
-        __debugbreak();
+        DEBUG_BREAK();
     }
 }
 
@@ -187,7 +187,7 @@ void dotests()
     //    //b.load_from_disk_file(L"C:\\2\\1\\json1");
     //    ts::json_c jsn;
     //    int n = jsn.parse( b.cstr() );
-    //    __debugbreak();
+    //    DEBUG_BREAK();
     //}
 
 
@@ -240,7 +240,7 @@ void dotests()
     //    sum += (int)el;
     //}
 
-   // __debugbreak();
+   // DEBUG_BREAK();
 
 #if 0
     {
@@ -263,7 +263,7 @@ void dotests()
 
     }
 
-    __debugbreak();
+    DEBUG_BREAK();
 #endif
 
 	/*
@@ -325,7 +325,7 @@ void dotests()
 	hm[1] = 2;
 	hm[3] = 4;
 
-	__debugbreak();
+	DEBUG_BREAK();
 	*/
 
     crash();

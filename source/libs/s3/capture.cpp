@@ -16,7 +16,7 @@ static int next_offset = 0;
 
 void capture_tick( capture_callback * data_callback, void *context )
 {
-    spinlock::auto_simple_lock l(sync);
+    SIMPLELOCK(sync);
 
     if (pDSCaptureBuffer)
     {
@@ -78,7 +78,7 @@ void format_by_index(int index)
 
 void stop_capture()
 {
-    spinlock::auto_simple_lock l(sync);
+    SIMPLELOCK(sync);
 
     if (pDSCaptureBuffer)
     {
@@ -122,7 +122,7 @@ bool start_capture(Format & cfmt, const Format * tryformats, int try_formats_cnt
 {
     stop_capture();
 
-    spinlock::auto_simple_lock l(sync);
+    SIMPLELOCK(sync);
 
     DEVICE device = (captureguid == DEFAULT_DEVICE) ? (DEVICE &)MY_DSDEVID_DefaultVoiceCapture : captureguid;
 

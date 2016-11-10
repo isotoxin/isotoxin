@@ -341,45 +341,47 @@ ts::uint32 dialog_addcontact_c::gm_handler( gmsg<ISOGM_CMD_RESULT>& r)
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-dialog_addgroup_c::dialog_addgroup_c(initial_rect_data_s &data) :gui_isodialog_c(data)
+dialog_addconference_c::dialog_addconference_c(initial_rect_data_s &data) :gui_isodialog_c(data)
 {
-    deftitle = title_new_groupchat;
+    deftitle = title_new_conference;
 }
 
-dialog_addgroup_c::~dialog_addgroup_c()
+dialog_addconference_c::~dialog_addconference_c()
 {
     if (gui)
         gui->delete_event(DELEGATE(this, hidectl));
 }
 
-/*virtual*/ void dialog_addgroup_c::created()
+/*virtual*/ void dialog_addconference_c::created()
 {
     set_theme_rect(CONSTASTR("main"), false);
+    networks();
+    update_options();
     __super::created();
     tabsel(CONSTASTR("1"));
-    update_lifetime();
     if (!networks_available)
         ctlenable( CONSTASTR("dialog_button_1"), false );
 }
 
-/*virtual*/ ts::ivec2 dialog_addgroup_c::get_min_size() const
+/*virtual*/ ts::ivec2 dialog_addconference_c::get_min_size() const
 {
     return ts::ivec2(510, 280);
 }
 
-void dialog_addgroup_c::getbutton(bcreate_s &bcr)
+void dialog_addconference_c::getbutton(bcreate_s &bcr)
 {
     __super::getbutton(bcr);
 }
 
-void dialog_addgroup_c::network_selected(const ts::str_c &prm)
+void dialog_addconference_c::network_selected(const ts::str_c &prm)
 {
     apid = prm.as_int();
     set_combik_menu(CONSTASTR("networks"), networks() );
-    update_lifetime();
+    update_options();
+    tabsel( CONSTASTR( "1" ) );
 }
 
-menu_c dialog_addgroup_c::networks()
+menu_c dialog_addconference_c::networks()
 {
     networks_available = false;
     menu_c nm;
@@ -388,7 +390,7 @@ menu_c dialog_addgroup_c::networks()
         if (ap.get_current_state() != CR_OK)
             mif |= MIF_DISABLED;
         int f = ap.get_features();
-        if (0 != (f & PF_GROUP_CHAT))
+        if (0 != (f & PF_CONFERENCE))
         {
             if (apid == 0)
             {
@@ -405,31 +407,30 @@ menu_c dialog_addgroup_c::networks()
     return nm;
 }
 
-bool dialog_addgroup_c::chatlifetime(RID,GUIPARAM p)
+bool dialog_addconference_c::chatoptions(RID,GUIPARAM p)
 {
-    persistent = p == nullptr;
+    o = oset.get( as_int(p) );
     return true;
 }
 
-void dialog_addgroup_c::update_lifetime()
+void dialog_addconference_c::update_options()
 {
     if (active_protocol_c *ap = prf().ap(apid))
     {
-        if ( 0 == (ap->get_features() & PF_GROUP_CHAT_PERSISTENT) )
-        {
-            // persistent group chats not supported yet
-            ctlenable(CONSTASTR("lifetime0"), false);
-            if (persistent)
-                if (RID p = find(CONSTASTR("lifetime1")))
-                    p.call_lbclick();
-        } else
-        {
-            ctlenable(CONSTASTR("lifetime0"), true);
-        }
+        ts::str_c oo = ap->get_infostr( IS_CONFERENCE_OPTIONS );
+        ts::parse_values( oo, [this]( const ts::pstr_c&k, const ts::pstr_c&v ) {
+            if ( k.equals( CONSTASTR( CONFA_OPT_TYPE ) ) )
+                oset.split( v.as_sptr(), '/' );
+        } );
+
+        if ( oset.size() == 0 )
+            o.clear();
+        else if ( o.is_empty() || oset.find( o ) < 0 )
+            o = oset.get(0);
     }
 }
 
-/*virtual*/ int dialog_addgroup_c::additions(ts::irect &)
+/*virtual*/ int dialog_addconference_c::additions(ts::irect &)
 {
     descmaker dm(this);
     dm << 1;
@@ -445,29 +446,43 @@ void dialog_addgroup_c::update_lifetime()
     }
     dm().vspace(5);
 
-    dm().textfield(TTT("Group chat name",250), CONSTWSTR(""), DELEGATE(this, groupname_handler)).focus(true);
+    dm().textfield(TTT("Conference name",250), CONSTWSTR(""), DELEGATE(this, confaname_handler)).focus(true);
     dm().vspace(5);
 
-    int incht = 0;
-    dm().radio(TTT("Group chat lifetime",252), DELEGATE(this, chatlifetime), incht).setmenu(
-        menu_c().add(TTT("Persistent (saved across client restarts)",253), 0, MENUHANDLER(), CONSTASTR("0"))
-        .add(TTT("Temporary (history log not saved; offline - leave group chat)",254), 0, MENUHANDLER(), CONSTASTR("1"))
-       ).setname("lifetime");
+    if (oset.size())
+    {
+        int incht = 0;
+
+        menu_c menu;
+        int i = 0;
+        for( const ts::str_c &ov : oset )
+        {
+            if ( ov.equals( CONSTASTR( "t" ) ) )
+                menu.add( TTT( "Text only conference", 253 ), 0, MENUHANDLER(), ts::amake( i ) );
+
+            if ( ov.equals( CONSTASTR( "a" ) ) )
+                menu.add( TTT( "Text and audio conference", 254 ), 0, MENUHANDLER(), ts::amake( i ) );
+
+            ++i;
+        }
+
+        dm().radio( TTT( "Conference options", 252 ), DELEGATE( this, chatoptions ), incht ).setmenu( menu );
+    }
 
     dm().vspace(5);
 
-    dm().hiddenlabel(TTT("Group chat name cannot be empty",251), true).setname(CONSTASTR("err1"));
+    dm().hiddenlabel(TTT("Conference name cannot be empty",251), true).setname(CONSTASTR("err1"));
 
     return 0;
 }
 
-bool dialog_addgroup_c::groupname_handler(const ts::wstr_c &m, bool )
+bool dialog_addconference_c::confaname_handler(const ts::wstr_c &m, bool )
 {
-    groupname = to_utf8(m);
+    confaname = to_utf8(m);
     return true;
 }
 
-/*virtual*/ bool dialog_addgroup_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
+/*virtual*/ bool dialog_addconference_c::sq_evt(system_query_e qp, RID rid, evt_data_s &data)
 {
     if (__super::sq_evt(qp, rid, data)) return true;
 
@@ -482,14 +497,14 @@ bool dialog_addgroup_c::groupname_handler(const ts::wstr_c &m, bool )
     return false;
 }
 
-bool dialog_addgroup_c::hidectl(RID, GUIPARAM p)
+bool dialog_addconference_c::hidectl(RID, GUIPARAM p)
 {
     MODIFY(RID::from_param(p)).visible(false);
     return true;
 }
 
 
-void dialog_addgroup_c::showerror(int id)
+void dialog_addconference_c::showerror(int id)
 {
     RID errr = find(CONSTASTR("err") + ts::amake(id));
     if (errr)
@@ -500,16 +515,21 @@ void dialog_addgroup_c::showerror(int id)
 
 }
 
-/*virtual*/ void dialog_addgroup_c::on_confirm()
+/*virtual*/ void dialog_addconference_c::on_confirm()
 {
-    if (groupname.is_empty())
+    if (confaname.is_empty())
     {
         showerror(1);
         return;
     }
 
+    ts::str_c co;
+
+    if ( oset.size() )
+        co.set( CONSTASTR( CONFA_OPT_TYPE ) ).append_char('=').append(o);
+
     if (active_protocol_c *ap = prf().ap(apid))
-        ap->add_group_chat(groupname, persistent);
+        ap->create_conference(confaname, co);
     __super::on_confirm();
 }
 

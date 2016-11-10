@@ -14,6 +14,7 @@ struct dialog_msgbox_params_s
     MENUHANDLER on_custom_h;
     ts::str_c on_custom_par;
     ts::bitmap_c bmp;
+    menu_c menu;
     bool bcancel_ = false;
     bool bok_ = true;
     bool bcustom_ = false;
@@ -34,14 +35,16 @@ struct dialog_msgbox_params_s
     dialog_msgbox_params_s& on_cancel(MENUHANDLER mh, const ts::str_c &par) {on_cancel_h = mh; on_cancel_par = par; return *this;}
     dialog_msgbox_params_s& on_custom( MENUHANDLER mh, const ts::str_c &par ) { on_custom_h = mh; on_custom_par = par; return *this; }
 
-    RID summon();
+    dialog_msgbox_params_s& checkboxes( const menu_c m ) { menu = m; return *this; }
+
+    RID summon( bool mainparent );
 };
 
 class dialog_msgbox_c;
 template<> struct MAKE_ROOT<dialog_msgbox_c> : public _PROOT(dialog_msgbox_c)
 {
     dialog_msgbox_params_s prms;
-    MAKE_ROOT(const dialog_msgbox_params_s &prms) : _PROOT(dialog_msgbox_c)(), prms(prms) { init( RS_NORMAL ); }
+    MAKE_ROOT(bool mainparent, const dialog_msgbox_params_s &prms) : _PROOT(dialog_msgbox_c)(), prms(prms) { init( rect_sys_e(RS_NORMAL | (mainparent ? RS_MAINPARENT : 0)) ); }
     ~MAKE_ROOT() {}
 };
 
@@ -51,6 +54,8 @@ class dialog_msgbox_c : public gui_isodialog_c
     dialog_msgbox_params_s m_params;
     ts::array_inplace_t<bcreate_s, 0> m_buttons;
     int height = 190;
+    ts::uint32 cbv = 0;
+    bool center_text = true;
 
     bool copy_text(RID, GUIPARAM);
     bool on_enter_press_func(RID, GUIPARAM);
@@ -69,6 +74,8 @@ protected:
     /*virtual*/ void on_confirm() override;
     /*virtual*/ void on_close() override;
     bool on_custom(RID, GUIPARAM);
+    bool checkboxes( RID, GUIPARAM );
+    bool checkboxes1( RID, GUIPARAM );
 public:
     dialog_msgbox_c(MAKE_ROOT<dialog_msgbox_c> &data);
     ~dialog_msgbox_c();
@@ -126,7 +133,7 @@ struct dialog_pb_params_s
 template<> struct MAKE_ROOT<dialog_pb_c> : public _PROOT(dialog_pb_c)
 {
     dialog_pb_params_s prms;
-    MAKE_ROOT(const dialog_pb_params_s &prms) : _PROOT(dialog_pb_c)(), prms(prms) { init( RS_NORMAL ); }
+    MAKE_ROOT(bool, const dialog_pb_params_s &prms) : _PROOT(dialog_pb_c)(), prms(prms) { init( (rect_sys_e)(RS_NORMAL | RS_MAINPARENT) ); }
     ~MAKE_ROOT() {}
 };
 
@@ -198,7 +205,7 @@ class dialog_entertext_c;
 template<> struct MAKE_ROOT<dialog_entertext_c> : public _PROOT(dialog_entertext_c)
 {
     dialog_entertext_params_s prms;
-    MAKE_ROOT(const dialog_entertext_params_s &prms) :_PROOT(dialog_entertext_c)(), prms(prms) { init( RS_NORMAL ); }
+    MAKE_ROOT(bool mainparent, const dialog_entertext_params_s &prms) :_PROOT(dialog_entertext_c)(), prms(prms) { init( rect_sys_e( RS_NORMAL | (mainparent ? RS_MAINPARENT : 0) ) ); }
     ~MAKE_ROOT() {}
 };
 

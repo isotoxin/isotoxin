@@ -371,7 +371,6 @@ size_t mspy_size(void *p)
 
 bool mspy_getallocated_info( memcb *cb, void *prm )
 {
-    int curl = 0;
     spylock();
     if ( first == nullptr )
     {

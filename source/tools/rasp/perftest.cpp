@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "libsodium/src/libsodium/include/sodium.h"
 
 using namespace ts;
 
@@ -318,6 +319,102 @@ struct data4test_s
 
 };
 
+struct gchkey_s
+{
+    byte key[32];
+    int closest[4];
+};
+
+static uint64_t calculate_comp_value( const uint8_t *pk1, const uint8_t *pk2 )
+{
+    uint64_t cmp1 = 0, cmp2 = 0;
+
+    size_t i;
+
+    for (i = 0; i < sizeof( uint64_t ); ++i) {
+        cmp1 = (cmp1 << 8) + (uint64_t)pk1[i];
+        cmp2 = (cmp2 << 8) + (uint64_t)pk2[i];
+    }
+
+    return (cmp1 - cmp2);
+}
+
+void addclosest( gchkey_s *keys, int to, int k )
+{
+    for (int i = 0; i < ARRAY_SIZE( keys->closest ); ++i)
+    {
+        if (keys[to].closest[i] < 0)
+        {
+            keys[to].closest[i] = k;
+            return;
+        }
+    }
+
+    size_t index = ARRAY_SIZE( keys->closest );
+
+    const uint8_t *real_pk = keys[k].key;
+    uint64_t comp_val = calculate_comp_value( keys[to].key, real_pk );
+    uint64_t comp_d = 0;
+
+    for (int i = 0; i < (ARRAY_SIZE( keys->closest ) / 2); ++i) {
+
+        uint64_t comp;
+        comp = calculate_comp_value( keys[to].key, keys[keys[to].closest[i]].key );
+
+        if (comp > comp_val && comp > comp_d) {
+            index = i;
+            comp_d = comp;
+        }
+    }
+
+    comp_val = calculate_comp_value( real_pk, keys[to].key );
+
+    for (int i = (ARRAY_SIZE( keys->closest ) / 2); i < ARRAY_SIZE( keys->closest ); ++i) {
+
+
+        uint64_t comp = calculate_comp_value( keys[keys[to].closest[i]].key, keys[to].key );
+
+        if (comp > comp_val && comp > comp_d) {
+            index = i;
+            comp_d = comp;
+        }
+    }
+
+    if (index < ARRAY_SIZE( keys->closest )) 
+    {
+        int rmpeer = keys[to].closest[index];
+        keys[to].closest[index] = k;
+
+        addclosest( keys, to, rmpeer );
+    }
+
+}
+
+void test_gchkeys()
+{
+    gchkey_s keys[16] = {};
+
+    for( int i=0;i<ARRAY_SIZE(keys);++i )
+    {
+        randombytes_buf( keys[i].key, 32 );
+        for (int j = 0; j < ARRAY_SIZE( keys[i].closest ); ++j)
+            keys[i].closest[j] = -1;
+    }
+    for (int i = 0; i < ARRAY_SIZE( keys ); ++i)
+    {
+        for (int j = 0; j < ARRAY_SIZE( keys ); ++j)
+        {
+            if (j == i) continue;
+            addclosest( keys, i, j );
+        }
+    }
+
+    for (int i = 0; i < ARRAY_SIZE( keys ); ++i)
+    {
+        Print( "%i: %i, %i - %i, %i\n", i, keys[i].closest[0], keys[i].closest[1], keys[i].closest[2], keys[i].closest[3], keys[i].closest[4] );
+    }
+}
+
 int proc_test(const wstrings_c & pars)
 {
     TSCOLOR c = ARGB<int>(-1,-2,-3,0);
@@ -336,10 +433,15 @@ int proc_test(const wstrings_c & pars)
             aval = (uint8)p.as_num_part<uint>(255,6);
     }
 
+    if (test == -1)
+    {
+        test_gchkeys();
 
-    data4test_s data(test, aval);
-    data.process();
-
+    } else
+    {
+        data4test_s data( test, aval );
+        data.process();
+    }
 
 
     return 0;

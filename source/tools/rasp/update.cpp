@@ -140,13 +140,17 @@ int proc_sign(const ts::wstrings_c & pars)
     ts::buf_c b; b.load_from_disk_file(arch);
     ts::aint archlen = b.size();
     ts::md5_c md5;
+    ts::uint8 blake2b[crypto_generichash_BYTES];
     md5.update(b.data(), b.size()); md5.done();
+    crypto_generichash( blake2b, sizeof(blake2b), b.data(), b.size(), nullptr, 0 );
 
     ts::wstr_c arch64 = fn_change_ext( arch, CONSTWSTR( "amd64.zip" ) );
     ts::buf_c b64; b64.load_from_disk_file( arch64 );
     ts::aint archlen64 = b64.size();
     ts::md5_c md5_64;
+    ts::uint8 blake2b_64[crypto_generichash_BYTES];
     md5_64.update( b64.data(), b64.size() ); md5_64.done();
+    crypto_generichash( blake2b_64, sizeof( blake2b_64 ), b64.data(), b64.size(), nullptr, 0 );
 
     ts::abp_c bp;
     b.load_from_disk_file(proc);
@@ -181,6 +185,8 @@ int proc_sign(const ts::wstrings_c & pars)
 
     ss.append(CONSTASTR("\r\nmd5=")).append_as_hex(md5.result(), 16);
     ss.append( CONSTASTR( "\r\nmd5-64=" ) ).append_as_hex( md5_64.result(), 16 );
+    ss.append( CONSTASTR( "\r\nblake2b=" ) ).append_as_hex( blake2b, sizeof( blake2b ) );
+    ss.append( CONSTASTR( "\r\nblake2b-64=" ) ).append_as_hex( blake2b_64, sizeof( blake2b_64 ) );
 
     unsigned char pk[crypto_sign_PUBLICKEYBYTES];
     unsigned char sk[crypto_sign_SECRETKEYBYTES];

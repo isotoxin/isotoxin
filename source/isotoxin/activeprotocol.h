@@ -222,6 +222,8 @@ public:
 
     void unlock_video_frame( incoming_video_frame_s *f );
 
+    ts::str_c get_actual_username() const;
+
     const ts::str_c &get_infostr(info_string_e s) const {return syncdata.lock_read()().getstr(s);};
     const ts::str_c &get_name() const {return syncdata.lock_read()().data.name;};
     const ts::str_c &get_tag() const { return syncdata.lock_read()().data.tag; };
@@ -277,13 +279,16 @@ public:
 
     void del_message( uint64 utag );
 
-    void join_group_chat(int gid, int cid);
-    void rename_group_chat(int gid, const ts::str_c &groupname);
-    void add_group_chat( const ts::str_c &groupname, bool persistent );
+    void join_conference(int gid, int cid);
+    void rename_conference(int gid, const ts::str_c &confaname);
+    void create_conference( const ts::str_c &confaname, const ts::str_c &o );
+    void del_conference( const ts::str_c &confa_id );
+    void enter_conference( const ts::str_c &confa_id );
+    void leave_conference( int gid, bool keep_leave );
     void resend_request( int cid, const ts::str_c &msg_utf8 );
     void add_contact( const ts::str_c& pub_id, const ts::str_c &msg_utf8 );
     void add_contact( const ts::str_c& pub_id ); // without authorization
-    void del_contact(int cid);
+    void del_contact(const contact_key_s &ck);
     void accept(int cid);
     void reject(int cid);
 
@@ -302,7 +307,7 @@ public:
 
     void avatar_data_request(int cid);
 
-    void typing(int cid);
+    void typing( const contact_key_s &ck );
     
     void export_data();
     void reset_data();

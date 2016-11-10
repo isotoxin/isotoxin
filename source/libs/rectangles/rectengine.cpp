@@ -102,6 +102,10 @@ bool rectengine_c::children_sort( fastdelegate::FastDelegate< bool (rectengine_c
         return !swap_them(e1, e2);
     }))
     {
+        for (rectengine_c *ch : children)
+            if (ch)
+                ch->getrect().need_recalc_screenpos();
+
         gui->dirty_hover_data();
         redraw();
         DEFERRED_UNIQUE_CALL(0, DELEGATE(this, cleanup_children), nullptr);
@@ -525,6 +529,8 @@ system_query_e me2sq( ts::mouse_event_e me )
         {
             MODIFY( *r ).pos( scr.lt ).size( scr.size() );
         }
+
+        r->need_recalc_screenpos();
     }
 }
 
@@ -616,6 +622,12 @@ void rectengine_root_c::my_wnd_s::kill()
     return !d.allowclose;
 }
 
+/*virtual*/ void rectengine_root_c::my_wnd_s::evt_on_exit()
+{
+    evt_data_s d;
+    owner()->sq_evt( SQ_EXIT, owner()->getrid(), d );
+}
+
 rectengine_root_c::rectengine_root_c( rect_sys_e sys)
 {
     redraw_rect = ts::irect( maximum<int>::value, minimum<int>::value );
@@ -641,7 +653,7 @@ rectengine_root_c::~rectengine_root_c()
 {
 	if (!syswnd.wnd && (pss.is_visible_and_nonzero_size() || pss.is_micromized()))
 	{
-        rpss.change_to(pss, this);
+        rpss.change_to(pss);
 
         struct shp_s : public ts::wnd_show_params_s
         {
@@ -741,7 +753,7 @@ rectengine_root_c::~rectengine_root_c()
 	} else if (!pss.is_visible_and_nonzero_size())
 	{
 		// window stil invisible => just change parameters
-		rpss.change_to(pss, this);
+		rpss.change_to(pss);
         syswnd.kill();
 	} else
 	{
@@ -757,7 +769,7 @@ rectengine_root_c::~rectengine_root_c()
             {
                 if ( force_apply_now || !pss.is_alphablend() )
                 {
-                    rpss.change_to( pss, engine );
+                    rpss.change_to( pss );
 
                     if ( update_frame )
                     {

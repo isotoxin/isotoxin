@@ -159,7 +159,7 @@ struct ipc_data_s
 
     bool send(const void *data, int datasize)
     {
-        spinlock::auto_simple_lock l(sync);
+        SIMPLELOCK(sync);
 
         DWORD w = 0;
         if (cleaup_buffers_signal)
@@ -185,7 +185,7 @@ struct ipc_data_s
 
     template<typename S> bool send(const S&s)
     {
-        spinlock::auto_simple_lock l(sync);
+        SIMPLELOCK(sync);
 
         DWORD w = 0;
         if (cleaup_buffers_signal)
@@ -317,7 +317,7 @@ struct ipc_data_s
 
         case DATATYPE_CLEANUP_BUFFERS:
             {
-                spinlock::auto_simple_lock l(sync);
+                SIMPLELOCK(sync);
                 cleanup_buffers();
             }
             return true;
@@ -342,7 +342,7 @@ struct ipc_data_s
                 }
 
 
-                spinlock::auto_simple_lock l(sync);
+                SIMPLELOCK(sync);
                 cleanup_buffers();
                 if (xchg_buffers_count < MAX_XCHG_BUFFERS)
                     insert_buffer(&bb);
@@ -730,7 +730,7 @@ void *ipc_junction_s::lock_buffer(int size)
 
     d.send(buf);
 
-    spinlock::auto_simple_lock xl(d.sync);
+    SIMPLELOCK(d.sync);
     d.insert_buffer( &b );
     return b.ptr->getptr();
 }
@@ -777,7 +777,7 @@ void ipc_junction_s::unlock_buffer(const void *ptr)
 {
     ipc_data_s &d = (ipc_data_s &)(*this);
     if (d.quit_quit_quit) return;
-    spinlock::auto_simple_lock l(d.sync);
+    SIMPLELOCK(d.sync);
     for (int i = 0; i < d.xchg_buffers_count;++i)
     {
         ipc_data_s::exchange_buffer_s &b = d.xchg_buffers[i];
@@ -822,7 +822,7 @@ void ipc_junction_s::cleanup_buffers()
     ipc_data_s &d = (ipc_data_s &)(*this);
     if (d.quit_quit_quit) return;
 
-    spinlock::auto_simple_lock l(d.sync);
+    SIMPLELOCK(d.sync);
 
     if (d.cleaup_buffers_signal)
     {

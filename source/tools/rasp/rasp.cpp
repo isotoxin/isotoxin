@@ -18,13 +18,7 @@
 #pragma USELIB( memspy )
 #pragma USELIB(rsvg)
 
-#ifdef _DEBUG
-#pragma comment(lib, "freetyped.lib")
-#else
 #pragma comment(lib, "freetype.lib")
-#endif // _DEBUG
-
-
 #pragma comment(lib, "zlib.lib")
 #pragma comment(lib, "minizip.lib")
 #pragma comment(lib, "sqlite3.lib")
@@ -311,7 +305,7 @@ int proc_hgver(const wstrings_c & pars)
         if (fnd)
         {
             //ts::start_app();
-            __debugbreak();
+            DEBUG_BREAK();
         }
     }
 

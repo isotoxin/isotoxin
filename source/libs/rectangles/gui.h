@@ -578,7 +578,7 @@ public:
         }
         else
         {
-            data.id = RID((int)m_rects.size());
+            data.id = RID(static_cast<int>(m_rects.size()));
             auto &sptr = m_rects.add();
             data.me = TSNEW(R, data);
             sptr = data.me;

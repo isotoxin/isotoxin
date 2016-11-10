@@ -49,7 +49,7 @@ class dialog_setup_network_c;
 template<> struct MAKE_ROOT<dialog_setup_network_c> : public _PROOT(dialog_setup_network_c)
 {
     dialog_protosetup_params_s prms;
-    MAKE_ROOT(const dialog_protosetup_params_s &prms) :_PROOT(dialog_setup_network_c)(), prms(prms) { init( rect_sys_e(RS_NORMAL|RS_MAINPARENT) ); }
+    MAKE_ROOT(bool, const dialog_protosetup_params_s &prms) :_PROOT(dialog_setup_network_c)(), prms(prms) { init( rect_sys_e(RS_NORMAL|RS_MAINPARENT) ); }
     ~MAKE_ROOT() {}
 };
 
@@ -115,7 +115,7 @@ class dialog_settings_c : public gui_isodialog_c, public sound_capture_handler_c
         MASK_PROFILE_CLIST          = SETBIT( NUMGEN_NEXT( ctlm ) ),
         MASK_PROFILE_NOTIFICATIONS  = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_CHAT           = SETBIT( NUMGEN_NEXT(ctlm) ),
-        MASK_PROFILE_GCHAT          = SETBIT( NUMGEN_NEXT(ctlm) ),
+        MASK_PROFILE_CONFERENCE          = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_MSGSNHIST      = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_FILES          = SETBIT( NUMGEN_NEXT(ctlm) ),
         MASK_PROFILE_NETWORKS       = SETBIT( NUMGEN_NEXT(ctlm) ),
@@ -313,7 +313,7 @@ private:
         BGROUP_COMMON3,
         BGROUP_CLIST,
         BGROUP_CHAT,
-        BGROUP_GCHAT,
+        BGROUP_CONFERENCE,
         BGROUP_MSGOPTS,
         BGROUP_TYPING,
         BGROUP_TYPING_NOTIFY,
@@ -380,7 +380,7 @@ private:
     enter_key_options_s ctl2send = EKO_ENTER_NEW_LINE;
     int double_enter = 0;
 
-    int collapse_beh = 2;
+    int collapse_beh = CBEH_BY_CLOSE_BUTTON;
     int oautoupdate = 0;
     int autoupdate = 2;
 

@@ -168,7 +168,7 @@ void ccollection_c::find_by_mask(wstrings_c & files, const ts::wsptr &fnmask, bo
         iterate_folders( pwstr_c(fnmask).substr(0, x), DELEGATE(&fld, filer) );
         for( const wstr_c &f : fld.m_folders )
         {
-            find_by_mask( files, ts::wstr_c(pwstr_c(fnmask).substr(0, x + 1)).append(f).append(pwstr_c(fnmask).substr(x+2)), full_paths);
+            find_by_mask( files, ts::wstr_c(pwstr_c(fnmask).substr(0, x + 1),f,pwstr_c(fnmask).substr(x+2)), full_paths);
         }
         return;
     }

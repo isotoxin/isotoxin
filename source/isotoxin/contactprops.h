@@ -13,8 +13,8 @@ class dialog_contact_props_c;
 template<> struct MAKE_ROOT<dialog_contact_props_c> : public _PROOT(dialog_contact_props_c)
 {
     dialog_contactprops_params_s prms;
-    MAKE_ROOT() :_PROOT(dialog_contact_props_c)() { init( RS_NORMAL ); }
-    MAKE_ROOT(const dialog_contactprops_params_s &prms) :_PROOT(dialog_contact_props_c)(), prms(prms) { init( RS_NORMAL ); }
+    MAKE_ROOT() :_PROOT(dialog_contact_props_c)() { init( (rect_sys_e)(RS_NORMAL | RS_MAINPARENT) ); }
+    MAKE_ROOT(bool, const dialog_contactprops_params_s &prms) :_PROOT(dialog_contact_props_c)(), prms(prms) { init( (rect_sys_e)(RS_NORMAL | RS_MAINPARENT) ); }
     ~MAKE_ROOT() {}
 };
 
@@ -39,13 +39,18 @@ class dialog_contact_props_c : public gui_isodialog_c
     ts::astrings_c tags;
     bool tags_handler(const ts::wstr_c &, bool );
 
+    ts::wstr_c regexp;
+    ts::wstr_c keywords;
+    bool regexp_handler( const ts::wstr_c &, bool );
+    bool keywords_handler( const ts::wstr_c &, bool );
+
     int imb = 0;
     keep_contact_history_e keeph = KCH_DEFAULT;
     auto_accept_audio_call_e aaac = AAAC_NOT;
     
     void history_settings( const ts::str_c& );
     void aaac_settings( const ts::str_c& );
-
+    
     void imb_settings( const ts::str_c& );
 
     menu_c gethistorymenu();

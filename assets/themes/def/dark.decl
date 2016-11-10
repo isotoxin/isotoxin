@@ -15,7 +15,7 @@ colors {
 	mark_bg=#64a7ff
 	smilesel_edge=#d9840f
 	smilesel_bg=#000000
-	achtung=#000000
+	achtung=#002973
 	text_appname=#d2fbc3
 	text_link=#00ff00
 	text_placeholder=#5e7083
@@ -43,6 +43,9 @@ colors {
 	msg_pm_time=#709def
 	msg_pm_bg=#353e3c
 	msg_pm_bg_found=#545358
+	msg_mine_quote=#a2c1a6
+	msg_other_quote=#bea834
+	msg_pm_quote=#bea645
 	msg_invite_bg=#132e25
 	load_bg=#545358
 	date_sep_bg=#746d6b
@@ -70,6 +73,8 @@ colors {
 	notice_call_text=#fff7e1
 	notice_reject_bg=#6679ae
 	notice_gchat_bg=#2e3645
+	notice_confa_new=#00ff00
+	notice_confa_rotten=#ff4700
 	notice_found_bg=#545358
 	notice_warning_bg=#ff6600
 	menu_item_text=#d0d1d2
@@ -137,7 +142,7 @@ colors {
 	head_text=#d8fff8
 	head_online=#00ff00
 	head_offline=#9d9ba4
-	filter_text=#080f08
+	filter_text=#aaaaaa
 	filter_inactive=#aaaaaa
 	filter_inactive_h=#aaaaca
 	filter_active=#00d600

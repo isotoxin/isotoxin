@@ -24,13 +24,13 @@ void active_protocol_s::set(int column, ts::data_value_s &v)
             config = v.blob;
             return;
         case 6:
-            options = (int)v.i;
+            options = static_cast<int>(v.i);
             return;
         case 7:
             avatar = v.blob;
             return;
         case 8:
-            sort_factor = (int)v.i;
+            sort_factor = static_cast<int>(v.i);
             return;
         case 9:
             configurable.login = v.text;
@@ -234,16 +234,16 @@ void contacts_s::set(int column, ts::data_value_s &v)
     switch (column)
     {
         case C_CONTACT_ID:
-            key.contactid = (int)v.i;
+            key.contactid = static_cast<int>(v.i);
             return;
         case C_PROTO_ID:
-            key.protoid = (ts::uint16)v.i;
+            key.protoid = static_cast<ts::uint16>( v.i );
             return;
         case C_META_ID:
-            metaid = (int)v.i;
+            metaid = static_cast<int>( v.i );
             return;
         case C_OPTIONS:
-            options = (int)v.i;
+            options = static_cast<int>( v.i );
             return;
         case C_NAME:
             name = v.text;
@@ -273,7 +273,7 @@ void contacts_s::set(int column, ts::data_value_s &v)
             avatar = v.blob;
             return;
         case C_AVATAR_TAG:
-            avatar_tag = (int)v.i;
+            avatar_tag = static_cast<int>( v.i );
             return;
     }
 }
@@ -424,13 +424,13 @@ void history_s::set(int column, ts::data_value_s &v)
             cr_time = v.i;
             return;
         case C_HISTORIAN:
-            historian = contact_key_s::buildfromdbvalue(v.i);
+            historian = contact_key_s::buildfromdbvalue( v.i, true );
             return;
         case C_SENDER:
-            sender = contact_key_s::buildfromdbvalue(v.i);
+            sender = contact_key_s::buildfromdbvalue( v.i, false );
             return;
         case C_RECEIVER:
-            receiver = contact_key_s::buildfromdbvalue(v.i);
+            receiver = historian.temp_type == TCT_CONFERENCE ? historian : contact_key_s::buildfromdbvalue( v.i, false );
             return;
         case C_TYPE_AND_OPTIONS:
             set_type_and_options( v.i );
@@ -465,11 +465,11 @@ void history_s::get(int column, ts::data_pair_s& v)
             v.i = sender.dbvalue();
             return;
         case C_RECEIVER:
-            v.i = receiver.dbvalue();
+            v.i = historian.is_conference() ? 0 : receiver.dbvalue();
             return;
         case C_TYPE_AND_OPTIONS:
             v.i = type;
-            v.i |= ((int64)options) << 16;
+            v.i |= static_cast<int64>(options) << 16;
             return;
         case C_MSG:
             if ( message_utf8 )
@@ -547,10 +547,10 @@ void unfinished_file_transfer_s::set(int column, ts::data_value_s &v)
     switch (column)
     {
         case 1:
-            historian = contact_key_s::buildfromdbvalue(v.i);
+            historian = contact_key_s::buildfromdbvalue(v.i, true);
             return;
         case 2:
-            sender = contact_key_s::buildfromdbvalue(v.i);
+            sender = contact_key_s::buildfromdbvalue(v.i, false);
             return;
         case 3:
             filename.set_as_utf8(v.text);
@@ -665,6 +665,353 @@ void unfinished_file_transfer_s::get_column_desc(int index, ts::column_desc_s&cd
 // transfer file
 
 
+/////// conferences
+
+void conference_s::set( int column, ts::data_value_s &v )
+{
+    switch ( column )
+    {
+    case C_PUBID:
+        pubid = v.text;
+        ASSERT( !confa );
+        return;
+    case C_NAME:
+        name = v.text;
+        ASSERT( !confa );
+        return;
+    case C_COMMENT:
+        comment = v.text;
+        ASSERT( !confa );
+        return;
+    case C_ID:
+        id = static_cast<int>(v.i);
+        return;
+    case C_APID:
+        proto_key.protoid = static_cast<ts::uint16>( v.i );
+        return;
+    case C_READTIME:
+        readtime = v.i;
+        return;
+    case C_FLAGS:
+        flags.__bits = static_cast<ts::flags32_s::BITS>(v.i);
+        return;
+    case C_TAGS:
+        tags.split<char>( v.text, ',' );
+        return;
+    case C_KEYWORDS:
+        keywords = ts::from_utf8(v.text);
+        textmatchkeywords.reset( text_match_c::build_from_template( keywords ) );
+        return;
+    }
+}
+
+void conference_s::get( int column, ts::data_pair_s& v )
+{
+    ts::column_desc_s ccd;
+    get_column_desc( column, ccd );
+    v.type_ = ccd.type_;
+    v.name = ccd.name_;
+    switch ( column )
+    {
+    case C_PUBID:
+        v.text = confa ? confa->get_pubid() : pubid;
+        return;
+    case C_NAME:
+        v.text = confa ? confa->get_name(false) : name;
+        return;
+    case C_COMMENT:
+        v.text = confa ? confa->get_comment() : comment;
+        return;
+    case C_ID:
+        v.i = id;
+        ASSERT( !confa || ( confa->getkey().contactid == (unsigned)id && confa->getkey().temp_type == TCT_CONFERENCE ) );
+        return;
+    case C_APID:
+        v.i = proto_key.protoid;
+        ASSERT( (!confa && proto_key.contactid == 0) || ( confa && confa->getkey().protoid == proto_key.protoid && confa->getkey().temp_type == TCT_CONFERENCE ) );
+        return;
+    case C_READTIME:
+        v.i = readtime;
+        return;
+    case C_FLAGS:
+        v.i = flags.__bits;
+        return;
+    case C_TAGS:
+        v.text = tags.join( ',' );
+        return;
+    case C_KEYWORDS:
+        v.text = ts::to_utf8(keywords);
+        return;
+    }
+}
+
+ts::data_type_e conference_s::get_column_type( int index )
+{
+    switch ( index )
+    {
+    case C_NAME:
+    case C_PUBID:
+    case C_COMMENT:
+    case C_TAGS:
+    case C_KEYWORDS:
+        return ts::data_type_e::t_str;
+    case C_ID:
+    case C_APID:
+    case C_FLAGS:
+        return ts::data_type_e::t_int;
+    case C_READTIME:
+        return ts::data_type_e::t_int64;
+    }
+    FORBIDDEN();
+    return ts::data_type_e::t_null;
+}
+
+void conference_s::get_column_desc( int index, ts::column_desc_s&cd )
+{
+    cd.type_ = get_column_type( index );
+    switch ( index )
+    {
+    case C_PUBID:
+        cd.name_ = CONSTASTR( "pubid" );
+        break;
+    case C_NAME:
+        cd.name_ = CONSTASTR( "name" );
+        break;
+    case C_COMMENT:
+        cd.name_ = CONSTASTR( "comment" );
+        break;
+    case C_ID:
+        cd.name_ = CONSTASTR( "confid" );
+        break;
+    case C_APID:
+        cd.name_ = CONSTASTR( "protoid" );
+        break;
+    case C_READTIME:
+        cd.name_ = CONSTASTR( "readtime" );
+        break;
+    case C_FLAGS:
+        cd.name_ = CONSTASTR( "flags" );
+        break;
+    case C_TAGS:
+        cd.name_ = CONSTASTR( "tags" );
+        return;
+    case C_KEYWORDS:
+        cd.name_ = CONSTASTR( "keywords" );
+        return;
+    default:
+        FORBIDDEN();
+    }
+}
+
+void conference_s::change_keywords( const ts::wstr_c& newkeywords )
+{
+    if (!newkeywords.equals( keywords ))
+    {
+        textmatchkeywords.reset( text_match_c::build_from_template( newkeywords ) );
+        keywords = newkeywords;
+        row_by_type( this ).changed();
+        prf().changed();
+    }
+}
+
+
+bool conference_s::update_name()
+{
+    if ( ASSERT( confa ) && !name.equals(confa->get_name(false)))
+    {
+        name = confa->get_name( false );
+        row_by_type( this ).changed();
+        prf().changed();
+        return true;
+    }
+
+    return false;
+}
+
+bool conference_s::update_comment()
+{
+    if (ASSERT( confa ) && !comment.equals( confa->get_comment() ))
+    {
+        comment = confa->get_comment();
+        row_by_type( this ).changed();
+        prf().changed();
+        return true;
+    }
+
+    return false;
+}
+
+bool conference_s::update_tags()
+{
+    if (ASSERT( confa ) && tags != confa->get_tags())
+    {
+        tags = confa->get_tags();
+        row_by_type( this ).changed();
+        prf().changed();
+        return true;
+    }
+
+    return false;
+}
+
+bool conference_s::update_keeph()
+{
+    if (ASSERT( confa ))
+    {
+        ts::flags32_s::BITS old = flags.__bits;
+        flags.__bits = flags.__bits & 0xffff;
+        flags.__bits |= (confa->get_keeph() << 16);
+
+        if (old != flags.__bits)
+        {
+            row_by_type( this ).changed();
+            prf().changed();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool conference_s::update_readtime()
+{
+    if ( ASSERT( confa ) && readtime != confa->get_readtime() )
+    {
+        readtime = confa->get_readtime();
+        row_by_type( this ).changed();
+        prf().changed();
+        return true;
+    }
+
+    return false;
+}
+
+bool conference_s::change_flag( ts::flags32_s::BITS mask, bool val )
+{
+    ts::flags32_s::BITS old = flags.__bits;
+    flags.init( mask, val );
+    if (old != flags.__bits)
+    {
+        row_by_type( this ).changed();
+        prf().changed();
+        return true;
+    }
+    return false;
+}
+
+bool conference_s::is_hl_message( const ts::wsptr &message, const ts::wsptr &my_name ) const
+{
+    if (my_name.l > 2 && ts::pwstr_c( message ).find_pos( my_name ) >= 0)
+        return true;
+
+    if (textmatchkeywords)
+        return textmatchkeywords->match( message );
+
+    return false;
+}
+
+// conferences
+
+/////// conference members
+
+void conference_member_s::set( int column, ts::data_value_s &v )
+{
+    switch ( column )
+    {
+    case 1:
+        pubid = v.text;
+        ASSERT( !memba );
+        return;
+    case 2:
+        name = v.text;
+        ASSERT( !memba );
+        return;
+    case 3:
+        id = static_cast<int>( v.i );
+        return;
+    case 4:
+        proto_key.protoid = static_cast<ts::uint16>( v.i );;
+        return;
+    }
+}
+
+void conference_member_s::get( int column, ts::data_pair_s& v )
+{
+    ts::column_desc_s ccd;
+    get_column_desc( column, ccd );
+    v.type_ = ccd.type_;
+    v.name = ccd.name_;
+    switch ( column )
+    {
+    case 1:
+        v.text = memba ? memba->get_pubid() : pubid;
+        return;
+    case 2:
+        v.text = memba ? memba->get_name( false ) : name;
+        return;
+    case 3:
+        v.i = id;
+        ASSERT( !memba || ( memba->getkey().contactid == (unsigned)id && memba->getkey().temp_type == TCT_UNKNOWN_MEMBER ) );
+        return;
+    case 4:
+        v.i = proto_key.protoid;
+        ASSERT( ( !memba && proto_key.contactid == 0 ) || ( memba && memba->getkey().protoid == proto_key.protoid && memba->getkey().temp_type == TCT_UNKNOWN_MEMBER ) );
+        return;
+    }
+}
+
+ts::data_type_e conference_member_s::get_column_type( int index )
+{
+    switch ( index )
+    {
+    case 1:
+    case 2:
+        return ts::data_type_e::t_str;
+    case 3:
+    case 4:
+        return ts::data_type_e::t_int;
+    }
+    FORBIDDEN();
+    return ts::data_type_e::t_null;
+}
+
+void conference_member_s::get_column_desc( int index, ts::column_desc_s&cd )
+{
+    cd.type_ = get_column_type( index );
+    switch ( index )
+    {
+    case 1:
+        cd.name_ = CONSTASTR( "pubid" );
+        break;
+    case 2:
+        cd.name_ = CONSTASTR( "name" );
+        break;
+    case 3:
+        cd.name_ = CONSTASTR( "membid" );
+        break;
+    case 4:
+        cd.name_ = CONSTASTR( "protoid" );
+        break;
+    default:
+        FORBIDDEN();
+    }
+}
+
+bool conference_member_s::update_name()
+{
+    if ( !name.equals( memba->get_name( false ) ) )
+    {
+        name = memba->get_name( false );
+        row_by_type( this ).changed();
+        prf().changed();
+        return true;
+    }
+
+    return false;
+}
+
+// conference members
+
+
 template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::prepare( ts::sqlitedb_c *db )
 {
     ts::tmp_array_inplace_t<ts::column_desc_s, 0> cds( T::columns );
@@ -705,62 +1052,63 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::flush( ts:
     {
         switch (r.st)
         {
-            case row_s::s_new:
-                if ( n_done >= n_per_call ) return true;
-            case row_s::s_changed:
-                if ( n_done >= n_per_call ) return true;
-                if (ASSERT(r.id != 0))
+        case row_s::s_new:
+            if ( n_done >= n_per_call ) return true;
+        case row_s::s_changed:
+            if ( n_done >= n_per_call ) return true;
+            if (ASSERT(r.id != 0))
+            {
+                vals.clear();
+                if (r.id > 0)
                 {
-                    vals.clear();
-                    if (r.id > 0)
-                    {
-                        ts::data_pair_s &dpair = vals.add();
-                        dpair.type_ = ts::data_type_e::t_int;
-                        dpair.name = CONSTASTR("id");
-                        dpair.i = r.id;
-                    }
-
-                    for(int i=1;i<T::columns;++i)
-                    {
-                        ts::data_pair_s &dpair = vals.add();
-                        r.other.get(i,dpair);
-                    }
-                    some_action = true;
-                    int newid = db->insert(T::get_table_name(), vals.array());
-                    if (r.id < 0)
-                    {
-                        __if_exists(T::maxid)
-                        {
-                            if (T::maxid > 0 && newid > T::maxid)
-                            {
-                                int other_newid = db->find_free(T::get_table_name(), CONSTASTR("id"));
-                                ts::data_pair_s idp;
-                                idp.name = CONSTASTR("id");
-                                idp.type_ = ts::data_type_e::t_int;
-                                idp.i = other_newid;
-                                db->update(T::get_table_name(), ts::array_wrapper_c<const ts::data_pair_s>(&idp, 1), ts::amake<uint>(CONSTASTR("id="), newid));
-                                newid = other_newid;
-                            }
-                        }
-
-                        new2ins[r.id] = newid;
-                    }
-                    r.id = newid;
-                    r.st = row_s::s_unchanged;
-                    if ( !all )
-                        ++n_done;
+                    ts::data_pair_s &dpair = vals.add();
+                    dpair.type_ = ts::data_type_e::t_int;
+                    dpair.name = CONSTASTR("id");
+                    dpair.i = r.id;
                 }
-                continue;
-            case row_s::s_delete:
-                if ( n_done >= n_per_call ) return true;
+
+                for(int i=1;i<T::columns;++i)
+                {
+                    ts::data_pair_s &dpair = vals.add();
+                    r.other.get(i,dpair);
+                }
                 some_action = true;
-                db->delrow(T::get_table_name(), r.id);
-                r.st = row_s::s_deleted;
+                int newid = db->insert(T::get_table_name(), vals.array());
+                if (r.id < 0)
+                {
+                    __if_exists(T::maxid)
+                    {
+                        if (T::maxid > 0 && newid > T::maxid)
+                        {
+                            int other_newid = db->find_free(T::get_table_name(), CONSTASTR("id"));
+                            ts::data_pair_s idp;
+                            idp.name = CONSTASTR("id");
+                            idp.type_ = ts::data_type_e::t_int;
+                            idp.i = other_newid;
+                            db->update(T::get_table_name(), ts::array_wrapper_c<const ts::data_pair_s>(&idp, 1), ts::amake<uint>(CONSTASTR("id="), newid));
+                            newid = other_newid;
+                        }
+                    }
+
+                    new2ins[r.id] = newid;
+                }
+                r.id = newid;
+                r.st = row_s::s_unchanged;
                 if ( !all )
                     ++n_done;
-                cleanup_requred = true;
-                continue;
-
+            }
+            continue;
+        case row_s::s_delete:
+            if ( n_done >= n_per_call ) return true;
+            some_action = true;
+            db->delrow(T::get_table_name(), r.id);
+            r.st = row_s::s_deleted;
+            if ( !all )
+                ++n_done;
+            cleanup_requred = true;
+            continue;
+        case row_s::s_temp:
+            continue;
         }
     }
 
@@ -808,8 +1156,8 @@ template<typename T, profile_table_e tabi> bool tableview_t<T, tabi>::reader(int
     ts::data_value_s v;
     if (CHECK(ts::data_type_e::t_int == getta(0, v))) // always id
     {
-        if (read_ids) read_ids->add( (int)v.i );
-        row_s &row = getcreate((int)v.i);
+        if (read_ids) read_ids->add( static_cast<int>(v.i) );
+        row_s &row = getcreate( static_cast<int>( v.i ) );
         if (!CHECK(row.st == row_s::s_unchanged)) return true;
 
         for(int i=1;i<T::columns;++i)
@@ -874,7 +1222,7 @@ ts::uint32 profile_c::gm_handler(gmsg<ISOGM_MESSAGE>&msg) // record history
             record_history(historian->getkey(), post);
 
         if (post.mt() == MTA_UNDELIVERED_MESSAGE)
-            g_app->undelivered_message(post);
+            g_app->undelivered_message( historian->getkey(), post );
     }
 
     return second_pass_requred ? GMRBIT_CALLAGAIN : 0;
@@ -943,6 +1291,10 @@ void profile_c::record_history( const contact_key_s&historian, const post_s &his
     auto &row = table_history.getcreate(0);
     row.other.historian = historian;
     static_cast<post_s &>(row.other) = history_item;
+
+    ASSERT( !historian.is_conference() || historian.temp_type == TCT_CONFERENCE );
+    ASSERT( historian.is_conference() || row.other.sender.temp_type == TCT_NONE );
+
     changed();
 }
 
@@ -950,8 +1302,11 @@ void profile_c::record_history( const contact_key_s&historian, const post_s &his
 void profile_c::kill_history_item(uint64 utag)
 {
     if(auto *row = table_history.find<true>([&](history_s &h) ->bool { return h.utag == utag; }))
-        if (row->deleted())
+        if ( row->deleted() )
+        {
             changed();
+            return;
+        }
 
     ts::tmp_str_c whr(CONSTASTR("utag=")); whr.append_as_num<int64>(utag);
     db->delrows(CONSTASTR("history"), whr);
@@ -959,16 +1314,7 @@ void profile_c::kill_history_item(uint64 utag)
 
 void profile_c::kill_history(const contact_key_s&historian)
 {
-    bool bchanged = false;
-    for (auto &row : table_history.rows)
-    {
-        if (row.other.historian == historian)
-            bchanged |= row.deleted();
-    }
-    if (bchanged)
-        changed();
-
-    // apply modification to db now due not all history items loaded
+    unload_history(historian);
     ts::tmp_str_c whr( CONSTASTR("historian=") ); whr.append_as_num( historian.dbvalue() );
     db->delrows( CONSTASTR("history"), whr );
 }
@@ -980,6 +1326,28 @@ void profile_c::unload_history( const contact_key_s&historian )
         if ( table_history.rows.get(i).other.historian == historian )
             table_history.rows.remove_slow( i );
     }
+}
+
+void profile_c::change_history_items( const contact_key_s &historian, const contact_key_s &old_sender, const contact_key_s &new_sender )
+{
+    ts::db_transaction_c __transaction( db );
+
+    table_history.cleanup();
+    for ( auto &row : table_history )
+        if ( row.other.historian == historian && row.other.sender == old_sender )
+            row.other.sender = new_sender, row.changed();
+
+    table_history.flush( db, true, false );
+
+    ts::tmp_str_c whr( CONSTASTR( "historian=" ) ); whr.append_as_num( historian.dbvalue() );
+    whr.append( CONSTASTR( " and sender=" ) ).append_as_num( old_sender.dbvalue() );
+
+    ts::data_pair_s dp;
+    dp.name = CONSTASTR( "sender" );
+    dp.type_ = ts::data_type_e::t_int64;
+    dp.i = new_sender.dbvalue();
+
+    db->update( CONSTASTR( "history" ), ts::array_wrapper_c<const ts::data_pair_s>( &dp, 1 ), whr );
 }
 
 bool profile_c::change_history_item(uint64 utag, contact_key_s & historian)
@@ -1103,10 +1471,20 @@ void profile_c::load_history( const contact_key_s&historian, allocpost *cb, void
             //p->historian = contact_key_s::buildfromdbvalue( dv.i );
 
             dg( history_s::C_SENDER, dv );
-            p->sender = contact_key_s::buildfromdbvalue( dv.i );
+            p->sender = contact_key_s::buildfromdbvalue( dv.i, false );
 
-            dg( history_s::C_RECEIVER, dv );
-            p->receiver = contact_key_s::buildfromdbvalue( dv.i );
+            if ( p->type != 0 ) // hint! non zero p->type means conference ( so unclear, I know, I know )
+            {
+                // conference!
+                dg( history_s::C_HISTORIAN, dv ); // read historian
+                p->receiver = contact_key_s::buildfromdbvalue( dv.i, true ); // receiver value of conference history items is always conference itself
+
+            } else
+            {
+                dg( history_s::C_RECEIVER, dv );
+                p->receiver = contact_key_s::buildfromdbvalue( dv.i, false );
+            }
+
 
             dg( history_s::C_TYPE_AND_OPTIONS, dv );
             p->set_type_and_options( dv.i );
@@ -1125,7 +1503,6 @@ void profile_c::load_history( const contact_key_s&historian, allocpost *cb, void
     r.prm = prm;
 
     db->read_table( history_s::get_table_name(), DELEGATE( &r, dr ), whr );
-
 }
 
 void profile_c::load_history( const contact_key_s&historian, time_t time, ts::aint nload, ts::tmp_tbuf_t<int>& loaded_ids )
@@ -1262,7 +1639,7 @@ void profile_c::detach_history( const contact_key_s&prev_historian, const contac
     if (changed)
     {
         this->changed();
-        table_history.flush(db, true); // very important to save now
+        table_history.flush(db, true, false); // very important to save now
     }
 }
 
@@ -1318,6 +1695,14 @@ int  profile_c::calc_history( const contact_key_s&historian, bool ignore_invites
     ts::tmp_str_c whr( CONSTASTR("historian=") ); whr.append_as_num( historian.dbvalue() );
     if (ignore_invites) whr.append( CONSTASTR(" and mtype<>2 and mtype<>103") ); // MTA_FRIEND_REQUEST MTA_OLD_REQUEST
     return db->count( CONSTASTR("history"), whr );
+}
+
+int  profile_c::calc_history( const contact_key_s&historian, const contact_key_s&sender )
+{
+    if ( !db ) return 0;
+    ts::tmp_str_c whr( CONSTASTR( "historian=" ) ); whr.append_as_num( historian.dbvalue() );
+    whr.append( CONSTASTR( " and sender=" ) ).append_as_num( sender.dbvalue() );
+    return db->count( CONSTASTR( "history" ), whr );
 }
 
 int  profile_c::calc_history_before( const contact_key_s&historian, time_t time )
@@ -1384,6 +1769,7 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
     MEMT( MEMT_PROFILE_COMMON );
 
     AUTOCLEAR( profile_flags, F_LOADING );
+    profile_flags.clear(F_LOADED_TABLES);
 
     if (db)
     {
@@ -1473,6 +1859,8 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
     PROFILE_TABLES
     #undef TAB
 
+    profile_flags.set( F_LOADED_TABLES );
+
     uuid = get<uint64>( CONSTASTR( "uuid" ), 0 );
 
     if ( uuid == 0 )
@@ -1516,6 +1904,7 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
 
     g_app->apply_debug_options();
     g_app->resetup_spelling();
+    load_protosort();
 
     return PLR_OK;
 }
@@ -1528,7 +1917,7 @@ void profile_c::load_undelivered()
     table.read(db, whr);
 
     for (const auto &row : table.rows)
-        g_app->undelivered_message(row.other);
+        g_app->undelivered_message(row.other.historian, row.other);
 
 }
 
@@ -1557,9 +1946,19 @@ profile_c::~profile_c()
 uint64 profile_c::getuid( uint cnt )
 {
     ASSERT( uuid > 0 );
+
     uint64 r = uuid;
     uuid += cnt;
-    param( CONSTASTR("uuid"), ts::tmp_str_c().set_as_num<uint64>( uuid ) );
+
+    if (cnt <= num_locked_uids)
+    {
+        num_locked_uids -= cnt;
+    } else
+    {
+        param( CONSTASTR( "uuid" ), ts::tmp_str_c().set_as_num<uint64>( r + cnt + 101 ) );
+        num_locked_uids = 101;
+    }
+
     return r;
 }
 
@@ -1676,13 +2075,13 @@ namespace
                     TSDEL(this);
 
                 if (e > 0)
-                    dialog_msgbox_c::mb_error(TTT("Your profile has not been encrypted. Error code: $", 378) / ts::wmake(e)).summon();
+                    dialog_msgbox_c::mb_error(TTT("Your profile has not been encrypted. Error code: $", 378) / ts::wmake(e)).summon(true);
                 else
                 {
                     if (enc)
-                        dialog_msgbox_c::mb_info(TTT("Your profile has been successfully encrypted. After [appname] restart, you will be prompted for password. Don't forget it!", 381)).summon();
+                        dialog_msgbox_c::mb_info(TTT("Your profile has been successfully encrypted. After [appname] restart, you will be prompted for password. Don't forget it!", 381)).summon( true );
                     else
-                        dialog_msgbox_c::mb_info(TTT("Your profile has been successfully decrypted.", 377)).summon();
+                        dialog_msgbox_c::mb_info(TTT("Your profile has been successfully decrypted.", 377)).summon( true );
                 }
 
                 return true;
@@ -1710,7 +2109,7 @@ namespace
 
         /*virtual*/ void    doit() override
         {
-            SUMMON_DIALOG<dialog_pb_c>(UD_ENCRYPT_PROFILE_PB, dialog_pb_c::params(
+            SUMMON_DIALOG<dialog_pb_c>(UD_ENCRYPT_PROFILE_PB, true, dialog_pb_c::params(
                 gui_isodialog_c::title(remove_enc ? title_removing_encryption : title_encrypting),
                 ts::wstr_c()
                 ).setpbproc(TSNEW(encryptor_c, remove_enc ? nullptr : passwhash)));
@@ -1789,7 +2188,7 @@ void profile_c::mb_error_load_profile( const ts::wsptr & prfn, profile_load_resu
     dialog_msgbox_c::mb_error( text )
         .bok( modal ? loc_text(loc_exit) : ts::wsptr() )
         .on_ok(modal ? s::exit_now : MENUHANDLER(), ts::asptr())
-        .summon();
+        .summon( true );
 }
 
 bool profile_c::addeditnethandler(dialog_protosetup_params_s &params)
@@ -1900,6 +2299,10 @@ void profile_c::flush_contacts()
     for ( const contact_key_s &ck : dirtycontacts )
     {
         const contact_c * c = contacts().find( ck );
+        
+        if (c->getkey().is_conference())
+            continue; // never save conferences here
+
         auto *row = table_contacts.find<false>( [&]( const contacts_s &k )->bool { return k.key == ck; } );
         if ( c && !c->get_options().unmasked().is( contact_c::F_DIP ) )
         {
@@ -2011,6 +2414,327 @@ ts::wstr_c profile_c::get_disabled_dicts()
 
     return ts::wstr_c();
 }
+
+bool profile_c::delete_conference( int id )
+{
+    ASSERT( profile_flags.is( F_LOADED_TABLES ) );
+
+    get_table_conference().cleanup();
+
+    for ( auto &c : get_table_conference() )
+    {
+        if ( c.other.id == id )
+        {
+            if (active_protocol_c *ap = prf().ap( c.other.proto_key.protoid ))
+            {
+                if (c.is_temp())
+                {
+                    ap->del_contact( c.other.proto_key );
+                } else
+                {
+                    ap->del_conference( c.other.pubid );
+                }
+            }
+            c.other.confa = nullptr;
+            if (c.deleted())
+                changed();
+            return true;
+        }
+    }
+
+    return false;
+}
+
+conference_s * profile_c::add_conference( const ts::str_c &pubid, const contact_key_s &protocol_key )
+{
+    ASSERT( find_conference(pubid, protocol_key.protoid) == nullptr && find_conference(protocol_key) == nullptr );
+
+    get_table_conference().cleanup();
+
+    auto is_present = [this]( int id )
+    {
+        for ( const auto &c : get_table_conference() )
+            if ( c.other.id == id )
+                return true;
+        return false;
+    };
+
+
+    int newid = 1;
+    for ( ; is_present( newid ); ++newid );
+
+    auto &nc = get_table_conference().getcreate(0);
+    nc.other.pubid = pubid;
+    nc.other.proto_key = protocol_key;
+    nc.other.id = newid;
+
+    nc.other.flags.init( conference_s::F_MIC_ENABLED, !prf().get_options().is( COPT_MUTE_MIC_ON_INVITE ) );
+    nc.other.flags.init( conference_s::F_SPEAKER_ENABLED, !prf().get_options().is( COPT_MUTE_SPEAKER_ON_INVITE ) );
+
+    if (nc.other.pubid.is_empty())
+    {
+        nc.other.pubid.set( CONSTASTR( "temp-" ) ).append_as_num( prf().getuid() );
+        nc.temp();
+    }
+
+    changed();
+
+    return &nc.other;
+}
+
+conference_member_s * profile_c::add_conference_member( const ts::str_c &pubid, const contact_key_s &protocol_key )
+{
+    ASSERT( find_conference_member( pubid, protocol_key.protoid ) == nullptr && (protocol_key.contactid == 0 || find_conference_member( protocol_key ) == nullptr) );
+
+    get_table_conference_member().cleanup();
+
+    auto is_present = [this]( int id )
+    {
+        for ( const auto &c : get_table_conference_member() )
+            if ( c.other.id == id )
+                return true;
+        return false;
+    };
+
+
+    int newid = 1;
+    for ( ; is_present( newid ); ++newid );
+
+    auto &ncm = get_table_conference_member().getcreate( 0 );
+    ncm.other.pubid = pubid;
+    ncm.other.proto_key = protocol_key;
+    ncm.other.id = newid;
+
+    ASSERT( !ncm.other.pubid.is_empty() );
+
+    changed();
+
+    return &ncm.other;
+}
+
+bool profile_c::delete_conference_member( int id )
+{
+    ASSERT( profile_flags.is( F_LOADED_TABLES ) );
+
+    get_table_conference_member().cleanup();
+
+    for ( auto &c : get_table_conference_member() )
+    {
+        if ( c.other.id == id )
+        {
+            c.other.memba = nullptr;
+            if ( c.deleted() )
+                changed();
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool profile_c::is_conference_member( const contact_key_s &ck )
+{
+    if ( ck.temp_type == TCT_UNKNOWN_MEMBER )
+        return nullptr != find_conference_member_by_id( ck.contactid );
+
+    get_table_conference().cleanup();
+
+    for ( const auto &confa : get_table_conference() )
+        if ( calc_history( confa.other.history_key(), ck ) > 0 )
+            return true;
+    return false;
+}
+
+void profile_c::make_contact_unknown_member( contact_c * c )
+{
+    ts::db_transaction_c __transaction( db );
+
+    contact_key_s oldkey = c->getkey();
+    killcontact( oldkey ); // remove from db
+    conference_member_s * cm = add_conference_member( c->get_pubid(), contact_key_s(0, 0, oldkey.protoid) );
+    cm->memba = c;
+    cm->update_name();
+    c->make_unknown_conference_member( cm->id );
+
+    get_table_conference().cleanup();
+
+    // fix history of conferences
+    for ( const auto &confa : get_table_conference() )
+    {
+        if ( confa.other.confa )
+        {
+            ASSERT( confa.other.confa->getkey() == confa.other.history_key() );
+            confa.other.confa->change_history_items( oldkey, c->getkey() );
+
+        } else
+            change_history_items( confa.other.history_key(), oldkey, c->getkey() );
+    }
+}
+
+void profile_c::make_contact_known( contact_c * c, const contact_key_s& proto_key )
+{
+    ts::db_transaction_c __transaction( db );
+    contact_key_s oldkey = c->getkey();
+
+    contacts().change_key( oldkey, proto_key );
+
+    get_table_conference().cleanup();
+
+    // fix history of conferences
+    for ( const auto &confa : get_table_conference() )
+    {
+        if ( confa.other.confa )
+        {
+            ASSERT( confa.other.confa->getkey() == confa.other.history_key() );
+            confa.other.confa->change_history_items( oldkey, c->getkey() );
+
+        }
+        else
+            change_history_items( confa.other.history_key(), oldkey, c->getkey() );
+    }
+
+}
+
+void profile_c::load_protosort()
+{
+    renew(protogroupsortdata);
+    ts::str_c ps( protosort() );
+
+    if ( !ps.is_empty() )
+    {
+        protogroupsortdata.set_count( ps.count_chars( ',' ) + 1, false );
+        ts::uint16 *data = protogroupsortdata.data16();
+
+        for ( ts::token<char> p( ps, ',' ); p; ++p )
+            *data++ = p->as_num<ts::uint16>();
+    }
+}
+
+void profile_c::save_protosort()
+{
+    ts::astrings_c ss;
+
+    bool seq_start = false;
+    ts::tbuf_t<ts::uint16> seq;
+    ts::str_c tmp;
+    int ff = 0;
+    for ( ts::uint16 v : protogroupsortdata )
+    {
+        if (!seq_start && v == 0)
+        {
+            seq.clear();
+            seq_start = true;
+            continue;
+        }
+
+        if (!seq_start)
+            continue;
+
+        if ( v == 0 )
+        {
+            seq_start = false;
+            seq.qsort();
+            tmp.set( CONSTASTR("0,") );
+            if (ff == 2 && seq.count() == 0)
+                tmp.append( CONSTASTR("$ffff,$ffff,") );
+            else
+                for ( ts::uint16 vv : seq )
+                    tmp.append_as_num( vv ).append_char(',');
+            tmp.append_char( '0' );
+            ss.get_string_index(tmp.as_sptr());
+            continue;
+        }
+
+        if (ap( v ) != nullptr)
+            seq.add( v );
+        else if (v == 0xffff)
+            ++ff;
+    }
+    protosort( ss.join(',') );
+}
+
+static void setup_prots( ts::tmp_tbuf_t<ts::uint16>& prots, const ts::uint16 * set_of_prots, ts::aint cnt )
+{
+    if (cnt)
+    {
+        prots.set_count( cnt + 2 );
+        prots.set( (ts::aint)0, (ts::uint16)0 );
+        prots.set( cnt + 1, 0 );
+        memcpy( prots.data16() + 1, set_of_prots, sizeof( ts::uint16 ) * cnt );
+    }
+    else
+    {
+        prots.set_count( 4 );
+        prots.set( (ts::aint)0, (ts::uint16)0 );
+        prots.set( (ts::aint)1, (ts::uint16)0xffff );
+        prots.set( (ts::aint)2, (ts::uint16)0xffff );
+        prots.set( (ts::aint)3, (ts::uint16)0 );
+    }
+}
+
+ts::aint profile_c::protogroupsort( const ts::uint16 * set_of_prots, ts::aint cnt )
+{
+    ts::tmp_tbuf_t<ts::uint16> prots;
+    setup_prots( prots, set_of_prots, cnt );
+
+    ts::aint i = protogroupsortdata.find_offset( prots.data16(), prots.count() );
+    if (i >= 0)
+        return i;
+
+    i = protogroupsortdata.count();
+    protogroupsortdata.append_buf(prots);
+
+    return i;
+}
+bool profile_c::protogroupsort_up( const ts::uint16 * set_of_prots, ts::aint cnt, bool test )
+{
+    ts::tmp_tbuf_t<ts::uint16> prots;
+    setup_prots( prots, set_of_prots, cnt );
+
+    ts::aint i = protogroupsortdata.find_offset( prots.data16(), prots.count() );
+    if (i <= 0) return false;
+
+    if (!test)
+    {
+        ASSERT( protogroupsortdata.get( i-1 ) == 0 );
+        ts::aint seek = i - 2;
+        for (; seek >= 0; --seek)
+            if (protogroupsortdata.get( seek ) == 0)
+                break;
+        ASSERT( seek >= 0 );
+        protogroupsortdata.cut( i * sizeof(ts::uint16), prots.byte_size() );
+        memcpy( protogroupsortdata.expand( seek * sizeof( ts::uint16 ), prots.byte_size() ), prots.data(), prots.byte_size() );
+        save_protosort();
+    }
+
+    return true;
+}
+bool profile_c::protogroupsort_dn( const ts::uint16 * set_of_prots, ts::aint cnt, bool test )
+{
+    ts::tmp_tbuf_t<ts::uint16> prots;
+    setup_prots( prots, set_of_prots, cnt );
+
+    ts::aint i = protogroupsortdata.find_offset( prots.data16(), prots.count() );
+    if (i >= protogroupsortdata.count() - prots.count()) return false;
+
+    if (!test)
+    {
+        protogroupsortdata.cut( i * sizeof( ts::uint16 ), prots.byte_size() );
+
+        ASSERT( protogroupsortdata.get( i ) == 0 );
+        ts::aint seek = i+1;
+        for (ts::aint pcnt = protogroupsortdata.count(); seek < pcnt; ++seek)
+            if (protogroupsortdata.get( seek ) == 0)
+                break;
+        ++seek;
+        ASSERT( seek <= protogroupsortdata.count() );
+        memcpy( protogroupsortdata.expand( seek * sizeof( ts::uint16 ), prots.byte_size() ), prots.data(), prots.byte_size() );
+        save_protosort();
+    }
+
+    return true;
+}
+
 
 #ifdef _DEBUG
 void profile_c::test()

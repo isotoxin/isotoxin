@@ -32,8 +32,8 @@ struct audio_format_s
     int sampleSize() const { return channels * (bits / 8); }
     int avgBytesPerSec() const { return sampleSize() * sample_rate; }
     int avgBytesPerMSecs(int ms) const { return sampleSize() * (sample_rate * ms / 1000); }
-    int bytesToMSec( int bytes ) const { return bytes * 1000 / ( sampleSize() * sample_rate ); }
-    int samplesToMSec( int samples ) const { return samples * 1000 / sample_rate; }
+    size_t bytesToMSec( size_t bytes ) const { return bytes * 1000 / ( sampleSize() * sample_rate ); }
+    size_t samplesToMSec( size_t samples ) const { return samples * 1000 / sample_rate; }
 };
 
 struct video_format_s
@@ -80,10 +80,10 @@ struct contact_data_s
         MAIN RULE: id is not index! Delete contact must not shift values!
         0 (zero) value reserved for self
         Positive (>0) values - ids of contacts
-        Negative (<0) values - ids of group chats
+        Negative (<0) values - ids of conferences
 
         id - stable identifier - must never be changed during contact lifetime
-        unused values (eg: deleted contacts or group chats) can be used with new ones
+        unused values (eg: deleted contacts or conferences) can be used with new ones
     */
     int id;
 
@@ -102,7 +102,7 @@ struct contact_data_s
     int *members; // cid's
     int members_count;
 
-    int groupchat_permissions;
+    int conference_permissions;
 
     contact_state_e state;
     contact_online_state_e ostate;
@@ -114,7 +114,7 @@ struct contact_data_s
         state = CS_ROTTEN;
         ostate = COS_ONLINE;
         gender = CSEX_UNKNOWN;
-        groupchat_permissions = 0;
+        conference_permissions = 0;
     }
 #endif
 };
@@ -194,7 +194,7 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     /*
         Incoming message!
         mt  - see enum for possible values
-        gid - negative (groupchat id) when groupchat message received, 0 - normal message
+        gid - negative (conference id) when conference message received, 0 - normal message
         cid - unique contact id (known and unknown contacts), see contact_data_s::id
         sendtime - message send time (sender should send it)
         msgbody_utf8, mlen - message itself
@@ -225,7 +225,7 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
         plugin should use this func to play audio or show video
         audio/video player will be automatically allocated for gid/cid client
 
-        gid - negative (groupchat id) when groupchat message received, 0 - normal message
+        gid - negative (conference id) when conference message received, 0 - normal message
         cid - unique contact id (known and unknown contacts), see contact_data_s::id
 
         audio system automatically allocates unique audio channel for gid-cid pair
@@ -242,7 +242,7 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     /*
         stream options from peer
 
-        gid - negative (groupchat id) when groupchat message received, 0 - normal message
+        gid - negative (conference id) when conference message received, 0 - normal message
         cid - unique contact id (known and unknown contacts), see contact_data_s::id
 
     */
@@ -285,7 +285,7 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     /*
         plugin should call this function 1 per second for every typing client
 
-        gid - negative (groupchat id) when groupchat message received, 0 - normal message
+        gid - negative (conference id) when conference message received, 0 - normal message
         cid - unique contact id (known and unknown contacts), see contact_data_s::id
 
     */
@@ -303,42 +303,45 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
 */
 
 #define PROTO_FUNCTIONS \
-    FUNC1( void, tick,           int * ) \
+    FUNC1( void, tick,              int * ) \
     FUNC0( void, goodbye ) \
-    FUNC1( void, set_name,       const char* ) \
-    FUNC1( void, set_statusmsg,  const char* ) \
-    FUNC2( void, set_config,     const void*, int ) \
-    FUNC2( void, set_avatar,     const void*, int ) \
-    FUNC1( void, set_ostate,     int ) \
-    FUNC1( void, set_gender,     int ) \
+    FUNC1( void, set_name,          const char* ) \
+    FUNC1( void, set_statusmsg,     const char* ) \
+    FUNC2( void, set_config,        const void*, int ) \
+    FUNC2( void, set_avatar,        const void*, int ) \
+    FUNC1( void, set_ostate,        int ) \
+    FUNC1( void, set_gender,        int ) \
     FUNC0( void, init_done ) \
     FUNC0( void, online ) \
     FUNC0( void, offline ) \
     FUNC0( void, export_data ) \
-    FUNC1( void, save_config,    void * ) \
-    FUNC2( int,  add_contact,    const char*, const char* ) \
-    FUNC2( int,  resend_request, int, const char* ) \
-    FUNC1( void, del_contact,    int ) \
-    FUNC2( void, send_message,   int, const message_s * ) \
-    FUNC1( void, del_message,    u64 ) \
-    FUNC1( void, accept,         int ) \
-    FUNC1( void, reject,         int ) \
-    FUNC2( void, call,           int, const call_info_s * ) \
-    FUNC1( void, stop_call,      int ) \
-    FUNC1( void, accept_call,    int ) \
-    FUNC2( int,  send_av,        int, const call_info_s * ) \
-    FUNC2( void, stream_options, int, const stream_options_s * ) \
-    FUNC2( void, file_send,      int, const file_send_info_s *) \
-    FUNC2( void, file_accept,    u64, u64) \
-    FUNC2( void, file_control,   u64, file_control_e) \
-    FUNC2( bool, file_portion,   u64, const file_portion_s *) \
-    FUNC1( void, get_avatar,     int ) \
-    FUNC2( void, add_groupchat,  const char *, bool ) \
-    FUNC2( void, ren_groupchat,  int, const char * ) \
-    FUNC2( void, join_groupchat, int, int ) \
-    FUNC1( void, typing,         int ) \
-    FUNC1( void, logging_flags,  unsigned int ) \
-    FUNC1( void, telemetry_flags,  unsigned int ) \
+    FUNC1( void, save_config,       void * ) \
+    FUNC2( int,  add_contact,       const char*, const char* ) \
+    FUNC2( int,  resend_request,    int, const char* ) \
+    FUNC1( void, del_contact,       int ) \
+    FUNC2( void, send_message,      int, const message_s * ) \
+    FUNC1( void, del_message,       u64 ) \
+    FUNC1( void, accept,            int ) \
+    FUNC1( void, reject,            int ) \
+    FUNC2( void, call,              int, const call_info_s * ) \
+    FUNC1( void, stop_call,         int ) \
+    FUNC1( void, accept_call,       int ) \
+    FUNC2( int,  send_av,           int, const call_info_s * ) \
+    FUNC2( void, stream_options,    int, const stream_options_s * ) \
+    FUNC2( void, file_send,         int, const file_send_info_s *) \
+    FUNC2( void, file_accept,       u64, u64) \
+    FUNC2( void, file_control,      u64, file_control_e) \
+    FUNC2( bool, file_portion,      u64, const file_portion_s *) \
+    FUNC1( void, get_avatar,        int ) \
+    FUNC2( void, create_conference, const char *, const char * ) \
+    FUNC2( void, ren_conference,    int, const char * ) \
+    FUNC2( void, join_conference,   int, int ) \
+    FUNC1( void, del_conference,    const char * ) \
+    FUNC1( void, enter_conference,  const char * ) \
+    FUNC2( void, leave_conference,  int, int ) \
+    FUNC1( void, typing,            int ) \
+    FUNC1( void, logging_flags,     unsigned int ) \
+    FUNC1( void, telemetry_flags,   unsigned int ) \
     
 
 struct proto_functions_s

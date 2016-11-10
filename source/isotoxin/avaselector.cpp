@@ -491,13 +491,12 @@ bool dialog_avaselector_c::generate_identicon( RID, GUIPARAM )
 {
     animated = false;
 
-    ts::md5_c md5;
     ts::str_c somerandomstuff;
     somerandomstuff.append_as_num( ts::Time::current().raw() );
     somerandomstuff.append_as_num( random64() );
-    md5.update( somerandomstuff.cstr(), somerandomstuff.get_length() );
-    md5.done();
-    gen_identicon( bitmap, md5.result() );
+    ts::uint8 hash[BLAKE2B_HASH_SIZE_SMALL];
+    BLAKE2B( hash, somerandomstuff.cstr(), somerandomstuff.get_length() );
+    gen_identicon( bitmap, hash );
     newimage();
 
     return true;
@@ -1040,8 +1039,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
 
                 } else
                 {
-                    ts::wstr_c infostr(ts::roundstr<ts::wstr_c, float>(resize_k * 100.0f, 1));
-                    infostr.append(CONSTWSTR("%, "));
+                    ts::wstr_c infostr( ts::roundstr<ts::wstr_c, float>(resize_k * 100.0f, 1), CONSTWSTR( "%, " ) );
                     infostr.append_as_uint(avarect.width());
                     infostr.append(CONSTWSTR(" x "));
                     infostr.append_as_uint(avarect.height());
@@ -1098,7 +1096,7 @@ void dialog_avaselector_c::draw_process(ts::TSCOLOR col, bool cam, bool cambusy)
 
                 draw_data_s&dd = getengine().begin_draw();
 
-                ts::wstr_c t(CONSTWSTR("<l>"),  loc_text(loc_dropimagehere)); t.append(CONSTWSTR("</l>"));
+                ts::wstr_c t(CONSTWSTR("<l>"),  loc_text(loc_dropimagehere), CONSTWSTR("</l>"));
                 ts::ivec2 tsz = gui->textsize(ts::g_default_text_font, t);
                 ts::ivec2 tpos = (viewrect.size() - tsz) / 2;
 

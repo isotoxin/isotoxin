@@ -5,8 +5,8 @@ template<> struct MAKE_ROOT<dialog_prepareimage_c> : public _PROOT(dialog_prepar
 {
     contact_key_s ck;
     ts::bitmap_c bitmap;
-    MAKE_ROOT(const contact_key_s &ck) : _PROOT(dialog_prepareimage_c)(), ck(ck)  { init( RS_NORMAL ); }
-    MAKE_ROOT(const contact_key_s &ck, const ts::bitmap_c &bitmap) : _PROOT(dialog_prepareimage_c)(), ck(ck), bitmap(bitmap)  { init( RS_NORMAL ); }
+    MAKE_ROOT(bool, const contact_key_s &ck) : _PROOT(dialog_prepareimage_c)(), ck(ck)  { init( (rect_sys_e)(RS_NORMAL|RS_MAINPARENT) ); }
+    MAKE_ROOT(bool, const contact_key_s &ck, const ts::bitmap_c &bitmap) : _PROOT(dialog_prepareimage_c)(), ck(ck), bitmap(bitmap)  { init( (rect_sys_e)(RS_NORMAL|RS_MAINPARENT) ); }
     ~MAKE_ROOT() {}
 };
 
@@ -148,10 +148,10 @@ class desktopgrab_c;
 template<> struct MAKE_ROOT<desktopgrab_c> : public _PROOT( desktopgrab_c )
 {
     ts::irect r;
-    contact_key_s k;
+    uint64 avk;
     int monitor;
     bool av_call;
-    MAKE_ROOT( const ts::irect &r, const contact_key_s &k, int monitor, bool av_call ) :_PROOT( desktopgrab_c )( ), r( r ), k(k), monitor(monitor), av_call( av_call ) { init( RS_TOOL ); }
+    MAKE_ROOT( const ts::irect &r, uint64 avk, int monitor, bool av_call ) :_PROOT( desktopgrab_c )( ), r( r ), avk( avk ), monitor(monitor), av_call( av_call ) { init( RS_TOOL ); }
     ~MAKE_ROOT();
 };
 
@@ -166,7 +166,7 @@ class desktopgrab_c : public gui_control_c
     int monitor = 0;
     int tickvalue = 0;
     framedrawer_s fd;
-    contact_key_s k;
+    uint64 avk;
 
     bool av_call;
 
@@ -181,6 +181,6 @@ public:
     /*virtual*/ ts::wstr_c get_name() const override { return ts::wstr_c(); }
     /*virtual*/ bool sq_evt( system_query_e qp, RID rid, evt_data_s &data ) override;
 
-    static void run( const contact_key_s &k, bool av_call );
+    static void run( uint64 avkey, bool av_call );
 
 };

@@ -85,7 +85,7 @@ bool save_to_bmp_format(buf_c &buf, const bmpcore_exbody_s &bmp, int options)
     BITMAPINFOHEADER bmInfoHeader = {};
 
     if (bmp.info().bytepp() != 1 && bmp.info().bytepp() != 3 && bmp.info().bytepp() != 4) return false;
-    if ((bmp.info().bitpp >> 3) != bmp.info().bytepp()) return false;
+    if ((bmp.info().bitpp >> 3) != (unsigned)bmp.info().bytepp()) return false;
 
     int lPitch = (int)(((bmp.info().bytepp()*bmp.info().sz.x - 1) / 4 + 1) * 4);
 

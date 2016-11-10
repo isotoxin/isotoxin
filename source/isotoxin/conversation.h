@@ -12,7 +12,7 @@ enum notice_e
     NOTICE_CALL_INPROGRESS,
     NOTICE_CALL,
     NOTICE_FILE,
-    NOTICE_GROUP_CHAT,
+    NOTICE_CONFERENCE,
     NOTICE_PREV_NEXT,
     
     NOTICE_WARN_NODICTS,
@@ -65,6 +65,13 @@ template<> struct MAKE_CHILD<gui_notice_callinprogress_c> : public _PCHILD(gui_n
     ~MAKE_CHILD();
 };
 
+class gui_notice_conference_c;
+template<> struct MAKE_CHILD<gui_notice_conference_c> : public _PCHILD( gui_notice_conference_c )
+{
+    MAKE_CHILD( RID parent_ ) { parent = parent_; }
+    ~MAKE_CHILD();
+};
+
 class gui_notice_c : public gui_label_ex_c
 {
     DUMMY(gui_notice_c);
@@ -99,13 +106,13 @@ protected:
     void update_text(int dtimesec = 0);
 
     bool b_turn_off_spelling(RID, GUIPARAM);
-    bool b_noti_switch( RID, GUIPARAM p );
 
 public:
     gui_notice_c() {}
     gui_notice_c(MAKE_CHILD<gui_notice_c> &data);
     gui_notice_c(MAKE_CHILD<gui_notice_network_c> &data);
     gui_notice_c(MAKE_CHILD<gui_notice_callinprogress_c> &data);
+    gui_notice_c(MAKE_CHILD<gui_notice_conference_c> &data);
     /*virtual*/ ~gui_notice_c();
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
@@ -201,7 +208,7 @@ public:
     /*virtual*/ void created() override;
     /*virtual*/ bool sq_evt(system_query_e qp, RID rid, evt_data_s &data) override;
 
-    void setup(contact_c *collocutor);
+    void setup_callinprogress();
 
     void setcam( vsb_c *cam ) { camera.reset(cam); }
 
@@ -216,6 +223,52 @@ public:
         return avcp.get();
     }
     vsb_c *getcamera() { return camera.get();  }
+};
+
+class gui_notice_conference_c : public gui_notice_c
+{
+    static const ts::flags32_s::BITS F_FIRST_TIME = F_FREEBITSTART_NOTICE << 0;
+    static const ts::flags32_s::BITS F_COLLAPSED = F_FREEBITSTART_NOTICE << 1;
+    static const ts::flags32_s::BITS F_INDICATOR = F_FREEBITSTART_NOTICE << 2;
+
+    struct member_s
+    {
+        MOVABLE( true );
+
+        static const int hltime = 7000;
+
+        ts::shared_ptr<contact_c> c;
+        enum mt_e
+        {
+            T_NORMAL,
+            T_ROTTEN,
+            T_NEW,
+        } t = T_NEW;
+        ts::Time offtime = ts::Time::current() + hltime;
+        bool present = true;
+
+        member_s( contact_c*c ):c(c) {}
+    };
+
+    ts::array_inplace_t< member_s, 8 > members;
+    ts::safe_ptr<gui_button_c> collapse_btn;
+    ts::astrings_c names;
+
+    bool recheck( RID, GUIPARAM c );
+    bool on_collapse_or_expand( RID, GUIPARAM );
+
+    void update();
+
+    bool check_indicator( RID, GUIPARAM );
+
+public:
+    gui_notice_conference_c( MAKE_CHILD<gui_notice_conference_c> &data );
+    /*virtual*/ ~gui_notice_conference_c();
+
+    /*virtual*/ void created() override;
+    /*virtual*/ bool sq_evt( system_query_e qp, RID rid, evt_data_s &data );
+
+    void setup_conference();
 };
 
 class gui_notice_network_c : public gui_notice_c
@@ -344,6 +397,7 @@ class gui_message_item_c : public gui_label_ex_c
         MICOL_TEXT_UND = 1,
         MICOL_TIME = 2,
         MICOL_LINK = 3,
+        MICOL_QUOTE = 4,
     };
 
     static const int BTN_EXPLORE = 0;
@@ -476,18 +530,6 @@ class gui_message_item_c : public gui_label_ex_c
     
     bool try_select_link(RID r = RID(), GUIPARAM p = nullptr);
 
-    void prepare_str_prefix( ts::wstr_c &pret, ts::wstr_c &postt )
-    {
-        pret.set(CONSTWSTR("<p><r> <color=#"));
-        ts::TSCOLOR c = get_default_text_color(2);
-        pret.append_as_hex(ts::RED(c))
-            .append_as_hex(ts::GREEN(c))
-            .append_as_hex(ts::BLUE(c))
-            .append_as_hex(ts::ALPHA(c))
-            .append(CONSTWSTR(">"));
-        postt.set(CONSTWSTR("</color></r>"));
-    }
-
     void prepare_text_time(time_t posttime);
     void add_text_time(ts::wstr_c &newtext);
 
@@ -597,6 +639,7 @@ public:
 
     bool is_history_load_button() const {return MTA_HISTORY_LOAD_BUTTON == mt;}
     bool is_date_separator() const {return MTA_DATE_SEPARATOR == mt;}
+    bool is_typing() const { return MTA_TYPING == mt; }
     void init_date_separator( const tm &tmtm );
     void init_request( const ts::asptr &message_utf8 );
     void init_load( ts::aint n_load );
@@ -605,7 +648,7 @@ public:
 
 
     bool is_file() const { return MTA_RECV_FILE == mt || MTA_SEND_FILE == mt; }
-    bool is_message() const { return MTA_MESSAGE == mt || MTA_UNDELIVERED_MESSAGE == mt; }
+    bool is_message() const { return is_message_mt((message_type_app_e)mt); }
     bool is_super_message() const { return MTA_SUPERMESSAGE == mt; }
     bool setup_super_message( contact_root_c *cr, ts::aint post_index, ts::aint post_index2 = -1 );
     void setup_super_message( gui_message_item_c *other );
@@ -700,8 +743,8 @@ class gui_messagelist_c : public gui_vscrollgroup_c
         int ap;
     };
     ts::array_inplace_t<protodesc_s, 1> protodescs;
-    ts::wstr_c my_name_in_group;
-    int group_apid = 0;
+    ts::wstr_c my_name_in_conference;
+    int conference_apid = 0;
 
     void clear_list(bool empty_mode);
     gui_message_item_c *insert_message_item( gmsg<ISOGM_SUMMON_POST> &p, contact_c *author );
@@ -758,8 +801,6 @@ public:
 
     bool insert_date_separator( ts::aint index, tm &prev_post_time, time_t next_post_time );
     void restore_date_separator( ts::aint index, ts::aint cnt );
-
-    bool is_personal_message( const ts::wstr_c& messagetext, int group_apid );
 
     void find_prev_next(uint64 *prevutag, uint64 *nextutag);
     void goto_item(uint64 utag);
@@ -829,6 +870,7 @@ class gui_message_editor_c : public gui_textedit_c, public spellchecker_s
     ts::safe_ptr<leech_dock_bottom_right_s> smile_pos_corrector;
     ts::ivec2 rb;
 
+    bool complete_name( RID, GUIPARAM );
     bool show_smile_selector(RID, GUIPARAM);
     bool clear_text(RID, GUIPARAM);
     bool on_enter_press_func(RID, GUIPARAM);
@@ -840,6 +882,9 @@ class gui_message_editor_c : public gui_textedit_c, public spellchecker_s
 
     /*virtual*/ void paste_( int cp) override;
     /*virtual*/ void new_text( int caret_char_pos ) override;
+
+    ts::wstr_c last_curt;
+    ts::wstr_c last_name;
 
 public:
     gui_message_editor_c(initial_rect_data_s &data) :gui_textedit_c(data) {}

@@ -145,14 +145,14 @@ MODIFY::MODIFY(RID id)
 	client = gui->get_rect(id);
 	if (client)
     {
-        change_to( client->getprops() );
+        set( client->getprops().update_screenpos() );
         client->__spec_inmod(1);
     }
 }
 
 MODIFY::MODIFY(guirect_c &r):client(&r) 
 {
-	change_to( client->getprops() );
+	set( client->getprops().update_screenpos() );
     client->__spec_inmod(1);
 }
 
@@ -166,8 +166,24 @@ MODIFY::~MODIFY()
     }
 }
 
-bool rectprops_c::change_to(const rectprops_c &p, rectengine_c *engine)
+const rectprops_c & rectprops_c::update_screenpos() const
 {
+    if ( m_flags.is(F_RECALC_SCREENPOS) )
+        if (guirect_c *r = owner())
+        {
+            m_screenpos = m_pos;
+            if(RID p = r->getparent())
+                m_screenpos += HOLD(p)().getprops().screenpos();
+            const_cast<rectprops_c *>(this)->m_flags.clear( F_RECALC_SCREENPOS );
+        }
+    return *this;
+}
+
+bool rectprops_c::change_to(const rectprops_c &p)
+{
+    guirect_c &guirect = *owner();
+    rectengine_c &engine = guirect.getengine();
+
     ts::ivec2 oldsize = currentsize();
     evt_data_s evtd;
 
@@ -175,7 +191,7 @@ bool rectprops_c::change_to(const rectprops_c &p, rectengine_c *engine)
     evtd.rectchg.rect = p.rect();
     evtd.rectchg.area = 0;
     evtd.rectchg.apply = false;
-    engine->sq_evt(SQ_RECT_CHANGING, engine->getrid(), evtd);
+    engine.sq_evt(SQ_RECT_CHANGING, engine.getrid(), evtd);
 
     bool zindex_changed = zindex() != p.zindex(); //-V550
     bool hl_changed = is_highlighted() != p.is_highlighted();
@@ -183,7 +199,8 @@ bool rectprops_c::change_to(const rectprops_c &p, rectengine_c *engine)
     bool vis_changed = is_visible() != p.is_visible();
     ts::ivec2 posdelta = p.screenpos() - screenpos();
     
-    change_to(p); m_size = evtd.rectchg.rect.get().size(); // change current property set
+    set(p); m_size = evtd.rectchg.rect.get().size(); // change current property set
+    m_flags.set(F_RECT_MEMBER);
 
     // changed values for notifications
     evtd.changed.pos_changed = posdelta != ts::ivec2(0);
@@ -193,35 +210,36 @@ bool rectprops_c::change_to(const rectprops_c &p, rectengine_c *engine)
     evtd.changed.zindex = zindex_changed;
     evtd.changed.rect = rect();
     if (evtd.changed.pos_changed)
-        engine->__spec_apply_screen_pos_delta_not_me(posdelta);
+        engine.__spec_apply_screen_pos_delta_not_me(posdelta);
     if (evtd.changed.pos_changed || evtd.changed.size_changed)
     {
-        engine->redraw();
-        evtd.changed.manual = engine->is_manual_move_resize();
-        engine->sq_evt(SQ_RECT_CHANGED, engine->getrid(), evtd);
+        engine.redraw();
+        evtd.changed.manual = engine.is_manual_move_resize();
+        engine.sq_evt(SQ_RECT_CHANGED, engine.getrid(), evtd);
     }
     if (vis_changed)
     {
-        RID parr = engine->getrect().getparent();
+        RID parr = guirect.getparent();
         if (parr)
         {
             HOLD holdp(parr);
             evt_data_s d;
-            d.rect.id = engine->getrid();
+            d.rect.id = engine.getrid();
             d.rect.is_visible = vis;
             holdp.engine().sq_evt(SQ_CHILD_VISIBILITY_CHANGED, parr, d);
         }
+        if (vis) need_recalc_screenpos();
     }
     if (zindex_changed)
-        engine->sq_evt(SQ_ZINDEX_CHANGED, engine->getrid(), evtd);
+        engine.sq_evt(SQ_ZINDEX_CHANGED, engine.getrid(), evtd);
     if (hl_changed || ac_changed)
-        engine->getrect().sq_evt(SQ_THEMERECT_CHANGED, engine->getrid(), evtd);
+        guirect.sq_evt(SQ_THEMERECT_CHANGED, engine.getrid(), evtd);
         
     if (evtd.changed.pos_changed || evtd.changed.size_changed || vis_changed)
         gui->dirty_hover_data();
 
 #ifdef _DEBUG
-    engine->getrect().sq_evt(SQ_DEBUG_CHANGED_SOME, engine->getrid(), evtd); 
+    engine.getrect().sq_evt(SQ_DEBUG_CHANGED_SOME, engine.getrid(), evtd); 
 #endif // _DEBUG
 
     return is_visible() && (ac_changed || hl_changed || vis_changed || evtd.changed.size_changed);
@@ -250,7 +268,7 @@ void guirect_c::prepare_test_00()
 }
 #endif
 
-guirect_c::guirect_c(initial_rect_data_s &data):m_rid(data.id), m_parent(data.parent), m_engine(data.engine)
+guirect_c::guirect_c(initial_rect_data_s &data):m_rid(data.id), m_parent(data.parent), m_engine(data.engine), m_props(true)
 {
 	if (ASSERT(m_engine))
 		m_engine->set_controlled_rect( this );
@@ -297,6 +315,13 @@ void guirect_c::created()
         HOLD(m_parent).engine().sq_evt(SQ_CHILD_CREATED, m_parent, d);
     }
     DEBUGCODE( m_test_01 = true; )
+}
+
+void guirect_c::need_recalc_screenpos()
+{
+    m_props.need_recalc_screenpos();
+    for (rectengine_c *e : getengine())
+        if (e) e->getrect().need_recalc_screenpos();
 }
 
 /*virtual*/ ts::bitmap_c guirect_c::get_icon( bool for_tray )
@@ -425,6 +450,11 @@ void gui_control_c::created()
                     m_engine->draw(*thr, defaultthrdraw, &dd);
                 }
         }
+        break;
+    case SQ_KEYDOWN:
+    case SQ_KEYUP:
+        if (getparent())
+            return HOLD( getparent() )().sq_evt( qp, getparent(), data );
     }
 
     return __super::sq_evt(qp, rid, data);
@@ -636,13 +666,23 @@ int gui_button_c::get_ctl_width()
     return get_min_size().x;
 }
 
+void gui_button_c::apply_face()
+{
+    if (flags.is( F_SECOND_FACE ) && face_getter[1])
+    {
+        set_face( face_getter[1]() );
+    }
+    else
+    {
+        flags.clear( F_SECOND_FACE );
+        if (face_getter[0]) set_face( face_getter[0]() );
+    }
+}
+
 ts::uint32 gui_button_c::gm_handler(gmsg<GM_UI_EVENT> & e)
 {
     if (UE_THEMECHANGED == e.evt)
-    {
-        if (face_getter)
-            set_face(face_getter());
-    }
+        apply_face();
 
     return 0;
 }
@@ -657,12 +697,33 @@ void gui_button_c::set_face( button_desc_s *bdesc )
     flags.init(F_DISABLED_USE_ALPHA, desc->rects[button_desc_s::NORMAL] == desc->rects[button_desc_s::DISABLED]);
 }
 
+void gui_button_c::set_text_internal( const ts::wsptr&t )
+{
+    text.clear();
+    image.clear();
+
+    if (ts::pwstr_c( t ).begins( CONSTWSTR( "<img=" ) ))
+    {
+        int x = ts::pwstr_c( t ).find_pos( 5, '>' );
+        if (ASSERT( x > 5 ))
+        {
+            text.set( t.skip( x + 1 ) );
+            image = ts::to_str( ts::pwstr_c( t ).substr( 5, x ) );
+        }
+    } else
+        text.set( t );
+
+    flags.clear( F_TEXTSIZEACTUAL );
+}
+
+
 /*virtual*/ ts::ivec2 gui_button_c::get_min_size() const
 {
     if (flags.is(F_RADIOBUTTON|F_CHECKBUTTON))
     {
         ts::ivec2 sz = desc->rects[ curstate ].size();
         const_cast<gui_button_c *>(this)->update_textsize();
+        sz.x += textsize.x;
         if (textsize.y > sz.y) sz.y = textsize.y;
         return sz;
     }
@@ -855,7 +916,14 @@ void gui_button_c::push()
 
     if (flags.is(F_RADIOBUTTON))
         gmsg<GM_GROUP_SIGNAL>( getrid(), grouptag ).send();
-    CHECK(handler && handler(getrid(), param));
+
+    CHECK(handler && handler(getrid(), param ? param : as_param( is_second_face() ? 1 : 0 ) ));
+
+    if (face_getter[1])
+    {
+        flags.invert( F_SECOND_FACE );
+        apply_face();
+    }
 }
 
 //________________________________________________________________________________________________________________________________ gui label
@@ -1343,7 +1411,8 @@ bool gui_tooltip_c::check_text(RID r, GUIPARAM param)
             return true;
         }
     }
-    const ts::wstr_c &tt = HOLD(ownrect)().tooltip();
+    guirect_c &or = HOLD( ownrect )();
+    const ts::wstr_c &tt = or .tooltip();
     if (tt.is_empty())
     {
         MODIFY( *this ).hide();
@@ -1362,7 +1431,7 @@ bool gui_tooltip_c::check_text(RID r, GUIPARAM param)
         if (const theme_rect_s *thr = themerect())
             sz = thr->size_by_clientsize(sz + 5, false);
         
-        ts::irect maxsz = ts::wnd_get_max_size( ts::irect(cp, cp + sz) );
+        ts::irect maxsz = ts::wnd_get_max_size( or .getprops().screenrect() );
         bool fixx = false;
         if (cp.x + sz.x >= maxsz.rb.x) cp.x = maxsz.rb.x - sz.x, fixx = true;
         if ( fixx && cp.y + sz.y >= maxsz.rb.y ) cp.y = cp.y - 27 - sz.y;
@@ -1738,7 +1807,7 @@ void gui_hgroup_c::children_repos()
                     if (szpol_override[i] == frompol)
                     {
                         rsize &www = rsizes.get(i);
-                        if (www.sz > maxsz)
+                        if (www.sz >= maxsz)
                         {
                             maxszi = i;
                             maxsz = www.sz;
@@ -2521,7 +2590,7 @@ bool gui_popup_menu_c::update_size(RID, GUIPARAM)
     ts::ivec2 sz = thr ? thr->size_by_clientsize(csz, false) : csz;
     ts::ivec2 cp = getprops().screenpos();
 
-    ts::irect maxsz = flags.is(F_SYSMENU) ? ts::wnd_get_max_size_fs(ts::irect(cp, cp + sz)) : ts::wnd_get_max_size(ts::irect(cp, cp + sz));
+    ts::irect maxsz = flags.is(F_SYSMENU) ? ts::wnd_get_max_size_fs( showpoint.rect ) : ts::wnd_get_max_size( showpoint.rect );
 
     bool height_decreased = false;
     if (sz.y > (maxsz.height() - 50))
@@ -2561,7 +2630,7 @@ bool gui_popup_menu_c::update_size(RID, GUIPARAM)
         if (cp.x < showpoint.rect.rb.x) cp.x = showpoint.rect.lt.x - sz.x;
         break;
     default:
-        __debugbreak();
+        DEBUG_BREAK();
     }
 
     TS_STATIC_CHECK( menu_anchor_s::relpos_check == 4, "woopz" );
@@ -2986,7 +3055,7 @@ MAKE_CHILD<gui_textfield_c>::~MAKE_CHILD()
     if (selector)
     {
         get().selector = &(gui_button_c &)MAKE_CHILD<gui_button_c>(get().getrid());
-        get().selector->set_face_getter(selectorface ? selectorface : BUTTON_FACE(selector));
+        get().selector->set_face_getter(selectorface ? selectorface : BUTTON_FACE(selector), selectorface2);
         get().selector->set_handler(handler, param);
         ts::ivec2 minsz = get().selector->get_min_size();
         get().set_margins_rb(ts::ivec2(minsz.x, 0));

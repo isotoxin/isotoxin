@@ -323,7 +323,8 @@ bool _cdecl ts::app_preinit( const wchar_t *cmdl )
 #if defined _DEBUG || defined _CRASH_HANDLER
     {
         MEMT( MEMT_TEMP );
-        set_dump_filename( ts::fn_change_name_ext( ts::get_exe_full_name(), ts::wstr_c( CONSTWSTR( APPNAME ) ).append_char( '.' ).append( ts::to_wstr( application_c::appver() ) ).as_sptr(),
+
+        set_dump_filename( ts::fn_change_name_ext( ts::get_exe_full_name(), ts::wstr_c( CONSTWSTR( APPNAME ), CONSTWSTR( "." ), ts::to_wstr( application_c::appver() ) ),
 
 #ifdef MODE64
         CONSTWSTR( "x64.dmp" ) ) );

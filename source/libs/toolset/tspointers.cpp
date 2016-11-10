@@ -11,7 +11,7 @@ namespace ts
         };
     }
 
-static_setup< struct_buf_t<dummy_struct_s, 128> > pool;
+static_setup< struct_buf_t<dummy_struct_s, 128>, -3 > pool;
 
 safe_object::pointer_container_s *safe_object::pointer_container_s::create(safe_object *p)
 {

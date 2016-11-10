@@ -300,7 +300,7 @@ namespace
 
 void _cdecl dmsg(const char *str)
 {
-    spinlock::auto_simple_lock _l(__dmsg__().sync);
+    SIMPLELOCK(__dmsg__().sync);
 
     int i = 0;
     int d = 0;
