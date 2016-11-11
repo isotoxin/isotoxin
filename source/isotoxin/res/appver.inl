@@ -1,2 +1,2 @@
-#define APPVER 0,4,495 
-#define APPVERD 0.4.495 
+#define APPVER 0,4,496 
+#define APPVERD 0.4.496 

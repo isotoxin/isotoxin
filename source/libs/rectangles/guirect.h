@@ -991,7 +991,7 @@ class gui_button_c : public gui_control_c
     GUIPARAMHANDLER handler;
     GUIPARAM param = nullptr;
 
-    GET_BUTTON_FACE face_getter[2];
+    GET_BUTTON_FACE face_getter[2] = {};
 
     bool group_handler(gmsg<GM_GROUP_SIGNAL> & signal);
     bool default_handler(RID r, GUIPARAM param);

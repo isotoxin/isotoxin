@@ -2256,14 +2256,16 @@ public:
         {
             if (is_conference())
             {
-                str_c idstr = get_details_pubid();
+                bool dummy;
+                str_c idstr = get_details_pubid( dummy );
                 tmps.set( CONSTASTR( "{\"" CDET_PUBLIC_UNIQUE_ID "\":\"" ) );
                 tmps.append( idstr ).append_char( '\"' );
 
             } else
             {
-                str_c idstr = get_details_pubid();
-                if (idstr.ends( CONSTASTR( "????????????" ) ))
+                bool zero_nospam = false;
+                str_c idstr = get_details_pubid( zero_nospam );
+                if (zero_nospam)
                     tmps.set( CONSTASTR( "{\"" CDET_PUBLIC_ID_BAD "\":\"" ) );
                 else
                     tmps.set( CONSTASTR( "{\"" CDET_PUBLIC_ID "\":\"" ) );
@@ -2293,7 +2295,7 @@ public:
 
     }
 
-    str_c get_details_pubid() const
+    str_c get_details_pubid( bool &zero_nospam ) const
     {
         str_c s;
         if ( is_conference() )
@@ -2302,8 +2304,8 @@ public:
             {
                 s.append_as_hex( bid, TOX_CONFERENCE_UID_SIZE );
 
-                byte hash[crypto_shorthash_KEYBYTES];
-                crypto_shorthash( hash, bid, TOX_CONFERENCE_UID_SIZE, (const byte *)"tox-chat" /* 8 bytes hash key */ );
+                byte hash[crypto_shorthash_BYTES];
+                crypto_shorthash( hash, bid, TOX_CONFERENCE_UID_SIZE, (const byte *)"tox-chat-tox-chat" /* at least 16 bytes hash key */ );
 
                 s.append_char( cip ? '+' : '-' );
                 s.append_as_hex( hash, 4 );
@@ -2312,9 +2314,25 @@ public:
         }
 
         if (const byte *bid = address.get( tox_address_c::TAT_FULL_ADDRESS ))
-            s.append_as_hex( bid, TOX_ADDRESS_SIZE);
+            s.append_as_hex( bid, TOX_ADDRESS_SIZE), zero_nospam = false;
         else if (const byte *bid1 = address.get( tox_address_c::TAT_PUBLIC_KEY ))
-            s.append_as_hex( bid1, TOX_PUBLIC_KEY_SIZE ).append(CONSTASTR("????????????"));
+        {
+            auto address_checksum = []( uint8_t *store, const uint8_t *address, uint32_t len )
+            {
+                uint8_t checksum[2] = {};
+                for (uint32_t i = 0; i < len; ++i) {
+                    checksum[i % 2] ^= address[i];
+                }
+                memcpy( store, checksum, sizeof( uint16_t ) );
+            };
+
+            uint8_t addr[TOX_ADDRESS_SIZE] = {};
+            memcpy( addr, bid1, TOX_PUBLIC_KEY_SIZE );
+            address_checksum( addr + TOX_ADDRESS_SIZE - sizeof( uint16_t ), addr, TOX_ADDRESS_SIZE - sizeof( uint16_t ) );
+
+            s.append_as_hex( addr, TOX_ADDRESS_SIZE );
+            zero_nospam = true;
+        }
         return s;
     }
 
@@ -5035,8 +5053,8 @@ int __stdcall add_contact(const char* public_id, const char* invite_message_utf8
         s.hex2buf<TOX_CONFERENCE_UID_SIZE>( confaid.id );
         s.hex2buf<4>( hash_check, TOX_CONFERENCE_UID_SIZE * 2 + 1 );
 
-        byte hash[crypto_shorthash_KEYBYTES];
-        crypto_shorthash( hash, confaid.id, TOX_CONFERENCE_UID_SIZE, (const byte *)"tox-chat" /* 8 bytes hash key */ );
+        byte hash[crypto_shorthash_BYTES];
+        crypto_shorthash( hash, confaid.id, TOX_CONFERENCE_UID_SIZE, (const byte *)"tox-chat-tox-chat" /* at least 16 bytes hash key */ );
         if ( !memcmp( hash, hash_check, 4 ) )
         {
             // yo! conference!
@@ -5046,6 +5064,48 @@ int __stdcall add_contact(const char* public_id, const char* invite_message_utf8
             add_conference(t, confaid, invite_message_utf8);
             return CR_OK;
         }
+    }
+
+    if (s.get_length() == (TOX_PUBLIC_KEY_SIZE * 2) && s.contain_chars( CONSTASTR( "0123456789abcdefABCDEF" ) ))
+    {
+        public_key_s pk;
+        s.hex2buf<TOX_PUBLIC_KEY_SIZE>( pk.key );
+
+        TOX_ERR_FRIEND_ADD er = TOX_ERR_FRIEND_ADD_NULL;
+        int fid = tox_friend_add_norequest( tox, pk.key, &er );
+        switch (er) //-V719
+        {
+        case TOX_ERR_FRIEND_ADD_ALREADY_SENT:
+            return CR_ALREADY_PRESENT;
+        case TOX_ERR_FRIEND_ADD_OWN_KEY:
+        case TOX_ERR_FRIEND_ADD_BAD_CHECKSUM:
+        case TOX_ERR_FRIEND_ADD_SET_NEW_NOSPAM:
+            return CR_INVALID_PUB_ID;
+        case TOX_ERR_FRIEND_ADD_MALLOC:
+            return CR_MEMORY_ERROR;
+        }
+
+        contact_descriptor_s *desc = contact_descriptor_s::find( pk );
+        if (desc) desc->set_fid( fid, fid >= 0 );
+        else
+        {
+            desc = new contact_descriptor_s( ID_CONTACT, fid );
+            desc->address = pk;
+        }
+        memset( desc->avatar_hash, 0, sizeof( desc->avatar_hash ) );
+        desc->avatar_tag = 0;
+        desc->state = CS_OFFLINE;
+
+        contact_data_s cdata( desc->get_id(), CDM_PUBID | CDM_STATE );
+
+        //PUBID
+        sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
+        cdata.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
+        cdata.public_id = pubid.cstr();
+
+        cdata.state = CS_WAIT;
+        hf->update_contact( &cdata );
+        return CR_OK;
     }
 
     if (s.get_length() == (TOX_ADDRESS_SIZE * 2) && s.contain_chars( CONSTASTR( "0123456789abcdefABCDEF" ) ))
@@ -5087,7 +5147,7 @@ void __stdcall del_contact(int id)
                 public_key_s mkey;
                 uint32_t *chats = (uint32_t *)_alloca( sizeof( uint32_t ) * chatscount );
                 tox_conference_get_chatlist(tox, chats);
-                for(int i=0;i<chatscount;++i)
+                for(size_t i=0;i<chatscount;++i)
                 {
                     int gnum = chats[i];
                     int peers = tox_conference_peer_count(tox, gnum, nullptr);

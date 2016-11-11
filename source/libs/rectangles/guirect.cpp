@@ -917,9 +917,11 @@ void gui_button_c::push()
     if (flags.is(F_RADIOBUTTON))
         gmsg<GM_GROUP_SIGNAL>( getrid(), grouptag ).send();
 
+    ts::safe_ptr<gui_button_c> safeptr(this);
+
     CHECK(handler && handler(getrid(), param ? param : as_param( is_second_face() ? 1 : 0 ) ));
 
-    if (face_getter[1])
+    if (!safeptr.expired() && face_getter[1])
     {
         flags.invert( F_SECOND_FACE );
         apply_face();
