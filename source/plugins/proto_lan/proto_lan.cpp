@@ -66,7 +66,9 @@ void __stdcall api_getinfo( proto_info_s *info )
         "ID",
         "f=png",
         "",
-        nullptr
+        "",
+        "",
+        nullptr,
     };
 
     info->strings = strings;

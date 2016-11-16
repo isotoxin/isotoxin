@@ -36,6 +36,24 @@ gui_listitem_c::gui_listitem_c(initial_rect_data_s &data, gui_listitem_params_s 
     flags.set(F_MENU_ON_RCLICK);
 }
 
+void gui_listitem_c::set( const ts::wstr_c &text_, const ts::str_c &param_, const ts::bitmap_c *icon_ )
+{
+    if (icon_)
+        icon = *icon_;
+    else
+        icon.clear();
+
+    param = param_;
+    height = 1;
+
+    if (icon.info().sz.x)
+        if (icon.info().sz.y > height)
+            height = icon.info().sz.y;
+
+    set_text( text_ );
+    textrect.make_dirty( true, true, true );
+}
+
 gui_listitem_c::~gui_listitem_c()
 {
 }
@@ -980,6 +998,16 @@ public:
     {
     }
 
+    void set_height( int h )
+    {
+        if (height != h)
+        {
+            height = h;
+            gui_group_c &p = HOLD( getparent() ).as<gui_group_c>();
+            gui->repos_children(&p);
+        }
+    }
+
     void set_emptymessage( const ts::wstr_c &emt )
     {
         if (emptymessage != emt)
@@ -1040,6 +1068,13 @@ public:
                 return true;
             }
             break;
+        case SQ_CTX_MENU_PRESENT:
+            if (rid == getrid())
+                for (rectengine_c *e : getengine())
+                    if (e && e->getrect().sq_evt( SQ_CTX_MENU_PRESENT, e->getrid(), data ))
+                        if (data.getsome.handled)
+                            return true;
+            break;
         }
 
         return __super::sq_evt(qp, rid, data);
@@ -1049,6 +1084,24 @@ MAKE_CHILD<gui_simple_dialog_list_c>::~MAKE_CHILD()
 {
     MODIFY(get()).show();
 }
+
+void gui_dialog_c::set_list_height( const ts::asptr& ctl_name, int h )
+{
+    for (description_s &d : descs)
+    {
+        if ((d.ctl == description_s::_LIST) && d.name == ctl_name)
+        {
+            d.height_ = h;
+            break;
+        }
+    }
+    if (RID crid = find( ctl_name ))
+    {
+        gui_simple_dialog_list_c &lst = HOLD( crid ).as<gui_simple_dialog_list_c>();
+        lst.set_height( h );
+    }
+}
+
 
 void gui_dialog_c::set_list_emptymessage(const ts::asptr& ctl_name, const ts::wstr_c& t)
 {

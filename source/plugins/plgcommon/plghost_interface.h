@@ -6,7 +6,7 @@
 
 // typical scenario : AQ -> plghost, HA -> application
 
-#define PLGHOST_IPC_PROTOCOL_VERSION 17
+#define PLGHOST_IPC_PROTOCOL_VERSION 18
 
 enum commands_e
 {
@@ -44,6 +44,7 @@ enum commands_e
     AQ_ADD_CONTACT,
     AQ_DEL_CONTACT,
     HQ_UPDATE_CONTACT,
+    AQ_REFRESH_DETAILS,
 
     AQ_ACCEPT,
     AQ_REJECT,

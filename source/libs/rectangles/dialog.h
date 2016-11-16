@@ -51,6 +51,8 @@ public:
     gui_listitem_c(initial_rect_data_s &data, gui_listitem_params_s &prms);
     gui_listitem_c(MAKE_CHILD<gui_listitem_c> &data) :gui_listitem_c(data, data) {}
 
+    void set( const ts::wstr_c &text_, const ts::str_c &param_, const ts::bitmap_c *icon_ );
+
     /*virtual*/ ~gui_listitem_c();
 
     /*virtual*/ ts::ivec2 get_min_size() const override;
@@ -350,6 +352,8 @@ protected:
     void ctlshow( ts::uint32 cmask, bool vis );
     void ctlenable( const ts::asptr&name, bool enblflg );
     void ctldesc( const ts::asptr&name, ts::wstr_c desc );
+
+    void set_list_height( const ts::asptr& ctl_name, int h );
 
     void set_check_value( const ts::asptr&name, bool v );
 

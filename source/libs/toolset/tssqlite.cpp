@@ -15,6 +15,41 @@ struct sqlite_encrypt_stuff_s
 };
 static sqlite_encrypt_stuff_s *estuff = nullptr;
 
+struct getdacolumn
+{
+    sqlite3_stmt *stmt;
+
+    data_type_e get_da_value( int index, data_value_s &v )
+    {
+        int ct = sqlite3_column_type( stmt, index );
+        switch (ct)
+        {
+        case SQLITE_INTEGER:
+            v.i = sqlite3_column_int64( stmt, index );
+            return data_type_e::t_int;
+        case SQLITE_FLOAT:
+            v.f = sqlite3_column_double( stmt, index );
+            return data_type_e::t_float;
+        case SQLITE3_TEXT:
+            v.text.set( asptr( (const char *)sqlite3_column_text( stmt, index ) ) );
+            return data_type_e::t_str;
+        case SQLITE_BLOB:
+            v.blob.set_size( sqlite3_column_bytes( stmt, index ) );
+            memcpy( v.blob.data(), sqlite3_column_blob( stmt, index ), v.blob.size() );
+            return data_type_e::t_blob;
+        case SQLITE_NULL:
+            v.blob.clear();
+            v.text.clear();
+            v.i = 0;
+            return data_type_e::t_null;
+        default:
+            FORBIDDEN();
+        };
+
+        return data_type_e::t_null;
+    }
+};
+
 class sqlite3_c : public sqlitedb_c
 {
     sqlite3 *db = nullptr;
@@ -441,6 +476,35 @@ public:
         }
     }
 
+    /*virtual*/ bool unique_values( const asptr& tablename, SQLITE_UNIQUE_VALUES reader, const asptr& column )
+    {
+        if (ASSERT( db ))
+        {
+            tmp_str_c tstr;
+            streamstr<tmp_str_c> sql( tstr );
+            sql << CONSTASTR( "SELECT `" ) << column << CONSTASTR( "` FROM `" ) << tablename << CONSTASTR( "` group by `" ) << column << CONSTASTR( "`" );
+
+            struct getdacolumn0 : public getdacolumn
+            {
+                SQLITE_UNIQUE_VALUES reader;
+
+                getdacolumn0( SQLITE_UNIQUE_VALUES reader ) :reader( reader ) {}
+                ~getdacolumn0()
+                {
+                    for (int row = 0; SQLITE_ROW == sqlite3_step( stmt ); ++row)
+                    {
+                        data_value_s v;
+                        get_da_value( 0, v );
+                        reader( v );
+                    }
+                    sqlite3_finalize( stmt );
+                }
+            } columngetter( reader );
+
+            return SQLITE_OK == sqlite3_prepare_v2( db, sql.buffer(), (int)sql.buffer().get_length(), &columngetter.stmt, nullptr );
+        }
+        return false;
+    }
 
     /*virtual*/ bool read_table( const asptr& tablename, SQLITE_TABLEREADER reader, const asptr& where_items ) override
     {
@@ -452,43 +516,12 @@ public:
             if (where_items.l)
                 sql << CONSTASTR(" where ") << where_items;
 
-            struct getdacolumn
+            struct getdacolumn0 : public getdacolumn
             {
                 SQLITE_TABLEREADER reader;
-                sqlite3_stmt *stmt;
-            
-                data_type_e get_da_value( int index, data_value_s &v )
-                {
-                    int ct = sqlite3_column_type(stmt, index);
-                    switch (ct)
-                    {
-                    case SQLITE_INTEGER:
-                        v.i = sqlite3_column_int64(stmt, index);
-                        return data_type_e::t_int;
-                    case SQLITE_FLOAT:
-                        v.f = sqlite3_column_double(stmt, index);
-                        return data_type_e::t_float;
-                    case SQLITE3_TEXT:
-                        v.text.set( asptr((const char *)sqlite3_column_text(stmt, index)) );
-                        return data_type_e::t_str;
-                    case SQLITE_BLOB:
-                        v.blob.set_size( sqlite3_column_bytes(stmt, index) );
-                        memcpy( v.blob.data(), sqlite3_column_blob(stmt, index), v.blob.size() );
-                        return data_type_e::t_blob;
-                    case SQLITE_NULL:
-                        v.blob.clear();
-                        v.text.clear();
-                        v.i = 0;
-                        return data_type_e::t_null;
-                    default:
-                        FORBIDDEN();
-                    };
-                
-                    return data_type_e::t_null;
-                }
 
-                getdacolumn( SQLITE_TABLEREADER reader ):reader(reader) {}
-                ~getdacolumn()
+                getdacolumn0( SQLITE_TABLEREADER reader ):reader(reader) {}
+                ~getdacolumn0()
                 {
                     auto getta = DELEGATE( this, get_da_value );
                     for( int row = 0; SQLITE_ROW == sqlite3_step(stmt); ++row )

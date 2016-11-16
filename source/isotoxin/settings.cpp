@@ -24,12 +24,14 @@ static menu_c list_proxy_types(int cur, MENUHANDLER mh, int av = -1)
     menu_c m;
     m.add(TTT("Direct connection",159), cur == 0 ? MIF_MARKED : 0, mh, CONSTASTR("0"));
 
+    if (CF_PROXY_SUPPORT_HTTP & av)
+        m.add( TTT("HTTP proxy",517), cur == 1 ? MIF_MARKED : 0, mh, CONSTASTR( "1" ) );
     if (CF_PROXY_SUPPORT_HTTPS & av)
-        m.add(TTT("HTTPS proxy",160), cur == 1 ? MIF_MARKED : 0, mh, CONSTASTR("1"));
+        m.add(TTT("HTTPS proxy",160), cur == 2 ? MIF_MARKED : 0, mh, CONSTASTR("2"));
     if (CF_PROXY_SUPPORT_SOCKS4 & av)
-        m.add(TTT("Socks 4 proxy",161), cur == 2 ? MIF_MARKED : 0, mh, CONSTASTR("2"));
+        m.add(TTT("Socks 4 proxy",161), cur == 3 ? MIF_MARKED : 0, mh, CONSTASTR("3"));
     if (CF_PROXY_SUPPORT_SOCKS5 & av)
-        m.add(TTT("Socks 5 proxy",162), cur == 3 ? MIF_MARKED : 0, mh, CONSTASTR("3"));
+        m.add(TTT("Socks 5 proxy",162), cur == 4 ? MIF_MARKED : 0, mh, CONSTASTR("4"));
 
     return m;
 }
@@ -3398,7 +3400,7 @@ void dialog_settings_c::select_signal_device(const ts::str_c& prm)
     mod();
 }
 
-/*virtual*/ void dialog_settings_c::datahandler( const void *data, int size )
+/*virtual*/ bool dialog_settings_c::datahandler( const void *data, int size )
 {
     bool mic_level_detected = false;
     if (mic_test_rec)
@@ -3472,6 +3474,8 @@ void dialog_settings_c::select_signal_device(const ts::str_c& prm)
         x = false;
     }
     */
+
+    return true;
 }
 
 bool dialog_settings_c::micvolset(RID, GUIPARAM p)
@@ -3972,9 +3976,10 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
         addh += 55;
 
         int pt = 0;
-        if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_HTTPS) pt = 1;
-        if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_SOCKS4) pt = 2;
-        if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_SOCKS5) pt = 3;
+        if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_HTTP) pt = 1;
+        if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_HTTPS) pt = 2;
+        if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_SOCKS4) pt = 3;
+        if (params.configurable.proxy.proxy_type & CF_PROXY_SUPPORT_SOCKS5) pt = 4;
         ts::wstr_c pa = to_wstr(params.configurable.proxy.proxy_addr);
 
         dm().vspace(5);
@@ -3989,11 +3994,8 @@ menu_c dialog_setup_network_c::get_list_avaialble_networks()
         dm().vspace(5);
         addh += 45;
 
-        ts::wstr_c iroot(CONSTWSTR("%APPDATA%"));
+        ts::wstr_c iroot( ts::from_utf8( params.proto_desc.getstr( IS_IMPORT_PATH ) ) );
         ts::parse_env(iroot);
-
-        if (dir_present(ts::fn_join(iroot, ts::to_wstr(params.networktag))))
-            iroot = ts::fn_join(iroot, ts::to_wstr(params.networktag));
         ts::fix_path(iroot, FNO_APPENDSLASH);
 
         dm().file(loc_text(loc_import_from_file), iroot, params.importcfg, DELEGATE(this, network_importfile));
@@ -4140,9 +4142,10 @@ void dialog_setup_network_c::set_proxy_type_handler(const ts::str_c& p)
 
     int psel = p.as_int();
     if (psel == 0) params.configurable.proxy.proxy_type = 0;
-    else if (psel == 1) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_HTTPS;
-    else if (psel == 2) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_SOCKS4;
-    else if (psel == 3) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_SOCKS5;
+    else if (psel == 1) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_HTTP;
+    else if (psel == 2) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_HTTPS;
+    else if (psel == 3) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_SOCKS4;
+    else if (psel == 4) params.configurable.proxy.proxy_type = CF_PROXY_SUPPORT_SOCKS5;
 
     set_combik_menu(CONSTASTR("protoproxytype"), list_proxy_types(psel, DELEGATE(this, set_proxy_type_handler), params.proto_desc.connection_features & CF_PROXY_MASK));
     if (RID r = find(CONSTASTR("protoproxyaddr")))

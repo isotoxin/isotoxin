@@ -62,6 +62,15 @@ menu_c  RID::call_get_menu() const
     return d.getsome.handled ? *d.getsome.menu : menu_c();
 }
 
+bool RID::call_ctxmenu_present() const
+{
+    evt_data_s d;
+    d.getsome.handled = false;
+    HOLD ctl( *this );
+    ctl().sq_evt( SQ_CTX_MENU_PRESENT, *this, d );
+    return d.getsome.handled;
+}
+
 void RID::call_restore_signal() const
 {
     HOLD ctl(*this);
@@ -455,6 +464,14 @@ void gui_control_c::created()
     case SQ_KEYUP:
         if (getparent())
             return HOLD( getparent() )().sq_evt( qp, getparent(), data );
+        break;
+    case SQ_CTX_MENU_PRESENT:
+        if (popupmenu)
+        {
+            data.getsome.handled = true;
+            return true;
+        }
+        break;
     }
 
     return __super::sq_evt(qp, rid, data);

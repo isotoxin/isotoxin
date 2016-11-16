@@ -183,13 +183,17 @@ void rectengine_c::mouse_unlock()
 
 void rectengine_c::trunc_children( ts::aint index)
 {
+    bool some_del = false;
     for (; index < children.size(); ++index)
     {
         rectengine_c *c = children.get(index);
-        if (c) TSDEL(c);
+        if (c) TSDEL(c), some_del = true;
     }
-    cleanup_children_now();
-    redraw();
+    if (some_del)
+    {
+        cleanup_children_now();
+        redraw();
+    }
 }
 
 void rectengine_c::add_child(rectengine_c *re, RID after)

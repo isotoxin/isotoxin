@@ -4,7 +4,7 @@
 #define LIBHUNSPELL_DLL_EXPORTED
 
 #define _CSTDIO_
-#define _FILEMGR_HXX_
+#define FILEMGR_HXX_
 
 #define BUFSIZE  65536
 #define HZIP_EXTENSION ".hz"

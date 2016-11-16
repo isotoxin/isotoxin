@@ -13,6 +13,10 @@ dialog_contact_props_c::dialog_contact_props_c(MAKE_ROOT<dialog_contact_props_c>
 
 dialog_contact_props_c::~dialog_contact_props_c()
 {
+    if (gui)
+    {
+        gui->delete_event( DELEGATE( this, refresh_details ) );
+    }
 }
 
 /*virtual*/ ts::wstr_c dialog_contact_props_c::get_name() const
@@ -336,6 +340,14 @@ ts::wstr_c dialog_contact_props_c::buildmh()
 
 /*virtual*/ bool dialog_contact_props_c::sq_evt(system_query_e qp, RID rid, evt_data_s &d)
 {
+    if (SQ_RECT_CHANGED == qp)
+    {
+        if (!lst_ajust_height.is_empty())
+        {
+            set_list_height( lst_ajust_height, getprops().size().y - 135 );
+        }
+    }
+
     if (__super::sq_evt(qp, rid, d)) return true;
 
     //switch (qp)
@@ -494,6 +506,13 @@ ts::uint32 dialog_contact_props_c::gm_handler(gmsg<ISOGM_V_UPDATE_CONTACT> &c)
 {
     if (contactue && contactue->subpresent(c.contact->getkey()) || c.contact == contactue)
     {
+        if (lstrid && lstrid.call_ctxmenu_present())
+            return 0;
+
+        if (gui->mtrack( MTT_RESIZE | MTT_MOVE | MTT_SBMOVE ))
+            return 0;
+
+
         update();
         fill_list();
     }
@@ -564,6 +583,15 @@ namespace customel
             if (gui)
                 gui->delete_event(DELEGATE(this, flash_pereflash));
         }
+
+        void set( ts::astrings_c &&links_, ts::buf_c &&qrs_, const ts::wstr_c &text_, const ts::str_c &param_, const ts::bitmap_c *icon_ )
+        {
+            links = std::move(links_);
+            qrs = std::move(qrs_);
+            __super::set( text_, param_, icon_ );
+            getengine().redraw();
+        }
+
         /*virtual*/ void get_link_prolog(ts::wstr_c &r, int linknum) const override
         {
             r.clear();
@@ -652,6 +680,10 @@ namespace customel
                         clicka = SQ_MOUSE_RUP, clicklink = overlink;
                 }
                 break;
+            case SQ_CTX_MENU_PRESENT:
+                if (flashing)
+                    data.getsome.handled = true;
+                break;
             }
 
             if (SQ_MOUSE_LUP == qp || SQ_MOUSE_RUP == qp)
@@ -685,7 +717,7 @@ MAKE_CHILD<customel::gui_lli_c>::~MAKE_CHILD()
 }
 
 
-void dialog_contact_props_c::add_det(RID lst, contact_c *c)
+void dialog_contact_props_c::add_det(RID lstctl, int index, contact_c *c)
 {
     ts::str_c par;
 
@@ -788,6 +820,12 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
             extractitems( lst, v );
             for ( const ts::str_c &idx : lst )
                 addl(TTT("Email",368), idx, true, true, true, vals.add(idx));
+        } else if (dname.equals( CONSTASTR( CDET_CONN_INFO ) ))
+        {
+            ts::astrings_c lst;
+            extractitems( lst, v );
+            for (const ts::str_c &idx : lst)
+                addl( TTT("Connection info",518), idx, true, true, true, vals.add( idx ) );
         }
 
     });
@@ -821,7 +859,18 @@ void dialog_contact_props_c::add_det(RID lst, contact_c *c)
 
     desc.replace_all( CONSTWSTR( "<id>" ), id );
 
-    MAKE_CHILD<customel::gui_lli_c>(std::move(vals), std::move(qrs), lst, desc, par) << (const ts::bitmap_c *)(inf.bmp);
+    if (index >= HOLD(lstctl).engine().children_count())
+    {
+        additem:
+        MAKE_CHILD<customel::gui_lli_c>( std::move( vals ), std::move( qrs ), lstctl, desc, par ) << (const ts::bitmap_c *)(inf.bmp);
+    } else
+    {
+        rectengine_c *itme = HOLD( lstctl ).engine().get_child( index );
+        if (!itme) goto additem;
+        customel::gui_lli_c *itm = ts::ptr_cast<customel::gui_lli_c *>(&itme->getrect());
+        itm->set( std::move( vals ), std::move( qrs ), desc, par, (const ts::bitmap_c *)(inf.bmp) );
+
+    }
 }
 
 void dialog_contact_props_c::fill_list()
@@ -830,11 +879,16 @@ void dialog_contact_props_c::fill_list()
     {
         if (RID lst = find( CONSTASTR( "list" ) ))
         {
-            HOLD( lst ).engine().trunc_children( 0 );
+            HOLD( lst ).engine().trunc_children( contactue->subcount() );
 
+            int index = 0;
             contactue->subiterate( [&]( contact_c *c ) {
-                add_det( lst, c );
+                add_det( lst, index, c );
+                ++index;
             } );
+
+            lstrid = lst;
+            lst_ajust_height.set( CONSTASTR( "list" ) );
 
         }
 
@@ -842,8 +896,11 @@ void dialog_contact_props_c::fill_list()
         {
             if (RID lst = find( CONSTASTR( "det" ) ))
             {
-                HOLD( lst ).engine().trunc_children( 0 );
-                add_det( lst, contactue );
+                HOLD( lst ).engine().trunc_children( 1 );
+                add_det( lst, 0, contactue );
+
+                lstrid = lst;
+                lst_ajust_height.set( CONSTASTR( "det" ) );
             }
         }
     }
@@ -877,15 +934,48 @@ void dialog_contact_props_c::tags_menu(menu_c &m, ts::aint )
 
 /*virtual*/ void dialog_contact_props_c::tabselected(ts::uint32 mask)
 {
+    enable_refresh_details( false );
+    lst_ajust_height.clear();
+    lstrid = RID();
+
     if (mask & 1)
         if (RID e = find(CONSTASTR("tags")))
             HOLD(e).as<gui_textedit_c>().ctx_menu_func = DELEGATE(this, tags_menu);
 
     if (mask & (2|64))
-        fill_list();
+        fill_list(), enable_refresh_details(true);
 
 }
 
+bool dialog_contact_props_c::refresh_details( RID, GUIPARAM )
+{
+    if (do_refresh_details)
+        DEFERRED_UNIQUE_CALL( 2.0, DELEGATE( this, refresh_details ), 0 );
+
+    if (contactue->getkey().is_conference())
+    {
+        if (contactue->get_state() == CS_ONLINE)
+        {
+            if (active_protocol_c *ap = prf().ap( contactue->getkey().protoid ))
+                ap->refresh_details( contactue->getkey() );
+        }
+    } else
+    {
+        contactue->subiterate( [&]( contact_c *c ) {
+
+            if (active_protocol_c *ap = prf().ap( c->getkey().protoid ))
+                ap->refresh_details( c->getkey() );
+        } );
+    }
+
+    return true;
+}
+void dialog_contact_props_c::enable_refresh_details( bool f )
+{
+    do_refresh_details = f;
+    if (do_refresh_details)
+        DEFERRED_UNIQUE_CALL( 2.0, DELEGATE(this, refresh_details), 0 );
+}
 
 
 

@@ -1065,6 +1065,20 @@ bool gui_contact_item_c::allow_drop() const
                         dialog_msgbox_c::mb_warning(txt).bcancel().on_ok(m_delete_doit, cks).summon(true);
                     }
                 }
+                static void m_invite2c( const ts::str_c&cks )
+                {
+                    ts::token<char> t( cks, '|' );
+
+                    contact_key_s ck( t->as_sptr() );
+                    contact_root_c * c = contacts().rfind( ck );
+                    if (c && c->getkey().is_conference())
+                    {
+                        ++t;
+                        contact_key_s cki( t->as_sptr() );
+                        contact_root_c * ci = contacts().rfind( cki );
+                        c->join_conference( ci );
+                    }
+                }
                 static void m_invite( const ts::str_c&cks )
                 {
                     contact_key_s ck( cks );
@@ -1237,20 +1251,44 @@ bool gui_contact_item_c::allow_drop() const
 
                 if ( contact->getkey().is_conference() )
                 {
-                    if ( active_protocol_c *ap = prf().ap( contact->getkey().protoid ) )
-                        if ( 0 != ( ap->get_features() & PF_CONFERENCE_ENTER_LEAVE ) )
+                    if (active_protocol_c *ap = prf().ap( contact->getkey().protoid ))
+                    {
+                        if (0 != (ap->get_features() & PF_CONFERENCE_ENTER_LEAVE))
                         {
-                            if ( contact->get_state() == CS_OFFLINE )
+                            if (contact->get_state() == CS_OFFLINE)
                             {
-                                m.add( TTT("Enter conference",505), 0, handlers::m_enter, contact->getkey().as_str() );
+                                m.add( TTT( "Enter conference", 505 ), 0, handlers::m_enter, contact->getkey().as_str() );
                                 m.add_separator();
                             }
-                            if ( contact->get_state() == CS_ONLINE )
+                            if (contact->get_state() == CS_ONLINE)
                             {
                                 m.add( TTT( "Leave conference", 304 ), 0, handlers::m_leave, contact->getkey().as_str() );
+
+                                ts::tmp_pointers_t< contact_root_c, 4 > inv;
+
+                                contacts().iterate_proto_contacts( [&]( contact_c *c ) {
+
+                                    if (c->getmeta() && !contact->subpresent( c->getkey() ) && c->get_state() == CS_ONLINE) // TODO: protocol support offline invite?
+                                        inv.set( c->getmeta() );
+
+                                    return true;
+                                }, ap->getid() );
+
+                                if (inv.size())
+                                {
+                                    menu_c ma = m.add_sub( TTT( "Invite", 516 ) );
+                                    for (contact_root_c *c : inv)
+                                    {
+                                        ts::str_c n = c->get_name();
+                                        text_adapt_user_input( n );
+
+                                        ma.add( ts::from_utf8( n ), 0, handlers::m_invite2c, contact->getkey().as_str().append_char( '|' ).append( c->getkey().as_str() ) );
+                                    }
+                                }
                                 m.add_separator();
                             }
                         }
+                    }
                 }
 
                 m.add(TTT("Properties",225),0,handlers::m_contact_props,contact->getkey().as_str());

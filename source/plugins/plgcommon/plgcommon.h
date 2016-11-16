@@ -27,6 +27,12 @@
 #define _NIX
 #endif
 
+#ifdef _WIN32
+#define WINDOWS_ONLY
+#else
+#define WINDOWS_ONLY __error
+#endif
+
 enum logging_flags_e
 {
     LFLS_CLOSE = 1,

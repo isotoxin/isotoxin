@@ -2322,6 +2322,11 @@ int lan_engine::add_contact(const char* public_id, const char* invite_message_ut
     return CR_OK;
 }
 
+void lan_engine::refresh_details( int id )
+{
+
+}
+
 void lan_engine::del_contact(int id)
 {
     if (id)

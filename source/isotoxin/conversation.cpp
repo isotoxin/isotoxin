@@ -2251,11 +2251,8 @@ void gui_notice_network_c::ctx_onlink_do( const ts::str_c &cc )
     {
         if ( active_protocol_c *ap = prf().ap( networkid ) )
         {
-            ts::wstr_c iroot( CONSTWSTR( "%APPDATA%" ) );
+            ts::wstr_c iroot( ts::from_utf8(ap->get_infostr( IS_IMPORT_PATH )) );
             ts::parse_env( iroot );
-
-            if ( dir_present( ts::fn_join( iroot, ts::to_wstr( ap->get_tag() ) ) ) )
-                iroot = ts::fn_join( iroot, ts::to_wstr( ap->get_tag() ) );
             ts::fix_path( iroot, FNO_APPENDSLASH );
 
             ts::extension_s ext;
@@ -3146,11 +3143,13 @@ void gui_message_item_c::ctx_menu_delmessage( const ts::str_c &smutag )
                 }
                 sfrom = nitm;
             }
-
         }
     }
 
     del();
+
+    ml->update_first();
+
 }
 
 void gui_message_item_c::del()
@@ -5227,6 +5226,23 @@ const ts::str_c &gui_messagelist_c::protodesc( int apid )
     __super::created();
 }
 
+void gui_messagelist_c::update_first()
+{
+    first_message_utag = 0;
+    ts::aint n = getengine().children_count();
+    for (ts::aint i=0;i<n;++i)
+    {
+        if (gui_message_item_c * itm = get_item( i ))
+        {
+            if (itm->get_utag())
+            {
+                first_message_utag = itm->get_utag();
+                return;
+            }
+        }
+    }
+}
+
 /*virtual*/ void gui_messagelist_c::children_repos_info(cri_s &info) const
 {
     if (flags.is(F_EMPTY_MODE))
@@ -6579,6 +6595,8 @@ gui_messagelist_c::filler_s::filler_s( gui_messagelist_c *owner, ts::aint loadn 
             scroll_to = &first_message->getengine(), stt = ST_KEEP_CURRENT;
 
     ts::aint new_messages = fix_super_messages(h);
+    if (new_messages == 0)
+        new_messages = ts::tmin( loadn, h->history_size() );
     fillindex_up = new_messages - 1;
 
     tick();

@@ -349,7 +349,7 @@ void set_proxy_curl( CURL *curl )
         str_c proxya = tox_proxy_host;
 
         int pt = 0;
-        if ( tox_proxy_type & CF_PROXY_SUPPORT_HTTPS ) pt = CURLPROXY_HTTP;
+        if ( tox_proxy_type & (CF_PROXY_SUPPORT_HTTPS|CF_PROXY_SUPPORT_HTTPS) ) pt = CURLPROXY_HTTP;
         else if ( tox_proxy_type & CF_PROXY_SUPPORT_SOCKS4 ) pt = CURLPROXY_SOCKS4;
         else if ( tox_proxy_type & CF_PROXY_SUPPORT_SOCKS5 ) pt = CURLPROXY_SOCKS5_HOSTNAME;
 
@@ -1709,20 +1709,9 @@ enum contact_caps_e
     CCC_VIDEO_EX = 8,   // contact's client support vp9 and lossless video
 };
 
-struct conference_member_try_join_s
+extern "C"
 {
-    public_key_s key;
-    int gnum = 0;
-    int next_try_time = time_ms() + 1000;
-    int offline_skip = 0;
-    bool is_online = false;
-    int choose_me_coef() const
-    {
-        return max( offline_skip, gnum );
-    }
-    conference_member_try_join_s( const public_key_s &key, int initial_gnum = 0 ): key(key), gnum( initial_gnum )
-    {
-    }
+    const char *get_conn_info( const void *tox, const uint8_t *real_pk );
 };
 
 struct contact_descriptor_s
@@ -2270,6 +2259,11 @@ public:
                 else
                     tmps.set( CONSTASTR( "{\"" CDET_PUBLIC_ID "\":\"" ) );
                 tmps.append( idstr ).append_char( '\"' );
+
+
+                if (const char *cinfo = get_conn_info( tox, address.as_public_key().key ))
+                    tmps.append( CONSTASTR( ",\"" CDET_CONN_INFO "\":\"" ) ).append( cinfo ).append_char( '\"' );
+
             }
 
             if ( !dnsname.is_empty() )
@@ -2394,6 +2388,10 @@ public:
 
     void set_conference_id();
     void setup_members_and_send( contact_data_s &cdata );
+    void update_members();
+
+    void update_contact();
+
     bool is_audio_conference() const
     {
         if (!is_conference() || !is_fid_ok()) return false;
@@ -2667,60 +2665,60 @@ void update_self()
     hf->update_contact(&self);
 }
 
-static void update_contact( const contact_descriptor_s *desc )
+void contact_descriptor_s::update_contact()
 {
-    if ( desc->state == contact_state_check )
+    if ( state == contact_state_check )
         return;
 
     if (tox)
     {
-        contact_data_s cd( desc->get_id(), CDM_PUBID | CDM_STATE | CDM_ONLINE_STATE | CDM_AVATAR_TAG );
+        contact_data_s cd( get_id(), CDM_PUBID | CDM_STATE | CDM_ONLINE_STATE | CDM_AVATAR_TAG );
 
         TOX_ERR_FRIEND_QUERY err = TOX_ERR_FRIEND_QUERY_NULL;
-        TOX_USER_STATUS st = desc->is_fid_ok() ? tox_friend_get_status(tox, desc->get_fid(), &err) : (TOX_USER_STATUS)(-1);
+        TOX_USER_STATUS st = is_fid_ok() ? tox_friend_get_status(tox, get_fid(), &err) : (TOX_USER_STATUS)(-1);
         if (err != TOX_ERR_FRIEND_QUERY_OK) st = (TOX_USER_STATUS)(-1);
 
         sstr_t<max_t<TOX_PUBLIC_KEY_SIZE, TOX_CONFERENCE_UID_SIZE>::value * 2 + 16> pubid;
 
-        if (desc->is_conference())
+        if (is_conference())
         {
-            cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
+            cd.public_id_len = address.as_str( pubid, tox_address_c::TAT_CONFERENCE_ID );
             cd.mask |= CDM_SPECIAL_BITS;
-            SETUPFLAG( cd.mask, CDF_AUDIO_CONFERENCE, desc->is_audio_conference() );
+            SETUPFLAG( cd.mask, CDF_AUDIO_CONFERENCE, is_audio_conference() );
         }
         else
-            cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
+            cd.public_id_len = address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
 
         cd.public_id = pubid.cstr();
 
-        cd.avatar_tag = desc->avatar_tag;
+        cd.avatar_tag = avatar_tag;
 
         str_c name, statusmsg;
 
         if (st >= (TOX_USER_STATUS)0)
         {
             TOX_ERR_FRIEND_QUERY er;
-            name.set_length(static_cast<int>(tox_friend_get_name_size(tox, desc->get_fid(), &er)));
-            tox_friend_get_name(tox, desc->get_fid(), (byte*)name.str(), &er);
+            name.set_length(static_cast<int>(tox_friend_get_name_size(tox, get_fid(), &er)));
+            tox_friend_get_name(tox, get_fid(), (byte*)name.str(), &er);
             cd.name = name.cstr();
             cd.name_len = name.get_length();
 
-            statusmsg.set_length((int)tox_friend_get_status_message_size(tox, desc->get_fid(), &er));
-            tox_friend_get_status_message(tox, desc->get_fid(), (byte*)statusmsg.str(), &er);
+            statusmsg.set_length((int)tox_friend_get_status_message_size(tox, get_fid(), &er));
+            tox_friend_get_status_message(tox, get_fid(), (byte*)statusmsg.str(), &er);
             cd.status_message = statusmsg.cstr();
             cd.status_message_len = statusmsg.get_length();
 
             cd.mask |= CDM_NAME | CDM_STATUSMSG;
         }
 
-        if (st < (TOX_USER_STATUS)0 || desc->state != CS_OFFLINE)
+        if (st < (TOX_USER_STATUS)0 || state != CS_OFFLINE)
         {
-            cd.state = desc->state;
+            cd.state = state;
             st = TOX_USER_STATUS_NONE;
 
         } else
         {
-            cd.state = tox_friend_get_connection_status(tox, desc->get_fid(), nullptr) != TOX_CONNECTION_NONE ? CS_ONLINE : CS_OFFLINE;
+            cd.state = tox_friend_get_connection_status(tox, get_fid(), nullptr) != TOX_CONNECTION_NONE ? CS_ONLINE : CS_OFFLINE;
         }
         
         switch (st)
@@ -2737,12 +2735,12 @@ static void update_contact( const contact_descriptor_s *desc )
         }
 
         str_c details_json_string;
-        desc->prepare_details(details_json_string, cd);
+        prepare_details(details_json_string, cd);
 
         hf->update_contact(&cd);
     } else
     {
-        contact_data_s cd(desc->get_id(), CDM_STATE);
+        contact_data_s cd(get_id(), CDM_STATE);
         cd.state = CS_OFFLINE;
         hf->update_contact(&cd);
     }
@@ -2808,8 +2806,8 @@ static contact_descriptor_s * find_restore_descriptor(int fid)
 
 static void update_init_contact(int fid)
 {
-    contact_descriptor_s *desc = find_restore_descriptor(fid);
-    if (desc) update_contact(desc);
+    if (contact_descriptor_s *desc = find_restore_descriptor( fid ))
+        desc->update_contact();
 }
 
 static int find_tox_unknown_contact(const public_key_s &id, const asptr &name)
@@ -3288,6 +3286,49 @@ static void cb_friend_typing(Tox *, uint32_t fid, bool is_typing, void * /*userd
     if (is_typing)
         other_typing.emplace_back( fid, time_ms() );
 }
+
+void contact_descriptor_s::update_members()
+{
+    TOX_ERR_CONFERENCE_PEER_QUERY e;
+    int num = tox_conference_peer_count( tox, get_gnum(), &e );
+
+    if (e != TOX_ERR_CONFERENCE_PEER_QUERY_OK)
+        num = 0;
+
+    for (int m = 0; m < num; ++m)
+    {
+        TOX_ERR_CONFERENCE_PEER_QUERY pq;
+        public_key_s member_pubkey;
+        tox_conference_peer_get_public_key( tox, get_gnum(), m, member_pubkey.key, &pq );
+        if (pq != TOX_ERR_CONFERENCE_PEER_QUERY_OK)
+            continue;
+
+        if (lastmypubid == member_pubkey)
+            continue; // do not put self to members list
+
+        if (contact_descriptor_s *desc = contact_descriptor_s::find( member_pubkey ))
+        {
+            UNSETFLAG( desc->flags, contact_descriptor_s::F_DETAILS_SENT );
+
+            if ( desc->state == CS_UNKNOWN )
+            {
+                sstr_t<TOX_PUBLIC_KEY_SIZE * 2 + 16> pubid;
+
+                contact_data_s cd( desc->get_id(), CDM_PUBID | CDM_DETAILS | CDF_CONFERENCE_MEMBER );
+
+                cd.public_id_len = desc->address.as_str( pubid, tox_address_c::TAT_PUBLIC_KEY );
+                cd.public_id = pubid.cstr();
+
+                str_c details_json_string;
+                desc->prepare_details( details_json_string, cd );
+
+                hf->update_contact( &cd );
+            } else
+                desc->update_contact();
+        }
+    }
+}
+
 
 void contact_descriptor_s::setup_members_and_send(contact_data_s &cdata)
 {
@@ -4029,7 +4070,7 @@ static TOX_ERR_NEW prepare()
     options.proxy_host = tox_proxy_host.cstr();
     options.proxy_port = 0;
     options.proxy_type = TOX_PROXY_TYPE_NONE;
-    if (tox_proxy_type & CF_PROXY_SUPPORT_HTTPS)
+    if (tox_proxy_type & (CF_PROXY_SUPPORT_HTTP|CF_PROXY_SUPPORT_HTTPS))
         options.proxy_type = TOX_PROXY_TYPE_HTTP;
     if (tox_proxy_type & (CF_PROXY_SUPPORT_SOCKS4|CF_PROXY_SUPPORT_SOCKS5))
         options.proxy_type = TOX_PROXY_TYPE_SOCKS5;
@@ -4789,7 +4830,7 @@ void __stdcall init_done()
         for (contact_descriptor_s *f = contact_descriptor_s::first_desc; f; f = f->next)
         {
             if (!f->is_fid_ok() && f->state == CS_INVITE_RECEIVE)
-                update_contact(f);
+                f->update_contact();
         }
     }
 }
@@ -4936,7 +4977,7 @@ void do_on_offline_stuff()
             if ( f->state == CS_INVITE_RECEIVE || f->state == CS_INVITE_SEND || f->state == CS_UNKNOWN ) continue;
             f->on_offline();
             if (!tox) f->set_fid(-1, false);
-            update_contact(f);
+            f->update_contact();
         }
     }
 }
@@ -5124,6 +5165,23 @@ int __stdcall add_contact(const char* public_id, const char* invite_message_utf8
 
     return CR_INVALID_PUB_ID;
 }
+
+void __stdcall refresh_details( int id )
+{
+    if (tox && id != 0)
+    {
+        auto it = id2desc.find( id );
+        if (it == id2desc.end()) return;
+        contact_descriptor_s *desc = it->second;
+        UNSETFLAG( desc->flags, contact_descriptor_s::F_DETAILS_SENT );
+
+        if (desc->is_conference())
+            desc->update_members();
+
+        desc->update_contact();
+    }
+}
+
 
 void __stdcall del_contact(int id)
 {
@@ -5813,13 +5871,15 @@ void __stdcall api_getinfo( proto_info_s *info )
         "ToxID",
         "f=png",
         CONFA_OPT_TYPE "=t/a",
+        "%APPDATA%\\tox", WINDOWS_ONLY // path to import
+        "%APPDATA%\\tox\\isotoxin_tox_save.tox", WINDOWS_ONLY // file
         nullptr
     };
-    
+
     info->strings = strings;
 
     info->priority = 500;
     info->indicator = 500;
     info->features = PF_AVATARS | PF_PURE_NEW | PF_IMPORT | PF_EXPORT | PF_AUDIO_CALLS | PF_VIDEO_CALLS | PF_SEND_FILE | PF_PAUSE_FILE | PF_CONFERENCE | PF_CONFERENCE_ENTER_LEAVE; //PF_AUTH_NICKNAME | PF_UNAUTHORIZED_CHAT;
-    info->connection_features = CF_PROXY_SUPPORT_HTTPS | CF_PROXY_SUPPORT_SOCKS5 | CF_IPv6_OPTION | CF_UDP_OPTION | CF_SERVER_OPTION;
+    info->connection_features = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_SOCKS5 | CF_IPv6_OPTION | CF_UDP_OPTION | CF_SERVER_OPTION;
 }

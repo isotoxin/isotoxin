@@ -1979,7 +1979,7 @@ void xmpp::letsconnect()
     {
         connecting = true;
 
-        if ( proxy_type & CF_PROXY_SUPPORT_HTTPS )
+        if ( proxy_type & (CF_PROXY_SUPPORT_HTTP|CF_PROXY_SUPPORT_HTTPS) )
         {
             gloox::ConnectionTCPClient *tcp = new gloox::ConnectionTCPClient( j->logInstance(), std::string(proxy.host.cstr(), proxy.host.get_length()), proxy.port );
             j->setConnectionImpl( new gloox::ConnectionHTTPProxy( j.get(), tcp, j->logInstance(), j->server(), j->port() ) );
@@ -2627,6 +2627,11 @@ int xmpp::add_contact(const char* public_id, const char* invite_message_utf8)
     return CR_OK;
 }
 
+void xmpp::refresh_details( int id )
+{
+
+}
+
 void xmpp::del_contact(int id)
 {
     if ( contact_descriptor_s *c = find( id ) )
@@ -2898,6 +2903,8 @@ void __stdcall api_getinfo( proto_info_s *info )
         "",
         "JID",
         "f=png,jpg,gif" NL "s=8192" NL "a=32" NL "b=96",
+        "",
+        "",
         "",
         nullptr
     };

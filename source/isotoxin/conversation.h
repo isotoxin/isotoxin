@@ -790,6 +790,8 @@ public:
     void check_list();
 #endif // _DEBUG
 
+    void update_first();
+
     const ts::str_c &protodesc( int ap );
 
     /*virtual*/ ts::ivec2 get_min_size() const override;

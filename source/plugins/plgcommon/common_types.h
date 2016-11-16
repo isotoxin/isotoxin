@@ -57,20 +57,24 @@ enum info_string_e // hard order
 
     IS_CONFERENCE_OPTIONS,
 
+    IS_IMPORT_PATH,
+    IS_EXPORT_FILE,
+
     IS_LAST, // always set to nullptr
     _is_count_
 };
 
 enum connection_features_e
 {
-    CF_PROXY_SUPPORT_HTTPS  = 1,
-    CF_PROXY_SUPPORT_SOCKS4 = 2,
-    CF_PROXY_SUPPORT_SOCKS5 = 4,
-    CF_IPv6_OPTION          = 8,
-    CF_UDP_OPTION           = 16,
-    CF_SERVER_OPTION        = 32,
+    CF_PROXY_SUPPORT_HTTP   = 1,
+    CF_PROXY_SUPPORT_HTTPS  = 2,
+    CF_PROXY_SUPPORT_SOCKS4 = 4,
+    CF_PROXY_SUPPORT_SOCKS5 = 8,
+    CF_IPv6_OPTION          = 16,
+    CF_UDP_OPTION           = 32,
+    CF_SERVER_OPTION        = 64,
 
-    CF_PROXY_MASK = CF_PROXY_SUPPORT_HTTPS | CF_PROXY_SUPPORT_SOCKS4 | CF_PROXY_SUPPORT_SOCKS5,
+    CF_PROXY_MASK = CF_PROXY_SUPPORT_HTTP | CF_PROXY_SUPPORT_HTTPS | CF_PROXY_SUPPORT_SOCKS4 | CF_PROXY_SUPPORT_SOCKS5,
 };
 
 
@@ -264,6 +268,7 @@ enum config_flags_e
 #define CDET_DNSNAME        "dnsname"   // dns name (alias for id, ToxDNS for example)
 #define CDET_CLIENT         "client"    // client name and version. eg: isotoxin/0.3.393
 #define CDET_CLIENT_CAPS    "clcaps"    // client caps - caps keywords. eg: 
+#define CDET_CONN_INFO      "cinfo"     // connection info (ip address)
 
 // system message fields
 #define SMF_SUBJECT         "subj"

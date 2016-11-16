@@ -122,6 +122,9 @@ void av_contact_s::mic_switch(bool enable)
 
         if (conference_s *c = core->c->find_conference())
             c->change_flag( conference_s::F_MIC_ENABLED, is_mic_on() );
+
+        if (is_mic_on())
+            g_app->check_capture();
     }
 }
 
@@ -196,6 +199,9 @@ void av_contact_s::set_so_audio( bool inactive_, bool enable_mic, bool enable_sp
         update_speaker();
         send_so();
         core->c->redraw();
+
+        if (enable_mic)
+            g_app->check_capture();
     }
 }
 
@@ -421,6 +427,8 @@ av_contact_s & av_contacts_c::get( uint64 avkey, av_contact_s::state_e st )
     spinlock::simple_lock( sync );
     m_contacts.add( avc );
     spinlock::simple_unlock( sync );
+
+    g_app->check_capture();
 
     avc->send_so(); // update stream options now
     return *avc;

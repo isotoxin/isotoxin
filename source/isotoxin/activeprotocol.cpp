@@ -1230,6 +1230,14 @@ void active_protocol_c::del_contact( const contact_key_s &ck )
     ipcp->send( ipcw(AQ_DEL_CONTACT) << ck.gidcid() );
 }
 
+void active_protocol_c::refresh_details( const contact_key_s &ck )
+{
+    ASSERT( ck.protoid == (unsigned)id );
+    ASSERT( ck.temp_type != TCT_UNKNOWN_MEMBER );
+
+    ipcp->send( ipcw( AQ_REFRESH_DETAILS ) << ck.gidcid() );
+}
+
 void active_protocol_c::resend_request( int cid, const ts::str_c &msg_utf8 )
 {
     ipcp->send( ipcw(AQ_ADD_CONTACT) << (char)1 << cid << msg_utf8 );

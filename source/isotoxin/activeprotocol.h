@@ -292,6 +292,8 @@ public:
     void accept(int cid);
     void reject(int cid);
 
+    void refresh_details( const contact_key_s &ck );
+
     void apply_encoding_settings(); // should be called before enabling video or during video call (to change current settings)
     void accept_call(int cid);
     void send_video_frame(int cid, const ts::bmpcore_exbody_s &eb, uint64 timestamp );

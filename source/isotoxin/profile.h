@@ -275,6 +275,17 @@ struct conference_member_s
 {
     MOVABLE( true );
 
+    enum column_e
+    {
+        C_PUBID = 1,
+        C_NAME,
+        C_ID,
+        C_APID,
+
+        C_count
+    };
+
+
     ts::shared_ptr< contact_c > memba;
 
     ts::str_c pubid;
@@ -285,7 +296,7 @@ struct conference_member_s
     void set( int column, ts::data_value_s& v );
     void get( int column, ts::data_pair_s& v );
 
-    static const int columns = 1 + 4; // pubid, name, id, apid
+    static const int columns = C_count; // pubid, name, id, apid
     static ts::asptr get_table_name() { return CONSTASTR( "confa_members" ); }
     static void get_column_desc( int index, ts::column_desc_s&cd );
     static ts::data_type_e get_column_type( int index );
@@ -535,6 +546,7 @@ class profile_c : public config_base_c
     void load_protosort();
     void save_protosort();
 
+    void cleanup_tables(); // garbage collector
 
 public:
 

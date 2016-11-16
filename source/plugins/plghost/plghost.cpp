@@ -805,6 +805,14 @@ unsigned long exec_task(data_data_s *d, unsigned long flags)
             protolib.functions->del_contact(id);
         }
         break;
+    case AQ_REFRESH_DETAILS:
+        if (LIBLOADED())
+        {
+            ipcr r( d->get_reader() );
+            int id = r.get<int>();
+            protolib.functions->refresh_details( id );
+        }
+        break;
     case AQ_MESSAGE:
         if (LIBLOADED())
         {

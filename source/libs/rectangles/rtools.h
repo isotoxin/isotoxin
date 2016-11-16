@@ -105,6 +105,7 @@ public:
     menu_anchor_s  call_get_popup_menu_pos( menu_anchor_s::relpos_e rp = menu_anchor_s::RELPOS_TYPE_RD ) const;
     int         call_get_menu_level() const;
     menu_c      call_get_menu() const;
+    bool        call_ctxmenu_present() const;
     bool        call_is_tooltip() const;
     void        call_restore_signal() const;
     void        call_setup_button(bcreate_s &bcr) const;

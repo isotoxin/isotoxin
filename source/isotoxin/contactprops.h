@@ -68,7 +68,7 @@ class dialog_contact_props_c : public gui_isodialog_c
     ts::wstr_c buildmh();
 
 
-    void add_det(RID lst, contact_c *c);
+    void add_det(RID lst, int index, contact_c *c);
 
     struct cinfo_s
     {
@@ -96,6 +96,13 @@ class dialog_contact_props_c : public gui_isodialog_c
     void tags_menu_handler(const ts::str_c&);
 
     bool open_details_tab = false;
+    bool do_refresh_details = false;
+
+    bool refresh_details(RID, GUIPARAM);
+    void enable_refresh_details( bool f );
+
+    ts::str_c lst_ajust_height;
+    RID lstrid;
 
 protected:
     /*virtual*/ int unique_tag() override { return UD_CONTACTPROPS; }

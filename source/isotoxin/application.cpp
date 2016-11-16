@@ -550,16 +550,13 @@ ts::uint32 application_c::gm_handler(gmsg<ISOGM_EXPORT_PROTO_DATA>&d)
     e[0].ext = CONSTWSTR("*.*");
     ts::extensions_s exts(e, 1);
 
-    ts::wstr_c deffn(to_wstr(ap->get_tag()));
-    if (deffn.equals(CONSTWSTR("tox")))  // not so good hardcode // TODO
+    ts::wstr_c deffn(ts::from_utf8(ap->get_infostr(IS_EXPORT_FILE)));
+    ts::parse_env( deffn );
+    if (!deffn.is_empty())
     {
-        fromdir = CONSTWSTR("%APPDATA%");
-        ts::parse_env(fromdir);
-
-        if (dir_present(ts::fn_join(fromdir, deffn)))
-            fromdir = ts::fn_join(fromdir, deffn);
-        ts::fix_path(fromdir, FNO_APPENDSLASH);
-        deffn.set(CONSTWSTR("isotoxin_tox_save.tox"));
+        fromdir = ts::fn_get_path(deffn);
+        deffn = ts::fn_get_name_with_ext(deffn);
+        ts::fix_path( fromdir, FNO_APPENDSLASH );
     }
 
     ts::wstr_c fn = HOLD(main)().getroot()->save_filename_dialog(fromdir, deffn, exts, title);
@@ -1381,6 +1378,46 @@ bool application_c::blinking_reason_s::tick()
 
 }
 
+namespace
+{
+    struct hardware_sound_capture_switch_s : public ts::task_c
+    {
+        ts::tbuf0_t<s3::Format> fmts;
+        hardware_sound_capture_switch_s( const s3::Format *_fmts, ts::aint cnt )
+        {
+            fmts.buf_t::append_buf( _fmts, cnt * sizeof( s3::Format ) );
+        }
+        hardware_sound_capture_switch_s() {}
+
+        /*virtual*/ int iterate() override
+        {
+            if (fmts.count())
+            {
+                // start
+                s3::Format fmtw;
+                s3::start_capture( fmtw, fmts.begin(), (int)fmts.count() );
+            } else
+            {
+                s3::stop_capture();
+            }
+
+            return R_DONE;
+        }
+
+
+        /*virtual*/ void done( bool canceled ) override
+        {
+            if (!canceled && g_app)
+                g_app->F_CAPTURE_AUDIO_TASK = false;
+
+            __super::done( canceled );
+        }
+
+    };
+}
+
+
+
 /*virtual*/ void application_c::app_fix_sleep_value(int &sleep_ms)
 {
     UNSTABLE_CODE_PROLOG
@@ -1395,6 +1432,12 @@ bool application_c::blinking_reason_s::tick()
 
         s3::capture_tick(datacaptureaccept, nullptr);
         sleep_ms = 1;
+
+        if (!F_CAPTURE_AUDIO_TASK && (ts::Time::current() - last_capture_accepted) > 120000)
+        {
+            F_CAPTURE_AUDIO_TASK = true;
+            add_task( TSNEW( hardware_sound_capture_switch_s ) );
+        }
     }
 
     if (avcontacts().tick())
@@ -2228,7 +2271,10 @@ UNSTABLE_CODE_EPILOG
 void application_c::handle_sound_capture(const void *data, int size)
 {
     if (m_currentsc)
-        m_currentsc->datahandler(data, size);
+    {
+        if (m_currentsc->datahandler( data, size ))
+            last_capture_accepted = ts::Time::current();
+    }
 }
 void application_c::register_capture_handler(sound_capture_handler_c *h)
 {
@@ -2243,50 +2289,6 @@ void application_c::unregister_capture_handler(sound_capture_handler_c *h)
         m_currentsc = nullptr;
         start_capture(nullptr);
     }
-}
-
-namespace
-{
-    struct hardware_sound_capture_switch_s : public ts::task_c
-    {
-        ts::tbuf0_t<s3::Format> fmts;
-        hardware_sound_capture_switch_s(const s3::Format *_fmts, ts::aint cnt)
-        {
-            fmts.buf_t::append_buf(_fmts, cnt * sizeof(s3::Format));
-        }
-        hardware_sound_capture_switch_s() {}
-
-        /*virtual*/ int iterate() override
-        {
-            if (fmts.count())
-            {
-                // start
-                s3::Format fmtw;
-                s3::start_capture(fmtw, fmts.begin(), (int)fmts.count());
-            } else
-            {
-                s3::stop_capture();
-            }
-
-            return R_DONE;
-        }
-
-
-        /*virtual*/ void done(bool canceled) override
-        {
-            if (!canceled && g_app)
-            {
-                g_app->F_CAPTURE_AUDIO_TASK = false;
-                
-                DEFERRED_EXECUTION_BLOCK_BEGIN(0)
-                    g_app->check_capture();
-                DEFERRED_EXECUTION_BLOCK_END(0)
-            }
-
-            __super::done(canceled);
-        }
-
-    };
 }
 
 void application_c::check_capture()
@@ -2307,6 +2309,7 @@ void application_c::check_capture()
         ts::aint cntf;
         const s3::Format *fmts = m_currentsc->formats(cntf);
         add_task(TSNEW(hardware_sound_capture_switch_s, fmts, cntf));
+        last_capture_accepted = ts::Time::current();
 
     } else if (F_CAPTURING && m_currentsc)
         s3::get_capture_format(m_currentsc->getfmt());
@@ -2440,13 +2443,14 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, contact_c *sub, b
     return r;
 }
 
-/*virtual*/ void application_c::datahandler(const void *data, int size)
+/*virtual*/ bool application_c::datahandler(const void *data, int size)
 {
     static int ticktag = 0;
     ++ticktag;
 
-    av_contact_s *avc2sendaudio = nullptr;
+    bool used = false;
 
+    av_contact_s *avc2sendaudio = nullptr;
     avcontacts().iterate([&]( av_contact_s &avc )
     {
         if (av_contact_s::AV_INPROGRESS != avc.core->state)
@@ -2478,7 +2482,10 @@ av_contact_s * application_c::update_av( contact_root_c *avmc, contact_c *sub, b
         bool continue_use = avc2sendaudio->core->ticktag == ticktag - 1;
         avc2sendaudio->core->ticktag = ticktag;
         avc2sendaudio->send_audio( capturefmt, data, size, !continue_use );
+        used = true;
     }
+
+    return used;
 }
 
 /*virtual*/ const s3::Format *application_c::formats( ts::aint &count )

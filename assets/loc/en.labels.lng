@@ -513,6 +513,9 @@
 513=Keywords
 514=Not enough space for file[br]$[br]File size: $[br]Available space: $
 515=Keep inactive
+516=Invite
+517=HTTP proxy
+518=Connection info
 900=information
 901=warning
 902=error

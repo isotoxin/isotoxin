@@ -196,7 +196,7 @@ protected:
 public:
     s3::Format &getfmt() { return capturefmt; }
     bool is_capture() const { return capture; };
-    virtual void datahandler(const void *data, int size) = 0;
+    virtual bool datahandler(const void *data, int size) = 0;
     virtual const s3::Format *formats( ts::aint &count) { count = 0; return nullptr; };
 
     void start_capture();

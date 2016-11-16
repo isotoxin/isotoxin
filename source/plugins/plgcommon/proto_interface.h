@@ -319,6 +319,7 @@ struct host_functions_s // plugin can (or must) call these functions to do its j
     FUNC2( int,  add_contact,       const char*, const char* ) \
     FUNC2( int,  resend_request,    int, const char* ) \
     FUNC1( void, del_contact,       int ) \
+    FUNC1( void, refresh_details,   int ) \
     FUNC2( void, send_message,      int, const message_s * ) \
     FUNC1( void, del_message,       u64 ) \
     FUNC1( void, accept,            int ) \

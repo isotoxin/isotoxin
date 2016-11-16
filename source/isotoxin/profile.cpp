@@ -782,6 +782,7 @@ void conference_s::get_column_desc( int index, ts::column_desc_s&cd )
         break;
     case C_ID:
         cd.name_ = CONSTASTR( "confid" );
+        cd.options.set( ts::column_desc_s::f_unique_index );
         break;
     case C_APID:
         cd.name_ = CONSTASTR( "protoid" );
@@ -917,18 +918,18 @@ void conference_member_s::set( int column, ts::data_value_s &v )
 {
     switch ( column )
     {
-    case 1:
+    case C_PUBID:
         pubid = v.text;
         ASSERT( !memba );
         return;
-    case 2:
+    case C_NAME:
         name = v.text;
         ASSERT( !memba );
         return;
-    case 3:
+    case C_ID:
         id = static_cast<int>( v.i );
         return;
-    case 4:
+    case C_APID:
         proto_key.protoid = static_cast<ts::uint16>( v.i );;
         return;
     }
@@ -942,17 +943,17 @@ void conference_member_s::get( int column, ts::data_pair_s& v )
     v.name = ccd.name_;
     switch ( column )
     {
-    case 1:
+    case C_PUBID:
         v.text = memba ? memba->get_pubid() : pubid;
         return;
-    case 2:
+    case C_NAME:
         v.text = memba ? memba->get_name( false ) : name;
         return;
-    case 3:
+    case C_ID:
         v.i = id;
         ASSERT( !memba || ( memba->getkey().contactid == (unsigned)id && memba->getkey().temp_type == TCT_UNKNOWN_MEMBER ) );
         return;
-    case 4:
+    case C_APID:
         v.i = proto_key.protoid;
         ASSERT( ( !memba && proto_key.contactid == 0 ) || ( memba && memba->getkey().protoid == proto_key.protoid && memba->getkey().temp_type == TCT_UNKNOWN_MEMBER ) );
         return;
@@ -963,11 +964,11 @@ ts::data_type_e conference_member_s::get_column_type( int index )
 {
     switch ( index )
     {
-    case 1:
-    case 2:
+    case C_PUBID:
+    case C_NAME:
         return ts::data_type_e::t_str;
-    case 3:
-    case 4:
+    case C_ID:
+    case C_APID:
         return ts::data_type_e::t_int;
     }
     FORBIDDEN();
@@ -979,16 +980,17 @@ void conference_member_s::get_column_desc( int index, ts::column_desc_s&cd )
     cd.type_ = get_column_type( index );
     switch ( index )
     {
-    case 1:
+    case C_PUBID:
         cd.name_ = CONSTASTR( "pubid" );
         break;
-    case 2:
+    case C_NAME:
         cd.name_ = CONSTASTR( "name" );
         break;
-    case 3:
+    case C_ID:
         cd.name_ = CONSTASTR( "membid" );
+        cd.options.set( ts::column_desc_s::f_unique_index );
         break;
-    case 4:
+    case C_APID:
         cd.name_ = CONSTASTR( "protoid" );
         break;
     default:
@@ -1275,7 +1277,7 @@ uint64 profile_c::uniq_history_item_tag()
         REMOVE_CODE_REMINDER( 564 ); // always unique, no need 2 check it anymore
 
         ts::tmp_str_c whr(CONSTASTR("utag=")); whr.append_as_num<int64>(utag);
-        if (0 == db->count(CONSTASTR("history"), whr))
+        if (0 == db->count( history_s::get_table_name(), whr))
             break;
 
         utag = prf().getuid();
@@ -1309,14 +1311,14 @@ void profile_c::kill_history_item(uint64 utag)
         }
 
     ts::tmp_str_c whr(CONSTASTR("utag=")); whr.append_as_num<int64>(utag);
-    db->delrows(CONSTASTR("history"), whr);
+    db->delrows( history_s::get_table_name(), whr);
 }
 
 void profile_c::kill_history(const contact_key_s&historian)
 {
     unload_history(historian);
     ts::tmp_str_c whr( CONSTASTR("historian=") ); whr.append_as_num( historian.dbvalue() );
-    db->delrows( CONSTASTR("history"), whr );
+    db->delrows( history_s::get_table_name(), whr );
 }
 
 void profile_c::unload_history( const contact_key_s&historian )
@@ -1347,7 +1349,7 @@ void profile_c::change_history_items( const contact_key_s &historian, const cont
     dp.type_ = ts::data_type_e::t_int64;
     dp.i = new_sender.dbvalue();
 
-    db->update( CONSTASTR( "history" ), ts::array_wrapper_c<const ts::data_pair_s>( &dp, 1 ), whr );
+    db->update( history_s::get_table_name(), ts::array_wrapper_c<const ts::data_pair_s>( &dp, 1 ), whr );
 }
 
 bool profile_c::change_history_item(uint64 utag, contact_key_s & historian)
@@ -1376,7 +1378,7 @@ bool profile_c::change_history_item(uint64 utag, contact_key_s & historian)
     dp.type_ = ts::data_type_e::t_int;
     dp.i = MTA_MESSAGE;
 
-    db->update(CONSTASTR("history"), ts::array_wrapper_c<const ts::data_pair_s>(&dp, 1), whr);
+    db->update( history_s::get_table_name(), ts::array_wrapper_c<const ts::data_pair_s>(&dp, 1), whr);
 
     return ok;
 }
@@ -1431,7 +1433,7 @@ void profile_c::change_history_item(const contact_key_s&historian, const post_s 
         ++n;
     }
     ASSERT(n<=ARRAY_SIZE(dp));
-    db->update( CONSTASTR("history"), ts::array_wrapper_c<const ts::data_pair_s>(dp,n), whr );
+    db->update( history_s::get_table_name(), ts::array_wrapper_c<const ts::data_pair_s>(dp,n), whr );
 }
 
 void profile_c::kill_message( uint64 msgutag )
@@ -1550,7 +1552,7 @@ void profile_c::load_history( const contact_key_s&historian, time_t time, ts::ai
                 dp[1].i = row.other.mt();
             }
 
-            db->update(CONSTASTR("history"), ts::array_wrapper_c<const ts::data_pair_s>(dp, fixed ? 2 : 1), whr);
+            db->update( history_s::get_table_name(), ts::array_wrapper_c<const ts::data_pair_s>(dp, fixed ? 2 : 1), whr);
         }
         time = ct;
     }
@@ -1607,7 +1609,7 @@ void profile_c::load_history( const contact_key_s&historian, time_t time, ts::ai
             dp.type_ = ts::data_type_e::t_int;
             dp.i = row->other.mt();
 
-            db->update(CONSTASTR("history"), ts::array_wrapper_c<const ts::data_pair_s>(&dp, 1), whr);
+            db->update( history_s::get_table_name(), ts::array_wrapper_c<const ts::data_pair_s>(&dp, 1), whr);
         }
     }
 
@@ -1694,7 +1696,7 @@ int  profile_c::calc_history( const contact_key_s&historian, bool ignore_invites
     if ( !db ) return 0;
     ts::tmp_str_c whr( CONSTASTR("historian=") ); whr.append_as_num( historian.dbvalue() );
     if (ignore_invites) whr.append( CONSTASTR(" and mtype<>2 and mtype<>103") ); // MTA_FRIEND_REQUEST MTA_OLD_REQUEST
-    return db->count( CONSTASTR("history"), whr );
+    return db->count( history_s::get_table_name(), whr );
 }
 
 int  profile_c::calc_history( const contact_key_s&historian, const contact_key_s&sender )
@@ -1702,7 +1704,7 @@ int  profile_c::calc_history( const contact_key_s&historian, const contact_key_s
     if ( !db ) return 0;
     ts::tmp_str_c whr( CONSTASTR( "historian=" ) ); whr.append_as_num( historian.dbvalue() );
     whr.append( CONSTASTR( " and sender=" ) ).append_as_num( sender.dbvalue() );
-    return db->count( CONSTASTR( "history" ), whr );
+    return db->count( history_s::get_table_name(), whr );
 }
 
 int  profile_c::calc_history_before( const contact_key_s&historian, time_t time )
@@ -1710,7 +1712,7 @@ int  profile_c::calc_history_before( const contact_key_s&historian, time_t time 
     if ( !db ) return 0;
     ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num(historian.dbvalue());
     whr.append( CONSTASTR(" and mtime<") ).append_as_num<int64>( time );
-    return db->count(CONSTASTR("history"), whr);
+    return db->count( history_s::get_table_name(), whr);
 }
 
 int  profile_c::calc_history_after(const contact_key_s&historian, time_t time, bool only_messages)
@@ -1719,7 +1721,7 @@ int  profile_c::calc_history_after(const contact_key_s&historian, time_t time, b
     ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num(historian.dbvalue());
     if (only_messages) whr.append( CONSTASTR(" and mtype==0") );
     whr.append(CONSTASTR(" and mtime>=")).append_as_num<int64>(time);
-    return db->count(CONSTASTR("history"), whr);
+    return db->count( history_s::get_table_name(), whr);
 }
 
 int  profile_c::calc_history_between( const contact_key_s&historian, time_t time1, time_t time2 )
@@ -1728,7 +1730,7 @@ int  profile_c::calc_history_between( const contact_key_s&historian, time_t time
     ts::tmp_str_c whr(CONSTASTR("historian=")); whr.append_as_num(historian.dbvalue());
     whr.append(CONSTASTR(" and mtime>=")).append_as_num<int64>(time1);
     whr.append(CONSTASTR(" and mtime<")).append_as_num<int64>(time2);
-    return db->count(CONSTASTR("history"), whr);
+    return db->count( history_s::get_table_name(), whr);
 }
 
 ts::bitmap_c profile_c::load_avatar( const contact_key_s& ck )
@@ -1854,6 +1856,8 @@ profile_load_result_e profile_c::xload(const ts::wstr_c& pfn, const ts::uint8 *k
     }
     if (generated)
         unique_profile_tag( utag );
+
+    cleanup_tables();
     
     #define TAB(tab) if (load_on_start<tab##_s>::value) { MEMT( MEMT_PROFILE_##tab ); table_##tab.read( db ); }
     PROFILE_TABLES
@@ -2733,6 +2737,68 @@ bool profile_c::protogroupsort_dn( const ts::uint16 * set_of_prots, ts::aint cnt
     }
 
     return true;
+}
+
+void profile_c::cleanup_tables()
+{
+    struct g
+    {
+        ts::tmp_tbuf_t<int64> hst;
+        void gg( const ts::data_value_s& v )
+        {
+            hst.add( v.i );
+        }
+        bool ggx( int row, ts::SQLITE_DATAGETTER dg )
+        {
+            ts::data_value_s dv;
+            dg( contacts_s::C_CONTACT_ID, dv );
+            hst.find_remove_fast( dv.i );
+            return true;
+        }
+        bool ggy( int row, ts::SQLITE_DATAGETTER dg )
+        {
+            ts::data_value_s dv;
+            dg( conference_s::C_ID, dv );
+            int64 cid = dv.i;
+            dg( conference_s::C_APID, dv );
+            int64 k = (cid << 32) | dv.i; // see CONFDBVAL
+            hst.find_remove_fast( k );
+            return true;
+        }
+        bool ggz( int row, ts::SQLITE_DATAGETTER dg )
+        {
+            ts::data_value_s dv;
+            dg( conference_member_s::C_ID, dv );
+            int64 cid = dv.i;
+            dg( conference_member_s::C_APID, dv );
+            int64 k = -((dv.i << 32) | cid); // see MEMBDBVAL
+            hst.add(k);
+            return true;
+        }
+    } ggg;
+
+    db->unique_values( history_s::get_table_name(), DELEGATE( &ggg, gg ), CONSTASTR( "historian" ) );
+    db->read_table( contacts_s::get_table_name(), DELEGATE( &ggg, ggx ) );
+    db->read_table( conference_s::get_table_name(), DELEGATE( &ggg, ggy ) );
+
+    if (ggg.hst.count())
+    {
+        db->delrows( history_s::get_table_name(), ts::str_c( CONSTASTR( "historian=" ) ).append_as_num( ggg.hst.get(0) ) );
+        return;
+    }
+
+    ggg.hst.clear();
+    db->read_table( conference_member_s::get_table_name(), DELEGATE( &ggg, ggz ) );
+
+    for(int64 k : ggg.hst)
+    {
+        if (0 == db->count( history_s::get_table_name(), ts::str_c( CONSTASTR( "sender=" ) ).append_as_num( k ) ))
+        {
+            db->delrows( conference_member_s::get_table_name(), ts::str_c( CONSTASTR( "membid=" ) ).append_as_num( (uint64)(-k) & 0xffffffff ) ); // see MEMBDBVAL
+            return;
+        }
+    }
+
 }
 
 

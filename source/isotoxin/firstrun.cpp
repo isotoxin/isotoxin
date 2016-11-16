@@ -21,6 +21,7 @@ void dialog_firstrun_c::set_defaults()
     choice0 = PCH_PROGRAMFILES;
     choice1 = PCH_APPDATA;
     is_autostart = true;
+    is_crbackup = true;
 }
 
 void dialog_firstrun_c::set_portable()
@@ -32,6 +33,7 @@ void dialog_firstrun_c::set_portable()
     choice0 = PCH_HERE;
     choice1 = PCH_INSTALLPATH;
     is_autostart = false;
+    is_crbackup = false;
 }
 
 
@@ -498,6 +500,11 @@ bool dialog_firstrun_c::start( RID, GUIPARAM )
     cfg().language( deflng );
     if (is_autostart)
         ts::master().sys_autostart( CONSTWSTR("Isotoxin"), exepath, CONSTWSTR("minimize"));
+
+
+    int misc_flags = cfg().misc_flags();
+    INITFLAG( misc_flags, MISCF_DONT_BACKUP_PROFILE, !is_crbackup );
+    cfg().misc_flags( misc_flags );
 
     if (exit) 
     {

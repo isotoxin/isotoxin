@@ -201,7 +201,7 @@ class application_c : public gui_c, public sound_capture_handler_c
     bool b_customize(RID r, GUIPARAM param);
 
     ts::tbuf_t<s3::Format> avformats;
-    /*virtual*/ void datahandler(const void *data, int size) override;
+    /*virtual*/ bool datahandler(const void *data, int size) override;
     /*virtual*/ const s3::Format *formats( ts::aint &count) override;
 
 public:
@@ -453,6 +453,7 @@ public:
     ts::array_inplace_t<blinking_reason_s,2> m_blink_reasons;
     ts::tbuf_t<contact_key_s> m_locked_recalc_unread;
     
+    ts::Time last_capture_accepted = ts::Time::current();
     sound_capture_handler_c *m_currentsc = nullptr;
     ts::pointers_t<sound_capture_handler_c, 0> m_scaptures;
 

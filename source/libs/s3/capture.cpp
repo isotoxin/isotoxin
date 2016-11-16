@@ -16,7 +16,8 @@ static int next_offset = 0;
 
 void capture_tick( capture_callback * data_callback, void *context )
 {
-    SIMPLELOCK(sync);
+    spinlock::auto_simple_lock l( sync, false );
+    if (!l.is_locked()) return;
 
     if (pDSCaptureBuffer)
     {

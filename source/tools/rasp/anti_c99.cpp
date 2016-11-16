@@ -17,6 +17,9 @@ static const char *contants[] = {
     "MAX_ONION_CLIENTS_ANNOUNCE",
     "MAX_EVENTS",
     "MAX_SAVED_DHT_NODES",
+    "MAX_GROUP_MESSAGE_DATA_LEN",
+    "MAX_NAME_LENGTH",
+    "MAX_INCOMMING_CONNECTIONS",
 };
 
 struct decomment

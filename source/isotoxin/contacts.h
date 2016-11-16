@@ -174,10 +174,10 @@ struct contact_key_s
     int64 dbvalue() const
     {
         if ( TCT_CONFERENCE == temp_type )
-            return (static_cast<int64>( contactid ) << 32) | protoid; // historian
+            return (static_cast<int64>( contactid ) << 32) | protoid; // historian // see CONFDBVAL
 
         if ( TCT_UNKNOWN_MEMBER == temp_type )
-            return -( ( static_cast<int64>( protoid ) << 32 ) | contactid );
+            return -( ( static_cast<int64>( protoid ) << 32 ) | contactid ); // see MEMBDBVAL
 
         return (static_cast<int64>(protoid) << 32) | contactid; // always positive
     }
@@ -1143,11 +1143,12 @@ public:
     ts::aint count() const {return arr.size();}
     contact_c & get(int index) {return *arr.get(index);};
 
-    template <typename R> void iterate_proto_contacts( R r )
+    template <typename R> void iterate_proto_contacts( R r, int proto = 0 )
     {
         for( contact_c *c : arr )
             if (!c->is_meta())
-                if (!r(c)) break;
+                if (proto == 0 || static_cast<ts::uint16>(proto) == c->getkey().protoid)
+                    if (!r( c )) break;
     }
     template <typename R> void iterate_root_contacts(R r)
     {

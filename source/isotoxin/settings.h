@@ -465,7 +465,7 @@ private:
     ts::array_inplace_t<sound_device_s, 0> play_devices;
     mediasystem_c media;
 
-    /*virtual*/ void datahandler( const void *data, int size ) override;
+    /*virtual*/ bool datahandler( const void *data, int size ) override;
 
     ts::str_c micdevice;
     ts::str_c talkdevice;

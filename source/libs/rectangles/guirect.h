@@ -60,6 +60,7 @@ enum system_query_e
     SQ_GET_MENU_LEVEL,
     SQ_POPUP_MENU_DIE,
     SQ_GET_MENU,
+    SQ_CTX_MENU_PRESENT,
     SQ_IS_TOOLTIP,
     SQ_BUTTON_SETUP,
     SQ_OPEN_GROUP,
