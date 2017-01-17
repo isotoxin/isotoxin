@@ -42,7 +42,7 @@ Multiprotocol messenger for windows XP and later with tox support
 - Command line **git** must be installed (it used to get some libs)<br>
 - Enter **build-win** folder. Threre are 3 utils: **7z**, **grep**, **wget**<br>
 - run **1-get-libs.cmd** - it will download some libs (such as zlib, pnglib and so on) from external sources. All you need is internet access. **wget** and **git** used to download, **7z** used to unpack files<br>
-- run **2-build-libs-2015.cmd** - it (re)builds external libs by respective version of Visual Studio. **grep** utility used at this step<br>
+- run **2-build-libs-2015.cmd** - it (re)builds external libs by respective version of Visual Studio.<br>
 - run **3-build-isotoxin-2015.cmd** - build of isotoxin.exe, plghost.exe and proto.dll's by respective version of Visual Studio<br>
 - run **4-build-assets.cmd** - it creates isotoxin.data - zip archive with Isotoxin assets. Also, you can take it from https://github.com/isotoxin/isotoxin/releases or http://isotoxin.im/files from latest version archive.<br>
 <br>
